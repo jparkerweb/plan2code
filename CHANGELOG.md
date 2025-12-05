@@ -2,6 +2,14 @@
 
 All notable changes to Plan2Code will be documented in this file.
 
+## v1.0.1 - 2025-12-05
+
+### 📦 Updated
+
+- Added Initial Context Check to `Planning Phase 1` - Model now asks about additional files, reference materials, and external integrations before
+  analyzing requirements
+- Added user verification checklist and git checkpoint to `Implementation Phase 3` - Phase completion reports now guide users through verification and git checkpointing before starting the next phase
+
 ## v1.0.0 - 2025-12-04
 
 ### ✨ Added

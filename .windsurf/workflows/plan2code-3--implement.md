@@ -196,6 +196,26 @@ When the phase is complete, provide this summary:
 
 [Any blockers, spec clarifications, or deviations - or "None"]
 
+## Verify It Yourself
+
+Before moving on, confirm this phase is working:
+
+- **Files exist**: The files listed above were created/modified
+- **No syntax errors**: Open new files in your editor - no red underlines or errors
+- **App runs** (if applicable): Start command runs without crashing
+- **Quick check**: [Describe 1-2 specific things to verify based on what was built]
+
+## Save Your Progress
+
+Before starting the next phase, commit your progress:
+
+\`\`\`bash
+git add -A
+git commit -m "Complete Phase X: [Phase Name]"
+\`\`\`
+
+This creates a checkpoint you can return to if needed.
+
 ## Next Steps
 
 The next uncompleted phase is Phase Y: [Name].
@@ -210,9 +230,11 @@ To continue, start a NEW conversation with:
 When phase implementation is complete, always tell the user:
 
 1. What was accomplished (completion summary)
-2. Files to attach in next session for the next phase
-3. Reminder to start a NEW conversation
-4. If all phases complete: recommend proceeding to finalization
+2. How to verify the phase is working (quick checks)
+3. How to save progress with a git commit (provide the command, do not execute it)
+4. Files to attach in next session for the next phase
+5. Reminder to start a NEW conversation
+6. If all phases complete: recommend proceeding to finalization
 
 Example for continuing:
 
@@ -245,5 +267,6 @@ If the user says "abort", "cancel", "start over", or similar:
 - Update checkboxes IMMEDIATELY after completing each task
 - ONE phase per conversation by default
 - Do NOT run tests unless explicitly listed as a task
+- Do NOT run git commands - provide commit instructions for the user to execute
 - Flag blockers and spec issues clearly - do not silently skip or assume
 - Your job is to BUILD according to spec, not to redesign
