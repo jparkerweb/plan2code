@@ -1,0 +1,1151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PLAN2CODE - AI Development with Purpose</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Archivo+Black&family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --accent: #0ea5e9;
+            --accent-glow: rgba(14, 165, 233, 0.3);
+            --black: #000000;
+            --white: #ffffff;
+            --gray: #a3a3a3;
+            --dark-gray: #171717;
+            --red: #a70c0c;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: var(--white);
+            color: var(--black);
+            overflow-x: hidden;
+        }
+
+        .headline {
+            font-family: 'Bebas Neue', sans-serif;
+            letter-spacing: 0.02em;
+            line-height: 0.9;
+        }
+
+        .subheadline {
+            font-family: 'Archivo Black', sans-serif;
+            letter-spacing: -0.02em;
+            line-height: 1;
+        }
+
+        /* Hero Section - INVERTED */
+        .hero {
+            height: 100vh;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            position: relative;
+        }
+
+        .hero-left {
+            background: var(--white);
+            color: var(--black);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            padding: 4rem;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .hero-left::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            right: -20%;
+            width: 80%;
+            height: 200%;
+            background: var(--accent);
+            opacity: 0.1;
+            transform: rotate(15deg);
+            animation: pulseGlow 8s ease-in-out infinite;
+        }
+
+        @keyframes pulseGlow {
+            0%, 100% { opacity: 0.1; transform: rotate(15deg) scale(1); }
+            50% { opacity: 0.15; transform: rotate(15deg) scale(1.05); }
+        }
+
+        .hero-title {
+            position: relative;
+            z-index: 1;
+        }
+
+        .hero-title h1 {
+            font-size: clamp(4rem, 15vw, 12rem);
+            margin: 0;
+            line-height: 0.85;
+            animation: slideInLeft 1s ease-out;
+        }
+
+        .hero-title .plan {
+            color: var(--black);
+            display: block;
+        }
+
+        .hero-title .two {
+            color: var(--accent);
+            display: block;
+            margin-left: 2rem;
+            animation: slideInLeft 1s ease-out 0.2s backwards;
+        }
+
+        .hero-title .code {
+            color: var(--black);
+            display: block;
+            animation: slideInLeft 1s ease-out 0.4s backwards;
+        }
+
+        @keyframes slideInLeft {
+            from {
+                opacity: 0;
+                transform: translateX(-50px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        .hero-subtitle {
+            font-size: clamp(1rem, 2vw, 1.5rem);
+            margin-top: 3rem;
+            font-weight: 300;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            position: relative;
+            z-index: 1;
+            animation: fadeIn 1s ease-out 0.8s backwards;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        .hero-right {
+            background: var(--black);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .geometric-shape {
+            position: absolute;
+            animation: float 6s ease-in-out infinite;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translate(0, 0) rotate(0deg); }
+            50% { transform: translate(20px, -20px) rotate(5deg); }
+        }
+
+        .shape-1 {
+            width: 300px;
+            height: 300px;
+            background: var(--accent);
+            top: 10%;
+            right: 15%;
+            clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);
+            opacity: 0.8;
+            animation-delay: 0s;
+        }
+
+        .shape-2 {
+            width: 200px;
+            height: 200px;
+            bottom: 20%;
+            left: 10%;
+            animation-delay: 1s;
+            background: transparent;
+            position: absolute;
+        }
+
+        .shape-2::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            clip-path: polygon(50% 0%, 100% 100%, 0% 100%);
+            background: var(--white);
+        }
+
+        .shape-2::after {
+            content: '';
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            width: calc(100% - 40px);
+            height: calc(100% - 40px);
+            clip-path: polygon(50% 0%, 100% 100%, 0% 100%);
+            background: var(--black);
+        }
+
+        .shape-3 {
+            width: 150px;
+            height: 150px;
+            background: var(--white);
+            top: 40%;
+            left: 20%;
+            border-radius: 50%;
+            opacity: 0.3;
+            animation-delay: 2s;
+        }
+
+        .shape-4 {
+            width: 250px;
+            height: 250px;
+            border: 15px solid var(--accent);
+            bottom: 10%;
+            right: 20%;
+            transform: rotate(45deg);
+            animation-delay: 1.5s;
+        }
+
+        /* Problem Section */
+        .problem {
+            min-height: 60vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 8rem 4rem;
+            background: var(--black);
+            color: var(--white);
+            position: relative;
+            overflow: hidden;
+            text-align: center;
+        }
+
+        .problem::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, transparent 40%, var(--accent) 100%);
+            opacity: 0.1;
+        }
+
+        .problem-text {
+            font-size: clamp(2rem, 6vw, 5rem);
+            max-width: 1400px;
+            font-weight: 700;
+            line-height: 1.2;
+            position: relative;
+            z-index: 1;
+            opacity: 0;
+            transform: translateY(30px);
+            transition: all 1s ease-out;
+        }
+
+        .problem-text.visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        .problem-text .highlight {
+            color: var(--accent);
+            font-style: italic;
+        }
+
+        .accent {
+            color: var(--accent);
+        }
+
+        .gray {
+            color: var(--gray);
+        }
+
+        .code-line {
+            font-family: 'Courier New', Courier, monospace;
+            color: var(--accent);
+            white-space: nowrap;
+        }
+
+        .code-list {
+            list-style: auto;
+            margin-left: 40px;
+        }
+
+        .code-list li::marker {
+            color: var(--gray);
+        }
+
+        .github-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-top: 2rem;
+            padding: 1rem 1.5rem;
+            background: var(--black);
+            color: var(--white);
+            text-decoration: none;
+            font-weight: 600;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            font-size: 0.875rem;
+            position: relative;
+            z-index: 1;
+            transition: all 0.3s ease;
+            animation: fadeIn 1s ease-out 1s backwards;
+        }
+
+        .github-link:hover {
+            background: var(--accent);
+            transform: translateX(5px);
+        }
+
+        .github-icon {
+            width: 1.25rem;
+            height: 1.25rem;
+        }
+
+        .inline-link {
+            display: inline-block;
+            margin-top: 1rem;
+            color: var(--accent);
+            text-decoration: none;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+
+        .inline-link:hover {
+            color: var(--black);
+            transform: translateX(5px);
+        }
+
+        /* Steps Section - INVERTED PATTERN */
+        .step {
+            min-height: 80vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .step-content {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            padding: 6rem 4rem;
+            max-width: 900px;
+            width: 100%;
+            opacity: 0;
+            transform: translateY(50px);
+            transition: all 0.8s ease-out;
+        }
+
+        .step-content.visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        .step-header {
+            display: flex;
+            align-items: center;
+            gap: 2rem;
+            margin-bottom: 2rem;
+        }
+
+        .step-number {
+            font-size: clamp(5rem, 10vw, 8rem);
+            line-height: 1;
+            opacity: 0.5;
+        }
+
+        .step-icon {
+            font-size: clamp(3rem, 6vw, 5rem);
+        }
+
+        .step-title {
+            font-size: clamp(2rem, 4vw, 3.5rem);
+            margin-bottom: 2rem;
+            line-height: 1.1;
+        }
+
+        .step-description {
+            font-size: 1.125rem;
+            line-height: 1.8;
+            margin-bottom: 2rem;
+            font-weight: 300;
+        }
+
+        .step-points {
+            list-style: none;
+            margin-top: 2rem;
+        }
+
+        .step-points li {
+            font-size: 1rem;
+            padding: 1rem 0;
+            border-bottom: 1px solid rgba(0,0,0,0.1);
+            position: relative;
+            padding-left: 2rem;
+        }
+
+        .step-points li::before {
+            content: '→';
+            position: absolute;
+            left: 0;
+            color: var(--accent);
+            font-weight: 700;
+        }
+
+        /* Alternating step backgrounds */
+        .step:nth-child(odd) { background: var(--white); color: var(--black); }
+        .step:nth-child(odd) .step-points li { border-bottom-color: rgba(0,0,0,0.1); }
+
+        .step:nth-child(even) { background: var(--black); color: var(--white); }
+        .step:nth-child(even) .step-points li { border-bottom-color: rgba(255,255,255,0.1); }
+
+        /* Numbers Section */
+        .numbers {
+            padding: 6rem 2rem;
+            background: var(--white);
+            position: relative;
+            overflow-x: auto;
+        }
+
+        .numbers-grid {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 2rem;
+            max-width: 1400px;
+            margin: 0 auto;
+            min-width: max-content;
+        }
+
+        .number-item {
+            text-align: center;
+            opacity: 0;
+            transform: translateY(30px);
+            transition: all 0.6s ease-out;
+            flex: 1;
+            min-width: 150px;
+        }
+
+        .number-item.visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        .number-value {
+            font-size: clamp(4rem, 8vw, 7rem);
+            line-height: 1;
+            color: var(--accent);
+            margin-bottom: 0.5rem;
+            transition: transform 0.3s ease;
+        }
+        .number-value.-red {
+            color: var(--red);
+        }
+
+        .number-item:hover .number-value {
+            transform: scale(1.1);
+        }
+
+        .number-label {
+            font-size: clamp(0.75rem, 1.5vw, 1rem);
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            white-space: nowrap;
+        }
+
+        /* Before/After Section - INVERTED */
+        .comparison {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            min-height: 100vh;
+        }
+
+        .comparison-side {
+            padding: 6rem 4rem;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            opacity: 0;
+            transition: all 0.8s ease-out;
+        }
+
+        .comparison-side.visible {
+            opacity: 1;
+        }
+
+        .comparison-before {
+            background: var(--black);
+            color: var(--white);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .comparison-before::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: repeating-linear-gradient(
+                45deg,
+                transparent,
+                transparent 10px,
+                rgba(14, 165, 233, 0.08) 10px,
+                rgba(14, 165, 233, 0.08) 20px
+            );
+        }
+
+        .comparison-after {
+            background: var(--white);
+            color: var(--black);
+            position: relative;
+        }
+
+        .comparison-title {
+            font-size: clamp(2.5rem, 5vw, 4rem);
+            margin-bottom: 2rem;
+            position: relative;
+            z-index: 1;
+        }
+
+        .comparison-list {
+            list-style: none;
+            font-size: 1.125rem;
+            line-height: 2;
+            position: relative;
+            z-index: 1;
+        }
+
+        .comparison-list li {
+            padding: 1rem 0;
+            padding-left: 2rem;
+            position: relative;
+        }
+
+        .comparison-before .comparison-list li::before {
+            content: '✗';
+            position: absolute;
+            left: 0;
+            color: #fb7185;
+            font-weight: 700;
+        }
+
+        .comparison-after .comparison-list li::before {
+            content: '✓';
+            position: absolute;
+            left: 0;
+            color: var(--accent);
+            font-weight: 700;
+        }
+
+        .comparison-after .comparison-list li {
+            border-bottom: 1px solid rgba(0,0,0,0.1);
+        }
+
+        /* How To Start Section */
+        .how-to-start {
+            padding: 8rem 4rem;
+            background: var(--white);
+            color: var(--black);
+        }
+
+        .how-to-start-title {
+            font-size: clamp(3rem, 6vw, 5rem);
+            text-align: center;
+            margin-bottom: 6rem;
+            opacity: 0;
+            transform: translateY(30px);
+            transition: all 0.8s ease-out;
+        }
+
+        .how-to-start-title.visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        .steps-list {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: grid;
+            gap: 3rem;
+        }
+
+        .start-step {
+            display: grid;
+            grid-template-columns: auto 1fr;
+            gap: 3rem;
+            align-items: start;
+            opacity: 0;
+            transform: translateX(-50px);
+            transition: all 0.6s ease-out;
+            padding: 2rem;
+            border-left: 4px solid transparent;
+            transition: all 0.6s ease-out, border-color 0.3s ease;
+        }
+
+        .start-step.visible {
+            opacity: 1;
+            transform: translateX(0);
+        }
+
+        .start-step:hover {
+            border-left-color: var(--accent);
+            transform: translateX(10px);
+        }
+
+        .start-step-number {
+            font-size: clamp(4rem, 8vw, 6rem);
+            line-height: 1;
+            color: var(--accent);
+            font-weight: 700;
+            min-width: 150px;
+        }
+
+        .start-step-content h3 {
+            font-size: clamp(1.5rem, 3vw, 2.5rem);
+            margin-bottom: 1rem;
+        }
+
+        .start-step-content p {
+            font-size: 1.125rem;
+            line-height: 1.8;
+            font-weight: 300;
+            color: var(--gray);
+        }
+
+        /* CTA Section - INVERTED */
+        .cta {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: var(--black);
+            position: relative;
+            overflow: hidden;
+            padding: 4rem;
+        }
+
+        .cta::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle, var(--accent-glow) 0%, transparent 70%);
+            animation: rotate 20s linear infinite;
+        }
+
+        @keyframes rotate {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        .cta-text {
+            font-size: clamp(4rem, 10vw, 10rem);
+            text-align: center;
+            margin-bottom: 3rem;
+            position: relative;
+            z-index: 1;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            opacity: 0;
+            transform: scale(0.9);
+            animation: scaleIn 1s ease-out 0.5s forwards;
+            color: var(--white);
+        }
+
+        @keyframes scaleIn {
+            to {
+                opacity: 1;
+                transform: scale(1);
+            }
+        }
+
+        .cta-text:hover {
+            color: var(--accent);
+            transform: scale(1.05);
+            text-shadow: 0 0 40px var(--accent-glow);
+        }
+
+        .cta-button {
+            display: inline-block;
+            background: var(--white);
+            color: var(--black);
+            border: none;
+            padding: 2rem 4rem;
+            font-size: 1.5rem;
+            font-weight: 700;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            text-decoration: none;
+            cursor: pointer;
+            position: relative;
+            z-index: 1;
+            overflow: hidden;
+            transition: all 0.3s ease;
+            opacity: 0;
+            animation: fadeInUp 1s ease-out 1s forwards;
+        }
+
+        @keyframes fadeInUp {
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+        }
+
+        .cta-button::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: var(--accent);
+            transition: left 0.5s ease;
+            z-index: -1;
+        }
+
+        .cta-button:hover::before {
+            left: 0;
+        }
+
+        .cta-button:hover {
+            transform: scale(1.05);
+            box-shadow: 0 10px 40px var(--accent-glow);
+            color: var(--white);
+        }
+
+        .cta-subtext {
+            margin-top: 2rem;
+            font-size: 1rem;
+            color: var(--gray);
+            text-align: center;
+            position: relative;
+            z-index: 1;
+            opacity: 0;
+            animation: fadeIn 1s ease-out 1.5s forwards;
+        }
+
+        /* Mobile Responsive */
+        @media (max-width: 768px) {
+            .hero,
+            .comparison {
+                grid-template-columns: 1fr;
+            }
+
+            .hero {
+                height: auto;
+            }
+
+            .hero-left,
+            .hero-right {
+                min-height: 50vh;
+            }
+
+            .step {
+                min-height: auto;
+            }
+
+            .step-content {
+                padding: 4rem 2rem;
+            }
+
+            .step-header {
+                flex-direction: column;
+                gap: 1rem;
+                align-items: flex-start;
+            }
+
+            .numbers {
+                padding: 4rem 1rem;
+            }
+
+            .numbers-grid {
+                flex-wrap: wrap;
+                justify-content: center;
+            }
+
+            .number-item {
+                min-width: 120px;
+            }
+
+            .start-step {
+                grid-template-columns: 1fr;
+                gap: 1rem;
+            }
+
+            .start-step-number {
+                min-width: auto;
+            }
+
+            .cta-button {
+                padding: 1.5rem 3rem;
+                font-size: 1.25rem;
+            }
+        }
+
+        /* Scroll Indicator */
+        .scroll-indicator {
+            position: absolute;
+            bottom: 2rem;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 10;
+            animation: scrollBounce 2s ease-in-out infinite;
+        }
+
+        @keyframes scrollBounce {
+            0%, 100% { transform: translateX(-50%) translateY(0); }
+            50% { transform: translateX(-50%) translateY(10px); }
+        }
+
+        .scroll-indicator::before {
+            content: '↓';
+            font-size: 2rem;
+            color: var(--black);
+        }
+
+        /* Accessibility */
+        @media (prefers-reduced-motion: reduce) {
+            *,
+            *::before,
+            *::after {
+                animation-duration: 0.01ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.01ms !important;
+            }
+        }
+
+        /* High Contrast Mode Support */
+        @media (prefers-contrast: high) {
+            :root {
+                --accent: #38bdf8;
+            }
+
+            .step-points li,
+            .comparison-list li {
+                border-bottom-width: 2px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Hero Section -->
+    <section class="hero">
+        <div class="hero-left">
+            <div class="hero-title headline">
+                <h1 class="plan">PLAN</h1>
+                <h1 class="two">2</h1>
+                <h1 class="code">CODE</h1>
+            </div>
+            <p class="hero-subtitle">The AI workflow that puts planning first</p>
+            <a href="https://github.com/jparkerweb/plan2code" class="github-link" target="_blank" rel="noopener noreferrer">
+                <svg class="github-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
+                View on GitHub
+            </a>
+        </div>
+        <div class="hero-right">
+            <div class="geometric-shape shape-1"></div>
+            <div class="geometric-shape shape-2"></div>
+            <div class="geometric-shape shape-3"></div>
+            <div class="geometric-shape shape-4"></div>
+        </div>
+        <div class="scroll-indicator"></div>
+    </section>
+
+    <!-- Problem Section -->
+    <section class="problem">
+        <h2 class="problem-text">
+            AI development without a plan is just <span class="highlight">expensive typing</span>
+        </h2>
+    </section>
+
+    <!-- Steps Section -->
+    <section class="step">
+        <div class="step-content">
+            <div class="step-header">
+                <div class="step-number headline">01</div>
+                <div class="step-icon">🤔</div>
+            </div>
+            <h2 class="step-title subheadline">Plan</h2>
+            <p class="step-description">
+                Have natural back and forth conversations with AI to analyze your requirements and design the solution. Iterate until you reach a minimum of 90% confidence in your agreed upon plan.
+            </p>
+            <ul class="step-points">
+                <li>Extract functional and non-functional requirements</li>
+                <li>Examine existing codebase and integration points if applicable</li>
+                <li>Confirm tech stack with explicit approval</li>
+                <li>Design architecture, interfaces, and schemas</li>
+            </ul>
+        </div>
+    </section>
+
+    <section class="step">
+        <div class="step-content">
+            <div class="step-header">
+                <div class="step-number headline">02</div>
+                <div class="step-icon">📝</div>
+            </div>
+            <h2 class="step-title subheadline">Document</h2>
+            <p class="step-description">
+                Transform your plan into structured, actionable implementation specs. Break work into phases with clear tasks any developer could follow.
+            </p>
+            <ul class="step-points">
+                <li>Create phase-by-phase implementation plan</li>
+                <li>Define one-story-point tasks with checkboxes</li>
+                <li>Each phase is self-contained for fresh context</li>
+                <li>Generate `overview.md` and `Phase X.md` files</li>
+                <li>Enables tracking progress for each task and phase</li>
+            </ul>
+        </div>
+    </section>
+
+    <section class="step">
+        <div class="step-content">
+            <div class="step-header">
+                <div class="step-number headline">03</div>
+                <div class="step-icon" style="color: var(--accent);">⚡</div>
+            </div>
+            <h2 class="step-title subheadline">Implement</h2>
+            <p class="step-description">
+                Execute the implementation following specs exactly. By following one phase per conversation, context is kept clean, focused, and efficient.
+            </p>
+            <ul class="step-points">
+                <li>With resumeable context enabled by progress tracking, start a fresh conversation for each phase</li>
+                <li>Follow specifications exactly as documented</li>
+                <li>Update progress for each task as it completes</li>
+                <li>Code review before marking a phase complete</li>
+            </ul>
+        </div>
+    </section>
+
+    <section class="step">
+        <div class="step-content">
+            <div class="step-header">
+                <div class="step-number headline">04</div>
+                <div class="step-icon">🧹</div>
+            </div>
+            <h2 class="step-title subheadline">Finalize</h2>
+            <p class="step-description">
+                Validate the implementation, create summaries, and archive documentation. Ensure nothing was missed and the project is properly closed out.
+            </p>
+            <ul class="step-points">
+                <li>Audit all tasks for completion</li>
+                <li>Document what was built and files changed</li>
+                <li>Review if `README.md` or other docs need updates</li>
+                <li>Archive specs to completed folder for future reference</li>
+            </ul>
+        </div>
+    </section>
+
+    <!-- Numbers Section -->
+    <section class="numbers">
+        <div class="numbers-grid">
+            <div class="number-item">
+                <div class="number-value headline">4</div>
+                <div class="number-label">Structured phases</div>
+            </div>
+            <div class="number-item">
+                <div class="number-value headline">✓</div>
+                <div class="number-label">Confidence before code</div>
+            </div>
+            <div class="number-item">
+                <div class="number-value headline">1</div>
+                <div class="number-label">Conversation per phase</div>
+            </div>
+            <div class="number-item">
+                <div class="number-value headline -red">0</div>
+                <div class="number-label">Context pollution</div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Before/After Section -->
+    <section class="comparison">
+        <div class="comparison-side comparison-before">
+            <h2 class="comparison-title subheadline">THE CHAOS</h2>
+            <ul class="comparison-list">
+                <li>Start coding immediately</li>
+                <li>Discover issues mid-implementation</li>
+                <li>Constant backtracking and refactoring</li>
+                <li>Bloated context with dead ends</li>
+                <li>Unclear if requirements are met</li>
+                <li>Expensive AI tokens on trial & error</li>
+                <li>Low confidence in the final result</li>
+            </ul>
+        </div>
+        <div class="comparison-side comparison-after">
+            <h2 class="comparison-title subheadline">THE CLARITY</h2>
+            <ul class="comparison-list">
+                <li>Complete plan before coding</li>
+                <li>Issues caught during design</li>
+                <li>Implementation follows blueprint</li>
+                <li>Clean, focused context per phase</li>
+                <li>Clear success criteria validated</li>
+                <li>Efficient AI assistance throughout</li>
+                <li>Ship with total confidence</li>
+            </ul>
+        </div>
+    </section>
+
+    <!-- How To Start Section -->
+    <section class="how-to-start">
+        <h2 class="how-to-start-title headline">HOW TO START</h2>
+        <div class="steps-list">
+            <div class="start-step">
+                <div class="start-step-number headline">01</div>
+                <div class="start-step-content">
+                    <h3 class="subheadline">Install the workflow</h3>
+                    <p>Copy the Plan2Code prompts to your AI assistant. Works with Claude Code, Cursor, GitHub Copilot, Windsurf, and more.</p>
+                    <a href="https://github.com/jparkerweb/plan2code" class="inline-link" target="_blank" rel="noopener noreferrer">Get it on GitHub &rarr;</a>
+                </div>
+            </div>
+            <div class="start-step">
+                <div class="start-step-number headline">02</div>
+                <div class="start-step-content">
+                    <h3 class="subheadline">Start a new chat with <span class="code-line">/plan2code-1--plan</span></h3>
+                    <p>Describe your feature or project. The AI will work through planning phases until reaching 90% confidence in the solution.</p>
+                </div>
+            </div>
+            <div class="start-step">
+                <div class="start-step-number headline">03</div>
+                <div class="start-step-content">
+                    <h3 class="subheadline">Follow the 4-step workflow</h3>
+                    <p>New conversation for each step:</p>
+                    <ul class="code-list">
+                        <li><span class="code-line">/plan2code-1--plan</span></li>
+                        <li><span class="code-line">/plan2code-2--document</span></li>
+                        <li><span class="code-line">/plan2code-3--implement</span> <span class="gray">(per phase)</span></li>
+                        <li><span class="code-line">/plan2code-4--finalize</span></li>
+                    </ul>
+                    <br>
+                    <p>Clean context, maximum clarity!</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- CTA Section -->
+    <section class="cta">
+        <h2 class="cta-text headline">START<br>PLANNING<br>NOW</h2>
+        <a href="https://github.com/jparkerweb/plan2code" class="cta-button" target="_blank" rel="noopener noreferrer">GET IT ON GITHUB</a>
+        <p class="cta-subtext">Free and open source &mdash; transform your AI development workflow today</p>
+    </section>
+
+    <script>
+        // Intersection Observer for scroll animations
+        const observerOptions = {
+            threshold: 0.2,
+            rootMargin: '0px 0px -100px 0px'
+        };
+
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.classList.add('visible');
+                }
+            });
+        }, observerOptions);
+
+        // Observe all animated elements
+        document.addEventListener('DOMContentLoaded', () => {
+            const animatedElements = document.querySelectorAll(
+                '.problem-text, .step-content, .number-item, .comparison-side, .how-to-start-title, .start-step'
+            );
+
+            animatedElements.forEach(el => observer.observe(el));
+
+            // Stagger animation for number items
+            const numberItems = document.querySelectorAll('.number-item');
+            numberItems.forEach((item, index) => {
+                item.style.transitionDelay = `${index * 0.1}s`;
+            });
+
+            // Stagger animation for start steps
+            const startSteps = document.querySelectorAll('.start-step');
+            startSteps.forEach((step, index) => {
+                step.style.transitionDelay = `${index * 0.2}s`;
+            });
+
+            // Hide scroll indicator after scrolling
+            let scrolled = false;
+            window.addEventListener('scroll', () => {
+                if (!scrolled && window.scrollY > 100) {
+                    const indicator = document.querySelector('.scroll-indicator');
+                    if (indicator) {
+                        indicator.style.opacity = '0';
+                        indicator.style.transition = 'opacity 0.5s ease';
+                        scrolled = true;
+                    }
+                }
+            });
+
+            // Parallax effect for hero shapes
+            const shapes = document.querySelectorAll('.geometric-shape');
+            window.addEventListener('scroll', () => {
+                const scrolled = window.scrollY;
+                shapes.forEach((shape, index) => {
+                    const speed = (index + 1) * 0.1;
+                    shape.style.transform = `translateY(${scrolled * speed}px)`;
+                });
+            });
+
+            // Add pulse effect to numbers on hover
+            const numberValues = document.querySelectorAll('.number-value');
+            numberValues.forEach(value => {
+                value.addEventListener('mouseenter', () => {
+                    value.style.transition = 'transform 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55)';
+                });
+            });
+
+            // Keyboard accessibility for CTA
+            document.querySelector('.cta-text').setAttribute('tabindex', '0');
+            document.querySelector('.cta-text').addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    window.open('https://github.com/jparkerweb/plan2code', '_blank');
+                }
+            });
+        });
+
+        // Performance optimization: pause animations when not in viewport
+        const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+        if (!prefersReducedMotion.matches) {
+            const animationObserver = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        entry.target.style.animationPlayState = 'running';
+                    } else {
+                        entry.target.style.animationPlayState = 'paused';
+                    }
+                });
+            }, { threshold: 0 });
+
+            const animatedShapes = document.querySelectorAll('.geometric-shape');
+            animatedShapes.forEach(shape => animationObserver.observe(shape));
+        }
+    </script>
+</body>
+</html>
