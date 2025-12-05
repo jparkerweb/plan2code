@@ -2,6 +2,8 @@
 
 A structured 4-step workflow for developing features and projects with AI assistance. This methodology emphasizes thorough planning before implementation, ensuring well-documented, maintainable code.
 
+<img src="docs/plan2code.png" alt="Plan2Code Workflow" width="600">
+
 ## Overview
 
 ```
