@@ -62,7 +62,8 @@ Download only the directories you need for your AI coding tool.
 
 ---
 
-### Claude Code CLI
+<details>
+<summary>Claude Code CLI</summary>
 
 **Location:** `.claude/commands/`
 
@@ -92,9 +93,12 @@ Download only the directories you need for your AI coding tool.
 
 **Documentation:** [Claude Code Slash Commands](https://code.claude.com/docs/en/slash-commands)
 
+</details>
+
 ---
 
-### GitHub Copilot CLI
+<details>
+<summary>GitHub Copilot CLI</summary>
 
 **Location:** `.github/agents/`
 
@@ -126,9 +130,12 @@ copilot
 
 **Documentation:** [GitHub Copilot CLI Custom Agents](https://docs.github.com/en/copilot/concepts/agents/about-copilot-cli)
 
+</details>
+
 ---
 
-### VS Code GitHub Copilot
+<details>
+<summary>VS Code GitHub Copilot</summary>
 
 **Location:** `.github/prompts/`
 
@@ -166,9 +173,12 @@ description: "Plan2Code Step 1: Planning Mode"
 
 **Documentation:** [VS Code Copilot Prompt Files](https://code.visualstudio.com/docs/copilot/customization/prompt-files)
 
+</details>
+
 ---
 
-### Windsurf IDE
+<details>
+<summary>Windsurf IDE</summary>
 
 **Location:** `.windsurf/workflows/`
 
@@ -195,9 +205,12 @@ description: "Plan2Code Step 1: Planning Mode"
 
 **Documentation:** [Windsurf Workflows](https://docs.windsurf.com/windsurf/cascade/workflows)
 
+</details>
+
 ---
 
-### Cursor AI
+<details>
+<summary>Cursor AI</summary>
 
 **Location:** `.cursor/rules/`
 
@@ -235,9 +248,12 @@ alwaysApply: false
 
 **Documentation:** [Cursor Rules for AI](https://docs.cursor.com/context/rules)
 
+</details>
+
 ---
 
-### Google Antigravity
+<details>
+<summary>Google Antigravity</summary>
 
 **Location:** `.agent/workflows/`
 
@@ -271,9 +287,12 @@ description: "Plan2Code Step 1: Planning Mode"
 
 **Documentation:** [Customize Antigravity](https://atamel.dev/posts/2025/11-25_customize_antigravity_rules_workflows/)
 
+</details>
+
 ---
 
-### Continue (VS Code/JetBrains)
+<details>
+<summary>Continue (VS Code/JetBrains)</summary>
 
 **Location:** `.continue/prompts/`
 
@@ -310,6 +329,8 @@ description: "Plan2Code Step 1: Planning Mode"
 - Use `{{{ currentFile }}}` to reference the current file
 
 **Documentation:** [Continue Prompts](https://docs.continue.dev/customize/deep-dives/prompts)
+
+</details>
 
 ---
 
@@ -660,4 +681,3 @@ Feel free to modify these prompts to fit your workflow:
 **Too many/few phases:**
 
 - Adjust during Step 2 (Documentation) - phases should represent logical groupings of work
-
