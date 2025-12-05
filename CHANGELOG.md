@@ -2,6 +2,20 @@
 
 All notable changes to Plan2Code will be documented in this file.
 
+## v1.0.2 - 2025-12-05
+
+### 🐛 Fixed
+
+- Fixed pre-checked prerequisite checkbox in Phase template (`[x]` → `[ ]`) - generated phase documents no longer appear with prerequisites already complete
+
+### 📦 Updated
+
+- Added Session Start logic to Planning Mode - automatically detects and resumes from existing `PLAN-DRAFT-*.md` files
+- Replaced vague scope indicators with measurable criteria (phases, requirements, components, integrations)
+- Added Large Project checkpoint workflow - projects meeting Large thresholds now checkpoint at Phase 3 and resume in a new conversation
+- Added output economy rule - keeps phase responses concise, reserving detailed schemas/APIs for final PLAN-DRAFT
+- Updated PLAN-DRAFT template with new status options: `Draft | Phase 3 Complete - Resume at Phase 4 | Complete`
+
 ## v1.0.1 - 2025-12-05
 
 ### 📦 Updated
