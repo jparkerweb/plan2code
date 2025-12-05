@@ -153,7 +153,7 @@ Each task should be:
 
 ## Prerequisites
 
-- [x] Phase X-1 must be complete (if applicable)
+- [ ] Phase X-1 must be complete (if applicable)
 - [ ] [Any other prerequisites: env vars set, services running, etc.]
 
 ## Tasks
