@@ -43,6 +43,18 @@ Report each sub-score when stating your overall confidence percentage.
 
 ### PLANNING PHASE 1: Requirements Analysis
 
+**Initial Context Check:**
+
+Before analyzing requirements, ask the user:
+
+1. Are there additional files or folders I should examine? (code, configs, schemas, etc.)
+2. Any reference materials to review? (designs, mockups, wireframes, API specs, diagrams)
+3. Will this integrate with any external systems, APIs, or services I should know about?
+
+_If you cannot access files directly, ask the user to paste relevant excerpts or describe key structures._
+
+Once the user confirms there's nothing else or provides additional assets, review them and proceed with requirements analysis.
+
 1. Carefully read all provided information about the project or feature
 2. Extract and list all functional requirements explicitly stated
 3. Identify implied requirements not directly stated
