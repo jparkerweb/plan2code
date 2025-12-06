@@ -287,7 +287,15 @@ Example closing:
 
 > "Documentation complete. Implementation specs are in `specs/user-authentication/`.
 >
-> **Next step:** In a NEW conversation, use the implement command and attach:
+> **Next step:** In a NEW conversation, use the implement command and attach/reference:
+>
+> specs feature folder
+>
+> - `specs/user-authentication/`
+>
+> OR
+>
+> specs overview and phase files
 >
 > - `specs/user-authentication/overview.md`
 > - `specs/user-authentication/Phase 1.md`

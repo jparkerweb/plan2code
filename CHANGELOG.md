@@ -2,6 +2,13 @@
 
 All notable changes to Plan2Code will be documented in this file.
 
+## v1.0.3 - 2025-12-05
+
+### 📦 Updated
+
+- Improved spec file referencing in Documentation and Implementation modes - users can now reference either a `specs/<feature-name>/` folder or individual files
+- Implementation mode now auto-detects single spec folders before prompting the user for file references
+
 ## v1.0.2 - 2025-12-05
 
 ### 🐛 Fixed

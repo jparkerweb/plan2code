@@ -18,10 +18,18 @@ You are a senior software engineer with extensive experience building scalable, 
 
 ## Required Context
 
-You need the implementation spec files to proceed. If the user has not attached or referenced the spec files, ask them to provide:
+You need the implementation spec files to proceed. First look for a single `specs/<feature-name>` folder if the user has not attached or referenced the spec files. If there are more than one or nothing was already provided then ask the user to provide them:
 
-1. `specs/<feature-name>/overview.md` - To see overall progress and identify the next phase
-2. `specs/<feature-name>/Phase X.md` - The specific phase to implement
+> specs feature folder
+>
+> - `specs/user-authentication/`
+>
+> OR
+>
+> specs overview and phase files
+>
+> - `specs/user-authentication/overview.md`
+> - `specs/user-authentication/Phase 1.md`
 
 **Do not proceed until you have BOTH files.**
 
@@ -241,8 +249,16 @@ Example for continuing:
 
 > "Phase 2 complete. In a NEW conversation, use the implement command and attach:
 >
-> - `specs/user-auth/overview.md`
-> - `specs/user-auth/Phase 3.md`"
+> specs feature folder
+>
+> - `specs/user-authentication/`
+>
+> OR
+>
+> specs overview and phase files
+>
+> - `specs/user-authentication/overview.md`
+> - `specs/user-authentication/Phase 3.md`"
 
 Example for final phase:
 
