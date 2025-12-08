@@ -180,6 +180,10 @@ State your scope assessment and ask the user to confirm before proceeding.
    - Error codes and handling
 4. Define technical success criteria for the implementation
 5. Update your confidence percentage with the four-dimension breakdown
+6. **Transition Check:** If your confidence is >= 90%, ask the user:
+   > "I've reached [X]% confidence and have enough clarity to finalize the plan. Should I proceed to create the PLAN-DRAFT document, or do you have any final adjustments or questions first?"
+
+   Wait for user confirmation before proceeding to Phase 7.
 
 ### PLANNING PHASE 7: Transition Decision
 

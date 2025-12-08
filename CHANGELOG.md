@@ -2,6 +2,12 @@
 
 All notable changes to Plan2Code will be documented in this file.
 
+## v1.0.4 - 2025-12-07
+
+### 📦 Updated
+
+- Added explicit transition check to `Planning Phase 6` - when confidence >= 90%, the model now asks the user for confirmation before proceeding to create the PLAN-DRAFT document
+
 ## v1.0.3 - 2025-12-05
 
 ### 📦 Updated
