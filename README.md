@@ -15,21 +15,6 @@ A structured 4-step workflow for developing features and projects with AI assist
       New Chat               New Chat           New Chat (per phase)        New Chat
 ```
 
-| Step   | File                                   | Purpose                                        |
-| ------ | -------------------------------------- | ---------------------------------------------- |
-| Init   | `src/plan2code---init.md`            | Generate AGENTS.md file for project guidance   |
-| Update | `src/plan2code---init-update.md`     | Update existing AGENTS.md with new learnings   |
-| 0      | `src/plan2code---quick-task.md`      | Lightweight planning for small tasks           |
-| 1      | `src/plan2code-1--plan.md`           | Requirements analysis and architecture design  |
-| 1b     | `src/plan2code-1b--revise-plan.md`   | Modify specs mid-implementation                |
-| 2      | `src/plan2code-2--document.md`       | Create structured implementation documentation |
-| 3      | `src/plan2code-3--implement.md`      | Execute the implementation phase by phase      |
-| 4      | `src/plan2code-4--finalize.md`       | Validate, summarize, and archive               |
-
----
-
-## Quick Reference
-
 | Command | Use When |
 |---------|----------|
 | `/plan2code---init` | Generate AGENTS.md file for new/existing projects |
@@ -53,504 +38,115 @@ See [QUICK-REFERENCE.md](QUICK-REFERENCE.md) for full reference card.
 
 ## Installation
 
-This repository includes pre-configured workflow files for all major AI coding assistants. Choose your platform and follow the setup instructions below.
-
-### Supported Platforms
-
-| Platform                                   | Directory              | Invocation                                                                                                  | Status |
-| ------------------------------------------ | ---------------------- | ----------------------------------------------------------------------------------------------------------- | ------ |
-| [Claude Code CLI](#claude-code-cli)        | `.claude/commands/`    | `/plan2code-1--plan`, `/plan2code-2--document`, `/plan2code-3--implement`, `/plan2code-4--finalize` | Ready  |
-| [GitHub Copilot CLI](#github-copilot-cli)  | `.github/agents/`      | `--agent=plan2code-1--plan` or `/agent plan2code-1--plan`                                               | Ready  |
-| [VS Code Copilot](#vs-code-github-copilot) | `.github/prompts/`     | Slash commands in chat                                                                                      | Ready  |
-| [Windsurf IDE](#windsurf-ide)              | `.windsurf/workflows/` | `/plan2code-1--plan`, `/plan2code-2--document`, `/plan2code-3--implement`, `/plan2code-4--finalize` | Ready  |
-| [Cursor AI](#cursor-ai)                    | `.cursor/commands/`    | `/plan2code-1--plan`, `/plan2code-2--document`, `/plan2code-3--implement`, `/plan2code-4--finalize` | Ready  |
-| [Google Antigravity](#google-antigravity)  | `.agent/workflows/`    | `/plan2code-1--plan`, `/plan2code-2--document`, `/plan2code-3--implement`, `/plan2code-4--finalize` | Ready  |
-| [Continue](#continue-vs-codejetbrains)     | `.continue/prompts/`   | `/plan2code-1--plan`, `/plan2code-2--document`, `/plan2code-3--implement`, `/plan2code-4--finalize` | Ready  |
-
 ### Prerequisites
 
-The install script requires **Node.js** (v14 or later). If you don't have Node.js installed:
-
-1. Download from [nodejs.org](https://nodejs.org/)
-2. Or use a package manager:
-   - **macOS:** `brew install node`
-   - **Windows:** `winget install OpenJS.NodeJS` or `choco install nodejs`
-   - **Linux:** `sudo apt install nodejs` (Debian/Ubuntu) or `sudo dnf install nodejs` (Fedora)
-
-> **Note:** If you prefer not to install Node.js, you can use **Method 2: Manual copy** below instead.
+**Node.js** (v14 or later) is required. If you don't have it:
+- Download from [nodejs.org](https://nodejs.org/)
+- Or: `brew install node` (macOS) | `winget install OpenJS.NodeJS` (Windows) | `sudo apt install nodejs` (Linux)
 
 ### Quick Start
 
-**Option A: Global Installation (Recommended for supported tools)**
-
-Some tools support global installation to your home directory. Use files from the `dist/global-commands/` directory:
-
-| Tool | Home Directory Location |
-|------|------------------------|
-| Claude Code | `~/.claude/commands/` |
-| Copilot CLI | `~/.copilot/agents/` |
-| Cursor | `~/.cursor/commands/` |
-| Continue | `~/.continue/prompts/` |
-| Windsurf | `~/.codeium/windsurf/global_workflows/` |
-| VS Code Copilot | Windows: `%APPDATA%\Code\User\prompts\`<br>macOS: `~/Library/Application Support/Code/User/prompts/`<br>Linux: `~/.config/Code/User/prompts/` |
-
-Other tools (GitHub Copilot in `.github/`, Antigravity) require per-project installation.
-
-> **Home Directory Locations:**
->
-> - **macOS/Linux:** `~/` (e.g., `/Users/yourname/` or `/home/yourname/`)
-> - **Windows:** `%USERPROFILE%` (e.g., `C:\Users\yourname\`)
-
-**Method 1: Use the install script (easiest)**
-
 ```bash
-# Clone the repository
-git clone https://github.com/your-username/plan2code.git
+git clone https://github.com/jparkerweb/plan2code.git
 cd plan2code
-
-# Interactive mode - choose platforms from menu
 node install.js
 ```
 
-The interactive menu displays:
-```
-Available platforms:
-
-  1. Claude Code      (~/.claude/commands/)
-  2. Copilot CLI      (~/.copilot/agents/)
-  3. Cursor           (~/.cursor/commands/)
-  4. Continue         (~/.continue/prompts/)
-  5. Windsurf         (~/.codeium/windsurf/global_workflows/)
-  6. VS Code Copilot  (%APPDATA%\Code\User\prompts\)
-
-  A. Install ALL platforms
-  U. Uninstall Plan2Code files
-  Q. Quit
-
-Enter choice (1-6, A, U, Q, or comma-separated like 1,3,5):
-```
+The interactive installer will guide you through:
+- **Global installation** (recommended) - commands available in all projects
+- **Local/project installation** - commands for a specific project only
+- **Uninstall** - remove previously installed files
 
 <img src="docs/install-script.jpg" width="600">
 
-**Non-interactive options:**
-```bash
-node install.js --dry-run          # Preview installation (all platforms)
-node install.js --platform claude  # Install specific platform only
-node install.js --uninstall        # Remove all installed files
-```
+### Supported Platforms
 
-**Method 2: Manual copy from `dist/global-commands/`**
+| Platform | Global Location | Invocation |
+|----------|-----------------|------------|
+| Claude Code | `~/.claude/commands/` | `/plan2code-1--plan` |
+| Copilot CLI | `~/.copilot/agents/` | `--agent=plan2code-1--plan` |
+| VS Code Copilot | `~/Library/Application Support/Code/User/prompts/` | Slash commands |
+| Windsurf | `~/.codeium/windsurf/global_workflows/` | `/plan2code-1--plan` |
+| Cursor | `~/.cursor/commands/` | `/plan2code-1--plan` |
+| Continue | `~/.continue/prompts/` | `/plan2code-1--plan` |
+| Antigravity | `.agent/workflows/` (project only) | `/plan2code-1--plan` |
 
-```bash
-# Clone the repository
-git clone https://github.com/your-username/plan2code.git
-
-# macOS/Linux - copy desired platform directories:
-cp -r plan2code/dist/global-commands/.claude ~/                    # Claude Code
-cp -r plan2code/dist/global-commands/.copilot ~/                   # Copilot CLI
-cp -r plan2code/dist/global-commands/.cursor ~/                    # Cursor
-cp -r plan2code/dist/global-commands/.continue ~/                  # Continue
-mkdir -p ~/.codeium/windsurf && cp -r plan2code/dist/global-commands/.codeium/windsurf/global_workflows ~/.codeium/windsurf/  # Windsurf
-# VS Code Copilot (macOS):
-cp plan2code/dist/global-commands/vscode-copilot-prompts/*.prompt.md ~/Library/Application\ Support/Code/User/prompts/
-# VS Code Copilot (Linux):
-mkdir -p ~/.config/Code/User/prompts && cp plan2code/dist/global-commands/vscode-copilot-prompts/*.prompt.md ~/.config/Code/User/prompts/
-
-# Windows (PowerShell):
-Copy-Item -Recurse plan2code\dist\global-commands\.claude $env:USERPROFILE\
-Copy-Item -Recurse plan2code\dist\global-commands\.copilot $env:USERPROFILE\
-Copy-Item -Recurse plan2code\dist\global-commands\.cursor $env:USERPROFILE\
-Copy-Item -Recurse plan2code\dist\global-commands\.continue $env:USERPROFILE\
-New-Item -ItemType Directory -Force -Path "$env:USERPROFILE\.codeium\windsurf"
-Copy-Item -Recurse plan2code\dist\global-commands\.codeium\windsurf\global_workflows $env:USERPROFILE\.codeium\windsurf\
-# VS Code Copilot (Windows):
-New-Item -ItemType Directory -Force -Path "$env:APPDATA\Code\User\prompts"
-Copy-Item plan2code\dist\global-commands\vscode-copilot-prompts\*.prompt.md $env:APPDATA\Code\User\prompts\
-```
-
-**Option B: Per-Project Installation**
-
-If you prefer project-specific configuration, use files from the `dist/local-commands/` directory:
+### CLI Options
 
 ```bash
-# Clone the repository
-git clone https://github.com/your-username/plan2code.git
-
-# Copy the platform-specific directory to your project
-# Example for Claude Code:
-cp -r plan2code/dist/local-commands/.claude your-project/
-
-# Example for GitHub Copilot (VS Code):
-cp -r plan2code/dist/local-commands/.github your-project/
-
-# Example for Windsurf:
-cp -r plan2code/dist/local-commands/.windsurf your-project/
+node install.js                    # Interactive menu
+node install.js --platform claude  # Install specific platform
+node install.js --local            # Install to current project instead of global
+node install.js --dry-run          # Preview what would be installed
+node install.js --uninstall        # Remove installed files
+node install.js --help             # Show all options
 ```
-
-> **Warning:** If your project's `.gitignore` includes patterns like `.windsurf/`, `.cursor/`, or similar, the AI tool may not recognize the workflows/commands. Use global installation instead.
-
-**Option C: Download individual platform directories**
-
-Download only the directories you need from `dist/local-commands/` (for projects) or `dist/global-commands/` (for home directory).
 
 ---
 
 <details>
-<summary>Claude Code CLI</summary>
+<summary>Platform Details</summary>
 
-**Location:** `.claude/commands/` (project) or `~/.claude/commands/` (global)
+### Claude Code CLI
 
-**Setup:**
+Type `/plan2code-1--plan` in chat. Restart Claude Code after installation.
 
-```bash
-# Global installation (recommended) - interactive
-node install.js    # Select option 1 or A
+**Docs:** [Claude Code Slash Commands](https://code.claude.com/docs/en/slash-commands)
 
-# Or non-interactive
-node install.js --platform claude
-
-# Or manual copy
-cp -r plan2code/dist/global-commands/.claude ~/
-
-# Or per-project
-cp -r plan2code/dist/local-commands/.claude your-project/
-```
-
-Restart Claude Code or start a new session after installation.
-
-**Files:**
-
-```
-.claude/commands/
-├── plan2code-1--plan.md       # Step 1: Planning
-├── plan2code-2--document.md   # Step 2: Documentation
-├── plan2code-3--implement.md  # Step 3: Implementation
-└── plan2code-4--finalize.md   # Step 4: Finalization
-```
-
-**Usage:**
+### GitHub Copilot CLI
 
 ```bash
-/plan2code-1--plan           # Start planning a new feature
-/plan2code-2--document       # Create implementation docs from plan
-/plan2code-3--implement      # Begin/continue implementation
-/plan2code-4--finalize       # Wrap up after all phases complete
-```
-
-**Documentation:** [Claude Code Slash Commands](https://code.claude.com/docs/en/slash-commands)
-
-</details>
-
----
-
-<details>
-<summary>GitHub Copilot CLI</summary>
-
-**Location:** `.github/agents/` (project) or `~/.copilot/agents/` (global)
-
-**Setup:**
-
-```bash
-# Global installation (recommended) - interactive
-node install.js    # Select option 2 or A
-
-# Or non-interactive
-node install.js --platform copilot
-
-# Or manual copy
-cp -r plan2code/dist/global-commands/.copilot ~/
-
-# Or per-project
-cp -r plan2code/dist/local-commands/.github your-project/
-```
-
-Ensure GitHub Copilot CLI is installed: `npm install -g @github/copilot@latest`
-
-**Files:**
-
-```
-.github/agents/
-├── plan2code-1--plan.agent.md       # Step 1: Planning
-├── plan2code-2--document.agent.md   # Step 2: Documentation
-├── plan2code-3--implement.agent.md  # Step 3: Implementation
-└── plan2code-4--finalize.agent.md   # Step 4: Finalization
-```
-
-**Usage:**
-
-```bash
-# Using --agent flag
 copilot --agent=plan2code-1--plan --prompt "I want to build a REST API"
-
-# Using slash commands in interactive mode
-copilot
-> /agent plan2code-1--plan
 ```
 
-**Documentation:** [GitHub Copilot CLI Custom Agents](https://docs.github.com/en/copilot/concepts/agents/about-copilot-cli)
+Requires: `npm install -g @github/copilot@latest`
+
+**Docs:** [GitHub Copilot CLI Custom Agents](https://docs.github.com/en/copilot/concepts/agents/about-copilot-cli)
+
+### VS Code GitHub Copilot
+
+Open Copilot Chat (`Ctrl+Shift+I`), type `/` to see prompts. Requires per-project install via `node install.js --local`.
+
+**Docs:** [VS Code Copilot Prompt Files](https://code.visualstudio.com/docs/copilot/customization/prompt-files)
+
+### Windsurf IDE
+
+Type `/plan2code-1--plan` in Cascade. Note: 12,000 character limit per workflow.
+
+**Docs:** [Windsurf Workflows](https://docs.windsurf.com/windsurf/cascade/workflows)
+
+### Cursor AI
+
+Type `/` in chat, select command from dropdown.
+
+**Docs:** [Cursor Commands](https://docs.cursor.com/agent/chat/commands)
+
+### Google Antigravity
+
+Type `/plan2code-1--plan` in chat. Requires per-project install via `node install.js --local`.
+
+**Docs:** [Customize Antigravity](https://atamel.dev/posts/2025/11-25_customize_antigravity_rules_workflows/)
+
+### Continue (VS Code/JetBrains)
+
+Type `/plan2code-1--plan` in chat. Install the Continue extension first.
+
+**Docs:** [Continue Prompts](https://docs.continue.dev/customize/deep-dives/prompts)
 
 </details>
 
 ---
 
 <details>
-<summary>VS Code GitHub Copilot</summary>
+<summary>Manual Installation</summary>
 
-**Location:** `.github/prompts/` (project only - no global support)
+If your AI tool isn't listed or you prefer manual setup:
 
-**Setup:**
-
-```bash
-# Per-project installation only
-cp -r plan2code/dist/local-commands/.github your-project/
-```
-
-Open VS Code and ensure GitHub Copilot extension is installed. Prompts are automatically recognized.
-
-> **Note:** GitHub prompts must be installed per-project (no global support).
-
-**Files:**
-
-```
-.github/prompts/
-├── plan2code-1--plan.prompt.md       # Step 1: Planning
-├── plan2code-2--document.prompt.md   # Step 2: Documentation
-├── plan2code-3--implement.prompt.md  # Step 3: Implementation
-└── plan2code-4--finalize.prompt.md   # Step 4: Finalization
-```
-
-**File Format:**
-
-```yaml
----
-mode: agent
-description: "Plan2Code Step 1: Planning Mode"
----
-[prompt content]
-```
-
-**Usage:**
-
-- Open Copilot Chat (Ctrl+Shift+I or Cmd+Shift+I)
-- Type `/` to see available prompts
-- Select the desired workflow step
-
-**Documentation:** [VS Code Copilot Prompt Files](https://code.visualstudio.com/docs/copilot/customization/prompt-files)
+1. **Copy/Paste:** Copy contents from `src/plan2code-*.md` files into your conversation
+2. **File Reference:** Tell the AI: `Please follow the instructions in src/plan2code-1--plan.md`
+3. **Custom Integration:** Adapt files from `dist/` directories to your tool's format
 
 </details>
-
----
-
-<details>
-<summary>Windsurf IDE</summary>
-
-**Location:** `.windsurf/workflows/` (project) or `~/.codeium/windsurf/global_workflows/` (global)
-
-**Setup:**
-
-```bash
-# Global installation (recommended) - interactive
-node install.js    # Select option 5 or A
-
-# Or non-interactive
-node install.js --platform windsurf
-
-# Or manual copy (macOS/Linux)
-mkdir -p ~/.codeium/windsurf
-cp -r plan2code/dist/global-commands/.codeium/windsurf/global_workflows ~/.codeium/windsurf/
-
-# Or per-project
-cp -r plan2code/dist/local-commands/.windsurf your-project/
-```
-
-> **Note:** Windsurf also searches parent directories up to git root for `.windsurf/workflows/`.
-
-> **Warning:** If `.windsurf/` is in your project's `.gitignore`, workflows may not be recognized. Use global installation instead.
-
-**Files:**
-
-```
-.windsurf/workflows/
-├── plan2code-1--plan.md       # Step 1: Planning
-├── plan2code-2--document.md   # Step 2: Documentation
-├── plan2code-3--implement.md  # Step 3: Implementation
-└── plan2code-4--finalize.md   # Step 4: Finalization
-```
-
-**Note:** Windsurf has a 12,000 character limit per workflow file.
-
-**Usage:**
-
-- In Cascade, type `/plan2code-1--plan` to invoke the planning workflow
-
-**Documentation:** [Windsurf Workflows](https://docs.windsurf.com/windsurf/cascade/workflows)
-
-</details>
-
----
-
-<details>
-<summary>Cursor AI</summary>
-
-**Location:** `.cursor/commands/` (project) or `~/.cursor/commands/` (global)
-
-**Setup:**
-
-```bash
-# Global installation (recommended) - interactive
-node install.js    # Select option 3 or A
-
-# Or non-interactive
-node install.js --platform cursor
-
-# Or manual copy
-cp -r plan2code/dist/global-commands/.cursor ~/
-
-# Or per-project
-cp -r plan2code/dist/local-commands/.cursor your-project/
-```
-
-**Files:**
-
-```
-.cursor/commands/
-├── plan2code-1--plan.md       # Step 1: Planning
-├── plan2code-2--document.md   # Step 2: Documentation
-├── plan2code-3--implement.md  # Step 3: Implementation
-└── plan2code-4--finalize.md   # Step 4: Finalization
-```
-
-**Usage:**
-
-- Type `/` in Cursor chat to see available commands
-- Select `plan2code-1--plan` from the dropdown
-- Commands from both project and global directories appear automatically
-
-**Documentation:** [Cursor Commands](https://docs.cursor.com/agent/chat/commands)
-
-</details>
-
----
-
-<details>
-<summary>Google Antigravity</summary>
-
-**Location:** `.agent/workflows/` (project only)
-
-> **Note:** Antigravity supports global workflows through the UI, but the exact filesystem path is not well documented. Project-level workflows in `.agent/workflows/` are the recommended approach.
-
-**Setup:**
-
-```bash
-# Per-project installation only
-cp -r plan2code/dist/local-commands/.agent your-project/
-```
-
-Workflows appear automatically in Antigravity.
-
-> **Warning:** If `.agent/` is in your project's `.gitignore`, workflows may not be recognized.
-
-**Files:**
-
-```
-.agent/workflows/
-├── plan2code-1--plan.md       # Step 1: Planning
-├── plan2code-2--document.md   # Step 2: Documentation
-├── plan2code-3--implement.md  # Step 3: Implementation
-└── plan2code-4--finalize.md   # Step 4: Finalization
-```
-
-**File Format:**
-
-```yaml
----
-description: "Plan2Code Step 1: Planning Mode"
----
-[prompt content]
-```
-
-**Usage:**
-
-- Type `/plan2code-1--plan` in the agent chat to invoke the planning workflow
-
-**Documentation:** [Customize Antigravity](https://atamel.dev/posts/2025/11-25_customize_antigravity_rules_workflows/)
-
-</details>
-
----
-
-<details>
-<summary>Continue (VS Code/JetBrains)</summary>
-
-**Location:** `.continue/prompts/` (project) or `~/.continue/prompts/` (global)
-
-**Setup:**
-
-```bash
-# Global installation (recommended) - interactive
-node install.js    # Select option 4 or A
-
-# Or non-interactive
-node install.js --platform continue
-
-# Or manual copy
-cp -r plan2code/dist/global-commands/.continue ~/
-
-# Or per-project
-cp -r plan2code/dist/local-commands/.continue your-project/
-```
-
-Install the Continue extension for VS Code or JetBrains. Prompts are automatically recognized.
-
-> **Warning:** If `.continue/` is in your project's `.gitignore`, prompts may not be recognized. Use global installation instead.
-
-**Files:**
-
-```
-.continue/prompts/
-├── plan2code-1--plan.prompt.md       # Step 1: Planning
-├── plan2code-2--document.prompt.md   # Step 2: Documentation
-├── plan2code-3--implement.prompt.md  # Step 3: Implementation
-└── plan2code-4--finalize.prompt.md   # Step 4: Finalization
-```
-
-**File Format:**
-
-```yaml
----
-name: plan2code-1--plan
-description: "Plan2Code Step 1: Planning Mode"
----
-[prompt content]
-```
-
-**Usage:**
-
-- In Continue chat, type `/plan2code-1--plan` to invoke the planning workflow
-- Use `{{{ input }}}` template variable for user input
-- Use `{{{ currentFile }}}` to reference the current file
-
-**Documentation:** [Continue Prompts](https://docs.continue.dev/customize/deep-dives/prompts)
-
-</details>
-
----
-
-### Manual Installation (Any Platform)
-
-If your AI tool isn't listed above, you can still use Plan2Code:
-
-1. **Copy/Paste Method:** Copy the contents of the appropriate `src/plan2code-*.md` file and paste it at the start of your conversation.
-
-2. **File Reference Method:** Reference the file directly in your prompt:
-
-   ```
-   Please follow the instructions in src/plan2code-1--plan.md
-
-   I want to build a user authentication system.
-   ```
-
-3. **Custom Integration:** Use files from `dist/local-commands/` or `dist/global-commands/` as templates, then adapt to your tool's custom instruction format.
 
 ---
 
