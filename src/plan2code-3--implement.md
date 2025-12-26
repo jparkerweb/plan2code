@@ -32,7 +32,7 @@ If the user provides a path to an `overview.md` file (e.g., `specs/high-severity
 1. Read the overview.md file
 2. Find the "Phase Checklist" section
 3. Identify the first unchecked `[ ]` phase - this is the next phase to implement
-4. Automatically read the corresponding `Phase X.md` file from the same directory
+4. Automatically read the corresponding `phase-X.md` file from the same directory
 5. Proceed with implementation
 
 **Option 2: Auto-detect from specs folder**
@@ -111,7 +111,7 @@ For each task in the phase:
 
 After all tasks are done:
 
-1. Update `Phase X.md`:
+1. Update `phase-X.md`:
 
    - All task checkboxes marked `[x]`
    - Fill in the "Phase Completion Summary" section
@@ -214,7 +214,7 @@ Before requesting user sign-off, verify:
 ```markdown
 ## Implementation Review
 
-- [ ] All tasks in Phase X.md are checked `[x]` or marked blocked `[!]`
+- [ ] All tasks in phase-X.md are checked `[x]` or marked blocked `[!]`
 - [ ] All files mentioned in tasks exist and are properly formatted
 - [ ] No TODO/FIXME comments left unaddressed in new code
 - [ ] Code compiles/parses without syntax errors
@@ -222,7 +222,7 @@ Before requesting user sign-off, verify:
 - [ ] Tests executed (if testing tasks present in this phase)
 - [ ] Test results documented in completion summary
 - [ ] Blocked tasks (if any) are documented with clear explanations
-- [ ] Phase X.md "Phase Completion Summary" section is filled in
+- [ ] phase-X.md "Phase Completion Summary" section is filled in
 - [ ] **READY FOR USER SIGN-OFF** (do NOT update overview.md checkbox yet)
 ```
 

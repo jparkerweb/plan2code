@@ -89,7 +89,7 @@ Each task should be:
    - Success Criteria checklist (from section 7)
    - Phase Checklist (from Implementation Phases)
    - Quick Reference (Key Files, Environment Variables, External Dependencies)
-5. **Write** each `Phase X.md` file with detailed tasks
+5. **Write** each `phase-X.md` file with detailed tasks
 6. **Verify** all requirements from planning document are covered
 7. **Present** summary to user and ask about the planning document
 
@@ -101,9 +101,9 @@ Create the following file structure:
 specs/
 └── <feature-name>/
     ├── overview.md          # High-level overview with phase checklist
-    ├── Phase 1.md           # Detailed tasks for Phase 1
-    ├── Phase 2.md           # Detailed tasks for Phase 2
-    └── Phase N.md           # Continue for all phases
+    ├── phase-1.md           # Detailed tasks for Phase 1
+    ├── phase-2.md           # Detailed tasks for Phase 2
+    └── phase-N.md           # Continue for all phases
 ```
 
 The `<feature-name>` folder should use kebab-case (e.g., `user-authentication`, `payment-integration`).
@@ -185,7 +185,7 @@ Check the Testing Strategy from the PLAN-DRAFT (section 2.4):
 [Filled in during finalization]
 ```
 
-### Phase X.md Template
+### phase-X.md Template
 
 ```markdown
 # Phase X: [Descriptive Name]
@@ -249,8 +249,8 @@ Once all files are created, present this summary:
 
 Created files:
 - specs/<feature-name>/overview.md
-- specs/<feature-name>/Phase 1.md
-- specs/<feature-name>/Phase 2.md
+- specs/<feature-name>/phase-1.md
+- specs/<feature-name>/phase-2.md
 [etc.]
 
 Total phases: X
@@ -259,15 +259,10 @@ Total tasks: Y
 Requirements coverage: [Confirm all planning requirements are addressed]
 ```
 
-Then ask the user:
+Then automatically archive the planning document:
 
-> "The planning document `specs/PLAN-DRAFT-<timestamp>.md` has been converted to implementation specs. Would you like to:
->
-> 1. **Delete it** - The information is now in the spec files
-> 2. **Archive it** - Move to `specs/<feature-name>/PLAN-DRAFT.md` for reference
-> 3. **Keep it** - Leave in current location
->
-> I recommend option 2 for traceability."
+1. Move `specs/PLAN-DRAFT-<timestamp>.md` to `specs/<feature-name>/PLAN-DRAFT.md`
+2. Confirm: "Archived planning document to `specs/<feature-name>/PLAN-DRAFT.md` for reference."
 
 When documentation is complete, tell the user:
 

@@ -29,7 +29,7 @@ If there are multiple active spec folders or nothing was already provided, ask t
 
 1. The entire `specs/<feature-name>/` directory contents:
    - `overview.md`
-   - All `Phase X.md` files
+   - All `phase-X.md` files
 
 **Do not proceed until you have all spec files.**
 
@@ -71,7 +71,7 @@ Complete these steps in order. Report progress after each step.
 
 #### Process:
 
-1. Open each `Phase X.md` file
+1. Open each `phase-X.md` file
 2. For every task, verify its status:
 
 | Status | Meaning     | Action Required                  |
@@ -272,8 +272,8 @@ Add this summary to `overview.md` under `## Completion Summary`.
 1. Create archive directory: `specs--completed/<feature-name>/`
 2. Move all files from `specs/<feature-name>/` to the archive:
    - `overview.md` (with completion summary added)
-   - All `Phase X.md` files
-   - `PLAN-DRAFT.md` (if it was archived here)
+   - All `phase-X.md` files
+   - `PLAN-DRAFT.md` (if present)
 3. Verify the original `specs/<feature-name>/` directory is empty and can be removed
 
 #### Archive structure:
@@ -285,8 +285,8 @@ specs/
 specs--completed/
 └── <feature-name>/              # Archived feature
     ├── overview.md              # With completion summary
-    ├── Phase 1.md               # All checkboxes [x]
-    ├── Phase 2.md
+    ├── phase-1.md               # All checkboxes [x]
+    ├── phase-2.md
     └── ...
 ```
 

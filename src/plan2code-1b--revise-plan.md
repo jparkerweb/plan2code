@@ -159,7 +159,7 @@ Report any issues found and resolve before proceeding.
 
 3. Remind user of next steps:
 
-```markdown
+```
 ╔═══════════════════════════════════════════════════════════════════╗
 ║  REVISION COMPLETE                                                 ║
 ╠═══════════════════════════════════════════════════════════════════╣
