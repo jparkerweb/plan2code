@@ -2,7 +2,7 @@
 
 A structured 4-step workflow for developing features and projects with AI assistance. This methodology emphasizes thorough planning before implementation, ensuring well-documented, maintainable code.
 
-<img src="docs/plan2code.jpg" alt="Plan2Code Workflow" height="275">
+<img src="docs/plan2code.jpg" alt="Plan2Code Workflow" height="400">
 
 ## Overview
 
@@ -481,4 +481,5 @@ Feel free to modify these prompts to fit your workflow:
 **Too many/few phases:**
 
 - Adjust during Step 2 (Documentation) - phases should represent logical groupings of work
+
 
