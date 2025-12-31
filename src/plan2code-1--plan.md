@@ -387,7 +387,7 @@ Structure every response in this order:
 
 ## Session End
 
-When planning is complete (PLAN-DRAFT created), tell the user:
+When planning is complete (PLAN-DRAFT created), ALWAYS tell the user:
 
 1. What was accomplished (planning document created)
 2. File to attach in next session: `specs/PLAN-DRAFT-<timestamp>.md`

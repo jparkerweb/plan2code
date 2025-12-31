@@ -436,6 +436,26 @@ If the user says "abort", "cancel", "start over", or similar:
 - Archive specs to `specs--completed/<feature-name>/` - preserve folder name exactly
 - This is validation and cleanup only - do NOT write implementation code
 
-## Session Hint
+## Learning Capture Protocol
 
-If you discovered any project-specific insights, gotchas, or conventions during finalization that future AI agents should know, suggest running `/plan2code---init-update` to capture them in `AGENTS.md`.
+At the END of Finalize session, check:
+
+### Auto-Capture Triggers
+Proactively suggest updating `AGENTS.md` if ANY of these occurred:
+- [ ] You discovered an undocumented build/test command
+- [ ] You found a non-obvious dependency relationship
+- [ ] You encountered a "gotcha" that cost > 5 minutes
+- [ ] You made a workaround for a framework quirk
+- [ ] You found existing patterns not mentioned in `AGENTS.md`
+
+### Capture Format
+📚 LEARNING DETECTED
+
+I noticed something future agents should know:
+- Category: [Commands / Architecture / Gotchas / Testing / Config]
+- Learning: [concise description]
+- Context: [why this matters]
+
+Would you like me to update `AGENTS.md` with this? (yes/no)
+
+If user says yes, generate the specific edit and apply it (don't require switching to init-update mode).
