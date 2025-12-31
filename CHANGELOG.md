@@ -2,6 +2,39 @@
 
 All notable changes to Plan2Code will be documented in this file.
 
+## v1.3.3 - 2025-12-30
+
+### ✨ Added
+
+- **Learning Capture Protocol** - Replaced simple "Session Hint" with structured learning capture
+  - Auto-capture triggers checklist (undocumented commands, gotchas, patterns, workarounds)
+  - Formatted capture template with category, learning, and context
+  - Inline `AGENTS.md` updates without requiring init-update mode switch
+  - Applied to Implementation (Step 3) and Finalize (Step 4) modes
+
+### 🔧 Changed
+
+- **Archive path includes timestamp** - Specs now archived to `specs--completed/<feature-name>-<timestamp>/`
+  - Prevents overwriting when re-implementing same feature
+  - Preserves history of multiple implementation attempts
+- **Clearer session end instructions** - Planning mode (Step 1) now explicitly says "ALWAYS tell the user"
+- **Simplified next command reference** - Removed "or equivalent" from next step instructions
+
+## v1.3.2 - 2025-12-25
+
+### 🔧 Changed
+
+- **Phase file naming convention** - Changed from `Phase X.md` to `phase-X.md` (lowercase, hyphen instead of space)
+  - Affects generated spec files in `specs/<feature-name>/`
+  - Updated references in documentation, implementation, and finalization modes
+- **PLAN-DRAFT auto-archiving** - Planning documents are now automatically archived without prompting
+  - Moves `specs/PLAN-DRAFT-<timestamp>.md` to `specs/<feature-name>/PLAN-DRAFT.md` after documentation step
+  - Removed user prompt asking to delete/archive/keep
+
+### 📦 Updated
+
+- Improved uniformity of Prompt files
+
 ## v1.3.1 - 2025-12-19
 
 ### ✨ Added
