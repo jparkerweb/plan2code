@@ -2,6 +2,92 @@
 
 All notable changes to Plan2Code will be documented in this file.
 
+## v1.5.2
+
+### ✨ Added
+
+- **AI Agent File Sync** - Init and Init-Update workflows now detect and sync other AI agent config files
+  - Detects 6 file types: CLAUDE.md, GEMINI.md, .cursorrules, .github/copilot-instructions.md, .cursor/rules/, .windsurf/rules/
+  - Offers to replace with references to AGENTS.md as single source of truth
+  - User confirmation required before any modifications
+  - Correct relative paths for each file location (./AGENTS.md, ../AGENTS.md, ../../AGENTS.md)
+- **Knowledge Transfer** - Init mode now uses existing CLAUDE.md content as context when creating new AGENTS.md
+  - Preserves project knowledge during migration to AGENTS.md
+## v1.5.1
+### ✨ Added
+- **Prerequisite verification workflow** - Agents now verify/complete prerequisites before starting phase tasks
+  - Implementation mode processes prerequisites in order: verify, complete, or mark assumed
+  - Loop prompt treats prerequisites as "Task 0.X" - one per iteration before tasks
+  - New completion markers: `PREREQ_COMPLETE` and `PREREQ_ASSUMED`
+- **New checkbox state `[?]`** - "Assumed complete, couldn't verify" for prerequisites that can't be validated
+  - Use when prerequisite cannot be programmatically verified (e.g., "Design approved by stakeholder")
+  - Agents skip `[?]` items like `[x]` items
+- **Re-opened phase handling in Revision mode** - Properly handle adding tasks to completed phases
+  - New "Re-opening" impact type (Medium-High risk) in impact assessment
+  - New tasks in completed phases get `🆕 ADDED` flag
+  - Phase checkbox changes from `[x]` to `[ ]` in overview.md when new tasks added
+  - "Phases Re-opened" section in revision summary
+  - Consistency check now verifies phase completion status matches task completion
+
+### 🔧 Changed
+- **Installer UI refresh** - Cleaner, narrower layout for better terminal compatibility
+  - Narrower menu boxes (65 characters instead of 76)
+  - Smaller mascot display at end of installation
+  - Added first-time user documentation link after successful install
+  - Updated menu descriptions to show "+ loop CLI" for relevant options
+- **Planning workflow guardrails** - Prevent users from skipping the documentation step
+  - Added critical reminder after Phase 7 to direct to `/plan2code-2--document`
+  - Added workflow order reminder in Session End section: Plan → Document → Implement → Finalize
+  - Updated example closing message to emphasize documentation as next step
+  - Added workflow order to Important Reminders section
+- **AGENTS.md pre-flight message** - Improved guidance for new projects
+  - Message now explains that new projects can continue without AGENTS.md
+  - Suggests creating basic AGENTS.md first with rules can still be valuable
+
+## v1.5.0 - 2026-01-22
+
+### ✨ Added
+- **Plan2Code Loop** - New autonomous CLI tool for hands-off spec implementation
+  - Separate Node.js/TypeScript tool in `plan2code-loop/` directory
+  - LLM-driven task discovery - AI reads spec files and finds unchecked tasks
+  - Iterates through tasks one at a time, marking checkboxes as complete
+  - Structured completion markers: `TASK_COMPLETE: 1.1 - description`
+  - Session persistence with scratchpad and iteration logging
+  - Supports Claude Code and GitHub Copilot CLI agents
+- **Installer integration** for loop CLI
+  - Option `A` now installs prompts to all platforms AND builds/links the loop CLI
+  - Option `O` builds and links plan2code-loop CLI only
+  - Option `U` uninstalls prompts AND unlinks the loop CLI
+
+### 📝 Documentation
+- Updated README.md with "Autonomous Loop" section explaining when to use loop vs manual Step 3
+- Updated QUICK-REFERENCE.md with loop commands and decision tree
+- Updated AGENTS.md with loop architecture, commands, and completion markers
+
+## v1.4.0 - 2026-01-09
+
+### ✨ Added
+- **Parallel Phase Execution** - Run multiple implementation phases simultaneously in separate agent instances
+  - Documentation Mode auto-detects parallel-eligible phases based on file conflicts and dependencies
+  - Implementation Mode presents phase selection UI when parallel options are available
+  - New "Parallel Execution Groups" section in `overview.md` tracks which phases can run together
+  - Conflict detection criteria: file overlap, prerequisite dependencies, data/output dependencies, shared state
+  - Users can start multiple `/plan2code-3--implement` sessions to work on different parallel phases
+- **In-Progress Phase Tracking** - Track which phases are actively being worked on
+  - New `[/]` checkbox status indicates a phase is in-progress (between `[ ]` pending and `[x]` complete)
+  - Phases marked `[/]` when an agent starts working, `[x]` when user approves completion
+  - Aborted phases stay `[/]` to enable resume - never reset back to `[ ]`
+  - Parallel selection UI shows `[IN PROGRESS]` vs `[AVAILABLE]` status for each phase
+  - Single in-progress phase prompts user to confirm resume (prevents accidental overlap)
+  - Supports multiple agent sessions on parallel phases with clear visibility of what's active
+
+### 🔧 Changed
+- **Documentation Mode process** - Added step 6 "Analyze phases for parallel execution eligibility"
+- **Implementation Mode detection** - Now checks for parallel siblings before starting phase
+- **Implementation Mode phase selection** - 4-case decision logic for parallel, resume, auto-start scenarios
+- **Session end summaries** - Documentation Mode now reports parallel execution groups
+- **Abort handling** - Phases remain `[/]` on abort with clear resume instructions
+
 ## v1.3.3 - 2025-12-30
 
 ### ✨ Added

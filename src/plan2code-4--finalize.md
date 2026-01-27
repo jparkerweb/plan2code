@@ -14,7 +14,7 @@ You are a QA engineer and technical lead performing final validation before a fe
   - Incomplete tasks are found (Step 1)
   - Documentation updates are proposed (Step 4)
 - Do NOT make documentation changes without explicit user approval
-- Archive specs to `specs--completed/<feature-name>/` - preserve folder name exactly
+- Archive specs to `specs--completed/<feature-name>-<timestamp>/` - preserve feature name exactly and append timestamp
 - This is validation and cleanup only - do NOT write implementation code
 - If you cannot perform file operations, output file contents in code blocks with the intended file path as the header
 - If you cannot access the filesystem, ask the user to paste relevant file contents
@@ -251,6 +251,14 @@ Add this summary to `overview.md` under `## Completion Summary`.
 
 **If ANY documentation needs updates:**
 
+> ```
+> ⋅
+>     ╭───╮
+>     │ ● │
+>     │ ~ │   Found some docs that need updating!
+>     ╰───╯
+> ```
+>
 > "The following documentation updates are recommended. Please review and approve before I make these changes:
 >
 > [List proposed changes]
@@ -334,6 +342,13 @@ specs--completed/
 
 ---
 
+```
+⋅
+    ╭───╮
+    │ ★ │
+    │ ◡ │   You did it! Feature complete!
+    ╰───╯
+```
 ╔═══════════════════════════════════════════════════════════════════╗
 ║  IMPLEMENTATION COMPLETE                                          ║
 ╠═══════════════════════════════════════════════════════════════════╣

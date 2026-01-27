@@ -31,9 +31,11 @@ If the user provides a path to an `overview.md` file (e.g., `specs/high-severity
 
 1. Read the overview.md file
 2. Find the "Phase Checklist" section
-3. Identify the first unchecked `[ ]` phase - this is the next phase to implement
-4. Automatically read the corresponding `phase-X.md` file from the same directory
-5. Proceed with implementation
+3. Identify workable phases — any phase marked `[ ]` (pending) or `[/]` (in-progress)
+4. **Check for parallel execution options** (see Parallel Phase Selection below)
+5. Apply phase selection logic based on status and parallelism
+6. Automatically read the corresponding `phase-X.md` file from the same directory
+7. Proceed with implementation
 
 **Option 2: Auto-detect from specs folder**
 
@@ -48,6 +50,109 @@ If there are multiple active spec folders or nothing was found, ask the user to 
 > Example: `specs/user-authentication/overview.md`
 
 **Do not proceed until you have successfully read the overview.md and determined the next phase.**
+
+### Phase Status Tracking
+
+Phases in overview.md use checkbox notation to track status:
+
+| Checkbox | Status | Meaning |
+|----------|--------|---------|
+| `[ ]` | Pending | Not yet started |
+| `[/]` | In Progress | Started but not complete (may be active or paused/aborted) |
+| `[x]` | Complete | Finished and approved |
+| `[?]` | Assumed | Couldn't verify, assumed complete (for prerequisites) |
+
+**Status Transitions:**
+- `[ ]` → `[/]` — When an agent STARTS working on a phase
+- `[/]` → `[x]` — When user APPROVES a completed phase
+- `[/]` stays `[/]` — On abort (preserves resume capability)
+
+**Important:** Never reset `[/]` back to `[ ]`. If work was started, it stays marked so users can consciously choose to resume.
+
+### Parallel Phase Selection
+
+After identifying the next workable phase(s), check if parallel execution options are available:
+
+1. **Look for "Parallel Execution Groups" section** in overview.md
+2. **Find if the next phase belongs to a group** with other uncompleted phases
+3. **Only show consecutive uncompleted phases** in the same group
+
+**Decision Logic:**
+
+```
+Find workable phases = all phases marked [ ] or [/] (not [x])
+Check Parallel Execution Groups table:
+
+CASE 1: Multiple parallel phases available
+  - If 2+ workable phases exist in the same parallel group
+  → Show parallel selection UI with status for each
+
+CASE 2: Single workable phase that is IN PROGRESS [/]
+  - Phase was started but not completed (possibly by another session)
+  → Show resume prompt: "Phase X is in progress. Resume? (yes/no)"
+
+CASE 3: Single workable phase that is PENDING [ ]
+  - Fresh phase, no parallel options
+  → Auto-start: mark [/] and begin implementation
+
+CASE 4: No Parallel Execution Groups section exists
+  → Fall back to sequential mode using Cases 2-3 logic
+```
+
+**Parallel Selection UI:**
+
+When parallel options are available (CASE 1), present this prompt:
+
+```
+⚡ PARALLEL PHASES AVAILABLE
+
+These phases can be worked on in parallel:
+
+  [1] Phase N: [Name]       [IN PROGRESS]    ← if marked [/]
+  [2] Phase N+1: [Name]     [AVAILABLE]      ← if marked [ ]
+  [3] Phase N+2: [Name]     [AVAILABLE]      ← if marked [ ]
+
+Which phase would you like to work on? (1/2/3)
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│ TIP: Run another agent instance with /plan2code-3--implement to work  │
+│ on a different phase simultaneously.                                    │
+│                                                                         │
+│ IN PROGRESS phases may be running in another session - selecting one    │
+│ will resume work on it.                                                 │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+**Single Phase Resume UI:**
+
+When there's only one workable phase and it's in-progress (CASE 2):
+
+```
+⚡ PHASE RESUME CHECK
+
+Phase N: [Name] is marked as IN PROGRESS.
+
+This could mean:
+  • Another agent session is currently working on it
+  • A previous session was aborted mid-phase
+
+Resume this phase? (yes / no - I'll wait)
+```
+
+If user says "yes", proceed with implementation.
+If user says "no", end session gracefully.
+
+**Important Rules:**
+- Only show phases that are **consecutive** AND **in the same parallel group** AND **not complete** (`[ ]` or `[/]`)
+- Stop showing options at the first phase that is NOT in the same group (even if later phases are)
+- If user selects a phase, proceed with that phase
+- After selection, mark the phase `[/]` in overview.md (if not already), then read `phase-X.md` and begin
+
+**Edge Cases:**
+- If Parallel Execution Groups section is missing → fall back to sequential (Cases 2-3)
+- If table shows "None" → fall back to sequential (Cases 2-3)
+- If only one workable phase remains in the group → apply Cases 2-3 (resume or auto-start)
+- If ALL parallel phases are `[/]` (all in progress) → show selection UI with all marked IN PROGRESS, warn user that work may be duplicated
 
 ### Code Consistency Rules
 
@@ -85,18 +190,40 @@ Proceeding to Task 2.4 (no Stripe dependency).
 
 ## Process
 
-### 1. Identify the Current Phase
+### 1. Identify and Claim the Phase
 
-Review `overview.md` and find the next uncompleted phase (unchecked `[ ]` in the Phase Checklist).
+Review `overview.md` and find workable phases (`[ ]` or `[/]` in the Phase Checklist).
 
-State: `⚡ [PHASE X: Phase Name] - Starting implementation`
+Apply the decision logic from "Parallel Phase Selection" to determine which phase to work on.
+
+**Once a phase is selected:**
+1. If the phase is `[ ]` (pending), immediately update it to `[/]` in overview.md
+2. If the phase is already `[/]` (resuming), no change needed
+
+State: `⚡ [PHASE X: Phase Name] - Marking in-progress and starting implementation`
 
 ### 2. Verify Prerequisites
 
-Check the Prerequisites section in the phase document:
+Before implementing any tasks, process the Prerequisites section in order:
 
-- All listed prerequisites must be complete
-- If a prerequisite is not met, STOP and inform the user
+1. Read each prerequisite
+2. For each unchecked (`[ ]`) prerequisite:
+   - **Verifiable:** Check if condition is met (e.g., check overview.md for phase completion) → mark `[x]`
+   - **Actionable:** Complete the action (e.g., install dependencies) → mark `[x]`
+   - **Cannot verify:** Mark `[?]` with note explaining assumption
+   - **Blocked:** Mark `[!]` with blocker reason, STOP the phase
+
+3. Only proceed to tasks when ALL prerequisites are `[x]` or `[?]`
+
+**Example:**
+```markdown
+## Prerequisites
+- [x] Phase 1: Core Setup is complete ← verified via overview.md
+- [?] Design approved by stakeholder ← cannot verify, assuming complete
+- [!] API credentials configured ← BLOCKED: .env missing STRIPE_KEY
+```
+
+If any prerequisite is marked `[!]`, STOP and inform the user before proceeding
 
 ### 3. Implement Tasks Sequentially
 
@@ -141,9 +268,9 @@ After completing all tasks and self-review:
 
 When user replies "approved":
 
-1. Update `overview.md` - mark the phase checkbox `[x]`
-2. Update `Phase X.md` - change Status to "Complete"
-3. Confirm completion and provide next steps
+1. Update `overview.md` - change the phase checkbox from `[/]` to `[x]`
+2. Update `phase-X.md` - change Status to "Complete"
+3. Confirm completion and provide next steps (see Session End section)
 
 ### Handling Blockers
 
@@ -272,6 +399,14 @@ Before approving, confirm this phase is working:
 - **App runs** (if applicable): Start command runs without crashing
 - **Quick check**: [Describe 1-2 specific things to verify based on what was built]
 
+```
+⋅
+    ╭───╮
+    │ ● │
+    │ ~ │   Ready for your review!
+    ╰───╯
+```
+
 ╔═══════════════════════════════════════════════════════════════════════════════╗
 ║  Reply "approved" to mark this phase complete, or describe any issues.       ║
 ╚═══════════════════════════════════════════════════════════════════════════════╝
@@ -322,6 +457,12 @@ Example for continuing:
 > Phase marked complete in overview.md.
 >
 > ```
+> ⋅
+>     ╭───╮
+>     │ ★ │
+>     │ ◡ │   Phase done! Great progress!
+>     ╰───╯
+>
 > ╔═══════════════════════════════════════════════════════════════════╗
 > ║  NEXT STEPS                                                       ║
 > ╠═══════════════════════════════════════════════════════════════════╣
@@ -348,6 +489,12 @@ Example for final phase:
 > This was the final implementation phase!
 >
 > ```
+> ⋅
+>     ╭───╮
+>     │ ★ │
+>     │ ◡ │   All phases complete! Amazing work!
+>     ╰───╯
+>
 > ╔═══════════════════════════════════════════════════════════════════╗
 > ║  NEXT STEPS - FINAL PHASE COMPLETE                                ║
 > ╠═══════════════════════════════════════════════════════════════════╣
@@ -369,11 +516,12 @@ Example for final phase:
 
 If the user says "abort", "cancel", "start over", or similar:
 
-1. Confirm: "Are you sure you want to abort Phase X? Partial progress will remain in the spec files."
+1. Confirm: "Are you sure you want to abort Phase X? The phase will remain marked as in-progress `[/]` for resuming later."
 2. If confirmed:
    - List which tasks were completed vs. remaining
    - Note any files that were created/modified
-   - Explain checkboxes reflect current state
+   - **Do NOT change the phase checkbox** — it stays `[/]` so it can be resumed
+   - Explain: "The phase remains `[/]` in overview.md. Run `/plan2code-3--implement` again to resume."
 3. Do not continue with implementation
 
 ## Recovery

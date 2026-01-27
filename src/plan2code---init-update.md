@@ -2,6 +2,14 @@
 
 Start all UPDATE AGENTS MODE responses with '🛞'
 
+```
+⋅
+    ╭───╮
+    │ ● │
+    │ ◡ │   Time to level up AGENTS.md!
+    ╰───╯
+```
+
 This prompt guides AI coding agents through an interactive Q&A flow to update an existing `AGENTS.md` file with new learnings, commands, and project knowledge.
 
 ---
@@ -37,8 +45,6 @@ Check if there is recent conversation context (work that was just completed in t
 >
 > "Would you like me to add any of these to AGENTS.md?"
 
-Wait for user response before proceeding.
-
 **If no recent work context:**
 Skip directly to Step 3.
 
@@ -48,6 +54,14 @@ Skip directly to Step 3.
 
 Present the user with update options:
 
+> ```
+> ⋅
+>     ╭───╮
+>     │ ● │
+>     │ ~ │   What should we update?
+>     ╰───╯
+> ```
+>
 > "What would you like to add or update in AGENTS.md?"
 >
 > **Options:**
@@ -65,73 +79,32 @@ Present the user with update options:
 >
 > "Which would you like to do? (You can pick multiple, e.g., '1 and 3')"
 
-Wait for user response.
-
 ---
 
 ## Step 4: Gather Details
 
-Based on the user's selection, ask targeted follow-up questions.
+Ask targeted follow-up questions based on the user's selection:
 
-### If Commands:
-> "What command(s) would you like to document?"
-> - What does the command do?
-> - Are there important flags or variations?
-> - Any prerequisites or context needed?
-
-### If Architecture:
-> "What architectural insight did you learn?"
-> - Which components or modules are involved?
-> - How do they interact?
-> - Is this a pattern that repeats elsewhere in the codebase?
-
-### If Gotchas/Pitfalls:
-> "What's the gotcha you encountered?"
-> - What was the unexpected behavior?
-> - What's the correct approach or workaround?
-> - Where in the codebase does this apply?
-
-### If Testing:
-> "What testing knowledge should be captured?"
-> - Specific test commands or patterns?
-> - Test data or fixture setup?
-> - Mocking/stubbing approaches used in this project?
-
-### If Environment/Config:
-> "What environment or config detail should be documented?"
-> - Is this about local dev setup, CI, or deployment?
-> - Are there specific env variables or files involved?
-
-### If General Rules:
-> "What rule or convention should future agents follow?"
-> - Does this apply project-wide or to specific areas?
-> - Is this a "always do X" or "never do Y" type rule?
-> - Why does this rule exist? (brief context helps agents follow it)
-
-### If Something Else:
-> "Tell me what you'd like to add, and I'll figure out where it fits best."
-
-### If Review for Corrections:
-> "I'll walk through the current AGENTS.md sections. For each, let me know if anything is outdated or incorrect."
-> 
-> Then iterate through each section, asking:
-> - "Is this still accurate?"
-> - "Anything to update here?"
-
-### If Prune/Consolidate:
-> "I'll review AGENTS.md for redundancy and verbosity. Here's what I'd suggest trimming:"
-> - [List specific suggestions]
->
-> "Should I make these changes?"
+| Category | Key Questions |
+|----------|---------------|
+| **Commands** | What does it do? Important flags? Prerequisites? |
+| **Architecture** | Which components? How do they interact? Repeating pattern? |
+| **Gotchas** | What was unexpected? Correct approach/workaround? |
+| **Testing** | Specific commands? Fixtures? Mocking patterns? |
+| **Environment** | Local/CI/deploy? Which env vars or files? |
+| **Rules** | Project-wide or specific? "Always do X" or "never do Y"? Why? |
+| **Other** | "Tell me what to add, I'll find where it fits." |
+| **Review** | Walk through each section: "Still accurate? Anything to update?" |
+| **Prune** | Suggest specific trims, ask "Should I make these changes?" |
 
 ---
 
-## Step 5: Confirm Understanding
+## Step 5: Confirm & Apply
 
 Before making changes, confirm with the user:
 
 > "Here's what I'm going to add/update:"
-> 
+>
 > **Section:** [section name]
 > **Change:** [brief description of the change]
 > ```
@@ -140,21 +113,13 @@ Before making changes, confirm with the user:
 >
 > "Does this look right? (yes/no/adjust)"
 
-If the user says "adjust," ask what to change and repeat Step 5.
+If "adjust," ask what to change and repeat. If "yes," apply the edit:
+- Insert in the appropriate section (create if needed)
+- Preserve existing structure, formatting, and heading styles
 
 ---
 
-## Step 6: Apply Update
-
-Make the targeted edit to AGENTS.md:
-- Insert new content in the appropriate section
-- If a relevant section doesn't exist, create it in a logical location
-- Preserve existing structure and formatting style
-- Use the same heading levels and list styles as the existing file
-
----
-
-## Step 7: Summary & Next
+## Step 6: Summary & Next
 
 After applying the update:
 
@@ -165,6 +130,73 @@ After applying the update:
 > "Would you like to add anything else, or are we done for now?"
 
 If the user wants to add more, return to Step 3.
+
+**When the user is done** (responds "no" or similar), proceed to Step 7.
+
+---
+
+## Step 7: AI Agent File Sync
+
+After the user finishes updating AGENTS.md, check for other AI agent configuration files and offer to replace them with references to AGENTS.md.
+
+### Files to Detect
+
+Check if any of these exist:
+- `CLAUDE.md` (root) → use `./AGENTS.md`
+- `GEMINI.md` (root) → use `./AGENTS.md`
+- `.cursorrules` (root) → use `./AGENTS.md`
+- `.github/copilot-instructions.md` → use `../AGENTS.md`
+- `.cursor/rules/*.md` → use `../../AGENTS.md`
+- `.windsurf/rules/*.md` → use `../../AGENTS.md`
+
+**If no files found:** Skip silently and end the workflow.
+
+### User Confirmation
+
+If files are found, display:
+
+> ```
+> ⋅
+>     ╭───╮
+>     │ ● │
+>     │ ~ │   Found some other AI agent configs!
+>     ╰───╯
+> ```
+>
+> I found these AI agent configuration files that could reference AGENTS.md:
+>
+> | File | Current Size |
+> |------|--------------|
+> | `CLAUDE.md` | 45 lines |
+> | `.cursor/rules/` | 3 files |
+>
+> Would you like me to replace them with references to AGENTS.md?
+> - **Yes** - Update all listed files
+> - **Select** - Choose specific files (I'll list them with numbers)
+> - **No** - Keep them as-is
+
+**If "Select":** List files numbered, let user specify which (e.g., "1 and 3").
+
+**Warning:** For files with >10 lines, note: "CLAUDE.md has custom content that will be replaced."
+
+### Reference Template
+
+Replace file contents with (use actual filename, adjust relative path):
+
+```markdown
+# CLAUDE.md
+
+See [AGENTS.md](./AGENTS.md) for complete project documentation including:
+- Development commands and setup
+- Architecture overview
+- Environment variables
+- Testing patterns
+- Deployment guides
+```
+
+**For directory configs** (`.cursor/rules/`, `.windsurf/rules/`): Delete all existing `.md` files and create a single `reference.md`.
+
+After Step 7 completes (or is skipped), the update workflow is complete.
 
 ---
 
@@ -227,5 +259,14 @@ Agent: Done! Changes applied.
 
 User:  No, we're good.
 
-Agent: Great! AGENTS.md is updated. Happy coding!
+Agent: I found a CLAUDE.md file (23 lines). Would you like me to replace it
+       with a reference to AGENTS.md?
+       - Yes - Update it
+       - No - Keep it as-is
+
+User:  Yes
+
+Agent: Done! Updated CLAUDE.md to reference AGENTS.md.
+
+       All set! AGENTS.md is your single source of truth now. Happy coding!
 ```
