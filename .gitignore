@@ -1,3 +1,7 @@
 specs/
-dist/
+specs--completed/
 CLAUDE.md
+dist/
+plan2code-loop/dist
+plan2code-loop/node_modules
+plan2code-loop/package-lock.json

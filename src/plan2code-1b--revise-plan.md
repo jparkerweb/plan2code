@@ -59,6 +59,7 @@ Present findings and confirm understanding before proceeding.
 |------|-------------|------------|
 | **Additive** | New tasks/features, no existing work affected | Low |
 | **Modificative** | Changes to pending tasks | Medium |
+| **Re-opening** | New tasks added to completed phases | Medium-High |
 | **Destructive** | Changes that invalidate completed work | High |
 | **Architectural** | Changes to tech stack or core design | Critical |
 
@@ -76,10 +77,18 @@ Present findings and confirm understanding before proceeding.
 **Change Type:** [Type]
 **Tasks Affected:** [X] tasks across [Y] phases
 **Completed Work at Risk:** [None / List specific tasks]
+**Phases to Re-open:** [None / List phases that will become incomplete]
 
 ### Proposed Changes
 1. [Change description]
 2. [Change description]
+```
+⋅
+    ╭───╮
+    │ ● │
+    │ ~ │   Here's the plan. What do you think?
+    ╰───╯
+```
 
 Proceed with revision? (yes / no / discuss)
 ```
@@ -105,6 +114,15 @@ Make all approved changes to the spec files:
 3. Update dependencies if affected
 4. Preserve all completed `[x]` tasks unless explicitly approved to remove
 
+5. **Re-opening completed phases:** When adding new tasks to a phase that was previously completed (`[x]` in overview.md):
+   - Add the new task(s) to the phase file with `🆕 ADDED` flag:
+     ```markdown
+     - [ ] **Task 2.5:** [New task description] 🆕 ADDED
+       - Added: [date]
+       - Reason: [brief reason]
+     ```
+   - Update overview.md to uncheck that phase: `[x]` → `[ ]`
+   - Add HTML comment for traceability: `<!-- Re-opened: [date] - [reason] -->`
 ### STEP 4: Consistency Check
 
 `🔄 [REVISION] Step 4: Consistency Check`
@@ -120,6 +138,8 @@ Verify the updated specs are internally consistent:
 - [ ] Tech stack updated if needed
 - [ ] Success criteria still achievable
 - [ ] overview.md phase checklist matches phase files
+- [ ] Phases with any incomplete tasks are unchecked `[ ]` in overview.md
+- [ ] Phases with ALL tasks complete are checked `[x]` in overview.md
 ```
 
 Report any issues found and resolve before proceeding.
@@ -144,6 +164,9 @@ Report any issues found and resolve before proceeding.
 - **Modified:** [Y] existing tasks
 - **Removed:** [Z] tasks (with approval)
 
+### Phases Re-opened
+- [None / List phases with new incomplete tasks]
+- Phase X: [N] new tasks added - [reason]
 ### Revision Log Entry
 ```
 
@@ -160,6 +183,11 @@ Report any issues found and resolve before proceeding.
 3. Remind user of next steps:
 
 ```
+⋅
+    ╭───╮
+    │ ★ │
+    │ ◡ │   All revised! Ready to continue!
+    ╰───╯
 ╔═══════════════════════════════════════════════════════════════════╗
 ║  REVISION COMPLETE                                                 ║
 ╠═══════════════════════════════════════════════════════════════════╣

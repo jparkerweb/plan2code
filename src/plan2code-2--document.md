@@ -90,8 +90,39 @@ Each task should be:
    - Phase Checklist (from Implementation Phases)
    - Quick Reference (Key Files, Environment Variables, External Dependencies)
 5. **Write** each `phase-X.md` file with detailed tasks
-6. **Verify** all requirements from planning document are covered
-7. **Present** summary to user and ask about the planning document
+6. **Analyze** phases for parallel execution eligibility (see Parallel Eligibility Analysis below)
+7. **Verify** all requirements from planning document are covered
+8. **Present** summary to user and ask about the planning document
+### Parallel Eligibility Analysis
+After creating all phase files, analyze which phases can be executed in parallel. This enables users to run multiple agent instances simultaneously for faster implementation.
+**Analysis Process:**
+1. For each pair of adjacent phases (Phase N and Phase N+1), check for conflicts:
+   | Conflict Type | How to Detect | Result if Found |
+   |---------------|---------------|-----------------|
+   | **File Overlap** | Any task in Phase N modifies a file also modified in Phase N+1 | NOT parallel-eligible |
+   | **Prerequisite Dependency** | Phase N+1's Prerequisites section references Phase N | NOT parallel-eligible |
+   | **Data/Output Dependency** | Phase N+1 tasks require artifacts, exports, or state created by Phase N | NOT parallel-eligible |
+   | **Shared State** | Both phases modify the same database tables, config, or global state | NOT parallel-eligible |
+2. Group consecutive phases with NO conflicts into Parallel Execution Groups:
+   - If Phases 2 and 3 have no conflicts → Group A: 2, 3
+   - If Phase 4 depends on Phase 3 → Phase 4 starts a new sequence
+   - If Phases 5 and 6 have no conflicts → Group B: 5, 6
+3. Populate the "Parallel Execution Groups" table in `overview.md`:
+   **Example with parallel groups:**
+   ```markdown
+   | Group | Phases | Reason |
+   |-------|--------|--------|
+   | A | 2, 3 | Phase 2 (data models) and Phase 3 (API routes) touch separate files |
+   | B | 5, 6 | Phase 5 (frontend) and Phase 6 (tests) have no shared dependencies |
+   ```
+   **Example with no parallel phases:**
+   ```markdown
+   | Group | Phases | Reason |
+   |-------|--------|--------|
+   | None | - | All phases must run sequentially due to dependencies |
+   ```
+4. Inform the user about parallel eligibility in the completion summary:
+   > **Parallel Execution:** Phases [X, Y] can be run simultaneously in separate agent instances. Phases [Z] must be run sequentially due to dependencies.
 
 ### Output Structure
 
@@ -169,6 +200,13 @@ Check the Testing Strategy from the PLAN-DRAFT (section 2.4):
 ## Phase Checklist
 - [ ] Phase 1: [Name] - [Description]
 ...
+## Parallel Execution Groups
+<!-- This section enables running multiple phases simultaneously in separate agent instances -->
+<!-- Phases in the same group have no file conflicts or dependencies between them -->
+| Group | Phases | Reason |
+|-------|--------|--------|
+| [A/B/etc or "None"] | [phase numbers] | [Why these can run in parallel] |
+_If no phases can run in parallel, this table will show "None - all phases must run sequentially"_
 
 ## Quick Reference
 ### Key Files
@@ -257,6 +295,9 @@ Total phases: X
 Total tasks: Y
 
 Requirements coverage: [Confirm all planning requirements are addressed]
+Parallel Execution Groups:
+- Group A: Phases X, Y (can run simultaneously)
+- [Or: "None - all phases must run sequentially"]
 ```
 
 Then automatically archive the planning document:
@@ -276,6 +317,12 @@ Example closing:
 > "Documentation complete. Implementation specs are in `specs/user-authentication/`.
 >
 > ```
+> ⋅
+>     ╭───╮
+>     │ ★ │
+>     │ ◡ │   Specs are ready! Time to build!
+>     ╰───╯
+>
 > ╔═══════════════════════════════════════════════════════════════════╗
 > ║  NEXT STEPS                                                       ║
 > ╠═══════════════════════════════════════════════════════════════════╣
