@@ -169,8 +169,11 @@ When modifying workflow prompts in `src/`:
 ## Gotchas/Pitfalls
 
 - **Version sync:** When adding a new version to `CHANGELOG.md`, also update `version.json` to match. The installer displays the version from `version.json` in its header.
+
 ## Mascot
+
 The project has a mascot - an ASCII art robot that appears in installer output and workflow prompts. Mascot variants are defined in `MASCOT` constant in `install.js` and appear in workflow markdown files.
+
 ```
    ╭───╮
    │ ● │

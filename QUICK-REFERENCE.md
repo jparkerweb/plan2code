@@ -35,17 +35,22 @@ specs--completed/                # After Step 4
 - Never look in `specs--completed/` (it's archived specs)
 
 ## Phase Status
+
 | Checkbox | Status | Meaning |
 |----------|--------|---------|
 | `[ ]` | Pending | Not started |
 | `[/]` | In Progress | Agent working (or paused) |
 | `[x]` | Complete | Approved |
+
 ## Parallel Execution
+
 When phases have no file conflicts or dependencies, they can run simultaneously:
+
 1. Documentation Mode auto-detects parallel-eligible phases
 2. Implementation Mode shows selection UI with status for each phase
 3. Run multiple `/plan2code-3--implement` instances on different phases
 4. `[/]` status shows which phases are actively being worked on
+
 ## Quick Troubleshooting
 
 | Issue                  | Solution                                        |
@@ -78,13 +83,18 @@ Is it a quick, small task?
 Need to revise mid-implementation?
 └── /plan2code-1b--revise-plan
 ```
+
 ## Autonomous Loop (Alternative)
+
 The `plan2code-loop` CLI is an **alternative** to Step 3, not a replacement.
+
 | Approach | Use When |
 |----------|----------|
 | `/plan2code-3--implement` | You want interactive control per phase |
 | `plan2code-loop` | You want hands-off autonomous execution |
+
 ```bash
 plan2code-loop   # Fully interactive - auto-detects specs, prompts for options
 ```
+
 Session state stored per-spec in `specs/<feature>/.plan2code-loop/`
