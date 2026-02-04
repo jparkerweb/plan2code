@@ -39,10 +39,13 @@ See [QUICK-REFERENCE.md](QUICK-REFERENCE.md) for full reference card.
 ## Installation
 
 Plan2Code includes an interactive installer that generates and installs workflow files for all major AI coding assistants.
+
 <img src="docs/install-script.jpg" width="582">
+
 ### Prerequisites
 
 The install script requires **Node.js** (v14 or later). If you don't have Node.js installed:
+
 1. Download from [nodejs.org](https://nodejs.org/)
 2. Or use a package manager:
    - **macOS:** `brew install node`
@@ -50,6 +53,7 @@ The install script requires **Node.js** (v14 or later). If you don't have Node.j
    - **Linux:** `sudo apt install nodejs` (Debian/Ubuntu) or `sudo dnf install nodejs` (Fedora)
 
 ### Supported Platforms
+
 | Platform         | Global Directory                       | Invocation                   |
 | ---------------- | -------------------------------------- | ---------------------------- |
 | Claude Code      | `~/.claude/commands/`                  | `/plan2code-1--plan`, etc. |
@@ -59,16 +63,19 @@ The install script requires **Node.js** (v14 or later). If you don't have Node.j
 | Windsurf         | `~/.codeium/windsurf/global_workflows/`| `/plan2code-1--plan`, etc. |
 | Codeium (IJ)     | `~/.codeium/global_workflows/`         | `/plan2code-1--plan`, etc. |
 | VS Code Copilot  | Platform-specific (see below)          | Slash commands in chat       |
+
 **VS Code Copilot paths:**
 - Windows: `%APPDATA%\Code\User\prompts\`
 - macOS: `~/Library/Application Support/Code/User/prompts/`
 - Linux: `~/.config/Code/User/prompts/`
+
 ### Quick Start
 
 ```bash
 # Clone the repository
 git clone https://github.com/plan/plan2code.git
 cd plan2code
+
 # Run the interactive installer
 node install.js
 ```
@@ -85,6 +92,7 @@ Available platforms:
   5. Windsurf         (~/.codeium/windsurf/global_workflows/)
   6. Codeium (IJ)     (~/.codeium/global_workflows/)
   7. VS Code Copilot  (%APPDATA%\Code\User\prompts\)
+
   A. Install ALL platforms + loop CLI
   O. Build/link plan2code-loop CLI only
   L. Show local (project) install instructions
@@ -112,22 +120,28 @@ Enter choice (1-7, A, O, L, U, Q, or comma-separated like 1,3,5):
 ```bash
 # Install to Claude Code only
 node install.js --platform claude
+
 # Install to multiple specific platforms
 node install.js  # Then enter "1,3,5" for Claude, Cursor, Windsurf
 
 # Preview installation without making changes
 node install.js --dry-run
+
 # Remove all installed files
 node install.js --uninstall
 ```
 
 ### Per-Project Installation
+
 If you prefer project-specific configuration instead of global installation:
+
 ```bash
 # Run the installer with --local flag
 node install.js --local
 ```
+
 This will generate the distribution files and display instructions for copying them to your project. The generated files will be in `dist/local-commands/` organized by platform:
+
 ```
 dist/local-commands/
 ├── .claude/commands/        # Claude Code
@@ -138,10 +152,13 @@ dist/local-commands/
 ├── .windsurf/workflows/     # Windsurf
 └── .agent/workflows/        # Google Antigravity
 ```
+
 > **Note:** Some AI tools (Windsurf, Cursor, Continue) may not recognize workflows in gitignored directories. If your project's `.gitignore` includes patterns like `.windsurf/`, consider using global installation instead.
+
 ---
 
 ## Platform-Specific Notes
+
 <details>
 <summary>Claude Code CLI</summary>
 

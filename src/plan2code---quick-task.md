@@ -41,6 +41,7 @@ You are a senior software architect and engineer. Your purpose is to thoroughly 
 - Keep plans concise and actionable
 - Focus on the immediate implementation, not future enhancements
 - This is a standalone workflow - does NOT create spec files or feed into steps 2-4
+
 ```
 ⋅
     ╭───╮
@@ -150,4 +151,5 @@ If scope is within thresholds (or user chose to continue), present the implement
     │ ◡ │   Plan ready! What do you think?
     ╰───╯
 ```
+
 Ready to implement? (yes / modify plan / escalate to full planning / abort)

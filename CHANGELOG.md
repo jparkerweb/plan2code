@@ -13,8 +13,11 @@ All notable changes to Plan2Code will be documented in this file.
   - Correct relative paths for each file location (./AGENTS.md, ../AGENTS.md, ../../AGENTS.md)
 - **Knowledge Transfer** - Init mode now uses existing CLAUDE.md content as context when creating new AGENTS.md
   - Preserves project knowledge during migration to AGENTS.md
+
 ## v1.5.1
+
 ### ✨ Added
+
 - **Prerequisite verification workflow** - Agents now verify/complete prerequisites before starting phase tasks
   - Implementation mode processes prerequisites in order: verify, complete, or mark assumed
   - Loop prompt treats prerequisites as "Task 0.X" - one per iteration before tasks
@@ -30,6 +33,7 @@ All notable changes to Plan2Code will be documented in this file.
   - Consistency check now verifies phase completion status matches task completion
 
 ### 🔧 Changed
+
 - **Installer UI refresh** - Cleaner, narrower layout for better terminal compatibility
   - Narrower menu boxes (65 characters instead of 76)
   - Smaller mascot display at end of installation
@@ -47,6 +51,7 @@ All notable changes to Plan2Code will be documented in this file.
 ## v1.5.0 - 2026-01-22
 
 ### ✨ Added
+
 - **Plan2Code Loop** - New autonomous CLI tool for hands-off spec implementation
   - Separate Node.js/TypeScript tool in `plan2code-loop/` directory
   - LLM-driven task discovery - AI reads spec files and finds unchecked tasks
@@ -60,6 +65,7 @@ All notable changes to Plan2Code will be documented in this file.
   - Option `U` uninstalls prompts AND unlinks the loop CLI
 
 ### 📝 Documentation
+
 - Updated README.md with "Autonomous Loop" section explaining when to use loop vs manual Step 3
 - Updated QUICK-REFERENCE.md with loop commands and decision tree
 - Updated AGENTS.md with loop architecture, commands, and completion markers
@@ -67,6 +73,7 @@ All notable changes to Plan2Code will be documented in this file.
 ## v1.4.0 - 2026-01-09
 
 ### ✨ Added
+
 - **Parallel Phase Execution** - Run multiple implementation phases simultaneously in separate agent instances
   - Documentation Mode auto-detects parallel-eligible phases based on file conflicts and dependencies
   - Implementation Mode presents phase selection UI when parallel options are available
@@ -82,6 +89,7 @@ All notable changes to Plan2Code will be documented in this file.
   - Supports multiple agent sessions on parallel phases with clear visibility of what's active
 
 ### 🔧 Changed
+
 - **Documentation Mode process** - Added step 6 "Analyze phases for parallel execution eligibility"
 - **Implementation Mode detection** - Now checks for parallel siblings before starting phase
 - **Implementation Mode phase selection** - 4-case decision logic for parallel, resume, auto-start scenarios
@@ -107,6 +115,7 @@ All notable changes to Plan2Code will be documented in this file.
 - **Simplified next command reference** - Removed "or equivalent" from next step instructions
 
 ## v1.3.2 - 2025-12-25
+
 
 ### 🔧 Changed
 
