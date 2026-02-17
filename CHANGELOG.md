@@ -2,6 +2,74 @@
 
 All notable changes to Plan2Code will be documented in this file.
 
+## v1.5.4
+
+### ✨ Added
+
+- **AI Assisted commit attribution** - All git commit messages now include an `AI Assisted` footer for transparency
+  - **Init mode** - Generated AGENTS.md files include a Git Commit Messages section instructing agents to always append `AI Assisted`
+  - **Init-update mode** - New "Git Commit Messages" menu option (option 7) for adding or modifying commit message conventions
+  - **Loop task mode** - `createTaskCommit()` automatically appends `AI Assisted` footer to every commit
+  - **Loop phase mode** - Prompt template instructs LLM to include `-m "AI Assisted"` as final flag on every commit
+  - **Implement mode** - User-facing git commit suggestions after phase approval include `-m "AI Assisted"`
+
+### 🔧 Changed
+
+- **README loop install instructions** - Replaced inline text with formatted code block showing both install options
+
+## v1.5.3
+
+### ✨ Added
+
+- **Loop mode selection** - Plan2Code Loop now asks users to choose between two loop modes:
+  - **One task per loop** (default) - Each agent invocation implements exactly one task. Node controller handles git commits after each task. Same behavior as before.
+  - **One phase per loop** - Each agent invocation implements all remaining tasks in the current phase. The LLM handles git commits after each task (with JIRA ticket ID). Ideal for related tasks and smart models with higher context windows.
+- **Phase-mode prompt template** - New `LOOP_PROMPT_TEMPLATE_PHASE` instructs the LLM to complete all tasks in the current phase, create git commits per task, and output `TASK_COMPLETE` markers for each
+- **Multi-marker completion detection** - New `checkForAllCompletions()` function parses all `TASK_COMPLETE`, `TASK_BLOCKED`, and `PREREQ_COMPLETE` markers from a single agent output
+- **`PHASE_COMPLETE` marker** - New completion marker for phase mode indicating current phase is done (distinct from `LOOP_COMPLETE` which means all phases done)
+- **`loopMode` config field** - New `SessionConfig.loopMode` field (`'task' | 'phase'`) persisted in session state for resume support
+- **Documentation auto-discovery** - Documentation workflow now auto-discovers features to document
+  - Automatically finds `specs/*/PLAN-DRAFT-*.md` files
+  - If only one feature exists, uses it without prompting
+  - If multiple features exist, presents list and asks user to choose
+  - Automatically reads `PLAN-CONVERSATION-*.md` if present (optional, for context)
+- **Documentation Verification Pass** - Documentation workflow now cross-references against PLAN-DRAFT before finalizing
+  - New Process Step 7 with sub-steps: 7A (re-read PLAN-DRAFT), 7B (cross-reference sections), 7C (fix gaps), 7D (output summary)
+  - New "Documentation Verification Pass" section with mapping table showing which PLAN-DRAFT sections to verify against which spec files
+  - Gap handling: Missing items added with `<!-- VERIFICATION: Added - FR-X from PLAN-DRAFT -->` markers
+  - Session end output now includes verification summary table showing Items in PLAN-DRAFT / Covered / Added per section
+  - Added reminders: "Always run verification pass before finalizing" and "PLAN-DRAFT is the source of truth"
+- **Conversation Logging** - Planning workflow now saves the full planning conversation before creating PLAN-DRAFT
+  - New file: `specs/<feature-name>/PLAN-CONVERSATION-<YYYYMMDD>.md` created in Phase 7
+  - Contains full conversation transcript organized by phase with speaker attribution (`[AGENT]` vs `[USER RESPONSE]`)
+  - Decision summary tables with user quotes, confirmed requirements, approved technologies, and assumptions
+  - Serves as source of truth for plan verification
+- **PLAN-DRAFT Verification Pass** - New STEP 7C verifies PLAN-DRAFT against conversation log
+  - Cross-references all requirements, tech decisions, risks, and assumptions
+  - Missing items added with `<!-- VERIFICATION: Added from Phase X -->` markers
+  - Outputs verification summary showing what was captured vs added
+- **Conversation Log field in PLAN-DRAFT** - New header field links to the conversation log file
+
+### 🔧 Changed
+
+- **Installer default option** - Pressing Enter without selecting an option now defaults to `A` (Install to ALL platforms + loop CLI) instead of quitting
+- **Planning output location changed** - PLAN-DRAFT and conversation log now created in feature subdirectory
+  - New location: `specs/<feature-name>/PLAN-DRAFT-<date>.md` and `specs/<feature-name>/PLAN-CONVERSATION-<date>.md`
+  - Date format: YYYYMMDD (e.g., `20250204`) instead of full timestamp
+  - Uppercase `PLAN-CONVERSATION` for consistency with `PLAN-DRAFT`
+  - Feature directory created during planning (Step 1) instead of documentation (Step 2)
+  - Documentation step no longer archives PLAN-DRAFT (already in correct location)
+- **Planning Phase 7 restructured** - Now has three sub-steps:
+  - STEP 7A: Save Conversation Log (new)
+  - STEP 7B: Create PLAN-DRAFT (existing behavior, uses same timestamp)
+  - STEP 7C: Verification Pass (new)
+- **Session End example updated** - Now shows both conversation log and PLAN-DRAFT files
+- **Important Reminders expanded** - Added reminders about conversation log and verification pass
+
+### 🐛 Fixed
+
+- **`.gitignore` missing `specs/` entries in phase mode** - `ensureGitignore()` only ran inside `createTaskCommit()`, which is never called in phase mode. Moved `ensureGitRepo()` and `ensureGitignore()` to run once at startup in `Controller.run()` as a pre-flight step, ensuring `.gitignore` entries are set before the first iteration regardless of loop mode
+
 ## v1.5.2
 
 ### ✨ Added

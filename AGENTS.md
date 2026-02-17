@@ -15,7 +15,7 @@ Plan2Code is a structured 4-step workflow methodology for AI-assisted software d
 ```
 plan2code/
 ├── src/                    # Source workflow prompts (8 markdown files)
-├── plan2code-loop/       # Autonomous loop CLI tool (Node.js/TypeScript)
+├── plan2code-loop/         # Autonomous loop CLI tool (Node.js/TypeScript)
 │   ├── src/                # TypeScript source
 │   └── dist/               # Built output (tsup)
 ├── dist/                   # Generated distribution files (auto-generated)
@@ -74,11 +74,18 @@ plan2code-loop
 
 The CLI auto-detects specs in `./specs/`, prompts for selection if multiple found, and handles session continuation interactively. Session state is stored per-spec in `specs/<feature>/.plan2code-loop/`.
 
+### Loop Modes
+
+The CLI asks users to choose a loop mode:
+- **One task per loop** (default) - Each agent invocation implements exactly one task. The Node controller handles git commits.
+- **One phase per loop** - Each agent invocation implements all remaining tasks in the current phase. The LLM handles git commits (with JIRA ticket ID if provided). The controller parses multiple completion markers from a single iteration.
+
 ### Completion Markers
 
 The LLM must output one of these formats:
 - `TASK_COMPLETE: 1.1 - Task description` - Task done successfully
 - `TASK_BLOCKED: 1.1 - Reason` - Cannot complete task
+- `PHASE_COMPLETE` - Current phase finished (phase mode only)
 - `LOOP_COMPLETE` - All phases finished
 
 ## Development Commands
@@ -169,10 +176,20 @@ When modifying workflow prompts in `src/`:
 ## Gotchas/Pitfalls
 
 - **Version sync:** When adding a new version to `CHANGELOG.md`, also update `version.json` to match. The installer displays the version from `version.json` in its header.
+- **Loop `.gitignore` setup:** `ensureGitignore()` runs at startup in `Controller.run()` as a pre-flight step, not just inside `createTaskCommit()`. This is critical for phase mode where the Node controller doesn't handle commits — without it, `git add -A` would stage spec files.
+
+## Git Commit Messages
+
+- **AI Assisted footer:** All git commit messages must include `AI Assisted` as the final line, separated from the message body by a blank line
+- **Commit paths:** This is enforced across all commit surfaces:
+  - Loop task mode: `createTaskCommit()` in `plan2code-loop/src/utils/git.ts` appends the footer automatically
+  - Loop phase mode: Prompt template instructs the LLM to add `-m "AI Assisted"` as the final flag
+  - Implement mode: User-facing commit suggestions in `src/plan2code-3--implement.md` include the footer
+- **Init workflow:** `src/smarsh2code---init.md` generates AGENTS.md files with a Git Commit Messages section that includes this convention by default
 
 ## Mascot
 
-The project has a mascot - an ASCII art robot that appears in installer output and workflow prompts. Mascot variants are defined in `MASCOT` constant in `install.js` and appear in workflow markdown files.
+The project has a mascot called "Smarshy" - an ASCII art robot that appears in installer output and workflow prompts. Mascot variants are defined in `MASCOT` constant in `install.js` and appear in workflow markdown files.
 
 ```
    ╭───╮

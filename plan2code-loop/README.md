@@ -42,11 +42,20 @@ The loop uses an **LLM-driven discovery** approach:
 
 1. **Spec Selection** - Interactive menu to select from discovered specs
 2. **Task Discovery** - The AI reads `overview.md` and phase files to find unchecked tasks
-3. **Implementation** - The AI implements ONE task per iteration
-4. **Checkbox Update** - The AI marks the task complete in the markdown file
+3. **Implementation** - The AI implements tasks (one per iteration in task mode, or all in a phase in phase mode)
+4. **Checkbox Update** - The AI marks tasks complete in the markdown file
 5. **Scratchpad Update** - The AI appends notes to the per-spec scratchpad
-6. **Completion Marker** - The AI outputs a structured marker (e.g., `TASK_COMPLETE: 1.1 - description`)
+6. **Completion Marker** - The AI outputs structured markers (e.g., `TASK_COMPLETE: 1.1 - description`)
 7. **Loop** - Repeat until all tasks done or max iterations reached
+
+### Loop Modes
+
+The CLI asks you to choose a loop mode:
+
+| Mode | Behavior | Git Commits | Best For |
+|------|----------|-------------|----------|
+| **One task per loop** (default) | Each agent invocation implements exactly one task | Node controller commits after each task | Smaller models, careful step-by-step execution |
+| **One phase per loop** | Each agent invocation implements all remaining tasks in the current phase | LLM commits after each task (with JIRA ID if provided) | Smart models with larger context windows, keeping related tasks together |
 
 ### Why LLM-Driven?
 
@@ -63,6 +72,7 @@ The AI must output one of these markers at the end of each iteration:
 ```
 TASK_COMPLETE: 1.1 - Initialize project structure
 TASK_BLOCKED: 2.3 - Missing API credentials
+PHASE_COMPLETE
 LOOP_COMPLETE
 ```
 
@@ -70,7 +80,10 @@ LOOP_COMPLETE
 |--------|---------|
 | `TASK_COMPLETE: X.X - desc` | Task implemented and marked complete |
 | `TASK_BLOCKED: X.X - reason` | Cannot complete task (explains why) |
+| `PHASE_COMPLETE` | Current phase finished (phase mode only) |
 | `LOOP_COMPLETE` | All phases finished |
+
+In **phase mode**, the AI outputs multiple `TASK_COMPLETE` markers (one per task) within a single iteration, followed by `PHASE_COMPLETE` or `LOOP_COMPLETE`.
 
 ## Session Files
 
@@ -124,6 +137,7 @@ Tasks: 0/15
 
 ? JIRA Ticket ID (optional): PROJ-123
 ? Select AI agent: Claude Code
+? Tasks per loop iteration: One task per loop (default)
 ? Maximum iterations: 100
 
 Starting Plan2Code Loop
@@ -131,6 +145,7 @@ Starting Plan2Code Loop
 Agent: Claude Code
 Model: default
 Spec: C:\projects\my-app\specs\todo-app
+Loop mode: One task per loop
 Max iterations: 100
 
 Iteration 1/100

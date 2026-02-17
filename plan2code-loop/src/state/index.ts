@@ -2,6 +2,7 @@ export {
   type SessionConfig,
   type IterationLogEntry,
   type SessionState,
+  type LoopMode,
   DEFAULT_CONFIG,
 } from './config.js';
 

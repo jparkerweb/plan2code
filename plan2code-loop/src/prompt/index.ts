@@ -3,4 +3,4 @@ export {
   type PromptContext,
 } from './builder.js';
 
-export { LOOP_PROMPT_TEMPLATE } from './templates.js';
+export { LOOP_PROMPT_TEMPLATE, LOOP_PROMPT_TEMPLATE_PHASE } from './templates.js';
