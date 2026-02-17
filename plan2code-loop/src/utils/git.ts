@@ -40,7 +40,7 @@ export async function ensureGitRepo(cwd: string): Promise<boolean> {
 /**
  * Required entries for the .gitignore file
  */
-const REQUIRED_GITIGNORE_ENTRIES = ['specs/', 'specs--completed/', 'nul'];
+const REQUIRED_GITIGNORE_ENTRIES = ['specs/', 'specs--completed/', 'nul', 'node_modules/'];
 
 /**
  * Ensure .gitignore exists with required entries

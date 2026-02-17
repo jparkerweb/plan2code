@@ -1,7 +1,7 @@
 import path from 'path';
 import { confirm, input, select } from '@inquirer/prompts';
 import { agentRegistry } from './agents/index.js';
-import { StateManager, type SessionConfig } from './state/index.js';
+import { StateManager, type SessionConfig, type LoopMode } from './state/index.js';
 import { detectSpecDirectories, getSpecProgress } from './spec/utils.js';
 import { logger } from './utils/index.js';
 
@@ -22,9 +22,13 @@ async function selectSpec(cwd: string = process.cwd()): Promise<string | null> {
     logger.info('Expected: specs/<feature>/overview.md');
     logger.info('');
     logger.info('To get started:');
-    logger.info('1. Create a spec directory: mkdir -p specs/my-feature');
-    logger.info('2. Create overview.md with phases listed as checkboxes');
-    logger.info('3. Create phase-1.md, phase-2.md, etc. with task checkboxes');
+    logger.info('');
+    logger.info('1. Create a spec using `plan2code-1--plan`');
+    logger.info('   command in our AI Agent');
+    logger.info('');
+    logger.info('2. Come back here and run `plan2code-loop`');
+    logger.info('   as an alternative to `plan2code-3--implement`');
+    logger.info('');
     return null;
   }
 
@@ -61,31 +65,13 @@ async function selectSpec(cwd: string = process.cwd()): Promise<string | null> {
  * Select AI agent
  */
 async function selectAgent(): Promise<string> {
-  const availableAgents = await agentRegistry.getAvailable();
+  const allAgents = agentRegistry.getAll();
 
-  if (availableAgents.length === 0) {
-    logger.error('No AI agents detected on your system!');
-    console.log();
-    logger.info('Please install at least one of the following:');
-    console.log();
-    logger.bold('Claude Code:');
-    logger.dim('  npm install -g @anthropic-ai/claude-code');
-    console.log();
-    logger.bold('GitHub Copilot CLI:');
-    logger.dim('  gh extension install github/gh-copilot');
-    console.log();
-    throw new Error('No agents available. Please install an AI agent and try again.');
-  }
 
-  if (availableAgents.length === 1) {
-    const agent = availableAgents[0];
-    logger.info(`Using ${agent.config.displayName} (only available agent)`);
-    return agent.config.name;
-  }
 
   const agentName = await select({
     message: 'Select AI agent:',
-    choices: availableAgents.map((agent) => ({
+    choices: allAgents.map((agent) => ({
       name: agent.config.displayName,
       value: agent.config.name,
     })),
@@ -121,6 +107,26 @@ async function selectMaxIterations(): Promise<number> {
   });
 
   return max;
+}
+/**
+ * Select loop mode: one task per loop or one phase per loop
+ */
+async function selectLoopMode(): Promise<LoopMode> {
+  const mode = await select<LoopMode>({
+    message: 'Tasks per loop iteration:',
+    choices: [
+      {
+        name: 'One task per loop (default)',
+        value: 'task' as LoopMode,
+      },
+      {
+        name: 'One phase per loop (related tasks together)',
+        value: 'phase' as LoopMode,
+      },
+    ],
+    default: 'task',
+  });
+  return mode;
 }
 
 /**
@@ -195,6 +201,9 @@ export async function setupSession(
   if (sessionAction === 'continue') {
     const existingConfig = await stateManager.readConfig();
     if (existingConfig) {
+      const agent = await selectAgent();
+      existingConfig.agent = agent;
+      await stateManager.writeConfig(existingConfig);
       logger.info('Resuming previous session...');
       return { config: existingConfig, isResume: true };
     }
@@ -207,6 +216,7 @@ export async function setupSession(
   // Collect new session configuration
   const jiraTicketId = await promptJiraTicketId();
   const agent = await selectAgent();
+  const loopMode = await selectLoopMode();
   const maxIterations = await selectMaxIterations();
 
   const config: SessionConfig = {
@@ -219,6 +229,7 @@ export async function setupSession(
     startedAt: new Date().toISOString(),
     currentIteration: 0,
     jiraTicketId,
+    loopMode,
   };
 
   // Initialize session

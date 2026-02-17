@@ -13,5 +13,6 @@ export {
   createTaskCommit,
   isGitRepo,
   ensureGitRepo,
+  ensureGitignore,
   type GitCommitOptions
 } from './git.js';

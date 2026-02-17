@@ -1,3 +1,4 @@
+export type LoopMode = 'task' | 'phase';
 export interface SessionConfig {
   agent: string;              // "claude-code" | "copilot-cli"
   model: string;              // Selected model
@@ -8,6 +9,7 @@ export interface SessionConfig {
   startedAt: string;          // ISO timestamp
   currentIteration: number;
   jiraTicketId?: string;      // JIRA ticket ID for commit messages
+  loopMode: LoopMode;         // "task" = one task per loop, "phase" = one phase per loop
 }
 
 export interface IterationLogEntry {
@@ -26,4 +28,5 @@ export const DEFAULT_CONFIG: Partial<SessionConfig> = {
   timeout: 30,
   verbose: false,
   currentIteration: 0,
+  loopMode: 'task',
 };

@@ -1,7 +1,7 @@
 import { agentRegistry, type Agent, type AgentExecutionResult } from './agents/index.js';
 import { StateManager, type SessionConfig, type IterationLogEntry } from './state/index.js';
 import { buildLoopPrompt } from './prompt/index.js';
-import { checkForCompletion, logger, type CompletionCheckResult } from './utils/index.js';
+import { checkForCompletion, checkForAllCompletions, logger, ensureGitRepo, ensureGitignore, type CompletionCheckResult } from './utils/index.js';
 
 export interface TaskCompleteInfo {
   marker: string;
@@ -23,6 +23,7 @@ export interface LoopResult {
   finalMarker?: string;
   exitReason: 'all_complete' | 'max_iterations' | 'interrupted' | 'error';
   tasksCompleted: number;
+  prereqsCompleted: number;
   error?: Error;
 }
 
@@ -36,6 +37,7 @@ export class Controller {
   private interrupted = false;
   private abortController: AbortController | null = null;
   private tasksCompleted = 0;
+  private prereqsCompleted = 0;
 
   constructor(options: ControllerOptions) {
     this.config = options.config;
@@ -57,6 +59,8 @@ export class Controller {
       iteration: this.config.currentIteration + 1,
       maxIterations: this.config.maxIterations,
       stateManager: this.stateManager,
+      loopMode: this.config.loopMode || 'task',
+      jiraTicketId: this.config.jiraTicketId,
     });
   }
 
@@ -131,10 +135,25 @@ export class Controller {
   }
 
   async run(): Promise<LoopResult> {
+    // Pre-flight: verify agent CLI is available
+    const isAvailable = await this.agent.isAvailable();
+    if (!isAvailable) {
+      logger.error(`"${this.agent.config.displayName}" is not available!`);
+      logger.info(`Please ensure the "${this.agent.config.command}" command is installed and available in your PATH.`);
+      throw new Error(`Agent "${this.agent.config.displayName}" is not available. Please install it and try again.`);
+    }
+    // Ensure git repo and .gitignore are set up before any iterations
+    const gitReady = await ensureGitRepo(process.cwd());
+    if (!gitReady) {
+      throw new Error('Failed to initialize a git repository in the current working directory. Cannot start Plan2Code Loop.');
+    }
+    ensureGitignore(process.cwd());
+    const loopModeLabel = (this.config.loopMode || 'task') === 'phase' ? 'One phase per loop' : 'One task per loop';
     logger.header('Starting Plan2Code Loop');
     logger.info(`Agent: ${this.agent.config.displayName}`);
     logger.info(`Model: ${this.config.model}`);
     logger.info(`Spec: ${this.config.specPath}`);
+    logger.info(`Loop mode: ${loopModeLabel}`);
     logger.info(`Max iterations: ${this.config.maxIterations}`);
     console.log();
 
@@ -145,6 +164,7 @@ export class Controller {
           iterations: this.config.currentIteration,
           exitReason: 'interrupted',
           tasksCompleted: this.tasksCompleted,
+          prereqsCompleted: this.prereqsCompleted,
         };
       }
 
@@ -157,13 +177,13 @@ export class Controller {
       // Build prompt - simple, just spec path and iteration info
       const prompt = await this.buildPrompt();
 
-      const spinner = logger.spinner('Waiting for agent response');
+      const spinner = logger.spinner('Waiting for AI Agent response (please be patient)');
       const startTime = Date.now();
 
       // Update spinner with elapsed time every second
       const elapsedInterval = setInterval(() => {
         const elapsed = Math.round((Date.now() - startTime) / 1000);
-        spinner.text = `Waiting for agent response (${elapsed}s)`;
+        spinner.text = `Waiting for AI Agent response (please be patient) ... (${elapsed}s)`;
       }, 1000);
 
       try {
@@ -189,10 +209,99 @@ export class Controller {
             iterations: this.config.currentIteration,
             exitReason: 'interrupted',
             tasksCompleted: this.tasksCompleted,
+            prereqsCompleted: this.prereqsCompleted,
           };
         }
 
-        // Check for completion markers in output (now includes task info)
+        // Branch completion handling based on loop mode
+        const isPhaseMode = (this.config.loopMode || 'task') === 'phase';
+        if (isPhaseMode) {
+          // Phase mode: parse ALL completion markers from output
+          const allCompletions = checkForAllCompletions(result.stdout + result.stderr);
+          // Determine status
+          let status: IterationLogEntry['status'] = 'running';
+          if (allCompletions.tasks.length > 0 || allCompletions.loopComplete || allCompletions.phaseComplete) {
+            const hasBlocked = allCompletions.tasks.some(t => t.marker === 'TASK_BLOCKED');
+            const hasCompleted = allCompletions.tasks.some(t => t.marker === 'TASK_COMPLETE' || t.marker === 'PREREQ_COMPLETE' || t.marker === 'PREREQ_ASSUMED');
+            status = hasCompleted || allCompletions.phaseComplete || allCompletions.loopComplete ? 'completed' : hasBlocked ? 'blocked' : 'running';
+          } else if (result.timedOut) {
+            status = 'timeout';
+          } else if (result.exitCode !== 0) {
+            status = 'error';
+          }
+          // Log iteration with count of tasks
+          const markerSummary = allCompletions.tasks.map(t => `${t.marker}: ${t.taskId}`).join(', ');
+          const logEntry = this.createLogEntry(result, status, markerSummary || undefined);
+          await this.stateManager.appendIterationLog(logEntry);
+          // Display each completed task
+          const duration = Math.round(result.duration / 1000);
+          for (const task of allCompletions.tasks) {
+            if (task.marker === 'TASK_COMPLETE') {
+              this.tasksCompleted++;
+              const taskDisplay = this.formatTaskDisplay(task);
+              logger.success(taskDisplay ? `Completed: ${taskDisplay}` : 'Task completed!');
+            } else if (task.marker === 'PREREQ_COMPLETE') {
+              this.prereqsCompleted++;
+              const prereqDisplay = task.taskId && task.taskName
+                ? `Prereq ${task.taskId}: ${task.taskName}`
+                : task.taskId ? `Prereq ${task.taskId}` : 'Prerequisite';
+              logger.success(`Verified: ${prereqDisplay}`);
+            } else if (task.marker === 'PREREQ_ASSUMED') {
+              this.prereqsCompleted++;
+              const prereqDisplay = task.taskId && task.taskName
+                ? `Prereq ${task.taskId}: ${task.taskName}`
+                : task.taskId ? `Prereq ${task.taskId}` : 'Prerequisite';
+              logger.success(`Assumed: ${prereqDisplay}`);
+            } else if (task.marker === 'TASK_BLOCKED') {
+              const blockInfo = task.taskId
+                ? `Task ${task.taskId} blocked: ${task.reason || 'Unknown reason'}`
+                : `Task blocked: ${task.reason || 'Unknown reason'}`;
+              logger.warning(blockInfo);
+            }
+          }
+          // Show phase-level summary
+          if (allCompletions.tasks.length > 0) {
+            const completedCount = allCompletions.tasks.filter(t => t.marker === 'TASK_COMPLETE').length;
+            const prereqCount = allCompletions.tasks.filter(t => t.marker === 'PREREQ_COMPLETE' || t.marker === 'PREREQ_ASSUMED').length;
+            const blockedCount = allCompletions.tasks.filter(t => t.marker === 'TASK_BLOCKED').length;
+            const parts: string[] = [];
+            if (completedCount > 0) parts.push(`${completedCount} task(s) completed`);
+            if (prereqCount > 0) parts.push(`${prereqCount} prereq(s) verified`);
+            if (blockedCount > 0) parts.push(`${blockedCount} blocked`);
+            logger.iteration(iterNum, this.config.maxIterations,
+              `Phase done: ${parts.join(', ')} (${duration}s)`);
+          } else {
+            logger.iteration(iterNum, this.config.maxIterations, `completed in ${duration}s`);
+          }
+          // Verbose output
+          if (this.config.verbose) {
+            console.log();
+            logger.dim('--- Agent Output ---');
+            console.log(result.stdout);
+            if (result.stderr) {
+              logger.dim('--- Agent Stderr ---');
+              console.log(result.stderr);
+            }
+            logger.dim('--- End Output ---');
+            console.log();
+          } else if (result.exitCode !== 0 && result.stderr.trim()) {
+            logger.error(`  ${result.stderr.trim().split('\n')[0]}`);
+          }
+          // Handle LOOP_COMPLETE
+          if (allCompletions.loopComplete) {
+            this.onLoopComplete?.();
+            logger.success('All tasks complete!');
+            return {
+              completed: true,
+              iterations: iterNum,
+              finalMarker: 'LOOP_COMPLETE',
+              exitReason: 'all_complete',
+              tasksCompleted: this.tasksCompleted,
+              prereqsCompleted: this.prereqsCompleted,
+            };
+          }
+        } else {
+          // Task mode (default): existing single-marker logic
         const completion = checkForCompletion(result.stdout + result.stderr);
 
         // Determine status
@@ -216,7 +325,6 @@ export class Controller {
         // Display iteration result with task info from completion marker
         this.displayIterationResult(result, iterNum, completion);
 
-        // Note: Scratchpad updates are now handled by the LLM directly
 
         // Handle completion markers
         if (completion.completed) {
@@ -230,6 +338,18 @@ export class Controller {
               taskName: completion.taskName,
             });
             logger.success(taskDisplay ? `Completed: ${taskDisplay}` : 'Task completed!');
+            } else if (completion.marker === 'PREREQ_COMPLETE' || completion.marker === 'PREREQ_ASSUMED') {
+              this.prereqsCompleted++;
+              await this.onTaskComplete?.({
+                marker: completion.marker,
+                taskId: completion.taskId,
+                taskName: completion.taskName,
+              });
+              const prereqDisplay = completion.taskId && completion.taskName
+                ? `Prereq ${completion.taskId}: ${completion.taskName}`
+                : completion.taskId ? `Prereq ${completion.taskId}` : 'Prerequisite';
+              const verb = completion.marker === 'PREREQ_COMPLETE' ? 'Verified' : 'Assumed';
+              logger.success(`${verb}: ${prereqDisplay}`);
           } else if (completion.marker === 'TASK_BLOCKED') {
             const blockInfo = completion.taskId
               ? `Task ${completion.taskId} blocked: ${completion.reason || 'Unknown reason'}`
@@ -251,7 +371,9 @@ export class Controller {
               finalMarker: 'LOOP_COMPLETE',
               exitReason: 'all_complete',
               tasksCompleted: this.tasksCompleted,
+                prereqsCompleted: this.prereqsCompleted,
             };
+            }
           }
         }
 
@@ -266,8 +388,14 @@ export class Controller {
         }
 
         // Handle error (but continue - LLM might recover)
-        if (result.exitCode !== 0 && !result.timedOut && !completion.completed) {
+        if (result.exitCode !== 0 && !result.timedOut) {
+          // In phase mode, check if any tasks completed despite error exit code
+          const hasCompletions = isPhaseMode
+            ? checkForAllCompletions(result.stdout + result.stderr).tasks.length > 0
+            : checkForCompletion(result.stdout + result.stderr).completed;
+          if (!hasCompletions) {
           logger.warning(`Iteration ${iterNum} exited with code ${result.exitCode}, continuing...`);
+          }
         }
 
       } catch (error) {
@@ -290,6 +418,7 @@ export class Controller {
           iterations: this.config.currentIteration,
           exitReason: 'error',
           tasksCompleted: this.tasksCompleted,
+          prereqsCompleted: this.prereqsCompleted,
           error: error instanceof Error ? error : new Error(String(error)),
         };
       }
@@ -302,6 +431,7 @@ export class Controller {
       iterations: this.config.currentIteration,
       exitReason: 'max_iterations',
       tasksCompleted: this.tasksCompleted,
+      prereqsCompleted: this.prereqsCompleted,
     };
   }
 

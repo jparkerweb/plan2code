@@ -54,20 +54,13 @@ The install script requires **Node.js** (v14 or later). If you don't have Node.j
 
 ### Supported Platforms
 
-| Platform         | Global Directory                       | Invocation                   |
-| ---------------- | -------------------------------------- | ---------------------------- |
-| Claude Code      | `~/.claude/commands/`                  | `/plan2code-1--plan`, etc. |
-| Copilot CLI      | `~/.copilot/agents/`                   | `--agent=plan2code-1--plan` |
-| Cursor           | `~/.cursor/commands/`                  | `/plan2code-1--plan`, etc. |
-| Continue         | `~/.continue/prompts/`                 | `/plan2code-1--plan`, etc. |
-| Windsurf         | `~/.codeium/windsurf/global_workflows/`| `/plan2code-1--plan`, etc. |
-| Codeium (IJ)     | `~/.codeium/global_workflows/`         | `/plan2code-1--plan`, etc. |
-| VS Code Copilot  | Platform-specific (see below)          | Slash commands in chat       |
-
-**VS Code Copilot paths:**
-- Windows: `%APPDATA%\Code\User\prompts\`
-- macOS: `~/Library/Application Support/Code/User/prompts/`
-- Linux: `~/.config/Code/User/prompts/`
+- Claude Code
+- Cursor
+- Windsurf
+- Continue
+- Codeium (IntelliJ)
+- GitHub Copilot CLI
+- VS Code GitHub Copilot
 
 ### Quick Start
 
@@ -102,307 +95,7 @@ Available platforms:
 Enter choice (1-7, A, O, L, U, Q, or comma-separated like 1,3,5):
 ```
 
-### Installer Options
-
-| Command | Description |
-|---------|-------------|
-| `node install.js` | Interactive mode - select platforms from menu |
-| `node install.js --platform <id>` | Install to specific platform only |
-| `node install.js --dry-run` | Preview what would be installed without making changes |
-| `node install.js --local` | Show instructions for project-level installation |
-| `node install.js --uninstall` | Remove installed files and unlink loop CLI |
-| `node install.js --help` | Display help information |
-
-**Valid platform IDs:** `claude`, `copilot`, `cursor`, `continue`, `windsurf`, `codeium`, `vscode-copilot`
-
-**Examples:**
-
-```bash
-# Install to Claude Code only
-node install.js --platform claude
-
-# Install to multiple specific platforms
-node install.js  # Then enter "1,3,5" for Claude, Cursor, Windsurf
-
-# Preview installation without making changes
-node install.js --dry-run
-
-# Remove all installed files
-node install.js --uninstall
-```
-
-### Per-Project Installation
-
-If you prefer project-specific configuration instead of global installation:
-
-```bash
-# Run the installer with --local flag
-node install.js --local
-```
-
-This will generate the distribution files and display instructions for copying them to your project. The generated files will be in `dist/local-commands/` organized by platform:
-
-```
-dist/local-commands/
-├── .claude/commands/        # Claude Code
-├── .cursor/commands/        # Cursor
-├── .github/prompts/         # VS Code GitHub Copilot
-├── .github/agents/          # GitHub Copilot CLI (agents)
-├── .continue/prompts/       # Continue
-├── .windsurf/workflows/     # Windsurf
-└── .agent/workflows/        # Google Antigravity
-```
-
-> **Note:** Some AI tools (Windsurf, Cursor, Continue) may not recognize workflows in gitignored directories. If your project's `.gitignore` includes patterns like `.windsurf/`, consider using global installation instead.
-
----
-
-## Platform-Specific Notes
-
-<details>
-<summary>Claude Code CLI</summary>
-
-**Installation:**
-```bash
-node install.js --platform claude
-# Or use interactive mode and select option 1
-```
-
-**Global location:** `~/.claude/commands/`
-
-**Usage:**
-```bash
-/plan2code-1--plan           # Start planning a new feature
-/plan2code-2--document       # Create implementation docs from plan
-/plan2code-3--implement      # Begin/continue implementation
-/plan2code-4--finalize       # Wrap up after all phases complete
-```
-
-Restart Claude Code or start a new session after installation.
-
-**Documentation:** [Claude Code Slash Commands](https://docs.anthropic.com/en/docs/claude-code/slash-commands)
-
-</details>
-
----
-
-<details>
-<summary>GitHub Copilot CLI</summary>
-
-**Installation:**
-```bash
-node install.js --platform copilot
-# Or use interactive mode and select option 2
-```
-
-**Global location:** `~/.copilot/agents/`
-
-Ensure GitHub Copilot CLI is installed: `npm install -g @github/copilot@latest`
-
-**Usage:**
-```bash
-# Using --agent flag
-copilot --agent=plan2code-1--plan --prompt "I want to build a REST API"
-
-# Using slash commands in interactive mode
-copilot
-> /agent plan2code-1--plan
-```
-
-**Documentation:** [GitHub Copilot CLI Custom Agents](https://docs.github.com/en/copilot/concepts/agents/about-copilot-cli)
-
-</details>
-
----
-
-<details>
-<summary>VS Code GitHub Copilot</summary>
-
-**Installation:**
-```bash
-node install.js --platform vscode-copilot
-# Or use interactive mode and select option 7
-```
-
-**Global location:** Platform-specific (Windows: `%APPDATA%\Code\User\prompts\`, macOS: `~/Library/Application Support/Code/User/prompts/`, Linux: `~/.config/Code/User/prompts/`)
-
-**Usage:**
-- Open Copilot Chat (Ctrl+Shift+I or Cmd+Shift+I)
-- Type `/` to see available prompts
-- Select the desired workflow step
-
-**Documentation:** [VS Code Copilot Prompt Files](https://code.visualstudio.com/docs/copilot/customization/prompt-files)
-
-</details>
-
----
-
-<details>
-<summary>Windsurf IDE</summary>
-
-**Installation:**
-```bash
-node install.js --platform windsurf
-# Or use interactive mode and select option 5
-```
-
-**Global location:** `~/.codeium/windsurf/global_workflows/`
-
-> **Note:** Windsurf has a 12,000 character limit per workflow file.
-
-**Usage:**
-- In Cascade, type `/plan2code-1--plan` to invoke the planning workflow
-
-**Documentation:** [Windsurf Workflows](https://docs.windsurf.com/windsurf/cascade/workflows)
-
-</details>
-
----
-
-<details>
-<summary>Cursor AI</summary>
-
-**Installation:**
-```bash
-node install.js --platform cursor
-# Or use interactive mode and select option 3
-```
-
-**Global location:** `~/.cursor/commands/`
-
-**Usage:**
-- Type `/` in Cursor chat to see available commands
-- Select `plan2code-1--plan` from the dropdown
-- Commands from both project and global directories appear automatically
-
-**Documentation:** [Cursor Commands](https://docs.cursor.com/agent/chat/commands)
-
-</details>
-
----
-
-<details>
-<summary>Continue (VS Code/JetBrains)</summary>
-
-**Installation:**
-```bash
-node install.js --platform continue
-# Or use interactive mode and select option 4
-```
-
-**Global location:** `~/.continue/prompts/`
-
-Install the Continue extension for VS Code or JetBrains. Prompts are automatically recognized.
-
-**Usage:**
-- In Continue chat, type `/plan2code-1--plan` to invoke the planning workflow
-
-**Documentation:** [Continue Prompts](https://docs.continue.dev/customize/deep-dives/prompts)
-
-</details>
-
----
-
-<details>
-<summary>Codeium (IntelliJ)</summary>
-
-**Installation:**
-```bash
-node install.js --platform codeium
-# Or use interactive mode and select option 6
-```
-
-**Global location:** `~/.codeium/global_workflows/`
-
-**Usage:**
-- Type `/plan2code-1--plan` in the Codeium chat to invoke workflows
-
-</details>
-
----
-
-<details>
-<summary>Google Antigravity</summary>
-
-**Installation:** Use the `--local` option and copy files to your project:
-```bash
-node install.js --local
-# Then copy dist/local-commands/.agent to your project
-```
-
-**Project location:** `.agent/workflows/` (per-project only)
-
-> **Note:** Antigravity requires per-project installation.
-
-**Usage:**
-- Type `/plan2code-1--plan` in the agent chat to invoke the planning workflow
-
-**Documentation:** [Customize Antigravity](https://atamel.dev/posts/2025/11-25_customize_antigravity_rules_workflows/)
-
-</details>
-
----
-
-## Autonomous Loop (Alternative to Step 3)
-
-For hands-off implementation, Plan2Code includes an optional autonomous loop CLI that iterates through your spec tasks automatically.
-
-> **Note:** The loop is an **alternative** to `/plan2code-3--implement`, not a replacement. Use the manual Step 3 workflow when you want direct control over each phase, or use the loop when you prefer autonomous execution.
-
-### When to Use Each
-
-| Approach | Best For |
-|----------|----------|
-| `/plan2code-3--implement` | Interactive control, reviewing each phase, complex logic requiring human judgment |
-| `plan2code-loop` | Straightforward implementations, batch processing, overnight runs |
-
-### Installing the Loop
-
-```bash
-# Option 1: Install everything (prompts + loop)
-node install.js  # Select option A
-
-# Option 2: Install loop only
-node install.js  # Select option O
-```
-
-### Using the Loop
-
-```bash
-# Run the loop - fully interactive
-plan2code-loop
-```
-
-The CLI will:
-1. Auto-detect specs in `./specs/` directory
-2. Let you select a spec if multiple are found
-3. Prompt to continue if an existing session is found
-4. Ask for JIRA ticket ID, agent selection, and max iterations
-
-Session state is stored per-spec in `specs/<feature>/.plan2code-loop/`, keeping each feature's progress isolated.
-
-The loop will:
-1. Read your `overview.md` and phase files
-2. Find the first unchecked task
-3. Implement it and mark the checkbox complete
-4. Repeat until all tasks are done or max iterations reached
-
-See [plan2code-loop/](plan2code-loop/) for full documentation.
-
----
-
-### Manual Usage (No Installation)
-
-If you prefer not to install, you can use Plan2Code prompts directly:
-
-1. **Copy/Paste Method:** Copy the contents of the appropriate `src/plan2code-*.md` file and paste it at the start of your conversation.
-
-2. **File Reference Method:** Reference the file directly in your prompt:
-   ```
-   Please follow the instructions in src/plan2code-1--plan.md
-
-   I want to build a user authentication system.
-   ```
+For per-project installation or additional options, run `node install.js --help`.
 
 ---
 
@@ -436,7 +129,7 @@ Fresh conversations prevent context pollution and ensure the AI focuses on the c
 5. **Technical Specification** - Break down implementation phases, identify risks
 6. **Transition Decision** - Finalize plan when confidence reaches 90%+
 
-**Output:** `specs/PLAN-DRAFT-<timestamp>.md` containing the complete implementation plan
+**Output:** `specs/<feature-name>/PLAN-DRAFT-<date>.md` and `specs/<feature-name>/PLAN-CONVERSATION-<date>.md` (date format: YYYYMMDD)
 
 **Key Behaviors:**
 
@@ -451,7 +144,7 @@ Fresh conversations prevent context pollution and ensure the AI focuses on the c
 
 **Purpose:** Transform the planning output into structured, actionable implementation documents.
 
-**Required Context:** Attach or reference the `specs/PLAN-DRAFT-<timestamp>.md` from Step 1 (or provide the planning conversation).
+**Required Context:** Attach or reference the `specs/<feature-name>/PLAN-DRAFT-<date>.md` from Step 1 (or provide the planning conversation).
 
 **Output Structure:**
 
@@ -521,9 +214,7 @@ The `overview.md` includes a "Parallel Execution Groups" section that identifies
 
 ---
 
-## How to Use These Prompts
-
-### Option 1: Platform-Specific Slash Commands (Recommended)
+## How to Use
 
 After running `node install.js`, use the slash commands directly in your AI tool:
 
@@ -533,20 +224,6 @@ After running `node install.js`, use the slash commands directly in your AI tool
 /plan2code-3--implement      # Begin/continue implementation
 /plan2code-4--finalize       # Wrap up after all phases complete
 ```
-
-### Option 2: Direct File Reference
-
-Reference the prompt files directly in your conversation:
-
-```
-Please follow the instructions in src/plan2code-1--plan.md
-
-I want to build a user authentication system with OAuth support.
-```
-
-### Option 3: Copy/Paste
-
-Copy the contents of each prompt file and paste at the beginning of your conversation when starting that step.
 
 ---
 
@@ -564,14 +241,14 @@ AI:   🤔 [REQUIREMENTS ANALYSIS]
       ... asks clarifying questions, works through phases ...
 
 AI:   🤔 [TRANSITION DECISION]
-      Confidence: 92%. Creating specs/PLAN DRAFT.md...
+      Confidence: 92%. Creating specs/task-api/PLAN-DRAFT-20250204.md...
 ```
 
 **Session 2 - Documentation (New Chat):**
 
 ```
 User: [Paste or invoke Step 2 prompt]
-      [Attach: specs/PLAN DRAFT.md]
+      [Attach: specs/task-api/PLAN-DRAFT-20250204.md]
 
 AI:   📝 [DOCUMENTATION]
       Creating specs/task-api/overview.md...
@@ -682,9 +359,66 @@ The `[/]` status enables parallel execution - multiple agents can work on differ
 | Step               | Required Input                                       |
 | ------------------ | ---------------------------------------------------- |
 | Step 1 (Plan)      | None (describe your feature/project)                 |
-| Step 2 (Document)  | `specs/PLAN DRAFT.md` or planning conversation       |
+| Step 2 (Document)  | `specs/<feature>/PLAN-DRAFT-<date>.md` or planning conversation |
 | Step 3 (Implement) | `specs/<feature>/overview.md` (auto-detects phase)   |
 | Step 4 (Finalize)  | `specs/<feature>/overview.md`                        |
+
+---
+
+## Autonomous Loop (Alternative to Step 3)
+
+For hands-off implementation, Plan2Code includes an optional autonomous loop CLI that iterates through your spec tasks automatically.
+
+> **Note:** The loop is an **alternative** to `/plan2code-3--implement`, not a replacement. Use the manual Step 3 workflow when you want direct control over each phase, or use the loop when you prefer autonomous execution.
+
+### When to Use Each
+
+| Approach | Best For |
+|----------|----------|
+| `/plan2code-3--implement` | Interactive control, reviewing each phase, complex logic requiring human judgment |
+| `plan2code-loop` | Straightforward implementations, batch processing, overnight runs |
+
+### Installing the Loop
+
+```bash
+# From the plan2code root directory:
+
+# Option 1: Install everything (recommended)
+node install.js  # Select option A
+
+# Option 2: Install loop only
+node install.js  # Select option O
+```
+
+### Using the Loop
+
+```bash
+# Run the loop - fully interactive
+plan2code-loop
+```
+
+The CLI will:
+1. Auto-detect specs in `./specs/` directory
+2. Let you select a spec if multiple are found
+3. Prompt to continue if an existing session is found
+4. Ask for JIRA ticket ID, agent selection, loop mode, and max iterations
+
+### Loop Modes
+
+| Mode | Behavior | Git Commits | Best For |
+|------|----------|-------------|----------|
+| **One task per loop** (default) | Each agent call implements one task | Node controller commits after each task | Smaller models, cautious execution |
+| **One phase per loop** | Each agent call implements all tasks in a phase | LLM commits after each task (with JIRA ID) | Smart models with larger context windows, related tasks |
+
+Session state is stored per-spec in `specs/<feature>/.plan2code-loop/`, keeping each feature's progress isolated.
+
+The loop will:
+1. Read your `overview.md` and phase files
+2. Find the first unchecked task (or phase, in phase mode)
+3. Implement it and mark the checkbox complete
+4. Repeat until all tasks are done or max iterations reached
+
+See [plan2code-loop/](plan2code-loop/) for full documentation.
 
 ---
 

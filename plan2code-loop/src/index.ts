@@ -58,6 +58,9 @@ export async function run(): Promise<LoopResult | null> {
     logger.header('Session Summary');
     logger.info(`Total iterations: ${loopResult.iterations}`);
     logger.info(`Tasks completed: ${loopResult.tasksCompleted}`);
+    if (loopResult.prereqsCompleted > 0) {
+      logger.info(`Prerequisites verified: ${loopResult.prereqsCompleted}`);
+    }
     logger.info(`Exit reason: ${loopResult.exitReason}`);
     if (loopResult.finalMarker) {
       logger.info(`Completion marker: ${loopResult.finalMarker}`);
