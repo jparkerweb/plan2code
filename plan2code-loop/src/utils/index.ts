@@ -1,6 +1,7 @@
 export { logger, MASCOT, type Logger } from './logger.js';
 export {
   checkForCompletion,
+  checkForAllCompletions,
   type CompletionMarker,
   type CompletionCheckResult
 } from './completion.js';

@@ -50,14 +50,6 @@ If no plan exists and user wants to skip:
 | Independence | Testable/verifiable independently |
 | Dependencies | Logical dependency order |
 
-**Typical progression:**
-1. Project setup/configuration
-2. Data models/database layer
-3. Core business logic/services
-4. API/Interface layer
-5. Integration, error handling, polish
-6. Additional features as needed
-
 ## Task Writing
 
 | Criterion | Description |
@@ -130,29 +122,9 @@ Or if none:
 | None | - | All phases must run sequentially |
 ```
 
-### Documentation Verification
+### Documentation Verification (Step 9)
 
-**STEP 9A:** Re-read PLAN-DRAFT as source of truth
-
-**STEP 9B:** Cross-reference:
-
-| PLAN-DRAFT Section | Verify Against |
-|--------------------|----------------|
-| 2.1 Functional Requirements | phase-X.md tasks (each FR-X has tasks) |
-| 2.2 Non-Functional Requirements | overview.md or tasks |
-| 3 Tech Stack | overview.md (exact match) |
-| 4.1 Architecture Pattern | overview.md |
-| 4.3 Component Overview | overview.md |
-| 5 Implementation Phases | Phase Checklist (all have phase-X.md) |
-| 6 Risks and Mitigations | overview.md |
-| 7 Success Criteria | overview.md |
-| 9 Assumptions | Tasks or overview |
-
-**STEP 9C:** For gaps:
-- Missing requirement: Add task with `<!-- VERIFICATION: Added - FR-X from PLAN-DRAFT -->`
-- Missing section: Add to overview.md with `<!-- VERIFICATION: Added from PLAN-DRAFT section X -->`
-
-**STEP 9D:** Output verification summary
+Re-read PLAN-DRAFT as source of truth. Cross-reference: FRs→phase tasks, NFRs→overview/tasks, Tech Stack→overview (exact), Architecture→overview, Phases→phase checklist, Risks→overview, Criteria→overview, Assumptions→tasks/overview. Fix gaps with `<!-- VERIFICATION: Added -->` comments. Output verification summary.
 
 ### Output Structure
 
@@ -182,112 +154,15 @@ Use kebab-case for feature name (e.g., `user-authentication`).
 
 ### overview.md
 
-```markdown
-# [Feature Name] - Implementation Overview
+Header: Title, Created date, Source (PLAN-DRAFT path), Status (Not Started | In Progress | Complete).
 
-**Created:** [Date]
-**Source:** PLAN-DRAFT-<date>.md
-**Status:** Not Started | In Progress | Complete
-
-## Summary
-[From Executive Summary]
-
-## Tech Stack
-[Copy table from planning doc]
-
-## Architecture
-### Pattern
-[From section 4.1]
-
-### Component Overview
-| Component | Responsibility | Dependencies |
-|-----------|----------------|--------------|
-[From section 4.3]
-
-## Risks and Mitigations
-| Risk | Likelihood | Impact | Mitigation |
-|------|------------|--------|------------|
-[From section 6]
-
-## Success Criteria
-[From section 7]
-- [ ] [Criterion]
-
-## Phase Checklist
-- [ ] Phase 1: [Name] - [Description]
-
-## Parallel Execution Groups
-<!-- This section enables running multiple phases simultaneously in separate agent instances -->
-<!-- Phases in the same group have no file conflicts or dependencies between them -->
-
-| Group | Phases | Reason |
-|-------|--------|--------|
-| [A/None] | [numbers] | [Why parallel-eligible] |
-
-## Quick Reference
-### Key Files
-[Files to be created]
-
-### Environment Variables
-[Required env vars or "None"]
-
-### External Dependencies
-[External services/APIs]
-
----
-## Completion Summary
-[Filled during finalization]
-```
+Sections: Summary (from Executive Summary), Tech Stack table (exact copy from PLAN-DRAFT), Architecture (Pattern + Component Overview table), Risks and Mitigations table, Success Criteria checklist, Phase Checklist, Parallel Execution Groups table (from analysis), Quick Reference (Key Files, Environment Variables, External Dependencies), Completion Summary (filled during finalization).
 
 ### phase-X.md
 
-```markdown
-# Phase X: [Name]
+Header: Phase name, Status, Estimated Tasks count.
 
-**Status:** Not Started | In Progress | Complete
-**Estimated Tasks:** [N]
-
-## Overview
-[2-3 sentences: what this phase accomplishes]
-
-## Prerequisites
-- [ ] Phase X-1 complete (if applicable)
-- [ ] [Other prerequisites]
-
-## Tasks
-
-### [Category 1]
-- [ ] **Task X.1:** [Description]
-  - File: `path/to/file`
-  - [Details]
-
-### Phase Testing (if enabled)
-- [ ] **Task X.N:** Run test suite
-  - Command: `[test command]`
-  - Pass criteria: [criteria]
-
-## Acceptance Criteria
-- [ ] [Verifiable criterion]
-
-## Notes
-[Additional context]
-
----
-## Phase Completion Summary
-_[Filled after implementation]_
-
-**Completed:** [Date]
-**Implemented by:** [AI/human]
-
-### What was done:
-[Summary]
-
-### Files created/modified:
-- `path/to/file` - [description]
-
-### Issues encountered:
-[Issues or "None"]
-```
+Sections: Overview (2-3 sentences), Prerequisites checklist, Tasks (grouped by category, `- [ ] **Task X.N:** [Description]` with File path and details), Phase Testing (if enabled), Acceptance Criteria checklist, Notes, Phase Completion Summary (filled after implementation: date, implementer, what was done, files changed, issues).
 
 ## Session End
 
@@ -333,19 +208,9 @@ Parallel Execution: [Groups or "None - sequential only"]
 >     │ ★ │
 >     │ ◡ │   Specs are ready! Time to build!
 >     ╰───╯
->
-> ╔═══════════════════════════════════════════════════════════════════╗
-> ║  NEXT STEPS                                                       ║
-> ╠═══════════════════════════════════════════════════════════════════╣
-> ║                                                                   ║
-> ║  1. Start a NEW conversation                                      ║
-> ║  2. Use command: /plan2code-3--implement                          ║
-> ║  3. Provide path: specs/<feature-name>/overview.md                ║
-> ║                                                                   ║
-> ║  The command will auto-detect Phase 1 as the next phase.          ║
-> ║  Complete ONE phase per conversation.                             ║
-> ║                                                                   ║
-> ╚═══════════════════════════════════════════════════════════════════╝
+> ============================================
+> NEXT STEP: Start a NEW conversation and run:
+> `/plan2code-3--implement`
 > ```"
 
 ## Abort Handling

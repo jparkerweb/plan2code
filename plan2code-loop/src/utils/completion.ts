@@ -54,6 +54,7 @@ export function checkForCompletion(output: string): CompletionCheckResult {
       taskName: prereqMatch[2].trim(),
     };
   }
+
   // Check for PREREQ_ASSUMED with prereq info
   // Format: PREREQ_ASSUMED: P2.1 - Design approval (cannot verify)
   const assumedMatch = output.match(/PREREQ_ASSUMED[:\[\s]+([^\]:\-\s]+)[\]:\-\s]+(.+?)(?:\n|$)/i);
@@ -65,6 +66,7 @@ export function checkForCompletion(output: string): CompletionCheckResult {
       taskName: assumedMatch[2].trim(),
     };
   }
+
   // Check for TASK_BLOCKED with task info and reason
   // Format: TASK_BLOCKED: 1.1 - Reason why blocked
   const blockedWithTaskMatch = output.match(/TASK_BLOCKED[:\[\s]+(\d+\.\d+)[\]:\-\s]+(.+?)(?:\n|$)/i);
@@ -94,6 +96,7 @@ export function checkForCompletion(output: string): CompletionCheckResult {
 
   return { completed: false };
 }
+
 /**
  * Extract ALL completion markers from output (for phase mode).
  * Returns an array of all TASK_COMPLETE/TASK_BLOCKED markers found,
@@ -107,12 +110,15 @@ export function checkForAllCompletions(output: string): {
   const tasks: CompletionCheckResult[] = [];
   let loopComplete = false;
   let phaseComplete = false;
+
   if (output.includes('LOOP_COMPLETE')) {
     loopComplete = true;
   }
+
   if (output.includes('PHASE_COMPLETE')) {
     phaseComplete = true;
   }
+
   // Find all TASK_COMPLETE markers with task info
   // Format: TASK_COMPLETE: 1.1 - Task description
   const completeRegex = /TASK_COMPLETE[:\[\s]+(\d+\.\d+)[\]:\-\s]+(.+?)(?:\n|$)/gi;
@@ -125,6 +131,7 @@ export function checkForAllCompletions(output: string): {
       taskName: match[2].trim(),
     });
   }
+
   // Find all TASK_BLOCKED markers with task info
   const blockedRegex = /TASK_BLOCKED[:\[\s]+(\d+\.\d+)[\]:\-\s]+(.+?)(?:\n|$)/gi;
   while ((match = blockedRegex.exec(output)) !== null) {
@@ -135,6 +142,7 @@ export function checkForAllCompletions(output: string): {
       reason: match[2].trim(),
     });
   }
+
   // Find PREREQ_COMPLETE markers
   const prereqRegex = /PREREQ_COMPLETE[:\[\s]+([^\]:\-\s]+)[\]:\-\s]+(.+?)(?:\n|$)/gi;
   while ((match = prereqRegex.exec(output)) !== null) {
@@ -145,6 +153,7 @@ export function checkForAllCompletions(output: string): {
       taskName: match[2].trim(),
     });
   }
+
   // Find PREREQ_ASSUMED markers
   const assumedRegex = /PREREQ_ASSUMED[:\[\s]+([^\]:\-\s]+)[\]:\-\s]+(.+?)(?:\n|$)/gi;
   while ((match = assumedRegex.exec(output)) !== null) {
@@ -155,5 +164,6 @@ export function checkForAllCompletions(output: string): {
       taskName: match[2].trim(),
     });
   }
+
   return { tasks, loopComplete, phaseComplete };
 }

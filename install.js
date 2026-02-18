@@ -110,6 +110,7 @@ const MASCOT = {
     '   ╰───╯   ',
   ],
 };
+
 // Source directory containing pre-formatted global installation files
 const SOURCE_BASE = 'dist/global-commands';
 
@@ -1247,6 +1248,7 @@ function runInteractive() {
       rl.close();
       process.exit(displayLocalInstructions());
     }
+
     if (input === 'O') {
       // Install plan2code-loop
       rl.close();

@@ -67,8 +67,6 @@ async function selectSpec(cwd: string = process.cwd()): Promise<string | null> {
 async function selectAgent(): Promise<string> {
   const allAgents = agentRegistry.getAll();
 
-
-
   const agentName = await select({
     message: 'Select AI agent:',
     choices: allAgents.map((agent) => ({
@@ -108,6 +106,7 @@ async function selectMaxIterations(): Promise<number> {
 
   return max;
 }
+
 /**
  * Select loop mode: one task per loop or one phase per loop
  */
@@ -126,6 +125,7 @@ async function selectLoopMode(): Promise<LoopMode> {
     ],
     default: 'task',
   });
+
   return mode;
 }
 

@@ -31,24 +31,9 @@ If multiple active spec folders exist or nothing provided, ask user for:
 
 ## Examples
 
-### Task Audit
-**Bad:** "All tasks complete. Moving to Step 2." (No verification shown)
+**Task Audit:** Always show verification table with phase totals, blocked items, and completion %. Never just assert "all complete" without evidence.
 
-**Good:**
-| Phase | Total | Completed | Blocked |
-|-------|-------|-----------|---------|
-| Phase 1 | 12 | 12 | 0 |
-| Phase 2 | 18 | 17 | 1 |
-Blocked: Task 2.14 - OAuth awaiting credentials. Completion: 96.7%
-
-### Documentation Review
-**Bad:** "No docs need updating." (No evidence of review)
-
-**Good:**
-| Document | Needs Update? | Changes |
-|----------|---------------|---------|
-| README.md | Yes | Add auth setup |
-| .env.example | Yes | Add JWT_SECRET |
+**Documentation Review:** Always show review table with each document checked and proposed changes. Never assert "no updates needed" without evidence.
 
 ## Process
 
@@ -190,40 +175,21 @@ Add this summary to `overview.md` under `## Completion Summary`.
 | `API.md` / docs | API documentation | Update with new endpoints |
 | `CLAUDE.md` | AI assistant context | Update if patterns changed |
 
-#### Report:
+Report: table of documents needing updates with proposed changes. List each document with specific additions.
 
-```markdown
-## Documentation Review
-| Document | Needs Update? | Proposed Changes |
-|----------|---------------|------------------|
-| README.md | Yes | Add "Authentication" section |
-| CHANGELOG.md | Yes | Add entry: "Added user auth with JWT" |
+If updates needed, show Mascot and ask for approval:
 
-### Proposed Updates
-#### README.md
-[Show specific additions]
-
-#### CHANGELOG.md
-[Show specific entry]
+```
+⋅
+    ╭───╮
+    │ ● │
+    │ ~ │   Found some docs that need updating!
+    ╰───╯
 ```
 
-**If ANY documentation needs updates:**
+> Reply "approve" to proceed with doc updates, or specify which to skip.
 
-> ```
-> ⋅
->     ╭───╮
->     │ ● │
->     │ ~ │   Found some docs that need updating!
->     ╰───╯
-> ```
->
-> "The following documentation updates are recommended. Review and approve:
->
-> [List proposed changes]
->
-> Reply 'approve' to proceed, or specify which to skip."
-
-**Do NOT make documentation changes without user approval.**
+Do NOT make documentation changes without user approval.
 
 ---
 
@@ -297,68 +263,17 @@ specs--completed/
     ╰───╯
 ```
 
-╔═══════════════════════════════════════════════════════════════════╗
-║  IMPLEMENTATION COMPLETE                                          ║
-╠═══════════════════════════════════════════════════════════════════╣
-║                                                                   ║
-║  All tasks finished. Specs archived to:                           ║
-║  specs--completed/<feature-name>/                                 ║
-║                                                                   ║
-║  Thank you for using the Plan2Code workflow!                      ║
-║                                                                   ║
-╚═══════════════════════════════════════════════════════════════════╝
-```
+> IMPLEMENTATION COMPLETED!
+> All tasks finished.
+> Specs archived to `specs--completed/<feature-name>/`.
+> Thank you for using the Plan2Code workflow!
 
 ### Handling Incomplete Implementations
 
-**Partial Completion (>75%):** Allow finalization with documentation:
-
-```markdown
-## Partial Completion Notice
-Feature finalized at [X]% completion.
-
-### Incomplete Items
-- Phase X, Task Y: [Description] - [Reason]
-
-╔═══════════════════════════════════════════════════════════════════╗
-║  NEXT STEPS - REMAINING WORK                                      ║
-╠═══════════════════════════════════════════════════════════════════╣
-║                                                                   ║
-║  [X] incomplete tasks remain.                                     ║
-║  Review the overview.md for remaining items.                      ║
-║  Address these in a follow-up implementation cycle.               ║
-║                                                                   ║
-╚═══════════════════════════════════════════════════════════════════╝
-```
-
-**Low Completion (<75%):** Recommend returning to implementation:
-
-```markdown
-Implementation only [X]% complete. Recommend returning to Implementation Mode.
-
-**Incomplete phases:**
-- Phase X: [Y]/[Z] tasks
-- Phase Y: [Y]/[Z] tasks
-
-Options:
-1. Return to implementation
-2. Proceed with partial finalization
-
-╔═══════════════════════════════════════════════════════════════════╗
-║  NEXT STEPS - IMPLEMENTATION INCOMPLETE                           ║
-╠═══════════════════════════════════════════════════════════════════╣
-║                                                                   ║
-║  Completion rate is below 75%.                                    ║
-║  Return to implementation before finalizing.                      ║
-║                                                                   ║
-║  1. Start a NEW conversation                                      ║
-║  2. Use command: /plan2code-3--implement                          ║
-║  3. Provide path: specs/<feature-name>/overview.md                ║
-║                                                                   ║
-║  The command will auto-detect the next Phase to implement.        ║
-║                                                                   ║
-╚═══════════════════════════════════════════════════════════════════╝
-```
+| Completion | Action |
+|-----------|--------|
+| **>75%** | Finalize with notice. List incomplete items. Note remaining tasks for follow-up cycle. |
+| **<75%** | Recommend returning to implementation. List incomplete phases with task counts. Options: 1) Return via `/plan2code-3--implement` 2) Proceed with partial finalization. |
 
 ## Abort Handling
 
@@ -375,23 +290,6 @@ If user says "abort", "cancel", or similar:
 | Missing spec files | Ask for all phase-X.md files |
 | Doc updates rejected | Skip updates, note in summary |
 
-## Learning Capture Protocol
+## Learning Capture
 
-At END of session, check for auto-capture triggers:
-- [ ] Discovered undocumented build/test command
-- [ ] Found non-obvious dependency relationship
-- [ ] Encountered "gotcha" costing >5 minutes
-- [ ] Made workaround for framework quirk
-- [ ] Found patterns not in `AGENTS.md`
-
-If any triggered:
-```
-📚 LEARNING DETECTED
-- Category: [Commands / Architecture / Gotchas / Testing / Config]
-- Learning: [description]
-- Context: [why this matters]
-
-Update AGENTS.md with this? (yes/no)
-```
-
-If yes, generate and apply the edit directly.
+At session end, if you discovered undocumented commands, dependency quirks, gotchas (>5min cost), framework workarounds, or missing `AGENTS.md` patterns → prompt user to update AGENTS.md. If yes, apply the edit directly.

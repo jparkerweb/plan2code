@@ -34,7 +34,7 @@ The CLI will:
 1. Auto-detect specs in `./specs/` directory
 2. Let you select a spec if multiple are found
 3. Prompt to continue if an existing session is found
-4. Ask for JIRA ticket ID, agent selection, and max iterations
+4. Ask for JIRA ticket ID, agent selection, loop mode, and max iterations
 
 ## How It Works
 

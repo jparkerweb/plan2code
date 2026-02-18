@@ -61,7 +61,7 @@ Before Phase 1, check for `specs/*/PLAN-DRAFT-*.md`:
 When assumptions made, end with:
 **Assumptions this phase:** [Assumption] - [impact if wrong]
 
-User should confirm before next phase.
+User MUST confirm before next phase.
 
 ### Confidence Calculation
 
@@ -76,20 +76,6 @@ Four dimensions (0-25% each):
 
 Report each sub-score with overall percentage.
 
-## Examples
-
-### Requirement Gathering
-**Bad:** "You want auth. I'll design JWT with bcrypt." (Made tech decisions without asking)
-
-**Good:** "You mentioned authentication. Before proposing:
-1. What methods? (email/password, social, SSO?)
-2. Compliance? (SOC2, HIPAA?)
-3. Token storage? (cookies, localStorage?)"
-
-### Scope Assessment
-**Bad:** "Medium project. Moving to Phase 4." (No justification)
-
-**Good:** "Analysis: 8 requirements (Medium: 10-15), 4 components (Medium: 4-6), 2 integrations (Medium: 2-3). Appears **Medium**. Agree?"
 
 ## Process
 
@@ -231,160 +217,29 @@ State assessment and ask user to confirm.
 - Ask targeted questions
 - State: "Need clarity on [areas] to improve [dimension] confidence."
 
----
-
-#### STEP 7A: Save Conversation Log
-
-Create `specs/<feature-name>/PLAN-CONVERSATION-<YYYYMMDD>.md`:
-
-```markdown
-# Planning Conversation Log
-
-**Feature:** [Name]
-**Date:** [YYYYMMDD]
-**Related:** specs/<feature-name>/PLAN-DRAFT-<date>.md
-
----
-
-## Transcript
-
-### Phase 1: Requirements Analysis
-**[AGENT]** [Response]
-**[USER]** [Response]
-[...continue for all phases...]
-
----
-
-## Decision Summary
-
-### Key Decisions
-| Phase | Decision | User Confirmation |
-|-------|----------|-------------------|
-
-### Requirements Confirmed
-| ID | Requirement | Phase |
-|----|-------------|-------|
-
-### Technology Approved
-| Tech | Category | Phase | Confirmation |
-|------|----------|-------|--------------|
-
-### Assumptions
-| Assumption | Phase | Impact if Wrong | Acknowledged |
-|------------|-------|-----------------|--------------|
-```
-
-Save before STEP 7B.
-
----
-
-#### STEP 7B: Create PLAN-DRAFT
-
-Using same date, create `specs/<feature-name>/PLAN-DRAFT-<date>.md` (template below).
-
----
-
-#### STEP 7C: Verification Pass
-
-After PLAN-DRAFT:
-
-1. Re-read conversation log as source of truth
-2. Verify against PLAN-DRAFT:
-
-| From Conversation | Verify In PLAN-DRAFT |
-|-------------------|----------------------|
-| Functional requirements | 2.1 |
-| Non-functional requirements | 2.2 |
-| Technology decisions | 3. Tech Stack |
-| Architecture decisions | 4. Architecture |
-| Risks | 6. Risks |
-| Assumptions | 9. Assumptions |
-| Success criteria | 7. Success Criteria |
-
-3. For gaps: Add with `<!-- VERIFICATION: Added from Phase X -->`
-4. Output summary:
-```
-## Verification Complete
-| Section | In Conversation | In PLAN-DRAFT | Added |
-|---------|-----------------|---------------|-------|
-**Status:** [All captured / X items added]
-```
-5. Save updated PLAN-DRAFT if needed
-
----
+**Phase 7 Outputs:**
+1. Save PLAN-CONVERSATION (see template below) — transcript + decision summary tables
+2. Create PLAN-DRAFT (see template below) using same date
+3. Verify: re-read conversation as source of truth, cross-reference against PLAN-DRAFT sections (Reqs→2.1/2.2, Tech→3, Architecture→4, Risks→6, Assumptions→9, Criteria→7). Add gaps with `<!-- VERIFICATION -->` comments. Output verification summary table.
 
 ## Templates
 
 ### PLAN-DRAFT Format
 
-```markdown
-# [Feature Name] - Implementation Plan
+File: `specs/<feature-name>/PLAN-DRAFT-<YYYYMMDD>.md`
 
-**Created:** [Date]
-**Status:** Draft | Phase 3 Complete - Resume at Phase 4 | Complete
-**Confidence:** [X]% (Reqs: X/25, Feasibility: X/25, Integration: X/25, Risk: X/25)
-**Conversation Log:** specs/<feature-name>/PLAN-CONVERSATION-<date>.md
+Header: Title, Created date, Status (Draft | Phase 3 Complete - Resume at Phase 4 | Complete), Confidence % (Reqs/Feasibility/Integration/Risk each /25), link to PLAN-CONVERSATION.
 
-## 1. Executive Summary
-[2-3 sentences]
-
-## 2. Requirements
-### 2.1 Functional
-- [ ] FR-1: [Description]
-
-### 2.2 Non-Functional
-- [ ] NFR-1: [Description]
-
-### 2.3 Out of Scope
-- [Exclusions]
-
-### 2.4 Testing Strategy
-| Preference | Selection |
-|------------|-----------|
-| Types | [Unit/Integration/E2E/None] |
-| Phase Testing | [After each/Dedicated/None] |
-| Coverage | [Critical/Moderate/Comprehensive/N/A] |
-
-## 3. Tech Stack
-| Category | Technology | Version | Justification |
-|----------|------------|---------|---------------|
-
-## 4. Architecture
-### 4.1 Pattern
-[Name and rationale]
-
-### 4.2 System Context Diagram
-[ASCII or description]
-
-### 4.3 Components
-| Component | Responsibility | Dependencies |
-|-----------|----------------|--------------|
-
-### 4.4 Data Model
-[Schema, relationships]
-
-### 4.5 API Design
-[Endpoints if applicable]
-
-## 5. Implementation Phases
-### Phase 1: [Name]
-**Goal:** [Accomplishment]
-**Dependencies:** None / [List]
-- [ ] Task 1.1: [Description]
-
-## 6. Risks and Mitigations
-| Risk | Likelihood | Impact | Mitigation |
-|------|------------|--------|------------|
-
-## 7. Success Criteria
-- [ ] [Criterion]
-
-## 8. Open Questions
-[Remove if none]
-
-## 9. Assumptions
-[List]
-```
+Sections:
+1. **Executive Summary** — 2-3 sentences
+2. **Requirements** — 2.1 Functional (FR-N checklist), 2.2 Non-Functional (NFR-N checklist), 2.3 Out of Scope, 2.4 Testing Strategy table (Types, Phase Testing, Coverage)
+3. **Tech Stack** — table: Category / Technology / Version / Justification
+4. **Architecture** — 4.1 Pattern (name + rationale), 4.2 System Context Diagram, 4.3 Components table, 4.4 Data Model, 4.5 API Design
+5. **Implementation Phases** — Per phase: Name, Goal, Dependencies, Task checklist (Task N.N)
+6. **Risks and Mitigations** — table: Risk / Likelihood / Impact / Mitigation
+7. **Success Criteria** — checklist
+8. **Open Questions** — remove if none
+9. **Assumptions** — list
 
 ### Response Format
 
@@ -414,15 +269,9 @@ When complete (PLAN-DRAFT created), tell user:
 >     │ ★ │
 >     │ ◡ │   Planning done! Ready for documentation!
 >     ╰───╯
->
-> ╔═══════════════════════════════════════════════════════════════════╗
-> ║  NEXT STEPS                                                       ║
-> ╠═══════════════════════════════════════════════════════════════════╣
-> ║                                                                   ║
-> ║  1. Start a NEW conversation                                      ║
-> ║  2. Use command: /plan2code-2--document                           ║
-> ║                                                                   ║
-> ╚═══════════════════════════════════════════════════════════════════╝
+> =============================================
+> NEXT STEP: Start a NEW conversation then run:
+> `/plan2code-2--document`
 > ```"
 
 ## Abort Handling

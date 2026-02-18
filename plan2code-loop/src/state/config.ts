@@ -1,4 +1,5 @@
 export type LoopMode = 'task' | 'phase';
+
 export interface SessionConfig {
   agent: string;              // "claude-code" | "copilot-cli"
   model: string;              // Selected model

@@ -1,0 +1,14 @@
+{
+  "name": "plan2code",
+  "version": "1.6.1",
+  "private": true,
+  "bin": {
+    "plan2code": "./install.js"
+  },
+  "scripts": {
+    "prepare": "husky"
+  },
+  "devDependencies": {
+    "husky": "^9.0.0"
+  }
+}

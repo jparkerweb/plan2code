@@ -142,12 +142,14 @@ export class Controller {
       logger.info(`Please ensure the "${this.agent.config.command}" command is installed and available in your PATH.`);
       throw new Error(`Agent "${this.agent.config.displayName}" is not available. Please install it and try again.`);
     }
+
     // Ensure git repo and .gitignore are set up before any iterations
     const gitReady = await ensureGitRepo(process.cwd());
     if (!gitReady) {
       throw new Error('Failed to initialize a git repository in the current working directory. Cannot start Plan2Code Loop.');
     }
     ensureGitignore(process.cwd());
+
     const loopModeLabel = (this.config.loopMode || 'task') === 'phase' ? 'One phase per loop' : 'One task per loop';
     logger.header('Starting Plan2Code Loop');
     logger.info(`Agent: ${this.agent.config.displayName}`);
@@ -215,9 +217,11 @@ export class Controller {
 
         // Branch completion handling based on loop mode
         const isPhaseMode = (this.config.loopMode || 'task') === 'phase';
+
         if (isPhaseMode) {
           // Phase mode: parse ALL completion markers from output
           const allCompletions = checkForAllCompletions(result.stdout + result.stderr);
+
           // Determine status
           let status: IterationLogEntry['status'] = 'running';
           if (allCompletions.tasks.length > 0 || allCompletions.loopComplete || allCompletions.phaseComplete) {
@@ -229,10 +233,12 @@ export class Controller {
           } else if (result.exitCode !== 0) {
             status = 'error';
           }
+
           // Log iteration with count of tasks
           const markerSummary = allCompletions.tasks.map(t => `${t.marker}: ${t.taskId}`).join(', ');
           const logEntry = this.createLogEntry(result, status, markerSummary || undefined);
           await this.stateManager.appendIterationLog(logEntry);
+
           // Display each completed task
           const duration = Math.round(result.duration / 1000);
           for (const task of allCompletions.tasks) {
@@ -259,6 +265,7 @@ export class Controller {
               logger.warning(blockInfo);
             }
           }
+
           // Show phase-level summary
           if (allCompletions.tasks.length > 0) {
             const completedCount = allCompletions.tasks.filter(t => t.marker === 'TASK_COMPLETE').length;
@@ -273,6 +280,7 @@ export class Controller {
           } else {
             logger.iteration(iterNum, this.config.maxIterations, `completed in ${duration}s`);
           }
+
           // Verbose output
           if (this.config.verbose) {
             console.log();
@@ -287,6 +295,7 @@ export class Controller {
           } else if (result.exitCode !== 0 && result.stderr.trim()) {
             logger.error(`  ${result.stderr.trim().split('\n')[0]}`);
           }
+
           // Handle LOOP_COMPLETE
           if (allCompletions.loopComplete) {
             this.onLoopComplete?.();
@@ -302,42 +311,41 @@ export class Controller {
           }
         } else {
           // Task mode (default): existing single-marker logic
-        const completion = checkForCompletion(result.stdout + result.stderr);
+          const completion = checkForCompletion(result.stdout + result.stderr);
 
-        // Determine status
-        let status: IterationLogEntry['status'] = 'running';
-        if (completion.completed) {
-          if (completion.marker === 'TASK_BLOCKED') {
-            status = 'blocked';
-          } else {
-            status = 'completed';
+          // Determine status
+          let status: IterationLogEntry['status'] = 'running';
+          if (completion.completed) {
+            if (completion.marker === 'TASK_BLOCKED') {
+              status = 'blocked';
+            } else {
+              status = 'completed';
+            }
+          } else if (result.timedOut) {
+            status = 'timeout';
+          } else if (result.exitCode !== 0) {
+            status = 'error';
           }
-        } else if (result.timedOut) {
-          status = 'timeout';
-        } else if (result.exitCode !== 0) {
-          status = 'error';
-        }
 
-        // Log iteration
-        const logEntry = this.createLogEntry(result, status, completion.marker);
-        await this.stateManager.appendIterationLog(logEntry);
+          // Log iteration
+          const logEntry = this.createLogEntry(result, status, completion.marker);
+          await this.stateManager.appendIterationLog(logEntry);
 
-        // Display iteration result with task info from completion marker
-        this.displayIterationResult(result, iterNum, completion);
+          // Display iteration result with task info from completion marker
+          this.displayIterationResult(result, iterNum, completion);
 
+          // Handle completion markers
+          if (completion.completed) {
+            const taskDisplay = this.formatTaskDisplay(completion);
 
-        // Handle completion markers
-        if (completion.completed) {
-          const taskDisplay = this.formatTaskDisplay(completion);
-
-          if (completion.marker === 'TASK_COMPLETE') {
-            this.tasksCompleted++;
-            await this.onTaskComplete?.({
-              marker: completion.marker,
-              taskId: completion.taskId,
-              taskName: completion.taskName,
-            });
-            logger.success(taskDisplay ? `Completed: ${taskDisplay}` : 'Task completed!');
+            if (completion.marker === 'TASK_COMPLETE') {
+              this.tasksCompleted++;
+              await this.onTaskComplete?.({
+                marker: completion.marker,
+                taskId: completion.taskId,
+                taskName: completion.taskName,
+              });
+              logger.success(taskDisplay ? `Completed: ${taskDisplay}` : 'Task completed!');
             } else if (completion.marker === 'PREREQ_COMPLETE' || completion.marker === 'PREREQ_ASSUMED') {
               this.prereqsCompleted++;
               await this.onTaskComplete?.({
@@ -350,29 +358,29 @@ export class Controller {
                 : completion.taskId ? `Prereq ${completion.taskId}` : 'Prerequisite';
               const verb = completion.marker === 'PREREQ_COMPLETE' ? 'Verified' : 'Assumed';
               logger.success(`${verb}: ${prereqDisplay}`);
-          } else if (completion.marker === 'TASK_BLOCKED') {
-            const blockInfo = completion.taskId
-              ? `Task ${completion.taskId} blocked: ${completion.reason || 'Unknown reason'}`
-              : `Task blocked: ${completion.reason || 'Unknown reason'}`;
-            logger.warning(blockInfo);
-          } else if (completion.marker === 'LOOP_COMPLETE') {
-            // Commit any final changes before completing
-            this.tasksCompleted++;
-            await this.onTaskComplete?.({
-              marker: completion.marker,
-              taskId: completion.taskId,
-              taskName: completion.taskName || 'Final implementation complete',
-            });
-            this.onLoopComplete?.();
-            logger.success('All tasks complete!');
-            return {
-              completed: true,
-              iterations: iterNum,
-              finalMarker: 'LOOP_COMPLETE',
-              exitReason: 'all_complete',
-              tasksCompleted: this.tasksCompleted,
+            } else if (completion.marker === 'TASK_BLOCKED') {
+              const blockInfo = completion.taskId
+                ? `Task ${completion.taskId} blocked: ${completion.reason || 'Unknown reason'}`
+                : `Task blocked: ${completion.reason || 'Unknown reason'}`;
+              logger.warning(blockInfo);
+            } else if (completion.marker === 'LOOP_COMPLETE') {
+              // Commit any final changes before completing
+              this.tasksCompleted++;
+              await this.onTaskComplete?.({
+                marker: completion.marker,
+                taskId: completion.taskId,
+                taskName: completion.taskName || 'Final implementation complete',
+              });
+              this.onLoopComplete?.();
+              logger.success('All tasks complete!');
+              return {
+                completed: true,
+                iterations: iterNum,
+                finalMarker: 'LOOP_COMPLETE',
+                exitReason: 'all_complete',
+                tasksCompleted: this.tasksCompleted,
                 prereqsCompleted: this.prereqsCompleted,
-            };
+              };
             }
           }
         }
@@ -394,7 +402,7 @@ export class Controller {
             ? checkForAllCompletions(result.stdout + result.stderr).tasks.length > 0
             : checkForCompletion(result.stdout + result.stderr).completed;
           if (!hasCompletions) {
-          logger.warning(`Iteration ${iterNum} exited with code ${result.exitCode}, continuing...`);
+            logger.warning(`Iteration ${iterNum} exited with code ${result.exitCode}, continuing...`);
           }
         }
 

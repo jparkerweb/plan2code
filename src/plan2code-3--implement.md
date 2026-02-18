@@ -60,75 +60,16 @@ Never reset `[/]` to `[ ]`. Started work stays marked for conscious resume decis
 
 ## Parallel Phase Selection
 
-After identifying workable phases, check for parallel execution:
+Check overview.md for "Parallel Execution Groups" section. Find workable phases (`[ ]` or `[/]`).
 
-1. Look for "Parallel Execution Groups" section in overview.md
-2. Find if next phase belongs to a group with other uncompleted phases
-3. Only show consecutive uncompleted phases in same group
+| Condition | Action |
+|-----------|--------|
+| 2+ workable phases in same parallel group | Show selection prompt listing each with status. TIP: run another agent on a different phase simultaneously. If all are `[/]`, warn about duplication. |
+| Single `[/]` phase | Prompt: "Phase X is in progress. Resume? (yes/no)" |
+| Single `[ ]` phase | Auto-start: mark `[/]` and begin |
+| No parallel groups section | Sequential mode (single-phase rules above) |
 
-**Decision Logic:**
-
-```
-Find workable phases = all phases marked [ ] or [/] (not [x])
-Check Parallel Execution Groups table:
-
-CASE 1: Multiple parallel phases available
-  - If 2+ workable phases exist in the same parallel group
-  → Show parallel selection UI with status for each
-
-CASE 2: Single workable phase that is IN PROGRESS [/]
-  - Phase was started but not completed (possibly by another session)
-  → Show resume prompt: "Phase X is in progress. Resume? (yes/no)"
-
-CASE 3: Single workable phase that is PENDING [ ]
-  - Fresh phase, no parallel options
-  → Auto-start: mark [/] and begin implementation
-
-CASE 4: No Parallel Execution Groups section exists
-  → Fall back to sequential mode using Cases 2-3 logic
-```
-
-**Parallel Selection UI:**
-
-When parallel options are available (CASE 1), present this prompt:
-
-```
-⚡ PARALLEL PHASES AVAILABLE
-
-These phases can run in parallel:
-  [1] Phase N: [Name]       [IN PROGRESS]
-  [2] Phase N+1: [Name]     [AVAILABLE]
-  [3] Phase N+2: [Name]     [AVAILABLE]
-
-Which phase? (1/2/3)
-
-┌─────────────────────────────────────────────────────────────────────────┐
-│ TIP: Run another agent instance with /plan2code-3--implement to work    │
-│ on a different phase simultaneously.                                    │
-│                                                                         │
-│ IN PROGRESS phases may be running in another session - selecting one    │
-│ will resume work on it.                                                 │
-└─────────────────────────────────────────────────────────────────────────┘
-```
-
-**Single Phase Resume UI:**
-```
-⚡ PHASE RESUME CHECK
-
-Phase N: [Name] is IN PROGRESS.
-- Another session may be working on it
-- Previous session may have been aborted
-
-Resume? (yes / no - I'll wait)
-```
-
-**Rules:**
-- Only show consecutive, same-group, incomplete phases (`[ ]` or `[/]`)
-- Stop at first phase NOT in same group
-- After selection, mark `[/]` if not already, read `phase-X.md`, begin
-- If ALL parallel phases are `[/]`, warn about potential duplication
-
-**Fallback:** If Parallel Execution Groups missing or shows "None", use sequential (Cases 2-3).
+Only show consecutive same-group incomplete phases. After selection, mark `[/]`, read `phase-X.md`, begin.
 
 ## Code Consistency Rules
 
@@ -143,18 +84,9 @@ Resume? (yes / no - I'll wait)
 
 ## Examples
 
-**Following Specs:**
-- Bad: Task says "create UserService.ts" but creates "services/user.service.ts"
-- Good: Creates exactly `src/services/UserService.ts` as specified
+**Following Specs:** Create exactly `src/services/UserService.ts` as specified — never rename or relocate.
 
-**Handling Blockers:**
-```
-- [!] **Task 2.3:** Connect to Stripe API
-  > BLOCKED: STRIPE_SECRET_KEY not in environment.
-  > User action: Add to .env
-
-Proceeding to Task 2.4 (no Stripe dependency).
-```
+**Blocker format:** `- [!] **Task 2.3:** ... > BLOCKED: [reason]. > User action: [action].` Then proceed to next non-dependent task.
 
 ## Process
 
@@ -214,51 +146,17 @@ After all tasks:
 
 ### 6. After User Approval
 
-When user replies "approved":
-1. Update `overview.md`: `[/]` -> `[x]`
-2. Update `phase-X.md`: Status -> "Complete"
-3. Confirm and provide next steps
+See "After Approval / Session End" section below.
 
-## Handling Blockers
+## Issue Handling
 
-**1. Mark as Blocked:**
-```markdown
-- [!] **Task 3.2:** Create OAuth integration
-  > BLOCKED: Missing GOOGLE_CLIENT_ID environment variable.
-  > Required: User must configure OAuth credentials.
-```
+| Type | Action | Format |
+|------|--------|--------|
+| Blocker | Mark `[!]`, continue non-dependent tasks, report at phase end | `> BLOCKED: [reason]. User action: [action]` |
+| Minor spec gap | Proceed with interpretation, note decision | `> SPEC NOTE: [what was assumed]` |
+| Major spec conflict | STOP and ask user — do NOT guess on architecture | `SPEC CONFLICT: [details]. Please clarify.` |
 
-**2. Continue** with non-dependent tasks.
-
-**3. Report** all blocked tasks at phase end.
-
-## Handling Spec Issues
-
-**Minor (proceed with interpretation):**
-```markdown
-- [x] **Task 2.4:** Create user validation
-  > SPEC NOTE: Format not specified. Implemented RFC 5322 email regex.
-```
-
-**Major (stop and ask):**
-```markdown
-[PHASE 2: Database Layer] - PAUSED
-
-SPEC CONFLICT:
-- Task 2.3: "email as primary key"
-- Architecture section: "id (UUID) as primary key"
-
-Please clarify before continuing.
-```
-
-Do NOT guess on architectural decisions.
-
-## Phase Size Flexibility
-
-- **Small phase (<5 tasks):** After completing, ask if should continue with next phase
-- **Large phase (>40 tasks):** Warn at start, suggest breaking into sub-phases for future
-
-Default: ONE phase per conversation.
+Default: ONE phase per conversation. Small phase (<5 tasks): ask if should continue with next. Large (>40): warn at start.
 
 ## Templates
 
@@ -278,34 +176,9 @@ Before sign-off, verify:
 
 ### Completion Report Format
 
-```markdown
-⚡ [PHASE X: Phase Name] - READY FOR SIGN-OFF
+Header: `⚡ [PHASE X: Phase Name] - READY FOR SIGN-OFF`
 
-## Summary
-[2-3 sentences on accomplishments]
-
-## Tasks Completed: Y/Z
-[List blocked tasks if any]
-
-## Test Results (if run)
-| Run | Passed | Failed | Skipped |
-|-----|--------|--------|---------|
-| X   | X      | X      | X       |
-
-## Files Created
-- `path/to/file.ts` - [description]
-
-## Files Modified
-- `path/to/file.ts` - [changes]
-
-## Issues
-[Blockers, clarifications, deviations - or "None"]
-
-## Verify
-- Files listed above exist
-- No syntax errors in editor
-- App runs (if applicable)
-- [1-2 specific checks for what was built]
+Sections: Summary (2-3 sentences), Tasks Completed (Y/Z + blocked list), Test Results table (if run), Files Created, Files Modified, Issues (or "None"), Verify (files exist, no syntax errors, app runs, 1-2 specific checks).
 
 ```
 ⋅
@@ -315,108 +188,35 @@ Before sign-off, verify:
     ╰───╯
 ```
 
-╔═══════════════════════════════════════════════════════════════════════════════╗
-║  Reply "approved" to mark this phase complete, or describe any issues.       ║
-╚═══════════════════════════════════════════════════════════════════════════════╝
+> Reply "approved" to mark this phase complete, or describe any issues.
+
+### After Approval / Session End
+
+On user "approved":
+1. Mark `[/]` → `[x]` in overview.md, update phase-X.md status to "Complete"
+2. Show Mascot art with completion message
+3. Provide: `git add -A && git commit -m "Complete Phase X: [Phase Name]" -m "AI Assisted"`
+4. **If more phases:** "NEXT STEP: Start NEW conversation and run: `/plan2code-3--implement`"
+5. **If final phase:** "NEXT STEP: Start NEW conversation and run: `/plan2code-4--finalize`"
+6. Mention `/plan2code-1b--revise` option
+
+continuing:
+```
+⋅
+    ╭───╮
+    │ ★ │
+    │ ◡ │   Phase done! Great progress!
+    ╰───╯
 ```
 
-### After Approval Format
-
-```markdown
-⚡ [PHASE X: Phase Name] - COMPLETE
-
-Phase marked complete in overview.md.
-
-## Save Your Progress
-
-\`\`\`bash
-git add -A
-git commit -m "Complete Phase X: [Phase Name]" -m "AI Assisted"
-\`\`\`
-
-This creates a checkpoint you can return to if needed.
-
-## Next Steps
-
-The next uncompleted phase is Phase Y: [Name].
-To continue, start a NEW conversation with:
-
-> /plan2code-3--implement specs/<feature-name>/overview.md
-
-The command will auto-detect Phase Y as the next phase to implement.
+final phase:
 ```
-
-## Session End
-
-When the user approves the phase (replies "approved"), provide:
-
-1. Confirmation that the phase is marked complete
-2. Git commit command (for user to execute)
-3. Files to attach in next session for the next phase
-4. Reminder to start a NEW conversation
-5. If all phases complete: recommend proceeding to finalization
-
-Example for continuing:
-
-> "⚡ [PHASE 2: Phase Name] - COMPLETE ✓
->
-> Phase marked complete in overview.md.
->
-> ```
-> ⋅
->     ╭───╮
->     │ ★ │
->     │ ◡ │   Phase done! Great progress!
->     ╰───╯
->
-> ╔═══════════════════════════════════════════════════════════════════╗
-> ║  NEXT STEPS                                                       ║
-> ╠═══════════════════════════════════════════════════════════════════╣
-> ║                                                                   ║
-> ║  Save your progress:                                              ║
-> ║  git add -A && git commit -m "Complete Phase 2: [Phase Name]" -m "AI Assisted"     ║
-> ║                                                                   ║
-> ║  Then:                                                            ║
-> ║  1. Start a NEW conversation                                      ║
-> ║  2. Use command: /plan2code-3--implement                          ║
-> ║  3. Provide path: specs/<feature-name>/overview.md                ║
-> ║                                                                   ║
-> ║  The command will auto-detect Phase 3 as next.                    ║
-> ║                                                                   ║
-> ╚═══════════════════════════════════════════════════════════════════╝
-> ```
->
-> Need to change the plan? Use `/plan2code-1b--revise` before continuing."
-
-Example for final phase:
-
-> "⚡ [PHASE 4: Phase Name] - COMPLETE ✓
->
-> This was the final implementation phase!
->
-> ```
-> ⋅
->     ╭───╮
->     │ ★ │
->     │ ◡ │   All phases complete! Amazing work!
->     ╰───╯
->
-> ╔═══════════════════════════════════════════════════════════════════╗
-> ║  NEXT STEPS - FINAL PHASE COMPLETE                                ║
-> ╠═══════════════════════════════════════════════════════════════════╣
-> ║                                                                   ║
-> ║  Save your progress:                                              ║
-> ║  git add -A && git commit -m "Complete Phase 4: [Phase Name]" -m "AI Assisted"     ║
-> ║                                                                   ║
-> ║  Then:                                                            ║
-> ║  1. Start a NEW conversation                                      ║
-> ║  2. Use command: /plan2code-4--finalize                           ║
-> ║  3. Provide path: specs/<feature-name>/overview.md                ║
-> ║                                                                   ║
-> ╚═══════════════════════════════════════════════════════════════════╝
-> ```
->
-> Need to revise before finalizing? Use `/plan2code-1b--revise` first."
+⋅
+    ╭───╮
+    │ ★ │
+    │ ◡ │   All phases complete! Amazing work!
+    ╰───╯
+```
 
 ## Abort Handling
 
@@ -437,24 +237,6 @@ If user says "abort", "cancel", or similar:
 | Spec unclear/conflicting | Mark task blocked, ask user |
 | Need to change plan | Pause, use `/plan2code-1b--revise` |
 
-## Learning Capture Protocol
+## Learning Capture
 
-At END of each session, check for auto-capture triggers:
-- [ ] Discovered undocumented build/test command
-- [ ] Found non-obvious dependency relationship
-- [ ] Encountered "gotcha" costing >5 minutes
-- [ ] Made workaround for framework quirk
-- [ ] Found patterns not in `AGENTS.md`
-
-**Capture Format:**
-```
-📚 LEARNING DETECTED
-
-Category: [Commands / Architecture / Gotchas / Testing / Config]
-Learning: [concise description]
-Context: [why this matters]
-
-Update AGENTS.md with this? (yes/no)
-```
-
-If yes, apply the edit directly.
+At session end, if you discovered undocumented commands, dependency quirks, gotchas (>5min cost), framework workarounds, or missing `AGENTS.md` patterns → prompt user to update AGENTS.md. If yes, apply the edit directly.
