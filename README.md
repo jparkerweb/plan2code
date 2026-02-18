@@ -64,6 +64,24 @@ The install script requires **Node.js** (v14 or later). If you don't have Node.j
 
 ### Quick Start
 
+#### No Clone Required
+
+Run the interactive installer directly using `npx` with your preferred GitHub authentication method:
+
+**If you use SSH keys:**
+```bash
+npx git+ssh://git@github.com/jparkerweb/plan2code.git
+```
+
+**If you use HTTPS authentication:**
+```bash
+npx git+https://github.com/jparkerweb/plan2code.git
+```
+
+This downloads the installer to a temporary location, runs it, installs the workflow files to your machine, and cleans up automatically. The installed workflows remain on your system and work independently. To update or reinstall, simply run the command again.
+
+#### Standard Installation (Clone Method)
+
 ```bash
 # Clone the repository
 git clone https://github.com/plan/plan2code.git
@@ -71,6 +89,9 @@ cd plan2code
 
 # Run the interactive installer
 node install.js
+
+# OPTIONAL: Install dev dependencies (ONLY if you plan to modify/contribute to Plan2Code)
+npm install
 ```
 
 The installer will display an interactive menu:
@@ -219,10 +240,10 @@ The `overview.md` includes a "Parallel Execution Groups" section that identifies
 After running `node install.js`, use the slash commands directly in your AI tool:
 
 ```
-/smarsh2code-1--plan           # Start planning a new feature
-/smarsh2code-2--document       # Create implementation docs from plan
-/smarsh2code-3--implement      # Begin/continue implementation
-/smarsh2code-4--finalize       # Wrap up after all phases complete
+/plan2code-1--plan           # Start planning a new feature
+/plan2code-2--document       # Create implementation docs from plan
+/plan2code-3--implement      # Begin/continue implementation
+/plan2code-4--finalize       # Wrap up after all phases complete
 ```
 
 ---

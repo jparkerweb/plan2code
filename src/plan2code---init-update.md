@@ -18,7 +18,7 @@ Interactive Q&A flow to update an existing `AGENTS.md` with new learnings and pr
 
 Check if `AGENTS.md` exists in project root.
 
-**If missing:** "No AGENTS.md found. Create one from scratch? I can analyze the codebase and generate an initial file." Stop and wait. If yes, use `smarsh2code---init.md` workflow.
+**If missing:** "No AGENTS.md found. Create one from scratch? I can analyze the codebase and generate an initial file." Stop and wait. If yes, use `plan2code---init.md` workflow.
 
 **If exists:** Read and summarize:
 - Main sections (bullets)

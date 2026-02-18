@@ -18,12 +18,17 @@ plan2code/
 ├── plan2code-loop/         # Autonomous loop CLI tool (Node.js/TypeScript)
 │   ├── src/                # TypeScript source
 │   └── dist/               # Built output (tsup)
+├── scripts/                # Development scripts
+│   └── validate-char-count.js  # Pre-commit character count validator
 ├── dist/                   # Generated distribution files (auto-generated)
 │   ├── global-commands/    # For global installation (~/.claude/, etc.)
 │   └── local-commands/     # For per-project installation (.claude/, etc.)
+├── .husky/                 # Git hooks (husky)
+│   └── pre-commit          # Runs character count validation
 ├── docs/                   # Documentation and assets
 ├── specs/                  # Feature specs (if any in-progress)
 ├── install.js              # Interactive installer (Node.js)
+├── package.json            # Root package (husky only, private: true)
 ├── version.json            # Version metadata
 └── README.md               # User documentation
 ```
@@ -34,6 +39,7 @@ plan2code/
 |------|---------|
 | `install.js` | Main installer - generates and installs workflow files to AI tool directories |
 | `src/plan2code-*.md` | Source workflow prompts (the "source of truth") |
+| `scripts/validate-char-count.js` | Pre-commit validator ensuring all source prompts ≤ 11,000 chars |
 | `version.json` | Version metadata (name, version, description) |
 | `QUICK-REFERENCE.md` | User quick-reference card |
 
@@ -91,6 +97,9 @@ The LLM must output one of these formats:
 ## Development Commands
 
 ```bash
+# Install dev dependencies (sets up husky pre-commit hooks)
+npm install
+
 # Run the interactive installer
 node install.js
 
@@ -177,6 +186,7 @@ When modifying workflow prompts in `src/`:
 
 - **Version sync:** When adding a new version to `CHANGELOG.md`, also update `version.json` to match. The installer displays the version from `version.json` in its header.
 - **Loop `.gitignore` setup:** `ensureGitignore()` runs at startup in `Controller.run()` as a pre-flight step, not just inside `createTaskCommit()`. This is critical for phase mode where the Node controller doesn't handle commits — without it, `git add -A` would stage spec files.
+- **Workflow file character limit:** All `src/plan2code-*.md` files must be ≤ 11,000 characters. A husky pre-commit hook enforces this. The 11,000 limit leaves buffer for platform-specific YAML headers (106-142 chars) to stay under Windsurf's 12,000 char limit.
 
 ## Git Commit Messages
 
@@ -185,11 +195,11 @@ When modifying workflow prompts in `src/`:
   - Loop task mode: `createTaskCommit()` in `plan2code-loop/src/utils/git.ts` appends the footer automatically
   - Loop phase mode: Prompt template instructs the LLM to add `-m "AI Assisted"` as the final flag
   - Implement mode: User-facing commit suggestions in `src/plan2code-3--implement.md` include the footer
-- **Init workflow:** `src/smarsh2code---init.md` generates AGENTS.md files with a Git Commit Messages section that includes this convention by default
+- **Init workflow:** `src/plan2code---init.md` generates AGENTS.md files with a Git Commit Messages section that includes this convention by default
 
 ## Mascot
 
-The project has a mascot called "Smarshy" - an ASCII art robot that appears in installer output and workflow prompts. Mascot variants are defined in `MASCOT` constant in `install.js` and appear in workflow markdown files.
+The project has a mascot - an ASCII art robot that appears in installer output and workflow prompts. Mascot variants are defined in `MASCOT` constant in `install.js` and appear in workflow markdown files.
 
 ```
    ╭───╮

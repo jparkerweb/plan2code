@@ -2,6 +2,38 @@
 
 All notable changes to Plan2Code will be documented in this file.
 
+## v1.6.1
+
+### ✨ Added
+
+- **NPX installation support** - Team members can now install directly from GitHub without cloning
+  - Added `name`, `version`, and `bin` fields to `package.json` for npm compatibility
+  - Installation via `npx git+ssh://git@github.com/jparkerweb/plan2code.git` (SSH)
+  - Installation via `npx git+https://github.com/jparkerweb/plan2code.git` (HTTPS)
+  - Installer runs from temporary location and cleans up automatically
+  - Updated README.md with Quick Start section showing both authentication methods
+  - Added `.npmignore` file to suppress npm warnings during npx execution
+
+## v1.6.0
+
+### 🏎️ Improved
+
+- **Reduced workflow file sizes** - All 4 over-target source prompts compressed to ≤ 11,000 characters for Windsurf IDE compatibility (12,000 char limit minus header buffer)
+  - `plan2code-3--implement.md` - 14,806 → 8,533 chars (42% reduction)
+  - `plan2code-1--plan.md` - 13,587 → 10,348 chars (24% reduction)
+  - `plan2code-4--finalize.md` - 12,012 → 8,586 chars (29% reduction)
+  - `plan2code-2--document.md` - 11,842 → 9,031 chars (24% reduction)
+  - All functional workflow behavior preserved
+  - Compression techniques: template-to-section-list specs, removed bad examples, consolidated redundant sections, simplified decorative boxes, imperative directives
+
+### 🧪 Testing
+
+- **Pre-commit character count validation** - Husky pre-commit hook prevents workflow files from exceeding 11,000 characters
+  - `scripts/validate-char-count.js` - Cross-platform Node.js validation script using only built-in modules
+  - `.husky/pre-commit` - Git hook trigger calling the validation script
+  - Root `package.json` with husky as sole devDependency (`private: true`)
+  - `.gitignore` updated with `node_modules/` and `package-lock.json`
+
 ## v1.5.4
 
 ### ✨ Added

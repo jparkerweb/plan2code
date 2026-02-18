@@ -1,4 +1,4 @@
-export const LOOP_PROMPT_TEMPLATE = `# PLAN-LOOP: Autonomous Task Implementation
+export const LOOP_PROMPT_TEMPLATE = `# PLAN2CODE-LOOP: Autonomous Task Implementation
 
 ## CRITICAL CONSTRAINT
 **IMPLEMENT EXACTLY ONE TASK PER ITERATION.**
@@ -83,7 +83,9 @@ If key patterns or learnings were discovered, update \`./AGENTS.md\` if it exist
 
 Remember: ONE TASK ONLY. Find it, implement it, mark it done, output TASK_COMPLETE with the task ID and description, then stop.
 `;
+
 export const LOOP_PROMPT_TEMPLATE_PHASE = `# PLAN2CODE-LOOP: Autonomous Phase Implementation
+
 ## CRITICAL CONSTRAINT
 **IMPLEMENT ALL REMAINING TASKS IN THE CURRENT PHASE.**
 Find the first incomplete phase, then implement every remaining task in that phase before stopping.

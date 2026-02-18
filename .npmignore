@@ -1,0 +1,19 @@
+# Exclude user-generated spec files
+specs/
+specs--completed/
+
+# Exclude development files
+.husky/
+.git/
+.gitignore
+CLAUDE.md
+
+# Exclude generated files (installer generates dist/ dynamically)
+dist/
+
+# Exclude dependencies (installer will run npm install if needed)
+node_modules/
+package-lock.json
+plan2code-loop/node_modules/
+plan2code-loop/package-lock.json
+plan2code-loop/dist/

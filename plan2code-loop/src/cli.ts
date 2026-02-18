@@ -23,11 +23,11 @@ async function selectSpec(cwd: string = process.cwd()): Promise<string | null> {
     logger.info('');
     logger.info('To get started:');
     logger.info('');
-    logger.info('1. Create a spec using `smarsh2code-1--plan`');
+    logger.info('1. Create a spec using `plan2code-1--plan`');
     logger.info('   command in our AI Agent');
     logger.info('');
-    logger.info('2. Come back here and run `smarsh2code-loop`');
-    logger.info('   as an alternative to `smarsh2code-3--implement`');
+    logger.info('2. Come back here and run `plan2code-loop`');
+    logger.info('   as an alternative to `plan2code-3--implement`');
     logger.info('');
     return null;
   }
@@ -66,8 +66,6 @@ async function selectSpec(cwd: string = process.cwd()): Promise<string | null> {
  */
 async function selectAgent(): Promise<string> {
   const allAgents = agentRegistry.getAll();
-
-
 
   const agentName = await select({
     message: 'Select AI agent:',
@@ -108,6 +106,7 @@ async function selectMaxIterations(): Promise<number> {
 
   return max;
 }
+
 /**
  * Select loop mode: one task per loop or one phase per loop
  */
@@ -126,6 +125,7 @@ async function selectLoopMode(): Promise<LoopMode> {
     ],
     default: 'task',
   });
+
   return mode;
 }
 
