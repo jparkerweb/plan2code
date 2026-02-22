@@ -182,9 +182,13 @@ Sections: Summary (2-3 sentences), Tasks Completed (Y/Z + blocked list), Test Re
 
 ```
 ⋅
+   o     o
+    ╲   ╱  ?
     ╭───╮
     │ ● │
     │ ~ │   Ready for your review!
+    ├───┤
+    │ · │
     ╰───╯
 ```
 
@@ -194,27 +198,35 @@ Sections: Summary (2-3 sentences), Tasks Completed (Y/Z + blocked list), Test Re
 
 On user "approved":
 1. Mark `[/]` → `[x]` in overview.md, update phase-X.md status to "Complete"
-2. Show Mascot art with completion message
+2. Show Planny art with completion message
 3. Provide: `git add -A && git commit -m "Complete Phase X: [Phase Name]" -m "AI Assisted"`
 4. **If more phases:** "NEXT STEP: Start NEW conversation and run: `/plan2code-3--implement`"
 5. **If final phase:** "NEXT STEP: Start NEW conversation and run: `/plan2code-4--finalize`"
 6. Mention `/plan2code-1b--revise` option
 
-continuing:
+Planny (continuing):
 ```
 ⋅
+   o     o
+    ╲   ╱
     ╭───╮
     │ ★ │
     │ ◡ │   Phase done! Great progress!
+    ├───┤
+    │ · │
     ╰───╯
 ```
 
-final phase:
+Planny (final phase):
 ```
 ⋅
+   o     o
+  ╲ ╲   ╱ ╱
     ╭───╮
     │ ★ │
     │ ◡ │   All phases complete! Amazing work!
+    ├───┤
+    │ · │
     ╰───╯
 ```
 
@@ -235,7 +247,7 @@ If user says "abort", "cancel", or similar:
 |-------|----------|
 | Lost context mid-phase | Attach specs, say "resume from Task X.Y" |
 | Spec unclear/conflicting | Mark task blocked, ask user |
-| Need to change plan | Pause, use `/plan2code-1b--revise` |
+| Need to change plan | Pause, use `/plan2code-1b--revise-plan` |
 
 ## Learning Capture
 

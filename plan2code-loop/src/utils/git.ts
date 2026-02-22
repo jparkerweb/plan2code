@@ -109,7 +109,9 @@ export async function createTaskCommit(options: GitCommitOptions): Promise<boole
     // Build commit message
     let commitMessage = taskName;
     if (jiraTicketId) {
-      commitMessage = `${taskName}\n\n${jiraTicketId}`;
+      commitMessage = `${taskName}\n\n${jiraTicketId}\n\nAI Assisted`;
+    } else {
+      commitMessage = `${taskName}\n\nAI Assisted`;
     }
 
     // Create the commit

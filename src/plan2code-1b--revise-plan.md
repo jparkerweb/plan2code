@@ -170,9 +170,13 @@ Report and resolve issues before proceeding.
 
 ```
 ⋅
+   o     o
+    ╲   ╱
     ╭───╮
     │ ★ │
     │ ◡ │   All revised! Ready to continue!
+    ├───┤
+    │ · │
     ╰───╯
 
 ╔═══════════════════════════════════════════════════════════════════╗

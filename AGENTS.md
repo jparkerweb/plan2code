@@ -100,26 +100,8 @@ The LLM must output one of these formats:
 # Install dev dependencies (sets up husky pre-commit hooks)
 npm install
 
-# Run the interactive installer
+# Run the interactive installer (always interactive — any CLI args are silently ignored)
 node install.js
-
-# Install to specific platform only
-node install.js --platform claude
-node install.js --platform cursor
-node install.js --platform copilot
-node install.js --platform continue
-node install.js --platform windsurf
-node install.js --platform codeium
-node install.js --platform vscode-copilot
-
-# Preview changes without installing
-node install.js --dry-run
-
-# Show local (per-project) installation instructions
-node install.js --local
-
-# Uninstall all Plan2Code files
-node install.js --uninstall
 
 # Plan2Code Loop
 cd plan2code-loop && npm install   # First time setup
@@ -128,13 +110,22 @@ cd plan2code-loop && npm run build # Build the CLI
 
 ### Installer Menu Options
 
+**Main menu:**
+
 | Option | Action |
 |--------|--------|
-| `A` | Install to ALL platforms + build & link loop CLI |
-| `O` | Build & link plan2code-loop CLI only |
-| `U` | Uninstall prompts from all platforms + unlink loop CLI |
+| `I` | Install Plan2Code for all platforms + loop CLI |
+| `U` | Uninstall Plan2Code files + loop CLI (confirmation required) |
+| `C` | Open CUSTOM sub-menu |
+| `Q` | Quit |
+
+**CUSTOM sub-menu (`C`):**
+
+| Option | Action |
+|--------|--------|
 | `L` | Show local (per-project) install instructions |
-| `1-7` | Install to specific platform |
+| `O` | Install plan2code-loop CLI only |
+| `Q` | Return to main menu |
 
 ## How the Installer Works
 
@@ -145,15 +136,19 @@ cd plan2code-loop && npm run build # Build the CLI
 
 ### Platform-Specific File Formats
 
-| Platform | Extension | Header |
-|----------|-----------|--------|
-| Claude Code | `.md` | None |
-| Cursor | `.md` | None |
-| Copilot CLI | `.md` | YAML frontmatter |
-| Continue | `.prompt.md` | YAML frontmatter |
-| Windsurf | `.md` | YAML frontmatter |
-| VS Code Copilot | `.prompt.md` | YAML frontmatter |
-| Codeium | `.md` | YAML frontmatter |
+| Platform | Extension / File | Local Dir | Global Dir | Header |
+|----------|-----------------|-----------|------------|--------|
+| Claude Code | `.md` | — | — | None |
+| Cursor | `.md` | — | — | None |
+| Copilot CLI | `.md` | — | — | YAML frontmatter |
+| Continue | `.prompt.md` | — | — | YAML frontmatter |
+| Windsurf | `.md` | — | — | YAML frontmatter |
+| VS Code Copilot | `.prompt.md` | — | — | YAML frontmatter |
+| Codeium | `.md` | — | — | YAML frontmatter |
+| Claude Code (Skills) | `SKILL.md` in subdir | `.claude/skills/<skill-name>/` | `~/.claude/skills/<skill-name>/` | YAML frontmatter + `disable-model-invocation: true` |
+| Agent Skills (Amp · Gemini CLI · OpenCode) | `SKILL.md` in subdir | `.agents/skills/<skill-name>/` | `~/.agents/skills/<skill-name>/` | YAML frontmatter (no disable flag) |
+| Crush | `SKILL.md` in subdir | — (global only) | `~/.config/crush/skills/<skill-name>/` (Unix) / `%LOCALAPPDATA%\crush\skills\<skill-name>\` (Windows) | YAML frontmatter |
+| Gemini CLI (TOML) | `.toml` | `.gemini/commands/` | `~/.gemini/commands/` | None (TOML fields: `description`, `prompt`) |
 
 ## Naming Convention
 
@@ -184,7 +179,7 @@ When modifying workflow prompts in `src/`:
 
 ## Gotchas/Pitfalls
 
-- **Version sync:** When adding a new version to `CHANGELOG.md`, also update `version.json` to match. The installer displays the version from `version.json` in its header.
+- **Version sync:** When adding a new version to `CHANGELOG.md`, also update `version.json` and `package.json` to match. The installer displays the version from `version.json` in its header.
 - **Loop `.gitignore` setup:** `ensureGitignore()` runs at startup in `Controller.run()` as a pre-flight step, not just inside `createTaskCommit()`. This is critical for phase mode where the Node controller doesn't handle commits — without it, `git add -A` would stage spec files.
 - **Workflow file character limit:** All `src/plan2code-*.md` files must be ≤ 11,000 characters. A husky pre-commit hook enforces this. The 11,000 limit leaves buffer for platform-specific YAML headers (106-142 chars) to stay under Windsurf's 12,000 char limit.
 
@@ -199,11 +194,15 @@ When modifying workflow prompts in `src/`:
 
 ## Mascot
 
-The project has a mascot - an ASCII art robot that appears in installer output and workflow prompts. Mascot variants are defined in `MASCOT` constant in `install.js` and appear in workflow markdown files.
+The project has a mascot called "Planny" - an ASCII art robot that appears in installer output and workflow prompts. Mascot variants are defined in `MASCOT` constant in `install.js` and appear in workflow markdown files.
 
 ```
+  o     o
+   ╲   ╱
    ╭───╮
    │ ● │
    │ ◡ │
+   ├───┤
+   │ · │
    ╰───╯
 ```

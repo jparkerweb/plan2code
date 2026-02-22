@@ -2,8 +2,8 @@
 
 ## Commands
 
-| Step   | Command                       | Input           | Output                              |
-| ------ | ----------------------------- | --------------- | ----------------------------------- |
+| Step   | Command                         | Input           | Output                              |
+| ------ | ------------------------------- | --------------- | ----------------------------------- |
 | Init   | /plan2code---init             | None            | AGENTS.md file                      |
 | Update | /plan2code---init-update      | AGENTS.md       | Updated AGENTS.md                   |
 | 0      | /plan2code---quick-task       | Requirements    | Conversational plan                 |
@@ -60,10 +60,10 @@ When phases have no file conflicts or dependencies, they can run simultaneously:
 | ---------------------- | ------------------------------------------------- |
 | Lost context mid-phase | Attach spec files, say "resume from Task X.Y"     |
 | Wrong phase started    | Say "abort", start correct phase                  |
-| Need to change plan    | Use `/plan2code-1b--revise-plan`                  |
+| Need to change plan    | Use `/plan2code-1b--revise-plan`                |
 | Multiple spec folders  | Specify which: "Continue with specs/user-auth/"   |
-| Need AGENTS.md file    | Use `/plan2code---init` to generate one           |
-| Update AGENTS.md       | Use `/plan2code---init-update` after sessions     |
+| Need AGENTS.md file    | Use `/plan2code---init` to generate one         |
+| Update AGENTS.md       | Use `/plan2code---init-update` after sessions   |
 | Run phases in parallel | Check Parallel Execution Groups in overview.md    |
 
 ## Workflow Decision

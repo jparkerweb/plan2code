@@ -1,6 +1,6 @@
 {
   "name": "plan2code",
-  "version": "1.6.1",
+  "version": "1.7.0",
   "private": true,
   "bin": {
     "plan2code": "./install.js"

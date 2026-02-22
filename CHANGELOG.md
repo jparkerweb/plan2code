@@ -2,6 +2,42 @@
 
 All notable changes to Plan2Code will be documented in this file.
 
+## v1.7.0
+
+### ✨ Added
+
+- **4 new platform targets** — Gemini CLI, Crush, Amp, and OpenCode now supported
+  - Gemini CLI installs as TOML commands (`.gemini/commands/plan2code-*.toml`)
+  - Crush installs as skill subdirs (`~/.config/crush/skills/` on Unix, `%LOCALAPPDATA%\crush\skills\` on Windows)
+  - Amp and OpenCode covered via shared Agent Skills target (`.agents/skills/`)
+- **Claude Code Skills format** — Migrated from flat `.claude/commands/*.md` to `.claude/skills/<skill-name>/SKILL.md` with `disable-model-invocation: true` frontmatter
+- **Agent Skills cross-tool target** — Single `.agents/skills/` install covers Amp, Gemini CLI, and OpenCode simultaneously
+- **Legacy cleanup** — Old `.claude/commands/plan2code-*.md` files automatically removed on install and uninstall
+- **TOML generation** — New `generateTomlContent()` produces Gemini CLI command files using TOML literal multi-line strings
+
+### 🔧 Changed
+
+- `AGENTS.md` Platform-Specific File Formats table expanded to 5 columns with 4 new platform rows
+- `docs/index.html` hero section updated with 4 new platform pills
+- `README.md` Supported Platforms list updated with 4 new platforms
+
+## v1.6.2
+
+### 🔧 Changed
+
+- **Installer menu simplified** — Replaced the 7-platform picker with a clean 4-option menu (I/U/C/Q)
+  - `I` — Install Plan2Code for all platforms + loop CLI
+  - `U` — Uninstall (with confirmation prompt)
+  - `C` — CUSTOM sub-menu: `L` (local install instructions), `O` (loop CLI only), `Q` (back)
+  - `Q` — Quit
+  - Any CLI arguments (e.g. `--dry-run`, `--platform`) are now silently ignored; installer always runs interactively
+- **README installation section** — npx install method promoted to primary recommended install path; updated menu example
+
+### 🗑️ Removed
+
+- CLI flags `--dry-run`, `--platform`, `--local`, `--uninstall`, `--help`, `--loop`, `--uninstall-loop` (all removed; installer is always interactive)
+- `displayHelp()` function removed from `install.js`
+
 ## v1.6.1
 
 ### ✨ Added

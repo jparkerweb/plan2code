@@ -177,13 +177,17 @@ Add this summary to `overview.md` under `## Completion Summary`.
 
 Report: table of documents needing updates with proposed changes. List each document with specific additions.
 
-If updates needed, show Mascot and ask for approval:
+If updates needed, show Planny and ask for approval:
 
 ```
 ⋅
+   o     o
+    ╲   ╱  ?
     ╭───╮
     │ ● │
     │ ~ │   Found some docs that need updating!
+    ├───┤
+    │ · │
     ╰───╯
 ```
 
@@ -257,9 +261,13 @@ specs--completed/
 
 ```
 ⋅
+   o     o
+  ╲ ╲   ╱ ╱
     ╭───╮
     │ ★ │
     │ ◡ │   You did it! Feature complete!
+    ├───┤
+    │ · │
     ╰───╯
 ```
 

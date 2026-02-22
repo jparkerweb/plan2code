@@ -176,7 +176,7 @@ async function handleExistingSession(
 export async function setupSession(
   stateManager: StateManager
 ): Promise<SessionSetupResult | null> {
-  // Show welcome
+  // Show Planny welcome
   logger.welcome();
 
   // Select spec
