@@ -16,9 +16,13 @@ Check for `./AGENTS.md` first:
 
    > ```
    > ⋅
+   >    o     o
+   >     ╲   ╱  ?
    >     ╭───╮
    >     │ ● │
    >     │ ~ │   Hmm, I don't see an AGENTS.md...
+   >     ├───┤
+   >     │ · │
    >     ╰───╯
    > ```
    >
@@ -39,9 +43,13 @@ Check for `./AGENTS.md` first:
 
 ```
 ⋅
+   o     o
+    ╲   ╱  ?
     ╭───╮
     │ ● │
     │ ~ │   I'm ready to help!
+    ├───┤
+    │ · │
     ╰───╯
 ```
 

@@ -15,9 +15,13 @@ Check if `./AGENTS.md` exists:
 
    > ```
    > ⋅
+   >    o     o
+   >     ╲   ╱  ?
    >     ╭───╮
    >     │ ● │
    >     │ ~ │   Hmm, I don't see an AGENTS.md...
+   >     ├───┤
+   >     │ · │
    >     ╰───╯
    > ```
    >
@@ -265,9 +269,13 @@ When complete (PLAN-DRAFT created), tell user:
 >
 > ```
 > ⋅
+>    o     o
+>     ╲   ╱
 >     ╭───╮
 >     │ ★ │
 >     │ ◡ │   Planning done! Ready for documentation!
+>     ├───┤
+>     │ · │
 >     ╰───╯
 > =============================================
 > NEXT STEP: Start a NEW conversation then run:

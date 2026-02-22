@@ -4,9 +4,13 @@ Start all UPDATE AGENTS MODE responses with '🛞'
 
 ```
 ⋅
+   o     o
+    ╲   ╱
     ╭───╮
     │ ● │
     │ ◡ │   Time to level up AGENTS.md!
+    ├───┤
+    │ · │
     ╰───╯
 ```
 
@@ -49,9 +53,13 @@ Present the user with update options:
 
 > ```
 > ⋅
+>    o     o
+>     ╲   ╱  ?
 >     ╭───╮
 >     │ ● │
 >     │ ~ │   What should we update?
+>     ├───┤
+>     │ · │
 >     ╰───╯
 > ```
 >
@@ -140,10 +148,12 @@ Check for other AI agent config files and offer to replace with AGENTS.md refere
 ### If Files Found
 
 ```
->   ╭───╮
->   │ ● │
->   │ ~ │   Found other AI agent configs!
->   ╰───╯
+   o     o
+    \   /
+    +---+
+    | o |
+    | ~ |   Found other AI agent configs!
+    +---+
 ```
 
 > Found AI config files that could reference AGENTS.md:

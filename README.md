@@ -2,7 +2,7 @@
 
 A structured 4-step workflow for developing features and projects with AI assistance. This methodology emphasizes thorough planning before implementation, ensuring well-documented, maintainable code.
 
-<img src="docs/plan2code.jpg" alt="Plan2Code Workflow" height="400">
+<img src="docs/desk.jpg" alt="Plan2Code Workflow" height="275">
 
 ## Overview
 
@@ -15,16 +15,16 @@ A structured 4-step workflow for developing features and projects with AI assist
       New Chat               New Chat           New Chat (per phase)        New Chat
 ```
 
-| Command | Use When |
-|---------|----------|
-| `/plan2code---init` | Generate AGENTS.md file for new/existing projects |
-| `/plan2code---init-update` | Update AGENTS.md with new learnings from coding sessions |
-| `/plan2code---quick-task` | Small, quick tasks that don't need full workflow |
-| `/plan2code-1--plan` | Starting a new feature (full planning) |
-| `/plan2code-1b--revise-plan` | Requirements change mid-implementation |
-| `/plan2code-2--document` | After planning, create implementation specs |
-| `/plan2code-3--implement` | Execute implementation (one phase per conversation) |
-| `/plan2code-4--finalize` | All phases complete, ready to archive |
+| Command                          | When to Use                                              |
+|----------------------------------|----------------------------------------------------------|
+| `/plan2code---init`            | Generate AGENTS.md file for new/existing projects        |
+| `/plan2code---init-update`     | Update AGENTS.md with new learnings from coding sessions |
+| `/plan2code---quick-task`      | Small, quick tasks that don't need full workflow         |
+| `/plan2code-1--plan`           | Starting a new feature (full planning)                   |
+| `/plan2code-1b--revise-plan`   | Requirements change mid-implementation                   |
+| `/plan2code-2--document`       | After planning, create implementation specs              |
+| `/plan2code-3--implement`      | Execute implementation (one phase per conversation)      |
+| `/plan2code-4--finalize`       | All phases complete, ready to archive                    |
 
 **Key Rules:**
 - Start NEW conversation for each step (and each implementation phase)
@@ -40,13 +40,13 @@ See [QUICK-REFERENCE.md](QUICK-REFERENCE.md) for full reference card.
 
 Plan2Code includes an interactive installer that generates and installs workflow files for all major AI coding assistants.
 
-<img src="docs/install-script.jpg" width="582">
+<img src="docs/install-script.jpg" width="600">
 
 ### Prerequisites
 
 The install script requires **Node.js** (v14 or later). If you don't have Node.js installed:
 
-1. Download from [nodejs.org](https://nodejs.org/)
+1. Download from [nodejs.org](https://nodejs.org/) (recommended)
 2. Or use a package manager:
    - **macOS:** `brew install node`
    - **Windows:** `winget install OpenJS.NodeJS` or `choco install nodejs`
@@ -61,8 +61,28 @@ The install script requires **Node.js** (v14 or later). If you don't have Node.j
 - Codeium (IntelliJ)
 - GitHub Copilot CLI
 - VS Code GitHub Copilot
+- Gemini CLI
+- Crush
+- Amp
+- OpenCode
 
-### Quick Start
+### Install via npx (Recommended — No Clone Required)
+
+Run the interactive installer directly using `npx` with your preferred GitHub authentication method:
+
+**If you use SSH keys:**
+```bash
+npx git+ssh://git@github.com/jparkerweb/plan2code.git
+```
+
+**If you use HTTPS authentication:**
+```bash
+npx git+https://github.com/jparkerweb/plan2code.git
+```
+
+This downloads the installer to a temporary location, runs it, installs the workflow files to your machine, and cleans up automatically. The installed workflows remain on your system and work independently. To update or reinstall, simply run the command again.
+
+### Standard Installation (Clone Method)
 
 #### No Clone Required
 
@@ -84,7 +104,7 @@ This downloads the installer to a temporary location, runs it, installs the work
 
 ```bash
 # Clone the repository
-git clone https://github.com/plan/plan2code.git
+git clone https://github.com/jparkerweb/plan2code.git
 cd plan2code
 
 # Run the interactive installer
@@ -94,29 +114,20 @@ node install.js
 npm install
 ```
 
-The installer will display an interactive menu:
+The installer displays an interactive menu:
 
 ```
-Available platforms:
+╔════════════════════════════════════════════════════════════════╗
+║ INSTALL PLAN2CODE                                            ║
+╠════════════════════════════════════════════════════════════════╣
+║  I.  INSTALL    Install Plan2Code for all platforms          ║
+║  U.  UNINSTALL  Remove Plan2Code files                       ║
+║  C.  CUSTOM     Advanced options                               ║
+║  Q.  QUIT       Exit                                           ║
+╚════════════════════════════════════════════════════════════════╝
 
-  1. Claude Code      (~/.claude/commands/)
-  2. Copilot CLI      (~/.copilot/agents/)
-  3. Cursor           (~/.cursor/commands/)
-  4. Continue         (~/.continue/prompts/)
-  5. Windsurf         (~/.codeium/windsurf/global_workflows/)
-  6. Codeium (IJ)     (~/.codeium/global_workflows/)
-  7. VS Code Copilot  (%APPDATA%\Code\User\prompts\)
-
-  A. Install ALL platforms + loop CLI
-  O. Build/link plan2code-loop CLI only
-  L. Show local (project) install instructions
-  U. Uninstall Plan2Code files + unlink loop CLI
-  Q. Quit
-
-Enter choice (1-7, A, O, L, U, Q, or comma-separated like 1,3,5):
+SELECT OPTION (I, U, C, Q) [I]:
 ```
-
-For per-project installation or additional options, run `node install.js --help`.
 
 ---
 
@@ -405,10 +416,10 @@ For hands-off implementation, Plan2Code includes an optional autonomous loop CLI
 # From the plan2code root directory:
 
 # Option 1: Install everything (recommended)
-node install.js  # Select option A
+node install.js  # Select I at the menu
 
 # Option 2: Install loop only
-node install.js  # Select option O
+node install.js  # Select C, then O at the menu
 ```
 
 ### Using the Loop

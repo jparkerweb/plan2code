@@ -1,6 +1,6 @@
 {
   "name": "plan2code-loop",
-  "version": "1.6.1",
+  "version": "1.6.2",
   "description": "Plan2Code Loop - Autonomous spec-driven implementation CLI",
   "type": "module",
   "main": "dist/index.js",
