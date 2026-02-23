@@ -18,6 +18,10 @@ plan2code/
 ├── plan2code-loop/         # Autonomous loop CLI tool (Node.js/TypeScript)
 │   ├── src/                # TypeScript source
 │   └── dist/               # Built output (tsup)
+├── plan2code-metrics/      # Recursive self-improvement toolchain
+│   ├── src/                # TypeScript source
+│   │   └── prompts/        # Internal AI prompt templates (no char limit)
+│   └── dist/               # Built output (tsup)
 ├── scripts/                # Development scripts
 │   └── validate-char-count.js  # Pre-commit character count validator
 ├── dist/                   # Generated distribution files (auto-generated)
@@ -54,7 +58,7 @@ plan2code/
 | `plan2code-1b--revise-plan.md` | 1b | Mid-implementation revisions |
 | `plan2code-2--document.md` | 2 | Create implementation specs |
 | `plan2code-3--implement.md` | 3 | Execute implementation (phase by phase) |
-| `plan2code-4--finalize.md` | 4 | Validate, summarize, archive |
+| `plan2code-4--finalize.md` | 4 | Validate, summarize, feedback, archive (7 steps) |
 
 ## Plan2Code Loop (`plan2code-loop/`)
 
@@ -94,6 +98,88 @@ The LLM must output one of these formats:
 - `PHASE_COMPLETE` - Current phase finished (phase mode only)
 - `LOOP_COMPLETE` - All phases finished
 
+## Plan2Code Metrics (`plan2code-metrics/`)
+
+A recursive self-improvement toolchain for plan2code contributors. Collects run metrics, aggregates by prompt generation, diagnoses weak steps via AI, and proposes surgical prompt edits.
+
+### Metrics Data Flow
+
+```
+Collect → Aggregate → Analyze → Improve → Apply
+```
+
+1. **Collector** reads project artifacts (`specs/<feature>/`) → writes `RunMetrics` JSON per run
+2. **Aggregator** groups runs by prompt SHA fingerprint (cohorts) → `aggregated.json`
+3. **Analyzer** invokes AI with aggregated metrics + prompt contents → diagnosis markdown
+4. **Improver** invokes AI with diagnosis → validated `PromptEdit[]` proposals (char limit + verbatim checks)
+5. **Applier** shows interactive diffs → patches `src/plan2code-*.md` files
+
+### Metrics Commands
+
+```bash
+cd plan2code-metrics && npm run build  # Build the CLI
+plan2code-metrics                      # Run (fully interactive, no flags)
+```
+
+### Metrics CLI Menu
+
+| Option | Action |
+|--------|--------|
+| Collect | Read spec artifacts → run JSON |
+| Import | Copy run JSON from another project |
+| View | Display cohort metrics with health indicators |
+| Analyze | AI diagnosis of weak metrics |
+| Propose | AI improvement proposals with validation |
+| Apply | Interactive diff review + file patching |
+
+### Key Files
+
+| File | Purpose |
+|------|---------|
+| `types.ts` | All interfaces (`RunMetrics`, `UserFeedback`, `CohortMetrics`, etc.) + `METRIC_TARGETS` |
+| `collector.ts` | Reads project artifacts → run JSON (parses plan drafts, overview.md, loop logs) |
+| `aggregator.ts` | Merges runs by prompt generation (SHA cohort) → `aggregated.json` |
+| `analyzer.ts` | AI diagnosis via `prompts/analyze.md` template |
+| `improver.ts` | AI proposals via `prompts/improve.md` + validation (char count, old_text match) |
+| `applier.ts` | Interactive diff review + file patching |
+| `cli.ts` | Menu-driven interactive CLI (100% prompts, no flags) |
+| `invoke-llm.ts` | Unified LLM interface (Claude Code or Copilot CLI) |
+
+### User Feedback
+
+The collector parses an optional `## User Feedback` table from `overview.md`:
+
+```markdown
+## User Feedback
+| Field | Value |
+|-------|-------|
+| Rating | 8 |
+| Reason | Smooth workflow |
+| Went Well | Planning was thorough |
+| Went Poorly | Some tasks unclear |
+```
+
+Feedback is collected during finalize (Step 5) or retroactively via the CLI. Pipe characters in values are escaped as `\|`. The aggregator computes `avg_user_rating` and `feedback_count` per cohort.
+
+### Supported AI Agents
+
+- **Claude Code** (recommended): `claude` CLI with `--inputFile` for prompt delivery
+- **GitHub Copilot CLI**: `copilot` CLI with stdin prompt delivery
+
+### Metric Targets
+
+| Metric | Target | Direction |
+|--------|--------|-----------|
+| `avg_confidence` | ≥ 90 | higher is better |
+| `avg_task_completion_rate` | ≥ 0.95 | higher is better |
+| `avg_blocker_count` | ≤ 1.5 | lower is better |
+| `avg_completion_marker_success_rate` | ≥ 0.95 | higher is better |
+| `avg_verification_failures_found` | ≤ 1.0 | lower is better |
+| `archival_success_rate` | ≥ 0.99 | higher is better |
+| `avg_user_rating` | ≥ 7.0 | higher is better |
+
+Data stored in `.plan2code-metrics/` (runs/, aggregated.json, proposals/).
+
 ## Development Commands
 
 ```bash
@@ -106,6 +192,10 @@ node install.js
 # Plan2Code Loop
 cd plan2code-loop && npm install   # First time setup
 cd plan2code-loop && npm run build # Build the CLI
+
+# Plan2Code Metrics
+cd plan2code-metrics && npm install   # First time setup
+cd plan2code-metrics && npm run build # Build the CLI
 ```
 
 ### Installer Menu Options
@@ -125,6 +215,7 @@ cd plan2code-loop && npm run build # Build the CLI
 |--------|--------|
 | `L` | Show local (per-project) install instructions |
 | `O` | Install plan2code-loop CLI only |
+| `M` | Install plan2code-metrics CLI only |
 | `Q` | Return to main menu |
 
 ## How the Installer Works
@@ -172,16 +263,19 @@ When modifying workflow prompts in `src/`:
 
 ## Code Style
 
-- **JavaScript:** CommonJS modules (Node.js built-ins only - no external dependencies)
-- **Console output:** Uses ANSI color codes via the `COLORS` constant
-- **User interaction:** Readline-based interactive prompts
-- **File operations:** Synchronous fs operations for simplicity
+- **install.js:** CommonJS, Node.js built-ins only (no external deps), ANSI colors via `COLORS` constant, readline-based prompts
+- **plan2code-loop & plan2code-metrics:** TypeScript + ESM, built with tsup (target ES2022, moduleResolution: bundler)
+  - External deps: `@inquirer/prompts`, `chalk`, `execa`, `ora`
+  - Interactive CLI via `@inquirer/prompts` (select, input, confirm)
+- **File operations:** Synchronous fs in all packages
 
 ## Gotchas/Pitfalls
 
 - **Version sync:** When adding a new version to `CHANGELOG.md`, also update `version.json` and `package.json` to match. The installer displays the version from `version.json` in its header.
 - **Loop `.gitignore` setup:** `ensureGitignore()` runs at startup in `Controller.run()` as a pre-flight step, not just inside `createTaskCommit()`. This is critical for phase mode where the Node controller doesn't handle commits — without it, `git add -A` would stage spec files.
 - **Workflow file character limit:** All `src/plan2code-*.md` files must be ≤ 11,000 characters. A husky pre-commit hook enforces this. The 11,000 limit leaves buffer for platform-specific YAML headers (106-142 chars) to stay under Windsurf's 12,000 char limit.
+- **Metrics internal prompts have no char limit:** Files in `plan2code-metrics/src/prompts/` are NOT subject to the 11,000 char limit — only `src/plan2code-*.md` consumer-facing prompts are.
+- **User Feedback table format:** The `## User Feedback` markdown table in `overview.md` has a strict format the collector regex depends on. Field names must be exactly `Rating`, `Reason`, `Went Well`, `Went Poorly`. Pipe characters in values must be escaped as `\|`.
 
 ## Git Commit Messages
 
@@ -197,12 +291,8 @@ When modifying workflow prompts in `src/`:
 The project has a mascot called "Planny" - an ASCII art robot that appears in installer output and workflow prompts. Mascot variants are defined in `MASCOT` constant in `install.js` and appear in workflow markdown files.
 
 ```
-  o     o
-   ╲   ╱
    ╭───╮
    │ ● │
    │ ◡ │
-   ├───┤
-   │ · │
    ╰───╯
 ```
