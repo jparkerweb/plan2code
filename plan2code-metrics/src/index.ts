@@ -10,6 +10,7 @@ export { runCLI } from './cli.js';
 export { METRIC_TARGETS } from './types.js';
 export type {
   RunMetrics,
+  UserFeedback,
   PromptVersions,
   PromptEdit,
   PromptProposal,

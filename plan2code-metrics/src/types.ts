@@ -62,6 +62,13 @@ export interface Step4FinalizeMetrics {
   archival_succeeded: boolean | null;
 }
 
+export interface UserFeedback {
+  overall_rating: number;   // 1-10
+  rating_reason: string;
+  what_went_well: string;
+  what_went_poorly: string;
+}
+
 export interface RunMetrics {
   schema_version: '1.0';
   run_id: string;
@@ -76,6 +83,7 @@ export interface RunMetrics {
   step2_document: Step2DocumentMetrics;
   step3_implement: Step3ImplementMetrics;
   step4_finalize: Step4FinalizeMetrics;
+  user_feedback: UserFeedback | null;
 }
 
 export interface PromptEdit {
@@ -137,6 +145,10 @@ export interface CohortMetrics {
   avg_verification_failures_found: number | null;
   avg_documentation_updates_needed: number | null;
   archival_success_rate: number | null;
+
+  // User feedback
+  avg_user_rating: number | null;
+  feedback_count: number;
 }
 
 export interface AggregatedMetrics {
@@ -159,4 +171,5 @@ export const METRIC_TARGETS = {
   avg_completion_marker_success_rate: { target: 0.95, direction: 'gte' as const },
   avg_verification_failures_found: { target: 1.0, direction: 'lte' as const },
   archival_success_rate: { target: 0.99, direction: 'gte' as const },
+  avg_user_rating: { target: 7.0, direction: 'gte' as const },
 } as const;

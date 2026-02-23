@@ -45,6 +45,7 @@ The following diagnosis was produced by the analysis step:
 - For high `avg_blocker_count`: Add blocker-recovery guidance or prerequisite check instructions.
 - For low `avg_confidence`: Strengthen the confidence calculation instructions with clearer rubrics.
 - For low `avg_parallel_groups`: Add explicit guidance for identifying parallel tasks in Step 2.
+- For low `avg_user_rating`: Review user feedback themes (what_went_well, what_went_poorly) for systemic issues.
 - Keep each `new_text` as short as possible while still addressing the root cause.
 
 ---

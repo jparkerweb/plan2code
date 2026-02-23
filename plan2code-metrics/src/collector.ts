@@ -14,6 +14,7 @@ import type {
   Step2DocumentMetrics,
   Step3ImplementMetrics,
   Step4FinalizeMetrics,
+  UserFeedback,
 } from './types.js';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -399,6 +400,50 @@ export function collectStep4(specDir: string): Step4FinalizeMetrics {
   };
 }
 
+// ── User Feedback ─────────────────────────────────────────────────────────
+
+export function collectUserFeedback(specDir: string): UserFeedback | null {
+  // Try both active and archived locations for overview.md
+  const overviewPath = path.join(specDir, 'overview.md');
+  const specDirName = path.basename(specDir);
+  const parentDir = path.dirname(specDir);
+  const completedPath = path.join(parentDir, '..', 'specs--completed', specDirName, 'overview.md');
+
+  const overview = readFileSafe(overviewPath) ?? readFileSafe(completedPath);
+  if (!overview) return null;
+
+  // Look for ## User Feedback section with a markdown table
+  const feedbackMatch = overview.match(
+    /## User Feedback\s*\n\s*\|[^\n]*\|\s*\n\s*\|[-| ]+\|\s*\n([\s\S]*?)(?=\n##\s|\n*$)/
+  );
+  if (!feedbackMatch) return null;
+
+  const tableBody = feedbackMatch[1];
+
+  // Parse table rows: | Field | Value |
+  // Use regex to split only on unescaped pipes, preserving whitespace in values
+  const rows = tableBody.split('\n').filter(l => l.trim().startsWith('|'));
+  const fields: Record<string, string> = {};
+  for (const row of rows) {
+    // Split on unescaped pipes (not preceded by backslash)
+    const cells = row.split(/(?<!\\)\|/).map(c => c.trim()).filter(c => c.length > 0);
+    if (cells.length >= 2) {
+      const value = cells.slice(1).join('|').replace(/\\\|/g, '|');
+      fields[cells[0].toLowerCase()] = value;
+    }
+  }
+
+  const rating = parseInt(fields['rating'] ?? '', 10);
+  if (isNaN(rating) || rating < 1 || rating > 10) return null;
+
+  return {
+    overall_rating: rating,
+    rating_reason: fields['reason'] ?? '',
+    what_went_well: fields['went well'] ?? '',
+    what_went_poorly: fields['went poorly'] ?? '',
+  };
+}
+
 // ── Main collector ────────────────────────────────────────────────────────────
 
 export interface CollectorOptions {
@@ -463,6 +508,7 @@ export async function collectRun(opts: CollectorOptions): Promise<RunMetrics> {
     step2_document: collectStep2(specDir),
     step3_implement: collectStep3(specDir),
     step4_finalize: collectStep4(specDir),
+    user_feedback: collectUserFeedback(specDir),
   };
 
   // Write to output dir
