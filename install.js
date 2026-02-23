@@ -80,37 +80,25 @@ const SYMBOLS = {
 const MASCOT = {
   // Full mascot for headers
   full: [
-    '  o     o  ',
-    '   ╲   ╱   ',
     '   ╭───╮   ',
     '   │ ● │   ',
     '   │ ◡ │   ',
-    '   ├───┤   ',
-    '   │ · │   ',
     '   ╰───╯   ',
   ],
   // Mini mascot for inline use
   mini: '(◉‿◉)',
   // Waving mascot for greetings
   wave: [
-    '  o     o  ',
-    '   ╲   ╱ /',
     '   ╭───╮   ',
-    '   │ ● │   ',
+    '   │ ● │  /',
     '   │ ◡ │   ',
-    '   ├───┤   ',
-    '   │ · │   ',
     '   ╰───╯   ',
   ],
   // Thinking mascot for prompts
   thinking: [
-    '  o     o  ',
-    '   ╲   ╱  ?',
     '   ╭───╮   ',
-    '   │ ● │   ',
+    '   │ ● │  ?',
     '   │ ~ │   ',
-    '   ├───┤   ',
-    '   │ · │   ',
     '   ╰───╯   ',
   ],
 };

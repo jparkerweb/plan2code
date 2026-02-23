@@ -4,13 +4,9 @@ Start all CREATE AGENTS MODE responses with '💡'
 
 ```
 ⋅
-   o     o
-    ╲   ╱
     ╭───╮
     │ ● │
     │ ◡ │   Let me explore your codebase!
-    ├───┤
-    │ · │
     ╰───╯
 ```
 
@@ -61,13 +57,9 @@ If files found, show:
 
 ```
 ⋅
-   o     o
-    ╲   ╱
     ╭───╮
     │ ● │
     │ ~ │   Found some other AI agent configs!
-    ├───┤
-    │ · │
     ╰───╯
 
 I found these AI agent configuration files:

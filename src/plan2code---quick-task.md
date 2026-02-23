@@ -16,13 +16,9 @@ Check for `./AGENTS.md` first:
 
    > ```
    > ⋅
-   >    o     o
-   >     ╲   ╱  ?
-   >     ╭───╮
-   >     │ ● │
+   >     ╭───╮  
+   >     │ ● │   ?
    >     │ ~ │   Hmm, I don't see an AGENTS.md...
-   >     ├───┤
-   >     │ · │
    >     ╰───╯
    > ```
    >
@@ -43,13 +39,9 @@ Check for `./AGENTS.md` first:
 
 ```
 ⋅
-   o     o
-    ╲   ╱  ?
     ╭───╮
     │ ● │
     │ ~ │   I'm ready to help!
-    ├───┤
-    │ · │
     ╰───╯
 ```
 
@@ -150,13 +142,9 @@ Then tell user: "Created `specs/<feature-name>/PLAN-DRAFT-<date>.md`. Start new 
 ---
 ```
 ⋅
-   o     o
-    ╲   ╱
     ╭───╮
     │ ★ │
     │ ◡ │   Plan ready! What do you think?
-    ├───┤
-    │ · │
     ╰───╯
 ```
 

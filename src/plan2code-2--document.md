@@ -204,13 +204,9 @@ Parallel Execution: [Groups or "None - sequential only"]
 >
 > ```
 > ⋅
->    o     o
->     ╲   ╱
 >     ╭───╮
 >     │ ★ │
 >     │ ◡ │   Specs are ready! Time to build!
->     ├───┤
->     │ · │
 >     ╰───╯
 > ============================================
 > NEXT STEP: Start a NEW conversation and run:

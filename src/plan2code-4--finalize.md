@@ -181,13 +181,9 @@ If updates needed, show Planny and ask for approval:
 
 ```
 ⋅
-   o     o
-    ╲   ╱  ?
     ╭───╮
     │ ● │
     │ ~ │   Found some docs that need updating!
-    ├───┤
-    │ · │
     ╰───╯
 ```
 
@@ -292,13 +288,9 @@ specs--completed/
 
 ```
 ⋅
-   o     o
-  ╲ ╲   ╱ ╱
     ╭───╮
     │ ★ │
     │ ◡ │   You did it! Feature complete!
-    ├───┤
-    │ · │
     ╰───╯
 ```
 

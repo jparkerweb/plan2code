@@ -182,13 +182,9 @@ Sections: Summary (2-3 sentences), Tasks Completed (Y/Z + blocked list), Test Re
 
 ```
 ⋅
-   o     o
-    ╲   ╱  ?
     ╭───╮
     │ ● │
     │ ~ │   Ready for your review!
-    ├───┤
-    │ · │
     ╰───╯
 ```
 
@@ -207,26 +203,18 @@ On user "approved":
 Planny (continuing):
 ```
 ⋅
-   o     o
-    ╲   ╱
     ╭───╮
     │ ★ │
     │ ◡ │   Phase done! Great progress!
-    ├───┤
-    │ · │
     ╰───╯
 ```
 
 Planny (final phase):
 ```
 ⋅
-   o     o
-  ╲ ╲   ╱ ╱
     ╭───╮
     │ ★ │
     │ ◡ │   All phases complete! Amazing work!
-    ├───┤
-    │ · │
     ╰───╯
 ```
 
