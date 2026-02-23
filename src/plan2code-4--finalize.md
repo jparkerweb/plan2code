@@ -276,6 +276,9 @@ specs--completed/
 > Specs archived to `specs--completed/<feature-name>/`.
 > Thank you for using the Plan2Code workflow!
 
+### Metrics Capture (Contributors)
+To help improve plan2code's prompts, run `plan2code-metrics` in the project root.
+
 ### Handling Incomplete Implementations
 
 | Completion | Action |

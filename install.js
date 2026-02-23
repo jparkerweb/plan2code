@@ -1387,8 +1387,11 @@ function runInteractive() {
       rl.close();
       const loopResult = installPlan2CodeLoop();
       console.log('');
+      const metricsResult = installPlan2CodeMetrics();
+      console.log('');
       const installResult = install();
-      process.exit(loopResult !== 0 ? loopResult : installResult);
+      const exitCode = loopResult !== 0 ? loopResult : metricsResult !== 0 ? metricsResult : installResult;
+      process.exit(exitCode);
     }
 
     // Task 2.4: U path — Uninstall All
@@ -1410,7 +1413,9 @@ function runInteractive() {
         rl.close();
         const uninstallResult = uninstallFiles();
         const loopResult = uninstallPlan2CodeLoop();
-        process.exit(uninstallResult !== 0 ? uninstallResult : loopResult);
+        const metricsResult = uninstallPlan2CodeMetrics();
+        const exitCode = uninstallResult !== 0 ? uninstallResult : loopResult !== 0 ? loopResult : metricsResult;
+        process.exit(exitCode);
       } else {
         console.log(`\n${COLORS.YELLOW}${SYMBOLS.WARNING} CANCELLED${COLORS.RESET}\n`);
         rl.close();
@@ -1426,10 +1431,11 @@ function runInteractive() {
       console.log(`${COLORS.CYAN}╠════════════════════════════════════════════════════════════════╣${COLORS.RESET}`);
       console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET}  ${COLORS.BRIGHT}L.${COLORS.RESET}  ${COLORS.BLUE}LOCAL${COLORS.RESET}      Show local (project) install instructions`, 65) + `${COLORS.CYAN}║${COLORS.RESET}`);
       console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET}  ${COLORS.BRIGHT}O.${COLORS.RESET}  ${COLORS.GREEN}LOOP CLI${COLORS.RESET}   Install plan2code-loop CLI only`, 65) + `${COLORS.CYAN}║${COLORS.RESET}`);
+      console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET}  ${COLORS.BRIGHT}M.${COLORS.RESET}  ${COLORS.GREEN}METRICS${COLORS.RESET}    Install plan2code-metrics CLI only`, 65) + `${COLORS.CYAN}║${COLORS.RESET}`);
       console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET}  ${COLORS.BRIGHT}Q.${COLORS.RESET}  ${COLORS.DIM}BACK${COLORS.RESET}       Return to main menu`, 65) + `${COLORS.CYAN}║${COLORS.RESET}`);
       console.log(`${COLORS.CYAN}╚════════════════════════════════════════════════════════════════╝${COLORS.RESET}`);
       console.log('');
-      const customAnswer = await question(`${COLORS.CYAN}${SYMBOLS.SELECT} SELECT OPTION${COLORS.RESET} (L, O, Q) [Q]: `);
+      const customAnswer = await question(`${COLORS.CYAN}${SYMBOLS.SELECT} SELECT OPTION${COLORS.RESET} (L, O, M, Q) [Q]: `);
       const customInput = customAnswer.trim().toUpperCase() || 'Q';
 
       // Task 2.6: C > L — show local install instructions
@@ -1442,6 +1448,13 @@ function runInteractive() {
       if (customInput === 'O') {
         rl.close();
         const result = installPlan2CodeLoop();
+        process.exit(result);
+      }
+
+      // C > M — install metrics CLI only
+      if (customInput === 'M') {
+        rl.close();
+        const result = installPlan2CodeMetrics();
         process.exit(result);
       }
 
@@ -1737,6 +1750,249 @@ function uninstallPlan2CodeLoop() {
 
   console.log('');
   console.log(`${COLORS.GREEN}${SYMBOLS.SUCCESS} plan2code-loop uninstalled${COLORS.RESET}`);
+  console.log('');
+
+  return 0;
+}
+
+// ============================================================================
+// PLAN2CODE-METRICS INSTALLATION
+// ============================================================================
+
+/**
+ * Build plan2code-metrics package
+ */
+function buildPlan2CodeMetrics() {
+  const metricsDir = path.join(__dirname, 'plan2code-metrics');
+
+  if (!fs.existsSync(metricsDir)) {
+    console.log(`${COLORS.YELLOW}${SYMBOLS.WARNING}${COLORS.RESET} plan2code-metrics directory not found`);
+    return false;
+  }
+
+  console.log(`${COLORS.CYAN}${SYMBOLS.ACTIVE} Building plan2code-metrics...${COLORS.RESET}`);
+
+  try {
+    console.log(`  ${COLORS.DIM}Installing dependencies...${COLORS.RESET}`);
+    execSync('npm install', { cwd: metricsDir, stdio: 'pipe' });
+
+    console.log(`  ${COLORS.DIM}Running build...${COLORS.RESET}`);
+    execSync('npm run build', { cwd: metricsDir, stdio: 'pipe' });
+
+    console.log(`  ${COLORS.GREEN}${SYMBOLS.SUCCESS}${COLORS.RESET} Build complete`);
+    return true;
+  } catch (error) {
+    console.log(`  ${COLORS.RED}${SYMBOLS.ERROR}${COLORS.RESET} Build failed: ${error.message}`);
+    return false;
+  }
+}
+
+/**
+ * Clean up existing plan2code-metrics symlinks/files before creating new ones
+ */
+function cleanupExistingMetricsSymlinks() {
+  console.log(`  ${COLORS.DIM}Cleaning up existing symlinks...${COLORS.RESET}`);
+
+  try {
+    const npmPrefix = execSync('npm config get prefix', { encoding: 'utf8' }).trim();
+    const npmBinGlobal = process.platform === 'win32' ? npmPrefix : path.join(npmPrefix, 'bin');
+    const npmRootGlobal = path.join(npmPrefix, 'node_modules');
+
+    const binFiles = [
+      path.join(npmBinGlobal, 'plan2code-metrics'),
+      path.join(npmBinGlobal, 'plan2code-metrics.cmd'),
+      path.join(npmBinGlobal, 'plan2code-metrics.ps1')
+    ];
+
+    const nodeModulesLink = path.join(npmRootGlobal, 'plan2code-metrics');
+
+    for (const file of binFiles) {
+      try {
+        const stats = fs.lstatSync(file);
+        if (stats) {
+          fs.unlinkSync(file);
+          console.log(`    ${COLORS.DIM}Removed: ${path.basename(file)}${COLORS.RESET}`);
+        }
+      } catch (err) {
+        if (err.code !== 'ENOENT') {
+          try {
+            fs.rmSync(file, { force: true, recursive: true });
+            console.log(`    ${COLORS.DIM}Removed: ${path.basename(file)}${COLORS.RESET}`);
+          } catch (rmErr) {
+            console.log(`    ${COLORS.DIM}Could not remove: ${path.basename(file)}${COLORS.RESET}`);
+          }
+        }
+      }
+    }
+
+    try {
+      const stats = fs.lstatSync(nodeModulesLink);
+      if (stats) {
+        if (process.platform === 'win32') {
+          try {
+            fs.rmdirSync(nodeModulesLink);
+            console.log(`    ${COLORS.DIM}Removed: node_modules/plan2code-metrics (junction)${COLORS.RESET}`);
+          } catch (rmdirErr) {
+            fs.rmSync(nodeModulesLink, { force: true, recursive: true });
+            console.log(`    ${COLORS.DIM}Removed: node_modules/plan2code-metrics${COLORS.RESET}`);
+          }
+        } else {
+          fs.rmSync(nodeModulesLink, { force: true, recursive: true });
+          console.log(`    ${COLORS.DIM}Removed: node_modules/plan2code-metrics${COLORS.RESET}`);
+        }
+      }
+    } catch (err) {
+      if (err.code !== 'ENOENT') {
+        console.log(`    ${COLORS.DIM}Could not remove node_modules symlink: ${err.message}${COLORS.RESET}`);
+      }
+    }
+
+    return true;
+  } catch (error) {
+    console.log(`    ${COLORS.DIM}Cleanup skipped: ${error.message}${COLORS.RESET}`);
+    return true;
+  }
+}
+
+/**
+ * Create global symlink for plan2code-metrics
+ */
+function createMetricsGlobalSymlink() {
+  const metricsDir = path.join(__dirname, 'plan2code-metrics');
+  const distBin = path.join(metricsDir, 'dist', 'bin', 'plan2code-metrics.js');
+
+  if (!fs.existsSync(distBin)) {
+    console.log(`${COLORS.YELLOW}${SYMBOLS.WARNING}${COLORS.RESET} plan2code-metrics binary not found. Run build first.`);
+    return false;
+  }
+
+  console.log(`${COLORS.CYAN}${SYMBOLS.ACTIVE} Creating global symlink...${COLORS.RESET}`);
+
+  cleanupExistingMetricsSymlinks();
+
+  if (process.platform === 'win32') {
+    try {
+      const npmPrefix = execSync('npm config get prefix', { encoding: 'utf8' }).trim();
+      const symlinkCmd = path.join(npmPrefix, 'plan2code-metrics.cmd');
+      const symlinkPs1 = path.join(npmPrefix, 'plan2code-metrics.ps1');
+
+      const batchContent = `@echo off\r\nnode "${distBin}" %*\r\n`;
+      fs.writeFileSync(symlinkCmd, batchContent);
+      console.log(`  ${COLORS.GREEN}${SYMBOLS.SUCCESS}${COLORS.RESET} Created: plan2code-metrics.cmd`);
+
+      const ps1Content = `#!/usr/bin/env pwsh\r\nnode "${distBin}" $args\r\n`;
+      fs.writeFileSync(symlinkPs1, ps1Content);
+      console.log(`  ${COLORS.GREEN}${SYMBOLS.SUCCESS}${COLORS.RESET} Created: plan2code-metrics.ps1`);
+
+      console.log(`  ${COLORS.DIM}Run 'plan2code-metrics' from any directory${COLORS.RESET}`);
+      return true;
+    } catch (error) {
+      console.log(`  ${COLORS.RED}${SYMBOLS.ERROR}${COLORS.RESET} Failed to create wrappers: ${error.message}`);
+      return false;
+    }
+  }
+
+  try {
+    execSync('npm link', { cwd: metricsDir, stdio: 'pipe' });
+    console.log(`  ${COLORS.GREEN}${SYMBOLS.SUCCESS}${COLORS.RESET} Global symlink created`);
+    console.log(`  ${COLORS.DIM}Run 'plan2code-metrics' from any directory${COLORS.RESET}`);
+    return true;
+  } catch (error) {
+    console.log(`  ${COLORS.RED}${SYMBOLS.ERROR}${COLORS.RESET} Symlink failed: ${error.message}`);
+    return false;
+  }
+}
+
+/**
+ * Remove global symlink for plan2code-metrics
+ */
+function removeMetricsGlobalSymlink() {
+  console.log(`${COLORS.CYAN}${SYMBOLS.ACTIVE} Removing global symlink...${COLORS.RESET}`);
+
+  let removedCount = 0;
+
+  try {
+    const npmPrefix = execSync('npm config get prefix', { encoding: 'utf8' }).trim();
+    const npmBinGlobal = process.platform === 'win32' ? npmPrefix : path.join(npmPrefix, 'bin');
+    const npmRootGlobal = path.join(npmPrefix, 'node_modules');
+
+    const filesToRemove = [
+      { path: path.join(npmBinGlobal, 'plan2code-metrics'), name: 'plan2code-metrics' },
+      { path: path.join(npmBinGlobal, 'plan2code-metrics.cmd'), name: 'plan2code-metrics.cmd' },
+      { path: path.join(npmBinGlobal, 'plan2code-metrics.ps1'), name: 'plan2code-metrics.ps1' },
+      { path: path.join(npmRootGlobal, 'plan2code-metrics'), name: 'node_modules/plan2code-metrics' }
+    ];
+
+    for (const file of filesToRemove) {
+      try {
+        fs.lstatSync(file.path);
+        try {
+          fs.rmdirSync(file.path);
+          console.log(`  ${COLORS.GREEN}${SYMBOLS.SUCCESS}${COLORS.RESET} Removed: ${file.name}`);
+          removedCount++;
+        } catch (rmdirErr) {
+          try {
+            fs.unlinkSync(file.path);
+            console.log(`  ${COLORS.GREEN}${SYMBOLS.SUCCESS}${COLORS.RESET} Removed: ${file.name}`);
+            removedCount++;
+          } catch (unlinkErr) {
+            fs.rmSync(file.path, { force: true, recursive: true });
+            console.log(`  ${COLORS.GREEN}${SYMBOLS.SUCCESS}${COLORS.RESET} Removed: ${file.name}`);
+            removedCount++;
+          }
+        }
+      } catch (err) {
+        // File doesn't exist, skip it
+      }
+    }
+
+    if (removedCount === 0) {
+      console.log(`  ${COLORS.DIM}${SYMBOLS.INFO} No files found to remove${COLORS.RESET}`);
+    }
+
+    return true;
+  } catch (error) {
+    console.log(`  ${COLORS.RED}${SYMBOLS.ERROR}${COLORS.RESET} Uninstall failed: ${error.message}`);
+    return false;
+  }
+}
+
+/**
+ * Install plan2code-metrics (build + symlink)
+ */
+function installPlan2CodeMetrics() {
+  displaySectionHeader('PLAN2CODE-METRICS', '[ BUILD & INSTALL ]');
+
+  const buildSuccess = buildPlan2CodeMetrics();
+  if (!buildSuccess) {
+    return 1;
+  }
+
+  const symlinkSuccess = createMetricsGlobalSymlink();
+  if (!symlinkSuccess) {
+    return 1;
+  }
+
+  console.log('');
+  console.log(`${COLORS.GREEN}${SYMBOLS.SUCCESS} plan2code-metrics installed successfully!${COLORS.RESET}`);
+  console.log('');
+  console.log(`${COLORS.CYAN}Usage:${COLORS.RESET}`);
+  console.log(`  ${COLORS.BRIGHT}plan2code-metrics${COLORS.RESET}       Start the interactive metrics CLI`);
+  console.log('');
+
+  return 0;
+}
+
+/**
+ * Uninstall plan2code-metrics
+ */
+function uninstallPlan2CodeMetrics() {
+  displaySectionHeader('PLAN2CODE-METRICS', '[ UNINSTALL ]');
+
+  removeMetricsGlobalSymlink();
+
+  console.log('');
+  console.log(`${COLORS.GREEN}${SYMBOLS.SUCCESS} plan2code-metrics uninstalled${COLORS.RESET}`);
   console.log('');
 
   return 0;
