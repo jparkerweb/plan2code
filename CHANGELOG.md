@@ -2,6 +2,24 @@
 
 All notable changes to Plan2Code will be documented in this file.
 
+## v1.8.1
+
+### ✨ Added
+
+- **User feedback collection** — Optional 1-10 rating with reason, what went well, and what went poorly
+  - Finalize prompt (Step 5) asks for optional feedback before archival, writes structured table to `overview.md`
+  - Collector parses `## User Feedback` table from `overview.md` into `RunMetrics.user_feedback`
+  - Aggregator computes `avg_user_rating` and `feedback_count` per cohort
+  - CLI offers interactive feedback collection if none found during metrics collection
+  - Analysis and improvement prompts reference `avg_user_rating` metric target (≥ 7.0)
+  - `UserFeedback` type exported from public API
+- **Pipe-safe feedback parsing** — User text containing `|` characters is escaped on write and correctly unescaped on parse using negative lookbehind regex
+
+### 🐛 Fixed
+
+- **Duplicate run files** — Interactive feedback no longer creates a second run JSON; the original is deleted before re-collecting
+- **Finalize step ordering** — Feedback collection moved to Step 5 (before archival at Step 6), ensuring `overview.md` is written while still in the active spec directory
+
 ## v1.8.0
 
 ### ✨ Added
