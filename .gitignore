@@ -5,6 +5,11 @@ dist/
 plan2code-loop/dist
 plan2code-loop/node_modules
 plan2code-loop/package-lock.json
+plan2code-metrics/dist
+plan2code-metrics/node_modules
+plan2code-metrics/package-lock.json
+.plan2code-loop
+.plan2code-metrics
 nul
 node_modules/
 package-lock.json

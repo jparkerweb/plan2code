@@ -2,6 +2,27 @@
 
 All notable changes to Plan2Code will be documented in this file.
 
+## v1.8.0
+
+### ✨ Added
+
+- **plan2code-metrics** — New recursive self-improvement toolchain for plan2code contributors (`plan2code-metrics/`)
+  - Fully interactive menu-driven CLI — no flags, all inputs collected via prompts
+  - **Collect** metrics from completed project specs (plan, document, implement, finalize steps)
+  - **Import** run data from other projects for cross-project aggregation
+  - **View** metrics status with health indicators and generation-over-generation deltas
+  - **Analyze** weak steps via AI-powered diagnosis (Claude Code or GitHub Copilot CLI)
+  - **Generate** surgical improvement proposals with automatic validation (char count limits, edit verification)
+  - **Review and apply** proposals with interactive diff review
+  - Cohort-based aggregation groups runs by prompt generation (SHA fingerprint of prompt files)
+  - Supports both Claude Code and GitHub Copilot CLI as AI backends
+  - Standalone TypeScript package with tsup build (ESM), installed via `npm link`
+
+### 🔧 Changed
+
+- **plan2code-4--finalize.md** — Added "Metrics Capture (Contributors)" note in Step 6 directing contributors to run `plan2code-metrics` after finalization
+- **plan2code-loop index.ts** — Added dim hint "run plan2code-metrics" after session summary
+
 ## v1.7.0
 
 ### ✨ Added
