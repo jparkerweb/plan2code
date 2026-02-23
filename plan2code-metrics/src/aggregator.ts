@@ -113,6 +113,11 @@ function buildCohort(runs: RunMetrics[], cohortKey: string): CohortMetrics {
   const avgDocUpdates = avg(runs.map(r => r.step4_finalize.documentation_updates_needed));
   const archivalRate = rate(runs.map(r => r.step4_finalize.archival_succeeded));
 
+  // User feedback
+  const feedbackRuns = runs.filter(r => r.user_feedback != null);
+  const avgUserRating = avg(feedbackRuns.map(r => r.user_feedback!.overall_rating));
+  const feedbackCount = feedbackRuns.length;
+
   return {
     cohort_key: cohortKey,
     prompt_versions: runs[0].prompt_versions,
@@ -146,6 +151,9 @@ function buildCohort(runs: RunMetrics[], cohortKey: string): CohortMetrics {
     avg_verification_failures_found: avgVerifFailures,
     avg_documentation_updates_needed: avgDocUpdates,
     archival_success_rate: archivalRate,
+
+    avg_user_rating: avgUserRating,
+    feedback_count: feedbackCount,
   };
 }
 

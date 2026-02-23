@@ -197,9 +197,39 @@ Do NOT make documentation changes without user approval.
 
 ---
 
-### STEP 5: Spec Cleanup
+### STEP 5: User Feedback (Optional)
 
-`🧹 [FINALIZATION STEP 5: Spec Cleanup]`
+`🧹 [FINALIZATION STEP 5: User Feedback]`
+
+**Objective:** Collect optional user feedback before archival.
+
+Ask the user: "Would you like to provide feedback on this workflow run? (optional)"
+
+If yes, collect:
+1. **Rating** (1-10): "How would you rate this workflow run overall?"
+2. **Reason**: "Brief reason for your rating?"
+3. **Went Well**: "What went well?"
+4. **Went Poorly**: "What went poorly or could improve?"
+
+Append to `overview.md` (in the active spec directory):
+
+```markdown
+## User Feedback
+| Field | Value |
+|-------|-------|
+| Rating | [1-10] |
+| Reason | [response] |
+| Went Well | [response] |
+| Went Poorly | [response] |
+```
+
+If the user declines, skip and proceed to Step 6 (Spec Cleanup).
+
+---
+
+### STEP 6: Spec Cleanup
+
+`🧹 [FINALIZATION STEP 6: Spec Cleanup]`
 
 **Objective:** Archive completed specifications.
 
@@ -226,9 +256,9 @@ specs--completed/
 
 ---
 
-### STEP 6: Final Confirmation
+### STEP 7: Final Confirmation
 
-`🧹 [FINALIZATION STEP 6: Final Confirmation]`
+`🧹 [FINALIZATION STEP 7: Final Confirmation]`
 
 **Objective:** Confirm all finalization steps complete.
 
@@ -246,8 +276,9 @@ specs--completed/
 - [x] Step 2: Implementation Verification
 - [x] Step 3: Implementation Summary
 - [x] Step 4: Documentation Review
-- [x] Step 5: Spec Cleanup
-- [x] Step 6: Final Confirmation
+- [x] Step 5: User Feedback (Optional)
+- [x] Step 6: Spec Cleanup
+- [x] Step 7: Final Confirmation
 
 ### Files Created/Modified During Finalization
 - `specs/<feature-name>/overview.md` - Added completion summary

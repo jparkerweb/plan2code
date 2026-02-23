@@ -181,6 +181,70 @@ async function flowCollect(): Promise<void> {
     console.log(`  Step 2 (Document):   ${metrics.step2_document.present ? chalk.green('✓') : chalk.gray('—')}`);
     console.log(`  Step 3 (Implement):  ${metrics.step3_implement.present ? (metrics.step3_implement.used_loop_mode ? chalk.green('✓ (loop)') : chalk.yellow('✓ (manual)')) : chalk.gray('—')}`);
     console.log(`  Step 4 (Finalize):   ${metrics.step4_finalize.present ? chalk.green('✓') : chalk.gray('—')}`);
+    console.log(`  User Feedback:       ${metrics.user_feedback ? chalk.green(`✓ (${metrics.user_feedback.overall_rating}/10)`) : chalk.gray('—')}`);
+
+    // Offer to collect feedback interactively if not present
+    if (!metrics.user_feedback) {
+      console.log();
+      const wantFeedback = await confirm({
+        message: 'No user feedback found in overview.md. Would you like to provide feedback now?',
+        default: false,
+      });
+
+      if (wantFeedback) {
+        const rating = await input({
+          message: 'Overall rating (1-10):',
+          validate: (v) => {
+            const n = parseInt(v, 10);
+            return (n >= 1 && n <= 10) ? true : 'Must be a number between 1 and 10';
+          },
+        });
+        const reason = await input({ message: 'Rating reason:' });
+        const wentWell = await input({ message: 'What went well?' });
+        const wentPoorly = await input({ message: 'What went poorly?' });
+
+        // Write the feedback table into overview.md
+        const overviewPath = path.join(specDir, 'overview.md');
+        let overviewContent = '';
+        try {
+          overviewContent = fs.readFileSync(overviewPath, 'utf8');
+        } catch { /* empty */ }
+
+        // Escape pipe characters in user text to prevent table parsing issues
+        const esc = (s: string) => s.replace(/\|/g, '\\|');
+
+        const feedbackTable = [
+          '',
+          '## User Feedback',
+          '| Field | Value |',
+          '|-------|-------|',
+          `| Rating | ${rating} |`,
+          `| Reason | ${esc(reason)} |`,
+          `| Went Well | ${esc(wentWell)} |`,
+          `| Went Poorly | ${esc(wentPoorly)} |`,
+          '',
+        ].join('\n');
+
+        fs.writeFileSync(overviewPath, overviewContent + feedbackTable, 'utf8');
+        console.log(chalk.green('✓ Feedback written to overview.md'));
+
+        // Delete the original run (without feedback) before re-collecting
+        const originalRunPath = path.join(runsDir, `${metrics.run_id}.json`);
+        try { fs.unlinkSync(originalRunPath); } catch { /* ignore */ }
+
+        // Re-collect and re-aggregate
+        const reSpinner = ora('Re-collecting metrics with feedback...').start();
+        const updatedMetrics = await collectRun({
+          specDir,
+          projectName,
+          plan2codeRoot,
+          plan2codeVersion,
+          outputDir: runsDir,
+        });
+        aggregate(runsDir, aggregatedPath);
+        reSpinner.succeed(`Updated: ${updatedMetrics.run_id} (rating: ${updatedMetrics.user_feedback?.overall_rating}/10)`);
+      }
+    }
   } catch (err) {
     spinner.fail(`Collection failed: ${err instanceof Error ? err.message : String(err)}`);
   }
@@ -290,6 +354,13 @@ async function flowViewStatus(): Promise<void> {
         console.log(`    avg_verif_failures:       ${metricStatus('avg_verification_failures_found', cohort.avg_verification_failures_found)}`);
       if (cohort.archival_success_rate != null)
         console.log(`    archival_success_rate:    ${metricStatus('archival_success_rate', cohort.archival_success_rate)}`);
+    }
+
+    // User feedback
+    if (cohort.feedback_count > 0) {
+      console.log(chalk.bold('  User Feedback:'));
+      console.log(`    avg_user_rating:          ${metricStatus('avg_user_rating', cohort.avg_user_rating)}`);
+      console.log(`    feedback_count:           ${chalk.white(String(cohort.feedback_count))}`);
     }
 
     // Compare with previous generation
