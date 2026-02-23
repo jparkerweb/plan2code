@@ -76,13 +76,9 @@ Present findings and confirm understanding before proceeding.
 
 ```
 ⋅
-   o     o
-    ╲   ╱  ?
     ╭───╮
     │ ● │
     │ ~ │   Here's the plan. What do you think?
-    ├───┤
-    │ · │
     ╰───╯
 ```
 
@@ -170,13 +166,9 @@ Report and resolve issues before proceeding.
 
 ```
 ⋅
-   o     o
-    ╲   ╱
     ╭───╮
     │ ★ │
     │ ◡ │   All revised! Ready to continue!
-    ├───┤
-    │ · │
     ╰───╯
 
 ╔═══════════════════════════════════════════════════════════════════╗

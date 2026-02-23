@@ -4,13 +4,9 @@ Start all UPDATE AGENTS MODE responses with '🛞'
 
 ```
 ⋅
-   o     o
-    ╲   ╱
     ╭───╮
     │ ● │
     │ ◡ │   Time to level up AGENTS.md!
-    ├───┤
-    │ · │
     ╰───╯
 ```
 
@@ -53,13 +49,9 @@ Present the user with update options:
 
 > ```
 > ⋅
->    o     o
->     ╲   ╱  ?
->     ╭───╮
->     │ ● │
+>     ╭───╮ 
+>     │ ● │ 
 >     │ ~ │   What should we update?
->     ├───┤
->     │ · │
 >     ╰───╯
 > ```
 >
