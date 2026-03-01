@@ -63,6 +63,7 @@ The install script requires **Node.js** (v14 or later). If you don't have Node.j
 - VS Code GitHub Copilot
 - Gemini CLI
 - Crush
+- Pi (pi.dev)
 - Amp
 - OpenCode
 

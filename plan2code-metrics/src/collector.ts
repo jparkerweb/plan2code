@@ -36,6 +36,34 @@ function readFileSafe(filePath: string): string | null {
   }
 }
 
+/** Strip the "## Success Criteria" section so its checkboxes aren't counted as tasks. */
+function stripSuccessCriteriaSection(overview: string): string {
+  return overview.replace(/^## Success Criteria\s*\n[\s\S]*?(?=\n## |\n*$)/m, '');
+}
+
+/**
+ * Extract canonical task counts from the Completion Summary section.
+ * Supports two formats found in real specs:
+ *   - Bold text: "**Completion Rate:** 100% (5/5 tasks)"
+ *   - Table row: "| Total Tasks | 28 (28/28 complete — 100%) |"
+ * Returns null when no parseable counts are found.
+ */
+function parseCompletionSummaryTaskCount(overview: string): { completed: number; total: number } | null {
+  const summaryMatch = overview.match(/## Completion Summary\s*\n([\s\S]*?)(?=\n## |\n*$)/);
+  if (!summaryMatch) return null;
+  const summary = summaryMatch[1];
+
+  // "Completion Rate: X% (Y/Z tasks)"
+  const rateMatch = summary.match(/Completion Rate[:\s*]*\d{1,3}%\s*\((\d+)\/(\d+)\s*tasks?\)/i);
+  if (rateMatch) return { completed: parseInt(rateMatch[1], 10), total: parseInt(rateMatch[2], 10) };
+
+  // "Total Tasks | 28 (28/28 complete"
+  const tableMatch = summary.match(/Total Tasks\s*\|\s*(\d+)\s*\((\d+)\/(\d+)\s*complete/i);
+  if (tableMatch) return { completed: parseInt(tableMatch[2], 10), total: parseInt(tableMatch[3], 10) };
+
+  return null;
+}
+
 function generateRunId(): string {
   const now = new Date();
   const ts = now.toISOString().replace(/[-:T]/g, '').slice(0, 14);
@@ -173,13 +201,10 @@ export function collectStep2(specDir: string): Step2DocumentMetrics {
       requirement_coverage_percent: null, verification_items_added: null };
   }
 
-  // Count all checkbox tasks: - [ ], - [x], - [!], - [/]
-  const allTasks = (overview.match(/^\s*-\s+\[[ x!/?]\]/gm) ?? []).length;
-
   // Detect Parallel Execution Groups table
   const parallelGroups = (overview.match(/Parallel\s+Execution\s+Group/gi) ?? []).length;
 
-  // Count phase files
+  // Count phase files (scanned first so we can use sum as a total_tasks fallback)
   let phaseCount = 0;
   let tasksPerPhase: number[] = [];
   try {
@@ -190,11 +215,29 @@ export function collectStep2(specDir: string): Step2DocumentMetrics {
     phaseCount = phaseFiles.length;
     for (const pf of phaseFiles) {
       const content = readFileSafe(path.join(specDir, pf)) ?? '';
-      const count = (content.match(/^\s*-\s+\[[ x!/?]\]/gm) ?? []).length;
+      const count = (content.match(/^\s*-\s+\[[ x!/?]\]\s+\*\*Task\s+\d/gm) ?? []).length;
       tasksPerPhase.push(count);
     }
   } catch {
     // leave empty
+  }
+
+  // total_tasks priority:
+  //   1. Completion Summary canonical count
+  //   2. Sum of phase file task counts
+  //   3. Stripped overview checkboxes (excluding Success Criteria)
+  const summaryCount = parseCompletionSummaryTaskCount(overview);
+  const phaseSum = tasksPerPhase.length > 0 ? tasksPerPhase.reduce((a, b) => a + b, 0) : 0;
+  const strippedOverview = stripSuccessCriteriaSection(overview);
+  const strippedCheckboxCount = (strippedOverview.match(/^\s*-\s+\[[ x!/?]\]/gm) ?? []).length;
+
+  let totalTasks: number;
+  if (summaryCount) {
+    totalTasks = summaryCount.total;
+  } else if (phaseSum > 0) {
+    totalTasks = phaseSum;
+  } else {
+    totalTasks = strippedCheckboxCount;
   }
 
   // Requirement coverage: look for coverage percentage in overview
@@ -207,7 +250,7 @@ export function collectStep2(specDir: string): Step2DocumentMetrics {
 
   return {
     present: true,
-    total_tasks: allTasks || null,
+    total_tasks: totalTasks || null,
     tasks_per_phase: tasksPerPhase.length > 0 ? tasksPerPhase : null,
     phase_count: phaseCount || null,
     parallel_groups_identified: parallelGroups || 0,
@@ -216,124 +259,67 @@ export function collectStep2(specDir: string): Step2DocumentMetrics {
   };
 }
 
-// ── Step 3: Implement (loop data) ─────────────────────────────────────────────
+// ── Step 3: Implement ──────────────────────────────────────────────────────────
 
 export function collectStep3(specDir: string): Step3ImplementMetrics {
-  const loopDir = path.join(specDir, '.plan2code-loop');
-  const iterLogPath = path.join(loopDir, 'iteration.log');
-  const configPath = path.join(loopDir, 'config.json');
-
-  if (!fs.existsSync(loopDir)) {
-    return { present: true, used_loop_mode: false, loop_mode: null,
-      task_completion_rate: null, tasks_completed: null, tasks_total: null,
-      blocker_count: null, blocker_categories: null, total_iterations: null,
-      avg_iteration_duration_ms: null, exit_code_distribution: null,
-      completion_marker_success_rate: null };
+  // Discover phase-*.md files
+  let phaseFiles: string[] = [];
+  try {
+    const files = fs.readdirSync(specDir);
+    phaseFiles = files
+      .filter(f => /^phase-\d+\.md$/i.test(f))
+      .sort();
+  } catch {
+    // leave empty
   }
 
-  // Parse config.json for loop mode
-  let loopMode: 'task' | 'phase' | null = null;
-  const configContent = readFileSafe(configPath);
-  if (configContent) {
-    try {
-      const config = JSON.parse(configContent);
-      loopMode = config.loopMode ?? null;
-    } catch {
-      // ignore
-    }
-  }
-
-  // Parse NDJSON iteration.log
-  const iterLogContent = readFileSafe(iterLogPath);
-  if (!iterLogContent) {
-    return { present: true, used_loop_mode: true, loop_mode: loopMode,
-      task_completion_rate: null, tasks_completed: null, tasks_total: null,
-      blocker_count: null, blocker_categories: null, total_iterations: null,
-      avg_iteration_duration_ms: null, exit_code_distribution: null,
-      completion_marker_success_rate: null };
-  }
-
-  interface IterEntry {
-    iteration: number;
-    timestamp: string;
-    duration: number;
-    exitCode: number;
-    status: string;
-    completionMarker?: string;
-  }
-
-  const entries: IterEntry[] = [];
-  for (const line of iterLogContent.split('\n')) {
-    const trimmed = line.trim();
-    if (!trimmed) continue;
-    try {
-      entries.push(JSON.parse(trimmed));
-    } catch {
-      // skip malformed lines
-    }
-  }
-
-  const totalIterations = entries.length;
-  if (totalIterations === 0) {
-    return { present: true, used_loop_mode: true, loop_mode: loopMode,
-      task_completion_rate: null, tasks_completed: null, tasks_total: null,
-      blocker_count: null, blocker_categories: null, total_iterations: 0,
-      avg_iteration_duration_ms: null, exit_code_distribution: null,
-      completion_marker_success_rate: null };
-  }
-
-  // Exit code distribution
-  const exitCodes: Record<string, number> = {};
-  for (const e of entries) {
-    const key = String(e.exitCode ?? 'other');
-    exitCodes[key] = (exitCodes[key] ?? 0) + 1;
-  }
-
-  // Average duration
-  const durations = entries.map(e => e.duration).filter(d => d != null && d > 0);
-  const avgDuration = durations.length > 0
-    ? Math.round(durations.reduce((a, b) => a + b, 0) / durations.length)
-    : null;
-
-  // Completion markers
-  const markerEntries = entries.filter(e => e.completionMarker && e.completionMarker.trim() !== '');
-  const taskCompleteEntries = markerEntries.filter(e =>
-    e.completionMarker?.startsWith('TASK_COMPLETE')
-  );
-  const blockedEntries = markerEntries.filter(e =>
-    e.completionMarker?.startsWith('TASK_BLOCKED')
-  );
-
-  // Completion marker success rate: entries where a valid marker was detected vs total
-  const validMarkerCount = markerEntries.length;
-  const markerSuccessRate = totalIterations > 0
-    ? validMarkerCount / totalIterations
-    : null;
-
-  // Task counts from markers (used for completion_marker_success_rate)
-  const blockerCount = blockedEntries.length;
-
-  // Blocker categories (parse from "TASK_BLOCKED: X.Y - reason")
-  const blockerCategories: string[] = [];
-  for (const e of blockedEntries) {
-    const match = e.completionMarker?.match(/TASK_BLOCKED:\s*[\d.]+\s*-\s*(.+)/);
-    if (match) {
-      // Normalize to snake_case category
-      const reason = match[1].toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
-      if (!blockerCategories.includes(reason)) {
-        blockerCategories.push(reason);
-      }
-    }
-  }
-
-  // Count tasks from overview.md checkboxes (consistent numerator and denominator)
+  // Read overview.md for Completion Summary
   const overviewPath = path.join(specDir, 'overview.md');
   const overview = readFileSafe(overviewPath);
+  const summaryCount = overview ? parseCompletionSummaryTaskCount(overview) : null;
+
+  // present = true if phase files exist OR overview has completion data
+  const present = phaseFiles.length > 0 || summaryCount != null;
+  if (!present) {
+    return { present: false, task_completion_rate: null, tasks_completed: null,
+      tasks_total: null, blocker_count: null };
+  }
+
+  // Count checkboxes in phase files
+  let phaseTotal = 0;
+  let phaseCompleted = 0;
+  let blockerCount = 0;
+  for (const pf of phaseFiles) {
+    const content = readFileSafe(path.join(specDir, pf)) ?? '';
+    phaseTotal += (content.match(/^\s*-\s+\[[ x!/?]\]\s+\*\*Task\s+\d/gm) ?? []).length;
+    phaseCompleted += (content.match(/^\s*-\s+\[x\]\s+\*\*Task\s+\d/gm) ?? []).length;
+    blockerCount += (content.match(/^\s*-\s+\[!\]\s+\*\*Task\s+\d/gm) ?? []).length;
+  }
+
+  // Count checkboxes in overview (stripped of Success Criteria)
+  let overviewTotal = 0;
+  let overviewCompleted = 0;
+  if (overview) {
+    const stripped = stripSuccessCriteriaSection(overview);
+    overviewTotal = (stripped.match(/^\s*-\s+\[[ x!/?]\]/gm) ?? []).length;
+    overviewCompleted = (stripped.match(/^\s*-\s+\[x\]/gm) ?? []).length;
+  }
+
+  // Task counts priority:
+  //   1. Completion Summary in overview.md
+  //   2. Checkbox counting in phase files
+  //   3. Checkbox counting in overview.md (stripped of Success Criteria)
   let tasksTotal: number | null = null;
   let tasksCompleted: number | null = null;
-  if (overview) {
-    tasksTotal = (overview.match(/^\s*-\s+\[[ x!/?]\]/gm) ?? []).length || null;
-    tasksCompleted = (overview.match(/^\s*-\s+\[x\]/gm) ?? []).length || null;
+  if (summaryCount) {
+    tasksTotal = summaryCount.total;
+    tasksCompleted = summaryCount.completed;
+  } else if (phaseTotal > 0) {
+    tasksTotal = phaseTotal;
+    tasksCompleted = phaseCompleted;
+  } else if (overviewTotal > 0) {
+    tasksTotal = overviewTotal;
+    tasksCompleted = overviewCompleted;
   }
 
   const taskCompletionRate = tasksTotal && tasksTotal > 0 && tasksCompleted != null
@@ -342,17 +328,10 @@ export function collectStep3(specDir: string): Step3ImplementMetrics {
 
   return {
     present: true,
-    used_loop_mode: true,
-    loop_mode: loopMode,
     task_completion_rate: taskCompletionRate,
-    tasks_completed: tasksCompleted || null,
+    tasks_completed: tasksCompleted,
     tasks_total: tasksTotal,
     blocker_count: blockerCount,
-    blocker_categories: blockerCategories.length > 0 ? blockerCategories : null,
-    total_iterations: totalIterations,
-    avg_iteration_duration_ms: avgDuration,
-    exit_code_distribution: exitCodes,
-    completion_marker_success_rate: markerSuccessRate,
   };
 }
 
@@ -380,10 +359,17 @@ export function collectStep4(specDir: string): Step4FinalizeMetrics {
       archival_succeeded: archivalSucceeded };
   }
 
-  // Completion rate: completed tasks / total tasks
-  const totalTasks = (overview.match(/^\s*-\s+\[[ x!/?]\]/gm) ?? []).length;
-  const completedTasks = (overview.match(/^\s*-\s+\[x\]/gm) ?? []).length;
-  const completionRate = totalTasks > 0 ? completedTasks / totalTasks : null;
+  // Completion rate: prefer Completion Summary, fall back to stripped overview checkboxes
+  let completionRate: number | null = null;
+  const summaryCount = parseCompletionSummaryTaskCount(overview);
+  if (summaryCount) {
+    completionRate = summaryCount.total > 0 ? summaryCount.completed / summaryCount.total : null;
+  } else {
+    const stripped = stripSuccessCriteriaSection(overview);
+    const totalTasks = (stripped.match(/^\s*-\s+\[[ x!/?]\]/gm) ?? []).length;
+    const completedTasks = (stripped.match(/^\s*-\s+\[x\]/gm) ?? []).length;
+    completionRate = totalTasks > 0 ? completedTasks / totalTasks : null;
+  }
 
   // Verification failures: look for [!] tasks or "verification failed" text
   const blockedTasks = (overview.match(/^\s*-\s+\[!\]/gm) ?? []).length;
@@ -474,24 +460,6 @@ export async function collectRun(opts: CollectorOptions): Promise<RunMetrics> {
     completedAt = stat.mtime.toISOString();
   } catch {
     // leave null
-  }
-
-  // Try to get started_at from earliest iteration log entry
-  const loopDir = path.join(specDir, '.plan2code-loop');
-  const iterLogPath = path.join(loopDir, 'iteration.log');
-  const iterLogContent = readFileSafe(iterLogPath);
-  if (iterLogContent) {
-    const lines = iterLogContent.split('\n').filter(l => l.trim());
-    if (lines.length > 0) {
-      try {
-        const first = JSON.parse(lines[0]);
-        if (first.timestamp) startedAt = first.timestamp;
-      } catch { /* ignore */ }
-      try {
-        const last = JSON.parse(lines[lines.length - 1]);
-        if (last.timestamp) completedAt = last.timestamp;
-      } catch { /* ignore */ }
-    }
   }
 
   const metrics: RunMetrics = {

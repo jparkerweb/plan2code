@@ -2,6 +2,73 @@
 
 All notable changes to Plan2Code will be documented in this file.
 
+## v1.10.0
+
+### ✨ Added
+
+- **Retry logic with escalating timeouts in loop controller** — Timed-out iterations now retry automatically instead of silently continuing
+  - Default base timeout reduced from 30 minutes to 3 minutes per attempt
+  - Up to 5 retry attempts per iteration (configurable via `maxRetries`)
+  - Each retry escalates timeout by +30 seconds (attempt 0 = base, attempt 1 = base + 30s, etc.)
+  - New `executeWithRetry()` method wraps `executeIteration()` with retry loop
+  - Fatal timeout (all attempts exhausted) stops the loop cleanly with a logged error
+  - Spinner displays elapsed seconds during each attempt; retries show attempt count
+  - `maxRetries` field added to `SessionConfig` and `DEFAULT_CONFIG`
+
+### 🔧 Changed
+
+- **Append-only scratchpad enforcement in loop prompt templates** — Both task-mode and phase-mode templates now explicitly prohibit editing or reorganizing existing scratchpad content
+  - Instruction changed from "append to scratchpad.md" to "add a new entry at the **bottom**"
+  - Added rule: "Never edit, reorganize, or insert into existing content — only append new entries to the end of the file"
+- **AGENTS.md restructured into progressive discovery format** — AGENTS.md converted to a lightweight index with summaries and markdown links; full detail moved to `.agents-docs/` section files
+  - `.agents-docs/AGENTS-architecture.md` — Architecture overview and key design decisions
+  - `.agents-docs/AGENTS-code-style.md` — Code style conventions
+  - `.agents-docs/AGENTS-development-commands.md` — Development commands and setup
+  - `.agents-docs/AGENTS-plan2code-loop.md` — Loop CLI architecture and commands
+  - `.agents-docs/AGENTS-plan2code-metrics.md` — Metrics toolchain details
+  - `init-update` prompt updated with `.agents-docs/` detection in pre-flight check
+- **Agents mode emoji updated** — Loop controller agents-mode indicator changed from wheel to hammer
+
+## v1.9.1
+
+### ✨ Added
+
+- **Pi (pi.dev) platform support** — New target for the Pi terminal-based coding agent
+  - Local prompt templates installed to `.pi/prompts/` (flat `.md` with YAML `description` frontmatter)
+  - Global prompt templates installed to `~/.pi/agent/prompts/`
+  - Pi users already get skill support via existing `.agents/skills/` target; this adds native slash command access
+  - No new helper functions needed — Pi uses the same flat-file-with-YAML pattern as Windsurf, Copilot CLI, and Codeium
+
+### 📚 Documentation
+
+- `AGENTS.md` Platform-Specific File Formats table updated with Pi row
+- `README.md` Supported Platforms list updated with Pi (pi.dev)
+## v1.9.0
+
+### ✨ Added
+
+- **Progressive discovery for AGENTS.md** — Init and init-update prompts now generate AGENTS.md as a lightweight index with summaries and markdown links, plus `.agents-docs/` section files containing full detail
+  - **Init prompt** — New `## Progressive Discovery` section defines index format, always-inline sections (Project Overview, Git Commit Messages, How to Use This File), `.agents-docs/` directory setup, grouping heuristics, and opt-in restructure offer for existing single-file AGENTS.md
+  - **Init-update prompt** — `.agents-docs/` detection in pre-flight check, legacy migration offer, edit routing (inline sections → AGENTS.md, detailed sections → `.agents-docs/` files), section file lifecycle (create, delete, orphan cleanup), enhanced summary with file count, new update rule 9 (route edits to correct file)
+  - **Reference templates** updated in both prompts to include `.agents-docs/` in the bullet list
+  - **"How to Use This File"** added as a required content section in generated AGENTS.md files
+
+## v1.8.2
+
+### 🐛 Fixed
+
+- **Inflated metrics task counts** — Metrics collector regex now matches only `**Task X.N:**` checkbox items instead of all checkboxes, fixing ~100-200% count inflation from prerequisite and acceptance criteria checkboxes
+  - `collectStep2` (`tasks_per_phase`) uses Task-pattern-only regex
+  - `collectStep3` (`phaseTotal`, `phaseCompleted`, `blockerCount`) all use Task-pattern-only regex
+  - Step 4 overview fallback left unchanged (correctly counts Phase Checklist checkboxes)
+
+### 🔧 Changed
+
+- **Document workflow** — Checkbox format `- [ ]` now restricted to Task items only; Prerequisites, Acceptance Criteria, and Success Criteria use plain bullet lists (no checkboxes)
+- **Implement workflow** — Prerequisite verification changed from checkbox-based (`[x]`/`[?]`/`[!]`) to inline annotation approach (`VERIFIED`/`ASSUMED: [reason]`/`BLOCKED: [reason]`); added clarifying note that checkbox states apply to Task items and Phase Checklist only
+- **Finalize workflow** — Task completion audit now specifies counting only `**Task X.N:**` checkbox items
+- **Loop prompt templates** — Both task-mode and phase-mode templates updated: prerequisites use plain bullets with inline annotations instead of checkboxes; Checkbox States section scoped to "Task items only"
+
 ## v1.8.1
 
 ### ✨ Added

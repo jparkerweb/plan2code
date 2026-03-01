@@ -16,7 +16,8 @@ Analyze this codebase and create `AGENTS.md` to guide future AI coding agents (C
 
 1. **Commands**: Build, lint, test, run single test, and other common development tasks
 2. **Architecture**: High-level "big picture" structure requiring multi-file context to understand
-3. **Git Commit Messages**: Always append `AI Assisted` as the last line of every git commit message, separated from the rest of the message body with a blank line
+3. **Git Commit Messages**: All commits must follow this format: `<description>\n\n<JIRA-Ticket-ID>\nAI Assisted`. Derive the JIRA ticket ID from the current branch name — the format is `<prefix>/<TICKET-ID>-description` where the ticket ID is an uppercase project key, hyphen, and integer (e.g., `PCWEB-10968`). The ticket ID and `AI Assisted` go on consecutive lines after a blank line.
+4. **How to Use This File**: A short paragraph explaining that sections below contain brief summaries and agents should follow the markdown links to `.agents-docs/` for full details — only read what's relevant to the current task.
 
 ## Rules
 
@@ -33,6 +34,43 @@ Prefix the file with:
 
 This file provides guidance to AI coding agents like Claude Code (claude.ai/code), Cursor AI, Codex, Gemini CLI, GitHub Copilot, and other AI coding assistants when working with code in this repository.
 ```
+
+---
+
+## Progressive Discovery
+
+Generate AGENTS.md as an **index file** — each section gets a 2-3 line summary with a markdown link to a detail file. Full content goes in `.agents-docs/` directory files.
+
+- **Index format** — each section in AGENTS.md: heading, brief summary, then `Details: [Section Name](./.agents-docs/AGENTS-<section-name>.md)`
+- **Detail files** — named `AGENTS-<section-name>.md` using kebab-case from the section header (e.g., "Development Commands" → `AGENTS-development-commands.md`)
+- **Detail file header** — each file starts with:
+  ```
+  # <Section Name>
+  > Part of [AGENTS.md](../AGENTS.md) — project guidance for AI coding agents.
+  ```
+
+### Always Inline
+
+These sections must remain fully inline in AGENTS.md (never split to separate files):
+- Project Overview
+- Git Commit Messages
+- How to Use This File
+
+### Directory Setup
+
+- Create `.agents-docs/` directory in the project root
+- Each file: `AGENTS-<section-name>.md` where `<section-name>` is kebab-case of the section header
+- Each file starts with `# <Section Name>` followed by breadcrumb: `> Part of [AGENTS.md](../AGENTS.md) — project guidance for AI coding agents.`
+
+### Grouping Heuristics
+
+- Combine related subsections into a single detail file (e.g., "Architecture" with its subsections → one file)
+- Sections under ~10 lines of content should stay inline in AGENTS.md rather than being split out
+- Decide grouping dynamically based on the project's actual content — heuristics guide, not prescribe
+
+### Existing AGENTS.md Without `.agents-docs/`
+
+If AGENTS.md exists but `.agents-docs/` does not, offer to restructure: "Your AGENTS.md uses a single-file format. Want to restructure it for progressive discovery? This splits detailed sections into `.agents-docs/` files and converts AGENTS.md to a lightweight index." Only restructure if the user confirms — never auto-restructure.
 
 ---
 
@@ -81,4 +119,5 @@ See [AGENTS.md]([Path]) for complete project documentation including:
 - Environment variables
 - Testing patterns
 - Deployment guides
+- Section details in .agents-docs/
 ```

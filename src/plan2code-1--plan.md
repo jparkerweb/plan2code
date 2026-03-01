@@ -221,6 +221,7 @@ State assessment and ask user to confirm.
 1. Save PLAN-CONVERSATION (see template below) — transcript + decision summary tables
 2. Create PLAN-DRAFT (see template below) using same date
 3. Verify: re-read conversation as source of truth, cross-reference against PLAN-DRAFT sections (Reqs→2.1/2.2, Tech→3, Architecture→4, Risks→6, Assumptions→9, Criteria→7). Add gaps with `<!-- VERIFICATION -->` comments. Output verification summary table.
+4. Append `## Planning Metrics` to PLAN-DRAFT with these exact fields: `confidence: [0-100]`, `clarification_rounds: [N]`, `functional_requirements_count: [N]`, `non_functional_requirements_count: [N]`, `risk_count: [N]`, `phase_count: [N]`, `verification_gaps_found: [N]`. Use exact field names — the metrics pipeline parses this section.
 
 ## Templates
 

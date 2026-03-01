@@ -28,7 +28,7 @@ The following diagnosis was produced by the analysis step:
 
 1. **Char limit:** Each target file MUST stay under 11,000 characters after your edit is applied. This is enforced by code — edits that violate it will be automatically rejected.
 2. **Maximum 5 edits per cycle.** Focus on the highest-impact changes only.
-3. **Each edit must cite a specific metric** in its `expected_metric_impact` field (e.g., "avg_completion_marker_success_rate", "avg_blocker_count").
+3. **Each edit must cite a specific metric** in its `expected_metric_impact` field (e.g., "avg_task_completion_rate", "avg_blocker_count").
 4. **`old_text` must be verbatim** from the file. Copy-paste exactly — include surrounding whitespace/newlines as they appear. Edits with mismatched old_text will be automatically rejected.
 5. **Do NOT modify Role sections** (lines starting with "You are" at the top of each file) or step headings (lines starting with `#`).
 6. **Each edit must be independently applicable** — no edit should depend on another edit being applied first.
@@ -41,7 +41,6 @@ The following diagnosis was produced by the analysis step:
 
 - Target the specific sections identified in "Recommended Improvement Targets" from the diagnosis.
 - For high `avg_clarification_rounds`: Add more upfront specification examples or decision criteria to Step 1.
-- For low `avg_completion_marker_success_rate`: Clarify or simplify the completion marker format in Step 3.
 - For high `avg_blocker_count`: Add blocker-recovery guidance or prerequisite check instructions.
 - For low `avg_confidence`: Strengthen the confidence calculation instructions with clearer rubrics.
 - For low `avg_parallel_groups`: Add explicit guidance for identifying parallel tasks in Step 2.

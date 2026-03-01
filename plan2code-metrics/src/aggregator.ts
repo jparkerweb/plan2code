@@ -99,13 +99,9 @@ function buildCohort(runs: RunMetrics[], cohortKey: string): CohortMetrics {
   const avgReqCoverage = avg(runs.map(r => r.step2_document.requirement_coverage_percent));
   const avgVerifItems = avg(runs.map(r => r.step2_document.verification_items_added));
 
-  // Step 3 (loop only)
-  const loopRuns = runs.filter(r => r.step3_implement.used_loop_mode);
-  const avgCompletionRate = avg(loopRuns.map(r => r.step3_implement.task_completion_rate));
-  const avgBlockerCount = avg(loopRuns.map(r => r.step3_implement.blocker_count));
-  const avgTotalIter = avg(loopRuns.map(r => r.step3_implement.total_iterations));
-  const avgIterDuration = avg(loopRuns.map(r => r.step3_implement.avg_iteration_duration_ms));
-  const avgMarkerSuccess = avg(loopRuns.map(r => r.step3_implement.completion_marker_success_rate));
+  // Step 3 averages
+  const avgCompletionRate = avg(runs.map(r => r.step3_implement.task_completion_rate));
+  const avgBlockerCount = avg(runs.map(r => r.step3_implement.blocker_count));
 
   // Step 4 averages
   const avgCompletionAtAudit = avg(runs.map(r => r.step4_finalize.completion_rate_at_audit));
@@ -140,12 +136,8 @@ function buildCohort(runs: RunMetrics[], cohortKey: string): CohortMetrics {
     avg_requirement_coverage_percent: avgReqCoverage,
     avg_verification_items_added: avgVerifItems,
 
-    loop_run_count: loopRuns.length,
     avg_task_completion_rate: avgCompletionRate,
     avg_blocker_count: avgBlockerCount,
-    avg_total_iterations: avgTotalIter,
-    avg_iteration_duration_ms: avgIterDuration,
-    avg_completion_marker_success_rate: avgMarkerSuccess,
 
     avg_completion_rate_at_audit: avgCompletionAtAudit,
     avg_verification_failures_found: avgVerifFailures,

@@ -5,6 +5,7 @@
  */
 
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
 import { select, input, confirm } from '@inquirer/prompts';
 import chalk from 'chalk';
@@ -18,6 +19,33 @@ import type { AggregatedMetrics, CohortMetrics } from './types.js';
 import { METRIC_TARGETS } from './types.js';
 import { AGENTS, type AgentType } from './invoke-llm.js';
 
+// ── Session state (set at startup via interactive prompts) ───────────────────
+
+let resolvedPlan2CodeRoot = '';
+let resolvedProjectRoot = '';
+
+// ── Persisted user config (~/.plan2code-metrics.json) ──────────────────────
+
+const USER_CONFIG_PATH = path.join(os.homedir(), '.plan2code-metrics.json');
+
+interface UserConfig {
+  plan2codeRepoPath?: string;
+}
+
+function loadUserConfig(): UserConfig {
+  try {
+    return JSON.parse(fs.readFileSync(USER_CONFIG_PATH, 'utf8'));
+  } catch {
+    return {};
+  }
+}
+
+function saveUserConfig(config: UserConfig): void {
+  try {
+    fs.writeFileSync(USER_CONFIG_PATH, JSON.stringify(config, null, 2), 'utf8');
+  } catch { /* best-effort */ }
+}
+
 // ── Defaults ──────────────────────────────────────────────────────────────────
 
 const DEFAULT_METRICS_DIR = '.plan2code-metrics';
@@ -25,7 +53,7 @@ const DEFAULT_RUNS_SUBDIR = 'runs';
 const DEFAULT_AGGREGATED_FILE = 'aggregated.json';
 const DEFAULT_PROPOSALS_SUBDIR = 'proposals';
 
-function getMetricsDirs(baseDir = process.cwd()) {
+function getMetricsDirs(baseDir = resolvedProjectRoot) {
   const metricsDir = path.join(baseDir, DEFAULT_METRICS_DIR);
   return {
     metricsDir,
@@ -89,13 +117,7 @@ async function selectAgentAndModel(): Promise<{ agent: AgentType; model: string 
     choices: Object.values(AGENTS).map(a => ({ name: a.displayName, value: a.name })),
   });
 
-  const agentDef = AGENTS[agentChoice];
-  const model = await select({
-    message: 'AI model:',
-    choices: agentDef.models.map(m => ({ name: m.label, value: m.value })),
-  });
-
-  return { agent: agentChoice, model };
+  return { agent: agentChoice, model: AGENTS[agentChoice].defaultModel };
 }
 
 // ── Flow: Collect metrics ─────────────────────────────────────────────────────
@@ -107,8 +129,8 @@ async function flowCollect(): Promise<void> {
   const sourceChoice = await select({
     message: 'Where is the completed project spec?',
     choices: [
-      { name: 'Active spec directory (specs/<feature-name>/)', value: 'active' },
       { name: 'Archived spec (specs--completed/<feature-name>/)', value: 'archived' },
+      { name: 'Active spec directory (specs/<feature-name>/)', value: 'active' },
       { name: 'Custom path', value: 'custom' },
     ],
   });
@@ -118,10 +140,10 @@ async function flowCollect(): Promise<void> {
 
   if (sourceChoice === 'active' || sourceChoice === 'archived') {
     const baseSubdir = sourceChoice === 'active' ? 'specs' : 'specs--completed';
-    const baseDir = path.join(process.cwd(), baseSubdir);
+    const baseDir = path.join(resolvedProjectRoot, baseSubdir);
 
     if (!fs.existsSync(baseDir)) {
-      console.log(chalk.red(`No ${baseSubdir}/ directory found in ${process.cwd()}`));
+      console.log(chalk.red(`No ${baseSubdir}/ directory found in ${resolvedProjectRoot}`));
       return;
     }
 
@@ -152,7 +174,7 @@ async function flowCollect(): Promise<void> {
   }
 
   // Detect plan2code root
-  const plan2codeRoot = detectPlan2CodeRoot() ?? process.cwd();
+  const plan2codeRoot = resolvedPlan2CodeRoot;
   const plan2codeVersion = detectPlan2CodeVersion(plan2codeRoot);
 
   const { runsDir, aggregatedPath } = getMetricsDirs();
@@ -179,7 +201,7 @@ async function flowCollect(): Promise<void> {
     console.log(chalk.bold('Collected:'));
     console.log(`  Step 1 (Plan):       ${metrics.step1_plan.present ? chalk.green('✓') : chalk.gray('—')}`);
     console.log(`  Step 2 (Document):   ${metrics.step2_document.present ? chalk.green('✓') : chalk.gray('—')}`);
-    console.log(`  Step 3 (Implement):  ${metrics.step3_implement.present ? (metrics.step3_implement.used_loop_mode ? chalk.green('✓ (loop)') : chalk.yellow('✓ (manual)')) : chalk.gray('—')}`);
+    console.log(`  Step 3 (Implement):  ${metrics.step3_implement.present ? chalk.green('✓') : chalk.gray('—')}`);
     console.log(`  Step 4 (Finalize):   ${metrics.step4_finalize.present ? chalk.green('✓') : chalk.gray('—')}`);
     console.log(`  User Feedback:       ${metrics.user_feedback ? chalk.green(`✓ (${metrics.user_feedback.overall_rating}/10)`) : chalk.gray('—')}`);
 
@@ -334,15 +356,13 @@ async function flowViewStatus(): Promise<void> {
         console.log(`    avg_verification_items:   ${metricStatus('avg_verification_items_added', cohort.avg_verification_items_added)}`);
     }
 
-    // Step 3 metrics (loop only)
-    if (cohort.loop_run_count > 0) {
-      console.log(chalk.bold(`  Step 3 (Implement) — ${cohort.loop_run_count} loop run(s):`));
+    // Step 3 metrics
+    if (cohort.avg_task_completion_rate != null || cohort.avg_blocker_count != null) {
+      console.log(chalk.bold('  Step 3 (Implement):'));
       if (cohort.avg_task_completion_rate != null)
         console.log(`    avg_task_completion_rate: ${metricStatus('avg_task_completion_rate', cohort.avg_task_completion_rate)}`);
       if (cohort.avg_blocker_count != null)
         console.log(`    avg_blocker_count:        ${metricStatus('avg_blocker_count', cohort.avg_blocker_count)}`);
-      if (cohort.avg_completion_marker_success_rate != null)
-        console.log(`    avg_marker_success_rate:  ${metricStatus('avg_completion_marker_success_rate', cohort.avg_completion_marker_success_rate)}`);
     }
 
     // Step 4 metrics
@@ -402,7 +422,7 @@ async function flowRunAnalysis(): Promise<string | null> {
   console.log(chalk.bold.cyan('── Run Analysis (Diagnose Weak Steps) ──'));
 
   const { aggregatedPath, proposalsDir } = getMetricsDirs();
-  const plan2codeRoot = detectPlan2CodeRoot() ?? process.cwd();
+  const plan2codeRoot = resolvedPlan2CodeRoot;
 
   const aggregated = loadAggregated(aggregatedPath);
   if (!aggregated || aggregated.total_runs === 0) {
@@ -460,7 +480,7 @@ async function flowGenerateProposal(): Promise<void> {
   console.log(chalk.bold.cyan('── Generate Improvement Proposal ──'));
 
   const { aggregatedPath, proposalsDir, runsDir } = getMetricsDirs();
-  const plan2codeRoot = detectPlan2CodeRoot() ?? process.cwd();
+  const plan2codeRoot = resolvedPlan2CodeRoot;
 
   // Find diagnosis files
   let diagFiles: string[] = [];
@@ -540,7 +560,7 @@ async function flowReviewAndApply(): Promise<void> {
   console.log(chalk.bold.cyan('── Review and Apply a Proposal ──'));
 
   const { proposalsDir } = getMetricsDirs();
-  const plan2codeRoot = detectPlan2CodeRoot() ?? process.cwd();
+  const plan2codeRoot = resolvedPlan2CodeRoot;
 
   if (!fs.existsSync(proposalsDir)) {
     console.log(chalk.yellow('No proposals directory found. Generate a proposal first.'));
@@ -577,6 +597,138 @@ async function flowReviewAndApply(): Promise<void> {
   });
 }
 
+// ── Flow: Delete metrics data ─────────────────────────────────────────────────
+
+async function flowDelete(): Promise<void> {
+  console.log();
+  console.log(chalk.bold.cyan('── Delete Metrics Data ──'));
+
+  const { metricsDir, runsDir, aggregatedPath, proposalsDir } = getMetricsDirs();
+
+  if (!fs.existsSync(metricsDir)) {
+    console.log(chalk.yellow('No metrics data found (.plan2code-metrics/ does not exist).'));
+    return;
+  }
+
+  const scope = await select({
+    message: 'What do you want to delete?',
+    choices: [
+      { name: 'Delete specific run(s)', value: 'select' },
+      { name: 'Delete all runs and aggregated data', value: 'runs' },
+      { name: 'Delete everything (runs, aggregated data, proposals)', value: 'all' },
+      { name: 'Cancel', value: 'cancel' },
+    ],
+  });
+
+  if (scope === 'cancel') return;
+
+  if (scope === 'select') {
+    const runs = loadRunFiles(runsDir);
+    if (runs.length === 0) {
+      console.log(chalk.yellow('No run files found.'));
+      return;
+    }
+
+    const choices = runs.map(r => ({
+      name: `${r.run_id}  ${r.project.name}  v${r.plan2code_version}`,
+      value: r.run_id,
+    }));
+
+    // Select runs one at a time since @inquirer/prompts select is single-choice
+    const toDelete: string[] = [];
+    let selecting = true;
+    while (selecting) {
+      const remaining = choices.filter(c => !toDelete.includes(c.value));
+      if (remaining.length === 0) break;
+
+      const chosen = await select({
+        message: `Select a run to delete (${toDelete.length} selected so far):`,
+        choices: [
+          ...remaining,
+          { name: toDelete.length > 0 ? `Done selecting (delete ${toDelete.length})` : 'Cancel', value: '__done__' },
+        ],
+      });
+
+      if (chosen === '__done__') {
+        selecting = false;
+      } else {
+        toDelete.push(chosen);
+        console.log(chalk.gray(`  + ${chosen}`));
+      }
+    }
+
+    if (toDelete.length === 0) return;
+
+    const confirmed = await confirm({
+      message: `Delete ${toDelete.length} run(s)? This cannot be undone.`,
+      default: false,
+    });
+    if (!confirmed) return;
+
+    let deleted = 0;
+    for (const runId of toDelete) {
+      const filePath = path.join(runsDir, `${runId}.json`);
+      try {
+        fs.unlinkSync(filePath);
+        deleted++;
+      } catch {
+        console.log(chalk.yellow(`  Could not delete ${runId}.json`));
+      }
+    }
+
+    console.log(chalk.green(`✓ Deleted ${deleted} run(s).`));
+
+    // Re-aggregate with remaining runs
+    const remainingRuns = loadRunFiles(runsDir);
+    if (remainingRuns.length > 0) {
+      aggregate(runsDir, aggregatedPath);
+      console.log(chalk.gray(`  Aggregated metrics updated (${remainingRuns.length} runs remaining).`));
+    } else {
+      try { fs.unlinkSync(aggregatedPath); } catch { /* ignore */ }
+      console.log(chalk.gray('  No runs remaining — aggregated data removed.'));
+    }
+    return;
+  }
+
+  // scope === 'runs' or 'all'
+  const label = scope === 'all'
+    ? 'ALL metrics data (runs, aggregated data, and proposals)'
+    : 'all runs and aggregated data';
+
+  const confirmed = await confirm({
+    message: `Delete ${label}? This cannot be undone.`,
+    default: false,
+  });
+  if (!confirmed) return;
+
+  // Delete run files
+  let runCount = 0;
+  if (fs.existsSync(runsDir)) {
+    const files = fs.readdirSync(runsDir).filter(f => f.endsWith('.json'));
+    for (const f of files) {
+      try { fs.unlinkSync(path.join(runsDir, f)); runCount++; } catch { /* ignore */ }
+    }
+  }
+
+  // Delete aggregated file
+  try { fs.unlinkSync(aggregatedPath); } catch { /* ignore */ }
+
+  console.log(chalk.green(`✓ Deleted ${runCount} run(s) and aggregated data.`));
+
+  if (scope === 'all') {
+    // Delete proposals
+    let proposalCount = 0;
+    if (fs.existsSync(proposalsDir)) {
+      const files = fs.readdirSync(proposalsDir);
+      for (const f of files) {
+        try { fs.unlinkSync(path.join(proposalsDir, f)); proposalCount++; } catch { /* ignore */ }
+      }
+      try { fs.rmdirSync(proposalsDir); } catch { /* ignore */ }
+    }
+    console.log(chalk.green(`✓ Deleted ${proposalCount} proposal file(s).`));
+  }
+}
+
 // ── Main menu ─────────────────────────────────────────────────────────────────
 
 export async function runCLI(): Promise<void> {
@@ -585,17 +737,57 @@ export async function runCLI(): Promise<void> {
   console.log(chalk.gray('Recursive self-improvement toolchain for plan2code contributors'));
   console.log();
 
-  // Check if we're in (or near) a plan2code repo
-  const plan2codeRoot = detectPlan2CodeRoot();
-  if (!plan2codeRoot) {
-    console.log(chalk.yellow('⚠ Could not detect plan2code repository (src/plan2code-*.md not found nearby).'));
-    console.log(chalk.gray('  Prompt version hashing and analysis will be limited.'));
-    console.log();
-  } else {
-    const version = detectPlan2CodeVersion(plan2codeRoot);
-    console.log(chalk.gray(`plan2code root: ${plan2codeRoot}  (v${version})`));
-    console.log();
+  // ── Prompt for paths ────────────────────────────────────────────────────────
+
+  const userConfig = loadUserConfig();
+  const savedRoot = userConfig.plan2codeRepoPath && fs.existsSync(userConfig.plan2codeRepoPath)
+    ? userConfig.plan2codeRepoPath
+    : null;
+  const detectedRoot = savedRoot ?? detectPlan2CodeRoot();
+
+  const s2cPath = await input({
+    message: 'Path to plan2code repo:',
+    default: detectedRoot ?? undefined,
+    validate: (v) => {
+      if (!v.trim()) return 'Path is required';
+      const resolved = path.resolve(v.trim());
+      if (!fs.existsSync(resolved)) return 'Directory not found';
+      return true;
+    },
+  });
+  resolvedPlan2CodeRoot = path.resolve(s2cPath.trim());
+
+  // Persist the path for next run
+  if (resolvedPlan2CodeRoot !== userConfig.plan2codeRepoPath) {
+    saveUserConfig({ ...userConfig, plan2codeRepoPath: resolvedPlan2CodeRoot });
   }
+
+  // Warn if the path doesn't look like a plan2code repo
+  const hasSrcPrompts =
+    fs.existsSync(path.join(resolvedPlan2CodeRoot, 'src', 'plan2code-1--plan.md')) &&
+    fs.existsSync(path.join(resolvedPlan2CodeRoot, 'src', 'plan2code-2--document.md'));
+  if (!hasSrcPrompts) {
+    console.log(chalk.yellow('⚠ No src/plan2code-*.md prompts found at that path. Hashing and analysis may be limited.'));
+  }
+
+  const projPath = await input({
+    message: 'Path to project repo (metrics source):',
+    default: process.cwd(),
+    validate: (v) => {
+      if (!v.trim()) return 'Path is required';
+      const resolved = path.resolve(v.trim());
+      if (!fs.existsSync(resolved)) return 'Directory not found';
+      return true;
+    },
+  });
+  resolvedProjectRoot = path.resolve(projPath.trim());
+
+  // Display resolved paths
+  const version = detectPlan2CodeVersion(resolvedPlan2CodeRoot);
+  console.log();
+  console.log(chalk.gray(`plan2code repo: ${resolvedPlan2CodeRoot}  (v${version})`));
+  console.log(chalk.gray(`project repo:     ${resolvedProjectRoot}`));
+  console.log();
 
   let continueLoop = true;
   while (continueLoop) {
@@ -608,6 +800,7 @@ export async function runCLI(): Promise<void> {
         { name: 'Run analysis (diagnose weak steps)', value: 'analyze' },
         { name: 'Generate improvement proposal', value: 'propose' },
         { name: 'Review and apply a proposal', value: 'apply' },
+        { name: chalk.red('Delete metrics data'), value: 'delete' },
         { name: 'Exit', value: 'exit' },
       ],
     });
@@ -630,6 +823,9 @@ export async function runCLI(): Promise<void> {
         break;
       case 'apply':
         await flowReviewAndApply();
+        break;
+      case 'delete':
+        await flowDelete();
         break;
       case 'exit':
         continueLoop = false;
