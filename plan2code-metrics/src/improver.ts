@@ -154,7 +154,7 @@ export interface ImproverResult {
 }
 
 export async function generateImprovement(opts: ImproverOptions): Promise<ImproverResult> {
-  const { diagnosisPath, plan2codeRoot, proposalsDir, runsDir, model = 'claude-opus-4-6', agent = 'claude-code' } = opts;
+  const { diagnosisPath, plan2codeRoot, proposalsDir, runsDir, model = 'default', agent = 'claude-code' } = opts;
 
   // Load diagnosis
   let diagnosisContent: string;
@@ -193,7 +193,7 @@ export async function generateImprovement(opts: ImproverOptions): Promise<Improv
   });
 
   // Invoke Claude
-  console.log(`\nInvoking AI improvement proposal (model: ${model})...`);
+  console.log(`\nInvoking AI improvement proposal (agent: ${agent}, model: ${model === 'default' ? 'user default' : model})...`);
   console.log('This may take a minute...\n');
 
   let aiResponse: string;

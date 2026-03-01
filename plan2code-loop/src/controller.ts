@@ -64,9 +64,82 @@ export class Controller {
     });
   }
 
-  private async executeIteration(prompt: string): Promise<AgentExecutionResult> {
-    const timeoutMs = this.config.timeout * 60 * 1000;
+  private computeTimeoutMs(attempt: number): number {
+    const baseMs = this.config.timeout * 60 * 1000;
+    return baseMs + (attempt * 30 * 1000);
+  }
 
+  private formatDuration(ms: number): string {
+    const totalSec = Math.round(ms / 1000);
+    const min = Math.floor(totalSec / 60);
+    const sec = totalSec % 60;
+    if (min === 0) return `${sec}s`;
+    if (sec === 0) return `${min}m`;
+    return `${min}m ${sec}s`;
+  }
+
+  private async executeWithRetry(prompt: string, iterNum: number): Promise<AgentExecutionResult | 'fatal_timeout'> {
+    const maxAttempts = (this.config.maxRetries ?? 5) + 1;
+
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      const timeoutMs = this.computeTimeoutMs(attempt);
+
+      if (attempt > 0) {
+        const prevTimeoutMs = this.computeTimeoutMs(attempt - 1);
+        logger.warning(
+          `Timed out after ${this.formatDuration(prevTimeoutMs)}, retrying (${attempt}/${maxAttempts - 1})...`
+        );
+      }
+
+      const spinnerBase = attempt > 0
+        ? `Waiting for AI Agent response (retry ${attempt}/${maxAttempts - 1})`
+        : 'Waiting for AI Agent response (please be patient)';
+      const spinner = logger.spinner(spinnerBase);
+      const startTime = Date.now();
+
+      const elapsedInterval = setInterval(() => {
+        const elapsed = Math.round((Date.now() - startTime) / 1000);
+        spinner.text = `${spinnerBase} ... (${elapsed}s)`;
+      }, 1000);
+
+      const result = await this.executeIteration(prompt, timeoutMs);
+      clearInterval(elapsedInterval);
+      spinner.stop();
+
+      // Cancelled or interrupted — return immediately, don't retry
+      if (result.cancelled || this.interrupted) {
+        return result;
+      }
+
+      // Completed (success or error exit code) — return to caller
+      if (!result.timedOut) {
+        return result;
+      }
+
+      // Timed out — retry if attempts remain, otherwise fatal
+      if (attempt < maxAttempts - 1) {
+        continue;
+      }
+
+      // All attempts exhausted
+      logger.error(
+        `Iteration ${iterNum} timed out on all ${maxAttempts} attempt${maxAttempts === 1 ? '' : 's'}. Stopping loop.`
+      );
+      const entry: IterationLogEntry = {
+        iteration: iterNum,
+        timestamp: new Date().toISOString(),
+        duration: result.duration,
+        exitCode: -1,
+        status: 'timeout',
+      };
+      await this.stateManager.appendIterationLog(entry);
+      return 'fatal_timeout';
+    }
+
+    return 'fatal_timeout'; // unreachable, satisfies TS
+  }
+
+  private async executeIteration(prompt: string, timeoutMs: number): Promise<AgentExecutionResult> {
     // Create new AbortController for this iteration
     this.abortController = new AbortController();
 
@@ -179,19 +252,21 @@ export class Controller {
       // Build prompt - simple, just spec path and iteration info
       const prompt = await this.buildPrompt();
 
-      const spinner = logger.spinner('Waiting for AI Agent response (please be patient)');
-      const startTime = Date.now();
-
-      // Update spinner with elapsed time every second
-      const elapsedInterval = setInterval(() => {
-        const elapsed = Math.round((Date.now() - startTime) / 1000);
-        spinner.text = `Waiting for AI Agent response (please be patient) ... (${elapsed}s)`;
-      }, 1000);
-
       try {
-        const result = await this.executeIteration(prompt);
-        clearInterval(elapsedInterval);
-        spinner.stop();
+        const retryResult = await this.executeWithRetry(prompt, iterNum);
+
+        if (retryResult === 'fatal_timeout') {
+          return {
+            completed: false,
+            iterations: this.config.currentIteration,
+            exitReason: 'error',
+            tasksCompleted: this.tasksCompleted,
+            prereqsCompleted: this.prereqsCompleted,
+            error: new Error(`Iteration ${iterNum} failed after all retry attempts`),
+          };
+        }
+
+        const result = retryResult;
 
         // Check if cancelled
         if (result.cancelled || this.interrupted) {
@@ -390,13 +465,8 @@ export class Controller {
         await this.stateManager.updateSpecHash(this.config.specPath);
         this.config.currentIteration++;
 
-        // Handle timeout
-        if (result.timedOut) {
-          logger.warning(`Iteration ${iterNum} timed out, continuing...`);
-        }
-
         // Handle error (but continue - LLM might recover)
-        if (result.exitCode !== 0 && !result.timedOut) {
+        if (result.exitCode !== 0) {
           // In phase mode, check if any tasks completed despite error exit code
           const hasCompletions = isPhaseMode
             ? checkForAllCompletions(result.stdout + result.stderr).tasks.length > 0

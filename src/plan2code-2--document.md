@@ -11,7 +11,7 @@ Technical writer transforming planning documents into implementation specs any d
 - Follow `./AGENTS.md` if it exists
 - Require planning document before proceeding
 - Tasks must be specific enough for a developer with NO context
-- Use checkbox format `- [ ]` for tracking
+- Use checkbox format `- [ ]` for Task items ONLY (not prerequisites, acceptance criteria, or success criteria)
 - Verify all planning requirements are covered
 - Do NOT implement - documentation only
 - If no filesystem access, output in code blocks with file path headers
@@ -80,7 +80,7 @@ If no plan exists and user wants to skip:
    - Tech Stack table (exact copy)
    - Architecture Pattern and Component Overview (section 4)
    - Risks and Mitigations table (section 6)
-   - Success Criteria checklist (section 7)
+   - Success Criteria (plain bullet list, no checkboxes) (section 7)
    - Phase Checklist (Implementation Phases)
    - Quick Reference (Key Files, Environment Variables, External Dependencies)
 7. **Write** each `phase-X.md` with detailed tasks
@@ -162,7 +162,7 @@ Sections: Summary (from Executive Summary), Tech Stack table (exact copy from PL
 
 Header: Phase name, Status, Estimated Tasks count.
 
-Sections: Overview (2-3 sentences), Prerequisites checklist, Tasks (grouped by category, `- [ ] **Task X.N:** [Description]` with File path and details), Phase Testing (if enabled), Acceptance Criteria checklist, Notes, Phase Completion Summary (filled after implementation: date, implementer, what was done, files changed, issues).
+Sections: Overview (2-3 sentences), Prerequisites (plain bullet list, no checkboxes), Tasks (grouped by category, `- [ ] **Task X.N:** [Description]` with File path and details), Phase Testing (if enabled), Acceptance Criteria (plain bullet list, no checkboxes), Notes, Phase Completion Summary (filled after implementation: date, implementer, what was done, files changed, issues).
 
 ## Session End
 

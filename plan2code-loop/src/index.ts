@@ -80,7 +80,6 @@ export async function run(): Promise<LoopResult | null> {
     logger.dim('  - config.json (session configuration)');
     logger.dim('  - scratchpad.md (LLM-managed notes)');
     logger.dim('  - iteration.log (history)');
-    logger.dim('Tip: run `plan2code-metrics` to capture run data for prompt improvement.');
 
     return loopResult;
   } finally {

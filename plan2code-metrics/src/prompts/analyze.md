@@ -35,7 +35,6 @@ The following are the current contents of the plan2code workflow prompt files be
 | avg_verification_items_added (Step 2) | ≤ 1.5 | lower is better |
 | avg_task_completion_rate (Step 3) | ≥ 0.95 | higher is better |
 | avg_blocker_count (Step 3) | ≤ 1.5 | lower is better |
-| avg_completion_marker_success_rate (Step 3) | ≥ 0.95 | higher is better |
 | avg_verification_failures_found (Step 4) | ≤ 1.0 | lower is better |
 | archival_success_rate (Step 4) | ≥ 0.99 | higher is better |
 | avg_user_rating (Feedback) | ≥ 7.0 | higher is better (1-10 scale, null if no feedback) |

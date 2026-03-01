@@ -4,7 +4,8 @@ export interface SessionConfig {
   agent: string;              // "claude-code" | "copilot-cli"
   model: string;              // Selected model
   maxIterations: number;      // 5-50
-  timeout: number;            // Minutes per iteration
+  timeout: number;            // Base timeout in minutes per iteration attempt
+  maxRetries: number;         // Max retry attempts per iteration (timeout increments by 30s each retry)
   verbose: boolean;
   specPath: string;           // Path to the spec directory
   startedAt: string;          // ISO timestamp
@@ -26,7 +27,8 @@ export type SessionState = 'new' | 'continue' | 'changed';
 
 export const DEFAULT_CONFIG: Partial<SessionConfig> = {
   maxIterations: 100,
-  timeout: 30,
+  timeout: 3,
+  maxRetries: 5,
   verbose: false,
   currentIteration: 0,
   loopMode: 'task',

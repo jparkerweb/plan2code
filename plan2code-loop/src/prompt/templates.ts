@@ -23,17 +23,18 @@ Find the FIRST unchecked task, implement ONLY that task, then STOP and report.
 2. Find the FIRST phase with an unchecked checkbox (\`- [ ]\` or \`- [/]\`)
 3. Read that phase's file (e.g., \`phase-1.md\`)
 4. Check the \`## Prerequisites\` section FIRST
-5. Find the FIRST unchecked prerequisite (\`- [ ]\`)
-   - If found, that is your task for this iteration
-   - Verify/complete it, then mark \`[x]\` or \`[?]\`
-6. Only if ALL prerequisites are complete (\`[x]\` or \`[?]\`), find the FIRST unchecked task
+5. Find the FIRST unverified prerequisite (no "VERIFIED" or "ASSUMED" annotation)
+   - If found, verify/complete it, then annotate "VERIFIED" or "ASSUMED: [reason]" inline
+6. Only if ALL prerequisites are verified or assumed, find the FIRST unchecked task (\`- [ ]\`)
 7. That is your ONE task - implement ONLY that task
 
-## Checkbox States
+## Checkbox States (Task items only)
 - \`[ ]\` = incomplete/pending (do the FIRST one you find)
 - \`[x]\` = complete (skip)
 - \`[?]\` = assumed complete, couldn't verify (skip)
 - \`[!]\` = blocked (skip)
+
+Prerequisites use plain bullets with inline annotations, not checkboxes.
 
 ## Implementation Steps
 1. Read and understand the single task
@@ -66,7 +67,10 @@ Use only when ALL phases in overview.md are marked complete.
 
 ## Scratchpad Management
 
-After completing each task, append to \`{{specPath}}/.plan2code-loop/scratchpad.md\`:
+After completing each task, add a new entry at the **bottom** of \`{{specPath}}/.plan2code-loop/scratchpad.md\`.
+Never edit, reorganize, or insert into existing content � only append new entries to the end of the file.
+
+Each entry should include:
 - Task completed and Phase item reference
 - Key decisions made and reasoning
 - Files changed
@@ -108,16 +112,18 @@ Complete each task fully before moving to the next task within the phase.
 2. Find the FIRST phase with an unchecked checkbox (\`- [ ]\` or \`- [/]\`)
 3. Read that phase's file (e.g., \`phase-1.md\`)
 4. Check the \`## Prerequisites\` section FIRST
-5. Complete ALL unchecked prerequisites (\`- [ ]\`) first, in order
-   - Verify/complete each, then mark \`[x]\` or \`[?]\`
-6. Once ALL prerequisites are complete, implement ALL unchecked tasks in order
+5. Verify ALL unverified prerequisites first, in order
+   - Annotate each "VERIFIED" or "ASSUMED: [reason]" inline
+6. Once ALL prerequisites are verified, implement ALL unchecked tasks in order
 7. Continue until every task in the phase is marked \`[x]\`
 
-## Checkbox States
+## Checkbox States (Task items only)
 - \`[ ]\` = incomplete/pending
 - \`[x]\` = complete (skip)
 - \`[?]\` = assumed complete, couldn't verify (skip)
 - \`[!]\` = blocked (skip, note in scratchpad)
+
+Prerequisites use plain bullets with inline annotations, not checkboxes.
 
 ## Implementation Steps (repeat for EACH task in the phase)
 1. Read and understand the task
@@ -139,9 +145,13 @@ git commit -m "<commit message>"
 \`\`\`
 
 **Commit message format:**
-- With JIRA ticket: Use \`-m "Task X.Y: description" -m "{{jiraTicketId}}" -m "AI Assisted"\` (three \`-m\` flags)
-- Without JIRA ticket: \`-m "Task X.Y: description" -m "AI Assisted"\` (two \`-m\` flags)
-- ALWAYS include the "AI Assisted" footer as the final \`-m\` flag
+\`\`\`
+git add -A
+git commit -m "Task X.Y: description" -m "{{jiraTicketId}}" -m "AI Assisted"
+\`\`\`
+- With JIRA ticket: three \`-m\` flags (description, ticket ID, AI Assisted)
+- Without JIRA ticket: two \`-m\` flags (description, AI Assisted)
+- ALWAYS include "AI Assisted" as the final \`-m\` flag
 
 Replace X.Y with the actual task ID and description with a concise summary of what was implemented.
 
@@ -167,7 +177,10 @@ After ALL tasks in the phase are complete (or blocked), output:
 
 ## Scratchpad Management
 
-After completing each task, append to \`{{specPath}}/.plan2code-loop/scratchpad.md\`:
+After completing each task, add a new entry at the **bottom** of \`{{specPath}}/.plan2code-loop/scratchpad.md\`.
+Never edit, reorganize, or insert into existing content � only append new entries to the end of the file.
+
+Each entry should include:
 - Task completed and Phase item reference
 - Key decisions made and reasoning
 - Files changed

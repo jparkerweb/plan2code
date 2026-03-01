@@ -294,6 +294,16 @@ const LOCAL_DESTINATIONS = [
     ].join('\n')
   },
   {
+    name: 'Pi Prompts',
+    dir: '.pi/prompts',
+    filePattern: (prompt) => generateFilename(prompt, '.md'),
+    header: (prompt) => [
+      '---',
+      `description: "Plan2Code ${prompt.stepNumber === 'init' ? 'Init' : `Step ${prompt.stepNumber}`}: ${prompt.displayName} - ${prompt.description}"`,
+      '---'
+    ].join('\n')
+  },
+  {
     name: 'Claude Code Skills',
     dir: '.claude/skills',
     type: 'skill',
@@ -372,6 +382,16 @@ const GLOBAL_DESTINATIONS = [
   {
     name: 'Codeium (Global)',
     dir: '.codeium/global_workflows',
+    filePattern: (prompt) => generateFilename(prompt, '.md'),
+    header: (prompt) => [
+      '---',
+      `description: "Plan2Code ${prompt.stepNumber === 'init' ? 'Init' : `Step ${prompt.stepNumber}`}: ${prompt.displayName} - ${prompt.description}"`,
+      '---'
+    ].join('\n')
+  },
+  {
+    name: 'Pi (Global)',
+    dir: '.pi/agent/prompts',
     filePattern: (prompt) => generateFilename(prompt, '.md'),
     header: (prompt) => [
       '---',
@@ -564,6 +584,13 @@ const INSTALL_TARGETS = [
     dir: '.gemini/commands',
     type: 'toml',
     filePattern: /^plan2code-.*\.toml$/,
+    icon: '◉ '
+  },
+  {
+    name: 'Pi',
+    id: 'pi',
+    dir: '.pi/agent/prompts',
+    filePattern: /^plan2code-.*\.md$/,
     icon: '◉ '
   }
 ];
@@ -1299,6 +1326,7 @@ function displayLocalInstructions() {
     { name: 'Continue', dir: '.continue/prompts/', desc: 'Prompts for Continue extension' },
     { name: 'Windsurf', dir: '.windsurf/workflows/', desc: 'Workflows for Windsurf' },
     { name: 'Codeium (IntelliJ)', dir: '.codeium/global_workflows/', desc: 'Codeium global workflows' },
+    { name: 'Pi', dir: '.pi/prompts/', desc: 'Prompt templates for pi.dev coding agent' },
   ];
 
   localDirs.forEach((item, i) => {

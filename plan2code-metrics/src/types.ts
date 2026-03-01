@@ -41,17 +41,10 @@ export interface Step2DocumentMetrics {
 
 export interface Step3ImplementMetrics {
   present: boolean;
-  used_loop_mode: boolean;
-  loop_mode: 'task' | 'phase' | null;
   task_completion_rate: number | null;
   tasks_completed: number | null;
   tasks_total: number | null;
   blocker_count: number | null;
-  blocker_categories: string[] | null;
-  total_iterations: number | null;
-  avg_iteration_duration_ms: number | null;
-  exit_code_distribution: Record<string, number> | null;
-  completion_marker_success_rate: number | null;
 }
 
 export interface Step4FinalizeMetrics {
@@ -132,13 +125,9 @@ export interface CohortMetrics {
   avg_requirement_coverage_percent: number | null;
   avg_verification_items_added: number | null;
 
-  // Step 3 averages (loop only)
-  loop_run_count: number;
+  // Step 3 averages
   avg_task_completion_rate: number | null;
   avg_blocker_count: number | null;
-  avg_total_iterations: number | null;
-  avg_iteration_duration_ms: number | null;
-  avg_completion_marker_success_rate: number | null;
 
   // Step 4 averages
   avg_completion_rate_at_audit: number | null;
@@ -168,7 +157,6 @@ export const METRIC_TARGETS = {
   avg_verification_items_added: { target: 1.5, direction: 'lte' as const },
   avg_task_completion_rate: { target: 0.95, direction: 'gte' as const },
   avg_blocker_count: { target: 1.5, direction: 'lte' as const },
-  avg_completion_marker_success_rate: { target: 0.95, direction: 'gte' as const },
   avg_verification_failures_found: { target: 1.0, direction: 'lte' as const },
   archival_success_rate: { target: 0.99, direction: 'gte' as const },
   avg_user_rating: { target: 7.0, direction: 'gte' as const },

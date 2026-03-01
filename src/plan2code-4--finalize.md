@@ -48,7 +48,8 @@ Complete steps in order. Report progress after each.
 **Objective:** Verify all tasks across all phases completed.
 
 1. Open each `phase-X.md` file
-2. Verify each task status:
+2. Count only `**Task X.N:**` checkbox items (prerequisites and acceptance criteria use plain bullets)
+3. Verify each task status:
 
 | Status | Meaning | Action |
 |--------|---------|--------|
@@ -298,9 +299,6 @@ specs--completed/
 > All tasks finished.
 > Specs archived to `specs--completed/<feature-name>/`.
 > Thank you for using the Plan2Code workflow!
-
-### Metrics Capture (Contributors)
-To help improve plan2code's prompts, run `plan2code-metrics` in the project root.
 
 ### Handling Incomplete Implementations
 

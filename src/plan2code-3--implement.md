@@ -51,12 +51,16 @@ Do not proceed without successfully reading overview.md and determining the next
 | `[x]` | Complete | Finished and approved |
 | `[?]` | Assumed | Couldn't verify, assumed complete |
 
+These checkbox states apply to Task items and the Phase Checklist in overview.md only. Prerequisites and Acceptance Criteria use plain bullets.
+
 **Transitions:**
 - `[ ]` -> `[/]`: Agent STARTS phase
 - `[/]` -> `[x]`: User APPROVES completed phase
 - `[/]` stays `[/]`: On abort (preserves resume capability)
 
 Never reset `[/]` to `[ ]`. Started work stays marked for conscious resume decisions.
+
+**Disk Write Rule:** Write task completion status (`[x]`) to `phase-X.md` on disk immediately after each task — never batch status updates. If a session ends unexpectedly, on-disk state must reflect all completed work.
 
 ## Parallel Phase Selection
 
@@ -102,17 +106,17 @@ State: `⚡ [PHASE X: Phase Name] - Marking in-progress and starting`
 
 ### 2. Verify Prerequisites
 
-Process Prerequisites section in order:
+Process Prerequisites section in order. Prerequisites use plain bullets (no checkboxes).
 
-For each unchecked (`[ ]`) prerequisite:
-- **Verifiable:** Check condition -> mark `[x]`
-- **Actionable:** Complete action -> mark `[x]`
-- **Cannot verify:** Mark `[?]` with assumption note
-- **Blocked:** Mark `[!]` with reason, STOP phase
+For each prerequisite:
+- **Verifiable:** Check condition, note "VERIFIED" inline
+- **Actionable:** Complete action, note "VERIFIED" inline
+- **Cannot verify:** Note "ASSUMED: [reason]" inline
+- **Blocked:** Note "BLOCKED: [reason]" inline, STOP phase
 
-Proceed only when ALL prerequisites are `[x]` or `[?]`.
+Proceed only when all prerequisites are verified or assumed.
 
-If any `[!]`, STOP and inform user.
+If any blocked, STOP and inform user.
 
 ### 3. Implement Tasks Sequentially
 
@@ -195,7 +199,7 @@ Sections: Summary (2-3 sentences), Tasks Completed (Y/Z + blocked list), Test Re
 On user "approved":
 1. Mark `[/]` → `[x]` in overview.md, update phase-X.md status to "Complete"
 2. Show Planny art with completion message
-3. Provide: `git add -A && git commit -m "Complete Phase X: [Phase Name]" -m "AI Assisted"`
+3. Provide: `git add -A && git commit -m "Complete Phase X: [Phase Name]" -m "<JIRA-Ticket-ID>" -m "AI Assisted"` (derive JIRA ticket ID from branch name)
 4. **If more phases:** "NEXT STEP: Start NEW conversation and run: `/plan2code-3--implement`"
 5. **If final phase:** "NEXT STEP: Start NEW conversation and run: `/plan2code-4--finalize`"
 6. Mention `/plan2code-1b--revise` option

@@ -57,12 +57,12 @@ export interface AnalyzerOptions {
   aggregatedPath: string;    // Path to aggregated.json
   plan2codeRoot: string;     // Path to plan2code repo root
   proposalsDir: string;      // Where to save diagnosis output
-  model?: string;            // AI model to use (default: claude-opus-4-6)
+  model?: string;            // AI model to use (default: agent's default)
   agent?: AgentType;         // Agent to use (default: claude-code)
 }
 
 export async function runAnalysis(opts: AnalyzerOptions): Promise<string> {
-  const { aggregatedPath, plan2codeRoot, proposalsDir, model = 'claude-opus-4-6', agent = 'claude-code' } = opts;
+  const { aggregatedPath, plan2codeRoot, proposalsDir, model = 'default', agent = 'claude-code' } = opts;
 
   // Load aggregated metrics
   let aggregated: AggregatedMetrics | null = null;
@@ -102,7 +102,7 @@ export async function runAnalysis(opts: AnalyzerOptions): Promise<string> {
   });
 
   // Invoke Claude
-  console.log(`\nInvoking AI analysis (model: ${model})...`);
+  console.log(`\nInvoking AI analysis (agent: ${agent}, model: ${model === 'default' ? 'user default' : model})...`);
   console.log('This may take a minute...\n');
 
   let diagnosisContent: string;
