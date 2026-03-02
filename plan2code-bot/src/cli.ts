@@ -11,7 +11,7 @@ import type { BotConfig, BotMode, BotState, StepName, StepResult } from './types
 
 const BANNER = `
   ╔══════════════════════════════════════╗
-  ║         plan2code-bot  v1.0.0        ║
+  ║         plan2code-bot  v1.1.0        ║
   ║   Autonomous Workflow Test Runner    ║
   ╚══════════════════════════════════════╝
 `;
