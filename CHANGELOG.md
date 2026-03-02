@@ -2,6 +2,22 @@
 
 All notable changes to Plan2Code will be documented in this file.
 
+## v1.11.0
+
+### ✨ Added
+
+- **plan2code-bot** — New autonomous workflow test runner (`plan2code-bot/`) that uses the Claude Agent SDK to simulate a human running the entire plan2code workflow end-to-end
+  - Two auto-detected modes: **new-project** (generates an app idea, creates a subdirectory, runs init through finalize) and **enhancement** (scans existing codebase, proposes a realistic enhancement)
+  - `--idea` flag to seed the idea generator with a specific concept
+  - `--resume` flag to continue incomplete runs from saved state — skips previously succeeded steps and restores idea, config, and implement pass counter
+  - State file (`.plan2code-bot-state.json`) saved after each step; automatically deleted on full success, preserved on failure for later resume
+  - Resume auto-detects state files in current directory (enhancement mode) or immediate subdirectories (new-project mode)
+  - Artifact validation after each step (aborts on missing expected outputs)
+  - Auto-responder handles `AskUserQuestion` prompts autonomously (approvals, testing gates, name questions)
+  - Bot-friendly skill installation (copies plan2code skills with `disable-model-invocation` stripped)
+  - Implement step loops up to 10 passes until all phases are complete
+  - Installer integration: `C > B` menu option to install bot CLI only
+
 ## v1.10.0
 
 ### ✨ Added
