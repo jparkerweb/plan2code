@@ -1405,8 +1405,10 @@ function runInteractive() {
       console.log('');
       const metricsResult = installPlan2CodeMetrics();
       console.log('');
+      const botResult = installPlan2CodeBot();
+      console.log('');
       const installResult = install();
-      const exitCode = loopResult !== 0 ? loopResult : metricsResult !== 0 ? metricsResult : installResult;
+      const exitCode = loopResult !== 0 ? loopResult : metricsResult !== 0 ? metricsResult : botResult !== 0 ? botResult : installResult;
       process.exit(exitCode);
     }
 
@@ -1430,7 +1432,8 @@ function runInteractive() {
         const uninstallResult = uninstallFiles();
         const loopResult = uninstallPlan2CodeLoop();
         const metricsResult = uninstallPlan2CodeMetrics();
-        const exitCode = uninstallResult !== 0 ? uninstallResult : loopResult !== 0 ? loopResult : metricsResult;
+        const botResult = uninstallPlan2CodeBot();
+        const exitCode = uninstallResult !== 0 ? uninstallResult : loopResult !== 0 ? loopResult : metricsResult !== 0 ? metricsResult : botResult;
         process.exit(exitCode);
       } else {
         console.log(`\n${COLORS.YELLOW}${SYMBOLS.WARNING} CANCELLED${COLORS.RESET}\n`);
@@ -1448,10 +1451,11 @@ function runInteractive() {
       console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET}  ${COLORS.BRIGHT}L.${COLORS.RESET}  ${COLORS.BLUE}LOCAL${COLORS.RESET}      Show local (project) install instructions`, 65) + `${COLORS.CYAN}║${COLORS.RESET}`);
       console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET}  ${COLORS.BRIGHT}O.${COLORS.RESET}  ${COLORS.GREEN}LOOP CLI${COLORS.RESET}   Install plan2code-loop CLI only`, 65) + `${COLORS.CYAN}║${COLORS.RESET}`);
       console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET}  ${COLORS.BRIGHT}M.${COLORS.RESET}  ${COLORS.GREEN}METRICS${COLORS.RESET}    Install plan2code-metrics CLI only`, 65) + `${COLORS.CYAN}║${COLORS.RESET}`);
+      console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET}  ${COLORS.BRIGHT}B.${COLORS.RESET}  ${COLORS.GREEN}BOT${COLORS.RESET}        Install plan2code-bot CLI only`, 65) + `${COLORS.CYAN}║${COLORS.RESET}`);
       console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET}  ${COLORS.BRIGHT}Q.${COLORS.RESET}  ${COLORS.DIM}BACK${COLORS.RESET}       Return to main menu`, 65) + `${COLORS.CYAN}║${COLORS.RESET}`);
       console.log(`${COLORS.CYAN}╚════════════════════════════════════════════════════════════════╝${COLORS.RESET}`);
       console.log('');
-      const customAnswer = await question(`${COLORS.CYAN}${SYMBOLS.SELECT} SELECT OPTION${COLORS.RESET} (L, O, M, Q) [Q]: `);
+      const customAnswer = await question(`${COLORS.CYAN}${SYMBOLS.SELECT} SELECT OPTION${COLORS.RESET} (L, O, M, B, Q) [Q]: `);
       const customInput = customAnswer.trim().toUpperCase() || 'Q';
 
       // Task 2.6: C > L — show local install instructions
@@ -1471,6 +1475,13 @@ function runInteractive() {
       if (customInput === 'M') {
         rl.close();
         const result = installPlan2CodeMetrics();
+        process.exit(result);
+      }
+
+      // C > B — install bot CLI only
+      if (customInput === 'B') {
+        rl.close();
+        const result = installPlan2CodeBot();
         process.exit(result);
       }
 
@@ -2009,6 +2020,249 @@ function uninstallPlan2CodeMetrics() {
 
   console.log('');
   console.log(`${COLORS.GREEN}${SYMBOLS.SUCCESS} plan2code-metrics uninstalled${COLORS.RESET}`);
+  console.log('');
+
+  return 0;
+}
+
+// ============================================================================
+// PLAN2CODE-BOT INSTALLATION
+// ============================================================================
+
+/**
+ * Build plan2code-bot package
+ */
+function buildPlan2CodeBot() {
+  const botDir = path.join(__dirname, 'plan2code-bot');
+
+  if (!fs.existsSync(botDir)) {
+    console.log(`${COLORS.YELLOW}${SYMBOLS.WARNING}${COLORS.RESET} plan2code-bot directory not found`);
+    return false;
+  }
+
+  console.log(`${COLORS.CYAN}${SYMBOLS.ACTIVE} Building plan2code-bot...${COLORS.RESET}`);
+
+  try {
+    console.log(`  ${COLORS.DIM}Installing dependencies...${COLORS.RESET}`);
+    execSync('npm install', { cwd: botDir, stdio: 'pipe' });
+
+    console.log(`  ${COLORS.DIM}Running build...${COLORS.RESET}`);
+    execSync('npm run build', { cwd: botDir, stdio: 'pipe' });
+
+    console.log(`  ${COLORS.GREEN}${SYMBOLS.SUCCESS}${COLORS.RESET} Build complete`);
+    return true;
+  } catch (error) {
+    console.log(`  ${COLORS.RED}${SYMBOLS.ERROR}${COLORS.RESET} Build failed: ${error.message}`);
+    return false;
+  }
+}
+
+/**
+ * Clean up existing plan2code-bot symlinks/files before creating new ones
+ */
+function cleanupExistingBotSymlinks() {
+  console.log(`  ${COLORS.DIM}Cleaning up existing symlinks...${COLORS.RESET}`);
+
+  try {
+    const npmPrefix = execSync('npm config get prefix', { encoding: 'utf8' }).trim();
+    const npmBinGlobal = process.platform === 'win32' ? npmPrefix : path.join(npmPrefix, 'bin');
+    const npmRootGlobal = path.join(npmPrefix, 'node_modules');
+
+    const binFiles = [
+      path.join(npmBinGlobal, 'plan2code-bot'),
+      path.join(npmBinGlobal, 'plan2code-bot.cmd'),
+      path.join(npmBinGlobal, 'plan2code-bot.ps1')
+    ];
+
+    const nodeModulesLink = path.join(npmRootGlobal, 'plan2code-bot');
+
+    for (const file of binFiles) {
+      try {
+        const stats = fs.lstatSync(file);
+        if (stats) {
+          fs.unlinkSync(file);
+          console.log(`    ${COLORS.DIM}Removed: ${path.basename(file)}${COLORS.RESET}`);
+        }
+      } catch (err) {
+        if (err.code !== 'ENOENT') {
+          try {
+            fs.rmSync(file, { force: true, recursive: true });
+            console.log(`    ${COLORS.DIM}Removed: ${path.basename(file)}${COLORS.RESET}`);
+          } catch (rmErr) {
+            console.log(`    ${COLORS.DIM}Could not remove: ${path.basename(file)}${COLORS.RESET}`);
+          }
+        }
+      }
+    }
+
+    try {
+      const stats = fs.lstatSync(nodeModulesLink);
+      if (stats) {
+        if (process.platform === 'win32') {
+          try {
+            fs.rmdirSync(nodeModulesLink);
+            console.log(`    ${COLORS.DIM}Removed: node_modules/plan2code-bot (junction)${COLORS.RESET}`);
+          } catch (rmdirErr) {
+            fs.rmSync(nodeModulesLink, { force: true, recursive: true });
+            console.log(`    ${COLORS.DIM}Removed: node_modules/plan2code-bot${COLORS.RESET}`);
+          }
+        } else {
+          fs.rmSync(nodeModulesLink, { force: true, recursive: true });
+          console.log(`    ${COLORS.DIM}Removed: node_modules/plan2code-bot${COLORS.RESET}`);
+        }
+      }
+    } catch (err) {
+      if (err.code !== 'ENOENT') {
+        console.log(`    ${COLORS.DIM}Could not remove node_modules symlink: ${err.message}${COLORS.RESET}`);
+      }
+    }
+
+    return true;
+  } catch (error) {
+    console.log(`    ${COLORS.DIM}Cleanup skipped: ${error.message}${COLORS.RESET}`);
+    return true;
+  }
+}
+
+/**
+ * Create global symlink for plan2code-bot
+ */
+function createBotGlobalSymlink() {
+  const botDir = path.join(__dirname, 'plan2code-bot');
+  const distBin = path.join(botDir, 'dist', 'bin', 'plan2code-bot.js');
+
+  if (!fs.existsSync(distBin)) {
+    console.log(`${COLORS.YELLOW}${SYMBOLS.WARNING}${COLORS.RESET} plan2code-bot binary not found. Run build first.`);
+    return false;
+  }
+
+  console.log(`${COLORS.CYAN}${SYMBOLS.ACTIVE} Creating global symlink...${COLORS.RESET}`);
+
+  cleanupExistingBotSymlinks();
+
+  if (process.platform === 'win32') {
+    try {
+      const npmPrefix = execSync('npm config get prefix', { encoding: 'utf8' }).trim();
+      const symlinkCmd = path.join(npmPrefix, 'plan2code-bot.cmd');
+      const symlinkPs1 = path.join(npmPrefix, 'plan2code-bot.ps1');
+
+      const batchContent = `@echo off\r\nnode "${distBin}" %*\r\n`;
+      fs.writeFileSync(symlinkCmd, batchContent);
+      console.log(`  ${COLORS.GREEN}${SYMBOLS.SUCCESS}${COLORS.RESET} Created: plan2code-bot.cmd`);
+
+      const ps1Content = `#!/usr/bin/env pwsh\r\nnode "${distBin}" $args\r\n`;
+      fs.writeFileSync(symlinkPs1, ps1Content);
+      console.log(`  ${COLORS.GREEN}${SYMBOLS.SUCCESS}${COLORS.RESET} Created: plan2code-bot.ps1`);
+
+      console.log(`  ${COLORS.DIM}Run 'plan2code-bot' from any directory${COLORS.RESET}`);
+      return true;
+    } catch (error) {
+      console.log(`  ${COLORS.RED}${SYMBOLS.ERROR}${COLORS.RESET} Failed to create wrappers: ${error.message}`);
+      return false;
+    }
+  }
+
+  try {
+    execSync('npm link', { cwd: botDir, stdio: 'pipe' });
+    console.log(`  ${COLORS.GREEN}${SYMBOLS.SUCCESS}${COLORS.RESET} Global symlink created`);
+    console.log(`  ${COLORS.DIM}Run 'plan2code-bot' from any directory${COLORS.RESET}`);
+    return true;
+  } catch (error) {
+    console.log(`  ${COLORS.RED}${SYMBOLS.ERROR}${COLORS.RESET} Symlink failed: ${error.message}`);
+    return false;
+  }
+}
+
+/**
+ * Remove global symlink for plan2code-bot
+ */
+function removeBotGlobalSymlink() {
+  console.log(`${COLORS.CYAN}${SYMBOLS.ACTIVE} Removing global symlink...${COLORS.RESET}`);
+
+  let removedCount = 0;
+
+  try {
+    const npmPrefix = execSync('npm config get prefix', { encoding: 'utf8' }).trim();
+    const npmBinGlobal = process.platform === 'win32' ? npmPrefix : path.join(npmPrefix, 'bin');
+    const npmRootGlobal = path.join(npmPrefix, 'node_modules');
+
+    const filesToRemove = [
+      { path: path.join(npmBinGlobal, 'plan2code-bot'), name: 'plan2code-bot' },
+      { path: path.join(npmBinGlobal, 'plan2code-bot.cmd'), name: 'plan2code-bot.cmd' },
+      { path: path.join(npmBinGlobal, 'plan2code-bot.ps1'), name: 'plan2code-bot.ps1' },
+      { path: path.join(npmRootGlobal, 'plan2code-bot'), name: 'node_modules/plan2code-bot' }
+    ];
+
+    for (const file of filesToRemove) {
+      try {
+        fs.lstatSync(file.path);
+        try {
+          fs.rmdirSync(file.path);
+          console.log(`  ${COLORS.GREEN}${SYMBOLS.SUCCESS}${COLORS.RESET} Removed: ${file.name}`);
+          removedCount++;
+        } catch (rmdirErr) {
+          try {
+            fs.unlinkSync(file.path);
+            console.log(`  ${COLORS.GREEN}${SYMBOLS.SUCCESS}${COLORS.RESET} Removed: ${file.name}`);
+            removedCount++;
+          } catch (unlinkErr) {
+            fs.rmSync(file.path, { force: true, recursive: true });
+            console.log(`  ${COLORS.GREEN}${SYMBOLS.SUCCESS}${COLORS.RESET} Removed: ${file.name}`);
+            removedCount++;
+          }
+        }
+      } catch (err) {
+        // File doesn't exist, skip it
+      }
+    }
+
+    if (removedCount === 0) {
+      console.log(`  ${COLORS.DIM}${SYMBOLS.INFO} No files found to remove${COLORS.RESET}`);
+    }
+
+    return true;
+  } catch (error) {
+    console.log(`  ${COLORS.RED}${SYMBOLS.ERROR}${COLORS.RESET} Uninstall failed: ${error.message}`);
+    return false;
+  }
+}
+
+/**
+ * Install plan2code-bot (build + symlink)
+ */
+function installPlan2CodeBot() {
+  displaySectionHeader('PLAN2CODE-BOT', '[ BUILD & INSTALL ]');
+
+  const buildSuccess = buildPlan2CodeBot();
+  if (!buildSuccess) {
+    return 1;
+  }
+
+  const symlinkSuccess = createBotGlobalSymlink();
+  if (!symlinkSuccess) {
+    return 1;
+  }
+
+  console.log('');
+  console.log(`${COLORS.GREEN}${SYMBOLS.SUCCESS} plan2code-bot installed successfully!${COLORS.RESET}`);
+  console.log('');
+  console.log(`${COLORS.CYAN}Usage:${COLORS.RESET}`);
+  console.log(`  ${COLORS.BRIGHT}plan2code-bot${COLORS.RESET}           Run autonomous workflow test`);
+  console.log('');
+
+  return 0;
+}
+
+/**
+ * Uninstall plan2code-bot
+ */
+function uninstallPlan2CodeBot() {
+  displaySectionHeader('PLAN2CODE-BOT', '[ UNINSTALL ]');
+
+  removeBotGlobalSymlink();
+
+  console.log('');
+  console.log(`${COLORS.GREEN}${SYMBOLS.SUCCESS} plan2code-bot uninstalled${COLORS.RESET}`);
   console.log('');
 
   return 0;

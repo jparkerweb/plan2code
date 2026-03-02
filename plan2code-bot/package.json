@@ -1,0 +1,36 @@
+{
+  "name": "plan2code-bot",
+  "version": "1.0.0",
+  "description": "Plan2Code Bot - Autonomous workflow runner for testing plan2code end-to-end",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "plan2code-bot": "./dist/bin/plan2code-bot.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "start": "node dist/bin/plan2code-bot.js",
+    "test": "vitest run",
+    "prepublishOnly": "npm run build"
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.2.63",
+    "chalk": "^5.6.2",
+    "fs-extra": "^11.3.3",
+    "ora": "^9.0.0"
+  },
+  "devDependencies": {
+    "@types/fs-extra": "^11.0.4",
+    "@types/node": "^25.0.3",
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.18"
+  }
+}
