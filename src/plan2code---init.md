@@ -16,8 +16,7 @@ Analyze this codebase and create `AGENTS.md` to guide future AI coding agents (C
 
 1. **Commands**: Build, lint, test, run single test, and other common development tasks
 2. **Architecture**: High-level "big picture" structure requiring multi-file context to understand
-3. **Git Commit Messages**: All commits must follow this format: `<description>\n\n<JIRA-Ticket-ID>\nAI Assisted`. Derive the JIRA ticket ID from the current branch name — the format is `<prefix>/<TICKET-ID>-description` where the ticket ID is an uppercase project key, hyphen, and integer (e.g., `ABC-10968`). The ticket ID and `AI Assisted` go on consecutive lines after a blank line.
-4. **How to Use This File**: A short paragraph explaining that sections below contain brief summaries and agents should follow the markdown links to `.agents-docs/` for full details — only read what's relevant to the current task.
+3. **How to Use This File**: A short paragraph explaining that sections below contain brief summaries and agents should follow the markdown links to `.agents-docs/` for full details — only read what's relevant to the current task.
 
 ## Rules
 
@@ -53,7 +52,6 @@ Generate AGENTS.md as an **index file** — each section gets a 2-3 line summary
 
 These sections must remain fully inline in AGENTS.md (never split to separate files):
 - Project Overview
-- Git Commit Messages
 - How to Use This File
 
 ### Directory Setup

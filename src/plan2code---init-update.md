@@ -42,24 +42,6 @@ Section files:
 
 Wait for user response before continuing. If user accepts, restructure existing content: create `.agents-docs/` directory with section files, convert AGENTS.md to index with summaries and links. Always-inline sections (Project Overview, Git Commit Messages, How to Use This File) stay in AGENTS.md. If user declines, continue with single-file editing.
 
-### Git Commit Messages Audit
-
-Check AGENTS.md for a `## Git Commit Messages` section describing this format:
-```
-<description>
-
-<JIRA-Ticket-ID>
-AI Assisted
-```
-Required rules:
-1. **JIRA ticket ID from branch** — derive from branch name format `<prefix>/<TICKET-ID>-description` (uppercase project key + hyphen + integer, e.g., `ABC-10968`)
-2. **AI Assisted footer** — always the last line, on its own line directly after the ticket ID
-
-If the section is missing or either rule is absent, flag it:
-> "Your Git Commit Messages section is missing [missing items]. Want me to add them?"
-
-If user confirms, add/update the section before proceeding. If user declines, continue.
-
 Proceed to Step 2.
 
 ---

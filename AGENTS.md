@@ -44,23 +44,6 @@ Language/toolchain conventions for `install.js` vs TypeScript packages, and pitf
 
 Details: [Code Style & Gotchas](./.agents-docs/AGENTS-code-style.md)
 
-## Git Commit Messages
-
-- **Commit message format:**
-  ```
-  <description of what this commit is about>
-
-  <JIRA-Ticket-ID>
-  AI Assisted
-  ```
-- **JIRA ticket ID:** Derive the ticket ID from the current branch name. The branch format is `<prefix>/<TICKET-ID>-description`, where the ticket ID is an uppercase project key followed by a hyphen and integer (e.g., `ABC-10968`, `ABC-123`).
-- **AI Assisted footer:** Always the last line of every commit message.
-- **Commit paths:** This is enforced across all commit surfaces:
-  - Loop task mode: `createTaskCommit()` in `plan2code-loop/src/utils/git.ts` appends the footer automatically
-  - Loop phase mode: Prompt template instructs the LLM to follow the format above
-  - Implement mode: User-facing commit suggestions in `src/plan2code-3--implement.md` follow the format above
-- **Init workflow:** `src/plan2code---init.md` generates AGENTS.md files with a Git Commit Messages section that includes this convention by default
-
 ## Mascot
 
 The project has a mascot called "Planny" - an ASCII art robot that appears in installer output and workflow prompts. Mascot variants are defined in `MASCOT` constant in `install.js` and appear in workflow markdown files.
