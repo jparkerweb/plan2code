@@ -221,7 +221,14 @@ State assessment and ask user to confirm.
 1. Save PLAN-CONVERSATION (see template below) — transcript + decision summary tables
 2. Create PLAN-DRAFT (see template below) using same date
 3. Verify: re-read conversation as source of truth, cross-reference against PLAN-DRAFT sections (Reqs→2.1/2.2, Tech→3, Architecture→4, Risks→6, Assumptions→9, Criteria→7). Add gaps with `<!-- VERIFICATION -->` comments. Output verification summary table.
-4. Append `## Planning Metrics` to PLAN-DRAFT with these exact fields: `confidence: [0-100]`, `clarification_rounds: [N]`, `functional_requirements_count: [N]`, `non_functional_requirements_count: [N]`, `risk_count: [N]`, `phase_count: [N]`, `verification_gaps_found: [N]`. Use exact field names — the metrics pipeline parses this section.
+4. Append `## Planning Metrics` to PLAN-DRAFT with a `<!-- METRICS_JSON {...} -->` HTML comment. The metrics pipeline parses this — use exact format:
+
+```
+## Planning Metrics
+<!-- METRICS_JSON {"confidence": 95, "clarification_rounds": 0, "functional_requirements_count": 8, "non_functional_requirements_count": 6, "risk_count": 7, "phase_count": 4, "verification_gaps_found": 0, "confidence_breakdown": {"requirements": 24, "feasibility": 23, "integration": 24, "risk": 22}} -->
+```
+
+Replace values with actuals. Optionally add plain `key: value` lines below for readability (no bold/markdown).
 
 ## Templates
 
@@ -275,20 +282,11 @@ When complete (PLAN-DRAFT created), tell user:
 > `/plan2code-2--document`
 > ```"
 
-## Abort Handling
+## Abort / Recovery
 
-If user says "abort", "cancel", "start over":
-1. Confirm: "Abort planning? Progress will not be saved."
-2. If confirmed, state files created that may need cleanup
-3. Stop workflow
-
-## Recovery
-
-| Issue | Solution |
-|-------|----------|
-| Lost context | Attach PLAN-DRAFT, state phase |
-| Unclear answers | One follow-up, max 3 rounds |
-| Confidence stuck <90% | List blockers, ask targeted questions |
+- **Abort:** Confirm with user, list files needing cleanup, stop workflow
+- **Lost context:** Attach PLAN-DRAFT, state phase
+- **Confidence stuck <90%:** List blockers, ask targeted questions
 
 ## Reminders
 
@@ -296,5 +294,5 @@ If user says "abort", "cancel", "start over":
 - Do NOT implement - design and present plan only
 - Responses start with: `🤔 [PLANNING PHASE X: Name]`
 - **Workflow:** Plan -> Document -> Implement -> Finalize. After planning: `/plan2code-2--document`
-- Save conversation log (7A) before PLAN-DRAFT (7B)
+- Save conversation log (7A) before PLAN-DRAFT (7B), run verification (7C) after
 - Run verification (7C) after PLAN-DRAFT - conversation log is source of truth
