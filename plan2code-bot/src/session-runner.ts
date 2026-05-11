@@ -1,12 +1,14 @@
 import { query } from '@anthropic-ai/claude-agent-sdk';
-import { createAutoResponder } from './auto-responder.js';
-import type { BotConfig, StepName } from './types.js';
+import { createIntelligentResponder } from './intelligent-responder.js';
+import type { BotConfig, ExecutionObservation, StepName } from './types.js';
+import type { ObservationCollector } from './observation-collector.js';
 
 export interface SessionOptions {
   prompt: string;
   config: BotConfig;
   step: StepName;
   maxTurns?: number;
+  collector: ObservationCollector;
 }
 
 export interface SessionResult {
@@ -14,10 +16,11 @@ export interface SessionResult {
   output: string;
   success: boolean;
   duration: number;
+  observations: ExecutionObservation;
 }
 
 export async function runSession(options: SessionOptions): Promise<SessionResult> {
-  const { prompt, config, step, maxTurns = 50 } = options;
+  const { prompt, config, step, maxTurns = 50, collector } = options;
   const startTime = Date.now();
   let output = '';
   let sessionId: string | null = null;
@@ -30,18 +33,30 @@ export async function runSession(options: SessionOptions): Promise<SessionResult
         maxTurns,
         permissionMode: 'bypassPermissions',
         allowDangerouslySkipPermissions: true,
-        canUseTool: createAutoResponder(config, step),
+        canUseTool: createIntelligentResponder(config, step, collector),
         systemPrompt: { type: 'preset', preset: 'claude_code' },
-        settingSources: ['user', 'project'],
+        settingSources: ['project'],
       },
     });
 
     for await (const message of session) {
+      // Record all messages for observations
+      collector.recordMessage(message);
+
       if (message.type === 'assistant') {
         sessionId = message.session_id ?? sessionId;
         for (const block of message.message.content) {
           if (block.type === 'text') {
             output += block.text + '\n';
+          } else if (block.type === 'tool_use') {
+            // Capture tool invocations from the message stream as a fallback
+            // in case canUseTool doesn't fire (e.g., Skill sub-sessions)
+            collector.recordToolUse(
+              block.name,
+              block.input as Record<string, unknown>,
+              undefined,
+              true
+            );
           }
         }
       } else if (message.type === 'result') {
@@ -51,10 +66,12 @@ export async function runSession(options: SessionOptions): Promise<SessionResult
 
     const duration = Date.now() - startTime;
     const hasOutput = output.trim().length > 0;
-    return { sessionId, output, success: hasOutput, duration };
+    const observations = collector.finalize();
+    return { sessionId, output, success: hasOutput, duration, observations };
   } catch (error) {
     const duration = Date.now() - startTime;
     const errorMsg = error instanceof Error ? error.message : String(error);
-    return { sessionId, output, success: false, duration };
+    const observations = collector.finalize();
+    return { sessionId, output, success: false, duration, observations };
   }
 }

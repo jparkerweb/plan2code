@@ -7,6 +7,7 @@ vi.mock('@anthropic-ai/claude-agent-sdk', () => ({
 
 import { query } from '@anthropic-ai/claude-agent-sdk';
 import { runSession } from './session-runner.js';
+import { ObservationCollector } from './observation-collector.js';
 import type { BotConfig } from './types.js';
 
 const config: BotConfig = {
@@ -35,14 +36,17 @@ describe('runSession', () => {
       })() as any,
     );
 
+    const collector = new ObservationCollector('init');
     const result = await runSession({
       prompt: 'do something',
       config,
       step: 'init',
+      collector,
     });
 
     expect(result.success).toBe(false);
     expect(result.output.trim()).toBe('');
+    expect(result.observations).toBeDefined();
   });
 
   it('returns success: true when output has content', async () => {
@@ -61,14 +65,18 @@ describe('runSession', () => {
       })() as any,
     );
 
+    const collector = new ObservationCollector('init');
     const result = await runSession({
       prompt: 'do something',
       config,
       step: 'init',
+      collector,
     });
 
     expect(result.success).toBe(true);
     expect(result.output).toContain('AGENTS.md');
     expect(result.sessionId).toBe('sess-2');
+    expect(result.observations).toBeDefined();
+    expect(result.observations.step).toBe('init');
   });
 });
