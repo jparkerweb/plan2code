@@ -7,6 +7,8 @@ import { runSession } from './session-runner.js';
 import { buildStepPrompt } from './prompts/step-instructions.js';
 import { checkAllPhasesComplete } from './step-detector.js';
 import { saveState, loadState, deleteState, findExistingState } from './bot-state.js';
+import { ObservationCollector } from './observation-collector.js';
+import { evaluateStep } from './evaluator.js';
 import type { BotConfig, BotMode, BotState, StepName, StepResult } from './types.js';
 
 const BANNER = `
@@ -149,30 +151,64 @@ async function runStep(
   const prompt = buildStepPrompt(step, config);
 
   try {
+    // Create observation collector
+    const collector = new ObservationCollector(step);
+
     const result = await runSession({
       prompt,
       config,
       step,
       maxTurns: step === 'implement' ? 80 : 50,
+      collector,
     });
-
-    const stepResult: StepResult = {
-      step,
-      success: result.success,
-      sessionId: result.sessionId,
-      duration: result.duration,
-      error: result.success ? null : 'Session failed',
-    };
 
     if (result.success) {
       spinner.succeed(
         chalk.green(`${step} completed in ${formatDuration(result.duration)}`)
       );
+
+      // Run evaluation
+      spinner.text = chalk.cyan('Evaluating step quality...');
+      spinner.start();
+
+      const evaluation = await evaluateStep(step, result.observations, config.projectDir);
+
+      spinner.succeed(
+        chalk.cyan(`Evaluation complete: ${formatScore(evaluation.score)}`)
+      );
+
+      // Display evaluation summary
+      console.log(chalk.dim(`  Score: ${formatScore(evaluation.score)}`));
+      if (evaluation.strengths.length > 0) {
+        console.log(chalk.green(`  ✓ ${evaluation.strengths[0]}`));
+      }
+      if (evaluation.weaknesses.length > 0) {
+        console.log(chalk.yellow(`  ⚠ ${evaluation.weaknesses[0]}`));
+      }
+
+      const stepResult: StepResult = {
+        step,
+        success: result.success,
+        sessionId: result.sessionId,
+        duration: result.duration,
+        error: null,
+        evaluation,
+        observations: result.observations,
+      };
+
+      return stepResult;
     } else {
       spinner.fail(chalk.red(`${step} failed after ${formatDuration(result.duration)}`));
-    }
 
-    return stepResult;
+      return {
+        step,
+        success: false,
+        sessionId: result.sessionId,
+        duration: result.duration,
+        error: 'Session failed',
+        observations: result.observations,
+      };
+    }
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
     spinner.fail(chalk.red(`${step} error: ${errorMsg}`));
@@ -184,6 +220,12 @@ async function runStep(
       error: errorMsg,
     };
   }
+}
+
+function formatScore(score: number): string {
+  if (score >= 85) return chalk.green(`${score}/100`);
+  if (score >= 70) return chalk.yellow(`${score}/100`);
+  return chalk.red(`${score}/100`);
 }
 
 export interface CLIOptions {
@@ -438,6 +480,28 @@ export async function runCLI(options: CLIOptions = {}): Promise<void> {
     console.log(chalk.dim('--- Finalize (skipped — previously succeeded) ---'));
   } else {
     console.log(chalk.bold('--- Finalize ---'));
+
+    // Check quality gate: average score must be >= 60
+    const evaluatedSteps = state.steps.filter((s) => s.evaluation);
+    if (evaluatedSteps.length > 0) {
+      const avgScore =
+        evaluatedSteps.reduce((sum, s) => sum + (s.evaluation?.score ?? 0), 0) /
+        evaluatedSteps.length;
+
+      console.log(chalk.dim(`  Average quality score: ${formatScore(Math.round(avgScore))}`));
+
+      if (avgScore < 60) {
+        console.log(
+          chalk.red(
+            '\n⚠ Quality gate failed: Average score is below 60. Please review and fix issues before finalizing.'
+          )
+        );
+        console.log(chalk.dim('  Check specs/<feature>/BOT-EVALUATION.md for detailed feedback.'));
+        printSummary(state, workDir, false);
+        return;
+      }
+    }
+
     state.currentStep = 'finalize';
     const finalizeResult = await runStep('finalize', config, state);
     state.steps.push(finalizeResult);
@@ -485,14 +549,39 @@ function printSummary(state: BotState, workDir: string, allSucceeded: boolean): 
 
   for (const step of state.steps) {
     const icon = step.success ? chalk.green('✓') : chalk.red('✗');
-    console.log(`  ${icon} ${step.step.padEnd(12)} ${formatDuration(step.duration)}`);
+    const scoreText = step.evaluation
+      ? ` [${formatScore(step.evaluation.score)}]`
+      : '';
+    console.log(
+      `  ${icon} ${step.step.padEnd(12)} ${formatDuration(step.duration)}${scoreText}`
+    );
   }
 
   console.log('');
-  console.log(chalk.dim(`  Total: ${successCount}/${state.steps.length} steps succeeded in ${formatDuration(totalDuration)}`));
+
+  // Display average quality score if available
+  const evaluatedSteps = state.steps.filter((s) => s.evaluation);
+  if (evaluatedSteps.length > 0) {
+    const avgScore =
+      evaluatedSteps.reduce((sum, s) => sum + (s.evaluation?.score ?? 0), 0) /
+      evaluatedSteps.length;
+    console.log(
+      chalk.dim(`  Average quality: ${formatScore(Math.round(avgScore))}`)
+    );
+  }
+
+  console.log(
+    chalk.dim(
+      `  Total: ${successCount}/${state.steps.length} steps succeeded in ${formatDuration(totalDuration)}`
+    )
+  );
   console.log(chalk.dim(`  Implement passes: ${state.implementPasses}`));
   if (!allSucceeded) {
-    console.log(chalk.dim(`  State saved to: ${path.relative(workDir, projectDir)}/.plan2code-bot-state.json`));
+    console.log(
+      chalk.dim(
+        `  State saved to: ${path.relative(workDir, projectDir)}/.plan2code-bot-state.json`
+      )
+    );
   }
   console.log('');
 }
