@@ -1387,32 +1387,43 @@ function runInteractive() {
     console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET} ${COLORS.BRIGHT}INSTALL PLAN2CODE${COLORS.RESET}`, 58) + `${COLORS.CYAN}║${COLORS.RESET}`);
     console.log(`${COLORS.CYAN}╠═════════════════════════════════════════════════════════╣${COLORS.RESET}`);
     console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET}  ${COLORS.BRIGHT}I.${COLORS.RESET}  ${COLORS.GREEN}INSTALL${COLORS.RESET}    Install Plan2Code for all platforms`, 58) + `${COLORS.CYAN}║${COLORS.RESET}`);
+    console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET}  ${COLORS.BRIGHT}A.${COLORS.RESET}  ${COLORS.MAGENTA}ALL${COLORS.RESET}        Install Plan2Code + dev tools`, 58) + `${COLORS.CYAN}║${COLORS.RESET}`);
     console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET}  ${COLORS.BRIGHT}U.${COLORS.RESET}  ${COLORS.RED}UNINSTALL${COLORS.RESET}  Remove Plan2Code files`, 58) + `${COLORS.CYAN}║${COLORS.RESET}`);
     console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET}  ${COLORS.BRIGHT}C.${COLORS.RESET}  ${COLORS.BLUE}CUSTOM${COLORS.RESET}     Advanced options`, 58) + `${COLORS.CYAN}║${COLORS.RESET}`);
     console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET}  ${COLORS.BRIGHT}Q.${COLORS.RESET}  ${COLORS.DIM}QUIT${COLORS.RESET}       Exit`, 58) + `${COLORS.CYAN}║${COLORS.RESET}`);
     console.log(`${COLORS.CYAN}╚═════════════════════════════════════════════════════════╝${COLORS.RESET}`);
     console.log('');
 
-    // Task 2.2: Input prompt
+    // Input prompt
     console.log('');
-    const answer = await question(`${COLORS.CYAN}${SYMBOLS.SELECT} SELECT OPTION${COLORS.RESET} (I, U, C, Q) [I]: `);
+    const answer = await question(`${COLORS.CYAN}${SYMBOLS.SELECT} SELECT OPTION${COLORS.RESET} (I, A, U, C, Q) [I]: `);
     const input = answer.trim().toUpperCase() || 'I';
 
-    // Task 2.3: I path — Install All
+    // I path — Install prompts + loop
     if (input === 'I') {
       rl.close();
       const loopResult = installPlan2CodeLoop();
       console.log('');
-      const metricsResult = installPlan2CodeMetrics();
-      console.log('');
-      const botResult = installPlan2CodeBot();
-      console.log('');
       const installResult = install();
-      const exitCode = loopResult !== 0 ? loopResult : metricsResult !== 0 ? metricsResult : botResult !== 0 ? botResult : installResult;
+      const exitCode = loopResult !== 0 ? loopResult : installResult;
       process.exit(exitCode);
     }
 
-    // Task 2.4: U path — Uninstall All
+    // A path — Install Everything (prompts + loop + bot + metrics)
+    if (input === 'A') {
+      rl.close();
+      const loopResult = installPlan2CodeLoop();
+      console.log('');
+      const botResult = installPlan2CodeBot();
+      console.log('');
+      const metricsResult = installPlan2CodeMetrics();
+      console.log('');
+      const installResult = install();
+      const exitCode = loopResult !== 0 ? loopResult : installResult !== 0 ? installResult : botResult !== 0 ? botResult : metricsResult;
+      process.exit(exitCode);
+    }
+
+    // U path — Uninstall All
     if (input === 'U') {
       console.log('');
       console.log(`${COLORS.RED}   o     o${COLORS.RESET}`);
@@ -1442,7 +1453,7 @@ function runInteractive() {
       }
     }
 
-    // Task 2.5: C path — CUSTOM sub-menu
+    // C path — CUSTOM sub-menu
     if (input === 'C') {
       console.log('');
       console.log(`${COLORS.CYAN}╔════════════════════════════════════════════════════════════════╗${COLORS.RESET}`);
@@ -1458,13 +1469,13 @@ function runInteractive() {
       const customAnswer = await question(`${COLORS.CYAN}${SYMBOLS.SELECT} SELECT OPTION${COLORS.RESET} (L, O, M, B, Q) [Q]: `);
       const customInput = customAnswer.trim().toUpperCase() || 'Q';
 
-      // Task 2.6: C > L — show local install instructions
+      // C > L — show local install instructions
       if (customInput === 'L') {
         rl.close();
         process.exit(displayLocalInstructions());
       }
 
-      // Task 2.7: C > O — install loop CLI only
+      // C > O — install loop CLI only
       if (customInput === 'O') {
         rl.close();
         const result = installPlan2CodeLoop();
@@ -1485,19 +1496,19 @@ function runInteractive() {
         process.exit(result);
       }
 
-      // Task 2.8: C > Q — back to main menu
+      // C > Q — back to main menu
       return main();
     }
 
-    // Task 2.8: Q — exit
+    // Q — exit
     if (input === 'Q') {
       console.log(`\n${COLORS.YELLOW}${SYMBOLS.WARNING} CANCELLED${COLORS.RESET}\n`);
       rl.close();
       process.exit(0);
     }
 
-    // Task 2.8: Invalid input — loop back
-    console.log(`\n${COLORS.RED}${SYMBOLS.ERROR} Invalid option. Please choose I, U, C, or Q.${COLORS.RESET}\n`);
+    // Invalid input — loop back
+    console.log(`\n${COLORS.RED}${SYMBOLS.ERROR} Invalid option. Please choose I, A, U, C, or Q.${COLORS.RESET}\n`);
     return main();
   }
 
