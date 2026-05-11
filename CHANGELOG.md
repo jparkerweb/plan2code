@@ -2,6 +2,16 @@
 
 All notable changes to Plan2Code will be documented in this file.
 
+## v1.11.1
+
+### 🔧 Changed
+
+- **Task complexity check in Document workflow** — Enhanced task writing guidance with lightweight cognitive complexity heuristics (inspired by PR #26)
+  - "Time-boxed" criterion now includes explicit split triggers: 5+ logic branches, 2+ integration points, or shared interface mutation
+  - New "Complexity check" prompt: before finalizing each task, LLM considers logic branches, distinct behaviors, integration points, shared interface impact, and error/edge cases
+  - Tasks complex on 3+ signals must be split; adjacent trivial tasks forming a cohesive unit should be combined
+  - Process step 7 updated to reinforce the complexity check during phase file authoring
+
 ## v1.11.0
 
 ### ✨ Added
@@ -13,7 +23,15 @@ All notable changes to Plan2Code will be documented in this file.
   - State file (`.plan2code-bot-state.json`) saved after each step; automatically deleted on full success, preserved on failure for later resume
   - Resume auto-detects state files in current directory (enhancement mode) or immediate subdirectories (new-project mode)
   - Artifact validation after each step (aborts on missing expected outputs)
-  - Auto-responder handles `AskUserQuestion` prompts autonomously (approvals, testing gates, name questions)
+  - **LLM-as-judge evaluation system** — Always-on quality assessment that transforms bot from "yes-man" to authentic QA agent
+    - **Intelligent decision making**: Uses LLM to answer `AskUserQuestion` prompts based on current observations (tools used, files created, errors) instead of hardcoded keyword matching
+    - **Post-step evaluation**: Comprehensive quality assessment after each step using step-specific criteria (score 0-100, strengths, weaknesses, suggestions, critical issues)
+    - **Observation tracking**: Full execution history captured (tools, files, messages, errors, questions with LLM reasoning)
+    - **Quality gate**: Blocks finalization if average score < 60, ensuring minimum quality standards
+    - **Evaluation artifacts**: Creates `BOT-EVALUATION.md` (quality assessments) and `BOT-NOTES.md` (execution observations) for metrics analysis
+    - **Color-coded output**: Green (≥85), yellow (70-84), red (<70) score display in console
+    - **Honest scoring**: Evaluation criteria emphasize realistic assessment (most work scores 70-85, not inflated)
+    - **Metrics-ready data**: Structured `EvaluationResult` and `ExecutionObservation` in state file for `plan2code-metrics` analysis
   - Bot-friendly skill installation (copies plan2code skills with `disable-model-invocation` stripped)
   - Implement step loops up to 10 passes until all phases are complete
   - Installer integration: `C > B` menu option to install bot CLI only
