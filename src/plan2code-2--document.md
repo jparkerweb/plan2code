@@ -54,11 +54,13 @@ If no plan exists and user wants to skip:
 
 | Criterion | Description |
 |-----------|-------------|
-| Time-boxed | 15-60 minutes |
+| Time-boxed | 15-60 min. Split if 5+ logic branches, 2+ integration points, or shared interface mutation. Combine adjacent trivial tasks that form a cohesive unit. |
 | Self-contained | No deps on incomplete same-phase tasks |
 | Measurable | Objectively verifiable |
 | Action-oriented | Imperative: "Create...", "Implement..." |
 | Specific | File paths, function names, exact requirements |
+
+**Complexity check** — before finalizing each task, consider: logic branches, distinct behaviors, integration points, shared interface impact, and error/edge cases. Tasks that are complex on 3+ of these signals should be split.
 
 **Examples:**
 
@@ -83,7 +85,7 @@ If no plan exists and user wants to skip:
    - Success Criteria (plain bullet list, no checkboxes) (section 7)
    - Phase Checklist (Implementation Phases)
    - Quick Reference (Key Files, Environment Variables, External Dependencies)
-7. **Write** each `phase-X.md` with detailed tasks
+7. **Write** each `phase-X.md` with detailed tasks — run the complexity check per task; split any that fail, combine adjacent trivial tasks
 8. **Analyze** parallel execution eligibility
 9. **Verify** all PLAN-DRAFT requirements covered:
    - 9A: Re-read PLAN-DRAFT as source of truth
@@ -192,6 +194,14 @@ Total tasks: Y
 
 Parallel Execution: [Groups or "None - sequential only"]
 ```
+
+Also append a machine-parseable metrics comment to the END of `overview.md` for the metrics pipeline:
+
+```
+<!-- METRICS_JSON {"step": "document", "total_tasks": 28, "tasks_per_phase": [7, 7, 7, 7], "phase_count": 4, "parallel_groups_identified": 2, "verification_items_added": 3} -->
+```
+
+Replace values with actuals. `verification_items_added` = total Added column from the Verification Summary table.
 
 **Tell user:**
 1. What was created (spec files list)

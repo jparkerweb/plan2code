@@ -36,6 +36,29 @@ function readFileSafe(filePath: string): string | null {
   }
 }
 
+/**
+ * Extract METRICS_JSON HTML comment blocks from a file.
+ * Format: <!-- METRICS_JSON {"key": value, ...} -->
+ * A file may contain multiple blocks (e.g., overview.md has document + finalize).
+ * If `stepFilter` is provided, returns only the block with matching "step" field.
+ * Returns parsed object or null if not found / invalid.
+ */
+function extractMetricsJson(content: string, stepFilter?: string): Record<string, unknown> | null {
+  const re = /<!--\s*METRICS_JSON\s+(\{[\s\S]*?\})\s*-->/g;
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(content)) !== null) {
+    try {
+      const parsed = JSON.parse(match[1]) as Record<string, unknown>;
+      if (!stepFilter || parsed['step'] === stepFilter) {
+        return parsed;
+      }
+    } catch {
+      // try next match
+    }
+  }
+  return null;
+}
+
 /** Strip the "## Success Criteria" section so its checkboxes aren't counted as tasks. */
 function stripSuccessCriteriaSection(overview: string): string {
   return overview.replace(/^## Success Criteria\s*\n[\s\S]*?(?=\n## |\n*$)/m, '');
@@ -53,8 +76,8 @@ function parseCompletionSummaryTaskCount(overview: string): { completed: number;
   if (!summaryMatch) return null;
   const summary = summaryMatch[1];
 
-  // "Completion Rate: X% (Y/Z tasks)"
-  const rateMatch = summary.match(/Completion Rate[:\s*]*\d{1,3}%\s*\((\d+)\/(\d+)\s*tasks?\)/i);
+  // "Completion Rate: X% (Y/Z tasks)" — handles bold markdown and various separators
+  const rateMatch = summary.match(/\**Completion(?:\s+Rate)?\**[:\s*]+\d{1,3}%\s*\((\d+)\/(\d+)\s*tasks?\)/i);
   if (rateMatch) return { completed: parseInt(rateMatch[1], 10), total: parseInt(rateMatch[2], 10) };
 
   // "Total Tasks | 28 (28/28 complete"
@@ -119,15 +142,58 @@ export function collectStep1(specDir: string): Step1PlanMetrics {
   draftFiles.sort();
   const latestDraft = readFileSafe(draftFiles[draftFiles.length - 1]) ?? '';
 
-  // Parse "Confidence: XX%" — look for overall or total confidence
-  let finalConfidence: number | null = null;
-  const confMatch = latestDraft.match(/(?:Overall|Final|Total)?\s*[Cc]onfidence[:\s]+(\d{1,3})%/);
-  if (confMatch) {
-    finalConfidence = parseInt(confMatch[1], 10);
-  } else {
-    // Try table format: | Confidence | 92 |
-    const tableMatch = latestDraft.match(/[|]\s*[Cc]onfidence\s*[|]\s*(\d{1,3})/);
-    if (tableMatch) finalConfidence = parseInt(tableMatch[1], 10);
+  // ── Primary source: METRICS_JSON HTML comment ──
+  // Format: <!-- METRICS_JSON {"confidence": 95, "clarification_rounds": 0, ...} -->
+  const metricsJson = extractMetricsJson(latestDraft);
+  if (metricsJson) {
+    const num = (key: string): number | null => {
+      const v = metricsJson[key];
+      return typeof v === 'number' ? v : null;
+    };
+    const bd = metricsJson['confidence_breakdown'] as Record<string, number> | undefined;
+    return {
+      present: true,
+      final_confidence: num('confidence'),
+      confidence_breakdown: bd ? {
+        requirements: bd.requirements ?? null,
+        feasibility: bd.feasibility ?? null,
+        integration: bd.integration ?? null,
+        risk: bd.risk ?? null,
+      } : null,
+      clarification_rounds: num('clarification_rounds'),
+      tech_stack_revision_rounds: num('tech_stack_revision_rounds'),
+      verification_gaps_found: num('verification_gaps_found'),
+      functional_requirements_count: num('functional_requirements_count'),
+      non_functional_requirements_count: num('non_functional_requirements_count'),
+      risk_count: num('risk_count'),
+      phase_count: num('phase_count'),
+    };
+  }
+
+  // ── Fallback: structured ## Planning Metrics appendix ──
+  // Handles both plain (confidence: 95) and bold (**confidence:** 95) field formats
+  // Planning Metrics is typically the last section, so we capture greedily to end,
+  // but stop at the next ## heading or --- if present.
+  const metricsSection = latestDraft.match(/^##\s+Planning\s+Metrics\s*\n([\s\S]+?)(?:\n##\s|\n---)/m)
+    ?? latestDraft.match(/^##\s+Planning\s+Metrics\s*\n([\s\S]+)/m);
+  const metricsBlock = metricsSection?.[1] ?? '';
+  const parseMetricField = (field: string): number | null => {
+    // Match plain "field: N" or bold "**field:** N"
+    const m = metricsBlock.match(new RegExp(`^\\**${field}\\**[:\\s*]+?(\\d+)`, 'm'));
+    return m ? parseInt(m[1], 10) : null;
+  };
+
+  // ── Confidence ──
+  let finalConfidence = parseMetricField('confidence');
+  if (finalConfidence === null) {
+    // Fallback: prose scraping — handle bold markdown like **Confidence:** 95%
+    const confMatch = latestDraft.match(/(?:Overall|Final|Total)?\s*\**[Cc]onfidence\**[:\s*]+(\d{1,3})%/);
+    if (confMatch) {
+      finalConfidence = parseInt(confMatch[1], 10);
+    } else {
+      const tableMatch = latestDraft.match(/[|]\s*[Cc]onfidence\s*[|]\s*(\d{1,3})/);
+      if (tableMatch) finalConfidence = parseInt(tableMatch[1], 10);
+    }
   }
 
   // Confidence breakdown (requirements, feasibility, integration, risk)
@@ -145,34 +211,52 @@ export function collectStep1(specDir: string): Step1PlanMetrics {
     };
   }
 
-  // Count ### FR- / ### NFR- headings
-  const frCount = (latestDraft.match(/###\s+FR-/g) ?? []).length;
-  const nfrCount = (latestDraft.match(/###\s+NFR-/g) ?? []).length;
+  // ── Clarification rounds ──
+  let clarificationRounds = parseMetricField('clarification_rounds');
 
-  // Count risk table rows (lines starting with | that contain risk-level keywords)
-  const riskRows = latestDraft.match(/^\s*[|][^|]*(?:High|Medium|Low|Critical)[^|]*[|]/gm) ?? [];
-  const riskCount = riskRows.length || null;
+  // ── Verification gaps ──
+  let verificationGaps = parseMetricField('verification_gaps_found');
 
-  // Count ## Phase headings
-  const phaseCount = (latestDraft.match(/^##\s+Phase\s+\d/gm) ?? []).length || null;
+  // ── Functional / non-functional requirements ──
+  let frCount = parseMetricField('functional_requirements_count');
+  if (frCount === null) {
+    frCount = (latestDraft.match(/###\s+FR-/g) ?? []).length || null;
+  }
+  let nfrCount = parseMetricField('non_functional_requirements_count');
+  if (nfrCount === null) {
+    nfrCount = (latestDraft.match(/###\s+NFR-/g) ?? []).length || null;
+  }
 
-  // Clarification rounds from conversation file
-  let clarificationRounds: number | null = null;
+  // ── Risk count ──
+  let riskCount = parseMetricField('risk_count');
+  if (riskCount === null) {
+    const riskRows = latestDraft.match(/^\s*[|][^|]*(?:High|Medium|Low|Critical)[^|]*[|]/gm) ?? [];
+    riskCount = riskRows.length || null;
+  }
+
+  // ── Phase count ──
+  let phaseCount = parseMetricField('phase_count');
+  if (phaseCount === null) {
+    phaseCount = (latestDraft.match(/^##\s+Phase\s+\d/gm) ?? []).length || null;
+  }
+
+  // ── Tech stack revision rounds (conversation file only) ──
   let techStackRevisions: number | null = null;
-  let verificationGaps: number | null = null;
 
+  // Fall back to conversation file scraping for fields not found in appendix
   if (convFiles.length > 0) {
     convFiles.sort();
     const latestConv = readFileSafe(convFiles[convFiles.length - 1]) ?? '';
-    // Count heading repetitions as clarification rounds (## Clarification or ## Round)
-    const clarRounds = (latestConv.match(/^##\s+(?:Clarification|Round)\s+\d/gm) ?? []).length;
-    clarificationRounds = clarRounds || null;
-    // Tech stack revision rounds
+    if (clarificationRounds === null) {
+      const clarRounds = (latestConv.match(/^##\s+(?:Clarification|Round)\s+\d/gm) ?? []).length;
+      clarificationRounds = clarRounds || null;
+    }
     const techRounds = (latestConv.match(/^##\s+(?:Tech\s+Stack|Technology)\s+Revision/gmi) ?? []).length;
     techStackRevisions = techRounds || null;
-    // Verification gaps found
-    const gapMatches = latestConv.match(/(?:verification\s+gap|gap\s+found|missing\s+requirement)/gi) ?? [];
-    verificationGaps = gapMatches.length || null;
+    if (verificationGaps === null) {
+      const gapMatches = latestConv.match(/(?:verification\s+gap|gap\s+found|missing\s+requirement)/gi) ?? [];
+      verificationGaps = gapMatches.length || null;
+    }
   }
 
   return {
@@ -182,8 +266,8 @@ export function collectStep1(specDir: string): Step1PlanMetrics {
     clarification_rounds: clarificationRounds,
     tech_stack_revision_rounds: techStackRevisions,
     verification_gaps_found: verificationGaps,
-    functional_requirements_count: frCount || null,
-    non_functional_requirements_count: nfrCount || null,
+    functional_requirements_count: frCount,
+    non_functional_requirements_count: nfrCount,
     risk_count: riskCount,
     phase_count: phaseCount,
   };
@@ -200,6 +284,27 @@ export function collectStep2(specDir: string): Step2DocumentMetrics {
       phase_count: null, parallel_groups_identified: null,
       requirement_coverage_percent: null, verification_items_added: null };
   }
+
+  // ── Primary source: METRICS_JSON in overview.md ──
+  const step2Json = extractMetricsJson(overview, 'document');
+  if (step2Json) {
+    const num = (key: string): number | null => {
+      const v = step2Json[key];
+      return typeof v === 'number' ? v : null;
+    };
+    const tpp = step2Json['tasks_per_phase'];
+    return {
+      present: true,
+      total_tasks: num('total_tasks'),
+      tasks_per_phase: Array.isArray(tpp) ? tpp : null,
+      phase_count: num('phase_count'),
+      parallel_groups_identified: num('parallel_groups_identified') ?? 0,
+      requirement_coverage_percent: num('requirement_coverage_percent'),
+      verification_items_added: num('verification_items_added'),
+    };
+  }
+
+  // ── Fallback: regex scraping ──
 
   // Detect Parallel Execution Groups table
   const parallelGroups = (overview.match(/Parallel\s+Execution\s+Group/gi) ?? []).length;
@@ -277,6 +382,28 @@ export function collectStep3(specDir: string): Step3ImplementMetrics {
   const overviewPath = path.join(specDir, 'overview.md');
   const overview = readFileSafe(overviewPath);
   const summaryCount = overview ? parseCompletionSummaryTaskCount(overview) : null;
+
+  // ── Primary source: METRICS_JSON in overview.md (from finalize step) ──
+  if (overview) {
+    const step3Json = extractMetricsJson(overview, 'finalize');
+    if (step3Json) {
+      const num = (key: string): number | null => {
+        const v = step3Json[key];
+        return typeof v === 'number' ? v : null;
+      };
+      const total = num('tasks_total');
+      const completed = num('tasks_completed');
+      return {
+        present: true,
+        task_completion_rate: total && total > 0 && completed != null ? completed / total : null,
+        tasks_completed: completed,
+        tasks_total: total,
+        blocker_count: num('blocker_count') ?? 0,
+      };
+    }
+  }
+
+  // ── Fallback: regex scraping ──
 
   // present = true if phase files exist OR overview has completion data
   const present = phaseFiles.length > 0 || summaryCount != null;
@@ -358,6 +485,24 @@ export function collectStep4(specDir: string): Step4FinalizeMetrics {
       verification_failures_found: null, documentation_updates_needed: null,
       archival_succeeded: archivalSucceeded };
   }
+
+  // ── Primary source: METRICS_JSON in overview.md ──
+  const step4Json = extractMetricsJson(overview, 'finalize');
+  if (step4Json) {
+    const num = (key: string): number | null => {
+      const v = step4Json[key];
+      return typeof v === 'number' ? v : null;
+    };
+    return {
+      present: true,
+      completion_rate_at_audit: num('completion_rate_at_audit'),
+      verification_failures_found: num('verification_failures_found') ?? 0,
+      documentation_updates_needed: num('documentation_updates_needed'),
+      archival_succeeded: archivalSucceeded,
+    };
+  }
+
+  // ── Fallback: regex scraping ──
 
   // Completion rate: prefer Completion Summary, fall back to stripped overview checkboxes
   let completionRate: number | null = null;

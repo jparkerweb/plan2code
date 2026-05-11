@@ -268,6 +268,10 @@ specs--completed/
 - **Completion Rate:** [X]% ([Y]/[Z] tasks)
 - **Archived To:** `specs--completed/<feature-name>/`
 
+<!-- METRICS_JSON {"step": "finalize", "completion_rate_at_audit": 0.95, "tasks_completed": 19, "tasks_total": 20, "verification_failures_found": 1, "documentation_updates_needed": 2} -->
+
+Replace METRICS_JSON values with actuals. `completion_rate_at_audit` = Y/Z as decimal (e.g., 19/20 = 0.95).
+
 ### Finalization Steps Completed
 - [x] Step 1: Task Completion Audit
 - [x] Step 2: Implementation Verification
