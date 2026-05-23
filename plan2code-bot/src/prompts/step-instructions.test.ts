@@ -34,9 +34,9 @@ describe('buildStepPrompt', () => {
     expect(prompt).toContain('/plan2code-2-document');
   });
 
-  it('implement prompt includes /plan2code-3-implement skill invocation', () => {
+  it('implement prompt instructs direct tool usage without skill invocation', () => {
     const prompt = buildStepPrompt('implement', config);
-    expect(prompt).toContain('/plan2code-3-implement');
+    expect(prompt).toContain('Do NOT use the Skill tool');
   });
 
   it('finalize prompt includes /plan2code-4-finalize skill invocation', () => {

@@ -24,7 +24,7 @@ Check for `./AGENTS.md` first:
    >
    > "No `AGENTS.md` found. This file provides essential project context.
    >
-   > **Run:** `plan2code---init`
+   > **Run:** `plan2code-init`
    >
    > Let me know when ready to continue."
 
@@ -114,11 +114,11 @@ After achieving clarity, assess scope:
 [Files examined, patterns noted]
 
 ---
-**Next:** New conversation with `/plan2code-1--plan`, attach this file.
+**Next:** New conversation with `/plan2code-1-plan`, attach this file.
 Resume at Phase 2 (System Context).
 ```
 
-Then tell user: "Created `specs/<feature-name>/PLAN-DRAFT-<date>.md`. Start new conversation with `/plan2code-1--plan` to continue."
+Then tell user: "Created `specs/<feature-name>/PLAN-DRAFT-<date>.md`. Start new conversation with `/plan2code-1-plan` to continue."
 
 ---
 

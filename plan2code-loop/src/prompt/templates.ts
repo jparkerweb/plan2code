@@ -68,7 +68,7 @@ Use only when ALL phases in overview.md are marked complete.
 ## Scratchpad Management
 
 After completing each task, add a new entry at the **bottom** of \`{{specPath}}/.plan2code-loop/scratchpad.md\`.
-Never edit, reorganize, or insert into existing content � only append new entries to the end of the file.
+Never edit, reorganize, or insert into existing content — only append new entries to the end of the file.
 
 Each entry should include:
 - Task completed and Phase item reference
@@ -94,6 +94,7 @@ export const LOOP_PROMPT_TEMPLATE_PHASE = `# PLAN2CODE-LOOP: Autonomous Phase Im
 **IMPLEMENT ALL REMAINING TASKS IN THE CURRENT PHASE.**
 Find the first incomplete phase, then implement every remaining task in that phase before stopping.
 Complete each task fully before moving to the next task within the phase.
+
 ## Project Information
 - **Project Root:** \`{{projectRoot}}\`
 - **Spec Location:** \`{{specPath}}\`
@@ -178,7 +179,7 @@ After ALL tasks in the phase are complete (or blocked), output:
 ## Scratchpad Management
 
 After completing each task, add a new entry at the **bottom** of \`{{specPath}}/.plan2code-loop/scratchpad.md\`.
-Never edit, reorganize, or insert into existing content � only append new entries to the end of the file.
+Never edit, reorganize, or insert into existing content — only append new entries to the end of the file.
 
 Each entry should include:
 - Task completed and Phase item reference

@@ -1,14 +1,14 @@
 // All TypeScript interfaces for plan2code-metrics
 
 export interface PromptVersions {
-  plan: string;           // sha256:... plan2code-1--plan.md
-  revise_plan: string;    // plan2code-1b--revise-plan.md
-  document: string;       // plan2code-2--document.md
-  implement: string;      // plan2code-3--implement.md
-  finalize: string;       // plan2code-4--finalize.md
-  init: string;           // plan2code---init.md
-  init_update: string;    // plan2code---init-update.md
-  quick_task: string;     // plan2code---quick-task.md
+  plan: string;           // sha256:... plan2code-1-plan.md
+  revise_plan: string;    // plan2code-1b-revise-plan.md
+  document: string;       // plan2code-2-document.md
+  implement: string;      // plan2code-3-implement.md
+  finalize: string;       // plan2code-4-finalize.md
+  init: string;           // plan2code-init.md
+  init_update: string;    // plan2code-init-update.md
+  quick_task: string;     // plan2code-quick-task.md
 }
 
 export interface Step1PlanMetrics {

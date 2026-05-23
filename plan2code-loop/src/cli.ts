@@ -23,11 +23,11 @@ async function selectSpec(cwd: string = process.cwd()): Promise<string | null> {
     logger.info('');
     logger.info('To get started:');
     logger.info('');
-    logger.info('1. Create a spec using `plan2code-1--plan`');
+    logger.info('1. Create a spec using `plan2code-1-plan`');
     logger.info('   command in our AI Agent');
     logger.info('');
     logger.info('2. Come back here and run `plan2code-loop`');
-    logger.info('   as an alternative to `plan2code-3--implement`');
+    logger.info('   as an alternative to `plan2code-3-implement`');
     logger.info('');
     return null;
   }

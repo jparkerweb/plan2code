@@ -10,7 +10,7 @@ Start all CREATE AGENTS MODE responses with '💡'
     ╰───╯
 ```
 
-Analyze this codebase and create `AGENTS.md` to guide future AI coding agents (Claude Code, Codex, Gemini CLI, etc.).
+Analyze this codebase and create `AGENTS.md` to guide future AI coding agents (Claude Code, Codex, Gemini CLI, Devin, etc.).
 
 ## Content
 
@@ -31,7 +31,7 @@ Prefix the file with:
 ```
 # AGENTS.md
 
-This file provides guidance to AI coding agents like Claude Code (claude.ai/code), Cursor AI, Codex, Gemini CLI, GitHub Copilot, and other AI coding assistants when working with code in this repository.
+This file provides guidance to AI coding agents like Claude Code (claude.ai/code), Cursor AI, Codex, Gemini CLI, GitHub Copilot, Devin, and other AI coding assistants when working with code in this repository.
 ```
 
 ---
@@ -106,7 +106,27 @@ Update them to reference AGENTS.md? (Yes / Select / No)
 
 Only modify confirmed files.
 
-### Reference Template
+### CLAUDE.md Template
+
+CLAUDE.md gets a special template because Claude Code auto-loads it — the `CRITICAL — MANDATORY FIRST STEP` directive ensures AGENTS.md is always read:
+
+```markdown
+# CLAUDE.md
+
+**CRITICAL — MANDATORY FIRST STEP: You MUST read [AGENTS.md](./AGENTS.md) before responding to ANY user message, including simple questions. Do NOT skip this step regardless of how trivial the request appears. No exceptions.**
+
+See AGENTS.md for complete project documentation including:
+- Development commands and setup
+- Architecture overview
+- Environment variables
+- Testing patterns
+- Deployment guides
+- Section details in .agents-docs/
+
+This file exists for Claude Code auto-loading. All AI coding agents should reference AGENTS.md.
+```
+
+### Reference Template (all other files)
 
 ```markdown
 # [Title]

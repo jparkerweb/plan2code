@@ -106,17 +106,17 @@ export class Controller {
       clearInterval(elapsedInterval);
       spinner.stop();
 
-      // Cancelled or interrupted — return immediately, don't retry
+      // Cancelled or interrupted â€” return immediately, don't retry
       if (result.cancelled || this.interrupted) {
         return result;
       }
 
-      // Completed (success or error exit code) — return to caller
+      // Completed (success or error exit code) â€” return to caller
       if (!result.timedOut) {
         return result;
       }
 
-      // Timed out — retry if attempts remain, otherwise fatal
+      // Timed out â€” retry if attempts remain, otherwise fatal
       if (attempt < maxAttempts - 1) {
         continue;
       }

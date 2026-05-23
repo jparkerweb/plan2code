@@ -76,7 +76,7 @@ For each step (1–4), provide:
 
 Numbered list. For each underperforming metric:
 1. **Metric:** [metric name] | **Value:** [actual] | **Target:** [target]
-   - **File:** [plan2code-X--name.md]
+   - **File:** [plan2code-X-name.md]
    - **Section:** [specific heading or section name]
    - **Hypothesis:** [specific gap in the prompt that would explain the metric miss]
    - **Confidence:** [High/Medium/Low] — [reason for confidence level]

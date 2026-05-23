@@ -117,7 +117,7 @@ export const logger = {
     console.log(chalk.green.bold('═'.repeat(50)));
     console.log();
     console.log(chalk.cyan.bold('Next Step:'));
-    console.log(chalk.white('  Return to your AI Agent and run the'), chalk.yellow.bold('/plan2code-4--finalize'), chalk.white('step.'));
+    console.log(chalk.white('  Return to your AI Agent and run the'), chalk.yellow.bold('/plan2code-4-finalize'), chalk.white('step.'));
     console.log(chalk.dim('  This will ensure quality, completeness, and proper documentation.'));
     console.log();
   },

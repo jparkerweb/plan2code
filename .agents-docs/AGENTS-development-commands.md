@@ -58,7 +58,7 @@ cd plan2code-metrics && npm run build # Build the CLI
 | VS Code Copilot | `.prompt.md` | — | — | YAML frontmatter |
 | Codeium | `.md` | — | — | YAML frontmatter |
 | Claude Code (Skills) | `SKILL.md` in subdir | `.claude/skills/<skill-name>/` | `~/.claude/skills/<skill-name>/` | YAML frontmatter + `disable-model-invocation: true` |
-| Agent Skills (Amp · Gemini CLI · OpenCode) | `SKILL.md` in subdir | `.agents/skills/<skill-name>/` | `~/.agents/skills/<skill-name>/` | YAML frontmatter (no disable flag) |
+| Agent Skills (Amp · Devin · Gemini CLI · OpenCode) | `SKILL.md` in subdir | `.agents/skills/<skill-name>/` | `~/.agents/skills/<skill-name>/` | YAML frontmatter (no disable flag) |
 | Crush | `SKILL.md` in subdir | — (global only) | `~/.config/crush/skills/<skill-name>/` (Unix) / `%LOCALAPPDATA%\crush\skills\<skill-name>\` (Windows) | YAML frontmatter |
 | Gemini CLI (TOML) | `.toml` | `.gemini/commands/` | `~/.gemini/commands/` | None (TOML fields: `description`, `prompt`) |
 | Pi (pi.dev) | `.md` | `.pi/prompts/` | `~/.pi/agent/prompts/` | YAML frontmatter (`description`) |

@@ -16,14 +16,14 @@ const ANALYZE_PROMPT_PATH = new URL('../src/prompts/analyze.md', import.meta.url
 function readPromptFiles(plan2codeRoot: string): Record<string, string> {
   const srcDir = path.join(plan2codeRoot, 'src');
   const promptFiles = [
-    'plan2code-1--plan.md',
-    'plan2code-1b--revise-plan.md',
-    'plan2code-2--document.md',
-    'plan2code-3--implement.md',
-    'plan2code-4--finalize.md',
-    'plan2code---init.md',
-    'plan2code---init-update.md',
-    'plan2code---quick-task.md',
+    'plan2code-1-plan.md',
+    'plan2code-1b-revise-plan.md',
+    'plan2code-2-document.md',
+    'plan2code-3-implement.md',
+    'plan2code-4-finalize.md',
+    'plan2code-init.md',
+    'plan2code-init-update.md',
+    'plan2code-quick-task.md',
   ];
 
   const contents: Record<string, string> = {};

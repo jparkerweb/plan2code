@@ -2,7 +2,7 @@
 
 An autonomous CLI tool that implements Plan2Code specs by looping through tasks automatically.
 
-> **Note:** This is an **alternative** to `/plan2code-3--implement`, not a replacement. Use the manual Step 3 workflow when you want interactive control over each phase, or use this loop when you prefer hands-off autonomous execution.
+> **Note:** This is an **alternative** to `/plan2code-3-implement`, not a replacement. Use the manual Step 3 workflow when you want interactive control over each phase, or use this loop when you prefer hands-off autonomous execution.
 
 ## Installation
 

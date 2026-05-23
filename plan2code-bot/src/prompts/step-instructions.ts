@@ -20,7 +20,7 @@ export function buildStepPrompt(step: StepName, config: BotConfig): string {
 function buildInitPrompt(config: BotConfig): string {
   return `${AUTONOMOUS_PREAMBLE}
 
-This is a brand new project with no existing code. Create a minimal stub AGENTS.md file and an IDEA.md file. Do NOT run the /plan2code-init skill � there is no codebase to analyze yet.
+This is a brand new project with no existing code. Create a minimal stub AGENTS.md file and an IDEA.md file. Do NOT run the /plan2code-init skill — there is no codebase to analyze yet.
 
 The project idea is: ${config.ideaDescription}
 The project name is: ${config.ideaName}
@@ -28,7 +28,7 @@ The project name is: ${config.ideaName}
 ## What to create
 
 ### AGENTS.md
-Create a minimal stub with ONLY the following � do NOT invent architecture, tech stack details, commands, or file structures:
+Create a minimal stub with ONLY the following — do NOT invent architecture, tech stack details, commands, or file structures:
 
 \`\`\`markdown
 # AGENTS.md
@@ -47,7 +47,7 @@ This project is in the planning phase. Architecture, commands, and detailed docu
 If IDEA.md does not already exist, create it with the project name and description.
 
 ## Rules
-- Do NOT create .agents-docs/ or any detail files � there is nothing to document yet
+- Do NOT create .agents-docs/ or any detail files — there is nothing to document yet
 - Do NOT hallucinate architecture, dependencies, file structures, or tech stack choices
 - Do NOT install dependencies or scaffold project files
 - ONLY create the two files above`;
@@ -85,7 +85,7 @@ When making decisions:
 function buildImplementPrompt(config: BotConfig): string {
   return `${AUTONOMOUS_PREAMBLE}
 
-You are a senior software engineer implementing a project phase. Do NOT use the Skill tool � implement directly using Read, Write, Edit, Glob, and Grep tools.
+You are a senior software engineer implementing a project phase. Do NOT use the Skill tool — implement directly using Read, Write, Edit, Glob, and Grep tools.
 
 ## Process
 
@@ -95,7 +95,7 @@ You are a senior software engineer implementing a project phase. Do NOT use the 
 4. **Mark phase in-progress**: Update \`[ ]\` to \`[/]\` in overview.md
 5. **Implement each task sequentially**:
    - Read the task specification completely
-   - Write the code using Write or Edit tools � create real files, not code blocks
+   - Write the code using Write or Edit tools — create real files, not code blocks
    - Mark the task \`[x]\` in the phase file immediately after completing it
 6. **Complete the phase**: After all tasks, fill in the "Phase Completion Summary" in the phase file
 7. **Mark phase complete**: Update \`[/]\` to \`[x]\` in overview.md
@@ -103,11 +103,11 @@ You are a senior software engineer implementing a project phase. Do NOT use the 
 ## Rules
 
 - Follow AGENTS.md if it exists
-- Implement specs EXACTLY � no creative additions or unsolicited improvements
-- Write task completion status (\`[x]\`) to disk immediately after each task � never batch
+- Implement specs EXACTLY — no creative additions or unsolicited improvements
+- Write task completion status (\`[x]\`) to disk immediately after each task — never batch
 - Only create files mentioned in the spec tasks
 - Use the specified file paths, function names, and structures from the spec
-- No placeholder code � fully implement every function
+- No placeholder code — fully implement every function
 - Match existing codebase conventions
 - Do NOT run git commands
 - Skip running tests unless explicitly listed as a phase task

@@ -67,7 +67,7 @@ Produce EXACTLY the following sections. The JSON block is parsed by machine — 
 ```json
 [
   {
-    "file": "plan2code-X--name.md",
+    "file": "plan2code-X-name.md",
     "rationale": "One sentence explaining what this edit fixes",
     "expected_metric_impact": "avg_metric_name: expected direction and magnitude",
     "char_count_before": 0,

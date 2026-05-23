@@ -18,7 +18,7 @@ Interactive Q&A flow to update an existing `AGENTS.md` with new learnings and pr
 
 Check if `AGENTS.md` exists in project root.
 
-**If missing:** "No AGENTS.md found. Create one from scratch? I can analyze the codebase and generate an initial file." Stop and wait. If yes, use `plan2code---init.md` workflow.
+**If missing:** "No AGENTS.md found. Create one from scratch? I can analyze the codebase and generate an initial file." Stop and wait. If yes, use `plan2code-init.md` workflow.
 
 **If exists:** Read and summarize:
 - Main sections (bullets)
@@ -197,12 +197,34 @@ Check for other AI agent config files and offer to replace with AGENTS.md refere
 
 **Warning** for files >10 lines: "[file] has custom content that will be replaced."
 
-### Reference Template
+### CLAUDE.md Template
+
+CLAUDE.md gets a special template because Claude Code auto-loads it — the `CRITICAL — MANDATORY FIRST STEP` directive ensures AGENTS.md is always read:
 
 ```markdown
 # CLAUDE.md
 
-See [AGENTS.md](./AGENTS.md) for complete project documentation including:
+**CRITICAL — MANDATORY FIRST STEP: You MUST read [AGENTS.md](./AGENTS.md) before responding to ANY user message, including simple questions. Do NOT skip this step regardless of how trivial the request appears. No exceptions.**
+
+See AGENTS.md for complete project documentation including:
+- Development commands and setup
+- Architecture overview
+- Environment variables
+- Testing patterns
+- Deployment guides
+- Section details in .agents-docs/
+
+This file exists for Claude Code auto-loading. All AI coding agents should reference AGENTS.md.
+```
+
+### Reference Template (all other files)
+
+Use title and path from the detection table:
+
+```markdown
+# [Title]
+
+See [AGENTS.md]([Path]) for complete project documentation including:
 - Development commands and setup
 - Architecture overview
 - Environment variables
