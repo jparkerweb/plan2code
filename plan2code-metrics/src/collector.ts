@@ -99,14 +99,14 @@ function generateRunId(): string {
 export function collectPromptVersions(plan2codeRoot: string): PromptVersions {
   const srcDir = path.join(plan2codeRoot, 'src');
   return {
-    plan:        sha256File(path.join(srcDir, 'plan2code-1--plan.md')),
-    revise_plan: sha256File(path.join(srcDir, 'plan2code-1b--revise-plan.md')),
-    document:    sha256File(path.join(srcDir, 'plan2code-2--document.md')),
-    implement:   sha256File(path.join(srcDir, 'plan2code-3--implement.md')),
-    finalize:    sha256File(path.join(srcDir, 'plan2code-4--finalize.md')),
-    init:        sha256File(path.join(srcDir, 'plan2code---init.md')),
-    init_update: sha256File(path.join(srcDir, 'plan2code---init-update.md')),
-    quick_task:  sha256File(path.join(srcDir, 'plan2code---quick-task.md')),
+    plan:        sha256File(path.join(srcDir, 'plan2code-1-plan.md')),
+    revise_plan: sha256File(path.join(srcDir, 'plan2code-1b-revise-plan.md')),
+    document:    sha256File(path.join(srcDir, 'plan2code-2-document.md')),
+    implement:   sha256File(path.join(srcDir, 'plan2code-3-implement.md')),
+    finalize:    sha256File(path.join(srcDir, 'plan2code-4-finalize.md')),
+    init:        sha256File(path.join(srcDir, 'plan2code-init.md')),
+    init_update: sha256File(path.join(srcDir, 'plan2code-init-update.md')),
+    quick_task:  sha256File(path.join(srcDir, 'plan2code-quick-task.md')),
   };
 }
 

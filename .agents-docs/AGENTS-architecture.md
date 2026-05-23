@@ -5,7 +5,11 @@
 
 ```
 plan2code/
-├── src/                        # Source workflow prompts (8 markdown files)
+├── src/                        # Source workflow prompts (9 markdown files)
+│   └── plan2code-3b-review-references/  # Reference files for review skill
+│       ├── verification-protocol.md        # Deep verification + confidence calibration
+│       ├── dimensions.md                   # 11 dimensions with detailed checklists
+│       └── false-positives.md              # Known false-positive patterns
 ├── plan2code-loop/           # Autonomous loop CLI tool (Node.js/TypeScript)
 │   ├── src/                    # TypeScript source
 │   └── dist/                   # Built output (tsup)
@@ -42,22 +46,36 @@ plan2code/
 
 | File | Step | Purpose |
 |------|------|---------|
-| `plan2code---init.md` | Init | Generate AGENTS.md as index + `.agents-docs/` section files (progressive discovery) |
-| `plan2code---init-update.md` | Update | Update AGENTS.md with learnings; detects and routes edits to `.agents-docs/` files |
-| `plan2code---quick-task.md` | 0 | Lightweight planning for small tasks |
-| `plan2code-1--plan.md` | 1 | Requirements analysis & architecture |
-| `plan2code-1b--revise-plan.md` | 1b | Mid-implementation revisions |
-| `plan2code-2--document.md` | 2 | Create implementation specs |
-| `plan2code-3--implement.md` | 3 | Execute implementation (phase by phase) |
-| `plan2code-4--finalize.md` | 4 | Validate, summarize, feedback, archive (7 steps) |
+| `plan2code-init.md` | Init | Generate AGENTS.md as index + `.agents-docs/` section files (progressive discovery) |
+| `plan2code-init-update.md` | Update | Update AGENTS.md with learnings; detects and routes edits to `.agents-docs/` files |
+| `plan2code-quick-task.md` | 0 | Lightweight planning for small tasks |
+| `plan2code-1-plan.md` | 1 | Requirements analysis & architecture |
+| `plan2code-1b-revise-plan.md` | 1b | Mid-implementation revisions |
+| `plan2code-2-document.md` | 2 | Create implementation specs |
+| `plan2code-3-implement.md` | 3 | Execute implementation (phase by phase) |
+| `plan2code-3b-review.md` | 3b | Post-implementation comprehensive review |
+| `plan2code-4-finalize.md` | 4 | Validate, summarize, feedback, archive (7 steps) |
 
 ## Naming Convention
 
 Workflow files follow a strict naming pattern:
-- **Utilities:** `plan2code---<name>.md` (triple dash)
-- **Numbered steps:** `plan2code-<N>--<name>.md` (single dash, number, double dash)
+- **Utilities:** `plan2code-<name>.md` (single dash)
+- **Numbered steps:** `plan2code-<N>-<name>.md` (single dash, number, single dash)
 
 Examples:
-- `plan2code---init.md` (utility)
-- `plan2code-1--plan.md` (step 1)
-- `plan2code-1b--revise-plan.md` (step 1b)
+- `plan2code-init.md` (utility)
+- `plan2code-1-plan.md` (step 1)
+- `plan2code-1b-revise-plan.md` (step 1b)
+
+## Reference Files
+
+Some workflows use companion reference files for depth that exceeds the 11k char limit. The orchestrator (main workflow file) loads them via `Read` directives during execution.
+
+**Pattern:** `src/<source-filename-without-extension>-references/` (e.g., `plan2code-3b-review-references/`)
+
+**How the installer handles them:**
+- **Skill-directory platforms** (Claude Code, Agents, Crush, Devin): reference files are nested as `<skill-name>/references/`. Read paths use canonical `references/<file>.md`.
+- **Flat-file platforms** (Windsurf, Cursor, Copilot, Continue): reference files are placed as a sibling directory. The installer rewrites Read paths to the sibling directory name (e.g., `plan2code-3b-review-references/<file>.md`).
+- **TOML platforms** (Gemini CLI): reference files are skipped — TOML embeds content inline, so Read directives won't resolve. The orchestrator's inline fallback text covers this.
+
+Reference files are NOT subject to the 11,000 character limit. Currently only the review workflow (Step 3b) uses this pattern — it serves as the POC for potential adoption by other workflows.

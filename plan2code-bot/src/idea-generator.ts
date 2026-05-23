@@ -39,12 +39,12 @@ export async function generateNewAppIdea(seed?: string): Promise<IdeaResult> {
   const category = categories[Math.floor(Math.random() * categories.length)];
 
   const seedClause = seed
-    ? `\n\nThe user provided this seed for inspiration. Stay closely aligned with the theme and intent of the seed — build on it, don't ignore it:\n"${seed}"`
+    ? `\n\nThe user provided this seed for inspiration. Stay closely aligned with the theme and intent of the seed â€” build on it, don't ignore it:\n"${seed}"`
     : '';
 
   const prompt = `Generate a random, creative idea for a ${category}. The project should be achievable in a single coding session (1-2 hours) and should be interesting but not overly complex.
 
-IMPORTANT: Be creative and diverse with your ideas. Avoid defaulting to developer-centric tools (git analyzers, code formatters, repo scanners, etc.) unless the category specifically calls for it. Think about ideas that would appeal to a broad audience — productivity, entertainment, education, health, finance, art, music, social, cooking, travel, fitness, etc.${seedClause}
+IMPORTANT: Be creative and diverse with your ideas. Avoid defaulting to developer-centric tools (git analyzers, code formatters, repo scanners, etc.) unless the category specifically calls for it. Think about ideas that would appeal to a broad audience â€” productivity, entertainment, education, health, finance, art, music, social, cooking, travel, fitness, etc.${seedClause}
 
 Respond in EXACTLY this format (no other text):
 NAME: <kebab-case-project-name>
@@ -54,7 +54,7 @@ DESCRIPTION: <2-3 sentence description of what the app does, its key features, a
     prompt,
     options: {
       maxTurns: 1,
-      systemPrompt: 'You are a wildly creative project idea generator. You come up with surprising, fun, and diverse software project ideas spanning many domains — not just developer tools. Respond only in the exact format requested.',
+      systemPrompt: 'You are a wildly creative project idea generator. You come up with surprising, fun, and diverse software project ideas spanning many domains â€” not just developer tools. Respond only in the exact format requested.',
     },
   });
 

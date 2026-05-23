@@ -17,14 +17,15 @@ A structured 4-step workflow for developing features and projects with AI assist
 
 | Command                          | When to Use                                              |
 |----------------------------------|----------------------------------------------------------|
-| `/plan2code---init`            | Generate AGENTS.md file for new/existing projects        |
-| `/plan2code---init-update`     | Update AGENTS.md with new learnings from coding sessions |
-| `/plan2code---quick-task`      | Small, quick tasks that don't need full workflow         |
-| `/plan2code-1--plan`           | Starting a new feature (full planning)                   |
-| `/plan2code-1b--revise-plan`   | Requirements change mid-implementation                   |
-| `/plan2code-2--document`       | After planning, create implementation specs              |
-| `/plan2code-3--implement`      | Execute implementation (one phase per conversation)      |
-| `/plan2code-4--finalize`       | All phases complete, ready to archive                    |
+| `/plan2code-init`            | Generate AGENTS.md file for new/existing projects        |
+| `/plan2code-init-update`     | Update AGENTS.md with new learnings from coding sessions |
+| `/plan2code-quick-task`      | Small, quick tasks that don't need full workflow         |
+| `/plan2code-1-plan`           | Starting a new feature (full planning)                   |
+| `/plan2code-1b-revise-plan`   | Requirements change mid-implementation                   |
+| `/plan2code-2-document`       | After planning, create implementation specs              |
+| `/plan2code-3-implement`      | Execute implementation (one phase per conversation)      |
+| `/plan2code-3b-review`        | Post-phase code review (after key features or milestones)|
+| `/plan2code-4-finalize`       | All phases complete, ready to archive                    |
 
 **Key Rules:**
 - Start NEW conversation for each step (and each implementation phase)
@@ -66,6 +67,7 @@ The install script requires **Node.js** (v14 or later). If you don't have Node.j
 - Pi (pi.dev)
 - Amp
 - OpenCode
+- Devin
 
 ### Install via npx (Recommended — No Clone Required)
 
@@ -231,6 +233,31 @@ The `overview.md` includes a "Parallel Execution Groups" section that identifies
 
 ---
 
+### Step 3b: Review Mode 🔬 (Optional)
+
+**Purpose:** Comprehensive post-implementation code review with adaptive scope and spec compliance checking.
+
+**AI Role:** Critical review specialist -- independent second opinion
+
+**When to use:** After completing implementation phases, especially key features or milestones. Can be run after any phase, not just before finalization.
+
+**What it does:**
+
+1. Determines review scope — detects conversation context, user-specified scope, or gathers git changes as fallback
+2. Understands context and determines review strategy
+3. Analyzes across 11 dimensions (correctness, security, performance, spec compliance, etc.)
+4. Generates findings ranked by severity (Critical, Warning, Suggestion)
+5. Offers to fix issues, then provides commit guidance
+
+**Key Behaviors:**
+
+- Uses companion reference files for deep verification, detailed dimension checklists, and false-positive detection (loaded automatically during review)
+- Reviews all changed files across 11 dimensions; prioritizes by risk when batches exceed 50 files
+- Spec-aware when `specs/` exists; works standalone without specs
+- Review phase is read-only; fixes only on user request with verification
+
+---
+
 ### Step 4: Finalization Mode 🧹
 
 **Purpose:** Validate implementation, create summaries, and archive documentation.
@@ -252,10 +279,11 @@ The `overview.md` includes a "Parallel Execution Groups" section that identifies
 After running `node install.js`, use the slash commands directly in your AI tool:
 
 ```
-/plan2code-1--plan           # Start planning a new feature
-/plan2code-2--document       # Create implementation docs from plan
-/plan2code-3--implement      # Begin/continue implementation
-/plan2code-4--finalize       # Wrap up after all phases complete
+/plan2code-1-plan           # Start planning a new feature
+/plan2code-2-document       # Create implementation docs from plan
+/plan2code-3-implement      # Begin/continue implementation
+/plan2code-3b-review        # Post-phase code review (optional)
+/plan2code-4-finalize       # Wrap up after all phases complete
 ```
 
 ---
@@ -394,6 +422,7 @@ The `[/]` status enables parallel execution - multiple agents can work on differ
 | Step 1 (Plan)      | None (describe your feature/project)                 |
 | Step 2 (Document)  | `specs/<feature>/PLAN-DRAFT-<date>.md` or planning conversation |
 | Step 3 (Implement) | `specs/<feature>/overview.md` (auto-detects phase)   |
+| Step 3b (Review)   | Optional: scope guidance (e.g., "review last 2 phases", "just the auth module", "whole PR"). Auto-detects changes and specs if no scope given. |
 | Step 4 (Finalize)  | `specs/<feature>/overview.md`                        |
 
 ---
@@ -402,13 +431,13 @@ The `[/]` status enables parallel execution - multiple agents can work on differ
 
 For hands-off implementation, Plan2Code includes an optional autonomous loop CLI that iterates through your spec tasks automatically.
 
-> **Note:** The loop is an **alternative** to `/plan2code-3--implement`, not a replacement. Use the manual Step 3 workflow when you want direct control over each phase, or use the loop when you prefer autonomous execution.
+> **Note:** The loop is an **alternative** to `/plan2code-3-implement`, not a replacement. Use the manual Step 3 workflow when you want direct control over each phase, or use the loop when you prefer autonomous execution.
 
 ### When to Use Each
 
 | Approach | Best For |
 |----------|----------|
-| `/plan2code-3--implement` | Interactive control, reviewing each phase, complex logic requiring human judgment |
+| `/plan2code-3-implement` | Interactive control, reviewing each phase, complex logic requiring human judgment |
 | `plan2code-loop` | Straightforward implementations, batch processing, overnight runs |
 
 ### Installing the Loop

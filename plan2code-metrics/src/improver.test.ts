@@ -5,18 +5,18 @@ import type { PromptEdit } from './types.js';
 // ── Shared fixtures ───────────────────────────────────────────────────────────
 
 const PROMPT_CONTENTS: Record<string, string> = {
-  'plan2code-1--plan.md': 'This is the plan prompt content. It has some text here.',
-  'plan2code-2--document.md': 'Document prompt with repeated text. repeated text. Done.',
-  'plan2code-3--implement.md': 'Implement prompt content.',
+  'plan2code-1-plan.md': 'This is the plan prompt content. It has some text here.',
+  'plan2code-2-document.md': 'Document prompt with repeated text. repeated text. Done.',
+  'plan2code-3-implement.md': 'Implement prompt content.',
 };
 
 function makeEdit(overrides: Partial<PromptEdit> = {}): PromptEdit {
   return {
-    file: 'plan2code-1--plan.md',
+    file: 'plan2code-1-plan.md',
     rationale: 'test rationale',
     expected_metric_impact: 'test impact',
-    char_count_before: PROMPT_CONTENTS['plan2code-1--plan.md'].length,
-    char_count_after: PROMPT_CONTENTS['plan2code-1--plan.md'].length,
+    char_count_before: PROMPT_CONTENTS['plan2code-1-plan.md'].length,
+    char_count_after: PROMPT_CONTENTS['plan2code-1-plan.md'].length,
     char_count_delta: 0,
     old_text: 'some text',
     new_text: 'better text',
@@ -59,10 +59,10 @@ describe('validateEdit', () => {
 
   it('warns when old_text appears multiple times', () => {
     const edit = makeEdit({
-      file: 'plan2code-2--document.md',
+      file: 'plan2code-2-document.md',
       old_text: 'repeated text',
-      char_count_before: PROMPT_CONTENTS['plan2code-2--document.md'].length,
-      char_count_after: PROMPT_CONTENTS['plan2code-2--document.md'].length,
+      char_count_before: PROMPT_CONTENTS['plan2code-2-document.md'].length,
+      char_count_after: PROMPT_CONTENTS['plan2code-2-document.md'].length,
     });
     const result = validateEdit(edit, PROMPT_CONTENTS);
     expect(result.valid).toBe(true);

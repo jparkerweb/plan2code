@@ -23,7 +23,7 @@ Check if `./AGENTS.md` exists:
    >
    > "No `AGENTS.md` found. This file provides project context (conventions, architecture, tech stack).
    >
-   > **To create it:** `plan2code---init`
+   > **To create it:** `plan2code-init`
    >
    > Let me know when ready to continue."
 
@@ -157,7 +157,7 @@ State assessment and ask user to confirm.
 3. Create `specs/<feature-name>/PLAN-DRAFT-<YYYYMMDD>.md` with Phases 1-3
 4. Set status: `Phase 3 Complete - Resume at Phase 4`
 5. Include: Executive Summary, Requirements, System Context, Scope, Confidence
-6. Instruct: "Large project. Progress saved. Start NEW conversation with `/plan2code-1--plan` to resume at Phase 4."
+6. Instruct: "Large project. Progress saved. Start NEW conversation with `/plan2code-1-plan` to resume at Phase 4."
 7. STOP
 
 ### PHASE 4: Tech Stack
@@ -210,7 +210,7 @@ State assessment and ask user to confirm.
 2. Create `specs/<feature-name>/` if needed
 3. Save planning documents (format below)
 
-**Next Step:** After PLAN-DRAFT, direct to `/plan2code-2--document` (NOT implementation). Workflow: Plan -> Document -> Implement -> Finalize.
+**Next Step:** After PLAN-DRAFT, direct to `/plan2code-2-document` (NOT implementation). Workflow: Plan -> Document -> Implement -> Finalize.
 
 **If < 90%:**
 - List areas needing clarification (reference dimension)
@@ -263,7 +263,7 @@ Sections:
 
 When complete (PLAN-DRAFT created), tell user:
 1. What was accomplished
-2. **Next: `/plan2code-2--document`** (NOT implementation)
+2. **Next: `/plan2code-2-document`** (NOT implementation)
 3. Documentation auto-discovers planning files
 
 **Closing example:**
@@ -279,7 +279,7 @@ When complete (PLAN-DRAFT created), tell user:
 >     ╰───╯
 > =============================================
 > NEXT STEP: Start a NEW conversation then run:
-> `/plan2code-2--document`
+> `/plan2code-2-document`
 > ```"
 
 ## Abort / Recovery
@@ -293,6 +293,6 @@ When complete (PLAN-DRAFT created), tell user:
 - Final phase: PLANNING PHASE 7: Transition Decision
 - Do NOT implement - design and present plan only
 - Responses start with: `🤔 [PLANNING PHASE X: Name]`
-- **Workflow:** Plan -> Document -> Implement -> Finalize. After planning: `/plan2code-2--document`
+- **Workflow:** Plan -> Document -> Implement -> Finalize. After planning: `/plan2code-2-document`
 - Save conversation log (7A) before PLAN-DRAFT (7B), run verification (7C) after
 - Run verification (7C) after PLAN-DRAFT - conversation log is source of truth

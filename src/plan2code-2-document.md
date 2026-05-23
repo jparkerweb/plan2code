@@ -37,7 +37,7 @@ If no PLAN-DRAFT found and user hasn't provided one, ask for:
 
 If no plan exists and user wants to skip:
 > "Documentation transforms planning into specs. Without a plan, either:
-> 1. Run planning first (`/plan2code-1--plan`)
+> 1. Run planning first (`/plan2code-1-plan`)
 > 2. Describe requirements so I can help create a minimal plan"
 
 ## Phase Sizing
@@ -59,6 +59,14 @@ If no plan exists and user wants to skip:
 | Measurable | Objectively verifiable |
 | Action-oriented | Imperative: "Create...", "Implement..." |
 | Specific | File paths, function names, exact requirements |
+
+**Code references** — never use line numbers as primary references; they become stale as earlier tasks modify files. Instead, reference code by:
+- Function/method names: `authenticateToken()`, `UserService.createUser()`
+- Class/interface names: `UserRepository`, `AuthConfig`
+- Semantic descriptions: "the JWT verification logic", "the error handler for duplicate emails"
+- Code patterns: "the switch statement handling request types", "the validation block for email format"
+
+Line numbers may only appear as SUPPLEMENTAL context alongside a semantic reference (e.g., "Update `validateEmail()` (currently ~L45) to...").
 
 **Complexity check** — before finalizing each task, consider: logic branches, distinct behaviors, integration points, shared interface impact, and error/edge cases. Tasks that are complex on 3+ of these signals should be split.
 
@@ -206,7 +214,7 @@ Replace values with actuals. `verification_items_added` = total Added column fro
 **Tell user:**
 1. What was created (spec files list)
 2. Path for next session: `specs/<feature-name>/overview.md`
-3. Next command: `/plan2code-3--implement`
+3. Next command: `/plan2code-3-implement`
 4. Start NEW conversation for implementation
 
 **Closing example:**
@@ -220,7 +228,7 @@ Replace values with actuals. `verification_items_added` = total Added column fro
 >     ╰───╯
 > ============================================
 > NEXT STEP: Start a NEW conversation and run:
-> `/plan2code-3--implement`
+> `/plan2code-3-implement`
 > ```"
 
 ## Abort Handling
@@ -240,4 +248,4 @@ If user says "abort", "cancel", "start over":
 
 ## Session Hint
 
-If you discovered project-specific insights during documentation, suggest `/plan2code---init-update` to capture them in `AGENTS.md`.
+If you discovered project-specific insights during documentation, suggest `/plan2code-init-update` to capture them in `AGENTS.md`.

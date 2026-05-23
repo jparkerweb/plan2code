@@ -69,8 +69,8 @@ function detectPlan2CodeRoot(): string | null {
   for (let i = 0; i < 5; i++) {
     const srcDir = path.join(dir, 'src');
     if (
-      fs.existsSync(path.join(srcDir, 'plan2code-1--plan.md')) &&
-      fs.existsSync(path.join(srcDir, 'plan2code-2--document.md'))
+      fs.existsSync(path.join(srcDir, 'plan2code-1-plan.md')) &&
+      fs.existsSync(path.join(srcDir, 'plan2code-2-document.md'))
     ) {
       return dir;
     }
@@ -764,8 +764,8 @@ export async function runCLI(): Promise<void> {
 
   // Warn if the path doesn't look like a plan2code repo
   const hasSrcPrompts =
-    fs.existsSync(path.join(resolvedPlan2CodeRoot, 'src', 'plan2code-1--plan.md')) &&
-    fs.existsSync(path.join(resolvedPlan2CodeRoot, 'src', 'plan2code-2--document.md'));
+    fs.existsSync(path.join(resolvedPlan2CodeRoot, 'src', 'plan2code-1-plan.md')) &&
+    fs.existsSync(path.join(resolvedPlan2CodeRoot, 'src', 'plan2code-2-document.md'));
   if (!hasSrcPrompts) {
     console.log(chalk.yellow('⚠ No src/plan2code-*.md prompts found at that path. Hashing and analysis may be limited.'));
   }

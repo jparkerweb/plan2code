@@ -2,6 +2,58 @@
 
 All notable changes to Plan2Code will be documented in this file.
 
+## v1.14.0
+
+### ✨ Added
+
+- **Review workflow (Step 3b)** — New `/plan2code-3b-review` command for comprehensive post-implementation code review
+  - 5-step process: scope detection, context analysis, 11-dimension review, spec/test assessment, summary with fix options
+  - Adaptive scope: focused (named files), branch (git diff), or full (subsystem) — auto-detected with user override
+  - 3 severity levels (Critical, Warning, Suggestion) with High-confidence-only findings
+  - Reference file architecture: orchestrator (≤11k chars) + 3 companion reference files loaded via Read directives
+  - Deep verification protocol with use-case tracing for architectural findings and adversarial self-check
+  - Detailed dimension checklists (8 non-obvious items per dimension with anti-patterns and "don't flag" guidance)
+  - False-positive catalog with detection shortcuts to prevent common false findings
+  - Finding verification gate — re-reads source at each cited line before presenting
+  - Mnemonic fix options: `H` (high-priority), `A` (all), `S` (specify by number)
+  - Post-fix Plan/Apply/Verify pipeline — enterprise-grade fix quality with full validation
+  - Doc review mode — >70% doc changes triggers editorial critique
+  - Graceful degradation for agents that can't read external files
+  - Spec-aware when `specs/` exists; works standalone for any codebase
+  - Context-aware session end with pipeline state detection
+  - Registered in installer for all 14+ platform destinations
+  - Installer copies reference directories for all 13+ platform targets
+  - Reference content inlined into TOML output (Gemini CLI) so platforms that cannot resolve runtime file reads still get full workflow depth
+  - Uninstall now removes orphaned `*-references/` directories even when prompt files were already removed manually
+  - Implement workflow session-end now suggests review after each phase
+
+## v1.13.0
+
+### 🔧 Changed
+
+- **Simplified workflow naming convention** — All workflow and skill files unified to single-dash naming, eliminating double-dash (`--`) and triple-dash (`---`) conventions
+  - Renamed 8 source prompt files in `src/` (e.g., `plan2code---init.md` → `plan2code-init.md`, `plan2code-1--plan.md` → `plan2code-1-plan.md`)
+  - Updated `install.js` `SOURCE_PROMPTS` metadata and `generateFilename()` to emit single-dash names
+  - Updated all cross-references inside workflow prompt markdown content
+  - Updated documentation: `README.md`, `QUICK-REFERENCE.md`, `AGENTS.md`, `.agents-docs/AGENTS-architecture.md`
+  - Updated tooling references in `plan2code-loop/`, `plan2code-bot/`, and `plan2code-metrics/`
+  - Fixed pre-existing broken test assertion in `plan2code-bot` step-instructions test
+  - Repaired Windows-1252 / U+FFFD encoding artifacts (em-dashes) in `plan2code-loop` and `plan2code-bot` source files
+
+### 🎁 Added
+
+- **Devin platform support** — Added Devin to supported platforms list across `README.md`, `AGENTS.md`, `install.js` Agent Skills targets, `.agents-docs/AGENTS-development-commands.md`, and the `/plan2code-init` prompt
+- **CLAUDE.md MANDATORY FIRST STEP template** — `/plan2code-init` and `/plan2code-init-update` now generate a CLAUDE.md template containing a `CRITICAL — MANDATORY FIRST STEP` directive that forces Claude Code to read AGENTS.md before responding to any user message
+
+## v1.12.0
+
+### 🔧 Changed
+
+- **Resilient code references in workflow prompts** — Workflow prompts now explicitly guide AI agents to use semantic anchors (function names, class names, code patterns) instead of line numbers, which become stale as tasks modify files during implementation
+  - **Document mode** (`plan2code-2-document.md`) — New "Code references" block in Task Writing section lists four preferred anchor types with examples; line numbers allowed only as supplemental context
+  - **Revise-plan mode** (`plan2code-1b-revise-plan.md`) — Matching code reference rule added to Step 3 (Execute Revisions) so revised and new tasks follow the same convention
+  - **Implement mode** (`plan2code-3-implement.md`) — New "Verify locations" row in Code Consistency Rules table instructs agents to treat line numbers as approximate and locate by function/symbol name
+
 ## v1.11.1
 
 ### 🔧 Changed

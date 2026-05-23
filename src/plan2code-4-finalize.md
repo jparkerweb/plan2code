@@ -309,7 +309,7 @@ Replace METRICS_JSON values with actuals. `completion_rate_at_audit` = Y/Z as de
 | Completion | Action |
 |-----------|--------|
 | **>75%** | Finalize with notice. List incomplete items. Note remaining tasks for follow-up cycle. |
-| **<75%** | Recommend returning to implementation. List incomplete phases with task counts. Options: 1) Return via `/plan2code-3--implement` 2) Proceed with partial finalization. |
+| **<75%** | Recommend returning to implementation. List incomplete phases with task counts. Options: 1) Return via `/plan2code-3-implement` 2) Proceed with partial finalization. |
 
 ## Abort Handling
 

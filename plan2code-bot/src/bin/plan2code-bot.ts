@@ -3,10 +3,10 @@ import { runCLI } from '../cli.js';
 function showHelp(): void {
   console.log(`
 +----------------------------------------------------------------+
-�                   PLAN2CODEDE-BOT                            �
-�----------------------------------------------------------------�
-�  Autonomous workflow test runner foplan2codede              �
-�  Features LLM-as-judge for honest quality evaluation          �
+—                   PLAN2CODEDE-BOT                            —
+—----------------------------------------------------------------—
+—  Autonomous workflow test runner foplan2codede              —
+—  Features LLM-as-judge for honest quality evaluation          —
 +----------------------------------------------------------------+
 
 Usage:
@@ -20,11 +20,11 @@ Options:
   --resume            Resume a previous incomplete run
 
 Modes:
-  � New Project Mode - Run from empty directory
+  — New Project Mode - Run from empty directory
     The bot generates an app idea, creates a subdirectory, writes
     IDEA.md, runs init, then all 4 workflow steps.
 
-  � Enhancement Mode - Run from directory with AGENTS.md
+  — Enhancement Mode - Run from directory with AGENTS.md
     The bot scans the existing codebase, proposes an enhancement,
     writes IDEA.md, then runs plan through finalize.
 

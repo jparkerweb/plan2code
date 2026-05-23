@@ -116,7 +116,7 @@ const SRC_DIR = path.join(__dirname, 'src');
 // Configuration for source prompts
 const SOURCE_PROMPTS = [
   {
-    source: 'plan2code---init.md',
+    source: 'plan2code-init.md',
     stepNumber: 'init',
     name: 'init',
     displayName: 'Init Mode',
@@ -124,7 +124,7 @@ const SOURCE_PROMPTS = [
     isUtility: true
   },
   {
-    source: 'plan2code---init-update.md',
+    source: 'plan2code-init-update.md',
     stepNumber: 'update',
     name: 'init-update',
     displayName: 'Init Update Mode',
@@ -132,42 +132,49 @@ const SOURCE_PROMPTS = [
     isUtility: true
   },
   {
-    source: 'plan2code---quick-task.md',
+    source: 'plan2code-quick-task.md',
     stepNumber: 0,
     name: 'quick-task',
     displayName: 'Quick Task Mode',
     description: 'Lightweight planning for small tasks'
   },
   {
-    source: 'plan2code-1--plan.md',
+    source: 'plan2code-1-plan.md',
     stepNumber: 1,
     name: 'plan',
     displayName: 'Planning Mode',
     description: 'Requirements analysis and architecture design'
   },
   {
-    source: 'plan2code-1b--revise-plan.md',
+    source: 'plan2code-1b-revise-plan.md',
     stepNumber: '1b',
     name: 'revise-plan',
     displayName: 'Revision Mode',
     description: 'Modify specs mid-implementation when requirements change'
   },
   {
-    source: 'plan2code-2--document.md',
+    source: 'plan2code-2-document.md',
     stepNumber: 2,
     name: 'document',
     displayName: 'Documentation Mode',
     description: 'Transform planning output into structured implementation docs'
   },
   {
-    source: 'plan2code-3--implement.md',
+    source: 'plan2code-3-implement.md',
     stepNumber: 3,
     name: 'implement',
     displayName: 'Implementation Mode',
     description: 'Execute implementation phase by phase'
   },
   {
-    source: 'plan2code-4--finalize.md',
+    source: 'plan2code-3b-review.md',
+    stepNumber: '3b',
+    name: 'review',
+    displayName: 'Review Mode',
+    description: 'Comprehensive post-implementation review with spec compliance checking'
+  },
+  {
+    source: 'plan2code-4-finalize.md',
     stepNumber: 4,
     name: 'finalize',
     displayName: 'Finalization Mode',
@@ -178,9 +185,9 @@ const SOURCE_PROMPTS = [
 // Helper function to generate destination filename based on stepNumber
 function generateFilename(prompt, extension = '.md') {
   if (prompt.isUtility || prompt.stepNumber === 0 || prompt.stepNumber === 'init') {
-    return `plan2code---${prompt.name}${extension}`;
+    return `plan2code-${prompt.name}${extension}`;
   }
-  return `plan2code-${prompt.stepNumber}--${prompt.name}${extension}`;
+  return `plan2code-${prompt.stepNumber}-${prompt.name}${extension}`;
 }
 
 // Helper function to generate skill name (normalizes double hyphens to single)
@@ -310,7 +317,7 @@ const LOCAL_DESTINATIONS = [
     header: (prompt) => generateSkillHeader(prompt, true),
   },
   {
-    name: 'Agent Skills (Amp · Gemini CLI · OpenCode)',
+    name: 'Agent Skills (Amp · Devin · Gemini CLI · OpenCode)',
     dir: '.agents/skills',
     type: 'skill',
     header: (prompt) => generateSkillHeader(prompt, false),
@@ -406,7 +413,7 @@ const GLOBAL_DESTINATIONS = [
     header: (prompt) => generateSkillHeader(prompt, true),
   },
   {
-    name: 'Agent Skills (Amp · Gemini CLI · OpenCode)',
+    name: 'Agent Skills (Amp · Devin · Gemini CLI · OpenCode)',
     dir: '.agents/skills',
     type: 'skill',
     header: (prompt) => generateSkillHeader(prompt, false),
@@ -555,7 +562,7 @@ const INSTALL_TARGETS = [
     icon: '◉ '
   },
   {
-    name: 'Agent Skills (Amp · Gemini CLI · OpenCode)',
+    name: 'Agent Skills (Amp · Devin · Gemini CLI · OpenCode)',
     id: 'agent-skills',
     dir: getAgentSkillsDir,
     sourceDir: '.agents/skills',
@@ -822,6 +829,66 @@ function writeSkillToDestination(rootDir, baseDir, dest, prompt, sourceContent, 
 }
 
 /**
+ * Recursively copy a directory and all its contents (files and subdirectories).
+ */
+function copyDirRecursive(src, dest, stats) {
+  fs.mkdirSync(dest, { recursive: true });
+  const entries = fs.readdirSync(src);
+  for (const entry of entries) {
+    const srcPath = path.join(src, entry);
+    const destPath = path.join(dest, entry);
+    if (fs.statSync(srcPath).isDirectory()) {
+      copyDirRecursive(srcPath, destPath, stats);
+    } else {
+      fs.copyFileSync(srcPath, destPath);
+      stats.copied++;
+    }
+  }
+}
+
+/**
+ * Inline reference file content into orchestrator content.
+ * Replaces each `Read references/X.md` directive with the file's actual content,
+ * wrapped in markers. Used for TOML targets (Gemini CLI), which cannot resolve
+ * relative file reads at runtime.
+ */
+function inlineReferenceContent(sourceContent, srcRefDir) {
+  if (!fs.existsSync(srcRefDir)) return sourceContent;
+  return sourceContent.replace(
+    /^Read\s+references\/([^\s]+\.md)(.*)$/gm,
+    (match, filename, suffix) => {
+      const refPath = path.join(srcRefDir, filename);
+      if (!fs.existsSync(refPath)) return match;
+      const refContent = fs.readFileSync(refPath, 'utf8');
+      return `<!-- BEGIN inlined references/${filename}${suffix} -->\n${refContent}\n<!-- END inlined references/${filename} -->`;
+    }
+  );
+}
+
+/**
+ * Copy a reference directory (e.g., plan2code-3b-review-references/) to a destination.
+ * Used by syncPrompts() to distribute reference files alongside orchestrator files.
+ */
+function copyReferenceDirectory(srcRefDir, destRefDir, stats, quiet = false) {
+  const copyStats = { copied: 0 };
+  try {
+    copyDirRecursive(srcRefDir, destRefDir, copyStats);
+  } catch (err) {
+    console.error(`    ${COLORS.RED}${SYMBOLS.ERROR}${COLORS.RESET} Failed to copy reference directory: ${err.message}`);
+    stats.errors++;
+    return;
+  }
+  stats.updated += copyStats.copied;
+  if (!quiet) {
+    const refDirName = path.basename(destRefDir);
+    const files = fs.readdirSync(srcRefDir);
+    for (const file of files) {
+      console.log(`    ${COLORS.GREEN}▰▰▰${COLORS.RESET} ${refDirName}/${file}`);
+    }
+  }
+}
+
+/**
  * Write a TOML file to a destination for Gemini CLI
  */
 function writeTomlToDestination(rootDir, baseDir, dest, prompt, sourceContent, stats, quiet = false) {
@@ -903,25 +970,44 @@ function syncPrompts(quiet = false) {
       continue;
     }
 
-    // Write to dist/local-commands/
-    for (const dest of LOCAL_DESTINATIONS) {
-      if (dest.type === 'skill') {
-        writeSkillToDestination(projectRoot, 'dist/local-commands', dest, prompt, sourceContent, stats, quiet);
-      } else if (dest.type === 'toml') {
-        writeTomlToDestination(projectRoot, 'dist/local-commands', dest, prompt, sourceContent, stats, quiet);
-      } else {
-        writeToDestination(projectRoot, 'dist/local-commands', dest, prompt, sourceContent, stats, quiet);
-      }
-    }
+    // Detect reference directory (e.g., plan2code-3b-review-references/)
+    const refDirName = prompt.source.replace(/\.md$/, '-references');
+    const srcRefDir = path.join(SRC_DIR, refDirName);
+    const hasRefDir = fs.existsSync(srcRefDir);
 
-    // Write to dist/global-commands/
-    for (const dest of GLOBAL_DESTINATIONS) {
-      if (dest.type === 'skill') {
-        writeSkillToDestination(projectRoot, 'dist/global-commands', dest, prompt, sourceContent, stats, quiet);
-      } else if (dest.type === 'toml') {
-        writeTomlToDestination(projectRoot, 'dist/global-commands', dest, prompt, sourceContent, stats, quiet);
-      } else {
-        writeToDestination(projectRoot, 'dist/global-commands', dest, prompt, sourceContent, stats, quiet);
+    // Write to dist/local-commands/ and dist/global-commands/
+    const distBases = [
+      { base: 'dist/local-commands', destinations: LOCAL_DESTINATIONS },
+      { base: 'dist/global-commands', destinations: GLOBAL_DESTINATIONS },
+    ];
+
+    for (const { base, destinations } of distBases) {
+      for (const dest of destinations) {
+        if (dest.type === 'skill') {
+          writeSkillToDestination(projectRoot, base, dest, prompt, sourceContent, stats, quiet);
+          if (hasRefDir) {
+            const skillName = generateSkillName(prompt);
+            const destRefDir = path.join(projectRoot, base, dest.dir, skillName, 'references');
+            copyReferenceDirectory(srcRefDir, destRefDir, stats, quiet);
+          }
+        } else if (dest.type === 'toml') {
+          // TOML targets (Gemini CLI) cannot resolve relative file reads at runtime,
+          // so inline reference content directly into the prompt body.
+          const contentForToml = hasRefDir
+            ? inlineReferenceContent(sourceContent, srcRefDir)
+            : sourceContent;
+          writeTomlToDestination(projectRoot, base, dest, prompt, contentForToml, stats, quiet);
+        } else {
+          // For flat-file destinations, rewrite Read directive paths to sibling directory name
+          const contentForDest = hasRefDir
+            ? sourceContent.replace(/^(Read\s+)references\//gm, '$1' + refDirName + '/')
+            : sourceContent;
+          writeToDestination(projectRoot, base, dest, prompt, contentForDest, stats, quiet);
+          if (hasRefDir) {
+            const destRefDir = path.join(projectRoot, base, dest.dir, refDirName);
+            copyReferenceDirectory(srcRefDir, destRefDir, stats, quiet);
+          }
+        }
       }
     }
   }
@@ -970,8 +1056,15 @@ function copySkillDirectory(sourcePath, destPath, stats) {
     fs.mkdirSync(destSubdir, { recursive: true });
     const files = fs.readdirSync(srcSubdir);
     for (const file of files) {
-      fs.copyFileSync(path.join(srcSubdir, file), path.join(destSubdir, file));
-      stats.copied++;
+      const srcEntry = path.join(srcSubdir, file);
+      const destEntry = path.join(destSubdir, file);
+      if (fs.statSync(srcEntry).isDirectory()) {
+        // Recursively copy nested subdirectories (e.g., references/)
+        copyDirRecursive(srcEntry, destEntry, stats);
+      } else {
+        fs.copyFileSync(srcEntry, destEntry);
+        stats.copied++;
+      }
     }
   }
 }
@@ -992,6 +1085,15 @@ function cleanLegacyTargets() {
         fs.rmSync(entryPath, { recursive: true, force: true });
       } else {
         fs.unlinkSync(entryPath);
+      }
+    }
+    // Clean up any orphaned reference directories
+    for (const entry of entries) {
+      if (/^plan2code-.*-references$/.test(entry)) {
+        const entryPath = path.join(targetDir, entry);
+        if (fs.existsSync(entryPath) && fs.statSync(entryPath).isDirectory()) {
+          fs.rmSync(entryPath, { recursive: true, force: true });
+        }
       }
     }
   }
@@ -1100,6 +1202,18 @@ function install(targets = null) {
           }
         }
       }
+      // Also clean old reference directories for flat-file targets
+      if (target.type !== 'skill') {
+        const existingRefDirs = fs.readdirSync(destPath).filter(f =>
+          /^plan2code-.*-references$/.test(f) &&
+          fs.existsSync(path.join(destPath, f)) &&
+          fs.statSync(path.join(destPath, f)).isDirectory()
+        );
+        for (const refDir of existingRefDirs) {
+          fs.rmSync(path.join(destPath, refDir), { recursive: true, force: true });
+          console.log(`    ${COLORS.YELLOW}░░░${COLORS.RESET} Removed: ${refDir}/`);
+        }
+      }
     } catch (err) {
       // Directory might be newly created, ignore read errors
     }
@@ -1130,6 +1244,28 @@ function install(targets = null) {
           console.log(`    ${COLORS.RED}✖✖✖${COLORS.RESET} ${file}: ${err.message}`);
           totalErrors++;
         }
+      }
+
+      // Copy sibling reference directories for flat-file targets.
+      // Source-of-truth: scan sourcePath for *-references directories rather than deriving
+      // names from prompt filenames (extension assumptions break when new file types are added).
+      const refDirs = fs.readdirSync(sourcePath).filter(f =>
+        /^plan2code-.*-references$/.test(f) &&
+        fs.statSync(path.join(sourcePath, f)).isDirectory()
+      );
+      for (const refDirName of refDirs) {
+        const srcRefDir = path.join(sourcePath, refDirName);
+        const destRefDir = path.join(destPath, refDirName);
+        const refStats = { copied: 0 };
+        try {
+          copyDirRecursive(srcRefDir, destRefDir, refStats);
+        } catch (err) {
+          console.log(`    ${COLORS.RED}✖✖✖${COLORS.RESET} Failed to copy ${refDirName}/: ${err.message}`);
+          totalErrors++;
+          continue;
+        }
+        console.log(`    ${COLORS.GREEN}▰▰▰${COLORS.RESET} ${refDirName}/ (${refStats.copied} reference files)`);
+        totalInstalled += refStats.copied;
       }
     }
     console.log('');
@@ -1229,26 +1365,45 @@ function uninstallFiles(targets = null) {
     }
 
     if (files.length === 0) {
-      console.log(`  ${COLORS.DIM}${SYMBOLS.INFO} No Plan2Code files found - nothing to remove\n${COLORS.RESET}`);
-      continue;
+      console.log(`  ${COLORS.DIM}${SYMBOLS.INFO} No Plan2Code files found${COLORS.RESET}`);
+    } else {
+      // Remove files/skill directories
+      console.log(`  ${COLORS.CYAN}${SYMBOLS.ACTIVE} REMOVING${COLORS.RESET} ${files.length} file(s)...`);
+      for (const file of files) {
+        const destFile = path.join(destPath, file);
+
+        try {
+          if (target.type === 'skill') {
+            // recursive: true handles nested subdirectories (e.g., references/)
+            fs.rmSync(destFile, { recursive: true, force: true });
+          } else {
+            fs.unlinkSync(destFile);
+          }
+          console.log(`    ${COLORS.GREEN}▰▰▰${COLORS.RESET} Removed: ${file}`);
+          totalRemoved++;
+        } catch (err) {
+          console.log(`    ${COLORS.RED}✖✖✖${COLORS.RESET} ${file}: ${err.message}`);
+          totalErrors++;
+        }
+      }
     }
 
-    // Remove files/skill directories
-    console.log(`  ${COLORS.CYAN}${SYMBOLS.ACTIVE} REMOVING${COLORS.RESET} ${files.length} file(s)...`);
-    for (const file of files) {
-      const destFile = path.join(destPath, file);
-
+    // Remove sibling reference directories for flat-file targets.
+    // Runs unconditionally so orphaned reference dirs are cleaned even if prompt files were already removed.
+    if (target.type !== 'skill') {
       try {
-        if (target.type === 'skill') {
-          fs.rmSync(destFile, { recursive: true, force: true });
-        } else {
-          fs.unlinkSync(destFile);
+        const refDirs = fs.readdirSync(destPath).filter(f =>
+          /^plan2code-.*-references$/.test(f) &&
+          fs.existsSync(path.join(destPath, f)) &&
+          fs.statSync(path.join(destPath, f)).isDirectory()
+        );
+        for (const refDir of refDirs) {
+          fs.rmSync(path.join(destPath, refDir), { recursive: true, force: true });
+          console.log(`    ${COLORS.GREEN}▰▰▰${COLORS.RESET} Removed: ${refDir}/`);
+          totalRemoved++;
         }
-        console.log(`    ${COLORS.GREEN}▰▰▰${COLORS.RESET} Removed: ${file}`);
-        totalRemoved++;
       } catch (err) {
-        console.log(`    ${COLORS.RED}✖✖✖${COLORS.RESET} ${file}: ${err.message}`);
-        totalErrors++;
+        // Directory may already be removed, ignore
       }
     }
     console.log('');

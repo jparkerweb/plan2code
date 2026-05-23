@@ -85,6 +85,7 @@ Only show consecutive same-group incomplete phases. After selection, mark `[/]`,
 | No extra files | Only create files mentioned in tasks |
 | Minimal dependencies | No packages outside approved tech stack |
 | No placeholder code | Fully implement every function |
+| Verify locations | Treat any line numbers in specs as approximate — read the file and locate by function/symbol name |
 
 ## Examples
 
@@ -200,9 +201,10 @@ On user "approved":
 1. Mark `[/]` → `[x]` in overview.md, update phase-X.md status to "Complete"
 2. Show Planny art with completion message
 3. Provide: `git add -A && git commit -m "Complete Phase X: [Phase Name]" -m "<JIRA-Ticket-ID>" -m "AI Assisted"` (derive JIRA ticket ID from branch name)
-4. **If more phases:** "NEXT STEP: Start NEW conversation and run: `/plan2code-3--implement`"
-5. **If final phase:** "NEXT STEP: Start NEW conversation and run: `/plan2code-4--finalize`"
-6. Mention `/plan2code-1b--revise` option
+4. **If more phases:** "NEXT STEP: Start NEW conversation and run: `/plan2code-3-implement`"
+5. **If final phase:** "NEXT STEP: Start NEW conversation and run: `/plan2code-4-finalize`"
+6. Mention `/plan2code-1b-revise-plan` option
+7. Suggest: "Optional: run `/plan2code-3b-review` for a post-phase code review -- recommended after key features or milestones."
 
 Planny (continuing):
 ```
@@ -230,7 +232,7 @@ If user says "abort", "cancel", or similar:
    - List completed vs remaining tasks
    - Note created/modified files
    - Do NOT change phase checkbox (stays `[/]`)
-   - Explain: "Run `/plan2code-3--implement` again to resume."
+   - Explain: "Run `/plan2code-3-implement` again to resume."
 3. Stop implementation
 
 ## Recovery
@@ -239,7 +241,7 @@ If user says "abort", "cancel", or similar:
 |-------|----------|
 | Lost context mid-phase | Attach specs, say "resume from Task X.Y" |
 | Spec unclear/conflicting | Mark task blocked, ask user |
-| Need to change plan | Pause, use `/plan2code-1b--revise-plan` |
+| Need to change plan | Pause, use `/plan2code-1b-revise-plan` |
 
 ## Learning Capture
 

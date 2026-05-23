@@ -91,6 +91,8 @@ Proceed with revision? (yes / no / discuss)
 
 `🔄 [REVISION] Step 3: Execute Revisions`
 
+**Code references:** When writing or revising task descriptions, never use line numbers as primary references — they become stale as tasks modify files. Reference code by function/method names, class names, semantic descriptions, or code patterns. Line numbers may only appear as supplemental context (e.g., "Update `validateEmail()` (currently ~L45) to...").
+
 1. Update affected tasks with `🔄 REVISED` flag:
 
 ```markdown
@@ -178,7 +180,7 @@ Report and resolve issues before proceeding.
 ║  Specs have been updated. To continue implementation:             ║
 ║                                                                   ║
 ║  1. Start a NEW conversation                                      ║
-║  2. Use command: /plan2code-3--implement                          ║
+║  2. Use command: /plan2code-3-implement                          ║
 ║  3. Provide path: specs/<feature-name>/overview.md                ║
 ║                                                                   ║
 ║  The command will auto-detect the next Phase to implement.        ║
