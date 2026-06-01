@@ -1,5 +1,5 @@
 # False-Positive Catalog
-> Part of plan2code-3b-review — loaded before presenting findings in Step 3 (Analyze).
+> Part of plan2code-review — loaded before presenting findings in Step 3 (Analyze).
 
 Check every finding against this catalog before presenting it. These patterns represent common categories of false findings that waste reviewer and developer time. Each entry includes the bias, a concrete example, why it's wrong, and how to verify before flagging.
 

@@ -20,11 +20,11 @@ A structured 4-step workflow for developing features and projects with AI assist
 | `/plan2code-init`            | Generate AGENTS.md file for new/existing projects        |
 | `/plan2code-init-update`     | Update AGENTS.md with new learnings from coding sessions |
 | `/plan2code-quick-task`      | Small, quick tasks that don't need full workflow         |
+| `/plan2code-review`           | Post-phase code review (after key features or milestones)|
 | `/plan2code-1-plan`           | Starting a new feature (full planning)                   |
 | `/plan2code-1b-revise-plan`   | Requirements change mid-implementation                   |
 | `/plan2code-2-document`       | After planning, create implementation specs              |
 | `/plan2code-3-implement`      | Execute implementation (one phase per conversation)      |
-| `/plan2code-3b-review`        | Post-phase code review (after key features or milestones)|
 | `/plan2code-4-finalize`       | All phases complete, ready to archive                    |
 
 **Key Rules:**
@@ -68,6 +68,7 @@ The install script requires **Node.js** (v14 or later). If you don't have Node.j
 - Amp
 - OpenCode
 - Devin
+- Zed
 
 ### Install via npx (Recommended — No Clone Required)
 
@@ -131,6 +132,12 @@ The installer displays an interactive menu:
 
 SELECT OPTION (I, U, C, Q) [I]:
 ```
+
+---
+
+## Status Line — Claude CLI (Optional)
+
+A persistent three-line status bar for Claude Code showing model, project, git branch, uncommitted diff stats, context usage, and plan quota. Included in `node install.js` → `A` (Install All + dev tools), or available individually via Custom → Status Line. See [src/statusline-claude/README.md](src/statusline-claude/README.md) for details.
 
 ---
 
@@ -233,7 +240,7 @@ The `overview.md` includes a "Parallel Execution Groups" section that identifies
 
 ---
 
-### Step 3b: Review Mode 🔬 (Optional)
+### Review Mode 🔬 (Optional)
 
 **Purpose:** Comprehensive post-implementation code review with adaptive scope and spec compliance checking.
 
@@ -282,7 +289,7 @@ After running `node install.js`, use the slash commands directly in your AI tool
 /plan2code-1-plan           # Start planning a new feature
 /plan2code-2-document       # Create implementation docs from plan
 /plan2code-3-implement      # Begin/continue implementation
-/plan2code-3b-review        # Post-phase code review (optional)
+/plan2code-review           # Post-phase code review (optional)
 /plan2code-4-finalize       # Wrap up after all phases complete
 ```
 
@@ -422,7 +429,7 @@ The `[/]` status enables parallel execution - multiple agents can work on differ
 | Step 1 (Plan)      | None (describe your feature/project)                 |
 | Step 2 (Document)  | `specs/<feature>/PLAN-DRAFT-<date>.md` or planning conversation |
 | Step 3 (Implement) | `specs/<feature>/overview.md` (auto-detects phase)   |
-| Step 3b (Review)   | Optional: scope guidance (e.g., "review last 2 phases", "just the auth module", "whole PR"). Auto-detects changes and specs if no scope given. |
+| Review (Optional)  | Scope guidance (e.g., "review last 2 phases", "just the auth module", "whole PR"). Auto-detects changes and specs if no scope given. |
 | Step 4 (Finalize)  | `specs/<feature>/overview.md`                        |
 
 ---

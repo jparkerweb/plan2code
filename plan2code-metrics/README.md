@@ -6,7 +6,7 @@ Recursive self-improvement toolchain for plan2code contributors. Collects metric
 
 ```bash
 # Install (one-time, from the plan2code root)
-node install.js            # → "I" (Install All) includes metrics
+node install.js            # → "A" (Install All + dev tools) includes metrics
                            # → or "M" (Metrics only) under the CUSTOM sub-menu
 
 # After finishing any project spec (steps 1-4):
@@ -78,7 +78,7 @@ From the plan2code repo root:
 node install.js
 ```
 
-Choose **I** (Install All) to install prompts, loop CLI, and metrics together. Or choose **C** (Custom) then **M** (Metrics) to install just the metrics CLI.
+Choose **A** (Install All + dev tools) to install prompts, loop CLI, bot, metrics, and status line together. Or choose **C** (Custom) then **M** (Metrics) to install just the metrics CLI.
 
 The installer handles `npm install`, `npm run build`, and global linking automatically. After install, `plan2code-metrics` is available from any directory.
 

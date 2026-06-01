@@ -1,5 +1,5 @@
 # Dimension Checklists
-> Part of plan2code-3b-review — loaded during Step 3 (Analyze).
+> Part of plan2code-review — loaded during Step 3 (Analyze).
 
 Non-obvious check items, anti-patterns, and "don't flag" guidance for each review dimension. Focus on what LLMs commonly miss.
 

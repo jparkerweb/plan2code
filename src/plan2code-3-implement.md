@@ -204,7 +204,7 @@ On user "approved":
 4. **If more phases:** "NEXT STEP: Start NEW conversation and run: `/plan2code-3-implement`"
 5. **If final phase:** "NEXT STEP: Start NEW conversation and run: `/plan2code-4-finalize`"
 6. Mention `/plan2code-1b-revise-plan` option
-7. Suggest: "Optional: run `/plan2code-3b-review` for a post-phase code review -- recommended after key features or milestones."
+7. Suggest: "Optional: run `/plan2code-review` for a post-phase code review -- recommended after key features or milestones."
 
 Planny (continuing):
 ```

@@ -7,11 +7,11 @@
 | Init   | /plan2code-init             | None            | AGENTS.md file                      |
 | Update | /plan2code-init-update      | AGENTS.md       | Updated AGENTS.md                   |
 | 0      | /plan2code-quick-task       | Requirements    | Conversational plan                 |
+| review | /plan2code-review            | Scope guidance  | Review findings + fixes             |
 | 1      | /plan2code-1-plan            | Requirements    | PLAN-CONVERSATION-<date>.md + PLAN-DRAFT-<date>.md |
 | 1b     | /plan2code-1b-revise-plan    | Specs + changes | Updated specs                       |
 | 2      | /plan2code-2-document        | PLAN-DRAFT.md   | overview.md + Phase files           |
 | 3      | /plan2code-3-implement       | overview.md     | Implemented code                    |
-| 3b     | /plan2code-3b-review         | Scope guidance  | Review findings + fixes             |
 | 4      | /plan2code-4-finalize        | overview.md     | Archived specs                      |
 
 ## File Structure

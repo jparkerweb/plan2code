@@ -2,6 +2,54 @@
 
 All notable changes to Plan2Code will be documented in this file.
 
+## v1.15.2
+
+### 🔧 Changed
+
+- **Review workflow renamed** — `/plan2code-3b-review` → `/plan2code-review`
+  - Removed `3b` step-number prefix; review is now a standalone utility workflow (like `init` and `quick-task`)
+  - Source file: `src/plan2code-review.md` (was `plan2code-3b-review.md`)
+  - Reference directory: `src/plan2code-review-references/` (was `plan2code-3b-review-references/`)
+  - Updated all docs, installer config, architecture docs, and cross-references
+
+## v1.15.1
+
+### 🔧 Changed
+
+- **Zed agent support** — Added Zed to all agent support documentation
+  - `README.md` Supported Platforms list
+  - `AGENTS.md` intro and Project Overview
+  - `.agents-docs/AGENTS-development-commands.md` Platform-Specific File Formats table
+  - `install.js` Agent Skills platform label
+  - `src/plan2code-init.md` AGENTS.md template text
+
+## v1.15.0
+
+### ✨ Added
+
+- **Claude CLI status line** — Persistent three-line status bar for Claude Code, displaying model, project, git branch, uncommitted diff stats, session duration, context window usage bar, and plan/quota usage. Reads all data from Claude Code's stdin JSON — no API calls, no auth, no background processes.
+  - `src/statusline-claude/statusline.js` — self-contained: stdin parsing, config loader, ANSI formatting, orchestration
+  - `src/statusline-claude/statusline-config.json` — distributed default config
+  - `src/statusline-claude/README.md` — user docs: install, config, usage modes, troubleshooting
+  - **Planny mascot icons** on each line (`╭─╮`, `│★│`, `╰─╯`) in brand colors, with monochrome fallback
+  - **Context window bar** (12-cell `▰▱`) with configurable `autocompactBuffer` (default 33000 tokens) so the percentage reflects *usable* context, not the raw window
+  - **Adaptive plan usage segment** — auto-detects data shape:
+    - Pro/Max/Teams (rate_limits present) → `5h: NN% · 7d: NN%`
+    - Bedrock / Vertex / PAYG (no rate_limits) → `NNk in · NNk out` session tokens
+    - Segment hidden when neither is available
+  - **Real uncommitted diff stats** via `git diff HEAD --numstat` → `+NN -NN`
+  - **Color-coded thresholds** — green / yellow / red for context bar and rate limits
+  - **Separator line** rendered at fixed 55-character width for consistent alignment
+  - **Session cost display** — Estimated session cost shown next to duration (e.g. `49m ($4.62)`) via new `items.sessionCost` config (default on); reads `cost.total_cost_usd` from Claude Code stdin; hidden when zero or unavailable
+  - **Compact mode redesigned** — `"compact": true` now renders two content lines (no mascot icons, no separator) instead of one cramped single line. The single-line variant truncated in narrow terminals — the exact case compact mode was meant to help. Default remains `false`.
+  - **Silent failure** on all errors — never crashes, never blocks the CLI; 1.5s per-call timeouts on git operations; non-git workspaces short-circuit without spawning subprocesses
+- **Installer integration** — Status line included in `Install All + dev tools` (`A`); also available via `Custom → S` (opt-in).
+  - Copies `statusline.js` verbatim to `~/.claude/plan2code-statusline.js` (single-file design, no bundling)
+  - Registers in `~/.claude/settings.json` under `statusLine` via atomic temp-file + rename write
+  - Preserves existing `statusline-config.json` on reinstall
+  - Detects non-plan2code custom `statusLine` configs — prompts before replacing; auto-backs up to `statusline-previous.json`
+  - Uninstall (`U`) removes bundled script + `settings.json` entry; preserves `statusline-config.json`. Only removes `settings.statusLine` if it points to the plan2code bundle — non-plan2code entries are left intact.
+
 ## v1.14.0
 
 ### ✨ Added

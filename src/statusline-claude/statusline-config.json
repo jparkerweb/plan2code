@@ -1,0 +1,15 @@
+{
+  "autocompactBuffer": 33000,
+  "color": true,
+  "compact": false,
+  "items": {
+    "model": true,
+    "project": true,
+    "branch": true,
+    "contextBar": true,
+    "planUsage": true,
+    "linesChanged": true,
+    "duration": true,
+    "sessionCost": true
+  }
+}
