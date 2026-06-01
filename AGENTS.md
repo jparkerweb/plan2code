@@ -1,10 +1,10 @@
 # AGENTS.md
 
-This file provides guidance to AI coding agents like Claude Code (claude.ai/code), Cursor AI, Codex, Gemini CLI, GitHub Copilot, Devin, and other AI coding assistants when working with code in this repository.
+This file provides guidance to AI coding agents like Claude Code (claude.ai/code), Cursor AI, Codex, Gemini CLI, GitHub Copilot, Devin, Zed, and other AI coding assistants when working with code in this repository.
 
 ## Project Overview
 
-Plan2Code is a structured 4-step workflow methodology for AI-assisted software development. It provides prompt templates that can be installed globally or per-project for various AI coding tools (Claude Code, Cursor, Copilot, Continue, Windsurf, Codeium, Devin).
+Plan2Code is a structured 4-step workflow methodology for AI-assisted software development. It provides prompt templates that can be installed globally or per-project for various AI coding tools (Claude Code, Cursor, Copilot, Continue, Windsurf, Codeium, Devin, Zed).
 
 **Version:** Check `version.json` for current version
 **Author:** Justin Parker
@@ -31,6 +31,12 @@ Details: [Plan2Code Loop](./.agents-docs/AGENTS-plan2code-loop.md)
 Recursive self-improvement toolchain (`plan2code-metrics/`) for collecting run metrics, aggregating by prompt generation, diagnosing weak steps, and proposing prompt edits.
 
 Details: [Plan2Code Metrics](./.agents-docs/AGENTS-plan2code-metrics.md)
+
+## Plan2Code Status Line (Claude CLI)
+
+Optional CLI status bar (`src/statusline-claude/`) for Claude Code. Displays model, project, branch, context usage, usage stats (rate limits or token counts), git diff stats, and duration. Reads data directly from Claude Code's stdin JSON — no API calls, no auth, no background processes. Included in `Install All + dev tools` (`A`); also available via `install.js` Custom → S (opt-in).
+
+Details: [Architecture](./.agents-docs/AGENTS-architecture.md) (see Status Line section)
 
 ## Development Commands
 

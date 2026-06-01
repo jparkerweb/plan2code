@@ -10,7 +10,7 @@ Start all CREATE AGENTS MODE responses with '💡'
     ╰───╯
 ```
 
-Analyze this codebase and create `AGENTS.md` to guide future AI coding agents (Claude Code, Codex, Gemini CLI, Devin, etc.).
+Analyze this codebase and create `AGENTS.md` to guide future AI coding agents (Claude Code, Codex, Gemini CLI, Devin, Zed, etc.).
 
 ## Content
 
@@ -31,7 +31,7 @@ Prefix the file with:
 ```
 # AGENTS.md
 
-This file provides guidance to AI coding agents like Claude Code (claude.ai/code), Cursor AI, Codex, Gemini CLI, GitHub Copilot, Devin, and other AI coding assistants when working with code in this repository.
+This file provides guidance to AI coding agents like Claude Code (claude.ai/code), Cursor AI, Codex, Gemini CLI, GitHub Copilot, Devin, Zed, and other AI coding assistants when working with code in this repository.
 ```
 
 ---

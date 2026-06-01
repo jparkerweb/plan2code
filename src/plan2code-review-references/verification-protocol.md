@@ -1,5 +1,5 @@
 # Verification Protocol
-> Part of plan2code-3b-review — loaded during Step 3 (Analyze).
+> Part of plan2code-review — loaded during Step 3 (Analyze).
 
 Apply this protocol to every finding before presenting it. Findings that fail verification are dropped. No exceptions.
 

@@ -25,8 +25,9 @@ cd plan2code-metrics && npm run build # Build the CLI
 
 | Option | Action |
 |--------|--------|
-| `I` | Install Plan2Code for all platforms + loop CLI |
-| `U` | Uninstall Plan2Code files + loop CLI (confirmation required) |
+| `I` | Install Plan2Code workflow prompts for all platforms, plus `plan2code-loop` CLI |
+| `A` | Everything in `I` plus `plan2code-bot`, `plan2code-metrics` (dev tools), and Claude Code status line |
+| `U` | Uninstall Plan2Code files: prompts + `plan2code-loop` + `plan2code-metrics` + `plan2code-bot` + Claude Code status line (confirmation required) |
 | `C` | Open CUSTOM sub-menu |
 | `Q` | Quit |
 
@@ -37,6 +38,8 @@ cd plan2code-metrics && npm run build # Build the CLI
 | `L` | Show local (per-project) install instructions |
 | `O` | Install plan2code-loop CLI only |
 | `M` | Install plan2code-metrics CLI only |
+| `S` | Install Claude Code status line only |
+| `B` | Install plan2code-bot CLI only |
 | `Q` | Return to main menu |
 
 ## How the Installer Works
@@ -58,7 +61,7 @@ cd plan2code-metrics && npm run build # Build the CLI
 | VS Code Copilot | `.prompt.md` | — | — | YAML frontmatter |
 | Codeium | `.md` | — | — | YAML frontmatter |
 | Claude Code (Skills) | `SKILL.md` in subdir | `.claude/skills/<skill-name>/` | `~/.claude/skills/<skill-name>/` | YAML frontmatter + `disable-model-invocation: true` |
-| Agent Skills (Amp · Devin · Gemini CLI · OpenCode) | `SKILL.md` in subdir | `.agents/skills/<skill-name>/` | `~/.agents/skills/<skill-name>/` | YAML frontmatter (no disable flag) |
+| Agent Skills (Amp · Devin · Gemini CLI · OpenCode · Zed) | `SKILL.md` in subdir | `.agents/skills/<skill-name>/` | `~/.agents/skills/<skill-name>/` | YAML frontmatter (no disable flag) |
 | Crush | `SKILL.md` in subdir | — (global only) | `~/.config/crush/skills/<skill-name>/` (Unix) / `%LOCALAPPDATA%\crush\skills\<skill-name>\` (Windows) | YAML frontmatter |
 | Gemini CLI (TOML) | `.toml` | `.gemini/commands/` | `~/.gemini/commands/` | None (TOML fields: `description`, `prompt`) |
 | Pi (pi.dev) | `.md` | `.pi/prompts/` | `~/.pi/agent/prompts/` | YAML frontmatter (`description`) |

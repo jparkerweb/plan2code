@@ -167,11 +167,12 @@ const SOURCE_PROMPTS = [
     description: 'Execute implementation phase by phase'
   },
   {
-    source: 'plan2code-3b-review.md',
-    stepNumber: '3b',
+    source: 'plan2code-review.md',
+    stepNumber: 'review',
     name: 'review',
     displayName: 'Review Mode',
-    description: 'Comprehensive post-implementation review with spec compliance checking'
+    description: 'Comprehensive post-implementation review with spec compliance checking',
+    isUtility: true
   },
   {
     source: 'plan2code-4-finalize.md',
@@ -195,12 +196,19 @@ function generateSkillName(prompt) {
   return generateFilename(prompt, '').replace(/--+/g, '-');
 }
 
+// Helper function to generate step label for descriptions
+function generateStepLabel(prompt) {
+  if (prompt.stepNumber === 'init') return 'Init';
+  if (prompt.stepNumber === 'review') return 'Review';
+  return `Step ${prompt.stepNumber}`;
+}
+
 // Helper function to generate YAML frontmatter for SKILL.md files
 function generateSkillHeader(prompt, disableModelInvocation = false) {
   const lines = [
     '---',
     `name: ${generateSkillName(prompt)}`,
-    `description: "Plan2Code ${prompt.stepNumber === 'init' ? 'Init' : `Step ${prompt.stepNumber}`}: ${prompt.displayName} - user-initiated workflow step. Do not invoke autonomously."`,
+    `description: "Plan2Code ${generateStepLabel(prompt)}: ${prompt.displayName} - user-initiated workflow step. Do not invoke autonomously."`,
   ];
   if (disableModelInvocation) lines.push('disable-model-invocation: true');
   lines.push('---');
@@ -209,7 +217,7 @@ function generateSkillHeader(prompt, disableModelInvocation = false) {
 
 // Helper function to generate complete .toml file content for Gemini CLI
 function generateTomlContent(prompt, sourceContent) {
-  const stepLabel = prompt.stepNumber === 'init' ? 'Init' : `Step ${prompt.stepNumber}`;
+  const stepLabel = generateStepLabel(prompt);
   const desc = `Plan2Code ${stepLabel}: ${prompt.displayName} - user-initiated ${prompt.description || 'workflow step'}`;
   return `description = "${desc}"\nprompt = '''\n${sourceContent}\n'''\n`;
 }
@@ -235,7 +243,7 @@ const LOCAL_DESTINATIONS = [
     header: (prompt) => [
       '---',
       'mode: agent',
-      `description: "Plan2Code ${prompt.stepNumber === 'init' ? 'Init' : `Step ${prompt.stepNumber}`}: ${prompt.displayName} - ${prompt.description}"`,
+      `description: "Plan2Code ${generateStepLabel(prompt)}: ${prompt.displayName} - ${prompt.description}"`,
       '---'
     ].join('\n')
   },
@@ -245,7 +253,7 @@ const LOCAL_DESTINATIONS = [
     filePattern: (prompt) => generateFilename(prompt, '.agent.md'),
     header: (prompt) => [
       '---',
-      `description: "Plan2Code ${prompt.stepNumber === 'init' ? 'Init' : `Step ${prompt.stepNumber}`}: ${prompt.displayName} - ${prompt.description}"`,
+      `description: "Plan2Code ${generateStepLabel(prompt)}: ${prompt.displayName} - ${prompt.description}"`,
       '---'
     ].join('\n')
   },
@@ -256,7 +264,7 @@ const LOCAL_DESTINATIONS = [
     header: (prompt) => [
       '---',
       `name: ${prompt.name}`,
-      `description: "Plan2Code ${prompt.stepNumber === 'init' ? 'Init' : `Step ${prompt.stepNumber}`}: ${prompt.displayName} - ${prompt.description}"`,
+      `description: "Plan2Code ${generateStepLabel(prompt)}: ${prompt.displayName} - ${prompt.description}"`,
       '---'
     ].join('\n')
   },
@@ -266,7 +274,7 @@ const LOCAL_DESTINATIONS = [
     filePattern: (prompt) => generateFilename(prompt, '.md'),
     header: (prompt) => [
       '---',
-      `description: "Plan2Code ${prompt.stepNumber === 'init' ? 'Init' : `Step ${prompt.stepNumber}`}: ${prompt.displayName} - ${prompt.description}"`,
+      `description: "Plan2Code ${generateStepLabel(prompt)}: ${prompt.displayName} - ${prompt.description}"`,
       '---'
     ].join('\n')
   },
@@ -276,7 +284,7 @@ const LOCAL_DESTINATIONS = [
     filePattern: (prompt) => generateFilename(prompt, '.md'),
     header: (prompt) => [
       '---',
-      `description: "Plan2Code ${prompt.stepNumber === 'init' ? 'Init' : `Step ${prompt.stepNumber}`}: ${prompt.displayName} - ${prompt.description}"`,
+      `description: "Plan2Code ${generateStepLabel(prompt)}: ${prompt.displayName} - ${prompt.description}"`,
       '---'
     ].join('\n')
   },
@@ -286,7 +294,7 @@ const LOCAL_DESTINATIONS = [
     filePattern: (prompt) => generateFilename(prompt, '.md'),
     header: (prompt) => [
       '---',
-      `description: "Plan2Code ${prompt.stepNumber === 'init' ? 'Init' : `Step ${prompt.stepNumber}`}: ${prompt.displayName} - ${prompt.description}"`,
+      `description: "Plan2Code ${generateStepLabel(prompt)}: ${prompt.displayName} - ${prompt.description}"`,
       '---'
     ].join('\n')
   },
@@ -296,7 +304,7 @@ const LOCAL_DESTINATIONS = [
     filePattern: (prompt) => generateFilename(prompt, '.md'),
     header: (prompt) => [
       '---',
-      `description: "Plan2Code ${prompt.stepNumber === 'init' ? 'Init' : `Step ${prompt.stepNumber}`}: ${prompt.displayName} - ${prompt.description}"`,
+      `description: "Plan2Code ${generateStepLabel(prompt)}: ${prompt.displayName} - ${prompt.description}"`,
       '---'
     ].join('\n')
   },
@@ -306,7 +314,7 @@ const LOCAL_DESTINATIONS = [
     filePattern: (prompt) => generateFilename(prompt, '.md'),
     header: (prompt) => [
       '---',
-      `description: "Plan2Code ${prompt.stepNumber === 'init' ? 'Init' : `Step ${prompt.stepNumber}`}: ${prompt.displayName} - ${prompt.description}"`,
+      `description: "Plan2Code ${generateStepLabel(prompt)}: ${prompt.displayName} - ${prompt.description}"`,
       '---'
     ].join('\n')
   },
@@ -344,7 +352,7 @@ const GLOBAL_DESTINATIONS = [
     filePattern: (prompt) => generateFilename(prompt, '.md'),
     header: (prompt) => [
       '---',
-      `description: "Plan2Code ${prompt.stepNumber === 'init' ? 'Init' : `Step ${prompt.stepNumber}`}: ${prompt.displayName} - ${prompt.description}"`,
+      `description: "Plan2Code ${generateStepLabel(prompt)}: ${prompt.displayName} - ${prompt.description}"`,
       '---'
     ].join('\n')
   },
@@ -361,7 +369,7 @@ const GLOBAL_DESTINATIONS = [
     header: (prompt) => [
       '---',
       `name: ${prompt.name}`,
-      `description: "Plan2Code ${prompt.stepNumber === 'init' ? 'Init' : `Step ${prompt.stepNumber}`}: ${prompt.displayName} - ${prompt.description}"`,
+      `description: "Plan2Code ${generateStepLabel(prompt)}: ${prompt.displayName} - ${prompt.description}"`,
       '---'
     ].join('\n')
   },
@@ -371,7 +379,7 @@ const GLOBAL_DESTINATIONS = [
     filePattern: (prompt) => generateFilename(prompt, '.md'),
     header: (prompt) => [
       '---',
-      `description: "Plan2Code ${prompt.stepNumber === 'init' ? 'Init' : `Step ${prompt.stepNumber}`}: ${prompt.displayName} - ${prompt.description}"`,
+      `description: "Plan2Code ${generateStepLabel(prompt)}: ${prompt.displayName} - ${prompt.description}"`,
       '---'
     ].join('\n')
   },
@@ -382,7 +390,7 @@ const GLOBAL_DESTINATIONS = [
     header: (prompt) => [
       '---',
       'agent: agent',
-      `description: "Plan2Code ${prompt.stepNumber === 'init' ? 'Init' : `Step ${prompt.stepNumber}`}: ${prompt.displayName} - ${prompt.description}"`,
+      `description: "Plan2Code ${generateStepLabel(prompt)}: ${prompt.displayName} - ${prompt.description}"`,
       '---'
     ].join('\n')
   },
@@ -392,7 +400,7 @@ const GLOBAL_DESTINATIONS = [
     filePattern: (prompt) => generateFilename(prompt, '.md'),
     header: (prompt) => [
       '---',
-      `description: "Plan2Code ${prompt.stepNumber === 'init' ? 'Init' : `Step ${prompt.stepNumber}`}: ${prompt.displayName} - ${prompt.description}"`,
+      `description: "Plan2Code ${generateStepLabel(prompt)}: ${prompt.displayName} - ${prompt.description}"`,
       '---'
     ].join('\n')
   },
@@ -402,7 +410,7 @@ const GLOBAL_DESTINATIONS = [
     filePattern: (prompt) => generateFilename(prompt, '.md'),
     header: (prompt) => [
       '---',
-      `description: "Plan2Code ${prompt.stepNumber === 'init' ? 'Init' : `Step ${prompt.stepNumber}`}: ${prompt.displayName} - ${prompt.description}"`,
+      `description: "Plan2Code ${generateStepLabel(prompt)}: ${prompt.displayName} - ${prompt.description}"`,
       '---'
     ].join('\n')
   },
@@ -413,10 +421,10 @@ const GLOBAL_DESTINATIONS = [
     header: (prompt) => generateSkillHeader(prompt, true),
   },
   {
-    name: 'Agent Skills (Amp · Devin · Gemini CLI · OpenCode)',
+    name: 'Agent Skills (Amp · Devin · Gemini CLI · OpenCode · Zed)',
     dir: '.agents/skills',
     type: 'skill',
-    header: (prompt) => generateSkillHeader(prompt, false),
+    header: (prompt) => generateSkillHeader(prompt, true),
   },
   {
     name: 'Crush',
@@ -460,10 +468,6 @@ function getCrushSkillsDir() {
 // Helper function to get Agent Skills global directory based on platform
 function getAgentSkillsDir() {
   const homedir = os.homedir();
-  if (process.platform === 'win32') {
-    const localAppData = process.env.LOCALAPPDATA || path.join(homedir, 'AppData', 'Local');
-    return path.join(localAppData, 'agents', 'skills');
-  }
   return path.join(homedir, '.agents', 'skills');
 }
 
@@ -562,15 +566,13 @@ const INSTALL_TARGETS = [
     icon: '◉ '
   },
   {
-    name: 'Agent Skills (Amp · Devin · Gemini CLI · OpenCode)',
+    name: 'Agent Skills (Amp · Devin · Gemini CLI · OpenCode · Zed)',
     id: 'agent-skills',
     dir: getAgentSkillsDir,
     sourceDir: '.agents/skills',
     type: 'skill',
     filePattern: /^plan2code-/,
-    displayPath: process.platform === 'win32'
-      ? '%LOCALAPPDATA%\\agents\\skills'
-      : '~/.agents/skills',
+    displayPath: '~/.agents/skills',
     icon: '◉ '
   },
   {
@@ -713,19 +715,8 @@ function deleteDirectory(dirPath) {
   if (!fs.existsSync(dirPath)) {
     return;
   }
-
   try {
-    const files = fs.readdirSync(dirPath);
-    for (const file of files) {
-      const filePath = path.join(dirPath, file);
-      const stat = fs.statSync(filePath);
-      if (stat.isDirectory()) {
-        deleteDirectory(filePath);
-      } else {
-        fs.unlinkSync(filePath);
-      }
-    }
-    fs.rmdirSync(dirPath);
+    fs.rmSync(dirPath, { recursive: true, force: true });
   } catch (err) {
     console.error(`  ${COLORS.RED}${SYMBOLS.ERROR}${COLORS.RESET} Could not delete directory ${dirPath}: ${err.message}`);
   }
@@ -866,7 +857,7 @@ function inlineReferenceContent(sourceContent, srcRefDir) {
 }
 
 /**
- * Copy a reference directory (e.g., plan2code-3b-review-references/) to a destination.
+ * Copy a reference directory (e.g., plan2code-review-references/) to a destination.
  * Used by syncPrompts() to distribute reference files alongside orchestrator files.
  */
 function copyReferenceDirectory(srcRefDir, destRefDir, stats, quiet = false) {
@@ -970,7 +961,7 @@ function syncPrompts(quiet = false) {
       continue;
     }
 
-    // Detect reference directory (e.g., plan2code-3b-review-references/)
+    // Detect reference directory (e.g., plan2code-review-references/)
     const refDirName = prompt.source.replace(/\.md$/, '-references');
     const srcRefDir = path.join(SRC_DIR, refDirName);
     const hasRefDir = fs.existsSync(srcRefDir);
@@ -1102,13 +1093,12 @@ function cleanLegacyTargets() {
 /**
  * Execute installation
  */
-function install(targets = null) {
+async function install(targets = null) {
   const projectRoot = __dirname;
   const homeDir = os.homedir();
   const targetList = targets || getTargets();
 
   let totalInstalled = 0;
-  let totalSkipped = 0;
   let totalErrors = 0;
 
   displaySectionHeader('  INSTALLING FILES  ');
@@ -1286,9 +1276,7 @@ function install(targets = null) {
   console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET}  ${statusColor}Status:${COLORS.RESET}            ${statusColor}${statusText}${COLORS.RESET}`, 76) + `${COLORS.CYAN}║${COLORS.RESET}`);
   console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET}  Files Installed:   ${COLORS.GREEN}${totalInstalled}${COLORS.RESET}`, 76) + `${COLORS.CYAN}║${COLORS.RESET}`);
 
-  if (totalSkipped > 0) {
-    console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET}  Files Skipped:     ${COLORS.YELLOW}${totalSkipped}${COLORS.RESET}`, 76) + `${COLORS.CYAN}║${COLORS.RESET}`);
-  }
+
   if (totalErrors > 0) {
     console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET}  Errors:            ${COLORS.RED}${totalErrors}${COLORS.RESET}`, 76) + `${COLORS.CYAN}║${COLORS.RESET}`);
   }
@@ -1559,12 +1547,12 @@ function runInteractive() {
       rl.close();
       const loopResult = installPlan2CodeLoop();
       console.log('');
-      const installResult = install();
+      const installResult = await install();
       const exitCode = loopResult !== 0 ? loopResult : installResult;
       process.exit(exitCode);
     }
 
-    // A path — Install Everything (prompts + loop + bot + metrics)
+    // A path — Install Everything (prompts + loop + bot + metrics + Claude status line)
     if (input === 'A') {
       rl.close();
       const loopResult = installPlan2CodeLoop();
@@ -1573,8 +1561,10 @@ function runInteractive() {
       console.log('');
       const metricsResult = installPlan2CodeMetrics();
       console.log('');
-      const installResult = install();
-      const exitCode = loopResult !== 0 ? loopResult : installResult !== 0 ? installResult : botResult !== 0 ? botResult : metricsResult;
+      const statusLineResult = await installStatusLine();
+      console.log('');
+      const installResult = await install();
+      const exitCode = loopResult !== 0 ? loopResult : botResult !== 0 ? botResult : metricsResult !== 0 ? metricsResult : statusLineResult !== 0 ? statusLineResult : installResult;
       process.exit(exitCode);
     }
 
@@ -1599,7 +1589,8 @@ function runInteractive() {
         const loopResult = uninstallPlan2CodeLoop();
         const metricsResult = uninstallPlan2CodeMetrics();
         const botResult = uninstallPlan2CodeBot();
-        const exitCode = uninstallResult !== 0 ? uninstallResult : loopResult !== 0 ? loopResult : metricsResult !== 0 ? metricsResult : botResult;
+        const statusLineResult = uninstallStatusLine();
+        const exitCode = uninstallResult !== 0 ? uninstallResult : loopResult !== 0 ? loopResult : metricsResult !== 0 ? metricsResult : botResult !== 0 ? botResult : statusLineResult;
         process.exit(exitCode);
       } else {
         console.log(`\n${COLORS.YELLOW}${SYMBOLS.WARNING} CANCELLED${COLORS.RESET}\n`);
@@ -1617,11 +1608,12 @@ function runInteractive() {
       console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET}  ${COLORS.BRIGHT}L.${COLORS.RESET}  ${COLORS.BLUE}LOCAL${COLORS.RESET}      Show local (project) install instructions`, 65) + `${COLORS.CYAN}║${COLORS.RESET}`);
       console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET}  ${COLORS.BRIGHT}O.${COLORS.RESET}  ${COLORS.GREEN}LOOP CLI${COLORS.RESET}   Install plan2code-loop CLI only`, 65) + `${COLORS.CYAN}║${COLORS.RESET}`);
       console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET}  ${COLORS.BRIGHT}M.${COLORS.RESET}  ${COLORS.GREEN}METRICS${COLORS.RESET}    Install plan2code-metrics CLI only`, 65) + `${COLORS.CYAN}║${COLORS.RESET}`);
+      console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET}  ${COLORS.BRIGHT}S.${COLORS.RESET}  ${COLORS.GREEN}STATUS${COLORS.RESET}     Install Claude Code status line`, 65) + `${COLORS.CYAN}║${COLORS.RESET}`);
       console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET}  ${COLORS.BRIGHT}B.${COLORS.RESET}  ${COLORS.GREEN}BOT${COLORS.RESET}        Install plan2code-bot CLI only`, 65) + `${COLORS.CYAN}║${COLORS.RESET}`);
       console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET}  ${COLORS.BRIGHT}Q.${COLORS.RESET}  ${COLORS.DIM}BACK${COLORS.RESET}       Return to main menu`, 65) + `${COLORS.CYAN}║${COLORS.RESET}`);
       console.log(`${COLORS.CYAN}╚════════════════════════════════════════════════════════════════╝${COLORS.RESET}`);
       console.log('');
-      const customAnswer = await question(`${COLORS.CYAN}${SYMBOLS.SELECT} SELECT OPTION${COLORS.RESET} (L, O, M, B, Q) [Q]: `);
+      const customAnswer = await question(`${COLORS.CYAN}${SYMBOLS.SELECT} SELECT OPTION${COLORS.RESET} (L, O, M, S, B, Q) [Q]: `);
       const customInput = customAnswer.trim().toUpperCase() || 'Q';
 
       // C > L — show local install instructions
@@ -1641,6 +1633,13 @@ function runInteractive() {
       if (customInput === 'M') {
         rl.close();
         const result = installPlan2CodeMetrics();
+        process.exit(result);
+      }
+
+      // C > S — install status line
+      if (customInput === 'S') {
+        rl.close();
+        const result = await installStatusLine();
         process.exit(result);
       }
 
@@ -1678,7 +1677,7 @@ function runInteractive() {
 // PLAN2CODE-LOOP INSTALLATION
 // ============================================================================
 
-const { execSync, spawn } = require('child_process');
+const { execSync } = require('child_process');
 
 /**
  * Build plan2code-loop package
@@ -1870,27 +1869,13 @@ function removeGlobalSymlink() {
     for (const file of filesToRemove) {
       try {
         fs.lstatSync(file.path);
-        // File exists, try to remove it
-        try {
-          // Try rmdirSync first for junctions/symlinks
-          fs.rmdirSync(file.path);
-          console.log(`  ${COLORS.GREEN}${SYMBOLS.SUCCESS}${COLORS.RESET} Removed: ${file.name}`);
-          removedCount++;
-        } catch (rmdirErr) {
-          // Fall back to unlinkSync for regular files
-          try {
-            fs.unlinkSync(file.path);
-            console.log(`  ${COLORS.GREEN}${SYMBOLS.SUCCESS}${COLORS.RESET} Removed: ${file.name}`);
-            removedCount++;
-          } catch (unlinkErr) {
-            // Last resort: rmSync
-            fs.rmSync(file.path, { force: true, recursive: true });
-            console.log(`  ${COLORS.GREEN}${SYMBOLS.SUCCESS}${COLORS.RESET} Removed: ${file.name}`);
-            removedCount++;
-          }
-        }
+        fs.rmSync(file.path, { force: true, recursive: true });
+        console.log(`  ${COLORS.GREEN}${SYMBOLS.SUCCESS}${COLORS.RESET} Removed: ${file.name}`);
+        removedCount++;
       } catch (err) {
-        // File doesn't exist, skip it
+        if (err.code !== 'ENOENT') {
+          console.log(`  ${COLORS.RED}${SYMBOLS.ERROR}${COLORS.RESET} Failed to remove ${file.name}: ${err.message}`);
+        }
       }
     }
 
@@ -1904,6 +1889,7 @@ function removeGlobalSymlink() {
     return false;
   }
 }
+
 /**
  * Install plan2code-loop (build + symlink)
  */
@@ -2119,23 +2105,13 @@ function removeMetricsGlobalSymlink() {
     for (const file of filesToRemove) {
       try {
         fs.lstatSync(file.path);
-        try {
-          fs.rmdirSync(file.path);
-          console.log(`  ${COLORS.GREEN}${SYMBOLS.SUCCESS}${COLORS.RESET} Removed: ${file.name}`);
-          removedCount++;
-        } catch (rmdirErr) {
-          try {
-            fs.unlinkSync(file.path);
-            console.log(`  ${COLORS.GREEN}${SYMBOLS.SUCCESS}${COLORS.RESET} Removed: ${file.name}`);
-            removedCount++;
-          } catch (unlinkErr) {
-            fs.rmSync(file.path, { force: true, recursive: true });
-            console.log(`  ${COLORS.GREEN}${SYMBOLS.SUCCESS}${COLORS.RESET} Removed: ${file.name}`);
-            removedCount++;
-          }
-        }
+        fs.rmSync(file.path, { force: true, recursive: true });
+        console.log(`  ${COLORS.GREEN}${SYMBOLS.SUCCESS}${COLORS.RESET} Removed: ${file.name}`);
+        removedCount++;
       } catch (err) {
-        // File doesn't exist, skip it
+        if (err.code !== 'ENOENT') {
+          console.log(`  ${COLORS.RED}${SYMBOLS.ERROR}${COLORS.RESET} Failed to remove ${file.name}: ${err.message}`);
+        }
       }
     }
 
@@ -2186,6 +2162,234 @@ function uninstallPlan2CodeMetrics() {
 
   console.log('');
   console.log(`${COLORS.GREEN}${SYMBOLS.SUCCESS} plan2code-metrics uninstalled${COLORS.RESET}`);
+  console.log('');
+
+  return 0;
+}
+
+// ============================================================================
+// STATUS LINE INSTALLATION
+// ============================================================================
+
+/**
+ * Status line source layout — single-file design, no bundling step.
+ * `statusline.js` is self-contained (config loader, formatters, entry point)
+ * and copied verbatim to ~/.claude/plan2code-statusline.js on install.
+ */
+function getStatusLineSrcDir() {
+  return path.join(__dirname, 'src', 'statusline-claude');
+}
+
+/**
+ * Install status line (copy + configure settings).
+ * Async because it may prompt when a custom (non-plan2code) statusLine exists.
+ */
+async function installStatusLine({ quiet = false } = {}) {
+  if (!quiet) {
+    displaySectionHeader('CLAUDE STATUS LINE', '[ INSTALL ]');
+  } else {
+    console.log(`  ${COLORS.CYAN}${SYMBOLS.ACTIVE} INSTALLING${COLORS.RESET} Claude Status Line...`);
+  }
+
+  const srcDir = getStatusLineSrcDir();
+  if (!fs.existsSync(srcDir)) {
+    console.log(`  ${COLORS.RED}${SYMBOLS.ERROR}${COLORS.RESET} src/statusline-claude directory not found`);
+    return 1;
+  }
+
+  const homeDir = os.homedir();
+  const claudeDir = path.join(homeDir, '.claude');
+
+  try {
+    fs.mkdirSync(claudeDir, { recursive: true });
+  } catch (error) {
+    console.log(`  ${COLORS.RED}${SYMBOLS.ERROR}${COLORS.RESET} Cannot create ~/.claude/: ${error.message}`);
+    return 1;
+  }
+
+  // Copy script directly from src (no bundling — statusline.js is self-contained)
+  const statuslineDest = path.join(claudeDir, 'plan2code-statusline.js');
+  const configDest = path.join(claudeDir, 'statusline-config.json');
+
+  try {
+    fs.copyFileSync(path.join(srcDir, 'statusline.js'), statuslineDest);
+    if (!quiet) console.log(`  ${COLORS.GREEN}${SYMBOLS.SUCCESS}${COLORS.RESET} Installed: ~/.claude/plan2code-statusline.js`);
+  } catch (error) {
+    console.log(`  ${COLORS.RED}${SYMBOLS.ERROR}${COLORS.RESET} Failed to copy script: ${error.message}`);
+    return 1;
+  }
+
+  // Preserve existing user config
+  if (!fs.existsSync(configDest)) {
+    try {
+      fs.copyFileSync(path.join(srcDir, 'statusline-config.json'), configDest);
+      if (!quiet) console.log(`  ${COLORS.GREEN}${SYMBOLS.SUCCESS}${COLORS.RESET} Created: ~/.claude/statusline-config.json`);
+    } catch (error) {
+      console.log(`  ${COLORS.RED}${SYMBOLS.ERROR}${COLORS.RESET} Failed to copy config: ${error.message}`);
+      return 1;
+    }
+  } else {
+    if (!quiet) console.log(`  ${COLORS.DIM}${SYMBOLS.INFO} Preserved existing: ~/.claude/statusline-config.json${COLORS.RESET}`);
+  }
+
+  // Make executable on non-Windows
+  if (process.platform !== 'win32') {
+    try {
+      fs.chmodSync(statuslineDest, 0o755);
+    } catch {}
+  }
+
+  // Configure Claude Code settings.json
+  let settingsOk = false;
+  const settingsPath = path.join(claudeDir, 'settings.json');
+  const expectedCommand = `node "${statuslineDest.replace(/\\/g, '/')}"`;
+
+  try {
+    let settings = {};
+    if (fs.existsSync(settingsPath)) {
+      settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+    }
+
+    // Detect existing statusLine — skip prompt if ours or absent
+    if (settings.statusLine && settings.statusLine.command) {
+      const existingCmd = settings.statusLine.command;
+      const isPlan2Code = existingCmd.includes('plan2code-statusline');
+
+      if (!isPlan2Code) {
+        // Custom statusLine detected — prompt before overwriting
+        console.log(`  ${COLORS.YELLOW}${SYMBOLS.WARNING}${COLORS.RESET} Existing statusLine detected in settings.json:`);
+        console.log(`  ${COLORS.DIM}  ${existingCmd}${COLORS.RESET}`);
+
+        const rl2 = readline.createInterface({ input: process.stdin, output: process.stdout });
+        const answer = await new Promise(resolve => {
+          rl2.question(`  ${COLORS.CYAN}Replace with Plan2Code status line?${COLORS.RESET} (Y/n): `, resolve);
+        });
+        rl2.close();
+
+        if (answer.trim().toLowerCase() === 'n') {
+          console.log(`  ${COLORS.DIM}${SYMBOLS.INFO} Skipped — scripts installed but settings.json unchanged${COLORS.RESET}`);
+          console.log('');
+          return 0;
+        }
+
+        // Backup existing config before replacing
+        const backupPath = path.join(claudeDir, 'statusline-previous.json');
+        fs.writeFileSync(backupPath, JSON.stringify({ statusLine: settings.statusLine }, null, 2));
+        console.log(`  ${COLORS.GREEN}${SYMBOLS.SUCCESS}${COLORS.RESET} Backed up existing config: ~/.claude/statusline-previous.json`);
+      }
+    }
+
+    settings.statusLine = {
+      type: 'command',
+      command: expectedCommand,
+    };
+    // Atomic write: temp file + rename so a crash/power-loss never leaves
+    // settings.json truncated.
+    const tmpSettings = settingsPath + '.tmp';
+    fs.writeFileSync(tmpSettings, JSON.stringify(settings, null, 2));
+    fs.renameSync(tmpSettings, settingsPath);
+    if (!quiet) console.log(`  ${COLORS.GREEN}${SYMBOLS.SUCCESS}${COLORS.RESET} Configured: ~/.claude/settings.json (statusLine)`);
+    settingsOk = true;
+  } catch (error) {
+    console.log(`  ${COLORS.RED}${SYMBOLS.ERROR}${COLORS.RESET} Failed to update settings.json: ${error.message}`);
+  }
+
+  // Clean up legacy filenames from previous installs
+  for (const legacy of ['statusline.js', 'plan-usage.js', 'plan2code-plan-usage.js', 'statusline-cache.json']) {
+    const legacyPath = path.join(claudeDir, legacy);
+    try {
+      if (fs.existsSync(legacyPath)) {
+        fs.unlinkSync(legacyPath);
+        if (!quiet) console.log(`  ${COLORS.DIM}${SYMBOLS.INFO} Removed legacy: ${legacy}${COLORS.RESET}`);
+      }
+    } catch {}
+  }
+
+  if (settingsOk) {
+    if (!quiet) {
+      console.log('');
+      console.log(`${COLORS.GREEN}${SYMBOLS.SUCCESS} Claude Status Line installed successfully!${COLORS.RESET}`);
+      console.log('');
+      console.log(`${COLORS.CYAN}Usage:${COLORS.RESET}`);
+      console.log(`  ${COLORS.DIM}Restart Claude Code to see the status bar${COLORS.RESET}`);
+      console.log(`  ${COLORS.DIM}Config: ~/.claude/statusline-config.json${COLORS.RESET}`);
+      console.log('');
+    } else {
+      console.log(`    ${COLORS.GREEN}${SYMBOLS.SUCCESS}${COLORS.RESET} Claude Status Line → ${COLORS.DIM}~/.claude/plan2code-statusline.js${COLORS.RESET}`);
+    }
+  } else {
+    console.log('');
+    console.log(`  ${COLORS.YELLOW}${SYMBOLS.WARNING}${COLORS.RESET} Scripts installed but settings.json not updated.`);
+    console.log(`  ${COLORS.DIM}Add statusLine config to ~/.claude/settings.json manually.${COLORS.RESET}`);
+    console.log('');
+  }
+
+  return settingsOk ? 0 : 1;
+}
+
+/**
+ * Uninstall status line
+ */
+function uninstallStatusLine() {
+  displaySectionHeader('CLAUDE STATUS LINE', '[ UNINSTALL ]');
+
+  const homeDir = os.homedir();
+  const claudeDir = path.join(homeDir, '.claude');
+  const settingsPath = path.join(claudeDir, 'settings.json');
+
+  // Remove statusLine from settings.json (only if it points to our bundle)
+  try {
+    if (fs.existsSync(settingsPath)) {
+      const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+      if (settings.statusLine) {
+        const existingCmd = settings.statusLine.command || '';
+        if (existingCmd.includes('plan2code-statusline')) {
+          delete settings.statusLine;
+          const tmpSettings = settingsPath + '.tmp';
+          fs.writeFileSync(tmpSettings, JSON.stringify(settings, null, 2));
+          fs.renameSync(tmpSettings, settingsPath);
+          console.log(`  ${COLORS.GREEN}${SYMBOLS.SUCCESS}${COLORS.RESET} Removed statusLine from settings.json`);
+        } else {
+          console.log(`  ${COLORS.DIM}${SYMBOLS.INFO} Preserved non-plan2code statusLine in settings.json${COLORS.RESET}`);
+          console.log(`  ${COLORS.DIM}  ${existingCmd}${COLORS.RESET}`);
+        }
+      } else {
+        console.log(`  ${COLORS.DIM}${SYMBOLS.INFO} No statusLine config in settings.json${COLORS.RESET}`);
+      }
+    }
+  } catch (error) {
+    console.log(`  ${COLORS.RED}${SYMBOLS.ERROR}${COLORS.RESET} Failed to update settings.json: ${error.message}`);
+  }
+
+  // Remove script files (preserve config)
+  const filesToRemove = [
+    { path: path.join(claudeDir, 'plan2code-statusline.js'), name: 'plan2code-statusline.js' },
+    { path: path.join(claudeDir, 'plan2code-plan-usage.js'), name: 'plan2code-plan-usage.js' },
+    { path: path.join(claudeDir, 'statusline.js'), name: 'statusline.js (legacy)' },
+    { path: path.join(claudeDir, 'plan-usage.js'), name: 'plan-usage.js (legacy)' },
+    { path: path.join(claudeDir, 'statusline-cache.json'), name: 'statusline-cache.json' },
+  ];
+
+  let removedCount = 0;
+  for (const file of filesToRemove) {
+    try {
+      if (fs.existsSync(file.path)) {
+        fs.unlinkSync(file.path);
+        console.log(`  ${COLORS.GREEN}${SYMBOLS.SUCCESS}${COLORS.RESET} Removed: ${file.name}`);
+        removedCount++;
+      }
+    } catch (error) {
+      console.log(`  ${COLORS.RED}${SYMBOLS.ERROR}${COLORS.RESET} Failed to remove ${file.name}: ${error.message}`);
+    }
+  }
+
+  if (removedCount === 0) {
+    console.log(`  ${COLORS.DIM}${SYMBOLS.INFO} No status line files found${COLORS.RESET}`);
+  }
+
+  console.log(`  ${COLORS.DIM}${SYMBOLS.INFO} Preserved: statusline-config.json${COLORS.RESET}`);
+  console.log('');
+  console.log(`${COLORS.GREEN}${SYMBOLS.SUCCESS} Status line uninstalled${COLORS.RESET}`);
   console.log('');
 
   return 0;
@@ -2362,23 +2566,13 @@ function removeBotGlobalSymlink() {
     for (const file of filesToRemove) {
       try {
         fs.lstatSync(file.path);
-        try {
-          fs.rmdirSync(file.path);
-          console.log(`  ${COLORS.GREEN}${SYMBOLS.SUCCESS}${COLORS.RESET} Removed: ${file.name}`);
-          removedCount++;
-        } catch (rmdirErr) {
-          try {
-            fs.unlinkSync(file.path);
-            console.log(`  ${COLORS.GREEN}${SYMBOLS.SUCCESS}${COLORS.RESET} Removed: ${file.name}`);
-            removedCount++;
-          } catch (unlinkErr) {
-            fs.rmSync(file.path, { force: true, recursive: true });
-            console.log(`  ${COLORS.GREEN}${SYMBOLS.SUCCESS}${COLORS.RESET} Removed: ${file.name}`);
-            removedCount++;
-          }
-        }
+        fs.rmSync(file.path, { force: true, recursive: true });
+        console.log(`  ${COLORS.GREEN}${SYMBOLS.SUCCESS}${COLORS.RESET} Removed: ${file.name}`);
+        removedCount++;
       } catch (err) {
-        // File doesn't exist, skip it
+        if (err.code !== 'ENOENT') {
+          console.log(`  ${COLORS.RED}${SYMBOLS.ERROR}${COLORS.RESET} Failed to remove ${file.name}: ${err.message}`);
+        }
       }
     }
 
