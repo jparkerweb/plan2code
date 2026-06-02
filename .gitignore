@@ -1,6 +1,5 @@
 specs/
 specs--completed/
-CLAUDE.md
 dist/
 plan2code-loop/dist
 plan2code-loop/node_modules
