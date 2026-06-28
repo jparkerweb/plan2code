@@ -149,3 +149,7 @@ Then tell user: "Created `specs/<feature-name>/PLAN-DRAFT-<date>.md`. Start new 
 ```
 
 Ready to implement? (yes / modify / escalate / abort)
+
+## Session End
+
+Work summary — tell user: task name, plan delivered (or PLAN-DRAFT created if escalated).

@@ -11,7 +11,8 @@
 
 ## Gotchas / Pitfalls
 
-- **Version sync:** When adding a new version to `CHANGELOG.md`, also update `version.json` and `package.json` to match. The installer displays the version from `version.json` in its header.
+- **Version sync:** When adding a new version to `CHANGELOG.md`, also update `version.json` and `package.json` (root) to match. Check `README.md` for any version badges or references that need updating. The installer displays the version from `version.json` in its header. All three files (`CHANGELOG.md`, `version.json`, `package.json`) must always show the same version number.
+- **CHANGELOG ordering:** Entries in `CHANGELOG.md` must be in reverse-chronological order — newest version at the top, oldest at the bottom. New entries are always inserted immediately after the file header.
 - **Loop `.gitignore` setup:** `ensureGitignore()` runs at startup in `Controller.run()` as a pre-flight step, not just inside `createTaskCommit()`. This is critical for phase mode where the Node controller doesn't handle commits — without it, `git add -A` would stage spec files.
 - **Workflow file character limit:** All `src/plan2code-*.md` files must be ≤ 11,000 characters. A husky pre-commit hook enforces this. The 11,000 limit leaves buffer for platform-specific YAML headers (106-142 chars) to stay under Windsurf's 12,000 char limit.
 - **Metrics internal prompts have no char limit:** Files in `plan2code-metrics/src/prompts/` are NOT subject to the 11,000 char limit — only `src/plan2code-*.md` consumer-facing prompts are.

@@ -155,9 +155,15 @@ Run every finding through the false-positive detection shortcuts before presenti
 
 ## Session End
 
-After approval, select template:
-- **Specs + more phases:** "Next: Phase X. NEW conversation: `/plan2code-3-implement`"
-- **Specs + all complete:** "All complete! NEW conversation: `/plan2code-4-finalize`"
+Work summary — tell user: scope reviewed, findings count by severity (Critical/Warning/Suggestion), fixes applied, unresolved findings.
+
+After approval, select template based on project state:
+
+**Pre-condition check:** Before suggesting implement or finalize, verify that `overview.md` AND at least one `phase-*.md` file exist in the specs directory. If they do NOT exist, the document step has not been run yet.
+
+- **Specs dir exists but NO overview.md / phase-*.md files:** "Next: generate implementation docs. NEW conversation: `/plan2code-2-document`"
+- **Specs + overview.md + phase files + more phases:** "Next: Phase X. NEW conversation: `/plan2code-3-implement`"
+- **Specs + overview.md + phase files + all complete:** "All complete! NEW conversation: `/plan2code-4-finalize`"
 - **Standalone:** "Review complete -- [summary]."
 - **Commit** (code changes): `git add [files] && git commit -m "fix: [desc]" -m "<JIRA>" -m "AI Assisted"` -- derive JIRA from branch.
 
@@ -168,6 +174,8 @@ After approval, select template:
     │ ◡ │   Review complete!
     ╰───╯
 ```
+
+Returning context: Review complete. Unresolved findings documented for follow-up. Run `/plan2code-review` again after addressing follow-up work.
 
 ## Abort / Recovery
 

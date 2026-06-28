@@ -2,6 +2,30 @@
 
 All notable changes to Plan2Code will be documented in this file.
 
+## v1.15.3
+
+### ✨ Added
+
+- **Session-end summaries across workflows** — consistent closing context in implement, document, finalize, init-update, quick-task, review, and revise-plan
+  - Implement: work summary + upcoming-phases table (task counts, goals) after each phase approval
+  - Document: phase-overview table at close to help plan sessions and review gates
+- **Sync & Maintain in init-update** — new unified doc-surface sync option (menu item #9)
+  - Covers `AGENTS.md`, `.agents-docs/`, active `specs/`, README, and human docs; tier-voice routing, never duplicates across tiers
+  - Adaptive to repo conventions — detects the human-docs tree, never assumes
+- **Research steps in plan** — domain research (Phase 1), tech-options research (Phase 4), and an investigate-to-close-gaps rule on the 90% confidence gate
+
+### 🔧 Changed
+
+- **Spec auto-discovery hardened** — replaced Glob (silently fails on gitignored `specs/`) with explicit shell `ls` across document, implement, finalize, init-update, and revise-plan
+- **Revision-mode guardrails** — `1b-revise-plan` edits restricted to `specs/` paths only; execution-shaped language removed; cleanup step added
+- **Commit-message enforcement in implement** — subject ≤100 chars, exactly three `-m` flags, no body
+- **Finalize documentation review expanded** — audits `AGENTS.md` + `.agents-docs/`, mandates corrections (not just additions), routes facts per tier voice
+- **Quality language pass** — plan demands edge cases/failure modes and measurable criteria; document and finalize role statements sharpened
+
+### 🐛 Fixed
+
+- **Review workflow next-step guard** — Review mode no longer suggests `/plan2code-3-implement` when `overview.md` and `phase-*.md` files don't exist. If the document step hasn't been run yet, it now correctly directs users to `/plan2code-2-document` first.
+
 ## v1.15.2
 
 ### 🔧 Changed

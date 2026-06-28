@@ -14,6 +14,12 @@ Interactive Q&A flow to update an existing `AGENTS.md` with new learnings and pr
 
 ---
 
+## Awareness Context
+
+Before making any updates, orient yourself to current project state: read `AGENTS.md` and `README.md`, list `src/` directory, run `ls specs/` (not Glob — gitignored) to read any active spec overview, and locate the human-docs tree (`docs/` or equivalent — don't assume).
+
+---
+
 ## Step 1: Pre-flight Check
 
 Check if `AGENTS.md` exists in project root.
@@ -84,6 +90,7 @@ Present the user with update options:
 > - **6. General Rules** - Coding conventions, style rules, project-specific practices
 > - **7. Git Commit Messages** - Commit message conventions, AI attribution rules
 > - **8. Something else** - Tell me what you'd like to add
+> - **9. Sync & Maintain** - Audit & sync all doc surfaces — AGENTS.md, `.agents-docs/`, `specs/`, README, human docs: fix stale/wrong/missing, cut redundancy
 >
 > You can also ask me to:
 > - **Review for corrections** - Check if any existing content is outdated or wrong
@@ -105,8 +112,27 @@ Present the user with update options:
 | Rules | Project-wide or specific? Why? |
 | Git Commit Messages | Format? Attribution? Conventions? |
 | Other | "Tell me what to add." |
+| Sync & Maintain | Scope: all surfaces or specific? Then follow the Sync & Maintain section. |
 | Review | Per section: "Still accurate?" |
 | Prune | Suggest trims, confirm before applying |
+
+---
+
+## Sync & Maintain
+
+Keep every doc surface accurate and in sync. **Deep-audit surfaces this session touched; staleness-scan the rest.** Verify against actual code — never assume or fabricate.
+
+| Surface | Tier | Voice |
+|---------|------|-------|
+| `AGENTS.md` + ALL applicable `.agents-docs/*` | Persistent | Agent — how/where, exact commands, paths, gotchas |
+| `README.md` + human docs | Persistent | Human — what/why, scannable |
+| Active `specs/<feature>/` | Transient | Session knowledge — status, decisions, next steps. No bloat |
+
+**Adaptive:** `AGENTS.md`/`.agents-docs/`/`specs/` are plan2code conventions — expected, but verify. `README.md` is standard. Human-docs tree varies (`docs/` or other) — detect, don't assume.
+
+**Fix everywhere:** stale paths/commands, missing/outdated info, mistakes, redundancy.
+
+**Never duplicate across tiers:** route each fact to its surfaces in that surface's voice — different phrasings of one truth, never copied text.
 
 ---
 
@@ -115,6 +141,7 @@ Present the user with update options:
 Before changes, route edits to the correct file when `.agents-docs/` exists:
 - Always-inline sections (Project Overview, Git Commit Messages, How to Use This File) → edit AGENTS.md directly
 - All other sections → edit the corresponding `.agents-docs/AGENTS-<section-name>.md` file
+- Sync & Maintain: human-voice facts → README/human docs; session knowledge → active spec's `overview.md`
 
 Preview format:
 > **File:** `.agents-docs/AGENTS-architecture.md` (or `AGENTS.md` for inline sections)
@@ -206,13 +233,7 @@ CLAUDE.md gets a special template because Claude Code auto-loads it — the `CRI
 
 **CRITICAL — MANDATORY FIRST STEP: You MUST read [AGENTS.md](./AGENTS.md) before responding to ANY user message, including simple questions. Do NOT skip this step regardless of how trivial the request appears. No exceptions.**
 
-See AGENTS.md for complete project documentation including:
-- Development commands and setup
-- Architecture overview
-- Environment variables
-- Testing patterns
-- Deployment guides
-- Section details in .agents-docs/
+See AGENTS.md for full project documentation: commands, architecture, environment, testing, deployment, and .agents-docs/ section details.
 
 This file exists for Claude Code auto-loading. All AI coding agents should reference AGENTS.md.
 ```
@@ -224,13 +245,7 @@ Use title and path from the detection table:
 ```markdown
 # [Title]
 
-See [AGENTS.md]([Path]) for complete project documentation including:
-- Development commands and setup
-- Architecture overview
-- Environment variables
-- Testing patterns
-- Deployment guides
-- Section details in .agents-docs/
+See [AGENTS.md]([Path]) for full project documentation: commands, architecture, environment, testing, deployment, and .agents-docs/ section details.
 ```
 
 **For directory configs** (`.cursor/rules/`, `.windsurf/rules/`): Delete existing `.md` files, create single `reference.md`.
@@ -254,54 +269,31 @@ See [AGENTS.md]([Path]) for complete project documentation including:
 ## Example Session
 
 ```
-Agent: Found AGENTS.md covering:
-       - Build/test commands
-       - Project structure
-       - API conventions
-       Line count: 127
-       Structure: Single-file (no .agents-docs/ directory)
-
-       Your AGENTS.md uses a single-file format. Want to
-       restructure for progressive discovery?
-
-User:  No thanks, just update it.
-
-Agent: OK, keeping single-file format.
-
-       Recent work on auth flow. Worth documenting:
-       - JWT refresh token must validate before access token
+Agent: Found AGENTS.md (127 lines, single-file). Restructure for
+       progressive discovery?
+User:  No, just update it.
+Agent: Recent work on auth flow. Worth documenting:
        - Auth tests require TEST_SECRET env var
-
-       Add these?
-
-User:  Yes, both.
-
-Agent: Adding:
-
-       **Section:** Gotchas
-       ```
-       - JWT refresh token must validate before access token in auth flow
-       ```
-
-       **Section:** Testing
-       ```
-       - Auth tests require TEST_SECRET env variable
-       ```
-
+       Add it?
+User:  Yes
+Agent: **Section:** Testing
+       "- Auth tests require TEST_SECRET env variable"
        Look right?
-
 User:  Yes
-
-Agent: Done! Added 2 entries to Gotchas and Testing.
-       Line count: 131/500
-
-       Add anything else?
-
+Agent: Done! Line count: 128/500. Add anything else?
 User:  No
-
 Agent: Found CLAUDE.md (23 lines). Replace with AGENTS.md reference?
-
 User:  Yes
-
 Agent: Updated CLAUDE.md. AGENTS.md is your single source of truth now!
 ```
+
+## Session End
+
+Work summary — tell user: sections updated, entries added/changed, files modified (`AGENTS.md` or `.agents-docs/` files).
+
+Suggested commit:
+```
+git commit -m "docs: update AGENTS.md with new learnings" -m "<JIRA-Ticket-ID>" -m "AI Assisted"
+```
+
+Returning context: Run `/plan2code-init-update` again to make additional updates.

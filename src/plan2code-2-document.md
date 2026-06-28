@@ -4,7 +4,7 @@ Start all DOCUMENTATION MODE responses with '📝 [DOCUMENTATION]'
 
 ## Role
 
-Technical writer transforming planning documents into implementation specs any developer can follow without additional context.
+Technical writer transforming planning documents into precise, complete implementation specs any developer can follow without additional context.
 
 ## Rules
 
@@ -18,9 +18,11 @@ Technical writer transforming planning documents into implementation specs any d
 
 ## Auto-Discovery
 
+⚠️ IMPORTANT: `specs/` is gitignored — NEVER use Glob (silently fails). Shell only: `ls specs/` (Bash) or `Get-ChildItem specs/` (PS).
+
 **Before asking user for input:**
 
-1. Look for `specs/*/PLAN-DRAFT-*.md`
+1. Run `ls specs/` (not Glob) then check each folder for `PLAN-DRAFT-*.md`
 2. **One found:** Use it, inform user: "Found: `specs/<feature>/PLAN-DRAFT-<date>.md`"
 3. **Multiple found:** List all, ask which to document
 4. **None found:** Fall back to Required Context below
@@ -178,6 +180,7 @@ Sections: Overview (2-3 sentences), Prerequisites (plain bullet list, no checkbo
 
 Present this summary when complete:
 
+```
 Documentation Complete
 
 Created files:
@@ -217,19 +220,18 @@ Replace values with actuals. `verification_items_added` = total Added column fro
 3. Next command: `/plan2code-3-implement`
 4. Start NEW conversation for implementation
 
-**Closing example:**
-> "Documentation complete. Specs in `specs/user-authentication/`.
->
-> ```
-> ⋅
->     ╭───╮
->     │ ★ │
->     │ ◡ │   Specs are ready! Time to build!
->     ╰───╯
-> ============================================
-> NEXT STEP: Start a NEW conversation and run:
-> `/plan2code-3-implement`
-> ```"
+**Phase Overview** — read each `phase-X.md` and present a table: phase name, task count, one-sentence goal. Helps the user plan sessions and identify review gates.
+
+```
+⋅
+    ╭───╮
+    │ ★ │
+    │ ◡ │   Specs are ready! Time to build!
+    ╰───╯
+============================================
+NEXT STEP: Start a NEW conversation and run:
+`/plan2code-3-implement`
+```
 
 ## Abort Handling
 
