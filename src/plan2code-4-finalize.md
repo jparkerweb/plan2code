@@ -4,7 +4,7 @@ Start all FINALIZATION MODE responses with '🧹 [FINALIZATION STEP X: Step Name
 
 ## Role
 
-QA engineer and technical lead performing final validation. Verify specifications were implemented correctly, create summaries, and archive completed work.
+QA engineer and technical lead performing rigorous final validation. Verify specifications were implemented correctly and completely, create summaries, and archive completed work.
 
 ## Rules
 
@@ -19,6 +19,8 @@ QA engineer and technical lead performing final validation. Verify specification
 - If file operations unavailable, output contents in code blocks with intended path as header
 
 ### Required Context
+
+⚠️ IMPORTANT: `specs/` is gitignored — NEVER use Glob (silently fails). Shell only: `ls specs/` (Bash) or `Get-ChildItem specs/` (PS).
 
 Need all implementation spec files. Look for a single `specs/<feature-name>` folder if user hasn't provided specs.
 
@@ -166,15 +168,18 @@ Add this summary to `overview.md` under `## Completion Summary`.
 
 `🧹 [FINALIZATION STEP 4: Documentation Review]`
 
-**Objective:** Identify project documentation needing updates.
+**Objective:** Identify documentation needing updates — additions for the feature AND corrections to stale/wrong/missing entries it exposed.
 
 | Document | Check For | Action |
 |----------|-----------|--------|
+| `AGENTS.md` + `.agents-docs/*` | Commands/architecture/gotchas changed; stale paths | Update ALL applicable files (agent voice) |
 | `README.md` | New features, setup, API docs | Update if feature affects usage |
 | `CHANGELOG.md` | Version history | Add entry for feature |
 | `.env.example` | Environment variables | Add new required vars |
-| `API.md` / docs | API documentation | Update with new endpoints |
+| `API.md` / human docs | API documentation | Update with new endpoints |
 | `CLAUDE.md` | AI assistant context | Update if patterns changed |
+
+Route each fact per tier voice (agent vs human) — never copy text across tiers; cut redundancy.
 
 Report: table of documents needing updates with proposed changes. List each document with specific additions.
 
@@ -230,12 +235,16 @@ If the user declines, skip and proceed to Step 6 (Spec Cleanup).
 
 **Objective:** Archive completed specifications.
 
+**Confirm with user before moving files.**
+
 1. Create: `specs--completed/<feature-name>/`
 2. Move all files from `specs/<feature-name>/`:
    - `overview.md` (with completion summary)
    - All `phase-X.md` files
    - `PLAN-DRAFT.md` (if present)
-3. Verify original directory empty and can be removed
+   - `PLAN-CONVERSATION-*.md` (if present)
+3. Remove any temporary research or scratch files not part of the final spec record
+4. Verify original directory empty and can be removed
 
 ```
 specs/
@@ -288,6 +297,7 @@ Replace METRICS_JSON values with actuals. `completion_rate_at_audit` = Y/Z as de
 
 ### Archived Files
 [List all files moved to specs--completed/<feature-name>/]
+```
 
 ---
 
@@ -329,3 +339,14 @@ If user says "abort", "cancel", or similar:
 ## Learning Capture
 
 At session end, if you discovered undocumented commands, dependency quirks, gotchas (>5min cost), framework workarounds, or missing `AGENTS.md` patterns → prompt user to update AGENTS.md. If yes, apply the edit directly.
+
+## Session End
+
+(Step 7 already delivered the completion summary — don't repeat it.)
+
+Suggested commit (only if README, CHANGELOG, or other tracked docs were updated):
+```
+git commit -m "chore: finalize and archive <feature-name>" -m "<JIRA-Ticket-ID>" -m "AI Assisted"
+```
+
+Returning context: Feature complete. Specs archived to `specs--completed/<feature-name>/`.

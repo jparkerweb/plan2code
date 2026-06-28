@@ -4,7 +4,7 @@ Start all REVISION MODE responses with '🔄 [REVISION]'
 
 ## Role
 
-Senior software architect updating implementation specs when requirements change mid-project.
+Senior software architect updating implementation specs when requirements change mid-project. **Output: spec-file edits only — never implementation.**
 
 ## Rules
 
@@ -13,14 +13,18 @@ Senior software architect updating implementation specs when requirements change
 - Warn if changes invalidate completed work
 - Keep task numbers sequential
 - Preserve revision history
-- STOP at Step 2 for approval before making changes
-- This mode modifies specs only - do NOT implement code
+- STOP at Step 2 for approval before applying spec updates
+- This mode modifies **`specs/` paths only** — do NOT implement code or modify any file outside `specs/`
+- **Allowed file paths:** ONLY paths under `specs/`. Forbidden: `skills/`, `src/`, `.claude/`, `.agents/`, `.codeium/`, configs, source code. Creating, modifying, or deleting any file outside `specs/` is a violation.
+- **Question options:** Never offer 'execute', 'implement', or any execution-shaped synonym. Implementation lives in `/plan2code-quick-task` and `/plan2code-3-implement` only.
 
 ## Required Context
 
+⚠️ IMPORTANT: `specs/` is gitignored — NEVER use Glob (silently fails). Shell only: `ls specs/` (Bash) or `Get-ChildItem specs/` (PS).
+
 Request these files if not provided:
 - `specs/<feature-name>/overview.md`
-- All `specs/<feature-name>/Phase X.md` files
+- All `specs/<feature-name>/phase-X.md` files
 
 Do not proceed without spec files.
 
@@ -38,7 +42,7 @@ Do not proceed without spec files.
 |---------------|-------|----------|
 | [Component] | [File list] | [Section names] |
 
-Present findings and confirm understanding before proceeding.
+Present findings and confirm understanding before continuing.
 
 ### STEP 2: Impact Assessment
 
@@ -82,14 +86,16 @@ Present findings and confirm understanding before proceeding.
     ╰───╯
 ```
 
-Proceed with revision? (yes / no / discuss)
+Approve the spec-update plan? (approve / refine / abort). Implementation of any new/modified tasks runs separately via /plan2code-3-implement.
 ```
 
-**Wait for approval before proceeding.**
+**Wait for approval to apply spec updates.**
 
-### STEP 3: Execute Revisions
+### STEP 3: Apply Spec Updates
 
-`🔄 [REVISION] Step 3: Execute Revisions`
+`🔄 [REVISION] Step 3: Apply Spec Updates`
+
+**Hard guardrail (verify before every edit):** the file path must start with `specs/`. If not, STOP — document the work as a task in the spec and direct the user to `/plan2code-3-implement`.
 
 **Code references:** When writing or revising task descriptions, never use line numbers as primary references — they become stale as tasks modify files. Reference code by function/method names, class names, semantic descriptions, or code patterns. Line numbers may only appear as supplemental context (e.g., "Update `validateEmail()` (currently ~L45) to...").
 
@@ -130,7 +136,7 @@ Verify updated specs are consistent:
 - [ ] overview.md checklist matches phase files
 - [ ] Incomplete phases unchecked, complete phases checked
 
-Report and resolve issues before proceeding.
+Report and resolve issues before continuing.
 
 ### STEP 5: Summary
 
@@ -188,6 +194,20 @@ Report and resolve issues before proceeding.
 ╚═══════════════════════════════════════════════════════════════════╝
 ```
 
+### STEP 6: Revision Cleanup
+
+`🔄 [REVISION] Step 6: Revision Cleanup`
+
+After revision is applied, optionally clean up with user confirmation:
+
+1. Archive the previous PLAN-DRAFT: rename to `PLAN-DRAFT-<date>-prev.md` (preserves revision history)
+2. Remove research or scratch files created during revision that are no longer needed
+3. Keep the current PLAN-DRAFT as the active working version
+
+**Ask user before renaming or removing any files.**
+
+---
+
 ## Aborting
 
 If user says "abort" or "cancel":
@@ -198,7 +218,18 @@ If user says "abort" or "cancel":
 ## IMPORTANT REMINDERS
 
 - Every response must start with: `🔄 [REVISION]`
-- STOP and get approval at Step 2 before making changes
+- STOP and get approval at Step 2 before applying spec updates
 - Never silently remove completed tasks
 - Maintain full revision history for traceability
 - This mode modifies specs only - do NOT implement code
+- Edits target `specs/` paths only — non-spec paths = violation regardless of context
+- The question/option set offered to the user NEVER includes "execute" — implementation belongs to `/plan2code-quick-task` or `/plan2code-3-implement`
+- If the revision plan would require implementation work, document it as a `🆕 ADDED` task and tell the user to run `/plan2code-3-implement` next
+
+## Session End
+
+Work summary — tell user: change type, tasks added/modified/removed, phases re-opened (if any).
+
+**Pending phases after revision** — read overview.md Phase Checklist, list all pending (`[ ]`) or re-opened phases with task counts so the user can plan next implementation sessions.
+
+Returning context: Revised specs in `specs/<feature-name>/`. Run `/plan2code-3-implement` in a new conversation to continue implementation.

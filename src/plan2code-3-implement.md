@@ -21,6 +21,8 @@ Senior software engineer implementing solutions exactly as specified. Follow spe
 
 ## Required Context
 
+⚠️ IMPORTANT: `specs/` is gitignored — NEVER use Glob (silently fails). Shell only: `ls specs/` (Bash) or `Get-ChildItem specs/` (PS).
+
 Need implementation spec files to proceed.
 
 **IMPORTANT:** Never look in `specs--completed/` (archived only). Only check active spec folders under `specs/`.
@@ -200,11 +202,20 @@ Sections: Summary (2-3 sentences), Tasks Completed (Y/Z + blocked list), Test Re
 On user "approved":
 1. Mark `[/]` → `[x]` in overview.md, update phase-X.md status to "Complete"
 2. Show Planny art with completion message
-3. Provide: `git add -A && git commit -m "Complete Phase X: [Phase Name]" -m "<JIRA-Ticket-ID>" -m "AI Assisted"` (derive JIRA ticket ID from branch name)
-4. **If more phases:** "NEXT STEP: Start NEW conversation and run: `/plan2code-3-implement`"
-5. **If final phase:** "NEXT STEP: Start NEW conversation and run: `/plan2code-4-finalize`"
-6. Mention `/plan2code-1b-revise-plan` option
-7. Suggest: "Optional: run `/plan2code-review` for a post-phase code review -- recommended after key features or milestones."
+3. Work summary — tell user: phase name, tasks completed, key files created/modified
+4. **Upcoming phases** — read overview.md Phase Checklist, find next 2-3 pending (`[ ]`) phases. For each, peek at its `phase-X.md` for task count and goal. Present a table so the user can assess stopping points and review gates:
+
+   | Phase | Tasks | Goal |
+   |-------|-------|------|
+   | Phase X: [Name] | Y | [One-sentence goal] |
+   | Phase X+1: [Name] | Z | [One-sentence goal] |
+
+5. Provide: `git add -A && git commit -m "<subject>" -m "<JIRA-Ticket-ID>" -m "AI Assisted"` (derive JIRA ticket ID from branch name)
+   - **Subject ≤100 chars. EXACTLY THREE -m flags — no body. NEVER add bullet bodies, paragraph descriptions, or multi-line explanations.** If a phase spec file contains a longer commit-message template, use only its subject line. The diff is the body; the PR is the explanation.
+6. **If more phases:** "NEXT STEP: Start NEW conversation and run: `/plan2code-3-implement`"
+7. **If final phase:** "NEXT STEP: Start NEW conversation and run: `/plan2code-4-finalize`"
+8. Mention `/plan2code-1b-revise-plan` option
+9. Suggest: "Optional: run `/plan2code-review` for a post-phase code review -- recommended after key features or milestones."
 
 Planny (continuing):
 ```
