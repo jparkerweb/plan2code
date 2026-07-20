@@ -2,6 +2,12 @@
 
 All notable changes to Plan2Code will be documented in this file.
 
+## v1.15.4
+
+### ✨ Added
+
+- **Status line: reasoning effort + context token count** — model segment now appends the current reasoning effort level (e.g. `Sonnet 5 | High`, hidden when the model doesn't support an effort parameter); context bar now shows raw input tokens used alongside the percentage (e.g. `42% (84k)`), independently toggleable via new `items.effort` / `items.contextTokens` config flags
+
 ## v1.15.3
 
 ### ✨ Added
