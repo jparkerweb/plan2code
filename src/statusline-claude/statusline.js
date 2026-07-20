@@ -26,9 +26,11 @@ const DEFAULTS = {
   compact: false,
   items: {
     model: true,
+    effort: true,
     project: true,
     branch: true,
     contextBar: true,
+    contextTokens: true,
     planUsage: true,
     linesChanged: true,
     duration: true,
@@ -176,6 +178,14 @@ function getModelName(stdinData) {
   return model;
 }
 
+const EFFORT_LABELS = { low: 'Low', medium: 'Medium', high: 'High', xhigh: 'XHigh', max: 'Max' };
+
+function getEffortLevel(stdinData) {
+  const level = stdinData?.effort?.level;
+  if (!level || typeof level !== 'string') return '';
+  return EFFORT_LABELS[level] || (level.charAt(0).toUpperCase() + level.slice(1));
+}
+
 function getProjectName(stdinData) {
   const projectDir = stdinData?.workspace?.project_dir;
   if (!projectDir || typeof projectDir !== 'string') return '';
@@ -194,7 +204,7 @@ function calculateContextPercent(stdinData, config) {
   return Math.round(Math.min(100, (rawUsedTokens / usableTokens) * 100));
 }
 
-function formatContextBar(percent, config) {
+function formatContextBar(percent, tokens, config) {
   if (percent == null) return null;
 
   const clamped = Math.max(0, Math.min(100, percent));
@@ -202,12 +212,15 @@ function formatContextBar(percent, config) {
   const filledStr = '▰'.repeat(filled);
   const emptyStr = '▱'.repeat(CONTEXT_BAR_LEN - filled);
 
-  if (!config.color) return `${filledStr}${emptyStr} ${clamped}%`;
+  const tokenStr = config.items.contextTokens && tokens != null ? ` (${formatTokenCount(tokens)})` : '';
+
+  if (!config.color) return `${filledStr}${emptyStr} ${clamped}%${tokenStr}`;
 
   const barColor = clamped >= CONTEXT_THRESHOLDS.yellow ? C.barRed
     : clamped >= CONTEXT_THRESHOLDS.green ? C.barYellow
     : C.barGreen;
-  return `${barColor}${filledStr}${C.gray}${emptyStr}${C.reset} ${barColor}${clamped}%${C.reset}`;
+  const tokenPart = tokenStr ? `${C.label}${tokenStr}${C.reset}` : '';
+  return `${barColor}${filledStr}${C.gray}${emptyStr}${C.reset} ${barColor}${clamped}%${C.reset}${tokenPart}`;
 }
 
 function formatLinesChanged(stdinData, config) {
@@ -314,7 +327,16 @@ function formatLine1(stdinData, config) {
 
   if (config.items.model) {
     const model = getModelName(stdinData);
-    if (model) segments.push(config.color ? `${C.muted}${model}${C.reset}` : model);
+    if (model) {
+      const effort = config.items.effort ? getEffortLevel(stdinData) : '';
+      if (!effort) {
+        segments.push(config.color ? `${C.muted}${model}${C.reset}` : model);
+      } else if (!config.color) {
+        segments.push(`${model} | ${effort}`);
+      } else {
+        segments.push(`${C.muted}${model}${C.reset}${C.gray} | ${C.reset}${C.label}${effort}${C.reset}`);
+      }
+    }
   }
 
   if (config.items.project) {
@@ -345,7 +367,8 @@ function formatLine2(stdinData, config) {
 
   if (config.items.contextBar) {
     const percent = calculateContextPercent(stdinData, config);
-    const bar = formatContextBar(percent, config);
+    const tokens = stdinData?.context_window?.total_input_tokens;
+    const bar = formatContextBar(percent, tokens, config);
     if (bar) segments.push(bar);
   }
 

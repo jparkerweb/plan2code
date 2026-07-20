@@ -4,9 +4,11 @@
   "compact": false,
   "items": {
     "model": true,
+    "effort": true,
     "project": true,
     "branch": true,
     "contextBar": true,
+    "contextTokens": true,
     "planUsage": true,
     "linesChanged": true,
     "duration": true,

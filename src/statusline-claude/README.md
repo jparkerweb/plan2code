@@ -7,20 +7,20 @@ A persistent three-line status bar for Claude Code that displays model info, pro
 **Pro / Max / Teams** — rate limits segment:
 
 ```
-╭─╮  Opus 4.6 │ plan2code │ feature/statusline │ +12 -3
+╭─╮  Opus 4.6 | High │ plan2code │ feature/statusline │ +12 -3
 │★│  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
-╰─╯  3h 5m ($4.62) │ ▰▰▰▰▰▱▱▱▱▱▱▱ 42% │ 5h: 28% · 7d: 61%
+╰─╯  3h 5m ($4.62) │ ▰▰▰▰▰▱▱▱▱▱▱▱ 42% (84k) │ 5h: 28% · 7d: 61%
 ```
 
 **Enterprise / Bedrock / Vertex / PAYG** — session token counts (no `rate_limits` in stdin):
 
 ```
-╭─╮  Sonnet 4.5 │ plan2code │ main │ +12 -3
+╭─╮  Sonnet 4.5 | Medium │ plan2code │ main │ +12 -3
 │★│  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
-╰─╯  2m ($0.18) │ ▰▰▱▱▱▱▱▱▱▱▱▱ 18% │ 88k in · 3k out
+╰─╯  2m ($0.18) │ ▰▰▱▱▱▱▱▱▱▱▱▱ 18% (36k) │ 88k in · 3k out
 ```
 
-**Line 1:** Planny icon | Model name | Project name | Git branch | Uncommitted changes
+**Line 1:** Planny icon | Model name + reasoning effort | Project name | Git branch | Uncommitted changes
 **Line 2:** Planny icon | Gray separator
 **Line 3:** Planny icon | Session duration + cost | Context window bar | Usage (rate limits or token counts)
 
@@ -63,6 +63,7 @@ Edit `~/.claude/statusline-config.json`:
   "compact": false,
   "items": {
     "model": true,
+    "effort": true,
     "project": true,
     "branch": true,
     "contextBar": true,
@@ -80,9 +81,11 @@ Edit `~/.claude/statusline-config.json`:
 | `color` | `true` | Enable ANSI color output. Set `false` for monochrome. The `NO_COLOR` environment variable (per [no-color.org](https://no-color.org)) also disables color. |
 | `compact` | `false` | Two-line mode — drops the mascot icons and the separator line. Goes from 3 lines to 2, no horizontal truncation. |
 | `items.model` | `true` | Show model name (Opus, Sonnet, Haiku) |
+| `items.effort` | `true` | Append the current reasoning effort level (Low/Medium/High/XHigh/Max) to the model segment, e.g. `Sonnet 5 \| High`. Reads `effort.level` from stdin; hidden when the current model doesn't support an effort parameter (field absent from stdin). |
 | `items.project` | `true` | Show project directory name |
 | `items.branch` | `true` | Show current git branch (falls back to short SHA when detached HEAD) |
 | `items.contextBar` | `true` | Show context window usage bar with percentage |
+| `items.contextTokens` | `true` | Append raw tokens used in the context window next to the percentage, e.g. `42% (84k)`. Reads `context_window.total_input_tokens` (the same input-token count `used_percentage` is derived from — excludes output tokens). Requires `items.contextBar` to also be enabled. |
 | `items.planUsage` | `true` | Show usage info: rate limits (Pro/Max) or token counts (Bedrock/Vertex/PAYG) |
 | `items.linesChanged` | `true` | Show uncommitted git diff stats (+added -removed) |
 | `items.duration` | `true` | Show session duration |
