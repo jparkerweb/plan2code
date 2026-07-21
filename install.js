@@ -207,6 +207,7 @@ function generateSkillName(prompt) {
 // Helper function to generate step label for descriptions
 function generateStepLabel(prompt) {
   if (prompt.stepNumber === 'init') return 'Init';
+  if (prompt.stepNumber === 'update') return 'Update';
   if (prompt.stepNumber === 'review') return 'Review';
   if (prompt.stepNumber === 'handoff') return 'Handoff';
   return `Step ${prompt.stepNumber}`;

@@ -57,7 +57,7 @@ This skill never modifies these files — it only reads and compares them.
 List every published (non-draft) release and take the numerically-highest semver tag. Do **not** rely on `gh release view` / GitHub's "Latest" flag: that flag returns whatever release is *marked* latest — normally the newest semver, but a maintainer can manually pin it to an older release, which would make the Step 6 ahead-comparison misfire.
 
 ```bash
-gh release list --repo jparkerweb/plan2code --json tagName,isDraft -q '.[] | select(.isDraft==false) | .tagName'
+gh release list --repo jparkerweb/plan2code --limit 100 --json tagName,isDraft -q '.[] | select(.isDraft==false) | .tagName'
 ```
 
 Strip any leading `v` from each returned tag, compare them as numeric `(major, minor, patch)` tuples (the same rule as Step 6), and take the maximum → `$RELEASE_VERSION`. If the command returns no tags or exits non-zero for **any** reason (no releases yet, transient error, etc.), set `$RELEASE_VERSION = "0.0.0"` — no error-text matching is needed.
