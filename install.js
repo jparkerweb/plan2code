@@ -180,6 +180,14 @@ const SOURCE_PROMPTS = [
     name: 'finalize',
     displayName: 'Finalization Mode',
     description: 'Validate, summarize, and archive completed work'
+  },
+  {
+    source: 'plan2code-handoff.md',
+    stepNumber: 'handoff',
+    name: 'handoff',
+    displayName: 'Handoff Mode',
+    description: 'Compact the conversation into a self-contained handoff document for a fresh session',
+    isUtility: true
   }
 ];
 
@@ -200,6 +208,7 @@ function generateSkillName(prompt) {
 function generateStepLabel(prompt) {
   if (prompt.stepNumber === 'init') return 'Init';
   if (prompt.stepNumber === 'review') return 'Review';
+  if (prompt.stepNumber === 'handoff') return 'Handoff';
   return `Step ${prompt.stepNumber}`;
 }
 
