@@ -74,3 +74,29 @@ When modifying workflow prompts in `src/`:
 2. Run `node install.js` to regenerate distribution files
 3. Test the workflow in your AI tool of choice
 4. The `dist/` folder is regenerated automatically — don't edit files there directly
+
+## Adding a New Workflow Prompt / Skill
+
+Adding a new prompt to `src/` is more than dropping in a file — the installer is
+driven by an explicit registry and several docs enumerate the command set. When
+you add a `src/plan2code-<name>.md`, do **all** of the following so nothing drifts:
+
+1. **Create the source file** `src/plan2code-<name>.md` — body content **only**,
+   no YAML frontmatter (the installer generates frontmatter per platform). Keep
+   it **under 11,000 characters** (`npm test` enforces this).
+2. **Register it in the installer.** Add an entry to the `SOURCE_PROMPTS` array in
+   `install.js` (`source`, `stepNumber`, `name`, `displayName`, `description`, and
+   `isUtility: true` for non-numbered utilities). If `stepNumber` is a non-numeric
+   label (e.g. `'handoff'`), add a matching case to `generateStepLabel()` so the
+   generated description reads correctly.
+3. **Update every doc that lists the command set** — keep these in sync, they are
+   the canonical inventories:
+   - `README.md` — command table ("When to Use")
+   - `QUICK-REFERENCE.md` — Commands table
+   - `.agents-docs/AGENTS-architecture.md` — "Workflow Prompts (in `src/`)" table
+   - `CHANGELOG.md` — add an entry under the current version
+   - `docs/index.html` — **only** if the new prompt belongs to the core pipeline
+     shown there; utilities (like `init`, `quick-task`, `handoff`) are deliberately
+     omitted from that curated marketing list.
+4. **Regenerate and validate:** run `node install.js` (regenerates `dist/`) and
+   `npm test` (character-count validator now covers the new file).

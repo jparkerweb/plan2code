@@ -1,10 +1,3 @@
----
-name: plan2code-handoff
-description: "Compact the current conversation into a handoff document so another agent (or a fresh session) can pick up where this one left off. Writes to ./handoffs/ in the repo. Invoke explicitly with /plan2code-handoff."
-argument-hint: "(optional) focus area for the next session"
-disable-model-invocation: true
----
-
 # plan2code-handoff
 
 Turn everything useful in the current conversation into a single, self-contained

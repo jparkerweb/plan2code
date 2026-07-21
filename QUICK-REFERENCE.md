@@ -13,6 +13,7 @@
 | 2      | /plan2code-2-document        | PLAN-DRAFT.md   | overview.md + Phase files           |
 | 3      | /plan2code-3-implement       | overview.md     | Implemented code                    |
 | 4      | /plan2code-4-finalize        | overview.md     | Archived specs                      |
+| handoff | /plan2code-handoff          | Conversation    | Self-contained handoff doc in handoffs/ |
 
 ## File Structure
 
