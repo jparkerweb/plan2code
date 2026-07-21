@@ -27,6 +27,8 @@ plan2code/
 │   └── local-commands/         # For per-project installation (.claude/, etc.)
 ├── .husky/                     # Git hooks (husky)
 │   └── pre-commit              # Runs character count validation
+├── .claude/                    # Repo-local Claude Code config (NOT installed by install.js)
+│   └── skills/                 # Maintainer-only dev skills, e.g. plan2code-publish/
 ├── docs/                       # Documentation and assets
 ├── specs/                      # Feature specs (if any in-progress)
 ├── install.js                  # Interactive installer (Node.js)
@@ -59,6 +61,7 @@ plan2code/
 | `plan2code-3-implement.md` | 3 | Execute implementation (phase by phase) |
 | `plan2code-review.md` | review | Post-implementation comprehensive review |
 | `plan2code-4-finalize.md` | 4 | Validate, summarize, feedback, archive (7 steps) |
+| `plan2code-handoff.md` | handoff | Compact the conversation into a self-contained handoff document |
 
 ## Naming Convention
 
@@ -83,6 +86,14 @@ Some workflows use companion reference files for depth that exceeds the 11k char
 - **TOML platforms** (Gemini CLI): reference files are skipped — TOML embeds content inline, so Read directives won't resolve. The orchestrator's inline fallback text covers this.
 
 Reference files are NOT subject to the 11,000 character limit. Currently only the review workflow uses this pattern — it serves as the POC for potential adoption by other workflows.
+
+## Repo-Local Skills (`.claude/skills/`)
+
+Maintainer-only Claude Code skills committed to the repo but **deliberately excluded** from `install.js` — they are dev tooling, not shipped product, so they never install to `~/.claude/skills/` and carry no version bump of their own (a product-version bump would wrongly imply a user-facing release); changelog mentions fold into the current version's entry.
+
+- `plan2code-publish/` — cuts a GitHub Release from the top `CHANGELOG.md` entry once `CHANGELOG.md` / `version.json` / `package.json` agree and the version is ahead of the latest published release. Delegates tag creation to `gh release create --target main`.
+
+**Warning:** anything named `plan2code-*` placed under `~/.claude/skills/` is deleted by the installer's uninstall (`uninstallFiles()` in `install.js`) and by every re-install's pre-copy cleanup in `install()` (both match `/^plan2code-/` for the Claude Code skills target). Keep these skills repo-local only.
 
 ## Status Line
 

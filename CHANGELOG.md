@@ -10,6 +10,11 @@ All notable changes to Plan2Code will be documented in this file.
   - Always captures a confirmed **Next task**: infers a candidate from context and requires the user to confirm or fill it in before the file is written
   - References plan specs, logs, and files by path rather than copying them; strips secrets; suggests follow-on skills and verification steps
   - Repo-safe: checks `git check-ignore` and warns (without silently editing `.gitignore`) when `handoffs/` isn't ignored in an arbitrary repo
+- **Repo-local release publisher skill** — new `/plan2code-publish` maintainer skill in `.claude/skills/` cuts a GitHub Release from the top `CHANGELOG.md` entry once `CHANGELOG.md`, `version.json`, and `package.json` agree and the version is ahead of the latest published release. Dev tooling only — deliberately excluded from `install.js`, never installed to `~/.claude/skills/`.
+
+### 🐛 Fixed
+
+- **Review workflow next-step suggestion made context-aware** — `/plan2code-review` Session End now reconciles three signals: session context (what preceded the review in the conversation), the user's review intent, and on-disk spec state gathered shell-agnostically — a file-search tool's empty result is never treated as proof that no specs exist. Suggestions render only at actual session end, cite their evidence and its source, and conflicting signals ask one targeted question instead of guessing.
 
 ## v1.15.4
 

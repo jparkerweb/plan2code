@@ -26,6 +26,7 @@ A structured 4-step workflow for developing features and projects with AI assist
 | `/plan2code-2-document`       | After planning, create implementation specs              |
 | `/plan2code-3-implement`      | Execute implementation (one phase per conversation)      |
 | `/plan2code-4-finalize`       | All phases complete, ready to archive                    |
+| `/plan2code-handoff`          | Compact the conversation into a handoff doc for a fresh session |
 
 **Key Rules:**
 - Start NEW conversation for each step (and each implementation phase)
