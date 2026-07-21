@@ -2,6 +2,15 @@
 
 All notable changes to Plan2Code will be documented in this file.
 
+## v1.16.0
+
+### ✨ Added
+
+- **`/plan2code-handoff` skill** — compacts the current conversation into a self-contained handoff document (written to gitignored `./handoffs/<timestamp>-handoff.md`) so a fresh session or another agent can resume the work
+  - Always captures a confirmed **Next task**: infers a candidate from context and requires the user to confirm or fill it in before the file is written
+  - References plan specs, logs, and files by path rather than copying them; strips secrets; suggests follow-on skills and verification steps
+  - Repo-safe: checks `git check-ignore` and warns (without silently editing `.gitignore`) when `handoffs/` isn't ignored in an arbitrary repo
+
 ## v1.15.4
 
 ### ✨ Added

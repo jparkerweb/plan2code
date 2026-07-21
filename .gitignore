@@ -11,6 +11,7 @@ plan2code-metrics/package-lock.json
 .plan2code-metrics
 nul
 .cognition/
+handoffs/
 node_modules/
 package-lock.json
 SYNC.md
