@@ -14,9 +14,9 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/jparkerweb/plan2code"
+    "url": "https://code.jparkerweb.com/jparkerweb/plan2code"
   },
-  "homepage": "https://plan2code.jparkerweb.com",
+  "homepage": "https://code.jparkerweb.com/jparkerweb/plan2code",
   "releaseDate": "2026-07-31",
   "mode": "utility"
 }
