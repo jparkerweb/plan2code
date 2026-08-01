@@ -20,6 +20,14 @@ A persistent three-line status bar for Claude Code that displays model info, pro
 ╰─╯  2m ($0.18) │ ▰▰▱▱▱▱▱▱▱▱▱▱ 18% (36k) │ 88k in · 3k out
 ```
 
+**Git worktree** — session running in a linked worktree at `C:\git\plan2code-user-auth`:
+
+```
+╭─╮  Opus 4.6 | High │ plan2code ⑂ │ feature/user-auth │ +12 -3
+│★│  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
+╰─╯  3h 5m ($4.62) │ ▰▰▰▰▰▱▱▱▱▱▱▱ 42% (84k) │ 5h: 28% · 7d: 61%
+```
+
 **Line 1:** Planny icon | Model name + reasoning effort | Project name | Git branch | Uncommitted changes
 **Line 2:** Planny icon | Gray separator
 **Line 3:** Planny icon | Session duration + cost | Context window bar | Usage (rate limits or token counts)
@@ -65,6 +73,7 @@ Edit `~/.claude/statusline-config.json`:
     "model": true,
     "effort": true,
     "project": true,
+    "worktree": true,
     "branch": true,
     "contextBar": true,
     "planUsage": true,
@@ -83,6 +92,7 @@ Edit `~/.claude/statusline-config.json`:
 | `items.model` | `true` | Show model name (Opus, Sonnet, Haiku) |
 | `items.effort` | `true` | Append the current reasoning effort level (Low/Medium/High/XHigh/Max) to the model segment, e.g. `Sonnet 5 \| High`. Reads `effort.level` from stdin; hidden when the current model doesn't support an effort parameter (field absent from stdin). |
 | `items.project` | `true` | Show project directory name |
+| `items.worktree` | `true` | Detect [git worktrees](https://git-scm.com/docs/git-worktree) and render the project segment as `repo ⑂ worktree` instead of just the worktree's directory name. See [Worktree Display](#worktree-display). Requires `items.project`. |
 | `items.branch` | `true` | Show current git branch (falls back to short SHA when detached HEAD) |
 | `items.contextBar` | `true` | Show context window usage bar with percentage |
 | `items.contextTokens` | `true` | Append raw tokens used in the context window next to the percentage, e.g. `42% (84k)`. Reads `context_window.total_input_tokens` (the same input-token count `used_percentage` is derived from — excludes output tokens). Requires `items.contextBar` to also be enabled. |
@@ -100,6 +110,27 @@ Malformed config falls back to defaults silently. Type errors on individual keys
 | Claude Code | Supported | Full feature set via `settings.json` registration |
 | Copilot CLI | Planned | Deferred — CLI lacks status line script support as of v0.0.421 |
 | Others | Not supported | Codex CLI, Gemini CLI have built-in status, not scriptable |
+
+## Worktree Display
+
+With `items.worktree` disabled, a session in a linked worktree shows only that worktree's directory name (`plan2code-user-auth`) — the underlying repository identity is lost, and the session looks like an unrelated project.
+
+When enabled, the project segment becomes `repo ⑂ worktree`:
+
+| Worktree directory | Branch | Rendered | Why |
+|--------------------|--------|----------|-----|
+| `plan2code` (primary checkout) | `main` | `plan2code` | Not a linked worktree — unchanged |
+| `plan2code-spike` | `spike-thing` | `plan2code ⑂ spike` | Repo prefix stripped from the worktree name |
+| `plan2code-user-auth` | `feature/user-auth` | `plan2code ⑂` | Name is redundant with the visible branch — collapses to the bare marker |
+| `plan2code-user-auth` | `feature/user-auth`, `items.branch: false` | `plan2code ⑂ user-auth` | No branch shown, so the name is kept |
+
+Details:
+
+- **Detection** — a single `git rev-parse --git-dir --git-common-dir`. The two paths differ only inside a linked worktree. The true repo name comes from `--git-common-dir` (its parent directory, or the `<name>.git` basename for a bare main repo), so it is correct regardless of how the worktree directory was named.
+- **Prefix stripping** — a leading repo name followed by `-`, `_`, or `.` is removed, so `plan2code-user-auth` reads as `user-auth`.
+- **Redundancy collapse** — worktree directories usually mirror their branch. The name is dropped (leaving `⑂`) when it matches the branch after normalizing case and `/ _ . -` separators, compared against both the full branch and its trailing segment so type prefixes like `feature/` don't defeat the match. This only applies when the branch is actually displayed.
+- **Color** — the repo keeps its bold silver; the `⑂` marker and worktree name render in amber so a non-primary checkout is obvious at a glance. Monochrome output is `repo ⑂ worktree`.
+- **Cost** — one extra `git` invocation, subject to the same 1.5s timeout, and skipped entirely outside git repos.
 
 ## Usage Display
 

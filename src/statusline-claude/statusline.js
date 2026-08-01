@@ -28,6 +28,7 @@ const DEFAULTS = {
     model: true,
     effort: true,
     project: true,
+    worktree: true,
     branch: true,
     contextBar: true,
     contextTokens: true,
@@ -90,6 +91,7 @@ const C = {
   // Plan2Code brand
   teal: rgb(190, 192, 200),     // Silver — repo
   sky: rgb(120, 195, 255),      // Light sky blue — branch
+  amber: rgb(235, 170, 95),     // Amber — linked worktree marker
   muted: rgb(40, 120, 200),     // Mid blue — model
   label: rgb(130, 135, 150),    // Mid gray — field labels (5h, 7d)
   // Bar & quota thresholds
@@ -150,6 +152,54 @@ function getGitBranch(stdinData) {
   return sha || '';
 }
 
+// Linked worktrees have their own .git dir under the main repo's
+// .git/worktrees/<name>, while --git-common-dir still points at the main repo's
+// .git. Equal paths mean we're in the primary checkout.
+function getWorktreeInfo(cwd) {
+  const raw = gitExec(['rev-parse', '--git-dir', '--git-common-dir'], cwd);
+  if (!raw) return null;
+
+  const [gitDir, commonDir] = raw.split('\n').map((p) => path.resolve(cwd, p.trim()));
+  if (!gitDir || !commonDir) return null;
+
+  const samePath = process.platform === 'win32'
+    ? gitDir.toLowerCase() === commonDir.toLowerCase()
+    : gitDir === commonDir;
+  if (samePath) return null;
+
+  // commonDir is normally <repo>/.git; bare repos use <name>.git directly
+  const commonBase = path.basename(commonDir);
+  const repoName = commonBase === '.git'
+    ? path.basename(path.dirname(commonDir))
+    : commonBase.replace(/\.git$/i, '');
+
+  const toplevel = gitExec(['rev-parse', '--show-toplevel'], cwd);
+  const worktreeName = path.basename(toplevel || cwd);
+  if (!repoName || !worktreeName) return null;
+
+  return { repoName, worktreeName };
+}
+
+// "plan2code-user-auth" in repo "plan2code" reads as just "user-auth"
+function stripRepoPrefix(worktreeName, repoName) {
+  const lowerWt = worktreeName.toLowerCase();
+  const lowerRepo = repoName.toLowerCase();
+  if (!lowerWt.startsWith(lowerRepo) || lowerWt === lowerRepo) return worktreeName;
+  const rest = worktreeName.slice(repoName.length);
+  return /^[-_.]/.test(rest) ? rest.slice(1) : worktreeName;
+}
+
+const normalizeName = (s) => s.toLowerCase().replace(/[/_.\s-]+/g, '-').replace(/^-|-$/g, '');
+
+// Worktree dirs usually mirror their branch (plan2code-user-auth / feature/user-auth).
+// Compare against both the full branch and its trailing segment so the common
+// type prefixes (feature/, bugfix/, ...) don't defeat the match.
+function isRedundantWithBranch(worktreeName, branch) {
+  if (!branch) return false;
+  const candidates = new Set([normalizeName(branch), normalizeName(branch.split('/').pop())]);
+  return candidates.has(normalizeName(worktreeName));
+}
+
 // ============================================================================
 // Formatters
 // ============================================================================
@@ -190,6 +240,34 @@ function getProjectName(stdinData) {
   const projectDir = stdinData?.workspace?.project_dir;
   if (!projectDir || typeof projectDir !== 'string') return '';
   return path.basename(projectDir);
+}
+
+// Returns the project segment: "plan2code" normally, "plan2code ⑂ spike" in a
+// linked worktree — the name collapsing to a bare ⑂ when the branch says it already.
+function formatProject(stdinData, config, branch) {
+  const project = getProjectName(stdinData);
+  if (!project) return null;
+  const plain = (text) => (config.color ? `${C.bold}${C.teal}${text}${C.reset}` : text);
+
+  if (!config.items.worktree) return plain(project);
+
+  const cwd = stdinData?.workspace?.project_dir || process.cwd();
+  if (!isGitRepo(cwd)) return plain(project);
+
+  const info = getWorktreeInfo(cwd);
+  if (!info) return plain(project);
+
+  const shortName = stripRepoPrefix(info.worktreeName, info.repoName);
+  // Only dedupe against a branch the user can actually see — otherwise the
+  // worktree identity would vanish entirely.
+  const visibleBranch = config.items.branch ? branch : '';
+  const redundant = isRedundantWithBranch(shortName, visibleBranch)
+    || isRedundantWithBranch(info.worktreeName, visibleBranch)
+    || normalizeName(shortName) === normalizeName(info.repoName);
+  const marker = redundant ? '⑂' : `⑂ ${shortName}`;
+
+  if (!config.color) return `${info.repoName} ${marker}`;
+  return `${C.bold}${C.teal}${info.repoName}${C.reset} ${C.amber}${marker}${C.reset}`;
 }
 
 function calculateContextPercent(stdinData, config) {
@@ -339,14 +417,16 @@ function formatLine1(stdinData, config) {
     }
   }
 
+  // Branch is resolved first — the project segment dedupes the worktree name against it
+  const branch = config.items.branch || config.items.worktree ? getGitBranch(stdinData) : '';
+
   if (config.items.project) {
-    const project = getProjectName(stdinData);
-    if (project) segments.push(config.color ? `${C.bold}${C.teal}${project}${C.reset}` : project);
+    const project = formatProject(stdinData, config, branch);
+    if (project) segments.push(project);
   }
 
-  if (config.items.branch) {
-    const branch = getGitBranch(stdinData);
-    if (branch) segments.push(config.color ? `${C.sky}${branch}${C.reset}` : branch);
+  if (config.items.branch && branch) {
+    segments.push(config.color ? `${C.sky}${branch}${C.reset}` : branch);
   }
 
   if (config.items.linesChanged) {
