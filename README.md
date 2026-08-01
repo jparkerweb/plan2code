@@ -75,14 +75,8 @@ The install script requires **Node.js** (v14 or later). If you don't have Node.j
 
 Run the interactive installer directly using `npx` with your preferred GitHub authentication method:
 
-**If you use SSH keys:**
 ```bash
-npx git+ssh://git@github.com/jparkerweb/plan2code.git
-```
-
-**If you use HTTPS authentication:**
-```bash
-npx git+https://github.com/jparkerweb/plan2code.git
+npx git+https://code.jparkerweb.com/jparkerweb/plan2code.git
 ```
 
 This downloads the installer to a temporary location, runs it, installs the workflow files to your machine, and cleans up automatically. The installed workflows remain on your system and work independently. To update or reinstall, simply run the command again.
@@ -93,14 +87,8 @@ This downloads the installer to a temporary location, runs it, installs the work
 
 Run the interactive installer directly using `npx` with your preferred GitHub authentication method:
 
-**If you use SSH keys:**
 ```bash
-npx git+ssh://git@github.com/jparkerweb/plan2code.git
-```
-
-**If you use HTTPS authentication:**
-```bash
-npx git+https://github.com/jparkerweb/plan2code.git
+npx git+https://code.jparkerweb.com/jparkerweb/plan2code.git
 ```
 
 This downloads the installer to a temporary location, runs it, installs the workflow files to your machine, and cleans up automatically. The installed workflows remain on your system and work independently. To update or reinstall, simply run the command again.
@@ -109,7 +97,7 @@ This downloads the installer to a temporary location, runs it, installs the work
 
 ```bash
 # Clone the repository
-git clone https://github.com/jparkerweb/plan2code.git
+git clone https://code.jparkerweb.com/jparkerweb/plan2code.git
 cd plan2code
 
 # Run the interactive installer

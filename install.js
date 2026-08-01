@@ -1299,7 +1299,7 @@ async function install(targets = null) {
   if (totalErrors === 0) {
     console.log(`${COLORS.GREEN}    ╭───╮${COLORS.RESET}   ${COLORS.BRIGHT}All done! Happy coding!${COLORS.RESET}`);
     console.log(`${COLORS.GREEN}    │ ${COLORS.CYAN}★${COLORS.GREEN} │${COLORS.RESET}   ${COLORS.BRIGHT}If this is your first time using Plan2Code, read the docs here:${COLORS.RESET}`);
-    console.log(`${COLORS.GREEN}    │ ${COLORS.BRIGHT}◡${COLORS.GREEN} │${COLORS.RESET}   ${COLORS.BRIGHT}https://github.com/jparkerweb/plan2code${COLORS.RESET}`);
+    console.log(`${COLORS.GREEN}    │ ${COLORS.BRIGHT}◡${COLORS.GREEN} │${COLORS.RESET}   ${COLORS.BRIGHT}https://code.jparkerweb.com/jparkerweb/plan2code${COLORS.RESET}`);
     console.log(`${COLORS.GREEN}    ╰───╯${COLORS.RESET}`);
   }
 
