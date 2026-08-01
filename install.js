@@ -646,7 +646,7 @@ function displayHeader() {
   console.log('║              ╰───╯   Welcome to Plan2Code!              ║');
   console.log('║                                                         ║');
   console.log('║   G L O B A L   I N S T A L L A T I O N   S Y S T E M   ║');
-  console.log('║          https://jparkerweb.github.io/plan2code         ║');
+  console.log('║     https://code.jparkerweb.com/jparkerweb/plan2code    ║');
   console.log('║                                                         ║');
   console.log('╚═════════════════════════════════════════════════════════╝');
   console.log(COLORS.RESET);
