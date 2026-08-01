@@ -2,6 +2,15 @@
 
 All notable changes to Plan2Code will be documented in this file.
 
+## v1.16.1
+
+### ✨ Added
+
+- **Status line: git worktree awareness** — a session running in a linked git worktree now renders the project segment as `repo ⑂ worktree` (e.g. `plan2code ⑂ spike`) instead of only the worktree's directory name, which previously made the session look like an unrelated project
+  - Repo identity resolved from `git rev-parse --git-common-dir`, so it is correct regardless of how the worktree directory was named (bare `<name>.git` main repos included)
+  - A leading repo prefix is stripped from the worktree name (`plan2code-user-auth` → `user-auth`), and the name collapses to a bare `⑂` when it merely restates the branch already on screen — matched across `/ _ . -` separators and type prefixes like `feature/`, and only when the branch is actually displayed
+  - Toggleable via the new `items.worktree` config flag (default on); one extra timeout-bounded `git` call, skipped outside git repos
+
 ## v1.16.0
 
 ### ✨ Added
