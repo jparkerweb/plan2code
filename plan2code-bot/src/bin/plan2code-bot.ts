@@ -48,7 +48,7 @@ Examples:
   plan2code-bot --resume
 
 Documentation:
-  https://jparkerweb.github.io/plan2code
+  https://code.jparkerweb.com/jparkerweb/plan2code
 `);
 }
 
