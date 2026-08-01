@@ -6,6 +6,7 @@
     "model": true,
     "effort": true,
     "project": true,
+    "worktree": true,
     "branch": true,
     "contextBar": true,
     "contextTokens": true,
