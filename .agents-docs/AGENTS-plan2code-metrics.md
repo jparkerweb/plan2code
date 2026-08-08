@@ -32,6 +32,9 @@ plan2code-metrics                      # Run (fully interactive, no flags)
 | Analyze | AI diagnosis of weak metrics |
 | Propose | AI improvement proposals with validation |
 | Apply | Interactive diff review + file patching |
+| Fetch community submissions | List/parse/import open community-feedback GitHub issues from jparkerweb/plan2code, close on success |
+
+Community submissions arrive as GitHub issues labeled `community-feedback` on `jparkerweb/plan2code`, created by the finalize prompt's post-Step-6 submission flow; the "Fetch community submissions" option requires an authenticated `gh` CLI to list/close them.
 
 ## Key Source Files
 
@@ -40,11 +43,12 @@ plan2code-metrics                      # Run (fully interactive, no flags)
 | `types.ts` | All interfaces (`RunMetrics`, `UserFeedback`, `CohortMetrics`, etc.) + `METRIC_TARGETS` |
 | `collector.ts` | Reads project artifacts → run JSON (parses plan drafts, overview.md, loop logs) |
 | `aggregator.ts` | Merges runs by prompt generation (SHA cohort) → `aggregated.json` |
+| `community.ts` | Lists/parses/closes `community-feedback`-labeled GitHub issues via `gh` CLI |
 | `analyzer.ts` | AI diagnosis via `prompts/analyze.md` template |
 | `improver.ts` | AI proposals via `prompts/improve.md` + validation (char count, old_text match) |
 | `applier.ts` | Interactive diff review + file patching |
 | `cli.ts` | Menu-driven interactive CLI (100% prompts, no flags) |
-| `invoke-llm.ts` | Unified LLM interface (Claude Code or Copilot CLI) |
+| `invoke-llm.ts` | Unified LLM interface (Claude Code, GitHub Copilot CLI, or Devin CLI) |
 
 ## User Feedback
 
@@ -66,6 +70,7 @@ Feedback is collected during finalize (Step 5) or retroactively via the CLI. Pip
 
 - **Claude Code** (recommended): `claude` CLI with `--inputFile` for prompt delivery
 - **GitHub Copilot CLI**: `copilot` CLI with stdin prompt delivery
+- **Devin CLI**: `devin` CLI with `--print --prompt-file <file> --permission-mode dangerous`
 
 ## Metric Targets
 
