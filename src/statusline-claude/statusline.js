@@ -282,7 +282,7 @@ function calculateContextPercent(stdinData, config) {
   return Math.round(Math.min(100, (rawUsedTokens / usableTokens) * 100));
 }
 
-function formatContextBar(percent, tokens, config) {
+function formatContextBar(percent, tokens, config, suppressTokens) {
   if (percent == null) return null;
 
   const clamped = Math.max(0, Math.min(100, percent));
@@ -290,7 +290,8 @@ function formatContextBar(percent, tokens, config) {
   const filledStr = '▰'.repeat(filled);
   const emptyStr = '▱'.repeat(CONTEXT_BAR_LEN - filled);
 
-  const tokenStr = config.items.contextTokens && tokens != null ? ` (${formatTokenCount(tokens)})` : '';
+  const showTokens = config.items.contextTokens && !suppressTokens && tokens != null;
+  const tokenStr = showTokens ? ` (${formatTokenCount(tokens)})` : '';
 
   if (!config.color) return `${filledStr}${emptyStr} ${clamped}%${tokenStr}`;
 
@@ -445,15 +446,21 @@ function formatLine2(stdinData, config) {
     if (dur) segments.push(dur);
   }
 
+  // Token usage ("X in / Y out") already surfaces total_input_tokens — suppress the
+  // context bar's duplicate (XXk) in that case. Rate-limit accounts show no absolute
+  // tokens elsewhere, so the bar's (XXk) stays as the only source there.
+  const rateLimits = config.items.planUsage ? formatRateLimits(stdinData, config) : null;
+  const tokenUsage = config.items.planUsage && !rateLimits ? formatTokenUsage(stdinData, config) : null;
+
   if (config.items.contextBar) {
     const percent = calculateContextPercent(stdinData, config);
     const tokens = stdinData?.context_window?.total_input_tokens;
-    const bar = formatContextBar(percent, tokens, config);
+    const bar = formatContextBar(percent, tokens, config, !!tokenUsage);
     if (bar) segments.push(bar);
   }
 
   if (config.items.planUsage) {
-    const usage = formatRateLimits(stdinData, config) || formatTokenUsage(stdinData, config);
+    const usage = rateLimits || tokenUsage;
     if (usage) segments.push(usage);
   }
 
