@@ -1,6 +1,6 @@
 # AGENTS.md
 
-This file provides guidance to AI coding agents like Claude Code (claude.ai/code), Cursor AI, Codex, Gemini CLI, GitHub Copilot, Devin, Zed, and other AI coding assistants when working with code in this repository.
+This file provides guidance to AI coding agents like Claude Code (claude.ai/code), Cursor AI, Codex, GitHub Copilot, Devin, Zed, and other AI coding assistants when working with code in this repository.
 
 ## Project Overview
 
@@ -52,7 +52,7 @@ Details: [Code Style & Gotchas](./.agents-docs/AGENTS-code-style.md)
 
 ## Mascot
 
-The project has a mascot called "Planny" - an ASCII art robot that appears in installer output and workflow prompts. Mascot variants are defined in `MASCOT` constant in `install.js` and appear in workflow markdown files.
+The project has a mascot called "Planny" — an ASCII art robot that appears in installer output and workflow prompts. Mascot variants are defined in the `MASCOT` constant in `install.js` and appear in workflow markdown files.
 
 ```
    ╭───╮

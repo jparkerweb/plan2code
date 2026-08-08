@@ -5,11 +5,23 @@
 
 ```
 plan2code/
-├── src/                        # Source workflow prompts (9 markdown files)
-│   └── plan2code-review-references/     # Reference files for review skill
-│       ├── verification-protocol.md        # Deep verification + confidence calibration
-│       ├── dimensions.md                   # 11 dimensions with detailed checklists
-│       └── false-positives.md              # Known false-positive patterns
+├── src/                        # Source workflow prompts (11 markdown files)
+│   ├── plan2code-0-pathfinder-references/ # Reference files for pathfinder skill
+│   │   ├── chart.md                        # MODE A: destination + frontier grills, templates
+│   │   ├── grilling.md                     # Folded-in grilling + domain-modeling
+│   │   ├── questions.md                    # On-disk question-file format + markers
+│   │   ├── resolve.md                      # Per-type resolution + graduating the fog
+│   │   ├── handoff.md                      # Clearing gate + PLAN-DRAFT handoff
+│   │   └── trail.md                        # Every-response map visual + pathed resume command
+│   ├── plan2code-review-references/     # Reference files for review skill
+│   │   ├── verification-protocol.md        # Deep verification + confidence calibration
+│   │   ├── dimensions.md                   # 11 dimensions with detailed checklists
+│   │   ├── false-positives.md              # Known false-positive patterns
+│   │   └── session-end.md                  # Next-step routing at review session end
+│   ├── plan2code-init-update-references/ # Reference files for init-update skill
+│   │   └── ai-agent-file-sync.md           # Step 7: replace AI configs with AGENTS.md refs
+│   └── plan2code-4-finalize-references/ # Reference files for finalize skill
+│       └── community-feedback-submission.md # STEP 6.5 payload schema + submission tiers
 ├── plan2code-loop/           # Autonomous loop CLI tool (Node.js/TypeScript)
 │   ├── src/                    # TypeScript source
 │   └── dist/                   # Built output (tsup)
@@ -54,14 +66,15 @@ plan2code/
 |------|------|---------|
 | `plan2code-init.md` | Init | Generate AGENTS.md as index + `.agents-docs/` section files (progressive discovery) |
 | `plan2code-init-update.md` | Update | Update AGENTS.md with learnings; detects and routes edits to `.agents-docs/` files |
-| `plan2code-quick-task.md` | 0 | Lightweight planning for small tasks |
+| `plan2code-0-pathfinder.md` | 0 | Chart a foggy idea as a local map of decision questions under `specs/<idea>/pathfinder/`, resolve one per session, hand a seeded PLAN-DRAFT to Step 1 |
+| `plan2code-quick-task.md` | quick | Lightweight planning for small tasks (standalone — not a pipeline step) |
 | `plan2code-1-plan.md` | 1 | Requirements analysis & architecture |
 | `plan2code-1b-revise-plan.md` | 1b | Mid-implementation revisions |
 | `plan2code-2-document.md` | 2 | Create implementation specs |
 | `plan2code-3-implement.md` | 3 | Execute implementation (phase by phase) |
 | `plan2code-review.md` | review | Post-implementation comprehensive review |
-| `plan2code-4-finalize.md` | 4 | Validate, summarize, feedback, archive (7 steps) |
-| `plan2code-handoff.md` | handoff | Compact the conversation into a self-contained handoff document |
+| `plan2code-4-finalize.md` | 4 | Validate, summarize, feedback, archive (steps 1–7, +optional 6.5) |
+| `plan2code-handoff.md` | handoff | Compact the conversation into a self-contained handoff document for a fresh session |
 
 ## Naming Convention
 
@@ -83,9 +96,10 @@ Some workflows use companion reference files for depth that exceeds the 11k char
 **How the installer handles them:**
 - **Skill-directory platforms** (Claude Code, Agents, Crush, Devin): reference files are nested as `<skill-name>/references/`. Read paths use canonical `references/<file>.md`.
 - **Flat-file platforms** (Windsurf, Cursor, Copilot, Continue): reference files are placed as a sibling directory. The installer rewrites Read paths to the sibling directory name (e.g., `plan2code-review-references/<file>.md`).
-- **TOML platforms** (Gemini CLI): reference files are skipped — TOML embeds content inline, so Read directives won't resolve. The orchestrator's inline fallback text covers this.
 
-Reference files are NOT subject to the 11,000 character limit. Currently only the review workflow uses this pattern — it serves as the POC for potential adoption by other workflows.
+Reference files are NOT subject to the 11,000 character limit. The review workflow pioneered this pattern (`verification-protocol`, `dimensions`, `false-positives`, `session-end`); the init-update workflow also uses it (`ai-agent-file-sync` for its Step 7), `plan2code-4-finalize.md` uses it for STEP 6.5 (`community-feedback-submission`), and `plan2code-0-pathfinder.md` leans on it hardest (`chart`, `grilling`, `questions`, `resolve`, `handoff`, `trail` — the orchestrator is a dispatcher, the depth lives in the references). Other workflows can adopt it when a source file's detail exceeds the 11k limit.
+
+**`Read` directives must sit at column 0.** `install.js` matches `/^(Read\s+)references\//gm` for the flat-file path rewrite — anchored, with no leading-whitespace tolerance. An indented or bulleted `Read` line is silently skipped, so flat-file platforms ship a `references/` path that does not exist there (they receive the reference dir as a *sibling*, named `plan2code-<name>-references/`).
 
 ## Repo-Local Skills (`.claude/skills/`)
 

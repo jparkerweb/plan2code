@@ -2,24 +2,28 @@
 
 ## Commands
 
-| Step   | Command                         | Input           | Output                              |
-| ------ | ------------------------------- | --------------- | ----------------------------------- |
-| Init   | /plan2code-init             | None            | AGENTS.md file                      |
-| Update | /plan2code-init-update      | AGENTS.md       | Updated AGENTS.md                   |
-| 0      | /plan2code-quick-task       | Requirements    | Conversational plan                 |
-| review | /plan2code-review            | Scope guidance  | Review findings + fixes             |
-| 1      | /plan2code-1-plan            | Requirements    | PLAN-CONVERSATION-<date>.md + PLAN-DRAFT-<date>.md |
-| 1b     | /plan2code-1b-revise-plan    | Specs + changes | Updated specs                       |
-| 2      | /plan2code-2-document        | PLAN-DRAFT.md   | overview.md + Phase files           |
-| 3      | /plan2code-3-implement       | overview.md     | Implemented code                    |
-| 4      | /plan2code-4-finalize        | overview.md     | Archived specs                      |
-| handoff | /plan2code-handoff          | Conversation    | Self-contained handoff doc in handoffs/ |
+| Step    | Command                      | Input           | Output                                             |
+| ------- | ----------------------------- | --------------- | -------------------------------------------------- |
+| Init    | /plan2code-init            | None            | AGENTS.md file                                     |
+| Update  | /plan2code-init-update     | AGENTS.md       | Updated AGENTS.md                                  |
+| 0       | /plan2code-0-pathfinder    | A foggy idea    | pathfinder/map.md + PLAN-DRAFT-<date>.md           |
+| quick   | /plan2code-quick-task      | Requirements    | Conversational plan (standalone — not a pipeline step) |
+| review  | /plan2code-review          | Scope guidance  | Review findings + fixes                            |
+| 1       | /plan2code-1-plan          | Requirements    | PLAN-CONVERSATION-<date>.md + PLAN-DRAFT-<date>.md |
+| 1b      | /plan2code-1b-revise-plan  | Specs + changes | Updated specs                                      |
+| 2       | /plan2code-2-document      | PLAN-DRAFT.md   | overview.md + Phase files                          |
+| 3       | /plan2code-3-implement     | overview.md     | Implemented code                                   |
+| 4       | /plan2code-4-finalize      | overview.md     | Archived specs                                     |
+| handoff | /plan2code-handoff         | Conversation    | Self-contained handoff doc in handoffs/            |
 
 ## File Structure
 
 ```
 specs/
 └── <feature-name>/
+    ├── pathfinder/                   # From Step 0 (optional, if charted)
+    │   ├── map.md                    #   the map: destination, decisions, fog
+    │   └── questions/NN-<slug>.md    #   one decision question per file
     ├── PLAN-DRAFT-<date>.md          # From Step 1 (verified plan)
     ├── PLAN-CONVERSATION-<date>.md   # From Step 1 (conversation log)
     ├── overview.md                   # From Step 2
@@ -76,6 +80,10 @@ New to a project?
 
 Learned something during a session?
 └── /plan2code-init-update → Add learnings to AGENTS.md
+
+Too unclaer to plan? (big idea, don't yet know what the questions are)
+└── /plan2code-0-pathfinder → chart it, clear one decision per session
+    └── then → /plan2code-1-plan (resumes at Phase 4)
 
 Is it a quick, small task?
 ├── Yes → /plan2code-quick-task (standalone)
