@@ -10,14 +10,16 @@ import path from 'path';
 import { select, input, confirm } from '@inquirer/prompts';
 import chalk from 'chalk';
 import ora from 'ora';
+import { execa } from 'execa';
 import { collectRun } from './collector.js';
-import { aggregate, loadAggregated, importRun, loadRunFiles } from './aggregator.js';
+import { aggregate, loadAggregated, importRun, loadRunFiles, writeRunFile } from './aggregator.js';
 import { runAnalysis } from './analyzer.js';
 import { generateImprovement } from './improver.js';
 import { reviewAndApply } from './applier.js';
 import type { AggregatedMetrics, CohortMetrics } from './types.js';
 import { METRIC_TARGETS } from './types.js';
 import { AGENTS, type AgentType } from './invoke-llm.js';
+import { listCommunityIssues, closeIssue, ingestCommunityIssues } from './community.js';
 
 // ── Session state (set at startup via interactive prompts) ───────────────────
 
@@ -321,18 +323,37 @@ async function flowViewStatus(): Promise<void> {
     return;
   }
 
+  const localCount = aggregated.cohorts.filter(c => c.source !== 'community').length;
+  const communityCount = aggregated.cohorts.length - localCount;
+
   console.log();
-  console.log(chalk.bold(`Total runs: ${aggregated.total_runs}  |  Generations: ${aggregated.cohorts.length}`));
+  console.log(chalk.bold(
+    `Total runs: ${aggregated.total_runs}  |  Generations: ${localCount}` +
+    (communityCount > 0 ? `  |  Community cohorts: ${communityCount}` : '')
+  ));
   console.log(chalk.gray(`Last updated: ${aggregated.last_updated}`));
+
+  // Community runs carry no wall-clock timestamps, so their first_seen/last_seen
+  // fall back to the run_id string; only render a Period line for real ISO dates.
+  const isIsoDate = (s?: string): boolean => !!s && /^\d{4}-\d{2}-\d{2}/.test(s);
 
   for (let i = 0; i < aggregated.cohorts.length; i++) {
     const cohort = aggregated.cohorts[i];
     const isCurrent = cohort.cohort_key === aggregated.current_cohort_key;
     const label = isCurrent ? chalk.bold.green('[CURRENT]') : '';
+    const isCommunity = cohort.source === 'community';
 
     console.log();
-    console.log(chalk.bold(`Generation ${i + 1} (sha:${cohort.cohort_key}) — ${cohort.run_count} run(s) ${label}`));
-    console.log(chalk.gray(`  Period: ${cohort.first_seen?.slice(0, 10)} → ${cohort.last_seen?.slice(0, 10)}`));
+    if (isCommunity) {
+      // cohort_key is already `community:v<version>` — no sha: prefix.
+      console.log(chalk.bold(`Community feedback (${cohort.cohort_key}) — ${cohort.run_count} run(s) ${label}`));
+    } else {
+      console.log(chalk.bold(`Generation ${i + 1} (sha:${cohort.cohort_key}) — ${cohort.run_count} run(s) ${label}`));
+    }
+    if (isIsoDate(cohort.first_seen)) {
+      const end = isIsoDate(cohort.last_seen) ? cohort.last_seen.slice(0, 10) : cohort.first_seen.slice(0, 10);
+      console.log(chalk.gray(`  Period: ${cohort.first_seen.slice(0, 10)} → ${end}`));
+    }
 
     // Step 1 metrics
     if (cohort.avg_confidence != null || cohort.avg_clarification_rounds != null) {
@@ -383,8 +404,10 @@ async function flowViewStatus(): Promise<void> {
       console.log(`    feedback_count:           ${chalk.white(String(cohort.feedback_count))}`);
     }
 
-    // Compare with previous generation
-    if (i > 0) {
+    // Compare with the previous cohort -- but only within the same population.
+    // Community and local cohorts measure different things; a cross-source
+    // delta (e.g. a community cohort vs the last local generation) is noise.
+    if (i > 0 && aggregated.cohorts[i - 1].source === cohort.source) {
       const prev = aggregated.cohorts[i - 1];
       const deltas: string[] = [];
       if (cohort.avg_confidence != null && prev.avg_confidence != null) {
@@ -396,7 +419,7 @@ async function flowViewStatus(): Promise<void> {
         deltas.push(`completion ${d >= 0 ? chalk.green(`▲${(d * 100).toFixed(1)}%`) : chalk.red(`▼${(Math.abs(d) * 100).toFixed(1)}%`)}`);
       }
       if (deltas.length > 0) {
-        console.log(chalk.gray(`  vs Gen ${i}: ${deltas.join('  ')}`));
+        console.log(chalk.gray(`  ${isCommunity ? 'vs prior version' : `vs Gen ${i}`}: ${deltas.join('  ')}`));
       }
     }
   }
@@ -729,6 +752,55 @@ async function flowDelete(): Promise<void> {
   }
 }
 
+// ── Flow: Fetch community submissions ────────────────────────────────────────
+
+const COMMUNITY_REPO = 'jparkerweb/plan2code';
+
+async function flowFetchCommunitySubmissions(): Promise<void> {
+  console.log();
+  console.log(chalk.bold.cyan('── Fetch Community Submissions ──'));
+
+  try {
+    await execa('gh', ['auth', 'status']);
+  } catch {
+    console.log(chalk.red('`gh` CLI not found or not authenticated — install/auth `gh` to use this feature.'));
+    return;
+  }
+
+  let issues;
+  try {
+    issues = await listCommunityIssues(COMMUNITY_REPO);
+  } catch (err) {
+    console.log(chalk.red(`Failed to list community-feedback issues: ${err instanceof Error ? err.message : String(err)}`));
+    return;
+  }
+
+  if (issues.length === 0) {
+    console.log(chalk.yellow('No open community-feedback issues found.'));
+    return;
+  }
+
+  const { runsDir, aggregatedPath } = getMetricsDirs();
+
+  const tally = await ingestCommunityIssues(issues, COMMUNITY_REPO, runsDir, { writeRunFile, closeIssue });
+
+  for (const num of tally.malformedIssues) {
+    console.log(chalk.yellow(`  Skipping issue #${num}: malformed or missing METRICS_JSON payload.`));
+  }
+  for (const num of tally.closeFailedIssues) {
+    console.log(chalk.yellow(`  Imported issue #${num} but failed to close it (still open; will retry next fetch).`));
+  }
+
+  if (tally.imported > 0) {
+    aggregate(runsDir, aggregatedPath);
+  }
+
+  console.log();
+  console.log(chalk.green(
+    `✓ Imported: ${tally.imported}  Skipped (duplicate): ${tally.skippedDuplicate}  Skipped (malformed): ${tally.skippedMalformed}  Closed: ${tally.closed}  Close failed: ${tally.closeFailed}`
+  ));
+}
+
 // ── Main menu ─────────────────────────────────────────────────────────────────
 
 export async function runCLI(): Promise<void> {
@@ -800,6 +872,7 @@ export async function runCLI(): Promise<void> {
         { name: 'Run analysis (diagnose weak steps)', value: 'analyze' },
         { name: 'Generate improvement proposal', value: 'propose' },
         { name: 'Review and apply a proposal', value: 'apply' },
+        { name: 'Fetch community submissions', value: 'fetch-community' },
         { name: chalk.red('Delete metrics data'), value: 'delete' },
         { name: 'Exit', value: 'exit' },
       ],
@@ -823,6 +896,9 @@ export async function runCLI(): Promise<void> {
         break;
       case 'apply':
         await flowReviewAndApply();
+        break;
+      case 'fetch-community':
+        await flowFetchCommunitySubmissions();
         break;
       case 'delete':
         await flowDelete();

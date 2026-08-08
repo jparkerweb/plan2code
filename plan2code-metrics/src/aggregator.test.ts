@@ -1,6 +1,9 @@
-import { describe, it, expect } from 'vitest';
-import { avg, rate, buildCohortKey, backfillPromptVersions } from './aggregator.js';
-import type { PromptVersions } from './types.js';
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
+import { describe, it, expect, afterEach } from 'vitest';
+import { avg, rate, buildCohortKey, backfillPromptVersions, cohortKeyForRun, aggregate } from './aggregator.js';
+import type { PromptVersions, RunMetrics } from './types.js';
 
 // ── avg() ─────────────────────────────────────────────────────────────────────
 
@@ -150,5 +153,101 @@ describe('buildCohortKey', () => {
       plan: 'sha256:aaa',
     };
     expect(buildCohortKey(ordered)).toBe(buildCohortKey(reversed));
+  });
+});
+
+// ── Run fixtures for cohort keying / aggregation ──────────────────────────────
+
+function makeRun(overrides: Partial<RunMetrics> = {}): RunMetrics {
+  return {
+    schema_version: '1.0',
+    run_id: 'run-20260101-000000-0000',
+    plan2code_version: '1.17.0',
+    prompt_versions: { ...FULL_VERSIONS },
+    project: { name: 'proj', started_at: null, completed_at: null },
+    step1_plan: { present: false, final_confidence: null, confidence_breakdown: null, clarification_rounds: null, tech_stack_revision_rounds: null, verification_gaps_found: null, functional_requirements_count: null, non_functional_requirements_count: null, risk_count: null, phase_count: null },
+    step2_document: { present: false, total_tasks: null, tasks_per_phase: null, phase_count: null, parallel_groups_identified: null, requirement_coverage_percent: null, verification_items_added: null },
+    step3_implement: { present: false, task_completion_rate: null, tasks_completed: null, tasks_total: null, blocker_count: null },
+    step4_finalize: { present: false, completion_rate_at_audit: null, verification_failures_found: null, documentation_updates_needed: null, archival_succeeded: null },
+    user_feedback: null,
+    ...overrides,
+  };
+}
+
+// ── cohortKeyForRun() ─────────────────────────────────────────────────────────
+
+describe('cohortKeyForRun', () => {
+  it('keys local runs by the prompt-version hash (unchanged from buildCohortKey)', () => {
+    const run = makeRun({ source: 'local' });
+    expect(cohortKeyForRun(run)).toBe(buildCohortKey(run.prompt_versions));
+  });
+
+  it('treats a run with no source as local', () => {
+    const run = makeRun();
+    delete run.source;
+    expect(cohortKeyForRun(run)).toBe(buildCohortKey(run.prompt_versions));
+  });
+
+  it('keys community runs by plan2code_version, ignoring prompt fingerprints', () => {
+    const run = makeRun({ source: 'community', plan2code_version: '1.17.0' });
+    expect(cohortKeyForRun(run)).toBe('community:v1.17.0');
+  });
+
+  it('groups two community runs of the same version together regardless of prompt fingerprint', () => {
+    const a = makeRun({ source: 'community', plan2code_version: '1.17.0', prompt_versions: { ...FULL_VERSIONS } });
+    const b = makeRun({ source: 'community', plan2code_version: '1.17.0', prompt_versions: backfillPromptVersions({} as PromptVersions) });
+    expect(cohortKeyForRun(a)).toBe(cohortKeyForRun(b));
+  });
+
+  it('separates community runs from different versions', () => {
+    const a = makeRun({ source: 'community', plan2code_version: '1.17.0' });
+    const b = makeRun({ source: 'community', plan2code_version: '1.18.0' });
+    expect(cohortKeyForRun(a)).not.toBe(cohortKeyForRun(b));
+  });
+});
+
+// ── aggregate() cohort separation ─────────────────────────────────────────────
+
+describe('aggregate', () => {
+  let tmpDir: string;
+
+  afterEach(() => {
+    if (tmpDir) fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  function writeRuns(runs: RunMetrics[]): { runsDir: string; outPath: string } {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'plan2code-agg-test-'));
+    const runsDir = path.join(tmpDir, 'runs');
+    fs.mkdirSync(runsDir, { recursive: true });
+    for (const run of runs) {
+      fs.writeFileSync(path.join(runsDir, `${run.run_id}.json`), JSON.stringify(run), 'utf8');
+    }
+    return { runsDir, outPath: path.join(tmpDir, 'aggregated.json') };
+  }
+
+  it('places local and community runs of the same version in separate cohorts', () => {
+    const local = makeRun({ run_id: 'run-20260101-000001-0001', source: 'local' });
+    const community = makeRun({ run_id: 'run-20260101-000002-0002', source: 'community' });
+    const { runsDir, outPath } = writeRuns([local, community]);
+
+    const result = aggregate(runsDir, outPath);
+
+    expect(result.total_runs).toBe(2);
+    expect(result.cohorts).toHaveLength(2);
+    const communityCohort = result.cohorts.find(c => c.source === 'community');
+    const localCohort = result.cohorts.find(c => c.source === 'local');
+    expect(communityCohort?.cohort_key).toBe('community:v1.17.0');
+    expect(localCohort?.cohort_key).toBe(buildCohortKey(local.prompt_versions));
+  });
+
+  it('never selects a community cohort as current when a local cohort exists', () => {
+    // Community run sorts last by run_id, but current must stay on the local cohort.
+    const local = makeRun({ run_id: 'run-20260101-000001-0001', source: 'local' });
+    const community = makeRun({ run_id: 'run-29991231-235959-9999', source: 'community' });
+    const { runsDir, outPath } = writeRuns([local, community]);
+
+    const result = aggregate(runsDir, outPath);
+
+    expect(result.current_cohort_key).toBe(buildCohortKey(local.prompt_versions));
   });
 });

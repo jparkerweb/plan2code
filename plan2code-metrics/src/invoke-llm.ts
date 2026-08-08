@@ -1,7 +1,8 @@
 /**
  * invoke-llm.ts
  * Unified LLM invocation for plan2code-metrics.
- * Supports Claude Code (temp file → stdin) and Copilot CLI (stdin string).
+ * Supports Claude Code (temp file → stdin), Copilot CLI (stdin string), and
+ * Devin CLI (temp prompt file).
  * Mirrors the agent pattern from plan2code-loop.
  */
 
@@ -12,7 +13,7 @@ import { tmpdir } from 'os';
 
 // ── Agent definitions ────────────────────────────────────────────────────────
 
-export type AgentType = 'claude-code' | 'copilot-cli';
+export type AgentType = 'claude-code' | 'copilot-cli' | 'devin-cli';
 
 export interface AgentDef {
   name: AgentType;
@@ -33,6 +34,12 @@ export const AGENTS: Record<AgentType, AgentDef> = {
     displayName: 'GitHub Copilot CLI',
     command: 'copilot',
     defaultModel: 'claude-sonnet-4',
+  },
+  'devin-cli': {
+    name: 'devin-cli',
+    displayName: 'Devin CLI',
+    command: 'devin',
+    defaultModel: 'default',
   },
 };
 
@@ -68,6 +75,23 @@ export async function invokeLLM(opts: InvokeLLMOptions): Promise<string> {
         inputFile: tempFile,
         timeout,
       });
+      return result.stdout;
+    } finally {
+      try { unlinkSync(tempFile); } catch { /* ignore cleanup errors */ }
+    }
+  } else if (agent === 'devin-cli') {
+    // Devin CLI: load prompt from a temp file, run single-turn, auto-approve tool calls
+    const tempFile = join(tmpdir(), `plan2code-metrics-prompt-${Date.now()}.txt`);
+    writeFileSync(tempFile, prompt, 'utf-8');
+
+    try {
+      const args: string[] = ['--print', '--prompt-file', tempFile, '--permission-mode', 'dangerous'];
+      // Only add --model if not using default
+      if (model && model !== 'default') {
+        args.push('--model', model);
+      }
+
+      const result = await execa(def.command, args, { timeout });
       return result.stdout;
     } finally {
       try { unlinkSync(tempFile); } catch { /* ignore cleanup errors */ }

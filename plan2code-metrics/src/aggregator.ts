@@ -36,6 +36,26 @@ export function buildCohortKey(promptVersions: PromptVersions): string {
 }
 
 /**
+ * Cohort key for a single run, chosen by the run's origin.
+ *
+ * Local runs are keyed by their prompt-file SHA-256 fingerprint, which captures
+ * in-development prompt edits that share one unreleased version.
+ *
+ * Community submissions can't reproduce that byte-exact hash: they carry the
+ * installed, platform-transformed prompts (not the raw src/*.md the local
+ * collector hashes), and the payload is LLM-generated. They are keyed instead
+ * by `plan2code_version` -- a reliable, byte-comparison-free identifier, since
+ * every released version ships a fixed set of prompts. This keeps community
+ * cohorts free of the CRLF/whitespace fragility a cross-machine hash would have.
+ */
+export function cohortKeyForRun(run: RunMetrics): string {
+  if (run.source === 'community') {
+    return `community:v${run.plan2code_version}`;
+  }
+  return buildCohortKey(run.prompt_versions);
+}
+
+/**
  * Backfill missing PromptVersions fields for old run files (pre-v1.1).
  */
 export function backfillPromptVersions(pv: PromptVersions): PromptVersions {
@@ -116,6 +136,7 @@ function buildCohort(runs: RunMetrics[], cohortKey: string): CohortMetrics {
 
   return {
     cohort_key: cohortKey,
+    source: runs[0].source ?? 'local',
     prompt_versions: runs[0].prompt_versions,
     run_count: runs.length,
     run_ids: runIds,
@@ -157,7 +178,7 @@ export function aggregate(runsDir: string, outputPath: string): AggregatedMetric
   // Group by cohort key
   const cohortMap = new Map<string, RunMetrics[]>();
   for (const run of runs) {
-    const key = buildCohortKey(run.prompt_versions);
+    const key = cohortKeyForRun(run);
     if (!cohortMap.has(key)) cohortMap.set(key, []);
     cohortMap.get(key)!.push(run);
   }
@@ -169,9 +190,14 @@ export function aggregate(runsDir: string, outputPath: string): AggregatedMetric
   }
   cohorts.sort((a, b) => a.first_seen.localeCompare(b.first_seen));
 
-  // Determine current cohort (most recent)
-  const currentCohortKey = cohorts.length > 0
-    ? cohorts[cohorts.length - 1].cohort_key
+  // Determine current cohort (most recent). Prefer local cohorts so an
+  // ingested community submission never becomes the maintainer's "current
+  // generation" for self-improvement; fall back to all cohorts if there are
+  // no local runs yet.
+  const localCohorts = cohorts.filter(c => c.source !== 'community');
+  const currentPool = localCohorts.length > 0 ? localCohorts : cohorts;
+  const currentCohortKey = currentPool.length > 0
+    ? currentPool[currentPool.length - 1].cohort_key
     : null;
 
   const aggregated: AggregatedMetrics = {
@@ -200,13 +226,10 @@ export function loadAggregated(outputPath: string): AggregatedMetrics | null {
 }
 
 /**
- * Import a single run JSON from another project into the local runs dir.
- * Returns true if imported, false if already present.
+ * Write a run to the local runs dir, deduped by run_id filename.
+ * Returns true if written, false if a file for that run_id already existed.
  */
-export function importRun(runJsonPath: string, runsDir: string): boolean {
-  const content = fs.readFileSync(runJsonPath, 'utf8');
-  const run = JSON.parse(content) as RunMetrics;
-  run.prompt_versions = backfillPromptVersions(run.prompt_versions);
+export function writeRunFile(run: RunMetrics, runsDir: string): boolean {
   const destPath = path.join(runsDir, `${run.run_id}.json`);
 
   if (fs.existsSync(destPath)) {
@@ -216,4 +239,15 @@ export function importRun(runJsonPath: string, runsDir: string): boolean {
   fs.mkdirSync(runsDir, { recursive: true });
   fs.writeFileSync(destPath, JSON.stringify(run, null, 2), 'utf8');
   return true;
+}
+
+/**
+ * Import a single run JSON from another project into the local runs dir.
+ * Returns true if imported, false if already present.
+ */
+export function importRun(runJsonPath: string, runsDir: string): boolean {
+  const content = fs.readFileSync(runJsonPath, 'utf8');
+  const run = JSON.parse(content) as RunMetrics;
+  run.prompt_versions = backfillPromptVersions(run.prompt_versions);
+  return writeRunFile(run, runsDir);
 }

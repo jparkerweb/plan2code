@@ -116,9 +116,10 @@ plan2code-metrics
 | **Collect metrics** | Parse a completed project spec and extract step-by-step metrics into a run JSON |
 | **Import run data** | Copy a run JSON from another project into the local metrics store |
 | **View metrics status** | Show aggregated metrics with health indicators and generation deltas |
-| **Run analysis** | AI-powered diagnosis of weak steps (requires Claude Code or Copilot CLI) |
+| **Run analysis** | AI-powered diagnosis of weak steps (requires Claude Code, GitHub Copilot CLI, or Devin CLI) |
 | **Generate improvement proposal** | AI generates surgical prompt edits based on a diagnosis |
 | **Review and apply** | Interactive diff review to accept/reject individual edits |
+| **Fetch community submissions** | List open community-feedback GitHub issues, parse + validate their METRICS_JSON payload, import into the local run store, and close them |
 
 ### Each Time You Finish a Spec
 
@@ -256,6 +257,7 @@ The analysis and improvement steps require an AI agent. Two backends are support
 |---------|---------|-------|
 | **Claude Code** | `claude` | Uses `--print` mode. Recommended. |
 | **GitHub Copilot CLI** | `copilot` | Uses stdin piping with `--allow-all-tools -s`. |
+| **Devin CLI** | `devin` | Uses `--print --prompt-file <file> --permission-mode dangerous`. |
 
 Model selection is interactive — choose from available models when prompted.
 
@@ -271,7 +273,8 @@ src/
 ├── analyzer.ts                # AI diagnosis via LLM invocation
 ├── improver.ts                # AI improvement proposal + validation
 ├── applier.ts                 # Interactive diff review + file patching
-├── invoke-llm.ts              # Unified LLM invocation (Claude Code / Copilot CLI)
+├── community.ts               # Community-feedback issue parsing + ingestion
+├── invoke-llm.ts              # Unified LLM invocation (Claude / Copilot / Devin)
 ├── index.ts                   # Public API exports
 └── prompts/
     ├── analyze.md             # AI prompt template for diagnosis
