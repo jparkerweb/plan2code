@@ -109,6 +109,7 @@ The scratchpad is managed by the LLM itself - after each task, the AI appends no
 |-------|--------|
 | Claude Code | Supported |
 | GitHub Copilot CLI | Supported |
+| Devin CLI | Supported |
 
 The loop uses your configured default model for each agent.
 
@@ -119,7 +120,7 @@ $ plan2code-loop
 
     ╭──────────────────────────────────────╮
     │                                      │
-    │   🔮  Plany's Loop               │
+    │   🔮  Planny's Loop                  │
     │       Autonomous Implementation      │
     │                                      │
     ╰──────────────────────────────────────╯
@@ -196,7 +197,8 @@ src/
 ├── cli.ts                    # Interactive prompts
 ├── agents/                   # Agent implementations
 │   ├── claude-code.ts
-│   └── copilot-cli.ts
+│   ├── copilot-cli.ts
+│   └── devin-cli.ts
 ├── prompt/                   # Prompt building
 │   ├── templates.ts
 │   └── builder.ts

@@ -1,7 +1,7 @@
 export type LoopMode = 'task' | 'phase';
 
 export interface SessionConfig {
-  agent: string;              // "claude-code" | "copilot-cli"
+  agent: string;              // "claude-code" | "copilot-cli" | "devin-cli"
   model: string;              // Selected model
   maxIterations: number;      // 5-50
   timeout: number;            // Base timeout in minutes per iteration attempt

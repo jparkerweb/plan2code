@@ -14,6 +14,7 @@ export interface AgentConfig {
     model: string;
     skipPermissions: string;
     silent?: string;
+    promptFile?: string;
   };
 }
 
