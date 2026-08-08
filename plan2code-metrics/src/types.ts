@@ -66,6 +66,11 @@ export interface RunMetrics {
   schema_version: '1.0';
   run_id: string;
   plan2code_version: string;
+  // Origin of the run. Local runs are collected on the maintainer's machine;
+  // community runs are ingested from GitHub feedback issues. Absent on pre-v1.17
+  // run files, which are treated as 'local'. Drives cohort keying (see
+  // cohortKeyForRun in aggregator.ts).
+  source?: 'local' | 'community';
   prompt_versions: PromptVersions;
   project: {
     name: string;
@@ -102,7 +107,8 @@ export interface PromptProposal {
 
 // Aggregated metrics schema
 export interface CohortMetrics {
-  cohort_key: string;          // hash of sorted prompt_versions
+  cohort_key: string;          // local: hash of sorted prompt_versions; community: `community:v<version>`
+  source?: 'local' | 'community';
   prompt_versions: PromptVersions;
   run_count: number;
   run_ids: string[];

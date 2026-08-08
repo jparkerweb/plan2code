@@ -43,7 +43,7 @@ function readFileSafe(filePath: string): string | null {
  * If `stepFilter` is provided, returns only the block with matching "step" field.
  * Returns parsed object or null if not found / invalid.
  */
-function extractMetricsJson(content: string, stepFilter?: string): Record<string, unknown> | null {
+export function extractMetricsJson(content: string, stepFilter?: string): Record<string, unknown> | null {
   const re = /<!--\s*METRICS_JSON\s+(\{[\s\S]*?\})\s*-->/g;
   let match: RegExpExecArray | null;
   while ((match = re.exec(content)) !== null) {
@@ -611,6 +611,7 @@ export async function collectRun(opts: CollectorOptions): Promise<RunMetrics> {
     schema_version: '1.0',
     run_id: runId,
     plan2code_version: plan2codeVersion,
+    source: 'local',
     prompt_versions: collectPromptVersions(plan2codeRoot),
     project: {
       name: projectName,
