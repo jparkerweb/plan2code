@@ -2,6 +2,58 @@
 
 All notable changes to Plan2Code will be documented in this file.
 
+## v2.0.0
+
+Ports upstream v1.17.0 and v2.0.0 into Plan2Code.
+
+### 💥 Breaking
+
+- **Gemini CLI is no longer an install target.** The `.gemini/commands/*.toml` surface is removed, along with the build-time machinery it required: `generateTomlContent()`, `writeTomlToDestination()`, `inlineReferenceContent()`, and the `dest.type === 'toml'` branch in `syncPrompts()`. Every remaining target resolves `Read references/*.md` directives at runtime, so reference content no longer needs inlining at build time.
+
+  **Uninstall still cleans up Gemini files.** The `.gemini/commands` entry is deliberately retained in the uninstall target list (labelled `Gemini CLI (legacy — uninstall only)`) behind a new `uninstallOnly` flag, so `.toml` files written by v1.x installs can still be removed. Do not add it back to `LOCAL_DESTINATIONS` / `GLOBAL_DESTINATIONS`.
+
+  All other platforms are unaffected — Claude Code (skills *and* commands), Cursor, Windsurf, Continue, Codeium, GitHub Copilot, VS Code Copilot, Pi, Crush, Amp, Devin, OpenCode, and Zed all install exactly as before.
+
+### ✨ Added
+
+- **Pathfinder workflow** — new `/plan2code-0-pathfinder` command, an optional Step 0 for an idea too big and unclear to plan yet: where you can feel the shape of the work but can't write it down as requirements. Adapted from Matt Pocock's [`wayfinder`](https://github.com/mattpocock/skills/tree/main/skills/engineering/wayfinder) skill (MIT), reworked for Plan2Code's local `specs/` workflow.
+
+  Pathfinder names a **destination**, then charts the way to it as a map of decision **questions** under `specs/<idea>/pathfinder/` — `map.md` as the index plus one `questions/NN-<slug>.md` file per decision. It resolves **one question per session** (research excepted), and each resolution clears the fog ahead of it, graduating whatever became specifiable into fresh questions. When nothing is left to decide, it writes `specs/<idea>/PLAN-DRAFT-<date>.md` carrying the status string `/plan2code-1-plan` already recognizes, so planning resumes at Phase 4 in the same folder with Requirements, System Context, and Scope pre-answered.
+
+  **Grilling is batched** — up to three *independent* probes per turn instead of one probe per round trip, delivered either through the environment's structured question tool or as numbered prose Q blocks, chosen per batch by a detail test. Probes are written in plain English, and any probe you skip is re-asked rather than quietly dropped. It **plans, it never builds**: four question types — `grill` (HITL, the default), `research` (AFK, resolved by background subagents in parallel), `sketch` (HITL), and `legwork`.
+
+  Map state uses the house checkbox vocabulary — `[ ]` open (the frontier), `[/]` claimed, `[x]` resolved, `[!]` blocked, `[-]` out of scope. `questions/` is ground truth and `map.md` is a rebuildable index: every Work session reconciles the two before choosing, which self-heals drift and recovers claims left by a crashed session. Every response ends with a **Trail Footer** — a one-line path from `START` to the `⚑` destination, a numbered legend, a plain-English confidence line, and exactly one closer chosen by turn type (a turn that asks you something never emits a resume command).
+
+  Depth lives in six new reference files under `src/plan2code-0-pathfinder-references/` (`chart`, `grilling`, `questions`, `resolve`, `handoff`, `trail`), so the orchestrator stays a dispatcher and the skill has no external skill dependencies.
+
+- **Community feedback submission** — `/plan2code-4-finalize` gains STEP 6.5: after archival, assembles a METRICS_JSON payload from the completed run and submits it as a `community-feedback`-labeled GitHub issue on `jparkerweb/plan2code`, with a tiered fallback (`gh` CLI issue create → browser-opened prefilled issue → printed URL) for environments without `gh`. Payload schema and submission tiers live in the new `plan2code-4-finalize-references/community-feedback-submission.md`. Step 5 now asks for explicit submission consent and skips straight to Step 6 when declined.
+
+- **Community submission ingestion in plan2code-metrics** — new "Fetch community submissions" CLI flow (`community.ts`) lists open feedback issues via `gh`, validates and parses each `METRICS_JSON` payload (type-only validation; malformed submissions are skipped and logged, not fixed up), imports them into the local run store deduped by `run_id`, re-aggregates, and closes each imported issue. Matches an open issue by the `community-feedback` label OR the `[Feedback]` title prefix OR the `METRICS_JSON` marker, so browser/print-tier submissions from outside contributors are still picked up; paginates fully (`--limit 1000`); and closes issues idempotently even on the duplicate path.
+
+- **Community runs cohort by Plan2Code version** — ingested community runs are keyed into cohorts by their `plan2code_version` rather than by a prompt-file fingerprint, since community submissions carry the installed, platform-transformed prompts and an LLM-generated payload. Runs now carry a `source` (`local`/`community`) tag, and `current_cohort_key` prefers local cohorts so ingested feedback never displaces the maintainer's current prompt generation.
+
+- **Devin CLI as an AI backend** for both `plan2code-metrics` (`invoke-llm.ts`) and `plan2code-loop` (`agents/devin-cli.ts`) — `devin --print --prompt-file <file> --permission-mode dangerous`. Unlike upstream, which replaced GitHub Copilot CLI with Devin, Plan2Code keeps **both**: Claude Code, GitHub Copilot CLI, and Devin CLI are all selectable. Existing Copilot CLI selections keep working.
+
+### 🔧 Changed
+
+- **README rebuilt** around a shorter, task-first structure, with the deep material split into a new `.readme/` folder: `walkthrough.md`, `autonomous-loop.md`, `status-line.md`, `metrics.md`, `test-bot.md`.
+- **Docs site and README redesigned** around an "airmail" postcard theme — a fixed four-sided airmail-chevron page frame, sticky header, and the workflow presented as six posted letters, with Pathfinder and the optional Review step both surfaced. Adds a postage-stamp favicon set (`favicon.svg` / `.ico` / `.png` / `apple-touch-icon.png`) and a new README banner; removes three orphaned images (`desk.jpg`, `install-script.jpg`, `plan2code.jpg`).
+- **`/plan2code-4-finalize` archives `pathfinder/` with the spec** — STEP 6 now names `pathfinder/` in the move list and no longer describes the cleanup target as "research or scratch files," wording that pointed an agent straight at `pathfinder/questions/`. The map is the rationale record behind the plan, in the same class as `PLAN-CONVERSATION-*.md`.
+- **`/plan2code-1b-revise-plan` no longer deletes `pathfinder/`** — its Step 6 cleanup had the same "research or scratch files" wording.
+- **`/plan2code-quick-task` is no longer labelled "Step 0"** — pathfinder now owns step 0, and quick-task was never a pipeline step. It registers as a utility (like `init`, `review`, and `handoff`), so its generated description reads `Plan2Code Quick Task: Quick Task Mode`. Filename, skill name, and command path are unchanged.
+- **`/plan2code-handoff` asks where to save** — the OS temp directory is now the default, with `./handoffs/` or any other path available on request. Adds a spec-awareness section: when the session worked inside `specs/<feature>/`, the handoff cites the in-progress `phase-X.md` and its actual checkbox state rather than relying on conversation memory.
+- **`/plan2code-init-update` Step 7 offloaded to a reference file** — the AI Agent File Sync detail moves to `plan2code-init-update-references/ai-agent-file-sync.md` with an inline fallback. The `CLAUDE.md` MANDATORY-FIRST-STEP template is unchanged.
+- **`/plan2code-review` Session End offloaded to a reference file** — next-step routing moves to `plan2code-review-references/session-end.md` with an inline fallback.
+- **Status line: context-bar token count suppressed on token-usage accounts** — the bar's `(84k)` reads the same `context_window.total_input_tokens` the `in`/`out` usage segment already shows on Enterprise/Bedrock/Vertex/PAYG accounts. It now renders only on Pro/Max/Teams (rate-limit) accounts, where no other segment carries an absolute token count. The `items.contextTokens` flag still turns it off entirely.
+- **`aggregator.ts` refactor** — extracted `writeRunFile()` (dedup-by-`run_id` write) out of `importRun()` so the community ingestion path can reuse it without a source file path; `collector.ts` now exports `extractMetricsJson()` for the same reason.
+- **`.agents-docs/AGENTS-code-style.md`** documents a metrics gotcha: when a `PLAN-DRAFT-*.md` carries no `METRICS_JSON` comment, `collector.ts` scrapes it by regex, and the four confidence-*breakdown* patterns match a bare dimension word plus a number **without** requiring a `%` — so even a table row like `| Requirements | 11 |` gets ingested as a planning confidence score.
+- **`.agents-docs/AGENTS-architecture.md`** documents the column-0 requirement for `Read references/*.md` directives — `install.js` anchors its flat-file path-rewrite regex at `^`, so an indented `Read` line is silently skipped.
+
+### 🐛 Fixed
+
+- Broken review-command row and column alignment in `QUICK-REFERENCE.md`.
+- `plan2code-loop` banner misspelled the mascot as "Plany".
+
 ## v1.16.1
 
 ### ✨ Added
