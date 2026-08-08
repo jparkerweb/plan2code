@@ -1,6 +1,6 @@
 {
   "name": "Plan2Code",
-  "version": "1.16.1",
+  "version": "2.0.0",
   "description": "A structured 4-step workflow methodology for AI-assisted software development",
   "keywords": [
     "ai",
@@ -14,10 +14,9 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://code.jparkerweb.com/jparkerweb/plan2code"
+    "url": "https://github.com/jparkerweb/plan2code"
   },
-  "homepage": "https://code.jparkerweb.com/jparkerweb/plan2code",
-  "releaseDate": "2026-07-31",
+  "homepage": "https://github.com/jparkerweb/plan2code",
+  "releaseDate": "2026-08-08",
   "mode": "utility"
 }
-
