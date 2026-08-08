@@ -203,9 +203,9 @@ Do NOT make documentation changes without user approval.
 
 `🧹 [FINALIZATION STEP 5: User Feedback]`
 
-**Objective:** Collect optional user feedback before archival.
+**Objective:** Collect optional feedback before archival.
 
-Ask the user: "Would you like to provide feedback on this workflow run? (optional)"
+Ask the user: "Would you like to provide feedback on this run? (optional)" If no, skip to Step 6.
 
 If yes, collect:
 1. **Rating** (1-10): "How would you rate this workflow run overall?"
@@ -225,7 +225,7 @@ Append to `overview.md` (in the active spec directory):
 | Went Poorly | [response] |
 ```
 
-If the user declines, skip and proceed to Step 6 (Spec Cleanup).
+Ask: "Submit this feedback + run metrics to the maintainer via GitHub? (optional)" Hold as "submission consent". If declined, skip to Step 6.
 
 ---
 
@@ -238,27 +238,24 @@ If the user declines, skip and proceed to Step 6 (Spec Cleanup).
 **Confirm with user before moving files.**
 
 1. Create: `specs--completed/<feature-name>/`
-2. Move all files from `specs/<feature-name>/`:
+2. Move all contents of `specs/<feature-name>/`:
    - `overview.md` (with completion summary)
    - All `phase-X.md` files
-   - `PLAN-DRAFT.md` (if present)
-   - `PLAN-CONVERSATION-*.md` (if present)
-3. Remove any temporary research or scratch files not part of the final spec record
+   - `PLAN-DRAFT.md`, `PLAN-CONVERSATION-*.md`, `pathfinder/` (if present)
+3. Remove temporary scratch files not part of the final spec record
 4. Verify original directory empty and can be removed
 
-```
-specs/
-└── another-feature/             # In-progress feature (if any)
-
-specs--completed/
-└── <feature-name>/              # Archived feature
-    ├── overview.md              # With completion summary
-    ├── phase-1.md               # All checkboxes [x]
-    ├── phase-2.md
-    └── ...
-```
-
 **Keep folder name exactly as-is during archival.**
+
+---
+
+### STEP 6.5: Community Feedback Submission
+
+`🧹 [FINALIZATION STEP 6.5: Community Feedback Submission]`
+
+If Step 5 feedback/consent was declined, skip to Step 7. Otherwise assemble/preview/submit the payload:
+
+Read references/community-feedback-submission.md
 
 ---
 
@@ -288,6 +285,7 @@ Replace METRICS_JSON values with actuals. `completion_rate_at_audit` = Y/Z as de
 - [x] Step 4: Documentation Review
 - [x] Step 5: User Feedback (Optional)
 - [x] Step 6: Spec Cleanup
+- [x] Step 6.5: Community Feedback Submission
 - [x] Step 7: Final Confirmation
 
 ### Files Created/Modified During Finalization

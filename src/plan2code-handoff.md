@@ -34,15 +34,14 @@ the next task (and shape the whole document around it), but still confirm.
 
 ## Where to write it
 
-Save to `./handoffs/` at the repo root with a timestamped filename so it's
-discoverable but doesn't collide with earlier handoffs:
+Ask the user if they would like to save the file to the tempory directory of the user's OS (this should be the default) or to some other location like `./handoffs/` at the repo root.  Filenames should have a timestamped filename so it's discoverable but doesn't collide with earlier handoffs:
 
 ```
-./handoffs/<YYYY-MM-DD-HHmm>-handoff.md
+<user-specified-path>/<YYYY-MM-DD-HHmm>-handoff.md
 ```
 
 Get the timestamp from the shell rather than guessing — e.g. PowerShell
-`Get-Date -Format 'yyyy-MM-dd-HHmm'`. Create the `handoffs/` directory if it
+`Get-Date -Format 'yyyy-MM-dd-HHmm'`. Create the `<user-specified-path>/` directory if it
 doesn't exist.
 
 ### Make sure you aren't leaking the file into version control
@@ -61,6 +60,25 @@ If it is **not** ignored, do not silently modify the user's `.gitignore`. Tell
 them the file would be tracked by git and offer to add a `handoffs/` line to
 `.gitignore` — let them decide. Some users may want handoffs committed so
 teammates get them; that's a legitimate choice, so present it, don't force it.
+
+## If this touched a plan2code spec
+
+`specs/` is gitignored — Glob/Grep and file search silently skip it; use a shell
+listing instead: `ls specs/` (bash) or `Get-ChildItem specs/` (PowerShell). If the
+conversation worked inside `specs/<feature>/`, confirm the exact state before
+writing:
+
+- Which `phase-X.md` is in progress, and whether its `- [ ]` tasks are still
+  unchecked (checkboxes are ground truth, not the overview's Phase Checklist).
+- Cite that file and its checkbox state directly in **Current state** and
+  **Key files & pointers**, instead of relying on conversation memory alone.
+- Let **Suggested skills** name the specific next pipeline command
+  (`/plan2code-3-implement` to keep implementing the phase,
+  `/plan2code-4-finalize` once all phases are checked) — but only as a
+  suggestion; the confirmed **Next task** above still governs what the reader
+  does first.
+
+No `specs/` activity this session? Skip this section entirely.
 
 ## What to include
 
@@ -101,8 +119,9 @@ a command that must be run a specific way. Save the reader from re-discovering
 these the hard way.>
 
 ## Suggested skills
-<Which skills the next agent should use, and when — e.g. sync-repo for syncing,
-a plan2code workflow phase, /code-review before finishing. Skip if none apply.>
+<Which skills the next agent should use, and when — e.g. /plan2code-3-implement
+to continue a phase, /plan2code-review before finishing, /plan2code-4-finalize
+to wrap up. Skip if none apply.>
 
 ## Verification
 <How the reader confirms their work: exact test/build commands, what "done"

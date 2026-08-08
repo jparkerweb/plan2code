@@ -161,18 +161,10 @@ Work summary — tell user: scope reviewed, findings count by severity (Critical
 
 **Next step** — suggest what genuinely helps next. Principles to reason from, not a lookup table — adapt; when a case doesn't fit cleanly, say what you verified and ask.
 
-- **Plan2Code Workflow Pipeline:** `/plan2code-1-plan` → `PLAN-*` files · `/plan2code-2-document` → `overview.md` + `phase-*.md` (the "spec docs") in `specs/<feature>/` · `/plan2code-3-implement` → checks off phase tasks, one phase per run · `/plan2code-4-finalize` → archives to `specs--completed/`.
-- **Find specs (any OS/shell):** `specs/` is gitignored, and search tools (Glob/Grep/project search) skip gitignored paths on many platforms — an empty search result is not evidence either way. Check with a terminal listing: `ls specs/<feature>/` (bash/zsh) · `Get-ChildItem specs/<feature>` (PowerShell) · `dir specs\<feature>` (cmd). Feature dir unknown? List `specs/` first. Command errors? Try another shell's form, then read the expected files directly — file reads see gitignored paths. Conclude "no specs" only after a terminal listing or a failed direct read.
-- **Reconcile three signals:** session context (what this conversation was doing — a fresh session may have none), user intent (what they asked reviewed), the disk check above. Disk wins on state; context wins on intent and on disk silence; no context → intent + disk decide.
-- **plan2code artifact reviewed (a plan, the spec docs, phases) — route on the reviewed feature's own `specs/<feature>/` state (another feature's specs prove nothing here), to the earliest unmet stage, suggesting only a step whose input exists:**
-  - `PLAN-*` without `overview.md` → `/plan2code-2-document`
-  - `overview.md` without `phase-*.md` → `/plan2code-2-document`
-  - Unchecked `- [ ]` tasks in `phase-*.md` → `/plan2code-3-implement` (checkboxes are ground truth; flag overview conflicts)
-  - All phase tasks checked → `/plan2code-4-finalize`
-  - Archived spec → pipeline complete; summary only
-- **Anything else** (code/PRs, logs, docs, tickets, emails, a codebase): no pipeline step — close with the summary; add a next action only if the review makes one obvious and actionable.
-- **Gates:** unresolved Criticals → fixing them (H/A/S) is the next step. Signals the rules above can't reconcile, or multiple candidate specs → ask one targeted question.
-- **Output:** "Next (NEW conversation): `/plan2code-<step>` — [why + how you know]"; otherwise "Review complete -- [summary]."
+Read references/session-end.md
+
+> Fallback: route plan2code artifacts (plan/spec docs/phases) on the reviewed feature's own `specs/<feature>/` state to the earliest unmet pipeline stage whose input exists — `PLAN-*` or `overview.md` without `phase-*.md` → `/plan2code-2-document`; unchecked `- [ ]` phase tasks → `/plan2code-3-implement`; all checked → `/plan2code-4-finalize`; archived → complete, summary only. Verify `specs/` on disk with a terminal `ls`/`Get-ChildItem` — it's gitignored, so search tools miss it and an empty result proves nothing. Non-pipeline artifacts (code/PRs/docs/logs) → summary only. Unresolved Criticals → fixing them (H/A/S) is the next step. Ambiguous or multiple candidate specs → ask one targeted question. Output: "Next (NEW conversation): `/plan2code-<step>` — [why + how you know]"; else "Review complete -- [summary]."
+
 - **Commit** (code changes): `git add [files] && git commit -m "fix: [desc]" -m "<JIRA>" -m "AI Assisted"` -- derive JIRA from branch.
 
 ```
