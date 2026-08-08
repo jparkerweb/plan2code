@@ -1,3 +1,29 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Line endings
+#
+# Git stores LF, and every text file is checked out as LF on all platforms.
+# This is not cosmetic: scripts/validate-char-count.js measures the characters
+# actually on disk, so a CRLF checkout adds ~1 character per line. The workflow
+# prompts in src/plan2code-*.md run close to their 11,000 character budget
+# (several sit above 10,800), and a CRLF working tree pushes them over — turning
+# `npm test` into a check that passes or fails depending on how the repo was
+# cloned. Pinning eol=lf makes the count reproducible everywhere.
+# ─────────────────────────────────────────────────────────────────────────────
+* text=auto eol=lf
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Binary — never line-ending-converted, never diffed as text
+# ─────────────────────────────────────────────────────────────────────────────
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.ico  binary
+*.mp4  binary
+*.webm binary
+*.woff  binary
+*.woff2 binary
+
 # The encrypted sync-repo blob is base64 text but must never have its bytes
 # altered by line-ending normalization. Treat it as binary so autocrlf/eol
 # settings can never corrupt the ciphertext.
