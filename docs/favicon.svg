@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="Plan2Code postage stamp">
+  <defs>
+    <!-- Perforated stamp silhouette: white keeps, black bites out.
+         Few, deep notches so the scalloped edge still reads at 16px. -->
+    <mask id="perf">
+      <rect width="64" height="64" fill="#000"/>
+      <rect x="2" y="2" width="60" height="60" fill="#fff"/>
+      <g fill="#000">
+        <circle cx="2"  cy="2"  r="5"/><circle cx="14" cy="2"  r="5"/><circle cx="26" cy="2"  r="5"/>
+        <circle cx="38" cy="2"  r="5"/><circle cx="50" cy="2"  r="5"/><circle cx="62" cy="2"  r="5"/>
+        <circle cx="2"  cy="62" r="5"/><circle cx="14" cy="62" r="5"/><circle cx="26" cy="62" r="5"/>
+        <circle cx="38" cy="62" r="5"/><circle cx="50" cy="62" r="5"/><circle cx="62" cy="62" r="5"/>
+        <circle cx="2"  cy="14" r="5"/><circle cx="2"  cy="26" r="5"/>
+        <circle cx="2"  cy="38" r="5"/><circle cx="2"  cy="50" r="5"/>
+        <circle cx="62" cy="14" r="5"/><circle cx="62" cy="26" r="5"/>
+        <circle cx="62" cy="38" r="5"/><circle cx="62" cy="50" r="5"/>
+      </g>
+    </mask>
+  </defs>
+
+  <g mask="url(#perf)">
+    <!-- printed stamp -->
+    <rect x="2" y="2" width="60" height="60" fill="#D33A38"/>
+    <!-- the 2, set as a franking-machine numeral -->
+    <g fill="#FBFAF6">
+      <rect x="16" y="13" width="32" height="8"/>
+      <rect x="40" y="13" width="8"  height="22"/>
+      <rect x="16" y="27" width="32" height="8"/>
+      <rect x="16" y="27" width="8"  height="24"/>
+      <rect x="16" y="43" width="32" height="8"/>
+    </g>
+  </g>
+</svg>
