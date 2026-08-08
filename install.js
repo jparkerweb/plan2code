@@ -132,11 +132,19 @@ const SOURCE_PROMPTS = [
     isUtility: true
   },
   {
+    source: 'plan2code-0-pathfinder.md',
+    stepNumber: '0',
+    name: 'pathfinder',
+    displayName: 'Pathfinder Mode',
+    description: 'charting of a foggy idea as a map of decision questions, cleared one at a time'
+  },
+  {
     source: 'plan2code-quick-task.md',
-    stepNumber: 0,
+    stepNumber: 'quick',
     name: 'quick-task',
     displayName: 'Quick Task Mode',
-    description: 'Lightweight planning for small tasks'
+    description: 'Lightweight planning for small tasks',
+    isUtility: true
   },
   {
     source: 'plan2code-1-plan.md',
@@ -210,6 +218,7 @@ function generateStepLabel(prompt) {
   if (prompt.stepNumber === 'update') return 'Update';
   if (prompt.stepNumber === 'review') return 'Review';
   if (prompt.stepNumber === 'handoff') return 'Handoff';
+  if (prompt.stepNumber === 'quick') return 'Quick Task';
   return `Step ${prompt.stepNumber}`;
 }
 
@@ -225,12 +234,6 @@ function generateSkillHeader(prompt, disableModelInvocation = false) {
   return lines.join('\n');
 }
 
-// Helper function to generate complete .toml file content for Gemini CLI
-function generateTomlContent(prompt, sourceContent) {
-  const stepLabel = generateStepLabel(prompt);
-  const desc = `Plan2Code ${stepLabel}: ${prompt.displayName} - user-initiated ${prompt.description || 'workflow step'}`;
-  return `description = "${desc}"\nprompt = '''\n${sourceContent}\n'''\n`;
-}
 
 // Destination configurations for project-level installation (local)
 const LOCAL_DESTINATIONS = [
@@ -335,16 +338,10 @@ const LOCAL_DESTINATIONS = [
     header: (prompt) => generateSkillHeader(prompt, true),
   },
   {
-    name: 'Agent Skills (Amp · Devin · Gemini CLI · OpenCode)',
+    name: 'Agent Skills (Amp · Devin · OpenCode)',
     dir: '.agents/skills',
     type: 'skill',
     header: (prompt) => generateSkillHeader(prompt, false),
-  },
-  {
-    name: 'Gemini CLI',
-    dir: '.gemini/commands',
-    type: 'toml',
-    filePattern: (prompt) => `${generateFilename(prompt, '')}.toml`,
   }
 ];
 
@@ -431,7 +428,7 @@ const GLOBAL_DESTINATIONS = [
     header: (prompt) => generateSkillHeader(prompt, true),
   },
   {
-    name: 'Agent Skills (Amp · Devin · Gemini CLI · OpenCode · Zed)',
+    name: 'Agent Skills (Amp · Devin · OpenCode · Zed)',
     dir: '.agents/skills',
     type: 'skill',
     header: (prompt) => generateSkillHeader(prompt, true),
@@ -442,12 +439,6 @@ const GLOBAL_DESTINATIONS = [
     type: 'skill',
     header: (prompt) => generateSkillHeader(prompt, false),
   },
-  {
-    name: 'Gemini CLI',
-    dir: '.gemini/commands',
-    type: 'toml',
-    filePattern: (prompt) => `${generateFilename(prompt, '')}.toml`,
-  }
 ];
 
 // Helper function to get VS Code Copilot prompts directory based on platform
@@ -576,7 +567,7 @@ const INSTALL_TARGETS = [
     icon: '◉ '
   },
   {
-    name: 'Agent Skills (Amp · Devin · Gemini CLI · OpenCode · Zed)',
+    name: 'Agent Skills (Amp · Devin · OpenCode · Zed)',
     id: 'agent-skills',
     dir: getAgentSkillsDir,
     sourceDir: '.agents/skills',
@@ -597,12 +588,17 @@ const INSTALL_TARGETS = [
       : '~/.config/crush/skills',
     icon: '◉ '
   },
+  // Gemini CLI is no longer an install target. This entry is RETAINED FOR UNINSTALL
+  // ONLY so `.gemini/commands/plan2code-*.toml` files written by earlier versions can
+  // still be cleaned up. Do not add a matching entry back to LOCAL_DESTINATIONS /
+  // GLOBAL_DESTINATIONS.
   {
-    name: 'Gemini CLI',
+    name: 'Gemini CLI (legacy — uninstall only)',
     id: 'gemini',
     dir: '.gemini/commands',
     type: 'toml',
     filePattern: /^plan2code-.*\.toml$/,
+    uninstallOnly: true,
     icon: '◉ '
   },
   {
@@ -646,7 +642,7 @@ function displayHeader() {
   console.log('║              ╰───╯   Welcome to Plan2Code!              ║');
   console.log('║                                                         ║');
   console.log('║   G L O B A L   I N S T A L L A T I O N   S Y S T E M   ║');
-  console.log('║     https://code.jparkerweb.com/jparkerweb/plan2code    ║');
+  console.log('║          https://github.com/jparkerweb/plan2code        ║');
   console.log('║                                                         ║');
   console.log('╚═════════════════════════════════════════════════════════╝');
   console.log(COLORS.RESET);
@@ -848,25 +844,6 @@ function copyDirRecursive(src, dest, stats) {
 }
 
 /**
- * Inline reference file content into orchestrator content.
- * Replaces each `Read references/X.md` directive with the file's actual content,
- * wrapped in markers. Used for TOML targets (Gemini CLI), which cannot resolve
- * relative file reads at runtime.
- */
-function inlineReferenceContent(sourceContent, srcRefDir) {
-  if (!fs.existsSync(srcRefDir)) return sourceContent;
-  return sourceContent.replace(
-    /^Read\s+references\/([^\s]+\.md)(.*)$/gm,
-    (match, filename, suffix) => {
-      const refPath = path.join(srcRefDir, filename);
-      if (!fs.existsSync(refPath)) return match;
-      const refContent = fs.readFileSync(refPath, 'utf8');
-      return `<!-- BEGIN inlined references/${filename}${suffix} -->\n${refContent}\n<!-- END inlined references/${filename} -->`;
-    }
-  );
-}
-
-/**
  * Copy a reference directory (e.g., plan2code-review-references/) to a destination.
  * Used by syncPrompts() to distribute reference files alongside orchestrator files.
  */
@@ -886,48 +863,6 @@ function copyReferenceDirectory(srcRefDir, destRefDir, stats, quiet = false) {
     for (const file of files) {
       console.log(`    ${COLORS.GREEN}▰▰▰${COLORS.RESET} ${refDirName}/${file}`);
     }
-  }
-}
-
-/**
- * Write a TOML file to a destination for Gemini CLI
- */
-function writeTomlToDestination(rootDir, baseDir, dest, prompt, sourceContent, stats, quiet = false) {
-  const filename = dest.filePattern(prompt);
-  const destDir = path.join(rootDir, baseDir, dest.dir);
-  const filePath = path.join(destDir, filename);
-
-  // Build TOML content
-  const tomlContent = generateTomlContent(prompt, sourceContent);
-
-  // Ensure destination directory exists
-  fs.mkdirSync(destDir, { recursive: true });
-
-  // Check if file needs updating
-  let needsUpdate = true;
-  if (fs.existsSync(filePath)) {
-    try {
-      const existingContent = fs.readFileSync(filePath, 'utf8');
-      needsUpdate = existingContent !== tomlContent;
-    } catch (err) {
-      // File exists but can't be read, will try to write
-    }
-  }
-
-  if (needsUpdate) {
-    try {
-      fs.writeFileSync(filePath, tomlContent, 'utf8');
-      if (!quiet) {
-        console.log(`    ${COLORS.GREEN}▰▰▰${COLORS.RESET} ${filename}`);
-      }
-    } catch (err) {
-      console.error(`    ${COLORS.RED}✖✖✖${COLORS.RESET} ${filename}: ${err.message}`);
-      stats.errors++;
-      return;
-    }
-    stats.updated++;
-  } else {
-    stats.skipped++;
   }
 }
 
@@ -991,13 +926,6 @@ function syncPrompts(quiet = false) {
             const destRefDir = path.join(projectRoot, base, dest.dir, skillName, 'references');
             copyReferenceDirectory(srcRefDir, destRefDir, stats, quiet);
           }
-        } else if (dest.type === 'toml') {
-          // TOML targets (Gemini CLI) cannot resolve relative file reads at runtime,
-          // so inline reference content directly into the prompt body.
-          const contentForToml = hasRefDir
-            ? inlineReferenceContent(sourceContent, srcRefDir)
-            : sourceContent;
-          writeTomlToDestination(projectRoot, base, dest, prompt, contentForToml, stats, quiet);
         } else {
           // For flat-file destinations, rewrite Read directive paths to sibling directory name
           const contentForDest = hasRefDir
@@ -1032,11 +960,16 @@ function syncPrompts(quiet = false) {
 /**
  * Get targets to process based on selected platforms
  */
-function getTargets(platformIds = null) {
+function getTargets(platformIds = null, { includeLegacy = false } = {}) {
+  // Entries flagged `uninstallOnly` are platforms we no longer install to, kept so their
+  // files from earlier versions can still be cleaned up. Only uninstall may see them.
+  const pool = includeLegacy
+    ? INSTALL_TARGETS
+    : INSTALL_TARGETS.filter(t => !t.uninstallOnly);
   if (platformIds && platformIds.length > 0) {
-    return INSTALL_TARGETS.filter(t => platformIds.includes(t.id));
+    return pool.filter(t => platformIds.includes(t.id));
   }
-  return INSTALL_TARGETS;
+  return pool;
 }
 
 // ============================================================================
@@ -1299,7 +1232,7 @@ async function install(targets = null) {
   if (totalErrors === 0) {
     console.log(`${COLORS.GREEN}    ╭───╮${COLORS.RESET}   ${COLORS.BRIGHT}All done! Happy coding!${COLORS.RESET}`);
     console.log(`${COLORS.GREEN}    │ ${COLORS.CYAN}★${COLORS.GREEN} │${COLORS.RESET}   ${COLORS.BRIGHT}If this is your first time using Plan2Code, read the docs here:${COLORS.RESET}`);
-    console.log(`${COLORS.GREEN}    │ ${COLORS.BRIGHT}◡${COLORS.GREEN} │${COLORS.RESET}   ${COLORS.BRIGHT}https://code.jparkerweb.com/jparkerweb/plan2code${COLORS.RESET}`);
+    console.log(`${COLORS.GREEN}    │ ${COLORS.BRIGHT}◡${COLORS.GREEN} │${COLORS.RESET}   ${COLORS.BRIGHT}https://github.com/jparkerweb/plan2code${COLORS.RESET}`);
     console.log(`${COLORS.GREEN}    ╰───╯${COLORS.RESET}`);
   }
 
@@ -1317,7 +1250,8 @@ async function install(targets = null) {
  */
 function uninstallFiles(targets = null) {
   const homeDir = os.homedir();
-  const targetList = targets || getTargets();
+  // includeLegacy: uninstall must also clear platforms we no longer install to
+  const targetList = targets || getTargets(null, { includeLegacy: true });
 
   let totalRemoved = 0;
   let totalErrors = 0;
@@ -1530,7 +1464,7 @@ function runInteractive() {
   const question = (prompt) => new Promise(resolve => rl.question(prompt, resolve));
 
   async function main() {
-    // Task 2.1: Main menu display
+    // Main menu display
     displayHeader();
 
     console.log(`${COLORS.BLUE}${COLORS.BRIGHT}Version Info:${COLORS.RESET} ${projectVersion.name} ${projectVersion.version}`);
