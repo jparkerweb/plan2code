@@ -201,7 +201,7 @@ Report and resolve issues before continuing.
 After revision is applied, optionally clean up with user confirmation:
 
 1. Archive the previous PLAN-DRAFT: rename to `PLAN-DRAFT-<date>-prev.md` (preserves revision history)
-2. Remove research or scratch files created during revision that are no longer needed
+2. Remove scratch files created during revision that are no longer needed. NEVER remove `pathfinder/` — it is the decision record behind the plan
 3. Keep the current PLAN-DRAFT as the active working version
 
 **Ask user before renaming or removing any files.**
