@@ -1,6 +1,8 @@
 # Trail Footer
 
 > Loaded at the top of the skill. Read once; it applies to EVERY response in both modes. Defines the map visual and the pathed resume command that close each turn.
+>
+> **Backend note.** The glyphs, the two forms, and the discipline are identical either way. On `**Backend:** github` the inputs come from the sub-issue query rather than the checklist, and Form A's command is the map issue URL — see `github-issues.md`.
 
 The trail is how a human with no memory of the last session sees, at a glance, how far the map has come and what is left — and copies the exact command to resume without hunting for a path that lives in gitignored `specs/`. It closes every response once a map exists.
 

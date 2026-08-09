@@ -166,7 +166,9 @@ it as requirements, so planning would just invent the answers. Pathfinder finds 
 destination; Step 1 then walks it.
 
 1. **Name the destination** — one or two lines fixing what this effort is finding its way to. Settled
-   first, because it fixes scope.
+   first, because it fixes scope. It also asks where the map should live: **local files** under
+   gitignored `specs/` (private, solo — the default), or **GitHub Issues** (a map issue with one
+   sub-issue per decision, native blocking, so your team can see and work the frontier in the tracker).
 2. **Chart the map** — a breadth-first grilling surfaces the open decisions. Anything you can phrase
    *sharply* becomes a question file; anything you can only sense stays listed as fog.
 3. **Clear one question per session** — resolving a question burns off the fog behind it, graduating
@@ -182,7 +184,8 @@ react to) · `legwork` (manual work that has to happen before a decision is poss
 It never answers its own questions, and it **plans, it never builds.** When the urge to just build it
 arrives, the map is done. Skip Step 0 entirely when you already know what you're building.
 
-**Out:** `specs/<feature>/pathfinder/map.md` + `questions/` → `PLAN-DRAFT-<date>.md`
+**Out:** `specs/<feature>/pathfinder/map.md` + `questions/` (or a `pathfinder:map` issue and its
+sub-issues) → `PLAN-DRAFT-<date>.md`. The draft is always a local file — that is what Step 1 reads.
 
 ### 1 · Plan 🤔
 

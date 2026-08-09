@@ -2,6 +2,24 @@
 
 All notable changes to Plan2Code will be documented in this file.
 
+## v2.1.0
+
+### ✨ Added
+
+- **GitHub Issues backend for Pathfinder** — `/plan2code-0-pathfinder` no longer assumes local files. Chart Step 1 now asks, HITL and never self-picked, where the map should live: **local** (the default — files under gitignored `specs/<idea>/pathfinder/`, private and solo) or **github** (a `pathfinder:map` issue whose decision questions are its sub-issues, driven by the `gh` CLI). The pick is recorded as the first `## Ground rules` bullet, never re-asked and never switched mid-map, and Auto-Discovery resolves either backend — an issue URL or number as the argument routes straight to `github`.
+
+  On `github`, the local model maps onto the tracker's own primitives rather than being simulated in issue bodies: a question is a **sub-issue** (`sub_issues` endpoint), blocking is GitHub's **native issue dependencies** (`dependencies/blocked_by`, so the frontier renders in GitHub's UI without opening the map), the claim is the **assignee**, `Type:` becomes a single `pathfinder:<type>-<mode>` label so type and mode cannot drift, `Locked: yes` becomes `pathfinder:locked`, and resolution is an `## Answer` comment followed by a close — `completed` for a decision, `not planned` for a question ruled out of scope. Both wiring calls key on the issue's **database id**, not its `#number`. The map body therefore carries no question checklist at all: the frontier is a live query, which removes the single largest source of drift in the local backend.
+
+  Three things stay on local disk whatever the backend: runnable sketches (`specs/<idea>/pathfinder/sketch-NN/`), anything secret, and the `PLAN-DRAFT-<date>.md` — `/plan2code-1-plan` discovers its input with `ls specs/` and has no notion of a tracker, so a draft that existed only as an issue would be invisible to the rest of the pipeline.
+
+  Guardrails carried over from the local backend's assumptions: `github` is only offered after a five-check preflight (`gh` present, authenticated, GitHub remote, issues enabled, push access), and the offer must name the repo's **visibility** in the same breath, because a map on a public tracker publishes the destination, the rejected alternatives, and the codebase recon. The Step 3 recon is held in-session and published at Step 6, so the Step 4 no-fog off-ramp leaves no litter on a shared tracker. A `gh` failure mid-session stops the session rather than falling back to local files, which would fork the map.
+
+  Depth lives in a seventh reference file, `src/plan2code-0-pathfinder-references/github-issues.md` — preflight, label set, the local↔GitHub equivalence table, create-then-wire charting, the frontier query, resolve and out-of-scope flows, reconcile, the trail footer, handoff, and a failure-mode table. Adapted from the GitHub tracker doc behind Matt Pocock's [`wayfinder`](https://github.com/mattpocock/skills/tree/main/skills/engineering/wayfinder) skill (MIT).
+
+### 🔧 Changed
+
+- **`src/plan2code-0-pathfinder.md` recompressed** to absorb the new `## Backend` section within the 11,000-character workflow-file limit — duplication between the orchestrator and its reference files was removed (the local layout and marker legend now live only in `questions.md`; Form A/B footer detail only in `trail.md`), and step text tightened. No behaviour was dropped.
+
 ## v2.0.0
 
 Ports upstream v1.17.0 and v2.0.0 into Plan2Code.

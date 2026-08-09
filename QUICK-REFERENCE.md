@@ -6,7 +6,7 @@
 | ------- | ----------------------------- | --------------- | -------------------------------------------------- |
 | Init    | /plan2code-init            | None            | AGENTS.md file                                     |
 | Update  | /plan2code-init-update     | AGENTS.md       | Updated AGENTS.md                                  |
-| 0       | /plan2code-0-pathfinder    | A foggy idea    | pathfinder/map.md + PLAN-DRAFT-<date>.md           |
+| 0       | /plan2code-0-pathfinder    | A foggy idea    | pathfinder/map.md *or* GitHub Issues + PLAN-DRAFT-<date>.md |
 | quick   | /plan2code-quick-task      | Requirements    | Conversational plan (standalone — not a pipeline step) |
 | review  | /plan2code-review          | Scope guidance  | Review findings + fixes                            |
 | 1       | /plan2code-1-plan          | Requirements    | PLAN-CONVERSATION-<date>.md + PLAN-DRAFT-<date>.md |
@@ -21,9 +21,10 @@
 ```
 specs/
 └── <feature-name>/
-    ├── pathfinder/                   # From Step 0 (optional, if charted)
+    ├── pathfinder/                   # From Step 0 (optional, if charted locally)
     │   ├── map.md                    #   the map: destination, decisions, fog
     │   └── questions/NN-<slug>.md    #   one decision question per file
+    │                                 #   (GitHub Issues backend: map issue + sub-issues instead)
     ├── PLAN-DRAFT-<date>.md          # From Step 1 (verified plan)
     ├── PLAN-CONVERSATION-<date>.md   # From Step 1 (conversation log)
     ├── overview.md                   # From Step 2

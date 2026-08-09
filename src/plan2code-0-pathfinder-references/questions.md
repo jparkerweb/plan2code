@@ -1,5 +1,7 @@
 # Questions & Map Format
 > Part of plan2code-0-pathfinder — the on-disk format both modes share: directory layout, `NN` numbering, the question-file schema, `Type:` vocabulary, and the marker / blocking rules. The main file keeps only the marker legend and a layout gist; the authority is here.
+>
+> **This file describes the `local` backend only.** If `## Ground rules` says `**Backend:** github`, the equivalence table in `github-issues.md` replaces every rule below — there are no files, no `NN`, no schema lines, and no checklist.
 
 ## Layout
 
