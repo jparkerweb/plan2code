@@ -2,6 +2,8 @@
 
 Loaded at The Clearing Gate. Turns a cleared map into `specs/<idea>/PLAN-DRAFT-<YYYYMMDD>.md` that `/plan2code-1-plan` resumes from at Phase 4, then freezes `pathfinder/` as the rationale record.
 
+**Backend note.** The scoring rubric, the hard caps, the honesty rules, the template, and the mapping table are the same either way — and the draft is written to local disk either way, because `/plan2code-1-plan` reads a file, not a tracker. On `**Backend:** github`, `github-issues.md` replaces only the preflight table, the question links (issue URLs, already absolute), and the freeze steps.
+
 Nothing here is creative. The gate is scored, the mapping is fixed, the template is literal. Follow it exactly or the resuming plan session silently loses work.
 
 ## Preflight — before scoring anything

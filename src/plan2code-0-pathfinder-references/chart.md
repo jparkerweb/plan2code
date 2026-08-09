@@ -1,5 +1,7 @@
 # Chart Playbook
 > Part of plan2code-0-pathfinder — loaded at the top of MODE A (Chart). Expands the numbered Chart steps.
+>
+> **Backend note.** Steps 0, 2, and 4 — the gates and the grills — are identical either way, and so is every judgement call below (fog vs question, in scope vs out, the destination test). What differs is where Steps 3 and 5-7 put the bytes: on `**Backend:** github`, `github-issues.md` overrides the `map.md` and question-file templates here, the single-pass rule under *Step 6: Numbering and dependency order*, and the timing of the recon. Read it alongside this file, not instead of it.
 
 Charting produces a map and a set of question files. It resolves nothing by hand. Every judgement below serves one goal: put a sharp question on the map for everything you can phrase now, and leave everything else honestly in the fog.
 
@@ -342,7 +344,9 @@ Watch for **stranded** questions: a live question whose `Blocked by:` names some
 
 ## Step 6: Numbering and dependency order
 
-Upstream wayfinder creates every unit first and wires the blocking edges in a **second pass**, because a server-side tracker assigns ids and nothing can reference a sibling until it has one. That constraint does not exist here — **you choose `NN` yourself**, so charting is a **single pass**: decide the order, then write each file complete, `Blocked by:` filled at the moment of writing.
+Upstream wayfinder creates every unit first and wires the blocking edges in a **second pass**, because a server-side tracker assigns ids and nothing can reference a sibling until it has one. On `**Backend:** local` that constraint does not exist — **you choose `NN` yourself**, so charting is a **single pass**: decide the order, then write each file complete, `Blocked by:` filled at the moment of writing.
+
+(On `**Backend:** github` the constraint comes back, and so does the two-pass shape. Rules 1, 6, 7, and 8 below still hold — they are about dependency reasoning, not about ids. Rules 2-5, which are about `NN`, are replaced by sub-issue order; see `github-issues.md`.)
 
 The rules:
 

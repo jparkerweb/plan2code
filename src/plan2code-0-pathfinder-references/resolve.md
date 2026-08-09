@@ -1,6 +1,8 @@
 # Resolution Playbook
 
 > Loaded at the top of MODE B. Work Step 6 routes here by `Type:`; Work Step 8 uses the fog procedure at the end.
+>
+> **Backend note.** Every resolution technique here is backend-independent — the type table, the primary-source rule, the sketch tiers, the checklist discipline, the `## Answer` anatomy. On `**Backend:** github`, `Type:` is a `pathfinder:<type>-<mode>` label, `## Answer` and `## Evidence` are comments rather than file sections, and a research subagent gets an issue URL instead of a path; see `github-issues.md`. Sketches stay on local disk regardless.
 
 Every question resolves into the SAME shape — a filled `## Answer` plus whatever `## Evidence` backs it. The type only decides how you get there.
 
