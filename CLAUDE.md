@@ -1,11 +1,14 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+**CRITICAL — MANDATORY FIRST STEP: You MUST read [AGENTS.md](./AGENTS.md) before responding to ANY user message, including simple questions. Do NOT skip this step regardless of how trivial the request appears. No exceptions.**
 
-See [AGENTS.md](./AGENTS.md) for complete project documentation including:
+See AGENTS.md for complete project documentation including:
 - Development commands and setup
 - Architecture overview
 - Workflow prompt reference
 - Plan2Code Loop CLI details
-- Agent Failure Log
 - Code style and gotchas
+- Keeping this file current / Failure log
+- Section details in .agents-docs/
+
+This file exists for Claude Code auto-loading. All AI coding agents should reference AGENTS.md.

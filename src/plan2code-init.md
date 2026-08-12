@@ -58,14 +58,14 @@ These sections must remain fully inline in AGENTS.md (never split to separate fi
 
 ### Failure Log section template
 
-When creating or modifying `AGETNS.md`, always ensure this section is included at the end:
+When creating or modifying `AGENTS.md`, always ensure this section is included at the end:
 
 ```
 ## Keeping this file current
 
-The `Failure log` section below is a recording of mistakes make by previous AI Agents while working with this code base.
+The `Failure log` section below is a recording of mistakes made by previous AI Agents while working with this code base.
 
-When you make a mistage, get corrected, or discover something about this codebase that wasn't written down:
+When you make a mistake, get corrected, or discover something about this codebase that wasn't written down:
 
 1. Add one line to the `Failure log` below, in the imperative, describing the correct behaviour.
 2. Keep it specific to this repo. General advice belongs nowhere.

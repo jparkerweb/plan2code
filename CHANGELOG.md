@@ -2,6 +2,26 @@
 
 All notable changes to Plan2Code will be documented in this file.
 
+## v2.1.1
+
+### ✨ Added
+
+- **Failure Log convention in the init prompts** — `/plan2code-init` now generates a `## Keeping this file current` / `## Failure log` pair at the end of `AGENTS.md`, so agents record repo-specific corrections as one imperative line each instead of relearning them. The section is always-inline (never split to `.agents-docs/`) and is listed in the generated `CLAUDE.md` pointer block. `/plan2code-init-update` gains a matching **Failure Log Audit** step that flags the section as missing on existing `AGENTS.md` files and offers to add it.
+
+- **`plan2code-changelog` skill** (`.claude/skills/plan2code-changelog/`) — validates the CHANGELOG version before a PR is opened. Reads `main` for the current latest version, classifies the branch's changes to pick minor vs patch, and keeps `CHANGELOG.md`, `package.json`, and `version.json` in lockstep. Exists because parallel branches pick colliding version numbers independently.
+
+### 🔧 Changed
+
+- **`AGENTS.md` preamble shortened** in the init template — the generated header no longer enumerates specific agents (Claude Code, Cursor, Codex, Copilot, Devin, Zed) and reads "AI coding agents working with code in this repository."
+
+- **`CLAUDE.md` added at the repo root** — a pointer file to `AGENTS.md`, matching what `/plan2code-init` now tells agents to generate.
+
+- **`CLAUDE.md` template reconciled between the two init prompts** — `/plan2code-init` emitted the `CRITICAL — MANDATORY FIRST STEP` directive followed by a seven-item bullet list, while `/plan2code-init-update`'s Step 7 reference emitted the directive followed by a single prose line. Running one workflow after the other rewrote `CLAUDE.md` back and forth. `src/plan2code-init-update-references/ai-agent-file-sync.md` now carries the bullet-list form for both the `CLAUDE.md` and the generic reference template.
+
+### 🐛 Fixed
+
+- **Typos in the Failure Log template** — the template shipped in `src/plan2code-init.md` and `src/plan2code-init-update.md` said `AGETNS.md`, `mistage`, and "mistakes make by". Since agents copy this block verbatim into generated `AGENTS.md` files, the errors propagated into every project initialized with it.
+
 ## v2.1.0
 
 ### ✨ Added
