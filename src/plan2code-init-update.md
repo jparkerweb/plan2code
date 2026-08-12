@@ -55,9 +55,9 @@ Check AGENTS.md for a `## Keeping this file current` section at the end of the f
 ```
 ## Keeping this file current
 
-The `Failure log` section below is a recording of mistakes make by previous AI Agents while working with this code base.
+The `Failure log` section below is a recording of mistakes made by previous AI Agents while working with this code base.
 
-When you make a mistage, get corrected, or discover something about this codebase that wasn't written down:
+When you make a mistake, get corrected, or discover something about this codebase that wasn't written down:
 
 1. Add one line to the `Failure log` below, in the imperative, describing the correct behaviour.
 2. Keep it specific to this repo. General advice belongs nowhere.
@@ -216,7 +216,7 @@ Check for other AI agent config files (`CLAUDE.md`, `GEMINI.md`, `.cursorrules`,
 
 Read references/ai-agent-file-sync.md
 
-> Fallback: for each detected file, offer Yes/Select/No to replace it with a pointer to AGENTS.md (warn when a file >10 lines has custom content that would be replaced). `CLAUDE.md` gets a special template opening with a `CRITICAL — MANDATORY FIRST STEP` directive to always read `AGENTS.md` (Claude Code auto-loads it); all other files get a short "See AGENTS.md for full project documentation" pointer using the correct relative path (`./`, `../`, or `../../` by location). For directory configs (`.cursor/rules/`, `.windsurf/rules/`), delete existing `.md` files and create a single `reference.md`.
+> Fallback: for each detected file, offer Yes/Select/No to replace it with a pointer to AGENTS.md (warn when a file >10 lines has custom content that would be replaced). `CLAUDE.md` gets a special template opening with a `CRITICAL — MANDATORY FIRST STEP` directive to always read `AGENTS.md` (Claude Code auto-loads it); all other files get a "See AGENTS.md for complete project documentation including:" pointer with the same bullet list, using the correct relative path (`./`, `../`, or `../../` by location). For directory configs (`.cursor/rules/`, `.windsurf/rules/`), delete existing `.md` files and create a single `reference.md`.
 
 ---
 

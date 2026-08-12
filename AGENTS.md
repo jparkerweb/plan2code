@@ -1,6 +1,6 @@
 # AGENTS.md
 
-This file provides guidance to AI coding agents like Claude Code (claude.ai/code), Cursor AI, Codex, GitHub Copilot, Devin, Zed, and other AI coding assistants when working with code in this repository.
+This file provides guidance to AI coding agents working with code in this repository.
 
 ## Project Overview
 
@@ -12,7 +12,7 @@ Plan2Code is a structured 4-step workflow methodology for AI-assisted software d
 
 ## How to Use This File
 
-This file is an index — each section below contains a brief summary and a link to a detail file in `.agents-docs/`. Read only the sections relevant to your current task. Full details (commands, tables, file lists) are in the linked files. The sections "Git Commit Messages" and "Project Overview" are fully inline here.
+This file is an index — each section below contains a brief summary and a link to a detail file in `.agents-docs/`. Read only the sections relevant to your current task. Full details (commands, tables, file lists) are in the linked files. The sections "Project Overview", "How to Use This File", "Mascot", and "Keeping this file current" / "Failure log" are fully inline here and are never split into `.agents-docs/`.
 
 ## Architecture
 
@@ -60,3 +60,18 @@ The project has a mascot called "Planny" — an ASCII art robot that appears in 
    │ ◡ │
    ╰───╯
 ```
+
+## Keeping this file current
+
+The `Failure log` section below is a recording of mistakes made by previous AI Agents while working with this code base.
+
+When you make a mistake, get corrected, or discover something about this codebase that wasn't written down:
+
+1. Add one line to the `Failure log` below, in the imperative, describing the correct behaviour.
+2. Keep it specific to this repo. General advice belongs nowhere.
+3. If this fix is a workflow rather than a rule, put it in `.claude/skills/` and link it from here.
+4. Include the change in the same commit and mention it in your summary.
+
+## Failure log
+
+- Do not audit `CHANGELOG.md` headings through PowerShell — the emoji come back as `?`. See the gotcha for the correct approach.
