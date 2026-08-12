@@ -17,6 +17,7 @@ Analyze this codebase and create `AGENTS.md` to guide future AI coding agents (C
 1. **Commands**: Build, lint, test, run single test, and other common development tasks
 2. **Architecture**: High-level "big picture" structure requiring multi-file context to understand
 3. **How to Use This File**: A short paragraph explaining that sections below contain brief summaries and agents should follow the markdown links to `.agents-docs/` for full details — only read what's relevant to the current task.
+4. **Failure Log**: running list of mistakes and/or corrections that went wrong via the AI Agent at least once. 
 
 ## Rules
 
@@ -31,7 +32,7 @@ Prefix the file with:
 ```
 # AGENTS.md
 
-This file provides guidance to AI coding agents like Claude Code (claude.ai/code), Cursor AI, Codex, GitHub Copilot, Devin, Zed, and other AI coding assistants when working with code in this repository.
+This file provides guidance to AI coding agents working with code in this repository.
 ```
 
 ---
@@ -53,6 +54,29 @@ Generate AGENTS.md as an **index file** — each section gets a 2-3 line summary
 These sections must remain fully inline in AGENTS.md (never split to separate files):
 - Project Overview
 - How to Use This File
+- Keeping this file current / Failure log
+
+### Failure Log section template
+
+When creating or modifying `AGETNS.md`, always ensure this section is included at the end:
+
+```
+## Keeping this file current
+
+The `Failure log` section below is a recording of mistakes make by previous AI Agents while working with this code base.
+
+When you make a mistage, get corrected, or discover something about this codebase that wasn't written down:
+
+1. Add one line to the `Failure log` below, in the imperative, describing the correct behaviour.
+2. Keep it specific to this repo. General advice belongs nowhere.
+3. If this fix is a workflow rather than a rule, put it in `.claude/skills/` and link it from here.
+4. Include the change in the same commit and mention it in your summary.
+
+## Failure log
+
+- 
+
+```
 
 ### Directory Setup
 
@@ -121,6 +145,7 @@ See AGENTS.md for complete project documentation including:
 - Environment variables
 - Testing patterns
 - Deployment guides
+- Keeping this file current / Failure log
 - Section details in .agents-docs/
 
 This file exists for Claude Code auto-loading. All AI coding agents should reference AGENTS.md.
@@ -137,5 +162,6 @@ See [AGENTS.md]([Path]) for complete project documentation including:
 - Environment variables
 - Testing patterns
 - Deployment guides
+- Keeping this file current / Failure log
 - Section details in .agents-docs/
 ```
