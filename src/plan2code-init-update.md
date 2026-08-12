@@ -48,6 +48,33 @@ Section files:
 
 Wait for user response before continuing. If user accepts, restructure existing content: create `.agents-docs/` directory with section files, convert AGENTS.md to index with summaries and links. Always-inline sections (Project Overview, Git Commit Messages, How to Use This File) stay in AGENTS.md. If user declines, continue with single-file editing.
 
+### Failure Log Audit
+
+Check AGENTS.md for a `## Keeping this file current` section at the end of the file describing this format:
+
+```
+## Keeping this file current
+
+The `Failure log` section below is a recording of mistakes make by previous AI Agents while working with this code base.
+
+When you make a mistage, get corrected, or discover something about this codebase that wasn't written down:
+
+1. Add one line to the `Failure log` below, in the imperative, describing the correct behaviour.
+2. Keep it specific to this repo. General advice belongs nowhere.
+3. If this fix is a workflow rather than a rule, put it in `.claude/skills/` and link it from here.
+4. Include the change in the same commit and mention it in your summary.
+
+## Failure log
+
+- 
+
+```
+
+If the section is missing, flag it:
+> "Your Keeping this file current section is missing. Want me to add it?"
+
+If user confirms, add/update the section before proceeding. If user declines, continue.
+
 Proceed to Step 2.
 
 ---
