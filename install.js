@@ -11,9 +11,9 @@
  * GLOBAL INSTALLATION SYSTEM
  *
  * DESCRIPTION:
- * Install Plan2Code prompts to user's home directory for global use.
- * Generates distribution files on-the-fly from source prompts in src/.
- * Always runs interactively — any CLI arguments are silently ignored.
+ * Install Plan2Code skills globally or into the current project via skills.sh.
+ * Builds the committed skills/ artifact from source prompts in src/.
+ * Supports non-interactive --build-skills and --verify-skills maintenance hooks.
  */
 
 const fs = require('fs');
@@ -103,8 +103,10 @@ const MASCOT = {
   ],
 };
 
-// Source directory containing pre-formatted global installation files
-const SOURCE_BASE = 'dist/global-commands';
+// Generated skills directory — the committed, canonical Agent Skills build of src/.
+// `skills add` consumes this directory; nothing else is platform-specific any more.
+const SKILLS_DIR_NAME = 'skills';
+const SKILLS_DIR = path.join(__dirname, SKILLS_DIR_NAME);
 
 // Source prompts directory
 const SRC_DIR = path.join(__dirname, 'src');
@@ -235,212 +237,6 @@ function generateSkillHeader(prompt, disableModelInvocation = false) {
 }
 
 
-// Destination configurations for project-level installation (local)
-const LOCAL_DESTINATIONS = [
-  {
-    name: 'Claude Code Commands',
-    dir: '.claude/commands',
-    filePattern: (prompt) => generateFilename(prompt, '.md'),
-    header: null
-  },
-  {
-    name: 'Cursor Commands',
-    dir: '.cursor/commands',
-    filePattern: (prompt) => generateFilename(prompt, '.md'),
-    header: null
-  },
-  {
-    name: 'GitHub Copilot Prompts',
-    dir: '.github/prompts',
-    filePattern: (prompt) => generateFilename(prompt, '.prompt.md'),
-    header: (prompt) => [
-      '---',
-      'mode: agent',
-      `description: "Plan2Code ${generateStepLabel(prompt)}: ${prompt.displayName} - ${prompt.description}"`,
-      '---'
-    ].join('\n')
-  },
-  {
-    name: 'GitHub Copilot Agents',
-    dir: '.github/agents',
-    filePattern: (prompt) => generateFilename(prompt, '.agent.md'),
-    header: (prompt) => [
-      '---',
-      `description: "Plan2Code ${generateStepLabel(prompt)}: ${prompt.displayName} - ${prompt.description}"`,
-      '---'
-    ].join('\n')
-  },
-  {
-    name: 'Continue Prompts',
-    dir: '.continue/prompts',
-    filePattern: (prompt) => generateFilename(prompt, '.prompt.md'),
-    header: (prompt) => [
-      '---',
-      `name: ${prompt.name}`,
-      `description: "Plan2Code ${generateStepLabel(prompt)}: ${prompt.displayName} - ${prompt.description}"`,
-      '---'
-    ].join('\n')
-  },
-  {
-    name: 'Windsurf Workflows',
-    dir: '.windsurf/workflows',
-    filePattern: (prompt) => generateFilename(prompt, '.md'),
-    header: (prompt) => [
-      '---',
-      `description: "Plan2Code ${generateStepLabel(prompt)}: ${prompt.displayName} - ${prompt.description}"`,
-      '---'
-    ].join('\n')
-  },
-  {
-    name: 'Windsurf Global Workflows',
-    dir: '.codeium/windsurf/global_workflows',
-    filePattern: (prompt) => generateFilename(prompt, '.md'),
-    header: (prompt) => [
-      '---',
-      `description: "Plan2Code ${generateStepLabel(prompt)}: ${prompt.displayName} - ${prompt.description}"`,
-      '---'
-    ].join('\n')
-  },
-  {
-    name: 'Agent Workflows',
-    dir: '.agent/workflows',
-    filePattern: (prompt) => generateFilename(prompt, '.md'),
-    header: (prompt) => [
-      '---',
-      `description: "Plan2Code ${generateStepLabel(prompt)}: ${prompt.displayName} - ${prompt.description}"`,
-      '---'
-    ].join('\n')
-  },
-  {
-    name: 'Codeium Global Workflows',
-    dir: '.codeium/global_workflows',
-    filePattern: (prompt) => generateFilename(prompt, '.md'),
-    header: (prompt) => [
-      '---',
-      `description: "Plan2Code ${generateStepLabel(prompt)}: ${prompt.displayName} - ${prompt.description}"`,
-      '---'
-    ].join('\n')
-  },
-  {
-    name: 'Pi Prompts',
-    dir: '.pi/prompts',
-    filePattern: (prompt) => generateFilename(prompt, '.md'),
-    header: (prompt) => [
-      '---',
-      `description: "Plan2Code ${generateStepLabel(prompt)}: ${prompt.displayName} - ${prompt.description}"`,
-      '---'
-    ].join('\n')
-  },
-  {
-    name: 'Claude Code Skills',
-    dir: '.claude/skills',
-    type: 'skill',
-    header: (prompt) => generateSkillHeader(prompt, true),
-  },
-  {
-    name: 'Agent Skills (Amp · Devin · OpenCode)',
-    dir: '.agents/skills',
-    type: 'skill',
-    header: (prompt) => generateSkillHeader(prompt, false),
-  }
-];
-
-// Destination configurations for global (home directory) installation
-const GLOBAL_DESTINATIONS = [
-  {
-    name: 'Claude Code (Global)',
-    dir: '.claude/commands',
-    filePattern: (prompt) => generateFilename(prompt, '.md'),
-    header: null
-  },
-  {
-    name: 'Copilot CLI (Global)',
-    dir: '.copilot/agents',
-    filePattern: (prompt) => generateFilename(prompt, '.md'),
-    header: (prompt) => [
-      '---',
-      `description: "Plan2Code ${generateStepLabel(prompt)}: ${prompt.displayName} - ${prompt.description}"`,
-      '---'
-    ].join('\n')
-  },
-  {
-    name: 'Cursor (Global)',
-    dir: '.cursor/commands',
-    filePattern: (prompt) => generateFilename(prompt, '.md'),
-    header: null
-  },
-  {
-    name: 'Continue (Global)',
-    dir: '.continue/prompts',
-    filePattern: (prompt) => generateFilename(prompt, '.prompt.md'),
-    header: (prompt) => [
-      '---',
-      `name: ${prompt.name}`,
-      `description: "Plan2Code ${generateStepLabel(prompt)}: ${prompt.displayName} - ${prompt.description}"`,
-      '---'
-    ].join('\n')
-  },
-  {
-    name: 'Windsurf (Global)',
-    dir: '.codeium/windsurf/global_workflows',
-    filePattern: (prompt) => generateFilename(prompt, '.md'),
-    header: (prompt) => [
-      '---',
-      `description: "Plan2Code ${generateStepLabel(prompt)}: ${prompt.displayName} - ${prompt.description}"`,
-      '---'
-    ].join('\n')
-  },
-  {
-    name: 'VS Code Copilot (Global)',
-    dir: 'vscode-copilot-prompts',
-    filePattern: (prompt) => generateFilename(prompt, '.prompt.md'),
-    header: (prompt) => [
-      '---',
-      'agent: agent',
-      `description: "Plan2Code ${generateStepLabel(prompt)}: ${prompt.displayName} - ${prompt.description}"`,
-      '---'
-    ].join('\n')
-  },
-  {
-    name: 'Codeium (Global)',
-    dir: '.codeium/global_workflows',
-    filePattern: (prompt) => generateFilename(prompt, '.md'),
-    header: (prompt) => [
-      '---',
-      `description: "Plan2Code ${generateStepLabel(prompt)}: ${prompt.displayName} - ${prompt.description}"`,
-      '---'
-    ].join('\n')
-  },
-  {
-    name: 'Pi (Global)',
-    dir: '.pi/agent/prompts',
-    filePattern: (prompt) => generateFilename(prompt, '.md'),
-    header: (prompt) => [
-      '---',
-      `description: "Plan2Code ${generateStepLabel(prompt)}: ${prompt.displayName} - ${prompt.description}"`,
-      '---'
-    ].join('\n')
-  },
-  {
-    name: 'Claude Code Skills',
-    dir: '.claude/skills',
-    type: 'skill',
-    header: (prompt) => generateSkillHeader(prompt, true),
-  },
-  {
-    name: 'Agent Skills (Amp · Devin · OpenCode · Zed)',
-    dir: '.agents/skills',
-    type: 'skill',
-    header: (prompt) => generateSkillHeader(prompt, true),
-  },
-  {
-    name: 'Crush',
-    dir: 'crush-skills',
-    type: 'skill',
-    header: (prompt) => generateSkillHeader(prompt, false),
-  },
-];
-
 // Helper function to get VS Code Copilot prompts directory based on platform
 function getVSCodeCopilotDir() {
   const platform = process.platform;
@@ -466,28 +262,6 @@ function getCrushSkillsDir() {
   return path.join(homedir, '.config', 'crush', 'skills');
 }
 
-// Helper function to get Agent Skills global directory based on platform
-function getAgentSkillsDir() {
-  const homedir = os.homedir();
-  return path.join(homedir, '.agents', 'skills');
-}
-
-// Helper function to resolve target directory (handles both static and dynamic paths)
-function resolveTargetDir(target) {
-  if (typeof target.dir === 'function') {
-    return target.dir();
-  }
-  return path.join(os.homedir(), target.dir);
-}
-
-// Helper function to get display path for a target
-function getDisplayPath(target) {
-  if (target.displayPath) {
-    return target.displayPath;
-  }
-  return `~/${target.dir}/`;
-}
-
 // Helper function to pad strings with ANSI codes correctly
 function stripAnsi(str) {
   return str.replace(/\x1b\[[0-9;]*m/g, '');
@@ -499,116 +273,43 @@ function padEndVisible(str, length, char = ' ') {
   return str + char.repeat(paddingNeeded);
 }
 
-// Legacy targets — paths that were previously installed but are no longer active install targets
-const LEGACY_TARGETS = [
-  {
-    dir: '.claude/commands',
-    filePattern: /^plan2code-.*\.md$/,
-    type: 'flat',
-  },
+// Legacy install paths — directories that pre-2.2 installs wrote Plan2Code files into.
+// 2.2.0 delegates all distribution to the `skills` CLI, so these are cleanup-only: install and
+// uninstall both sweep them so files from earlier versions don't linger and shadow the new
+// skills. Do NOT add entries here as install targets; the `skills` CLI owns installation.
+//
+// `dir` is either a path relative to the home directory or a function returning an absolute path.
+// `type: 'skill'` entries are directories (removed recursively); the rest are flat files.
+const LEGACY_PATHS = [
+  // Claude Code — pre-v2 slash commands
+  { name: 'Claude Code commands', dir: '.claude/commands', filePattern: /^plan2code-.*\.md$/ },
+  // Copilot CLI agents
+  { name: 'Copilot CLI agents', dir: '.copilot/agents', filePattern: /^plan2code-.*\.md$/ },
+  // Cursor slash commands
+  { name: 'Cursor commands', dir: '.cursor/commands', filePattern: /^plan2code-.*\.md$/ },
+  // Continue prompts
+  { name: 'Continue prompts', dir: '.continue/prompts', filePattern: /^plan2code-.*\.prompt\.md$/ },
+  // Windsurf global workflows
+  { name: 'Windsurf workflows', dir: '.codeium/windsurf/global_workflows', filePattern: /^plan2code-.*\.md$/ },
+  // Codeium (IntelliJ) global workflows
+  { name: 'Codeium workflows', dir: '.codeium/global_workflows', filePattern: /^plan2code-.*\.md$/ },
+  // Pi prompts
+  { name: 'Pi prompts', dir: '.pi/agent/prompts', filePattern: /^plan2code-.*\.md$/ },
+  // Gemini CLI — removed as a target in v2.0.0, still cleaned up
+  { name: 'Gemini CLI commands', dir: '.gemini/commands', filePattern: /^plan2code-.*\.toml$/ },
+  // VS Code Copilot prompts (platform-specific location)
+  { name: 'VS Code Copilot prompts', dir: getVSCodeCopilotDir, filePattern: /^plan2code-.*\.prompt\.md$/ },
+  // Skill directories that pre-2.2 installs wrote as real copies. The skills CLI owns these
+  // paths now (~/.agents/skills is its store; the rest are links into it), but it won't
+  // recognize hand-copied directories from an earlier version, so sweep them too. Safe to run
+  // before `skills add`, which recreates whatever it needs.
+  { name: 'Crush skills', dir: getCrushSkillsDir, filePattern: /^plan2code-/, type: 'skill' },
+  { name: 'Claude Code skills', dir: '.claude/skills', filePattern: /^plan2code-/, type: 'skill' },
+  { name: 'Agent skills store', dir: '.agents/skills', filePattern: /^plan2code-/, type: 'skill' },
 ];
 
-// Installation targets
-const INSTALL_TARGETS = [
-  {
-    name: 'Claude Code',
-    id: 'claude',
-    dir: '.claude/skills',
-    type: 'skill',
-    filePattern: /^plan2code-/,
-    icon: '◉ '
-  },
-  {
-    name: 'Copilot CLI',
-    id: 'copilot',
-    dir: '.copilot/agents',
-    filePattern: /^plan2code-.*\.md$/,
-    icon: '◉ '
-  },
-  {
-    name: 'Cursor',
-    id: 'cursor',
-    dir: '.cursor/commands',
-    filePattern: /^plan2code-.*\.md$/,
-    icon: '◉ '
-  },
-  {
-    name: 'Continue',
-    id: 'continue',
-    dir: '.continue/prompts',
-    filePattern: /^plan2code-.*\.prompt\.md$/,
-    icon: '◉ '
-  },
-  {
-    name: 'Windsurf',
-    id: 'windsurf',
-    dir: '.codeium/windsurf/global_workflows',
-    filePattern: /^plan2code-.*\.md$/,
-    icon: '◉ '
-  },
-  {
-    name: 'Codeium (IntelliJ)',
-    id: 'codeium',
-    dir: '.codeium/global_workflows',
-    filePattern: /^plan2code-.*\.md$/,
-    icon: '◉ '
-  },
-  {
-    name: 'VS Code Copilot',
-    id: 'vscode-copilot',
-    dir: getVSCodeCopilotDir,
-    sourceDir: 'vscode-copilot-prompts',
-    displayPath: process.platform === 'win32'
-      ? '%APPDATA%\\Code\\User\\prompts\\'
-      : process.platform === 'darwin'
-        ? '~/Library/Application Support/Code/User/prompts/'
-        : '~/.config/Code/User/prompts/',
-    filePattern: /^plan2code-.*\.prompt\.md$/,
-    icon: '◉ '
-  },
-  {
-    name: 'Agent Skills (Amp · Devin · OpenCode · Zed)',
-    id: 'agent-skills',
-    dir: getAgentSkillsDir,
-    sourceDir: '.agents/skills',
-    type: 'skill',
-    filePattern: /^plan2code-/,
-    displayPath: '~/.agents/skills',
-    icon: '◉ '
-  },
-  {
-    name: 'Crush',
-    id: 'crush',
-    dir: getCrushSkillsDir,
-    sourceDir: 'crush-skills',
-    type: 'skill',
-    filePattern: /^plan2code-/,
-    displayPath: process.platform === 'win32'
-      ? '%LOCALAPPDATA%\\crush\\skills'
-      : '~/.config/crush/skills',
-    icon: '◉ '
-  },
-  // Gemini CLI is no longer an install target. This entry is RETAINED FOR UNINSTALL
-  // ONLY so `.gemini/commands/plan2code-*.toml` files written by earlier versions can
-  // still be cleaned up. Do not add a matching entry back to LOCAL_DESTINATIONS /
-  // GLOBAL_DESTINATIONS.
-  {
-    name: 'Gemini CLI (legacy — uninstall only)',
-    id: 'gemini',
-    dir: '.gemini/commands',
-    type: 'toml',
-    filePattern: /^plan2code-.*\.toml$/,
-    uninstallOnly: true,
-    icon: '◉ '
-  },
-  {
-    name: 'Pi',
-    id: 'pi',
-    dir: '.pi/agent/prompts',
-    filePattern: /^plan2code-.*\.md$/,
-    icon: '◉ '
-  }
-];
+// Reference directories that flat-file targets received as siblings (e.g. plan2code-review-references/).
+const LEGACY_REFERENCE_DIR = /^plan2code-.*-references$/;
 
 // ============================================================================
 // DISPLAY FUNCTIONS
@@ -728,248 +429,257 @@ function deleteDirectory(dirPath) {
   }
 }
 
-/**
- * Write a file to a destination with optional YAML header
- */
-function writeToDestination(rootDir, baseDir, dest, prompt, sourceContent, stats, quiet = false) {
-  const destDir = path.join(rootDir, baseDir, dest.dir);
-  const destFile = dest.filePattern(prompt);
-  const destPath = path.join(destDir, destFile);
+// ============================================================================
+// SKILLS BUILD (src/ -> skills/)
+// ============================================================================
 
-  // Build the output content
-  let outputContent;
-  if (dest.header) {
-    const header = dest.header(prompt);
-    outputContent = header + '\n\n' + sourceContent;
-  } else {
-    outputContent = sourceContent;
+function listFilesRecursive(dir, prefix = '') {
+  const out = [];
+  for (const entry of fs.readdirSync(dir)) {
+    const abs = path.join(dir, entry);
+    const rel = prefix ? path.join(prefix, entry) : entry;
+    if (fs.statSync(abs).isDirectory()) out.push(...listFilesRecursive(abs, rel));
+    else out.push(rel);
   }
-
-  // Ensure destination directory exists
-  if (!fs.existsSync(destDir)) {
-    fs.mkdirSync(destDir, { recursive: true });
-  }
-
-  // Check if file needs updating
-  let needsUpdate = true;
-  if (fs.existsSync(destPath)) {
-    try {
-      const existingContent = fs.readFileSync(destPath, 'utf8');
-      needsUpdate = existingContent !== outputContent;
-    } catch (err) {
-      // File exists but can't be read, will try to write
-    }
-  }
-
-  if (needsUpdate) {
-    try {
-      fs.writeFileSync(destPath, outputContent, 'utf8');
-      if (!quiet) {
-        console.log(`    ${COLORS.GREEN}▰▰▰${COLORS.RESET} ${destFile}`);
-      }
-    } catch (err) {
-      console.error(`    ${COLORS.RED}✖✖✖${COLORS.RESET} ${destFile}: ${err.message}`);
-      stats.errors++;
-      return;
-    }
-    stats.updated++;
-  } else {
-    stats.skipped++;
-  }
+  return out;
 }
 
-/**
- * Write a skill file to a destination as <skill-name>/SKILL.md
- */
-function writeSkillToDestination(rootDir, baseDir, dest, prompt, sourceContent, stats, quiet = false) {
-  const skillName = generateSkillName(prompt);
-  const destDir = path.join(rootDir, baseDir, dest.dir, skillName);
-  const filePath = path.join(destDir, 'SKILL.md');
+function computeExpectedSkills() {
+  const expected = new Map();
+  const errors = [];
 
-  // Build the output content
-  let outputContent;
-  if (dest.header) {
-    outputContent = dest.header(prompt) + '\n\n' + sourceContent;
-  } else {
-    outputContent = sourceContent;
-  }
-
-  // Ensure destination directory exists
-  fs.mkdirSync(destDir, { recursive: true });
-
-  // Check if file needs updating
-  let needsUpdate = true;
-  if (fs.existsSync(filePath)) {
-    try {
-      const existingContent = fs.readFileSync(filePath, 'utf8');
-      needsUpdate = existingContent !== outputContent;
-    } catch (err) {
-      // File exists but can't be read, will try to write
-    }
-  }
-
-  if (needsUpdate) {
-    try {
-      fs.writeFileSync(filePath, outputContent, 'utf8');
-      if (!quiet) {
-        console.log(`    ${COLORS.GREEN}▰▰▰${COLORS.RESET} ${skillName}/SKILL.md`);
-      }
-    } catch (err) {
-      console.error(`    ${COLORS.RED}✖✖✖${COLORS.RESET} ${skillName}/SKILL.md: ${err.message}`);
-      stats.errors++;
-      return;
-    }
-    stats.updated++;
-  } else {
-    stats.skipped++;
-  }
-}
-
-/**
- * Recursively copy a directory and all its contents (files and subdirectories).
- */
-function copyDirRecursive(src, dest, stats) {
-  fs.mkdirSync(dest, { recursive: true });
-  const entries = fs.readdirSync(src);
-  for (const entry of entries) {
-    const srcPath = path.join(src, entry);
-    const destPath = path.join(dest, entry);
-    if (fs.statSync(srcPath).isDirectory()) {
-      copyDirRecursive(srcPath, destPath, stats);
-    } else {
-      fs.copyFileSync(srcPath, destPath);
-      stats.copied++;
-    }
-  }
-}
-
-/**
- * Copy a reference directory (e.g., plan2code-review-references/) to a destination.
- * Used by syncPrompts() to distribute reference files alongside orchestrator files.
- */
-function copyReferenceDirectory(srcRefDir, destRefDir, stats, quiet = false) {
-  const copyStats = { copied: 0 };
-  try {
-    copyDirRecursive(srcRefDir, destRefDir, copyStats);
-  } catch (err) {
-    console.error(`    ${COLORS.RED}${SYMBOLS.ERROR}${COLORS.RESET} Failed to copy reference directory: ${err.message}`);
-    stats.errors++;
-    return;
-  }
-  stats.updated += copyStats.copied;
-  if (!quiet) {
-    const refDirName = path.basename(destRefDir);
-    const files = fs.readdirSync(srcRefDir);
-    for (const file of files) {
-      console.log(`    ${COLORS.GREEN}▰▰▰${COLORS.RESET} ${refDirName}/${file}`);
-    }
-  }
-}
-
-/**
- * Sync prompts from src/ to dist/ directories
- * This generates the distribution files before installation
- */
-function syncPrompts(quiet = false) {
-  const stats = { updated: 0, skipped: 0, errors: 0 };
-  const projectRoot = __dirname;
-
-  if (!quiet) {
-    console.log(`${COLORS.CYAN}${SYMBOLS.ACTIVE} GENERATING DISTRIBUTION FILES${COLORS.RESET}\n`);
-  }
-
-  // Clean up old dist directories
-  const localDistPath = path.join(projectRoot, 'dist/local-commands');
-  const globalDistPath = path.join(projectRoot, 'dist/global-commands');
-
-  if (fs.existsSync(localDistPath)) {
-    if (!quiet) console.log(`  ${COLORS.YELLOW}░░░${COLORS.RESET} Cleaning: dist/local-commands/`);
-    deleteDirectory(localDistPath);
-  }
-
-  if (fs.existsSync(globalDistPath)) {
-    if (!quiet) console.log(`  ${COLORS.YELLOW}░░░${COLORS.RESET} Cleaning: dist/global-commands/`);
-    deleteDirectory(globalDistPath);
-  }
-
-  // Process each source prompt
   for (const prompt of SOURCE_PROMPTS) {
     const sourcePath = path.join(SRC_DIR, prompt.source);
-
-    // Read source content
     let sourceContent;
     try {
       sourceContent = fs.readFileSync(sourcePath, 'utf8');
     } catch (err) {
-      console.error(`  ${COLORS.RED}${SYMBOLS.ERROR}${COLORS.RESET} Could not read: src/${prompt.source}`);
-      stats.errors++;
+      errors.push(`Could not read src/${prompt.source}: ${err.message}`);
       continue;
     }
 
-    // Detect reference directory (e.g., plan2code-review-references/)
-    const refDirName = prompt.source.replace(/\.md$/, '-references');
-    const srcRefDir = path.join(SRC_DIR, refDirName);
-    const hasRefDir = fs.existsSync(srcRefDir);
+    const skillName = generateSkillName(prompt);
+    expected.set(
+      `${SKILLS_DIR_NAME}/${skillName}/SKILL.md`,
+      generateSkillHeader(prompt, true) + '\n\n' + sourceContent
+    );
 
-    // Write to dist/local-commands/ and dist/global-commands/
-    const distBases = [
-      { base: 'dist/local-commands', destinations: LOCAL_DESTINATIONS },
-      { base: 'dist/global-commands', destinations: GLOBAL_DESTINATIONS },
-    ];
+    const srcRefDir = path.join(SRC_DIR, prompt.source.replace(/\.md$/, '-references'));
+    if (!fs.existsSync(srcRefDir)) continue;
+    for (const relPath of listFilesRecursive(srcRefDir)) {
+      expected.set(
+        `${SKILLS_DIR_NAME}/${skillName}/references/${relPath.split(path.sep).join('/')}`,
+        fs.readFileSync(path.join(srcRefDir, relPath), 'utf8')
+      );
+    }
+  }
 
-    for (const { base, destinations } of distBases) {
-      for (const dest of destinations) {
-        if (dest.type === 'skill') {
-          writeSkillToDestination(projectRoot, base, dest, prompt, sourceContent, stats, quiet);
-          if (hasRefDir) {
-            const skillName = generateSkillName(prompt);
-            const destRefDir = path.join(projectRoot, base, dest.dir, skillName, 'references');
-            copyReferenceDirectory(srcRefDir, destRefDir, stats, quiet);
-          }
-        } else {
-          // For flat-file destinations, rewrite Read directive paths to sibling directory name
-          const contentForDest = hasRefDir
-            ? sourceContent.replace(/^(Read\s+)references\//gm, '$1' + refDirName + '/')
-            : sourceContent;
-          writeToDestination(projectRoot, base, dest, prompt, contentForDest, stats, quiet);
-          if (hasRefDir) {
-            const destRefDir = path.join(projectRoot, base, dest.dir, refDirName);
-            copyReferenceDirectory(srcRefDir, destRefDir, stats, quiet);
-          }
-        }
-      }
+  return { expected, errors };
+}
+
+function buildSkills(quiet = false) {
+  const { expected, errors } = computeExpectedSkills();
+  const stats = { written: 0, unchanged: 0, pruned: 0, errors: errors.length };
+  for (const message of errors) console.error(`  ${COLORS.RED}${SYMBOLS.ERROR}${COLORS.RESET} ${message}`);
+  if (!quiet) console.log(`${COLORS.CYAN}${SYMBOLS.ACTIVE} BUILDING SKILLS${COLORS.RESET} ${COLORS.DIM}src/ -> ${SKILLS_DIR_NAME}/${COLORS.RESET}\n`);
+
+  const expectedSkillNames = new Set(SOURCE_PROMPTS.map(generateSkillName));
+  if (fs.existsSync(SKILLS_DIR)) {
+    for (const entry of fs.readdirSync(SKILLS_DIR)) {
+      const entryPath = path.join(SKILLS_DIR, entry);
+      if (!fs.statSync(entryPath).isDirectory() || expectedSkillNames.has(entry)) continue;
+      deleteDirectory(entryPath);
+      stats.pruned++;
+      if (!quiet) console.log(`  ${COLORS.YELLOW}░░░${COLORS.RESET} Pruned: ${entry}/`);
+    }
+  }
+
+  for (const skillName of expectedSkillNames) {
+    const skillDir = path.join(SKILLS_DIR, skillName);
+    if (!fs.existsSync(skillDir)) continue;
+    for (const relPath of listFilesRecursive(skillDir)) {
+      const key = `${SKILLS_DIR_NAME}/${skillName}/${relPath.split(path.sep).join('/')}`;
+      if (expected.has(key)) continue;
+      fs.rmSync(path.join(skillDir, relPath), { force: true });
+      stats.pruned++;
+      if (!quiet) console.log(`  ${COLORS.YELLOW}░░░${COLORS.RESET} Pruned: ${key}`);
+    }
+  }
+
+  for (const [relPath, content] of expected) {
+    const absPath = path.join(__dirname, relPath.split('/').join(path.sep));
+    let current = null;
+    if (fs.existsSync(absPath)) {
+      try { current = fs.readFileSync(absPath, 'utf8'); } catch {}
+    }
+    if (current === content) {
+      stats.unchanged++;
+      continue;
+    }
+    try {
+      fs.mkdirSync(path.dirname(absPath), { recursive: true });
+      fs.writeFileSync(absPath, content, 'utf8');
+      stats.written++;
+      if (!quiet) console.log(`  ${COLORS.GREEN}▰▰▰${COLORS.RESET} ${relPath}`);
+    } catch (err) {
+      console.error(`  ${COLORS.RED}✖✖✖${COLORS.RESET} ${relPath}: ${err.message}`);
+      stats.errors++;
     }
   }
 
   if (!quiet) {
-    console.log('');
-    console.log(`  ${COLORS.GREEN}${SYMBOLS.SUCCESS}${COLORS.RESET} Generated ${stats.updated} files (${stats.skipped} unchanged)`);
-    if (stats.errors > 0) {
-      console.log(`  ${COLORS.RED}${SYMBOLS.ERROR}${COLORS.RESET} ${stats.errors} errors`);
-    }
+    console.log(`\n  ${COLORS.GREEN}${SYMBOLS.SUCCESS}${COLORS.RESET} ${SOURCE_PROMPTS.length} skill(s): ${stats.written} written, ${stats.unchanged} unchanged, ${stats.pruned} pruned`);
+    if (stats.errors > 0) console.log(`  ${COLORS.RED}${SYMBOLS.ERROR}${COLORS.RESET} ${stats.errors} error(s)`);
     console.log('');
   }
-
   return stats.errors === 0;
 }
 
+function verifySkillsSync() {
+  const { expected, errors } = computeExpectedSkills();
+  const problems = [...errors];
+  for (const [relPath, content] of expected) {
+    const absPath = path.join(__dirname, relPath.split('/').join(path.sep));
+    if (!fs.existsSync(absPath)) problems.push(`missing: ${relPath}`);
+    else if (fs.readFileSync(absPath, 'utf8') !== content) problems.push(`out of date: ${relPath}`);
+  }
+  if (fs.existsSync(SKILLS_DIR)) {
+    for (const relPath of listFilesRecursive(SKILLS_DIR)) {
+      const key = `${SKILLS_DIR_NAME}/${relPath.split(path.sep).join('/')}`;
+      if (!expected.has(key)) problems.push(`unexpected: ${key}`);
+    }
+  }
+  if (problems.length > 0) {
+    console.error(`${SKILLS_DIR_NAME}/ is out of sync with src/:\n`);
+    for (const problem of problems) console.error(`  ${problem}`);
+    console.error(`\n${problems.length} problem(s). Run 'npm run build:skills' and commit the result.`);
+    return false;
+  }
+  console.log(`${SKILLS_DIR_NAME}/ matches src/ — ${expected.size} file(s) across ${SOURCE_PROMPTS.length} skill(s) ✓`);
+  return true;
+}
+
+function cleanLegacyPaths(quiet = false) {
+  const stats = { removed: 0, errors: 0 };
+  for (const legacy of LEGACY_PATHS) {
+    const dir = typeof legacy.dir === 'function' ? legacy.dir() : path.join(os.homedir(), legacy.dir);
+    if (!fs.existsSync(dir)) continue;
+    let entries;
+    try { entries = fs.readdirSync(dir); } catch { continue; }
+    for (const entry of entries) {
+      const isMatch = legacy.filePattern.test(entry);
+      const isReferenceDir = LEGACY_REFERENCE_DIR.test(entry);
+      if (!isMatch && !isReferenceDir) continue;
+      try {
+        const entryPath = path.join(dir, entry);
+        if (isReferenceDir || legacy.type === 'skill' || fs.statSync(entryPath).isDirectory()) {
+          fs.rmSync(entryPath, { recursive: true, force: true });
+        } else {
+          fs.unlinkSync(entryPath);
+        }
+        stats.removed++;
+        if (!quiet) console.log(`  ${COLORS.YELLOW}░░░${COLORS.RESET} ${legacy.name}: removed ${entry}`);
+      } catch (err) {
+        stats.errors++;
+        if (!quiet) console.log(`  ${COLORS.RED}✖✖✖${COLORS.RESET} ${legacy.name}: could not remove ${entry} — ${err.message}`);
+      }
+    }
+  }
+  return stats;
+}
+
 // ============================================================================
-// TARGET SELECTION
+// SKILLS CLI DELEGATION
 // ============================================================================
 
-/**
- * Get targets to process based on selected platforms
- */
-function getTargets(platformIds = null, { includeLegacy = false } = {}) {
-  // Entries flagged `uninstallOnly` are platforms we no longer install to, kept so their
-  // files from earlier versions can still be cleaned up. Only uninstall may see them.
-  const pool = includeLegacy
-    ? INSTALL_TARGETS
-    : INSTALL_TARGETS.filter(t => !t.uninstallOnly);
-  if (platformIds && platformIds.length > 0) {
-    return pool.filter(t => platformIds.includes(t.id));
+const SKILLS_CLI = 'npx --yes skills';
+const BENIGN_SKILLS_FAILURE = /does not support (global|project) skill installation/i;
+
+function execSkillsCli(args) {
+  const options = {
+    encoding: 'utf8',
+    stdio: ['pipe', 'pipe', 'pipe'],
+    env: { ...process.env, npm_config_loglevel: 'error' },
+  };
+  try {
+    return { ok: true, output: String(execSync(`${SKILLS_CLI} ${args}`, options)).trim() };
+  } catch (err) {
+    return { ok: false, output: `${err.stdout || ''}\n${err.stderr || ''}`.trim() };
   }
-  return pool;
+}
+
+function runSkillsCli(args) {
+  const result = execSkillsCli(args);
+  return result.ok ? result.output : null;
+}
+
+function skillNameArgs() {
+  return `-s ${SOURCE_PROMPTS.map(generateSkillName).join(' ')}`;
+}
+
+function extractSkillsFailures(output) {
+  const failures = [];
+  for (const rawLine of stripAnsi(output).split('\n')) {
+    if (!rawLine.includes('✗')) continue;
+    const message = rawLine.slice(rawLine.indexOf('✗') + 1).trim();
+    if (message && !BENIGN_SKILLS_FAILURE.test(message)) failures.push(message);
+  }
+  return failures;
+}
+
+function reportSkillsOutput(result) {
+  if (!result.ok) {
+    console.log(`\n${stripAnsi(result.output)}`);
+    return;
+  }
+  for (const failure of extractSkillsFailures(result.output)) {
+    console.log(`  ${COLORS.YELLOW}${SYMBOLS.WARNING}${COLORS.RESET} ${failure}`);
+  }
+}
+
+function ensureSkillsCli() {
+  const version = runSkillsCli('--version');
+  if (version !== null) {
+    console.log(`  ${COLORS.GREEN}${SYMBOLS.SUCCESS}${COLORS.RESET} skills CLI ${COLORS.DIM}${version.split('\n').pop()}${COLORS.RESET}`);
+    return true;
+  }
+  console.log(`  ${COLORS.RED}${SYMBOLS.ERROR}${COLORS.RESET} Could not run the ${COLORS.BRIGHT}skills${COLORS.RESET} CLI.`);
+  console.log(`\n  ${COLORS.DIM}Plan2Code installs through skills.sh, which needs Node 18+ and network access.${COLORS.RESET}`);
+  console.log(`  ${COLORS.DIM}Check that this works, then re-run the installer:${COLORS.RESET}`);
+  console.log(`    ${COLORS.CYAN}npx --yes skills --version${COLORS.RESET}\n`);
+  return false;
+}
+
+function listInstalledSkills(scope) {
+  const json = runSkillsCli(`list ${scope === 'global' ? '-g' : ''} --json`.trim());
+  if (!json) return [];
+  try {
+    const parsed = JSON.parse(json);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.map(skill => skill && skill.name)
+      .filter(name => typeof name === 'string' && name.startsWith('plan2code-'));
+  } catch {
+    return [];
+  }
+}
+
+function removeInstalledSkills(scope, { quiet = false } = {}) {
+  const installed = listInstalledSkills(scope);
+  if (installed.length === 0) {
+    if (!quiet) console.log(`  ${COLORS.DIM}${SYMBOLS.INFO} No Plan2Code skills currently installed${COLORS.RESET}`);
+    return 0;
+  }
+  const scopeFlag = scope === 'global' ? '-g ' : '';
+  let removed = 0;
+  for (const name of installed) {
+    if (runSkillsCli(`remove ${name} ${scopeFlag}-y`) === null) {
+      if (!quiet) console.log(`  ${COLORS.RED}✖✖✖${COLORS.RESET} Could not remove ${name}`);
+      continue;
+    }
+    removed++;
+    if (!quiet) console.log(`  ${COLORS.YELLOW}░░░${COLORS.RESET} Removed: ${name}`);
+  }
+  return removed;
 }
 
 // ============================================================================
@@ -977,268 +687,62 @@ function getTargets(platformIds = null, { includeLegacy = false } = {}) {
 // ============================================================================
 
 /**
- * Recursively copy skill subdirectories matching /^plan2code-/ from source to dest
- */
-function copySkillDirectory(sourcePath, destPath, stats) {
-  fs.mkdirSync(destPath, { recursive: true });
-  const entries = fs.readdirSync(sourcePath);
-  for (const entry of entries) {
-    if (!/^plan2code-/.test(entry)) continue;
-    const srcSubdir = path.join(sourcePath, entry);
-    if (!fs.statSync(srcSubdir).isDirectory()) continue;
-    const destSubdir = path.join(destPath, entry);
-    fs.mkdirSync(destSubdir, { recursive: true });
-    const files = fs.readdirSync(srcSubdir);
-    for (const file of files) {
-      const srcEntry = path.join(srcSubdir, file);
-      const destEntry = path.join(destSubdir, file);
-      if (fs.statSync(srcEntry).isDirectory()) {
-        // Recursively copy nested subdirectories (e.g., references/)
-        copyDirRecursive(srcEntry, destEntry, stats);
-      } else {
-        fs.copyFileSync(srcEntry, destEntry);
-        stats.copied++;
-      }
-    }
-  }
-}
-
-/**
- * Remove files/dirs matching LEGACY_TARGETS patterns (silent cleanup)
- */
-function cleanLegacyTargets() {
-  const homedir = os.homedir();
-  for (const target of LEGACY_TARGETS) {
-    const targetDir = path.join(homedir, target.dir);
-    if (!fs.existsSync(targetDir)) continue;
-    const entries = fs.readdirSync(targetDir);
-    for (const entry of entries) {
-      if (!target.filePattern.test(entry)) continue;
-      const entryPath = path.join(targetDir, entry);
-      if (target.type === 'skill') {
-        fs.rmSync(entryPath, { recursive: true, force: true });
-      } else {
-        fs.unlinkSync(entryPath);
-      }
-    }
-    // Clean up any orphaned reference directories
-    for (const entry of entries) {
-      if (/^plan2code-.*-references$/.test(entry)) {
-        const entryPath = path.join(targetDir, entry);
-        if (fs.existsSync(entryPath) && fs.statSync(entryPath).isDirectory()) {
-          fs.rmSync(entryPath, { recursive: true, force: true });
-        }
-      }
-    }
-  }
-}
-
-/**
  * Execute installation
  */
-async function install(targets = null) {
-  const projectRoot = __dirname;
-  const homeDir = os.homedir();
-  const targetList = targets || getTargets();
-
-  let totalInstalled = 0;
-  let totalErrors = 0;
-
-  displaySectionHeader('  INSTALLING FILES  ');
-
-  // Generate distribution files first
-  if (!syncPrompts(true)) {
-    console.log(`${COLORS.RED}${SYMBOLS.ERROR} Failed to generate distribution files${COLORS.RESET}`);
+async function install() {
+  displaySectionHeader('  INSTALLING SKILLS  ');
+  if (!buildSkills(true)) {
+    console.log(`${COLORS.RED}${SYMBOLS.ERROR} Failed to build ${SKILLS_DIR_NAME}/ from src/${COLORS.RESET}`);
     return 1;
   }
-  console.log(`${COLORS.GREEN}${SYMBOLS.SUCCESS} Distribution files generated${COLORS.RESET}\n`);
-
-  // Clean up legacy install targets before installing new ones
-  cleanLegacyTargets();
+  console.log(`${COLORS.GREEN}${SYMBOLS.SUCCESS} Built ${SOURCE_PROMPTS.length} skills from src/${COLORS.RESET}`);
+  if (!ensureSkillsCli()) return 1;
 
   console.log('');
   displayStatusBox('PARAMETERS', [
-    `${COLORS.CYAN}Source:${COLORS.RESET}           ${SOURCE_BASE}/`,
-    `${COLORS.CYAN}Home Directory:${COLORS.RESET}   ${homeDir}`,
-    `${COLORS.CYAN}Platforms:${COLORS.RESET}        ${targetList.length}`,
+    `${COLORS.CYAN}Source:${COLORS.RESET}           ${SKILLS_DIR_NAME}/`,
+    `${COLORS.CYAN}Skills:${COLORS.RESET}           ${SOURCE_PROMPTS.length}`,
+    `${COLORS.CYAN}Scope:${COLORS.RESET}            GLOBAL ${COLORS.DIM}(skills.sh default agent set)${COLORS.RESET}`,
+    `${COLORS.CYAN}Store:${COLORS.RESET}            ${path.join(os.homedir(), '.agents', 'skills')}`,
     `${COLORS.CYAN}Mode:${COLORS.RESET}             INSTALL`,
   ]);
-  console.log('');
+  console.log(`\n${COLORS.YELLOW}${SYMBOLS.ACTIVE} CLEANING PREVIOUS INSTALLS (PLEASE WAIT ⌛)${COLORS.RESET}\n`);
+  removeInstalledSkills('global');
+  const legacy = cleanLegacyPaths();
+  if (legacy.removed > 0) console.log(`  ${COLORS.GREEN}${SYMBOLS.SUCCESS}${COLORS.RESET} Cleaned ${legacy.removed} legacy file(s) from pre-2.2 installs`);
 
-  console.log(`${COLORS.YELLOW}${SYMBOLS.ACTIVE} STARTING INSTALLATION${COLORS.RESET}\n`);
+  console.log(`\n${COLORS.YELLOW}${SYMBOLS.ACTIVE} INSTALLING VIA SKILLS.SH${COLORS.RESET}\n`);
+  console.log(`  ${COLORS.DIM}Installing ${SOURCE_PROMPTS.length} skills...${COLORS.RESET}`);
+  const result = execSkillsCli(`add "${SKILLS_DIR}" -g ${skillNameArgs()} -y`);
+  reportSkillsOutput(result);
+  const failed = !result.ok;
 
-  for (const target of targetList) {
-    // Handle both static dir strings and dynamic dir functions
-    const sourceSubDir = target.sourceDir || target.dir;
-    const sourcePath = path.join(projectRoot, SOURCE_BASE, typeof sourceSubDir === 'function' ? sourceSubDir() : sourceSubDir);
-    const destPath = resolveTargetDir(target);
-    const displayPathStr = getDisplayPath(target);
-
-    console.log(`${COLORS.CYAN}╔═══════════════════════════════════════════════════════════════════════════╗${COLORS.RESET}`);
-    console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET} ${COLORS.BRIGHT}${target.icon} ${target.name}${COLORS.RESET}`, 76) + `${COLORS.CYAN}║${COLORS.RESET}`);
-    console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET} ${COLORS.DIM}Path: ${displayPathStr}${COLORS.RESET}`, 76) + `${COLORS.CYAN}║${COLORS.RESET}`);
-    console.log(`${COLORS.CYAN}╚═══════════════════════════════════════════════════════════════════════════╝${COLORS.RESET}`);
-
-    // Check if source directory exists
-    if (!fs.existsSync(sourcePath)) {
-      const sourceDisplayDir = target.sourceDir || (typeof target.dir === 'string' ? target.dir : 'vscode-copilot-prompts');
-      console.log(`  ${COLORS.YELLOW}${SYMBOLS.WARNING} WARNING${COLORS.RESET} Source not found: ${SOURCE_BASE}/${sourceDisplayDir}`);
-      console.log(`  ${COLORS.YELLOW}${SYMBOLS.INFO}${COLORS.RESET} Distribution files may be missing. Check src/ directory for source prompts.\n`);
-      totalErrors++;
-      continue;
-    }
-
-    // Get files/entries to install
-    let files;
-    try {
-      files = fs.readdirSync(sourcePath).filter(f => target.filePattern.test(f));
-    } catch (err) {
-      console.log(`  ${COLORS.RED}${SYMBOLS.ERROR} ERROR${COLORS.RESET} Failed to read source directory: ${err.message}\n`);
-      totalErrors++;
-      continue;
-    }
-
-    if (files.length === 0) {
-      const sourceDisplayDir = target.sourceDir || (typeof target.dir === 'string' ? target.dir : 'vscode-copilot-prompts');
-      console.log(`  ${COLORS.YELLOW}${SYMBOLS.WARNING} WARNING${COLORS.RESET} No Plan2Code files found in ${SOURCE_BASE}/${sourceDisplayDir}\n`);
-      continue;
-    }
-
-    // Create destination directory if needed
-    if (!fs.existsSync(destPath)) {
-      try {
-        fs.mkdirSync(destPath, { recursive: true });
-        console.log(`  ${COLORS.GREEN}${SYMBOLS.SUCCESS} CREATED${COLORS.RESET} Directory: ${displayPathStr}`);
-      } catch (err) {
-        console.log(`  ${COLORS.RED}${SYMBOLS.ERROR} ERROR${COLORS.RESET} Cannot create directory: ${err.message}\n`);
-        totalErrors++;
-        continue;
-      }
-    }
-
-    // Clean up old files/dirs before copying new ones
-    try {
-      const existingFiles = fs.readdirSync(destPath).filter(f => target.filePattern.test(f));
-      if (existingFiles.length > 0) {
-        console.log(`  ${COLORS.YELLOW}${SYMBOLS.ACTIVE} CLEANING${COLORS.RESET} ${existingFiles.length} existing file(s)...`);
-        for (const oldFile of existingFiles) {
-          const oldFilePath = path.join(destPath, oldFile);
-          try {
-            if (target.type === 'skill') {
-              fs.rmSync(oldFilePath, { recursive: true, force: true });
-            } else {
-              fs.unlinkSync(oldFilePath);
-            }
-            console.log(`    ${COLORS.YELLOW}░░░${COLORS.RESET} Removed: ${oldFile}`);
-          } catch (err) {
-            console.log(`    ${COLORS.RED}✖✖✖${COLORS.RESET} Failed to remove ${oldFile}: ${err.message}`);
-          }
-        }
-      }
-      // Also clean old reference directories for flat-file targets
-      if (target.type !== 'skill') {
-        const existingRefDirs = fs.readdirSync(destPath).filter(f =>
-          /^plan2code-.*-references$/.test(f) &&
-          fs.existsSync(path.join(destPath, f)) &&
-          fs.statSync(path.join(destPath, f)).isDirectory()
-        );
-        for (const refDir of existingRefDirs) {
-          fs.rmSync(path.join(destPath, refDir), { recursive: true, force: true });
-          console.log(`    ${COLORS.YELLOW}░░░${COLORS.RESET} Removed: ${refDir}/`);
-        }
-      }
-    } catch (err) {
-      // Directory might be newly created, ignore read errors
-    }
-
-    // Copy files/skill directories
-    if (target.type === 'skill') {
-      const copyStats = { copied: 0 };
-      console.log(`  ${COLORS.CYAN}${SYMBOLS.ACTIVE} COPYING${COLORS.RESET} skill directories...`);
-      try {
-        copySkillDirectory(sourcePath, destPath, copyStats);
-        console.log(`    ${COLORS.GREEN}▰▰▰${COLORS.RESET} ${copyStats.copied} file(s) across ${files.length} skill(s)`);
-        totalInstalled += copyStats.copied;
-      } catch (err) {
-        console.log(`    ${COLORS.RED}✖✖✖${COLORS.RESET} Copy failed: ${err.message}`);
-        totalErrors++;
-      }
-    } else {
-      console.log(`  ${COLORS.CYAN}${SYMBOLS.ACTIVE} COPYING${COLORS.RESET} ${files.length} file(s)...`);
-      for (const file of files) {
-        const srcFile = path.join(sourcePath, file);
-        const destFile = path.join(destPath, file);
-
-        try {
-          fs.copyFileSync(srcFile, destFile);
-          console.log(`    ${COLORS.GREEN}▰▰▰${COLORS.RESET} ${file}`);
-          totalInstalled++;
-        } catch (err) {
-          console.log(`    ${COLORS.RED}✖✖✖${COLORS.RESET} ${file}: ${err.message}`);
-          totalErrors++;
-        }
-      }
-
-      // Copy sibling reference directories for flat-file targets.
-      // Source-of-truth: scan sourcePath for *-references directories rather than deriving
-      // names from prompt filenames (extension assumptions break when new file types are added).
-      const refDirs = fs.readdirSync(sourcePath).filter(f =>
-        /^plan2code-.*-references$/.test(f) &&
-        fs.statSync(path.join(sourcePath, f)).isDirectory()
-      );
-      for (const refDirName of refDirs) {
-        const srcRefDir = path.join(sourcePath, refDirName);
-        const destRefDir = path.join(destPath, refDirName);
-        const refStats = { copied: 0 };
-        try {
-          copyDirRecursive(srcRefDir, destRefDir, refStats);
-        } catch (err) {
-          console.log(`    ${COLORS.RED}✖✖✖${COLORS.RESET} Failed to copy ${refDirName}/: ${err.message}`);
-          totalErrors++;
-          continue;
-        }
-        console.log(`    ${COLORS.GREEN}▰▰▰${COLORS.RESET} ${refDirName}/ (${refStats.copied} reference files)`);
-        totalInstalled += refStats.copied;
-      }
-    }
-    console.log('');
-  }
-
-  // Summary
-  console.log(`${COLORS.CYAN}╔═══════════════════════════════════════════════════════════════════════════╗${COLORS.RESET}`);
+  console.log(`\n${COLORS.CYAN}╔═══════════════════════════════════════════════════════════════════════════╗${COLORS.RESET}`);
   console.log(`${COLORS.CYAN}║${COLORS.RESET}${' '.repeat(75)}${COLORS.CYAN}║${COLORS.RESET}`);
   console.log(`${COLORS.CYAN}║${COLORS.RESET}${' '.repeat(31)}${COLORS.BRIGHT}S U M M A R Y${COLORS.RESET}${' '.repeat(31)}${COLORS.CYAN}║${COLORS.RESET}`);
   console.log(`${COLORS.CYAN}║${COLORS.RESET}${' '.repeat(75)}${COLORS.CYAN}║${COLORS.RESET}`);
   console.log(`${COLORS.CYAN}╠═══════════════════════════════════════════════════════════════════════════╣${COLORS.RESET}`);
-
   console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET}  ${COLORS.GREEN}Mode:${COLORS.RESET}              INSTALL`, 76) + `${COLORS.CYAN}║${COLORS.RESET}`);
-
-  const statusColor = totalErrors > 0 ? COLORS.RED : COLORS.GREEN;
-  const statusText = totalErrors > 0 ? 'COMPLETED WITH ERRORS' : 'SUCCESS';
-
+  const statusColor = failed ? COLORS.RED : COLORS.GREEN;
+  const statusText = failed ? 'FAILED' : 'SUCCESS';
   console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET}  ${statusColor}Status:${COLORS.RESET}            ${statusColor}${statusText}${COLORS.RESET}`, 76) + `${COLORS.CYAN}║${COLORS.RESET}`);
-  console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET}  Files Installed:   ${COLORS.GREEN}${totalInstalled}${COLORS.RESET}`, 76) + `${COLORS.CYAN}║${COLORS.RESET}`);
-
-
-  if (totalErrors > 0) {
-    console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET}  Errors:            ${COLORS.RED}${totalErrors}${COLORS.RESET}`, 76) + `${COLORS.CYAN}║${COLORS.RESET}`);
-  }
-
+  const installedNames = failed ? [] : listInstalledSkills('global');
+  console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET}  Skills Installed:  ${COLORS.GREEN}${installedNames.length}${COLORS.RESET}`, 76) + `${COLORS.CYAN}║${COLORS.RESET}`);
   console.log(`${COLORS.CYAN}║${COLORS.RESET}${' '.repeat(75)}${COLORS.CYAN}║${COLORS.RESET}`);
-  console.log(`${COLORS.CYAN}╚═══════════════════════════════════════════════════════════════════════════╝${COLORS.RESET}`);
+  console.log(`${COLORS.CYAN}╚═══════════════════════════════════════════════════════════════════════════╝${COLORS.RESET}\n`);
 
-  // Show celebratory or sad mascot based on result
-  console.log('');
-  if (totalErrors === 0) {
-    console.log(`${COLORS.GREEN}    ╭───╮${COLORS.RESET}   ${COLORS.BRIGHT}All done! Happy coding!${COLORS.RESET}`);
-    console.log(`${COLORS.GREEN}    │ ${COLORS.CYAN}★${COLORS.GREEN} │${COLORS.RESET}   ${COLORS.BRIGHT}If this is your first time using Plan2Code, read the docs here:${COLORS.RESET}`);
-    console.log(`${COLORS.GREEN}    │ ${COLORS.BRIGHT}◡${COLORS.GREEN} │${COLORS.RESET}   ${COLORS.BRIGHT}https://github.com/jparkerweb/plan2code${COLORS.RESET}`);
-    console.log(`${COLORS.GREEN}    ╰───╯${COLORS.RESET}`);
+  if (failed) {
+    console.log(`${COLORS.RED}${SYMBOLS.ERROR} skills add failed. Re-run, or install by hand:${COLORS.RESET}`);
+    console.log(`    ${COLORS.CYAN}npx --yes skills add "${SKILLS_DIR}" -g ${skillNameArgs()} -y${COLORS.RESET}\n`);
+    return 1;
   }
 
-  console.log('');
-
-  return totalErrors === 0 ? 0 : 1;
+  console.log(`${COLORS.GREEN}    ╭───╮${COLORS.RESET}   ${COLORS.BRIGHT}All done! Happy coding!${COLORS.RESET}`);
+  console.log(`${COLORS.GREEN}    │ ${COLORS.CYAN}★${COLORS.GREEN} │${COLORS.RESET}   ${COLORS.BRIGHT}If this is your first time using Plan2Code, read the docs here:${COLORS.RESET}`);
+  console.log(`${COLORS.GREEN}    │ ${COLORS.BRIGHT}◡${COLORS.GREEN} │${COLORS.RESET}   ${COLORS.BRIGHT}https://github.com/jparkerweb/plan2code${COLORS.RESET}`);
+  console.log(`${COLORS.GREEN}    ╰───╯${COLORS.RESET}`);
+  console.log(`\n${COLORS.DIM}  Update later with:${COLORS.RESET} ${COLORS.CYAN}npx skills update -g${COLORS.RESET}\n`);
+  return 0;
 }
 
 // ============================================================================
@@ -1248,203 +752,88 @@ async function install(targets = null) {
 /**
  * Execute uninstallation
  */
-function uninstallFiles(targets = null) {
-  const homeDir = os.homedir();
-  // includeLegacy: uninstall must also clear platforms we no longer install to
-  const targetList = targets || getTargets(null, { includeLegacy: true });
-
-  let totalRemoved = 0;
-  let totalErrors = 0;
-
-  displaySectionHeader('UNINSTALLATION', '[ REMOVING FILES ]');
-
+function uninstallSkills() {
+  displaySectionHeader('UNINSTALLATION', '[ REMOVING SKILLS ]');
   console.log('');
   displayStatusBox('PARAMETERS', [
-    `${COLORS.CYAN}Home Directory:${COLORS.RESET}   ${homeDir}`,
-    `${COLORS.CYAN}Platforms:${COLORS.RESET}        ${targetList.length}`,
+    `${COLORS.CYAN}Home Directory:${COLORS.RESET}   ${os.homedir()}`,
+    `${COLORS.CYAN}Scope:${COLORS.RESET}            GLOBAL`,
     `${COLORS.CYAN}Mode:${COLORS.RESET}             UNINSTALL`,
   ]);
-  console.log('');
 
-  // Clean up legacy install targets
-  cleanLegacyTargets();
-
-  console.log(`${COLORS.YELLOW}${SYMBOLS.ACTIVE} STARTING UNINSTALLATION${COLORS.RESET}\n`);
-
-  for (const target of targetList) {
-    const destPath = resolveTargetDir(target);
-    const displayPathStr = getDisplayPath(target);
-
-    console.log(`${COLORS.CYAN}╔═══════════════════════════════════════════════════════════════════════════╗${COLORS.RESET}`);
-    console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET} ${COLORS.BRIGHT}${target.icon} ${target.name}${COLORS.RESET}`, 76) + `${COLORS.CYAN}║${COLORS.RESET}`);
-    console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET} ${COLORS.DIM}Path: ${displayPathStr}${COLORS.RESET}`, 76) + `${COLORS.CYAN}║${COLORS.RESET}`);
-    console.log(`${COLORS.CYAN}╚═══════════════════════════════════════════════════════════════════════════╝${COLORS.RESET}`);
-
-    // Check if destination directory exists
-    if (!fs.existsSync(destPath)) {
-      console.log(`  ${COLORS.DIM}${SYMBOLS.INFO} Directory not found - nothing to remove\n${COLORS.RESET}`);
-      continue;
-    }
-
-    // Get files/entries to remove
-    let files;
-    try {
-      files = fs.readdirSync(destPath).filter(f => target.filePattern.test(f));
-    } catch (err) {
-      console.log(`  ${COLORS.RED}${SYMBOLS.ERROR} ERROR${COLORS.RESET} Failed to read directory: ${err.message}\n`);
-      totalErrors++;
-      continue;
-    }
-
-    if (files.length === 0) {
-      console.log(`  ${COLORS.DIM}${SYMBOLS.INFO} No Plan2Code files found${COLORS.RESET}`);
-    } else {
-      // Remove files/skill directories
-      console.log(`  ${COLORS.CYAN}${SYMBOLS.ACTIVE} REMOVING${COLORS.RESET} ${files.length} file(s)...`);
-      for (const file of files) {
-        const destFile = path.join(destPath, file);
-
-        try {
-          if (target.type === 'skill') {
-            // recursive: true handles nested subdirectories (e.g., references/)
-            fs.rmSync(destFile, { recursive: true, force: true });
-          } else {
-            fs.unlinkSync(destFile);
-          }
-          console.log(`    ${COLORS.GREEN}▰▰▰${COLORS.RESET} Removed: ${file}`);
-          totalRemoved++;
-        } catch (err) {
-          console.log(`    ${COLORS.RED}✖✖✖${COLORS.RESET} ${file}: ${err.message}`);
-          totalErrors++;
-        }
-      }
-    }
-
-    // Remove sibling reference directories for flat-file targets.
-    // Runs unconditionally so orphaned reference dirs are cleaned even if prompt files were already removed.
-    if (target.type !== 'skill') {
-      try {
-        const refDirs = fs.readdirSync(destPath).filter(f =>
-          /^plan2code-.*-references$/.test(f) &&
-          fs.existsSync(path.join(destPath, f)) &&
-          fs.statSync(path.join(destPath, f)).isDirectory()
-        );
-        for (const refDir of refDirs) {
-          fs.rmSync(path.join(destPath, refDir), { recursive: true, force: true });
-          console.log(`    ${COLORS.GREEN}▰▰▰${COLORS.RESET} Removed: ${refDir}/`);
-          totalRemoved++;
-        }
-      } catch (err) {
-        // Directory may already be removed, ignore
-      }
-    }
-    console.log('');
+  let removed = 0;
+  let errors = 0;
+  if (ensureSkillsCli()) {
+    console.log(`\n${COLORS.YELLOW}${SYMBOLS.ACTIVE} REMOVING SKILLS${COLORS.RESET}\n`);
+    removed += removeInstalledSkills('global');
+  } else {
+    errors++;
   }
 
-  // Summary
-  console.log(`${COLORS.CYAN}╔═══════════════════════════════════════════════════════════════════════════╗${COLORS.RESET}`);
+  console.log(`\n${COLORS.YELLOW}${SYMBOLS.ACTIVE} CLEANING LEGACY PATHS${COLORS.RESET}\n`);
+  const legacy = cleanLegacyPaths();
+  if (legacy.removed === 0) console.log(`  ${COLORS.DIM}${SYMBOLS.INFO} Nothing left over from earlier versions${COLORS.RESET}`);
+  removed += legacy.removed;
+  errors += legacy.errors;
+
+  console.log(`\n${COLORS.CYAN}╔═══════════════════════════════════════════════════════════════════════════╗${COLORS.RESET}`);
   console.log(`${COLORS.CYAN}║${COLORS.RESET}${' '.repeat(75)}${COLORS.CYAN}║${COLORS.RESET}`);
   console.log(`${COLORS.CYAN}║${COLORS.RESET}${' '.repeat(31)}${COLORS.BRIGHT}S U M M A R Y${COLORS.RESET}${' '.repeat(31)}${COLORS.CYAN}║${COLORS.RESET}`);
   console.log(`${COLORS.CYAN}║${COLORS.RESET}${' '.repeat(75)}${COLORS.CYAN}║${COLORS.RESET}`);
   console.log(`${COLORS.CYAN}╠═══════════════════════════════════════════════════════════════════════════╣${COLORS.RESET}`);
-
   console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET}  ${COLORS.GREEN}Mode:${COLORS.RESET}              UNINSTALL`, 76) + `${COLORS.CYAN}║${COLORS.RESET}`);
-
-  const statusColor = totalErrors > 0 ? COLORS.RED : COLORS.GREEN;
-  const statusText = totalErrors > 0 ? 'COMPLETED WITH ERRORS' : 'SUCCESS';
-
+  const statusColor = errors > 0 ? COLORS.RED : COLORS.GREEN;
+  const statusText = errors > 0 ? 'COMPLETED WITH ERRORS' : 'SUCCESS';
   console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET}  ${statusColor}Status:${COLORS.RESET}            ${statusColor}${statusText}${COLORS.RESET}`, 76) + `${COLORS.CYAN}║${COLORS.RESET}`);
-  console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET}  Files Removed:     ${COLORS.GREEN}${totalRemoved}${COLORS.RESET}`, 76) + `${COLORS.CYAN}║${COLORS.RESET}`);
-
-  if (totalErrors > 0) {
-    console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET}  Errors:            ${COLORS.RED}${totalErrors}${COLORS.RESET}`, 76) + `${COLORS.CYAN}║${COLORS.RESET}`);
-  }
-
+  console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET}  Items Removed:     ${COLORS.GREEN}${removed}${COLORS.RESET}`, 76) + `${COLORS.CYAN}║${COLORS.RESET}`);
+  if (errors > 0) console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET}  Errors:            ${COLORS.RED}${errors}${COLORS.RESET}`, 76) + `${COLORS.CYAN}║${COLORS.RESET}`);
   console.log(`${COLORS.CYAN}║${COLORS.RESET}${' '.repeat(75)}${COLORS.CYAN}║${COLORS.RESET}`);
-  console.log(`${COLORS.CYAN}╚═══════════════════════════════════════════════════════════════════════════╝${COLORS.RESET}`);
-
-  console.log('');
-
-  return totalErrors === 0 ? 0 : 1;
+  console.log(`${COLORS.CYAN}╚═══════════════════════════════════════════════════════════════════════════╝${COLORS.RESET}\n`);
+  return errors > 0 ? 1 : 0;
 }
 
 // ============================================================================
-// LOCAL INSTALLATION INSTRUCTIONS
+// PROJECT INSTALLATION
 // ============================================================================
 
 /**
- * Display local installation instructions for manual copy/paste
+ * Install skills into the current project instead of globally.
  */
-function displayLocalInstructions() {
-  const projectRoot = __dirname;
-
-  displaySectionHeader('LOCAL INSTALLATION', '[ MANUAL COPY/PASTE INSTRUCTIONS ]');
-
-  // Generate dist files first
-  console.log(`${COLORS.CYAN}${SYMBOLS.ACTIVE} GENERATING DISTRIBUTION FILES${COLORS.RESET}\n`);
-  if (!syncPrompts(true)) {
-    console.log(`${COLORS.RED}${SYMBOLS.ERROR} Failed to generate distribution files${COLORS.RESET}`);
+function installProjectSkills() {
+  const projectDir = process.cwd();
+  displaySectionHeader('PROJECT INSTALLATION', '[ CURRENT DIRECTORY ]');
+  if (!buildSkills(true)) {
+    console.log(`${COLORS.RED}${SYMBOLS.ERROR} Failed to build ${SKILLS_DIR_NAME}/ from src/${COLORS.RESET}`);
     return 1;
   }
-  console.log(`${COLORS.GREEN}${SYMBOLS.SUCCESS} Distribution files generated${COLORS.RESET}\n`);
+  console.log(`${COLORS.GREEN}${SYMBOLS.SUCCESS} Built ${SOURCE_PROMPTS.length} skills from src/${COLORS.RESET}`);
+  if (!ensureSkillsCli()) return 1;
 
-  const localDistPath = path.join(projectRoot, 'dist', 'local-commands');
-
-  console.log(`${COLORS.GREEN}${SYMBOLS.ACTIVE} LOCAL INSTALLATION INSTRUCTIONS${COLORS.RESET}\n`);
-
+  console.log('');
   displayStatusBox('OVERVIEW', [
-    `Local installation copies prompts to your ${COLORS.BRIGHT}project directory${COLORS.RESET}`,
-    `(not your home directory). This is useful for project-specific setups.`,
+    `Installs into ${COLORS.BRIGHT}this project${COLORS.RESET} rather than your home directory, so the`,
+    `skills travel with the repo and are visible to everyone who clones it.`,
     '',
-    `Files have been generated in:`,
-    `${COLORS.CYAN}${localDistPath}${COLORS.RESET}`,
+    `${COLORS.CYAN}Project:${COLORS.RESET} ${projectDir}`,
+    `${COLORS.CYAN}Skills:${COLORS.RESET}  ${SOURCE_PROMPTS.length}`,
   ]);
-
   console.log('');
-  console.log(`${COLORS.CYAN}╔═══════════════════════════════════════════════════════════════════════════╗${COLORS.RESET}`);
-  console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET} ${COLORS.BRIGHT}COPY THE APPROPRIATE FOLDER TO YOUR PROJECT ROOT${COLORS.RESET}`, 76) + `${COLORS.CYAN}║${COLORS.RESET}`);
-  console.log(`${COLORS.CYAN}╠═══════════════════════════════════════════════════════════════════════════╣${COLORS.RESET}`);
+  if (projectDir === __dirname) {
+    console.log(`  ${COLORS.YELLOW}${SYMBOLS.WARNING}${COLORS.RESET} This is the Plan2Code repo itself — installing here is rarely what you want.\n`);
+  }
 
-  // Show local destinations
-  const localDirs = [
-    { name: 'Claude Code', dir: '.claude/commands/', desc: 'Slash commands for Claude Code' },
-    { name: 'Cursor', dir: '.cursor/commands/', desc: 'Slash commands for Cursor IDE' },
-    { name: 'GitHub Copilot', dir: '.github/prompts/', desc: 'Prompts for GitHub Copilot' },
-    { name: 'Continue', dir: '.continue/prompts/', desc: 'Prompts for Continue extension' },
-    { name: 'Windsurf', dir: '.windsurf/workflows/', desc: 'Workflows for Windsurf' },
-    { name: 'Codeium (IntelliJ)', dir: '.codeium/global_workflows/', desc: 'Codeium global workflows' },
-    { name: 'Pi', dir: '.pi/prompts/', desc: 'Prompt templates for pi.dev coding agent' },
-  ];
-
-  localDirs.forEach((item, i) => {
-    const num = `${COLORS.BRIGHT}${i + 1}.${COLORS.RESET}`;
-    const name = `${COLORS.GREEN}${item.name.padEnd(16)}${COLORS.RESET}`;
-    const dir = `${COLORS.DIM}${item.dir}${COLORS.RESET}`;
-    console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET}  ${num} ${name} ${dir}`, 76) + `${COLORS.CYAN}║${COLORS.RESET}`);
-  });
-
-  console.log(`${COLORS.CYAN}╚═══════════════════════════════════════════════════════════════════════════╝${COLORS.RESET}`);
-
+  console.log(`${COLORS.YELLOW}${SYMBOLS.ACTIVE} INSTALLING VIA SKILLS.SH${COLORS.RESET}\n`);
+  console.log(`  ${COLORS.DIM}Installing ${SOURCE_PROMPTS.length} skills...${COLORS.RESET}`);
+  const result = execSkillsCli(`add "${SKILLS_DIR}" ${skillNameArgs()} -y`);
+  reportSkillsOutput(result);
   console.log('');
-  displayStatusBox('EXAMPLE COMMANDS', [
-    `${COLORS.BRIGHT}For Claude Code:${COLORS.RESET}`,
-    `${COLORS.GREEN}cp -r dist/local-commands/.claude YOUR_PROJECT/${COLORS.RESET}`,
-    '',
-    `${COLORS.BRIGHT}For Cursor:${COLORS.RESET}`,
-    `${COLORS.GREEN}cp -r dist/local-commands/.cursor YOUR_PROJECT/${COLORS.RESET}`,
-    '',
-    `${COLORS.BRIGHT}For GitHub Copilot:${COLORS.RESET}`,
-    `${COLORS.GREEN}cp -r dist/local-commands/.github YOUR_PROJECT/${COLORS.RESET}`,
-    '',
-    `${COLORS.BRIGHT}For Continue:${COLORS.RESET}`,
-    `${COLORS.GREEN}cp -r dist/local-commands/.continue YOUR_PROJECT/${COLORS.RESET}`,
-  ]);
-
-  console.log('');
-  console.log(`${COLORS.DIM}The dist/local-commands/ folder contains all necessary files organized by tool.`);
-  console.log(`Copy the appropriate subfolder(s) to your project root directory.${COLORS.RESET}`);
-  console.log('');
-
+  if (!result.ok) {
+    console.log(`${COLORS.RED}${SYMBOLS.ERROR} skills add failed. Run it by hand from your project root:${COLORS.RESET}`);
+    console.log(`    ${COLORS.CYAN}npx --yes skills add "${SKILLS_DIR}" ${skillNameArgs()} -y${COLORS.RESET}\n`);
+    return 1;
+  }
+  console.log(`${COLORS.GREEN}${SYMBOLS.SUCCESS} Installed into ${projectDir}${COLORS.RESET}\n`);
+  console.log(`${COLORS.DIM}  Check the new directories aren't gitignored, or your agents won't see them.${COLORS.RESET}\n`);
   return 0;
 }
 
@@ -1473,9 +862,9 @@ function runInteractive() {
     console.log(`${COLORS.CYAN}╔═════════════════════════════════════════════════════════╗${COLORS.RESET}`);
     console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET} ${COLORS.BRIGHT}INSTALL PLAN2CODE${COLORS.RESET}`, 58) + `${COLORS.CYAN}║${COLORS.RESET}`);
     console.log(`${COLORS.CYAN}╠═════════════════════════════════════════════════════════╣${COLORS.RESET}`);
-    console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET}  ${COLORS.BRIGHT}I.${COLORS.RESET}  ${COLORS.GREEN}INSTALL${COLORS.RESET}    Install Plan2Code for all platforms`, 58) + `${COLORS.CYAN}║${COLORS.RESET}`);
+    console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET}  ${COLORS.BRIGHT}I.${COLORS.RESET}  ${COLORS.GREEN}INSTALL${COLORS.RESET}    Install Plan2Code skills everywhere`, 58) + `${COLORS.CYAN}║${COLORS.RESET}`);
     console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET}  ${COLORS.BRIGHT}A.${COLORS.RESET}  ${COLORS.MAGENTA}ALL${COLORS.RESET}        Install Plan2Code + dev tools`, 58) + `${COLORS.CYAN}║${COLORS.RESET}`);
-    console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET}  ${COLORS.BRIGHT}U.${COLORS.RESET}  ${COLORS.RED}UNINSTALL${COLORS.RESET}  Remove Plan2Code files`, 58) + `${COLORS.CYAN}║${COLORS.RESET}`);
+    console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET}  ${COLORS.BRIGHT}U.${COLORS.RESET}  ${COLORS.RED}UNINSTALL${COLORS.RESET}  Remove Plan2Code skills and dev tools`, 58) + `${COLORS.CYAN}║${COLORS.RESET}`);
     console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET}  ${COLORS.BRIGHT}C.${COLORS.RESET}  ${COLORS.BLUE}CUSTOM${COLORS.RESET}     Advanced options`, 58) + `${COLORS.CYAN}║${COLORS.RESET}`);
     console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET}  ${COLORS.BRIGHT}Q.${COLORS.RESET}  ${COLORS.DIM}QUIT${COLORS.RESET}       Exit`, 58) + `${COLORS.CYAN}║${COLORS.RESET}`);
     console.log(`${COLORS.CYAN}╚═════════════════════════════════════════════════════════╝${COLORS.RESET}`);
@@ -1486,17 +875,13 @@ function runInteractive() {
     const answer = await question(`${COLORS.CYAN}${SYMBOLS.SELECT} SELECT OPTION${COLORS.RESET} (I, A, U, C, Q) [I]: `);
     const input = answer.trim().toUpperCase() || 'I';
 
-    // I path — Install prompts + loop
+    // I path — skills only. The loop remains optional via A or Custom → O.
     if (input === 'I') {
       rl.close();
-      const loopResult = installPlan2CodeLoop();
-      console.log('');
-      const installResult = await install();
-      const exitCode = loopResult !== 0 ? loopResult : installResult;
-      process.exit(exitCode);
+      process.exit(await install());
     }
 
-    // A path — Install Everything (prompts + loop + bot + metrics + Claude status line)
+    // A path — Install Everything (skills + loop + bot + metrics + Claude status line)
     if (input === 'A') {
       rl.close();
       const loopResult = installPlan2CodeLoop();
@@ -1515,13 +900,9 @@ function runInteractive() {
     // U path — Uninstall All
     if (input === 'U') {
       console.log('');
-      console.log(`${COLORS.RED}   o     o${COLORS.RESET}`);
-      console.log(`${COLORS.RED}    ╲   ╱  ${COLORS.YELLOW}!${COLORS.RESET}`);
       console.log(`${COLORS.RED}    ╭───╮${COLORS.RESET}`);
-      console.log(`${COLORS.RED}    │ ${COLORS.YELLOW}○${COLORS.RED} │${COLORS.RESET}`);
+      console.log(`${COLORS.RED}    │ ${COLORS.YELLOW}○${COLORS.RED} │${COLORS.RESET}   ${COLORS.YELLOW}!${COLORS.RESET}`);
       console.log(`${COLORS.RED}    │ ${COLORS.YELLOW}~${COLORS.RED} │${COLORS.RESET}   ${COLORS.DIM}Are you sure? This will remove Plan2Code from all platforms.${COLORS.RESET}`);
-      console.log(`${COLORS.RED}    ├───┤${COLORS.RESET}`);
-      console.log(`${COLORS.RED}    │ · │${COLORS.RESET}`);
       console.log(`${COLORS.RED}    ╰───╯${COLORS.RESET}`);
       console.log('');
       const confirmAnswer = await question(`${COLORS.RED}${SYMBOLS.SELECT} CONFIRM UNINSTALL${COLORS.RESET} (Y/N) [N]: `);
@@ -1529,7 +910,7 @@ function runInteractive() {
 
       if (confirmInput === 'Y') {
         rl.close();
-        const uninstallResult = uninstallFiles();
+        const uninstallResult = uninstallSkills();
         const loopResult = uninstallPlan2CodeLoop();
         const metricsResult = uninstallPlan2CodeMetrics();
         const botResult = uninstallPlan2CodeBot();
@@ -1549,7 +930,7 @@ function runInteractive() {
       console.log(`${COLORS.CYAN}╔════════════════════════════════════════════════════════════════╗${COLORS.RESET}`);
       console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET} ${COLORS.BRIGHT}CUSTOM OPTIONS${COLORS.RESET}`, 65) + `${COLORS.CYAN}║${COLORS.RESET}`);
       console.log(`${COLORS.CYAN}╠════════════════════════════════════════════════════════════════╣${COLORS.RESET}`);
-      console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET}  ${COLORS.BRIGHT}L.${COLORS.RESET}  ${COLORS.BLUE}LOCAL${COLORS.RESET}      Show local (project) install instructions`, 65) + `${COLORS.CYAN}║${COLORS.RESET}`);
+      console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET}  ${COLORS.BRIGHT}L.${COLORS.RESET}  ${COLORS.BLUE}LOCAL${COLORS.RESET}      Install skills into the current project only`, 65) + `${COLORS.CYAN}║${COLORS.RESET}`);
       console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET}  ${COLORS.BRIGHT}O.${COLORS.RESET}  ${COLORS.GREEN}LOOP CLI${COLORS.RESET}   Install plan2code-loop CLI only`, 65) + `${COLORS.CYAN}║${COLORS.RESET}`);
       console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET}  ${COLORS.BRIGHT}M.${COLORS.RESET}  ${COLORS.GREEN}METRICS${COLORS.RESET}    Install plan2code-metrics CLI only`, 65) + `${COLORS.CYAN}║${COLORS.RESET}`);
       console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET}  ${COLORS.BRIGHT}S.${COLORS.RESET}  ${COLORS.GREEN}STATUS${COLORS.RESET}     Install Claude Code status line`, 65) + `${COLORS.CYAN}║${COLORS.RESET}`);
@@ -1560,10 +941,10 @@ function runInteractive() {
       const customAnswer = await question(`${COLORS.CYAN}${SYMBOLS.SELECT} SELECT OPTION${COLORS.RESET} (L, O, M, S, B, Q) [Q]: `);
       const customInput = customAnswer.trim().toUpperCase() || 'Q';
 
-      // C > L — show local install instructions
+      // C > L — install skills into the current project
       if (customInput === 'L') {
         rl.close();
-        process.exit(displayLocalInstructions());
+        process.exit(installProjectSkills());
       }
 
       // C > O — install loop CLI only
@@ -2576,5 +1957,22 @@ function uninstallPlan2CodeBot() {
 // MAIN
 // ============================================================================
 
-// Always run interactive menu
+// Non-interactive build hooks for the committed skills/ artifact.
+const argv = process.argv.slice(2);
+
+if (argv.includes('--build-skills')) {
+  process.exit(buildSkills() ? 0 : 1);
+}
+
+if (argv.includes('--verify-skills')) {
+  process.exit(verifySkillsSync() ? 0 : 1);
+}
+
+if (argv.length > 0) {
+  console.error(`Unknown option(s): ${argv.join(' ')}`);
+  console.error('Usage: node install.js [--build-skills | --verify-skills]');
+  console.error('Run with no options for the interactive installer.');
+  process.exit(1);
+}
+
 runInteractive();
