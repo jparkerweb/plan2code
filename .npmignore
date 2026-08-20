@@ -8,7 +8,7 @@ specs--completed/
 .gitignore
 CLAUDE.md
 
-# Exclude generated files (installer generates dist/ dynamically)
+# Exclude stale generated output from pre-2.2 checkouts
 dist/
 
 # Exclude dependencies (installer will run npm install if needed)

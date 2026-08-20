@@ -1,13 +1,14 @@
 {
   "name": "plan2code",
-  "version": "2.1.1",
+  "version": "2.2.0",
   "private": true,
   "bin": {
     "plan2code": "./install.js"
   },
   "scripts": {
     "prepare": "husky",
-    "test": "node scripts/validate-char-count.js"
+    "build:skills": "node install.js --build-skills",
+    "test": "node scripts/validate-char-count.js && node install.js --verify-skills"
   },
   "devDependencies": {
     "husky": "^9.0.0"
