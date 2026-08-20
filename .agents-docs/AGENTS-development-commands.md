@@ -7,8 +7,14 @@
 # Install dev dependencies (sets up husky pre-commit hooks)
 npm install
 
-# Run the interactive installer (always interactive — any CLI args are silently ignored)
+# Run the interactive installer
 node install.js
+
+# Regenerate skills/ from src/ (non-interactive)
+npm run build:skills
+
+# Character-count validation + skills/ drift check
+npm test
 
 # Plan2Code Loop
 cd plan2code-loop && npm install   # First time setup
@@ -25,9 +31,9 @@ cd plan2code-metrics && npm run build # Build the CLI
 
 | Option | Action |
 |--------|--------|
-| `I` | Install Plan2Code workflow prompts for all platforms, plus `plan2code-loop` CLI |
-| `A` | Everything in `I` plus `plan2code-bot`, `plan2code-metrics` (dev tools), and Claude Code status line |
-| `U` | Uninstall Plan2Code files: prompts + `plan2code-loop` + `plan2code-metrics` + `plan2code-bot` + Claude Code status line (confirmation required) |
+| `I` | Install the Plan2Code skills globally through the skills CLI — **skills only**, no dev tools |
+| `A` | Everything in `I` plus `plan2code-loop`, `plan2code-bot`, `plan2code-metrics`, and the Claude Code status line |
+| `U` | Uninstall Plan2Code skills and all dev tools (confirmation required) |
 | `C` | Open CUSTOM sub-menu |
 | `Q` | Quit |
 
@@ -35,67 +41,63 @@ cd plan2code-metrics && npm run build # Build the CLI
 
 | Option | Action |
 |--------|--------|
-| `L` | Show local (per-project) install instructions |
+| `L` | Install the skills into the current project instead of globally |
 | `O` | Install plan2code-loop CLI only |
 | `M` | Install plan2code-metrics CLI only |
 | `S` | Install Claude Code status line only |
 | `B` | Install plan2code-bot CLI only |
 | `Q` | Return to main menu |
 
+## Non-Interactive Flags
+
+`install.js` takes no arguments for normal use, but exposes two build hooks. Any other argument exits 1 with usage.
+
+| Flag | Action |
+|------|--------|
+| `--build-skills` | Regenerate `skills/` from `src/`, pruning stale skills and reference files |
+| `--verify-skills` | Compare committed `skills/` with `src/`; exits 1 on drift and is run by `npm test` |
+
 ## How the Installer Works
 
-1. **Reads source prompts** from `src/plan2code-*.md`
-2. **Generates platform-specific files** with appropriate headers (YAML frontmatter for some platforms)
-3. **Writes to `dist/`** subdirectories organized by destination type
-4. **Copies to target directories** (global: `~/.claude/commands/`, etc.)
+1. **Builds `skills/` from `src/`** — one Agent Skill per source prompt, including uncommitted source edits.
+2. **Checks the skills CLI is reachable** with `npx --yes skills --version`.
+3. **Sweeps pre-2.2 install paths** and removes installed `plan2code-*` skills so renamed or retired prompts cannot survive as orphans.
+4. **Delegates installation** to `npx --yes skills add "<repo>/skills" -g -s <skill names> -y`.
 
-## Platform-Specific File Formats
+The skills CLI owns distribution from step 4 onward. It stores canonical skills under `~/.agents/skills/` and links them into agents that maintain their own skill directory. Plan2Code no longer maintains platform-specific output formats.
 
-| Platform | Extension / File | Local Dir | Global Dir | Header |
-|----------|-----------------|-----------|------------|--------|
-| Claude Code | `.md` | — | — | None |
-| Cursor | `.md` | — | — | None |
-| Copilot CLI | `.md` | — | — | YAML frontmatter |
-| Continue | `.prompt.md` | — | — | YAML frontmatter |
-| Windsurf | `.md` | — | — | YAML frontmatter |
-| VS Code Copilot | `.prompt.md` | — | — | YAML frontmatter |
-| Codeium | `.md` | — | — | YAML frontmatter |
-| Claude Code (Skills) | `SKILL.md` in subdir | `.claude/skills/<skill-name>/` | `~/.claude/skills/<skill-name>/` | YAML frontmatter + `disable-model-invocation: true` |
-| Agent Skills (Amp · Devin · OpenCode · Zed) | `SKILL.md` in subdir | `.agents/skills/<skill-name>/` | `~/.agents/skills/<skill-name>/` | YAML frontmatter (no disable flag) |
-| Crush | `SKILL.md` in subdir | — (global only) | `~/.config/crush/skills/<skill-name>/` (Unix) / `%LOCALAPPDATA%\crush\skills\<skill-name>\` (Windows) | YAML frontmatter |
-| Pi (pi.dev) | `.md` | `.pi/prompts/` | `~/.pi/agent/prompts/` | YAML frontmatter (`description`) |
+**Invocation choices:**
+
+| Choice | Reason |
+|--------|--------|
+| Explicit space-separated `-s <names>` | Avoids shell expansion and prevents unrelated directories under `skills/` from being installed. |
+| No `-a` / `--agent '*'` | Uses the CLI's supported default agent set instead of requesting incompatible scope/agent combinations. |
+| Captured output | Suppresses the CLI's duplicated banners while preserving real failures; unsupported-scope noise is filtered. |
+
+## Skill Format
+
+| Item | Value |
+|------|-------|
+| Path | `skills/<skill-name>/SKILL.md` |
+| Skill name | `generateSkillName(prompt)`, such as `plan2code-1-plan` or `plan2code-init` |
+| Frontmatter | `name`, `description`, `disable-model-invocation: true` |
+| Reference files | `skills/<skill-name>/references/<file>.md` |
+
+`disable-model-invocation: true` is unconditional because these workflows are user-initiated. Agents that do not recognize the field ignore it.
 
 ## Editing Workflow Prompts
 
-When modifying workflow prompts in `src/`:
+`src/` is the source of truth; `skills/` is a committed build artifact.
 
-1. Edit the source file in `src/`
-2. Run `node install.js` to regenerate distribution files
-3. Test the workflow in your AI tool of choice
-4. The `dist/` folder is regenerated automatically — don't edit files there directly
+1. Edit the source file under `src/`.
+2. Run `npm run build:skills`.
+3. Test the workflow in an AI tool.
+4. Commit regenerated `skills/` beside the source change; `npm test` fails on drift.
+5. Never edit `skills/` by hand because the next build overwrites it.
 
 ## Adding a New Workflow Prompt / Skill
 
-Adding a new prompt to `src/` is more than dropping in a file — the installer is
-driven by an explicit registry and several docs enumerate the command set. When
-you add a `src/plan2code-<name>.md`, do **all** of the following so nothing drifts:
-
-1. **Create the source file** `src/plan2code-<name>.md` — body content **only**,
-   no YAML frontmatter (the installer generates frontmatter per platform). Keep
-   it **under 11,000 characters** (`npm test` enforces this).
-2. **Register it in the installer.** Add an entry to the `SOURCE_PROMPTS` array in
-   `install.js` (`source`, `stepNumber`, `name`, `displayName`, `description`, and
-   `isUtility: true` for non-numbered utilities). If `stepNumber` is a non-numeric
-   label (e.g. `'handoff'`), add a matching case to `generateStepLabel()` so the
-   generated description reads correctly.
-3. **Update every doc that lists the command set** — keep these in sync, they are
-   the canonical inventories:
-   - `README.md` — command table ("When to Use")
-   - `QUICK-REFERENCE.md` — Commands table
-   - `.agents-docs/AGENTS-architecture.md` — "Workflow Prompts (in `src/`)" table
-   - `CHANGELOG.md` — add an entry under the current version
-   - `docs/index.html` — **only** if the new prompt belongs to the core pipeline
-     shown there; utilities (like `init`, `quick-task`, `handoff`) are deliberately
-     omitted from that curated marketing list.
-4. **Regenerate and validate:** run `node install.js` (regenerates `dist/`) and
-   `npm test` (character-count validator now covers the new file).
+1. Create `src/plan2code-<name>.md` with body content only and keep it under 11,000 characters.
+2. Register it in `SOURCE_PROMPTS` in `install.js`; add a matching `generateStepLabel()` case when needed.
+3. Update command inventories in `README.md`, `QUICK-REFERENCE.md`, `.agents-docs/AGENTS-architecture.md`, and `CHANGELOG.md`. Update `docs/index.html` only for core pipeline steps.
+4. Run `npm run build:skills` and `npm test`.

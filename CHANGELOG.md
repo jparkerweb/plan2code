@@ -2,6 +2,24 @@
 
 All notable changes to Plan2Code will be documented in this file.
 
+## v2.2.0
+
+### ✨ Added
+
+- **Committed Agent Skills build** — each workflow under `src/` now builds to `skills/<skill-name>/SKILL.md`, with companion references nested under `references/`. `npm run build:skills` regenerates the artifact, and `npm test` verifies that committed skills have not drifted from their source prompts.
+
+- **Project-scoped skill installation** — Custom → `L` now installs Plan2Code directly into the current project through the skills CLI instead of printing manual copy instructions.
+
+### 🔧 Changed
+
+- **Installation now delegates to the skills CLI** — Plan2Code ships one canonical Agent Skill format instead of maintaining separate command, prompt, workflow, and skill outputs for individual tools. The installer builds `skills/`, checks `npx --yes skills`, removes stale Plan2Code skills, and runs `skills add` with an explicit workflow list. Installation now requires Node.js 18+ and network access; installed skills can be updated with `npx skills update -g`.
+
+- **Legacy installation cleanup is automatic** — install and uninstall sweep files written by earlier per-tool installers so old commands cannot shadow the canonical skills. This includes the Gemini CLI files retained exclusively for uninstall compatibility.
+
+- **Default installation is skills-only** — main-menu option `I` no longer installs `plan2code-loop`. The loop remains part of `A` and is still available separately through Custom → `O`.
+
+- **One frontmatter contract serves every agent** — generated `SKILL.md` files always include `name`, `description`, and `disable-model-invocation: true`. Reference files remain nested under their owning skill, eliminating the old flat-file path rewrite and its column-position constraint.
+
 ## v2.1.1
 
 ### ✨ Added

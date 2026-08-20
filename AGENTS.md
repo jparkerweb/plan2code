@@ -40,7 +40,7 @@ Details: [Architecture](./.agents-docs/AGENTS-architecture.md) (see Status Line 
 
 ## Development Commands
 
-Build commands, installer menu options, how the installer generates platform-specific files, platform format table, and how to edit workflow prompts.
+Build commands, installer menu options, non-interactive skill-build verification, skills CLI delegation, skill format, and how to edit workflow prompts.
 
 Details: [Development Commands](./.agents-docs/AGENTS-development-commands.md)
 

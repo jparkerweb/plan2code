@@ -12,20 +12,22 @@ agent, and the next engineer all start from the same specs.
 
 Six commands, each posted separately. Two of them are optional.
 
-Version 2.0.0 · MIT · 📖 [plan2code.jparkerweb.com](https://plan2code.jparkerweb.com)
+Version 2.2.0 · MIT · 📖 [plan2code.jparkerweb.com](https://plan2code.jparkerweb.com)
 
 ---
 
 ## Install
 
-Requires [Node.js](https://nodejs.org/) 14 or later. Re-run any time to update.
+Requires [Node.js](https://nodejs.org/) 18 or later and network access — installation runs through
+the [skills CLI](https://skills.sh). Re-run any time to update.
 
 ```bash
 npx --allow-git=all git+https://github.com/jparkerweb/plan2code.git
 ```
 
-This fetches the installer to a temp directory, runs it, writes the slash commands for whichever
-tools you pick, and cleans up after itself. The installed commands work independently from then on.
+This fetches the installer to a temp directory, builds the workflow as Agent Skills, delegates
+installation to `skills add`, and cleans up after itself. The installed skills work independently
+from then on.
 
 Either route lands you on the same menu:
 
@@ -33,16 +35,24 @@ Either route lands you on the same menu:
 ╔═════════════════════════════════════════════════════════╗
 ║ INSTALL PLAN2CODE                                       ║
 ╠═════════════════════════════════════════════════════════╣
-║  I.  INSTALL    Install Plan2Code for all platforms     ║
+║  I.  INSTALL    Install Plan2Code skills everywhere     ║
 ║  A.  ALL        Install Plan2Code + dev tools           ║
-║  U.  UNINSTALL  Remove Plan2Code files                  ║
+║  U.  UNINSTALL  Remove Plan2Code skills and dev tools   ║
 ║  C.  CUSTOM     Advanced options                        ║
 ║  Q.  QUIT       Exit                                    ║
 ╚═════════════════════════════════════════════════════════╝
 ```
 
-**Supported tools:** Claude Code · Cursor · Windsurf · Continue · Codeium (IntelliJ) ·
-GitHub Copilot CLI · VS Code Copilot · Crush · Pi · Amp · OpenCode · Devin · Zed
+**Supported tools:** every agent supported by the skills CLI, including Claude Code · Cursor ·
+GitHub Copilot · Windsurf · Codex · Continue · Codeium · Zed · Amp · OpenCode · Devin · Crush · Pi ·
+Gemini CLI · Cline · Roo · Kilo · Goose · Trae · Qwen Code.
+
+The installer keeps one canonical copy of each skill under `~/.agents/skills/` and links it into
+agents that maintain their own directory. Update later with `npx skills update -g`.
+
+Use the installer rather than calling `skills add` against the repository root: recursive discovery
+would also find maintainer-only skills under `.claude/skills/`. The installer targets `skills/`
+explicitly.
 
 <details>
 <summary>Prefer to clone?</summary>
@@ -254,8 +264,13 @@ like this.
 
 ## Troubleshooting
 
-**Slash commands aren't recognised.** Re-run `node install.js` for that platform and restart your AI
-tool. For a per-project install, check the directory isn't gitignored.
+**The skills aren't recognised.** Re-run the installer and restart your AI tool. Confirm the global
+install with `npx skills list -g`. For a project install, check the generated directories aren't
+gitignored.
+
+**Your tool doesn't read Agent Skills.** Since v2.2.0, Plan2Code ships only as skills. If your tool
+has no skill support, paste the relevant `src/plan2code-*.md` manually or point it at the installed
+copy under `~/.agents/skills/`.
 
 **The agent starts coding during planning.** The prompts forbid it, but models drift. Say: "Stay in
 planning mode. Do not write code yet."
@@ -278,7 +293,8 @@ a fixed size.
 
 The prompts are yours to edit. Common changes: add testing requirements in Step 2, move the 90%
 confidence threshold in Step 1, restructure the `specs/` layout, or add review gates to Step 3.
-Source files live in `src/`; re-run `node install.js` to push your edits out to every platform.
+Source files live in `src/`; run `npm run build:skills`, then re-run `node install.js` to push your
+edits out through the skills CLI.
 
 ---
 
