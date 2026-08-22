@@ -19,6 +19,8 @@
   --red:#D33A38; --blue:#2455A4; --kraft:#E5D8BE;
 }
 *{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth}
+[id]{scroll-margin-top:90px}
 body{background:var(--air);color:var(--ink);font:400 16.5px/1.65 'Karla',system-ui,sans-serif;-webkit-font-smoothing:antialiased}
 .bs{font-family:'Big Shoulders Display',sans-serif;font-weight:800;letter-spacing:.005em}
 .hand{font-family:'Caveat',cursive}
@@ -163,9 +165,26 @@ h1 em{font-style:normal;color:var(--red)}
 
 /* ── install ── */
 .install{padding:0 0 82px}
-.term{margin-top:20px;background:var(--ink);color:#D6E2F2;padding:24px;
+.termwrap{position:relative;margin-top:20px}
+.term{background:var(--ink);color:#D6E2F2;padding:24px 76px 24px 24px;
   font-family:ui-monospace,Menlo,monospace;font-size:12.5px;line-height:2.05;overflow-x:auto}
 .term .c{color:#7488A6}.term .k{color:#F0B06A}.term .p{color:#8FB6E8}
+.copy{
+  position:absolute;top:12px;right:12px;display:grid;place-items:center;gap:0;
+  width:40px;height:40px;background:transparent;border:1.5px solid rgba(214,226,242,.35);
+  color:#8FB6E8;cursor:pointer;transition:background .18s,color .18s,border-color .18s;
+}
+.copy:hover{background:#8FB6E8;color:var(--ink);border-color:#8FB6E8}
+.copy svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.copy .tick{display:none}
+.copy.-done{border-color:#8FB6E8;color:#8FB6E8;background:transparent}
+.copy.-done .clip{display:none}
+.copy.-done .tick{display:block}
+.copy-flash{
+  position:absolute;top:20px;right:62px;font-size:9.5px;letter-spacing:.16em;
+  text-transform:uppercase;font-weight:700;color:#8FB6E8;opacity:0;transition:opacity .18s;pointer-events:none;
+}
+.copy-flash.-on{opacity:1}
 
 /* ── close ── */
 .close{background:var(--ink);color:var(--paper);text-align:center;padding:92px 0}
@@ -185,7 +204,7 @@ footer .wrap{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;
   .rc{grid-template-columns:1fr}
   .letters{grid-template-columns:1fr}
 }
-@media(prefers-reduced-motion:reduce){*{transition:none!important}}
+@media(prefers-reduced-motion:reduce){*{transition:none!important}html{scroll-behavior:auto}}
 </style>
 </head>
 <body>
@@ -226,7 +245,7 @@ footer .wrap{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;
           <p>Anyone who has watched an AI agent confidently build the wrong thing. You approve a plan, it becomes phase documents in your repo, and the agent works to those documents one phase at a time.</p>
         </div>
         <div class="acts">
-          <a class="btn" href="https://github.com/jparkerweb/plan2code">Install Plan2Code</a>
+          <a class="btn" href="#installation">Install Plan2Code</a>
           <a class="btn -o" href="#dispatch">Read the letters</a>
         </div>
       </div>
@@ -371,19 +390,62 @@ footer .wrap{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;
   </div>
 </section>
 
-<section class="install wrap">
+<section class="install wrap" id="installation">
   <div class="sect"><h2>Installation</h2><span>Node 18+ · network required · re-run to update</span></div>
-  <pre class="term"><span class="p">$</span> npx <span class="k">--allow-git=all</span> git+https://github.com/jparkerweb/plan2code.git</pre>
+  <div class="termwrap">
+    <pre class="term" id="install-cmd"><span class="p">$</span> npx <span class="k">--allow-git=all</span> git+https://github.com/jparkerweb/plan2code.git</pre>
+    <span class="copy-flash" id="copy-flash" aria-hidden="true">Copied</span>
+    <button class="copy" id="copy-btn" type="button" aria-label="Copy install command to clipboard" title="Copy install command">
+      <svg class="clip" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+      <svg class="tick" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12.5 9.5 18 20 6.5"/></svg>
+    </button>
+  </div>
 </section>
 
 <section class="close">
   <div class="wrap">
     <h2>Post it once.<br><em>Then go outside.</em></h2>
     <span class="hand">free, MIT, twenty seconds to install</span>
-    <br><a class="btn" href="https://github.com/jparkerweb/plan2code">Get Plan2Code</a>
+    <br><a class="btn" href="https://github.com/jparkerweb/plan2code">Plan2Code Git Repo</a>
   </div>
 </section>
 
 <footer><div class="wrap"><span>Plan2Code v2.0.0</span><span>MIT</span><span>plan2code.jparkerweb.com</span></div></footer>
+
+<script>
+(function(){
+  var CMD = 'npx --allow-git=all git+https://github.com/jparkerweb/plan2code.git';
+  var btn = document.getElementById('copy-btn');
+  var flash = document.getElementById('copy-flash');
+  var timer;
+  function done(){
+    btn.classList.add('-done');
+    flash.classList.add('-on');
+    clearTimeout(timer);
+    timer = setTimeout(function(){
+      btn.classList.remove('-done');
+      flash.classList.remove('-on');
+    }, 1800);
+  }
+  function fallback(){
+    var ta = document.createElement('textarea');
+    ta.value = CMD;
+    ta.setAttribute('readonly','');
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand('copy'); done(); } catch(e) {}
+    document.body.removeChild(ta);
+  }
+  btn.addEventListener('click', function(){
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(CMD).then(done, fallback);
+    } else {
+      fallback();
+    }
+  });
+})();
+</script>
 </body>
 </html>
