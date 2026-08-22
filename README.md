@@ -1,7 +1,7 @@
 
 # Plan2Code
 
-<img src="docs/banner.png" alt="Plan2Code — send the plan, the build follows" style="max-width:1024px;">
+<img src="docs/banner.png" alt="banner" style="max-width:1024px;">
 
 **A spec-driven workflow for AI coding agents. Send the plan — the build follows.**
 
