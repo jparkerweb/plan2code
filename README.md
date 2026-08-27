@@ -1,7 +1,7 @@
 
 # Plan2Code
 
-<img src="docs/banner.png" alt="banner" style="max-width:1024px;">
+<img src="https://raw.githubusercontent.com/jparkerweb/plan2code/main/docs/banner.png" alt="banner" style="max-width:1024px;">
 
 **A spec-driven workflow for AI coding agents. Send the plan — the build follows.**
 
