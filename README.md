@@ -12,7 +12,7 @@ agent, and the next engineer all start from the same specs.
 
 Six commands, each posted separately. Two of them are optional.
 
-Version 2.2.0 · MIT · 📖 [plan2code.jparkerweb.com](https://plan2code.jparkerweb.com)
+Version 2.3.0 · MIT · 📖 [plan2code.jparkerweb.com](https://plan2code.jparkerweb.com)
 
 ---
 
@@ -90,7 +90,7 @@ implementation is where most agent drift starts.
 
 | Command | Use it when |
 |---------|-------------|
-| `/plan2code-0-pathfinder` | The idea is too big and unclear to plan. Charts it as decisions, clears one per session, hands a hot plan draft to Step 1 |
+| `/plan2code-0-pathfinder` | The idea is too big and unclear to plan. Charts it as decisions, clears them one at a time, hands a hot plan draft to Step 1 |
 | `/plan2code-1-plan` | Starting a feature. Full requirements → architecture pass |
 | `/plan2code-2-document` | Planning is done. Turn the plan into phase specs |
 | `/plan2code-3-implement` | Build the next phase (one per conversation) |
@@ -129,7 +129,8 @@ your-project/
 │   └── task-api/                     ← in progress
 │       ├── pathfinder/               ← only if you charted it in Step 0
 │       │   ├── map.md                    the destination, the decisions, the fog
-│       │   └── questions/NN-<slug>.md    one decision per file
+│       │   ├── questions/NN-<slug>.md    one decision per file
+│       │   └── briefs/brief-<date>.md    plain-English decision summaries
 │       ├── PLAN-DRAFT-20260804.md    ← Step 1: the verified plan
 │       ├── PLAN-CONVERSATION-*.md    ← Step 1: how you got there
 │       ├── overview.md               ← Step 2: phase list + parallel groups
@@ -181,8 +182,11 @@ destination; Step 1 then walks it.
    sub-issue per decision, native blocking, so your team can see and work the frontier in the tracker).
 2. **Chart the map** — a breadth-first grilling surfaces the open decisions. Anything you can phrase
    *sharply* becomes a question file; anything you can only sense stays listed as fog.
-3. **Clear one question per session** — resolving a question burns off the fog behind it, graduating
-   whatever just became sharp into new questions.
+3. **Clear the questions one at a time** — resolving one burns off the fog behind it, graduating
+   whatever just became sharp into new questions. After each decision it offers a menu: take the next
+   question here, or start fresh — recommended after about three, to keep the agent sharp.
+   Ask for a **brief** at any point and you get a dated, plain-English summary of what has been
+   decided, what is still open, and what is next — meeting minutes, with no jargon in them.
 4. **Hand off** — when nothing is left to decide, it writes a `PLAN-DRAFT` that
    `/plan2code-1-plan` resumes from at Phase 4, with requirements, context, and scope already
    answered.

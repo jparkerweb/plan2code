@@ -23,7 +23,8 @@ specs/
 └── <feature-name>/
     ├── pathfinder/                   # From Step 0 (optional, if charted locally)
     │   ├── map.md                    #   the map: destination, decisions, fog
-    │   └── questions/NN-<slug>.md    #   one decision question per file
+    │   ├── questions/NN-<slug>.md    #   one decision question per file
+    │   └── briefs/brief-<date>.md    #   plain-English decision summaries
     │                                 #   (GitHub Issues backend: map issue + sub-issues instead)
     ├── PLAN-DRAFT-<date>.md          # From Step 1 (verified plan)
     ├── PLAN-CONVERSATION-<date>.md   # From Step 1 (conversation log)
@@ -83,7 +84,7 @@ Learned something during a session?
 └── /plan2code-init-update → Add learnings to AGENTS.md
 
 Too unclaer to plan? (big idea, don't yet know what the questions are)
-└── /plan2code-0-pathfinder → chart it, clear one decision per session
+└── /plan2code-0-pathfinder → chart it, clear the decisions one at a time
     └── then → /plan2code-1-plan (resumes at Phase 4)
 
 Is it a quick, small task?

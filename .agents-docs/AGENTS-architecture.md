@@ -67,7 +67,7 @@ plan2code/
 |------|------|---------|
 | `plan2code-init.md` | Init | Generate AGENTS.md as index + `.agents-docs/` section files (progressive discovery) |
 | `plan2code-init-update.md` | Update | Update AGENTS.md with learnings; detects and routes edits to `.agents-docs/` files |
-| `plan2code-0-pathfinder.md` | 0 | Chart a foggy idea as a local map of decision questions under `specs/<idea>/pathfinder/`, resolve one per session, hand a seeded PLAN-DRAFT to Step 1 |
+| `plan2code-0-pathfinder.md` | 0 | Chart a foggy idea as a local map of decision questions under `specs/<idea>/pathfinder/`, resolve them one at a time, hand a seeded PLAN-DRAFT to Step 1 |
 | `plan2code-quick-task.md` | quick | Lightweight planning for small tasks (standalone — not a pipeline step) |
 | `plan2code-1-plan.md` | 1 | Requirements analysis & architecture |
 | `plan2code-1b-revise-plan.md` | 1b | Mid-implementation revisions |
@@ -96,7 +96,7 @@ Some workflows use companion reference files for depth that exceeds the 11k char
 
 **How the installer handles them:** the directory is copied verbatim to `skills/<skill-name>/references/`, so `Read references/<file>.md` resolves consistently for every agent. There is one output format, with no flat-file sibling directory or path rewrite.
 
-Reference files are NOT subject to the 11,000 character limit. The review workflow pioneered this pattern (`verification-protocol`, `dimensions`, `false-positives`, `session-end`); the init-update workflow also uses it (`ai-agent-file-sync` for its Step 7), `plan2code-4-finalize.md` uses it for STEP 6.5 (`community-feedback-submission`), and `plan2code-0-pathfinder.md` leans on it hardest (`chart`, `grilling`, `questions`, `resolve`, `handoff`, `trail`, `github-issues` — the orchestrator is a dispatcher, the depth lives in the references). Other workflows can adopt it when a source file's detail exceeds the 11k limit.
+Reference files are NOT subject to the 11,000 character limit. The review workflow pioneered this pattern (`verification-protocol`, `dimensions`, `false-positives`, `session-end`); the init-update workflow also uses it (`ai-agent-file-sync` for its Step 7), `plan2code-4-finalize.md` uses it for STEP 6.5 (`community-feedback-submission`), and `plan2code-0-pathfinder.md` leans on it hardest (`chart`, `grilling`, `questions`, `resolve`, `handoff`, `trail`, `github-issues`, `brief` — the orchestrator is a dispatcher, the depth lives in the references). Other workflows can adopt it when a source file's detail exceeds the 11k limit.
 
 ## Repo-Local Skills (`.claude/skills/`)
 
