@@ -2,6 +2,22 @@
 
 All notable changes to Plan2Code will be documented in this file.
 
+## v2.3.0
+
+### ✨ Added
+
+- **`plan2code-0-pathfinder`: `Resolved:` date on question files** — a sixth schema line recording the day each decision landed. Reconcile backfills older maps from `Claimed:` (today if unclaimed), and resolved map rows now carry the date in italics beside the gist. On the GitHub Issues backend the issue's own close date fills this role, so there is nothing to write and nothing to backfill.
+
+- **`plan2code-0-pathfinder`: BRIEF mode** — asking for a `brief`, `recap`, or `minutes` writes a dated, plain-English report to `pathfinder/briefs/brief-<YYYYMMDD>.md`: what was decided in the range, what was ruled out, what is ready to decide next, what is still blocked, and what is next. Zero pathfinder machinery in the file — no numbers, markers, or jargon — so it doubles as meeting minutes for a joint Product and Engineering session. New `references/brief.md`; BRIEF mode never claims or resolves a question. The brief file stays on local disk on both backends.
+
+### 🔧 Changed
+
+- **`plan2code-0-pathfinder`: MODE B cadence is now decide → menu → checkpoint** — questions still resolve strictly one at a time, but a session no longer ends after one. Recording a decision leads to a continue-or-stop fork-menu (new Trail Footer **Form C**, with the resume command always visible as the stop branch), and a fresh session is *recommended* after about three decisions — or after a heavy, contested, or locked one — to protect context quality rather than forced by the rules.
+
+- **`plan2code-0-pathfinder`: every user-facing question uses the structured question UI when available** — intent gate, destination and frontier grills, recap confirmations, sketch reactions, `legwork · HITL` completion, and the new fork-menu. The old detail test that routed gnarly questions to prose Q blocks is gone: trade-offs go in option descriptions, composed answers come back through `Other`, and an artifact is shown in prose immediately before the tool rather than replacing it. Prose Q blocks are now fallback only, for when the tool does not exist.
+
+- **`plan2code-0-pathfinder`: the breadth-first frontier grill gains seven product axes** — user value, success measurement, target user, rollout, analytics, support and docs, and legal/compliance, each with a sample probe. Inapplicable axes are named and skipped up front, and with Product in the room engineering and product batches alternate so neither team spectates. New group-session grilling rules: address the room, record who broke a tie, and never record a contested pick as decided — both positions go under `## Evidence` and the question stays open.
+
 ## v2.2.0
 
 ### ✨ Added

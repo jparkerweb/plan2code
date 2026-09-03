@@ -14,11 +14,39 @@ Every question resolves into the SAME shape — a filled `## Answer` plus whatev
 | `legwork · HITL` | Human does, agent waits | No | The human confirmed it is done |
 | `grill · HITL` | Human decides, agent interrogates | No — but probes batch, up to 3 per turn | The human said it in their own words |
 
-**One question _file_ per session** holds for every row except `research`. HITL rows are never self-answered — an agent that writes its own `## Answer` on a `grill` has broken the skill.
+**One question _file_ at a time** holds for every row except `research` — several may resolve in one session, but strictly in sequence, per the Cadence below. HITL rows are never self-answered — an agent that writes its own `## Answer` on a `grill` has broken the skill.
 
 Every file you create along the way — question files, sketch READMEs — opens with the banner:
 
 `> Pathfinder planning note - decisions, not implementation work. Archive with the spec; do not delete.`
+
+---
+
+## Cadence: decide → menu → checkpoint
+
+The Work loop no longer ends after one decision. It ends when the human stops it, or when the checkpoint recommends stopping — whichever comes first. This holds for a solo developer and for a Product + Engineering room alike; a meeting is just a session with more people answering, and needs no special invocation.
+
+```
+claim ONE → resolve → recap → confirm → record → mark map [x]
+   → MENU (trail.md Form C): takeable frontier + resume command, human picks or stops
+   → claim the next … repeat …
+```
+
+**The menu turn.** After every recorded decision, use the structured question tool per trail.md §Form C: offer up to three takeable questions (from the map's checklist rows — name + gist, no file re-reads) plus `Start fresh`; `Other` covers another frontier name. Flag anything just unblocked, mark exactly one description `RECOMMENDED`, and print the resume command under `OR START FRESH` before the tool. Lowest `NN` stays the *recommendation* default, never the selection — the human picks.
+
+**The checkpoint is the menu with the recommendation flipped.** The old one-per-session rule had two jobs: crash-safety and context hygiene — a fresh window per decision keeps the model sharp. Sequential claims preserve the first. The checkpoint preserves the second: after **~3 questions resolved this session** (soft cap), or earlier after a heavy, contested, or `Locked: yes` decision that would benefit from settling overnight, mark the tool's `Start fresh` option RECOMMENDED and say why in the question text — "to keep me sharp." The human can override in either direction; a recommendation is something to push against, not a gate.
+
+The restart costs one paste and loses nothing: every claim, answer, and map update hits disk before anything else happens, and the next session assumes no memory anyway. The fresh session reconciles, renders the trail, and presents the menu again.
+
+**In-loop hygiene** — what keeps each cycle lean between checkpoints:
+
+- Read only what the cycle needs: the claimed question file plus resolved neighbors' *gists* (Work Step 5). Never re-read the whole `questions/` directory between cycles — reconcile ran once at session start, and this session is the only writer.
+- The menu renders from the map's checklist rows, never from re-reading question files.
+- Strictly one claim open at any moment. Claim → record → release, then the menu. Never two.
+
+**Group sessions.** When Product and Engineering (or any room) work the map together, the grilling playbook's group-session rules apply: probes address the room, the recap captures the decision in the room's words, and a contested pick is never recorded as decided — both positions go under `## Evidence`, the question stays `open`, and the menu moves on (or offer to convert it to `sketch`; reacting to something concrete resolves more standoffs than argument). At Session End, offer `write a brief for today` — the brief doubles as the meeting minutes.
+
+**Stopping is always legitimate.** Ending after one decision is fine. The skill no longer forces deliberation time between decisions; it *advises* it, via the checkpoint, where a decision was heavy enough to deserve settling overnight.
 
 ---
 
@@ -77,6 +105,7 @@ Type: research · AFK
 State: resolved
 Blocked by: none
 Claimed: 2026-08-03 14:02
+Resolved: 2026-08-03
 Locked: no
 
 ## Question
@@ -167,9 +196,9 @@ Rules for a paper sketch: use REAL-looking content, never placeholders. Real cus
 
 Present it, then ask the pointed questions the sketch actually opens — up to three, batched, in the same turn as the artifact. A sketch is the one place where several probes come free: the human has the whole picture in front of them, so a second and third question cost them almost nothing, and a state table with three questionable rows should not take three sessions.
 
-Pointed is the discipline that survives batching. Never "thoughts?" — every probe names its row or element: "row 5 says a flagged message still archives when retention expires. Right, or does the hold pin it in place?" Sketches always trip the detail test's second row — the artifact has to sit inline, and a picker cannot carry it — so this is a numbered Q block below the sketch, never a structured tool call. This is the one place the tool-first rule is settled in advance; do not re-litigate it per sketch.
+Pointed is the discipline that survives batching. Never "thoughts?" — every probe names its row or element: "row 5 says a flagged message still archives when retention expires. Right, or does the hold pin it in place?" Show the artifact inline, then immediately invoke the structured question tool for up to three pointed reaction probes. The artifact stays in prose; every answer control stays in the UI, with `Other` available for hybrids and corrections.
 
-Follow the Q-block formatting rules in `grilling.md` for the probes below the artifact — blank line between every element, options as a bullet list, `---` between probes. A sketch batch is the easiest one to render as a wall of text, because the artifact above it already ate the human's attention.
+Follow the structured-tool rules in `grilling.md`: short distinct headers, the pointed question plus why-it-matters in the question field, genuine alternatives with trade-offs in descriptions, and one recommendation per probe.
 
 Putting up a sketch is a **Form B turn** in `trail.md`: close it with `WAITING ON YOU` naming the probes, never a resume command. The human is meant to react to the artifact in this conversation, and a footer telling them to start a new one throws the sketch away.
 
@@ -339,7 +368,7 @@ Numbered, specific, and verifiable — every line names the exact place to click
 Tell me when 1-5 are done, plus the two values from steps 4 and 5.
 ```
 
-Then stop and wait. Do not guess the answers, do not proceed to the next question, do not mark it resolved on the assumption it went fine.
+Immediately after the checklist, invoke the structured question tool: `Done` · `Blocked` · `Need help` · `Defer`; the question text names every value the human must include, and `Other` carries those values/details. Then stop and wait. Do not guess, proceed, or mark it resolved on the assumption it went fine.
 
 Handing over a checklist is a **Form B turn** in `trail.md` — close with `WAITING ON YOU` naming the checklist and the values you asked for, and no resume command. The human may be gone for hours, but the session is still theirs to come back to; only park it as a session end (Form A) once you are actually stopping.
 
@@ -382,12 +411,12 @@ Rule the question `out-of-scope`, mark the map row `[-]`, add one line to `## Ou
 
 ## `grill · HITL`
 
-The default type: a decision only the human can make. Route to **the grilling playbook** — it owns the interrogation technique, the batching rules (up to three independent probes per turn), the detail test that decides whether the batch goes through the structured question tool (the default) or numbered Q blocks (the fallback), and the recommend-then-ask pattern.
+The default type: a decision only the human can make. Route to **the grilling playbook** — it owns the interrogation technique, structured-question-tool-first delivery, batching rules (up to three independent probes per turn), prose fallback when the tool is unavailable, and the recommend-then-ask pattern.
 
 Three things this playbook adds on top:
 
 - **Zoom before you grill.** Work Step 5 already had you read the claimed question plus anything it references. Bring the resolved neighbors' gists into the first message so the human is not re-litigating settled ground.
-- **Batch probes, not question files.** One question file per session is unchanged. A batch of three probes resolves ONE `questions/NN-*.md`; it is not licence to close three of them.
+- **Batch probes, not question files.** One question file at a time is unchanged. A batch of three probes resolves ONE `questions/NN-*.md`; the next file starts only after this one's menu turn (§Cadence).
 - **The human's own words.** A `grill` resolves only through live exchange. Never write the `## Answer` from what you inferred they would probably say — and a probe they skipped twice is unanswered, not decided.
 
 A good grill `## Answer` contains four things:
@@ -401,7 +430,7 @@ A good grill `## Answer` contains four things:
 
 ## Writing the `## Answer`
 
-Same anatomy for every type. Append it at Work Step 7; never edit `## Question` to match the answer.
+Same anatomy for every type. Append it at Work Step 7; never edit `## Question` to match the answer. In the same write, set `State: resolved` **and** `Resolved:` to today's date (`YYYY-MM-DD`, from the shell, never guessed) — the date is what lets a brief report "decided on <day>", so a resolution without it is incomplete.
 
 | Part | Required | Content |
 |---|---|---|
@@ -456,10 +485,10 @@ The gist is what gets copied into the map row. It is not a summary of the answer
 - Carries the number or name that matters, if there is one.
 - Never the full answer. If it needs a semicolon and a subordinate clause, cut it.
 
-The map row it produces:
+The map row it produces — gist, then the `Resolved:` date in italics:
 
 ```markdown
-- [x] [Export format](./questions/03-export-format.md) — one `.eml` per message in 2 GB ZIP parts, manifest.csv carries SHA-256
+- [x] [Export format](./questions/03-export-format.md) — one `.eml` per message in 2 GB ZIP parts, manifest.csv carries SHA-256 *(2026-08-03)*
 ```
 
 ---

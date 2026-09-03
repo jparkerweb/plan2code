@@ -4,7 +4,7 @@
 >
 > **Local-file maps never load this file.** If `## Ground rules` says `**Backend:** local`, close it and use `questions.md`.
 
-Everything the skill says about *judgement* is unchanged by the backend: the fog-vs-question test, the destination grill, one question per session, HITL is never self-answered, the Clearing Gate rubric. This file changes only *where the bytes go*.
+Everything the skill says about *judgement* is unchanged by the backend: the fog-vs-question test, the destination grill, one question at a time, the decide-menu-checkpoint cadence, HITL is never self-answered, the Clearing Gate rubric. This file changes only *where the bytes go*.
 
 ---
 
@@ -83,6 +83,7 @@ This is the whole mapping. Everything below expands a row.
 | `Blocked by: 02, 04` | Native issue dependencies (`dependencies/blocked_by`) |
 | `Locked: yes` | The `pathfinder:locked` label |
 | `Claimed: <timestamp>` | GitHub's own assignment event in the timeline |
+| `Resolved: <YYYY-MM-DD>` | The issue's own close timestamp (`closedAt`) — nothing to write, nothing to backfill |
 | `## Question Checklist` in `map.md` | **Nothing** — the frontier is a live query, not a written list |
 | `## Not yet specified`, `## Out of scope`, `## Ground rules`, `## Destination`, `## Glossary` | The same sections, in the map issue body |
 | `sketch-NN/` | Still local disk — see *What stays on local disk* |
@@ -145,7 +146,8 @@ plan, not at shipped code. Continuous streaming to external systems is not on th
 
 - **Backend:** github — this issue is the map; questions are its sub-issues.
 - `AGENTS.md` exists and governs. Its conventions are not re-litigated by any question here.
-- One question _issue_ per session. `research` questions may run as parallel subagents.
+- One question _issue_ at a time; the fork-menu between decisions; a fresh session recommended after ~3. `research` questions may run as parallel subagents.
+- Every user-facing question uses the structured question tool when available; probes batch at most three. Prose Q blocks are fallback only when the tool is unavailable.
 - HITL questions are answered by the human in their own words. Never self-answered.
 - Sketches are throwaway and live on local disk only, under `specs/audit-log-export/pathfinder/sketch-<issue>/`.
 
@@ -316,11 +318,13 @@ gh issue close <n> --reason completed
 
 # 3. Append the gist to the map's Decisions so far (read body, edit, write back).
 gh issue view <map-number> --json body --jq .body > /tmp/map.md
-#    ...append: - [Export format](<issue-url>) — <gist>
+#    ...append: - [Export format](<issue-url>) — <gist> *(YYYY-MM-DD)*
 gh issue edit <map-number> --body-file /tmp/map.md
 ```
 
 Then bump `**Updated:**` and re-score `**Confidence:**` in the same map edit.
+
+**The close date IS the `Resolved:` date.** There is no line to set and none to backfill — `closedAt` is written by GitHub the moment step 2 runs, and a brief filters on it. Stamp the same date in italics on the `## Decisions so far` line so the map reads as a dated record on its own.
 
 **Never edit the question body to hold the answer.** The body is the question as asked; the comment is the answer. Editing the body rewrites history and destroys the record of what was actually put to the human — which is half of why the answer is defensible three weeks later.
 
@@ -354,6 +358,8 @@ Much shorter here — the tracker holds the state, so there is no checklist to r
 | Index drift | A closed, completed question with no line under `## Decisions so far` | Read its `## Answer` comment, append the gist. |
 
 Then re-read `## Not yet specified` in full — that part is identical to local mode, and the bullet left behind after its question exists is just as corrosive here.
+
+Local mode's `Resolved:` backfill has no counterpart here: `closedAt` cannot be absent on a closed issue. If a `## Decisions so far` line is missing its date, take the date from `closedAt` during the index-drift repair above.
 
 ---
 
@@ -391,6 +397,22 @@ NEXT STEP · start a new conversation and run:
 ```
 
 Form B is unchanged — a turn that asks the human something still says `WAITING ON YOU`, still names the outstanding probes, and still emits no resume command.
+
+Form C — the fork-menu after a recorded decision — is unchanged in shape, with two substitutions: the takeable options come from the frontier query rather than the checklist rows, and the `OR START FRESH` command carries the map issue URL. The `RECOMMENDED` marker and the ~3-decision checkpoint work exactly as `trail.md` describes.
+
+---
+
+## BRIEF mode
+
+The report is identical either way, and the file still lands on **local disk** at `specs/<idea>/pathfinder/briefs/brief-<YYYYMMDD>.md` — a brief is a plain-English artifact for people, not tracker state, and writing it as an issue comment would bury it. Three substitutions against `brief.md`:
+
+| `brief.md` says | Here |
+|---|---|
+| Filter resolved questions by `Resolved:` in range | Filter the map's sub-issues closed as completed by `closedAt` in range |
+| Reconcile backfills absent `Resolved:` dates | Nothing to backfill; run the three reconcile checks above instead |
+| Open / blocked / out-of-scope sections read the checklist | They read the frontier query — unassigned-unblocked, `blocked_by > 0`, and `pathfinder:out-of-scope` respectively |
+
+`## Not yet specified`, `## Destination`, and `**Confidence:**` come from the map issue body, same as always. The no-machinery rule tightens rather than relaxes: no `#numbers`, no label names, no `gh` commands in the file. The reader may never have opened the tracker either.
 
 ---
 

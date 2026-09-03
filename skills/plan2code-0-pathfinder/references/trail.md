@@ -14,8 +14,9 @@ It is **presentation only**. Rebuild it fresh from `map.md` each response; never
 
 | Situation | Footer? |
 |---|---|
-| `map.md` exists and the turn **ends the session** — Session End, a cleared map, a fully blocked frontier | **Yes**, both parts: the trail, then the resume command |
-| `map.md` exists and the turn **asks the human something** — a probe batch, a sketch put up for reaction, a `legwork · HITL` checklist | **Yes**, but with the waiting form of Part 2. Never a resume command — see below |
+| `map.md` exists and the turn **ends the session** — Session End, a cleared map, a fully blocked frontier | **Yes**, both parts: the trail, then the resume command (Form A) |
+| `map.md` exists and the turn **asks the human something** — a probe batch, a sketch put up for reaction, a `legwork · HITL` checklist | **Yes**, but with the waiting form of Part 2 (Form B). Never a resume command — see below |
+| `map.md` exists and the turn **offers the menu after a recorded decision** — the continue-or-stop fork of the Work cadence | **Yes**, the fork form of Part 2 (Form C): the takeable questions AND the resume command as the stop branch |
 | Intent Gate (Step 0), the no-fog off-ramp, or any route-and-stop before Step 5 | **No** — no map on disk yet, and no path to resume. There is nothing to draw. |
 
 One idea per session, so there is only ever one trail. Draw the trail for the active idea and no other.
@@ -70,7 +71,7 @@ How each line is built, top to bottom:
 
 ### Part 2 — the next line
 
-Part 2 answers exactly one question for the human: **is this turn over, or is it my move?** It has two forms, and the **turn type** picks between them — not the map's status.
+Part 2 answers exactly one question for the human: **is this turn over, or is it my move?** It has three forms, and the **turn type** picks between them — not the map's status.
 
 #### Form A — the turn ends the session
 
@@ -103,6 +104,28 @@ Name every outstanding item at its stable number so a partial reply is cheap to 
 **Emit no resume command on a Form B turn.** There is nothing to resume — the session is alive and holding a claim. A resume command here reads as *we're done*, and the human either walks away mid-decision or burns the next turn asking what you meant. This is the single most common way the footer misfires, and it costs the batch the round trips batching was introduced to save.
 
 One exception: `grilling.md`'s unreachable-human procedure. Parking a mid-grill question and stopping IS a session end — use Form A, and say in the body that the question is parked mid-grill with its batch outstanding.
+
+#### Form C — the menu after a recorded decision
+
+Used ONLY on the Work cadence's fork-menu turn (resolve.md §Cadence), immediately after an `## Answer` landed and the map row flipped `[x]`. It is the one legitimate hybrid: an *explicit* continue-or-stop fork where the resume command IS the stop branch, not a farewell.
+
+First print the stop branch, clearly labeled:
+
+```
+OR START FRESH · new conversation, paste:
+`/plan2code-0-pathfinder specs/audit-log-export/pathfinder`
+```
+
+Then invoke the structured question tool (header `Next step`) asking: "Continue here, or start fresh? Everything is saved." Options: up to three takeable question names, then `Start fresh`. Put each question's gist / newly-unblocked note in its description. The automatic `Other` path lets the human name another frontier question not shown. Mark one option's description `RECOMMENDED` — early in the session that is a question; at the checkpoint it is `Start fresh`.
+
+Rules for Form C:
+
+- **The command label is mandatory and exact:** `OR START FRESH · new conversation, paste:`. It makes the command the stop branch, not a farewell. Never render a bare command on a menu turn.
+- **The choice itself always uses the structured tool.** Never print `NEXT UP` as a prose menu when the tool exists.
+- Options come from the map's checklist rows (names + gists), takeable questions only. Flag anything the decision just recorded unblocked. The fourth slot is `Start fresh`; `Other` covers a frontier question omitted from the top three.
+- **The recommendation carries the checkpoint** (resolve.md §Cadence): early in a session recommend a question; after ~3 resolved this session — or after a heavy, contested, or `Locked: yes` decision — recommend `Start fresh`, with the reason said in the question text ("to keep me sharp").
+- **Form C never replaces Form B.** A turn that asks probes, shows a sketch, or hands over a checklist is Form B, no command. Form C fires only between decisions, when nothing is claimed.
+- If the human walks away mid-menu, nothing is stranded: no claim is open, and the command to come back is already on screen.
 
 ---
 
@@ -165,7 +188,7 @@ At `Cleared` the named legend is optional — the destination is reached and the
 
 ## Discipline
 
-- **Never print a resume command on a turn that asks a question.** The footer must not tell the human to leave a conversation you are still waiting in. Before you write Part 2, ask whether the response above it ends with something for them to answer; if it does, Form B, no exceptions but the parked-grill one.
+- **Never print a bare resume command on a turn that asks a question.** The footer must not tell the human to leave a conversation you are still waiting in. Before you write Part 2, ask whether the response above it ends with something for them to answer: mid-question (probes, sketch, checklist) → Form B, no command, no exceptions but the parked-grill one; between decisions at the fork-menu → Form C, where the command appears ONLY under its `OR START FRESH` label as the explicit stop branch.
 - **Alignment is not the point.** Glyphs sit in `NN` order and the legend names them in the same order; do not burn effort column-aligning numbers under waypoints across variable-width glyphs. Legibility over pixels.
 - **Rebuild, never cache.** The markers come from the current `map.md`, which Work Step 2 has already reconciled against the question files this session. A footer that disagrees with the checklist above it means you drew from memory.
 - **One trail.** Never render two ideas' trails, and never invent a stop the map does not list.

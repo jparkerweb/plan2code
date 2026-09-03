@@ -14,7 +14,7 @@ Pathfinder builds an apparatus — a directory, a map, a file per decision. That
 You already have the idea name from Auto-Discovery. Do NOT create the directory yet. Say, in substance:
 
 > "This is Pathfinder. Nothing exists for `<idea>` yet. Pathfinder charts a map of the open decisions when an idea is big or unclear to plan — but that is overhead if this is small or already clear. Three ways to go:
-> - **Chart it** — I map the open decisions, one per session, then hand a draft to `/plan2code-1-plan`.
+> - **Chart it** — I map the open decisions, we clear them one at a time, then hand a draft to `/plan2code-1-plan`.
 > - **Straight to `/plan2code-1-plan`** — the way looks clear enough to plan now.
 > - **`/plan2code-quick-task`** — small enough to just do.
 >
@@ -23,7 +23,7 @@ You already have the idea name from Auto-Discovery. Do NOT create the directory 
 Rules for the gate:
 
 - **It is HITL.** You recommend; the human chooses. Never self-select "chart" and start creating files because it is the default path — that is exactly the failure this gate exists to stop.
-- **Read the request honestly.** A one-line bugfix, or a change with no open decisions, is not a charting job — recommend an off-ramp and mean it. Reserve "chart" for real fog: several unsettled decisions, unclear scope, or competing designs.
+- **Read the request honestly.** A one-line bugfix, or a change with no open decisions, is not a charting job — recommend an off-ramp and mean it. Reserve "chart" for real fog: several unsettled decisions, unclear scope, or competing designs. A joint Product + Engineering kickoff on a fresh idea is the canonical "chart it" case — a new feature explored by two teams is fog almost by definition.
 - **No disk writes.** Naming the idea and talking is free. Creating `specs/<idea>/pathfinder/` is not — it waits for an explicit "chart."
 - **On an off-ramp, route and STOP.** Point at `/plan2code-1-plan` or `/plan2code-quick-task`, create nothing, end the session. If `AGENTS.md` is absent, mention `/plan2code-init` first, as with any handoff.
 
@@ -52,7 +52,7 @@ Two round trips, not six. Three probes each — exactly the cap, so neither batc
 
 Batch 2 bends the independence test on purpose. The arrival signal (5) can shift under the smallest arrival (4), so strictly it should be held back — but holding it costs a third round trip to catch a conflict that is rare and cheap to spot. The trade is to send them together and reconcile at the recap: if the smallest arrival comes back materially smaller than the artifact you were told about, re-check the arrival signal against it before writing the destination. A knowing trade here, not a licence to batch dependent probes elsewhere.
 
-**Both batches go out as numbered Q blocks — this grill is the other standing exception to the tool-first rule.** Probes 2, 3, 4, and 5 need the human's own phrasing — the destination is written into `map.md` verbatim as agreed, so a clicked option label is not something you can write down. That is the detail test's first row, four times over. Probe 6 names categories but the category is the worthless half of the answer: "deadline" changes nothing, "Q3 close, and the SEC audit lands Nov 1" changes the delivery question, the testing posture, and the out-of-scope line at once. Only probe 1 would survive a picker on its own, and it rides in a Q block anyway, because one tripping probe downgrades the whole batch. Do not reach for the structured question tool here.
+**Both batches go through the structured question tool.** Give each probe genuine candidate options with trade-offs and a recommendation; the built-in `Other` path is where the human composes the actor, boundary, arrival signal, or forcing-function detail in their own words. A clicked option is not written verbatim as the destination — the recap-confirmation tool call turns all six answers into the agreed one-or-two-line destination before disk write.
 
 **Probe 1 — the artifact**
 
@@ -155,6 +155,7 @@ Type: legwork · AFK
 State: resolved
 Blocked by: none
 Claimed: 2026-08-03 09:12
+Resolved: 2026-08-03
 Locked: no
 
 ## Question
@@ -272,16 +273,18 @@ Say it out loud so the human tracks the move, then jump:
 
 Two mechanics keep the fan-out honest:
 
-1. **Round-robin the areas.** Before you start, list the axes you intend to cross: data, surface, permissions, volume, delivery, failure, operations, testing. Take one probe per axis before any second probe on any axis.
+1. **Round-robin the areas.** Before you start, list the axes you intend to cross — engineering axes (data, surface, permissions, volume, delivery, failure, operations, testing) AND product axes (user value, success measurement, target user, rollout, analytics, support & docs, legal/compliance). Not every axis applies to every destination: name the ones that do before the first probe, say which you are skipping and why, then take one probe per axis before any second probe on any axis.
 2. **Ask for the axis you have not touched.** Near the end: "What have I not asked about that would embarrass us to discover in week three?"
 
-**Breadth-first is the ideal batch.** One probe per axis means the probes are independent by construction — that is what breadth-first *means* — so this grill should run as batches of three, not as a stream of singles. Seven axes is three turns. If you catch yourself wanting to batch two probes on the same axis, that is depth wearing a batch's clothes; pull back.
+**Breadth-first is the ideal batch.** One probe per axis means the probes are independent by construction — that is what breadth-first *means* — so this grill should run as batches of three, not as a stream of singles. If you catch yourself wanting to batch two probes on the same axis, that is depth wearing a batch's clothes; pull back.
+
+**With Product in the room, the product axes are not optional.** A joint Product + Engineering session that only fans out across engineering axes produces a map Product cannot answer for — and vice versa. Alternate: an engineering batch, then a product batch, so neither team spectates for three turns straight.
 
 ### Sample breadth probes
 
-Each opens a different axis. Send 1-3 as one batch and 4-6 as the next, then probe 7 alongside the "what have I not asked about" closer above; note each answer and move.
+Each opens a different axis. Batch three at a time in list order (skipping axes you ruled inapplicable), with probe 7 riding alongside the "what have I not asked about" closer above; note each answer and move.
 
-**They go out as numbered Q blocks — this grill is one of the two standing exceptions to the tool-first rule.** Several of the probes do name alternatives, so they would pass the detail test on its own terms, and that is exactly the trap: the output of this grill is not a decision, it is a *sort* into sharp question or fog, and sorting takes the elaboration around the answer. A clicked label leaves you nothing to sort with. The structured question tool earns its keep in MODE B, where a claimed question already has named alternatives and the sorting is long done.
+**Every batch goes through the structured question tool.** The output is a *sort* into sharp question or fog, so the option descriptions carry the framing and the built-in `Other` path captures elaboration the named choices miss. Never ask these probes as a prose list when the tool exists.
 
 1. **Data** — "What is the smallest and largest thing an operator could reasonably ask for in one export? Give me both ends."
 2. **Surface** — "Where does this start: a button in the admin UI, a scheduled thing, an API call someone scripts?"
@@ -290,6 +293,16 @@ Each opens a different axis. Send 1-3 as one batch and 4-6 as the next, then pro
 5. **Delivery and failure** — "The export succeeds but the download link expires before they click it. What should have happened?"
 6. **Operations** — "Six months from now someone asks who exported what. Does this feature audit itself?"
 7. **Testing** — "What would you need to see pass before you would let this near a customer's compliance data?" *(This one always runs — see the mandatory testing-posture question below.)*
+
+The product axes, same style — one sample probe each:
+
+8. **User value** — "A compliance officer gets this feature Monday morning. What stops being painful for them that day?"
+9. **Success measurement** — "Three months after ship, what number or behavior tells you this was worth building?"
+10. **Target user** — "Who is this for first — every tenant, one segment, one named customer who asked?"
+11. **Rollout** — "Does this land for everyone at once, behind a flag, or piloted with one tenant first?"
+12. **Analytics** — "What do you want to know about how people actually use it — and is any of that instrumented today?"
+13. **Support & docs** — "A support ticket about this lands in week one. What does the agent need to see to answer it without escalating?"
+14. **Legal / compliance** — "Does anything here touch data retention, privacy, or a regulator's definition of a record?"
 
 Record each answer as one line in your working notes with an area label. At the end of the grill you will have two piles: lines you can turn into a sharp question, and lines you cannot. The second pile is the fog.
 
@@ -390,6 +403,8 @@ Say once, at Step 5: *"This map lives in gitignored `specs/` — local to you, n
 
 # Map: audit-log-export
 
+*Decisions live in `questions/` — one file each. This file is just the index.*
+
 **Status:** Working
 **Updated:** 2026-08-03
 **Confidence:** Requirements-clarity 18/25 · Feasibility-technical 14/25 · Integration-points 16/25 · Risk-assessment 14/25
@@ -417,8 +432,8 @@ plan, not at shipped code. Continuous streaming to external systems is not on th
      obeyed while resolving it. Nothing here is re-asked. -->
 
 - `AGENTS.md` exists and governs. Its conventions are not re-litigated by any question here.
-- One question _file_ per session. `research` questions may run as parallel subagents.
-- Grill probes are batched per the grilling playbook — at most three per turn, through the structured question tool unless the detail test forces prose Q blocks.
+- One question _file_ at a time; the fork-menu between decisions; a fresh session recommended after ~3. `research` questions may run as parallel subagents.
+- Every user-facing question uses the structured question tool when available; probes batch at most three. Prose Q blocks are fallback only when the tool is unavailable.
 - Questions are put to the human in plain English. Technical terms only where the term is the decision.
 - HITL questions are answered by the human in their own words. Never self-answered.
 - No new runtime dependency is assumed without a `research` question backing it.
@@ -442,10 +457,11 @@ plan, not at shipped code. Continuous streaming to external systems is not on th
 
 <!-- Rebuilt from questions/ every session — the files are ground truth, this is an index.
      [ ] open (the frontier) · [/] claimed · [x] resolved · [!] open but blocked
-     [-] out of scope. Resolved rows carry the one-line gist from the question's Answer. -->
+     [-] out of scope. Resolved rows carry the one-line gist from the question's Answer,
+     then the Resolved: date in italics — briefs filter on these dates. -->
 
-- [x] [Codebase context](./questions/00-codebase-context.md) — Node/Express/Knex/React with a BullMQ-to-S3 export precedent; `audit_events` is 180M rows partitioned monthly, no `actor_id` index, `requireAdmin` has no tenant scoping.
-- [x] [Export format](./questions/01-export-format.md) — CSV with a UTF-8 BOM and RFC 4180 quoting, plus a sidecar SHA-256 manifest; JSONL rejected because recipients open these in Excel.
+- [x] [Codebase context](./questions/00-codebase-context.md) — Node/Express/Knex/React with a BullMQ-to-S3 export precedent; `audit_events` is 180M rows partitioned monthly, no `actor_id` index, `requireAdmin` has no tenant scoping. *(2026-08-03)*
+- [x] [Export format](./questions/01-export-format.md) — CSV with a UTF-8 BOM and RFC 4180 quoting, plus a sidecar SHA-256 manifest; JSONL rejected because recipients open these in Excel. *(2026-08-03)*
 - [/] [Row-count ceiling](./questions/02-row-count-ceiling.md)
 - [ ] [Export authorization](./questions/03-export-authorization.md)
 - [ ] [Testing posture](./questions/04-testing-posture.md)
@@ -489,7 +505,7 @@ plan, not at shipped code. Continuous streaming to external systems is not on th
 
 ## The question-file template
 
-Five contiguous `Key: value` lines after the H1. Not YAML. No frontmatter delimiters. No `- [ ]` checkboxes anywhere inside a question file — use plain bullets, including for legwork checklists.
+Six contiguous `Key: value` lines after the H1. Not YAML. No frontmatter delimiters. No `- [ ]` checkboxes anywhere inside a question file — use plain bullets, including for legwork checklists.
 
 `## Question` is written at charting. `## Answer` is appended only when the question resolves. `## Evidence` holds sources, links, and artifacts, and a `research` subagent writes into it during Chart Step 8 without deciding anything.
 
@@ -504,6 +520,7 @@ Type: grill · HITL
 State: open
 Blocked by: none
 Claimed: none
+Resolved: none
 Locked: yes
 
 ## Question
@@ -544,6 +561,7 @@ Type: grill · HITL
 State: resolved
 Blocked by: none
 Claimed: 2026-08-03 10:41
+Resolved: 2026-08-03
 Locked: yes
 
 ## Question
@@ -626,6 +644,7 @@ Type: grill · HITL
 State: open
 Blocked by: none
 Claimed: none
+Resolved: none
 Locked: no
 
 ## Question

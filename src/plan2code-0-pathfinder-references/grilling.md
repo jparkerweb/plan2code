@@ -3,7 +3,9 @@
 
 Grilling is how a `grill · HITL` question resolves, how Chart Step 2 names the destination, and how Chart Step 4 maps the frontier. It is also the fallback for any question whose type gives you no better route. The output of a grill is a decision in the human's own words — never a decision you made on their behalf.
 
-**Probe ≠ question file.** A *probe* is one turn of the interrogation; a *question file* is one `questions/NN-<slug>.md` on the map. Batching applies to probes only. **One question file per session still holds** — resolving three question files in one sitting is not what this is.
+**Probe ≠ question file.** A *probe* is one turn of the interrogation; a *question file* is one `questions/NN-<slug>.md` on the map. Batching applies to probes only. **One question file at a time still holds** — a batch of three probes resolves ONE file; a session moves to the next file only through the fork-menu between decisions (resolve.md §Cadence), never by interleaving two grills.
+
+**Grilling a room.** When several people answer — a Product + Engineering session — the mechanics are unchanged, plus three rules: address probes to the room, not a person, unless one person owns the call; the recap must capture the decision in the room's words, and whose call broke any tie is worth a clause in the `## Answer`; and a contested pick is NOT a decision — when Product and Engineering disagree, record both positions under `## Evidence`, leave the question `open`, and move on (or offer a `sketch` — reacting to something concrete resolves more standoffs than argument). Never average two positions into an answer nobody actually gave.
 
 ## The interview protocol
 
@@ -15,8 +17,8 @@ The old rule here was one probe per turn. It was safe and it was unusably slow: 
 |---|---|
 | Up to 3 probes per turn, never more | Past three the human skims, and a skimmed answer is worse than none. Three is a ceiling, not a quota — send two if only two are independent. |
 | Only batch mutually independent probes | The independence test below. A probe whose wording or recommendation shifts based on another probe's answer waits for the next turn. |
-| Reach for the structured question tool first | It is the intended channel, not the leftover bin. Shape the batch so it fits — three probes, plain headers, options a description can carry — and fall back to prose only when the detail test genuinely trips. |
-| A probe that needs detail goes in prose, never in options | The detail test below. Batching buys round trips; it must never buy them by shrinking a decision to fit a picker. |
+| Use the structured question tool for every question when available | The built-in UI is the primary experience: selectable answers, visible skips, and `Other` for composition. Prose provides context, never the answer control. |
+| Keep detail in descriptions, context, and `Other` | Batching buys round trips; it must never buy them by shrinking a decision to fit a picker. |
 | Wait for the whole batch before sending the next | Their answers reshape what comes next. Pre-writing turn 2 wastes it. |
 | Recommend an answer with every probe | A bare question makes the human do all the work. A recommendation gives them something to push against, which is faster and sharper. |
 | Write it in plain English; keep the technical word only where that word IS the decision | A probe the human has to decode is a probe they answer approximately. See *Say it in plain English*. |
@@ -66,7 +68,7 @@ Every probe gets read once, by a busy human, in a terminal. Write it the way you
 | "the sacrificial boundary" | "name one thing people would assume is included that you are willing to cut" |
 | "shall I set `Locked: yes`?" | "worth recording why we picked this, so nobody re-opens it in six months?" |
 | "Q3 is blocked by 02" | "the export format question has to land before this one" |
-| "this batch trips the detail test" | nothing — that call is yours, not theirs |
+| "the UI cannot handle this question" | nothing — put context before the tool and preserve `Other` |
 
 **Refer to questions by name, never by number** — "[Export format](./questions/04-export-format.md)", not "04". The number means something to the file system and to nobody else.
 
@@ -88,58 +90,37 @@ In doubt, hold it back. A held probe costs one extra round trip. A dependent pro
 
 Independent probes are usually the ones that came from **different areas** — data, interface, security, operations, testing. Dependent probes are usually consecutive steps down one thread.
 
-### Delivering a batch: choosing the channel
+### Delivering a batch: structured UI first
 
-Two channels — the environment's structured question tool, or numbered Q blocks in prose. **Choose before you write a word, and choose per batch, not per probe.** One channel per turn: a batch split across a tool popup and a loose prose question loses the prose half every time, because the human answers in the tool and never scrolls back.
+**Use the environment's structured question tool for every user-facing question when it is available.** This includes destination probes, frontier probes, claimed-question grills, recap confirmations, lock offers, sketch reactions, intent gates, and fork-menus. The built-in UI is faster to scan, preserves visible skips, and always provides an `Other` path for composed answers. Numbered prose Q blocks exist only as the fallback when the tool is unavailable.
 
-**The tool is where you start.** Assemble the batch for it — three probes, a plain two-or-three-word header each, alternatives a sentence or two of description can carry — and only then run the detail test to see whether anything forces you out. Prose is the exception you fall back to, not the safe default you retreat to. Two things make the tool worth the effort: a skipped probe comes back *visibly* skipped, and a picker is answerable in one pass by a human who has thirty seconds. Neither survives the move to prose.
+One question object per probe, up to three per call. Never split a batch between a tool popup and prose — the prose half gets lost when the human answers in the UI.
 
-The two failure directions are opposite and both real. Retreating to prose out of caution costs you the visible skip and the fast reply. Forcing a genuinely gnarly decision into a picker costs you the reasoning, which is worse. The detail test below is where that line sits — run it honestly in both directions.
+**Composed answers still use the tool.** Do not invent a false-complete option set merely to make a picker. Offer the genuine candidates you know; the automatic `Other` option is where the human composes a boundary, rationale, hybrid, old-incident detail, or alternative you could not know. When no genuine candidate exists, offer useful control choices such as `Use recommendation` and `Defer for now`; the human writes the real answer through `Other`. A click is still followed by the normal recap-confirmation turn, which captures reasoning in the human's words.
 
-**Whichever channel you pick, the turn closes with the waiting footer.** A turn that sends a batch is a **Form B turn** in `trail.md`: the Trail Footer under it names the outstanding probes after `WAITING ON YOU` and carries **no** resume command. Emitting "start a NEW conversation" above an unanswered batch tells the human to leave the session you are sitting in — they walk, and the batch you built to save round trips costs you the whole decision instead. Same for the recap turn below, which is also waiting on them.
+**Artifacts do not force prose questions.** Show the state table, fake request/response, ASCII UI, or worked example in the response, then immediately invoke the structured tool for the pointed reaction probes. The artifact is prose; the questions are UI controls. Never ask "thoughts?" outside the tool.
 
-#### The detail test — the only things that force you out of the tool
+**Never reshape the decision to fit the tool.** Descriptions carry trade-offs; `Other` carries composition. Split bundled decisions into separate probes and rename colliding short headers. Do not cut a real alternative or hide complexity. If the UI cannot represent the question faithfully even with descriptions + `Other`, state the full context immediately before the tool and keep the actual answer control in the tool.
 
-Numbered Q blocks are **required, not merely permitted**, if *any* probe in the batch trips *any* row below. One tripping probe downgrades the whole batch.
-
-These four rows are the whole list. Nothing else forces prose — not a long question, not a hard decision, not a `Locked: yes`, not your discomfort with the widget.
-
-| Trip | Looks like | Not this |
-|---|---|---|
-| The answer must be composed, not picked | "Name one thing a reasonable person would assume is in scope that you are willing to cut." There is no option set, because inventing one puts words in their mouth. | A decision with genuine named alternatives, however weighty. Write the options. |
-| The probe needs an artifact inline to be answerable | A state table, a fake request/response pair, an ASCII UI, a worked example with real numbers — effectively every `sketch` probe | A probe that merely *mentions* a file path, a format, or a number. Those go in the question text. |
-| An option cannot be conveyed even in its description | Each alternative needs a worked paragraph before it means anything — a migration path, a failure sequence, a schema | An alternative that needs one or two sentences of trade-off. That is what the description field is for. |
-| The alternatives themselves are unknown to you | You cannot name the losing options at all, because the frame is theirs — a contract, an old incident, an org politics fact | You can name them but cannot say why each loses. Name them, recommend one, and let the recap turn supply the reasoning. |
-
-Three things that look like trips and are not:
-
-- **One label bundling several decisions** — "authentic counts, one-use per attempt, restored on death" is three answers wearing one coat. The fix is to **split it into separate probes**, not to write prose. Three separated probes is exactly one batch.
-- **Two probes colliding on the tool's short header limit** (16 characters in Claude Code) — `Export scope` twice is unanswerable, but the fix is to rename them (`Date range`, `Who can run`) or to hold one for the next turn. Reword before you retreat.
-- **A hybrid is possible** — the free-text escape hatch takes "the header from B with the list from C" fine. Trip only when you can already predict the answer *will* be a composition, which is the first row.
-
-**`Locked: yes` on its own does not trip the test.** A lock's `## Answer` owes every alternative and the reason each lost — but if *you* can already name the alternatives, you have written the options, and the recap turn turns the pick into words the human said. A lock trips only on the fourth row, where you cannot name them at all. Treating every lock as an automatic downgrade sends almost every MODE B decision worth grilling to prose, which defeats the point — MODE B is exactly where a claimed question already has named alternatives and the tool earns its keep.
-
-**Nothing tripped? Use the structured tool.** Not "may" — do. It is the intended channel, and it is where the visible-skip guarantee behind the partial-answer discipline below comes from.
-
-**Never reshape a probe to fit the tool.** Reaching for the tool first is not licence to shrink a decision into it. The failure mode is not that the tool rejects a gnarly probe — it is that it *accepts* one. You compress a decision with real texture into three tidy options, the human clicks the least-bad one, and you have recorded a decision with no reasoning behind it. That answer cannot satisfy `## Answer`'s obligation to name what was rejected and why, and nobody finds out until handoff, when the PLAN-DRAFT's Architecture section turns out to have nothing to say. Splitting a bundled probe or renaming a colliding header is reshaping the *batch* and is always right. Cutting a real alternative, or thinning a description until the trade-off disappears, is reshaping the *decision* and is always wrong. When the honest choice is between paragraphs and dishonest options, write the paragraphs.
+The turn closes with the waiting footer (Form B in `trail.md`): it names outstanding probes and carries no resume command. The recap confirmation is also asked through the tool and remains Form B.
 
 #### The structured tool
 
-The default channel, and the one you build the batch for. One question object per probe, up to three in a single call:
+The primary channel. One question object per probe, up to three in a single call:
 
 - **Header** — the decision in two or three plain words (`Export format`, `Size cap`). Not a type, not a marker, not a number.
 - **Question** — the probe, with its why-it-matters. This is prose and it is not rationed; the same sentences you would have written in a Q block go here.
 - **Options** — the genuine alternatives, each described by its trade-off, with the recommended one named as such in its description. Two to four; the free-text escape hatch covers the rest. Label plainly, then let the description carry the precise term: `One file per message` labelling the `.eml`-in-a-ZIP option, with `.eml` named in the description.
 
-A short *label* is not a short *decision*. The label is a handle — `Fixed tick count` — and the description carries the trade-off that makes it choosable. A probe only trips the third detail-test row when even that description cannot hold the option. A label bundling several independent answers is not that row — it is a probe that wants splitting.
+A short *label* is not a short *decision*. The label is a handle — `Fixed tick count` — and the description carries the trade-off that makes it choosable. A label bundling several independent answers is a probe that wants splitting.
 
-**A click is a decision, not a sentence.** The HITL rule wants an `## Answer` traceable to something the human actually said, and a selected option label is thin evidence on its own. What makes tool-delivered answers legitimate is the recap turn in *Landing the grill* — you play the choices back in prose and they confirm or correct in their own words. Never skip the recap on the grounds that the tool already captured the answer; the tool captured the *pick*, and the recap captures the *agreement*.
+**A click is a decision, not a sentence.** The HITL rule wants an `## Answer` traceable to something the human actually said, and a selected option label is thin evidence on its own. What makes tool-delivered answers legitimate is the recap turn in *Landing the grill* — you play the choices back in the tool's question text and they confirm or correct in their own words. Never skip the recap on the grounds that the tool already captured the answer; the tool captured the *pick*, and the recap captures the *agreement*.
 
 **If a reply comes back thinner than the decision** — a bare click on something you now realise carries weight — do not paper over it. Fold the why into the recap turn as one more probe before writing the `## Answer`.
 
 #### Numbered Q blocks
 
-The mandatory channel for anything the detail test catches, and the fallback anywhere the structured tool does not exist. Give each probe the room the tool would have denied it.
+Fallback ONLY when the structured question tool does not exist or its call fails. Never choose prose merely because the answer is detailed, composed, architectural, `Locked: yes`, or attached to an artifact — descriptions + `Other` + context immediately before the tool cover those cases.
 
 **Copy this shape exactly.** The blank lines are load-bearing, not decoration:
 
@@ -188,14 +169,14 @@ A batch is only worth sending if the human can read it. These are mechanical, an
 | **The question itself gets its own line, not a run-on with the heading** | `**Q1 — Export format.** When a custodian…` buries the decision inside a paragraph. Name it, break, then ask it. |
 | **Never use spaces to convey structure** | Whatever hierarchy you indent by hand disappears on render. Structure comes from blank lines, bullets, and bold — nothing else. |
 
-The same applies to the recap turn in *Landing the grill*: it is prose the human has to check line by line, so give each recapped decision its own bullet.
+For the recap in *Landing the grill*, summarize each decision in the structured tool's question text and ask the human to confirm or correct it; use `Other` for corrections.
 
 ### When answers come back partial
 
 Assume they will. The human answers two and drops one, and the dropped one is often the hardest and most valuable.
 
 1. **Diff what came back against what you sent.** Skipped, answered with "Other: skip", or silently omitted all count as unanswered.
-2. **Lead the next turn with the unanswered probes**, at their original numbers, restated in full. Not "you missed Q3" — the whole probe again, with its recommendation, because they have lost the context by now. Unanswered probes come *before* any new probe, and they count against the cap of three.
+2. **Lead the next tool call with the unanswered probes**, using their original headers and full wording. Not "you missed Export scope" — the whole probe again, with its recommendation, because they have lost the context by now. Unanswered probes come *before* any new probe, and they count against the cap of three.
 3. **Skipped twice, stop pushing.** Record it under `## Evidence` as an open probe with your recommendation verbatim, then either narrow it into something answerable or spin it out — a fresh question file if you can phrase it sharply, a `## Not yet specified` line if you cannot.
 4. **Never promote your own recommendation into `## Answer`.** A probe the human declined twice is unanswered, not decided. Writing it up as decided is self-answering a HITL question, which breaks the skill.
 
@@ -334,7 +315,7 @@ Offer it, do not impose it: *"This one looks hard to reverse and the reasoning w
 
 Chart Step 6 requires this question. It exists because `/plan2code-1-plan` Phase 1 asks for exactly three things and stalls without them: testing types, whether tests run after each phase, and the coverage target. A map that clears without answering them hands the human a plan session that immediately re-asks.
 
-The first three probes below pass the independence test against each other — none reads differently under another's answer — so **send all three as one batch**. This is the canonical worked example of a full batch, and it is the canonical case for the structured tool: every one of the three has named alternatives you can already write, the answers are fixed literals rather than prose, and nothing in the batch trips the detail test.
+The first three probes below pass the independence test against each other — none reads differently under another's answer — so **send all three as one structured-tool batch**. Every probe has named alternatives and fixed literals; `Other` remains available.
 
 | Probe | Recommend by default |
 |---|---|
@@ -373,10 +354,10 @@ If a decision survives all six with no answer, it is not ready to leave the map.
 | Drip-feeding one probe at a time | Twelve open questions on the map, one probe per response, the human gives up on session four | Batch up to three independent probes. On a charted map the human's round trips are the scarce resource, not your token budget. |
 | Losing a probe the human skipped | Sent three, got two back, moved on and never mentioned the third | Diff the batch. Lead the next turn with what came back empty, restated in full. |
 | A batch of naked questions | Three one-liners with no recommendations and no why-it-matters | Every probe in a batch carries its own recommendation and its own stake. Otherwise you have offloaded the thinking, not the round trips. |
-| Sending a batch as a wall of text | Three probes hard-wrapped across source lines with their options indented, all collapsing into one paragraph on render | Blank line between every element, options as a bullet list, `---` between probes. The three-probe cap exists so the human reads all three; an unreadable batch gets skimmed, and a skimmed answer is worse than none. |
-| Flattening a gnarly probe into a picker | An architectural decision reduced to three option labels because the batch was already going through the structured tool | Run the detail test. One tripping probe sends the whole batch to numbered Q blocks. A clicked option records no reasoning, and the `## Answer` needs reasoning. |
-| Defaulting to prose when nothing tripped | A clean three-probe batch written as Q blocks "to be safe", or downgraded just because the question will be `Locked: yes` | The detail test is a test, not a preference, and it is four rows long. Nothing tripped means the tool: you gain visibly skipped probes, and the recap turn still captures the reasoning a lock needs. |
-| Retreating to prose over a fixable batch | Two probes collided on the 16-character header, or one option label was bundling three answers, so the whole batch went to Q blocks | Neither is a detail-test trip. Rename the headers; split the bundled probe. Reshape the batch, never the decision. |
+| Asking in prose when the tool exists | Numbered Q blocks or a loose "which one?" despite AskUserQuestion being available | Put every answer control in the structured UI. Use descriptions for trade-offs and `Other` for composition. Prose may provide context or an artifact immediately before the tool, never the question itself. |
+| Flattening a gnarly probe into labels | An architectural decision reduced to three option labels with no useful descriptions | Keep the tool, not the flattening: put the real trade-off in each description, preserve `Other`, and recap the reasoning before recording. |
+| Treating an artifact as an excuse for prose | An ASCII UI followed by "thoughts?" | Show the artifact, then invoke the structured tool with pointed reaction probes naming the rows/elements. |
+| Retreating to prose over a fixable batch | Two probes collide on the short header, or one label bundles three answers | Rename the headers; split the bundled probe. Reshape the batch, never the decision. |
 | Sending four probes because the tool accepts four | A fourth probe added to a clean batch of three because there was room in the call | The cap is three regardless of what the environment allows. The ceiling is the human's attention, not the tool's schema. |
 | Grilling in Pathfinder's own vocabulary | "The frontier has one takeable `grill · HITL` — shall we graduate 02 out of the fog and lock it?" | Plain English. Markers, types, `NN` numbers, and fog are your bookkeeping; the human is deciding about their product. |
 | Plain-washing the load-bearing term | "Do you want the friendly file or the compact one?" where the real choice is `.eml`-in-a-ZIP versus NDJSON | Plain wording, precise nouns. Name the formats and gloss them; a decision made on a euphemism cannot be written into `## Answer`. |
@@ -384,7 +365,7 @@ If a decision survives all six with no answer, it is not ready to leave the map.
 | Accepting a vague answer and moving on | "Handle it sensibly" → recorded as the decision | Push once more, concretely: "Sensibly meaning we drop the attachment, or fail the whole job?" A vague answer is not an answer. |
 | Leading the human to your preferred answer | "You'd want Postgres here, right?" | Recommend openly, then present the real alternatives with their real merits. A recommendation invites a fight; a leading question suppresses one. |
 | Grilling past the decision into implementation | "Should the retry helper take a callback or return a promise?" | That is the plan's job, or the implementer's. Stop at the decision. The pull to keep going is the edge of the map. |
-| Drifting off the claimed question | Claimed `[Export format](./questions/04-export-format.md)`, forty minutes later deep in auth | Name the drift out loud, capture the new thread as a fresh question or as a line in `## Not yet specified`, and return. One question _file_ per session. |
+| Drifting off the claimed question | Claimed `[Export format](./questions/04-export-format.md)`, forty minutes later deep in auth | Name the drift out loud, capture the new thread as a fresh question or as a line in `## Not yet specified`, and return. One question _file_ at a time — switching happens at the menu, not mid-grill. |
 | Self-answering a HITL question | An `## Answer` with no words the human said | Delete it. Reopen the question. See the HITL rule. |
 | Recording the decision but not the rejections | "We chose event-driven." | Rejections are half the record — and mandatory when `Locked: yes`. Ask what else was on the table before you close. |
 | Grilling a fact | "How long does the retention sweep take?" | If it is measurable, measure it — or make it a `research · AFK` question. Do not make the human guess at their own system. |
@@ -396,7 +377,7 @@ If a decision survives all six with no answer, it is not ready to leave the map.
 When the branch is walked out. **Steps 1-3 are ONE turn, not three** — recap, confirmation request, and lock offer go out together, because a lock offer sent after a separate confirmation costs a round trip to ask a yes/no the human could have answered alongside the recap.
 
 1. Recap the decisions in order, in the human's own terms, using glossary vocabulary. Include anything a structured-tool reply left implicit, so the confirmation covers the reasoning and not just the picks.
-2. Ask for the confirmation. Do not skip this — the recap is where the human catches the one thing you misheard, and where a clicked option becomes words they said.
-3. Apply the Lock test in the same message. Offer, do not impose.
+2. Ask for confirmation through the structured question tool (`Confirm` / `Correct via Other`). Do not skip this — the recap is where the human catches the one thing you misheard, and where a clicked option becomes words they said.
+3. Apply the Lock test as another question in the same tool call. Offer, do not impose.
 4. Write `## Answer` per Work Step 7: the decision, what was rejected and why, consequences, and a one-line `**Gist:**`. Evidence, links, and transcript fragments go under `## Evidence`.
 5. Anything the grill surfaced that belongs to a different question goes to the map — a fresh question if you can phrase it sharply, `## Not yet specified` if you cannot, `## Out of scope` if it sits past the destination.
