@@ -10,6 +10,10 @@ Read references/grilling.md
 
 > Fallback: ≤3 independent probes/turn, each with a recommendation, re-ask any skipped; AskUserQuestion for every question, prose only if unavailable; plain English; facts you look up, decisions are the human's.
 
+## Interface
+
+The FIRST thing you do, before anything else in this file — before Step 0: ask **web console** (suggested) or **terminal**? Console → run `node "<D>/console.mjs" open --workflow pathfinder` before reading (<D>: references/web-console/ beside this SKILL.md, or the dir in ~/.plan2code/console/console-dir), then <D>/console.md → Pathfinder notes. Switchable anytime. `--web` or `Use the web console for this session.` in the argument answers it; drop the flag. Dashboard-launched? Resume its open session (console.md → Launches), then Step 0.
+
 ## Backend
 
 The map lives in ONE of two places — the human's pick at Chart Step 1, never yours:
@@ -120,20 +124,20 @@ Any failing: name it, keep working. All passing: follow the handoff playbook, se
 
 Read references/trail.md
 
-> Fallback: once the map exists, end every response with a marker path (`●` done · `◉` here · `○` open · `⊘` blocked · `⊝` out of scope) `START`→`⚑`, a named legend, a plain-English confidence note, one closer.
-
-Once the map exists the trail closes EVERY response, then ONE closer by turn type. Asking anything → Form B: `WAITING ON YOU · answer here, in this conversation:` + open items, no command. Menu after a decision → Form C: `NEXT UP` picks + `OR START FRESH`. Session end → Form A: `NEXT STEP · start a new conversation and run:` + `/plan2code-0-pathfinder specs/<idea>/pathfinder` (map issue URL on `github`), or `/plan2code-1-plan` once `Cleared`.
+> Fallback: once the map exists, end every response with a marker path (`●` done · `◉` here · `○` open · `⊘` blocked · `⊝` out of scope) `START`→`⚑`, a named legend, a plain-English confidence note, then ONE closer: asking → Form B, `WAITING ON YOU`, no command; menu → Form C, `NEXT UP` + `OR START FRESH`; session end → Form A, `NEXT STEP` + resume command with `--web` (map issue URL on `github`).
 
 ## Session End
 
 Report each question resolved (name + gist), what graduated, what's still open; offer a brief for today. Nothing to commit — `local` is gitignored, `github` already on the tracker. Then the mascot, then the Trail Footer.
 
+**Web console:** at session end or on a `__stop`, post `finish` (Form A's command) BEFORE `stop` (console.md → Pathfinder).
+
 ```
 ⋅
     ╭───╮
-    │ ★ │
+   ╲│ ★ │╱
     │ ◡ │   One more decision down. The fog is thinner!
-    ╰───╯
+    ╰┬─┬╯
 ```
 
 **When the map cleared**, the mascot says `The way is clear! Time to plan!` and the footer routes to `/plan2code-1-plan` — or `/plan2code-init` FIRST if `## Ground rules` records `AGENTS.md` absent.

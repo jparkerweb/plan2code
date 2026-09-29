@@ -38,6 +38,12 @@ Optional CLI status bar (`src/statusline-claude/`) for Claude Code. Displays mod
 
 Details: [Architecture](./.agents-docs/AGENTS-architecture.md) (see Status Line section)
 
+## Web Console
+
+Optional local browser UI (`src/web-console/`) that every skill offers at the start of a session, so questions, sign-off gates, build progress and the document taking shape can be worked through in a page instead of the terminal. The bare `plan2code` skill is the front door: it opens the console's dashboard — a card menu of every skill — and a pick launches that skill on the same page by resuming the session under its workflow. A phase's sign-off card offers to run the code review first — before approval — and a finished quick task's hand-off offers a **Review it now** button; either runs `plan2code-review` on the page in the same session. Finished (not paused) screens offer **Back to the dashboard**, and notes and quick questions can carry image and document (text, code, PDF) attachments (stored in the session dir, never the project). An **Ask** tab, always last, opens a Quick question chat the running agent answers at its next check-in, on its own channel beside the cards (edits only after the person approves them); context is attached only on purpose, through **+ Add context**, and an empty conversation offers starter questions. A Role in User Preferences (asked for by a dashboard banner until set) orders the starter templates on Pathfinder, Plan and Quick Task's fresh-idea card (`"templates": "idea"`, wording in `public/starters.js`) and the Ask starters; it never changes what a skill asks. Note attachments a spec file cites are copied into `specs/<idea>/attachments/` by the agent with `console.mjs keep`; the server itself never writes into a project. The footer's folder label opens a **Workspace** dialog where the person adds more folders as read-only context for the whole console session, each addressed as `@name` in answers, notes and Ask (contract in `console.md` → Workspace). A green / yellow / red **session meter** in the top bar counts weighted points as one console session chains skill runs (`public/meter.js`; agents report per-unit work with `run` in a post) and suggests a fresh console session at red. The **?** at the top right opens a 16-topic Help dialog built into the page, so it reads even with the server gone. Zero dependencies, detached `node` server on `127.0.0.1`, bundled into each skill via `additionalReferences`.
+
+Details: [Architecture](./.agents-docs/AGENTS-architecture.md) (see Web Console section) and [.readme/web-console.md](./.readme/web-console.md)
+
 ## Development Commands
 
 Build commands, installer menu options, non-interactive skill-build verification, skills CLI delegation, skill format, and how to edit workflow prompts.
@@ -52,13 +58,15 @@ Details: [Code Style & Gotchas](./.agents-docs/AGENTS-code-style.md)
 
 ## Mascot
 
-The project has a mascot called "Planny" — an ASCII art robot that appears in installer output and workflow prompts. Mascot variants are defined in the `MASCOT` constant in `install.js` and appear in workflow markdown files.
+The project has a mascot called "Planny": a box with a star for an eye, stick arms and two small feet. He appears in installer output, workflow prompts, the loop, the Claude Code status line (box, star and feet, no arms) and the web console. ASCII variants are defined in the `MASCOT` constant in `install.js` (and `plan2code-loop/src/utils/logger.ts`) and appear in workflow markdown files: arms down at rest, one arm waving when he is asking something, both arms up when he is celebrating. The eye is always the star.
+
+The web console draws him as inline SVG in `src/web-console/public/index.html`, where he doubles as the page's state indicator: his star lights in the highlight colour and he waves when something is yours to do, the star turns and his feet walk while the agent works, it goes green when all is done, he shows no arms at all when the agent is not answering, and he fades with his star shut when the connection drops. The parts are classed (`shell`, `eye`, `smile`, `foot`, and one `arms a-<mood>` set per mood) and `app.js` switches mood with a single class, so the drawing stays in the markup and the styling in `app.css`. The nine skill start poses, the dashboard wake-up, `favicon.svg` / `favicon.js` and `src/launcher/plan2code.ico` all use the same design.
 
 ```
-   ╭───╮
-   │ ● │
-   │ ◡ │
-   ╰───╯
+    ╭───╮
+    │ ★ │╱
+   ╱│ ◡ │
+    ╰┬─┬╯
 ```
 
 ## Keeping this file current
@@ -75,3 +83,4 @@ When you make a mistake, get corrected, or discover something about this codebas
 ## Failure log
 
 - Do not audit `CHANGELOG.md` headings through PowerShell — the emoji come back as `?`. See the gotcha for the correct approach.
+- Sync upstream only through `/sync-repo`, and verify its baseline against the real tree before porting: an earlier sync silently skipped a whole upstream release (the `3-implement-review` skill) while the recorded version froze. Update the baseline with `.claude/skills/sync-repo/set-synced.mjs`, never with a shell pipe over the decrypted body.

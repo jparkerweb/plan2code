@@ -13,6 +13,10 @@ session, or a subagent — resume the work without re-reading this transcript.
 The reader of this document starts with **zero context**. They can see the repo
 and can open files, but they cannot see this conversation. Write for them.
 
+## Interface
+
+The FIRST thing you do, before anything else in this file — before inferring the next task: ask **web console** (browser page, suggested) or **terminal**? Console → run `node "<D>/console.mjs" open --workflow handoff` before reading (<D>: references/web-console/ beside this SKILL.md — ~/.agents/skills/plan2code-handoff/references/web-console/ globally — or the dir in ~/.plan2code/console/console-dir), then read <D>/console.md. The next-task confirmation and any clarifying questions go through it, and the finished handoff lands on the page as a doc with the download the page offers. Switchable anytime. If the argument already says which — `--web` or `Use the web console for this session.` — take it and do not ask; drop the flag. Launched by the dashboard? Its session is already open — resume it (console.md → Launches), then the one hard rule. On the console, a `__stop` action is the person ending the session (console.md → Stop requests); at every session end post `finish` BEFORE `stop`.
+
 ## The one hard rule: capture the next task, and confirm it with the user
 
 Every handoff MUST end with a **Next task** that the incoming agent should start
@@ -79,8 +83,8 @@ writing:
 - Cite that file and its checkbox state directly in **Current state** and
   **Key files & pointers**, instead of relying on conversation memory alone.
 - Let **Suggested skills** name the specific next pipeline command
-  (`/plan2code-3-implement` to keep implementing the phase,
-  `/plan2code-4-finalize` once all phases are checked) — but only as a
+  (`/plan2code-3-implement --web` to keep implementing the phase,
+  `/plan2code-4-finalize --web` once all phases are checked) — but only as a
   suggestion; the confirmed **Next task** above still governs what the reader
   does first.
 
@@ -125,8 +129,8 @@ a command that must be run a specific way. Save the reader from re-discovering
 these the hard way.>
 
 ## Suggested skills
-<Which skills the next agent should use, and when — e.g. /plan2code-3-implement
-to continue a phase, /plan2code-review before finishing, /plan2code-4-finalize
+<Which skills the next agent should use, and when — e.g. /plan2code-3-implement --web
+to continue a phase, /plan2code-review before finishing, /plan2code-4-finalize --web
 to wrap up. Skip if none apply.>
 
 ## Verification

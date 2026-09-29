@@ -5,6 +5,11 @@ conversation** — that's the whole trick.
 
 ← [Back to README](../README.md)
 
+> **Prefer a page to a terminal?** Every skill can run in your browser — start at the
+> `/plan2code` dashboard, add `--web` to a direct command (e.g. `/plan2code-1-plan --web`),
+> or choose the console when offered. Questions, sign-offs and build progress stay on the page.
+> See [web-console.md](web-console.md).
+
 ---
 
 ## Session 1 — Plan
@@ -73,7 +78,7 @@ Repeat. New conversation each time. It always finds the next open phase itself.
 When you reach a parallel group, it offers you the choice — open a second agent, take the other
 phase, and the `[/]` marks keep them from colliding.
 
-**Optional, any time:** `/plan2code-review` for an independent second opinion on what just landed.
+Use `/plan2code-3-implement-review` instead when review should run automatically before phase approval. `/plan2code-review` remains available for an independent second opinion at any other time.
 
 ---
 

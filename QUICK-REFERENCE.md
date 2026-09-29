@@ -2,19 +2,23 @@
 
 ## Commands
 
-| Step    | Command                      | Input           | Output                                             |
-| ------- | ----------------------------- | --------------- | -------------------------------------------------- |
-| Init    | /plan2code-init            | None            | AGENTS.md file                                     |
-| Update  | /plan2code-init-update     | AGENTS.md       | Updated AGENTS.md                                  |
-| 0       | /plan2code-0-pathfinder    | A foggy idea    | pathfinder/map.md *or* GitHub Issues + PLAN-DRAFT-<date>.md |
-| quick   | /plan2code-quick-task      | Requirements    | Conversational plan (standalone — not a pipeline step) |
-| review  | /plan2code-review          | Scope guidance  | Review findings + fixes                            |
-| 1       | /plan2code-1-plan          | Requirements    | PLAN-CONVERSATION-<date>.md + PLAN-DRAFT-<date>.md |
-| 1b      | /plan2code-1b-revise-plan  | Specs + changes | Updated specs                                      |
-| 2       | /plan2code-2-document      | PLAN-DRAFT.md   | overview.md + Phase files                          |
-| 3       | /plan2code-3-implement     | overview.md     | Implemented code                                   |
-| 4       | /plan2code-4-finalize      | overview.md     | Archived specs                                     |
-| handoff | /plan2code-handoff         | Conversation    | Self-contained handoff doc in handoffs/            |
+| Step     | Command                         | Input           | Output                                                                                  |
+| -------- | ------------------------------- | --------------- | --------------------------------------------------------------------------------------- |
+| —        | /plan2code                    | None            | Web console dashboard — a menu of every skill below, launched on the page               |
+| Init     | /plan2code-init               | None            | AGENTS.md file                                                                          |
+| Update   | /plan2code-init-update        | AGENTS.md       | Updated AGENTS.md                                                                       |
+| 0        | /plan2code-0-pathfinder       | A foggy idea    | pathfinder/map.md *or* GitHub Issues + PLAN-DRAFT-<date>.md                             |
+| quick    | /plan2code-quick-task         | Requirements    | Conversational plan (standalone — not a pipeline step)                                  |
+| review   | /plan2code-review             | Scope guidance  | Review findings + fixes                                                                 |
+| 1        | /plan2code-1-plan             | Requirements    | PLAN-CONVERSATION-<date>.md + PLAN-DRAFT-<date>.md                                      |
+| 1b       | /plan2code-1b-revise-plan     | Specs + changes | Updated specs                                                                           |
+| 2        | /plan2code-2-document         | PLAN-DRAFT.md   | overview.md + Phase files                                                               |
+| 3        | /plan2code-3-implement        | overview.md     | Implemented code                                                                        |
+| 3+review | /plan2code-3-implement-review | overview.md     | Reviewed implementation ready for approval (alternative to `/plan2code-3-implement`)  |
+| 4        | /plan2code-4-finalize         | overview.md     | Archived specs                                                                          |
+| handoff  | /plan2code-handoff            | Conversation    | Self-contained handoff doc in handoffs/                                                 |
+
+Append ` --web` to any step to work through it in the browser web console instead of the terminal — or run `/plan2code` with nothing for the dashboard, a menu of every skill that launches your pick on the same page. See [.readme/web-console.md](.readme/web-console.md).
 
 ## File Structure
 
@@ -24,7 +28,7 @@ specs/
     ├── pathfinder/                   # From Step 0 (optional, if charted locally)
     │   ├── map.md                    #   the map: destination, decisions, fog
     │   ├── questions/NN-<slug>.md    #   one decision question per file
-    │   └── briefs/brief-<date>.md    #   plain-English decision summaries
+    │   └── briefs/brief-<date>.md    #   on-demand plain-English decision briefs
     │                                 #   (GitHub Issues backend: map issue + sub-issues instead)
     ├── PLAN-DRAFT-<date>.md          # From Step 1 (verified plan)
     ├── PLAN-CONVERSATION-<date>.md   # From Step 1 (conversation log)
@@ -64,15 +68,15 @@ When phases have no file conflicts or dependencies, they can run simultaneously:
 
 ## Quick Troubleshooting
 
-| Issue                  | Solution                                          |
-| ---------------------- | ------------------------------------------------- |
-| Lost context mid-phase | Attach spec files, say "resume from Task X.Y"     |
-| Wrong phase started    | Say "abort", start correct phase                  |
+| Issue                  | Solution                                         |
+| ---------------------- | ------------------------------------------------ |
+| Lost context mid-phase | Attach spec files, say "resume from Task X.Y"    |
+| Wrong phase started    | Say "abort", start correct phase                 |
 | Need to change plan    | Use `/plan2code-1b-revise-plan`                |
-| Multiple spec folders  | Specify which: "Continue with specs/user-auth/"   |
-| Need AGENTS.md file    | Use `/plan2code-init` to generate one         |
-| Update AGENTS.md       | Use `/plan2code-init-update` after sessions   |
-| Run phases in parallel | Check Parallel Execution Groups in overview.md    |
+| Multiple spec folders  | Specify which: "Continue with specs/user-auth/"  |
+| Need AGENTS.md file    | Use `/plan2code-init` to generate one          |
+| Update AGENTS.md       | Use `/plan2code-init-update` after sessions    |
+| Run phases in parallel | Check Parallel Execution Groups in overview.md   |
 
 ## Workflow Decision
 
@@ -83,8 +87,9 @@ New to a project?
 Learned something during a session?
 └── /plan2code-init-update → Add learnings to AGENTS.md
 
-Too unclaer to plan? (big idea, don't yet know what the questions are)
-└── /plan2code-0-pathfinder → chart it, clear the decisions one at a time
+Too foggy to plan? (big idea, don't yet know what the questions are)
+└── /plan2code-0-pathfinder → chart it, clear one decision at a time
+    ├── continue-or-stop menu between decisions; fresh session recommended after ~3
     └── then → /plan2code-1-plan (resumes at Phase 4)
 
 Is it a quick, small task?
@@ -92,6 +97,7 @@ Is it a quick, small task?
 └── No → /plan2code-1-plan (full workflow)
          ├── /plan2code-2-document
          ├── /plan2code-3-implement (repeat per phase)
+         │   ├── OR: /plan2code-3-implement-review (review gate before approval)
          │   └── OR: plan2code-loop (autonomous alternative)
          └── /plan2code-4-finalize
 
@@ -103,10 +109,11 @@ Need to revise mid-implementation?
 
 The `plan2code-loop` CLI is an **alternative** to Step 3, not a replacement.
 
-| Approach | Use When |
-|----------|----------|
-| `/plan2code-3-implement` | You want interactive control per phase |
-| `plan2code-loop` | You want hands-off autonomous execution |
+| Approach                          | Use When                                        |
+|-----------------------------------|-------------------------------------------------|
+| `/plan2code-3-implement`        | You want interactive control per phase          |
+| `/plan2code-3-implement-review` | You want review and fixes before phase approval |
+| `plan2code-loop`                | You want hands-off autonomous execution         |
 
 ```bash
 plan2code-loop   # Fully interactive - auto-detects specs, prompts for options
@@ -114,9 +121,9 @@ plan2code-loop   # Fully interactive - auto-detects specs, prompts for options
 
 ### Loop Modes
 
-| Mode | Description |
-|------|-------------|
-| **One task per loop** (default) | One task per agent invocation. Node handles git commits. |
-| **One phase per loop** | All tasks in a phase per invocation. LLM handles git commits. Best for smart models with larger context. |
+| Mode                            | Description                                                                                              |
+|---------------------------------|----------------------------------------------------------------------------------------------------------|
+| **One task per loop** (default) | One task per agent invocation. Node handles git commits.                                                 |
+| **One phase per loop**          | All tasks in a phase per invocation. LLM handles git commits. Best for smart models with larger context. |
 
 Session state stored per-spec in `specs/<feature>/.plan2code-loop/`

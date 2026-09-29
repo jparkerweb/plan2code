@@ -52,9 +52,9 @@ Display the exact rendered title, full body (including the `METRICS_JSON` block)
 ```
 ⋅
     ╭───╮
-    │ ● │
-    │ ~ │   Ready to submit your feedback to the maintainer!
-    ╰───╯
+    │ ★ │╱
+   ╱│ ~ │   Ready to submit your feedback to the maintainer!
+    ╰┬─┬╯
 ```
 
 > Reply "approve" to proceed with submission, or "skip" to cancel.

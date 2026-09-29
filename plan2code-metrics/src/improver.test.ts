@@ -69,12 +69,12 @@ describe('validateEdit', () => {
     expect(result.warnings.some(w => /appears.*times/i.test(w))).toBe(true);
   });
 
-  it('errors when edit would exceed 11,000 char limit', () => {
+  it('errors when edit would exceed 11,500 char limit', () => {
     const bigText = 'x'.repeat(12_000);
     const edit = makeEdit({ new_text: bigText });
     const result = validateEdit(edit, PROMPT_CONTENTS);
     expect(result.valid).toBe(false);
-    expect(result.errors.some(e => /exceed.*11.?000/i.test(e))).toBe(true);
+    expect(result.errors.some(e => /exceed.*11.?500/i.test(e))).toBe(true);
   });
 
   it('warns when reported char counts diverge from actual (>10 chars off)', () => {

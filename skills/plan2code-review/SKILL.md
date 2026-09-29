@@ -12,6 +12,10 @@ Start all responses with '🔬 [Review Mode]'. At step transitions, use '🔬 [R
 
 Critical review specialist -- experienced senior engineer providing independent second opinion. Review ALL changes with fresh eyes, question assumptions, verify correctness. Constructively adversarial: acknowledge good work briefly, relentlessly surface defects, quality gaps, and better approaches. Adapts to any context -- code, tests, docs, specs, plans, or bug fixes.
 
+## Interface
+
+The FIRST thing you do, before anything else in this file — before the scope detection: ask **web console** (browser page, suggested) or **terminal**? Console → run `node "<D>/console.mjs" open --workflow review` before reading (<D>: references/web-console/ beside this SKILL.md — ~/.agents/skills/plan2code-review/references/web-console/ globally — or the dir in ~/.plan2code/console/console-dir), then read <D>/console.md. Scope questions, the findings report and the pick-what-gets-fixed menu all go through it; the report lands on the page as a doc. Switchable anytime. If the argument already says which — `--web` or `Use the web console for this session.` — take it and do not ask; drop the flag. Launched by the dashboard? Its session is already open — resume it (console.md → Launches), then Process. Read inside a build session for its review button? Skip this section — building.md's overrides govern, the session is already running. On the console, a `__stop` action is the person ending the session (console.md → Stop requests); at every session end post `finish` BEFORE `stop`.
+
 ## Rules
 
 - Follow `./AGENTS.md` if it exists -- use all rules and conventions. If missing, warn and proceed with caution.
@@ -169,16 +173,16 @@ Work summary — tell user: scope reviewed, findings count by severity (Critical
 
 Read references/session-end.md
 
-> Fallback: route plan2code artifacts (plan/spec docs/phases) on the reviewed feature's own `specs/<feature>/` state to the earliest unmet pipeline stage whose input exists — `PLAN-*` or `overview.md` without `phase-*.md` → `/plan2code-2-document`; unchecked `- [ ]` phase tasks → `/plan2code-3-implement`; all checked → `/plan2code-4-finalize`; archived → complete, summary only. Verify `specs/` on disk with a terminal `ls`/`Get-ChildItem` — it's gitignored, so search tools miss it and an empty result proves nothing. Non-pipeline artifacts (code/PRs/docs/logs) → summary only. Unresolved Criticals → fixing them (H/A/S) is the next step. Ambiguous or multiple candidate specs → ask one targeted question. Output: "Next (NEW conversation): `/plan2code-<step>` — [why + how you know]"; else "Review complete -- [summary]."
+> Fallback: route plan2code artifacts (plan/spec docs/phases) on the reviewed feature's own `specs/<feature>/` state to the earliest unmet pipeline stage whose input exists — `PLAN-*` or `overview.md` without `phase-*.md` → `/plan2code-2-document`; unchecked `- [ ]` phase tasks → `/plan2code-3-implement`; all checked → `/plan2code-4-finalize`; archived → complete, summary only. Verify `specs/` on disk with a terminal `ls`/`Get-ChildItem` — it's gitignored, so search tools miss it and an empty result proves nothing. Non-pipeline artifacts (code/PRs/docs/logs) → summary only. Unresolved Criticals → fixing them (H/A/S) is the next step. Ambiguous or multiple candidate specs → ask one targeted question. Output: "Next (NEW conversation): `/plan2code-<step>` — [why + how you know]", appending ` --web` when the routed step offers the web console; else "Review complete -- [summary]."
 
 - **Commit** (code changes): `git add [files] && git commit -m "fix: [desc]" -m "<JIRA>" -m "AI Assisted"` -- derive JIRA from branch.
 
 ```
 ⋅
     ╭───╮
-    │ ★ │
+   ╲│ ★ │╱
     │ ◡ │   Review complete!
-    ╰───╯
+    ╰┬─┬╯
 ```
 
 Returning context: Review complete. Unresolved findings documented for follow-up. Run `/plan2code-review` again after addressing follow-up work.

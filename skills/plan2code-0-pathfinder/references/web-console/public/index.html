@@ -1,0 +1,2077 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <title>Plan2Code Console</title>
+    <link rel="stylesheet" href="/app.css" />
+    <!-- Every module up front. Without these the browser finds render.js and
+         answers.js only once app.js has arrived and been parsed, and marked
+         only once render.js has: three round trips in a row before the page
+         can draw anything real. -->
+    <link rel="modulepreload" href="/app.js" />
+    <link rel="modulepreload" href="/answers.js" />
+    <link rel="modulepreload" href="/render.js" />
+    <link rel="modulepreload" href="/palette.js" />
+    <link rel="modulepreload" href="/labels.js" />
+    <link rel="modulepreload" href="/boot.js" />
+    <link rel="modulepreload" href="/chat.js" />
+    <link rel="modulepreload" href="/help.js" />
+    <link rel="modulepreload" href="/starters.js" />
+    <link rel="modulepreload" href="/workspace.js" />
+    <link rel="modulepreload" href="/meter.js" />
+    <link rel="modulepreload" href="/mentions.js" />
+    <link rel="modulepreload" href="/favicon.js" />
+    <link rel="modulepreload" href="/vendor/marked.esm.js" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/favicon.png" />
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to the questions</a>
+
+    <div id="banner" class="banner" role="status" hidden></div>
+
+    <!-- Planny's wake-up on a freshly opened dashboard: a large copy of the
+         rail drawing that powers on centre stage, then glides into the rail.
+         Hidden unless boot.js is playing it; placed entirely by app.css,
+         because the CSP refuses style attributes. -->
+    <div class="wake" id="wake" hidden aria-hidden="true">
+      <svg class="wake-bot" viewBox="0 0 22 30" focusable="false">
+        <g class="body">
+          <rect class="foot f1" x="5.7" y="27.1" width="3.6" height="1.7" rx="0.85" />
+          <rect class="foot f2" x="12.7" y="27.1" width="3.6" height="1.7" rx="0.85" />
+          <rect class="shell" x="3" y="7" width="16" height="20" rx="3.2" />
+          <g class="look">
+            <path class="eye" d="M11 10.95 L11.79 12.91 L13.9 13.06 L12.28 14.42 L12.79 16.47 L11 15.35 L9.21 16.47 L9.72 14.42 L8.1 13.06 L10.21 12.91 Z" />
+            <path class="scan" d="M11 10.6 V17.4" />
+          </g>
+          <path class="smile" d="M8.3 18.4 Q11 21 13.7 18.4" />
+          <g class="limb l"><path d="M3 18 L1.3 21" /><circle cx="1.3" cy="21" r="0.85" /></g>
+          <g class="limb r"><path d="M19 18 L20.7 21" /><circle cx="20.7" cy="21" r="0.85" /></g>
+        </g>
+        <g class="zzz">
+          <path d="M15.4 3.4 h2.2 l-2.2 2.2 h2.2" />
+          <path d="M17.2 0 h1.8 l-1.8 1.8 h1.8" />
+          <path d="M18.8 -3.1 h1.4 l-1.4 1.4 h1.4" />
+        </g>
+      </svg>
+      <p class="wake-hint">Click to wake Planny</p>
+    </div>
+
+    <header class="topbar">
+      <div class="topbar-row">
+        <div class="ident">
+          <span class="badge" id="badge">Pathfinder</span>
+          <h1 id="title">Plan2Code Console</h1>
+          <!-- The session meter: how much this console session has done. The
+               ring fills with the points (full at 8); the colour is the
+               level. Hidden until a frame carries `meter`. -->
+          <span class="meter-slot">
+            <button
+              type="button"
+              class="meter-pill"
+              id="meter-pill"
+              hidden
+              aria-haspopup="dialog"
+              aria-expanded="false"
+              aria-controls="meter-pop"
+            >
+              <svg class="meter-ring" viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+                <circle class="meter-track" cx="10" cy="10" r="7" />
+                <circle
+                  class="meter-fill"
+                  id="meter-fill"
+                  cx="10"
+                  cy="10"
+                  r="7"
+                  pathLength="100"
+                  stroke-dasharray="100 100"
+                  stroke-dashoffset="100"
+                />
+              </svg>
+              <span id="meter-words">Session: fresh</span>
+            </button>
+            <div class="meter-pop" id="meter-pop" role="dialog" aria-label="Session meter" hidden>
+              <p class="meter-tip" id="meter-tip"></p>
+              <button type="button" class="linky" id="meter-help">What is this?</button>
+            </div>
+          </span>
+        </div>
+        <div class="progress-block">
+          <div class="progress-label">
+            <span id="progress-text">Getting started</span>
+            <span id="confidence" class="confidence"></span>
+          </div>
+          <div class="progress-track" role="progressbar" aria-labelledby="progress-text" id="progress-bar">
+            <div class="progress-fill" id="progress-fill"></div>
+          </div>
+        </div>
+        <button
+          type="button"
+          class="icon-btn"
+          id="btn-about"
+          title="Help"
+          aria-label="Help"
+        >
+          <!-- Drawn, not a "?" glyph, so it does not depend on a font. -->
+          <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+            <circle cx="8" cy="8" r="7" class="ab-ring" />
+            <path class="ab-mark" d="M6.1 6.05a1.95 1.95 0 1 1 2.4 1.9v1.25" />
+            <circle cx="8" cy="11.7" r="0.85" class="ab-dot" />
+          </svg>
+        </button>
+        <button
+          type="button"
+          class="icon-btn"
+          id="btn-looks"
+          title="Colors, theme and sound"
+          aria-label="Colors, theme and sound"
+        >
+          <!-- Three swatches, so the button says what it opens without a word. -->
+          <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+            <circle cx="5" cy="5.5" r="3.1" class="sw-a" />
+            <circle cx="11" cy="5.5" r="3.1" class="sw-b" />
+            <circle cx="8" cy="11" r="3.1" class="sw-c" />
+          </svg>
+        </button>
+      </div>
+      <div class="topbar-row second">
+        <div class="row-left">
+          <!-- Back to the dashboard: every skill but the dashboard itself. A
+               filled triangle in the highlight color, pointing the way home. -->
+          <button
+            type="button"
+            class="btn ghost small home-btn"
+            id="btn-home"
+            title="Back to the dashboard"
+            aria-label="Back to the dashboard"
+            hidden
+          >
+            <svg viewBox="0 0 12 12" aria-hidden="true" focusable="false"><path d="M9.5 1.5v9L2 6z" /></svg>
+          </button>
+          <button type="button" class="btn ghost small stop-btn" id="btn-stop">Stop session</button>
+          <button type="button" class="btn ghost small brief-btn" id="btn-brief" hidden>
+            Write a brief
+          </button>
+        </div>
+        <div class="views-group">
+          <span class="views-arrow" aria-hidden="true">
+            <svg viewBox="0 0 10 16" focusable="false"><path d="M2 2l6 6-6 6" /></svg>
+            <svg viewBox="0 0 10 16" focusable="false"><path d="M2 2l6 6-6 6" /></svg>
+            <svg viewBox="0 0 10 16" focusable="false"><path d="M2 2l6 6-6 6" /></svg>
+          </span>
+          <nav class="views" id="views" aria-label="Views"></nav>
+        </div>
+      </div>
+    </header>
+
+    <div class="layout">
+      <div class="rail">
+        <!-- Planny. Drawn here rather than built in script because the page
+             runs under a CSP with no inline script, and because a mascot that
+             only ever changes class does not need a renderer. The parts are
+             named so app.js can say what he is doing with one class. -->
+        <div class="dock" id="dock">
+          <!-- Proportioned after the ASCII Planny, a box with a star for an eye,
+               plus the stick arms and feet that let him act out a mood. The
+               viewBox is cropped to his box, so the arms and sparkles hang
+               just outside it rather than shrinking him. -->
+          <!-- The flight: stars streaming past while Plan2Code is thinking.
+               Filled in by app.js, because this page's CSP refuses the style
+               attributes that would place each star in markup. -->
+          <div class="sky" id="dock-sky" aria-hidden="true"></div>
+          <span class="pilot">
+          <span class="trail" aria-hidden="true"><i></i><i></i><i></i></span>
+          <svg class="planny" id="planny" viewBox="0 0 22 30" aria-hidden="true" focusable="false">
+            <!-- Feet first, so the shell's bottom edge covers their tops. -->
+            <rect class="foot f1" x="5.7" y="27.1" width="3.6" height="1.7" rx="0.85" />
+            <rect class="foot f2" x="12.7" y="27.1" width="3.6" height="1.7" rx="0.85" />
+            <rect class="shell" x="3" y="7" width="16" height="20" rx="3.2" />
+            <path class="eye" d="M11 10.95 L11.79 12.91 L13.9 13.06 L12.28 14.42 L12.79 16.47 L11 15.35 L9.21 16.47 L9.72 14.42 L8.1 13.06 L10.21 12.91 Z" />
+            <path class="smile" d="M8.3 18.4 Q11 21 13.7 18.4" />
+            <!-- One arm set per mood, shown by class alone (the CSP refuses
+                 style attributes). A mood with no set of its own shows the
+                 resting arms; adrift shows none at all. -->
+            <g class="arms a-rest"><g class="arm"><path d="M3 18 L1.3 21" /><circle cx="1.3" cy="21" r="0.85" /></g><g class="arm"><path d="M19 18 L20.7 21" /><circle cx="20.7" cy="21" r="0.85" /></g></g>
+            <g class="arms a-point"><g class="arm"><path d="M3 18 L1.3 21" /><circle cx="1.3" cy="21" r="0.85" /></g><g class="arm wave"><path d="M19 17.5 L21.4 14.9" /><circle cx="21.4" cy="14.9" r="0.85" /></g></g>
+            <g class="arms a-work"><g class="arm pump-l"><path d="M3 18 L1.1 20.6" /><circle cx="1.1" cy="20.6" r="0.85" /></g><g class="arm pump-r"><path d="M19 18 L20.9 20.6" /><circle cx="20.9" cy="20.6" r="0.85" /></g></g>
+            <g class="arms a-done"><g class="arm"><path d="M3 16.5 L1.1 13.7" /><circle cx="1.1" cy="13.7" r="0.85" /></g><g class="arm"><path d="M19 16.5 L20.9 13.7" /><circle cx="20.9" cy="13.7" r="0.85" /></g></g>
+            <g class="arms a-gone"><g class="arm"><path d="M3 18.6 L2.5 22.2" /><circle cx="2.5" cy="22.2" r="0.85" /></g><g class="arm"><path d="M19 18.6 L19.5 22.2" /><circle cx="19.5" cy="22.2" r="0.85" /></g></g>
+            <!-- Variant parts, hidden unless a mood variant wants them:
+                 sparkles for a good moment, Z's for asleep. Each sits in a
+                 positioning group because a CSS animation on transform would
+                 overwrite a transform on the path itself. -->
+            <g class="spark">
+              <g transform="translate(1.4 6.6)"><path d="M0 -2.4 L0.65 -0.65 L2.4 0 L0.65 0.65 L0 2.4 L-0.65 0.65 L-2.4 0 L-0.65 -0.65 Z" /></g>
+              <g transform="translate(20.6 5.2)"><path d="M0 -1.9 L0.5 -0.5 L1.9 0 L0.5 0.5 L0 1.9 L-0.5 0.5 L-1.9 0 L-0.5 -0.5 Z" /></g>
+            </g>
+            <g class="zzz">
+              <path d="M19.4 5.6 h2.4 l-2.4 2.4 h2.4" />
+              <path d="M20.4 1.8 h1.9 l-1.9 1.9 h1.9" />
+              <path d="M21.4 -1.6 h1.4 l-1.4 1.4 h1.4" />
+            </g>
+          </svg>
+          </span>
+          <p class="dock-say">
+            <span id="agent-spin" class="spinner tiny dock-spin" aria-hidden="true" hidden></span>
+            <span id="agent-text" aria-live="polite">Connecting…</span>
+            <!-- Outside the live region on purpose: this changes once a second
+                 while the agent works, and a polite region would read the clock
+                 out loud every time it did. -->
+            <span id="agent-tick" class="tick" aria-hidden="true"></span>
+          </p>
+        </div>
+        <nav class="sidebar" id="sidebar" aria-label="Session outline"></nav>
+      </div>
+
+      <main class="main" id="main" tabindex="-1">
+        <!-- The starting screen, in the markup so it is on screen from the
+             first paint, before any script has run. The server writes the
+             session's own line into the heading; app.js replaces the whole
+             pane with the real screen the moment it draws. -->
+        <div class="launching boot-pane">
+          <div class="spinner" aria-hidden="true"></div>
+          <p class="card-kicker">Just a moment</p>
+          <h2 class="launch-title" id="boot-title">Opening the console</h2>
+          <p class="launch-quip">Getting everything ready…</p>
+        </div>
+      </main>
+
+      <aside class="aside" id="aside" aria-label="Notes and discussion"></aside>
+    </div>
+
+    <!-- Planny acting out each skill while it starts up and while it works.
+         Inert until app.js clones one onto the starting or waiting screen
+         (startStage), so it costs nothing on any other screen. Classes only,
+         no style attributes: the CSP refuses them, and the motion lives in
+         app.css under `.pose`. -->
+    <template id="start-poses">
+      <!-- Init / Init Update: laying the foundation. Blocks drop onto a stack
+           beside him one at a time and settle with a squash, his star
+           following each one down while he reaches to steady the pile. -->
+      <svg class="pose pose-init" data-pose="init" viewBox="0 4 240 216" aria-hidden="true" focusable="false">
+        <ellipse class="shadow" cx="120" cy="198" rx="34" ry="5" />
+        <ellipse class="shadow" cx="194" cy="198" rx="22" ry="4" />
+        <g class="bob">
+          <rect class="fl foot f1" x="94" y="179" width="20" height="10" rx="5" />
+          <rect class="fl foot f2" x="126" y="179" width="20" height="10" rx="5" />
+          <rect class="sh" x="80" y="72" width="80" height="108" rx="16" />
+          <path class="ln" d="M80 126 L66 150" /><circle class="fl" cx="66" cy="150" r="5.5" />
+          <path class="ln" d="M160 124 L178 142" /><circle class="fl" cx="178" cy="142" r="5.5" />
+          <g class="in-look"><path class="ey blink" d="M124 86 L127.64 94.98 L137.31 95.67 L129.9 101.92 L132.23 111.33 L124 106.2 L115.77 111.33 L118.1 101.92 L110.69 95.67 L120.36 94.98 Z" /></g>
+          <path class="es" d="M112 122 Q120 128 128 122" />
+        </g>
+        <rect class="blk in-b1" x="176" y="180" width="36" height="16" rx="3" />
+        <rect class="blk in-b2" x="179" y="164" width="30" height="16" rx="3" />
+        <rect class="blk ac in-b3" x="182" y="148" width="24" height="16" rx="3" />
+      </svg>
+
+      <!-- 0 Pathfinder: leaning into the unknown, spyglass held to the
+           horizon, a dotted trail rolling by under him. -->
+      <svg class="pose pose-pathfinder" data-pose="pathfinder" viewBox="0 4 240 216" aria-hidden="true" focusable="false">
+        <path class="pf-trail" d="M14 212 Q120 196 226 210" />
+        <g class="bob">
+          <g transform="rotate(6 120 126)">
+            <rect class="fl foot f1" x="94" y="179" width="20" height="10" rx="5" />
+          <rect class="fl foot f2" x="126" y="179" width="20" height="10" rx="5" />
+            <rect class="sh" x="80" y="72" width="80" height="108" rx="16" />
+            <path class="ln" d="M80 126 L66 150" /><circle class="fl" cx="66" cy="150" r="5.5" />
+            <path class="ln" d="M160 116 L173.6 81.2" /><circle class="fl" cx="173.6" cy="81.2" r="5.5" />
+            <g class="pf-look"><path class="ey blink" d="M126 84 L129.64 92.98 L139.31 93.67 L131.9 99.92 L134.23 109.33 L126 104.2 L117.77 109.33 L120.1 99.92 L112.69 93.67 L122.36 92.98 Z" /></g>
+            <path class="es" d="M114 120 Q121 126 128 120" />
+          </g>
+        </g>
+        <g class="prop">
+          <g class="pf-glass">
+            <line class="lt" x1="181.5" y1="83.5" x2="177" y2="88" />
+            <path class="lt" d="M178 80 L190 68 L197 75 L185 87 Z" />
+            <path class="lt" d="M191.5 69.5 L203.5 57.5 L207.5 61.5 L195.5 73.5 Z" />
+            <circle class="ac" cx="207" cy="58" r="4" />
+          </g>
+          <circle class="ac twinkle t1" cx="206" cy="40" r="2" />
+          <circle class="ac twinkle t2" cx="220" cy="58" r="2.5" />
+          <circle class="ac twinkle t3" cx="196" cy="28" r="3" />
+        </g>
+      </svg>
+
+      <!-- 1 Plan: a question mark bobbing over his head, hand to his chin,
+           star on the clipboard while its boxes tick themselves off. -->
+      <svg class="pose pose-plan" data-pose="plan" viewBox="0 4 240 216" aria-hidden="true" focusable="false">
+        <ellipse class="shadow" cx="120" cy="198" rx="34" ry="5" />
+        <g class="bob">
+          <rect class="fl foot f1" x="94" y="179" width="20" height="10" rx="5" />
+          <rect class="fl foot f2" x="126" y="179" width="20" height="10" rx="5" />
+          <rect class="sh" x="80" y="72" width="80" height="108" rx="16" />
+          <path class="ln" d="M80 120 L66 114" /><circle class="fl" cx="66" cy="114" r="5.5" />
+          <g class="pl-look"><path class="ey blink" d="M114 84 L117.64 92.98 L127.31 93.67 L119.9 99.92 L122.23 109.33 L114 104.2 L105.77 109.33 L108.1 99.92 L100.69 93.67 L110.36 92.98 Z" /></g>
+          <line class="es" x1="110" y1="124" x2="124" y2="123" />
+          <path class="ln" d="M160 128 L172 142 L134 136" /><circle class="fl" cx="134" cy="136" r="5.5" />
+          <g class="pl-q">
+            <path class="as" d="M112 36 Q112 22 125 22 Q138 22 138 34 Q138 42 127 46 L127 53" />
+            <circle class="ac" cx="127" cy="63" r="3.5" />
+          </g>
+        </g>
+        <g class="prop">
+          <rect class="lt pl-board" x="32" y="88" width="34" height="44" rx="4" />
+          <rect class="fl" x="42" y="84" width="14" height="7" rx="2" />
+          <path class="as pl-check c1" pathLength="1" d="M37 101 L40 104 L45 98" />
+          <line class="lt" x1="50" y1="101" x2="60" y2="101" />
+          <path class="as pl-check c2" pathLength="1" d="M37 112 L40 115 L45 109" />
+          <line class="lt" x1="50" y1="112" x2="58" y2="112" />
+          <path class="as pl-check c3" pathLength="1" d="M37 123 L40 126 L45 120" />
+          <line class="lt" x1="50" y1="123" x2="60" y2="123" />
+        </g>
+      </svg>
+
+      <!-- 2 Document: brow down, writing. He steadies the page while the
+           pencil walks it and each line appears behind it. -->
+      <svg class="pose pose-document" data-pose="document" viewBox="0 4 240 216" aria-hidden="true" focusable="false">
+        <ellipse class="shadow" cx="120" cy="198" rx="34" ry="5" />
+        <g class="bob">
+          <g transform="rotate(4 120 126)">
+            <rect class="fl foot f1" x="94" y="179" width="20" height="10" rx="5" />
+          <rect class="fl foot f2" x="126" y="179" width="20" height="10" rx="5" />
+            <rect class="sh" x="80" y="72" width="80" height="108" rx="16" />
+            <path class="ln" d="M80 126 L66 150" /><circle class="fl" cx="66" cy="150" r="5.5" />
+            <path class="ln" d="M160 118 L176 108" /><circle class="fl" cx="176" cy="108" r="5.5" />
+            <g class="dc-look"><path class="ey blink" d="M120 86 L123.64 94.98 L133.31 95.67 L125.9 101.92 L128.23 111.33 L120 106.2 L111.77 111.33 L114.1 101.92 L106.69 95.67 L116.36 94.98 Z" /></g>
+            <path class="ln" d="M107 81 L133 83" />
+            <path class="es" d="M113 122 Q120 127 127 122" />
+          </g>
+        </g>
+        <g class="prop">
+          <rect class="lt dc-page" x="178" y="84" width="36" height="46" rx="3" />
+          <line class="lt" x1="204" y1="84" x2="214" y2="94" />
+          <line class="lt dc-line d1" pathLength="1" x1="184" y1="98" x2="200" y2="98" />
+          <line class="lt dc-line d2" pathLength="1" x1="184" y1="106" x2="208" y2="106" />
+          <line class="lt dc-line d3" pathLength="1" x1="184" y1="114" x2="204" y2="114" />
+          <line class="lt dc-line d4" pathLength="1" x1="184" y1="122" x2="196" y2="122" />
+          <g class="dc-pencil">
+            <line class="ln" x1="220" y1="96" x2="192" y2="124" />
+            <path class="ac" d="M188 123 L193 128 L184 132 Z" />
+          </g>
+        </g>
+      </svg>
+
+      <!-- 3 Implement: fist up, determined. He cranks the wrench, sparks
+           fly, and the code badge pulses on the other side. -->
+      <svg class="pose pose-implement" data-pose="implement" viewBox="0 4 240 216" aria-hidden="true" focusable="false">
+        <ellipse class="shadow" cx="120" cy="198" rx="34" ry="5" />
+        <g class="bob">
+          <rect class="fl foot f1" x="94" y="179" width="20" height="10" rx="5" />
+          <rect class="fl foot f2" x="126" y="179" width="20" height="10" rx="5" />
+          <rect class="sh" x="80" y="72" width="80" height="108" rx="16" />
+          <path class="ln" d="M80 128 L64 138" /><circle class="fl" cx="64" cy="138" r="5.5" />
+          <path class="ln" d="M160 118 L174 96" /><circle class="fl" cx="174" cy="96" r="5.5" />
+          <path class="ey blink" d="M120 86 L123.64 94.98 L133.31 95.67 L125.9 101.92 L128.23 111.33 L120 106.2 L111.77 111.33 L114.1 101.92 L106.69 95.67 L116.36 94.98 Z" />
+          <path class="es" d="M104 121 Q120 128 136 121" />
+        </g>
+        <g class="prop">
+          <g class="im-wrench">
+            <line class="ln" x1="64" y1="138" x2="44" y2="118" />
+            <path class="ln" d="M30 112 A8 8 0 1 0 38 104" />
+          </g>
+          <g class="im-spark">
+            <line class="lt" x1="20" y1="122" x2="14" y2="124" />
+            <line class="lt" x1="18" y1="110" x2="12" y2="110" />
+            <line class="lt" x1="28" y1="96" x2="24" y2="92" />
+          </g>
+        </g>
+        <g class="prop p2">
+          <rect class="lt" x="176" y="100" width="34" height="24" rx="6" />
+          <path class="as im-lt" d="M186 106 L181 112 L186 118" />
+          <path class="as im-slash" d="M195 105 L191 119" />
+          <path class="as im-gt" d="M200 106 L205 112 L200 118" />
+        </g>
+      </svg>
+
+      <!-- 4 Finalize: hopping for joy, both arms up, beside the checkmark
+           flag, confetti drifting down and his star glowing. -->
+      <svg class="pose pose-finalize" data-pose="finalize" viewBox="0 4 240 216" aria-hidden="true" focusable="false">
+        <ellipse class="shadow fz-shadow" cx="120" cy="198" rx="34" ry="5" />
+        <g class="fz-hop">
+          <g transform="translate(0 -8)">
+            <rect class="fl foot f1" x="94" y="179" width="20" height="10" rx="5" />
+          <rect class="fl foot f2" x="126" y="179" width="20" height="10" rx="5" />
+            <rect class="sh" x="80" y="72" width="80" height="108" rx="16" />
+            <path class="ln" d="M80 116 L60 90" /><circle class="fl" cx="60" cy="90" r="5.5" />
+            <path class="ln" d="M160 116 L180 90" /><circle class="fl" cx="180" cy="90" r="5.5" />
+            <circle class="ac fz-halo" cx="120" cy="98" r="23" />
+            <path class="ey blink" d="M120 84 L123.64 92.98 L133.31 93.67 L125.9 99.92 L128.23 109.33 L120 104.2 L111.77 109.33 L114.1 99.92 L106.69 93.67 L116.36 92.98 Z" />
+            <path class="ey" d="M106 118 Q120 134 134 118 Z" />
+          </g>
+        </g>
+        <g class="prop">
+          <line class="ln" x1="196" y1="150" x2="196" y2="96" />
+          <g class="fz-flag">
+            <path class="ac" d="M196 98 L234 112 L196 126 Z" />
+            <path class="es fz-tick" d="M203 112 L207 116 L215 108" />
+          </g>
+        </g>
+        <g class="fz-confetti">
+          <g class="cf"><circle class="ac" cx="40" cy="40" r="3" /></g>
+          <g class="cf"><rect class="fl" x="58.5" y="20.5" width="3" height="7" transform="rotate(30 60 24)" /></g>
+          <g class="cf"><circle class="fl" cx="30" cy="82" r="2" /></g>
+          <g class="cf"><rect class="ac" x="50.5" y="58.5" width="3" height="7" transform="rotate(-35 52 62)" /></g>
+          <g class="cf"><circle class="ac" cx="120" cy="18" r="2.5" /></g>
+          <g class="cf"><rect class="ac" x="194.5" y="26.5" width="3" height="7" transform="rotate(40 196 30)" /></g>
+          <g class="cf"><circle class="fl" cx="216" cy="58" r="2.5" /></g>
+          <g class="cf"><circle class="fl" cx="182" cy="62" r="2" /></g>
+          <g class="cf"><rect class="fl" x="220.5" y="80.5" width="3" height="7" transform="rotate(-20 222 84)" /></g>
+          <g class="cf"><circle class="ac" cx="200" cy="12" r="2" /></g>
+        </g>
+      </svg>
+
+      <!-- Quick Task: in a hurry. Leaning into a dash, arms pumping and feet
+           stepping, speed lines streaming off behind him and a lightning bolt
+           crackling ahead. -->
+      <svg class="pose pose-quick-task" data-pose="quick-task" viewBox="0 4 240 216" aria-hidden="true" focusable="false">
+        <ellipse class="shadow qt-shadow" cx="120" cy="198" rx="34" ry="5" />
+        <g>
+          <line class="lt qt-line" x1="72" y1="92" x2="46" y2="92" />
+          <line class="lt qt-line l2" x1="68" y1="116" x2="32" y2="116" />
+          <line class="lt qt-line l3" x1="64" y1="140" x2="42" y2="140" />
+          <line class="lt qt-line l4" x1="60" y1="164" x2="34" y2="164" />
+        </g>
+        <g class="bob">
+          <g transform="rotate(10 120 182)">
+            <rect class="fl foot f1" x="94" y="179" width="20" height="10" rx="5" />
+          <rect class="fl foot f2" x="126" y="179" width="20" height="10" rx="5" />
+            <rect class="sh" x="80" y="72" width="80" height="108" rx="16" />
+            <path class="ln" d="M80 122 L66 138 L58 128" /><circle class="fl" cx="58" cy="128" r="5.5" />
+            <path class="ln" d="M160 122 L174 112 L182 122" /><circle class="fl" cx="182" cy="122" r="5.5" />
+            <path class="ey blink" d="M132 84 L135.64 92.98 L145.31 93.67 L137.9 99.92 L140.23 109.33 L132 104.2 L123.77 109.33 L126.1 99.92 L118.69 93.67 L128.36 92.98 Z" />
+            <line class="es" x1="122" y1="121" x2="138" y2="119" />
+          </g>
+        </g>
+        <g class="qt-zap">
+          <path class="ac" d="M212 60 L196 98 L209 98 L200 130 L226 88 L212 88 L222 60 Z" />
+        </g>
+      </svg>
+
+      <!-- Review: a magnifying glass over the code. It works down the page,
+           stops on the line that is wrong and flags it; his star follows it
+           the whole way, one hand on his chin. -->
+      <svg class="pose pose-review" data-pose="review" viewBox="0 4 240 216" aria-hidden="true" focusable="false">
+        <ellipse class="shadow" cx="120" cy="198" rx="34" ry="5" />
+        <g class="bob">
+          <rect class="fl foot f1" x="94" y="179" width="20" height="10" rx="5" />
+          <rect class="fl foot f2" x="126" y="179" width="20" height="10" rx="5" />
+          <rect class="sh" x="80" y="72" width="80" height="108" rx="16" />
+          <path class="ln" d="M160 126 L174 138" /><circle class="fl" cx="174" cy="138" r="5.5" />
+          <g class="rv-look"><path class="ey blink" d="M126 86 L129.64 94.98 L139.31 95.67 L131.9 101.92 L134.23 111.33 L126 106.2 L117.77 111.33 L120.1 101.92 L112.69 95.67 L122.36 94.98 Z" /></g>
+          <path class="ln" d="M113 82 Q126 76 139 83" />
+          <line class="es" x1="114" y1="124" x2="126" y2="122" />
+          <path class="ln" d="M80 126 L70 146 L98 150" /><circle class="fl" cx="98" cy="150" r="5.5" />
+        </g>
+        <g class="prop">
+          <rect class="lt" x="174" y="80" width="44" height="60" rx="4" />
+          <line class="lt" x1="182" y1="94" x2="204" y2="94" />
+          <line class="lt" x1="188" y1="106" x2="210" y2="106" />
+          <line class="lt" x1="188" y1="118" x2="206" y2="118" />
+          <line class="as rv-flag" x1="188" y1="118" x2="206" y2="118" />
+          <line class="lt" x1="182" y1="130" x2="200" y2="130" />
+          <g class="rv-pin"><circle class="ac" cx="227" cy="118" r="4" /></g>
+          <g class="rv-glass">
+            <circle class="lt" cx="197" cy="94" r="12" />
+            <line class="ln" x1="206" y1="103" x2="216" y2="113" />
+          </g>
+        </g>
+      </svg>
+
+      <!-- Handoff: passing it on. Both arms out, holding a wrapped parcel
+           toward whoever picks up next, an arrow pulsing the way it is going. -->
+      <svg class="pose pose-handoff" data-pose="handoff" viewBox="0 4 240 216" aria-hidden="true" focusable="false">
+        <ellipse class="shadow" cx="126" cy="198" rx="44" ry="5" />
+        <g class="bob">
+          <g transform="translate(-8 0)">
+            <rect class="fl foot f1" x="94" y="179" width="20" height="10" rx="5" />
+          <rect class="fl foot f2" x="126" y="179" width="20" height="10" rx="5" />
+            <rect class="sh" x="80" y="72" width="80" height="108" rx="16" />
+            <path class="ln" d="M80 126 L66 150" /><circle class="fl" cx="66" cy="150" r="5.5" />
+            <path class="ey blink" d="M126 86 L129.64 94.98 L139.31 95.67 L131.9 101.92 L134.23 111.33 L126 106.2 L117.77 111.33 L120.1 101.92 L112.69 95.67 L122.36 94.98 Z" />
+            <path class="es" d="M110 120 Q122 129 134 120" />
+            <g class="ho-reach">
+              <line class="ln" x1="160" y1="124" x2="184" y2="116" />
+              <line class="ln" x1="160" y1="148" x2="184" y2="140" />
+            </g>
+            <g class="ho-give">
+              <path class="as" d="M202 102 C194 88 186 94 194 102 M202 102 C210 88 218 94 210 102" />
+              <rect class="sh" x="182" y="102" width="40" height="36" rx="4" />
+              <line class="as" x1="202" y1="102" x2="202" y2="138" />
+              <line class="as" x1="182" y1="120" x2="222" y2="120" />
+              <circle class="fl" cx="183" cy="116" r="5.5" />
+              <circle class="fl" cx="183" cy="140" r="5.5" />
+            </g>
+          </g>
+        </g>
+        <g class="ho-arrow"><path class="as" d="M178 64 L214 64 M204 54 L216 64 L204 74" /></g>
+      </svg>
+    </template>
+
+    <!-- The Help dialog's content, cloned into #help-modal the first time ? is
+         pressed, so none of it costs the first paint. Tab order, labels and
+         colors live in HELP_TABS (help.js); a test keeps this in step. -->
+    <template id="help-content">
+      <svg class="help-icons" aria-hidden="true" focusable="false">
+        <symbol id="hi-about" viewBox="0 0 24 24" fill="none">
+          <circle cx="12" cy="12" r="9" />
+          <path d="M12 11v6" />
+          <path d="M12 7.5v.5" />
+        </symbol>
+        <symbol id="hi-around" viewBox="0 0 24 24" fill="none">
+          <circle cx="12" cy="12" r="9" />
+          <path d="M15.5 8.5l-2 5-5 2 2-5z" />
+        </symbol>
+        <symbol id="hi-workspace" viewBox="0 0 24 24" fill="none">
+          <path d="M3 7.5V18a1.5 1.5 0 0 0 1.5 1.5h13" />
+          <path d="M6 5.5a1.5 1.5 0 0 1 1.5-1.5h3l2 2h6A1.5 1.5 0 0 1 20 7.5v7a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 6 14.5z" />
+        </symbol>
+        <symbol id="hi-planny" viewBox="0 0 24 24" fill="none">
+          <rect x="6" y="5" width="12" height="13" rx="3" />
+          <path d="M12 8.6l1 2.1 2.3.3-1.7 1.6.4 2.3-2-1.1-2 1.1.4-2.3-1.7-1.6 2.3-.3z" />
+          <path d="M6 12.5L3.8 15.5M18 12.5l2.2 3M9 18v2M15 18v2" />
+        </symbol>
+        <symbol id="hi-answering" viewBox="0 0 24 24" fill="none">
+          <rect x="4" y="4" width="16" height="16" rx="3" />
+          <path d="M8 12.5l3 3 5-6" />
+        </symbol>
+        <symbol id="hi-sending" viewBox="0 0 24 24" fill="none">
+          <path d="M3.5 11.5L20 4l-5.5 16-3.5-6.5z" />
+          <path d="M11 13.5L20 4" />
+        </symbol>
+        <symbol id="hi-notes" viewBox="0 0 24 24" fill="none">
+          <path d="M16.5 8l-7 7a2 2 0 0 0 2.8 2.8l7.4-7.4a4 4 0 0 0-5.7-5.7l-7.4 7.4a6 6 0 0 0 8.5 8.5l6-6" />
+        </symbol>
+        <symbol id="hi-docs" viewBox="0 0 24 24" fill="none">
+          <path d="M6 3h8l4 4v14H6z" />
+          <path d="M14 3v4h4M9 12h6M9 16h6" />
+        </symbol>
+        <symbol id="hi-dashboard" viewBox="0 0 24 24" fill="none">
+          <rect x="4" y="4" width="7" height="7" rx="1.5" />
+          <rect x="13" y="4" width="7" height="7" rx="1.5" />
+          <rect x="4" y="13" width="7" height="7" rx="1.5" />
+          <rect x="13" y="13" width="7" height="7" rx="1.5" />
+        </symbol>
+        <symbol id="hi-meter" viewBox="0 0 24 24" fill="none">
+          <circle cx="12" cy="12" r="8" />
+          <path d="M12 4a8 8 0 0 1 7.6 10.5" />
+          <path d="M12 12l3-3" />
+        </symbol>
+        <symbol id="hi-build" viewBox="0 0 24 24" fill="none">
+          <rect x="3" y="9" width="18" height="6" rx="3" />
+          <path d="M6 12h7" />
+        </symbol>
+        <symbol id="hi-ask" viewBox="0 0 24 24" fill="none">
+          <path d="M4 5h16v11H10l-4 4v-4H4z" />
+          <path d="M8 9.5h8M8 12.5h5" />
+        </symbol>
+        <symbol id="hi-finishing" viewBox="0 0 24 24" fill="none">
+          <path d="M6 21V4" />
+          <path d="M6 4h11l-2 4 2 4H6" />
+        </symbol>
+        <symbol id="hi-stuck" viewBox="0 0 24 24" fill="none">
+          <path d="M12 4l9 16H3z" />
+          <path d="M12 10v4.5M12 17v.5" />
+        </symbol>
+        <symbol id="hi-prefs" viewBox="0 0 24 24" fill="none">
+          <path d="M4 7h16M4 12h16M4 17h16" />
+          <circle cx="9" cy="7" r="1.8" />
+          <circle cx="15" cy="12" r="1.8" />
+          <circle cx="7" cy="17" r="1.8" />
+        </symbol>
+        <symbol id="hi-privacy" viewBox="0 0 24 24" fill="none">
+          <rect x="5" y="10.5" width="14" height="10" rx="2" />
+          <path d="M8 10.5V8a4 4 0 0 1 8 0v2.5M12 14.5v2" />
+        </symbol>
+      </svg>
+
+      <!-- Tab 1: What this page is -->
+      <section class="help-panel" data-tab="about">
+        <h3>What this page is</h3>
+        <p class="help-lead">
+          A page for answering Plan2Code's questions, reading what it has
+          written and approving things, instead of typing it all into the
+          terminal.
+        </p>
+        <figure class="help-figure" data-figure="about">
+          <svg class="help-diagram" viewBox="0 0 560 160" role="img" aria-labelledby="hd-about-title hd-about-desc">
+            <title id="hd-about-title">You, this page, its program and Plan2Code, all on your machine</title>
+            <desc id="hd-about-desc">
+              Four boxes in a row, each talking both ways with the next: you in
+              your browser, this page, a small program on 127.0.0.1, and
+              Plan2Code in your terminal. A dashed outline around all four is
+              labelled "Your machine only".
+            </desc>
+            <defs>
+              <marker id="hd-about-arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+                <path class="hd-arrow" d="M0 0 L8 4 L0 8 z" />
+              </marker>
+            </defs>
+            <rect class="hd-line hd-dash" x="6" y="6" width="548" height="148" rx="10" />
+            <text class="hd-label hd-accent" x="18" y="26">Your machine only</text>
+            <rect class="hd-box" x="16" y="42" width="100" height="64" rx="8" />
+            <rect class="hd-box" x="160" y="42" width="100" height="64" rx="8" />
+            <rect class="hd-box" x="304" y="42" width="100" height="64" rx="8" />
+            <rect class="hd-box" x="448" y="42" width="100" height="64" rx="8" />
+            <text class="hd-label" x="66" y="70" text-anchor="middle">You</text>
+            <text class="hd-label small" x="66" y="88" text-anchor="middle">in your browser</text>
+            <text class="hd-label" x="210" y="79" text-anchor="middle">This page</text>
+            <text class="hd-label" x="354" y="70" text-anchor="middle">Small program</text>
+            <text class="hd-label small" x="354" y="88" text-anchor="middle">on 127.0.0.1</text>
+            <text class="hd-label" x="498" y="70" text-anchor="middle">Plan2Code</text>
+            <text class="hd-label small" x="498" y="88" text-anchor="middle">in your terminal</text>
+            <path class="hd-line" d="M120 74 H156" marker-start="url(#hd-about-arrow)" marker-end="url(#hd-about-arrow)" />
+            <path class="hd-line" d="M264 74 H300" marker-start="url(#hd-about-arrow)" marker-end="url(#hd-about-arrow)" />
+            <path class="hd-line" d="M408 74 H444" marker-start="url(#hd-about-arrow)" marker-end="url(#hd-about-arrow)" />
+            <path class="hd-flow" d="M66 110 V132 H498 V110" />
+          </svg>
+          <figcaption>Everything stays on this computer. Both ends have to be running.</figcaption>
+        </figure>
+        <p>
+          A small program running on your own machine, started for you by
+          Plan2Code in your terminal. Nothing here goes over the internet, and
+          there is no account and nothing to install.
+        </p>
+        <h4>On this machine only</h4>
+        <p>
+          The address starts with <strong>127.0.0.1</strong>, which always means
+          "this computer". Nothing you type leaves your machine, and a colleague
+          cannot open your link from theirs. To work through a session together,
+          share your screen.
+        </p>
+        <h4>How long it runs</h4>
+        <p>
+          <strong>It stays up while this tab is open.</strong> Close the tab and
+          it shuts itself down <span data-fact="closedTabMinutes">2</span> minutes
+          later, and after <span data-fact="maxLifeHours">4</span> hours
+          regardless. Reopening the same link brings everything back: nothing you
+          typed is kept in the browser alone.
+        </p>
+        <h4>Two halves, both running</h4>
+        <p>
+          <strong>The terminal is the other half.</strong> This page collects your
+          answers; Plan2Code, in the terminal you started it from, is what reads
+          them and writes the files. Both have to be running for a question to
+          reach you or an answer to reach it.
+        </p>
+        <p id="about-live" class="about-live"></p>
+        <p>
+          <strong>If it stops.</strong> Press Send anyway. Answers are written to
+          disk the moment they leave this page and are held until something
+          collects them, so starting Plan2Code again picks them up where you
+          left off. Nothing is lost by closing this tab either.
+        </p>
+      </section>
+
+      <!-- Tab 2: Finding your way around -->
+      <section class="help-panel" data-tab="around">
+        <h3>Finding your way around</h3>
+        <p class="help-lead">
+          The page is laid out the same way in every session: a bar across the
+          top, the outline on the left, the question or document in the middle,
+          your notes on the right and the Send button at the bottom.
+        </p>
+        <figure class="help-figure" data-figure="around">
+          <svg class="help-diagram" viewBox="0 0 560 320" role="img" aria-labelledby="hd-around-title hd-around-desc">
+            <title id="hd-around-title">A map of the page</title>
+            <desc id="hd-around-desc">
+              A simplified outline of this page with six numbered areas, in the
+              same order as the sections below: 1, the top bar, with the title on
+              the left, the progress bar in the middle, the question mark and
+              swatch buttons on the right, and Stop session under the title;
+              2, Planny and the outline down the left; 3, the view tabs, on the
+              top bar's second row at the right; 4, the question card in the
+              middle with Previous and Next under it; 5, the notes panel on the
+              right; 6, the footer with Clear and Send to Plan2Code.
+            </desc>
+            <rect class="hd-box" x="6" y="6" width="548" height="308" rx="10" />
+            <path class="hd-line" d="M6 64 H554 M130 64 V270 M430 64 V270 M6 270 H554" />
+            <text class="hd-label" x="20" y="28">Title</text>
+            <rect class="hd-line" x="215" y="18" width="130" height="6" rx="3" />
+            <rect class="hd-accent" x="215" y="18" width="58" height="6" rx="3" />
+            <rect class="hd-box" x="482" y="10" width="22" height="22" rx="5" />
+            <text class="hd-label" x="493" y="26" text-anchor="middle">?</text>
+            <rect class="hd-box" x="510" y="10" width="22" height="22" rx="5" />
+            <circle class="hd-accent" cx="521" cy="21" r="5" />
+            <rect class="hd-box" x="20" y="38" width="96" height="20" rx="5" />
+            <text class="hd-label small" x="68" y="52" text-anchor="middle">Stop session</text>
+            <text class="hd-label small" x="340" y="53">Questions</text>
+            <text class="hd-label small" x="408" y="53">Overview</text>
+            <text class="hd-label small" x="540" y="53" text-anchor="end">Ask</text>
+            <rect class="hd-box" x="46" y="80" width="18" height="26" rx="4" />
+            <path class="hd-line" d="M50 80 L46 72 M60 80 L64 72" />
+            <path class="hd-line" d="M22 122 H112 M22 138 H100 M22 154 H108 M22 170 H92 M22 186 H104" />
+            <rect class="hd-box" x="150" y="80" width="260" height="144" rx="8" />
+            <text class="hd-label" x="280" y="148" text-anchor="middle">The question card</text>
+            <text class="hd-label small" x="280" y="166" text-anchor="middle">answer it here</text>
+            <text class="hd-label small" x="160" y="250">Previous</text>
+            <text class="hd-label small" x="400" y="250" text-anchor="end">Next</text>
+            <text class="hd-label small" x="442" y="84">Notes on this</text>
+            <rect class="hd-box" x="442" y="206" width="100" height="44" rx="6" />
+            <text class="hd-label small" x="20" y="297">What is ready</text>
+            <rect class="hd-box" x="352" y="282" width="52" height="22" rx="5" />
+            <text class="hd-label small" x="378" y="297" text-anchor="middle">Clear</text>
+            <rect class="hd-accent" x="412" y="282" width="132" height="22" rx="5" />
+            <text class="hd-label small" x="478" y="297" text-anchor="middle">Send to Plan2Code</text>
+            <circle class="hd-accent" cx="160" cy="22" r="10" />
+            <text class="hd-label hd-accent" x="160" y="27" text-anchor="middle">1</text>
+            <circle class="hd-accent" cx="100" cy="94" r="10" />
+            <text class="hd-label hd-accent" x="100" y="99" text-anchor="middle">2</text>
+            <circle class="hd-accent" cx="316" cy="48" r="10" />
+            <text class="hd-label hd-accent" x="316" y="53" text-anchor="middle">3</text>
+            <circle class="hd-accent" cx="280" cy="246" r="10" />
+            <text class="hd-label hd-accent" x="280" y="251" text-anchor="middle">4</text>
+            <circle class="hd-accent" cx="492" cy="128" r="10" />
+            <text class="hd-label hd-accent" x="492" y="133" text-anchor="middle">5</text>
+            <circle class="hd-accent" cx="250" cy="292" r="10" />
+            <text class="hd-label hd-accent" x="250" y="297" text-anchor="middle">6</text>
+          </svg>
+          <figcaption>The numbers follow the sections below, top to bottom.</figcaption>
+        </figure>
+        <h4>The top bar</h4>
+        <ul>
+          <li>The name of the step you are in, and the session's title.</li>
+          <li>
+            <strong>The progress bar</strong>, for example "4 of 9 answered", or
+            "4 of 9 done" while something is being built.
+          </li>
+          <li>
+            The <strong>?</strong> button opens this Help, and the swatch button
+            beside it opens <strong>User Preferences</strong>: your role first,
+            then your colors, theme, card width and sounds.
+          </li>
+          <li>
+            <strong>Stop session</strong> ends the session and saves your place.
+            See "Stopping and finishing".
+          </li>
+          <li>
+            The <strong>triangle</strong> beside it, pointing left, saves your
+            place and takes you back to the dashboard. It is there on every step
+            except the dashboard itself.
+          </li>
+        </ul>
+        <h4>Planny and the outline, on the left</h4>
+        <p>
+          Planny sits at the top, with a line beside him saying whose turn it is
+          and what Plan2Code is doing. Below him the outline lists the session's
+          topics and every question in them, with how many are settled. Click any
+          question to jump to it.
+        </p>
+        <h4>The view tabs</h4>
+        <p>
+          Under the top bar: <strong>Questions</strong> first, then
+          <strong>Overview</strong> when the session is working on a spec, then
+          one tab per document Plan2Code has written, and <strong>Ask</strong>,
+          always last.
+          Each tab remembers where you scrolled for as long as this browser tab
+          stays open.
+        </p>
+        <h4>Moving between questions</h4>
+        <p>
+          <strong>Previous</strong> and <strong>Next</strong> under each card walk
+          the questions still waiting for you, so you never have to hunt for the
+          next one in the outline.
+        </p>
+        <h4>Notes, on the right</h4>
+        <p>
+          <strong>Notes on this</strong> shows the back and forth about the
+          question you are on, with a box for a note of your own. See "Notes and
+          attachments".
+        </p>
+        <h4>The footer</h4>
+        <ul>
+          <li>What is ready to send, on the left.</li>
+          <li>
+            In the middle, the folder the session was started from, any folders
+            you added, and its git branch. Click it to open your workspace. See
+            "Your workspace".
+          </li>
+          <li>
+            <strong>Clear</strong> and <strong>Send to Plan2Code</strong> on the
+            right. See "Sending and what happens next".
+          </li>
+        </ul>
+      </section>
+
+      <!-- Tab 3: Your workspace -->
+      <section class="help-panel" data-tab="workspace">
+        <h3>Your workspace</h3>
+        <p class="help-lead">
+          The folders Plan2Code uses as context in this session: the folder you
+          started in, plus any others you add, such as a shared library or a
+          design folder next door.
+        </p>
+        <h4>Opening it</h4>
+        <p>
+          Click the folder name in the middle of the bottom bar. It shows your
+          folder's name and branch, such as <strong>shop · main</strong>, and
+          <strong>shop + 2 folders · main</strong> once you have added some.
+          The workspace lasts for this console session only: it carries across
+          steps you start from the dashboard, and a new console session starts
+          with just the folder you started in.
+        </p>
+        <h4>Adding a folder</h4>
+        <ul>
+          <li>
+            Paste or type its path and press <strong>Add</strong>. A path such as
+            <code>../shared</code> counts from the folder you started in.
+          </li>
+          <li>
+            Or press <strong>Browse…</strong> to pick it from your computer's own
+            folder window. Browse… is hidden when the page is being reached from
+            another machine; type the path instead.
+          </li>
+          <li>
+            Each folder gets a short name, such as <strong>@shared</strong>, made
+            of lowercase letters, numbers and hyphens. Change it, and add a line
+            on what the folder is, in the boxes under its path.
+          </li>
+          <li>
+            The folder you started in can be renamed and described, but not
+            removed. <strong>Remove</strong> takes any other one out, and
+            Plan2Code is told.
+          </li>
+        </ul>
+        <h4>Using @names</h4>
+        <p>
+          Type <strong>@</strong> in the Ask box, a note or a typed answer and a
+          list of your folder names appears. Pick one, and Plan2Code knows
+          exactly which folder you mean, for example "use the button styles from
+          @shared".
+        </p>
+        <h4>What Plan2Code does with them</h4>
+        <p>
+          It reads the added folders for reference, and changes them only if you
+          ask it to. Before it first uses one, it reads that folder's own notes
+          for agents, so it follows that folder's rules as well.
+        </p>
+        <h4>Marks you may see</h4>
+        <ul>
+          <li>
+            <strong>This folder no longer exists</strong>: it was moved, renamed
+            or deleted since you added it. Remove it, or put it back and the mark
+            goes away.
+          </li>
+          <li>
+            <strong>The agent can't read this yet</strong>: Plan2Code tried and
+            was refused. Most agents ask your permission the first time; allow it
+            in the terminal. In Claude Code, the mark carries a command such as
+            <code>/add-dir</code> followed by the path: copy it and run it in the
+            terminal.
+          </li>
+          <li>
+            <strong>Inside another folder in the list</strong>: fine to keep. It
+            only means one folder already contains the other.
+          </li>
+        </ul>
+      </section>
+
+      <!-- Tab 4: Reading Planny -->
+      <section class="help-panel" data-tab="planny">
+        <h3>Reading Planny</h3>
+        <p class="help-lead">
+          Planny, the little box with a star for an eye at the top left, shows at a glance whose turn
+          it is, and the line beside him says it in words.
+        </p>
+        <figure class="help-figure help-moods" data-figure="planny" role="img" aria-labelledby="hd-planny-title">
+          <div class="help-moods-row"></div>
+          <span id="hd-planny-title" class="help-moods-title">Planny's six moods, left to right: your turn, working, all caught up, done, not running, not connected.</span>
+        </figure>
+        <h4>Your turn</h4>
+        <p>
+          Leaning in and waving, his star lit in your highlight color. Something on this page is
+          waiting for you: a question to answer, or answers ready to send.
+        </p>
+        <h4>Working</h4>
+        <p>
+          Star turning, arms pumping, feet walking on the spot. Plan2Code has your answers and is thinking, or is
+          busy building. The line beside him says what it is doing. After about
+          30 seconds of silence it asks "Still working, or waiting on an approval
+          in your terminal?", because the terminal may have stopped to ask your
+          permission for something, and this page cannot see that.
+        </p>
+        <h4>All caught up</h4>
+        <p>
+          A green star. Nothing is waiting on either side: every question is
+          answered and Plan2Code has nothing new yet.
+        </p>
+        <h4>Done</h4>
+        <p>A green star and both arms up. The session is finished. You can close the tab.</p>
+        <h4>Not running</h4>
+        <p>
+          Grey, still, arms down out of sight. This page is fine, but Plan2Code has not checked in
+          for <span data-fact="adriftMinutes">3</span> minutes. Anything you answer
+          is still saved.
+        </p>
+        <h4>Not connected</h4>
+        <p>
+          Faded, arms hanging, his star shut in red. This page cannot reach its program, after
+          <span data-fact="goneSeconds">8</span> seconds without contact. Your
+          answers are saved.
+        </p>
+        <p>
+          For what to do about the last two, see "When something looks stuck".
+        </p>
+      </section>
+
+      <!-- Tab 5: Answering questions -->
+      <section class="help-panel" data-tab="answering">
+        <h3>Answering questions</h3>
+        <p class="help-lead">
+          Each question is a card, and every card works the same way: answer it,
+          add a note if you like, and send when you are ready.
+        </p>
+        <h4>The kinds of card</h4>
+        <ul>
+          <li><strong>Pick one.</strong> Choose a single option. The trade-off for each is written under it.</li>
+          <li><strong>Pick any.</strong> Tick as many as apply. Some cards have quick-pick buttons that tick a set in one go.</li>
+          <li><strong>Type an answer.</strong> A box for your own words.</li>
+          <li><strong>Yes or no.</strong> One of two buttons, sometimes with what each would lead to spelled out.</li>
+          <li><strong>Is this right?</strong> Plan2Code plays back what it understood. Agree, or say what is off.</li>
+          <li><strong>Read, then approve.</strong> Open the document it points to, then approve it or ask for changes.</li>
+          <li><strong>Steps only you can do.</strong> A checklist of things to do outside this page, ticked off as you go.</li>
+          <li><strong>Put in order or edit a list.</strong> Drag the rows, or use <strong>Move up</strong> and <strong>Move down</strong>, and edit any row.</li>
+          <li><strong>What to do next.</strong> A short menu of where to go from here.</li>
+          <li><strong>Something to read.</strong> A notice. Nothing to answer.</li>
+        </ul>
+        <h4>Help with an answer</h4>
+        <ul>
+          <li>
+            <strong>Autofill suggestion</strong> puts the example into the box as
+            a real answer for you to edit. It disappears as soon as you have typed
+            anything of your own.
+          </li>
+          <li>
+            <strong>Starter templates</strong> sit above the first "What's the
+            idea?" box in Pathfinder, Plan and Quick Task. <strong>Blank</strong>
+            comes first, then outlines to fill in, in the order your role puts
+            them. Picking one fills the box with text you can edit; if you have
+            already typed something, it asks before replacing it. Only what is in
+            the box is sent.
+          </li>
+          <li>
+            <strong>Something else, in your own words</strong> sits among the
+            options on a pick-one card when none of them fits. It is an
+            alternative, not an extra: whichever you touched last is your answer.
+          </li>
+          <li>
+            <strong>Anything else, in your own words</strong> sits under a
+            pick-any card. What you write there joins your ticks rather than
+            replacing them.
+          </li>
+          <li>
+            <strong>Skip this one</strong> appears on questions that are optional,
+            and moves you on to the next question by itself; <strong>Do not
+            skip</strong> brings the question back.
+          </li>
+        </ul>
+        <h4>After you answer</h4>
+        <p>
+          <strong>A settled card reads as an answer</strong>: what you chose,
+          stated in words, with everything else locked.
+        </p>
+        <p>
+          <strong>A card you have sent is held</strong> until Plan2Code replies,
+          showing what you sent. It unlocks by itself when it answers. The rest of
+          the page keeps working, so you can read ahead or answer the next
+          question meanwhile.
+        </p>
+        <p>
+          If a card has been held for a long time, <strong>Take this back and
+          answer again</strong> puts your answer back in the box so you can change
+          it and send again.
+        </p>
+      </section>
+
+      <!-- Tab 6: Sending and what happens next -->
+      <section class="help-panel" data-tab="sending">
+        <h3>Sending and what happens next</h3>
+        <p class="help-lead">
+          Nothing leaves this page until you press
+          <strong>Send to Plan2Code</strong>, so you can answer, change your
+          mind and answer again without committing to anything.
+        </p>
+        <figure class="help-figure" data-figure="sending">
+          <svg class="help-diagram" viewBox="0 0 560 170" role="img" aria-labelledby="hd-sending-title hd-sending-desc">
+            <title id="hd-sending-title">What happens when you send</title>
+            <desc id="hd-sending-desc">
+              Four steps in a loop: you answer, and it is kept on this page; you
+              press Send; your answers are held on disk until Plan2Code collects
+              them; Plan2Code replies with the next questions, and the loop
+              starts again with you.
+            </desc>
+            <defs>
+              <marker id="hd-sending-arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+                <path class="hd-arrow" d="M0 0 L8 4 L0 8 z" />
+              </marker>
+            </defs>
+            <rect class="hd-box" x="8" y="20" width="116" height="72" rx="8" />
+            <rect class="hd-accent" x="150" y="20" width="116" height="72" rx="8" />
+            <rect class="hd-box" x="292" y="20" width="116" height="72" rx="8" />
+            <rect class="hd-box" x="434" y="20" width="116" height="72" rx="8" />
+            <text class="hd-label" x="66" y="52" text-anchor="middle">You answer</text>
+            <text class="hd-label small" x="66" y="70" text-anchor="middle">kept here</text>
+            <text class="hd-label hd-accent" x="208" y="61" text-anchor="middle">Send</text>
+            <text class="hd-label" x="350" y="52" text-anchor="middle">Held on disk</text>
+            <text class="hd-label small" x="350" y="70" text-anchor="middle">until collected</text>
+            <text class="hd-label" x="492" y="45" text-anchor="middle">Plan2Code</text>
+            <text class="hd-label small" x="492" y="63" text-anchor="middle">replies with the</text>
+            <text class="hd-label small" x="492" y="79" text-anchor="middle">next questions</text>
+            <path class="hd-line" d="M126 56 H146" marker-end="url(#hd-sending-arrow)" />
+            <path class="hd-line" d="M268 56 H288" marker-end="url(#hd-sending-arrow)" />
+            <path class="hd-line" d="M410 56 H430" marker-end="url(#hd-sending-arrow)" />
+            <path class="hd-line" d="M492 94 V140 H66 V98" marker-end="url(#hd-sending-arrow)" />
+            <text class="hd-label small" x="279" y="158" text-anchor="middle">and round again</text>
+            <path class="hd-flow" d="M126 56 H146 M268 56 H288 M410 56 H430 M492 94 V140 H66 V98" />
+          </svg>
+          <figcaption>Nothing leaves this page until you press Send.</figcaption>
+        </figure>
+        <h4>Before you send</h4>
+        <ul>
+          <li>
+            Everything you pick or type is a draft that Plan2Code cannot see
+            yet, and every bit of it can be undone.
+          </li>
+          <li>
+            Drafts survive a closed tab and a reload: open the same link again and
+            your half-typed answers are still there.
+          </li>
+          <li>
+            The footer says what is ready to go, and the Send button pulses gently
+            while there is something to send.
+          </li>
+          <li>
+            <strong>Clear</strong> throws away everything you have not sent yet. It
+            asks first.
+          </li>
+        </ul>
+        <h4>Sending</h4>
+        <p>
+          Press <strong>Send to Plan2Code</strong>, or
+          <kbd>Ctrl</kbd>+<kbd>Enter</kbd> (<kbd>⌘</kbd>+<kbd>Enter</kbd> on a
+          Mac).
+        </p>
+        <h4>What happens next</h4>
+        <ol>
+          <li>
+            Your answers are written to disk straight away, and held there until
+            Plan2Code collects them, so nothing can write over them.
+          </li>
+          <li>
+            A second send waits until the first has been collected. Send stays
+            off until then.
+          </li>
+          <li>Planny switches to Working while Plan2Code reads them.</li>
+          <li>
+            The next questions appear on their own, with a chime if sounds are on.
+            There is nothing to reload.
+          </li>
+        </ol>
+      </section>
+
+      <!-- Tab 7: Notes and attachments -->
+      <section class="help-panel" data-tab="notes">
+        <h3>Notes and attachments</h3>
+        <p class="help-lead">
+          A note lets you say more about any question, and an attachment lets you
+          show instead of describe.
+        </p>
+        <h4>Notes</h4>
+        <p>
+          The <strong>Notes on this</strong> panel on the right belongs to the
+          question you are on. Type in <strong>Add a note, attach a file, or ask
+          something</strong> and it goes with your next send. A note qualifies
+          your answer without replacing it: "B, but keep the header row" is an
+          answer and a note together. Plan2Code's replies appear in the same
+          panel.
+        </p>
+        <h4>Attaching a file</h4>
+        <p>Three ways, whichever is handiest:</p>
+        <ul>
+          <li>the <strong>+ Attach file</strong> button by the box,</li>
+          <li><strong>paste</strong> a screenshot or a copied file into the box, or</li>
+          <li><strong>drag and drop</strong> files onto the notes panel.</li>
+        </ul>
+        <p>
+          Each file uploads straight away while you keep typing, and sits in a
+          tray with a remove button. A failed upload offers to retry or remove,
+          and holds back only that note, so the rest of your answers still send.
+        </p>
+        <h4>What you can attach</h4>
+        <ul>
+          <li>
+            Up to <span data-fact="maxAttachments">5</span> attachments per note,
+            images and documents counted together.
+          </li>
+          <li>
+            <strong>Images</strong> are shrunk in your browser to a JPEG at most
+            <span data-fact="imageEdge">2000</span> px on the long edge, and must
+            be under <span data-fact="maxUploadMb">4</span> MB after shrinking.
+          </li>
+          <li>
+            <strong>Documents</strong> up to
+            <span data-fact="maxDocMb">10</span> MB each, uploaded exactly as they
+            are: plain text, Markdown, JSON, YAML, TOML, INI, CSV, TSV, logs, XML,
+            HTML, CSS and SCSS, code (JavaScript, TypeScript, Python, Java, C#, Go,
+            Rust, Ruby, PHP, shell, PowerShell, SQL) and PDF.
+          </li>
+          <li>
+            Anything else is refused with a message naming the file: Word files
+            such as <code>.docx</code>, files that are too large, and dotfiles such
+            as <code>.env</code>, which is where secrets tend to live.
+          </li>
+        </ul>
+        <h4>Where the files go</h4>
+        <p>
+          With the session, in
+          <code>~/.plan2code/console/sessions/&lt;id&gt;/uploads/</code>, never in
+          your project. They are removed along with the session after
+          <span data-fact="cleanupDays">30</span> days untouched.
+        </p>
+        <p>
+          The exception is a note attachment Plan2Code cites in a spec file.
+          Before it writes that file, it copies the attachment into
+          <code>specs/&lt;idea&gt;/attachments/</code>, so the link still works
+          after the session is gone. Files attached on the Ask tab always stay
+          in the session.
+        </p>
+      </section>
+
+      <!-- Tab 8: Documents and printing -->
+      <section class="help-panel" data-tab="docs">
+        <h3>Documents and printing</h3>
+        <p class="help-lead">
+          What Plan2Code writes appears here as it takes shape, one tab per
+          document, so you can read along without opening a file.
+        </p>
+        <h4>Reading a document</h4>
+        <p>
+          Each document has its own tab beside <strong>Questions</strong>, with
+          its version number next to the title. It is built from sections, and
+          each section tells you how firm it is:
+        </p>
+        <ul>
+          <li><strong>Settled</strong> sections are plain: decided, and they will not move.</li>
+          <li>
+            <strong>Assumed for now, still open</strong> sections have a dashed
+            edge. Plan2Code had to pick something to keep going, and it is still
+            yours to change.
+          </li>
+          <li><strong>Draft</strong> sections are dimmed: placeholders, still to be worked out.</li>
+        </ul>
+        <p>
+          <strong>Out of date</strong> by the title means answers have landed that
+          the document does not reflect yet.
+        </p>
+        <h4>The Overview tab</h4>
+        <p>
+          When the session is working on a spec that has an
+          <code>overview.md</code>, the <strong>Overview</strong> tab shows it. It
+          is read-only, and read fresh from disk each time you open the tab, so an
+          edit shows up straight away. No file, no tab.
+        </p>
+        <h4>Printing and saving</h4>
+        <ul>
+          <li>
+            <strong>Print</strong> prints the document alone, without the rest of
+            the page. Choose "Save as PDF" in the print dialog for a PDF.
+          </li>
+          <li>
+            <strong>Download</strong> saves it as a Markdown file. When the
+            document is already a file on disk, the page shows
+            <strong>Saved as</strong> and its path instead.
+          </li>
+        </ul>
+        <h4>Briefs (Pathfinder)</h4>
+        <p>
+          <strong>Write a brief</strong>, in the top bar, asks how far back to go:
+          <strong>Today</strong>, <strong>This week</strong>, <strong>Since a
+          date</strong> or <strong>Everything so far</strong>. Press
+          <strong>Write the brief</strong> and Plan2Code writes a plain-English
+          report of what has been decided, what is still open and what happens
+          next. It opens in its own tab, ready to print or hand to someone who has
+          not been in the room. <strong>Save as HTML</strong>, beside
+          <strong>Print</strong>, downloads it as a single web page that opens in
+          any browser, formatting and images included.
+        </p>
+      </section>
+
+      <!-- Tab 9: The dashboard -->
+      <section class="help-panel" data-tab="dashboard">
+        <h3>The dashboard</h3>
+        <p class="help-lead">
+          The front door: run <code>/plan2code</code> and every step Plan2Code
+          can take is laid out as a card. Pick one and it starts right here, on
+          this page.
+        </p>
+        <figure class="help-figure" data-figure="dashboard">
+          <svg class="help-diagram" viewBox="0 0 560 110" role="img" aria-labelledby="hd-dashboard-title hd-dashboard-desc">
+            <title id="hd-dashboard-title">The steps, in order</title>
+            <desc id="hd-dashboard-desc">
+              Five steps left to right, each leading to the next: Pathfinder,
+              marked optional; Plan; Document; Implement, done with or without a
+              review; and Finalize.
+            </desc>
+            <defs>
+              <marker id="hd-dashboard-arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+                <path class="hd-arrow" d="M0 0 L8 4 L0 8 z" />
+              </marker>
+            </defs>
+            <rect class="hd-box hd-dash" x="8" y="20" width="92" height="44" rx="8" />
+            <rect class="hd-box" x="120" y="20" width="92" height="44" rx="8" />
+            <rect class="hd-box" x="232" y="20" width="92" height="44" rx="8" />
+            <rect class="hd-accent" x="344" y="20" width="92" height="44" rx="8" />
+            <rect class="hd-box" x="456" y="20" width="92" height="44" rx="8" />
+            <text class="hd-label" x="54" y="47" text-anchor="middle">Pathfinder</text>
+            <text class="hd-label" x="166" y="47" text-anchor="middle">Plan</text>
+            <text class="hd-label" x="278" y="47" text-anchor="middle">Document</text>
+            <text class="hd-label hd-accent" x="390" y="47" text-anchor="middle">Implement</text>
+            <text class="hd-label" x="502" y="47" text-anchor="middle">Finalize</text>
+            <text class="hd-label small" x="54" y="84" text-anchor="middle">optional</text>
+            <text class="hd-label small" x="390" y="84" text-anchor="middle">with or without</text>
+            <text class="hd-label small" x="390" y="100" text-anchor="middle">review</text>
+            <path class="hd-line" d="M102 42 H116" marker-end="url(#hd-dashboard-arrow)" />
+            <path class="hd-line" d="M214 42 H228" marker-end="url(#hd-dashboard-arrow)" />
+            <path class="hd-line" d="M326 42 H340" marker-end="url(#hd-dashboard-arrow)" />
+            <path class="hd-line" d="M438 42 H452" marker-end="url(#hd-dashboard-arrow)" />
+            <path class="hd-flow" d="M54 14 V8 H502 V14" />
+          </svg>
+          <figcaption>Implement runs once per phase, so it repeats until every phase is done.</figcaption>
+        </figure>
+        <h4>Asking for your role</h4>
+        <p>
+          Until you pick a role, a one-line banner at the top asks for it, so the
+          starter templates can be ordered for you.
+          <strong>Set up preferences</strong> opens User Preferences;
+          <strong>Not now</strong> puts the banner away. Either way it does not
+          come back, and you can change your role any time from the swatch
+          button.
+        </p>
+        <h4>The cards</h4>
+        <p>They come in three groups.</p>
+        <p><strong>First, the project</strong></p>
+        <ul>
+          <li><strong>Set up this project.</strong> Reads your project and writes AGENTS.md, the guide every later step works from.</li>
+          <li><strong>Refresh AGENTS.md.</strong> Brings AGENTS.md and its notes up to date with what the project has learned lately.</li>
+        </ul>
+        <p><strong>The steps, in order</strong></p>
+        <ul>
+          <li><strong>Pathfinder.</strong> A foggy idea becomes a clear list of decisions, settled one question at a time.</li>
+          <li><strong>Plan.</strong> Requirements, technical design and your approval: the shape of what gets built.</li>
+          <li><strong>Revise the plan.</strong> Requirements changed mid-build? Adjust the plan without starting over.</li>
+          <li><strong>Document.</strong> The plan becomes a checklist of small tasks, grouped into phases, that a developer can just do.</li>
+          <li><strong>Implement.</strong> Builds the next phase, task by task, with a report and your sign-off at the end.</li>
+          <li><strong>Implement + review.</strong> One phase built, then a careful review of the changes, then your sign-off. All in one run.</li>
+          <li><strong>Finalize.</strong> Checks the work, writes the summary, files the specs away and suggests the commit message.</li>
+        </ul>
+        <p><strong>Useful any time</strong></p>
+        <ul>
+          <li><strong>Quick task.</strong> Too small for the full process? A quick plan, then it just builds it.</li>
+          <li><strong>Review.</strong> A second opinion on the changes. Problems ranked, and you pick what gets fixed.</li>
+          <li><strong>Handoff.</strong> Pack this conversation into a document a fresh session can pick up cold.</li>
+        </ul>
+        <h4>Picking a spec</h4>
+        <p>
+          Once your project has specs, <strong>Pick up a spec, or start
+          fresh</strong>, at the top, lists every spec folder with where it
+          stands, plus
+          <strong>Start from scratch</strong> for a new idea. The one you pick is
+          what a step works on, and it decides which cards make sense: a spec
+          that is half built has no use for Pathfinder, and a new idea cannot be
+          implemented yet. Cards that do not fit are greyed out with the reason
+          why.
+        </p>
+        <p>
+          <strong>Hide unavailable workflows</strong>, under the picker, hides
+          them instead. It is on to begin with, and remembered on this machine.
+        </p>
+        <h4>The Suggested flag</h4>
+        <p>
+          One card may carry a <strong>Suggested</strong> flag: where Plan2Code
+          would start, given what it found in your project. No AGENTS.md yet
+          suggests setting up; a spec part way through suggests its next step,
+          with a line on the card saying where it stands.
+        </p>
+        <h4>Starting a step</h4>
+        <p>
+          Click a card and it asks you to confirm: what the step does, which spec
+          it is for, and a <strong>Start</strong> button named after the step,
+          such as <strong>Start Plan</strong> (<strong>Back</strong>,
+          or <kbd>Esc</kbd>, returns to the cards). Press Start and Planny flies
+          while it gets ready. A few seconds later this same page is that step,
+          already running. No command to type, no second window.
+        </p>
+        <h4>Coming back</h4>
+        <p>
+          When a step finishes, its last screen has a <strong>Back to the
+          dashboard</strong> button that turns the page back into the cards, so
+          the next step can start straight away. See "Stopping and finishing".
+        </p>
+      </section>
+
+      <!-- Tab 10: Session meter -->
+      <section class="help-panel" data-tab="meter">
+        <h3>Session meter</h3>
+        <p class="help-lead">
+          The small ring in the top bar counts how much work this console session
+          has done, and tells you when a fresh one would serve you better.
+        </p>
+        <h4>The three colors</h4>
+        <ul>
+          <li>
+            <strong>Green, "Session: fresh".</strong> Under
+            <span data-fact="meterYellow">4</span> points. Carry on.
+          </li>
+          <li>
+            <strong>Yellow, "Session: getting long".</strong> From
+            <span data-fact="meterYellow">4</span> points. Fine for now; think
+            about a fresh start after this step.
+          </li>
+          <li>
+            <strong>Red, "Session: time for a fresh start".</strong> From
+            <span data-fact="meterRed">6</span> points. The dashboard also says so
+            in a banner.
+          </li>
+        </ul>
+        <h4>What it counts</h4>
+        <p>
+          Each step you run here adds points: a plan or a set of documents
+          weighs more than a single answered question, and a built phase more
+          still. Click the ring to see the count. It is a rule of thumb, not a
+          reading of Plan2Code's real memory: long sessions tend to make it
+          miss things, and the ring is there to remind you.
+        </p>
+        <h4>What red means</h4>
+        <p>
+          Starting a <strong>new console session</strong> will keep Plan2Code
+          sharp: stop this one, then start Plan2Code again in a new
+          conversation. Resuming this session carries its count along, so it
+          does not help. Your work is all on disk, so nothing is lost.
+        </p>
+        <p>
+          The meter never blocks anything. Red is advice; you can keep going.
+        </p>
+      </section>
+
+      <!-- Tab 11: Watching a build -->
+      <section class="help-panel" data-tab="build">
+        <h3>Watching a build</h3>
+        <p class="help-lead">
+          Implement, Implement + review and Quick task spend most of their time
+          building rather than asking, so the page shows you the build as it
+          happens.
+        </p>
+        <h4>What it is doing now</h4>
+        <p>
+          The line beside Planny says what Plan2Code is working on, for
+          example "Task 5 of 9: the rate limiter". Tasks are counted within the
+          phase, and the progress bar counts the same way: "5 of 9 done".
+        </p>
+        <h4>The task list and the phase file</h4>
+        <ul>
+          <li>
+            The phase's task list has its own tab, and each task ticks as soon as
+            it is finished and saved.
+          </li>
+          <li>
+            The phase file itself, such as <code>phase-3.md</code>, is in the tab
+            beside it: what has to be true before the phase starts, and every
+            task in full, not just the checklist.
+          </li>
+        </ul>
+        <h4>Questions along the way</h4>
+        <p>
+          Anything the build needs from you, such as which phase to do next, a
+          clash in the spec or tests that are failing, arrives as an ordinary
+          card. Answer it like any other.
+        </p>
+        <h4>Signing off</h4>
+        <p>
+          When the phase is built, a <strong>Completion report</strong> tab says
+          what was done, which files changed and how to check it, and an
+          <strong>Approve this phase</strong> card asks for your approval.
+          Nothing is marked complete until you give it.
+        </p>
+        <h4>Reviewing before you approve</h4>
+        <ul>
+          <li>
+            <strong>Review the code first</strong>, on the approval card, runs a
+            careful review of exactly the files the phase changed. The findings
+            come back in their own tab, and a <strong>Which to fix</strong> card
+            lists each one with how serious it is. Tick the ones to fix, or use
+            <strong>Critical and warnings</strong> or <strong>All of
+            them</strong>, and send. Plan2Code fixes and re-checks them, then
+            the approval card comes back.
+          </li>
+          <li>
+            A quick task has no approval card, so its last screen offers
+            <strong>Review it now</strong> instead, with <strong>No thanks, I am
+            done</strong> beside it.
+          </li>
+          <li>
+            Implement + review offers neither: it reviews every phase before
+            asking for your approval anyway.
+          </li>
+        </ul>
+        <h4>Long tasks</h4>
+        <p>
+          Some tasks take a while without anything to show. The build tells the
+          page how long it may go quiet, and Planny only says it has stopped
+          checking in once that time has passed.
+        </p>
+      </section>
+
+      <!-- Tab 12: Ask a quick question -->
+      <section class="help-panel" data-tab="ask">
+        <h3>Ask a quick question</h3>
+        <p class="help-lead">
+          The <strong>Ask</strong> tab, always the last tab, is a chat for
+          anything you want to know, without waiting for a card to ask it on.
+        </p>
+        <h4>Asking</h4>
+        <p>
+          Ask about this project's files, or about anything at all. Plan2Code
+          answers at its next check-in (during a build, once it finishes the task
+          it is on), and the work carries on meanwhile. Asking never holds up
+          your answers to the cards, and sending those never holds up a question.
+        </p>
+        <h4>What it is about</h4>
+        <p>
+          The box starts with no context, so a question is a general one unless
+          you say otherwise. <strong>+ Add context</strong>, beside
+          <strong>+ Attach file</strong>, lists the last three places you
+          visited (question cards, document sections, and a spec you picked on
+          the dashboard) and <strong>This spec</strong>. Pick one and a chip, <strong>About:</strong> followed
+          by its name, sits above the box. Press <strong>×</strong> on it to
+          remove it. It clears after each send, so pick it again for a
+          follow-up.
+        </p>
+        <h4>Starter questions</h4>
+        <p>
+          An empty conversation offers a few starter questions for this step,
+          with the ones most useful to your Role first. Clicking one fills the
+          box for you to edit; it never sends by itself. They come back with
+          <strong>New conversation</strong>.
+        </p>
+        <h4>How much you can ask</h4>
+        <ul>
+          <li>
+            Up to <span data-fact="chatLimit">10</span> questions per
+            conversation. The counter at the top of the tab ("3 of 10") is
+            always in view.
+            Once the last one is answered, <strong>New conversation</strong>
+            starts a clean one. So does switching steps through the dashboard.
+          </li>
+          <li>
+            Up to <span data-fact="chatMaxChars">4,000</span> characters per
+            question. A count appears near the limit.
+          </li>
+          <li>
+            Up to <span data-fact="maxAttachments">5</span> attachments per
+            question, added the same ways as on a note: <strong>+ Attach
+            file</strong>, paste, or drag and drop onto the box.
+          </li>
+        </ul>
+        <h4>Typing and sending</h4>
+        <p>
+          <kbd>Enter</kbd> starts a new line in the Ask box.
+          <kbd>Ctrl</kbd>+<kbd>Enter</kbd> (<kbd>⌘</kbd>+<kbd>Enter</kbd> on a
+          Mac), or <strong>Send</strong>, sends the question. It sends only the
+          question, never your answers to the cards.
+        </p>
+        <h4>Changes need your approval</h4>
+        <p>
+          Ask for a change to a file and Plan2Code replies with a summary and
+          the list of files it would touch, with <strong>Approve</strong> and
+          <strong>Decline</strong> buttons. Nothing changes until you approve.
+          Afterwards it lists what changed, with line counts. Nothing is
+          committed, and it never touches the running step's own files under
+          <code>specs/</code>.
+        </p>
+        <p>
+          A chat message never answers a card or moves the work on. That is what
+          the cards are for.
+        </p>
+        <h4>When you cannot send</h4>
+        <ul>
+          <li>
+            "That's 10 questions in this conversation" means press
+            <strong>New conversation</strong> to keep going.
+          </li>
+          <li>
+            "No agent is available right now" means the session has finished or
+            Plan2Code has gone quiet. Check the terminal, or resume the session,
+            to ask.
+          </li>
+        </ul>
+        <p>Either way, the conversation above stays readable.</p>
+        <h4>When an answer lands</h4>
+        <p>
+          If you are on another tab when a reply arrives, a dot appears on
+          <strong>Ask</strong> and a chime plays once (if sounds are on).
+        </p>
+      </section>
+
+      <!-- Tab 13: Stopping and finishing -->
+      <section class="help-panel" data-tab="finishing">
+        <h3>Stopping and finishing</h3>
+        <p class="help-lead">
+          Every session ends with a screen that says what happened and what to
+          run next, whether it finished on its own or you stopped it.
+        </p>
+        <h4>Stopping early</h4>
+        <p>
+          <strong>Stop session</strong>, at the top, ends the session and saves
+          your place. Any answers you have ready go with it, and Plan2Code
+          gives you a command to pick up where you left off, in a new
+          conversation.
+        </p>
+        <ul>
+          <li>
+            It only works when it is your turn. While Plan2Code is busy with
+            what you last sent, the button waits, so a stop never lands half way
+            through writing your answers down.
+          </li>
+          <li>
+            It asks first. <strong>Keep going</strong> backs out;
+            <strong>Stop and save</strong> stops.
+          </li>
+          <li>
+            At points where nothing is saved yet, such as early in a plan, the
+            dialog says what would be lost and the button reads <strong>Stop
+            anyway</strong> instead.
+          </li>
+        </ul>
+        <h4>Back to the dashboard, mid-way</h4>
+        <p>
+          The <strong>triangle</strong> left of Stop session leaves the step you
+          are in for the dashboard, in this same session. Your place is saved
+          the way a stop saves it, with any answers you have ready going along,
+          and the menu appears here instead of a finish screen. From there,
+          pick the same step again to carry on, or pick another one. It follows
+          Stop's rules: it only works on your turn, it asks first, and it
+          shows the same warning where nothing is saved yet.
+        </p>
+        <h4>The three endings</h4>
+        <ul>
+          <li>
+            <strong>A next step.</strong> What was done, and under
+            <strong>Next step</strong> the exact command to run next, with a
+            <strong>Copy</strong> button: the next phase, Finalize, or a commit.
+          </li>
+          <li>
+            <strong>All done.</strong> "All done, nothing left to run." There is
+            nothing to copy but the command that opens the dashboard.
+          </li>
+          <li>
+            <strong>Paused.</strong> You pressed <strong>Stop session</strong>.
+            The screen names what was saved and gives the command that picks it
+            up later. Nothing else is offered.
+          </li>
+        </ul>
+        <p>
+          Paused means there is more to do and your place is kept. Finished means
+          this step is over.
+        </p>
+        <h4>Running the next command</h4>
+        <p>
+          Press <strong>Copy</strong>, then paste the command into the terminal
+          where you started Plan2Code, in a new conversation. When the next
+          step is another Plan2Code step, the command already ends with
+          <code>--web</code>, which asks Plan2Code to open this page again, so
+          you carry on here rather than in the terminal.
+        </p>
+        <h4>Back to the dashboard</h4>
+        <p>
+          A finished screen (never a paused one) has a <strong>Back to the
+          dashboard</strong> button. It turns this page back into the cards, in
+          the same conversation, so the next step starts right here.
+          Plan2Code listens for it for about ten minutes after the end. After
+          that, or once the session has closed, the button becomes the
+          <code>/plan2code</code> command to run in a new conversation instead.
+          After a long step, a new conversation is the better choice anyway: it
+          starts with a clean slate.
+        </p>
+      </section>
+
+      <!-- Tab 14: When something looks stuck -->
+      <section class="help-panel" data-tab="stuck">
+        <h3>When something looks stuck</h3>
+        <p class="help-lead">
+          This page and Plan2Code in your terminal are two programs, and either
+          can stop without the other. Nothing you have typed is lost either way.
+        </p>
+        <figure class="help-figure" data-figure="stuck">
+          <svg class="help-diagram" viewBox="0 0 560 262" role="img" aria-labelledby="hd-stuck-title hd-stuck-desc">
+            <title id="hd-stuck-title">What to check when something looks stuck</title>
+            <desc id="hd-stuck-desc">
+              A decision flow. First: does Planny say Not connected? If yes, run
+              the command again and use the new link. If no: does he say Not
+              running? If yes, look at the terminal, which may be waiting for
+              your permission, finished or errored. Either way, and in every
+              other case, answering anyway is safe, because what you send is
+              held until Plan2Code collects it.
+            </desc>
+            <defs>
+              <marker id="hd-stuck-arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+                <path class="hd-arrow" d="M0 0 L8 4 L0 8 z" />
+              </marker>
+            </defs>
+            <path class="hd-box" d="M20 50 L110 16 L200 50 L110 84 Z" />
+            <text class="hd-label" x="110" y="46" text-anchor="middle">Says Not</text>
+            <text class="hd-label" x="110" y="63" text-anchor="middle">connected?</text>
+            <rect class="hd-box" x="260" y="26" width="284" height="48" rx="8" />
+            <text class="hd-label" x="402" y="46" text-anchor="middle">Run the command again,</text>
+            <text class="hd-label" x="402" y="63" text-anchor="middle">use the new link</text>
+            <path class="hd-line" d="M202 50 H256" marker-end="url(#hd-stuck-arrow)" />
+            <text class="hd-label small" x="228" y="43" text-anchor="middle">yes</text>
+            <path class="hd-line" d="M110 86 V112" marker-end="url(#hd-stuck-arrow)" />
+            <text class="hd-label small" x="118" y="103">no</text>
+            <path class="hd-box" d="M20 150 L110 116 L200 150 L110 184 Z" />
+            <text class="hd-label" x="110" y="146" text-anchor="middle">Says Not</text>
+            <text class="hd-label" x="110" y="163" text-anchor="middle">running?</text>
+            <rect class="hd-box" x="260" y="120" width="284" height="60" rx="8" />
+            <text class="hd-label" x="402" y="144" text-anchor="middle">Look at the terminal: waiting</text>
+            <text class="hd-label" x="402" y="162" text-anchor="middle">for permission, finished, errored?</text>
+            <path class="hd-line" d="M202 150 H256" marker-end="url(#hd-stuck-arrow)" />
+            <text class="hd-label small" x="228" y="143" text-anchor="middle">yes</text>
+            <path class="hd-line" d="M110 186 V206" marker-end="url(#hd-stuck-arrow)" />
+            <text class="hd-label small" x="118" y="200">no</text>
+            <path class="hd-line" d="M402 182 V206" marker-end="url(#hd-stuck-arrow)" />
+            <path class="hd-line" d="M546 50 H554 V231 H474" marker-end="url(#hd-stuck-arrow)" />
+            <rect class="hd-accent" x="90" y="210" width="380" height="44" rx="8" />
+            <text class="hd-label hd-accent" x="280" y="229" text-anchor="middle">Answering anyway is safe:</text>
+            <text class="hd-label" x="280" y="246" text-anchor="middle">what you send is held until it is collected</text>
+            <path class="hd-flow" d="M202 50 H256 M546 50 H554 V231 H474" />
+          </svg>
+          <figcaption>Whatever you find, nothing you have typed is lost.</figcaption>
+        </figure>
+        <h4>Not running, or not connected?</h4>
+        <ul>
+          <li>
+            <strong>Not running</strong> (Planny grey and still): this page is
+            fine, but Plan2Code in the terminal has not checked in for
+            <span data-fact="adriftMinutes">3</span> minutes. It may have finished
+            its turn, hit an error, or be waiting on you there.
+          </li>
+          <li>
+            <strong>Not connected</strong> (Planny faded, arms hanging, his star shut in red):
+            this page cannot reach its own program, after
+            <span data-fact="goneSeconds">8</span> seconds without contact.
+            Usually it has shut itself down; see "Getting a new link" below.
+          </li>
+        </ul>
+        <p>"Reading Planny" shows every mood side by side.</p>
+        <h4>It may be waiting for you in the terminal</h4>
+        <p>
+          Plan2Code sometimes stops in the terminal to ask your permission
+          before it runs a command or changes a file, and this page cannot see
+          that. After about 30 seconds of silence while it is working, the line
+          beside Planny asks "Still working, or waiting on an approval in your
+          terminal?" Have a look at the terminal: answering there sets it going
+          again.
+        </p>
+        <p>
+          If it stays quiet a couple of minutes longer, the line changes to
+          "Plan2Code has not checked in for a few minutes", with Planny still
+          in his working pose. It may be busy, or still waiting on you in the
+          terminal; the terminal is where to look. A build that said a task may
+          take longer gets that long before the line changes.
+        </p>
+        <p>
+          Hands-off modes, such as <code>auto</code> mode in Claude Code or
+          <code>smart</code> mode in Devin, cut down on those stops, though some
+          may still need you.
+        </p>
+        <h4>Answering anyway</h4>
+        <p>
+          You can keep answering and press Send while Plan2Code is not running.
+          What you send is written to disk and held until something collects it,
+          so starting Plan2Code again picks it up where you left off.
+        </p>
+        <h4>Getting a new link</h4>
+        <p>The program behind this page shuts itself down:</p>
+        <ul>
+          <li>
+            <span data-fact="closedTabMinutes">2</span> minutes after the last tab
+            showing it closes,
+          </li>
+          <li>
+            after <span data-fact="idleMinutes">30</span> minutes without hearing
+            from anyone, or
+          </li>
+          <li>
+            after <span data-fact="maxLifeHours">4</span> hours, whatever is
+            happening.
+          </li>
+        </ul>
+        <p>
+          To get it back, ask Plan2Code in the terminal to resume the session,
+          or run the step's command again, and use the new link it gives you.
+          Everything you typed, sent or not, is still there.
+        </p>
+        <div class="handoff-command" data-copy>
+          <code class="handoff-code">resume the session and print the web console address here</code>
+        </div>
+      </section>
+
+      <!-- Tab 15: Keyboard and preferences -->
+      <section class="help-panel" data-tab="prefs">
+        <h3>Keyboard and preferences</h3>
+        <p class="help-lead">
+          Everything on the page works from the keyboard, and the swatch button
+          lets you make it look and sound the way you like.
+        </p>
+        <h4>Keyboard shortcuts</h4>
+        <table>
+          <thead>
+            <tr>
+              <th>Keys</th>
+              <th>What they do</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><kbd>Ctrl</kbd>+<kbd>Enter</kbd> (<kbd>⌘</kbd>+<kbd>Enter</kbd> on a Mac)</td>
+              <td>Send your answers (not while this Help is open). In the Ask box, send the question.</td>
+            </tr>
+            <tr>
+              <td><kbd>Enter</kbd> in the Ask box</td>
+              <td>Start a new line.</td>
+            </tr>
+            <tr>
+              <td><kbd>Esc</kbd></td>
+              <td>Close a dialog, this Help included. On the dashboard, back out of a card you picked.</td>
+            </tr>
+            <tr>
+              <td><kbd>Tab</kbd> / <kbd>Space</kbd></td>
+              <td>Move between options, and pick one.</td>
+            </tr>
+            <tr>
+              <td>Arrow keys, <kbd>Home</kbd>, <kbd>End</kbd> in Help</td>
+              <td>Move between topics.</td>
+            </tr>
+          </tbody>
+        </table>
+        <p>
+          Every control is a real button, option or checkbox, so screen readers
+          and keyboard-only use work too.
+        </p>
+        <h4>Your preferences</h4>
+        <p>
+          The swatch button at the top, beside <strong>?</strong>, opens
+          <strong>User Preferences</strong>:
+        </p>
+        <ul>
+          <li>
+            <strong>Role</strong>: Engineer, Product lead / PM, Architect / tech
+            lead, Designer (UX), QA / test engineer or Engineering manager, or
+            <strong>Not set / none of these</strong> (the default). It puts the
+            starter templates and Ask starter questions most useful to you first,
+            and never changes the questions a skill asks.
+          </li>
+          <li>
+            <strong>Theme</strong>: <strong>Follow my system</strong> (the
+            default), <strong>Light</strong> or <strong>Dark</strong>.
+          </li>
+          <li>
+            <strong>Card width</strong>: how wide the question and documents are.
+            <strong>Narrow</strong> (<span data-fact="cardWidths">720</span> px),
+            <strong>Comfortable</strong>
+            (<span data-fact="cardWidths">880</span> px, the default) or
+            <strong>Wide</strong> (<span data-fact="cardWidths">1,080</span> px).
+            On a smaller window they fit the space there is.
+          </li>
+          <li>
+            <strong>Highlight color</strong>: one of
+            <span data-fact="accentCount">32</span>, rust to begin with. It marks
+            what is yours to do, and Planny's star uses it while he works.
+          </li>
+          <li>
+            <strong>Sounds</strong>: <strong>Play sounds</strong> switches every
+            sound on or off at once. Below it, each moment has its own box:
+            Planny snoring and waking up, starting a skill from the dashboard,
+            the session opening, a started skill being ready, the session
+            ending, new questions for you, a reply on the Ask tab and a new tab
+            joining the strip. Keep only the ones you want; ticking a box plays
+            its sound.
+          </li>
+          <li>
+            <strong>Back to default</strong> puts everything back as it was, and
+            sets Role back to Not set.
+          </li>
+        </ul>
+        <p>
+          Your choices are remembered on this machine and carry over to every
+          session you open here.
+        </p>
+        <h4>Less motion</h4>
+        <p>
+          The page has no motion switch of its own. It follows your computer's
+          "reduce motion" setting, and with it on, the animations stay still.
+        </p>
+        <ul>
+          <li>
+            <strong>Windows:</strong> Settings → Accessibility → Visual effects →
+            Animation effects (off).
+          </li>
+          <li>
+            <strong>macOS:</strong> System Settings → Accessibility → Display →
+            Reduce motion (on).
+          </li>
+        </ul>
+      </section>
+
+      <!-- Tab 16: Privacy and where things are saved -->
+      <section class="help-panel" data-tab="privacy">
+        <h3>Privacy and where things are saved</h3>
+        <p class="help-lead">
+          Nothing on this page leaves your machine, and nothing it keeps lives in
+          your project.
+        </p>
+        <h4>On this machine only</h4>
+        <p>
+          The page is served on <strong>127.0.0.1</strong>, which only this
+          computer can reach. It is not visible on your network, so sharing the
+          link with someone on another machine will not work, by design. To work
+          through a session together, share your screen.
+        </p>
+        <h4>The link is a key</h4>
+        <p>
+          The link carries a long private code. The first time it is opened, the
+          page swaps that code for a cookie in this browser and takes it out of
+          the address bar, so it does not linger in your history or show in a
+          screenshot. Treat the link like a password all the same: anyone on
+          this machine who has it can open the session.
+        </p>
+        <h4>What is kept, and where</h4>
+        <p>Everything lives under <code>~/.plan2code/console/</code> in your home folder:</p>
+        <ul>
+          <li>
+            each session's questions, your drafts and your answers, in
+            <code>sessions/&lt;id&gt;/</code>;
+          </li>
+          <li>
+            files you attached to notes and questions, in that session's
+            <code>uploads/</code> (a note attachment cited in a spec file is also
+            copied into the spec's <code>attachments/</code> folder; see "Notes
+            and attachments");
+          </li>
+          <li>
+            your role, theme, colors, card width and sounds, in
+            <code>looks.json</code>.
+          </li>
+        </ul>
+        <p>
+          A session nobody has touched for
+          <span data-fact="cleanupDays">30</span> days is removed, uploads and
+          all, the next time a session opens. Your preferences are never removed.
+        </p>
+        <p>
+          Folders you add to your workspace last for one console session. The
+          page keeps only each folder's path, name and description, and never
+          looks inside.
+        </p>
+        <h4>Your project is the real record</h4>
+        <p>
+          What Plan2Code decides and builds is written to <code>specs/</code>
+          and your code, in your project. This page and the terminal are two ways
+          of working on those files; neither owns them. Losing a session loses
+          nothing that matters, and you can switch between the page and the
+          terminal at any time.
+        </p>
+      </section>
+    </template>
+
+    <dialog class="modal looks" id="looks-modal" aria-labelledby="looks-title">
+      <h2 id="looks-title">User Preferences</h2>
+      <p class="modal-blurb">
+        Kept on this machine, for every session you open here. Role only puts the
+        starter templates most useful to you first; it never changes the questions
+        you're asked.
+      </p>
+      <fieldset class="modal-ranges looks-row looks-role">
+        <legend>Role</legend>
+        <select id="looks-role" aria-label="Role"></select>
+        <p class="help">Only puts the starter templates most useful to you first.</p>
+      </fieldset>
+      <fieldset class="modal-ranges looks-row">
+        <legend>Theme</legend>
+        <label><input type="radio" name="looks-theme" value="system" checked /> <span>Follow my system</span></label>
+        <label><input type="radio" name="looks-theme" value="light" /> <span>Light</span></label>
+        <label><input type="radio" name="looks-theme" value="dark" /> <span>Dark</span></label>
+      </fieldset>
+      <fieldset class="modal-ranges looks-row">
+        <legend>Card width</legend>
+        <label><input type="radio" name="looks-width" value="narrow" /> <span>Narrow</span></label>
+        <label><input type="radio" name="looks-width" value="comfortable" checked /> <span>Comfortable</span></label>
+        <label><input type="radio" name="looks-width" value="wide" /> <span>Wide</span></label>
+        <p class="help">How wide the question and documents are. On a smaller window they fit the space there is.</p>
+      </fieldset>
+      <fieldset class="modal-ranges looks-accents">
+        <legend>Highlight color</legend>
+        <div class="swatches" id="looks-swatches"></div>
+        <p class="help">
+          Your highlight color marks what is yours to do, and Planny's
+          star uses it while he works. Green, amber and red also mean done,
+          staged and careful, so a highlight close to one of those can blur
+          which is which.
+        </p>
+      </fieldset>
+      <fieldset class="modal-ranges looks-sounds">
+        <legend>Sounds</legend>
+        <label><input type="checkbox" id="looks-sound" checked /> <span>Play sounds</span></label>
+        <div class="looks-row looks-sound-events" id="looks-sound-events">
+          <label><input type="checkbox" data-sound="snore" checked /> <span>Planny snoring</span></label>
+          <label><input type="checkbox" data-sound="bootup" checked /> <span>Planny waking up</span></label>
+          <label><input type="checkbox" data-sound="startSkill" checked /> <span>Starting a skill</span></label>
+          <label><input type="checkbox" data-sound="sessionStart" checked /> <span>Session opens</span></label>
+          <label><input type="checkbox" data-sound="skillReady" checked /> <span>Skill is ready</span></label>
+          <label><input type="checkbox" data-sound="sessionEnd" checked /> <span>Session ends</span></label>
+          <label><input type="checkbox" data-sound="question" checked /> <span>New questions for you</span></label>
+          <label><input type="checkbox" data-sound="chatReply" checked /> <span>Reply on the Ask tab</span></label>
+          <label><input type="checkbox" data-sound="newTab" checked /> <span>New tab added</span></label>
+        </div>
+        <p class="help">Ticking one plays it. Play sounds switches them all off at once and keeps your picks for when you switch back on.</p>
+      </fieldset>
+      <div class="modal-actions">
+        <button type="button" class="btn ghost" id="looks-reset">Back to default</button>
+        <button type="button" class="btn primary" id="looks-done">Done</button>
+      </div>
+    </dialog>
+
+    <!-- The Workspace: the folder this session started in plus any added as
+         context. The list is drawn by app.js from the frame's `workspace`;
+         every change goes through the server's /workspace routes. -->
+    <dialog class="modal workspace" id="workspace-modal" aria-labelledby="workspace-title">
+      <h2 id="workspace-title">Workspace</h2>
+      <p class="modal-blurb">
+        The folders the agent uses as context this session. It reads the extra ones for
+        reference and only changes them if you ask.
+      </p>
+      <ul class="workspace-list" id="workspace-list"></ul>
+      <div class="workspace-add">
+        <label class="workspace-add-label" for="workspace-path">Add a folder</label>
+        <div class="workspace-add-row">
+          <input
+            type="text"
+            id="workspace-path"
+            placeholder="Paste or type a folder path"
+            autocomplete="off"
+            spellcheck="false"
+          />
+          <button type="button" class="btn" id="workspace-browse">Browse…</button>
+          <button type="button" class="btn primary" id="workspace-add">Add</button>
+        </div>
+        <p class="workspace-add-msg" id="workspace-add-msg" aria-live="polite"></p>
+      </div>
+      <div class="modal-actions">
+        <button
+          type="button"
+          class="icon-btn workspace-help"
+          id="workspace-help"
+          title="Help on the workspace"
+          aria-label="Help on the workspace"
+        >
+          <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+            <circle cx="8" cy="8" r="7" class="ab-ring" />
+            <path class="ab-mark" d="M6.1 6.05a1.95 1.95 0 1 1 2.4 1.9v1.25" />
+            <circle cx="8" cy="11.7" r="0.85" class="ab-dot" />
+          </svg>
+        </button>
+        <button type="button" class="btn primary" id="workspace-done">Close</button>
+      </div>
+    </dialog>
+
+    <!-- A native dialog, so focus trapping, Esc and the backdrop come from the
+         browser rather than from code that has to be got right. -->
+    <dialog class="modal help" id="help-modal" aria-labelledby="help-title">
+      <h2 id="help-title">Help</h2>
+      <div class="help-layout">
+        <div id="help-tabs" class="help-tabs" role="tablist" aria-orientation="vertical" aria-label="Help topics"></div>
+        <div id="help-panels" class="help-panels"></div>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn primary" id="help-done">Close</button>
+      </div>
+    </dialog>
+
+    <dialog class="modal" id="stop-modal" aria-labelledby="stop-title">
+      <h2 id="stop-title">Stop this session?</h2>
+      <p class="modal-blurb" id="stop-blurb"></p>
+      <!-- Only when stopping now would lose answers. A button that says it
+           saves has to be true about the times it cannot. -->
+      <p class="modal-why" id="stop-warn" hidden></p>
+      <div class="modal-actions">
+        <button type="button" class="btn ghost" id="stop-cancel">Keep going</button>
+        <button type="button" class="btn primary" id="stop-go">Stop and save</button>
+      </div>
+    </dialog>
+
+    <dialog class="modal" id="home-modal" aria-labelledby="home-title">
+      <h2 id="home-title">Leave this workflow?</h2>
+      <p class="modal-blurb" id="home-blurb"></p>
+      <!-- The same warning Stop shows: going home saves the way a stop does,
+           so it loses what a stop would lose. -->
+      <p class="modal-why" id="home-warn" hidden></p>
+      <div class="modal-actions">
+        <button type="button" class="btn ghost" id="home-cancel">Keep going</button>
+        <button type="button" class="btn primary" id="home-go">Back to the dashboard</button>
+      </div>
+    </dialog>
+
+    <!-- While the stop is being handled. A dialog rather than a painted layer so
+         focus, Esc and the backdrop come from the browser; Esc hides it and the
+         Stop button brings it back, the stop itself carries on regardless. -->
+    <dialog class="modal stopping" id="stopping-modal" aria-labelledby="stopping-title">
+      <h2 id="stopping-title">Wrapping up</h2>
+      <ol class="stop-steps" id="stop-steps"></ol>
+      <div id="stop-extra"></div>
+      <div class="modal-actions">
+        <button type="button" class="btn ghost" id="stopping-hide">Back to the page</button>
+      </div>
+    </dialog>
+
+    <dialog class="modal" id="brief-modal" aria-labelledby="brief-title">
+      <h2 id="brief-title">Write a brief</h2>
+      <p class="modal-blurb">
+        A plain-English report of what has been decided, what is still open and what
+        happens next. Plan2Code writes it to a file and shows it here, ready to
+        print or hand to someone who has not been in the room.
+      </p>
+      <fieldset class="modal-ranges">
+        <legend>How far back?</legend>
+        <label><input type="radio" name="brief-range" value="today" checked /> <span>Today</span></label>
+        <label><input type="radio" name="brief-range" value="this week" /> <span>This week</span></label>
+        <label><input type="radio" name="brief-range" value="since" /> <span>Since a date</span></label>
+        <label class="since-row">
+          <span class="since-label">Date</span>
+          <input type="date" id="brief-since" />
+        </label>
+        <label><input type="radio" name="brief-range" value="full" /> <span>Everything so far</span></label>
+      </fieldset>
+      <p class="modal-why" id="brief-why"></p>
+      <div class="modal-actions">
+        <button type="button" class="btn ghost" id="brief-cancel">Cancel</button>
+        <button type="button" class="btn primary" id="brief-go">Write the brief</button>
+      </div>
+    </dialog>
+
+    <footer class="footer">
+      <div class="footer-summary" id="footer-summary" aria-live="polite">
+        Nothing to send yet.
+      </div>
+      <button type="button" class="footer-where" id="footer-where" hidden></button>
+      <div class="footer-actions">
+        <span class="hint" id="send-hint"></span>
+        <button type="button" class="btn ghost" id="btn-clear" hidden>Clear</button>
+        <button type="button" class="btn primary" id="btn-send" disabled>Send to Plan2Code</button>
+      </div>
+    </footer>
+
+    <!-- p2c:boot -->
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

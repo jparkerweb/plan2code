@@ -1,14 +1,14 @@
 {
   "name": "plan2code",
-  "version": "2.3.0",
+  "version": "2.4.0",
   "private": true,
   "bin": {
-    "plan2code": "./install.js"
+    "plan2code-install": "./install.js"
   },
   "scripts": {
     "prepare": "husky",
     "build:skills": "node install.js --build-skills",
-    "test": "node scripts/validate-char-count.js && node install.js --verify-skills"
+    "test": "node scripts/validate-char-count.js && node install.js --verify-skills && node scripts/parse-check.mjs && node scripts/check-skill-table.mjs && node --test scripts/test-web-console.mjs scripts/test-launcher.mjs"
   },
   "devDependencies": {
     "husky": "^9.0.0"

@@ -2,6 +2,31 @@
 
 All notable changes to Plan2Code will be documented in this file.
 
+## v2.4.0
+
+### ✨ Added
+
+- **Web console**: an optional local browser UI that every skill offers at the start of a session ("web console or terminal?"). Questions, recaps, sign-off gates, build progress and the document taking shape are laid out in a page instead of scrolling past in the terminal, so the workflow is usable by product people and not only engineers. Zero dependencies, no build step: a detached `node server.mjs` bound to `127.0.0.1`, bundled into each skill as `references/web-console/`. Answers carry the literal terminal token they stand for (`approved`, `a`, `skip`), so declining the console or losing it mid-session falls straight back to the terminal with nothing lost. Full guide in `.readme/web-console.md`.
+- **`plan2code` dashboard skill**: a new bare-named skill that opens the console as a card menu of every skill, with a spec picker, and launches the pick on the same page. **Back to the dashboard** works from finished screens and, mid-workflow, from a triangle beside **Stop session**.
+- **Global `plan2code` command**: installed with the skills (`I` and `A`; alone via Custom → `D`; removed by `U`). Typed in any project it opens the dashboard in Claude Code or Devin, asking which when both are installed and remembering the last pick in `~/.plan2code/launcher.json`. `--cli claude|devin` skips the question and `--model <name>` skips the model notice; other arguments are forwarded. It starts the agent with permission prompts off (`--permission-mode bypassPermissions` in Claude Code, `--permission-mode bypass` in Devin); run `claude /plan2code` yourself if you want prompts. The launcher lives in `~/.plan2code/bin/` with npm-style shims (sh, plus `.cmd` and `.ps1` on Windows).
+- **Desktop shortcut** (opt-in, asked after the command installs): `Plan2Code.lnk` on Windows, `Plan2Code.command` on macOS, `plan2code.desktop` on Linux. It opens a native folder picker first, starting on the last folder picked.
+- **`plan2code-3-implement-review`**: a quality-gated Step 3 that implements one phase, runs a focused review and the selected fixes before sign-off, and marks the phase complete only after the reviewed result is approved. Step 2's hand-off now offers it first, with `/plan2code-3-implement` as the review-free alternative.
+- **`--web` flag**: `/plan2code-1-plan --web plan a lunch voting app` opens the console without asking. Every next-step command the workflow prints (resume footers, NEXT STEP lines, the loop's completion banner) now carries `--web`.
+- **Console pages for builds and reviews**: a build shows the current task, a task-count progress bar and the phase's task list ticking as tasks land. After an approved phase or a finished quick task, **Review it now** runs `/plan2code-review` on the page, with *Which to fix* presets for critical-and-warnings or everything.
+- **Console conveniences**: nine question shapes with live validation and drag-to-reorder phases; drafts that survive a closed tab, reload, server restart or agent crash; an **Ask** tab for quick questions the agent answers at its next check-in (file edits need approval); image and document attachments; a read-only **Overview** tab; a **Workspace** of extra read-only folders addressed as `@name`; a green / yellow / red **session meter**; a **Role** preference that orders starter templates; nineteen highlight colours, light / dark themes and card widths; audio cues with per-event toggles; and a 16-topic Help dialog.
+- **Planny in the console**: drawn in SVG in his own dock above the question list, where he carries the page's state: his star lights and he waves when it is your turn, the star turns and he walks on the spot while the agent works, it goes green when all is caught up, he shows no arms when the agent is not answering, and he fades with his star shut when disconnected. He flies through a starfield while the agent thinks, wakes up on a fresh dashboard, and acts out each skill on its starting screen, arms holding that step's prop. The tab icon adds a busy, ready or attention bar, and the desktop shortcut uses him too.
+- **Tests**: `scripts/test-web-console.mjs` and `scripts/test-launcher.mjs` (run by `node --test`), `scripts/parse-check.mjs` (every shipped browser module parses as an ES module) and `scripts/check-skill-table.mjs` (the dashboard's "What each skill reads and writes" table matches the skills), all wired into `npm test`. `scripts/bench-web-console.mjs` measures time to first paint.
+- **install.js**: an animated progress indicator during the two long install phases, so the installer no longer looks hung.
+
+### 🔧 Changed
+
+- **Planny has a new look everywhere**: a box with a star for an eye, stick arms and two small feet, chosen from twenty studies. Every ASCII Planny in the workflow prompts, the installer, `plan2code-loop` and the Claude Code status line is redrawn to match: the eye is always the star, one arm waves when he is asking something, both go up when he is celebrating, and the status line shows his box, star and feet without arms.
+- **Character limit raised from 11,000 to 11,500** for `src/plan2code-*.md` (`scripts/validate-char-count.js`, and the same number in `plan2code-metrics`'s `improver.ts` and `applier.ts`), so the console's Interface lines fit without cutting workflow rules.
+- **package.json**: the installer's bin is renamed `plan2code` → `plan2code-install`, leaving the `plan2code` name to the launcher. The `npx` install command is unchanged.
+- **install.js**: skills bundle the shared `src/web-console/` directory through `additionalReferences`, copied as bytes so the bundled chimes survive the build. Installed skills are listed by reading the skills store directly instead of `skills list` (seconds instead of over a minute on Windows), and removal is one variadic `skills remove`.
+- **plan2code-0-pathfinder**: the duplicated Trail Footer forms fold into the fallback line, since `references/trail.md` defines them in full; the GitHub Issues backend is unchanged.
+- **`.gitattributes`**: `*.mp3` is binary. `.editorconfig` pins LF for editors. `prototypes/` is gitignored.
+
 ## v2.3.0
 
 ### ✨ Added

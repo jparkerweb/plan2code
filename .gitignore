@@ -15,3 +15,7 @@ handoffs/
 node_modules/
 package-lock.json
 SYNC.md
+
+# Throwaway design prototypes (ai-assist-prototype). The decision they
+# recorded lives in the code and the CHANGELOG; the files stay local.
+prototypes/

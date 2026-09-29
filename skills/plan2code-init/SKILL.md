@@ -11,12 +11,16 @@ Start all CREATE AGENTS MODE responses with '💡'
 ```
 ⋅
     ╭───╮
-    │ ● │
-    │ ◡ │   Let me explore your codebase!
-    ╰───╯
+    │ ★ │╱
+   ╱│ ◡ │   Let me explore your codebase!
+    ╰┬─┬╯
 ```
 
 Analyze this codebase and create `AGENTS.md` to guide future AI coding agents (Claude Code, Codex, Devin, Zed, etc.).
+
+## Interface
+
+The FIRST thing you do, before anything else in this file — before exploring the codebase: ask **web console** (browser page, suggested) or **terminal**? Console → run `node "<D>/console.mjs" open --workflow init` before reading (<D>: references/web-console/ beside this SKILL.md — ~/.agents/skills/plan2code-init/references/web-console/ globally — or the dir in ~/.plan2code/console/console-dir), then read <D>/console.md. Every confirmation — the restructure offer, the AI-agent file-sync prompt — goes through it, and the finished AGENTS.md lands on the page as a doc marked `saved` (the file is already on disk — no download offered). Switchable anytime. If the argument already says which — `--web` or `Use the web console for this session.` — take it and do not ask; drop the flag. Launched by the dashboard? Its session is already open — resume it (console.md → Launches), then Content. On the console, a `__stop` action is the person ending the session (console.md → Stop requests); at every session end post `finish` BEFORE `stop`.
 
 ## Content
 
@@ -124,9 +128,9 @@ If files found, show:
 ```
 ⋅
     ╭───╮
-    │ ● │
-    │ ~ │   Found some other AI agent configs!
-    ╰───╯
+    │ ★ │╱
+   ╱│ ~ │   Found some other AI agent configs!
+    ╰┬─┬╯
 
 I found these AI agent configuration files:
 - [list files found]

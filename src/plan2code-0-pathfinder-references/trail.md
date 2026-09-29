@@ -77,7 +77,7 @@ Part 2 answers exactly one question for the human: **is this turn over, or is it
 
 ```
 NEXT STEP · start a new conversation and run:
-`/plan2code-0-pathfinder specs/audit-log-export/pathfinder`
+`/plan2code-0-pathfinder specs/audit-log-export/pathfinder --web`
 ```
 
 The path is always relative and always ends `/pathfinder` — that is exactly the argument this skill's Auto-Discovery resolves an idea from, so the human pastes it back with zero edits. Fill `<idea>` from the active map's directory; never leave the `<spec-folder>` placeholder in a rendered footer.
@@ -86,9 +86,9 @@ The command target follows the map's status, but the sentence is always the same
 
 | Status | Command |
 |---|---|
-| `Charting` / `Working` | `/plan2code-0-pathfinder specs/<idea>/pathfinder` |
-| `Cleared` | `/plan2code-1-plan` — point at the PLAN-DRAFT the Clearing Gate wrote |
-| `Cleared`, but `## Ground rules` records `AGENTS.md` **absent** | `/plan2code-init` FIRST (offer `questions/00-codebase-context.md`), then `/plan2code-1-plan` |
+| `Charting` / `Working` | `/plan2code-0-pathfinder specs/<idea>/pathfinder --web` |
+| `Cleared` | `/plan2code-1-plan --web` — point at the PLAN-DRAFT the Clearing Gate wrote |
+| `Cleared`, but `## Ground rules` records `AGENTS.md` **absent** | `/plan2code-init` FIRST (offer `questions/00-codebase-context.md`), then `/plan2code-1-plan --web` |
 
 #### Form B — the turn asks the human something
 
@@ -113,7 +113,7 @@ First print the stop branch, clearly labeled:
 
 ```
 OR START FRESH · new conversation, paste:
-`/plan2code-0-pathfinder specs/audit-log-export/pathfinder`
+`/plan2code-0-pathfinder specs/audit-log-export/pathfinder --web`
 ```
 
 Then invoke the structured question tool (header `Next step`) asking: "Continue here, or start fresh? Everything is saved." Options: up to three takeable question names, then `Start fresh`. Put each question's gist / newly-unblocked note in its description. The automatic `Other` path lets the human name another frontier question not shown. Mark one option's description `RECOMMENDED` — early in the session that is a question; at the checkpoint it is `Start fresh`.
@@ -168,7 +168,7 @@ Q2 Ceiling behaviour past the cap (re-ask) · Q3 Who sees the truncation warning
   Confidence: not yet — Feasibility, Risk still need work.
 
 NEXT STEP · start a new conversation and run:
-`/plan2code-0-pathfinder specs/audit-log-export/pathfinder`
+`/plan2code-0-pathfinder specs/audit-log-export/pathfinder --web`
 ```
 
 **Cleared** — every stop walked, fog empty, command hands off:
@@ -179,7 +179,7 @@ NEXT STEP · start a new conversation and run:
   Confidence: solid.
 
 NEXT STEP · start a new conversation and run:
-`/plan2code-1-plan`
+`/plan2code-1-plan --web`
 ```
 
 At `Cleared` the named legend is optional — the destination is reached and the PLAN-DRAFT is the thing to point at. Keep the confidence line; the Clearing Gate leaned on it.

@@ -31,9 +31,9 @@ cd plan2code-metrics && npm run build # Build the CLI
 
 | Option | Action |
 |--------|--------|
-| `I` | Install the Plan2Code skills globally through the skills CLI — **skills only**, no dev tools |
-| `A` | Everything in `I` plus `plan2code-loop`, `plan2code-bot`, `plan2code-metrics`, and the Claude Code status line |
-| `U` | Uninstall Plan2Code skills and all dev tools (confirmation required) |
+| `I` | Install the Plan2Code skills globally via the `skills` CLI, plus the global `plan2code` command (opens the dashboard in Claude Code or Devin) — no dev tools |
+| `A` | Everything in `I` plus every dev tool: `plan2code-loop`, `plan2code-bot`, `plan2code-metrics`, and the Claude Code status line |
+| `U` | Uninstall Plan2Code: skills + `plan2code` command + `plan2code-loop` + `plan2code-metrics` + `plan2code-bot` + Claude Code status line (confirmation required) |
 | `C` | Open CUSTOM sub-menu |
 | `Q` | Quit |
 
@@ -46,6 +46,7 @@ cd plan2code-metrics && npm run build # Build the CLI
 | `M` | Install plan2code-metrics CLI only |
 | `S` | Install Claude Code status line only |
 | `B` | Install plan2code-bot CLI only |
+| `D` | Install the global `plan2code` command only |
 | `Q` | Return to main menu |
 
 ## Non-Interactive Flags
@@ -97,7 +98,7 @@ The skills CLI owns distribution from step 4 onward. It stores canonical skills 
 
 ## Adding a New Workflow Prompt / Skill
 
-1. Create `src/plan2code-<name>.md` with body content only and keep it under 11,000 characters.
+1. Create `src/plan2code-<name>.md` with body content only and keep it under 11,500 characters.
 2. Register it in `SOURCE_PROMPTS` in `install.js`; add a matching `generateStepLabel()` case when needed.
 3. Update command inventories in `README.md`, `QUICK-REFERENCE.md`, `.agents-docs/AGENTS-architecture.md`, and `CHANGELOG.md`. Update `docs/index.html` only for core pipeline steps.
 4. Run `npm run build:skills` and `npm test`.

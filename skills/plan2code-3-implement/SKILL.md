@@ -12,6 +12,10 @@ Start all IMPLEMENTATION MODE responses with '⚡ [PHASE X: Phase Name]'
 
 Senior software engineer implementing solutions exactly as specified. Follow specs precisely, update progress, flag issues.
 
+## Interface
+
+The FIRST thing you do, before anything else in this file — before reading a spec, before Phase 1: ask **web console** (browser page, suggested) or **terminal**? Console → run `node "<D>/console.mjs" open --workflow implement` before reading (<D>: references/web-console/ beside this SKILL.md — ~/.agents/skills/plan2code-3-implement/references/web-console/ globally — or the dir in ~/.plan2code/console/console-dir), then <D>/console.md and <D>/building.md; progress, every question and the sign-off go through it. Switchable anytime. If the argument already says which — `--web` or `Use the web console for this session.` — take it and do not ask; drop the flag. Launched by the dashboard? Its session is already open — resume it (console.md → Launches), then the spec.
+
 ## Rules
 
 - Follow `./AGENTS.md` if it exists
@@ -156,6 +160,7 @@ After all tasks:
 3. Use Completion Report Format
 4. Do NOT mark phase `[x]` until user says "approved"
 5. Address issues before re-requesting sign-off
+6. On "review": run the code review BEFORE sign-off — Review Mode (references/review.md in the installed skill, src/plan2code-review.md in this repo), scope fixed to exactly this phase's change set, no commit instructions. Apply the fixes the user picks, update the report, then request sign-off again. The phase stays `[/]` throughout.
 
 ### 6. After User Approval
 
@@ -196,12 +201,12 @@ Sections: Summary (2-3 sentences), Tasks Completed (Y/Z + blocked list), Test Re
 ```
 ⋅
     ╭───╮
-    │ ● │
-    │ ~ │   Ready for your review!
-    ╰───╯
+    │ ★ │╱
+   ╱│ ~ │   Ready for your review!
+    ╰┬─┬╯
 ```
 
-> Reply "approved" to mark this phase complete, or describe any issues.
+> Reply "approved" to mark this phase complete, "review" to run a focused code review of this phase's changes first, or describe any issues.
 
 ### After Approval / Session End
 
@@ -218,27 +223,27 @@ On user "approved":
 
 5. Provide: `git add -A && git commit -m "<subject>" -m "<JIRA-Ticket-ID>" -m "AI Assisted"` (derive JIRA ticket ID from branch name)
    - **Subject ≤100 chars. EXACTLY THREE -m flags — no body. NEVER add bullet bodies, paragraph descriptions, or multi-line explanations.** If a phase spec file contains a longer commit-message template, use only its subject line. The diff is the body; the PR is the explanation.
-6. **If more phases:** "NEXT STEP: Start NEW conversation and run: `/plan2code-3-implement`"
-7. **If final phase:** "NEXT STEP: Start NEW conversation and run: `/plan2code-4-finalize`"
-8. Mention `/plan2code-1b-revise-plan` option
-9. Suggest: "Optional: run `/plan2code-review` for a post-phase code review -- recommended after key features or milestones."
+6. **If more phases:** "NEXT STEP: Start NEW conversation and run: `/plan2code-3-implement --web`"
+7. **If final phase:** "NEXT STEP: Start NEW conversation and run: `/plan2code-4-finalize --web`"
+8. Mention `/plan2code-1b-revise-plan --web` option
+9. **On the web console:** post `finish` with the next step — never a review offer; it was on the sign-off card — then wait and `stop` per building.md.
 
 Planny (continuing):
 ```
 ⋅
     ╭───╮
-    │ ★ │
+   ╲│ ★ │╱
     │ ◡ │   Phase done! Great progress!
-    ╰───╯
+    ╰┬─┬╯
 ```
 
 Planny (final phase):
 ```
 ⋅
     ╭───╮
-    │ ★ │
+   ╲│ ★ │╱
     │ ◡ │   All phases complete! Amazing work!
-    ╰───╯
+    ╰┬─┬╯
 ```
 
 ## Abort Handling
@@ -249,8 +254,8 @@ If user says "abort", "cancel", or similar:
    - List completed vs remaining tasks
    - Note created/modified files
    - Do NOT change phase checkbox (stays `[/]`)
-   - Explain: "Run `/plan2code-3-implement` again to resume."
-3. Stop implementation
+   - Explain: "Run `/plan2code-3-implement --web` again to resume."
+3. Stop implementation. On the web console, post `finish` with that command, then `stop`.
 
 ## Recovery
 

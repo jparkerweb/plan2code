@@ -52,11 +52,11 @@ Two round trips, not six. Three probes each — exactly the cap, so neither batc
 
 Batch 2 bends the independence test on purpose. The arrival signal (5) can shift under the smallest arrival (4), so strictly it should be held back — but holding it costs a third round trip to catch a conflict that is rare and cheap to spot. The trade is to send them together and reconcile at the recap: if the smallest arrival comes back materially smaller than the artifact you were told about, re-check the arrival signal against it before writing the destination. A knowing trade here, not a licence to batch dependent probes elsewhere.
 
-**Both batches go through the structured question tool.** Give each probe genuine candidate options with trade-offs and a recommendation; the built-in `Other` path is where the human composes the actor, boundary, arrival signal, or forcing-function detail in their own words. A clicked option is not written verbatim as the destination — the recap-confirmation tool call turns all six answers into the agreed one-or-two-line destination before disk write.
+**Both batches go through the structured question tool.** Give each probe genuine candidate options with trade-offs and a recommendation; the built-in `Other` path is where the human composes the actor, a further feature to leave out, the arrival signal, or forcing-function detail in their own words. A clicked option is not written verbatim as the destination — the recap-confirmation tool call turns all six answers into the agreed one-or-two-line destination before disk write.
 
 **Probe 1 — the artifact**
 
-> "When this map is cleared, what exists that does not exist now: a plan you hand to `/plan2code-1-plan`, a decision locked before anyone plans, or a change already made in the codebase? My guess: a plan."
+> "When we are done here, what exists that does not exist now: a plan you hand to `/plan2code-1-plan`, a decision recorded before anyone plans, or a change already made in the codebase? My guess: a plan."
 
 *Fishing for:* the shape of the destination. Push back if the answer is "the feature working" — that is past the edge of every pathfinder map. Say so plainly: "That is the build. The map ends at the plan for the build."
 
@@ -68,29 +68,31 @@ Batch 2 bends the independence test on purpose. The arrival signal (5) can shift
 
 **Probe 3 — the sacrificial boundary**
 
-> "Name one thing a reasonable person would assume is part of this that you are willing to say is NOT part of it."
+> "Which of these features are we leaving out this time?"
 
-*Fishing for:* the first `## Out of scope` bullet. This probe does more work than any other. A destination nobody has excluded anything from has not been thought about. If the human cannot name one, offer two candidates and make them reject one.
+Deliver it as a multi-select (`multi` on the web console) of 3–5 features a reasonable person might expect to be included. Every option names a feature ("Scheduled exports"), never a rule to keep ("Exports stay manual"). Each option's description ends "(Leaving this out = …)", naming what that leaves. Offer a recommended preset of the ones you would leave out; the free-text path lets them name another feature.
+
+*Fishing for:* the first `## Out of scope` bullets — the ticked features become them. This probe does more work than any other. If nothing is ticked, push once: a destination nobody has excluded anything from has not been thought about. The preset is the push.
 
 **Probe 4 — the smallest arrival**
 
-> "What is the smallest version that would still count as arriving? If only that existed, would you call it done or would you feel cheated?"
+> "What is the smallest version that would still count? If only that existed, would you call it done or would you feel cheated?"
 
 *Fishing for:* the difference between the destination and the wish list. Everything above the smallest arrival is a candidate for out of scope or for a later effort.
 
 **Probe 5 — the arrival signal**
 
-> "How do you know you have arrived — what do you look at?"
+> "How will you know it's done — what do you look at?"
 
 *Fishing for:* a checkable condition. "It feels right" is not one. "Every open decision has an answer and I can hand the draft to planning without re-litigating format" is one.
 
 **Probe 6 — the forcing function**
 
-> "What made this surface now? A deadline, an incident, an audit, a customer?"
+> "What made this come up now? A deadline, an incident, an audit, a customer?"
 
 *Fishing for:* constraints that will shape half the questions and that nobody volunteers unprompted. A regulatory deadline changes the delivery question, the testing posture question, and the out-of-scope line all at once.
 
-**The probe names above are internal labels, not headings the human reads.** Head each Q block plainly — *What you end up with*, *Who uses it*, *What's not included*, *Smallest version that counts*, *How you know it's done*, *Why now* — and keep the probe text itself as plain as the quotes above. "The sacrificial boundary" and "the arrival signal" mean something to this playbook and nothing to the person answering. Full rule in the grilling playbook, *Say it in plain English*.
+**The probe names above are internal labels, not headings the human reads.** Head each Q block plainly — *What you end up with*, *Who uses it*, *Leave for later*, *Smallest version that counts*, *How you know it's done*, *Why now* — and keep the probe text itself as plain as the quotes above. "The sacrificial boundary" and "the arrival signal" mean something to this playbook and nothing to the person answering. Full rule in the grilling playbook, *Say it in plain English*.
 
 ### Worked example — same idea, two destinations
 

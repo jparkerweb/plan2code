@@ -12,7 +12,7 @@ agent, and the next engineer all start from the same specs.
 
 Six commands, each posted separately. Two of them are optional.
 
-Version 2.3.0 · MIT · 📖 [plan2code.jparkerweb.com](https://plan2code.jparkerweb.com)
+Version 2.4.0 · MIT · 📖 [plan2code.jparkerweb.com](https://plan2code.jparkerweb.com)
 
 ---
 
@@ -49,6 +49,15 @@ Gemini CLI · Cline · Roo · Kilo · Goose · Trae · Qwen Code.
 
 The installer keeps one canonical copy of each skill under `~/.agents/skills/` and links it into
 agents that maintain their own directory. Update later with `npx skills update -g`.
+
+The installer also adds a global `plan2code` command. Run it from any project and the Plan2Code
+dashboard opens right there, in **Claude Code** or **Devin**. With both installed it asks which and
+remembers your pick; `plan2code --cli claude` or `--cli devin` skips the question, and `--model <name>`
+chooses the model. It works in cmd, PowerShell, Git Bash, macOS and Linux shells, and needs the
+Claude Code or Devin CLI on your `PATH`. It starts the agent with permission prompts off
+(`--permission-mode bypassPermissions` in Claude Code, `--permission-mode bypass` in Devin); run
+`claude /plan2code` yourself if you want prompts. The installer then offers a desktop shortcut (answer `y`),
+which opens a folder picker first. Uninstalling (`U`) removes both.
 
 Use the installer rather than calling `skills add` against the repository root: recursive discovery
 would also find maintainer-only skills under `.claude/skills/`. The installer targets `skills/`
@@ -90,10 +99,12 @@ implementation is where most agent drift starts.
 
 | Command | Use it when |
 |---------|-------------|
+| `/plan2code` | Open the web console dashboard: every skill below as a card, launched on the page |
 | `/plan2code-0-pathfinder` | The idea is too big and unclear to plan. Charts it as decisions, clears them one at a time, hands a hot plan draft to Step 1 |
 | `/plan2code-1-plan` | Starting a feature. Full requirements → architecture pass |
 | `/plan2code-2-document` | Planning is done. Turn the plan into phase specs |
 | `/plan2code-3-implement` | Build the next phase (one per conversation) |
+| `/plan2code-3-implement-review` | Build the next phase and review it before you approve it (instead of `/plan2code-3-implement`) |
 | `/plan2code-review` | Independent second opinion on local changes, then optional fixes |
 | `/plan2code-4-finalize` | All phases done. Validate, summarize, archive |
 | `/plan2code-init` | Generate this repo's `AGENTS.md` so every agent starts informed |
@@ -101,6 +112,10 @@ implementation is where most agent drift starts.
 | `/plan2code-quick-task` | A small change that doesn't warrant the full sequence |
 | `/plan2code-1b-revise-plan` | Requirements moved mid-build. Revise the specs, not the code |
 | `/plan2code-handoff` | Compact this conversation into a doc the next one resumes from |
+
+Every skill asks at the start whether to work in the terminal or in the **web console**, a local
+browser page for the questions, sign-offs, build progress and the document taking shape. Add `--web`
+to any command to skip the question: `/plan2code-1-plan --web plan a lunch voting app`.
 
 ---
 
@@ -232,6 +247,9 @@ One phase per conversation. It won't run tests unless the phase says to.
 
 **In:** `specs/<feature>/overview.md`. **Out:** working code, and updated checkboxes.
 
+Want a second pair of eyes before you sign off? `/plan2code-3-implement-review` builds the phase the
+same way, runs a focused review and the fixes you pick, and only then asks for approval.
+
 ### Review 🔬 — optional, any time
 
 An independent second opinion, not a rubber stamp. It figures out its own scope (conversation
@@ -313,6 +331,7 @@ Core reference:
 
 Optional tooling — none of it is required to use the workflow:
 
+- **[.readme/web-console.md](.readme/web-console.md)**: the browser dashboard, and working through every step on one page
 - **[.readme/autonomous-loop.md](.readme/autonomous-loop.md)** — `plan2code-loop`, a hands-off alternative to Step 3
 - **[.readme/status-line.md](.readme/status-line.md)** — three-line Claude Code status bar: model, context, quota, diff
 - **[.readme/metrics.md](.readme/metrics.md)** — `plan2code-metrics`, measuring and improving the prompts themselves
