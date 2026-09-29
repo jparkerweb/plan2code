@@ -12,6 +12,10 @@ Start all FINALIZATION MODE responses with '🧹 [FINALIZATION STEP X: Step Name
 
 QA engineer and technical lead performing rigorous final validation. Verify specifications were implemented correctly and completely, create summaries, and archive completed work.
 
+## Interface
+
+The FIRST thing you do, before anything else in this file — before the Required Context check, before Step 1: ask **web console** (browser page, suggested) or **terminal**? Console → run `node "<D>/console.mjs" open --workflow finalize` before reading (<D>: references/web-console/ beside this SKILL.md, or the dir in ~/.plan2code/console/console-dir; `--spec specs/<feature-name>` if known, else post `specDir` later), then <D>/console.md → Finalize; the audit options, the doc-update approval and every cleanup confirmation go through it. Switchable anytime. `--web` or `Use the web console for this session.` in the argument answers it; drop the flag. Dashboard-launched? Resume its open session (console.md → Launches), then the Required Context check.
+
 ## Rules
 
 - Follow `./AGENTS.md` if it exists
@@ -39,9 +43,7 @@ If multiple active spec folders exist or nothing provided, ask user for:
 
 ## Examples
 
-**Task Audit:** Always show verification table with phase totals, blocked items, and completion %. Never just assert "all complete" without evidence.
-
-**Documentation Review:** Always show review table with each document checked and proposed changes. Never assert "no updates needed" without evidence.
+**Task Audit / Documentation Review:** Always show the evidence table — phase totals and blocked items / each document checked with proposed changes. Never assert "all complete" or "no updates needed" without it.
 
 ## Process
 
@@ -194,9 +196,9 @@ If updates needed, show Planny and ask for approval:
 ```
 ⋅
     ╭───╮
-    │ ● │
-    │ ~ │   Found some docs that need updating!
-    ╰───╯
+    │ ★ │╱
+   ╱│ ~ │   Found some docs that need updating!
+    ╰┬─┬╯
 ```
 
 > Reply "approve" to proceed with doc updates, or specify which to skip.
@@ -250,8 +252,6 @@ Ask: "Submit this feedback + run metrics to the maintainer via GitHub? (optional
    - `PLAN-DRAFT.md`, `PLAN-CONVERSATION-*.md`, `pathfinder/` (if present)
 3. Remove temporary scratch files not part of the final spec record
 4. Verify original directory empty and can be removed
-
-**Keep folder name exactly as-is during archival.**
 
 ---
 
@@ -308,9 +308,9 @@ Replace METRICS_JSON values with actuals. `completion_rate_at_audit` = Y/Z as de
 ```
 ⋅
     ╭───╮
-    │ ★ │
+   ╲│ ★ │╱
     │ ◡ │   You did it! Feature complete!
-    ╰───╯
+    ╰┬─┬╯
 ```
 
 > IMPLEMENTATION COMPLETED!
@@ -323,7 +323,7 @@ Replace METRICS_JSON values with actuals. `completion_rate_at_audit` = Y/Z as de
 | Completion | Action |
 |-----------|--------|
 | **>75%** | Finalize with notice. List incomplete items. Note remaining tasks for follow-up cycle. |
-| **<75%** | Recommend returning to implementation. List incomplete phases with task counts. Options: 1) Return via `/plan2code-3-implement` 2) Proceed with partial finalization. |
+| **<75%** | Recommend returning to implementation. List incomplete phases with task counts. Options: 1) Return via `/plan2code-3-implement --web` 2) Proceed with partial finalization. |
 
 ## Abort Handling
 
@@ -342,7 +342,7 @@ If user says "abort", "cancel", or similar:
 
 ## Learning Capture
 
-At session end, if you discovered undocumented commands, dependency quirks, gotchas (>5min cost), framework workarounds, or missing `AGENTS.md` patterns → prompt user to update AGENTS.md. If yes, apply the edit directly.
+If you discovered undocumented commands, dependency quirks, gotchas (>5min cost), or missing `AGENTS.md` patterns → prompt user to update AGENTS.md; apply the edit if yes.
 
 ## Session End
 
@@ -354,3 +354,5 @@ git commit -m "chore: finalize and archive <feature-name>" -m "<JIRA-Ticket-ID>"
 ```
 
 Returning context: Feature complete. Specs archived to `specs--completed/<feature-name>/`.
+
+**On the web console:** a `__stop` action in a send ends the session: see console.md → Stop requests. At every session end post `finish` BEFORE `stop`, per console.md → Finalize — the completion summary is printed to a terminal the browser user is not watching.

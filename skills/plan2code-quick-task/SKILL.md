@@ -12,6 +12,10 @@ Start all QUICK TASK MODE responses with '🚀'
 
 Senior software architect. Analyze requirements, ask clarifying questions, deliver a concise Implementation Plan.
 
+## Interface
+
+The FIRST thing you do, before anything else in this file — before the AGENTS.md check, before asking what to build: ask **web console** (browser page, suggested) or **terminal**? Console → run `node "<D>/console.mjs" open --workflow quick-task` before reading (<D>: references/web-console/ beside this SKILL.md — ~/.agents/skills/plan2code-quick-task/references/web-console/ globally — or the dir in ~/.plan2code/console/console-dir), then read <D>/console.md and <D>/building.md. Every question, the scope check and the plan go through it; once the task is built, the finish offers a review of it on the page. Switchable anytime. If the argument already says which — `--web` or `Use the web console for this session.` — take it and do not ask; drop the flag. Launched by the dashboard? Its session is already open — resume it (console.md → Launches), then the AGENTS.md check.
+
 ## Project Context (BLOCKING)
 
 Check for `./AGENTS.md` first:
@@ -22,10 +26,10 @@ Check for `./AGENTS.md` first:
 
    > ```
    > ⋅
-   >     ╭───╮  
-   >     │ ● │   ?
-   >     │ ~ │   Hmm, I don't see an AGENTS.md...
-   >     ╰───╯
+   >     ╭───╮  ?
+   >     │ ★ │╱
+   >    ╱│ ~ │   Hmm, I don't see an AGENTS.md...
+   >     ╰┬─┬╯
    > ```
    >
    > "No `AGENTS.md` found. This file provides essential project context.
@@ -46,12 +50,12 @@ Check for `./AGENTS.md` first:
 ```
 ⋅
     ╭───╮
-    │ ● │
-    │ ~ │   I'm ready to help!
-    ╰───╯
+    │ ★ │╱
+   ╱│ ~ │   I'm ready to help!
+    ╰┬─┬╯
 ```
 
-Ask what feature the user wants, then ask follow-up questions until 100% clear.
+Ask what feature the user wants, then ask follow-up questions until 100% clear. Console: that first card carries `"templates": "idea"` (console.md → Starter templates).
 
 ## Scope Validation
 
@@ -120,11 +124,11 @@ After achieving clarity, assess scope:
 [Files examined, patterns noted]
 
 ---
-**Next:** New conversation with `/plan2code-1-plan`, attach this file.
+**Next:** New conversation with `/plan2code-1-plan --web`, attach this file.
 Resume at Phase 2 (System Context).
 ```
 
-Then tell user: "Created `specs/<feature-name>/PLAN-DRAFT-<date>.md`. Start new conversation with `/plan2code-1-plan` to continue."
+Then tell user: "Created `specs/<feature-name>/PLAN-DRAFT-<date>.md`. Start new conversation with `/plan2code-1-plan --web` to continue."
 
 ---
 
@@ -149,9 +153,9 @@ Then tell user: "Created `specs/<feature-name>/PLAN-DRAFT-<date>.md`. Start new 
 ```
 ⋅
     ╭───╮
-    │ ★ │
+   ╲│ ★ │╱
     │ ◡ │   Plan ready! What do you think?
-    ╰───╯
+    ╰┬─┬╯
 ```
 
 Ready to implement? (yes / modify / escalate / abort)
@@ -159,3 +163,5 @@ Ready to implement? (yes / modify / escalate / abort)
 ## Session End
 
 Work summary — tell user: task name, plan delivered (or PLAN-DRAFT created if escalated).
+
+**On the web console:** a `__stop` action in a send is the person ending the session: see console.md → Stop requests. At every session end (built, escalated, aborted) post `finish` BEFORE `stop`, as building.md → Quick task describes. After a build, keep waiting for the review button's answer before you stop.

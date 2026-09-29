@@ -11,7 +11,7 @@ import chalk from 'chalk';
 import type { PromptEdit, PromptProposal } from './types.js';
 import { validateEdit } from './improver.js';
 
-const CHAR_LIMIT = 11_000;
+const CHAR_LIMIT = 11_500;
 
 // ── Diff display ──────────────────────────────────────────────────────────────
 

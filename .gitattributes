@@ -4,7 +4,7 @@
 # Git stores LF, and every text file is checked out as LF on all platforms.
 # This is not cosmetic: scripts/validate-char-count.js measures the characters
 # actually on disk, so a CRLF checkout adds ~1 character per line. The workflow
-# prompts in src/plan2code-*.md run close to their 11,000 character budget
+# prompts in src/plan2code-*.md run close to their 11,500 character budget
 # (several sit above 10,800), and a CRLF working tree pushes them over — turning
 # `npm test` into a check that passes or fails depending on how the repo was
 # cloned. Pinning eol=lf makes the count reproducible everywhere.
@@ -16,6 +16,7 @@
 # ─────────────────────────────────────────────────────────────────────────────
 *.png  binary
 *.jpg  binary
+*.mp3  binary
 *.jpeg binary
 *.gif  binary
 *.ico  binary

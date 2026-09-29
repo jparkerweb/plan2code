@@ -514,15 +514,15 @@ function main() {
   }
 
   if (config.color) {
-    const ico1 = `${C.sGreen}╭─╮${C.reset} `;
-    const ico2 = `${C.sGreen}│${C.sEye}★${C.sGreen}│${C.reset} `;
-    const ico3 = `${C.sGreen}╰─╯${C.reset} `;
+    const ico1 = ` ${C.sGreen}╭───╮${C.reset}  `;
+    const ico2 = ` ${C.sGreen}│ ${C.sEye}★${C.sGreen} │${C.reset}  `;
+    const ico3 = ` ${C.sGreen}╰┬─┬╯${C.reset}  `;
     const pad = `${C.gray}${'┄'.repeat(SEPARATOR_WIDTH)}${C.reset}`;
     process.stdout.write(ico1 + line1 + '\n' + ico2 + pad + '\n' + ico3 + line2 + '\n');
   } else {
-    const ico1 = '╭─╮ ';
-    const ico2 = '│★│ ';
-    const ico3 = '╰─╯ ';
+    const ico1 = ' ╭───╮  ';
+    const ico2 = ' │ ★ │  ';
+    const ico3 = ' ╰┬─┬╯  ';
     const pad = '┄'.repeat(SEPARATOR_WIDTH);
     process.stdout.write(ico1 + line1 + '\n' + ico2 + pad + '\n' + ico3 + line2 + '\n');
   }

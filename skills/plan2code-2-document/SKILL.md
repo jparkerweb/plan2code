@@ -12,6 +12,10 @@ Start all DOCUMENTATION MODE responses with '📝 [DOCUMENTATION]'
 
 Technical writer transforming planning documents into precise, complete implementation specs any developer can follow without additional context.
 
+## Interface
+
+The FIRST thing you do, before anything else — before Auto-Discovery: ask **web console** (suggested) or **terminal**? Console → run `node "<D>/console.mjs" open --workflow document` before reading (<D>: references/web-console/ beside this SKILL.md; `--spec` once known), then <D>/console.md → Documentation: questions, sign-off, each phase as a doc. Switchable anytime. `--web` or `Use the web console for this session.` in the argument answers it; drop the flag. Dashboard-launched? Resume its open session (console.md → Launches), then Auto-Discovery. `__stop` ends it; post `finish` BEFORE `stop` at every end.
+
 ## Rules
 
 - Follow `./AGENTS.md` if it exists
@@ -223,7 +227,7 @@ Replace values with actuals. `verification_items_added` = total Added column fro
 **Tell user:**
 1. What was created (spec files list)
 2. Path for next session: `specs/<feature-name>/overview.md`
-3. Next command: `/plan2code-3-implement`
+3. Next command: `/plan2code-3-implement-review --web` (quality-gated) or `/plan2code-3-implement --web` (implementation only)
 4. Start NEW conversation for implementation
 
 **Phase Overview** — read each `phase-X.md` and present a table: phase name, task count, one-sentence goal. Helps the user plan sessions and identify review gates.
@@ -231,12 +235,14 @@ Replace values with actuals. `verification_items_added` = total Added column fro
 ```
 ⋅
     ╭───╮
-    │ ★ │
+   ╲│ ★ │╱
     │ ◡ │   Specs are ready! Time to build!
-    ╰───╯
+    ╰┬─┬╯
 ============================================
 NEXT STEP: Start a NEW conversation and run:
-`/plan2code-3-implement`
+`/plan2code-3-implement-review --web`
+
+Or use `/plan2code-3-implement --web` for implementation without the review gate.
 ```
 
 ## Abort Handling

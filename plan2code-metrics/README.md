@@ -226,7 +226,7 @@ Output: `.plan2code-metrics/proposals/<timestamp>-diagnosis.md`
 Sends the diagnosis plus current prompt file contents to an AI model. The AI proposes surgical `old_text -> new_text` edits, each validated against:
 
 - The `old_text` actually exists in the target file
-- The edited file stays under the 11,000 character limit
+- The edited file stays under the 11,500 character limit
 
 Output: `.plan2code-metrics/proposals/prop-<timestamp>.json`
 

@@ -98,5 +98,5 @@ Nothing decided in the range? Keep the file honest: "No decisions were recorded 
 - **Scraper safety, same as the PLAN-DRAFT:** no `%`, no raw `NN/25` scores, and no bare `Requirements` / `Feasibility` / `Integration` / `Risk` followed by a number anywhere in the file. The plain-English confidence line is the only rendering permitted.
 - **Standing `specs/` rules apply:** no loop tokens, no `- [ ]` checkboxes, no `METRICS_JSON`.
 - **Rejections are one line each.** The brief summarizes; the question file argues. The closing pointer line covers readers who want the full reasoning.
-- **BRIEF mode does not count as question work.** One-question-per-session accounting is untouched; no claim is ever taken.
+- **BRIEF mode does not count as question work.** It does not count toward the session's decision cadence; no claim is ever taken.
 - **Do not edit an old brief to "update" it.** Yesterday's brief reflects yesterday's map — write today's instead. Same-day overwrite only.

@@ -15,18 +15,18 @@ background processes.** Optional, and unrelated to the workflow itself.
 On Pro / Max / Teams accounts, where rate limits are available:
 
 ```
-◦ ◦  Opus 5 / high │ plan2code │ feature/pathfinder-github-iss │ +12 -3
-╭●╮  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
-├■┤  3h 5m ($4.62) │ ▰▰▰▰▰▱▱▱▱▱▱▱ 42% (84K) │ 5h: 28% · 7d: 61%
+ ╭───╮  Opus 5 / high │ plan2code │ feature/pathfinder-github-iss │ +12 -3
+ │ ★ │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
+ ╰┬─┬╯  3h 5m ($4.62) │ ▰▰▰▰▰▱▱▱▱▱▱▱ 42% (84K) │ 5h: 28% · 7d: 61%
 ```
 
 On Enterprise / Bedrock / Vertex / pay-as-you-go, where they aren't, the last segment becomes session
 token counts instead:
 
 ```
-◦ ◦  Sonnet 5 │ plan2code │ main │ +12 -3
-╭●╮  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
-├■┤  2m ($0.18) │ ▰▰▱▱▱▱▱▱▱▱▱▱ 18% │ 88k in · 3k out
+ ╭───╮  Sonnet 5 │ plan2code │ main │ +12 -3
+ │ ★ │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
+ ╰┬─┬╯  2m ($0.18) │ ▰▰▱▱▱▱▱▱▱▱▱▱ 18% │ 88k in · 3k out
 ```
 
 The icons down the left are Planny, the project mascot.

@@ -26,7 +26,7 @@ The following diagnosis was produced by the analysis step:
 
 ## Hard Constraints — ALL must be satisfied:
 
-1. **Char limit:** Each target file MUST stay under 11,000 characters after your edit is applied. This is enforced by code — edits that violate it will be automatically rejected.
+1. **Char limit:** Each target file MUST stay under 11,500 characters after your edit is applied. This is enforced by code — edits that violate it will be automatically rejected.
 2. **Maximum 5 edits per cycle.** Focus on the highest-impact changes only.
 3. **Each edit must cite a specific metric** in its `expected_metric_impact` field (e.g., "avg_task_completion_rate", "avg_blocker_count").
 4. **`old_text` must be verbatim** from the file. Copy-paste exactly — include surrounding whitespace/newlines as they appear. Edits with mismatched old_text will be automatically rejected.
@@ -85,7 +85,7 @@ Set `char_count_before`, `char_count_after`, and `char_count_delta` to your best
 
 A table with columns: File | Before | Projected After | Delta | Limit | Status (✓/✗)
 
-Verify that NO file exceeds 11,000 characters after your proposed edits.
+Verify that NO file exceeds 11,500 characters after your proposed edits.
 
 ---
 

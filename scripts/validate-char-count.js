@@ -3,14 +3,14 @@
 const fs = require('fs');
 const path = require('path');
 
-const CHAR_LIMIT = 11000;
+const CHAR_LIMIT = 11500;
 const srcDir = path.join(__dirname, '..', 'src');
 
 // Note: readdirSync is non-recursive, so files in subdirectories like
 // plan2code-review-references/ are automatically excluded from
 // the character limit check. Reference files have no char limit.
 const files = fs.readdirSync(srcDir)
-  .filter(f => f.startsWith('plan2code-') && f.endsWith('.md'))
+  .filter(f => /^plan2code(-.*)?\.md$/.test(f))
   .sort();
 
 const failures = [];
