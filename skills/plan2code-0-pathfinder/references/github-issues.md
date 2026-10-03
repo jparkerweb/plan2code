@@ -349,12 +349,13 @@ Then one line under the map's `## Out of scope`, giving the name as a link plus 
 
 ## Reconcile (Work Step 2)
 
-Much shorter here — the tracker holds the state, so there is no checklist to rebuild. Three checks:
+Much shorter here — the tracker holds the state, so there is no checklist to rebuild. Four checks:
 
 | Check | Symptom | Repair |
 |---|---|---|
 | Crashed mid-answer | Open, assigned, and an `## Answer` comment already exists | The comment wins. Close as completed, add the gist to Decisions so far, say so. |
 | Stale claim | Open, assigned, no `## Answer`, and the assignee is you from a dead session | Unassign, say so, put it back on the frontier. **If it is someone else's login, leave it** — that is a live session, not a crash. |
+| Interrupted research | An open `research` question with no `## Evidence` comment ending in `**Research complete:**` | Re-fire its subagent (`resolve.md` → Interrupted research), say so in one line. |
 | Index drift | A closed, completed question with no line under `## Decisions so far` | Read its `## Answer` comment, append the gist. |
 
 Then re-read `## Not yet specified` in full — that part is identical to local mode, and the bullet left behind after its question exists is just as corrosive here.
@@ -375,7 +376,7 @@ Three things never move to the tracker, whatever the backend:
 
 Sketch directories are named for the issue number rather than a local `NN`, so `sketch-42` belongs to the question at `#42`. Same rules otherwise: throwaway, one command to run, never merged.
 
-Research subagents work the same way with one substitution: the brief carries the **issue URL** instead of a file path, and the instruction is to post findings as a comment opening `## Evidence` via `gh issue comment` — and to decide nothing. `## Answer` and the close are still written by the session that fired it.
+Research subagents work the same way with one substitution: the brief carries the **issue URL** instead of a file path, and the instruction is to post findings as a comment opening `## Evidence` via `gh issue comment` — and to decide nothing. The comment ends with the `**Research complete:** <YYYY-MM-DD>` line, and the firing session waits for every subagent before Session End, exactly as on local disk. `## Answer` and the close are still written by the session that fired it.
 
 ---
 
@@ -409,7 +410,7 @@ The report is identical either way, and the file still lands on **local disk** a
 | `brief.md` says | Here |
 |---|---|
 | Filter resolved questions by `Resolved:` in range | Filter the map's sub-issues closed as completed by `closedAt` in range |
-| Reconcile backfills absent `Resolved:` dates | Nothing to backfill; run the three reconcile checks above instead |
+| Reconcile backfills absent `Resolved:` dates | Nothing to backfill; run the four reconcile checks above instead |
 | Open / blocked / out-of-scope sections read the checklist | They read the frontier query — unassigned-unblocked, `blocked_by > 0`, and `pathfinder:out-of-scope` respectively |
 
 `## Not yet specified`, `## Destination`, and `**Confidence:**` come from the map issue body, same as always. The no-machinery rule tightens rather than relaxes: no `#numbers`, no label names, no `gh` commands in the file. The reader may never have opened the tracker either.

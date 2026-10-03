@@ -65,6 +65,20 @@ The subagent's brief must carry, verbatim:
 3. The instruction to write into `## Evidence` of THAT file and nothing else — `## Answer` and `State:` are written by the session that fired it, at Work Step 7.
 4. The primary-source rule below.
 5. The no-deciding rule below.
+6. The instruction to end `## Evidence` with `**Research complete:** <YYYY-MM-DD>` as its last line, written only once every claim is in. Without that line, the next session cannot tell finished research from research that was cut off.
+
+### Wait for every subagent
+
+Subagents run inside this session's process, even when the harness runs them in the background. Close the terminal, or end the session, and they die mid-write, leaving `## Evidence` half-filled. So:
+
+- **Do not reach Session End, or post a web console `finish`, while any research subagent is still running.** Wait for each one to report back. The main session does not read the sources while it waits; it only collects completions.
+- While waiting in the web console, post `{"agent":{"status":"working","activity":"Researching 3 questions (1 of 3 back)"}}` and update the count as each returns, so the page never says "done" while work is still in flight.
+- Never tell the human the research "will finish on its own" or is "running in the background, ready for next time". It is not: it lives in this terminal.
+- Once all are back, Session End reports each research question with a one-line summary of what was found (not decided).
+
+### Interrupted research
+
+At Work Step 2 (Reconcile), any research question that is not resolved and whose `## Evidence` lacks the `**Research complete:**` line was never finished: a closed terminal, a crash, a rate limit. Re-fire its subagent with the same brief, plus one instruction: keep what is already in `## Evidence`, verify it, fill the gaps, then write the line. Say so in one line to the human. A map written before this line existed shows the same symptom; re-firing it costs a little time and nothing else.
 
 ### Primary sources only
 
@@ -165,9 +179,11 @@ bypassable — and Object Lock cannot be added to the existing bucket.
 - UNVERIFIED: whether our compliance counsel treats GOVERNANCE as sufficient
   for the SEC 17a-4 attestation. No primary source exists for this — it is a
   human judgment, not a fact. Belongs in a grill.
+
+**Research complete:** 2026-08-03
 ```
 
-Note what the example does: every claim carries its own citation, a live command counts as a primary source, and the one thing that cannot be sourced is flagged rather than smoothed over.
+Note what the example does: every claim carries its own citation, a live command counts as a primary source, the one thing that cannot be sourced is flagged rather than smoothed over, and the closing `**Research complete:**` line marks the subagent's work as whole.
 
 ---
 
