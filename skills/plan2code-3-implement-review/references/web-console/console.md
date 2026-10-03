@@ -27,6 +27,12 @@ workflow still applies: the same questions, the same order, the same gates, the
 same cap of three questions at a time, the same recap before anything is recorded.
 You are not allowed to answer your own questions just because a form makes it easy.
 
+> **The one rule that keeps the page alive: while the session is open, every
+> turn ends on a `wait` call, never on text.** `wait` exit `10` means "nobody
+> has answered yet", not "done": relay one line and run `wait` again in the
+> same turn, as many times as it takes. A turn that ends without a `wait`
+> running strands the person's next click. Details: The wait loop, below.
+
 ---
 
 ## Deciding whether to use it
@@ -172,7 +178,19 @@ so even a kill at the worst possible moment costs you a repeat, never an answer.
 Do not poll faster than this. Do not spin on `status`. Exit 10 is not a finished
 turn: never emit a final response or stop after an arbitrary number of slices;
 relay one line and immediately call `wait` again. Do not give up: people step
-away from a session and come back.
+away from a session and come back. The same holds after a `finish`: keep
+waiting (resuming the server on exit `20`) until the dashboard or done press
+or about ten minutes with nothing, because the Ask tab stays live and its
+messages only arrive through `wait`. Ending your turn earlier strands them.
+
+**The turn never ends on a wait.** While a console session is open, including
+after a finish that offers a button (Back to the dashboard, Review it now), the
+last thing in every turn you take is a `wait` call, never a line of text. The
+line you relay after exit `10` goes in the same turn as the next `wait`, so
+write it and call `wait` straight after. A turn that ends with the session open
+and no `wait` running is a bug the person feels at once: their button press
+sits unread until they ask why. If you catch yourself about to write a closing
+summary while the page is still open, call `wait` first.
 
 **Collect promptly.** A question someone has sent is locked on the page for as
 long as you are mid-turn on it: they can read, move around and answer the other
@@ -453,6 +471,14 @@ messages, `offline` when no agent is connected or the session has finished,
 
 ### Answering
 
+**Every message gets a reply, always.** The Ask tab is the person talking to
+you, and the page shows "working on the answer" until a reply lands. Never
+leave one unanswered, whatever it asks and whatever mid-task you are in. When
+a message asks you to do something, do it if you can, then say what happened; if
+you will not, the reply says so and why. `post` and `wait` print
+`unansweredChat` with a `warning` for every message handed over and not yet
+replied to: treat that as a stop-and-reply.
+
 1. Handle any card answers first, under the workflow's own rules.
 2. Write the chat replies, in inbox order.
 3. Send **one** `post` with the card updates and `chat: { replies: [...] }`.
@@ -510,8 +536,9 @@ enforces it, so never tell someone to keep asking past it.
   proposal is a new reply.
 - Hard limits: never touch the running skill's own files under
   `specs/<idea>/` (`post` rejects a proposal that names them); run no commands
-  beyond read-only lookups; never commit; refuse a request outside these and
-  say why.
+  beyond read-only lookups, except one the person plainly asks you to run in
+  their message (a commit they spell out, a test run): run it, then report the
+  result in the reply; refuse anything else and say why, in the reply.
 - Edits happen only at check-ins, never mid-task in a build.
 
 ```jsonc
@@ -715,8 +742,10 @@ review run from a build's review button stays in the build's session, under
 its workflow: `building.md` → The review, mid-session. On completion the finish's `command` is the suggested
 commit when fixes landed — filled in, in the AGENTS.md format, with
 `"where": "When you are happy with it, commit it from your terminal:"` —
-otherwise leave `command` out. A stop mid-review loses nothing on disk, so its
-finish is the bare `/plan2code-review`.
+otherwise leave `command` out. The completion finish carries `"dashboard": true`
+so the finished screen offers **Back to the dashboard**; keep waiting for the
+press. A stop mid-review loses nothing on disk, so its finish is the bare
+`/plan2code-review` (a pause, so no dashboard button).
 
 ### Handoff (`handoff`)
 
@@ -891,6 +920,8 @@ Session meter) and `folderIssue` (Workspace → When a folder cannot be read).
 --file` does the same.
 
 ### Every item
+
+**Give every new question a new `id`.** An id names one question for the whole session. The server drops a stale `submitted` record if you reword a question under an old id, but never rely on it: a fresh id is the only unambiguous way to ask something new.
 
 ```jsonc
 {
@@ -1141,7 +1172,7 @@ usual slices for up to about ten minutes:
 | --- | --- |
 | An action `{ "i": "__dashboard", "type": "dashboard" }` | `open --resume <sid> --no-open --workflow dashboard` (the resume re-runs the project scan), then ONE post with `"finish": null`, the `menu` payload and `"agent": { "status": "waiting" }`. Then read the dashboard skill (`~/.agents/skills/plan2code/SKILL.md`) and carry on as the dashboard from its "The menu" section, in this same conversation. The same action can also arrive before any finish, from the top bar's triangle: see Stop requests → "Back to the dashboard, mid-workflow". |
 | An action `__review` or `__done` | As `building.md` says (quick task only). |
-| `wait` exit `20` | They closed the tab. Do not resume: the session is over. |
+| `wait` exit `20` | The server is gone, not necessarily the tab. `open --resume <sid> --no-open --workflow <yours>`, then keep waiting: their Ask messages and the dashboard button still need you. Give up only when the resume itself fails. |
 | Nothing after about ten minutes | `stop` the server. The page swaps the button for the `/plan2code` command. |
 
 ### 2. Stop the server

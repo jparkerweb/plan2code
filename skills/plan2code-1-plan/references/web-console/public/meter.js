@@ -35,23 +35,68 @@ export const RUN_EVENTS = new Set(Object.keys(WEIGHTS));
 
 const weightOf = (key) => (Object.prototype.hasOwnProperty.call(WEIGHTS, key) ? WEIGHTS[key] : 0);
 
+// What each scoring event is called in the meter's list of contributions.
+const LAUNCH_LABELS = Object.freeze({
+  plan: "Plan started",
+  "revise-plan": "Revise plan started",
+  document: "Document started",
+  review: "Review started",
+  "quick-task": "Quick task started",
+  init: "Init started",
+  "init-update": "Init update started",
+  finalize: "Finalize started",
+});
+const RUN_LABELS = Object.freeze({
+  "pathfinder-chart": "Pathfinder map written",
+  "pathfinder-question": "Pathfinder question settled",
+  plan: "Plan drafted",
+  "revise-plan": "Plan revised",
+  document: "Spec documented",
+  "implement-phase": "Implement phase built",
+  "implement-review-phase": "Implement + Review phase built",
+  review: "Code review run",
+  "quick-task": "Quick task built",
+  init: "Init run",
+  "init-update": "Init update run",
+  finalize: "Finalize run",
+  handoff: "Handoff written",
+});
+
+// The unit a run names, from its ledger id ("L3:phase-2" -> "phase-2").
+const unitOf = (id) => (typeof id === "string" && id.includes(":") ? id.slice(id.indexOf(":") + 1) : "");
+
 /**
- * The session's points, folded from ledger entries in order. An id seen
- * before is skipped, so a repeated `post` never counts twice.
+ * What the count is made of: one { label, points } per ledger entry that
+ * scored, in order. An id seen before is skipped, so a repeated `post` never
+ * counts twice. Entries that weigh nothing are left out.
  */
-export function pointsFrom(entries) {
+export function breakdownFrom(entries) {
   const seen = new Set();
-  let points = 0;
+  const rows = [];
   for (const entry of Array.isArray(entries) ? entries : []) {
     if (!entry || typeof entry !== "object") continue;
     if (entry.id !== undefined) {
       if (seen.has(entry.id)) continue;
       seen.add(entry.id);
     }
-    if (entry.kind === "launch" && LAUNCH_COUNTED.has(entry.workflow)) points += weightOf(entry.workflow);
-    else if (entry.kind === "run") points += weightOf(entry.event);
+    let points = 0;
+    let label = "";
+    if (entry.kind === "launch" && LAUNCH_COUNTED.has(entry.workflow)) {
+      points = weightOf(entry.workflow);
+      label = LAUNCH_LABELS[entry.workflow] || entry.workflow;
+    } else if (entry.kind === "run") {
+      points = weightOf(entry.event);
+      const unit = unitOf(entry.id);
+      label = (RUN_LABELS[entry.event] || entry.event) + (unit ? `: ${unit}` : "");
+    }
+    if (points > 0) rows.push({ label, points });
   }
-  return points;
+  return rows;
+}
+
+/** The session's points, folded from ledger entries in order. */
+export function pointsFrom(entries) {
+  return breakdownFrom(entries).reduce((sum, row) => sum + row.points, 0);
 }
 
 export const YELLOW_AT = 4;
@@ -94,5 +139,12 @@ export const RED_BANNER =
 export function meterView(entries) {
   const points = pointsFrom(entries);
   const level = levelFor(points);
-  return { points, level, fraction: ringFraction(points), words: WORDS[level], tooltip: tooltipFor(points) };
+  return {
+    points,
+    level,
+    fraction: ringFraction(points),
+    words: WORDS[level],
+    tooltip: tooltipFor(points),
+    items: breakdownFrom(entries),
+  };
 }

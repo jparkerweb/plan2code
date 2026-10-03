@@ -1,0 +1,115 @@
+{
+  "_note": "Curated model menu for the plan2code launcher. Maintained by the Plan2Code authors; every install overwrites this file. Users add models in User Preferences (kept in ~/.plan2code/models.json). Devin entries are explicit ids at Low, Medium and High effort only, verified against `devin models list`.",
+  "claude": [
+    {
+      "id": "default",
+      "label": "Default (your account setting)"
+    },
+    {
+      "id": "sonnet",
+      "label": "Sonnet — latest Sonnet"
+    },
+    {
+      "id": "opus",
+      "label": "Opus — latest Opus"
+    },
+    {
+      "id": "haiku",
+      "label": "Haiku — latest Haiku"
+    },
+    {
+      "id": "opusplan",
+      "label": "Opus Plan — Opus in plan mode, Sonnet otherwise"
+    }
+  ],
+  "devin": [
+    {
+      "id": "adaptive",
+      "label": "Adaptive"
+    },
+    {
+      "id": "swe-2-medium",
+      "label": "SWE-2 Medium"
+    },
+    {
+      "id": "swe-2-high",
+      "label": "SWE-2 High"
+    },
+    {
+      "id": "claude-opus-5-5-low",
+      "label": "Claude Opus 5.5 Low"
+    },
+    {
+      "id": "claude-opus-5-5-medium",
+      "label": "Claude Opus 5.5 Medium"
+    },
+    {
+      "id": "claude-opus-5-5-high",
+      "label": "Claude Opus 5.5 High"
+    },
+    {
+      "id": "claude-sonnet-5-5-low",
+      "label": "Claude Sonnet 5.5 Low"
+    },
+    {
+      "id": "claude-sonnet-5-5-medium",
+      "label": "Claude Sonnet 5.5 Medium"
+    },
+    {
+      "id": "claude-sonnet-5-5-high",
+      "label": "Claude Sonnet 5.5 High"
+    },
+    {
+      "id": "gpt-6-sol-low",
+      "label": "GPT-6 Sol Low Thinking"
+    },
+    {
+      "id": "gpt-6-sol-medium",
+      "label": "GPT-6 Sol Medium Thinking"
+    },
+    {
+      "id": "gpt-6-sol-high",
+      "label": "GPT-6 Sol High Thinking"
+    },
+    {
+      "id": "gpt-6-luna-low",
+      "label": "GPT-6 Luna Low Thinking"
+    },
+    {
+      "id": "gpt-6-luna-medium",
+      "label": "GPT-6 Luna Medium Thinking"
+    },
+    {
+      "id": "gpt-6-luna-high",
+      "label": "GPT-6 Luna High Thinking"
+    },
+    {
+      "id": "gemini-3-8-flash-low",
+      "label": "Gemini 3.8 Flash Low"
+    },
+    {
+      "id": "gemini-3-8-flash-medium",
+      "label": "Gemini 3.8 Flash Medium"
+    },
+    {
+      "id": "gemini-3-8-flash-high",
+      "label": "Gemini 3.8 Flash High"
+    },
+    {
+      "id": "kimi-k3-low",
+      "label": "Kimi K3 Low"
+    },
+    {
+      "id": "kimi-k3-high",
+      "label": "Kimi K3 High"
+    },
+    {
+      "id": "glm-5-3-low",
+      "label": "GLM-5.3 Low"
+    },
+    {
+      "id": "glm-5-3-high",
+      "label": "GLM-5.3 High"
+    }
+  ]
+}

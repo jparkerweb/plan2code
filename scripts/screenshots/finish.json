@@ -1,0 +1,21 @@
+{
+  "items": [
+    {
+      "id": "signoff",
+      "status": "answered",
+      "answer": {
+        "verdict": "approve"
+      }
+    }
+  ],
+  "finish": {
+    "headline": "Phase 3 is built",
+    "body": "11 of 11 tasks, all on disk. Phase 4 (authentication) is next.",
+    "command": "/plan2code-3-implement specs/task-api/overview.md",
+    "doc": "report",
+    "dashboard": true
+  },
+  "agent": {
+    "status": "waiting"
+  }
+}

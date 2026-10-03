@@ -187,7 +187,7 @@ export const ACCENTS = {
   },
 };
 
-export const DEFAULT_ACCENT = "rust";
+export const DEFAULT_ACCENT = "ocean";
 
 // The card-width presets. Here for the same reason the accents are: the page
 // validates a saved `looks.width` with cardWidth(), and the server uses it to

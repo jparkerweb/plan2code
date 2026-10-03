@@ -10,7 +10,7 @@
 // this, that reversibility is the whole point.
 
 import { md, el, copyButton, selectContents } from "./render.js";
-import { ACCENTS, DEFAULT_CARD_WIDTH, SOUND_EVENTS, cardWidth, soundKey, soundPrefs } from "./palette.js";
+import { ACCENTS, DEFAULT_ACCENT, DEFAULT_CARD_WIDTH, SOUND_EVENTS, cardWidth, soundKey, soundPrefs } from "./palette.js";
 import { activityLabel, workingLine } from "./labels.js";
 import { playWake } from "./boot.js";
 import {
@@ -64,6 +64,7 @@ import {
   STOP_REPLY,
   sentAnswer,
   submittedAwaiting,
+  noteAwaiting,
   suggestionFrom,
   THUMB_EDGE,
   turnGate,
@@ -128,7 +129,7 @@ const LOOKS_KEY = "p2c-console:looks";
 // The per-event sound switches (SOUND_EVENTS) live in palette.js too.
 const DEFAULT_LOOKS = {
   theme: "system",
-  accent: "rust",
+  accent: DEFAULT_ACCENT,
   sound: true,
   ...soundPrefs(null),
   width: DEFAULT_CARD_WIDTH,
@@ -136,6 +137,8 @@ const DEFAULT_LOOKS = {
 };
 
 let looks = { ...DEFAULT_LOOKS };
+let syncedLooks = null;
+let looksReady = false;
 
 function adoptLooks(saved) {
   looks = { ...DEFAULT_LOOKS, ...saved };
@@ -178,25 +181,47 @@ async function syncLooks() {
   }
   if (saved && saved.looks && typeof saved.looks === "object") {
     adoptLooks(saved.looks);
+    syncedLooks = { ...looks };
     try {
       localStorage.setItem(LOOKS_KEY, JSON.stringify(looks));
     } catch {}
     applyLooks();
     renderSwatches();
-  } else if (localStorage.getItem(LOOKS_KEY)) {
-    pushLooks();
+  } else {
+    // Blocked storage throws on read, and that must not stop the page loading.
+    let held = false;
+    try {
+      held = Boolean(localStorage.getItem(LOOKS_KEY));
+    } catch {}
+    if (held) pushLooks();
   }
+  looksReady = true;
+  // Not inline: with the server's copy in the page this runs before `S` exists.
+  setTimeout(maybeWelcome, 0);
 }
 
 // Fire-and-forget mirror. A failed POST costs nothing the next session would
 // notice on this port; the localStorage copy still covers the reload case.
 function pushLooks() {
   try {
+    // Only what this tab changed since it last synced, so a tab with stale
+    // settings never overwrites another tab's change to a different key.
+    const set = {};
+    for (const [k, v] of Object.entries(looks)) if (!syncedLooks || syncedLooks[k] !== v) set[k] = v;
+    const before = syncedLooks;
+    const partial = Boolean(before);
+    if (partial && !Object.keys(set).length) return;
+    syncedLooks = { ...looks };
+    const body = partial ? { set } : { looks };
+    // A write that did not land must be sent again with the next change.
+    const undo = () => (syncedLooks = before);
     fetch("/looks", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ looks }),
-    }).catch(() => {});
+      body: JSON.stringify(body),
+    })
+      .then((res) => res.ok || undo())
+      .catch(undo);
   } catch {}
 }
 
@@ -379,6 +404,24 @@ for (const evt of ["pointerdown", "keydown"]) {
     sound(name);
   });
 }
+
+// Run it, on a fenced git block (render.js): stage the block as the Ask
+// draft and open the chat. The person still presses Send, so nothing runs
+// on a stray click — the same fill-the-box pattern as the Ask starters.
+document.addEventListener("click", (e) => {
+  const run = e.target.closest(".md-run");
+  if (!run) return;
+  const code = run.closest(".md-pre-wrap")?.querySelector("code");
+  if (!code || !code.textContent.trim()) return;
+  local.chat.draft = `run:\n${code.textContent}`;
+  view = "ask";
+  save();
+  render();
+  const ta = $("ask-input");
+  if (!ta) return;
+  ta.focus();
+  ta.setSelectionRange(ta.value.length, ta.value.length);
+});
 
 // The stars for Planny's flight, made once. Each gets its place and pace as
 // custom properties set through the CSSOM: the CSP forbids style attributes
@@ -795,13 +838,16 @@ async function loadState() {
     const res = await fetch("/state", { cache: "no-store" });
     if (!res.ok) throw new Error(String(res.status));
     const body = await res.json();
-    adopt(body);
-    // The server answers again: back to the stream, once the wait is up.
-    if (!es && pollTimer && Date.now() >= esRetryAt) {
-      clearInterval(pollTimer);
-      pollTimer = null;
-      connect();
+    // The same rev is the same state: adopting it again would redraw the page
+    // every few seconds while polling for nothing. Still proof of life, though.
+    if (S && typeof body.rev === "number" && body.rev === rev) {
+      lastContact = Date.now();
+      agentLastSeen = body.agentLastSeen || agentLastSeen;
+      markGone();
+    } else {
+      adopt(body);
     }
+    retryStream();
   } catch {
     markGone();
   }
@@ -1158,6 +1204,11 @@ function connect() {
     esErrors = 0;
     esRetryMs = ES_RETRY_MIN_MS;
     lastContact = Date.now();
+    // Back on the stream: polling was only ever the stand-in.
+    if (pollTimer) {
+      clearInterval(pollTimer);
+      pollTimer = null;
+    }
   };
   es.onerror = () => {
     esErrors++;
@@ -1179,6 +1230,18 @@ function startPolling() {
   pollTimer = setInterval(loadState, 3000);
 }
 
+// While polling, every answer from the server is a cue to try the stream
+// again, so polling lasts only as long as the outage did. Polling carries on
+// while an attempt is open, so startPolling() never runs for a failed one; the
+// wait is pushed back here instead, or a dead stream would be retried on every
+// poll. One attempt at a time, since `es` is set while it is trying.
+function retryStream() {
+  if (!pollTimer || es || Date.now() < esRetryAt) return;
+  esRetryAt = Date.now() + esRetryMs;
+  esRetryMs = Math.min(esRetryMs * 2, ES_RETRY_MAX_MS);
+  connect();
+}
+
 setInterval(() => {
   fetch("/ping", { method: "POST" })
     .then((r) => (r.ok ? r.json() : null))
@@ -1186,6 +1249,7 @@ setInterval(() => {
       if (!body) return;
       lastContact = Date.now();
       agentLastSeen = body.agentLastSeen || agentLastSeen;
+      retryStream();
       // A rev we have not seen means a state frame went missing -- a dropped
       // SSE reconnect, a tab asleep in a background window. Ask for it rather
       // than waiting for the next change to come along.
@@ -1442,6 +1506,31 @@ function renderMeter() {
   $("meter-words").textContent = meterFrame.words;
   pill.title = meterFrame.tooltip;
   $("meter-tip").textContent = meterFrame.tooltip;
+  // What the points are made of: one row per piece of work that scored.
+  const list = $("meter-list");
+  const rows = Array.isArray(meterFrame.items) ? meterFrame.items : [];
+  list.hidden = !rows.length;
+  list.replaceChildren(
+    ...rows.map((row) => {
+      const li = el("li");
+      li.appendChild(el("span", "meter-item-label", row.label));
+      li.appendChild(el("span", "meter-item-points", "+" + row.points));
+      return li;
+    })
+  );
+  // Once the session is past fresh, say how to start a new one.
+  const fresh = $("meter-fresh");
+  fresh.hidden = meterFrame.level === "green";
+  if (fresh.hidden || fresh.dataset.built) return;
+  fresh.dataset.built = "1";
+  const text = handoffText({ command: DASHBOARD_COMMAND });
+  const code = el("code", "handoff-code", text);
+  const row = el("div", "handoff-command meter-fresh-row");
+  row.append(code, copyButton(text, "btn small ghost handoff-copy", code));
+  fresh.append(
+    textWithCode("p", "meter-fresh-text", `To start a new session, run \`${DASHBOARD_COMMAND}\` in a new conversation:`),
+    row
+  );
 }
 
 function toggleMeterPop(open) {
@@ -1469,7 +1558,7 @@ function renderChrome() {
   renderMeter();
   $("title").textContent = S.title || "Session";
   $("badge").textContent = workflowLabel(S.workflow);
-  document.title = (S.title || "Session") + " · Plan2Code";
+  document.title = (S.title || "Session") + " · #" + String(S.sid || "").slice(-6) + " · Plan2Code";
 
   const h = S.headline || {};
   // On a finished session an open item is frozen: the send on it counts as
@@ -1529,7 +1618,18 @@ function renderStatus() {
       moodVar = Math.floor(Math.random() * MOOD_VARIANTS[mood]);
     }
     bot.setAttribute("class", `planny is-${mood} v${moodVar}`);
-    if (text.textContent !== line) text.textContent = line;
+    if (text.dataset.line !== line) {
+      text.dataset.line = line;
+      text.replaceChildren(
+        ...line.split(/\*\*(.+?)\*\*/).map((part, i) => {
+          if (i % 2 === 0) return document.createTextNode(part);
+          const key = document.createElement("strong");
+          key.className = "agent-key";
+          key.textContent = part;
+          return key;
+        })
+      );
+    }
     tick.textContent = count || "";
     $("agent-spin").hidden = !spin;
     $("dock").classList.toggle("is-flying", Boolean(spin));
@@ -1584,7 +1684,7 @@ function renderStatus() {
     if (agentStale()) {
       return say(
         "work",
-        "Plan2Code has not checked in for a few minutes. Your answers are saved. Have a look at your terminal (it may be happily working away, or waiting for your permission approval)."
+        "Still working on it. Longer tasks can go a few minutes between updates. Your answers are saved. If it stays quiet for a long while, check your terminal (it may be waiting on a permission approval)."
       );
     }
     // Same clock as agentStale(), so the soft line at 30 s hands over to the
@@ -1602,8 +1702,8 @@ function renderStatus() {
     return say(
       "adrift",
       stranded()
-        ? "Plan2Code is not running. Your answers are saved and waiting for it. The terminal may be waiting for your permission approval."
-        : "Plan2Code is not running right now. Anything you answer here is saved. The terminal may be waiting for your permission approval."
+        ? "Plan2Code is not running. Your answers are saved and waiting for it. If the terminal is idle, type **continue** there and it will pick them up; it may also be waiting for your permission approval."
+        : "Plan2Code is not running right now. Anything you answer here is saved. If the terminal is idle, type **continue** there to wake it; it may also be waiting for your permission approval."
     );
   }
 
@@ -1740,7 +1840,7 @@ function renderViews() {
   for (const t of tabs) {
     const b = el("button", "view-tab", t.label);
     b.type = "button";
-    b.setAttribute("aria-current", String(view === t.id));
+    b.setAttribute("aria-current", String(view === t.id || (t.id === "questions" && view === "end")));
     if (t.count) {
       const c = el("span", "tab-count", String(t.count));
       b.appendChild(c);
@@ -1756,7 +1856,7 @@ function renderViews() {
         chatDot = false;
         save();
       }
-      view = t.id;
+      view = t.id === "questions" && finish() ? "end" : t.id;
       // The cached text paints at once; the fresh read repaints if the file
       // changed on disk since.
       render();
@@ -1821,16 +1921,20 @@ function renderSidebar() {
   // session outline usually lives. The card that is mid-launch gets the
   // half-filled mark the page uses for "sent, on its way".
   if (isDashboard() && !fin) {
+    const menu = (S && S.menu) || {};
     for (const g of CATALOG_GROUPS) {
       const box = el("div", "rail-group");
       const head = el("p", "rail-title");
       head.appendChild(el("span", null, g.title));
       box.appendChild(head);
       for (const e of SKILL_CATALOG.filter((x) => x.group === g.id)) {
-        const av = cardAvailability(e, scan(), selSpec());
+        const av = cardPresentation(e, scan(), selSpec(), menu);
         // Unavailable for the selected spec fades hard; the brief greying
         // while a launch is in flight or the server is away does not.
-        const b = el("button", "rail-item" + (av.on ? "" : " is-unavailable"));
+        const b = el(
+          "button",
+          "rail-item" + (av.on ? "" : " is-unavailable") + (av.recommended ? " is-suggested" : "")
+        );
         b.type = "button";
         b.disabled = Boolean(local.launching) || gone || pendingResult || !av.on;
         if (!av.on && av.reason) b.title = av.reason;
@@ -1845,6 +1949,13 @@ function renderSidebar() {
         mark.title = isGoing ? "starting" : isPicked ? "picked" : "pick to start";
         b.appendChild(mark);
         b.appendChild(el("span", null, e.title));
+        // The center pane's own "Suggested" pill scrolls out of view, so the
+        // rail repeats the call-out here as a small dot next to the title.
+        if (av.recommended) {
+          const dot = el("span", "rail-suggested-dot", "");
+          dot.title = "Suggested next step";
+          b.appendChild(dot);
+        }
         // Same as a card click: the pick goes to the confirm pane, never
         // straight to a launch. From the Overview tab too, so the pane shows.
         b.addEventListener("click", () => {
@@ -2465,6 +2576,34 @@ function renderDashboard(main) {
     if (note) revealNote(note, wake.typed);
   }
   main.appendChild(wrap);
+  // Deferred: this runs inside render(), and the dialog is not part of it.
+  queueMicrotask(maybeWelcome);
+}
+
+/* ------------------------------------------------------------- welcome */
+
+// The first dashboard a person ever sees gets a Welcome dialog. Closing it by
+// any route (button, Esc, backdrop) saves looks.welcomeSeen, which rides in
+// looks.json like every other preference. Waits out the wake-up animation and
+// never lands on top of another open dialog.
+function maybeWelcome() {
+  if (!looksReady || looks.welcomeSeen === true || !S || !isDashboard() || finish() || wake) return;
+  if (document.querySelector("dialog[open]")) return;
+  openWelcome();
+}
+
+function openWelcome() {
+  if ($("help-modal").open) $("help-modal").close();
+  const slot = $("welcome-bot");
+  if (!slot.firstElementChild) {
+    const bot = $("planny").cloneNode(true);
+    bot.removeAttribute("id");
+    bot.setAttribute("class", "planny is-point v1");
+    slot.appendChild(bot);
+  }
+  const dlg = $("welcome-modal");
+  if (!dlg.open) dlg.showModal();
+  $("welcome-done").focus();
 }
 
 /* ------------------------------------------------------------- wake-up */
@@ -2505,10 +2644,12 @@ function maybeWake() {
   playWake({
     stage,
     bot: stage.querySelector(".wake-bot"),
+    skipEl: stage.querySelector(".wake-skip"),
     target: $("planny"),
     stir: stirWake,
     onStart: () => sound("bootup"),
     onGlide: wakeGlide,
+    onSkip: skipWakeSounds,
     signal: wake.abort.signal,
   }).then(({ skipped }) => {
     stopSnore();
@@ -2539,6 +2680,14 @@ function stopSnore() {
   if (!snore) return;
   snore.pause();
   snore = null;
+}
+
+// The Skip button: silence anything the intro already queued or started. The
+// promise's .then does the snore and the bootup fade; this only clears cues
+// still waiting to play.
+function skipWakeSounds() {
+  soundQueued = null;
+  soundHeld = null;
 }
 
 // The glide: the menu rises in and the note starts typing. On a skip the run
@@ -2575,7 +2724,10 @@ function typeNote() {
 // Done once the entrance has played and the note is all there. Nothing to
 // redraw: what is on screen already is the finished dashboard.
 function settleWake() {
-  if (wake && wake.entered && wake.typed == null) wake = null;
+  if (wake && wake.entered && wake.typed == null) {
+    wake = null;
+    maybeWelcome();
+  }
 }
 
 function finishWake() {
@@ -3206,6 +3358,34 @@ function inFlightFor(item) {
   return sub ? { value: sub, summary: "" } : null;
 }
 
+// A sent note's attachments as links: an image opens full size, a document
+// opens in its own tab. The page serves both by the upload's own file name.
+function sentAttachments(note) {
+  const entries = [
+    ...(note.images || []).map((e) => ({ ...e, kind: "image" })),
+    ...(note.files || []).map((e) => ({ ...e, kind: "file" })),
+  ];
+  if (!entries.length) return null;
+  const tray = el("div", "attach-tray");
+  for (const e of entries) {
+    const a = el("a", "attach-link");
+    a.href = uploadUrl(e);
+    a.target = "_blank";
+    a.rel = "noopener";
+    a.title = e.name || "attachment";
+    if (e.kind === "image") {
+      const fig = el("figure", "attach-thumb is-ready");
+      const pic = el("img");
+      pic.src = a.href;
+      pic.alt = e.name || "image";
+      fig.appendChild(pic);
+      a.appendChild(fig);
+    } else a.appendChild(docChip({ name: e.name || "file" }, "ready"));
+    tray.appendChild(a);
+  }
+  return tray;
+}
+
 function renderCard(item) {
   const staged = local.staged[item.id];
   const flight = inFlightFor(item);
@@ -3357,6 +3537,13 @@ function renderInFlight(card, item, flight) {
     box.appendChild(ul);
   }
   if (text) box.appendChild(el("blockquote", "answered-text", text));
+  const note = noteAwaiting(item);
+  const sub = submittedAwaiting(item);
+  if (note && sub && note.at === sub.at) {
+    if (note.text) box.appendChild(el("blockquote", "answered-text", note.text));
+    const tray = sentAttachments(note);
+    if (tray) box.appendChild(tray);
+  }
 
   // Say which of the two it actually is. Once the agent has collected the send,
   // "waiting to be picked up" is no longer true, and a status line that lies is
@@ -3660,6 +3847,19 @@ function stageQuiet(id, value) {
   save();
 }
 
+// The next answer for a click, carrying over the words typed on the card. Note
+// boxes stage quietly, without a render, so the `staged` a builder closed over
+// at render time can be missing everything typed since: read the live answer
+// when the click lands instead. A click that clears the pick while text is
+// still in the box keeps the text as a note on its own (`bare`), the same shape
+// the note box stages when nothing is picked.
+function withNote(item, value, bare = { type: "answer", kind: item.kind }) {
+  const cur = local.staged[item.id];
+  const text = cur && cur.text;
+  if (!text) return value;
+  return value ? { ...value, text } : { ...bare, text };
+}
+
 // Unique per question and option, and the same on every render.
 const optionId = (item, o, i) => `pick-${item.id}-${o.k || i}`;
 
@@ -3724,12 +3924,18 @@ function buildMulti(card, item, staged) {
     box.checked = on;
     box.setAttribute("aria-label", o.k ? `${o.k}: ${o.text}` : o.text);
     box.addEventListener("change", () => {
-      const next = new Set(chosen);
+      const cur = local.staged[item.id];
+      const next = new Set((cur && cur.ks) || []);
       if (box.checked) next.add(o.k);
       else next.delete(o.k);
+      // Unticking the last box keeps what is written in "Anything else".
       stage(
         item.id,
-        next.size ? { type: "answer", kind: "multi", ks: [...next], text: staged && staged.text } : null
+        withNote(item, next.size ? { type: "answer", kind: "multi", ks: [...next] } : null, {
+          type: "answer",
+          kind: "multi",
+          ks: [],
+        })
       );
     });
 
@@ -3772,7 +3978,14 @@ function renderPresets(card, item, staged) {
     b.type = "button";
     b.setAttribute("aria-pressed", String(on));
     b.addEventListener("click", () =>
-      stage(item.id, on ? null : { type: "answer", kind: "multi", ks: [...p.ks], text: staged && staged.text })
+      stage(
+        item.id,
+        withNote(item, on ? null : { type: "answer", kind: "multi", ks: [...p.ks] }, {
+          type: "answer",
+          kind: "multi",
+          ks: [],
+        })
+      )
     );
     row.appendChild(b);
   }
@@ -3858,6 +4071,20 @@ function buildText(card, item, staged) {
     wrap.appendChild(templateRow(item, input, templatesFor(S.workflow, looks.role), check));
   }
   wrap.appendChild(input);
+  // Fresh-idea boxes take files as context, the same ones the note pane holds.
+  if (!single && TEMPLATE_WORKFLOWS.includes(S.workflow)) {
+    input.addEventListener("paste", (e) => {
+      const files = incomingFiles(e.clipboardData && e.clipboardData.files);
+      if (!files.length) return;
+      if (!e.clipboardData.getData("text/plain")) e.preventDefault();
+      attachFiles(item.id, files);
+    });
+    const under = attachRow(item.id, "Add files to this answer");
+    under.classList.add("is-under");
+    wrap.appendChild(under);
+    const attached = noteImages(item.id);
+    if (attached.length) wrap.appendChild(attachTray(item.id, attached));
+  }
   if (item.help) wrap.appendChild(el("p", "help", item.help));
   wrap.appendChild(err);
   card.appendChild(wrap);
@@ -3946,7 +4173,9 @@ function buildConfirm(card, item, staged) {
     const on = staged && staged.yes === yes;
     const b = el("button", "btn" + (on ? " primary" : "") + (danger && !on ? " danger" : ""), label);
     b.type = "button";
-    b.addEventListener("click", () => stage(item.id, on ? null : { type: "answer", kind: "confirm", yes }));
+    b.addEventListener("click", () =>
+      stage(item.id, withNote(item, on ? null : { type: "answer", kind: "confirm", yes }))
+    );
     return b;
   };
   row.appendChild(mk(yesLabel, true, item.danger));
@@ -4031,7 +4260,7 @@ function buildReview(card, item, staged) {
     const b = el("button", "btn" + (on ? " primary" : "") + (v.danger && !on ? " danger" : ""), verdictText(v));
     b.type = "button";
     b.addEventListener("click", () =>
-      stage(item.id, on ? null : { type: "answer", kind: "review", verdict: v.id, text: staged && staged.text })
+      stage(item.id, withNote(item, on ? null : { type: "answer", kind: "review", verdict: v.id }))
     );
     row.appendChild(b);
   }
@@ -4044,6 +4273,15 @@ function buildReview(card, item, staged) {
 
 function buildChecklist(card, item, staged) {
   const doneSet = new Set((staged && staged.done) || []);
+  // Built from the live answer, so a note typed since the render rides along.
+  // Nothing ticked, no state and no note is no answer at all: stage nothing
+  // rather than an empty one that would still count as ready to send.
+  const commitList = (change) => {
+    const cur = local.staged[item.id];
+    const next = { ...(cur || {}), type: "answer", kind: "checklist", ...change };
+    const empty = !(next.done && next.done.length) && !next.state && !next.text;
+    stage(item.id, empty ? null : next);
+  };
   const list = el("ol", "steps");
   (item.steps || []).forEach((step, i) => {
     const li = el("li", "step");
@@ -4052,10 +4290,11 @@ function buildChecklist(card, item, staged) {
     box.id = `step-${item.id}-${i}`;
     box.checked = doneSet.has(i);
     box.addEventListener("change", () => {
-      const next = new Set(doneSet);
+      const cur = local.staged[item.id];
+      const next = new Set((cur && cur.done) || []);
       if (box.checked) next.add(i);
       else next.delete(i);
-      stage(item.id, { ...(staged || { type: "answer", kind: "checklist" }), done: [...next] });
+      commitList({ done: [...next] });
     });
     const label = el("label");
     label.htmlFor = box.id;
@@ -4079,14 +4318,7 @@ function buildChecklist(card, item, staged) {
     const on = staged && staged.state === s.id;
     const b = el("button", "btn" + (on ? " primary" : ""), s.label);
     b.type = "button";
-    b.addEventListener("click", () =>
-      stage(item.id, {
-        ...(staged || { type: "answer", kind: "checklist" }),
-        type: "answer",
-        kind: "checklist",
-        state: on ? null : s.id,
-      })
-    );
+    b.addEventListener("click", () => commitList({ state: on ? null : s.id }));
     row.appendChild(b);
   }
   card.appendChild(row);
@@ -4142,7 +4374,7 @@ function buildList(card, item, staged) {
   const ul = el("ul", "rows");
   let dragIndex = null;
 
-  const commit = (next) => stage(item.id, { type: "answer", kind: "list", rows: next });
+  const commit = (next) => stage(item.id, withNote(item, { type: "answer", kind: "list", rows: next }));
 
   rows.forEach((row, i) => {
     const li = el("li", "row-item");
@@ -4245,7 +4477,8 @@ function buildList(card, item, staged) {
   if (staged) {
     const reset = el("button", "linky", "Put it back how it was");
     reset.type = "button";
-    reset.addEventListener("click", () => stage(item.id, null));
+    // Puts the rows back; a note typed below stays.
+    reset.addEventListener("click", () => stage(item.id, withNote(item, null)));
     row.appendChild(reset);
   }
   card.appendChild(row);
@@ -4267,8 +4500,14 @@ function commentField(card, item, labelText, required) {
   ta.addEventListener("input", () => {
     setDraft(id, ta.value);
     const cur = local.staged[item.id];
-    if (cur) stageQuiet(item.id, { ...cur, text: ta.value.trim() || undefined });
-    else if (ta.value.trim())
+    if (cur) {
+      const next = { ...cur, text: ta.value.trim() || undefined };
+      // Emptying the box of a note-only answer leaves nothing to send, so it
+      // unstages rather than counting as ready.
+      const empty = (v) => v == null || v === "" || (Array.isArray(v) && !v.length);
+      const bare = Object.keys(next).every((k) => k === "type" || k === "kind" || empty(next[k]));
+      stageQuiet(item.id, bare ? null : next);
+    } else if (ta.value.trim())
       stageQuiet(item.id, { type: "answer", kind: item.kind, text: ta.value.trim() });
     stagedChanged();
   });
@@ -4424,8 +4663,8 @@ function askState() {
 // frame for the moment after a 409 stale, before the new frame lands.
 const askConversation = () => local.chat.conversation ?? askFrame().conversation;
 
-// An upload's server path is `<session>/uploads/<uuid>.jpg`; the page serves
-// it at /uploads/<uuid>.jpg.
+// An upload's server path is `<session>/uploads/<uuid>.<ext>`; the page serves
+// it at /uploads/<uuid>.<ext>.
 const uploadUrl = (img) => img.url || "/uploads/" + String(img.path || "").split(/[\\/]/).pop();
 
 function renderAsk(main) {
@@ -4983,7 +5222,7 @@ function renderAside() {
   aside.appendChild(el("h2", null, "Notes on this"));
 
   const thread = item.thread || [];
-  if (!thread.length) {
+  if (!thread.length && !(isOpen(item) && !finish() && noteAwaiting(item))) {
     aside.appendChild(
       el(
         "p",
@@ -5004,6 +5243,21 @@ function renderAside() {
     aside.appendChild(box);
   }
 
+  // A note that has been sent but not yet picked up: shown at once, so the
+  // send is seen to have gone, and gone when the agent replies.
+  const waiting = isOpen(item) && !finish() ? noteAwaiting(item) : null;
+  if (waiting) {
+    const box = el("div", "msg you pending");
+    const who = el("div", "msg-who");
+    who.appendChild(el("span", null, "You"));
+    who.appendChild(el("span", null, "Sent, waiting for Plan2Code"));
+    box.appendChild(who);
+    if (waiting.text) box.appendChild(md(waiting.text, "md"));
+    const tray = sentAttachments(waiting);
+    if (tray) box.appendChild(tray);
+    aside.appendChild(box);
+  }
+
   // A finished session has nobody left for a note to reach, so the box would
   // be a place to type words that go nowhere.
   if (!isOpen(item) || finish()) {
@@ -5018,24 +5272,7 @@ function renderAside() {
   wrap.appendChild(label);
 
   const attached = noteImages(item.id);
-  const addRow = el("div", "attach-row");
-  const addBtn = el("button", "btn small ghost", "+ Attach file");
-  addBtn.type = "button";
-  addBtn.setAttribute("aria-label", "Add files to this note");
-  addBtn.disabled = attached.length >= MAX_ATTACHMENTS;
-  const picker = el("input");
-  picker.type = "file";
-  picker.accept = pickerAccept();
-  picker.multiple = true;
-  picker.hidden = true;
-  addBtn.addEventListener("click", () => picker.click());
-  picker.addEventListener("change", () => {
-    attachFiles(item.id, picker.files);
-    picker.value = "";
-  });
-  addRow.appendChild(addBtn);
-  addRow.appendChild(picker);
-  wrap.appendChild(addRow);
+  wrap.appendChild(attachRow(item.id, "Add files to this note"));
 
   if (attached.length) wrap.appendChild(attachTray(item.id, attached));
 
@@ -5079,8 +5316,8 @@ function pageIcon() {
   return svg;
 }
 
-// A document in a tray: never an <img>, since documents are never served
-// back. Icon, extension badge, name and size, and nothing to click but ×.
+// A document in a tray: never an <img>, since a document is not a picture.
+// Icon, extension badge, name and size; a sent one is wrapped in a link.
 function docChip(entry, status) {
   const ext = docExt(entry.name) || "";
   const fig = el("figure", `attach-thumb attach-chip is-${status}`);
@@ -5094,6 +5331,29 @@ function docChip(entry, status) {
   if (size) text.appendChild(el("span", "attach-chip-size", size));
   fig.appendChild(text);
   return fig;
+}
+
+// The + Attach file control and its hidden picker, for a note's box or a
+// card's own. Files go to the item's note attachments either way.
+function attachRow(itemId, ariaLabel) {
+  const row = el("div", "attach-row");
+  const btn = el("button", "btn small ghost", "+ Attach file");
+  btn.type = "button";
+  btn.setAttribute("aria-label", ariaLabel);
+  btn.disabled = noteImages(itemId).length >= MAX_ATTACHMENTS;
+  const picker = el("input");
+  picker.type = "file";
+  picker.accept = pickerAccept();
+  picker.multiple = true;
+  picker.hidden = true;
+  btn.addEventListener("click", () => picker.click());
+  picker.addEventListener("change", () => {
+    attachFiles(itemId, picker.files);
+    picker.value = "";
+  });
+  row.appendChild(btn);
+  row.appendChild(picker);
+  return row;
 }
 
 function attachTray(itemId, attached) {
@@ -5220,8 +5480,8 @@ function setNoteImages(itemId, list) {
   else delete local.images[itemId];
 }
 
-// Where an attachment is deleted from. Documents are never served back, so
-// they have no `url`; their route is built from the path, as uploadUrl does.
+// Where an attachment is deleted from. Documents have no `url`, so their
+// route is built from the path, as uploadUrl does.
 const deleteUrl = (entry) => entry.url || "/uploads/" + String(entry.path || "").split(/[\\/]/).pop();
 
 // The files in a paste worth attaching: images and allowed documents. A paste
@@ -6461,7 +6721,7 @@ h4.md-h, h5.md-h, h6.md-h { font-size: 15px; }
 .md-table th, .md-table td { border: 1px solid #e4ddd1; padding: 8px 11px; text-align: left; }
 .md-table th { background: #fbf9f6; font-weight: 600; }
 .md-img { max-width: 100%; border-radius: 8px; }
-.md a { color: #ae4f2b; }
+.md a { color: #206cc3; }
 @media print {
   body { background: #fff; }
   main { padding: 0; min-height: 0; }
@@ -6585,7 +6845,7 @@ function renderAbout() {
   } else if (agentAdrift()) {
     line.classList.add("is-bad");
     line.textContent =
-      "Right now: this page is fine, but Plan2Code has not checked in for a few minutes. Have a look at the terminal; it may have finished its turn, hit an error, or be waiting on you there.";
+      "Right now: this page is fine, but Plan2Code has not checked in for a few minutes. Have a look at the terminal; it may have finished its turn, hit an error, or be waiting on you there. If it is idle, type continue there to wake it.";
   } else {
     line.classList.add("is-good");
     line.textContent = "Right now: both halves are talking to each other.";
@@ -6593,6 +6853,18 @@ function renderAbout() {
 }
 
 let helpBuilt = false;
+
+async function renderHelpVersion() {
+  const el = $("help-version");
+  try {
+    const res = await fetch("/version", { cache: "no-store" });
+    const { version } = res.ok ? await res.json() : {};
+    el.textContent = version ? "Plan2Code v" + version : "";
+    el.hidden = !version;
+  } catch {
+    el.hidden = true;
+  }
+}
 
 const HELP_MOODS = [
   ["point", "Your turn"],
@@ -6683,6 +6955,7 @@ function openHelp() {
   });
   selectHelpTab(id);
   renderAbout();
+  renderHelpVersion();
   $("help-modal").showModal();
   $("help-tab-" + id).focus();
 }
@@ -6729,6 +7002,19 @@ function lightDismiss(dlg) {
 lightDismiss($("looks-modal"));
 lightDismiss($("help-modal"));
 lightDismiss($("workspace-modal"));
+lightDismiss($("welcome-modal"));
+
+$("welcome-done").addEventListener("click", () => $("welcome-modal").close());
+$("welcome-modal").addEventListener("close", () => {
+  if (looks.welcomeSeen !== true) {
+    looks.welcomeSeen = true;
+    saveLooks();
+  }
+  $("btn-about").focus();
+});
+$("help-panels").addEventListener("click", (e) => {
+  if (e.target.closest && e.target.closest('[data-action="welcome"]')) openWelcome();
+});
 
 $("btn-about").addEventListener("click", () => {
   openHelp();
@@ -6757,6 +7043,8 @@ $("help-modal").addEventListener("keydown", (e) => {
 
 $("btn-looks").addEventListener("click", () => {
   renderSwatches();
+  setModelsStatus("", false);
+  loadModelsData();
   $("looks-modal").showModal();
 });
 $("looks-done").addEventListener("click", () => $("looks-modal").close());
@@ -6764,7 +7052,7 @@ $("looks-modal").addEventListener("close", () => {
   if (isDashboard() && !needsRoleNudge(looks) && $("main").querySelector(".dash-nudge")) render();
 });
 $("looks-reset").addEventListener("click", () => {
-  looks = { ...DEFAULT_LOOKS, role: ROLE_NOT_SET };
+  looks = { ...DEFAULT_LOOKS, role: ROLE_NOT_SET, welcomeSeen: looks.welcomeSeen };
   saveLooks();
   render();
 });
@@ -6811,6 +7099,101 @@ for (const box of document.querySelectorAll("input[data-sound]")) {
     if (box.checked) sound(event);
   });
 }
+
+// Models: the launcher's menu. The built-in list ships with every install and is read-only
+// here; what the person adds is saved to the server, which the launcher reads on its next run.
+let modelsData = null;
+let modelsTab = "claude";
+
+function setModelsStatus(text, isError) {
+  const status = $("models-status");
+  status.textContent = text;
+  status.classList.toggle("error", Boolean(isError));
+}
+
+function renderModels() {
+  for (const cli of ["claude", "devin"]) {
+    $("models-tab-" + cli).setAttribute("aria-pressed", String(cli === modelsTab));
+  }
+  const shipped = $("models-shipped");
+  const user = $("models-user");
+  shipped.replaceChildren();
+  user.replaceChildren();
+  if (!modelsData) {
+    setModelsStatus("Models could not be loaded.", true);
+    return;
+  }
+  for (const m of modelsData.shipped[modelsTab] || []) {
+    const row = el("div", "models-row locked");
+    row.append(el("span", null, m.id), el("span", null, m.label || ""));
+    shipped.appendChild(row);
+  }
+  const mine = modelsData.user[modelsTab];
+  mine.forEach((m, i) => {
+    const row = el("div", "models-row");
+    const id = el("input");
+    id.value = m.id;
+    id.placeholder = "Model id";
+    id.setAttribute("aria-label", "Model id");
+    const label = el("input");
+    label.value = m.label;
+    label.placeholder = "Name shown in the menu";
+    label.setAttribute("aria-label", "Name shown in the menu");
+    const remove = el("button", "btn small ghost", "Remove");
+    remove.type = "button";
+    id.addEventListener("change", () => { m.id = id.value.trim(); saveModels(); });
+    label.addEventListener("change", () => { m.label = label.value.trim(); saveModels(); });
+    remove.addEventListener("click", () => {
+      mine.splice(i, 1);
+      saveModels();
+      renderModels();
+    });
+    row.append(id, label, remove);
+    user.appendChild(row);
+  });
+}
+
+async function saveModels() {
+  try {
+    const res = await fetch("/models", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ models: modelsData.user }),
+    });
+    const body = await res.json();
+    if (!res.ok) return setModelsStatus(body.error || "Could not save.", true);
+    setModelsStatus("Saved. Restart plan2code to use it.", false);
+  } catch {
+    setModelsStatus("Could not save.", true);
+  }
+}
+
+async function loadModelsData() {
+  try {
+    const res = await fetch("/models");
+    if (res.ok) modelsData = await res.json();
+  } catch {}
+  renderModels();
+}
+
+for (const cli of ["claude", "devin"]) {
+  $("models-tab-" + cli).addEventListener("click", () => {
+    modelsTab = cli;
+    renderModels();
+  });
+}
+$("models-add").addEventListener("click", () => {
+  if (!modelsData) return;
+  modelsData.user[modelsTab].push({ id: "", label: "" });
+  renderModels();
+  $("models-user").querySelector(".models-row:last-child input")?.focus();
+});
+$("models-reset").addEventListener("click", () => {
+  if (!modelsData) return;
+  modelsData.user = { claude: [], devin: [] };
+  saveModels();
+  renderModels();
+});
 
 $("btn-brief").addEventListener("click", openBrief);
 $("brief-cancel").addEventListener("click", () => $("brief-modal").close());

@@ -75,6 +75,7 @@ import {
   STOP_REPLY,
   sentAnswer,
   submittedAwaiting,
+  noteAwaiting,
   suggestionFrom,
   turnGate,
   verdictLabel,
@@ -136,6 +137,7 @@ import {
 } from "../src/web-console/public/workspace.js";
 import {
   levelFor,
+  breakdownFrom,
   meterView,
   pointsFrom,
   RED_AT,
@@ -146,6 +148,7 @@ import {
 } from "../src/web-console/public/meter.js";
 import { applyMention, matchNames, mentionAt } from "../src/web-console/public/mentions.js";
 import { FAVICON_BODY, FAVICON_COLORS, faviconState, faviconSvg } from "../src/web-console/public/favicon.js";
+import { runHint } from "../src/web-console/public/render.js";
 import { pickerCommand, pickFolder, WINDOWS_PICKER_SOURCE, WORKSPACE_PICKER_PROMPT } from "../src/web-console/picker.mjs";
 import {
   appendLedger,
@@ -153,6 +156,7 @@ import {
   bindLoopback,
   chatReplyLines,
   checkDocument,
+  cwdHash,
   handOff,
   initialWorkspace,
   parseArgs,
@@ -170,6 +174,7 @@ import {
   SPEC_STATES,
   staleScratch,
   staleSessions,
+  STATE_LOCK_FILE,
   sweepUploads,
   terminalLine,
   UPLOAD_MAX_AGE_MS,
@@ -182,7 +187,12 @@ const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const CONSOLE_CLI = path.join(ROOT, "src", "web-console", "console.mjs");
 
 const HOME = fs.mkdtempSync(path.join(os.tmpdir(), "p2c-console-test-"));
-const ENV = { ...process.env, PLAN2CODE_CONSOLE_HOME: HOME, PLAN2CODE_NO_BROWSER: "1" };
+const MODELS_DIR = path.join(HOME, "plan2code");
+const ENV = { ...process.env, PLAN2CODE_CONSOLE_HOME: HOME, PLAN2CODE_MODELS_DIR: MODELS_DIR, PLAN2CODE_NO_BROWSER: "1" };
+
+// The session cookie is named for the server's port: browsers ignore the port
+// when they scope a cookie, so one shared name let each session's server
+// overwrite the one before it.
 
 function cli(args, { expectFail = false, env, cwd = ROOT } = {}) {
   const res = spawnSync(process.execPath, [CONSOLE_CLI, ...args], {
@@ -1228,10 +1238,36 @@ test("a document that is the wrong type, lies about its type, or is too large is
   assert.equal((await uploadDoc("a.md", MD, { origin: "http://evil.example.com" })).status, 403);
 });
 
-test("a document is never served back, and deleting it removes its file", async () => {
+test("a document is served back inline under a fixed type, and deleting it removes its file", async () => {
   const { id, path: file } = (await uploadDoc("spec.pdf", PDF)).json;
   const url = `/uploads/${id}.pdf`;
-  assert.equal((await raw("GET", url)).status, 404);
+  const pdf = await raw("GET", url);
+  assert.equal(pdf.status, 200);
+  assert.equal(pdf.headers["content-type"], "application/pdf");
+  assert.equal(pdf.headers["x-content-type-options"], "nosniff");
+  assert.equal(pdf.headers["content-security-policy"], undefined, "a sandboxed PDF cannot open in the viewer");
+  assert.deepEqual(pdf.body, PDF);
+  for (const [name, buf, type] of [
+    ["page.html", Buffer.from("<script>fetch('/submit')</script>"), "text/plain; charset=utf-8"],
+    ["logo.svg", MD, null],
+    ["notes.md", MD, "text/plain; charset=utf-8"],
+  ]) {
+    const up = await uploadDoc(name, buf);
+    if (!type) {
+      assert.equal(up.status, 415, "an svg is not an allowed document");
+      continue;
+    }
+    const text = await raw("GET", `/uploads/${up.json.id}.${name.split(".").pop()}`);
+    assert.equal(text.status, 200, name);
+    assert.equal(text.headers["content-type"], type, "text and code are never served as html");
+    assert.equal(text.headers["content-security-policy"], "sandbox");
+    assert.deepEqual(text.body, buf);
+    assert.equal((await raw("DELETE", `/uploads/${up.json.id}.${name.split(".").pop()}`)).status, 204);
+  }
+  assert.equal((await raw("GET", url, undefined, { cookie: "" })).status, 403);
+  for (const p of ["/uploads/../state.json.md", "/uploads/%2e%2e/x.pdf", "/uploads/not-a-uuid.md"]) {
+    assert.equal((await raw("GET", p)).status, 404, p);
+  }
   for (const p of ["/uploads/../state.json.md", "/uploads/%2e%2e/x.pdf", "/uploads/not-a-uuid.md"]) {
     assert.equal((await raw("DELETE", p)).status, 404, p);
   }
@@ -1296,6 +1332,46 @@ test("a result is consumed only once", () => {
   assert.equal(res.status, 10, "an already-consumed result must not be handed over twice");
 });
 
+test("a send records its note and attachments on the item, so the page can show them after a reload", async () => {
+  const readState = () => JSON.parse(fs.readFileSync(path.join(HOME, "sessions", sid, "state.json"), "utf8"));
+  const j = (await uploadJpeg("shot.png")).json;
+  const d = (await uploadDoc("spec.pdf", PDF)).json;
+  const atts = [
+    { path: j.path, name: j.name, kind: "image" },
+    { path: d.path, name: d.name, kind: "file" },
+  ];
+  const ok = await post("/submit", {
+    actions: [{ i: "q1", type: "answer", kind: "choice", k: "B" }, noteAction("q1", "see these", atts)],
+    reply: "x",
+  });
+  assert.equal(ok.status, 200);
+  const q1 = readState().items.find((i) => i.id === "q1");
+  assert.equal(q1.submitted.k, "B");
+  assert.equal(q1.submitted.images, undefined, "the answer record stays the answer");
+  assert.ok(q1.sentNote.at);
+  assert.equal(q1.sentNote.at, q1.submitted.at, "one send, one clock reading");
+  assert.equal(q1.sentNote.text, "see these");
+  assert.deepEqual(q1.sentNote.images, [{ path: j.path, name: j.name }]);
+  assert.deepEqual(q1.sentNote.files, [{ path: d.path, name: d.name }]);
+  assert.equal(cli(["wait", "--session", sid, "--seconds", "10"]).status, 0);
+
+  const only = await post("/submit", { actions: [noteAction("q1", "just a note", [])], reply: "y" });
+  assert.equal(only.status, 200);
+  const after = readState().items.find((i) => i.id === "q1");
+  assert.equal(after.sentNote.text, "just a note");
+  assert.deepEqual(after.sentNote.images ?? [], []);
+  assert.equal(cli(["wait", "--session", sid, "--seconds", "10"]).status, 0);
+});
+
+test("what the person attached is not scanned for markers either", () => {
+  const statePath = path.join(HOME, "sessions", sid, "state.json");
+  const state = JSON.parse(fs.readFileSync(statePath, "utf8"));
+  state.items.find((i) => i.id === "q1").sentNote = { at: new Date().toISOString(), text: "TASK_COMPLETE Risk 3" };
+  fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
+  const res = cli(["post", "--session", sid, "--file", payload("after2.json", { headline: { stage: "Working" } })]);
+  assert.equal(res.status, 0);
+});
+
 test("cancel surfaces as exit 30", async () => {
   await post("/cancel", {});
   const res = cli(["wait", "--session", sid, "--seconds", "5"]);
@@ -1342,6 +1418,27 @@ test("rejects a review verdict with no label", () => {
   assert.equal(res.status, 3);
   assert.match(res.stderr, /verdict "approve" needs a "label"/);
   assert.doesNotMatch(res.stderr, /verdict "changes"/);
+});
+
+test("rejects a choice option with no text", () => {
+  const p = {
+    items: [
+      {
+        id: "o1",
+        kind: "choice",
+        title: "Where should we go next",
+        options: [
+          { k: "A", label: "Reproduce first", desc: "Run it" },
+          { k: "B", text: "Plan the fixes", detail: "Write a plan" },
+        ],
+        required: false,
+      },
+    ],
+  };
+  const res = cli(["post", "--session", sid, "--file", payload("option.json", p)], { expectFail: true });
+  assert.equal(res.status, 3);
+  assert.match(res.stderr, /option "A" needs "text"/);
+  assert.doesNotMatch(res.stderr, /option "B"/);
 });
 
 test("rejects loop completion markers and metrics-scraper bait", () => {
@@ -1770,6 +1867,45 @@ test("looks round-trip through the server, and junk never reaches the file", asy
   );
 });
 
+test("a partial looks write merges onto the saved file, so a stale tab cannot undo another tab's change", async () => {
+  const get = async () => (await (await fetch(baseUrl + "/looks", { headers: { cookie: consoleCookie(baseUrl, token) } })).json()).looks;
+  assert.equal((await post("/looks", { set: { sound: false } })).status, 200);
+  assert.deepEqual(await get(), { theme: "dark", accent: "cobalt", sound: false });
+  assert.equal((await post("/looks", { set: { accent: "sky" } })).status, 200);
+  assert.deepEqual(await get(), { theme: "dark", accent: "sky", sound: false }, "keys this write did not name stay put");
+  assert.equal((await post("/looks", { set: { deep: { nested: true } } })).status, 400);
+  assert.deepEqual(await get(), { theme: "dark", accent: "sky", sound: false });
+  assert.equal((await post("/looks", { looks: { theme: "dark", accent: "cobalt" } })).status, 200);
+});
+
+test("the tab title carries the session's short id, so tabs from different agents can be told apart", async () => {
+  const html = await (await fetch(baseUrl + "/", { headers: { cookie: consoleCookie(baseUrl, token) } })).text();
+  assert.match(html, new RegExp(`<title>[^<]* · #${sid.slice(-6)} · Plan2Code</title>`));
+});
+
+test("models: the user's additions round-trip, XHigh and Max are refused, and the shipped list is read-only", async () => {
+  fs.mkdirSync(path.join(MODELS_DIR, "bin"), { recursive: true });
+  fs.writeFileSync(path.join(MODELS_DIR, "bin", "models.json"), JSON.stringify({ claude: [{ id: "opus", label: "Opus" }], devin: [{ id: "adaptive", label: "Adaptive" }] }));
+  const get = async () => (await fetch(baseUrl + "/models", { headers: { cookie: consoleCookie(baseUrl, token) } })).json();
+
+  assert.deepEqual((await get()).shipped.devin, [{ id: "adaptive", label: "Adaptive" }]);
+  assert.deepEqual((await get()).user, { claude: [], devin: [] });
+
+  const saved = await post("/models", { models: { devin: [{ id: " new-model-medium ", label: "" }, { id: "new-model-medium" }, { id: "" }] } });
+  assert.equal(saved.status, 200);
+  assert.deepEqual((await get()).user, { claude: [], devin: [{ id: "new-model-medium", label: "new-model-medium" }] });
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(MODELS_DIR, "models.json"), "utf8")).devin.length, 1, "the launcher reads this file");
+
+  for (const id of ["some-model-xhigh", "some-model-MAX", "bad id!"]) {
+    assert.equal((await post("/models", { models: { devin: [{ id }] } })).status, 400, id);
+  }
+  assert.equal((await post("/models", { nope: true })).status, 400);
+  assert.equal((await get()).user.devin.length, 1, "a refused write must not touch what is saved");
+
+  assert.equal((await post("/models", { models: {} })).status, 200, "reset to default");
+  assert.deepEqual((await get()).user, { claude: [], devin: [] });
+});
+
 test("stop leaves a process it cannot identify as ours alone", () => {
   // A handle file can outlive a reboot in the system temp dir and its pid can
   // be reused. Killing on the strength of a number alone can hit anything.
@@ -2049,6 +2185,18 @@ test("a send the agent never settled is still a send in flight", () => {
   // No clock to compare by: give the agent the benefit of the doubt rather
   // than lock a question it may have answered.
   assert.equal(submittedAwaiting({ submitted: sub, thread: [{ who: "agent", text: "No time on me." }] }), null);
+});
+
+test("a note the agent has not answered yet is still on its way", () => {
+  const note = { at: "2026-09-23T03:00:00Z", text: "look at this" };
+  assert.equal(noteAwaiting({}), null);
+  assert.equal(noteAwaiting(null), null);
+  assert.equal(noteAwaiting({ sentNote: "nope" }), null);
+  assert.equal(noteAwaiting({ sentNote: note }), note);
+  assert.equal(noteAwaiting({ sentNote: note, thread: [{ who: "agent", text: "Earlier.", at: "2026-09-23T02:00:00Z" }] }), note);
+  assert.equal(noteAwaiting({ sentNote: note, thread: [{ who: "agent", text: "Seen.", at: "2026-09-23T03:01:00Z" }] }), null);
+  assert.equal(noteAwaiting({ sentNote: note, thread: [{ who: "user", text: "look at this", at: "2026-09-23T03:00:00Z" }] }), null);
+  assert.equal(noteAwaiting({ sentNote: note, thread: [{ who: "agent", text: "No clock." }] }), null);
 });
 
 // --- the session's ending ------------------------------------------------
@@ -2943,26 +3091,26 @@ test("open without --title names the session after the project folder", () => {
   cli(["stop", "--session", res.json.sid]);
 });
 
-// A saved dark theme and accent used to flash the default light rust for as
+// A saved dark theme and accent used to flash the default light accent for as
 // long as it took the script to fetch /looks. The server paints them now.
 test("saved looks are painted by the server before any script runs", async () => {
   const looksFile = path.join(HOME, "looks.json");
   const before = fs.existsSync(looksFile) ? fs.readFileSync(looksFile) : null;
   fs.writeFileSync(
     looksFile,
-    JSON.stringify({ looks: { theme: "dark", accent: "ocean", sound: true, width: "wide" } })
+    JSON.stringify({ looks: { theme: "dark", accent: "violet", sound: true, width: "wide" } })
   );
   try {
     const res = cli(["open", "--workflow", "plan", "--no-open"]);
     const m = res.json.url.match(/^(http:\/\/127\.0\.0\.1:\d+)\/s\/([^/]+)\//);
     const cookie = consoleCookie(m[1], m[2]);
     const html = await (await fetch(m[1] + "/", { headers: { cookie } })).text();
-    assert.match(html, /<html lang="en" data-theme="dark" data-looks-accent="ocean" data-width="wide">/);
+    assert.match(html, /<html lang="en" data-theme="dark" data-looks-accent="violet" data-width="wide">/);
     const css = await (await fetch(m[1] + "/app.css", { headers: { cookie } })).text();
-    assert.ok(css.includes(`:root[data-looks-accent="ocean"][data-theme="dark"]{--accent:${ACCENTS.ocean.dark[0]}`));
+    assert.ok(css.includes(`:root[data-looks-accent="violet"][data-theme="dark"]{--accent:${ACCENTS.violet.dark[0]}`));
     assert.ok(!css.includes(`data-looks-accent="${DEFAULT_ACCENT}"`), "the default needs no rule");
     const boot = JSON.parse(html.match(/id="boot">([\s\S]*?)<\/script>/)[1]);
-    assert.equal(boot.looks.accent, "ocean");
+    assert.equal(boot.looks.accent, "violet");
     cli(["stop", "--session", res.json.sid]);
   } finally {
     if (before) fs.writeFileSync(looksFile, before);
@@ -3373,6 +3521,7 @@ test("post and wait hand back the terminal line; the collected result on disk do
     const waiting = cli(["wait", "--session", res.json.sid, "--seconds", "5"]);
     assert.equal(waiting.status, 10);
     assert.equal(waiting.json.message, "Waiting on your answer in the web console");
+    assert.match(waiting.json.next, /run this same wait command again/);
     assert.equal(waiting.json.terminalLine, terminalLine(res.json.url));
 
     const sent = await fetch(`${s.base}/submit`, {
@@ -3396,6 +3545,21 @@ test("post and wait hand back the terminal line; the collected result on disk do
   }
 });
 
+test("building.md gives a quick-task build its own Build progress tab", () => {
+  const md = fs.readFileSync(path.join(ROOT, "src", "web-console", "building.md"), "utf8");
+  const section = md.slice(md.indexOf("## Quick task (`quick-task`)"));
+  assert.ok(section.includes('"title": "Build progress"'));
+  assert.match(section, /post after every step/i);
+});
+
+test("building.md has the finished quick task offer Back to the dashboard as well as the review", () => {
+  const md = fs.readFileSync(path.join(ROOT, "src", "web-console", "building.md"), "utf8");
+  const section = md.slice(md.indexOf("## Quick task (`quick-task`)"));
+  const bullet = section.slice(section.indexOf("**The finish after the build:**"), section.indexOf("**Escalated / aborted:**"));
+  assert.ok(bullet.includes('"dashboard": true'));
+  assert.ok(bullet.includes("Review it now"));
+});
+
 /* ------------------------------------------- quick question: the contract */
 
 // Every outcome `wait` had before the chat channel existed, pinned by exit
@@ -3411,7 +3575,7 @@ const pinKeys = (obj, expected, what) =>
     `${what}: top-level keys changed`
   );
 const RESULT_KEYS = ["type", "at", "sid", "rev", "actions", "reply", "consumedAt", "terminalLine"];
-const WAITING_KEYS = ["status", "sid", "elapsed", "answered", "total", "staged", "url", "message", "terminalLine"];
+const WAITING_KEYS = ["status", "sid", "elapsed", "answered", "total", "staged", "url", "message", "next", "terminalLine"];
 
 function openSession(extra = {}) {
   const res = cli(["open", "--file", payload(`pin-${Date.now()}.json`, { ...BASE, ...extra }), "--no-open"]);
@@ -3756,15 +3920,14 @@ test("typed text never starts a reply line of its own, so it cannot pass for a d
   }
 });
 
-test("a finished session refuses a question as offline", async () => {
+test("a finished session whose agent is still listening still takes a question", async () => {
   const s = openSession();
   try {
     postPatch(s, { finish: { headline: "The map is written" } });
-    await until(async () => (await chatFrame(s)).offline);
+    await until(async () => !(await chatFrame(s)).offline);
     const res = await ask(s, "Anyone there?");
-    assert.equal(res.status, 409);
-    assert.equal(res.body.error, "offline");
-    assert.equal((await s.send("/chat", { reset: true, conversation: 1 })).status, 409);
+    assert.equal(res.status, 200, JSON.stringify(res.body));
+    assert.equal(res.body.ok, true);
   } finally {
     cli(["stop", "--session", s.sid]);
   }
@@ -4064,8 +4227,9 @@ test("unreadDot and shouldChime: one chime per new reply, never while on Ask, ne
 test("chatOffline: finished, paused, a stale working agent (with quietMinutes), an adrift waiting agent, a live one", () => {
   const now = 10 * 60 * 60 * 1000;
   const ago = (ms) => ({ agentLastSeenMs: now - ms, now });
-  assert.equal(chatOffline({ finish: { headline: "Done" }, agent: { status: "waiting" }, ...ago(0) }), true);
-  assert.equal(chatOffline({ finish: { headline: "Paused — saved" }, agent: { status: "working" }, ...ago(0) }), true);
+  assert.equal(chatOffline({ finish: { headline: "Done" }, agent: { status: "waiting" }, ...ago(0) }), false, "a live agent through the finish wait is online");
+  assert.equal(chatOffline({ finish: { headline: "Done" }, agent: { status: "waiting" }, ...ago(3 * 60 * 1000 + 1000) }), true, "offline once it goes quiet");
+  assert.equal(chatOffline({ finish: { headline: "Paused — saved" }, agent: { status: "working" }, ...ago(STALE_MS + 1000) }), true);
   assert.equal(chatOffline({ agent: { status: "working" }, ...ago(STALE_MS + 1000) }), true);
   assert.equal(chatOffline({ agent: { status: "working" }, ...ago(STALE_MS - 1000) }), false);
   assert.equal(chatOffline({ agent: { status: "working", quietMinutes: 20 }, ...ago(15 * 60 * 1000) }), false, "a long task is not offline");
@@ -4420,7 +4584,25 @@ test("meter: levels, ring, fold and tooltip wording", () => {
     fraction: 0.25,
     words: "Session: fresh",
     tooltip: "This session is fresh (2 points).",
+    items: [{ label: "Document started", points: 2 }],
   });
+});
+
+test("meter: the breakdown lists each scoring entry once and sums to the total", () => {
+  const entries = [
+    { kind: "launch", id: "L1", workflow: "dashboard" },
+    { kind: "launch", id: "L2", workflow: "quick-task" },
+    { kind: "run", id: "L2:phase-2", event: "implement-phase" },
+    { kind: "run", id: "L2:phase-2", event: "implement-phase" },
+    { kind: "run", id: "L2:handoff", event: "handoff" },
+    { kind: "folder-issue", id: "L2:api", name: "api", reason: "denied" },
+  ];
+  assert.deepEqual(breakdownFrom(entries), [
+    { label: "Quick task started", points: 1 },
+    { label: "Implement phase built: phase-2", points: 2 },
+  ]);
+  assert.equal(pointsFrom(entries), breakdownFrom(entries).reduce((n, r) => n + r.points, 0));
+  assert.deepEqual(breakdownFrom(null), []);
 });
 
 test("workspace: default names, name rules and the free-name suggestion", () => {
@@ -4531,6 +4713,7 @@ test("page: the Workspace dialog, meter pill and new modules are in the page, wi
     "meter-fill",
     "meter-words",
     "meter-pop",
+    "meter-list",
     "meter-help",
   ]) {
     assert.ok(html.includes(`id="${id}"`), `index.html must carry #${id}`);
@@ -5010,6 +5193,274 @@ test("meter: a folder issue shows in the frame's workspace.issues until the next
   }
 });
 
+/* ------------------------------------------- review fixes: two writers, one page */
+
+// Browsers scope a cookie by host and ignore the port. With one shared name,
+// the second session's link overwrote the first session's token, and the
+// first tab got nothing but 403s from then on.
+test("two sessions keep their own cookies: each server reads only the one named for its port", async () => {
+  const a = openSession();
+  const b = openSession();
+  try {
+    for (const s of [a, b]) {
+      const token = s.url.match(/\/s\/([^/]+)\//)[1];
+      const res = await fetch(s.url, { redirect: "manual" });
+      assert.ok(res.headers.get("set-cookie").startsWith(`${consoleCookie(s.base, token)};`));
+    }
+    // What a browser holding both sends to either server.
+    const both = `${a.cookie}; ${b.cookie}`;
+    for (const s of [a, b]) {
+      assert.equal((await fetch(`${s.base}/state`, { headers: { cookie: both, connection: "close" } })).status, 200);
+    }
+    // The old shared name is no longer a key to anything.
+    const aToken = a.url.match(/\/s\/([^/]+)\//)[1];
+    const shared = await fetch(`${a.base}/state`, { headers: { cookie: `p2c_console=${aToken}`, connection: "close" } });
+    assert.equal(shared.status, 403);
+    // Another session's cookie opens nothing here either.
+    const crossed = b.cookie.replace(/^p2c_console_\d+/, `p2c_console_${new URL(a.base).port}`);
+    assert.equal((await fetch(`${a.base}/state`, { headers: { cookie: crossed, connection: "close" } })).status, 403);
+  } finally {
+    cli(["stop", "--session", a.sid]);
+    cli(["stop", "--session", b.sid]);
+  }
+});
+
+// state.json has two writers, `post` and the server's /submit. Both are held
+// at the lock here until each has read nothing yet, then let go together:
+// whichever writes second must be building on the first one's write.
+test("a post and a submit that overlap both survive: the state lock serialises them", async () => {
+  const s = openSession();
+  try {
+    const lock = path.join(s.session, STATE_LOCK_FILE);
+    fs.writeFileSync(lock, String(process.pid));
+    const patchFile = payload(`overlap-${Date.now()}.json`, {
+      items: [{ id: "q2", kind: "text", title: "Team name", required: false }],
+      agent: { status: "waiting", activity: "Asking about the team" },
+    });
+    const posting = new Promise((resolve) => {
+      const child = spawn(process.execPath, [CONSOLE_CLI, "post", "--session", s.sid, "--file", patchFile], { env: ENV, cwd: ROOT });
+      let err = "";
+      child.stderr.on("data", (c) => (err += c));
+      child.on("exit", (code) => resolve({ code, err }));
+    });
+    const submitting = s.send("/submit", EXPORT_A);
+    await sleep(400);
+    assert.ok(fs.existsSync(lock), "nobody broke a live, young lock");
+    fs.rmSync(lock);
+    const [posted, submitted] = await Promise.all([posting, submitting]);
+    assert.equal(posted.code, 0, posted.err);
+    assert.equal(submitted.status, 200);
+
+    const state = readState(s.session);
+    const q1 = state.items.find((i) => i.id === "q1");
+    assert.ok(state.items.some((i) => i.id === "q2"), "the post's new question is kept");
+    assert.equal(state.agent.activity, "Asking about the team");
+    assert.equal(q1.submitted && q1.submitted.k, "A", "the send's record is kept");
+    assert.equal(state.phase, "submitted");
+    assert.equal(fs.existsSync(lock), false, "and the lock is let go");
+    assert.equal(cli(["wait", "--session", s.sid, "--seconds", "5"]).status, 0);
+  } finally {
+    cli(["stop", "--session", s.sid]);
+  }
+});
+
+test("a lock left by a writer that died is broken rather than waited on for good", () => {
+  const s = openSession();
+  try {
+    const lock = path.join(s.session, STATE_LOCK_FILE);
+    // A pid no process has: the holder is gone.
+    fs.writeFileSync(lock, "999999999");
+    const res = postPatch(s, { agent: { status: "working" } });
+    assert.equal(res.status, 0, res.stderr);
+    assert.equal(readState(s.session).agent.status, "working");
+    assert.equal(fs.existsSync(lock), false);
+  } finally {
+    cli(["stop", "--session", s.sid]);
+  }
+});
+
+// A young handle and a live pid are what a server that died a minute ago
+// leaves behind for any process to inherit. Only /health is proof.
+test("stop never kills a live process that does not answer /health as ours", () => {
+  const bystander = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { stdio: "ignore" });
+  const sidForged = "20000101-000000-beef01";
+  // Under the test home, as the CLI sees it: this process has no override of
+  // its own, and lib.mjs would name the real runtime dir.
+  const dir = path.join(HOME, "runtime", cwdHash(repoRoots(ROOT).project));
+  fs.mkdirSync(dir, { recursive: true });
+  const forged = path.join(dir, `${sidForged}.json`);
+  try {
+    fs.writeFileSync(
+      forged,
+      JSON.stringify({ v: 1, sid: sidForged, pid: bystander.pid, port: 1, url: "http://127.0.0.1:1/", startedAt: new Date().toISOString() })
+    );
+    const res = cli(["stop", "--session", sidForged]);
+    assert.equal(res.json.stopped, 0);
+    assert.equal(res.json.skippedStaleHandles, 1);
+    assert.equal(fs.existsSync(forged), false, "the handle goes");
+    assert.doesNotThrow(() => process.kill(bystander.pid, 0), "the process stays");
+  } finally {
+    bystander.kill();
+    fs.rmSync(forged, { force: true });
+  }
+});
+
+// A fresh `open` starts the server before it writes the state. The server used
+// to seed workspace.json at boot from the folder holding .git, which for a
+// linked worktree is the main checkout.
+test("open from a linked worktree seeds the workspace with the worktree, not the main checkout", () => {
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), "p2c-wt-"));
+  const repo = path.join(base, "repo");
+  const wt = path.join(base, "wt");
+  fs.mkdirSync(repo);
+  const git = (cwd, ...a) => execFileSync("git", a, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+  git(repo, "init", "-q");
+  git(repo, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "--allow-empty", "-m", "x");
+  git(repo, "worktree", "add", "-q", wt);
+  const { worktree, project } = repoRoots(wt);
+  assert.notEqual(worktree, project);
+  let sidOpened = null;
+  try {
+    const res = cliIn(wt, ["open", "--workflow", "plan", "--no-open"]);
+    sidOpened = res.json.sid;
+    assert.deepEqual(res.json.workspace.folders.map((f) => f.path), [worktree]);
+    const onDisk = JSON.parse(fs.readFileSync(path.join(res.json.session, WORKSPACE_FILE), "utf8"));
+    assert.deepEqual(onDisk.folders.map((f) => f.path), [worktree], "workspace.json names the worktree");
+  } finally {
+    if (sidOpened) cliIn(wt, ["stop", "--session", sidOpened]);
+    fs.rmSync(base, { recursive: true, force: true });
+  }
+});
+
+/* ------------------------------------------- review fixes: the CLI's edges */
+
+test("validate refuses a text pattern that does not compile, and post exits 3 on it", () => {
+  const item = (pattern) => ({ items: [{ id: "t1", kind: "text", title: "Ticket number", pattern }] });
+  assert.deepEqual(validate(item("^[A-Z]+-\\d+$")), []);
+  assert.match(validate(item("([")).join("\n"), /"pattern" is not a valid JavaScript regular expression/);
+  assert.match(validate(item(7)).join("\n"), /"pattern" must be a string/);
+
+  const s = openSession();
+  try {
+    const before = fs.readFileSync(path.join(s.session, "state.json"), "utf8");
+    const bad = postPatch(s, { items: [{ id: "t1", kind: "text", title: "Ticket number", pattern: "([", required: false }] }, { expectFail: true });
+    assert.equal(bad.status, 3);
+    assert.match(bad.stderr, /pattern/);
+    assert.equal(fs.readFileSync(path.join(s.session, "state.json"), "utf8"), before, "nothing was written");
+  } finally {
+    cli(["stop", "--session", s.sid]);
+  }
+});
+
+test("a flag that needs a value and has none is bad usage, exit 2, never a crash", () => {
+  for (const argv of [
+    ["open", "--resume"],
+    ["open", "--session", "--no-open"],
+    ["wait", "--session"],
+    ["post", "--session", sid, "--file"],
+    ["keep", "--session", sid, "--upload", "x", "--name", "--spec", "specs/x"],
+    ["status", "--session"],
+    ["stop", "--session"],
+  ]) {
+    const res = cli(argv, { expectFail: true });
+    assert.equal(res.status, 2, argv.join(" "));
+    assert.match(res.stderr, /needs a value/, argv.join(" "));
+    assert.doesNotMatch(res.stderr, /TypeError|at .*\.mjs/, argv.join(" "));
+  }
+});
+
+test("wait reads --seconds 6s as six seconds, not as nothing", () => {
+  const s = openSession();
+  try {
+    const t0 = Date.now();
+    const res = cli(["wait", "--session", s.sid, "--seconds", "6s"]);
+    assert.equal(res.status, 10);
+    assert.ok(Date.now() - t0 >= 5000, "the slice ran its length");
+  } finally {
+    cli(["stop", "--session", s.sid]);
+  }
+});
+
+test("only open leaves the console-dir pointer; status, help and a bad command do not", () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "p2c-pointer-"));
+  const env = { PLAN2CODE_CONSOLE_HOME: home, PLAN2CODE_MODELS_DIR: path.join(home, "plan2code") };
+  const pointer = path.join(home, "console-dir");
+  try {
+    cli(["status"], { env });
+    cli(["help"], { env });
+    const usage = cli(["nope"], { env, expectFail: true });
+    assert.match(usage.stderr, /keep/, "the usage line names every command");
+    assert.equal(fs.existsSync(pointer), false);
+    const opened = cli(["open", "--no-open"], { env });
+    assert.equal(fs.readFileSync(pointer, "utf8").trim(), path.join(ROOT, "src", "web-console"));
+    cli(["stop", "--session", opened.json.sid], { env });
+  } finally {
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
+
+/* ------------------------------------------- review fixes: the Origin guard */
+
+// Every route that changes something refuses a foreign Origin before it reads
+// a byte of the body. /workspace/browse is the one that could open a native
+// dialog; the echo stands in for it, so a guard that failed would answer 200
+// here rather than put a picker on the screen.
+test("every state-changing route refuses a foreign Origin, and nothing changes", async () => {
+  const picked = tempFolder();
+  const s = consoleSession(["--workflow", "plan", "--file", payload(`origin-${Date.now()}.json`, BASE)], {
+    env: { PLAN2CODE_PICKER_ECHO: picked },
+  });
+  const files = ["state.json", "result.json", "draft.json", WORKSPACE_FILE, "chat.ndjson"];
+  const snapshot = () =>
+    Object.fromEntries(
+      [...files.map((f) => path.join(s.session, f)), path.join(HOME, "looks.json")].map((f) => [
+        f,
+        fs.existsSync(f) ? fs.readFileSync(f, "utf8") : null,
+      ])
+    );
+  const routes = [
+    ["POST", "/submit", EXPORT_A],
+    ["POST", "/cancel", {}],
+    ["POST", "/chat", { text: "Why CSV?", conversation: 1 }],
+    ["POST", "/chat/decision", { re: "r1", decision: "approve", conversation: 1 }],
+    ["POST", "/draft", { staged: { q1: { k: "B" } } }],
+    ["POST", "/looks", { looks: { theme: "light" } }],
+    ["POST", "/models", { models: { devin: [{ id: "x" }] } }],
+    ["POST", "/workspace/add", { path: picked }],
+    ["POST", "/workspace/edit", { id: "f0", name: "renamed" }],
+    ["POST", "/workspace/remove", { id: "f0" }],
+    ["POST", "/workspace/browse", {}],
+    ["POST", "/bye", {}],
+    ["POST", "/upload", null],
+    ["DELETE", "/uploads/00000000-0000-0000-0000-000000000000.jpg", null],
+  ];
+  try {
+    await s.get("/workspace");
+    const before = snapshot();
+    for (const [method, route, body] of routes) {
+      const res = await fetch(`${s.base}${route}`, {
+        method,
+        headers: { "content-type": "application/json", cookie: s.cookie, origin: "http://evil.example.com", connection: "close" },
+        body: body === null ? undefined : JSON.stringify(body),
+      });
+      assert.equal(res.status, 403, `${method} ${route}`);
+    }
+    assert.deepEqual(snapshot(), before, "no file moved");
+    // And the same requests from the page's own origin do get through, so the
+    // 403s above are the guard and not something else.
+    const own = await fetch(`${s.base}/workspace/browse`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: s.cookie, origin: s.base, connection: "close" },
+      body: "{}",
+    });
+    assert.equal(own.status, 200);
+    assert.deepEqual(await own.json(), { path: picked });
+  } finally {
+    cli(["stop", "--session", s.sid]);
+    fs.rmSync(picked, { recursive: true, force: true });
+  }
+});
+
 test.after(() => {
   try {
     execFileSync(process.execPath, [CONSOLE_CLI, "stop", "--all"], { env: ENV, cwd: ROOT });
@@ -5158,7 +5609,7 @@ test("validate rejects an item pattern that is not a valid regular expression", 
   for (const bad of ["([a-z", "*oops", 42]) {
     const problems = validate({ items: [item(bad)] });
     assert.equal(problems.length, 1, JSON.stringify(bad));
-    assert.match(problems[0], /item "slug" "pattern" must be a string holding a valid JavaScript regular expression/);
+    assert.match(problems[0], /item "slug" "pattern" (must be a string holding a JavaScript regular expression|is not a valid JavaScript regular expression)/);
   }
 });
 
@@ -5166,4 +5617,51 @@ test("the usage line names every command", () => {
   const res = cli(["nope"], { expectFail: true });
   assert.equal(res.status, 2);
   assert.match(res.stderr, /<open\|post\|wait\|chat\|keep\|status\|stop\|help>/);
+});
+
+test("runHint: git blocks get Run it, command words get the hint, the rest nothing", () => {
+  assert.equal(runHint("git add -A && git commit -m \"x\""), "run");
+  assert.equal(runHint("\n\ngit status\n"), "run");
+  assert.equal(runHint("git"), "run");
+  assert.equal(runHint("node install.js --build-skills"), "hint");
+  assert.equal(runHint("docker compose up"), "hint");
+  assert.equal(runHint("#!/bin/bash\necho hi"), "hint");
+  assert.equal(runHint("pws run.ps1"), null);
+  assert.equal(runHint("/plan2code-3-implement specs/x/overview.md"), null);
+  assert.equal(runHint("/plan2code"), null);
+  assert.equal(runHint('{"a": 1}'), null);
+  assert.equal(runHint("some prose, not a command"), null);
+  assert.equal(runHint(""), null);
+  assert.equal(runHint(null), null);
+  // The first non-empty line decides: a git line after a blank one runs.
+  assert.equal(runHint("   \ngit commit -m \"x\"\n"), "run");
+});
+
+test("a reused item id does not inherit the previous answer's submitted record", async () => {
+  const { applyPatch } = await import("../src/web-console/lib.mjs");
+  const before = { items: [{ id: "q7", kind: "choice", title: "A", body: "old", status: "open", submitted: { at: "t", text: "old answer" } }] };
+  const reworded = applyPatch(before, { items: [{ id: "q7", kind: "choice", title: "B", body: "new", status: "open" }] });
+  assert.equal(reworded.items[0].submitted, undefined);
+  assert.equal(reworded.items[0].status, "open");
+  // Settling or threading the same question keeps the record.
+  assert.ok(applyPatch(before, { items: [{ id: "q7", status: "answered", answer: { k: "A" } }] }).items[0].submitted);
+  // A settled question with a typo fixed stays settled.
+  const settled = { items: [{ id: "q7", kind: "choice", title: "A", body: "old", status: "answered", answer: { k: "A" }, submitted: { at: "t", k: "A" } }] };
+  const edited = applyPatch(settled, { items: [{ id: "q7", body: "old, fixed" }] }).items[0];
+  assert.deepEqual([edited.status, edited.answer, !!edited.submitted], ["answered", { k: "A" }, true]);
+  assert.ok(applyPatch(before, { items: [{ id: "q7", thread: [{ who: "agent", text: "hi" }] }] }).items[0].submitted);
+  // A settled id reused for a different kind of question opens as a new one, even with no status in the patch.
+  const swapped = applyPatch(settled, { items: [{ id: "q7", kind: "confirm", title: "C", body: "new" }] }).items[0];
+  assert.deepEqual([swapped.status, swapped.answer, swapped.submitted], ["open", undefined, undefined]);
+});
+
+test("unansweredChat lists delivered Quick questions that still have no reply", async () => {
+  const { unansweredChat, appendChat, writeCursor } = await import("../src/web-console/lib.mjs");
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "p2c-chat-"));
+  appendChat(dir, { kind: "reset", conversation: 1, workflow: "dashboard", reason: "start" });
+  appendChat(dir, { kind: "message", conversation: 1, text: "run it" });
+  assert.deepEqual(unansweredChat(dir, {}), [], "not handed over yet, so not owed");
+  writeCursor(dir, 2);
+  assert.deepEqual(unansweredChat(dir, {}), [2]);
+  assert.deepEqual(unansweredChat(dir, { chat: { replies: [{ id: "r2", re: 2, conversation: 1, md: "done" }] } }), []);
 });

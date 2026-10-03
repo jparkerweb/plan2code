@@ -3,449 +3,418 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Plan2Code — Spec-Driven Workflow for AI Coding Agents</title>
-<meta name="description" content="Send the plan — the build follows. You approve a plan, it becomes phase documents in your repo, and the agent builds to those documents one phase at a time.">
+<title>Plan2Code: plan and build with your AI agent in your browser</title>
+<meta name="description" content="Plan and build with an AI coding agent on a page in your browser. You answer the questions and approve each phase, and the specs land in your repo as plain files.">
+<meta name="color-scheme" content="light dark">
 <link rel="icon" href="favicon.ico" sizes="32x32">
 <link rel="icon" type="image/png" sizes="32x32" href="favicon.png">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@500;700;800&family=Karla:wght@300;400;500;600;700&family=Caveat:wght@500&display=swap" rel="stylesheet">
 <style>
-:root{
-  --air:#E4ECF6; --air-2:#D3DEEE; --paper:#FBFAF6;
-  --ink:#16233D; --ink-soft:#5E6E8A;
-  --red:#D33A38; --blue:#2455A4; --kraft:#E5D8BE;
+/* The web console's palette and type (src/web-console/public/app.css), so the
+   site and the product look like one thing, with the Plan2Code blue as the
+   accent: #2455a4 in light, and the console's Ocean highlight (palette.js),
+   which the screenshots use, in dark. System fonts only, like the console. */
+:root {
+  --bg: #f6f3ee;
+  --panel: #ffffff;
+  --panel-2: #fbf9f6;
+  --ink: #1d1a17;
+  --ink-2: #5d564d;
+  --ink-3: #8f8779;
+  --rule: #e4ddd1;
+  --rule-2: #cfc6b6;
+  --accent: #2455a4;
+  --accent-soft: #ecf2f9;
+  --accent-ink: #ffffff;
+  --accent-line: #9ab4d3;
+  --ok: #2f6b45;
+  --focus: #1f6feb;
+  --code-bg: #1d1a17;
+  --code-ink: #f0ece5;
+  --shadow: 0 1px 2px rgba(29, 26, 23, 0.05), 0 8px 24px rgba(29, 26, 23, 0.06);
+  --shadow-lg: 0 2px 4px rgba(29, 26, 23, 0.06), 0 24px 60px rgba(29, 26, 23, 0.12);
+  --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --serif: "Iowan Old Style", Charter, Georgia, Cambria, serif;
+  --mono: ui-monospace, SFMono-Regular, "Cascadia Mono", Menlo, Consolas, monospace;
+  --radius: 10px;
+  --width: 1120px;
+  --gutter: 24px;
 }
-*{margin:0;padding:0;box-sizing:border-box}
-html{scroll-behavior:smooth}
-[id]{scroll-margin-top:90px}
-body{background:var(--air);color:var(--ink);font:400 16.5px/1.65 'Karla',system-ui,sans-serif;-webkit-font-smoothing:antialiased}
-.bs{font-family:'Big Shoulders Display',sans-serif;font-weight:800;letter-spacing:.005em}
-.hand{font-family:'Caveat',cursive}
-.wrap{max-width:1140px;margin:0 auto;padding:0 34px}
-a{color:inherit}
-:focus-visible{outline:2px solid var(--red);outline-offset:3px}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #171513;
+    --panel: #201d1a;
+    --panel-2: #262220;
+    --ink: #f0ece5;
+    --ink-2: #b6afa3;
+    --ink-3: #8b8376;
+    --rule: #332e29;
+    --rule-2: #46403a;
+    --accent: #619fe5;
+    --accent-soft: #1a2533;
+    --accent-ink: #0c1117;
+    --accent-line: #3d5978;
+    --ok: #74c28f;
+    --focus: #6aa3ff;
+    --code-bg: #0f0d0c;
+    --code-ink: #f0ece5;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.35);
+    --shadow-lg: 0 2px 4px rgba(0, 0, 0, 0.45), 0 24px 60px rgba(0, 0, 0, 0.5);
+  }
+}
 
-/* ── SIGNATURE: airmail chevron border framing the page on all four sides ── */
-:root{--fr:11px}
-.frame-t,.frame-b,.frame-l,.frame-r{
-  position:fixed;z-index:60;pointer-events:none;
-  background:repeating-linear-gradient(-45deg,
-    var(--red) 0 14px, var(--paper) 14px 28px,
-    var(--blue) 28px 42px, var(--paper) 42px 56px);
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 17px/1.6 var(--sans);
+  -webkit-font-smoothing: antialiased;
+  overflow-wrap: break-word;
 }
-.frame-t,.frame-b{left:0;right:0;height:var(--fr)}
-.frame-t{top:0}
-.frame-b{bottom:0}
-.frame-l,.frame-r{top:0;bottom:0;width:var(--fr)}
-.frame-l{left:0}
-.frame-r{right:0}
-body{padding:var(--fr)}
+img { max-width: 100%; height: auto; }
+a { color: var(--accent); text-underline-offset: 3px; }
+a:hover { text-decoration-thickness: 2px; }
+code { font-family: var(--mono); font-size: 0.88em; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; border-radius: 4px; }
+h1, h2, h3 { font-family: var(--serif); font-weight: 600; line-height: 1.15; margin: 0; }
+h2 { font-size: clamp(1.8rem, 4vw, 2.5rem); margin-bottom: 12px; }
+h3 { font-size: 1.45rem; margin: 8px 0; }
+.muted { color: var(--ink-2); }
+.wrap { max-width: var(--width); margin: 0 auto; padding: 0 var(--gutter); }
+.narrow { max-width: 780px; margin: 0 auto; padding: 0 var(--gutter); text-align: center; }
+.skip { position: absolute; left: -9999px; top: 0; background: var(--panel); color: var(--ink); padding: 10px 16px; z-index: 10; }
+.skip:focus { left: 0; }
 
-/* ── header (sticky, sits just under the top frame) ── */
-.top{
-  background:var(--paper);border-bottom:2px solid var(--ink);
-  position:sticky;top:var(--fr);z-index:40;
-}
-.top .wrap{display:flex;align-items:center;gap:16px;padding-top:13px;padding-bottom:12px}
-.brand{font-family:'Big Shoulders Display',sans-serif;font-weight:800;font-size:26px;letter-spacing:.01em;text-transform:uppercase}
-.brand i{font-style:normal;color:var(--red)}
-.avion{
-  margin-left:auto;border:1.5px solid var(--blue);color:var(--blue);
-  font-size:10px;letter-spacing:.22em;text-transform:uppercase;font-weight:700;padding:5px 11px;
-}
+/* Planny, drawn as the console draws him: shell, star eye, lip, arms up. */
+.planny { display: block; margin: 0 auto; width: 44px; height: 60px; overflow: visible; }
+.planny .shell { fill: var(--panel); stroke: var(--ink-2); stroke-width: 1.3; }
+.planny .smile, .planny .arm path { fill: none; stroke: var(--ink-2); stroke-linecap: round; }
+.planny .smile { stroke-width: 0.9; }
+.planny .arm path { stroke-width: 1.2; }
+.planny .arm circle, .planny .foot { fill: var(--ink-2); }
+.planny .eye { fill: var(--accent); }
 
-/* ── hero: the envelope ── */
-.hero{padding:56px 0 70px}
-.env{
-  background:var(--paper);border:2px solid var(--ink);position:relative;
-  box-shadow:10px 12px 0 rgba(22,35,61,.14);padding:40px 42px 44px;
-}
-/* cancellation waves */
-.cancel{position:absolute;right:34px;top:34px;width:210px;height:110px;pointer-events:none}
-.cancel .ring{fill:none;stroke:var(--red);stroke-width:2.2}
-.cancel .wv{fill:none;stroke:var(--red);stroke-width:2.2;opacity:.85}
-.cancel text{font-family:'Karla',sans-serif;font-weight:700;fill:var(--red);letter-spacing:.06em}
-/* stamp */
-.pstamp{
-  position:absolute;right:250px;top:34px;width:86px;height:104px;background:var(--air-2);
-  border:2px solid var(--ink);padding:8px;text-align:center;
-}
-.pstamp .in{border:1px solid rgba(22,35,61,.35);height:100%;display:flex;flex-direction:column;justify-content:center;gap:2px}
-.pstamp b{font-family:'Big Shoulders Display',sans-serif;font-weight:800;font-size:26px;line-height:1;color:var(--blue)}
-.pstamp span{font-size:8px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-soft);font-weight:700}
-@media(max-width:900px){.cancel,.pstamp{display:none}}
+/* Screenshots: framed like a window, one per theme via <picture>. */
+.shot { display: block; border: 1px solid var(--rule-2); border-radius: var(--radius); overflow: hidden; background: var(--panel); box-shadow: var(--shadow); }
+.shot img { display: block; width: 100%; }
+.shot.big { border-radius: 14px; box-shadow: var(--shadow-lg); }
 
-.kick{font-size:10.5px;letter-spacing:.24em;text-transform:uppercase;color:var(--blue);font-weight:700}
-h1{font-family:'Big Shoulders Display',sans-serif;font-weight:800;font-size:clamp(3rem,9vw,7rem);line-height:.86;text-transform:uppercase;margin-top:14px;max-width:13ch}
-h1 em{font-style:normal;color:var(--red)}
-.addr{
-  margin-top:32px;padding-top:26px;border-top:1.5px dashed rgba(22,35,61,.3);
-  display:grid;grid-template-columns:1fr 1fr;gap:36px;align-items:end;
-}
-.addr .to{font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--ink-soft);font-weight:700}
-.addr p{margin-top:10px;color:var(--ink-soft);max-width:44ch}
-.acts{display:flex;flex-wrap:wrap;gap:12px}
-.btn{
-  display:inline-block;text-decoration:none;background:var(--ink);color:var(--paper);
-  font-family:'Big Shoulders Display',sans-serif;font-weight:700;font-size:19px;letter-spacing:.1em;
-  text-transform:uppercase;padding:12px 28px;transition:background .18s,transform .18s;
-}
-.btn:hover{background:var(--red);transform:translateY(-2px)}
-.btn.-o{background:transparent;border:2px solid var(--ink);color:var(--ink);padding:10px 26px}
-.btn.-o:hover{background:var(--ink);color:var(--paper)}
+/* The install command and its copy button. */
+.cmd { position: relative; display: inline-flex; align-items: center; gap: 12px; max-width: 100%; background: var(--code-bg); color: var(--code-ink); border-radius: var(--radius); padding: 10px 10px 10px 18px; text-align: left; }
+.cmd pre { margin: 0; min-width: 0; overflow-x: auto; font: 14.5px/1.5 var(--mono); white-space: pre; }
+.cmd pre span { color: var(--accent-line); user-select: none; }
+.copy { flex: none; display: inline-flex; align-items: center; gap: 6px; border: 0; border-radius: 7px; background: var(--accent); color: var(--accent-ink); font: 700 13px/1 var(--sans); padding: 10px 12px; cursor: pointer; min-height: 40px; }
+.copy:hover { filter: brightness(1.08); }
+.copy svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.copy .tick { display: none; }
+.copy.-done .clip { display: none; }
+.copy.-done .tick { display: block; }
+.then { margin: 12px 0 0; color: var(--ink-2); font-size: 15px; }
 
-/* ── postage meter strip ── */
-.meter{background:var(--ink);color:var(--paper)}
-.meter .wrap{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:0}
-.meter div{padding:24px 18px;border-left:1px dashed rgba(251,250,246,.28)}
-.meter div:first-child{border-left:none}
-.meter b{display:block;font-family:'Big Shoulders Display',sans-serif;font-weight:800;font-size:2.4rem;line-height:1;color:#8FB6E8}
-.meter span{display:block;margin-top:3px;font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;opacity:.66;font-weight:700}
+/* Hero: centered headline, then the dashboard at full width. */
+.hero { padding: 40px 0 32px; background: linear-gradient(to bottom, var(--panel), var(--bg)); }
+.hero .narrow { max-width: 960px; }
+.hero h1 { font-size: clamp(2.2rem, 5.6vw, 3.7rem); line-height: 1.06; margin: 12px 0 14px; }
+.hero .lede { font-size: 1.2rem; color: var(--ink-2); margin: 0 auto 22px; max-width: 60ch; }
+.stage { max-width: 1200px; margin: 0 auto; padding: 8px var(--gutter) 72px; }
 
-/* ── dispatch (steps as airmail envelopes) ── */
-.dispatch{padding:80px 0 40px}
-.sect{display:flex;align-items:flex-end;gap:16px;border-bottom:2px solid var(--ink);padding-bottom:10px}
-.sect h2{font-family:'Big Shoulders Display',sans-serif;font-weight:800;font-size:clamp(2rem,5vw,3.4rem);text-transform:uppercase;line-height:.95}
-.sect span{margin-left:auto;font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-soft);font-weight:700;padding-bottom:5px}
+/* Sections. */
+section.s { padding: 72px 0; }
+section.alt { background: var(--panel); border-block: 1px solid var(--rule); }
+.intro { max-width: 62ch; margin: 0; }
 
-.letters{display:grid;grid-template-columns:repeat(auto-fit,minmax(400px,1fr));gap:22px;margin-top:30px}
-.ltr{
-  background:var(--paper);border:2px solid var(--ink);position:relative;
-  padding:26px 26px 28px 40px;display:flex;flex-direction:column;
-  box-shadow:6px 7px 0 rgba(22,35,61,.12);transition:transform .2s,box-shadow .2s;
-}
-.ltr:hover{transform:translate(-3px,-3px);box-shadow:9px 10px 0 rgba(22,35,61,.16)}
-/* chevron spine */
-.ltr::before{
-  content:'';position:absolute;left:0;top:0;bottom:0;width:14px;
-  background:repeating-linear-gradient(-45deg,var(--red) 0 10px,var(--paper) 10px 20px,var(--blue) 20px 30px,var(--paper) 30px 40px);
-  border-right:1px solid var(--ink);
-}
-.ltr .mark{
-  position:absolute;right:20px;top:18px;width:56px;height:56px;border:2px solid var(--red);border-radius:50%;
-  display:grid;place-items:center;text-align:center;transform:rotate(-11deg);
-  font-size:8.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--red);font-weight:700;line-height:1.25;
-}
-.ltr h3{font-family:'Big Shoulders Display',sans-serif;font-weight:800;font-size:1.9rem;text-transform:uppercase;line-height:1;padding-right:70px}
-.ltr .flag{
-  display:inline-block;margin-left:9px;vertical-align:5px;font-family:'Karla',sans-serif;font-weight:700;
-  font-size:9px;letter-spacing:.11em;text-transform:uppercase;background:var(--blue);color:#fff;padding:3px 8px;
-}
-.ltr .flag.-r{background:var(--red)}
-.ltr code{display:block;font-family:ui-monospace,Menlo,monospace;font-size:11.5px;color:var(--blue);margin-top:7px;font-weight:600}
-.ltr p{margin-top:12px;color:var(--ink-soft);font-size:.94rem}
-.ltr .pen{font-family:'Caveat',cursive;font-size:1.2rem;color:var(--red);margin-top:10px;transform:rotate(-.8deg)}
-.ltr ul{list-style:none;margin-top:auto;padding-top:16px}
-.ltr li{font-size:.85rem;padding:6px 0 6px 18px;position:relative;border-top:1px dotted rgba(22,35,61,.24)}
-.ltr li::before{content:'✈';position:absolute;left:0;color:var(--blue);font-size:9px;top:9px}
+/* How a session goes: alternating screenshot and text rows. */
+.row { display: grid; grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); gap: 48px; align-items: center; margin-top: 56px; }
+.row.flip { grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); }
+.row.flip .shot { order: 2; }
+.row .k { font-family: var(--serif); font-size: 3rem; line-height: 1; color: var(--accent); }
+.row p { color: var(--ink-2); margin: 0; }
 
-/* ── two routes ── */
-.routes{background:var(--paper);border-top:2px solid var(--ink);border-bottom:2px solid var(--ink);padding:76px 0;margin-top:56px}
-.rc{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:28px}
-.rc div{border:2px solid var(--ink);padding:26px 24px}
-.rc .-a{background:rgba(211,58,56,.06)}
-.rc .-b{background:rgba(36,85,164,.06)}
-.rc h4{font-family:'Big Shoulders Display',sans-serif;font-weight:800;font-size:1.5rem;text-transform:uppercase}
-.rc ul{list-style:none;margin-top:14px}
-.rc li{padding:9px 0 9px 24px;position:relative;font-size:.95rem;border-top:1px solid rgba(22,35,61,.14);color:var(--ink-soft)}
-.rc li:first-child{border-top:none}
-.rc .-a li::before{content:'✕';position:absolute;left:0;color:var(--red);font-weight:700}
-.rc .-b li::before{content:'✓';position:absolute;left:0;color:var(--blue);font-weight:700}
+/* The pipeline: a vertical line of steps, then the utilities. */
+.line { list-style: none; margin: 36px 0 0; padding: 0; position: relative; }
+.line::before { content: ""; position: absolute; left: 11px; top: 10px; bottom: 26px; width: 2px; background: var(--rule-2); }
+.line li { position: relative; padding: 0 0 26px 48px; }
+.line li::before { content: ""; position: absolute; left: 4px; top: 7px; width: 16px; height: 16px; border-radius: 50%; background: var(--panel); border: 2px solid var(--accent); }
+.line li.opt::before { border-style: dashed; }
+.line h3 { display: inline; font-family: var(--sans); font-size: 1.15rem; font-weight: 650; }
+.chip { display: inline-block; margin-left: 8px; vertical-align: 2px; font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-2); border: 1px solid var(--rule-2); border-radius: 999px; padding: 2px 8px; }
+.line p { margin: 4px 0 0; color: var(--ink-2); max-width: 64ch; }
+.line code { color: var(--ink-2); font-size: 13px; }
+.utils { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 12px; }
+.util { border: 1px solid var(--rule-2); border-radius: var(--radius); background: var(--bg); padding: 16px; }
+.util h3 { font-family: var(--sans); font-size: 1rem; font-weight: 650; margin: 8px 0 4px; }
+.util p { margin: 0; font-size: 14.5px; color: var(--ink-2); }
+.util .chip { margin-left: 0; }
 
-/* ── regulations ── */
-.regs{padding:78px 0}
-.rg{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:0;margin-top:26px;border-top:2px solid var(--ink);border-left:2px solid var(--ink)}
-.rg div{padding:22px 20px;border-right:2px solid var(--ink);border-bottom:2px solid var(--ink);background:var(--paper)}
-.rg b{font-size:10px;letter-spacing:.15em;text-transform:uppercase;color:var(--red);font-weight:700}
-.rg p{margin-top:9px;font-size:.94rem;color:var(--ink-soft)}
-.rg p strong{color:var(--ink);font-weight:700}
+/* What the page gives you: a two-column list. */
+.feat { columns: 2; column-gap: 56px; margin-top: 36px; }
+.feat div { break-inside: avoid; padding: 18px 0; border-top: 1px solid var(--rule); }
+.feat h3 { font-size: 1.2rem; margin: 0 0 4px; }
+.feat p { margin: 0; color: var(--ink-2); }
+.feat-shots { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; margin-top: 40px; }
+.feat-shots figure { margin: 0; }
+.feat-shots figcaption { margin-top: 10px; font-size: 14.5px; color: var(--ink-2); }
 
-/* ── install ── */
-.install{padding:0 0 82px}
-.termwrap{position:relative;margin-top:20px}
-.term{background:var(--ink);color:#D6E2F2;padding:24px 76px 24px 24px;
-  font-family:ui-monospace,Menlo,monospace;font-size:12.5px;line-height:2.05;overflow-x:auto}
-.term .c{color:#7488A6}.term .k{color:#F0B06A}.term .p{color:#8FB6E8}
-.copy{
-  position:absolute;top:12px;right:12px;display:grid;place-items:center;gap:0;
-  width:40px;height:40px;background:transparent;border:1.5px solid rgba(214,226,242,.35);
-  color:#8FB6E8;cursor:pointer;transition:background .18s,color .18s,border-color .18s;
+/* The rules: numbered. */
+ol.rules { list-style: none; padding: 0; margin: 32px 0 0; counter-reset: r; }
+ol.rules li { counter-increment: r; display: grid; grid-template-columns: 3.5rem minmax(0, 1fr); gap: 16px; padding: 22px 0; border-top: 1px solid var(--rule); }
+ol.rules li::before { content: counter(r); font-family: var(--serif); font-size: 2.6rem; line-height: 1; color: var(--accent); }
+ol.rules h3 { font-family: var(--sans); font-size: 1.15rem; font-weight: 650; margin: 0 0 4px; }
+ol.rules p { margin: 0; color: var(--ink-2); }
+
+/* Prefer the terminal? */
+.term-band { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 48px; align-items: center; }
+pre.term { background: var(--code-bg); color: var(--code-ink); border-radius: var(--radius); padding: 22px; margin: 0; font: 14.5px/1.8 var(--mono); overflow-x: auto; }
+
+/* Closing install and footer. */
+.close { text-align: center; }
+.close .muted { margin: 0 0 22px; }
+footer { border-top: 1px solid var(--rule); padding: 26px 0 32px; color: var(--ink-2); font-size: 14.5px; }
+footer .wrap { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px 22px; }
+footer a { color: inherit; }
+
+@media (max-width: 820px) {
+  .row, .row.flip, .term-band, .feat-shots { grid-template-columns: minmax(0, 1fr); gap: 20px; }
+  .row.flip .shot { order: 0; }
+  .row { margin-top: 44px; }
+  .feat { columns: 1; }
+  .utils { grid-template-columns: minmax(0, 1fr); }
+  section.s { padding: 56px 0; }
 }
-.copy:hover{background:#8FB6E8;color:var(--ink);border-color:#8FB6E8}
-.copy svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
-.copy .tick{display:none}
-.copy.-done{border-color:#8FB6E8;color:#8FB6E8;background:transparent}
-.copy.-done .clip{display:none}
-.copy.-done .tick{display:block}
-.copy-flash{
-  position:absolute;top:20px;right:62px;font-size:9.5px;letter-spacing:.16em;
-  text-transform:uppercase;font-weight:700;color:#8FB6E8;opacity:0;transition:opacity .18s;pointer-events:none;
+@media (max-width: 600px) {
+  :root { --gutter: 16px; }
+  body { font-size: 16px; }
+  .hero { padding-top: 40px; }
+  .cmd { display: flex; }
+  .cmd pre { font-size: 13px; }
+  ol.rules li { grid-template-columns: 2.5rem minmax(0, 1fr); }
 }
-.copy-flash.-on{opacity:1}
-
-/* ── close ── */
-.close{background:var(--ink);color:var(--paper);text-align:center;padding:92px 0}
-.close h2{font-family:'Big Shoulders Display',sans-serif;font-weight:800;font-size:clamp(2.4rem,7vw,5.2rem);text-transform:uppercase;line-height:.9}
-.close h2 em{font-style:normal;color:#8FB6E8}
-.close .hand{display:block;margin-top:14px;font-size:1.5rem;color:#8FB6E8}
-.close .btn{margin-top:24px;background:var(--red)}
-.close .btn:hover{background:var(--paper);color:var(--ink)}
-footer{background:var(--ink);color:rgba(251,250,246,.5);padding:0 0 28px;font-size:10px;letter-spacing:.15em;text-transform:uppercase;font-weight:700}
-footer .wrap{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;border-top:1px dashed rgba(251,250,246,.24);padding-top:20px}
-
-@media(max-width:700px){:root{--fr:8px}}
-@media(max-width:820px){
-  .wrap{padding:0 20px}
-  .env{padding:26px 22px 28px}
-  .addr{grid-template-columns:1fr;gap:22px}
-  .rc{grid-template-columns:1fr}
-  .letters{grid-template-columns:1fr}
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  * { transition: none !important; animation: none !important; }
 }
-@media(prefers-reduced-motion:reduce){*{transition:none!important}html{scroll-behavior:auto}}
 </style>
 </head>
 <body>
+<a class="skip" href="#main">Skip to the content</a>
+<main id="main">
 
-<div class="frame-t" aria-hidden="true"></div>
-<div class="frame-b" aria-hidden="true"></div>
-<div class="frame-l" aria-hidden="true"></div>
-<div class="frame-r" aria-hidden="true"></div>
-
-<header class="top">
-  <div class="wrap">
-    <span class="brand">PLAN<i>2</i>CODE</span>
-    <span class="avion">Par Avion &middot; Via Air Mail</span>
-  </div>
-</header>
-
-<section class="hero">
-  <div class="wrap">
-    <div class="env">
-      <div class="pstamp"><div class="in"><b>2.0</b><span>Plan2Code</span><span>Postage</span></div></div>
-      <svg class="cancel" viewBox="0 0 210 110" aria-hidden="true">
-        <circle class="ring" cx="52" cy="55" r="42"/>
-        <text x="52" y="46" text-anchor="middle" font-size="10">SHIPPED</text>
-        <text x="52" y="62" text-anchor="middle" font-size="13" font-weight="700">2026</text>
-        <text x="52" y="76" text-anchor="middle" font-size="8">NO REWORK</text>
-        <path class="wv" d="M98,36 C118,28 138,44 158,36 C178,28 194,40 208,34"/>
-        <path class="wv" d="M98,50 C118,42 138,58 158,50 C178,42 194,54 208,48"/>
-        <path class="wv" d="M98,64 C118,56 138,72 158,64 C178,56 194,68 208,62"/>
-        <path class="wv" d="M98,78 C118,70 138,86 158,78 C178,70 194,82 208,76"/>
-      </svg>
-
-      <p class="kick">Spec-driven workflow for AI coding agents</p>
-      <h1>Send the plan.<br>The build <em>follows</em>.</h1>
-
-      <div class="addr">
-        <div>
-          <p class="to">Addressed to</p>
-          <p>Anyone who has watched an AI agent confidently build the wrong thing. You approve a plan, it becomes phase documents in your repo, and the agent works to those documents one phase at a time.</p>
-        </div>
-        <div class="acts">
-          <a class="btn" href="#installation">Install Plan2Code</a>
-          <a class="btn -o" href="#dispatch">Read the letters</a>
-        </div>
-      </div>
+<section class="hero" aria-labelledby="hero-title">
+  <div class="narrow">
+    <svg class="planny" viewBox="0 0 22 30" aria-hidden="true" focusable="false">
+      <rect class="foot" x="5.7" y="27.1" width="3.6" height="1.7" rx="0.85"/>
+      <rect class="foot" x="12.7" y="27.1" width="3.6" height="1.7" rx="0.85"/>
+      <rect class="shell" x="3" y="7" width="16" height="20" rx="3.2"/>
+      <path class="eye" d="M11 10.95 L11.79 12.91 L13.9 13.06 L12.28 14.42 L12.79 16.47 L11 15.35 L9.21 16.47 L9.72 14.42 L8.1 13.06 L10.21 12.91 Z"/>
+      <path class="smile" d="M8.3 18.4 Q11 21 13.7 18.4"/>
+      <g class="arm"><path d="M3 16.5 L1.1 13.7"/><circle cx="1.1" cy="13.7" r="0.85"/></g>
+      <g class="arm"><path d="M19 16.5 L20.9 13.7"/><circle cx="20.9" cy="13.7" r="0.85"/></g>
+    </svg>
+    <h1 id="hero-title">Plan and build with your AI agent, on one page.</h1>
+    <p class="lede">Plan2Code asks the questions, drafts the plan and builds it one phase at a time. You answer and approve in your browser, and the specs land in your repo.</p>
+    <div class="cmd">
+      <pre id="install-cmd"><span aria-hidden="true">$ </span>npx --allow-git=all git+https://github.com/jparkerweb/plan2code.git</pre>
+      <button class="copy" type="button" aria-label="Copy the install command">
+        <svg class="clip" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        <svg class="tick" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12.5 9.5 18 20 6.5"/></svg>
+        <span class="label">Copy</span>
+      </button>
     </div>
+    <p class="then">then run <code>plan2code</code> in any project.</p>
   </div>
 </section>
 
-<div class="meter">
-  <div class="wrap">
-    <div><b>90%</b><span>Confidence gate</span></div>
-    <div><b>11</b><span>Review dimensions</span></div>
-    <div><b>1</b><span>Chat per phase</span></div>
-    <div><b>0</b><span>Context pollution</span></div>
-  </div>
+<div class="stage">
+  <picture class="shot big">
+    <source media="(prefers-color-scheme: dark)" srcset="screenshots/dashboard-dark.webp">
+    <img src="screenshots/dashboard-light.webp" width="2560" height="1600" alt="The Plan2Code dashboard for a task API that is half built: a Set up card, then the steps in order, with the Implement card marked Suggested and reading Phase 3 of 4 is next.">
+  </picture>
 </div>
 
-<section class="dispatch wrap" id="dispatch">
-  <div class="sect"><h2>Six written letters</h2><span>Two optional</span></div>
-
-  <div class="letters">
-
-    <article class="ltr">
-      <span class="mark">Opt<br>00</span>
-      <h3>Pathfinder<span class="flag">New in 2.0</span></h3>
-      <code>/plan2code-0-pathfinder</code>
-      <p>For an idea that arrives too foggy to plan. It charts the idea as a map of decision questions and clears them one at a time until nothing is left to decide.</p>
-      <p class="pen">it never answers its own questions — that's the point</p>
-      <ul>
-        <li>One decision per file, cleared one at a time</li>
-        <li>Ask for a brief — plain-English minutes, any time</li>
-        <li>Research questions fan out to parallel agents</li>
-        <li>Clears at ≥18/25 on four confidence dimensions</li>
-        <li>Hands a hot plan draft to Step 1</li>
-      </ul>
-    </article>
-
-    <article class="ltr">
-      <span class="mark">Req<br>01</span>
-      <h3>Plan</h3>
-      <code>/plan2code-1-plan</code>
-      <p>A real back-and-forth about what gets built. Requirements pulled apart, your codebase actually read, the stack confirmed rather than assumed.</p>
-      <ul>
-        <li>Functional and non-functional requirements</li>
-        <li>Integration points read from real source</li>
-        <li>Tech stack confirmed by explicit approval</li>
-        <li>Will not finalize below 90% confidence</li>
-      </ul>
-    </article>
-
-    <article class="ltr">
-      <span class="mark">Req<br>02</span>
-      <h3>Document</h3>
-      <code>/plan2code-2-document</code>
-      <p>The plan stops being a conversation and becomes files — an overview plus one self-contained phase document per phase, cut into one-story-point tasks.</p>
-      <ul>
-        <li>overview.md and Phase 1…N.md land in your repo</li>
-        <li>One-point tasks with real checkboxes</li>
-        <li>Parallel groups marked for concurrent agents</li>
-        <li>Each phase readable with no prior context</li>
-      </ul>
-    </article>
-
-    <article class="ltr">
-      <span class="mark">Req<br>03</span>
-      <h3>Implement</h3>
-      <code>/plan2code-3-implement</code>
-      <p>Build to the drawing, one phase per conversation. Planning context bleeding into implementation is where most agent drift starts.</p>
-      <p class="pen">reply “approved” — nothing advances on a guess</p>
-      <ul>
-        <li>Fresh conversation for every phase</li>
-        <li>Specs followed exactly as documented</li>
-        <li>Self-review against the spec before close</li>
-        <li>[/] claims prevent parallel-agent collisions</li>
-      </ul>
-    </article>
-
-    <article class="ltr">
-      <span class="mark">Opt<br>✳</span>
-      <h3>Review<span class="flag -r">Second opinion</span></h3>
-      <code>/plan2code-review</code>
-      <p>An independent senior engineer with fresh eyes and no attachment to the code that just shipped. It reads every changed file completely and reports only what it can prove — file, line, and a concrete fix.</p>
-      <ul>
-        <li>Scope adapts: files, branch diff, or subsystem</li>
-        <li>All 11 dimensions reported, clean ones justified</li>
-        <li>Ranked Critical / Warning / Suggestion</li>
-        <li>Read-only until you reply H, A, or S 1,3,5</li>
-      </ul>
-    </article>
-
-    <article class="ltr">
-      <span class="mark">Req<br>04</span>
-      <h3>Finalize</h3>
-      <code>/plan2code-4-finalize</code>
-      <p>Close it out. Every task audited against the spec it came from, a summary of what was built, docs checked for drift, and the folder filed away.</p>
-      <ul>
-        <li>Audit for tasks quietly left open</li>
-        <li>Summary of what was built and changed</li>
-        <li>README and other docs reconciled</li>
-        <li>Specs archived to specs--completed/</li>
-      </ul>
-    </article>
-
-  </div>
-</section>
-
-<section class="routes">
+<section class="s" id="session" aria-labelledby="session-title">
   <div class="wrap">
-    <div class="sect"><h2>Two routes</h2><span>Same destination</span></div>
-    <div class="rc">
-      <div class="-a">
-        <h4>Sent without an address</h4>
-        <ul>
-          <li>Coding starts, requirements arrive later</li>
-          <li>Design problems surface mid-build</li>
-          <li>Constant backtracking and rework</li>
-          <li>Context bloated with abandoned attempts</li>
-          <li>No way to prove requirements were met</li>
-          <li>Tokens burned on trial and error</li>
-        </ul>
+    <h2 id="session-title">How a session goes</h2>
+    <p class="intro muted">One page, from the first card to the sign-off. Your agent does the work in the terminal; you do your part here.</p>
+
+    <div class="row">
+      <picture class="shot">
+        <source media="(prefers-color-scheme: dark)" srcset="screenshots/question-dark.webp">
+        <img src="screenshots/question-light.webp" width="2560" height="1600" loading="lazy" alt="A Plan question card, How tasks are paged, with three options, the first marked Suggested, each with its trade-off underneath.">
+      </picture>
+      <div>
+        <span class="k" aria-hidden="true">1</span>
+        <h3>Pick a card, answer on the page</h3>
+        <p>Pick a step on the dashboard and it starts right there. Questions arrive a few at a time, each option with its trade-off written under it.</p>
       </div>
-      <div class="-b">
-        <h4>Sent with a plan attached</h4>
-        <ul>
-          <li>The plan is approved before any code</li>
-          <li>Problems caught while they are still cheap</li>
-          <li>Implementation follows the drawing</li>
-          <li>Clean context, one phase at a time</li>
-          <li>Checkboxes prove what is done</li>
-          <li>Tokens spent building the agreed thing</li>
-        </ul>
+    </div>
+
+    <div class="row flip">
+      <picture class="shot">
+        <source media="(prefers-color-scheme: dark)" srcset="screenshots/build-dark.webp">
+        <img src="screenshots/build-light.webp" width="2560" height="1600" loading="lazy" alt="A phase of a task API being built: 5 of 11 done on the progress bar, and the phase's task list with the first five ticked.">
+      </picture>
+      <div>
+        <span class="k" aria-hidden="true">2</span>
+        <h3>Watch it build</h3>
+        <p>Tasks tick off as they land, and the line beside Planny says what is being worked on right now.</p>
+      </div>
+    </div>
+
+    <div class="row">
+      <picture class="shot">
+        <source media="(prefers-color-scheme: dark)" srcset="screenshots/signoff-dark.webp">
+        <img src="screenshots/signoff-light.webp" width="2560" height="1600" loading="lazy" alt="The Approve this phase card, with a button to read the completion report and three choices: Review the code first, Approve this phase, and I want changes.">
+      </picture>
+      <div>
+        <span class="k" aria-hidden="true">3</span>
+        <h3>Sign off</h3>
+        <p>Read the completion report, then approve the phase or ask for changes. In Implement, you can also have the code reviewed first.</p>
       </div>
     </div>
   </div>
 </section>
 
-<section class="regs wrap">
-  <div class="sect"><h2>Postal regulations</h2><span>Four · non-negotiable</span></div>
-  <div class="rg">
-    <div><b>Reg 01</b><p>A <strong>fresh conversation</strong> for each step, and each implementation phase.</p></div>
-    <div><b>Reg 02</b><p>No code until the plan hits <strong>90% confidence</strong>. The gate does not negotiate.</p></div>
-    <div><b>Reg 03</b><p><strong>Checkboxes are the state</strong>, not the chat. Any session resumes cold.</p></div>
-    <div><b>Reg 04</b><p>Reply <strong>approved</strong> to close a phase. Nothing advances on a guess.</p></div>
-  </div>
-</section>
-
-<section class="install wrap" id="installation">
-  <div class="sect"><h2>Installation</h2><span>Node 18+ · network required · re-run to update</span></div>
-  <div class="termwrap">
-    <pre class="term" id="install-cmd"><span class="p">$</span> npx <span class="k">--allow-git=all</span> git+https://github.com/jparkerweb/plan2code.git</pre>
-    <span class="copy-flash" id="copy-flash" aria-hidden="true">Copied</span>
-    <button class="copy" id="copy-btn" type="button" aria-label="Copy install command to clipboard" title="Copy install command">
-      <svg class="clip" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-      <svg class="tick" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12.5 9.5 18 20 6.5"/></svg>
-    </button>
-  </div>
-</section>
-
-<section class="close">
+<section class="s alt" id="pipeline" aria-labelledby="pipeline-title">
   <div class="wrap">
-    <h2>Post it once.<br><em>Then go outside.</em></h2>
-    <span class="hand">free, MIT, twenty seconds to install</span>
-    <br><a class="btn" href="https://github.com/jparkerweb/plan2code">Plan2Code Git Repo</a>
+    <h2 id="pipeline-title">The pipeline</h2>
+    <p class="intro muted">Every step is a card on the dashboard. Each one writes files the next one reads, so any session can pick up cold.</p>
+    <ol class="line">
+      <li class="opt"><h3>Pathfinder</h3><span class="chip">Step 0 · optional</span><p>A foggy idea becomes a clear list of decisions, settled one question at a time. <code>/plan2code-0-pathfinder</code></p></li>
+      <li><h3>Plan</h3><span class="chip">Step 1</span><p>Requirements, technical design and your approval: the shape of what gets built. <code>/plan2code-1-plan</code></p></li>
+      <li><h3>Document</h3><span class="chip">Step 2</span><p>The plan becomes a checklist of small tasks, grouped into phases, that a developer can just do. <code>/plan2code-2-document</code></p></li>
+      <li><h3>Implement</h3><span class="chip">Step 3 · once per phase</span><p>Builds the next phase, task by task, with a report and your sign-off at the end. <strong>Implement + review</strong> adds a careful review of the changes before the sign-off. <code>/plan2code-3-implement</code></p></li>
+      <li><h3>Finalize</h3><span class="chip">Step 4</span><p>Checks the work, writes the summary, files the specs away and suggests the commit message. <code>/plan2code-4-finalize</code></p></li>
+    </ol>
+    <div class="utils">
+      <div class="util"><span class="chip">Any time</span><h3>Quick task</h3><p>Too small for the full process? A quick plan, then it just builds it.</p></div>
+      <div class="util"><span class="chip">Any time</span><h3>Review</h3><p>A second opinion on the changes. Problems ranked, and you pick what gets fixed.</p></div>
+      <div class="util"><span class="chip">Any time</span><h3>Handoff</h3><p>Pack this conversation into a document a fresh session can pick up cold.</p></div>
+    </div>
   </div>
 </section>
 
-<footer><div class="wrap"><span>Plan2Code v2.0.0</span><span>MIT</span><span>plan2code.jparkerweb.com</span></div></footer>
+<section class="s" id="features" aria-labelledby="features-title">
+  <div class="wrap">
+    <h2 id="features-title">What the page gives you</h2>
+    <p class="intro muted">The same workflow as the terminal, with more room to think.</p>
+    <div class="feat">
+      <div><h3>Trade-offs in plain view</h3><p>Questions arrive a few at a time, each option with its trade-off written under it, so you choose rather than guess.</p></div>
+      <div><h3>Review before you approve</h3><p>Review the code first, on the sign-off card, reviews exactly the files the phase changed. You tick which findings get fixed, then approve.</p></div>
+      <div><h3>The Ask tab</h3><p>A chat beside the cards for anything you want to know. It is answered at the agent's next check-in and never holds up your answers.</p></div>
+      <div><h3>Attachments on notes</h3><p>Paste a screenshot or attach a document to a note on any question, and show instead of describe.</p></div>
+      <div><h3>Workspace folders</h3><p>Add a shared library or a design folder as read-only context, and point at it by its <code>@name</code>.</p></div>
+      <div><h3>Session meter</h3><p>A ring in the top bar turns from green to red as a session grows long, and suggests when a fresh one would serve you better.</p></div>
+      <div><h3>Runs on your machine</h3><p>A small program Plan2Code starts for you serves the page on <code>127.0.0.1</code>. No account, no dependencies, and nothing leaves your computer.</p></div>
+    </div>
+    <div class="feat-shots">
+      <figure>
+        <picture class="shot">
+          <source media="(prefers-color-scheme: dark)" srcset="screenshots/ask-dark.webp">
+          <img src="screenshots/ask-light.webp" width="2560" height="1600" loading="lazy" alt="The Ask tab: the question Where are tasks paged? and Plan2Code's answer naming the file.">
+        </picture>
+        <figcaption>The Ask tab, answered between tasks.</figcaption>
+      </figure>
+      <figure>
+        <picture class="shot">
+          <source media="(prefers-color-scheme: dark)" srcset="screenshots/finish-dark.webp">
+          <img src="screenshots/finish-light.webp" width="2560" height="1600" loading="lazy" alt="The finished screen after a phase: what happened, the next command with a Copy button, and a Back to the dashboard button.">
+        </picture>
+        <figcaption>Every ending says what to run next.</figcaption>
+      </figure>
+    </div>
+  </div>
+</section>
+
+<section class="s alt" id="rules" aria-labelledby="rules-title">
+  <div class="wrap">
+    <h2 id="rules-title">The rules</h2>
+    <p class="intro muted">Four rules do most of the work.</p>
+    <ol class="rules">
+      <li><div><h3>Keep each session short.</h3><p>Chaining a couple of small skills on the dashboard is fine. Start a fresh console session when the session meter turns red, and always before a big planning or build step. The specs on disk carry everything between sessions.</p></div></li>
+      <li><div><h3>No code until the plan hits 90% confidence.</h3><p>Step 1 will not finalize below the threshold. Under it, the agent keeps asking and keeps reading your code, and writes every assumption down where you can argue with it.</p></div></li>
+      <li><div><h3>Checkboxes are the state, not the chat.</h3><p>Progress lives in the spec files. Any agent, any session, resumes cold from them.</p></div></li>
+      <li><div><h3>Approve a phase to close it.</h3><p>On the sign-off card, or by replying <code>approved</code> in the terminal. Nothing advances on a guess about what you meant.</p></div></li>
+    </ol>
+  </div>
+</section>
+
+<section class="s" id="terminal" aria-labelledby="terminal-title">
+  <div class="wrap term-band">
+    <div>
+      <h2 id="terminal-title">Prefer the terminal?</h2>
+      <p class="muted">Every skill also runs right in the terminal. Each one asks at the start whether you want the page or the terminal; add <code>--web</code> to skip the question and go straight to the page.</p>
+      <p><a href="https://github.com/jparkerweb/plan2code#prefer-the-terminal">See every command in the README</a></p>
+    </div>
+    <pre class="term">/plan2code
+/plan2code-1-plan --web plan a REST API for tasks</pre>
+  </div>
+</section>
+
+<section class="s alt close" id="install" aria-labelledby="install-title">
+  <div class="narrow">
+    <h2 id="install-title">Install</h2>
+    <p class="muted">Needs Node.js 18 or later. Run it again any time to update.</p>
+    <div class="cmd">
+      <pre><span aria-hidden="true">$ </span>npx --allow-git=all git+https://github.com/jparkerweb/plan2code.git</pre>
+      <button class="copy" type="button" aria-label="Copy the install command">
+        <svg class="clip" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        <svg class="tick" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12.5 9.5 18 20 6.5"/></svg>
+        <span class="label">Copy</span>
+      </button>
+    </div>
+    <p class="then">then run <code>plan2code</code> in any project.</p>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    <a href="https://github.com/jparkerweb/plan2code">Plan2Code on GitHub</a>
+    <span>MIT license</span>
+    <span>Version 2.4.1</span>
+  </div>
+</footer>
 
 <script>
-(function(){
+(function () {
   var CMD = 'npx --allow-git=all git+https://github.com/jparkerweb/plan2code.git';
-  var btn = document.getElementById('copy-btn');
-  var flash = document.getElementById('copy-flash');
-  var timer;
-  function done(){
-    btn.classList.add('-done');
-    flash.classList.add('-on');
-    clearTimeout(timer);
-    timer = setTimeout(function(){
-      btn.classList.remove('-done');
-      flash.classList.remove('-on');
-    }, 1800);
-  }
-  function fallback(){
-    var ta = document.createElement('textarea');
-    ta.value = CMD;
-    ta.setAttribute('readonly','');
-    ta.style.position = 'fixed';
-    ta.style.opacity = '0';
-    document.body.appendChild(ta);
-    ta.select();
-    try { document.execCommand('copy'); done(); } catch(e) {}
-    document.body.removeChild(ta);
-  }
-  btn.addEventListener('click', function(){
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(CMD).then(done, fallback);
-    } else {
-      fallback();
+  function wire(btn) {
+    var label = btn.querySelector('.label');
+    var timer;
+    function done() {
+      btn.classList.add('-done');
+      label.textContent = 'Copied';
+      clearTimeout(timer);
+      timer = setTimeout(function () {
+        btn.classList.remove('-done');
+        label.textContent = 'Copy';
+      }, 1800);
     }
-  });
+    function fallback() {
+      var ta = document.createElement('textarea');
+      ta.value = CMD;
+      ta.setAttribute('readonly', '');
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand('copy'); done(); } catch (e) {}
+      document.body.removeChild(ta);
+    }
+    btn.addEventListener('click', function () {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(CMD).then(done, fallback);
+      } else {
+        fallback();
+      }
+    });
+  }
+  var buttons = document.querySelectorAll('.copy');
+  for (var i = 0; i < buttons.length; i++) wire(buttons[i]);
 })();
 </script>
 </body>

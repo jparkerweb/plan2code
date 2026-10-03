@@ -16,6 +16,13 @@ npm run build:skills
 # Character-count validation + skills/ drift check
 npm test
 
+# Refresh the web console screenshots in docs/screenshots/ (needs a local Chrome or Edge).
+# Rerun after any change a person would see on the console page, and open every image
+# before committing: right screen, both themes, no username or home path in frame.
+npm i --no-save puppeteer-core                         # once; never added to package.json
+node scripts/capture-screenshots.mjs                   # every screen
+node scripts/capture-screenshots.mjs --only dashboard  # one screen
+
 # Plan2Code Loop
 cd plan2code-loop && npm install   # First time setup
 cd plan2code-loop && npm run build # Build the CLI

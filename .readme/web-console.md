@@ -1,8 +1,32 @@
 # The Web Console
 
-A local page in your browser for working through a Plan2Code session instead
-of answering everything in the terminal. Every skill has one — and `/plan2code`
-is the front door: it opens a dashboard of all of them, and whichever you pick
+## New here? A two-minute tour
+
+**Launch it.** After installing, run `plan2code` in your project folder. It starts Claude Code or
+Devin on the dashboard, and the page opens in your browser. In any other agent, run `/plan2code`
+inside it, or add `--web` to a skill (`/plan2code-1-plan --web plan a lunch voting app`).
+
+**What you see.**
+
+- **The dashboard** has a card for every skill. The one it suggests next is flagged. Pick a card and
+  that skill starts on the same page.
+- **Questions** come laid out with the trade-offs next to each option and a progress bar on top.
+  Nothing is sent until you press **Send**, and half-typed answers survive a closed tab.
+- **Tabs** show the document taking shape, the build progress and, always last, **Ask**, where you can
+  put a quick question to the running agent.
+- **Sign-off** asks for your approval at the end of a phase. You can run the code review first from
+  the same card.
+
+**Where next.** [walkthrough.md](walkthrough.md) follows one feature from the first idea to the
+last phase. The rest of this file is the reference: every card, button and rule. Prefer the terminal?
+Run the same commands without `--web` and answer there; the files under `specs/` are identical.
+
+---
+
+The web console is the main way to use Plan2Code: a local page in your browser
+where you pick a step, answer its questions, watch the documents and the build
+take shape, and approve the work. Every skill runs on it, and `/plan2code` is
+the front door: it opens a dashboard of all of them, and whichever you pick
 starts right there on the same page.
 
 It exists because the hardest part of adopting Plan2Code is not the engineering.
@@ -10,12 +34,34 @@ It is getting the person who actually knows what the product should do into the
 room. Pathfinder and Planning are the two steps where that person matters most,
 and they were the two steps that looked like a wall of terminal text.
 
+## Quick start
+
+1. Install Plan2Code (see [Install and start](../README.md#install-and-start) in the README).
+2. Run `plan2code` in your project, or `/plan2code` inside your agent. The dashboard opens in your
+   browser.
+3. Pick a card. The same page becomes that step's session.
+4. Answer on the page and press **Send to Plan2Code**.
+
+Starting a step by its own command instead? Add `--web` (for example `/plan2code-1-plan --web`) and
+it opens on the page without asking.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="../docs/screenshots/dashboard-dark.webp">
+  <img src="../docs/screenshots/dashboard-light.webp" alt="The Plan2Code dashboard: a Set up card, then the steps in order as cards, one of them marked Suggested.">
+</picture>
+
 ---
 
 ## What you get
 
 - **Every question laid out**, with the trade-offs written next to each option
   instead of scrolling past in your history.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="../docs/screenshots/question-dark.webp">
+  <img src="../docs/screenshots/question-light.webp" alt="A Plan question card, How tasks are paged, with three options, the first marked Suggested, each with its trade-off underneath.">
+</picture>
+
 - **A progress bar.** "4 of 9 settled" answers the first thing anybody asks.
 - **Previous and Next under each card**, walking the questions still waiting, so
   the list on the left is somewhere to jump from rather than the only way round.
@@ -48,12 +94,12 @@ and they were the two steps that looked like a wall of terminal text.
   the starter templates on an idea card and the starter questions on the Ask
   tab put the most useful ones first. It changes the order, never the
   questions a skill asks (see *Your role* below).
-- **Light or dark, and a highlight color you pick.** The swatch button at the
+- **Light or dark, and a highlight color you pick.** The gear button at the
   top right opens *User Preferences*: your role first, then these. It follows
   your system by default; set it to one or the other if
   you would rather it stayed put. Remembered on your machine, so it carries
   over to every session.
-- **A card as wide as you want it.** The same swatch panel has a *Card width*
+- **A card as wide as you want it.** The same panel has a *Card width*
   setting — **Narrow** (720px), **Comfortable** (880px, the default) or
   **Wide** (1080px) — that widens the question card, the Previous / Next pager
   and the document tabs together. The dashboard keeps its own layout, and on a
@@ -99,7 +145,7 @@ and they were the two steps that looked like a wall of terminal text.
   on those stops, though they may still need your attention, and when the agent
   has been working and silent for about 30 seconds, Planny's line asks
   *"Still working, or waiting on an approval in your terminal?"* — well before
-  the three-minute "has not checked in" message.
+  the two-minute *"Still working on it"* line.
 - **The tab icon says whose turn it is.** A bar along the bottom of Planny's
   favicon follows the line beside him: dashed amber while Plan2Code is
   working or picking up your answers, solid green when it is your move, solid
@@ -112,6 +158,22 @@ and they were the two steps that looked like a wall of terminal text.
   the one for where you are. It is part of the page itself, so it still reads
   fully when the page has lost its program.
 - Works offline, on your own machine only. No account, no install, no network.
+
+An Implement phase ends on a sign-off card: read the completion report, then
+review the code first, approve the phase, or ask for changes. Implement +
+review has already reviewed the code, so its card has no review button.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="../docs/screenshots/signoff-dark.webp">
+  <img src="../docs/screenshots/signoff-light.webp" alt="The Approve this phase card, with a button to read the completion report and three choices: Review the code first, Approve this phase, and I want changes.">
+</picture>
+
+The **Ask** tab is a chat beside the cards, for a quick question at any point.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="../docs/screenshots/ask-dark.webp">
+  <img src="../docs/screenshots/ask-light.webp" alt="The Ask tab: the question Where are tasks paged? and Plan2Code's answer naming the file.">
+</picture>
 
 ## Using it
 
@@ -136,9 +198,11 @@ the top and the menu rises in. (Browsers stay silent until your first click,
 so the snoring usually starts with it; with *Sounds* off, the same wake-up
 plays without audio.)
 It plays only on a fresh `/plan2code`: not on a reload, not when you come
-back with **Back to the dashboard**, and not after a launch. Once he is
-stirring, another click or any key skips straight to the menu, and with reduced
-motion switched on in your system settings you get the awake dashboard at once.
+back with **Back to the dashboard**, and not after a launch. To skip it — from
+the asleep screen or mid-animation — press the muted **Skip** button at the
+bottom right or hit Escape; either goes straight to the dashboard, silent.
+With reduced motion switched on in your system settings you get the awake
+dashboard at once.
 
 Or start any step directly, as usual:
 
@@ -189,14 +253,14 @@ Sharing the link with a colleague on another machine will not work, and that is
 deliberate. It is bound to your own machine only. To work through a session
 together, share your screen.
 
-For the same reason, the browser page is only offered when the agent is running
+For the same reason, the web console is only offered when the agent is running
 on your own machine. An agent working in a cloud VM, a container or over SSH
 stays in the terminal: a `127.0.0.1` link from somewhere else is a link you
 cannot open.
 
 ### Your role
 
-The first control in *User Preferences* (the swatch button) is **Role**:
+The first control in *User Preferences* (the gear button) is **Role**:
 Engineer, Product lead / PM, Architect / tech lead, Designer (UX), QA / test
 engineer, Engineering manager, or **Not set / none of these**, the default.
 It only reorders things: the starter templates on an idea card and the starter
@@ -281,8 +345,9 @@ new console session starts with just the folder you started in.
 
 A small ring pill in the top bar — **Session: fresh** (green), **Session:
 getting long** (yellow), **Session: time for a fresh start** (red) — counts the
-work this console session has done. Click it for the count and a **What is
-this?** link to Help.
+work this console session has done. Click it for the count, a list of each
+step that added points and what it added (for example *Quick task started +1*),
+and a **What is this?** link to Help.
 
 Each skill run adds points (`WEIGHTS` in `public/meter.js`): Plan, Document,
 Review, Init and Init update 2; Revise plan, Quick task and Finalize 1; a
@@ -362,7 +427,9 @@ nothing is saved yet (early in a plan) the confirm says what would be lost.
 
 ### Attachments in notes and questions
 
-Any note, and any quick question on the Ask tab, can carry files, three ways:
+Any note, any quick question on the Ask tab, and the fresh-idea box on
+Pathfinder, Plan and Quick Task can carry files (on a card they travel with your
+answer as a note attachment), three ways:
 
 - the **+ Attach file** button beside the box (pick one or more files),
 - **paste** a screenshot or a copied file straight into the box,
@@ -438,9 +505,9 @@ send never holds up a question.
 - **Edits need your approval.** Ask for a change to a file and the agent
   replies with a summary and the list of files it would touch, with
   **Approve** and **Decline**. Nothing changes until you approve. Afterwards
-  it lists what changed, with line counts, and nothing is committed. It never
-  edits the running skill's own files under `specs/`, and a chat message never
-  answers a card or moves the workflow on: that is what the cards are for.
+  it lists what changed, with line counts, and nothing is committed unless you
+  spell out a commit in your message. It never edits the running skill's own
+  files under `specs/`, and a chat message never answers a card or moves the workflow on: that is what the cards are for.
 - **When you cannot send.** Two different lines explain it: "That's 10
   questions in this conversation" means start a new one, and "No agent is
   connected right now" means the session has finished or the agent has gone
@@ -462,6 +529,19 @@ chimes once (if sounds are on).
 
 Every control is a real button, radio or checkbox, so screen readers and
 keyboard-only navigation work.
+
+---
+
+## Troubleshooting
+
+| What happened | What to do |
+| --- | --- |
+| You closed the tab | Open the link again. Everything is where you left it. After about two minutes with no tab open the link stops working: ask the agent to resume the session for a new one. |
+| The link stopped working | Tell the agent. It restarts the session and gives you a new link. |
+| Your agent session died while you were mid-answer | Press Send anyway. Your answers are written to disk and are never discarded, including when the session is restarted. The next session picks them up. |
+| The page says Plan2Code is not running | It has not checked in for a few minutes. Look at the terminal: it may have finished its turn, hit an error, or be waiting on you there. If it is idle, type `continue` in the terminal and it picks your answers up. Answering here still works, and what you send is held for it. |
+| You are not sure anything is connected | The **?** at the top right opens Help. Its *What this page is* tab says what keeps the page alive and whether both halves are talking at that moment, and *When something looks stuck* covers what to check. |
+| You would rather use the terminal after all | Say so. Nothing is lost. |
 
 ---
 
@@ -539,17 +619,6 @@ Your `looks.json` and the `console-dir` pointer are never touched, and neither
 is the session being opened. Nothing of value goes with them: the page is
 never the record, `specs/` in your project is.
 
-### Recovering from things going wrong
-
-| What happened | What to do |
-| --- | --- |
-| You closed the tab | Open the link again. Everything is where you left it. |
-| The link stopped working | Tell the agent. It restarts the session and gives you a new link. |
-| Your agent session died while you were mid-answer | Press Send anyway. Your answers are written to disk and are never discarded, including when the session is restarted. The next session picks them up. |
-| The page says Plan2Code is not running | It has not checked in for a few minutes. Look at the terminal: it may have finished its turn, hit an error, or be waiting on you there. Answering here still works, and what you send is held for it. |
-| You are not sure anything is connected | The **?** at the top right opens Help. Its *What this page is* tab says what keeps the page alive and whether both halves are talking at that moment, and *When something looks stuck* covers what to check. |
-| You would rather use the terminal after all | Say so. Nothing is lost. |
-
 ---
 
 ## Security
@@ -572,7 +641,9 @@ this:
   file name you sent, and live only under the session's own `uploads/`. The
   server checks the bytes: a JPEG header for images (4 MB cap), and for
   documents a `%PDF-` header or strict UTF-8 with no NUL byte (10 MB cap).
-  Documents are never served back to the browser. A send may only point at
+  Documents are served back only under a fixed type (`application/pdf`, or
+  `text/plain` for text and code) with `nosniff` (and `sandbox` on text), so
+  the Sent box can link them. A send may only point at
   uploads inside that session's `uploads/`, images in `images` and documents
   in `files`.
 
@@ -585,7 +656,7 @@ origin.
 | Route | Does |
 | --- | --- |
 | `POST /upload` | Raw bytes, original name in `x-p2c-name`. `Content-Type: image/jpeg`: writes `uploads/<uuid>.jpg` and answers `{ ok, id, kind: "image", path, url, name, size }`; not a JPEG → 415, over 4 MB → 413. `Content-Type: application/octet-stream`: a document, its extension from the name's allow-listed extension; writes `uploads/<uuid>.<ext>` and answers `{ ok, id, kind: "file", path, name, size }` with no `url`; not an allowed extension or contents that do not match → 415 `type`, over 10 MB → 413. Any other content type → 415. |
-| `GET /uploads/<id>.jpg` | Serves an uploaded image (for the thumbnail after a reload). Only `<uuid>.jpg` names under `uploads/`; documents are never served (404). |
+| `GET /uploads/<id>.<ext>` | Serves an upload: an image as `image/jpeg` (the thumbnail after a reload), a document as `application/pdf` or `text/plain; charset=utf-8` with `nosniff` and, on text, `Content-Security-Policy: sandbox`. Only `<uuid>.<allowed ext>` names under `uploads/`; anything else is 404. |
 | `DELETE /uploads/<id>.<ext>` | Deletes an image or document removed before sending. 204, or 404 if it is not there. |
 | `POST /submit` | The Send. A note may carry `images` and `files`, each `[{ path, name }]`: at most 5 together, images in `images` and documents in `files`, every path inside this session's `uploads/`, otherwise 400. |
 | `POST /chat` | A Quick question `{ text, about?, images?, files?, conversation }`, or `{ reset: true, conversation }` for New conversation. Appended to the session's `chat.ndjson`. 400 `too-long` (over 4,000 characters), `image`, `file` or `bad`; 409 `offline`, `stale` or `limit` (10 per conversation). Never refused because a card send is still uncollected. |
@@ -607,6 +678,7 @@ origin.
 | Agent contract | `src/web-console/console.md`, plus `building.md` for the build steps |
 | Tests | `node --test scripts/test-web-console.mjs`, also run by `npm test` |
 | Start-up benchmark | `node scripts/bench-web-console.mjs` (needs `puppeteer-core` and a local Chrome or Edge for the paint columns; `--browser-delay 900` models a real browser launch, `--roundtrip` times Send→agent and post→page) |
+| Screenshots | `node scripts/capture-screenshots.mjs` (needs `puppeteer-core` and a local Chrome or Edge) |
 | Dependencies | none at runtime. `marked` 15.0.7 (MIT) is vendored for its lexer only |
 
 Edit `src/` only. `skills/` is a committed build artifact: regenerate it with
@@ -661,7 +733,7 @@ Two environment variables help when the start is what you are looking at:
 | `PLAN2CODE_CONSOLE_TRACE=1` | `open` prints a timeline of its steps to stderr (roots found, server spawned, port bound, browser sent, state written, server listening). |
 | `PLAN2CODE_BROWSER` | The command that opens the link instead of the system default, run through the shell with the link appended, e.g. `PLAN2CODE_BROWSER='firefox --new-tab'`. |
 
-Every `console.mjs` invocation also writes its own directory to
+Every `console.mjs open` also writes its own directory to
 `$PLAN2CODE_CONSOLE_HOME/console-dir` (or `~/.plan2code/console/console-dir`
 when the override is unset): it is how an agent finds the console on a later
 session without searching the skill install dirs.
@@ -670,3 +742,28 @@ The vendored file is `src/web-console/public/vendor/marked.esm.js`,
 sha256 `7a7d9a521ac9384e0c3a075120a7c486cbd0c3c32cc5601bbb79a23e97403690`.
 Only `marked.lexer()` is used; the rendering is ours, in `public/render.js`, and
 builds DOM nodes rather than HTML so nothing needs sanitising.
+
+### Refreshing the screenshots
+
+The docs and the landing page show the console through the images in
+`docs/screenshots/`, one light and one dark WebP per screen. Rerun the capture
+after any change a person would see on the page: a new layout, a renamed
+button, a different colour.
+
+```bash
+npm i --no-save puppeteer-core                           # once; never added to package.json
+node scripts/capture-screenshots.mjs                     # every screen
+node scripts/capture-screenshots.mjs --only dashboard    # one screen
+```
+
+Each screen is staged with no agent, from the payloads in
+`scripts/screenshots/` (its README names the file behind each screen), in a
+throwaway sample project and console home that the script removes when it is
+done. It prints each file's size and warns over 300 KB.
+
+Open every image before you commit it: the right screen, both themes, nothing
+cut off, and no username, home path or real project name anywhere on it.
+
+## Models in User Preferences
+
+The `plan2code` launcher's model menu comes from `models.json`, which every install overwrites with the authors' curated list. **User Preferences → Models** (Claude and Devin tabs) lets you add a model that came out before Plan2Code was updated; additions are kept in `~/.plan2code/models.json`, and **Reset to default** removes them. Restart `plan2code` to see a change. You can always run `plan2code --model <id>`, or switch model inside your agent before running a skill. Devin ids ending `-xhigh` or `-max` are refused.

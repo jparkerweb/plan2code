@@ -549,6 +549,12 @@ function computeExpectedSkills() {
 
     for (const reference of prompt.additionalReferences || []) {
       const absSource = path.join(SRC_DIR, reference.source);
+      if (reference.source === 'web-console') {
+        expected.set(
+          `${SKILLS_DIR_NAME}/${skillName}/references/${reference.target}/version.json`,
+          fs.readFileSync(path.join(__dirname, 'version.json'))
+        );
+      }
       try {
         if (fs.statSync(absSource).isDirectory()) {
           for (const relPath of listFilesRecursive(absSource)) {
@@ -884,14 +890,14 @@ async function install() {
     return 1;
   }
 
+  // Point at the dashboard first: the `plan2code` command when it installed, the skill otherwise.
+  const dashboardWhere = launcherFailed ? 'Open the dashboard in your agent:' : 'Open the dashboard from any project:';
+  const dashboardCommand = launcherFailed ? '/plan2code' : LAUNCHER_COMMAND;
   console.log(`${COLORS.GREEN}    ╭───╮${COLORS.RESET}   ${COLORS.BRIGHT}All done! Happy coding!${COLORS.RESET}`);
-  console.log(`${COLORS.GREEN}   ╲│ ${COLORS.CYAN}★${COLORS.GREEN} │╱${COLORS.RESET}  ${COLORS.BRIGHT}If this is your first time using Plan2Code, read the docs here:${COLORS.RESET}`);
-  console.log(`${COLORS.GREEN}    │ ${COLORS.BRIGHT}◡${COLORS.GREEN} │${COLORS.RESET}   ${COLORS.BRIGHT}https://github.com/jparkerweb/plan2code${COLORS.RESET}`);
-  console.log(`${COLORS.GREEN}    ╰┬─┬╯${COLORS.RESET}`);
+  console.log(`${COLORS.GREEN}   ╲│ ${COLORS.CYAN}★${COLORS.GREEN} │╱${COLORS.RESET}  ${COLORS.BRIGHT}${dashboardWhere}${COLORS.RESET}`);
+  console.log(`${COLORS.GREEN}    │ ${COLORS.BRIGHT}◡${COLORS.GREEN} │${COLORS.RESET}   ${COLORS.BRIGHT}${COLORS.CYAN}${dashboardCommand}${COLORS.RESET}`);
+  console.log(`${COLORS.GREEN}    ╰┬─┬╯${COLORS.RESET}   ${COLORS.DIM}Docs:${COLORS.RESET} ${COLORS.BRIGHT}https://github.com/jparkerweb/plan2code${COLORS.RESET}`);
   console.log('');
-  if (!launcherFailed) {
-    console.log(`${COLORS.DIM}  Open the dashboard in Claude Code or Devin from any project:${COLORS.RESET} ${COLORS.CYAN}${LAUNCHER_COMMAND}${COLORS.RESET}`);
-  }
   console.log(`${COLORS.DIM}  Update later with:${COLORS.RESET} ${COLORS.CYAN}npx skills update -g${COLORS.RESET}`);
   console.log('');
 
@@ -2131,6 +2137,8 @@ function uninstallPlan2CodeBot() {
 const LAUNCHER_COMMAND = 'plan2code';
 const LAUNCHER_MARKER = 'plan2code-launcher';
 const LAUNCHER_SRC = path.join(__dirname, 'src', 'launcher', 'plan2code.js');
+const MODELS_SRC = path.join(__dirname, 'src', 'launcher', 'models.json');
+const MODELS_DEST = path.join(os.homedir(), '.plan2code', 'bin', 'models.json');
 const LAUNCHER_DEST = path.join(os.homedir(), '.plan2code', 'bin', 'plan2code.js');
 const LAUNCHER_STATE = path.join(os.homedir(), '.plan2code', 'launcher.json');
 const LAUNCHER_PICK_FOLDER_FLAG = '--pick-folder';
@@ -2180,28 +2188,60 @@ function getLauncherBinCandidates() {
 }
 
 /**
- * Shims written into the bin directory — the same trio npm creates for a global bin on
+ * Shims written into the bin directory: the same trio npm creates for a global bin on
  * Windows (sh for Git Bash, .cmd for cmd.exe, .ps1 for PowerShell), just the sh one elsewhere.
+ * Each runs the Node that ran the installer (`nodePath`, an absolute path) rather than `node`
+ * from PATH, because a desktop entry starts without the shell profile that puts an nvm Node
+ * on PATH, and `nvm use` can swap that Node later. If the path is gone (Node was upgraded or
+ * removed), the shim falls back to `node` on PATH, as npm's own shims do.
  */
-function getLauncherShims(binDir) {
+function getLauncherShims(binDir, nodePath = process.execPath) {
   const base = path.join(binDir, LAUNCHER_COMMAND);
-  const posixDest = LAUNCHER_DEST.replace(/\\/g, '/');
-  // The sh shim also runs from the desktop shortcut, where a version manager's (nvm, fnm)
-  // PATH is not set up, so it prefers the Node that ran the installer and falls back to
-  // `node` on PATH if that one is gone (a version switched or removed since).
-  const posixNode = process.execPath.replace(/\\/g, '/');
+  const shQuote = (value) => `'${value.replace(/'/g, "'\\''")}'`;
+  const psQuote = (value) => `'${value.replace(/'/g, "''")}'`;
+  const cmdEscape = (value) => value.replace(/%/g, '%%');
+  const posixNode = shQuote(nodePath.replace(/\\/g, '/'));
+  const posixDest = shQuote(LAUNCHER_DEST.replace(/\\/g, '/'));
   const shims = [
     {
       file: base,
-      content: `#!/bin/sh\n# ${LAUNCHER_MARKER}\nNODE="${posixNode}"\n[ -x "$NODE" ] || NODE=node\nexec "$NODE" "${posixDest}" "$@"\n`,
+      content: [
+        '#!/bin/sh',
+        `# ${LAUNCHER_MARKER}`,
+        `NODE=${posixNode}`,
+        `if [ -x "$NODE" ]; then exec "$NODE" ${posixDest} "$@"; else exec node ${posixDest} "$@"; fi`,
+        '',
+      ].join('\n'),
     },
   ];
   if (process.platform === 'win32') {
+    const cmdNode = cmdEscape(nodePath);
+    const cmdDest = cmdEscape(LAUNCHER_DEST);
     shims.push(
-      { file: `${base}.cmd`, content: `@echo off\r\nrem ${LAUNCHER_MARKER}\r\nnode "${LAUNCHER_DEST}" %*\r\n` },
+      {
+        file: `${base}.cmd`,
+        content: [
+          '@echo off',
+          `rem ${LAUNCHER_MARKER}`,
+          `if not exist "${cmdNode}" goto p2c_path_node`,
+          `"${cmdNode}" "${cmdDest}" %*`,
+          'exit /b %ERRORLEVEL%',
+          ':p2c_path_node',
+          `node "${cmdDest}" %*`,
+          '',
+        ].join('\r\n'),
+      },
       {
         file: `${base}.ps1`,
-        content: `#!/usr/bin/env pwsh\r\n# ${LAUNCHER_MARKER}\r\n& node '${LAUNCHER_DEST.replace(/'/g, "''")}' $args\r\nexit $LASTEXITCODE\r\n`,
+        content: [
+          '#!/usr/bin/env pwsh',
+          `# ${LAUNCHER_MARKER}`,
+          `$node = ${psQuote(nodePath)}`,
+          "if (-not (Test-Path -LiteralPath $node -PathType Leaf)) { $node = 'node' }",
+          `& $node ${psQuote(LAUNCHER_DEST)} $args`,
+          'exit $LASTEXITCODE',
+          '',
+        ].join('\r\n'),
       }
     );
   }
@@ -2397,6 +2437,9 @@ async function installLauncher({ quiet = false } = {}) {
   try {
     fs.mkdirSync(path.dirname(LAUNCHER_DEST), { recursive: true });
     fs.copyFileSync(LAUNCHER_SRC, LAUNCHER_DEST);
+    // The curated model menu is the authors' source of truth, so it is overwritten on every install.
+    // Models the user added in User Preferences live in ~/.plan2code/models.json and are untouched.
+    fs.copyFileSync(MODELS_SRC, MODELS_DEST);
     if (process.platform !== 'win32') fs.chmodSync(LAUNCHER_DEST, 0o755);
     console.log(`  ${COLORS.GREEN}${SYMBOLS.SUCCESS}${COLORS.RESET} Installed: ${LAUNCHER_DEST}`);
   } catch (error) {
@@ -2467,7 +2510,7 @@ function uninstallLauncher() {
   }
   const shortcut = getShortcutFile();
   if (isOurShortcut(shortcut)) remove(shortcut);
-  for (const file of [LAUNCHER_DEST, SHORTCUT_ICON_DEST, SHORTCUT_PNG_DEST, LAUNCHER_STATE]) {
+  for (const file of [LAUNCHER_DEST, MODELS_DEST, SHORTCUT_ICON_DEST, SHORTCUT_PNG_DEST, LAUNCHER_STATE]) {
     if (fs.existsSync(file)) remove(file);
   }
   try {

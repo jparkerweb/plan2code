@@ -24,10 +24,13 @@ export const DONE_AT_MS = 5000;
 // sound. `onGlide({ instant })` is the page's cue to bring the menu in: called
 // at the glide, or with `instant: true` if the run ends before one (a skip).
 // From the nudge on, clicks and keys are swallowed, so the run always plays
-// out to the end with its sound; only `signal` aborting (the page leaving the
-// dashboard, dormant or mid-run) cuts it short, as a skip. Under reduced
-// motion nothing is shown and it resolves at once.
-export function playWake({ stage, bot, target, stir, onStart, onGlide, signal }) {
+// out to the end with its sound; only `skipEl` (the muted Skip button, or the
+// Escape key, for anyone without a mouse) and `signal` aborting (the page
+// leaving the dashboard, dormant or mid-run) cut it short, as a skip.
+// `onSkip` is the page's cue to silence the intro sounds
+// once a skip lands. Under reduced motion nothing is shown and it resolves at
+// once.
+export function playWake({ stage, bot, target, skipEl, stir, onStart, onGlide, onSkip, signal }) {
   return new Promise((resolve) => {
     if (matchMedia("(prefers-reduced-motion: reduce)").matches || signal?.aborted) {
       resolve({ skipped: false });
@@ -41,8 +44,18 @@ export function playWake({ stage, bot, target, stir, onStart, onGlide, signal })
       if (e.target === bot && e.propertyName === "transform") end(false);
     };
     const skip = () => end(true);
-    // Browser and OS shortcuts (reload, tab switch, devtools) still go through.
+    // The Skip button's events must reach it: the document handlers below run
+    // in the capture phase, ahead of the button's own click.
+    const hitsSkip = (e) => Boolean(skipEl && e.target instanceof Node && skipEl.contains(e.target));
+    const onSkipClick = () => end(true);
+    // Browser and OS shortcuts (reload, tab switch, devtools) still go through;
+    // Escape skips, so the run can be left by keyboard too.
     const swallow = (e) => {
+      if (hitsSkip(e)) return;
+      if (e.key === "Escape") {
+        onSkipClick();
+        return;
+      }
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       e.preventDefault();
       e.stopPropagation();
@@ -79,6 +92,8 @@ export function playWake({ stage, bot, target, stir, onStart, onGlide, signal })
       document.removeEventListener("keydown", swallow, true);
       bot.removeEventListener("transitionend", onGlideEnd);
       signal?.removeEventListener("abort", skip);
+      skipEl?.removeEventListener("click", onSkipClick);
+      if (skipped) onSkip?.();
       stage.hidden = true;
       stage.classList.remove("dormant", "stirring", "booting", "gliding");
       bot.style.removeProperty("--wake-glide");
@@ -89,6 +104,11 @@ export function playWake({ stage, bot, target, stir, onStart, onGlide, signal })
     // The waking click is the only input the run takes: from here on every
     // click and key is swallowed until it ends.
     function start(e) {
+      if (hitsSkip(e)) return;
+      if (e.key === "Escape") {
+        onSkipClick();
+        return;
+      }
       e.preventDefault();
       document.removeEventListener("pointerdown", start, true);
       document.removeEventListener("keydown", start, true);
@@ -110,6 +130,7 @@ export function playWake({ stage, bot, target, stir, onStart, onGlide, signal })
 
     document.addEventListener("pointerdown", start, true);
     document.addEventListener("keydown", start, true);
+    skipEl?.addEventListener("click", onSkipClick);
     signal?.addEventListener("abort", skip);
     stage.hidden = false;
     stage.classList.add("dormant");
