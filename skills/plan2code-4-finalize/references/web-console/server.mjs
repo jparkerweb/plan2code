@@ -21,8 +21,11 @@ import {
   CHAT_CURSOR_FILE,
   CHAT_FILE,
   LEDGER_FILE,
+  HERE,
   LOOKS_FILE,
   PUBLIC_DIR,
+  SHIPPED_MODELS_FILE,
+  USER_MODELS_FILE,
   WORKSPACE_FILE,
   appendChat,
   appendEvent,
@@ -44,6 +47,7 @@ import {
   readWorkspace,
   remoteWarning,
   typedCount,
+  withStateLock,
   writeJsonAtomic,
   writeWorkspace,
 } from "./lib.mjs";
@@ -84,6 +88,12 @@ if (typeof args.token !== "string" || !args.token) {
 }
 const TOKEN = args.token;
 const PROJECT = args.project || process.cwd();
+// The checkout this session runs in, from `open`. PROJECT is the folder that
+// holds .git, which for a linked worktree is the MAIN checkout: the wrong
+// folder to seed the workspace with or resolve a typed path against. A fresh
+// `open` starts this server before it writes the state, so until the state is
+// there this is the only place the worktree can come from.
+const WORKTREE = typeof args.worktree === "string" ? args.worktree : "";
 const IDLE_MS = Number(args["idle-ms"] || 30 * 60 * 1000);
 const MAX_LIFE_MS = Number(args["max-life-ms"] || 4 * 60 * 60 * 1000);
 
@@ -96,12 +106,12 @@ const CURSOR_PATH = path.join(DIR, CHAT_CURSOR_FILE);
 // Images and documents attached to notes and quick questions. Only ever named
 // by the server (a UUID, plus `jpg` or an extension from DOC_TYPES), and only
 // ever resolved inside this directory: the client's file name is a label.
-// Only images are served back; a document is written, read by the agent from
-// disk, and deleted, never handed to a browser.
+// Images are served back as JPEG. A document is served under a fixed type
+// (PDF, or text/plain for everything else, sandboxed and never sniffed), so
+// the page can link it without ever letting a browser run it.
 const UPLOADS_DIR = path.join(DIR, "uploads");
 const UPLOAD_EXTS = ["jpg", ...Object.keys(DOC_TYPES)];
 const EXT_ALT = UPLOAD_EXTS.join("|");
-const UPLOAD_ROUTE = /^\/uploads\/([0-9a-f-]{36})\.jpg$/;
 const UPLOAD_ANY_ROUTE = new RegExp(`^/uploads/([0-9a-f-]{36})\\.(${EXT_ALT})$`);
 const UPLOAD_NAME = new RegExp(`^[0-9a-f-]{36}\\.(${EXT_ALT})$`);
 
@@ -216,7 +226,7 @@ const SERVABLE = new Set([
 // live in it). A stat says whether anything moved; refreshing through
 // checkState also means a request that sees a new state first still counts
 // it as a new revision and tells every other tab. Callers must not mutate
-// what this returns -- /submit clones before it edits.
+// what this returns -- /submit edits a fresh read of its own, under the lock.
 function readState() {
   checkState();
   return stateNow;
@@ -302,6 +312,10 @@ const foldPath = (p) => (FOLD_CASE ? p.toLowerCase() : p);
 
 let workspaceSeen = { stamp: null, ws: null };
 
+// The folder the session runs in: the state's own once it is written, else
+// the one `open` passed on the command line. Null while neither is known.
+const sessionWorktree = () => stateNow?.worktree || WORKTREE || null;
+
 // The session's workspace, created with just the original folder when absent.
 function workspaceNow() {
   const stamp = fileStamp(WORKSPACE_PATH);
@@ -311,10 +325,15 @@ function workspaceNow() {
     workspaceSeen = { stamp, ws };
     return ws;
   }
-  const fresh = initialWorkspace(stateNow?.worktree || PROJECT);
+  const root = sessionWorktree();
+  const fresh = { ...initialWorkspace(root || PROJECT), remote: remoteWarning().remote || "" };
   // There but unreadable for now (a scanner's lock): never written over, and
   // never cached, so the next call reads it again.
   if (stamp) return workspaceSeen.ws || fresh;
+  // Nor saved while the session's folder is unknown: PROJECT is only a guess
+  // (the main checkout, for a linked worktree), and the file, once written,
+  // is what every later read trusts.
+  if (!root) return fresh;
   try {
     saveWorkspace(fresh);
   } catch {}
@@ -405,7 +424,7 @@ function nextFolderId(ws) {
 function addFolder(ws, body) {
   const raw = typeof body.path === "string" ? body.path.trim().replace(/^(["'])(.*)\1$/, "$2").trim() : "";
   const input = raw.replace(/^~(?=$|[\\/])/, () => os.homedir());
-  const resolved = raw ? path.resolve(stateNow?.worktree || PROJECT, input) : "";
+  const resolved = raw ? path.resolve(sessionWorktree() || PROJECT, input) : "";
   if (!resolved || !isFolder(resolved)) return [400, { reason: "not-a-folder" }];
   const same = ws.folders.find((f) => foldPath(path.resolve(f.path)) === foldPath(resolved));
   if (same) return [400, { reason: "duplicate", name: same.name }];
@@ -455,7 +474,7 @@ function removeFolder(ws, body) {
 // Where the picker opens: beside the last folder added, else the original.
 function pickerStart(ws) {
   const added = ws.folders.filter((f) => !f.original);
-  return added.length ? path.dirname(added[added.length - 1].path) : ws.folders[0]?.path || PROJECT;
+  return added.length ? path.dirname(added[added.length - 1].path) : ws.folders[0]?.path || sessionWorktree() || PROJECT;
 }
 
 // One picker at a time. Spawned, never spawnSync: the dialog can sit open for
@@ -464,6 +483,8 @@ function pickerStart(ws) {
 let pickerBusy = false;
 
 function bootWorkspace() {
+  // Nothing to check yet: the first read once the state is written makes it.
+  if (!sessionWorktree() && !fileStamp(WORKSPACE_PATH)) return;
   const ws = workspaceNow();
   const remote = remoteWarning().remote || "";
   if ((ws.remote || "") !== remote) {
@@ -541,9 +562,14 @@ function recordSubmitted(state, actions) {
   if (!Array.isArray(state.items)) return;
   const at = nowIso();
   for (const action of actions) {
-    if (!action || typeof action !== "object" || action.type === "comment") continue;
+    if (!action || typeof action !== "object") continue;
     const item = state.items.find((i) => i && i.id === action.i);
     if (!item) continue;
+    if (action.type === "comment") {
+      const pick = (list) => (Array.isArray(list) ? list.map(({ path, name }) => ({ path, name })) : []);
+      item.sentNote = { at, text: String(action.text || ""), images: pick(action.images), files: pick(action.files) };
+      continue;
+    }
     const { i, type, ...rest } = action;
     // JSON.parse makes "__proto__" an own property, and it would then be
     // written back into state.json and re-read forever.
@@ -577,12 +603,13 @@ function timingSafeEq(a, b) {
   return crypto.timingSafeEqual(ab, bb);
 }
 
-// Named per port. Cookies ignore the port, so every console on 127.0.0.1 shares
-// one jar: under a single name, opening a second session overwrote the first
-// one's cookie and locked its tab out.
-function cookieName(port = PORT) {
-  return `p2c_console_${port}`;
-}
+// One cookie per port. Browsers scope cookies by host and ignore the port, so
+// with one shared name every session on 127.0.0.1 wrote over the one before
+// it, and the first session's tab went on sending the second one's token and
+// got nothing but 403s. The port is what makes a session's origin its own, and
+// a resumed server on a new port is reached again only through its /s/ link,
+// which sets the cookie under the new name.
+const cookieName = () => `p2c_console_${PORT}`;
 
 function cookieToken(req) {
   const raw = req.headers.cookie || "";
@@ -621,6 +648,47 @@ function originOk(req, port) {
 
 function touch() {
   lastContact = Date.now();
+}
+
+const MODEL_CLIS = ["claude", "devin"];
+const MODEL_ID = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,99}$/;
+// Devin's XHigh and Max efforts are never offered, curated or added.
+const MODEL_EFFORT_BLOCKED = /-(xhigh|max)$/i;
+
+/**
+ * The user's added models: { claude: [{id,label}], devin: [...] }. Returns { models } or
+ * { error }. Blank rows are dropped; ids are trimmed and made unique per CLI; a label
+ * defaults to the id. Nothing else in the body survives.
+ */
+function cleanModels(input) {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return { error: "models must be an object" };
+  const models = {};
+  for (const cli of MODEL_CLIS) {
+    const list = input[cli] == null ? [] : input[cli];
+    if (!Array.isArray(list) || list.length > 50) return { error: `${cli} must be a list of at most 50 models` };
+    const seen = new Set();
+    models[cli] = [];
+    for (const row of list) {
+      const id = String((row && row.id) ?? "").trim();
+      if (!id) continue;
+      if (!MODEL_ID.test(id)) return { error: `"${id}" is not a valid model id` };
+      if (MODEL_EFFORT_BLOCKED.test(id)) return { error: `"${id}": only Low, Medium and High efforts are allowed` };
+      if (seen.has(id)) continue;
+      seen.add(id);
+      const label = String((row && row.label) ?? "").trim().slice(0, 80) || id;
+      models[cli].push({ id, label });
+    }
+  }
+  return { models };
+}
+
+function shippedModels() {
+  const file = readJson(SHIPPED_MODELS_FILE, null) || {};
+  const out = {};
+  for (const cli of MODEL_CLIS) {
+    out[cli] = (Array.isArray(file[cli]) ? file[cli] : []).filter((m) => m && typeof m.id === "string");
+  }
+  return out;
 }
 
 /**
@@ -668,8 +736,8 @@ function asset(rel) {
 
 // The saved highlight color, painted from the very first frame. The page's
 // script owns the colors once it runs (applyLooks clears the attribute these
-// hang off), but until then the only way to avoid flashing the default rust
-// at someone who picked ocean is a stylesheet rule the server can switch on
+// hang off), but until then the only way to avoid flashing the default ocean
+// at someone who picked violet is a stylesheet rule the server can switch on
 // with an attribute: the CSP forbids inline styles, and the colors live in
 // palette.js, so they are generated from there rather than copied into CSS.
 function accentCss() {
@@ -742,7 +810,10 @@ function renderIndex() {
   // `$'` in the inserted text as patterns, and titles and state are free text.
   return indexTemplate
     .replace('<html lang="en">', () => `<html lang="en"${htmlAttrs}>`)
-    .replace("<title>Plan2Code Console</title>", () => `<title>${escHtml(title)} · Plan2Code</title>`)
+    .replace(
+      "<title>Plan2Code Console</title>",
+      () => `<title>${escHtml(title)} · #${escHtml(String(SID).slice(-6))} · Plan2Code</title>`
+    )
     .replace('<h1 id="title">Plan2Code Console</h1>', () => `<h1 id="title">${escHtml(title)}</h1>`)
     .replace(
       '<span class="badge" id="badge">Pathfinder</span>',
@@ -821,7 +892,7 @@ const server = http.createServer((req, res) => {
       302,
       baseHeaders({
         location: "/",
-        "set-cookie": `${cookieName(port)}=${TOKEN}; HttpOnly; SameSite=Strict; Path=/`,
+        "set-cookie": `${cookieName()}=${TOKEN}; HttpOnly; SameSite=Strict; Path=/`,
       })
     );
     return res.end();
@@ -885,6 +956,14 @@ const server = http.createServer((req, res) => {
       )
       .catch(() => json(res, 404, { error: "no overview" }));
     return;
+  }
+
+  if (pathname === "/version" && req.method === "GET") {
+    for (const file of [path.join(HERE, "version.json"), path.join(HERE, "..", "..", "version.json")]) {
+      const version = readJson(file, {}).version;
+      if (typeof version === "string" && version) return json(res, 200, { version });
+    }
+    return json(res, 404, { error: "no version" });
   }
 
   if (pathname === "/state" && req.method === "GET") {
@@ -957,7 +1036,10 @@ const server = http.createServer((req, res) => {
     if (!originOk(req, port)) return json(res, 403, { error: "bad origin" });
     return readBody(req, (err, body) => {
       if (err) return json(res, 400, { error: "body must be JSON" });
-      const looks = cleanLooks(body && body.looks);
+      // `set` carries only the keys one tab changed, merged onto what is on
+      // disk, so a tab holding stale settings cannot undo another tab's change.
+      const set = body && body.set !== undefined ? cleanLooks(body.set) : null;
+      const looks = set ? { ...(readJson(LOOKS_FILE, null)?.looks || {}), ...set } : cleanLooks(body && body.looks);
       if (!looks) return json(res, 400, { error: "looks must be an object of simple settings" });
       try {
         ensureDir(path.dirname(LOOKS_FILE));
@@ -966,6 +1048,29 @@ const server = http.createServer((req, res) => {
         return json(res, 500, { error: String(e.message) });
       }
       return json(res, 200, { ok: true });
+    });
+  }
+
+  // The launcher's model menu: what ships (read-only here) and what the user added.
+  if (pathname === "/models" && req.method === "GET") {
+    const saved = readJson(USER_MODELS_FILE, null) || {};
+    const { models } = cleanModels(saved);
+    return json(res, 200, { shipped: shippedModels(), user: models || { claude: [], devin: [] } });
+  }
+
+  if (pathname === "/models" && req.method === "POST") {
+    if (!originOk(req, port)) return json(res, 403, { error: "bad origin" });
+    return readBody(req, (err, body) => {
+      if (err) return json(res, 400, { error: "body must be JSON" });
+      const { models, error } = cleanModels(body && body.models);
+      if (error) return json(res, 400, { error });
+      try {
+        ensureDir(path.dirname(USER_MODELS_FILE));
+        writeJsonAtomic(USER_MODELS_FILE, models);
+      } catch (e) {
+        return json(res, 500, { error: String(e.message) });
+      }
+      return json(res, 200, { ok: true, user: models });
     });
   }
 
@@ -1008,8 +1113,8 @@ const server = http.createServer((req, res) => {
     }
 
     // A document: the extension comes from the allow-list via its name, and
-    // the bytes have to agree with it. No `url` comes back, because a
-    // document is never served.
+    // the bytes have to agree with it. No `url` comes back: the page builds
+    // the link from the path, as it does for the delete route.
     if (contentType.startsWith("application/octet-stream")) {
       // The extension comes from the whole name: the label is cut at 200
       // characters, and a long name would lose it there.
@@ -1033,11 +1138,11 @@ const server = http.createServer((req, res) => {
 
   // Matched on the raw request line as well as the parsed path: URL parsing
   // folds `..` segments away, and nothing that needed folding is an upload.
-  // GET serves images only; DELETE takes documents too.
+  // GET and DELETE take images and documents alike.
   if (pathname.startsWith("/uploads/") || req.url.startsWith("/uploads/")) {
     if (req.method === "GET") {
-      const m = UPLOAD_ROUTE.exec(req.url);
-      const file = m && m[0] === pathname ? uploadPath(m[1]) : null;
+      const m = UPLOAD_ANY_ROUTE.exec(req.url);
+      const file = m && m[0] === pathname ? uploadPath(m[1], m[2]) : null;
       if (!file) return json(res, 404, { error: "not found" });
       let buf;
       try {
@@ -1045,7 +1150,15 @@ const server = http.createServer((req, res) => {
       } catch {
         return json(res, 404, { error: "not found" });
       }
-      return send(res, 200, buf, "image/jpeg", { "cache-control": "private, max-age=86400" });
+      const ext = m[2];
+      if (ext === "jpg") return send(res, 200, buf, "image/jpeg", { "cache-control": "private, max-age=86400" });
+      const pdf = DOC_TYPES[ext].kind === "pdf";
+      // A sandboxed PDF cannot load the browser's viewer, and one needs no
+      // sandbox: text is the only thing a browser might otherwise run.
+      return send(res, 200, buf, pdf ? "application/pdf" : "text/plain; charset=utf-8", {
+        ...(pdf ? {} : { "content-security-policy": "sandbox" }),
+        "cache-control": "private, max-age=86400",
+      });
     }
     if (req.method === "DELETE") {
       if (!originOk(req, port)) return json(res, 403, { error: "bad origin" });
@@ -1079,16 +1192,6 @@ const server = http.createServer((req, res) => {
       if (badAttachments) {
         return json(res, 400, { error: "a comment carries at most 5 attachments, each uploaded to this session" });
       }
-      // One send is one agent turn. Writing over a result the agent has not
-      // collected yet destroys everything in it, and the loss is silent: two
-      // tabs, or one impatient second press, and an approval disappears.
-      if (pendingResult()) {
-        return json(res, 409, {
-          error: "pending",
-          message:
-            "Your last answers have not been picked up yet. Nothing is lost, they are still on their way.",
-        });
-      }
       const result = {
         type: "submit",
         at: nowIso(),
@@ -1097,26 +1200,68 @@ const server = http.createServer((req, res) => {
         actions: body.actions,
         reply: body.reply || "",
       };
+      // The result and the state change together, under the state lock: a
+      // `post` or an `open` landing in the middle of a send would otherwise
+      // write back a state read before it, and the send's record would go, or
+      // this write would carry an older state over the agent's new one.
+      let refused = null;
+      let written = null;
+      let agentWrote = false;
       try {
-        // Atomic: the waiter polls this file and will land mid-write eventually.
-        writeJsonAtomic(RESULT_FILE, result);
+        written = withStateLock(DIR, () => {
+          // One send is one agent turn. Writing over a result the agent has not
+          // collected yet destroys everything in it, and the loss is silent: two
+          // tabs, or one impatient second press, and an approval disappears.
+          if (pendingResult()) {
+            refused = "pending";
+            return null;
+          }
+          try {
+            // Atomic: the waiter polls this file and will land mid-write eventually.
+            writeJsonAtomic(RESULT_FILE, result);
+          } catch (e) {
+            refused = String(e.message);
+            return null;
+          }
+          try {
+            // Read fresh from disk, never from the cache: an agent write the
+            // watcher has not reached yet is in the file and must be kept.
+            const text = fs.readFileSync(STATE_FILE, "utf8");
+            const state = JSON.parse(text);
+            agentWrote = text !== lastStateText;
+            state.phase = "submitted";
+            recordSubmitted(state, body.actions);
+            return { state, text: writeJsonAtomic(STATE_FILE, state) };
+          } catch {
+            // The answers are safe in result.json; the stamp is only a courtesy.
+            return null;
+          }
+        });
       } catch (e) {
-        return json(res, 500, { error: String(e.message) });
+        refused = String(e.message);
       }
+      if (refused === "pending") {
+        return json(res, 409, {
+          error: "pending",
+          message:
+            "Your last answers have not been picked up yet. Nothing is lost, they are still on their way.",
+        });
+      }
+      if (refused) return json(res, 500, { error: refused });
       appendEvent(DIR, { type: "submit", rev, count: body.actions.length });
-      const current = readState();
-      if (current) {
-        // A copy: the cached state is what every other reader is handed.
-        const state = structuredClone(current);
-        state.phase = "submitted";
-        recordSubmitted(state, body.actions);
-        try {
-          // Account for our own write here rather than letting the watcher find
-          // it: the watcher reads a changed state.json as proof the AGENT is
-          // alive, and this write is not that.
-          adoptStateText(writeJsonAtomic(STATE_FILE, state), state);
-          rev++;
-        } catch {}
+      if (written) {
+        // Account for our own write here rather than letting the watcher find
+        // it: the watcher reads a changed state.json as proof the AGENT is
+        // alive, and this write is not that. An agent write it swept up on the
+        // way is, and is handled as the watcher would have handled it.
+        adoptStateText(written.text, written.state);
+        rev++;
+        if (agentWrote) {
+          agentSeenAt = Date.now();
+          try {
+            ensureConversation(written.state);
+          } catch {}
+        }
       }
       // Name the items that went. A page with OTHER answers staged should drop
       // only what was sent, and a brief request is a submit carrying no answers
@@ -1282,15 +1427,21 @@ const server = http.createServer((req, res) => {
 
   if (pathname === "/cancel" && req.method === "POST") {
     if (!originOk(req, port)) return json(res, 403, { error: "bad origin" });
-    if (pendingResult()) return json(res, 409, { error: "pending", message: "A send is still on its way." });
     const result = { type: "cancel", at: nowIso(), sid: SID, rev, actions: [], reply: "" };
-    // As /submit: a cancel that never reached disk must not tell the page it
-    // did, or the page stands down while the agent waits on forever.
+    // Under the state lock like a send, so `open` clearing a collected result
+    // can never take this one with it. As /submit: a cancel that never reached
+    // disk must not tell the page it did, or the page stands down while the
+    // agent waits on forever.
+    let pending = false;
     try {
-      writeJsonAtomic(RESULT_FILE, result);
+      withStateLock(DIR, () => {
+        pending = pendingResult();
+        if (!pending) writeJsonAtomic(RESULT_FILE, result);
+      });
     } catch (e) {
       return json(res, 500, { error: String(e.message) });
     }
+    if (pending) return json(res, 409, { error: "pending", message: "A send is still on its way." });
     appendEvent(DIR, { type: "cancel", rev });
     broadcast("cancelled", { rev });
     return json(res, 200, { ok: true });
@@ -1319,6 +1470,8 @@ const server = http.createServer((req, res) => {
   // Treat a departure as "shorten the deadline", never as "exit now": the user
   // may simply be reloading.
   if (pathname === "/bye") {
+    // It moves the shutdown deadline, so only the page itself may send it.
+    if (!originOk(req, port)) return json(res, 403, { error: "bad origin" });
     if (clients.size === 0) lastContact = Date.now() - (IDLE_MS - 2 * 60 * 1000);
     return json(res, 200, { ok: true });
   }
@@ -1382,7 +1535,9 @@ function readRaw(req, limit, cb) {
 
 /* ------------------------------------------------------- state watching */
 
-// The agent writes state.json through `console.mjs post`. Watch the DIRECTORY,
+// The agent writes state.json through `console.mjs post`, and the server only
+// through /submit; both under the state lock (updateState() in lib.mjs), so
+// neither can write back a state read before the other's. Watch the DIRECTORY,
 // not the file: on Windows a watch on a file breaks the moment that file is
 // replaced by rename, which is exactly what an atomic write does.
 let watchTimer = null;
@@ -1490,7 +1645,9 @@ setInterval(() => {
 // the server deciding to stop. Do not "optimise" this away.
 setInterval(() => {
   const idle = Date.now() - lastContact;
-  if (idle > IDLE_MS) {
+  // Answers nobody has collected yet keep the server up (bounded by MAX_LIFE_MS):
+  // exiting would strand the tab and the send it holds.
+  if (idle > IDLE_MS && !resultFlags().pending) {
     appendEvent(DIR, { type: "exit", reason: "idle", idleMs: idle });
     process.exit(0);
   }

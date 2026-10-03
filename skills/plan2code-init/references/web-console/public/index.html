@@ -57,6 +57,7 @@
         </g>
       </svg>
       <p class="wake-hint">Click to wake Planny</p>
+      <button class="wake-skip" type="button">Skip</button>
     </div>
 
     <header class="topbar">
@@ -94,6 +95,8 @@
             </button>
             <div class="meter-pop" id="meter-pop" role="dialog" aria-label="Session meter" hidden>
               <p class="meter-tip" id="meter-tip"></p>
+              <ul class="meter-list" id="meter-list" aria-label="What the points are made of" hidden></ul>
+              <div class="meter-fresh" id="meter-fresh" hidden></div>
               <button type="button" class="linky" id="meter-help">What is this?</button>
             </div>
           </span>
@@ -128,13 +131,28 @@
           title="Colors, theme and sound"
           aria-label="Colors, theme and sound"
         >
-          <!-- Three swatches, so the button says what it opens without a word. -->
+          <!-- A gear: ring, hub and eight teeth. -->
           <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-            <circle cx="5" cy="5.5" r="3.1" class="sw-a" />
-            <circle cx="11" cy="5.5" r="3.1" class="sw-b" />
-            <circle cx="8" cy="11" r="3.1" class="sw-c" />
+            <path class="gr-teeth" d="M12 8h2.6M8 12v2.6M4 8H1.4M8 4V1.4M10.83 10.83l1.84 1.84M5.17 10.83l-1.84 1.84M5.17 5.17L3.33 3.33M10.83 5.17l1.84-1.84" />
+            <circle cx="8" cy="8" r="4.2" class="gr-ring" />
+            <circle cx="8" cy="8" r="1.6" class="gr-hub" />
           </svg>
         </button>
+        <a
+          class="icon-btn"
+          id="btn-feedback"
+          href="https://github.com/jparkerweb/plan2code/issues/new/choose"
+          target="_blank"
+          rel="noopener noreferrer"
+          title="Report a bug or suggest an idea"
+          aria-label="Report a bug or suggest an idea (opens GitHub in a new tab)"
+        >
+          <!-- A megaphone: horn, handle and two sound waves. -->
+          <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+            <path class="mg-body" d="M1.8 6.2h2.8L10.4 3v10L4.6 9.8H1.8z" />
+            <path class="mg-line" d="M4.6 9.8l.9 3.4h1.6l-.6-2.7M12.4 6.1a2.6 2.6 0 0 1 0 3.8M13.8 4.5a5 5 0 0 1 0 7" />
+          </svg>
+        </a>
       </div>
       <div class="topbar-row second">
         <div class="row-left">
@@ -595,6 +613,9 @@
           written and approving things, instead of typing it all into the
           terminal.
         </p>
+        <p>
+          New here? <button type="button" class="help-link" data-action="welcome">Show the welcome again</button>
+        </p>
         <figure class="help-figure" data-figure="about">
           <svg class="help-diagram" viewBox="0 0 560 160" role="img" aria-labelledby="hd-about-title hd-about-desc">
             <title id="hd-about-title">You, this page, its program and Plan2Code, all on your machine</title>
@@ -680,7 +701,7 @@
               A simplified outline of this page with six numbered areas, in the
               same order as the sections below: 1, the top bar, with the title on
               the left, the progress bar in the middle, the question mark and
-              swatch buttons on the right, and Stop session under the title;
+              gear buttons on the right, and Stop session under the title;
               2, Planny and the outline down the left; 3, the view tabs, on the
               top bar's second row at the right; 4, the question card in the
               middle with Previous and Next under it; 5, the notes panel on the
@@ -738,9 +759,13 @@
             "4 of 9 done" while something is being built.
           </li>
           <li>
-            The <strong>?</strong> button opens this Help, and the swatch button
+            The <strong>?</strong> button opens this Help, and the gear button
             beside it opens <strong>User Preferences</strong>: your role first,
             then your colors, theme, card width and sounds.
+          </li>
+          <li>
+            The <strong>megaphone</strong> button at the far right opens GitHub in a
+            new tab, where you can report a bug or suggest an idea.
           </li>
           <li>
             <strong>Stop session</strong> ends the session and saves your place.
@@ -1339,7 +1364,8 @@
         <p>
           Each step you run here adds points: a plan or a set of documents
           weighs more than a single answered question, and a built phase more
-          still. Click the ring to see the count. It is a rule of thumb, not a
+          still. Click the ring to see the count and a list of each step that added
+          points, with what it added. It is a rule of thumb, not a
           reading of Plan2Code's real memory: long sessions tend to make it
           miss things, and the ring is there to remind you.
         </p>
@@ -1675,7 +1701,8 @@
         </p>
         <p>
           If it stays quiet a couple of minutes longer, the line changes to
-          "Plan2Code has not checked in for a few minutes", with Planny still
+          "Still working on it. Longer tasks can go a few minutes between
+          updates", with Planny still
           in his working pose. It may be busy, or still waiting on you in the
           terminal; the terminal is where to look. A build that said a task may
           take longer gets that long before the line changes.
@@ -1721,7 +1748,7 @@
       <section class="help-panel" data-tab="prefs">
         <h3>Keyboard and preferences</h3>
         <p class="help-lead">
-          Everything on the page works from the keyboard, and the swatch button
+          Everything on the page works from the keyboard, and the gear button
           lets you make it look and sound the way you like.
         </p>
         <h4>Keyboard shortcuts</h4>
@@ -1761,7 +1788,7 @@
         </p>
         <h4>Your preferences</h4>
         <p>
-          The swatch button at the top, beside <strong>?</strong>, opens
+          The gear button at the top, beside <strong>?</strong>, opens
           <strong>User Preferences</strong>:
         </p>
         <ul>
@@ -1786,7 +1813,7 @@
           </li>
           <li>
             <strong>Highlight color</strong>: one of
-            <span data-fact="accentCount">32</span>, rust to begin with. It marks
+            <span data-fact="accentCount">32</span>, ocean blue to begin with. It marks
             what is yours to do, and Planny's star uses it while he works.
           </li>
           <li>
@@ -1936,6 +1963,29 @@
         </div>
         <p class="help">Ticking one plays it. Play sounds switches them all off at once and keeps your picks for when you switch back on.</p>
       </fieldset>
+      <fieldset class="modal-ranges looks-models">
+        <legend>Models</legend>
+        <div class="models-tabs" role="group" aria-label="Which agent">
+          <button type="button" class="btn small ghost" id="models-tab-claude" aria-pressed="true">Claude</button>
+          <button type="button" class="btn small ghost" id="models-tab-devin" aria-pressed="false">Devin</button>
+        </div>
+        <div class="models-note">
+          <p><strong>You usually don't need to change this.</strong> Plan2Code ships an up-to-date model list with every release. Add a model here only when a new one comes out before Plan2Code has been updated.</p>
+          <ul>
+            <li>Restart <code>plan2code</code> to see a change in its model menu.</li>
+            <li>At any time, run <code>plan2code --model &lt;id&gt;</code>, or pick your model inside your agent before running a skill.</li>
+            <li>Updating Plan2Code refreshes the built-in list. Models you added stay, unless the built-in list now includes them.</li>
+            <li>Devin models are limited to Low, Medium and High effort.</li>
+          </ul>
+        </div>
+        <div class="models-list" id="models-shipped" aria-label="Built-in models"></div>
+        <div class="models-list" id="models-user" aria-label="Models you added"></div>
+        <div class="models-actions">
+          <button type="button" class="btn small" id="models-add">Add a model</button>
+          <button type="button" class="btn small ghost" id="models-reset">Reset to default</button>
+          <span class="help" id="models-status" role="status"></span>
+        </div>
+      </fieldset>
       <div class="modal-actions">
         <button type="button" class="btn ghost" id="looks-reset">Back to default</button>
         <button type="button" class="btn primary" id="looks-done">Done</button>
@@ -1994,7 +2044,58 @@
         <div id="help-panels" class="help-panels"></div>
       </div>
       <div class="modal-actions">
+        <span class="help-version" id="help-version" hidden></span>
         <button type="button" class="btn primary" id="help-done">Close</button>
+      </div>
+    </dialog>
+
+    <!-- Shown once, on the first dashboard a person sees. Closing it by any
+         route saves looks.welcomeSeen; Help's first tab reopens it. -->
+    <dialog class="modal welcome" id="welcome-modal" aria-labelledby="welcome-title">
+      <div class="welcome-poster">
+        <div class="welcome-sky" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></div>
+        <!-- Planny is cloned in from #planny by app.js, so he is always the
+             same robot as the one in the dock. -->
+        <div class="welcome-bot" id="welcome-bot" aria-hidden="true"></div>
+        <p class="welcome-kicker">Plan2Code Web Console</p>
+        <h2 id="welcome-title">Ideas in. Working code out.</h2>
+        <p class="welcome-lead">
+          Answer questions, read what gets written and approve each step here,
+          instead of in the terminal. It runs on this machine only.
+        </p>
+      </div>
+      <div class="welcome-cols">
+        <div class="welcome-col">
+          <span class="welcome-dot is-accent">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="3.5" y="9" width="12" height="9" rx="1.6" transform="rotate(-12 9.5 13.5)" /><rect x="8.5" y="6" width="12" height="9" rx="1.6" /></svg>
+          </span>
+          <h3>Pick a card</h3>
+          <p>Start with <strong>Suggested</strong>. Pathfinder for a foggy idea, Quick Task for something small.</p>
+        </div>
+        <div class="welcome-col">
+          <span class="welcome-dot is-stage">
+            <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false"><circle cx="10" cy="10" r="7" opacity="0.35" /><circle cx="10" cy="10" r="7" pathLength="100" stroke-dasharray="50 100" stroke-dashoffset="25" transform="rotate(-90 10 10)" /></svg>
+          </span>
+          <h3>Refresh at half way</h3>
+          <p>Once the session meter passes half, finish the step and start a new conversation.</p>
+        </div>
+        <div class="welcome-col">
+          <span class="welcome-dot is-bare">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="3.5" y="5" width="17" height="14" rx="2" /><path d="M7.5 10l3 2-3 2M12.5 14.5h4" /></svg>
+          </span>
+          <h3>Come back</h3>
+          <p><code>/plan2code</code> in your agent, or <code>plan2code</code> in any folder.</p>
+        </div>
+        <div class="welcome-col">
+          <span class="welcome-dot is-plain">
+            <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M12 8h2.6M8 12v2.6M4 8H1.4M8 4V1.4M10.83 10.83l1.84 1.84M5.17 10.83l-1.84 1.84M5.17 5.17L3.33 3.33M10.83 5.17l1.84-1.84" /><circle cx="8" cy="8" r="4.2" /><circle cx="8" cy="8" r="1.6" /></svg>
+          </span>
+          <h3>Get help</h3>
+          <p><kbd>?</kbd> opens Help. The gear holds your role, theme and sounds.</p>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn primary" id="welcome-done">Start building</button>
       </div>
     </dialog>
 

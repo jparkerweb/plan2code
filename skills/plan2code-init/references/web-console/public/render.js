@@ -23,7 +23,8 @@ const SAFE_PROTOCOL = /^(https?:|mailto:|#|\/(?![/\\]))/i;
 function safeHref(href) {
   if (!href) return null;
   const trimmed = String(href).trim();
-  // Blocks javascript: and data: hrefs before they can reach the DOM.
+  // Blocks javascript: and data: hrefs before they can reach the DOM, and a
+  // protocol-relative `//host` (or `/\host`), which leaves the page for another site.
   return SAFE_PROTOCOL.test(trimmed) ? trimmed : null;
 }
 
@@ -103,6 +104,26 @@ function inlineInto(parent, tokens) {
   }
 }
 
+// What a fenced code block offers beside Copy, from its first non-empty line:
+// `'run'` gets a Run it button (git commands — the one kind a person keeps
+// copying into Ask by hand), `'hint'` a muted note that pasting it into Ask
+// may get the agent to run it, and `null` nothing extra. A leading `/` is a
+// skill command for a new conversation, never a terminal command, so it gets
+// neither.
+const COMMAND_WORDS =
+  /^(git|node|npm|npx|pnpm|yarn|bun|deno|python3?|pip3?|brew|curl|wget|docker|kubectl|terraform|make|cmake|cargo|go|java|mvn|gradle|gh|aws|az|gcloud|jq|ssh|scp|rsync|chmod|chown|mkdir|cp|mv|rm|ls|cd|cat|echo|export|source|bash|sh|zsh|fish|pwsh|powershell|cmd|systemctl|service|apt|apt-get|dnf|yum|pacman|tar|unzip|zip)\b/i;
+
+export function runHint(text) {
+  const firstLine = (text || "")
+    .split("\n")
+    .map((line) => line.trim())
+    .find((line) => line.length > 0);
+  if (!firstLine || firstLine.startsWith("/")) return null;
+  if (/^git(\s|$)/.test(firstLine)) return "run";
+  if (firstLine.startsWith("#!")) return "hint";
+  return COMMAND_WORDS.test(firstLine) ? "hint" : null;
+}
+
 function blockInto(parent, tokens) {
   for (const t of tokens || []) {
     switch (t.type) {
@@ -140,7 +161,16 @@ function blockInto(parent, tokens) {
         // textContent, so a fenced block containing markup is inert.
         pre.appendChild(el("code", null, t.text));
         wrap.appendChild(copyButton(t.text, "md-copy"));
+        const hint = runHint(t.text);
+        if (hint === "run") {
+          const run = el("button", "md-run", "Run it");
+          run.type = "button";
+          wrap.appendChild(run);
+        }
         wrap.appendChild(pre);
+        if (hint === "hint") {
+          wrap.appendChild(el("p", "md-run-hint", "The agent may be able to run this — paste it into the Ask tab"));
+        }
         parent.appendChild(wrap);
         break;
       }

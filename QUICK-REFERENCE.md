@@ -1,6 +1,20 @@
 # Plan2Code Quick Reference
 
+## Launch
+
+The web console is the main way in: a local page where questions, documents, build progress and sign-offs live.
+
+| How                       | Command                              | What happens                                                                           |
+| ------------------------- | ------------------------------------ | -------------------------------------------------------------------------------------- |
+| From your project (shell) | `plan2code`                          | Opens Claude Code or Devin on the dashboard (`--cli claude` / `--cli devin` to choose) |
+| Inside any agent          | `/plan2code`                         | Opens the dashboard: a card for every skill, launched on the same page                 |
+| Straight into a skill     | `/plan2code-1-plan --web` (any step) | Skips the "web console or terminal?" question and opens the page                       |
+
+Pick a skill on the dashboard and the same page becomes that session. Details: [.readme/web-console.md](.readme/web-console.md) · worked example: [.readme/walkthrough.md](.readme/walkthrough.md).
+
 ## Commands
+
+Every command below is what a dashboard card runs. Typed on its own, each one asks "web console or terminal?" first.
 
 | Step     | Command                         | Input           | Output                                                                                  |
 | -------- | ------------------------------- | --------------- | --------------------------------------------------------------------------------------- |
@@ -18,7 +32,7 @@
 | 4        | /plan2code-4-finalize         | overview.md     | Archived specs                                                                          |
 | handoff  | /plan2code-handoff            | Conversation    | Self-contained handoff doc in handoffs/                                                 |
 
-Append ` --web` to any step to work through it in the browser web console instead of the terminal — or run `/plan2code` with nothing for the dashboard, a menu of every skill that launches your pick on the same page. See [.readme/web-console.md](.readme/web-console.md).
+**Terminal instead:** run any command without `--web` and answer the interface question with **terminal**. Nothing is lost: same questions, same gates, same files under `specs/`. You can switch between the two mid-feature.
 
 ## File Structure
 
@@ -43,9 +57,9 @@ Note: `<date>` uses YYYYMMDD format (e.g., `20250204`)
 
 ## Key Rules
 
-- Start NEW conversation for each step (and each implementation phase)
+- Keep sessions short: fresh console session when the meter turns red, and before a big plan or build step
 - ONE phase per conversation (but parallel phases can run in separate instances)
-- Reply "approved" to complete phases
+- Approve phases on the sign-off card (or reply "approved" in the terminal)
 - 90% confidence required before planning completes
 - Never look in `specs--completed/` (it's archived specs)
 
@@ -62,7 +76,7 @@ Note: `<date>` uses YYYYMMDD format (e.g., `20250204`)
 When phases have no file conflicts or dependencies, they can run simultaneously:
 
 1. Documentation Mode auto-detects parallel-eligible phases
-2. Implementation Mode shows selection UI with status for each phase
+2. Implementation Mode asks which phase to take (a card on the web console), with the status of each
 3. Run multiple `/plan2code-3-implement` instances on different phases
 4. `[/]` status shows which phases are actively being worked on
 

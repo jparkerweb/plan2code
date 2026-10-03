@@ -21,7 +21,7 @@ The FIRST thing you do, before anything else in this file — before Step 1, bef
 - This mode modifies **`specs/` paths only** — do NOT implement code or modify any file outside `specs/`
 - **Allowed file paths:** ONLY paths under `specs/`. Forbidden: `skills/`, `src/`, `.claude/`, `.agents/`, `.codeium/`, configs, source code. Creating, modifying, or deleting any file outside `specs/` is a violation.
 - **Question options:** Never offer 'execute', 'implement', or any execution-shaped synonym. Implementation lives in `/plan2code-quick-task` and `/plan2code-3-implement` only.
-- **Web console exception:** the console's temporary payload files (outside the repo, in the system temp directory) are the one allowed write outside `specs/`. They are messages to the page, never project files.
+- **Web console exception:** the console's temporary payload files (outside the repo, in the session folder `open` prints) are the one allowed write outside `specs/`. They are messages to the page, never project files.
 
 ## Required Context
 

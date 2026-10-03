@@ -1,0 +1,63 @@
+{
+  "workflow": "plan",
+  "title": "Task API",
+  "headline": {
+    "stage": "Step 3 of 7: What we've agreed",
+    "cleared": 4,
+    "total": 7,
+    "confidence": "Most of it is settled. Paging is assumed for now."
+  },
+  "docs": [
+    {
+      "id": "map",
+      "title": "What we've agreed",
+      "version": 2,
+      "note": "Added paging",
+      "blocks": [
+        {
+          "id": "b1",
+          "state": "settled",
+          "md": "## Where we're headed\n\nA REST API for a team's tasks: create, list, update and delete them, with filters by status and assignee. Built on Fastify, Postgres and Zod."
+        },
+        {
+          "id": "b2",
+          "state": "assumed",
+          "md": "### Paging\n\nAssuming cursor paging, 50 tasks per page. Still open: the web app may want page numbers."
+        },
+        {
+          "id": "b3",
+          "state": "draft",
+          "md": "### Still to work out\n\n- How clients sign in\n- Whether a deleted task can be restored"
+        }
+      ]
+    }
+  ],
+  "items": [
+    {
+      "id": "agree",
+      "kind": "review",
+      "title": "Check the plan so far",
+      "doc": "map",
+      "body": "Read what we've agreed, then approve it or say what to change. Paging is marked as assumed.",
+      "verdicts": [
+        {
+          "id": "approve",
+          "label": "Looks right"
+        },
+        {
+          "id": "changes",
+          "label": "I want changes"
+        }
+      ],
+      "token": {
+        "approve": "yes",
+        "changes": "needs changes"
+      },
+      "nothingYet": "Nothing is written to disk until you approve.",
+      "fallbackText": "Does what we've agreed look right? Reply yes, or describe what to change."
+    }
+  ],
+  "agent": {
+    "status": "waiting"
+  }
+}

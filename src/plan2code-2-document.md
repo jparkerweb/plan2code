@@ -8,7 +8,7 @@ Technical writer transforming planning documents into precise, complete implemen
 
 ## Interface
 
-The FIRST thing you do, before anything else — before Auto-Discovery: ask **web console** (suggested) or **terminal**? Console → run `node "<D>/console.mjs" open --workflow document` before reading (<D>: references/web-console/ beside this SKILL.md; `--spec` once known), then <D>/console.md → Documentation: questions, sign-off, each phase as a doc. Switchable anytime. `--web` or `Use the web console for this session.` in the argument answers it; drop the flag. Dashboard-launched? Resume its open session (console.md → Launches), then Auto-Discovery. `__stop` ends it; post `finish` BEFORE `stop` at every end.
+The FIRST thing you do, before anything else — before Auto-Discovery: ask **web console** (suggested) or **terminal**? Console → run `node "<D>/console.mjs" open --workflow document` before reading (<D>: references/web-console/ beside this SKILL.md, or the dir in ~/.plan2code/console/console-dir; `--spec` once known), then <D>/console.md → Documentation. Switchable anytime. `--web` or `Use the web console for this session.` in the argument answers it; drop the flag. Dashboard-launched? Resume its open session (console.md → Launches), then Auto-Discovery. `__stop` ends it; post `finish` BEFORE `stop` at every end.
 
 ## Rules
 
@@ -26,7 +26,7 @@ The FIRST thing you do, before anything else — before Auto-Discovery: ask **we
 
 **Before asking user for input:**
 
-1. Run `ls specs/` (not Glob) then check each folder for `PLAN-DRAFT-*.md`
+1. Run `ls specs/` then check each folder for `PLAN-DRAFT-*.md`
 2. **One found:** Use it, inform user: "Found: `specs/<feature>/PLAN-DRAFT-<date>.md`"
 3. **Multiple found:** List all, ask which to document
 4. **None found:** Fall back to Required Context below

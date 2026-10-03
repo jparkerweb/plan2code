@@ -42,7 +42,7 @@ These are verified, not assumed. They shape everything below.
 
 ### 2.1 The character limit is the binding constraint
 
-`scripts/validate-char-count.js` caps every flat `src/plan2code-*.md` at 11,000 characters, enforced by a husky pre-commit hook. Measured today:
+`scripts/validate-char-count.js` caps every flat `src/plan2code-*.md` at 11,500 characters (11,000 when the numbers below were measured), enforced by a husky pre-commit hook. Measured today:
 
 ```
 10995      5  plan2code-0-pathfinder.md   <- 5 characters of headroom

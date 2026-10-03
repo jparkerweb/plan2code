@@ -25,6 +25,7 @@ export const WORKSPACE_PICKER_PROMPT = "Choose a folder to add to the workspace"
 export const WINDOWS_PICKER_SOURCE = `
 using System;
 using System.Runtime.InteropServices;
+using System.Threading;
 
 public static class Plan2CodeFolderPicker {
   [ComImport, Guid("DC1C5A9C-E88A-4DDE-A5A1-60F82A20AEF7")]
@@ -62,11 +63,39 @@ public static class Plan2CodeFolderPicker {
   [DllImport("shell32.dll", CharSet = CharSet.Unicode, PreserveSig = false)]
   private static extern void SHCreateItemFromParsingName(string path, IntPtr bindContext, ref Guid iid, out IShellItem item);
 
+  [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+  private static extern IntPtr FindWindow(string className, string title);
+
+  [DllImport("user32.dll")]
+  private static extern bool SetWindowPos(IntPtr hWnd, IntPtr after, int x, int y, int w, int h, uint flags);
+
+  [DllImport("user32.dll")]
+  private static extern bool SetForegroundWindow(IntPtr hWnd);
+
+  [DllImport("user32.dll")]
+  private static extern int GetSystemMetrics(int index);
+
   private const uint FOS_PICKFOLDERS = 0x20;
   private const uint FOS_FORCEFILESYSTEM = 0x40;
   private const uint FOS_PATHMUSTEXIST = 0x800;
   private const uint SIGDN_FILESYSPATH = 0x80058000;
   private const int ERROR_CANCELLED = unchecked((int)0x800704C7);
+
+  private static void Raise(string title) {
+    for (int i = 0; i < 100; i++) {
+      IntPtr hwnd = FindWindow(null, title);
+      if (hwnd != IntPtr.Zero) {
+        int w = Math.Min(1100, GetSystemMetrics(0) - 80);
+        int h = Math.Min(750, GetSystemMetrics(1) - 80);
+        int x = (GetSystemMetrics(0) - w) / 2 + 40;
+        int y = (GetSystemMetrics(1) - h) / 2 + 40;
+        SetWindowPos(hwnd, new IntPtr(-1), x, y, w, h, 0x40);
+        SetForegroundWindow(hwnd);
+        return;
+      }
+      Thread.Sleep(50);
+    }
+  }
 
   public static string Pick(IntPtr owner, string title, string start) {
     IFileOpenDialog dialog = (IFileOpenDialog)new FileOpenDialog();
@@ -83,6 +112,9 @@ public static class Plan2CodeFolderPicker {
           dialog.SetFolder(folder);
         } catch (Exception) {}
       }
+      Thread raiser = new Thread(delegate() { Raise(title); });
+      raiser.IsBackground = true;
+      raiser.Start();
       int hr = dialog.Show(owner);
       if (hr == ERROR_CANCELLED) return null;
       Marshal.ThrowExceptionForHR(hr);

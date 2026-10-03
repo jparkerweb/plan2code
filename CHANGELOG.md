@@ -2,6 +2,38 @@
 
 All notable changes to Plan2Code will be documented in this file.
 
+## v2.4.1
+
+### ✨ Added
+
+- **Screenshots of the web console**: seven screens (dashboard, question, living document, build, sign-off, finish, Ask tab) in light and dark, as WebP in `docs/screenshots/`. Readers see the theme that matches their system, on GitHub and on the site.
+- **`scripts/capture-screenshots.mjs`**: stages each screen from the JSON payloads in `scripts/screenshots/`, in a throwaway sample project and console home, and captures it with puppeteer-core and a local Chrome or Edge. One command refreshes every image; `--only <shot>` refreshes one. `puppeteer-core` is installed with `--no-save` and never added to `package.json`.
+- **New landing page**: `docs/index.html` rebuilt in the console's look, with the console above the fold.
+- **Web console welcome**: the first dashboard a person sees opens a Welcome dialog with Planny waving, four tips and a **Start building** button. Closing it by any route saves `looks.welcomeSeen` in `looks.json`; Help's first tab has **Show the welcome again**.
+- **Report a bug or idea from the console**: a megaphone button at the right of the top bar opens GitHub's new-issue chooser for `jparkerweb/plan2code`, with new **Bug** and **Idea** issue templates in `.github/ISSUE_TEMPLATE/` (blank issues off).
+- **Version in Help**: the Help dialog's footer shows the running Plan2Code version, served by a new `GET /version` route. The skill build copies `version.json` into each skill's `references/web-console/` so the console can find it.
+
+### 🔧 Changed
+
+- **install.js**: the closing message beside Planny now names the dashboard first: `plan2code` from any project, or `/plan2code` in your agent when the command could not be installed. The docs link moves to the line under it.
+- **web-console**: User Preferences opens from a gear button instead of the three swatches, and the default highlight color is now ocean blue instead of rust.
+- **web-console**: the dashboard rail marks the suggested next step with a small dot, since the center pane's Suggested pill can scroll out of view. Send pulses only while it is the primary button.
+- **web-console**: when the agent stops checking in, the status line and Help now say to type **continue** in an idle terminal so it picks your answers up.
+- **web-console**: `wait` exit 10 now carries a `next` instruction (relay one line, then wait again), and `console.md` opens with the one rule that keeps the page alive: every turn ends on a `wait` call, never on text.
+- **web-console**: a finished quick task offers **Back to the dashboard** as well as **Review it now**, so the finished screen is never a dead end.
+- **Windows**: the folder picker (the launcher's desktop shortcut and the Workspace **Browse…** button) now opens centred and in front of other windows instead of behind the terminal.
+- **Launcher**: before asking which CLI to use, `plan2code` says what it is about to do and that running `/plan2code` inside your agent works too.
+
+### 🐛 Fixed
+
+- **web-console**: reusing a settled question id for a different kind of question (say a multi-select turned confirm) now opens it as a new question instead of keeping the old answer.
+
+### 📚 Documentation
+
+- **Web console first**: README, QUICK-REFERENCE, the walkthrough and the console guide now open on the browser flow (install, run `plan2code`, pick a card) with screenshots, and keep every slash command in a "Prefer the terminal?" section. The walkthrough follows the task API through the web console, session by session, and the console guide opens with a Quick start and has Troubleshooting ahead of the internals.
+- **Rule 1 is now "Keep each session short"**, worded the same in README, QUICK-REFERENCE, the walkthrough and the landing page: chain a couple of small skills on the dashboard, and start a fresh console session when the session meter turns red or before a big planning or build step.
+- **Web console guide** opens with a two-minute tour; **QUICK-REFERENCE** opens with a Launch table (shell, inside an agent, straight into a skill with `--web`) and a "Terminal instead" note; the walkthrough mentions the Ask tab during a build and ends with links onward.
+
 ## v2.4.0
 
 ### ✨ Added
@@ -17,6 +49,9 @@ All notable changes to Plan2Code will be documented in this file.
 - **Planny in the console**: drawn in SVG in his own dock above the question list, where he carries the page's state: his star lights and he waves when it is your turn, the star turns and he walks on the spot while the agent works, it goes green when all is caught up, he shows no arms when the agent is not answering, and he fades with his star shut when disconnected. He flies through a starfield while the agent thinks, wakes up on a fresh dashboard, and acts out each skill on its starting screen, arms holding that step's prop. The tab icon adds a busy, ready or attention bar, and the desktop shortcut uses him too.
 - **Tests**: `scripts/test-web-console.mjs` and `scripts/test-launcher.mjs` (run by `node --test`), `scripts/parse-check.mjs` (every shipped browser module parses as an ES module) and `scripts/check-skill-table.mjs` (the dashboard's "What each skill reads and writes" table matches the skills), all wired into `npm test`. `scripts/bench-web-console.mjs` measures time to first paint.
 - **install.js**: an animated progress indicator during the two long install phases, so the installer no longer looks hung.
+- **Curated launcher models**: the `plan2code` launcher's model menu reads `src/launcher/models.json` (copied to `~/.plan2code/bin/` and refreshed by every install) instead of asking the CLI, so Devin offers a short verified list at Low, Medium and High effort. **User Preferences → Models** (Claude and Devin tabs) adds models released after an install, kept in `~/.plan2code/models.json`, with **Reset to default**. `--model <id>` still skips the menu.
+- **Quick-task build progress on the console**: an approved quick-task plan opens a **Build progress** tab that ticks each step, raises the progress bar and updates the activity line, as an Implement phase does.
+- **Console extras**: sent notes and their attachments stay listed in the Sent box after a reload or in a second tab; the fresh-idea box on Pathfinder, Plan and Quick Task has **+ Attach file** (and takes a paste); clicking the session meter lists what each step added; git code blocks get a **Run it** button; the Ask tab may run one command the person spells out (a commit, a test run) and report the result; the wake-up animation has a **Skip** button.
 
 ### 🔧 Changed
 
@@ -26,6 +61,9 @@ All notable changes to Plan2Code will be documented in this file.
 - **install.js**: skills bundle the shared `src/web-console/` directory through `additionalReferences`, copied as bytes so the bundled chimes survive the build. Installed skills are listed by reading the skills store directly instead of `skills list` (seconds instead of over a minute on Windows), and removal is one variadic `skills remove`.
 - **plan2code-0-pathfinder**: the duplicated Trail Footer forms fold into the fallback line, since `references/trail.md` defines them in full; the GitHub Issues backend is unchanged.
 - **`.gitattributes`**: `*.mp3` is binary. `.editorconfig` pins LF for editors. `prototypes/` is gitignored.
+- **Finished screens**: Review, Init, Init Update and Handoff end with **Back to the dashboard**, as Quick Task does; only a pause leaves it off.
+- **Console sturdiness**: `wait` reports the server gone only after three missed health checks in a row, so a busy server is not taken for a dead one; a reused question id no longer inherits the old answer; polling stops redrawing an unchanged page and returns to the live stream (with backoff) once the server answers; `stop` gives a busy server a second, longer health check before leaving it alone; a fresh session in a linked worktree records the worktree as its folder; a text question whose `pattern` does not compile is refused at `post`.
+- **scripts/validate-char-count.js**: the dashboard prompt `src/plan2code.md` is size-checked too.
 
 ## v2.3.0
 

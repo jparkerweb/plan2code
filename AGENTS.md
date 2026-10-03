@@ -84,3 +84,5 @@ When you make a mistake, get corrected, or discover something about this codebas
 
 - Do not audit `CHANGELOG.md` headings through PowerShell — the emoji come back as `?`. See the gotcha for the correct approach.
 - Sync upstream only through `/sync-repo`, and verify its baseline against the real tree before porting: an earlier sync silently skipped a whole upstream release (the `3-implement-review` skill) while the recorded version froze. Update the baseline with `.claude/skills/sync-repo/set-synced.mjs`, never with a shell pipe over the decrypted body.
+- After a sync merge, run `npm test` before trusting a "clean" file: when upstream and plan2code fixed the same bug, `git merge-file` keeps both copies without a conflict (a sync once left `let pattern` declared twice in `app.js`, caught only by `parse-check`).
+- When extracting upstream files in Git Bash, run `git show <ref>:<path>` with `MSYS_NO_PATHCONV=1` and `C:/` style paths (never `/c/`): path conversion rewrites `origin/main:.readme/x.md` into `origin\main;.readme\x.md`, the show fails, and the merge silently runs against an empty "theirs". Check every extracted file is non-empty before merging.

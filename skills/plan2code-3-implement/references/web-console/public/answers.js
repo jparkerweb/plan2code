@@ -69,6 +69,22 @@ export function submittedAwaiting(item) {
   return replied ? null : s;
 }
 
+/**
+ * The note (and its attachments) the person last sent on an item, while the
+ * agent has yet to say anything after it. The server records it as `sentNote`
+ * on every send, so the page can show it in the Notes pane and in the Sent
+ * box instead of letting it vanish into a send that shows no sign of arriving.
+ * Any thread message from the send onwards, or none with a clock to compare,
+ * means it has been picked up.
+ */
+export function noteAwaiting(item) {
+  const n = item && item.sentNote;
+  if (!n || typeof n !== "object") return null;
+  const thread = Array.isArray(item.thread) ? item.thread : [];
+  const picked = thread.some((m) => m && (!n.at || !m.at || m.at >= n.at));
+  return picked ? null : n;
+}
+
 /* -------------------------------------------------------------- labels */
 
 export function optionLabel(item, k) {

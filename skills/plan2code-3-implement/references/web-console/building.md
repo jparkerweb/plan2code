@@ -273,7 +273,7 @@ for whichever comes first:
 | An action `{ "i": "__review", "type": "review" }` | Take the review up (below). |
 | An action `{ "i": "__dashboard", "type": "dashboard" }` | Take the session back as the dashboard (console.md → Finishing). |
 | An action `{ "i": "__done", "type": "done" }` | `stop` the server. The session is over. |
-| `wait` exit `20` | They closed the tab. Do not resume: the session is over. |
+| `wait` exit `20` | The server is gone, not necessarily the tab. Resume it (`open --resume <sid> --no-open --workflow <yours>`) and keep waiting. |
 | Nothing after about ten minutes | `stop` the server. The page then shows the terminal command for a review instead of a button that would go nowhere. |
 
 **Read references/review.md** and run Review Mode with these overrides:
@@ -406,15 +406,38 @@ post carries `"run": { "event": "implement-review-phase", "id": "phase-N" }`.
   ("Change the plan"), `escalate` ("Plan it properly instead") and `abort`
   ("Stop here", `"danger": true`), token equal to the ids.
 - **Building** after `yes`: settle the verdict (`"status": "answered"` plus
-  `"answer": { "verdict": "yes" }`) in the post that starts the build, then
-  exactly as "While you build", with the plan's steps
-  as the task list and `total` = the number of steps.
+  `"answer": { "verdict": "yes" }`) in the post that starts the build, and
+  open a **Build progress** tab in that same post, the way an Implement phase
+  gets its tasks tab. The plan's steps are the task list and `total` is their
+  number:
+
+  ```jsonc
+  {
+    "stopWarning": "",
+    "items": [{ "id": "<the Build this plan? item's id>", "status": "answered", "answer": { "verdict": "yes" } }],
+    "headline": { "stage": "Building", "cleared": 0, "total": 4 },
+    "docs": [{ "id": "tasks", "title": "Build progress", "version": 1, "blocks": [
+      { "id": "tasks", "state": "settled", "md": "- [ ] Step one\n- [ ] Step two\n- [ ] Step three\n- [ ] Step four" }
+    ]}],
+    "agent": { "status": "working", "activity": "Step 1 of 4: step one", "quietMinutes": 10 }
+  }
+  ```
+
+  Then post after every step, exactly as "While you build": bump the doc's
+  `version` and repost the whole list with that step ticked, raise
+  `headline.cleared`, and set `agent.activity` to the next step ("Step 2 of 4:
+  step two"). Never go silent for the whole build: a quick task with many steps
+  is the case this tab is for. Check for a Quick question between steps, and do
+  not call `wait` until the build is done.
 - **The finish after the build:** `command` is the commit command, filled in,
   in the project's commit format (AGENTS.md), with
   `"where": "When you are happy with it, commit it from your terminal:"`, and
   `review` on offer — the **Review it now** button, since a quick task has no
-  sign-off card to put it on. Keep waiting for the answer, and everything
-  after that is "The review, mid-session" above.
+  sign-off card to put it on — and `"dashboard": true`, so the finished screen
+  also offers **Back to the dashboard**. Both are required: a finish without
+  `dashboard` leaves the person on a dead end. Keep waiting for whichever
+  button is pressed, and everything after that is "The review, mid-session"
+  above.
 - **Escalated / aborted:** settle the verdict the same way in the finish post —
   finish with `"command": "/plan2code-1-plan"` and the
   PLAN-DRAFT's path in `body`, no review; or `"command": "/plan2code-quick-task"`.

@@ -11,9 +11,11 @@
  *
  * When both CLIs are installed it asks which one, with the last pick as the default; with only
  * one installed it uses that. `--cli claude` / `--cli devin` skips the question. Before starting
- * it says that the CLI keeps the model it last used and waits for Enter. Any other arguments are
- * forwarded to the CLI. Self-contained, Node built-ins only: install.js copies this file to
- * ~/.plan2code/bin/ and points the global shims at it.
+ * it asks which model to run, from the curated list in models.json (shipped with every
+ * install) plus any models the user added in User Preferences; Enter keeps the model the CLI
+ * last used, and `--model` skips the question. Any other arguments are forwarded to the CLI. Self-contained, Node
+ * built-ins only: install.js copies this file to ~/.plan2code/bin/ and points the global
+ * shims at it.
  *
  * `--pick-folder` (passed by the desktop shortcut, never forwarded to the CLI) asks for the
  * project folder with a native folder picker first, starting on the folder picked last time.
@@ -30,6 +32,8 @@ const IS_MAC = process.platform === 'darwin';
 const PICK_FOLDER_FLAG = '--pick-folder';
 const CLI_FLAG = '--cli';
 const STATE_FILE = path.join(os.homedir(), '.plan2code', 'launcher.json');
+// Menus longer than this print compactly (id-only, two columns).
+const MODELS_MENU_COMPACT_AT = 30;
 const PICKER_PROMPT = 'Choose the project folder to open Plan2Code in';
 
 /** The CLIs that can open the dashboard, in menu order. `args` builds the full argument list. */
@@ -46,6 +50,11 @@ const CLIS = [
   },
 ];
 
+// The curated menu ships beside this file (models.json, overwritten by every install); models
+// the user adds in User Preferences live in ~/.plan2code/models.json and are merged in.
+const SHIPPED_MODELS_FILE = path.join(__dirname, 'models.json');
+const USER_MODELS_FILE = path.join(os.homedir(), '.plan2code', 'models.json');
+
 /**
  * The Explorer-style folder picker (IFileOpenDialog with FOS_PICKFOLDERS): address bar, paste a
  * path, Quick Access, search. Windows PowerShell's FolderBrowserDialog is the old tree-only
@@ -56,6 +65,7 @@ const CLIS = [
 const WINDOWS_PICKER_SOURCE = `
 using System;
 using System.Runtime.InteropServices;
+using System.Threading;
 
 public static class Plan2CodeFolderPicker {
   [ComImport, Guid("DC1C5A9C-E88A-4DDE-A5A1-60F82A20AEF7")]
@@ -93,11 +103,39 @@ public static class Plan2CodeFolderPicker {
   [DllImport("shell32.dll", CharSet = CharSet.Unicode, PreserveSig = false)]
   private static extern void SHCreateItemFromParsingName(string path, IntPtr bindContext, ref Guid iid, out IShellItem item);
 
+  [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+  private static extern IntPtr FindWindow(string className, string title);
+
+  [DllImport("user32.dll")]
+  private static extern bool SetWindowPos(IntPtr hWnd, IntPtr after, int x, int y, int w, int h, uint flags);
+
+  [DllImport("user32.dll")]
+  private static extern bool SetForegroundWindow(IntPtr hWnd);
+
+  [DllImport("user32.dll")]
+  private static extern int GetSystemMetrics(int index);
+
   private const uint FOS_PICKFOLDERS = 0x20;
   private const uint FOS_FORCEFILESYSTEM = 0x40;
   private const uint FOS_PATHMUSTEXIST = 0x800;
   private const uint SIGDN_FILESYSPATH = 0x80058000;
   private const int ERROR_CANCELLED = unchecked((int)0x800704C7);
+
+  private static void Raise(string title) {
+    for (int i = 0; i < 100; i++) {
+      IntPtr hwnd = FindWindow(null, title);
+      if (hwnd != IntPtr.Zero) {
+        int w = Math.Min(1100, GetSystemMetrics(0) - 80);
+        int h = Math.Min(750, GetSystemMetrics(1) - 80);
+        int x = (GetSystemMetrics(0) - w) / 2 + 40;
+        int y = (GetSystemMetrics(1) - h) / 2 + 40;
+        SetWindowPos(hwnd, new IntPtr(-1), x, y, w, h, 0x40);
+        SetForegroundWindow(hwnd);
+        return;
+      }
+      Thread.Sleep(50);
+    }
+  }
 
   public static string Pick(IntPtr owner, string title, string start) {
     IFileOpenDialog dialog = (IFileOpenDialog)new FileOpenDialog();
@@ -114,6 +152,9 @@ public static class Plan2CodeFolderPicker {
           dialog.SetFolder(folder);
         } catch (Exception) {}
       }
+      Thread raiser = new Thread(delegate() { Raise(title); });
+      raiser.IsBackground = true;
+      raiser.Start();
       int hr = dialog.Show(owner);
       if (hr == ERROR_CANCELLED) return null;
       Marshal.ThrowExceptionForHR(hr);
@@ -259,6 +300,8 @@ async function chooseCli(requested) {
 
   const { lastCli } = readState();
   const defaultIndex = Math.max(0, installed.findIndex((cli) => cli.id === lastCli));
+  console.log('plan2code will try to open this with the Claude Code or Devin CLI, whichever is installed.');
+  console.log("You're also welcome to skip this launcher and run the `/plan2code` skill directly from your AI agent.");
   console.log('Which CLI should open Plan2Code?');
   installed.forEach((cli, i) => console.log(`  ${i + 1}) ${cli.label}`));
   for (;;) {
@@ -277,16 +320,74 @@ function hasModelFlag(args) {
   return args.some((arg) => arg === '--model' || arg.startsWith('--model='));
 }
 
+/** `[{ id, label }]` from a parsed models file for one CLI; anything malformed is skipped. */
+function modelEntries(file, cliId) {
+  const list = file && Array.isArray(file[cliId]) ? file[cliId] : [];
+  return list.filter((m) => m && typeof m.id === 'string' && m.id.trim() && typeof m.label === 'string');
+}
+
+/** The shipped list first, then the user's additions the shipped list does not already have. */
+function mergeModels(shipped, user) {
+  const seen = new Set(shipped.map((m) => m.id));
+  return [...shipped, ...user.filter((m) => !seen.has(m.id) && seen.add(m.id))];
+}
+
+function readJsonFile(file) {
+  try {
+    return JSON.parse(fs.readFileSync(file, 'utf8'));
+  } catch {
+    return null;
+  }
+}
+
+/** The model menu for one CLI: the curated list plus the user's additions from User Preferences. */
+function listModels(cli) {
+  return mergeModels(
+    modelEntries(readJsonFile(SHIPPED_MODELS_FILE), cli.id),
+    modelEntries(readJsonFile(USER_MODELS_FILE), cli.id)
+  );
+}
+
 /**
- * Say that the CLI starts on the model it last used, and wait for Enter so the person can back
- * out and change it first. Without an interactive terminal there is nobody to wait for.
+ * Ask which model to run: a numbered list with Enter keeping the model the CLI last used.
+ * A pick appends `--model <id>` to `extraArgs`. Without an interactive terminal there is
+ * nobody to ask, so it just says which model will be used, as it always has.
  */
-async function confirmModel(cli) {
+async function chooseModel(cli, extraArgs) {
+  if (!process.stdin.isTTY) {
+    console.log(`${cli.label} will use the model you last used in it. To use a different model, open`);
+    console.log(`\`${cli.id}\` on its own and switch model there, or run \`plan2code --model <name>\`.`);
+    return;
+  }
+  const models = listModels(cli);
+  if (!models.length) return;
+
   console.log('');
-  console.log(`${cli.label} will use the model you last used in it. To use a different model, open`);
-  console.log(`\`${cli.id}\` on its own and switch model there, or run \`plan2code --model <name>\`.`);
-  if (process.stdin.isTTY) await ask('Press Enter to continue, or Ctrl+C to cancel.');
-  console.log('');
+  console.log(`Which model should ${cli.label} use?`);
+  if (models.length > MODELS_MENU_COMPACT_AT) {
+    // Labels off, ids in two columns: a long menu of full rows would bury
+    // the prompt above the fold.
+    const half = Math.ceil(models.length / 2);
+    for (let i = 0; i < half; i++) {
+      const left = `  ${i + 1}) ${models[i].id}`;
+      const right = models[i + half] ? `  ${i + half + 1}) ${models[i + half].id}` : '';
+      console.log(left.padEnd(48) + right);
+    }
+  } else {
+    models.forEach((model, i) => console.log(`  ${i + 1}) ${model.id} — ${model.label}`));
+  }
+  for (;;) {
+    const answer = (await ask(`Choice [keep last used]: `)).trim().toLowerCase();
+    if (!answer) return;
+    const byNumber = models[Number(answer) - 1];
+    const byName = models.find((model) => model.id === answer || model.label.toLowerCase() === answer);
+    const model = (/^\d+$/.test(answer) && byNumber) || byName;
+    if (model) {
+      extraArgs.push('--model', model.id);
+      return;
+    }
+    console.log(`Type a number from 1 to ${models.length}, a model name, or press Enter to keep the last-used model.`);
+  }
 }
 
 /**
@@ -415,7 +516,7 @@ async function launch() {
     console.log(`Opening Plan2Code in ${folder}`);
   }
 
-  if (!hasModelFlag(extraArgs)) await confirmModel(cli);
+  if (!hasModelFlag(extraArgs)) await chooseModel(cli, extraArgs);
 
   const args = cli.args(extraArgs);
   const options = { cwd, stdio: 'inherit' };
@@ -450,4 +551,7 @@ async function launch() {
   });
 }
 
-launch();
+// Run only when invoked directly; requiring the file (the tests do) is load-only.
+if (require.main === module) launch();
+
+module.exports = { mergeModels, modelEntries };

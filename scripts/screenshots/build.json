@@ -1,0 +1,40 @@
+{
+  "workflow": "implement",
+  "title": "task-api: Phase 3",
+  "headline": {
+    "stage": "Phase 3: API endpoints",
+    "cleared": 5,
+    "total": 11
+  },
+  "docs": [
+    {
+      "id": "phase",
+      "title": "Phase 3 tasks",
+      "version": 6,
+      "blocks": [
+        {
+          "id": "tasks",
+          "state": "settled",
+          "md": "- [x] **Task 3.1:** Register the /tasks routes plugin\n- [x] **Task 3.2:** Add GET /tasks with cursor paging\n- [x] **Task 3.3:** Add GET /tasks/:id\n- [x] **Task 3.4:** Add POST /tasks with a Zod schema\n- [x] **Task 3.5:** Add PATCH /tasks/:id for status and fields\n- [ ] **Task 3.6:** Add DELETE /tasks/:id as a soft delete\n- [ ] **Task 3.7:** Filter GET /tasks by status and assignee\n- [ ] **Task 3.8:** Return one error shape for 400, 404 and 409\n- [ ] **Task 3.9:** Document the endpoints in openapi.yaml\n- [ ] **Task 3.10:** Write tests for paging, filters and validation\n- [ ] **Task 3.11:** Run the test suite and record the results"
+        }
+      ]
+    },
+    {
+      "id": "phasefile",
+      "title": "phase-3.md",
+      "version": 6,
+      "blocks": [
+        {
+          "id": "body",
+          "state": "settled",
+          "md": "# Phase 3: API endpoints\n\n**Status:** In Progress\n**Estimated Tasks:** 11\n\n## Overview\n\nThe /tasks endpoints: list with paging and filters, read, create, update and soft delete, with one error shape for every failure.\n\n## Prerequisites\n\n- Phase 2 complete (the tasks table and model exist) VERIFIED\n- Postgres runs locally VERIFIED\n\n## Tasks\n\n- [x] **Task 3.1:** Register the /tasks routes plugin\n- [x] **Task 3.2:** Add GET /tasks with cursor paging\n- [x] **Task 3.3:** Add GET /tasks/:id\n- [x] **Task 3.4:** Add POST /tasks with a Zod schema\n- [x] **Task 3.5:** Add PATCH /tasks/:id for status and fields\n- [ ] **Task 3.6:** Add DELETE /tasks/:id as a soft delete\n- [ ] **Task 3.7:** Filter GET /tasks by status and assignee\n- [ ] **Task 3.8:** Return one error shape for 400, 404 and 409\n- [ ] **Task 3.9:** Document the endpoints in openapi.yaml\n- [ ] **Task 3.10:** Write tests for paging, filters and validation\n- [ ] **Task 3.11:** Run the test suite and record the results\n\n## Acceptance Criteria\n\n- Every endpoint validates its input and answers errors in one shape\n- Paging stays stable while tasks are added and removed\n"
+        }
+      ]
+    }
+  ],
+  "agent": {
+    "status": "working",
+    "activity": "Task 6 of 11: deleting a task",
+    "quietMinutes": 15
+  }
+}

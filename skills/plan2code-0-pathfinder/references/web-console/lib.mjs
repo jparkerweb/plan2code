@@ -39,6 +39,13 @@ export const SESSIONS_DIR = path.join(HOME_DIR, "sessions");
 // state: a browser ties localStorage to the origin, and the origin carries the
 // ephemeral port, so the file under this dir is the only copy of a preference
 // that survives the next session's new port.
+// Model menus for the `plan2code` launcher. The shipped list (bin/models.json) is the
+// authors' and is overwritten by every install; the user's additions (models.json) are
+// theirs. The launcher reads both. PLAN2CODE_MODELS_DIR moves them, for tests.
+const PLAN2CODE_DIR = process.env.PLAN2CODE_MODELS_DIR || path.join(os.homedir(), ".plan2code");
+export const SHIPPED_MODELS_FILE = path.join(PLAN2CODE_DIR, "bin", "models.json");
+export const USER_MODELS_FILE = path.join(PLAN2CODE_DIR, "models.json");
+
 export const LOOKS_FILE = path.join(HOME_DIR, "looks.json");
 
 // The runtime dir has to follow PLAN2CODE_CONSOLE_HOME too. Without that, a
@@ -139,6 +146,91 @@ export function appendEvent(dir, event) {
   const line = JSON.stringify({ at: nowIso(), ...event });
   fs.appendFileSync(path.join(dir, "events.ndjson"), line + "\n");
   return line;
+}
+
+/* ----------------------------------------------------- the state lock */
+
+// state.json has two writers in two processes: console.mjs (`open` and `post`,
+// the agent's side) and the server (`/submit` stamps the phase and records
+// what was sent on each item). Each writer reads the file, changes it and
+// writes it back, so two of them overlapping lose whichever wrote first. Every
+// read-modify-write of state.json therefore runs under this lock, a file
+// created with O_EXCL beside it. The sections it guards are a read, a merge
+// and a write, milliseconds long, so a lock older than LOCK_STALE_MS, or one
+// whose holder has died, is a crash left behind and is broken. The wait runs
+// past the stale age, so a writer always gets in eventually.
+export const STATE_LOCK_FILE = "state.json.lock";
+const LOCK_STALE_MS = 5000;
+const LOCK_WAIT_MS = 7000;
+
+function lockStale(lock) {
+  try {
+    const st = fs.statSync(lock);
+    if (Date.now() - st.mtimeMs > LOCK_STALE_MS) return true;
+    const pid = Number.parseInt(fs.readFileSync(lock, "utf8"), 10);
+    return Number.isInteger(pid) && pid > 0 && pid !== process.pid && !pidAlive(pid);
+  } catch (err) {
+    // Gone between the failed create and this look: free, so try again.
+    return err.code === "ENOENT";
+  }
+}
+
+// Run fn while holding the session's state lock, and release it however fn
+// ends. fn must not call process.exit(): the release would never run, and the
+// next writer would wait out the stale age.
+export function withStateLock(dir, fn) {
+  const lock = path.join(dir, STATE_LOCK_FILE);
+  const deadline = Date.now() + LOCK_WAIT_MS;
+  let fd = null;
+  for (let attempt = 0; fd === null; attempt++) {
+    try {
+      fd = fs.openSync(lock, "wx");
+    } catch (err) {
+      // EPERM / EACCES: on Windows, a lock being deleted still blocks a create.
+      if (!["EEXIST", "EPERM", "EACCES", "EBUSY"].includes(err.code)) throw err;
+      if (Date.now() > deadline) throw new Error("state.json is busy with another writer; try again");
+      if (err.code === "EEXIST" && lockStale(lock)) {
+        try {
+          fs.rmSync(lock, { force: true });
+        } catch {}
+        continue;
+      }
+      sleepSync(Math.min(5 * (attempt + 1), 50));
+    }
+  }
+  try {
+    try {
+      fs.writeSync(fd, String(process.pid));
+    } finally {
+      fs.closeSync(fd);
+    }
+    return fn();
+  } finally {
+    try {
+      fs.rmSync(lock, { force: true });
+    } catch {}
+  }
+}
+
+// The one way to change state.json: under the lock, read it fresh, hand it to
+// fn (null when there is no state yet, with the raw text beside it), and write
+// back whatever fn returns. A null return writes nothing. Returns the written
+// state and its text, or null.
+export function updateState(dir, fn) {
+  const file = path.join(dir, "state.json");
+  return withStateLock(dir, () => {
+    let text = null;
+    try {
+      text = fs.readFileSync(file, "utf8");
+    } catch {}
+    let state = null;
+    try {
+      state = text === null ? null : JSON.parse(text);
+    } catch {}
+    const next = fn(state, text);
+    if (!next) return null;
+    return { state: next, text: writeJsonAtomic(file, next) };
+  });
 }
 
 export function sleepSync(ms) {
@@ -827,6 +919,41 @@ const ITEM_DEFAULTS = {
   thread: [],
 };
 
+// The question a card asks. If a patch rewrites any of these on a known id, it
+// is a new question wearing an old id.
+const QUESTION_FIELDS = ["kind", "title", "body", "options", "steps", "rows", "summary", "doc", "verdicts"];
+
+/**
+ * Merge item patches by id, and keep a reused id from inheriting the person's
+ * old answer. `submitted` is the server's record of what they sent to the
+ * PREVIOUS question. When a patch changes what an item asks and doesn't itself
+ * settle it, that record (and any stale `answer`) is dropped, so the page shows
+ * the new question as open instead of "Sent, waiting for Plan2Code" forever.
+ */
+function dropStaleSubmissions(currentItems, before, patchList) {
+  const merged = mergeKeyed(currentItems, patchList, "id", ITEM_DEFAULTS, "items");
+  for (const entry of patchList) {
+    const prev = (before || []).find((x) => x.id === entry.id);
+    if (!prev || (prev.submitted === undefined && prev.answer === undefined)) continue;
+    const rewritten = QUESTION_FIELDS.some(
+      (f) => f in entry && JSON.stringify(entry[f]) !== JSON.stringify(prev[f]),
+    );
+    const settles = entry.status === "answered" || entry.status === "skipped" || "answer" in entry;
+    // A settled question edited in place (a typo in its body) stays settled; only an
+    // explicit reopen turns it into a new question.
+    const wasSettled = prev.status === "answered" || prev.status === "skipped";
+    // A different kind is never a typo fix: a multi turned confirm is another question.
+    const kindChanged = "kind" in entry && entry.kind !== prev.kind;
+    const reopens = entry.status === "open" || entry.status === "reopened" || kindChanged;
+    if (!rewritten || settles || (wasSettled && !reopens)) continue;
+    const item = merged.find((x) => x.id === entry.id);
+    if (wasSettled && !("status" in entry)) item.status = "open";
+    if (!("submitted" in entry)) delete item.submitted;
+    delete item.answer;
+  }
+  return merged;
+}
+
 const DOC_DEFAULTS = { version: 1, stale: false, blocks: [] };
 
 // Blocks merge by id like docs do, so a patch that only settles a block's
@@ -868,7 +995,7 @@ export function applyPatch(state, patch) {
         break;
       case "items":
         if (!Array.isArray(v)) throw new Error('"items" must be an array');
-        next.items = mergeKeyed(next.items, v, "id", ITEM_DEFAULTS, "items");
+        next.items = dropStaleSubmissions(next.items, state.items, v);
         break;
       case "topics":
         if (!Array.isArray(v)) throw new Error('"topics" must be an array');
@@ -1033,6 +1160,17 @@ export function validate(state) {
     if ((item.kind === "choice" || item.kind === "multi") && !Array.isArray(item.options)) {
       problems.push(`item "${item.id}" is a ${item.kind} and needs "options"`);
     }
+    if ((item.kind === "choice" || item.kind === "multi") && Array.isArray(item.options)) {
+      for (const o of item.options) {
+        if (!o || typeof o.k !== "string" || !o.k.trim()) {
+          problems.push(`item "${item.id}" has an option with no "k" (its key, like "A")`);
+        } else if (typeof o.text !== "string" || !o.text.trim()) {
+          problems.push(
+            `item "${item.id}" option "${o.k}" needs "text" (the label) and optionally "detail". Options use "text"/"detail", not "label"/"desc".`
+          );
+        }
+      }
+    }
     if (item.verdicts != null) {
       if (!Array.isArray(item.verdicts) || !item.verdicts.length) {
         problems.push(`item "${item.id}" "verdicts" must be a non-empty array of { id, label }`);
@@ -1051,16 +1189,18 @@ export function validate(state) {
     if (item.templates != null && (item.kind !== "text" || item.templates !== "idea")) {
       problems.push(`item "${item.id}" has "templates": only a text item can carry it, and its only value is "idea".`);
     }
-    // The page compiles this to check the answer. One that will not compile
-    // is dropped there, so the check the agent asked for would silently not run.
+    // The page compiles it as the person types, and a pattern that does not
+    // compile throws there, on every keystroke, with nothing on screen to say why.
     if (item.pattern != null) {
-      let compiles = typeof item.pattern === "string";
-      try {
-        if (compiles) new RegExp(item.pattern);
-      } catch {
-        compiles = false;
+      if (typeof item.pattern !== "string") {
+        problems.push(`item "${item.id}" "pattern" must be a string holding a JavaScript regular expression`);
+      } else {
+        try {
+          new RegExp(item.pattern);
+        } catch (e) {
+          problems.push(`item "${item.id}" "pattern" is not a valid JavaScript regular expression: ${e.message}`);
+        }
       }
-      if (!compiles) problems.push(`item "${item.id}" "pattern" must be a string holding a valid JavaScript regular expression`);
     }
     const recs = (item.options || []).filter((o) => o.recommended);
     if (recs.length > 1) problems.push(`item "${item.id}" marks ${recs.length} options recommended; at most one`);
@@ -1148,7 +1288,7 @@ export function validate(state) {
   // server's record of an answer someone pressed Send on; if their own words
   // happened to contain "TASK_COMPLETE" or "Risk 3", every later agent patch
   // would be rejected and the session would wedge with no way out.
-  const authored = state.items.map(({ submitted, ...rest }) => rest);
+  const authored = state.items.map(({ submitted, sentNote, ...rest }) => rest);
   const prose =
     JSON.stringify(authored) +
     JSON.stringify(state.docs || []) +
@@ -1203,6 +1343,8 @@ export function switchWorkflow(state, { workflow, title, specDir }) {
 //   chat.ndjson       the server. One JSON line per entry: message / decision / reset.
 //   chat-cursor.json  console.mjs. The last seq the agent was handed.
 //   state.json        console.mjs `post`. The agent's replies, under chat.replies.
+//                     (state.json as a whole has a second writer, the server's
+//                     /submit, so every change to it goes through updateState().)
 //
 // The Workspace and the session meter follow the same rule, in files that
 // switchWorkflow() never touches, so they carry across dashboard hops:
@@ -1349,6 +1491,19 @@ export function collectChat(dir, state) {
 // opening line of every session and every first card reply would carry it.
 export function deliverableChat(entries) {
   return entries.some((e) => e.kind !== "reset") ? entries : [];
+}
+
+// Things the person said that were handed over but never answered. The page keeps
+// showing "working on the answer" for each until a reply lands, so the agent is
+// told on every post and every wait slice until it has replied (a refusal is a reply).
+export function unansweredChat(dir, state) {
+  const { conversation } = currentConversation(readChat(dir, 0));
+  const replied = new Set((state?.chat?.replies || []).map((r) => r && r.re));
+  const cursor = readCursor(dir);
+  return readChat(dir, 0)
+    .filter((e) => (e.kind === "message" || e.kind === "decision") && e.conversation === conversation)
+    .filter((e) => e.seq <= cursor && !replied.has(e.seq))
+    .map((e) => e.seq);
 }
 
 // How many things the person said are still waiting to be collected.

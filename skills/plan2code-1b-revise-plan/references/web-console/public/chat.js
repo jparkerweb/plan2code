@@ -211,13 +211,15 @@ export function shouldChime(prevDot, nextDot) {
 const ADRIFT_MS = 3 * 60 * 1000;
 
 /**
- * Whether nobody is there to answer a chat message. A finished or paused
- * session has no agent coming back to it; otherwise the agent is offline once
- * it has been silent longer than the page would tolerate before calling it
- * stuck (working) or adrift (anything else).
+ * Whether nobody is there to answer a chat message. A finished session's agent
+ * is often still listening through its last wait (the review and dashboard
+ * buttons on the hand-off card live as long as it does), so finish alone does
+ * not end the chat — going quiet does. Offline once the agent has been silent
+ * longer than the page would tolerate before calling it stuck (working) or
+ * adrift (anything else), which is also the only signal left once the server
+ * is gone.
  */
 export function chatOffline({ finish, agent, agentLastSeenMs, now }) {
-  if (finish) return true;
   const silent = now - agentLastSeenMs;
   if (agent && agent.status === "working") return silent > quietLimitMs(agent, STALE_MS);
   return silent > quietLimitMs(agent, ADRIFT_MS);

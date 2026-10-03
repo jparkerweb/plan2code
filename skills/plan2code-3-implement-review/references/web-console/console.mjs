@@ -54,6 +54,7 @@ import {
   nowIso,
   parseArgs,
   pendingChatCount,
+  unansweredChat,
   pendingWorkspaceChanges,
   pidAlive,
   print,
@@ -77,6 +78,7 @@ import {
   sweepUploads,
   switchWorkflow,
   terminalLine,
+  updateState,
   UPLOAD_MAX_AGE_MS,
   validate,
   validateChat,
@@ -87,6 +89,10 @@ import {
 } from "./lib.mjs";
 import { RUN_EVENTS } from "./public/meter.js";
 import { changeLine } from "./public/workspace.js";
+
+// Mirrors the server's absolute lifetime cap: a handle older than this cannot
+// still be one of our servers, so its pid gets no second look.
+const MAX_SERVER_LIFE_MS = 4 * 60 * 60 * 1000;
 
 const argv = process.argv.slice(2);
 const cmd = argv[0];
@@ -102,8 +108,24 @@ function trace(what) {
 
 /* ----------------------------------------------------------------- open */
 
+// Cache this console's directory where a later agent session can find it.
+// HOME_DIR is fixed (~/.plan2code/console, or $PLAN2CODE_CONSOLE_HOME), so
+// console-dir there is a stable place to look: the next skill that offers the
+// console points its agent at the file rather than making it search the skill
+// install dirs again. Written by `open` alone, which starts every session: a
+// `wait` or a `post` every few seconds need not rewrite it each time.
+function leavePointer() {
+  try {
+    ensureDir(HOME_DIR);
+    fs.writeFileSync(path.join(HOME_DIR, "console-dir"), HERE + "\n");
+  } catch {
+    /* a pointer we cannot leave costs nothing */
+  }
+}
+
 async function cmdOpen() {
   trace("open: start");
+  leavePointer();
   const { project, worktree, branch } = repoRoots();
   reapHandles(project);
   trace("open: project found");
@@ -113,6 +135,11 @@ async function cmdOpen() {
   let state;
   // A new skill run for the meter: a fresh open, or a resume into another workflow.
   let launched = true;
+  // Everything `open` does to a stored state, as a step it can take twice:
+  // once now, on the read below, so a bad payload is refused before anything
+  // starts, and again on a fresh read under the state lock when it writes, so
+  // a send the person made in between is kept rather than written over.
+  let reshape = (s) => s;
 
   if (sid) {
     sid = path.basename(sid);
@@ -120,27 +147,6 @@ async function cmdOpen() {
     if (!fs.existsSync(dir)) die(`no session "${sid}" to resume`, 1);
     state = readJson(path.join(dir, "state.json"));
     if (!state) die(`session "${sid}" has no state`, 1);
-    // Resuming takes a pause back down. A paused finish is a bookmark --
-    // "saved here, pick it up later" -- and picking it up is exactly what
-    // this is. Left in place, the page keeps saying PAUSED over every
-    // question the resumed session asks, because `finish` is a scalar and
-    // only an explicit `finish: null` patch clears it. A real ending is
-    // different: re-sharing a finished session's link should still show its
-    // card, so only a headline that says "paused" comes down. Done before
-    // --file applies, so a patch can still post a finish of its own.
-    if (state.finish && /^\s*paused\b/i.test(String(state.finish.headline || ""))) {
-      delete state.finish;
-      // The questions still open at the pause were the old session's asks,
-      // already narrated in the finish body so the next session can name
-      // them. Whatever the resumed session still needs it asks again, in its
-      // own words -- kept, the leftovers sit beside the new asks as
-      // duplicates nobody owns. Settled items stay: they are the record.
-      state.items = (state.items || []).filter((i) => !isOpen(i));
-      // And the topics that only the dropped items lived under, so a new
-      // item reusing an old topic id does not inherit a stale title.
-      const liveTopics = new Set(state.items.map((i) => i.topic));
-      state.topics = (state.topics || []).filter((t) => liveTopics.has(t.id));
-    }
     // A resume can also be a hand-off: the dashboard launches another skill
     // into its own session, and the first thing that skill needs is for the
     // page to stop being a dashboard. Letting the flags restate these fields
@@ -148,26 +154,51 @@ async function cmdOpen() {
     // rather than a resume plus a whole extra post.
     const switching = args.workflow && args.workflow !== state.workflow;
     launched = Boolean(switching);
-    if (switching && (args.workflow === "dashboard" || state.workflow === "dashboard")) {
-      // Going through the dashboard is a fresh start: a skill launched from
-      // the menu gets a clean page, not the last skill's questions and tabs
-      // under its own name. The staged draft goes too, since its item ids
-      // belonged to the old questions. A skill run inline from another (a
-      // quick task's review) never passes the dashboard, so it keeps the page.
-      state = switchWorkflow(state, {
-        workflow: args.workflow,
-        title: typeof args.title === "string" ? args.title : path.basename(worktree),
-        specDir: args.spec,
-      });
-      fs.rmSync(path.join(dir, "draft.json"), { force: true });
-    } else if (switching) state.workflow = args.workflow;
-    if (args.title) state.title = args.title;
-    if (args.spec) state.specDir = args.spec;
-    // Every resume clears the wake-up flag: a server restart, a launch from
-    // the dashboard, a Back-to-dashboard return. Cleared here rather than by
-    // the page because the page cannot write state, and a replay on a return
-    // is exactly what the decision rules out.
-    delete state.wake;
+    // Going through the dashboard is a fresh start: a skill launched from
+    // the menu gets a clean page, not the last skill's questions and tabs
+    // under its own name. The staged draft goes too, since its item ids
+    // belonged to the old questions. A skill run inline from another (a
+    // quick task's review) never passes the dashboard, so it keeps the page.
+    const hop = switching && (args.workflow === "dashboard" || state.workflow === "dashboard");
+    if (hop) fs.rmSync(path.join(dir, "draft.json"), { force: true });
+    reshape = (s) => {
+      // Resuming takes a pause back down. A paused finish is a bookmark --
+      // "saved here, pick it up later" -- and picking it up is exactly what
+      // this is. Left in place, the page keeps saying PAUSED over every
+      // question the resumed session asks, because `finish` is a scalar and
+      // only an explicit `finish: null` patch clears it. A real ending is
+      // different: re-sharing a finished session's link should still show its
+      // card, so only a headline that says "paused" comes down. Done before
+      // --file applies, so a patch can still post a finish of its own.
+      if (s.finish && /^\s*paused\b/i.test(String(s.finish.headline || ""))) {
+        delete s.finish;
+        // The questions still open at the pause were the old session's asks,
+        // already narrated in the finish body so the next session can name
+        // them. Whatever the resumed session still needs it asks again, in its
+        // own words -- kept, the leftovers sit beside the new asks as
+        // duplicates nobody owns. Settled items stay: they are the record.
+        s.items = (s.items || []).filter((i) => !isOpen(i));
+        // And the topics that only the dropped items lived under, so a new
+        // item reusing an old topic id does not inherit a stale title.
+        const liveTopics = new Set(s.items.map((i) => i.topic));
+        s.topics = (s.topics || []).filter((t) => liveTopics.has(t.id));
+      }
+      if (hop) {
+        s = switchWorkflow(s, {
+          workflow: args.workflow,
+          title: typeof args.title === "string" ? args.title : path.basename(worktree),
+          specDir: args.spec,
+        });
+      } else if (switching) s.workflow = args.workflow;
+      if (args.title) s.title = args.title;
+      if (args.spec) s.specDir = args.spec;
+      // Every resume clears the wake-up flag: a server restart, a launch from
+      // the dashboard, a Back-to-dashboard return. Cleared here rather than by
+      // the page because the page cannot write state, and a replay on a return
+      // is exactly what the decision rules out.
+      delete s.wake;
+      return s;
+    };
   } else {
     sid = newSessionId();
     // Named, not made: the folder is created once --file has passed, so a
@@ -185,22 +216,36 @@ async function cmdOpen() {
     // Only a freshly opened dashboard plays Planny's wake-up.
     if (args.workflow === "dashboard") state.wake = true;
   }
-  // On every open, so a resume from another worktree refreshes both.
-  state.worktree = worktree;
-  state.branch = branch;
 
   // A first payload's meter and folder reports, as `post` takes them: checked
   // now, before anything is written, and appended once the launch is.
   let openRun;
   let openIssue;
+  let patch = null;
   if (args.file) {
-    const patch = readJson(path.resolve(args.file));
+    patch = readJson(path.resolve(args.file));
     if (!patch) die(`could not read --file ${args.file} as JSON`, 2);
     ({ run: openRun, folderIssue: openIssue } = patch);
     delete patch.run;
     delete patch.folderIssue;
+  }
+  const base = reshape;
+  const settle = (s) => {
+    s = base(s);
+    // On every open, so a resume from another worktree refreshes both.
+    s.worktree = worktree;
+    s.branch = branch;
+    return s;
+  };
+  reshape = (s) => (patch ? applyPatch(settle(s), patch) : settle(s));
+  state = settle(state);
+  if (patch) {
     ledgerFromPost(dir, openRun, openIssue, state.workflow);
-    state = applyPatch(state, patch);
+    try {
+      state = applyPatch(state, patch);
+    } catch (e) {
+      die(e.message, 3);
+    }
     const problems = validate(state);
     if (problems.length) return failValidation(problems);
   }
@@ -209,13 +254,15 @@ async function cmdOpen() {
   // A fresh session needs a fresh server, and a server is a whole Node boot:
   // the slowest thing `open` does, bar the browser. Start both now, before
   // the scan and the state write, so their start-up runs alongside them
-  // instead of after. Neither can reach a page before the server is up, and
-  // the state is on disk long before that; the server reads it per request,
-  // never at boot.
+  // instead of after. The server does look at the state as it boots, and on
+  // a fresh session finds none yet: it takes the worktree from its command
+  // line, not from the state, and picks the state up on its first request or
+  // poll tick. No page can reach it before it is listening, and the state is
+  // on disk long before a browser gets there.
   const existing = sid && (args.resume || args.session) ? listHandles(project).find((h) => h.sid === sid) : null;
   const reusable = existing && pidAlive(existing.pid) ? healthOk(existing) : Promise.resolve(false);
   let boot = null;
-  if (!existing) boot = await startServer(project, sid, dir);
+  if (!existing) boot = await startServer(project, worktree, sid, dir);
 
   // The dashboard's spec picker reads its inventory straight off the session
   // state, so the scan belongs to `open` rather than to the agent: filesystem
@@ -223,23 +270,43 @@ async function cmdOpen() {
   // never something a model has to remember to fetch. Rooted at the worktree's
   // own top level: `project` is the common-dir key so linked worktrees share
   // sessions, but each shows the specs on its own disk.
-  if (state.workflow === "dashboard") state.scan = scanProject(worktree);
+  const scan = state.workflow === "dashboard" ? scanProject(worktree) : null;
 
-  // Clear a result the agent already collected, and ONLY that one.
-  //
-  // An unconsumed result is answers a person pressed Send on that nobody has
-  // picked up yet. Deleting it here is exactly the documented crash-recovery
-  // case ("your session died, press Send anyway, the next session picks it
-  // up") and deleting it destroys their work silently.
-  const resultPath = path.join(dir, "result.json");
-  const waiting = readJson(resultPath);
-  if (waiting && waiting.consumedAt) fs.rmSync(resultPath, { force: true });
-  const carried = Boolean(waiting && !waiting.consumedAt);
+  // Under the state lock, which a send on the page takes too: the result and
+  // the state are read fresh here and the state is rebuilt from that read, so
+  // nothing the person sent since the read above is lost or stamped over.
+  let carried = false;
+  let written;
+  try {
+    written = updateState(dir, (fresh) => {
+      const next = fresh ? reshape(fresh) : state;
+      if (scan) next.scan = scan;
 
-  // Do not stamp over "submitted" either: the phase is how the page knows a
-  // send is still in flight.
-  if (!carried) state.phase = "collecting";
-  writeJsonAtomic(path.join(dir, "state.json"), state);
+      // Clear a result the agent already collected, and ONLY that one.
+      //
+      // An unconsumed result is answers a person pressed Send on that nobody has
+      // picked up yet. Deleting it here is exactly the documented crash-recovery
+      // case ("your session died, press Send anyway, the next session picks it
+      // up") and deleting it destroys their work silently.
+      const resultPath = path.join(dir, "result.json");
+      const waiting = readJson(resultPath);
+      if (waiting && waiting.consumedAt) fs.rmSync(resultPath, { force: true });
+      carried = Boolean(waiting && !waiting.consumedAt);
+
+      // Do not stamp over "submitted" either: the phase is how the page knows a
+      // send is still in flight.
+      if (!carried) next.phase = "collecting";
+      return next;
+    });
+  } catch (e) {
+    written = { error: e.message };
+  }
+  if (!written || written.error) {
+    // A server just started for this state would only serve a page that never starts.
+    if (boot) boot.kill();
+    die(`could not write the session state: ${written ? written.error : "unknown"}`, 1);
+  }
+  state = written.state;
   appendEvent(dir, { type: "open", resumed: Boolean(args.resume || args.session), carried });
   trace("open: state written");
 
@@ -288,14 +355,14 @@ async function cmdOpen() {
 
   // A handle whose pid is alive but is not ours (the pid was reused) leaves
   // this for last: nothing could be started until that was known.
-  let started = boot || (await startServer(project, sid, dir));
+  let started = boot || (await startServer(project, worktree, sid, dir));
   let handle = await awaitHandle(started);
   if (!handle && started.handoff) {
     // The handover went wrong somewhere (a platform that will not pass the
     // socket, a server that died taking it). Once more the old way, where
     // the server binds its own port: slower, and certain.
     started.kill();
-    started = await startServer(project, sid, dir, { handoff: false });
+    started = await startServer(project, worktree, sid, dir, { handoff: false });
     handle = await awaitHandle(started);
   }
   if (!handle) {
@@ -372,7 +439,7 @@ function isFolder(p) {
  * boot: a process's first listen() blocks for ~50ms on Windows while the
  * socket stack loads, which is time the server spends booting anyway.
  */
-async function startServer(project, sid, dir, { handoff = true } = {}) {
+async function startServer(project, worktree, sid, dir, { handoff = true } = {}) {
   const token = newToken();
   const handlePath = handleFile(project, sid);
   ensureDir(path.dirname(handlePath));
@@ -389,6 +456,9 @@ async function startServer(project, sid, dir, { handoff = true } = {}) {
       `--session=${dir}`,
       `--token=${token}`,
       `--project=${project}`,
+      // The checkout the session runs in, which the state does not hold yet
+      // on a fresh open. See WORKTREE in server.mjs.
+      `--worktree=${worktree}`,
       ...(handoff ? ["--handoff"] : []),
       ...(args["idle-ms"] ? [`--idle-ms=${args["idle-ms"]}`] : []),
     ],
@@ -487,20 +557,37 @@ function cmdPost() {
   delete patch.folderIssue;
   const ledgerLines = ledgerFromPost(dir, run, folderIssue, before.workflow);
 
-  let next;
+  // The patch is applied to a fresh read under the state lock, never to the
+  // read above: a send the person made in between is in the file, and a write
+  // built on the older read would take it away. Nothing in here may exit, so
+  // the lock is always let go; a refusal is carried out and reported after.
+  let refused = null;
+  let problems = [];
+  let written;
   try {
-    next = applyPatch(before, patch);
+    written = updateState(dir, (fresh) => {
+      if (!fresh) {
+        refused = ["that session has no state", 1];
+        return null;
+      }
+      let next;
+      try {
+        next = applyPatch(fresh, patch);
+      } catch (e) {
+        refused = [e.message, 3];
+        return null;
+      }
+      problems = validate(next);
+      if (!problems.length && patch.chat) problems = validateChat(next, readChat(dir));
+      return problems.length ? null : next;
+    });
   } catch (e) {
-    die(e.message, 3);
+    die(e.message, 1);
   }
-  const problems = validate(next);
+  if (refused) die(...refused);
   if (problems.length) return failValidation(problems);
-  if (patch.chat) {
-    const chatProblems = validateChat(next, readChat(dir));
-    if (chatProblems.length) return failValidation(chatProblems);
-  }
+  const next = written.state;
 
-  writeJsonAtomic(statePath, next);
   for (const line of ledgerLines) appendLedger(dir, line);
   appendEvent(dir, { type: "post", items: (patch.items || []).length });
 
@@ -512,6 +599,7 @@ function cmdPost() {
     items: next.items.length,
     open,
     phase: next.phase,
+    ...unansweredNote(dir, next),
     ...(handle && handle.url ? { terminalLine: terminalLine(handle.url) } : {}),
   });
 }
@@ -554,13 +642,15 @@ function ledgerFromPost(dir, run, issue, workflow) {
 
 async function cmdWait() {
   const dir = mustSession();
-  // A --seconds that is not a number would make the deadline NaN, and the
-  // slice would end at once with exit 10: a busy loop, not a wait.
+  // "240s" reads as 240. A --seconds with no number in it at all would make
+  // the deadline NaN, and the slice would end at once with exit 10: a busy
+  // loop, not a wait. So that is refused rather than guessed at.
   const given = args.seconds;
-  if (given !== undefined && (typeof given !== "string" || !given.trim() || !Number.isFinite(Number(given)))) {
+  const asked = typeof given === "string" ? Number.parseFloat(given) : NaN;
+  if (given !== undefined && !Number.isFinite(asked)) {
     die(`--seconds must be a number, got "${args.seconds}"`, 2);
   }
-  const seconds = Math.max(5, Number(args.seconds || 240));
+  const seconds = Math.max(5, given === undefined ? 240 : asked);
   const sid = path.basename(dir);
   const project = projectRoot();
   const resultPath = path.join(dir, "result.json");
@@ -580,6 +670,11 @@ async function cmdWait() {
   // was a full read and parse every 400ms, which put up to 0.4s between the
   // person pressing Send and the agent starting on it, on every single send.
   let healthAt = 0;
+  // A busy server (right after a post, say) can miss one health check without
+  // being gone. Only a missing handle or dead pid is proof at once; a server
+  // that merely does not answer must fail three checks in a row, each with a
+  // longer look, before the slice ends with exit 20.
+  let healthMisses = 0;
   // Null, not the current stamp: a result written between the check above and
   // this line would otherwise read as already seen and wait out the slice.
   let seen = null;
@@ -605,11 +700,17 @@ async function cmdWait() {
     if (Date.now() - healthAt > 5000) {
       healthAt = Date.now();
       const handle = listHandles(project).find((h) => h.sid === sid);
-      if (!handle || !pidAlive(handle.pid) || !(await healthOk(handle))) {
+      if (!handle || !pidAlive(handle.pid)) {
         print(serverGone(sid));
         process.exitCode = 20;
         return;
       }
+      if (await healthOk(handle, 4000)) healthMisses = 0;
+      else if (++healthMisses >= 3) {
+        print(serverGone(sid));
+        process.exitCode = 20;
+        return;
+      } else healthAt = Date.now() - 3000; // look again in about 2s, not 5s
     }
     sleepSync(50);
   }
@@ -630,7 +731,9 @@ async function cmdWait() {
     staged,
     url: handle ? handle.url : "",
     message: "Waiting on your answer in the web console",
+    next: "NOT FINISHED, do not end your turn or write a summary: relay the message in one line, then run this same wait command again right now. Repeat until the exit code is not 10.",
     pendingChat: 0,
+    ...unansweredNote(dir, state),
     // A workspace change alone never ends a slice: it rides on the next send.
     pendingWorkspace: pendingWorkspaceChanges(dir).length,
     ...(handle && handle.url ? { terminalLine: terminalLine(handle.url) } : {}),
@@ -638,11 +741,19 @@ async function cmdWait() {
   process.exitCode = 10;
 }
 
+// Quick questions already handed over with no reply yet. Always empty when all are answered.
+function unansweredNote(dir, state) {
+  const seqs = unansweredChat(dir, state);
+  return seqs.length
+    ? { unansweredChat: seqs, warning: "Quick questions " + seqs.join(", ") + " have no reply yet and the page still shows them as pending. Reply to each now (chat.replies, re = seq): do what was asked when you can, or say why you will not." }
+    : {};
+}
+
 function serverGone(sid) {
   return {
     status: "server-gone",
     sid,
-    message: "The console server is not running. Start it again with `open --resume` and give the person the new link.",
+    message: "The console server is not running. Start it again with `open --resume <sid> --no-open`, then keep waiting: at a finished screen too, since the person's Ask messages and the dashboard button still need you.",
   };
 }
 
@@ -943,10 +1054,13 @@ async function cmdStop() {
     // reboot in the system temp directory, and PIDs get reused; without this
     // check `stop --all` can kill an unrelated program that happens to have
     // inherited the number. /health returning our own sid is the only proof:
-    // a young handle with a live pid is not, since the server may have died
-    // minutes ago and its number gone straight to something else. A server
-    // too wedged to answer /health still meets its own idle deadline.
-    if (!(await healthOk(h))) {
+    // a live pid and a young handle are not, since a server that died a
+    // minute ago leaves exactly that behind for any process to inherit. A
+    // busy server gets a second, longer look, and still has to answer as
+    // ours; one that does not is left alone, and only its handle goes.
+    const young = Date.now() - Date.parse(h.startedAt || 0) < MAX_SERVER_LIFE_MS;
+    const ours = (await healthOk(h)) || (young && pidAlive(h.pid) && (await healthOk(h, 5000)));
+    if (!ours) {
       skipped++;
       try {
         fs.rmSync(h.handlePath, { force: true });
@@ -1074,18 +1188,6 @@ const COMMANDS = {
   help: cmdHelp,
 };
 
-// Cache this console's directory where a later agent session can find it.
-// HOME_DIR is fixed (~/.plan2code/console, or $PLAN2CODE_CONSOLE_HOME), so
-// console-dir there is a stable place to look: the next skill that offers the
-// console points its agent at the file rather than making it search the skill
-// install dirs again. Written on every invocation, help and errors included.
-try {
-  ensureDir(HOME_DIR);
-  fs.writeFileSync(path.join(HOME_DIR, "console-dir"), HERE + "\n");
-} catch {
-  /* a pointer we cannot leave costs nothing */
-}
-
 // Say which Node is too old, rather than dying later inside a health check with
 // "fetch is not defined". Whatever agent is driving this has to be able to read
 // the failure, tell the person in one line, and carry on in the terminal.
@@ -1103,6 +1205,14 @@ if (!cmd || !Object.hasOwn(COMMANDS, cmd)) {
     "console: usage: console.mjs <open|post|wait|chat|keep|status|stop|help> [--session <id>] [--file <patch.json>] [--seconds N]\n"
   );
   process.exit(2);
+}
+
+// A flag given with no value parses as `true`, and a boolean handed on as a
+// path or a name crashes somewhere deep (path.basename(true) throws). Every
+// flag that takes a value is checked once, here, and refused as bad usage.
+const VALUE_FLAGS = ["session", "sid", "resume", "file", "spec", "title", "workflow", "upload", "name", "from", "seconds", "limit", "idle-ms"];
+for (const flag of VALUE_FLAGS) {
+  if (flag in args && typeof args[flag] !== "string") die(`--${flag} needs a value`, 2);
 }
 
 await COMMANDS[cmd]();

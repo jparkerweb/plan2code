@@ -11,8 +11,10 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
+import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 
+const require = createRequire(import.meta.url);
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const LAUNCHER = path.join(ROOT, "src", "launcher", "plan2code.js");
 const IS_WINDOWS = process.platform === "win32";
@@ -124,6 +126,28 @@ test("launcher: an unknown --cli exits 2, a missing CLI 127, and nothing is star
   assert.match(missing.stderr, /the `devin` CLI was not found/);
 
   assert.equal(box.argsOf("claude"), null);
+});
+
+test("launcher: mergeModels keeps the shipped list first and drops user duplicates", () => {
+  const { mergeModels, modelEntries } = require(LAUNCHER);
+  const shipped = [{ id: "a", label: "A" }, { id: "b", label: "B" }];
+  const user = [{ id: "b", label: "B old" }, { id: "c", label: "C" }, { id: "c", label: "C again" }];
+  assert.deepEqual(mergeModels(shipped, user), [...shipped, { id: "c", label: "C" }]);
+  assert.deepEqual(mergeModels(shipped, []), shipped);
+  // A missing or corrupt user file yields no additions rather than an error.
+  assert.deepEqual(modelEntries(null, "devin"), []);
+  assert.deepEqual(modelEntries({ devin: "nope" }, "devin"), []);
+  assert.deepEqual(modelEntries({ devin: [{ id: 1 }, null, { id: "ok", label: "Ok" }] }, "devin"), [{ id: "ok", label: "Ok" }]);
+});
+
+test("launcher: the shipped models.json is curated Devin at low/medium/high only", () => {
+  const shipped = JSON.parse(fs.readFileSync(path.join(path.dirname(LAUNCHER), "models.json"), "utf8"));
+  assert.ok(shipped.claude.length > 0);
+  assert.ok(shipped.devin.length > 0 && shipped.devin.length <= 30);
+  for (const { id, label } of shipped.devin) {
+    assert.ok(id && label);
+    assert.doesNotMatch(id, /(xhigh|max|fast|priority)$/);
+  }
 });
 
 test("launcher: with neither CLI installed it exits 127 naming both", (t) => {
