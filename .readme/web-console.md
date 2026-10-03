@@ -204,22 +204,8 @@ bottom right or hit Escape; either goes straight to the dashboard, silent.
 With reduced motion switched on in your system settings you get the awake
 dashboard at once.
 
-Or start any step directly, as usual:
-
-```
-/plan2code-init
-/plan2code-init-update
-/plan2code-0-pathfinder
-/plan2code-1-plan
-/plan2code-1b-revise-plan
-/plan2code-2-document
-/plan2code-3-implement
-/plan2code-3-implement-review
-/plan2code-quick-task
-/plan2code-review
-/plan2code-4-finalize
-/plan2code-handoff
-```
+Or start any step directly by its command (the full list is in the README's
+[Prefer the terminal?](../README.md#prefer-the-terminal) section).
 
 The first thing it asks is how you would like to work:
 
@@ -530,6 +516,10 @@ chimes once (if sounds are on).
 Every control is a real button, radio or checkbox, so screen readers and
 keyboard-only navigation work.
 
+## Models in User Preferences
+
+The `plan2code` launcher's model menu comes from `models.json`, which every install overwrites with the authors' curated list. **User Preferences → Models** (Claude and Devin tabs) lets you add a model that came out before Plan2Code was updated; additions are kept in `~/.plan2code/models.json`, and **Reset to default** removes them. Restart `plan2code` to see a change. You can always run `plan2code --model <id>`, or switch model inside your agent before running a skill. Devin ids ending `-xhigh` or `-max` are refused.
+
 ---
 
 ## Troubleshooting
@@ -763,7 +753,3 @@ done. It prints each file's size and warns over 300 KB.
 
 Open every image before you commit it: the right screen, both themes, nothing
 cut off, and no username, home path or real project name anywhere on it.
-
-## Models in User Preferences
-
-The `plan2code` launcher's model menu comes from `models.json`, which every install overwrites with the authors' curated list. **User Preferences → Models** (Claude and Devin tabs) lets you add a model that came out before Plan2Code was updated; additions are kept in `~/.plan2code/models.json`, and **Reset to default** removes them. Restart `plan2code` to see a change. You can always run `plan2code --model <id>`, or switch model inside your agent before running a skill. Devin ids ending `-xhigh` or `-max` are refused.

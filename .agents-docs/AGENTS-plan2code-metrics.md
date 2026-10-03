@@ -17,10 +17,7 @@ Collect → Aggregate → Analyze → Improve → Apply
 
 ## Metrics Commands
 
-```bash
-cd plan2code-metrics && npm run build  # Build the CLI
-plan2code-metrics                      # Run (fully interactive, no flags)
-```
+Run `plan2code-metrics` (fully interactive, no flags). Build and test commands: see [Development Commands](./AGENTS-development-commands.md).
 
 ## Metrics CLI Menu
 
@@ -33,6 +30,7 @@ plan2code-metrics                      # Run (fully interactive, no flags)
 | Propose | AI improvement proposals with validation |
 | Apply | Interactive diff review + file patching |
 | Fetch community submissions | List/parse/import open community-feedback GitHub issues from jparkerweb/plan2code, close on success |
+| Delete metrics data | Delete selected runs, all runs + aggregated data, or everything including proposals |
 
 Community submissions arrive as GitHub issues labeled `community-feedback` on `jparkerweb/plan2code`, created by the finalize prompt's post-Step-6 submission flow; the "Fetch community submissions" option requires an authenticated `gh` CLI to list/close them.
 
@@ -49,6 +47,7 @@ Community submissions arrive as GitHub issues labeled `community-feedback` on `j
 | `applier.ts` | Interactive diff review + file patching |
 | `cli.ts` | Menu-driven interactive CLI (100% prompts, no flags) |
 | `invoke-llm.ts` | Unified LLM interface (Claude Code, GitHub Copilot CLI, or Devin CLI) |
+| `*.test.ts` | vitest suites for aggregator, community, improver (`npm test` in `plan2code-metrics/`) |
 
 ## User Feedback
 
@@ -68,8 +67,8 @@ Feedback is collected during finalize (Step 5) or retroactively via the CLI. Pip
 
 ## Supported AI Agents
 
-- **Claude Code** (recommended): `claude` CLI with `--inputFile` for prompt delivery
-- **GitHub Copilot CLI**: `copilot` CLI with stdin prompt delivery
+- **Claude Code** (recommended): `claude --print --dangerously-skip-permissions`, prompt written to a temp file and piped to stdin (execa `inputFile`)
+- **GitHub Copilot CLI**: `copilot --allow-all-tools -s`, prompt on stdin (default model `claude-sonnet-4`)
 - **Devin CLI**: `devin` CLI with `--print --prompt-file <file> --permission-mode dangerous`
 
 ## Metric Targets
@@ -77,11 +76,14 @@ Feedback is collected during finalize (Step 5) or retroactively via the CLI. Pip
 | Metric | Target | Direction |
 |--------|--------|-----------|
 | `avg_confidence` | ≥ 90 | higher is better |
+| `avg_clarification_rounds` | ≤ 2.0 | lower is better |
+| `avg_verification_gaps_found` | ≤ 2.0 | lower is better |
+| `avg_parallel_groups` | ≥ 0.5 | higher is better |
+| `avg_verification_items_added` | ≤ 1.5 | lower is better |
 | `avg_task_completion_rate` | ≥ 0.95 | higher is better |
 | `avg_blocker_count` | ≤ 1.5 | lower is better |
-| `avg_completion_marker_success_rate` | ≥ 0.95 | higher is better |
 | `avg_verification_failures_found` | ≤ 1.0 | lower is better |
 | `archival_success_rate` | ≥ 0.99 | higher is better |
 | `avg_user_rating` | ≥ 7.0 | higher is better |
 
-Data stored in `.plan2code-metrics/` (runs/, aggregated.json, proposals/).
+On start the CLI asks for the plan2code repo path (default: saved `plan2codeRepoPath` in `~/.plan2code-metrics.json`, else auto-detected up to 5 parent dirs) and the project path (default: cwd). Data is stored in `<project>/.plan2code-metrics/` (runs/, aggregated.json, proposals/).

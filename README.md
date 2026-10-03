@@ -31,7 +31,7 @@ The dashboard, in a project halfway through a build. It suggests the next step f
 ## Install and start
 
 Requires [Node.js](https://nodejs.org/) 18 or later and network access — installation runs through
-the [skills CLI](https://skills.sh). Re-run any time to update.
+the [skills CLI](https://skills.sh). To update, re-run the install command.
 
 ```bash
 npx --allow-git=all git+https://github.com/jparkerweb/plan2code.git
@@ -41,7 +41,7 @@ This fetches the installer to a temp directory, builds the workflow as Agent Ski
 installation to `skills add`, and cleans up after itself. The installed skills work independently
 from then on.
 
-Either route lands you on the same menu:
+The installer opens this menu (cloning and running `node install.js`, below, opens the same one):
 
 ```
 ╔═════════════════════════════════════════════════════════╗
@@ -59,7 +59,9 @@ Either route lands you on the same menu:
 
 1. In any project, run `plan2code`. It starts Claude Code or Devin on the dashboard, and the
    dashboard opens in your browser.
-2. Pick a card.
+2. In a project without an `AGENTS.md`, pick **Set up this project** first: Plan and Quick task
+   need it.
+3. Pick a card.
 
 Already inside your agent? Type `/plan2code` instead.
 
@@ -81,7 +83,7 @@ GitHub Copilot · Windsurf · Codex · Continue · Codeium · Zed · Amp · Open
 Gemini CLI · Cline · Roo · Kilo · Goose · Trae · Qwen Code.
 
 The installer keeps one canonical copy of each skill under `~/.agents/skills/` and links it into
-agents that maintain their own directory. Update later with `npx skills update -g`.
+agents that maintain their own directory. To update, re-run the install command.
 
 Use the installer rather than calling `skills add` against the repository root: recursive discovery
 would also find maintainer-only skills under `.claude/skills/`. The installer targets `skills/`
@@ -149,7 +151,7 @@ step in the same session.
 
 ```
  ┌╴╴╴╴╴╴╴╴╴╴╴╴┐
- ╎0 PATHFINDER╎ optional · new in 2.0 · for an idea too big or unclear to plan
+ ╎0 PATHFINDER╎ optional · for an idea too big or unclear to plan
  └╴╴╴╴╴╴┬╴╴╴╴╴┘
         ▼
  ┌────────────┐  ┌────────────┐  ┌────────────┐  ┌╴╴╴╴╴╴╴╴╴╴╴╴┐  ┌────────────┐
@@ -204,42 +206,12 @@ what you meant.
 
 ## What lands in your repo
 
-```
-your-project/
-├── specs/
-│   └── task-api/                     ← in progress
-│       ├── pathfinder/               ← only if you charted it in Step 0
-│       │   ├── map.md                    the destination, the decisions, the fog
-│       │   ├── questions/NN-<slug>.md    one decision per file
-│       │   └── briefs/brief-<date>.md    plain-English decision summaries
-│       ├── PLAN-DRAFT-20260804.md    ← Step 1: the verified plan
-│       ├── PLAN-CONVERSATION-*.md    ← Step 1: how you got there
-│       ├── overview.md               ← Step 2: phase list + parallel groups
-│       └── Phase 1.md … Phase N.md   ← Step 2: one-point tasks, self-contained
-├── specs--completed/
-│   └── auth-refresh/                 ← Step 4 files finished work here
-└── ...your code
-```
+Each feature gets a folder under `specs/` (the plan, the overview and one file per phase), and Step 4
+moves it to `specs--completed/`. The layout and progress marks are on the
+[quick reference](QUICK-REFERENCE.md#file-structure).
 
-`specs/` is gitignored by default — it's your working drawing, not a deliverable. Share a folder
-deliberately with `git add -f` when you want to.
-
-### Progress marks
-
-| Mark | Status | Meaning |
-|------|--------|---------|
-| `[ ]` | Open | Unclaimed. Any agent picks it up cold. |
-| `[/]` | In progress | Claimed right now — which is how two agents run parallel phases without colliding. |
-| `[x]` | Done | Built, self-reviewed against the spec, approved by you. |
-
-```markdown
-## Phases
-
-- [x] Phase 1: Project setup
-- [x] Phase 2: Data model
-- [/] Phase 3: API endpoints        ← an agent is on this now
-- [ ] Phase 4: Authentication       ← next available
-```
+Add `specs/` to your project's `.gitignore` (`plan2code-loop` adds it for you): it's your working
+drawing, not a deliverable. Share a folder deliberately with `git add -f` when you want to.
 
 Step 2 marks which phases don't share files. Open a second agent on one of those, and the `[/]` marks
 keep the two out of each other's way.
@@ -251,7 +223,7 @@ keep the two out of each other's way.
 Each step is its own run, and the specs on disk are the only thing carried from one to the next.
 Chain a small one onto the last, or start a fresh session for a big one (rule 1).
 
-### 0 · Pathfinder 🧭 — optional, new in 2.0
+### 0 · Pathfinder 🧭 (optional)
 
 On the page: one question at a time with the options and their trade-offs, the map growing in its own
 tab, and a **Write a brief** button for a printable summary.
@@ -290,9 +262,10 @@ sub-issues) → `PLAN-DRAFT-<date>.md`. The draft is always a local file — tha
 On the page: questions in batches of up to three, the phase breakdown as a list you can reorder and
 edit, and a sign-off at each stage.
 
-The agent works as a senior architect through six phases, stopping for you after each: requirements
-analysis · system context (reading your actual codebase) · tech stack (needs your explicit sign-off) ·
-architecture design · technical specification · transition decision.
+The agent works as a senior architect through seven phases, stopping for you after each: requirements
+analysis · system context (reading your actual codebase) · scope assessment (a large project saves and
+resumes in a fresh session) · tech stack (needs your explicit sign-off) · architecture design ·
+technical specification · transition decision.
 
 It won't finalize below **90% confidence**, and every assumption it makes is written into the draft.
 
@@ -304,13 +277,13 @@ On the page: a question only where the plan leaves something open, each phase fi
 own tab as it is written, and one sign-off at the end.
 
 The plan becomes the drawing. One `overview.md` with the phase checklist, plus one file per phase of
-one-story-point tasks. Each phase is **self-contained** — an agent opening `Phase 3.md` cold needs
+one-story-point tasks. Each phase is **self-contained** — an agent opening `phase-3.md` cold needs
 nothing else to build it. Unit and E2E tests are excluded unless you ask for them.
 
 The overview also identifies the **parallel execution groups**: phases with no shared files or
 dependencies, safe to run in separate agents at once.
 
-**In:** the `PLAN-DRAFT`. **Out:** `overview.md` + `Phase 1…N.md`
+**In:** the `PLAN-DRAFT`. **Out:** `overview.md` + `phase-1…N.md`
 
 ### 3 · Implement ⚡
 
@@ -352,19 +325,6 @@ the docs that drifted (`README`, `CHANGELOG`, `AGENTS.md`), then archives the wh
 like this.
 
 **In:** `specs/<feature>/overview.md`. **Out:** archived specs.
-
----
-
-## What to bring to each step
-
-| Step | Required input |
-|------|----------------|
-| 0 · Pathfinder | Nothing to start — just describe the idea. To continue: the feature name; it finds its own map |
-| 1 · Plan | Nothing — describe the feature |
-| 2 · Document | `specs/<feature>/PLAN-DRAFT-<date>.md`, or the planning conversation |
-| 3 · Implement | `specs/<feature>/overview.md` — it detects the phase itself |
-| Review | Scope guidance, e.g. "the last two phases", "just the auth module", "the whole PR". Auto-detects if you give none |
-| 4 · Finalize | `specs/<feature>/overview.md` |
 
 ---
 
@@ -417,17 +377,12 @@ the requirements.
 **Too many or too few phases.** Fix it in Step 2 — a phase should be a logical grouping of work, not
 a fixed size.
 
-**The page says it lost contact with Plan2Code.** Nothing you typed is lost, and the page reconnects
-by itself. If the link has stopped working, tell the agent: it restarts the session and gives you a
-new link.
-
 **The agent runs on another machine, or over SSH.** The page is served on `127.0.0.1` of the machine
 the agent runs on, so your browser can only reach it there. A forwarded port often works; otherwise
 work in the terminal, which loses nothing.
 
-**You closed the tab.** Open the link again. Everything is where you left it, including answers you
-had typed but not sent. The page's program stops about two minutes after the last tab closes, so
-after that, ask the agent to resume the session for a new link.
+**Web console problems** (lost contact, a closed tab, a dead link): see
+[.readme/web-console.md](.readme/web-console.md#troubleshooting).
 
 ---
 
