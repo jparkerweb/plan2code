@@ -759,6 +759,9 @@ that is what the person is there to download. The finish carries no
 - Every probe, recap and menu goes through the page.
 - Post `"stopWarning"` while no map exists (Steps 0 to 4) and `"stopWarning": ""`
   once it does, and `"specDir": "specs/<idea>"` when the folder is created.
+- Chart Step 8's research subagents must all report back before the
+  finish (Finishing → Nothing of yours may still be running); the finish
+  body then names what each one found.
 - At every session end, post `finish` (headline, `body`, and Form A's command as
   `command`) BEFORE `stop`. Someone who spent the session in the browser never
   sees the Trail Footer, and without this their last screen promises a question
@@ -1100,6 +1103,15 @@ open, the next question will appear here on its own" about a session that is
 over, and the one thing they need is a command in a terminal they are not
 looking at.
 
+**Nothing of yours may still be running.** Before the finish, every
+subagent or background job you started this session must have reported
+back. They run inside your terminal's process, not the console's: the page
+cannot see them, and the moment it says the session ended, the person is
+free to close that terminal and kill them mid-write. While you wait, post
+`{"agent":{"status":"working","activity":"Researching 3 questions (1 of 3 back)"}}`
+and update the count as each returns. Never write a `finish.body` that says
+work "is running in the background" or "will finish on its own".
+
 ### 1. Post the finish
 
 The same closer you are about to print in the terminal, as data:
@@ -1201,6 +1213,7 @@ answers were submitted but never picked up.
 | Your session ends mid-flight | Their answers still land on disk. A fresh session runs `status` (or `open --resume`, which reports `pendingResult: true`), and `wait` returns them. An uncollected result is never discarded. |
 | They ask to go back to the terminal | `stop` the session and continue. The files under `specs/` are unchanged. |
 | The session ends and they are still in the browser | Post `finish` **before** `stop`, and wait for the dashboard button first unless it is a pause. See Finishing, above. Without it their last screen says the next question is coming, and then says contact was lost. |
+| You started subagents or background jobs | Wait for every one to report back before `finish`, posting `working` with a count meanwhile. A finish while they run tells the person it is safe to close the terminal, and that kills them. |
 | Any session end, not only the last one | Also post `finish`: an off-ramp that routes elsewhere, a checkpoint that saves and stops, a stop request. Anything that ends the session without it leaves the page promising a question that is not coming. |
 | Picking up a paused session | `open --resume <sid>` (or `open --session <sid>`) clears a paused `finish` itself, and the questions left open at the pause with it: the finish body already said what was still open, so re-ask whatever the new session needs in your own words rather than leaving the old asks on the page as duplicates. Settled items stay. For any other ending you are deliberately taking back, post `"finish": null` in your first patch. |
 | The same result arrives twice | Your harness killed `wait` after it handed the result over but before it recorded that. Handle it once. Most of a repeated patch is harmless, because items merge by id, but `thread` and `comments` **append**: leave out any thread entry you already sent, or the person sees your reply twice. |

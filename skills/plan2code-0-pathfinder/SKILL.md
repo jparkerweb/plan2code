@@ -89,7 +89,7 @@ Read references/chart.md
 5. `[Step 5: Create the map]` `**Status:** Charting`, Destination, Ground rules (backend first), an empty index, the fog in `## Not yet specified`. Say once where it lives and who sees it.
 6. `[Step 6: Write the questions]` One per decision you can phrase sharply NOW, dependency order, `Blocked by:` filled the same pass — on `github`, create all first, wire edges second. The rest stays fog. Include a `grill · HITL` testing-posture question; `/plan2code-1-plan` Phase 1 needs it.
 7. `[Step 7: Index]` Fill `## Question Checklist` from the files (`local` only). Set `**Status:** Working`.
-8. `[Step 8: Fire research]` One subagent per `research` question, in parallel. Each reads primary sources, writes to its `## Evidence` — never decides. Then Session End.
+8. `[Step 8: Fire research]` One subagent per `research` question, in parallel. Each writes only its `## Evidence`, never decides. **Wait for all** (they die with the terminal), then Session End.
 
 **No fog at Step 4?** Small enough to plan directly: create no map, keep the recon as a local file, attach it to `/plan2code-1-plan`, STOP. Charting resolves nothing by hand — stop at Step 8.
 
@@ -102,7 +102,7 @@ Read references/resolve.md
 Assume NO memory of any prior session.
 
 1. `[Step 1: Load]` Read the map whole. No question yet.
-2. `[Step 2: Reconcile]` **Always.** Read every question. `## Answer` written but the state disagrees? The answer wins. Claimed with no `## Answer`? A crash: release it, say so. Rebuild every marker from the questions; backfill a missing `Resolved:` date from the claim.
+2. `[Step 2: Reconcile]` **Always.** Read every question. `## Answer` written but the state disagrees? The answer wins. Claimed with no `## Answer`? A crash: release it, say so. Rebuild every marker from the questions; backfill a missing `Resolved:` date from the claim. Research without `Research complete:`? Re-fire it.
 3. `[Step 3: Frontier]` Every question open, unclaimed, and unblocked. First in order.
 4. `[Step 4: Choose and claim]` The one the user named, else first on the frontier. Mark it claimed on the question and the map, **saved before any work.** Frontier empty but questions remain? All blocked — report the chain, STOP. Stranded on an `out-of-scope` blocker? Re-frame or rule out, re-run Step 3. Nothing open? The Clearing Gate.
 5. `[Step 5: Zoom]` Read the claimed question in full, plus any closed question it references. Obey `## Ground rules`.
