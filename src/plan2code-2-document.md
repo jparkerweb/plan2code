@@ -6,6 +6,18 @@ Start all DOCUMENTATION MODE responses with '📝 [DOCUMENTATION]'
 
 Technical writer transforming planning documents into precise, complete implementation specs any developer can follow without additional context.
 
+## Interface
+
+The FIRST thing you do, before anything else — before Auto-Discovery: ask **web console** (suggested) or **terminal**? Console → run `node "<D>/console.mjs" open --workflow document` before reading (<D>: references/web-console/ beside this SKILL.md, or the dir in ~/.plan2code/console/console-dir; `--spec` once known), then <D>/console.md → Documentation. Switchable anytime. `--web` or `Use the web console for this session.` in the argument answers it; drop the flag. Dashboard-launched? Resume its open session (console.md → Launches), then Auto-Discovery. `__stop` ends it; post `finish` BEFORE `stop` at every end.
+
+## Scripts
+
+`<S>` is `scripts/` beside this SKILL.md (`~/.agents/skills/plan2code-2-document/scripts/` globally). Run from the project root; each prints one JSON object, and on a non-zero exit `next` says what to do.
+
+- `node "<S>/specs.mjs" list`: every active spec with its `planDrafts` (file and **Status:** line).
+- `node "<S>/specs.mjs" status <spec>`: once written, the phases, task counts, goals, parallel groups and `checks` the files produce.
+- `node "<S>/specs.mjs" metrics <spec> --step document --set verification_items_added=<N>`: the METRICS_JSON line.
+
 ## Rules
 
 - Follow `./AGENTS.md` if it exists
@@ -18,11 +30,11 @@ Technical writer transforming planning documents into precise, complete implemen
 
 ## Auto-Discovery
 
-⚠️ IMPORTANT: `specs/` is gitignored — NEVER use Glob (silently fails). Shell only: `ls specs/` (Bash) or `Get-ChildItem specs/` (PS).
+`specs/` is gitignored, so Glob silently finds nothing there; `specs.mjs` reads it directly.
 
 **Before asking user for input:**
 
-1. Run `ls specs/` (not Glob) then check each folder for `PLAN-DRAFT-*.md`
+1. Run `specs.mjs list` and collect every spec's `planDrafts` (skip `archived` ones, the `-prev` copies)
 2. **One found:** Use it, inform user: "Found: `specs/<feature>/PLAN-DRAFT-<date>.md`"
 3. **Multiple found:** List all, ask which to document
 4. **None found:** Fall back to Required Context below
@@ -97,6 +109,7 @@ Line numbers may only appear as SUPPLEMENTAL context alongside a semantic refere
    - Quick Reference (Key Files, Environment Variables, External Dependencies)
 7. **Write** each `phase-X.md` with detailed tasks — run the complexity check per task; split any that fail, combine adjacent trivial tasks
 8. **Analyze** parallel execution eligibility
+8a. **Check the structure:** `specs.mjs status specs/<feature-name>`. Fix every `error` and `warn` in `checks` (task numbering, a checkbox under Prerequisites or criteria, a checklist row with no phase file), and confirm `phases` and `parallelGroups` read back as you wrote them
 9. **Verify** all PLAN-DRAFT requirements covered:
    - 9A: Re-read PLAN-DRAFT as source of truth
    - 9B: Cross-reference each section against docs
@@ -166,13 +179,13 @@ Use kebab-case for feature name (e.g., `user-authentication`).
 
 ### overview.md
 
-Header: Title, Created date, Source (PLAN-DRAFT path), Status (Not Started | In Progress | Complete).
+Header: Title, Created date, Source (PLAN-DRAFT path), Status on its own line as `**Status:** <value>` (Not Started | In Progress | Complete).
 
 Sections: Summary (from Executive Summary), Tech Stack table (exact copy from PLAN-DRAFT), Architecture (Pattern + Component Overview table), Risks and Mitigations table, Success Criteria checklist, Phase Checklist, Parallel Execution Groups table (from analysis), Quick Reference (Key Files, Environment Variables, External Dependencies), Completion Summary (filled during finalization).
 
 ### phase-X.md
 
-Header: Phase name, Status, Estimated Tasks count.
+Header: Phase name, Status on its own line as `**Status:** <value>` (Not Started | In Progress | Complete; `specs.mjs mark` updates it), Estimated Tasks count.
 
 Sections: Overview (2-3 sentences), Prerequisites (plain bullet list, no checkboxes), Tasks (grouped by category, `- [ ] **Task X.N:** [Description]` with File path and details), Phase Testing (if enabled), Acceptance Criteria (plain bullet list, no checkboxes), Notes, Phase Completion Summary (filled after implementation: date, implementer, what was done, files changed, issues).
 
@@ -206,31 +219,33 @@ Total tasks: Y
 Parallel Execution: [Groups or "None - sequential only"]
 ```
 
-Also append a machine-parseable metrics comment to the END of `overview.md` for the metrics pipeline:
+Also append a machine-parseable metrics comment to the END of `overview.md` for the metrics pipeline, shaped like:
 
 ```
 <!-- METRICS_JSON {"step": "document", "total_tasks": 28, "tasks_per_phase": [7, 7, 7, 7], "phase_count": 4, "parallel_groups_identified": 2, "verification_items_added": 3} -->
 ```
 
-Replace values with actuals. `verification_items_added` = total Added column from the Verification Summary table.
+Paste the `comment` from `specs.mjs metrics specs/<feature-name> --step document --set verification_items_added=<N>`, where N is the Added column total of your Verification Summary. It counts the tasks, phases and parallel groups from the files.
 
 **Tell user:**
 1. What was created (spec files list)
 2. Path for next session: `specs/<feature-name>/overview.md`
-3. Next command: `/plan2code-3-implement`
+3. Next command: `/plan2code-3-implement-review --web` (quality-gated) or `/plan2code-3-implement --web` (implementation only)
 4. Start NEW conversation for implementation
 
-**Phase Overview** — read each `phase-X.md` and present a table: phase name, task count, one-sentence goal. Helps the user plan sessions and identify review gates.
+**Phase Overview** — present a table from `status`'s `phases`: phase name, task count (`tasks.total`), one-sentence goal (`goal`, tightened if it runs long; write one yourself when it is null). Helps the user plan sessions and identify review gates.
 
 ```
 ⋅
     ╭───╮
-    │ ★ │
+   ╲│ ★ │╱
     │ ◡ │   Specs are ready! Time to build!
-    ╰───╯
+    ╰┬─┬╯
 ============================================
 NEXT STEP: Start a NEW conversation and run:
-`/plan2code-3-implement`
+`/plan2code-3-implement-review --web`
+
+Or use `/plan2code-3-implement --web` for implementation without the review gate.
 ```
 
 ## Abort Handling

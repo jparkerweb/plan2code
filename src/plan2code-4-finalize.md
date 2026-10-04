@@ -6,6 +6,20 @@ Start all FINALIZATION MODE responses with '🧹 [FINALIZATION STEP X: Step Name
 
 QA engineer and technical lead performing rigorous final validation. Verify specifications were implemented correctly and completely, create summaries, and archive completed work.
 
+## Interface
+
+The FIRST thing you do, before anything else in this file — before the Required Context check, before Step 1: ask **web console** (browser page, suggested) or **terminal**? Console → run `node "<D>/console.mjs" open --workflow finalize` before reading (<D>: references/web-console/ beside this SKILL.md, or the dir in ~/.plan2code/console/console-dir; `--spec specs/<feature-name>` if known, else post `specDir` later), then <D>/console.md → Finalize; the audit options, the doc-update approval and every cleanup confirmation go through it. Switchable anytime. `--web` or `Use the web console for this session.` in the argument answers it; drop the flag. Dashboard-launched? Resume its open session (console.md → Launches), then the Required Context check.
+
+## Scripts
+
+`<S>` is `scripts/` beside this SKILL.md (`~/.agents/skills/plan2code-4-finalize/scripts/` globally). Run from the project root. Each prints one JSON object; on a non-zero exit read `message` and do what `next` says.
+
+- `node "<S>/specs.mjs" list` / `status <spec>`: specs on disk; one spec's phases, task counts by marker, completion and `checks`. `status` also reads an archived spec.
+- `node "<S>/specs.mjs" archive <spec> [--dry-run]`: the Step 6 move, verified.
+- `node "<S>/specs.mjs" metrics <spec> --step finalize --set ...`: Step 7's METRICS_JSON line.
+- `node "<S>/feedback-payload.mjs"`: Step 6.5 (see its reference).
+- `node "<S>/commit-msg.mjs" --subject "<subject>"`: the commit command, ticket from the branch.
+
 ## Rules
 
 - Follow `./AGENTS.md` if it exists
@@ -20,11 +34,7 @@ QA engineer and technical lead performing rigorous final validation. Verify spec
 
 ### Required Context
 
-⚠️ IMPORTANT: `specs/` is gitignored — NEVER use Glob (silently fails). Shell only: `ls specs/` (Bash) or `Get-ChildItem specs/` (PS).
-
-Need all implementation spec files. Look for a single `specs/<feature-name>` folder if user hasn't provided specs.
-
-**NEVER look in `specs--completed/`** - that contains archived specs only.
+Need all implementation spec files. If the user hasn't named the spec, run `specs.mjs list` (it reads gitignored `specs/` directly, where Glob silently finds nothing, and never offers `specs--completed/`, which holds archives only). Exactly one active spec → use it.
 
 If multiple active spec folders exist or nothing provided, ask user for:
 1. The entire `specs/<feature-name>/` directory: `overview.md` and all `phase-X.md` files
@@ -33,9 +43,7 @@ If multiple active spec folders exist or nothing provided, ask user for:
 
 ## Examples
 
-**Task Audit:** Always show verification table with phase totals, blocked items, and completion %. Never just assert "all complete" without evidence.
-
-**Documentation Review:** Always show review table with each document checked and proposed changes. Never assert "no updates needed" without evidence.
+**Task Audit / Documentation Review:** Always show the evidence table — phase totals and blocked items / each document checked with proposed changes. Never assert "all complete" or "no updates needed" without it.
 
 ## Process
 
@@ -49,17 +57,16 @@ Complete steps in order. Report progress after each.
 
 **Objective:** Verify all tasks across all phases completed.
 
-1. Open each `phase-X.md` file
-2. Count only `**Task X.N:**` checkbox items (prerequisites and acceptance criteria use plain bullets)
-3. Verify each task status:
+1. Run `specs.mjs status <spec>`. It counts only `**Task X.N:**` checkbox items (prerequisites and acceptance criteria use plain bullets) in every `phase-X.md`, by marker:
 
-| Status | Meaning | Action |
-|--------|---------|--------|
-| `[x]` | Completed | Verify implementation exists |
-| `[ ]` | Not started | Flag INCOMPLETE |
-| `[!]` | Blocked | Document blocker |
+| Marker | Meaning | Counts as | Action |
+|--------|---------|-----------|--------|
+| `[x]` | Completed | Completed | Verify implementation exists |
+| `[?]` | Assumed complete | Completed | List it: it was never verified |
+| `[ ]` / `[/]` | Not started / started | Incomplete | Flag INCOMPLETE |
+| `[!]` | Blocked | Incomplete | Document blocker |
 
-3. Create audit table:
+2. Build the audit table from each phase's `tasks` (Completed = `complete` + `assumed`; Incomplete = `pending` + `in-progress`; each phase's `openTasks`, `blockedTasks` and `assumedTasks` name them; the Total row is `totals`):
 
 ```markdown
 ## Task Completion Audit
@@ -69,7 +76,7 @@ Complete steps in order. Report progress after each.
 | **Total** | **X** | **X** | **X** | **X** |
 ```
 
-4. Calculate: `(Completed / Total) * 100`
+3. Completion is `completionPercent` (Completed / Total). Report any `error` in `checks` too (e.g. a phase marked `[x]` in overview.md with open tasks).
 
 #### If incomplete tasks exist:
 
@@ -188,9 +195,9 @@ If updates needed, show Planny and ask for approval:
 ```
 ⋅
     ╭───╮
-    │ ● │
-    │ ~ │   Found some docs that need updating!
-    ╰───╯
+    │ ★ │╱
+   ╱│ ~ │   Found some docs that need updating!
+    ╰┬─┬╯
 ```
 
 > Reply "approve" to proceed with doc updates, or specify which to skip.
@@ -237,15 +244,9 @@ Ask: "Submit this feedback + run metrics to the maintainer via GitHub? (optional
 
 **Confirm with user before moving files.**
 
-1. Create: `specs--completed/<feature-name>/`
-2. Move all contents of `specs/<feature-name>/`:
-   - `overview.md` (with completion summary)
-   - All `phase-X.md` files
-   - `PLAN-DRAFT.md`, `PLAN-CONVERSATION-*.md`, `pathfinder/` (if present)
-3. Remove temporary scratch files not part of the final spec record
-4. Verify original directory empty and can be removed
-
-**Keep folder name exactly as-is during archival.**
+1. Remove temporary scratch files not part of the final spec record (ask first; never `pathfinder/`). Everything left is the record: `overview.md` (with completion summary), every `phase-X.md`, `PLAN-DRAFT-*.md`, `PLAN-CONVERSATION-*.md`, `pathfinder/` (if present).
+2. `specs.mjs archive <spec> --dry-run` and show the user its `files`; on their yes, `specs.mjs archive <spec>`. It moves the whole folder to `specs--completed/<feature-name>/` (name preserved exactly) and verifies the original is gone (`sourceRemoved`, `filesAtTarget`). Exit 5 `target-exists`: an archive of that name already exists; nothing moved, ask the user how to proceed.
+3. In the same confirm, say the spec's remembered web console workspace folders will be forgotten too. After a successful move, on that yes: `node "<D>/console.mjs" forget --spec specs/<feature-name>` (<D>: references/web-console/ beside this SKILL.md). `forgot: false` just means none were saved; any failure is one line, never a blocker.
 
 ---
 
@@ -276,7 +277,7 @@ Read references/community-feedback-submission.md
 
 <!-- METRICS_JSON {"step": "finalize", "completion_rate_at_audit": 0.95, "tasks_completed": 19, "tasks_total": 20, "verification_failures_found": 1, "documentation_updates_needed": 2} -->
 
-Replace METRICS_JSON values with actuals. `completion_rate_at_audit` = Y/Z as decimal (e.g., 19/20 = 0.95).
+Paste the `comment` from `specs.mjs metrics <spec's current path: specs--completed/<feature-name> once archived, else specs/<feature-name>> --step finalize --set verification_failures_found=<N> --set documentation_updates_needed=<N>`: it computes the rate (Y/Z as a decimal) and the task counts; the two `--set` numbers are your Step 2 and Step 4 counts.
 
 ### Finalization Steps Completed
 - [x] Step 1: Task Completion Audit
@@ -302,9 +303,9 @@ Replace METRICS_JSON values with actuals. `completion_rate_at_audit` = Y/Z as de
 ```
 ⋅
     ╭───╮
-    │ ★ │
+   ╲│ ★ │╱
     │ ◡ │   You did it! Feature complete!
-    ╰───╯
+    ╰┬─┬╯
 ```
 
 > IMPLEMENTATION COMPLETED!
@@ -316,8 +317,8 @@ Replace METRICS_JSON values with actuals. `completion_rate_at_audit` = Y/Z as de
 
 | Completion | Action |
 |-----------|--------|
-| **>75%** | Finalize with notice. List incomplete items. Note remaining tasks for follow-up cycle. |
-| **<75%** | Recommend returning to implementation. List incomplete phases with task counts. Options: 1) Return via `/plan2code-3-implement` 2) Proceed with partial finalization. |
+| **≥75%** | Finalize with notice. List incomplete items. Note remaining tasks for follow-up cycle. |
+| **<75%** | Recommend returning to implementation. List incomplete phases with task counts. Options: 1) Return via `/plan2code-3-implement --web` 2) Proceed with partial finalization. |
 
 ## Abort Handling
 
@@ -336,15 +337,14 @@ If user says "abort", "cancel", or similar:
 
 ## Learning Capture
 
-At session end, if you discovered undocumented commands, dependency quirks, gotchas (>5min cost), framework workarounds, or missing `AGENTS.md` patterns → prompt user to update AGENTS.md. If yes, apply the edit directly.
+If you discovered undocumented commands, dependency quirks, gotchas (>5min cost), or missing `AGENTS.md` patterns → prompt user to update AGENTS.md; apply the edit if yes.
 
 ## Session End
 
 (Step 7 already delivered the completion summary — don't repeat it.)
 
-Suggested commit (only if README, CHANGELOG, or other tracked docs were updated):
-```
-git commit -m "chore: finalize and archive <feature-name>" -m "<JIRA-Ticket-ID>" -m "AI Assisted"
-```
+Suggested commit (only if README, CHANGELOG, or other tracked docs were updated): the `command` from `commit-msg.mjs --subject "chore: finalize and archive <feature-name>"` (exit 4 `no-ticket`: show it with `<JIRA-Ticket-ID>` for the user to fill in).
 
 Returning context: Feature complete. Specs archived to `specs--completed/<feature-name>/`.
+
+**On the web console:** a `__stop` action in a send ends the session: see console.md → Stop requests. At every session end post `finish` BEFORE `stop`, per console.md → Finalize — the completion summary is printed to a terminal the browser user is not watching.

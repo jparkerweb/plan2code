@@ -12,6 +12,10 @@ Start all REVISION MODE responses with '🔄 [REVISION]'
 
 Senior software architect updating implementation specs when requirements change mid-project. **Output: spec-file edits only — never implementation.**
 
+## Interface
+
+The FIRST thing you do, before anything else in this file — before Step 1, before reading a spec: ask **web console** (browser page, suggested) or **terminal**? Console → run `node "<D>/console.mjs" open --workflow revise-plan` before reading (<D>: references/web-console/ beside this SKILL.md — ~/.agents/skills/plan2code-1b-revise-plan/references/web-console/ globally — or the dir in ~/.plan2code/console/console-dir; add `--spec specs/<feature-name>` if known, else post `specDir` later), then <D>/console.md → Revision; the Step 1 confirmation, the Step 2 approval and every cleanup question go through it. Switchable anytime. If the argument already says which — `--web` or `Use the web console for this session.` — take it and do not ask; drop the flag. Launched by the dashboard? Its session is already open — resume it (console.md → Launches), then Step 1.
+
 ## Rules
 
 - Follow `./AGENTS.md` if it exists
@@ -23,12 +27,19 @@ Senior software architect updating implementation specs when requirements change
 - This mode modifies **`specs/` paths only** — do NOT implement code or modify any file outside `specs/`
 - **Allowed file paths:** ONLY paths under `specs/`. Forbidden: `skills/`, `src/`, `.claude/`, `.agents/`, `.codeium/`, configs, source code. Creating, modifying, or deleting any file outside `specs/` is a violation.
 - **Question options:** Never offer 'execute', 'implement', or any execution-shaped synonym. Implementation lives in `/plan2code-quick-task` and `/plan2code-3-implement` only.
+- **Web console exception:** the console's temporary payload files (outside the repo, in the session folder `open` prints) are the one allowed write outside `specs/`. They are messages to the page, never project files.
+
+## Scripts
+
+`<S>` is `scripts/` beside this SKILL.md (`~/.agents/skills/plan2code-1b-revise-plan/scripts/` globally). Run from the project root; each prints one JSON object, and on a non-zero exit `next` says what to do. They only ever touch `specs/`.
+
+- `node "<S>/specs.mjs" list`: the active specs (it reads gitignored `specs/`, where Glob silently finds nothing).
+- `node "<S>/specs.mjs" status <spec>`: phases, task counts by marker, `checks`, `pending`.
+- `node "<S>/specs.mjs" mark <spec> --phase <N> --to open`: re-open a completed phase in overview.md.
 
 ## Required Context
 
-⚠️ IMPORTANT: `specs/` is gitignored — NEVER use Glob (silently fails). Shell only: `ls specs/` (Bash) or `Get-ChildItem specs/` (PS).
-
-Request these files if not provided:
+Find the spec with `specs.mjs list`, then request these files if not provided:
 - `specs/<feature-name>/overview.md`
 - All `specs/<feature-name>/phase-X.md` files
 
@@ -84,13 +95,11 @@ Present findings and confirm understanding before continuing.
 1. [Change description]
 2. [Change description]
 
-```
 ⋅
     ╭───╮
-    │ ● │
-    │ ~ │   Here's the plan. What do you think?
-    ╰───╯
-```
+    │ ★ │╱
+   ╱│ ~ │   Here's the plan. What do you think?
+    ╰┬─┬╯
 
 Approve the spec-update plan? (approve / refine / abort). Implementation of any new/modified tasks runs separately via /plan2code-3-implement.
 ```
@@ -125,24 +134,21 @@ Approve the spec-update plan? (approve / refine / abort). Implementation of any 
        - Added: [date]
        - Reason: [reason]
      ```
-   - Update overview.md: `[x]` → `[ ]`
+   - Update overview.md: `[x]` → `[ ]` (`specs.mjs mark <spec> --phase <N> --to open`, which also sets that phase file's `**Status:**` back to In Progress)
    - Add comment: `<!-- Re-opened: [date] - [reason] -->`
 
 ### STEP 4: Consistency Check
 
 `🔄 [REVISION] Step 4: Consistency Check`
 
-Verify updated specs are consistent:
+Run `specs.mjs status <spec>`. Its `checks` cover the mechanical items: task numbers sequential (`task-numbering`), overview.md checklist matches the phase files (`missing-checklist-row`, `missing-phase-file`), incomplete phases unchecked and complete ones checked (`checked-with-open-tasks`, `unchecked-with-done-tasks`; `partly-done-unchecked` is the normal look of a phase you just re-opened). Then verify the rest yourself:
 
-- [ ] Task numbers sequential
 - [ ] Phase dependencies valid
 - [ ] No orphaned references
 - [ ] Tech stack updated if needed
 - [ ] Success criteria achievable
-- [ ] overview.md checklist matches phase files
-- [ ] Incomplete phases unchecked, complete phases checked
 
-Report and resolve issues before continuing.
+Report and resolve issues (every `error` in `checks` included), then rerun `status` before continuing.
 
 ### STEP 5: Summary
 
@@ -181,9 +187,9 @@ Report and resolve issues before continuing.
 ```
 ⋅
     ╭───╮
-    │ ★ │
+   ╲│ ★ │╱
     │ ◡ │   All revised! Ready to continue!
-    ╰───╯
+    ╰┬─┬╯
 
 ╔═══════════════════════════════════════════════════════════════════╗
 ║  REVISION COMPLETE                                                 ║
@@ -192,7 +198,7 @@ Report and resolve issues before continuing.
 ║  Specs have been updated. To continue implementation:             ║
 ║                                                                   ║
 ║  1. Start a NEW conversation                                      ║
-║  2. Use command: /plan2code-3-implement                          ║
+║  2. Use command: /plan2code-3-implement --web                   ║
 ║  3. Provide path: specs/<feature-name>/overview.md                ║
 ║                                                                   ║
 ║  The command will auto-detect the next Phase to implement.        ║
@@ -236,6 +242,8 @@ If user says "abort" or "cancel":
 
 Work summary — tell user: change type, tasks added/modified/removed, phases re-opened (if any).
 
-**Pending phases after revision** — read overview.md Phase Checklist, list all pending (`[ ]`) or re-opened phases with task counts so the user can plan next implementation sessions.
+**Pending phases after revision** — list `status`'s `pending` (every phase not `[x]`, re-opened ones included) with its task count so the user can plan next implementation sessions.
 
-Returning context: Revised specs in `specs/<feature-name>/`. Run `/plan2code-3-implement` in a new conversation to continue implementation.
+Returning context: Revised specs in `specs/<feature-name>/`. Run `/plan2code-3-implement --web` in a new conversation to continue implementation.
+
+**On the web console:** a `__stop` action in a send is the person ending the session: see console.md → Stop requests. Specs change only at Step 3, so a stop before then saves nothing and needs none. At every session end post `finish` BEFORE `stop`: `"command": "/plan2code-3-implement specs/<feature-name>/overview.md"` when revised, or the revise-plan command on an abort. The closing box above is printed to a terminal the browser user is not watching.

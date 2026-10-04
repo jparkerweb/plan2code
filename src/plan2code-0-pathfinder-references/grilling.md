@@ -65,7 +65,7 @@ Every probe gets read once, by a busy human, in a terminal. Write it the way you
 | "this is a `grill · HITL`" | "this one is yours to call" |
 | "the frontier holds two takeable questions" | "two things we can decide right now" |
 | "graduating this out of the fog" | "this is sharp enough to write down as a real question now" |
-| "the sacrificial boundary" | "name one thing people would assume is included that you are willing to cut" |
+| "the sacrificial boundary" | "which of these features are we leaving out this time?" |
 | "shall I set `Locked: yes`?" | "worth recording why we picked this, so nobody re-opens it in six months?" |
 | "Q3 is blocked by 02" | "the export format question has to land before this one" |
 | "the UI cannot handle this question" | nothing — put context before the tool and preserve `Other` |
@@ -73,6 +73,8 @@ Every probe gets read once, by a busy human, in a terminal. Write it the way you
 **Refer to questions by name, never by number** — "[Export format](./questions/04-export-format.md)", not "04". The number means something to the file system and to nobody else.
 
 **No metaphor where a fact fits.** Maps, fog, and trails belong in the footer and the mascot. Inside a probe they cost a translation step: "three things here are still undecided" beats "the fog is thick in this quarter of the map."
+
+**On a what-to-drop question, name the thing dropped.** Whenever a question asks what gets dropped, left out or cut, every option names the thing being dropped, never a rule to keep. Otherwise ticking an option reads as a double negative, and the person has to work out whether a tick means yes or no. Bad: "☐ Exports stay manual" · Good: "☐ Scheduled exports (Leaving this out = someone runs each export by hand)"
 
 The same discipline covers everything else the human reads — the recap turn in *Landing the grill*, the option labels and descriptions in the structured tool, the sketch probes, and the HITL checklists in the resolution playbook. Plain in the question, precise in the term that carries the decision.
 
@@ -125,7 +127,7 @@ Fallback ONLY when the structured question tool does not exist or its call fails
 **Copy this shape exactly.** The blank lines are load-bearing, not decoration:
 
 ````markdown
-Three independent decisions are open. Answer in any order, skip any you want to punt — "Q2: b, Q3: the hybrid" is a perfectly good reply.
+Three independent decisions are open. Answer in any order, skip any you want to punt — "Q2: a, c; Q3: the hybrid" is a perfectly good reply.
 
 ---
 
@@ -143,15 +145,18 @@ When a custodian exports a year of a channel, what do they get back?
 
 ---
 
-**Q2 — What's not included**
+**Q2 — Leave for later**
 
-Name one thing a reasonable person would assume is part of this that you are willing to say is NOT part of it.
+Which of these features are we leaving out this time? Tick any number.
 
-*Why it matters:* this becomes the first thing written down as out of scope, and every later "is that in or out?" call is measured against it. A destination nobody has excluded anything from has not been thought about.
+*Why it matters:* the ones you tick become the first things written down as out of scope, and every later "is that in or out?" call is measured against them. A destination nobody has excluded anything from has not been thought about.
 
-*Recommendation:* none — this one is yours. If nothing comes to mind, I will offer two candidates and you reject one.
+*Recommendation:* **(a)** and **(c)** — neither is needed for the first review hand-off.
 
-*(free text — no options on this one)*
+- **a)** Scheduled exports (Leaving this out = someone runs each export by hand)
+- **b)** Exports of deleted messages (Leaving this out = anything already purged stays out of the file)
+- **c)** Export to a cloud bucket (Leaving this out = the file downloads to the custodian's machine only)
+- **d)** Redaction inside the export (Leaving this out = the review vendor redacts after ingest)
 ````
 
 Number them, keep the numbers stable across turns and sessions, and say out loud that partial answers are welcome — the invitation is what makes the skip visible instead of silent.

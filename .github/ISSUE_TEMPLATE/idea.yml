@@ -1,0 +1,29 @@
+name: "💡 Idea"
+description: Suggest a feature or an improvement to Plan2Code.
+title: "💡 Idea: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem or goal is this for?
+      description: What are you trying to do that is hard or impossible today?
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: Your idea
+      description: What would you like Plan2Code to do?
+    validations:
+      required: true
+  - type: textarea
+    id: who
+    attributes:
+      label: Who would this help?
+      placeholder: "Product leads writing specs, engineers running the loop, ..."
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you considered
+      description: Workarounds you use now, or other ways it could work.

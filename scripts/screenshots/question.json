@@ -1,0 +1,117 @@
+{
+  "workflow": "plan",
+  "title": "Task API",
+  "headline": {
+    "stage": "Step 1 of 7: What we're building",
+    "cleared": 1,
+    "total": 7,
+    "confidence": "A clear idea so far. Who calls the API and how it signs in are still open."
+  },
+  "topics": [
+    {
+      "id": "t1",
+      "title": "What we're building",
+      "status": "current"
+    }
+  ],
+  "items": [
+    {
+      "id": "q2",
+      "topic": "t1",
+      "kind": "choice",
+      "title": "How tasks are paged",
+      "body": "A team can have thousands of tasks. How should the list endpoint hand them back?",
+      "options": [
+        {
+          "k": "A",
+          "text": "Cursor paging",
+          "detail": "Stable while tasks are added and removed. No jumping to page 7.",
+          "recommended": true
+        },
+        {
+          "k": "B",
+          "text": "Page numbers",
+          "detail": "Familiar and easy to link to, but rows shift when tasks change mid-scroll."
+        },
+        {
+          "k": "C",
+          "text": "Everything at once",
+          "detail": "Simplest to build; slow and heavy once a team has a few thousand tasks."
+        }
+      ],
+      "token": {
+        "A": "a",
+        "B": "b",
+        "C": "c"
+      },
+      "fallbackText": "How tasks are paged: a) cursor paging  b) page numbers  c) everything at once. My guess: a."
+    },
+    {
+      "id": "q3",
+      "topic": "t1",
+      "kind": "multi",
+      "title": "Day one endpoints",
+      "body": "Which of these should be there on the first day? Anything left unticked waits for a later version.",
+      "options": [
+        {
+          "k": "1",
+          "text": "List and read tasks",
+          "detail": "GET /tasks and GET /tasks/:id, with filters by status and assignee."
+        },
+        {
+          "k": "2",
+          "text": "Create and update tasks",
+          "detail": "POST /tasks and PATCH /tasks/:id, validated."
+        },
+        {
+          "k": "3",
+          "text": "Delete tasks",
+          "detail": "A soft delete, so a task can come back."
+        },
+        {
+          "k": "4",
+          "text": "Comments on a task",
+          "detail": "A thread under each task. Doubles the data model."
+        }
+      ],
+      "presets": [
+        {
+          "label": "The essentials",
+          "ks": [
+            "1",
+            "2"
+          ]
+        },
+        {
+          "label": "Everything",
+          "ks": [
+            "1",
+            "2",
+            "3",
+            "4"
+          ]
+        }
+      ],
+      "token": {
+        "1": "1",
+        "2": "2",
+        "3": "3",
+        "4": "4"
+      },
+      "fallbackText": "Day one endpoints (pick any): 1) list and read  2) create and update  3) delete  4) comments on a task."
+    },
+    {
+      "id": "q4",
+      "topic": "t1",
+      "kind": "text",
+      "title": "Who calls it",
+      "body": "Which apps will call this API, and roughly how many people use them?",
+      "placeholder": "For example: our web app and a mobile app, about 2,000 people across 40 teams.",
+      "token": {},
+      "fallbackText": "Who calls it: which apps will call this API, and roughly how many people use them?"
+    }
+  ],
+  "agent": {
+    "status": "waiting"
+  }
+}

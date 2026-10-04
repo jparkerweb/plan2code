@@ -1,0 +1,88 @@
+{
+  "workflow": "implement",
+  "title": "task-api: Phase 3",
+  "headline": {
+    "stage": "Phase 3: API endpoints",
+    "cleared": 11,
+    "total": 11
+  },
+  "docs": [
+    {
+      "id": "phase",
+      "title": "Phase 3 tasks",
+      "version": 12,
+      "blocks": [
+        {
+          "id": "tasks",
+          "state": "settled",
+          "md": "- [x] **Task 3.1:** Register the /tasks routes plugin\n- [x] **Task 3.2:** Add GET /tasks with cursor paging\n- [x] **Task 3.3:** Add GET /tasks/:id\n- [x] **Task 3.4:** Add POST /tasks with a Zod schema\n- [x] **Task 3.5:** Add PATCH /tasks/:id for status and fields\n- [x] **Task 3.6:** Add DELETE /tasks/:id as a soft delete\n- [x] **Task 3.7:** Filter GET /tasks by status and assignee\n- [x] **Task 3.8:** Return one error shape for 400, 404 and 409\n- [x] **Task 3.9:** Document the endpoints in openapi.yaml\n- [x] **Task 3.10:** Write tests for paging, filters and validation\n- [x] **Task 3.11:** Run the test suite and record the results"
+        }
+      ]
+    },
+    {
+      "id": "report",
+      "title": "Completion report",
+      "version": 1,
+      "blocks": [
+        {
+          "id": "summary",
+          "state": "settled",
+          "md": "## Summary\n\nThe /tasks endpoints work end to end. Clients can list tasks with cursor paging and filters, read one, create, update and soft delete, and every failure comes back in the same error shape.\n\n**Tasks:** 11 of 11 done, none blocked."
+        },
+        {
+          "id": "tests",
+          "state": "settled",
+          "md": "## Tests\n\n| Suite | Passed | Failed |\n| --- | --- | --- |\n| tasks | 31 | 0 |\n| paging | 8 | 0 |"
+        },
+        {
+          "id": "files",
+          "state": "settled",
+          "md": "## Files\n\n**Created:** `src/tasks/routes.js`, `src/tasks/schema.js`, `src/tasks/paginate.js`, `test/tasks.test.js`\n\n**Modified:** `src/app.js`, `openapi.yaml`"
+        },
+        {
+          "id": "verify",
+          "state": "settled",
+          "md": "## How to check it\n\n1. Run `npm test`: 39 passing.\n2. Create two tasks, then call `GET /tasks?limit=1`: one task and a `nextCursor`.\n3. `PATCH /tasks/:id` with an unknown status answers 400 in the shared error shape."
+        }
+      ]
+    }
+  ],
+  "items": [
+    {
+      "id": "signoff",
+      "kind": "review",
+      "title": "Approve this phase",
+      "doc": "report",
+      "body": "Phase 3 is built. Read the report, try the checks, then approve it, review the code first, or say what to change.",
+      "verdicts": [
+        {
+          "id": "review",
+          "label": "Review the code first"
+        },
+        {
+          "id": "approve",
+          "label": "Approve this phase"
+        },
+        {
+          "id": "changes",
+          "label": "I want changes"
+        }
+      ],
+      "token": {
+        "review": "review",
+        "approve": "approved",
+        "changes": "needs changes"
+      },
+      "nothingYet": "Nothing is marked complete until you approve.",
+      "gate": {
+        "id": "signoff",
+        "authoritative": true
+      },
+      "fallbackText": "Reply \"approved\" to mark this phase complete, \"review\" to run the code review first, or describe any issues."
+    }
+  ],
+  "agent": {
+    "status": "waiting",
+    "quietMinutes": null
+  }
+}

@@ -52,11 +52,11 @@ Two round trips, not six. Three probes each — exactly the cap, so neither batc
 
 Batch 2 bends the independence test on purpose. The arrival signal (5) can shift under the smallest arrival (4), so strictly it should be held back — but holding it costs a third round trip to catch a conflict that is rare and cheap to spot. The trade is to send them together and reconcile at the recap: if the smallest arrival comes back materially smaller than the artifact you were told about, re-check the arrival signal against it before writing the destination. A knowing trade here, not a licence to batch dependent probes elsewhere.
 
-**Both batches go through the structured question tool.** Give each probe genuine candidate options with trade-offs and a recommendation; the built-in `Other` path is where the human composes the actor, boundary, arrival signal, or forcing-function detail in their own words. A clicked option is not written verbatim as the destination — the recap-confirmation tool call turns all six answers into the agreed one-or-two-line destination before disk write.
+**Both batches go through the structured question tool.** Give each probe genuine candidate options with trade-offs and a recommendation; the built-in `Other` path is where the human composes the actor, a further feature to leave out, the arrival signal, or forcing-function detail in their own words. A clicked option is not written verbatim as the destination — the recap-confirmation tool call turns all six answers into the agreed one-or-two-line destination before disk write.
 
 **Probe 1 — the artifact**
 
-> "When this map is cleared, what exists that does not exist now: a plan you hand to `/plan2code-1-plan`, a decision locked before anyone plans, or a change already made in the codebase? My guess: a plan."
+> "When we are done here, what exists that does not exist now: a plan you hand to `/plan2code-1-plan`, a decision recorded before anyone plans, or a change already made in the codebase? My guess: a plan."
 
 *Fishing for:* the shape of the destination. Push back if the answer is "the feature working" — that is past the edge of every pathfinder map. Say so plainly: "That is the build. The map ends at the plan for the build."
 
@@ -68,29 +68,31 @@ Batch 2 bends the independence test on purpose. The arrival signal (5) can shift
 
 **Probe 3 — the sacrificial boundary**
 
-> "Name one thing a reasonable person would assume is part of this that you are willing to say is NOT part of it."
+> "Which of these features are we leaving out this time?"
 
-*Fishing for:* the first `## Out of scope` bullet. This probe does more work than any other. A destination nobody has excluded anything from has not been thought about. If the human cannot name one, offer two candidates and make them reject one.
+Deliver it as a multi-select (`multi` on the web console) of 3–5 features a reasonable person might expect to be included. Every option names a feature ("Scheduled exports"), never a rule to keep ("Exports stay manual"). Each option's description ends "(Leaving this out = …)", naming what that leaves. Offer a recommended preset of the ones you would leave out; the free-text path lets them name another feature.
+
+*Fishing for:* the first `## Out of scope` bullets — the ticked features become them. This probe does more work than any other. If nothing is ticked, push once: a destination nobody has excluded anything from has not been thought about. The preset is the push.
 
 **Probe 4 — the smallest arrival**
 
-> "What is the smallest version that would still count as arriving? If only that existed, would you call it done or would you feel cheated?"
+> "What is the smallest version that would still count? If only that existed, would you call it done or would you feel cheated?"
 
 *Fishing for:* the difference between the destination and the wish list. Everything above the smallest arrival is a candidate for out of scope or for a later effort.
 
 **Probe 5 — the arrival signal**
 
-> "How do you know you have arrived — what do you look at?"
+> "How will you know it's done — what do you look at?"
 
 *Fishing for:* a checkable condition. "It feels right" is not one. "Every open decision has an answer and I can hand the draft to planning without re-litigating format" is one.
 
 **Probe 6 — the forcing function**
 
-> "What made this surface now? A deadline, an incident, an audit, a customer?"
+> "What made this come up now? A deadline, an incident, an audit, a customer?"
 
 *Fishing for:* constraints that will shape half the questions and that nobody volunteers unprompted. A regulatory deadline changes the delivery question, the testing posture question, and the out-of-scope line all at once.
 
-**The probe names above are internal labels, not headings the human reads.** Head each Q block plainly — *What you end up with*, *Who uses it*, *What's not included*, *Smallest version that counts*, *How you know it's done*, *Why now* — and keep the probe text itself as plain as the quotes above. "The sacrificial boundary" and "the arrival signal" mean something to this playbook and nothing to the person answering. Full rule in the grilling playbook, *Say it in plain English*.
+**The probe names above are internal labels, not headings the human reads.** Head each Q block plainly — *What you end up with*, *Who uses it*, *Leave for later*, *Smallest version that counts*, *How you know it's done*, *Why now* — and keep the probe text itself as plain as the quotes above. "The sacrificial boundary" and "the arrival signal" mean something to this playbook and nothing to the person answering. Full rule in the grilling playbook, *Say it in plain English*.
 
 ### Worked example — same idea, two destinations
 
@@ -349,7 +351,7 @@ Fog gathers **only toward the destination**. The destination fixes the scope, so
 | Reopening | Automatic, as answers land | Only if the destination is redrawn — and then as a fresh effort, not a resumption |
 | The act | An admission of ignorance | A scoping decision |
 
-Ruling something out of scope is a **scoping act, not a step on the route**. When a question you already created turns out to sit past the destination — mis-scoped in during charting, or exposed by a later answer — set `State: out-of-scope`, mark its row `[-]`, and leave one line in `## Out of scope` giving the gist and the reason, linking the question by name. It does not get an `## Answer` and it is not a decision the route walked.
+Ruling something out of scope is a **scoping act, not a step on the route**. When a question you already created turns out to sit past the destination — mis-scoped in during charting, or exposed by a later answer — run `rule-out <NN> --reason "<why>"` (resolve.md, Ruling a question out of scope mid-work): it sets `State: out-of-scope`, marks its row `[-]` and leaves one linked line in `## Out of scope` with the reason. Then handle anything it reports `stranded`. It does not get an `## Answer` and it is not a decision the route walked.
 
 Watch for **stranded** questions: a live question whose `Blocked by:` names something now out of scope will never unblock. Re-frame its `## Question` to drop the dependency, or rule it out too. Never leave it sitting.
 
@@ -367,7 +369,7 @@ The rules:
 2. **Blockers get lower numbers.** If *Row-count ceiling* blocks *Delivery channel*, the ceiling is `02` and delivery is `05`. This makes `Blocked by: 02` readable at a glance and makes "lowest `NN` first" on the frontier a sane traversal order.
 3. **`00` is always the codebase context.** Never anything else.
 4. **`NN` is never reused and never renumbered.** Not when a question is ruled out of scope, not when one is deleted, not to close a gap in the sequence. Links and `Blocked by:` lines would rot silently. Gaps in the numbering are normal and harmless.
-5. **The next number is max + 1**, computed from the directory listing, not from the map.
+5. **The next number is max + 1**, and `frontier` reports it as `nextNN`: one past the highest `NN` in the directory listing, on any `Blocked by:` line, or in any `questions/NN-` link in the map or a question file, and never below the map's `**Next NN:**` line. That line is a high-water mark the script keeps (every write command updates it, and it only rises), so even a deleted question that nothing links to any more never has its number handed out again. Never edit it by hand.
 6. **Only depend on what genuinely gates the question.** A `Blocked by:` chain that is really a preference for reading order strangles the frontier. Ask: could this question be answered — badly but honestly — without the blocker? If yes, it is not blocked.
 7. **Cycles are a phrasing bug.** If A blocks B and B blocks A, the two are one decision. Merge them or re-frame one to drop the edge.
 8. **Refer by name in prose.** Bare numbers appear only on `Blocked by:` lines.
@@ -408,10 +410,15 @@ Say once, at Step 5: *"This map lives in gitignored `specs/` — local to you, n
 **Status:** Working
 **Updated:** 2026-08-03
 **Confidence:** Requirements-clarity 18/25 · Feasibility-technical 14/25 · Integration-points 16/25 · Risk-assessment 14/25
+**Next NN:** 07
 
 <!-- Status: Charting while the map is being built (Chart Steps 1-6) -> Working once the
      checklist is indexed (Chart Step 7) -> Cleared only when the Clearing Gate passes.
      A fresh session routes on this line, so it must be correct before the session ends. -->
+
+<!-- Next NN: the number the next new question file takes. Kept by the script (reconcile
+     adds it at Chart Step 7 and every write command raises it); it never goes down, so a
+     deleted question's number is never reused. Leave it out at Step 5; never edit it. -->
 
 <!-- Confidence: four dimensions, each scored out of 25, re-scored at every resolution.
      The Clearing Gate requires all four at 18/25 or better. Score against evidence. -->
@@ -429,7 +436,9 @@ plan, not at shipped code. Continuous streaming to external systems is not on th
 ## Ground rules
 
 <!-- Standing constraints for every session on this map. Read before choosing a question,
-     obeyed while resolving it. Nothing here is re-asked. -->
+     obeyed while resolving it. Nothing here is re-asked. The first line records AGENTS.md:
+     "- `AGENTS.md` exists and governs." or, when it is missing, exactly
+     "- `AGENTS.md` is absent." (the handoff then routes to /plan2code-init first). -->
 
 - `AGENTS.md` exists and governs. Its conventions are not re-litigated by any question here.
 - One question _file_ at a time; the fork-menu between decisions; a fresh session recommended after ~3. `research` questions may run as parallel subagents.

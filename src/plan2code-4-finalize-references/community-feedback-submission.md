@@ -2,71 +2,71 @@
 
 > Loaded by `src/plan2code-4-finalize.md` STEP 6.5. This file has no character limit (see `AGENTS-architecture.md` Reference Files).
 
-## 1. Generate a fresh `run_id`
+Everything in the payload is read from files, so a script builds it: the metrics from the `METRICS_JSON` comments the pipeline already wrote, the task counts from the phase files, your Step 5 answers from overview.md's `## User Feedback` table, the installed version, and a sha256 prefix of each prompt. Your part is the two judgment counts, the preview, and the user's approval.
 
-Compute your own current timestamp and a freshly generated random 4-character hex string — do not reuse the example value shown below or anywhere in this spec. Format: `run-<YYYYMMDD>-<HHMMSS>-<4-hex-chars>` (e.g. `run-20260715-143000-a1b2`).
+## 1. Build the payload
 
-## 2. Assemble the payload
+Step 6 has already archived the spec, so point at the archive:
 
-Read `PLAN-DRAFT-*.md`, `phase-*.md`, and `overview.md` in `specs--completed/<feature-name>/` (STEP 6 has already archived them there) and reason over their content to gather:
-
-- `step1`: `final_confidence`, `confidence_breakdown` (`{requirements, feasibility, integration, risk}`), `clarification_rounds`, `tech_stack_revision_rounds`, `verification_gaps_found`, `functional_requirements_count`, `non_functional_requirements_count`, `risk_count`, `phase_count`
-- `step2`: `total_tasks`, `phase_count`, `parallel_groups_identified`, `requirement_coverage_percent`, `verification_items_added`
-- `step3`: `task_completion_rate`, `tasks_completed`, `tasks_total`, `blocker_count`
-- `step4`: `completion_rate_at_audit`, `verification_failures_found`, `documentation_updates_needed`, `archival_succeeded` (safe to read now that Step 6 has run)
-- `plan2code_version` — from `version.json`
-- `prompt_versions_short` — first 12 characters of each of the 8 prompt file names' content (`plan`, `revise_plan`, `document`, `implement`, `finalize`, `init`, `init_update`, `quick_task`). You do not have `sha256File()` available — note these as best-effort/approximate if you cannot compute a real hash, or omit the field entirely if you cannot.
-
-**Never include** `project.name` or any bulky arrays (e.g. `tasks_per_phase`).
-
-Include the feedback collected at Step 5 as `user_feedback`: `overall_rating`, `rating_reason`, `what_went_well`, `what_went_poorly`.
-
-Assemble the full nested JSON object matching this schema exactly:
-
-```json
-{
-  "schema_version": "1.0",
-  "run_id": "run-<YYYYMMDD>-<HHMMSS>-<4-hex>",
-  "plan2code_version": "<from version.json>",
-  "prompt_versions_short": { "plan": "...", "revise_plan": "...", "document": "...", "implement": "...", "finalize": "...", "init": "...", "init_update": "...", "quick_task": "..." },
-  "step1": { "final_confidence": 0, "confidence_breakdown": { "requirements": 0, "feasibility": 0, "integration": 0, "risk": 0 }, "clarification_rounds": 0, "tech_stack_revision_rounds": 0, "verification_gaps_found": 0, "functional_requirements_count": 0, "non_functional_requirements_count": 0, "risk_count": 0, "phase_count": 0 },
-  "step2": { "total_tasks": 0, "phase_count": 0, "parallel_groups_identified": 0, "requirement_coverage_percent": 0, "verification_items_added": 0 },
-  "step3": { "task_completion_rate": 0, "tasks_completed": 0, "tasks_total": 0, "blocker_count": 0 },
-  "step4": { "completion_rate_at_audit": 0, "verification_failures_found": 0, "documentation_updates_needed": 0, "archival_succeeded": true },
-  "user_feedback": { "overall_rating": 0, "rating_reason": "...", "what_went_well": "...", "what_went_poorly": "..." }
-}
+```
+node "<S>/feedback-payload.mjs" build specs--completed/<feature-name> --set verification_failures_found=<N> --set documentation_updates_needed=<N>
 ```
 
-## 3. Render the GitHub Issue
+If Step 6 did not archive (the archive target already existed), the spec is still in `specs/`: pass `specs/<feature-name>` instead. A bare `<feature-name>` that exists in both folders stops with exit 5 `ambiguous-spec` rather than guessing, because `specs--completed/<feature-name>` would be the older run.
 
-- **Title:** `` `[Feedback] v<plan2code_version> — rating <N>/10` `` (e.g. `[Feedback] v1.15.3 — rating 8/10`)
-- **Body:** a short human-readable markdown summary (version, rating, headline numbers such as completion rate and confidence), followed by the full payload as `<!-- METRICS_JSON {...} -->` (same HTML-comment convention used in Step 7's own summary block)
-- **Label:** `community-feedback`
+The two counts are the ones Step 7's METRICS_JSON carries (your Step 2 and Step 4 findings). It prints:
 
-Estimate the combined URL-encoded size of `title` + `body` + `labels`. If it exceeds roughly 8KB, warn the user and offer to truncate the longest free-text `user_feedback` field(s) — starting with `rating_reason`, then `what_went_well`/`what_went_poorly` — before proceeding. This size limit only affects the browser/print fallback tiers (below), not the `gh` CLI tier.
+| Field | Use |
+|---|---|
+| `title`, `body`, `label` | The exact issue to preview. The body ends with the full payload as `<!-- METRICS_JSON {...} -->` |
+| `payload` | The schema-1.0 object: a fresh `run_id`, `plan2code_version`, `prompt_versions_short` (12-character sha256 prefixes), `step1`-`step4`, `user_feedback`. It never includes `project.name` or bulky arrays |
+| `notes` | Missing METRICS_JSON blocks (that step is `null`, which the ingest side reads as not present). Mention them in one line |
+| `oversize`, `urlBytes`, `next` | The prefilled browser URL is over ~8 KB. Offer to shorten the free-text answers; on yes, rebuild with `--truncate` (trims `rating_reason` first, then `what_went_well` / `what_went_poorly`). Tier 1 (`gh`) has no limit, so declining is fine only when `gh` is installed and signed in (`gh auth status`): if `gh` fails, `submit` stops with exit 4 `oversize` instead of falling back to the browser |
+| `dir` | Where `payload.json` and `body.md` were written; `submit` needs it |
 
-## 4. Preview and approval gate
+| Exit | Meaning | Do |
+|---|---|---|
+| 2 `missing-set` | A judgment count is missing | Pass both `--set` values |
+| 3 `no-feedback` | overview.md has no `## User Feedback` table | Nothing to submit: skip to Step 7 |
+| 3 `spec-not-found` | Wrong name or not archived | Check `specs--completed/` |
+| 4 `bad-rating` | The Rating row is not 1-10 | Fix the row, rebuild |
+| 5 `ambiguous-spec` | A bare name exists in both `specs/` and `specs--completed/` | Pass the exact path: `specs/<feature-name>` if Step 6 did not archive this run |
 
-Display the exact rendered title, full body (including the `METRICS_JSON` block), and label(s) to the user, mirroring the Step 4 Documentation Review pattern:
+## 2. Preview and approval gate
+
+Display the exact `title`, the full `body` (including the `METRICS_JSON` block), and the label to the user, mirroring the Step 4 Documentation Review pattern:
 
 ```
 ⋅
     ╭───╮
-    │ ● │
-    │ ~ │   Ready to submit your feedback to the maintainer!
-    ╰───╯
+    │ ★ │╱
+   ╱│ ~ │   Ready to submit your feedback to the maintainer!
+    ╰┬─┬╯
 ```
 
 > Reply "approve" to proceed with submission, or "skip" to cancel.
 
 Do NOT proceed to submission without an explicit "approve" reply. A "skip" or any non-approval reply cancels this sub-step entirely and proceeds to Step 7 with no submission.
 
-## 5. Tiered submission
+## 3. Submit
 
-On approval, attempt each tier in order until one succeeds:
+On approval only:
 
-1. **Tier 1 (primary):** Attempt `gh issue create --repo jparkerweb/plan2code --title "<title>" --body "<body>" --label community-feedback` via your shell tool. If it succeeds, report the created issue URL to the user and stop.
-2. **Tier 2 (secondary):** If `gh` is not installed or not authenticated (command fails), construct the URL `https://github.com/jparkerweb/plan2code/issues/new?title=<url-encoded title>&body=<url-encoded body>&labels=community-feedback` and attempt to open it in the user's default browser using the OS-appropriate command (`start "<url>"` on Windows, `open "<url>"` on macOS, `xdg-open "<url>"` on Linux). Tell the user they still need to click "Submit issue" themselves since they must be logged in.
-3. **Tier 3 (tertiary):** If no browser can be opened (e.g. no shell tool access, headless/remote session), print the same URL from Tier 2 to the terminal/chat: "Please open this URL in your browser and click 'Submit issue' to share your feedback: `<url>`".
+```
+node "<S>/feedback-payload.mjs" submit --from <dir>
+```
 
-After any tier succeeds (or the user manually confirms Tier 3 submission), proceed to Step 7 as normal.
+It tries each tier in order and reports the one that worked:
+
+| `tier` | What happened | Tell the user |
+|---|---|---|
+| 1 | `gh issue create` succeeded | The issue URL (`issue`) |
+| 2 | `gh` missing or not signed in (`ghError`); the system was asked to open the prefilled new-issue page | If it opened, they still need to click **Submit new issue**, signed in to GitHub. If nothing opened (a remote or headless session), give them `url` as in tier 3 |
+| 3 | No browser could be opened (headless or remote session) | "Please open this URL in your browser and click 'Submit new issue' to share your feedback:" plus `url` |
+
+| Exit | Meaning | Do |
+|---|---|---|
+| 3 `no-payload` | `--from` has no `payload.json` / `body.md` | Pass the `dir` that `build` printed |
+| 4 `oversize` | `gh` failed (`message` says why) and the URL is over ~8 KB, too long for tiers 2 and 3, so neither ran | Offer to shorten the free-text answers: on yes, rebuild with `--truncate` and submit again. Or have the user install `gh` and run `gh auth login`, then submit again |
+
+`--dry-run` shows the tiers without running them, plus `urlBytes` and `oversize` (when `oversize` is true, only tier 1 can submit). After any tier succeeds (or the user confirms a tier 3 submission), proceed to Step 7 as normal.
