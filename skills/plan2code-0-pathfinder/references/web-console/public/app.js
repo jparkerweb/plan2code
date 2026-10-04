@@ -5658,6 +5658,19 @@ function sendState() {
       : { disabled: true, why: "Your last answers are on their way. One moment.", short: "" };
   }
   if (agentWorking()) {
+    // A question the agent left open while still working is still a question,
+    // and its answer has nowhere better to wait than the server, which holds
+    // a send until the agent next looks. The contract says to switch to
+    // "waiting" before asking, but an agent that asks and carries on ("while
+    // you decide") must not lock the person out of answering for up to an
+    // hour of quietMinutes.
+    if (myTurn().length && (stagedCount() || pendingNotes().length)) {
+      return {
+        disabled: false,
+        why: "Plan2Code is still working. Your answers wait for it to look.",
+        short: "Still working · it reads this next",
+      };
+    }
     const ms = workingMs();
     if (ms > patience(WORKING_GRACE_MS)) {
       // A stuck agent must not lock someone out of their own session, so the
