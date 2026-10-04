@@ -135,8 +135,15 @@ not questions. Put them in the phase doc as they happen, and in the report.
 
 ### When the workflow asks something
 
-Publish it, set `"agent": { "status": "waiting", "quietMinutes": null }`, and
-go into the wait loop. When the answer lands, set `working` again and carry on.
+Publish it, set `"agent": { "status": "waiting", "quietMinutes": null }` in
+the SAME post, and go into the wait loop. When the answer lands, set `working`
+again and carry on.
+
+A question stops the build. Never leave yourself `working` with a question
+open, and never "carry on while you decide": the page reads `working` as "not
+your turn", and the person is left looking at a question they cannot answer.
+If there is other work the answer does not touch, finish it before you ask,
+then ask and wait.
 
 | Moment | `kind` | Notes |
 | --- | --- | --- |
