@@ -41,6 +41,7 @@ import {
   die,
   ensureDir,
   fileStamp,
+  forgetWorkspace,
   handOff,
   handleFile,
   healthOk,
@@ -65,6 +66,7 @@ import {
   readLedger,
   readWorkspace,
   reapHandles,
+  rememberedWorkspace,
   remoteWarning,
   removeScratch,
   removeSessions,
@@ -73,6 +75,7 @@ import {
   SESSION_MAX_AGE_MS,
   sessionDir,
   sleepSync,
+  specKey,
   staleScratch,
   staleSessions,
   sweepUploads,
@@ -317,7 +320,7 @@ async function cmdOpen() {
     if (launched) appendLedger(dir, { kind: "launch", id: nextLaunchId(readLedger(dir)), workflow: state.workflow });
     for (const line of ledgerFromPost(dir, openRun, openIssue, state.workflow)) appendLedger(dir, line);
   } catch {}
-  const workspace = workspaceOnOpen(dir, worktree);
+  const workspace = workspaceOnOpen(dir, worktree, state.specDir);
 
   // Month-old sessions and scratch files: listed before the print so the
   // agent can see what went, removed after it so the page waits for nothing.
@@ -403,10 +406,11 @@ async function cmdOpen() {
  * The workspace as `open` hands it to the agent, and the cursor seeded to
  * match: the agent now has the whole list, so no change up to here is owed.
  * Read-only on workspace.json, which only the server writes; on a fresh
- * session the server has not made it yet, so the original folder stands in.
+ * session the server has not made it yet, so what was remembered for this
+ * folder and spec stands in, the same list the server is about to make.
  */
-function workspaceOnOpen(dir, worktree) {
-  const ws = readWorkspace(dir) || initialWorkspace(worktree);
+function workspaceOnOpen(dir, worktree, specDir) {
+  const ws = readWorkspace(dir) || initialWorkspace(worktree, rememberedWorkspace(worktree, specDir).entry);
   const missing = ws.folders.filter((f) => !isFolder(f.path)).map((f) => f.id);
   try {
     writeWorkspaceCursor(dir, ws.version || 0);
@@ -946,6 +950,18 @@ function realNearest(p) {
   return path.join(fs.realpathSync(existing), path.relative(existing, p));
 }
 
+/* --------------------------------------------------------------- forget */
+
+// Drop the folder list remembered for one spec (Finalize, once the spec is
+// archived). The project's own list and every other spec's are untouched.
+function cmdForget() {
+  if (typeof args.spec !== "string" || !args.spec.trim()) die("forget needs --spec specs/<idea>", 2);
+  let spec = specKey(args.spec);
+  if (/\.md$/i.test(spec)) spec = spec.slice(0, spec.lastIndexOf("/"));
+  const worktree = repoRoots().worktree;
+  print({ ok: true, spec, forgot: forgetWorkspace(worktree, spec) });
+}
+
 /* ----------------------------------------------------------------- help */
 
 function cmdHelp() {
@@ -961,7 +977,8 @@ port, and the filesystem as transport; this CLI is the whole agent surface.
           first post. --file is optional, and --title defaults to the
           project's folder name. Also prints workspace: { folders: [{ name,
           path, description?, original? }], missing? }, the folders this
-          console session reads as context, addressed as @name.
+          console session reads as context, addressed as @name. The list is
+          remembered per folder and spec in workspaces.json beside looks.json.
   post    --session <sid> --file <patch.json>
           Merge a patch into the session. Prints terminalLine while the
           server is live. Exit 3 = rejected; stderr says why. A patch may
@@ -988,6 +1005,10 @@ port, and the filesystem as transport; this CLI is the whole agent surface.
           Copy a cited note attachment into specs/<idea>/attachments/. Prints
           { ok, path, link, image, reused }; exit 2 = bad usage, 3 = refused or
           missing. Paste link as it is.
+  forget  --spec specs/<idea>
+          Drop the workspace folders remembered for that spec, in this
+          folder (Finalize, after archiving it). Prints { ok, spec, forgot };
+          forgot is false when nothing was saved. Exit 2 = bad usage.
   status  [--session <sid>] [--all]
           One session, or every session belonging to this project.
   stop    --session <sid> | --all
@@ -1206,6 +1227,7 @@ const COMMANDS = {
   wait: cmdWait,
   chat: cmdChat,
   keep: cmdKeep,
+  forget: cmdForget,
   status: cmdStatus,
   stop: cmdStop,
   help: cmdHelp,

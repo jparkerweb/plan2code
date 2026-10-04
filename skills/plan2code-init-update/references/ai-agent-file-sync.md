@@ -1,20 +1,23 @@
 # Step 7 — AI Agent File Sync
 
 Check for other AI agent config files and offer to replace them with AGENTS.md
-references, so AGENTS.md stays the single source of truth.
+references, so AGENTS.md stays the single source of truth. Detection and the
+replacement text are fixed, so a script does both; the choice is the user's.
 
-## Files to Detect
+## Detect
 
-| File | Reference Path |
-|------|----------------|
-| `CLAUDE.md` (root) | `./AGENTS.md` |
-| `GEMINI.md` (root) | `./AGENTS.md` |
-| `.cursorrules` (root) | `./AGENTS.md` |
-| `.github/copilot-instructions.md` | `../AGENTS.md` |
-| `.cursor/rules/*.md` | `../../AGENTS.md` |
-| `.windsurf/rules/*.md` | `../../AGENTS.md` |
+```
+node "<S>/agent-files.mjs" detect
+```
 
-**No files found:** Skip silently, end workflow.
+It looks for `CLAUDE.md`, `GEMINI.md` and `.cursorrules` (root),
+`.github/copilot-instructions.md`, and the `.cursor/rules/` and `.windsurf/rules/`
+folders (each folder is one entry). Per entry: `id`, `lines`, `custom` (over 10
+lines), `alreadyPointer` (already the AGENTS.md pointer: nothing to offer) and
+`linkedToAgents` (a symlink or hard link to AGENTS.md: it is AGENTS.md).
+
+Leave out `alreadyPointer` entries, and `linkedToAgents` entries too (they are
+AGENTS.md). **Nothing left:** skip silently, end workflow.
 
 ## If Files Found
 
@@ -36,44 +39,26 @@ references, so AGENTS.md stays the single source of truth.
 > - **Select** - Choose specific (numbered list)
 > - **No** - Keep as-is
 
-**Warning** for files >10 lines: "[file] has custom content that will be replaced."
+Relay each `warnings` line ("[file] has custom content that will be replaced.").
 
-## CLAUDE.md Template
+## Apply the confirmed ones
 
-CLAUDE.md gets a special template because Claude Code auto-loads it — the `CRITICAL — MANDATORY FIRST STEP` directive ensures AGENTS.md is always read:
-
-```markdown
-# CLAUDE.md
-
-**CRITICAL — MANDATORY FIRST STEP: You MUST read [AGENTS.md](./AGENTS.md) before responding to ANY user message, including simple questions. Do NOT skip this step regardless of how trivial the request appears. No exceptions.**
-
-See AGENTS.md for complete project documentation including:
-- Development commands and setup
-- Architecture overview
-- Environment variables
-- Testing patterns
-- Deployment guides
-- Keeping this file current / Failure log
-- Section details in .agents-docs/
-
-This file exists for Claude Code auto-loading. All AI coding agents should reference AGENTS.md.
+```
+node "<S>/agent-files.mjs" apply <id> [<id> ...]     # Select
+node "<S>/agent-files.mjs" apply --all               # Yes
 ```
 
-## Reference Template (all other files)
+Only ids the user confirmed. `--dry-run` previews the `actions` without writing.
+It writes:
 
-Use title and path from the detection table:
+- **`CLAUDE.md`**: the special template, because Claude Code auto-loads it. It opens
+  with the `CRITICAL — MANDATORY FIRST STEP` directive to read AGENTS.md before
+  answering anything, then points at AGENTS.md for full documentation.
+- **Every other file**: `# <Title>` plus the "See AGENTS.md for complete project
+  documentation including:" pointer and bullet list, with the right relative path (`./`, `../` or `../../` by location).
+- **Rules folders** (`.cursor/rules/`, `.windsurf/rules/`): deletes the existing `.md`
+  files (and `.mdc` for Cursor) and creates a single `reference.md`.
 
-```markdown
-# [Title]
-
-See [AGENTS.md]([Path]) for complete project documentation including:
-- Development commands and setup
-- Architecture overview
-- Environment variables
-- Testing patterns
-- Deployment guides
-- Keeping this file current / Failure log
-- Section details in .agents-docs/
-```
-
-**For directory configs** (`.cursor/rules/`, `.windsurf/rules/`): Delete existing `.md` files, create single `reference.md`.
+Exit 3 means AGENTS.md is missing or an id was not among those detected. Exit 5
+`linked-to-agents` means a named id is AGENTS.md through a link: leave it as it
+is (`--all` skips such entries as `skipped-linked`).

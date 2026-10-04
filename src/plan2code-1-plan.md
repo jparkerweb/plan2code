@@ -48,7 +48,7 @@ Check if `./AGENTS.md` exists:
 
 ### Check for Existing Progress
 
-Before Phase 1, check for existing `PLAN-DRAFT-*.md` under `specs/` (`ls specs/` via shell — never Glob; it is gitignored):
+Before Phase 1, run `node "<S>/specs.mjs" list` from the project root (`<S>`: `scripts/` beside this SKILL.md, `~/.agents/skills/plan2code-1-plan/scripts/` globally). It reads gitignored `specs/` (Glob silently finds nothing there) and gives each spec's `planDrafts` with its **Status:** line (`-prev` copies are `archived`; ignore them). Route on that status:
 - Status "Phase 3 Complete - Resume at Phase 4": Resume at Phase 4
 - Status "Escalated from Quick Task - Resume at Phase 2": Acknowledge, verify requirements, skip to Phase 2
 - Status "Draft" or "Complete": Ask user how to proceed

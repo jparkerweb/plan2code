@@ -19,7 +19,7 @@ specs/<idea>/
 
 ## Numbering
 
-`NN` is zero-padded from `00`, assigned in dependency order (blockers lower), **never reused or renumbered** — links and `Blocked by:` would rot silently. Next = max + 1. `00` is always `00-codebase-context.md`, never anything else. Gaps in the sequence are normal and harmless.
+`NN` is zero-padded from `00`, assigned in dependency order (blockers lower), **never reused or renumbered** — links and `Blocked by:` would rot silently. Next = max + 1 (`frontier`'s `nextNN`), never below the map's `**Next NN:**` high-water line, which the script keeps so a deleted question's number stays retired (chart.md, Step 6 rule 5). A one-digit file name (`1-export.md`) still reads as `01`, but `lint` asks for the rename. `00` is always `00-codebase-context.md`, never anything else. Gaps in the sequence are normal and harmless.
 
 ## The six schema lines
 
@@ -41,5 +41,7 @@ Each question file carries six contiguous `Key: value` lines after its H1 — NO
 ## Markers and blocking
 
 **Map markers**, rebuilt from the files every session: `[ ]` open — **these rows ARE the frontier** · `[/]` claimed · `[x]` resolved · `[!]` open but blocked · `[-]` out of scope. Resolved rows carry the gist plus the `Resolved:` date in italics: `— <gist> *(YYYY-MM-DD)*`.
+
+`scripts/pathfinder.mjs` implements exactly these rules (`reconcile` rebuilds the markers, `frontier` computes blocking, `lint` checks the schema), so this file is the reference for reading its output and for writing a question file. Apply the rules by hand only when the script cannot run.
 
 **Unblocked** ⟺ every `NN` in `Blocked by:` is `resolved`. **Stranded:** a blocker gone `out-of-scope` never resolves — the question is not merely blocked. Re-frame its `## Question` to drop the dependency, or rule it out too. Never leave it sitting.

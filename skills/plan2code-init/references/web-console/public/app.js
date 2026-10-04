@@ -2542,6 +2542,7 @@ function renderDashboard(main) {
   const specs = specList();
   if (specs.length) wrap.appendChild(renderSpecPicker(specs));
   wrap.appendChild(hideUnavailableToggle());
+  if (!local.launching && !launchScoping) syncWorkspaceScope();
 
   // "Unavailable" is the scan's verdict for the selected spec, not the
   // momentary greying while a launch is in flight or the server is away, so
@@ -2963,6 +2964,11 @@ async function launchSkill(entry) {
   // cards that take no spec (utilities, setup) launch untargeted even while
   // a spec is selected.
   if (target) action.spec = target.dir;
+  // The skill opens on the folders remembered for what it was launched for.
+  // Held until the launch is in flight: the swap's own frame re-renders the
+  // dashboard, which would otherwise sync back to the picker's spec.
+  launchScoping = true;
+  await syncWorkspaceScope(target ? target.dir : "");
   try {
     const res = await fetch("/submit", {
       method: "POST",
@@ -2973,6 +2979,7 @@ async function launchSkill(entry) {
       }),
     });
     if (res.status === 409) {
+      launchScoping = false;
       pendingResult = true;
       banner("Your last pick is still being picked up. One moment.", "info");
       return;
@@ -2980,10 +2987,12 @@ async function launchSkill(entry) {
     if (!res.ok) throw new Error(String(res.status));
     sound("startSkill");
     local.launching = { skill: entry.skill, title: entry.title, at: Date.now() };
+    launchScoping = false;
     pendingResult = true;
     save();
     render();
   } catch {
+    launchScoping = false;
     banner("That did not go through. Nothing was lost; try again.", "warn");
   }
 }
@@ -5854,6 +5863,32 @@ async function postJson(url, body) {
   }
 }
 
+/* The workspace follows the dashboard's picker: the folders remembered for
+   the selected spec, or the project's own under "Start from scratch". The
+   server swaps the list and remembers every change after it. */
+let scopeAsked = null;
+// True from a launch's scope sync until its send has gone (or failed).
+let launchScoping = false;
+async function syncWorkspaceScope(spec) {
+  if (!S || S.workflow !== "dashboard" || gone || !wsFrame) return;
+  const want = spec === undefined ? (selSpec() && selSpec().dir) || "" : spec;
+  if ((wsFrame.scope || "") === want || scopeAsked === want) return;
+  scopeAsked = want;
+  const { status, body } = await postJson("/workspace/scope", { spec: want });
+  if (status === 200 && body && Array.isArray(body.folders)) wsFrame = { ...wsFrame, ...body };
+  scopeAsked = null;
+  if ($("workspace-modal").open) renderWorkspace();
+}
+
+// The dialog's "Remembered for" line: whose list this is.
+function workspaceScopeText() {
+  const scope = (wsFrame && wsFrame.scope) || "";
+  if (!scope) return "Remembered for this project, so your next console session here starts with these folders.";
+  const spec = specList().find((s) => s.dir === scope);
+  const name = spec ? spec.name : scope.split("/").pop();
+  return `Remembered for the ${name} spec, and loaded again whenever it is picked.`;
+}
+
 const NAME_RULE = "Names use lowercase letters, numbers and hyphens.";
 const BROWSE_UNAVAILABLE = "Browse isn't available here — type or paste the path.";
 // The folder whose Remove is waiting on its inline confirm, by id.
@@ -5893,6 +5928,7 @@ function renderWorkspace() {
   }
   folders.forEach((f, i) => paintWorkspaceRow(list.children[i], f));
   $("workspace-browse").hidden = Boolean(wsFrame && wsFrame.remote);
+  $("workspace-scope").textContent = workspaceScopeText();
 }
 
 function workspaceRow(f) {

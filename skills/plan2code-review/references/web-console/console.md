@@ -556,8 +556,15 @@ enforces it, so never tell someone to keep asking past it.
 The person can add folders beside the one the session started in (a shared
 library, a design folder), from the footer's folder label. Together they are
 the session's **workspace**: context for every skill run in this console
-session, each folder addressed by a short `@name`. It outlives dashboard hops;
-a new console session starts with the original folder alone.
+session, each folder addressed by a short `@name`. It outlives dashboard hops,
+and it is remembered: every change is saved to `workspaces.json` beside
+`looks.json` (never into the project), keyed by the folder the session runs
+in and then by spec. A session with a spec opens on that spec's list, one with
+none on the project's; a spec with nothing saved starts as a copy of the
+project's list. The dashboard's picker swaps the list as the selection moves,
+and a `specDir` you post mid-run takes the current list with it. There is
+nothing for you to load: `open` prints the list, and a switch of spec on a
+resume reaches you as ordinary workspace changes on your next `wait`.
 
 ### What you are told
 
@@ -767,7 +774,7 @@ that is what the person is there to download. The finish carries no
   sees the Trail Footer, and without this their last screen promises a question
   that is never coming.
 - Post `run` `pathfinder-chart` (id `map`) when a new map is first written,
-  and `pathfinder-research` (id = the question's file slug) as each research
+  and `pathfinder-research` (id = the question's file slug; on `github`, `q<issue-number>`) as each research
   subagent reports back, or when you resolve a `research` question yourself
   (Posting an update → Session meter). Other questions score through their
   answers, so there is nothing to post for them.
@@ -820,7 +827,7 @@ know:
 | 3, Implementation Summary | Written to `overview.md` as usual; mirror it as a doc (marked `saved`) so the page reader sees it land. |
 | 4, Documentation Review | The proposed-updates table as a doc, and a `multi` naming the documents to update — every option ticked is "approve", unticked ones are skipped. A `review` works instead when the set is all-or-nothing. |
 | 5, User Feedback | Optional items, `required: false`: the rating as a `choice` of 1 to 10 or a `text`, the three reasons as `text`. The submit-to-maintainer consent is a `confirm`. |
-| 6, Spec Cleanup | A `confirm` before moving anything, the archive paths in `consequences`. |
+| 6, Spec Cleanup | A `confirm` before moving anything, the archive paths in `consequences`, and a line that the spec's remembered workspace folders are forgotten too (`console.mjs forget --spec specs/<feature>` after the move). |
 
 Pass `--spec specs/<feature>` to `open`, or post `specDir` once you know it.
 Stopping mid-finalize loses nothing

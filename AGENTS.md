@@ -40,9 +40,15 @@ Details: [Architecture](./.agents-docs/AGENTS-architecture.md) (see Status Line 
 
 ## Web Console
 
-Optional local browser UI (`src/web-console/`, zero dependencies, detached `node` server on `127.0.0.1`) bundled into every skill via `additionalReferences`. The bare `plan2code` skill opens its dashboard, a card menu that launches any skill in the same session. Pages cover questions, sign-off gates (with an in-page code review), build progress, the living document, an **Ask** chat, a read-only **Workspace** of extra folders, a session meter, a built-in 16-topic Help, a first-run Welcome, User Preferences (gear) and a bug/idea link to GitHub issues. The agent-facing contract is `console.md` / `building.md`; the server never writes into a project.
+Optional local browser UI (`src/web-console/`, zero dependencies, detached `node` server on `127.0.0.1`) bundled into every skill via `additionalReferences`. The bare `plan2code` skill opens its dashboard, a card menu that launches any skill in the same session. Pages cover questions, sign-off gates (with an in-page code review), build progress, the living document, an **Ask** chat, a read-only **Workspace** of extra folders (remembered per folder and spec in `~/.plan2code/console/workspaces.json`), a session meter, a built-in 16-topic Help, a first-run Welcome, User Preferences (gear) and a bug/idea link to GitHub issues. The agent-facing contract is `console.md` / `building.md`; the server never writes into a project.
 
 Details: [Architecture](./.agents-docs/AGENTS-architecture.md) (see Web Console section) and [.readme/web-console.md](./.readme/web-console.md)
+
+## Skill Scripts
+
+Deterministic workflow steps run as Node scripts shipped in each skill's `scripts/` (shared ones in `src/skill-scripts/`, a skill's own in `src/<skill>-scripts/`, listed per skill in `SOURCE_PROMPTS` → `scripts`). Prose keeps the judgment. JSON on stdout, documented exit codes, tests run against the built `skills/` tree.
+
+Details: [Architecture](./.agents-docs/AGENTS-architecture.md) (see Skill Scripts section)
 
 ## Development Commands
 
@@ -86,3 +92,4 @@ When you make a mistake, get corrected, or discover something about this codebas
 - Sync upstream only through `/sync-repo`, and verify its baseline against the real tree before porting: an earlier sync silently skipped a whole upstream release (the `3-implement-review` skill) while the recorded version froze. Update the baseline with `.claude/skills/sync-repo/set-synced.mjs`, never with a shell pipe over the decrypted body.
 - After a sync merge, run `npm test` before trusting a "clean" file: when upstream and plan2code fixed the same bug, `git merge-file` keeps both copies without a conflict (a sync once left `let pattern` declared twice in `app.js`, caught only by `parse-check`).
 - When extracting upstream files in Git Bash, run `git show <ref>:<path>` with `MSYS_NO_PATHCONV=1` and `C:/` style paths (never `/c/`): path conversion rewrites `origin/main:.readme/x.md` into `origin\main;.readme\x.md`, the show fails, and the merge silently runs against an empty "theirs". Check every extracted file is non-empty before merging.
+- After a sync, grep the result for the upstream owner slug and company name in any case (the `/sync-repo` body lists them): the rebrand map only rewrites URLs, so a bare owner slug once slipped through into `feedback-payload.mjs` (and its test) until it was fixed by hand to `jparkerweb/plan2code`. No upstream name may appear in plain text anywhere in this repo.

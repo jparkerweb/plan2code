@@ -2,7 +2,7 @@
 
 > Loaded when the user's argument asks for a brief. Produces one plain-English report file for a date range — the artifact a PM pastes into Slack or reads aloud in a meeting. The only mutation BRIEF mode ever performs is the Work Step 2 reconcile; it never claims, resolves, or answers a question.
 
-> **Backend note.** The report is IDENTICAL either way — same sections, same plain-English rules — and the brief file always lands on **local disk** under `specs/<idea>/pathfinder/briefs/`, even on `**Backend:** github`. What differs is where the inputs come from: on `github` the range filter reads each question issue's close date instead of a `Resolved:` line, and the open / blocked / out-of-scope sections come from the frontier query rather than the checklist — see `github-issues.md`.
+> **Backend note.** The report is IDENTICAL either way — same sections, same plain-English rules — and the brief file always lands on **local disk** under `specs/<idea>/pathfinder/briefs/`, even on `**Backend:** github`. What differs is where the inputs come from: on `github` the range filter reads each question issue's close date instead of a `Resolved:` line, and the open / blocked / out-of-scope sections come from the frontier query rather than the checklist — see `github-issues.md`. `pathfinder.mjs` reads local files only, so on `github` do each script step below except `lint` by hand with `gh`, as `github-issues.md` describes.
 
 ## When it fires
 
@@ -14,17 +14,17 @@ The argument (or message) asks for a `brief`, `summary`, `recap`, or `minutes` f
 /plan2code-0-pathfinder full brief for specs/<idea>/pathfinder
 ```
 
-Range grammar is deliberately loose: `today` (the default when unstated) · `this week` · `since <date>` · an explicit `<date>..<date>` · `full` (everything since the map was created). Get today's date from the shell — never guess it.
+Translate the person's words into the script's range: `today` (the default when unstated) · `this-week` (Monday through today) · `since:<YYYY-MM-DD>` · `<YYYY-MM-DD>..<YYYY-MM-DD>` · `full` (everything since the map was created). Resolve a relative phrase ("since Tuesday") to a date yourself; the script takes dates only and reads today from the clock.
 
 No `map.md` for the idea? There is nothing to brief — say so and route to charting. `**Status:** Cleared`? A brief is still legitimate: cover the full history and point at the PLAN-DRAFT in `## Next step`.
 
 ## Procedure
 
-1. **Resolve the idea** exactly as Auto-Discovery does (shell only — `specs/` is gitignored, Glob silently fails).
-2. **Reconcile first, in full** (Work Step 2): files win over markers, stale claims reset to `open`, absent `Resolved:` dates backfilled from `Claimed:`. Save the repaired map. A brief must never disagree with the map it summarizes — this is why BRIEF mode reconciles rather than reporting drift.
-3. **Filter**: resolved questions whose `Resolved:` date falls in the range. Out-of-scope rulings are NOT date-filtered — they are standing scope boundaries and appear in every brief.
-4. **Write** `specs/<idea>/pathfinder/briefs/brief-<YYYYMMDD>.md` (create `briefs/` if absent). The filename carries today's date regardless of range — the `**Covers:**` line disambiguates. Same-day re-runs overwrite: a brief is a report, not a record; the question files remain the record.
-5. **Report** in chat: the file path, the range, one line on any reconcile repairs. Then the Trail Footer, Form A (the session is over; the command routes by map status as usual).
+1. **Resolve the idea** exactly as Auto-Discovery does.
+2. **Reconcile first**: `node "<S>/pathfinder.mjs" reconcile specs/<idea>/pathfinder`. A brief must never disagree with the map it summarizes, which is why BRIEF mode repairs drift rather than reporting it. Keep its `repairs` for step 5.
+3. **Gather**: `node "<S>/pathfinder.mjs" brief-data specs/<idea>/pathfinder --range <range>`. It filters resolved questions by `Resolved:` date and returns every section's source (below), the file to write, and `drift` / `undatedResolved` (both empty after step 2; if not, rerun step 2). Out-of-scope rulings are never date-filtered: standing scope boundaries appear in every brief.
+4. **Write** the file at its `file` path (create `briefs/` if absent). The name carries today's date regardless of range; the `**Covers:**` line disambiguates. Same-day re-runs overwrite (`exists: true`): a brief is a report, not a record; the question files remain the record.
+5. **Report** in chat: the file path, the range, one line on any reconcile repairs. Then the Trail Footer, Form A (the session is over; the command routes by map status as usual). Run `lint` first: it checks the brief for percent signs and scraper bait.
 
 ## The template
 
@@ -78,17 +78,17 @@ Run: `/plan2code-0-pathfinder specs/audit-log-export/pathfinder`
 
 **How each section is built:**
 
-| Section | Source | Rendering rule |
+| Section | `brief-data` field | Rendering rule |
 |---|---|---|
-| Heading + `**Covers:**` | Idea name in words; the range; `<resolved>/<total>` using the trail's counting rule (out-of-scope rows excluded from the total) | |
-| Where this is headed | `## Destination`, verbatim | Never paraphrase it |
-| Decided `<in range>` | Resolved files with `Resolved:` in range | Question name bold, gist as the first line, rejected alternatives compressed to ONE line each with the why in parentheses. `Locked: yes` renders as *Recorded as hard to reverse.* — never the word "locked" |
-| Ruled out | `## Out of scope`, all of it | One line each: name + why |
-| Open - ready to decide next | The frontier (open, unclaimed, unblocked) | Flag anything a resolution in range just unblocked: "can now be decided; X landed <day>" |
-| Open - waiting on something first | `[!]` blocked rows | Name the blocker in plain words ("waiting on the export format decision"), never `Blocked by: 02` |
-| Still taking shape | `## Not yet specified` | Lightly rephrase each bullet into one plain sentence |
-| How solid is this? | The map's `**Confidence:**` line | ONLY via trail.md's plain-English mapping (solid / solid-but-borderline / not yet). Omit the section if the map has no confidence line |
-| Next step | Map status | `Working`/`Charting` → the pathed resume command; `Cleared` → point at the PLAN-DRAFT and `/plan2code-1-plan` |
+| Heading + `**Covers:**` | `title`, `covers`, `progress` | `progress` already uses the trail's counting rule (out-of-scope excluded from the total) |
+| Where this is headed | `destination` | Verbatim. Never paraphrase it |
+| Decided `<in range>` | `decidedHeading`, `decided` (`name`, `gist`, `rejected`, `hardToReverse`) | Question name bold, gist as the first line, each `rejected` entry compressed to ONE line with the why in parentheses. `hardToReverse` renders as *Recorded as hard to reverse.* — never the word "locked". Empty → `note` |
+| Ruled out | `ruledOut` | One line each: name + why, link markup dropped |
+| Open - ready to decide next | `ready` | Flag each `justUnblockedBy`: "can now be decided; X landed <day>" |
+| Open - waiting on something first | `waiting` | Name the blocker in plain words ("waiting on the export format decision"), never `Blocked by: 02` |
+| Still taking shape | `fog` | Lightly rephrase each bullet into one plain sentence |
+| How solid is this? | `confidence` | Already the plain-English line. Omit the section when it is null |
+| Next step | `nextStep` | `command` as given; with a `plan`, point at that PLAN-DRAFT too |
 
 Nothing decided in the range? Keep the file honest: "No decisions were recorded in this period." under Decided, and render the open sections as usual — a meeting that only surfaced questions still gets minutes.
 

@@ -178,8 +178,8 @@ function lockStale(lock) {
 // Run fn while holding the session's state lock, and release it however fn
 // ends. fn must not call process.exit(): the release would never run, and the
 // next writer would wait out the stale age.
-export function withStateLock(dir, fn) {
-  const lock = path.join(dir, STATE_LOCK_FILE);
+export function withStateLock(dir, fn, lockName = STATE_LOCK_FILE) {
+  const lock = path.join(dir, lockName);
   const deadline = Date.now() + LOCK_WAIT_MS;
   let fd = null;
   for (let attempt = 0; fd === null; attempt++) {
@@ -188,7 +188,7 @@ export function withStateLock(dir, fn) {
     } catch (err) {
       // EPERM / EACCES: on Windows, a lock being deleted still blocks a create.
       if (!["EEXIST", "EPERM", "EACCES", "EBUSY"].includes(err.code)) throw err;
-      if (Date.now() > deadline) throw new Error("state.json is busy with another writer; try again");
+      if (Date.now() > deadline) throw new Error(`${lockName.replace(/.lock$/, "")} is busy with another writer; try again`);
       if (err.code === "EEXIST" && lockStale(lock)) {
         try {
           fs.rmSync(lock, { force: true });
@@ -487,8 +487,9 @@ export async function removeSessions(sessionsDir, sids) {
 }
 
 // The console folder's own files that no sweep may ever remove: the person's
-// looks and the pointer to this console's directory.
-export const PROTECTED_CONSOLE_FILES = new Set(["looks.json", "console-dir"]);
+// looks, the folders remembered per project and spec, and the pointer to
+// this console's directory.
+export const PROTECTED_CONSOLE_FILES = new Set(["looks.json", "workspaces.json", "console-dir"]);
 
 function isScratchName(name) {
   return (
@@ -1619,15 +1620,123 @@ export function readWorkspace(dir) {
   return readJson(path.join(dir, WORKSPACE_FILE), null);
 }
 
-// A fresh workspace: just the original folder, named after itself.
-export function initialWorkspace(worktree) {
+// A fresh workspace: the original folder, named after itself, plus whatever
+// was remembered for this folder and spec (rememberedWorkspace() below).
+export function initialWorkspace(worktree, remembered = null) {
+  const original = { id: "f0", path: worktree, name: defaultName(worktree), description: "", original: true };
+  if (remembered && remembered.original) {
+    if (remembered.original.name) original.name = remembered.original.name;
+    if (remembered.original.description) original.description = remembered.original.description;
+  }
+  const added = ((remembered && remembered.folders) || []).map((f, i) => ({
+    id: "f" + (i + 1),
+    path: f.path,
+    name: f.name,
+    description: f.description || "",
+    ...(f.nested ? { nested: true } : {}),
+  }));
+  return { version: 0, folders: [original, ...added], missing: [], changes: [], remote: "" };
+}
+
+/* ------------------------------------------------ remembered workspaces */
+
+// The folder list outlives the console session: one file for the person,
+// beside looks.json, keyed by the folder a session runs in and then by spec.
+// Never under specs/: the paths are this machine's, and the server never
+// writes into a project.
+//
+//   { "projects": { "<folded worktree>": {
+//       "path": "<worktree>",
+//       "project": { original, folders, at },          // no spec picked
+//       "specs": { "specs/<name>": { original, folders, at } } } } }
+//
+// `original` holds the first folder's name and description only (its path is
+// always the session's own); `folders` the added ones as { path, name,
+// description, nested? }. Two writers, the server on every change and
+// `console.mjs forget`, each a read-modify-write of one key.
+export const WORKSPACES_FILE = path.join(HOME_DIR, "workspaces.json");
+
+const foldKey = (p) => {
+  const resolved = path.resolve(String(p || ""));
+  return process.platform === "win32" || process.platform === "darwin" ? resolved.toLowerCase() : resolved;
+};
+
+// `specs/<name>` with forward slashes and no trailing slash, or "" for none.
+export function specKey(specDir) {
+  return String(specDir || "")
+    .trim()
+    .replace(/\\/g, "/")
+    .replace(/^\.\//, "")
+    .replace(/\/+$/, "");
+}
+
+function readStore() {
+  const saved = readJson(WORKSPACES_FILE, null);
+  return saved && typeof saved.projects === "object" && saved.projects ? saved : { projects: {} };
+}
+
+/**
+ * What was remembered for this folder and spec: `{ entry, from }`, where
+ * `from` is "spec" when the spec has its own list, "project" when it falls
+ * back to the project's (a spec's list starts as a copy of it), and null
+ * when nothing was ever saved.
+ */
+export function rememberedWorkspace(worktree, specDir) {
+  const project = readStore().projects[foldKey(worktree)];
+  if (!project) return { entry: null, from: null };
+  const spec = specKey(specDir);
+  if (spec && project.specs && project.specs[spec]) return { entry: project.specs[spec], from: "spec" };
+  return project.project ? { entry: project.project, from: "project" } : { entry: null, from: null };
+}
+
+// The workspace's folders as the store keeps them.
+export function rememberable(ws) {
+  const folders = (ws && ws.folders) || [];
+  const first = folders.find((f) => f.original) || {};
   return {
-    version: 0,
-    folders: [{ id: "f0", path: worktree, name: defaultName(worktree), description: "", original: true }],
-    missing: [],
-    changes: [],
-    remote: "",
+    original: { name: first.name || "", description: first.description || "" },
+    folders: folders
+      .filter((f) => !f.original)
+      .map((f) => ({ path: f.path, name: f.name, description: f.description || "", ...(f.nested ? { nested: true } : {}) })),
+    at: nowIso(),
   };
+}
+
+// Every server and `console.mjs forget` writes the one file, so each
+// read-modify-write holds this lock beside it.
+const WORKSPACES_LOCK = "workspaces.json.lock";
+
+// Save the list for this folder and spec ("" for the project's own).
+export function rememberWorkspace(worktree, specDir, ws) {
+  ensureDir(path.dirname(WORKSPACES_FILE));
+  withStateLock(path.dirname(WORKSPACES_FILE), () => saveRemembered(worktree, specDir, ws), WORKSPACES_LOCK);
+}
+
+function saveRemembered(worktree, specDir, ws) {
+  const store = readStore();
+  const key = foldKey(worktree);
+  const project = store.projects[key] || { path: path.resolve(worktree) };
+  const spec = specKey(specDir);
+  if (spec) project.specs = { ...(project.specs || {}), [spec]: rememberable(ws) };
+  else project.project = rememberable(ws);
+  store.projects[key] = project;
+  writeJsonAtomic(WORKSPACES_FILE, store);
+}
+
+// Drop one spec's list (Finalize, once the spec is archived). True when there was one.
+export function forgetWorkspace(worktree, specDir) {
+  const spec = specKey(specDir);
+  if (!spec || !fs.existsSync(WORKSPACES_FILE)) return false;
+  return withStateLock(path.dirname(WORKSPACES_FILE), () => dropRemembered(worktree, spec), WORKSPACES_LOCK);
+}
+
+function dropRemembered(worktree, spec) {
+  const store = readStore();
+  const project = store.projects[foldKey(worktree)];
+  if (!spec || !project || !project.specs || !project.specs[spec]) return false;
+  delete project.specs[spec];
+  writeJsonAtomic(WORKSPACES_FILE, store);
+  return true;
 }
 
 // Single-writer rule: only server.mjs may call this.

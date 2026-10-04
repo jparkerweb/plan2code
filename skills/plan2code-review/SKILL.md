@@ -16,6 +16,14 @@ Critical review specialist -- experienced senior engineer providing independent 
 
 The FIRST thing you do, before anything else in this file — before the scope detection: ask **web console** (browser page, suggested) or **terminal**? Console → run `node "<D>/console.mjs" open --workflow review` before reading (<D>: references/web-console/ beside this SKILL.md — ~/.agents/skills/plan2code-review/references/web-console/ globally — or the dir in ~/.plan2code/console/console-dir), then read <D>/console.md. Scope questions, the findings report and the pick-what-gets-fixed menu all go through it; the report lands on the page as a doc. Switchable anytime. If the argument already says which — `--web` or `Use the web console for this session.` — take it and do not ask; drop the flag. Launched by the dashboard? Its session is already open — resume it (console.md → Launches), then Process. Read inside a build session for its review button? Skip this section — building.md's overrides govern, the session is already running. On the console, a `__stop` action is the person ending the session (console.md → Stop requests); at every session end post `finish` BEFORE `stop`; unless it is a pause, the finish carries `"dashboard": true` (the Back to the dashboard button) and you keep waiting for the press (console.md → Finishing).
 
+## Scripts
+
+`<S>` is `scripts/` beside the SKILL.md that loaded this file (`~/.agents/skills/<skill>/scripts/` globally; when this file is a reference inside implement, implement-review or quick-task, that skill's own `<skill>/scripts/`, never `references/scripts/`). Run from the project root. Each prints one JSON object; on a non-zero exit read `message` and do what `next` says.
+
+- `node "<S>/review-scope.mjs" [--base <branch>]`: the branch-review scope from git (Step 1).
+- `node "<S>/specs.mjs" list` / `status <spec>`: spec state on disk (Step 2, Session End routing).
+- `node "<S>/commit-msg.mjs" --subject "<subject>" --files <path> [--files <path> ...]`: the commit command (one `--files` per path).
+
 ## Rules
 
 - Follow `./AGENTS.md` if it exists -- use all rules and conventions. If missing, warn and proceed with caution.
@@ -46,7 +54,7 @@ Three levels -- auto-detected, always respect explicit user override:
 
 **User override:** If user specifies scope, use exactly that. Never silently narrow.
 
-**Doc review:** >70% doc files = editorial critique. >70% code = also verify related docs match.
+**Doc review:** >70% doc files = editorial critique. >70% code = also verify related docs match. (`review-scope.mjs` reports this as `mix`: `docs`, `code` or `mixed`; for a Focused scope, count the named files the same way.)
 
 ## Process
 
@@ -60,7 +68,7 @@ Three levels -- auto-detected, always respect explicit user override:
 
 1. **User prompt** — use it.
 2. **Conversation context** — recent work? Those artifacts. Scope: `focused`.
-3. **Git fallback** — `git status`, `git diff`, `git log main..HEAD --oneline`, `git diff --name-only main..HEAD`. Nothing? Ask user.
+3. **Git fallback** — run `review-scope.mjs`. It compares the branch with its base (`main`, else `master`; `--base` overrides; `base` says which it used) and adds staged, unstaged and untracked changes: `files` (status, lines), `counts`, `commits`, `mix`, `batchByRisk`. `empty: true`? Ask user. Exit 3 `no-base` (no `main` or `master`, or no such `--base`)? Rerun with `--base <trunk>`, asking the user which branch is the trunk if unclear. Exit 3 `not-a-repo`? Ask user which files to review.
 
 **Classify review type** from context (auto-detect; use `ask_user_question` only if ambiguous):
 
@@ -75,13 +83,13 @@ Three levels -- auto-detected, always respect explicit user override:
 | >70% .md files | Docs | Accuracy, Completeness |
 | Default | General | All 11, risk-prioritized |
 
-**50+ files:** batch by risk tier (security/auth/data first).
+**50+ files** (`batchByRisk`): batch by risk tier (security/auth/data first).
 
 > 🔬 [Review Mode] [X] files, ~[Y] lines. Type: [type]. Focus: [prioritized dimensions].
 
 ### Step 2: Context
 
-1. **Specs?** Read `overview.md` + recent `phase-X.md`.
+1. **Specs?** `specs.mjs list` (it reads gitignored `specs/`, which file search skips), then read `overview.md` + recent `phase-X.md`.
 2. **AGENTS.md** for conventions.
 3. **Tech stack** -- check for deprecations, CVEs, breaking changes.
 4. **Classify:** >70% docs = doc review. >70% code = verify docs match.
@@ -173,9 +181,9 @@ Work summary — tell user: scope reviewed, findings count by severity (Critical
 
 Read references/session-end.md
 
-> Fallback: route plan2code artifacts (plan/spec docs/phases) on the reviewed feature's own `specs/<feature>/` state to the earliest unmet pipeline stage whose input exists — `PLAN-*` or `overview.md` without `phase-*.md` → `/plan2code-2-document`; unchecked `- [ ]` phase tasks → `/plan2code-3-implement`; all checked → `/plan2code-4-finalize`; archived → complete, summary only. Verify `specs/` on disk with a terminal `ls`/`Get-ChildItem` — it's gitignored, so search tools miss it and an empty result proves nothing. Non-pipeline artifacts (code/PRs/docs/logs) → summary only. Unresolved Criticals → fixing them (H/A/S) is the next step. Ambiguous or multiple candidate specs → ask one targeted question. Output: "Next (NEW conversation): `/plan2code-<step>` — [why + how you know]", appending ` --web` when the routed step offers the web console; else "Review complete -- [summary]."
+> Fallback: route plan2code artifacts (plan/spec docs/phases) on the reviewed feature's own `specs/<feature>/` state to the earliest unmet pipeline stage whose input exists — `PLAN-*` or `overview.md` without `phase-*.md` → `/plan2code-2-document`; unchecked `- [ ]` phase tasks → `/plan2code-3-implement`; all checked → `/plan2code-4-finalize`; archived → complete, summary only. Read the state with `specs.mjs status <spec>` (gitignored `specs/` defeats search tools). Non-pipeline artifacts (code/PRs/docs/logs) → summary only. Unresolved Criticals → fixing them (H/A/S) is the next step. Ambiguous or multiple candidate specs → ask one targeted question. Output: "Next (NEW conversation): `/plan2code-<step>` — [why + how you know]", appending ` --web` when the routed step offers the web console; else "Review complete -- [summary]."
 
-- **Commit** (code changes): `git add [files] && git commit -m "fix: [desc]" -m "<JIRA>" -m "AI Assisted"` -- derive JIRA from branch.
+- **Commit** (code changes): the `command` from `commit-msg.mjs --subject "fix: [desc]" --files <file>` repeated once per fixed file (ticket from the branch; exit 4 `no-ticket`: show it with `<JIRA>` for the user to fill in). On Windows PowerShell 5.1 (no `&&`), give `add` and `commit` as two commands.
 
 ```
 ⋅

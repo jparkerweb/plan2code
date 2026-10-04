@@ -324,8 +324,20 @@ context for this console session.
   Code with a copyable `/add-dir <path>` to run); *Inside another folder in
   the list* for a nested one.
 
-The workspace carries across skills you start from the dashboard and back. A
-new console session starts with just the folder you started in.
+The workspace carries across skills you start from the dashboard and back, and
+it is remembered for next time:
+
+- **Saved on every change**, in `~/.plan2code/console/workspaces.json` (beside
+  `looks.json`, never in the project, since the paths are your machine's),
+  keyed by the folder you started in.
+- **One list per spec.** *Start from scratch* on the dashboard shows the
+  project's list. Picking a spec loads its own; the first time, it starts as a
+  copy of the project's, and after that the two are separate. A spec created
+  mid-run (Pathfinder, Plan) takes the list in force with it. The line under
+  the dialog's title says whose list it is.
+- **Forgotten on archive.** Finalize's Spec Cleanup step says it will forget
+  the spec's list and runs `console.mjs forget --spec specs/<name>` after the
+  move.
 
 ### Session meter
 

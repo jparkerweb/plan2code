@@ -2505,6 +2505,9 @@ a.icon-btn { box-sizing: border-box; text-decoration: none; }
    actions stay put. */
 .modal.workspace { max-width: 680px; }
 .modal.workspace[open] { display: flex; flex-direction: column; max-height: calc(100vh - 48px); }
+.workspace .modal-blurb { margin-bottom: 6px; }
+.workspace-scope { margin: 0 0 16px; color: var(--ink-3, var(--ink-2)); font-size: 12.5px; }
+
 .workspace-list {
   list-style: none; margin: 0; padding: 0;
   display: grid; gap: 12px;

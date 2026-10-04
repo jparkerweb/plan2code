@@ -3384,7 +3384,7 @@ test("the scratch sweep removes old patches and helpers, never looks, the pointe
       return p;
     };
     const removable = [file("p2.json"), file("helper.mjs")];
-    const kept = [file("looks.json"), file("console-dir"), file("notes.txt"), file("p3.json", false)];
+    const kept = [file("looks.json"), file("workspaces.json"), file("console-dir"), file("notes.txt"), file("p3.json", false)];
     const subdir = path.join(dir, "x.json");
     fs.mkdirSync(subdir);
     backdate(subdir);
@@ -3393,12 +3393,12 @@ test("the scratch sweep removes old patches and helpers, never looks, the pointe
     const stale = staleScratch(dir, Date.now(), SESSION_MAX_AGE_MS).sort();
     assert.deepEqual(stale, ["helper.mjs", "p2.json"]);
     assert.deepEqual(
-      (await removeScratch(dir, [...stale, "looks.json", "../p.json", "console-dir"])).sort(),
+      (await removeScratch(dir, [...stale, "looks.json", "workspaces.json", "../p.json", "console-dir"])).sort(),
       ["helper.mjs", "p2.json"]
     );
     for (const p of removable) assert.equal(fs.existsSync(p), false, p);
     for (const p of kept) assert.ok(fs.existsSync(p), p);
-    assert.deepEqual([...PROTECTED_CONSOLE_FILES].sort(), ["console-dir", "looks.json"]);
+    assert.deepEqual([...PROTECTED_CONSOLE_FILES].sort(), ["console-dir", "looks.json", "workspaces.json"]);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
@@ -3594,6 +3594,8 @@ const RESULT_KEYS = ["type", "at", "sid", "rev", "actions", "reply", "consumedAt
 const WAITING_KEYS = ["status", "sid", "elapsed", "answered", "total", "staged", "url", "message", "next", "terminalLine"];
 
 function openSession(extra = {}) {
+  // A fresh page, and no folders remembered from an earlier test.
+  fs.rmSync(path.join(HOME, "workspaces.json"), { force: true });
   const res = cli(["open", "--file", payload(`pin-${Date.now()}.json`, { ...BASE, ...extra }), "--no-open"]);
   const s = sessionUrl(res.json.url);
   const send = (pathname, body) =>
@@ -4926,7 +4928,20 @@ test("initialWorkspace names the original folder after itself and marks it origi
 
 /* ------------------------------------ workspace and meter: end to end */
 
+// The folders remembered across console sessions (workspaces.json) are
+// cleared for every new test session unless it asks to keep them, so one
+// test's additions never seed the next one's workspace.
+const REMEMBERED = path.join(HOME, "workspaces.json");
+const remembered = () => JSON.parse(fs.readFileSync(REMEMBERED, "utf8"));
+const rememberedFor = (spec) => {
+  const projects = Object.values(remembered().projects);
+  const project = projects.find((p) => path.resolve(p.path).toLowerCase() === ROOT.toLowerCase());
+  if (!project) return undefined;
+  return spec ? (project.specs || {})[spec] : project.project;
+};
+
 function consoleSession(openArgs, opts = {}) {
+  if (!opts.keepRemembered) fs.rmSync(REMEMBERED, { force: true });
   const res = cli(["open", "--no-open", ...openArgs], opts);
   const s = sessionUrl(res.json.url);
   const send = (pathname, body) =>
@@ -4974,9 +4989,18 @@ test("workspace: a folder added on the dashboard survives dashboard → plan →
     assert.equal(meterView(ledger).points, 2);
     assert.equal((await s.get("/state")).meter.points, 2, "the frame carries the meter");
 
-    const fresh = consoleSession(["--workflow", "dashboard"]);
+    assert.deepEqual(
+      rememberedFor("").folders.map((f) => [f.path, f.description]),
+      [[extra, "the design notes"]],
+      "the add was remembered for the project, outside the session folder"
+    );
+    const fresh = consoleSession(["--workflow", "dashboard"], { keepRemembered: true });
     try {
-      assert.equal(fresh.opened.workspace.folders.length, 1, "a new console session starts with only the original folder");
+      assert.deepEqual(
+        fresh.opened.workspace.folders.map((f) => f.path),
+        [ROOT, extra],
+        "a new console session in the same folder opens with the remembered folders"
+      );
       assert.equal(meterView(readLedger(fresh.session)).points, 0);
     } finally {
       cli(["stop", "--session", fresh.sid]);
@@ -4984,6 +5008,78 @@ test("workspace: a folder added on the dashboard survives dashboard → plan →
   } finally {
     cli(["stop", "--session", s.sid]);
     fs.rmSync(extra, { recursive: true, force: true });
+  }
+});
+
+test("workspace: a spec starts from the project's list, then stands alone, and the scope swaps lists with logged changes", async () => {
+  const s = consoleSession(["--workflow", "dashboard"]);
+  const shared = tempFolder();
+  const specOnly = tempFolder();
+  try {
+    assert.equal((await addFolder(s, { path: shared })).status, 200);
+    const toSpec = await s.send("/workspace/scope", { spec: "specs/demo" });
+    assert.equal(toSpec.status, 200);
+    const view = await toSpec.json();
+    assert.equal(view.scope, "specs/demo");
+    assert.deepEqual(view.folders.map((f) => f.path), [ROOT, shared], "seeded from the project's list");
+    assert.equal(rememberedFor("specs/demo"), undefined, "nothing is saved for the spec until it changes");
+
+    assert.equal((await addFolder(s, { path: specOnly })).status, 200);
+    assert.deepEqual(rememberedFor("specs/demo").folders.map((f) => f.path), [shared, specOnly]);
+    assert.deepEqual(rememberedFor("").folders.map((f) => f.path), [shared], "the project's list is untouched");
+
+    const before = wsFile(s).version;
+    const back = await (await s.send("/workspace/scope", { spec: "" })).json();
+    assert.deepEqual([back.scope, back.folders.map((f) => f.path)], ["", [ROOT, shared]]);
+    assert.deepEqual(
+      wsFile(s).changes.filter((c) => c.version > before).map((c) => [c.kind, c.path]),
+      [["removed", specOnly]],
+      "the swap is logged, so the agent hears of it"
+    );
+    const again = await (await s.send("/workspace/scope", { spec: "specs/demo/" })).json();
+    assert.deepEqual(again.folders.map((f) => f.path), [ROOT, shared, specOnly], "the spec's own list comes back");
+    assert.equal((await s.send("/workspace/scope", { spec: "../elsewhere" })).status, 400);
+  } finally {
+    cli(["stop", "--session", s.sid]);
+    fs.rmSync(shared, { recursive: true, force: true });
+    fs.rmSync(specOnly, { recursive: true, force: true });
+  }
+});
+
+test("workspace: open --spec starts on that spec's list, a posted specDir takes the list with it, and forget drops only that spec", async () => {
+  const s = consoleSession(["--workflow", "dashboard"]);
+  const shared = tempFolder();
+  const specOnly = tempFolder();
+  let other = null;
+  let planned = null;
+  try {
+    await addFolder(s, { path: shared });
+    await s.send("/workspace/scope", { spec: "specs/demo" });
+    await addFolder(s, { path: specOnly });
+    cli(["stop", "--session", s.sid]);
+
+    other = consoleSession(["--workflow", "implement", "--spec", "specs/demo"], { keepRemembered: true });
+    assert.deepEqual(other.opened.workspace.folders.map((f) => f.path), [ROOT, shared, specOnly]);
+    assert.equal((await other.get("/workspace")).scope, "specs/demo");
+
+    planned = consoleSession(["--workflow", "plan"], { keepRemembered: true });
+    assert.deepEqual(planned.opened.workspace.folders.map((f) => f.path), [ROOT, shared], "no spec: the project's list");
+    cli(["post", "--session", planned.sid, "--file", payload("ws-spec.json", { specDir: "specs/brand-new" })]);
+    let saved;
+    for (let i = 0; i < 40 && !(saved = rememberedFor("specs/brand-new")); i++) await sleep(100);
+    assert.deepEqual(saved && saved.folders.map((f) => f.path), [shared], "the list in force became the new spec's");
+
+    const forgot = cli(["forget", "--spec", "specs/demo/overview.md"]);
+    assert.deepEqual(forgot.json, { ok: true, spec: "specs/demo", forgot: true });
+    assert.equal(cli(["forget", "--spec", "specs/demo"]).json.forgot, false, "a second forget finds nothing");
+    assert.equal(rememberedFor("specs/demo"), undefined);
+    assert.ok(rememberedFor("specs/brand-new"), "other specs are kept");
+    assert.ok(rememberedFor(""), "the project's list is kept");
+    assert.equal(cli(["forget"], { expectFail: true }).status, 2);
+  } finally {
+    for (const x of [s, other, planned]) if (x) cli(["stop", "--session", x.sid]);
+    fs.rmSync(shared, { recursive: true, force: true });
+    fs.rmSync(specOnly, { recursive: true, force: true });
   }
 });
 

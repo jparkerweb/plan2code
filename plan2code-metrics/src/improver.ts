@@ -9,7 +9,7 @@ import path from 'path';
 import type { PromptEdit, PromptProposal } from './types.js';
 import { invokeLLM, type AgentType } from './invoke-llm.js';
 
-const CHAR_LIMIT = 11_500;
+const CHAR_LIMIT = 20_000;
 const IMPROVE_PROMPT_PATH = new URL('../src/prompts/improve.md', import.meta.url).pathname
   .replace(/^\/([A-Za-z]:)/, '$1'); // Fix Windows path
 

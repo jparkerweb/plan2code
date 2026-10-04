@@ -2,7 +2,7 @@
 
 > Loaded at the top of MODE B. Work Step 6 routes here by `Type:`; Work Step 8 uses the fog procedure at the end.
 >
-> **Backend note.** Every resolution technique here is backend-independent — the type table, the primary-source rule, the sketch tiers, the checklist discipline, the `## Answer` anatomy. On `**Backend:** github`, `Type:` is a `pathfinder:<type>-<mode>` label, `## Answer` and `## Evidence` are comments rather than file sections, and a research subagent gets an issue URL instead of a path; see `github-issues.md`. Sketches stay on local disk regardless.
+> **Backend note.** Every resolution technique here is backend-independent — the type table, the primary-source rule, the sketch tiers, the checklist discipline, the `## Answer` anatomy. On `**Backend:** github`, `Type:` is a `pathfinder:<type>-<mode>` label, `## Answer` and `## Evidence` are comments rather than file sections, and a research subagent gets an issue URL instead of a path; see `github-issues.md`. Sketches stay on local disk regardless. `pathfinder.mjs` reads local files only, so on `github` do each script step below except `lint` by hand with `gh`, as `github-issues.md` describes.
 
 Every question resolves into the SAME shape — a filled `## Answer` plus whatever `## Evidence` backs it. The type only decides how you get there.
 
@@ -14,7 +14,7 @@ Every question resolves into the SAME shape — a filled `## Answer` plus whatev
 | `legwork · HITL` | Human does, agent waits | No | The human confirmed it is done |
 | `grill · HITL` | Human decides, agent interrogates | No — but probes batch, up to 3 per turn | The human said it in their own words |
 
-**One question _file_ at a time** holds for every row except `research` — several may resolve in one session, but strictly in sequence, per the Cadence below. HITL rows are never self-answered — an agent that writes its own `## Answer` on a `grill` has broken the skill.
+**One question _file_ at a time** holds for every row except `research` — several may resolve in one session, but strictly in sequence, per the Cadence below. `research` is also the one type that is **never claimed**: its subagents fire unclaimed (the file stays `State: open`), so `claim` and its one-claim rule govern grill, sketch and legwork only, and a grill can be claimed while research runs. A research question is finished with `## Answer` plus `resolve` once its subagent is back, or re-fired from `reconcile`'s `refire` if it was cut off. HITL rows are never self-answered — an agent that writes its own `## Answer` on a `grill` has broken the skill.
 
 Every file you create along the way — question files, sketch READMEs — opens with the banner:
 
@@ -42,7 +42,7 @@ The restart costs one paste and loses nothing: every claim, answer, and map upda
 
 - Read only what the cycle needs: the claimed question file plus resolved neighbors' *gists* (Work Step 5). Never re-read the whole `questions/` directory between cycles — reconcile ran once at session start, and this session is the only writer.
 - The menu renders from the map's checklist rows, never from re-reading question files.
-- Strictly one claim open at any moment. Claim → record → release, then the menu. Never two.
+- Strictly one claim open at any moment. Claim → record → release, then the menu. Never two. (Research subagents run unclaimed beside it; see the top of this file.)
 
 **Group sessions.** When Product and Engineering (or any room) work the map together, the grilling playbook's group-session rules apply: probes address the room, the recap captures the decision in the room's words, and a contested pick is never recorded as decided — both positions go under `## Evidence`, the question stays `open`, and the menu moves on (or offer to convert it to `sketch`; reacting to something concrete resolves more standoffs than argument). At Session End, offer `write a brief for today` — the brief doubles as the meeting minutes.
 
@@ -52,7 +52,7 @@ The restart costs one paste and loses nothing: every claim, answer, and map upda
 
 ## `research · AFK`
 
-The only type an agent resolves alone, and the only type that may run several at once. Charting fires them in a batch at Chart Step 8; MODE B fires any that appear later the same way.
+The only type an agent resolves alone, and the only type that may run several at once. Charting fires them in a batch at Chart Step 8; MODE B fires any that appear later the same way, unclaimed: never run `claim` on a research question. When one tops the frontier at Work Step 4, fire it, then claim the first non-research question.
 
 ### Spin up a subagent
 
@@ -78,7 +78,7 @@ Subagents run inside this session's process, even when the harness runs them in 
 
 ### Interrupted research
 
-At Work Step 2 (Reconcile), any research question that is not resolved and whose `## Evidence` lacks the `**Research complete:**` line was never finished: a closed terminal, a crash, a rate limit. Re-fire its subagent with the same brief, plus one instruction: keep what is already in `## Evidence`, verify it, fill the gaps, then write the line. Say so in one line to the human. A map written before this line existed shows the same symptom; re-firing it costs a little time and nothing else.
+At Work Step 2, `reconcile` lists in `refire` every research question that is not resolved and whose `## Evidence` lacks the `**Research complete:**` line (with its path and `## Question` text for the brief): it was never finished, by a closed terminal, a crash, a rate limit. Re-fire its subagent with the same brief, plus one instruction: keep what is already in `## Evidence`, verify it, fill the gaps, then write the line. Say so in one line to the human. A map written before this line existed shows the same symptom; re-firing it costs a little time and nothing else.
 
 ### Primary sources only
 
@@ -421,7 +421,7 @@ If the legwork turns out to BE the deliverable rather than an unblocker — you 
 
 > "This has stopped being legwork that unblocks a decision and become the work itself. Pathfinder plans; it doesn't build. I'm ruling this out of scope and it belongs in planning."
 
-Rule the question `out-of-scope`, mark the map row `[-]`, add one line to `## Out of scope` naming what it turned into, and hand off to `/plan2code-1-plan` for that piece. Never let pathfinder quietly become the implementation.
+Rule the question out with `rule-out <NN> --reason "<what it turned into>"` (it marks the row `[-]` and adds the `## Out of scope` line), and hand off to `/plan2code-1-plan` for that piece. Never let pathfinder quietly become the implementation.
 
 ---
 
@@ -446,7 +446,7 @@ A good grill `## Answer` contains four things:
 
 ## Writing the `## Answer`
 
-Same anatomy for every type. Append it at Work Step 7; never edit `## Question` to match the answer. In the same write, set `State: resolved` **and** `Resolved:` to today's date (`YYYY-MM-DD`, from the shell, never guessed) — the date is what lets a brief report "decided on <day>", so a resolution without it is incomplete.
+Same anatomy for every type. Append it at Work Step 7; never edit `## Question` to match the answer. Then run `node "<S>/pathfinder.mjs" resolve specs/<idea>/pathfinder <NN>`: it sets `State: resolved` **and** `Resolved:` to today (from the clock; the date is what lets a brief report "decided on <day>"), and writes the map row from your `**Gist:**`. It refuses an Answer with no Gist line.
 
 | Part | Required | Content |
 |---|---|---|
@@ -519,7 +519,7 @@ The map row it produces — gist, then the `Resolved:` date in italics:
 
 1. **Re-read `## Not yet specified` in full.** Every bullet, every session, after every resolution. Not the ones you remember — you are assuming no memory of prior sessions, and the bullet that graduates is usually the one you forgot was there.
 2. **Ask of each bullet: did the answer just make this sharp?** Can you now write a `## Question` paragraph a stranger could act on, without "we'll need to figure out" anywhere in it?
-3. **If yes, write the question file NOW** — in this same session, before Work Step 9. Next `NN` = max existing + 1, never reused. Fill all five metadata lines, with `Blocked by:` wired in the same pass. Add its `[ ]` or `[!]` row to `## Question Checklist`.
+3. **If yes, write the question file NOW** — in this same session, before Work Step 9. Its `NN` is `frontier`'s `nextNN` (max existing + 1, from the directory, never reused). Fill all six schema lines, with `Blocked by:` wired in the same pass. `reconcile` then adds its `[ ]` or `[!]` row to `## Question Checklist`.
 4. **DELETE the bullet from `## Not yet specified`.** Immediately, in the same edit as writing the file.
 5. **If no, leave the bullet alone** — untouched, not reworded into something that merely sounds sharper.
 6. **Re-check the counts.** One fog patch may graduate into three questions, or into none. Both are normal. A patch that graduates into three was written at the right coarseness; a patch that graduates into exactly one every time was probably a question all along.
@@ -538,10 +538,9 @@ Detection is cheap: after writing any graduated question file, re-read `## Not y
 
 The destination fixes the scope. When a resolution reveals that a question — the one you just claimed, or another on the map — sits past the destination:
 
-1. Set that file's `State: out-of-scope`. Do NOT write a `## Answer`; there is no decision, only a scope boundary. Add one line under `## Question` saying why it is out.
-2. Set its map row to `[-]`.
-3. Add one line to `## Out of scope`: the name as a link, plus the reason.
-4. Check for **stranded** questions — anything whose `Blocked by:` names it. A blocker that is `out-of-scope` will never be `resolved`, so the dependent is permanently blocked. Re-frame its `## Question` to drop the dependency, or rule it out too. Never leave it sitting.
+1. Decide the one-line reason. Do NOT write a `## Answer`; there is no decision, only a scope boundary.
+2. Run `node "<S>/pathfinder.mjs" rule-out specs/<idea>/pathfinder <NN> --reason "<why>"`. It sets `State: out-of-scope`, adds the reason under `## Question`, marks the row `[-]` and adds the linked line to `## Out of scope`.
+3. Handle its `stranded` list: questions whose `Blocked by:` names it. A blocker that is `out-of-scope` will never be `resolved`, so the dependent is permanently blocked. Re-frame its `## Question` to drop the dependency, or rule it out too. Never leave it sitting.
 
 Out-of-scope work never graduates back. The frontier stops at the destination. It returns only if the destination is redrawn, and then as a fresh effort with a fresh map.
 
@@ -559,9 +558,9 @@ An answer can also break questions that already exist. Three cases:
 | What happened | Do this |
 |---|---|
 | The question still matters but is asked wrong | **Re-frame.** Rewrite `## Question` in place. Keep `NN`, keep the file, keep the links. Add one line noting which answer forced the re-frame. |
-| The question no longer exists — the answer subsumed it | **Delete the file and its map row.** Add one line to the answering question's `## Answer` consequences saying what it absorbed. Do not renumber anything. |
+| The question no longer exists — the answer subsumed it | **Delete the file, then run `reconcile`** (it drops the map row). Add one line to the answering question's `## Answer` consequences saying what it absorbed. Do not renumber anything. |
 | The question is now two questions | **Re-frame the original to the narrower half; write a new file at max+1 for the other.** Wire `Blocked by:` between them if one gates the other. |
 
 Never leave a question standing that you know is wrong on the theory that a later session will notice. It will not — it assumes no memory, and a well-formed `## Question` reads as intentional.
 
-Two hard constraints on all three cases: **`NN` is never reused and never renumbered** — links and `Blocked by:` lines would rot silently. And every re-frame or deletion is reflected in the map's `## Question Checklist` in the same edit, so the index never disagrees with the files.
+Two hard constraints on all three cases: **`NN` is never reused and never renumbered** — links and `Blocked by:` lines would rot silently. And run `reconcile` straight after any re-frame or deletion, so the index never disagrees with the files (it drops the row of a deleted file and adds one for a new file).

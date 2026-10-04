@@ -45,7 +45,10 @@ import {
   readLedger,
   readOverview,
   readWorkspace,
+  rememberWorkspace,
+  rememberedWorkspace,
   remoteWarning,
+  specKey,
   typedCount,
   withStateLock,
   writeJsonAtomic,
@@ -326,7 +329,9 @@ function workspaceNow() {
     return ws;
   }
   const root = sessionWorktree();
-  const fresh = { ...initialWorkspace(root || PROJECT), remote: remoteWarning().remote || "" };
+  const scope = specKey(stateNow?.specDir);
+  const remembered = root ? rememberedWorkspace(root, scope).entry : null;
+  const fresh = { ...initialWorkspace(root || PROJECT, remembered), scope, remote: remoteWarning().remote || "" };
   // There but unreadable for now (a scanner's lock): never written over, and
   // never cached, so the next call reads it again.
   if (stamp) return workspaceSeen.ws || fresh;
@@ -347,11 +352,85 @@ function saveWorkspace(ws) {
 
 // One change: a new version, an entry in the change log the agent is handed,
 // the file, and every open page.
-function bumpWorkspace(ws, change) {
+function bumpWorkspace(ws, change, { remember = true } = {}) {
   ws.version = (ws.version || 0) + 1;
   ws.changes = [...(ws.changes || []), { ...change, version: ws.version }];
   saveWorkspace(ws);
+  // Remembered for the next console session too. A folder gone missing or
+  // found again is not a change of mind, so it is not saved.
+  if (remember) rememberNow(ws);
   pushState();
+}
+
+function rememberNow(ws) {
+  const root = sessionWorktree();
+  if (!root) return;
+  try {
+    rememberWorkspace(root, ws.scope || "", ws);
+  } catch {}
+}
+
+/**
+ * Point the workspace at another spec ("" for the project's own list) and
+ * swap in what was remembered there, logging each difference as a change so
+ * the agent's cursor stays truthful. A spec with nothing saved starts from
+ * the project's list (`seed: "project"`, the dashboard picker) or keeps the
+ * list it has and saves it as the spec's (`seed: "current"`, a spec created
+ * mid-run). Folders keep their ids when their path stays.
+ */
+function setScope(ws, spec, seed = "project") {
+  const root = sessionWorktree();
+  const next = specKey(spec);
+  if (!root || (ws.scope || "") === next) return false;
+  const found = rememberedWorkspace(root, next);
+  ws.scope = next;
+  if (next && found.from !== "spec" && seed === "current") {
+    saveWorkspace(ws);
+    rememberNow(ws);
+    pushState();
+    return true;
+  }
+  const want = initialWorkspace(root, found.entry).folders;
+  const byPath = new Map(ws.folders.map((f) => [foldPath(path.resolve(f.path)), f]));
+  const kept = new Set();
+  const folders = [];
+  const changes = [];
+  for (const w of want) {
+    const have = w.original ? ws.folders.find((f) => f.original) : byPath.get(foldPath(path.resolve(w.path)));
+    if (!have) {
+      folders.push({ ...w, id: "pending" });
+      changes.push({ kind: "added", name: w.name, path: w.path, description: w.description });
+      continue;
+    }
+    kept.add(have);
+    if (have.name !== w.name) changes.push({ kind: "renamed", from: have.name, name: w.name, path: have.path });
+    if ((have.description || "") !== (w.description || "")) {
+      changes.push({ kind: "described", name: w.name, path: have.path, description: w.description || "" });
+    }
+    folders.push({ ...have, name: w.name, description: w.description || "" });
+  }
+  for (const f of ws.folders) {
+    if (!kept.has(f)) changes.unshift({ kind: "removed", name: f.name, path: f.path });
+  }
+  ws.folders = folders.filter((f) => f.id !== "pending");
+  for (const f of folders.filter((f) => f.id === "pending")) ws.folders.push({ ...f, id: nextFolderId(ws) });
+  ws.missing = (ws.missing || []).filter((id) => ws.folders.some((f) => f.id === id));
+  if (!changes.length) {
+    saveWorkspace(ws);
+    pushState();
+  }
+  for (const c of changes) bumpWorkspace(ws, c, { remember: false });
+  checkFolders(ws);
+  return true;
+}
+
+// A spec posted mid-run (Pathfinder or Plan making its folder, a skill that
+// learns its spec late) takes the workspace with it.
+function followSpecDir(state) {
+  const spec = specKey(state && state.specDir);
+  if (!spec || !fileStamp(WORKSPACE_PATH)) return;
+  const ws = workspaceNow();
+  if ((ws.scope || "") !== spec) setScope(ws, spec, "current");
 }
 
 function isFolder(p) {
@@ -370,10 +449,10 @@ function checkFolders(ws) {
     const marked = ws.missing.includes(f.id);
     if (!there && !marked) {
       ws.missing = [...ws.missing, f.id];
-      bumpWorkspace(ws, { kind: "missing", name: f.name, path: f.path });
+      bumpWorkspace(ws, { kind: "missing", name: f.name, path: f.path }, { remember: false });
     } else if (there && marked) {
       ws.missing = ws.missing.filter((id) => id !== f.id);
-      bumpWorkspace(ws, { kind: "found", name: f.name, path: f.path });
+      bumpWorkspace(ws, { kind: "found", name: f.name, path: f.path }, { remember: false });
     }
   }
 }
@@ -402,8 +481,8 @@ function folderIssues(entries) {
 }
 
 function workspaceView() {
-  const { folders, missing, remote } = workspaceNow();
-  return { folders, missing: missing || [], remote: remote || "", issues: folderIssues(ledgerEntries()) };
+  const { folders, missing, remote, scope } = workspaceNow();
+  return { folders, missing: missing || [], remote: remote || "", scope: scope || "", issues: folderIssues(ledgerEntries()) };
 }
 
 // Whether child sits strictly under parent.
@@ -492,6 +571,7 @@ function bootWorkspace() {
     saveWorkspace(ws);
   }
   checkFolders(ws);
+  followSpecDir(stateNow);
 }
 
 /**
@@ -1403,6 +1483,24 @@ const server = http.createServer((req, res) => {
     });
   }
 
+  // Which list the workspace is: a spec's, or the project's (`spec` empty).
+  // The dashboard's picker sends it as the selection moves and before a
+  // launch, so a skill opens on the list of the spec it was launched for.
+  if (pathname === "/workspace/scope" && req.method === "POST") {
+    if (!originOk(req, port)) return json(res, 403, { error: "bad origin" });
+    return readBody(req, (err, body) => {
+      if (err || !body || typeof body !== "object" || Array.isArray(body)) return json(res, 400, { error: "bad" });
+      const spec = typeof body.spec === "string" ? body.spec : "";
+      if (spec && !/^specs\/[^/\\]+$/.test(specKey(spec))) return json(res, 400, { reason: "bad-spec" });
+      try {
+        setScope(workspaceNow(), spec, "project");
+      } catch (e) {
+        return json(res, 500, { error: String(e.message) });
+      }
+      return json(res, 200, workspaceView());
+    });
+  }
+
   // Only ever returns a path: the page then adds it through /workspace/add.
   if (pathname === "/workspace/browse" && req.method === "POST") {
     if (!originOk(req, port)) return json(res, 403, { error: "bad origin" });
@@ -1560,6 +1658,9 @@ function checkState() {
       agentSeenAt = Date.now();
       try {
         ensureConversation(parsed);
+      } catch {}
+      try {
+        followSpecDir(parsed);
       } catch {}
       pushState();
     }
