@@ -207,7 +207,7 @@ says, and `stop`:
 ```jsonc
 {
   "items": [{ "id": "signoff", "status": "answered", "answer": { "verdict": "approve" } }],
-  "run": { "event": "implement-phase", "id": "phase-3" },
+  "run": { "event": "implement-phase", "id": "phase-3", "tasks": 9 },
   "finish": {
     "headline": "Phase 3 is done",
     "body": "9 of 9 tasks, all on disk.\n\n| Phase | Tasks | Goal |\n| --- | --- | --- |\n| Phase 4: ... | 6 | ... |\n\nCommit it with:\n\n```\ngit add -A && git commit -m \"...\" -m \"AI Assisted\"\n```",
@@ -229,7 +229,10 @@ still offers the review on its finish — see below.
 `run` scores the approved phase on the session meter (console.md → Posting an
 update → Session meter), in the same post that records the approval:
 `implement-phase` for Implement, `implement-review-phase` for Implement +
-Review, id `phase-N`. Quick task and a standalone Review are counted when
+Review, id `phase-N`, and `tasks`: how many of the phase's tasks were
+completed (`[x]`, not blocked `[!]`). The phase scores by its size, so a
+twelve-task phase weighs four times a three-task one; leave `tasks` out and
+every phase weighs the same. Quick task and a standalone Review are counted when
 their session opens, so they post no `run` for that; a review run on the page
 after a build reports its own (below).
 
@@ -386,7 +389,8 @@ item: Stage 4 is the only gate. Stage 4 is the sign-off above **without the
 review verdict** — the phase was already reviewed — with the review results
 and unresolved findings in the report doc, header "Reviewed and ready for
 sign-off" in the item's `body`. The finish never carries `review`, and its
-post carries `"run": { "event": "implement-review-phase", "id": "phase-N" }`.
+post carries `"run": { "event": "implement-review-phase", "id": "phase-N", "tasks": N }`
+with the count of completed tasks.
 
 ---
 

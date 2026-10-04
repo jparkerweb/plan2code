@@ -87,7 +87,7 @@ import {
   writeJsonAtomic,
   writeWorkspaceCursor,
 } from "./lib.mjs";
-import { RUN_EVENTS } from "./public/meter.js";
+import { RUN_EVENTS, TASK_EVENTS, MAX_TASKS, isTaskCount } from "./public/meter.js";
 import { changeLine } from "./public/workspace.js";
 
 // Mirrors the server's absolute lifetime cap: a handle older than this cannot
@@ -618,7 +618,11 @@ function ledgerFromPost(dir, run, issue, workflow) {
     const event = run && typeof run === "object" ? run.event : undefined;
     if (!RUN_EVENTS.has(event)) die(`run: unknown event "${event}"`, 3);
     if (typeof run.id !== "string" || !run.id.trim()) die("run: id required", 3);
-    lines.push({ kind: "run", id: `${launch}:${run.id}`, event, workflow });
+    if (run.tasks !== undefined) {
+      if (!TASK_EVENTS.has(event)) die(`run: tasks only goes with ${[...TASK_EVENTS].join(" or ")}`, 3);
+      if (!isTaskCount(run.tasks)) die(`run: tasks must be a whole number from 1 to ${MAX_TASKS}`, 3);
+    }
+    lines.push({ kind: "run", id: `${launch}:${run.id}`, event, workflow, ...(run.tasks !== undefined ? { tasks: run.tasks } : {}) });
   }
   if (issue !== undefined) {
     const text = (v) => typeof v === "string" && v.trim() !== "";
@@ -856,9 +860,28 @@ function consume(dir, resultPath, result, url, chat = []) {
     writeJsonAtomic(resultPath, collected);
   } catch {}
   appendEvent(dir, { type: "consume", kind: result.type });
+  ledgerAnswers(dir, result);
   advanceCursor(dir, chat);
   advanceWorkspace(dir, changes);
   process.exitCode = result.type === "cancel" ? 30 : 0;
+}
+
+// One `answer` ledger line per item the person answered in this send, for
+// the session meter. The id carries the send's stamp, so a send collected
+// twice (a kill before consumedAt was written) still counts once, while the
+// same question answered again in a later round counts again: that round was
+// real back-and-forth. Never fatal: the meter is advice.
+function ledgerAnswers(dir, result) {
+  if (!result || result.type !== "submit" || !Array.isArray(result.actions)) return;
+  try {
+    const launch = lastLaunchId(readLedger(dir));
+    const workflow = (readJson(path.join(dir, "state.json")) || {}).workflow;
+    const items = new Set();
+    for (const a of result.actions) {
+      if (a && a.type === "answer" && typeof a.i === "string" && !a.i.startsWith("__")) items.add(a.i);
+    }
+    for (const i of items) appendLedger(dir, { kind: "answer", id: `${launch}:answer:${result.at}:${i}`, workflow });
+  } catch {}
 }
 
 /* ----------------------------------------------------------------- keep */
@@ -942,7 +965,7 @@ port, and the filesystem as transport; this CLI is the whole agent surface.
   post    --session <sid> --file <patch.json>
           Merge a patch into the session. Prints terminalLine while the
           server is live. Exit 3 = rejected; stderr says why. A patch may
-          carry run: { event, id } (session meter points) and folderIssue:
+          carry run: { event, id, tasks? } (session meter points) and folderIssue:
           { name, reason, hint? } (a workspace folder you could not read);
           both go to the ledger, never into the state.
   wait    --session <sid> [--seconds <N>]
