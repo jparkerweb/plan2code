@@ -23,6 +23,7 @@ All notable changes to Plan2Code will be documented in this file.
 - **web-console**: a finished quick task offers **Back to the dashboard** as well as **Review it now**, so the finished screen is never a dead end.
 - **Windows**: the folder picker (the launcher's desktop shortcut and the Workspace **Browse…** button) now opens centred and in front of other windows instead of behind the terminal.
 - **Launcher**: before asking which CLI to use, `plan2code` says what it is about to do and that running `/plan2code` inside your agent works too.
+- **web-console**: the session meter now weighs the work a session actually did instead of a flat amount per step. A built phase scores one point per 3 tasks it completed (rounded up), plus 1 for Implement + Review, so a twelve-task phase weighs four times a three-task one; the agent reports the count as `run.tasks`. Every 2 questions you answer on the page add a point to the skill you answered them in, so a long back-and-forth in Plan or Pathfinder counts for more than a short one. Each Pathfinder research question adds 1 through a new `pathfinder-research` event, since research fills the context with nobody answering anything. The levels move to match: yellow from 5 points, red from 10, and the ring is full at 15.
 
 ### 🐛 Fixed
 
