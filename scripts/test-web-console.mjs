@@ -141,7 +141,9 @@ import {
   meterView,
   pointsFrom,
   RED_AT,
+  ANSWERS_PER_POINT,
   ringFraction,
+  runPoints,
   tooltipFor,
   WEIGHTS,
   YELLOW_AT,
@@ -361,6 +363,20 @@ test("a submit round-trips to the agent with the literal reply token", async () 
   assert.equal(res.json.type, "submit");
   assert.equal(res.json.reply, "Export format: b");
   assert.equal(res.json.actions[0].k, "B");
+});
+
+test("a collected answer is written to the meter ledger once, and a button press is not", async () => {
+  const answers = () => readLedger(session).filter((e) => e.kind === "answer");
+  const mine = answers().filter((e) => e.id.endsWith(":q1"));
+  assert.equal(mine.length, 1, "the round-trip above left one answer for q1");
+  assert.match(mine[0].id, /^L\d+:answer:.+:q1$/);
+  // Collecting the same send again (a kill before consumedAt) adds nothing.
+  const resultFile = path.join(session, "result.json");
+  const collected = JSON.parse(fs.readFileSync(resultFile, "utf8"));
+  const before = answers().length;
+  fs.writeFileSync(resultFile, JSON.stringify({ ...collected, consumedAt: undefined }));
+  assert.equal(cli(["wait", "--session", sid, "--seconds", "5"]).status, 0);
+  assert.equal(new Set(answers().map((e) => e.id)).size, before, "a re-collected send dedupes by id");
 });
 
 // The page shows a settled question's answer back to the person. If it had to
@@ -4260,7 +4276,7 @@ test("console.md and building.md teach the workspace and session meter contract"
   const dir = path.join(ROOT, "src", "web-console");
   const consoleMd = fs.readFileSync(path.join(dir, "console.md"), "utf8");
   const buildingMd = fs.readFileSync(path.join(dir, "building.md"), "utf8");
-  for (const word of ["workspace", "pendingWorkspace", "folderIssue", "run", "pathfinder-question", "pathfinder-chart", "AGENTS.md", "/add-dir"]) {
+  for (const word of ["workspace", "pendingWorkspace", "folderIssue", "run", "pathfinder-question", "pathfinder-research", "pathfinder-chart", "AGENTS.md", "/add-dir"]) {
     assert.ok(consoleMd.includes(word), `console.md must mention ${word}`);
   }
   for (const word of ["implement-phase", "implement-review-phase"]) {
@@ -4554,10 +4570,10 @@ test("keep copies a cited upload into specs/<idea>/attachments/, reuses it, link
 /* ------------------------------------------ workspace, meter, mentions */
 
 test("meter: levels, ring, fold and tooltip wording", () => {
-  for (const p of [0, 3]) assert.equal(levelFor(p), "green", `${p} points`);
-  for (const p of [4, 5]) assert.equal(levelFor(p), "yellow", `${p} points`);
-  for (const p of [6, 12]) assert.equal(levelFor(p), "red", `${p} points`);
-  assert.deepEqual([0, 4, 8, 14].map(ringFraction), [0, 0.5, 1, 1]);
+  for (const p of [0, 4]) assert.equal(levelFor(p), "green", `${p} points`);
+  for (const p of [5, 9]) assert.equal(levelFor(p), "yellow", `${p} points`);
+  for (const p of [10, 15]) assert.equal(levelFor(p), "red", `${p} points`);
+  assert.deepEqual([0, 6, 15, 20].map(ringFraction), [0, 0.4, 1, 1]);
   assert.equal(ringFraction(-3), 0);
 
   assert.equal(pointsFrom([{ kind: "launch", id: "L1", workflow: "plan" }]), 2);
@@ -4577,11 +4593,11 @@ test("meter: levels, ring, fold and tooltip wording", () => {
 
   assert.equal(tooltipFor(1), "This session is fresh (1 point).");
   assert.match(tooltipFor(5), /getting long \(5 points\)/);
-  assert.match(tooltipFor(9), /done a lot \(9 points\)/);
+  assert.match(tooltipFor(10), /done a lot \(10 points\)/);
   assert.deepEqual(meterView([{ kind: "launch", id: "L1", workflow: "document" }]), {
     points: 2,
     level: "green",
-    fraction: 0.25,
+    fraction: 2 / 15,
     words: "Session: fresh",
     tooltip: "This session is fresh (2 points).",
     items: [{ label: "Document started", points: 2 }],
@@ -4603,6 +4619,57 @@ test("meter: the breakdown lists each scoring entry once and sums to the total",
   ]);
   assert.equal(pointsFrom(entries), breakdownFrom(entries).reduce((n, r) => n + r.points, 0));
   assert.deepEqual(breakdownFrom(null), []);
+});
+
+test("meter: a built phase scores by the tasks it completed", () => {
+  // One point per 3 tasks, rounded up; Implement + Review adds 1 for the review.
+  assert.deepEqual([1, 3, 4, 6, 9, 12, 18].map((n) => runPoints("implement-phase", n)), [1, 1, 2, 2, 3, 4, 6]);
+  assert.deepEqual([1, 6, 12].map((n) => runPoints("implement-review-phase", n)), [2, 3, 5]);
+  // No count, or a bad one, falls back to the flat weight.
+  for (const bad of [undefined, 0, -2, 2.5, "9", 1000]) {
+    assert.equal(runPoints("implement-phase", bad), WEIGHTS["implement-phase"], `tasks ${bad}`);
+  }
+  assert.equal(runPoints("review", 30), WEIGHTS.review, "tasks only scales a built phase");
+
+  const entries = [
+    { kind: "run", id: "L1:phase-1", event: "implement-phase", tasks: 3 },
+    { kind: "run", id: "L2:phase-2", event: "implement-phase", tasks: 14 },
+    { kind: "run", id: "L3:phase-3", event: "implement-review-phase", tasks: 1 },
+  ];
+  assert.deepEqual(breakdownFrom(entries), [
+    { label: "Implement phase built: phase-1 (3 tasks)", points: 1 },
+    { label: "Implement phase built: phase-2 (14 tasks)", points: 5 },
+    { label: "Implement + Review phase built: phase-3 (1 task)", points: 2 },
+  ]);
+  assert.equal(levelFor(pointsFrom(entries)), "yellow", "one big phase can yellow a session alone");
+});
+
+test("meter: answers score per skill run, one point per two, rounded down", () => {
+  assert.equal(ANSWERS_PER_POINT, 2);
+  const answer = (launch, i, workflow) => ({ kind: "answer", id: `${launch}:answer:t:${i}`, workflow });
+  const entries = [
+    { kind: "launch", id: "L1", workflow: "pathfinder" },
+    ...["q1", "q2", "q3", "q4", "q5"].map((i) => answer("L1", i, "pathfinder")),
+    { kind: "run", id: "L1:map", event: "pathfinder-chart" },
+    { kind: "run", id: "L1:q1", event: "pathfinder-question" },
+    { kind: "run", id: "L1:q6", event: "pathfinder-research" },
+    { kind: "run", id: "L1:q6", event: "pathfinder-research" },
+    { kind: "launch", id: "L2", workflow: "quick-task" },
+    answer("L2", "c1", "quick-task"),
+    answer("L2", "c1", "quick-task"),
+    { kind: "launch", id: "L3", workflow: "plan" },
+    answer("L3", "p1", "plan"),
+  ];
+  assert.deepEqual(breakdownFrom(entries), [
+    { label: "5 answers in Pathfinder", points: 2 },
+    { label: "Pathfinder map written: map", points: 2 },
+    { label: "Pathfinder research done: q6", points: 1 },
+    { label: "Quick task started", points: 1 },
+    { label: "Plan started", points: 2 },
+  ], "a duplicate id counts once, a lone answer scores nothing, a settled question scores nothing");
+  const more = [...entries, answer("L3", "p2", "plan"), answer("L3", "p1-again", "plan")];
+  assert.deepEqual(breakdownFrom(more).at(-1), { label: "3 answers in Plan", points: 1 });
+  assert.equal(pointsFrom(more), 9);
 });
 
 test("workspace: default names, name rules and the free-name suggestion", () => {
@@ -5134,6 +5201,12 @@ test("meter: a repeated run counts once, a bad one appends nothing, and neither 
     const noId = postPatch(s, { run: { event: "plan" } }, { expectFail: true });
     assert.equal(noId.status, 3);
     assert.match(noId.stderr, /run: id required/);
+    const badTasks = postPatch(s, { run: { event: "implement-phase", id: "phase-1", tasks: 0 } }, { expectFail: true });
+    assert.equal(badTasks.status, 3);
+    assert.match(badTasks.stderr, /run: tasks must be a whole number/);
+    const strayTasks = postPatch(s, { run: { event: "plan", id: "p", tasks: 4 } }, { expectFail: true });
+    assert.equal(strayTasks.status, 3);
+    assert.match(strayTasks.stderr, /run: tasks only goes with/);
     const badIssue = postPatch(s, { folderIssue: { name: "docs" } }, { expectFail: true });
     assert.equal(badIssue.status, 3);
     const bait = postPatch(s, { folderIssue: { name: "docs", reason: "TASK_COMPLETE" } }, { expectFail: true });
@@ -5141,6 +5214,10 @@ test("meter: a repeated run counts once, a bad one appends nothing, and neither 
     const badState = postPatch(s, { run: { event: "plan", id: "p" }, items: [{ id: "q1", title: "grilling" }] }, { expectFail: true });
     assert.equal(badState.status, 3, "a patch the state rejects appends nothing either");
     assert.equal(readLedger(s.session).length, before, "rejected posts appended nothing");
+
+    assert.equal(postPatch(s, { run: { event: "implement-phase", id: "phase-1", tasks: 7 } }).status, 0);
+    assert.ok(readLedger(s.session).some((e) => e.id === "L1:phase-1" && e.tasks === 7), "tasks reach the ledger");
+    assert.equal(points(), 5, "a 7-task phase adds 3");
 
     const state = readState(s.session);
     assert.equal("run" in state, false);

@@ -66,7 +66,7 @@
           <span class="badge" id="badge">Pathfinder</span>
           <h1 id="title">Plan2Code Console</h1>
           <!-- The session meter: how much this console session has done. The
-               ring fills with the points (full at 8); the colour is the
+               ring fills with the points (full at 15); the colour is the
                level. Hidden until a frame carries `meter`. -->
           <span class="meter-slot">
             <button
@@ -1347,16 +1347,16 @@
         <ul>
           <li>
             <strong>Green, "Session: fresh".</strong> Under
-            <span data-fact="meterYellow">4</span> points. Carry on.
+            <span data-fact="meterYellow">5</span> points. Carry on.
           </li>
           <li>
             <strong>Yellow, "Session: getting long".</strong> From
-            <span data-fact="meterYellow">4</span> points. Fine for now; think
+            <span data-fact="meterYellow">5</span> points. Fine for now; think
             about a fresh start after this step.
           </li>
           <li>
             <strong>Red, "Session: time for a fresh start".</strong> From
-            <span data-fact="meterRed">6</span> points. The dashboard also says so
+            <span data-fact="meterRed">10</span> points. The dashboard also says so
             in a banner.
           </li>
         </ul>
@@ -1364,7 +1364,9 @@
         <p>
           Each step you run here adds points: a plan or a set of documents
           weighs more than a single answered question, and a built phase more
-          still. Click the ring to see the count and a list of each step that added
+          still, by how many tasks it completed: a big phase adds more than a
+          small one. Every two questions you answer add a point too, so a long
+          back-and-forth counts for more than a short one. Click the ring to see the count and a list of each step that added
           points, with what it added. It is a rule of thumb, not a
           reading of Plan2Code's real memory: long sessions tend to make it
           miss things, and the ring is there to remind you.

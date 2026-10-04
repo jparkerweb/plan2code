@@ -337,10 +337,14 @@ and a **What is this?** link to Help.
 
 Each skill run adds points (`WEIGHTS` in `public/meter.js`): Plan, Document,
 Review, Init and Init update 2; Revise plan, Quick task and Finalize 1; a
-Pathfinder map 2 and each question it resolves 1; an Implement phase 2, an
-Implement + Review phase 3; Handoff and the dashboard 0. A review run on the
+Pathfinder map 2 and each question its research subagents settle 1; a built phase by its size,
+one point per 3 tasks it completed (rounded up), plus 1 for Implement + Review
+(a flat 2, or 3, if the agent did not report a task count); Handoff and the dashboard 0.
+On top of that, every 2 questions you answer on the page add 1 point to the
+skill run you answered them in (`ANSWERS_PER_POINT`), so a long Pathfinder or a
+Plan with many clarifying questions weighs more than a short one. A review run on the
 page after a quick task or a phase sign-off counts as a Review too. Green is
-under 4, yellow from 4, red from 6, and the ring is full at 8. At red the dashboard
+under 5, yellow from 5, red from 10, and the ring is full at 15. At red the dashboard
 also shows a banner: starting a **new console session** keeps the agent sharp
 (resuming this one carries the count along). It is a rule of thumb, not a
 reading of the agent's real context, and it never blocks anything.

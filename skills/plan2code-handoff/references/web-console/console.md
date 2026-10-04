@@ -767,8 +767,10 @@ that is what the person is there to download. The finish carries no
   sees the Trail Footer, and without this their last screen promises a question
   that is never coming.
 - Post `run` `pathfinder-chart` (id `map`) when a new map is first written,
-  and `pathfinder-question` (id = the question's file slug) each time a
-  question is resolved (Posting an update → Session meter).
+  and `pathfinder-research` (id = the question's file slug) as each research
+  subagent reports back, or when you resolve a `research` question yourself
+  (Posting an update → Session meter). Other questions score through their
+  answers, so there is nothing to post for them.
 - The scope probe is **Leave for later**: "Which of these features are we
   leaving out this time?" as a `multi` with a recommended preset. Every option
   names a feature, and its `detail` ends "(Leaving this out = …)". Never phrase
@@ -868,19 +870,31 @@ launches itself: Plan, Revise plan, Document, Review, Quick task, Init, Init
 update and Finalize score when their session opens, and there is nothing to
 post for them.
 
+It counts answers itself too: every card the person answers in a send adds to
+the skill run's tally when `wait` hands the send to you, and every 2 answers
+score a point, so a long back-and-forth weighs more than a short one. Notes,
+Quick questions and buttons such as Stop or the dashboard do not count.
+
 Per-unit work is yours to report, with `run` in any post:
 
 ```jsonc
-{ "run": { "event": "implement-phase", "id": "phase-2" } }
+{ "run": { "event": "implement-phase", "id": "phase-2", "tasks": 9 } }
 ```
 
-- `event` is one of `pathfinder-chart`, `pathfinder-question`, `plan`,
+- `event` is one of `pathfinder-chart`, `pathfinder-question` (scores
+  nothing now: answers count instead), `pathfinder-research`, `plan`,
   `revise-plan`, `document`, `implement-phase`, `implement-review-phase`,
   `review`, `quick-task`, `init`, `init-update`, `finalize`, `handoff`.
   An unknown event is exit `3`.
 - `id` names the unit: a question's file slug, `phase-N`, `map`. The same id
   posted again in the same skill run is ignored, so a repeated post never
   counts twice.
+- `tasks` goes only with `implement-phase` and `implement-review-phase`: the
+  number of tasks the phase completed (marked `[x]`; blocked `[!]` tasks do
+  not count), a whole number from 1 to 999. A built phase scores by its size,
+  one point per 3 tasks rounded up, and Implement + Review one more for the
+  review. Always send it: without it a phase scores a flat 2 (or 3), however
+  big it was. On any other event it is exit `3`.
 - One `run` per post. Which events a workflow reports is in its own notes
   (Workflow notes → Pathfinder; `building.md` for Implement and for the
   review run on the page after a build).
