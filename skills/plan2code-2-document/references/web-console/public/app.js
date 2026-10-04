@@ -3327,15 +3327,36 @@ function renderWaiting(main) {
   }
   pane.appendChild(title);
   pane.appendChild(el("p", null, doing));
-  pane.appendChild(
-    el(
-      "p",
-      null,
-      docs().length
-        ? "The tabs above fill in as it goes. You can follow along with live `Task` updates in the `Phase tasks` tab. If Plan2Code needs you, the question appears here on its own."
-        : "If Plan2Code needs you, the question appears here on its own."
-    )
+  if (!docs().length) {
+    pane.appendChild(el("p", null, "If Plan2Code needs you, the question appears here on its own."));
+    return;
+  }
+  // "Task" and the tasks tab's own name both open that tab, so the pointer is
+  // one click from what it points at. A build posts it as `phase` ("Phase N
+  // tasks"), a quick task as `tasks`; with neither the words stay plain.
+  const list =
+    docs().find((d) => d.id === "phase") ||
+    docs().find((d) => d.id === "tasks") ||
+    docs().find((d) => /\btasks\b/i.test(d.title || ""));
+  const jump = (word) => {
+    if (!list) return el("strong", "waiting-jump", word);
+    const b = el("button", "waiting-jump", word);
+    b.type = "button";
+    b.addEventListener("click", () => {
+      view = "doc:" + list.id;
+      render();
+    });
+    return b;
+  };
+  const p = el("p");
+  p.append(
+    "The tabs above fill in as it goes. You can follow along with live ",
+    jump("Task"),
+    " updates in the ",
+    jump((list && list.title) || "Phase tasks"),
+    " tab. If Plan2Code needs you, the question appears here on its own."
   );
+  pane.appendChild(p);
 }
 
 // A notice is context for the question it sits beside, so it lives inside the

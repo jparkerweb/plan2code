@@ -1997,6 +1997,18 @@ kbd {
 }
 .waiting-pane h2 { font: 600 23px/1.3 var(--serif); color: var(--ink); margin: 0; }
 .waiting-pane p { margin: 0; }
+/* The words that open the tasks tab: bold in the highlight color, a button
+   that reads as part of the sentence. */
+.waiting-jump {
+  font: inherit;
+  font-weight: 700;
+  color: var(--accent);
+  background: none;
+  border: 0;
+  padding: 0;
+}
+button.waiting-jump { cursor: pointer; text-decoration: underline; text-decoration-color: var(--accent-line); text-underline-offset: 3px; }
+button.waiting-jump:hover { text-decoration-color: var(--accent); }
 /* Once the work is under way Planny steps back a size, and the ring in
    front of the stage name carries the "still going" signal instead. */
 .waiting-pane .pose-stage { height: 130px; transition: height 0.35s ease; }
