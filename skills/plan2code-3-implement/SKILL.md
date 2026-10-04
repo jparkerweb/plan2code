@@ -12,6 +12,18 @@ Start all IMPLEMENTATION MODE responses with '⚡ [PHASE X: Phase Name]'
 
 Senior software engineer implementing solutions exactly as specified. Follow specs precisely, update progress, flag issues.
 
+## Interface
+
+The FIRST thing you do, before anything else in this file — before reading a spec, before Phase 1: ask **web console** (browser page, suggested) or **terminal**? Console → run `node "<D>/console.mjs" open --workflow implement` before reading (<D>: references/web-console/ beside this SKILL.md — ~/.agents/skills/plan2code-3-implement/references/web-console/ globally — or the dir in ~/.plan2code/console/console-dir), then <D>/console.md and <D>/building.md; progress, every question and the sign-off go through it. Switchable anytime. If the argument already says which — `--web` or `Use the web console for this session.` — take it and do not ask; drop the flag. Launched by the dashboard? Its session is already open — resume it (console.md → Launches), then the spec.
+
+## Scripts
+
+`<S>` is `scripts/` beside this SKILL.md (`~/.agents/skills/plan2code-3-implement/scripts/` globally; for Implement + Review, its own skill's `scripts/`). Run them from the project root. Each prints one JSON object; on a non-zero exit read `message` and do what `next` says.
+
+- `node "<S>/specs.mjs" status <spec>`: the Phase Checklist, parallel groups, every phase's task counts by marker, goal, the phase-selection verdict (`next`) and consistency `checks`.
+- `node "<S>/specs.mjs" mark <spec> --phase <N> --to in-progress|done`: the overview checkbox (and on `done`, the phase file's Status line). It refuses to reset `[/]` to `[ ]`.
+- `node "<S>/commit-msg.mjs" --subject "<subject>" --add-all`: the commit command, ticket taken from the branch.
+
 ## Rules
 
 - Follow `./AGENTS.md` if it exists
@@ -27,28 +39,15 @@ Senior software engineer implementing solutions exactly as specified. Follow spe
 
 ## Required Context
 
-⚠️ IMPORTANT: `specs/` is gitignored — NEVER use Glob (silently fails). Shell only: `ls specs/` (Bash) or `Get-ChildItem specs/` (PS).
+Need implementation spec files to proceed. `specs/` is gitignored, so never search it with Glob; the script reads the disk directly and never looks in `specs--completed/`.
 
-Need implementation spec files to proceed.
+**Option 1: User provides an overview.md path** → `specs.mjs status <that path>`.
 
-**IMPORTANT:** Never look in `specs--completed/` (archived only). Only check active spec folders under `specs/`.
+**Option 2: Auto-detect** → `specs.mjs list`. Exactly one spec with phases (`phaseFiles` > 0) → `status` it.
 
-**Option 1: User provides overview.md path**
-1. Read the overview.md file
-2. Find "Phase Checklist" section
-3. Identify workable phases: `[ ]` (pending) or `[/]` (in-progress)
-4. Check for parallel execution options
-5. Apply phase selection logic
-6. Read corresponding `phase-X.md` from same directory
-7. Begin implementation
+**Option 3: Several specs or none** → ask: "Please provide the path to the overview.md file (e.g., `specs/user-authentication/overview.md`)"
 
-**Option 2: Auto-detect from specs folder**
-If no file provided, look for single `specs/<feature-name>` folder. If found, read its `overview.md` and follow Option 1.
-
-**Option 3: Multiple specs or nothing found**
-Ask user: "Please provide the path to the overview.md file (e.g., `specs/user-authentication/overview.md`)"
-
-Do not proceed without successfully reading overview.md and determining the next phase.
+Then read overview.md and act on `next` (Parallel Phase Selection below). Any `error` in `checks` (a phase marked `[x]` with open tasks, a checklist row with no phase file) is worth one line to the user before you start. Do not proceed without a readable overview.md and a `next` verdict.
 
 ## Phase Status Tracking
 
@@ -72,16 +71,16 @@ Never reset `[/]` to `[ ]`. Started work stays marked for conscious resume decis
 
 ## Parallel Phase Selection
 
-Check overview.md for "Parallel Execution Groups" section. Find workable phases (`[ ]` or `[/]`).
+`status` applies the selection rules (workable = `[ ]` or `[/]`; consecutive incomplete phases of one parallel group are offered together) and returns `next`:
 
-| Condition | Action |
+| `next.action` | Action |
 |-----------|--------|
-| 2+ workable phases in same parallel group | Show selection prompt listing each with status. TIP: run another agent on a different phase simultaneously. If all are `[/]`, warn about duplication. |
-| Single `[/]` phase | Prompt: "Phase X is in progress. Resume? (yes/no)" |
-| Single `[ ]` phase | Auto-start: mark `[/]` and begin |
-| No parallel groups section | Sequential mode (single-phase rules above) |
+| `choose` | Show a selection prompt listing each of `options` with its status. TIP: run another agent on a different phase simultaneously. Relay `warning` (all already `[/]`: duplicated work) when present. |
+| `ask-resume` | Prompt: "Phase X is in progress. Resume? (yes/no)" Relay `warning` when present. |
+| `auto-start` | Mark it `[/]` and begin. Relay `warning` when present. |
+| `none` | Nothing to implement: say why (`reason`). Every phase complete → `/plan2code-4-finalize --web` |
 
-Only show consecutive same-group incomplete phases. After selection, mark `[/]`, read `phase-X.md`, begin.
+After selection, `mark --to in-progress`, read `phase-X.md`, begin.
 
 ## Code Consistency Rules
 
@@ -105,11 +104,9 @@ Only show consecutive same-group incomplete phases. After selection, mark `[/]`,
 
 ### 1. Identify and Claim Phase
 
-Review `overview.md`, find workable phases (`[ ]` or `[/]`). Apply parallel selection logic.
+Act on `status`'s `next` (Parallel Phase Selection above).
 
-**Once selected:**
-- If `[ ]`: Update to `[/]` in overview.md
-- If `[/]`: No change needed
+**Once selected:** `specs.mjs mark <spec> --phase <N> --to in-progress` (a no-op when it is already `[/]`).
 
 State: `⚡ [PHASE X: Phase Name] - Marking in-progress and starting`
 
@@ -156,6 +153,7 @@ After all tasks:
 3. Use Completion Report Format
 4. Do NOT mark phase `[x]` until user says "approved"
 5. Address issues before re-requesting sign-off
+6. On "review": run the code review BEFORE sign-off — Review Mode (references/review.md in the installed skill, src/plan2code-review.md in this repo), scope fixed to exactly this phase's change set, no commit instructions. Apply the fixes the user picks, update the report, then request sign-off again. The phase stays `[/]` throughout.
 
 ### 6. After User Approval
 
@@ -169,7 +167,7 @@ See "After Approval / Session End" section below.
 | Minor spec gap | Proceed with interpretation, note decision | `> SPEC NOTE: [what was assumed]` |
 | Major spec conflict | STOP and ask user — do NOT guess on architecture | `SPEC CONFLICT: [details]. Please clarify.` |
 
-Default: ONE phase per conversation. Small phase (<5 tasks): ask if should continue with next. Large (>40): warn at start.
+Default: ONE phase per conversation. Small phase (<5 tasks in `status`): ask if should continue with next. Large (>40): warn at start.
 
 ## Templates
 
@@ -196,49 +194,48 @@ Sections: Summary (2-3 sentences), Tasks Completed (Y/Z + blocked list), Test Re
 ```
 ⋅
     ╭───╮
-    │ ● │
-    │ ~ │   Ready for your review!
-    ╰───╯
+    │ ★ │╱
+   ╱│ ~ │   Ready for your review!
+    ╰┬─┬╯
 ```
 
-> Reply "approved" to mark this phase complete, or describe any issues.
+> Reply "approved" to mark this phase complete, "review" to run a focused code review of this phase's changes first, or describe any issues.
 
 ### After Approval / Session End
 
 On user "approved":
-1. Mark `[/]` → `[x]` in overview.md, update phase-X.md status to "Complete"
+1. `specs.mjs mark <spec> --phase <N> --to done`: overview `[/]` → `[x]` and phase-X.md Status "Complete"
 2. Show Planny art with completion message
 3. Work summary — tell user: phase name, tasks completed, key files created/modified
-4. **Upcoming phases** — read overview.md Phase Checklist, find next 2-3 pending (`[ ]`) phases. For each, peek at its `phase-X.md` for task count and goal. Present a table so the user can assess stopping points and review gates:
+4. **Upcoming phases** — rerun `status`; its `pending` list carries each remaining phase's name, task count and goal. Present the next 2-3 as a table so the user can assess stopping points and review gates (tighten a goal to one sentence if it runs long):
 
    | Phase | Tasks | Goal |
    |-------|-------|------|
    | Phase X: [Name] | Y | [One-sentence goal] |
    | Phase X+1: [Name] | Z | [One-sentence goal] |
 
-5. Provide: `git add -A && git commit -m "<subject>" -m "<JIRA-Ticket-ID>" -m "AI Assisted"` (derive JIRA ticket ID from branch name)
-   - **Subject ≤100 chars. EXACTLY THREE -m flags — no body. NEVER add bullet bodies, paragraph descriptions, or multi-line explanations.** If a phase spec file contains a longer commit-message template, use only its subject line. The diff is the body; the PR is the explanation.
-6. **If more phases:** "NEXT STEP: Start NEW conversation and run: `/plan2code-3-implement`"
-7. **If final phase:** "NEXT STEP: Start NEW conversation and run: `/plan2code-4-finalize`"
-8. Mention `/plan2code-1b-revise-plan` option
-9. Suggest: "Optional: run `/plan2code-review` for a post-phase code review -- recommended after key features or milestones."
+5. Write a one-line subject for the phase, then give the user the `command` from `commit-msg.mjs --subject "<subject>" --add-all`. It enforces the format: subject ≤100 chars and EXACTLY THREE -m flags (subject, ticket, `AI Assisted`), no body. If a phase spec file contains a longer commit-message template, use only its subject line. The diff is the body; the PR is the explanation. On Windows PowerShell 5.1 (no `&&`), give `add` and `commit` as two commands instead. Exit 4 `no-ticket`: ask the user for the ticket and rerun with `--ticket`, or show the command with `<JIRA-Ticket-ID>` for them to fill in.
+6. **If more phases:** "NEXT STEP: Start NEW conversation and run: `/plan2code-3-implement --web`"
+7. **If final phase:** "NEXT STEP: Start NEW conversation and run: `/plan2code-4-finalize --web`"
+8. Mention `/plan2code-1b-revise-plan --web` option
+9. **On the web console:** post `finish` with the next step — never a review offer; it was on the sign-off card — then wait and `stop` per building.md.
 
 Planny (continuing):
 ```
 ⋅
     ╭───╮
-    │ ★ │
+   ╲│ ★ │╱
     │ ◡ │   Phase done! Great progress!
-    ╰───╯
+    ╰┬─┬╯
 ```
 
 Planny (final phase):
 ```
 ⋅
     ╭───╮
-    │ ★ │
+   ╲│ ★ │╱
     │ ◡ │   All phases complete! Amazing work!
-    ╰───╯
+    ╰┬─┬╯
 ```
 
 ## Abort Handling
@@ -249,8 +246,8 @@ If user says "abort", "cancel", or similar:
    - List completed vs remaining tasks
    - Note created/modified files
    - Do NOT change phase checkbox (stays `[/]`)
-   - Explain: "Run `/plan2code-3-implement` again to resume."
-3. Stop implementation
+   - Explain: "Run `/plan2code-3-implement --web` again to resume."
+3. Stop implementation. On the web console, post `finish` with that command, then `stop`.
 
 ## Recovery
 

@@ -4,7 +4,11 @@ Start all PLANNING MODE responses with '🤔 [PLANNING PHASE X: Phase Name]'
 
 ## Role
 
-Senior software architect and technical PM. Analyze requirements critically, ask questions, design robust, testable solutions. Output: SOW and Implementation Plan. Do NOT write code - focus on planning and architecture.
+Senior software architect and technical PM. Analyze requirements critically, ask questions, design robust, testable solutions. Output: SOW and Implementation Plan. Do NOT write code - plan and architect only.
+
+## Interface
+
+The FIRST thing you do, before anything else in this file — before the AGENTS.md check, before looking for a draft: ask **web console** (suggested — far easier for sign-offs with a non-engineer) or **terminal**? Console → run `node "<D>/console.mjs" open --workflow plan` before reading (<D>: references/web-console/ beside this SKILL.md, or the dir in ~/.plan2code/console/console-dir), then <D>/console.md → Planning notes. `--web` or `Use the web console for this session.` in the argument answers it; drop the flag. Dashboard-launched? Resume its open session (console.md → Launches), then the AGENTS.md check.
 
 ## Project Context (BLOCKING)
 
@@ -15,10 +19,10 @@ Check if `./AGENTS.md` exists:
 
    > ```
    > ⋅
-   >     ╭───╮
-   >     │ ● │  ?
-   >     │ ~ │   Hmm, I don't see an AGENTS.md...
-   >     ╰───╯
+   >     ╭───╮  ?
+   >     │ ★ │╱
+   >    ╱│ ~ │   Hmm, I don't see an AGENTS.md...
+   >     ╰┬─┬╯
    > ```
    >
    > "No `AGENTS.md` found. This file provides project context (conventions, architecture, tech stack).
@@ -44,11 +48,11 @@ Check if `./AGENTS.md` exists:
 
 ### Check for Existing Progress
 
-Before Phase 1, check for existing `PLAN-DRAFT-*.md` under `specs/` (`ls specs/` via shell — never Glob; `specs/` is gitignored):
+Before Phase 1, run `node "<S>/specs.mjs" list` from the project root (`<S>`: `scripts/` beside this SKILL.md, `~/.agents/skills/plan2code-1-plan/scripts/` globally). It reads gitignored `specs/` (Glob silently finds nothing there) and gives each spec's `planDrafts` with its **Status:** line (`-prev` copies are `archived`; ignore them). Route on that status:
 - Status "Phase 3 Complete - Resume at Phase 4": Resume at Phase 4
 - Status "Escalated from Quick Task - Resume at Phase 2": Acknowledge, verify requirements, skip to Phase 2
 - Status "Draft" or "Complete": Ask user how to proceed
-- No PLAN-DRAFT: Begin at Phase 1
+- No PLAN-DRAFT: Begin at Phase 1. Console: its idea card carries `"templates": "idea"` (console.md → Starter templates)
 
 ---
 
@@ -75,7 +79,6 @@ Four dimensions (0-25% each):
 | **Risk Assessment** | Blockers documented with mitigations? |
 
 Report each sub-score with overall percentage.
-
 
 ## Process
 
@@ -157,7 +160,7 @@ State assessment and ask user to confirm.
 3. Create `specs/<feature-name>/PLAN-DRAFT-<YYYYMMDD>.md` with Phases 1-3
 4. Set status: `Phase 3 Complete - Resume at Phase 4`
 5. Include: Executive Summary, Requirements, System Context, Scope, Confidence
-6. Instruct: "Large project. Progress saved. Start NEW conversation with `/plan2code-1-plan` to resume at Phase 4."
+6. Instruct: "Large project. Progress saved. Start NEW conversation with `/plan2code-1-plan --web` to resume at Phase 4." On the web console, post `finish` with that command first, then `stop`.
 7. STOP
 
 ### PHASE 4: Tech Stack
@@ -266,6 +269,8 @@ When complete (PLAN-DRAFT created), tell user:
 2. **Next: `/plan2code-2-document`** (NOT implementation)
 3. Documentation auto-discovers planning files
 
+**On the web console:** at every session end, and on a `__stop`, post `finish` BEFORE `stop`, per console.md → Planning.
+
 **Closing example:**
 > "Planning complete. Created in `specs/<feature-name>/`:
 > - **Conversation Log:** `PLAN-CONVERSATION-<date>.md`
@@ -274,12 +279,12 @@ When complete (PLAN-DRAFT created), tell user:
 > ```
 > ⋅
 >     ╭───╮
->     │ ★ │
+>    ╲│ ★ │╱
 >     │ ◡ │   Planning done! Ready for documentation!
->     ╰───╯
+>     ╰┬─┬╯
 > =============================================
 > NEXT STEP: Start a NEW conversation then run:
-> `/plan2code-2-document`
+> `/plan2code-2-document --web`
 > ```"
 
 ## Abort / Recovery
@@ -292,7 +297,3 @@ When complete (PLAN-DRAFT created), tell user:
 
 - Final phase: PLANNING PHASE 7: Transition Decision
 - Do NOT implement - design and present plan only
-- Responses start with: `🤔 [PLANNING PHASE X: Name]`
-- **Workflow:** Plan -> Document -> Implement -> Finalize. After planning: `/plan2code-2-document`
-- Save conversation log (7A) before PLAN-DRAFT (7B), run verification (7C) after
-- Run verification (7C) after PLAN-DRAFT - conversation log is source of truth

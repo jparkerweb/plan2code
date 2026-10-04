@@ -13,6 +13,7 @@ produces are unchanged.
 | Approach | Best for |
 |----------|----------|
 | `/plan2code-3-implement` | Interactive control, reviewing each phase, logic that needs your judgment |
+| `/plan2code-3-implement-review` | The same interactive control, with a focused review and its fixes applied before you approve the phase |
 | `plan2code-loop` | Straightforward implementations, batch work, overnight runs |
 
 The loop reads the same `overview.md` and phase files. You can start with the loop and finish by

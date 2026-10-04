@@ -2,22 +2,28 @@
 
 Loaded at The Clearing Gate. Turns a cleared map into `specs/<idea>/PLAN-DRAFT-<YYYYMMDD>.md` that `/plan2code-1-plan` resumes from at Phase 4, then freezes `pathfinder/` as the rationale record.
 
-**Backend note.** The scoring rubric, the hard caps, the honesty rules, the template, and the mapping table are the same either way — and the draft is written to local disk either way, because `/plan2code-1-plan` reads a file, not a tracker. On `**Backend:** github`, `github-issues.md` replaces only the preflight table, the question links (issue URLs, already absolute), and the freeze steps.
+**Backend note.** The scoring rubric, the hard caps, the honesty rules, the template, and the mapping table are the same either way — and the draft is written to local disk either way, because `/plan2code-1-plan` reads a file, not a tracker. On `**Backend:** github`, `github-issues.md` replaces only the preflight table, the question links (issue URLs, already absolute), and the freeze steps. `pathfinder.mjs` reads local files only, so on `github` do each script step below except `lint` by hand with `gh`, as `github-issues.md` describes.
 
 Nothing here is creative. The gate is scored, the mapping is fixed, the template is literal. Follow it exactly or the resuming plan session silently loses work.
 
 ## Preflight — before scoring anything
 
-| # | Check | If it fails |
-|---|---|---|
-| 1 | Re-run the reconcile pass: read every file in `questions/`, rebuild every map marker from the files | Fix the map first. Markers are derived, never authored. |
-| 2 | Zero `[ ]`, zero `[/]`, zero `[!]` rows in `## Question Checklist` | Not cleared. Return to the frontier. |
-| 3 | `## Not yet specified` is empty | Not cleared. Graduate the fog into questions, or admit it is out of scope. |
-| 4 | Every `[x]` row's file has a real `## Answer` with a `**Gist:**` | The file wins over the marker. Repair, then re-check. |
-| 5 | `ls specs/<idea>/` shows no existing `PLAN-DRAFT-*.md` | One already exists — read it. Update it in place; never add a second dated draft. |
-| 6 | The destination is reachable with nothing left to decide — no `## Answer` defers a choice to "whoever implements this" | Not cleared. Name the open decision and graduate it into a question. |
+Run `reconcile`, then `node "<S>/pathfinder.mjs" gate specs/<idea>/pathfinder`. Its `checks` cover the mechanical preflight, read from the files:
 
-Only after all six pass do you score the four dimensions.
+| `checks` id | Means | If it fails |
+|---|---|---|
+| `markers-match-files` | The map's markers are the files' (reconcile ran) | Run `reconcile`. Markers are derived, never authored. |
+| `no-open-claimed-blocked` | Zero `[ ]`, `[/]`, `[!]` | Not cleared. Return to the frontier. |
+| `fog-empty` | `## Not yet specified` is empty | Not cleared. Graduate the fog into questions, or admit it is out of scope. |
+| `every-resolved-has-gist` | Every resolved file has a real `## Answer` with a `**Gist:**` | The file wins over the marker. Repair, then re-check. |
+| `hard-caps` | None of the Requirements, Feasibility or Risk caps below holds (the Integration cap is yours to check) | That dimension cannot exceed 17: fix the record first. |
+| `scores-at-least-18` | The map's `**Confidence:**` line has all four at 18 or better | Not cleared. Keep working the weak dimension. |
+
+`existingPlanDraft` lists a `PLAN-DRAFT-*.md` already in `specs/<idea>/`: read it and update it in place, never add a second dated draft. `planDraftPath` is the file to write either way.
+
+One preflight item stays yours: **the destination is reachable with nothing left to decide**: no `## Answer` defers a choice to "whoever implements this". If one does, the map is not cleared: name the open decision and graduate it into a question.
+
+Score the four dimensions (below), write them to the map's `**Confidence:**` line, and rerun `gate` until `mechanicalPass` is true.
 
 ## The clearing-gate scoring rubric
 
@@ -45,7 +51,7 @@ The 18-boundary is the honest line between *"needs designing"* and *"needs decid
 
 ### Hard caps
 
-A cap overrides your judgment. While a cap condition holds, the dimension **cannot** exceed 17, so the gate cannot pass.
+A cap overrides your judgment. While a cap condition holds, the dimension **cannot** exceed 17, so the gate cannot pass. `gate` reports the Requirements, Feasibility and Risk caps from the files (`caps`); the Integration cap needs you to match the destination's systems to questions.
 
 | Cap | Condition |
 |---|---|
@@ -107,7 +113,7 @@ Consequences of that being a literal string match:
 - Copy it byte for byte. Plain ASCII hyphen-minus surrounded by single spaces. An en dash, a colon, or "Phase 3 complete" in lower case breaks the match and 1-plan starts over at Phase 1 — throwing away every decision the map holds.
 - It goes on its own `**Status:**` line in the header block, not buried in prose.
 - The file must be named `PLAN-DRAFT-<YYYYMMDD>.md` and live directly in `specs/<idea>/`. `PLAN-DRAFT-*.md` is a reserved name inside `pathfinder/` — never write it there.
-- Get the date from the shell (`date +%Y%m%d` in Bash, `Get-Date -Format yyyyMMdd` in PowerShell). Do not guess it.
+- Use the date in `gate`'s `planDraftPath` (it reads the clock). Do not guess it. On `github` (no `gate`), take today's date from the shell and check `ls specs/<idea>/` for an existing draft.
 
 **Discovery is shell-only.** `specs/` is gitignored, so Glob silently returns nothing and every downstream skill would report "no PLAN-DRAFT found". Use `ls specs/` and `ls specs/<idea>/` (Bash) or `Get-ChildItem specs/` (PowerShell) — the same rule 1-plan and `/plan2code-2-document` follow when they look for the file you are about to write.
 
@@ -337,6 +343,8 @@ The reason is exact. When a PLAN-DRAFT carries no `METRICS_JSON` comment, the me
 - *Without the replace-in-place bullet*, 1-plan's Phase 7 creates `PLAN-DRAFT-<its own date>.md` alongside yours. `/plan2code-2-document` then finds two drafts in the folder, hits its "Multiple found: List all, ask which to document" branch, and asks the user to disambiguate between a pathfinder draft and a plan draft that partially supersedes it.
 
 Never drop the footer to make the file tidier. It is load-bearing.
+
+After writing the draft, run `lint`: it scans a pathfinder-written PLAN-DRAFT with the metrics collector's own patterns and names any bait that reached the page.
 
 ## System Context and Scope Assessment — why they buy you Phase 4
 

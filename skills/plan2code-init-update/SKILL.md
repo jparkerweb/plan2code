@@ -11,12 +11,25 @@ Start all UPDATE AGENTS MODE responses with '🛞'
 ```
 ⋅
     ╭───╮
-    │ ● │
-    │ ◡ │   Time to level up AGENTS.md!
-    ╰───╯
+    │ ★ │╱
+   ╱│ ◡ │   Time to level up AGENTS.md!
+    ╰┬─┬╯
 ```
 
 Interactive Q&A flow to update an existing `AGENTS.md` with new learnings and project knowledge.
+
+## Interface
+
+The FIRST thing you do, before anything else in this file — before the Awareness Context: ask **web console** (browser page, suggested) or **terminal**? Console → run `node "<D>/console.mjs" open --workflow init-update` before reading (<D>: references/web-console/ beside this SKILL.md — ~/.agents/skills/plan2code-init-update/references/web-console/ globally — or the dir in ~/.plan2code/console/console-dir), then read <D>/console.md. Every question in the Q&A flow and the restructure offer go through it. Switchable anytime. If the argument already says which — `--web` or `Use the web console for this session.` — take it and do not ask; drop the flag. Launched by the dashboard? Its session is already open — resume it (console.md → Launches), then Awareness Context. On the console, a `__stop` action is the person ending the session (console.md → Stop requests); at every session end post `finish` BEFORE `stop`; unless it is a pause, the finish carries `"dashboard": true` (the Back to the dashboard button) and you keep waiting for the press (console.md → Finishing).
+
+## Scripts
+
+`<S>` is `scripts/` beside this SKILL.md (`~/.agents/skills/plan2code-init-update/scripts/` globally). Run from the project root; each prints one JSON object, and on a non-zero exit `next` says what to do.
+
+- `node "<S>/agents-md.mjs" inspect`: AGENTS.md's facts (exists, `lines` and `budget` against 500, `structure`, `sections` with their `details` link, `.agents-docs/` files, `brokenLinks`, `orphans`, `problems`).
+- `node "<S>/agents-md.mjs" filename "<Section Name>"`: a new section file's name, link line and header.
+- `node "<S>/agent-files.mjs" detect` / `apply <id> ...`: Step 7.
+- `node "<S>/commit-msg.mjs" --subject "<subject>"`: the Session End commit.
 
 ---
 
@@ -28,17 +41,16 @@ Before making any updates, orient yourself to current project state: read `AGENT
 
 ## Step 1: Pre-flight Check
 
-Check if `AGENTS.md` exists in project root.
+Run `agents-md.mjs inspect`.
 
-**If missing:** "No AGENTS.md found. Create one from scratch? I can analyze the codebase and generate an initial file." Stop and wait. If yes, use `plan2code-init.md` workflow.
+**If `exists` is false:** "No AGENTS.md found. Create one from scratch? I can analyze the codebase and generate an initial file." Stop and wait. If yes, use `plan2code-init.md` workflow.
 
-**If exists:** Read and summarize:
-- Main sections (bullets)
-- Current line count
+**If exists:** Read it and summarize:
+- Main sections (bullets, from `sections`)
+- Current line count (`budget`)
+- Anything in `problems` (broken links, orphan section files, a missing breadcrumb, an always-inline section split out)
 
-Check for `.agents-docs/` directory:
-
-**If `.agents-docs/` exists:**
+**If `structure` is `progressive`** (list `agentsDocs`):
 ```
 Structure: Progressive discovery (index + N section files)
 Section files:
@@ -47,12 +59,12 @@ Section files:
 [etc.]
 ```
 
-**If `.agents-docs/` does not exist:** Note: `Structure: Single-file (no .agents-docs/ directory)`
+**If `structure` is `single-file`:** Note: `Structure: Single-file (no .agents-docs/ directory)`
 
 **IMPORTANT — you MUST offer restructuring.** Stop and ask:
 > "Your AGENTS.md uses a single-file format. Want to restructure for progressive discovery? This splits detailed sections into `.agents-docs/` files and converts AGENTS.md to a lightweight index with summaries and links."
 
-Wait for user response before continuing. If user accepts, restructure existing content: create `.agents-docs/` directory with section files, convert AGENTS.md to index with summaries and links. Always-inline sections (Project Overview, Git Commit Messages, How to Use This File) stay in AGENTS.md. If user declines, continue with single-file editing.
+Wait for user response before continuing. If user accepts, restructure existing content: create `.agents-docs/` directory with section files, convert AGENTS.md to index with summaries and links. Always-inline sections (Project Overview, How to Use This File, Keeping this file current / Failure log) stay in AGENTS.md. If user declines, continue with single-file editing.
 
 ### Failure Log Audit
 
@@ -106,10 +118,10 @@ Present the user with update options:
 
 > ```
 > ⋅
->     ╭───╮ 
->     │ ● │ 
->     │ ~ │   What should we update?
->     ╰───╯
+>     ╭───╮
+>     │ ★ │╱
+>    ╱│ ~ │   What should we update?
+>     ╰┬─┬╯
 > ```
 >
 > "What would you like to add or update in AGENTS.md?"
@@ -121,7 +133,7 @@ Present the user with update options:
 > - **4. Testing** - Test patterns, how to run specific tests, fixtures
 > - **5. Environment/Config** - Setup quirks, env variables, configuration
 > - **6. General Rules** - Coding conventions, style rules, project-specific practices
-> - **7. Git Commit Messages** - Commit message conventions, AI attribution rules
+> - **7. Failure Log** - Record a mistake or correction in the Failure log
 > - **8. Something else** - Tell me what you'd like to add
 > - **9. Sync & Maintain** - Audit & sync all doc surfaces — AGENTS.md, `.agents-docs/`, `specs/`, README, human docs: fix stale/wrong/missing, cut redundancy
 >
@@ -143,7 +155,7 @@ Present the user with update options:
 | Testing | Commands? Fixtures? Mocking? |
 | Environment | Local/CI/deploy? Env vars/files? |
 | Rules | Project-wide or specific? Why? |
-| Git Commit Messages | Format? Attribution? Conventions? |
+| Failure Log | What went wrong? Correct behaviour (imperative, one line)? |
 | Other | "Tell me what to add." |
 | Sync & Maintain | Scope: all surfaces or specific? Then follow the Sync & Maintain section. |
 | Review | Per section: "Still accurate?" |
@@ -172,7 +184,7 @@ Keep every doc surface accurate and in sync. **Deep-audit surfaces this session 
 ## Step 5: Confirm & Apply
 
 Before changes, route edits to the correct file when `.agents-docs/` exists:
-- Always-inline sections (Project Overview, Git Commit Messages, How to Use This File) → edit AGENTS.md directly
+- Always-inline sections (Project Overview, How to Use This File, Keeping this file current / Failure log) → edit AGENTS.md directly
 - All other sections → edit the corresponding `.agents-docs/AGENTS-<section-name>.md` file
 - Sync & Maintain: human-voice facts → README/human docs; session knowledge → active spec's `overview.md`
 
@@ -190,10 +202,10 @@ Preview format:
 
 ### Section File Lifecycle (when `.agents-docs/` exists)
 
-- **New section (>~10 lines):** Create `.agents-docs/AGENTS-<section-name>.md` with breadcrumb header, add summary + link in AGENTS.md
+- **New section (>~10 lines):** Create the file `agents-md.mjs filename "<Section Name>"` names, starting with its `header` lines; add a summary + its `link` line in AGENTS.md
 - **New section (<~10 lines):** Keep inline in AGENTS.md
 - **Delete section:** Remove the `.agents-docs/` file and its summary + link from AGENTS.md
-- **Orphan cleanup:** After all edits, check for `.agents-docs/` files with no corresponding AGENTS.md section — offer to remove them
+- **Orphan cleanup:** After all edits, rerun `inspect`: offer to remove each file in `orphans` (no link from AGENTS.md), and fix any `brokenLinks`
 
 ---
 
@@ -203,7 +215,7 @@ After applying:
 > "Done! Changed:"
 > - [Summary]
 
-If `.agents-docs/` exists:
+From a fresh `inspect` (`budget` is the X/500; warn if `nearLimit`), when `structure` is `progressive`:
 > Structure: AGENTS.md (index) + N section files in .agents-docs/
 > Index line count: X/500
 
@@ -222,7 +234,7 @@ Check for other AI agent config files (`CLAUDE.md`, `GEMINI.md`, `.cursorrules`,
 
 Read references/ai-agent-file-sync.md
 
-> Fallback: for each detected file, offer Yes/Select/No to replace it with a pointer to AGENTS.md (warn when a file >10 lines has custom content that would be replaced). `CLAUDE.md` gets a special template opening with a `CRITICAL — MANDATORY FIRST STEP` directive to always read `AGENTS.md` (Claude Code auto-loads it); all other files get a "See AGENTS.md for complete project documentation including:" pointer with the same bullet list, using the correct relative path (`./`, `../`, or `../../` by location). For directory configs (`.cursor/rules/`, `.windsurf/rules/`), delete existing `.md` files and create a single `reference.md`.
+> Fallback: `agent-files.mjs detect`, then offer Yes/Select/No for what it found (relay its `warnings`), then `agent-files.mjs apply <confirmed ids>`; it writes the CLAUDE.md template and the relative-path pointers itself.
 
 ---
 
@@ -265,9 +277,6 @@ Agent: Updated CLAUDE.md. AGENTS.md is your single source of truth now!
 
 Work summary — tell user: sections updated, entries added/changed, files modified (`AGENTS.md` or `.agents-docs/` files).
 
-Suggested commit:
-```
-git commit -m "docs: update AGENTS.md with new learnings" -m "<JIRA-Ticket-ID>" -m "AI Assisted"
-```
+Suggested commit: the `command` from `commit-msg.mjs --subject "docs: update AGENTS.md with new learnings"` (exit 4 `no-ticket`: show it with `<JIRA-Ticket-ID>` for the user to fill in).
 
 Returning context: Run `/plan2code-init-update` again to make additional updates.

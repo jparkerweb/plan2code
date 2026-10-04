@@ -7,25 +7,25 @@ A persistent three-line status bar for Claude Code that displays model info, pro
 **Pro / Max / Teams** — rate limits segment:
 
 ```
-╭─╮  Opus 4.6 | High │ plan2code │ feature/statusline │ +12 -3
-│★│  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
-╰─╯  3h 5m ($4.62) │ ▰▰▰▰▰▱▱▱▱▱▱▱ 42% (84k) │ 5h: 28% · 7d: 61%
+ ╭───╮  Opus 4.6 | High │ plan2code │ feature/statusline │ +12 -3
+ │ ★ │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
+ ╰┬─┬╯  3h 5m ($4.62) │ ▰▰▰▰▰▱▱▱▱▱▱▱ 42% (84k) │ 5h: 28% · 7d: 61%
 ```
 
 **Enterprise / Bedrock / Vertex / PAYG** — session token counts (no `rate_limits` in stdin):
 
 ```
-╭─╮  Sonnet 4.5 | Medium │ plan2code │ main │ +12 -3
-│★│  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
-╰─╯  2m ($0.18) │ ▰▰▱▱▱▱▱▱▱▱▱▱ 18% │ 88k in · 3k out
+ ╭───╮  Sonnet 4.5 | Medium │ plan2code │ main │ +12 -3
+ │ ★ │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
+ ╰┬─┬╯  2m ($0.18) │ ▰▰▱▱▱▱▱▱▱▱▱▱ 18% │ 88k in · 3k out
 ```
 
 **Git worktree** — session running in a linked worktree at `C:\git\plan2code-user-auth`:
 
 ```
-╭─╮  Opus 4.6 | High │ plan2code ⑂ │ feature/user-auth │ +12 -3
-│★│  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
-╰─╯  3h 5m ($4.62) │ ▰▰▰▰▰▱▱▱▱▱▱▱ 42% (84k) │ 5h: 28% · 7d: 61%
+ ╭───╮  Opus 4.6 | High │ plan2code ⑂ │ feature/user-auth │ +12 -3
+ │ ★ │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
+ ╰┬─┬╯  3h 5m ($4.62) │ ▰▰▰▰▰▱▱▱▱▱▱▱ 42% (84k) │ 5h: 28% · 7d: 61%
 ```
 
 **Line 1:** Planny icon | Model name + reasoning effort | Project name | Git branch | Uncommitted changes

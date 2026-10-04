@@ -81,35 +81,41 @@ const MASCOT = {
   // Full mascot for headers
   full: [
     '   ╭───╮   ',
-    '   │ ● │   ',
+    '  ╱│ ★ │╲  ',
     '   │ ◡ │   ',
-    '   ╰───╯   ',
+    '   ╰┬─┬╯   ',
   ],
   // Mini mascot for inline use
-  mini: '(◉‿◉)',
+  mini: '╱[★]╲',
   // Waving mascot for greetings
   wave: [
     '   ╭───╮   ',
-    '   │ ● │  /',
-    '   │ ◡ │   ',
-    '   ╰───╯   ',
+    '   │ ★ │╱  ',
+    '  ╱│ ◡ │   ',
+    '   ╰┬─┬╯   ',
   ],
   // Thinking mascot for prompts
   thinking: [
-    '   ╭───╮   ',
-    '   │ ● │  ?',
-    '   │ ~ │   ',
-    '   ╰───╯   ',
+    '   ╭───╮  ?',
+    '   │ ★ │╱  ',
+    '  ╱│ ~ │   ',
+    '   ╰┬─┬╯   ',
   ],
 };
 
-// Generated skills directory — the committed, canonical Agent Skills build of src/.
+// Generated skills directory: the committed, canonical Agent Skills build of src/.
+// `npm run build:skills` regenerates it and `npm test` (`--verify-skills`) fails on drift.
 // `skills add` consumes this directory; nothing else is platform-specific any more.
 const SKILLS_DIR_NAME = 'skills';
 const SKILLS_DIR = path.join(__dirname, SKILLS_DIR_NAME);
 
 // Source prompts directory
 const SRC_DIR = path.join(__dirname, 'src');
+
+// Shared skill scripts (src/skill-scripts/). A skill lists the ones it runs in its
+// `scripts` field; SHARED_SCRIPTS_ALWAYS ride along with any skill that has scripts.
+const SHARED_SCRIPTS_DIR = 'skill-scripts';
+const SHARED_SCRIPTS_ALWAYS = ['common.mjs'];
 
 // ============================================================================
 // SYNC PROMPTS CONFIGURATION (merged from sync-prompts.js)
@@ -118,12 +124,25 @@ const SRC_DIR = path.join(__dirname, 'src');
 // Configuration for source prompts
 const SOURCE_PROMPTS = [
   {
+    source: 'plan2code.md',
+    stepNumber: 'dashboard',
+    name: 'dashboard',
+    // `bare` builds the skill name without a suffix: this one installs as
+    // `plan2code`, the hub that opens the console menu for every other skill.
+    bare: true,
+    displayName: 'Dashboard Mode',
+    description: 'Open the web console dashboard and launch any Plan2Code skill from the menu',
+    additionalReferences: [{ source: 'web-console', target: 'web-console' }]
+  },
+  {
     source: 'plan2code-init.md',
     stepNumber: 'init',
     name: 'init',
     displayName: 'Init Mode',
     description: 'Generate AGENTS.md file for project-specific guidance',
-    isUtility: true
+    isUtility: true,
+    scripts: ['agents-md.mjs', 'agent-files.mjs'],
+    additionalReferences: [{ source: 'web-console', target: 'web-console' }]
   },
   {
     source: 'plan2code-init-update.md',
@@ -131,14 +150,17 @@ const SOURCE_PROMPTS = [
     name: 'init-update',
     displayName: 'Init Update Mode',
     description: 'Update existing AGENTS.md with new learnings',
-    isUtility: true
+    isUtility: true,
+    scripts: ['agents-md.mjs', 'agent-files.mjs', 'commit-msg.mjs'],
+    additionalReferences: [{ source: 'web-console', target: 'web-console' }]
   },
   {
     source: 'plan2code-0-pathfinder.md',
     stepNumber: '0',
     name: 'pathfinder',
     displayName: 'Pathfinder Mode',
-    description: 'charting of a foggy idea as a map of decision questions, cleared one at a time'
+    description: 'charting of a foggy idea as a map of decision questions, cleared one at a time',
+    additionalReferences: [{ source: 'web-console', target: 'web-console' }]
   },
   {
     source: 'plan2code-quick-task.md',
@@ -146,35 +168,71 @@ const SOURCE_PROMPTS = [
     name: 'quick-task',
     displayName: 'Quick Task Mode',
     description: 'Lightweight planning for small tasks',
-    isUtility: true
+    isUtility: true,
+    // review.md rides along for the web console's "Review it now" button, which
+    // runs the review in the same session once the quick task is built.
+    scripts: ['specs.mjs', 'commit-msg.mjs', 'review-scope.mjs'],
+    additionalReferences: [
+      { source: 'web-console', target: 'web-console' },
+      { source: 'plan2code-review.md', target: 'review.md' },
+      { source: 'plan2code-review-references' }
+    ]
   },
   {
     source: 'plan2code-1-plan.md',
     stepNumber: 1,
     name: 'plan',
     displayName: 'Planning Mode',
-    description: 'Requirements analysis and architecture design'
+    description: 'Requirements analysis and architecture design',
+    scripts: ['specs.mjs'],
+    additionalReferences: [{ source: 'web-console', target: 'web-console' }]
   },
   {
     source: 'plan2code-1b-revise-plan.md',
     stepNumber: '1b',
     name: 'revise-plan',
     displayName: 'Revision Mode',
-    description: 'Modify specs mid-implementation when requirements change'
+    description: 'Modify specs mid-implementation when requirements change',
+    scripts: ['specs.mjs'],
+    additionalReferences: [{ source: 'web-console', target: 'web-console' }]
   },
   {
     source: 'plan2code-2-document.md',
     stepNumber: 2,
     name: 'document',
     displayName: 'Documentation Mode',
-    description: 'Transform planning output into structured implementation docs'
+    description: 'Transform planning output into structured implementation docs',
+    scripts: ['specs.mjs'],
+    additionalReferences: [{ source: 'web-console', target: 'web-console' }]
   },
   {
     source: 'plan2code-3-implement.md',
     stepNumber: 3,
     name: 'implement',
     displayName: 'Implementation Mode',
-    description: 'Execute implementation phase by phase'
+    description: 'Execute implementation phase by phase',
+    // review.md rides along for the web console's review offer on the sign-off
+    // card, which runs the review in the same session before the phase is approved.
+    scripts: ['specs.mjs', 'commit-msg.mjs', 'review-scope.mjs'],
+    additionalReferences: [
+      { source: 'web-console', target: 'web-console' },
+      { source: 'plan2code-review.md', target: 'review.md' },
+      { source: 'plan2code-review-references' }
+    ]
+  },
+  {
+    source: 'plan2code-3-implement-review.md',
+    stepNumber: 3,
+    name: 'implement-review',
+    displayName: 'Implementation + Review Mode',
+    description: 'Implement one phase, review it, then request sign-off',
+    scripts: ['specs.mjs', 'commit-msg.mjs', 'review-scope.mjs'],
+    additionalReferences: [
+      { source: 'web-console', target: 'web-console' },
+      { source: 'plan2code-3-implement.md', target: 'implement.md' },
+      { source: 'plan2code-review.md', target: 'review.md' },
+      { source: 'plan2code-review-references' }
+    ]
   },
   {
     source: 'plan2code-review.md',
@@ -182,14 +240,18 @@ const SOURCE_PROMPTS = [
     name: 'review',
     displayName: 'Review Mode',
     description: 'Comprehensive post-implementation review with spec compliance checking',
-    isUtility: true
+    isUtility: true,
+    scripts: ['specs.mjs', 'commit-msg.mjs', 'review-scope.mjs'],
+    additionalReferences: [{ source: 'web-console', target: 'web-console' }]
   },
   {
     source: 'plan2code-4-finalize.md',
     stepNumber: 4,
     name: 'finalize',
     displayName: 'Finalization Mode',
-    description: 'Validate, summarize, and archive completed work'
+    description: 'Validate, summarize, and archive completed work',
+    scripts: ['specs.mjs', 'commit-msg.mjs'],
+    additionalReferences: [{ source: 'web-console', target: 'web-console' }]
   },
   {
     source: 'plan2code-handoff.md',
@@ -197,12 +259,17 @@ const SOURCE_PROMPTS = [
     name: 'handoff',
     displayName: 'Handoff Mode',
     description: 'Compact the conversation into a self-contained handoff document for a fresh session',
-    isUtility: true
+    isUtility: true,
+    scripts: ['specs.mjs'],
+    additionalReferences: [{ source: 'web-console', target: 'web-console' }]
   }
 ];
 
 // Helper function to generate destination filename based on stepNumber
 function generateFilename(prompt, extension = '.md') {
+  // `bare` is for the dashboard: `plan2code`, no suffix — it is the hub the
+  // numbered and utility skills hang off, not a step among them.
+  if (prompt.bare) return `plan2code${extension}`;
   if (prompt.isUtility || prompt.stepNumber === 0 || prompt.stepNumber === 'init') {
     return `plan2code-${prompt.name}${extension}`;
   }
@@ -216,6 +283,7 @@ function generateSkillName(prompt) {
 
 // Helper function to generate step label for descriptions
 function generateStepLabel(prompt) {
+  if (prompt.bare) return 'Dashboard';
   if (prompt.stepNumber === 'init') return 'Init';
   if (prompt.stepNumber === 'update') return 'Update';
   if (prompt.stepNumber === 'review') return 'Review';
@@ -338,9 +406,9 @@ function displayHeader() {
   console.log(`${COLORS.CYAN}${COLORS.BRIGHT}`);
   console.log('╔═════════════════════════════════════════════════════════╗');
   console.log('║              ╭───╮                                      ║');
-  console.log('║              │ ● │   Hi! I\'m Planny!                    ║');
-  console.log('║              │ ◡ │   Nice to meet you                   ║');
-  console.log('║              ╰───╯   Welcome to Plan2Code!              ║');
+  console.log('║              │ ★ │╱  Hi! I\'m Planny!                    ║');
+  console.log('║             ╱│ ◡ │   Nice to meet you                   ║');
+  console.log('║              ╰┬─┬╯   Welcome to Plan2Code!              ║');
   console.log('║                                                         ║');
   console.log('║   G L O B A L   I N S T A L L A T I O N   S Y S T E M   ║');
   console.log('║          https://github.com/jparkerweb/plan2code        ║');
@@ -411,6 +479,24 @@ function displayProgress(current, total, label) {
   process.stdout.write(`\r${COLORS.CYAN}[${bar}${COLORS.CYAN}]${COLORS.RESET} ${percent}% ${label}`);
 }
 
+/**
+ * Animated spinner that works with synchronous operations
+ * Shows visible progress indicator
+ */
+function createSpinner() {
+  return {
+    start: function() {
+      process.stdout.write('\n  ⏳ ');
+    },
+    tick: function() {
+      process.stdout.write('█');
+    },
+    stop: function() {
+      process.stdout.write(' ✓\n');
+    }
+  };
+}
+
 // ============================================================================
 // SYNC PROMPTS FUNCTIONS
 // ============================================================================
@@ -459,22 +545,100 @@ function computeExpectedSkills() {
     }
 
     const skillName = generateSkillName(prompt);
-    expected.set(
-      `${SKILLS_DIR_NAME}/${skillName}/SKILL.md`,
-      generateSkillHeader(prompt, true) + '\n\n' + sourceContent
-    );
+    // disable-model-invocation is always set: these are user-initiated workflow steps, and
+    // one SKILL.md now serves every agent, so the strictest setting is the correct one.
+    const skillContent = generateSkillHeader(prompt, true) + '\n\n' + sourceContent;
+    // Buffers, not utf8 strings: reference dirs can hold binary files (the
+    // console's chime mp3s), and a utf8 round-trip would mangle them.
+    expected.set(`${SKILLS_DIR_NAME}/${skillName}/SKILL.md`, Buffer.from(skillContent));
 
     const srcRefDir = path.join(SRC_DIR, prompt.source.replace(/\.md$/, '-references'));
-    if (!fs.existsSync(srcRefDir)) continue;
-    for (const relPath of listFilesRecursive(srcRefDir)) {
-      expected.set(
-        `${SKILLS_DIR_NAME}/${skillName}/references/${relPath.split(path.sep).join('/')}`,
-        fs.readFileSync(path.join(srcRefDir, relPath), 'utf8')
-      );
+    if (fs.existsSync(srcRefDir)) {
+      for (const relPath of listFilesRecursive(srcRefDir)) {
+        const absPath = path.join(srcRefDir, relPath);
+        expected.set(
+          `${SKILLS_DIR_NAME}/${skillName}/references/${relPath.split(path.sep).join('/')}`,
+          fs.readFileSync(absPath)
+        );
+      }
+    }
+
+    for (const reference of prompt.additionalReferences || []) {
+      const absSource = path.join(SRC_DIR, reference.source);
+      if (reference.source === 'web-console') {
+        expected.set(
+          `${SKILLS_DIR_NAME}/${skillName}/references/${reference.target}/version.json`,
+          fs.readFileSync(path.join(__dirname, 'version.json'))
+        );
+      }
+      try {
+        if (fs.statSync(absSource).isDirectory()) {
+          for (const relPath of listFilesRecursive(absSource)) {
+            const targetPath = reference.target ? path.join(reference.target, relPath) : relPath;
+            expected.set(
+              `${SKILLS_DIR_NAME}/${skillName}/references/${targetPath.split(path.sep).join('/')}`,
+              fs.readFileSync(path.join(absSource, relPath))
+            );
+          }
+        } else {
+          expected.set(
+            `${SKILLS_DIR_NAME}/${skillName}/references/${reference.target}`,
+            fs.readFileSync(absSource)
+          );
+        }
+      } catch (err) {
+        errors.push(`Could not include src/${reference.source} for ${skillName}: ${err.message}`);
+      }
+    }
+
+    // Scripts land flat in skills/<skill>/scripts/, beside the SKILL.md that runs them:
+    // the skill's own src/<source>-scripts/ plus the shared ones it names in `scripts`
+    // from src/skill-scripts/. Skills install independently, so shared code is copied
+    // into each skill rather than referenced across skill directories.
+    const scripts = new Map();
+    const ownScriptsDir = path.join(SRC_DIR, prompt.source.replace(/\.md$/, '-scripts'));
+    const sharedNames = prompt.scripts || [];
+    if (sharedNames.length || fs.existsSync(ownScriptsDir)) {
+      for (const name of [...SHARED_SCRIPTS_ALWAYS, ...sharedNames]) {
+        const abs = path.join(SRC_DIR, SHARED_SCRIPTS_DIR, name);
+        if (!fs.existsSync(abs)) {
+          errors.push(`src/${SHARED_SCRIPTS_DIR}/${name} (named by ${skillName}) does not exist`);
+          continue;
+        }
+        scripts.set(name, fs.readFileSync(abs));
+      }
+      if (fs.existsSync(ownScriptsDir)) {
+        for (const relPath of listFilesRecursive(ownScriptsDir)) {
+          const name = relPath.split(path.sep).join('/');
+          if (scripts.has(name) || name === 'version.json') {
+            errors.push(`src/${path.basename(ownScriptsDir)}/${name} collides with a ${name === 'version.json' ? 'generated file' : 'shared script'} of the same name`);
+            continue;
+          }
+          scripts.set(name, fs.readFileSync(path.join(ownScriptsDir, relPath)));
+        }
+      }
+      // The version the scripts report (the finalize feedback payload needs it, and an
+      // installed skill has no repo version.json to read).
+      scripts.set('version.json', fs.readFileSync(path.join(__dirname, 'version.json')));
+    }
+    for (const [name, content] of scripts) {
+      expected.set(`${SKILLS_DIR_NAME}/${skillName}/scripts/${name}`, content);
     }
   }
 
   return { expected, errors };
+}
+
+/**
+ * Remove empty directories below `dir` (never `dir` itself), deepest first.
+ */
+function removeEmptyDirs(dir) {
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    const sub = path.join(dir, entry.name);
+    removeEmptyDirs(sub);
+    if (fs.readdirSync(sub).length === 0) fs.rmdirSync(sub);
+  }
 }
 
 function buildSkills(quiet = false) {
@@ -504,21 +668,28 @@ function buildSkills(quiet = false) {
       stats.pruned++;
       if (!quiet) console.log(`  ${COLORS.YELLOW}░░░${COLORS.RESET} Pruned: ${key}`);
     }
+    // A folder the build no longer fills (a skill that lost all its scripts) goes too.
+    removeEmptyDirs(skillDir);
   }
 
   for (const [relPath, content] of expected) {
     const absPath = path.join(__dirname, relPath.split('/').join(path.sep));
     let current = null;
     if (fs.existsSync(absPath)) {
-      try { current = fs.readFileSync(absPath, 'utf8'); } catch {}
+      try {
+        current = fs.readFileSync(absPath);
+      } catch (err) {
+        // Unreadable — fall through and overwrite
+      }
     }
-    if (current === content) {
+
+    if (current && current.equals(content)) {
       stats.unchanged++;
       continue;
     }
     try {
       fs.mkdirSync(path.dirname(absPath), { recursive: true });
-      fs.writeFileSync(absPath, content, 'utf8');
+      fs.writeFileSync(absPath, content);
       stats.written++;
       if (!quiet) console.log(`  ${COLORS.GREEN}▰▰▰${COLORS.RESET} ${relPath}`);
     } catch (err) {
@@ -540,8 +711,13 @@ function verifySkillsSync() {
   const problems = [...errors];
   for (const [relPath, content] of expected) {
     const absPath = path.join(__dirname, relPath.split('/').join(path.sep));
-    if (!fs.existsSync(absPath)) problems.push(`missing: ${relPath}`);
-    else if (fs.readFileSync(absPath, 'utf8') !== content) problems.push(`out of date: ${relPath}`);
+    if (!fs.existsSync(absPath)) {
+      problems.push(`missing: ${relPath}`);
+      continue;
+    }
+    if (!fs.readFileSync(absPath).equals(content)) {
+      problems.push(`out of date: ${relPath}`);
+    }
   }
   if (fs.existsSync(SKILLS_DIR)) {
     for (const relPath of listFilesRecursive(SKILLS_DIR)) {
@@ -650,36 +826,51 @@ function ensureSkillsCli() {
   return false;
 }
 
+/**
+ * List installed Plan2Code skill names for a scope ('global' or 'project').
+ *
+ * Reads the skills CLI's canonical store directory directly instead of running `skills list`.
+ * The list command cross-references every installed skill against every agent directory it
+ * can find — an O(skills × agents) scan that takes over a minute on Windows. The store is
+ * just a directory of skill folders, so a readdir answers the same question instantly.
+ */
 function listInstalledSkills(scope) {
-  const json = runSkillsCli(`list ${scope === 'global' ? '-g' : ''} --json`.trim());
-  if (!json) return [];
+  const store = path.join(scope === 'global' ? os.homedir() : process.cwd(), '.agents', 'skills');
+  let entries;
   try {
-    const parsed = JSON.parse(json);
-    if (!Array.isArray(parsed)) return [];
-    return parsed.map(skill => skill && skill.name)
-      .filter(name => typeof name === 'string' && name.startsWith('plan2code-'));
-  } catch {
+    entries = fs.readdirSync(store);
+  } catch (err) {
     return [];
   }
+  return entries.filter(name =>
+    (name === 'plan2code' || name.startsWith('plan2code-')) && fs.existsSync(path.join(store, name, 'SKILL.md'))
+  );
 }
 
+/**
+ * Remove every installed Plan2Code skill for a scope. Returns the number removed, or -1 when
+ * the skills CLI call fails.
+ */
 function removeInstalledSkills(scope, { quiet = false } = {}) {
   const installed = listInstalledSkills(scope);
   if (installed.length === 0) {
     if (!quiet) console.log(`  ${COLORS.DIM}${SYMBOLS.INFO} No Plan2Code skills currently installed${COLORS.RESET}`);
     return 0;
   }
+
+  // `skills remove` is variadic and silently skips names that aren't installed, so one call
+  // clears the store and unlinks every agent. Passing the full build list alongside what was
+  // found also sweeps stray copies an earlier version left outside the store.
+  const names = [...new Set([...installed, ...SOURCE_PROMPTS.map(generateSkillName)])];
   const scopeFlag = scope === 'global' ? '-g ' : '';
-  let removed = 0;
+  if (runSkillsCli(`remove ${names.join(' ')} ${scopeFlag}-y`) === null) {
+    if (!quiet) console.log(`  ${COLORS.RED}✖✖✖${COLORS.RESET} Could not remove installed skills`);
+    return -1;
+  }
   for (const name of installed) {
-    if (runSkillsCli(`remove ${name} ${scopeFlag}-y`) === null) {
-      if (!quiet) console.log(`  ${COLORS.RED}✖✖✖${COLORS.RESET} Could not remove ${name}`);
-      continue;
-    }
-    removed++;
     if (!quiet) console.log(`  ${COLORS.YELLOW}░░░${COLORS.RESET} Removed: ${name}`);
   }
-  return removed;
+  return installed.length;
 }
 
 // ============================================================================
@@ -706,18 +897,40 @@ async function install() {
     `${COLORS.CYAN}Store:${COLORS.RESET}            ${path.join(os.homedir(), '.agents', 'skills')}`,
     `${COLORS.CYAN}Mode:${COLORS.RESET}             INSTALL`,
   ]);
-  console.log(`\n${COLORS.YELLOW}${SYMBOLS.ACTIVE} CLEANING PREVIOUS INSTALLS (PLEASE WAIT ⌛)${COLORS.RESET}\n`);
-  removeInstalledSkills('global');
-  const legacy = cleanLegacyPaths();
-  if (legacy.removed > 0) console.log(`  ${COLORS.GREEN}${SYMBOLS.SUCCESS}${COLORS.RESET} Cleaned ${legacy.removed} legacy file(s) from pre-2.2 installs`);
+  console.log('');
 
-  console.log(`\n${COLORS.YELLOW}${SYMBOLS.ACTIVE} INSTALLING VIA SKILLS.SH${COLORS.RESET}\n`);
+  // Clear previous installs before writing anything new. The CLI goes first so it can unwind
+  // its own store and links properly; the legacy sweep then picks up pre-2.2 remnants.
+  console.log(`${COLORS.YELLOW}${SYMBOLS.ACTIVE} CLEANING PREVIOUS INSTALLS ${COLORS.GREEN}[please wait...]${COLORS.RESET}`);
+  const spinner1 = createSpinner();
+  spinner1.start();
+  removeInstalledSkills('global', { quiet: true });
+  spinner1.tick();
+  const legacy = cleanLegacyPaths(true);
+  spinner1.tick();
+  spinner1.stop();
+  if (legacy.removed > 0) {
+    console.log(`  ${COLORS.GREEN}${SYMBOLS.SUCCESS}${COLORS.RESET} Cleaned ${legacy.removed} legacy file(s) from pre-2.2 installs`);
+  }
+  console.log('');
+
+  console.log(`${COLORS.YELLOW}${SYMBOLS.ACTIVE} INSTALLING VIA SKILLS.SH ${COLORS.GREEN}[please wait...]${COLORS.RESET}`);
   console.log(`  ${COLORS.DIM}Installing ${SOURCE_PROMPTS.length} skills...${COLORS.RESET}`);
+  const spinner2 = createSpinner();
+  spinner2.start();
   const result = execSkillsCli(`add "${SKILLS_DIR}" -g ${skillNameArgs()} -y`);
+  spinner2.tick();
+  spinner2.stop();
+  console.log('');
   reportSkillsOutput(result);
   const failed = !result.ok;
 
-  console.log(`\n${COLORS.CYAN}╔═══════════════════════════════════════════════════════════════════════════╗${COLORS.RESET}`);
+  // The `plan2code` command opens the dashboard skill, so it's only worth adding once the
+  // skills themselves are in place.
+  const launcherFailed = failed ? false : (await installLauncher({ quiet: true })) !== 0;
+
+  // Summary
+  console.log(`${COLORS.CYAN}╔═══════════════════════════════════════════════════════════════════════════╗${COLORS.RESET}`);
   console.log(`${COLORS.CYAN}║${COLORS.RESET}${' '.repeat(75)}${COLORS.CYAN}║${COLORS.RESET}`);
   console.log(`${COLORS.CYAN}║${COLORS.RESET}${' '.repeat(31)}${COLORS.BRIGHT}S U M M A R Y${COLORS.RESET}${' '.repeat(31)}${COLORS.CYAN}║${COLORS.RESET}`);
   console.log(`${COLORS.CYAN}║${COLORS.RESET}${' '.repeat(75)}${COLORS.CYAN}║${COLORS.RESET}`);
@@ -728,6 +941,10 @@ async function install() {
   console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET}  ${statusColor}Status:${COLORS.RESET}            ${statusColor}${statusText}${COLORS.RESET}`, 76) + `${COLORS.CYAN}║${COLORS.RESET}`);
   const installedNames = failed ? [] : listInstalledSkills('global');
   console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET}  Skills Installed:  ${COLORS.GREEN}${installedNames.length}${COLORS.RESET}`, 76) + `${COLORS.CYAN}║${COLORS.RESET}`);
+  if (!failed) {
+    const commandStatus = launcherFailed ? `${COLORS.RED}FAILED (see above)` : `${COLORS.GREEN}${LAUNCHER_COMMAND}`;
+    console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET}  Global Command:    ${commandStatus}${COLORS.RESET}`, 76) + `${COLORS.CYAN}║${COLORS.RESET}`);
+  }
   console.log(`${COLORS.CYAN}║${COLORS.RESET}${' '.repeat(75)}${COLORS.CYAN}║${COLORS.RESET}`);
   console.log(`${COLORS.CYAN}╚═══════════════════════════════════════════════════════════════════════════╝${COLORS.RESET}\n`);
 
@@ -737,12 +954,18 @@ async function install() {
     return 1;
   }
 
+  // Point at the dashboard first: the `plan2code` command when it installed, the skill otherwise.
+  const dashboardWhere = launcherFailed ? 'Open the dashboard in your agent:' : 'Open the dashboard from any project:';
+  const dashboardCommand = launcherFailed ? '/plan2code' : LAUNCHER_COMMAND;
   console.log(`${COLORS.GREEN}    ╭───╮${COLORS.RESET}   ${COLORS.BRIGHT}All done! Happy coding!${COLORS.RESET}`);
-  console.log(`${COLORS.GREEN}    │ ${COLORS.CYAN}★${COLORS.GREEN} │${COLORS.RESET}   ${COLORS.BRIGHT}If this is your first time using Plan2Code, read the docs here:${COLORS.RESET}`);
-  console.log(`${COLORS.GREEN}    │ ${COLORS.BRIGHT}◡${COLORS.GREEN} │${COLORS.RESET}   ${COLORS.BRIGHT}https://github.com/jparkerweb/plan2code${COLORS.RESET}`);
-  console.log(`${COLORS.GREEN}    ╰───╯${COLORS.RESET}`);
-  console.log(`\n${COLORS.DIM}  Update later with:${COLORS.RESET} ${COLORS.CYAN}npx skills update -g${COLORS.RESET}\n`);
-  return 0;
+  console.log(`${COLORS.GREEN}   ╲│ ${COLORS.CYAN}★${COLORS.GREEN} │╱${COLORS.RESET}  ${COLORS.BRIGHT}${dashboardWhere}${COLORS.RESET}`);
+  console.log(`${COLORS.GREEN}    │ ${COLORS.BRIGHT}◡${COLORS.GREEN} │${COLORS.RESET}   ${COLORS.BRIGHT}${COLORS.CYAN}${dashboardCommand}${COLORS.RESET}`);
+  console.log(`${COLORS.GREEN}    ╰┬─┬╯${COLORS.RESET}   ${COLORS.DIM}Docs:${COLORS.RESET} ${COLORS.BRIGHT}https://github.com/jparkerweb/plan2code${COLORS.RESET}`);
+  console.log('');
+  console.log(`${COLORS.DIM}  Update later with:${COLORS.RESET} ${COLORS.CYAN}npx skills update -g${COLORS.RESET}`);
+  console.log('');
+
+  return launcherFailed ? 1 : 0;
 }
 
 // ============================================================================
@@ -765,7 +988,9 @@ function uninstallSkills() {
   let errors = 0;
   if (ensureSkillsCli()) {
     console.log(`\n${COLORS.YELLOW}${SYMBOLS.ACTIVE} REMOVING SKILLS${COLORS.RESET}\n`);
-    removed += removeInstalledSkills('global');
+    const skillsRemoved = removeInstalledSkills('global');
+    if (skillsRemoved < 0) errors++;
+    else removed += skillsRemoved;
   } else {
     errors++;
   }
@@ -901,9 +1126,9 @@ function runInteractive() {
     if (input === 'U') {
       console.log('');
       console.log(`${COLORS.RED}    ╭───╮${COLORS.RESET}`);
-      console.log(`${COLORS.RED}    │ ${COLORS.YELLOW}○${COLORS.RED} │${COLORS.RESET}   ${COLORS.YELLOW}!${COLORS.RESET}`);
+      console.log(`${COLORS.RED}   ╲│ ${COLORS.YELLOW}★${COLORS.RED} │╱${COLORS.RESET}  ${COLORS.YELLOW}!${COLORS.RESET}`);
       console.log(`${COLORS.RED}    │ ${COLORS.YELLOW}~${COLORS.RED} │${COLORS.RESET}   ${COLORS.DIM}Are you sure? This will remove Plan2Code from all platforms.${COLORS.RESET}`);
-      console.log(`${COLORS.RED}    ╰───╯${COLORS.RESET}`);
+      console.log(`${COLORS.RED}    ╰┬─┬╯${COLORS.RESET}`);
       console.log('');
       const confirmAnswer = await question(`${COLORS.RED}${SYMBOLS.SELECT} CONFIRM UNINSTALL${COLORS.RESET} (Y/N) [N]: `);
       const confirmInput = confirmAnswer.trim().toUpperCase() || 'N';
@@ -915,7 +1140,8 @@ function runInteractive() {
         const metricsResult = uninstallPlan2CodeMetrics();
         const botResult = uninstallPlan2CodeBot();
         const statusLineResult = uninstallStatusLine();
-        const exitCode = uninstallResult !== 0 ? uninstallResult : loopResult !== 0 ? loopResult : metricsResult !== 0 ? metricsResult : botResult !== 0 ? botResult : statusLineResult;
+        const launcherResult = uninstallLauncher();
+        const exitCode = uninstallResult !== 0 ? uninstallResult : loopResult !== 0 ? loopResult : metricsResult !== 0 ? metricsResult : botResult !== 0 ? botResult : statusLineResult !== 0 ? statusLineResult : launcherResult;
         process.exit(exitCode);
       } else {
         console.log(`\n${COLORS.YELLOW}${SYMBOLS.WARNING} CANCELLED${COLORS.RESET}\n`);
@@ -935,10 +1161,11 @@ function runInteractive() {
       console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET}  ${COLORS.BRIGHT}M.${COLORS.RESET}  ${COLORS.GREEN}METRICS${COLORS.RESET}    Install plan2code-metrics CLI only`, 65) + `${COLORS.CYAN}║${COLORS.RESET}`);
       console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET}  ${COLORS.BRIGHT}S.${COLORS.RESET}  ${COLORS.GREEN}STATUS${COLORS.RESET}     Install Claude Code status line`, 65) + `${COLORS.CYAN}║${COLORS.RESET}`);
       console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET}  ${COLORS.BRIGHT}B.${COLORS.RESET}  ${COLORS.GREEN}BOT${COLORS.RESET}        Install plan2code-bot CLI only`, 65) + `${COLORS.CYAN}║${COLORS.RESET}`);
+      console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET}  ${COLORS.BRIGHT}D.${COLORS.RESET}  ${COLORS.GREEN}P2C CMD${COLORS.RESET}    Install the plan2code command only`, 65) + `${COLORS.CYAN}║${COLORS.RESET}`);
       console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET}  ${COLORS.BRIGHT}Q.${COLORS.RESET}  ${COLORS.DIM}BACK${COLORS.RESET}       Return to main menu`, 65) + `${COLORS.CYAN}║${COLORS.RESET}`);
       console.log(`${COLORS.CYAN}╚════════════════════════════════════════════════════════════════╝${COLORS.RESET}`);
       console.log('');
-      const customAnswer = await question(`${COLORS.CYAN}${SYMBOLS.SELECT} SELECT OPTION${COLORS.RESET} (L, O, M, S, B, Q) [Q]: `);
+      const customAnswer = await question(`${COLORS.CYAN}${SYMBOLS.SELECT} SELECT OPTION${COLORS.RESET} (L, O, M, S, B, D, Q) [Q]: `);
       const customInput = customAnswer.trim().toUpperCase() || 'Q';
 
       // C > L — install skills into the current project
@@ -975,6 +1202,12 @@ function runInteractive() {
         process.exit(result);
       }
 
+      // C > D — install the global `plan2code` command (opens the dashboard in Claude Code or Devin)
+      if (customInput === 'D') {
+        rl.close();
+        process.exit(await installLauncher());
+      }
+
       // C > Q — back to main menu
       return main();
     }
@@ -1002,7 +1235,7 @@ function runInteractive() {
 // PLAN2CODE-LOOP INSTALLATION
 // ============================================================================
 
-const { execSync } = require('child_process');
+const { execSync, execFileSync } = require('child_process');
 
 /**
  * Build plan2code-loop package
@@ -1948,6 +2181,409 @@ function uninstallPlan2CodeBot() {
 
   console.log('');
   console.log(`${COLORS.GREEN}${SYMBOLS.SUCCESS} plan2code-bot uninstalled${COLORS.RESET}`);
+  console.log('');
+
+  return 0;
+}
+
+// ============================================================================
+// PLAN2CODE COMMAND (global `plan2code` → dashboard in Claude Code or Devin)
+// ============================================================================
+
+/**
+ * `plan2code` typed in any directory opens the dashboard skill there in Claude Code
+ * (`claude /plan2code --permission-mode bypassPermissions`) or Devin
+ * (`devin --permission-mode bypass -- /plan2code`), asking which when both are installed.
+ * The launcher is copied out of the package into ~/.plan2code/bin/ because the installer
+ * normally runs from an npx cache directory that npm is free to delete; the shims in the bin
+ * directory point at that stable copy.
+ */
+const LAUNCHER_COMMAND = 'plan2code';
+const LAUNCHER_MARKER = 'plan2code-launcher';
+const LAUNCHER_SRC = path.join(__dirname, 'src', 'launcher', 'plan2code.js');
+const MODELS_SRC = path.join(__dirname, 'src', 'launcher', 'models.json');
+const MODELS_DEST = path.join(os.homedir(), '.plan2code', 'bin', 'models.json');
+const LAUNCHER_DEST = path.join(os.homedir(), '.plan2code', 'bin', 'plan2code.js');
+const LAUNCHER_STATE = path.join(os.homedir(), '.plan2code', 'launcher.json');
+const LAUNCHER_PICK_FOLDER_FLAG = '--pick-folder';
+const SHORTCUT_NAME = 'Plan2Code';
+const SHORTCUT_ICON_SRC = path.join(__dirname, 'src', 'launcher', 'plan2code.ico');
+const SHORTCUT_ICON_DEST = path.join(path.dirname(LAUNCHER_DEST), 'plan2code.ico');
+const SHORTCUT_PNG_SRC = path.join(__dirname, 'src', 'web-console', 'public', 'favicon.png');
+const SHORTCUT_PNG_DEST = path.join(path.dirname(LAUNCHER_DEST), 'plan2code.png');
+
+function getNpmGlobalBinDir() {
+  try {
+    const prefix = execSync('npm config get prefix', { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+    if (!prefix) return null;
+    return process.platform === 'win32' ? prefix : path.join(prefix, 'bin');
+  } catch {
+    return null;
+  }
+}
+
+function isDirOnPath(dir) {
+  const normalize = (p) => {
+    const resolved = path.resolve(p.replace(/^"|"$/g, '')).replace(/[\\/]+$/, '');
+    return process.platform === 'win32' ? resolved.toLowerCase() : resolved;
+  };
+  const target = normalize(dir);
+  return (process.env.PATH || '').split(path.delimiter).filter(Boolean).some((entry) => normalize(entry) === target);
+}
+
+function isDirWritable(dir) {
+  try {
+    fs.mkdirSync(dir, { recursive: true });
+    fs.accessSync(dir, fs.constants.W_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Where the command can live: npm's global bin first (on PATH wherever Node was installed
+ * normally), then ~/.local/bin on macOS/Linux for a system Node whose prefix needs sudo.
+ */
+function getLauncherBinCandidates() {
+  const dirs = [getNpmGlobalBinDir()];
+  if (process.platform !== 'win32') dirs.push(path.join(os.homedir(), '.local', 'bin'));
+  return [...new Set(dirs.filter(Boolean))];
+}
+
+/**
+ * Shims written into the bin directory: the same trio npm creates for a global bin on
+ * Windows (sh for Git Bash, .cmd for cmd.exe, .ps1 for PowerShell), just the sh one elsewhere.
+ * Each runs the Node that ran the installer (`nodePath`, an absolute path) rather than `node`
+ * from PATH, because a desktop entry starts without the shell profile that puts an nvm Node
+ * on PATH, and `nvm use` can swap that Node later. If the path is gone (Node was upgraded or
+ * removed), the shim falls back to `node` on PATH, as npm's own shims do.
+ */
+function getLauncherShims(binDir, nodePath = process.execPath) {
+  const base = path.join(binDir, LAUNCHER_COMMAND);
+  const shQuote = (value) => `'${value.replace(/'/g, "'\\''")}'`;
+  const psQuote = (value) => `'${value.replace(/'/g, "''")}'`;
+  const cmdEscape = (value) => value.replace(/%/g, '%%');
+  const posixNode = shQuote(nodePath.replace(/\\/g, '/'));
+  const posixDest = shQuote(LAUNCHER_DEST.replace(/\\/g, '/'));
+  const shims = [
+    {
+      file: base,
+      content: [
+        '#!/bin/sh',
+        `# ${LAUNCHER_MARKER}`,
+        `NODE=${posixNode}`,
+        `if [ -x "$NODE" ]; then exec "$NODE" ${posixDest} "$@"; else exec node ${posixDest} "$@"; fi`,
+        '',
+      ].join('\n'),
+    },
+  ];
+  if (process.platform === 'win32') {
+    const cmdNode = cmdEscape(nodePath);
+    const cmdDest = cmdEscape(LAUNCHER_DEST);
+    shims.push(
+      {
+        file: `${base}.cmd`,
+        content: [
+          '@echo off',
+          `rem ${LAUNCHER_MARKER}`,
+          `if not exist "${cmdNode}" goto p2c_path_node`,
+          `"${cmdNode}" "${cmdDest}" %*`,
+          'exit /b %ERRORLEVEL%',
+          ':p2c_path_node',
+          `node "${cmdDest}" %*`,
+          '',
+        ].join('\r\n'),
+      },
+      {
+        file: `${base}.ps1`,
+        content: [
+          '#!/usr/bin/env pwsh',
+          `# ${LAUNCHER_MARKER}`,
+          `$node = ${psQuote(nodePath)}`,
+          "if (-not (Test-Path -LiteralPath $node -PathType Leaf)) { $node = 'node' }",
+          `& $node ${psQuote(LAUNCHER_DEST)} $args`,
+          'exit $LASTEXITCODE',
+          '',
+        ].join('\r\n'),
+      }
+    );
+  }
+  return shims;
+}
+
+function isOurLauncherShim(file) {
+  try {
+    return fs.readFileSync(file, 'utf8').includes(LAUNCHER_MARKER);
+  } catch {
+    return false;
+  }
+}
+
+function isCommandOnPath(command) {
+  try {
+    execSync(process.platform === 'win32' ? `where ${command}` : `command -v ${command}`, { stdio: 'ignore' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function runPowerShell(script, env = {}) {
+  return execFileSync(
+    'powershell.exe',
+    ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')],
+    { encoding: 'utf8', env: { ...process.env, ...env }, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true }
+  ).trim();
+}
+
+/**
+ * The person's desktop folder. Windows asks the shell, because OneDrive and group policy
+ * often move it off ~/Desktop; Linux asks xdg-user-dir, which knows localized names.
+ */
+function getDesktopDir() {
+  try {
+    if (process.platform === 'win32') {
+      const dir = runPowerShell("[Console]::OutputEncoding = [Text.Encoding]::UTF8\n[Environment]::GetFolderPath('Desktop')");
+      if (dir) return dir;
+    } else if (process.platform !== 'darwin') {
+      const dir = execFileSync('xdg-user-dir', ['DESKTOP'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+      if (dir && path.resolve(dir) !== os.homedir()) return dir;
+    }
+  } catch {}
+  return path.join(os.homedir(), 'Desktop');
+}
+
+/**
+ * Where the desktop shortcut lives: a .lnk on Windows, a .command Terminal opens on macOS,
+ * a .desktop entry on Linux.
+ */
+function getShortcutFile(desktopDir = getDesktopDir()) {
+  if (process.platform === 'win32') return path.join(desktopDir, `${SHORTCUT_NAME}.lnk`);
+  if (process.platform === 'darwin') return path.join(desktopDir, `${SHORTCUT_NAME}.command`);
+  return path.join(desktopDir, `${SHORTCUT_NAME.toLowerCase()}.desktop`);
+}
+
+/**
+ * The macOS/Linux shortcuts carry the launcher marker as a comment. A .lnk has nowhere to hide
+ * one (its Description is the hover tooltip), so it is recognized by what it runs: the
+ * `plan2code.ps1` shim with `--pick-folder`, both stored in the .lnk as UTF-16. The
+ * `plan2code.cmd` target of earlier shortcuts still counts, so a reinstall upgrades them.
+ */
+function isOurShortcut(file) {
+  try {
+    const content = fs.readFileSync(file);
+    if (file.endsWith('.lnk')) {
+      const has = (text) => content.includes(Buffer.from(text, 'utf16le'));
+      return has(LAUNCHER_PICK_FOLDER_FLAG) && (has(`${LAUNCHER_COMMAND}.ps1`) || has(`${LAUNCHER_COMMAND}.cmd`));
+    }
+    return content.includes(LAUNCHER_MARKER);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Put a shortcut on the desktop that runs `plan2code --pick-folder` through the shim in
+ * `binDir`, so the person picks the project folder in a native dialog before the CLI opens.
+ * On Windows it opens in PowerShell — PowerShell 7 (`pwsh`) when installed, Windows
+ * PowerShell otherwise — running the `.ps1` shim, rather than cmd.exe running the `.cmd` one.
+ */
+function installDesktopShortcut(binDir, file) {
+  const shim = path.join(binDir, LAUNCHER_COMMAND);
+
+  try {
+    if (!fs.statSync(path.dirname(file)).isDirectory()) throw new Error('not a folder');
+  } catch {
+    console.log(`  ${COLORS.YELLOW}${SYMBOLS.WARNING}${COLORS.RESET} No desktop folder found at ${path.dirname(file)} — skipped the shortcut`);
+    return 1;
+  }
+
+  try {
+    if (process.platform === 'win32') {
+      let icon = '';
+      try {
+        fs.copyFileSync(SHORTCUT_ICON_SRC, SHORTCUT_ICON_DEST);
+        icon = SHORTCUT_ICON_DEST;
+      } catch {}
+      runPowerShell(
+        [
+          '$pwsh = Get-Command pwsh.exe -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1',
+          "$target = if ($pwsh) { $pwsh.Source } else { Join-Path $env:SystemRoot 'System32\\WindowsPowerShell\\v1.0\\powershell.exe' }",
+          '$shortcut = (New-Object -ComObject WScript.Shell).CreateShortcut($env:P2C_FILE)',
+          '$shortcut.TargetPath = $target',
+          `$shortcut.Arguments = "-NoLogo -ExecutionPolicy Bypass -File \`"$($env:P2C_SCRIPT)\`" $($env:P2C_ARGS)"`,
+          '$shortcut.WorkingDirectory = $env:USERPROFILE',
+          '$shortcut.Description = $env:P2C_DESCRIPTION',
+          'if ($env:P2C_ICON) { $shortcut.IconLocation = "$($env:P2C_ICON),0" }',
+          '$shortcut.Save()',
+        ].join('\n'),
+        {
+          P2C_FILE: file,
+          P2C_SCRIPT: `${shim}.ps1`,
+          P2C_ARGS: LAUNCHER_PICK_FOLDER_FLAG,
+          P2C_DESCRIPTION: 'Open the Plan2Code dashboard in Claude Code or Devin',
+          P2C_ICON: icon,
+        }
+      );
+    } else if (process.platform === 'darwin') {
+      fs.writeFileSync(file, `#!/bin/sh\n# ${LAUNCHER_MARKER}\nexec "${shim}" ${LAUNCHER_PICK_FOLDER_FLAG}\n`);
+      fs.chmodSync(file, 0o755);
+    } else {
+      let icon = '';
+      try {
+        fs.copyFileSync(SHORTCUT_PNG_SRC, SHORTCUT_PNG_DEST);
+        icon = SHORTCUT_PNG_DEST;
+      } catch {}
+      fs.writeFileSync(
+        file,
+        [
+          '[Desktop Entry]',
+          `# ${LAUNCHER_MARKER}`,
+          'Type=Application',
+          `Name=${SHORTCUT_NAME}`,
+          'Comment=Open the Plan2Code dashboard in Claude Code or Devin',
+          `Exec="${shim}" ${LAUNCHER_PICK_FOLDER_FLAG}`,
+          ...(icon ? [`Icon=${icon}`] : []),
+          'Terminal=true',
+          'Categories=Development;',
+          '',
+        ].join('\n')
+      );
+      fs.chmodSync(file, 0o755);
+      // GNOME only launches a desktop file once it is marked trusted; elsewhere this is a no-op.
+      try {
+        execFileSync('gio', ['set', file, 'metadata::trusted', 'true'], { stdio: 'ignore' });
+      } catch {}
+    }
+    console.log(`  ${COLORS.GREEN}${SYMBOLS.SUCCESS}${COLORS.RESET} Created: ${file}`);
+    return 0;
+  } catch (error) {
+    console.log(`  ${COLORS.YELLOW}${SYMBOLS.WARNING}${COLORS.RESET} Failed to create the desktop shortcut: ${error.message}`);
+    return 1;
+  }
+}
+
+/**
+ * Offer the desktop shortcut after the command is in place. One that is already there is
+ * refreshed without asking, since the shim it points at may have moved.
+ */
+async function offerDesktopShortcut(binDir) {
+  const file = getShortcutFile();
+  if (isOurShortcut(file)) return installDesktopShortcut(binDir, file);
+  if (!process.stdin.isTTY) return 0;
+
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  const answer = await new Promise((resolve) => {
+    rl.question(`  ${COLORS.CYAN}Also add a ${SHORTCUT_NAME} shortcut to your desktop?${COLORS.RESET} (y/N): `, resolve);
+  });
+  rl.close();
+
+  return answer.trim().toLowerCase().startsWith('y') ? installDesktopShortcut(binDir, file) : 0;
+}
+
+/**
+ * Install the global `plan2code` command, then offer the desktop shortcut. `quiet` prints
+ * compact lines for use inside the skills install instead of a section of its own.
+ */
+async function installLauncher({ quiet = false } = {}) {
+  if (quiet) {
+    console.log(`${COLORS.YELLOW}${SYMBOLS.ACTIVE} INSTALLING THE ${LAUNCHER_COMMAND.toUpperCase()} COMMAND${COLORS.RESET}`);
+  } else {
+    displaySectionHeader('PLAN2CODE COMMAND', '[ INSTALL ]');
+  }
+
+  if (!fs.existsSync(LAUNCHER_SRC)) {
+    console.log(`  ${COLORS.RED}${SYMBOLS.ERROR}${COLORS.RESET} src/launcher/plan2code.js not found`);
+    return 1;
+  }
+
+  try {
+    fs.mkdirSync(path.dirname(LAUNCHER_DEST), { recursive: true });
+    fs.copyFileSync(LAUNCHER_SRC, LAUNCHER_DEST);
+    // The curated model menu is the authors' source of truth, so it is overwritten on every install.
+    // Models the user added in User Preferences live in ~/.plan2code/models.json and are untouched.
+    fs.copyFileSync(MODELS_SRC, MODELS_DEST);
+    if (process.platform !== 'win32') fs.chmodSync(LAUNCHER_DEST, 0o755);
+    console.log(`  ${COLORS.GREEN}${SYMBOLS.SUCCESS}${COLORS.RESET} Installed: ${LAUNCHER_DEST}`);
+  } catch (error) {
+    console.log(`  ${COLORS.RED}${SYMBOLS.ERROR}${COLORS.RESET} Failed to copy launcher: ${error.message}`);
+    return 1;
+  }
+
+  const candidates = getLauncherBinCandidates();
+  const binDir =
+    candidates.find((dir) => isDirWritable(dir) && isDirOnPath(dir)) || candidates.find((dir) => isDirWritable(dir));
+  if (!binDir) {
+    console.log(`  ${COLORS.RED}${SYMBOLS.ERROR}${COLORS.RESET} No writable bin directory found (tried: ${candidates.join(', ') || 'none'})`);
+    console.log(`  ${COLORS.DIM}Link it by hand:${COLORS.RESET} ${COLORS.CYAN}sudo ln -sf "${LAUNCHER_DEST}" /usr/local/bin/${LAUNCHER_COMMAND}${COLORS.RESET}`);
+    return 1;
+  }
+
+  try {
+    for (const shim of getLauncherShims(binDir)) {
+      const replacingForeign = fs.existsSync(shim.file) && !isOurLauncherShim(shim.file);
+      fs.rmSync(shim.file, { force: true });
+      fs.writeFileSync(shim.file, shim.content);
+      if (!shim.file.endsWith('.cmd') && !shim.file.endsWith('.ps1')) fs.chmodSync(shim.file, 0o755);
+      const note = replacingForeign ? ` ${COLORS.DIM}(replaced an existing command)${COLORS.RESET}` : '';
+      console.log(`  ${COLORS.GREEN}${SYMBOLS.SUCCESS}${COLORS.RESET} Created: ${shim.file}${note}`);
+    }
+  } catch (error) {
+    console.log(`  ${COLORS.RED}${SYMBOLS.ERROR}${COLORS.RESET} Failed to create the ${LAUNCHER_COMMAND} command: ${error.message}`);
+    return 1;
+  }
+
+  if (!isDirOnPath(binDir)) {
+    console.log(`  ${COLORS.YELLOW}${SYMBOLS.WARNING}${COLORS.RESET} ${binDir} is not on your PATH — add it to use ${COLORS.BRIGHT}${LAUNCHER_COMMAND}${COLORS.RESET} from any directory`);
+  }
+  if (!isCommandOnPath('claude') && !isCommandOnPath('devin')) {
+    console.log(`  ${COLORS.YELLOW}${SYMBOLS.WARNING}${COLORS.RESET} Neither the ${COLORS.BRIGHT}claude${COLORS.RESET} nor the ${COLORS.BRIGHT}devin${COLORS.RESET} CLI is on your PATH — install one before running ${COLORS.BRIGHT}${LAUNCHER_COMMAND}${COLORS.RESET}`);
+  }
+  // The shortcut is a convenience on top of the command, so a failure here only warns.
+  await offerDesktopShortcut(binDir);
+  console.log(`  ${COLORS.DIM}Run '${LAUNCHER_COMMAND}' in any project to open the Plan2Code dashboard in Claude Code or Devin${COLORS.RESET}`);
+  console.log(`  ${COLORS.YELLOW}${SYMBOLS.WARNING}${COLORS.RESET} It starts the agent with permission prompts off (${COLORS.CYAN}--permission-mode bypassPermissions${COLORS.RESET} in Claude Code, ${COLORS.CYAN}bypass${COLORS.RESET} in Devin). Run ${COLORS.CYAN}claude /plan2code${COLORS.RESET} yourself if you want prompts.`);
+  console.log('');
+
+  return 0;
+}
+
+/**
+ * Remove the global `plan2code` command. Only shims carrying the launcher marker are
+ * touched, so a `plan2code` bin from anything else is left alone.
+ */
+function uninstallLauncher() {
+  displaySectionHeader('PLAN2CODE COMMAND', '[ UNINSTALL ]');
+
+  let removedCount = 0;
+  const remove = (file) => {
+    try {
+      fs.rmSync(file, { force: true });
+      console.log(`  ${COLORS.GREEN}${SYMBOLS.SUCCESS}${COLORS.RESET} Removed: ${file}`);
+      removedCount++;
+    } catch (error) {
+      console.log(`  ${COLORS.RED}${SYMBOLS.ERROR}${COLORS.RESET} Failed to remove ${file}: ${error.message}`);
+    }
+  };
+
+  for (const binDir of getLauncherBinCandidates()) {
+    for (const { file } of getLauncherShims(binDir)) {
+      if (isOurLauncherShim(file)) remove(file);
+    }
+  }
+  const shortcut = getShortcutFile();
+  if (isOurShortcut(shortcut)) remove(shortcut);
+  for (const file of [LAUNCHER_DEST, MODELS_DEST, SHORTCUT_ICON_DEST, SHORTCUT_PNG_DEST, LAUNCHER_STATE]) {
+    if (fs.existsSync(file)) remove(file);
+  }
+  try {
+    fs.rmdirSync(path.dirname(LAUNCHER_DEST));
+  } catch {}
+
+  if (removedCount === 0) {
+    console.log(`  ${COLORS.DIM}${SYMBOLS.INFO} No ${LAUNCHER_COMMAND} command found${COLORS.RESET}`);
+  }
   console.log('');
 
   return 0;

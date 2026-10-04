@@ -1,0 +1,78 @@
+name: "🐛 Bug"
+description: Something in Plan2Code or the web console is broken or behaves unexpectedly.
+title: "🐛 Bug: "
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Describe the problem. Screenshots are welcome.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect to happen?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Run /plan2code
+        2. Pick ...
+        3. See ...
+    validations:
+      required: true
+  - type: dropdown
+    id: skill
+    attributes:
+      label: Which skill or tool?
+      options:
+        - Dashboard (/plan2code)
+        - Init / Init Update
+        - Pathfinder
+        - Plan / Revise Plan
+        - Quick Task
+        - Document
+        - Implement / Implement + Review
+        - Review
+        - Finalize
+        - Handoff
+        - Web console (page itself)
+        - Loop (plan2code-loop)
+        - Metrics
+        - Status line
+        - Installer
+        - Other
+    validations:
+      required: true
+  - type: dropdown
+    id: interface
+    attributes:
+      label: Where were you working?
+      options:
+        - Web console
+        - Terminal
+        - Not sure
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Plan2Code version
+      description: Found in version.json, the installer banner, or at the bottom of the web console's Help dialog.
+      placeholder: "2.4.0"
+  - type: input
+    id: environment
+    attributes:
+      label: OS, Node version and agent CLI
+      placeholder: "Windows 11, Node 22, Claude Code"
+  - type: textarea
+    id: logs
+    attributes:
+      label: Console output or logs
+      description: Anything from the terminal or the browser console that helps.
+      render: shell

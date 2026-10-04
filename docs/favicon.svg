@@ -1,33 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="Plan2Code postage stamp">
-  <defs>
-    <!-- Perforated stamp silhouette: white keeps, black bites out.
-         Few, deep notches so the scalloped edge still reads at 16px. -->
-    <mask id="perf">
-      <rect width="64" height="64" fill="#000"/>
-      <rect x="2" y="2" width="60" height="60" fill="#fff"/>
-      <g fill="#000">
-        <circle cx="2"  cy="2"  r="5"/><circle cx="14" cy="2"  r="5"/><circle cx="26" cy="2"  r="5"/>
-        <circle cx="38" cy="2"  r="5"/><circle cx="50" cy="2"  r="5"/><circle cx="62" cy="2"  r="5"/>
-        <circle cx="2"  cy="62" r="5"/><circle cx="14" cy="62" r="5"/><circle cx="26" cy="62" r="5"/>
-        <circle cx="38" cy="62" r="5"/><circle cx="50" cy="62" r="5"/><circle cx="62" cy="62" r="5"/>
-        <circle cx="2"  cy="14" r="5"/><circle cx="2"  cy="26" r="5"/>
-        <circle cx="2"  cy="38" r="5"/><circle cx="2"  cy="50" r="5"/>
-        <circle cx="62" cy="14" r="5"/><circle cx="62" cy="26" r="5"/>
-        <circle cx="62" cy="38" r="5"/><circle cx="62" cy="50" r="5"/>
-      </g>
-    </mask>
-  </defs>
-
-  <g mask="url(#perf)">
-    <!-- printed stamp -->
-    <rect x="2" y="2" width="60" height="60" fill="#D33A38"/>
-    <!-- the 2, set as a franking-machine numeral -->
-    <g fill="#FBFAF6">
-      <rect x="16" y="13" width="32" height="8"/>
-      <rect x="40" y="13" width="8"  height="22"/>
-      <rect x="16" y="27" width="32" height="8"/>
-      <rect x="16" y="27" width="8"  height="24"/>
-      <rect x="16" y="43" width="32" height="8"/>
-    </g>
-  </g>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="Plan2Code">
+  <rect x="6" y="2.6" width="20" height="25.4" rx="4.4" fill="#eef3fa" stroke="#3b332c" stroke-width="2.2" />
+  <rect x="9.6" y="27.6" width="4.8" height="2.6" rx="1.3" fill="#3b332c" />
+  <rect x="17.6" y="27.6" width="4.8" height="2.6" rx="1.3" fill="#3b332c" />
+  <path d="M16 8.8 L17.41 12.26 L21.14 12.53 L18.28 14.94 L19.17 18.57 L16 16.6 L12.83 18.57 L13.72 14.94 L10.86 12.53 L14.59 12.26 Z" fill="#2455a4" />
+  <path d="M12.2 20.6 Q16 24.2 19.8 20.6" fill="none" stroke="#3b332c" stroke-width="1.8" stroke-linecap="round" />
 </svg>
