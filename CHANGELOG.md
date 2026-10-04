@@ -51,6 +51,7 @@ All notable changes to Plan2Code will be documented in this file.
 
 - **pathfinder**: charting no longer ends the session, or shows "Session ended" in the web console, while its research subagents are still running. They live in the terminal's process, so closing it on a "done" page killed them mid-write. The session now waits for every one (the page shows a running count), each subagent ends `## Evidence` with a `**Research complete:**` line, and Work Step 2 re-fires any research question missing it. `console.md` makes the same rule general: no `finish` while any subagent or background job is still out.
 - **web-console**: reusing a settled question id for a different kind of question (say a multi-select turned confirm) now opens it as a new question instead of keeping the old answer.
+- **web-console**: Send no longer stays disabled when an agent posts a question mid-build while still marked `working` (seen on Implement + Review, where the question said "I'm carrying on while you decide"). Once an open question has an answer or a note staged, Send unlocks at once with "Still working · it reads this next", instead of waiting out the agent's `quietMinutes` (up to an hour); the server holds the send until the agent next looks. `building.md` now says a question stops the build: set `waiting` in the same post as the question and wait, never keep working with a question open.
 
 ### 📚 Documentation
 
