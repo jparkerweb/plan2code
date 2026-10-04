@@ -833,10 +833,28 @@
           Click the folder name in the middle of the bottom bar. It shows your
           folder's name and branch, such as <strong>shop · main</strong>, and
           <strong>shop + 2 folders · main</strong> once you have added some.
-          The workspace lasts for this console session only: it carries across
-          steps you start from the dashboard, and a new console session starts
-          with just the folder you started in.
+          It carries across steps you start from the dashboard.
         </p>
+        <h4>Remembered for next time</h4>
+        <ul>
+          <li>
+            Every change is saved as you make it, so the next console session in
+            this folder starts with the same folders.
+          </li>
+          <li>
+            Each spec keeps its own list. The first time you pick a spec on the
+            dashboard it starts as a copy of the project's list (the one shown
+            under <strong>Start from scratch</strong>), and after that the two
+            are separate. Picking a spec loads its list; the line under the
+            dialog's title says whose list you are looking at.
+          </li>
+          <li>
+            The lists live in <code>workspaces.json</code> in your own
+            Plan2Code settings folder, beside your look and feel, never in the
+            project. Finalize offers to forget a spec's list when it archives the
+            spec.
+          </li>
+        </ul>
         <h4>Adding a folder</h4>
         <ul>
           <li>
@@ -1363,9 +1381,10 @@
         <h4>What it counts</h4>
         <p>
           Each step you run here adds points: a plan or a set of documents
-          weighs more than a single answered question, and a built phase more
-          still, by how many tasks it completed: a big phase adds more than a
-          small one. Every two questions you answer add a point too, so a long
+          weighs more than a quick task, and a built phase more still, by how
+          many tasks it completed: a big phase adds more than a small one.
+          Every two questions you answer within one step add a point too
+          (rounded down, so a single answer adds nothing), so a long
           back-and-forth counts for more than a short one. Click the ring to see the count and a list of each step that added
           points, with what it added. It is a rule of thumb, not a
           reading of Plan2Code's real memory: long sessions tend to make it
@@ -2003,6 +2022,7 @@
         The folders the agent uses as context this session. It reads the extra ones for
         reference and only changes them if you ask.
       </p>
+      <p class="workspace-scope" id="workspace-scope"></p>
       <ul class="workspace-list" id="workspace-list"></ul>
       <div class="workspace-add">
         <label class="workspace-add-label" for="workspace-path">Add a folder</label>

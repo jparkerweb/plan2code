@@ -112,6 +112,11 @@ const SKILLS_DIR = path.join(__dirname, SKILLS_DIR_NAME);
 // Source prompts directory
 const SRC_DIR = path.join(__dirname, 'src');
 
+// Shared skill scripts (src/skill-scripts/). A skill lists the ones it runs in its
+// `scripts` field; SHARED_SCRIPTS_ALWAYS ride along with any skill that has scripts.
+const SHARED_SCRIPTS_DIR = 'skill-scripts';
+const SHARED_SCRIPTS_ALWAYS = ['common.mjs'];
+
 // ============================================================================
 // SYNC PROMPTS CONFIGURATION (merged from sync-prompts.js)
 // ============================================================================
@@ -136,6 +141,7 @@ const SOURCE_PROMPTS = [
     displayName: 'Init Mode',
     description: 'Generate AGENTS.md file for project-specific guidance',
     isUtility: true,
+    scripts: ['agents-md.mjs', 'agent-files.mjs'],
     additionalReferences: [{ source: 'web-console', target: 'web-console' }]
   },
   {
@@ -145,6 +151,7 @@ const SOURCE_PROMPTS = [
     displayName: 'Init Update Mode',
     description: 'Update existing AGENTS.md with new learnings',
     isUtility: true,
+    scripts: ['agents-md.mjs', 'agent-files.mjs', 'commit-msg.mjs'],
     additionalReferences: [{ source: 'web-console', target: 'web-console' }]
   },
   {
@@ -164,6 +171,7 @@ const SOURCE_PROMPTS = [
     isUtility: true,
     // review.md rides along for the web console's "Review it now" button, which
     // runs the review in the same session once the quick task is built.
+    scripts: ['specs.mjs', 'commit-msg.mjs', 'review-scope.mjs'],
     additionalReferences: [
       { source: 'web-console', target: 'web-console' },
       { source: 'plan2code-review.md', target: 'review.md' },
@@ -176,6 +184,7 @@ const SOURCE_PROMPTS = [
     name: 'plan',
     displayName: 'Planning Mode',
     description: 'Requirements analysis and architecture design',
+    scripts: ['specs.mjs'],
     additionalReferences: [{ source: 'web-console', target: 'web-console' }]
   },
   {
@@ -184,6 +193,7 @@ const SOURCE_PROMPTS = [
     name: 'revise-plan',
     displayName: 'Revision Mode',
     description: 'Modify specs mid-implementation when requirements change',
+    scripts: ['specs.mjs'],
     additionalReferences: [{ source: 'web-console', target: 'web-console' }]
   },
   {
@@ -192,6 +202,7 @@ const SOURCE_PROMPTS = [
     name: 'document',
     displayName: 'Documentation Mode',
     description: 'Transform planning output into structured implementation docs',
+    scripts: ['specs.mjs'],
     additionalReferences: [{ source: 'web-console', target: 'web-console' }]
   },
   {
@@ -202,6 +213,7 @@ const SOURCE_PROMPTS = [
     description: 'Execute implementation phase by phase',
     // review.md rides along for the web console's review offer on the sign-off
     // card, which runs the review in the same session before the phase is approved.
+    scripts: ['specs.mjs', 'commit-msg.mjs', 'review-scope.mjs'],
     additionalReferences: [
       { source: 'web-console', target: 'web-console' },
       { source: 'plan2code-review.md', target: 'review.md' },
@@ -214,6 +226,7 @@ const SOURCE_PROMPTS = [
     name: 'implement-review',
     displayName: 'Implementation + Review Mode',
     description: 'Implement one phase, review it, then request sign-off',
+    scripts: ['specs.mjs', 'commit-msg.mjs', 'review-scope.mjs'],
     additionalReferences: [
       { source: 'web-console', target: 'web-console' },
       { source: 'plan2code-3-implement.md', target: 'implement.md' },
@@ -228,6 +241,7 @@ const SOURCE_PROMPTS = [
     displayName: 'Review Mode',
     description: 'Comprehensive post-implementation review with spec compliance checking',
     isUtility: true,
+    scripts: ['specs.mjs', 'commit-msg.mjs', 'review-scope.mjs'],
     additionalReferences: [{ source: 'web-console', target: 'web-console' }]
   },
   {
@@ -236,6 +250,7 @@ const SOURCE_PROMPTS = [
     name: 'finalize',
     displayName: 'Finalization Mode',
     description: 'Validate, summarize, and archive completed work',
+    scripts: ['specs.mjs', 'commit-msg.mjs'],
     additionalReferences: [{ source: 'web-console', target: 'web-console' }]
   },
   {
@@ -245,6 +260,7 @@ const SOURCE_PROMPTS = [
     displayName: 'Handoff Mode',
     description: 'Compact the conversation into a self-contained handoff document for a fresh session',
     isUtility: true,
+    scripts: ['specs.mjs'],
     additionalReferences: [{ source: 'web-console', target: 'web-console' }]
   }
 ];
@@ -574,9 +590,55 @@ function computeExpectedSkills() {
         errors.push(`Could not include src/${reference.source} for ${skillName}: ${err.message}`);
       }
     }
+
+    // Scripts land flat in skills/<skill>/scripts/, beside the SKILL.md that runs them:
+    // the skill's own src/<source>-scripts/ plus the shared ones it names in `scripts`
+    // from src/skill-scripts/. Skills install independently, so shared code is copied
+    // into each skill rather than referenced across skill directories.
+    const scripts = new Map();
+    const ownScriptsDir = path.join(SRC_DIR, prompt.source.replace(/\.md$/, '-scripts'));
+    const sharedNames = prompt.scripts || [];
+    if (sharedNames.length || fs.existsSync(ownScriptsDir)) {
+      for (const name of [...SHARED_SCRIPTS_ALWAYS, ...sharedNames]) {
+        const abs = path.join(SRC_DIR, SHARED_SCRIPTS_DIR, name);
+        if (!fs.existsSync(abs)) {
+          errors.push(`src/${SHARED_SCRIPTS_DIR}/${name} (named by ${skillName}) does not exist`);
+          continue;
+        }
+        scripts.set(name, fs.readFileSync(abs));
+      }
+      if (fs.existsSync(ownScriptsDir)) {
+        for (const relPath of listFilesRecursive(ownScriptsDir)) {
+          const name = relPath.split(path.sep).join('/');
+          if (scripts.has(name) || name === 'version.json') {
+            errors.push(`src/${path.basename(ownScriptsDir)}/${name} collides with a ${name === 'version.json' ? 'generated file' : 'shared script'} of the same name`);
+            continue;
+          }
+          scripts.set(name, fs.readFileSync(path.join(ownScriptsDir, relPath)));
+        }
+      }
+      // The version the scripts report (the finalize feedback payload needs it, and an
+      // installed skill has no repo version.json to read).
+      scripts.set('version.json', fs.readFileSync(path.join(__dirname, 'version.json')));
+    }
+    for (const [name, content] of scripts) {
+      expected.set(`${SKILLS_DIR_NAME}/${skillName}/scripts/${name}`, content);
+    }
   }
 
   return { expected, errors };
+}
+
+/**
+ * Remove empty directories below `dir` (never `dir` itself), deepest first.
+ */
+function removeEmptyDirs(dir) {
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    const sub = path.join(dir, entry.name);
+    removeEmptyDirs(sub);
+    if (fs.readdirSync(sub).length === 0) fs.rmdirSync(sub);
+  }
 }
 
 function buildSkills(quiet = false) {
@@ -606,6 +668,8 @@ function buildSkills(quiet = false) {
       stats.pruned++;
       if (!quiet) console.log(`  ${COLORS.YELLOW}░░░${COLORS.RESET} Pruned: ${key}`);
     }
+    // A folder the build no longer fills (a skill that lost all its scripts) goes too.
+    removeEmptyDirs(skillDir);
   }
 
   for (const [relPath, content] of expected) {

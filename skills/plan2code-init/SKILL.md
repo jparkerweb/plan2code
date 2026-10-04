@@ -22,6 +22,14 @@ Analyze this codebase and create `AGENTS.md` to guide future AI coding agents (C
 
 The FIRST thing you do, before anything else in this file — before exploring the codebase: ask **web console** (browser page, suggested) or **terminal**? Console → run `node "<D>/console.mjs" open --workflow init` before reading (<D>: references/web-console/ beside this SKILL.md — ~/.agents/skills/plan2code-init/references/web-console/ globally — or the dir in ~/.plan2code/console/console-dir), then read <D>/console.md. Every confirmation — the restructure offer, the AI-agent file-sync prompt — goes through it, and the finished AGENTS.md lands on the page as a doc marked `saved` (the file is already on disk — no download offered). Switchable anytime. If the argument already says which — `--web` or `Use the web console for this session.` — take it and do not ask; drop the flag. Launched by the dashboard? Its session is already open — resume it (console.md → Launches), then Content. On the console, a `__stop` action is the person ending the session (console.md → Stop requests); at every session end post `finish` BEFORE `stop`; unless it is a pause, the finish carries `"dashboard": true` (the Back to the dashboard button) and you keep waiting for the press (console.md → Finishing).
 
+## Scripts
+
+`<S>` is `scripts/` beside this SKILL.md (`~/.agents/skills/plan2code-init/scripts/` globally). Run from the project root; each prints one JSON object, and on a non-zero exit `next` says what to do.
+
+- `node "<S>/agents-md.mjs" inspect`: does AGENTS.md exist, its line count against 500, `structure` (`progressive` or `single-file`), sections, `.agents-docs/` files, broken links, orphans. Run it first.
+- `node "<S>/agents-md.mjs" filename "<Section Name>"`: a section's detail file name, its `Details:` link line and its two header lines.
+- `node "<S>/agent-files.mjs" detect` / `apply <id> ... [--dry-run]`: AI Agent File Sync (below).
+
 ## Content
 
 1. **Commands**: Build, lint, test, run single test, and other common development tasks
@@ -31,8 +39,8 @@ The FIRST thing you do, before anything else in this file — before exploring t
 
 ## Rules
 
-- If `AGENTS.md` exists: suggest improvements instead of creating new
-- If only `CLAUDE.md` exists: migrate its content to the new `AGENTS.md`
+- If `AGENTS.md` exists (`inspect` → `exists`): suggest improvements instead of creating new
+- If only `CLAUDE.md` exists (`inspect` → `otherFiles`): migrate its content to the new `AGENTS.md`
 - Include relevant content from: `README.md`, `PROJECT.md`, `.cursorrules`, `.cursor/rules/`, `GEMINI.md`, `.github/copilot-instructions.md`
 - Omit: obvious instructions, generic dev practices, easily discoverable file structures, made-up sections
 - Keep under 500 lines with focused, actionable, scoped rules
@@ -51,13 +59,8 @@ This file provides guidance to AI coding agents working with code in this reposi
 
 Generate AGENTS.md as an **index file** — each section gets a 2-3 line summary with a markdown link to a detail file. Full content goes in `.agents-docs/` directory files.
 
-- **Index format** — each section in AGENTS.md: heading, brief summary, then `Details: [Section Name](./.agents-docs/AGENTS-<section-name>.md)`
-- **Detail files** — named `AGENTS-<section-name>.md` using kebab-case from the section header (e.g., "Development Commands" → `AGENTS-development-commands.md`)
-- **Detail file header** — each file starts with:
-  ```
-  # <Section Name>
-  > Part of [AGENTS.md](../AGENTS.md) — project guidance for AI coding agents.
-  ```
+- **Index format** — each section in AGENTS.md: heading, brief summary, then its `Details:` link line
+- **Detail files** — `agents-md.mjs filename "<Section Name>"` gives the file (`AGENTS-<kebab-case>.md`, e.g. "Development Commands" → `.agents-docs/AGENTS-development-commands.md`), the `Details:` link and the two header lines (`# <Section Name>` plus the "Part of AGENTS.md" breadcrumb) to start it with
 
 ### Always Inline
 
@@ -90,9 +93,8 @@ When you make a mistake, get corrected, or discover something about this codebas
 
 ### Directory Setup
 
-- Create `.agents-docs/` directory in the project root
-- Each file: `AGENTS-<section-name>.md` where `<section-name>` is kebab-case of the section header
-- Each file starts with `# <Section Name>` followed by breadcrumb: `> Part of [AGENTS.md](../AGENTS.md) — project guidance for AI coding agents.`
+- Create `.agents-docs/` directory in the project root, one file per split section, named and headed as `filename` prints
+- After writing, rerun `inspect`: `problems` must be empty (no broken link, no orphan, no missing breadcrumb, nothing always-inline split out)
 
 ### Grouping Heuristics
 
@@ -102,24 +104,13 @@ When you make a mistake, get corrected, or discover something about this codebas
 
 ### Existing AGENTS.md Without `.agents-docs/`
 
-If AGENTS.md exists but `.agents-docs/` does not, offer to restructure: "Your AGENTS.md uses a single-file format. Want to restructure it for progressive discovery? This splits detailed sections into `.agents-docs/` files and converts AGENTS.md to a lightweight index." Only restructure if the user confirms — never auto-restructure.
+If `inspect` reports `structure: "single-file"`, offer to restructure: "Your AGENTS.md uses a single-file format. Want to restructure it for progressive discovery? This splits detailed sections into `.agents-docs/` files and converts AGENTS.md to a lightweight index." Only restructure if the user confirms — never auto-restructure.
 
 ---
 
 ## AI Agent File Sync
 
-After creating `AGENTS.md`, check for these files and offer to replace with references:
-
-| File | Title | Path |
-|------|-------|------|
-| `CLAUDE.md` | CLAUDE.md | `./AGENTS.md` |
-| `GEMINI.md` | GEMINI.md | `./AGENTS.md` |
-| `.cursorrules` | .cursorrules | `./AGENTS.md` |
-| `.github/copilot-instructions.md` | Copilot Instructions | `../AGENTS.md` |
-| `.cursor/rules/*.md` | Project Rules | `../../AGENTS.md` |
-| `.windsurf/rules/*.md` | Project Rules | `../../AGENTS.md` |
-
-For `.cursor/rules/` and `.windsurf/rules/`: delete existing `.md` files, create single `reference.md`.
+After creating `AGENTS.md`, run `agent-files.mjs detect`. It finds `CLAUDE.md`, `GEMINI.md`, `.cursorrules`, `.github/copilot-instructions.md`, and the `.cursor/rules/` and `.windsurf/rules/` folders, with each one's line count and `custom` (more than 10 lines). Leave out entries with `alreadyPointer: true` (already the AGENTS.md pointer) and `linkedToAgents: true` (a symlink or hard link: they are AGENTS.md); nothing left: skip this step silently.
 
 ### Confirmation Prompt
 
@@ -133,45 +124,11 @@ If files found, show:
     ╰┬─┬╯
 
 I found these AI agent configuration files:
-- [list files found]
+- [each `found` id, with its line count]
 
 Update them to reference AGENTS.md? (Yes / Select / No)
 ```
 
-Only modify confirmed files.
+Relay every `warnings` line (custom content that would be replaced). A rules folder is one entry: replacing it deletes its `.md` files (and `.mdc` for Cursor) and leaves one `reference.md`.
 
-### CLAUDE.md Template
-
-CLAUDE.md gets a special template because Claude Code auto-loads it — the `CRITICAL — MANDATORY FIRST STEP` directive ensures AGENTS.md is always read:
-
-```markdown
-# CLAUDE.md
-
-**CRITICAL — MANDATORY FIRST STEP: You MUST read [AGENTS.md](./AGENTS.md) before responding to ANY user message, including simple questions. Do NOT skip this step regardless of how trivial the request appears. No exceptions.**
-
-See AGENTS.md for complete project documentation including:
-- Development commands and setup
-- Architecture overview
-- Environment variables
-- Testing patterns
-- Deployment guides
-- Keeping this file current / Failure log
-- Section details in .agents-docs/
-
-This file exists for Claude Code auto-loading. All AI coding agents should reference AGENTS.md.
-```
-
-### Reference Template (all other files)
-
-```markdown
-# [Title]
-
-See [AGENTS.md]([Path]) for complete project documentation including:
-- Development commands and setup
-- Architecture overview
-- Environment variables
-- Testing patterns
-- Deployment guides
-- Keeping this file current / Failure log
-- Section details in .agents-docs/
-```
+Only modify confirmed files: `agent-files.mjs apply <id> ...` with the ids the user confirmed (`--all` for Yes). It writes the pointer templates itself: `CLAUDE.md` gets the `CRITICAL — MANDATORY FIRST STEP` directive that makes Claude Code read AGENTS.md first (it auto-loads CLAUDE.md); every other file gets the "See AGENTS.md for complete project documentation including:" pointer with the same bullet list and the right relative path. Rerunning is harmless (`unchanged`).

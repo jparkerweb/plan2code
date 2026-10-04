@@ -117,6 +117,7 @@ The skills CLI owns distribution from step 4 onward. It stores canonical skills 
 | Skill name | `generateSkillName(prompt)`, such as `plan2code-1-plan` or `plan2code-init` |
 | Frontmatter | `name`, `description`, `disable-model-invocation: true` |
 | Reference files | `skills/<skill-name>/references/<path>`, copied from `src/<prompt>-references/` and `additionalReferences` (any file type; every skill bundles `web-console/` plus a copy of `version.json`) |
+| Scripts | `skills/<skill-name>/scripts/<file>.mjs`, plus `common.mjs` and a generated `version.json` (see Skill Scripts in the architecture doc) |
 
 `disable-model-invocation: true` is unconditional because these workflows are user-initiated. Agents that do not recognize the field ignore it.
 
@@ -132,7 +133,7 @@ See the `skills/` build-artifact gotcha in [Code Style & Gotchas](./AGENTS-code-
 
 ## Adding a New Workflow Prompt / Skill
 
-1. Create `src/plan2code-<name>.md` with body content only and keep it under 11,500 characters.
-2. Register it in `SOURCE_PROMPTS` in `install.js` (with the web-console `additionalReferences` entry every skill carries); add a `generateStepLabel()` case when needed. Add it to the skill/workflow table and the "What each skill reads and writes" table in `src/plan2code.md` (the latter is checked by `scripts/check-skill-table.mjs`), and to the workflow lists in `src/web-console/public/answers.js`, `public/meter.js` and the `console.mjs` usage text.
+1. Create `src/plan2code-<name>.md` with body content only and keep it under 20,000 characters.
+2. Register it in `SOURCE_PROMPTS` in `install.js` (with the web-console `additionalReferences` entry every skill carries); add a `generateStepLabel()` case when needed. List any shared scripts it runs in `scripts: [...]`, and put its own scripts in `src/plan2code-<name>-scripts/`. Add it to the skill/workflow table and the "What each skill reads and writes" table in `src/plan2code.md` (the latter is checked by `scripts/check-skill-table.mjs`), and to the workflow lists in `src/web-console/public/answers.js`, `public/meter.js` and the `console.mjs` usage text.
 3. Update command inventories in `README.md`, `QUICK-REFERENCE.md`, `.agents-docs/AGENTS-architecture.md`, and `CHANGELOG.md`. Update `docs/index.html` only for core pipeline steps.
 4. Run `npm run build:skills` and `npm test`.

@@ -44,42 +44,38 @@ the next task (and shape the whole document around it), but still confirm.
 
 ## Where to write it
 
-Ask the user if they would like to save the file to the tempory directory of the user's OS (this should be the default) or to some other location like `./handoffs/` at the repo root.  Filenames should have a timestamped filename so it's discoverable but doesn't collide with earlier handoffs:
+Ask the user if they would like to save the file to the temporary directory of the user's OS (this should be the default) or to some other location like `./handoffs/` at the repo root. Then let the script pick the exact path, from the project root:
 
 ```
-<user-specified-path>/<YYYY-MM-DD-HHmm>-handoff.md
+node "<S>/handoff-path.mjs" --dir temp        # or: --dir handoffs
 ```
 
-Get the timestamp from the shell rather than guessing — e.g. PowerShell
-`Get-Date -Format 'yyyy-MM-dd-HHmm'`. Create the `<user-specified-path>/` directory if it
-doesn't exist.
+`<S>` is `scripts/` beside this SKILL.md (`~/.agents/skills/plan2code-handoff/scripts/` globally). It prints one JSON object: `path` is `<dir>/<YYYY-MM-DD-HHmm>-handoff.md` from the clock (suffixed `-2`, `-3`... rather than overwrite an earlier handoff), and the folder is created if missing. Write the document to exactly that `path`. Exit 5 means the folder could not be created (or `--dir` names a file): ask for another location.
 
 ### Make sure you aren't leaking the file into version control
 
 The handoff is working state for the next session, not a project artifact, so it
 should stay out of commits and PRs. Don't assume it will — this skill may run in
-any repo. Before (or right after) writing, check whether the path is ignored:
+any repo. The same output's `git` block says:
 
-- Is this even a git repo? `git rev-parse --is-inside-work-tree` — if it errors,
-  there's nothing to ignore; skip this and just tell the user where the file is.
-- Is the file ignored? `git check-ignore handoffs/` (exit 0 = ignored). This is
-  the reliable check — a repo may ignore `handoffs/` via a global or nested
-  `.gitignore`, so don't rely on grepping the root `.gitignore` alone.
+- `repo: false`, or `inRepo: false` (the OS temp dir): nothing to ignore; just tell the user where the file is.
+- `ignored: true`: git already ignores it (via any `.gitignore`, global or nested; `git check-ignore` is the check).
+- `ignored: false`: it would be tracked; `git.ignoreLine` is the line to offer, and the top-level `warning` says so.
 
 If it is **not** ignored, do not silently modify the user's `.gitignore`. Tell
-them the file would be tracked by git and offer to add a `handoffs/` line to
-`.gitignore` — let them decide. Some users may want handoffs committed so
+them the file would be tracked by git and offer to add the `ignoreLine` (e.g.
+`handoffs/`) to `.gitignore` — let them decide. Some users may want handoffs committed so
 teammates get them; that's a legitimate choice, so present it, don't force it.
 
 ## If this touched a plan2code spec
 
-`specs/` is gitignored — Glob/Grep and file search silently skip it; use a shell
-listing instead: `ls specs/` (bash) or `Get-ChildItem specs/` (PowerShell). If the
+`specs/` is gitignored — Glob/Grep and file search silently skip it. If the
 conversation worked inside `specs/<feature>/`, confirm the exact state before
-writing:
+writing with `node "<S>/specs.mjs" status specs/<feature>`, which reads the disk:
 
-- Which `phase-X.md` is in progress, and whether its `- [ ]` tasks are still
-  unchecked (checkboxes are ground truth, not the overview's Phase Checklist).
+- Which `phase-X.md` is in progress, and which of its tasks are still open
+  (each phase's `tasks` and `openTasks`: checkboxes are ground truth, not the
+  overview's Phase Checklist; a disagreement shows up in `checks`).
 - Cite that file and its checkbox state directly in **Current state** and
   **Key files & pointers**, instead of relying on conversation memory alone.
 - Let **Suggested skills** name the specific next pipeline command
@@ -123,7 +119,7 @@ specs, the files you were editing, relevant logs (e.g. .plan2code-loop NDJSON),
 and any PR/issue URLs.>
 
 ## Gotchas & decisions
-<Non-obvious things learned this session: a constraint (e.g. the 11k-char limit
+<Non-obvious things learned this session: a constraint (e.g. the 20,000-char limit
 on src/plan2code-*.md), a decision made and why, a dead end already ruled out,
 a command that must be run a specific way. Save the reader from re-discovering
 these the hard way.>
@@ -153,8 +149,9 @@ Tell the user the path you wrote to and give a one-line summary of the confirmed
 next task, so they know what the incoming agent will start on. Mention that a
 fresh session can be pointed at the file to resume the work.
 
-If your ignore check above found the file is **not** gitignored (or the repo has
-no `.gitignore`, or it isn't a git repo at all), say so plainly here — e.g. "note:
-`handoffs/` isn't gitignored in this repo, so this file will show up in `git
-status` and could be committed" — and offer to add the ignore line. Never leave
+If your ignore check above found the file is in a repo and **not** gitignored
+(`git.ignored: false`, which includes a repo with no `.gitignore`), say so plainly
+here, e.g. "note: `handoffs/` isn't gitignored in this repo, so this file will
+show up in `git status` and could be committed", and offer to add the
+`ignoreLine`. Outside a repo there is nothing to ignore. Never leave
 the user unaware that the handoff might ride along into a commit.

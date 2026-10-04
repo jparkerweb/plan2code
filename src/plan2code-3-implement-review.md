@@ -95,7 +95,7 @@ Only this prompt can obtain phase approval.
 When the user replies `approved` to the final sign-off:
 
 1. Run Implementation Mode's `After Approval / Session End` actions.
-2. Mark overview.md `[/]` to `[x]` and set the phase status to `Complete`.
+2. Mark overview.md `[/]` to `[x]` and set the phase status to `Complete` (`specs.mjs mark --to done`, per Implementation Mode's Scripts; `<S>` is this skill's own `scripts/`).
 3. Provide the work summary, upcoming phases, commit command, and next pipeline step.
 4. Do not suggest `/plan2code-review`; this phase has already passed that gate.
 5. Mention `/plan2code-1b-revise-plan` only when it remains relevant.

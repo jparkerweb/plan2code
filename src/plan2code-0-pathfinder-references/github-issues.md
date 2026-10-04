@@ -401,6 +401,8 @@ Form B is unchanged — a turn that asks the human something still says `WAITING
 
 Form C — the fork-menu after a recorded decision — is unchanged in shape, with two substitutions: the takeable options come from the frontier query rather than the checklist rows, and the `OR START FRESH` command carries the map issue URL. The `RECOMMENDED` marker and the ~3-decision checkpoint work exactly as `trail.md` describes.
 
+With no script to draw them, the labels are exact: Form A `NEXT STEP · start a new conversation and run:`, Form B `WAITING ON YOU · answer here, in this conversation:`, Form C `OR START FRESH · new conversation, paste:`. The Form C question tool uses the header `Next step` and the question "Continue here, or start fresh? Everything is saved." (add "I recommend starting fresh, to keep me sharp." at the ~3-decision checkpoint). Its options are up to three takeable question names plus `Start fresh`, one marked `RECOMMENDED`.
+
 ---
 
 ## BRIEF mode

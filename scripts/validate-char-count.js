@@ -3,7 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const CHAR_LIMIT = 11500;
+const CHAR_LIMIT = 20000;
 const srcDir = path.join(__dirname, '..', 'src');
 
 // Note: readdirSync is non-recursive, so files in subdirectories like
