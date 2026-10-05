@@ -37,6 +37,7 @@ All notable changes to Plan2Code will be documented in this file.
 - **finalize**: `feedback-payload.mjs` counts the same phase files `specs.mjs` does, `submit` refuses an oversize URL when `gh` is unavailable (`oversize`), and a bare spec name present in both `specs/` and `specs--completed/` is refused as ambiguous.
 - Every script was checked against real specs and Pathfinder maps in other repositories and by four independent reviews; each issue found has a regression test.
 
+- **document**: `overview.md` puts the Phase Checklist and Parallel Execution Groups directly under the Summary, ahead of the Tech Stack, Architecture, Risks and Success Criteria, so the phases are found without scrolling. Every script finds these sections by heading, so specs written in the old order keep working.
 - **install.js**: the closing message beside Planny now names the dashboard first: `plan2code` from any project, or `/plan2code` in your agent when the command could not be installed. The docs link moves to the line under it.
 - **web-console**: User Preferences opens from a gear button instead of the three swatches, and the default highlight color is now ocean blue instead of rust.
 - **web-console**: the dashboard rail marks the suggested next step with a small dot, since the center pane's Suggested pill can scroll out of view. Send pulses only while it is the primary button.
