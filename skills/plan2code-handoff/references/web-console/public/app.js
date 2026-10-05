@@ -1825,8 +1825,11 @@ function renderBriefButton() {
 function renderViews() {
   const nav = $("views");
   nav.replaceChildren();
+  // Sent and not yet picked up: the same ring as Ask, until Plan2Code moves on
+  // or goes quiet (a turning ring would pass a dead session for a slow one).
+  const sentBusy = pendingResult && !gone && !agentAdrift();
   const tabs = [
-    { id: "questions", label: isDashboard() ? "Dashboard" : "Questions", count: myTurn().length },
+    { id: "questions", label: isDashboard() ? "Dashboard" : "Questions", count: myTurn().length, busy: sentBusy },
   ];
   // Built in rather than posted: present exactly while the spec in view has
   // an overview.md. A tab that vanishes under the person sends them home.
@@ -1835,11 +1838,21 @@ function renderViews() {
   else if (view === "overview") view = "questions";
   for (const d of docs()) tabs.push({ id: "doc:" + d.id, label: d.title || "Document", count: 0 });
   // Always last, on every workflow and after a finish: the Quick question chat.
-  tabs.push({ id: "ask", label: "Ask", count: 0, dot: chatDot });
+  // The ring left of "Ask" shows exactly when the conversation's own ring does:
+  // a question the agent picked up and has not answered yet.
+  const ask = askState();
+  const askBusy = ask.view.rows.some((r) => r.working) && ask.send.state !== "offline" && !agentAdrift();
+  tabs.push({ id: "ask", label: "Ask", count: 0, dot: chatDot, busy: askBusy });
 
   for (const t of tabs) {
     const b = el("button", "view-tab", t.label);
     b.type = "button";
+    if (t.busy) {
+      const spin = el("span", "spinner tiny tab-spin");
+      spin.setAttribute("aria-hidden", "true");
+      b.prepend(spin);
+      b.title = t.id === "ask" ? "Plan2Code is working on an answer" : "Sent. Waiting for Plan2Code";
+    }
     b.setAttribute("aria-current", String(view === t.id || (t.id === "questions" && view === "end")));
     if (t.count) {
       const c = el("span", "tab-count", String(t.count));
