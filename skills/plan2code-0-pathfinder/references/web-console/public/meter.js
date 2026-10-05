@@ -53,16 +53,55 @@ export const TASK_EVENTS = Object.freeze(new Set(Object.keys(TASK_BONUS)));
 // The most tasks one run may report: past this it is a typo, not a phase.
 export const MAX_TASKS = 999;
 
+// A build scores while it runs, not only once it is approved: console.mjs
+// writes a `progress` ledger entry whenever a build's `headline.cleared`
+// rises, and the build's row scores those tasks at TASKS_PER_POINT with no
+// bonus. The phase's `run` then takes the row over with its final score, so
+// the total only ever climbs. Workflows whose headline counts tasks:
+export const PROGRESS_WORKFLOWS = Object.freeze(new Set(["implement", "implement-review"]));
+
+// Implement + Review reviews every phase as a stage of the build. A `review`
+// run inside it is that stage, so it scores the phase's TASK_BONUS when it
+// starts, and the phase's own run leaves the bonus out after it.
+const BUILT_IN_REVIEW = Object.freeze({ "implement-review": "implement-review-phase" });
+
+/**
+ * The ledger entry a build's progress post stands for, or null when it adds
+ * nothing: not a task-counting workflow, no whole `cleared`, or no more tasks
+ * than this build already has. `seg` is how many phases this skill run has
+ * finished, so a second phase in the same run starts its own count, but only
+ * once its headline is back at 0: until then a `cleared` is the finished
+ * phase's, posted again, and opening a build on it would count it twice.
+ */
+export function progressEntry(entries, launch, workflow, cleared) {
+  if (!PROGRESS_WORKFLOWS.has(workflow)) return null;
+  if (cleared !== 0 && !isTaskCount(cleared)) return null;
+  const list = Array.isArray(entries) ? entries : [];
+  const seg = list.filter((e) => e && e.kind === "run" && TASK_EVENTS.has(e.event) && launchOf(e.id) === launch).length;
+  const build = `${launch}:b${seg}`;
+  const mine = list.filter((e) => e && e.kind === "progress" && e.build === build);
+  const entry = (tasks) => ({ kind: "progress", id: `${build}:${tasks}`, build, workflow, tasks });
+  if (cleared === 0) return seg > 0 && !mine.length ? entry(0) : null;
+  if (seg > 0 && !mine.length) return null;
+  const most = mine.reduce((n, e) => Math.max(n, e.tasks), 0);
+  return cleared > most ? entry(cleared) : null;
+}
+
 /** A valid `run.tasks`: a whole number from 1 to MAX_TASKS. */
 export function isTaskCount(tasks) {
   return Number.isInteger(tasks) && tasks >= 1 && tasks <= MAX_TASKS;
 }
 
-/** What one `run` scores, from its event and (for a built phase) its tasks. */
-export function runPoints(event, tasks) {
+/**
+ * What one `run` scores, from its event and (for a built phase) its tasks.
+ * `bonus: false` leaves the review bonus out, for a phase whose review
+ * already scored.
+ */
+export function runPoints(event, tasks, { bonus = true } = {}) {
   if (TASK_EVENTS.has(event) && isTaskCount(tasks)) {
-    return Math.ceil(tasks / TASKS_PER_POINT) + TASK_BONUS[event];
+    return Math.ceil(tasks / TASKS_PER_POINT) + (bonus ? TASK_BONUS[event] : 0);
   }
+  if (TASK_EVENTS.has(event) && !bonus) return weightOf(event) - TASK_BONUS[event];
   return weightOf(event);
 }
 
@@ -133,6 +172,8 @@ export function breakdownFrom(entries) {
   const seen = new Set();
   const rows = [];
   const answers = new Map(); // launch id -> { row, count, workflow }
+  const builds = new Map(); // launch id -> the row of the build in progress
+  const reviewed = new Set(); // launch ids whose built-in review has scored
   for (const entry of Array.isArray(entries) ? entries : []) {
     if (!entry || typeof entry !== "object") continue;
     if (entry.id !== undefined) {
@@ -150,17 +191,54 @@ export function breakdownFrom(entries) {
       tally.count += 1;
       continue;
     }
+    if (entry.kind === "progress") {
+      if (!isTaskCount(entry.tasks)) continue;
+      const launch = launchOf(entry.id);
+      let row = builds.get(launch);
+      if (!row || row.build !== entry.build) {
+        row = { label: "", points: 0, build: entry.build, tasks: 0 };
+        builds.set(launch, row);
+        rows.push(row);
+      }
+      if (entry.tasks > row.tasks) {
+        row.tasks = entry.tasks;
+        row.points = Math.ceil(entry.tasks / TASKS_PER_POINT);
+        const where = WORKFLOW_NAMES[entry.workflow] || "Build";
+        row.label = `${where}: ${entry.tasks} ${entry.tasks === 1 ? "task" : "tasks"} built so far`;
+      }
+      continue;
+    }
     let points = 0;
     let label = "";
     if (entry.kind === "launch" && LAUNCH_COUNTED.has(entry.workflow)) {
       points = weightOf(entry.workflow);
       label = LAUNCH_LABELS[entry.workflow] || entry.workflow;
     } else if (entry.kind === "run") {
-      points = runPoints(entry.event, entry.tasks);
-      const unit = unitOf(entry.id);
-      const counted = TASK_EVENTS.has(entry.event) && isTaskCount(entry.tasks);
-      const size = counted ? ` (${entry.tasks} ${entry.tasks === 1 ? "task" : "tasks"})` : "";
-      label = (RUN_LABELS[entry.event] || entry.event) + (unit ? `: ${unit}` : "") + size;
+      const launch = launchOf(entry.id);
+      const builtIn = BUILT_IN_REVIEW[entry.workflow];
+      if (entry.event === "review" && builtIn) {
+        // The review stage of Implement + Review: it scores the bonus its
+        // phase would otherwise carry, once per skill run.
+        if (reviewed.has(launch)) continue;
+        reviewed.add(launch);
+        points = TASK_BONUS[builtIn];
+        label = `${WORKFLOW_NAMES[entry.workflow]}: code review run`;
+      } else {
+        const bonus = !(TASK_EVENTS.has(entry.event) && reviewed.has(launch));
+        points = runPoints(entry.event, entry.tasks, { bonus });
+        const unit = unitOf(entry.id);
+        const counted = TASK_EVENTS.has(entry.event) && isTaskCount(entry.tasks);
+        const size = counted ? ` (${entry.tasks} ${entry.tasks === 1 ? "task" : "tasks"})` : "";
+        label = (RUN_LABELS[entry.event] || entry.event) + (unit && unit !== entry.event ? `: ${unit}` : "") + size;
+      }
+      // A finished phase takes over its build's progress row, in place.
+      if (TASK_EVENTS.has(entry.event) && builds.has(launch)) {
+        const row = builds.get(launch);
+        builds.delete(launch);
+        row.label = label;
+        row.points = Math.max(points, row.points);
+        continue;
+      }
     }
     if (points > 0) rows.push({ label, points });
   }
@@ -169,7 +247,7 @@ export function breakdownFrom(entries) {
     const where = WORKFLOW_NAMES[workflow] ? ` in ${WORKFLOW_NAMES[workflow]}` : "";
     row.label = `${count} ${count === 1 ? "answer" : "answers"}${where}`;
   }
-  return rows.filter((row) => row.points > 0);
+  return rows.filter((row) => row.points > 0).map(({ label, points }) => ({ label, points }));
 }
 
 /** The session's points, folded from ledger entries in order. */

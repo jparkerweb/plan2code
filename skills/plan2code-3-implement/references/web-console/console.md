@@ -901,7 +901,9 @@ Per-unit work is yours to report, with `run` in any post:
   not count), a whole number from 1 to 999. A built phase scores by its size,
   one point per 3 tasks rounded up, and Implement + Review one more for the
   review. Always send it: without it a phase scores a flat 2 (or 3), however
-  big it was. On any other event it is exit `3`.
+  big it was. On any other event it is exit `3`. The console already counts a
+  build's tasks from `headline.cleared` as they are ticked off; the phase's
+  `run` takes that count over with the final score, so it never counts twice.
 - One `run` per post. Which events a workflow reports is in its own notes
   (Workflow notes → Pathfinder; `building.md` for Implement and for the
   review run on the page after a build).

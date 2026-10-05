@@ -140,6 +140,7 @@ import {
   breakdownFrom,
   meterView,
   pointsFrom,
+  progressEntry,
   RED_AT,
   ANSWERS_PER_POINT,
   ringFraction,
@@ -4644,6 +4645,65 @@ test("meter: a built phase scores by the tasks it completed", () => {
     { label: "Implement + Review phase built: phase-3 (1 task)", points: 2 },
   ]);
   assert.equal(levelFor(pointsFrom(entries)), "yellow", "one big phase can yellow a session alone");
+});
+
+test("meter: a build scores its tasks as it goes, and the approved phase takes the row over", () => {
+  const run = (event, id, extra = {}) => ({ kind: "run", id: `L1:${id}`, event, workflow: "implement-review", ...extra });
+  const ledger = [{ kind: "launch", id: "L1", workflow: "implement-review" }];
+  const tick = (cleared) => {
+    const e = progressEntry(ledger, "L1", "implement-review", cleared);
+    if (e) ledger.push(e);
+    return e;
+  };
+  assert.equal(tick(0), null, "the first build needs no reset");
+  for (let n = 1; n <= 17; n++) tick(n);
+  assert.equal(tick(17), null, "the same count posted again adds nothing");
+  assert.equal(tick(9), null, "a lower count adds nothing");
+  assert.deepEqual(breakdownFrom(ledger), [{ label: "Implement + Review: 17 tasks built so far", points: 6 }]);
+
+  ledger.push(run("review", "review"));
+  ledger.push(run("review", "review-again"));
+  assert.equal(pointsFrom(ledger), 7, "the built-in review scores its 1 once, not a Review's 2");
+  ledger.push(run("implement-review-phase", "phase-6", { tasks: 17 }));
+  assert.deepEqual(breakdownFrom(ledger), [
+    { label: "Implement + Review phase built: phase-6 (17 tasks)", points: 6 },
+    { label: "Implement + Review: code review run", points: 1 },
+  ], "the phase took its build's row over and left the review's point out");
+  assert.equal(pointsFrom(ledger), 7);
+
+  assert.equal(tick(17), null, "the finished phase's count posted again opens nothing");
+  assert.equal(tick(2), null, "nor does a count before the next phase resets to 0");
+  assert.equal(tick(0).tasks, 0);
+  tick(2);
+  assert.equal(pointsFrom(ledger), 8, "the next phase in the same run counts afresh");
+
+  assert.equal(progressEntry([], "L1", "plan", 3), null, "only builds count progress");
+  assert.equal(progressEntry([], "L1", "implement", 2.5), null);
+  assert.equal(progressEntry([], "L1", "implement", 1000), null);
+  // A phase that ends below its progress (blocked tasks) never takes points back.
+  assert.equal(pointsFrom([
+    { kind: "progress", id: "L1:b0:9", build: "L1:b0", workflow: "implement", tasks: 9 },
+    { kind: "run", id: "L1:phase-1", event: "implement-phase", workflow: "implement", tasks: 5 },
+  ]), 3);
+  // Implement's own review verdict is an extra review and still scores 2.
+  assert.equal(pointsFrom([{ kind: "run", id: "L1:review", event: "review", workflow: "implement" }]), 2);
+});
+
+test("meter: a build post's headline.cleared reaches the ledger as progress", () => {
+  const res = cli(["open", "--workflow", "implement", "--title", "Meter: Phase 1", "--no-open"]);
+  const s = { sid: res.json.sid, session: res.json.session };
+  try {
+    const points = () => meterView(readLedger(s.session)).points;
+    assert.equal(postPatch(s, { headline: { stage: "Phase 1", cleared: 0, total: 7 } }).status, 0);
+    assert.equal(postPatch(s, { headline: { cleared: 4 } }).status, 0);
+    assert.equal(points(), 2, "4 tasks built so far");
+    assert.equal(postPatch(s, { headline: { cleared: 4 } }).status, 0);
+    assert.equal(readLedger(s.session).filter((e) => e.kind === "progress").length, 1, "a repeat writes nothing");
+    assert.equal(postPatch(s, { headline: { cleared: 7 }, run: { event: "implement-phase", id: "phase-1", tasks: 7 } }).status, 0);
+    assert.equal(points(), 3, "the phase's run took over: 7 tasks score 3, not 3 + 3");
+  } finally {
+    cli(["stop", "--session", s.sid]);
+  }
 });
 
 test("meter: answers score per skill run, one point per two, rounded down", () => {

@@ -352,6 +352,10 @@ Review, Init and Init update 2; Revise plan, Quick task and Finalize 1; a
 Pathfinder map 2 and each question its research subagents settle 1; a built phase by its size,
 one point per 3 tasks it completed (rounded up), plus 1 for Implement + Review
 (a flat 2, or 3, if the agent did not report a task count); Handoff and the dashboard 0.
+A build counts while it runs: each task the progress bar ticks off adds to the
+build's row (*Implement + Review: 9 tasks built so far*), Implement + Review's
+review stage adds its 1 as it starts, and the approved phase takes the row over
+with its final score, so the meter never waits for the sign-off to catch up.
 On top of that, every 2 questions you answer on the page add 1 point to the
 skill run you answered them in (`ANSWERS_PER_POINT`), so a long Pathfinder or a
 Plan with many clarifying questions weighs more than a short one. A review run on the
