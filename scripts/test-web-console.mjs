@@ -76,6 +76,8 @@ import {
   sentAnswer,
   submittedAwaiting,
   noteAwaiting,
+  threadText,
+  threadWho,
   suggestionFrom,
   turnGate,
   verdictLabel,
@@ -140,6 +142,7 @@ import {
   breakdownFrom,
   meterView,
   pointsFrom,
+  progressEntry,
   RED_AT,
   ANSWERS_PER_POINT,
   ringFraction,
@@ -150,14 +153,17 @@ import {
 } from "../src/web-console/public/meter.js";
 import { applyMention, matchNames, mentionAt } from "../src/web-console/public/mentions.js";
 import { FAVICON_BODY, FAVICON_COLORS, faviconState, faviconSvg } from "../src/web-console/public/favicon.js";
+import { CACHE_MS, RELEASES_URL, REPO_URL, checkForUpdate, compareVersions, latestTag } from "../src/web-console/update-check.mjs";
 import { runHint } from "../src/web-console/public/render.js";
 import { pickerCommand, pickFolder, WINDOWS_PICKER_SOURCE, WORKSPACE_PICKER_PROMPT } from "../src/web-console/picker.mjs";
 import {
   appendLedger,
+  applyPatch,
   attachmentName,
   bindLoopback,
   chatReplyLines,
   checkDocument,
+  cleanupFindings,
   cwdHash,
   handOff,
   initialWorkspace,
@@ -168,6 +174,7 @@ import {
   readLedger,
   readWorkspaceCursor,
   readOverview,
+  removeCleanup,
   removeScratch,
   removeSessions,
   repoRoots,
@@ -175,6 +182,7 @@ import {
   SESSION_MAX_AGE_MS,
   SPEC_STATES,
   staleScratch,
+  STRAY_GRACE_MS,
   staleSessions,
   STATE_LOCK_FILE,
   sweepUploads,
@@ -191,6 +199,9 @@ const CONSOLE_CLI = path.join(ROOT, "src", "web-console", "console.mjs");
 const HOME = fs.mkdtempSync(path.join(os.tmpdir(), "p2c-console-test-"));
 const MODELS_DIR = path.join(HOME, "plan2code");
 const ENV = { ...process.env, PLAN2CODE_CONSOLE_HOME: HOME, PLAN2CODE_MODELS_DIR: MODELS_DIR, PLAN2CODE_NO_BROWSER: "1" };
+// Every server these tests start runs the release check at boot. A fresh
+// cached failure keeps the whole suite off the network and bannerless.
+fs.writeFileSync(path.join(HOME, "update-check.json"), JSON.stringify({ checkedAt: Date.now(), latest: null }));
 
 // The session cookie is named for the server's port: browsers ignore the port
 // when they scope a cookie, so one shared name let each session's server
@@ -1369,6 +1380,11 @@ test("a send records its note and attachments on the item, so the page can show 
   assert.equal(q1.sentNote.text, "see these");
   assert.deepEqual(q1.sentNote.images, [{ path: j.path, name: j.name }]);
   assert.deepEqual(q1.sentNote.files, [{ path: d.path, name: d.name }]);
+  // Earlier tests in this session sent notes on q1 too: the newest is this one.
+  const mine = q1.thread.filter((m) => m.who === "user").at(-1);
+  assert.equal(mine.text, "see these", "the note goes into the Notes thread, where the agent's reply will sit under it");
+  assert.equal(mine.at, q1.sentNote.at);
+  assert.deepEqual(mine.images, [{ path: j.path, name: j.name }]);
   assert.equal(cli(["wait", "--session", sid, "--seconds", "10"]).status, 0);
 
   const only = await post("/submit", { actions: [noteAction("q1", "just a note", [])], reply: "y" });
@@ -1376,6 +1392,11 @@ test("a send records its note and attachments on the item, so the page can show 
   const after = readState().items.find((i) => i.id === "q1");
   assert.equal(after.sentNote.text, "just a note");
   assert.deepEqual(after.sentNote.images ?? [], []);
+  assert.deepEqual(
+    after.thread.filter((m) => m.who === "user").map((m) => m.text).slice(-2),
+    ["see these", "just a note"],
+    "every note stays in the thread, not just the latest one",
+  );
   assert.equal(cli(["wait", "--session", sid, "--seconds", "10"]).status, 0);
 });
 
@@ -1542,8 +1563,35 @@ test("patches merge by id and append threads", () => {
   const q1 = state.items.find((i) => i.id === "q1");
   assert.equal(q1.status, "answered");
   assert.equal(q1.title, "Export format", "untouched fields survive a merge");
-  assert.equal(q1.thread.length, 1);
-  assert.ok(q1.thread[0].at, "the server stamps the time the agent left out");
+  const replies = q1.thread.filter((m) => m.who === "agent");
+  assert.equal(replies.length, 1);
+  assert.ok(replies[0].at, "the server stamps the time the agent left out");
+});
+
+test("a thread reply in another shape is lifted into { who, text }, and an empty one is refused", () => {
+  const base = { items: [{ id: "n1", kind: "text", title: "Name", status: "open", thread: [{ who: "user", text: "why?", at: "2026-10-05T10:00:00Z" }] }] };
+  const next = applyPatch(base, {
+    items: [{ id: "n1", thread: [
+      { from: "agent", md: "Because." },
+      { role: "assistant", content: "Also this." },
+      { who: "user", text: "why?" },
+    ] }],
+  });
+  const thread = next.items[0].thread;
+  assert.deepEqual(thread.map((m) => [m.who, m.text]), [["user", "why?"], ["agent", "Because."], ["agent", "Also this."]],
+    "aliases lifted, and the echoed note is not shown twice");
+  assert.equal(thread[1].md, undefined);
+  assert.equal(thread[1].from, undefined);
+  assert.throws(() => applyPatch(base, { items: [{ id: "n1", thread: [{ who: "agent" }] }] }), /thread entry has no "text"/);
+  assert.throws(() => applyPatch(base, { items: [{ id: "n1", thread: [{ who: "agent", md: "  " }] }] }), /no "text"/);
+});
+
+test("the page reads older { from, md } thread entries", () => {
+  assert.equal(threadWho({ from: "agent", md: "x" }), "agent");
+  assert.equal(threadWho({ who: "user", text: "x" }), "user");
+  assert.equal(threadText({ from: "agent", md: "Older shape." }), "Older shape.");
+  assert.equal(threadText({ who: "agent", text: "Now." }), "Now.");
+  assert.equal(threadText({ who: "agent" }), "");
 });
 
 /* ------------------------------------------- result handoff (regressions) */
@@ -1922,6 +1970,27 @@ test("models: the user's additions round-trip, XHigh and Max are refused, and th
   assert.deepEqual((await get()).user, { claude: [], devin: [] });
 });
 
+test("cleanup over HTTP: a scan lists strays in the console home, and a delete removes only what the scan found", async () => {
+  const stray = path.join(HOME, "stray-cleanup.json");
+  fs.writeFileSync(stray, "{}");
+  backdate(stray);
+  const res = await post("/cleanup", { scan: true });
+  assert.equal(res.status, 200);
+  const scan = await res.json();
+  const ids = scan.items.map((i) => i.id);
+  assert.ok(ids.includes("console:stray-cleanup.json"), ids.join(", "));
+  for (const id of ["console:looks.json", "console:update-check.json", "console:sessions", "console:runtime"]) assert.ok(!ids.includes(id), id);
+  assert.ok(!ids.includes("session:" + sid), "never the session serving the page");
+  assert.ok(scan.items.every((i) => !("path" in i)), "no paths go to the page");
+  assert.ok(!scan.items.some((i) => i.where === "root"), "a console from another home never reaches ~/.plan2code");
+
+  const done = await post("/cleanup", { delete: ["console:stray-cleanup.json", "console:looks.json", "session:" + sid] });
+  assert.equal(done.status, 200);
+  assert.deepEqual((await done.json()).removed, ["console:stray-cleanup.json"]);
+  assert.equal(fs.existsSync(stray), false);
+  assert.ok(fs.existsSync(path.join(HOME, "update-check.json")));
+});
+
 test("stop leaves a process it cannot identify as ours alone", () => {
   // A handle file can outlive a reboot in the system temp dir and its pid can
   // be reused. Killing on the strength of a number alone can hit anything.
@@ -2211,7 +2280,12 @@ test("a note the agent has not answered yet is still on its way", () => {
   assert.equal(noteAwaiting({ sentNote: note }), note);
   assert.equal(noteAwaiting({ sentNote: note, thread: [{ who: "agent", text: "Earlier.", at: "2026-09-23T02:00:00Z" }] }), note);
   assert.equal(noteAwaiting({ sentNote: note, thread: [{ who: "agent", text: "Seen.", at: "2026-09-23T03:01:00Z" }] }), null);
-  assert.equal(noteAwaiting({ sentNote: note, thread: [{ who: "user", text: "look at this", at: "2026-09-23T03:00:00Z" }] }), null);
+  assert.equal(
+    noteAwaiting({ sentNote: note, thread: [{ who: "user", text: "look at this", at: "2026-09-23T03:00:00Z" }] }),
+    note,
+    "the person's own note in the thread is not a reply to it",
+  );
+  assert.equal(noteAwaiting({ sentNote: note, thread: [{ from: "agent", md: "Older shape.", at: "2026-09-23T03:01:00Z" }] }), null);
   assert.equal(noteAwaiting({ sentNote: note, thread: [{ who: "agent", text: "No clock." }] }), null);
 });
 
@@ -3374,7 +3448,7 @@ test("the session sweep removes only month-old session dirs, never the one being
   }
 });
 
-test("the scratch sweep removes old patches and helpers, never looks, the pointer or a directory", async () => {
+test("the scratch sweep removes old patches and helpers, never looks, the pointer, the update cache or a directory", async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "p2c-scratch-"));
   try {
     const file = (name, stale = true) => {
@@ -3384,7 +3458,7 @@ test("the scratch sweep removes old patches and helpers, never looks, the pointe
       return p;
     };
     const removable = [file("p2.json"), file("helper.mjs")];
-    const kept = [file("looks.json"), file("workspaces.json"), file("console-dir"), file("notes.txt"), file("p3.json", false)];
+    const kept = [file("looks.json"), file("workspaces.json"), file("console-dir"), file("update-check.json"), file("notes.txt"), file("p3.json", false)];
     const subdir = path.join(dir, "x.json");
     fs.mkdirSync(subdir);
     backdate(subdir);
@@ -3393,14 +3467,101 @@ test("the scratch sweep removes old patches and helpers, never looks, the pointe
     const stale = staleScratch(dir, Date.now(), SESSION_MAX_AGE_MS).sort();
     assert.deepEqual(stale, ["helper.mjs", "p2.json"]);
     assert.deepEqual(
-      (await removeScratch(dir, [...stale, "looks.json", "workspaces.json", "../p.json", "console-dir"])).sort(),
+      (await removeScratch(dir, [...stale, "looks.json", "workspaces.json", "../p.json", "console-dir", "update-check.json"])).sort(),
       ["helper.mjs", "p2.json"]
     );
     for (const p of removable) assert.equal(fs.existsSync(p), false, p);
     for (const p of kept) assert.ok(fs.existsSync(p), p);
-    assert.deepEqual([...PROTECTED_CONSOLE_FILES].sort(), ["console-dir", "looks.json", "workspaces.json"]);
+    assert.deepEqual([...PROTECTED_CONSOLE_FILES].sort(), ["console-dir", "looks.json", "update-check.json", "workspaces.json"]);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("cleanup finds old sessions and strays in both folders, and keeps every protected name and this session", async () => {
+  const plan2code = fs.mkdtempSync(path.join(os.tmpdir(), "p2c-cleanup-"));
+  const consoleDir = path.join(plan2code, "console");
+  try {
+    // Strays count only once they have sat for the grace period, so every one
+    // this test expects to be found is backdated.
+    const put = (p, body = "{}") => {
+      fs.mkdirSync(path.dirname(p), { recursive: true });
+      fs.writeFileSync(p, body);
+      return p;
+    };
+    const stray = (p, body) => {
+      put(p, body);
+      backdate(p);
+      return p;
+    };
+    const session = (sid, stale) => {
+      const state = put(path.join(consoleDir, "sessions", sid, "state.json"));
+      if (stale) backdate(state);
+      return path.dirname(state);
+    };
+    const old = session("20250801-101010-aaaaaa", true);
+    const current = session("20250801-101010-bbbbbb", true);
+    const fresh = session("20260920-101010-cccccc", false);
+    // A month-old state.json, but a draft saved today: still in use.
+    const drafted = session("20250801-101010-dddddd", true);
+    put(path.join(drafted, "draft.json"));
+    const kept = [
+      ...["looks.json", "workspaces.json", "console-dir", "update-check.json"].map((n) => put(path.join(consoleDir, n))),
+      put(path.join(plan2code, "launcher.json")),
+      put(path.join(plan2code, "models.json")),
+      put(path.join(plan2code, "bin", "plan2code.js"), "x"),
+      current,
+      fresh,
+      drafted,
+    ];
+    stray(path.join(consoleDir, "p1.json"), "12345");
+    put(path.join(consoleDir, "runtime", "x.json"));
+    backdate(put(path.join(plan2code, "console-dev", "sessions", "x.txt"), "abc"));
+    backdate(path.join(plan2code, "console-dev"));
+    // An old folder with a file rewritten just now: the folder's own mtime
+    // never moves for that, so only its contents show it is in use.
+    const busy = put(path.join(plan2code, "busy", "log.txt"));
+    backdate(path.join(plan2code, "busy"));
+    kept.push(busy);
+    stray(path.join(plan2code, "notes.txt"));
+    // In use right now: a held lock and a temp between its write and rename.
+    const live = [put(path.join(consoleDir, "workspaces.json.lock"), ""), put(path.join(plan2code, "models.json.123.tmp"))];
+    kept.push(...live);
+    stray(path.join(consoleDir, "looks.json.456.tmp"));
+
+    const opts = { consoleDir, plan2codeDir: plan2code, skipSid: "20250801-101010-bbbbbb" };
+    const { items, bytes } = await cleanupFindings(opts);
+    assert.deepEqual(items.map((i) => i.id).sort(), [
+      "console:looks.json.456.tmp",
+      "console:p1.json",
+      "root:console-dev",
+      "root:notes.txt",
+      "session:20250801-101010-aaaaaa",
+    ]);
+    assert.equal(STRAY_GRACE_MS, 60 * 60 * 1000);
+    assert.equal(items.find((i) => i.id === "console:p1.json").bytes, 5);
+    assert.equal(items.find((i) => i.id === "root:console-dev").kind, "folder");
+    assert.equal(bytes, items.reduce((n, i) => n + i.bytes, 0));
+
+    // A console running from another home never reaches the folder above it.
+    const elsewhere = await cleanupFindings({ ...opts, plan2codeDir: path.join(plan2code, "other") });
+    assert.deepEqual(elsewhere.items.map((i) => i.where).sort(), ["console", "console", "session"]);
+
+    // Only ids a fresh scan still finds are removed; anything else is ignored.
+    const done = await removeCleanup(
+      ["console:p1.json", "session:20250801-101010-aaaaaa", "session:20250801-101010-dddddd", "root:busy", "root:console-dev", "console:looks.json", "root:bin", "session:20250801-101010-bbbbbb", "console:workspaces.json.lock", "root:models.json.123.tmp", "console:../escape", 7],
+      opts
+    );
+    assert.deepEqual(done.removed.sort(), ["console:p1.json", "root:console-dev", "session:20250801-101010-aaaaaa"]);
+    assert.deepEqual(done.failed, []);
+    assert.equal(done.bytes, 5 + 3 + 2);
+    assert.equal(fs.existsSync(old), false);
+    assert.equal(fs.existsSync(path.join(plan2code, "console-dev")), false);
+    assert.ok(fs.existsSync(path.join(plan2code, "notes.txt")), "not asked for, so not removed");
+    for (const p of kept) assert.ok(fs.existsSync(p), p);
+    assert.ok(fs.existsSync(path.join(consoleDir, "runtime", "x.json")));
+  } finally {
+    fs.rmSync(plan2code, { recursive: true, force: true });
   }
 });
 
@@ -4646,6 +4807,65 @@ test("meter: a built phase scores by the tasks it completed", () => {
   assert.equal(levelFor(pointsFrom(entries)), "yellow", "one big phase can yellow a session alone");
 });
 
+test("meter: a build scores its tasks as it goes, and the approved phase takes the row over", () => {
+  const run = (event, id, extra = {}) => ({ kind: "run", id: `L1:${id}`, event, workflow: "implement-review", ...extra });
+  const ledger = [{ kind: "launch", id: "L1", workflow: "implement-review" }];
+  const tick = (cleared) => {
+    const e = progressEntry(ledger, "L1", "implement-review", cleared);
+    if (e) ledger.push(e);
+    return e;
+  };
+  assert.equal(tick(0), null, "the first build needs no reset");
+  for (let n = 1; n <= 17; n++) tick(n);
+  assert.equal(tick(17), null, "the same count posted again adds nothing");
+  assert.equal(tick(9), null, "a lower count adds nothing");
+  assert.deepEqual(breakdownFrom(ledger), [{ label: "Implement + Review: 17 tasks built so far", points: 6 }]);
+
+  ledger.push(run("review", "review"));
+  ledger.push(run("review", "review-again"));
+  assert.equal(pointsFrom(ledger), 7, "the built-in review scores its 1 once, not a Review's 2");
+  ledger.push(run("implement-review-phase", "phase-6", { tasks: 17 }));
+  assert.deepEqual(breakdownFrom(ledger), [
+    { label: "Implement + Review phase built: phase-6 (17 tasks)", points: 6 },
+    { label: "Implement + Review: code review run", points: 1 },
+  ], "the phase took its build's row over and left the review's point out");
+  assert.equal(pointsFrom(ledger), 7);
+
+  assert.equal(tick(17), null, "the finished phase's count posted again opens nothing");
+  assert.equal(tick(2), null, "nor does a count before the next phase resets to 0");
+  assert.equal(tick(0).tasks, 0);
+  tick(2);
+  assert.equal(pointsFrom(ledger), 8, "the next phase in the same run counts afresh");
+
+  assert.equal(progressEntry([], "L1", "plan", 3), null, "only builds count progress");
+  assert.equal(progressEntry([], "L1", "implement", 2.5), null);
+  assert.equal(progressEntry([], "L1", "implement", 1000), null);
+  // A phase that ends below its progress (blocked tasks) never takes points back.
+  assert.equal(pointsFrom([
+    { kind: "progress", id: "L1:b0:9", build: "L1:b0", workflow: "implement", tasks: 9 },
+    { kind: "run", id: "L1:phase-1", event: "implement-phase", workflow: "implement", tasks: 5 },
+  ]), 3);
+  // Implement's own review verdict is an extra review and still scores 2.
+  assert.equal(pointsFrom([{ kind: "run", id: "L1:review", event: "review", workflow: "implement" }]), 2);
+});
+
+test("meter: a build post's headline.cleared reaches the ledger as progress", () => {
+  const res = cli(["open", "--workflow", "implement", "--title", "Meter: Phase 1", "--no-open"]);
+  const s = { sid: res.json.sid, session: res.json.session };
+  try {
+    const points = () => meterView(readLedger(s.session)).points;
+    assert.equal(postPatch(s, { headline: { stage: "Phase 1", cleared: 0, total: 7 } }).status, 0);
+    assert.equal(postPatch(s, { headline: { cleared: 4 } }).status, 0);
+    assert.equal(points(), 2, "4 tasks built so far");
+    assert.equal(postPatch(s, { headline: { cleared: 4 } }).status, 0);
+    assert.equal(readLedger(s.session).filter((e) => e.kind === "progress").length, 1, "a repeat writes nothing");
+    assert.equal(postPatch(s, { headline: { cleared: 7 }, run: { event: "implement-phase", id: "phase-1", tasks: 7 } }).status, 0);
+    assert.equal(points(), 3, "the phase's run took over: 7 tasks score 3, not 3 + 3");
+  } finally {
+    cli(["stop", "--session", s.sid]);
+  }
+});
+
 test("meter: answers score per skill run, one point per two, rounded down", () => {
   assert.equal(ANSWERS_PER_POINT, 2);
   const answer = (launch, i, workflow) => ({ kind: "answer", id: `${launch}:answer:t:${i}`, workflow });
@@ -5558,6 +5778,7 @@ test("only open leaves the console-dir pointer; status, help and a bad command d
   const home = fs.mkdtempSync(path.join(os.tmpdir(), "p2c-pointer-"));
   const env = { PLAN2CODE_CONSOLE_HOME: home, PLAN2CODE_MODELS_DIR: path.join(home, "plan2code") };
   const pointer = path.join(home, "console-dir");
+  fs.writeFileSync(path.join(home, "update-check.json"), JSON.stringify({ checkedAt: Date.now(), latest: null }));
   try {
     cli(["status"], { env });
     cli(["help"], { env });
@@ -5837,4 +6058,174 @@ test("unansweredChat lists delivered Quick questions that still have no reply", 
   writeCursor(dir, 2);
   assert.deepEqual(unansweredChat(dir, {}), [2]);
   assert.deepEqual(unansweredChat(dir, { chat: { replies: [{ id: "r2", re: 2, conversation: 1, md: "done" }] } }), []);
+});
+
+/* ------------------------------------------------------- update check */
+
+const REPO_VERSION = JSON.parse(fs.readFileSync(path.join(ROOT, "version.json"), "utf8")).version;
+
+test("update check: compareVersions orders X.Y.Z numerically and refuses anything else", () => {
+  assert.equal(compareVersions("2.4.3", "2.4.3"), 0);
+  assert.equal(compareVersions("2.4.3", "2.5.0"), -1);
+  assert.equal(compareVersions("3.0.0", "2.99.99"), 1);
+  assert.equal(compareVersions("2.10.0", "2.9.9"), 1, "numeric, not string, order");
+  for (const bad of ["2.4", "v2.4.3", "", undefined, "2.4.3-rc1"]) {
+    assert.equal(compareVersions(bad, "2.4.3"), null, String(bad));
+    assert.equal(compareVersions("2.4.3", bad), null, String(bad));
+  }
+});
+
+test("update check: latestTag picks the highest vX.Y.Z, skipping peeled and non-release tags", () => {
+  const out = [
+    "aaa\trefs/tags/v2.4.3",
+    "bbb\trefs/tags/v2.4.3^{}",
+    "ccc\trefs/tags/v2.10.0",
+    "ddd\trefs/tags/v2.10.0^{}",
+    "eee\trefs/tags/v2.9.9",
+    "fff\trefs/tags/v3.0.0-rc1",
+    "ggg\trefs/tags/release-4",
+    "hhh\trefs/tags/v9.0.0^{}",
+  ].join("\n");
+  assert.equal(latestTag(out), "2.10.0");
+  assert.equal(latestTag(out.replace(/\n/g, "\r\n")), "2.10.0", "CRLF output");
+  assert.equal(latestTag("fff\trefs/tags/v3.0.0-rc1\nggg\trefs/tags/release-4"), null);
+  assert.equal(latestTag(""), null);
+  assert.equal(latestTag(null), null);
+  assert.equal(latestTag(42), null);
+});
+
+test("update check: the cache is reused for an hour, failures included, and rebuilt when stale or corrupt", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "p2c-update-"));
+  const cacheFile = path.join(dir, "nested", "update-check.json");
+  const now = 1_800_000_000_000;
+  let calls = 0;
+  const tags = (v) => async () => {
+    calls++;
+    return `abc\trefs/tags/v${v}\n`;
+  };
+  const read = () => JSON.parse(fs.readFileSync(cacheFile, "utf8"));
+  try {
+    // No cache: asks, and writes what it found.
+    assert.deepEqual(await checkForUpdate({ installed: "2.4.3", cacheFile, now, run: tags("2.5.0") }), {
+      installed: "2.4.3",
+      latest: "2.5.0",
+      updateAvailable: true,
+    });
+    assert.equal(calls, 1);
+    assert.deepEqual(read(), { checkedAt: now, latest: "2.5.0" });
+
+    // Fresh: the runner is not called.
+    const fresh = await checkForUpdate({ installed: "2.4.3", cacheFile, now: now + CACHE_MS - 1, run: tags("9.9.9") });
+    assert.equal(fresh.latest, "2.5.0");
+    assert.equal(calls, 1);
+
+    // Equal or newer installed: no update.
+    assert.equal((await checkForUpdate({ installed: "2.5.0", cacheFile, now, run: tags("9.9.9") })).updateAvailable, false);
+    assert.equal((await checkForUpdate({ installed: "2.6.0", cacheFile, now, run: tags("9.9.9") })).updateAvailable, false);
+    assert.equal(calls, 1);
+
+    // Stale: asks again and rewrites.
+    const stale = await checkForUpdate({ installed: "2.4.3", cacheFile, now: now + CACHE_MS, run: tags("2.6.0") });
+    assert.equal(stale.latest, "2.6.0");
+    assert.equal(calls, 2);
+    assert.equal(read().checkedAt, now + CACHE_MS);
+
+    // Corrupt: treated as stale.
+    fs.writeFileSync(cacheFile, "{not json");
+    assert.equal((await checkForUpdate({ installed: "2.4.3", cacheFile, now, run: tags("2.7.0") })).latest, "2.7.0");
+    assert.equal(calls, 3);
+
+    // A failed lookup is cached as null, and not retried within the hour.
+    fs.rmSync(cacheFile);
+    const failed = async () => {
+      calls++;
+      return null;
+    };
+    assert.equal(await checkForUpdate({ installed: "2.4.3", cacheFile, now, run: failed }), null);
+    assert.equal(calls, 4);
+    assert.deepEqual(read(), { checkedAt: now, latest: null });
+    assert.equal(await checkForUpdate({ installed: "2.4.3", cacheFile, now: now + 1000, run: tags("9.9.9") }), null);
+    assert.equal(calls, 4, "the cached failure is reused");
+
+    // A runner that throws, or an unknown installed version, is null, never a throw.
+    fs.rmSync(cacheFile);
+    const boom = async () => {
+      throw new Error("boom");
+    };
+    assert.equal(await checkForUpdate({ installed: "2.4.3", cacheFile, now, run: boom }), null);
+    assert.equal(await checkForUpdate({ installed: "dev", cacheFile, now: now + CACHE_MS * 2, run: tags("2.5.0") }), null);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("update check: the repo and Releases URLs are the plan2code repo's", () => {
+  assert.equal(REPO_URL, "https://github.com/jparkerweb/plan2code.git");
+  assert.equal(RELEASES_URL, "https://github.com/jparkerweb/plan2code/releases/");
+});
+
+test("update check: the frame carries update only when a newer release is cached, and /version names latest", async () => {
+  const newer = `${Number(REPO_VERSION.split(".")[0]) + 1}.0.0`;
+  for (const [latest, expectUpdate] of [
+    [newer, true],
+    [REPO_VERSION, false],
+  ]) {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), "p2c-update-frame-"));
+    const env = { PLAN2CODE_CONSOLE_HOME: home, PLAN2CODE_MODELS_DIR: path.join(home, "plan2code") };
+    fs.writeFileSync(path.join(home, "update-check.json"), JSON.stringify({ checkedAt: Date.now(), latest }));
+    const res = cli(["open", "--no-open", "--workflow", "dashboard"], { env });
+    const s = sessionUrl(res.json.url);
+    const get = async (pathname) =>
+      (await fetch(`${s.base}${pathname}`, { headers: { cookie: s.cookie, connection: "close" } })).json();
+    try {
+      // The check answers just after boot; give it a moment either way.
+      let frame;
+      for (let i = 0; i < 20; i++) {
+        frame = await get("/state");
+        if (frame.update) break;
+        await new Promise((r) => setTimeout(r, 100));
+      }
+      if (expectUpdate) {
+        assert.deepEqual(frame.update, { installed: REPO_VERSION, latest: newer });
+      } else {
+        assert.equal("update" in frame, false, "no update key when the installed version is current");
+      }
+      assert.deepEqual(await get("/version"), { version: REPO_VERSION, latest });
+    } finally {
+      cli(["stop", "--session", res.json.sid], { env });
+      fs.rmSync(home, { recursive: true, force: true });
+    }
+  }
+});
+
+test("update banner: the modal is in the page, with the exact command and no inline styles or scripts", () => {
+  const html = fs.readFileSync(path.join(ROOT, "src", "web-console", "public", "index.html"), "utf8");
+  const app = fs.readFileSync(path.join(ROOT, "src", "web-console", "public", "app.js"), "utf8");
+  const dialog = html.match(/<dialog class="modal" id="update-modal" aria-labelledby="update-title">([\s\S]*?)<\/dialog>/);
+  assert.ok(dialog, "index.html has the update modal");
+  assert.doesNotMatch(dialog[1], /\sstyle=/);
+  assert.doesNotMatch(dialog[1], /<script/i);
+  const panel = helpTemplate().match(/<section class="help-panel" data-tab="dashboard">([\s\S]*?)<\/section>/);
+  assert.ok(panel, "the help has a dashboard topic");
+  assert.match(panel[1], /UPDATE AVAILABLE/, "the dashboard topic explains the banner");
+  assert.doesNotMatch(panel[1], /\sstyle=/);
+  assert.doesNotMatch(panel[1], /<script/i);
+  assert.ok(app.includes('"npx --allow-git=all git+https://github.com/jparkerweb/plan2code.git"'), "app.js copies the exact command");
+});
+
+test("update banner: built only on the dashboard, dismissed per session, and Help's version links to Releases", () => {
+  const app = fs.readFileSync(path.join(ROOT, "src", "web-console", "public", "app.js"), "utf8");
+  const start = app.indexOf("function renderDashboard(main) {");
+  assert.ok(start >= 0, "app.js has renderDashboard");
+  const end = app.indexOf("\n}\n", start);
+  const body = app.slice(start, end);
+  assert.match(body, /"dash-nudge update-banner"/, "renderDashboard builds the banner");
+  const outside = app.slice(0, start) + app.slice(end);
+  assert.doesNotMatch(outside, /update-banner/, "no other code builds it");
+  assert.match(app, /"p2c-update-dismissed:" \+ S\.sid/, "the dismissal is keyed by the session id");
+  assert.match(app, /const RELEASES_URL = "https:\/\/github\.com\/jparkerweb\/plan2code\/releases\/";/);
+  assert.match(app, /\.rel = "noopener noreferrer";/);
+  const help = app.match(/async function renderHelpVersion\(\) \{([\s\S]*?)\n\}/);
+  assert.ok(help, "app.js has renderHelpVersion");
+  assert.match(help[1], /releasesLink\(/, "the help version is a Releases link");
 });

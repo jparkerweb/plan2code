@@ -60,7 +60,9 @@ The first payload for a phase you are about to build:
 ```
 
 `headline.cleared` / `total` are tasks done out of tasks in the phase: the
-progress bar is the first thing someone watching a build looks at.
+progress bar is the first thing someone watching a build looks at. The session
+meter counts the build's tasks from `cleared` as it rises, so keep it current,
+and start every phase (a second one in the same run too) at `"cleared": 0`.
 
 `phasefile` is the whole `phase-X.md`, verbatim from disk, as its own tab —
 the person can read the prerequisites and task specs while you build. Re-post
@@ -233,8 +235,9 @@ sign-off card, and approving past it was the answer. `implement-review` ends
 the same way; that phase was reviewed already. Only a finished `quick-task`
 still offers the review on its finish — see below.
 
-`run` scores the approved phase on the session meter (console.md → Posting an
-update → Session meter), in the same post that records the approval:
+`run` gives the approved phase its final score on the session meter (console.md →
+Posting an update → Session meter), in the same post that records the approval;
+it takes over what the build already counted from `cleared`, never adds to it:
 `implement-phase` for Implement, `implement-review-phase` for Implement +
 Review, id `phase-N`, and `tasks`: how many of the phase's tasks were
 completed (`[x]`, not blocked `[!]`). The phase scores by its size, so a
@@ -392,7 +395,10 @@ a question still owed, above the ending itself:
 
 The same build, then Stage 2 publishes the findings exactly as above (the
 `review` doc and the `fixes` item). Stage 3 fixes, with no "Check the fixes"
-item: Stage 4 is the only gate. Stage 4 is the sign-off above **without the
+item: Stage 4 is the only gate. The post that starts Stage 2's review carries
+`"run": { "event": "review", "id": "review" }`, as above: in this workflow it
+scores the review stage's 1 point on the meter as it begins, and the phase's
+final `run` leaves that point out. Stage 4 is the sign-off above **without the
 review verdict** — the phase was already reviewed — with the review results
 and unresolved findings in the report doc, header "Reviewed and ready for
 sign-off" in the item's `body`. The finish never carries `review`, and its
