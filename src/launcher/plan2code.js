@@ -19,6 +19,10 @@
  *
  * `--pick-folder` (passed by the desktop shortcut, never forwarded to the CLI) asks for the
  * project folder with a native folder picker first, starting on the folder picked last time.
+ *
+ * On a terminal it opens with a Planny banner (renderBanner) and colors its headings, numbers,
+ * defaults and errors (paint). Color is on only on a TTY (stdout and stderr each checked on
+ * its own) with NO_COLOR unset; piped runs print plain text and no banner.
  */
 
 const { spawn, spawnSync } = require('child_process');
@@ -35,6 +39,61 @@ const STATE_FILE = path.join(os.homedir(), '.plan2code', 'launcher.json');
 // Menus longer than this print compactly (id-only, two columns).
 const MODELS_MENU_COMPACT_AT = 30;
 const PICKER_PROMPT = 'Choose the project folder to open Plan2Code in';
+
+// The escape values install.js's COLORS uses, copied: this file is installed alone and may
+// require nothing but Node built-ins.
+const ANSI = {
+  reset: '\x1b[0m',
+  bright: '\x1b[1m',
+  dim: '\x1b[2m',
+  cyan: '\x1b[36m',
+  green: '\x1b[32m',
+  yellow: '\x1b[33m',
+  red: '\x1b[31m',
+  magenta: '\x1b[35m',
+};
+
+/** Wrappers that color text when `useColor` is true and return it plain otherwise. */
+function paint(useColor) {
+  const wrap = (code) => (text) => (useColor ? code + text + ANSI.reset : String(text));
+  return {
+    bright: wrap(ANSI.bright),
+    dim: wrap(ANSI.dim),
+    cyan: wrap(ANSI.cyan),
+    green: wrap(ANSI.green),
+    yellow: wrap(ANSI.yellow),
+    red: wrap(ANSI.red),
+    magenta: wrap(ANSI.magenta),
+  };
+}
+
+// Color only on a real terminal, and never when NO_COLOR is set to anything. Each stream
+// asks for itself: `plan2code 2> err.log` from a terminal still logs plain errors.
+const useColor = Boolean(process.stdout.isTTY) && !process.env.NO_COLOR;
+const c = paint(useColor);
+const ce = paint(Boolean(process.stderr.isTTY) && !process.env.NO_COLOR);
+
+// Planny waving hello, as install.js's MASCOT.wave draws him.
+const MASCOT = [
+  '   ╭───╮   ',
+  '   │ ★ │╱  ',
+  '  ╱│ ◡ │   ',
+  '   ╰┬─┬╯   ',
+];
+
+/** Planny with the name and tagline beside his face; colored only through `p`. No trailing newline. */
+function renderBanner(p) {
+  const beside = { 1: p.bright(p.cyan('Plan2Code')), 2: p.dim('Plan it, build it, ship it — with your AI agent.') };
+  return MASCOT.map((row, i) => (beside[i] ? `${p.magenta(row)}  ${beside[i]}` : p.magenta(row))).join('\n');
+}
+
+/** The banner, on a terminal only: piped runs print exactly what they always have. */
+function printIntro() {
+  if (!process.stdout.isTTY) return;
+  console.log('');
+  console.log(renderBanner(c));
+  console.log('');
+}
 
 /** The CLIs that can open the dashboard, in menu order. `args` builds the full argument list. */
 const CLIS = [
@@ -266,6 +325,11 @@ function takeCliFlag(argv) {
   return { cli, rest };
 }
 
+/** With no menu to show, say which CLI is opening, on a terminal only. */
+function announceCli(cli) {
+  if (process.stdout.isTTY) console.log(c.dim(`Opening with ${cli.label}…`));
+}
+
 /**
  * Choose the CLI from those installed: the `--cli` pick, the only one installed, or a numbered
  * menu defaulting to the last pick. Returns `{ cli }` with its resolved `path`, or `{ code }` (the
@@ -277,41 +341,46 @@ async function chooseCli(requested) {
   if (requested !== undefined) {
     const known = CLIS.find((cli) => cli.id === requested);
     if (!known) {
-      console.error(`plan2code: --cli takes ${CLIS.map((cli) => cli.id).join(' or ')}${requested ? `, not "${requested}"` : ''}.`);
+      console.error(`${ce.red('plan2code:')} --cli takes ${CLIS.map((cli) => cli.id).join(' or ')}${requested ? `, not "${requested}"` : ''}.`);
       return { code: 2 };
     }
     const found = installed.find((cli) => cli.id === requested);
     if (!found) {
-      console.error(`plan2code: the \`${known.id}\` CLI was not found on your PATH.`);
+      console.error(`${ce.red('plan2code:')} the \`${known.id}\` CLI was not found on your PATH.`);
       console.error(`Install ${known.label}, open a new terminal, and run \`plan2code\` again.`);
     }
+    if (found) announceCli(found);
     return found ? { cli: found } : { code: 127 };
   }
 
   if (installed.length === 0) {
-    console.error(`plan2code: neither ${CLIS.map((cli) => `\`${cli.id}\``).join(' nor ')} was found on your PATH.`);
+    console.error(`${ce.red('plan2code:')} neither ${CLIS.map((cli) => `\`${cli.id}\``).join(' nor ')} was found on your PATH.`);
     console.error(`Install ${CLIS.map((cli) => cli.label).join(' or ')}, open a new terminal, and run \`plan2code\` again.`);
     return { code: 127 };
   }
   if (installed.length === 1 || !process.stdin.isTTY) {
     const { lastCli } = readState();
-    return { cli: installed.find((cli) => cli.id === lastCli) || installed[0] };
+    const cli = installed.find((cli) => cli.id === lastCli) || installed[0];
+    if (installed.length === 1) announceCli(cli);
+    return { cli };
   }
 
   const { lastCli } = readState();
   const defaultIndex = Math.max(0, installed.findIndex((cli) => cli.id === lastCli));
-  console.log('plan2code will try to open this with the Claude Code or Devin CLI, whichever is installed.');
-  console.log("You're also welcome to skip this launcher and run the `/plan2code` skill directly from your AI agent.");
-  console.log('Which CLI should open Plan2Code?');
-  installed.forEach((cli, i) => console.log(`  ${i + 1}) ${cli.label}`));
+  console.log(c.bright('Plan2Code opens inside an AI coding agent. Pick which one to use:'));
+  console.log('');
+  installed.forEach((cli, i) =>
+    console.log(`  ${c.cyan(`${i + 1})`)} ${cli.label}${cli.id === lastCli ? ` ${c.dim('(last used)')}` : ''}`)
+  );
+  console.log(c.dim('You can also skip this launcher and run `/plan2code` straight from your agent.'));
   for (;;) {
-    const answer = (await ask(`Choice [${defaultIndex + 1}]: `)).trim().toLowerCase();
+    const answer = (await ask(`Choice ${c.green(`[${defaultIndex + 1}]`)}: `)).trim().toLowerCase();
     if (!answer) return { cli: installed[defaultIndex] };
     const byNumber = installed[Number(answer) - 1];
     const byName = installed.find((cli) => cli.id === answer || cli.label.toLowerCase() === answer);
     if (/^\d+$/.test(answer) && byNumber) return { cli: byNumber };
     if (byName) return { cli: byName };
-    console.log(`Type a number from 1 to ${installed.length}, or press Enter for ${installed[defaultIndex].label}.`);
+    console.log(c.yellow(`Type a number from 1 to ${installed.length}, or press Enter for ${installed[defaultIndex].label}.`));
   }
 }
 
@@ -363,21 +432,22 @@ async function chooseModel(cli, extraArgs) {
   if (!models.length) return;
 
   console.log('');
-  console.log(`Which model should ${cli.label} use?`);
+  console.log(c.bright(`Which model should ${cli.label} use?`));
   if (models.length > MODELS_MENU_COMPACT_AT) {
     // Labels off, ids in two columns: a long menu of full rows would bury
     // the prompt above the fold.
     const half = Math.ceil(models.length / 2);
     for (let i = 0; i < half; i++) {
-      const left = `  ${i + 1}) ${models[i].id}`;
-      const right = models[i + half] ? `  ${i + half + 1}) ${models[i + half].id}` : '';
-      console.log(left.padEnd(48) + right);
+      // Padded before coloring, so the escape codes never count toward the column width.
+      const left = `  ${i + 1}) ${models[i].id}`.padEnd(48);
+      const right = models[i + half] ? `  ${c.cyan(`${i + half + 1})`)} ${models[i + half].id}` : '';
+      console.log(left.replace(`${i + 1})`, c.cyan(`${i + 1})`)) + right);
     }
   } else {
-    models.forEach((model, i) => console.log(`  ${i + 1}) ${model.id} — ${model.label}`));
+    models.forEach((model, i) => console.log(`  ${c.cyan(`${i + 1})`)} ${model.id} — ${model.label}`));
   }
   for (;;) {
-    const answer = (await ask(`Choice [keep last used]: `)).trim().toLowerCase();
+    const answer = (await ask(`Choice ${c.green('[keep last used]')}: `)).trim().toLowerCase();
     if (!answer) return;
     const byNumber = models[Number(answer) - 1];
     const byName = models.find((model) => model.id === answer || model.label.toLowerCase() === answer);
@@ -386,7 +456,7 @@ async function chooseModel(cli, extraArgs) {
       extraArgs.push('--model', model.id);
       return;
     }
-    console.log(`Type a number from 1 to ${models.length}, a model name, or press Enter to keep the last-used model.`);
+    console.log(c.yellow(`Type a number from 1 to ${models.length}, a model name, or press Enter to keep the last-used model.`));
   }
 }
 
@@ -455,8 +525,9 @@ async function pickFolder() {
   const start = readLastFolder();
   const picker = getPickerCommand(start);
 
+  console.log('');
   if (picker) {
-    console.log('Pick a project folder in the window that just opened...');
+    console.log(c.dim('Pick a project folder in the window that just opened...'));
     const result = spawnSync(picker.command, picker.args, {
       encoding: 'utf8',
       env: { ...process.env, ...picker.env },
@@ -470,7 +541,7 @@ async function pickFolder() {
     if (!result.error && !folder && (result.status === 0 || result.status === 1)) return null;
   }
 
-  const answer = (await ask(`Project folder [${start}]: `)).trim().replace(/^["']|["']$/g, '');
+  const answer = (await ask(`Project folder ${c.green(`[${start}]`)}: `)).trim().replace(/^["']|["']$/g, '');
   if (!answer) return start;
   return path.resolve(answer.replace(/^~(?=$|[\\/])/, os.homedir()));
 }
@@ -499,6 +570,7 @@ async function launch() {
   const fromShortcut = argv.includes(PICK_FOLDER_FLAG);
   const { cli: requestedCli, rest: extraArgs } = takeCliFlag(argv.filter((arg) => arg !== PICK_FOLDER_FLAG));
 
+  printIntro();
   const { cli, code } = await chooseCli(requestedCli);
   if (!cli) return exitWith(code, fromShortcut);
   saveState({ lastCli: cli.id });
@@ -508,12 +580,12 @@ async function launch() {
     const folder = await pickFolder();
     if (!folder) return process.exit(0);
     if (!isDirectory(folder)) {
-      console.error(`plan2code: ${folder} is not a folder.`);
+      console.error(`${ce.red('plan2code:')} ${folder} is not a folder.`);
       return exitWith(1, fromShortcut);
     }
     saveState({ lastFolder: folder });
     cwd = folder;
-    console.log(`Opening Plan2Code in ${folder}`);
+    console.log(`Opening Plan2Code in ${c.cyan(folder)}`);
   }
 
   if (!hasModelFlag(extraArgs)) await chooseModel(cli, extraArgs);
@@ -537,7 +609,7 @@ async function launch() {
   }
 
   child.on('error', (error) => {
-    console.error(`plan2code: failed to start ${cli.id}: ${error.message}`);
+    console.error(`${ce.red('plan2code:')} failed to start ${cli.id}: ${error.message}`);
     exitWith(1, fromShortcut);
   });
 
@@ -554,4 +626,4 @@ async function launch() {
 // Run only when invoked directly; requiring the file (the tests do) is load-only.
 if (require.main === module) launch();
 
-module.exports = { mergeModels, modelEntries };
+module.exports = { mergeModels, modelEntries, renderBanner, paint };

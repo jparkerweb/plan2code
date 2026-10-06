@@ -90,7 +90,7 @@ import {
   writeJsonAtomic,
   writeWorkspaceCursor,
 } from "./lib.mjs";
-import { RUN_EVENTS, TASK_EVENTS, MAX_TASKS, isTaskCount } from "./public/meter.js";
+import { RUN_EVENTS, TASK_EVENTS, MAX_TASKS, isTaskCount, progressEntry } from "./public/meter.js";
 import { changeLine } from "./public/workspace.js";
 
 // Mirrors the server's absolute lifetime cap: a handle older than this cannot
@@ -593,6 +593,13 @@ function cmdPost() {
   const next = written.state;
 
   for (const line of ledgerLines) appendLedger(dir, line);
+  // A build scores its tasks as it clears them (meter.js, PROGRESS_WORKFLOWS),
+  // after any `run` in the same post, so a phase finished here ends its count.
+  if (patch.headline && typeof patch.headline === "object") {
+    const ledger = readLedger(dir);
+    const progress = progressEntry(ledger, lastLaunchId(ledger), next.workflow, patch.headline.cleared);
+    if (progress) appendLedger(dir, progress);
+  }
   appendEvent(dir, { type: "post", items: (patch.items || []).length });
 
   const open = next.items.filter((i) => isOpen(i) && i.required !== false).length;

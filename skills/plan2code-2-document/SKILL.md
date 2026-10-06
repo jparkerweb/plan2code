@@ -107,11 +107,12 @@ Line numbers may only appear as SUPPLEMENTAL context alongside a semantic refere
 5. **Use existing** `specs/<feature-name>/` directory
 6. **Write** `overview.md` first, copying from PLAN-DRAFT:
    - Summary (from Executive Summary)
+   - Phase Checklist (Implementation Phases), directly under Summary
+   - Parallel Execution Groups (filled in step 8)
    - Tech Stack table (exact copy)
    - Architecture Pattern and Component Overview (section 4)
    - Risks and Mitigations table (section 6)
    - Success Criteria (plain bullet list, no checkboxes) (section 7)
-   - Phase Checklist (Implementation Phases)
    - Quick Reference (Key Files, Environment Variables, External Dependencies)
 7. **Write** each `phase-X.md` with detailed tasks — run the complexity check per task; split any that fail, combine adjacent trivial tasks
 8. **Analyze** parallel execution eligibility
@@ -187,7 +188,7 @@ Use kebab-case for feature name (e.g., `user-authentication`).
 
 Header: Title, Created date, Source (PLAN-DRAFT path), Status on its own line as `**Status:** <value>` (Not Started | In Progress | Complete).
 
-Sections: Summary (from Executive Summary), Tech Stack table (exact copy from PLAN-DRAFT), Architecture (Pattern + Component Overview table), Risks and Mitigations table, Success Criteria checklist, Phase Checklist, Parallel Execution Groups table (from analysis), Quick Reference (Key Files, Environment Variables, External Dependencies), Completion Summary (filled during finalization).
+Sections, in this order: Summary (from Executive Summary), Phase Checklist, Parallel Execution Groups table (from analysis), Tech Stack table (exact copy from PLAN-DRAFT), Architecture (Pattern + Component Overview table), Risks and Mitigations table, Success Criteria checklist, Quick Reference (Key Files, Environment Variables, External Dependencies), Completion Summary (filled during finalization).
 
 ### phase-X.md
 

@@ -71,7 +71,11 @@ A card click is a send whose action carries the skill:
   "reply": "Start Implement (/plan2code-3-implement) for specs/lunch-vote, right here in this session." }
 ```
 
-`__launch` names no question; like `__stop` it is about the session. `spec` is the picker's selected spec dir — present only when the launched skill takes a spec and the person picked one; absent means "start from scratch". On it, in this turn:
+`__launch` names no question; like `__stop` it is about the session. `spec` is the picker's selected spec dir — present only when the launched skill takes a spec and the person picked one; absent means "start from scratch".
+
+> **Never hand this to a skill-invocation tool. Open its `SKILL.md` with your own file-read tool instead.** Every Plan2Code skill below the dashboard ships `disable-model-invocation: true` on purpose — it exists to be read and followed inline, not launched as a sub-skill — and calling one through a skill-invocation tool errors out and strands the hand-off mid-launch.
+
+On it, in this turn:
 
 1. **Resume the session as that skill — before reading anything**, in one command:
 
@@ -80,7 +84,7 @@ A card click is a send whose action carries the skill:
    ```
 
    `<its workflow>` is the action's `workflow` field (mapped below). Pass `--spec` only when the action carried one; `--title` is optional — post a real title once you know what the run is about. Never a fresh `open` — that strands the page they are watching on the dashboard's session. `--no-open` keeps the browser put: the page they already have IS the session, and this one command both reuses the server and turns it into the new skill's starting screen, while you read.
-2. **Read the skill's file.** Installs put every skill beside this one at `~/.agents/skills/<skill>/SKILL.md` — `<skill>` is the action's `skill` field.
+2. **Read the skill's file with your own file-read tool.** Installs put every skill beside this one at `~/.agents/skills/<skill>/SKILL.md` — `<skill>` is the action's `skill` field.
 3. **Follow the skill file from the top.** Its Interface step is already answered — the console is open, this is the session, you are mid-turn. Start where its real work starts: for most skills the AGENTS.md check; for pathfinder, Step 0's gate. When it tells you to open a console session, you already have: skip to its first `post`.
 
 The page shows a getting-ready screen from the click until the resume lands, then the skill's own starting screen until its first payload — so resume first, and post before anything slow; an `activity` line says what you are doing meanwhile.

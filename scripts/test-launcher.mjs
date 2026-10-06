@@ -174,3 +174,35 @@ test("launcher: the CLI's non-zero exit code is passed through", (t) => {
   assert.equal(result.status, 7, result.stderr);
   assert.notEqual(box.argsOf("claude"), null);
 });
+test("launcher: renderBanner draws Planny and the name, colored only through paint", () => {
+  const { renderBanner, paint } = require(LAUNCHER);
+  const plain = renderBanner(paint(false));
+  assert.doesNotMatch(plain, /\x1b/);
+  for (const part of ["╭───╮", "╰┬─┬╯", "★", "Plan2Code"]) assert.ok(plain.includes(part), part);
+  assert.ok(plain.split("\n").length >= 4);
+  const colored = renderBanner(paint(true));
+  assert.ok(colored.includes("\x1b["));
+  assert.ok(colored.includes("\x1b[0m"));
+});
+
+test("launcher: paint wraps text in the escape codes only when color is on", () => {
+  const { paint } = require(LAUNCHER);
+  assert.equal(paint(false).red("x"), "x");
+  assert.equal(paint(true).red("x"), "\x1b[31mx\x1b[0m");
+});
+
+test("launcher: a piped run prints no escape codes, with or without NO_COLOR", (t) => {
+  const box = sandbox(["claude"]);
+  t.after(box.cleanup);
+  const none = sandbox([]);
+  t.after(none.cleanup);
+  for (const env of [{}, { NO_COLOR: "1" }]) {
+    const runs = [box.run([], env), box.run(["--cli", "bogus"], env), none.run([], env)];
+    assert.deepEqual(runs.map((r) => r.status), [0, 2, 127]);
+    for (const r of runs) {
+      assert.doesNotMatch(r.stdout, /\x1b/);
+      assert.doesNotMatch(r.stderr, /\x1b/);
+    }
+  }
+});
+
