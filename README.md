@@ -3,7 +3,7 @@
 
 **A spec-driven workflow for AI coding agents.**
 
-<img src="docs/banner.jpg" alt="Plan2Code: plan and build with your AI agent, on one page. Planny, the mascot, acts out the five steps: Pathfinder, Plan, Document, Implement and Finalize." data="object-fit:contain;" style="max-width:1024px;">
+<img src="docs/banner.jpg" alt="banner" data="object-fit:contain;" style="max-width:1024px;">
 
 You work through Plan2Code on a page in your browser. The dashboard lists every step as a card, and
 each step's questions, progress and sign-offs arrive on that same page while your agent does the
