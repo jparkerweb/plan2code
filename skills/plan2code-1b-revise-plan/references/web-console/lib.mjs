@@ -48,6 +48,10 @@ export const USER_MODELS_FILE = path.join(PLAN2CODE_DIR, "models.json");
 
 export const LOOKS_FILE = path.join(HOME_DIR, "looks.json");
 
+// The newest Plan2Code release tag, as last asked of GitHub (update-check.mjs),
+// so every session within the hour reuses one lookup.
+export const UPDATE_CHECK_FILE = path.join(HOME_DIR, "update-check.json");
+
 // The runtime dir has to follow PLAN2CODE_CONSOLE_HOME too. Without that, a
 // test run (or a second sandboxed instance) shares one handle directory with
 // the real thing, and `stop --all` reaches outside its own world and kills a
@@ -487,9 +491,9 @@ export async function removeSessions(sessionsDir, sids) {
 }
 
 // The console folder's own files that no sweep may ever remove: the person's
-// looks, the folders remembered per project and spec, and the pointer to
-// this console's directory.
-export const PROTECTED_CONSOLE_FILES = new Set(["looks.json", "workspaces.json", "console-dir"]);
+// looks, the folders remembered per project and spec, the pointer to this
+// console's directory, and the cached release check.
+export const PROTECTED_CONSOLE_FILES = new Set(["looks.json", "workspaces.json", "console-dir", "update-check.json"]);
 
 function isScratchName(name) {
   return (
@@ -534,6 +538,148 @@ export async function removeScratch(consoleDir, names) {
     } catch {}
   }
   return removed;
+}
+
+/* ------------------------------------------------------------- cleanup */
+
+// What User Preferences -> Cleanup never removes. The console folder keeps its
+// protected files, its sessions dir (old sessions go one by one, by age) and,
+// under PLAN2CODE_CONSOLE_HOME, its runtime dir; ~/.plan2code keeps the
+// console, the launcher (bin/, launcher.json) and the models the person added.
+const KEPT_CONSOLE_ENTRIES = new Set([...PROTECTED_CONSOLE_FILES, "sessions", "runtime"]);
+export const KEPT_PLAN2CODE_ENTRIES = new Set(["console", "bin", "launcher.json", "models.json"]);
+// A stray must sit untouched this long before Cleanup lists it. The same
+// folders hold files that live for milliseconds -- a held
+// `workspaces.json.lock`, a `<file>.<pid>.tmp` between its write and its
+// rename -- and removing one mid-write loses another session's change.
+export const STRAY_GRACE_MS = 60 * 60 * 1000;
+
+// Bytes under `p`, never following a symlink: a link counts as itself.
+async function diskBytes(p) {
+  let st;
+  try {
+    st = await fs.promises.lstat(p);
+  } catch {
+    return 0;
+  }
+  if (!st.isDirectory()) return st.size;
+  let entries;
+  try {
+    entries = await fs.promises.readdir(p);
+  } catch {
+    return 0;
+  }
+  let total = 0;
+  for (const name of entries) total += await diskBytes(path.join(p, name));
+  return total;
+}
+
+// The newest mtime of anything under `p`, never following a symlink. A folder
+// counts by its files, since rewriting a file never touches its folder's
+// mtime; an empty folder counts by its own. Anything unreadable on the way
+// down answers Infinity, so it reads as just touched and stays.
+function newestMtime(p) {
+  let st;
+  try {
+    st = fs.lstatSync(p);
+  } catch {
+    return Infinity;
+  }
+  if (!st.isDirectory()) return st.mtimeMs;
+  let entries;
+  try {
+    entries = fs.readdirSync(p);
+  } catch {
+    return Infinity;
+  }
+  if (!entries.length) return st.mtimeMs;
+  let newest = 0;
+  for (const name of entries) newest = Math.max(newest, newestMtime(path.join(p, name)));
+  return newest;
+}
+
+function entryKind(entry) {
+  if (entry.isSymbolicLink()) return "link";
+  return entry.isDirectory() ? "folder" : "file";
+}
+
+function strayEntries(dir, kept, where, now) {
+  let entries;
+  try {
+    entries = fs.readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  const settled = (p) => now - newestMtime(p) >= STRAY_GRACE_MS;
+  return entries
+    .filter((e) => !kept.has(e.name))
+    .map((e) => ({ id: where + ":" + e.name, where, name: e.name, kind: entryKind(e), path: path.join(dir, e.name) }))
+    .filter((e) => settled(e.path));
+}
+
+/**
+ * Everything Cleanup would remove, worked out on the server and never taken
+ * from a client: sessions untouched for `maxAgeMs` (never `skipSid`; the rule
+ * `open` sweeps by, plus every file in the folder that old, so a resumed
+ * session or a saved draft keeps it), anything at the top of the console folder that is
+ * not kept, and -- only when the console runs from its default home inside
+ * `plan2codeDir` -- anything at the top of `plan2codeDir` that is not kept. Strays
+ * touched within `STRAY_GRACE_MS` are left for a later scan. A
+ * console running from another home (tests, dev) never reaches ~/.plan2code.
+ * Resolves to `{ items: [{ id, where, name, kind, bytes }], bytes }`.
+ */
+export async function cleanupFindings({
+  consoleDir = HOME_DIR,
+  plan2codeDir = PLAN2CODE_DIR,
+  now = Date.now(),
+  maxAgeMs = SESSION_MAX_AGE_MS,
+  skipSid,
+} = {}) {
+  const found = [];
+  const sessionsDir = path.join(consoleDir, "sessions");
+  for (const sid of staleSessions(sessionsDir, now, maxAgeMs, skipSid)) {
+    if (now - newestMtime(path.join(sessionsDir, sid)) <= maxAgeMs) continue;
+    found.push({ id: "session:" + sid, where: "session", name: sid, kind: "folder", path: path.join(sessionsDir, sid) });
+  }
+  found.push(...strayEntries(consoleDir, KEPT_CONSOLE_ENTRIES, "console", now));
+  if (path.resolve(consoleDir) === path.resolve(plan2codeDir, "console")) {
+    found.push(...strayEntries(plan2codeDir, KEPT_PLAN2CODE_ENTRIES, "root", now));
+  }
+  const items = [];
+  let bytes = 0;
+  for (const f of found) {
+    const size = await diskBytes(f.path);
+    bytes += size;
+    items.push({ id: f.id, where: f.where, name: f.name, kind: f.kind, bytes: size, path: f.path });
+  }
+  return { items, bytes };
+}
+
+/**
+ * Remove what Cleanup found, limited to `ids` the page was shown. The list is
+ * worked out afresh first and only ids on it are touched, so a name from the
+ * page is never a path, and anything that stopped qualifying since the scan
+ * (a session touched again) stays. A link is unlinked, never followed.
+ * Resolves to `{ removed: [id], bytes, failed: [id] }`.
+ */
+export async function removeCleanup(ids, opts = {}) {
+  const wanted = new Set((Array.isArray(ids) ? ids : []).filter((id) => typeof id === "string"));
+  const { items } = await cleanupFindings(opts);
+  const removed = [];
+  const failed = [];
+  let bytes = 0;
+  for (const item of items) {
+    if (!wanted.has(item.id)) continue;
+    try {
+      if (item.kind === "link") await fs.promises.unlink(item.path);
+      else await fs.promises.rm(item.path, { recursive: true, force: true });
+      removed.push(item.id);
+      bytes += item.bytes;
+    } catch {
+      failed.push(item.id);
+    }
+  }
+  return { removed, bytes, failed };
 }
 
 /**
@@ -871,7 +1017,7 @@ export function handOff(child, pre) {
 
 /* ----------------------------------------------------------- patch merge */
 
-const APPEND_KEYS = new Set(["thread", "comments"]);
+const APPEND_KEYS = new Set(["thread"]);
 
 function isPlainObject(v) {
   return v !== null && typeof v === "object" && !Array.isArray(v);
@@ -896,7 +1042,7 @@ function mergeOne(target, patch, where) {
 }
 
 // Merge a keyed collection: a known id merges one level, an unknown id appends.
-// Named fields are replaced whole; thread/comments append.
+// Named fields are replaced whole; thread appends.
 function mergeKeyed(current, patchList, idKey, defaults, where) {
   const out = Array.isArray(current) ? current.map((x) => ({ ...x })) : [];
   for (const entry of patchList) {
@@ -955,6 +1101,42 @@ function dropStaleSubmissions(currentItems, before, patchList) {
   return merged;
 }
 
+// A thread entry is `{ who, text }`, and the page reads nothing else. Models
+// borrow the shape of the replies and doc blocks they also write, so `from` /
+// `role` and `md` / `body` / `content` are lifted into place: left as they came,
+// each became a "Plan2Code" bubble with nothing in it. An entry with no words
+// at all is refused. The person's own notes are recorded by the server when
+// they send, so an agent that echoes one back is not shown it twice.
+const THREAD_TEXT_KEYS = ["text", "md", "body", "content"];
+
+function normalizeThreads(patchList, currentItems) {
+  return patchList.map((entry) => {
+    if (!isPlainObject(entry) || entry.thread == null) return entry;
+    if (!Array.isArray(entry.thread)) throw new Error(`item "${entry.id}" "thread" must be an array`);
+    const prev = (currentItems || []).find((x) => x && x.id === entry.id);
+    const said = new Set(
+      ((prev && prev.thread) || []).filter((m) => m && m.who === "user").map((m) => String(m.text || "").trim()),
+    );
+    const thread = [];
+    for (const m of entry.thread) {
+      if (!isPlainObject(m)) throw new Error(`item "${entry.id}" thread entries must be objects`);
+      guard(m, "thread");
+      const key = THREAD_TEXT_KEYS.find((k) => typeof m[k] === "string" && m[k].trim());
+      if (!key) {
+        throw new Error(
+          `item "${entry.id}" thread entry has no "text". Write { "who": "agent", "text": "<markdown>" }; the page shows nothing else.`,
+        );
+      }
+      const { from, role, md, body, content, ...rest } = m;
+      const who = (m.who || from || role) === "user" ? "user" : "agent";
+      const text = m[key];
+      if (who === "user" && said.has(text.trim())) continue;
+      thread.push({ ...rest, who, text });
+    }
+    return { ...entry, thread };
+  });
+}
+
 const DOC_DEFAULTS = { version: 1, stale: false, blocks: [] };
 
 // Blocks merge by id like docs do, so a patch that only settles a block's
@@ -996,7 +1178,7 @@ export function applyPatch(state, patch) {
         break;
       case "items":
         if (!Array.isArray(v)) throw new Error('"items" must be an array');
-        next.items = dropStaleSubmissions(next.items, state.items, v);
+        next.items = dropStaleSubmissions(next.items, state.items, normalizeThreads(v, state.items));
         break;
       case "topics":
         if (!Array.isArray(v)) throw new Error('"topics" must be an array');
@@ -1048,14 +1230,10 @@ function stampTimes(before, next) {
     if (changed && !next.agent.since) next.agent = { ...next.agent, since: now };
     else if (!next.agent.since) next.agent = { ...next.agent, since: before.agent?.since || now };
   }
-  for (const list of [next.items, next.docs]) {
-    if (!Array.isArray(list)) continue;
-    for (const entry of list) {
+  if (Array.isArray(next.items)) {
+    for (const entry of next.items) {
       if (Array.isArray(entry.thread)) {
         for (const m of entry.thread) if (!m.at) m.at = now;
-      }
-      if (Array.isArray(entry.comments)) {
-        for (const m of entry.comments) if (!m.at) m.at = now;
       }
     }
   }
@@ -1289,7 +1467,10 @@ export function validate(state) {
   // server's record of an answer someone pressed Send on; if their own words
   // happened to contain "TASK_COMPLETE" or "Risk 3", every later agent patch
   // would be rejected and the session would wedge with no way out.
-  const authored = state.items.map(({ submitted, sentNote, ...rest }) => rest);
+  const authored = state.items.map(({ submitted, sentNote, thread, ...rest }) => ({
+    ...rest,
+    thread: Array.isArray(thread) ? thread.filter((m) => !m || m.who !== "user") : thread,
+  }));
   const prose =
     JSON.stringify(authored) +
     JSON.stringify(state.docs || []) +

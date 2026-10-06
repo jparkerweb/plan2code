@@ -243,13 +243,33 @@ summarise it back.
 Then, in ONE `post`, do all of:
 
 - mark each answered item `"status": "answered"` and record its `answer`
-- add your replies to any comment threads
+- reply to every note in that item's `thread` (shape below)
 - answer any Quick questions that came with it, in `chat.replies` (see Quick
   questions)
 - publish the next batch of questions
 - set `"agent": { "status": "waiting" }`
 
 One post is one atomic update, so the page never shows a half-changed state.
+
+### Replying to a note
+
+A `comment` is the person talking to you about that card, often asking
+something. It shows in the card's **Notes on this** panel, and so does your
+answer:
+
+```jsonc
+{ "items": [{ "id": "p4", "thread": [
+  { "who": "agent", "text": "A proxy is the server some company networks route traffic through. **Markdown** is fine." }
+] }] }
+```
+
+- Every entry is `{ "who": "agent", "text": "<markdown>" }`. `text`, not
+  `md`: the page reads nothing else. An entry with no `text` is rejected.
+- The server writes their note into the thread as it arrives. Do not repeat
+  it, and send only your new entries: `thread` appends.
+- Answer what they asked, in the thread, even when you also change a doc or
+  re-ask the question. "I've updated the doc" alone leaves the question in the
+  panel with no answer under it.
 
 ### Recording the answer
 
@@ -661,9 +681,17 @@ finish are dropped, so you start on a blank page and post your own. A skill
 run inline from another (a quick task's review) keeps the page it was
 handed. A
 fresh `open` would strand the page the person is watching on the dashboard's
-session while your questions went to a page nobody has open. Then run the
-skill normally: its Interface question was already answered by being
-launched, so start where its real work starts.
+session while your questions went to a page nobody has open.
+
+> **Never hand this to a skill-invocation tool. Open its `SKILL.md` with your
+> own file-read tool and follow it from the top instead.** Every Plan2Code
+> skill below the dashboard ships `disable-model-invocation: true` on
+> purpose — it exists to be read and followed inline, not launched as a
+> sub-skill — and calling one through a skill-invocation tool errors out and
+> strands the hand-off mid-launch.
+
+Its Interface step is already answered by having been launched, so start
+where its real work starts.
 
 The menu itself is the page's own list — you never send it. The page knows
 the repo too: `open` scans `AGENTS.md` and `specs/` into `state.scan`
@@ -829,6 +857,12 @@ know:
 | 5, User Feedback | Optional items, `required: false`: the rating as a `choice` of 1 to 10 or a `text`, the three reasons as `text`. The submit-to-maintainer consent is a `confirm`. |
 | 6, Spec Cleanup | A `confirm` before moving anything, the archive paths in `consequences`, and a line that the spec's remembered workspace folders are forgotten too (`console.mjs forget --spec specs/<feature>` after the move). |
 
+Post `activity` as each step starts, before its doc or question lands — reading
+the spec, running `specs.mjs status` or `archive --dry-run`, checking the
+implementation — the same way Review does. A step with no card of its own
+(2, 3) is otherwise a stretch of silence the page can only show as "Starting
+Finalize".
+
 Pass `--spec specs/<feature>` to `open`, or post `specDir` once you know it.
 Stopping mid-finalize loses nothing
 — the specs are untouched until Step 3's summary write — so a stop's finish
@@ -859,7 +893,7 @@ question or doc lands:
 `{"agent":{"status":"working","activity":"Reading the plan"}}`.
 
 The patch merges: scalars replace, `null` deletes a key, `items` / `topics` / `docs`
-merge by `id` (an unknown id is added), and `thread` / `comments` append. Send only
+merge by `id` (an unknown id is added), and `thread` appends. Send only
 what changed. A whole-file rewrite would put the entire session back into your
 context on every turn.
 
@@ -1239,7 +1273,7 @@ answers were submitted but never picked up.
 | You started subagents or background jobs | Wait for every one to report back before `finish`, posting `working` with a count meanwhile. A finish while they run tells the person it is safe to close the terminal, and that kills them. |
 | Any session end, not only the last one | Also post `finish`: an off-ramp that routes elsewhere, a checkpoint that saves and stops, a stop request. Anything that ends the session without it leaves the page promising a question that is not coming. |
 | Picking up a paused session | `open --resume <sid>` (or `open --session <sid>`) clears a paused `finish` itself, and the questions left open at the pause with it: the finish body already said what was still open, so re-ask whatever the new session needs in your own words rather than leaving the old asks on the page as duplicates. Settled items stay. For any other ending you are deliberately taking back, post `"finish": null` in your first patch. |
-| The same result arrives twice | Your harness killed `wait` after it handed the result over but before it recorded that. Handle it once. Most of a repeated patch is harmless, because items merge by id, but `thread` and `comments` **append**: leave out any thread entry you already sent, or the person sees your reply twice. |
+| The same result arrives twice | Your harness killed `wait` after it handed the result over but before it recorded that. Handle it once. Most of a repeated patch is harmless, because items merge by id, but `thread` **appends**: leave out any thread entry you already sent, or the person sees your reply twice. |
 | The same chat arrives twice | Replies merge by `id`, so re-post the same reply if it is not on the page yet; do not answer the question a second time. |
 | `node` is missing, or older than 18 | One line, then the terminal. Do not try to install anything. |
 

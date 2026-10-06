@@ -523,6 +523,19 @@ send never holds up a question.
 A reply that lands while you are on another tab puts a dot on **Ask** and
 chimes once (if sounds are on).
 
+### When an update is out
+
+When a newer Plan2Code release is out, the dashboard shows an **UPDATE
+AVAILABLE** banner at the top. Click it for the details: the version you
+have, the new one (linked to its Releases page) and the exact command that
+updates you, with a Copy button. **×** hides the banner for this session; the
+next dashboard shows it again until you update.
+
+The check uses your own git login to read the repo's release tags, once an
+hour at most. If git cannot reach the repo (no git, no access, offline), you
+simply see no banner, and nothing waits on it. The version in Help always
+links to the Releases page.
+
 ### Keyboard
 
 | Key | Does |
@@ -538,7 +551,7 @@ keyboard-only navigation work.
 
 ## Models in User Preferences
 
-The `plan2code` launcher's model menu comes from `models.json`, which every install overwrites with the authors' curated list. **User Preferences → Models** (Claude and Devin tabs) lets you add a model that came out before Plan2Code was updated; additions are kept in `~/.plan2code/models.json`, and **Reset to default** removes them. Restart `plan2code` to see a change. You can always run `plan2code --model <id>`, or switch model inside your agent before running a skill. Devin ids ending `-xhigh` or `-max` are refused.
+The `plan2code` launcher's model menu comes from `models.json`, which every install overwrites with the authors' curated list. **User Preferences → Models** (Claude and Devin tabs) lets you add a model that came out before Plan2Code was updated; additions are kept in `~/.plan2code/models.json`, and **Reset to default** removes them. Restart `plan2code` to see a change. You can always run `plan2code --model <id>`, or switch model inside your agent before running a skill. Devin ids ending `-xhigh` or `-max` are refused. Maintainers refresh the curated list with the repo-local `/plan2code-model-update` skill, which shows a diff and changes only what they approve.
 
 ---
 
@@ -628,6 +641,17 @@ answers, uploads and all, paused or not — along with stray scratch files
 Your `looks.json` and the `console-dir` pointer are never touched, and neither
 is the session being opened. Nothing of value goes with them: the page is
 never the record, `specs/` in your project is.
+
+**Or clean up on demand.** *User Preferences → Cleanup* → **Find files to
+clean up** lists, with sizes, everything in `~/.plan2code/` that is not
+needed: sessions untouched for 30 days (never the one you are in), anything at
+the top of `~/.plan2code/console/` other than `sessions/`, `looks.json`,
+`workspaces.json`, `console-dir` and `update-check.json`, and anything at the top of `~/.plan2code/` other than
+`console/`, `bin/`, `launcher.json` and `models.json`. A stray is listed once
+it has sat untouched for an hour, so a lock or temp file another session is
+writing right now is never caught. **Delete these** removes
+that list and nothing else. A console running from another home
+(`PLAN2CODE_CONSOLE_HOME`) only ever looks inside that home.
 
 ---
 
