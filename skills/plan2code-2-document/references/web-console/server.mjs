@@ -25,12 +25,14 @@ import {
   LOOKS_FILE,
   PUBLIC_DIR,
   SHIPPED_MODELS_FILE,
+  UPDATE_CHECK_FILE,
   USER_MODELS_FILE,
   WORKSPACE_FILE,
   appendChat,
   appendEvent,
   chatForFrame,
   checkDocument,
+  cleanupFindings,
   currentConversation,
   ensureDir,
   fileStamp,
@@ -47,6 +49,7 @@ import {
   readWorkspace,
   rememberWorkspace,
   rememberedWorkspace,
+  removeCleanup,
   remoteWarning,
   specKey,
   typedCount,
@@ -59,6 +62,7 @@ import { CHAT_LIMIT, CHAT_MAX_CHARS, chatOffline } from "./public/chat.js";
 import { meterView } from "./public/meter.js";
 import { ACCENTS, DEFAULT_ACCENT, DEFAULT_CARD_WIDTH, cardWidth } from "./public/palette.js";
 import { defaultName, freeName, nameProblem } from "./public/workspace.js";
+import { checkForUpdate } from "./update-check.mjs";
 import { WORKSPACE_PICKER_PROMPT, pickFolder, pickerCommand } from "./picker.mjs";
 
 const args = parseArgs(process.argv.slice(2));
@@ -611,6 +615,7 @@ function stateFrame(state) {
     chat: { ...chatForFrame(chatEntries(), state), pickedUp: chatPickedUp(), offline: chatOfflineNow(state) },
     workspace: workspaceView(),
     meter: meterView(ledgerEntries()),
+    ...(updateInfo ? { update: updateInfo } : {}),
     have: haveKey(),
   };
 }
@@ -623,7 +628,7 @@ function haveKey() {
   ledgerEntries();
   return (
     `${STARTED}.${rev}.${pending ? 1 : 0}${stop ? 1 : 0}.${chatSeen.stamp || ""}.${cursorSeen.stamp || ""}` +
-    `.${workspaceSeen.stamp || ""}.${ledgerSeen.stamp || ""}`
+    `.${workspaceSeen.stamp || ""}.${ledgerSeen.stamp || ""}.${updateInfo ? updateInfo.latest : ""}`
   );
 }
 
@@ -648,6 +653,12 @@ function recordSubmitted(state, actions) {
     if (action.type === "comment") {
       const pick = (list) => (Array.isArray(list) ? list.map(({ path, name }) => ({ path, name })) : []);
       item.sentNote = { at, text: String(action.text || ""), images: pick(action.images), files: pick(action.files) };
+      // The person's side of the Notes thread. Left to the agent it was never
+      // written, so a question asked in a note vanished once it was picked up
+      // and the reply under it answered nothing on the page.
+      if (item.sentNote.text.trim() || item.sentNote.images.length || item.sentNote.files.length) {
+        item.thread = [...(Array.isArray(item.thread) ? item.thread : []), { who: "user", ...item.sentNote }];
+      }
       continue;
     }
     const { i, type, ...rest } = action;
@@ -933,6 +944,38 @@ function pushState() {
   if (stateNow) broadcast("state", stateFrame(stateNow));
 }
 
+/* --------------------------------------------------------- update check */
+
+// The version this console was installed as: install.js writes version.json
+// beside console.mjs; a dev checkout falls back to the repo root's.
+function installedVersion() {
+  for (const file of [path.join(HERE, "version.json"), path.join(HERE, "..", "..", "version.json")]) {
+    const version = readJson(file, {}).version;
+    if (typeof version === "string" && version) return version;
+  }
+  return null;
+}
+
+// Filled in once the boot-time check answers; until then, and whenever it
+// fails, the frame carries no `update` and the page shows no banner.
+let updateInfo = null;
+let updateLatest = null;
+
+// Started at boot and never awaited: git may take up to its 10 s limit, and
+// nothing the person sees waits on it. The catch is not optional: a throw in
+// pushState() would otherwise be an unhandled rejection, which ends the server.
+function startUpdateCheck() {
+  const installed = installedVersion();
+  if (!installed) return;
+  checkForUpdate({ installed, cacheFile: UPDATE_CHECK_FILE })
+    .then((result) => {
+      updateLatest = result?.latest ?? null;
+      updateInfo = result?.updateAvailable ? { installed: result.installed, latest: result.latest } : null;
+      if (updateInfo) pushState();
+    })
+    .catch(() => {});
+}
+
 let agentSeenAt = Date.now();
 function agentLastSeen() {
   return new Date(agentSeenAt).toISOString();
@@ -1039,10 +1082,8 @@ const server = http.createServer((req, res) => {
   }
 
   if (pathname === "/version" && req.method === "GET") {
-    for (const file of [path.join(HERE, "version.json"), path.join(HERE, "..", "..", "version.json")]) {
-      const version = readJson(file, {}).version;
-      if (typeof version === "string" && version) return json(res, 200, { version });
-    }
+    const version = installedVersion();
+    if (version) return json(res, 200, { version, latest: updateLatest });
     return json(res, 404, { error: "no version" });
   }
 
@@ -1090,7 +1131,7 @@ const server = http.createServer((req, res) => {
   if (pathname === "/draft" && req.method === "POST") {
     if (!originOk(req, port)) return json(res, 403, { error: "bad origin" });
     return readBody(req, (err, body) => {
-      if (err) return json(res, 400, { error: "body must be JSON" });
+      if (err) return json(res, err.tooBig ? 413 : 400, { error: err.tooBig ? "too large" : "body must be JSON" });
       // Debounced client-side; this is just the durable mirror. Twenty minutes
       // of someone's structured answers must not die with a closed tab.
       try {
@@ -1115,7 +1156,7 @@ const server = http.createServer((req, res) => {
   if (pathname === "/looks" && req.method === "POST") {
     if (!originOk(req, port)) return json(res, 403, { error: "bad origin" });
     return readBody(req, (err, body) => {
-      if (err) return json(res, 400, { error: "body must be JSON" });
+      if (err) return json(res, err.tooBig ? 413 : 400, { error: err.tooBig ? "too large" : "body must be JSON" });
       // `set` carries only the keys one tab changed, merged onto what is on
       // disk, so a tab holding stale settings cannot undo another tab's change.
       const set = body && body.set !== undefined ? cleanLooks(body.set) : null;
@@ -1141,7 +1182,7 @@ const server = http.createServer((req, res) => {
   if (pathname === "/models" && req.method === "POST") {
     if (!originOk(req, port)) return json(res, 403, { error: "bad origin" });
     return readBody(req, (err, body) => {
-      if (err) return json(res, 400, { error: "body must be JSON" });
+      if (err) return json(res, err.tooBig ? 413 : 400, { error: err.tooBig ? "too large" : "body must be JSON" });
       const { models, error } = cleanModels(body && body.models);
       if (error) return json(res, 400, { error });
       try {
@@ -1151,6 +1192,24 @@ const server = http.createServer((req, res) => {
         return json(res, 500, { error: String(e.message) });
       }
       return json(res, 200, { ok: true, user: models });
+    });
+  }
+
+  // User Preferences -> Cleanup. `{ scan: true }` lists what is not needed in
+  // ~/.plan2code; `{ delete: [id] }` removes those of the ids a fresh scan
+  // still finds. Never this session, never a path the page sent.
+  if (pathname === "/cleanup" && req.method === "POST") {
+    if (!originOk(req, port)) return json(res, 403, { error: "bad origin" });
+    return readBody(req, (err, body) => {
+      if (err) return json(res, err.tooBig ? 413 : 400, { error: err.tooBig ? "too large" : "body must be JSON" });
+      if (body && Array.isArray(body.delete)) {
+        return removeCleanup(body.delete, { skipSid: SID })
+          .then((done) => json(res, 200, { ok: true, ...done }))
+          .catch((e) => json(res, 500, { error: String(e.message) }));
+      }
+      return cleanupFindings({ skipSid: SID })
+        .then(({ items, bytes }) => json(res, 200, { ok: true, bytes, items: items.map(({ path: _p, ...item }) => item) }))
+        .catch((e) => json(res, 500, { error: String(e.message) }));
     });
   }
 
@@ -1260,7 +1319,7 @@ const server = http.createServer((req, res) => {
   if (pathname === "/submit" && req.method === "POST") {
     if (!originOk(req, port)) return json(res, 403, { error: "bad origin" });
     return readBody(req, (err, body) => {
-      if (err) return json(res, 400, { error: "body must be JSON" });
+      if (err) return json(res, err.tooBig ? 413 : 400, { error: err.tooBig ? "too large" : "body must be JSON" });
       if (!body || !Array.isArray(body.actions) || body.actions.length === 0) {
         return json(res, 400, { error: "actions must be a non-empty array" });
       }
@@ -1361,6 +1420,7 @@ const server = http.createServer((req, res) => {
   if (pathname === "/chat" && req.method === "POST") {
     if (!originOk(req, port)) return json(res, 403, { error: "bad origin" });
     return readBody(req, (err, body) => {
+      if (err && err.tooBig) return json(res, 413, { error: "too large" });
       if (err || !body || typeof body !== "object" || Array.isArray(body)) return json(res, 400, { error: "bad" });
       const state = readState() || {};
       const current = currentConversation(chatEntries()).conversation;
@@ -1424,6 +1484,7 @@ const server = http.createServer((req, res) => {
   if (pathname === "/chat/decision" && req.method === "POST") {
     if (!originOk(req, port)) return json(res, 403, { error: "bad origin" });
     return readBody(req, (err, body) => {
+      if (err && err.tooBig) return json(res, 413, { error: "too large" });
       if (err || !body || typeof body !== "object" || Array.isArray(body)) return json(res, 400, { error: "bad" });
       if (body.decision !== "approve" && body.decision !== "decline") return json(res, 400, { error: "bad" });
       if (body.text !== undefined && typeof body.text !== "string") return json(res, 400, { error: "bad" });
@@ -1472,6 +1533,7 @@ const server = http.createServer((req, res) => {
   if (Object.hasOwn(workspaceRoutes, pathname) && req.method === "POST") {
     if (!originOk(req, port)) return json(res, 403, { error: "bad origin" });
     return readBody(req, (err, body) => {
+      if (err && err.tooBig) return json(res, 413, { error: "too large" });
       if (err || !body || typeof body !== "object" || Array.isArray(body)) return json(res, 400, { error: "bad" });
       let answer;
       try {
@@ -1489,6 +1551,7 @@ const server = http.createServer((req, res) => {
   if (pathname === "/workspace/scope" && req.method === "POST") {
     if (!originOk(req, port)) return json(res, 403, { error: "bad origin" });
     return readBody(req, (err, body) => {
+      if (err && err.tooBig) return json(res, 413, { error: "too large" });
       if (err || !body || typeof body !== "object" || Array.isArray(body)) return json(res, 400, { error: "bad" });
       const spec = typeof body.spec === "string" ? body.spec : "";
       if (spec && !/^specs\/[^/\\]+$/.test(specKey(spec))) return json(res, 400, { reason: "bad-spec" });
@@ -1589,15 +1652,19 @@ function readBody(req, cb) {
   let tooBig = false;
   req.on("data", (c) => {
     size += c.length;
+    // Drain past the cap rather than destroy, exactly like readRaw: a
+    // destroyed request emits 'close', never 'end' or 'error', so cb would
+    // never run and the page would see a reset instead of the 413 that names
+    // the problem.
     if (size > MAX_BODY) {
       tooBig = true;
-      req.destroy();
+      chunks.length = 0;
       return;
     }
     chunks.push(c);
   });
   req.on("end", () => {
-    if (tooBig) return cb(new Error("too large"));
+    if (tooBig) return cb(Object.assign(new Error("too large"), { tooBig: true }));
     try {
       cb(null, JSON.parse(Buffer.concat(chunks).toString("utf8")));
     } catch (e) {
@@ -1834,6 +1901,9 @@ function onListening(port) {
     bootWorkspace();
   } catch {}
   process.stdout.write(JSON.stringify({ type: "ready", url, port, sid: SID }) + "\n");
+  try {
+    startUpdateCheck();
+  } catch {}
   try {
     process.send?.({ type: "listening", port });
   } catch {}

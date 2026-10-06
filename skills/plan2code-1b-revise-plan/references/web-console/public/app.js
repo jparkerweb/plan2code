@@ -66,6 +66,8 @@ import {
   submittedAwaiting,
   noteAwaiting,
   suggestionFrom,
+  threadText,
+  threadWho,
   THUMB_EDGE,
   turnGate,
   verdictText,
@@ -446,6 +448,10 @@ document.addEventListener("click", (e) => {
 
 
 const GONE_AFTER_MS = 8000;
+// Named so a reconnect can clear only THIS banner: a bare banner(null) would
+// wipe an unrelated warning that landed while the page was gone (an upload
+// failure, a refused send).
+const GONE_BANNER = "Lost contact with Plan2Code. Nothing you have typed is lost. This page reconnects by itself.";
 const WORKING_GRACE_MS = 5 * 60 * 1000;
 // Two minutes with the agent mid-turn, three when it is merely meant to be
 // listening. The difference is the cost of being wrong: a working agent that
@@ -521,6 +527,9 @@ let chatFrame = null;
 // sends them.
 let wsFrame = null;
 let meterFrame = null;
+// The frame's update ({ installed, latest }), present only when a newer
+// release is out; null otherwise.
+let updateFrame = null;
 let chatDot = false;
 let chatSending = false;
 let chatResetting = false;
@@ -566,7 +575,6 @@ function fresh() {
     drafts: {},
     images: {},
     sent: {},
-    sentAt: null,
     stopping: null,
     afterBuild: null,
     homeward: null,
@@ -870,10 +878,12 @@ function adopt(body) {
   chatFrame = body.chat || null;
   if (body.workspace) wsFrame = body.workspace;
   if (body.meter) meterFrame = body.meter;
+  // Always replaced: an absent key means no update.
+  updateFrame = body.update || null;
   lastContact = Date.now();
   if (gone) {
     gone = false;
-    banner(null);
+    if ($("banner").textContent === GONE_BANNER) banner(null);
   }
   if (firstLoad) {
     load();
@@ -1016,7 +1026,9 @@ function adopt(body) {
   render();
   if ($("workspace-modal").open) renderWorkspace();
   tellFolderIssues();
-  if (firstLoad || S.specDir !== prevSpecDir || S.workflow !== prevWorkflow) loadOverview();
+  // The Overview tab's file changes under a build, so a tab you are watching
+  // refetches on every new frame too, not only on the click that opened it.
+  if (firstLoad || S.specDir !== prevSpecDir || S.workflow !== prevWorkflow || view === "overview") loadOverview();
   if (announce) showArrival(announce);
   // New entries land at the bottom of the rail. Gliding down to them beats
   // leaving the list parked where it was while it grew underneath.
@@ -1149,15 +1161,12 @@ function markGone() {
     // of the server means there, and a banner promising a reconnect would
     // argue with it.
     if (!finish() && !stopInProgress()) {
-      banner(
-        "Lost contact with Plan2Code. Nothing you have typed is lost. This page reconnects by itself.",
-        "warn"
-      );
+      banner(GONE_BANNER, "warn");
     }
     render();
   } else if (!bad && gone) {
     gone = false;
-    banner(null);
+    if ($("banner").textContent === GONE_BANNER) banner(null);
     render();
   }
 }
@@ -1182,7 +1191,6 @@ function connect() {
     } catch {}
   });
   es.addEventListener("submitted", (e) => {
-    local.sentAt = Date.now();
     // Drop only what was actually sent.
     //
     // This event fires for a send from ANY tab of this session, which is why it
@@ -1799,14 +1807,19 @@ async function sendBrief() {
         reply: briefPhrase(choice.range),
       }),
     });
+    if (res.status === 409) throw Object.assign(new Error("pending"), { pending: true });
     if (!res.ok) throw new Error(String(res.status));
     $("brief-modal").close();
     banner("Asked for a brief. It will appear as a tab when it is written.", "good");
     setTimeout(() => banner(null), 5000);
     pendingResult = true;
     render();
-  } catch {
-    why.textContent = "That did not go through. Try again in a moment.";
+  } catch (err) {
+    if (err && err.pending) pendingResult = true;
+    why.textContent =
+      err && err.pending
+        ? "Your last answers are still being picked up. Try again in a moment."
+        : "That did not go through. Try again in a moment.";
   } finally {
     go.disabled = false;
     go.textContent = "Write the brief";
@@ -2515,6 +2528,51 @@ function roleNudge() {
   return nudge;
 }
 
+// × on the update banner hides it for this console session only, and only
+// for the release it named. Blocked storage means "not dismissed".
+function updateDismissKey() {
+  try {
+    return "p2c-update-dismissed:" + S.sid;
+  } catch {
+    return "p2c-update-dismissed:";
+  }
+}
+
+function updateDismissed() {
+  try {
+    return sessionStorage.getItem(updateDismissKey()) === updateFrame.latest;
+  } catch {
+    return false;
+  }
+}
+
+const RELEASES_URL = "https://github.com/jparkerweb/plan2code/releases/";
+const UPDATE_COMMAND = "npx --allow-git=all git+https://github.com/jparkerweb/plan2code.git";
+
+function releasesLink(text) {
+  const a = el("a", null, text);
+  a.href = RELEASES_URL;
+  a.target = "_blank";
+  a.rel = "noopener noreferrer";
+  return a;
+}
+
+function openUpdateModal() {
+  if (!updateFrame) return;
+  const versions = $("update-versions");
+  versions.replaceChildren(
+    document.createTextNode("Version "),
+    releasesLink("v" + updateFrame.latest),
+    document.createTextNode(" is out — you have "),
+    el("code", null, updateFrame.installed),
+    document.createTextNode(".")
+  );
+  const row = $("update-command");
+  const code = el("code", null, UPDATE_COMMAND);
+  row.replaceChildren(code, copyButton(UPDATE_COMMAND, "btn small ghost handoff-copy", code));
+  $("update-modal").showModal();
+}
+
 function renderDashboard(main) {
   maybeWake();
   const menu = (S && S.menu) || {};
@@ -2525,6 +2583,25 @@ function renderDashboard(main) {
     const warn = el("div", "dash-nudge meter-banner", RED_BANNER);
     warn.setAttribute("role", "status");
     wrap.appendChild(warn);
+  }
+  // Built here only, so no other workflow's page ever shows it.
+  if (updateFrame && !updateDismissed()) {
+    const notice = el("div", "dash-nudge update-banner");
+    notice.setAttribute("role", "status");
+    const open = el("button", "update-banner-open", "UPDATE AVAILABLE · v" + updateFrame.latest);
+    open.type = "button";
+    open.addEventListener("click", openUpdateModal);
+    const dismiss = el("button", "update-banner-dismiss", "×");
+    dismiss.type = "button";
+    dismiss.setAttribute("aria-label", "Dismiss until next time");
+    dismiss.addEventListener("click", () => {
+      try {
+        sessionStorage.setItem(updateDismissKey(), updateFrame.latest);
+      } catch {}
+      render();
+    });
+    notice.append(open, dismiss);
+    wrap.appendChild(notice);
   }
   wrap.appendChild(el("p", "card-kicker", "Plan2Code"));
   wrap.appendChild(el("h2", "dash-title", "What are we doing today?"));
@@ -3223,7 +3300,11 @@ document.addEventListener("keydown", cancelSkipMove, true);
 function skipAndMoveOn(id) {
   cancelSkipMove();
   local.skipFlash = id;
-  stage(id, { type: "skip", skipped: true });
+  // A note already typed goes along: skipping the question is not retracting
+  // the comment. Dropping it would leave the text in the box but out of the
+  // send, which looks kept and is not.
+  const cur = local.staged[id];
+  stage(id, { type: "skip", skipped: true, ...(cur && cur.text ? { text: cur.text } : {}) });
   skipTimer = setTimeout(() => {
     skipTimer = null;
     local.skipFlash = null;
@@ -3340,19 +3421,24 @@ function renderWaiting(main) {
   }
   pane.appendChild(title);
   pane.appendChild(el("p", null, doing));
+  const ask = "If Plan2Code needs you, the question appears here on its own.";
   if (!docs().length) {
-    pane.appendChild(el("p", null, "If Plan2Code needs you, the question appears here on its own."));
+    pane.appendChild(el("p", null, ask));
     return;
   }
   // "Task" and the tasks tab's own name both open that tab, so the pointer is
   // one click from what it points at. A build posts it as `phase` ("Phase N
-  // tasks"), a quick task as `tasks`; with neither the words stay plain.
+  // tasks"), a quick task as `tasks`. A skill with no task list (Document,
+  // Plan) has nothing live to follow, so it gets no pointer at all.
   const list =
     docs().find((d) => d.id === "phase") ||
     docs().find((d) => d.id === "tasks") ||
     docs().find((d) => /\btasks\b/i.test(d.title || ""));
+  if (!list) {
+    pane.appendChild(el("p", null, "The tabs above fill in as it goes. " + ask));
+    return;
+  }
   const jump = (word) => {
-    if (!list) return el("strong", "waiting-jump", word);
     const b = el("button", "waiting-jump", word);
     b.type = "button";
     b.addEventListener("click", () => {
@@ -3366,8 +3452,8 @@ function renderWaiting(main) {
     "The tabs above fill in as it goes. You can follow along with live ",
     jump("Task"),
     " updates in the ",
-    jump((list && list.title) || "Phase tasks"),
-    " tab. If Plan2Code needs you, the question appears here on its own."
+    jump(list.title || "Phase tasks"),
+    " tab. " + ask
   );
   pane.appendChild(p);
 }
@@ -3505,8 +3591,8 @@ function renderSettled(card, item) {
   // would misreport which of the two was the answer.
   let prose = text;
   if (!prose && !lines.length) {
-    const mine = (item.thread || []).filter((m) => m.who === "user");
-    if (mine.length) prose = String(mine[mine.length - 1].text || "").trim();
+    const mine = (item.thread || []).filter((m) => threadWho(m) === "user");
+    if (mine.length) prose = threadText(mine[mine.length - 1]).trim();
   }
 
   const nothing = !lines.length && !prose;
@@ -4322,6 +4408,10 @@ function buildChecklist(card, item, staged) {
   const commitList = (change) => {
     const cur = local.staged[item.id];
     const next = { ...(cur || {}), type: "answer", kind: "checklist", ...change };
+    // A tick or a state IS the answer, so it ends a skip staged earlier:
+    // left in place, `skipped` would collapse the reply to "skip" while the
+    // card showed ticked steps on their way.
+    delete next.skipped;
     const empty = !(next.done && next.done.length) && !next.state && !next.text;
     stage(item.id, empty ? null : next);
   };
@@ -4371,7 +4461,7 @@ function buildChecklist(card, item, staged) {
 function buildMenu(card, item, staged) {
   const list = el("ul", "options");
   const name = "menu-" + item.id;
-  for (const o of item.options || []) {
+  for (const [i, o] of (item.options || []).entries()) {
     const picked = staged && staged.k === o.k;
     const li = el("li", "option" + (picked ? " is-picked" : ""));
     const label = el("label");
@@ -4379,7 +4469,13 @@ function buildMenu(card, item, staged) {
     const radio = el("input");
     radio.type = "radio";
     radio.name = name;
+    // The same id buildChoice gives its radios: withFocus finds the focused
+    // input by id after the render this change() sets off, and without one a
+    // keyboard user arrowing through the menu lands on <body> every time.
+    radio.id = optionId(item, o, i);
+    radio.value = o.k;
     radio.checked = Boolean(picked);
+    radio.setAttribute("aria-label", o.k ? `${o.k}: ${o.text}` : o.text);
     radio.addEventListener("change", () => stage(item.id, { type: "answer", kind: "menu", k: o.k }));
     const body = el("div", "option-body");
     const head = el("div", "option-label");
@@ -5276,20 +5372,30 @@ function renderAside() {
       )
     );
   }
+  // A note that has been sent but not yet picked up: marked as waiting, so the
+  // send is seen to have gone, until the agent replies. The server writes the
+  // note into the thread as it arrives; a session from before that has only
+  // `sentNote`, which gets a box of its own below.
+  const waiting = isOpen(item) && !finish() ? noteAwaiting(item) : null;
+  let waitingShown = false;
   for (const m of thread) {
-    const box = el("div", "msg " + (m.who === "user" ? "you" : ""));
+    const mine = threadWho(m) === "user";
+    const pending = Boolean(waiting && mine && m.at && m.at === waiting.at);
+    if (pending) waitingShown = true;
+    const box = el("div", "msg" + (mine ? " you" : "") + (pending ? " pending" : ""));
     const who = el("div", "msg-who");
-    who.appendChild(el("span", null, m.who === "user" ? "You" : "Plan2Code"));
-    if (m.at) who.appendChild(el("span", null, shortTime(m.at)));
+    who.appendChild(el("span", null, mine ? "You" : "Plan2Code"));
+    if (pending) who.appendChild(el("span", null, "Sent, waiting for Plan2Code"));
+    else if (m.at) who.appendChild(el("span", null, shortTime(m.at)));
     box.appendChild(who);
-    box.appendChild(md(m.text, "md"));
+    const text = threadText(m);
+    if (text) box.appendChild(md(text, "md"));
+    const tray = mine ? sentAttachments(m) : null;
+    if (tray) box.appendChild(tray);
     aside.appendChild(box);
   }
 
-  // A note that has been sent but not yet picked up: shown at once, so the
-  // send is seen to have gone, and gone when the agent replies.
-  const waiting = isOpen(item) && !finish() ? noteAwaiting(item) : null;
-  if (waiting) {
+  if (waiting && !waitingShown) {
     const box = el("div", "msg you pending");
     const who = el("div", "msg-who");
     who.appendChild(el("span", null, "You"));
@@ -5589,7 +5695,10 @@ async function attachFiles(itemId, files) {
   const taken = wanted.slice(0, room);
   // One banner at a time, so every refusal goes into it, each by name.
   const said = refused.map((r) => (r.reason === "too-large" ? tooLargeText(r.name) : notAllowedText(r.name)));
-  if (taken.length < wanted.length) said.push(chat ? "Up to 5 attachments per question." : "Up to 5 attachments per note.");
+  if (taken.length < wanted.length)
+    said.push(
+      chat ? `Up to ${CHAT_MAX_ATTACHMENTS} attachments per question.` : `Up to ${MAX_ATTACHMENTS} attachments per note.`
+    );
   if (said.length) banner(said.join(" "), refused.length ? "warn" : "info");
   await Promise.all(
     taken.map(async (file) => {
@@ -6439,6 +6548,10 @@ async function goHome() {
     $("home-modal").close();
   } catch (err) {
     $("home-modal").close();
+    // The server is holding an uncollected result: Send, Home and Stop all
+    // need to read as busy until the frame or the ping says otherwise, same
+    // as send() and sendAfterBuild() do on a 409.
+    if (err && err.pending) pendingResult = true;
     banner(
       err && err.pending
         ? "Your last answers are still being picked up, so that could not go yet. Try again in a moment."
@@ -6499,6 +6612,7 @@ async function stopSession() {
     stoppingHidden = false;
   } catch (err) {
     $("stop-modal").close();
+    if (err && err.pending) pendingResult = true;
     banner(
       err && err.pending
         ? "Your last answers are still being picked up, so the stop could not go yet. Try again in a moment."
@@ -6653,7 +6767,6 @@ function markSent({ sentIds, sentNotes = {}, summaries, values }) {
     local.sent[id] = { at: Date.now(), summary: summaries[id] || "", value: values[id] || null };
   }
   local.staged = {};
-  local.sentAt = Date.now();
   save();
 }
 
@@ -6706,7 +6819,7 @@ const STATE_WORDS = { done: "all done", blocked: "blocked", help: "need help", d
 // something the agent never hears.
 function tokenFor(item, v) {
   const map = item.token || {};
-  if (v.skipped) return "skip";
+  if (v.skipped) return v.text ? `skip; ${v.text}` : "skip";
   const parts = [];
   if (v.k) parts.push(map[v.k] || v.k);
   if (Array.isArray(v.ks) && v.ks.length) parts.push(v.ks.map((k) => map[k] || k).join(", "));
@@ -6938,14 +7051,14 @@ function renderAbout() {
 let helpBuilt = false;
 
 async function renderHelpVersion() {
-  const el = $("help-version");
+  const slot = $("help-version");
   try {
     const res = await fetch("/version", { cache: "no-store" });
     const { version } = res.ok ? await res.json() : {};
-    el.textContent = version ? "Plan2Code v" + version : "";
-    el.hidden = !version;
+    slot.replaceChildren(...(version ? [releasesLink("Plan2Code v" + version)] : []));
+    slot.hidden = !version;
   } catch {
-    el.hidden = true;
+    slot.hidden = true;
   }
 }
 
@@ -7053,6 +7166,7 @@ function openHelpOn(id) {
 }
 
 $("btn-home").addEventListener("click", openHomeConfirm);
+$("update-done").addEventListener("click", () => $("update-modal").close());
 $("home-cancel").addEventListener("click", () => $("home-modal").close());
 $("home-go").addEventListener("click", goHome);
 $("btn-stop").addEventListener("click", openStopConfirm);
@@ -7132,6 +7246,7 @@ $("btn-looks").addEventListener("click", () => {
 });
 $("looks-done").addEventListener("click", () => $("looks-modal").close());
 $("looks-modal").addEventListener("close", () => {
+  resetCleanup();
   if (isDashboard() && !needsRoleNudge(looks) && $("main").querySelector(".dash-nudge")) render();
 });
 $("looks-reset").addEventListener("click", () => {
@@ -7277,6 +7392,111 @@ $("models-reset").addEventListener("click", () => {
   saveModels();
   renderModels();
 });
+
+// Cleanup: the server works out what in ~/.plan2code is not needed and
+// shows it first; Delete these sends back only the ids it was shown, and the
+// server re-checks every one before removing it.
+let cleanupFound = null;
+// Bumped by every scan, delete and reset: a response from an older one is
+// dropped, so a scan still in flight when Preferences closes cannot refill it.
+let cleanupGen = 0;
+const CLEANUP_SHOWN = 8;
+
+function setCleanupStatus(text, isError) {
+  const status = $("cleanup-status");
+  status.textContent = text;
+  status.classList.toggle("error", Boolean(isError));
+}
+
+function cleanupLabel(item) {
+  if (item.where === "session") return "Session " + item.name;
+  const where = item.where === "root" ? "~/.plan2code/" : "~/.plan2code/console/";
+  return where + item.name + (item.kind === "folder" ? "/" : "");
+}
+
+function cleanupSummary(items, bytes) {
+  const sessions = items.filter((i) => i.where === "session").length;
+  const strays = items.length - sessions;
+  const parts = [];
+  if (sessions) parts.push(sessions + (sessions === 1 ? " old session" : " old sessions"));
+  if (strays) parts.push(strays + (strays === 1 ? " stray file or folder" : " stray files and folders"));
+  return parts.join(", ") + " · " + formatBytes(bytes);
+}
+
+function resetCleanup() {
+  cleanupGen++;
+  cleanupFound = null;
+  $("cleanup-list").replaceChildren();
+  $("cleanup-delete").hidden = true;
+  $("cleanup-delete").disabled = false;
+  $("cleanup-scan").disabled = false;
+  setCleanupStatus("", false);
+}
+
+function renderCleanup() {
+  const list = $("cleanup-list");
+  list.replaceChildren();
+  const items = (cleanupFound && cleanupFound.items) || [];
+  $("cleanup-delete").hidden = !items.length;
+  if (!items.length) return;
+  const rows = (some) => some.map((item) => {
+    const row = el("div", "cleanup-row");
+    row.append(el("span", null, cleanupLabel(item)), el("span", "cleanup-size", formatBytes(item.bytes)));
+    return row;
+  });
+  list.append(el("p", "cleanup-summary", cleanupSummary(items, cleanupFound.bytes)), ...rows(items.slice(0, CLEANUP_SHOWN)));
+  if (items.length > CLEANUP_SHOWN) {
+    const more = el("details", "cleanup-more");
+    more.append(el("summary", null, (items.length - CLEANUP_SHOWN) + " more"), ...rows(items.slice(CLEANUP_SHOWN)));
+    list.appendChild(more);
+  }
+}
+
+async function scanCleanup() {
+  const gen = ++cleanupGen;
+  $("cleanup-scan").disabled = true;
+  $("cleanup-delete").disabled = true;
+  setCleanupStatus("Looking…", false);
+  const { status, body } = await postJson("/cleanup", { scan: true });
+  if (gen !== cleanupGen) return;
+  $("cleanup-scan").disabled = false;
+  $("cleanup-delete").disabled = false;
+  if (status !== 200 || !body.ok) {
+    cleanupFound = null;
+    renderCleanup();
+    return setCleanupStatus(status ? body.error || "Could not look." : "Plan2Code isn't reachable.", true);
+  }
+  cleanupFound = { items: body.items || [], bytes: body.bytes || 0 };
+  renderCleanup();
+  // Left in the status line, not cleared: it is the live region, so this is
+  // what a screen reader hears when the scan finishes.
+  const found = cleanupFound.items.length;
+  setCleanupStatus(found ? "Found " + found + (found === 1 ? " item." : " items.") : "Nothing to clean up.", false);
+}
+
+async function deleteCleanup() {
+  if (!cleanupFound || !cleanupFound.items.length) return;
+  const gen = ++cleanupGen;
+  $("cleanup-delete").disabled = true;
+  $("cleanup-scan").disabled = true;
+  setCleanupStatus("Deleting…", false);
+  const { status, body } = await postJson("/cleanup", { delete: cleanupFound.items.map((i) => i.id) });
+  if (gen !== cleanupGen) return;
+  $("cleanup-delete").disabled = false;
+  $("cleanup-scan").disabled = false;
+  if (status !== 200 || !body.ok) {
+    return setCleanupStatus(status ? body.error || "Could not delete." : "Plan2Code isn't reachable.", true);
+  }
+  const removed = (body.removed || []).length;
+  const failed = (body.failed || []).length;
+  cleanupFound = null;
+  renderCleanup();
+  const done = removed ? "Deleted " + removed + (removed === 1 ? " item" : " items") + " · " + formatBytes(body.bytes) + " freed." : "Nothing was deleted.";
+  setCleanupStatus(failed ? done + " " + failed + " could not be removed." : done, Boolean(failed));
+}
+
+$("cleanup-scan").addEventListener("click", scanCleanup);
+$("cleanup-delete").addEventListener("click", deleteCleanup);
 
 $("btn-brief").addEventListener("click", openBrief);
 $("brief-cancel").addEventListener("click", () => $("brief-modal").close());

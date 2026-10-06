@@ -65,7 +65,7 @@ export function submittedAwaiting(item) {
   if (!s || typeof s !== "object") return null;
   if (item.answer && typeof item.answer === "object") return null;
   const thread = Array.isArray(item.thread) ? item.thread : [];
-  const replied = thread.some((m) => m && m.who === "agent" && (!s.at || !m.at || m.at >= s.at));
+  const replied = thread.some((m) => m && threadWho(m) === "agent" && (!s.at || !m.at || m.at >= s.at));
   return replied ? null : s;
 }
 
@@ -74,15 +74,31 @@ export function submittedAwaiting(item) {
  * agent has yet to say anything after it. The server records it as `sentNote`
  * on every send, so the page can show it in the Notes pane and in the Sent
  * box instead of letting it vanish into a send that shows no sign of arriving.
- * Any thread message from the send onwards, or none with a clock to compare,
- * means it has been picked up.
+ * Any agent message from the send onwards, or one with no clock to compare,
+ * means it has been picked up. The person's own entries never count: the
+ * server writes their note into the thread as it arrives.
  */
 export function noteAwaiting(item) {
   const n = item && item.sentNote;
   if (!n || typeof n !== "object") return null;
   const thread = Array.isArray(item.thread) ? item.thread : [];
-  const picked = thread.some((m) => m && (!n.at || !m.at || m.at >= n.at));
+  const picked = thread.some((m) => m && threadWho(m) === "agent" && (!n.at || !m.at || m.at >= n.at));
   return picked ? null : n;
+}
+
+/**
+ * Who said a thread entry and what they said. The contract is `{ who, text }`
+ * and the server lifts anything else into it, but sessions written before that
+ * hold `{ from, md }` replies, which would otherwise draw as empty bubbles.
+ */
+export function threadWho(m) {
+  return m && (m.who || m.from || m.role) === "user" ? "user" : "agent";
+}
+
+export function threadText(m) {
+  if (!m) return "";
+  for (const k of ["text", "md", "body", "content"]) if (typeof m[k] === "string" && m[k].trim()) return m[k];
+  return "";
 }
 
 /* -------------------------------------------------------------- labels */

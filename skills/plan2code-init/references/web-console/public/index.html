@@ -1291,6 +1291,14 @@
           come back, and you can change your role any time from the swatch
           button.
         </p>
+        <h4>When an update is out</h4>
+        <p>
+          When a newer Plan2Code release is out, the dashboard shows
+          <strong>UPDATE AVAILABLE</strong> at the top. Click it for the command
+          to run in your terminal; × hides it until the next
+          <code>/plan2code</code>. The version at the bottom of Help links to
+          the Releases page.
+        </p>
         <h4>The cards</h4>
         <p>They come in three groups.</p>
         <p><strong>First, the project</strong></p>
@@ -1846,6 +1854,15 @@
             its sound.
           </li>
           <li>
+            <strong>Cleanup</strong>: <strong>Find files to clean up</strong>
+            lists what Plan2Code doesn't need in your
+            <code>~/.plan2code</code> folder: sessions nobody has opened for
+            30 days, and files or folders that ended up there by mistake. It
+            shows each one with its size, and <strong>Delete these</strong>
+            removes exactly that list. Your preferences, saved folders, models,
+            the launcher and the session you are in always stay.
+          </li>
+          <li>
             <strong>Back to default</strong> puts everything back as it was, and
             sets Role back to Not set.
           </li>
@@ -1982,6 +1999,16 @@
           <label><input type="checkbox" data-sound="newTab" checked /> <span>New tab added</span></label>
         </div>
         <p class="help">Ticking one plays it. Play sounds switches them all off at once and keeps your picks for when you switch back on.</p>
+      </fieldset>
+      <fieldset class="modal-ranges looks-cleanup">
+        <legend>Cleanup</legend>
+        <p class="help">Finds what Plan2Code doesn't need in your <code>~/.plan2code</code> folder: sessions nobody has opened for 30 days, and files or folders that ended up there by mistake. You see the list before anything is deleted. Your preferences, saved folders, models, the launcher and this session always stay.</p>
+        <div class="cleanup-list" id="cleanup-list" aria-label="What would be deleted"></div>
+        <div class="models-actions">
+          <button type="button" class="btn small" id="cleanup-scan">Find files to clean up</button>
+          <button type="button" class="btn small danger" id="cleanup-delete" hidden>Delete these</button>
+          <span class="help" id="cleanup-status" role="status"></span>
+        </div>
       </fieldset>
       <fieldset class="modal-ranges looks-models">
         <legend>Models</legend>
@@ -2178,6 +2205,24 @@
       <div class="modal-actions">
         <button type="button" class="btn ghost" id="brief-cancel">Cancel</button>
         <button type="button" class="btn primary" id="brief-go">Write the brief</button>
+      </div>
+    </dialog>
+
+    <!-- Opened from the dashboard's UPDATE AVAILABLE banner. The versions and
+         the copy row are filled by app.js; the update itself runs in a
+         terminal, never from this page. -->
+    <dialog class="modal" id="update-modal" aria-labelledby="update-title">
+      <h2 id="update-title">A new Plan2Code is available</h2>
+      <p class="modal-blurb" id="update-versions"></p>
+      <ol class="update-steps">
+        <li>
+          Run this in your terminal (not in this page or your agent):
+          <div class="update-command" id="update-command"></div>
+        </li>
+        <li>When it finishes, close this console and start <code>plan2code</code> again.</li>
+      </ol>
+      <div class="modal-actions">
+        <button type="button" class="btn primary" id="update-done">Close</button>
       </div>
     </dialog>
 

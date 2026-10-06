@@ -5,7 +5,10 @@
 // popover; this file owns the rules. No DOM access at module scope and no
 // imports: the page and `node --test` both import this file.
 
-const NAME_CHAR = /[a-z0-9-]/;
+// Uppercase too: "@Repo" must still name @repo — names are forced lowercase
+// by the workspace rules, and a query typed with a capital otherwise matches
+// nothing and opens no suggestions at all.
+const NAME_CHAR = /[a-z0-9-]/i;
 const MAX_MATCHES = 6;
 
 /**
@@ -23,11 +26,13 @@ export function mentionAt(text, caret) {
 }
 
 // Names starting with the query first, then names containing it, in the
-// order given, at most six.
+// order given, at most six. Case-folded: folder names are lowercase by rule,
+// and "@Repo" should still find @repo rather than claim nothing matches.
 export function matchNames(names, query) {
-  const q = String(query || "");
-  const prefix = names.filter((n) => n.startsWith(q));
-  const inside = names.filter((n) => !n.startsWith(q) && n.includes(q));
+  const q = String(query || "").toLowerCase();
+  const fold = (n) => String(n).toLowerCase();
+  const prefix = names.filter((n) => fold(n).startsWith(q));
+  const inside = names.filter((n) => !fold(n).startsWith(q) && fold(n).includes(q));
   return [...prefix, ...inside].slice(0, MAX_MATCHES);
 }
 

@@ -2,6 +2,42 @@
 
 All notable changes to Plan2Code will be documented in this file.
 
+## v2.4.2
+
+### ✨ Added
+
+- **web-console**: the Questions and Ask tabs show a small spinner left of their name while Plan2Code is on it. Questions (Dashboard on the dashboard) spins from Send until the answers are picked up, the same wait as *Sent. Waiting for Plan2Code.*; Ask spins while a question the agent picked up has no answer yet, exactly when the conversation's own ring does. Neither turns once the agent goes quiet or offline, so a dead session never reads as a slow one.
+- **web-console**: **User Preferences → Cleanup**, above Models. **Find files to clean up** lists, with sizes, what `~/.plan2code` does not need: sessions untouched for 30 days (never the one serving the page), anything at the top of `~/.plan2code/console/` but `sessions/`, `looks.json`, `workspaces.json`, `console-dir` and `update-check.json`, and anything at the top of `~/.plan2code/` but `console/`, `bin/`, `launcher.json` and `models.json`. A stray is listed only after an hour untouched (`STRAY_GRACE_MS`), so a held lock or a temp file mid-rename never is. **Delete these** removes exactly that list and reports what went and the space freed. The server builds the list (`POST /cleanup`, `cleanupFindings()` in `lib.mjs`), sends no paths to the page, and on delete re-scans and removes only ids still found (`removeCleanup()`), unlinking symlinks without following them. A console running from `PLAN2CODE_CONSOLE_HOME` never looks outside that home. Help's User Preferences topic describes it.
+- **web-console**: the dashboard shows an **UPDATE AVAILABLE · v<latest>** banner when a newer release is out. The console server finds the newest `vX.Y.Z` tag with `git ls-remote --tags` when it starts (no shell, prompts off, a 10 s limit, never waited on), caches the answer for an hour in `~/.plan2code/console/update-check.json`, and adds `update` to the state frame only when that release is newer. The banner opens a dialog with both versions, a Releases link and the update command with Copy; × hides it for that session. `GET /version` also returns `latest`, and the version in Help links to the Releases page.
+- **launcher**: `plan2code` opens with a colored Planny banner and a plain-English intro, then the agent menu with cyan numbers, a `(last used)` marker on the remembered pick and a green default. With one CLI installed, or a `--cli` pick, it prints `Opening with <CLI>…` instead. The model menu, the folder prompt and every `plan2code:` error get the same styling. Color is used only on a terminal with `NO_COLOR` unset, so piped runs print plain text and no banner.
+- **maintainer**: a repo-local `/plan2code-model-update` skill (`.claude/skills/`, never installed) refreshes `src/launcher/models.json` from `devin models list` and Claude Code's documented model aliases. It shows a diff, applies only the changes the maintainer approves, checks the file against the launcher's rules, runs `npm test` and never commits.
+- **tests**: `scripts/test-web-console.mjs` covers Cleanup, the update check and the note thread; `scripts/test-launcher.mjs` covers the banner and color handling.
+
+### 🔧 Changed
+
+- **document**: `overview.md` puts the Phase Checklist and Parallel Execution Groups directly under the Summary, ahead of the Tech Stack, Architecture, Risks and Success Criteria, so the phases are found without scrolling. Every script finds these sections by heading, so specs written in the old order keep working.
+- **web-console**: while a build runs, the waiting screen's pointer to the tasks list is now clickable. **Task** and the tab's own name (say **Phase 6 tasks**) show bold in the highlight color, and either one opens that phase's tasks tab.
+- **web-console**: the session meter counts a build while it runs instead of only once the phase is approved. `console.mjs` writes a `progress` ledger entry whenever an Implement or Implement + Review post raises `headline.cleared`, and the build's row (*Implement + Review: 9 tasks built so far*) scores one point per 3 tasks done. The phase's final `run` takes that row over in place, so nothing counts twice and the meter never drops. A second phase in the same run starts its own count once its headline is back at `cleared: 0`.
+- **web-console**: the **UPDATE AVAILABLE** banner and **Send to Plan2Code** (while enabled) carry a soft glow in the picked highlight color; with reduced motion Send's pulse stops and the glow stays.
+- **web-console**: a request body over the size cap now gets `413 too large` from every JSON route instead of a connection reset or a `400`.
+
+### 🐛 Fixed
+
+- **web-console**: Implement + Review's built-in review no longer scores twice on the session meter. Its `review` run now scores the phase's 1-point review bonus as the review starts (not a standalone Review's 2), and the phase's final `run` leaves that point out. A 17-task phase now ends at 7 points, not 9. The breakdown also stops repeating the unit in "Code review run: review".
+- **web-console**: Send no longer stays disabled when an agent posts a question mid-build while still marked `working` (seen on Implement + Review, where the question said "I'm carrying on while you decide"). Once an open question has an answer or a note staged, Send unlocks at once with "Still working · it reads this next", instead of waiting out the agent's `quietMinutes` (up to an hour); the server holds the send until the agent next looks. `building.md` now says a question stops the build: set `waiting` in the same post as the question and wait, never keep working with a question open.
+- **web-console**: **Notes on this** showed the agent's replies as empty "Plan2Code" bubbles and dropped the person's own notes once they were picked up. The server now writes every note into the item's `thread` as it arrives, `post` lifts `from` / `role` and `md` / `body` / `content` into `{ who, text }` (and drops an echoed copy of the person's note), and an entry with no text is rejected with exit 3. Older `{ from, md }` entries still render. `console.md` gains a **Replying to a note** section.
+- **web-console**: dropped the `comments` list on docs, which `post` appended and time-stamped but nothing ever displayed.
+- **web-console**: a dashboard launch could strand the hand-off when the agent called a skill-invocation tool on the picked skill instead of reading its `SKILL.md` (every skill below the dashboard ships `disable-model-invocation: true`). `plan2code.md` and `console.md` now say to open the next skill's file with a file-read tool.
+- **web-console**: the waiting pane pointed Document and other skills with no task list at a tasks tab that never exists there. The pointer now appears only when a build's `phase` or a quick task's `tasks` tab is posted. The nav tab spinner also gets its 7px gap back from the tab's name.
+- **web-console**: skipping a question dropped a note already typed for it; the note now goes with the skip as `skip; <note>`. Ticking a checklist step after a skip now ends the skip instead of still sending `skip`.
+- **web-console**: reconnecting cleared every banner, including a warning that arrived while offline; it now clears only the *Lost contact* banner. An open Overview tab now refreshes during a build.
+- **web-console**: a `409` on Home, Stop or **Write the brief** now marks the page busy the way Send does, and the brief dialog says why it could not go.
+- **web-console**: arrowing through a menu question kept dropping keyboard focus to the page body; menu radios now carry stable ids, a `value` and an `aria-label`. `@` mentions typed with a capital letter now match, and the attachment-limit banner uses `MAX_ATTACHMENTS` / `CHAT_MAX_ATTACHMENTS` instead of a hard-coded 5.
+
+### 📚 Documentation
+
+- **web console guide**: new *When an update is out* section, Cleanup under the session cleanup notes, and a pointer to `/plan2code-model-update` for the curated model list.
+
 ## v2.4.1
 
 ### ✨ Added
@@ -19,7 +55,6 @@ All notable changes to Plan2Code will be documented in this file.
 - **commit-msg.mjs**, **review-scope.mjs**, **agents-md.mjs**, **agent-files.mjs**, **handoff-path.mjs**: the commit command from the branch's ticket, Review's git scope and doc share, AGENTS.md's structure and orphans, the AI agent file sync, and the handoff's timestamped path and git ignore check.
 - **tests**: `scripts/test-skill-scripts.mjs` and `scripts/test-script-<skill>.mjs`, run by `npm test` against the built `skills/` tree. One test fails if a `SKILL.md` names a script its skill does not ship.
 - **web console**: the Workspace dialog's folders are remembered across console sessions, in `~/.plan2code/console/workspaces.json` beside `looks.json` (never in the project), keyed by the folder a session runs in and then by spec. Every change is saved. *Start from scratch* on the dashboard shows the project's list; picking a spec loads its own, which starts as a copy of the project's and is separate after that, and a spec created mid-run takes the list in force with it. The dialog says whose list it is. New `console.mjs forget --spec specs/<name>`, which Finalize's Spec Cleanup runs after archiving a spec.
-- **web-console**: the Questions and Ask tabs show a small spinner left of their name while Plan2Code is on it. Questions (Dashboard on the dashboard) spins from Send until the answers are picked up, the same wait as *Sent. Waiting for Plan2Code.*; Ask spins while a question the agent picked up has no answer yet, exactly when the conversation's own ring does. Neither turns once the agent goes quiet or offline, so a dead session never reads as a slow one.
 
 ### 🔧 Changed
 
@@ -38,7 +73,6 @@ All notable changes to Plan2Code will be documented in this file.
 - **finalize**: `feedback-payload.mjs` counts the same phase files `specs.mjs` does, `submit` refuses an oversize URL when `gh` is unavailable (`oversize`), and a bare spec name present in both `specs/` and `specs--completed/` is refused as ambiguous.
 - Every script was checked against real specs and Pathfinder maps in other repositories and by four independent reviews; each issue found has a regression test.
 
-- **document**: `overview.md` puts the Phase Checklist and Parallel Execution Groups directly under the Summary, ahead of the Tech Stack, Architecture, Risks and Success Criteria, so the phases are found without scrolling. Every script finds these sections by heading, so specs written in the old order keep working.
 - **install.js**: the closing message beside Planny now names the dashboard first: `plan2code` from any project, or `/plan2code` in your agent when the command could not be installed. The docs link moves to the line under it.
 - **web-console**: User Preferences opens from a gear button instead of the three swatches, and the default highlight color is now ocean blue instead of rust.
 - **web-console**: the dashboard rail marks the suggested next step with a small dot, since the center pane's Suggested pill can scroll out of view. Send pulses only while it is the primary button.
@@ -48,15 +82,11 @@ All notable changes to Plan2Code will be documented in this file.
 - **Windows**: the folder picker (the launcher's desktop shortcut and the Workspace **Browse…** button) now opens centred and in front of other windows instead of behind the terminal.
 - **Launcher**: before asking which CLI to use, `plan2code` says what it is about to do and that running `/plan2code` inside your agent works too.
 - **web-console**: the session meter now weighs the work a session actually did instead of a flat amount per step. A built phase scores one point per 3 tasks it completed (rounded up), plus 1 for Implement + Review, so a twelve-task phase weighs four times a three-task one; the agent reports the count as `run.tasks`. Every 2 questions you answer on the page add a point to the skill you answered them in, so a long back-and-forth in Plan or Pathfinder counts for more than a short one. Each Pathfinder research question adds 1 through a new `pathfinder-research` event, since research fills the context with nobody answering anything. The levels move to match: yellow from 5 points, red from 10, and the ring is full at 15.
-- **web-console**: while a build runs, the waiting screen's pointer to the tasks list is now clickable. **Task** and the tab's own name (say **Phase 6 tasks**) show bold in the highlight color, and either one opens that phase's tasks tab.
-- **web-console**: the session meter counts a build while it runs instead of only once the phase is approved. `console.mjs` writes a `progress` ledger entry whenever an Implement or Implement + Review post raises `headline.cleared`, and the build's row (*Implement + Review: 9 tasks built so far*) scores one point per 3 tasks done. The phase's final `run` takes that row over in place, so nothing counts twice and the meter never drops. A second phase in the same run starts its own count once its headline is back at `cleared: 0`.
 
 ### 🐛 Fixed
 
-- **web-console**: Implement + Review's built-in review no longer scores twice on the session meter. Its `review` run now scores the phase's 1-point review bonus as the review starts (not a standalone Review's 2), and the phase's final `run` leaves that point out. A 17-task phase now ends at 7 points, not 9. The breakdown also stops repeating the unit in "Code review run: review".
 - **pathfinder**: charting no longer ends the session, or shows "Session ended" in the web console, while its research subagents are still running. They live in the terminal's process, so closing it on a "done" page killed them mid-write. The session now waits for every one (the page shows a running count), each subagent ends `## Evidence` with a `**Research complete:**` line, and Work Step 2 re-fires any research question missing it. `console.md` makes the same rule general: no `finish` while any subagent or background job is still out.
 - **web-console**: reusing a settled question id for a different kind of question (say a multi-select turned confirm) now opens it as a new question instead of keeping the old answer.
-- **web-console**: Send no longer stays disabled when an agent posts a question mid-build while still marked `working` (seen on Implement + Review, where the question said "I'm carrying on while you decide"). Once an open question has an answer or a note staged, Send unlocks at once with "Still working · it reads this next", instead of waiting out the agent's `quietMinutes` (up to an hour); the server holds the send until the agent next looks. `building.md` now says a question stops the build: set `waiting` in the same post as the question and wait, never keep working with a question open.
 
 ### 📚 Documentation
 
