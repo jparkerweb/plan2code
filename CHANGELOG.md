@@ -2,6 +2,20 @@
 
 All notable changes to Plan2Code will be documented in this file.
 
+## v2.5.0
+
+### ✨ Added
+
+- **web-console**: a **Subagents** switch for the skills that can hand work to helpers (Implement, Implement + review, Quick task, Review, Pathfinder). An icon button after Write a brief, lit while helpers are on, opens a **Subagents** dialog: **Use helpers** or **Work alone**, an editable instruction with **Reset to default**, and an advisory "at most N at once" (1 to 20). It is off by default and saved per project folder and skill in `~/.plan2code/console/subagents.json` (`POST /subagents`, on Cleanup's keep-list). The button shows only when the skill opts in (`public/subagents.js`) and the agent's console copy reported support (`caps: ["subagents"]` on its `open` event), so an older skill copy never shows a switch it cannot serve.
+- **web-console**: the switch reaches the agent as a standing instruction, and only when it changes. `wait` exit 0, `chat` and `open` carry a `subagents` field and `Subagents: on (revision N)` lines last in `reply`. A higher revision replaces a lower one, "off" goes only to an agent that was told "on", and a resume or dashboard launch with the switch on states it once. The per-session cursor moves only after the print, so a killed `wait` repeats a change rather than losing it. Contract: `console.md` → Standing instructions; `building.md` points at it.
+- **web-console**: a **Subagents** tab before Ask, from the first helper the agent reports through `post` (`helpers: [{ id, title, ask, state, result? }]`, merged by `id`, or one `{ id: "alone", alone: true }` entry when it has no way to start helpers). One row per helper with its ask, a Running / Done / Failed pill and a one-line result. It clears on a dashboard hop, and helper reports add no session meter points. `validate()` refuses malformed entries with exit 3 (house rule 8). Help gains a 17th topic, **Helpers (subagents)**.
+
+### 🔧 Changed
+
+- **review**: run on its own with nothing named (no argument, no conversation work, not from a build's review button), `plan2code-review` no longer assumes the branch diff. It does a quick scan (branch changes, uncommitted changes, specs) and asks what to review, each option with its size; on the web console that is the first scope question, a `choice`. A build's review keeps its already-decided scope.
+- **web-console**: `post` and `open --file` refuse a patch that sends a doc a lower `version` than the page already holds (exit 3, naming the doc and both versions; house rule 9). A version going back is almost always a stale or copied payload, which the page would otherwise show quietly under the new run's name. `building.md` now says a later phase in the same session continues `phase`, `phasefile`, `report` and `review` from the version the page holds instead of restarting at 1.
+- **web-console**: the project name in the footer's `<project> · <branch>` label now shows in your highlight color, and the browser tab title starts with it (`<project> · <title> · #<sid> · Plan2Code`), so consoles for different projects are easy to tell apart.
+
 ## v2.4.2
 
 ### ✨ Added
