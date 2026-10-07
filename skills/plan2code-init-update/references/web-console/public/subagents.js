@@ -88,7 +88,7 @@ export function cleanSetting(input) {
 export const FRAME_LINES = Object.freeze([
   "Hand independent work to helpers if your tools allow it; otherwise carry on alone.",
   "Report each helper on the page (console.md → Standing instructions); questions for the person stay with you.",
-  'With no way to start helpers, report one "working alone" entry for this skill run instead.',
+  'If your tools cannot start helpers at all, report one "working alone" entry for this skill run instead; a real helper report removes it.',
 ]);
 
 export const PATHFINDER_RESEARCH_LINE = "Research questions always use helpers, whatever this switch says.";
@@ -201,11 +201,14 @@ export function switchLabel(frame) {
 }
 
 // What the Subagents tab draws: the working-alone note, or one row per helper
-// in the order the agent reported them. A result shows once the helper ended.
+// in the order the agent reported them. A real helper supersedes the
+// working-alone marker, so the note only draws when no helper was ever
+// reported. A result shows once the helper ended.
 export function helperRows(helpers) {
   const list = Array.isArray(helpers) ? helpers.filter(isPlainObject) : [];
-  if (list.some((h) => h.alone === true)) return { alone: true, rows: [] };
-  const rows = list.map(({ id, title, ask, state, result }) => ({
+  const real = list.filter((h) => h.alone !== true);
+  if (!real.length) return { alone: list.some((h) => h.alone === true), rows: [] };
+  const rows = real.map(({ id, title, ask, state, result }) => ({
     id,
     title,
     ask,
