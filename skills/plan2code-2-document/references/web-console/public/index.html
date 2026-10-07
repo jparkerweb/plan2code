@@ -21,6 +21,7 @@
     <link rel="modulepreload" href="/starters.js" />
     <link rel="modulepreload" href="/workspace.js" />
     <link rel="modulepreload" href="/meter.js" />
+    <link rel="modulepreload" href="/subagents.js" />
     <link rel="modulepreload" href="/mentions.js" />
     <link rel="modulepreload" href="/favicon.js" />
     <link rel="modulepreload" href="/vendor/marked.esm.js" />
@@ -171,6 +172,18 @@
           <button type="button" class="btn ghost small stop-btn" id="btn-stop">Stop session</button>
           <button type="button" class="btn ghost small brief-btn" id="btn-brief" hidden>
             Write a brief
+          </button>
+          <!-- Subagents: opted-in skills only. Lit while helpers are on; a click
+               opens the Subagents dialog and never toggles them itself. -->
+          <button type="button" class="btn ghost small subagents-btn" id="btn-subagents" aria-pressed="false" hidden>
+            <!-- An orchestrator and its helpers: one larger node linked to three smaller ones. -->
+            <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+              <path class="sa-link" d="M6.9 6.6L10.9 3.9M7.4 8h3.5M6.9 9.4l4 2.7" />
+              <circle cx="4.6" cy="8" r="2.6" class="sa-hub" />
+              <circle cx="12.4" cy="3" r="1.5" class="sa-node" />
+              <circle cx="12.4" cy="8" r="1.5" class="sa-node" />
+              <circle cx="12.4" cy="13" r="1.5" class="sa-node" />
+            </svg>
           </button>
         </div>
         <div class="views-group">
@@ -579,6 +592,13 @@
         <symbol id="hi-build" viewBox="0 0 24 24" fill="none">
           <rect x="3" y="9" width="18" height="6" rx="3" />
           <path d="M6 12h7" />
+        </symbol>
+        <symbol id="hi-subagents" viewBox="0 0 24 24" fill="none">
+          <circle cx="7" cy="12" r="3.5" />
+          <circle cx="18" cy="5" r="2" />
+          <circle cx="18" cy="12" r="2" />
+          <circle cx="18" cy="19" r="2" />
+          <path d="M10 10l6-4M10.5 12H16M10 14l6 4" />
         </symbol>
         <symbol id="hi-ask" viewBox="0 0 24 24" fill="none">
           <path d="M4 5h16v11H10l-4 4v-4H4z" />
@@ -1477,7 +1497,61 @@
         </p>
       </section>
 
-      <!-- Tab 12: Ask a quick question -->
+      <!-- Tab 12: Helpers (subagents) -->
+      <section class="help-panel" data-tab="subagents">
+        <h3>Helpers (subagents)</h3>
+        <p>
+          On a build, a review and Pathfinder, Plan2Code can hand independent
+          pieces of work to helpers (subagents) while it keeps the conversation
+          with you. The <strong>Subagents</strong> button in the top bar, after
+          Stop session, is lit while helpers are on.
+        </p>
+        <h4>The switch</h4>
+        <ul>
+          <li>
+            Clicking the button opens the <strong>Subagents</strong> dialog; it
+            never switches helpers on or off by itself. Pick <strong>Use
+            helpers</strong> or <strong>Work alone</strong>, edit the instruction
+            Plan2Code follows (<strong>Reset to default</strong> puts the
+            shipped one back), and say how many may run at once.
+          </li>
+          <li>
+            It is off by default and saved for this project and this skill, so
+            the next session of the same skill here starts the same way.
+          </li>
+          <li>
+            The change reaches Plan2Code at its next check-in, as a setting,
+            not as something you typed. How many helpers it can really start is
+            up to your agent; some have no helpers at all.
+          </li>
+          <li>The button only appears on skills that use helpers, and only when Plan2Code can pass the setting on.</li>
+        </ul>
+        <h4>The Subagents tab</h4>
+        <ul>
+          <li>
+            With the first helper, a <strong>Subagents</strong> tab appears before
+            Ask: one row each, with what it was asked, whether it is running, done
+            or failed, and a one-line result at the end. The number on the tab is
+            how many are still running.
+          </li>
+          <li>
+            Helpers report through Plan2Code, so the rows change at its
+            check-ins, not live. The page cannot stop a helper; ask Plan2Code
+            on the Ask tab if one should stop.
+          </li>
+          <li>
+            <strong>Working alone</strong> means your agent has no way to start
+            helpers here, so it is doing the work itself.
+          </li>
+          <li>
+            Pathfinder always uses helpers for its research questions, whatever
+            the switch says, and they show here too.
+          </li>
+          <li>The tab clears when you go back to the dashboard.</li>
+        </ul>
+      </section>
+
+      <!-- Tab 13: Ask a quick question -->
       <section class="help-panel" data-tab="ask">
         <h3>Ask a quick question</h3>
         <p class="help-lead">
@@ -1568,7 +1642,7 @@
         </p>
       </section>
 
-      <!-- Tab 13: Stopping and finishing -->
+      <!-- Tab 14: Stopping and finishing -->
       <section class="help-panel" data-tab="finishing">
         <h3>Stopping and finishing</h3>
         <p class="help-lead">
@@ -1650,7 +1724,7 @@
         </p>
       </section>
 
-      <!-- Tab 14: When something looks stuck -->
+      <!-- Tab 15: When something looks stuck -->
       <section class="help-panel" data-tab="stuck">
         <h3>When something looks stuck</h3>
         <p class="help-lead">
@@ -1772,7 +1846,7 @@
         </div>
       </section>
 
-      <!-- Tab 15: Keyboard and preferences -->
+      <!-- Tab 16: Keyboard and preferences -->
       <section class="help-panel" data-tab="prefs">
         <h3>Keyboard and preferences</h3>
         <p class="help-lead">
@@ -1888,7 +1962,7 @@
         </ul>
       </section>
 
-      <!-- Tab 16: Privacy and where things are saved -->
+      <!-- Tab 17: Privacy and where things are saved -->
       <section class="help-panel" data-tab="privacy">
         <h3>Privacy and where things are saved</h3>
         <p class="help-lead">
@@ -1925,7 +1999,11 @@
           </li>
           <li>
             your role, theme, colors, card width and sounds, in
-            <code>looks.json</code>.
+            <code>looks.json</code>;
+          </li>
+          <li>
+            your Subagents switch for each project and skill, in
+            <code>subagents.json</code>.
           </li>
         </ul>
         <p>
@@ -2036,6 +2114,46 @@
       <div class="modal-actions">
         <button type="button" class="btn ghost" id="looks-reset">Back to default</button>
         <button type="button" class="btn primary" id="looks-done">Done</button>
+      </div>
+    </dialog>
+
+    <!-- Subagents: the switch for this skill, filled from the frame's
+         `subagents` by app.js and saved through POST /subagents. It borrows
+         the User Preferences dialog's classes, so it needs no dialog styles of
+         its own, only a themed number box. -->
+    <dialog class="modal looks subagents" id="subagents-modal" aria-labelledby="subagents-title">
+      <h2 id="subagents-title">Subagents</h2>
+      <p class="modal-blurb">
+        Let Plan2Code hand independent work to helpers in this skill. Saved for this
+        project and this skill.
+      </p>
+      <fieldset class="modal-ranges looks-row">
+        <legend>Helpers</legend>
+        <label><input type="radio" name="subagents-on" value="on" /> <span>Use helpers</span></label>
+        <label><input type="radio" name="subagents-on" value="off" checked /> <span>Work alone</span></label>
+      </fieldset>
+      <fieldset class="modal-ranges">
+        <legend>Instruction</legend>
+        <textarea id="subagents-instruction" rows="4" maxlength="2000" aria-label="Instruction"></textarea>
+        <div class="models-actions">
+          <button type="button" class="btn small ghost" id="subagents-default">Reset to default</button>
+          <span class="help">Passed to the agent as written, at its next check-in.</span>
+        </div>
+      </fieldset>
+      <fieldset class="modal-ranges">
+        <legend>At most</legend>
+        <label>
+          <input type="number" id="subagents-max" min="1" max="20" step="1" aria-label="At most this many helpers at once" />
+          <span>helpers at once</span>
+        </label>
+        <p class="help">Advisory: your agent's own limit still applies.</p>
+      </fieldset>
+      <p class="help" id="subagents-checkin"></p>
+      <p class="help" id="subagents-research" hidden></p>
+      <p class="help" id="subagents-status" role="status"></p>
+      <div class="modal-actions">
+        <button type="button" class="btn ghost" id="subagents-cancel">Cancel</button>
+        <button type="button" class="btn primary" id="subagents-save">Save</button>
       </div>
     </dialog>
 

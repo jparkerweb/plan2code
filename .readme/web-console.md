@@ -153,7 +153,7 @@ it opens on the page without asking.
   states differ by pattern, not only color). A finished session goes back to
   the plain icon, so a console left in a background tab can be checked at a
   glance.
-- **Help.** The **?** at the top right opens a Help dialog with 16 topics,
+- **Help.** The **?** at the top right opens a Help dialog with 17 topics,
   one per tab down the left (across the top on a narrow window), opening on
   the one for where you are. It is part of the page itself, so it still reads
   fully when the page has lost its program.
@@ -338,6 +338,33 @@ it is remembered for next time:
 - **Forgotten on archive.** Finalize's Spec Cleanup step says it will forget
   the spec's list and runs `console.mjs forget --spec specs/<name>` after the
   move.
+
+### Subagents
+
+On a build (Implement, Implement + review, Quick task), a review and
+Pathfinder, the agent can hand independent pieces of work to helpers
+(subagents) while it keeps the conversation with you.
+
+- **The button.** An icon in the top bar, after Stop session (and Write a
+  brief on Pathfinder): one larger node linked to three smaller ones, lit in
+  your highlight color while helpers are on. It shows only on those skills,
+  and only when the skill's copy of the console can pass the setting on.
+- **The dialog.** A click opens it; the button never switches anything by
+  itself. **Use helpers** or **Work alone**, the instruction the agent follows
+  (**Reset to default** puts the shipped one back), and how many helpers may
+  run at once (1 to 20; your agent's own limit still applies). **Save** sends
+  it; the agent hears of it at its next check-in, as a setting, not as
+  something you typed.
+- **Saved per project and per skill**, off by default, in
+  `~/.plan2code/console/subagents.json`. The next session of the same skill
+  in the same folder starts the same way.
+- **The Subagents tab.** With the first helper the agent reports, a tab
+  appears before Ask: one row per helper with what it was asked and whether it
+  is running, done or failed, plus a one-line result at the end. Rows change at
+  the agent's check-ins, not live. *Working alone* means your agent has no way
+  to start helpers here. The tab clears when you go back to the dashboard.
+- **Pathfinder's research** always uses helpers, whatever the switch says, and
+  they show in the tab too.
 
 ### Session meter
 
@@ -621,6 +648,8 @@ exception being the note attachments the agent keeps for a spec, above):
 | `~/.plan2code/console/sessions/<id>/workspace.json`, `ledger.ndjson`, `workspace-cursor.json` | the workspace's folders (paths, names, descriptions — never their contents), the session meter's events, and how far the agent has been told of workspace changes. Kept beside the session, so they outlive every dashboard hop | with the session |
 | `~/.plan2code/console/sessions/<id>/uploads/` | images and documents attached to notes and quick questions | 30 days after the session was last touched |
 | `~/.plan2code/console/looks.json` | your role, theme, colors, sounds and card width | always |
+| `~/.plan2code/console/subagents.json` | your Subagents switch, instruction and limit, per project folder and skill | always |
+| `~/.plan2code/console/sessions/<id>/subagents-setting.json`, `subagents-cursor.json` | this session's copy of the switch, and how far the agent has been told of it | with the session |
 | your system temp directory | the port, process id and session token | until reboot |
 
 Each of the workspace and meter files has exactly one writer: the server owns
@@ -646,7 +675,7 @@ never the record, `specs/` in your project is.
 clean up** lists, with sizes, everything in `~/.plan2code/` that is not
 needed: sessions untouched for 30 days (never the one you are in), anything at
 the top of `~/.plan2code/console/` other than `sessions/`, `looks.json`,
-`workspaces.json`, `console-dir` and `update-check.json`, and anything at the top of `~/.plan2code/` other than
+`workspaces.json`, `subagents.json`, `console-dir` and `update-check.json`, and anything at the top of `~/.plan2code/` other than
 `console/`, `bin/`, `launcher.json` and `models.json`. A stray is listed once
 it has sat untouched for an hour, so a lock or temp file another session is
 writing right now is never caught. **Delete these** removes
@@ -701,6 +730,7 @@ origin.
 | `POST /workspace/edit` | `{ id, name?, description? }`. Renames or re-describes one folder: 400 `bad-name` / `name-taken`, 404 `unknown`. |
 | `POST /workspace/remove` | `{ id }`. 400 `original` for the folder the session started in, 404 `unknown`. |
 | `POST /workspace/browse` | Opens the system folder picker and answers `{ path }` or `{ cancelled: true }`; never adds anything itself. 409 `busy` while one is open, 404 `no-picker` when the session looks remote or no picker exists. |
+| `POST /subagents` | `{ on, instruction, max }` (`instruction: null` for the shipped default). Saves the switch for this project and skill and answers `{ ok, setting }`; 400 `not-offered` on a skill without the switch, `bad`, `too-long` (over 2,000 characters) or `max` (outside 1 to 20). |
 
 ## For maintainers
 
