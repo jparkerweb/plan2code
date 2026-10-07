@@ -4345,8 +4345,11 @@ function templateRow(item, input, entries, check) {
     save();
     paint();
     input.focus();
+    const start = text.indexOf("[");
+    const end = start < 0 ? -1 : text.indexOf("]", start);
     try {
-      input.setSelectionRange(text.length, text.length);
+      if (end > start) input.setSelectionRange(start, end + 1);
+      else input.setSelectionRange(text.length, text.length);
     } catch {}
   };
 

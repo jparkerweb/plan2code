@@ -4500,7 +4500,7 @@ test("console.md and building.md teach the workspace and session meter contract"
 /* ------------------------------------------------- roles and templates */
 
 const ROLE_IDS = ROLES.map((r) => r.id);
-const TEMPLATE_SET_SIZE = { pathfinder: 6, plan: 6, "quick-task": 7 };
+const TEMPLATE_SET_SIZE = { pathfinder: 8, plan: 10, "quick-task": 10 };
 
 test("normalizeRole keeps a known role and turns anything else into Not set", () => {
   for (const id of ROLE_IDS) assert.equal(normalizeRole(id), id);
@@ -4514,9 +4514,9 @@ test("needsRoleNudge: only a missing role key nudges, whatever the value once it
   for (const looks of [{ role: "none" }, { role: "pm" }, { role: "garbage" }]) assert.equal(needsRoleNudge(looks), false);
 });
 
-test("TEMPLATES: thirteen non-empty texts, the five Pathfinder and Plan share held once", () => {
+test("TEMPLATES: nineteen non-empty texts, the six Pathfinder and Plan share held once", () => {
   const ids = Object.keys(TEMPLATES);
-  assert.equal(ids.length, 13);
+  assert.equal(ids.length, 19);
   for (const id of ids) {
     assert.equal(TEMPLATES[id].id, id);
     assert.ok(TEMPLATES[id].text.trim(), `${id} has text`);
@@ -4525,13 +4525,31 @@ test("TEMPLATES: thirteen non-empty texts, the five Pathfinder and Plan share he
   const shared = TEMPLATE_ORDERS.pathfinder.engineer.filter((id) => TEMPLATE_ORDERS.plan.engineer.includes(id));
   assert.deepEqual(
     [...shared].sort(),
-    ["design-decision", "engineering-spec", "product-requirements", "scoping-rollout", "test-strategy"]
+    ["design-decision", "engineering-spec", "integration", "product-requirements", "scoping-rollout", "test-strategy"]
   );
   const labels = Object.values(TEMPLATES).map((t) => t.label);
   assert.equal(new Set(labels).size, labels.length, "no template is held twice under another id");
   const textIn = (wf, id) => templatesFor(wf, "engineer").find((t) => t.id === id).text;
   for (const id of shared) {
     assert.equal(textIn("pathfinder", id), textIn("plan", id), `${id} reads the same in Pathfinder and Plan`);
+  }
+});
+
+test("TEMPLATES: Markdown sections, a ## heading first and an answer under every heading", () => {
+  for (const { id, text } of Object.values(TEMPLATES)) {
+    const lines = text.split("\n");
+    assert.ok(lines[0].startsWith("## "), `${id} opens on a ## heading`);
+    lines.forEach((line, i) => {
+      assert.equal(line, line.trimEnd(), `${id} line ${i + 1} has no trailing space`);
+      if (!line.startsWith("## ")) return;
+      assert.ok(line.slice(3).trim(), `${id} line ${i + 1} names its heading`);
+      assert.ok(lines[i + 1]?.trim() && !lines[i + 1].startsWith("#"), `${id}: "${line}" has its answer on the next line`);
+      if (i > 0) assert.equal(lines[i - 1], "", `${id}: a blank line comes before "${line}"`);
+    });
+    for (const l of lines) {
+      assert.ok(!/^[A-Z][\w' ]*:\s*\[/.test(l), `${id}: "${l}" is a Markdown section, not a Label: [blank] line`);
+      assert.ok(!/\S\s+[A-Z][\w' ]*:\s*\[/.test(l), `${id}: "${l}" puts one answer on a line`);
+    }
   }
 });
 
@@ -5303,6 +5321,11 @@ test("subagents: the page shows the switch only when offered and supported, and 
 test("subagents: helperRows labels each state, shows a result only once a helper ended, and collapses to working alone", () => {
   assert.deepEqual(helperRows([{ id: "alone", alone: true }]), { alone: true, rows: [] });
   assert.deepEqual(helperRows(undefined), { alone: false, rows: [] });
+  // A stale working-alone entry must never hide a real helper (it can survive
+  // in sessions written before the merge started dropping it).
+  const mixed = helperRows([{ id: "alone", alone: true }, { id: "h9", title: "Late", ask: "a", state: "done", result: "ok" }]);
+  assert.equal(mixed.alone, false);
+  assert.deepEqual(mixed.rows.map((r) => r.id), ["h9"]);
   const { alone, rows } = helperRows([
     { id: "h1", title: "One", ask: "a", state: "running", result: "not yet" },
     { id: "h2", title: "Two", ask: "b", state: "done", result: "Found 2 call sites" },
@@ -6009,7 +6032,7 @@ test("subagents: a workflow without the switch refuses it, bad bodies name the f
 
 const reportedHelper = (id, extra = {}) => ({ id, title: `Helper ${id}`, ask: "Find the callers of applyPatch", state: "running", ...extra });
 
-test("helpers: post merges them by id, takes one working-alone entry, and null clears the list", () => {
+test("helpers: post merges them by id, a real helper supersedes working alone, and null clears the list", () => {
   const s = consoleSession(["--workflow", "implement"]);
   try {
     assert.equal(postPatch(s, { helpers: [reportedHelper("h1")] }).status, 0);
@@ -6017,15 +6040,23 @@ test("helpers: post merges them by id, takes one working-alone entry, and null c
     assert.equal(postPatch(s, { helpers: [done, reportedHelper("h2")] }).status, 0);
     assert.deepEqual(readState(s.session).helpers, [done, reportedHelper("h2")], "h1 updated in place, h2 added");
 
+    // Working alone is a claim about having no helper tool at all, so real
+    // helpers supersede it whichever order the two arrive in.
     assert.equal(postPatch(s, { helpers: [{ id: "alone", alone: true }] }).status, 0);
-    assert.deepEqual(readState(s.session).helpers.map((h) => h.id), ["h1", "h2", "alone"]);
-    const second = postPatch(s, { helpers: [{ id: "solo", alone: true }] }, { expectFail: true });
-    assert.equal(second.status, 3);
-    assert.match(second.stderr, /helper "solo"/);
-    assert.deepEqual(readState(s.session).helpers.map((h) => h.id), ["h1", "h2", "alone"], "the refused entry was not written");
+    assert.deepEqual(readState(s.session).helpers.map((h) => h.id), ["h1", "h2"], "alone beside real helpers is dropped");
 
     assert.equal(postPatch(s, { helpers: null }).status, 0);
     assert.equal("helpers" in readState(s.session), false);
+
+    assert.equal(postPatch(s, { helpers: [{ id: "alone", alone: true }] }).status, 0);
+    assert.deepEqual(readState(s.session).helpers, [{ id: "alone", alone: true }]);
+    const second = postPatch(s, { helpers: [{ id: "solo", alone: true }] }, { expectFail: true });
+    assert.equal(second.status, 3);
+    assert.match(second.stderr, /helper "solo"/);
+    assert.deepEqual(readState(s.session).helpers, [{ id: "alone", alone: true }], "the refused entry was not written");
+
+    assert.equal(postPatch(s, { helpers: [reportedHelper("h1")] }).status, 0);
+    assert.deepEqual(readState(s.session).helpers.map((h) => h.id), ["h1"], "a real helper removes the working-alone marker");
   } finally {
     cli(["stop", "--session", s.sid]);
   }
@@ -6115,7 +6146,7 @@ test("helpers: a dashboard hop clears them, a same-workflow or paused resume kee
   const s = consoleSession(["--workflow", "implement"]);
   try {
     const meterBefore = (await s.get("/state")).meter;
-    assert.equal(postPatch(s, { helpers: [reportedHelper("h1"), { id: "alone", alone: true }] }).status, 0);
+    assert.equal(postPatch(s, { helpers: [reportedHelper("h1"), reportedHelper("h2")] }).status, 0);
     assert.deepEqual((await s.get("/state")).meter, meterBefore, "helper reports add nothing to the meter");
     assert.equal(readLedger(s.session).some((e) => JSON.stringify(e).includes("h1")), false, "nothing about helpers reaches the ledger");
 

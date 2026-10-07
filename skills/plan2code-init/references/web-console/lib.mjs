@@ -1211,6 +1211,10 @@ export function applyPatch(state, patch) {
         if (!Array.isArray(v)) throw new Error('"helpers" must be an array');
         if (!v.every(isPlainObject)) throw new Error('"helpers" entries must be objects, each { id, title, ask, state }');
         next.helpers = mergeKeyed(next.helpers, v, "id", {}, "helpers");
+        // A real helper report supersedes the working-alone marker, whether it
+        // arrives after one or beside one.
+        if (next.helpers.some((h) => isPlainObject(h) && h.alone !== true))
+          next.helpers = next.helpers.filter((h) => !(isPlainObject(h) && h.alone === true));
         break;
       case "docs":
         if (!Array.isArray(v)) throw new Error('"docs" must be an array');

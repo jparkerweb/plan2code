@@ -2,6 +2,21 @@
 
 All notable changes to Plan2Code will be documented in this file.
 
+## v2.5.1
+
+### ✨ Added
+
+- **web-console**: six new starter templates, each slotted into every role's order. **Refactor** (Plan, Quick Task) asks what behaviour must not change. **Performance problem** (Plan, Quick Task) asks for today's number and the target. **Dependency upgrade** (Quick Task) asks for the known breaking changes. **Spike** (Pathfinder) is a time-boxed question with an "answered when". **Integration** (Pathfinder, Plan) covers the other side's auth and limits and what happens when it fails. **Data migration** (Plan) asks for a rollback plan. Pathfinder now offers 8 templates, Plan 10 and Quick Task 10, 19 in all.
+
+### 🔧 Changed
+
+- **web-console**: the starter templates on the fresh-idea card (Pathfinder, Plan, Quick Task) are now Markdown sections. Each one is a `## heading` with its answer on the lines under it, instead of `Label: [blank]` lines run together. You get room to write, and the agent gets clear sections. Brackets mark only the parts you fill in, so the lines already written for you (who reads it, what it should pin down) read as defaults. **Bug investigation** splits Expected and Actual into their own sections and numbers its steps. **Add a test** lists its cases. Picking a template now selects its first `[blank]`, so you type straight over it instead of starting at the end of the box. Ids, labels and which skills see the existing templates are unchanged. A new test in `scripts/test-web-console.mjs` pins the shape.
+- **web-console**: template content, revised against design-doc, PRD, ADR (MADR) and bug-report guidance. **Engineering spec** gains *Out of scope* and asks for the simpler options turned down. **Product requirements** gains *Not doing* and asks for evidence and a measure of success. **Test strategy** leads with what costs most if it breaks. **Scoping and rollout** asks who sees it first and how it rolls back. **Bug investigation** gains *How often* and *Error or logs*. **Small change** gains *Leave alone*, and its *Done when* asks for a command or check. **Add a test** names the failure case. **Record a decision**'s *Why* asks what forced the choice.
+
+### 🐛 Fixed
+
+- **web-console**: a "working alone" report no longer hides helpers reported after it (or beside it). A real helper report now removes the marker (`applyPatch` in `lib.mjs`, `helperRows()` in `subagents.js`), the standing instruction and `console.md` say to post `alone` only when the agent's tools cannot start helpers at all, and Help's **Helpers (subagents)** topic says the note goes away once a helper shows.
+
 ## v2.5.0
 
 ### ✨ Added
