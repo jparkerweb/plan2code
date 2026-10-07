@@ -64,6 +64,13 @@ progress bar is the first thing someone watching a build looks at. The session
 meter counts the build's tasks from `cleared` as it rises, so keep it current,
 and start every phase (a second one in the same run too) at `"cleared": 0`.
 
+`"version": 1` is for the first phase of a session only. A doc's version
+never goes back (console.md → House rules, rule 9), so a later phase in the
+same session reposts `phase` and `phasefile` at one more than the version the
+page holds, with the new phase's title and content. The same goes for
+`report` at sign-off and `review` in a mid-session review: version 1 the
+first time, then up from wherever the page has it.
+
 `phasefile` is the whole `phase-X.md`, verbatim from disk, as its own tab —
 the person can read the prerequisites and task specs while you build. Re-post
 it whenever the file changes, which is every task: the checkbox write that
@@ -110,6 +117,12 @@ printed), never into the project or into `~/.plan2code/console/` directly:
   you keep it current.
 - Do not call `wait` while building. There is nothing to collect, and the page
   holds anything the person sends until you next look.
+
+A build may receive a `Subagents:` standing instruction, on `open` output or a
+`chat` check between tasks. Follow console.md → Standing instructions for
+handing independent tasks to helpers and reporting them as `helpers`. Keep the
+per-task progress posts, the checkbox writes, the chat checks and the sign-off
+with you.
 
 ### Quick questions between tasks
 
@@ -195,7 +208,8 @@ only ever be offered once nothing could come of it:
 `reply` carries `Approve this phase: approved`, which is the terminal's
 `approved`. If the note that came with an approval asks for a change, treat it
 as "describe any issues": do the change first and ask again. `changes` means
-exactly what it says: address it, bump the report's version, and reopen the
+exactly what it says: address it, bump the report's version (a later phase's
+report starts above the last one's, too), and reopen the
 item (`"status": "reopened"`) with a reply in its `thread`. `review` is the
 person asking for the code review before they approve anything — see "The
 review, mid-session" below.

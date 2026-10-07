@@ -25,6 +25,7 @@ import {
   LOOKS_FILE,
   PUBLIC_DIR,
   SHIPPED_MODELS_FILE,
+  SUBAGENTS_SETTING_FILE,
   UPDATE_CHECK_FILE,
   USER_MODELS_FILE,
   WORKSPACE_FILE,
@@ -38,6 +39,7 @@ import {
   fileStamp,
   handleFile,
   initialWorkspace,
+  latestOpenCaps,
   nowIso,
   parseArgs,
   pendingChatCount,
@@ -46,20 +48,25 @@ import {
   readJson,
   readLedger,
   readOverview,
+  readSubagentSetting,
   readWorkspace,
   rememberWorkspace,
   rememberedWorkspace,
   removeCleanup,
   remoteWarning,
+  saveSubagentStoreEntry,
   specKey,
+  subagentStoreEntry,
   typedCount,
   withStateLock,
   writeJsonAtomic,
+  writeSubagentSetting,
   writeWorkspace,
 } from "./lib.mjs";
 import { DOC_TYPES, MAX_ATTACHMENTS, MAX_DOC_BYTES, docExt, workflowLabel, workflowTitle } from "./public/answers.js";
 import { CHAT_LIMIT, CHAT_MAX_CHARS, chatOffline } from "./public/chat.js";
 import { meterView } from "./public/meter.js";
+import { cleanSetting, defaultSetting, offered } from "./public/subagents.js";
 import { ACCENTS, DEFAULT_ACCENT, DEFAULT_CARD_WIDTH, cardWidth } from "./public/palette.js";
 import { defaultName, freeName, nameProblem } from "./public/workspace.js";
 import { checkForUpdate } from "./update-check.mjs";
@@ -212,6 +219,7 @@ const SERVABLE = new Set([
   "starters.js",
   "workspace.js",
   "meter.js",
+  "subagents.js",
   "mentions.js",
   "favicon.js",
   "start-stop.mp3",
@@ -601,6 +609,48 @@ function ensureConversation(state) {
   if (entry) appendEvent(DIR, { type: "chat-reset", reason: entry.reason });
 }
 
+/* ------------------------------------------------------------ subagents */
+
+// subagents-setting.json has one writer, this server, and the agent hears of
+// it only through what console.mjs reads there; events.ndjson's latest `open`
+// says whether the agent's console copy can carry it. Both re-read only when
+// their file has moved.
+const SUBAGENTS_SETTING_PATH = path.join(DIR, SUBAGENTS_SETTING_FILE);
+const EVENTS_PATH = path.join(DIR, "events.ndjson");
+
+let subagentSettingSeen = { stamp: null, setting: null };
+function subagentSettingNow() {
+  const stamp = fileStamp(SUBAGENTS_SETTING_PATH);
+  if (stamp !== subagentSettingSeen.stamp) subagentSettingSeen = { stamp, setting: readSubagentSetting(DIR) };
+  return subagentSettingSeen.setting;
+}
+
+let capsSeen = { stamp: null, caps: [] };
+function openCapsNow() {
+  const stamp = fileStamp(EVENTS_PATH);
+  if (stamp !== capsSeen.stamp) capsSeen = { stamp, caps: latestOpenCaps(DIR) };
+  return capsSeen.caps;
+}
+
+const sameSetting = (a, b) => a.workflow === b.workflow && a.on === b.on && a.instruction === b.instruction && a.max === b.max;
+
+/**
+ * Turn the per-project store into this session's setting, for the workflow
+ * the session is in now. The only place that happens (FR-7): a session an
+ * older server ran has no setting file, so nothing is ever injected into it.
+ * A record that already matches is left alone, revision and all, so a
+ * restart alone never re-tells the agent anything.
+ */
+function syncSubagentSetting(state) {
+  if (!state || typeof state.workflow !== "string") return;
+  const { workflow } = state;
+  const { on, instruction, max } = offered(workflow) ? subagentStoreEntry(sessionWorktree(), workflow) : defaultSetting(workflow);
+  const target = { workflow, on, instruction, max };
+  const current = readSubagentSetting(DIR);
+  if (current && sameSetting(current, target)) return;
+  writeSubagentSetting(DIR, { ...target, revision: (current ? current.revision : 0) + 1 });
+}
+
 // What the page needs to draw itself, in the shape of the SSE state frame.
 // `have` names that exact view, for the page to hand back when it opens its
 // stream (see /events).
@@ -615,9 +665,19 @@ function stateFrame(state) {
     chat: { ...chatForFrame(chatEntries(), state), pickedUp: chatPickedUp(), offline: chatOfflineNow(state) },
     workspace: workspaceView(),
     meter: meterView(ledgerEntries()),
+    subagents: subagentsView(state),
     ...(updateInfo ? { update: updateInfo } : {}),
     have: haveKey(),
   };
+}
+
+// The page shows the switch only when `offered && supported` (FR-3); the
+// frame says both and leaves combining them to the page. `instruction: null`
+// is the shipped default, which the page reads from subagents.js itself.
+function subagentsView(state) {
+  const workflow = state && state.workflow;
+  const { on, instruction, max, revision } = subagentSettingNow() || { ...defaultSetting(workflow), revision: 0 };
+  return { offered: offered(workflow), supported: openCapsNow().includes("subagents"), on, instruction, max, revision };
 }
 
 function haveKey() {
@@ -626,9 +686,12 @@ function haveKey() {
   chatPickedUp();
   workspaceNow();
   ledgerEntries();
+  subagentSettingNow();
+  openCapsNow();
   return (
     `${STARTED}.${rev}.${pending ? 1 : 0}${stop ? 1 : 0}.${chatSeen.stamp || ""}.${cursorSeen.stamp || ""}` +
-    `.${workspaceSeen.stamp || ""}.${ledgerSeen.stamp || ""}.${updateInfo ? updateInfo.latest : ""}`
+    `.${workspaceSeen.stamp || ""}.${ledgerSeen.stamp || ""}.${updateInfo ? updateInfo.latest : ""}` +
+    `.${subagentSettingSeen.stamp || ""}.${capsSeen.stamp || ""}`
   );
 }
 
@@ -1172,6 +1235,39 @@ const server = http.createServer((req, res) => {
     });
   }
 
+  // The Subagents switch for the session's workflow. Saved per project folder
+  // for the next session, and applied to this one with a bumped revision, which
+  // is what console.mjs hands the agent at its next pickup. Never blocked by,
+  // and never blocking, a card send.
+  if (pathname === "/subagents" && req.method === "POST") {
+    if (!originOk(req, port)) return json(res, 403, { error: "bad origin" });
+    return readBody(req, (err, body) => {
+      if (err) return json(res, err.tooBig ? 413 : 400, { error: err.tooBig ? "too large" : "body must be JSON" });
+      const state = readState();
+      if (!state || !offered(state.workflow)) return json(res, 400, { error: "not-offered" });
+      const clean = cleanSetting(body);
+      if (clean.error) return json(res, 400, { error: clean.error });
+      const { on, instruction, max } = clean;
+      const current = readSubagentSetting(DIR);
+      const next = { workflow: state.workflow, on, instruction, max };
+      // The store is per project, so another session may have moved it since
+      // this one synced: it always takes the person's latest pick. Only a
+      // real change to this session's setting bumps what the agent hears.
+      const unchanged = Boolean(current && sameSetting(current, next));
+      try {
+        saveSubagentStoreEntry(sessionWorktree(), state.workflow, { on, instruction, max });
+        if (!unchanged) writeSubagentSetting(DIR, { ...next, revision: (current ? current.revision : 0) + 1 });
+      } catch (e) {
+        return json(res, 500, { error: String(e.message) });
+      }
+      if (unchanged) return json(res, 200, { ok: true, setting: current });
+      const setting = readSubagentSetting(DIR);
+      appendEvent(DIR, { type: "subagents", on, revision: setting.revision });
+      pushState();
+      return json(res, 200, { ok: true, setting });
+    });
+  }
+
   // The launcher's model menu: what ships (read-only here) and what the user added.
   if (pathname === "/models" && req.method === "GET") {
     const saved = readJson(USER_MODELS_FILE, null) || {};
@@ -1399,6 +1495,9 @@ const server = http.createServer((req, res) => {
           agentSeenAt = Date.now();
           try {
             ensureConversation(written.state);
+          } catch {}
+          try {
+            syncSubagentSetting(written.state);
           } catch {}
         }
       }
@@ -1727,6 +1826,9 @@ function checkState() {
         ensureConversation(parsed);
       } catch {}
       try {
+        syncSubagentSetting(parsed);
+      } catch {}
+      try {
         followSpecDir(parsed);
       } catch {}
       pushState();
@@ -1899,6 +2001,9 @@ function onListening(port) {
   } catch {}
   try {
     bootWorkspace();
+  } catch {}
+  try {
+    syncSubagentSetting(readState());
   } catch {}
   process.stdout.write(JSON.stringify({ type: "ready", url, port, sid: SID }) + "\n");
   try {

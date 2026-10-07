@@ -151,6 +151,24 @@ import {
   WEIGHTS,
   YELLOW_AT,
 } from "../src/web-console/public/meter.js";
+import {
+  blockFor,
+  CHECKIN_LINE,
+  checkHelper,
+  checkHelpers,
+  cleanSetting,
+  defaultInstruction,
+  defaultSetting,
+  effectiveInstruction,
+  FRAME_LINES,
+  helperRows,
+  offered,
+  offLine,
+  showSwitch,
+  showTab,
+  SUBAGENT_WORKFLOWS,
+  switchLabel,
+} from "../src/web-console/public/subagents.js";
 import { applyMention, matchNames, mentionAt } from "../src/web-console/public/mentions.js";
 import { FAVICON_BODY, FAVICON_COLORS, faviconState, faviconSvg } from "../src/web-console/public/favicon.js";
 import { CACHE_MS, RELEASES_URL, REPO_URL, checkForUpdate, compareVersions, latestTag } from "../src/web-console/update-check.mjs";
@@ -167,12 +185,18 @@ import {
   cwdHash,
   handOff,
   initialWorkspace,
+  latestOpenCaps,
   parseArgs,
   pendingWorkspaceChanges,
   PROTECTED_CONSOLE_FILES,
   readChat,
   readLedger,
+  readSubagentCursor,
+  readSubagentSetting,
   readWorkspaceCursor,
+  resetSubagentCursor,
+  writeSubagentCursor,
+  writeSubagentSetting,
   readOverview,
   removeCleanup,
   removeScratch,
@@ -709,6 +733,7 @@ test("every module the page imports is actually served", async () => {
   const html = fs.readFileSync(path.join(dir, "index.html"), "utf8");
   for (const m of html.matchAll(/<link rel="modulepreload" href="\/([^"]+)"/g)) wanted.add(m[1]);
   assert.ok(wanted.has("chat.js"), "the page preloads chat.js");
+  assert.ok(wanted.has("subagents.js"), "the page preloads subagents.js");
   assert.ok(wanted.size > 1, "found the imports");
   for (const f of wanted) {
     const res = await fetch(`${baseUrl}/${f}`, { headers: { cookie: consoleCookie(baseUrl, token), connection: "close" } });
@@ -822,9 +847,9 @@ const helpTemplate = () => {
   return tpl[1];
 };
 
-test("help: 16 tabs with unique ids", () => {
-  assert.equal(HELP_TABS.length, 16);
-  assert.equal(new Set(HELP_TABS.map((t) => t.id)).size, 16);
+test("help: 17 tabs with unique ids", () => {
+  assert.equal(HELP_TABS.length, 17);
+  assert.equal(new Set(HELP_TABS.map((t) => t.id)).size, 17);
   assert.ok(Object.isFrozen(HELP_TABS) && HELP_TABS.every((t) => Object.isFrozen(t)), "the tab list is frozen");
 });
 
@@ -894,6 +919,8 @@ test("help: helpTabFor opens on the tab for where the person is", () => {
     [{ adrift: true, view: "ask" }, "stuck"],
     [{ view: "ask" }, "ask"],
     [{ view: "ask", dashboard: true }, "ask"],
+    [{ view: "subagents" }, "subagents"],
+    [{ view: "subagents", workflow: "implement" }, "subagents"],
     [{ dashboard: true }, "dashboard"],
     [{ dashboard: true, view: "overview" }, "dashboard"],
     [{ workspace: true }, "workspace"],
@@ -3458,7 +3485,15 @@ test("the scratch sweep removes old patches and helpers, never looks, the pointe
       return p;
     };
     const removable = [file("p2.json"), file("helper.mjs")];
-    const kept = [file("looks.json"), file("workspaces.json"), file("console-dir"), file("update-check.json"), file("notes.txt"), file("p3.json", false)];
+    const kept = [
+      file("looks.json"),
+      file("workspaces.json"),
+      file("subagents.json"),
+      file("console-dir"),
+      file("update-check.json"),
+      file("notes.txt"),
+      file("p3.json", false),
+    ];
     const subdir = path.join(dir, "x.json");
     fs.mkdirSync(subdir);
     backdate(subdir);
@@ -3467,12 +3502,18 @@ test("the scratch sweep removes old patches and helpers, never looks, the pointe
     const stale = staleScratch(dir, Date.now(), SESSION_MAX_AGE_MS).sort();
     assert.deepEqual(stale, ["helper.mjs", "p2.json"]);
     assert.deepEqual(
-      (await removeScratch(dir, [...stale, "looks.json", "workspaces.json", "../p.json", "console-dir", "update-check.json"])).sort(),
+      (await removeScratch(dir, [...stale, "looks.json", "workspaces.json", "subagents.json", "../p.json", "console-dir", "update-check.json"])).sort(),
       ["helper.mjs", "p2.json"]
     );
     for (const p of removable) assert.equal(fs.existsSync(p), false, p);
     for (const p of kept) assert.ok(fs.existsSync(p), p);
-    assert.deepEqual([...PROTECTED_CONSOLE_FILES].sort(), ["console-dir", "looks.json", "update-check.json", "workspaces.json"]);
+    assert.deepEqual([...PROTECTED_CONSOLE_FILES].sort(), [
+      "console-dir",
+      "looks.json",
+      "subagents.json",
+      "update-check.json",
+      "workspaces.json",
+    ]);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
@@ -3506,7 +3547,9 @@ test("cleanup finds old sessions and strays in both folders, and keeps every pro
     const drafted = session("20250801-101010-dddddd", true);
     put(path.join(drafted, "draft.json"));
     const kept = [
-      ...["looks.json", "workspaces.json", "console-dir", "update-check.json"].map((n) => put(path.join(consoleDir, n))),
+      ...["looks.json", "workspaces.json", "subagents.json", "console-dir", "update-check.json"].map((n) =>
+        put(path.join(consoleDir, n))
+      ),
       put(path.join(plan2code, "launcher.json")),
       put(path.join(plan2code, "models.json")),
       put(path.join(plan2code, "bin", "plan2code.js"), "x"),
@@ -5138,6 +5181,232 @@ test("workspace cursor never moves backwards, and only changes past it are pendi
   }
 });
 
+test("subagents: only the five opted-in workflows offer the switch", () => {
+  for (const w of ["implement", "implement-review", "quick-task", "review", "pathfinder"]) {
+    assert.equal(offered(w), true, w);
+    assert.ok(defaultInstruction(w).length > 0, `${w} has a default instruction`);
+  }
+  for (const w of ["dashboard", "plan", "document", "init", "handoff", "constructor", "toString", undefined]) {
+    assert.equal(offered(w), false, String(w));
+    assert.equal(defaultInstruction(w), "");
+  }
+  assert.equal(Object.keys(SUBAGENT_WORKFLOWS).length, 5);
+  assert.deepEqual(defaultSetting("review"), { workflow: "review", on: false, instruction: null, max: 3 });
+  assert.equal(effectiveInstruction({ workflow: "review", instruction: "  " }), defaultInstruction("review"));
+  assert.equal(effectiveInstruction({ workflow: "review", instruction: " Mine " }), "Mine");
+});
+
+test("subagents: blockFor walks every switch transition, and never says off to an agent not told on", () => {
+  const setting = (on, revision, extra = {}) => ({ workflow: "implement", on, instruction: null, max: 3, revision, ...extra });
+  const none = { revision: 0, state: "none" };
+
+  assert.equal(blockFor(setting(false, 1), none), null, "never on: nothing");
+  assert.equal(blockFor(null, none), null, "no setting: nothing");
+
+  const on = blockFor(setting(true, 2), none);
+  assert.equal(on.lines[0], "Subagents: on (revision 2) — a console setting, not typed by the person.");
+  assert.ok(!on.lines[0].includes("replaces"));
+  assert.deepEqual(on.field, { state: "on", revision: 2, max: 3, instruction: defaultInstruction("implement") });
+  assert.deepEqual(on.cursor, { revision: 2, state: "on" });
+  assert.equal(on.lines[on.lines.length - 1], "  At most 3 helpers at once.");
+  for (const frame of FRAME_LINES) assert.ok(on.lines.includes("  " + frame), frame);
+
+  const edit = blockFor(setting(true, 5, { instruction: "First line\n\nSecond line", max: 7 }), { revision: 4, state: "on" });
+  assert.equal(edit.lines[0], "Subagents: on (revision 5, replaces revision 4) — a console setting, not typed by the person.");
+  assert.ok(edit.lines.includes("  First line") && edit.lines.includes("  Second line"), "the instruction's own lines are indented");
+  assert.ok(!edit.lines.some((line) => !line.trim()), "blank instruction lines are dropped");
+  const nested = blockFor(setting(true, 2, { instruction: "- a\r\n  - b\n   \n" }), none);
+  assert.deepEqual(nested.lines.slice(-3, -1), ["  - a", "    - b"], "the person's own indentation survives, CRLF and blank lines do not");
+  assert.equal(edit.field.max, 7);
+  for (const line of edit.lines.slice(1)) assert.match(line, /^ {2}\S/, "only the first line starts at column 0");
+
+  const off = blockFor(setting(false, 6), { revision: 5, state: "on" });
+  assert.deepEqual(off.lines, [offLine(6)]);
+  assert.equal(off.lines[0], "Subagents: off (revision 6) — don't start new helpers for the rest of this session.");
+  assert.deepEqual(off.cursor, { revision: 6, state: "off" });
+  assert.equal(off.field.state, "off");
+
+  assert.equal(blockFor(setting(false, 6), { revision: 6, state: "off" }), null, "same revision again: nothing");
+  assert.equal(blockFor(setting(true, 6), { revision: 6, state: "on" }), null, "same revision while on: nothing");
+  assert.equal(blockFor(setting(false, 3), { revision: 2, state: "off" }), null, "off after off: nothing");
+
+  assert.equal(blockFor(setting(true, 6), none).lines[0], "Subagents: on (revision 6) — a console setting, not typed by the person.", "a reset cursor re-states on");
+  assert.equal(blockFor(setting(false, 6), none), null, "a reset cursor with it off: nothing");
+  assert.equal(blockFor({ ...setting(true, 9), workflow: "plan" }, none), null, "a workflow that does not offer it: nothing");
+});
+
+test("subagents: the injected wording names no harness tool", () => {
+  const texts = [...FRAME_LINES, ...Object.keys(SUBAGENT_WORKFLOWS).map(defaultInstruction), offLine(1)];
+  for (const text of texts) {
+    for (const tool of ["run_subagent", "subagent_type", "Task(", "spawn_agent", "/agents", "Agent tool"]) {
+      assert.ok(!text.includes(tool), `"${text}" names ${tool}`);
+    }
+  }
+});
+
+test("subagents: cleanSetting accepts a good setting and names the field that fails", () => {
+  assert.deepEqual(cleanSetting({ on: true, instruction: null, max: 3 }), { on: true, instruction: null, max: 3 });
+  assert.deepEqual(cleanSetting({ on: false, instruction: "  Do it  ", max: 20 }), { on: false, instruction: "Do it", max: 20 });
+  assert.equal(cleanSetting({ on: true, instruction: "", max: 1 }).instruction, null, "an empty instruction is the default");
+  for (const max of [0, 21, 2.5, "3"]) assert.deepEqual(cleanSetting({ on: true, instruction: null, max }), { error: "max" }, String(max));
+  assert.deepEqual(cleanSetting({ on: true, instruction: "x".repeat(2001), max: 3 }), { error: "too-long" });
+  assert.deepEqual(cleanSetting({ on: "yes", instruction: null, max: 3 }), { error: "bad" });
+  assert.deepEqual(cleanSetting({ on: true, instruction: 7, max: 3 }), { error: "bad" });
+  assert.deepEqual(cleanSetting(null), { error: "bad" });
+});
+
+test("subagents: checkHelper and checkHelpers name the helper behind every problem", () => {
+  const running = { id: "h1", title: "Read the store", ask: "Find the lock helpers", state: "running" };
+  const done = { id: "h2", title: "Tests", ask: "Run the suite", state: "done", result: "All green" };
+  assert.deepEqual(checkHelper(running), []);
+  assert.deepEqual(checkHelper(done), []);
+  assert.deepEqual(checkHelper({ id: "alone", alone: true }), []);
+  assert.deepEqual(checkHelpers([running, done, { id: "alone", alone: true }]), []);
+
+  const one = (entry) => {
+    const problems = checkHelper(entry);
+    assert.equal(problems.length, 1, JSON.stringify(problems));
+    assert.match(problems[0], new RegExp(`helper "${entry.id}"`));
+    return problems[0];
+  };
+  one({ ...running, title: undefined });
+  assert.match(one({ ...running, state: "paused" }), /state must be running, done or failed/);
+  one({ ...running, title: "t".repeat(81) });
+  one({ ...running, ask: "a".repeat(401) });
+  one({ ...done, result: "r".repeat(201) });
+
+  const dupes = checkHelpers([running, { ...done, id: "h1" }]);
+  assert.ok(dupes.some((p) => p === 'helper "h1": duplicate id'), dupes.join("; "));
+  const alones = checkHelpers([{ id: "alone", alone: true }, { id: "alone", alone: true }]);
+  assert.ok(alones.some((p) => /helper "alone": only one working-alone entry/.test(p)), alones.join("; "));
+  assert.deepEqual(checkHelpers("nope"), ["helpers must be an array"]);
+});
+
+test("subagents: the page shows the switch only when offered and supported, and the tab only with a helper", () => {
+  assert.equal(showSwitch(null), false);
+  assert.equal(showSwitch({ offered: false, supported: true, on: true }), false);
+  assert.equal(showSwitch({ offered: true, supported: false, on: true }), false);
+  assert.equal(showSwitch({ offered: true, supported: true, on: false }), true);
+  assert.equal(switchLabel({ on: true }), "Subagents: on");
+  assert.equal(switchLabel({ on: false }), "Subagents: off");
+
+  const on = { offered: true, supported: true, on: true };
+  const off = { offered: true, supported: true, on: false };
+  const helper = { id: "h1", title: "Research", ask: "Check the docs", state: "running" };
+  assert.equal(showTab(on, []), false, "never an empty tab, even when on");
+  assert.equal(showTab(on, undefined), false);
+  assert.equal(showTab(off, [helper]), true, "a helper shows with the switch off (Pathfinder research)");
+  assert.equal(showTab({ ...on, supported: false }, [helper]), false, "no tab where the switch cannot show");
+  assert.ok(CHECKIN_LINE.includes("check-ins, not live"));
+});
+
+test("subagents: helperRows labels each state, shows a result only once a helper ended, and collapses to working alone", () => {
+  assert.deepEqual(helperRows([{ id: "alone", alone: true }]), { alone: true, rows: [] });
+  assert.deepEqual(helperRows(undefined), { alone: false, rows: [] });
+  const { alone, rows } = helperRows([
+    { id: "h1", title: "One", ask: "a", state: "running", result: "not yet" },
+    { id: "h2", title: "Two", ask: "b", state: "done", result: "Found 2 call sites" },
+    { id: "h3", title: "Three", ask: "c", state: "failed", result: "Timed out" },
+  ]);
+  assert.equal(alone, false);
+  assert.deepEqual(rows.map((r) => [r.id, r.stateLabel]), [["h1", "Running"], ["h2", "Done"], ["h3", "Failed"]]);
+  assert.equal("result" in rows[0], false, "a running helper has no result in its row");
+  assert.equal(rows[1].result, "Found 2 call sites");
+  assert.equal(rows[2].result, "Timed out");
+});
+
+test("page: the Subagents button sits right after Write a brief, and its dialog is in the page with no inline styles or scripts", () => {
+  const html = fs.readFileSync(path.join(ROOT, "src", "web-console", "public", "index.html"), "utf8");
+  const row = html.match(/<div class="row-left">([\s\S]*?)<\/div>\s*<div class="views-group">/);
+  assert.ok(row, "index.html has the second row's left cluster");
+  const ids = [...row[1].matchAll(/<button[^>]*\bid="([^"]+)"/g)].map((m) => m[1]);
+  assert.equal(ids[ids.indexOf("btn-brief") + 1], "btn-subagents", "the Subagents button follows Write a brief");
+  assert.match(row[1], /<button[^>]*id="btn-subagents"[^>]*\bhidden\b/, "the button starts hidden");
+  for (const part of ["sa-hub", "sa-node", "sa-link"]) assert.ok(row[1].includes(`class="${part}"`), `the icon has ${part}`);
+  const dialog = html.match(/<dialog class="modal looks subagents" id="subagents-modal" aria-labelledby="subagents-title">([\s\S]*?)<\/dialog>/);
+  assert.ok(dialog, "index.html has the Subagents dialog");
+  for (const id of ["subagents-instruction", "subagents-default", "subagents-max", "subagents-checkin", "subagents-research", "subagents-status", "subagents-cancel", "subagents-save"]) {
+    assert.ok(dialog[1].includes(`id="${id}"`), `the dialog carries #${id}`);
+  }
+  assert.doesNotMatch(dialog[1], /\sstyle=/);
+  assert.doesNotMatch(dialog[1], /<script/i);
+});
+
+test("subagents: the store round-trips per project and workflow under the console home", () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "p2c-subagents-home-"));
+  try {
+    const project = path.join(home, "My Repo");
+    const script = `
+      const lib = await import(${JSON.stringify(new URL("../src/web-console/lib.mjs", import.meta.url).href)});
+      const project = ${JSON.stringify(project)};
+      lib.saveSubagentStoreEntry(project, "implement", { on: true, instruction: "Mine", max: 5 });
+      const flipped = project.replace(/My Repo$/, "MY REPO");
+      console.log(JSON.stringify({
+        file: lib.SUBAGENTS_FILE,
+        saved: lib.subagentStoreEntry(project, "implement"),
+        otherCase: lib.subagentStoreEntry(flipped, "implement"),
+        unsaved: lib.subagentStoreEntry(project, "review"),
+      }));
+    `;
+    const res = spawnSync(process.execPath, ["--input-type=module", "-e", script], {
+      env: { ...process.env, PLAN2CODE_CONSOLE_HOME: home },
+      encoding: "utf8",
+    });
+    assert.equal(res.status, 0, res.stderr);
+    const out = JSON.parse(res.stdout);
+    assert.equal(out.file, path.join(home, "subagents.json"), "the store follows PLAN2CODE_CONSOLE_HOME");
+    assert.deepEqual(out.saved, { on: true, instruction: "Mine", max: 5 });
+    if (process.platform === "win32" || process.platform === "darwin") {
+      assert.deepEqual(out.otherCase, out.saved, "a different-case path reads the same entry");
+    }
+    assert.deepEqual(out.unsaved, { on: false, instruction: null, max: 3 });
+    assert.ok(!fs.existsSync(path.join(home, "subagents.json.lock")), "the lock is released");
+  } finally {
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test("subagents: the session setting and the cursor never go backwards, except a reset", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "p2c-subagents-"));
+  try {
+    assert.equal(readSubagentSetting(dir), null);
+    writeSubagentSetting(dir, { workflow: "implement", on: true, instruction: null, max: 3, revision: 5 });
+    writeSubagentSetting(dir, { workflow: "implement", on: false, instruction: null, max: 3, revision: 3 });
+    assert.equal(readSubagentSetting(dir).revision, 5);
+    assert.equal(readSubagentSetting(dir).on, false, "the rest of the setting is still written");
+    fs.writeFileSync(path.join(dir, "subagents-setting.json"), JSON.stringify({ workflow: "implement", on: "yes", max: 3, revision: 1 }));
+    assert.equal(readSubagentSetting(dir), null, "malformed reads null");
+
+    assert.deepEqual(readSubagentCursor(dir), { revision: 0, state: "none" });
+    writeSubagentCursor(dir, { revision: 4, state: "on" });
+    writeSubagentCursor(dir, { revision: 2, state: "off" });
+    assert.deepEqual(readSubagentCursor(dir), { revision: 4, state: "on" });
+    resetSubagentCursor(dir);
+    assert.deepEqual(readSubagentCursor(dir), { revision: 0, state: "none" });
+    fs.writeFileSync(path.join(dir, "subagents-cursor.json"), JSON.stringify({ revision: 2, state: "maybe" }));
+    assert.deepEqual(readSubagentCursor(dir), { revision: 0, state: "none" });
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("subagents: latestOpenCaps reads the last open event, skipping a torn line", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "p2c-caps-"));
+  const events = path.join(dir, "events.ndjson");
+  try {
+    assert.deepEqual(latestOpenCaps(dir), [], "no events yet");
+    fs.writeFileSync(events, [{ type: "open", caps: ["subagents"] }, { type: "open" }].map((e) => JSON.stringify(e)).join("\n") + "\n");
+    assert.deepEqual(latestOpenCaps(dir), [], "the latest open has no caps");
+    fs.appendFileSync(events, JSON.stringify({ type: "post" }) + "\n" + JSON.stringify({ type: "open", caps: ["subagents"] }) + "\n");
+    assert.deepEqual(latestOpenCaps(dir), ["subagents"]);
+    fs.appendFileSync(events, '{"type":"open","ca');
+    assert.deepEqual(latestOpenCaps(dir), ["subagents"], "a torn final line is ignored");
+    assert.ok(PROTECTED_CONSOLE_FILES.has("subagents.json"));
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("initialWorkspace names the original folder after itself and marks it original", () => {
   const ws = initialWorkspace(path.join("C:", "git", "My Repo"));
   assert.equal(ws.version, 0);
@@ -5497,6 +5766,376 @@ test("workspace: chat hands over a workspace change on its own, then has nothing
   } finally {
     cli(["stop", "--session", s.sid]);
     fs.rmSync(extra, { recursive: true, force: true });
+  }
+});
+
+/* ------------------------------------------- subagents: end to end */
+
+// The switch is remembered per project folder in the console home, so every
+// test that starts from "off" clears it first.
+const SUBAGENTS_STORE = path.join(HOME, "subagents.json");
+const subagentsSession = (extra = {}, { keepStore = false } = {}) => {
+  if (!keepStore) fs.rmSync(SUBAGENTS_STORE, { force: true });
+  return openSession({ workflow: "implement", ...extra });
+};
+const setSubagents = async (s, body) => {
+  const res = await s.send("/subagents", body);
+  return { status: res.status, body: await res.json() };
+};
+const frameSubagents = async (s) =>
+  (await (await fetch(`${s.base}/state`, { headers: { cookie: s.cookie, connection: "close" } })).json()).subagents;
+const ON3 = { on: true, instruction: null, max: 3 };
+const submitAndWait = async (s) => {
+  assert.equal((await s.send("/submit", EXPORT_A)).status, 200);
+  return cli(["wait", "--session", s.sid, "--seconds", "10"]);
+};
+const subagentLines = (reply) =>
+  String(reply || "")
+    .split("\n")
+    .filter((l) => l.startsWith("Subagents:"));
+
+test("subagents: a change reaches the next pickup once, last in reply, edits name what they replace and off follows only an on", async () => {
+  const s = subagentsSession();
+  const extra = tempFolder();
+  try {
+    const on = await setSubagents(s, ON3);
+    assert.equal(on.status, 200);
+    assert.equal(on.body.ok, true);
+    const rev = on.body.setting.revision;
+    assert.deepEqual(on.body.setting, { workflow: "implement", on: true, instruction: null, max: 3, revision: rev });
+
+    assert.equal((await ask(s, "Which files does the first task touch?")).status, 200);
+    assert.equal((await addFolder(s, { path: extra })).status, 200);
+    const first = await submitAndWait(s);
+    assert.equal(first.status, 0);
+    assert.deepEqual(first.json.subagents, { state: "on", revision: rev, max: 3, instruction: defaultInstruction("implement") });
+    const reply = first.json.reply;
+    const at = (re) => reply.search(re);
+    assert.ok(at(/^Export format: a$/m) === 0, reply);
+    assert.ok(at(/^Quick question:/m) > 0, reply);
+    assert.ok(at(/^Workspace:/m) > at(/^Quick question:/m), reply);
+    assert.ok(at(/^Subagents:/m) > at(/^Workspace:/m), reply);
+    assert.match(reply, new RegExp(`^Subagents: on \\(revision ${rev}\\) — a console setting, not typed by the person\\.$`, "m"));
+    assert.ok(reply.endsWith("\n  At most 3 helpers at once."), "the block goes last");
+    assert.deepEqual(subagentLines(reply).length, 1, "one block");
+    assert.deepEqual(readSubagentCursor(s.session), { revision: rev, state: "on" });
+
+    const second = await submitAndWait(s);
+    assert.equal("subagents" in second.json, false, "handed over once");
+    assert.deepEqual(subagentLines(second.json.reply), []);
+
+    const edited = await setSubagents(s, { ...ON3, max: 5 });
+    assert.equal(edited.body.setting.revision, rev + 1);
+    const third = await submitAndWait(s);
+    assert.equal(third.json.subagents.revision, rev + 1);
+    assert.equal(third.json.subagents.max, 5);
+    assert.deepEqual(subagentLines(third.json.reply), [
+      `Subagents: on (revision ${rev + 1}, replaces revision ${rev}) — a console setting, not typed by the person.`,
+    ]);
+
+    const same = await setSubagents(s, { ...ON3, max: 5 });
+    assert.equal(same.status, 200);
+    assert.equal(same.body.setting.revision, rev + 1, "saving the same values bumps nothing");
+    assert.equal("subagents" in (await submitAndWait(s)).json, false, "and injects nothing");
+
+    const off = await setSubagents(s, { ...ON3, on: false, max: 5 });
+    assert.equal(off.body.setting.revision, rev + 2, "off is a revision of its own");
+    const fourth = await submitAndWait(s);
+    assert.equal(fourth.json.subagents.state, "off");
+    assert.deepEqual(subagentLines(fourth.json.reply), [
+      `Subagents: off (revision ${rev + 2}) — don't start new helpers for the rest of this session.`,
+    ]);
+    assert.equal("subagents" in (await submitAndWait(s)).json, false, "off is said once");
+  } finally {
+    cli(["stop", "--session", s.sid]);
+    fs.rmSync(extra, { recursive: true, force: true });
+  }
+});
+
+test("subagents: never on means never a line, and chat hands a pending block over on its own", async () => {
+  const s = subagentsSession();
+  try {
+    const off = await setSubagents(s, { on: false, instruction: null, max: 4 });
+    assert.equal(off.status, 200);
+    const got = await submitAndWait(s);
+    assert.equal("subagents" in got.json, false);
+    assert.deepEqual(subagentLines(got.json.reply), [], "off is never said to an agent not told on");
+    assert.equal(cli(["chat", "--session", s.sid]).status, 10);
+
+    assert.equal((await setSubagents(s, { on: true, instruction: "Split by file.", max: 4 })).status, 200);
+    const chat = cli(["chat", "--session", s.sid]);
+    assert.equal(chat.status, 0);
+    assert.deepEqual(chat.json.chat, []);
+    assert.equal(chat.json.subagents.state, "on");
+    assert.equal(chat.json.subagents.instruction, "Split by file.");
+    assert.match(chat.json.reply, /^Subagents: on \(revision \d+\)/);
+    assert.match(chat.json.reply, /^ {2}Split by file\.$/m);
+    assert.ok(chat.json.terminalLine);
+    assert.equal(cli(["chat", "--session", s.sid]).status, 10, "then nothing");
+  } finally {
+    cli(["stop", "--session", s.sid]);
+  }
+});
+
+test("subagents: a resume re-states an on setting once, says nothing when off, and a lost cursor repeats the block", async () => {
+  const s = subagentsSession();
+  try {
+    const rev = (await setSubagents(s, ON3)).body.setting.revision;
+    const resumed = cli(["open", "--resume", s.sid, "--no-open"]);
+    assert.equal(resumed.json.ok, true);
+    assert.deepEqual(resumed.json.subagents, { state: "on", revision: rev, max: 3, instruction: defaultInstruction("implement") });
+    assert.equal(subagentLines(resumed.json.reply)[0], `Subagents: on (revision ${rev}) — a console setting, not typed by the person.`);
+    assert.ok(resumed.json.reply.split("\n").every((l, i) => i === 0 || l.startsWith("  ")), "only the block's lines");
+    assert.equal("subagents" in (await submitAndWait(s)).json, false, "the next pickup carries nothing");
+
+    // The print happened but the cursor write did not: the block comes again.
+    fs.writeFileSync(path.join(s.session, "subagents-cursor.json"), JSON.stringify({ revision: 0, state: "none" }));
+    const again = await submitAndWait(s);
+    assert.equal(again.json.subagents.state, "on");
+    assert.deepEqual(subagentLines(again.json.reply), [`Subagents: on (revision ${rev}) — a console setting, not typed by the person.`]);
+    assert.deepEqual(readSubagentCursor(s.session), { revision: rev, state: "on" });
+
+    assert.equal((await setSubagents(s, { ...ON3, on: false })).status, 200);
+    const quiet = cli(["open", "--resume", s.sid, "--no-open"]);
+    assert.equal("subagents" in quiet.json, false, "a resume with the switch off says nothing");
+    assert.equal("reply" in quiet.json, false);
+    assert.equal("subagents" in (await submitAndWait(s)).json, false, "nor does the next pickup");
+  } finally {
+    cli(["stop", "--session", s.sid]);
+  }
+});
+
+test("subagents: a dashboard launch into implement hears implement's saved setting once", async () => {
+  const seed = subagentsSession();
+  try {
+    assert.equal((await setSubagents(seed, ON3)).status, 200);
+  } finally {
+    cli(["stop", "--session", seed.sid]);
+  }
+  const s = consoleSession(["--workflow", "dashboard"]);
+  try {
+    assert.equal((await s.get("/state")).subagents.offered, false, "the dashboard offers no switch");
+    const launched = cli(["open", "--resume", s.sid, "--no-open", "--workflow", "implement"]);
+    // On the launch itself, not at a later pickup: a skill may do its main
+    // work before it ever collects anything.
+    assert.equal(launched.json.subagents?.state, "on", "the launch's own open output carries the block");
+    assert.match(launched.json.reply, /^Subagents: on \(revision \d+\)/);
+    await sleep(1200);
+    assert.equal(cli(["chat", "--session", s.sid]).status, 10, "never both");
+    const view = await s.get("/state");
+    assert.deepEqual([view.subagents.offered, view.subagents.supported, view.subagents.on], [true, true, true]);
+  } finally {
+    cli(["stop", "--session", s.sid]);
+  }
+});
+
+test("subagents: the setting survives a restart at the same revision and starts the next session in the project", async () => {
+  const s = subagentsSession();
+  let next = null;
+  try {
+    const saved = await setSubagents(s, { on: true, instruction: "Split by file.", max: 7 });
+    assert.equal(saved.status, 200);
+    const rev = saved.body.setting.revision;
+    cli(["stop", "--session", s.sid]);
+    const resumed = cli(["open", "--resume", s.sid, "--no-open"]);
+    const frame = await (
+      await fetch(`${sessionUrl(resumed.json.url).base}/state`, { headers: { cookie: sessionUrl(resumed.json.url).cookie, connection: "close" } })
+    ).json();
+    assert.deepEqual(
+      [frame.subagents.on, frame.subagents.instruction, frame.subagents.max, frame.subagents.revision],
+      [true, "Split by file.", 7, rev],
+      "a restart alone bumps nothing"
+    );
+
+    next = subagentsSession({}, { keepStore: true });
+    const fresh = await frameSubagents(next);
+    assert.deepEqual([fresh.on, fresh.instruction, fresh.max], [true, "Split by file.", 7], "a new session in the same project starts there");
+  } finally {
+    cli(["stop", "--session", s.sid]);
+    if (next) cli(["stop", "--session", next.sid]);
+  }
+});
+
+test("subagents: a save that matches this session still becomes the project's setting, without a bump", async () => {
+  const b = subagentsSession();
+  const a = subagentsSession({}, { keepStore: true });
+  let c = null;
+  try {
+    const before = (await frameSubagents(b)).revision;
+    assert.equal((await setSubagents(a, ON3)).status, 200, "another session turns it on for the project");
+    const same = await setSubagents(b, { ...ON3, on: false });
+    assert.equal(same.status, 200);
+    assert.equal(same.body.setting.revision, before, "nothing changed for this session's agent");
+    assert.equal("subagents" in (await submitAndWait(b)).json, false);
+
+    c = subagentsSession({}, { keepStore: true });
+    assert.equal((await frameSubagents(c)).on, false, "the next session starts from the person's latest pick");
+  } finally {
+    for (const s of [a, b, c]) if (s) cli(["stop", "--session", s.sid]);
+  }
+});
+
+test("subagents: a workflow without the switch refuses it, bad bodies name the field, and an older copy's open hides it", async () => {
+  const plan = subagentsSession({ workflow: "plan" });
+  const s = subagentsSession();
+  try {
+    assert.deepEqual(await setSubagents(plan, ON3), { status: 400, body: { error: "not-offered" } });
+    assert.equal((await frameSubagents(plan)).offered, false);
+    assert.equal("subagents" in (await submitAndWait(plan)).json, false);
+
+    assert.deepEqual(await setSubagents(s, { ...ON3, max: 0 }), { status: 400, body: { error: "max" } });
+    assert.deepEqual(await setSubagents(s, { ...ON3, max: 21 }), { status: 400, body: { error: "max" } });
+    assert.deepEqual(await setSubagents(s, { ...ON3, instruction: "x".repeat(2001) }), { status: 400, body: { error: "too-long" } });
+    assert.deepEqual(await setSubagents(s, { ...ON3, on: "yes" }), { status: 400, body: { error: "bad" } });
+
+    assert.equal((await frameSubagents(s)).supported, true, "this copy's open carries caps");
+    fs.appendFileSync(path.join(s.session, "events.ndjson"), JSON.stringify({ at: new Date().toISOString(), type: "open", resumed: true }) + "\n");
+    assert.equal((await frameSubagents(s)).supported, false, "an older copy's open has no caps");
+    cli(["open", "--resume", s.sid, "--no-open"]);
+    assert.equal((await frameSubagents(s)).supported, true);
+
+    // A session an older server ran has no setting file: nothing is injected,
+    // whatever the store says.
+    assert.equal((await setSubagents(s, ON3)).status, 200);
+    fs.rmSync(path.join(s.session, "subagents-setting.json"), { force: true });
+    assert.equal("subagents" in (await submitAndWait(s)).json, false);
+  } finally {
+    cli(["stop", "--session", plan.sid]);
+    cli(["stop", "--session", s.sid]);
+  }
+});
+
+/* ------------------------------------------ subagents: helper reports */
+
+const reportedHelper = (id, extra = {}) => ({ id, title: `Helper ${id}`, ask: "Find the callers of applyPatch", state: "running", ...extra });
+
+test("helpers: post merges them by id, takes one working-alone entry, and null clears the list", () => {
+  const s = consoleSession(["--workflow", "implement"]);
+  try {
+    assert.equal(postPatch(s, { helpers: [reportedHelper("h1")] }).status, 0);
+    const done = reportedHelper("h1", { state: "done", result: "Found 2 call sites" });
+    assert.equal(postPatch(s, { helpers: [done, reportedHelper("h2")] }).status, 0);
+    assert.deepEqual(readState(s.session).helpers, [done, reportedHelper("h2")], "h1 updated in place, h2 added");
+
+    assert.equal(postPatch(s, { helpers: [{ id: "alone", alone: true }] }).status, 0);
+    assert.deepEqual(readState(s.session).helpers.map((h) => h.id), ["h1", "h2", "alone"]);
+    const second = postPatch(s, { helpers: [{ id: "solo", alone: true }] }, { expectFail: true });
+    assert.equal(second.status, 3);
+    assert.match(second.stderr, /helper "solo"/);
+    assert.deepEqual(readState(s.session).helpers.map((h) => h.id), ["h1", "h2", "alone"], "the refused entry was not written");
+
+    assert.equal(postPatch(s, { helpers: null }).status, 0);
+    assert.equal("helpers" in readState(s.session), false);
+  } finally {
+    cli(["stop", "--session", s.sid]);
+  }
+});
+
+test("helpers: every malformed report exits 3 naming the helper, and nothing is written", () => {
+  const s = consoleSession(["--workflow", "implement"]);
+  try {
+    assert.equal(postPatch(s, { helpers: [reportedHelper("h1")] }).status, 0);
+    const statePath = path.join(s.session, "state.json");
+    const before = fs.readFileSync(statePath, "utf8");
+    const cases = [
+      ["missing title", [{ id: "h3", ask: "Read the docs", state: "running" }], /helper "h3": title must be a non-empty string/],
+      ["unknown state", [reportedHelper("h3", { state: "paused" })], /helper "h3": state must be running, done or failed/],
+      ["81-char title", [reportedHelper("h3", { title: "t".repeat(81) })], /helper "h3": title must be at most 80 characters/],
+      ["401-char ask", [reportedHelper("h3", { ask: "a".repeat(401) })], /helper "h3": ask must be at most 400 characters/],
+      ["201-char result", [reportedHelper("h3", { state: "done", result: "r".repeat(201) })], /helper "h3": result must be at most 200 characters/],
+      ["completion marker", [reportedHelper("h3", { state: "done", result: "PHASE_COMPLETE" })], /helper "h3" result contains a loop completion marker/],
+      ["metrics bait", [reportedHelper("h3", { title: "Risk 3" })], /helper "h3" title contains "Risk 3"/],
+      ["not an array", { id: "h3" }, /"helpers" must be an array/],
+      ["null entry", [null], /"helpers" entries must be objects/],
+      ["string entry", ["h3"], /"helpers" entries must be objects/],
+    ];
+    for (const [name, helpers, re] of cases) {
+      const res = postPatch(s, { helpers }, { expectFail: true });
+      assert.equal(res.status, 3, name);
+      assert.match(res.stderr, re, name);
+      assert.equal(fs.readFileSync(statePath, "utf8"), before, `${name}: nothing written`);
+    }
+  } finally {
+    cli(["stop", "--session", s.sid]);
+  }
+});
+
+test("docs: a doc's version never goes back; the same version again is fine, and a hop starts every doc fresh", () => {
+  const s = consoleSession(["--workflow", "implement"]);
+  try {
+    const doc = (version, md) => ({ docs: [{ id: "phase", title: "Phase 5 tasks", version, blocks: [{ id: "tasks", state: "settled", md }] }] });
+    assert.equal(postPatch(s, doc(7, "- [x] Task 4.1")).status, 0);
+    assert.equal(postPatch(s, doc(7, "- [x] Task 4.1 (again)")).status, 0, "the same version again is fine");
+    const statePath = path.join(s.session, "state.json");
+    const before = fs.readFileSync(statePath, "utf8");
+    const stale = postPatch(s, doc(1, "- [ ] Task 4.1"), { expectFail: true });
+    assert.equal(stale.status, 3);
+    assert.match(stale.stderr, /doc "phase" is at version 7 on the page; this patch sends version 1/);
+    assert.equal(fs.readFileSync(statePath, "utf8"), before, "nothing written");
+    assert.equal(postPatch(s, doc(8, "- [ ] Task 5.1")).status, 0, "a higher version goes through");
+    assert.equal(postPatch(s, { docs: [{ id: "phase", blocks: [{ id: "tasks", state: "settled", md: "- [x] Task 5.1" }] }] }).status, 0, "a patch with no version is not checked");
+
+    cli(["open", "--resume", s.sid, "--no-open", "--workflow", "dashboard"]);
+    cli(["open", "--resume", s.sid, "--no-open", "--workflow", "implement"]);
+    assert.equal(postPatch(s, doc(1, "- [ ] Task 1.1")).status, 0, "after a hop the doc starts fresh");
+  } finally {
+    cli(["stop", "--session", s.sid]);
+  }
+});
+
+test("docs: a second phase in one build session goes through as building.md teaches it", () => {
+  const md = fs.readFileSync(path.join(ROOT, "src", "web-console", "building.md"), "utf8");
+  assert.match(md, /`"version": 1` is for the first phase of a session only/);
+  assert.match(md, /a later phase in the\s+same session reposts `phase` and `phasefile` at one more than the version the\s+page holds/);
+  const s = consoleSession(["--workflow", "implement"]);
+  try {
+    const phase = (n, version, md) => ({
+      headline: { stage: `Phase ${n}`, cleared: 0 },
+      docs: [
+        { id: "phase", title: `Phase ${n} tasks`, version, blocks: [{ id: "tasks", state: "settled", md }] },
+        { id: "phasefile", title: `phase-${n}.md`, version, blocks: [{ id: "body", state: "settled", md }] },
+      ],
+    });
+    assert.equal(postPatch(s, phase(1, 1, "- [ ] Task 1.1")).status, 0);
+    assert.equal(postPatch(s, phase(1, 2, "- [x] Task 1.1")).status, 0);
+    const restarted = postPatch(s, phase(2, 1, "- [ ] Task 2.1"), { expectFail: true });
+    assert.equal(restarted.status, 3, "restarting at version 1 is refused");
+    assert.equal(postPatch(s, phase(2, 3, "- [ ] Task 2.1")).status, 0, "continuing from the page's version goes through");
+    const docs = readState(s.session).docs;
+    assert.deepEqual(
+      docs.map((d) => [d.id, d.title, d.version]),
+      [["phase", "Phase 2 tasks", 3], ["phasefile", "phase-2.md", 3]]
+    );
+  } finally {
+    cli(["stop", "--session", s.sid]);
+  }
+});
+
+test("helpers: a dashboard hop clears them, a same-workflow or paused resume keeps them, and the meter never moves", async () => {
+  const s = consoleSession(["--workflow", "implement"]);
+  try {
+    const meterBefore = (await s.get("/state")).meter;
+    assert.equal(postPatch(s, { helpers: [reportedHelper("h1"), { id: "alone", alone: true }] }).status, 0);
+    assert.deepEqual((await s.get("/state")).meter, meterBefore, "helper reports add nothing to the meter");
+    assert.equal(readLedger(s.session).some((e) => JSON.stringify(e).includes("h1")), false, "nothing about helpers reaches the ledger");
+
+    cli(["open", "--resume", s.sid, "--no-open"]);
+    assert.equal(readState(s.session).helpers.length, 2, "a resume with no --workflow keeps them");
+    cli(["open", "--resume", s.sid, "--no-open", "--workflow", "implement"]);
+    assert.equal(readState(s.session).helpers.length, 2, "a resume into the same workflow keeps them");
+
+    assert.equal(postPatch(s, { finish: { headline: "Paused at Task 2" } }).status, 0);
+    cli(["open", "--resume", s.sid, "--no-open"]);
+    const resumed = readState(s.session);
+    assert.equal("finish" in resumed, false, "the pause came down");
+    assert.equal(resumed.helpers.length, 2, "taking a pause down keeps them");
+
+    cli(["open", "--resume", s.sid, "--no-open", "--workflow", "dashboard"]);
+    assert.equal("helpers" in readState(s.session), false, "the hop to the dashboard drops them");
+    cli(["open", "--resume", s.sid, "--no-open", "--workflow", "implement"]);
+    assert.equal("helpers" in readState(s.session), false, "and the hop back brings none");
+  } finally {
+    cli(["stop", "--session", s.sid]);
   }
 });
 

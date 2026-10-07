@@ -103,6 +103,15 @@ import { FOOTER_TIERS, footerLabel, nameProblem } from "./workspace.js";
 import { RED_BANNER } from "./meter.js";
 import { applyMention, matchNames, mentionAt } from "./mentions.js";
 import { faviconState, setFavicon } from "./favicon.js";
+import {
+  CHECKIN_LINE,
+  PATHFINDER_RESEARCH_LINE,
+  defaultInstruction,
+  helperRows,
+  showSwitch,
+  showTab,
+  switchLabel,
+} from "./subagents.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -530,6 +539,9 @@ let meterFrame = null;
 // The frame's update ({ installed, latest }), present only when a newer
 // release is out; null otherwise.
 let updateFrame = null;
+// The frame's Subagents switch ({ offered, supported, on, instruction, max,
+// revision }), or null before a server that sends it.
+let subagentsFrame = null;
 let chatDot = false;
 let chatSending = false;
 let chatResetting = false;
@@ -880,6 +892,8 @@ function adopt(body) {
   if (body.meter) meterFrame = body.meter;
   // Always replaced: an absent key means no update.
   updateFrame = body.update || null;
+  // Always replaced too: an older server sends none, and then there is no switch.
+  subagentsFrame = body.subagents || null;
   lastContact = Date.now();
   if (gone) {
     gone = false;
@@ -1301,6 +1315,7 @@ function render() {
     renderChrome();
     renderStatus();
     renderBriefButton();
+    renderSubagentsButton();
     renderStopButton();
     renderHomeButton();
     tabAdded = renderViews();
@@ -1566,7 +1581,7 @@ function renderChrome() {
   renderMeter();
   $("title").textContent = S.title || "Session";
   $("badge").textContent = workflowLabel(S.workflow);
-  document.title = (S.title || "Session") + " · #" + String(S.sid || "").slice(-6) + " · Plan2Code";
+  renderTabTitle();
 
   const h = S.headline || {};
   // On a finished session an open item is frozen: the send on it counts as
@@ -1835,6 +1850,69 @@ function renderBriefButton() {
   if (offer) btn.disabled = gone || pendingResult;
 }
 
+// Shown only where the skill opts in and the agent's console copy can deliver
+// it. Lit while helpers are on; a click opens the dialog, never toggles.
+function renderSubagentsButton() {
+  const btn = $("btn-subagents");
+  const offer = showSwitch(subagentsFrame);
+  btn.hidden = !offer;
+  if (!offer) return;
+  const label = switchLabel(subagentsFrame);
+  btn.setAttribute("aria-pressed", String(Boolean(subagentsFrame.on)));
+  btn.title = label;
+  btn.setAttribute("aria-label", label);
+  btn.disabled = gone;
+}
+
+// The Subagents dialog, filled from the frame each time it opens. A null
+// instruction is the shipped default, shown as its text so it can be edited.
+function openSubagents() {
+  if (!showSwitch(subagentsFrame)) return;
+  const on = Boolean(subagentsFrame.on);
+  for (const radio of document.querySelectorAll('input[name="subagents-on"]')) {
+    radio.checked = radio.value === (on ? "on" : "off");
+  }
+  $("subagents-instruction").value = subagentsFrame.instruction ?? defaultInstruction(S.workflow);
+  $("subagents-max").value = String(subagentsFrame.max);
+  $("subagents-checkin").textContent = CHECKIN_LINE;
+  const research = $("subagents-research");
+  research.textContent = PATHFINDER_RESEARCH_LINE;
+  research.hidden = S.workflow !== "pathfinder";
+  $("subagents-status").textContent = "";
+  $("subagents-save").disabled = false;
+  $("subagents-modal").showModal();
+  const checked = document.querySelector('input[name="subagents-on"]:checked');
+  if (checked) checked.focus();
+}
+
+const SUBAGENTS_ERRORS = {
+  max: "Pick a number from 1 to 20.",
+  "too-long": "The instruction is over 2,000 characters.",
+  "not-offered": "This skill doesn't use helpers.",
+  bad: "That didn't save. Try again.",
+};
+const SUBAGENTS_LOST = "Lost contact with Plan2Code. Try again once it's back.";
+
+async function saveSubagents() {
+  const save = $("subagents-save");
+  const status = $("subagents-status");
+  const picked = document.querySelector('input[name="subagents-on"]:checked');
+  const text = $("subagents-instruction").value.trim();
+  // The shipped default is stored as null, so a later release's wording
+  // reaches everyone who never changed it.
+  const instruction = text === defaultInstruction(S.workflow) ? null : text;
+  const body = { on: Boolean(picked && picked.value === "on"), instruction, max: Number($("subagents-max").value) };
+  save.disabled = true;
+  status.textContent = "";
+  const res = await postJson("/subagents", body);
+  save.disabled = false;
+  // The next state frame redraws the button.
+  if (res.status === 200) return $("subagents-modal").close();
+  if (res.status === 400) status.textContent = SUBAGENTS_ERRORS[res.body && res.body.error] || SUBAGENTS_ERRORS.bad;
+  else if (res.status === 403 || res.status === 0) status.textContent = SUBAGENTS_LOST;
+  else status.textContent = SUBAGENTS_ERRORS.bad;
+}
+
 function renderViews() {
   const nav = $("views");
   nav.replaceChildren();
@@ -1850,6 +1928,14 @@ function renderViews() {
   if (hasOverview) tabs.push({ id: "overview", label: "Overview", count: 0 });
   else if (view === "overview") view = "questions";
   for (const d of docs()) tabs.push({ id: "doc:" + d.id, label: d.title || "Document", count: 0 });
+  // The helpers the agent reported, from the first one on; cleared by a
+  // dashboard hop, which sends the person home like the Overview tab does.
+  if (showTab(subagentsFrame, S.helpers)) {
+    // From the rows the tab draws, so the badge never counts helpers the
+    // working-alone note hides.
+    const running = helperRows(S.helpers).rows.filter((r) => r.state === "running").length;
+    tabs.push({ id: "subagents", label: "Subagents", count: running });
+  } else if (view === "subagents") view = "questions";
   // Always last, on every workflow and after a finish: the Quick question chat.
   // The ring left of "Ask" shows exactly when the conversation's own ring does:
   // a question the agent picked up and has not answered yet.
@@ -2130,6 +2216,7 @@ function paintMain(main) {
   if (view.startsWith("doc:")) return renderDoc(main, view.slice(4));
   if (view === "overview") return renderOverview(main);
   if (view === "ask") return renderAsk(main);
+  if (view === "subagents") return renderSubagents(main);
 
   // The session's own page, reached from the PAUSED / SESSION ENDED item at
   // the top of the rail. The hand-off lives here alone now, rather than
@@ -4774,6 +4861,42 @@ function renderOverview(main) {
   main.appendChild(box);
 }
 
+// The helpers the agent reported, as it last posted them. Everything here is
+// the agent's text, so it goes in as text, never as markup.
+function renderSubagents(main) {
+  const card = el("section", "card sa-card");
+  card.appendChild(el("h2", null, "Subagents"));
+  card.appendChild(el("p", "help", CHECKIN_LINE));
+  const { alone, rows } = helperRows(S.helpers);
+  if (alone) {
+    card.appendChild(
+      el("p", "sa-alone", "Working alone: your agent has no way to start helpers here, so it is doing this skill's work itself.")
+    );
+    main.appendChild(card);
+    return;
+  }
+  const list = el("ul", "sa-list");
+  for (const row of rows) {
+    const item = el("li", "sa-row");
+    const head = el("div", "sa-head");
+    head.appendChild(el("strong", "sa-title", row.title));
+    const pill = el("span", "pill sa-pill is-" + row.state);
+    if (row.state === "running") {
+      const spin = el("span", "spinner tiny");
+      spin.setAttribute("aria-hidden", "true");
+      pill.appendChild(spin);
+    }
+    pill.appendChild(document.createTextNode(row.stateLabel));
+    head.appendChild(pill);
+    item.appendChild(head);
+    item.appendChild(el("p", "sa-ask", row.ask));
+    if (row.result) item.appendChild(el("p", "sa-result", row.result));
+    list.appendChild(item);
+  }
+  card.appendChild(list);
+  main.appendChild(card);
+}
+
 /* ---------------------------------------------------------------- ask */
 
 // The frame's chat block, with `offline` worked out now rather than when the
@@ -5956,10 +6079,30 @@ const workspaceFolders = () => (wsFrame && Array.isArray(wsFrame.folders) ? wsFr
 // session opened before the server wrote `worktree` has nothing to show, so
 // the slot stays hidden. The footer renders on every tick, so the DOM is only
 // touched when the labels change, or when a resize clears the key.
+// The project's name: the workspace's original folder, or the session's
+// worktree folder before a frame carries the workspace.
+function projectName() {
+  const folders = workspaceFolders();
+  if (folders.length && folders[0].name) return folders[0].name;
+  const path = (S && S.worktree) || "";
+  return path ? path.split(/[\\/]/).filter(Boolean).pop() || path : "";
+}
+
+// The browser tab's title, led by the project so tabs from different
+// projects are told apart. Called from the chrome and the footer, since the
+// workspace frame can arrive after either.
+function renderTabTitle() {
+  if (!S) return;
+  const name = projectName();
+  document.title =
+    (name ? name + " · " : "") + (S.title || "Session") + " · #" + String(S.sid || "").slice(-6) + " · Plan2Code";
+}
+
 function renderWhere() {
   const b = $("footer-where");
   const folders = workspaceFolders();
   const path = S.worktree || "";
+  renderTabTitle();
   const alert = Boolean(folders.length && ((wsFrame.missing || []).length || (wsFrame.issues || []).length));
   const labels = folders.length
     ? Array.from({ length: FOOTER_TIERS }, (_, tier) => footerLabel({ folders, branch: S.branch }, tier))
@@ -5972,7 +6115,16 @@ function renderWhere() {
   let label = labels[0];
   for (const text of labels) {
     label = text;
-    b.textContent = text;
+    // The project name takes the highlight color, so several consoles side by
+    // side tell apart at a glance; the rest of the label stays quiet.
+    const name = projectName();
+    b.textContent = "";
+    if (name && text.startsWith(name)) {
+      b.appendChild(el("span", "where-project", name));
+      b.appendChild(document.createTextNode(text.slice(name.length)));
+    } else {
+      b.textContent = text;
+    }
     if (alert) {
       const dot = el("span", "where-alert");
       dot.setAttribute("aria-hidden", "true");
@@ -7197,6 +7349,7 @@ function lightDismiss(dlg) {
   });
 }
 lightDismiss($("looks-modal"));
+lightDismiss($("subagents-modal"));
 lightDismiss($("help-modal"));
 lightDismiss($("workspace-modal"));
 lightDismiss($("welcome-modal"));
@@ -7499,6 +7652,13 @@ $("cleanup-scan").addEventListener("click", scanCleanup);
 $("cleanup-delete").addEventListener("click", deleteCleanup);
 
 $("btn-brief").addEventListener("click", openBrief);
+$("btn-subagents").addEventListener("click", openSubagents);
+$("subagents-default").addEventListener("click", () => {
+  $("subagents-instruction").value = defaultInstruction(S.workflow);
+});
+$("subagents-save").addEventListener("click", saveSubagents);
+$("subagents-cancel").addEventListener("click", () => $("subagents-modal").close());
+$("subagents-modal").addEventListener("close", () => $("btn-subagents").focus());
 $("brief-cancel").addEventListener("click", () => $("brief-modal").close());
 $("brief-go").addEventListener("click", sendBrief);
 for (const radio of document.querySelectorAll('input[name="brief-range"]')) {

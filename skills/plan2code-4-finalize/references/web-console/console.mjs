@@ -64,6 +64,8 @@ import {
   readChat,
   readJson,
   readLedger,
+  readSubagentCursor,
+  readSubagentSetting,
   readWorkspace,
   reapHandles,
   rememberedWorkspace,
@@ -71,6 +73,7 @@ import {
   removeScratch,
   removeSessions,
   repoRoots,
+  resetSubagentCursor,
   scanProject,
   SESSION_MAX_AGE_MS,
   sessionDir,
@@ -88,9 +91,11 @@ import {
   workspaceForAgent,
   writeCursor,
   writeJsonAtomic,
+  writeSubagentCursor,
   writeWorkspaceCursor,
 } from "./lib.mjs";
 import { RUN_EVENTS, TASK_EVENTS, MAX_TASKS, isTaskCount, progressEntry } from "./public/meter.js";
+import { blockFor, offered } from "./public/subagents.js";
 import { changeLine } from "./public/workspace.js";
 
 // Mirrors the server's absolute lifetime cap: a handle older than this cannot
@@ -310,7 +315,11 @@ async function cmdOpen() {
     die(`could not write the session state: ${written ? written.error : "unknown"}`, 1);
   }
   state = written.state;
-  appendEvent(dir, { type: "open", resumed: Boolean(args.resume || args.session), carried });
+  appendEvent(dir, { type: "open", resumed: Boolean(args.resume || args.session), carried, caps: ["subagents"] });
+  // A new agent conversation has been told nothing yet (FR-6).
+  try {
+    resetSubagentCursor(dir);
+  } catch {}
   trace("open: state written");
 
   // Dashboard launches are recorded too (they score nothing), so the folder
@@ -337,9 +346,18 @@ async function cmdOpen() {
     removeScratch(HOME_DIR, sweptScratch).catch(() => {});
   };
 
+  // A standing instruction the new agent is owed, as `subagents` and a
+  // `reply` holding only its lines; neither key when nothing is owed.
+  const subagentsOwed = () => {
+    awaitSubagentSync(dir, state.workflow);
+    const [out, cursor] = withSubagents(dir, { reply: "" });
+    return [out.subagents ? out : {}, cursor];
+  };
+
   // Reuse a live server if one is already serving this session.
   if (existing && (await reusable)) {
     if (!args["no-open"]) openBrowser(existing.url);
+    const [owed, subCursor] = subagentsOwed();
     print({
       ok: true,
       sid,
@@ -349,9 +367,11 @@ async function cmdOpen() {
       pendingResult: carried,
       terminalLine: terminalLine(existing.url),
       workspace,
+      ...owed,
       ...swept,
       ...remoteWarning(),
     });
+    advanceSubagents(dir, subCursor);
     sweep();
     return;
   }
@@ -384,6 +404,7 @@ async function cmdOpen() {
   const notes = [];
   if (remote.note) notes.push(remote.note);
   if (carried) notes.push("Answers are already waiting. Run `wait` to collect them.");
+  const [owed, subCursor] = subagentsOwed();
   print({
     ok: true,
     sid,
@@ -394,10 +415,12 @@ async function cmdOpen() {
     pendingResult: carried,
     terminalLine: terminalLine(handle.url),
     workspace,
+    ...owed,
     ...swept,
     ...(remote.remote ? { remote: remote.remote } : {}),
     ...(notes.length ? { note: notes.join(" ") } : {}),
   });
+  advanceSubagents(dir, subCursor);
   // After the print, never before it: the page and the link wait for nothing.
   sweep();
 }
@@ -774,7 +797,7 @@ function serverGone(sid) {
 
 // Quick questions and nothing else: an ordinary exit 0 with no card actions.
 function deliverChat(dir, sid, entries, url) {
-  const [out, changes] = withWorkspace(dir, {
+  const [withWs, changes] = withWorkspace(dir, {
     type: "chat",
     at: nowIso(),
     sid,
@@ -782,9 +805,11 @@ function deliverChat(dir, sid, entries, url) {
     chat: entries,
     reply: chatReplyLines(entries),
   });
+  const [out, subCursor] = withSubagents(dir, withWs);
   print({ ...out, ...(url ? { terminalLine: terminalLine(url) } : {}) });
   advanceCursor(dir, entries);
   advanceWorkspace(dir, changes);
+  advanceSubagents(dir, subCursor);
   process.exitCode = 0;
 }
 
@@ -803,6 +828,52 @@ function advanceWorkspace(dir, changes) {
   if (!changes.length) return;
   try {
     writeWorkspaceCursor(dir, Math.max(...changes.map((c) => c.version)));
+  } catch {}
+}
+
+// The server rewrites the session's setting for a new workflow only once its
+// watcher sees the state `open` just wrote, so a launch or hop that read the
+// file at once would find the old workflow's and owe the agent nothing until
+// its next pickup. Give the server a moment to catch up instead, never
+// writing the file ourselves (FR-7). A session with no setting file at all is
+// an older server, which never writes one: a short look, not the full wait.
+const SUBAGENT_SYNC_WAIT_MS = 1500;
+const SUBAGENT_SYNC_MISSING_MS = 250;
+function awaitSubagentSync(dir, workflow) {
+  if (!offered(workflow)) return;
+  const start = Date.now();
+  for (;;) {
+    const setting = readSubagentSetting(dir);
+    if (setting && setting.workflow === workflow) return;
+    const budget = setting ? SUBAGENT_SYNC_WAIT_MS : SUBAGENT_SYNC_MISSING_MS;
+    if (Date.now() - start >= budget) return;
+    sleepSync(25);
+  }
+}
+
+// The Subagents switch the agent is owed, added to what it is about to read:
+// the setting as `subagents`, and its lines last in `reply`, after card lines,
+// Quick questions and Workspace lines (FR-9). Read from the session's own
+// setting file only, which only the server writes (FR-7). A setting for
+// another workflow is the server not having caught up with a hop yet: it
+// rides on the next pickup instead.
+function withSubagents(dir, out) {
+  const setting = readSubagentSetting(dir);
+  if (!setting) return [out, null];
+  const workflow = (readJson(path.join(dir, "state.json")) || {}).workflow;
+  if (setting.workflow !== workflow) return [out, null];
+  const block = blockFor(setting, readSubagentCursor(dir));
+  if (!block) return [out, null];
+  const reply = [out.reply, ...block.lines].filter(Boolean).join("\n");
+  return [{ ...out, subagents: block.field, reply }, block.cursor];
+}
+
+// After the print, like advanceWorkspace(): a kill in between repeats the
+// block at the next pickup, never loses it.
+function advanceSubagents(dir, cursor) {
+  if (!cursor) return;
+  try {
+    writeSubagentCursor(dir, cursor);
   } catch {}
 }
 
@@ -832,15 +903,17 @@ async function cmdChat() {
   }
   const entries = deliverableChat(collectChat(dir, readJson(path.join(dir, "state.json")) || {}));
   const changes = pendingWorkspaceChanges(dir);
-  if (!entries.length && !changes.length) {
+  const reply = [chatReplyLines(entries), ...changes.map(changeLine)].filter(Boolean).join("\n");
+  const [out, subCursor] = withSubagents(dir, { chat: entries, workspace: changes, reply });
+  if (!entries.length && !changes.length && !subCursor) {
     print({ chat: [] });
     process.exitCode = 10;
     return;
   }
-  const reply = [chatReplyLines(entries), ...changes.map(changeLine)].filter(Boolean).join("\n");
-  print({ chat: entries, workspace: changes, reply, terminalLine: terminalLine(handle.url) });
+  print({ ...out, terminalLine: terminalLine(handle.url) });
   advanceCursor(dir, entries);
   advanceWorkspace(dir, changes);
+  advanceSubagents(dir, subCursor);
   process.exitCode = 0;
 }
 
@@ -865,7 +938,8 @@ function consume(dir, resultPath, result, url, chat = []) {
   // never on result.json itself.
   const withChat = { ...collected, chat };
   if (chat.length) withChat.reply = [collected.reply, chatReplyLines(chat)].filter(Boolean).join("\n");
-  const [out, changes] = withWorkspace(dir, withChat);
+  const [withWs, changes] = withWorkspace(dir, withChat);
+  const [out, subCursor] = withSubagents(dir, withWs);
   print(url ? { ...out, terminalLine: terminalLine(url) } : out);
   try {
     writeJsonAtomic(resultPath, collected);
@@ -874,6 +948,7 @@ function consume(dir, resultPath, result, url, chat = []) {
   ledgerAnswers(dir, result);
   advanceCursor(dir, chat);
   advanceWorkspace(dir, changes);
+  advanceSubagents(dir, subCursor);
   process.exitCode = result.type === "cancel" ? 30 : 0;
 }
 
@@ -986,12 +1061,18 @@ port, and the filesystem as transport; this CLI is the whole agent surface.
           path, description?, original? }], missing? }, the folders this
           console session reads as context, addressed as @name. The list is
           remembered per folder and spec in workspaces.json beside looks.json.
+          May also print subagents: { state, revision, max, instruction } and
+          a reply holding only its "Subagents: ..." lines, when a standing
+          instruction (the page's Subagents switch) is owed to you.
   post    --session <sid> --file <patch.json>
           Merge a patch into the session. Prints terminalLine while the
           server is live. Exit 3 = rejected; stderr says why. A patch may
           carry run: { event, id, tasks? } (session meter points) and folderIssue:
           { name, reason, hint? } (a workspace folder you could not read);
-          both go to the ledger, never into the state.
+          both go to the ledger, never into the state. A patch may also
+          carry helpers: [{ id, title, ask, state, result? }] or one
+          { id: "alone", alone: true }, merged by id, for the Subagents tab
+          (see console.md → Standing instructions).
   wait    --session <sid> [--seconds <N>]
           A bounded wait slice, sized below your shell timeout. Exit 0 = the
           result is on stdout, 10 = still waiting ("Waiting on your answer
@@ -1002,10 +1083,14 @@ port, and the filesystem as transport; this CLI is the whole agent surface.
           "workspace" (changes since you last heard, each once, with a
           "Workspace: ..." line in reply); exit 10 counts them as
           pendingWorkspace, and a change alone never ends a slice.
+          Exit 0 may also carry "subagents" (a console setting, not typed
+          by the person, with its "Subagents: ..." lines last in reply); a
+          setting change alone never ends a slice either.
   chat    --session <sid>
-          Collect Quick questions and workspace changes now, never waiting,
-          never touching card sends. Exit 0 = { chat, workspace, reply,
-          terminalLine }, 10 = none, 20 = server gone.
+          Collect Quick questions, workspace changes and a Subagents
+          setting change now, never waiting, never touching card sends.
+          Exit 0 = { chat, workspace, subagents?, reply, terminalLine },
+          10 = none, 20 = server gone.
   terminalLine is "→ Look at the web console: <url>": end your terminal
   messages with it during a console session.
   keep    --session <sid> --upload <path> --name <name> --spec specs/<idea> [--from <file>]

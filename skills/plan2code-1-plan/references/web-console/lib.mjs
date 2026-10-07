@@ -25,6 +25,7 @@ import { fileURLToPath } from "node:url";
 import { CHAT_LIMIT } from "./public/chat.js";
 import { DOC_TYPES } from "./public/answers.js";
 import { defaultName } from "./public/workspace.js";
+import { checkHelpers, cleanSetting, defaultSetting, offered } from "./public/subagents.js";
 
 export const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const PUBLIC_DIR = path.join(HERE, "public");
@@ -491,9 +492,16 @@ export async function removeSessions(sessionsDir, sids) {
 }
 
 // The console folder's own files that no sweep may ever remove: the person's
-// looks, the folders remembered per project and spec, the pointer to this
-// console's directory, and the cached release check.
-export const PROTECTED_CONSOLE_FILES = new Set(["looks.json", "workspaces.json", "console-dir", "update-check.json"]);
+// looks, the folders remembered per project and spec, the Subagents switch
+// saved per project and workflow, the pointer to this console's directory,
+// and the cached release check.
+export const PROTECTED_CONSOLE_FILES = new Set([
+  "looks.json",
+  "workspaces.json",
+  "subagents.json",
+  "console-dir",
+  "update-check.json",
+]);
 
 function isScratchName(name) {
   return (
@@ -1142,6 +1150,19 @@ const DOC_DEFAULTS = { version: 1, stale: false, blocks: [] };
 // Blocks merge by id like docs do, so a patch that only settles a block's
 // state keeps its text. Blocks left out of the patch stay as they are.
 function mergeDocs(current, patchList) {
+  // A doc's version only moves forward. One going back is a stale or copied
+  // payload (last phase's progress script, say), and the page would quietly
+  // show the old content under the new run's name.
+  for (const entry of patchList) {
+    if (!isPlainObject(entry) || typeof entry.version !== "number") continue;
+    const prev = (current || []).find((d) => d && d.id === entry.id);
+    if (prev && typeof prev.version === "number" && entry.version < prev.version) {
+      throw new Error(
+        `doc "${entry.id}" is at version ${prev.version} on the page; this patch sends version ${entry.version}. ` +
+          "Versions only go up: bump it, and check the payload is the current one."
+      );
+    }
+  }
   const merged = mergeKeyed(current, patchList, "id", DOC_DEFAULTS, "docs");
   for (const entry of patchList) {
     if (!Array.isArray(entry.blocks)) continue;
@@ -1183,6 +1204,13 @@ export function applyPatch(state, patch) {
       case "topics":
         if (!Array.isArray(v)) throw new Error('"topics" must be an array');
         next.topics = mergeKeyed(next.topics, v, "id", {}, "topics");
+        break;
+      case "helpers":
+        // The agent's report of its helpers, for the page's Subagents tab.
+        // Only `post` writes it; the server's /submit never touches it.
+        if (!Array.isArray(v)) throw new Error('"helpers" must be an array');
+        if (!v.every(isPlainObject)) throw new Error('"helpers" entries must be objects, each { id, title, ask, state }');
+        next.helpers = mergeKeyed(next.helpers, v, "id", {}, "helpers");
         break;
       case "docs":
         if (!Array.isArray(v)) throw new Error('"docs" must be an array');
@@ -1478,6 +1506,20 @@ export function validate(state) {
     JSON.stringify(state.menu || {});
   problems.push(...proseProblems(prose));
 
+  // The agent's report of its helpers: the shape the page draws from
+  // (subagents.js), then the same prose scan as everything else it writes.
+  if (state.helpers != null) {
+    problems.push(...checkHelpers(state.helpers));
+    for (const helper of Array.isArray(state.helpers) ? state.helpers : []) {
+      if (!isPlainObject(helper)) continue;
+      for (const field of ["title", "ask", "result"]) {
+        if (typeof helper[field] === "string") {
+          problems.push(...proseProblems(helper[field], `helper "${helper.id}" ${field}`));
+        }
+      }
+    }
+  }
+
   return problems;
 }
 
@@ -1507,7 +1549,8 @@ export function blankState({ sid, workflow, title, project, specDir }) {
  * A resume that passes through the dashboard (a finished skill going back to
  * it, or a launch from its menu) is a new skill taking the page over, so it
  * starts from a blank page: the last skill's questions, sections, docs,
- * headline and ending are its record on disk, not the next skill's opening.
+ * helpers, headline and ending are its record on disk, not the next skill's
+ * opening.
  * Only the session's identity carries across. `workspace.json`,
  * `ledger.ndjson` and the cursors live beside `state.json`, so the workspace
  * and the meter outlive every hop.
@@ -1534,6 +1577,8 @@ export function switchWorkflow(state, { workflow, title, specDir }) {
 //   workspace.json         the server. Folders, version, change log, missing, remote.
 //   ledger.ndjson          console.mjs. Append-only meter events and folder issues.
 //   workspace-cursor.json  console.mjs. The last workspace version handed to the agent.
+//   subagents-setting.json the server. The Subagents switch for this session, with its revision.
+//   subagents-cursor.json  console.mjs. The last Subagents revision and state handed to the agent.
 export const CHAT_FILE = "chat.ndjson";
 export const CHAT_CURSOR_FILE = "chat-cursor.json";
 export const WORKSPACE_FILE = "workspace.json";
@@ -1987,6 +2032,98 @@ export function writeWorkspaceCursor(dir, version) {
 export function pendingWorkspaceChanges(dir) {
   const cursor = readWorkspaceCursor(dir);
   return (readWorkspace(dir)?.changes || []).filter((c) => c.version > cursor);
+}
+
+/* ------------------------------------------------------ the Subagents switch */
+
+// The person's Subagents switch, remembered per project folder and workflow:
+//
+//   { "<folded project path>": { "<workflow>": { on, instruction, max } } }
+//
+// Keyed with foldKey(), as workspaces.json is. `instruction: null` is the
+// workflow's shipped default.
+export const SUBAGENTS_FILE = path.join(HOME_DIR, "subagents.json");
+const SUBAGENTS_LOCK = "subagents.json.lock";
+
+function readSubagentStore() {
+  const saved = readJson(SUBAGENTS_FILE, null);
+  return saved && typeof saved === "object" && !Array.isArray(saved) ? saved : {};
+}
+
+// The saved `{ on, instruction, max }` for this folder and workflow, or the
+// default's when nothing (or something malformed) is saved.
+export function subagentStoreEntry(worktree, workflow) {
+  const { on, instruction, max } = defaultSetting(workflow);
+  const project = offered(workflow) ? readSubagentStore()[foldKey(worktree)] : null;
+  const saved = project && typeof project === "object" ? cleanSetting(project[workflow]) : null;
+  return saved && !saved.error ? saved : { on, instruction, max };
+}
+
+// Single-writer rule: only server.mjs may call this.
+export function saveSubagentStoreEntry(worktree, workflow, value) {
+  ensureDir(path.dirname(SUBAGENTS_FILE));
+  withStateLock(
+    path.dirname(SUBAGENTS_FILE),
+    () => {
+      const store = readSubagentStore();
+      const key = foldKey(worktree);
+      const project = store[key] && typeof store[key] === "object" ? store[key] : {};
+      store[key] = { ...project, [workflow]: { on: value.on, instruction: value.instruction, max: value.max } };
+      writeJsonAtomic(SUBAGENTS_FILE, store);
+    },
+    SUBAGENTS_LOCK
+  );
+}
+
+export const SUBAGENTS_SETTING_FILE = "subagents-setting.json";
+
+const isCount = (n) => Number.isInteger(n) && n >= 0;
+
+// This session's switch, `{ workflow, on, instruction, max, revision }`, or
+// null when there is none or it is malformed.
+export function readSubagentSetting(dir) {
+  const s = readJson(path.join(dir, SUBAGENTS_SETTING_FILE), null);
+  if (!s || typeof s !== "object") return null;
+  if (typeof s.workflow !== "string" || typeof s.on !== "boolean" || !Number.isInteger(s.max) || !isCount(s.revision)) return null;
+  return s;
+}
+
+// Single-writer rule: only server.mjs may call this. The revision never goes
+// backwards within a session.
+export function writeSubagentSetting(dir, setting) {
+  const previous = readSubagentSetting(dir);
+  const revision = Math.max(previous ? previous.revision : 0, setting.revision);
+  return writeJsonAtomic(path.join(dir, SUBAGENTS_SETTING_FILE), { ...setting, revision });
+}
+
+export const SUBAGENTS_CURSOR_FILE = "subagents-cursor.json";
+const CURSOR_STATES = new Set(["none", "on", "off"]);
+
+// What the agent was last told: `{ revision, state }`.
+export function readSubagentCursor(dir) {
+  const saved = readJson(path.join(dir, SUBAGENTS_CURSOR_FILE), null);
+  if (!saved || !isCount(saved.revision) || !CURSOR_STATES.has(saved.state)) return { revision: 0, state: "none" };
+  return { revision: saved.revision, state: saved.state };
+}
+
+// Single-writer rule: only console.mjs may call this. Never backwards, like
+// writeWorkspaceCursor(): a killed `wait` may repeat a change, never skip one.
+export function writeSubagentCursor(dir, cursor) {
+  const old = readSubagentCursor(dir);
+  const next = cursor.revision < old.revision ? old : { revision: cursor.revision, state: cursor.state };
+  writeJsonAtomic(path.join(dir, SUBAGENTS_CURSOR_FILE), next);
+}
+
+// The one place the cursor may go back: `open`, which starts a fresh agent.
+export function resetSubagentCursor(dir) {
+  writeJsonAtomic(path.join(dir, SUBAGENTS_CURSOR_FILE), { revision: 0, state: "none" });
+}
+
+// The `caps` of the last `open` event: what the agent's console copy can do.
+export function latestOpenCaps(dir) {
+  const opens = readJsonLines(path.join(dir, "events.ndjson")).filter((e) => e.type === "open");
+  const last = opens[opens.length - 1];
+  return last && Array.isArray(last.caps) ? last.caps : [];
 }
 
 /**
