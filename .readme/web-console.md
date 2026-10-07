@@ -264,9 +264,12 @@ pressing *Not now* puts it away for good.
 The first "What's the idea?" box in Pathfinder, Plan and Quick Task has a row
 of starter templates above it: **Blank** first, then outlines to fill in (an
 engineering spec, product requirements, a design decision, a bug
-investigation, and so on), in the order your role puts
-them. With a role chosen, the first one carries a *For your role* pill. Pick
-one and the box fills with editable text, `[blanks]` marked; if you have
+investigation, a refactor, a data migration, and so on), in the order your
+role puts them. With a role chosen, the first one carries a *For your role*
+pill. Pick one and the box fills with editable Markdown, one `## heading` per
+answer with the answer on the lines under it, and the first `[blank]` is
+selected so you can type straight over it. Brackets mark only the parts you
+fill in; everything else is a default you can keep or edit. If you have
 already typed something, a strip asks **Replace** or **Keep mine** first.
 Only what is in the box is sent, exactly as if you had typed it.
 

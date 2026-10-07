@@ -667,7 +667,7 @@ your next `chat` check.
 Subagents: on (revision 2) — a console setting, not typed by the person.
   Hand independent work to helpers if your tools allow it; otherwise carry on alone.
   Report each helper on the page (console.md → Standing instructions); questions for the person stay with you.
-  With no way to start helpers, report one "working alone" entry for this skill run instead.
+  If your tools cannot start helpers at all, report one "working alone" entry for this skill run instead; a real helper report removes it.
   Hand independent tasks in a phase to helpers: tasks that touch different files and do not depend on each other. Keep tasks that share files, the phase's tests and the sign-off with you.
   At most 3 helpers at once.
 ```
@@ -716,8 +716,11 @@ page never hears from a helper directly:
 - Questions for the person stay with you, never with a helper: most harnesses
   give helpers no way to ask, and an answer only reaches the agent holding the
   session.
-- **No way to start helpers?** Post one `{ "id": "alone", "alone": true }`
+- **No way to start helpers at all?** Post one `{ "id": "alone", "alone": true }`
   entry for the skill run instead. The tab then says you are working alone.
+  It is a claim about your tools, not about the moment — post it only when no
+  helper mechanism exists. Reporting a real helper removes it, so an early
+  `alone` can never hide a later helper.
 - **Pathfinder:** research questions always use helpers and are always
   reported, whatever the switch says. The switch governs recon, sketches and
   lookups beside the conversation.
