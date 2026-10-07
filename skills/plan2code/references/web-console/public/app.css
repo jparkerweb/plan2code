@@ -208,6 +208,26 @@ body {
 .stop-btn:hover:not(:disabled) { color: var(--warn); border-color: var(--warn); }
 .brief-btn:hover:not(:disabled) { color: var(--accent); border-color: var(--accent-line); }
 
+/* Subagents: an orchestrator and its helpers. Unlit is a hollow outline in
+   the quiet ink; lit fills the nodes with the highlight color. */
+.subagents-btn { border-color: var(--rule-2); color: var(--ink-2); display: inline-flex; align-items: center; justify-content: center; }
+.btn.subagents-btn { padding: 0 6px; align-self: stretch; }
+.subagents-btn[hidden] { display: none; }
+.subagents-btn svg { width: 16px; height: 16px; display: block; }
+.subagents-btn .sa-link { fill: none; stroke: var(--ink-2); stroke-width: 1.2; stroke-linecap: round; }
+.subagents-btn .sa-hub { fill: none; stroke: var(--ink-2); stroke-width: 1.4; }
+.subagents-btn .sa-node { fill: none; stroke: var(--ink-2); stroke-width: 1.2; }
+.subagents-btn[aria-pressed="true"] .sa-hub,
+.subagents-btn[aria-pressed="true"] .sa-node { fill: var(--accent); stroke: var(--accent); }
+.subagents-btn[aria-pressed="true"] .sa-link { stroke: var(--accent); }
+.subagents-btn:hover:not(:disabled) { color: var(--accent); border-color: var(--accent-line); }
+.subagents-btn:hover:not(:disabled) .sa-link,
+.subagents-btn:hover:not(:disabled) .sa-hub,
+.subagents-btn:hover:not(:disabled) .sa-node { stroke: var(--accent); }
+.subagents-btn:disabled .sa-link,
+.subagents-btn:disabled .sa-hub,
+.subagents-btn:disabled .sa-node { stroke: var(--ink-3); fill: none; }
+
 .ident { display: flex; align-items: baseline; gap: 12px; min-width: 0; }
 
 /* The session meter: a ring that fills with the points and a few words, in
@@ -1430,6 +1450,30 @@ h1 {
 .pill.done { background: var(--ok-soft); color: var(--ok); }
 .pill.staged { background: var(--stage-soft); color: var(--stage); }
 
+/* The Subagents tab: one row per reported helper, newest state in a pill. */
+.sa-card h2 { margin: 0 0 6px; }
+.sa-card > .help { margin: 0 0 16px; }
+.sa-alone { margin: 0; color: var(--ink-2); }
+.sa-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.sa-row { border: 1px solid var(--rule); border-radius: 8px; background: var(--panel-2); padding: 12px 14px; }
+.sa-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.sa-title { min-width: 0; overflow-wrap: anywhere; }
+.sa-ask {
+  margin: 4px 0 0; color: var(--ink-2); font-size: 13.5px;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden;
+}
+.sa-result { margin: 8px 0 0; padding-top: 8px; border-top: 1px solid var(--rule); font-size: 13.5px; }
+.sa-pill { display: inline-flex; align-items: center; gap: 6px; flex: none; }
+.sa-pill.is-running { background: var(--accent-soft); color: var(--accent); border-color: var(--accent-line); }
+.sa-pill.is-done { background: var(--ok-soft); color: var(--ok); }
+.sa-pill.is-failed { background: var(--warn-soft); color: var(--warn); }
+.sa-pill .spinner.tiny { width: 10px; height: 10px; }
+/* The dialog's number box, themed like the page's other inputs. */
+.subagents input[type="number"] {
+  width: 5em; font: inherit; color: var(--ink); background: var(--panel-2);
+  border: 1px solid var(--rule-2); border-radius: 6px; padding: 4px 8px;
+}
+
 /* ------------------------------------------------------ settled answer */
 
 .answered {
@@ -1971,6 +2015,8 @@ h4.md-h, h5.md-h, h6.md-h { font-size: 15px; }
   cursor: pointer;
 }
 .footer-where:hover { text-decoration: underline; }
+/* The project name, in the person's highlight color. */
+.where-project { color: var(--accent); font-weight: 600; }
 /* A folder is missing or the agent could not read one: the dialog says which. */
 .where-alert {
   display: inline-block; width: 7px; height: 7px; margin-left: 6px;

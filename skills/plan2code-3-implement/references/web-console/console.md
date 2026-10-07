@@ -170,7 +170,7 @@ so even a kill at the worst possible moment costs you a repeat, never an answer.
 
 | Exit | Meaning | What you do |
 | --- | --- | --- |
-| `0` | They pressed Send, or asked a Quick question. stdout is the result JSON, and may carry `workspace` (changes to the folder list, see Workspace). | Handle the cards (if any), the chat (if any) and any `workspace` changes, then post once (below, Quick questions and Workspace). |
+| `0` | They pressed Send, or asked a Quick question. stdout is the result JSON, and may carry `workspace` (changes to the folder list, see Workspace) and `subagents` (the helpers switch, see Standing instructions). | Handle the cards (if any), the chat (if any), any `workspace` changes and any `subagents` block, then post once (below, Quick questions, Workspace and Standing instructions). |
 | `10` | Still working. stdout has a short progress summary; `pendingWorkspace` counts workspace changes waiting for the next send. | Relay ONE line: the `message` field itself, "Waiting on your answer in the web console", followed by the `terminalLine`. Then call `wait` again. |
 | `20` | The server is gone. | `open --resume <sid>`, give them the new link, then keep waiting. |
 | `30` | They pressed Cancel. | Stop. Ask what they want to do, in the terminal. |
@@ -647,6 +647,84 @@ for permission is not a failure; report only a read that failed after it.
 
 ---
 
+## Standing instructions
+
+On the skills that offer it (`implement`, `implement-review`, `quick-task`,
+`review`, `pathfinder`), the person can turn **helpers** (subagents) on or off
+from the top bar's Subagents button. Their pick is saved per project and per
+skill, off by default, and reaches you as a standing instruction, only when it
+changes.
+
+### What arrives
+
+A `subagents` field beside `reply`, and `Subagents:` lines last in `reply`,
+after the card lines, the `Quick question:` blocks and the `Workspace:` lines.
+It rides on `wait` exit `0`, `chat` exit `0` and `open` output. A setting
+change alone never ends a `wait` slice: it waits for the next send, or for
+your next `chat` check.
+
+```
+Subagents: on (revision 2) — a console setting, not typed by the person.
+  Hand independent work to helpers if your tools allow it; otherwise carry on alone.
+  Report each helper on the page (console.md → Standing instructions); questions for the person stay with you.
+  With no way to start helpers, report one "working alone" entry for this skill run instead.
+  Hand independent tasks in a phase to helpers: tasks that touch different files and do not depend on each other. Keep tasks that share files, the phase's tests and the sign-off with you.
+  At most 3 helpers at once.
+```
+
+beside `"subagents": { "state": "on", "revision": 2, "max": 3, "instruction": "…" }`.
+An edit while on arrives as `Subagents: on (revision 3, replaces revision 2) — …`
+with the whole block again; switching off arrives as one line:
+`Subagents: off (revision 4) — don't start new helpers for the rest of this session.`
+
+It is a console setting, not something the person typed. It never answers a
+card, and it is never recorded under `specs/`.
+
+### Obeying it
+
+- **On:** hand independent work to helpers if your tools allow it, at most
+  `max` at once, following the instruction lines. `max` is advisory: your
+  harness's own limit still applies.
+- **A higher revision replaces a lower one.** Follow the latest block only.
+- **Off:** start no new helpers for the rest of the session. Let running ones
+  finish and report them.
+- **Nothing arrives:** keep doing what the skill says.
+- **Scope is the skill run it arrived in.** After a dashboard launch, no block
+  means the switch is off for this skill, even if an earlier skill in the same
+  conversation was told "on": `open` starts the count again, and a launch with
+  the switch off sends nothing.
+
+### Reporting helpers
+
+Post them, at your check-ins, so the page's Subagents tab can show them. The
+page never hears from a helper directly:
+
+```jsonc
+{ "helpers": [
+  { "id": "h1", "title": "Read the store helpers", "ask": "Find every caller of readSubagentSetting.", "state": "running" },
+  { "id": "h2", "title": "Check the tests", "ask": "Run the subagents tests and report failures.", "state": "done", "result": "All 9 pass." }
+] }
+```
+
+- `id` (non-empty), `title` (at most 80 characters), `ask` (at most 400) and
+  `state` (`running`, `done` or `failed`) are required; `result` (at most 200)
+  is the one line you add once a helper ends.
+- Merged by `id`: post a helper again with its new `state` and `result` and it
+  updates in place. `"helpers": null` clears the list. A dashboard hop clears it
+  too; a resume into the same skill keeps it.
+- One post per change worth seeing, not a stream.
+- Questions for the person stay with you, never with a helper: most harnesses
+  give helpers no way to ask, and an answer only reaches the agent holding the
+  session.
+- **No way to start helpers?** Post one `{ "id": "alone", "alone": true }`
+  entry for the skill run instead. The tab then says you are working alone.
+- **Pathfinder:** research questions always use helpers and are always
+  reported, whatever the switch says. The switch governs recon, sketches and
+  lookups beside the conversation.
+- Helpers add no session meter points. Post no `run` for them.
+
+---
+
 ## Launches (dashboard only)
 
 A `dashboard` session is not a conversation: the page draws a menu of every
@@ -763,7 +841,10 @@ commands follow the pipeline: the sign-off's is
 
 ### Review (`review`)
 
-Scope questions up front, then the findings report as a doc (`id: "report"`),
+Scope questions up front — run standalone with nothing named, the first is
+a `choice`, "What should I review?", built from a quick scan (branch changes,
+uncommitted changes, specs, files you name; each option with its size),
+never an assumed target; a build's review skips it (`building.md`). Then the findings report as a doc (`id: "report"`),
 then the pick-what-gets-fixed menu as a `multi` or `choice` keyed by finding
 id, carrying `"doc": "report"` so the card links straight to the findings.
 Settle that item (`"status": "answered"` plus the `answer` they sent) in
@@ -797,6 +878,8 @@ that is what the person is there to download. The finish carries no
 - Chart Step 8's research subagents must all report back before the
   finish (Finishing → Nothing of yours may still be running); the finish
   body then names what each one found.
+- Report every research subagent as a helper, whatever the Subagents switch
+  says (Standing instructions → Reporting helpers).
 - At every session end, post `finish` (headline, `body`, and Form A's command as
   `command`) BEFORE `stop`. Someone who spent the session in the browser never
   sees the Trail Footer, and without this their last screen promises a question
@@ -1146,6 +1229,16 @@ A patch that breaks one of these is rejected with exit `3` and a message:
    (Session meter) and a non-empty `id`; a `folderIssue` needs non-empty
    `name` and `reason` strings, and `hint`, when present, is one too. Rules 4
    and 5 cover `reason` and `hint`.
+8. **`helpers` entries are well formed** (Standing instructions → Reporting
+   helpers): an array of objects, each with a unique `id`, a `title`, an `ask`
+   and a known `state` within their limits, plus at most one `alone` entry.
+   Rules 4 and 5 cover `title`, `ask` and `result`.
+9. **A doc's `version` never goes back.** Sending a known doc a lower
+   `version` than the page holds is refused: it is almost always a stale or
+   copied payload. The same version again is fine, and a dashboard hop starts
+   every doc fresh. Anything else reusing a doc id in the same session (a
+   build's second phase, a second report or review) continues from the
+   version the page holds.
 
 These are workflow rules you already follow. The server just makes them checkable.
 
@@ -1167,7 +1260,9 @@ cannot see them, and the moment it says the session ended, the person is
 free to close that terminal and kill them mid-write. While you wait, post
 `{"agent":{"status":"working","activity":"Researching 3 questions (1 of 3 back)"}}`
 and update the count as each returns. Never write a `finish.body` that says
-work "is running in the background" or "will finish on its own".
+work "is running in the background" or "will finish on its own". Mark every
+reported helper `done` or `failed` before the finish, so the Subagents tab
+never ends on a row still running.
 
 ### 1. Post the finish
 
