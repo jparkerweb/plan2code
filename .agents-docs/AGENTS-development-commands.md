@@ -14,7 +14,7 @@ node install.js
 # Regenerate skills/ from src/ (non-interactive)
 npm run build:skills
 
-# Full check (about 70s): char limits, skills/ drift, browser-module parse check,
+# Full check (about 70s): char limits, skills/ build, browser-module parse check,
 # dashboard skill-table check, web console + launcher node:test suites
 npm test
 
@@ -29,7 +29,7 @@ node scripts/bench-web-console.mjs [--runs 7] [--workflow dashboard]
 # before committing: right screen, both themes, no username or home path in frame.
 npm i --no-save puppeteer-core                         # once; never added to package.json
 node scripts/capture-screenshots.mjs                   # every screen
-node scripts/capture-screenshots.mjs --only dashboard  # one screen
+node scripts/capture-screenshots.mjs --only dashboard  # one screen (dashboard-utilities scrolls to the utility cards)
 
 # Plan2Code Loop
 cd plan2code-loop && npm install   # First time setup
@@ -89,7 +89,7 @@ The root `npm test` does not run the metrics or bot vitest suites; run them in t
 | Flag | Action |
 |------|--------|
 | `--build-skills` | Regenerate `skills/` from `src/`, pruning stale skills and reference files |
-| `--verify-skills` | Compare committed `skills/` with `src/`; exits 1 on drift and is run by `npm test` |
+| `--verify-skills` | Diff local `skills/` against `src/`; exits 1 on drift. Diagnostic only, the installer rebuilds anyway |
 
 ## How the Installer Works
 
@@ -128,7 +128,7 @@ See the `skills/` build-artifact gotcha in [Code Style & Gotchas](./AGENTS-code-
 1. Edit the source file under `src/`.
 2. Run `npm run build:skills`.
 3. Test the workflow in an AI tool.
-4. Commit regenerated `skills/` beside the source change; `npm test` fails on drift.
+4. `skills/` is gitignored, so only the `src/` change is committed.
 5. Never edit `skills/` by hand because the next build overwrites it.
 
 ## Adding a New Workflow Prompt / Skill

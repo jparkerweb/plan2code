@@ -12,7 +12,7 @@
  *
  * DESCRIPTION:
  * Install Plan2Code skills globally or into the current project via skills.sh.
- * Builds the committed skills/ artifact from source prompts in src/.
+ * Builds the (gitignored) skills/ artifact from source prompts in src/.
  * Supports non-interactive --build-skills and --verify-skills maintenance hooks.
  */
 
@@ -103,8 +103,8 @@ const MASCOT = {
   ],
 };
 
-// Generated skills directory: the committed, canonical Agent Skills build of src/.
-// `npm run build:skills` regenerates it and `npm test` (`--verify-skills`) fails on drift.
+// Generated skills directory: the gitignored Agent Skills build of src/.
+// The installer and `npm run build:skills` regenerate it; `--verify-skills` diffs a stale tree.
 // `skills add` consumes this directory; nothing else is platform-specific any more.
 const SKILLS_DIR_NAME = 'skills';
 const SKILLS_DIR = path.join(__dirname, SKILLS_DIR_NAME);
@@ -262,6 +262,16 @@ const SOURCE_PROMPTS = [
     isUtility: true,
     scripts: ['specs.mjs'],
     additionalReferences: [{ source: 'web-console', target: 'web-console' }]
+  },
+  {
+    source: 'plan2code-git-commit.md',
+    stepNumber: 'git-commit',
+    name: 'git-commit',
+    displayName: 'Git Commit Mode',
+    description: 'Commit changes with a clear message, suggest splits, offer a branch and a push',
+    isUtility: true,
+    scripts: ['commit-msg.mjs'],
+    additionalReferences: [{ source: 'web-console', target: 'web-console' }]
   }
 ];
 
@@ -288,6 +298,7 @@ function generateStepLabel(prompt) {
   if (prompt.stepNumber === 'update') return 'Update';
   if (prompt.stepNumber === 'review') return 'Review';
   if (prompt.stepNumber === 'handoff') return 'Handoff';
+  if (prompt.stepNumber === 'git-commit') return 'Git Commit';
   if (prompt.stepNumber === 'quick') return 'Quick Task';
   return `Step ${prompt.stepNumber}`;
 }
@@ -728,7 +739,7 @@ function verifySkillsSync() {
   if (problems.length > 0) {
     console.error(`${SKILLS_DIR_NAME}/ is out of sync with src/:\n`);
     for (const problem of problems) console.error(`  ${problem}`);
-    console.error(`\n${problems.length} problem(s). Run 'npm run build:skills' and commit the result.`);
+    console.error(`\n${problems.length} problem(s). Run 'npm run build:skills' to regenerate it.`);
     return false;
   }
   console.log(`${SKILLS_DIR_NAME}/ matches src/ — ${expected.size} file(s) across ${SOURCE_PROMPTS.length} skill(s) ✓`);
@@ -2593,7 +2604,7 @@ function uninstallLauncher() {
 // MAIN
 // ============================================================================
 
-// Non-interactive build hooks for the committed skills/ artifact.
+// Non-interactive build hooks for the generated skills/ artifact.
 const argv = process.argv.slice(2);
 
 if (argv.includes('--build-skills')) {

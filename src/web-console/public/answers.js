@@ -247,6 +247,7 @@ export const WORKFLOW_LABEL = {
   "quick-task": "Quick task",
   finalize: "Wrapping up",
   handoff: "Handoff",
+  "git-commit": "Git commit",
 };
 
 export function workflowLabel(workflow) {
@@ -271,6 +272,7 @@ export const CONSOLE_WORKFLOWS = [
   "/plan2code-review",
   "/plan2code-4-finalize",
   "/plan2code-handoff",
+  "/plan2code-git-commit",
 ];
 
 // Rides on the end of the command as part of the skill's argument. Every
@@ -434,6 +436,8 @@ export function resumeCommand({ workflow, specDir } = {}) {
       return withOverview("/plan2code-4-finalize");
     case "handoff":
       return "/plan2code-handoff";
+    case "git-commit":
+      return "/plan2code-git-commit";
     default:
       return dir ? `/plan2code-0-pathfinder ${dir}/pathfinder` : "/plan2code-0-pathfinder";
   }
@@ -638,6 +642,17 @@ export const SKILL_CATALOG = [
     about:
       "Writes down everything a new session would need, as a single document: what was decided, what is done, what is left. Use it when a conversation got long, a machine changed, or tomorrow-you deserves the context today-you has.",
   },
+  {
+    skill: "plan2code-git-commit",
+    command: "/plan2code-git-commit",
+    workflow: "git-commit",
+    group: "extra",
+    chip: "Utility",
+    title: "Git commit",
+    blurb: "Commits your changes with a clear message, suggests a split when it is really two jobs, and offers to push.",
+    about:
+      "Reads what changed and drafts the commit message for you to approve. On the main branch it offers a new one first, and when the work is really two jobs it suggests splitting it into separate commits. It asks before every commit and every push, and never force-pushes.",
+  },
 ];
 
 // A workflow by the name its dashboard card gives it ("Implement"), for the
@@ -660,6 +675,7 @@ export const START_POSES = [
   "quick-task",
   "review",
   "handoff",
+  "git-commit",
 ];
 
 const POSE_ALIASES = { "init-update": "init", "revise-plan": "plan", "implement-review": "implement" };
@@ -699,19 +715,21 @@ const NEXT_FOR_STATE = {
 };
 
 const ON = { on: true };
+export const GIT_INIT_NOTE = "Not a git repository yet: it offers to start one";
 const off = (reason) => ({ on: false, reason });
 
 /**
  * Whether a catalog card is clickable for the current picker selection.
  *
- * `scan` is the server's project scan ({ hasAgents, specs }); `sel` is the
+ * `scan` is the server's project scan ({ hasAgents, isGit, specs }); `sel` is the
  * picked spec object or null for "start from scratch". A spec whose files
  * match no pipeline shape ("unrecognized") behaves like no spec at all for
  * availability — but its folder still goes along on a Pathfinder or Plan
  * launch, since the files may be reference docs.
  *
- * Returns { on, reason?, next? } — `reason` is the one line a greyed card
- * shows, `next` marks the state's natural step.
+ * Returns { on, reason?, note?, next? } — `reason` is the one line a greyed card
+ * shows, `note` the one line a clickable card shows when there is something to
+ * know before launching it, `next` marks the state's natural step.
  */
 export function cardAvailability(entry, scan, sel) {
   const hasAgents = Boolean(scan && scan.hasAgents);
@@ -727,6 +745,8 @@ export function cardAvailability(entry, scan, sel) {
     case "plan2code-review":
     case "plan2code-handoff":
       return ON;
+    case "plan2code-git-commit":
+      return scan && scan.isGit === false ? { on: true, note: GIT_INIT_NOTE } : ON;
     case "plan2code-0-pathfinder":
       if (!state || state === "exploring") return { ...ON, next };
       return off("This spec is already past the questions");
@@ -763,7 +783,14 @@ export function cardPresentation(entry, scan, sel, menu = {}) {
   const recommendation = requested && cardAvailability(requested, scan, sel).on ? requested.skill : null;
   const recommended = availability.on && (recommendation ? entry.skill === recommendation : availability.next);
   const supplied = initial && menu.details && typeof menu.details[entry.skill] === "string" ? menu.details[entry.skill] : "";
-  const detail = availability.on && supplied ? supplied : !initial && availability.next && sel && sel.detail ? sel.detail : "";
+  const detail =
+    availability.on && supplied
+      ? supplied
+      : availability.on && availability.note
+        ? availability.note
+        : !initial && availability.next && sel && sel.detail
+          ? sel.detail
+          : "";
   return { ...availability, recommended, detail };
 }
 

@@ -16,7 +16,7 @@ The FIRST thing you do, before anything else in this file — before reading a s
 
 - `node "<S>/specs.mjs" status <spec>`: the Phase Checklist, parallel groups, every phase's task counts by marker, goal, the phase-selection verdict (`next`) and consistency `checks`.
 - `node "<S>/specs.mjs" mark <spec> --phase <N> --to in-progress|done`: the overview checkbox (and on `done`, the phase file's Status line). It refuses to reset `[/]` to `[ ]`.
-- `node "<S>/commit-msg.mjs" --subject "<subject>" --add-all`: the commit command, ticket taken from the branch.
+- `node "<S>/commit-msg.mjs" --subject "<subject>" --add-all`: the commit command (`<subject>`, then `AI Assisted`).
 
 ## Rules
 
@@ -208,7 +208,7 @@ On user "approved":
    | Phase X: [Name] | Y | [One-sentence goal] |
    | Phase X+1: [Name] | Z | [One-sentence goal] |
 
-5. Write a one-line subject for the phase, then give the user the `command` from `commit-msg.mjs --subject "<subject>" --add-all`. It enforces the format: subject ≤100 chars and EXACTLY THREE -m flags (subject, ticket, `AI Assisted`), no body. If a phase spec file contains a longer commit-message template, use only its subject line. The diff is the body; the PR is the explanation. On Windows PowerShell 5.1 (no `&&`), give `add` and `commit` as two commands instead. Exit 4 `no-ticket`: ask the user for the ticket and rerun with `--ticket`, or show the command with `<JIRA-Ticket-ID>` for them to fill in.
+5. Write a one-line subject for the phase, then give the user the `command` from `commit-msg.mjs --subject "<subject>" --add-all`. It enforces the format: subject ≤100 chars and EXACTLY TWO -m flags (subject, `AI Assisted`), no body. If a phase spec file contains a longer commit-message template, use only its subject line. The diff is the body; the PR is the explanation. On Windows PowerShell 5.1 (no `&&`), give `add` and `commit` as two commands instead.
 6. **If more phases:** "NEXT STEP: Start NEW conversation and run: `/plan2code-3-implement --web`"
 7. **If final phase:** "NEXT STEP: Start NEW conversation and run: `/plan2code-4-finalize --web`"
 8. Mention `/plan2code-1b-revise-plan --web` option

@@ -344,6 +344,20 @@ function gitDirAt(dir) {
   return fs.existsSync(path.join(git, "HEAD")) ? git : null;
 }
 
+// Whether `dir` is inside a git repository, found without a git process: the
+// same walk findRoots() does. A set GIT_DIR / GIT_WORK_TREE / GIT_COMMON_DIR
+// means git decides, so it counts as a repository. A `gitdir:` file (a linked
+// worktree or a submodule) counts like a `.git` folder.
+export function insideGitRepo(dir) {
+  if (process.env.GIT_DIR || process.env.GIT_WORK_TREE || process.env.GIT_COMMON_DIR) return true;
+  for (let d = path.resolve(dir); ; ) {
+    if (gitDirAt(d)) return true;
+    const up = path.dirname(d);
+    if (up === d) return false;
+    d = up;
+  }
+}
+
 export function projectRoot(cwd = process.cwd()) {
   return repoRoots(cwd).project;
 }
@@ -857,6 +871,7 @@ function isDir(p) {
  * Scan <root>/specs into picker entries, most recently touched first.
  * `touched` is the newest file mtime inside the folder — last write wins,
  * which is the honest reading of "the one you were working on".
+ * `isGit` says whether `root` sits inside a git repository (no git process).
  */
 export function scanProject(root) {
   const specsDir = path.join(root, "specs");
@@ -888,6 +903,7 @@ export function scanProject(root) {
   return {
     at: nowIso(),
     hasAgents: fs.existsSync(path.join(root, "AGENTS.md")),
+    isGit: insideGitRepo(root),
     specs,
   };
 }

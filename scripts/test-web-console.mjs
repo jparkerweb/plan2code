@@ -52,6 +52,7 @@ import {
   DONE_REPLY,
   finishPaused,
   fitWithin,
+  GIT_INIT_NOTE,
   handoffShape,
   handoffText,
   HOME_REPLY,
@@ -185,6 +186,7 @@ import {
   cwdHash,
   handOff,
   initialWorkspace,
+  insideGitRepo,
   latestOpenCaps,
   parseArgs,
   pendingWorkspaceChanges,
@@ -3028,6 +3030,63 @@ test("the project scan reads each spec's pipeline stage off its files", () => {
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
+});
+
+// The dashboard's Git commit card offers to start a repository when the folder
+// is not one. The scan answers that from the filesystem, never from a git
+// process, and a linked worktree (a .git file, not a folder) must count.
+test("scanProject reports isGit for a repo, a subfolder, a linked worktree and a plain folder", () => {
+  const saved = {};
+  for (const k of ["GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR"]) {
+    saved[k] = process.env[k];
+    delete process.env[k];
+  }
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), "p2c-isgit-"));
+  try {
+    const repo = path.join(base, "repo");
+    fs.mkdirSync(path.join(repo, "sub"), { recursive: true });
+    const git = (cwd, ...a) => execFileSync("git", a, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+    git(repo, "init", "-q");
+    git(repo, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "--allow-empty", "-m", "x");
+    git(repo, "worktree", "add", "-q", path.join(base, "wt"));
+    const plain = path.join(base, "plain");
+    fs.mkdirSync(plain);
+
+    assert.equal(scanProject(repo).isGit, true);
+    assert.equal(scanProject(path.join(repo, "sub")).isGit, true);
+    assert.equal(fs.statSync(path.join(base, "wt", ".git")).isFile(), true, "a linked worktree's .git is a file");
+    assert.equal(scanProject(path.join(base, "wt")).isGit, true);
+    assert.equal(scanProject(plain).isGit, false);
+    assert.equal(insideGitRepo(plain), false);
+
+    // When git is steered by the environment, git decides: count it as a repo.
+    process.env.GIT_DIR = path.join(plain, "nowhere");
+    assert.equal(insideGitRepo(plain), true);
+  } finally {
+    for (const [k, v] of Object.entries(saved)) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+    fs.rmSync(base, { recursive: true, force: true });
+  }
+});
+
+test("the Git commit card stays clickable outside a repository and says what happens", () => {
+  const entry = SKILL_CATALOG.find((e) => e.skill === "plan2code-git-commit");
+  const outside = cardAvailability(entry, { hasAgents: true, isGit: false }, null);
+  assert.equal(outside.on, true);
+  assert.equal(outside.note, GIT_INIT_NOTE);
+  for (const scan of [{ hasAgents: true, isGit: true }, { hasAgents: true }, null]) {
+    const a = cardAvailability(entry, scan, null);
+    assert.equal(a.on, true);
+    assert.equal(a.note, undefined);
+  }
+  const scan = { hasAgents: true, isGit: false, specs: [] };
+  assert.equal(cardPresentation(entry, scan, null).detail, GIT_INIT_NOTE);
+  // The agent's own detail line still wins over the note.
+  const withSpec = { hasAgents: true, isGit: false, specs: [{ dir: "specs/x", name: "x", state: "building" }] };
+  const menu = { details: { "plan2code-git-commit": "Two changes ready" } };
+  assert.equal(cardPresentation(entry, withSpec, withSpec.specs[0], menu).detail, "Two changes ready");
 });
 
 test("a verdict's button text never renders blank", () => {

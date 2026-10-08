@@ -18,7 +18,7 @@ The FIRST thing you do, before anything else in this file — before the Require
 - `node "<S>/specs.mjs" archive <spec> [--dry-run]`: the Step 6 move, verified.
 - `node "<S>/specs.mjs" metrics <spec> --step finalize --set ...`: Step 7's METRICS_JSON line.
 - `node "<S>/feedback-payload.mjs"`: Step 6.5 (see its reference).
-- `node "<S>/commit-msg.mjs" --subject "<subject>"`: the commit command, ticket from the branch.
+- `node "<S>/commit-msg.mjs" --subject "<subject>"`: the commit command.
 
 ## Rules
 
@@ -343,7 +343,7 @@ If you discovered undocumented commands, dependency quirks, gotchas (>5min cost)
 
 (Step 7 already delivered the completion summary — don't repeat it.)
 
-Suggested commit (only if README, CHANGELOG, or other tracked docs were updated): the `command` from `commit-msg.mjs --subject "chore: finalize and archive <feature-name>"` (exit 4 `no-ticket`: show it with `<JIRA-Ticket-ID>` for the user to fill in).
+Suggested commit (only if README, CHANGELOG, or other tracked docs were updated): the `command` from `commit-msg.mjs --subject "chore: finalize and archive <feature-name>"`.
 
 Returning context: Feature complete. Specs archived to `specs--completed/<feature-name>/`.
 

@@ -228,7 +228,7 @@ test("specs archive: dry-run, move, refuse to clobber", () => {
 
 /* ============================================================ commit-msg.mjs */
 
-test("commit-msg: ticket from the branch, the three -m flags, subject rules", () => {
+test("commit-msg: the two -m flags on any branch, subject rules", () => {
   const repo = tmp("commit");
   const g = gitInit(repo, "feature/ABC-10968-export-csv");
   write(repo, "a.txt", "a");
@@ -237,24 +237,29 @@ test("commit-msg: ticket from the branch, the three -m flags, subject rules", ()
   const C = (...a) => runScript("plan2code-review", "commit-msg.mjs", a, { cwd: repo });
   const ok = C("--subject", "Add the export endpoint", "--add-all");
   assert.equal(ok.code, 0, ok.stderr);
-  assert.equal(ok.json.ticket, "ABC-10968");
-  assert.equal(ok.json.command, 'git add -A && git commit -m "Add the export endpoint" -m "ABC-10968" -m "AI Assisted"');
-  assert.equal(ok.json.message, "Add the export endpoint\n\nABC-10968\nAI Assisted");
+  assert.equal(ok.json.ticket, undefined);
+  assert.equal(ok.json.branch, undefined);
+  assert.equal(ok.json.command, 'git add -A && git commit -m "Add the export endpoint" -m "AI Assisted"');
+  assert.equal(ok.json.message, "Add the export endpoint\n\nAI Assisted");
   assert.equal(C("--subject", "x".repeat(101)).code, 4);
   assert.equal(C("--subject", 'say "hi"').code, 4);
   assert.equal(C("--subject", "costs $5").code, 4);
   assert.equal(C().code, 2);
   assert.match(C("--subject", "Fix it", "--files", "src/a.ts", "--files", "my file.md").json.command, /^git add -- src\/a\.ts 'my file\.md' && git commit/);
-  g("checkout", "-q", "-b", "chore/no-ticket-here");
-  const none = C("--subject", "Fix it");
-  assert.equal(none.code, 4);
-  assert.equal(none.json.error, "no-ticket");
-  assert.equal(C("--subject", "Fix it", "--ticket", "ABC-1").json.ticket, "ABC-1");
-  assert.equal(C("--subject", "Fix it", "--ticket", "abc-1").code, 4);
-  g("checkout", "-q", "-b", "PROJ2-7_underscore");
-  assert.equal(C("--subject", "Fix it").json.ticket, "PROJ2-7");
+  const fix = 'git commit -m "Fix it" -m "AI Assisted"';
+  assert.equal(C("--subject", "Fix it").json.commit, fix, "ticket branch");
+  g("checkout", "-q", "-b", "main");
+  const onMain = C("--subject", "Fix it");
+  assert.equal(onMain.json.commit, fix, "main");
+  assert.equal(onMain.json.message, "Fix it\n\nAI Assisted");
+  assert.equal(onMain.json.ticket, undefined);
+  assert.equal(onMain.json.branch, undefined);
+  const flag = C("--subject", "Fix it", "--ticket", "ABC-1");
+  assert.equal(flag.code, 2, "--ticket is an unknown flag");
+  assert.equal(flag.json.error, "unknown-flag");
   const notRepo = runScript("plan2code-review", "commit-msg.mjs", ["--subject", "x"], { cwd: tmp("norepo") });
-  assert.equal(notRepo.code, 3);
+  assert.equal(notRepo.code, 0, "no repository needed");
+  assert.equal(notRepo.json.commit, 'git commit -m "x" -m "AI Assisted"');
 });
 
 /* ============================================================ agent-files.mjs */
@@ -427,7 +432,7 @@ test("commit-msg: a repo with no commits, stray arguments, and paths quoted for 
   const repo = tmp("commit2");
   gitInit(repo, "feature/ABC-12-x");
   const C = (...a) => runScript("plan2code-review", "commit-msg.mjs", a, { cwd: repo });
-  assert.equal(C("--subject", "Add x").json.ticket, "ABC-12", "no commits yet");
+  assert.equal(C("--subject", "Add x").json.commit, 'git commit -m "Add x" -m "AI Assisted"', "no commits yet");
   const stray = C("--subject", "Fix", "--files", "a.js", "b.js");
   assert.equal(stray.code, 2);
   assert.equal(stray.json.error, "stray-argument");
@@ -577,7 +582,7 @@ test("commit-msg: @ and - paths are quoted, git add ends its options, risky subj
   const files = C("--subject", "Fix", "--files", "@types/x.d.ts", "--files", "-weird.md", "--files", "src/a@b.js");
   assert.equal(files.code, 0, files.stderr);
   assert.equal(files.json.add, "git add -- '@types/x.d.ts' '-weird.md' src/a@b.js");
-  assert.equal(files.json.commit, 'git commit -m "Fix" -m "ABC-12" -m "AI Assisted"');
+  assert.equal(files.json.commit, 'git commit -m "Fix" -m "AI Assisted"');
   assert.equal(files.json.command, `${files.json.add} && ${files.json.commit}`);
   assert.equal(C("--subject", "Fix", "--add-all").json.add, "git add -A");
   const bare = C("--subject", "Fix").json;

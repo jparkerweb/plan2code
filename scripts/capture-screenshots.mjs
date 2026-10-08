@@ -13,7 +13,7 @@
 // The shots use the console's Ocean highlight rather than its default orange:
 // it is the console's nearest to the Plan2Code blue the site and README use.
 //
-// Shots: dashboard, question, doc, build, signoff, finish, ask.
+// Shots: dashboard, dashboard-utilities, question, doc, build, signoff, finish, ask.
 //
 // Needs puppeteer-core (`npm i --no-save puppeteer-core`, never added to
 // package.json) and a local Chrome or Edge. Writes nothing outside its temp
@@ -52,6 +52,14 @@ const SHOTS = {
     posts: ["dashboard"],
     scrollTo: ".dash-toggle",
     mustShow: ".dash-card:has(.pill.suggested)",
+  },
+  // The utility cards sit even lower: scroll until the Git commit card is the
+  // last row in frame ("cmd:" picks a card by its command).
+  "dashboard-utilities": {
+    workflow: "dashboard",
+    posts: ["dashboard"],
+    scrollTo: "cmd:/plan2code-git-commit",
+    mustShow: "cmd:/plan2code-git-commit",
   },
   question: { workflow: "plan", posts: ["question"] },
   doc: { workflow: "plan", posts: ["doc"], tab: "What we've agreed" },
@@ -201,11 +209,15 @@ async function openTab(page, label) {
 async function scrollTo(page, { scrollTo: top, mustShow }) {
   const problem = await page.evaluate(
     (topSel, showSel) => {
-      const node = document.querySelector(topSel);
+      const find = (sel) =>
+        sel.startsWith("cmd:")
+          ? [...document.querySelectorAll(".dash-card")].find((c) => c.querySelector(".dash-card-cmd")?.textContent.trim() === sel.slice(4))
+          : document.querySelector(sel);
+      const node = find(topSel);
       if (!node) return `nothing matched ${topSel}, captured from the top`;
-      node.scrollIntoView({ block: "start", behavior: "instant" });
+      node.scrollIntoView({ block: topSel.startsWith("cmd:") ? "end" : "start", behavior: "instant" });
       if (!showSel) return null;
-      const show = document.querySelector(showSel);
+      const show = find(showSel);
       if (!show) return `nothing matched ${showSel}`;
       const r = show.getBoundingClientRect();
       return r.top >= 0 && r.bottom <= window.innerHeight ? null : `${showSel} is not wholly in view`;
@@ -329,7 +341,7 @@ async function main() {
     // A saved role keeps the dashboard's "pick your role" banner out of shot,
     // and the Ocean highlight is the console's nearest to the Plan2Code blue
     // the landing page uses.
-    fs.writeFileSync(path.join(HOME, "looks.json"), JSON.stringify({ looks: { role: "engineer", accent: "ocean" } }));
+    fs.writeFileSync(path.join(HOME, "looks.json"), JSON.stringify({ looks: { role: "engineer", accent: "ocean", welcomeSeen: true } }));
     browser = await puppeteer.launch({
       executablePath: browserPath,
       headless: true,

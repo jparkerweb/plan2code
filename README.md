@@ -13,7 +13,7 @@ the next engineer all start from the same specs.
 
 One command opens it, every step is a card, and the terminal is always there if you prefer it.
 
-Version 2.5.1 · MIT · 📖 [plan2code.jparkerweb.com](https://plan2code.jparkerweb.com)
+Version 2.6.0 · MIT · 📖 [plan2code.jparkerweb.com](https://plan2code.jparkerweb.com)
 
 ---
 
@@ -183,6 +183,7 @@ The dashboard's cards, and when each one lights up for the spec you pick:
 | Quick task | Too small for the full process? A quick plan, then it just builds it. | Always |
 | Review | A second opinion on the changes. Problems ranked, and you pick what gets fixed. | Always |
 | Handoff | Pack this conversation into a document a fresh session can pick up cold. | Always |
+| Git commit | Commits your changes with a clear message, suggests a split when it is really two jobs, and offers to push. | Always (offers to start a repository outside one) |
 
 ---
 
@@ -349,6 +350,7 @@ console or the terminal; add `--web` to skip the question and go straight to the
 | `/plan2code-quick-task` | A small change that doesn't warrant the full sequence |
 | `/plan2code-1b-revise-plan` | Requirements moved mid-build. Revise the specs, not the code |
 | `/plan2code-handoff` | Compact this conversation into a doc the next one resumes from |
+| `/plan2code-git-commit` | Commit with a clear message, suggested splits, a branch offer on the default branch, and an optional push |
 
 ---
 

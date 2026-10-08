@@ -4712,15 +4712,22 @@ function buildList(card, item, staged) {
   }
   card.appendChild(row);
   card.appendChild(el("p", "help", "Drag to reorder, click a name to rename it."));
-  commentField(card, item, "Anything else about this breakdown? (type 'no changes' if none)");
+  commentField(card, item, "Anything else about this breakdown?", false, "no changes");
 }
 
-function commentField(card, item, labelText, required) {
+function commentField(card, item, labelText, required, quickText) {
   const wrap = el("div", "field");
   const id = "note-" + item.id;
   const label = el("label", null, labelText);
   label.htmlFor = id;
   wrap.appendChild(label);
+  let quick = null;
+  if (quickText) {
+    quick = el("button", "btn tiny", quickText.charAt(0).toUpperCase() + quickText.slice(1));
+    quick.type = "button";
+    quick.title = "Fill in \"" + quickText + "\"";
+    wrap.appendChild(quick);
+  }
   const ta = el("textarea");
   ta.id = id;
   ta.placeholder = required ? "Tell Plan2Code what to change." : "Optional.";
@@ -4741,6 +4748,12 @@ function commentField(card, item, labelText, required) {
     stagedChanged();
   });
   wrap.appendChild(ta);
+  if (quick)
+    quick.addEventListener("click", () => {
+      ta.value = quickText;
+      ta.dispatchEvent(new Event("input", { bubbles: true }));
+      ta.focus();
+    });
   card.appendChild(wrap);
 }
 

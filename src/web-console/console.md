@@ -96,8 +96,8 @@ files under `specs/` are the only source of truth, and neither channel owns them
    ```
    `--workflow` is whichever you are running: `dashboard`, `init`,
    `init-update`, `pathfinder`, `quick-task`, `plan`, `revise-plan`,
-   `document`, `implement`, `implement-review`, `review`, `finalize` or
-   `handoff`. Get it
+   `document`, `implement`, `implement-review`, `review`, `finalize`,
+   `handoff` or `git-commit`. Get it
    right: the page decides from it whether to offer a brief, what stopping
    early costs, and which command resumes the session if you cannot say.
    `dashboard` is the special one: the page draws the skill menu itself, and
@@ -776,7 +776,7 @@ where its real work starts.
 
 The menu itself is the page's own list — you never send it. The page knows
 the repo too: `open` scans `AGENTS.md` and `specs/` into `state.scan`
-(`{ hasAgents, specs: [{ dir, name, state, detail, touched }] }`), and the
+(`{ hasAgents, isGit, specs: [{ dir, name, state, detail, touched }] }`), and the
 picker at the top of the menu greys the cards that do not fit the selected
 spec's pipeline stage — or hides them outright while the **Hide unavailable
 workflows** switch under the picker is on (the default; kept in `looks.json`
@@ -872,6 +872,25 @@ One gate: the next-task confirmation, then the document itself as a doc —
 that is what the person is there to download. The finish carries no
 `command`: the doc download is the point, and the dashboard button and the
 "All done" line cover what comes next.
+
+### Git commit (`git-commit`)
+
+Open with `--workflow git-commit` (launched from the dashboard: resume the
+session instead). Post `activity` while you read diffs and untracked files. One
+card per step, each asked only when the step needs it:
+
+| Step | On the page |
+| --- | --- |
+| Branch offer | A `choice`, "Which branch?": the suggested `<type>/<name>` (recommended), "Another name" (`allowOther` with a `pattern` for a branch name's shape; run what they type through `branch-check`) and "Stay on the current branch". |
+| One commit | A `text` card whose `placeholder` is the drafted subject and whose `pattern` caps it at 100 characters, then a `confirm` "Commit this?" with the files in `consequences`. With the subject given as the argument there is no card. |
+| A split | The groups as a doc (`id: "commits"`: each group's subject and files, and any file that mixes concerns) plus a `review` card with verdicts `approve`, `change` and `single` ("One commit instead"). Asked even when the subject came as the argument. |
+| Push | A `confirm` with `push.command` and the commit list in `consequences`. |
+| `git init` | A `confirm` naming the folder (`danger: false`). |
+| `.gitignore` | The proposed file as a doc plus a `review` card. |
+
+Risky files (`sensitive`, `large`) are named in the card's `body`. Finish: no
+`command`, `"dashboard": true`, the commits and the push result in `body`.
+A stop's finish is the bare `/plan2code-git-commit`.
 
 ### Pathfinder
 
@@ -994,7 +1013,7 @@ The page's top bar shows a meter of how much work this console session has
 done (green, yellow, red), so the person knows when a fresh session would be
 sharper. It is advice only and never blocks anything. The console counts
 launches itself: Plan, Revise plan, Document, Review, Quick task, Init, Init
-update and Finalize score when their session opens, and there is nothing to
+update, Finalize and Git commit score when their session opens, and there is nothing to
 post for them.
 
 It counts answers itself too: every card the person answers in a send adds to
@@ -1011,7 +1030,8 @@ Per-unit work is yours to report, with `run` in any post:
 - `event` is one of `pathfinder-chart`, `pathfinder-question` (scores
   nothing now: answers count instead), `pathfinder-research`, `plan`,
   `revise-plan`, `document`, `implement-phase`, `implement-review-phase`,
-  `review`, `quick-task`, `init`, `init-update`, `finalize`, `handoff`.
+  `review`, `quick-task`, `init`, `init-update`, `finalize`, `handoff`,
+  `git-commit` (counted when its session opens, so never post it).
   An unknown event is exit `3`.
 - `id` names the unit: a question's file slug, `phase-N`, `map`. The same id
   posted again in the same skill run is ignored, so a repeated post never

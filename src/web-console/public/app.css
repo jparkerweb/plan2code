@@ -3419,6 +3419,20 @@ a.icon-btn { box-sizing: border-box; text-decoration: none; }
   100% { transform: translateX(8px); opacity: 0; }
 }
 
+/* Git commit -- the arm reaches out and a new commit settles onto the branch
+   line in step with it. */
+.pose .gc-reach { transform-origin: 0% 50%; animation: gc-reach 2.4s ease-in-out infinite; }
+@keyframes gc-reach {
+  0%, 100% { transform: scaleX(0.9); }
+  50% { transform: scaleX(1); }
+}
+.pose .gc-dot { animation: gc-dot 2.4s ease-in-out infinite; }
+@keyframes gc-dot {
+  0%, 15% { opacity: 0; transform: translateY(-8px); }
+  50%, 85% { opacity: 1; transform: translateY(0); }
+  100% { opacity: 0; transform: translateY(0); }
+}
+
 @media (max-width: 720px) {
   .dash { padding-top: 0; }
   .launch-stage { height: 140px; }

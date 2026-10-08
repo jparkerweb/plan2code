@@ -178,7 +178,7 @@ Read references/session-end.md
 
 > Fallback: route plan2code artifacts (plan/spec docs/phases) on the reviewed feature's own `specs/<feature>/` state to the earliest unmet pipeline stage whose input exists — `PLAN-*` or `overview.md` without `phase-*.md` → `/plan2code-2-document`; unchecked `- [ ]` phase tasks → `/plan2code-3-implement`; all checked → `/plan2code-4-finalize`; archived → complete, summary only. Read the state with `specs.mjs status <spec>` (gitignored `specs/` defeats search tools). Non-pipeline artifacts (code/PRs/docs/logs) → summary only. Unresolved Criticals → fixing them (H/A/S) is the next step. Ambiguous or multiple candidate specs → ask one targeted question. Output: "Next (NEW conversation): `/plan2code-<step>` — [why + how you know]", appending ` --web` when the routed step offers the web console; else "Review complete -- [summary]."
 
-- **Commit** (code changes): the `command` from `commit-msg.mjs --subject "fix: [desc]" --files <file>` repeated once per fixed file (ticket from the branch; exit 4 `no-ticket`: show it with `<JIRA>` for the user to fill in). On Windows PowerShell 5.1 (no `&&`), give `add` and `commit` as two commands.
+- **Commit** (code changes): the `command` from `commit-msg.mjs --subject "fix: [desc]" --files <file>` repeated once per fixed file. On Windows PowerShell 5.1 (no `&&`), give `add` and `commit` as two commands.
 
 ```
 ⋅

@@ -50,6 +50,13 @@ it opens on the page without asking.
   <img src="../docs/screenshots/dashboard-light.webp" alt="The Plan2Code dashboard: a Set up card, then the steps in order as cards, one of them marked Suggested.">
 </picture>
 
+Scroll down for the utilities. Outside a git repository the **Git commit** card says so and still offers to start one:
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="../docs/screenshots/dashboard-utilities-dark.webp">
+  <img src="../docs/screenshots/dashboard-utilities-light.webp" alt="The utility cards: Quick task, Review, Handoff and Git commit, which notes that the folder is not a git repository yet and offers to start one.">
+</picture>
+
 ---
 
 ## What you get
@@ -186,7 +193,9 @@ The easy way in is the dashboard:
 A page opens with every skill laid out as cards — the setup pair, the pipeline
 in order, and the utilities alongside — with a note about what it made of your
 project (no AGENTS.md yet, a spec waiting on Phase 2) and a *Suggested* flag on
-the card it would pick. Click one and Planny flies while it gets ready; a few
+the card it would pick. **Git commit** is among the utilities, always available; in a
+folder that is not a git repository its card says *Not a git repository yet: it offers to
+start one*, and clicking it still works. Click one and Planny flies while it gets ready; a few
 seconds later the same page is that skill's console, already running. No
 command names to remember.
 
