@@ -6,8 +6,8 @@ Recursive self-improvement toolchain for plan2code contributors. Collects metric
 
 ```bash
 # Install (one-time, from the plan2code root)
-node install.js            # → "A" (Install All + dev tools) includes metrics
-                           # → or "M" (Metrics only) under the CUSTOM sub-menu
+node install.js            # → "A" then "E" (Everything) includes metrics
+                           # → or "M" (Metrics only) under the ADVANCED sub-menu
 
 # After finishing any project spec (steps 1-4):
 cd your-project

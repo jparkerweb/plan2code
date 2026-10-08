@@ -13,7 +13,7 @@ From the plan2code root:
 
 ```bash
 node install.js
-# Select C > B to install bot only, or I to install everything
+# Select A > B to install the bot only, or A > E to install everything
 ```
 
 Or manually:
