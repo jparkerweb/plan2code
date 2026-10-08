@@ -8,6 +8,7 @@ All notable changes to Plan2Code will be documented in this file.
 
 - **web-console**: the breakdown question's "Anything else about this breakdown?" field has a **No changes** button. One click fills the box with "no changes", so you no longer type it. The old "(type 'no changes' if none)" hint is gone from the label.
 - **git-commit**: a new `/plan2code-git-commit` skill and dashboard card. It reads what changed, drafts the commit message for your approval, offers a new branch first on the default branch, suggests splitting work that is really two jobs, and asks before every commit and push (never a force-push). Outside a git repository it offers to start one.
+- **changelog**: a new `/plan2code-changelog` skill and dashboard card, just left of Git commit. It reads the default branch's latest version, classifies the branch's work and picks the version. When the branch already owns a version that is not released and not on another branch, it adds to that entry instead of starting a new one. It compares the branch with the newest entry, suggests the entries that are missing for you to edit, keeps `package.json` aligned, and offers to run Git commit next. The facts come from `changelog-state.mjs`, with tests in `scripts/test-script-changelog.mjs`.
 - **web-console**: the dashboard scan reports `isGit`, found from the filesystem without spawning git (linked worktrees count). The Git commit card stays clickable outside a repository and says "Not a git repository yet: it offers to start one". The skill has its own Planny pose and a Help entry.
 
 ### 🔧 Changed

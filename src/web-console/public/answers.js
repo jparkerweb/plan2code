@@ -248,6 +248,7 @@ export const WORKFLOW_LABEL = {
   finalize: "Wrapping up",
   handoff: "Handoff",
   "git-commit": "Git commit",
+  changelog: "Changelog",
 };
 
 export function workflowLabel(workflow) {
@@ -273,6 +274,7 @@ export const CONSOLE_WORKFLOWS = [
   "/plan2code-4-finalize",
   "/plan2code-handoff",
   "/plan2code-git-commit",
+  "/plan2code-changelog",
 ];
 
 // Rides on the end of the command as part of the skill's argument. Every
@@ -438,6 +440,8 @@ export function resumeCommand({ workflow, specDir } = {}) {
       return "/plan2code-handoff";
     case "git-commit":
       return "/plan2code-git-commit";
+    case "changelog":
+      return "/plan2code-changelog";
     default:
       return dir ? `/plan2code-0-pathfinder ${dir}/pathfinder` : "/plan2code-0-pathfinder";
   }
@@ -643,6 +647,17 @@ export const SKILL_CATALOG = [
       "Writes down everything a new session would need, as a single document: what was decided, what is done, what is left. Use it when a conversation got long, a machine changed, or tomorrow-you deserves the context today-you has.",
   },
   {
+    skill: "plan2code-changelog",
+    command: "/plan2code-changelog",
+    workflow: "changelog",
+    group: "extra",
+    chip: "Utility",
+    title: "Changelog",
+    blurb: "Checks the CHANGELOG version against the main branch and suggests entries for what is new.",
+    about:
+      "Works out the right version from the default branch, then compares your branch with the latest CHANGELOG entry and suggests the entries it is missing. You edit them before anything is written, it keeps package.json in step, and it offers to run Git commit next. If the newest version is not released or on another branch yet, it adds to that entry instead of starting a new one.",
+  },
+  {
     skill: "plan2code-git-commit",
     command: "/plan2code-git-commit",
     workflow: "git-commit",
@@ -676,6 +691,7 @@ export const START_POSES = [
   "review",
   "handoff",
   "git-commit",
+  "changelog",
 ];
 
 const POSE_ALIASES = { "init-update": "init", "revise-plan": "plan", "implement-review": "implement" };
@@ -744,6 +760,7 @@ export function cardAvailability(entry, scan, sel) {
     case "plan2code-quick-task":
     case "plan2code-review":
     case "plan2code-handoff":
+    case "plan2code-changelog":
       return ON;
     case "plan2code-git-commit":
       return scan && scan.isGit === false ? { on: true, note: GIT_INIT_NOTE } : ON;

@@ -264,6 +264,16 @@ const SOURCE_PROMPTS = [
     additionalReferences: [{ source: 'web-console', target: 'web-console' }]
   },
   {
+    source: 'plan2code-changelog.md',
+    stepNumber: 'changelog',
+    name: 'changelog',
+    displayName: 'Changelog Mode',
+    description: 'Check the CHANGELOG version against the default branch, suggest entries for new work, keep package.json aligned',
+    isUtility: true,
+    scripts: [],
+    additionalReferences: [{ source: 'web-console', target: 'web-console' }]
+  },
+  {
     source: 'plan2code-git-commit.md',
     stepNumber: 'git-commit',
     name: 'git-commit',
@@ -299,6 +309,7 @@ function generateStepLabel(prompt) {
   if (prompt.stepNumber === 'review') return 'Review';
   if (prompt.stepNumber === 'handoff') return 'Handoff';
   if (prompt.stepNumber === 'git-commit') return 'Git Commit';
+  if (prompt.stepNumber === 'changelog') return 'Changelog';
   if (prompt.stepNumber === 'quick') return 'Quick Task';
   return `Step ${prompt.stepNumber}`;
 }

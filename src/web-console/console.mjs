@@ -1108,7 +1108,7 @@ port, and the filesystem as transport; this CLI is the whole agent surface.
 
   workflows: dashboard · init · init-update · pathfinder · quick-task · plan ·
              revise-plan · document · implement · implement-review · review ·
-             finalize · handoff · git-commit
+             finalize · handoff · git-commit · changelog
 
   A session handed to you by the dashboard (a --session id): resume it with
   "open --resume <sid> --no-open --workflow <yours> --title <t>" -- never a

@@ -97,7 +97,7 @@ files under `specs/` are the only source of truth, and neither channel owns them
    `--workflow` is whichever you are running: `dashboard`, `init`,
    `init-update`, `pathfinder`, `quick-task`, `plan`, `revise-plan`,
    `document`, `implement`, `implement-review`, `review`, `finalize`,
-   `handoff` or `git-commit`. Get it
+   `handoff`, `git-commit` or `changelog`. Get it
    right: the page decides from it whether to offer a brief, what stopping
    early costs, and which command resumes the session if you cannot say.
    `dashboard` is the special one: the page draws the skill menu itself, and
@@ -873,6 +873,26 @@ that is what the person is there to download. The finish carries no
 `command`: the doc download is the point, and the dashboard button and the
 "All done" line cover what comes next.
 
+### Changelog (`changelog`)
+
+Open with `--workflow changelog` (launched from the dashboard: resume the
+session instead). Post `activity` while you read the history and the diff. One
+card per step, each asked only when the step needs it:
+
+| Step | On the page |
+| --- | --- |
+| Version | A `choice`, "Which version?": the computed version (recommended) with its reason in `body` (main is at X, the branch has Y), "Keep Y" when the branch's own entry could stay, and "Another version" (`allowOther`, with a `pattern` of `^[0-9]+.[0-9]+.[0-9]+$`). Left out when the entry is already right. |
+| Entries | A `list` titled "Entries to add": one row per suggested entry (`title` the section, `body` the line), editable, removable and reorderable. Anything they add arrives as a row. |
+| The result | The final entry as a doc (`id: "entry"`, marked `"saved": "CHANGELOG.md"` once written) plus a `review` card with verdicts `write` ("Write it"), `change` and `stop`. |
+| package.json | A `confirm` with the `old → new` in `consequences`. |
+| Git commit next | A `confirm`, "Run Git commit next?". |
+
+A yes to "Run Git commit next?" ends no session: settle the card, resume as
+`git-commit` (`open --resume <sid> --no-open --workflow git-commit`) and run
+that skill in this same session, as a dashboard launch does (Launches).
+Finish, on a no: `"dashboard": true` and the version and entries in `body`,
+with no `command`. A stop's finish is the bare `/plan2code-changelog`.
+
 ### Git commit (`git-commit`)
 
 Open with `--workflow git-commit` (launched from the dashboard: resume the
@@ -1013,7 +1033,7 @@ The page's top bar shows a meter of how much work this console session has
 done (green, yellow, red), so the person knows when a fresh session would be
 sharper. It is advice only and never blocks anything. The console counts
 launches itself: Plan, Revise plan, Document, Review, Quick task, Init, Init
-update, Finalize and Git commit score when their session opens, and there is nothing to
+update, Finalize, Git commit and Changelog score when their session opens, and there is nothing to
 post for them.
 
 It counts answers itself too: every card the person answers in a send adds to
@@ -1031,7 +1051,7 @@ Per-unit work is yours to report, with `run` in any post:
   nothing now: answers count instead), `pathfinder-research`, `plan`,
   `revise-plan`, `document`, `implement-phase`, `implement-review-phase`,
   `review`, `quick-task`, `init`, `init-update`, `finalize`, `handoff`,
-  `git-commit` (counted when its session opens, so never post it).
+  `git-commit`, `changelog` (both counted when their session opens, so never post them).
   An unknown event is exit `3`.
 - `id` names the unit: a question's file slug, `phase-N`, `map`. The same id
   posted again in the same skill run is ignored, so a repeated post never

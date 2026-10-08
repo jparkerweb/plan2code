@@ -26,13 +26,14 @@ export const WEIGHTS = Object.freeze({
   finalize: 1,
   handoff: 0,
   "git-commit": 1,
+  changelog: 1,
 });
 
 // Workflows whose launch itself scores WEIGHTS[workflow]. Pathfinder,
 // implement and implement-review score only through the agent's `run`
-// reports; dashboard and handoff never score; git-commit scores 1 on launch.
+// reports; dashboard and handoff never score; git-commit and changelog score 1 on launch.
 export const LAUNCH_COUNTED = Object.freeze(
-  new Set(["plan", "revise-plan", "document", "review", "quick-task", "init", "init-update", "finalize", "git-commit"])
+  new Set(["plan", "revise-plan", "document", "review", "quick-task", "init", "init-update", "finalize", "git-commit", "changelog"])
 );
 
 const weightOf = (key) => (Object.prototype.hasOwnProperty.call(WEIGHTS, key) ? WEIGHTS[key] : 0);
@@ -128,6 +129,7 @@ const WORKFLOW_NAMES = Object.freeze({
   finalize: "Finalize",
   handoff: "Handoff",
   "git-commit": "Git commit",
+  changelog: "Changelog",
 });
 
 // The skill run an entry belongs to, from its ledger id ("L3:..." -> "L3").
@@ -144,6 +146,7 @@ const LAUNCH_LABELS = Object.freeze({
   "init-update": "Init update started",
   finalize: "Finalize started",
   "git-commit": "Git commit started",
+  changelog: "Changelog started",
 });
 const RUN_LABELS = Object.freeze({
   "pathfinder-chart": "Pathfinder map written",
@@ -161,6 +164,7 @@ const RUN_LABELS = Object.freeze({
   finalize: "Finalize run",
   handoff: "Handoff written",
   "git-commit": "Git commit run",
+  changelog: "Changelog run",
 });
 
 // The unit a run names, from its ledger id ("L3:phase-2" -> "phase-2").

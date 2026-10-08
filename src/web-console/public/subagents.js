@@ -185,7 +185,7 @@ export function checkHelpers(list) {
 // are tested without a browser. `frame` is the state frame's `subagents`
 // block; app.js only renders what these say.
 
-export const CHECKIN_LINE = "Helpers report through Plan2Code, so their progress is shown as it checks-in, not live.";
+export const CHECKIN_LINE = "Helpers report through Plan2Code, so their progress is shown as it checks in, not live.";
 
 const STATE_LABELS = Object.freeze({ running: "Running", done: "Done", failed: "Failed" });
 

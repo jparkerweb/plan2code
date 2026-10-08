@@ -3433,6 +3433,9 @@ a.icon-btn { box-sizing: border-box; text-decoration: none; }
   100% { opacity: 0; transform: translateY(0); }
 }
 
+/* Changelog -- the arm reaches the page and the newest line is written in step. */
+.pose .cl-line { animation: gc-dot 2.4s ease-in-out infinite; }
+
 @media (max-width: 720px) {
   .dash { padding-top: 0; }
   .launch-stage { height: 140px; }

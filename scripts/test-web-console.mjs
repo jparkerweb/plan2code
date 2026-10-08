@@ -5374,7 +5374,7 @@ test("subagents: the page shows the switch only when offered and supported, and 
   assert.equal(showTab(on, undefined), false);
   assert.equal(showTab(off, [helper]), true, "a helper shows with the switch off (Pathfinder research)");
   assert.equal(showTab({ ...on, supported: false }, [helper]), false, "no tab where the switch cannot show");
-  assert.ok(CHECKIN_LINE.includes("check-ins, not live"));
+  assert.ok(CHECKIN_LINE.includes("checks in, not live"));
 });
 
 test("subagents: helperRows labels each state, shows a result only once a helper ended, and collapses to working alone", () => {
@@ -6957,4 +6957,17 @@ test("update banner: built only on the dashboard, dismissed per session, and Hel
   const help = app.match(/async function renderHelpVersion\(\) \{([\s\S]*?)\n\}/);
   assert.ok(help, "app.js has renderHelpVersion");
   assert.match(help[1], /releasesLink\(/, "the help version is a Releases link");
+});
+
+// The Changelog card sits left of Git commit, always clickable, and a launch
+// from it resumes the session under its own workflow.
+test("the Changelog card comes just before Git commit and is always on", () => {
+  const skills = SKILL_CATALOG.map((e) => e.skill);
+  assert.equal(skills.indexOf("plan2code-changelog") + 1, skills.indexOf("plan2code-git-commit"));
+  const entry = SKILL_CATALOG.find((e) => e.skill === "plan2code-changelog");
+  assert.equal(entry.workflow, "changelog");
+  assert.equal(entry.command, "/plan2code-changelog");
+  for (const scan of [{ hasAgents: true, isGit: false }, { hasAgents: false }, null]) {
+    assert.equal(cardAvailability(entry, scan, null).on, true);
+  }
 });

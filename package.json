@@ -8,7 +8,7 @@
   "scripts": {
     "prepare": "husky",
     "build:skills": "node install.js --build-skills",
-    "test": "node scripts/validate-char-count.js && node install.js --build-skills && node scripts/parse-check.mjs && node scripts/check-skill-table.mjs && node --test scripts/test-web-console.mjs scripts/test-launcher.mjs scripts/test-skill-scripts.mjs scripts/test-script-pathfinder.mjs scripts/test-script-finalize.mjs scripts/test-script-handoff.mjs scripts/test-script-git-commit.mjs"
+    "test": "node scripts/validate-char-count.js && node install.js --build-skills && node scripts/parse-check.mjs && node scripts/check-skill-table.mjs && node --test scripts/test-web-console.mjs scripts/test-launcher.mjs scripts/test-skill-scripts.mjs scripts/test-script-pathfinder.mjs scripts/test-script-finalize.mjs scripts/test-script-handoff.mjs scripts/test-script-git-commit.mjs scripts/test-script-changelog.mjs"
   },
   "devDependencies": {
     "husky": "^9.0.0"

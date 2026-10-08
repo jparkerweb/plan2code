@@ -32,6 +32,7 @@ Every command below is what a dashboard card runs. Typed on its own, each one as
 | 3+review   | /plan2code-3-implement-review | overview.md     | Reviewed implementation ready for approval (alternative to `/plan2code-3-implement`)                          |
 | 4          | /plan2code-4-finalize         | overview.md     | Archived specs                                                                                                |
 | handoff    | /plan2code-handoff            | Conversation    | Self-contained handoff doc (OS temp dir by default, or a folder you pick such as `handoffs/`)                 |
+| changelog  | /plan2code-changelog          | Your branch     | `CHANGELOG.md` entries and the `package.json` version, from the default branch's latest version |
 | git-commit | /plan2code-git-commit         | Your changes    | A commit (`<subject>` / `AI Assisted`): suggested splits, a branch offer on the default branch, optional push |
 
 **Terminal instead:** run any command without `--web` and answer the interface question with **terminal**. Nothing is lost: same questions, same gates, same files under `specs/`. You can switch between the two mid-feature.
