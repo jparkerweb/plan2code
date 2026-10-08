@@ -9,10 +9,14 @@ All notable changes to Plan2Code will be documented in this file.
 - **web-console**: the breakdown question's "Anything else about this breakdown?" field has a **No changes** button. One click fills the box with "no changes", so you no longer type it. The old "(type 'no changes' if none)" hint is gone from the label.
 - **git-commit**: a new `/plan2code-git-commit` skill and dashboard card. It reads what changed, drafts the commit message for your approval, offers a new branch first on the default branch, suggests splitting work that is really two jobs, and asks before every commit and push (never a force-push). Outside a git repository it offers to start one.
 - **changelog**: a new `/plan2code-changelog` skill and dashboard card, just left of Git commit. It reads the default branch's latest version, classifies the branch's work and picks the version. When the branch already owns a version that is not released and not on another branch, it adds to that entry instead of starting a new one. It compares the branch with the newest entry, suggests the entries that are missing for you to edit, keeps `package.json` aligned, and offers to run Git commit next. The facts come from `changelog-state.mjs`, with tests in `scripts/test-script-changelog.mjs`.
+- **web-console**: the Git commit card counts the files waiting ("3 files to commit") and greys out on a clean tree, from a bounded `git status` the scan runs when the dashboard opens. If git cannot answer, the card stays clickable.
+- **web-console**: the Commit this? question in Git commit has a collapsed **Show the N files** table of every path and its state, so "15 files" can be read before you say yes.
+- **web-console**: a finished quick task or phase build gets a **Commit it now** button beside the printed git command. It starts Git commit in the same session, as if you had clicked its dashboard card.
 - **web-console**: the dashboard scan reports `isGit`, found from the filesystem without spawning git (linked worktrees count). The Git commit card stays clickable outside a repository and says "Not a git repository yet: it offers to start one". The skill has its own Planny pose and a Help entry.
 
 ### 🔧 Changed
 
+- **web-console**: Subagents is now on by default for the skills that offer it, until you turn it off for a project and skill. A saved Off is kept.
 - **commits**: every commit Plan2Code suggests is now `<subject>`, a blank line, then `AI Assisted`. `commit-msg.mjs` no longer reads a ticket from the branch name and rejects `--ticket`.
 - **build**: `skills/` is no longer tracked. It is gitignored build output, rebuilt by the installer and `npm run build:skills`, as upstream does. `npm test` now runs `install.js --build-skills` instead of `--verify-skills`, so it fails on a broken source entry rather than on drift. `--verify-skills` stays as a diagnostic.
 

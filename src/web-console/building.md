@@ -236,11 +236,17 @@ says, and `stop`:
     "body": "9 of 9 tasks, all on disk.\n\n| Phase | Tasks | Goal |\n| --- | --- | --- |\n| Phase 4: ... | 6 | ... |\n\nCommit it with:\n\n```\ngit add -A && git commit -m \"...\" -m \"AI Assisted\"\n```",
     "command": "/plan2code-3-implement specs/lunch-vote/overview.md",
     "doc": "report",
+    "commit": true,
     "dashboard": true
   },
   "agent": { "status": "waiting" }
 }
 ```
+
+`"commit": true` is there because the body prints a git command: the finished
+screen gets a **Commit it now** button, and its `__commit` press is handled as
+console.md → Finishing says (resume as `git-commit`, same session). Leave it out
+when the body prints no commit.
 
 `finish.command` is the next pipeline step, the same one the terminal names:
 the next `/plan2code-3-implement`, or `/plan2code-4-finalize` after the last
@@ -464,8 +470,9 @@ with the count of completed tasks.
   in the project's commit format (AGENTS.md), with
   `"where": "When you are happy with it, commit it from your terminal:"`, and
   `review` on offer — the **Review it now** button, since a quick task has no
-  sign-off card to put it on — and `"dashboard": true`, so the finished screen
-  also offers **Back to the dashboard**. Both are required: a finish without
+  sign-off card to put it on — `"commit": true` (the **Commit it now** button;
+  console.md → Finishing) and `"dashboard": true`, so the finished screen
+  also offers **Back to the dashboard**. Review and dashboard are required: a finish without
   `dashboard` leaves the person on a dead end. Keep waiting for whichever
   button is pressed, and everything after that is "The review, mid-session"
   above.

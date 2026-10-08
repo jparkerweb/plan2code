@@ -52,6 +52,7 @@ import {
   DONE_REPLY,
   finishPaused,
   fitWithin,
+  GIT_CLEAN_REASON,
   GIT_INIT_NOTE,
   handoffShape,
   handoffText,
@@ -67,6 +68,8 @@ import {
   recordedAnswer,
   resumeCommand,
   REVIEW_REPLY,
+  commitOffer,
+  pendingNote,
   reviewOffer,
   SKILL_CATALOG,
   SPEC_STATE_LABELS,
@@ -187,6 +190,7 @@ import {
   handOff,
   initialWorkspace,
   insideGitRepo,
+  pendingFiles,
   latestOpenCaps,
   parseArgs,
   pendingWorkspaceChanges,
@@ -2444,6 +2448,20 @@ test("a finish can carry the dashboard flag, and only as a boolean", () => {
   assert.match(bad.stderr, /"finish\.dashboard" must be true or false \(or left out: no dashboard button\)/);
 });
 
+// The Commit it now button is the same kind of opt-in.
+test("a finish can carry the commit flag, and only as a boolean", () => {
+  const base = { headline: "The task is built", command: "git add -A && git commit -m \"x\" -m \"AI Assisted\"" };
+  for (const commit of [true, false]) {
+    const res = cli(["post", "--session", sid, "--file", payload("fin-commit.json", { finish: { ...base, commit } })]);
+    assert.equal(res.json.ok, true);
+  }
+  const bad = cli(["post", "--session", sid, "--file", payload("fin-commit-bad.json", { finish: { ...base, commit: "yes" } })], {
+    expectFail: true,
+  });
+  assert.equal(bad.status, 3);
+  assert.match(bad.stderr, /"finish.commit" must be true or false/);
+});
+
 // Taking the review up is the agent posting `"finish": null`: the session goes
 // back to work, so the page must stop saying it is over.
 test("a finish can be taken back, which puts the session back to work", () => {
@@ -3087,6 +3105,55 @@ test("the Git commit card stays clickable outside a repository and says what hap
   const withSpec = { hasAgents: true, isGit: false, specs: [{ dir: "specs/x", name: "x", state: "building" }] };
   const menu = { details: { "plan2code-git-commit": "Two changes ready" } };
   assert.equal(cardPresentation(entry, withSpec, withSpec.specs[0], menu).detail, "Two changes ready");
+});
+
+test("the Git commit card shows the pending count and greys out on a clean tree", () => {
+  const entry = SKILL_CATALOG.find((e) => e.skill === "plan2code-git-commit");
+  const clean = cardAvailability(entry, { hasAgents: true, isGit: true, pending: 0 }, null);
+  assert.equal(clean.on, false);
+  assert.equal(clean.reason, GIT_CLEAN_REASON);
+  const dirty = cardAvailability(entry, { hasAgents: true, isGit: true, pending: 3 }, null);
+  assert.deepEqual(dirty, { on: true, note: "3 files to commit" });
+  assert.equal(pendingNote(1), "1 file to commit");
+  // git could not say: stay clickable, and no repository still offers git init.
+  assert.deepEqual(cardAvailability(entry, { hasAgents: true, isGit: true, pending: null }, null), { on: true });
+  assert.equal(cardAvailability(entry, { hasAgents: true, isGit: false, pending: 0 }, null).note, GIT_INIT_NOTE);
+});
+
+test("pendingFiles counts changed and untracked paths, and says null outside a repository", () => {
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), "p2c-pending-"));
+  const git = (...a) => spawnSync("git", a, { cwd: repo, encoding: "utf8" });
+  const repo = path.join(base, "repo");
+  const plain = path.join(base, "plain");
+  fs.mkdirSync(repo);
+  fs.mkdirSync(plain);
+  try {
+    if (git("init", "-q").status !== 0) return; // no git on this machine
+    git("config", "user.email", "t@example.com");
+    git("config", "user.name", "T");
+    assert.equal(pendingFiles(repo), 0, "an empty repository is clean");
+    fs.writeFileSync(path.join(repo, "a.txt"), "a");
+    git("add", "a.txt");
+    git("commit", "-q", "-m", "first");
+    assert.equal(pendingFiles(repo), 0);
+    fs.writeFileSync(path.join(repo, "a.txt"), "changed");
+    fs.writeFileSync(path.join(repo, "b.txt"), "new");
+    assert.equal(pendingFiles(repo), 2, "one modified, one untracked");
+    git("add", "b.txt");
+    assert.equal(pendingFiles(repo), 2, "staged counts too");
+    assert.equal(scanProject(repo).pending, 2);
+    assert.equal(scanProject(plain).pending, null, "no repository, no count");
+  } finally {
+    fs.rmSync(base, { recursive: true, force: true });
+  }
+});
+
+test("the commit offer is read from finish.commit and a pause never carries it", () => {
+  assert.equal(commitOffer({ headline: "Done", commit: true }), true);
+  assert.equal(commitOffer({ headline: "Done", commit: false }), false);
+  assert.equal(commitOffer({ headline: "Done" }), false);
+  assert.equal(commitOffer({ headline: "Paused here", commit: true }), false);
+  assert.equal(commitOffer(null), false);
 });
 
 test("a verdict's button text never renders blank", () => {
@@ -5268,7 +5335,8 @@ test("subagents: only the five opted-in workflows offer the switch", () => {
     assert.equal(defaultInstruction(w), "");
   }
   assert.equal(Object.keys(SUBAGENT_WORKFLOWS).length, 5);
-  assert.deepEqual(defaultSetting("review"), { workflow: "review", on: false, instruction: null, max: 3 });
+  assert.deepEqual(defaultSetting("review"), { workflow: "review", on: true, instruction: null, max: 3 });
+  assert.equal(defaultSetting("plan").on, false, "a skill without the switch is never on");
   assert.equal(effectiveInstruction({ workflow: "review", instruction: "  " }), defaultInstruction("review"));
   assert.equal(effectiveInstruction({ workflow: "review", instruction: " Mine " }), "Mine");
 });
@@ -5441,7 +5509,7 @@ test("subagents: the store round-trips per project and workflow under the consol
     if (process.platform === "win32" || process.platform === "darwin") {
       assert.deepEqual(out.otherCase, out.saved, "a different-case path reads the same entry");
     }
-    assert.deepEqual(out.unsaved, { on: false, instruction: null, max: 3 });
+    assert.deepEqual(out.unsaved, { on: true, instruction: null, max: 3 }, "nothing saved means on");
     assert.ok(!fs.existsSync(path.join(home, "subagents.json.lock")), "the lock is released");
   } finally {
     fs.rmSync(home, { recursive: true, force: true });
@@ -5880,6 +5948,11 @@ test("subagents: a change reaches the next pickup once, last in reply, edits nam
   const s = subagentsSession();
   const extra = tempFolder();
   try {
+    // Nothing saved means on, and open already told the agent. Turn it off and
+    // let that be said, so the rest of the test starts from an off agent.
+    assert.equal((await setSubagents(s, { ...ON3, on: false })).status, 200);
+    assert.equal(subagentLines((await submitAndWait(s)).json.reply).length, 1, "off is said to an agent told on");
+
     const on = await setSubagents(s, ON3);
     assert.equal(on.status, 200);
     assert.equal(on.body.ok, true);
@@ -5935,7 +6008,11 @@ test("subagents: a change reaches the next pickup once, last in reply, edits nam
 });
 
 test("subagents: never on means never a line, and chat hands a pending block over on its own", async () => {
-  const s = subagentsSession();
+  // A project that saved "off" starts its next session off and untold.
+  const first = subagentsSession();
+  assert.equal((await setSubagents(first, { on: false, instruction: null, max: 4 })).status, 200);
+  cli(["stop", "--session", first.sid]);
+  const s = subagentsSession({}, { keepStore: true });
   try {
     const off = await setSubagents(s, { on: false, instruction: null, max: 4 });
     assert.equal(off.status, 200);
@@ -6044,14 +6121,14 @@ test("subagents: a save that matches this session still becomes the project's se
   let c = null;
   try {
     const before = (await frameSubagents(b)).revision;
-    assert.equal((await setSubagents(a, ON3)).status, 200, "another session turns it on for the project");
-    const same = await setSubagents(b, { ...ON3, on: false });
+    assert.equal((await setSubagents(a, { ...ON3, on: false })).status, 200, "another session turns it off for the project");
+    const same = await setSubagents(b, ON3);
     assert.equal(same.status, 200);
     assert.equal(same.body.setting.revision, before, "nothing changed for this session's agent");
     assert.equal("subagents" in (await submitAndWait(b)).json, false);
 
     c = subagentsSession({}, { keepStore: true });
-    assert.equal((await frameSubagents(c)).on, false, "the next session starts from the person's latest pick");
+    assert.equal((await frameSubagents(c)).on, true, "the next session starts from the person's latest pick");
   } finally {
     for (const s of [a, b, c]) if (s) cli(["stop", "--session", s.sid]);
   }

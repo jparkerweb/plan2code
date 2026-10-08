@@ -26,7 +26,9 @@ import {
   choiceAnswer,
   DASHBOARD_COMMAND,
   DASHBOARD_NOTE,
+  COMMIT_REPLY,
   DASHBOARD_REPLY,
+  commitOffer,
   dashboardOffer,
   DONE_REPLY,
   finishPaused,
@@ -567,7 +569,7 @@ let cardMarks = null;
 function fresh() {
   // `stopping` is set once a stop request has been accepted, and kept here so
   // a reload in the middle of wrapping up comes back to the same screen.
-  // `afterBuild` is "review", "done" or "dashboard" once a finished session's
+  // `afterBuild` is "review", "commit", "done" or "dashboard" once a finished session's
   // offer has been answered, so the buttons do not come back on a reload.
   // `homeward` is set once the top bar's Back to the dashboard request has
   // been accepted mid-workflow: { at }. The resume through the dashboard
@@ -717,7 +719,7 @@ const selSpec = () => {
 // the finish goes away, which is the agent taking the review up.
 function reviewPending() {
   const fin = finish();
-  if (!fin || !reviewOffer(fin) || local.afterBuild === "done" || local.afterBuild === "dashboard") return null;
+  if (!fin || !reviewOffer(fin) || ["done", "dashboard", "commit"].includes(local.afterBuild)) return null;
   if (local.afterBuild === "review") return gone ? null : "asked";
   return gone ? null : "open";
 }
@@ -1667,6 +1669,7 @@ function renderStatus() {
     // offer has something left to press here, and only while the server is
     // there to take the press.
     if (local.afterBuild === "dashboard" && !gone) return say("work", "Opening the dashboard…", "", true);
+    if (local.afterBuild === "commit" && !gone) return say("work", "Opening Git commit…", "", true);
     const offer = reviewPending();
     if (dashboardLive(finish()) && !gone && !offer) {
       return say("point", "Done. Head back to the dashboard, or close this tab.");
@@ -2318,8 +2321,13 @@ function renderHandoff(fin) {
   // A finished build offers its review first, above the next step, because it
   // is the one thing on this screen that has to happen before they leave.
   const offer = reviewOffer(fin);
-  if (offer && local.afterBuild !== "done" && local.afterBuild !== "dashboard") {
+  if (offer && !["done", "dashboard", "commit"].includes(local.afterBuild)) {
     card.appendChild(renderReviewOffer(offer));
+  }
+
+  // The commit, right after the review: one press starts Git commit here.
+  if (commitOffer(fin) && !gone && local.afterBuild !== "done" && local.afterBuild !== "dashboard") {
+    card.appendChild(renderCommitOffer());
   }
 
   // Three shapes: a next step to run, a pause with its resume command, or a
@@ -2500,6 +2508,31 @@ function renderReviewOffer(offer) {
   return box;
 }
 
+// Commit what was just built without leaving the page. Like the review button
+// it is a request to an agent still in its wait loop, so it is only drawn
+// while the server is there; the command printed below stays for the terminal.
+function renderCommitOffer() {
+  const box = el("section", "review-offer");
+  box.appendChild(el("p", "handoff-label", "Commit it"));
+  box.appendChild(
+    el(
+      "p",
+      "review-offer-text",
+      "Git commit reads what changed, drafts the message and asks before it commits or pushes. " +
+        "It opens right here, the same as the dashboard's Git commit card."
+    )
+  );
+  const asked = local.afterBuild === "commit";
+  const row = el("div", "btn-row");
+  const go = el("button", "btn primary", asked ? "Opening Git commit…" : "Commit it now");
+  go.type = "button";
+  go.disabled = asked || pendingResult;
+  go.addEventListener("click", () => sendAfterBuild("commit"));
+  row.appendChild(go);
+  box.appendChild(row);
+  return box;
+}
+
 // The way back to the dashboard, on a finished screen whose agent opted in
 // with `finish.dashboard`. Like the review button it is a request to an agent
 // still in its wait loop, so once the server is gone it turns into the
@@ -2546,9 +2579,9 @@ function textWithCode(tag, className, text) {
 }
 
 // Any answer to a finished session's offers, as one send through the ordinary
-// submit. Like a brief, it names no question: `__review`, `__done` and
-// `__dashboard` are about the session.
-const AFTER_FINISH_REPLIES = { review: REVIEW_REPLY, done: DONE_REPLY, dashboard: DASHBOARD_REPLY };
+// submit. Like a brief, it names no question: `__review`, `__commit`, `__done`
+// and `__dashboard` are about the session.
+const AFTER_FINISH_REPLIES = { review: REVIEW_REPLY, done: DONE_REPLY, dashboard: DASHBOARD_REPLY, commit: COMMIT_REPLY };
 async function sendAfterBuild(kind) {
   if (gone || pendingResult || local.afterBuild) return;
   try {
@@ -2572,6 +2605,7 @@ async function sendAfterBuild(kind) {
     const started = {
       review: "Review requested. It starts here in a moment.",
       dashboard: "Opening the dashboard. It appears here in a moment.",
+      commit: "Opening Git commit. It appears here in a moment.",
     }[kind];
     if (started) {
       banner(started, "good");
@@ -4406,7 +4440,29 @@ function buildConfirm(card, item, staged) {
     note.appendChild(md(item.consequences, "md"));
     card.appendChild(note);
   }
+  if (Array.isArray(item.files) && item.files.length) card.appendChild(filesTable(item.files));
   commentField(card, item, "Anything to add?");
+}
+
+// A collapsed list of the files a confirm is about ({ path, state } rows), so
+// "15 files" can be opened up and read before the person says yes.
+function filesTable(files) {
+  const box = el("details", "card-files");
+  box.appendChild(el("summary", "", `Show the ${files.length} file${files.length === 1 ? "" : "s"}`));
+  const table = el("table", "md-table");
+  const head = el("tr");
+  head.appendChild(el("th", "", "State"));
+  head.appendChild(el("th", "", "File"));
+  table.appendChild(head);
+  for (const f of files) {
+    if (!f || typeof f.path !== "string") continue;
+    const row = el("tr");
+    row.appendChild(el("td", "", typeof f.state === "string" ? f.state : ""));
+    row.appendChild(el("td", "", f.path));
+    table.appendChild(row);
+  }
+  box.appendChild(table);
+  return box;
 }
 
 function buildRecap(card, item, staged) {

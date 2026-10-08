@@ -456,6 +456,7 @@ export const REVIEW_REPLY =
   "Review what was just built before I go: run the focused code review on this session's changes, here on the page.";
 export const DONE_REPLY = "No review, thanks. I am done: close the session.";
 export const DASHBOARD_REPLY = "Take me back to the dashboard, right here in this session.";
+export const COMMIT_REPLY = "Commit what was just built: start Git commit, right here in this session.";
 
 // Shown under the Back to the dashboard button: the press picks up in the same
 // conversation, which carries a long skill's context into the next one.
@@ -469,6 +470,16 @@ export const DASHBOARD_NOTE =
  */
 export function dashboardOffer(fin) {
   return Boolean(fin && fin.dashboard === true && !finishPaused(fin));
+}
+
+/**
+ * Whether a finish offers to commit what was just built from this page. The
+ * agent opts in with `finish.commit: true` on a build that ended with a git
+ * command; the press starts Git commit in the same session, as the dashboard's
+ * card does. A pause never offers it.
+ */
+export function commitOffer(fin) {
+  return Boolean(fin && fin.commit === true && !finishPaused(fin));
 }
 
 /**
@@ -732,12 +743,14 @@ const NEXT_FOR_STATE = {
 
 const ON = { on: true };
 export const GIT_INIT_NOTE = "Not a git repository yet: it offers to start one";
+export const GIT_CLEAN_REASON = "Nothing to commit: no changed or new files";
+export const pendingNote = (n) => `${n} file${n === 1 ? "" : "s"} to commit`;
 const off = (reason) => ({ on: false, reason });
 
 /**
  * Whether a catalog card is clickable for the current picker selection.
  *
- * `scan` is the server's project scan ({ hasAgents, isGit, specs }); `sel` is the
+ * `scan` is the server's project scan ({ hasAgents, isGit, pending, specs }); `sel` is the
  * picked spec object or null for "start from scratch". A spec whose files
  * match no pipeline shape ("unrecognized") behaves like no spec at all for
  * availability — but its folder still goes along on a Pathfinder or Plan
@@ -763,7 +776,12 @@ export function cardAvailability(entry, scan, sel) {
     case "plan2code-changelog":
       return ON;
     case "plan2code-git-commit":
-      return scan && scan.isGit === false ? { on: true, note: GIT_INIT_NOTE } : ON;
+      if (scan && scan.isGit === false) return { on: true, note: GIT_INIT_NOTE };
+      // `pending` is null when git could not say: stay clickable then.
+      if (scan && scan.isGit && Number.isInteger(scan.pending)) {
+        return scan.pending === 0 ? off(GIT_CLEAN_REASON) : { on: true, note: pendingNote(scan.pending) };
+      }
+      return ON;
     case "plan2code-0-pathfinder":
       if (!state || state === "exploring") return { ...ON, next };
       return off("This spec is already past the questions");

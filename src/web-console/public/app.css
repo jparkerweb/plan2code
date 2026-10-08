@@ -1248,6 +1248,21 @@ h1 {
 .card .md, .card .prompt { max-width: none; }
 .card .prompt p:first-child { margin-top: 0; }
 
+.card-files {
+  margin-top: 10px;
+  font-size: 0.9em;
+}
+.card-files summary {
+  cursor: pointer;
+  color: var(--ink-2);
+}
+.card-files table {
+  margin-top: 6px;
+}
+.card-files td:last-child {
+  word-break: break-all;
+}
+
 .card-note {
   background: var(--accent-soft);
   border: 1px solid var(--accent-line);

@@ -358,6 +358,34 @@ export function insideGitRepo(dir) {
   }
 }
 
+// How many paths git would commit from `dir`: modified, staged, deleted and
+// untracked (an untracked folder counts once), from one bounded `git status`.
+// null when git cannot say (not installed, not a repository, too slow), which
+// the page reads as "unknown", never as a clean tree. --no-optional-locks keeps
+// this background look from taking the index lock out from under a commit.
+export function pendingFiles(dir) {
+  try {
+    const out = execFileSync("git", ["--no-optional-locks", "status", "--porcelain", "-z"], {
+      cwd: dir,
+      encoding: "utf8",
+      timeout: 3000,
+      windowsHide: true,
+      maxBuffer: 8 * 1024 * 1024,
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+    const parts = out.split("\0").filter(Boolean);
+    let n = 0;
+    for (let i = 0; i < parts.length; i++) {
+      n++;
+      // A rename or copy carries its old path as one more field.
+      if (/^[RC]/.test(parts[i])) i++;
+    }
+    return n;
+  } catch {
+    return null;
+  }
+}
+
 export function projectRoot(cwd = process.cwd()) {
   return repoRoots(cwd).project;
 }
@@ -871,7 +899,8 @@ function isDir(p) {
  * Scan <root>/specs into picker entries, most recently touched first.
  * `touched` is the newest file mtime inside the folder — last write wins,
  * which is the honest reading of "the one you were working on".
- * `isGit` says whether `root` sits inside a git repository (no git process).
+ * `isGit` says whether `root` sits inside a git repository (no git process);
+ * `pending` is how many paths a commit would take, or null when unknown.
  */
 export function scanProject(root) {
   const specsDir = path.join(root, "specs");
@@ -900,10 +929,12 @@ export function scanProject(root) {
     });
   }
   specs.sort((a, b) => b.touched - a.touched || a.name.localeCompare(b.name));
+  const isGit = insideGitRepo(root);
   return {
     at: nowIso(),
     hasAgents: fs.existsSync(path.join(root, "AGENTS.md")),
-    isGit: insideGitRepo(root),
+    isGit,
+    pending: isGit ? pendingFiles(root) : null,
     specs,
   };
 }
@@ -1466,6 +1497,9 @@ export function validate(state) {
       }
       if (fin.dashboard != null && typeof fin.dashboard !== "boolean") {
         problems.push('"finish.dashboard" must be true or false (or left out: no dashboard button)');
+      }
+      if (fin.commit != null && typeof fin.commit !== "boolean") {
+        problems.push('"finish.commit" must be true or false (or left out: no commit button)');
       }
       // The review offer on a finished build: true, or an object carrying the
       // button's heading. The heading is read by the person, so it faces the

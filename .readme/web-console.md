@@ -367,7 +367,7 @@ Pathfinder, the agent can hand independent pieces of work to helpers
   run at once (1 to 20; your agent's own limit still applies). **Save** sends
   it; the agent hears of it at its next check-in, as a setting, not as
   something you typed.
-- **Saved per project and per skill**, off by default, in
+- **Saved per project and per skill**, on until switched off, in
   `~/.plan2code/console/subagents.json`. The next session of the same skill
   in the same folder starts the same way.
 - **The Subagents tab.** With the first helper the agent reports, a tab

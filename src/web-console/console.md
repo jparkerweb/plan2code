@@ -652,7 +652,7 @@ for permission is not a failure; report only a read that failed after it.
 On the skills that offer it (`implement`, `implement-review`, `quick-task`,
 `review`, `pathfinder`), the person can turn **helpers** (subagents) on or off
 from the top bar's Subagents button. Their pick is saved per project and per
-skill, off by default, and reaches you as a standing instruction, only when it
+skill, on until switched off, and reaches you as a standing instruction, only when it
 changes.
 
 ### What arrives
@@ -776,13 +776,15 @@ where its real work starts.
 
 The menu itself is the page's own list — you never send it. The page knows
 the repo too: `open` scans `AGENTS.md` and `specs/` into `state.scan`
-(`{ hasAgents, isGit, specs: [{ dir, name, state, detail, touched }] }`), and the
+(`{ hasAgents, isGit, pending, specs: [{ dir, name, state, detail, touched }] }`), and the
 picker at the top of the menu greys the cards that do not fit the selected
 spec's pipeline stage — or hides them outright while the **Hide unavailable
 workflows** switch under the picker is on (the default; kept in `looks.json`
 as `hideUnavailable`). The scan is a snapshot of that `open` — a spec created
 mid-session appears the next time the session resumes as a dashboard, not
-live. What a dashboard posts is what it knows about this project:
+live. `pending` is how many files a commit would take (modified, staged, deleted
+and untracked, `null` when git cannot say): the Git commit card greys out at 0
+and shows the count above it. What a dashboard posts is what it knows about this project:
 
 ```jsonc
 {
@@ -902,7 +904,7 @@ card per step, each asked only when the step needs it:
 | Step | On the page |
 | --- | --- |
 | Branch offer | A `choice`, "Which branch?": the suggested `<type>/<name>` (recommended), "Another name" (`allowOther` with a `pattern` for a branch name's shape; run what they type through `branch-check`) and "Stay on the current branch". |
-| One commit | A `text` card whose `placeholder` is the drafted subject and whose `pattern` caps it at 100 characters, then a `confirm` "Commit this?" with the files in `consequences`. With the subject given as the argument there is no card. |
+| One commit | A `text` card whose `placeholder` is the drafted subject and whose `pattern` caps it at 100 characters, then a `confirm` "Commit this?" with the files in `consequences` and, as `files: [{ "path": "src/a.js", "state": "modified" }]` (states: modified, new, deleted, renamed), a collapsed **Show the N files** table on the card. With the subject given as the argument there is no card. |
 | A split | The groups as a doc (`id: "commits"`: each group's subject and files, and any file that mixes concerns) plus a `review` card with verdicts `approve`, `change` and `single` ("One commit instead"). Asked even when the subject came as the argument. |
 | Push | A `confirm` with `push.command` and the commit list in `consequences`. |
 | `git init` | A `confirm` naming the folder (`danger: false`). |
@@ -1333,6 +1335,7 @@ The same closer you are about to print in the terminal, as data:
 | `where` | optional | Overrides "Run this in the terminal where you started Plan2Code, in a new conversation:". |
 | `doc` | optional | Id of the document to offer as a Markdown download on the way out. Defaults to the first one. |
 | `console` | optional | Whether the copied text asks the next session to use the web console. Leave it out: it follows from the command. |
+| `commit` | optional | `true` on a finished `quick-task` or `implement` whose finish prints a git command puts a **Commit it now** button on the finished screen. The press arrives as `__commit` (below). |
 | `review` | optional | A finished `quick-task` only: `true` or `{ "label": "..." }` puts a **Review it now** button on the finished screen. `implement` offers the review on its sign-off card instead — before approval, where it can still change the outcome. See `building.md`. |
 
 **Write the bare command.** Every Plan2Code skill has a console — the
@@ -1379,6 +1382,7 @@ usual slices for up to about ten minutes:
 | --- | --- |
 | An action `{ "i": "__dashboard", "type": "dashboard" }` | `open --resume <sid> --no-open --workflow dashboard` (the resume re-runs the project scan), then ONE post with `"finish": null`, the `menu` payload and `"agent": { "status": "waiting" }`. Then read the dashboard skill (`~/.agents/skills/plan2code/SKILL.md`) and carry on as the dashboard from its "The menu" section, in this same conversation. The same action can also arrive before any finish, from the top bar's triangle: see Stop requests → "Back to the dashboard, mid-workflow". |
 | An action `__review` or `__done` | As `building.md` says (quick task only). |
+| An action `{ "i": "__commit", "type": "commit" }` | Commit it now: `open --resume <sid> --no-open --workflow git-commit` (no `finish`, no `stop`), then open `~/.agents/skills/plan2code-git-commit/SKILL.md` with your file-read tool and follow it from the top, as if the dashboard's Git commit card had been clicked. Leave the commit command you printed in the finish where it is for the terminal. |
 | `wait` exit `20` | The server is gone, not necessarily the tab. `open --resume <sid> --no-open --workflow <yours>`, then keep waiting: their Ask messages and the dashboard button still need you. Give up only when the resume itself fails. |
 | Nothing after about ten minutes | `stop` the server. The page swaps the button for the `/plan2code` command. |
 

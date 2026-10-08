@@ -58,7 +58,8 @@ export function effectiveInstruction(setting) {
 }
 
 export function defaultSetting(workflow) {
-  return { workflow, on: false, instruction: null, max: DEFAULT_MAX };
+  // On until the person turns it off, for the workflows that offer the switch.
+  return { workflow, on: offered(workflow), instruction: null, max: DEFAULT_MAX };
 }
 
 /**
