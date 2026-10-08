@@ -1259,7 +1259,7 @@ function runInteractive() {
         process.exit(result);
       }
 
-      // A > D: install the global `plan2code` command (opens the dashboard in Claude Code or Devin)
+      // A > D: install the global `plan2code` command (opens the dashboard in Claude Code, Devin or Codex)
       if (customInput === 'D') {
         rl.close();
         process.exit(await installLauncher());
@@ -2244,7 +2244,7 @@ function uninstallPlan2CodeBot() {
 }
 
 // ============================================================================
-// PLAN2CODE COMMAND (global `plan2code` → dashboard in Claude Code or Devin)
+// PLAN2CODE COMMAND (global `plan2code` → dashboard in Claude Code, Devin or Codex)
 // ============================================================================
 
 /**
@@ -2479,7 +2479,7 @@ function installDesktopShortcut(binDir, file) {
           P2C_FILE: file,
           P2C_SCRIPT: `${shim}.ps1`,
           P2C_ARGS: LAUNCHER_PICK_FOLDER_FLAG,
-          P2C_DESCRIPTION: 'Open the Plan2Code dashboard in Claude Code or Devin',
+          P2C_DESCRIPTION: 'Open the Plan2Code dashboard in Claude Code, Devin or Codex',
           P2C_ICON: icon,
         }
       );
@@ -2499,7 +2499,7 @@ function installDesktopShortcut(binDir, file) {
           `# ${LAUNCHER_MARKER}`,
           'Type=Application',
           `Name=${SHORTCUT_NAME}`,
-          'Comment=Open the Plan2Code dashboard in Claude Code or Devin',
+          'Comment=Open the Plan2Code dashboard in Claude Code, Devin or Codex',
           `Exec="${shim}" ${LAUNCHER_PICK_FOLDER_FLAG}`,
           ...(icon ? [`Icon=${icon}`] : []),
           'Terminal=true',
@@ -2596,7 +2596,7 @@ async function installLauncher({ quiet = false } = {}) {
   }
   // The shortcut is a convenience on top of the command, so a failure here only warns.
   await offerDesktopShortcut(binDir);
-  console.log(`  ${COLORS.YELLOW}${SYMBOLS.WARNING}${COLORS.RESET} The ${LAUNCHER_COMMAND} command starts the agent with permission prompts off (${COLORS.CYAN}--permission-mode bypassPermissions${COLORS.RESET} in Claude Code, ${COLORS.CYAN}bypass${COLORS.RESET} in Devin). Run ${COLORS.CYAN}claude /plan2code${COLORS.RESET} yourself if you want prompts.`);
+  console.log(`  ${COLORS.YELLOW}${SYMBOLS.WARNING}${COLORS.RESET} The ${LAUNCHER_COMMAND} command starts the agent with permission prompts off (${COLORS.CYAN}--permission-mode bypassPermissions${COLORS.RESET} in Claude Code, ${COLORS.CYAN}bypass${COLORS.RESET} in Devin, ${COLORS.CYAN}--dangerously-bypass-approvals-and-sandbox${COLORS.RESET} in Codex). Run ${COLORS.CYAN}claude /plan2code${COLORS.RESET} yourself if you want prompts.`);
   console.log('');
   // Inside install() the final summary prints the steps once, after everything else.
   if (!quiet) printGettingStarted({ commandInstalled: true });

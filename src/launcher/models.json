@@ -1,5 +1,5 @@
 {
-  "_note": "Curated model menu for the plan2code launcher. Maintained by the Plan2Code authors; every install overwrites this file. Users add models in User Preferences (kept in ~/.plan2code/models.json). Devin entries are explicit ids at Low, Medium and High effort only, verified against `devin models list`.",
+  "_note": "Curated model menu for the plan2code launcher. Maintained by the Plan2Code authors; every install overwrites this file. Users add models in User Preferences (kept in ~/.plan2code/models.json). Devin entries are explicit ids at Low, Medium and High effort only, verified against `devin models list`. Codex has no curated entries yet (its docs name none to verify): the launcher skips the model question for it. Pass --model <name> to choose one.",
   "claude": [
     {
       "id": "default",
@@ -111,5 +111,6 @@
       "id": "glm-5-3-high",
       "label": "GLM-5.3 High"
     }
-  ]
+  ],
+  "codex": []
 }
