@@ -13,9 +13,16 @@ All notable changes to Plan2Code will be documented in this file.
 - **web-console**: the Commit this? question in Git commit has a collapsed **Show the N files** table of every path and its state, so "15 files" can be read before you say yes.
 - **web-console**: a finished quick task or phase build gets a **Commit it now** button beside the printed git command. It starts Git commit in the same session, as if you had clicked its dashboard card.
 - **web-console**: the dashboard scan reports `isGit`, found from the filesystem without spawning git (linked worktrees count). The Git commit card stays clickable outside a repository and says "Not a git repository yet: it offers to start one". The skill has its own Planny pose and a Help entry.
+- **installer**: after an install it prints getting-started steps: how to start Plan2Code from the project you want to work in, and what to do if no agent CLI is installed yet.
+- **launcher**: the `plan2code` command can start Codex as well as the other agent CLIs. The Codex launch line follows Codex's documentation and has not been tried by hand.
+- **launcher**: when no agent CLI is installed, `plan2code` now explains how to get one and how to run the skill from it, instead of printing one line and exiting.
+- **docs**: the README, quick reference, docs site and package READMEs open with a "Before you start" block: Node.js 18+ is needed, start Plan2Code from your project, and the ways in. `scripts/test-getting-started.mjs` keeps them in step.
+- **web-console**: Help's "When something looks stuck" tab is now second, opens with a "Check this first" callout about a permission prompt waiting in the terminal, and lists four symptoms with a likely cause and what to do. The quiet and Not running status lines carry a "What to check" button that opens it.
+- **web-console**: every finished and paused screen shows a "Before you close this" panel: the tab is safe to close, why to restart the agent or start a new session, and the two ways to carry on.
 
 ### 🔧 Changed
 
+- **installer**: the menu is now Install, Uninstall, Advanced and Quit. The former Custom choices live under Advanced.
 - **web-console**: Subagents is now on by default for the skills that offer it, until you turn it off for a project and skill. A saved Off is kept.
 - **commits**: every commit Plan2Code suggests is now `<subject>`, a blank line, then `AI Assisted`. `commit-msg.mjs` no longer reads a ticket from the branch name and rejects `--ticket`.
 - **build**: `skills/` is no longer tracked. It is gitignored build output, rebuilt by the installer and `npm run build:skills`, as upstream does. `npm test` now runs `install.js --build-skills` instead of `--verify-skills`, so it fails on a broken source entry rather than on drift. `--verify-skills` stays as a diagnostic.

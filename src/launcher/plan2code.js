@@ -2,7 +2,7 @@
 'use strict';
 
 /**
- * `plan2code` — open the Plan2Code dashboard skill in Claude Code, Devin or Codex, in the
+ * `plan2code`: open the Plan2Code dashboard skill in Claude Code, Devin or Codex, in the
  * current directory.
  *
  * Runs one of:
