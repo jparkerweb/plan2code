@@ -1376,6 +1376,26 @@ h1 {
 .presets { margin-top: 12px; gap: 8px; }
 .presets-label { font-size: 12.5px; color: var(--ink-3); }
 
+/* "Before you close this": three rows on every finished screen. The icon sits
+   in a coloured circle and the label says the same thing, so no meaning rests
+   on colour alone. */
+.handoff-guide {
+  margin: 20px 0 0; padding: 14px 16px;
+  background: var(--panel-2); border: 1px solid var(--rule-2); border-radius: var(--radius);
+}
+.handoff-guide-title { margin: 0 0 10px; font: 600 15px/1.3 var(--serif); color: var(--ink); }
+.handoff-guide-rows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.handoff-guide-row { display: flex; align-items: flex-start; gap: 12px; font-size: 14px; color: var(--ink-2); }
+.handoff-guide-text { min-width: 0; overflow-wrap: anywhere; }
+.handoff-guide-label { color: var(--ink); }
+.handoff-guide-icon {
+  flex: none; display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; border-radius: 50%; border: 1.5px solid currentColor;
+}
+.handoff-guide-icon svg { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.handoff-guide-icon.is-safe { color: var(--ok); background: var(--ok-soft); }
+.handoff-guide-icon.is-fresh { color: var(--accent-ink); background: var(--accent); border-color: var(--accent); }
+.handoff-guide-icon.is-carry { color: var(--accent); background: var(--accent-soft); }
 .handoff-close { margin: 16px 0 0; color: var(--ink-2); }
 .handoff-tools { margin-top: 16px; }
 .handoff-unsent {
@@ -2360,6 +2380,26 @@ a.icon-btn { box-sizing: border-box; text-decoration: none; }
   border-radius: 4px;
   padding: 1px 5px;
   overflow-wrap: anywhere;
+}
+/* Help, "When something looks stuck": a calm callout and a symptom / cause / action list. */
+.help-panel .help-callout {
+  display: flex; align-items: flex-start; gap: 12px;
+  margin: 0 0 16px; padding: 12px 14px;
+  background: var(--stage-soft); border: 1px solid var(--stage); border-left-width: 4px; border-radius: var(--radius);
+}
+.help-callout-icon { flex: none; width: 22px; height: 22px; margin-top: 1px; fill: none; stroke: var(--stage); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.help-panel .help-callout-label { display: block; margin-bottom: 2px; font-size: 14px; color: var(--ink); }
+.help-panel .help-callout p { margin: 0; color: var(--ink); }
+.help-panel ol.help-rows { list-style: none; margin: 0 0 12px; padding: 0; }
+.help-row { margin: 0 0 8px; padding: 10px 12px; background: var(--panel-2); border: 1px solid var(--rule); border-radius: var(--radius); }
+.help-panel .help-row:last-child { margin-bottom: 0; }
+.help-row dl { display: grid; grid-template-columns: max-content 1fr; gap: 3px 12px; margin: 0; }
+.help-row dt { font-size: 12px; font-weight: 700; letter-spacing: 0.02em; text-transform: uppercase; color: var(--ink-2); padding-top: 1px; }
+.help-row dd { margin: 0; font-size: 13.5px; color: var(--ink); min-width: 0; overflow-wrap: anywhere; }
+@media (max-width: 520px) {
+  .help-row dl { grid-template-columns: 1fr; gap: 0; }
+  .help-row dt { margin-top: 6px; }
+  .help-row dt:first-child { margin-top: 0; }
 }
 .help-panel .handoff-command { margin: 0 0 12px; }
 .help-panel .handoff-command:last-child { margin-bottom: 0; }
@@ -3567,3 +3607,12 @@ a.icon-btn { box-sizing: border-box; text-decoration: none; }
   color: var(--accent);
   font-weight: 700;
 }
+
+/* "What to check", beside the quiet and Not running lines. A link in a button's clothes. */
+.status-help {
+  font: inherit; font-size: 0.92em; font-weight: 600;
+  color: var(--accent); background: none; border: 0; padding: 0 2px;
+  text-decoration: underline; text-underline-offset: 2px; cursor: pointer;
+}
+.status-help:hover { text-decoration-thickness: 2px; }
+.status-help:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 3px; }

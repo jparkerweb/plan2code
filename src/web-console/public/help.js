@@ -9,6 +9,7 @@ const tab = (id, label, diagram) => Object.freeze({ id, label, diagram });
 
 export const HELP_TABS = Object.freeze([
   tab("about", "What this page is", true),
+  tab("stuck", "When something looks stuck", true),
   tab("around", "Finding your way around", true),
   tab("workspace", "Your workspace", false),
   tab("planny", "Reading Planny", true),
@@ -22,7 +23,6 @@ export const HELP_TABS = Object.freeze([
   tab("subagents", "Helpers (subagents)", false),
   tab("ask", "Ask a quick question", false),
   tab("finishing", "Stopping and finishing", false),
-  tab("stuck", "When something looks stuck", true),
   tab("prefs", "Keyboard and preferences", false),
   tab("privacy", "Privacy and where things are saved", false),
 ]);

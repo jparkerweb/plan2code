@@ -1050,7 +1050,7 @@ test("help: every number the help quotes matches the code", () => {
   const panels = new Map(
     [...tpl.matchAll(/<section class="help-panel" data-tab="([^"]+)">([\s\S]*?)<\/section>/g)].map((m) => [m[1], m[2]])
   );
-  const firstSeven = HELP_TABS.slice(0, 7).map((t) => panels.get(t.id)).join("\n");
+  const firstEight = HELP_TABS.slice(0, 8).map((t) => panels.get(t.id)).join("\n");
   const used = [
     "closedTabMinutes",
     "maxLifeHours",
@@ -1062,7 +1062,7 @@ test("help: every number the help quotes matches the code", () => {
     "maxUploadMb",
     "cleanupDays",
   ];
-  for (const key of used) assert.ok(firstSeven.includes(`data-fact="${key}"`), `tabs 1 to 7 quote ${key}`);
+  for (const key of used) assert.ok(firstEight.includes(`data-fact="${key}"`), `tabs 1 to 8 quote ${key}`);
 });
 
 /* ---------------------------------------------------------- image uploads */
@@ -7047,4 +7047,57 @@ test("the Changelog card comes just before Git commit and is always on", () => {
   for (const scan of [{ hasAgents: true, isGit: false }, { hasAgents: false }, null]) {
     assert.equal(cardAvailability(entry, scan, null).on, true);
   }
+});
+
+/* ------------------------------------------- getting started: stuck help and the finished screen */
+
+const EM = String.fromCharCode(0x2014);
+const publicSource = (name) => fs.readFileSync(path.join(ROOT, "src", "web-console", "public", name), "utf8");
+
+test("help: the stuck tab is second, with a callout and four symptom rows before the diagram", () => {
+  assert.equal(HELP_TABS[0].id, "about");
+  assert.equal(HELP_TABS[1].id, "stuck");
+  const tpl = helpTemplate();
+  const panel = tpl.match(/<section class="help-panel" data-tab="stuck">([\s\S]*?)<\/section>/)[1];
+  assert.match(panel, /<div class="help-callout" role="note">/);
+  assert.match(panel, /Check this first/);
+  assert.match(panel, /look at your terminal/);
+  assert.equal((panel.match(/class="help-row"/g) || []).length, 4, "four symptom rows");
+  for (const part of ["You see", "Likely cause", "Do this"]) {
+    assert.equal((panel.match(new RegExp(`<dt>${part}</dt>`, "g")) || []).length, 4, `each row has "${part}"`);
+  }
+  assert.ok(panel.indexOf("help-rows") < panel.indexOf("help-figure"), "the rows come before the diagram");
+  assert.match(panel, /<svg class="help-callout-icon"[^>]*aria-hidden="true"/, "the icon is decoration");
+});
+
+test("status line: the quiet and Not running lines offer What to check, opening Help on the stuck tab", () => {
+  const app = publicSource("app.js");
+  assert.match(app, /help\.textContent = "What to check"/);
+  assert.match(app, /openHelpOn\("stuck"\)/);
+  // Exactly the three lines that carry it: the approval hint, the stale line and the Not running line.
+  const render = app.slice(app.indexOf("function renderStatus()"), app.indexOf("/* ---------------------------------------------------------------- brief */"));
+  assert.match(render, /Boolean\(hint\)/);
+  assert.equal((render.match(/^\s+true\n\s+\);/gm) || []).length, 2, "the stale and Not running lines pass check");
+});
+
+test("finished screen: every shape shows Before you close this, with three rows", () => {
+  const app = publicSource("app.js");
+  const handoff = app.slice(app.indexOf("function renderHandoff("));
+  assert.match(handoff.slice(0, handoff.indexOf("\n}\n")), /card\.appendChild\(renderCloseGuide\(shape\)\)/);
+  const guide = app.slice(app.indexOf("function renderCloseGuide("), app.indexOf("function renderHandoff("));
+  for (const label of ["Safe to close", "Start fresh", "Carry on", "Before you close this"]) {
+    assert.ok(guide.includes(label), `the guide says "${label}"`);
+  }
+  assert.match(guide, /shape === "paused"/, "a pause changes the Start fresh sentence");
+  assert.match(guide, /resume command/);
+});
+
+test("getting started: the new help, status and finished-screen strings carry no em dash", () => {
+  const app = publicSource("app.js");
+  const guide = app.slice(app.indexOf("const GUIDE_ICONS"), app.indexOf("function renderHandoff("));
+  assert.ok(!guide.includes(EM), "the close guide has no em dash");
+  const tpl = helpTemplate();
+  const stuck = tpl.match(/<section class="help-panel" data-tab="stuck">([\s\S]*?)<\/section>/)[1];
+  const fresh = stuck.slice(0, stuck.indexOf("<h4>Not running, or not connected?</h4>"));
+  assert.ok(!fresh.includes(EM), "the callout and rows have no em dash");
 });

@@ -1637,23 +1637,32 @@ function renderStatus() {
   // end right now, and it flies too: the ring and the stars mean the same
   // thing. Never on the stale or adrift lines: a turning ring beside
   // "has not checked in" would contradict the sentence it sits next to.
-  const say = (mood, line, count, spin) => {
+  // `check` adds a "What to check" button that opens Help on the stuck tab.
+  const say = (mood, line, count, spin, check) => {
     if (mood !== moodNow) {
       moodNow = mood;
       moodVar = Math.floor(Math.random() * MOOD_VARIANTS[mood]);
     }
     bot.setAttribute("class", `planny is-${mood} v${moodVar}`);
-    if (text.dataset.line !== line) {
-      text.dataset.line = line;
-      text.replaceChildren(
-        ...line.split(/\*\*(.+?)\*\*/).map((part, i) => {
-          if (i % 2 === 0) return document.createTextNode(part);
-          const key = document.createElement("strong");
-          key.className = "agent-key";
-          key.textContent = part;
-          return key;
-        })
-      );
+    const shown = check ? `${line}|check` : line;
+    if (text.dataset.line !== shown) {
+      text.dataset.line = shown;
+      const parts = line.split(/\*\*(.+?)\*\*/).map((part, i) => {
+        if (i % 2 === 0) return document.createTextNode(part);
+        const key = document.createElement("strong");
+        key.className = "agent-key";
+        key.textContent = part;
+        return key;
+      });
+      if (check) {
+        const help = document.createElement("button");
+        help.type = "button";
+        help.className = "status-help";
+        help.textContent = "What to check";
+        help.addEventListener("click", () => openHelpOn("stuck"));
+        parts.push(document.createTextNode(" "), help);
+      }
+      text.replaceChildren(...parts);
     }
     tick.textContent = count || "";
     $("agent-spin").hidden = !spin;
@@ -1710,13 +1719,16 @@ function renderStatus() {
     if (agentStale()) {
       return say(
         "work",
-        "Still working on it. Longer tasks can go a few minutes between updates. Your answers are saved. If it stays quiet for a long while, check your terminal (it may be waiting on a permission approval)."
+        "Still working on it. Longer tasks can go a few minutes between updates. Your answers are saved. If it stays quiet for a long while, check your terminal (it may be waiting on a permission approval).",
+        "",
+        false,
+        true
       );
     }
     // Same clock as agentStale(), so the soft line at 30 s hands over to the
     // stale message at two minutes on one timeline.
     const hint = agentLastSeen ? approvalHint(S.agent, Date.now() - Date.parse(agentLastSeen)) : "";
-    return say("work", hint || activity() || "Plan2Code is thinking…", fmtMs(workingMs()), true);
+    return say("work", hint || activity() || "Plan2Code is thinking…", fmtMs(workingMs()), true, Boolean(hint));
   }
   // Between pressing Send and the agent picking it up, the agent's own status
   // is still "waiting" because it has not started yet. Reading that as "your
@@ -1729,7 +1741,10 @@ function renderStatus() {
       "adrift",
       stranded()
         ? "Plan2Code is not running. Your answers are saved and waiting for it. If the terminal is idle, type **continue** there and it will pick them up; it may also be waiting for your permission approval."
-        : "Plan2Code is not running right now. Anything you answer here is saved. If the terminal is idle, type **continue** there to wake it; it may also be waiting for your permission approval."
+        : "Plan2Code is not running right now. Anything you answer here is saved. If the terminal is idle, type **continue** there to wake it; it may also be waiting for your permission approval.",
+      "",
+      false,
+      true
     );
   }
 
@@ -2312,6 +2327,69 @@ function paintMain(main) {
 // in prose and useless for the single action a screen exists to offer. A
 // finish with nothing left to run skips the last two beats: it gets a quiet
 // pointer at the dashboard instead of a Next step block.
+// "Before you close this": the three things someone looking at a finished
+// screen wonders. Every finish shape gets it; a pause says where the place is
+// kept, and a session with nothing left to run points at the dashboard alone.
+const GUIDE_ICONS = {
+  safe: ["M5 12.5 10 17.5 19 7"],
+  fresh: ["M19.5 12a7.5 7.5 0 1 1-2.4-5.5", "M19.5 4v4.5H15"],
+  carry: ["M5 12h13", "M13 6.5 18.5 12 13 17.5"],
+};
+
+function guideIcon(kind) {
+  const wrap = el("span", `handoff-guide-icon is-${kind}`);
+  wrap.setAttribute("aria-hidden", "true");
+  const svg = document.createElementNS(SVG_NS, "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("width", "16");
+  svg.setAttribute("height", "16");
+  for (const d of GUIDE_ICONS[kind]) {
+    const path = document.createElementNS(SVG_NS, "path");
+    path.setAttribute("d", d);
+    svg.appendChild(path);
+  }
+  wrap.appendChild(svg);
+  return wrap;
+}
+
+function renderCloseGuide(shape) {
+  const panel = el("section", "handoff-guide");
+  panel.setAttribute("aria-labelledby", "handoff-guide-title");
+  const title = el("h3", "handoff-guide-title", "Before you close this");
+  title.id = "handoff-guide-title";
+  panel.appendChild(title);
+  const rows = [
+    ["safe", "Safe to close", "This tab is only a window. Everything is saved on disk, and nothing here needs you."],
+    [
+      "fresh",
+      "Start fresh",
+      shape === "paused"
+        ? "Restart your agent window, or close the old session and start a new one. Your saved place is picked up by the resume command above."
+        : "Restart your agent window, or close the old session and start a new one. A new session starts from clean context. This one is full of this step's instructions, so continuing in it is slower and can confuse the next step.",
+    ],
+    [
+      "carry",
+      "Carry on",
+      shape === "all-done"
+        ? `In the new session, start from the dashboard with \`${DASHBOARD_COMMAND}\`.`
+        : `Paste the command above in the new session, or start from the dashboard with \`${DASHBOARD_COMMAND}\`.`,
+    ],
+  ];
+  const list = el("ul", "handoff-guide-rows");
+  for (const [kind, label, text] of rows) {
+    const row = el("li", "handoff-guide-row");
+    row.appendChild(guideIcon(kind));
+    const body = el("div", "handoff-guide-text");
+    body.appendChild(el("strong", "handoff-guide-label", label));
+    body.appendChild(document.createTextNode(" "));
+    body.appendChild(textWithCode("span", "handoff-guide-line", text));
+    row.appendChild(body);
+    list.appendChild(row);
+  }
+  panel.appendChild(list);
+  return panel;
+}
+
 function renderHandoff(fin) {
   const card = el("article", "card handoff");
   card.appendChild(el("p", "card-kicker", "Session ended"));
@@ -2402,13 +2480,15 @@ function renderHandoff(fin) {
     }
   }
 
+  card.appendChild(renderCloseGuide(shape));
+
   card.appendChild(
     el(
       "p",
       "handoff-close",
       reviewPending() === "open"
-        ? "The review is optional. Skip it and you can close this tab: nothing else here needs you."
-        : "Then you can close this tab. Nothing here needs you any more."
+        ? "The review is optional. Skip it and nothing else here needs you."
+        : "That is everything on this page."
     )
   );
 
