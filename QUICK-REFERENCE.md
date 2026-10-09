@@ -1,13 +1,20 @@
 # Plan2Code Quick Reference
 
+## Before you start
+
+- **Node.js 18 or newer.** Check with `node --version`. No Node? Get it from [nodejs.org](https://nodejs.org/) (the LTS download), or run `winget install OpenJS.NodeJS.LTS` on Windows, `brew install node` on macOS, or use `nvm` on Linux. Then open a new terminal.
+- **Start from your project.** Open your terminal in the project you want to work on (`cd` into it) before you run anything. Plan2Code works on the folder you start it in.
+- **Ways in.** `plan2code` (Claude Code, Devin or Codex), or type `/plan2code` in your agent (`$plan2code` in Codex).
+- **No agent yet?** Install Claude Code, Codex or Devin first.
+
 ## Launch
 
 The web console is the main way in: a local page where questions, documents, build progress and sign-offs live.
 
 | How                       | Command                              | What happens                                                                           |
 | ------------------------- | ------------------------------------ | -------------------------------------------------------------------------------------- |
-| From your project (shell) | `plan2code`                          | Opens Claude Code or Devin on the dashboard (`--cli claude` / `--cli devin` to choose) |
-| Inside any agent          | `/plan2code`                         | Opens the dashboard: a card for every skill, launched on the same page                 |
+| From your project (shell) | `plan2code`                          | Opens Claude Code, Devin or Codex on the dashboard (`--cli claude` / `devin` / `codex` to choose) |
+| Inside any agent          | `/plan2code` (`$plan2code` in Codex) | Opens the dashboard: a card for every skill, launched on the same page                 |
 | Install / update          | `npx --allow-git=all git+https://github.com/jparkerweb/plan2code.git` | Installs the skills and the `plan2code` command; re-run it to update |
 | Straight into a skill     | `/plan2code-1-plan --web` (any step) | Skips the "web console or terminal?" question and opens the page                       |
 

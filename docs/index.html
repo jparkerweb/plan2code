@@ -112,6 +112,11 @@ h3 { font-size: 1.45rem; margin: 8px 0; }
 .copy .tick { display: none; }
 .copy.-done .clip { display: none; }
 .copy.-done .tick { display: block; }
+.before { margin: 0 auto 20px; max-width: 640px; text-align: left; background: var(--panel); border: 1px solid var(--rule-2); border-radius: var(--radius); padding: 14px 18px; font-size: 15px; }
+.before h3 { font-size: 1.05rem; margin: 0 0 8px; }
+.before ul { margin: 0; padding-left: 20px; color: var(--ink-2); }
+.before li { margin: 4px 0; }
+.before strong { color: var(--ink); }
 .then { margin: 12px 0 0; color: var(--ink-2); font-size: 15px; }
 
 /* Hero: centered headline, then the dashboard at full width. */
@@ -215,6 +220,14 @@ footer a { color: inherit; }
     </svg>
     <h1 id="hero-title">Plan and build with your AI agent, on one page.</h1>
     <p class="lede">Plan2Code asks the questions, drafts the plan and builds it one phase at a time. You answer and approve in your browser, and the specs land in your repo.</p>
+    <div class="before" id="before-start">
+      <h3>Before you start</h3>
+      <ul>
+        <li><strong>Node.js 18 or newer.</strong> Check with <code>node --version</code>. No Node? Get it from <a href="https://nodejs.org/">nodejs.org</a> (the LTS download), or run <code>winget install OpenJS.NodeJS.LTS</code> on Windows, <code>brew install node</code> on macOS, or use <code>nvm</code> on Linux. Then open a new terminal.</li>
+        <li><strong>Start from your project.</strong> Open your terminal in the project you want to work on (<code>cd</code> into it) before you run anything. Plan2Code works on the folder you start it in.</li>
+        <li><strong>No agent yet?</strong> Install Claude Code, Codex or Devin first.</li>
+      </ul>
+    </div>
     <div class="cmd">
       <pre id="install-cmd"><span aria-hidden="true">$ </span>npx --allow-git=all git+https://github.com/jparkerweb/plan2code.git</pre>
       <button class="copy" type="button" aria-label="Copy the install command">
@@ -223,7 +236,7 @@ footer a { color: inherit; }
         <span class="label">Copy</span>
       </button>
     </div>
-    <p class="then">then run <code>plan2code</code> in any project.</p>
+    <p class="then">then, from your project, run <code>plan2code</code> (Claude Code, Devin or Codex), or type <code>/plan2code</code> in your agent (<code>$plan2code</code> in Codex).</p>
   </div>
 </section>
 
@@ -356,7 +369,15 @@ footer a { color: inherit; }
 <section class="s alt close" id="install" aria-labelledby="install-title">
   <div class="narrow">
     <h2 id="install-title">Install</h2>
-    <p class="muted">Needs Node.js 18 or later. Run it again any time to update.</p>
+    <p class="muted">Run it again any time to update.</p>
+    <div class="before" id="before-start-2">
+      <h3>Before you start</h3>
+      <ul>
+        <li><strong>Node.js 18 or newer.</strong> Check with <code>node --version</code>. No Node? Get it from <a href="https://nodejs.org/">nodejs.org</a> (the LTS download), or run <code>winget install OpenJS.NodeJS.LTS</code> on Windows, <code>brew install node</code> on macOS, or use <code>nvm</code> on Linux. Then open a new terminal.</li>
+        <li><strong>Start from your project.</strong> Open your terminal in the project you want to work on (<code>cd</code> into it) before you run anything. Plan2Code works on the folder you start it in.</li>
+        <li><strong>No agent yet?</strong> Install Claude Code, Codex or Devin first.</li>
+      </ul>
+    </div>
     <div class="cmd">
       <pre><span aria-hidden="true">$ </span>npx --allow-git=all git+https://github.com/jparkerweb/plan2code.git</pre>
       <button class="copy" type="button" aria-label="Copy the install command">
@@ -365,7 +386,7 @@ footer a { color: inherit; }
         <span class="label">Copy</span>
       </button>
     </div>
-    <p class="then">then run <code>plan2code</code> in any project.</p>
+    <p class="then">then, from your project, run <code>plan2code</code> (Claude Code, Devin or Codex), or type <code>/plan2code</code> in your agent (<code>$plan2code</code> in Codex).</p>
   </div>
 </section>
 

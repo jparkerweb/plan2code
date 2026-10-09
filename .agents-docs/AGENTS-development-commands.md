@@ -15,7 +15,7 @@ node install.js
 npm run build:skills
 
 # Full check (about 70s): char limits, skills/ build, browser-module parse check,
-# dashboard skill-table check, web console + launcher node:test suites
+# dashboard skill-table check, web console + launcher + getting-started node:test suites
 npm test
 
 # One web console or launcher test

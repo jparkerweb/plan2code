@@ -10,6 +10,8 @@ Plan2Code is a structured 4-step workflow methodology for AI-assisted software d
 **Author:** Justin Parker
 **License:** MIT
 
+Plan2Code is started from the project the person works in (`cd` into it, then run `plan2code`), not from this repository; every newcomer doc says so, next to the Node.js 18+ requirement.
+
 ## How to Use This File
 
 This file is an index — each section below contains a brief summary and a link to a detail file in `.agents-docs/`. Read only the sections relevant to your current task. Full details (commands, tables, file lists) are in the linked files. The sections "Project Overview", "How to Use This File", "Mascot", and "Keeping this file current" / "Failure log" are fully inline here and are never split into `.agents-docs/`.

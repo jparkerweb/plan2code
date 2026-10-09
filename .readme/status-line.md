@@ -36,7 +36,7 @@ The icons down the left are Planny, the project mascot.
 ## Install
 
 ```bash
-node install.js     # A  (everything + dev tools)  — or  C → S  (status line only)
+node install.js     # A → E  (everything + dev tools)  or  A → S  (status line only)
 ```
 
 That copies the script to `~/.claude/plan2code-statusline.js`, writes a default config to
