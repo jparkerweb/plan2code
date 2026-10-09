@@ -10,6 +10,8 @@ Plan2Code is a structured 4-step workflow methodology for AI-assisted software d
 **Author:** Justin Parker
 **License:** MIT
 
+Plan2Code is started from the project the person works in (`cd` into it, then run `plan2code`), not from this repository; every newcomer doc says so, next to the Node.js 18+ requirement.
+
 ## How to Use This File
 
 This file is an index — each section below contains a brief summary and a link to a detail file in `.agents-docs/`. Read only the sections relevant to your current task. Full details (commands, tables, file lists) are in the linked files. The sections "Project Overview", "How to Use This File", "Mascot", and "Keeping this file current" / "Failure log" are fully inline here and are never split into `.agents-docs/`.
@@ -93,3 +95,5 @@ When you make a mistake, get corrected, or discover something about this codebas
 - After a sync merge, run `npm test` before trusting a "clean" file: when upstream and plan2code fixed the same bug, `git merge-file` keeps both copies without a conflict (a sync once left `let pattern` declared twice in `app.js`, caught only by `parse-check`).
 - When extracting upstream files in Git Bash, run `git show <ref>:<path>` with `MSYS_NO_PATHCONV=1` and `C:/` style paths (never `/c/`): path conversion rewrites `origin/main:.readme/x.md` into `origin\main;.readme\x.md`, the show fails, and the merge silently runs against an empty "theirs". Check every extracted file is non-empty before merging.
 - After a sync, grep the result for the upstream owner slug and company name in any case (the `/sync-repo` body lists them): the rebrand map only rewrites URLs, so a bare owner slug once slipped through into `feedback-payload.mjs` (and its test) until it was fixed by hand to `jparkerweb/plan2code`. No upstream name may appear in plain text anywhere in this repo.
+- Keep plan2code's ticket-free `commit-msg.mjs` (`<subject>`, `AI Assisted`) in every `/sync-repo`: upstream's ticket-from-branch rule was ported by mistake once and removed in v2.6.0.
+- When a new first-run dialog is added to the web console, set its seen flag in `scripts/capture-screenshots.mjs`'s `looks.json` too: the Welcome dialog once covered the regenerated dashboard screenshots until `welcomeSeen: true` was added.

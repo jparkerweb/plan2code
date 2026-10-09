@@ -247,6 +247,8 @@ export const WORKFLOW_LABEL = {
   "quick-task": "Quick task",
   finalize: "Wrapping up",
   handoff: "Handoff",
+  "git-commit": "Git commit",
+  changelog: "Changelog",
 };
 
 export function workflowLabel(workflow) {
@@ -271,6 +273,8 @@ export const CONSOLE_WORKFLOWS = [
   "/plan2code-review",
   "/plan2code-4-finalize",
   "/plan2code-handoff",
+  "/plan2code-git-commit",
+  "/plan2code-changelog",
 ];
 
 // Rides on the end of the command as part of the skill's argument. Every
@@ -434,6 +438,10 @@ export function resumeCommand({ workflow, specDir } = {}) {
       return withOverview("/plan2code-4-finalize");
     case "handoff":
       return "/plan2code-handoff";
+    case "git-commit":
+      return "/plan2code-git-commit";
+    case "changelog":
+      return "/plan2code-changelog";
     default:
       return dir ? `/plan2code-0-pathfinder ${dir}/pathfinder` : "/plan2code-0-pathfinder";
   }
@@ -448,6 +456,7 @@ export const REVIEW_REPLY =
   "Review what was just built before I go: run the focused code review on this session's changes, here on the page.";
 export const DONE_REPLY = "No review, thanks. I am done: close the session.";
 export const DASHBOARD_REPLY = "Take me back to the dashboard, right here in this session.";
+export const COMMIT_REPLY = "Commit what was just built: start Git commit, right here in this session.";
 
 // Shown under the Back to the dashboard button: the press picks up in the same
 // conversation, which carries a long skill's context into the next one.
@@ -461,6 +470,16 @@ export const DASHBOARD_NOTE =
  */
 export function dashboardOffer(fin) {
   return Boolean(fin && fin.dashboard === true && !finishPaused(fin));
+}
+
+/**
+ * Whether a finish offers to commit what was just built from this page. The
+ * agent opts in with `finish.commit: true` on a build that ended with a git
+ * command; the press starts Git commit in the same session, as the dashboard's
+ * card does. A pause never offers it.
+ */
+export function commitOffer(fin) {
+  return Boolean(fin && fin.commit === true && !finishPaused(fin));
 }
 
 /**
@@ -638,6 +657,28 @@ export const SKILL_CATALOG = [
     about:
       "Writes down everything a new session would need, as a single document: what was decided, what is done, what is left. Use it when a conversation got long, a machine changed, or tomorrow-you deserves the context today-you has.",
   },
+  {
+    skill: "plan2code-changelog",
+    command: "/plan2code-changelog",
+    workflow: "changelog",
+    group: "extra",
+    chip: "Utility",
+    title: "Changelog",
+    blurb: "Checks the CHANGELOG version against the main branch and suggests entries for what is new.",
+    about:
+      "Works out the right version from the default branch, then compares your branch with the latest CHANGELOG entry and suggests the entries it is missing. You edit them before anything is written, it keeps package.json in step, and it offers to run Git commit next. If the newest version is not released or on another branch yet, it adds to that entry instead of starting a new one.",
+  },
+  {
+    skill: "plan2code-git-commit",
+    command: "/plan2code-git-commit",
+    workflow: "git-commit",
+    group: "extra",
+    chip: "Utility",
+    title: "Git commit",
+    blurb: "Commits your changes with a clear message, suggests a split when it is really two jobs, and offers to push.",
+    about:
+      "Reads what changed and drafts the commit message for you to approve. On the main branch it offers a new one first, and when the work is really two jobs it suggests splitting it into separate commits. It asks before every commit and every push, and never force-pushes.",
+  },
 ];
 
 // A workflow by the name its dashboard card gives it ("Implement"), for the
@@ -660,6 +701,8 @@ export const START_POSES = [
   "quick-task",
   "review",
   "handoff",
+  "git-commit",
+  "changelog",
 ];
 
 const POSE_ALIASES = { "init-update": "init", "revise-plan": "plan", "implement-review": "implement" };
@@ -699,19 +742,23 @@ const NEXT_FOR_STATE = {
 };
 
 const ON = { on: true };
+export const GIT_INIT_NOTE = "Not a git repository yet: it offers to start one";
+export const GIT_CLEAN_REASON = "Nothing to commit: no changed or new files";
+export const pendingNote = (n) => `${n} file${n === 1 ? "" : "s"} to commit`;
 const off = (reason) => ({ on: false, reason });
 
 /**
  * Whether a catalog card is clickable for the current picker selection.
  *
- * `scan` is the server's project scan ({ hasAgents, specs }); `sel` is the
+ * `scan` is the server's project scan ({ hasAgents, isGit, pending, specs }); `sel` is the
  * picked spec object or null for "start from scratch". A spec whose files
  * match no pipeline shape ("unrecognized") behaves like no spec at all for
  * availability — but its folder still goes along on a Pathfinder or Plan
  * launch, since the files may be reference docs.
  *
- * Returns { on, reason?, next? } — `reason` is the one line a greyed card
- * shows, `next` marks the state's natural step.
+ * Returns { on, reason?, note?, next? } — `reason` is the one line a greyed card
+ * shows, `note` the one line a clickable card shows when there is something to
+ * know before launching it, `next` marks the state's natural step.
  */
 export function cardAvailability(entry, scan, sel) {
   const hasAgents = Boolean(scan && scan.hasAgents);
@@ -726,6 +773,14 @@ export function cardAvailability(entry, scan, sel) {
     case "plan2code-quick-task":
     case "plan2code-review":
     case "plan2code-handoff":
+    case "plan2code-changelog":
+      return ON;
+    case "plan2code-git-commit":
+      if (scan && scan.isGit === false) return { on: true, note: GIT_INIT_NOTE };
+      // `pending` is null when git could not say: stay clickable then.
+      if (scan && scan.isGit && Number.isInteger(scan.pending)) {
+        return scan.pending === 0 ? off(GIT_CLEAN_REASON) : { on: true, note: pendingNote(scan.pending) };
+      }
       return ON;
     case "plan2code-0-pathfinder":
       if (!state || state === "exploring") return { ...ON, next };
@@ -763,7 +818,14 @@ export function cardPresentation(entry, scan, sel, menu = {}) {
   const recommendation = requested && cardAvailability(requested, scan, sel).on ? requested.skill : null;
   const recommended = availability.on && (recommendation ? entry.skill === recommendation : availability.next);
   const supplied = initial && menu.details && typeof menu.details[entry.skill] === "string" ? menu.details[entry.skill] : "";
-  const detail = availability.on && supplied ? supplied : !initial && availability.next && sel && sel.detail ? sel.detail : "";
+  const detail =
+    availability.on && supplied
+      ? supplied
+      : availability.on && availability.note
+        ? availability.note
+        : !initial && availability.next && sel && sel.detail
+          ? sel.detail
+          : "";
   return { ...availability, recommended, detail };
 }
 

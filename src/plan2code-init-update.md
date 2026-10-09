@@ -271,6 +271,6 @@ Agent: Updated CLAUDE.md. AGENTS.md is your single source of truth now!
 
 Work summary — tell user: sections updated, entries added/changed, files modified (`AGENTS.md` or `.agents-docs/` files).
 
-Suggested commit: the `command` from `commit-msg.mjs --subject "docs: update AGENTS.md with new learnings"` (exit 4 `no-ticket`: show it with `<JIRA-Ticket-ID>` for the user to fill in).
+Suggested commit: the `command` from `commit-msg.mjs --subject "docs: update AGENTS.md with new learnings"`.
 
 Returning context: Run `/plan2code-init-update` again to make additional updates.

@@ -14,8 +14,8 @@ node install.js
 # Regenerate skills/ from src/ (non-interactive)
 npm run build:skills
 
-# Full check (about 70s): char limits, skills/ drift, browser-module parse check,
-# dashboard skill-table check, web console + launcher node:test suites
+# Full check (about 70s): char limits, skills/ build, browser-module parse check,
+# dashboard skill-table check, web console + launcher + getting-started node:test suites
 npm test
 
 # One web console or launcher test
@@ -29,7 +29,7 @@ node scripts/bench-web-console.mjs [--runs 7] [--workflow dashboard]
 # before committing: right screen, both themes, no username or home path in frame.
 npm i --no-save puppeteer-core                         # once; never added to package.json
 node scripts/capture-screenshots.mjs                   # every screen
-node scripts/capture-screenshots.mjs --only dashboard  # one screen
+node scripts/capture-screenshots.mjs --only dashboard  # one screen (dashboard-utilities scrolls to the utility cards)
 
 # Plan2Code Loop
 cd plan2code-loop && npm install   # First time setup
@@ -64,13 +64,12 @@ The root `npm test` does not run the metrics or bot vitest suites; run them in t
 
 | Option | Action |
 |--------|--------|
-| `I` | Install the Plan2Code skills globally via the `skills` CLI, plus the global `plan2code` command (opens the dashboard in Claude Code or Devin) — no dev tools |
-| `A` | Everything in `I` plus every dev tool: `plan2code-loop`, `plan2code-bot`, `plan2code-metrics`, and the Claude Code status line |
+| `I` | Install the Plan2Code skills globally via the `skills` CLI, plus the global `plan2code` command (opens the dashboard in Claude Code, Devin or Codex), then print the getting-started steps. No dev tools |
 | `U` | Uninstall Plan2Code: skills + `plan2code` command + `plan2code-loop` + `plan2code-metrics` + `plan2code-bot` + Claude Code status line (confirmation required) |
-| `C` | Open CUSTOM sub-menu |
+| `A` | Open the ADVANCED sub-menu |
 | `Q` | Quit |
 
-**CUSTOM sub-menu (`C`):**
+**ADVANCED sub-menu (`A`):**
 
 | Option | Action |
 |--------|--------|
@@ -80,6 +79,7 @@ The root `npm test` does not run the metrics or bot vitest suites; run them in t
 | `S` | Install Claude Code status line only |
 | `B` | Install plan2code-bot CLI only |
 | `D` | Install the global `plan2code` command only |
+| `E` | Everything: the skills, the `plan2code` command and every dev tool (`plan2code-loop`, `plan2code-bot`, `plan2code-metrics`, the Claude Code status line) |
 | `Q` | Return to main menu |
 
 ## Non-Interactive Flags
@@ -89,7 +89,7 @@ The root `npm test` does not run the metrics or bot vitest suites; run them in t
 | Flag | Action |
 |------|--------|
 | `--build-skills` | Regenerate `skills/` from `src/`, pruning stale skills and reference files |
-| `--verify-skills` | Compare committed `skills/` with `src/`; exits 1 on drift and is run by `npm test` |
+| `--verify-skills` | Diff local `skills/` against `src/`; exits 1 on drift. Diagnostic only, the installer rebuilds anyway |
 
 ## How the Installer Works
 
@@ -97,7 +97,7 @@ The root `npm test` does not run the metrics or bot vitest suites; run them in t
 2. **Checks the skills CLI is reachable** with `npx --yes skills --version`.
 3. **Sweeps pre-2.2 install paths** and removes installed `plan2code-*` skills so renamed or retired prompts cannot survive as orphans.
 4. **Delegates installation** to `npx --yes skills add "<repo>/skills" -g -s <skill names> -y`.
-5. **Installs the global `plan2code` command** (only when step 4 succeeded). Custom → `L` runs the same flow without `-g` and without the launcher.
+5. **Installs the global `plan2code` command** (only when step 4 succeeded). Advanced → `L` runs the same flow without `-g` and without the launcher.
 
 The skills CLI owns distribution from step 4 onward. It stores canonical skills under `~/.agents/skills/` and links them into agents that maintain their own skill directory. Plan2Code no longer maintains platform-specific output formats.
 
@@ -128,7 +128,7 @@ See the `skills/` build-artifact gotcha in [Code Style & Gotchas](./AGENTS-code-
 1. Edit the source file under `src/`.
 2. Run `npm run build:skills`.
 3. Test the workflow in an AI tool.
-4. Commit regenerated `skills/` beside the source change; `npm test` fails on drift.
+4. `skills/` is gitignored, so only the `src/` change is committed.
 5. Never edit `skills/` by hand because the next build overwrites it.
 
 ## Adding a New Workflow Prompt / Skill

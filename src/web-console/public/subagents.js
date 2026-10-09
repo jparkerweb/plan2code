@@ -58,7 +58,8 @@ export function effectiveInstruction(setting) {
 }
 
 export function defaultSetting(workflow) {
-  return { workflow, on: false, instruction: null, max: DEFAULT_MAX };
+  // On until the person turns it off, for the workflows that offer the switch.
+  return { workflow, on: offered(workflow), instruction: null, max: DEFAULT_MAX };
 }
 
 /**
@@ -185,7 +186,7 @@ export function checkHelpers(list) {
 // are tested without a browser. `frame` is the state frame's `subagents`
 // block; app.js only renders what these say.
 
-export const CHECKIN_LINE = "Helpers report through Plan2Code, so their progress shows here at its check-ins, not live.";
+export const CHECKIN_LINE = "Helpers report through Plan2Code, so their progress is shown as it checks in, not live.";
 
 const STATE_LABELS = Object.freeze({ running: "Running", done: "Done", failed: "Failed" });
 

@@ -16,7 +16,7 @@ One thing to remember: **collect after every finished spec.** Everything else is
 
 ```bash
 # Install once, from the plan2code root
-node install.js     # A  (everything + dev tools)  — or  C → M  (metrics only)
+node install.js     # A → E  (everything + dev tools)  or  A → M  (metrics only)
 
 # After finishing a spec (steps 1–4)
 cd your-project

@@ -25,7 +25,7 @@ hand, or the reverse — the checkboxes are the only handoff.
 
 ```bash
 # From the plan2code root directory
-node install.js     # A  (everything + dev tools)  — or  C → O  (loop only)
+node install.js     # A → E  (everything + dev tools)  or  A → O  (loop only)
 ```
 
 ## Run

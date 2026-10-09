@@ -26,7 +26,9 @@ import {
   choiceAnswer,
   DASHBOARD_COMMAND,
   DASHBOARD_NOTE,
+  COMMIT_REPLY,
   DASHBOARD_REPLY,
+  commitOffer,
   dashboardOffer,
   DONE_REPLY,
   finishPaused,
@@ -567,7 +569,7 @@ let cardMarks = null;
 function fresh() {
   // `stopping` is set once a stop request has been accepted, and kept here so
   // a reload in the middle of wrapping up comes back to the same screen.
-  // `afterBuild` is "review", "done" or "dashboard" once a finished session's
+  // `afterBuild` is "review", "commit", "done" or "dashboard" once a finished session's
   // offer has been answered, so the buttons do not come back on a reload.
   // `homeward` is set once the top bar's Back to the dashboard request has
   // been accepted mid-workflow: { at }. The resume through the dashboard
@@ -717,7 +719,7 @@ const selSpec = () => {
 // the finish goes away, which is the agent taking the review up.
 function reviewPending() {
   const fin = finish();
-  if (!fin || !reviewOffer(fin) || local.afterBuild === "done" || local.afterBuild === "dashboard") return null;
+  if (!fin || !reviewOffer(fin) || ["done", "dashboard", "commit"].includes(local.afterBuild)) return null;
   if (local.afterBuild === "review") return gone ? null : "asked";
   return gone ? null : "open";
 }
@@ -1635,23 +1637,32 @@ function renderStatus() {
   // end right now, and it flies too: the ring and the stars mean the same
   // thing. Never on the stale or adrift lines: a turning ring beside
   // "has not checked in" would contradict the sentence it sits next to.
-  const say = (mood, line, count, spin) => {
+  // `check` adds a "What to check" button that opens Help on the stuck tab.
+  const say = (mood, line, count, spin, check) => {
     if (mood !== moodNow) {
       moodNow = mood;
       moodVar = Math.floor(Math.random() * MOOD_VARIANTS[mood]);
     }
     bot.setAttribute("class", `planny is-${mood} v${moodVar}`);
-    if (text.dataset.line !== line) {
-      text.dataset.line = line;
-      text.replaceChildren(
-        ...line.split(/\*\*(.+?)\*\*/).map((part, i) => {
-          if (i % 2 === 0) return document.createTextNode(part);
-          const key = document.createElement("strong");
-          key.className = "agent-key";
-          key.textContent = part;
-          return key;
-        })
-      );
+    const shown = check ? `${line}|check` : line;
+    if (text.dataset.line !== shown) {
+      text.dataset.line = shown;
+      const parts = line.split(/\*\*(.+?)\*\*/).map((part, i) => {
+        if (i % 2 === 0) return document.createTextNode(part);
+        const key = document.createElement("strong");
+        key.className = "agent-key";
+        key.textContent = part;
+        return key;
+      });
+      if (check) {
+        const help = document.createElement("button");
+        help.type = "button";
+        help.className = "status-help";
+        help.textContent = "What to check";
+        help.addEventListener("click", () => openHelpOn("stuck"));
+        parts.push(document.createTextNode(" "), help);
+      }
+      text.replaceChildren(...parts);
     }
     tick.textContent = count || "";
     $("agent-spin").hidden = !spin;
@@ -1667,6 +1678,7 @@ function renderStatus() {
     // offer has something left to press here, and only while the server is
     // there to take the press.
     if (local.afterBuild === "dashboard" && !gone) return say("work", "Opening the dashboard…", "", true);
+    if (local.afterBuild === "commit" && !gone) return say("work", "Opening Git commit…", "", true);
     const offer = reviewPending();
     if (dashboardLive(finish()) && !gone && !offer) {
       return say("point", "Done. Head back to the dashboard, or close this tab.");
@@ -1707,13 +1719,16 @@ function renderStatus() {
     if (agentStale()) {
       return say(
         "work",
-        "Still working on it. Longer tasks can go a few minutes between updates. Your answers are saved. If it stays quiet for a long while, check your terminal (it may be waiting on a permission approval)."
+        "Still working on it. Longer tasks can go a few minutes between updates. Your answers are saved. If it stays quiet for a long while, check your terminal (it may be waiting on a permission approval).",
+        "",
+        false,
+        true
       );
     }
     // Same clock as agentStale(), so the soft line at 30 s hands over to the
     // stale message at two minutes on one timeline.
     const hint = agentLastSeen ? approvalHint(S.agent, Date.now() - Date.parse(agentLastSeen)) : "";
-    return say("work", hint || activity() || "Plan2Code is thinking…", fmtMs(workingMs()), true);
+    return say("work", hint || activity() || "Plan2Code is thinking…", fmtMs(workingMs()), true, Boolean(hint));
   }
   // Between pressing Send and the agent picking it up, the agent's own status
   // is still "waiting" because it has not started yet. Reading that as "your
@@ -1726,7 +1741,10 @@ function renderStatus() {
       "adrift",
       stranded()
         ? "Plan2Code is not running. Your answers are saved and waiting for it. If the terminal is idle, type **continue** there and it will pick them up; it may also be waiting for your permission approval."
-        : "Plan2Code is not running right now. Anything you answer here is saved. If the terminal is idle, type **continue** there to wake it; it may also be waiting for your permission approval."
+        : "Plan2Code is not running right now. Anything you answer here is saved. If the terminal is idle, type **continue** there to wake it; it may also be waiting for your permission approval.",
+      "",
+      false,
+      true
     );
   }
 
@@ -2309,6 +2327,69 @@ function paintMain(main) {
 // in prose and useless for the single action a screen exists to offer. A
 // finish with nothing left to run skips the last two beats: it gets a quiet
 // pointer at the dashboard instead of a Next step block.
+// "Before you close this": the three things someone looking at a finished
+// screen wonders. Every finish shape gets it; a pause says where the place is
+// kept, and a session with nothing left to run points at the dashboard alone.
+const GUIDE_ICONS = {
+  safe: ["M5 12.5 10 17.5 19 7"],
+  fresh: ["M19.5 12a7.5 7.5 0 1 1-2.4-5.5", "M19.5 4v4.5H15"],
+  carry: ["M5 12h13", "M13 6.5 18.5 12 13 17.5"],
+};
+
+function guideIcon(kind) {
+  const wrap = el("span", `handoff-guide-icon is-${kind}`);
+  wrap.setAttribute("aria-hidden", "true");
+  const svg = document.createElementNS(SVG_NS, "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("width", "16");
+  svg.setAttribute("height", "16");
+  for (const d of GUIDE_ICONS[kind]) {
+    const path = document.createElementNS(SVG_NS, "path");
+    path.setAttribute("d", d);
+    svg.appendChild(path);
+  }
+  wrap.appendChild(svg);
+  return wrap;
+}
+
+function renderCloseGuide(shape) {
+  const panel = el("section", "handoff-guide");
+  panel.setAttribute("aria-labelledby", "handoff-guide-title");
+  const title = el("h3", "handoff-guide-title", "Before you close this");
+  title.id = "handoff-guide-title";
+  panel.appendChild(title);
+  const rows = [
+    ["safe", "Safe to close", "This tab is only a window. Everything is saved on disk, and nothing here needs you."],
+    [
+      "fresh",
+      "Start fresh",
+      shape === "paused"
+        ? "Restart your agent window, or close the old session and start a new one. Your saved place is picked up by the resume command above."
+        : "Restart your agent window, or close the old session and start a new one. A new session starts from clean context. This one is full of this step's instructions, so continuing in it is slower and can confuse the next step.",
+    ],
+    [
+      "carry",
+      "Carry on",
+      shape === "all-done"
+        ? `In the new session, start from the dashboard with \`${DASHBOARD_COMMAND}\`.`
+        : `Paste the command above in the new session, or start from the dashboard with \`${DASHBOARD_COMMAND}\`.`,
+    ],
+  ];
+  const list = el("ul", "handoff-guide-rows");
+  for (const [kind, label, text] of rows) {
+    const row = el("li", "handoff-guide-row");
+    row.appendChild(guideIcon(kind));
+    const body = el("div", "handoff-guide-text");
+    body.appendChild(el("strong", "handoff-guide-label", label));
+    body.appendChild(document.createTextNode(" "));
+    body.appendChild(textWithCode("span", "handoff-guide-line", text));
+    row.appendChild(body);
+    list.appendChild(row);
+  }
+  panel.appendChild(list);
+  return panel;
+}
+
 function renderHandoff(fin) {
   const card = el("article", "card handoff");
   card.appendChild(el("p", "card-kicker", "Session ended"));
@@ -2318,8 +2399,13 @@ function renderHandoff(fin) {
   // A finished build offers its review first, above the next step, because it
   // is the one thing on this screen that has to happen before they leave.
   const offer = reviewOffer(fin);
-  if (offer && local.afterBuild !== "done" && local.afterBuild !== "dashboard") {
+  if (offer && !["done", "dashboard", "commit"].includes(local.afterBuild)) {
     card.appendChild(renderReviewOffer(offer));
+  }
+
+  // The commit, right after the review: one press starts Git commit here.
+  if (commitOffer(fin) && !gone && local.afterBuild !== "done" && local.afterBuild !== "dashboard") {
+    card.appendChild(renderCommitOffer());
   }
 
   // Three shapes: a next step to run, a pause with its resume command, or a
@@ -2394,13 +2480,15 @@ function renderHandoff(fin) {
     }
   }
 
+  card.appendChild(renderCloseGuide(shape));
+
   card.appendChild(
     el(
       "p",
       "handoff-close",
       reviewPending() === "open"
-        ? "The review is optional. Skip it and you can close this tab: nothing else here needs you."
-        : "Then you can close this tab. Nothing here needs you any more."
+        ? "The review is optional. Skip it and nothing else here needs you."
+        : "That is everything on this page."
     )
   );
 
@@ -2500,6 +2588,31 @@ function renderReviewOffer(offer) {
   return box;
 }
 
+// Commit what was just built without leaving the page. Like the review button
+// it is a request to an agent still in its wait loop, so it is only drawn
+// while the server is there; the command printed below stays for the terminal.
+function renderCommitOffer() {
+  const box = el("section", "review-offer");
+  box.appendChild(el("p", "handoff-label", "Commit it"));
+  box.appendChild(
+    el(
+      "p",
+      "review-offer-text",
+      "Git commit reads what changed, drafts the message and asks before it commits or pushes. " +
+        "It opens right here, the same as the dashboard's Git commit card."
+    )
+  );
+  const asked = local.afterBuild === "commit";
+  const row = el("div", "btn-row");
+  const go = el("button", "btn primary", asked ? "Opening Git commit…" : "Commit it now");
+  go.type = "button";
+  go.disabled = asked || pendingResult;
+  go.addEventListener("click", () => sendAfterBuild("commit"));
+  row.appendChild(go);
+  box.appendChild(row);
+  return box;
+}
+
 // The way back to the dashboard, on a finished screen whose agent opted in
 // with `finish.dashboard`. Like the review button it is a request to an agent
 // still in its wait loop, so once the server is gone it turns into the
@@ -2546,9 +2659,9 @@ function textWithCode(tag, className, text) {
 }
 
 // Any answer to a finished session's offers, as one send through the ordinary
-// submit. Like a brief, it names no question: `__review`, `__done` and
-// `__dashboard` are about the session.
-const AFTER_FINISH_REPLIES = { review: REVIEW_REPLY, done: DONE_REPLY, dashboard: DASHBOARD_REPLY };
+// submit. Like a brief, it names no question: `__review`, `__commit`, `__done`
+// and `__dashboard` are about the session.
+const AFTER_FINISH_REPLIES = { review: REVIEW_REPLY, done: DONE_REPLY, dashboard: DASHBOARD_REPLY, commit: COMMIT_REPLY };
 async function sendAfterBuild(kind) {
   if (gone || pendingResult || local.afterBuild) return;
   try {
@@ -2572,6 +2685,7 @@ async function sendAfterBuild(kind) {
     const started = {
       review: "Review requested. It starts here in a moment.",
       dashboard: "Opening the dashboard. It appears here in a moment.",
+      commit: "Opening Git commit. It appears here in a moment.",
     }[kind];
     if (started) {
       banner(started, "good");
@@ -4406,7 +4520,29 @@ function buildConfirm(card, item, staged) {
     note.appendChild(md(item.consequences, "md"));
     card.appendChild(note);
   }
+  if (Array.isArray(item.files) && item.files.length) card.appendChild(filesTable(item.files));
   commentField(card, item, "Anything to add?");
+}
+
+// A collapsed list of the files a confirm is about ({ path, state } rows), so
+// "15 files" can be opened up and read before the person says yes.
+function filesTable(files) {
+  const box = el("details", "card-files");
+  box.appendChild(el("summary", "", `Show the ${files.length} file${files.length === 1 ? "" : "s"}`));
+  const table = el("table", "md-table");
+  const head = el("tr");
+  head.appendChild(el("th", "", "State"));
+  head.appendChild(el("th", "", "File"));
+  table.appendChild(head);
+  for (const f of files) {
+    if (!f || typeof f.path !== "string") continue;
+    const row = el("tr");
+    row.appendChild(el("td", "", typeof f.state === "string" ? f.state : ""));
+    row.appendChild(el("td", "", f.path));
+    table.appendChild(row);
+  }
+  box.appendChild(table);
+  return box;
 }
 
 function buildRecap(card, item, staged) {
@@ -4712,15 +4848,22 @@ function buildList(card, item, staged) {
   }
   card.appendChild(row);
   card.appendChild(el("p", "help", "Drag to reorder, click a name to rename it."));
-  commentField(card, item, "Anything else about this breakdown? (type 'no changes' if none)");
+  commentField(card, item, "Anything else about this breakdown?", false, "no changes");
 }
 
-function commentField(card, item, labelText, required) {
+function commentField(card, item, labelText, required, quickText) {
   const wrap = el("div", "field");
   const id = "note-" + item.id;
   const label = el("label", null, labelText);
   label.htmlFor = id;
   wrap.appendChild(label);
+  let quick = null;
+  if (quickText) {
+    quick = el("button", "btn tiny", quickText.charAt(0).toUpperCase() + quickText.slice(1));
+    quick.type = "button";
+    quick.title = "Fill in \"" + quickText + "\"";
+    wrap.appendChild(quick);
+  }
   const ta = el("textarea");
   ta.id = id;
   ta.placeholder = required ? "Tell Plan2Code what to change." : "Optional.";
@@ -4741,6 +4884,12 @@ function commentField(card, item, labelText, required) {
     stagedChanged();
   });
   wrap.appendChild(ta);
+  if (quick)
+    quick.addEventListener("click", () => {
+      ta.value = quickText;
+      ta.dispatchEvent(new Event("input", { bubbles: true }));
+      ta.focus();
+    });
   card.appendChild(wrap);
 }
 

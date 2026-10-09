@@ -538,6 +538,58 @@
         </g>
         <g class="ho-arrow"><path class="as" d="M178 64 L214 64 M204 54 L216 64 L204 74" /></g>
       </svg>
+
+      <!-- Changelog: keeping the record. A page of release notes stands beside him,
+           and one arm reaches over to write the newest line onto it. -->
+      <svg class="pose pose-changelog" data-pose="changelog" viewBox="0 4 240 216" aria-hidden="true" focusable="false">
+        <ellipse class="shadow" cx="126" cy="198" rx="44" ry="5" />
+        <g class="prop">
+          <rect class="sh" x="176" y="58" width="44" height="116" rx="6" />
+          <line class="lt" x1="186" y1="76" x2="206" y2="76" />
+          <circle class="ac" cx="186" cy="94" r="3" /><line class="lt" x1="194" y1="94" x2="210" y2="94" />
+          <circle class="ac" cx="186" cy="112" r="3" /><line class="lt" x1="194" y1="112" x2="206" y2="112" />
+          <g class="cl-line"><circle class="ac" cx="186" cy="130" r="3" /><line class="lt" x1="194" y1="130" x2="210" y2="130" /></g>
+        </g>
+        <g class="bob">
+          <g transform="translate(-14 0)">
+            <rect class="fl foot f1" x="94" y="179" width="20" height="10" rx="5" />
+            <rect class="fl foot f2" x="126" y="179" width="20" height="10" rx="5" />
+            <rect class="sh" x="80" y="72" width="80" height="108" rx="16" />
+            <path class="ln" d="M80 126 L66 150" /><circle class="fl" cx="66" cy="150" r="5.5" />
+            <path class="ey blink" d="M126 86 L129.64 94.98 L139.31 95.67 L131.9 101.92 L134.23 111.33 L126 106.2 L117.77 111.33 L120.1 101.92 L112.69 95.67 L122.36 94.98 Z" />
+            <path class="es" d="M110 120 Q122 129 134 120" />
+            <g class="gc-reach">
+              <line class="ln" x1="160" y1="126" x2="196" y2="132" />
+              <circle class="fl" cx="196" cy="132" r="5.5" />
+            </g>
+          </g>
+        </g>
+      </svg>
+      <!-- Git commit: saving a step. Beside a branch line with two commits on
+           it, one arm reaches to set a third commit onto the line. -->
+      <svg class="pose pose-git-commit" data-pose="git-commit" viewBox="0 4 240 216" aria-hidden="true" focusable="false">
+        <ellipse class="shadow" cx="126" cy="198" rx="44" ry="5" />
+        <g class="prop">
+          <line class="lt gc-line" x1="204" y1="62" x2="204" y2="172" />
+          <circle class="ac" cx="204" cy="82" r="7" />
+          <circle class="ac" cx="204" cy="112" r="7" />
+          <circle class="ac gc-dot" cx="204" cy="142" r="7" />
+        </g>
+        <g class="bob">
+          <g transform="translate(-14 0)">
+            <rect class="fl foot f1" x="94" y="179" width="20" height="10" rx="5" />
+            <rect class="fl foot f2" x="126" y="179" width="20" height="10" rx="5" />
+            <rect class="sh" x="80" y="72" width="80" height="108" rx="16" />
+            <path class="ln" d="M80 126 L66 150" /><circle class="fl" cx="66" cy="150" r="5.5" />
+            <path class="ey blink" d="M126 86 L129.64 94.98 L139.31 95.67 L131.9 101.92 L134.23 111.33 L126 106.2 L117.77 111.33 L120.1 101.92 L112.69 95.67 L122.36 94.98 Z" />
+            <path class="es" d="M110 120 Q122 129 134 120" />
+            <g class="gc-reach">
+              <line class="ln" x1="160" y1="126" x2="212" y2="142" />
+              <circle class="fl" cx="212" cy="142" r="5.5" />
+            </g>
+          </g>
+        </g>
+      </svg>
     </template>
 
     <!-- The Help dialog's content, cloned into #help-modal the first time ? is
@@ -549,6 +601,10 @@
           <circle cx="12" cy="12" r="9" />
           <path d="M12 11v6" />
           <path d="M12 7.5v.5" />
+        </symbol>
+        <symbol id="hi-stuck" viewBox="0 0 24 24" fill="none">
+          <path d="M12 4l9 16H3z" />
+          <path d="M12 10v4.5M12 17v.5" />
         </symbol>
         <symbol id="hi-around" viewBox="0 0 24 24" fill="none">
           <circle cx="12" cy="12" r="9" />
@@ -607,10 +663,6 @@
         <symbol id="hi-finishing" viewBox="0 0 24 24" fill="none">
           <path d="M6 21V4" />
           <path d="M6 4h11l-2 4 2 4H6" />
-        </symbol>
-        <symbol id="hi-stuck" viewBox="0 0 24 24" fill="none">
-          <path d="M12 4l9 16H3z" />
-          <path d="M12 10v4.5M12 17v.5" />
         </symbol>
         <symbol id="hi-prefs" viewBox="0 0 24 24" fill="none">
           <path d="M4 7h16M4 12h16M4 17h16" />
@@ -705,7 +757,174 @@
         </p>
       </section>
 
-      <!-- Tab 2: Finding your way around -->
+      <!-- Tab 2: When something looks stuck -->
+      <section class="help-panel" data-tab="stuck">
+        <h3>When something looks stuck</h3>
+        <p class="help-lead">
+          This page and Plan2Code in your terminal are two programs, and either
+          can stop without the other. Nothing you have typed is lost either way.
+        </p>
+        <div class="help-callout" role="note">
+          <svg class="help-callout-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M12 3.5 22 20.5H2Z" />
+            <path d="M12 10v5" />
+            <path d="M12 17.8v.4" />
+          </svg>
+          <div>
+            <strong class="help-callout-label">Check this first</strong>
+            <p>
+              If nothing seems to be happening, look at your terminal. Plan2Code
+              often stops there to ask your permission, and this page cannot see it.
+            </p>
+          </div>
+        </div>
+        <h4>What you might see</h4>
+        <ol class="help-rows">
+            <li class="help-row">
+              <dl>
+                <dt>You see</dt><dd>The line beside Planny stays quiet for a minute or two while it is working.</dd>
+                <dt>Likely cause</dt><dd>A permission prompt is waiting in your terminal.</dd>
+                <dt>Do this</dt><dd>Switch to the terminal and answer it.</dd>
+              </dl>
+            </li>
+            <li class="help-row">
+              <dl>
+                <dt>You see</dt><dd><strong>Not running</strong> (Planny grey and still).</dd>
+                <dt>Likely cause</dt><dd>Plan2Code has not checked in for a few minutes.</dd>
+                <dt>Do this</dt><dd>Look at the terminal. If it is idle, type <code>continue</code> there.</dd>
+              </dl>
+            </li>
+            <li class="help-row">
+              <dl>
+                <dt>You see</dt><dd><strong>Not connected</strong> (Planny faded, his star shut).</dd>
+                <dt>Likely cause</dt><dd>The program behind this page shut itself down.</dd>
+                <dt>Do this</dt><dd>Ask Plan2Code to resume the session, and use the new link.</dd>
+              </dl>
+            </li>
+            <li class="help-row">
+              <dl>
+                <dt>You see</dt><dd>Nothing on the page changes after you press Send.</dd>
+                <dt>Likely cause</dt><dd>The agent is busy, or has finished its turn.</dd>
+                <dt>Do this</dt><dd>Your answer is saved. Check the terminal.</dd>
+              </dl>
+            </li>
+        </ol>
+        <figure class="help-figure" data-figure="stuck">
+          <svg class="help-diagram" viewBox="0 0 560 262" role="img" aria-labelledby="hd-stuck-title hd-stuck-desc">
+            <title id="hd-stuck-title">What to check when something looks stuck</title>
+            <desc id="hd-stuck-desc">
+              A decision flow. First: does Planny say Not connected? If yes, run
+              the command again and use the new link. If no: does he say Not
+              running? If yes, look at the terminal, which may be waiting for
+              your permission, finished or errored. Either way, and in every
+              other case, answering anyway is safe, because what you send is
+              held until Plan2Code collects it.
+            </desc>
+            <defs>
+              <marker id="hd-stuck-arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+                <path class="hd-arrow" d="M0 0 L8 4 L0 8 z" />
+              </marker>
+            </defs>
+            <path class="hd-box" d="M20 50 L110 16 L200 50 L110 84 Z" />
+            <text class="hd-label" x="110" y="46" text-anchor="middle">Says Not</text>
+            <text class="hd-label" x="110" y="63" text-anchor="middle">connected?</text>
+            <rect class="hd-box" x="260" y="26" width="284" height="48" rx="8" />
+            <text class="hd-label" x="402" y="46" text-anchor="middle">Run the command again,</text>
+            <text class="hd-label" x="402" y="63" text-anchor="middle">use the new link</text>
+            <path class="hd-line" d="M202 50 H256" marker-end="url(#hd-stuck-arrow)" />
+            <text class="hd-label small" x="228" y="43" text-anchor="middle">yes</text>
+            <path class="hd-line" d="M110 86 V112" marker-end="url(#hd-stuck-arrow)" />
+            <text class="hd-label small" x="118" y="103">no</text>
+            <path class="hd-box" d="M20 150 L110 116 L200 150 L110 184 Z" />
+            <text class="hd-label" x="110" y="146" text-anchor="middle">Says Not</text>
+            <text class="hd-label" x="110" y="163" text-anchor="middle">running?</text>
+            <rect class="hd-box" x="260" y="120" width="284" height="60" rx="8" />
+            <text class="hd-label" x="402" y="144" text-anchor="middle">Look at the terminal: waiting</text>
+            <text class="hd-label" x="402" y="162" text-anchor="middle">for permission, finished, errored?</text>
+            <path class="hd-line" d="M202 150 H256" marker-end="url(#hd-stuck-arrow)" />
+            <text class="hd-label small" x="228" y="143" text-anchor="middle">yes</text>
+            <path class="hd-line" d="M110 186 V206" marker-end="url(#hd-stuck-arrow)" />
+            <text class="hd-label small" x="118" y="200">no</text>
+            <path class="hd-line" d="M402 182 V206" marker-end="url(#hd-stuck-arrow)" />
+            <path class="hd-line" d="M546 50 H554 V231 H474" marker-end="url(#hd-stuck-arrow)" />
+            <rect class="hd-accent" x="90" y="210" width="380" height="44" rx="8" />
+            <text class="hd-label hd-accent" x="280" y="229" text-anchor="middle">Answering anyway is safe:</text>
+            <text class="hd-label" x="280" y="246" text-anchor="middle">what you send is held until it is collected</text>
+            <path class="hd-flow" d="M202 50 H256 M546 50 H554 V231 H474" />
+          </svg>
+          <figcaption>Whatever you find, nothing you have typed is lost.</figcaption>
+        </figure>
+        <h4>Not running, or not connected?</h4>
+        <ul>
+          <li>
+            <strong>Not running</strong> (Planny grey and still): this page is
+            fine, but Plan2Code in the terminal has not checked in for
+            <span data-fact="adriftMinutes">3</span> minutes. It may have finished
+            its turn, hit an error, or be waiting on you there.
+          </li>
+          <li>
+            <strong>Not connected</strong> (Planny faded, arms hanging, his star shut in red):
+            this page cannot reach its own program, after
+            <span data-fact="goneSeconds">8</span> seconds without contact.
+            Usually it has shut itself down; see "Getting a new link" below.
+          </li>
+        </ul>
+        <p>"Reading Planny" shows every mood side by side.</p>
+        <h4>It may be waiting for you in the terminal</h4>
+        <p>
+          Plan2Code sometimes stops in the terminal to ask your permission
+          before it runs a command or changes a file, and this page cannot see
+          that. After about 30 seconds of silence while it is working, the line
+          beside Planny asks "Still working, or waiting on an approval in your
+          terminal?" Have a look at the terminal: answering there sets it going
+          again.
+        </p>
+        <p>
+          If it stays quiet a couple of minutes longer, the line changes to
+          "Still working on it. Longer tasks can go a few minutes between
+          updates", with Planny still
+          in his working pose. It may be busy, or still waiting on you in the
+          terminal; the terminal is where to look. A build that said a task may
+          take longer gets that long before the line changes.
+        </p>
+        <p>
+          Hands-off modes, such as <code>auto</code> mode in Claude Code or
+          <code>smart</code> mode in Devin, cut down on those stops, though some
+          may still need you.
+        </p>
+        <h4>Answering anyway</h4>
+        <p>
+          You can keep answering and press Send while Plan2Code is not running.
+          What you send is written to disk and held until something collects it,
+          so starting Plan2Code again picks it up where you left off.
+        </p>
+        <h4>Getting a new link</h4>
+        <p>The program behind this page shuts itself down:</p>
+        <ul>
+          <li>
+            <span data-fact="closedTabMinutes">2</span> minutes after the last tab
+            showing it closes,
+          </li>
+          <li>
+            after <span data-fact="idleMinutes">30</span> minutes without hearing
+            from anyone, or
+          </li>
+          <li>
+            after <span data-fact="maxLifeHours">4</span> hours, whatever is
+            happening.
+          </li>
+        </ul>
+        <p>
+          To get it back, ask Plan2Code in the terminal to resume the session,
+          or run the step's command again, and use the new link it gives you.
+          Everything you typed, sent or not, is still there.
+        </p>
+        <div class="handoff-command" data-copy>
+          <code class="handoff-code">resume the session and print the web console address here</code>
+        </div>
+      </section>
+
+      <!-- Tab 3: Finding your way around -->
       <section class="help-panel" data-tab="around">
         <h3>Finding your way around</h3>
         <p class="help-lead">
@@ -839,7 +1058,7 @@
         </ul>
       </section>
 
-      <!-- Tab 3: Your workspace -->
+      <!-- Tab 4: Your workspace -->
       <section class="help-panel" data-tab="workspace">
         <h3>Your workspace</h3>
         <p class="help-lead">
@@ -930,7 +1149,7 @@
         </ul>
       </section>
 
-      <!-- Tab 4: Reading Planny -->
+      <!-- Tab 5: Reading Planny -->
       <section class="help-panel" data-tab="planny">
         <h3>Reading Planny</h3>
         <p class="help-lead">
@@ -978,7 +1197,7 @@
         </p>
       </section>
 
-      <!-- Tab 5: Answering questions -->
+      <!-- Tab 6: Answering questions -->
       <section class="help-panel" data-tab="answering">
         <h3>Answering questions</h3>
         <p class="help-lead">
@@ -1047,7 +1266,7 @@
         </p>
       </section>
 
-      <!-- Tab 6: Sending and what happens next -->
+      <!-- Tab 7: Sending and what happens next -->
       <section class="help-panel" data-tab="sending">
         <h3>Sending and what happens next</h3>
         <p class="help-lead">
@@ -1133,7 +1352,7 @@
         </ol>
       </section>
 
-      <!-- Tab 7: Notes and attachments -->
+      <!-- Tab 8: Notes and attachments -->
       <section class="help-panel" data-tab="notes">
         <h3>Notes and attachments</h3>
         <p class="help-lead">
@@ -1201,7 +1420,7 @@
         </p>
       </section>
 
-      <!-- Tab 8: Documents and printing -->
+      <!-- Tab 9: Documents and printing -->
       <section class="help-panel" data-tab="docs">
         <h3>Documents and printing</h3>
         <p class="help-lead">
@@ -1260,7 +1479,7 @@
         </p>
       </section>
 
-      <!-- Tab 9: The dashboard -->
+      <!-- Tab 10: The dashboard -->
       <section class="help-panel" data-tab="dashboard">
         <h3>The dashboard</h3>
         <p class="help-lead">
@@ -1341,6 +1560,8 @@
           <li><strong>Quick task.</strong> Too small for the full process? A quick plan, then it just builds it.</li>
           <li><strong>Review.</strong> A second opinion on the changes. Problems ranked, and you pick what gets fixed.</li>
           <li><strong>Handoff.</strong> Pack this conversation into a document a fresh session can pick up cold.</li>
+          <li><strong>Changelog.</strong> Checks the CHANGELOG version against the main branch and suggests entries for what is new.</li>
+          <li><strong>Git commit.</strong> Commits your changes with a clear message, suggests a split when it is really two jobs, and offers to push.</li>
         </ul>
         <h4>Picking a spec</h4>
         <p>
@@ -1381,7 +1602,7 @@
         </p>
       </section>
 
-      <!-- Tab 10: Session meter -->
+      <!-- Tab 11: Session meter -->
       <section class="help-panel" data-tab="meter">
         <h3>Session meter</h3>
         <p class="help-lead">
@@ -1429,7 +1650,7 @@
         </p>
       </section>
 
-      <!-- Tab 11: Watching a build -->
+      <!-- Tab 12: Watching a build -->
       <section class="help-panel" data-tab="build">
         <h3>Watching a build</h3>
         <p class="help-lead">
@@ -1497,7 +1718,7 @@
         </p>
       </section>
 
-      <!-- Tab 12: Helpers (subagents) -->
+      <!-- Tab 13: Helpers (subagents) -->
       <section class="help-panel" data-tab="subagents">
         <h3>Helpers (subagents)</h3>
         <p>
@@ -1516,7 +1737,7 @@
             shipped one back), and say how many may run at once.
           </li>
           <li>
-            It is off by default and saved for this project and this skill, so
+            It is on until you turn it off, and saved for this project and this skill, so
             the next session of the same skill here starts the same way.
           </li>
           <li>
@@ -1552,7 +1773,7 @@
         </ul>
       </section>
 
-      <!-- Tab 13: Ask a quick question -->
+      <!-- Tab 14: Ask a quick question -->
       <section class="help-panel" data-tab="ask">
         <h3>Ask a quick question</h3>
         <p class="help-lead">
@@ -1643,7 +1864,7 @@
         </p>
       </section>
 
-      <!-- Tab 14: Stopping and finishing -->
+      <!-- Tab 15: Stopping and finishing -->
       <section class="help-panel" data-tab="finishing">
         <h3>Stopping and finishing</h3>
         <p class="help-lead">
@@ -1723,128 +1944,6 @@
           After a long step, a new conversation is the better choice anyway: it
           starts with a clean slate.
         </p>
-      </section>
-
-      <!-- Tab 15: When something looks stuck -->
-      <section class="help-panel" data-tab="stuck">
-        <h3>When something looks stuck</h3>
-        <p class="help-lead">
-          This page and Plan2Code in your terminal are two programs, and either
-          can stop without the other. Nothing you have typed is lost either way.
-        </p>
-        <figure class="help-figure" data-figure="stuck">
-          <svg class="help-diagram" viewBox="0 0 560 262" role="img" aria-labelledby="hd-stuck-title hd-stuck-desc">
-            <title id="hd-stuck-title">What to check when something looks stuck</title>
-            <desc id="hd-stuck-desc">
-              A decision flow. First: does Planny say Not connected? If yes, run
-              the command again and use the new link. If no: does he say Not
-              running? If yes, look at the terminal, which may be waiting for
-              your permission, finished or errored. Either way, and in every
-              other case, answering anyway is safe, because what you send is
-              held until Plan2Code collects it.
-            </desc>
-            <defs>
-              <marker id="hd-stuck-arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
-                <path class="hd-arrow" d="M0 0 L8 4 L0 8 z" />
-              </marker>
-            </defs>
-            <path class="hd-box" d="M20 50 L110 16 L200 50 L110 84 Z" />
-            <text class="hd-label" x="110" y="46" text-anchor="middle">Says Not</text>
-            <text class="hd-label" x="110" y="63" text-anchor="middle">connected?</text>
-            <rect class="hd-box" x="260" y="26" width="284" height="48" rx="8" />
-            <text class="hd-label" x="402" y="46" text-anchor="middle">Run the command again,</text>
-            <text class="hd-label" x="402" y="63" text-anchor="middle">use the new link</text>
-            <path class="hd-line" d="M202 50 H256" marker-end="url(#hd-stuck-arrow)" />
-            <text class="hd-label small" x="228" y="43" text-anchor="middle">yes</text>
-            <path class="hd-line" d="M110 86 V112" marker-end="url(#hd-stuck-arrow)" />
-            <text class="hd-label small" x="118" y="103">no</text>
-            <path class="hd-box" d="M20 150 L110 116 L200 150 L110 184 Z" />
-            <text class="hd-label" x="110" y="146" text-anchor="middle">Says Not</text>
-            <text class="hd-label" x="110" y="163" text-anchor="middle">running?</text>
-            <rect class="hd-box" x="260" y="120" width="284" height="60" rx="8" />
-            <text class="hd-label" x="402" y="144" text-anchor="middle">Look at the terminal: waiting</text>
-            <text class="hd-label" x="402" y="162" text-anchor="middle">for permission, finished, errored?</text>
-            <path class="hd-line" d="M202 150 H256" marker-end="url(#hd-stuck-arrow)" />
-            <text class="hd-label small" x="228" y="143" text-anchor="middle">yes</text>
-            <path class="hd-line" d="M110 186 V206" marker-end="url(#hd-stuck-arrow)" />
-            <text class="hd-label small" x="118" y="200">no</text>
-            <path class="hd-line" d="M402 182 V206" marker-end="url(#hd-stuck-arrow)" />
-            <path class="hd-line" d="M546 50 H554 V231 H474" marker-end="url(#hd-stuck-arrow)" />
-            <rect class="hd-accent" x="90" y="210" width="380" height="44" rx="8" />
-            <text class="hd-label hd-accent" x="280" y="229" text-anchor="middle">Answering anyway is safe:</text>
-            <text class="hd-label" x="280" y="246" text-anchor="middle">what you send is held until it is collected</text>
-            <path class="hd-flow" d="M202 50 H256 M546 50 H554 V231 H474" />
-          </svg>
-          <figcaption>Whatever you find, nothing you have typed is lost.</figcaption>
-        </figure>
-        <h4>Not running, or not connected?</h4>
-        <ul>
-          <li>
-            <strong>Not running</strong> (Planny grey and still): this page is
-            fine, but Plan2Code in the terminal has not checked in for
-            <span data-fact="adriftMinutes">3</span> minutes. It may have finished
-            its turn, hit an error, or be waiting on you there.
-          </li>
-          <li>
-            <strong>Not connected</strong> (Planny faded, arms hanging, his star shut in red):
-            this page cannot reach its own program, after
-            <span data-fact="goneSeconds">8</span> seconds without contact.
-            Usually it has shut itself down; see "Getting a new link" below.
-          </li>
-        </ul>
-        <p>"Reading Planny" shows every mood side by side.</p>
-        <h4>It may be waiting for you in the terminal</h4>
-        <p>
-          Plan2Code sometimes stops in the terminal to ask your permission
-          before it runs a command or changes a file, and this page cannot see
-          that. After about 30 seconds of silence while it is working, the line
-          beside Planny asks "Still working, or waiting on an approval in your
-          terminal?" Have a look at the terminal: answering there sets it going
-          again.
-        </p>
-        <p>
-          If it stays quiet a couple of minutes longer, the line changes to
-          "Still working on it. Longer tasks can go a few minutes between
-          updates", with Planny still
-          in his working pose. It may be busy, or still waiting on you in the
-          terminal; the terminal is where to look. A build that said a task may
-          take longer gets that long before the line changes.
-        </p>
-        <p>
-          Hands-off modes, such as <code>auto</code> mode in Claude Code or
-          <code>smart</code> mode in Devin, cut down on those stops, though some
-          may still need you.
-        </p>
-        <h4>Answering anyway</h4>
-        <p>
-          You can keep answering and press Send while Plan2Code is not running.
-          What you send is written to disk and held until something collects it,
-          so starting Plan2Code again picks it up where you left off.
-        </p>
-        <h4>Getting a new link</h4>
-        <p>The program behind this page shuts itself down:</p>
-        <ul>
-          <li>
-            <span data-fact="closedTabMinutes">2</span> minutes after the last tab
-            showing it closes,
-          </li>
-          <li>
-            after <span data-fact="idleMinutes">30</span> minutes without hearing
-            from anyone, or
-          </li>
-          <li>
-            after <span data-fact="maxLifeHours">4</span> hours, whatever is
-            happening.
-          </li>
-        </ul>
-        <p>
-          To get it back, ask Plan2Code in the terminal to resume the session,
-          or run the step's command again, and use the new link it gives you.
-          Everything you typed, sent or not, is still there.
-        </p>
-        <div class="handoff-command" data-copy>
-          <code class="handoff-code">resume the session and print the web console address here</code>
-        </div>
       </section>
 
       <!-- Tab 16: Keyboard and preferences -->

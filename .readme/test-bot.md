@@ -19,7 +19,7 @@ Built for **maintainers**. If you're using Plan2Code to ship features, you don't
 ## Install
 
 ```bash
-node install.js     # A  (everything + dev tools)  — or  C → B  (bot only)
+node install.js     # A → E  (everything + dev tools)  or  A → B  (bot only)
 ```
 
 ## Run

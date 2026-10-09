@@ -12,7 +12,7 @@
  *
  * DESCRIPTION:
  * Install Plan2Code skills globally or into the current project via skills.sh.
- * Builds the committed skills/ artifact from source prompts in src/.
+ * Builds the (gitignored) skills/ artifact from source prompts in src/.
  * Supports non-interactive --build-skills and --verify-skills maintenance hooks.
  */
 
@@ -103,8 +103,8 @@ const MASCOT = {
   ],
 };
 
-// Generated skills directory: the committed, canonical Agent Skills build of src/.
-// `npm run build:skills` regenerates it and `npm test` (`--verify-skills`) fails on drift.
+// Generated skills directory: the gitignored Agent Skills build of src/.
+// The installer and `npm run build:skills` regenerate it; `--verify-skills` diffs a stale tree.
 // `skills add` consumes this directory; nothing else is platform-specific any more.
 const SKILLS_DIR_NAME = 'skills';
 const SKILLS_DIR = path.join(__dirname, SKILLS_DIR_NAME);
@@ -262,6 +262,26 @@ const SOURCE_PROMPTS = [
     isUtility: true,
     scripts: ['specs.mjs'],
     additionalReferences: [{ source: 'web-console', target: 'web-console' }]
+  },
+  {
+    source: 'plan2code-changelog.md',
+    stepNumber: 'changelog',
+    name: 'changelog',
+    displayName: 'Changelog Mode',
+    description: 'Check the CHANGELOG version against the default branch, suggest entries for new work, keep package.json aligned',
+    isUtility: true,
+    scripts: [],
+    additionalReferences: [{ source: 'web-console', target: 'web-console' }]
+  },
+  {
+    source: 'plan2code-git-commit.md',
+    stepNumber: 'git-commit',
+    name: 'git-commit',
+    displayName: 'Git Commit Mode',
+    description: 'Commit changes with a clear message, suggest splits, offer a branch and a push',
+    isUtility: true,
+    scripts: ['commit-msg.mjs'],
+    additionalReferences: [{ source: 'web-console', target: 'web-console' }]
   }
 ];
 
@@ -288,6 +308,8 @@ function generateStepLabel(prompt) {
   if (prompt.stepNumber === 'update') return 'Update';
   if (prompt.stepNumber === 'review') return 'Review';
   if (prompt.stepNumber === 'handoff') return 'Handoff';
+  if (prompt.stepNumber === 'git-commit') return 'Git Commit';
+  if (prompt.stepNumber === 'changelog') return 'Changelog';
   if (prompt.stepNumber === 'quick') return 'Quick Task';
   return `Step ${prompt.stepNumber}`;
 }
@@ -728,7 +750,7 @@ function verifySkillsSync() {
   if (problems.length > 0) {
     console.error(`${SKILLS_DIR_NAME}/ is out of sync with src/:\n`);
     for (const problem of problems) console.error(`  ${problem}`);
-    console.error(`\n${problems.length} problem(s). Run 'npm run build:skills' and commit the result.`);
+    console.error(`\n${problems.length} problem(s). Run 'npm run build:skills' to regenerate it.`);
     return false;
   }
   console.log(`${SKILLS_DIR_NAME}/ matches src/ — ${expected.size} file(s) across ${SOURCE_PROMPTS.length} skill(s) ✓`);
@@ -954,18 +976,53 @@ async function install() {
     return 1;
   }
 
-  // Point at the dashboard first: the `plan2code` command when it installed, the skill otherwise.
-  const dashboardWhere = launcherFailed ? 'Open the dashboard in your agent:' : 'Open the dashboard from any project:';
-  const dashboardCommand = launcherFailed ? '/plan2code' : LAUNCHER_COMMAND;
+  // The steps come first: where to start, the ways in, and what to do without an agent.
+  printGettingStarted({ commandInstalled: !launcherFailed });
   console.log(`${COLORS.GREEN}    ╭───╮${COLORS.RESET}   ${COLORS.BRIGHT}All done! Happy coding!${COLORS.RESET}`);
-  console.log(`${COLORS.GREEN}   ╲│ ${COLORS.CYAN}★${COLORS.GREEN} │╱${COLORS.RESET}  ${COLORS.BRIGHT}${dashboardWhere}${COLORS.RESET}`);
-  console.log(`${COLORS.GREEN}    │ ${COLORS.BRIGHT}◡${COLORS.GREEN} │${COLORS.RESET}   ${COLORS.BRIGHT}${COLORS.CYAN}${dashboardCommand}${COLORS.RESET}`);
+  console.log(`${COLORS.GREEN}   ╲│ ${COLORS.CYAN}★${COLORS.GREEN} │╱${COLORS.RESET}`);
+  console.log(`${COLORS.GREEN}    │ ${COLORS.BRIGHT}◡${COLORS.GREEN} │${COLORS.RESET}`);
   console.log(`${COLORS.GREEN}    ╰┬─┬╯${COLORS.RESET}   ${COLORS.DIM}Docs:${COLORS.RESET} ${COLORS.BRIGHT}https://github.com/jparkerweb/plan2code${COLORS.RESET}`);
   console.log('');
   console.log(`${COLORS.DIM}  Update later with:${COLORS.RESET} ${COLORS.CYAN}npx skills update -g${COLORS.RESET}`);
   console.log('');
 
   return launcherFailed ? 1 : 0;
+}
+
+/**
+ * Print what to do after installing: where to start, the ways in, and what to do when no AI
+ * agent is installed. Used at the end of every install route so they all end the same way.
+ */
+function printGettingStarted({ commandInstalled }) {
+  const agents = ['claude', 'devin', 'codex'].filter((name) => isCommandOnPath(name));
+  const line = (text = '') => console.log(`  ${text}`);
+  console.log(`${COLORS.CYAN}╔═══════════════════════════════════════════════════════════════════════════╗${COLORS.RESET}`);
+  console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET} ${COLORS.BRIGHT}HOW TO USE PLAN2CODE${COLORS.RESET}`, 76) + `${COLORS.CYAN}║${COLORS.RESET}`);
+  console.log(`${COLORS.CYAN}╚═══════════════════════════════════════════════════════════════════════════╝${COLORS.RESET}`);
+  console.log('');
+  line(`${COLORS.BRIGHT}1. Open a terminal IN the project you want to work on${COLORS.RESET}`);
+  line('   Plan2Code works on the folder you start it in.');
+  line(`   ${COLORS.CYAN}cd path/to/your-project${COLORS.RESET}`);
+  console.log('');
+  line(`${COLORS.BRIGHT}2. Start Plan2Code${COLORS.RESET}`);
+  if (commandInstalled) {
+    line(`   ${COLORS.CYAN}${LAUNCHER_COMMAND}${COLORS.RESET}   opens your AI agent on the Plan2Code dashboard`);
+    line(`   or, inside the agent itself: ${COLORS.CYAN}/plan2code${COLORS.RESET} (Claude Code, Devin)  ${COLORS.CYAN}$plan2code${COLORS.RESET} (Codex)`);
+  } else {
+    line(`   Inside your AI agent, type ${COLORS.CYAN}/plan2code${COLORS.RESET} (Claude Code, Devin) or ${COLORS.CYAN}$plan2code${COLORS.RESET} (Codex)`);
+  }
+  console.log('');
+  line(`${COLORS.BRIGHT}3. Pick a card on the page that opens in your browser${COLORS.RESET}`);
+  line('   Any AI agent that reads Agent Skills can run Plan2Code the same way.');
+  console.log('');
+  if (agents.length === 0) {
+    console.log(`  ${COLORS.YELLOW}${SYMBOLS.WARNING} NO AI AGENT FOUND ON THIS COMPUTER${COLORS.RESET}`);
+    line('Plan2Code runs inside an AI coding agent. Install one, open a new terminal, then follow the steps above:');
+    line(`   Claude Code   ${COLORS.CYAN}npm i -g @anthropic-ai/claude-code${COLORS.RESET}`);
+    line(`   Codex         ${COLORS.CYAN}npm i -g @openai/codex${COLORS.RESET}`);
+    line('   Devin         https://devin.ai');
+    console.log('');
+  }
 }
 
 // ============================================================================
@@ -1087,39 +1144,22 @@ function runInteractive() {
     console.log(`${COLORS.CYAN}╔═════════════════════════════════════════════════════════╗${COLORS.RESET}`);
     console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET} ${COLORS.BRIGHT}INSTALL PLAN2CODE${COLORS.RESET}`, 58) + `${COLORS.CYAN}║${COLORS.RESET}`);
     console.log(`${COLORS.CYAN}╠═════════════════════════════════════════════════════════╣${COLORS.RESET}`);
-    console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET}  ${COLORS.BRIGHT}I.${COLORS.RESET}  ${COLORS.GREEN}INSTALL${COLORS.RESET}    Install Plan2Code skills everywhere`, 58) + `${COLORS.CYAN}║${COLORS.RESET}`);
-    console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET}  ${COLORS.BRIGHT}A.${COLORS.RESET}  ${COLORS.MAGENTA}ALL${COLORS.RESET}        Install Plan2Code + dev tools`, 58) + `${COLORS.CYAN}║${COLORS.RESET}`);
-    console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET}  ${COLORS.BRIGHT}U.${COLORS.RESET}  ${COLORS.RED}UNINSTALL${COLORS.RESET}  Remove Plan2Code skills and dev tools`, 58) + `${COLORS.CYAN}║${COLORS.RESET}`);
-    console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET}  ${COLORS.BRIGHT}C.${COLORS.RESET}  ${COLORS.BLUE}CUSTOM${COLORS.RESET}     Advanced options`, 58) + `${COLORS.CYAN}║${COLORS.RESET}`);
+    console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET}  ${COLORS.BRIGHT}I.${COLORS.RESET}  ${COLORS.GREEN}INSTALL${COLORS.RESET}    Install skills + the plan2code command`, 58) + `${COLORS.CYAN}║${COLORS.RESET}`);
+    console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET}  ${COLORS.BRIGHT}U.${COLORS.RESET}  ${COLORS.RED}UNINSTALL${COLORS.RESET}  Remove everything Plan2Code installed`, 58) + `${COLORS.CYAN}║${COLORS.RESET}`);
+    console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET}  ${COLORS.BRIGHT}A.${COLORS.RESET}  ${COLORS.BLUE}ADVANCED${COLORS.RESET}   Project install, dev tools, and more`, 58) + `${COLORS.CYAN}║${COLORS.RESET}`);
     console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET}  ${COLORS.BRIGHT}Q.${COLORS.RESET}  ${COLORS.DIM}QUIT${COLORS.RESET}       Exit`, 58) + `${COLORS.CYAN}║${COLORS.RESET}`);
     console.log(`${COLORS.CYAN}╚═════════════════════════════════════════════════════════╝${COLORS.RESET}`);
     console.log('');
 
     // Input prompt
     console.log('');
-    const answer = await question(`${COLORS.CYAN}${SYMBOLS.SELECT} SELECT OPTION${COLORS.RESET} (I, A, U, C, Q) [I]: `);
+    const answer = await question(`${COLORS.CYAN}${SYMBOLS.SELECT} SELECT OPTION${COLORS.RESET} (I, U, A, Q) [I]: `);
     const input = answer.trim().toUpperCase() || 'I';
 
-    // I path — skills only. The loop remains optional via A or Custom → O.
+    // I path: skills and the plan2code command. The dev tools stay optional under Advanced.
     if (input === 'I') {
       rl.close();
       process.exit(await install());
-    }
-
-    // A path — Install Everything (skills + loop + bot + metrics + Claude status line)
-    if (input === 'A') {
-      rl.close();
-      const loopResult = installPlan2CodeLoop();
-      console.log('');
-      const botResult = installPlan2CodeBot();
-      console.log('');
-      const metricsResult = installPlan2CodeMetrics();
-      console.log('');
-      const statusLineResult = await installStatusLine();
-      console.log('');
-      const installResult = await install();
-      const exitCode = loopResult !== 0 ? loopResult : botResult !== 0 ? botResult : metricsResult !== 0 ? metricsResult : statusLineResult !== 0 ? statusLineResult : installResult;
-      process.exit(exitCode);
     }
 
     // U path — Uninstall All
@@ -1127,7 +1167,7 @@ function runInteractive() {
       console.log('');
       console.log(`${COLORS.RED}    ╭───╮${COLORS.RESET}`);
       console.log(`${COLORS.RED}   ╲│ ${COLORS.YELLOW}★${COLORS.RED} │╱${COLORS.RESET}  ${COLORS.YELLOW}!${COLORS.RESET}`);
-      console.log(`${COLORS.RED}    │ ${COLORS.YELLOW}~${COLORS.RED} │${COLORS.RESET}   ${COLORS.DIM}Are you sure? This will remove Plan2Code from all platforms.${COLORS.RESET}`);
+      console.log(`${COLORS.RED}    │ ${COLORS.YELLOW}~${COLORS.RED} │${COLORS.RESET}   ${COLORS.DIM}Are you sure? This removes everything Plan2Code installed: skills, the plan2code command and any dev tools.${COLORS.RESET}`);
       console.log(`${COLORS.RED}    ╰┬─┬╯${COLORS.RESET}`);
       console.log('');
       const confirmAnswer = await question(`${COLORS.RED}${SYMBOLS.SELECT} CONFIRM UNINSTALL${COLORS.RESET} (Y/N) [N]: `);
@@ -1150,11 +1190,11 @@ function runInteractive() {
       }
     }
 
-    // C path — CUSTOM sub-menu
-    if (input === 'C') {
+    // A path: ADVANCED sub-menu
+    if (input === 'A') {
       console.log('');
       console.log(`${COLORS.CYAN}╔════════════════════════════════════════════════════════════════╗${COLORS.RESET}`);
-      console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET} ${COLORS.BRIGHT}CUSTOM OPTIONS${COLORS.RESET}`, 65) + `${COLORS.CYAN}║${COLORS.RESET}`);
+      console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET} ${COLORS.BRIGHT}ADVANCED OPTIONS${COLORS.RESET}`, 65) + `${COLORS.CYAN}║${COLORS.RESET}`);
       console.log(`${COLORS.CYAN}╠════════════════════════════════════════════════════════════════╣${COLORS.RESET}`);
       console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET}  ${COLORS.BRIGHT}L.${COLORS.RESET}  ${COLORS.BLUE}LOCAL${COLORS.RESET}      Install skills into the current project only`, 65) + `${COLORS.CYAN}║${COLORS.RESET}`);
       console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET}  ${COLORS.BRIGHT}O.${COLORS.RESET}  ${COLORS.GREEN}LOOP CLI${COLORS.RESET}   Install plan2code-loop CLI only`, 65) + `${COLORS.CYAN}║${COLORS.RESET}`);
@@ -1162,53 +1202,70 @@ function runInteractive() {
       console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET}  ${COLORS.BRIGHT}S.${COLORS.RESET}  ${COLORS.GREEN}STATUS${COLORS.RESET}     Install Claude Code status line`, 65) + `${COLORS.CYAN}║${COLORS.RESET}`);
       console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET}  ${COLORS.BRIGHT}B.${COLORS.RESET}  ${COLORS.GREEN}BOT${COLORS.RESET}        Install plan2code-bot CLI only`, 65) + `${COLORS.CYAN}║${COLORS.RESET}`);
       console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET}  ${COLORS.BRIGHT}D.${COLORS.RESET}  ${COLORS.GREEN}P2C CMD${COLORS.RESET}    Install the plan2code command only`, 65) + `${COLORS.CYAN}║${COLORS.RESET}`);
+      console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET}  ${COLORS.BRIGHT}E.${COLORS.RESET}  ${COLORS.MAGENTA}EVERYTHING${COLORS.RESET} Install Plan2Code + all dev tools`, 65) + `${COLORS.CYAN}║${COLORS.RESET}`);
       console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET}  ${COLORS.BRIGHT}Q.${COLORS.RESET}  ${COLORS.DIM}BACK${COLORS.RESET}       Return to main menu`, 65) + `${COLORS.CYAN}║${COLORS.RESET}`);
       console.log(`${COLORS.CYAN}╚════════════════════════════════════════════════════════════════╝${COLORS.RESET}`);
       console.log('');
-      const customAnswer = await question(`${COLORS.CYAN}${SYMBOLS.SELECT} SELECT OPTION${COLORS.RESET} (L, O, M, S, B, D, Q) [Q]: `);
+      const customAnswer = await question(`${COLORS.CYAN}${SYMBOLS.SELECT} SELECT OPTION${COLORS.RESET} (L, O, M, S, B, D, E, Q) [Q]: `);
       const customInput = customAnswer.trim().toUpperCase() || 'Q';
 
-      // C > L — install skills into the current project
+      // A > E: install everything (skills + loop + bot + metrics + Claude status line)
+      if (customInput === 'E') {
+        rl.close();
+        const loopResult = installPlan2CodeLoop();
+        console.log('');
+        const botResult = installPlan2CodeBot();
+        console.log('');
+        const metricsResult = installPlan2CodeMetrics();
+        console.log('');
+        const statusLineResult = await installStatusLine();
+        console.log('');
+        const installResult = await install();
+        const exitCode = loopResult !== 0 ? loopResult : botResult !== 0 ? botResult : metricsResult !== 0 ? metricsResult : statusLineResult !== 0 ? statusLineResult : installResult;
+        process.exit(exitCode);
+      }
+
+      // A > L: install skills into the current project
       if (customInput === 'L') {
         rl.close();
         process.exit(installProjectSkills());
       }
 
-      // C > O — install loop CLI only
+      // A > O: install loop CLI only
       if (customInput === 'O') {
         rl.close();
         const result = installPlan2CodeLoop();
         process.exit(result);
       }
 
-      // C > M — install metrics CLI only
+      // A > M: install metrics CLI only
       if (customInput === 'M') {
         rl.close();
         const result = installPlan2CodeMetrics();
         process.exit(result);
       }
 
-      // C > S — install status line
+      // A > S: install status line
       if (customInput === 'S') {
         rl.close();
         const result = await installStatusLine();
         process.exit(result);
       }
 
-      // C > B — install bot CLI only
+      // A > B: install bot CLI only
       if (customInput === 'B') {
         rl.close();
         const result = installPlan2CodeBot();
         process.exit(result);
       }
 
-      // C > D — install the global `plan2code` command (opens the dashboard in Claude Code or Devin)
+      // A > D: install the global `plan2code` command (opens the dashboard in Claude Code, Devin or Codex)
       if (customInput === 'D') {
         rl.close();
         process.exit(await installLauncher());
       }
 
-      // C > Q — back to main menu
+      // A > Q: back to main menu
       return main();
     }
 
@@ -1220,7 +1277,7 @@ function runInteractive() {
     }
 
     // Invalid input — loop back
-    console.log(`\n${COLORS.RED}${SYMBOLS.ERROR} Invalid option. Please choose I, A, U, C, or Q.${COLORS.RESET}\n`);
+    console.log(`\n${COLORS.RED}${SYMBOLS.ERROR} Invalid option. Please choose I, U, A, or Q.${COLORS.RESET}\n`);
     return main();
   }
 
@@ -2187,7 +2244,7 @@ function uninstallPlan2CodeBot() {
 }
 
 // ============================================================================
-// PLAN2CODE COMMAND (global `plan2code` → dashboard in Claude Code or Devin)
+// PLAN2CODE COMMAND (global `plan2code` → dashboard in Claude Code, Devin or Codex)
 // ============================================================================
 
 /**
@@ -2422,7 +2479,7 @@ function installDesktopShortcut(binDir, file) {
           P2C_FILE: file,
           P2C_SCRIPT: `${shim}.ps1`,
           P2C_ARGS: LAUNCHER_PICK_FOLDER_FLAG,
-          P2C_DESCRIPTION: 'Open the Plan2Code dashboard in Claude Code or Devin',
+          P2C_DESCRIPTION: 'Open the Plan2Code dashboard in Claude Code, Devin or Codex',
           P2C_ICON: icon,
         }
       );
@@ -2442,7 +2499,7 @@ function installDesktopShortcut(binDir, file) {
           `# ${LAUNCHER_MARKER}`,
           'Type=Application',
           `Name=${SHORTCUT_NAME}`,
-          'Comment=Open the Plan2Code dashboard in Claude Code or Devin',
+          'Comment=Open the Plan2Code dashboard in Claude Code, Devin or Codex',
           `Exec="${shim}" ${LAUNCHER_PICK_FOLDER_FLAG}`,
           ...(icon ? [`Icon=${icon}`] : []),
           'Terminal=true',
@@ -2537,14 +2594,12 @@ async function installLauncher({ quiet = false } = {}) {
   if (!isDirOnPath(binDir)) {
     console.log(`  ${COLORS.YELLOW}${SYMBOLS.WARNING}${COLORS.RESET} ${binDir} is not on your PATH — add it to use ${COLORS.BRIGHT}${LAUNCHER_COMMAND}${COLORS.RESET} from any directory`);
   }
-  if (!isCommandOnPath('claude') && !isCommandOnPath('devin')) {
-    console.log(`  ${COLORS.YELLOW}${SYMBOLS.WARNING}${COLORS.RESET} Neither the ${COLORS.BRIGHT}claude${COLORS.RESET} nor the ${COLORS.BRIGHT}devin${COLORS.RESET} CLI is on your PATH — install one before running ${COLORS.BRIGHT}${LAUNCHER_COMMAND}${COLORS.RESET}`);
-  }
   // The shortcut is a convenience on top of the command, so a failure here only warns.
   await offerDesktopShortcut(binDir);
-  console.log(`  ${COLORS.DIM}Run '${LAUNCHER_COMMAND}' in any project to open the Plan2Code dashboard in Claude Code or Devin${COLORS.RESET}`);
-  console.log(`  ${COLORS.YELLOW}${SYMBOLS.WARNING}${COLORS.RESET} It starts the agent with permission prompts off (${COLORS.CYAN}--permission-mode bypassPermissions${COLORS.RESET} in Claude Code, ${COLORS.CYAN}bypass${COLORS.RESET} in Devin). Run ${COLORS.CYAN}claude /plan2code${COLORS.RESET} yourself if you want prompts.`);
+  console.log(`  ${COLORS.YELLOW}${SYMBOLS.WARNING}${COLORS.RESET} The ${LAUNCHER_COMMAND} command starts the agent with permission prompts off (${COLORS.CYAN}--permission-mode bypassPermissions${COLORS.RESET} in Claude Code, ${COLORS.CYAN}bypass${COLORS.RESET} in Devin, ${COLORS.CYAN}--dangerously-bypass-approvals-and-sandbox${COLORS.RESET} in Codex). Run ${COLORS.CYAN}claude /plan2code${COLORS.RESET} yourself if you want prompts.`);
   console.log('');
+  // Inside install() the final summary prints the steps once, after everything else.
+  if (!quiet) printGettingStarted({ commandInstalled: true });
 
   return 0;
 }
@@ -2593,7 +2648,7 @@ function uninstallLauncher() {
 // MAIN
 // ============================================================================
 
-// Non-interactive build hooks for the committed skills/ artifact.
+// Non-interactive build hooks for the generated skills/ artifact.
 const argv = process.argv.slice(2);
 
 if (argv.includes('--build-skills')) {

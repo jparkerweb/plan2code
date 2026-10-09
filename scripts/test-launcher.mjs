@@ -77,6 +77,29 @@ test("launcher: Devin keeps its args ahead of the -- and the prompt", (t) => {
   assert.deepEqual(box.argsOf("devin"), ["--permission-mode", "bypass", "--verbose", "--", "/plan2code"]);
 });
 
+test("launcher: Codex gets the bypass flag, the forwarded args, then the $plan2code prompt", (t) => {
+  const box = sandbox(["codex"]);
+  t.after(box.cleanup);
+  const result = box.run(["--verbose"]);
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(box.argsOf("codex"), ["--dangerously-bypass-approvals-and-sandbox", "--verbose", "$plan2code"]);
+});
+
+test("launcher: --cli codex picks Codex when it is installed beside another CLI", (t) => {
+  const box = sandbox(["claude", "codex"]);
+  t.after(box.cleanup);
+  const result = box.run(["--cli", "codex"]);
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(box.argsOf("claude"), null);
+  assert.ok(box.argsOf("codex"));
+});
+
+test("launcher: the shipped models.json lists every CLI, and every entry has an id and a label", () => {
+  const shipped = JSON.parse(fs.readFileSync(path.join(path.dirname(LAUNCHER), "models.json"), "utf8"));
+  assert.ok(Array.isArray(shipped.codex));
+  for (const { id, label } of shipped.codex) assert.ok(id && label);
+});
+
 test("launcher: a forwarded --model skips the model notice", (t) => {
   const box = sandbox(["claude"]);
   t.after(box.cleanup);
@@ -119,11 +142,12 @@ test("launcher: an unknown --cli exits 2, a missing CLI 127, and nothing is star
 
   const unknown = box.run(["--cli", "bogus"]);
   assert.equal(unknown.status, 2);
-  assert.match(unknown.stderr, /--cli takes claude or devin, not "bogus"/);
+  assert.match(unknown.stderr, /--cli takes claude, devin, codex, not "bogus"/);
 
   const missing = box.run(["--cli", "devin"]);
   assert.equal(missing.status, 127);
   assert.match(missing.stderr, /the `devin` CLI was not found/);
+  assert.ok(missing.stderr.includes("$plan2code"));
 
   assert.equal(box.argsOf("claude"), null);
 });
@@ -150,12 +174,15 @@ test("launcher: the shipped models.json is curated Devin at low/medium/high only
   }
 });
 
-test("launcher: with neither CLI installed it exits 127 naming both", (t) => {
+test("launcher: with no CLI installed it exits 127 and says how to run the skill from an agent", (t) => {
   const box = sandbox([]);
   t.after(box.cleanup);
   const result = box.run([]);
   assert.equal(result.status, 127);
-  assert.match(result.stderr, /neither `claude` nor `devin` was found/);
+  assert.match(result.stderr, /none of `claude`, `devin` or `codex` was found/);
+  assert.ok(result.stderr.includes("type /plan2code"));
+  assert.ok(result.stderr.includes("$plan2code (Codex)"));
+  assert.match(result.stderr, /cd into the project/);
 });
 
 test("launcher: a forwarded argument with a space and a cmd metacharacter arrives unchanged", (t) => {

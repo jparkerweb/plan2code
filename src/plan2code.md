@@ -19,7 +19,7 @@ If `open` fails outright, fall back without drama: list the skills in the termin
 
 ## The menu
 
-The page draws the cards itself — you never send the list. It also knows the repo already: `open` scans `AGENTS.md` and `specs/` into `state.scan` (`{ hasAgents, specs: [{ dir, name, state, detail, touched }] }`), and the picker at the top enables or greys every card from it — the spec the person picks there is the target their launch carries. What you post is your judgment on top of that:
+The page draws the cards itself — you never send the list. It also knows the repo already: `open` scans `AGENTS.md` and `specs/` into `state.scan` (`{ hasAgents, isGit, specs: [{ dir, name, state, detail, touched }] }`), and the picker at the top enables or greys every card from it — the spec the person picks there is the target their launch carries. What you post is your judgment on top of that:
 
 ```jsonc
 {
@@ -58,6 +58,8 @@ Ground truth for menu notes and Ask-tab answers. For anything beyond this table,
 | review | spec, diff | the fixes picked; no spec writes |
 | 4-finalize | spec + code | summary in `overview.md`; moves the spec to `specs--completed/` |
 | handoff | conversation, spec, git | `<timestamp>-handoff.md` (OS temp or `handoffs/`) |
+| changelog | `CHANGELOG.md`, `package.json`, git history | `CHANGELOG.md` entries, `package.json` version; no commits |
+| git-commit | git status, diffs, `AGENTS.md` | commits; optional branch, `.gitignore`, push; no spec writes |
 
 ## A pick arrives
 
@@ -99,6 +101,7 @@ If `skill` is not in the table below, say so on the page and stay the dashboard.
 | plan2code-1-plan | plan | | plan2code-review | review |
 | plan2code-1b-revise-plan | revise-plan | | plan2code-4-finalize | finalize |
 | plan2code-quick-task | quick-task | | plan2code-handoff | handoff |
+| plan2code-git-commit | git-commit | | plan2code-changelog | changelog |
 
 ## Coming back from another skill
 

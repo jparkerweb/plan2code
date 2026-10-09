@@ -52,6 +52,8 @@ import {
   DONE_REPLY,
   finishPaused,
   fitWithin,
+  GIT_CLEAN_REASON,
+  GIT_INIT_NOTE,
   handoffShape,
   handoffText,
   HOME_REPLY,
@@ -66,6 +68,8 @@ import {
   recordedAnswer,
   resumeCommand,
   REVIEW_REPLY,
+  commitOffer,
+  pendingNote,
   reviewOffer,
   SKILL_CATALOG,
   SPEC_STATE_LABELS,
@@ -185,6 +189,8 @@ import {
   cwdHash,
   handOff,
   initialWorkspace,
+  insideGitRepo,
+  pendingFiles,
   latestOpenCaps,
   parseArgs,
   pendingWorkspaceChanges,
@@ -1044,7 +1050,7 @@ test("help: every number the help quotes matches the code", () => {
   const panels = new Map(
     [...tpl.matchAll(/<section class="help-panel" data-tab="([^"]+)">([\s\S]*?)<\/section>/g)].map((m) => [m[1], m[2]])
   );
-  const firstSeven = HELP_TABS.slice(0, 7).map((t) => panels.get(t.id)).join("\n");
+  const firstEight = HELP_TABS.slice(0, 8).map((t) => panels.get(t.id)).join("\n");
   const used = [
     "closedTabMinutes",
     "maxLifeHours",
@@ -1056,7 +1062,7 @@ test("help: every number the help quotes matches the code", () => {
     "maxUploadMb",
     "cleanupDays",
   ];
-  for (const key of used) assert.ok(firstSeven.includes(`data-fact="${key}"`), `tabs 1 to 7 quote ${key}`);
+  for (const key of used) assert.ok(firstEight.includes(`data-fact="${key}"`), `tabs 1 to 8 quote ${key}`);
 });
 
 /* ---------------------------------------------------------- image uploads */
@@ -2442,6 +2448,20 @@ test("a finish can carry the dashboard flag, and only as a boolean", () => {
   assert.match(bad.stderr, /"finish\.dashboard" must be true or false \(or left out: no dashboard button\)/);
 });
 
+// The Commit it now button is the same kind of opt-in.
+test("a finish can carry the commit flag, and only as a boolean", () => {
+  const base = { headline: "The task is built", command: "git add -A && git commit -m \"x\" -m \"AI Assisted\"" };
+  for (const commit of [true, false]) {
+    const res = cli(["post", "--session", sid, "--file", payload("fin-commit.json", { finish: { ...base, commit } })]);
+    assert.equal(res.json.ok, true);
+  }
+  const bad = cli(["post", "--session", sid, "--file", payload("fin-commit-bad.json", { finish: { ...base, commit: "yes" } })], {
+    expectFail: true,
+  });
+  assert.equal(bad.status, 3);
+  assert.match(bad.stderr, /"finish.commit" must be true or false/);
+});
+
 // Taking the review up is the agent posting `"finish": null`: the session goes
 // back to work, so the page must stop saying it is over.
 test("a finish can be taken back, which puts the session back to work", () => {
@@ -3028,6 +3048,112 @@ test("the project scan reads each spec's pipeline stage off its files", () => {
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
+});
+
+// The dashboard's Git commit card offers to start a repository when the folder
+// is not one. The scan answers that from the filesystem, never from a git
+// process, and a linked worktree (a .git file, not a folder) must count.
+test("scanProject reports isGit for a repo, a subfolder, a linked worktree and a plain folder", () => {
+  const saved = {};
+  for (const k of ["GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR"]) {
+    saved[k] = process.env[k];
+    delete process.env[k];
+  }
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), "p2c-isgit-"));
+  try {
+    const repo = path.join(base, "repo");
+    fs.mkdirSync(path.join(repo, "sub"), { recursive: true });
+    const git = (cwd, ...a) => execFileSync("git", a, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+    git(repo, "init", "-q");
+    git(repo, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "--allow-empty", "-m", "x");
+    git(repo, "worktree", "add", "-q", path.join(base, "wt"));
+    const plain = path.join(base, "plain");
+    fs.mkdirSync(plain);
+
+    assert.equal(scanProject(repo).isGit, true);
+    assert.equal(scanProject(path.join(repo, "sub")).isGit, true);
+    assert.equal(fs.statSync(path.join(base, "wt", ".git")).isFile(), true, "a linked worktree's .git is a file");
+    assert.equal(scanProject(path.join(base, "wt")).isGit, true);
+    assert.equal(scanProject(plain).isGit, false);
+    assert.equal(insideGitRepo(plain), false);
+
+    // When git is steered by the environment, git decides: count it as a repo.
+    process.env.GIT_DIR = path.join(plain, "nowhere");
+    assert.equal(insideGitRepo(plain), true);
+  } finally {
+    for (const [k, v] of Object.entries(saved)) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+    fs.rmSync(base, { recursive: true, force: true });
+  }
+});
+
+test("the Git commit card stays clickable outside a repository and says what happens", () => {
+  const entry = SKILL_CATALOG.find((e) => e.skill === "plan2code-git-commit");
+  const outside = cardAvailability(entry, { hasAgents: true, isGit: false }, null);
+  assert.equal(outside.on, true);
+  assert.equal(outside.note, GIT_INIT_NOTE);
+  for (const scan of [{ hasAgents: true, isGit: true }, { hasAgents: true }, null]) {
+    const a = cardAvailability(entry, scan, null);
+    assert.equal(a.on, true);
+    assert.equal(a.note, undefined);
+  }
+  const scan = { hasAgents: true, isGit: false, specs: [] };
+  assert.equal(cardPresentation(entry, scan, null).detail, GIT_INIT_NOTE);
+  // The agent's own detail line still wins over the note.
+  const withSpec = { hasAgents: true, isGit: false, specs: [{ dir: "specs/x", name: "x", state: "building" }] };
+  const menu = { details: { "plan2code-git-commit": "Two changes ready" } };
+  assert.equal(cardPresentation(entry, withSpec, withSpec.specs[0], menu).detail, "Two changes ready");
+});
+
+test("the Git commit card shows the pending count and greys out on a clean tree", () => {
+  const entry = SKILL_CATALOG.find((e) => e.skill === "plan2code-git-commit");
+  const clean = cardAvailability(entry, { hasAgents: true, isGit: true, pending: 0 }, null);
+  assert.equal(clean.on, false);
+  assert.equal(clean.reason, GIT_CLEAN_REASON);
+  const dirty = cardAvailability(entry, { hasAgents: true, isGit: true, pending: 3 }, null);
+  assert.deepEqual(dirty, { on: true, note: "3 files to commit" });
+  assert.equal(pendingNote(1), "1 file to commit");
+  // git could not say: stay clickable, and no repository still offers git init.
+  assert.deepEqual(cardAvailability(entry, { hasAgents: true, isGit: true, pending: null }, null), { on: true });
+  assert.equal(cardAvailability(entry, { hasAgents: true, isGit: false, pending: 0 }, null).note, GIT_INIT_NOTE);
+});
+
+test("pendingFiles counts changed and untracked paths, and says null outside a repository", () => {
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), "p2c-pending-"));
+  const git = (...a) => spawnSync("git", a, { cwd: repo, encoding: "utf8" });
+  const repo = path.join(base, "repo");
+  const plain = path.join(base, "plain");
+  fs.mkdirSync(repo);
+  fs.mkdirSync(plain);
+  try {
+    if (git("init", "-q").status !== 0) return; // no git on this machine
+    git("config", "user.email", "t@example.com");
+    git("config", "user.name", "T");
+    assert.equal(pendingFiles(repo), 0, "an empty repository is clean");
+    fs.writeFileSync(path.join(repo, "a.txt"), "a");
+    git("add", "a.txt");
+    git("commit", "-q", "-m", "first");
+    assert.equal(pendingFiles(repo), 0);
+    fs.writeFileSync(path.join(repo, "a.txt"), "changed");
+    fs.writeFileSync(path.join(repo, "b.txt"), "new");
+    assert.equal(pendingFiles(repo), 2, "one modified, one untracked");
+    git("add", "b.txt");
+    assert.equal(pendingFiles(repo), 2, "staged counts too");
+    assert.equal(scanProject(repo).pending, 2);
+    assert.equal(scanProject(plain).pending, null, "no repository, no count");
+  } finally {
+    fs.rmSync(base, { recursive: true, force: true });
+  }
+});
+
+test("the commit offer is read from finish.commit and a pause never carries it", () => {
+  assert.equal(commitOffer({ headline: "Done", commit: true }), true);
+  assert.equal(commitOffer({ headline: "Done", commit: false }), false);
+  assert.equal(commitOffer({ headline: "Done" }), false);
+  assert.equal(commitOffer({ headline: "Paused here", commit: true }), false);
+  assert.equal(commitOffer(null), false);
 });
 
 test("a verdict's button text never renders blank", () => {
@@ -5209,7 +5335,8 @@ test("subagents: only the five opted-in workflows offer the switch", () => {
     assert.equal(defaultInstruction(w), "");
   }
   assert.equal(Object.keys(SUBAGENT_WORKFLOWS).length, 5);
-  assert.deepEqual(defaultSetting("review"), { workflow: "review", on: false, instruction: null, max: 3 });
+  assert.deepEqual(defaultSetting("review"), { workflow: "review", on: true, instruction: null, max: 3 });
+  assert.equal(defaultSetting("plan").on, false, "a skill without the switch is never on");
   assert.equal(effectiveInstruction({ workflow: "review", instruction: "  " }), defaultInstruction("review"));
   assert.equal(effectiveInstruction({ workflow: "review", instruction: " Mine " }), "Mine");
 });
@@ -5315,7 +5442,7 @@ test("subagents: the page shows the switch only when offered and supported, and 
   assert.equal(showTab(on, undefined), false);
   assert.equal(showTab(off, [helper]), true, "a helper shows with the switch off (Pathfinder research)");
   assert.equal(showTab({ ...on, supported: false }, [helper]), false, "no tab where the switch cannot show");
-  assert.ok(CHECKIN_LINE.includes("check-ins, not live"));
+  assert.ok(CHECKIN_LINE.includes("checks in, not live"));
 });
 
 test("subagents: helperRows labels each state, shows a result only once a helper ended, and collapses to working alone", () => {
@@ -5382,7 +5509,7 @@ test("subagents: the store round-trips per project and workflow under the consol
     if (process.platform === "win32" || process.platform === "darwin") {
       assert.deepEqual(out.otherCase, out.saved, "a different-case path reads the same entry");
     }
-    assert.deepEqual(out.unsaved, { on: false, instruction: null, max: 3 });
+    assert.deepEqual(out.unsaved, { on: true, instruction: null, max: 3 }, "nothing saved means on");
     assert.ok(!fs.existsSync(path.join(home, "subagents.json.lock")), "the lock is released");
   } finally {
     fs.rmSync(home, { recursive: true, force: true });
@@ -5821,6 +5948,11 @@ test("subagents: a change reaches the next pickup once, last in reply, edits nam
   const s = subagentsSession();
   const extra = tempFolder();
   try {
+    // Nothing saved means on, and open already told the agent. Turn it off and
+    // let that be said, so the rest of the test starts from an off agent.
+    assert.equal((await setSubagents(s, { ...ON3, on: false })).status, 200);
+    assert.equal(subagentLines((await submitAndWait(s)).json.reply).length, 1, "off is said to an agent told on");
+
     const on = await setSubagents(s, ON3);
     assert.equal(on.status, 200);
     assert.equal(on.body.ok, true);
@@ -5876,7 +6008,11 @@ test("subagents: a change reaches the next pickup once, last in reply, edits nam
 });
 
 test("subagents: never on means never a line, and chat hands a pending block over on its own", async () => {
-  const s = subagentsSession();
+  // A project that saved "off" starts its next session off and untold.
+  const first = subagentsSession();
+  assert.equal((await setSubagents(first, { on: false, instruction: null, max: 4 })).status, 200);
+  cli(["stop", "--session", first.sid]);
+  const s = subagentsSession({}, { keepStore: true });
   try {
     const off = await setSubagents(s, { on: false, instruction: null, max: 4 });
     assert.equal(off.status, 200);
@@ -5985,14 +6121,14 @@ test("subagents: a save that matches this session still becomes the project's se
   let c = null;
   try {
     const before = (await frameSubagents(b)).revision;
-    assert.equal((await setSubagents(a, ON3)).status, 200, "another session turns it on for the project");
-    const same = await setSubagents(b, { ...ON3, on: false });
+    assert.equal((await setSubagents(a, { ...ON3, on: false })).status, 200, "another session turns it off for the project");
+    const same = await setSubagents(b, ON3);
     assert.equal(same.status, 200);
     assert.equal(same.body.setting.revision, before, "nothing changed for this session's agent");
     assert.equal("subagents" in (await submitAndWait(b)).json, false);
 
     c = subagentsSession({}, { keepStore: true });
-    assert.equal((await frameSubagents(c)).on, false, "the next session starts from the person's latest pick");
+    assert.equal((await frameSubagents(c)).on, true, "the next session starts from the person's latest pick");
   } finally {
     for (const s of [a, b, c]) if (s) cli(["stop", "--session", s.sid]);
   }
@@ -6898,4 +7034,70 @@ test("update banner: built only on the dashboard, dismissed per session, and Hel
   const help = app.match(/async function renderHelpVersion\(\) \{([\s\S]*?)\n\}/);
   assert.ok(help, "app.js has renderHelpVersion");
   assert.match(help[1], /releasesLink\(/, "the help version is a Releases link");
+});
+
+// The Changelog card sits left of Git commit, always clickable, and a launch
+// from it resumes the session under its own workflow.
+test("the Changelog card comes just before Git commit and is always on", () => {
+  const skills = SKILL_CATALOG.map((e) => e.skill);
+  assert.equal(skills.indexOf("plan2code-changelog") + 1, skills.indexOf("plan2code-git-commit"));
+  const entry = SKILL_CATALOG.find((e) => e.skill === "plan2code-changelog");
+  assert.equal(entry.workflow, "changelog");
+  assert.equal(entry.command, "/plan2code-changelog");
+  for (const scan of [{ hasAgents: true, isGit: false }, { hasAgents: false }, null]) {
+    assert.equal(cardAvailability(entry, scan, null).on, true);
+  }
+});
+
+/* ------------------------------------------- getting started: stuck help and the finished screen */
+
+const EM = String.fromCharCode(0x2014);
+const publicSource = (name) => fs.readFileSync(path.join(ROOT, "src", "web-console", "public", name), "utf8");
+
+test("help: the stuck tab is second, with a callout and four symptom rows before the diagram", () => {
+  assert.equal(HELP_TABS[0].id, "about");
+  assert.equal(HELP_TABS[1].id, "stuck");
+  const tpl = helpTemplate();
+  const panel = tpl.match(/<section class="help-panel" data-tab="stuck">([\s\S]*?)<\/section>/)[1];
+  assert.match(panel, /<div class="help-callout" role="note">/);
+  assert.match(panel, /Check this first/);
+  assert.match(panel, /look at your terminal/);
+  assert.equal((panel.match(/class="help-row"/g) || []).length, 4, "four symptom rows");
+  for (const part of ["You see", "Likely cause", "Do this"]) {
+    assert.equal((panel.match(new RegExp(`<dt>${part}</dt>`, "g")) || []).length, 4, `each row has "${part}"`);
+  }
+  assert.ok(panel.indexOf("help-rows") < panel.indexOf("help-figure"), "the rows come before the diagram");
+  assert.match(panel, /<svg class="help-callout-icon"[^>]*aria-hidden="true"/, "the icon is decoration");
+});
+
+test("status line: the quiet and Not running lines offer What to check, opening Help on the stuck tab", () => {
+  const app = publicSource("app.js");
+  assert.match(app, /help\.textContent = "What to check"/);
+  assert.match(app, /openHelpOn\("stuck"\)/);
+  // Exactly the three lines that carry it: the approval hint, the stale line and the Not running line.
+  const render = app.slice(app.indexOf("function renderStatus()"), app.indexOf("/* ---------------------------------------------------------------- brief */"));
+  assert.match(render, /Boolean\(hint\)/);
+  assert.equal((render.match(/^\s+true\n\s+\);/gm) || []).length, 2, "the stale and Not running lines pass check");
+});
+
+test("finished screen: every shape shows Before you close this, with three rows", () => {
+  const app = publicSource("app.js");
+  const handoff = app.slice(app.indexOf("function renderHandoff("));
+  assert.match(handoff.slice(0, handoff.indexOf("\n}\n")), /card\.appendChild\(renderCloseGuide\(shape\)\)/);
+  const guide = app.slice(app.indexOf("function renderCloseGuide("), app.indexOf("function renderHandoff("));
+  for (const label of ["Safe to close", "Start fresh", "Carry on", "Before you close this"]) {
+    assert.ok(guide.includes(label), `the guide says "${label}"`);
+  }
+  assert.match(guide, /shape === "paused"/, "a pause changes the Start fresh sentence");
+  assert.match(guide, /resume command/);
+});
+
+test("getting started: the new help, status and finished-screen strings carry no em dash", () => {
+  const app = publicSource("app.js");
+  const guide = app.slice(app.indexOf("const GUIDE_ICONS"), app.indexOf("function renderHandoff("));
+  assert.ok(!guide.includes(EM), "the close guide has no em dash");
+  const tpl = helpTemplate();
+  const stuck = tpl.match(/<section class="help-panel" data-tab="stuck">([\s\S]*?)<\/section>/)[1];
+  const fresh = stuck.slice(0, stuck.indexOf("<h4>Not running, or not connected?</h4>"));
+  assert.ok(!fresh.includes(EM), "the callout and rows have no em dash");
 });

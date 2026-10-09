@@ -2,14 +2,15 @@
 'use strict';
 
 /**
- * `plan2code` — open the Plan2Code dashboard skill in Claude Code or Devin, in the current
- * directory.
+ * `plan2code`: open the Plan2Code dashboard skill in Claude Code, Devin or Codex, in the
+ * current directory.
  *
  * Runs one of:
  *   claude /plan2code --permission-mode bypassPermissions [extra args]
  *   devin --permission-mode bypass [extra args] -- /plan2code
+ *   codex --dangerously-bypass-approvals-and-sandbox [extra args] $plan2code
  *
- * When both CLIs are installed it asks which one, with the last pick as the default; with only
+ * Codex starts a skill with `$name` rather than `/name`. When more than one CLI is installed it asks which one, with the last pick as the default; with only
  * one installed it uses that. `--cli claude` / `--cli devin` skips the question. Before starting
  * it asks which model to run, from the curated list in models.json (shipped with every
  * install) plus any models the user added in User Preferences; Enter keeps the model the CLI
@@ -107,7 +108,27 @@ const CLIS = [
     label: 'Devin',
     args: (extra) => ['--permission-mode', 'bypass', ...extra, '--', '/plan2code'],
   },
+  {
+    id: 'codex',
+    label: 'Codex',
+    // Codex mentions a skill with `$name`; the prompt is its one positional argument.
+    args: (extra) => ['--dangerously-bypass-approvals-and-sandbox', ...extra, '$plan2code'],
+  },
 ];
+
+/** What to do when no agent is installed: how to get one and how to run the skill from it. */
+const SKILL_STEPS = [
+  'Plan2Code runs inside an AI coding agent. To use it:',
+  '  1. Install one: Claude Code (npm i -g @anthropic-ai/claude-code), Codex (npm i -g @openai/codex) or Devin (https://devin.ai).',
+  '  2. Open a new terminal and cd into the project you want to work on.',
+  '  3. Start your agent there, then type /plan2code (Claude Code, Devin) or $plan2code (Codex).',
+];
+
+/** The CLI ids as prose: "`claude`, `devin` or `codex`". */
+function cliIdList() {
+  const ids = CLIS.map((cli) => '`' + cli.id + '`');
+  return `${ids.slice(0, -1).join(', ')} or ${ids[ids.length - 1]}`;
+}
 
 // The curated menu ships beside this file (models.json, overwritten by every install); models
 // the user adds in User Preferences live in ~/.plan2code/models.json and are merged in.
@@ -341,21 +362,25 @@ async function chooseCli(requested) {
   if (requested !== undefined) {
     const known = CLIS.find((cli) => cli.id === requested);
     if (!known) {
-      console.error(`${ce.red('plan2code:')} --cli takes ${CLIS.map((cli) => cli.id).join(' or ')}${requested ? `, not "${requested}"` : ''}.`);
+      console.error(`${ce.red('plan2code:')} --cli takes ${CLIS.map((cli) => cli.id).join(', ')}${requested ? `, not "${requested}"` : ''}.`);
       return { code: 2 };
     }
     const found = installed.find((cli) => cli.id === requested);
     if (!found) {
       console.error(`${ce.red('plan2code:')} the \`${known.id}\` CLI was not found on your PATH.`);
       console.error(`Install ${known.label}, open a new terminal, and run \`plan2code\` again.`);
+      for (const step of SKILL_STEPS) console.error(step);
     }
     if (found) announceCli(found);
     return found ? { cli: found } : { code: 127 };
   }
 
   if (installed.length === 0) {
-    console.error(`${ce.red('plan2code:')} neither ${CLIS.map((cli) => `\`${cli.id}\``).join(' nor ')} was found on your PATH.`);
-    console.error(`Install ${CLIS.map((cli) => cli.label).join(' or ')}, open a new terminal, and run \`plan2code\` again.`);
+    console.error(`${ce.red('plan2code:')} none of ${cliIdList()} was found on your PATH.`);
+    console.error('');
+    for (const step of SKILL_STEPS) console.error(step);
+    console.error('');
+    console.error('Already have an agent? Open it in your project and type /plan2code ($plan2code in Codex), or install it and run `plan2code` again.');
     return { code: 127 };
   }
   if (installed.length === 1 || !process.stdin.isTTY) {

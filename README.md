@@ -13,7 +13,7 @@ the next engineer all start from the same specs.
 
 One command opens it, every step is a card, and the terminal is always there if you prefer it.
 
-Version 2.5.1 · MIT · 📖 [plan2code.jparkerweb.com](https://plan2code.jparkerweb.com)
+Version 2.6.0 · MIT · 📖 [plan2code.jparkerweb.com](https://plan2code.jparkerweb.com)
 
 ---
 
@@ -30,8 +30,14 @@ The dashboard, in a project halfway through a build. It suggests the next step f
 
 ## Install and start
 
-Requires [Node.js](https://nodejs.org/) 18 or later and network access — installation runs through
-the [skills CLI](https://skills.sh). To update, re-run the install command.
+### Before you start
+
+- **Node.js 18 or newer.** Check with `node --version`. No Node? Get it from [nodejs.org](https://nodejs.org/) (the LTS download), or run `winget install OpenJS.NodeJS.LTS` on Windows, `brew install node` on macOS, or use `nvm` on Linux. Then open a new terminal.
+- **Start from your project.** Open your terminal in the project you want to work on (`cd` into it) before you run anything. Plan2Code works on the folder you start it in.
+- **Ways in.** `plan2code` (Claude Code, Devin or Codex), or type `/plan2code` in your agent (`$plan2code` in Codex).
+- **No agent yet?** Install Claude Code, Codex or Devin first.
+
+Installation needs network access and runs through the [skills CLI](https://skills.sh). To update, re-run the install command.
 
 ```bash
 npx --allow-git=all git+https://github.com/jparkerweb/plan2code.git
@@ -47,33 +53,32 @@ The installer opens this menu (cloning and running `node install.js`, below, ope
 ╔═════════════════════════════════════════════════════════╗
 ║ INSTALL PLAN2CODE                                       ║
 ╠═════════════════════════════════════════════════════════╣
-║  I.  INSTALL    Install Plan2Code skills everywhere     ║
-║  A.  ALL        Install Plan2Code + dev tools           ║
-║  U.  UNINSTALL  Remove Plan2Code skills and dev tools   ║
-║  C.  CUSTOM     Advanced options                        ║
+║  I.  INSTALL    Install skills + the plan2code command  ║
+║  U.  UNINSTALL  Remove everything Plan2Code installed   ║
+║  A.  ADVANCED   Project install, dev tools, and more    ║
 ║  Q.  QUIT       Exit                                    ║
 ╚═════════════════════════════════════════════════════════╝
 ```
 
 ### Start
 
-1. In any project, run `plan2code`. It starts Claude Code or Devin on the dashboard, and the
-   dashboard opens in your browser.
+1. `cd` into your project, then run `plan2code`. It starts Claude Code, Devin or Codex on the dashboard,
+   and the dashboard opens in your browser.
 2. In a project without an `AGENTS.md`, pick **Set up this project** first: Plan and Quick task
    need it.
 3. Pick a card.
 
-Already inside your agent? Type `/plan2code` instead.
+Already inside your agent? Type `/plan2code` instead (`$plan2code` in Codex).
 
 <details>
 <summary>About the plan2code command</summary>
 
-The installer adds `plan2code` as a global command (Custom `C` → `D` adds just the command). Run it from any project and the Plan2Code
-dashboard opens right there, in **Claude Code** or **Devin**. With both installed it asks which and
-remembers your pick; `plan2code --cli claude` or `--cli devin` skips the question, and `--model <name>`
+Install (`I`) adds `plan2code` as a global command (Advanced `A` → `D` adds just the command). Run it from any project and the Plan2Code
+dashboard opens right there, in **Claude Code**, **Devin** or **Codex**. With more than one installed it asks which and
+remembers your pick; `plan2code --cli claude`, `--cli devin` or `--cli codex` skips the question, and `--model <name>`
 chooses the model. It works in cmd, PowerShell, Git Bash, macOS and Linux shells, and needs the
-Claude Code or Devin CLI on your `PATH`. It starts the agent with permission prompts off
-(`--permission-mode bypassPermissions` in Claude Code, `--permission-mode bypass` in Devin); run
+Claude Code, Devin or Codex CLI on your `PATH`. It starts the agent with permission prompts off
+(`--permission-mode bypassPermissions` in Claude Code, `--permission-mode bypass` in Devin, `--dangerously-bypass-approvals-and-sandbox` in Codex); run
 `claude /plan2code` yourself if you want prompts. The installer then offers a desktop shortcut (answer `y`),
 which opens a folder picker first. Uninstalling (`U`) removes both.
 </details>
@@ -183,6 +188,8 @@ The dashboard's cards, and when each one lights up for the spec you pick:
 | Quick task | Too small for the full process? A quick plan, then it just builds it. | Always |
 | Review | A second opinion on the changes. Problems ranked, and you pick what gets fixed. | Always |
 | Handoff | Pack this conversation into a document a fresh session can pick up cold. | Always |
+| Changelog | Checks the CHANGELOG version against the main branch and suggests entries for what is new. | Always |
+| Git commit | Commits your changes with a clear message, suggests a split when it is really two jobs, and offers to push. | Always (offers to start a repository outside one) |
 
 ---
 
@@ -349,6 +356,8 @@ console or the terminal; add `--web` to skip the question and go straight to the
 | `/plan2code-quick-task` | A small change that doesn't warrant the full sequence |
 | `/plan2code-1b-revise-plan` | Requirements moved mid-build. Revise the specs, not the code |
 | `/plan2code-handoff` | Compact this conversation into a doc the next one resumes from |
+| `/plan2code-changelog` | Check the CHANGELOG version against the default branch, suggest entries for new work you can edit, keep `package.json` aligned, then offer Git commit |
+| `/plan2code-git-commit` | Commit with a clear message, suggested splits, a branch offer on the default branch, and an optional push |
 
 ---
 
