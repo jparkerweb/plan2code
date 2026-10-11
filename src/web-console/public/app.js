@@ -28,6 +28,7 @@ import {
   DASHBOARD_NOTE,
   COMMIT_REPLY,
   DASHBOARD_REPLY,
+  afterFinishButton,
   commitOffer,
   dashboardOffer,
   DONE_REPLY,
@@ -65,6 +66,9 @@ import {
   startPose,
   STOP_REPLY,
   sentAnswer,
+  agentRepliedAfterSend,
+  indentReply,
+  showKey,
   submittedAwaiting,
   noteAwaiting,
   suggestionFrom,
@@ -114,6 +118,23 @@ import {
   showTab,
   switchLabel,
 } from "./subagents.js";
+import {
+  BRANCH_TYPES,
+  PR_HOST_LABELS,
+  boardActions,
+  boardAwaiting,
+  boardPrLink,
+  commitTicks,
+  composeBranchName,
+  currentRow,
+  filterBranches,
+  foldRemote,
+  gitReply,
+  nameStatus,
+  orderBranches,
+  refreshedLine,
+  relativeAge,
+} from "./git-board.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -418,24 +439,6 @@ for (const evt of ["pointerdown", "keydown"]) {
   });
 }
 
-// Run it, on a fenced git block (render.js): stage the block as the Ask
-// draft and open the chat. The person still presses Send, so nothing runs
-// on a stray click — the same fill-the-box pattern as the Ask starters.
-document.addEventListener("click", (e) => {
-  const run = e.target.closest(".md-run");
-  if (!run) return;
-  const code = run.closest(".md-pre-wrap")?.querySelector("code");
-  if (!code || !code.textContent.trim()) return;
-  local.chat.draft = `run:\n${code.textContent}`;
-  view = "ask";
-  save();
-  render();
-  const ta = $("ask-input");
-  if (!ta) return;
-  ta.focus();
-  ta.setSelectionRange(ta.value.length, ta.value.length);
-});
-
 // The stars for Planny's flight, made once. Each gets its place and pace as
 // custom properties set through the CSSOM: the CSP forbids style attributes
 // in markup, and the stylesheet cannot roll dice. They sit still, invisible,
@@ -462,7 +465,8 @@ const GONE_AFTER_MS = 8000;
 // Named so a reconnect can clear only THIS banner: a bare banner(null) would
 // wipe an unrelated warning that landed while the page was gone (an upload
 // failure, a refused send).
-const GONE_BANNER = "Lost contact with Plan2Code. Nothing you have typed is lost. This page reconnects by itself.";
+const GONE_BANNER =
+  "Lost contact with Plan2Code. Nothing you have typed is lost. A blip clears by itself; if Plan2Code starts again, it gives you a new link, so open that one.";
 const WORKING_GRACE_MS = 5 * 60 * 1000;
 // Two minutes with the agent mid-turn, three when it is merely meant to be
 // listening. The difference is the cost of being wrong: a working agent that
@@ -476,6 +480,8 @@ let S = null;
 let rev = 0;
 let agentLastSeen = null;
 let pendingResult = false;
+// Set while a "still being picked up" banner is showing (see the frame handler).
+let pendingBannerUp = false;
 let pendingStop = false;
 let lastContact = Date.now();
 let gone = false;
@@ -692,6 +698,84 @@ const finish = () => (S && S.finish && typeof S.finish === "object" ? S.finish :
 // skills, rendered from the page's own catalog, where a click IS the answer.
 const isDashboard = () => S && S.workflow === "dashboard";
 
+// The git board is drawn by the page too, from the console's own read-only
+// snapshot (state.git), with the agent's confirm and result cards above it.
+const isGitBoard = () => S && S.workflow === "git" && S.git;
+
+// A board click or a card send stays with the agent until its next post
+// (boardAwaiting in git-board.js), not just until `wait` collects it.
+function gitAwaiting() {
+  if (!isGitBoard()) return false;
+  return boardAwaiting({
+    sentAt: local.gitSentAt || null,
+    updatedAt: S.updatedAt || null,
+    cardsAwaiting: awaitingReply().length,
+    adrift: agentAdrift(),
+  });
+}
+
+// What the person has typed or ticked on the board. Every state frame redraws
+// the board from state.git, so this is what carries their place across it.
+//   panel     the open panel: "create", "commit" or "cleanup", or null
+//   create    the Create prompt's fields, while it is open
+//   ticks     the commit table's ticked paths; ignore, its .gitignore toggles
+//   sweep     the cleanup list's ticked branches
+//   base      the pull-request base the picker chose
+//   settled   cards the agent settled since the last click on the board
+//   scrollTop how far the column is scrolled on the board view, put back after each redraw
+//   anchorDelta the branch table's offset inside the board, for scroll restore
+const board = {
+  scrollTop: 0,
+  anchorDelta: null,
+  query: "",
+  showAll: false,
+  remoteOpen: null,
+  panel: null,
+  create: null,
+  ticks: null,
+  ignore: new Set(),
+  sweep: null,
+  base: null,
+  settled: new Set(),
+};
+
+// The search, ticks and open panel are also kept in `local`, so a reload (and
+// a skill hop back) restores them the way card drafts already do. Stale picks
+// are harmless: the next send re-checks every path against the snapshot. The
+// restore waits for the first draw: load() has not run when this module does.
+const boardBlank = { scrollTop: 0, anchorDelta: null, query: "", showAll: false, remoteOpen: null, panel: null, create: null, ticks: null, sweep: null, base: null };
+let boardHydrated = false;
+const hydrateBoard = () => {
+  boardHydrated = true;
+  const g = local.gitBoard;
+  if (!g) return;
+  Object.assign(board, boardBlank, {
+    query: g.query || "",
+    showAll: Boolean(g.showAll),
+    remoteOpen: g.remoteOpen ?? null,
+    panel: g.panel || null,
+    create: g.create || null,
+    ticks: g.ticks ? new Set(g.ticks) : null,
+    sweep: g.sweep ? new Set(g.sweep) : null,
+    base: g.base || null,
+    ignore: new Set(g.ignore || []),
+  });
+};
+const persistBoard = () => {
+  local.gitBoard = {
+    query: board.query,
+    showAll: board.showAll,
+    remoteOpen: board.remoteOpen,
+    panel: board.panel,
+    create: board.create,
+    ticks: board.ticks ? [...board.ticks] : null,
+    sweep: board.sweep ? [...board.sweep] : null,
+    base: board.base,
+    ignore: [...board.ignore],
+  };
+  save();
+};
+
 // The server's scan of the repo — AGENTS.md plus every spec under specs/,
 // classified by pipeline stage and sorted most-recently-touched first.
 const scan = () => (S && S.scan) || null;
@@ -728,6 +812,15 @@ function reviewPending() {
 // done: that send closes the session, so a button after it would go nowhere.
 const dashboardLive = (fin) => dashboardOffer(fin) && local.afterBuild !== "done";
 
+// Whether the agent has collected this card's send: carried by the last
+// collected send (state.collected), or sent before that collection.
+const sendCollected = (i, sub = i && i.submitted) => {
+  const c = S && S.collected;
+  if (!c || !sub) return false;
+  if (Array.isArray(c.ids) && c.ids.includes(i.id)) return true;
+  return Boolean(c.at && sub.at && String(sub.at) <= String(c.at));
+};
+
 // The durable half of `local.sent`: the server writes every send onto the
 // item itself (`submitted`), so the send survives a reload, a resume onto a
 // new port, and a second tab. It also covers an agent that took the answer
@@ -737,6 +830,12 @@ const dashboardLive = (fin) => dashboardOffer(fin) && local.afterBuild !== "done
 const submittedInFlight = (i) => {
   const sub = submittedAwaiting(i);
   if (!sub) return null;
+  // Collected, and the agent is back to waiting without settling it: it left
+  // the card open on purpose (a pick that still owes its recap), so the send
+  // is no longer with it, and nothing stays locked waiting on a reply.
+  // Any send at or before the last collection was collected too, not only the
+  // cards that last one carried.
+  if (!pendingResult && !agentWorking() && sendCollected(i, sub)) return null;
   const r = local.retract && local.retract[i.id];
   if (r === "any" || (r != null && r === sub.at)) return null;
   return sub;
@@ -880,6 +979,7 @@ function adopt(body) {
   // What was already theirs to answer, measured BEFORE the new state lands,
   // so what is theirs afterwards can be told apart from what just arrived.
   const before = firstLoad ? null : new Set(myTurn().map((i) => i.id));
+  const openBefore = firstLoad ? [] : openItems().map((i) => i.id);
   const wasFinished = Boolean(finish());
   const prevWorkflow = S ? S.workflow : null;
   const prevSpecDir = S ? S.specDir : null;
@@ -888,6 +988,12 @@ function adopt(body) {
   S = body.state;
   agentLastSeen = body.agentLastSeen || null;
   pendingResult = Boolean(body.pendingResult);
+  // A "still being picked up" banner is over once the send is: it said a
+  // moment, and left up it reads as a fault through every later screen.
+  if (!pendingResult && pendingBannerUp) {
+    pendingBannerUp = false;
+    banner(null);
+  }
   pendingStop = Boolean(body.pendingStop);
   chatFrame = body.chat || null;
   if (body.workspace) wsFrame = body.workspace;
@@ -920,7 +1026,11 @@ function adopt(body) {
   // run inline from another (a quick task's review) keeps all of it.
   const viaDashboard = prevWorkflow === "dashboard" || S.workflow === "dashboard";
   if (prevWorkflow && prevWorkflow !== S.workflow && viaDashboard) {
-    local = { ...fresh(), launching: local.launching, ...("specSel" in local ? { specSel: local.specSel } : {}) };
+    // The pick rides into the skill it launched, never back home: arriving at
+    // the dashboard, the picker starts on the most recently touched spec, the
+    // one the agent's fresh menu recommends for.
+    const keepPick = S.workflow !== "dashboard" && "specSel" in local;
+    local = { ...fresh(), launching: local.launching, ...(keepPick ? { specSel: local.specSel } : {}) };
     save();
     selected = null;
     view = "questions";
@@ -929,8 +1039,30 @@ function adopt(body) {
     scrollMemory.clear();
     drawnView = null;
     drawnTabs = null;
+    // The board's search, picks and open panel belonged to that git run too.
+    Object.assign(board, boardBlank);
+    board.ignore.clear();
+    board.settled.clear();
+  }
+  // The welcome belongs to the dashboard: a pick made under it (or a hop
+  // the agent made) leaves it behind, over a skill it says nothing about.
+  if (prevWorkflow === "dashboard" && S.workflow !== "dashboard" && $("welcome-modal").open) $("welcome-modal").close();
+  // A hop away from git that did not go through the dashboard (changelog and
+  // back, say) lets go of it the same way — the persisted copy too.
+  if (prevWorkflow === "git" && S.workflow !== "git") {
+    Object.assign(board, boardBlank);
+    board.ignore.clear();
+    local.gitBoard = null;
   }
   adoptChat();
+  // On the git board, a card the agent settled stays in the card slot until
+  // the next click on the board, so its outcome is not whisked away.
+  if (S.workflow === "git") {
+    for (const id of openBefore) {
+      const item = byId(id);
+      if (item && !isOpen(item)) board.settled.add(id);
+    }
+  } else board.settled.clear();
   // The finish a review was asked from has gone: the agent took the review
   // up. A later finish (after the review, or after a second phase) starts
   // with its own offer unanswered.
@@ -989,7 +1121,22 @@ function adopt(body) {
   const replied = !pendingResult && !agentWorking();
   for (const id of Object.keys(local.sent || {})) {
     const item = byId(id);
-    if (!item || !isOpen(item) || replied) delete local.sent[id];
+    if (!item || !isOpen(item) || replied) {
+      // Re-asked in its thread rather than settled: the question is theirs
+      // again, and what they sent goes back on the form to edit, not away.
+      // A reordered and renamed list, say, would otherwise have to be redone.
+      // One-click answers (a verdict, a yes) are not put back: re-clicking is
+      // free, and a pre-staged "I want changes" is one Send from going twice.
+      const effort = ["list", "text", "multi", "checklist", "choice"].includes(item && item.kind);
+      // A card collected and left open (a partial settle) is the same: theirs
+      // again, with what they sent still on it.
+      // Never on a finished (or paused) session: nothing more can be sent there.
+      if (effort && !finish() && isOpen(item) && replied && !local.staged[id] && (agentRepliedAfterSend(item) || sendCollected(item))) {
+        const back = sentAnswer(local.sent[id]);
+        if (back) local.staged[id] = back;
+      }
+      delete local.sent[id];
+    }
   }
   // A retracted send suppresses exactly that send. Once the item moves --
   // settled, sent again (a new `at`), or answered by an agent reply -- the
@@ -1064,7 +1211,10 @@ function adoptChat() {
   if (conv != null && conv !== local.chat.conversation) {
     if (local.chat.conversation == null) local.chat.conversation = conv;
     else if (conv > local.chat.conversation) {
-      local.chat = { ...freshChat(), history: local.chat.history, about: null, conversation: conv };
+      // What they were typing, and what they had attached to it, is theirs:
+      // a new conversation started elsewhere (another tab, a skill switch)
+      // must not wipe a message they have not sent yet.
+      local.chat = { ...freshChat(), history: local.chat.history, draft: local.chat.draft, images: local.chat.images, about: null, conversation: conv };
       chatError = "";
       askRowCount = 0;
       declineOpen.clear();
@@ -1400,7 +1550,7 @@ function trackAbout() {
 function withFocus(fn) {
   const a = document.activeElement;
   const keep =
-    a && (a.tagName === "TEXTAREA" || a.tagName === "INPUT") && a.id
+    a && (a.tagName === "TEXTAREA" || a.tagName === "INPUT" || a.tagName === "SELECT") && a.id
       ? { id: a.id, start: a.selectionStart, end: a.selectionEnd }
       : null;
   const before = $("main").querySelector(".card.question");
@@ -1586,22 +1736,40 @@ function renderChrome() {
   renderTabTitle();
 
   const h = S.headline || {};
-  // On a finished session an open item is frozen: the send on it counts as
-  // done, and only a question that was never touched stays outstanding.
-  const done =
-    Number(h.cleared) ||
-    asked().filter((i) => !isOpen(i) || (finish() && Boolean(recordedAnswer(i)))).length;
-  const total = progressTotal(done, Number(h.total) || asked().length);
-  const pct = total ? Math.round((done / total) * 100) : 0;
-
   // A build counts tasks, which get done rather than answered.
   const building = ["implement", "implement-review", "quick-task"].includes(S.workflow);
+  // On a finished session an open item is frozen: the send on it counts as
+  // done, and only a question that was never touched stays outstanding.
+  const answeredCount = () => asked().filter((i) => !isOpen(i) || (finish() && Boolean(recordedAnswer(i)))).length;
+  // The agent's own count wins once it gives a total, 0 done included: a
+  // phase starting at "cleared": 0 is 0 done, not the cards answered before
+  // it. A build between counts (a review starting at total 0) shows its stage.
+  // A fresh session's headline is 0 of 0 too, so that alone means "unset".
+  let done;
+  let total;
+  if (Number(h.total) > 0) {
+    // A question workflow that set a total and never moved `cleared` still
+    // fills as cards are answered; a build's 0 is a fact about its tasks.
+    done = building ? Math.max(0, Number(h.cleared) || 0) : Number(h.cleared) || answeredCount();
+    total = progressTotal(done, Number(h.total));
+  } else if (building && h.stage) {
+    done = 0;
+    total = 0;
+  } else {
+    done = answeredCount();
+    total = progressTotal(done, asked().length);
+  }
+  const pct = total ? Math.round((done / total) * 100) : 0;
+  // The menu has no questions to count: an empty bar there reads as a stall.
+  document.querySelector(".progress-block").hidden = (isDashboard() || S.workflow === "git") && !finish();
   $("progress-text").textContent = total
     ? `${done} of ${total} ${building ? "done" : "answered"}`
     : h.stage || "Getting started";
   $("confidence").textContent = h.confidence || "";
   $("progress-fill").style.width = pct + "%";
   const bar = $("progress-bar");
+  // A stage with nothing to count (a review starting) says its words, no track.
+  bar.hidden = !total && Boolean(h.stage);
   bar.setAttribute("aria-valuenow", String(done));
   bar.setAttribute("aria-valuemin", "0");
   bar.setAttribute("aria-valuemax", String(total));
@@ -1678,16 +1846,19 @@ function renderStatus() {
     // offer has something left to press here, and only while the server is
     // there to take the press.
     if (local.afterBuild === "dashboard" && !gone) return say("work", "Opening the dashboard…", "", true);
-    if (local.afterBuild === "commit" && !gone) return say("work", "Opening Git commit…", "", true);
+    if (local.afterBuild === "commit" && !gone) return say("work", "Opening Git…", "", true);
     const offer = reviewPending();
     if (dashboardLive(finish()) && !gone && !offer) {
       return say("point", "Done. Head back to the dashboard, or close this tab.");
     }
     if (offer === "asked") return say("work", "Review requested. Plan2Code is starting it.", "", true);
     if (offer === "open") return say("point", "Done. Review it here first, or close this tab.");
+    // A stop past a warning kept nothing, so it promises no saved place.
+    if (finishPaused(finish()))
+      return say("done", stopWarning() ? "Paused. The command above starts it again." : "Paused. Your place is saved: the command above picks it up.");
     return say("done", "All done. You can close this tab.");
   }
-  if (gone) return say("gone", "Not connected. Your answers are saved.");
+  if (gone) return say("gone", "Not connected. Your answers are saved.", "", false, true);
   // On the way home: the request is sent, and the page stays this skill's
   // until the agent resumes the session as the dashboard.
   if (local.homeward && !isDashboard()) {
@@ -1706,12 +1877,19 @@ function renderStatus() {
         : say("work", `Waking up ${local.launching.title}…`, "", true);
     }
     if (dashPick) return say("point", `Start ${dashPick.title} when you're ready.`);
+    // The cards work before the agent's menu lands, so a pick is always
+    // theirs; the line still says what the agent is up to, or that it went quiet.
+    if (agentAdrift()) return say("adrift", "Plan2Code has gone quiet. A pick still waits here for it.");
+    const doing = S.agent && typeof S.agent.activity === "string" ? S.agent.activity.trim() : "";
+    if (agentWorking() && !S.menu) return say("point", `Pick what we are doing today. ${doing || "Plan2Code is looking over the project."}`);
     return say("point", "Your move: pick what we are doing today.");
   }
   // A build can run a long while before it has anything to ask. Once the agent
   // says what it is doing, the working line below says that instead, rather
   // than promising questions that may never come.
-  if (!asked().length && !doingNow()) return say("work", `Starting ${workflowTitle(S.workflow)}…`, "", true);
+  if (!asked().length && !doingNow() && !isGitBoard()) {
+    return say("work", `Starting ${workflowTitle(S.workflow)}…`, "", true);
+  }
 
   // Show the AGENT's liveness, not the server's: if the agent's turn crashed
   // the server is still happily up, and a plain spinner would lie forever.
@@ -1749,24 +1927,29 @@ function renderStatus() {
   }
 
   const mine = myTurn().length;
+  // A board click names no question, so nothing above has said it went.
+  if (isGitBoard() && (pendingResult || gitAwaiting()) && !awaitingReply().length) {
+    return say("work", "Sent. Waiting for Plan2Code.", "", true);
+  }
   if (awaitingReply().length) {
     return mine
       ? say("point", `Sent. ${mine} question${mine === 1 ? "" : "s"} still for you.`)
       : say("work", "Sent. Waiting for Plan2Code.", "", true);
   }
 
+  if (!mine && isGitBoard()) return say("point", "The board is yours. Pick what to do next.");
   if (!mine) return say("happy", "All caught up.");
   // Everything in front of them is answered and only Send is left. This is the
   // one moment the page can name the next step and be certain it is right.
   if (!unanswered().length) return say("point", "That is all of them. Send it over.");
 
   const todo = unanswered().length;
-  return say(
-    "point",
-    todo === mine
-      ? `Your turn: ${mine} question${mine === 1 ? "" : "s"} waiting.`
-      : `${todo} still to answer, then send.`
-  );
+  if (todo === mine) return say("point", `Your turn: ${mine} question${mine === 1 ? "" : "s"} waiting.`);
+  // An optional card (required: false) left blank owes nothing: Send is the
+  // step once only those remain.
+  const owed = unanswered().filter((i) => i.required !== false).length;
+  if (!owed) return say("point", "Ready to send. The rest are optional.");
+  return say("point", `${owed} still to answer, then send.`);
 }
 
 /* ---------------------------------------------------------------- brief */
@@ -1792,6 +1975,7 @@ function briefRange() {
   if (value !== "since") return { range: BRIEF_RANGES[value] || "today" };
   const on = $("brief-since").value;
   if (!on) return { problem: "Pick the date to count from, or choose another range." };
+  if (on > localDay()) return { problem: "Pick a date that has already happened: a brief covers what was decided since then." };
   return { range: `since ${on}` };
 }
 
@@ -1811,6 +1995,13 @@ function syncBriefDate() {
   const input = $("brief-since");
   row.classList.toggle("is-off", !on);
   input.disabled = !on;
+  input.max = localDay();
+}
+
+// Today as YYYY-MM-DD in the person's own time zone, the shape a date input uses.
+function localDay(d = new Date()) {
+  const p = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }
 
 async function sendBrief() {
@@ -1865,7 +2056,9 @@ function renderBriefButton() {
   // would send the agent a request it has no procedure for.
   const offer = S && S.workflow === "pathfinder";
   btn.hidden = !offer;
-  if (offer) btn.disabled = gone || pendingResult;
+  // A finished (or paused) session has nobody to write it: the request would
+  // wait on disk for a session that may never come.
+  if (offer) btn.disabled = gone || pendingResult || Boolean(finish());
 }
 
 // Shown only where the skill opts in and the agent's console copy can deliver
@@ -1898,10 +2091,20 @@ function openSubagents() {
   research.hidden = S.workflow !== "pathfinder";
   $("subagents-status").textContent = "";
   $("subagents-save").disabled = false;
+  syncSubagentsFields();
   $("subagents-modal").showModal();
   const checked = document.querySelector('input[name="subagents-on"]:checked');
   if (checked) checked.focus();
 }
+
+// Instruction and "at most" only mean anything with helpers on, so they are
+// inert under Work alone (kept as typed, for when helpers go back on).
+function syncSubagentsFields() {
+  const picked = document.querySelector('input[name="subagents-on"]:checked');
+  const off = !picked || picked.value !== "on";
+  for (const id of ["subagents-instruction", "subagents-max", "subagents-default"]) $(id).disabled = off;
+}
+for (const radio of document.querySelectorAll('input[name="subagents-on"]')) radio.addEventListener("change", syncSubagentsFields);
 
 const SUBAGENTS_ERRORS = {
   max: "Pick a number from 1 to 20.",
@@ -1938,7 +2141,12 @@ function renderViews() {
   // or goes quiet (a turning ring would pass a dead session for a slow one).
   const sentBusy = pendingResult && !gone && !agentAdrift();
   const tabs = [
-    { id: "questions", label: isDashboard() ? "Dashboard" : "Questions", count: myTurn().length, busy: sentBusy },
+    {
+      id: "questions",
+      label: isDashboard() ? "Dashboard" : S.workflow === "git" ? "Git" : "Questions",
+      count: myTurn().length,
+      busy: sentBusy,
+    },
   ];
   // Built in rather than posted: present exactly while the spec in view has
   // an overview.md. A tab that vanishes under the person sends them home.
@@ -1952,7 +2160,7 @@ function renderViews() {
     // From the rows the tab draws, so the badge never counts helpers the
     // working-alone note hides.
     const running = helperRows(S.helpers).rows.filter((r) => r.state === "running").length;
-    tabs.push({ id: "subagents", label: "Subagents", count: running });
+    tabs.push({ id: "subagents", label: "Subagents", count: running, busy: running > 0 });
   } else if (view === "subagents") view = "questions";
   // Always last, on every workflow and after a finish: the Quick question chat.
   // The ring left of "Ask" shows exactly when the conversation's own ring does:
@@ -1964,11 +2172,14 @@ function renderViews() {
   for (const t of tabs) {
     const b = el("button", "view-tab", t.label);
     b.type = "button";
+    // A long doc title is cut on the tab (CSS); the whole of it is the tooltip.
+    if (!b.title) b.title = t.label;
     if (t.busy) {
       const spin = el("span", "spinner tiny tab-spin");
       spin.setAttribute("aria-hidden", "true");
       b.prepend(spin);
-      b.title = t.id === "ask" ? "Plan2Code is working on an answer" : "Sent. Waiting for Plan2Code";
+      const titles = { ask: "Plan2Code is working on an answer", subagents: "Subagents are running" };
+      b.title = titles[t.id] || "Sent. Waiting for Plan2Code";
     }
     b.setAttribute("aria-current", String(view === t.id || (t.id === "questions" && view === "end")));
     if (t.count) {
@@ -2165,7 +2376,18 @@ function renderMain() {
   // Inside the render pass, before withFocus restores the card's scroll, so
   // the restore is measured against the box's final height.
   fitGrowBox();
+  markMore();
 }
+
+// A card that scrolls its own contents fades out at the bottom edge while
+// there is more below: a finished screen's buttons, a long question's last
+// options, otherwise sit past the fold looking like the card simply ends.
+function markMore() {
+  for (const card of $("main").querySelectorAll(":scope > .card")) {
+    card.classList.toggle("has-more", card.scrollHeight - card.scrollTop - card.clientHeight > 4);
+  }
+}
+$("main").addEventListener("scroll", markMore, { capture: true, passive: true });
 
 /* ------------------------------------------------------ growing answer box */
 
@@ -2177,10 +2399,13 @@ function markGrowBox(card) {
   if (!card) return;
   const id = card.dataset.item;
   const areas = [...card.querySelectorAll("textarea")];
-  const box =
-    areas.find((t) => t.id === "text-" + id) ||
-    card.querySelector(".option.is-other.is-picked textarea.other-text") ||
-    areas.find((t) => t.id === "note-" + id);
+  // Not over the git board: the column there flows card and board at natural
+  // height, so there is no free height for a box to grow into.
+  const box = isGitBoard()
+    ? null
+    : areas.find((t) => t.id === "text-" + id) ||
+      card.querySelector(".option.is-other.is-picked textarea.other-text") ||
+      areas.find((t) => t.id === "note-" + id);
   // Only a box that stops being the one gives its fill back, so a keystroke
   // that re-marks the same box leaves its height alone.
   for (const n of areas) {
@@ -2224,7 +2449,7 @@ function fitGrowBox() {
 // It watches the column, not the box. The box growing changes what the card
 // scrolls, never the column's size, so resizing the box here can never set
 // off another callback: the loop a box-watching observer would feed.
-const growObserver = typeof ResizeObserver === "function" ? new ResizeObserver(() => fitGrowBox()) : null;
+const growObserver = typeof ResizeObserver === "function" ? new ResizeObserver(() => (fitGrowBox(), markMore())) : null;
 growObserver?.observe($("main"));
 
 function paintMain(main) {
@@ -2261,6 +2486,31 @@ function paintMain(main) {
         renderDashboard(main);
       }
     } else renderDashboard(main);
+    return;
+  }
+
+  // The git board stays up after every action until Done. The agent's
+  // confirm and result cards sit above it in the usual card slot; its
+  // `git-result` notice is the board's own result line instead.
+  if (isGitBoard() && !finish()) {
+    // At most one card, matching the one-card rule elsewhere. The rail lists
+    // every item, so a settled card the pane stopped tracking still shows when
+    // the rail picks it. Non-git-result notices fold into the card — and a
+    // notice with no card to fold into still gets one, or the agent's word
+    // would render nowhere.
+    const cards = asked().filter((i) => isOpen(i) || board.settled.has(i.id));
+    const sel = byId(selected);
+    const item = cards.find((i) => i.id === selected) || (sel && sel.kind !== "notice" ? sel : null) || cards[0];
+    const notices = items().filter((i) => i.kind === "notice" && i.id !== "git-result");
+    if (item || notices.length) {
+      const card = item ? renderCard(item) : el("div", "card");
+      for (const n of notices) card.appendChild(renderNotice(n));
+      card.classList.add("is-primary");
+      main.appendChild(card);
+      const pager = item ? buildPager(item) : null;
+      if (pager) main.appendChild(pager);
+    }
+    renderGitBoard(main);
     return;
   }
 
@@ -2352,19 +2602,24 @@ function guideIcon(kind) {
   return wrap;
 }
 
-function renderCloseGuide(shape) {
+function renderCloseGuide(shape, fin = {}) {
+  // A command that is not a skill (a finish's git commit) runs in a terminal,
+  // not "in the new session".
+  const shell = typeof fin.command === "string" && Boolean(fin.command.trim()) && !fin.command.trim().startsWith("/");
   const panel = el("section", "handoff-guide");
   panel.setAttribute("aria-labelledby", "handoff-guide-title");
   const title = el("h3", "handoff-guide-title", "Before you close this");
   title.id = "handoff-guide-title";
   panel.appendChild(title);
   const rows = [
-    ["safe", "Safe to close", "This tab is only a window. Everything is saved on disk, and nothing here needs you."],
+    ["safe", "Safe to close", "This tab is only a window: whatever this session wrote is on disk, and nothing here needs you."],
     [
       "fresh",
       "Start fresh",
       shape === "paused"
-        ? "Restart your agent window, or close the old session and start a new one. Your saved place is picked up by the resume command above."
+        ? stopWarning()
+          ? "Restart your agent window, or close the old session and start a new one. The command above starts it again."
+          : "Restart your agent window, or close the old session and start a new one. Your saved place is picked up by the resume command above."
         : "Restart your agent window, or close the old session and start a new one. A new session starts from clean context. This one is full of this step's instructions, so continuing in it is slower and can confuse the next step.",
     ],
     [
@@ -2372,7 +2627,9 @@ function renderCloseGuide(shape) {
       "Carry on",
       shape === "all-done"
         ? `In the new session, start from the dashboard with \`${DASHBOARD_COMMAND}\`.`
-        : `Paste the command above in the new session, or start from the dashboard with \`${DASHBOARD_COMMAND}\`.`,
+        : shell
+          ? `Run the command above in your terminal, then start the next step from the dashboard with \`${DASHBOARD_COMMAND}\`.`
+          : `Paste the command above in the new session, or start from the dashboard with \`${DASHBOARD_COMMAND}\`.`,
     ],
   ];
   const list = el("ul", "handoff-guide-rows");
@@ -2390,9 +2647,16 @@ function renderCloseGuide(shape) {
   return panel;
 }
 
+// A review, a commit in Git or the dashboard the person just asked for is starting
+// here, so the page is about to carry on rather than end.
+function closeGuideHeld() {
+  if (gone) return false;
+  return ["review", "commit", "dashboard"].includes(local.afterBuild) || reviewPending() === "asked";
+}
+
 function renderHandoff(fin) {
   const card = el("article", "card handoff");
-  card.appendChild(el("p", "card-kicker", "Session ended"));
+  card.appendChild(el("p", "card-kicker", finishPaused(fin) ? "Session paused" : "Session ended"));
   card.appendChild(el("h2", null, fin.headline));
   if (fin.body) card.appendChild(md(fin.body, "md prompt"));
 
@@ -2403,7 +2667,7 @@ function renderHandoff(fin) {
     card.appendChild(renderReviewOffer(offer));
   }
 
-  // The commit, right after the review: one press starts Git commit here.
+  // The commit, right after the review: one press starts Git's commit flow here.
   if (commitOffer(fin) && !gone && local.afterBuild !== "done" && local.afterBuild !== "dashboard") {
     card.appendChild(renderCommitOffer());
   }
@@ -2434,7 +2698,10 @@ function renderHandoff(fin) {
       el(
         "p",
         "handoff-where",
-        fin.where || "Run this in the terminal where you started Plan2Code, in a new conversation:"
+        fin.where ||
+          (command.startsWith("/")
+            ? "Run this in the terminal where you started Plan2Code, in a new conversation:"
+            : "Run this in your terminal:")
       )
     );
 
@@ -2451,7 +2718,7 @@ function renderHandoff(fin) {
         el(
           "p",
           "handoff-note",
-          "The last sentence asks Plan2Code to open this page again, so you carry on here rather than in the terminal."
+          "The --web at the end asks Plan2Code to open this page again, so you carry on here rather than in the terminal."
         )
       );
     }
@@ -2480,7 +2747,10 @@ function renderHandoff(fin) {
     }
   }
 
-  card.appendChild(renderCloseGuide(shape));
+  // Not while a hand-off they just asked for is starting on this page: "Safe
+  // to close" and "start a new one" would contradict the line above it. The
+  // press re-renders the page, and so does the agent taking it up.
+  if (!closeGuideHeld()) card.appendChild(renderCloseGuide(shape, fin));
 
   card.appendChild(
     el(
@@ -2542,7 +2812,7 @@ function renderReviewOffer(offer) {
   const box = el("section", "review-offer");
   box.appendChild(el("p", "handoff-label", "Before you go"));
   box.appendChild(el("h3", "review-offer-title", offer.label));
-  const asked = local.afterBuild === "review";
+  const { asked, disabled } = afterFinishButton(local.afterBuild, "review", pendingResult);
 
   if (gone) {
     box.appendChild(
@@ -2567,20 +2837,20 @@ function renderReviewOffer(offer) {
     el(
       "p",
       "review-offer-text",
-      "A careful review of the files this session changed: bugs, gaps against the spec, and anything risky. " +
+      "A careful review of the files this session changed: bugs, gaps against what was asked for, and anything risky. " +
         "The findings come back on this page and you choose which ones get fixed. Nothing changes until you do."
     )
   );
   const row = el("div", "btn-row");
   const go = el("button", "btn primary review-go", asked ? "Review requested…" : "Review it now");
   go.type = "button";
-  go.disabled = asked || pendingResult;
+  go.disabled = disabled;
   go.addEventListener("click", () => sendAfterBuild("review"));
   row.appendChild(go);
   if (!asked) {
     const no = el("button", "btn ghost", "No thanks, I am done");
     no.type = "button";
-    no.disabled = pendingResult;
+    no.disabled = disabled;
     no.addEventListener("click", () => sendAfterBuild("done"));
     row.appendChild(no);
   }
@@ -2598,15 +2868,14 @@ function renderCommitOffer() {
     el(
       "p",
       "review-offer-text",
-      "Git commit reads what changed, drafts the message and asks before it commits or pushes. " +
-        "It opens right here, the same as the dashboard's Git commit card."
+      "Git reads what changed, drafts the message and asks before it commits. It opens right here, on the git board."
     )
   );
-  const asked = local.afterBuild === "commit";
+  const { asked, disabled } = afterFinishButton(local.afterBuild, "commit", pendingResult);
   const row = el("div", "btn-row");
-  const go = el("button", "btn primary", asked ? "Opening Git commit…" : "Commit it now");
+  const go = el("button", "btn primary", asked ? "Opening Git…" : "Commit it now");
   go.type = "button";
-  go.disabled = asked || pendingResult;
+  go.disabled = disabled;
   go.addEventListener("click", () => sendAfterBuild("commit"));
   row.appendChild(go);
   box.appendChild(row);
@@ -2635,14 +2904,14 @@ function renderDashboardOffer(primary) {
     box.appendChild(row);
     return box;
   }
-  const asked = local.afterBuild === "dashboard";
+  const { asked, disabled } = afterFinishButton(local.afterBuild, "dashboard", pendingResult);
   const go = el(
     "button",
     primary ? "btn primary" : "btn",
     asked ? "Opening the dashboard…" : "Back to the dashboard"
   );
   go.type = "button";
-  go.disabled = asked || pendingResult;
+  go.disabled = disabled;
   go.addEventListener("click", () => sendAfterBuild("dashboard"));
   box.appendChild(go);
   box.appendChild(textWithCode("p", "dashboard-note", DASHBOARD_NOTE));
@@ -2685,7 +2954,7 @@ async function sendAfterBuild(kind) {
     const started = {
       review: "Review requested. It starts here in a moment.",
       dashboard: "Opening the dashboard. It appears here in a moment.",
-      commit: "Opening Git commit. It appears here in a moment.",
+      commit: "Opening Git. It appears here in a moment.",
     }[kind];
     if (started) {
       banner(started, "good");
@@ -2715,6 +2984,19 @@ function roleNudge() {
   setUp.type = "button";
   setUp.addEventListener("click", () => {
     renderSwatches();
+    // Closed without a role is a "Not now" too: having been to the dialog,
+    // they were asked, and the banner does not come back (Help says so).
+    $("looks-modal").addEventListener(
+      "close",
+      () => {
+        if (looks.role === undefined) {
+          looks.role = ROLE_NOT_SET;
+          saveLooks();
+          render();
+        }
+      },
+      { once: true }
+    );
     $("looks-modal").showModal();
   });
   const notNow = el("button", "btn tiny ghost", "Not now");
@@ -2806,7 +3088,13 @@ function renderDashboard(main) {
   }
   wrap.appendChild(el("p", "card-kicker", "Plan2Code"));
   wrap.appendChild(el("h2", "dash-title", "What are we doing today?"));
-  if (typeof menu.note === "string" && menu.note.trim()) {
+  // The agent's note reads the spec the picker opened on (the same "initial"
+  // test cardPresentation uses): another pick, or Start from scratch, gets
+  // the neutral line rather than context about a spec no longer shown.
+  const specsNow = (scan() && scan().specs) || [];
+  const picked = selSpec();
+  const onInitial = specsNow.length ? Boolean(picked && picked.dir === specsNow[0].dir) : !picked;
+  if (typeof menu.note === "string" && menu.note.trim() && onInitial) {
     wrap.appendChild(el("p", "dash-note", menu.note));
   } else if (!S.menu && agentWorking()) {
     // The cards work from the first paint; the agent's read of the
@@ -2833,7 +3121,11 @@ function renderDashboard(main) {
   const specs = specList();
   if (specs.length) wrap.appendChild(renderSpecPicker(specs));
   wrap.appendChild(hideUnavailableToggle());
-  if (!local.launching && !launchScoping) syncWorkspaceScope();
+  // Only when this tab's own pick moved: another tab changing the scope
+  // sends a frame here too, and re-asserting this tab's pick on every render
+  // had two dashboards trade the workspace back and forth without end.
+  const wantScope = (selSpec() && selSpec().dir) || "";
+  if (!local.launching && !launchScoping && wantScope !== scopeMine) syncWorkspaceScope();
 
   // "Unavailable" is the scan's verdict for the selected spec, not the
   // momentary greying while a launch is in flight or the server is away, so
@@ -2870,6 +3162,768 @@ function renderDashboard(main) {
   main.appendChild(wrap);
   // Deferred: this runs inside render(), and the dialog is not part of it.
   queueMicrotask(maybeWelcome);
+}
+
+/* ------------------------------------------------------------ git board */
+
+// The git board: drawn from state.git, which only console.mjs writes. A click
+// never runs git here. It sends one `__git` action through /submit, and the
+// agent confirms by card, runs the command and posts a `reread`, whose frame
+// redraws the board. The rules for what shows and what a click says live in
+// git-board.js; this is the drawing.
+
+const OP_WORDS = { rebase: "A rebase", am: "A git am", merge: "A merge", "cherry-pick": "A cherry-pick", revert: "A revert" };
+
+// One action at a time: locked while a send is uncollected or the agent is
+// mid-turn, and nothing queues. A "working" agent that has gone adrift lets
+// go, as gitAwaiting() does: collecting a click marks it working, and an agent
+// that died there must not leave the board locked for good.
+// A question card of the agent's open above it holds the board too: the card
+// is the turn, and a board click sent beside it went alone while the staged
+// answer waited for some later, unrelated send.
+const gitLocked = () =>
+  gone ||
+  pendingResult ||
+  (agentWorking() && !agentAdrift()) ||
+  Boolean(finish()) ||
+  gitAwaiting() ||
+  myTurn().some((i) => i.kind !== "notice");
+
+// `wording` only shapes the sentence (the operation an Abort names, say); it
+// is not part of the action.
+async function sendGit(op, fields = {}, wording = {}) {
+  if (gone || finish()) return;
+  if (pendingResult) {
+    banner("Your last click is still being picked up. One moment.", "info");
+    pendingBannerUp = true;
+    return;
+  }
+  try {
+    const res = await fetch("/submit", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        actions: [{ i: "__git", type: "git", op, ...fields }],
+        reply: gitReply(op, { ...fields, ...wording }),
+      }),
+    });
+    if (res.status === 409) {
+      pendingResult = true;
+      banner("Your last click is still being picked up. One moment.", "info");
+    pendingBannerUp = true;
+      render();
+      return;
+    }
+    if (!res.ok) throw new Error(String(res.status));
+    board.settled.clear();
+    board.panel = null;
+    board.create = null;
+    board.sweep = null;
+    pendingResult = true;
+    local.gitSentAt = Date.now();
+    save();
+    render();
+  } catch {
+    banner("That did not go through. Nothing was lost; try again.", "warn");
+  }
+}
+
+function renderGitBoard(main) {
+  if (!boardHydrated) hydrateBoard();
+  const git = S.git;
+  const wrap = el("div", "git-board");
+  if (git.error) {
+    const warn = el("div", "git-warn", git.error);
+    warn.setAttribute("role", "alert");
+    wrap.appendChild(warn);
+    main.appendChild(wrap);
+    return;
+  }
+  if (git.repo === false) {
+    // "Above" only once there is a card above: before the agent's first post
+    // the slot is empty, and the note would point at nothing.
+    const asking = Boolean(main.querySelector(":scope > .card"));
+    wrap.appendChild(
+      el(
+        "p",
+        "git-note",
+        asking
+          ? "This folder is not a git repository yet, so there is no board. Plan2Code asks above what to do."
+          : "This folder is not a git repository yet, so there is no board. Plan2Code will ask what to do here in a moment."
+      )
+    );
+    main.appendChild(wrap);
+    return;
+  }
+  const locked = gitLocked();
+  wrap.appendChild(gitHeader(git, locked));
+  const result = byId("git-result");
+  if (result && result.kind === "notice") wrap.appendChild(gitResultLine(result));
+  if (git.inProgress) wrap.appendChild(gitOpBanner(git, locked));
+  if (board.panel === "commit") wrap.appendChild(gitCommitPanel(git, locked));
+  else if (board.panel === "cleanup") wrap.appendChild(gitCleanupPanel(git, locked));
+  else if (board.panel === "create" && board.create) wrap.appendChild(gitCreatePanel(git, locked));
+  wrap.appendChild(gitBranches(git, locked));
+  // Last child on purpose: bottom: 0 can only pin an element whose natural
+  // spot is below the fold, so the bar rides the pane's bottom while the
+  // board scrolls and docks at the end.
+  wrap.appendChild(gitActionBar(git, locked));
+  // The column scrolls, not the board, and every redraw rebuilds the board,
+  // so the column would land back at the top; withFocus() only keeps a
+  // question card's place. board.scrollTop carries the place back; the
+  // anchor's offset inside the board then corrects for a result line or op
+  // banner appearing above the branch table, so the table does not jump. A
+  // card appearing or changing height above the board is outside that delta
+  // on purpose: the new card takes its space, the table is not scrolled out
+  // of sight chasing it.
+  const anchor = () => wrap.querySelector(".git-branches") || wrap.lastChild;
+  main.addEventListener("scroll", rememberGitScroll, { passive: true });
+  main.appendChild(wrap);
+  const a = anchor();
+  main.scrollTop = board.scrollTop + (a && board.anchorDelta != null ? a.getBoundingClientRect().top - wrap.getBoundingClientRect().top - board.anchorDelta : 0);
+  rememberGitScroll();
+  persistBoard();
+}
+
+// The scroll listener on `main` for the git board's memory, kept as a named
+// function because renderGitBoard re-adds it on every redraw -- adding the
+// same listener twice is a no-op, where a fresh closure would pile up. The
+// delta is the anchor's offset inside the board, not in the viewport: a card
+// appearing or changing height above the board must not shift the table.
+function rememberGitScroll() {
+  const main = $("main");
+  const wrap = main && main.querySelector(":scope > .git-board");
+  if (!wrap) return;
+  board.scrollTop = main.scrollTop;
+  const a = wrap.querySelector(".git-branches") || wrap.lastChild;
+  if (a) board.anchorDelta = a.getBoundingClientRect().top - wrap.getBoundingClientRect().top;
+}
+
+function smallButton(label, className, disabled, onClick) {
+  const b = el("button", "btn small" + (className ? " " + className : ""), label);
+  b.type = "button";
+  b.disabled = Boolean(disabled);
+  b.addEventListener("click", onClick);
+  return b;
+}
+
+function gitHeader(git, locked) {
+  const h = git.head || {};
+  const remotes = git.remotes || [];
+  const cur = currentRow(git);
+  const head = el("header", "git-head");
+  const row = el("div", "git-head-row");
+  // Mid-rebase HEAD is detached, but the person is still on their branch.
+  const title = h.branch || (h.rebasing ? `${h.rebasing} · rebasing` : `Not on a branch (at ${h.detached || "an unknown commit"})`);
+  row.appendChild(el("h2", "git-branch", title));
+  if (h.branch) {
+    row.appendChild(el("span", "git-track", h.upstream && h.gone ? "remote copy deleted" : h.upstream ? `↑${h.ahead || 0} ↓${h.behind || 0}` : "not published"));
+    if (remotes.length > 1 && cur && cur.upstreamRemote) row.appendChild(el("span", "badge", cur.upstreamRemote));
+  }
+  head.appendChild(row);
+
+  const meta = el("div", "git-head-meta");
+  if (!remotes.length) {
+    meta.appendChild(el("span", "git-noremote", "No remote"));
+    const cmd = "git remote add origin <url>";
+    const code = el("code", "md-code", cmd);
+    meta.appendChild(code);
+    meta.appendChild(copyButton(cmd, "btn small", code));
+  } else meta.appendChild(el("span", "git-refreshed", refreshedLine(git)));
+  if (locked && activity()) meta.appendChild(el("span", "git-activity", activity()));
+  head.appendChild(meta);
+
+  const pr = gitPrLink(git, locked);
+  if (pr) head.appendChild(pr);
+  return head;
+}
+
+function gitPrLink(git, locked) {
+  const cur = currentRow(git);
+  const bases = (git.branches || []).filter((b) => !b.remote && (!cur || b.name !== cur.name)).map((b) => b.name);
+  // One base for both the link and the picker, so they can never disagree: a
+  // pick that has since gone falls back to the default, and a default that is
+  // only on the remote is still offered.
+  const base = bases.includes(board.base) ? board.base : git.defaultBranch;
+  if (base && !bases.includes(base)) bases.unshift(base);
+  const link = boardPrLink(git, base);
+  if (!link) return null;
+  const box = el("div", "git-pr");
+  if (link.needsKind) {
+    if (!link.host) return null;
+    box.appendChild(el("span", "git-pr-ask", `Which host is ${link.host}?`));
+    for (const [kind, label] of Object.entries(PR_HOST_LABELS)) {
+      box.appendChild(smallButton(label, "", locked, () => pickPrHost(link.host, kind)));
+    }
+    return box;
+  }
+  if (!link.url || !/^https:\/\//i.test(link.url)) return null;
+  const a = el("a", "btn small primary git-pr-open", "Open pull request");
+  a.href = link.url;
+  a.target = "_blank";
+  a.rel = "noopener";
+  box.appendChild(a);
+  box.appendChild(copyButton(link.url, "btn small"));
+  if (bases.length) {
+    const label = el("label", "git-pr-base", "into ");
+    const sel = el("select");
+    sel.id = "git-pr-base";
+    for (const name of bases) {
+      const o = el("option", null, name);
+      o.value = name;
+      sel.appendChild(o);
+    }
+    sel.value = base;
+    sel.addEventListener("change", () => {
+      board.base = sel.value;
+      render();
+    });
+    label.appendChild(sel);
+    box.appendChild(label);
+  }
+  return box;
+}
+
+// The host is remembered for every project by the server (pr-hosts.json);
+// the action that follows has the agent re-read, which rebuilds the link.
+async function pickPrHost(host, kind) {
+  if (gitLocked()) return;
+  const res = await postJson("/pr-host", { host, kind });
+  if (res.status !== 200) {
+    banner("That could not be saved. Try again in a moment.", "warn");
+    return;
+  }
+  // The save is durable; a state frame that landed mid-POST still wins.
+  if (gitLocked()) return;
+  sendGit("pr-host", { host, kind });
+}
+
+function gitResultLine(notice) {
+  const box = el("div", "git-result");
+  box.setAttribute("role", "status");
+  if (notice.title) box.appendChild(el("strong", "git-result-title", notice.title));
+  if (notice.body) box.appendChild(md(notice.body, "md git-result-body"));
+  return box;
+}
+
+function gitOpBanner(git, locked) {
+  const box = el("div", "git-op");
+  box.setAttribute("role", "alert");
+  box.appendChild(el("strong", "git-op-title", `${OP_WORDS[git.inProgress] || "An operation"} is in progress`));
+  const conflicted = git.conflicted || [];
+  if (conflicted.length) {
+    const list = el("ul", "git-op-files");
+    for (const c of conflicted) {
+      const li = el("li");
+      li.appendChild(el("code", "md-code", c.path));
+      li.appendChild(el("span", c.markers ? "git-op-left" : "git-op-clear", c.markers ? " · markers left" : " · no markers"));
+      list.appendChild(li);
+    }
+    box.appendChild(list);
+  }
+  const actions = el("div", "git-op-actions");
+  const wording = { operation: git.inProgress };
+  actions.appendChild(smallButton("Abort", "danger", locked, () => sendGit("abort", {}, wording)));
+  // Always offered: the board's file states are a snapshot from the agent's
+  // last look, and someone who fixed a file in their editor has no other way
+  // to say so. `plan continue` checks the files on disk itself and refuses
+  // while markers remain, and that answer refreshes this banner.
+  const clean = conflicted.every((c) => c.markers === false);
+  const go = smallButton("Continue", clean ? "primary" : "", locked, () => sendGit("continue", {}, wording));
+  if (!clean) go.title = "Fixed them in your editor? Plan2Code checks the files again before it continues.";
+  actions.appendChild(go);
+  box.appendChild(actions);
+  return box;
+}
+
+function gitActionBar(git, locked) {
+  const acts = boardActions(git, { busy: locked });
+  const bar = el("div", "git-bar");
+  for (const key of ["refresh", "pull", "push", "publish", "commit", "cleanup"]) {
+    const a = acts[key];
+    if (!a.shown) continue;
+    const b = smallButton(a.label, key === "commit" ? "primary" : "", !a.enabled, () => gitAction(key, git));
+    if (a.title) b.title = a.title;
+    if (key === "commit" || key === "cleanup") b.setAttribute("aria-expanded", String(board.panel === key));
+    bar.appendChild(b);
+  }
+  // Done stays live while the agent works (the person's way out, read at its
+  // next turn), but not where a click cannot go: no server, or a send still
+  // waiting to be picked up.
+  const done = smallButton(acts.done.label, "primary git-done", !acts.done.enabled || gone || pendingResult, () => sendGit("done"));
+  if (gone) done.title = "Not connected right now.";
+  else if (pendingResult) done.title = "Your last click is still being picked up.";
+  bar.appendChild(done);
+  return bar;
+}
+
+function gitAction(key, git) {
+  if (key === "commit") return openCommit(git);
+  if (key === "cleanup") return openCleanup(git);
+  if (key === "publish") {
+    // Named only when there is one to name: with two or more, the agent's
+    // `plan publish` asks which (its "Publish to which remote?" card).
+    const remotes = git.remotes || [];
+    return sendGit("publish", remotes.length === 1 && remotes[0].name ? { remote: remotes[0].name } : {});
+  }
+  sendGit(key);
+}
+
+/* The branch table */
+
+function gitBranches(git, locked) {
+  const sec = el("section", "git-branches");
+  const tools = el("div", "git-tools");
+  const search = el("input", "git-search");
+  search.type = "search";
+  search.id = "git-search";
+  search.placeholder = "Search branches";
+  search.setAttribute("aria-label", "Search branches");
+  search.value = board.query;
+  search.addEventListener("input", () => {
+    board.query = search.value;
+    render();
+  });
+  tools.appendChild(search);
+  // Not mid-rebase or merge (the banner owns that), and not before the first
+  // commit, when there is nothing to branch from.
+  const cannotBranch = Boolean(git.inProgress) || git.hasCommits === false;
+  const nb = smallButton("New branch", "", locked || cannotBranch, () => openCreate(git));
+  if (git.hasCommits === false) nb.title = "Make the first commit, then you can branch from it.";
+  else if (git.inProgress) nb.title = "Finish or abort what is in progress first.";
+  tools.appendChild(nb);
+  sec.appendChild(tools);
+
+  // Mid-rebase HEAD is detached, but the branch being rebased is still the
+  // one they are on: it keeps its current badge, and never offers Delete.
+  const rebasing = git.head && git.head.rebasing;
+  const branches = (git.branches || []).map((b) => (rebasing && !b.remote && b.name === rebasing ? { ...b, current: true } : b));
+  const { top, remoteOnly } = orderBranches(branches);
+  const locals = filterBranches(top, board.query);
+  if (locals.length) sec.appendChild(branchTable(locals, locked, git.inProgress));
+  else sec.appendChild(el("p", "git-empty", board.query ? "No local branch matches." : "No local branches yet."));
+
+  if (remoteOnly.length) {
+    const fold = foldRemote(remoteOnly, { showAll: board.showAll, query: board.query });
+    const det = el("details", "git-remote-only");
+    // null remoteOpen takes the fold's default (open under a search); a manual
+    // toggle wins over it, search or not. The toggle event fires for the
+    // programmatic open too, so only a change away from what was rendered
+    // counts as theirs.
+    const renderedOpen = board.remoteOpen ?? Boolean(fold.open);
+    det.open = renderedOpen;
+    det.addEventListener("toggle", () => {
+      if (det.open !== renderedOpen) board.remoteOpen = det.open;
+    });
+    det.appendChild(el("summary", null, `Remote only (${board.query ? fold.shown.length : remoteOnly.length})`));
+    if (fold.shown.length) det.appendChild(branchTable(fold.shown, locked, git.inProgress));
+    else det.appendChild(el("p", "git-empty", "No remote branch matches."));
+    if (fold.hidden) {
+      det.appendChild(
+        smallButton(`Show all ${remoteOnly.length}`, "ghost", false, () => {
+          board.showAll = true;
+          render();
+        })
+      );
+    }
+    sec.appendChild(det);
+  }
+  return sec;
+}
+
+function branchTable(rows, locked, inProgress = false) {
+  const table = el("table", "git-table");
+  const thead = el("thead");
+  const hr = el("tr");
+  for (const h of ["Branch", "Ahead / behind", "Last commit", ""]) hr.appendChild(el("th", null, h));
+  thead.appendChild(hr);
+  table.appendChild(thead);
+  const tbody = el("tbody");
+  for (const b of rows) {
+    const tr = el("tr", b.current ? "is-current" : null);
+    const name = el("td", "git-cell-name");
+    name.appendChild(el("span", "git-name", b.remote ? `${b.remote}/${b.name}` : b.name));
+    const badges = [
+      [b.current, "current", "is-current"],
+      [b.default, "default", "is-default"],
+      [b.merged, "Merged", "is-merged"],
+      [b.gone, "Remote copy deleted", "is-gone"],
+    ];
+    for (const [on, label, cls] of badges) if (on) name.appendChild(el("span", `badge git-badge ${cls}`, label));
+    tr.appendChild(name);
+
+    let track = "not published";
+    if (b.remote) track = "remote only";
+    else if (b.gone) track = "—";
+    else if (b.upstream) track = `↑${b.ahead || 0} ↓${b.behind || 0}`;
+    tr.appendChild(el("td", "git-cell-track", track));
+
+    const last = el("td", "git-cell-last");
+    const l = b.last || {};
+    last.appendChild(el("span", "git-subject", l.subject || ""));
+    const by = [l.author, relativeAge(l.at)].filter(Boolean).join(" · ");
+    if (by) last.appendChild(el("span", "git-by", by));
+    tr.appendChild(last);
+
+    const acts = el("td", "git-cell-actions");
+    const branch = b.remote ? `${b.remote}/${b.name}` : b.name;
+    // Mid-operation the action bar only offers Done; a row's Switch or Delete
+    // would reach the agent asking for a second git op on top of the first.
+    const rowLocked = locked || inProgress;
+    if (!b.current) acts.appendChild(smallButton("Switch", "", rowLocked, () => sendGit("switch", { branch })));
+    if (!b.remote && !b.current && !b.default) {
+      acts.appendChild(smallButton("Delete", "danger", rowLocked, () => sendGit("delete", { branch: b.name })));
+    }
+    tr.appendChild(acts);
+    tbody.appendChild(tr);
+  }
+  table.appendChild(tbody);
+  // The table scrolls sideways on its own when the column is narrower than
+  // its no-wrap cells (a phone), so the search row and the buttons above it
+  // stay on screen.
+  const wrap = el("div", "git-table-wrap");
+  wrap.appendChild(table);
+  return wrap;
+}
+
+/* The panels */
+
+function panelFrame(title, onClose) {
+  const p = el("section", "git-panel");
+  const head = el("div", "git-panel-head");
+  head.appendChild(el("h3", "git-panel-title", title));
+  head.appendChild(smallButton("Close", "ghost", false, onClose));
+  p.appendChild(head);
+  return p;
+}
+
+const closePanel = () => {
+  board.panel = null;
+  board.create = null;
+  render();
+};
+
+// From: origin/<default> when that remote branch exists, else the local
+// default, else the current branch (or, detached, the commit).
+function createSources(git, commit = false) {
+  const def = git.defaultBranch;
+  const rows = git.branches || [];
+  const h = git.head || {};
+  const originDef =
+    def && rows.some((b) => (b.remote === "origin" && b.name === def) || (!b.remote && b.upstream === `origin/${def}`))
+      ? `origin/${def}`
+      : null;
+  const localDef = def && rows.some((b) => !b.remote && b.name === def) ? def : null;
+  const here = h.branch || h.detached || null;
+  // A commit from a detached HEAD belongs on the commit it was made at.
+  const preset = (commit && h.detached) || originDef || localDef || here || "HEAD";
+  return { preset, here, options: [...new Set([originDef, localDef, here, preset].filter(Boolean))] };
+}
+
+// In commit mode the commit panel hands over what it would have sent (its
+// ticked files and .gitignore picks, already checked against the snapshot);
+// a detached commit, which never shows the panel, starts from commitTicks().
+function openCreate(git, { commit = false, files = null, ignore = [] } = {}) {
+  if (gitLocked()) return;
+  // The agent's description is of the changes waiting: with none left (they
+  // were committed since), it describes nothing on this tree.
+  const pending = Number(S.git && S.git.changes && S.git.changes.count) || 0;
+  const describe = pending && S.board && typeof S.board.describe === "string" ? S.board.describe : "";
+  board.create = {
+    from: createSources(git, commit).preset,
+    type: BRANCH_TYPES[0],
+    description: describe,
+    name: null,
+    commit,
+    files: commit ? files || [...commitTicks(git.changes)] : null,
+    ignore: commit ? ignore : [],
+  };
+  board.panel = "create";
+  render();
+  $("git-new-desc")?.focus();
+}
+
+function gitCreatePanel(git, locked) {
+  const c = board.create;
+  const p = panelFrame(c.commit ? "New branch for this commit" : "New branch", closePanel);
+  const src = createSources(git, c.commit);
+
+  const fromRow = el("div", "git-field-row");
+  const fromLabel = el("label", "git-field", "From ");
+  const from = el("select");
+  from.id = "git-new-from";
+  for (const o of src.options) {
+    const opt = el("option", null, o);
+    opt.value = o;
+    from.appendChild(opt);
+  }
+  from.value = c.from;
+  from.addEventListener("change", () => {
+    c.from = from.value;
+    render();
+  });
+  fromLabel.appendChild(from);
+  fromRow.appendChild(fromLabel);
+  if (src.here && c.from !== src.here) {
+    fromRow.appendChild(
+      smallButton(`From ${src.here}`, "ghost", false, () => {
+        c.from = src.here;
+        render();
+      })
+    );
+  }
+  p.appendChild(fromRow);
+
+  const parts = el("div", "git-field-row");
+  const typeLabel = el("label", "git-field", "Type ");
+  const type = el("select");
+  type.id = "git-new-type";
+  for (const t of BRANCH_TYPES) {
+    const opt = el("option", null, t);
+    opt.value = t;
+    type.appendChild(opt);
+  }
+  type.value = c.type;
+  typeLabel.appendChild(type);
+  const descLabel = el("label", "git-field is-wide", "Short description ");
+  const desc = el("input");
+  desc.id = "git-new-desc";
+  desc.placeholder = "export csv";
+  desc.value = c.description;
+  descLabel.appendChild(desc);
+  parts.append(typeLabel, descLabel);
+  p.appendChild(parts);
+
+  const nameLabel = el("label", "git-field is-wide", "Branch name ");
+  const name = el("input", "git-new-name");
+  name.id = "git-new-name";
+  nameLabel.appendChild(name);
+  p.appendChild(nameLabel);
+  const status = el("p", "git-name-status");
+  status.setAttribute("aria-live", "polite");
+  p.appendChild(status);
+
+  const actions = el("div", "git-panel-actions");
+  const go = smallButton("Create", "primary", true, () => {
+    const fields = { name: currentName(), from: c.from };
+    if (c.commit) Object.assign(fields, { then: "commit", files: c.files || [] });
+    if (c.commit && c.ignore && c.ignore.length) fields.ignore = c.ignore;
+    sendGit("create", fields);
+  });
+  actions.appendChild(go);
+  actions.appendChild(smallButton("Cancel", "ghost", false, closePanel));
+  p.appendChild(actions);
+
+  // The name mirrors the two fields until it is edited directly. Typing
+  // updates the box, the status line and Create in place, never a redraw.
+  const currentName = () => (c.name == null ? composeBranchName(c) : c.name);
+  const noFiles = c.commit && !(c.files || []).length;
+  const refresh = () => {
+    const value = currentName();
+    if (name.value !== value) name.value = value;
+    const st = nameStatus(value, git);
+    gitNameLine(status, st);
+    if (noFiles) status.appendChild(el("span", null, " Nothing is ticked to commit."));
+    go.disabled = locked || st.kind !== "free" || noFiles;
+  };
+  type.addEventListener("change", () => {
+    c.type = type.value;
+    refresh();
+  });
+  desc.addEventListener("input", () => {
+    c.description = desc.value;
+    refresh();
+  });
+  name.addEventListener("input", () => {
+    c.name = name.value;
+    refresh();
+  });
+  refresh();
+  return p;
+}
+
+function gitNameLine(line, st) {
+  line.replaceChildren();
+  line.className = "git-name-status is-" + st.kind;
+  const say = (text) => line.appendChild(el("span", null, text));
+  const switchTo = (branch) =>
+    line.appendChild(smallButton("Switch to it", "", gitLocked(), () => sendGit("switch", { branch })));
+  if (st.kind === "empty") say("Fill in the fields above, or type a name.");
+  else if (st.kind === "invalid") say(st.reason);
+  else if (st.kind === "free") say("That name is free.");
+  else if (st.kind === "local") {
+    say(`${st.branch} already exists here. `);
+    switchTo(st.branch);
+  } else if (st.kind === "remote") {
+    say(`${st.remote}/${st.branch} already exists on ${st.remote}. `);
+    switchTo(`${st.remote}/${st.branch}`);
+  } else if (st.kind === "nested") say(`It clashes with ${st.clash}: one branch cannot be a folder of another.`);
+}
+
+function openCommit(git) {
+  if (gitLocked()) return;
+  if (board.panel === "commit") return closePanel();
+  board.ticks = commitTicks(git.changes);
+  board.ignore = new Set();
+  // Detached: there is no branch to commit on, so the commit makes one.
+  if (git.hasCommits !== false && !(git.head || {}).branch) return openCreate(git, { commit: true });
+  board.panel = "commit";
+  board.create = null;
+  render();
+}
+
+function gitCommitPanel(git, locked) {
+  const ch = git.changes || {};
+  const first = git.hasCommits === false;
+  const p = panelFrame(first ? "Make the first commit" : "Commit", closePanel);
+  const ticks = board.ticks || (board.ticks = commitTicks(ch));
+  const table = el("table", "git-table git-files");
+  const thead = el("thead");
+  const hr = el("tr");
+  for (const h of ["", "File", "State"]) hr.appendChild(el("th", null, h));
+  thead.appendChild(hr);
+  table.appendChild(thead);
+  const tbody = el("tbody");
+  const tickBox = (id, path) => {
+    const box = el("input");
+    box.type = "checkbox";
+    box.id = id;
+    box.checked = ticks.has(path);
+    box.setAttribute("aria-label", `Commit ${path}`);
+    box.addEventListener("change", () => {
+      if (box.checked) {
+        ticks.add(path);
+        board.ignore.delete(path);
+      } else ticks.delete(path);
+      render();
+    });
+    return box;
+  };
+  (ch.files || []).forEach((f, i) => {
+    const tr = el("tr", f.risky ? "is-held" : null);
+    const cell = el("td");
+    cell.appendChild(tickBox(`git-tick-f${i}`, f.path));
+    tr.appendChild(cell);
+    tr.appendChild(el("td", "git-path", f.path));
+    const state = el("td", "git-state", f.state || "");
+    if (f.risky) state.appendChild(el("span", "badge git-badge is-held", "held back"));
+    tr.appendChild(state);
+    tbody.appendChild(tr);
+  });
+  (ch.untrackedDirs || []).forEach((d, i) => {
+    const tr = el("tr");
+    const cell = el("td");
+    cell.appendChild(tickBox(`git-tick-d${i}`, d.path));
+    tr.appendChild(cell);
+    tr.appendChild(el("td", "git-path", d.path));
+    const state = el("td", "git-state", `untracked folder · ${d.files} ${d.files === 1 ? "file" : "files"} `);
+    const ignore = el("label", "git-ignore");
+    const box = el("input");
+    box.type = "checkbox";
+    box.id = `git-ignore-d${i}`;
+    box.checked = board.ignore.has(d.path);
+    box.addEventListener("change", () => {
+      if (box.checked) {
+        board.ignore.add(d.path);
+        ticks.delete(d.path);
+      } else board.ignore.delete(d.path);
+      render();
+    });
+    ignore.append(box, document.createTextNode(" Add to .gitignore"));
+    state.appendChild(ignore);
+    tr.appendChild(state);
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody);
+  p.appendChild(table);
+
+  const known = new Set([...(ch.files || []), ...(ch.untrackedDirs || [])].map((f) => f.path));
+  const files = [...ticks].filter((path) => known.has(path));
+  const ignore = [...board.ignore].filter((path) => known.has(path));
+  const send = () => sendGit("commit", { files, ignore });
+  const nothing = !files.length;
+  const actions = el("div", "git-panel-actions");
+  const h = git.head || {};
+  if (!first && h.branch && h.branch === git.defaultBranch) {
+    const offer = el("p", "git-offer", `You're on ${h.branch}. Make a branch for this?`);
+    actions.appendChild(offer);
+    actions.appendChild(
+      smallButton("Create branch", "primary", locked || nothing, () => openCreate(git, { commit: true, files, ignore }))
+    );
+    actions.appendChild(smallButton(`Commit on ${h.branch}`, "", locked || nothing, send));
+  } else {
+    actions.appendChild(
+      smallButton(`Commit ${files.length} ${files.length === 1 ? "file" : "files"}`, "primary", locked || nothing, send)
+    );
+  }
+  actions.appendChild(smallButton("Cancel", "ghost", false, closePanel));
+  p.appendChild(actions);
+  return p;
+}
+
+// Merged into the default branch, and those whose remote copy is deleted.
+// Never the current or the default branch; a branch in both lists shows once.
+function cleanupGroups(git) {
+  const locals = (git.branches || []).filter((b) => !b.remote && !b.current && !b.default);
+  // Gone wins, as cleanup-list has it: the panel names each branch the way
+  // the confirm that follows will.
+  const merged = locals.filter((b) => b.merged && !b.gone);
+  const gone = locals.filter((b) => b.gone);
+  return { merged, gone };
+}
+
+function openCleanup(git) {
+  if (gitLocked()) return;
+  if (board.panel === "cleanup") return closePanel();
+  const { merged, gone } = cleanupGroups(git);
+  board.sweep = new Set([...merged, ...gone].map((b) => b.name));
+  board.panel = "cleanup";
+  board.create = null;
+  render();
+}
+
+function gitCleanupPanel(git, locked) {
+  const p = panelFrame("Clean up branches", closePanel);
+  const { merged, gone } = cleanupGroups(git);
+  const sweep = board.sweep || (board.sweep = new Set([...merged, ...gone].map((b) => b.name)));
+  const group = (title, rows, key) => {
+    if (!rows.length) return;
+    p.appendChild(el("h4", "git-group-title", title));
+    const list = el("ul", "git-sweep");
+    rows.forEach((b, i) => {
+      const li = el("li");
+      const label = el("label");
+      const box = el("input");
+      box.type = "checkbox";
+      box.id = `git-sweep-${key}${i}`;
+      box.checked = sweep.has(b.name);
+      box.addEventListener("change", () => {
+        if (box.checked) sweep.add(b.name);
+        else sweep.delete(b.name);
+        render();
+      });
+      label.append(box, document.createTextNode(" " + b.name));
+      li.appendChild(label);
+      list.appendChild(li);
+    });
+    p.appendChild(list);
+  };
+  group(`Merged into ${git.defaultBranch}`, merged, "m");
+  group("Remote copy deleted", gone, "g");
+  const known = new Set([...merged, ...gone].map((b) => b.name));
+  const branches = [...sweep].filter((n) => known.has(n));
+  const actions = el("div", "git-panel-actions");
+  actions.appendChild(
+    smallButton(
+      `Delete ${branches.length} ${branches.length === 1 ? "branch" : "branches"}`,
+      "danger",
+      locked || !branches.length,
+      () => sendGit("cleanup", { branches })
+    )
+  );
+  actions.appendChild(smallButton("Cancel", "ghost", false, closePanel));
+  p.appendChild(actions);
+  return p;
 }
 
 /* ------------------------------------------------------------- welcome */
@@ -3629,11 +4683,13 @@ function renderWaiting(main) {
   }
   // "Task" and the tasks tab's own name both open that tab, so the pointer is
   // one click from what it points at. A build posts it as `phase` ("Phase N
-  // tasks"), a quick task as `tasks`. A skill with no task list (Document,
-  // Plan) has nothing live to follow, so it gets no pointer at all.
+  // tasks"); a quick task ticks the steps of its `plan` in place (an older
+  // agent may still post a separate `tasks` tab). A skill with no task list
+  // (Document, Plan) has nothing live to follow, so it gets no pointer at all.
   const list =
     docs().find((d) => d.id === "phase") ||
     docs().find((d) => d.id === "tasks") ||
+    (S.workflow === "quick-task" && docs().find((d) => d.id === "plan")) ||
     docs().find((d) => /\btasks\b/i.test(d.title || ""));
   if (!list) {
     pane.appendChild(el("p", null, "The tabs above fill in as it goes. " + ask));
@@ -3791,16 +4847,19 @@ function renderSettled(card, item) {
   // is nothing else at all. Attaching a side note to a pick they also made
   // would misreport which of the two was the answer.
   let prose = text;
+  let fromNote = false;
   if (!prose && !lines.length) {
     const mine = (item.thread || []).filter((m) => threadWho(m) === "user");
     if (mine.length) prose = threadText(mine[mine.length - 1]).trim();
+    fromNote = Boolean(prose);
   }
 
   const nothing = !lines.length && !prose;
   const box = el("div", "answered" + (nothing ? " is-empty" : ""));
   const head = el("p", "answered-head");
   head.appendChild(el("span", "answered-mark", nothing ? "·" : "✓"));
-  head.appendChild(el("span", null, nothing ? "No answer recorded" : "Your answer"));
+  // A note is not an answer: say which it is.
+  head.appendChild(el("span", null, nothing ? "No answer recorded" : fromNote ? "Your last note" : "Your answer"));
   box.appendChild(head);
 
   if (lines.length) {
@@ -3943,7 +5002,7 @@ function lockedOptions(card, item, keys) {
     li.appendChild(el("span", "option-mark" + (on ? " on" : ""), on ? "✓" : "·"));
     const body = el("div", "option-body");
     const head = el("div", "option-label");
-    if (o.k) head.appendChild(el("span", "option-key", o.k));
+    if (showKey(o.k, o.text)) head.appendChild(el("span", "option-key", o.k));
     head.appendChild(el("span", null, o.text));
     if (on) head.appendChild(el("span", "pill done", "Your answer"));
     body.appendChild(head);
@@ -4144,7 +5203,7 @@ function fillKicker(kicker, item) {
   kicker.replaceChildren(document.createTextNode(topic ? topic.title : "Question"));
 
   let pill = null;
-  if (!isOpen(item)) pill = el("span", "pill done", "Answered");
+  if (!isOpen(item)) pill = el("span", "pill done", item.status === "skipped" ? "Skipped" : "Answered");
   // Frozen on a finished session: the send it carries is the record, and a
   // staged leftover can no longer be sent, so it earns no pill.
   else if (finish()) pill = recordedAnswer(item) ? el("span", "pill done", "Sent") : null;
@@ -4167,7 +5226,12 @@ function renderStagedMarks() {
   const next = buildPager(item);
   if (shown && next) shown.replaceWith(next);
   else if (shown) shown.remove();
-  else if (next) main.appendChild(next);
+  else if (next) {
+    // Under its card, not under whatever follows it (the git board).
+    const card = main.querySelector(":scope > .card");
+    if (card) card.after(next);
+    else main.appendChild(next);
+  }
 }
 
 // Update staged state without a full re-render, so typing is never interrupted.
@@ -4223,7 +5287,7 @@ function buildChoice(card, item, staged) {
 
     const body = el("div", "option-body");
     const head = el("div", "option-label");
-    if (o.k) head.appendChild(el("span", "option-key", o.k));
+    if (showKey(o.k, o.text)) head.appendChild(el("span", "option-key", o.k));
     head.appendChild(el("span", null, o.text));
     if (o.recommended) head.appendChild(el("span", "pill suggested", "Suggested"));
     body.appendChild(head);
@@ -4271,7 +5335,7 @@ function buildMulti(card, item, staged) {
 
     const body = el("div", "option-body");
     const head = el("div", "option-label");
-    if (o.k) head.appendChild(el("span", "option-key", o.k));
+    if (showKey(o.k, o.text)) head.appendChild(el("span", "option-key", o.k));
     head.appendChild(el("span", null, o.text));
     if (o.recommended) head.appendChild(el("span", "pill suggested", "Suggested"));
     body.appendChild(head);
@@ -4516,7 +5580,9 @@ function buildConfirm(card, item, staged) {
   card.appendChild(row);
 
   if (item.consequences) {
-    const note = el("div", "card-note");
+    // "is-consequences": the command here is what Yes runs, so no "paste it
+    // into the Ask tab" nudge under it (app.css).
+    const note = el("div", "card-note is-consequences");
     note.appendChild(md(item.consequences, "md"));
     card.appendChild(note);
   }
@@ -4612,7 +5678,9 @@ function buildReview(card, item, staged) {
   const row = el("div", "btn-row");
   for (const v of verdicts) {
     const on = staged && staged.verdict === v.id;
-    const b = el("button", "btn" + (on ? " primary" : "") + (v.danger && !on ? " danger" : ""), verdictText(v));
+    // A picked danger verdict stays red (filled), so choosing "Abort" never
+    // reads like choosing the safe default.
+    const b = el("button", "btn" + (on ? (v.danger ? " danger is-on" : " primary") : v.danger ? " danger" : ""), verdictText(v));
     b.type = "button";
     b.addEventListener("click", () =>
       stage(item.id, withNote(item, on ? null : { type: "answer", kind: "review", verdict: v.id }))
@@ -4731,12 +5799,24 @@ function buildList(card, item, staged) {
   // Every handler re-reads the rows at the moment it fires rather than closing
   // over the array from render time. A reorder replaces that array, so a stale
   // closure would quietly undo the reorder the next time a rename committed.
-  const liveRows = () => {
+  // A name still being typed counts too: the tool buttons below keep the
+  // field's focus (their mousedown is cancelled), so its `change` has not
+  // fired yet when they act, and the re-render would otherwise drop it.
+  const ul = el("ul", "rows");
+  const baseRows = () => {
     const cur = local.staged[item.id];
     return (cur && cur.rows) || (item.rows || []).map((r) => ({ ...r }));
   };
+  const liveRows = () =>
+    baseRows().map((r) => {
+      const input = ul.querySelector(`input.row-title[data-row="${CSS.escape(String(r.id))}"]`);
+      const typed = input ? input.value.trim() : null;
+      return typed != null && typed !== r.title ? { ...r, title: typed } : r;
+    });
   const rows = liveRows();
-  const ul = el("ul", "rows");
+  // The first click on a tool after a rename used to land on a node the
+  // rename's re-render had already replaced, and do nothing.
+  const keepFocus = (b) => b.addEventListener("mousedown", (e) => e.preventDefault());
   let dragIndex = null;
 
   const commit = (next) => stage(item.id, withNote(item, { type: "answer", kind: "list", rows: next }));
@@ -4782,8 +5862,23 @@ function buildList(card, item, staged) {
     title.id = `row-${item.id}-${row.id}`;
     title.value = row.title || "";
     title.setAttribute("aria-label", "Name");
+    title.dataset.row = String(row.id);
+    // Staged as it is typed (quietly, no re-render, so the caret stays): a
+    // Ctrl+Enter, a Send, or an agent post landing mid-word all see the new
+    // name, where `change` alone only fired on blur and they did not.
+    title.addEventListener("input", () => {
+      const next = baseRows();
+      const at = next.findIndex((r) => r.id === row.id);
+      if (at === -1) return;
+      next[at] = { ...next[at], title: title.value.trim() };
+      const untouched =
+        next.length === (item.rows || []).length && next.every((r, i) => r.id === item.rows[i].id && r.title === item.rows[i].title);
+      stageQuiet(item.id, untouched && !local.staged[item.id] ? null : withNote(item, { type: "answer", kind: "list", rows: next }));
+      renderFooter();
+      renderStagedMarks();
+    });
     title.addEventListener("change", () => {
-      const next = liveRows();
+      const next = baseRows();
       const at = next.findIndex((r) => r.id === row.id);
       if (at === -1) return;
       const value = title.value.trim();
@@ -4823,6 +5918,9 @@ function buildList(card, item, staged) {
     del.title = "Remove";
     del.setAttribute("aria-label", `Remove “${row.title}”`);
     del.addEventListener("click", () => commit(liveRows().filter((r) => r.id !== row.id)));
+    up.setAttribute("aria-label", `Move “${row.title}” up`);
+    down.setAttribute("aria-label", `Move “${row.title}” down`);
+    for (const b of [up, down, del]) keepFocus(b);
     tools.appendChild(up);
     tools.appendChild(down);
     tools.appendChild(del);
@@ -4835,8 +5933,9 @@ function buildList(card, item, staged) {
   const row = el("div", "btn-row");
   const add = el("button", "btn small", "Add one");
   add.type = "button";
+  keepFocus(add);
   add.addEventListener("click", () =>
-    commit([...liveRows(), { id: "new-" + Date.now(), title: "New step", body: "" }])
+    commit([...liveRows(), { id: "new-" + Date.now(), title: "New item", body: "" }])
   );
   row.appendChild(add);
   if (staged) {
@@ -5147,7 +6246,7 @@ function askStarters(ss) {
 function askRow(r, ss, notes) {
   if (r.kind === "decision") {
     const row = el("div", "ask-row decision");
-    row.appendChild(el("p", "ask-decision", r.decision === "approve" ? "You approved the edit, please wait..." : "You declined the edit."));
+    row.appendChild(el("p", "ask-decision", r.decision !== "approve" ? "You declined the edit." : r.done ? "You approved the edit." : "You approved the edit, please wait..."));
     if (r.text) row.appendChild(el("p", "ask-text", r.text));
     return row;
   }
@@ -5630,10 +6729,14 @@ function renderAside() {
   // belong to a question stay on its own page.
   const item = view === "end" ? null : byId(selected);
   if (!item) {
-    aside.appendChild(el("p", "aside-empty", "Pick a question to see its notes."));
+    // The menu has no questions, so no notes either: the pane stays empty.
+    if (!isDashboard()) aside.appendChild(el("p", "aside-empty", "Pick a question to see its notes."));
     return;
   }
-  aside.appendChild(el("h2", null, "Notes on this"));
+  // Off the question's own page (a doc tab, Ask) "this" points at nothing on
+  // screen, so the pane names the question a note here will go to.
+  const onQuestion = view === "questions" || view === "end";
+  aside.appendChild(el("h2", null, onQuestion ? "Notes on this" : `Notes on “${item.title || "this question"}”`));
 
   const thread = item.thread || [];
   if (!thread.length && !(isOpen(item) && !finish() && noteAwaiting(item))) {
@@ -6063,7 +7166,10 @@ function heldNotes() {
 function sendState() {
   // Before `gone`, and before the grace period that can re-enable a send. A
   // finished session has nobody left to send to, whatever the socket says.
-  if (finish()) return { disabled: true, why: "This session is finished.", short: "Session finished" };
+  if (finish())
+    return finishPaused(finish())
+      ? { disabled: true, why: "This session is paused.", short: "Session paused" }
+      : { disabled: true, why: "This session is finished.", short: "Session finished" };
   if (gone) return { disabled: true, why: "Not connected right now.", short: "Not connected" };
   // A send is still being collected. Blocking here is what keeps someone from
   // writing over answers nobody has read yet.
@@ -6122,6 +7228,8 @@ function renderFooter() {
   // workspace label stays.
   const foot = document.querySelector(".footer");
   if (foot) foot.classList.toggle("is-dash", Boolean(isDashboard() && !finish()));
+  // A finished dashboard keeps its summary line but still has nothing to send.
+  if (foot) foot.classList.toggle("is-dash-done", Boolean(isDashboard() && finish()));
 
   const summary = $("footer-summary");
   const notes = pendingNotes();
@@ -6137,12 +7245,17 @@ function renderFooter() {
     summary.appendChild(document.createTextNode(" · " + sent.map((i) => i.title).join(" · ")));
   } else if (finish()) {
     // Not "nothing to send yet". There is no yet.
-    summary.appendChild(el("strong", null, "All done."));
+    const fin = finish();
+    summary.appendChild(el("strong", null, finishPaused(fin) ? "Paused." : "All done."));
     summary.appendChild(
       document.createTextNode(
         n || notes.length
           ? " Anything still waiting here was never sent."
-          : " Run the command above to pick this up."
+          : finishPaused(fin)
+            ? " Run the command above to pick this up."
+            : fin.command
+              ? " The next step is above."
+              : " Nothing left to run."
       )
     );
   } else if (!n && !notes.length) {
@@ -6160,7 +7273,10 @@ function renderFooter() {
     for (const [id, v] of Object.entries(local.staged)) {
       const item = byId(id);
       if (!item) continue;
-      bits.push(item.title + (v.k ? ` → ${v.k}` : v.verdict ? ` → ${v.verdict}` : ""));
+      // The label the person clicked, not the id the agent reads.
+      const verdict = v.verdict && (item.verdicts || []).find((x) => x.id === v.verdict);
+      const said = v.k || (verdict ? verdictText(verdict) : v.verdict);
+      bits.push(item.title + (said ? ` → ${said}` : ""));
     }
     for (const note of notes) {
       const item = byId(note.id);
@@ -6246,8 +7362,10 @@ function projectName() {
 function renderTabTitle() {
   if (!S) return;
   const name = projectName();
-  document.title =
-    (name ? name + " · " : "") + (S.title || "Session") + " · #" + String(S.sid || "").slice(-6) + " · Plan2Code";
+  const title = S.title || "Session";
+  // A title that defaulted to the folder name says it once, not twice.
+  const lead = name && name !== title ? name + " · " : "";
+  document.title = lead + title + " · #" + String(S.sid || "").slice(-6) + " · Plan2Code";
 }
 
 function renderWhere() {
@@ -6327,11 +7445,14 @@ async function postJson(url, body) {
    the selected spec, or the project's own under "Start from scratch". The
    server swaps the list and remembers every change after it. */
 let scopeAsked = null;
+// The scope this tab last asked for: its pick, not whatever the frame says.
+let scopeMine = null;
 // True from a launch's scope sync until its send has gone (or failed).
 let launchScoping = false;
 async function syncWorkspaceScope(spec) {
   if (!S || S.workflow !== "dashboard" || gone || !wsFrame) return;
   const want = spec === undefined ? (selSpec() && selSpec().dir) || "" : spec;
+  scopeMine = want;
   if ((wsFrame.scope || "") === want || scopeAsked === want) return;
   scopeAsked = want;
   const { status, body } = await postJson("/workspace/scope", { spec: want });
@@ -6473,7 +7594,11 @@ function workspaceField(f, field, labelText) {
       return showError("");
     }
     const { status, body } = await postJson("/workspace/edit", { id: f.id, [field]: value });
-    if (status === 200) return showError("");
+    // An earlier "Added as @x" is out of date once the list moves on.
+    if (status === 200) {
+      setAddMsg("");
+      return showError("");
+    }
     if (body.reason === "name-taken") showError(`@${value} is taken — try @${body.suggest}.`);
     else if (body.reason === "bad-name") showError(NAME_RULE);
     else showError("That did not save. Try again.");
@@ -6538,6 +7663,7 @@ function paintWorkspaceRow(li, f) {
       go.disabled = true;
       const { status } = await postJson("/workspace/remove", { id: f.id });
       wsConfirm = null;
+      if (status === 200) setAddMsg("");
       if (status !== 200) setAddMsg(`@${f.name} could not be removed. Try again.`, "error");
       renderWorkspace();
       $("workspace-path").focus();
@@ -6791,7 +7917,7 @@ function renderStopButton() {
     gone: "Not connected right now.",
     pending: "Your last answers are still being picked up. You can stop once they have been.",
     waiting: "Plan2Code is working on your answers. You can stop once it replies.",
-  }[gate] || "Save your place and end this session. You get a command to pick it up later.";
+  }[gate] || (stopWarning() ? "End this session. Work since the last save is not kept." : "Save your place and end this session. You get a command to pick it up later.");
 }
 
 // Plan2Code has the ball: it is working, or owes a reply to a send, and has
@@ -6816,6 +7942,7 @@ function renderHomeButton() {
     gone,
     pendingResult,
     waiting: Boolean(S) && agentHasTheBall(),
+    warned: Boolean(S) && Boolean(stopWarning()),
   });
   b.hidden = st.hidden;
   b.disabled = st.disabled;
@@ -6824,10 +7951,13 @@ function renderHomeButton() {
 
 function openHomeConfirm() {
   const n = Object.keys(local.staged).length + pendingNotes().length;
+  const warn = stopWarning();
+  // With a warning, "your place is saved" is the one thing not true: the
+  // warning says what is lost, and the button says the choice is theirs.
   $("home-blurb").textContent =
     (n === 1 ? "The answer you have ready goes with it. " : n ? `The ${n} answers you have ready go with it. ` : "") +
-    "Your place is saved; you can resume it from the dashboard.";
-  const warn = stopWarning();
+    (warn ? "Plan2Code takes you back to the dashboard." : "Your place is saved; you can resume it from the dashboard.");
+  $("home-go").textContent = warn ? "Leave anyway" : "Back to the dashboard";
   $("home-warn").hidden = !warn;
   $("home-warn").textContent = warn;
   $("home-modal").showModal();
@@ -6886,13 +8016,17 @@ function openStopConfirm() {
     return renderStopping();
   }
   const n = Object.keys(local.staged).length + pendingNotes().length;
+  const warn = stopWarning();
   $("stop-blurb").textContent =
     (n === 1 ? "The answer you have ready goes with it. " : n ? `The ${n} answers you have ready go with it. ` : "") +
-    "Plan2Code will save your place and give you a command to pick this up later, in a new conversation.";
-  const warn = stopWarning();
+    (isDashboard()
+      ? "Nothing has started yet, so there is nothing to save: this just ends the console session."
+      : warn
+        ? "Plan2Code stops here."
+        : "Plan2Code will save your place and give you a command to pick this up later, in a new conversation.");
   $("stop-warn").hidden = !warn;
   $("stop-warn").textContent = warn;
-  $("stop-go").textContent = warn ? "Stop anyway" : "Stop and save";
+  $("stop-go").textContent = isDashboard() ? "Stop" : warn ? "Stop anyway" : "Stop and save";
   $("stop-modal").showModal();
 }
 
@@ -7033,7 +8167,7 @@ function stagedPayload() {
     // needs a second code path.
     const tok = tokenFor(item, v);
     summaries[id] = tok;
-    if (tok) replyLines.push(`${item.title}: ${tok}`);
+    if (tok) replyLines.push(`${item.title}: ${indentReply(tok)}`);
   }
   // Which notes, and which of their images, went: markSent clears exactly
   // those, so a note held back on an upload stays drafted.
@@ -7104,6 +8238,7 @@ async function send() {
         "Your last answers are still being picked up. Nothing is lost, and nothing was sent twice. Try again in a moment.",
         "info"
       );
+      pendingBannerUp = true;
       pendingResult = true;
     } else {
       banner("That did not go through. Nothing was lost, try Send again.", "warn");
@@ -7132,7 +8267,22 @@ function tokenFor(item, v) {
   if (typeof v.ok === "boolean") parts.push(v.ok ? "confirmed" : "needs changes");
   if (v.state) parts.push(map[v.state] || STATE_WORDS[v.state] || v.state);
   if (Array.isArray(v.done) && v.done.length) parts.push(`did steps ${v.done.map((n) => n + 1).join(", ")}`);
-  if (Array.isArray(v.rows)) parts.push("new order: " + v.rows.map((r) => r.title).join(", then "));
+  if (Array.isArray(v.rows)) {
+    // What changed against the agent's rows, said in words: `reply` is what
+    // the agent reads, and an order alone hides a rename or a removal. The
+    // whole list always comes too, called a new order only when one moved.
+    const before = new Map((item.rows || []).map((r) => [r.id, r]));
+    const after = new Set(v.rows.map((r) => r.id));
+    const kept = (item.rows || []).filter((r) => after.has(r.id)).map((r) => r.id);
+    const moved = v.rows.filter((r) => before.has(r.id)).some((r, i) => r.id !== kept[i]);
+    parts.push((moved ? "new order: " : "the list: ") + v.rows.map((r) => r.title).join(", then "));
+    const renamed = v.rows.filter((r) => before.has(r.id) && before.get(r.id).title !== r.title);
+    const added = v.rows.filter((r) => !before.has(r.id));
+    const removed = (item.rows || []).filter((r) => !after.has(r.id));
+    if (renamed.length) parts.push("renamed " + renamed.map((r) => `${before.get(r.id).title} to ${r.title}`).join(", "));
+    if (added.length) parts.push("added " + added.map((r) => r.title).join(", "));
+    if (removed.length) parts.push("removed " + removed.map((r) => r.title).join(", "));
+  }
   if (v.text) parts.push(v.text);
   return parts.join("; ");
 }
@@ -7161,7 +8311,14 @@ function isMac() {
 // Markdown rather than HTML: it is what the agent wrote, what the file under
 // specs/ already holds, and what survives being pasted into Slack or a ticket.
 function downloadDoc(doc) {
-  const body = (doc.blocks || []).map((b) => b.md || "").join("\n\n");
+  // The file keeps what the page shows: the title, and which parts are still
+  // assumptions or drafts. Without the marks a half-finished document reads,
+  // once it leaves the page, as a set of decisions.
+  const mark = { assumed: "> **Assumed for now, still open.**\n\n", draft: "> **Draft.**\n\n" };
+  const blocks = (doc.blocks || []).map((b) => (mark[b.state] || "") + (b.md || ""));
+  const first = (doc.blocks || [])[0];
+  const titled = first && /^\s*#\s/.test(first.md || "");
+  const body = [titled || !doc.title ? null : `# ${doc.title}`, ...blocks].filter((x) => x != null).join("\n\n");
   saveFile(`${docFileName(doc)}.md`, body, "text/markdown");
 }
 
@@ -7567,7 +8724,9 @@ for (const [value, label] of [[ROLE_NOT_SET, ROLE_NOT_SET_LABEL], ...ROLES.map((
 $("looks-role").addEventListener("change", (e) => {
   looks.role = normalizeRole(e.target.value);
   saveLooks();
-  if (isDashboard()) render();
+  // The dashboard banner, and the starter templates and Ask starters on any
+  // page, all order themselves by the role.
+  if (S) render();
 });
 for (const radio of document.querySelectorAll('input[name="looks-theme"]')) {
   radio.addEventListener("change", () => {
@@ -7606,6 +8765,8 @@ for (const box of document.querySelectorAll("input[data-sound]")) {
 // Models: the launcher's menu. The built-in list ships with every install and is read-only
 // here; what the person adds is saved to the server, which the launcher reads on its next run.
 let modelsData = null;
+// The CLIs the launcher reads a model list for, in tab order (server.mjs MODEL_CLIS).
+const MODEL_CLIS = ["claude", "devin", "codex"];
 let modelsTab = "claude";
 
 function setModelsStatus(text, isError) {
@@ -7615,7 +8776,7 @@ function setModelsStatus(text, isError) {
 }
 
 function renderModels() {
-  for (const cli of ["claude", "devin"]) {
+  for (const cli of MODEL_CLIS) {
     $("models-tab-" + cli).setAttribute("aria-pressed", String(cli === modelsTab));
   }
   const shipped = $("models-shipped");
@@ -7679,7 +8840,7 @@ async function loadModelsData() {
   renderModels();
 }
 
-for (const cli of ["claude", "devin"]) {
+for (const cli of MODEL_CLIS) {
   $("models-tab-" + cli).addEventListener("click", () => {
     modelsTab = cli;
     renderModels();
@@ -7693,7 +8854,7 @@ $("models-add").addEventListener("click", () => {
 });
 $("models-reset").addEventListener("click", () => {
   if (!modelsData) return;
-  modelsData.user = { claude: [], devin: [] };
+  modelsData.user = Object.fromEntries(MODEL_CLIS.map((cli) => [cli, []]));
   saveModels();
   renderModels();
 });
@@ -7713,17 +8874,20 @@ function setCleanupStatus(text, isError) {
   status.classList.toggle("error", Boolean(isError));
 }
 
+const CLEANUP_WHERE = { root: "~/.plan2code/", console: "~/.plan2code/console/", completed: "specs--completed/" };
+
 function cleanupLabel(item) {
   if (item.where === "session") return "Session " + item.name;
-  const where = item.where === "root" ? "~/.plan2code/" : "~/.plan2code/console/";
-  return where + item.name + (item.kind === "folder" ? "/" : "");
+  return CLEANUP_WHERE[item.where] + item.name + (item.kind === "folder" ? "/" : "");
 }
 
 function cleanupSummary(items, bytes) {
   const sessions = items.filter((i) => i.where === "session").length;
-  const strays = items.length - sessions;
+  const completed = items.filter((i) => i.where === "completed").length;
+  const strays = items.length - sessions - completed;
   const parts = [];
   if (sessions) parts.push(sessions + (sessions === 1 ? " old session" : " old sessions"));
+  if (completed) parts.push(completed + (completed === 1 ? " old completed spec" : " old completed specs"));
   if (strays) parts.push(strays + (strays === 1 ? " stray file or folder" : " stray files and folders"));
   return parts.join(", ") + " · " + formatBytes(bytes);
 }
@@ -7794,10 +8958,15 @@ async function deleteCleanup() {
   }
   const removed = (body.removed || []).length;
   const failed = (body.failed || []).length;
+  // The server re-checks every id and keeps anything that changed since the
+  // scan; say so, rather than let a count that came up short pass unremarked.
+  const asked = cleanupFound.items.length;
+  const kept = Math.max(0, asked - removed - failed);
   cleanupFound = null;
   renderCleanup();
   const done = removed ? "Deleted " + removed + (removed === 1 ? " item" : " items") + " · " + formatBytes(body.bytes) + " freed." : "Nothing was deleted.";
-  setCleanupStatus(failed ? done + " " + failed + " could not be removed." : done, Boolean(failed));
+  const keptLine = kept ? ` ${kept} ${kept === 1 ? "was" : "were"} kept because ${kept === 1 ? "it" : "they"} changed since the scan.` : "";
+  setCleanupStatus((failed ? done + " " + failed + " could not be removed." : done) + keptLine, Boolean(failed));
 }
 
 $("cleanup-scan").addEventListener("click", scanCleanup);

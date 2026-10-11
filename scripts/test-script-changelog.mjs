@@ -5,23 +5,26 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { runScript, tmp, write, read, gitInit } from "./skill-script-helpers.mjs";
+import { runScript, tmp, write, read, gitInit, gitIn, copyFixture, fixtureCleanup } from "./skill-script-helpers.mjs";
 
 const S = (cwd, ...a) => runScript("plan2code-changelog", "changelog-state.mjs", a, { cwd });
 
 const V = (version, body = "### ✨ Added\n\n- **x**: a thing.\n") => `## v${version}\n\n${body}\n`;
 const LOG = (...entries) => `# Changelog\n\nAll notable changes.\n\n${entries.join("")}`;
 
-// A repo whose main has CHANGELOG at `top`, plus the runner.
+// A repo whose main has CHANGELOG at `top`, plus the runner. Built once per
+// set of options and copied for each test (fixture-helpers.mjs).
+test.after(fixtureCleanup);
 function repo(name, { changelog = LOG(V("1.0.0")), pkg = true } = {}) {
-  const dir = tmp(name);
-  const g = gitInit(dir, "main");
-  write(dir, "CHANGELOG.md", changelog);
-  if (pkg) write(dir, "package.json", `{\n  "name": "x",\n  "version": "1.0.0",\n  "private": true\n}\n`);
-  write(dir, "a.txt", "a\n");
-  g("add", "-A");
-  g("commit", "-q", "-m", "init");
-  return { dir, g };
+  const dir = copyFixture(name, JSON.stringify({ changelog, pkg }), (fresh) => {
+    const g = gitInit(fresh, "main");
+    write(fresh, "CHANGELOG.md", changelog);
+    if (pkg) write(fresh, "package.json", `{\n  "name": "x",\n  "version": "1.0.0",\n  "private": true\n}\n`);
+    write(fresh, "a.txt", "a\n");
+    g("add", "-A");
+    g("commit", "-q", "-m", "init");
+  });
+  return { dir, g: gitIn(dir) };
 }
 
 const commitAll = (g, msg) => {

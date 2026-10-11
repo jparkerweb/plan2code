@@ -88,7 +88,7 @@ export function cleanSetting(input) {
 // The non-editable part of every "on" block (FR-8).
 export const FRAME_LINES = Object.freeze([
   "Hand independent work to helpers if your tools allow it; otherwise carry on alone.",
-  "Report each helper on the page (console.md → Standing instructions); questions for the person stay with you.",
+  "Report each helper on the page (console-subagents.md); questions for the person stay with you.",
   'If your tools cannot start helpers at all, report one "working alone" entry for this skill run instead; a real helper report removes it.',
 ]);
 

@@ -8,7 +8,7 @@ Senior software engineer implementing solutions exactly as specified. Follow spe
 
 ## Interface
 
-The FIRST thing you do, before anything else in this file — before reading a spec, before Phase 1: ask **web console** (browser page, suggested) or **terminal**? Console → run `node "<D>/console.mjs" open --workflow implement` before reading (<D>: references/web-console/ beside this SKILL.md — ~/.agents/skills/plan2code-3-implement/references/web-console/ globally — or the dir in ~/.plan2code/console/console-dir), then <D>/console.md and <D>/building.md; progress, every question and the sign-off go through it. Switchable anytime. If the argument already says which — `--web` or `Use the web console for this session.` — take it and do not ask; drop the flag. Launched by the dashboard? Its session is already open — resume it (console.md → Launches), then the spec.
+The FIRST thing you do, before anything else in this file — before reading a spec, before Phase 1: ask **web console** (browser page, suggested) or **terminal**? Console → run `node "<D>/console.mjs" open --workflow implement` before reading (<D>: references/web-console/ beside this SKILL.md — ~/.agents/skills/plan2code-3-implement/references/web-console/ globally — or the dir in ~/.plan2code/console/console-dir), then read <D>/console.md, <D>/building.md and <D>/notes/implement.md in one batch; progress, every question and the sign-off go through it. Switchable anytime. If the argument already says which — `--web` or `Use the web console for this session.` — take it and do not ask; drop the flag. Launched by the dashboard? Its session is already open — resume it (console-launches.md), then the spec.
 
 ## Scripts
 
@@ -209,10 +209,10 @@ On user "approved":
    | Phase X+1: [Name] | Z | [One-sentence goal] |
 
 5. Write a one-line subject for the phase, then give the user the `command` from `commit-msg.mjs --subject "<subject>" --add-all`. It enforces the format: subject ≤100 chars and EXACTLY TWO -m flags (subject, `AI Assisted`), no body. If a phase spec file contains a longer commit-message template, use only its subject line. The diff is the body; the PR is the explanation. On Windows PowerShell 5.1 (no `&&`), give `add` and `commit` as two commands instead.
-6. **If more phases:** "NEXT STEP: Start NEW conversation and run: `/plan2code-3-implement --web`"
+6. **If more phases:** "NEXT STEP: Start NEW conversation and run: `/plan2code-3-implement specs/<feature>/overview.md --web`"
 7. **If final phase:** "NEXT STEP: Start NEW conversation and run: `/plan2code-4-finalize --web`"
 8. Mention `/plan2code-1b-revise-plan --web` option
-9. **On the web console:** post `finish` with the next step — never a review offer; it was on the sign-off card — then wait and `stop` per building.md.
+9. **On the web console:** post `finish` with the next step — never a review offer; it was on the sign-off card — then wait and `stop` per notes/implement.md.
 
 Planny (continuing):
 ```

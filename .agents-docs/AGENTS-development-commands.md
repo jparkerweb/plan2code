@@ -19,7 +19,7 @@ npm run build:skills
 npm test
 
 # One web console or launcher test
-node --test --test-name-pattern "<regex>" scripts/test-web-console.mjs
+node --test --test-name-pattern "<regex>" scripts/test-web-console-<area>.mjs
 
 # Web console start-up benchmark (puppeteer-core optional)
 node scripts/bench-web-console.mjs [--runs 7] [--workflow dashboard]
@@ -45,7 +45,7 @@ cd plan2code-bot && npm install && npm run build
 cd plan2code-bot && npm test          # vitest
 ```
 
-The root `npm test` does not run the metrics or bot vitest suites; run them in their package. `npm run dev` in loop, metrics and bot is `tsup --watch`. The web console and launcher suites isolate themselves with `PLAN2CODE_CONSOLE_HOME`, `PLAN2CODE_MODELS_DIR` and `PLAN2CODE_NO_BROWSER=1` (`scripts/test-web-console.mjs:191`), so they never open a browser or touch your real console home. Almost all of the ~70s is the web console suite.
+The root `npm test` does not run the metrics or bot vitest suites; run them in their package. `npm run dev` in loop, metrics and bot is `tsup --watch`. The web console and launcher suites isolate themselves with `PLAN2CODE_CONSOLE_HOME`, `PLAN2CODE_MODELS_DIR` and `PLAN2CODE_NO_BROWSER=1` (`scripts/web-console-test-helpers.mjs`), so they never open a browser or touch your real console home. The web console suites are split by area so `node --test` runs them in parallel.
 
 ## Test/Dev Env Vars
 

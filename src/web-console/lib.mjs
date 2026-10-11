@@ -22,6 +22,7 @@ import crypto from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
+import { countPending } from "./git-repo.mjs";
 import { CHAT_LIMIT } from "./public/chat.js";
 import { DOC_TYPES } from "./public/answers.js";
 import { defaultName } from "./public/workspace.js";
@@ -361,29 +362,11 @@ export function insideGitRepo(dir) {
 // How many paths git would commit from `dir`: modified, staged, deleted and
 // untracked (an untracked folder counts once), from one bounded `git status`.
 // null when git cannot say (not installed, not a repository, too slow), which
-// the page reads as "unknown", never as a clean tree. --no-optional-locks keeps
-// this background look from taking the index lock out from under a commit.
+// the page reads as "unknown", never as a clean tree. GIT_OPTIONAL_LOCKS=0 (set
+// by git-repo.mjs) keeps this background look from taking the index lock out
+// from under a commit.
 export function pendingFiles(dir) {
-  try {
-    const out = execFileSync("git", ["--no-optional-locks", "status", "--porcelain", "-z"], {
-      cwd: dir,
-      encoding: "utf8",
-      timeout: 3000,
-      windowsHide: true,
-      maxBuffer: 8 * 1024 * 1024,
-      stdio: ["ignore", "pipe", "ignore"],
-    });
-    const parts = out.split("\0").filter(Boolean);
-    let n = 0;
-    for (let i = 0; i < parts.length; i++) {
-      n++;
-      // A rename or copy carries its old path as one more field.
-      if (/^[RC]/.test(parts[i])) i++;
-    }
-    return n;
-  } catch {
-    return null;
-  }
+  return countPending(dir);
 }
 
 export function projectRoot(cwd = process.cwd()) {
@@ -535,12 +518,13 @@ export async function removeSessions(sessionsDir, sids) {
 
 // The console folder's own files that no sweep may ever remove: the person's
 // looks, the folders remembered per project and spec, the Subagents switch
-// saved per project and workflow, the pointer to this console's directory,
-// and the cached release check.
+// saved per project and workflow, what each unknown git host is, the pointer
+// to this console's directory, and the cached release check.
 export const PROTECTED_CONSOLE_FILES = new Set([
   "looks.json",
   "workspaces.json",
   "subagents.json",
+  "pr-hosts.json",
   "console-dir",
   "update-check.json",
 ]);
@@ -667,6 +651,23 @@ function strayEntries(dir, kept, where, now) {
     .filter((e) => settled(e.path));
 }
 
+// Finalize's archive, `<project>/specs--completed/<feature>/`: each feature
+// folder (or link) nobody has touched for `maxAgeMs`, judged by its newest
+// file. Loose files at the top are not specs and stay.
+function completedSpecs(project, now, maxAgeMs) {
+  const dir = path.join(project, "specs--completed");
+  let entries;
+  try {
+    entries = fs.readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  return entries
+    .filter((e) => e.isDirectory() || e.isSymbolicLink())
+    .map((e) => ({ id: "completed:" + e.name, where: "completed", name: e.name, kind: entryKind(e), path: path.join(dir, e.name) }))
+    .filter((e) => now - newestMtime(e.path) > maxAgeMs);
+}
+
 /**
  * Everything Cleanup would remove, worked out on the server and never taken
  * from a client: sessions untouched for `maxAgeMs` (never `skipSid`; the rule
@@ -676,6 +677,7 @@ function strayEntries(dir, kept, where, now) {
  * `plan2codeDir` -- anything at the top of `plan2codeDir` that is not kept. Strays
  * touched within `STRAY_GRACE_MS` are left for a later scan. A
  * console running from another home (tests, dev) never reaches ~/.plan2code.
+ * Given a `project`, also its completed specs untouched for `maxAgeMs`.
  * Resolves to `{ items: [{ id, where, name, kind, bytes }], bytes }`.
  */
 export async function cleanupFindings({
@@ -684,6 +686,7 @@ export async function cleanupFindings({
   now = Date.now(),
   maxAgeMs = SESSION_MAX_AGE_MS,
   skipSid,
+  project,
 } = {}) {
   const found = [];
   const sessionsDir = path.join(consoleDir, "sessions");
@@ -695,6 +698,7 @@ export async function cleanupFindings({
   if (path.resolve(consoleDir) === path.resolve(plan2codeDir, "console")) {
     found.push(...strayEntries(plan2codeDir, KEPT_PLAN2CODE_ENTRIES, "root", now));
   }
+  if (project) found.push(...completedSpecs(project, now, maxAgeMs));
   const items = [];
   let bytes = 0;
   for (const f of found) {
@@ -843,8 +847,13 @@ function classifySpec(dir, names) {
     let open = 0;
     for (const f of phases) {
       const text = readText(path.join(dir, f));
-      done += (text.match(/^- \[[xX]\]/gm) || []).length;
-      open += (text.match(/^- \[[ /!]\]/gm) || []).length;
+      // The task lines when the file has them (`- [ ] **Task 1.2:**`), so an
+      // Acceptance Criteria checkbox is not counted as a task; every checkbox
+      // in a file written before that format.
+      const tasks = text.split(/\r?\n/).filter((l) => TASK_LINE_RE.test(l));
+      const lines = tasks.length ? tasks.join("\n") : text;
+      done += (lines.match(/^\s*[-*] \[[xX]\]/gm) || []).length;
+      open += (lines.match(/^\s*[-*] \[[ /!]\]/gm) || []).length;
     }
     const total = done + open;
     if (open === 0 && done > 0) return { state: "built", detail: "all tasks done" };
@@ -884,7 +893,7 @@ function classifySpec(dir, names) {
   // A conversation log with no draft is a plan session interrupted before it
   // wrote anything: Plan resumes it, same as a cleared map.
   if (planConv) return { state: "mapped", detail: "planning in progress" };
-  return { state: "unrecognized", detail: "files on disk" };
+  return { state: "unrecognized", detail: "no pipeline files yet" };
 }
 
 function isDir(p) {
@@ -954,10 +963,15 @@ export function pidAlive(pid) {
   }
 }
 
-export async function healthOk(handle, timeoutMs = 1500) {
+export async function healthOk(handle, timeoutMs = 1500, signal) {
   if (!handle || !handle.url) return false;
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  // The caller's own abort ends the check at once (a wait that is done).
+  if (signal) {
+    if (signal.aborted) ctrl.abort();
+    else signal.addEventListener("abort", () => ctrl.abort(), { once: true });
+  }
   try {
     // No explicit Host header: it is a forbidden header name, so fetch drops it
     // silently. Requesting 127.0.0.1 directly sets the right one anyway, which
@@ -1147,9 +1161,20 @@ function dropStaleSubmissions(currentItems, before, patchList) {
     // A different kind is never a typo fix: a multi turned confirm is another question.
     const kindChanged = "kind" in entry && entry.kind !== prev.kind;
     const reopens = entry.status === "open" || entry.status === "reopened" || kindChanged;
-    if (!rewritten || settles || (wasSettled && !reopens)) continue;
+    // An explicit reopen counts as asking again even with the question's
+    // words unchanged (the notes reopen with a status and a thread reply):
+    // the last send stops being in flight, and its note moves to the thread.
+    if ((!rewritten && !reopens) || settles || (wasSettled && !reopens)) continue;
     const item = merged.find((x) => x.id === entry.id);
     if (wasSettled && !("status" in entry)) item.status = "open";
+    // What they wrote with that answer ("I want changes: rename tally") is the
+    // context for the question being asked again, so it moves into the thread
+    // rather than leaving with the record.
+    const said = prev.submitted && typeof prev.submitted.text === "string" ? prev.submitted.text.trim() : "";
+    const thread = Array.isArray(item.thread) ? item.thread : [];
+    if (said && !thread.some((m) => m && m.who === "user" && String(m.text || "").trim() === said)) {
+      item.thread = [...thread.filter((m) => !(m && m.who === "agent" && m.at === undefined)), { who: "user", text: said, at: prev.submitted.at }, ...thread.filter((m) => m && m.who === "agent" && m.at === undefined)];
+    }
     if (!("submitted" in entry)) delete item.submitted;
     delete item.answer;
   }
@@ -1217,8 +1242,172 @@ function mergeDocs(current, patchList) {
     if (!doc) continue;
     const prev = (current || []).find((d) => d.id === entry.id);
     doc.blocks = mergeKeyed(prev?.blocks, entry.blocks, "id", {}, "blocks");
+    // A known doc whose content moved, sent with no version, is the next
+    // version: the agent no longer has to track what the page holds, and a
+    // repost of unchanged content is not a new version.
+    if (prev && typeof entry.version !== "number" && typeof prev.version === "number") {
+      const text = (blocks) => JSON.stringify((blocks || []).map((b) => [b.id, b.md, b.state]));
+      if (text(prev.blocks) !== text(doc.blocks)) doc.version = prev.version + 1;
+    }
   }
   return merged;
+}
+
+/**
+ * `settle` in a patch: the cards the person just answered, marked answered
+ * with what they sent as the answer. `true` takes every open card from the
+ * latest send (one send stamps every card it carries with the same `at`); a
+ * list names the cards. An item the same patch settles itself keeps the
+ * agent's own answer: settle only fills in what the patch left out.
+ */
+function settleItems(items, settle, patchItems, collected) {
+  if (settle === undefined || settle === false) return items;
+  if (settle !== true && !(Array.isArray(settle) && settle.every((id) => typeof id === "string"))) {
+    throw new Error('"settle" must be true or a list of item ids');
+  }
+  const sent = (items || []).filter((i) => i && i.submitted && typeof i.submitted === "object");
+  let ids;
+  if (settle === true && collected && Array.isArray(collected.ids)) {
+    // The send `wait` last handed over (state.collected, written as it was
+    // collected): a later send the person made meanwhile is not the agent's yet.
+    ids = sent.filter((i) => isOpen(i) && collected.ids.includes(i.id)).map((i) => i.id);
+  } else if (settle === true) {
+    const latest = sent.filter(isOpen).map((i) => String(i.submitted.at || "")).sort().pop();
+    ids = sent.filter((i) => isOpen(i) && String(i.submitted.at || "") === latest).map((i) => i.id);
+  } else {
+    for (const id of settle) {
+      // The same patch reopening it has already let go of what was sent; the
+      // reopen wins below, so naming it is not an error.
+      const reopening = (patchItems || []).some((e) => e && e.id === id && (e.status === "open" || e.status === "reopened"));
+      if (!reopening && !sent.some((i) => i.id === id)) throw new Error(`settle: "${id}" has nothing sent to settle`);
+    }
+    ids = settle;
+  }
+  const own = new Map((patchItems || []).filter(isPlainObject).map((e) => [e.id, e]));
+  return items.map((item) => {
+    if (!ids.includes(item.id)) return item;
+    const entry = own.get(item.id) || {};
+    // The same patch reopening it (a `changes` verdict answered by a reworked
+    // report) means it is not settled: no answer is recorded over the reopen.
+    if (entry.status === "open" || entry.status === "reopened") return item;
+    const { at, kind, ...answer } = item.submitted;
+    return {
+      ...item,
+      // A "Skip this one" send settles as skipped, not as an answer.
+      status: "status" in entry ? item.status : answer.skipped === true ? "skipped" : "answered",
+      ...("answer" in entry ? {} : { answer }),
+    };
+  });
+}
+
+// A question the patch puts in front of the person: new, or reopened.
+function asksSomething(patchItems, before) {
+  return (patchItems || []).some((e) => {
+    if (!isPlainObject(e) || e._delete || e.kind === "notice") return false;
+    const prev = (before || []).find((x) => x && x.id === e.id);
+    if (!prev) return e.kind !== undefined && (e.status === undefined || e.status === "open");
+    return e.status === "reopened" || (e.status === "open" && !isOpen(prev));
+  });
+}
+
+/**
+ * The agent block after a patch, with the rule kept here rather than in every
+ * prompt: a patch that asks a question and says nothing of the status hands
+ * the turn over (a question stops the work). `quietMinutes` stays put: the
+ * page only counts it while working, and a build that asked a question goes
+ * back to the same long tasks once it is answered.
+ */
+function settleAgent(next, patch, before) {
+  const said = isPlainObject(patch.agent) ? patch.agent : null;
+  const saidStatus = said && "status" in said;
+  // A finish ends the working stretch too (nothing may still be running at
+  // one): a pause posted without a wait would otherwise sit at "working".
+  const finishes = isPlainObject(patch.finish);
+  if (!saidStatus && (finishes || asksSomething(patch.items, before.items))) {
+    next.agent = { ...(next.agent || {}), status: "waiting" };
+  }
+  return next;
+}
+
+/**
+ * Doc blocks that name a file get their `md` from disk: a build's phase file
+ * re-posted after every task was the biggest thing an agent typed, and every
+ * word of it was already on disk. `{ "id": "body", "file": "specs/x/phase-3.md" }`
+ * reads the file; `"select": "tasks"` keeps only its task checkbox lines; a doc
+ * with `"refresh": true` re-reads every file block it already has. Paths are
+ * relative to the worktree and must stay inside it. Runs in the CLI before
+ * the merge, so applyPatch itself never touches the disk.
+ */
+export const DOC_FILE_MAX = 512 * 1024;
+const TASK_LINE_RE = /^\s*(?:[-*]|\d+\.)\s+\[.\]\s+\*\*Task\s/i;
+
+export function resolveDocFiles(patch, state, worktree) {
+  if (!isPlainObject(patch) || !Array.isArray(patch.docs)) return patch;
+  const root = path.resolve(worktree || state.worktree || process.cwd());
+  const fold = (p) => (process.platform === "win32" || process.platform === "darwin" ? p.toLowerCase() : p);
+  const read = (file, select, docId) => {
+    if (typeof file !== "string" || !file.trim()) throw new Error(`doc "${docId}": a block's "file" must be a path`);
+    const abs = path.resolve(root, file);
+    let real;
+    try {
+      real = fs.realpathSync.native(abs);
+    } catch {
+      throw new Error(`doc "${docId}": no file at ${file}`);
+    }
+    const rootReal = (() => {
+      try {
+        return fs.realpathSync.native(root);
+      } catch {
+        return root;
+      }
+    })();
+    // path.relative, not a prefix test: a worktree at a drive root ends in a
+    // separator already, and win32's relative() folds case itself.
+    const rel = path.relative(fold(rootReal), fold(real));
+    if (rel.startsWith("..") || path.isAbsolute(rel)) throw new Error(`doc "${docId}": ${file} is outside the project`);
+    const stat = fs.statSync(real);
+    if (!stat.isFile()) throw new Error(`doc "${docId}": ${file} is not a file`);
+    if (stat.size > DOC_FILE_MAX) throw new Error(`doc "${docId}": ${file} is larger than ${DOC_FILE_MAX / 1024} KB`);
+    const text = fs.readFileSync(real, "utf8").replace(/\r\n/g, "\n");
+    if (select === undefined) return text;
+    if (select !== "tasks") throw new Error(`doc "${docId}": "select" only takes "tasks"`);
+    const tasks = text.split("\n").filter((l) => TASK_LINE_RE.test(l)).map((l) => l.trim());
+    if (!tasks.length) throw new Error(`doc "${docId}": ${file} has no task lines to select`);
+    return tasks.join("\n");
+  };
+  const docs = patch.docs.map((entry) => {
+    if (!isPlainObject(entry)) return entry;
+    const { refresh, ...rest } = entry;
+    let blocks = Array.isArray(rest.blocks) ? rest.blocks : undefined;
+    if (refresh === true) {
+      const prev = (state.docs || []).find((d) => d && d.id === entry.id);
+      const named = new Set((blocks || []).map((b) => b && b.id));
+      const again = ((prev && prev.blocks) || [])
+        .filter((b) => b && typeof b.file === "string" && !named.has(b.id))
+        .map((b) => ({ id: b.id, file: b.file, ...(b.select ? { select: b.select } : {}) }));
+      if (!again.length && !blocks) throw new Error(`doc "${entry.id}": "refresh" found no file blocks to re-read`);
+      blocks = [...(blocks || []), ...again];
+    } else if (refresh !== undefined) throw new Error(`doc "${entry.id}": "refresh" must be true`);
+    if (!blocks) return rest;
+    const prevBlocks = (state.docs || []).find((d) => d && d.id === entry.id)?.blocks || [];
+    return {
+      ...rest,
+      blocks: blocks.map((b) => {
+        if (!isPlainObject(b)) return b;
+        const prevBlock = prevBlocks.find((x) => x && x.id === b.id);
+        if (b.file === undefined || b.file === null) {
+          // Typed text over a block that was a file: it stops being one, so a
+          // later refresh cannot overwrite it and the prose scan sees it.
+          return "md" in b && prevBlock && typeof prevBlock.file === "string" ? { ...b, file: null, select: null } : b;
+        }
+        // A file named again without `select` is the whole file, now and on
+        // every refresh: an older select must not linger in the merge.
+        const select = "select" in b ? b.select : null;
+        return { state: prevBlock?.state || "settled", ...b, select, md: read(b.file, select ?? undefined, entry.id) };
+      }),
+    };
+  });
+  return { ...patch, docs };
 }
 
 /**
@@ -1233,6 +1422,8 @@ function mergeDocs(current, patchList) {
 export function applyPatch(state, patch) {
   guard(patch, "patch");
   patch = liftActivity(patch);
+  const { settle, ...rest } = patch;
+  patch = rest;
   const next = { ...state };
   for (const [k, v] of Object.entries(patch)) {
     if (v === null) {
@@ -1277,7 +1468,12 @@ export function applyPatch(state, patch) {
         const chat = { ...(next.chat || {}) };
         if (v.replies != null) {
           if (!Array.isArray(v.replies)) throw new Error('"chat.replies" must be an array');
-          chat.replies = mergeKeyed(chat.replies, v.replies, "id", {}, "chat.replies");
+          // A reply with no id is named for the message it answers (`r<seq>`),
+          // so a repeat delivery re-posted the same way replaces, never doubles.
+          const named = v.replies.map((r) =>
+            isPlainObject(r) && (r.id === undefined || r.id === "") && Number.isInteger(r.re) ? { ...r, id: `r${r.re}` } : r,
+          );
+          chat.replies = mergeKeyed(chat.replies, named, "id", {}, "chat.replies");
         }
         next.chat = chat;
         break;
@@ -1286,7 +1482,8 @@ export function applyPatch(state, patch) {
         next[k] = v;
     }
   }
-  return stampTimes(state, next);
+  if (settle !== undefined) next.items = settleItems(next.items || [], settle, patch.items, state.collected);
+  return stampTimes(state, settleAgent(next, patch, state));
 }
 
 // `activity` belongs under `agent`, which is the only place the page reads it.
@@ -1305,8 +1502,10 @@ function liftActivity(patch) {
 function stampTimes(before, next) {
   const now = nowIso();
   if (next.agent) {
+    // A status change starts its own clock: `since` merged along from the
+    // last status would date a fresh working turn to when the session opened.
     const changed = !before.agent || before.agent.status !== next.agent.status;
-    if (changed && !next.agent.since) next.agent = { ...next.agent, since: now };
+    if (changed) next.agent = { ...next.agent, since: now };
     else if (!next.agent.since) next.agent = { ...next.agent, since: before.agent?.since || now };
   }
   if (Array.isArray(next.items)) {
@@ -1464,7 +1663,17 @@ export function validate(state) {
     if (recs.length > 1) problems.push(`item "${item.id}" marks ${recs.length} options recommended; at most one`);
   }
 
-  const openRequired = state.items.filter((i) => i.required !== false && isOpen(i));
+  // The dashboard's page is the menu: a card posted there is drawn nowhere,
+  // yet counts as open (and keeps Stop live for a question nobody can see).
+  if (state.workflow === "dashboard" && state.items.some((i) => isOpen(i))) {
+    problems.push(
+      'The dashboard draws no question cards: post its "menu" (and "agent"), and launch the skill a question belongs to.'
+    );
+  }
+
+  // A notice asks nothing (the git board keeps its result line open all
+  // session), so it never takes one of the three slots.
+  const openRequired = state.items.filter((i) => i.required !== false && i.kind !== "notice" && isOpen(i));
   if (openRequired.length > MAX_OPEN_REQUIRED) {
     problems.push(
       `${openRequired.length} questions are open at once. The cap is ${MAX_OPEN_REQUIRED} ` +
@@ -1532,11 +1741,18 @@ export function validate(state) {
   if (quiet != null && (typeof quiet !== "number" || !(quiet > 0) || quiet > 60)) {
     problems.push('"agent.quietMinutes" must be a number of minutes between 1 and 60 (or null to clear it)');
   }
+  // The page reads exactly two: anything else would leave it guessing whose
+  // turn it is.
+  if (state.agent && state.agent.status != null && !["working", "waiting"].includes(state.agent.status)) {
+    problems.push(`"agent.status" must be "working" or "waiting" (not "${state.agent.status}")`);
+  }
   if (state.agent && state.agent.activity != null && typeof state.agent.activity !== "string") {
     problems.push('"agent.activity" must be a short sentence saying what you are doing');
   }
 
-  const gates = state.items.filter((i) => i.gate && i.gate.authoritative);
+  // Open gates only: an approval already given (last phase's sign-off) is a
+  // record, and must not stop the next phase from asking for its own.
+  const gates = state.items.filter((i) => i.gate && i.gate.authoritative && isOpen(i));
   if (gates.length > 1) {
     problems.push(
       `${gates.length} authoritative approval gates are open (${gates
@@ -1553,9 +1769,15 @@ export function validate(state) {
     ...rest,
     thread: Array.isArray(thread) ? thread.filter((m) => !m || m.who !== "user") : thread,
   }));
+  // A doc block read from a file (`file`) is the file's own words, already on
+  // disk: the agent cannot reword it, and refusing it would wedge every post
+  // that refreshes it. Only what the agent typed is scanned.
+  const typedDocs = (state.docs || []).map((d) =>
+    isPlainObject(d) && Array.isArray(d.blocks) ? { ...d, blocks: d.blocks.filter((b) => !(isPlainObject(b) && typeof b.file === "string")) } : d
+  );
   const prose =
     JSON.stringify(authored) +
-    JSON.stringify(state.docs || []) +
+    JSON.stringify(typedDocs) +
     JSON.stringify(state.finish || {}) +
     JSON.stringify(state.menu || {});
   problems.push(...proseProblems(prose));
@@ -1591,7 +1813,7 @@ export function blankState({ sid, workflow, title, project, specDir }) {
     specDir: specDir || "",
     created: nowIso(),
     phase: "collecting",
-    agent: { status: "working", since: nowIso(), handled: 0 },
+    agent: { status: "working", since: nowIso() },
     headline: { stage: "", cleared: 0, total: 0, confidence: "", note: "" },
     topics: [],
     items: [],
@@ -1601,7 +1823,8 @@ export function blankState({ sid, workflow, title, project, specDir }) {
 
 /**
  * A resume that passes through the dashboard (a finished skill going back to
- * it, or a launch from its menu) is a new skill taking the page over, so it
+ * it, or a launch from its menu), or into Git from any skill
+ * (Commit it now, Changelog's hand-off), is a new skill taking the page over, so it
  * starts from a blank page: the last skill's questions, sections, docs,
  * helpers, headline and ending are its record on disk, not the next skill's
  * opening.
@@ -1770,8 +1993,12 @@ export function collectChat(dir, state) {
 // something the person said. A reset alone (every session opens with one)
 // waits and rides along with the next message, or `wait` would return on the
 // opening line of every session and every first card reply would carry it.
+// A run of resets (the session's opening one, then one per skill switch)
+// says one thing, so only the last of each run is handed over; it carries the
+// highest seq of the run, so the cursor still moves past all of them.
 export function deliverableChat(entries) {
-  return entries.some((e) => e.kind !== "reset") ? entries : [];
+  if (!entries.some((e) => e.kind !== "reset")) return [];
+  return entries.filter((e, i) => !(e.kind === "reset" && entries[i + 1] && entries[i + 1].kind === "reset"));
 }
 
 // Things the person said that were handed over but never answered. The page keeps
@@ -2126,6 +2353,33 @@ export function saveSubagentStoreEntry(worktree, workflow, value) {
       writeJsonAtomic(SUBAGENTS_FILE, store);
     },
     SUBAGENTS_LOCK
+  );
+}
+
+/* ------------------------------------------------------- the PR host store */
+
+// What kind of git host an unknown host is, so the git board can build its
+// pull-request link. One answer per host, for every project:
+//
+//   { "<host>": "github" | "gitlab" | "bitbucket" | "azure" | "none" }
+export const PR_HOSTS_FILE = path.join(HOME_DIR, "pr-hosts.json");
+export const PR_HOST_KINDS = new Set(["github", "gitlab", "bitbucket", "azure", "none"]);
+const PR_HOSTS_LOCK = "pr-hosts.json.lock";
+
+// The saved hosts as a plain object; malformed → {}, unknown kinds dropped.
+export function readPrHosts() {
+  const saved = readJson(PR_HOSTS_FILE, null);
+  if (!saved || typeof saved !== "object" || Array.isArray(saved)) return {};
+  return Object.fromEntries(Object.entries(saved).filter(([, kind]) => PR_HOST_KINDS.has(kind)));
+}
+
+// Single-writer rule: only server.mjs may call this.
+export function savePrHost(host, kind) {
+  ensureDir(path.dirname(PR_HOSTS_FILE));
+  withStateLock(
+    path.dirname(PR_HOSTS_FILE),
+    () => writeJsonAtomic(PR_HOSTS_FILE, { ...readPrHosts(), [host]: kind }),
+    PR_HOSTS_LOCK
   );
 }
 

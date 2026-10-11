@@ -18,6 +18,8 @@ The web console is the main way in: a local page where questions, documents, bui
 | Install / update          | `npx --allow-git=all git+https://github.com/jparkerweb/plan2code.git` | Installs the skills and the `plan2code` command; re-run it to update |
 | Straight into a skill     | `/plan2code-1-plan --web` (any step) | Skips the "web console or terminal?" question and opens the page                       |
 
+The install command always opens a menu. Back at your prompt with no output at all? npm could not reach the repository and hid the reason: run `git ls-remote https://github.com/jparkerweb/plan2code.git` to see it (usually the network, a proxy or the VPN).
+
 Pick a skill on the dashboard and the same page becomes that session. Details: [.readme/web-console.md](.readme/web-console.md) · worked example: [.readme/walkthrough.md](.readme/walkthrough.md).
 
 ## Commands
@@ -40,7 +42,7 @@ Every command below is what a dashboard card runs. Typed on its own, each one as
 | 4          | /plan2code-4-finalize         | overview.md     | Archived specs                                                                                                |
 | handoff    | /plan2code-handoff            | Conversation    | Self-contained handoff doc (OS temp dir by default, or a folder you pick such as `handoffs/`)                 |
 | changelog  | /plan2code-changelog          | Your branch     | `CHANGELOG.md` entries and the `package.json` version, from the default branch's latest version |
-| git-commit | /plan2code-git-commit         | Your changes    | A commit (`<subject>` / `AI Assisted`): suggested splits, a branch offer on the default branch, optional push |
+| git        | /plan2code-git                | Your repo       | Commits (`<subject>` / `AI Assisted`), branches, pull with conflict help, push, publish                       |
 
 **Terminal instead:** run any command without `--web` and answer the interface question with **terminal**. Nothing is lost: same questions, same gates, same files under `specs/`. You can switch between the two mid-feature.
 

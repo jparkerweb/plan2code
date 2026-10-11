@@ -24,6 +24,8 @@
     <link rel="modulepreload" href="/subagents.js" />
     <link rel="modulepreload" href="/mentions.js" />
     <link rel="modulepreload" href="/favicon.js" />
+    <link rel="modulepreload" href="/git-board.js" />
+    <link rel="modulepreload" href="/pr-url.js" />
     <link rel="modulepreload" href="/vendor/marked.esm.js" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="icon" type="image/png" sizes="192x192" href="/favicon.png" />
@@ -37,8 +39,8 @@
          rail drawing that powers on centre stage, then glides into the rail.
          Hidden unless boot.js is playing it; placed entirely by app.css,
          because the CSP refuses style attributes. -->
-    <div class="wake" id="wake" hidden aria-hidden="true">
-      <svg class="wake-bot" viewBox="0 0 22 30" focusable="false">
+    <div class="wake" id="wake" hidden>
+      <svg class="wake-bot" viewBox="0 0 22 30" focusable="false" aria-hidden="true">
         <g class="body">
           <rect class="foot f1" x="5.7" y="27.1" width="3.6" height="1.7" rx="0.85" />
           <rect class="foot f2" x="12.7" y="27.1" width="3.6" height="1.7" rx="0.85" />
@@ -58,7 +60,7 @@
         </g>
       </svg>
       <p class="wake-hint">Click to wake Planny</p>
-      <button class="wake-skip" type="button">Skip</button>
+      <button class="wake-skip" type="button" aria-label="Skip the intro">Skip</button>
     </div>
 
     <header class="topbar">
@@ -565,13 +567,15 @@
           </g>
         </g>
       </svg>
-      <!-- Git commit: saving a step. Beside a branch line with two commits on
-           it, one arm reaches to set a third commit onto the line. -->
-      <svg class="pose pose-git-commit" data-pose="git-commit" viewBox="0 4 240 216" aria-hidden="true" focusable="false">
+      <!-- Git: minding the branches. Beside a branch line with a second branch
+           forking off it, one arm reaches to set a new commit onto the line. -->
+      <svg class="pose pose-git" data-pose="git" viewBox="0 4 240 216" aria-hidden="true" focusable="false">
         <ellipse class="shadow" cx="126" cy="198" rx="44" ry="5" />
         <g class="prop">
           <line class="lt gc-line" x1="204" y1="62" x2="204" y2="172" />
+          <path class="lt" d="M204 152 Q226 140 226 112 L226 72" />
           <circle class="ac" cx="204" cy="82" r="7" />
+          <circle class="ac" cx="226" cy="92" r="6" />
           <circle class="ac" cx="204" cy="112" r="7" />
           <circle class="ac gc-dot" cx="204" cy="142" r="7" />
         </g>
@@ -648,6 +652,12 @@
         <symbol id="hi-build" viewBox="0 0 24 24" fill="none">
           <rect x="3" y="9" width="18" height="6" rx="3" />
           <path d="M6 12h7" />
+        </symbol>
+        <symbol id="hi-git" viewBox="0 0 24 24" fill="none">
+          <circle cx="6" cy="5" r="2" />
+          <circle cx="6" cy="19" r="2" />
+          <circle cx="18" cy="7" r="2" />
+          <path d="M6 7v10M18 9a7 7 0 0 1-7 7H6" />
         </symbol>
         <symbol id="hi-subagents" viewBox="0 0 24 24" fill="none">
           <circle cx="7" cy="12" r="3.5" />
@@ -737,8 +747,9 @@
         <p>
           <strong>It stays up while this tab is open.</strong> Close the tab and
           it shuts itself down <span data-fact="closedTabMinutes">2</span> minutes
-          later, and after <span data-fact="maxLifeHours">4</span> hours
-          regardless. Reopening the same link brings everything back: nothing you
+          later. It also stops after <span data-fact="idleMinutes">30</span>
+          minutes without hearing from anyone, and after
+          <span data-fact="maxLifeHours">4</span> hours regardless. Reopening the same link brings everything back: nothing you
           typed is kept in the browser alone.
         </p>
         <h4>Two halves, both running</h4>
@@ -782,7 +793,7 @@
         <ol class="help-rows">
             <li class="help-row">
               <dl>
-                <dt>You see</dt><dd>The line beside Planny stays quiet for a minute or two while it is working.</dd>
+                <dt>You see</dt><dd>The line beside Planny stays quiet for half a minute or more while it is working.</dd>
                 <dt>Likely cause</dt><dd>A permission prompt is waiting in your terminal.</dd>
                 <dt>Do this</dt><dd>Switch to the terminal and answer it.</dd>
               </dl>
@@ -798,7 +809,7 @@
               <dl>
                 <dt>You see</dt><dd><strong>Not connected</strong> (Planny faded, his star shut).</dd>
                 <dt>Likely cause</dt><dd>The program behind this page shut itself down.</dd>
-                <dt>Do this</dt><dd>Ask Plan2Code to resume the session, and use the new link.</dd>
+                <dt>Do this</dt><dd>Ask Plan2Code to resume the session (or run the command again), and use the new link.</dd>
               </dl>
             </li>
             <li class="help-row">
@@ -1561,7 +1572,7 @@
           <li><strong>Review.</strong> A second opinion on the changes. Problems ranked, and you pick what gets fixed.</li>
           <li><strong>Handoff.</strong> Pack this conversation into a document a fresh session can pick up cold.</li>
           <li><strong>Changelog.</strong> Checks the CHANGELOG version against the main branch and suggests entries for what is new.</li>
-          <li><strong>Git commit.</strong> Commits your changes with a clear message, suggests a split when it is really two jobs, and offers to push.</li>
+          <li><strong>Git.</strong> Branches, pull, push and commits on one board, asking before anything leaves your machine. See "The git board".</li>
         </ul>
         <h4>Picking a spec</h4>
         <p>
@@ -1718,7 +1729,94 @@
         </p>
       </section>
 
-      <!-- Tab 13: Helpers (subagents) -->
+      <!-- Tab 13: The git board -->
+      <section class="help-panel" data-tab="git">
+        <h3>The git board</h3>
+        <p class="help-lead">
+          The Git card opens one board for your repository: branches, pull,
+          push and commits in one place. Every button is a request to
+          Plan2Code, which runs the git commands and says what each one did.
+        </p>
+        <h4>The header</h4>
+        <ul>
+          <li>The branch you are on, and how far it is ahead of or behind its remote copy.</li>
+          <li>
+            <strong>Last refreshed</strong> says when the remotes were last
+            fetched. <strong>Refresh</strong> fetches again; if that fails, the
+            line says so.
+          </li>
+          <li>
+            Once your branch is pushed, <strong>Open pull request</strong> opens
+            your host's new pull request page, into the default branch or the
+            one you pick beside it. The first time a host is unknown, the board
+            asks which kind it is and remembers the answer.
+          </li>
+        </ul>
+        <h4>The branch table</h4>
+        <ul>
+          <li>
+            The branch you are on and the default branch come first, then the
+            rest, newest commit first, each with <strong>Switch</strong> and
+            <strong>Delete</strong>.
+          </li>
+          <li>
+            <strong>Merged</strong> marks a branch already merged into the
+            default branch, and <strong>Remote copy deleted</strong> one whose
+            remote copy is gone. <strong>Clean up</strong> offers to delete those
+            local branches in one go.
+          </li>
+          <li>
+            Branches that exist only on the remote sit under
+            <strong>Remote only</strong>, showing the first
+            <span data-fact="remoteFold">50</span>; <strong>Show all</strong>
+            lists the rest.
+          </li>
+          <li><strong>Search branches</strong> filters both lists by name or last commit.</li>
+        </ul>
+        <h4>What asks first</h4>
+        <ul>
+          <li>
+            <strong>Push</strong>, <strong>Publish</strong>,
+            <strong>Delete</strong> and <strong>Clean up</strong> always show
+            exactly what will happen and wait for your yes. Deleting a branch
+            that is not merged is a red confirm.
+          </li>
+          <li>
+            Switching with uncommitted changes asks first: <strong>Switch and
+            bring them</strong>, <strong>Commit first</strong> or
+            <strong>Cancel</strong>. A pull that would touch your changes asks
+            the same way.
+          </li>
+          <li>
+            <strong>Commit</strong> opens a list of your changed files to tick,
+            and you approve the message before anything is committed.
+          </li>
+          <li>A remote branch is never deleted, and nothing is ever force-pushed.</li>
+        </ul>
+        <h4>One action at a time</h4>
+        <p>
+          While Planny works on a click, the bar is locked, so nothing queues
+          up behind it. When it is done, a result line says what happened, with
+          the commit hashes, and the board redraws from the repository as it now
+          stands.
+        </p>
+        <h4>Done</h4>
+        <p>
+          <strong>Done</strong> ends the session. If anything happened, the last
+          screen lists the commits, pushes and branches created or deleted, with
+          <strong>Back to the dashboard</strong>. If nothing did, the page goes
+          straight back to the dashboard.
+        </p>
+        <h4>In the terminal</h4>
+        <p>
+          The same skill takes plain instructions, such as
+          <code>/plan2code-git switch to main</code> or
+          <code>/plan2code-git commit and push</code>, and asks the same
+          questions before every push, publish and delete.
+        </p>
+      </section>
+
+      <!-- Tab 14: Helpers (subagents) -->
       <section class="help-panel" data-tab="subagents">
         <h3>Helpers (subagents)</h3>
         <p>
@@ -1773,7 +1871,7 @@
         </ul>
       </section>
 
-      <!-- Tab 14: Ask a quick question -->
+      <!-- Tab 15: Ask a quick question -->
       <section class="help-panel" data-tab="ask">
         <h3>Ask a quick question</h3>
         <p class="help-lead">
@@ -1864,7 +1962,7 @@
         </p>
       </section>
 
-      <!-- Tab 15: Stopping and finishing -->
+      <!-- Tab 16: Stopping and finishing -->
       <section class="help-panel" data-tab="finishing">
         <h3>Stopping and finishing</h3>
         <p class="help-lead">
@@ -1938,15 +2036,16 @@
           A finished screen (never a paused one) has a <strong>Back to the
           dashboard</strong> button. It turns this page back into the cards, in
           the same conversation, so the next step starts right here.
-          Plan2Code listens for it for about ten minutes after the end. After
-          that, or once the session has closed, the button becomes the
-          <code>/plan2code</code> command to run in a new conversation instead.
+          Plan2Code listens for it for as long as the session is open.
+          Once the session has closed, the button becomes the
+          <code>/plan2code</code> command to run in a new conversation
+          instead.
           After a long step, a new conversation is the better choice anyway: it
           starts with a clean slate.
         </p>
       </section>
 
-      <!-- Tab 16: Keyboard and preferences -->
+      <!-- Tab 17: Keyboard and preferences -->
       <section class="help-panel" data-tab="prefs">
         <h3>Keyboard and preferences</h3>
         <p class="help-lead">
@@ -2032,6 +2131,9 @@
             lists what Plan2Code doesn't need in your
             <code>~/.plan2code</code> folder: sessions nobody has opened for
             30 days, and files or folders that ended up there by mistake. It
+            also lists this project's <code>specs--completed/</code> folders
+            nobody has touched for 30 days; deleting one is permanent, since
+            that folder is usually gitignored and git can't restore it. It
             shows each one with its size, and <strong>Delete these</strong>
             removes exactly that list. Your preferences, saved folders, models,
             the launcher and the session you are in always stay.
@@ -2062,7 +2164,7 @@
         </ul>
       </section>
 
-      <!-- Tab 17: Privacy and where things are saved -->
+      <!-- Tab 18: Privacy and where things are saved -->
       <section class="help-panel" data-tab="privacy">
         <h3>Privacy and where things are saved</h3>
         <p class="help-lead">
@@ -2127,90 +2229,93 @@
       </section>
     </template>
 
-    <dialog class="modal looks" id="looks-modal" aria-labelledby="looks-title">
+    <dialog class="modal looks prefs" id="looks-modal" aria-labelledby="looks-title">
       <h2 id="looks-title">User Preferences</h2>
-      <p class="modal-blurb">
-        Kept on this machine, for every session you open here. Role only puts the
-        starter templates most useful to you first; it never changes the questions
-        you're asked.
-      </p>
-      <fieldset class="modal-ranges looks-row looks-role">
-        <legend>Role</legend>
-        <select id="looks-role" aria-label="Role"></select>
-        <p class="help">Only puts the starter templates most useful to you first.</p>
-      </fieldset>
-      <fieldset class="modal-ranges looks-row">
-        <legend>Theme</legend>
-        <label><input type="radio" name="looks-theme" value="system" checked /> <span>Follow my system</span></label>
-        <label><input type="radio" name="looks-theme" value="light" /> <span>Light</span></label>
-        <label><input type="radio" name="looks-theme" value="dark" /> <span>Dark</span></label>
-      </fieldset>
-      <fieldset class="modal-ranges looks-row">
-        <legend>Card width</legend>
-        <label><input type="radio" name="looks-width" value="narrow" /> <span>Narrow</span></label>
-        <label><input type="radio" name="looks-width" value="comfortable" checked /> <span>Comfortable</span></label>
-        <label><input type="radio" name="looks-width" value="wide" /> <span>Wide</span></label>
-        <p class="help">How wide the question and documents are. On a smaller window they fit the space there is.</p>
-      </fieldset>
-      <fieldset class="modal-ranges looks-accents">
-        <legend>Highlight color</legend>
-        <div class="swatches" id="looks-swatches"></div>
-        <p class="help">
-          Your highlight color marks what is yours to do, and Planny's
-          star uses it while he works. Green, amber and red also mean done,
-          staged and careful, so a highlight close to one of those can blur
-          which is which.
+      <div class="prefs-body">
+        <p class="modal-blurb">
+          Kept on this machine, for every session you open here. Role only puts the
+          starter templates most useful to you first; it never changes the questions
+          you're asked.
         </p>
-      </fieldset>
-      <fieldset class="modal-ranges looks-sounds">
-        <legend>Sounds</legend>
-        <label><input type="checkbox" id="looks-sound" checked /> <span>Play sounds</span></label>
-        <div class="looks-row looks-sound-events" id="looks-sound-events">
-          <label><input type="checkbox" data-sound="snore" checked /> <span>Planny snoring</span></label>
-          <label><input type="checkbox" data-sound="bootup" checked /> <span>Planny waking up</span></label>
-          <label><input type="checkbox" data-sound="startSkill" checked /> <span>Starting a skill</span></label>
-          <label><input type="checkbox" data-sound="sessionStart" checked /> <span>Session opens</span></label>
-          <label><input type="checkbox" data-sound="skillReady" checked /> <span>Skill is ready</span></label>
-          <label><input type="checkbox" data-sound="sessionEnd" checked /> <span>Session ends</span></label>
-          <label><input type="checkbox" data-sound="question" checked /> <span>New questions for you</span></label>
-          <label><input type="checkbox" data-sound="chatReply" checked /> <span>Reply on the Ask tab</span></label>
-          <label><input type="checkbox" data-sound="newTab" checked /> <span>New tab added</span></label>
-        </div>
-        <p class="help">Ticking one plays it. Play sounds switches them all off at once and keeps your picks for when you switch back on.</p>
-      </fieldset>
-      <fieldset class="modal-ranges looks-cleanup">
-        <legend>Cleanup</legend>
-        <p class="help">Finds what Plan2Code doesn't need in your <code>~/.plan2code</code> folder: sessions nobody has opened for 30 days, and files or folders that ended up there by mistake. You see the list before anything is deleted. Your preferences, saved folders, models, the launcher and this session always stay.</p>
-        <div class="cleanup-list" id="cleanup-list" aria-label="What would be deleted"></div>
-        <div class="models-actions">
-          <button type="button" class="btn small" id="cleanup-scan">Find files to clean up</button>
-          <button type="button" class="btn small danger" id="cleanup-delete" hidden>Delete these</button>
-          <span class="help" id="cleanup-status" role="status"></span>
-        </div>
-      </fieldset>
-      <fieldset class="modal-ranges looks-models">
-        <legend>Models</legend>
-        <div class="models-tabs" role="group" aria-label="Which agent">
-          <button type="button" class="btn small ghost" id="models-tab-claude" aria-pressed="true">Claude</button>
-          <button type="button" class="btn small ghost" id="models-tab-devin" aria-pressed="false">Devin</button>
-        </div>
-        <div class="models-note">
-          <p><strong>You usually don't need to change this.</strong> Plan2Code ships an up-to-date model list with every release. Add a model here only when a new one comes out before Plan2Code has been updated.</p>
-          <ul>
-            <li>Restart <code>plan2code</code> to see a change in its model menu.</li>
-            <li>At any time, run <code>plan2code --model &lt;id&gt;</code>, or pick your model inside your agent before running a skill.</li>
-            <li>Updating Plan2Code refreshes the built-in list. Models you added stay, unless the built-in list now includes them.</li>
-            <li>Devin models are limited to Low, Medium and High effort.</li>
-          </ul>
-        </div>
-        <div class="models-list" id="models-shipped" aria-label="Built-in models"></div>
-        <div class="models-list" id="models-user" aria-label="Models you added"></div>
-        <div class="models-actions">
-          <button type="button" class="btn small" id="models-add">Add a model</button>
-          <button type="button" class="btn small ghost" id="models-reset">Reset to default</button>
-          <span class="help" id="models-status" role="status"></span>
-        </div>
-      </fieldset>
+        <fieldset class="modal-ranges looks-row looks-role">
+          <legend>Role</legend>
+          <select id="looks-role" aria-label="Role"></select>
+          <p class="help">Only puts the starter templates most useful to you first.</p>
+        </fieldset>
+        <fieldset class="modal-ranges looks-row">
+          <legend>Theme</legend>
+          <label><input type="radio" name="looks-theme" value="system" checked /> <span>Follow my system</span></label>
+          <label><input type="radio" name="looks-theme" value="light" /> <span>Light</span></label>
+          <label><input type="radio" name="looks-theme" value="dark" /> <span>Dark</span></label>
+        </fieldset>
+        <fieldset class="modal-ranges looks-row">
+          <legend>Card width</legend>
+          <label><input type="radio" name="looks-width" value="narrow" /> <span>Narrow</span></label>
+          <label><input type="radio" name="looks-width" value="comfortable" checked /> <span>Comfortable</span></label>
+          <label><input type="radio" name="looks-width" value="wide" /> <span>Wide</span></label>
+          <p class="help">How wide the question and documents are. On a smaller window they fit the space there is.</p>
+        </fieldset>
+        <fieldset class="modal-ranges looks-accents">
+          <legend>Highlight color</legend>
+          <div class="swatches" id="looks-swatches"></div>
+          <p class="help">
+            Your highlight color marks what is yours to do, and Planny's
+            star uses it while he works. Green, amber and red also mean done,
+            staged and careful, so a highlight close to one of those can blur
+            which is which.
+          </p>
+        </fieldset>
+        <fieldset class="modal-ranges looks-sounds">
+          <legend>Sounds</legend>
+          <label><input type="checkbox" id="looks-sound" checked /> <span>Play sounds</span></label>
+          <div class="looks-row looks-sound-events" id="looks-sound-events">
+            <label><input type="checkbox" data-sound="snore" checked /> <span>Planny snoring</span></label>
+            <label><input type="checkbox" data-sound="bootup" checked /> <span>Planny waking up</span></label>
+            <label><input type="checkbox" data-sound="startSkill" checked /> <span>Starting a skill</span></label>
+            <label><input type="checkbox" data-sound="sessionStart" checked /> <span>Session opens</span></label>
+            <label><input type="checkbox" data-sound="skillReady" checked /> <span>Skill is ready</span></label>
+            <label><input type="checkbox" data-sound="sessionEnd" checked /> <span>Session ends</span></label>
+            <label><input type="checkbox" data-sound="question" checked /> <span>New questions for you</span></label>
+            <label><input type="checkbox" data-sound="chatReply" checked /> <span>Reply on the Ask tab</span></label>
+            <label><input type="checkbox" data-sound="newTab" checked /> <span>New tab added</span></label>
+          </div>
+          <p class="help">Ticking one plays it. Play sounds switches them all off at once and keeps your picks for when you switch back on.</p>
+        </fieldset>
+        <fieldset class="modal-ranges looks-cleanup">
+          <legend>Cleanup</legend>
+          <p class="help">Finds what Plan2Code doesn't need in your <code>~/.plan2code</code> folder: sessions nobody has opened for 30 days, and files or folders that ended up there by mistake. It also lists this project's <code>specs--completed/</code> folders nobody has touched for 30 days; deleting one is permanent, since that folder is usually gitignored and git can't restore it. You see the list before anything is deleted. Your preferences, saved folders, models, the launcher and this session always stay.</p>
+          <div class="cleanup-list" id="cleanup-list" aria-label="What would be deleted"></div>
+          <div class="models-actions">
+            <button type="button" class="btn small" id="cleanup-scan">Find files to clean up</button>
+            <button type="button" class="btn small danger" id="cleanup-delete" hidden>Delete these</button>
+            <span class="help" id="cleanup-status" role="status"></span>
+          </div>
+        </fieldset>
+        <fieldset class="modal-ranges looks-models">
+          <legend>Models</legend>
+          <div class="models-tabs" role="group" aria-label="Which agent">
+            <button type="button" class="btn small ghost" id="models-tab-claude" aria-pressed="true">Claude</button>
+            <button type="button" class="btn small ghost" id="models-tab-devin" aria-pressed="false">Devin</button>
+            <button type="button" class="btn small ghost" id="models-tab-codex" aria-pressed="false">Codex</button>
+          </div>
+          <div class="models-note">
+            <p><strong>You usually don't need to change this.</strong> Plan2Code ships an up-to-date model list with every release. Add a model here only when a new one comes out before Plan2Code has been updated.</p>
+            <ul>
+              <li>Restart <code>plan2code</code> to see a change in its model menu.</li>
+              <li>At any time, run <code>plan2code --model &lt;id&gt;</code>, or pick your model inside your agent before running a skill.</li>
+              <li>Updating Plan2Code refreshes the built-in list. Models you added stay, unless the built-in list now includes them.</li>
+              <li>Devin models are limited to Low, Medium and High effort.</li>
+            </ul>
+          </div>
+          <div class="models-list" id="models-shipped" aria-label="Built-in models"></div>
+          <div class="models-list" id="models-user" aria-label="Models you added"></div>
+          <div class="models-actions">
+            <button type="button" class="btn small" id="models-add">Add a model</button>
+            <button type="button" class="btn small ghost" id="models-reset">Reset to default</button>
+            <span class="help" id="models-status" role="status"></span>
+          </div>
+        </fieldset>
+      </div>
       <div class="modal-actions">
         <button type="button" class="btn ghost" id="looks-reset">Back to default</button>
         <button type="button" class="btn primary" id="looks-done">Done</button>
@@ -2436,6 +2541,9 @@
         <li>
           Run this in your terminal (not in this page or your agent):
           <div class="update-command" id="update-command"></div>
+          It opens the installer's menu. Back at your prompt with no output at all? npm
+          could not reach the repository and hid the reason: run
+          <code>git ls-remote https://github.com/jparkerweb/plan2code.git</code> to see it.
         </li>
         <li>When it finishes, close this console and start <code>plan2code</code> again.</li>
       </ol>

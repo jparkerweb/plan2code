@@ -11,6 +11,13 @@ import { ROOT, SKILLS, NOW, runScript, tmp, write, read, gitInit, phase } from "
 
 /* ================================================================ install */
 
+test("npm test runs every scripts/test-*.mjs file, and names none that is missing", () => {
+  const command = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8")).scripts.test;
+  const listed = [...command.matchAll(/scripts\/(test-[\w-]+\.mjs)/g)].map((m) => m[1]).sort();
+  const onDisk = fs.readdirSync(path.join(ROOT, "scripts")).filter((f) => /^test-[\w-]+\.mjs$/.test(f)).sort();
+  assert.deepEqual(listed, onDisk);
+});
+
 test("every skill with scripts ships common.mjs and version.json; dashboard ships none", () => {
   const withScripts = fs.readdirSync(SKILLS).filter((s) => fs.existsSync(path.join(SKILLS, s, "scripts")));
   assert.ok(withScripts.length >= 11, `expected most skills to carry scripts, got ${withScripts.join(", ")}`);

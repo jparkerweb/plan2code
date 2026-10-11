@@ -53,13 +53,13 @@ const SHOTS = {
     scrollTo: ".dash-toggle",
     mustShow: ".dash-card:has(.pill.suggested)",
   },
-  // The utility cards sit even lower: scroll until the Git commit card is the
+  // The utility cards sit even lower: scroll until the Git card is the
   // last row in frame ("cmd:" picks a card by its command).
   "dashboard-utilities": {
     workflow: "dashboard",
     posts: ["dashboard"],
-    scrollTo: "cmd:/plan2code-git-commit",
-    mustShow: "cmd:/plan2code-git-commit",
+    scrollTo: "cmd:/plan2code-git",
+    mustShow: "cmd:/plan2code-git",
   },
   question: { workflow: "plan", posts: ["question"] },
   doc: { workflow: "plan", posts: ["doc"], tab: "What we've agreed" },

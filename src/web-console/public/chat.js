@@ -31,7 +31,7 @@ function answeredFlags(messages) {
   for (let i = messages.length - 1; i >= 0; i--) {
     const m = messages[i];
     if (m.from === "agent") replyLater = true;
-    else if (m.kind === "message") flags.set(m.seq, replyLater);
+    else if (m.kind === "message" || m.kind === "decision") flags.set(m.seq, replyLater);
   }
   return flags;
 }
@@ -63,7 +63,7 @@ export function chatView(frameChat, ui = {}) {
         decided: decisions.get(m.id) || null,
       });
     } else if (m.kind === "decision") {
-      rows.push({ kind: "decision", decision: m.decision, text: m.text || "", re: m.re });
+      rows.push({ kind: "decision", decision: m.decision, text: m.text || "", re: m.re, done: Boolean(answered.get(m.seq)) });
     } else if (m.kind === "message") {
       const row = {
         kind: "person",

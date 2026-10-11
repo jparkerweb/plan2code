@@ -50,11 +50,11 @@ it opens on the page without asking.
   <img src="../docs/screenshots/dashboard-light.webp" alt="The Plan2Code dashboard: a Set up card, then the steps in order as cards, one of them marked Suggested.">
 </picture>
 
-Scroll down for the utilities. Outside a git repository the **Git commit** card says so and still offers to start one:
+Scroll down for the utilities. Outside a git repository the **Git** card says so and still offers to start one:
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="../docs/screenshots/dashboard-utilities-dark.webp">
-  <img src="../docs/screenshots/dashboard-utilities-light.webp" alt="The utility cards: Quick task, Review, Handoff and Git commit, which notes that the folder is not a git repository yet and offers to start one.">
+  <img src="../docs/screenshots/dashboard-utilities-light.webp" alt="The utility cards: Quick task, Review, Handoff and Git, which notes that the folder is not a git repository yet and offers to start one.">
 </picture>
 
 ---
@@ -160,7 +160,7 @@ Scroll down for the utilities. Outside a git repository the **Git commit** card 
   states differ by pattern, not only color). A finished session goes back to
   the plain icon, so a console left in a background tab can be checked at a
   glance.
-- **Help.** The **?** at the top right opens a Help dialog with 17 topics,
+- **Help.** The **?** at the top right opens a Help dialog with 18 topics,
   one per tab down the left (across the top on a narrow window), opening on
   the one for where you are. It is part of the page itself, so it still reads
   fully when the page has lost its program.
@@ -193,11 +193,13 @@ The easy way in is the dashboard:
 A page opens with every skill laid out as cards — the setup pair, the pipeline
 in order, and the utilities alongside — with a note about what it made of your
 project (no AGENTS.md yet, a spec waiting on Phase 2) and a *Suggested* flag on
-the card it would pick. **Git commit** is among the utilities, always available; in a
-folder that is not a git repository its card says *Not a git repository yet: it offers to
-start one*, and clicking it still works. Click one and Planny flies while it gets ready; a few
-seconds later the same page is that skill's console, already running. No
-command names to remember.
+the card it would pick. **Git** is among the utilities, always available: it opens
+the git board, with your branches, pull, push and commits on one page (Help's
+*The git board* topic walks through it), and asks before every push, publish and
+delete. In a folder that is not a git repository its card says *Not a git
+repository yet: it offers to start one*, and clicking it still works. Click
+one and Planny flies while it gets ready; a few seconds later the same page
+is that skill's console, already running. No command names to remember.
 
 A freshly opened dashboard starts with Planny asleep in the middle of the page.
 Click to wake him: he snores once while he gets a gentle shake side to side,
@@ -590,7 +592,7 @@ keyboard-only navigation work.
 
 ## Models in User Preferences
 
-The `plan2code` launcher's model menu comes from `models.json`, which every install overwrites with the authors' curated list. **User Preferences → Models** (Claude and Devin tabs) lets you add a model that came out before Plan2Code was updated; additions are kept in `~/.plan2code/models.json`, and **Reset to default** removes them. Restart `plan2code` to see a change. You can always run `plan2code --model <id>`, or switch model inside your agent before running a skill. Devin ids ending `-xhigh` or `-max` are refused. Maintainers refresh the curated list with the repo-local `/plan2code-model-update` skill, which shows a diff and changes only what they approve.
+The `plan2code` launcher's model menu comes from `models.json`, which every install overwrites with the authors' curated list. **User Preferences → Models** (Claude, Devin and Codex tabs) lets you add a model that came out before Plan2Code was updated; additions are kept in `~/.plan2code/models.json`, and **Reset to default** removes them. Restart `plan2code` to see a change. You can always run `plan2code --model <id>`, or switch model inside your agent before running a skill. Devin ids ending `-xhigh` or `-max` are refused. Maintainers refresh the curated list with the repo-local `/plan2code-model-update` skill, which shows a diff and changes only what they approve.
 
 ---
 
@@ -688,7 +690,10 @@ clean up** lists, with sizes, everything in `~/.plan2code/` that is not
 needed: sessions untouched for 30 days (never the one you are in), anything at
 the top of `~/.plan2code/console/` other than `sessions/`, `looks.json`,
 `workspaces.json`, `subagents.json`, `console-dir` and `update-check.json`, and anything at the top of `~/.plan2code/` other than
-`console/`, `bin/`, `launcher.json` and `models.json`. A stray is listed once
+`console/`, `bin/`, `launcher.json` and `models.json`. It also lists each
+folder in the project's `specs--completed/` whose newest file is more than 30
+days old: archived specs Finalize moved there. Deleting one is permanent:
+`specs--completed/` is usually gitignored, so git can't restore it. A stray is listed once
 it has sat untouched for an hour, so a lock or temp file another session is
 writing right now is never caught. **Delete these** removes
 that list and nothing else. A console running from another home
@@ -751,8 +756,8 @@ origin.
 | Source | `src/web-console/` |
 | Ships as | `skills/<every skill>/references/web-console/` |
 | Wiring | one `additionalReferences` entry per skill in `install.js`; the dashboard's menu lives in `public/answers.js` (`SKILL_CATALOG`) |
-| Agent contract | `src/web-console/console.md`, plus `building.md` for the build steps |
-| Tests | `node --test scripts/test-web-console.mjs`, also run by `npm test` |
+| Agent contract | `src/web-console/console.md` (read once), its topic files (`console-*.md`), `notes/<workflow>.md`, and `building.md` / `building-review.md` for the builds; `console.mjs help <topic>` prints any of them |
+| Tests | `node --test scripts/test-web-console-*.mjs` (split by area, shared setup in `scripts/web-console-test-helpers.mjs`), also run by `npm test` |
 | Start-up benchmark | `node scripts/bench-web-console.mjs` (needs `puppeteer-core` and a local Chrome or Edge for the paint columns; `--browser-delay 900` models a real browser launch, `--roundtrip` times Send→agent and post→page) |
 | Screenshots | `node scripts/capture-screenshots.mjs` (needs `puppeteer-core` and a local Chrome or Edge) |
 | Dependencies | none at runtime. `marked` 15.0.7 (MIT) is vendored for its lexer only |

@@ -20,9 +20,54 @@ import { marked } from "./vendor/marked.esm.js";
 // read the same way) is protocol-relative and would not, so it is refused.
 const SAFE_PROTOCOL = /^(https?:|mailto:|#|\/(?![/\\]))/i;
 
+// A note attachment kept into the spec (`console.mjs keep`) is cited by a
+// relative path ending in attachments/<slug>-<id8>.<ext>; the server serves
+// exactly those from the session's spec, so the link and the image work.
+const KEPT_ATTACHMENT = /^(?:\.{0,2}\/)*(?:[\w.-]+\/)*attachments\/([a-z0-9-]{1,40}-[0-9a-f-]{8}\.[a-z0-9]{1,5})$/i;
+
+// A link or image the page cannot follow (a relative path into the project,
+// a remote image the CSP refuses) still says where it points.
+function unreachable(parent, href) {
+  const where = String(href || "").trim();
+  if (!where || /^(javascript|data|vbscript):/i.test(where)) return;
+  parent.appendChild(document.createTextNode(" ("));
+  parent.appendChild(el("code", null, where));
+  parent.appendChild(document.createTextNode(")"));
+}
+
+// An html token that is only an HTML comment: it renders as nothing, as it
+// would in any markdown viewer. Anything else html stays literal text.
+function isComment(t) {
+  return t.type === "html" && /^\s*<!--[\s\S]*?-->\s*$/.test(String(t.raw ?? t.text ?? ""));
+}
+
+const TASK_MARKERS = {
+  "/": { mark: "◐", label: "in progress", cls: "is-doing" },
+  "!": { mark: "!", label: "blocked", cls: "is-blocked" },
+  "?": { mark: "?", label: "assumed", cls: "is-assumed" },
+};
+
+// A list item opening with one of TASK_MARKERS: the marker comes off its
+// first text token (so it is not drawn twice) and its look comes back.
+function takeMarker(item) {
+  const first = item.tokens && item.tokens[0];
+  const leaf = first && Array.isArray(first.tokens) && first.tokens[0];
+  const m = /^\[([/!?])\]\s+/.exec((first && first.text) || "");
+  if (!m || !leaf || leaf.type !== "text" || !String(leaf.text || "").startsWith(m[0])) return null;
+  first.text = first.text.slice(m[0].length);
+  leaf.text = leaf.text.slice(m[0].length);
+  if (typeof leaf.raw === "string" && leaf.raw.startsWith(m[0])) leaf.raw = leaf.raw.slice(m[0].length);
+  if (Array.isArray(leaf.tokens) && leaf.tokens[0] && leaf.tokens[0].type === "text") {
+    leaf.tokens[0].text = String(leaf.tokens[0].text || "").replace(m[0], "");
+  }
+  return TASK_MARKERS[m[1]];
+}
+
 function safeHref(href) {
   if (!href) return null;
   const trimmed = String(href).trim();
+  const kept = KEPT_ATTACHMENT.exec(trimmed);
+  if (kept) return "/attachments/" + kept[1].toLowerCase();
   // Blocks javascript: and data: hrefs before they can reach the DOM, and a
   // protocol-relative `//host` (or `/\host`), which leaves the page for another site.
   return SAFE_PROTOCOL.test(trimmed) ? trimmed : null;
@@ -74,6 +119,7 @@ function inlineInto(parent, tokens) {
         const href = safeHref(t.href);
         if (!href) {
           inlineInto(parent, t.tokens);
+          unreachable(parent, t.href);
           break;
         }
         const a = el("a");
@@ -87,8 +133,12 @@ function inlineInto(parent, tokens) {
       }
       case "image": {
         const src = safeHref(t.href);
-        if (!src) {
+        // Only same-origin images load (the CSP's img-src is 'self'), so a
+        // remote one gets the text-and-path treatment rather than a broken
+        // image and a console error.
+        if (!src || /^https?:/i.test(src)) {
           parent.appendChild(document.createTextNode(t.text || ""));
+          unreachable(parent, t.href);
           break;
         }
         const img = el("img", "md-img");
@@ -98,6 +148,8 @@ function inlineInto(parent, tokens) {
         break;
       }
       default:
+        // A comment is a note to tools (a spec's METRICS_JSON), never shown.
+        if (isComment(t)) break;
         // Includes `html`: rendered as literal text, never parsed.
         parent.appendChild(document.createTextNode(t.raw ?? t.text ?? ""));
     }
@@ -105,11 +157,9 @@ function inlineInto(parent, tokens) {
 }
 
 // What a fenced code block offers beside Copy, from its first non-empty line:
-// `'run'` gets a Run it button (git commands — the one kind a person keeps
-// copying into Ask by hand), `'hint'` a muted note that pasting it into Ask
-// may get the agent to run it, and `null` nothing extra. A leading `/` is a
-// skill command for a new conversation, never a terminal command, so it gets
-// neither.
+// `'hint'` a muted note that pasting it into Ask may get the agent to run it,
+// and `null` nothing extra. A leading `/` is a skill command for a new
+// conversation, never a terminal command, so it gets nothing.
 const COMMAND_WORDS =
   /^(git|node|npm|npx|pnpm|yarn|bun|deno|python3?|pip3?|brew|curl|wget|docker|kubectl|terraform|make|cmake|cargo|go|java|mvn|gradle|gh|aws|az|gcloud|jq|ssh|scp|rsync|chmod|chown|mkdir|cp|mv|rm|ls|cd|cat|echo|export|source|bash|sh|zsh|fish|pwsh|powershell|cmd|systemctl|service|apt|apt-get|dnf|yum|pacman|tar|unzip|zip)\b/i;
 
@@ -119,7 +169,6 @@ export function runHint(text) {
     .map((line) => line.trim())
     .find((line) => line.length > 0);
   if (!firstLine || firstLine.startsWith("/")) return null;
-  if (/^git(\s|$)/.test(firstLine)) return "run";
   if (firstLine.startsWith("#!")) return "hint";
   return COMMAND_WORDS.test(firstLine) ? "hint" : null;
 }
@@ -161,14 +210,8 @@ function blockInto(parent, tokens) {
         // textContent, so a fenced block containing markup is inert.
         pre.appendChild(el("code", null, t.text));
         wrap.appendChild(copyButton(t.text, "md-copy"));
-        const hint = runHint(t.text);
-        if (hint === "run") {
-          const run = el("button", "md-run", "Run it");
-          run.type = "button";
-          wrap.appendChild(run);
-        }
         wrap.appendChild(pre);
-        if (hint === "hint") {
+        if (runHint(t.text) === "hint") {
           wrap.appendChild(el("p", "md-run-hint", "The agent may be able to run this — paste it into the Ask tab"));
         }
         parent.appendChild(wrap);
@@ -181,11 +224,20 @@ function blockInto(parent, tokens) {
         const list = el(t.ordered ? "ol" : "ul", "md-list");
         if (t.ordered && typeof t.start === "number" && t.start !== 1) list.start = t.start;
         for (const item of t.items || []) {
-          const li = el("li", "md-li" + (item.task ? " is-task" : ""));
+          // The spec's other task markers ([/] in progress, [!] blocked,
+          // [?] assumed), which marked does not know: drawn like a task box
+          // rather than left as a bullet reading "[!]".
+          const other = !item.task && takeMarker(item);
+          const li = el("li", "md-li" + (item.task || other ? " is-task" : ""));
           if (item.task) {
             const box = el("span", "md-task" + (item.checked ? " is-done" : ""));
             box.textContent = item.checked ? "✓" : "·";
             box.setAttribute("aria-label", item.checked ? "done" : "not done");
+            li.appendChild(box);
+          } else if (other) {
+            const box = el("span", "md-task " + other.cls);
+            box.textContent = other.mark;
+            box.setAttribute("aria-label", other.label);
             li.appendChild(box);
           }
           blockInto(li, item.tokens);
@@ -224,6 +276,7 @@ function blockInto(parent, tokens) {
         break;
       }
       default: {
+        if (isComment(t)) break;
         // Unknown or raw html block: show the source, do not interpret it.
         const p = el("p", "md-p");
         p.textContent = t.raw ?? t.text ?? "";

@@ -55,6 +55,8 @@ import {
   removeCleanup,
   remoteWarning,
   saveSubagentStoreEntry,
+  PR_HOST_KINDS,
+  savePrHost,
   specKey,
   subagentStoreEntry,
   typedCount,
@@ -128,6 +130,31 @@ const UPLOAD_EXTS = ["jpg", ...Object.keys(DOC_TYPES)];
 const EXT_ALT = UPLOAD_EXTS.join("|");
 const UPLOAD_ANY_ROUTE = new RegExp(`^/uploads/([0-9a-f-]{36})\\.(${EXT_ALT})$`);
 const UPLOAD_NAME = new RegExp(`^[0-9a-f-]{36}\\.(${EXT_ALT})$`);
+
+// A kept attachment's name, as attachmentName() in lib.mjs writes it:
+// <slug>-<first 8 of the upload id>.<the upload's extension>.
+const KEPT_ROUTE = new RegExp(`^/attachments/([a-z0-9-]{1,40}-[0-9a-f-]{8}\\.(${EXT_ALT}))$`);
+
+function keptPath(name) {
+  const state = readState() || {};
+  if (typeof state.specDir !== "string" || !state.specDir.trim()) return null;
+  const root = path.resolve(state.worktree || process.cwd());
+  const dir = path.resolve(root, state.specDir, "attachments");
+  const file = path.join(dir, name);
+  try {
+    const real = fs.realpathSync.native(file);
+    const realDir = fs.realpathSync.native(dir);
+    const realRoot = fs.realpathSync.native(root);
+    const inside = (p, base) => {
+      const rel = path.relative(base.toLowerCase(), p.toLowerCase());
+      return rel && !rel.startsWith("..") && !path.isAbsolute(rel);
+    };
+    if (path.dirname(real).toLowerCase() !== realDir.toLowerCase() || !inside(real, realRoot)) return null;
+    return fs.statSync(real).isFile() ? real : null;
+  } catch {
+    return null;
+  }
+}
 
 function uploadPath(id, ext = "jpg") {
   if (!UPLOAD_EXTS.includes(ext)) return null;
@@ -222,6 +249,8 @@ const SERVABLE = new Set([
   "subagents.js",
   "mentions.js",
   "favicon.js",
+  "git-board.js",
+  "pr-url.js",
   "start-stop.mp3",
   "next.mp3",
   "insert.mp3",
@@ -598,7 +627,14 @@ function ensureConversation(state) {
   let entry = null;
   if (!last.conversation) {
     entry = appendChat(DIR, { kind: "reset", conversation: 1, workflow: state.workflow, reason: "start" });
-  } else if (last.workflow !== state.workflow && (last.workflow === "dashboard" || state.workflow === "dashboard")) {
+  } else if (
+    last.workflow !== state.workflow &&
+    // The same switches `open --resume` treats as a hop (a blank page, the
+    // agent's replies included): through the dashboard, or into git from
+    // anywhere (Commit it now, Changelog's "Commit this now?"). Without a new
+    // conversation, the old questions would show as unanswered again.
+    (last.workflow === "dashboard" || state.workflow === "dashboard" || state.workflow === "git")
+  ) {
     entry = appendChat(DIR, {
       kind: "reset",
       conversation: last.conversation + 1,
@@ -728,7 +764,8 @@ function recordSubmitted(state, actions) {
     // JSON.parse makes "__proto__" an own property, and it would then be
     // written back into state.json and re-read forever.
     if (Object.prototype.hasOwnProperty.call(rest, "__proto__")) delete rest["__proto__"];
-    item.submitted = { at, ...rest };
+    // A skip says so on the record, so settling it can record a skip.
+    item.submitted = { at, ...rest, ...(type === "skip" ? { skipped: true } : {}) };
   }
 }
 
@@ -804,13 +841,14 @@ function touch() {
   lastContact = Date.now();
 }
 
-const MODEL_CLIS = ["claude", "devin"];
+// The CLIs the launcher reads a model list for (src/launcher/plan2code.js listModels).
+const MODEL_CLIS = ["claude", "devin", "codex"];
 const MODEL_ID = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,99}$/;
 // Devin's XHigh and Max efforts are never offered, curated or added.
 const MODEL_EFFORT_BLOCKED = /-(xhigh|max)$/i;
 
 /**
- * The user's added models: { claude: [{id,label}], devin: [...] }. Returns { models } or
+ * The user's added models: { claude: [{id,label}], devin: [...], codex: [...] }. Returns { models } or
  * { error }. Blank rows are dropped; ids are trimmed and made unique per CLI; a label
  * defaults to the id. Nothing else in the body survives.
  */
@@ -1134,13 +1172,19 @@ const server = http.createServer((req, res) => {
           ? asked
           : ""
         : state.specDir;
+    // Most specs have no overview.md yet, which is normal, not an error: 204
+    // keeps the browser console free of a failed request per pick.
+    const noOverview = () => {
+      res.writeHead(204, baseHeaders({ "cache-control": "no-store" }));
+      res.end();
+    };
     readOverview(state.worktree || state.project, spec)
       .then((text) =>
         typeof text === "string"
           ? send(res, 200, text, "text/markdown; charset=utf-8", { "cache-control": "no-store" })
-          : json(res, 404, { error: "no overview" })
+          : noOverview()
       )
-      .catch(() => json(res, 404, { error: "no overview" }));
+      .catch(noOverview);
     return;
   }
 
@@ -1268,11 +1312,38 @@ const server = http.createServer((req, res) => {
     });
   }
 
+  // What an unknown git host is, for the git board's pull-request link. Saved
+  // to pr-hosts.json for every project; nothing is written under the project.
+  // The page follows it with a __git pr-host action, and the agent's reread
+  // rebuilds the link.
+  if (pathname === "/pr-host" && req.method === "POST") {
+    if (!originOk(req, port)) return json(res, 403, { error: "bad origin" });
+    return readBody(req, (err, body) => {
+      if (err) return json(res, err.tooBig ? 413 : 400, { error: err.tooBig ? "too large" : "body must be JSON" });
+      const { host: raw, kind } = body && typeof body === "object" ? body : {};
+      if (typeof raw !== "string" || !raw || raw.length > 253 || !/^[a-z0-9.-]+$/i.test(raw)) {
+        return json(res, 400, { error: "bad-host" });
+      }
+      // Hosts are looked up lowercased (git-repo.mjs parseRemoteUrl).
+      const host = raw.toLowerCase();
+      if (!PR_HOST_KINDS.has(kind)) return json(res, 400, { error: "bad-kind" });
+      const state = readState();
+      if (!state || state.workflow !== "git") return json(res, 400, { error: "not-git" });
+      try {
+        savePrHost(host, kind);
+      } catch (e) {
+        return json(res, 500, { error: String(e.message) });
+      }
+      appendEvent(DIR, { type: "pr-host", host, kind });
+      return json(res, 200, { ok: true });
+    });
+  }
+
   // The launcher's model menu: what ships (read-only here) and what the user added.
   if (pathname === "/models" && req.method === "GET") {
     const saved = readJson(USER_MODELS_FILE, null) || {};
     const { models } = cleanModels(saved);
-    return json(res, 200, { shipped: shippedModels(), user: models || { claude: [], devin: [] } });
+    return json(res, 200, { shipped: shippedModels(), user: models || Object.fromEntries(MODEL_CLIS.map((cli) => [cli, []])) });
   }
 
   if (pathname === "/models" && req.method === "POST") {
@@ -1292,18 +1363,19 @@ const server = http.createServer((req, res) => {
   }
 
   // User Preferences -> Cleanup. `{ scan: true }` lists what is not needed in
-  // ~/.plan2code; `{ delete: [id] }` removes those of the ids a fresh scan
-  // still finds. Never this session, never a path the page sent.
+  // ~/.plan2code and the project's old completed specs; `{ delete: [id] }`
+  // removes those of the ids a fresh scan still finds. Never this session,
+  // never a path the page sent.
   if (pathname === "/cleanup" && req.method === "POST") {
     if (!originOk(req, port)) return json(res, 403, { error: "bad origin" });
     return readBody(req, (err, body) => {
       if (err) return json(res, err.tooBig ? 413 : 400, { error: err.tooBig ? "too large" : "body must be JSON" });
       if (body && Array.isArray(body.delete)) {
-        return removeCleanup(body.delete, { skipSid: SID })
+        return removeCleanup(body.delete, { skipSid: SID, project: sessionWorktree() || PROJECT })
           .then((done) => json(res, 200, { ok: true, ...done }))
           .catch((e) => json(res, 500, { error: String(e.message) }));
       }
-      return cleanupFindings({ skipSid: SID })
+      return cleanupFindings({ skipSid: SID, project: sessionWorktree() || PROJECT })
         .then(({ items, bytes }) => json(res, 200, { ok: true, bytes, items: items.map(({ path: _p, ...item }) => item) }))
         .catch((e) => json(res, 500, { error: String(e.message) }));
     });
@@ -1369,6 +1441,30 @@ const server = http.createServer((req, res) => {
     }
 
     return readRaw(req, 0, () => json(res, 415, { error: "type" }));
+  }
+
+  // A note attachment the agent kept into the spec (`console.mjs keep`), so a
+  // doc citing `attachments/<name>` shows the image or opens the file. Read
+  // only, and only one exact name shape (the one `keep` writes) directly
+  // inside <worktree>/<specDir>/attachments/: nothing else in the project.
+  if (pathname.startsWith("/attachments/") || req.url.startsWith("/attachments/")) {
+    if (req.method !== "GET") return json(res, 405, { error: "method" });
+    const m = KEPT_ROUTE.exec(req.url);
+    const file = m && m[0] === pathname ? keptPath(m[1]) : null;
+    if (!file) return json(res, 404, { error: "not found" });
+    let buf;
+    try {
+      buf = fs.readFileSync(file);
+    } catch {
+      return json(res, 404, { error: "not found" });
+    }
+    const ext = m[2].toLowerCase();
+    if (ext === "jpg") return send(res, 200, buf, "image/jpeg", { "cache-control": "private, max-age=3600" });
+    const pdf = DOC_TYPES[ext].kind === "pdf";
+    return send(res, 200, buf, pdf ? "application/pdf" : "text/plain; charset=utf-8", {
+      ...(pdf ? {} : { "content-security-policy": "sandbox" }),
+      "cache-control": "private, max-age=3600",
+    });
   }
 
   // Matched on the raw request line as well as the parsed path: URL parsing

@@ -41,6 +41,18 @@ export function recordedAnswer(item) {
 }
 
 /**
+ * True when the agent wrote in the item's thread after the person's last send
+ * and has not settled it: the question is being asked again, so what they sent
+ * belongs back on the form rather than gone.
+ */
+export function agentRepliedAfterSend(item) {
+  const s = item && item.submitted;
+  if (!s || typeof s !== "object" || (item.answer && typeof item.answer === "object")) return false;
+  const thread = Array.isArray(item.thread) ? item.thread : [];
+  return thread.some((m) => m && threadWho(m) === "agent" && (!s.at || !m.at || m.at >= s.at));
+}
+
+/**
  * A send the person made that the agent never settled, still sitting on an
  * OPEN question.
  *
@@ -103,10 +115,19 @@ export function threadText(m) {
 
 /* -------------------------------------------------------------- labels */
 
+// A key worth showing: one or two letters or digits (A, 2) a person can say
+// back in the terminal. A word key (commit-first, yes) is an id for the agent,
+// and as a chip beside its own label it is noise.
+export function showKey(k, text) {
+  if (k == null) return false;
+  const key = String(k);
+  return /^[A-Za-z0-9]{1,2}$/.test(key) && key.toLowerCase() !== String(text || "").trim().toLowerCase();
+}
+
 export function optionLabel(item, k) {
   const o = ((item && item.options) || []).find((x) => x.k === k);
   if (!o) return String(k);
-  return o.k ? `${o.k} · ${o.text}` : o.text;
+  return showKey(o.k, o.text) ? `${o.k} · ${o.text}` : o.text;
 }
 
 export function verdictLabel(item, id) {
@@ -247,7 +268,7 @@ export const WORKFLOW_LABEL = {
   "quick-task": "Quick task",
   finalize: "Wrapping up",
   handoff: "Handoff",
-  "git-commit": "Git commit",
+  git: "Git",
   changelog: "Changelog",
 };
 
@@ -273,7 +294,7 @@ export const CONSOLE_WORKFLOWS = [
   "/plan2code-review",
   "/plan2code-4-finalize",
   "/plan2code-handoff",
-  "/plan2code-git-commit",
+  "/plan2code-git",
   "/plan2code-changelog",
 ];
 
@@ -383,14 +404,16 @@ const HOME_TITLES = {
  * adrift: then it comes back, and a second press is safe because the server
  * refuses a duplicate while the first is uncollected.
  */
-export function homeButtonState({ workflow, finished = false, stopping = false, homeward = false, adrift = false, ...turn } = {}) {
+export function homeButtonState({ workflow, finished = false, stopping = false, homeward = false, adrift = false, warned = false, ...turn } = {}) {
   if (!workflow || workflow === "dashboard" || finished || stopping) return { hidden: true, disabled: true, title: "" };
   if (homeward && !adrift) return { hidden: false, disabled: true, title: "Opening the dashboard…" };
   const gate = turnGate(turn);
   return {
     hidden: false,
     disabled: Boolean(gate),
-    title: gate ? HOME_TITLES[gate] : "Back to the dashboard. Your place is saved first.",
+    // With a stop warning up, the work since the last save is what leaving
+    // loses: the tooltip says so rather than promising a saved place.
+    title: gate ? HOME_TITLES[gate] : warned ? "Back to the dashboard. Work since the last save is not kept." : "Back to the dashboard. Your place is saved first.",
   };
 }
 
@@ -438,8 +461,8 @@ export function resumeCommand({ workflow, specDir } = {}) {
       return withOverview("/plan2code-4-finalize");
     case "handoff":
       return "/plan2code-handoff";
-    case "git-commit":
-      return "/plan2code-git-commit";
+    case "git":
+      return "/plan2code-git";
     case "changelog":
       return "/plan2code-changelog";
     default:
@@ -456,7 +479,7 @@ export const REVIEW_REPLY =
   "Review what was just built before I go: run the focused code review on this session's changes, here on the page.";
 export const DONE_REPLY = "No review, thanks. I am done: close the session.";
 export const DASHBOARD_REPLY = "Take me back to the dashboard, right here in this session.";
-export const COMMIT_REPLY = "Commit what was just built: start Git commit, right here in this session.";
+export const COMMIT_REPLY = "Commit what was just built: open Git's commit flow, right here in this session.";
 
 // Shown under the Back to the dashboard button: the press picks up in the same
 // conversation, which carries a long skill's context into the next one.
@@ -475,7 +498,7 @@ export function dashboardOffer(fin) {
 /**
  * Whether a finish offers to commit what was just built from this page. The
  * agent opts in with `finish.commit: true` on a build that ended with a git
- * command; the press starts Git commit in the same session, as the dashboard's
+ * command; the press starts Git's commit flow in the same session, as the dashboard's
  * card does. A pause never offers it.
  */
 export function commitOffer(fin) {
@@ -493,6 +516,16 @@ export function reviewOffer(fin) {
   if (!r) return null;
   const label = typeof r === "object" && typeof r.label === "string" ? r.label.trim() : "";
   return { label: label || "Review what was just built" };
+}
+
+/**
+ * One offer button on a finish (review, done, commit, dashboard). A press of
+ * any of them is the session's one answer, so it locks every button until the
+ * finish goes away, not just until the agent collects the send: `asked` is
+ * the pressed one, which keeps its "requested…" label.
+ */
+export function afterFinishButton(afterBuild, kind, pendingResult) {
+  return { asked: afterBuild === kind, disabled: Boolean(afterBuild) || Boolean(pendingResult) };
 }
 
 /* ------------------------------------------------------- the dashboard */
@@ -666,18 +699,18 @@ export const SKILL_CATALOG = [
     title: "Changelog",
     blurb: "Checks the CHANGELOG version against the main branch and suggests entries for what is new.",
     about:
-      "Works out the right version from the default branch, then compares your branch with the latest CHANGELOG entry and suggests the entries it is missing. You edit them before anything is written, it keeps package.json in step, and it offers to run Git commit next. If the newest version is not released or on another branch yet, it adds to that entry instead of starting a new one.",
+      "Works out the right version from the default branch, then compares your branch with the latest CHANGELOG entry and suggests the entries it is missing. You edit them before anything is written, it keeps package.json in step, and it offers to commit the result in Git. If the newest version is not released or on another branch yet, it adds to that entry instead of starting a new one.",
   },
   {
-    skill: "plan2code-git-commit",
-    command: "/plan2code-git-commit",
-    workflow: "git-commit",
+    skill: "plan2code-git",
+    command: "/plan2code-git",
+    workflow: "git",
     group: "extra",
     chip: "Utility",
-    title: "Git commit",
-    blurb: "Commits your changes with a clear message, suggests a split when it is really two jobs, and offers to push.",
+    title: "Git",
+    blurb: "Branches, pull, push and commits on one board that stays open while you work.",
     about:
-      "Reads what changed and drafts the commit message for you to approve. On the main branch it offers a new one first, and when the work is really two jobs it suggests splitting it into separate commits. It asks before every commit and every push, and never force-pushes.",
+      "Shows your branch, what is ahead or behind, and every local and remote branch. Switch, create, delete or clean up branches, pull (rebasing when they have split, with help on conflicts), push or publish, and commit with a clear message. It asks before every push, publish and delete, and never force-pushes.",
   },
 ];
 
@@ -701,7 +734,7 @@ export const START_POSES = [
   "quick-task",
   "review",
   "handoff",
-  "git-commit",
+  "git",
   "changelog",
 ];
 
@@ -743,7 +776,6 @@ const NEXT_FOR_STATE = {
 
 const ON = { on: true };
 export const GIT_INIT_NOTE = "Not a git repository yet: it offers to start one";
-export const GIT_CLEAN_REASON = "Nothing to commit: no changed or new files";
 export const pendingNote = (n) => `${n} file${n === 1 ? "" : "s"} to commit`;
 const off = (reason) => ({ on: false, reason });
 
@@ -775,12 +807,10 @@ export function cardAvailability(entry, scan, sel) {
     case "plan2code-handoff":
     case "plan2code-changelog":
       return ON;
-    case "plan2code-git-commit":
+    case "plan2code-git":
+      // Never greyed: a clean tree still has branches to switch, pull and push.
       if (scan && scan.isGit === false) return { on: true, note: GIT_INIT_NOTE };
-      // `pending` is null when git could not say: stay clickable then.
-      if (scan && scan.isGit && Number.isInteger(scan.pending)) {
-        return scan.pending === 0 ? off(GIT_CLEAN_REASON) : { on: true, note: pendingNote(scan.pending) };
-      }
+      if (scan && Number.isInteger(scan.pending) && scan.pending > 0) return { on: true, note: pendingNote(scan.pending) };
       return ON;
     case "plan2code-0-pathfinder":
       if (!state || state === "exploring") return { ...ON, next };
@@ -982,6 +1012,13 @@ export function noteAction(id, text, attachments) {
   return action;
 }
 
+// Typed text past its first line, indented, so only a real entry ever starts a
+// reply line: a typed "Idea name: foo" or "  Image: C:\x" must not read as an
+// answer or an attachment. Chat's lines already do this.
+export function indentReply(text, pad = "  ") {
+  return String(text).replace(/\r?\n/g, "\n" + pad);
+}
+
 // A note as `reply` lines, one indented `Image:` or `File:` line per
 // attachment in the order attached, so the agent can open each path with its
 // file-read tool. An image-only note reads exactly as it always did.
@@ -990,7 +1027,7 @@ export function noteReplyLines(title, text, attachments) {
   const anyFile = list.some((a) => attachmentKind(a) === "file");
   const said = text || (list.length ? (anyFile ? "(attachments only)" : "(images only)") : "");
   return [
-    `Note on ${title}: ${said}`,
+    `Note on ${title}: ${indentReply(said)}`,
     ...list.map((a) => `  ${attachmentKind(a) === "file" ? "File" : "Image"}: ${a.path} (${a.name})`),
   ];
 }

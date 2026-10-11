@@ -22,17 +22,21 @@ export const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const EXIT = { OK: 0, CRASH: 1, USAGE: 2, NOT_FOUND: 3, INVALID: 4, REFUSED: 5 };
 
 export class CliError extends Error {
-  constructor(exit, error, message, next) {
+  constructor(exit, error, message, next, extra) {
     super(message);
     this.exit = exit;
     this.error = error;
     this.next = next;
+    this.extra = extra;
   }
 }
 
-/** Throw a handled failure: the run() wrapper prints it and sets the exit code. */
-export function fail(exit, error, message, next) {
-  throw new CliError(exit, error, message, next);
+/**
+ * Throw a handled failure: the run() wrapper prints it and sets the exit code.
+ * `extra` adds fields to the failure JSON (a branch to switch to, the files).
+ */
+export function fail(exit, error, message, next, extra) {
+  throw new CliError(exit, error, message, next, extra);
 }
 
 export function out(obj) {
@@ -97,7 +101,7 @@ export async function run(usage, main) {
     await main(argv);
   } catch (err) {
     if (err instanceof CliError) {
-      out({ ok: false, error: err.error, message: err.message, ...(err.next ? { next: err.next } : {}) });
+      out({ ok: false, error: err.error, message: err.message, ...(err.next ? { next: err.next } : {}), ...(err.extra || {}) });
       process.stderr.write(`error: ${err.message}${err.next ? `\nnext: ${err.next}` : ""}\n`);
       process.exitCode = err.exit;
       return;
@@ -231,6 +235,29 @@ export function consoleLib() {
     );
   })();
   return consoleLibPromise;
+}
+
+// The one read-only git reader (git-repo.mjs) ships beside lib.mjs, so the git
+// skill's scripts read the repository with exactly the code the console uses.
+const GIT_REPO_CANDIDATES = [
+  path.join(HERE, "..", "references", "web-console", "git-repo.mjs"), // installed skill
+  path.join(HERE, "..", "web-console", "git-repo.mjs"), // src/skill-scripts in the repo
+];
+
+let gitRepoPromise;
+export function gitRepo() {
+  gitRepoPromise ||= (async () => {
+    for (const candidate of GIT_REPO_CANDIDATES) {
+      if (fs.existsSync(candidate)) return import(pathToFileURL(candidate).href);
+    }
+    fail(
+      EXIT.NOT_FOUND,
+      "git-repo-missing",
+      `The web console's git-repo.mjs is not beside this script (looked in ${GIT_REPO_CANDIDATES.join(", ")}).`,
+      "The skill install is incomplete; reinstall the Plan2Code skills (node install.js)."
+    );
+  })();
+  return gitRepoPromise;
 }
 
 /** The version these scripts shipped with (scripts/version.json, or the repo's). */

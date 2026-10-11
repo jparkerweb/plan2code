@@ -303,6 +303,12 @@ h1 {
 
 .progress-block { flex: 1 1 260px; min-width: 200px; max-width: 460px; margin-left: auto; }
 
+/* When the progress block is hidden (the dashboard, the git board) nothing
+   grows to fill the row, so the icon buttons would sit beside the title. The
+   first takes the slack instead; with the block shown its flex already eats
+   the space, so this costs nothing. */
+#btn-about { margin-left: auto; }
+
 .progress-label {
   display: flex;
   justify-content: space-between;
@@ -690,13 +696,13 @@ h1 {
 }
 .wake.dormant .wake-hint { opacity: 1; }
 
-/* Skip: muted, bottom right, so it never competes with the animation. */
+/* Skip: bottom right, out of the animation's way but big enough to find. */
 .wake-skip {
-  position: absolute; right: 14px; bottom: 14px;
-  padding: 4px 12px; border: 1px solid var(--ink-3); border-radius: 4px;
-  background: transparent; color: var(--ink-3);
-  font: inherit; font-size: 0.8rem; letter-spacing: 0.08em; text-transform: uppercase;
-  cursor: pointer; opacity: 0.7;
+  position: absolute; right: 24px; bottom: 24px;
+  min-width: 120px; padding: 10px 26px; border: 1.5px solid var(--ink-2); border-radius: 6px;
+  background: var(--panel-2); color: var(--ink-2);
+  font: inherit; font-size: 1rem; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase;
+  cursor: pointer; opacity: 0.9;
 }
 .wake-skip:hover, .wake-skip:focus-visible { opacity: 1; color: var(--ink); border-color: var(--ink); }
 
@@ -878,6 +884,11 @@ h1 {
   padding: 6px 13px;
   border-radius: 99px;
   cursor: pointer;
+  /* A doc titled with a sentence keeps the tab row to one line. */
+  max-width: 22ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .view-tab:hover { background: var(--panel-2); color: var(--ink); }
 .view-tab[aria-current="true"] {
@@ -947,12 +958,20 @@ h1 {
   padding-right: 32px;
 }
 
-/* The column itself never scrolls; the card does. */
+/* The column itself never scrolls; the card does. The git board is the one
+   exception, below: it stacks a card over the board, so the column takes the
+   scroll there and both flow through it at natural height. */
 .main > .card:not(.is-primary) { flex-shrink: 100; min-height: 104px; }
 .main > .card.is-primary { flex-shrink: 1; min-height: 0; }
 /* A card with a growing answer box takes the column's full height above the
    pager, and still scrolls its own contents. app.js sizes the box to fill it. */
 .main > .card.is-primary.has-grow { flex: 1 1 auto; }
+/* More below the fold (app.js markMore): the bottom edge fades, so a card
+   cut by the window never reads as finished. */
+.main > .card.has-more {
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 56px), transparent);
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 56px), transparent);
+}
 .pager { flex: none; }
 
 /* A document is read top to bottom and has no pinned furniture, so it goes back
@@ -1069,7 +1088,7 @@ h1 {
 }
 .ask-about-chip > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ask-about-chip .attach-remove { position: static; flex: none; }
-.ask-actions { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
+.ask-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 8px; }
 /* + Add context and its menu. It opens upward, over the list: the composer
    sits at the bottom of a pane that clips anything hanging below it. */
 .ask-context { position: relative; }
@@ -1754,6 +1773,7 @@ input[type="text"].invalid { border-color: var(--warn); }
 .btn.ghost { background: transparent; border-color: transparent; color: var(--ink-2); }
 .btn.ghost:hover { background: var(--panel-2); color: var(--ink); }
 .btn.danger { border-color: var(--warn); color: var(--warn); }
+.btn.danger.is-on { background: var(--warn); color: #fff; }
 .btn.small { padding: 7px 13px; font-size: 13.5px; }
 /* Available, but not the step. Reads as a button, does not shout like one. */
 .btn.standby {
@@ -1954,7 +1974,10 @@ input[type="text"].invalid { border-color: var(--warn); }
 
 /* ----------------------------------------------------------- markdown */
 
-.md { max-width: 68ch; }
+/* A word or path longer than the line breaks instead of widening the page;
+   code blocks and tables keep their own scroll. */
+.md { max-width: 68ch; overflow-wrap: anywhere; }
+.md pre, .md .md-table { overflow-wrap: normal; }
 .md-h { font-family: var(--serif); font-weight: 600; margin: 22px 0 9px; line-height: 1.25; }
 h2.md-h { font-size: 21px; }
 h3.md-h { font-size: 17.5px; }
@@ -1964,9 +1987,12 @@ h4.md-h, h5.md-h, h6.md-h { font-size: 15px; }
 .md-li { margin-bottom: 5px; }
 .md-task { display: inline-block; width: 16px; color: var(--ink-3); font-weight: 700; }
 .md-task.is-done { color: var(--ok); }
+.md-task.is-blocked { color: var(--warn); }
+.md-task.is-doing { color: var(--accent); }
+.md-task.is-assumed { color: var(--stage); }
 .md-li.is-task {
   list-style: none; margin-left: -18px;
-  display: grid; grid-template-columns: 16px 1fr; column-gap: 4px; align-items: baseline;
+  display: grid; grid-template-columns: 16px minmax(0, 1fr); column-gap: 4px; align-items: baseline;
 }
 .md-li.is-task > :not(.md-task) { grid-column: 2; }
 .md-li.is-task > .md-p:last-child { margin-bottom: 0; }
@@ -2000,23 +2026,17 @@ h4.md-h, h5.md-h, h6.md-h { font-size: 15px; }
   transition: opacity 0.12s;
 }
 .md-pre-wrap:hover .md-copy, .md-copy:focus { opacity: 1; }
-/* Run it, on git blocks: Copy's twin, tucked under it so the wider
-   "Press Ctrl+C" fallback label can never collide. */
-.md-run {
-  position: absolute; top: 34px; right: 8px;
-  font: 600 11.5px var(--sans);
-  background: var(--panel); color: var(--ink-2);
-  border: 1px solid var(--rule-2); border-radius: 6px;
-  padding: 4px 9px; cursor: pointer; opacity: 0;
-  transition: opacity 0.12s;
-}
-.md-pre-wrap:hover .md-run, .md-run:focus { opacity: 1; }
-/* The muted nudge on other command-looking blocks, a caption under the block. */
+/* The muted nudge on command-looking blocks, a caption under the block. */
 .md-run-hint {
-  margin: -6px 2px 0;
+  margin: 4px 2px 0;
   font: 11px var(--sans); color: var(--ink-3);
   opacity: 0.8;
 }
+/* No "paste it into the Ask tab" nudge where the command is the card's own
+   action (a confirm's consequences, a finished screen's commit beside its
+   Commit it now button). */
+.is-consequences .md-run-hint,
+.handoff .md-run-hint { display: none; }
 .md-hr { border: 0; border-top: 1px solid var(--rule); margin: 20px 0; }
 .md-table-wrap { overflow-x: auto; margin: 0 0 13px; }
 .md-table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
@@ -2065,6 +2085,7 @@ h4.md-h, h5.md-h, h6.md-h { font-size: 15px; }
 .footer.is-dash .footer-summary,
 .footer.is-dash .footer-actions { display: none; }
 .footer.is-dash .footer-where { grid-column: 2; }
+.footer.is-dash-done .footer-actions { display: none; }
 .hint { font-size: 12.5px; color: var(--ink-3); display: flex; align-items: center; gap: 7px; }
 /* A label, not a sentence: the full reason rides in the hint's tooltip, and
    the dock already carries the ticking clock this would otherwise repeat. */
@@ -2165,6 +2186,9 @@ button.waiting-jump:hover { text-decoration-color: var(--accent); }
 .icon-btn:hover .ab-dot { fill: var(--accent); }
 
 a.icon-btn { box-sizing: border-box; text-decoration: none; }
+/* A link in a dialog (the update modal's release, Help's version) keeps the
+   accent once visited: the browser's purple is unreadable on the dark theme. */
+.modal a:not(.btn), .modal a:not(.btn):visited { color: var(--accent); }
 .icon-btn .mg-body { fill: none; stroke: var(--ink-3); stroke-width: 1.4; stroke-linejoin: round; }
 .icon-btn .mg-line { fill: none; stroke: var(--ink-2); stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
 .icon-btn:hover .mg-body, .icon-btn:hover .mg-line { stroke: var(--accent); }
@@ -2629,6 +2653,14 @@ a.icon-btn { box-sizing: border-box; text-decoration: none; }
 @media (max-width: 720px) {
   .looks-row { grid-template-columns: 1fr; }
 }
+/* User Preferences itself (not the dialogs borrowing .looks): wider, and only
+   the body scrolls, so Back to default and Done never leave the screen. */
+.modal.prefs { max-width: 880px; }
+.modal.prefs[open] { display: flex; flex-direction: column; max-height: calc(100vh - 48px); }
+.prefs-body { overflow-y: auto; min-height: 0; flex: 1 1 auto; margin-right: -12px; padding-right: 12px; padding-top: 10px; }
+/* A line scrolled up under the title fades out rather than being sliced. */
+.prefs-body { -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 12px); mask-image: linear-gradient(to bottom, transparent 0, #000 12px); }
+.modal.prefs .modal-actions { flex: none; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--rule); }
 
 /* The Workspace dialog: one entry per folder, the original first, then the
    Add row. Wide enough for a real path; the list scrolls, the Add row and the
@@ -2972,13 +3004,14 @@ a.icon-btn { box-sizing: border-box; text-decoration: none; }
   padding-top: 10px;
   border-top: 1px solid var(--rule);
 }
+/* Wraps at the dashes rather than cut off: a command missing its end
+   ("/plan2code-3-implement-revi…") is no command at all. */
 .dash-card-cmd {
   font-family: var(--mono);
   font-size: 11.5px;
   color: var(--ink-3);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .dash-card-go { color: var(--accent); font-weight: 700; transition: transform 0.15s ease; }
 .dash-card:hover:not(:disabled) .dash-card-go { transform: translateX(3px); }
@@ -3474,8 +3507,8 @@ a.icon-btn { box-sizing: border-box; text-decoration: none; }
   100% { transform: translateX(8px); opacity: 0; }
 }
 
-/* Git commit -- the arm reaches out and a new commit settles onto the branch
-   line in step with it. */
+/* Git -- the arm reaches out and a new commit settles onto the branch line in
+   step with it. */
 .pose .gc-reach { transform-origin: 0% 50%; animation: gc-reach 2.4s ease-in-out infinite; }
 @keyframes gc-reach {
   0%, 100% { transform: scaleX(0.9); }
@@ -3616,3 +3649,165 @@ a.icon-btn { box-sizing: border-box; text-decoration: none; }
 }
 .status-help:hover { text-decoration-thickness: 2px; }
 .status-help:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 3px; }
+
+/* ------------------------------------------------------------ git board */
+
+/* The git workflow's main column stacks two things where every other view
+   holds one: the agent's card on top and the board under it. Stacked children
+   that each scrolled would put a scrollbar inside a scrollbar, so here the
+   column takes the one scroll and both flow through it at natural height. */
+.main:has(> .git-board) {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+/* Listed with .is-primary.has-grow too: that rule (a card with a growing note
+   box takes the column's height and shrinks into it) outranks a plain .card
+   here, and a card shrunk under the board spilled its buttons beneath it. */
+.main:has(> .git-board) > .card,
+.main:has(> .git-board) > .card.is-primary.has-grow,
+.main:has(> .git-board) > .git-board {
+  flex: none;
+  overflow-y: visible;
+  min-height: 0;
+}
+/* Over the board a card's boxes cannot fill the column (it flows, it does not
+   stretch), so a note box grows with what is typed instead, where the browser
+   can, rather than scrolling inside a 96px box. */
+.main:has(> .git-board) > .card textarea { field-sizing: content; max-height: 50vh; }
+.main > .git-board {
+  padding-right: 32px;
+  display: grid;
+  /* minmax(0, …): the column never takes the branch table's no-wrap width. */
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+  gap: 14px;
+  max-width: var(--card-width);
+}
+/* The board's header is a section lead, not a second card: the agent's card
+   above is the column's only framed element. */
+.git-head {
+  display: grid;
+  gap: 6px;
+  padding: 0 0 10px;
+  border-bottom: 1px solid var(--rule);
+}
+.git-head-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 14px; }
+.git-branch { margin: 0; font: 600 22px/1.2 var(--serif); overflow-wrap: anywhere; }
+.git-track { font-family: var(--mono); font-size: 14px; color: var(--ink-2); }
+.git-head-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; font-size: 13.5px; color: var(--ink-2); }
+.git-noremote { font-weight: 600; color: var(--stage); }
+.git-activity { color: var(--accent); }
+.git-pr { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding-top: 6px; border-top: 1px solid var(--rule); }
+.git-pr-open { text-decoration: none; }
+.git-pr-ask { font-size: 14px; color: var(--ink); }
+.git-pr-base { font-size: 13.5px; color: var(--ink-2); }
+.git-pr-base select, .git-field select, .git-field input, .git-search {
+  font: inherit;
+  font-size: 14px;
+  padding: 6px 10px;
+  color: var(--ink);
+  background: var(--panel);
+  border: 1px solid var(--rule-2);
+  border-radius: 8px;
+}
+.git-warn, .git-op {
+  padding: 12px 16px;
+  border: 1px solid var(--warn);
+  border-left-width: 4px;
+  border-radius: var(--radius);
+  background: var(--warn-soft);
+  color: var(--ink);
+}
+.git-op { display: grid; gap: 8px; border-color: var(--stage); background: var(--stage-soft); }
+.git-op-files { margin: 0; padding-left: 20px; font-size: 13.5px; }
+.git-op-left { color: var(--warn); }
+.git-op-clear { color: var(--ok); }
+.git-op-actions, .git-panel-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.git-note { margin: 0; color: var(--ink-2); }
+.git-result {
+  padding: 10px 16px;
+  border: 1px solid var(--accent-line);
+  border-radius: var(--radius);
+  background: var(--accent-soft);
+  font-size: 14px;
+}
+.git-result-body .md-p { margin: 4px 0 0; }
+/* The result box is the line length here: git's stderr runs the full width. */
+.git-result-body.md { max-width: none; }
+/* Pinned to the pane's bottom while the board scrolls past: the column is
+   the scroller on this view, and the bar is the board's last child, so
+   bottom: 0 holds it on screen until the board's end comes up to dock it.
+   Opaque so the table slips underneath, bordered so the seam reads. */
+.git-bar {
+  position: sticky;
+  bottom: 0;
+  z-index: 6;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px 0 8px;
+  background: var(--bg);
+  border-top: 1px solid var(--rule);
+}
+.git-done { margin-left: auto; }
+.git-panel {
+  display: grid;
+  gap: 10px;
+  padding: 14px 18px;
+  background: var(--panel);
+  border: 1px solid var(--accent-line);
+  border-radius: var(--radius);
+}
+.git-panel-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.git-panel-title { margin: 0; font-size: 16px; }
+.git-group-title { margin: 4px 0 0; font-size: 13.5px; color: var(--ink-2); }
+.git-field-row { display: flex; flex-wrap: wrap; align-items: end; gap: 10px; }
+.git-field { display: grid; gap: 4px; font-size: 13px; color: var(--ink-2); }
+.git-field.is-wide { flex: 1 1 16em; }
+.git-new-name { font-family: var(--mono); }
+.git-name-status { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0; font-size: 13.5px; color: var(--ink-2); }
+.git-name-status.is-free { color: var(--ok); }
+.git-name-status.is-invalid, .git-name-status.is-nested { color: var(--warn); }
+.git-name-status.is-local, .git-name-status.is-remote { color: var(--stage); }
+.git-offer { margin: 0 auto 0 0; font-size: 14px; }
+.git-sweep { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; font-family: var(--mono); font-size: 13.5px; }
+.git-ignore { margin-left: 8px; white-space: nowrap; }
+.git-tools { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+.git-search { flex: 1 1 auto; }
+.git-branches { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
+.git-table-wrap { overflow-x: auto; }
+.git-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.git-table th {
+  text-align: left;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--rule);
+}
+.git-table td { padding: 7px 8px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+.git-table tr.is-current td { background: var(--accent-soft); }
+.git-table tr.is-held td { color: var(--ink-2); }
+.git-cell-name { overflow-wrap: anywhere; }
+/* A branch name stays whole beside its badges (feature/export-csv never splits
+   as feature/export- / csv), and the headers stay on one line: a narrow column
+   scrolls the table sideways instead. */
+.git-cell-name .git-name { white-space: nowrap; }
+.git-table th { white-space: nowrap; }
+.git-name, .git-path { font-family: var(--mono); }
+.git-badge { margin-left: 6px; font-size: 10px; padding: 2px 6px; }
+.git-badge.is-merged { color: var(--ok); background: var(--ok-soft); border-color: var(--ok); }
+.git-badge.is-gone, .git-badge.is-held { color: var(--stage); background: var(--stage-soft); border-color: var(--stage); }
+.git-cell-track { font-family: var(--mono); white-space: nowrap; color: var(--ink-2); }
+/* Stacked with blocks, not `display: grid`: a grid <td> stops being a table
+   cell, and its row's separator no longer lines up with the others. */
+.git-cell-last > span { display: block; }
+.git-cell-last > .git-by { margin-top: 2px; }
+.git-by { font-size: 12px; color: var(--ink-3); }
+.git-cell-actions { white-space: nowrap; text-align: right; }
+.git-cell-actions .btn + .btn { margin-left: 6px; }
+.git-remote-only summary { cursor: pointer; font-weight: 600; color: var(--ink-2); padding: 4px 0; }
+.git-empty { margin: 0; font-size: 13.5px; color: var(--ink-3); }

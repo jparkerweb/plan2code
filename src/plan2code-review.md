@@ -8,7 +8,7 @@ Critical review specialist -- experienced senior engineer providing independent 
 
 ## Interface
 
-The FIRST thing you do, before anything else in this file — before the scope detection: ask **web console** (browser page, suggested) or **terminal**? Console → run `node "<D>/console.mjs" open --workflow review` before reading (<D>: references/web-console/ beside this SKILL.md — ~/.agents/skills/plan2code-review/references/web-console/ globally — or the dir in ~/.plan2code/console/console-dir), then read <D>/console.md. Scope questions, the findings report and the pick-what-gets-fixed menu all go through it; the report lands on the page as a doc. Switchable anytime. If the argument already says which — `--web` or `Use the web console for this session.` — take it and do not ask; drop the flag. Launched by the dashboard? Its session is already open — resume it (console.md → Launches), then Process. Read inside a build session for its review button? Skip this section — building.md's overrides govern, the session is already running. On the console, a `__stop` action is the person ending the session (console.md → Stop requests); at every session end post `finish` BEFORE `stop`; unless it is a pause, the finish carries `"dashboard": true` (the Back to the dashboard button) and you keep waiting for the press (console.md → Finishing).
+The FIRST thing you do, before anything else in this file — before the scope detection: ask **web console** (browser page, suggested) or **terminal**? Console → run `node "<D>/console.mjs" open --workflow review` before reading (<D>: references/web-console/ beside this SKILL.md — ~/.agents/skills/plan2code-review/references/web-console/ globally — or the dir in ~/.plan2code/console/console-dir), then read <D>/console.md and <D>/notes/review.md. Scope questions, the findings report and the pick-what-gets-fixed menu all go through it; the report lands on the page as a doc. Switchable anytime. If the argument already says which — `--web` or `Use the web console for this session.` — take it and do not ask; drop the flag. Launched by the dashboard? Its session is already open — resume it (console-launches.md), then Process. Read inside a build session for its review button? Skip this section — building-review.md's overrides govern, the session is already running. On the console, a `__stop` action is the person ending the session (console-stop.md); at every session end post `finish` BEFORE `stop`; unless it is a pause, the finish carries `"dashboard": true` (the Back to the dashboard button) and you keep waiting for the press (console-finish.md).
 
 ## Scripts
 
@@ -42,7 +42,7 @@ Three levels -- auto-detected, always respect explicit user override:
 | **Branch** | "review my changes", or picked when asked | Branch changes vs main |
 | **Full** | "full review" or names a subsystem | Entire codebase/subsystem |
 
-**Detection:** 1) User prompt wins. 2) Conversation context = `focused`. 3) Scope already decided by a host workflow (a build's review, `building.md`) = use it. 4) Standalone with nothing named = scan, then ask (Step 1). Never default to `branch` silently. Ambiguous? Ask.
+**Detection:** 1) User prompt wins. 2) Conversation context = `focused`. 3) Scope already decided by a host workflow (a build's review, `building-review.md`) = use it. 4) Standalone with nothing named = scan, then ask (Step 1). Never default to `branch` silently. Ambiguous? Ask.
 
 **Thoroughness:** Scope controls WHAT is reviewed, not HOW DEEPLY. Every review is thorough.
 

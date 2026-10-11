@@ -10,10 +10,10 @@ An autonomous CLI tool that implements Plan2Code specs by looping through tasks 
 # From the plan2code root directory:
 
 # Option 1: Install everything (recommended)
-node install.js  # Select option A
+node install.js  # Select A (Advanced) → E (Everything)
 
 # Option 2: Install loop only
-node install.js  # Select option O
+node install.js  # Select A (Advanced) → O (Loop CLI)
 
 # Option 3: Manual build and link
 cd plan2code-loop

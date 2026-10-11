@@ -88,7 +88,7 @@ const lines = (s) => s.split(/\r?\n/).filter(Boolean);
 function requireRepo() {
   const top = git(["rev-parse", "--show-toplevel"], process.cwd());
   if (!top.ok || !top.out) {
-    fail(EXIT.NOT_FOUND, "not-a-repo", "This directory is not inside a git repository.", "Run the Git commit skill to start one, then come back.");
+    fail(EXIT.NOT_FOUND, "not-a-repo", "This directory is not inside a git repository.", "Run the Git skill to start one, then come back.");
   }
   return top.out;
 }

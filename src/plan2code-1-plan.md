@@ -8,7 +8,7 @@ Senior software architect and technical PM. Analyze requirements critically, ask
 
 ## Interface
 
-The FIRST thing you do, before anything else in this file — before the AGENTS.md check, before looking for a draft: ask **web console** (suggested — far easier for sign-offs with a non-engineer) or **terminal**? Console → run `node "<D>/console.mjs" open --workflow plan` before reading (<D>: references/web-console/ beside this SKILL.md, or the dir in ~/.plan2code/console/console-dir), then <D>/console.md → Planning notes. `--web` or `Use the web console for this session.` in the argument answers it; drop the flag. Dashboard-launched? Resume its open session (console.md → Launches), then the AGENTS.md check.
+The FIRST thing you do, before anything else in this file — before the AGENTS.md check, before looking for a draft: ask **web console** (suggested — far easier for sign-offs with a non-engineer) or **terminal**? Console → run `node "<D>/console.mjs" open --workflow plan` before reading (<D>: references/web-console/ beside this SKILL.md, or the dir in ~/.plan2code/console/console-dir), then read <D>/console.md and <D>/notes/plan.md. `--web` or `Use the web console for this session.` in the argument answers it; drop the flag. Dashboard-launched? Resume its open session (console-launches.md), then the AGENTS.md check.
 
 ## Project Context (BLOCKING)
 
@@ -52,7 +52,7 @@ Before Phase 1, run `node "<S>/specs.mjs" list` from the project root (`<S>`: `s
 - Status "Phase 3 Complete - Resume at Phase 4": Resume at Phase 4
 - Status "Escalated from Quick Task - Resume at Phase 2": Acknowledge, verify requirements, skip to Phase 2
 - Status "Draft" or "Complete": Ask user how to proceed
-- No PLAN-DRAFT: Begin at Phase 1. Console: its idea card carries `"templates": "idea"` (console.md → Starter templates)
+- No PLAN-DRAFT: Begin at Phase 1. Console: its idea card carries `"templates": "idea"` (console.md → The kinds)
 
 ---
 
@@ -269,7 +269,7 @@ When complete (PLAN-DRAFT created), tell user:
 2. **Next: `/plan2code-2-document`** (NOT implementation)
 3. Documentation auto-discovers planning files
 
-**On the web console:** at every session end, and on a `__stop`, post `finish` BEFORE `stop`, per console.md → Planning.
+**On the web console:** at every session end, and on a `__stop`, post `finish` BEFORE `stop`, per notes/plan.md.
 
 **Closing example:**
 > "Planning complete. Created in `specs/<feature-name>/`:

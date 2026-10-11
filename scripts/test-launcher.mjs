@@ -1,7 +1,7 @@
 // Tests for the global `plan2code` launcher. Run with: node --test scripts/test-launcher.mjs
 //
 // The launcher is a script that runs on load, so each test spawns it for real: a temp home
-// for ~/.plan2code/launcher.json, and stand-in `claude` / `devin` commands on PATH that
+// for ~/.plan2code/launcher.json, and stand-in `claude` / `devin` / `codex` commands on PATH that
 // record the arguments they were started with. stdin is a pipe, never a TTY, so the launcher
 // takes its no-prompt path: no menu and no wait at the model notice.
 
@@ -96,8 +96,50 @@ test("launcher: --cli codex picks Codex when it is installed beside another CLI"
 
 test("launcher: the shipped models.json lists every CLI, and every entry has an id and a label", () => {
   const shipped = JSON.parse(fs.readFileSync(path.join(path.dirname(LAUNCHER), "models.json"), "utf8"));
-  assert.ok(Array.isArray(shipped.codex));
-  for (const { id, label } of shipped.codex) assert.ok(id && label);
+  for (const cli of ["claude", "devin", "codex"]) {
+    assert.ok(Array.isArray(shipped[cli]), cli);
+    for (const { id, label } of shipped[cli]) assert.ok(id && label, cli);
+  }
+});
+
+test("launcher: Codex takes a forwarded --model ahead of the $plan2code prompt, with no notice", (t) => {
+  const box = sandbox(["codex"]);
+  t.after(box.cleanup);
+  const result = box.run(["--cli", "codex", "--model", "x"]);
+  assert.equal(result.status, 0, result.stderr);
+  assert.doesNotMatch(result.stdout, new RegExp(NOTICE));
+  assert.deepEqual(box.argsOf("codex"), ["--dangerously-bypass-approvals-and-sandbox", "--model", "x", "$plan2code"]);
+});
+
+test("launcher: Codex's -m counts as a model already chosen", (t) => {
+  const box = sandbox(["codex"]);
+  t.after(box.cleanup);
+  const result = box.run(["--cli", "codex", "-m", "x"]);
+  assert.equal(result.status, 0, result.stderr);
+  assert.doesNotMatch(result.stdout, new RegExp(NOTICE));
+  assert.deepEqual(box.argsOf("codex"), ["--dangerously-bypass-approvals-and-sandbox", "-m", "x", "$plan2code"]);
+});
+
+test("launcher: hasModelFlag reads -m as a model only for Codex", () => {
+  const { hasModelFlag } = require(LAUNCHER);
+  for (const cli of ["claude", "devin", "codex"]) {
+    assert.equal(hasModelFlag(["--model", "x"], cli), true, cli);
+    assert.equal(hasModelFlag(["--model=x"], cli), true, cli);
+    assert.equal(hasModelFlag(["--verbose"], cli), false, cli);
+  }
+  for (const args of [["-m", "x"], ["-m=x"], ["-mx"]]) {
+    assert.equal(hasModelFlag(args, "codex"), true, args.join(" "));
+    assert.equal(hasModelFlag(args, "claude"), false, args.join(" "));
+  }
+});
+
+test("launcher: without a terminal, Codex prints the model notice", (t) => {
+  const box = sandbox(["codex"]);
+  t.after(box.cleanup);
+  const result = box.run([]);
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, new RegExp(`Codex ${NOTICE}`));
+  assert.match(result.stdout, /`codex` on its own/);
 });
 
 test("launcher: a forwarded --model skips the model notice", (t) => {
@@ -136,18 +178,38 @@ test("launcher: with both installed and no terminal to ask in, the last pick win
   assert.equal(box.argsOf("claude"), null);
 });
 
+test("launcher: with all three installed and no terminal, a last pick of codex opens Codex", (t) => {
+  const box = sandbox(["claude", "devin", "codex"]);
+  t.after(box.cleanup);
+  fs.mkdirSync(path.dirname(box.stateFile), { recursive: true });
+  fs.writeFileSync(box.stateFile, JSON.stringify({ lastCli: "codex" }));
+  assert.equal(box.run([]).status, 0);
+  assert.notEqual(box.argsOf("codex"), null);
+  assert.equal(box.argsOf("claude"), null);
+  assert.equal(box.argsOf("devin"), null);
+});
+
 test("launcher: an unknown --cli exits 2, a missing CLI 127, and nothing is started", (t) => {
   const box = sandbox(["claude"]);
   t.after(box.cleanup);
 
   const unknown = box.run(["--cli", "bogus"]);
   assert.equal(unknown.status, 2);
-  assert.match(unknown.stderr, /--cli takes claude, devin, codex, not "bogus"/);
+  assert.match(unknown.stderr, /--cli takes claude, devin or codex, not "bogus"/);
 
   const missing = box.run(["--cli", "devin"]);
   assert.equal(missing.status, 127);
   assert.match(missing.stderr, /the `devin` CLI was not found/);
-  assert.ok(missing.stderr.includes("$plan2code"));
+  assert.match(missing.stderr, /\n\nTo use Devin:\n/);
+  assert.ok(missing.stderr.includes("1. Install it: https://devin.ai"));
+  assert.ok(missing.stderr.includes("start Devin and type /plan2code."));
+  // Only the steps for the requested CLI: no "install one of" list that contradicts it.
+  assert.doesNotMatch(missing.stderr, /Install one:/);
+
+  const missingCodex = box.run(["--cli", "codex"]);
+  assert.equal(missingCodex.status, 127);
+  assert.ok(missingCodex.stderr.includes("npm i -g @openai/codex"));
+  assert.ok(missingCodex.stderr.includes("type $plan2code."));
 
   assert.equal(box.argsOf("claude"), null);
 });

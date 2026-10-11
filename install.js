@@ -274,11 +274,11 @@ const SOURCE_PROMPTS = [
     additionalReferences: [{ source: 'web-console', target: 'web-console' }]
   },
   {
-    source: 'plan2code-git-commit.md',
-    stepNumber: 'git-commit',
-    name: 'git-commit',
-    displayName: 'Git Commit Mode',
-    description: 'Commit changes with a clear message, suggest splits, offer a branch and a push',
+    source: 'plan2code-git.md',
+    stepNumber: 'git',
+    name: 'git',
+    displayName: 'Git Mode',
+    description: 'Branches, pull, push and commits on one board that stays open while you work',
     isUtility: true,
     scripts: ['commit-msg.mjs'],
     additionalReferences: [{ source: 'web-console', target: 'web-console' }]
@@ -308,7 +308,7 @@ function generateStepLabel(prompt) {
   if (prompt.stepNumber === 'update') return 'Update';
   if (prompt.stepNumber === 'review') return 'Review';
   if (prompt.stepNumber === 'handoff') return 'Handoff';
-  if (prompt.stepNumber === 'git-commit') return 'Git Commit';
+  if (prompt.stepNumber === 'git') return 'Git';
   if (prompt.stepNumber === 'changelog') return 'Changelog';
   if (prompt.stepNumber === 'quick') return 'Quick Task';
   return `Step ${prompt.stepNumber}`;
@@ -982,8 +982,6 @@ async function install() {
   console.log(`${COLORS.GREEN}   ╲│ ${COLORS.CYAN}★${COLORS.GREEN} │╱${COLORS.RESET}`);
   console.log(`${COLORS.GREEN}    │ ${COLORS.BRIGHT}◡${COLORS.GREEN} │${COLORS.RESET}`);
   console.log(`${COLORS.GREEN}    ╰┬─┬╯${COLORS.RESET}   ${COLORS.DIM}Docs:${COLORS.RESET} ${COLORS.BRIGHT}https://github.com/jparkerweb/plan2code${COLORS.RESET}`);
-  console.log('');
-  console.log(`${COLORS.DIM}  Update later with:${COLORS.RESET} ${COLORS.CYAN}npx skills update -g${COLORS.RESET}`);
   console.log('');
 
   return launcherFailed ? 1 : 0;

@@ -15,16 +15,53 @@ export const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 export const SKILLS = path.join(ROOT, "skills");
 export const NOW = "2026-08-03 14:05";
 
+export { copyFixture, slashed, fixtureCleanup } from "./fixture-helpers.mjs";
+
 // Rebuild skills/ on every import, not only when it is missing: a test file run
 // directly after an edit to src/ must not test a stale tree. The build is
-// idempotent and takes well under a second.
-execFileSync(process.execPath, [path.join(ROOT, "install.js"), "--build-skills"], { stdio: "ignore" });
+// idempotent and takes over a second, once per test file, so `npm test`, whose
+// script has just built the tree before `node --test`, skips it: npm sets
+// npm_lifecycle_event for every script it runs.
+if (process.env.npm_lifecycle_event !== "test") {
+  execFileSync(process.execPath, [path.join(ROOT, "install.js"), "--build-skills"], { stdio: "ignore" });
+}
+
+// Env a spawned script or printed git command must not inherit: relocation
+// vars (GIT_DIR and friends) would redirect every fixture command, a
+// developer's global git config can perturb printed commands, and stray
+// SSH_*/PLAN2CODE_* vars change what the scripts report.
+const AMBIENT_GIT_ENV = [
+  "GIT_DIR",
+  "GIT_WORK_TREE",
+  "GIT_INDEX_FILE",
+  "GIT_COMMON_DIR",
+  "GIT_OBJECT_DIRECTORY",
+  "GIT_CONFIG",
+  "GIT_CONFIG_GLOBAL",
+  "GIT_CONFIG_SYSTEM",
+  "GIT_CONFIG_NOSYSTEM",
+  "SSH_CONNECTION",
+  "PLAN2CODE_PICKER_ECHO",
+];
+
+// GIT_CONFIG_GLOBAL wants a real path: os.devNull is `\\.\nul` here, which git
+// cannot open. An empty file is the portable "no global config".
+const EMPTY_GITCONFIG = path.join(os.tmpdir(), "p2c-empty-gitconfig");
+try {
+  fs.writeFileSync(EMPTY_GITCONFIG, "");
+} catch {}
+
+export function scrubbedEnv(extra = {}) {
+  const e = { ...process.env };
+  for (const k of AMBIENT_GIT_ENV) delete e[k];
+  return { ...e, GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: EMPTY_GITCONFIG, ...extra };
+}
 
 export function runScript(skill, script, args, { cwd, env } = {}) {
   const r = spawnSync(process.execPath, [path.join(SKILLS, skill, "scripts", script), ...args], {
     cwd: cwd || ROOT,
     encoding: "utf8",
-    env: { ...process.env, PLAN2CODE_NOW: NOW, GIT_CONFIG_NOSYSTEM: "1", ...env },
+    env: scrubbedEnv({ PLAN2CODE_NOW: NOW, ...env }),
   });
   let json = null;
   try {
@@ -46,8 +83,11 @@ export function write(root, rel, content) {
 
 export const read = (root, rel) => fs.readFileSync(path.join(root, rel), "utf8");
 
+/** A git runner for `dir`. */
+export const gitIn = (dir) => (...a) => execFileSync("git", a, { cwd: dir, stdio: "pipe", encoding: "utf8" });
+
 export function gitInit(dir, branch = "main") {
-  const g = (...a) => execFileSync("git", a, { cwd: dir, stdio: "pipe", encoding: "utf8" });
+  const g = gitIn(dir);
   g("init", "-q", "-b", branch);
   g("config", "user.email", "t@example.com");
   g("config", "user.name", "Test");

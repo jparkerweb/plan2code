@@ -12,7 +12,7 @@ Read references/grilling.md
 
 ## Interface
 
-The FIRST thing you do, before anything else in this file — before Step 0: ask **web console** (suggested) or **terminal**? Console → run `node "<D>/console.mjs" open --workflow pathfinder` before reading (<D>: references/web-console/ beside this SKILL.md, or the dir in ~/.plan2code/console/console-dir), then <D>/console.md → Pathfinder notes. Switchable anytime. `--web` or `Use the web console for this session.` in the argument answers it; drop the flag. Dashboard-launched? Resume its open session (console.md → Launches), then Step 0.
+The FIRST thing you do, before anything else in this file — before Step 0: ask **web console** (suggested) or **terminal**? Console → run `node "<D>/console.mjs" open --workflow pathfinder` before reading (<D>: references/web-console/ beside this SKILL.md, or the dir in ~/.plan2code/console/console-dir), then read <D>/console.md and <D>/notes/pathfinder.md. Switchable anytime. `--web` or `Use the web console for this session.` in the argument answers it; drop the flag. Dashboard-launched? Resume its open session (console-launches.md), then Step 0.
 
 ## Backend
 
@@ -140,7 +140,7 @@ Close EVERY response with the trail once the map exists. You pick the form by wh
 
 Report each question resolved (name + gist), what graduated, what's still open; offer a brief for today. Nothing to commit — `local` is gitignored, `github` already on the tracker. Then the mascot, then the Trail Footer.
 
-**Web console:** at session end or on a `__stop`, post `finish` (Form A's command) BEFORE `stop` (console.md → Pathfinder).
+**Web console:** at session end or on a `__stop`, post `finish` (Form A's command) BEFORE `stop` (notes/pathfinder.md).
 
 ```
 ⋅

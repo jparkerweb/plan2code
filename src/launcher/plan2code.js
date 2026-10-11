@@ -10,13 +10,14 @@
  *   devin --permission-mode bypass [extra args] -- /plan2code
  *   codex --dangerously-bypass-approvals-and-sandbox [extra args] $plan2code
  *
- * Codex starts a skill with `$name` rather than `/name`. When more than one CLI is installed it asks which one, with the last pick as the default; with only
- * one installed it uses that. `--cli claude` / `--cli devin` skips the question. Before starting
- * it asks which model to run, from the curated list in models.json (shipped with every
- * install) plus any models the user added in User Preferences; Enter keeps the model the CLI
- * last used, and `--model` skips the question. Any other arguments are forwarded to the CLI. Self-contained, Node
- * built-ins only: install.js copies this file to ~/.plan2code/bin/ and points the global
- * shims at it.
+ * Codex starts a skill with `$name` rather than `/name`. When more than one CLI is installed
+ * it asks which one, with the last pick as the default; with only one installed it uses that.
+ * `--cli claude` / `--cli devin` / `--cli codex` skips the question. Before starting it asks
+ * which model to run, from the curated list in models.json (shipped with every install) plus
+ * any models the user added in User Preferences; Enter keeps the model the CLI last used, and
+ * `--model` (or Codex's `-m`) skips the question. Any other arguments are forwarded to the CLI.
+ * Self-contained, Node built-ins only: install.js copies this file to ~/.plan2code/bin/ and
+ * points the global shims at it.
  *
  * `--pick-folder` (passed by the desktop shortcut, never forwarded to the CLI) asks for the
  * project folder with a native folder picker first, starting on the folder picked last time.
@@ -101,16 +102,22 @@ const CLIS = [
   {
     id: 'claude',
     label: 'Claude Code',
+    install: 'npm i -g @anthropic-ai/claude-code',
+    prompt: '/plan2code',
     args: (extra) => ['/plan2code', '--permission-mode', 'bypassPermissions', ...extra],
   },
   {
     id: 'devin',
     label: 'Devin',
+    install: 'https://devin.ai',
+    prompt: '/plan2code',
     args: (extra) => ['--permission-mode', 'bypass', ...extra, '--', '/plan2code'],
   },
   {
     id: 'codex',
     label: 'Codex',
+    install: 'npm i -g @openai/codex',
+    prompt: '$plan2code',
     // Codex mentions a skill with `$name`; the prompt is its one positional argument.
     args: (extra) => ['--dangerously-bypass-approvals-and-sandbox', ...extra, '$plan2code'],
   },
@@ -124,9 +131,9 @@ const SKILL_STEPS = [
   '  3. Start your agent there, then type /plan2code (Claude Code, Devin) or $plan2code (Codex).',
 ];
 
-/** The CLI ids as prose: "`claude`, `devin` or `codex`". */
-function cliIdList() {
-  const ids = CLIS.map((cli) => '`' + cli.id + '`');
+/** The CLI ids as prose: "`claude`, `devin` or `codex`", or without the backticks for `quote` ''. */
+function cliIdList(quote = '`') {
+  const ids = CLIS.map((cli) => quote + cli.id + quote);
   return `${ids.slice(0, -1).join(', ')} or ${ids[ids.length - 1]}`;
 }
 
@@ -362,14 +369,17 @@ async function chooseCli(requested) {
   if (requested !== undefined) {
     const known = CLIS.find((cli) => cli.id === requested);
     if (!known) {
-      console.error(`${ce.red('plan2code:')} --cli takes ${CLIS.map((cli) => cli.id).join(', ')}${requested ? `, not "${requested}"` : ''}.`);
+      console.error(`${ce.red('plan2code:')} --cli takes ${cliIdList('')}${requested ? `, not "${requested}"` : ''}.`);
       return { code: 2 };
     }
     const found = installed.find((cli) => cli.id === requested);
     if (!found) {
       console.error(`${ce.red('plan2code:')} the \`${known.id}\` CLI was not found on your PATH.`);
-      console.error(`Install ${known.label}, open a new terminal, and run \`plan2code\` again.`);
-      for (const step of SKILL_STEPS) console.error(step);
+      console.error('');
+      console.error(`To use ${known.label}:`);
+      console.error(`  1. Install it: ${known.install}`);
+      console.error('  2. Open a new terminal and cd into the project you want to work on.');
+      console.error(`  3. Run \`plan2code --cli ${known.id}\` there, or start ${known.label} and type ${known.prompt}.`);
     }
     if (found) announceCli(found);
     return found ? { cli: found } : { code: 127 };
@@ -397,7 +407,7 @@ async function chooseCli(requested) {
   installed.forEach((cli, i) =>
     console.log(`  ${c.cyan(`${i + 1})`)} ${cli.label}${cli.id === lastCli ? ` ${c.dim('(last used)')}` : ''}`)
   );
-  console.log(c.dim('You can also skip this launcher and run `/plan2code` straight from your agent.'));
+  console.log(c.dim('You can also skip this launcher and run `/plan2code` (`$plan2code` in Codex) straight from your agent.'));
   for (;;) {
     const answer = (await ask(`Choice ${c.green(`[${defaultIndex + 1}]`)}: `)).trim().toLowerCase();
     if (!answer) return { cli: installed[defaultIndex] };
@@ -409,9 +419,17 @@ async function chooseCli(requested) {
   }
 }
 
-/** True when the forwarded arguments already pick a model (`--model <name>` / `--model=<name>`). */
-function hasModelFlag(args) {
-  return args.some((arg) => arg === '--model' || arg.startsWith('--model='));
+/**
+ * True when the forwarded arguments already pick a model: `--model <name>` / `--model=<name>`,
+ * and for Codex also its short form, `-m <name>` / `-m=<name>` / `-m<name>`.
+ */
+function hasModelFlag(args, cliId) {
+  return args.some(
+    (arg) =>
+      arg === '--model' ||
+      arg.startsWith('--model=') ||
+      (cliId === 'codex' && arg.startsWith('-m'))
+  );
 }
 
 /** `[{ id, label }]` from a parsed models file for one CLI; anything malformed is skipped. */
@@ -613,7 +631,7 @@ async function launch() {
     console.log(`Opening Plan2Code in ${c.cyan(folder)}`);
   }
 
-  if (!hasModelFlag(extraArgs)) await chooseModel(cli, extraArgs);
+  if (!hasModelFlag(extraArgs, cli.id)) await chooseModel(cli, extraArgs);
 
   const args = cli.args(extraArgs);
   const options = { cwd, stdio: 'inherit' };
@@ -651,4 +669,4 @@ async function launch() {
 // Run only when invoked directly; requiring the file (the tests do) is load-only.
 if (require.main === module) launch();
 
-module.exports = { mergeModels, modelEntries, renderBanner, paint };
+module.exports = { mergeModels, modelEntries, renderBanner, paint, hasModelFlag };

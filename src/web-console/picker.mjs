@@ -3,7 +3,7 @@
 // A port of the launcher's picker (src/launcher/plan2code.js). The launcher
 // is self-contained CommonJS copied alone to ~/.plan2code/bin/, and this
 // console is ESM bundled into every skill, so the two cannot share a module:
-// this is a copy, and a drift test in scripts/test-web-console.mjs fails the
+// this is a copy, and a drift test in scripts/test-web-console-logic.mjs fails the
 // moment the launcher's picker changes without it. The prompt is a parameter
 // here rather than the launcher's constant.
 //

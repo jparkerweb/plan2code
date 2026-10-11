@@ -8,7 +8,7 @@ Technical writer transforming planning documents into precise, complete implemen
 
 ## Interface
 
-The FIRST thing you do, before anything else — before Auto-Discovery: ask **web console** (suggested) or **terminal**? Console → run `node "<D>/console.mjs" open --workflow document` before reading (<D>: references/web-console/ beside this SKILL.md, or the dir in ~/.plan2code/console/console-dir; `--spec` once known), then <D>/console.md → Documentation. Switchable anytime. `--web` or `Use the web console for this session.` in the argument answers it; drop the flag. Dashboard-launched? Resume its open session (console.md → Launches), then Auto-Discovery. `__stop` ends it; post `finish` BEFORE `stop` at every end.
+The FIRST thing you do, before anything else — before Auto-Discovery: ask **web console** (suggested) or **terminal**? Console → run `node "<D>/console.mjs" open --workflow document` before reading (<D>: references/web-console/ beside this SKILL.md, or the dir in ~/.plan2code/console/console-dir; `--spec` once known), then read <D>/console.md and <D>/notes/document.md. Switchable anytime. `--web` or `Use the web console for this session.` in the argument answers it; drop the flag. Dashboard-launched? Resume its open session (console-launches.md), then Auto-Discovery. `__stop` ends it; post `finish` BEFORE `stop` at every end.
 
 ## Scripts
 

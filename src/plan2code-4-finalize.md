@@ -8,7 +8,7 @@ QA engineer and technical lead performing rigorous final validation. Verify spec
 
 ## Interface
 
-The FIRST thing you do, before anything else in this file — before the Required Context check, before Step 1: ask **web console** (browser page, suggested) or **terminal**? Console → run `node "<D>/console.mjs" open --workflow finalize` before reading (<D>: references/web-console/ beside this SKILL.md, or the dir in ~/.plan2code/console/console-dir; `--spec specs/<feature-name>` if known, else post `specDir` later), then <D>/console.md → Finalize; the audit options, the doc-update approval and every cleanup confirmation go through it. Switchable anytime. `--web` or `Use the web console for this session.` in the argument answers it; drop the flag. Dashboard-launched? Resume its open session (console.md → Launches), then the Required Context check.
+The FIRST thing you do, before anything else in this file — before the Required Context check, before Step 1: ask **web console** (browser page, suggested) or **terminal**? Console → run `node "<D>/console.mjs" open --workflow finalize` before reading (<D>: references/web-console/ beside this SKILL.md, or the dir in ~/.plan2code/console/console-dir; `--spec specs/<feature-name>` if known, else post `specDir` later), then read <D>/console.md and <D>/notes/finalize.md; the audit options, the doc-update approval and every cleanup confirmation go through it. Switchable anytime. `--web` or `Use the web console for this session.` in the argument answers it; drop the flag. Dashboard-launched? Resume its open session (console-launches.md), then the Required Context check.
 
 ## Scripts
 
@@ -64,7 +64,7 @@ Complete steps in order. Report progress after each.
 | `[x]` | Completed | Completed | Verify implementation exists |
 | `[?]` | Assumed complete | Completed | List it: it was never verified |
 | `[ ]` / `[/]` | Not started / started | Incomplete | Flag INCOMPLETE |
-| `[!]` | Blocked | Incomplete | Document blocker |
+| `[!]` | Blocked | Blocked (its own column; `totals.blocked`, not in `totals.incomplete`) | Document blocker |
 
 2. Build the audit table from each phase's `tasks` (Completed = `complete` + `assumed`; Incomplete = `pending` + `in-progress`; each phase's `openTasks`, `blockedTasks` and `assumedTasks` name them; the Total row is `totals`):
 
@@ -78,7 +78,7 @@ Complete steps in order. Report progress after each.
 
 3. Completion is `completionPercent` (Completed / Total). Report any `error` in `checks` too (e.g. a phase marked `[x]` in overview.md with open tasks).
 
-#### If incomplete tasks exist:
+#### If incomplete or blocked tasks exist (`totals.incomplete + totals.blocked > 0`):
 
 ```markdown
 INCOMPLETE TASKS DETECTED
@@ -343,8 +343,8 @@ If you discovered undocumented commands, dependency quirks, gotchas (>5min cost)
 
 (Step 7 already delivered the completion summary — don't repeat it.)
 
-Suggested commit (only if README, CHANGELOG, or other tracked docs were updated): the `command` from `commit-msg.mjs --subject "chore: finalize and archive <feature-name>"`.
+Suggested commit (only if README, CHANGELOG, or other tracked docs were updated): the `command` from `commit-msg.mjs --subject "chore: finalize and archive <feature-name>"`. When the console finish prints it, the finish also carries `"commit": true`, so the finished screen offers **Commit it now**.
 
 Returning context: Feature complete. Specs archived to `specs--completed/<feature-name>/`.
 
-**On the web console:** a `__stop` action in a send ends the session: see console.md → Stop requests. At every session end post `finish` BEFORE `stop`, per console.md → Finalize — the completion summary is printed to a terminal the browser user is not watching.
+**On the web console:** a `__stop` action in a send ends the session: see console-stop.md. At every session end post `finish` BEFORE `stop`, per notes/finalize.md — the completion summary is printed to a terminal the browser user is not watching.

@@ -25,16 +25,26 @@ export const WEIGHTS = Object.freeze({
   "init-update": 2,
   finalize: 1,
   handoff: 0,
-  "git-commit": 1,
+  git: 1,
+  // Scores 0 itself: Git's commits are tallied per run (COMMITS_PER_POINT).
+  "git-commits": 0,
+  "git-conflict": 1,
   changelog: 1,
 });
 
 // Workflows whose launch itself scores WEIGHTS[workflow]. Pathfinder,
 // implement and implement-review score only through the agent's `run`
-// reports; dashboard and handoff never score; git-commit and changelog score 1 on launch.
+// reports; dashboard and handoff never score; git and changelog score 1 on
+// launch (Git then adds its commit tally and conflict help).
 export const LAUNCH_COUNTED = Object.freeze(
-  new Set(["plan", "revise-plan", "document", "review", "quick-task", "init", "init-update", "finalize", "git-commit", "changelog"])
+  new Set(["plan", "revise-plan", "document", "review", "quick-task", "init", "init-update", "finalize", "git", "changelog"])
 );
+
+// Git's commits weigh what they add up to: each `git-commits` run carries
+// `commits`, and a skill run scores one point per COMMITS_PER_POINT commits,
+// rounded down. MAX_COMMITS is the most one run may report. Tune here.
+export const COMMITS_PER_POINT = 2;
+export const MAX_COMMITS = 999;
 
 const weightOf = (key) => (Object.prototype.hasOwnProperty.call(WEIGHTS, key) ? WEIGHTS[key] : 0);
 
@@ -128,7 +138,7 @@ const WORKFLOW_NAMES = Object.freeze({
   "init-update": "Init update",
   finalize: "Finalize",
   handoff: "Handoff",
-  "git-commit": "Git commit",
+  git: "Git",
   changelog: "Changelog",
 });
 
@@ -145,7 +155,7 @@ const LAUNCH_LABELS = Object.freeze({
   init: "Init started",
   "init-update": "Init update started",
   finalize: "Finalize started",
-  "git-commit": "Git commit started",
+  git: "Git started",
   changelog: "Changelog started",
 });
 const RUN_LABELS = Object.freeze({
@@ -163,7 +173,9 @@ const RUN_LABELS = Object.freeze({
   "init-update": "Init update run",
   finalize: "Finalize run",
   handoff: "Handoff written",
-  "git-commit": "Git commit run",
+  git: "Git run",
+  "git-commits": "Commits in Git",
+  "git-conflict": "Git conflict help",
   changelog: "Changelog run",
 });
 
@@ -180,6 +192,7 @@ export function breakdownFrom(entries) {
   const seen = new Set();
   const rows = [];
   const answers = new Map(); // launch id -> { row, count, workflow }
+  const commits = new Map(); // launch id -> { row, count }
   const builds = new Map(); // launch id -> the row of the build in progress
   const reviewed = new Set(); // launch ids whose built-in review has scored
   for (const entry of Array.isArray(entries) ? entries : []) {
@@ -187,6 +200,20 @@ export function breakdownFrom(entries) {
     if (entry.id !== undefined) {
       if (seen.has(entry.id)) continue;
       seen.add(entry.id);
+    }
+    // A click on the git board is not back-and-forth: Git's answers score nothing.
+    if (entry.kind === "answer" && entry.workflow === "git") continue;
+    if (entry.kind === "run" && entry.event === "git-commits") {
+      if (!Number.isInteger(entry.commits) || entry.commits < 1) continue;
+      const launch = launchOf(entry.id);
+      let tally = commits.get(launch);
+      if (!tally) {
+        tally = { row: { label: "", points: 0 }, count: 0 };
+        commits.set(launch, tally);
+        rows.push(tally.row);
+      }
+      tally.count += entry.commits;
+      continue;
     }
     if (entry.kind === "answer") {
       const launch = launchOf(entry.id);
@@ -254,6 +281,10 @@ export function breakdownFrom(entries) {
     row.points = Math.floor(count / ANSWERS_PER_POINT);
     const where = WORKFLOW_NAMES[workflow] ? ` in ${WORKFLOW_NAMES[workflow]}` : "";
     row.label = `${count} ${count === 1 ? "answer" : "answers"}${where}`;
+  }
+  for (const { row, count } of commits.values()) {
+    row.points = Math.floor(count / COMMITS_PER_POINT);
+    row.label = `${count} ${count === 1 ? "commit" : "commits"} in Git`;
   }
   return rows.filter((row) => row.points > 0).map(({ label, points }) => ({ label, points }));
 }

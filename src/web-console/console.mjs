@@ -64,6 +64,7 @@ import {
   readChat,
   readJson,
   readLedger,
+  readPrHosts,
   readSubagentCursor,
   readSubagentSetting,
   readWorkspace,
@@ -86,6 +87,7 @@ import {
   terminalLine,
   updateState,
   UPLOAD_MAX_AGE_MS,
+  resolveDocFiles,
   validate,
   validateChat,
   workspaceForAgent,
@@ -94,7 +96,8 @@ import {
   writeSubagentCursor,
   writeWorkspaceCursor,
 } from "./lib.mjs";
-import { RUN_EVENTS, TASK_EVENTS, MAX_TASKS, isTaskCount, progressEntry } from "./public/meter.js";
+import { snapshot } from "./git-repo.mjs";
+import { RUN_EVENTS, TASK_EVENTS, MAX_COMMITS, MAX_TASKS, isTaskCount, progressEntry } from "./public/meter.js";
 import { blockFor, offered } from "./public/subagents.js";
 import { changeLine } from "./public/workspace.js";
 
@@ -165,9 +168,19 @@ async function cmdOpen() {
     // Going through the dashboard is a fresh start: a skill launched from
     // the menu gets a clean page, not the last skill's questions and tabs
     // under its own name. The staged draft goes too, since its item ids
-    // belonged to the old questions. A skill run inline from another (a
-    // quick task's review) never passes the dashboard, so it keeps the page.
-    const hop = switching && (args.workflow === "dashboard" || state.workflow === "dashboard");
+    // belonged to the old questions. Git counts as a launch from anywhere:
+    // Commit it now on a finished screen and Changelog's "Commit this now?"
+    // both stand in for its dashboard card, and a finish left
+    // behind would keep the page on the old ending above the new questions
+    // (or the new board). A hop also drops the last run's state.git, since
+    // switchWorkflow() starts from a blank state.
+    // A skill run inline from another (a quick task's review) never switches
+    // through here, so it keeps the page.
+    const hop =
+      switching &&
+      (args.workflow === "dashboard" ||
+        state.workflow === "dashboard" ||
+        args.workflow === "git");
     if (hop) fs.rmSync(path.join(dir, "draft.json"), { force: true });
     reshape = (s) => {
       // Resuming takes a pause back down. A paused finish is a bookmark --
@@ -180,6 +193,15 @@ async function cmdOpen() {
       // --file applies, so a patch can still post a finish of its own.
       if (s.finish && /^\s*paused\b/i.test(String(s.finish.headline || ""))) {
         delete s.finish;
+        // A new agent picking the session up: its own working turn, timed
+        // from now, not the paused run's last status.
+        s.agent = { status: "working", since: nowIso() };
+        // The old run's warning about what a stop would lose is about its
+        // unsaved work; the new run posts its own when it has some.
+        delete s.stopWarning;
+        // So is its count: the open questions it counted are dropped below,
+        // and the page falls back to its own tally until the new run posts.
+        s.headline = { stage: "", cleared: 0, total: 0, confidence: "", note: "" };
         // The questions still open at the pause were the old session's asks,
         // already narrated in the finish body so the next session can name
         // them. Whatever the resumed session still needs it asks again, in its
@@ -229,15 +251,26 @@ async function cmdOpen() {
   // now, before anything is written, and appended once the launch is.
   let openRun;
   let openIssue;
+  let openReread;
   let patch = null;
   if (args.file) {
-    patch = readJson(path.resolve(args.file));
-    if (!patch) die(`could not read --file ${args.file} as JSON`, 2);
+    patch = readPatch(args.file);
+    if (!patch) die(`could not read --file ${args.file} as one JSON object`, 2);
     ({ run: openRun, folderIssue: openIssue } = patch);
     delete patch.run;
     delete patch.folderIssue;
+    openReread = liftReread(patch, args.workflow || state.workflow);
   }
   const base = reshape;
+  if (patch) {
+    // Against the page as this open leaves it (a hop starts blank), so a
+    // refresh never re-reads the last skill's files into the new page.
+    try {
+      patch = resolveDocFiles(patch, base(structuredClone(state)), worktree);
+    } catch (e) {
+      die(e.message, 3);
+    }
+  }
   const settle = (s) => {
     s = base(s);
     // On every open, so a resume from another worktree refreshes both.
@@ -268,7 +301,13 @@ async function cmdOpen() {
   // poll tick. No page can reach it before it is listening, and the state is
   // on disk long before a browser gets there.
   const existing = sid && (args.resume || args.session) ? listHandles(project).find((h) => h.sid === sid) : null;
-  const reusable = existing && pidAlive(existing.pid) ? healthOk(existing) : Promise.resolve(false);
+  // A live pid gets a second, longer look before it is given up on, as `stop`
+  // gives one: a server busy right after a post can miss the first, and a
+  // second server for the same session strands the page on the first.
+  const reusable =
+    existing && pidAlive(existing.pid)
+      ? healthOk(existing).then((ok) => ok || healthOk(existing, 5000))
+      : Promise.resolve(false);
   let boot = null;
   if (!existing) boot = await startServer(project, worktree, sid, dir);
 
@@ -279,6 +318,9 @@ async function cmdOpen() {
   // own top level: `project` is the common-dir key so linked worktrees share
   // sessions, but each shows the specs on its own disk.
   const scan = state.workflow === "dashboard" ? scanProject(worktree) : null;
+  // The git board's data, the same way: the console's own read-only snapshot
+  // (git-repo.mjs), taken before the lock so no git process runs under it.
+  const gitSnap = state.workflow === "git" ? snapshot(worktree, { prHosts: readPrHosts() }) : null;
 
   // Under the state lock, which a send on the page takes too: the result and
   // the state are read fresh here and the state is rebuilt from that read, so
@@ -289,6 +331,9 @@ async function cmdOpen() {
     written = updateState(dir, (fresh) => {
       const next = fresh ? reshape(fresh) : state;
       if (scan) next.scan = scan;
+      // A launch or hop starts the board fresh; a plain resume (a server
+      // restart) keeps the last word on whether a Refresh failed.
+      if (gitSnap) next.git = launched ? gitBlock(gitSnap, openReread ?? { refreshFailed: false }) : gitBlock(gitSnap, openReread, fresh?.git);
 
       // Clear a result the agent already collected, and ONLY that one.
       //
@@ -556,6 +601,26 @@ async function awaitHandle(started) {
   return null;
 }
 
+// A patch from a file, or from stdin with `--file -`: a heredoc piped into
+// the command saves the agent writing a file first, one tool call a turn.
+// A file PowerShell wrote comes with a BOM (Out-File / Set-Content in 5.1) or
+// in UTF-16 (its `>`), and both are the documented Windows route, so both read.
+function readPatch(file) {
+  try {
+    const buf = fs.readFileSync(file === "-" ? 0 : path.resolve(file));
+    let text;
+    if (buf[0] === 0xff && buf[1] === 0xfe) text = buf.subarray(2).toString("utf16le");
+    else if (buf[0] === 0xfe && buf[1] === 0xff) text = Buffer.from(buf.subarray(2)).swap16().toString("utf16le");
+    else text = buf.toString("utf8");
+    // A patch is one JSON object: an array, string or number would merge
+    // into the state as junk keys ("0", "1"...) and still report ok.
+    const patch = JSON.parse(text.replace(/^\uFEFF/, ""));
+    return patch && typeof patch === "object" && !Array.isArray(patch) ? patch : null;
+  } catch {
+    return null;
+  }
+}
+
 function failValidation(problems) {
   process.stderr.write("console: the payload was rejected, nothing was written.\n");
   for (const p of problems) process.stderr.write("  - " + p + "\n");
@@ -566,23 +631,44 @@ function failValidation(problems) {
 
 /* ----------------------------------------------------------------- post */
 
-function cmdPost() {
+async function cmdPost() {
+  // `post --wait <seconds>` is a post and then a wait in one command: one tool
+  // call per turn instead of two. A rejected post never waits (exit 3).
+  if (args.wait !== undefined && args.wait !== true && !Number.isFinite(Number.parseFloat(args.wait))) {
+    die("post --wait takes the slice in seconds, as wait --seconds does", 2);
+  }
+  if (!postOnce()) return;
+  if (args.wait === undefined) return;
+  // A bare --wait takes the slice from --seconds, as wait does.
+  args.seconds = args.wait === true ? args.seconds : args.wait;
+  return cmdWait();
+}
+
+function postOnce() {
   const dir = mustSession();
   const file = args.file;
   if (!file) die("post needs --file <path to a JSON patch>", 2);
-  const patch = readJson(path.resolve(file));
-  if (!patch) die(`could not read --file ${file} as JSON`, 2);
+  let patch = readPatch(file);
+  if (!patch) die(`could not read --file ${file} as one JSON object`, 2);
 
   const statePath = path.join(dir, "state.json");
   const before = readJson(statePath);
   if (!before) die("that session has no state", 1);
+  try {
+    patch = resolveDocFiles(patch, before, before.worktree || repoRoots().worktree);
+  } catch (e) {
+    die(e.message, 3);
+  }
 
   // Meter and folder reports go to the ledger, never into state.json. Checked
   // here, before anything is written: a rejected post appends nothing.
   const { run, folderIssue } = patch;
   delete patch.run;
   delete patch.folderIssue;
+  const reread = liftReread(patch, before.workflow);
   const ledgerLines = ledgerFromPost(dir, run, folderIssue, before.workflow);
+  // Taken before the lock: git processes must not run while it is held.
+  const snap = reread === undefined ? null : snapshot(before.worktree || repoRoots().worktree, { prHosts: readPrHosts() });
 
   // The patch is applied to a fresh read under the state lock, never to the
   // read above: a send the person made in between is in the file, and a write
@@ -603,6 +689,14 @@ function cmdPost() {
       } catch (e) {
         refused = [e.message, 3];
         return null;
+      }
+      // The result card and the fresh board land in this one write.
+      if (snap) {
+        next.git = gitBlock(snap, reread, fresh.git);
+        // The footer names the branch too: after a switch or a create it is
+        // the new one, and mid-rebase the one being rebased.
+        const onBranch = snap.head && (snap.head.branch || snap.head.rebasing);
+        if (onBranch) next.branch = onBranch;
       }
       problems = validate(next);
       if (!problems.length && patch.chat) problems = validateChat(next, readChat(dir));
@@ -625,9 +719,9 @@ function cmdPost() {
   }
   appendEvent(dir, { type: "post", items: (patch.items || []).length });
 
-  const open = next.items.filter((i) => isOpen(i) && i.required !== false).length;
+  const open = next.items.filter((i) => isOpen(i) && i.required !== false && i.kind !== "notice").length;
   // Only a live server's link: no handle, no line, never a dead link.
-  const handle = listHandles(projectRoot()).find((h) => h.sid === path.basename(dir));
+  const handle = listHandles(sessionProject(dir)).find((h) => h.sid === path.basename(dir));
   print({
     ok: true,
     items: next.items.length,
@@ -636,6 +730,40 @@ function cmdPost() {
     ...unansweredNote(dir, next),
     ...(handle && handle.url ? { terminalLine: terminalLine(handle.url) } : {}),
   });
+  return true;
+}
+
+/**
+ * A patch's `reread`, the agent's "re-read the repo" signal on the git board
+ * (FR-10), lifted out of the patch, or exit 3 when it is malformed or not on a
+ * git session. state.git itself is the console's own: a patch never carries it.
+ */
+function liftReread(patch, workflow) {
+  if (Object.hasOwn(patch, "git")) die("state.git is the console's own: post reread instead", 3);
+  const { reread } = patch;
+  delete patch.reread;
+  if (reread === undefined) return undefined;
+  const flagOnly =
+    reread && typeof reread === "object" && !Array.isArray(reread) && Object.keys(reread).length === 1 && typeof reread.refreshFailed === "boolean";
+  if (reread !== true && !flagOnly) die("reread must be true or { refreshFailed: true|false }", 3);
+  if (workflow !== "git") die("reread only goes with the git workflow", 3);
+  return reread;
+}
+
+/**
+ * The new state.git from a snapshot. The agent's refreshFailed wins; without
+ * one, a newer FETCH_HEAD means a refresh worked, and anything else keeps the
+ * last word on it.
+ */
+function gitBlock(snap, reread, previous) {
+  let refreshFailed;
+  if (reread && typeof reread === "object") refreshFailed = reread.refreshFailed;
+  else if (snap.lastFetch && (!previous?.lastFetch || Date.parse(snap.lastFetch) > Date.parse(previous.lastFetch))) refreshFailed = false;
+  else refreshFailed = Boolean(previous?.refreshFailed);
+  // A failed fetch still touches FETCH_HEAD, so its time is not a refresh:
+  // the board keeps saying when the last one that worked was.
+  if (refreshFailed === true && reread && typeof reread === "object") return { ...snap, lastFetch: previous?.lastFetch ?? null, refreshFailed };
+  return { ...snap, refreshFailed };
 }
 
 /**
@@ -656,7 +784,19 @@ function ledgerFromPost(dir, run, issue, workflow) {
       if (!TASK_EVENTS.has(event)) die(`run: tasks only goes with ${[...TASK_EVENTS].join(" or ")}`, 3);
       if (!isTaskCount(run.tasks)) die(`run: tasks must be a whole number from 1 to ${MAX_TASKS}`, 3);
     }
-    lines.push({ kind: "run", id: `${launch}:${run.id}`, event, workflow, ...(run.tasks !== undefined ? { tasks: run.tasks } : {}) });
+    if (run.commits !== undefined) {
+      if (event !== "git-commits") die("run: commits only goes with git-commits", 3);
+      const ok = Number.isInteger(run.commits) && run.commits >= 1 && run.commits <= MAX_COMMITS;
+      if (!ok) die(`run: commits must be a whole number from 1 to ${MAX_COMMITS}`, 3);
+    }
+    lines.push({
+      kind: "run",
+      id: `${launch}:${run.id}`,
+      event,
+      workflow,
+      ...(run.tasks !== undefined ? { tasks: run.tasks } : {}),
+      ...(run.commits !== undefined ? { commits: run.commits } : {}),
+    });
   }
   if (issue !== undefined) {
     const text = (v) => typeof v === "string" && v.trim() !== "";
@@ -690,7 +830,7 @@ async function cmdWait() {
   }
   const seconds = Math.max(5, given === undefined ? 240 : asked);
   const sid = path.basename(dir);
-  const project = projectRoot();
+  const project = sessionProject(dir);
   const resultPath = path.join(dir, "result.json");
   const chatPath = path.join(dir, CHAT_FILE);
   const deadline = Date.now() + seconds * 1000;
@@ -703,6 +843,7 @@ async function cmdWait() {
   if (existing && !existing.consumedAt) return consume(dir, resultPath, existing, liveUrl(), pendingChat());
   const earlyChat = pendingChat();
   if (earlyChat.length) return deliverChat(dir, sid, earlyChat, liveUrl());
+  markWaiting(dir);
 
   // A stat every 50ms, and a read only when the file has moved. The old tick
   // was a full read and parse every 400ms, which put up to 0.4s between the
@@ -713,6 +854,17 @@ async function cmdWait() {
   // that merely does not answer must fail three checks in a row, each with a
   // longer look, before the slice ends with exit 20.
   let healthMisses = 0;
+  // The check in flight, if any. Aborted on every way out, so a fetch left
+  // running never holds the process (and the agent) past the print.
+  let health = null;
+  const healthStop = new AbortController();
+  try {
+    return await pollSlice();
+  } finally {
+    healthStop.abort();
+  }
+
+  async function pollSlice() {
   // Null, not the current stamp: a result written between the check above and
   // this line would otherwise read as already seen and wait out the slice.
   let seen = null;
@@ -735,7 +887,10 @@ async function cmdWait() {
       if (entries.length) return deliverChat(dir, sid, entries, liveUrl());
     }
 
-    if (Date.now() - healthAt > 5000) {
+    // The health check runs beside the polling, never in its way: awaited
+    // inline, a slow /health (a busy server, just after a send) held a
+    // finished send back for up to the whole fetch timeout.
+    if (!health && Date.now() - healthAt > 5000) {
       healthAt = Date.now();
       const handle = listHandles(project).find((h) => h.sid === sid);
       if (!handle || !pidAlive(handle.pid)) {
@@ -743,18 +898,25 @@ async function cmdWait() {
         process.exitCode = 20;
         return;
       }
-      if (await healthOk(handle, 4000)) healthMisses = 0;
+      const check = { done: false, ok: false };
+      health = check;
+      healthOk(handle, 4000, healthStop.signal).then((ok) => Object.assign(check, { done: true, ok }));
+    }
+    if (health && health.done) {
+      const { ok } = health;
+      health = null;
+      if (ok) healthMisses = 0;
       else if (++healthMisses >= 3) {
         print(serverGone(sid));
         process.exitCode = 20;
         return;
       } else healthAt = Date.now() - 3000; // look again in about 2s, not 5s
     }
-    sleepSync(50);
+    await new Promise((r) => setTimeout(r, 50));
   }
 
   const state = readJson(path.join(dir, "state.json")) || {};
-  const items = (state.items || []).filter((i) => i.required !== false);
+  const items = (state.items || []).filter((i) => i.required !== false && i.kind !== "notice");
   const answered = items.filter((i) => !isOpen(i)).length;
   const draft = readJson(path.join(dir, "draft.json"), {});
   const staged = Object.keys(draft.staged || {}).length;
@@ -770,13 +932,13 @@ async function cmdWait() {
     url: handle ? handle.url : "",
     message: "Waiting on your answer in the web console",
     next: "NOT FINISHED, do not end your turn or write a summary: relay the message in one line, then run this same wait command again right now. Repeat until the exit code is not 10.",
-    pendingChat: 0,
     ...unansweredNote(dir, state),
     // A workspace change alone never ends a slice: it rides on the next send.
     pendingWorkspace: pendingWorkspaceChanges(dir).length,
     ...(handle && handle.url ? { terminalLine: terminalLine(handle.url) } : {}),
   });
   process.exitCode = 10;
+  }
 }
 
 // Quick questions already handed over with no reply yet. Always empty when all are answered.
@@ -791,7 +953,7 @@ function serverGone(sid) {
   return {
     status: "server-gone",
     sid,
-    message: "The console server is not running. Start it again with `open --resume <sid> --no-open`, then keep waiting: at a finished screen too, since the person's Ask messages and the dashboard button still need you.",
+    message: "The console server is not running. Start it again with `open --resume <sid> --workflow <yours>` (it gets a new link: give it to the person; without --no-open the browser opens it), then keep waiting: at a finished screen too, since the person's Ask messages and the dashboard button still need you.",
   };
 }
 
@@ -895,7 +1057,7 @@ function advanceCursor(dir, entries) {
 async function cmdChat() {
   const dir = mustSession();
   const sid = path.basename(dir);
-  const handle = listHandles(projectRoot()).find((h) => h.sid === sid);
+  const handle = listHandles(sessionProject(dir)).find((h) => h.sid === sid);
   if (!handle || !pidAlive(handle.pid) || !(await healthOk(handle))) {
     print(serverGone(sid));
     process.exitCode = 20;
@@ -940,16 +1102,82 @@ function consume(dir, resultPath, result, url, chat = []) {
   if (chat.length) withChat.reply = [collected.reply, chatReplyLines(chat)].filter(Boolean).join("\n");
   const [withWs, changes] = withWorkspace(dir, withChat);
   const [out, subCursor] = withSubagents(dir, withWs);
-  print(url ? { ...out, terminalLine: terminalLine(url) } : out);
+  const hop = hopFor(path.basename(dir), result);
+  print({ ...out, ...hop, ...(url ? { terminalLine: terminalLine(url) } : {}) });
   try {
     writeJsonAtomic(resultPath, collected);
   } catch {}
+  markWorking(dir, result);
   appendEvent(dir, { type: "consume", kind: result.type });
   ledgerAnswers(dir, result);
   advanceCursor(dir, chat);
   advanceWorkspace(dir, changes);
   advanceSubagents(dir, subCursor);
   process.exitCode = result.type === "cancel" ? 30 : 0;
+}
+
+// A collected send is the agent's turn: the page says so at once, without the
+// agent spending a whole post on "working" before it starts. The activity
+// line belonged to the last stretch of work, so it goes; quietMinutes stays,
+// since the page only counts it while working. Never fatal.
+// The send is no longer waiting to be picked up either, so the phase the
+// server set on it goes back to collecting (status and post report it).
+function markWorking(dir, result) {
+  if (!result) return;
+  try {
+    updateState(dir, (s) => {
+      if (!s) return null;
+      if (result.type !== "submit") return s.phase === "submitted" ? { ...s, phase: "collecting" } : null;
+      // The cards this send carried, so `settle: true` settles what the agent
+      // was handed and never a later send still waiting to be collected.
+      const ids = [...new Set((result.actions || []).filter((a) => a && (a.type === "answer" || a.type === "skip") && typeof a.i === "string" && !a.i.startsWith("__")).map((a) => a.i))];
+      return applyPatch({ ...s, phase: "collecting", collected: { at: result.consumedAt || nowIso(), ids } }, { agent: { status: "working", activity: null } });
+    });
+  } catch {}
+}
+
+// Waiting on an open question (or a finished screen's buttons) is the
+// person's turn, whatever the last post said: an agent that replied to a note
+// and went back to `wait` without restating its status left the page on
+// "working" with nobody working. With nothing open it stays as it is: an
+// agent waiting out its research subagents is still working. Only a change
+// is written.
+function markWaiting(dir) {
+  try {
+    updateState(dir, (s) => {
+      if (!s || !s.agent || s.agent.status !== "working") return null;
+      // The dashboard's menu and the git board are the page's own, and theirs
+      // to click whenever the agent is waiting.
+      const theirTurn =
+        s.finish || s.workflow === "dashboard" || s.workflow === "git" || (s.items || []).some((i) => isOpen(i) && i.kind !== "notice");
+      return theirTurn ? applyPatch(s, { agent: { status: "waiting" } }) : null;
+    });
+  } catch {}
+}
+
+// The session hops a send can ask for, each with the one command that makes
+// it and the skill file to follow after, so the agent copies instead of
+// assembling `open --resume …` from the action's fields.
+const HOP_ACTIONS = {
+  launch: (a) => ({ workflow: a.workflow, spec: a.spec, skill: a.skill }),
+  dashboard: () => ({ workflow: "dashboard", skill: "plan2code" }),
+  commit: () => ({ workflow: "git", skill: "plan2code-git" }),
+};
+
+function hopFor(sid, result) {
+  const actions = (result && Array.isArray(result.actions) && result.actions) || [];
+  const action = actions.find((a) => a && Object.hasOwn(HOP_ACTIONS, a.type) && typeof a.i === "string" && a.i.startsWith("__"));
+  if (!action) return {};
+  const { workflow, spec, skill } = HOP_ACTIONS[action.type](action);
+  if (typeof workflow !== "string" || !/^[a-z-]+$/.test(workflow)) return {};
+  const quote = (v) => (/[\s"]/.test(v) ? `"${v.replace(/"/g, '\\"')}"` : v);
+  const specArg = typeof spec === "string" && spec ? ` --spec ${quote(spec)}` : "";
+  const out = { resume: `node "${path.join(HERE, "console.mjs")}" open --resume ${sid} --no-open --workflow ${workflow}${specArg}` };
+  if (typeof skill === "string" && /^[a-z0-9-]+$/.test(skill)) {
+    const file = path.resolve(HERE, "..", "..", "..", skill, "SKILL.md");
+    if (fs.existsSync(file)) out.skillFile = file;
+  }
+  return out;
 }
 
 // One `answer` ledger line per item the person answered in this send, for
@@ -984,7 +1212,20 @@ function cmdKeep() {
   const project = state.project;
 
   const upload = path.resolve(args.upload);
-  if (!inside(path.join(dir, "uploads"), upload)) die("upload is not in this session's uploads folder", 3);
+  // Compared as real paths: Windows hands the same folder out both long
+  // (C:\Users\Justin.Parker) and 8.3 (C:\Users\JUSTIN~1.PAR), and the reply's
+  // path need not be spelled the way this session's directory is.
+  // A path that does not exist (yet) resolves through its nearest real parent,
+  // so a missing upload still reads as missing, not as somewhere else.
+  const real = (p) => {
+    try {
+      return fs.realpathSync.native(p);
+    } catch {
+      const parent = path.dirname(path.resolve(p));
+      return parent === path.resolve(p) ? path.resolve(p) : path.join(real(parent), path.basename(p));
+    }
+  };
+  if (!inside(real(path.join(dir, "uploads")), real(upload))) die("upload is not in this session's uploads folder", 3);
   const spec = path.resolve(project, args.spec);
   const attachments = path.join(spec, "attachments");
   if (!inside(project, spec) || !inside(fs.realpathSync(project), realNearest(attachments))) {
@@ -992,7 +1233,23 @@ function cmdKeep() {
   }
   if (!fs.existsSync(upload) || !fs.statSync(upload).isFile()) die("no such upload", 3);
 
-  const file = attachmentName({ upload, name: args.name });
+  // The file the link is written for has to be in the project too, or the
+  // relative link would point out of it.
+  if (typeof args.from === "string" && !inside(project, path.resolve(project, args.from))) {
+    die("--from is outside the project", 3);
+  }
+
+  // One upload, one copy: kept again under another name, the copy it already
+  // has (named for the same upload id) is the one reused.
+  // Named from the real path: an 8.3 spelling (7CF881~1.JPG) would name the
+  // copy after the short form and miss the copy this upload already has.
+  const named = attachmentName({ upload: real(upload), name: args.name });
+  const suffix = named.slice(named.lastIndexOf("-"));
+  let existing = null;
+  try {
+    existing = fs.readdirSync(attachments).find((f) => f.endsWith(suffix));
+  } catch {}
+  const file = existing || named;
   const target = path.join(attachments, file);
   fs.mkdirSync(attachments, { recursive: true });
   let reused = false;
@@ -1047,6 +1304,8 @@ function cmdForget() {
 /* ----------------------------------------------------------------- help */
 
 function cmdHelp() {
+  const topic = args._[0];
+  if (topic !== undefined) return helpTopic(String(topic));
   process.stdout.write(`console.mjs — the Plan2Code web console. A detached server, a loopback
 port, and the filesystem as transport; this CLI is the whole agent surface.
 
@@ -1064,15 +1323,21 @@ port, and the filesystem as transport; this CLI is the whole agent surface.
           May also print subagents: { state, revision, max, instruction } and
           a reply holding only its "Subagents: ..." lines, when a standing
           instruction (the page's Subagents switch) is owed to you.
-  post    --session <sid> --file <patch.json>
+  post    --session <sid> --file <patch.json | -> [--wait <N>]
           Merge a patch into the session. Prints terminalLine while the
-          server is live. Exit 3 = rejected; stderr says why. A patch may
+          server is live. Exit 3 = rejected; stderr says why. --wait <N>
+          then waits up to N seconds in the same command (two JSON lines;
+          the exit code is the wait's). The patch may carry settle: true
+          (or a list of item ids) to mark the latest send's cards answered
+          with what was sent; doc blocks may carry file: "<path>" (and
+          select: "tasks"), read from the project, and a doc refresh: true
+          re-reads them. A doc's version moves up by itself. A patch may
           carry run: { event, id, tasks? } (session meter points) and folderIssue:
           { name, reason, hint? } (a workspace folder you could not read);
           both go to the ledger, never into the state. A patch may also
           carry helpers: [{ id, title, ask, state, result? }] or one
           { id: "alone", alone: true }, merged by id, for the Subagents tab
-          (see console.md → Standing instructions).
+          (help subagents).
   wait    --session <sid> [--seconds <N>]
           A bounded wait slice, sized below your shell timeout. Exit 0 = the
           result is on stdout, 10 = still waiting ("Waiting on your answer
@@ -1085,7 +1350,11 @@ port, and the filesystem as transport; this CLI is the whole agent surface.
           pendingWorkspace, and a change alone never ends a slice.
           Exit 0 may also carry "subagents" (a console setting, not typed
           by the person, with its "Subagents: ..." lines last in reply); a
-          setting change alone never ends a slice either.
+          setting change alone never ends a slice either. A hop
+          (__launch, __dashboard, __commit) carries resume, the exact
+          open --resume command, and skillFile when installed. Collecting
+          a send sets the page to working; a wait with a question open
+          hands the turn back.
   chat    --session <sid>
           Collect Quick questions, workspace changes and a Subagents
           setting change now, never waiting, never touching card sends.
@@ -1102,21 +1371,57 @@ port, and the filesystem as transport; this CLI is the whole agent surface.
           folder (Finalize, after archiving it). Prints { ok, spec, forgot };
           forgot is false when nothing was saved. Exit 2 = bad usage.
   status  [--session <sid>] [--all]
-          One session, or every session belonging to this project.
+          One session, or (--all) every session on this machine, every project.
   stop    --session <sid> | --all
           Shut a session's server down. Always post finish first.
 
   workflows: dashboard · init · init-update · pathfinder · quick-task · plan ·
              revise-plan · document · implement · implement-review · review ·
-             finalize · handoff · git-commit · changelog
+             finalize · handoff · git · changelog
 
   A session handed to you by the dashboard (a --session id): resume it with
-  "open --resume <sid> --no-open --workflow <yours> --title <t>" -- never a
+  "open --resume <sid> --no-open --workflow <yours>" (the resume it carries) -- never a
   fresh "open", which would strand the page the person is watching.
 
-  The full contract is console.md beside this file. Build sessions
-  (implement, implement-review, quick-task) also read building.md.
+  The contract is console.md beside this file, read once; the rest is
+  read when its moment comes. help <topic> prints one; help topics lists
+  them. Build sessions (implement, implement-review, quick-task) also read
+  building.md.
 `);
+}
+
+// The contract's topic files, by the name console.md's index gives them.
+// Printing one saves an agent the path hunt: it already runs this CLI.
+const HELP_TOPICS = {
+  console: "console.md",
+  building: "building.md",
+  "building-review": "building-review.md",
+  finish: "console-finish.md",
+  stop: "console-stop.md",
+  attachments: "console-attachments.md",
+  chat: "console-chat.md",
+  workspace: "console-workspace.md",
+  subagents: "console-subagents.md",
+  launches: "console-launches.md",
+  dashboard: "console-launches.md",
+  meter: "console-meter.md",
+  trouble: "console-trouble.md",
+};
+for (const f of fs.existsSync(path.join(HERE, "notes")) ? fs.readdirSync(path.join(HERE, "notes")) : []) {
+  if (f.endsWith(".md")) HELP_TOPICS[f.slice(0, -3)] ??= `notes/${f}`;
+}
+HELP_TOPICS["init-update"] ??= HELP_TOPICS.init;
+HELP_TOPICS["implement-review"] ??= HELP_TOPICS.implement;
+
+function helpTopic(topic) {
+  const names = Object.keys(HELP_TOPICS).sort();
+  if (topic === "topics") {
+    print({ topics: Object.fromEntries(names.map((n) => [n, HELP_TOPICS[n]])) });
+    return;
+  }
+  const file = Object.hasOwn(HELP_TOPICS, topic) ? HELP_TOPICS[topic] : null;
+  if (!file) die(`no help topic "${topic}". Topics: ${names.join(", ")}`, 2);
+  process.stdout.write(fs.readFileSync(path.join(HERE, file), "utf8"));
 }
 
 /* --------------------------------------------------------------- status */
@@ -1126,7 +1431,7 @@ async function cmdStatus() {
   if (args.session || args.sid) {
     const dir = mustSession();
     const state = readJson(path.join(dir, "state.json")) || {};
-    const handle = listHandles(project).find((h) => h.sid === path.basename(dir));
+    const handle = listHandles(sessionProject(dir)).find((h) => h.sid === path.basename(dir));
     const result = readJson(path.join(dir, "result.json"));
     return print({
       sid: state.sid,
@@ -1176,7 +1481,10 @@ async function cmdStatus() {
 /* ----------------------------------------------------------------- stop */
 
 async function cmdStop() {
-  const project = projectRoot();
+  // --all is this folder's sessions; one named session is found wherever
+  // the command runs from.
+  const named = !args.all && (args.session || args.sid) ? sessionDir(path.basename(args.session || args.sid)) : null;
+  const project = named && fs.existsSync(named) ? sessionProject(named) : projectRoot();
   const handles = listHandles(project);
   const targets = args.all
     ? handles
@@ -1222,6 +1530,14 @@ function mustSession() {
   const dir = fs.existsSync(raw) ? path.resolve(raw) : sessionDir(path.basename(raw));
   if (!fs.existsSync(dir)) die(`no session at ${dir}`, 1);
   return dir;
+}
+
+// The project a session belongs to, from its own state: a command run from
+// another folder (an agent whose shell moved) still finds the session's
+// server, rather than reporting it gone and starting a second one.
+function sessionProject(dir) {
+  const state = readJson(path.join(dir, "state.json"));
+  return (state && typeof state.project === "string" && state.project) || projectRoot();
 }
 
 function tail(file, lines) {
@@ -1339,7 +1655,7 @@ if (Number.isFinite(nodeMajor) && nodeMajor < 18) {
 
 if (!cmd || !Object.hasOwn(COMMANDS, cmd)) {
   process.stderr.write(
-    "console: usage: console.mjs <open|post|wait|chat|keep|status|stop|help> [--session <id>] [--file <patch.json>] [--seconds N]\n"
+    "console: usage: console.mjs <open|post|wait|chat|keep|forget|status|stop|help> [--session <id>] [--file <patch.json>] [--seconds N]\n"
   );
   process.exit(2);
 }
