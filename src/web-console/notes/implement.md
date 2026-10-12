@@ -139,6 +139,31 @@ own (`building-review.md`).
 
 ---
 
+## Manual check-off (`next.action` is `checkoff`)
+
+No phase to build: the open tasks under approved phases are asked about one
+at a time, one `confirm` item each, posted with `--wait`:
+
+```jsonc
+{
+  "headline": { "stage": "Manual check-off", "cleared": 0, "total": 2 },
+  "items": [{
+    "id": "checkoff-3.4", "kind": "confirm", "title": "Task 3.4",
+    "body": "**Configure the SSO app in Okta**\n\nBLOCKED: needs admin access. User action: create the app and paste its client id into `.env`.\n\nIs this done?",
+    "yesLabel": "Done, check it off", "noLabel": "Not yet"
+  }]
+}
+```
+
+`yes` → `specs.mjs tick`, then `"headline": { "cleared": N }` with the next
+item. When the last one is answered, post the finish: `command` is
+`/plan2code-4-finalize specs/<feature>/overview.md` when `tick` said
+`remaining` is empty, otherwise the same `/plan2code-3-implement` command,
+and `body` lists what is still open. No `run` (nothing was built), no
+`commit` unless a body prints one.
+
+---
+
 ## Implement + Review (`implement-review`)
 
 The same build, then Stage 2 publishes the findings exactly as

@@ -152,8 +152,46 @@ test("specs status: the implement selection table", () => {
   assert.ok(next("x", "x", "/", "/").warning, "all options already [/] warns about duplicated work");
   assert.equal(next("x", " ", " ", " ").action, "auto-start");
   assert.equal(next("x", "x", "x", " ").action, "auto-start");
-  assert.equal(next("x", "x", "x", "x").action, "none");
-  assert.equal(next("x", "x", "x", "x").reason, "every phase is complete");
+  assert.equal(next("x", "x", "x", "x").action, "checkoff", "approved phases with open tasks are not finished");
+  assert.deepEqual(next("x", "x", "x", "x").tasks.map((t) => t.id), ["2.2", "3.1", "3.2", "3.2a", "3.4", "4.1"]);
+});
+
+test("specs: open tasks under approved phases are a checkoff, and tick checks them off one at a time", () => {
+  const root = specFixture();
+  write(root, "specs/lunch-vote/overview.md", OVERVIEW.replace(/- \[[ /]\] /g, "- [x] "));
+  write(root, "specs/lunch-vote/phase-2.md", phase(2, "Complete", [["x", "2.1"], ["x", "2.2"]]));
+  write(root, "specs/lunch-vote/phase-3.md", phase(3, "Complete", [["x", "3.1"], ["x", "3.2"], ["x", "3.3"]]));
+  write(
+    root,
+    "specs/lunch-vote/phase-4.md",
+    phase(4, "Complete", [["!", "4.1"], [" ", "4.2"], ["x", "4.3"]]).replace("**Task 4.1:** Do 4.1", "**Task 4.1:** Create the Okta app\n  > BLOCKED: needs admin. User action: create it.\n")
+  );
+  const S = (...a) => runScript("plan2code-3-implement", "specs.mjs", [...a, "--root", root]);
+  const j = S("status", "lunch-vote").json;
+  assert.equal(j.next.action, "checkoff");
+  assert.match(j.next.reason, /2 tasks are still open/);
+  assert.deepEqual(j.next.tasks.map((t) => [t.id, t.marker]), [["4.1", "[!]"], ["4.2", "[ ]"]]);
+  assert.equal(j.next.tasks[0].text, "Create the Okta app");
+  assert.match(j.next.tasks[0].detail, /User action: create it/);
+  assert.equal(S("list").json.specs.find((s) => s.name === "lunch-vote").state, "building", "the dashboard agrees: not built yet");
+
+  assert.equal(S("tick", "lunch-vote", "--task", "4.1", "--dry-run").json.changed, true);
+  assert.match(read(root, "specs/lunch-vote/phase-4.md"), /- \[!\] \*\*Task 4\.1/, "dry-run writes nothing");
+  const one = S("tick", "lunch-vote", "--task", "4.1");
+  assert.equal(one.code, 0, one.stderr);
+  assert.deepEqual(one.json.remaining, ["4.2"]);
+  assert.equal(one.json.next, "checkoff");
+  const text = read(root, "specs/lunch-vote/phase-4.md");
+  assert.match(text, /- \[x\] \*\*Task 4\.1:\*\* Create the Okta app\n  > BLOCKED: needs admin\. User action: create it\.\n  > Confirmed done by the user on \d{4}-\d{2}-\d{2}\.\n/);
+  assert.equal(S("tick", "lunch-vote", "--task", "4.1").json.changed, false, "ticking a done task is a no-op");
+  const last = S("tick", "lunch-vote", "--task", "4.2");
+  assert.deepEqual(last.json.remaining, []);
+  assert.equal(last.json.next, "none");
+  assert.equal(S("status", "lunch-vote").json.next.reason, "every phase is complete");
+  assert.equal(S("list").json.specs.find((s) => s.name === "lunch-vote").state, "built", "Finalize lights up on the dashboard");
+
+  assert.equal(S("tick", "lunch-vote", "--task", "4.9").code, 3);
+  assert.equal(S("tick", "lunch-vote", "--task", "nope").code, 2);
 });
 
 test("specs status: drift between the checklist and the phase files is an error", () => {
@@ -397,7 +435,7 @@ test("specs: group ranges expand, chains are not parallel, [?] phases count as d
   assert.deepEqual(runScript("plan2code-3-implement", "specs.mjs", ["status", "lunch-vote", "--root", root]).json.parallelGroups, []);
   write(root, "specs/lunch-vote/overview.md", OVERVIEW.replace("- [/] [Phase 2", "- [?] [Phase 2").replace("- [ ] **Phase 3", "- [?] **Phase 3").replace("- [ ] [Phase 4", "- [?] [Phase 4"));
   const done = runScript("plan2code-3-implement", "specs.mjs", ["status", "lunch-vote", "--root", root]).json;
-  assert.equal(done.next.reason, "every phase is complete");
+  assert.equal(done.next.action, "checkoff", "[?] phases count as done; their open tasks still need checking off");
   assert.deepEqual(done.pending, []);
   write(root, "specs/lunch-vote/overview.md", OVERVIEW.replace("- [/] [Phase 2", "- [!] [Phase 2"));
   const skip = runScript("plan2code-3-implement", "specs.mjs", ["status", "lunch-vote", "--root", root]).json.next;
