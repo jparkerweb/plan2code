@@ -6,7 +6,8 @@
 // a spec's PLAN-DRAFT says, which phases are open, how many tasks are done.
 // Those have one correct answer, so this script computes them instead of each
 // prompt re-deriving them by hand. It also performs the two mechanical writes
-// (a Phase Checklist marker, the archive move), with --dry-run.
+// (a Phase Checklist marker, a task the user confirmed, the archive move),
+// with --dry-run.
 //
 // Shell listing only matters to people: specs/ is gitignored, so editor search
 // tools skip it. This script reads the disk directly and does not care.
@@ -26,7 +27,8 @@ specs.mjs: spec state for the Plan2Code pipeline skills. JSON on stdout.
   node specs.mjs status <spec> [--root <dir>]
       One spec in full: the overview's Phase Checklist, Parallel Execution
       Groups, per-phase task counts by marker, task-numbering problems,
-      completion, the implement phase-selection verdict ("next"), the pending
+      completion, the implement phase-selection verdict ("next": choose,
+      ask-resume, auto-start, checkoff or none), the pending
       phases, and consistency checks. <spec> is specs/<name>, <name>, or a path
       to its overview.md.
 
@@ -48,6 +50,13 @@ specs.mjs: spec state for the Plan2Code pipeline skills. JSON on stdout.
       Complete phase sets it to In Progress. Warns when the phase file has no
       Status line. Refuses a phase with duplicate checklist rows, and refuses
       in-progress -> open (started work stays marked).
+
+  node specs.mjs tick <spec> --task <N.M> [--dry-run]
+      Check off one task the user confirmed is done: its marker becomes [x]
+      and a "> Confirmed done by the user on <date>." line goes under it.
+      Prints the tasks still open under approved phases ("remaining") and the
+      new phase-selection verdict ("next"). For the manual steps that
+      status's "checkoff" verdict lists.
 
   node specs.mjs archive <spec> [--dry-run]
       Move specs/<name>/ to specs--completed/<name>/. Refuses if the target
@@ -206,6 +215,21 @@ function firstSentence(text) {
   return (m ? m[1] : t).slice(0, 240);
 }
 
+// The lines under a task (its file path, notes, a BLOCKED / User action
+// blockquote), up to the next heading or checkbox: what a person needs to
+// judge whether a task they are asked about is done. taskBody is the index
+// just past its last non-blank line.
+function taskBody(lines, i) {
+  let end = i + 1;
+  while (end < lines.length && !/^#{1,6}\s/.test(lines[end]) && !CHECKBOX_RE.test(lines[end])) end++;
+  while (end > i + 1 && !lines[end - 1].trim()) end--;
+  return end;
+}
+
+function taskDetail(lines, i) {
+  return lines.slice(i + 1, taskBody(lines, i)).map((l) => l.trim()).filter(Boolean).join("\n").slice(0, 800);
+}
+
 function parsePhaseFile(file, number) {
   const text = readText(file) || "";
   const lines = text.split(/\r?\n/);
@@ -224,7 +248,8 @@ function parsePhaseFile(file, number) {
       const state = MARKERS[t[1]] || "unknown";
       counts[state]++;
       const named = !/^\d+$/.test(t[3]);
-      tasks.push({ id: `${t[2]}.${t[3]}${t[4]}`, phase: Number(t[2]), seq: named ? null : Number(t[3]), named, suffix: t[4], marker: t[1], state, line: i + 1 });
+      const said = plainText(line.slice(t[0].length)).replace(/^:\s*/, "").slice(0, 240);
+      tasks.push({ id: `${t[2]}.${t[3]}${t[4]}`, phase: Number(t[2]), seq: named ? null : Number(t[3]), named, suffix: t[4], marker: t[1], state, line: i + 1, text: said, detail: taskDetail(lines, i) });
       return;
     }
     // A line that looks like a task but is not counted as one (Task 1.4A,
@@ -306,6 +331,10 @@ function specStatus(spec) {
   }
 
   const phases = [];
+  // Tasks still open under a phase the user already approved: the manual
+  // steps an agent could not do (blocked [!]) or left unticked. Nothing is left
+  // to build, but the spec is not built until someone checks them off.
+  const leftovers = [];
   const numbers = new Set([...checklist.phases.map((p) => p.number), ...files.keys()]);
   for (const number of [...numbers].sort((a, b) => a - b)) {
     const row = checklist.phases.find((p) => p.number === number) || null;
@@ -339,6 +368,11 @@ function specStatus(spec) {
       }
       const done = parsed.counts.complete + parsed.counts.assumed;
       const rowDone = row && (row.state === "complete" || row.state === "assumed");
+      if (rowDone) {
+        for (const t of parsed.tasks.filter((t) => ["pending", "in-progress", "blocked", "unknown"].includes(t.state))) {
+          leftovers.push({ phase: number, id: t.id, marker: `[${t.marker}]`, state: t.state, file: `${spec.rel}/${file}`, line: t.line, text: t.text, detail: t.detail });
+        }
+      }
       // A phase may be approved with blocked [!] tasks left (Implementation
       // Mode's self-review allows "[x] or blocked [!]"); only unfinished work is an error.
       if (rowDone && parsed.unfinished > 0) {
@@ -382,7 +416,7 @@ function specStatus(spec) {
     totals: { ...totals, completed, incomplete: totals.pending + totals["in-progress"] + totals.unknown },
     completion: completion === null ? null : Number(completion.toFixed(4)),
     completionPercent: completion === null ? null : Math.round(completion * 100),
-    next: nextPhase(phases, groups.groups, checklist.found),
+    next: nextPhase(phases, groups.groups, checklist.found, leftovers),
     pending: phases
       .filter((p) => p.checklist && p.checklist !== "complete" && p.checklist !== "assumed")
       .map((p) => ({ number: p.number, name: p.name, state: p.checklist, tasks: p.tasks ? p.tasks.total : null, open: p.tasks ? p.tasks.open : null, goal: p.goal })),
@@ -393,14 +427,24 @@ function specStatus(spec) {
 /**
  * Implementation Mode's phase-selection table, applied mechanically.
  *   2+ workable phases in the same parallel group, consecutive -> choose (warn if all [/])
- *   a single [/] -> ask-resume · a single [ ] -> auto-start · nothing workable -> none
+ *   a single [/] -> ask-resume · a single [ ] -> auto-start
+ *   nothing workable, every phase approved, tasks still open in them -> checkoff
+ *   nothing workable otherwise -> none
  */
-function nextPhase(phases, groups, haveChecklist) {
+function nextPhase(phases, groups, haveChecklist, leftovers = []) {
   if (!haveChecklist) return { action: "none", reason: "no Phase Checklist in overview.md" };
   const ordered = phases.filter((p) => p.checklist);
   const isDone = (p) => p.checklist === "complete" || p.checklist === "assumed";
   const workable = ordered.filter((p) => p.checklist === "pending" || p.checklist === "in-progress");
   if (!workable.length) {
+    if (ordered.length && ordered.every(isDone) && leftovers.length) {
+      const n = leftovers.length;
+      return {
+        action: "checkoff",
+        reason: `every phase is approved, but ${n} task${n === 1 ? " is" : "s are"} still open in them (${leftovers.map((t) => t.id).join(", ")}); the spec is not built until ${n === 1 ? "it is" : "they are"} checked off`,
+        tasks: leftovers,
+      };
+    }
     return { action: "none", reason: ordered.length && ordered.every(isDone) ? "every phase is complete" : "no [ ] or [/] phase in the Phase Checklist" };
   }
   const first = workable[0];
@@ -611,6 +655,47 @@ async function cmdMark(args) {
   });
 }
 
+// Check off one task the user confirmed is done (a manual step left open under
+// an approved phase). The marker changes, and one line under the task says who
+// confirmed it, so the file never claims the agent verified it.
+async function cmdTick(args) {
+  const root = path.resolve(args.root || ".");
+  const spec = resolveSpec(root, args._[1]);
+  const id = String(args.task || "");
+  const m = id.match(/^(\d+)\.(\d+|[A-Za-z]+)([a-z]*)$/);
+  if (!m) fail(EXIT.USAGE, "bad-task", "--task needs a task id.", "Example: --task 2.3");
+  const number = Number(m[1]);
+  const file = phaseFiles(spec.dir).get(number);
+  if (!file) fail(EXIT.NOT_FOUND, "no-phase-file", `${spec.rel} has no phase-${number}.md.`, "Run `specs.mjs status` to see the phases.");
+  const phasePath = path.join(spec.dir, file);
+  const text = readText(phasePath) || "";
+  const hits = parsePhaseFile(phasePath, number).tasks.filter((t) => t.id === id);
+  if (!hits.length) fail(EXIT.NOT_FOUND, "no-task", `${file} has no Task ${id}.`, "Use an id from `specs.mjs status` (next.tasks).");
+  if (hits.length > 1) fail(EXIT.REFUSED, "duplicate-task", `Task ${id} appears ${hits.length} times in ${file} (lines ${hits.map((t) => t.line).join(", ")}); ticking one would be a guess.`, "Renumber the duplicate, then rerun.");
+  const task = hits[0];
+  const changes = [];
+  if (task.state !== "complete") {
+    const lines = text.split(/\r?\n/);
+    const idx = task.line - 1;
+    lines[idx] = lines[idx].replace(/\[(.)\]/, "[x]");
+    const indent = `${(lines[idx].match(/^\s*/) || [""])[0]}  `;
+    lines.splice(taskBody(lines, idx), 0, `${indent}> Confirmed done by the user on ${isoDate()}.`);
+    changes.push({ file: `${spec.rel}/${file}`, line: task.line, from: `[${task.marker}]`, to: "[x]" });
+    if (!args["dry-run"]) fs.writeFileSync(phasePath, lines.join(eol(text)));
+  }
+  const after = args["dry-run"] ? null : specStatus(spec);
+  out({
+    ok: true,
+    spec: spec.rel,
+    task: id,
+    phase: number,
+    dryRun: !!args["dry-run"],
+    changed: changes.length > 0,
+    changes,
+    ...(after ? { remaining: after.next.action === "checkoff" ? after.next.tasks.map((t) => t.id) : [], next: after.next.action } : {}),
+  });
+}
+
 function listRel(dir, base = dir) {
   const outList = [];
   for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -668,9 +753,9 @@ async function cmdArchive(args) {
 }
 
 run(USAGE, async (argv) => {
-  const args = parseArgs(argv, { booleans: ["dry-run"], values: ["root", "step", "phase", "to"], lists: ["set"] });
+  const args = parseArgs(argv, { booleans: ["dry-run"], values: ["root", "step", "phase", "to", "task"], lists: ["set"] });
   const cmd = args._[0];
-  const commands = { list: cmdList, status: cmdStatus, metrics: cmdMetrics, mark: cmdMark, archive: cmdArchive };
-  if (!commands[cmd]) fail(EXIT.USAGE, "unknown-command", cmd ? `Unknown command "${cmd}".` : "No command given.", "Commands: list, status, metrics, mark, archive. Run with --help.");
+  const commands = { list: cmdList, status: cmdStatus, metrics: cmdMetrics, mark: cmdMark, tick: cmdTick, archive: cmdArchive };
+  if (!commands[cmd]) fail(EXIT.USAGE, "unknown-command", cmd ? `Unknown command "${cmd}".` : "No command given.", "Commands: list, status, metrics, mark, tick, archive. Run with --help.");
   await commands[cmd](args);
 });

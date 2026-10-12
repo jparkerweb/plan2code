@@ -2,6 +2,12 @@
 
 All notable changes to Plan2Code will be documented in this file.
 
+## v2.7.1
+
+### 🐛 Fixed
+
+- **implement**: Implement no longer says there is nothing left to do while the dashboard keeps Finalize greyed out. When every phase is approved but tasks under them are still open (usually manual steps an agent could not do, left blocked `[!]` with a "User action"), `specs.mjs status` now returns a `checkoff` verdict listing them, and Implement asks about each one in turn: "Is this done?" in the terminal, or a **Done, check it off** / **Not yet** card in the web console. A yes runs the new `specs.mjs tick <spec> --task <id>`, which marks the task `[x]` and adds a "Confirmed done by the user on <date>" line under it. Once nothing is left open, Implement points to `/plan2code-4-finalize` and the dashboard shows the spec as ready to finalize.
+
 ## v2.7.0
 
 ### ✨ Added

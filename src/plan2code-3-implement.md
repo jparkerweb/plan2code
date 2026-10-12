@@ -72,9 +72,21 @@ Never reset `[/]` to `[ ]`. Started work stays marked for conscious resume decis
 | `choose` | Show a selection prompt listing each of `options` with its status. TIP: run another agent on a different phase simultaneously. Relay `warning` (all already `[/]`: duplicated work) when present. |
 | `ask-resume` | Prompt: "Phase X is in progress. Resume? (yes/no)" Relay `warning` when present. |
 | `auto-start` | Mark it `[/]` and begin. Relay `warning` when present. |
+| `checkoff` | Every phase is approved but tasks in them are still open (manual steps, blockers). Never say "nothing left to do": run Manual Check-Off below. |
 | `none` | Nothing to implement: say why (`reason`). Every phase complete → `/plan2code-4-finalize --web` |
 
 After selection, `mark --to in-progress`, read `phase-X.md`, begin.
+
+### Manual Check-Off
+
+`next.tasks` lists each open task (`id`, `marker`, `text`, `detail` with any BLOCKED / User action note). The spec is not built, and Finalize stays unavailable on the dashboard, until each is `[x]`. Say so in one line, then ask about them **one at a time**, in order:
+
+1. Show the task: id, `text`, and what `detail` says the person must do or check.
+2. Ask: "Is this done? (yes / not yet)". Console: a `confirm` item (`yesLabel` "Done, check it off", `noLabel` "Not yet"), posted with `--wait`, a new id per task.
+3. Yes → `node "<S>/specs.mjs" tick <spec> --task <id>` (writes `[x]` and a "Confirmed done by the user" line). Not yet → leave it as it stands. A note asking for help: help, then ask again.
+4. Next task.
+
+After the last one: `tick`'s `remaining` empty (`next` is `none`) → "NEXT STEP: Start NEW conversation and run: `/plan2code-4-finalize --web`". Otherwise list what is still open, say Finalize opens once they are checked off, and that rerunning Implement asks again. Never tick a task the person did not confirm.
 
 ## Code Consistency Rules
 
