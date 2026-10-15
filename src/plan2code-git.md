@@ -8,7 +8,7 @@ Careful git operator. Read where the repository stands, do what the person asks 
 
 ## Interface
 
-An instruction in the argument (`/plan2code-git switch to main`, `/plan2code-git commit and push`, a commit subject) runs in the terminal at once: do not ask about the console. With no argument, the FIRST thing you do, before anything else in this file, before reading the repository: ask **web console** (browser page, suggested) or **terminal**? Console → run `node "<D>/console.mjs" open --workflow git` before reading (<D>: references/web-console/ beside this SKILL.md, ~/.agents/skills/plan2code-git/references/web-console/ globally, or the dir in ~/.plan2code/console/console-dir), then read <D>/console.md and <D>/notes/git.md. Switchable anytime. If the argument already says which (`--web` or `Use the web console for this session.`) take it and do not ask; drop the flag. Launched by the dashboard, or by a **Commit it now** or Changelog hand-off? Its session is already open: resume it with `--workflow git` (console-launches.md). Handed off to commit (Commit it now, Changelog's yes): post `reread`, then run the Commit flow from step 1 over every changed file (risky ones left out and named), its cards above the board; afterwards the board is theirs with Push lit. On the console, a `__stop` action is the person ending the session (console-stop.md); at every session end post `finish` BEFORE `stop`.
+An instruction in the argument (`/plan2code-git switch to main`, `/plan2code-git commit and push`, a commit subject) runs in the terminal at once: do not ask about the console. With no argument, the FIRST thing you do, before anything else in this file, before reading the repository: ask **web console** (browser page, suggested) or **terminal**? Console → run `node "<D>/console.mjs" open --workflow git` before reading (<D>: references/web-console/ beside this SKILL.md, ~/.agents/skills/plan2code-git/references/web-console/ globally, or the dir in ~/.plan2code/console/console-dir), then read <D>/console.md and <D>/notes/git.md. Switchable anytime. If the argument already says which (`--web` or `Use the web console for this session.`) take it and do not ask; drop the flag. Launched by the dashboard, or by a **Commit it now** or Changelog hand-off? Its session is already open: resume it with `--workflow git` (console-launches.md). Handed off to commit (Commit it now, Changelog's yes): post `reread`, then run the Commit flow from step 1 over every changed file (risky ones left out and named), its cards on the board; afterwards the board is theirs with Push lit. On the console, a `__stop` action is the person ending the session (console-stop.md); at every session end post `finish` BEFORE `stop`.
 
 ## Project context
 
@@ -74,7 +74,7 @@ On a non-zero exit, save git's stderr to the session folder, run `classify-error
 - **commit** commits only the paths in `files`. With `ignore[]`, first propose those `.gitignore` lines as a doc plus a `review` card (approve / change), write them on approve, and add `.gitignore` to the commit.
 - **abort**, **continue**: `plan abort` / `plan continue`, then `reread`.
 - **pr-host**: the server already saved the answer; post `reread` only.
-- **done**: Session End.
+- **done** (Done with git): Session End; a card of yours still open is cancelled first (notes/git.md).
 - Deleting a branch on the remote is never offered and never run.
 
 ## Conflict help

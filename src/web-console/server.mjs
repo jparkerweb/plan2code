@@ -250,6 +250,7 @@ const SERVABLE = new Set([
   "mentions.js",
   "favicon.js",
   "git-board.js",
+  "git-board-view.js",
   "pr-url.js",
   "start-stop.mp3",
   "next.mp3",

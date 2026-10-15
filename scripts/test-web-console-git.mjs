@@ -327,7 +327,8 @@ test("git: the board stays locked from a click until the agent's next post, not 
   assert.equal(boardAwaiting({ sentAt, cardsAwaiting: 1, adrift: true }), false, "an agent gone quiet releases the lock");
 
   const app = fs.readFileSync(new URL("../src/web-console/public/app.js", import.meta.url), "utf8");
-  assert.match(app, /const gitLocked = \(\) =>[^;]*gitAwaiting\(\)/, "gitLocked includes gitAwaiting()");
+  assert.match(app, /const gitMode = \(\) =>[^;]*gitAwaiting\(\)/, "the busy mode includes gitAwaiting()");
+  assert.match(app, /const gitLocked = \(\) => gitMode\(\) !== "idle";/, "gitLocked is anything but idle");
   const send = app.slice(app.indexOf("async function sendGit("), app.indexOf("function renderGitBoard("));
   assert.match(send, /local\.gitSentAt = Date\.now\(\);\s*save\(\);/, "a board click records when it was sent, and saves it");
   assert.match(app, /sentAt: local\.gitSentAt[\s\S]{0,80}updatedAt: S\.updatedAt[\s\S]{0,80}cardsAwaiting: awaitingReply\(\)\.length/);
@@ -563,15 +564,18 @@ test("git board: the page draws it from git-board.js, with no inline styles", ()
   const dir = path.join(path.dirname(CONSOLE_CLI), "public");
   const app = fs.readFileSync(path.join(dir, "app.js"), "utf8");
   const html = fs.readFileSync(path.join(dir, "index.html"), "utf8");
+  const view = fs.readFileSync(path.join(dir, "git-board-view.js"), "utf8");
   assert.match(app, /^import [^;]+ from "\.\/git-board\.js";/m, "app.js imports git-board.js");
-  for (const m of ["git-board.js", "pr-url.js"]) assert.ok(html.includes(`rel="modulepreload" href="/${m}"`), `the page preloads ${m}`);
+  assert.match(app, /^import [^;]+ from "\.\/git-board-view\.js";/m, "app.js imports git-board-view.js");
+  for (const m of ["git-board.js", "git-board-view.js", "pr-url.js"]) assert.ok(html.includes(`rel="modulepreload" href="/${m}"`), `the page preloads ${m}`);
   assert.match(app, /const isGitBoard = \(\) => S && S\.workflow === "git" && S\.git;/);
   assert.match(app, /i: "__git", type: "git", op/, "a click is one __git action");
-  assert.match(app, /a\.rel = "noopener"/, "the PR link opens with rel=noopener");
+  assert.match(view, /a\.rel = "noopener"/, "the PR link opens with rel=noopener");
   const start = app.indexOf("/* ------------------------------------------------------------ git board */");
   const end = app.indexOf("/* ------------------------------------------------------------- welcome */");
   assert.ok(start > 0 && end > start);
   assert.doesNotMatch(app.slice(start, end), /setAttribute\(\s*["']style["']|\.style\./, "the board sets no inline styles");
+  assert.doesNotMatch(view, /setAttribute\(\s*["']style["']|\.style\./, "nor does its view");
 });
 
 // The board's every click is one `__git` action; the agent reads it off the

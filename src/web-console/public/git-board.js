@@ -1,13 +1,16 @@
-// Plan2Code Web Console - the git board's rules: branch order, names, buttons and replies.
+// Plan2Code Web Console - the git board's rules: branch order, names, buttons, replies, next step and tabs.
 //
 // Everything the board decides from a state.git snapshot (git-repo.mjs ->
 // snapshot()) lives here so it is tested without a browser: how the branch
-// list is ordered and folded, whether a new branch name is free, which action
+// list is ordered and folded, whether a new branch name is free and where a
+// new branch can start, which branches the clean-up offers, which action
 // buttons show and which are enabled, the plain sentence each button sends
 // the agent, the "Last refreshed" line, which files start ticked in the
-// commit dialog and the pull-request link. app.js only renders what these
-// say. No DOM access at module scope and only one import: the page and
-// `node --test` both import this file.
+// commit dialog, the pull-request link, the suggested next step and the tab
+// that owns it, each tab's badge, and how busy the board is and which
+// controls that allows. app.js only renders what these say. No DOM access at
+// module scope and only one import: the page and `node --test` both import
+// this file.
 
 import { prUrl } from "./pr-url.js";
 
@@ -148,6 +151,40 @@ export function nameStatus(name, git) {
   return { kind: "free" };
 }
 
+/**
+ * Where a new branch can start: `{ preset, here, options }`. origin/<default>
+ * when that remote branch exists, else the local default, else the current
+ * branch (or, detached, the commit). A commit from a detached HEAD belongs on
+ * the commit it was made at.
+ */
+export function createSources(git, commit = false) {
+  const g = git || {};
+  const def = g.defaultBranch;
+  const rows = list(g.branches).filter(Boolean);
+  const h = g.head || {};
+  const originDef =
+    def && rows.some((b) => (b.remote === "origin" && b.name === def) || (!b.remote && b.upstream === `origin/${def}`))
+      ? `origin/${def}`
+      : null;
+  const localDef = def && rows.some((b) => !b.remote && b.name === def) ? def : null;
+  const here = h.branch || h.detached || null;
+  const preset = (commit && h.detached) || originDef || localDef || here || "HEAD";
+  return { preset, here, options: [...new Set([originDef, localDef, here, preset].filter(Boolean))] };
+}
+
+/* ------------------------------------------------------------- cleanup */
+
+/**
+ * The clean-up panel's groups, `{ merged, gone }`: local branches merged into
+ * the default, and those whose remote copy is deleted. Never the current or
+ * the default branch; a branch in both shows once, under gone, the way the
+ * confirm that follows (cleanup-list) names it.
+ */
+export function cleanupGroups(git) {
+  const locals = list(git && git.branches).filter((b) => b && !b.remote && !b.current && !b.default);
+  return { merged: locals.filter((b) => b.merged && !b.gone), gone: locals.filter((b) => b.gone) };
+}
+
 /* ------------------------------------------------------------- buttons */
 
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
@@ -259,6 +296,9 @@ function filePhrase(files, count) {
   return n === 1 ? `this file${shown}` : `these ${n} files${shown}`;
 }
 
+// Nothing ticked, only .gitignore picks: the commit takes .gitignore alone.
+const ignoreOnly = (f) => !names(f.files).length && !Number(f.count) && names(f.ignore).length > 0;
+
 /** The plain instruction a board button sends the agent, one sentence per op. */
 export function gitReply(op, fields = {}) {
   const f = fields || {};
@@ -278,6 +318,7 @@ export function gitReply(op, fields = {}) {
       const start = `Create ${f.name} from ${f.from}.`;
       if (f.then !== "commit") return start;
       const ignore = names(f.ignore);
+      if (ignoreOnly(f)) return `${start} Then add ${ignore.join(", ")} to .gitignore and commit just .gitignore.`;
       const tail = ignore.length ? ` Add ${ignore.join(", ")} to .gitignore.` : "";
       return `${start} Then commit ${filePhrase(names(f.files), f.count)}.${tail}`;
     }
@@ -290,6 +331,7 @@ export function gitReply(op, fields = {}) {
     }
     case "commit": {
       const ignore = names(f.ignore);
+      if (ignoreOnly(f)) return `Add ${ignore.join(", ")} to .gitignore and commit just .gitignore.`;
       const tail = ignore.length ? ` Add ${ignore.join(", ")} to .gitignore.` : "";
       return `Commit ${filePhrase(names(f.files), f.count)}.${tail}`;
     }
@@ -379,4 +421,231 @@ export function boardPrLink(git, base) {
     needsKind,
     host: remote.host || null,
   };
+}
+
+/* ----------------------------------------------------------- next step */
+
+export const GIT_TABS = Object.freeze([
+  Object.freeze({ id: "changes", label: "Changes" }),
+  Object.freeze({ id: "branches", label: "Branches" }),
+  Object.freeze({ id: "sync", label: "Sync" }),
+]);
+
+const TAB_IDS = new Set(GIT_TABS.map((t) => t.id));
+
+// The tab each suggested step lives on. Anything not listed is Sync's.
+const STEP_TAB = Object.freeze({
+  commit: "changes",
+  "create-commit": "changes",
+  ignore: "changes",
+  create: "branches",
+  cleanup: "branches",
+});
+
+const tabOf = (step) => (step && STEP_TAB[step.op]) || "sync";
+
+const STALE_MS = 60 * 60 * 1000;
+
+const files = (n) => plural(n, "file", "files");
+const branchCount = (n) => plural(n, "branch", "branches");
+
+// Held-back (risky) paths: secrets and big files, never counted toward Commit.
+const heldPaths = (git) => list(git.changes && git.changes.files).filter((f) => f && f.risky && typeof f.path === "string").map((f) => f.path);
+
+// Local branches merged into the default or gone upstream, never the current or default one.
+// None without a default branch: boardActions() offers no Clean up then.
+const sweepable = (git) =>
+  git.defaultBranch ? list(git.branches).filter((b) => b && !b.remote && !b.current && !b.default && (b.merged || b.gone)) : [];
+
+// Every step whose rule matches, in rule order (first match wins).
+function matches(git) {
+  const head = git.head || {};
+  const held = heldPaths(git).length;
+  const count = Math.max(0, (Number(git.changes && git.changes.count) || 0) - held);
+  const cur = currentRow(git);
+  const onDefault = Boolean(head.branch) && head.branch === git.defaultBranch;
+  const hasRemote = list(git.remotes).length > 0;
+  const live = Boolean(head.upstream) && !head.gone;
+  const remoteName = (cur && cur.upstreamRemote) || "the remote";
+  const out = [];
+
+  // 1. An operation stopped part-way.
+  if (git.inProgress) {
+    const left = list(git.conflicted).filter((c) => c && c.markers).length;
+    out.push(
+      left
+        ? { op: "fix", label: "Fix the files", why: `${files(left)} still ${left === 1 ? "has" : "have"} conflict markers.` }
+        : { op: "continue", label: "Continue", why: "Every conflict is resolved." }
+    );
+    out.push({ op: "abort", label: `Abort the ${git.inProgress === "am" ? "git am" : git.inProgress}`, why: "Put everything back as it was." });
+    return out;
+  }
+  // 2. Nothing committed yet.
+  if (git.hasCommits === false) {
+    out.push({ op: "commit", label: "Make the first commit", why: `Nothing saved yet. ${files(count)} ready.` });
+    return out;
+  }
+  // 3. Detached HEAD.
+  if (!head.branch) out.push({ op: "create", label: "Make a branch here", why: `You're on commit ${head.detached || "an unknown commit"}, not a branch.` });
+  // 4. Uncommitted changes, held-back files left out.
+  if (count > 0) {
+    if (onDefault) {
+      out.push({ op: "create-commit", label: `Start a branch for ${files(count)}`, why: `You're on ${head.branch}. Work usually goes on its own branch.` });
+      out.push({ op: "commit", label: `Commit on ${head.branch}`, why: "Commit straight to the default branch.", forced: true });
+    } else {
+      out.push({ op: "commit", label: `Commit ${files(count)}`, why: `${files(count)} changed on ${head.branch || "this commit"}.` });
+    }
+  }
+  // 5. Behind, 6. ahead.
+  const behind = Number(head.behind) || 0;
+  const ahead = Number(head.ahead) || 0;
+  if (live && behind > 0) out.push({ op: "pull", label: "Pull", why: `${remoteName === "the remote" ? "The remote" : remoteName} has ${plural(behind, "commit", "commits")} you don't.` });
+  if (live && ahead > 0) out.push({ op: "push", label: `Push ${ahead}`, why: `${plural(ahead, "commit", "commits")} not on ${remoteName} yet.` });
+  // 7. Never published, or its remote copy was deleted.
+  if (head.branch && hasRemote && !live) {
+    out.push({ op: "publish", label: "Publish", why: head.gone ? `${head.branch}'s remote copy was deleted.` : `${head.branch} isn't on the remote yet.` });
+  }
+  // 8. Pushed, not the default branch, and a link that can open.
+  if (live && !onDefault) {
+    const link = boardPrLink(git, git.defaultBranch);
+    if (link && link.url) out.push({ op: "pr", label: "Open pull request", why: "Pushed. Ready for review?", url: link.url });
+  }
+  // 9. Branches to clean up.
+  const sweep = sweepable(git).length;
+  if (sweep) out.push({ op: "cleanup", label: `Clean up ${branchCount(sweep)}`, why: `${branchCount(sweep)} already merged or deleted on the remote.` });
+  return out;
+}
+
+// The held-back line and the .gitignore offer that fills an empty secondary slot.
+function heldOut(git) {
+  const held = heldPaths(git);
+  if (!held.length) return { held: null, ignore: null };
+  const what = held.length === 1 ? "`" + held[0] + "`" : `${held.length} held-back files`;
+  return {
+    held: held.length === 1 ? `${what} held back` : `${held.length} files held back`,
+    ignore: { op: "ignore", label: `Add ${what} to .gitignore`, why: `Keep ${held.length === 1 ? "it" : "them"} out of every commit.`, files: held },
+  };
+}
+
+// "Checked 3 hr. ago — Refresh?" when a remote exists and the last fetch is over an hour old or unknown.
+function staleLine(git, now) {
+  if (!list(git.remotes).length) return null;
+  const at = Date.parse(git.lastFetch);
+  if (!Number.isNaN(at) && now - at <= STALE_MS) return null;
+  const age = git.lastFetch ? relativeAge(git.lastFetch, now) : "";
+  return age ? `Checked ${age} — Refresh?` : "Never checked — Refresh?";
+}
+
+const withTab = (step) => (step ? { ...step, tab: tabOf(step) } : step);
+
+/**
+ * The board's suggested next step: `{ primary, secondary, stale, held, line,
+ * tab }`. `primary` is the first matching rule or null; `secondary` an array
+ * with at most one quieter step (the default-branch commit, else the next
+ * match, else the held-back .gitignore offer), or the two quiet actions when
+ * there is no primary. `stale` never changes the step. Every step carries the
+ * `tab` it lives on, and `tab` is the one that owns the suggestion.
+ */
+export function nextStep(git, { now = Date.now() } = {}) {
+  const g = git || {};
+  const all = matches(g);
+  const { held, ignore } = heldOut(g);
+  const head = g.head || {};
+  const stale = staleLine(g, now);
+  if (!all.length) {
+    const branch = head.branch || "this commit";
+    const checked = g.lastFetch ? relativeAge(g.lastFetch, now) : "";
+    const line = list(g.remotes).length
+      ? `All caught up on ${branch}${checked ? ` · checked ${checked}` : ""}`
+      : `Nothing to commit on ${branch} · no remote yet`;
+    const secondary = [ignore || { op: "create", label: "New branch" }, { op: "refresh", label: "Refresh" }].map(withTab);
+    return { primary: null, secondary, stale, held, line, tab: ignore ? "changes" : "sync" };
+  }
+  const [first, ...rest] = all;
+  const primary = withTab(first);
+  const second = rest.find((s) => s.forced) || rest[0] || ignore;
+  return { primary, secondary: second ? [withTab(second)] : [], stale, held, line: primary.why, tab: primary.tab };
+}
+
+/* -------------------------------------------------------------- badges */
+
+/**
+ * What each tab has waiting: `{ changes, branches, sync }`, each null or
+ * `{ kind, text, label, next }` (kind "count", "dot" or "warn"; `label` is
+ * for the tab's accessible name). `next` marks the tab owning the next step
+ * when there is a primary; that tab always carries a badge. Mid-operation
+ * only Sync is badged, with a warning.
+ */
+export function tabBadges(git, { now = Date.now(), stepTab = null } = {}) {
+  const g = git || {};
+  const head = g.head || {};
+  const out = { changes: null, branches: null, sync: null };
+  if (g.inProgress) {
+    out.sync = { kind: "warn", text: "!", label: "operation in progress", next: false };
+  } else {
+    const held = heldPaths(g).length;
+    const count = Math.max(0, (Number(g.changes && g.changes.count) || 0) - held);
+    if (count) out.changes = { kind: "count", text: String(count), label: `${count} waiting`, next: false };
+    else if (held) out.changes = { kind: "dot", text: "·", label: "held-back files", next: false };
+
+    const sweep = sweepable(g).length;
+    if (sweep) out.branches = { kind: "count", text: String(sweep), label: `${sweep} to clean up`, next: false };
+
+    const live = Boolean(head.upstream) && !head.gone;
+    const ahead = Number(head.ahead) || 0;
+    const behind = Number(head.behind) || 0;
+    if (live && (ahead || behind)) {
+      const text = [ahead ? `↑${ahead}` : null, behind ? `↓${behind}` : null].filter(Boolean).join(" ");
+      const label = [ahead ? `${ahead} to push` : null, behind ? `${behind} to pull` : null].filter(Boolean).join(", ");
+      out.sync = { kind: "count", text, label, next: false };
+    } else if (list(g.remotes).length && head.branch && !live && g.hasCommits !== false) {
+      out.sync = { kind: "count", text: "↑", label: "not published", next: false };
+    } else if (staleLine(g, now)) {
+      out.sync = { kind: "count", text: "?", label: "not checked lately", next: false };
+    }
+  }
+  const step = nextStep(g, { now });
+  const owner = TAB_IDS.has(stepTab) ? stepTab : step.tab;
+  if (step.primary && TAB_IDS.has(owner)) {
+    const b = out[owner] || { kind: "dot", text: "·", label: "" };
+    out[owner] = { ...b, next: true, label: b.label ? `${b.label}, next step` : "next step" };
+  }
+  return out;
+}
+
+/* ---------------------------------------------------------------- busy */
+
+/**
+ * How busy the board is, most restrictive first: "offline" (the server is
+ * gone, or the last click is not picked up yet), "running" (a git command or
+ * the agent's turn), "card" (a question of Plan2Code's waits), "idle".
+ */
+export function busyMode({ running = false, cardWaiting = false, gone = false, pending = false } = {}) {
+  if (gone || pending) return "offline";
+  if (running) return "running";
+  if (cardWaiting) return "card";
+  return "idle";
+}
+
+/**
+ * Whether a control of `role` works in `mode`: "nav" (switching tabs, search,
+ * folds) always; "action" (anything that sends, ticks, picks, copies or opens
+ * a panel) only when idle; "done" (Done with git) when idle or a card waits.
+ */
+export function controlAllowed(mode, role) {
+  if (role === "nav") return true;
+  if (role === "action") return mode === "idle";
+  if (role === "done") return mode === "idle" || mode === "card";
+  return false;
+}
+
+/**
+ * The tab to show. A click of theirs that landed, and arriving at the board,
+ * go to the next step's tab; a reload and a change they did not click for
+ * keep the tab they had.
+ */
+export function pickTab({ current = null, stepTab, reason } = {}) {
+  const step = TAB_IDS.has(stepTab) ? stepTab : "sync";
+  if (reason === "landed" || reason === "arrival") return step;
+  return TAB_IDS.has(current) ? current : step;
 }

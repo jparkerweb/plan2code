@@ -959,8 +959,8 @@ h1 {
 }
 
 /* The column itself never scrolls; the card does. The git board is the one
-   exception, below: it stacks a card over the board, so the column takes the
-   scroll there and both flow through it at natural height. */
+   exception, below: its card sits in the board's card slot, so the column
+   takes the scroll there and card and board flow through it at natural height. */
 .main > .card:not(.is-primary) { flex-shrink: 100; min-height: 104px; }
 .main > .card.is-primary { flex-shrink: 1; min-height: 0; }
 /* A card with a growing answer box takes the column's full height above the
@@ -3652,9 +3652,9 @@ a.icon-btn { box-sizing: border-box; text-decoration: none; }
 
 /* ------------------------------------------------------------ git board */
 
-/* The git workflow's main column stacks two things where every other view
-   holds one: the agent's card on top and the board under it. Stacked children
-   that each scrolled would put a scrollbar inside a scrollbar, so here the
+/* The git workflow's main column holds the board, and the agent's card sits
+   inside it, in the card slot under the tab strip. A card that scrolled inside
+   a scrolling board would put a scrollbar inside a scrollbar, so here the
    column takes the one scroll and both flow through it at natural height. */
 .main:has(> .git-board) {
   overflow-y: auto;
@@ -3664,17 +3664,17 @@ a.icon-btn { box-sizing: border-box; text-decoration: none; }
 /* Listed with .is-primary.has-grow too: that rule (a card with a growing note
    box takes the column's height and shrinks into it) outranks a plain .card
    here, and a card shrunk under the board spilled its buttons beneath it. */
-.main:has(> .git-board) > .card,
-.main:has(> .git-board) > .card.is-primary.has-grow,
+.git-cards > .card,
+.git-cards > .card.is-primary.has-grow,
 .main:has(> .git-board) > .git-board {
   flex: none;
   overflow-y: visible;
   min-height: 0;
 }
-/* Over the board a card's boxes cannot fill the column (it flows, it does not
-   stretch), so a note box grows with what is typed instead, where the browser
-   can, rather than scrolling inside a 96px box. */
-.main:has(> .git-board) > .card textarea { field-sizing: content; max-height: 50vh; }
+/* In the board's card slot a card's boxes cannot fill the column (it flows,
+   it does not stretch), so a note box grows with what is typed instead, where
+   the browser can, rather than scrolling inside a 96px box. */
+.git-cards > .card textarea { field-sizing: content; max-height: 50vh; }
 .main > .git-board {
   padding-right: 32px;
   display: grid;
@@ -3684,8 +3684,98 @@ a.icon-btn { box-sizing: border-box; text-decoration: none; }
   gap: 14px;
   max-width: var(--card-width);
 }
-/* The board's header is a section lead, not a second card: the agent's card
-   above is the column's only framed element. */
+/* The board is sized by its column, not the window: the narrow layout keys
+   off the board's own width. */
+.git-board { container-type: inline-size; container-name: git-board; }
+/* Plan2Code's card, between the tab strip and the tab's content. */
+.git-cards { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
+.git-cards:empty { display: none; }
+
+/* The tab strip: three tabs, Done with git on the right. */
+.git-tab-bar {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  border-bottom: 1px solid var(--rule);
+}
+.git-tabs { display: flex; gap: 2px; }
+.git-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  border-radius: 6px 6px 0 0;
+  background: transparent;
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+.git-tab:hover { background: var(--panel-2); color: var(--ink); }
+.git-tab[aria-selected="true"] { background: var(--accent-soft); color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+.git-tab:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.git-tab-badge {
+  min-width: 18px;
+  padding: 0 6px;
+  border: 1px solid var(--rule-2);
+  border-radius: 999px;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  line-height: 17px;
+  text-align: center;
+  color: var(--ink-2);
+}
+.git-tab-badge.is-dot { min-width: 0; font-weight: 700; }
+.git-tab-badge.is-warn { color: var(--warn); background: var(--warn-soft); border-color: var(--warn); }
+.git-tab-badge.is-next { color: var(--accent-ink); background: var(--accent); border-color: var(--accent); }
+.git-tab-badge.is-warn.is-next { color: var(--accent-ink); background: var(--warn); border-color: var(--warn); }
+.git-done { margin: 0 0 6px auto; }
+
+/* The next step: one primary button, at most one quieter one. */
+.git-step {
+  display: grid;
+  gap: 6px;
+  padding: 14px 18px;
+  background: var(--panel);
+  border: 1px solid var(--accent-line);
+  border-left-width: 4px;
+  border-radius: var(--radius);
+}
+.git-step.is-warn { border-color: var(--stage); background: var(--stage-soft); }
+.git-step.is-calm { border-color: var(--ok); background: var(--ok-soft); }
+.git-step-kicker { font-size: 12px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--ink-2); }
+.git-step.is-calm .git-step-kicker { color: var(--ok); }
+.git-step-title, .git-op-title { margin: 0; font: 600 18px/1.25 var(--serif); }
+.git-step-why, .git-step-label { margin: 0; font-size: 14px; color: var(--ink-2); }
+.git-step-label { font-weight: 600; color: var(--ink); }
+.git-step-actions, .git-sync-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.git-hint {
+  justify-self: start;
+  padding: 8px 12px;
+  border: 1px dashed var(--accent-line);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+.git-hint:hover { background: var(--accent-soft); }
+.git-hint:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.git-stale { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0; font-size: 13.5px; color: var(--stage); }
+.git-held { font-size: 13.5px; color: var(--ink-2); }
+.git-held .md-p { margin: 0; }
+.git-wait { margin: 0; font-size: 13.5px; color: var(--stage); }
+.git-fresh { margin: 0; font-size: 13px; color: var(--ink-3); }
+.git-fresh.is-stale { color: var(--stage); }
+.git-panel-tab { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
+.git-changes, .git-sync { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
+.git-sweep-offer { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0; font-size: 14px; color: var(--ink-2); }
+.git-pr-open.is-disabled { opacity: 0.5; cursor: not-allowed; }
+/* The board's header is a section lead, not a card: the framed elements are
+   the agent's card in the slot and the next step under it. */
 .git-head {
   display: grid;
   gap: 6px;
@@ -3735,22 +3825,6 @@ a.icon-btn { box-sizing: border-box; text-decoration: none; }
 .git-result-body .md-p { margin: 4px 0 0; }
 /* The result box is the line length here: git's stderr runs the full width. */
 .git-result-body.md { max-width: none; }
-/* Pinned to the pane's bottom while the board scrolls past: the column is
-   the scroller on this view, and the bar is the board's last child, so
-   bottom: 0 holds it on screen until the board's end comes up to dock it.
-   Opaque so the table slips underneath, bordered so the seam reads. */
-.git-bar {
-  position: sticky;
-  bottom: 0;
-  z-index: 6;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding: 10px 0 8px;
-  background: var(--bg);
-  border-top: 1px solid var(--rule);
-}
-.git-done { margin-left: auto; }
 .git-panel {
   display: grid;
   gap: 10px;
@@ -3811,3 +3885,13 @@ a.icon-btn { box-sizing: border-box; text-decoration: none; }
 .git-cell-actions .btn + .btn { margin-left: 6px; }
 .git-remote-only summary { cursor: pointer; font-weight: 600; color: var(--ink-2); padding: 4px 0; }
 .git-empty { margin: 0; font-size: 13.5px; color: var(--ink-3); }
+
+/* Last on purpose: the narrow layout overrides the board rules above it. */
+@container git-board (max-width: 720px) {
+  .git-tab-bar { flex-wrap: wrap; }
+  .git-tabs { flex-wrap: wrap; }
+  .git-done { margin: 0 0 6px; }
+  .git-head-meta { flex-direction: column; align-items: flex-start; }
+  .git-step-actions, .git-sync-actions, .git-op-actions, .git-panel-actions { flex-wrap: wrap; }
+  .git-step-actions .btn, .git-op-actions .btn { flex: 1 1 auto; }
+}

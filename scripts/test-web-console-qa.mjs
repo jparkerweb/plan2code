@@ -220,11 +220,12 @@ test("a build's own count wins, 0 done included; a question workflow still fills
 
 test("the git board: Publish names a remote only when there is one, and an open card holds the board", () => {
   const js = app();
-  const action = js.slice(js.indexOf("function gitAction("), js.indexOf("/* The branch table */"));
+  const view = fs.readFileSync(path.join(ROOT, "src", "web-console", "public", "git-board-view.js"), "utf8");
+  const action = view.slice(view.indexOf("function runStep("), view.indexOf("function stepButton("));
   assert.match(action, /remotes\.length === 1/);
-  const at = js.indexOf("const gitLocked = ");
+  const at = js.indexOf("const gitMode = ");
   assert.match(js.slice(at, js.indexOf(";", at)), /myTurn\(\)\.some\(\(i\) => i\.kind !== "notice"\)/);
-  const banner = js.slice(js.indexOf("function gitOpBanner("), js.indexOf("function gitActionBar("));
+  const banner = view.slice(view.indexOf("function opBlock("), view.indexOf("function prBlock("));
   assert.ok(!/if \(conflicted\.every/.test(banner), "Continue is always offered; plan continue checks the files itself");
 });
 
@@ -343,7 +344,7 @@ test("keep names a copy from the upload's real path, so an 8.3 spelling reuses t
 test("the cleanup confirm is red only when a gone branch holds commits found nowhere else", () => {
   const src = fs.readFileSync(path.join(ROOT, "src", "plan2code-git-scripts", "git.mjs"), "utf8");
   assert.match(src, /danger: x\.some\(\(b\) => deleteCheck\(s, localBranch\(s, b\)\)\.onlyHere\.count > 0\)/);
-  const js = app();
-  const groups = js.slice(js.indexOf("function cleanupGroups("), js.indexOf("function openCleanup("));
+  const rules = fs.readFileSync(path.join(ROOT, "src", "web-console", "public", "git-board.js"), "utf8");
+  const groups = rules.slice(rules.indexOf("export function cleanupGroups("), rules.indexOf("export function boardActions("));
   assert.match(groups, /b\.merged && !b\.gone/, "gone wins on the page too, as cleanup-list has it");
 });

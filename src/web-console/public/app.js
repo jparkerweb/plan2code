@@ -120,21 +120,19 @@ import {
 } from "./subagents.js";
 import {
   BRANCH_TYPES,
-  PR_HOST_LABELS,
-  boardActions,
+  GIT_TABS,
   boardAwaiting,
-  boardPrLink,
+  busyMode,
+  cleanupGroups,
   commitTicks,
-  composeBranchName,
-  currentRow,
-  filterBranches,
-  foldRemote,
+  controlAllowed,
+  createSources,
   gitReply,
-  nameStatus,
-  orderBranches,
-  refreshedLine,
-  relativeAge,
+  nextStep,
+  pickTab,
+  tabBadges,
 } from "./git-board.js";
+import { activeTab, drawGitBoard } from "./git-board-view.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -722,11 +720,14 @@ function gitAwaiting() {
 //   sweep     the cleanup list's ticked branches
 //   base      the pull-request base the picker chose
 //   settled   cards the agent settled since the last click on the board
-//   scrollTop how far the column is scrolled on the board view, put back after each redraw
-//   anchorDelta the branch table's offset inside the board, for scroll restore
+//   tab       the tab on show: "changes", "branches" or "sync", or null before the first draw
+//   scroll    how far the column was scrolled on each tab, put back after each redraw
+//   repickAt  when their last board click went out (ms): the first agent post
+//             after it moves the board to the new next step's tab
 const board = {
-  scrollTop: 0,
-  anchorDelta: null,
+  tab: null,
+  scroll: { changes: 0, branches: 0, sync: 0 },
+  repickAt: null,
   query: "",
   showAll: false,
   remoteOpen: null,
@@ -743,13 +744,36 @@ const board = {
 // a skill hop back) restores them the way card drafts already do. Stale picks
 // are harmless: the next send re-checks every path against the snapshot. The
 // restore waits for the first draw: load() has not run when this module does.
-const boardBlank = { scrollTop: 0, anchorDelta: null, query: "", showAll: false, remoteOpen: null, panel: null, create: null, ticks: null, sweep: null, base: null };
+const boardBlank = {
+  tab: null,
+  scroll: { changes: 0, branches: 0, sync: 0 },
+  repickAt: null,
+  query: "",
+  showAll: false,
+  remoteOpen: null,
+  panel: null,
+  create: null,
+  ticks: null,
+  sweep: null,
+  base: null,
+};
+// Each reset gets its own scroll memory: boardBlank's must never be the one written to.
+const resetBoard = () => {
+  Object.assign(board, boardBlank, { scroll: { ...boardBlank.scroll } });
+  board.ignore.clear();
+};
 let boardHydrated = false;
+// True from hydration until the first draw has picked its tab: that draw is a reload.
+let boardReloaded = false;
 const hydrateBoard = () => {
   boardHydrated = true;
   const g = local.gitBoard;
   if (!g) return;
+  boardReloaded = true;
   Object.assign(board, boardBlank, {
+    tab: GIT_TABS.some((t) => t.id === g.tab) ? g.tab : null,
+    scroll: { changes: 0, branches: 0, sync: 0, ...(g.scroll || {}) },
+    repickAt: typeof g.repickAt === "number" ? g.repickAt : null,
     query: g.query || "",
     showAll: Boolean(g.showAll),
     remoteOpen: g.remoteOpen ?? null,
@@ -763,6 +787,9 @@ const hydrateBoard = () => {
 };
 const persistBoard = () => {
   local.gitBoard = {
+    tab: board.tab,
+    scroll: { ...board.scroll },
+    repickAt: board.repickAt,
     query: board.query,
     showAll: board.showAll,
     remoteOpen: board.remoteOpen,
@@ -1039,9 +1066,8 @@ function adopt(body) {
     scrollMemory.clear();
     drawnView = null;
     drawnTabs = null;
-    // The board's search, picks and open panel belonged to that git run too.
-    Object.assign(board, boardBlank);
-    board.ignore.clear();
+    // The board's search, picks, open panel and tab belonged to that git run too.
+    resetBoard();
     board.settled.clear();
   }
   // The welcome belongs to the dashboard: a pick made under it (or a hop
@@ -1050,8 +1076,7 @@ function adopt(body) {
   // A hop away from git that did not go through the dashboard (changelog and
   // back, say) lets go of it the same way — the persisted copy too.
   if (prevWorkflow === "git" && S.workflow !== "git") {
-    Object.assign(board, boardBlank);
-    board.ignore.clear();
+    resetBoard();
     local.gitBoard = null;
   }
   adoptChat();
@@ -2489,9 +2514,10 @@ function paintMain(main) {
     return;
   }
 
-  // The git board stays up after every action until Done. The agent's
-  // confirm and result cards sit above it in the usual card slot; its
-  // `git-result` notice is the board's own result line instead.
+  // The git board stays up after every action until Done with git. The
+  // agent's confirm and result cards sit in the board's cardSlot, under the
+  // tab strip and above the tab's content (FR-8); its `git-result` notice is
+  // the board's own result line instead.
   if (isGitBoard() && !finish()) {
     // At most one card, matching the one-card rule elsewhere. The rail lists
     // every item, so a settled card the pane stopped tracking still shows when
@@ -2502,15 +2528,15 @@ function paintMain(main) {
     const sel = byId(selected);
     const item = cards.find((i) => i.id === selected) || (sel && sel.kind !== "notice" ? sel : null) || cards[0];
     const notices = items().filter((i) => i.kind === "notice" && i.id !== "git-result");
+    let card = null;
+    let pager = null;
     if (item || notices.length) {
-      const card = item ? renderCard(item) : el("div", "card");
+      card = item ? renderCard(item) : el("div", "card");
       for (const n of notices) card.appendChild(renderNotice(n));
       card.classList.add("is-primary");
-      main.appendChild(card);
-      const pager = item ? buildPager(item) : null;
-      if (pager) main.appendChild(pager);
+      pager = item ? buildPager(item) : null;
     }
-    renderGitBoard(main);
+    renderGitBoard(main, card, pager);
     return;
   }
 
@@ -3169,25 +3195,26 @@ function renderDashboard(main) {
 // The git board: drawn from state.git, which only console.mjs writes. A click
 // never runs git here. It sends one `__git` action through /submit, and the
 // agent confirms by card, runs the command and posts a `reread`, whose frame
-// redraws the board. The rules for what shows and what a click says live in
-// git-board.js; this is the drawing.
+// redraws the board. The rules live in git-board.js and the drawing in
+// git-board-view.js; this is the host: the busy mode, the tab, the scroll,
+// the keys, and the panels' state.
 
-const OP_WORDS = { rebase: "A rebase", am: "A git am", merge: "A merge", "cherry-pick": "A cherry-pick", revert: "A revert" };
+// How busy the board is (busyMode in git-board.js). Running while a send is
+// uncollected or the agent is mid-turn, and nothing queues. A "working" agent
+// that has gone adrift lets go, as gitAwaiting() does: collecting a click
+// marks it working, and an agent that died there must not leave the board
+// locked for good. A question card of the agent's open in the card slot holds
+// the board too: the card is the turn, and a board click sent beside it went
+// alone while the staged answer waited for some later, unrelated send.
+const gitMode = () =>
+  busyMode({
+    gone,
+    pending: pendingResult,
+    running: Boolean(finish()) || (agentWorking() && !agentAdrift()) || gitAwaiting(),
+    cardWaiting: myTurn().some((i) => i.kind !== "notice"),
+  });
 
-// One action at a time: locked while a send is uncollected or the agent is
-// mid-turn, and nothing queues. A "working" agent that has gone adrift lets
-// go, as gitAwaiting() does: collecting a click marks it working, and an agent
-// that died there must not leave the board locked for good.
-// A question card of the agent's open above it holds the board too: the card
-// is the turn, and a board click sent beside it went alone while the staged
-// answer waited for some later, unrelated send.
-const gitLocked = () =>
-  gone ||
-  pendingResult ||
-  (agentWorking() && !agentAdrift()) ||
-  Boolean(finish()) ||
-  gitAwaiting() ||
-  myTurn().some((i) => i.kind !== "notice");
+const gitLocked = () => gitMode() !== "idle";
 
 // `wording` only shapes the sentence (the operation an Abort names, say); it
 // is not part of the action.
@@ -3210,7 +3237,7 @@ async function sendGit(op, fields = {}, wording = {}) {
     if (res.status === 409) {
       pendingResult = true;
       banner("Your last click is still being picked up. One moment.", "info");
-    pendingBannerUp = true;
+      pendingBannerUp = true;
       render();
       return;
     }
@@ -3219,169 +3246,112 @@ async function sendGit(op, fields = {}, wording = {}) {
     board.panel = null;
     board.create = null;
     board.sweep = null;
+    // The commit table is always on show: its picks are re-seeded from the
+    // next snapshot, or a commit that landed would leave new changes unticked.
+    board.ticks = null;
+    board.ignore = new Set();
     pendingResult = true;
     local.gitSentAt = Date.now();
     save();
+    // The draw after this persists it with the rest of the board.
+    board.repickAt = local.gitSentAt;
     render();
   } catch {
     banner("That did not go through. Nothing was lost; try again.", "warn");
   }
 }
 
-function renderGitBoard(main) {
+// What the view may ask of the page. Built once: every handler reads the
+// board and state.git at the moment of the click, not at the draw.
+const gitOn = {
+  send: sendGit,
+  redraw: () => render(),
+  pickTab: (id) => {
+    board.tab = id;
+    persistBoard();
+    render();
+  },
+  openPanel: (name, opts) => openPanel(name, opts),
+  closePanel: () => closePanel(),
+  pickPrHost: (host, kind) => pickPrHost(host, kind),
+  persist: () => persistBoard(),
+};
+
+// The tab drawn last, which the scroll listener files the column's place under.
+let gitTabDrawn = null;
+
+// FR-9: their own click that landed (an agent post after it went out) and
+// arriving at the board go to the next step's tab; a reload and a change they
+// did not click for keep the tab they had. A frame with no updatedAt has not
+// landed: never re-pick on a guess.
+function resolveGitTab(step) {
+  const before = board.tab;
+  let reason = "background";
+  if (board.repickAt && S.updatedAt && Date.parse(S.updatedAt) > board.repickAt) {
+    reason = "landed";
+    board.repickAt = null;
+  } else if (board.tab == null) reason = "arrival";
+  else if (boardReloaded) reason = "reload";
+  boardReloaded = false;
+  board.tab = pickTab({ current: board.tab, stepTab: step.tab, reason });
+  if (board.tab !== before || reason === "landed") persistBoard();
+}
+
+function renderGitBoard(main, card = null, pager = null) {
   if (!boardHydrated) hydrateBoard();
   const git = S.git;
-  const wrap = el("div", "git-board");
-  if (git.error) {
-    const warn = el("div", "git-warn", git.error);
-    warn.setAttribute("role", "alert");
-    wrap.appendChild(warn);
-    main.appendChild(wrap);
-    return;
-  }
-  if (git.repo === false) {
-    // "Above" only once there is a card above: before the agent's first post
-    // the slot is empty, and the note would point at nothing.
-    const asking = Boolean(main.querySelector(":scope > .card"));
-    wrap.appendChild(
-      el(
-        "p",
-        "git-note",
-        asking
-          ? "This folder is not a git repository yet, so there is no board. Plan2Code asks above what to do."
-          : "This folder is not a git repository yet, so there is no board. Plan2Code will ask what to do here in a moment."
-      )
-    );
-    main.appendChild(wrap);
-    return;
-  }
-  const locked = gitLocked();
-  wrap.appendChild(gitHeader(git, locked));
+  const step = nextStep(git);
+  resolveGitTab(step);
   const result = byId("git-result");
-  if (result && result.kind === "notice") wrap.appendChild(gitResultLine(result));
-  if (git.inProgress) wrap.appendChild(gitOpBanner(git, locked));
-  if (board.panel === "commit") wrap.appendChild(gitCommitPanel(git, locked));
-  else if (board.panel === "cleanup") wrap.appendChild(gitCleanupPanel(git, locked));
-  else if (board.panel === "create" && board.create) wrap.appendChild(gitCreatePanel(git, locked));
-  wrap.appendChild(gitBranches(git, locked));
-  // Last child on purpose: bottom: 0 can only pin an element whose natural
-  // spot is below the fold, so the bar rides the pane's bottom while the
-  // board scrolls and docks at the end.
-  wrap.appendChild(gitActionBar(git, locked));
+  const { node, cardSlot } = drawGitBoard({
+    git,
+    board,
+    now: Date.now(),
+    mode: gitMode(),
+    offlineReason: gone ? "gone" : pendingResult ? "pending" : null,
+    step,
+    badges: tabBadges(git, { stepTab: step.tab }),
+    notice: result && result.kind === "notice" ? result : null,
+    activity: activity(),
+    hasCard: Boolean(card),
+    h: { el, md, copyButton },
+    on: gitOn,
+  });
+  if (card) cardSlot.appendChild(card);
+  if (pager) cardSlot.appendChild(pager);
+  const tabs = node.querySelector(".git-tabs");
+  if (tabs) tabs.addEventListener("keydown", gitTabKeys);
   // The column scrolls, not the board, and every redraw rebuilds the board,
-  // so the column would land back at the top; withFocus() only keeps a
-  // question card's place. board.scrollTop carries the place back; the
-  // anchor's offset inside the board then corrects for a result line or op
-  // banner appearing above the branch table, so the table does not jump. A
-  // card appearing or changing height above the board is outside that delta
-  // on purpose: the new card takes its space, the table is not scrolled out
-  // of sight chasing it.
-  const anchor = () => wrap.querySelector(".git-branches") || wrap.lastChild;
-  main.addEventListener("scroll", rememberGitScroll, { passive: true });
-  main.appendChild(wrap);
-  const a = anchor();
-  main.scrollTop = board.scrollTop + (a && board.anchorDelta != null ? a.getBoundingClientRect().top - wrap.getBoundingClientRect().top - board.anchorDelta : 0);
-  rememberGitScroll();
+  // so the column would land back at the top. Each tab keeps its own place,
+  // so a tab switch opens where that tab was left.
+  const tab = activeTab({ board, step });
+  gitTabDrawn = tab;
+  main.addEventListener("scroll", rememberGitTabScroll, { passive: true });
+  main.appendChild(node);
+  main.scrollTop = board.scroll[tab] || 0;
   persistBoard();
 }
 
-// The scroll listener on `main` for the git board's memory, kept as a named
-// function because renderGitBoard re-adds it on every redraw -- adding the
-// same listener twice is a no-op, where a fresh closure would pile up. The
-// delta is the anchor's offset inside the board, not in the viewport: a card
-// appearing or changing height above the board must not shift the table.
-function rememberGitScroll() {
+// The scroll listener on `main` for each tab's place, kept as a named function
+// because renderGitBoard re-adds it on every redraw: adding the same listener
+// twice is a no-op, where a fresh closure would pile up.
+function rememberGitTabScroll() {
   const main = $("main");
-  const wrap = main && main.querySelector(":scope > .git-board");
-  if (!wrap) return;
-  board.scrollTop = main.scrollTop;
-  const a = wrap.querySelector(".git-branches") || wrap.lastChild;
-  if (a) board.anchorDelta = a.getBoundingClientRect().top - wrap.getBoundingClientRect().top;
+  if (!gitTabDrawn || !main || !main.querySelector(":scope > .git-board")) return;
+  board.scroll[gitTabDrawn] = main.scrollTop;
 }
 
-function smallButton(label, className, disabled, onClick) {
-  const b = el("button", "btn small" + (className ? " " + className : ""), label);
-  b.type = "button";
-  b.disabled = Boolean(disabled);
-  b.addEventListener("click", onClick);
-  return b;
-}
-
-function gitHeader(git, locked) {
-  const h = git.head || {};
-  const remotes = git.remotes || [];
-  const cur = currentRow(git);
-  const head = el("header", "git-head");
-  const row = el("div", "git-head-row");
-  // Mid-rebase HEAD is detached, but the person is still on their branch.
-  const title = h.branch || (h.rebasing ? `${h.rebasing} · rebasing` : `Not on a branch (at ${h.detached || "an unknown commit"})`);
-  row.appendChild(el("h2", "git-branch", title));
-  if (h.branch) {
-    row.appendChild(el("span", "git-track", h.upstream && h.gone ? "remote copy deleted" : h.upstream ? `↑${h.ahead || 0} ↓${h.behind || 0}` : "not published"));
-    if (remotes.length > 1 && cur && cur.upstreamRemote) row.appendChild(el("span", "badge", cur.upstreamRemote));
-  }
-  head.appendChild(row);
-
-  const meta = el("div", "git-head-meta");
-  if (!remotes.length) {
-    meta.appendChild(el("span", "git-noremote", "No remote"));
-    const cmd = "git remote add origin <url>";
-    const code = el("code", "md-code", cmd);
-    meta.appendChild(code);
-    meta.appendChild(copyButton(cmd, "btn small", code));
-  } else meta.appendChild(el("span", "git-refreshed", refreshedLine(git)));
-  if (locked && activity()) meta.appendChild(el("span", "git-activity", activity()));
-  head.appendChild(meta);
-
-  const pr = gitPrLink(git, locked);
-  if (pr) head.appendChild(pr);
-  return head;
-}
-
-function gitPrLink(git, locked) {
-  const cur = currentRow(git);
-  const bases = (git.branches || []).filter((b) => !b.remote && (!cur || b.name !== cur.name)).map((b) => b.name);
-  // One base for both the link and the picker, so they can never disagree: a
-  // pick that has since gone falls back to the default, and a default that is
-  // only on the remote is still offered.
-  const base = bases.includes(board.base) ? board.base : git.defaultBranch;
-  if (base && !bases.includes(base)) bases.unshift(base);
-  const link = boardPrLink(git, base);
-  if (!link) return null;
-  const box = el("div", "git-pr");
-  if (link.needsKind) {
-    if (!link.host) return null;
-    box.appendChild(el("span", "git-pr-ask", `Which host is ${link.host}?`));
-    for (const [kind, label] of Object.entries(PR_HOST_LABELS)) {
-      box.appendChild(smallButton(label, "", locked, () => pickPrHost(link.host, kind)));
-    }
-    return box;
-  }
-  if (!link.url || !/^https:\/\//i.test(link.url)) return null;
-  const a = el("a", "btn small primary git-pr-open", "Open pull request");
-  a.href = link.url;
-  a.target = "_blank";
-  a.rel = "noopener";
-  box.appendChild(a);
-  box.appendChild(copyButton(link.url, "btn small"));
-  if (bases.length) {
-    const label = el("label", "git-pr-base", "into ");
-    const sel = el("select");
-    sel.id = "git-pr-base";
-    for (const name of bases) {
-      const o = el("option", null, name);
-      o.value = name;
-      sel.appendChild(o);
-    }
-    sel.value = base;
-    sel.addEventListener("change", () => {
-      board.base = sel.value;
-      render();
-    });
-    label.appendChild(sel);
-    box.appendChild(label);
-  }
-  return box;
+// Arrow keys, Home and End move between the tabs, as in the Help dialog. The
+// board is redrawn, so focus goes to the new tab after the render.
+function gitTabKeys(e) {
+  const index = GIT_TABS.findIndex((t) => t.id === gitTabDrawn);
+  const to = helpKeyTarget(e.key, Math.max(0, index), GIT_TABS.length);
+  if (to < 0) return;
+  e.preventDefault();
+  board.tab = GIT_TABS[to].id;
+  persistBoard();
+  render();
+  $(`git-tab-${board.tab}`)?.focus();
 }
 
 // The host is remembered for every project by the server (pr-hosts.json);
@@ -3398,203 +3368,32 @@ async function pickPrHost(host, kind) {
   sendGit("pr-host", { host, kind });
 }
 
-function gitResultLine(notice) {
-  const box = el("div", "git-result");
-  box.setAttribute("role", "status");
-  if (notice.title) box.appendChild(el("strong", "git-result-title", notice.title));
-  if (notice.body) box.appendChild(md(notice.body, "md git-result-body"));
-  return box;
-}
-
-function gitOpBanner(git, locked) {
-  const box = el("div", "git-op");
-  box.setAttribute("role", "alert");
-  box.appendChild(el("strong", "git-op-title", `${OP_WORDS[git.inProgress] || "An operation"} is in progress`));
-  const conflicted = git.conflicted || [];
-  if (conflicted.length) {
-    const list = el("ul", "git-op-files");
-    for (const c of conflicted) {
-      const li = el("li");
-      li.appendChild(el("code", "md-code", c.path));
-      li.appendChild(el("span", c.markers ? "git-op-left" : "git-op-clear", c.markers ? " · markers left" : " · no markers"));
-      list.appendChild(li);
-    }
-    box.appendChild(list);
-  }
-  const actions = el("div", "git-op-actions");
-  const wording = { operation: git.inProgress };
-  actions.appendChild(smallButton("Abort", "danger", locked, () => sendGit("abort", {}, wording)));
-  // Always offered: the board's file states are a snapshot from the agent's
-  // last look, and someone who fixed a file in their editor has no other way
-  // to say so. `plan continue` checks the files on disk itself and refuses
-  // while markers remain, and that answer refreshes this banner.
-  const clean = conflicted.every((c) => c.markers === false);
-  const go = smallButton("Continue", clean ? "primary" : "", locked, () => sendGit("continue", {}, wording));
-  if (!clean) go.title = "Fixed them in your editor? Plan2Code checks the files again before it continues.";
-  actions.appendChild(go);
-  box.appendChild(actions);
-  return box;
-}
-
-function gitActionBar(git, locked) {
-  const acts = boardActions(git, { busy: locked });
-  const bar = el("div", "git-bar");
-  for (const key of ["refresh", "pull", "push", "publish", "commit", "cleanup"]) {
-    const a = acts[key];
-    if (!a.shown) continue;
-    const b = smallButton(a.label, key === "commit" ? "primary" : "", !a.enabled, () => gitAction(key, git));
-    if (a.title) b.title = a.title;
-    if (key === "commit" || key === "cleanup") b.setAttribute("aria-expanded", String(board.panel === key));
-    bar.appendChild(b);
-  }
-  // Done stays live while the agent works (the person's way out, read at its
-  // next turn), but not where a click cannot go: no server, or a send still
-  // waiting to be picked up.
-  const done = smallButton(acts.done.label, "primary git-done", !acts.done.enabled || gone || pendingResult, () => sendGit("done"));
-  if (gone) done.title = "Not connected right now.";
-  else if (pendingResult) done.title = "Your last click is still being picked up.";
-  bar.appendChild(done);
-  return bar;
-}
-
-function gitAction(key, git) {
-  if (key === "commit") return openCommit(git);
-  if (key === "cleanup") return openCleanup(git);
-  if (key === "publish") {
-    // Named only when there is one to name: with two or more, the agent's
-    // `plan publish` asks which (its "Publish to which remote?" card).
-    const remotes = git.remotes || [];
-    return sendGit("publish", remotes.length === 1 && remotes[0].name ? { remote: remotes[0].name } : {});
-  }
-  sendGit(key);
-}
-
-/* The branch table */
-
-function gitBranches(git, locked) {
-  const sec = el("section", "git-branches");
-  const tools = el("div", "git-tools");
-  const search = el("input", "git-search");
-  search.type = "search";
-  search.id = "git-search";
-  search.placeholder = "Search branches";
-  search.setAttribute("aria-label", "Search branches");
-  search.value = board.query;
-  search.addEventListener("input", () => {
-    board.query = search.value;
-    render();
-  });
-  tools.appendChild(search);
-  // Not mid-rebase or merge (the banner owns that), and not before the first
-  // commit, when there is nothing to branch from.
-  const cannotBranch = Boolean(git.inProgress) || git.hasCommits === false;
-  const nb = smallButton("New branch", "", locked || cannotBranch, () => openCreate(git));
-  if (git.hasCommits === false) nb.title = "Make the first commit, then you can branch from it.";
-  else if (git.inProgress) nb.title = "Finish or abort what is in progress first.";
-  tools.appendChild(nb);
-  sec.appendChild(tools);
-
-  // Mid-rebase HEAD is detached, but the branch being rebased is still the
-  // one they are on: it keeps its current badge, and never offers Delete.
-  const rebasing = git.head && git.head.rebasing;
-  const branches = (git.branches || []).map((b) => (rebasing && !b.remote && b.name === rebasing ? { ...b, current: true } : b));
-  const { top, remoteOnly } = orderBranches(branches);
-  const locals = filterBranches(top, board.query);
-  if (locals.length) sec.appendChild(branchTable(locals, locked, git.inProgress));
-  else sec.appendChild(el("p", "git-empty", board.query ? "No local branch matches." : "No local branches yet."));
-
-  if (remoteOnly.length) {
-    const fold = foldRemote(remoteOnly, { showAll: board.showAll, query: board.query });
-    const det = el("details", "git-remote-only");
-    // null remoteOpen takes the fold's default (open under a search); a manual
-    // toggle wins over it, search or not. The toggle event fires for the
-    // programmatic open too, so only a change away from what was rendered
-    // counts as theirs.
-    const renderedOpen = board.remoteOpen ?? Boolean(fold.open);
-    det.open = renderedOpen;
-    det.addEventListener("toggle", () => {
-      if (det.open !== renderedOpen) board.remoteOpen = det.open;
-    });
-    det.appendChild(el("summary", null, `Remote only (${board.query ? fold.shown.length : remoteOnly.length})`));
-    if (fold.shown.length) det.appendChild(branchTable(fold.shown, locked, git.inProgress));
-    else det.appendChild(el("p", "git-empty", "No remote branch matches."));
-    if (fold.hidden) {
-      det.appendChild(
-        smallButton(`Show all ${remoteOnly.length}`, "ghost", false, () => {
-          board.showAll = true;
-          render();
-        })
-      );
-    }
-    sec.appendChild(det);
-  }
-  return sec;
-}
-
-function branchTable(rows, locked, inProgress = false) {
-  const table = el("table", "git-table");
-  const thead = el("thead");
-  const hr = el("tr");
-  for (const h of ["Branch", "Ahead / behind", "Last commit", ""]) hr.appendChild(el("th", null, h));
-  thead.appendChild(hr);
-  table.appendChild(thead);
-  const tbody = el("tbody");
-  for (const b of rows) {
-    const tr = el("tr", b.current ? "is-current" : null);
-    const name = el("td", "git-cell-name");
-    name.appendChild(el("span", "git-name", b.remote ? `${b.remote}/${b.name}` : b.name));
-    const badges = [
-      [b.current, "current", "is-current"],
-      [b.default, "default", "is-default"],
-      [b.merged, "Merged", "is-merged"],
-      [b.gone, "Remote copy deleted", "is-gone"],
-    ];
-    for (const [on, label, cls] of badges) if (on) name.appendChild(el("span", `badge git-badge ${cls}`, label));
-    tr.appendChild(name);
-
-    let track = "not published";
-    if (b.remote) track = "remote only";
-    else if (b.gone) track = "—";
-    else if (b.upstream) track = `↑${b.ahead || 0} ↓${b.behind || 0}`;
-    tr.appendChild(el("td", "git-cell-track", track));
-
-    const last = el("td", "git-cell-last");
-    const l = b.last || {};
-    last.appendChild(el("span", "git-subject", l.subject || ""));
-    const by = [l.author, relativeAge(l.at)].filter(Boolean).join(" · ");
-    if (by) last.appendChild(el("span", "git-by", by));
-    tr.appendChild(last);
-
-    const acts = el("td", "git-cell-actions");
-    const branch = b.remote ? `${b.remote}/${b.name}` : b.name;
-    // Mid-operation the action bar only offers Done; a row's Switch or Delete
-    // would reach the agent asking for a second git op on top of the first.
-    const rowLocked = locked || inProgress;
-    if (!b.current) acts.appendChild(smallButton("Switch", "", rowLocked, () => sendGit("switch", { branch })));
-    if (!b.remote && !b.current && !b.default) {
-      acts.appendChild(smallButton("Delete", "danger", rowLocked, () => sendGit("delete", { branch: b.name })));
-    }
-    tr.appendChild(acts);
-    tbody.appendChild(tr);
-  }
-  table.appendChild(tbody);
-  // The table scrolls sideways on its own when the column is narrower than
-  // its no-wrap cells (a phone), so the search row and the buttons above it
-  // stay on screen.
-  const wrap = el("div", "git-table-wrap");
-  wrap.appendChild(table);
-  return wrap;
-}
-
 /* The panels */
 
-function panelFrame(title, onClose) {
-  const p = el("section", "git-panel");
-  const head = el("div", "git-panel-head");
-  head.appendChild(el("h3", "git-panel-title", title));
-  head.appendChild(smallButton("Close", "ghost", false, onClose));
-  p.appendChild(head);
-  return p;
+// Opening a panel moves to the tab that draws it, so a panel is never open
+// on a hidden tab. `opts.ticks` / `opts.ignore` set the commit panel's picks
+// (the held-back .gitignore offer opens it with nothing ticked).
+function openPanel(name, opts = {}) {
+  if (gitLocked()) return;
+  const git = S.git;
+  if (name === "commit") {
+    board.tab = "changes";
+    if (opts.ticks) board.ticks = new Set(opts.ticks);
+    if (opts.ignore) board.ignore = new Set(opts.ignore);
+    if (board.panel !== "commit") return openCommit(git);
+    persistBoard();
+    return render();
+  }
+  if (name === "create") {
+    board.tab = opts.commit ? "changes" : "branches";
+    // A branch for the commit takes what the commit table has ticked, not a fresh default.
+    if (opts.commit && !opts.files) return openCreate(git, { ...opts, ...tablePicks(git) });
+    return openCreate(git, opts);
+  }
+  if (name === "cleanup") {
+    board.tab = "branches";
+    return openCleanup(git);
+  }
 }
 
 const closePanel = () => {
@@ -3602,23 +3401,6 @@ const closePanel = () => {
   board.create = null;
   render();
 };
-
-// From: origin/<default> when that remote branch exists, else the local
-// default, else the current branch (or, detached, the commit).
-function createSources(git, commit = false) {
-  const def = git.defaultBranch;
-  const rows = git.branches || [];
-  const h = git.head || {};
-  const originDef =
-    def && rows.some((b) => (b.remote === "origin" && b.name === def) || (!b.remote && b.upstream === `origin/${def}`))
-      ? `origin/${def}`
-      : null;
-  const localDef = def && rows.some((b) => !b.remote && b.name === def) ? def : null;
-  const here = h.branch || h.detached || null;
-  // A commit from a detached HEAD belongs on the commit it was made at.
-  const preset = (commit && h.detached) || originDef || localDef || here || "HEAD";
-  return { preset, here, options: [...new Set([originDef, localDef, here, preset].filter(Boolean))] };
-}
 
 // In commit mode the commit panel hands over what it would have sent (its
 // ticked files and .gitignore picks, already checked against the snapshot);
@@ -3643,233 +3425,26 @@ function openCreate(git, { commit = false, files = null, ignore = [] } = {}) {
   $("git-new-desc")?.focus();
 }
 
-function gitCreatePanel(git, locked) {
-  const c = board.create;
-  const p = panelFrame(c.commit ? "New branch for this commit" : "New branch", closePanel);
-  const src = createSources(git, c.commit);
-
-  const fromRow = el("div", "git-field-row");
-  const fromLabel = el("label", "git-field", "From ");
-  const from = el("select");
-  from.id = "git-new-from";
-  for (const o of src.options) {
-    const opt = el("option", null, o);
-    opt.value = o;
-    from.appendChild(opt);
-  }
-  from.value = c.from;
-  from.addEventListener("change", () => {
-    c.from = from.value;
-    render();
-  });
-  fromLabel.appendChild(from);
-  fromRow.appendChild(fromLabel);
-  if (src.here && c.from !== src.here) {
-    fromRow.appendChild(
-      smallButton(`From ${src.here}`, "ghost", false, () => {
-        c.from = src.here;
-        render();
-      })
-    );
-  }
-  p.appendChild(fromRow);
-
-  const parts = el("div", "git-field-row");
-  const typeLabel = el("label", "git-field", "Type ");
-  const type = el("select");
-  type.id = "git-new-type";
-  for (const t of BRANCH_TYPES) {
-    const opt = el("option", null, t);
-    opt.value = t;
-    type.appendChild(opt);
-  }
-  type.value = c.type;
-  typeLabel.appendChild(type);
-  const descLabel = el("label", "git-field is-wide", "Short description ");
-  const desc = el("input");
-  desc.id = "git-new-desc";
-  desc.placeholder = "export csv";
-  desc.value = c.description;
-  descLabel.appendChild(desc);
-  parts.append(typeLabel, descLabel);
-  p.appendChild(parts);
-
-  const nameLabel = el("label", "git-field is-wide", "Branch name ");
-  const name = el("input", "git-new-name");
-  name.id = "git-new-name";
-  nameLabel.appendChild(name);
-  p.appendChild(nameLabel);
-  const status = el("p", "git-name-status");
-  status.setAttribute("aria-live", "polite");
-  p.appendChild(status);
-
-  const actions = el("div", "git-panel-actions");
-  const go = smallButton("Create", "primary", true, () => {
-    const fields = { name: currentName(), from: c.from };
-    if (c.commit) Object.assign(fields, { then: "commit", files: c.files || [] });
-    if (c.commit && c.ignore && c.ignore.length) fields.ignore = c.ignore;
-    sendGit("create", fields);
-  });
-  actions.appendChild(go);
-  actions.appendChild(smallButton("Cancel", "ghost", false, closePanel));
-  p.appendChild(actions);
-
-  // The name mirrors the two fields until it is edited directly. Typing
-  // updates the box, the status line and Create in place, never a redraw.
-  const currentName = () => (c.name == null ? composeBranchName(c) : c.name);
-  const noFiles = c.commit && !(c.files || []).length;
-  const refresh = () => {
-    const value = currentName();
-    if (name.value !== value) name.value = value;
-    const st = nameStatus(value, git);
-    gitNameLine(status, st);
-    if (noFiles) status.appendChild(el("span", null, " Nothing is ticked to commit."));
-    go.disabled = locked || st.kind !== "free" || noFiles;
-  };
-  type.addEventListener("change", () => {
-    c.type = type.value;
-    refresh();
-  });
-  desc.addEventListener("input", () => {
-    c.description = desc.value;
-    refresh();
-  });
-  name.addEventListener("input", () => {
-    c.name = name.value;
-    refresh();
-  });
-  refresh();
-  return p;
+// The commit table's picks, checked against the snapshot: `{ files, ignore }`.
+// Seeded from commitTicks() when the table has not been drawn yet.
+function tablePicks(git) {
+  const ch = git.changes || {};
+  const known = new Set([...(ch.files || []), ...(ch.untrackedDirs || [])].map((f) => f.path));
+  const ticks = board.ticks || (board.ticks = commitTicks(ch));
+  return { files: [...ticks].filter((p) => known.has(p)), ignore: [...board.ignore].filter((p) => known.has(p)) };
 }
 
-function gitNameLine(line, st) {
-  line.replaceChildren();
-  line.className = "git-name-status is-" + st.kind;
-  const say = (text) => line.appendChild(el("span", null, text));
-  const switchTo = (branch) =>
-    line.appendChild(smallButton("Switch to it", "", gitLocked(), () => sendGit("switch", { branch })));
-  if (st.kind === "empty") say("Fill in the fields above, or type a name.");
-  else if (st.kind === "invalid") say(st.reason);
-  else if (st.kind === "free") say("That name is free.");
-  else if (st.kind === "local") {
-    say(`${st.branch} already exists here. `);
-    switchTo(st.branch);
-  } else if (st.kind === "remote") {
-    say(`${st.remote}/${st.branch} already exists on ${st.remote}. `);
-    switchTo(`${st.remote}/${st.branch}`);
-  } else if (st.kind === "nested") say(`It clashes with ${st.clash}: one branch cannot be a folder of another.`);
-}
-
+// The commit table is always on show, so opening its panel keeps what the
+// person has already ticked; sendGit() re-seeds the picks after each click.
 function openCommit(git) {
   if (gitLocked()) return;
   if (board.panel === "commit") return closePanel();
-  board.ticks = commitTicks(git.changes);
-  board.ignore = new Set();
+  const picks = tablePicks(git);
   // Detached: there is no branch to commit on, so the commit makes one.
-  if (git.hasCommits !== false && !(git.head || {}).branch) return openCreate(git, { commit: true });
+  if (git.hasCommits !== false && !(git.head || {}).branch) return openCreate(git, { commit: true, ...picks });
   board.panel = "commit";
   board.create = null;
   render();
-}
-
-function gitCommitPanel(git, locked) {
-  const ch = git.changes || {};
-  const first = git.hasCommits === false;
-  const p = panelFrame(first ? "Make the first commit" : "Commit", closePanel);
-  const ticks = board.ticks || (board.ticks = commitTicks(ch));
-  const table = el("table", "git-table git-files");
-  const thead = el("thead");
-  const hr = el("tr");
-  for (const h of ["", "File", "State"]) hr.appendChild(el("th", null, h));
-  thead.appendChild(hr);
-  table.appendChild(thead);
-  const tbody = el("tbody");
-  const tickBox = (id, path) => {
-    const box = el("input");
-    box.type = "checkbox";
-    box.id = id;
-    box.checked = ticks.has(path);
-    box.setAttribute("aria-label", `Commit ${path}`);
-    box.addEventListener("change", () => {
-      if (box.checked) {
-        ticks.add(path);
-        board.ignore.delete(path);
-      } else ticks.delete(path);
-      render();
-    });
-    return box;
-  };
-  (ch.files || []).forEach((f, i) => {
-    const tr = el("tr", f.risky ? "is-held" : null);
-    const cell = el("td");
-    cell.appendChild(tickBox(`git-tick-f${i}`, f.path));
-    tr.appendChild(cell);
-    tr.appendChild(el("td", "git-path", f.path));
-    const state = el("td", "git-state", f.state || "");
-    if (f.risky) state.appendChild(el("span", "badge git-badge is-held", "held back"));
-    tr.appendChild(state);
-    tbody.appendChild(tr);
-  });
-  (ch.untrackedDirs || []).forEach((d, i) => {
-    const tr = el("tr");
-    const cell = el("td");
-    cell.appendChild(tickBox(`git-tick-d${i}`, d.path));
-    tr.appendChild(cell);
-    tr.appendChild(el("td", "git-path", d.path));
-    const state = el("td", "git-state", `untracked folder · ${d.files} ${d.files === 1 ? "file" : "files"} `);
-    const ignore = el("label", "git-ignore");
-    const box = el("input");
-    box.type = "checkbox";
-    box.id = `git-ignore-d${i}`;
-    box.checked = board.ignore.has(d.path);
-    box.addEventListener("change", () => {
-      if (box.checked) {
-        board.ignore.add(d.path);
-        ticks.delete(d.path);
-      } else board.ignore.delete(d.path);
-      render();
-    });
-    ignore.append(box, document.createTextNode(" Add to .gitignore"));
-    state.appendChild(ignore);
-    tr.appendChild(state);
-    tbody.appendChild(tr);
-  });
-  table.appendChild(tbody);
-  p.appendChild(table);
-
-  const known = new Set([...(ch.files || []), ...(ch.untrackedDirs || [])].map((f) => f.path));
-  const files = [...ticks].filter((path) => known.has(path));
-  const ignore = [...board.ignore].filter((path) => known.has(path));
-  const send = () => sendGit("commit", { files, ignore });
-  const nothing = !files.length;
-  const actions = el("div", "git-panel-actions");
-  const h = git.head || {};
-  if (!first && h.branch && h.branch === git.defaultBranch) {
-    const offer = el("p", "git-offer", `You're on ${h.branch}. Make a branch for this?`);
-    actions.appendChild(offer);
-    actions.appendChild(
-      smallButton("Create branch", "primary", locked || nothing, () => openCreate(git, { commit: true, files, ignore }))
-    );
-    actions.appendChild(smallButton(`Commit on ${h.branch}`, "", locked || nothing, send));
-  } else {
-    actions.appendChild(
-      smallButton(`Commit ${files.length} ${files.length === 1 ? "file" : "files"}`, "primary", locked || nothing, send)
-    );
-  }
-  actions.appendChild(smallButton("Cancel", "ghost", false, closePanel));
-  p.appendChild(actions);
-  return p;
-}
-
-// Merged into the default branch, and those whose remote copy is deleted.
-// Never the current or the default branch; a branch in both lists shows once.
-function cleanupGroups(git) {
-  const locals = (git.branches || []).filter((b) => !b.remote && !b.current && !b.default);
-  // Gone wins, as cleanup-list has it: the panel names each branch the way
-  // the confirm that follows will.
-  const merged = locals.filter((b) => b.merged && !b.gone);
-  const gone = locals.filter((b) => b.gone);
-  return { merged, gone };
 }
 
 function openCleanup(git) {
@@ -3882,49 +3457,6 @@ function openCleanup(git) {
   render();
 }
 
-function gitCleanupPanel(git, locked) {
-  const p = panelFrame("Clean up branches", closePanel);
-  const { merged, gone } = cleanupGroups(git);
-  const sweep = board.sweep || (board.sweep = new Set([...merged, ...gone].map((b) => b.name)));
-  const group = (title, rows, key) => {
-    if (!rows.length) return;
-    p.appendChild(el("h4", "git-group-title", title));
-    const list = el("ul", "git-sweep");
-    rows.forEach((b, i) => {
-      const li = el("li");
-      const label = el("label");
-      const box = el("input");
-      box.type = "checkbox";
-      box.id = `git-sweep-${key}${i}`;
-      box.checked = sweep.has(b.name);
-      box.addEventListener("change", () => {
-        if (box.checked) sweep.add(b.name);
-        else sweep.delete(b.name);
-        render();
-      });
-      label.append(box, document.createTextNode(" " + b.name));
-      li.appendChild(label);
-      list.appendChild(li);
-    });
-    p.appendChild(list);
-  };
-  group(`Merged into ${git.defaultBranch}`, merged, "m");
-  group("Remote copy deleted", gone, "g");
-  const known = new Set([...merged, ...gone].map((b) => b.name));
-  const branches = [...sweep].filter((n) => known.has(n));
-  const actions = el("div", "git-panel-actions");
-  actions.appendChild(
-    smallButton(
-      `Delete ${branches.length} ${branches.length === 1 ? "branch" : "branches"}`,
-      "danger",
-      locked || !branches.length,
-      () => sendGit("cleanup", { branches })
-    )
-  );
-  actions.appendChild(smallButton("Cancel", "ghost", false, closePanel));
-  p.appendChild(actions);
-  return p;
-}
 
 /* ------------------------------------------------------------- welcome */
 
@@ -5228,7 +4760,7 @@ function renderStagedMarks() {
   else if (shown) shown.remove();
   else if (next) {
     // Under its card, not under whatever follows it (the git board).
-    const card = main.querySelector(":scope > .card");
+    const card = main.querySelector(":scope > .card, :scope > .git-board > .git-cards > .card");
     if (card) card.after(next);
     else main.appendChild(next);
   }

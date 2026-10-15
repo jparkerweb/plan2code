@@ -194,12 +194,13 @@ A page opens with every skill laid out as cards — the setup pair, the pipeline
 in order, and the utilities alongside — with a note about what it made of your
 project (no AGENTS.md yet, a spec waiting on Phase 2) and a *Suggested* flag on
 the card it would pick. **Git** is among the utilities, always available: it opens
-the git board, with your branches, pull, push and commits on one page (Help's
-*The git board* topic walks through it), and asks before every push, publish and
-delete. In a folder that is not a git repository its card says *Not a git
-repository yet: it offers to start one*, and clicking it still works. Click
-one and Planny flies while it gets ready; a few seconds later the same page
-is that skill's console, already running. No command names to remember.
+the git board, three tabs — Changes, Branches and Sync — that open on the
+likely next step (Help's *The git board* topic walks through it), and asks
+before every push, publish and delete. In a folder that is not a git
+repository its card says *Not a git repository yet: it offers to start one*,
+and clicking it still works. Click one and Planny flies while it gets ready;
+a few seconds later the same page is that skill's console, already running. No
+command names to remember.
 
 A freshly opened dashboard starts with Planny asleep in the middle of the page.
 Click to wake him: he snores once while he gets a gentle shake side to side,

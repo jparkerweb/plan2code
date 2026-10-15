@@ -686,7 +686,7 @@ export const SKILL_CATALOG = [
     group: "extra",
     chip: "Utility",
     title: "Handoff",
-    blurb: "Pack this conversation into a document a fresh session can pick up cold.",
+    blurb: "Pack the current session into a document a fresh session can pick up cold.",
     about:
       "Writes down everything a new session would need, as a single document: what was decided, what is done, what is left. Use it when a conversation got long, a machine changed, or tomorrow-you deserves the context today-you has.",
   },

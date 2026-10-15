@@ -6,8 +6,8 @@ Open with `--workflow git` (launched from the dashboard, or by a **Commit it
 now** or Changelog hand-off: resume the session instead). Like the dashboard,
 the main column is drawn by the page itself: the git board, from `state.git`,
 which `open` and every `reread` snapshot through `git-repo.mjs`. **You never
-post `git`** (exit 3: `state.git` is the console's own). Your cards sit above
-the board in the usual card slot.
+post `git`** (exit 3: `state.git` is the console's own). Your cards sit in
+the board's card slot, under its tab strip.
 
 **A click** arrives as one session action, one per send, and the board locks
 until your next post lands:
@@ -27,7 +27,7 @@ until your next post lands:
 | `switch`, `delete` | `branch` (a remote-only row is `<remote>/<name>`) |
 | `create` | `name`, `from`; `then: "commit"` with `files` (and `ignore`, when any) when it came from the commit panel's branch offer |
 | `cleanup` | `branches[]` |
-| `commit` | `files[]` (paths and untracked folders), `ignore[]` (folders to add to `.gitignore`) |
+| `commit` | `files[]` (paths and untracked folders), `ignore[]` (folders to add to `.gitignore`). `files[]` may be empty when `ignore[]` is not: the board's held-back offer (**Add … to .gitignore**). Then add the paths to `.gitignore` and commit only `.gitignore`. |
 | `pr-host` | `host`, `kind` (already saved by the page's `POST /pr-host`) |
 
 `reply` is the plain instruction the terminal would get, so it reads like any
@@ -108,12 +108,17 @@ Post `run: { "event": "git-commits", "id": "<first short hash>", "commits": N }`
 after each commit step (N commits made), and `run: { "event": "git-conflict",
 "id": "conflict-<n>" }` once per conflict help, resolved or aborted.
 
-**Finishing** (`console-finish.md`). Done (`op: "done"`) with something done
-this session: a `finish` with a headline, the commits with hashes, pushes and
-branches created or deleted in `body`, no `command`, and `"dashboard": true`;
-keep waiting for the press. Done with nothing done: no finish screen — resume
-as `dashboard` at once (`open --resume <sid> --no-open --workflow dashboard`),
-read the dashboard skill (`~/.agents/skills/plan2code/SKILL.md`), post its
-`menu` with `--wait` and carry on from its "Coming back from another skill". A
-stop's finish is a pause, headline "Paused …", the bare `/plan2code-git`,
-then `stop`.
+**Finishing** (`console-finish.md`). **Done with git** (`op: "done"`). A `done`
+that arrives while one of your cards is still open is the person cancelling it:
+record that card as cancelled (`{ "items": [{ "id": "<id>", "status":
+"answered", "answer": { "text": "Cancelled by Done with git" } }] }`, not
+`settle`, which refuses a card nothing was sent to) in the same post as the
+finish, or, with nothing done, before resuming as the dashboard. Never run what
+the card was asking for. With something done this session: a `finish` with a
+headline, the commits with hashes, pushes and branches created or deleted in
+`body`, no `command`, and `"dashboard": true`; keep waiting for the press. Done
+with nothing done: no finish screen — resume as `dashboard` at once (`open
+--resume <sid> --no-open --workflow dashboard`), read the dashboard skill
+(`~/.agents/skills/plan2code/SKILL.md`), post its `menu` with `--wait` and
+carry on from its "Coming back from another skill". A stop's finish is a pause,
+headline "Paused …", the bare `/plan2code-git`, then `stop`.

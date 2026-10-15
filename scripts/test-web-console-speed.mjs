@@ -550,7 +550,7 @@ test("a wait with nothing open leaves a working agent working", () => {
 
 test("the git board lets go of a working agent that went adrift", () => {
   const js = fs.readFileSync(path.join(ROOT, "src", "web-console", "public", "app.js"), "utf8");
-  const at = js.indexOf("const gitLocked = ");
+  const at = js.indexOf("const gitMode = ");
   const line = js.slice(at, js.indexOf(";", at));
   assert.ok(line.includes("(agentWorking() && !agentAdrift())"), line);
 });
@@ -649,8 +649,8 @@ test("a finish ends the working stretch, and resuming a pause starts a fresh one
 
 test("a card with a note box over the git board flows at its own height, never shrunk under the board", () => {
   const css = fs.readFileSync(path.join(ROOT, "src", "web-console", "public", "app.css"), "utf8");
-  const rule = css.slice(css.indexOf(".main:has(> .git-board) > .card,"), css.indexOf("{", css.indexOf(".main:has(> .git-board) > .card,")));
-  assert.ok(rule.includes(".main:has(> .git-board) > .card.is-primary.has-grow"), "the board's natural-height rule outranks .has-grow");
+  const rule = css.slice(css.indexOf(".git-cards > .card,"), css.indexOf("{", css.indexOf(".git-cards > .card,")));
+  assert.ok(rule.includes(".git-cards > .card.is-primary.has-grow"), "the board's natural-height rule outranks .has-grow");
   const js = fs.readFileSync(path.join(ROOT, "src", "web-console", "public", "app.js"), "utf8");
   const fn = js.slice(js.indexOf("function markGrowBox("), js.indexOf("function naturalHeight("));
   assert.ok(fn.includes("isGitBoard()"), "no box grows over the board");
@@ -668,16 +668,18 @@ test("long task lines, long words, a narrow board and a narrow Ask pane never wi
   assert.match(rule(".main > .git-board"), /grid-template-columns: minmax\(0, 1fr\)/);
   assert.match(rule(".git-table-wrap"), /overflow-x: auto/, "the branch table scrolls on its own");
   assert.match(rule(".ask-actions"), /flex-wrap: wrap/, "the Ask pane's Send never clips");
-  const js = fs.readFileSync(path.join(ROOT, "src", "web-console", "public", "app.js"), "utf8");
-  const fn = js.slice(js.indexOf("function branchTable("), js.indexOf("/* The panels */"));
-  assert.ok(fn.includes('el("div", "git-table-wrap")'), "branchTable wraps its table");
+  const view = fs.readFileSync(path.join(ROOT, "src", "web-console", "public", "git-board-view.js"), "utf8");
+  const fn = view.slice(view.indexOf("function branchTable("), view.indexOf("function createPanel("));
+  assert.ok(fn.includes('h.el("div", "git-table-wrap")'), "branchTable wraps its table");
 });
 
 test("over the git board a note box grows with its text, and the no-repo note only points above when a card is there", () => {
   const css = fs.readFileSync(path.join(ROOT, "src", "web-console", "public", "app.css"), "utf8");
-  assert.match(css, /\.main:has\(> \.git-board\) > \.card textarea \{ field-sizing: content; max-height: 50vh; \}/);
-  const js = fs.readFileSync(path.join(ROOT, "src", "web-console", "public", "app.js"), "utf8");
-  const fn = js.slice(js.indexOf("function renderGitBoard("), js.indexOf("function rememberGitScroll("));
-  assert.ok(fn.includes('main.querySelector(":scope > .card")'), "the note checks for a card first");
+  assert.match(css, /\.git-cards > \.card textarea \{ field-sizing: content; max-height: 50vh; \}/);
+  const view = fs.readFileSync(path.join(ROOT, "src", "web-console", "public", "git-board-view.js"), "utf8");
+  const fn = view.slice(view.indexOf("export function drawGitBoard("), view.indexOf("function header("));
+  assert.ok(fn.includes("ctx.hasCard"), "the note checks for a card first");
   assert.ok(fn.includes("will ask what to do here in a moment"));
+  const js = fs.readFileSync(path.join(ROOT, "src", "web-console", "public", "app.js"), "utf8");
+  assert.match(js, /hasCard: Boolean\(card\)/, "the host says whether a card is in the slot");
 });

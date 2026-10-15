@@ -25,6 +25,7 @@
     <link rel="modulepreload" href="/mentions.js" />
     <link rel="modulepreload" href="/favicon.js" />
     <link rel="modulepreload" href="/git-board.js" />
+    <link rel="modulepreload" href="/git-board-view.js" />
     <link rel="modulepreload" href="/pr-url.js" />
     <link rel="modulepreload" href="/vendor/marked.esm.js" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
@@ -1570,7 +1571,7 @@
         <ul>
           <li><strong>Quick task.</strong> Too small for the full process? A quick plan, then it just builds it.</li>
           <li><strong>Review.</strong> A second opinion on the changes. Problems ranked, and you pick what gets fixed.</li>
-          <li><strong>Handoff.</strong> Pack this conversation into a document a fresh session can pick up cold.</li>
+          <li><strong>Handoff.</strong> Pack the current session into a document a fresh session can pick up cold.</li>
           <li><strong>Changelog.</strong> Checks the CHANGELOG version against the main branch and suggests entries for what is new.</li>
           <li><strong>Git.</strong> Branches, pull, push and commits on one board, asking before anything leaves your machine. See "The git board".</li>
         </ul>
@@ -1733,86 +1734,123 @@
       <section class="help-panel" data-tab="git">
         <h3>The git board</h3>
         <p class="help-lead">
-          The Git card opens one board for your repository: branches, pull,
-          push and commits in one place. Every button is a request to
-          Plan2Code, which runs the git commands and says what each one did.
+          The Git card opens a board for your repository: three tabs — Changes,
+          Branches and Sync — and the next step on top. Every button is a request
+          to Plan2Code, which runs the git commands and says what each one did.
         </p>
         <h4>The header</h4>
         <ul>
-          <li>The branch you are on, and how far it is ahead of or behind its remote copy.</li>
+          <li>
+            The branch you are on, and how far it is ahead of (↑) or behind (↓)
+            its remote copy, or that it is not published yet.
+          </li>
+          <li>With more than one remote, a badge names the one your branch follows.</li>
+          <li>
+            With no remote at all, a <strong>No remote</strong> line shows the
+            command that adds one, with a copy button.
+          </li>
           <li>
             <strong>Last refreshed</strong> says when the remotes were last
-            fetched. <strong>Refresh</strong> fetches again; if that fails, the
-            line says so.
-          </li>
-          <li>
-            Once your branch is pushed, <strong>Open pull request</strong> opens
-            your host's new pull request page, into the default branch or the
-            one you pick beside it. The first time a host is unknown, the board
-            asks which kind it is and remembers the answer.
+            fetched. If a refresh fails, the line says so.
           </li>
         </ul>
-        <h4>The branch table</h4>
+        <h4>The tabs</h4>
         <ul>
           <li>
-            The branch you are on and the default branch come first, then the
-            rest, newest commit first, each with <strong>Switch</strong> and
-            <strong>Delete</strong>.
+            <strong>Changes</strong> lists your uncommitted files, ready to
+            commit. Its badge counts them, or shows a dot when the only files
+            left are held back (secrets and very large files).
           </li>
           <li>
-            <strong>Merged</strong> marks a branch already merged into the
-            default branch, and <strong>Remote copy deleted</strong> one whose
-            remote copy is gone. <strong>Clean up</strong> offers to delete those
-            local branches in one go.
+            <strong>Branches</strong> lists your branches with Switch and Delete,
+            plus new branch and clean-up. Its badge counts branches already
+            merged, or whose remote copy is gone, that can be cleaned up.
+            Branches that exist only on the remote sit under <strong>Remote
+            only</strong>, showing the first
+            <span data-fact="remoteFold">50</span>; <strong>Search
+            branches</strong> filters both lists.
           </li>
           <li>
-            Branches that exist only on the remote sit under
-            <strong>Remote only</strong>, showing the first
-            <span data-fact="remoteFold">50</span>; <strong>Show all</strong>
-            lists the rest.
+            <strong>Sync</strong> holds pull, push and publish. Its badge shows
+            ↑ and ↓ counts, ↑ alone when the branch is unpublished, or ? when the
+            remotes have not been checked lately. During a rebase or merge it
+            shows <strong>!</strong> instead. Once your branch is pushed, Sync
+            also offers <strong>Open pull request</strong>, into the default
+            branch or the one you pick beside it; the first time a host is
+            unknown, it asks which kind it is and remembers the answer.
           </li>
-          <li><strong>Search branches</strong> filters both lists by name or last commit.</li>
+          <li>A filled badge marks the tab where the next step is.</li>
         </ul>
-        <h4>What asks first</h4>
+        <h4>The next step</h4>
         <ul>
           <li>
-            <strong>Push</strong>, <strong>Publish</strong>,
-            <strong>Delete</strong> and <strong>Clean up</strong> always show
-            exactly what will happen and wait for your yes. Deleting a branch
-            that is not merged is a red confirm.
+            The tab that holds it opens with one main button and, at most, one
+            quieter one beside it: Commit, Push, Publish, Open pull request, and
+            so on.
           </li>
           <li>
-            Switching with uncommitted changes asks first: <strong>Switch and
-            bring them</strong>, <strong>Commit first</strong> or
-            <strong>Cancel</strong>. A pull that would touch your changes asks
-            the same way.
+            On the other tabs, a line reads <strong>Next step is on
+            ‹tab›</strong>; click it to go there.
           </li>
           <li>
-            <strong>Commit</strong> opens a list of your changed files to tick,
-            and you approve the message before anything is committed.
+            Held-back files never count toward the next step. The board offers
+            to add them to <code>.gitignore</code> instead.
           </li>
-          <li>A remote branch is never deleted, and nothing is ever force-pushed.</li>
+          <li>
+            When the remotes were last checked over an hour ago, it says
+            <strong>Checked … — Refresh?</strong>.
+          </li>
+          <li>
+            With nothing to do it says <strong>All caught up</strong>, or
+            <strong>Nothing to commit … no remote yet</strong> when there is no
+            remote.
+          </li>
+          <li>
+            Push, Publish, Delete and Clean up always show exactly what will
+            happen and wait for your yes. Nothing is ever force-pushed, and a
+            remote branch is never deleted.
+          </li>
         </ul>
-        <h4>One action at a time</h4>
+        <h4>Moving between tabs</h4>
+        <ul>
+          <li>
+            Once a click of yours has landed, the board moves to the tab of the
+            next step. Anything else that changes leaves you where you are.
+          </li>
+          <li>Reloading the page keeps the tab you were on.</li>
+          <li>The arrow keys move between tabs, and Home and End jump to the first and last.</li>
+        </ul>
+        <h4>While something is running</h4>
+        <ul>
+          <li>
+            Everything greys out except switching tabs, searching and opening
+            folds, so nothing queues up behind the running command.
+          </li>
+          <li>What is running shows where the next step usually sits.</li>
+          <li>Plan2Code's questions appear under the tab strip.</li>
+          <li>
+            When it is done, a result line says what happened, with the commit
+            hashes, and the board redraws from the repository as it now stands.
+          </li>
+        </ul>
+        <h4>Mid-rebase or merge</h4>
         <p>
-          While Planny works on a click, the bar is locked, so nothing queues
-          up behind it. When it is done, a result line says what happened, with
-          the commit hashes, and the board redraws from the repository as it now
-          stands.
+          A rebase or merge that stopped on conflicts shows one block on Sync,
+          with the files still to fix. <strong>Continue</strong> becomes the main
+          button once no conflict markers are left; a single <strong>Abort</strong>
+          puts everything back as it was. The other tabs wait until it is
+          finished or aborted.
         </p>
-        <h4>Done</h4>
+        <h4>Done with git</h4>
         <p>
-          <strong>Done</strong> ends the session. If anything happened, the last
-          screen lists the commits, pushes and branches created or deleted, with
-          <strong>Back to the dashboard</strong>. If nothing did, the page goes
-          straight back to the dashboard.
-        </p>
-        <h4>In the terminal</h4>
-        <p>
-          The same skill takes plain instructions, such as
-          <code>/plan2code-git switch to main</code> or
-          <code>/plan2code-git commit and push</code>, and asks the same
-          questions before every push, publish and delete.
+          <strong>Done with git</strong> ends the board. If anything happened, the
+          last screen lists the commits, pushes and branches created or deleted,
+          with <strong>Back to the dashboard</strong>; if nothing did, the page
+          goes straight back to the dashboard. It greys while a command runs and
+          comes back when it is done; if Plan2Code stops checking in,
+          <strong>Stop session</strong> in the top bar ends the session instead.
+          While a question of Plan2Code's waits, it cancels that question and
+          finishes.
         </p>
       </section>
 

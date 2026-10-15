@@ -2,6 +2,19 @@
 
 All notable changes to Plan2Code will be documented in this file.
 
+## v2.8.0
+
+### 🔧 Changed
+
+- **git**: the web console's git board is now three tabs, **Changes**, **Branches** and **Sync**, and opens on the tab holding the likely next step. Ten fixed rules pick that step from the repository's state (fix or continue a stopped rebase or merge, make the first commit, make a branch on a detached HEAD, commit or start a branch for your changes, pull, push, publish, open a pull request, clean up branches) and show it as one main button with at most one quieter one beside it. Each tab badges what is waiting on it, and the other tabs say "Next step is on ‹tab›" with a link to it. Your own click moves you to the next step's tab once it lands; a refresh or a commit from the terminal leaves you where you are, and a reload keeps your tab.
+- **git**: held-back files (secrets, files over 5 MB) no longer keep Commit as the next step forever. They get a quiet "held back" line and an **Add … to .gitignore** offer, which commits only `.gitignore`.
+- **git**: a busy board is read-only. While a git command runs or the agent has not picked up your last click, every button, tick and picker greys out (switching tabs, search and folds still work), and what is running shows where the next step usually sits. Plan2Code's questions now appear under the tab strip.
+- **git**: a rebase or merge stopped on conflicts shows one block on Sync with the files marked *markers left* or *resolved*, one main button and **Abort** once; Changes and Branches wait until it is finished or aborted.
+- **git**: **Done with git** is a normal button at the right of the tab strip. It greys while a git command runs (Stop session in the top bar still works), and while one of Plan2Code's questions waits it cancels that question and finishes.
+- **web-console**: Help → *The git board* is rewritten for the tabs, badges, the next step, the busy rules and Done with git. Handoff is described as packing the current session, not this conversation.
+- **docs**: the docs site's "Any time" skills now list **Changelog** and **Git** beside Quick task, Review and Handoff.
+- **tests**: `scripts/test-web-console-git-board.mjs` checks every sample repository state's next step, tab and badges, proves no control on a busy board is clickable, and that every board function is reachable on some tab.
+
 ## v2.7.1
 
 ### 🐛 Fixed
