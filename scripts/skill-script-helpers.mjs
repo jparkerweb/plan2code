@@ -83,8 +83,12 @@ export function write(root, rel, content) {
 
 export const read = (root, rel) => fs.readFileSync(path.join(root, rel), "utf8");
 
-/** A git runner for `dir`. */
-export const gitIn = (dir) => (...a) => execFileSync("git", a, { cwd: dir, stdio: "pipe", encoding: "utf8" });
+/**
+ * A git runner for `dir`, under the same scrubbed config the scripts get: with
+ * the ambient config, a global core.autocrlf=true checks files out with CRLF
+ * that the scripts (autocrlf off) then read as changed.
+ */
+export const gitIn = (dir) => (...a) => execFileSync("git", a, { cwd: dir, stdio: "pipe", encoding: "utf8", env: scrubbedEnv() });
 
 export function gitInit(dir, branch = "main") {
   const g = gitIn(dir);
