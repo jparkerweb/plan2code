@@ -2,6 +2,17 @@
 
 All notable changes to Plan2Code will be documented in this file.
 
+## v2.8.1
+
+### 📚 Documentation
+
+- **docs**: the docs site now shows the git board, with a light and dark screenshot under the pipeline's "Any time" cards: the Changes, Branches and Sync tabs, opening on the likely next step, the tab badges, the single block for a stopped rebase or merge, and asking before every push, publish or delete.
+- **docs**: `scripts/capture-screenshots.mjs` gains a `git` shot. It builds a sample repository with a pushed feature branch and three changes to commit, so `node scripts/capture-screenshots.mjs --only git` regenerates the images.
+
+### 🐛 Fixed
+
+- **tests**: `npm test` no longer fails `git plan switch` on a machine with a global `core.autocrlf=true`. `scripts/skill-script-helpers.mjs` now strips back the git config for the whole test process, so test fixtures, imported modules and the scripts under test always use the same settings.
+
 ## v2.8.0
 
 ### 🔧 Changed

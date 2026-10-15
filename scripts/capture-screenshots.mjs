@@ -13,7 +13,7 @@
 // The shots use the console's Ocean highlight rather than its default orange:
 // it is the console's nearest to the Plan2Code blue the site and README use.
 //
-// Shots: dashboard, dashboard-utilities, question, doc, build, signoff, finish, ask.
+// Shots: dashboard, dashboard-utilities, question, doc, build, signoff, finish, ask, git.
 //
 // Needs puppeteer-core (`npm i --no-save puppeteer-core`, never added to
 // package.json) and a local Chrome or Edge. Writes nothing outside its temp
@@ -67,6 +67,9 @@ const SHOTS = {
   signoff: { workflow: "implement", posts: ["signoff"] },
   finish: { workflow: "implement", posts: ["signoff", "finish"] },
   ask: { workflow: "plan", posts: ["question"], ask: "Where are tasks paged?" },
+  // The git board draws itself from a real repository, so this shot runs in
+  // its own git sample project; the post only hands the board back to you.
+  git: { workflow: "git", posts: ["git"], repo: true },
 };
 
 // On Windows the temp dir sits under the user's profile, and the page can
@@ -166,6 +169,46 @@ function makeSampleProject() {
   return project;
 }
 
+function git(cwd, ...gitArgs) {
+  const r = spawnSync("git", gitArgs, { cwd, env: ENV, encoding: "utf8" });
+  if (r.status !== 0) throw new Error(`git ${gitArgs.join(" ")} failed: ${(r.stderr || "").trim()}`);
+}
+
+// The git shot's project: the same sample in a repository whose feature branch
+// is pushed to a local bare "origin" and has three changes to commit, so the
+// board opens on Changes with Commit as the next step. It sits in its own
+// folder so the other shots never see a repository.
+let GIT_PROJECT = null;
+function makeGitProject() {
+  if (GIT_PROJECT) return GIT_PROJECT;
+  const parent = path.join(SCRATCH, "git");
+  fs.mkdirSync(parent, { recursive: true });
+  const origin = path.join(parent, "origin.git");
+  git(parent, "init", "--bare", "--initial-branch=main", origin);
+  const prev = SCRATCH;
+  SCRATCH = parent;
+  const project = makeSampleProject();
+  SCRATCH = prev;
+  const id = ["-c", "user.name=Sam Rivera", "-c", "user.email=sam@example.com", "-c", "commit.gpgsign=false"];
+  git(project, "init", "--initial-branch=main");
+  git(project, "remote", "add", "origin", origin);
+  git(project, "add", "-A");
+  git(project, ...id, "commit", "-m", "Scaffold the task API and its specs");
+  git(project, "push", "-u", "origin", "main");
+  git(project, "switch", "-c", "feature/task-endpoints");
+  fs.writeFileSync(path.join(project, "src", "tasks", "routes.js"), "// The /tasks routes.\nexport default async function routes(app) {}\n");
+  git(project, "add", "-A");
+  git(project, ...id, "commit", "-m", "Register the /tasks routes plugin");
+  git(project, "push", "-u", "origin", "feature/task-endpoints");
+  // A fetch stamps FETCH_HEAD, so the board says "Last refreshed" rather than "Never".
+  git(project, "fetch", "origin");
+  fs.appendFileSync(path.join(project, "src", "tasks", "paginate.js"), "\nexport const MAX_LIMIT = 50;\n");
+  fs.writeFileSync(path.join(project, "src", "tasks", "schema.js"), "// The Zod schema for a task.\nexport const taskSchema = {};\n");
+  fs.appendFileSync(path.join(project, "specs", "task-api", "phase-3.md"), "\n<!-- Task 3.1 in progress -->\n");
+  GIT_PROJECT = project;
+  return project;
+}
+
 function cli(cwd, ...cliArgs) {
   const r = spawnSync(process.execPath, [CONSOLE_CLI, ...cliArgs], { cwd, env: ENV, encoding: "utf8" });
   const line = (r.stdout || "").trim().split("\n").pop() || "";
@@ -194,7 +237,7 @@ function stage(project, shot) {
 // (the dashboard's wake-up is the longest).
 async function settle(page) {
   await page.waitForNetworkIdle({ idleTime: 500, timeout: 15000 }).catch(() => {});
-  await page.waitForSelector(".dash-card, .card, .handoff, .ask-pane, .doc", { timeout: 15000 }).catch(() => {});
+  await page.waitForSelector(".dash-card, .card, .handoff, .ask-pane, .doc, .git-board", { timeout: 15000 }).catch(() => {});
   await sleep(3500);
 }
 
@@ -348,12 +391,13 @@ async function main() {
       args: ["--no-first-run", "--no-default-browser-check", "--mute-audio"],
     });
     for (const name of names) {
-      const { sid, url } = stage(project, name);
+      const where = SHOTS[name].repo ? makeGitProject() : project;
+      const { sid, url } = stage(where, name);
       try {
-        if (SHOTS[name].ask) await captureAsk(browser, project, sid, url, SHOTS[name].ask);
+        if (SHOTS[name].ask) await captureAsk(browser, where, sid, url, SHOTS[name].ask);
         else await capture(browser, url, name, SHOTS[name]);
       } finally {
-        cli(project, "stop", "--session", sid);
+        cli(where, "stop", "--session", sid);
       }
     }
   } finally {

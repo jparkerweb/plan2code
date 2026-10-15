@@ -13,6 +13,7 @@ and dark WebP images in `docs/screenshots/`.
 | `build.json` | A phase being built: the progress bar, the task list and the current task |
 | `signoff.json` | The completion report and the sign-off card |
 | `finish.json` | The finished screen after sign-off (posted after `signoff.json`) |
+| `git.json` | The git board, handed back to you in a sample repository with three changes to commit (the script builds the repository) |
 
 Refresh every image with `node scripts/capture-screenshots.mjs`, or one with
 `--only <shot>`.
