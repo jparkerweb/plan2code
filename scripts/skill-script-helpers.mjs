@@ -57,6 +57,13 @@ export function scrubbedEnv(extra = {}) {
   return { ...e, GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: EMPTY_GITCONFIG, ...extra };
 }
 
+// Every git in a test process that imports this file runs under that same
+// scrubbed config: fixture commands, the modules a test imports and the
+// scripts it spawns. Mixed configs disagree: a global core.autocrlf=true once
+// checked fixtures out with CRLF that the scrubbed scripts read as changed.
+for (const k of AMBIENT_GIT_ENV) delete process.env[k];
+Object.assign(process.env, { GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: EMPTY_GITCONFIG });
+
 export function runScript(skill, script, args, { cwd, env } = {}) {
   const r = spawnSync(process.execPath, [path.join(SKILLS, skill, "scripts", script), ...args], {
     cwd: cwd || ROOT,
@@ -83,12 +90,8 @@ export function write(root, rel, content) {
 
 export const read = (root, rel) => fs.readFileSync(path.join(root, rel), "utf8");
 
-/**
- * A git runner for `dir`, under the same scrubbed config the scripts get: with
- * the ambient config, a global core.autocrlf=true checks files out with CRLF
- * that the scripts (autocrlf off) then read as changed.
- */
-export const gitIn = (dir) => (...a) => execFileSync("git", a, { cwd: dir, stdio: "pipe", encoding: "utf8", env: scrubbedEnv() });
+/** A git runner for `dir`, under the scrubbed config set beside `scrubbedEnv`. */
+export const gitIn = (dir) => (...a) => execFileSync("git", a, { cwd: dir, stdio: "pipe", encoding: "utf8" });
 
 export function gitInit(dir, branch = "main") {
   const g = gitIn(dir);
