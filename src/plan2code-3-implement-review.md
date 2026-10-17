@@ -27,6 +27,8 @@ This file controls the two referenced workflows. Follow each referenced workflow
 
 Read references/implement.md
 
+The habits in `references/building-habits.md` apply exactly as Implementation Mode reads them.
+
 Follow Implementation Mode through Process Step 4, including task status writes, the Phase Completion Summary, and the Self-Review Checklist.
 
 Override Implementation Mode at the sign-off boundary:
@@ -52,6 +54,7 @@ Run Review Mode with this explicit scope:
 - Use overview.md and the active phase file for spec-compliance context; they do not broaden scope to other phases.
 - Read related callers, dependencies, and project files when needed to verify a finding, but do not turn them into unrelated review targets.
 - Review all changed files completely and apply the full focused-review depth required by Review Mode.
+- Review Mode's helper rule applies: a fresh helper runs the analysis when available, this session verifies every finding, and the Stage 4 report carries the Reviewed by line. The helper's brief carries the phase's `phase-X.md` and its change set only, never Stage 1's work notes.
 
 Override Review Mode's completion and session-end behavior:
 
@@ -80,13 +83,13 @@ Return to Implementation Mode and render its Completion Report Format with heade
 
 Include the normal implementation completion sections plus:
 
-- **Review Results:** scope, files reviewed, finding totals by severity, and fixes applied.
+- **Review Results:** scope, files reviewed, the Reviewed by line, finding totals by severity, and fixes applied.
 - **Unresolved Review Findings:** concise numbered list, or `None`.
 - **Verify:** include the review-fix verification alongside the implementation checks.
 
 Then ask:
 
-> Reply `approved` to mark this reviewed phase complete, or describe any issues.
+> Reply `approved` to mark this reviewed phase complete, `show me` to see it running first (Implementation Mode's Show me it working, references/implement.md), or describe any issues.
 
 Only this prompt can obtain phase approval.
 

@@ -174,6 +174,7 @@ const SOURCE_PROMPTS = [
     scripts: ['specs.mjs', 'commit-msg.mjs', 'review-scope.mjs'],
     additionalReferences: [
       { source: 'web-console', target: 'web-console' },
+      { source: 'shared-references/building-habits.md', target: 'building-habits.md' },
       { source: 'plan2code-review.md', target: 'review.md' },
       { source: 'plan2code-review-references' }
     ]
@@ -216,6 +217,7 @@ const SOURCE_PROMPTS = [
     scripts: ['specs.mjs', 'commit-msg.mjs', 'review-scope.mjs'],
     additionalReferences: [
       { source: 'web-console', target: 'web-console' },
+      { source: 'shared-references/building-habits.md', target: 'building-habits.md' },
       { source: 'plan2code-review.md', target: 'review.md' },
       { source: 'plan2code-review-references' }
     ]
@@ -230,6 +232,7 @@ const SOURCE_PROMPTS = [
     additionalReferences: [
       { source: 'web-console', target: 'web-console' },
       { source: 'plan2code-3-implement.md', target: 'implement.md' },
+      { source: 'shared-references/building-habits.md', target: 'building-habits.md' },
       { source: 'plan2code-review.md', target: 'review.md' },
       { source: 'plan2code-review-references' }
     ]
@@ -262,6 +265,29 @@ const SOURCE_PROMPTS = [
     isUtility: true,
     scripts: ['specs.mjs'],
     additionalReferences: [{ source: 'web-console', target: 'web-console' }]
+  },
+  {
+    source: 'plan2code-xray.md',
+    stepNumber: 'xray',
+    name: 'xray',
+    displayName: 'X-ray Mode',
+    description: 'Explain how and why an area of the code works, or find the rough spots worth fixing',
+    isUtility: true,
+    scripts: [],
+    additionalReferences: [{ source: 'web-console', target: 'web-console' }]
+  },
+  {
+    source: 'plan2code-diagnose.md',
+    stepNumber: 'diagnose',
+    name: 'diagnose',
+    displayName: 'Diagnose Mode',
+    description: 'Find and write up a bug\'s cause without fixing it',
+    isUtility: true,
+    scripts: ['specs.mjs'],
+    additionalReferences: [
+      { source: 'web-console', target: 'web-console' },
+      { source: 'shared-references/building-habits.md', target: 'building-habits.md' }
+    ]
   },
   {
     source: 'plan2code-changelog.md',
@@ -309,6 +335,8 @@ function generateStepLabel(prompt) {
   if (prompt.stepNumber === 'review') return 'Review';
   if (prompt.stepNumber === 'handoff') return 'Handoff';
   if (prompt.stepNumber === 'git') return 'Git';
+  if (prompt.stepNumber === 'xray') return 'X-ray';
+  if (prompt.stepNumber === 'diagnose') return 'Diagnose';
   if (prompt.stepNumber === 'changelog') return 'Changelog';
   if (prompt.stepNumber === 'quick') return 'Quick Task';
   return `Step ${prompt.stepNumber}`;
@@ -900,9 +928,10 @@ function removeInstalledSkills(scope, { quiet = false } = {}) {
 // ============================================================================
 
 /**
- * Execute installation
+ * Execute installation. `unattended` (plan2code update) asks nothing and skips the getting-started
+ * steps; `outcome` receives `skills` and `launcher` as true or false for update's per-piece report.
  */
-async function install() {
+async function install({ unattended = false, outcome = {} } = {}) {
   displaySectionHeader('  INSTALLING SKILLS  ');
   if (!buildSkills(true)) {
     console.log(`${COLORS.RED}${SYMBOLS.ERROR} Failed to build ${SKILLS_DIR_NAME}/ from src/${COLORS.RESET}`);
@@ -946,10 +975,13 @@ async function install() {
   console.log('');
   reportSkillsOutput(result);
   const failed = !result.ok;
+  outcome.skills = !failed;
+  if (!failed) recordInstalled('skills');
 
   // The `plan2code` command opens the dashboard skill, so it's only worth adding once the
   // skills themselves are in place.
-  const launcherFailed = failed ? false : (await installLauncher({ quiet: true })) !== 0;
+  const launcherFailed = failed ? false : (await installLauncher({ quiet: true, unattended })) !== 0;
+  outcome.launcher = !failed && !launcherFailed;
 
   // Summary
   console.log(`${COLORS.CYAN}╔═══════════════════════════════════════════════════════════════════════════╗${COLORS.RESET}`);
@@ -977,7 +1009,7 @@ async function install() {
   }
 
   // The steps come first: where to start, the ways in, and what to do without an agent.
-  printGettingStarted({ commandInstalled: !launcherFailed });
+  if (!unattended) printGettingStarted({ commandInstalled: !launcherFailed });
   console.log(`${COLORS.GREEN}    ╭───╮${COLORS.RESET}   ${COLORS.BRIGHT}All done! Happy coding!${COLORS.RESET}`);
   console.log(`${COLORS.GREEN}   ╲│ ${COLORS.CYAN}★${COLORS.GREEN} │╱${COLORS.RESET}`);
   console.log(`${COLORS.GREEN}    │ ${COLORS.BRIGHT}◡${COLORS.GREEN} │${COLORS.RESET}`);
@@ -1049,6 +1081,7 @@ function uninstallSkills() {
   } else {
     errors++;
   }
+  if (errors === 0) forgetInstalled('skills');
 
   console.log(`\n${COLORS.YELLOW}${SYMBOLS.ACTIVE} CLEANING LEGACY PATHS${COLORS.RESET}\n`);
   const legacy = cleanLegacyPaths();
@@ -1520,6 +1553,7 @@ function installPlan2CodeLoop() {
   }
 
   console.log('');
+  recordInstalled('loop');
   console.log(`${COLORS.GREEN}${SYMBOLS.SUCCESS} plan2code-loop installed successfully!${COLORS.RESET}`);
   console.log('');
   console.log(`${COLORS.CYAN}Usage:${COLORS.RESET}`);
@@ -1539,6 +1573,7 @@ function uninstallPlan2CodeLoop() {
   displaySectionHeader('PLAN2CODE-LOOP', '[ UNINSTALL ]');
 
   removeGlobalSymlink();
+  forgetInstalled('loop');
 
   console.log('');
   console.log(`${COLORS.GREEN}${SYMBOLS.SUCCESS} plan2code-loop uninstalled${COLORS.RESET}`);
@@ -1756,6 +1791,7 @@ function installPlan2CodeMetrics() {
   }
 
   console.log('');
+  recordInstalled('metrics');
   console.log(`${COLORS.GREEN}${SYMBOLS.SUCCESS} plan2code-metrics installed successfully!${COLORS.RESET}`);
   console.log('');
   console.log(`${COLORS.CYAN}Usage:${COLORS.RESET}`);
@@ -1772,6 +1808,7 @@ function uninstallPlan2CodeMetrics() {
   displaySectionHeader('PLAN2CODE-METRICS', '[ UNINSTALL ]');
 
   removeMetricsGlobalSymlink();
+  forgetInstalled('metrics');
 
   console.log('');
   console.log(`${COLORS.GREEN}${SYMBOLS.SUCCESS} plan2code-metrics uninstalled${COLORS.RESET}`);
@@ -1795,9 +1832,10 @@ function getStatusLineSrcDir() {
 
 /**
  * Install status line (copy + configure settings).
- * Async because it may prompt when a custom (non-plan2code) statusLine exists.
+ * Async because it may prompt when a custom (non-plan2code) statusLine exists. `unattended`
+ * (plan2code update) never prompts: a custom statusLine is kept as it is.
  */
-async function installStatusLine({ quiet = false } = {}) {
+async function installStatusLine({ quiet = false, unattended = false } = {}) {
   if (!quiet) {
     displaySectionHeader('CLAUDE STATUS LINE', '[ INSTALL ]');
   } else {
@@ -1873,6 +1911,13 @@ async function installStatusLine({ quiet = false } = {}) {
         console.log(`  ${COLORS.YELLOW}${SYMBOLS.WARNING}${COLORS.RESET} Existing statusLine detected in settings.json:`);
         console.log(`  ${COLORS.DIM}  ${existingCmd}${COLORS.RESET}`);
 
+        // The person chose that status line when they last installed; an update keeps it.
+        if (unattended) {
+          console.log(`  ${COLORS.DIM}${SYMBOLS.INFO} Kept it: scripts updated, settings.json unchanged${COLORS.RESET}`);
+          recordInstalled('statusline');
+          return 0;
+        }
+
         const rl2 = readline.createInterface({ input: process.stdin, output: process.stdout });
         const answer = await new Promise(resolve => {
           rl2.question(`  ${COLORS.CYAN}Replace with Plan2Code status line?${COLORS.RESET} (Y/n): `, resolve);
@@ -1882,6 +1927,7 @@ async function installStatusLine({ quiet = false } = {}) {
         if (answer.trim().toLowerCase() === 'n') {
           console.log(`  ${COLORS.DIM}${SYMBOLS.INFO} Skipped — scripts installed but settings.json unchanged${COLORS.RESET}`);
           console.log('');
+          recordInstalled('statusline');
           return 0;
         }
 
@@ -1919,6 +1965,7 @@ async function installStatusLine({ quiet = false } = {}) {
   }
 
   if (settingsOk) {
+    recordInstalled('statusline');
     if (!quiet) {
       console.log('');
       console.log(`${COLORS.GREEN}${SYMBOLS.SUCCESS} Claude Status Line installed successfully!${COLORS.RESET}`);
@@ -2000,6 +2047,7 @@ function uninstallStatusLine() {
     console.log(`  ${COLORS.DIM}${SYMBOLS.INFO} No status line files found${COLORS.RESET}`);
   }
 
+  forgetInstalled('statusline');
   console.log(`  ${COLORS.DIM}${SYMBOLS.INFO} Preserved: statusline-config.json${COLORS.RESET}`);
   console.log('');
   console.log(`${COLORS.GREEN}${SYMBOLS.SUCCESS} Status line uninstalled${COLORS.RESET}`);
@@ -2217,6 +2265,7 @@ function installPlan2CodeBot() {
   }
 
   console.log('');
+  recordInstalled('bot');
   console.log(`${COLORS.GREEN}${SYMBOLS.SUCCESS} plan2code-bot installed successfully!${COLORS.RESET}`);
   console.log('');
   console.log(`${COLORS.CYAN}Usage:${COLORS.RESET}`);
@@ -2233,6 +2282,7 @@ function uninstallPlan2CodeBot() {
   displaySectionHeader('PLAN2CODE-BOT', '[ UNINSTALL ]');
 
   removeBotGlobalSymlink();
+  forgetInstalled('bot');
 
   console.log('');
   console.log(`${COLORS.GREEN}${SYMBOLS.SUCCESS} plan2code-bot uninstalled${COLORS.RESET}`);
@@ -2260,7 +2310,55 @@ const MODELS_SRC = path.join(__dirname, 'src', 'launcher', 'models.json');
 const MODELS_DEST = path.join(os.homedir(), '.plan2code', 'bin', 'models.json');
 const LAUNCHER_DEST = path.join(os.homedir(), '.plan2code', 'bin', 'plan2code.js');
 const LAUNCHER_STATE = path.join(os.homedir(), '.plan2code', 'launcher.json');
+// The release notice: the launcher reads the console's cached check through this copy, and
+// compares it with the version.json written beside it.
+const UPDATE_CHECK_SRC = path.join(__dirname, 'src', 'web-console', 'update-check.mjs');
+const UPDATE_CHECK_DEST = path.join(path.dirname(LAUNCHER_DEST), 'update-check.mjs');
+const LAUNCHER_VERSION_DEST = path.join(path.dirname(LAUNCHER_DEST), 'version.json');
+// What a global install put on this machine, so `plan2code update` reinstalls exactly that.
+const INSTALL_RECORD = path.join(os.homedir(), '.plan2code', 'install.json');
+const INSTALL_PIECES = ['skills', 'launcher', 'statusline', 'loop', 'metrics', 'bot'];
 const LAUNCHER_PICK_FOLDER_FLAG = '--pick-folder';
+
+/** `~/.plan2code/install.json` as `{ version, scope, pieces }`, or null when missing or unparsable. */
+function readInstallRecord() {
+  try {
+    const record = JSON.parse(fs.readFileSync(INSTALL_RECORD, 'utf8'));
+    if (record && typeof record === 'object' && Array.isArray(record.pieces)) return record;
+  } catch {}
+  return null;
+}
+
+/** Temp file, then rename, so a crash never leaves a half-written record. A failure only skips the record. */
+function writeInstallRecord(pieces) {
+  const record = {
+    version: projectVersion.version,
+    scope: 'global',
+    pieces: [...new Set(pieces)].filter((piece) => INSTALL_PIECES.includes(piece)).sort(),
+  };
+  const tmp = `${INSTALL_RECORD}.${process.pid}.tmp`;
+  try {
+    fs.mkdirSync(path.dirname(INSTALL_RECORD), { recursive: true });
+    fs.writeFileSync(tmp, JSON.stringify(record, null, 2) + '\n');
+    fs.renameSync(tmp, INSTALL_RECORD);
+  } catch {
+    try {
+      fs.rmSync(tmp, { force: true });
+    } catch {}
+  }
+}
+
+/** Add a piece after a successful global install. */
+function recordInstalled(piece) {
+  const record = readInstallRecord();
+  writeInstallRecord([...(record ? record.pieces : []), piece]);
+}
+
+/** Drop a piece after its uninstall; no record means nothing to forget. */
+function forgetInstalled(piece) {
+  const record = readInstallRecord();
+  if (record) writeInstallRecord(record.pieces.filter((p) => p !== piece));
+}
 const SHORTCUT_NAME = 'Plan2Code';
 const SHORTCUT_ICON_SRC = path.join(__dirname, 'src', 'launcher', 'plan2code.ico');
 const SHORTCUT_ICON_DEST = path.join(path.dirname(LAUNCHER_DEST), 'plan2code.ico');
@@ -2539,9 +2637,10 @@ async function offerDesktopShortcut(binDir) {
 
 /**
  * Install the global `plan2code` command, then offer the desktop shortcut. `quiet` prints
- * compact lines for use inside the skills install instead of a section of its own.
+ * compact lines for use inside the skills install instead of a section of its own;
+ * `unattended` (plan2code update) skips the shortcut offer and leaves any shortcut as it is.
  */
-async function installLauncher({ quiet = false } = {}) {
+async function installLauncher({ quiet = false, unattended = false } = {}) {
   if (quiet) {
     console.log(`${COLORS.YELLOW}${SYMBOLS.ACTIVE} INSTALLING THE ${LAUNCHER_COMMAND.toUpperCase()} COMMAND${COLORS.RESET}`);
   } else {
@@ -2559,6 +2658,8 @@ async function installLauncher({ quiet = false } = {}) {
     // The curated model menu is the authors' source of truth, so it is overwritten on every install.
     // Models the user added in User Preferences live in ~/.plan2code/models.json and are untouched.
     fs.copyFileSync(MODELS_SRC, MODELS_DEST);
+    fs.copyFileSync(UPDATE_CHECK_SRC, UPDATE_CHECK_DEST);
+    fs.writeFileSync(LAUNCHER_VERSION_DEST, JSON.stringify(projectVersion, null, 2) + '\n');
     if (process.platform !== 'win32') fs.chmodSync(LAUNCHER_DEST, 0o755);
     console.log(`  ${COLORS.GREEN}${SYMBOLS.SUCCESS}${COLORS.RESET} Installed: ${LAUNCHER_DEST}`);
   } catch (error) {
@@ -2592,8 +2693,9 @@ async function installLauncher({ quiet = false } = {}) {
   if (!isDirOnPath(binDir)) {
     console.log(`  ${COLORS.YELLOW}${SYMBOLS.WARNING}${COLORS.RESET} ${binDir} is not on your PATH — add it to use ${COLORS.BRIGHT}${LAUNCHER_COMMAND}${COLORS.RESET} from any directory`);
   }
+  recordInstalled('launcher');
   // The shortcut is a convenience on top of the command, so a failure here only warns.
-  await offerDesktopShortcut(binDir);
+  if (!unattended) await offerDesktopShortcut(binDir);
   console.log(`  ${COLORS.YELLOW}${SYMBOLS.WARNING}${COLORS.RESET} The ${LAUNCHER_COMMAND} command starts the agent with permission prompts off (${COLORS.CYAN}--permission-mode bypassPermissions${COLORS.RESET} in Claude Code, ${COLORS.CYAN}bypass${COLORS.RESET} in Devin, ${COLORS.CYAN}--dangerously-bypass-approvals-and-sandbox${COLORS.RESET} in Codex). Run ${COLORS.CYAN}claude /plan2code${COLORS.RESET} yourself if you want prompts.`);
   console.log('');
   // Inside install() the final summary prints the steps once, after everything else.
@@ -2627,7 +2729,8 @@ function uninstallLauncher() {
   }
   const shortcut = getShortcutFile();
   if (isOurShortcut(shortcut)) remove(shortcut);
-  for (const file of [LAUNCHER_DEST, MODELS_DEST, SHORTCUT_ICON_DEST, SHORTCUT_PNG_DEST, LAUNCHER_STATE]) {
+  forgetInstalled('launcher');
+  for (const file of [LAUNCHER_DEST, MODELS_DEST, UPDATE_CHECK_DEST, LAUNCHER_VERSION_DEST, SHORTCUT_ICON_DEST, SHORTCUT_PNG_DEST, LAUNCHER_STATE, INSTALL_RECORD]) {
     if (fs.existsSync(file)) remove(file);
   }
   try {
@@ -2643,25 +2746,98 @@ function uninstallLauncher() {
 }
 
 // ============================================================================
+// UPDATE (`plan2code update` runs the npx install with --update)
+// ============================================================================
+
+/**
+ * The install function for each recorded piece, in the order update runs them. Install
+ * functions only: an update never uninstalls anything. install() covers the skills and the
+ * plan2code command together.
+ */
+const UPDATE_STEPS = {
+  skills: install,
+  launcher: installLauncher,
+  statusline: installStatusLine,
+  loop: installPlan2CodeLoop,
+  metrics: installPlan2CodeMetrics,
+  bot: installPlan2CodeBot,
+};
+
+/**
+ * Reinstall whatever ~/.plan2code/install.json lists, without the menu or any prompt. Returns
+ * the exit code: 0 when every piece updated, 1 naming the pieces that failed.
+ */
+async function update({ steps = UPDATE_STEPS } = {}) {
+  displaySectionHeader('  UPDATING PLAN2CODE  ');
+  console.log(`${COLORS.BLUE}${COLORS.BRIGHT}Installing:${COLORS.RESET} ${projectVersion.name} ${projectVersion.version}`);
+  console.log('');
+
+  const record = readInstallRecord();
+  const pieces = record ? record.pieces : ['skills', 'launcher'];
+  if (!record) {
+    console.log(`${COLORS.YELLOW}${SYMBOLS.INFO}${COLORS.RESET} No install record found (installed before v${projectVersion.version}); updating the skills and the plan2code command.`);
+    console.log('');
+  }
+
+  const results = {};
+  for (const piece of INSTALL_PIECES) {
+    if (!pieces.includes(piece) || piece in results) continue;
+    const outcome = {};
+    try {
+      const code = await steps[piece]({ quiet: true, unattended: true, outcome });
+      results[piece] = code === 0 ? 'updated' : 'failed: see the messages above';
+    } catch (error) {
+      results[piece] = `failed: ${error.message}`;
+    }
+    // install() returns 1 when only the command failed, so its outcome says how the skills
+    // themselves went; a command it put in place has updated the launcher too, and one it
+    // could not is retried on its own as the next piece.
+    if (piece === 'skills' && typeof outcome.skills === 'boolean') {
+      results.skills = outcome.skills ? 'updated' : 'failed: see the messages above';
+    }
+    if (piece === 'skills' && outcome.launcher === true) results.launcher = 'updated';
+    console.log('');
+  }
+
+  console.log(`${COLORS.BRIGHT}UPDATE SUMMARY${COLORS.RESET}`);
+  const failed = [];
+  for (const piece of INSTALL_PIECES.filter((p) => p in results)) {
+    const ok = results[piece] === 'updated';
+    if (!ok) failed.push(piece);
+    console.log(`  ${ok ? COLORS.GREEN + SYMBOLS.SUCCESS : COLORS.RED + SYMBOLS.ERROR}${COLORS.RESET} ${piece}: ${results[piece]}`);
+  }
+  console.log('');
+  if (failed.length > 0) {
+    console.log(`${COLORS.RED}${SYMBOLS.ERROR} Update failed for: ${failed.join(', ')}${COLORS.RESET}\n`);
+    return 1;
+  }
+  console.log(`${COLORS.GREEN}${SYMBOLS.SUCCESS} Plan2Code is up to date (v${projectVersion.version})${COLORS.RESET}\n`);
+  return 0;
+}
+
+// ============================================================================
 // MAIN
 // ============================================================================
 
-// Non-interactive build hooks for the generated skills/ artifact.
-const argv = process.argv.slice(2);
+// Run only when invoked directly; requiring the file (the update tests do) is load-only.
+if (require.main === module) {
+  // Non-interactive build hooks for the generated skills/ artifact.
+  const argv = process.argv.slice(2);
 
-if (argv.includes('--build-skills')) {
-  process.exit(buildSkills() ? 0 : 1);
+  if (argv.includes('--build-skills')) {
+    process.exit(buildSkills() ? 0 : 1);
+  } else if (argv.includes('--verify-skills')) {
+    process.exit(verifySkillsSync() ? 0 : 1);
+  } else if (argv.length === 1 && argv[0] === '--update') {
+    update().then((code) => process.exit(code));
+  } else if (argv.length > 0) {
+    console.error(`Unknown option(s): ${argv.join(' ')}`);
+    console.error('Usage: node install.js [--build-skills | --verify-skills | --update]');
+    console.error('Run with no options for the interactive installer.');
+    process.exit(1);
+  } else {
+    runInteractive();
+  }
 }
 
-if (argv.includes('--verify-skills')) {
-  process.exit(verifySkillsSync() ? 0 : 1);
-}
-
-if (argv.length > 0) {
-  console.error(`Unknown option(s): ${argv.join(' ')}`);
-  console.error('Usage: node install.js [--build-skills | --verify-skills]');
-  console.error('Run with no options for the interactive installer.');
-  process.exit(1);
-}
-
-runInteractive();
+module.exports = { update, UPDATE_STEPS, INSTALL_RECORD, INSTALL_PIECES, readInstallRecord, recordInstalled, forgetInstalled };

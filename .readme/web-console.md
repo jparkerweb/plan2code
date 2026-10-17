@@ -15,7 +15,8 @@ inside it, or add `--web` to a skill (`/plan2code-1-plan --web plan a lunch voti
 - **Tabs** show the document taking shape, the build progress and, always last, **Ask**, where you can
   put a quick question to the running agent.
 - **Sign-off** asks for your approval at the end of a phase. You can run the code review first from
-  the same card.
+  the same card, or press **Show me it working** to have the agent start the app and show you
+  screenshots of the change right on the page.
 
 **Where next.** [walkthrough.md](walkthrough.md) follows one feature from the first idea to the
 last phase. The rest of this file is the reference: every card, button and rule. Prefer the terminal?
@@ -198,7 +199,15 @@ the git board, three tabs — Changes, Branches and Sync — that open on the
 likely next step (Help's *The git board* topic walks through it), and asks
 before every push, publish and delete. In a folder that is not a git
 repository its card says *Not a git repository yet: it offers to start one*,
-and clicking it still works. Click one and Planny flies while it gets ready;
+and clicking it still works. **Diagnose a bug** sits beside it, also always
+available: it finds a bug's cause and writes it up as
+`specs/<bug-name>/DIAGNOSIS-<date>.md` without fixing it. Pick such a spec in
+the picker and it reads *Bug diagnosed*: Quick Task (suggested) and Plan light
+up, while Document, Implement, Implement + Review and Finalize stay greyed. Once
+Quick Task has fixed it, the folder reads *Bug fixed*: Quick Task offers to
+archive it to `specs--completed/`, and until then the picker never opens on it
+and hides it while *Hide unavailable workflows* is on. Click a card and Planny
+flies while it gets ready;
 a few seconds later the same page is that skill's console, already running. No
 command names to remember.
 
@@ -569,9 +578,19 @@ chimes once (if sounds are on).
 
 When a newer Plan2Code release is out, the dashboard shows an **UPDATE
 AVAILABLE** banner at the top. Click it for the details: the version you
-have, the new one (linked to its Releases page) and the exact command that
-updates you, with a Copy button. **×** hides the banner for this session; the
-next dashboard shows it again until you update.
+have, the new one (linked to its Releases page) and the command that updates
+you, `plan2code update`, with a Copy button. It updates everything that was
+installed (the skills, the `plan2code` command and any extras you added), with
+no menu, and never uninstalls anything. If the `plan2code` command is not
+installed, the dialog also shows the install command,
+`npx --allow-git=all git+https://github.com/jparkerweb/plan2code.git`, to run
+instead. **×** hides the banner for this session; the next dashboard shows it
+again until you update.
+
+The `plan2code` command tells you too: before it starts your agent it prints
+one line, `Plan2Code v<latest> is out (you have v<installed>). Run: plan2code update`.
+It reads the same saved check, so it never waits on the network; when that
+check is missing or old, it refreshes it in the background for next time.
 
 The check uses your own git login to read the repo's release tags, once an
 hour at most. If git cannot reach the repo (no git, no access, offline), you
@@ -691,7 +710,8 @@ clean up** lists, with sizes, everything in `~/.plan2code/` that is not
 needed: sessions untouched for 30 days (never the one you are in), anything at
 the top of `~/.plan2code/console/` other than `sessions/`, `looks.json`,
 `workspaces.json`, `subagents.json`, `console-dir` and `update-check.json`, and anything at the top of `~/.plan2code/` other than
-`console/`, `bin/`, `launcher.json` and `models.json`. It also lists each
+`console/`, `bin/`, `launcher.json`, `install.json` (what you installed, which
+`plan2code update` reads) and `models.json`. It also lists each
 folder in the project's `specs--completed/` whose newest file is more than 30
 days old: archived specs Finalize moved there. Deleting one is permanent:
 `specs--completed/` is usually gitignored, so git can't restore it. A stray is listed once

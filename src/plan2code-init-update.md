@@ -121,7 +121,7 @@ Present the user with update options:
 > "What would you like to add or update in AGENTS.md?"
 >
 > **Options:**
-> - **1. Commands** - Build, test, run, lint, or other CLI commands
+> - **1. Commands** - Build, test, run, lint, how to run and view the app, or other CLI commands
 > - **2. Architecture** - How components interact, data flow, key patterns
 > - **3. Gotchas/Pitfalls** - Traps to avoid, non-obvious behaviors
 > - **4. Testing** - Test patterns, how to run specific tests, fixtures
@@ -143,7 +143,7 @@ Present the user with update options:
 
 | Category | Questions |
 |----------|-----------|
-| Commands | Purpose? Flags? Prerequisites? |
+| Commands | Purpose? Flags? Prerequisites? How to run and view the app? |
 | Architecture | Components? Interactions? Pattern? |
 | Gotchas | What was unexpected? Workaround? |
 | Testing | Commands? Fixtures? Mocking? |

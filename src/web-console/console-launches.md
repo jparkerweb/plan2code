@@ -17,7 +17,7 @@ menu judgment and the launch steps; this is what the page does around them.
 ```
 
 `spec` is the picker's selected spec dir, present only when the launched skill
-takes a spec and the person picked one. `resume` is the one command to run
+takes a spec (or is Quick Task on a `diagnosed` spec) and the person picked one. `resume` is the one command to run
 first, before reading anything: it reuses the live server and turns the page
 from the menu into the skill's starting screen while you read. `skillFile` is
 the skill to read next (absent outside an install: then
@@ -63,3 +63,18 @@ person's turn by itself.
 
 A `__stop` before a pick ends the session the usual way: `finish` (paused
 headline, `"command": "/plan2code"`) then `stop` (`console-stop.md`).
+
+## A delete
+
+The ✕ on a picker chip, after the page's two-step confirm (what goes, then
+the spec's name typed), sends `{ "i": "__delete", "type": "delete", "spec":
+"specs/<name>" }` with a `reply` saying it is for good. It is no hop: it
+carries no `resume`, and you stay the dashboard. The console never writes into
+a project, so the page only asks; delete through
+`node "<CONSOLE>" delete-spec --spec <spec>`, never your own `rm`. It takes
+only an existing `specs/<name>` folder inside the worktree (never a link,
+never deeper, never `specs--completed/`), exits 3 with `message` on a refusal
+having touched nothing, and drops the workspace remembered for that spec.
+Then `open --resume <sid> --no-open --workflow dashboard` to rescan, and post
+the menu again with `--wait`, its note saying what went or why it did not.
+The page shows the chip as "Deleting…" until that rescan lands.

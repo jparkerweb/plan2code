@@ -30,14 +30,16 @@ export const WEIGHTS = Object.freeze({
   "git-commits": 0,
   "git-conflict": 1,
   changelog: 1,
+  xray: 1,
+  diagnose: 1,
 });
 
 // Workflows whose launch itself scores WEIGHTS[workflow]. Pathfinder,
 // implement and implement-review score only through the agent's `run`
-// reports; dashboard and handoff never score; git and changelog score 1 on
+// reports; dashboard and handoff never score; git, changelog, xray and diagnose score 1 on
 // launch (Git then adds its commit tally and conflict help).
 export const LAUNCH_COUNTED = Object.freeze(
-  new Set(["plan", "revise-plan", "document", "review", "quick-task", "init", "init-update", "finalize", "git", "changelog"])
+  new Set(["plan", "revise-plan", "document", "review", "quick-task", "init", "init-update", "finalize", "git", "changelog", "xray", "diagnose"])
 );
 
 // Git's commits weigh what they add up to: each `git-commits` run carries
@@ -140,6 +142,8 @@ const WORKFLOW_NAMES = Object.freeze({
   handoff: "Handoff",
   git: "Git",
   changelog: "Changelog",
+  xray: "X-ray",
+  diagnose: "Diagnose",
 });
 
 // The skill run an entry belongs to, from its ledger id ("L3:..." -> "L3").
@@ -157,6 +161,8 @@ const LAUNCH_LABELS = Object.freeze({
   finalize: "Finalize started",
   git: "Git started",
   changelog: "Changelog started",
+  xray: "X-ray started",
+  diagnose: "Diagnose started",
 });
 const RUN_LABELS = Object.freeze({
   "pathfinder-chart": "Pathfinder map written",
@@ -177,6 +183,8 @@ const RUN_LABELS = Object.freeze({
   "git-commits": "Commits in Git",
   "git-conflict": "Git conflict help",
   changelog: "Changelog run",
+  xray: "X-ray run",
+  diagnose: "Diagnose run",
 });
 
 // The unit a run names, from its ledger id ("L3:phase-2" -> "phase-2").

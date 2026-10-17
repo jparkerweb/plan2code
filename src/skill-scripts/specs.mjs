@@ -14,7 +14,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { EXIT, fail, out, parseArgs, run, readText, isDir, rel, eol, consoleLib, isoDate, phaseFiles } from "./common.mjs";
+import { EXIT, fail, out, parseArgs, run, readText, isDir, rel, eol, consoleLib, isoDate, phaseFiles, LOOP_TOKENS, scrapeHits } from "./common.mjs";
 
 const USAGE = `
 specs.mjs: spec state for the Plan2Code pipeline skills. JSON on stdout.
@@ -31,6 +31,22 @@ specs.mjs: spec state for the Plan2Code pipeline skills. JSON on stdout.
       ask-resume, auto-start, checkoff or none), the pending
       phases, and consistency checks. <spec> is specs/<name>, <name>, or a path
       to its overview.md.
+
+  node specs.mjs check <spec> [--root <dir>]
+      Fail on a malformed spec: status's error and warn checks, plus every
+      checkbox under ## Tasks being a "- [ ] **Task N.M:**" line, no loop
+      completion token and no bare metric word (outside a METRICS_JSON
+      comment) in overview.md or a phase file. An indented "  - Test:"
+      sub-bullet is fine. Exit 4 with the problems when any is an error.
+
+  node specs.mjs check-draft <file|spec> [--root <dir>]
+      Fail on a malformed PLAN-DRAFT (a path, or a spec's newest non-archived
+      draft): its **Status:** line; for a Complete draft, the sections
+      Document reads, a ### Phase heading in section 5 and a parseable
+      METRICS_JSON comment (warns when no phase names an FR- item); always no
+      loop completion token and no bare metric word (Plan's own Confidence
+      header line is allowed; a pathfinder-written draft has none). Exit 4 on
+      any error.
 
   node specs.mjs metrics <spec> --step document|finalize [--set key=value ...]
       The METRICS_JSON comment for that step, countable fields computed from
@@ -752,10 +768,144 @@ async function cmdArchive(args) {
   });
 }
 
+/* ---------------------------------------------------------------- checks */
+
+// METRICS_JSON comments are the one place a metric word may sit beside a number.
+const METRICS_COMMENT_RE = /<!--\s*METRICS_JSON[\s\S]*?-->/g;
+
+// The collector's confidence patterns. Plan's draft header carries a
+// "**Confidence:** NN%" line on purpose (the collector's fallback when
+// METRICS_JSON is missing), so a Plan-written draft is exempt from these two.
+const CONFIDENCE_HITS = ["overall confidence with %", "confidence table cell"];
+
+function proseChecks(text, file, add, { allowConfidence = false } = {}) {
+  const m = text.match(LOOP_TOKENS);
+  if (m) add("error", file, "loop-token", `contains the loop completion token ${m[0]} (the loop scans specs/ for these)`);
+  for (const h of scrapeHits(text.replace(METRICS_COMMENT_RE, ""))) {
+    if (allowConfidence && CONFIDENCE_HITS.some((name) => h.startsWith(`${name}:`))) continue;
+    add("error", file, "metric-word", `metrics-scraper bait (${h}); hyphenate the label or reword`);
+  }
+}
+
+// The lint-style report: ok with the problems when nothing is an error, else
+// the failure shape (error, message, next, the same lines on stderr), written
+// here rather than through fail(), which would drop the problems list.
+function checkReport(command, base, problems) {
+  const errors = problems.filter((p) => p.level === "error").length;
+  const report = { ...base, errors, warnings: problems.length - errors, problems };
+  if (!errors) {
+    out({ ok: true, ...report });
+    return;
+  }
+  const message = `${command} found ${errors} error${errors === 1 ? "" : "s"}.`;
+  const next = `Fix each error in problems, then rerun ${command}.`;
+  out({ ok: false, error: `${command}-failed`, message, next, ...report });
+  process.stderr.write(`error: ${message}\nnext: ${next}\n`);
+  process.exitCode = EXIT.INVALID;
+}
+
+async function cmdCheck(args) {
+  const root = path.resolve(args.root || ".");
+  const spec = resolveSpec(root, args._[1], { allowArchived: true });
+  const problems = [];
+  const add = (level, file, code, message) => problems.push({ level, file, code, message });
+  const at = (name) => `${spec.rel}/${name}`;
+  const files = phaseFiles(spec.dir);
+  // status's own checks, each pinned to the phase file it opens with (by its
+  // real name: status says phase-N.md even for a phase-1-setup.md), else
+  // overview.md (a missing file or checklist row is fixed in the overview).
+  for (const c of specStatus(spec).checks) {
+    if (c.level !== "error" && c.level !== "warn") continue;
+    const named = c.code !== "missing-checklist-row" && c.message.match(/^phase-(\d+)/i);
+    add(c.level, at(named && files.has(Number(named[1])) ? files.get(Number(named[1])) : "overview.md"), c.code, c.message);
+  }
+  const names = [...(fs.existsSync(path.join(spec.dir, "overview.md")) ? ["overview.md"] : []), ...[...files.keys()].sort((a, b) => a - b).map((n) => files.get(n))];
+  for (const name of names) {
+    const text = readText(path.join(spec.dir, name)) || "";
+    if (name !== "overview.md") {
+      const tasks = section(text, /^#{1,6}\s+Tasks\b/i);
+      for (const [i, line] of (tasks ? tasks.lines : []).entries()) {
+        if (CHECKBOX_RE.test(line) && !TASK_RE.test(line)) {
+          add("error", at(name), "bad-task-line", `${name}:${tasks.start + 2 + i} is a checkbox under Tasks that is not a task line ("- [ ] **Task N.M:**"): ${line.trim().slice(0, 120)}`);
+        }
+      }
+    }
+    proseChecks(text, at(name), add);
+  }
+  checkReport("check", { spec: spec.rel, checked: names.map(at) }, problems);
+}
+
+const DRAFT_STATUSES = ["Draft", "Phase 3 Complete - Resume at Phase 4", "Escalated from Quick Task - Resume at Phase 2", "Complete"];
+// The headings Document reads out of a Complete draft.
+const DRAFT_SECTIONS = [
+  { name: "## 1. Executive Summary", re: /^##\s+1\.\s+Executive Summary\b/im },
+  { name: "## 2. Requirements", re: /^##\s+2\.\s+Requirements\b/im },
+  { name: "### 2.1", re: /^###\s+2\.1\b/m },
+  { name: "### 2.4", re: /^###\s+2\.4\b/m },
+  { name: "## 3. Tech Stack", re: /^##\s+3\.\s+Tech Stack\b/im },
+  { name: "## 4. Architecture", re: /^##\s+4\.\s+Architecture\b/im },
+  { name: "## 5. Implementation Phases", re: /^##\s+5\.\s+Implementation Phases\b/im },
+  { name: "## 6. Risks and Mitigations", re: /^##\s+6\.\s+Risks and Mitigations\b/im },
+  { name: "## 7. Success Criteria", re: /^##\s+7\.\s+Success Criteria\b/im },
+  { name: "## 9. Assumptions", re: /^##\s+9\.\s+Assumptions\b/im },
+];
+
+/** A PLAN-DRAFT path, or a spec whose newest non-archived draft is used. */
+function resolveDraft(root, arg) {
+  if (arg && /\.md$/i.test(arg) && !/\/overview\.md$/i.test(arg.replace(/\\/g, "/"))) {
+    const file = path.resolve(root, arg);
+    if (!fs.existsSync(file)) fail(EXIT.NOT_FOUND, "draft-not-found", `No file at ${rel(root, file)}.`, "Pass a PLAN-DRAFT-*.md path, or the spec folder to check its newest draft.");
+    return file;
+  }
+  const spec = resolveSpec(root, arg, { allowArchived: true });
+  const live = planDrafts(spec.dir).filter((d) => !d.archived);
+  if (!live.length) fail(EXIT.NOT_FOUND, "no-draft", `${spec.rel} has no PLAN-DRAFT-*.md.`, "Write the PLAN-DRAFT first (Plan's Phase 7), or pass its path.");
+  return path.join(spec.dir, live.at(-1).file);
+}
+
+async function cmdCheckDraft(args) {
+  const root = path.resolve(args.root || ".");
+  const file = resolveDraft(root, args._[1]);
+  const shown = rel(root, file);
+  const text = readText(file) || "";
+  const problems = [];
+  const add = (level, f, code, message) => problems.push({ level, file: f, code, message });
+  const status = statusOf(text);
+  const value = status === null ? null : status.trim();
+  if (value === null) add("error", shown, "bad-status", "has no **Status:** line");
+  else if (!DRAFT_STATUSES.includes(value)) add("error", shown, "bad-status", `**Status:** "${value}" is not one of ${DRAFT_STATUSES.join(" | ")}`);
+  // Only a Complete draft is read by Document; the others (a pathfinder draft
+  // at Resume at Phase 4 has placeholder sections by design) get the light check.
+  if (value === "Complete") {
+    for (const s of DRAFT_SECTIONS) if (!s.re.test(text)) add("error", shown, "missing-section", `has no ${s.name} heading (Document reads it)`);
+    const phasesSec = section(text, /^##\s+5\.\s+Implementation Phases\b/i);
+    if (phasesSec && !phasesSec.lines.some((l) => /^###\s+Phase\b/i.test(l))) add("error", shown, "no-phases", "section 5 has no ### Phase heading");
+    // Whitespace after METRICS_JSON, as the collector's own pattern requires.
+    const metrics = text.match(/<!--\s*METRICS_JSON\s+(\{[\s\S]*?\})\s*-->/);
+    let parsed = false;
+    if (metrics) {
+      try {
+        JSON.parse(metrics[1]);
+        parsed = true;
+      } catch {}
+    }
+    if (!parsed) add("error", shown, "no-metrics", metrics ? "the METRICS_JSON comment does not parse as JSON" : "has no <!-- METRICS_JSON {...} --> comment (Plan's Phase 7 writes it)");
+    const frSec = section(text, /^###\s+2\.1\b/);
+    if (frSec && phasesSec && /\bFR-\d+/.test(frSec.lines.join("\n")) && !/\bFR-\d+/.test(phasesSec.lines.join("\n"))) {
+      add("warn", shown, "untraced-requirements", "section 2.1 lists FR- items but no phase in section 5 names one");
+    }
+  }
+  // A pathfinder-written draft (no METRICS_JSON yet) carries no confidence
+  // line, as pathfinder.mjs lint already holds it to.
+  const byPathfinder = /plan2code-0-pathfinder/.test(text) && !/METRICS_JSON/.test(text);
+  proseChecks(text, shown, add, { allowConfidence: !byPathfinder });
+  checkReport("check-draft", { checked: [shown], status: value }, problems);
+}
+
 run(USAGE, async (argv) => {
   const args = parseArgs(argv, { booleans: ["dry-run"], values: ["root", "step", "phase", "to", "task"], lists: ["set"] });
   const cmd = args._[0];
-  const commands = { list: cmdList, status: cmdStatus, metrics: cmdMetrics, mark: cmdMark, tick: cmdTick, archive: cmdArchive };
-  if (!commands[cmd]) fail(EXIT.USAGE, "unknown-command", cmd ? `Unknown command "${cmd}".` : "No command given.", "Commands: list, status, metrics, mark, tick, archive. Run with --help.");
+  const commands = { list: cmdList, status: cmdStatus, metrics: cmdMetrics, mark: cmdMark, tick: cmdTick, archive: cmdArchive, check: cmdCheck, "check-draft": cmdCheckDraft };
+  if (!commands[cmd]) fail(EXIT.USAGE, "unknown-command", cmd ? `Unknown command "${cmd}".` : "No command given.", "Commands: list, status, check, check-draft, metrics, mark, tick, archive. Run with --help.");
   await commands[cmd](args);
 });

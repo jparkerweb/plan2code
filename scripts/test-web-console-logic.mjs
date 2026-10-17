@@ -32,6 +32,7 @@ import {
   sortAttachments,
   cardAvailability,
   cardPresentation,
+  defaultSpec,
   CATALOG_GROUPS,
   CONTINUE_IN_CONSOLE,
   CONSOLE_WORKFLOWS,
@@ -46,6 +47,11 @@ import {
   handoffShape,
   handoffText,
   launchReply,
+  launchTarget,
+  deleteAction,
+  deleteReply,
+  deleteSummary,
+  isDeletableSpecDir,
   MAX_NOTE_IMAGES,
   noteAction,
   noteReplyLines,
@@ -148,6 +154,7 @@ import {
   writeSubagentSetting,
   repoRoots,
   scanProject,
+  removeSpec,
   SPEC_STATES,
   validate,
   WORKSPACE_FILE,
@@ -634,6 +641,15 @@ test("the project scan reads each spec's pipeline stage off its files", () => {
       "PLAN-DRAFT-20260923.md": "# draft\n\n**Status:** Phase 3 Complete - Resume at Phase 4\n",
       "pathfinder/map.md": "**Status:** Cleared\n",
     });
+    // The other Status forms specs.mjs accepts read the same, CRLF included.
+    fakeSpec(root, "planned-bold-colon", { "PLAN-DRAFT-20260923.md": "# draft\n\n**Status**: Complete\n" });
+    fakeSpec(root, "draft-mid-plan-bold-colon", {
+      "PLAN-DRAFT-20260923.md": "# draft\r\n\r\n**Status**: Phase 3 Complete - Resume at Phase 4\r\n",
+    });
+    fakeSpec(root, "mapped-bold-colon", {
+      "pathfinder/map.md": "**Status**: Cleared\n",
+      "pathfinder/questions/00-a.md": "State: resolved\n",
+    });
     fakeSpec(root, "documented", {
       "overview.md": "# spec\n",
       "phase-1.md": "- [ ] Task one\n- [ ] Task two\n",
@@ -648,6 +664,19 @@ test("the project scan reads each spec's pipeline stage off its files", () => {
       "phase-1.md": "- [x] Task one\n- [x] Task two\n",
     });
     fakeSpec(root, "weird", { "DESIGN.md": "# notes\n" });
+    fakeSpec(root, "diagnosed", { "DIAGNOSIS-20261016.md": "# Diagnosis: rows go missing\n\n**Status:** Diagnosed\n" });
+    // Once planning starts on a diagnosed bug, the usual states win.
+    fakeSpec(root, "diagnosed-then-planned", {
+      "DIAGNOSIS-20261016.md": "# Diagnosis\n\n**Status:** Diagnosed\n",
+      "PLAN-DRAFT-20261017.md": "# draft\n\n**Status:** Complete\n",
+    });
+    // Quick Task marks the write-up Fixed: a finished bug, not loose files.
+    fakeSpec(root, "diagnosed-then-fixed", { "DIAGNOSIS-20261016.md": "# Diagnosis\n\n**Status:** Fixed\n" });
+    // A fixed bug someone then started planning around is mid-plan again.
+    fakeSpec(root, "fixed-then-conversation", {
+      "DIAGNOSIS-20261016.md": "# Diagnosis\n\n**Status:** Fixed\n",
+      "PLAN-CONVERSATION-20261017.md": "# conversation\n",
+    });
     fs.writeFileSync(path.join(root, "AGENTS.md"), "# agents\n");
 
     const scan = scanProject(root);
@@ -658,10 +687,17 @@ test("the project scan reads each spec's pipeline stage off its files", () => {
       ["mapped", "mapped"],
       ["planned", "planned"],
       ["draft-mid-plan", "mapped"],
+      ["planned-bold-colon", "planned"],
+      ["draft-mid-plan-bold-colon", "mapped"],
+      ["mapped-bold-colon", "mapped"],
       ["documented", "documented"],
       ["building", "building"],
       ["built", "built"],
       ["weird", "unrecognized"],
+      ["diagnosed", "diagnosed"],
+      ["diagnosed-then-planned", "planned"],
+      ["diagnosed-then-fixed", "fixed"],
+      ["fixed-then-conversation", "mapped"],
     ]) {
       assert.ok(byName[name], `spec ${name} was scanned`);
       assert.equal(byName[name].state, state, `spec ${name}`);
@@ -671,6 +707,12 @@ test("the project scan reads each spec's pipeline stage off its files", () => {
     assert.equal(byName.exploring.detail, "1 of 2 decisions made");
     assert.equal(byName.building.detail, "1 of 2 tasks done");
     assert.equal(byName["draft-mid-plan"].detail, "plan draft, resume at Phase 4");
+    assert.equal(byName["draft-mid-plan-bold-colon"].detail, "plan draft, resume at Phase 4");
+    assert.equal(byName.diagnosed.detail, "bug diagnosed, not fixed");
+    assert.equal(byName["diagnosed-then-fixed"].detail, "bug fixed");
+    for (const state of SPEC_STATES) assert.ok(SPEC_STATE_LABELS[state], `state ${state} has a picker label`);
+    assert.equal(SPEC_STATE_LABELS.diagnosed, "Bug diagnosed");
+    assert.equal(SPEC_STATE_LABELS.fixed, "Bug fixed");
 
     // A pathfinder folder with no map yet is still mid-exploration; a map
     // whose status line is missing or unreadable is too.
@@ -684,6 +726,118 @@ test("the project scan reads each spec's pipeline stage off its files", () => {
     const scan3 = scanProject(empty);
     assert.equal(scan3.hasAgents, false);
     assert.deepEqual(scan3.specs, []);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+// Deleting a spec from the dashboard: the page offers only folders it can
+// name exactly, and the agent's `delete-spec` refuses anything else on disk.
+test("isDeletableSpecDir takes exactly specs/<one name>", () => {
+  for (const ok of ["specs/lunch-vote", "specs/codebase-health", "specs/a b"]) {
+    assert.equal(isDeletableSpecDir(ok), true, ok);
+  }
+  for (const bad of [
+    "specs/../x",
+    "specs/..",
+    "specs/.",
+    "specs/.hidden",
+    "specs/a/b",
+    "specs/",
+    "specs",
+    "specs--completed/x",
+    "/specs/x",
+    "C:/specs/x",
+    "specs\\x",
+    "other/x",
+    "",
+    undefined,
+    null,
+  ]) {
+    assert.equal(isDeletableSpecDir(bad), false, String(bad));
+  }
+});
+
+test("a delete is a session action naming the folder, and its reply says it is for good", () => {
+  const spec = { dir: "specs/lunch-vote", name: "lunch-vote", state: "building", detail: "1 of 2 tasks done", files: 3, touched: 1 };
+  assert.deepEqual(deleteAction(spec), { i: "__delete", type: "delete", spec: "specs/lunch-vote" });
+  const reply = deleteReply(spec);
+  assert.match(reply, /specs\/lunch-vote\//);
+  assert.match(reply, /for good/);
+  assert.doesNotMatch(reply, /\b(brief|recap|minutes)\b/i);
+  const sum = deleteSummary(spec);
+  assert.equal(sum.folder, "specs/lunch-vote/");
+  assert.equal(sum.stage, `${SPEC_STATE_LABELS.building}: 1 of 2 tasks done`);
+  assert.equal(sum.files, "3 files");
+  assert.equal(sum.touched, 1);
+  assert.equal(deleteSummary({ ...spec, files: 1 }).files, "1 file");
+  assert.equal(deleteSummary({ ...spec, files: undefined }).files, "");
+  assert.equal(deleteSummary({ ...spec, detail: "" }).stage, SPEC_STATE_LABELS.building);
+});
+
+test("scanProject counts each spec's files", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "p2c-scan-files-"));
+  try {
+    fakeSpec(root, "three", { "overview.md": "# o\n", "phase-1.md": "- [ ] **Task 1.1:** a\n", "pathfinder/map.md": "# m\n" });
+    fakeSpec(root, "one", { "DESIGN.md": "# d\n" });
+    const byName = Object.fromEntries(scanProject(root).specs.map((s) => [s.name, s]));
+    assert.equal(byName.three.files, 3);
+    assert.equal(byName.one.files, 1);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("removeSpec deletes one spec folder and refuses everything else", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "p2c-remove-spec-"));
+  const outside = fs.mkdtempSync(path.join(os.tmpdir(), "p2c-remove-outside-"));
+  try {
+    fakeSpec(root, "keep", { "overview.md": "# keep\n" });
+    fakeSpec(root, "gone", { "overview.md": "# gone\n", "pathfinder/map.md": "# m\n" });
+    fs.mkdirSync(path.join(root, "specs--completed", "old"), { recursive: true });
+    fs.writeFileSync(path.join(outside, "precious.md"), "do not touch\n");
+
+    assert.deepEqual(removeSpec(root, "specs/gone"), { ok: true, removed: "specs/gone" });
+    assert.equal(fs.existsSync(path.join(root, "specs", "gone")), false);
+    assert.equal(fs.existsSync(path.join(root, "specs", "keep", "overview.md")), true);
+
+    for (const bad of ["specs/../specs--completed/old", "specs--completed/old", "specs/keep/pathfinder", "specs/missing", "specs"]) {
+      assert.throws(() => removeSpec(root, bad), Error, bad);
+    }
+    assert.equal(fs.existsSync(path.join(root, "specs--completed", "old")), true);
+
+    // A spec folder that is a link to somewhere else is refused, and what it
+    // points at survives.
+    fs.symlinkSync(outside, path.join(root, "specs", "linked"), "junction");
+    assert.throws(() => removeSpec(root, "specs/linked"), /outside|link/i);
+    assert.equal(fs.existsSync(path.join(outside, "precious.md")), true);
+
+    // A file named like a spec is not a spec folder.
+    fs.writeFileSync(path.join(root, "specs", "note.md"), "x\n");
+    assert.throws(() => removeSpec(root, "specs/note.md"), /folder/i);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+    fs.rmSync(outside, { recursive: true, force: true });
+  }
+});
+
+test("delete-spec removes a spec from the worktree it runs in, and exits 3 with the reason when it refuses", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "p2c-delete-cli-"));
+  try {
+    fakeSpec(root, "scratch", { "overview.md": "# s\n" });
+    const done = cli(["delete-spec", "--spec", "specs/scratch"], { cwd: root });
+    assert.equal(done.status, 0, done.stderr);
+    assert.equal(done.json.ok, true);
+    assert.equal(done.json.removed, "specs/scratch");
+    assert.equal(fs.existsSync(path.join(root, "specs", "scratch")), false);
+
+    const refused = cli(["delete-spec", "--spec", "specs/../AGENTS.md"], { cwd: root, expectFail: true });
+    assert.equal(refused.status, 3);
+    assert.equal(refused.json.ok, false);
+    assert.ok(refused.json.message);
+
+    const usage = cli(["delete-spec"], { cwd: root, expectFail: true });
+    assert.equal(usage.status, 2);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
@@ -864,6 +1018,49 @@ test("the dashboard matrix lights only the cards a spec state allows", () => {
   assert.equal(on("plan2code-1b-revise-plan", scan, sel("built")), false);
   assert.equal(on("plan2code-4-finalize", scan, sel("built")), true);
 
+  // A diagnosed bug: Quick Task (its next step) and Plan, never the build steps.
+  for (const skill of ["plan2code-quick-task", "plan2code-1-plan", "plan2code-review", "plan2code-diagnose"]) {
+    assert.equal(on(skill, scan, sel("diagnosed")), true, `${skill} on for a diagnosed bug`);
+  }
+  for (const skill of [
+    "plan2code-0-pathfinder",
+    "plan2code-1b-revise-plan",
+    "plan2code-2-document",
+    "plan2code-3-implement",
+    "plan2code-3-implement-review",
+    "plan2code-4-finalize",
+  ]) {
+    assert.equal(on(skill, scan, sel("diagnosed")), false, `${skill} off for a diagnosed bug`);
+  }
+  assert.equal(cardAvailability(entry("plan2code-quick-task"), scan, sel("diagnosed")).next, true);
+  assert.ok(!cardAvailability(entry("plan2code-1-plan"), scan, sel("diagnosed")).next);
+  assert.ok(!cardAvailability(entry("plan2code-quick-task"), scan, sel("building")).next);
+
+  // Quick Task carries the folder only for a diagnosed bug; spec cards always do.
+  assert.equal(launchTarget(entry("plan2code-quick-task"), sel("diagnosed")).dir, "specs/x");
+  assert.equal(launchTarget(entry("plan2code-quick-task"), sel("building")), null);
+  assert.equal(launchTarget(entry("plan2code-1-plan"), sel("diagnosed")).dir, "specs/x");
+  assert.equal(launchTarget(entry("plan2code-review"), sel("diagnosed")), null);
+  assert.equal(launchTarget(entry("plan2code-1-plan"), null), null);
+
+  // A fixed bug is finished: no pipeline card, and Quick Task starts fresh.
+  for (const skill of [
+    "plan2code-0-pathfinder",
+    "plan2code-1-plan",
+    "plan2code-1b-revise-plan",
+    "plan2code-2-document",
+    "plan2code-3-implement",
+    "plan2code-3-implement-review",
+    "plan2code-4-finalize",
+  ]) {
+    const av = cardAvailability(entry(skill), scan, sel("fixed"));
+    assert.equal(av.on, false, `${skill} off for a fixed bug`);
+    assert.ok(av.reason, `${skill} says why it is off for a fixed bug`);
+  }
+  assert.equal(on("plan2code-quick-task", scan, sel("fixed")), true);
+  assert.ok(!cardAvailability(entry("plan2code-quick-task"), scan, sel("fixed")).next);
+  assert.equal(launchTarget(entry("plan2code-quick-task"), sel("fixed")), null);
+
   // A greyed card always says why, and a selected spec's next step is marked.
   assert.ok(cardAvailability(entry("plan2code-3-implement"), scan, sel("exploring")).reason);
   assert.equal(cardAvailability(entry("plan2code-3-implement"), scan, sel("documented")).next, true);
@@ -901,6 +1098,29 @@ test("dashboard card presentation follows the current picker selection", () => {
   assert.equal(planned.on, true);
   assert.equal(planned.recommended, true);
   assert.equal(planned.detail, "plan drafted");
+});
+
+test("the picker never opens on a fixed bug", () => {
+  const fixed = { dir: "specs/old-bug", name: "old-bug", state: "fixed", detail: "bug fixed" };
+  const live = { dir: "specs/lunch-vote", name: "lunch-vote", state: "documented", detail: "2 phases, 8 tasks ready" };
+  assert.equal(defaultSpec([fixed, live]), live);
+  assert.equal(defaultSpec([live, fixed]), live);
+  assert.equal(defaultSpec([fixed]), null);
+  assert.equal(defaultSpec([]), null);
+  assert.equal(defaultSpec(undefined), null);
+
+  // The agent's recommendation describes the default pick, not the fixed bug
+  // the server listed first.
+  const entry = (skill) => SKILL_CATALOG.find((e) => e.skill === skill);
+  const scan = { hasAgents: true, specs: [fixed, live] };
+  const menu = { recommend: "plan2code-3-implement", details: { "plan2code-3-implement": "Phase 1 of 2 is next" } };
+  const shown = cardPresentation(entry("plan2code-3-implement"), scan, live, menu);
+  assert.equal(shown.recommended, true);
+  assert.equal(shown.detail, "Phase 1 of 2 is next");
+  // Only fixed bugs on disk: the default is "start from scratch".
+  const onlyFixed = { hasAgents: true, specs: [fixed] };
+  const fresh = cardPresentation(entry("plan2code-0-pathfinder"), onlyFixed, null, { recommend: "plan2code-0-pathfinder" });
+  assert.equal(fresh.recommended, true);
 });
 
 test("the launch reply names the picked spec", () => {
@@ -1071,6 +1291,8 @@ const CONSOLE_WORKFLOW_LIST = [
   "review",
   "finalize",
   "handoff",
+  "xray",
+  "diagnose",
 ];
 
 test("STARTER_SETS: 3 to 4 starters a set, one without context at least, known lead roles, unique ids", () => {

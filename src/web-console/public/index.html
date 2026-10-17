@@ -595,6 +595,75 @@
           </g>
         </g>
       </svg>
+      <!-- Codebase X-ray: seeing how it works. He holds a lens up to a file,
+           a scan line sweeps down it to show the structure inside, and a rough
+           spot lights up as the scan passes over it. -->
+      <svg class="pose pose-xray" data-pose="xray" viewBox="0 4 240 216" aria-hidden="true" focusable="false">
+        <ellipse class="shadow" cx="126" cy="198" rx="44" ry="5" />
+        <g class="prop">
+          <rect class="sh" x="182" y="60" width="44" height="112" rx="6" />
+          <line class="lt" x1="196" y1="76" x2="196" y2="152" />
+          <path class="lt" d="M196 96 L212 96 M196 124 L212 124" />
+          <circle class="ac" cx="196" cy="76" r="4" />
+          <circle class="ac" cx="212" cy="96" r="3.5" />
+          <circle class="ac" cx="212" cy="124" r="3.5" />
+          <circle class="ac" cx="196" cy="152" r="4" />
+          <g class="xr-spot"><circle class="as" cx="212" cy="124" r="8" /></g>
+          <line class="as xr-scan" x1="188" y1="70" x2="220" y2="70" />
+        </g>
+        <g class="bob">
+          <g transform="translate(-14 0)">
+            <rect class="fl foot f1" x="94" y="179" width="20" height="10" rx="5" />
+            <rect class="fl foot f2" x="126" y="179" width="20" height="10" rx="5" />
+            <rect class="sh" x="80" y="72" width="80" height="108" rx="16" />
+            <path class="ln" d="M80 126 L66 150" /><circle class="fl" cx="66" cy="150" r="5.5" />
+            <g class="xr-look"><path class="ey blink" d="M126 86 L129.64 94.98 L139.31 95.67 L131.9 101.92 L134.23 111.33 L126 106.2 L117.77 111.33 L120.1 101.92 L112.69 95.67 L122.36 94.98 Z" /></g>
+            <path class="es" d="M110 120 Q122 129 134 120" />
+            <line class="ln" x1="160" y1="126" x2="192" y2="132" />
+            <g class="xr-lens">
+              <line class="ln" x1="192" y1="132" x2="204" y2="120" />
+              <circle class="lt" cx="214" cy="110" r="14" />
+            </g>
+            <circle class="fl" cx="192" cy="132" r="5.5" />
+          </g>
+        </g>
+      </svg>
+      <!-- Diagnose a bug: finding the cause. A small bug scuttles along one
+           line of a file, his magnifier follows it until it is caught, and the
+           line it sits on is marked in red. He looks, he does not fix. -->
+      <svg class="pose pose-diagnose" data-pose="diagnose" viewBox="0 4 240 216" aria-hidden="true" focusable="false">
+        <ellipse class="shadow" cx="126" cy="198" rx="44" ry="5" />
+        <g class="prop">
+          <rect class="sh" x="176" y="60" width="46" height="112" rx="6" />
+          <line class="lt" x1="184" y1="78" x2="208" y2="78" />
+          <line class="lt" x1="188" y1="96" x2="214" y2="96" />
+          <path class="dg-mark" d="M184 124 Q187 120 190 124 T196 124 T202 124 T208 124 T214 124" />
+          <line class="lt" x1="188" y1="142" x2="208" y2="142" />
+          <line class="lt" x1="184" y1="158" x2="202" y2="158" />
+          <g class="dg-bug">
+            <path class="dg-leg" d="M195 111 L189 108 M195 115 L189 115 M195 119 L189 122 M205 111 L211 108 M205 115 L211 115 M205 119 L211 122 M198 104 L195 99 M202 104 L205 99" />
+            <ellipse class="dg-body" cx="200" cy="115" rx="5.5" ry="7" />
+            <circle class="dg-head" cx="200" cy="106" r="3.2" />
+          </g>
+        </g>
+        <g class="bob">
+          <g transform="translate(-14 0)">
+            <rect class="fl foot f1" x="94" y="179" width="20" height="10" rx="5" />
+            <rect class="fl foot f2" x="126" y="179" width="20" height="10" rx="5" />
+            <rect class="sh" x="80" y="72" width="80" height="108" rx="16" />
+            <path class="ln" d="M80 126 L66 150" /><circle class="fl" cx="66" cy="150" r="5.5" />
+            <g class="dg-look"><path class="ey blink" d="M126 86 L129.64 94.98 L139.31 95.67 L131.9 101.92 L134.23 111.33 L126 106.2 L117.77 111.33 L120.1 101.92 L112.69 95.67 L122.36 94.98 Z" /></g>
+            <path class="ln" d="M113 82 Q126 77 139 83" />
+            <line class="es" x1="114" y1="124" x2="128" y2="124" />
+            <line class="ln" x1="160" y1="126" x2="174" y2="140" />
+            <g class="dg-lens">
+              <line class="ln" x1="174" y1="140" x2="180" y2="127" />
+              <circle class="lt" cx="186" cy="114" r="14" />
+            </g>
+            <circle class="fl" cx="174" cy="140" r="5.5" />
+          </g>
+        </g>
+      </svg>
     </template>
 
     <!-- The Help dialog's content, cloned into #help-modal the first time ? is
@@ -1546,7 +1615,7 @@
         <p>
           When a newer Plan2Code release is out, the dashboard shows
           <strong>UPDATE AVAILABLE</strong> at the top. Click it for the command
-          to run in your terminal; × hides it until the next
+          to run in your terminal, <code>plan2code update</code>; × hides it until the next
           <code>/plan2code</code>. The version at the bottom of Help links to
           the Releases page.
         </p>
@@ -1574,6 +1643,8 @@
           <li><strong>Handoff.</strong> Pack the current session into a document a fresh session can pick up cold.</li>
           <li><strong>Changelog.</strong> Checks the CHANGELOG version against the main branch and suggests entries for what is new.</li>
           <li><strong>Git.</strong> Branches, pull, push and commits on one board, asking before anything leaves your machine. See "The git board".</li>
+          <li><strong>Codebase X-ray.</strong> Explains how and why an area of the code works, or finds the rough spots worth fixing.</li>
+          <li><strong>Diagnose a bug.</strong> Finds a bug's cause and writes it up without fixing it, ready to hand to Quick Task or Plan.</li>
         </ul>
         <h4>Picking a spec</h4>
         <p>
@@ -2520,6 +2591,24 @@
       </div>
     </dialog>
 
+    <!-- Deleting a spec from the dashboard's picker. Two deliberate steps: the
+         first says what goes and that it is for good, the second wants the
+         spec's name typed. The page only asks; the agent deletes. -->
+    <dialog class="modal" id="delete-modal" aria-labelledby="delete-title">
+      <h2 id="delete-title">Delete this spec?</h2>
+      <p class="modal-blurb" id="delete-blurb"></p>
+      <dl class="delete-facts" id="delete-facts"></dl>
+      <p class="modal-why" id="delete-warn">This is permanent. <code>specs/</code> is not tracked by git, so nothing can bring these files back.</p>
+      <div class="delete-confirm" id="delete-confirm" hidden>
+        <label for="delete-name">To delete it for good, type <strong id="delete-name-hint"></strong></label>
+        <input type="text" id="delete-name" autocomplete="off" spellcheck="false" />
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn ghost" id="delete-cancel">Keep it</button>
+        <button type="button" class="btn danger" id="delete-go">Delete this spec…</button>
+      </div>
+    </dialog>
+
     <dialog class="modal" id="home-modal" aria-labelledby="home-title">
       <h2 id="home-title">Leave this workflow?</h2>
       <p class="modal-blurb" id="home-blurb"></p>
@@ -2570,7 +2659,7 @@
     </dialog>
 
     <!-- Opened from the dashboard's UPDATE AVAILABLE banner. The versions and
-         the copy row are filled by app.js; the update itself runs in a
+         the two copy rows are filled by app.js; the update itself runs in a
          terminal, never from this page. -->
     <dialog class="modal" id="update-modal" aria-labelledby="update-title">
       <h2 id="update-title">A new Plan2Code is available</h2>
@@ -2579,7 +2668,11 @@
         <li>
           Run this in your terminal (not in this page or your agent):
           <div class="update-command" id="update-command"></div>
-          It opens the installer's menu. Back at your prompt with no output at all? npm
+          It updates everything that was installed (the skills, the <code>plan2code</code>
+          command and any extras you added), with no menu. If the <code>plan2code</code>
+          command is not installed, run this instead:
+          <div class="update-command" id="update-fallback"></div>
+          Back at your prompt with no output at all? npm
           could not reach the repository and hid the reason: run
           <code>git ls-remote https://github.com/jparkerweb/plan2code.git</code> to see it.
         </li>

@@ -406,7 +406,8 @@ test("every console workflow has its notes, and its skill's Interface reads them
   const notesFor = {
     init: "init", "init-update": "init", pathfinder: "pathfinder", plan: "plan", "revise-plan": "revise-plan",
     document: "document", implement: "implement", "implement-review": "implement", "quick-task": "quick-task",
-    review: "review", finalize: "finalize", handoff: "handoff", changelog: "changelog", git: "git",
+    review: "review", finalize: "finalize", handoff: "handoff", changelog: "changelog", git: "git", xray: "xray",
+    diagnose: "diagnose",
   };
   const skills = fs.readdirSync(path.join(ROOT, "src")).filter((f) => /^plan2code(-.*)?\.md$/.test(f));
   for (const f of skills) {

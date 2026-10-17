@@ -24,7 +24,7 @@ export const SUBAGENT_WORKFLOWS = Object.freeze({
   }),
   review: Object.freeze({
     instruction:
-      "Split the review across helpers by area (for example correctness, tests and security), then merge and de-duplicate their findings yourself before you report.",
+      "Run the review's analysis in one fresh helper briefed only with the spec and the change set (references/reviewer-brief.md); verify every finding yourself before you report.",
   }),
   pathfinder: Object.freeze({
     instruction:

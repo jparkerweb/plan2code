@@ -39,7 +39,7 @@ Load `./AGENTS.md` if it exists — its conventions govern; never re-ask what it
 
 - **Plan, don't do.** Every question resolves a DECISION. The pull to just build it is the edge of the map — hand off.
 - **Confirm before creating anything.** No files, no issues, until the Intent Gate (Step 0) and backend pick (Step 1) return.
-- **One question at a time** (`research` excepted — parallel); fork-menu between decisions, fresh session after ~3.
+- **One question at a time** (`research` runs in parallel); fork-menu between decisions, fresh session after ~3.
 - **Refer by name.** "[Export format](<link>)", never "02" or "#42" in prose. Bare ids belong on `Blocked by:` lines and in commands.
 - **HITL questions are never self-answered.** Ask and wait; an agent that answers its own grill has broken the skill.
 - **Questions are ground truth; the map is a rebuildable index.** A filled `## Answer` beats any state marker; detail lives in one place.
@@ -51,7 +51,7 @@ Load `./AGENTS.md` if it exists — its conventions govern; never re-ask what it
 
 ## Auto-Discovery and Mode Selection
 
-⚠️ `specs/` is gitignored — NEVER use Glob. Shell only: `ls specs/` (Bash) or `Get-ChildItem specs/` (PS).
+⚠️ `specs/` is gitignored: NEVER use Glob; list it with `ls specs/` or `Get-ChildItem specs/`.
 
 **Brief/recap/minutes asked?** → read references/brief.md: `reconcile`, then `brief-data --range <range>` (`github`: its brief section), write plain-English `briefs/brief-<YYYYMMDD>.md` from the output, STOP. Never resolves.
 
@@ -83,7 +83,7 @@ Read references/chart.md
 0. `[Chart - Step 0: Intent Gate]` **Before creating anything**, use AskUserQuestion for the outcome and WAIT: **chart a map** (foggy — Step 1), **`/plan2code-1-plan`** (clear — STOP), **`/plan2code-quick-task`** (tiny — STOP). HITL, never self-select "chart".
 1. `[Chart - Step 1: Name and backend]` Only after the gate says "chart." Confirm the kebab-case idea name, then ask — HITL, never self-picked — **local files or GitHub Issues?** Recommend `local` for solo work; offer `github` only if preflight passes, naming the repo's visibility. THEN the first write.
 2. `[Chart - Step 2: Destination]` Grill until it is one or two lines. It fixes scope — settle it first.
-3. `[Chart - Step 3: Recon]` Explore the codebase; record codebase context, resolved on the spot, `legwork · AFK`. On `github` hold it until Step 6 so a Step 4 off-ramp leaves no litter.
+3. `[Chart - Step 3: Recon]` Explore the codebase; record codebase context, resolved on the spot, `legwork · AFK`. On `github` hold it until Step 6 so a Step 4 off-ramp leaves no litter. Unfamiliar code? `/plan2code-xray` explains an area first.
 4. `[Chart - Step 4: Map the frontier]` Grill again **breadth-first**: fan out, never deep on one thread. Surface the open decisions and what is takeable now.
 5. `[Chart - Step 5: Create the map]` `**Status:** Charting`, Destination, Ground rules (backend first), an empty index, the fog in `## Not yet specified`. Say once where it lives and who sees it.
 6. `[Chart - Step 6: Write the questions]` One per decision you can phrase sharply NOW, dependency order, `Blocked by:` filled the same pass — on `github`, create all first, wire edges second. The rest stays fog. Include a `grill · HITL` testing-posture question; `/plan2code-1-plan` Phase 1 needs it.
@@ -102,7 +102,7 @@ Assume NO memory of any prior session.
 
 1. `[Work - Step 1: Load]` Read the map whole. No question yet.
 2. `[Work - Step 2: Reconcile]` **Always.** `local`: run `reconcile`. The answer wins: a question whose `## Answer` its state contradicts is resolved, a missing `Resolved:` is backfilled from the claim (today if none), a claim with no `## Answer` (a crash) is released, and every marker is rebuilt from the questions. Tell the human each `repairs` entry in one line. Re-fire every question in `refire` (research cut off before its `Research complete:` line; resolve.md → Interrupted research). `--dry-run` first if the map looks badly off. `github`: the reconcile checks in the backend playbook.
-3. `[Work - Step 3: Frontier]` Every question open, unclaimed, and unblocked, first in order. `local`: run `frontier` (`frontier`, `blocked` with each blocker, `stranded`, `nextNN`, `counts`).
+3. `[Work - Step 3: Frontier]` Every question open, unclaimed, and unblocked, first in order. `local`: run `frontier` (`blocked` with each blocker, `stranded`, `nextNN`, `counts`).
 4. `[Work - Step 4: Choose and claim]` The one the user named, else first on the frontier. Mark it claimed on the question and the map, **saved before any work** (`local`: `claim <NN>`, which refuses a blocked or non-open question and a second open claim). A `research` pick fires unclaimed instead (resolve.md); then claim the next one.
    - Stranded on an `out-of-scope` blocker? Check this first: re-frame or rule out, re-run Step 3.
    - Frontier empty but questions remain (`allBlocked`)? Report the chain, STOP.
@@ -126,7 +126,7 @@ The map clears only when ALL hold:
 3. The destination is reachable with nothing left to decide
 4. All four confidence dimensions score ≥ 18/25
 
-Score the four dimensions (handoff.md rubric) and write them to the map's `**Confidence:**` line. `local`: run `gate`; it checks 1, 2 and 4 against the files, plus the handoff preflight and the Requirements, Feasibility and Risk caps; condition 3, the Integration cap and the scores stay yours (its `judgment` list). Any failing: name it, keep working. All passing: follow the handoff playbook, set `**Status:** Cleared`, run `lint`, stop. The PLAN-DRAFT is always local — `/plan2code-1-plan` cannot read a tracker.
+Score the four dimensions (handoff.md rubric) and write them to the map's `**Confidence:**` line. `local`: run `gate`; it checks 1, 2 and 4 against the files, plus the handoff preflight and the Requirements, Feasibility and Risk caps; condition 3, the Integration cap and the scores stay yours (its `judgment` list). Any failing: name it, keep working. All passing: follow the handoff playbook, set `**Status:** Cleared`, run `lint`, stop. The PLAN-DRAFT is always local: Plan cannot read a tracker.
 
 ## Trail Footer
 
@@ -134,11 +134,11 @@ Read references/trail.md
 
 > Fallback: once the map exists, end every response with a marker path (`●` done · `◉` here · `○` open · `⊘` blocked · `⊝` out of scope) `START`→`⚑`, a named legend, a plain-English confidence note, then ONE closer: asking → Form B, `WAITING ON YOU`, no command; menu → Form C, `NEXT UP` + `OR START FRESH`; session end → Form A, `NEXT STEP` + resume command with `--web` (map issue URL on `github`).
 
-Close EVERY response with the trail once the map exists. You pick the form by what the turn does. `local`: `trail` draws it from the files, so paste its output verbatim. Asking → Form B, `trail --form B --item "<probe>" ... --text` (one `--item` per open probe, up to three). Menu after a decision → Form C, `trail --form C` WITHOUT `--text`: paste its `text`, then build the question tool from its `menu`. Session end → Form A, `trail --form A --text`. `github`: draw it by hand per the backend playbook.
+Close EVERY response with the trail once the map exists; the turn picks the form. `local`: `trail` draws it from the files; paste its output verbatim. Asking → `trail --form B --item "<probe>" ... --text` (one `--item` per open probe, up to three). Menu → `trail --form C` WITHOUT `--text`: paste its `text`, then build the question tool from its `menu`. Session end → `trail --form A --text`. `github`: by hand per the backend playbook.
 
 ## Session End
 
-Report each question resolved (name + gist), what graduated, what's still open; offer a brief for today. Nothing to commit — `local` is gitignored, `github` already on the tracker. Then the mascot, then the Trail Footer.
+Report each question resolved (name + gist), what graduated, what's still open; offer a brief for today. Nothing to commit (`local` is gitignored). Then the mascot, then the Trail Footer.
 
 **Web console:** at session end or on a `__stop`, post `finish` (Form A's command) BEFORE `stop` (notes/pathfinder.md).
 
@@ -156,9 +156,9 @@ Report each question resolved (name + gist), what graduated, what's still open; 
 
 | Issue | Action |
 |---|---|
-| Session stops mid-question, or map drift | Release the claim, note why (or leave it: the next reconcile releases a claim with no answer). Work Step 2 repairs both; questions win. Never reconcile mid-question: it would release your own live claim. |
-| A script cannot run (no `node`) | Say so once; do the step by hand from questions.md (markers, blocking, schema) and the reference that names the step. Footer by hand: the trail's glyph path, then Form A `NEXT STEP · start a new conversation and run:` + the command, Form B `WAITING ON YOU · answer here, in this conversation:` + the items, or Form C `OR START FRESH · new conversation, paste:` + the command. |
-| Frontier empty, fog remains | Not sharp yet. Grill it into a question, or clear the map |
+| Session stops mid-question, or map drift | Release the claim (or leave it: the next reconcile releases a claim with no answer). Work Step 2 repairs both; questions win. Never reconcile mid-question: it releases your own live claim. |
+| A script cannot run (no `node`) | Say so once; do the step by hand from questions.md and the step's reference, and draw the footer by hand from trail.md (or its fallback above). |
+| Frontier empty, fog remains | Grill it into a question, or clear the map |
 | Reference file missing | Use the fallback blockquote under its `Read` line |
 | `gh` fails mid-session on a `github` map | Report and STOP. Falling back to local forks the map |
 | User skips to planning | Their call. Name what is undecided, route to `/plan2code-1-plan` |

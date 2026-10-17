@@ -37,7 +37,7 @@ The dashboard, in a project halfway through a build. It suggests the next step f
 - **Ways in.** `plan2code` (Claude Code, Devin or Codex), or type `/plan2code` in your agent (`$plan2code` in Codex).
 - **No agent yet?** Install Claude Code, Codex or Devin first.
 
-Installation needs network access and runs through the [skills CLI](https://skills.sh). To update, re-run the install command.
+Installation needs network access and runs through the [skills CLI](https://skills.sh). To update, run `plan2code update` (or re-run the install command).
 
 ```bash
 npx --allow-git=all git+https://github.com/jparkerweb/plan2code.git
@@ -93,7 +93,7 @@ GitHub Copilot · Windsurf · Codex · Continue · Codeium · Zed · Amp · Open
 Gemini CLI · Cline · Roo · Kilo · Goose · Trae · Qwen Code.
 
 The installer keeps one canonical copy of each skill under `~/.agents/skills/` and links it into
-agents that maintain their own directory. To update, re-run the install command.
+agents that maintain their own directory. To update, run `plan2code update` (or re-run the install command).
 
 Use the installer rather than calling `skills add` against the repository root: recursive discovery
 would also find maintainer-only skills under `.claude/skills/`. The installer targets `skills/`
@@ -184,15 +184,17 @@ The dashboard's cards, and when each one lights up for the spec you pick:
 | Set up this project | Reads your project and writes AGENTS.md, the guide every later step works from. | The project has no AGENTS.md yet |
 | Refresh AGENTS.md | Brings AGENTS.md and its notes up to date with what the project has learned lately. | The project has an AGENTS.md |
 | Pathfinder | A foggy idea becomes a clear list of decisions, settled one question at a time. | You start fresh, or the spec is still being explored |
-| Plan | Requirements, technical design and your approval: the shape of what gets built. | You start fresh, or the spec has a finished Pathfinder map or a drafted plan |
+| Plan | Requirements, technical design and your approval: the shape of what gets built. | You start fresh, or the spec has a finished Pathfinder map, a drafted plan or a bug diagnosis |
 | Revise the plan | Requirements changed mid-build? Adjust the plan without starting over. | The spec is written up into phases and not fully built |
 | Document | The plan becomes a checklist of small tasks, grouped into phases, that a developer can just do. | The spec has a drafted plan |
 | Implement | Builds the next phase, task by task, with a report and your sign-off at the end. | The spec has phases with tasks still to build |
 | Implement + review | One phase built, then a careful review of the changes, then your sign-off. All in one run. | The spec has phases with tasks still to build |
 | Finalize | Checks the work, writes the summary, files the specs away and suggests the commit message. | Every task in the spec is done |
-| Quick task | Too small for the full process? A quick plan, then it just builds it. | Always |
+| Quick task | Too small for the full process? A quick plan, then it just builds it. | Always (suggested when the spec is a diagnosed bug) |
 | Review | A second opinion on the changes. Problems ranked, and you pick what gets fixed. | Always |
 | Handoff | Pack this conversation into a document a fresh session can pick up cold. | Always |
+| Codebase X-ray | Explain how and why an area works, or find the rough spots worth fixing. | Always |
+| Diagnose a bug | Find a bug's cause and write it up, without fixing it. | Always |
 | Changelog | Checks the CHANGELOG version against the main branch and suggests entries for what is new. | Always |
 | Git | Branches, pull, push and commits on one board, asking before anything leaves your machine. | Always (offers to start a repository outside one) |
 
@@ -361,6 +363,8 @@ console or the terminal; add `--web` to skip the question and go straight to the
 | `/plan2code-quick-task` | A small change that doesn't warrant the full sequence |
 | `/plan2code-1b-revise-plan` | Requirements moved mid-build. Revise the specs, not the code |
 | `/plan2code-handoff` | Compact this conversation into a doc the next one resumes from |
+| `/plan2code-xray` | Explain how and why an area of the code works (citing files, commits and PRs), or rank the rough spots worth fixing into a brief for Pathfinder or Plan; never edits code |
+| `/plan2code-diagnose` | Find a bug's cause and write it up as `specs/<bug-name>/DIAGNOSIS-<date>.md` without fixing it, then offer `/plan2code-quick-task` to fix it, or `/plan2code-1-plan` when the fix is big |
 | `/plan2code-changelog` | Check the CHANGELOG version against the default branch, suggest entries for new work you can edit, keep `package.json` aligned, then hand off to Git to commit |
 | `/plan2code-git` | Branches, pull, push and commits on one board (or plain instructions in the terminal); asks before every push, publish and delete |
 

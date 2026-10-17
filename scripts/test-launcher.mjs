@@ -20,13 +20,28 @@ const LAUNCHER = path.join(ROOT, "src", "launcher", "plan2code.js");
 const IS_WINDOWS = process.platform === "win32";
 const NOTICE = "will use the model you last used in it";
 
-/** A temp home and a bin dir holding stand-ins for `clis`; each writes its args to <bin>/<cli>.json. */
-function sandbox(clis) {
+/**
+ * A temp home and a bin dir holding stand-ins for `clis`; each writes its args to <bin>/<cli>.json.
+ * `installed: "X.Y.Z"` runs an installed copy instead, as install.js lays it out: the launcher,
+ * models.json and update-check.mjs in <home>/.plan2code/bin/ beside a version.json saying X.Y.Z.
+ */
+function sandbox(clis, { installed } = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "p2c-launcher-"));
   const home = path.join(dir, "home");
   const bin = path.join(dir, "bin");
   fs.mkdirSync(home);
   fs.mkdirSync(bin);
+  const consoleHome = path.join(home, ".plan2code", "console");
+  let launcher = LAUNCHER;
+  if (installed) {
+    const binCopy = path.join(home, ".plan2code", "bin");
+    fs.mkdirSync(binCopy, { recursive: true });
+    launcher = path.join(binCopy, "plan2code.js");
+    fs.copyFileSync(LAUNCHER, launcher);
+    fs.copyFileSync(path.join(path.dirname(LAUNCHER), "models.json"), path.join(binCopy, "models.json"));
+    fs.copyFileSync(path.join(ROOT, "src", "web-console", "update-check.mjs"), path.join(binCopy, "update-check.mjs"));
+    fs.writeFileSync(path.join(binCopy, "version.json"), JSON.stringify({ name: "Plan2Code", version: installed }));
+  }
   const recorder = path.join(bin, "record.js");
   fs.writeFileSync(
     recorder,
@@ -45,19 +60,29 @@ function sandbox(clis) {
   return {
     home,
     stateFile: path.join(home, ".plan2code", "launcher.json"),
+    cacheFile: path.join(consoleHome, "update-check.json"),
     run: (args, env = {}) =>
-      spawnSync(process.execPath, [LAUNCHER, ...args], {
+      spawnSync(process.execPath, [launcher, ...args], {
         cwd: dir,
         input: "",
         encoding: "utf8",
-        env: { ...process.env, PATH: bin, HOME: home, USERPROFILE: home, ...env },
+        env: { ...process.env, PATH: bin, HOME: home, USERPROFILE: home, PLAN2CODE_CONSOLE_HOME: consoleHome, ...env },
       }),
     argsOf: (cli) => {
       const file = path.join(bin, `${cli}.json`);
       return fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, "utf8")) : null;
     },
-    cleanup: () => fs.rmSync(dir, { recursive: true, force: true }),
+    // A detached release-check refresh may still be writing its cache; retry rather than fail.
+    cleanup: () => fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }),
   };
+}
+
+const NOTICE_LINE = /is out \(you have v/;
+
+/** Write the console's cached release check, `ageMs` old. */
+function writeCache(box, latest, ageMs = 0) {
+  fs.mkdirSync(path.dirname(box.cacheFile), { recursive: true });
+  fs.writeFileSync(box.cacheFile, JSON.stringify({ checkedAt: Date.now() - ageMs, latest }));
 }
 
 test("launcher: Claude Code gets the prompt first, then bypassPermissions and the forwarded args", (t) => {
@@ -263,6 +288,65 @@ test("launcher: the CLI's non-zero exit code is passed through", (t) => {
   assert.equal(result.status, 7, result.stderr);
   assert.notEqual(box.argsOf("claude"), null);
 });
+test("launcher: update runs the npx install and starts no agent", (t) => {
+  const box = sandbox(["npx", "claude"]);
+  t.after(box.cleanup);
+  const result = box.run(["update"]);
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /Updating Plan2Code\.\.\./);
+  const args = box.argsOf("npx");
+  assert.ok(args, "npx was not run");
+  assert.ok(args.includes("--update"), args.join(" "));
+  assert.ok(args.includes("git+https://github.com/jparkerweb/plan2code.git"), args.join(" "));
+  assert.equal(box.argsOf("claude"), null);
+});
+
+test("launcher: update passes npx's exit code through", (t) => {
+  const box = sandbox(["npx"]);
+  t.after(box.cleanup);
+  assert.equal(box.run(["update"], { P2C_TEST_EXIT: "3" }).status, 3);
+});
+
+test("launcher: release notice prints from a fresh cache", (t) => {
+  const box = sandbox(["claude"], { installed: "1.0.0" });
+  t.after(box.cleanup);
+  writeCache(box, "9.9.9");
+  const result = box.run([]);
+  assert.equal(result.status, 0, result.stderr);
+  assert.ok(result.stdout.includes("Plan2Code v9.9.9 is out (you have v1.0.0). Run: plan2code update"), result.stdout);
+  assert.notEqual(box.argsOf("claude"), null);
+});
+
+test("launcher: no notice when current, stale or missing, and the start does not wait", (t) => {
+  // PATH holds only the stand-ins, so the detached refresh finds no git: nothing may wait on it.
+  const cases = [
+    ["current", (box) => writeCache(box, "1.0.0")],
+    ["stale", (box) => writeCache(box, "9.9.9", 2 * 60 * 60 * 1000)],
+    ["missing", () => {}],
+  ];
+  for (const [name, setup] of cases) {
+    const box = sandbox(["claude"], { installed: "1.0.0" });
+    t.after(box.cleanup);
+    setup(box);
+    const started = Date.now();
+    const result = box.run([]);
+    const took = Date.now() - started;
+    assert.equal(result.status, 0, `${name}: ${result.stderr}`);
+    assert.doesNotMatch(result.stdout, NOTICE_LINE, name);
+    assert.notEqual(box.argsOf("claude"), null, name);
+    assert.ok(took < 5000, `${name}: the start took ${took} ms`);
+  }
+});
+
+test("launcher: compareVersions orders X.Y.Z numerically and refuses anything else", () => {
+  const { compareVersions } = require(LAUNCHER);
+  assert.equal(compareVersions("1.9.0", "1.10.0"), -1);
+  assert.equal(compareVersions("2.0.0", "2.0.0"), 0);
+  assert.equal(compareVersions("3.0.0", "2.9.9"), 1);
+  assert.equal(compareVersions("1.0.0", null), null);
+  assert.equal(compareVersions("v1.0.0", "1.0.0"), null);
+});
+
 test("launcher: renderBanner draws Planny and the name, colored only through paint", () => {
   const { renderBanner, paint } = require(LAUNCHER);
   const plain = renderBanner(paint(false));

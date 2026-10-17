@@ -210,6 +210,32 @@ export function rel(root, p) {
   return path.relative(root, p).split(path.sep).join("/") || ".";
 }
 
+/* ------------------------------------------------- planning-file patterns */
+
+// The loop completion markers. The loop scans specs/ for them, so no planning
+// file may contain one. The one copy every skill script checks against.
+export const LOOP_TOKENS = /\b(TASK_COMPLETE|PHASE_COMPLETE|ALL_TASKS_COMPLETE|IMPLEMENTATION_COMPLETE|SPEC_COMPLETE|WORK_COMPLETE)\b/;
+
+// The metrics collector's own scrape patterns (plan2code-metrics/src/collector.ts).
+export const SCRAPE = [
+  { name: "overall confidence with %", re: /(?:Overall|Final|Total)?\s*\**[Cc]onfidence\**[:\s*]+(\d{1,3})%/ },
+  { name: "confidence table cell", re: /[|]\s*[Cc]onfidence\s*[|]\s*(\d{1,3})/ },
+  { name: "bare Requirements + number", re: /[Rr]equirements?[:\s|]+(\d{1,2})/ },
+  { name: "bare Feasibility + number", re: /[Ff]easibility[:\s|]+(\d{1,2})/ },
+  { name: "bare Integration + number", re: /[Ii]ntegration[:\s|]+(\d{1,2})/ },
+  { name: "bare Risk + number", re: /[Rr]isk[:\s|]+(\d{1,2})/ },
+];
+
+/** Every SCRAPE pattern that matches `text`, as `<name>: "<match>"`. */
+export function scrapeHits(text) {
+  const hits = [];
+  for (const s of SCRAPE) {
+    const m = text.match(s.re);
+    if (m) hits.push(`${s.name}: "${m[0].trim()}"`);
+  }
+  return hits;
+}
+
 /* --------------------------------------------------------- the web console */
 
 // The web console ships beside these scripts in every installed skill

@@ -64,13 +64,14 @@ only ever be offered once nothing could come of it:
   ]}],
   "items": [{
     "id": "signoff", "kind": "review", "title": "Approve this phase", "doc": "report",
-    "body": "Phase 3 is built. Read the report, try the checks, then approve it, review the code first, or say what to change.",
+    "body": "Phase 3 is built. Read the report, try the checks, then approve it, review the code first, see it running, or say what to change.",
     "verdicts": [
       { "id": "review", "label": "Review the code first" },
+      { "id": "show", "label": "Show me it working" },
       { "id": "approve", "label": "Approve this phase" },
       { "id": "changes", "label": "I want changes" }
     ],
-    "token": { "approve": "approved", "changes": "needs changes" },
+    "token": { "approve": "approved", "changes": "needs changes", "show": "show me" },
     "nothingYet": "Nothing is marked complete until you approve.",
     "gate": { "id": "signoff", "authoritative": true }
   }]
@@ -83,7 +84,19 @@ change, treat it as "describe any issues": do the change first and ask again.
 `changes` means exactly what it says: address it, update the report, and reopen
 the item (`"status": "reopened"`) with a reply in its `thread`. `review` is the
 person asking for the code review before they approve anything — read
-`building-review.md`.
+`building-review.md`. `show` is the terminal's `show me`: see below.
+
+### Show me it working
+
+On `show`, run the workflow's **Show me it working** paragraph (start the app,
+look at the change, stop it, one summary line in `phase-X.md`). Save each
+screenshot under the session's `shots/` folder, never under `specs/`, and post
+them as image blocks in a `shown` doc (`console.md` → Documents), with what was
+run in a `md` block above them; no browser tool means that block alone says
+what the command printed. Then reopen the same card (`"status": "reopened"`)
+without the `show` verdict, a `thread` reply naming what was seen. The same
+holds on Finalize's card and the one `building-review.md` reopens; Quick
+Task's card is settled instead (`notes/quick-task.md`).
 
 `gate` marks the one approval that counts. The server refuses a second open
 authoritative gate, which is what keeps a composed workflow from asking for
@@ -172,7 +185,7 @@ Stage 3 fixes, with no "Check the fixes" item: Stage 4 is the only gate. The
 post that starts Stage 2's review carries `"run": { "event": "review", "id":
 "review" }`: in this workflow it scores the review stage's 1 point on the meter
 as it begins, and the phase's final `run` leaves that point out. Stage 4 is the
-sign-off above **without the review verdict** — the phase was already reviewed
+sign-off above (`show` included) **without the review verdict** — the phase was already reviewed
 — with the review results and unresolved findings in the report doc, header
 "Reviewed and ready for sign-off" in the item's `body`. The finish never
 carries `review`, and its post carries `"run": { "event":

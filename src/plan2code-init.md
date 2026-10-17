@@ -26,7 +26,7 @@ The FIRST thing you do, before anything else in this file — before exploring t
 
 ## Content
 
-1. **Commands**: Build, lint, test, run single test, and other common development tasks
+1. **Commands**: Build, lint, test, run single test, other common development tasks, and how to start the app and where to view it (URL or command), when it has one
 2. **Architecture**: High-level "big picture" structure requiring multi-file context to understand
 3. **How to Use This File**: A short paragraph explaining that sections below contain brief summaries and agents should follow the markdown links to `.agents-docs/` for full details — only read what's relevant to the current task.
 4. **Failure Log**: running list of mistakes and/or corrections that went wrong via the AI Agent at least once. 

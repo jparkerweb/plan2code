@@ -63,7 +63,7 @@ Three levels -- auto-detected, always respect explicit user override:
 1. **User prompt** — use it.
 2. **Conversation context** — recent work? Those artifacts. Scope: `focused`.
 3. **Standalone, nothing named** — do not assume a target. Do a quick scan (no file reading): `review-scope.mjs`, `specs.mjs list`, recent commits. Then ask what to review (`ask_user_question`; a `choice` on the console, scope questions up front), offering only options the scan supports, each with its size: the branch's changes vs base (files, ~lines, `commits`), uncommitted changes only (when any), a spec/plan under `specs/` (when any), a named subsystem or full codebase, or specific files/folders (free text via Other). Recommend the likeliest first. Nothing found (`empty: true`, no specs)? Ask for files or a subsystem. Use the answer as the scope, then continue.
-4. **Scan details** — `review-scope.mjs` compares the branch with its base (`main`, else `master`; `--base` overrides; `base` says which it used) and adds staged, unstaged and untracked changes: `files` (status, lines), `counts`, `commits`, `mix`, `batchByRisk`. `empty: true`? Ask user. Exit 3 `no-base` (no `main` or `master`, or no such `--base`)? Rerun with `--base <trunk>`, asking the user which branch is the trunk if unclear. Exit 3 `not-a-repo`? Ask user which files to review.
+4. **Scan details** — `review-scope.mjs` diffs the branch against its base (`main`, else `master`, or `--base`) plus staged, unstaged and untracked changes: `files`, `counts`, `commits`, `mix`, `batchByRisk`. `empty: true` or exit 3 `not-a-repo`? Ask user what to review. Exit 3 `no-base`? Rerun with `--base <trunk>`, asking which branch is the trunk if unclear.
 
 **Classify review type** from context (auto-detect; use `ask_user_question` only if ambiguous):
 
@@ -93,6 +93,8 @@ Three levels -- auto-detected, always respect explicit user override:
 
 ### Step 3: Analyze
 
+**Who reviews:** when your tool can start a helper (subagent) and helpers are not switched off for this skill run, fill references/reviewer-brief.md and hand the analysis to ONE fresh helper; do not analyze in parallel. The brief carries the review-depth references, the dimensions and the finding format: send only the filled brief. With no helper, or one that fails or returns nothing usable, run this step in this session.
+
 **Load review depth (conditional on scope):**
 
 | Scope | Load |
@@ -103,7 +105,7 @@ Three levels -- auto-detected, always respect explicit user override:
 
 Read references/verification-protocol.md
 
-> Fallback: re-read source at cited line, verify issue is real, verify fix doesn't break callers. For architectural findings, trace a use case end-to-end.
+> Fallback: re-read the cited line, confirm the issue is real and the fix keeps callers working; trace a use case for architectural findings.
 
 Read references/dimensions.md (Branch and Full scopes)
 
@@ -133,6 +135,8 @@ Read references/false-positives.md (Full scope only; fallback rules below apply 
 
 Run every finding through the false-positive detection shortcuts before presenting. Drop findings that fail.
 
+**Helper's findings:** when a helper ran the analysis, open every finding's cited `file:line` yourself and confirm it with verification-protocol.md and the false-positive shortcuts (fallback above). Drop any you cannot confirm; adjust severity if needed, never add unverified findings. Note how many you dropped for the report.
+
 ### Step 4: Spec & Test Assessment
 
 **Specs** (skip if none): Each `[x]` task correct? Criteria met? Paths match?
@@ -147,6 +151,7 @@ Run every finding through the false-positive detection shortcuts before presenti
 🔬 [Review Mode Complete]
 
 **Overview:** [2-3 sentences]  **Scope:** [X files, ~Y lines]
+**Reviewed by:** a fresh helper (N findings checked, M dropped) · or this session (helpers off) · or this session (this tool cannot start helpers) · or this session (helper failed). In-session, add once: this review was not independent of the work it reviewed.
 
 **Dimension Coverage:** Report all 11. Clean dimensions grouped on one summary line.
 

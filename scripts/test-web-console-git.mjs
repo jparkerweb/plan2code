@@ -303,7 +303,8 @@ test("git: the Git card's copy, place and availability are pinned (FR-58, FR-59)
   );
   assert.equal(entry.group, "extra");
   assert.equal(entry.chip, "Utility");
-  assert.equal(SKILL_CATALOG.at(-1), entry, "the Git card is last");
+  assert.equal(SKILL_CATALOG.at(-2), entry, "the Git card comes right before Handoff");
+  assert.equal(SKILL_CATALOG.at(-1).skill, "plan2code-handoff", "the Handoff card is last");
   for (const isGit of [true, false, undefined]) {
     for (const pending of [0, 3, null]) {
       const scan = { hasAgents: true, pending, ...(isGit === undefined ? {} : { isGit }) };

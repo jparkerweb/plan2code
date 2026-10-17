@@ -42,6 +42,7 @@ import {
   ensureDir,
   fileStamp,
   forgetWorkspace,
+  removeSpec,
   handOff,
   handleFile,
   healthOk,
@@ -88,6 +89,7 @@ import {
   updateState,
   UPLOAD_MAX_AGE_MS,
   resolveDocFiles,
+  resolveDocImages,
   validate,
   validateChat,
   workspaceForAgent,
@@ -267,6 +269,7 @@ async function cmdOpen() {
     // refresh never re-reads the last skill's files into the new page.
     try {
       patch = resolveDocFiles(patch, base(structuredClone(state)), worktree);
+      patch = resolveDocImages(patch, base(structuredClone(state)), dir);
     } catch (e) {
       die(e.message, 3);
     }
@@ -656,6 +659,7 @@ function postOnce() {
   if (!before) die("that session has no state", 1);
   try {
     patch = resolveDocFiles(patch, before, before.worktree || repoRoots().worktree);
+    patch = resolveDocImages(patch, before, dir);
   } catch (e) {
     die(e.message, 3);
   }
@@ -1301,6 +1305,24 @@ function cmdForget() {
   print({ ok: true, spec, forgot: forgetWorkspace(worktree, spec) });
 }
 
+/* ---------------------------------------------------------- delete-spec */
+
+// The dashboard's Delete button, carried out by the agent: the page never
+// writes into a project. removeSpec() does every check; a refusal is exit 3
+// with the reason, and the remembered workspace for the spec goes with it.
+function cmdDeleteSpec() {
+  if (typeof args.spec !== "string" || !args.spec.trim()) die("delete-spec needs --spec specs/<name>", 2);
+  const worktree = repoRoots().worktree;
+  try {
+    const done = removeSpec(worktree, args.spec);
+    forgetWorkspace(worktree, args.spec);
+    print(done);
+  } catch (err) {
+    print({ ok: false, message: err.message });
+    process.exit(3);
+  }
+}
+
 /* ----------------------------------------------------------------- help */
 
 function cmdHelp() {
@@ -1370,6 +1392,12 @@ port, and the filesystem as transport; this CLI is the whole agent surface.
           Drop the workspace folders remembered for that spec, in this
           folder (Finalize, after archiving it). Prints { ok, spec, forgot };
           forgot is false when nothing was saved. Exit 2 = bad usage.
+  delete-spec --spec specs/<name>
+          Delete that spec folder for good (the dashboard's Delete button, a
+          __delete action). Only an existing specs/<name> folder inside this
+          worktree: never a link, never deeper, never specs--completed/.
+          Prints { ok, removed }; exit 2 = bad usage, 3 = refused, with
+          { ok: false, message } saying why. Nothing is touched on a refusal.
   status  [--session <sid>] [--all]
           One session, or (--all) every session on this machine, every project.
   stop    --session <sid> | --all
@@ -1377,7 +1405,7 @@ port, and the filesystem as transport; this CLI is the whole agent surface.
 
   workflows: dashboard · init · init-update · pathfinder · quick-task · plan ·
              revise-plan · document · implement · implement-review · review ·
-             finalize · handoff · git · changelog
+             finalize · handoff · git · changelog · xray · diagnose
 
   A session handed to you by the dashboard (a --session id): resume it with
   "open --resume <sid> --no-open --workflow <yours>" (the resume it carries) -- never a
@@ -1636,6 +1664,7 @@ const COMMANDS = {
   chat: cmdChat,
   keep: cmdKeep,
   forget: cmdForget,
+  "delete-spec": cmdDeleteSpec,
   status: cmdStatus,
   stop: cmdStop,
   help: cmdHelp,
@@ -1655,7 +1684,7 @@ if (Number.isFinite(nodeMajor) && nodeMajor < 18) {
 
 if (!cmd || !Object.hasOwn(COMMANDS, cmd)) {
   process.stderr.write(
-    "console: usage: console.mjs <open|post|wait|chat|keep|forget|status|stop|help> [--session <id>] [--file <patch.json>] [--seconds N]\n"
+    "console: usage: console.mjs <open|post|wait|chat|keep|forget|delete-spec|status|stop|help> [--session <id>] [--file <patch.json>] [--seconds N]\n"
   );
   process.exit(2);
 }

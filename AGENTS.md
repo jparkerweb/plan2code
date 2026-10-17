@@ -86,6 +86,7 @@ When you make a mistake, get corrected, or discover something about this codebas
 2. Keep it specific to this repo. General advice belongs nowhere.
 3. If this fix is a workflow rather than a rule, put it in `.claude/skills/` and link it from here.
 4. Include the change in the same commit and mention it in your summary.
+5. A skill rule broken twice becomes a script check (a `scripts/` test or a skill-script check), not more prose.
 
 ## Failure log
 
@@ -100,3 +101,4 @@ When you make a mistake, get corrected, or discover something about this codebas
 - After a sync, grep for the upstream ticket key followed by anything, not only by digits: v2.8.0's git board fixtures built branch names as `` `feature/<KEY>-${11000 + i}-…` `` template literals, which a digits-only rewrite to `ABC-<n>` misses.
 - Import `scripts/skill-script-helpers.mjs` in any test that builds git fixtures for a skill script or `git-repo.mjs`: it scrubs the whole test process's git config, so fixtures, imported modules and spawned scripts agree. Mixed configs broke `git plan switch` once (a global `core.autocrlf=true` checked fixtures out with CRLF the scrubbed script read as changed).
 - Before deleting a test file that upstream split or removed, diff plan2code's copy against the rebranded upstream base and port the plan2code-only tests: v2.7.0's split of the web console suite would otherwise have dropped seven hardening tests (now in `scripts/test-web-console-hardening.mjs`).
+- Register a new skill in `install.js` `SOURCE_PROMPTS` before running its `scripts/test-script-<name>.mjs`: importing `scripts/skill-script-helpers.mjs` rebuilds `skills/` and prunes any skill folder `install.js` does not list, so the script under test vanishes.

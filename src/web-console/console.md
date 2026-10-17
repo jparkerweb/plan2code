@@ -39,7 +39,7 @@ several are due at once (a build's start), read them in one batch.
 | --- | --- |
 | `building.md` (`building`) | You run `implement`, `implement-review` or `quick-task`: right after `open`, then `notes/implement.md` or `notes/quick-task.md`. |
 | `building-review.md` (`building-review`) | A build's review is asked for on the page (a `review` verdict, `__review`, Implement + Review's Stage 2). |
-| `notes/<workflow>.md` (`<workflow>`) | Right after `open`: `init` (also init-update), `pathfinder`, `plan`, `revise-plan`, `document`, `implement` (also implement-review), `quick-task`, `review`, `finalize`, `handoff`, `changelog`, `git`. The dashboard's is `console-launches.md`. |
+| `notes/<workflow>.md` (`<workflow>`) | Right after `open`: `init` (also init-update), `pathfinder`, `plan`, `revise-plan`, `document`, `implement` (also implement-review), `quick-task`, `review`, `finalize`, `handoff`, `changelog`, `git`, `xray`, `diagnose`. The dashboard's is `console-launches.md`. |
 | `console-launches.md` (`launches`) | You are the dashboard. |
 | `console-finish.md` (`finish`) | Before your first `finish` post, and when a send carries `__commit`, or `__dashboard` from a finished screen. |
 | `console-stop.md` (`stop`) | A send carries `__stop`, or `__dashboard` with no finish up; or your notes say to post a `stopWarning`. |
@@ -65,7 +65,7 @@ terminal — that path loses nothing, and they can switch either way at any time
 1. `node "<CONSOLE>" open --workflow <w>`, where `<w>` is one of `dashboard`,
    `init`, `init-update`, `pathfinder`, `quick-task`, `plan`, `revise-plan`,
    `document`, `implement`, `implement-review`, `review`, `finalize`,
-   `handoff`, `git`, `changelog`. Get it right: the page decides from it what
+   `handoff`, `git`, `changelog`, `xray`, `diagnose`. Get it right: the page decides from it what
    to offer and what stopping costs. `--title` defaults to the folder name;
    `--spec specs/<idea>` when you already know the spec. It prints
    `{"ok":true,"sid":"...","session":"...","url":"...","terminalLine":"→ Look at the web console: ..."}`
@@ -164,6 +164,7 @@ An action whose `i` starts with `__` is about the session, not a question:
 | `__stop`, `__dashboard` (no finish up) | `console-stop.md` |
 | `__commit`, `__dashboard` (from a finished screen) | `console-finish.md` |
 | `__launch` | `console-launches.md` |
+| `__delete` | `console-launches.md` (the dashboard only) |
 | `__brief` | `notes/pathfinder.md` |
 | `__review`, `__done` | `building-review.md` |
 | `__git` | `notes/git.md` |
@@ -352,6 +353,10 @@ with `"_delete": true` removes the whole tab).
   (relative to the project, never outside it). Re-send the block, or the doc
   with `"refresh": true`, after the file changes. `"select": "tasks"` keeps only
   its `- [ ] **Task N.M:**` lines. Never paste a file you could name.
+- **`image`** instead of `md`: `{ "id", "image": "shots/run.png", "alt": "..." }`
+  shows a PNG, JPEG or WebP (5 MB at most) saved directly in the session's
+  `shots/` folder (the `session` path `open` printed), named with letters,
+  digits, `.`, `_` or `-`; anything else is exit `3`.
 - **`version`** moves by itself: a known doc whose content changed is the next
   version. Send one only to jump; it never goes back. Write a one-line `note`
   when you change a doc, and `"stale": true` while answers it does not reflect

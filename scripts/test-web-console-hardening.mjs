@@ -182,3 +182,47 @@ test("a fresh open whose --file is refused leaves no session folder behind", () 
   const after = fs.readdirSync(sessionsDir).filter((n) => !before.has(n));
   assert.deepEqual(after, [], "no orphan session folders");
 });
+
+// Show me it working: an image block may only point at a picture the agent
+// saved directly inside the session's shots/ folder, and only a real one.
+test("an image block outside the session's shots folder, or not an image, is refused", () => {
+  const s = consoleSession(["--file", payload("shots-safety.json", BASE)]);
+  try {
+    const shots = path.join(s.session, "shots");
+    fs.mkdirSync(shots, { recursive: true });
+    const png = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(32)]);
+    const outside = path.join(HOME, "outside-shot.png");
+    fs.writeFileSync(outside, png);
+    fs.writeFileSync(path.join(s.session, "beside.png"), png);
+    fs.writeFileSync(path.join(shots, "renamed.png"), "just some text, not a picture\n");
+    fs.writeFileSync(path.join(shots, "huge.png"), Buffer.concat([png, Buffer.alloc(6 * 1024 * 1024)]));
+    const cases = [
+      ["../../outside-shot.png", /outside the session's shots\/ folder/],
+      [outside, /outside the session's shots\/ folder/],
+      ["beside.png", /outside the session's shots\/ folder/],
+      ["shots/missing.png", /does not exist/],
+      ["shots/renamed.png", /not a PNG image/],
+      ["shots/huge.png", /larger than 5 MB/],
+    ];
+    let linked = false;
+    try {
+      fs.symlinkSync(outside, path.join(shots, "link.png"), "file");
+      linked = true;
+    } catch {
+      // Windows without the symlink privilege: the realpath check is still covered by the cases above.
+    }
+    if (linked) cases.push(["shots/link.png", /outside the session's shots\/ folder/]);
+    for (const [image, why] of cases) {
+      const patch = { docs: [{ id: "shown", title: "Shown", blocks: [{ id: "b1", image, alt: "The page" }] }] };
+      const res = cli(["post", "--session", s.sid, "--file", payload("shots-bad.json", patch)], { expectFail: true });
+      assert.equal(res.status, 3, image);
+      assert.match(res.stderr, why, image);
+    }
+    const both = { docs: [{ id: "shown", title: "Shown", blocks: [{ id: "b1", image: "shots/renamed.png", md: "x" }] }] };
+    const res = cli(["post", "--session", s.sid, "--file", payload("shots-both.json", both)], { expectFail: true });
+    assert.equal(res.status, 3);
+    assert.match(res.stderr, /cannot also carry "md" or "file"/);
+  } finally {
+    cli(["stop", "--session", s.sid]);
+  }
+});

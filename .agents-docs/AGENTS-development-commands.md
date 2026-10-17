@@ -84,12 +84,13 @@ The root `npm test` does not run the metrics or bot vitest suites; run them in t
 
 ## Non-Interactive Flags
 
-`install.js` takes no arguments for normal use, but exposes two build hooks. Any argument other than these two (when neither is present) exits 1 with usage; extra arguments beside either flag are ignored.
+`install.js` takes no arguments for normal use, but exposes two build hooks and the non-interactive update. Any argument other than these three (when none is present) exits 1 with usage; extra arguments beside `--build-skills` or `--verify-skills` are ignored, while `--update` must be the only argument.
 
 | Flag | Action |
 |------|--------|
 | `--build-skills` | Regenerate `skills/` from `src/`, pruning stale skills and reference files |
 | `--verify-skills` | Diff local `skills/` against `src/`; exits 1 on drift. Diagnostic only, the installer rebuilds anyway |
+| `--update` | No menu: reinstall what `~/.plan2code/install.json` lists (skills, launcher, statusline, loop, metrics, bot), never uninstalling; with no record, the skills and the `plan2code` command. `plan2code update` runs it through npx |
 
 ## How the Installer Works
 
@@ -134,6 +135,15 @@ See the `skills/` build-artifact gotcha in [Code Style & Gotchas](./AGENTS-code-
 ## Adding a New Workflow Prompt / Skill
 
 1. Create `src/plan2code-<name>.md` with body content only and keep it under 20,000 characters.
-2. Register it in `SOURCE_PROMPTS` in `install.js` (with the web-console `additionalReferences` entry every skill carries); add a `generateStepLabel()` case when needed. List any shared scripts it runs in `scripts: [...]`, and put its own scripts in `src/plan2code-<name>-scripts/`. Add it to the skill/workflow table and the "What each skill reads and writes" table in `src/plan2code.md` (the latter is checked by `scripts/check-skill-table.mjs`), and to the workflow lists in `src/web-console/public/answers.js`, `public/meter.js` and the `console.mjs` usage text.
-3. Update command inventories in `README.md`, `QUICK-REFERENCE.md`, `.agents-docs/AGENTS-architecture.md`, and `CHANGELOG.md`. Update `docs/index.html` only for core pipeline steps.
-4. Run `npm run build:skills` and `npm test`.
+2. Register it in `SOURCE_PROMPTS` in `install.js` (with the web-console `additionalReferences` entry every skill carries); add a `generateStepLabel()` case when needed. List any shared scripts it runs in `scripts: [...]`, and put its own scripts in `src/plan2code-<name>-scripts/` (with a `scripts/test-script-<name>.mjs` added to `package.json`'s `test` list).
+3. Register it with the web console, every one of these (the tests fail on a miss, but not all at once):
+   - `src/plan2code.md`: the skill/workflow table and "What each skill reads and writes" (checked by `scripts/check-skill-table.mjs`: every backticked token must appear in the skill's prompt).
+   - `src/web-console/public/answers.js`: `WORKFLOW_LABEL`, `CONSOLE_WORKFLOWS`, `resumeCommand()`, a `SKILL_CATALOG` card (utilities go in group `"extra"` before Changelog: tests pin Changelog then Git last), `START_POSES` and `cardAvailability()`.
+   - `src/web-console/public/meter.js`: `WEIGHTS`, `LAUNCH_COUNTED` (if its launch scores), `WORKFLOW_NAMES`, `LAUNCH_LABELS`, `RUN_LABELS`; and in `src/web-console/console-meter.md` the event list, plus the sentence near its top naming the skills that score on launch (when it joins `LAUNCH_COUNTED`).
+   - `src/web-console/public/index.html`: a start-pose `<svg class="pose pose-<workflow>" data-pose="<workflow>">` in `<template id="start-poses">` (pose CSS in `app.css`), and a line in Help's About list.
+   - `src/web-console/notes/<workflow>.md`, named in the skill's Interface line.
+   - `src/web-console/console.mjs` usage text, and `src/web-console/console.md` (the `open --workflow` list and the `notes/<workflow>.md` row).
+   - Tests: `notesFor` in `scripts/test-web-console-speed.mjs` and `CONSOLE_WORKFLOW_LIST` in `scripts/test-web-console-logic.mjs`.
+   - Optional: `STARTER_SET_FOR` in `public/starters.js` (unlisted gets "general") and `SUBAGENT_WORKFLOWS` in `public/subagents.js` (only for skills that offer helpers).
+4. Update command inventories in `README.md` (dashboard-card and command tables), `QUICK-REFERENCE.md`, `.agents-docs/AGENTS-architecture.md` (prompt table, own-script rows, notes list), and `CHANGELOG.md`. Update `docs/index.html` for core pipeline steps, and for a utility only when it is a headline change (its `.utils` block).
+5. Run `npm run build:skills` and `npm test`.

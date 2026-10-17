@@ -22,6 +22,7 @@ import {
   briefPhrase,
   cardAvailability,
   cardPresentation,
+  defaultSpec,
   CATALOG_GROUPS,
   choiceAnswer,
   DASHBOARD_COMMAND,
@@ -42,6 +43,11 @@ import {
   IMAGE_QUALITY,
   lastOpenCard,
   launchReply,
+  launchTarget,
+  deleteAction,
+  deleteReply,
+  deleteSummary,
+  isDeletableSpecDir,
   MAX_ATTACHMENTS,
   nextOpenAfter,
   MAX_DOC_BYTES,
@@ -597,6 +603,8 @@ function fresh() {
     afterBuild: null,
     homeward: null,
     launching: null,
+    // A picker Delete sent and not yet answered by a rescan: { dir, scanAt }.
+    deleting: null,
     retract: {},
     chat: freshChat(),
   };
@@ -812,13 +820,14 @@ const specList = () => {
 };
 
 // The spec the picker currently targets. Absent `specSel` means the picker
-// has not been touched, so it defaults to the most recently touched spec —
-// the first entry of the server's already-sorted list. An explicit "start
-// from scratch" is stored as null, which is different.
+// has not been touched, so it defaults to the most recently touched spec
+// still in play (defaultSpec: the server's list is already sorted, and a
+// fixed bug is skipped). An explicit "start from scratch" is stored as null,
+// which is different.
 const selSpec = () => {
   const specs = specList();
   if (!specs.length) return null;
-  if (local.specSel === undefined) return specs[0];
+  if (local.specSel === undefined) return defaultSpec(specs);
   return specs.find((s) => s.dir === local.specSel) || null;
 };
 
@@ -1054,8 +1063,8 @@ function adopt(body) {
   const viaDashboard = prevWorkflow === "dashboard" || S.workflow === "dashboard";
   if (prevWorkflow && prevWorkflow !== S.workflow && viaDashboard) {
     // The pick rides into the skill it launched, never back home: arriving at
-    // the dashboard, the picker starts on the most recently touched spec, the
-    // one the agent's fresh menu recommends for.
+    // the dashboard, the picker starts on the most recently touched spec still
+    // in play, the one the agent's fresh menu recommends for.
     const keepPick = S.workflow !== "dashboard" && "specSel" in local;
     local = { ...fresh(), launching: local.launching, ...(keepPick ? { specSel: local.specSel } : {}) };
     save();
@@ -3056,7 +3065,9 @@ function updateDismissed() {
 }
 
 const RELEASES_URL = "https://github.com/jparkerweb/plan2code/releases/";
-const UPDATE_COMMAND = "npx --allow-git=all git+https://github.com/jparkerweb/plan2code.git";
+const UPDATE_COMMAND = "plan2code update";
+// For a machine without the plan2code command: the full installer, menu and all.
+const UPDATE_FALLBACK_COMMAND = "npx --allow-git=all git+https://github.com/jparkerweb/plan2code.git";
 
 function releasesLink(text) {
   const a = el("a", null, text);
@@ -3079,6 +3090,9 @@ function openUpdateModal() {
   const row = $("update-command");
   const code = el("code", null, UPDATE_COMMAND);
   row.replaceChildren(code, copyButton(UPDATE_COMMAND, "btn small ghost handoff-copy", code));
+  const fallbackRow = $("update-fallback");
+  const fallback = el("code", null, UPDATE_FALLBACK_COMMAND);
+  fallbackRow.replaceChildren(fallback, copyButton(UPDATE_FALLBACK_COMMAND, "btn small ghost handoff-copy", fallback));
   $("update-modal").showModal();
 }
 
@@ -3117,9 +3131,9 @@ function renderDashboard(main) {
   // The agent's note reads the spec the picker opened on (the same "initial"
   // test cardPresentation uses): another pick, or Start from scratch, gets
   // the neutral line rather than context about a spec no longer shown.
-  const specsNow = (scan() && scan().specs) || [];
+  const first = defaultSpec(scan() && scan().specs);
   const picked = selSpec();
-  const onInitial = specsNow.length ? Boolean(picked && picked.dir === specsNow[0].dir) : !picked;
+  const onInitial = first ? Boolean(picked && picked.dir === first.dir) : !picked;
   if (typeof menu.note === "string" && menu.note.trim() && onInitial) {
     wrap.appendChild(el("p", "dash-note", menu.note));
   } else if (!S.menu && agentWorking()) {
@@ -3681,13 +3695,26 @@ function renderSpecPicker(specs) {
   });
   row.appendChild(scratch);
 
+  // A delete in flight ends when the agent's rescan lands (a new scan), gone
+  // or refused: either way the picker below is the truth again.
+  const sc = scan();
+  if (local.deleting && sc && sc.at !== local.deleting.scanAt) {
+    local.deleting = null;
+    save();
+  }
   for (const spec of specs) {
     const on = sel && sel.dir === spec.dir;
+    // A fixed bug is finished: hidden while unavailable workflows are, dimmed
+    // otherwise. A pick already on it stays visible, so it is never lost.
+    const fixed = spec.state === "fixed";
+    if (fixed && looks.hideUnavailable && !on) continue;
+    const deleting = Boolean(local.deleting && local.deleting.dir === spec.dir);
+    const wrap = el("div", "spec-chip-wrap" + (deleting ? " is-deleting" : "") + (fixed ? " is-fixed" : ""));
     const b = el("button", "spec-chip" + (on ? " is-sel" : ""));
     b.type = "button";
     b.setAttribute("aria-current", String(Boolean(on)));
     b.appendChild(el("span", "spec-chip-name", spec.name));
-    b.appendChild(el("span", "spec-chip-state", SPEC_STATE_LABELS[spec.state] || spec.state));
+    b.appendChild(el("span", "spec-chip-state", deleting ? "Deleting…" : SPEC_STATE_LABELS[spec.state] || spec.state));
     if (spec.detail) b.appendChild(el("span", "spec-chip-detail", spec.detail));
     b.addEventListener("click", () => {
       local.specSel = spec.dir;
@@ -3695,7 +3722,17 @@ function renderSpecPicker(specs) {
       render();
       loadOverview();
     });
-    row.appendChild(b);
+    wrap.appendChild(b);
+    if (isDeletableSpecDir(spec.dir)) {
+      const del = el("button", "spec-chip-del", "✕");
+      del.type = "button";
+      del.title = `Delete ${spec.dir}/`;
+      del.setAttribute("aria-label", `Delete the spec ${spec.name}`);
+      del.disabled = deleting || Boolean(local.deleting) || gone || pendingResult || Boolean(local.launching);
+      del.addEventListener("click", () => openDeleteConfirm(spec));
+      wrap.appendChild(del);
+    }
+    row.appendChild(wrap);
   }
   box.appendChild(row);
   return box;
@@ -3781,7 +3818,7 @@ function renderConfirm(main, entry) {
 
   // A card that takes a spec names the one the picker is holding, so START
   // reads as "build THIS spec", not the skill in the abstract.
-  const target = entry.spec ? selSpec() : null;
+  const target = launchTarget(entry, selSpec());
   if (target) {
     const specLine = el("p", "confirm-spec");
     specLine.appendChild(el("span", null, "for "));
@@ -3821,7 +3858,7 @@ function renderConfirm(main, entry) {
 // through the same wait loop. The dashboard reads `skill` off it.
 async function launchSkill(entry) {
   if (gone || pendingResult || local.launching || finish()) return;
-  const target = entry.spec ? selSpec() : null;
+  const target = launchTarget(entry, selSpec());
   // The card was clickable, so this should never fire — but a spec picked in
   // one tab could have shifted the ground under a stale render in another.
   if (!cardAvailability(entry, scan(), selSpec()).on) {
@@ -3839,7 +3876,7 @@ async function launchSkill(entry) {
   };
   // The picker's spec goes to the skill being launched, not to the card:
   // cards that take no spec (utilities, setup) launch untargeted even while
-  // a spec is selected.
+  // a spec is selected, save Quick Task on a diagnosed bug.
   if (target) action.spec = target.dir;
   // The skill opens on the folders remembered for what it was launched for.
   // Held until the launch is in flight: the swap's own frame re-renders the
@@ -5614,9 +5651,25 @@ function renderDoc(main, id) {
       box.appendChild(el("span", "block-tag", "Assumed for now, still open"));
     }
     if (b.state === "draft") box.appendChild(el("span", "block-tag", "Draft"));
-    box.appendChild(md(b.md, "md"));
+    box.appendChild(blockBody(b));
     main.appendChild(box);
   });
+}
+
+// A block's content: its markdown, or for an image block (a screenshot the
+// agent saved under the session's shots/ folder) a captioned picture.
+function blockBody(b) {
+  if (typeof b.image !== "string") return md(b.md, "md");
+  const fig = el("figure", "doc-figure");
+  const img = el("img", "doc-img");
+  img.src = "/shots/" + b.image.split("/").pop();
+  // The caption already says it: an alt repeating it is read twice, and shows
+  // twice in an export whose picture would not load.
+  img.alt = "";
+  img.loading = "lazy";
+  fig.appendChild(img);
+  if (b.alt) fig.appendChild(el("figcaption", null, b.alt));
+  return fig;
 }
 
 function printButton() {
@@ -7495,6 +7548,88 @@ function openHomeConfirm() {
   $("home-modal").showModal();
 }
 
+// The picker's Delete: a dialog in two steps. The first says what goes and
+// that it is for good; "Delete this spec…" then reveals the second, which
+// enables the final button only once the spec's name is typed exactly.
+// Cancel, Escape or a click on Keep it at either step changes nothing.
+let deleteTarget = null;
+
+function openDeleteConfirm(spec) {
+  if (!isDeletableSpecDir(spec.dir) || gone || pendingResult || local.launching || local.deleting) return;
+  deleteTarget = spec;
+  const sum = deleteSummary(spec);
+  $("delete-blurb").textContent = `Everything in ${sum.folder} will be deleted from this project.`;
+  const facts = $("delete-facts");
+  facts.replaceChildren();
+  const fact = (term, value) => {
+    if (!value) return;
+    facts.appendChild(el("dt", "", term));
+    facts.appendChild(el("dd", "", value));
+  };
+  fact("Spec", spec.name);
+  fact("Folder", sum.folder);
+  fact("Stage", sum.stage);
+  fact("Files", sum.files);
+  fact("Last changed", sum.touched ? new Date(sum.touched).toLocaleString() : "");
+  $("delete-name-hint").textContent = spec.name;
+  $("delete-name").value = "";
+  $("delete-confirm").hidden = true;
+  const go = $("delete-go");
+  go.textContent = "Delete this spec…";
+  go.classList.remove("is-on");
+  go.disabled = false;
+  $("delete-modal").showModal();
+}
+
+function deleteStep() {
+  const go = $("delete-go");
+  if (!deleteTarget) return;
+  if ($("delete-confirm").hidden) {
+    $("delete-confirm").hidden = false;
+    go.textContent = "Delete for good";
+    go.classList.add("is-on");
+    go.disabled = true;
+    $("delete-name").focus();
+    return;
+  }
+  if ($("delete-name").value.trim() !== deleteTarget.name) return;
+  sendDelete(deleteTarget);
+}
+
+async function sendDelete(spec) {
+  const go = $("delete-go");
+  go.disabled = true;
+  try {
+    const res = await fetch("/submit", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ actions: [deleteAction(spec)], reply: deleteReply(spec) }),
+    });
+    if (res.status === 409) throw Object.assign(new Error("pending"), { pending: true });
+    if (!res.ok) throw new Error(String(res.status));
+    const sc = scan();
+    local.deleting = { dir: spec.dir, scanAt: sc ? sc.at : null };
+    // The selection must not outlive the folder: back to the default pick,
+    // which the agent's fresh menu recommends for.
+    if (local.specSel === spec.dir) delete local.specSel;
+    pendingResult = true;
+    save();
+    $("delete-modal").close();
+  } catch (err) {
+    $("delete-modal").close();
+    if (err && err.pending) pendingResult = true;
+    banner(
+      err && err.pending
+        ? "Your last pick is still being picked up, so that could not go yet. Nothing was deleted; try again in a moment."
+        : "That did not go through. Nothing was deleted; try again.",
+      "warn"
+    );
+  } finally {
+    deleteTarget = null;
+    render();
+  }
+}
+
 async function goHome() {
   const go = $("home-go");
   go.disabled = true;
@@ -7847,7 +7982,7 @@ function downloadDoc(doc) {
   // assumptions or drafts. Without the marks a half-finished document reads,
   // once it leaves the page, as a set of decisions.
   const mark = { assumed: "> **Assumed for now, still open.**\n\n", draft: "> **Draft.**\n\n" };
-  const blocks = (doc.blocks || []).map((b) => (mark[b.state] || "") + (b.md || ""));
+  const blocks = (doc.blocks || []).map((b) => (mark[b.state] || "") + (typeof b.image === "string" ? b.alt || "" : b.md || ""));
   const first = (doc.blocks || [])[0];
   const titled = first && /^\s*#\s/.test(first.md || "");
   const body = [titled || !doc.title ? null : `# ${doc.title}`, ...blocks].filter((x) => x != null).join("\n\n");
@@ -7910,6 +8045,9 @@ h4.md-h, h5.md-h, h6.md-h { font-size: 15px; }
 .md-table th, .md-table td { border: 1px solid #e4ddd1; padding: 8px 11px; text-align: left; }
 .md-table th { background: #fbf9f6; font-weight: 600; }
 .md-img { max-width: 100%; border-radius: 8px; }
+.doc-figure { margin: 0 0 13px; }
+.doc-img { display: block; max-width: 100%; border: 1px solid #e4ddd1; border-radius: 8px; }
+.doc-figure figcaption { font-size: 13px; color: #5d564d; margin-top: 6px; }
 .md a { color: #206cc3; }
 @media print {
   body { background: #fff; }
@@ -7922,7 +8060,7 @@ h4.md-h, h5.md-h, h6.md-h { font-size: 15px; }
 // address on this origin (/state, say) would copy session data into something
 // meant to be shared. A remote image keeps its own address; anything else on
 // this origin becomes its alt text.
-const INLINE_UPLOAD = /^\/uploads\/[0-9a-f-]{36}\.jpg$/;
+const INLINE_UPLOAD = /^\/(?:uploads\/[0-9a-f-]{36}\.jpg|shots\/[A-Za-z0-9][A-Za-z0-9._-]{0,99}\.(?:png|jpe?g|webp))$/i;
 
 function imageToAlt(img) {
   const alt = img.getAttribute("alt") || "";
@@ -7977,7 +8115,7 @@ async function downloadDocHtml(doc) {
     const box = el("div", "block " + (b.state || "settled"));
     if (b.state === "assumed") box.appendChild(el("span", "block-tag", "Assumed for now, still open"));
     if (b.state === "draft") box.appendChild(el("span", "block-tag", "Draft"));
-    box.appendChild(md(b.md, "md"));
+    box.appendChild(blockBody(b));
     body.appendChild(box);
   }
   // Copy buttons only work inside the console.
@@ -8160,6 +8298,20 @@ function openHelpOn(id) {
 
 $("btn-home").addEventListener("click", openHomeConfirm);
 $("update-done").addEventListener("click", () => $("update-modal").close());
+$("delete-cancel").addEventListener("click", () => $("delete-modal").close());
+$("delete-go").addEventListener("click", deleteStep);
+$("delete-name").addEventListener("input", () => {
+  $("delete-go").disabled = !deleteTarget || $("delete-name").value.trim() !== deleteTarget.name;
+});
+$("delete-name").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    deleteStep();
+  }
+});
+$("delete-modal").addEventListener("close", () => {
+  deleteTarget = null;
+});
 $("home-cancel").addEventListener("click", () => $("home-modal").close());
 $("home-go").addEventListener("click", goHome);
 $("btn-stop").addEventListener("click", openStopConfirm);

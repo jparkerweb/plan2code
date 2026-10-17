@@ -51,6 +51,9 @@ for whichever comes first:
   session (files created or modified by the phase or the quick task, plus the
   tests and docs changed for it). Do not ask about scope. Use overview.md and
   the phase file for spec compliance; they do not widen the scope.
+- **The helper rule still applies:** a fresh helper runs the analysis when
+  available, you verify every finding, and the report carries its Reviewed by
+  line.
 - **No commit instructions and no next-conversation routing** mid-review. The
   way back out carries both.
 - The page takes the whole report, so the "top 10 of 15+" rule does not apply,
@@ -116,15 +119,18 @@ review set it to its own stage):
   "items": [{ "id": "signoff", "status": "reopened",
     "body": "Reviewed and ready for sign-off. The review found 3 issues: 2 fixed, 1 still open in the Review findings tab. The report is updated.",
     "verdicts": [
+      { "id": "show", "label": "Show me it working" },
       { "id": "approve", "label": "Approve this phase" },
       { "id": "changes", "label": "I want changes" }
     ],
+    "token": { "approve": "approved", "changes": "needs changes", "show": "show me" },
     "thread": [{ "who": "agent", "text": "Review done: 2 of 3 findings fixed; the rest is written up in the findings tab." }]
   }]
 }
 ```
 
-Review Mode's own closing gate ("Reply approved to commit") is this card:
+`show` runs as `notes/implement.md` → Show me it working says, then reopens
+this card without it. Review Mode's own closing gate ("Reply approved to commit") is this card:
 approving the phase now covers the fixes too, so there is no separate "Check
 the fixes" step. On approval, continue at `notes/implement.md` → After
 approval: the finish.

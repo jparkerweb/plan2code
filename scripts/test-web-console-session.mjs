@@ -225,6 +225,23 @@ test("a launch request round-trips with the skill the dashboard resumes as", asy
   assert.ok(state.items.every((i) => i.id !== "__launch"), "a launch must not become a question");
 });
 
+// A delete from the dashboard's picker is a send like a launch, but no hop:
+// the agent stays the dashboard, so it carries no resume and no skill file.
+test("a delete request round-trips with the spec folder and no resume", async () => {
+  await post("/submit", {
+    actions: [{ i: "__delete", type: "delete", spec: "specs/lunch-vote" }],
+    reply: "Delete the spec folder specs/lunch-vote/ for good, right here in this session.",
+  });
+  const res = cli(["wait", "--session", sid, "--seconds", "10"]);
+  assert.equal(res.status, 0);
+  assert.equal(res.json.actions[0].i, "__delete");
+  assert.equal(res.json.actions[0].spec, "specs/lunch-vote");
+  assert.equal(res.json.resume, undefined);
+  assert.equal(res.json.skillFile, undefined);
+  const state = JSON.parse(fs.readFileSync(path.join(session, "state.json"), "utf8"));
+  assert.ok(state.items.every((i) => i.id !== "__delete"), "a delete must not become a question");
+});
+
 // Back to the dashboard is a send like the review button: it names no
 // question, it is refused while an earlier send is uncollected, and the agent
 // answers it by resuming the same session as the dashboard.

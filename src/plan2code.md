@@ -32,9 +32,11 @@ The page draws the cards itself — you never send the list. It also knows the r
 ```
 
 - No AGENTS.md → `recommend: "plan2code-init"`; the note says why.
-- A spec mid-pipeline → recommend its next step; that card's `details` names where it stands ("Plan drafted", "Phase 2 of 4 is next"). The picker pre-selects the most recently touched spec — recommend for THAT one.
+- A spec mid-pipeline → recommend its next step; that card's `details` names where it stands ("Plan drafted", "Phase 2 of 4 is next"). The picker pre-selects the most recently touched spec that is not `fixed` — recommend for THAT one.
 - A spec that scans `unrecognized` ("files on disk") is input, not progress: its folder rides along on a Pathfinder or Plan launch as reference, and those are the only pipeline cards it lights. Read the files and recommend the fit — a settled design doc the person wrote is Plan's brief, loose notes are Pathfinder's. No skill generates such a doc; see the table below for what each one does write. Never flag Document or anything downstream of it for such a spec.
-- Nothing on disk → `recommend: "plan2code-0-pathfinder"`; the note invites the first idea.
+- A `diagnosed` spec ("Bug diagnosed") is a bug Diagnose wrote up: recommend Quick Task, or Plan when its `DIAGNOSIS-<date>.md` sizes the fix as big; its folder rides along on either launch.
+- A `fixed` spec ("Bug fixed") is a diagnosed bug Quick Task fixed but did not archive: finished, so never recommend for it or name it in the note; the picker never pre-selects one and hides it while unavailable workflows are hidden. The person archives it (Quick Task offers that once the bug is fixed) or deletes it with the picker's ✕.
+- Nothing on disk, or only `fixed` specs → `recommend: "plan2code-0-pathfinder"`; the note invites the first idea.
 - Recommend only what you would tell a person who asked "where do I start?". When in doubt, no flag and a neutral note — the page falls back to flagging the selected spec's own next step.
 - `recommend` must name a lit card for the initial selection. If the person switches specs or starts fresh, the page derives the suggestion and detail from its scan instead.
 
@@ -51,7 +53,7 @@ Ground truth for menu notes and Ask-tab answers. For anything beyond this table,
 | 0-pathfinder | the idea, loose notes | `pathfinder/map.md`, `pathfinder/questions/NN-<slug>.md`; cleared → `PLAN-DRAFT-<date>.md` |
 | 1-plan | idea or `PLAN-DRAFT` | `PLAN-DRAFT-<date>.md`, `PLAN-CONVERSATION-<date>.md` |
 | 1b-revise-plan | `overview.md`, `phase-X.md` | the same, revised |
-| quick-task | the ask | code; escalated → `PLAN-DRAFT-<date>.md` |
+| quick-task | the ask; a `DIAGNOSIS-*.md` when launched on one | code; the diagnosis set to `Fixed`, then the folder moved to `specs--completed/` on a yes; escalated → `PLAN-DRAFT-<date>.md` |
 | 2-document | `PLAN-DRAFT`, `PLAN-CONVERSATION` (optional) | `overview.md`, `phase-X.md` |
 | 3-implement(-review) | `overview.md`, `phase-X.md` | code; `[x]` marks + completion summary in `phase-X.md` |
 | review | spec, diff | the fixes picked; no spec writes |
@@ -59,6 +61,8 @@ Ground truth for menu notes and Ask-tab answers. For anything beyond this table,
 | handoff | conversation, spec, git | `<timestamp>-handoff.md` (OS temp or `handoffs/`) |
 | changelog | `CHANGELOG.md`, `package.json`, git history | `CHANGELOG.md` entries, `package.json` version; no commits |
 | git | git status, branches, diffs, `AGENTS.md` | commits, branches; optional `.gitignore`, push, publish; no spec writes |
+| xray | the codebase, `git` history, `gh` when present | an answer; `ARCHITECTURE-BRIEF-<date>.md` or `XRAY-<area>-<date>.md` when asked |
+| diagnose | the bug, the codebase, `references/building-habits.md` | `DIAGNOSIS-<date>.md`; no code changes |
 
 ## A pick arrives
 
@@ -72,7 +76,7 @@ A card click is a send whose action carries the skill:
   "reply": "Start Implement (/plan2code-3-implement) for specs/lunch-vote, right here in this session." }
 ```
 
-`__launch` names no question; like `__stop` it is about the session. `spec` is the picker's selected spec dir — present only when the launched skill takes a spec and the person picked one; absent means "start from scratch".
+`__launch` names no question; like `__stop` it is about the session. `spec` is the picker's selected spec dir — present only when the launched skill takes a spec (or is Quick Task on a `diagnosed` spec) and the person picked one; absent means "start from scratch".
 
 > **Never hand this to a skill-invocation tool. Open its `SKILL.md` with your own file-read tool instead.** Every Plan2Code skill below the dashboard ships `disable-model-invocation: true` on purpose — it exists to be read and followed inline, not launched as a sub-skill — and calling one through a skill-invocation tool errors out and strands the hand-off mid-launch.
 
@@ -101,6 +105,15 @@ If `skill` is not in the table below, say so on the page and stay the dashboard.
 | plan2code-1b-revise-plan | revise-plan | | plan2code-4-finalize | finalize |
 | plan2code-quick-task | quick-task | | plan2code-handoff | handoff |
 | plan2code-git | git | | plan2code-changelog | changelog |
+| plan2code-xray | xray | | plan2code-diagnose | diagnose |
+
+## A delete arrives
+
+The ✕ on a picker chip asks for that spec to go, after a two-step confirm on the page: `{ "i": "__delete", "type": "delete", "spec": "specs/<name>" }`. The page never deletes; you do, through the console's checked command, never your own `rm`:
+
+1. `node "<D>/console.mjs" delete-spec --spec <action.spec>` from the project root. Exit 0 → `{ ok, removed }`. Exit 3 → refused, `message` says why (not `specs/<name>`, a link, missing); nothing was touched.
+2. `node "<D>/console.mjs" open --resume <sid> --no-open --workflow dashboard`, which rescans `specs/`.
+3. Post the menu again with `--wait`; the note says what was deleted, or why it was not. Stay the dashboard.
 
 ## Coming back from another skill
 

@@ -54,6 +54,9 @@ import {
   rememberedWorkspace,
   removeCleanup,
   remoteWarning,
+  SHOTS_DIR_NAME,
+  SHOT_NAME,
+  shotType,
   saveSubagentStoreEntry,
   PR_HOST_KINDS,
   savePrHost,
@@ -130,6 +133,25 @@ const UPLOAD_EXTS = ["jpg", ...Object.keys(DOC_TYPES)];
 const EXT_ALT = UPLOAD_EXTS.join("|");
 const UPLOAD_ANY_ROUTE = new RegExp(`^/uploads/([0-9a-f-]{36})\\.(${EXT_ALT})$`);
 const UPLOAD_NAME = new RegExp(`^[0-9a-f-]{36}\\.(${EXT_ALT})$`);
+
+// Screenshots the agent saved for a doc's image block (Show me it working),
+// only ever directly inside <session>/shots/ under SHOT_NAME's plain shape.
+const SHOTS_DIR = path.join(DIR, SHOTS_DIR_NAME);
+const SHOT_TYPES = { png: "image/png", jpeg: "image/jpeg", webp: "image/webp" };
+
+function shotPath(name) {
+  if (!SHOT_NAME.test(name)) return null;
+  const file = path.resolve(SHOTS_DIR, name);
+  if (!file.startsWith(path.resolve(SHOTS_DIR) + path.sep)) return null;
+  try {
+    const real = fs.realpathSync.native(file);
+    const fold = (p) => (process.platform === "win32" || process.platform === "darwin" ? p.toLowerCase() : p);
+    if (fold(path.dirname(real)) !== fold(fs.realpathSync.native(SHOTS_DIR))) return null;
+    return fs.statSync(real).isFile() ? real : null;
+  } catch {
+    return null;
+  }
+}
 
 // A kept attachment's name, as attachmentName() in lib.mjs writes it:
 // <slug>-<first 8 of the upload id>.<the upload's extension>.
@@ -1466,6 +1488,25 @@ const server = http.createServer((req, res) => {
       ...(pdf ? {} : { "content-security-policy": "sandbox" }),
       "cache-control": "private, max-age=3600",
     });
+  }
+
+  // A screenshot for a doc's image block. Matched on the raw request line too,
+  // like uploads: anything URL parsing had to fold (`..`) is not a shot.
+  if (pathname.startsWith("/shots/") || req.url.startsWith("/shots/")) {
+    if (req.method !== "GET") return json(res, 405, { error: "method" });
+    const name = pathname.slice("/shots/".length);
+    const file = req.url === pathname ? shotPath(name) : null;
+    if (!file) return json(res, 404, { error: "not found" });
+    let buf;
+    try {
+      buf = fs.readFileSync(file);
+    } catch {
+      return json(res, 404, { error: "not found" });
+    }
+    // The bytes, not the name, pick the type: the file may have changed since it was posted.
+    const type = SHOT_TYPES[shotType(buf)];
+    if (!type) return json(res, 404, { error: "not found" });
+    return send(res, 200, buf, type, { "cache-control": "no-store" });
   }
 
   // Matched on the raw request line as well as the parsed path: URL parsing

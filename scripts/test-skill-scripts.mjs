@@ -115,6 +115,27 @@ test("specs list: active specs with state, drafts and archives, never specs--com
   assert.equal(r.json.hasAgents, true);
 });
 
+test("specs list: a folder holding only Diagnose's write-up is diagnosed", () => {
+  const root = specFixture();
+  write(root, "specs/csv-drops-rows/DIAGNOSIS-20261016.md", "# Diagnosis: CSV drops rows\n\n**Status:** Diagnosed\n");
+  const r = runScript("plan2code-diagnose", "specs.mjs", ["list", "--root", root]);
+  assert.equal(r.code, 0, r.stderr);
+  const bug = r.json.specs.find((s) => s.name === "csv-drops-rows");
+  assert.equal(bug.state, "diagnosed");
+  assert.equal(bug.detail, "bug diagnosed, not fixed");
+  assert.equal(bug.phaseFiles, 0);
+});
+
+test("specs list: a diagnosis Quick Task marked Fixed is a fixed bug", () => {
+  const root = specFixture();
+  write(root, "specs/csv-drops-rows/DIAGNOSIS-20261016.md", "# Diagnosis: CSV drops rows\n\n**Status:** Fixed\n");
+  const r = runScript("plan2code-quick-task", "specs.mjs", ["list", "--root", root]);
+  assert.equal(r.code, 0, r.stderr);
+  const bug = r.json.specs.find((s) => s.name === "csv-drops-rows");
+  assert.equal(bug.state, "fixed");
+  assert.equal(bug.detail, "bug fixed");
+});
+
 test("specs status: checklist formats, groups, task markers, numbering, totals, checks", () => {
   const root = specFixture();
   const r = runScript("plan2code-3-implement", "specs.mjs", ["status", "specs/lunch-vote/overview.md", "--root", root]);
@@ -138,6 +159,25 @@ test("specs status: checklist formats, groups, task markers, numbering, totals, 
   assert.equal(j.next.action, "ask-resume");
   assert.equal(j.next.phase.number, 2);
   assert.deepEqual(j.pending.map((p) => p.number), [2, 3, 4]);
+});
+
+test("specs status: a plain `  - Test:` sub-bullet under a task is not counted or flagged", () => {
+  const plain = specFixture();
+  const withTests = specFixture();
+  // The shape Document writes: a task line followed directly by a non-checkbox sub-bullet.
+  for (const [n, ids] of [[2, ["2.1", "2.2"]], [3, ["3.1", "3.4"]]]) {
+    const rel = `specs/lunch-vote/phase-${n}.md`;
+    let text = read(withTests, rel);
+    for (const id of ids) text = text.replace(`**Task ${id}:** Do ${id}\n`, `**Task ${id}:** Do ${id}\n  - Test: through \`POST /votes\`\n`);
+    assert.match(text, /\n  - Test: through/);
+    write(withTests, rel, text);
+  }
+  const status = (root) => runScript("plan2code-3-implement", "specs.mjs", ["status", "lunch-vote", "--root", root]).json;
+  const a = status(plain);
+  const b = status(withTests);
+  assert.deepEqual(b.phases.map((p) => p.tasks), a.phases.map((p) => p.tasks));
+  assert.deepEqual(b.totals, a.totals);
+  assert.deepEqual(b.checks, a.checks);
 });
 
 test("specs status: the implement selection table", () => {
@@ -471,6 +511,173 @@ test("specs: --set cannot override computed fields; empty overview exists; uncou
   assert.equal(e.overview, "overview.md");
   assert.ok(e.checks.some((c) => c.code === "no-checklist"));
   assert.ok(!e.checks.some((c) => c.code === "no-overview"));
+});
+
+// A spec with nothing for check to find: a checklist row per phase file,
+// sequential task numbers, a Test-first sub-bullet and plain-bullet criteria.
+function cleanSpec(root) {
+  write(root, "specs/clean/overview.md", "# Clean\n\n## Phase Checklist\n\n- [ ] [Phase 1: Data model](./phase-1.md)\n- [ ] [Phase 2: API](./phase-2.md)\n");
+  write(root, "specs/clean/phase-1.md", phase(1, "Not Started", [[" ", "1.1"], [" ", "1.2"]]).replace("**Task 1.1:** Do 1.1\n", "**Task 1.1:** Do 1.1\n  - Test: through `POST /votes`\n"));
+  write(root, "specs/clean/phase-2.md", phase(2, "Not Started", [[" ", "2.1"]]));
+  return root;
+}
+
+test("specs check: a well-formed spec passes", () => {
+  const root = cleanSpec(specFixture());
+  assert.match(read(root, "specs/clean/phase-1.md"), /\n  - Test: through/);
+  const r = runScript("plan2code-2-document", "specs.mjs", ["check", "clean", "--root", root]);
+  assert.equal(r.code, 0, r.stdout);
+  assert.equal(r.json.ok, true);
+  assert.equal(r.json.errors, 0);
+  assert.deepEqual(r.json.checked, ["specs/clean/overview.md", "specs/clean/phase-1.md", "specs/clean/phase-2.md"]);
+  assert.deepEqual(r.json.problems, []);
+});
+
+test("specs check: a bad task line, a checklist row with no phase file, a loop token and a bare metric word each fail", () => {
+  const root = cleanSpec(specFixture());
+  write(root, "specs/clean/overview.md", read(root, "specs/clean/overview.md") + "- [ ] [Phase 3: Docs](./phase-3.md)\n");
+  write(root, "specs/clean/phase-1.md", read(root, "specs/clean/phase-1.md").replace("- [ ] **Task 1.2:** Do 1.2", "- [ ] Task 1.2 without the bold"));
+  write(root, "specs/clean/phase-2.md", read(root, "specs/clean/phase-2.md") + "\n## Notes\n\nPrint TASK_COMPLETE when done. Risk: 3 of 5.\n");
+  const r = runScript("plan2code-2-document", "specs.mjs", ["check", "clean", "--root", root]);
+  assert.equal(r.code, 4, r.stdout);
+  assert.equal(r.json.ok, false);
+  assert.equal(r.json.error, "check-failed");
+  assert.match(r.json.next, /rerun check/);
+  assert.match(r.stderr, /^error: check found \d+ errors?\.\nnext: /);
+  const errs = r.json.problems.filter((p) => p.level === "error");
+  assert.equal(r.json.errors, errs.length);
+  const by = (code) => errs.filter((p) => p.code === code);
+  assert.deepEqual(by("bad-task-line").map((p) => p.file), ["specs/clean/phase-1.md"]);
+  assert.deepEqual(by("missing-phase-file").map((p) => p.file), ["specs/clean/overview.md"]);
+  assert.deepEqual(by("loop-token").map((p) => p.file), ["specs/clean/phase-2.md"]);
+  assert.deepEqual(by("metric-word").map((p) => p.file), ["specs/clean/phase-2.md"]);
+  for (const p of r.json.problems) assert.deepEqual(Object.keys(p), ["level", "file", "code", "message"]);
+  assert.equal(runScript("plan2code-2-document", "specs.mjs", ["check", "nope", "--root", root]).code, 3);
+  // A status problem names the phase file by its real name, not phase-N.md.
+  fs.renameSync(path.join(root, "specs/clean/phase-2.md"), path.join(root, "specs/clean/phase-2-api.md"));
+  write(root, "specs/clean/phase-2-api.md", phase(2, "Not Started", [[" ", "2.2"]]));
+  const named = runScript("plan2code-2-document", "specs.mjs", ["check", "clean", "--root", root]).json;
+  assert.deepEqual(named.problems.filter((p) => p.code === "task-numbering").map((p) => p.file), ["specs/clean/phase-2-api.md"]);
+});
+
+// A draft in the shape Plan's Phase 7 writes, with every heading Document reads.
+const COMPLETE_DRAFT = `# Lunch vote - Implementation Plan
+
+**Created:** 2026-08-01
+**Status:** Complete
+**Confidence:** 92% (Requirements-clarity 24/25 · Feasibility-technical 23/25 · Integration-points 23/25 · Risk-assessment 22/25)
+
+## 1. Executive Summary
+
+A lunch vote.
+
+## 2. Requirements
+
+### 2.1 Functional Requirements
+
+- [ ] FR-1: People vote
+
+### 2.4 Testing Strategy
+
+| Type | Phase Testing | Coverage |
+|------|---------------|----------|
+
+## 3. Tech Stack
+
+Node.
+
+## 4. Architecture
+
+One server.
+
+## 5. Implementation Phases
+
+### Phase 1: Votes
+
+Build the vote (FR-1).
+
+## 6. Risks and Mitigations
+
+| Risk | Likelihood | Impact | Mitigation |
+
+## 7. Success Criteria
+
+- [ ] Votes count
+
+## 9. Assumptions
+
+- People eat lunch
+
+## Planning Metrics
+<!-- METRICS_JSON {"confidence": 92, "confidence_breakdown": {"requirements": 24, "risk": 22}} -->
+`;
+
+test("specs check-draft: a complete draft passes", () => {
+  const root = specFixture();
+  write(root, "specs/lunch-vote/PLAN-DRAFT-20260801.md", COMPLETE_DRAFT);
+  for (const arg of ["lunch-vote", "specs/lunch-vote/PLAN-DRAFT-20260801.md"]) {
+    const r = runScript("plan2code-1-plan", "specs.mjs", ["check-draft", arg, "--root", root]);
+    assert.equal(r.code, 0, r.stdout);
+    assert.equal(r.json.errors, 0);
+    assert.equal(r.json.warnings, 0);
+    assert.equal(r.json.status, "Complete");
+    assert.deepEqual(r.json.checked, ["specs/lunch-vote/PLAN-DRAFT-20260801.md"]);
+  }
+  // A newer -prev copy is archived, never the one checked.
+  write(root, "specs/lunch-vote/PLAN-DRAFT-20260802-prev.md", "# old\n");
+  assert.equal(runScript("plan2code-1-plan", "specs.mjs", ["check-draft", "lunch-vote", "--root", root]).code, 0);
+  // Untraced requirements only warn.
+  write(root, "specs/lunch-vote/PLAN-DRAFT-20260801.md", COMPLETE_DRAFT.replace("Build the vote (FR-1).", "Build the vote."));
+  const w = runScript("plan2code-1-plan", "specs.mjs", ["check-draft", "lunch-vote", "--root", root]);
+  assert.equal(w.code, 0, w.stdout);
+  assert.deepEqual(w.json.problems.map((p) => [p.level, p.code]), [["warn", "untraced-requirements"]]);
+});
+
+test("specs check-draft: a missing section, a bad status, no metrics, a loop token each fail", () => {
+  const root = specFixture();
+  const check = (text) => {
+    write(root, "specs/lunch-vote/PLAN-DRAFT-20260801.md", text);
+    const r = runScript("plan2code-1-plan", "specs.mjs", ["check-draft", "lunch-vote", "--root", root]);
+    assert.equal(r.code, 4, r.stdout);
+    assert.equal(r.json.error, "check-draft-failed");
+    return r.json.problems.filter((p) => p.level === "error").map((p) => p.code);
+  };
+  const noTech = check(COMPLETE_DRAFT.replace("## 3. Tech Stack", "## 3. Tools"));
+  assert.deepEqual(noTech, ["missing-section"]);
+  assert.deepEqual(check(COMPLETE_DRAFT.replace("**Status:** Complete", "**Status:** Finished")), ["bad-status"]);
+  assert.deepEqual(check(COMPLETE_DRAFT.replace("**Status:** Complete\n", "")), ["bad-status"]);
+  assert.deepEqual(check(COMPLETE_DRAFT.replace(/## Planning Metrics\n<!--.*-->\n/, "")), ["no-metrics"]);
+  assert.deepEqual(check(COMPLETE_DRAFT.replace('{"confidence": 92,', '{"confidence": 92')), ["no-metrics"]);
+  assert.deepEqual(check(COMPLETE_DRAFT.replace("METRICS_JSON {", "METRICS_JSON{")), ["no-metrics"], "the collector needs whitespace after METRICS_JSON");
+  assert.deepEqual(check(COMPLETE_DRAFT.replace("### Phase 1: Votes", "Phase 1, votes")), ["no-phases"]);
+  assert.deepEqual(check(COMPLETE_DRAFT.replace("Node.", "Node. Then say PHASE_COMPLETE.")), ["loop-token"]);
+  assert.deepEqual(check(COMPLETE_DRAFT.replace("One server.", "One server. Integration: 4 services.")), ["metric-word"]);
+  const missing = runScript("plan2code-1-plan", "specs.mjs", ["check-draft", "specs/lunch-vote/PLAN-DRAFT-nope.md", "--root", root]);
+  assert.equal(missing.code, 3);
+  assert.equal(runScript("plan2code-1-plan", "specs.mjs", ["check-draft", "idea-only", "--root", root]).json.error, "no-draft");
+});
+
+test("specs check-draft: a pathfinder draft at Resume at Phase 4 is checked lightly", () => {
+  const root = specFixture();
+  const draft = "# Idea - Implementation Plan\n\n*Written by /plan2code-0-pathfinder.*\n\n**Status:** Phase 3 Complete - Resume at Phase 4\n\n## 1. Executive Summary\n\nTBD\n";
+  write(root, "specs/idea-only/PLAN-DRAFT-20260801.md", draft);
+  const r = runScript("plan2code-1-plan", "specs.mjs", ["check-draft", "idea-only", "--root", root]);
+  assert.equal(r.code, 0, r.stdout);
+  assert.deepEqual(r.json.problems, [], "no section, phase or metrics checks before Plan's Phase 4");
+  // Status, loop tokens and every metric pattern still apply, confidence included.
+  write(root, "specs/idea-only/PLAN-DRAFT-20260801.md", draft + "\n**Confidence:** 80%\n\nSay WORK_COMPLETE.\n");
+  const bad = runScript("plan2code-1-plan", "specs.mjs", ["check-draft", "idea-only", "--root", root]);
+  assert.equal(bad.code, 4);
+  assert.deepEqual(bad.json.problems.map((p) => p.code).sort(), ["loop-token", "metric-word"]);
+});
+
+test("common.mjs exports the shared loop-token and scrape patterns", async () => {
+  const common = await import(new URL(`file:///${path.join(SKILLS, "plan2code-2-document", "scripts", "common.mjs").replace(/\\/g, "/")}`).href);
+  assert.ok(common.LOOP_TOKENS instanceof RegExp);
+  assert.ok(common.LOOP_TOKENS.test("then TASK_COMPLETE"));
+  assert.equal(common.SCRAPE.length, 6);
+  assert.deepEqual(common.scrapeHits("Risk: 3"), ['bare Risk + number: "Risk: 3"']);
+  assert.deepEqual(common.scrapeHits("Risk-assessment 22/25"), []);
 });
 
 test("commit-msg: a repo with no commits, stray arguments, and paths quoted for every shell", () => {

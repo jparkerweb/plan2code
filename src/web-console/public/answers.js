@@ -270,6 +270,8 @@ export const WORKFLOW_LABEL = {
   handoff: "Handoff",
   git: "Git",
   changelog: "Changelog",
+  xray: "X-ray",
+  diagnose: "Diagnosing",
 };
 
 export function workflowLabel(workflow) {
@@ -296,6 +298,8 @@ export const CONSOLE_WORKFLOWS = [
   "/plan2code-handoff",
   "/plan2code-git",
   "/plan2code-changelog",
+  "/plan2code-xray",
+  "/plan2code-diagnose",
 ];
 
 // Rides on the end of the command as part of the skill's argument. Every
@@ -465,6 +469,10 @@ export function resumeCommand({ workflow, specDir } = {}) {
       return "/plan2code-git";
     case "changelog":
       return "/plan2code-changelog";
+    case "xray":
+      return "/plan2code-xray";
+    case "diagnose":
+      return "/plan2code-diagnose";
     default:
       return dir ? `/plan2code-0-pathfinder ${dir}/pathfinder` : "/plan2code-0-pathfinder";
   }
@@ -680,15 +688,26 @@ export const SKILL_CATALOG = [
       "A fresh-eyes pass over what changed: bugs, gaps, and the things the builder was too close to see. Problems come back ranked with a suggestion each, you pick which ones get fixed, and it fixes them.",
   },
   {
-    skill: "plan2code-handoff",
-    command: "/plan2code-handoff",
-    workflow: "handoff",
+    skill: "plan2code-xray",
+    command: "/plan2code-xray",
+    workflow: "xray",
     group: "extra",
     chip: "Utility",
-    title: "Handoff",
-    blurb: "Pack the current session into a document a fresh session can pick up cold.",
+    title: "Codebase X-ray",
+    blurb: "Explain how and why an area works, or find the rough spots worth fixing.",
     about:
-      "Writes down everything a new session would need, as a single document: what was decided, what is done, what is left. Use it when a conversation got long, a machine changed, or tomorrow-you deserves the context today-you has.",
+      "Two ways into code you did not write. Explain an area: how it works, step by step, and why it is that way, citing the files and the commits and pull requests behind it. Or find the rough spots: files that always change together, thin layers, tangled boundaries and busy code with no tests, ranked with a concrete example each. You tick the ones worth fixing and they become a brief for Pathfinder or Plan. It never changes code.",
+  },
+  {
+    skill: "plan2code-diagnose",
+    command: "/plan2code-diagnose",
+    workflow: "diagnose",
+    group: "extra",
+    chip: "Utility",
+    title: "Diagnose a bug",
+    blurb: "Find a bug's cause and write it up, without fixing it.",
+    about:
+      "Something is broken and nobody knows why. Diagnose asks what goes wrong and how to see it, then builds a command that fails on the bug before it forms a theory. It narrows the cause down to a file and a function, says how sure it is, and sizes the fix. The write-up lands in a spec folder, and the dashboard then offers Quick Task to fix it, or Plan when the fix is big. It never changes code.",
   },
   {
     skill: "plan2code-changelog",
@@ -711,6 +730,17 @@ export const SKILL_CATALOG = [
     blurb: "Branches, pull, push and commits on one board that stays open while you work.",
     about:
       "Shows your branch, what is ahead or behind, and every local and remote branch. Switch, create, delete or clean up branches, pull (rebasing when they have split, with help on conflicts), push or publish, and commit with a clear message. It asks before every push, publish and delete, and never force-pushes.",
+  },
+  {
+    skill: "plan2code-handoff",
+    command: "/plan2code-handoff",
+    workflow: "handoff",
+    group: "extra",
+    chip: "Utility",
+    title: "Handoff",
+    blurb: "Pack the current session into a document a fresh session can pick up cold.",
+    about:
+      "Writes down everything a new session would need, as a single document: what was decided, what is done, what is left. Use it when a conversation got long, a machine changed, or tomorrow-you deserves the context today-you has.",
   },
 ];
 
@@ -736,6 +766,8 @@ export const START_POSES = [
   "handoff",
   "git",
   "changelog",
+  "xray",
+  "diagnose",
 ];
 
 const POSE_ALIASES = { "init-update": "init", "revise-plan": "plan", "implement-review": "implement" };
@@ -754,6 +786,8 @@ export function catalogEntry(skill) {
 // What the picker shows next to a spec's name — the pipeline position the
 // server's scan worked out, in plain words.
 export const SPEC_STATE_LABELS = {
+  diagnosed: "Bug diagnosed",
+  fixed: "Bug fixed",
   exploring: "Exploring",
   mapped: "Ready to plan",
   planned: "Ready to document",
@@ -766,6 +800,7 @@ export const SPEC_STATE_LABELS = {
 // The card each spec state exists to light up. Used as the fallback for the
 // "Suggested" pill when the agent's menu payload names nothing.
 const NEXT_FOR_STATE = {
+  diagnosed: "plan2code-quick-task",
   exploring: "plan2code-0-pathfinder",
   mapped: "plan2code-1-plan",
   planned: "plan2code-2-document",
@@ -778,6 +813,16 @@ const ON = { on: true };
 export const GIT_INIT_NOTE = "Not a git repository yet: it offers to start one";
 export const pendingNote = (n) => `${n} file${n === 1 ? "" : "s"} to commit`;
 const off = (reason) => ({ on: false, reason });
+const FIXED_REASON = "This bug is fixed. Delete it with ✕, or move it to specs--completed/.";
+
+/**
+ * The spec the picker opens on: the most recently touched one that is still
+ * in play. A fixed bug is finished, so it is never the default; with nothing
+ * else on disk the picker opens on "start from scratch" (null).
+ */
+export function defaultSpec(specs) {
+  return (Array.isArray(specs) ? specs : []).find((s) => s && s.state !== "fixed") || null;
+}
 
 /**
  * Whether a catalog card is clickable for the current picker selection.
@@ -803,9 +848,13 @@ export function cardAvailability(entry, scan, sel) {
     case "plan2code-init-update":
       return hasAgents ? ON : off("Needs an AGENTS.md. Set the project up first.");
     case "plan2code-quick-task":
+      // Always on; a diagnosed bug is the one spec it is the next step for.
+      return next ? { ...ON, next } : ON;
     case "plan2code-review":
     case "plan2code-handoff":
     case "plan2code-changelog":
+    case "plan2code-xray":
+    case "plan2code-diagnose":
       return ON;
     case "plan2code-git":
       // Never greyed: a clean tree still has branches to switch, pull and push.
@@ -814,9 +863,12 @@ export function cardAvailability(entry, scan, sel) {
       return ON;
     case "plan2code-0-pathfinder":
       if (!state || state === "exploring") return { ...ON, next };
+      if (state === "diagnosed") return off("The cause is found. Fix it in a quick task, or plan it.");
+      if (state === "fixed") return off(FIXED_REASON);
       return off("This spec is already past the questions");
     case "plan2code-1-plan":
       if (state === "exploring") return off("Pathfinder is not finished with this spec yet");
+      if (state === "fixed") return off(FIXED_REASON);
       if (state === "documented" || state === "building" || state === "built")
         return off("The plan is written. Revise it instead if it moved.");
       return { ...ON, next };
@@ -840,10 +892,21 @@ export function cardAvailability(entry, scan, sel) {
   }
 }
 
+/**
+ * The spec a card's launch carries: the picker's selection for the cards that
+ * take a spec, and for Quick Task only a diagnosed bug, whose write-up it reads
+ * first. Every other card launches untargeted.
+ */
+export function launchTarget(entry, sel) {
+  if (!entry || !sel) return null;
+  if (entry.spec) return sel;
+  return entry.skill === "plan2code-quick-task" && sel.state === "diagnosed" ? sel : null;
+}
+
 export function cardPresentation(entry, scan, sel, menu = {}) {
   const availability = cardAvailability(entry, scan, sel);
-  const specs = scan && Array.isArray(scan.specs) ? scan.specs : [];
-  const initial = specs.length ? Boolean(sel && sel.dir === specs[0].dir) : !sel;
+  const first = defaultSpec(scan && scan.specs);
+  const initial = first ? Boolean(sel && sel.dir === first.dir) : !sel;
   const requested = initial && typeof menu.recommend === "string" ? catalogEntry(menu.recommend) : null;
   const recommendation = requested && cardAvailability(requested, scan, sel).on ? requested.skill : null;
   const recommended = availability.on && (recommendation ? entry.skill === recommendation : availability.next);
@@ -869,6 +932,38 @@ export function cardPresentation(entry, scan, sel, menu = {}) {
 export function launchReply(entry, spec) {
   const target = spec && spec.dir ? ` for ${spec.dir}` : "";
   return `Start ${entry.title} (${entry.command})${target}, right here in this session.`;
+}
+
+/**
+ * Deleting a spec from the picker. The page only names the folder; the agent
+ * deletes it (`console.mjs delete-spec`, which runs lib.mjs's removeSpec() on
+ * this same rule), because the console never writes into a project. A
+ * deletable dir is exactly `specs/<one name>`: no deeper path, no `.` or `..`,
+ * no dotfolder, no backslash, never specs--completed/.
+ */
+export function isDeletableSpecDir(dir) {
+  return typeof dir === "string" && /^specs\/[^/\\]+$/.test(dir) && !/^specs\/\./.test(dir);
+}
+
+export function deleteAction(spec) {
+  return { i: "__delete", type: "delete", spec: spec.dir };
+}
+
+export function deleteReply(spec) {
+  return `Delete the spec folder ${spec.dir}/ for good, right here in this session.`;
+}
+
+// What the delete dialog says about the spec, from the scan alone. `touched`
+// stays a number: the page formats it in the person's own locale.
+export function deleteSummary(spec) {
+  const label = SPEC_STATE_LABELS[spec.state] || spec.state || "";
+  const n = spec.files;
+  return {
+    folder: `${spec.dir}/`,
+    stage: spec.detail ? `${label}: ${spec.detail}` : label,
+    files: Number.isInteger(n) ? `${n} file${n === 1 ? "" : "s"}` : "",
+    touched: Number.isFinite(spec.touched) && spec.touched > 0 ? spec.touched : null,
+  };
 }
 
 export function staleLaunchFeedback(title, adrift) {

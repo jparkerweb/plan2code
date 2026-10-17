@@ -24,7 +24,7 @@ import { fileURLToPath } from "node:url";
 
 import { countPending } from "./git-repo.mjs";
 import { CHAT_LIMIT } from "./public/chat.js";
-import { DOC_TYPES } from "./public/answers.js";
+import { DOC_TYPES, isDeletableSpecDir } from "./public/answers.js";
 import { defaultName } from "./public/workspace.js";
 import { checkHelpers, cleanSetting, defaultSetting, offered } from "./public/subagents.js";
 
@@ -579,9 +579,10 @@ export async function removeScratch(consoleDir, names) {
 // What User Preferences -> Cleanup never removes. The console folder keeps its
 // protected files, its sessions dir (old sessions go one by one, by age) and,
 // under PLAN2CODE_CONSOLE_HOME, its runtime dir; ~/.plan2code keeps the
-// console, the launcher (bin/, launcher.json) and the models the person added.
+// console, the launcher (bin/, launcher.json), the install record that
+// `plan2code update` reads (install.json) and the models the person added.
 const KEPT_CONSOLE_ENTRIES = new Set([...PROTECTED_CONSOLE_FILES, "sessions", "runtime"]);
-export const KEPT_PLAN2CODE_ENTRIES = new Set(["console", "bin", "launcher.json", "models.json"]);
+export const KEPT_PLAN2CODE_ENTRIES = new Set(["console", "bin", "launcher.json", "install.json", "models.json"]);
 // A stray must sit untouched this long before Cleanup lists it. The same
 // folders hold files that live for milliseconds -- a held
 // `workspaces.json.lock`, a `<file>.<pid>.tmp` between its write and its
@@ -785,8 +786,13 @@ export function newToken() {
 // Where a spec folder stands, named after the step its files are ready for.
 // "unrecognized" is a folder with files but no pipeline shape: it launches
 // Pathfinder or Plan (the files may be reference docs) but unlocks nothing
-// else, exactly like picking no spec at all.
+// else, exactly like picking no spec at all. "diagnosed" is a bug Diagnose
+// wrote up and nobody has fixed or planned yet: it lights Quick Task and Plan.
+// "fixed" is that bug once Quick Task marked it Fixed: finished, so the
+// dashboard never picks or suggests it, and Quick Task offers to archive it.
 export const SPEC_STATES = new Set([
+  "diagnosed",
+  "fixed",
   "exploring",
   "mapped",
   "planned",
@@ -796,7 +802,9 @@ export const SPEC_STATES = new Set([
   "unrecognized",
 ]);
 
-function maxMtime(dir, depth = 4, budget = { n: 400 }) {
+// The newest mtime under dir. `tally.files` counts the files the same walk
+// sees (within its depth and budget), for the dashboard's delete dialog.
+function maxMtime(dir, depth = 4, budget = { n: 400 }, tally = null) {
   let best = 0;
   if (depth < 0 || budget.n <= 0) return best;
   let entries;
@@ -810,8 +818,11 @@ function maxMtime(dir, depth = 4, budget = { n: 400 }) {
     if (e.name.startsWith(".")) continue;
     const p = path.join(dir, e.name);
     try {
-      if (e.isDirectory()) best = Math.max(best, maxMtime(p, depth - 1, budget));
-      else best = Math.max(best, fs.statSync(p).mtimeMs);
+      if (e.isDirectory()) best = Math.max(best, maxMtime(p, depth - 1, budget, tally));
+      else {
+        best = Math.max(best, fs.statSync(p).mtimeMs);
+        if (tally) tally.files++;
+      }
     } catch {}
   }
   return best;
@@ -823,6 +834,16 @@ function readText(file) {
   } catch {
     return "";
   }
+}
+
+// A spec file's Status line value, in any of the forms the skill scripts
+// accept (`**Status:**`, `**Status**:`, `Status:`). Same pattern as STATUS_RE
+// in src/skill-scripts/specs.mjs; the console cannot import it, so keep the
+// two copies in step. A CRLF file's trailing `\r` is dropped.
+const STATUS_LINE_RE = /^[ \t]*(?:[-*][ \t]*)?(?:\*\*Status:\*\*|\*\*Status\*\*:|Status:)[ \t]*(.+?)[ \t\r]*$/m;
+function statusOf(text) {
+  const m = text.match(STATUS_LINE_RE);
+  return m ? m[1] : "";
 }
 
 // A spec folder's pipeline position, from its files alone. Furthest artifact
@@ -837,9 +858,7 @@ function classifySpec(dir, names) {
   const planDraft = drafts.length > 0;
   const planConv = has(/^PLAN-CONVERSATION.*\.md$/i);
   const liveDraft = drafts.filter((n) => !/-prev\.md$/i.test(n)).sort().reverse()[0] || drafts[0];
-  const draftStatus = liveDraft
-    ? (readText(path.join(dir, liveDraft)).match(/\*\*Status:\*\*\s*([^\n]+)/) || [])[1] || ""
-    : "";
+  const draftStatus = liveDraft ? statusOf(readText(path.join(dir, liveDraft))) : "";
   const resumeAt = draftStatus.match(/Resume at Phase\s*(\d+)/i);
 
   if (phases.length) {
@@ -870,10 +889,19 @@ function classifySpec(dir, names) {
   // Status line: Plan still has phases to run before Document can start.
   if (resumeAt) return { state: "mapped", detail: `plan draft, resume at Phase ${resumeAt[1]}` };
   if (planDraft) return { state: "planned", detail: "plan drafted" };
+  // A bug Diagnose wrote up, with nothing after it yet. A pathfinder map or a
+  // plan conversation means planning has started, so the usual states win.
+  // Quick Task marks the write-up Fixed once the bug is gone: then the bug is
+  // done, and the folder waits only to be archived.
+  const diagnosis = names.filter((n) => /^DIAGNOSIS-.*\.md$/i.test(n)).sort().reverse()[0];
+  const diagnosisStatus = diagnosis ? statusOf(readText(path.join(dir, diagnosis))).replace(/\*+/g, "").trim() : "";
+  if (diagnosis && !planConv && !fs.existsSync(path.join(pfDir, "map.md")))
+    return /^fixed/i.test(diagnosisStatus)
+      ? { state: "fixed", detail: "bug fixed" }
+      : { state: "diagnosed", detail: "bug diagnosed, not fixed" };
   if (isDir(pfDir)) {
     const mapText = readText(path.join(pfDir, "map.md"));
-    const m = mapText.match(/\*\*Status:\*\*\s*([^\n]+)/);
-    const status = m ? m[1].replace(/\*+/g, "").trim() : "";
+    const status = statusOf(mapText).replace(/\*+/g, "").trim();
     if (/^cleared/i.test(status)) return { state: "mapped", detail: "all decisions made" };
     let qTotal = 0;
     let qDone = 0;
@@ -930,11 +958,13 @@ export function scanProject(root) {
     } catch {
       continue;
     }
+    const tally = { files: 0 };
     specs.push({
       dir: `specs/${name}`,
       name,
       ...classifySpec(dir, files),
-      touched: maxMtime(dir),
+      touched: maxMtime(dir, 4, { n: 400 }, tally),
+      files: tally.files,
     });
   }
   specs.sort((a, b) => b.touched - a.touched || a.name.localeCompare(b.name));
@@ -946,6 +976,38 @@ export function scanProject(root) {
     pending: isGit ? pendingFiles(root) : null,
     specs,
   };
+}
+
+/**
+ * Delete one spec folder, for the dashboard's Delete button (`delete-spec`).
+ * Only an existing `specs/<name>` folder, as isDeletableSpecDir() spells it,
+ * whose real path sits directly in the worktree's own specs/: never a link to
+ * somewhere else, never specs--completed/, never anything deeper. specs/ is
+ * gitignored, so a mistake here cannot be undone; every refusal throws with
+ * the reason, and nothing is touched.
+ */
+export function removeSpec(worktree, dir) {
+  if (!isDeletableSpecDir(dir)) throw new Error(`"${dir}" is not a spec folder: only specs/<name> can be deleted`);
+  const fold = (p) => (process.platform === "win32" || process.platform === "darwin" ? p.toLowerCase() : p);
+  const root = path.resolve(worktree);
+  const target = path.join(root, dir);
+  let st;
+  try {
+    st = fs.lstatSync(target);
+  } catch {
+    throw new Error(`there is no ${dir} to delete`);
+  }
+  if (st.isSymbolicLink()) throw new Error(`${dir} is a link to another folder, so it is not deleted from here`);
+  if (!st.isDirectory()) throw new Error(`${dir} is not a folder`);
+  const real = fs.realpathSync.native(target);
+  const realSpecs = fs.realpathSync.native(path.join(root, "specs"));
+  const realRoot = fs.realpathSync.native(root);
+  const rel = path.relative(fold(realRoot), fold(realSpecs));
+  if (rel !== "specs" || fold(path.dirname(real)) !== fold(realSpecs)) {
+    throw new Error(`${dir} resolves outside the project's specs/ folder, so it is not deleted`);
+  }
+  fs.rmSync(real, { recursive: true });
+  return { ok: true, removed: dir };
 }
 
 /* -------------------------------------------------------------- liveness */
@@ -1246,7 +1308,7 @@ function mergeDocs(current, patchList) {
     // version: the agent no longer has to track what the page holds, and a
     // repost of unchanged content is not a new version.
     if (prev && typeof entry.version !== "number" && typeof prev.version === "number") {
-      const text = (blocks) => JSON.stringify((blocks || []).map((b) => [b.id, b.md, b.state]));
+      const text = (blocks) => JSON.stringify((blocks || []).map((b) => [b.id, b.md, b.state, b.image, b.alt]));
       if (text(prev.blocks) !== text(doc.blocks)) doc.version = prev.version + 1;
     }
   }
@@ -1411,6 +1473,83 @@ export function resolveDocFiles(patch, state, worktree) {
 }
 
 /**
+ * Image blocks: `{ "id", "image": "shots/run.png", "alt": "..." }` shows a
+ * screenshot the agent saved under the session's `shots/` folder (Show me it
+ * working). The path resolves against the session folder and must land, after
+ * `realpath`, directly inside `<session>/shots/` under a plain name, so the page
+ * can only ever be pointed at the agent's own pictures. The bytes decide the
+ * type, as checkDocument() does for documents: a text file renamed `.png` is
+ * refused. Stored session-relative; an image block never carries `md` or `file`.
+ * Runs in the CLI beside resolveDocFiles(), so applyPatch never touches the disk.
+ */
+export const SHOTS_DIR_NAME = "shots";
+export const SHOT_MAX = 5 * 1024 * 1024;
+export const SHOT_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,99}\.(png|jpe?g|webp)$/i;
+
+// What an image's first bytes say it is ("png", "jpeg", "webp"), or null.
+export function shotType(buf) {
+  if (buf.length >= 8 && buf.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return "png";
+  if (buf.length >= 3 && buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return "jpeg";
+  if (buf.length >= 12 && buf.toString("ascii", 0, 4) === "RIFF" && buf.toString("ascii", 8, 12) === "WEBP") return "webp";
+  return null;
+}
+
+export function resolveDocImages(patch, state, dir) {
+  if (!isPlainObject(patch) || !Array.isArray(patch.docs)) return patch;
+  const fold = (p) => (process.platform === "win32" || process.platform === "darwin" ? p.toLowerCase() : p);
+  const shotsDir = path.join(path.resolve(dir), SHOTS_DIR_NAME);
+  const check = (image, docId) => {
+    if (typeof image !== "string" || !image.trim()) throw new Error(`doc "${docId}": an image block's "image" must be a path`);
+    const where = `doc "${docId}": image ${image}`;
+    let real;
+    try {
+      real = fs.realpathSync.native(path.resolve(dir, image));
+    } catch {
+      throw new Error(`${where} does not exist. Save it under the session's ${SHOTS_DIR_NAME}/ folder first.`);
+    }
+    let realShots;
+    try {
+      realShots = fs.realpathSync.native(shotsDir);
+    } catch {
+      realShots = shotsDir;
+    }
+    const name = path.basename(real);
+    if (fold(path.dirname(real)) !== fold(realShots)) {
+      throw new Error(`${where} is outside the session's ${SHOTS_DIR_NAME}/ folder (${shotsDir}); only pictures saved there can be shown.`);
+    }
+    if (!SHOT_NAME.test(name)) throw new Error(`${where}: name it with letters, digits, dots, dashes or underscores, ending .png, .jpg, .jpeg or .webp`);
+    const stat = fs.statSync(real);
+    if (!stat.isFile()) throw new Error(`${where} is not a file`);
+    if (stat.size > SHOT_MAX) throw new Error(`${where} is larger than ${SHOT_MAX / 1024 / 1024} MB`);
+    const ext = path.extname(name).slice(1).toLowerCase();
+    const want = ext === "jpg" ? "jpeg" : ext;
+    if (shotType(fs.readFileSync(real)) !== want) throw new Error(`${where} is not a ${want.toUpperCase()} image (its bytes say otherwise)`);
+    return `${SHOTS_DIR_NAME}/${name}`;
+  };
+  const docs = patch.docs.map((entry) => {
+    if (!isPlainObject(entry) || !Array.isArray(entry.blocks)) return entry;
+    const prevBlocks = (state.docs || []).find((d) => d && d.id === entry.id)?.blocks || [];
+    return {
+      ...entry,
+      blocks: entry.blocks.map((b) => {
+        if (!isPlainObject(b)) return b;
+        const prevBlock = prevBlocks.find((x) => x && x.id === b.id);
+        if (b.image === undefined || b.image === null) {
+          // Text or a file over what was an image: it stops being one.
+          return ("md" in b || "file" in b) && prevBlock && typeof prevBlock.image === "string" ? { ...b, image: null, alt: null } : b;
+        }
+        if (("md" in b && b.md != null) || ("file" in b && b.file != null)) {
+          throw new Error(`doc "${entry.id}": block "${b.id}" is an image; it cannot also carry "md" or "file"`);
+        }
+        if (b.alt != null && typeof b.alt !== "string") throw new Error(`doc "${entry.id}": block "${b.id}" "alt" must be text`);
+        return { state: prevBlock?.state || "settled", ...b, image: check(b.image, entry.id), md: null, file: null };
+      }),
+    };
+  });
+  return { ...patch, docs };
+}
+
+/**
  * Apply an agent patch to the session state.
  *
  * Scalars replace, `null` deletes, `agent`/`headline` merge one level,
@@ -1556,12 +1695,15 @@ const JARGON = [
 ];
 
 // The loop parses these out of agent output; pathfinder forbids them under specs/.
+// The other copy is LOOP_TOKENS in src/skill-scripts/common.mjs: the console is
+// not a skill script and cannot import it, so keep the two in step.
 const FORBIDDEN_TOKENS =
   /\b(TASK_COMPLETE|PHASE_COMPLETE|ALL_TASKS_COMPLETE|IMPLEMENTATION_COMPLETE|SPEC_COMPLETE|WORK_COMPLETE)\b/;
 
 // plan2code-metrics scrapes confidence with patterns that do NOT require a
 // percent sign, so a bare "Requirements 22" in a rendered doc can poison a run's
-// metrics. Keep those four words away from bare numbers.
+// metrics. Keep those four words away from bare numbers. The skill scripts'
+// copy is SCRAPE in src/skill-scripts/common.mjs; keep the two in step.
 const METRICS_BAIT = /\b(Requirements?|Feasibility|Integration|Risk)[:\s|]+\d{1,2}\b/;
 
 // The marker and metrics-bait scan on its own, for agent text that never
@@ -1759,6 +1901,16 @@ export function validate(state) {
         .map((g) => g.id)
         .join(", ")}). Only one workflow may own sign-off at a time.`
     );
+  }
+
+  // An image block's alt text is its caption, read by the same newcomers a
+  // title is.
+  for (const d of state.docs || []) {
+    for (const b of (isPlainObject(d) && Array.isArray(d.blocks) ? d.blocks : [])) {
+      if (!isPlainObject(b) || typeof b.image !== "string" || typeof b.alt !== "string") continue;
+      const hit = JARGON.find((re) => re.test(b.alt));
+      if (hit) problems.push(`doc "${d.id}" image "${b.id}" alt text contains internal vocabulary (${hit.source})`);
+    }
   }
 
   // Scan what the AGENT wrote, never what the person typed. `submitted` is the

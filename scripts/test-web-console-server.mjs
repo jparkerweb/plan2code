@@ -716,3 +716,59 @@ test("notes/quick-task.md has the finished quick task offer Back to the dashboar
   assert.ok(bullet.includes('"dashboard": true'));
   assert.ok(bullet.includes("Review it now"));
 });
+
+// Show me it working: a screenshot saved under <session>/shots/ posts as an
+// image block and is served back; nothing else is reachable through /shots/.
+test("an image block under the session's shots folder round-trips, and /shots/ serves nothing else", async () => {
+  const res = cli(["open", "--workflow", "implement", "--no-open"]);
+  const m = res.json.url.match(/^(http:\/\/127\.0\.0\.1:\d+)\/s\/([^/]+)\//);
+  const cookie = cookieFor(m[1], m[2]);
+  try {
+    const shots = path.join(res.json.session, "shots");
+    fs.mkdirSync(shots, { recursive: true });
+    const png = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(32, 7)]);
+    fs.writeFileSync(path.join(shots, "home-page.png"), png);
+    const patch = { docs: [{ id: "shown", title: "Shown working", blocks: [{ id: "s1", image: "shots/home-page.png", alt: "The home page with the new button" }] }] };
+    cli(["post", "--session", res.json.sid, "--file", payload("shots-ok.json", patch)]);
+    const block = readState(res.json.session).docs.find((d) => d.id === "shown").blocks[0];
+    assert.equal(block.image, "shots/home-page.png", "stored session-relative");
+    assert.equal(block.md, undefined);
+
+    // Its alt text is a caption, held to the same vocabulary rule as a title.
+    const jargon = { docs: [{ id: "shown", blocks: [{ id: "s1", image: "shots/home-page.png", alt: "Grilling the home page" }] }] };
+    const refused = cli(["post", "--session", res.json.sid, "--file", payload("shots-jargon.json", jargon)], { expectFail: true });
+    assert.equal(refused.status, 3);
+    assert.match(refused.stderr, /alt text contains internal vocabulary/);
+    // A changed picture or caption is a new version of the doc.
+    const before = readState(res.json.session).docs.find((d) => d.id === "shown").version;
+    const recaption = { docs: [{ id: "shown", blocks: [{ id: "s1", image: "shots/home-page.png", alt: "The home page, after the fix" }] }] };
+    cli(["post", "--session", res.json.sid, "--file", payload("shots-recaption.json", recaption)]);
+    assert.equal(readState(res.json.session).docs.find((d) => d.id === "shown").version, before + 1);
+
+    const got = await fetch(m[1] + "/shots/home-page.png", { headers: { cookie } });
+    assert.equal(got.status, 200);
+    assert.equal(got.headers.get("content-type"), "image/png");
+    assert.equal(got.headers.get("cache-control"), "no-store");
+    assert.deepEqual(Buffer.from(await got.arrayBuffer()), png);
+
+    const anon = await fetch(m[1] + "/shots/home-page.png");
+    assert.equal(anon.status, 403, "the cookie is still required");
+    await anon.arrayBuffer();
+
+    // Raw request lines: fetch would fold the `..` away before sending.
+    const raw = (p) =>
+      new Promise((resolve, reject) => {
+        const req = http.request({ host: "127.0.0.1", port: Number(new URL(m[1]).port), path: p, headers: { cookie } }, (r) => {
+          r.resume();
+          r.on("end", () => resolve(r.statusCode));
+        });
+        req.on("error", reject);
+        req.end();
+      });
+    for (const p of ["/shots/../state.json", "/shots/..%2fstate.json", "/shots/missing.png", "/shots/home-page.png?x=1"]) {
+      assert.equal(await raw(p), 404, p);
+    }
+  } finally {
+    cli(["stop", "--session", res.json.sid]);
+  }
+});
