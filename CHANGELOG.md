@@ -2,7 +2,7 @@
 
 All notable changes to Plan2Code will be documented in this file.
 
-## Unreleased
+## v2.9.0
 
 ### ✨ Added
 
