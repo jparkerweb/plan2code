@@ -569,3 +569,17 @@ test("a redraw keeps the place of whatever scrolls: question card, finished scre
   assert.match(place, /scrollerKey\(inner\) === place\.key/, "a card comes back only while it shows the same thing");
   assert.match(place, /:scope > \.git-board/, "the git board keeps its own per-tab place");
 });
+
+test("Skip this one is a small accent button, like a comment box's quick answer", () => {
+  const app = fs.readFileSync(path.join(ROOT, "src", "web-console", "public", "app.js"), "utf8");
+  assert.match(app, /const skip = el\("button", "btn tiny", skipped \? "Do not skip" : "Skip this one"\);/, "the skip button is btn tiny");
+  assert.match(app, /quick = el\("button", "btn tiny"/, "the quick answer it matches is btn tiny");
+});
+
+test("a confirm's yes and a recap's yes are outlined in the accent, a dangerous yes stays red", () => {
+  const app = fs.readFileSync(path.join(ROOT, "src", "web-console", "public", "app.js"), "utf8");
+  const confirm = app.slice(app.indexOf("function buildConfirm("), app.indexOf("row.appendChild(mk(noLabel"));
+  assert.match(confirm, /\(yes && !danger && !on \? " is-approve" : ""\)/, "an unpicked, safe yes gets is-approve");
+  assert.match(confirm, /\(danger && !on \? " danger" : ""\)/, "a dangerous yes stays red");
+  assert.match(app, /const ok = el\("button", "btn" \+ \(okOn \? " primary" : " is-approve"\)/, "the recap's yes gets is-approve");
+});

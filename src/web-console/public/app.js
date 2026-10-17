@@ -4586,7 +4586,9 @@ function renderCard(item) {
 
   if (item.required === false && isOpen(item) && !flight && !finish()) {
     const skipped = Boolean(staged && staged.skipped);
-    const skip = el("button", "linky", skipped ? "Do not skip" : "Skip this one");
+    // A small accent chip, like a comment box's quick answer ("No changes"),
+    // rather than an underlined link that reads as fine print.
+    const skip = el("button", "btn tiny", skipped ? "Do not skip" : "Skip this one");
     skip.type = "button";
     skip.style.marginTop = "16px";
     skip.addEventListener("click", () => (skipped ? stage(item.id, null) : skipAndMoveOn(item.id)));
@@ -5339,9 +5341,15 @@ function buildConfirm(card, item, staged) {
   const yesLabel = item.yesLabel || "Yes";
   const noLabel = item.noLabel || "No";
 
+  // An unpicked yes is outlined in the accent, like a review's approve, unless
+  // the card is dangerous: then it stays red.
   const mk = (label, yes, danger) => {
     const on = staged && staged.yes === yes;
-    const b = el("button", "btn" + (on ? " primary" : "") + (danger && !on ? " danger" : ""), label);
+    const b = el(
+      "button",
+      "btn" + (on ? " primary" : "") + (danger && !on ? " danger" : "") + (yes && !danger && !on ? " is-approve" : ""),
+      label
+    );
     b.type = "button";
     b.addEventListener("click", () =>
       stage(item.id, withNote(item, on ? null : { type: "answer", kind: "confirm", yes }))
@@ -5396,7 +5404,7 @@ function buildRecap(card, item, staged) {
   const okOn = staged && staged.ok === true;
   const fixOn = staged && staged.ok === false;
 
-  const ok = el("button", "btn" + (okOn ? " primary" : ""), item.yesLabel || "Yes, that is right");
+  const ok = el("button", "btn" + (okOn ? " primary" : " is-approve"), item.yesLabel || "Yes, that is right");
   ok.type = "button";
   ok.addEventListener("click", () => stage(item.id, okOn ? null : { type: "answer", kind: "recap", ok: true }));
 
