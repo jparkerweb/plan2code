@@ -371,6 +371,16 @@ export function handoffShape(fin) {
 // sentence: nothing Pathfinder would read as asking for a brief.
 export const STOP_REPLY = "Stop here and save my place, so I can pick this up later.";
 
+// The same request, with a handoff note written first. Same plain voice: the
+// reply is read by the agent, and a word like "brief" would send Pathfinder
+// off to write one.
+export const STOP_HANDOFF_REPLY = "Stop here, save my place and write a handoff, so the dashboard can pick this up later.";
+
+/** The `__stop` action; `handoff: true` only when the handoff choice was pressed. */
+export function stopAction({ handoff } = {}) {
+  return handoff ? { i: "__stop", type: "stop", handoff: true } : { i: "__stop", type: "stop" };
+}
+
 /**
  * Why a session-level button (Stop session, Back to the dashboard) cannot be
  * pressed right now, or null when it can. Both wait for the person's turn:
@@ -813,7 +823,7 @@ const ON = { on: true };
 export const GIT_INIT_NOTE = "Not a git repository yet: it offers to start one";
 export const pendingNote = (n) => `${n} file${n === 1 ? "" : "s"} to commit`;
 const off = (reason) => ({ on: false, reason });
-const FIXED_REASON = "This bug is fixed. Delete it with ✕, or move it to specs--completed/.";
+export const FIXED_REASON = "This bug is fixed. Delete it with the Delete button on its chip, or move it to specs--completed/.";
 
 /**
  * The spec the picker opens on: the most recently touched one that is still
@@ -955,12 +965,50 @@ export function deleteReply(spec) {
 
 // What the delete dialog says about the spec, from the scan alone. `touched`
 // stays a number: the page formats it in the person's own locale.
+// A handoff on the dashboard (scan.handoffs). The page sends only the id; the
+// CLI reads the rest from the stored metadata. Plain wording, no em dashes:
+// these lines are read by the agent.
+export function pickupAction(h) {
+  return { i: "__pickup", type: "pickup", handoff: h.id };
+}
+export function pickupReply(h) {
+  return `Pick up the handoff "${h.title}" right here in this session.`;
+}
+export function deleteHandoffAction(h) {
+  return { i: "__delete", type: "delete", handoff: h.id };
+}
+export function deleteHandoffReply(h) {
+  return `Delete the handoff "${h.title}" for good, right here in this session.`;
+}
+export function handoffCopyText(file) {
+  return `Read the handoff at ${file} and carry on with its Next task.`;
+}
+/** "just now", "12 min ago", "6 h ago", "3 days ago" for an ISO time. */
+export function handoffAge(written, now = Date.now()) {
+  const t = Date.parse(written);
+  if (!Number.isFinite(t)) return "";
+  const mins = Math.max(0, Math.floor((now - t) / 60000));
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins} min ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours} h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days} day${days === 1 ? "" : "s"} ago`;
+}
+
+// The line under a spec's name on its chip. A fixed bug's label already says
+// "Bug fixed", so the scan's "bug fixed" detail would only repeat it.
+export function chipDetail(spec) {
+  return spec.state === "fixed" ? "" : spec.detail || "";
+}
+
 export function deleteSummary(spec) {
   const label = SPEC_STATE_LABELS[spec.state] || spec.state || "";
+  const detail = chipDetail(spec);
   const n = spec.files;
   return {
     folder: `${spec.dir}/`,
-    stage: spec.detail ? `${label}: ${spec.detail}` : label,
+    stage: detail ? `${label}: ${detail}` : label,
     files: Number.isInteger(n) ? `${n} file${n === 1 ? "" : "s"}` : "",
     touched: Number.isFinite(spec.touched) && spec.touched > 0 ? spec.touched : null,
   };

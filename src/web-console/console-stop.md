@@ -43,6 +43,41 @@ you are halfway through writing their last answers. The one exception is an
 agent that has stopped checking in: then Stop comes back, and the request waits
 on disk for whichever session collects it next.
 
+## Stop with a handoff
+
+Off the dashboard, the Stop dialog offers **Stop with a handoff** first and
+**Just stop and save** second. The handoff choice sends the same `__stop`, with
+`handoff: true`, and `wait` adds `handoffSkill` (the Handoff skill's `SKILL.md`,
+present in a built skill):
+
+```jsonc
+{ "type": "submit",
+  "actions": [ /* staged answers and notes, as usual */,
+               { "i": "__stop", "type": "stop", "handoff": true } ],
+  "reply": "...the answer lines...\nStop here, save my place and write a handoff, so the dashboard can pick this up later.",
+  "handoffSkill": "…/plan2code-handoff/SKILL.md" }
+```
+
+Act on it in this turn, in this order:
+
+1. **Handle the answers** exactly as in "Stop requests" step 1.
+2. **Save your place** exactly as step 2 there.
+3. **Make the handoff file:**
+   `node "<CONSOLE>" handoff new --workflow <yours> --skill <your skill> [--spec <spec>] --title "<short title>" --from-stop`
+   It prints the `path` to write.
+4. **Write the handoff.** Open `handoffSkill` with your file-read tool (never a
+   skill-invocation tool) and write the document it describes to that `path`.
+   Skip its questions and its "Where to write it" step: infer the Next task
+   from where the work stands, and say in the document that it was inferred.
+5. **Post `finish`** (`console-finish.md`) with a headline starting "Paused", a
+   `body` that names the handoff path and says the dashboard will offer it, and
+   the resume command, without `--wait`.
+6. **`stop`** the server.
+
+With no `handoffSkill` (a source checkout), use the structure in
+`~/.agents/skills/plan2code-handoff/SKILL.md`. Do not ask whether they are
+sure: the page already asked.
+
 ## Back to the dashboard, mid-workflow
 
 On every workflow but the dashboard, a triangle left of Stop session takes the

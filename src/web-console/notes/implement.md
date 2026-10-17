@@ -67,8 +67,8 @@ only ever be offered once nothing could come of it:
     "body": "Phase 3 is built. Read the report, try the checks, then approve it, review the code first, see it running, or say what to change.",
     "verdicts": [
       { "id": "review", "label": "Review the code first" },
-      { "id": "show", "label": "Show me it working" },
       { "id": "approve", "label": "Approve this phase" },
+      { "id": "show", "label": "Show me it working" },
       { "id": "changes", "label": "I want changes" }
     ],
     "token": { "approve": "approved", "changes": "needs changes", "show": "show me" },

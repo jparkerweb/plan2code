@@ -161,7 +161,7 @@ An action whose `i` starts with `__` is about the session, not a question:
 
 | Action | Read |
 | --- | --- |
-| `__stop`, `__dashboard` (no finish up) | `console-stop.md` |
+| `__stop` (plain, or with `handoff: true`), `__dashboard` (no finish up) | `console-stop.md` |
 | `__commit`, `__dashboard` (from a finished screen) | `console-finish.md` |
 | `__launch` | `console-launches.md` |
 | `__delete` | `console-launches.md` (the dashboard only) |

@@ -28,6 +28,7 @@ import {
   START_POSES,
   startPose,
   STOP_REPLY,
+  STOP_HANDOFF_REPLY,
   threadText,
   threadWho,
   turnGate,
@@ -388,6 +389,24 @@ test("a stop request carries the staged answers, reaches the agent as a send, an
   assert.equal((await ping()).pendingStop, false);
 });
 
+// "Stop with a handoff" is the same send with `handoff: true` on the action.
+// The source tree has no built Handoff skill beside it, so no handoffSkill.
+test("a handoff stop keeps its flag, reports as a stop until collected, and names no skill file in the source tree", async () => {
+  const ping = async () => (await post("/ping", {})).json();
+  const before = await ping();
+  await post("/submit", {
+    rev: before.rev,
+    actions: [{ i: "__stop", type: "stop", handoff: true }],
+    reply: STOP_HANDOFF_REPLY,
+  });
+  assert.equal((await ping()).pendingStop, true, "an uncollected handoff stop shows on the heartbeat");
+  const res = cli(["wait", "--session", sid, "--seconds", "5"]);
+  assert.equal(res.status, 0);
+  assert.equal(res.json.actions[0].handoff, true, "the flag reaches the agent");
+  assert.equal(res.json.handoffSkill, undefined, "no built skill beside the source tree");
+  assert.equal((await ping()).pendingStop, false);
+});
+
 // The top bar's triangle is a stop that lands on the menu: the staged answers
 // and `__dashboard` go as one send with no finish on the page, the agent gets
 // both at once, and the resume through the dashboard blanks the skill's page.
@@ -479,9 +498,22 @@ test("console-stop.md, building.md and the dashboard prompt teach the mid-workfl
   assert.ok(stopMd.includes("## Back to the dashboard, mid-workflow"));
   assert.ok(stopMd.includes(HOME_REPLY), "console-stop.md quotes the reply line the agent will see");
   assert.match(stopMd, /No `finish` and no `stop` in between/);
-  assert.match(read("src", "web-console", "console.md"), /`__stop`, `__dashboard` \(no finish up\) \| `console-stop\.md`/, "console.md's action table sends a mid-workflow __dashboard there");
+  assert.ok(stopMd.includes("## Stop with a handoff"));
+  for (const word of ["handoff new", "--from-stop", "handoffSkill"]) assert.ok(stopMd.includes(word), `console-stop.md names ${word}`);
+  assert.match(read("src", "web-console", "console.md"), /`__stop` \(plain, or with `handoff: true`\), `__dashboard` \(no finish up\) \| `console-stop\.md`/, "console.md's action table sends a handoff stop and a mid-workflow __dashboard there");
   assert.ok(read("src", "web-console", "building.md").includes("mid-build `__dashboard`"));
   assert.ok(read("src", "plan2code.md").includes("mid-workflow from the top bar's triangle"));
+});
+
+test("console-launches.md and the dashboard prompt teach the handoff pick-up and delete", () => {
+  const read = (...p) => fs.readFileSync(path.join(ROOT, ...p), "utf8");
+  const launches = read("src", "web-console", "console-launches.md");
+  for (const word of ["__pickup", "handoffFile", "delete-handoff", "handoffsDir", "fallback"]) {
+    assert.ok(launches.includes(word), `console-launches.md names ${word}`);
+  }
+  assert.ok(launches.includes("handoffs, handoffsDir"), "console-launches.md lists the scan fields");
+  const prompt = read("src", "plan2code.md");
+  for (const word of ["__pickup", "delete-handoff"]) assert.ok(prompt.includes(word), `src/plan2code.md names ${word}`);
 });
 
 // The server serves a hardcoded allow-list, so a new module that nobody adds

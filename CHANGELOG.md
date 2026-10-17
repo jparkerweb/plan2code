@@ -16,6 +16,8 @@ All notable changes to Plan2Code will be documented in this file.
 - **web console**: a doc can show a picture. An image block (`"image": "shots/<name>.png"`) shows a PNG, JPEG or WebP the agent saved under the session's `shots/` folder; anything outside that folder, over 5 MB or not really an image is refused.
 - **launcher**: `plan2code update` updates everything that was installed (the skills, the `plan2code` command and any of the status line, `plan2code-loop`, `plan2code-metrics` and `plan2code-bot`), with no menu and never uninstalling. Every global install now writes `~/.plan2code/install.json` listing what it installed, which `install.js --update` reads; with no record it updates the skills and the `plan2code` command.
 - **launcher**: `plan2code` prints one line before it starts your agent when a newer release is out: `Plan2Code v<latest> is out (you have v<installed>). Run: plan2code update`. It reads the web console's saved release check, so it never waits on the network; when that check is missing or old it refreshes it in the background for the next start.
+- **web console**: **Stop session** gains a second way to stop, **Stop with a handoff**. It saves the skill's place as before and also writes a Handoff document, so a quick task, a review or a half-done changelog keeps its context; the paused screen names the file.
+- **dashboard**: this checkout's unused handoffs show as chips in the spec picker. **Pick it up here** carries on in the skill that stopped (a handoff from the Handoff skill carries on in Quick Task), in the same session, and the chip is gone afterwards; **Read it all**, **Copy for a new conversation** and **Delete** sit beside it.
 
 ### 🔧 Changed
 
@@ -23,10 +25,18 @@ All notable changes to Plan2Code will be documented in this file.
 - **pathfinder**: tightened to stay under 15,000 characters as it took on the X-ray pointer.
 - **quick-task**, **implement**: when the cause is unclear or the fix big, they stop and suggest `/plan2code-diagnose`.
 - **finalize**: its archive confirmation now reads "yes / no / show me", the last chance to look at the whole feature running before the spec moves.
+- **dashboard**: Handoff is now the last card in *Useful any time*, after Git.
 - **contributors**: the add-a-skill checklist in `.agents-docs/AGENTS-development-commands.md` now lists every place a new skill must be registered (it missed about a dozen).
 - **contributors**: `AGENTS.md` gains a rule that a skill rule broken twice becomes a script check, not more prose.
 - **web console**: the UPDATE AVAILABLE dialog now gives `plan2code update` as the command, keeping the install command beside it for a machine without the `plan2code` command. User Preferences → Cleanup never lists `~/.plan2code/install.json`.
 - **docs**: README, the quick reference and the web console guide say to update with `plan2code update` (or re-run the install command).
+- **handoff**: every handoff now lives in `~/.plan2code/handoffs/` (a Markdown file plus a small `.json` beside it), owned by the web console, and handoffs older than 30 days are swept when the console opens. The Handoff skill writes there with no folder or `.gitignore` question, and Cleanup never lists the folder. Handoffs written to the OS temp folder or a `handoffs/` folder before this change are not listed.
+- **dashboard**: a **Bug fixed** spec has a visible **Delete** that needs one confirm, and its chip no longer repeats the "bug fixed" line.
+- **web console**: the review sign-off card lists **Approve this phase** before **Show me it working**, with the approve button outlined in the accent colour.
+
+### 🗑️ Removed
+
+- **handoff**: the Handoff skill's `handoff-path.mjs` script is retired in favour of `console.mjs handoff new`, which every skill can reach.
 
 ### 🐛 Fixed
 

@@ -75,6 +75,7 @@ import { cleanSetting, defaultSetting, offered } from "./public/subagents.js";
 import { ACCENTS, DEFAULT_ACCENT, DEFAULT_CARD_WIDTH, cardWidth } from "./public/palette.js";
 import { defaultName, freeName, nameProblem } from "./public/workspace.js";
 import { checkForUpdate } from "./update-check.mjs";
+import { handoffsDir, isHandoffId } from "./handoffs.mjs";
 import { WORKSPACE_PICKER_PROMPT, pickFolder, pickerCommand } from "./picker.mjs";
 
 const args = parseArgs(process.argv.slice(2));
@@ -1208,6 +1209,21 @@ const server = http.createServer((req, res) => {
           : noOverview()
       )
       .catch(noOverview);
+    return;
+  }
+
+  // A handoff's document, read-only, for the dashboard's "Read it all". Only a
+  // dashboard serves it, and only an id its own scan listed: a used or unknown
+  // id, or anything that is not a bare handoff id, is a 404.
+  if (pathname === "/handoff" && req.method === "GET") {
+    const state = readState() || {};
+    const id = url.searchParams.get("id");
+    const listed = state.workflow === "dashboard" && isHandoffId(id) && (state.scan?.handoffs || []).some((h) => h && h.id === id);
+    if (!listed) return send(res, 404, "", "text/plain");
+    fs.readFile(path.join(handoffsDir(), id + ".md"), "utf8", (err, text) => {
+      if (err) return send(res, 404, "", "text/plain");
+      send(res, 200, text, "text/markdown; charset=utf-8", { "cache-control": "no-store" });
+    });
     return;
   }
 

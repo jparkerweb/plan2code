@@ -223,7 +223,7 @@ Recovery matrix:
 }
 ```
 
-Note `recommended` is **optional per option**. Handoff explicitly wants its inferred task offered as the recommendation; the `.gitignore` question in handoff explicitly does not ("present it, don't force it").
+Note `recommended` is **optional per option**. Handoff explicitly wants its inferred task offered as the recommendation.
 
 ### 4.2 Primitives
 

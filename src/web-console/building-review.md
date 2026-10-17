@@ -119,8 +119,8 @@ review set it to its own stage):
   "items": [{ "id": "signoff", "status": "reopened",
     "body": "Reviewed and ready for sign-off. The review found 3 issues: 2 fixed, 1 still open in the Review findings tab. The report is updated.",
     "verdicts": [
-      { "id": "show", "label": "Show me it working" },
       { "id": "approve", "label": "Approve this phase" },
+      { "id": "show", "label": "Show me it working" },
       { "id": "changes", "label": "I want changes" }
     ],
     "token": { "approve": "approved", "changes": "needs changes", "show": "show me" },

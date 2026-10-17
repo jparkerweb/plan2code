@@ -192,7 +192,7 @@ The dashboard's cards, and when each one lights up for the spec you pick:
 | Finalize | Checks the work, writes the summary, files the specs away and suggests the commit message. | Every task in the spec is done |
 | Quick task | Too small for the full process? A quick plan, then it just builds it. | Always (suggested when the spec is a diagnosed bug) |
 | Review | A second opinion on the changes. Problems ranked, and you pick what gets fixed. | Always |
-| Handoff | Pack this conversation into a document a fresh session can pick up cold. | Always |
+| Handoff | Pack this conversation into a document a fresh session can pick up cold. Any skill's **Stop with a handoff** writes one too, and the dashboard lists them to pick up. | Always |
 | Codebase X-ray | Explain how and why an area works, or find the rough spots worth fixing. | Always |
 | Diagnose a bug | Find a bug's cause and write it up, without fixing it. | Always |
 | Changelog | Checks the CHANGELOG version against the main branch and suggests entries for what is new. | Always |
@@ -362,7 +362,7 @@ console or the terminal; add `--web` to skip the question and go straight to the
 | `/plan2code-init-update` | Fold what you learned this session back into `AGENTS.md` |
 | `/plan2code-quick-task` | A small change that doesn't warrant the full sequence |
 | `/plan2code-1b-revise-plan` | Requirements moved mid-build. Revise the specs, not the code |
-| `/plan2code-handoff` | Compact this conversation into a doc the next one resumes from |
+| `/plan2code-handoff` | Compact this conversation into a doc the next one resumes from, saved in `~/.plan2code/handoffs/` and listed on the dashboard to pick up |
 | `/plan2code-xray` | Explain how and why an area of the code works (citing files, commits and PRs), or rank the rough spots worth fixing into a brief for Pathfinder or Plan; never edits code |
 | `/plan2code-diagnose` | Find a bug's cause and write it up as `specs/<bug-name>/DIAGNOSIS-<date>.md` without fixing it, then offer `/plan2code-quick-task` to fix it, or `/plan2code-1-plan` when the fix is big |
 | `/plan2code-changelog` | Check the CHANGELOG version against the default branch, suggest entries for new work you can edit, keep `package.json` aligned, then hand off to Git to commit |

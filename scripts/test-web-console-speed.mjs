@@ -31,6 +31,7 @@ import {
   WEB_CONSOLE_DIR,
   consoleDoc,
   consoleDocFiles,
+  HANDOFFS_DIR,
 } from "./web-console-test-helpers.mjs";
 
 const choice = (id, extra = {}) => ({
@@ -321,6 +322,62 @@ test("settle and a defaulted reply id go through post end to end", async () => {
 
 /* ------------------------------------------------------------ session hops */
 
+// A pick-up hops into the stored workflow and spec; the page sends only the
+// id. A missing spec folder, a workflow that is not a workflow name, or the
+// Handoff skill's own handoff falls back to Quick Task, flagged. (No skills sit beside the source tree, so the
+// stored skill name stands there.)
+test("a pick-up comes with the stored skill's resume command, handoffFile, and falls back to Quick Task", async () => {
+  process.env.PLAN2CODE_HANDOFFS_DIR = HANDOFFS_DIR;
+  const store = await import("../src/web-console/handoffs.mjs");
+  const worktree = fs.mkdtempSync(path.join(os.tmpdir(), "p2c-pickup-"));
+  fs.mkdirSync(path.join(worktree, "specs", "lunch-vote"), { recursive: true });
+  const make = (rec) => {
+    const h = store.newHandoff({ worktree, project: worktree, workflow: "implement", skill: "plan2code-3-implement", title: "T", ...rec }, new Date(2026, 9, 17, 10, 0 + make.n++));
+    fs.writeFileSync(h.path, "# Handoff: T\n");
+    return h;
+  };
+  make.n = 0;
+  const s = consoleSession(["--workflow", "dashboard"]);
+  const resumeOf = (workflow, spec = "") =>
+    `node "${path.join(ROOT, "src", "web-console", "console.mjs")}" open --resume ${s.sid} --no-open --workflow ${workflow}${spec}`;
+  try {
+    const good = make({ spec: "specs/lunch-vote" });
+    const goneSpec = make({ spec: "specs/deleted" });
+    const badMeta = make({ spec: null });
+    const metaFile = path.join(HANDOFFS_DIR, badMeta.id + ".json");
+    fs.writeFileSync(metaFile, fs.readFileSync(metaFile, "utf8").replace('"workflow": "implement"', '"workflow": "Not A Workflow"'));
+    const cases = [
+      [good, resumeOf("implement", " --spec specs/lunch-vote"), undefined],
+      [goneSpec, resumeOf("quick-task"), true],
+      [badMeta, resumeOf("quick-task"), true],
+      // The Handoff skill's own handoff carries on in Quick Task, never in another handoff.
+      [make({ workflow: "handoff", skill: "plan2code-handoff" }), resumeOf("quick-task"), true],
+    ];
+    for (const [h, resume, fallback] of cases) {
+      assert.equal((await s.send("/submit", { actions: [{ i: "__pickup", type: "pickup", handoff: h.id }], reply: "pick up" })).status, 200);
+      const res = waitFor(s);
+      assert.equal(res.status, 0);
+      assert.equal(res.json.resume, resume);
+      assert.equal(res.json.handoffFile, h.path);
+      assert.equal(res.json.fallback, fallback);
+    }
+    // A stored spec with shell characters never reaches `resume`: Quick Task, flagged.
+    const hostile = make({ spec: "specs/x;touch pwned" });
+    assert.equal((await s.send("/submit", { actions: [{ i: "__pickup", type: "pickup", handoff: hostile.id }], reply: "pick up" })).status, 200);
+    const hot = waitFor(s).json;
+    assert.equal(hot.resume, resumeOf("quick-task"));
+    assert.equal(hot.fallback, true);
+    // An id that is not a handoff id gets the fallback and no handoffFile.
+    assert.equal((await s.send("/submit", { actions: [{ i: "__pickup", type: "pickup", handoff: "../x" }], reply: "pick up" })).status, 200);
+    const bad = waitFor(s).json;
+    assert.equal(bad.handoffFile, undefined);
+    assert.equal(bad.fallback, true);
+  } finally {
+    cli(["stop", "--session", s.sid]);
+    fs.rmSync(worktree, { recursive: true, force: true });
+  }
+});
+
 test("a launch, a dashboard press and Commit it now each come with their resume command", async () => {
   const s = consoleSession(["--workflow", "dashboard"]);
   try {
@@ -366,6 +423,15 @@ test("the built skills name the skill file to follow after a hop", async () => {
     assert.equal(res.status, 200);
     const got = run(["wait", "--session", opened.sid, "--seconds", "10"]).json;
     assert.equal(got.skillFile, path.join(ROOT, "skills", "plan2code-review", "SKILL.md"));
+    assert.equal(got.handoffSkill, undefined, "a launch is not a handoff stop");
+    const stopRes = await fetch(`${m[1]}/submit`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie, connection: "close" },
+      body: JSON.stringify({ actions: [{ i: "__stop", type: "stop", handoff: true }], reply: "stop with a handoff" }),
+    });
+    assert.equal(stopRes.status, 200);
+    const stopped = run(["wait", "--session", opened.sid, "--seconds", "10"]).json;
+    assert.equal(stopped.handoffSkill, path.join(ROOT, "skills", "plan2code-handoff", "SKILL.md"), "a handoff stop in a built skill names the Handoff skill file");
   } finally {
     run(["stop", "--session", opened.sid]);
   }

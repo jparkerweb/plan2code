@@ -50,7 +50,9 @@ import {
   launchTarget,
   deleteAction,
   deleteReply,
+  chipDetail,
   deleteSummary,
+  FIXED_REASON,
   isDeletableSpecDir,
   MAX_NOTE_IMAGES,
   noteAction,
@@ -67,6 +69,14 @@ import {
   SPEC_STATE_LABELS,
   STALE_MS,
   STOP_REPLY,
+  STOP_HANDOFF_REPLY,
+  stopAction,
+  pickupAction,
+  pickupReply,
+  deleteHandoffAction,
+  deleteHandoffReply,
+  handoffCopyText,
+  handoffAge,
   verdictLabel,
   verdictText,
   lastOpenCard,
@@ -580,6 +590,42 @@ test("the stop request cannot be mistaken for a brief request", () => {
   assert.doesNotMatch(STOP_REPLY, /\b(brief|recap|minutes)\b/i);
 });
 
+test("handoff helpers: actions carry only the id, replies and copy text are plain, ages round at the boundaries", () => {
+  const h = { id: "2026-10-17-1152-handoff", title: "Lunch vote" };
+  assert.deepEqual(pickupAction(h), { i: "__pickup", type: "pickup", handoff: h.id });
+  assert.deepEqual(deleteHandoffAction(h), { i: "__delete", type: "delete", handoff: h.id });
+  assert.equal(pickupReply(h), 'Pick up the handoff "Lunch vote" right here in this session.');
+  assert.equal(deleteHandoffReply(h), 'Delete the handoff "Lunch vote" for good, right here in this session.');
+  const file = "/home/sam/.plan2code/handoffs/2026-10-17-1152-handoff.md";
+  assert.equal(handoffCopyText(file), `Read the handoff at ${file} and carry on with its Next task.`);
+  for (const line of [pickupReply(h), deleteHandoffReply(h), handoffCopyText(file)]) {
+    assert.ok(!line.includes("—"), "no em dash");
+    assert.doesNotMatch(line, /(brief|recap|minutes)/i);
+  }
+  const now = Date.parse("2026-10-17T12:00:00Z");
+  const ago = (ms) => handoffAge(new Date(now - ms).toISOString(), now);
+  assert.equal(ago(0), "just now");
+  assert.equal(ago(59 * 1000), "just now");
+  assert.equal(ago(60 * 1000), "1 min ago");
+  assert.equal(ago(59 * 60 * 1000), "59 min ago");
+  assert.equal(ago(60 * 60 * 1000), "1 h ago");
+  assert.equal(ago(23 * 3600 * 1000), "23 h ago");
+  assert.equal(ago(24 * 3600 * 1000), "1 day ago");
+  assert.equal(ago(3 * 24 * 3600 * 1000), "3 days ago");
+  assert.equal(handoffAge("not a date", now), "");
+});
+
+test("the stop-with-a-handoff request is its own plain line, and stopAction sets the flag only when asked", () => {
+  assert.notEqual(STOP_HANDOFF_REPLY, STOP_REPLY);
+  assert.match(STOP_HANDOFF_REPLY, /handoff/i);
+  assert.doesNotMatch(STOP_HANDOFF_REPLY, /\b(brief|recap|minutes)\b/i);
+  assert.ok(!STOP_HANDOFF_REPLY.includes("—"), "no em dash in a line that rides to the agent");
+  assert.ok(!("handoff" in stopAction({})), "a plain stop carries no handoff key");
+  assert.deepEqual(stopAction({}), { i: "__stop", type: "stop" });
+  assert.equal(stopAction({ handoff: true }).handoff, true);
+  assert.equal(stopAction({ handoff: true }).type, "stop");
+});
+
 // Nineteen highlight colors, four shades each, two themes: far too many to
 // trust to eyeballing, and a failure here is a label nobody can read.
 const hexLum = (h) => {
@@ -773,6 +819,18 @@ test("a delete is a session action naming the folder, and its reply says it is f
   assert.equal(deleteSummary({ ...spec, files: 1 }).files, "1 file");
   assert.equal(deleteSummary({ ...spec, files: undefined }).files, "");
   assert.equal(deleteSummary({ ...spec, detail: "" }).stage, SPEC_STATE_LABELS.building);
+});
+
+test("a fixed bug says so once: on its chip, in the delete dialog and on its greyed cards", () => {
+  const fixed = { dir: "specs/old-bug", name: "old-bug", state: "fixed", detail: "bug fixed", files: 1, touched: 1 };
+  assert.equal(deleteSummary(fixed).stage, "Bug fixed");
+  const building = { dir: "specs/lunch-vote", name: "lunch-vote", state: "building", detail: "1 of 2 tasks done" };
+  assert.equal(deleteSummary(building).stage, `${SPEC_STATE_LABELS.building}: 1 of 2 tasks done`);
+  assert.equal(chipDetail(fixed), "");
+  assert.equal(chipDetail(building), "1 of 2 tasks done");
+  assert.equal(chipDetail({ ...building, detail: undefined }), "");
+  assert.match(FIXED_REASON, /Delete button/);
+  assert.doesNotMatch(FIXED_REASON, /✕/);
 });
 
 test("scanProject counts each spec's files", () => {

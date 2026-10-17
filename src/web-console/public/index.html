@@ -1661,6 +1661,23 @@
           <strong>Hide unavailable workflows</strong>, under the picker, hides
           them instead. It is on to begin with, and remembered on this machine.
         </p>
+        <p>
+          The <strong>✕</strong> on a spec deletes its folder, after two steps:
+          one says what goes, the other wants the spec's name typed. A fixed
+          bug has its own <strong>Delete</strong> button at the bottom of its
+          chip instead, and needs just one confirm, since the work is done.
+        </p>
+        <p>
+          A <strong>Handoff</strong> is a note a step left when you stopped it
+          with a handoff. It shows as a dashed chip after the specs. Pick one
+          and the cards give way to a preview with its Next task and four
+          buttons: <strong>Pick it up here</strong> carries on in the same step
+          and spec, <strong>Read it all</strong> shows the whole note,
+          <strong>Copy for a new conversation</strong> puts a ready prompt on
+          the clipboard, and <strong>Delete</strong> removes it. A picked-up
+          handoff drops off the list, but stays in
+          <code>~/.plan2code/handoffs/</code> until the 30-day sweep.
+        </p>
         <h4>The Suggested flag</h4>
         <p>
           One card may carry a <strong>Suggested</strong> flag: where Plan2Code
@@ -2092,8 +2109,16 @@
             through writing your answers down.
           </li>
           <li>
-            It asks first. <strong>Keep going</strong> backs out;
-            <strong>Stop and save</strong> stops.
+            It asks first, and offers two ways to stop.
+            <strong>Stop with a handoff</strong> saves your place and writes a
+            note the dashboard can offer to pick up later;
+            <strong>Just stop and save</strong> saves what the step keeps on
+            disk and gives you a command to resume, without the conversation;
+            <strong>Keep going</strong> backs out.
+          </li>
+          <li>
+            A handoff lands in <code>~/.plan2code/handoffs/</code> and shows on
+            the dashboard, next to your specs, until you use or delete it.
           </li>
           <li>
             At points where nothing is saved yet, such as early in a plan, the
@@ -2245,7 +2270,9 @@
             that folder is usually gitignored and git can't restore it. It
             shows each one with its size, and <strong>Delete these</strong>
             removes exactly that list. Your preferences, saved folders, models,
-            the launcher and the session you are in always stay.
+            the launcher and the session you are in always stay, and the
+            <code>handoffs/</code> folder is Plan2Code's own, so it is never
+            offered for removal.
           </li>
           <li>
             <strong>Back to default</strong> puts everything back as it was, and
@@ -2296,7 +2323,10 @@
           this machine who has it can open the session.
         </p>
         <h4>What is kept, and where</h4>
-        <p>Everything lives under <code>~/.plan2code/console/</code> in your home folder:</p>
+        <p>
+          Everything lives in your home folder, under
+          <code>~/.plan2code/console/</code> unless noted:
+        </p>
         <ul>
           <li>
             each session's questions, your drafts and your answers, in
@@ -2314,7 +2344,13 @@
           </li>
           <li>
             your Subagents switch for each project and skill, in
-            <code>subagents.json</code>.
+            <code>subagents.json</code>;
+          </li>
+          <li>
+            handoffs you save when you stop or with the Handoff skill, in
+            <code>~/.plan2code/handoffs/</code>, one <code>.md</code> and one
+            <code>.json</code> each, removed after the same
+            <span data-fact="cleanupDays">30</span> days.
           </li>
         </ul>
         <p>
@@ -2585,20 +2621,37 @@
       <!-- Only when stopping now would lose answers. A button that says it
            saves has to be true about the times it cannot. -->
       <p class="modal-why" id="stop-warn" hidden></p>
+      <div class="stop-choices">
+        <button type="button" class="stop-choice suggested" id="stop-handoff">
+          <span class="stop-choice-icon" aria-hidden="true">&#x270E;</span>
+          <span class="stop-choice-text">
+            <span class="stop-choice-title">Stop with a handoff</span>
+            <span class="stop-choice-detail">Saves your place and writes a handoff note. Next time the dashboard offers to pick it up right where this left off.</span>
+          </span>
+        </button>
+        <button type="button" class="stop-choice" id="stop-go">
+          <span class="stop-choice-icon" aria-hidden="true">&#x25A0;</span>
+          <span class="stop-choice-text">
+            <span class="stop-choice-title">Just stop and save</span>
+            <span class="stop-choice-detail">Saves what this step keeps on disk and gives you a command to resume. What we talked about is not kept.</span>
+          </span>
+        </button>
+      </div>
       <div class="modal-actions">
         <button type="button" class="btn ghost" id="stop-cancel">Keep going</button>
-        <button type="button" class="btn primary" id="stop-go">Stop and save</button>
       </div>
     </dialog>
 
     <!-- Deleting a spec from the dashboard's picker. Two deliberate steps: the
          first says what goes and that it is for good, the second wants the
-         spec's name typed. The page only asks; the agent deletes. -->
+         spec's name typed. A fixed bug takes the first step only. The page
+         only asks; the agent deletes. -->
     <dialog class="modal" id="delete-modal" aria-labelledby="delete-title">
       <h2 id="delete-title">Delete this spec?</h2>
       <p class="modal-blurb" id="delete-blurb"></p>
       <dl class="delete-facts" id="delete-facts"></dl>
       <p class="modal-why" id="delete-warn">This is permanent. <code>specs/</code> is not tracked by git, so nothing can bring these files back.</p>
+      <p class="modal-why" id="delete-warn-handoff" hidden>Handoffs are not kept anywhere else.</p>
       <div class="delete-confirm" id="delete-confirm" hidden>
         <label for="delete-name">To delete it for good, type <strong id="delete-name-hint"></strong></label>
         <input type="text" id="delete-name" autocomplete="off" spellcheck="false" />
@@ -2606,6 +2659,16 @@
       <div class="modal-actions">
         <button type="button" class="btn ghost" id="delete-cancel">Keep it</button>
         <button type="button" class="btn danger" id="delete-go">Delete this spec…</button>
+      </div>
+    </dialog>
+
+    <!-- A handoff's whole document, from the dashboard's "Read it all". Escape
+         closes it; the body is filled by the page with rendered markdown. -->
+    <dialog class="modal handoff-read" id="handoff-modal" aria-labelledby="handoff-title">
+      <h2 id="handoff-title">Handoff</h2>
+      <div class="handoff-body md" id="handoff-body"></div>
+      <div class="modal-actions">
+        <button type="button" class="btn ghost" id="handoff-close">Close</button>
       </div>
     </dialog>
 

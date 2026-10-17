@@ -199,17 +199,33 @@ the git board, three tabs — Changes, Branches and Sync — that open on the
 likely next step (Help's *The git board* topic walks through it), and asks
 before every push, publish and delete. In a folder that is not a git
 repository its card says *Not a git repository yet: it offers to start one*,
-and clicking it still works. **Diagnose a bug** sits beside it, also always
+and clicking it still works. **Codebase X-ray** is always available too: it
+explains how and why an area works, or ranks its rough spots into
+`specs/<name>/ARCHITECTURE-BRIEF-<date>.md`, and never changes code.
+**Diagnose a bug** sits beside it, also always
 available: it finds a bug's cause and writes it up as
 `specs/<bug-name>/DIAGNOSIS-<date>.md` without fixing it. Pick such a spec in
 the picker and it reads *Bug diagnosed*: Quick Task (suggested) and Plan light
 up, while Document, Implement, Implement + Review and Finalize stay greyed. Once
 Quick Task has fixed it, the folder reads *Bug fixed*: Quick Task offers to
 archive it to `specs--completed/`, and until then the picker never opens on it
-and hides it while *Hide unavailable workflows* is on. Click a card and Planny
+and hides it while *Hide unavailable workflows* is on. Its chip has a visible
+**Delete** button in place of the hover ✕ other specs carry, and one confirm
+removes the folder (any other spec also asks you to type its name). Click a card and Planny
 flies while it gets ready;
 a few seconds later the same page is that skill's console, already running. No
 command names to remember.
+
+Handoffs this checkout has not picked up yet follow the specs in the picker as
+dashed **Handoff** chips, each with its title and age. Select one and the skill
+cards give way to a preview: when it was written, its spec, the skill it came
+from and its Next task. **Pick it up here** carries on in that skill and spec
+in this same session (Quick Task takes over, and says so, when the skill or
+spec is gone), and the chip is gone from the next dashboard. **Read it all**
+opens the whole document, **Copy for a new conversation** copies a one-line
+prompt that points a fresh conversation at the file, and **Delete** removes it
+for good after one confirm. Handoffs from *Stop with a handoff* (below) and
+from the Handoff skill land in the same place, `~/.plan2code/handoffs/`.
 
 A freshly opened dashboard starts with Planny asleep in the middle of the page.
 Click to wake him: he snores once while he gets a gentle shake side to side,
@@ -465,6 +481,15 @@ A finished session says so, and ends in one of three shapes:
 - **Paused.** You pressed *Stop session*. The card names what was saved and
   gives the command that picks it up later. Nothing else is offered.
 
+*Stop session* offers two ways to stop (on the dashboard, where nothing has
+started, it is a plain Stop). **Stop with a handoff**, the suggested one,
+saves your place as usual and also has the agent write a handoff: where the
+work stands and the next task, kept in `~/.plan2code/handoffs/` rather than in
+your project. The paused card names the file, and the dashboard offers it as a
+chip until it is picked up. **Just stop and save** saves your place and gives
+the resume command, nothing more; where the step has nothing saved yet it reads
+*Stop anyway*, under a warning about what is lost.
+
 The first two also carry a **Back to the dashboard** button (beside the next
 step, or as the main button under "All done"). Press it and the same page turns
 back into the skill menu, in the same conversation, so the next skill starts
@@ -681,6 +706,7 @@ exception being the note attachments the agent keeps for a spec, above):
 | `~/.plan2code/console/sessions/<id>/` | the questions, your draft, your answers | 30 days after the session was last touched |
 | `~/.plan2code/console/sessions/<id>/workspace.json`, `ledger.ndjson`, `workspace-cursor.json` | the workspace's folders (paths, names, descriptions — never their contents), the session meter's events, and how far the agent has been told of workspace changes. Kept beside the session, so they outlive every dashboard hop | with the session |
 | `~/.plan2code/console/sessions/<id>/uploads/` | images and documents attached to notes and quick questions | 30 days after the session was last touched |
+| `~/.plan2code/handoffs/<id>.md`, `<id>.json` | each handoff's document, and which checkout, spec and skill it belongs to and whether it was picked up (`handoffs.mjs` is their one owner) | 30 days after it was last touched, picked up or not |
 | `~/.plan2code/console/looks.json` | your role, theme, colors, sounds and card width | always |
 | `~/.plan2code/console/subagents.json` | your Subagents switch, instruction and limit, per project folder and skill | always |
 | `~/.plan2code/console/sessions/<id>/subagents-setting.json`, `subagents-cursor.json` | this session's copy of the switch, and how far the agent has been told of it | with the session |
@@ -700,7 +726,8 @@ reads), `public/meter.js` and `public/mentions.js` (the `@name` popover) — and
 **Old sessions clean themselves up.** Each time a session opens, whole session
 folders nobody has touched for 30 days are deleted — questions, drafts,
 answers, uploads and all, paused or not — along with stray scratch files
-(`.json` / `.mjs`) left at the top of `~/.plan2code/console/` for as long.
+(`.json` / `.mjs`) left at the top of `~/.plan2code/console/` for as long, and
+handoffs in `~/.plan2code/handoffs/` untouched for as long, both files each.
 Your `looks.json` and the `console-dir` pointer are never touched, and neither
 is the session being opened. Nothing of value goes with them: the page is
 never the record, `specs/` in your project is.
@@ -711,7 +738,8 @@ needed: sessions untouched for 30 days (never the one you are in), anything at
 the top of `~/.plan2code/console/` other than `sessions/`, `looks.json`,
 `workspaces.json`, `subagents.json`, `console-dir` and `update-check.json`, and anything at the top of `~/.plan2code/` other than
 `console/`, `bin/`, `launcher.json`, `install.json` (what you installed, which
-`plan2code update` reads) and `models.json`. It also lists each
+`plan2code update` reads), `models.json` and `handoffs/` (old handoffs go by
+age, above). It also lists each
 folder in the project's `specs--completed/` whose newest file is more than 30
 days old: archived specs Finalize moved there. Deleting one is permanent:
 `specs--completed/` is usually gitignored, so git can't restore it. A stray is listed once
@@ -750,7 +778,7 @@ this:
 
 ### Routes
 
-The upload routes, the send, the overview read and the workspace. Like every page route, they are on `127.0.0.1`
+The upload routes, the send, the overview and handoff reads, and the workspace. Like every page route, they are on `127.0.0.1`
 behind the session cookie, and the ones that write also check the request's
 origin.
 
@@ -763,6 +791,7 @@ origin.
 | `POST /chat` | A Quick question `{ text, about?, images?, files?, conversation }`, or `{ reset: true, conversation }` for New conversation. Appended to the session's `chat.ndjson`. 400 `too-long` (over 4,000 characters), `image`, `file` or `bad`; 409 `offline`, `stale` or `limit` (10 per conversation). Never refused because a card send is still uncollected. |
 | `POST /chat/decision` | Approve or Decline on an edit the agent proposed: `{ re, decision, text?, conversation }`. Once per proposal; does not count toward the 10. |
 | `GET /overview?spec=specs/<name>` | The Overview tab's read of `<spec>/overview.md`, as `text/markdown` with `cache-control: no-store`. On the dashboard `spec` must be one of the scanned specs; elsewhere the session's own spec is used. The file's real path must stay inside the project, so `../`, absolute paths and symlinks pointing out all get 404. |
+| `GET /handoff?id=<id>` | *Read it all*: the handoff's `.md` from `~/.plan2code/handoffs/`, as `text/markdown` with `cache-control: no-store`. A dashboard only, and only an id its own scan listed: a used, unknown or malformed id is 404. |
 | `GET /workspace` | The Workspace dialog's list: folders, `missing`, `remote` and the agent's folder `issues`. `?check=1` re-checks every folder on disk first. |
 | `POST /workspace/add` | `{ path, name?, description? }`. The path is resolved against the folder the session started in (`~` expanded) and must be a folder: 400 `not-a-folder`, `duplicate` (with its `name`; compared case-insensitively on Windows and macOS), `bad-name`, or `name-taken` with a `suggest`. Answers the new entry, `nested: true` when it sits inside another folder in the list. |
 | `POST /workspace/edit` | `{ id, name?, description? }`. Renames or re-describes one folder: 400 `bad-name` / `name-taken`, 404 `unknown`. |

@@ -99,6 +99,7 @@ import {
   writeWorkspaceCursor,
 } from "./lib.mjs";
 import { snapshot } from "./git-repo.mjs";
+import { handoffsDir, isHandoffId, listHandoffs, markHandoffUsed, newHandoff, readHandoffMeta, removeHandoff, removeHandoffs, staleHandoffs } from "./handoffs.mjs";
 import { RUN_EVENTS, TASK_EVENTS, MAX_COMMITS, MAX_TASKS, isTaskCount, progressEntry } from "./public/meter.js";
 import { blockFor, offered } from "./public/subagents.js";
 import { changeLine } from "./public/workspace.js";
@@ -321,6 +322,13 @@ async function cmdOpen() {
   // own top level: `project` is the common-dir key so linked worktrees share
   // sessions, but each shows the specs on its own disk.
   const scan = state.workflow === "dashboard" ? scanProject(worktree) : null;
+  // This checkout's unused handoffs live outside every repo (handoffs.mjs), so
+  // they join the scan here and not in scanProject(), which also serves
+  // `specs.mjs list`. handoffsDir rides along so the page never guesses it.
+  if (scan) {
+    scan.handoffs = listHandoffs(worktree);
+    scan.handoffsDir = handoffsDir();
+  }
   // The git board's data, the same way: the console's own read-only snapshot
   // (git-repo.mjs), taken before the lock so no git process runs under it.
   const gitSnap = state.workflow === "git" ? snapshot(worktree, { prHosts: readPrHosts() }) : null;
@@ -384,14 +392,16 @@ async function cmdOpen() {
   // Nothing about this reaches the page.
   const sweptSessions = staleSessions(SESSIONS_DIR, Date.now(), SESSION_MAX_AGE_MS, sid);
   const sweptScratch = staleScratch(HOME_DIR, Date.now(), SESSION_MAX_AGE_MS);
+  const sweptHandoffs = staleHandoffs(Date.now(), SESSION_MAX_AGE_MS);
   const swept =
-    sweptSessions.length || sweptScratch.length
-      ? { swept: { sessions: sweptSessions, scratch: sweptScratch } }
+    sweptSessions.length || sweptScratch.length || sweptHandoffs.length
+      ? { swept: { sessions: sweptSessions, scratch: sweptScratch, handoffs: sweptHandoffs } }
       : {};
   const sweep = () => {
     sweepUploads(SESSIONS_DIR, Date.now(), UPLOAD_MAX_AGE_MS, sid).catch(() => {});
     removeSessions(SESSIONS_DIR, sweptSessions).catch(() => {});
     removeScratch(HOME_DIR, sweptScratch).catch(() => {});
+    removeHandoffs(sweptHandoffs).catch(() => {});
   };
 
   // A standing instruction the new agent is owed, as `subagents` and a
@@ -1107,7 +1117,8 @@ function consume(dir, resultPath, result, url, chat = []) {
   const [withWs, changes] = withWorkspace(dir, withChat);
   const [out, subCursor] = withSubagents(dir, withWs);
   const hop = hopFor(path.basename(dir), result);
-  print({ ...out, ...hop, ...(url ? { terminalLine: terminalLine(url) } : {}) });
+  markPickedUp(result);
+  print({ ...out, ...hop, ...handoffFor(result), ...(url ? { terminalLine: terminalLine(url) } : {}) });
   try {
     writeJsonAtomic(resultPath, collected);
   } catch {}
@@ -1166,21 +1177,78 @@ const HOP_ACTIONS = {
   launch: (a) => ({ workflow: a.workflow, spec: a.spec, skill: a.skill }),
   dashboard: () => ({ workflow: "dashboard", skill: "plan2code" }),
   commit: () => ({ workflow: "git", skill: "plan2code-git" }),
+  pickup: pickupHop,
 };
+
+// A pick-up hops into the skill and spec the handoff's `.json` names (the page
+// sends only the id). When the skill is no longer installed, the spec folder
+// is gone, or the Handoff skill wrote it, Quick Task picks it up instead,
+// flagged so the agent says so. In a
+// source tree no skill sits beside the console, so nothing can be told to be
+// missing and the stored skill stands.
+function skillPath(skill) {
+  return path.resolve(HERE, "..", "..", "..", skill, "SKILL.md");
+}
+
+function pickupHop(action) {
+  const id = action.handoff;
+  const meta = isHandoffId(id) ? readHandoffMeta(id) : null;
+  const handoffFile = isHandoffId(id) ? path.join(handoffsDir(), id + ".md") : undefined;
+  const quick = { workflow: "quick-task", spec: undefined, skill: "plan2code-quick-task", handoffFile, fallback: true };
+  if (!meta) return quick;
+  if (typeof meta.workflow !== "string" || !/^[a-z-]+$/.test(meta.workflow)) return quick;
+  // The Handoff skill's own handoff: resuming it would only write another one.
+  if (meta.workflow === "handoff") return quick;
+  if (typeof meta.skill !== "string" || !/^[a-z0-9-]+$/.test(meta.skill)) return quick;
+  const specGone =
+    typeof meta.spec === "string" && meta.spec && (!SAFE_SPEC.test(meta.spec) || !fs.existsSync(path.join(meta.worktree || "", meta.spec)));
+  const skillGone = !fs.existsSync(skillPath(meta.skill)) && fs.existsSync(skillPath("plan2code-quick-task"));
+  if (specGone || skillGone) return quick;
+  return { workflow: meta.workflow, spec: meta.spec || undefined, skill: meta.skill, handoffFile };
+}
+
+// A stop that asked for a handoff gets the Handoff skill's file beside it, so
+// the agent opens it instead of locating it. Only a built skill has one.
+function handoffFor(result) {
+  const actions = (result && Array.isArray(result.actions) && result.actions) || [];
+  if (!actions.some((a) => a && a.type === "stop" && a.i === "__stop" && a.handoff === true)) return {};
+  const file = path.resolve(HERE, "..", "..", "..", "plan2code-handoff", "SKILL.md");
+  return fs.existsSync(file) ? { handoffSkill: file } : {};
+}
+
+// A pick-up uses its handoff up as its hop is printed, so the next dashboard
+// scan no longer lists it. Never fatal; a repeat delivery marks it again.
+function markPickedUp(result) {
+  const actions = (result && Array.isArray(result.actions) && result.actions) || [];
+  for (const a of actions) {
+    if (a && a.type === "pickup" && typeof a.i === "string" && a.i.startsWith("__") && isHandoffId(a.handoff)) {
+      try {
+        markHandoffUsed(a.handoff);
+      } catch {}
+    }
+  }
+}
+
+// A spec name that is safe to put in the `resume` command: `specs/<name>` with
+// nothing a shell would act on. A handoff's `.json` and a page's send are both
+// data off disk or the wire, so the name is checked here and not trusted.
+const SAFE_SPEC = /^specs\/[^/\\"'`$;&|<>(){}*?!#~\r\n]+$/;
 
 function hopFor(sid, result) {
   const actions = (result && Array.isArray(result.actions) && result.actions) || [];
   const action = actions.find((a) => a && Object.hasOwn(HOP_ACTIONS, a.type) && typeof a.i === "string" && a.i.startsWith("__"));
   if (!action) return {};
-  const { workflow, spec, skill } = HOP_ACTIONS[action.type](action);
+  const { workflow, spec, skill, handoffFile, fallback } = HOP_ACTIONS[action.type](action);
   if (typeof workflow !== "string" || !/^[a-z-]+$/.test(workflow)) return {};
   const quote = (v) => (/[\s"]/.test(v) ? `"${v.replace(/"/g, '\\"')}"` : v);
-  const specArg = typeof spec === "string" && spec ? ` --spec ${quote(spec)}` : "";
+  const specArg = typeof spec === "string" && SAFE_SPEC.test(spec) ? ` --spec ${quote(spec)}` : "";
   const out = { resume: `node "${path.join(HERE, "console.mjs")}" open --resume ${sid} --no-open --workflow ${workflow}${specArg}` };
   if (typeof skill === "string" && /^[a-z0-9-]+$/.test(skill)) {
-    const file = path.resolve(HERE, "..", "..", "..", skill, "SKILL.md");
+    const file = skillPath(skill);
     if (fs.existsSync(file)) out.skillFile = file;
   }
+  if (typeof handoffFile === "string") out.handoffFile = handoffFile;
+  if (fallback) out.fallback = true;
   return out;
 }
 
@@ -1323,6 +1391,47 @@ function cmdDeleteSpec() {
   }
 }
 
+/* --------------------------------------------------------------- handoff */
+
+// A handoff the agent is about to write, claimed in ~/.plan2code/handoffs/
+// (handoffs.mjs) for this checkout: the Stop flow's "Stop with a handoff" and
+// the Handoff skill both start here. Only the .json is written; the agent
+// writes the document at the printed path.
+function cmdHandoff() {
+  const usage = "handoff needs: handoff new --workflow <w> --skill <s> [--spec specs/<x>] [--title <t>] [--from-stop]";
+  if (args._[0] !== "new" || args._.length > 1) die(usage, 2);
+  if (typeof args.workflow !== "string" || typeof args.skill !== "string") die(usage, 2);
+  if ("from-stop" in args && args["from-stop"] !== true) die("--from-stop takes no value", 2);
+  const { worktree, project } = repoRoots();
+  try {
+    const { id, path: file, meta } = newHandoff({
+      worktree,
+      project,
+      spec: args.spec,
+      workflow: args.workflow,
+      skill: args.skill,
+      title: args.title,
+      fromStop: args["from-stop"] === true,
+    });
+    print({ ok: true, id, path: file, meta });
+  } catch (err) {
+    print({ ok: false, message: err.message });
+    process.exit(3);
+  }
+}
+
+// The dashboard's Delete on a Handoff chip, carried out by the agent, the
+// same shape as delete-spec: removeHandoff() does every check.
+function cmdDeleteHandoff() {
+  if (typeof args.handoff !== "string" || !args.handoff.trim()) die("delete-handoff needs --handoff <id>", 2);
+  try {
+    print(removeHandoff(args.handoff));
+  } catch (err) {
+    print({ ok: false, message: err.message });
+    process.exit(3);
+  }
+}
+
 /* ----------------------------------------------------------------- help */
 
 function cmdHelp() {
@@ -1334,8 +1443,8 @@ port, and the filesystem as transport; this CLI is the whole agent surface.
   open    [--file <payload.json>] [--workflow <w>] [--title "<t>"] [--spec <dir>]
           [--session|--resume <sid>] [--no-open] [--idle-ms <ms>]
           Start or resume a session and its server. Prints { ok, sid, session,
-          url, terminalLine }, plus swept { sessions, scratch } when old
-          sessions or scratch files were removed. Run it FIRST, before
+          url, terminalLine }, plus swept { sessions, scratch, handoffs } when
+          old sessions, scratch files or handoffs were removed. Run it FIRST, before
           reading anything: the page shows a starting screen until your
           first post. --file is optional, and --title defaults to the
           project's folder name. Also prints workspace: { folders: [{ name,
@@ -1398,6 +1507,17 @@ port, and the filesystem as transport; this CLI is the whole agent surface.
           worktree: never a link, never deeper, never specs--completed/.
           Prints { ok, removed }; exit 2 = bad usage, 3 = refused, with
           { ok: false, message } saying why. Nothing is touched on a refusal.
+  handoff new --workflow <w> --skill <s> [--spec specs/<name>] [--title "<t>"] [--from-stop]
+          Claim a handoff for this checkout in ~/.plan2code/handoffs/ (Stop
+          with a handoff, the Handoff skill). Writes only <id>.json; you write
+          the document at path. Prints { ok, id, path, meta }; exit 2 = bad
+          usage, 3 = a bad value, with { ok: false, message } saying why.
+  delete-handoff --handoff <id>
+          Delete that handoff for good (a Handoff chip's Delete, a __delete
+          action): <id>.md and <id>.json, only in ~/.plan2code/handoffs/,
+          never a link. Prints { ok, removed }; exit 2 = bad usage, 3 =
+          refused, with { ok: false, message } saying why. Nothing is touched
+          on a refusal.
   status  [--session <sid>] [--all]
           One session, or (--all) every session on this machine, every project.
   stop    --session <sid> | --all
@@ -1665,6 +1785,8 @@ const COMMANDS = {
   keep: cmdKeep,
   forget: cmdForget,
   "delete-spec": cmdDeleteSpec,
+  handoff: cmdHandoff,
+  "delete-handoff": cmdDeleteHandoff,
   status: cmdStatus,
   stop: cmdStop,
   help: cmdHelp,
@@ -1684,7 +1806,7 @@ if (Number.isFinite(nodeMajor) && nodeMajor < 18) {
 
 if (!cmd || !Object.hasOwn(COMMANDS, cmd)) {
   process.stderr.write(
-    "console: usage: console.mjs <open|post|wait|chat|keep|forget|delete-spec|status|stop|help> [--session <id>] [--file <patch.json>] [--seconds N]\n"
+    "console: usage: console.mjs <open|post|wait|chat|keep|forget|delete-spec|handoff|delete-handoff|status|stop|help> [--session <id>] [--file <patch.json>] [--seconds N]\n"
   );
   process.exit(2);
 }
@@ -1692,7 +1814,7 @@ if (!cmd || !Object.hasOwn(COMMANDS, cmd)) {
 // A flag given with no value parses as `true`, and a boolean handed on as a
 // path or a name crashes somewhere deep (path.basename(true) throws). Every
 // flag that takes a value is checked once, here, and refused as bad usage.
-const VALUE_FLAGS = ["session", "sid", "resume", "file", "spec", "title", "workflow", "upload", "name", "from", "seconds", "limit", "idle-ms"];
+const VALUE_FLAGS = ["session", "sid", "resume", "file", "spec", "title", "workflow", "skill", "handoff", "upload", "name", "from", "seconds", "limit", "idle-ms"];
 for (const flag of VALUE_FLAGS) {
   if (flag in args && typeof args[flag] !== "string") die(`--${flag} needs a value`, 2);
 }

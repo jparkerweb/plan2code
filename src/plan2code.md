@@ -37,6 +37,7 @@ The page draws the cards itself — you never send the list. It also knows the r
 - A `diagnosed` spec ("Bug diagnosed") is a bug Diagnose wrote up: recommend Quick Task, or Plan when its `DIAGNOSIS-<date>.md` sizes the fix as big; its folder rides along on either launch.
 - A `fixed` spec ("Bug fixed") is a diagnosed bug Quick Task fixed but did not archive: finished, so never recommend for it or name it in the note; the picker never pre-selects one and hides it while unavailable workflows are hidden. The person archives it (Quick Task offers that once the bug is fixed) or deletes it with the picker's ✕.
 - Nothing on disk, or only `fixed` specs → `recommend: "plan2code-0-pathfinder"`; the note invites the first idea.
+- A handoff in `state.scan.handoffs` newer than the most recently touched spec is usually the place to start: say so in `note` (the page has no card to `recommend` for it).
 - Recommend only what you would tell a person who asked "where do I start?". When in doubt, no flag and a neutral note — the page falls back to flagging the selected spec's own next step.
 - `recommend` must name a lit card for the initial selection. If the person switches specs or starts fresh, the page derives the suggestion and detail from its scan instead.
 
@@ -58,7 +59,7 @@ Ground truth for menu notes and Ask-tab answers. For anything beyond this table,
 | 3-implement(-review) | `overview.md`, `phase-X.md` | code; `[x]` marks + completion summary in `phase-X.md` |
 | review | spec, diff | the fixes picked; no spec writes |
 | 4-finalize | spec + code | summary in `overview.md`; moves the spec to `specs--completed/` |
-| handoff | conversation, spec, git | `<timestamp>-handoff.md` (OS temp or `handoffs/`) |
+| handoff | conversation, spec, git | `~/.plan2code/handoffs/<id>.md`, listed on the dashboard |
 | changelog | `CHANGELOG.md`, `package.json`, git history | `CHANGELOG.md` entries, `package.json` version; no commits |
 | git | git status, branches, diffs, `AGENTS.md` | commits, branches; optional `.gitignore`, push, publish; no spec writes |
 | xray | the codebase, `git` history, `gh` when present | an answer; `ARCHITECTURE-BRIEF-<date>.md` or `XRAY-<area>-<date>.md` when asked |
@@ -107,6 +108,10 @@ If `skill` is not in the table below, say so on the page and stay the dashboard.
 | plan2code-git | git | | plan2code-changelog | changelog |
 | plan2code-xray | xray | | plan2code-diagnose | diagnose |
 
+## A pick-up arrives
+
+A handoff chip's **Pick it up here** sends `__pickup` with `resume`, `skillFile` and `handoffFile` (and `fallback` when the named skill or spec is gone, or the Handoff skill wrote it). Read `console-launches.md` → A pick-up, then do as a pick does: `resume` first, then the skill's file, then the handoff.
+
 ## A delete arrives
 
 The ✕ on a picker chip asks for that spec to go, after a two-step confirm on the page: `{ "i": "__delete", "type": "delete", "spec": "specs/<name>" }`. The page never deletes; you do, through the console's checked command, never your own `rm`:
@@ -114,6 +119,10 @@ The ✕ on a picker chip asks for that spec to go, after a two-step confirm on t
 1. `node "<D>/console.mjs" delete-spec --spec <action.spec>` from the project root. Exit 0 → `{ ok, removed }`. Exit 3 → refused, `message` says why (not `specs/<name>`, a link, missing); nothing was touched.
 2. `node "<D>/console.mjs" open --resume <sid> --no-open --workflow dashboard`, which rescans `specs/`.
 3. Post the menu again with `--wait`; the note says what was deleted, or why it was not. Stay the dashboard.
+
+A `fixed` spec is deleted after one confirm on the page (its own Delete button, no name to type); your steps are the same.
+
+A handoff's Delete is the same `__delete` with `handoff` (an id) instead of `spec`: run `node "<D>/console.mjs" delete-handoff --handoff <action.handoff>`, then steps 2 and 3.
 
 ## Coming back from another skill
 

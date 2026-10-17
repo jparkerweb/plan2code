@@ -38,6 +38,7 @@ import {
 } from "../src/web-console/lib.mjs";
 import {
   ROOT,
+  HANDOFFS_DIR,
   HOME,
   ENV,
   cookieFor,
@@ -434,6 +435,9 @@ test("cleanup finds old sessions and strays in both folders, and keeps every pro
     backdate(path.join(plan2code, "busy"));
     kept.push(busy);
     stray(path.join(plan2code, "notes.txt"));
+    // Handoffs are Plan2Code's own, however old: swept by age on open, never offered here.
+    backdate(put(path.join(plan2code, "handoffs", "2025-01-01-0900-handoff.md")));
+    backdate(path.join(plan2code, "handoffs"));
     // In use right now: a held lock and a temp between its write and rename.
     const live = [put(path.join(consoleDir, "workspaces.json.lock"), ""), put(path.join(plan2code, "models.json.123.tmp"))];
     kept.push(...live);
@@ -448,6 +452,7 @@ test("cleanup finds old sessions and strays in both folders, and keeps every pro
       "root:notes.txt",
       "session:20250801-101010-aaaaaa",
     ]);
+    assert.equal(items.some((i) => i.id === "root:handoffs"), false, "the handoffs folder is never a stray");
     assert.equal(STRAY_GRACE_MS, 60 * 60 * 1000);
     assert.equal(items.find((i) => i.id === "console:p1.json").bytes, 5);
     assert.equal(items.find((i) => i.id === "root:console-dev").kind, "folder");
@@ -657,6 +662,20 @@ test("open reports a month-old session under swept and removes it after printing
   assert.deepEqual(res.json.swept.sessions, [oldSid]);
   for (let i = 0; i < 20 && fs.existsSync(oldDir); i++) await new Promise((r) => setTimeout(r, 100));
   assert.equal(fs.existsSync(oldDir), false);
+});
+
+test("open reports a month-old handoff under swept.handoffs and removes both its files", async () => {
+  const id = "2025-01-01-0900-handoff";
+  fs.mkdirSync(HANDOFFS_DIR, { recursive: true });
+  const files = [path.join(HANDOFFS_DIR, id + ".md"), path.join(HANDOFFS_DIR, id + ".json")];
+  fs.writeFileSync(files[0], "# Handoff: old\n");
+  fs.writeFileSync(files[1], "{}");
+  for (const f of files) backdate(f);
+  const res = cli(["open", "--workflow", "plan", "--no-open"]);
+  cli(["stop", "--session", res.json.sid]);
+  assert.deepEqual(res.json.swept.handoffs, [id]);
+  for (let i = 0; i < 20 && files.some((f) => fs.existsSync(f)); i++) await new Promise((r) => setTimeout(r, 100));
+  assert.deepEqual(files.filter((f) => fs.existsSync(f)), []);
 });
 
 test("post and wait hand back the terminal line; the collected result on disk does not carry it", async () => {

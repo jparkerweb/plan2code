@@ -29,6 +29,17 @@ test("every skill with scripts ships common.mjs and version.json; dashboard ship
   assert.equal(JSON.parse(fs.readFileSync(path.join(SKILLS, "plan2code-4-finalize", "scripts", "version.json"), "utf8")).version, v);
 });
 
+test("the Handoff skill writes through the console's handoff new, with no folder or gitignore step", () => {
+  const skill = fs.readFileSync(path.join(SKILLS, "plan2code-handoff", "SKILL.md"), "utf8");
+  assert.match(skill, /console\.mjs" handoff new/);
+  assert.doesNotMatch(skill, /handoff-path\.mjs/);
+  assert.doesNotMatch(skill, /--dir temp/);
+  assert.doesNotMatch(skill, /\.gitignore/);
+  // handoff-path.mjs is retired: the build ships only the shared specs.mjs.
+  assert.ok(!fs.existsSync(path.join(SKILLS, "plan2code-handoff", "scripts", "handoff-path.mjs")), "handoff-path.mjs is not shipped");
+  assert.ok(fs.existsSync(path.join(SKILLS, "plan2code-handoff", "scripts", "specs.mjs")), "specs.mjs still is");
+});
+
 test("every script a SKILL.md (or a reference it ships) runs exists beside it, and answers --help", () => {
   for (const skill of fs.readdirSync(SKILLS)) {
     const dir = path.join(SKILLS, skill);

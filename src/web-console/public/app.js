@@ -9,7 +9,7 @@
 // that is local and reversible. For someone who has never used a tool like
 // this, that reversibility is the whole point.
 
-import { md, el, copyButton, selectContents } from "./render.js";
+import { md, mdInto, el, copyButton, selectContents } from "./render.js";
 import { ACCENTS, DEFAULT_ACCENT, DEFAULT_CARD_WIDTH, SOUND_EVENTS, cardWidth, soundKey, soundPrefs } from "./palette.js";
 import { activityLabel, workingLine } from "./labels.js";
 import { playWake } from "./boot.js";
@@ -46,6 +46,13 @@ import {
   launchTarget,
   deleteAction,
   deleteReply,
+  pickupAction,
+  pickupReply,
+  deleteHandoffAction,
+  deleteHandoffReply,
+  handoffCopyText,
+  handoffAge,
+  chipDetail,
   deleteSummary,
   isDeletableSpecDir,
   MAX_ATTACHMENTS,
@@ -71,6 +78,8 @@ import {
   STALE_MS,
   startPose,
   STOP_REPLY,
+  STOP_HANDOFF_REPLY,
+  stopAction,
   sentAnswer,
   agentRepliedAfterSend,
   indentReply,
@@ -829,6 +838,22 @@ const selSpec = () => {
   if (!specs.length) return null;
   if (local.specSel === undefined) return defaultSpec(specs);
   return specs.find((s) => s.dir === local.specSel) || null;
+};
+
+// This checkout's unused handoffs (scan.handoffs, newest first). A handoff is
+// picked in the same chip row as a spec, stored as `specSel = "handoff:<id>"`;
+// selSpec() then reads as "no spec", and selHandoff() is the handoff itself,
+// or null once it is gone from the scan (which also drops the stale pick).
+const handoffList = () => {
+  const sc = scan();
+  return sc && Array.isArray(sc.handoffs) ? sc.handoffs : [];
+};
+const selHandoff = () => {
+  if (typeof local.specSel !== "string" || !local.specSel.startsWith("handoff:")) return null;
+  const id = local.specSel.slice("handoff:".length);
+  const h = handoffList().find((x) => x.id === id) || null;
+  if (!h) delete local.specSel;
+  return h;
 };
 
 // The review a finished build offers, and where it has got to:
@@ -3098,6 +3123,10 @@ function openUpdateModal() {
 
 function renderDashboard(main) {
   maybeWake();
+  // First, so nothing below reads a pick whose handoff has left the scan, and
+  // a delete the agent's rescan has finished stops holding the buttons.
+  selHandoff();
+  settleDeleting();
   const menu = (S && S.menu) || {};
   const wrap = el("div", "dash");
   if (needsRoleNudge(looks)) wrap.appendChild(roleNudge());
@@ -3159,7 +3188,17 @@ function renderDashboard(main) {
   }
 
   const specs = specList();
-  if (specs.length) wrap.appendChild(renderSpecPicker(specs));
+  if (specs.length || handoffList().length) wrap.appendChild(renderSpecPicker(specs));
+  const handoff = selHandoff();
+  if (handoff) {
+    // A handoff is picked up, not launched: its skill and spec come from its
+    // own record, so the skill cards and their toggle have nothing to say.
+    if (!local.launching && !launchScoping && scopeMine !== "") syncWorkspaceScope();
+    wrap.appendChild(renderHandoffPreview(handoff));
+    main.appendChild(wrap);
+    queueMicrotask(maybeWelcome);
+    return;
+  }
   wrap.appendChild(hideUnavailableToggle());
   // Only when this tab's own pick moved: another tab changing the scope
   // sends a frame here too, and re-asserting this tab's pick on every render
@@ -3678,13 +3717,18 @@ function hideUnavailableToggle() {
    no send — so it costs nothing to change your mind. */
 function renderSpecPicker(specs) {
   const sel = selSpec();
+  const handoffs = handoffList();
+  const pickedHandoff = selHandoff();
   const box = el("section", "spec-pick");
-  box.appendChild(el("h3", "dash-group-title", "Pick up a spec, or start fresh"));
+  box.appendChild(
+    el("h3", "dash-group-title", handoffs.length ? "Pick up a spec or a handoff, or start fresh" : "Pick up a spec, or start fresh")
+  );
   const row = el("div", "spec-row");
 
-  const scratch = el("button", "spec-chip" + (sel ? "" : " is-sel"));
+  const scratchOn = !sel && !pickedHandoff;
+  const scratch = el("button", "spec-chip" + (scratchOn ? " is-sel" : ""));
   scratch.type = "button";
-  scratch.setAttribute("aria-current", String(!sel));
+  scratch.setAttribute("aria-current", String(scratchOn));
   scratch.appendChild(el("span", "spec-chip-name", "Start from scratch"));
   scratch.appendChild(el("span", "spec-chip-state", "a new idea"));
   scratch.addEventListener("click", () => {
@@ -3695,13 +3739,6 @@ function renderSpecPicker(specs) {
   });
   row.appendChild(scratch);
 
-  // A delete in flight ends when the agent's rescan lands (a new scan), gone
-  // or refused: either way the picker below is the truth again.
-  const sc = scan();
-  if (local.deleting && sc && sc.at !== local.deleting.scanAt) {
-    local.deleting = null;
-    save();
-  }
   for (const spec of specs) {
     const on = sel && sel.dir === spec.dir;
     // A fixed bug is finished: hidden while unavailable workflows are, dimmed
@@ -3715,7 +3752,8 @@ function renderSpecPicker(specs) {
     b.setAttribute("aria-current", String(Boolean(on)));
     b.appendChild(el("span", "spec-chip-name", spec.name));
     b.appendChild(el("span", "spec-chip-state", deleting ? "Deleting…" : SPEC_STATE_LABELS[spec.state] || spec.state));
-    if (spec.detail) b.appendChild(el("span", "spec-chip-detail", spec.detail));
+    const detail = chipDetail(spec);
+    if (detail) b.appendChild(el("span", "spec-chip-detail", detail));
     b.addEventListener("click", () => {
       local.specSel = spec.dir;
       save();
@@ -3724,7 +3762,9 @@ function renderSpecPicker(specs) {
     });
     wrap.appendChild(b);
     if (isDeletableSpecDir(spec.dir)) {
-      const del = el("button", "spec-chip-del", "✕");
+      // A fixed bug is done with, so its Delete is a visible button rather
+      // than the hover ✕ every other spec has.
+      const del = fixed ? el("button", "spec-chip-del-label", "Delete") : el("button", "spec-chip-del", "✕");
       del.type = "button";
       del.title = `Delete ${spec.dir}/`;
       del.setAttribute("aria-label", `Delete the spec ${spec.name}`);
@@ -3734,8 +3774,137 @@ function renderSpecPicker(specs) {
     }
     row.appendChild(wrap);
   }
+  // Handoffs follow the specs: dashed chips, the state word is "Handoff".
+  for (const h of handoffs) {
+    const on = Boolean(pickedHandoff && pickedHandoff.id === h.id);
+    const deleting = Boolean(local.deleting && local.deleting.dir === "handoff:" + h.id);
+    const b = el("button", "spec-chip is-handoff" + (on ? " is-sel" : "") + (deleting ? " is-deleting" : ""));
+    b.type = "button";
+    b.setAttribute("aria-current", String(on));
+    b.appendChild(el("span", "spec-chip-name", h.title || "Handoff"));
+    b.appendChild(el("span", "spec-chip-state", deleting ? "Deleting…" : "Handoff"));
+    b.appendChild(el("span", "spec-chip-detail", handoffAge(h.written)));
+    b.addEventListener("click", () => {
+      local.specSel = "handoff:" + h.id;
+      save();
+      render();
+    });
+    row.appendChild(b);
+  }
   box.appendChild(row);
   return box;
+}
+
+// A delete in flight ends when the agent's rescan lands (a new scan), gone
+// or refused: either way the picker is the truth again.
+function settleDeleting() {
+  const sc = scan();
+  if (local.deleting && sc && sc.at !== local.deleting.scanAt) {
+    local.deleting = null;
+    save();
+  }
+}
+
+// What a picked handoff shows: where it came from and its Next task, with the
+// four things to do with it.
+function renderHandoffPreview(h) {
+  const box = el("section", "handoff-preview");
+  box.appendChild(el("h3", "handoff-preview-title", h.title || "Handoff"));
+  const entry = SKILL_CATALOG.find((e) => e.skill === h.skill);
+  const meta = [
+    "Written " + (h.written ? new Date(h.written).toLocaleString() : "at an unknown time"),
+    h.spec ? "spec " + h.spec.replace(/^specs\//, "") : "no spec",
+    "from " + (entry ? entry.title : h.skill),
+  ];
+  box.appendChild(el("p", "handoff-preview-meta", meta.join(" · ")));
+  if (h.next) {
+    box.appendChild(el("p", "handoff-preview-label", "Next task"));
+    box.appendChild(el("p", "handoff-preview-next", h.next));
+  }
+  const busy = Boolean(local.launching || local.deleting) || gone || pendingResult;
+  const actions = el("div", "handoff-preview-actions");
+  const go = el("button", "btn primary", "Pick it up here");
+  go.type = "button";
+  go.disabled = busy;
+  go.addEventListener("click", () => pickUpHandoff(h));
+  const read = el("button", "btn", "Read it all");
+  read.type = "button";
+  read.addEventListener("click", () => readHandoff(h));
+  const copy = el("button", "btn", "Copy for a new conversation");
+  copy.type = "button";
+  copy.addEventListener("click", () => {
+    const dir = (scan() && scan().handoffsDir) || "";
+    const sep = dir.includes("\\") ? "\\" : "/";
+    const file = dir ? dir.replace(/[\\/]+$/, "") + sep + h.id + ".md" : h.id + ".md";
+    copyHandoffText(handoffCopyText(file), copy);
+  });
+  const del = el("button", "btn danger", "Delete");
+  del.type = "button";
+  del.disabled = busy;
+  del.addEventListener("click", () => openHandoffDelete(h));
+  actions.append(go, read, copy, del);
+  box.appendChild(actions);
+  return box;
+}
+
+// The prompt that sends a new conversation to the handoff. A refused
+// clipboard gets a plain word on the button instead of a silent nothing.
+async function copyHandoffText(text, button) {
+  try {
+    await navigator.clipboard.writeText(text);
+    button.textContent = "Copied";
+  } catch {
+    button.textContent = "Copy was refused";
+  }
+  setTimeout(() => (button.textContent = "Copy for a new conversation"), 1500);
+}
+
+// Pick it up here: a hop like a card launch. The page sends only the id; the
+// CLI reads the stored skill and spec, marks the handoff used and falls back
+// to Quick Task if either is gone.
+async function pickUpHandoff(h) {
+  if (gone || pendingResult || local.launching || finish()) return;
+  launchScoping = true;
+  await syncWorkspaceScope(h.spec || "");
+  try {
+    const res = await fetch("/submit", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ actions: [pickupAction(h)], reply: pickupReply(h) }),
+    });
+    if (res.status === 409) {
+      launchScoping = false;
+      pendingResult = true;
+      banner("Your last pick is still being picked up. One moment.", "info");
+      return;
+    }
+    if (!res.ok) throw new Error(String(res.status));
+    sound("startSkill");
+    local.launching = { skill: h.skill, title: h.title || "the handoff", at: Date.now() };
+    launchScoping = false;
+    pendingResult = true;
+    save();
+    render();
+  } catch {
+    launchScoping = false;
+    banner("That did not go through. Nothing was lost; try again.", "warn");
+  }
+}
+
+// Read it all: the document, in a dialog, from /handoff?id= (served only for
+// an id the dashboard's own scan listed).
+async function readHandoff(h) {
+  $("handoff-title").textContent = h.title || "Handoff";
+  const body = $("handoff-body");
+  body.replaceChildren(el("p", "md-p", "Reading…"));
+  $("handoff-modal").showModal();
+  try {
+    const res = await fetch("/handoff?id=" + encodeURIComponent(h.id), { cache: "no-store" });
+    if (res.status !== 200) throw new Error(String(res.status));
+    mdInto(body, await res.text());
+  } catch {
+    body.replaceChildren(el("p", "md-p", "This handoff could not be read."));
+  }
 }
 
 function dashCard(entry, menu) {
@@ -5248,8 +5417,13 @@ function buildReview(card, item, staged) {
   for (const v of verdicts) {
     const on = staged && staged.verdict === v.id;
     // A picked danger verdict stays red (filled), so choosing "Abort" never
-    // reads like choosing the safe default.
-    const b = el("button", "btn" + (on ? (v.danger ? " danger is-on" : " primary") : v.danger ? " danger" : ""), verdictText(v));
+    // reads like choosing the safe default. An unpicked approve is outlined
+    // in the accent, so the main way forward stands out.
+    const b = el(
+      "button",
+      "btn" + (on ? (v.danger ? " danger is-on" : " primary") : v.danger ? " danger" : v.id === "approve" ? " is-approve" : ""),
+      verdictText(v)
+    );
     b.type = "button";
     b.addEventListener("click", () =>
       stage(item.id, withNote(item, on ? null : { type: "answer", kind: "review", verdict: v.id }))
@@ -7550,13 +7724,58 @@ function openHomeConfirm() {
 
 // The picker's Delete: a dialog in two steps. The first says what goes and
 // that it is for good; "Delete this spec…" then reveals the second, which
-// enables the final button only once the spec's name is typed exactly.
+// enables the final button only once the spec's name is typed exactly. A
+// fixed bug skips the second step: its first press sends the delete.
 // Cancel, Escape or a click on Keep it at either step changes nothing.
 let deleteTarget = null;
+// The spec warning as index.html writes it, kept so a fixed bug's wording
+// never sticks for the next spec.
+let deleteWarnDefault = null;
+
+// A handoff's Delete reuses the same dialog in one step: no name to type, and
+// the warning says where the file lives instead of what git does not track.
+function openHandoffDelete(h) {
+  if (gone || pendingResult || local.launching || local.deleting) return;
+  deleteTarget = { handoff: h };
+  $("delete-title").textContent = "Delete this handoff?";
+  $("delete-blurb").textContent = "This handoff will be deleted from ~/.plan2code/handoffs/.";
+  $("delete-warn").hidden = true;
+  $("delete-warn-handoff").hidden = false;
+  const facts = $("delete-facts");
+  facts.replaceChildren();
+  const fact = (term, value) => {
+    if (!value) return;
+    facts.appendChild(el("dt", "", term));
+    facts.appendChild(el("dd", "", value));
+  };
+  const entry = SKILL_CATALOG.find((e) => e.skill === h.skill);
+  fact("Handoff", h.title || h.id);
+  fact("Written", h.written ? new Date(h.written).toLocaleString() : "");
+  fact("Spec", h.spec ? h.spec.replace(/^specs\//, "") : "");
+  fact("From", entry ? entry.title : h.skill);
+  $("delete-confirm").hidden = true;
+  const go = $("delete-go");
+  go.textContent = "Delete it";
+  go.classList.add("is-on");
+  go.disabled = false;
+  $("delete-modal").showModal();
+}
 
 function openDeleteConfirm(spec) {
   if (!isDeletableSpecDir(spec.dir) || gone || pendingResult || local.launching || local.deleting) return;
   deleteTarget = spec;
+  // A fixed bug is finished work: one confirm, and a warning that says so.
+  const fixed = spec.state === "fixed";
+  $("delete-title").textContent = "Delete this spec?";
+  const warn = $("delete-warn");
+  if (!deleteWarnDefault) deleteWarnDefault = [...warn.childNodes].map((n) => n.cloneNode(true));
+  warn.replaceChildren(
+    ...(fixed
+      ? ["The bug is fixed, so this only clears the write-up. ", el("code", "", "specs/"), " is not tracked by git, so it cannot be brought back."]
+      : deleteWarnDefault.map((n) => n.cloneNode(true)))
+  );
+  warn.hidden = false;
+  $("delete-warn-handoff").hidden = true;
   const sum = deleteSummary(spec);
   $("delete-blurb").textContent = `Everything in ${sum.folder} will be deleted from this project.`;
   const facts = $("delete-facts");
@@ -7575,8 +7794,8 @@ function openDeleteConfirm(spec) {
   $("delete-name").value = "";
   $("delete-confirm").hidden = true;
   const go = $("delete-go");
-  go.textContent = "Delete this spec…";
-  go.classList.remove("is-on");
+  go.textContent = fixed ? "Delete it" : "Delete this spec…";
+  go.classList.toggle("is-on", fixed);
   go.disabled = false;
   $("delete-modal").showModal();
 }
@@ -7584,6 +7803,8 @@ function openDeleteConfirm(spec) {
 function deleteStep() {
   const go = $("delete-go");
   if (!deleteTarget) return;
+  if (deleteTarget.handoff) return sendDeleteHandoff(deleteTarget.handoff);
+  if (deleteTarget.state === "fixed") return sendDelete(deleteTarget);
   if ($("delete-confirm").hidden) {
     $("delete-confirm").hidden = false;
     go.textContent = "Delete for good";
@@ -7594,6 +7815,38 @@ function deleteStep() {
   }
   if ($("delete-name").value.trim() !== deleteTarget.name) return;
   sendDelete(deleteTarget);
+}
+
+async function sendDeleteHandoff(h) {
+  const go = $("delete-go");
+  go.disabled = true;
+  try {
+    const res = await fetch("/submit", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ actions: [deleteHandoffAction(h)], reply: deleteHandoffReply(h) }),
+    });
+    if (res.status === 409) throw Object.assign(new Error("pending"), { pending: true });
+    if (!res.ok) throw new Error(String(res.status));
+    const sc = scan();
+    local.deleting = { dir: "handoff:" + h.id, scanAt: sc ? sc.at : null };
+    if (local.specSel === "handoff:" + h.id) delete local.specSel;
+    pendingResult = true;
+    save();
+    $("delete-modal").close();
+  } catch (err) {
+    $("delete-modal").close();
+    if (err && err.pending) pendingResult = true;
+    banner(
+      err && err.pending
+        ? "Your last pick is still being picked up, so that could not go yet. Nothing was deleted; try again in a moment."
+        : "That did not go through. Nothing was deleted; try again.",
+      "warn"
+    );
+  } finally {
+    deleteTarget = null;
+    render();
+  }
 }
 
 async function sendDelete(spec) {
@@ -7684,29 +7937,42 @@ function openStopConfirm() {
   }
   const n = Object.keys(local.staged).length + pendingNotes().length;
   const warn = stopWarning();
+  const dash = isDashboard();
   $("stop-blurb").textContent =
     (n === 1 ? "The answer you have ready goes with it. " : n ? `The ${n} answers you have ready go with it. ` : "") +
-    (isDashboard()
-      ? "Nothing has started yet, so there is nothing to save: this just ends the console session."
-      : warn
-        ? "Plan2Code stops here."
-        : "Plan2Code will save your place and give you a command to pick this up later, in a new conversation.");
+    (dash ? "Nothing has started yet, so there is nothing to save: this just ends the console session." : "");
+  $("stop-blurb").hidden = !$("stop-blurb").textContent;
   $("stop-warn").hidden = !warn;
   $("stop-warn").textContent = warn;
-  $("stop-go").textContent = isDashboard() ? "Stop" : warn ? "Stop anyway" : "Stop and save";
+  // The dashboard has nothing to hand off: one plain Stop. Elsewhere both
+  // choices show, and "Just stop and save" turns into "Stop anyway" where
+  // nothing is saved yet.
+  $("stop-handoff").hidden = dash;
+  const title = $("stop-go").querySelector(".stop-choice-title");
+  const detail = $("stop-go").querySelector(".stop-choice-detail");
+  if (dash) {
+    title.textContent = "Stop";
+    detail.textContent = "Ends the console session.";
+  } else if (warn) {
+    title.textContent = "Stop anyway";
+    detail.textContent = "Ends the session now. What the warning above names is not kept.";
+  } else {
+    title.textContent = "Just stop and save";
+    detail.textContent = "Saves what this step keeps on disk and gives you a command to resume. What we talked about is not kept.";
+  }
   $("stop-modal").showModal();
 }
 
-async function stopSession() {
-  const go = $("stop-go");
-  go.disabled = true;
+async function stopSession(handoff = false) {
+  const buttons = [$("stop-handoff"), $("stop-go")];
+  for (const b of buttons) b.disabled = true;
   const payload = stagedPayload();
-  payload.actions.push({ i: "__stop", type: "stop" });
+  payload.actions.push(stopAction({ handoff }));
   try {
     const res = await fetch("/submit", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ actions: payload.actions, reply: [...payload.replyLines, STOP_REPLY].join("\n") }),
+      body: JSON.stringify({ actions: payload.actions, reply: [...payload.replyLines, handoff ? STOP_HANDOFF_REPLY : STOP_REPLY].join("\n") }),
     });
     if (res.status === 409) throw Object.assign(new Error("pending"), { pending: true });
     if (!res.ok) throw new Error(String(res.status));
@@ -7725,7 +7991,7 @@ async function stopSession() {
       "warn"
     );
   } finally {
-    go.disabled = false;
+    for (const b of buttons) b.disabled = false;
     render();
   }
 }
@@ -8299,6 +8565,7 @@ function openHelpOn(id) {
 $("btn-home").addEventListener("click", openHomeConfirm);
 $("update-done").addEventListener("click", () => $("update-modal").close());
 $("delete-cancel").addEventListener("click", () => $("delete-modal").close());
+$("handoff-close").addEventListener("click", () => $("handoff-modal").close());
 $("delete-go").addEventListener("click", deleteStep);
 $("delete-name").addEventListener("input", () => {
   $("delete-go").disabled = !deleteTarget || $("delete-name").value.trim() !== deleteTarget.name;
@@ -8316,7 +8583,8 @@ $("home-cancel").addEventListener("click", () => $("home-modal").close());
 $("home-go").addEventListener("click", goHome);
 $("btn-stop").addEventListener("click", openStopConfirm);
 $("stop-cancel").addEventListener("click", () => $("stop-modal").close());
-$("stop-go").addEventListener("click", stopSession);
+$("stop-handoff").addEventListener("click", () => stopSession(true));
+$("stop-go").addEventListener("click", () => stopSession(false));
 $("stopping-hide").addEventListener("click", () => {
   stoppingHidden = true;
   $("stopping-modal").close();

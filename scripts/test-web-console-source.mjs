@@ -248,6 +248,107 @@ test("update check: the frame carries update only when a newer release is cached
   }
 });
 
+test("stop modal: handoff choice first, plain stop second, Keep going last, styled and wired", () => {
+  const web = (f) => fs.readFileSync(path.join(ROOT, "src", "web-console", "public", f), "utf8");
+  const html = web("index.html");
+  const app = web("app.js");
+  const css = web("app.css");
+  const dialog = html.match(/<dialog class="modal" id="stop-modal"[^>]*>([\s\S]*?)<\/dialog>/);
+  assert.ok(dialog, "index.html has the stop modal");
+  const body = dialog[1];
+  const at = (id) => body.indexOf(`id="${id}"`);
+  assert.ok(at("stop-handoff") >= 0 && at("stop-handoff") < at("stop-go") && at("stop-go") < at("stop-cancel"), "handoff, plain stop, Keep going, in that order");
+  assert.ok(body.includes("Stop with a handoff") && body.includes("Just stop and save"));
+  assert.doesNotMatch(body, /\sstyle=|<script/i);
+  assert.match(css, /\.stop-choice/, "app.css styles the choices");
+  assert.match(css, /\.stop-choice:focus-visible/, "and gives them a focus outline");
+  const open = app.slice(app.indexOf("function openStopConfirm()"), app.indexOf("async function stopSession("));
+  assert.ok(open.includes("stop-handoff") && open.includes("isDashboard()"), "openStopConfirm hides the handoff on the dashboard");
+  assert.ok(app.includes("stopSession(true)") && app.includes("STOP_HANDOFF_REPLY") && app.includes("stopAction"), "app.js wires the handoff stop");
+  const help = helpTemplate().match(/<section class="help-panel" data-tab="finishing">([\s\S]*?)<\/section>/);
+  assert.ok(help && help[1].includes("Stop with a handoff") && help[1].includes("Just stop and save") && help[1].includes("~/.plan2code/handoffs/"), "Help names both choices and where handoffs land");
+});
+
+// The dashboard's handoff chips, preview and their four actions.
+test("dashboard handoffs: dashed chips, a preview with four buttons, and the cards give way", () => {
+  const web = (f) => fs.readFileSync(path.join(ROOT, "src", "web-console", "public", f), "utf8");
+  const app = web("app.js");
+  const css = web("app.css");
+  const html = web("index.html");
+  const fn = (name, next) => app.slice(app.indexOf(`function ${name}(`), app.indexOf(next, app.indexOf(`function ${name}(`)));
+
+  const picker = fn("renderSpecPicker", "\nfunction ");
+  assert.ok(picker.includes("is-handoff") && picker.includes('"Handoff"'), "renderSpecPicker builds handoff chips");
+  assert.ok(picker.includes('"handoff:"'), "a handoff is picked as handoff:<id>");
+  const dash = fn("renderDashboard", "\n/* -----");
+  assert.ok(dash.includes("handoffList()"), "renderDashboard shows the picker for handoffs alone");
+  const early = dash.indexOf("renderHandoffPreview(");
+  assert.ok(early > 0 && early < dash.indexOf("hideUnavailableToggle()"), "the preview returns before the toggle and the card groups");
+  assert.match(app, /const selHandoff = \(\) =>/);
+  assert.match(app, /startsWith\("handoff:"\)/);
+
+  const preview = fn("renderHandoffPreview", "\nasync function ");
+  for (const label of ["Pick it up here", "Read it all", "Copy for a new conversation", "Delete"]) {
+    assert.ok(preview.includes(`"${label}"`), `the preview names ${label}`);
+  }
+  assert.ok(app.includes("pickupAction(") && app.includes('"/submit"'), "Pick it up here posts a __pickup to /submit");
+  assert.ok(app.includes('"/handoff?id="'), "Read it all fetches /handoff?id=");
+  assert.ok(app.includes("handoffCopyText("), "Copy puts the ready prompt on the clipboard");
+  assert.ok(app.includes("deleteHandoffAction(") && app.includes("function openHandoffDelete("), "Delete reuses the confirm dialog");
+
+  assert.match(css, /\.spec-chip\.is-handoff/, "app.css styles handoff chips");
+  assert.match(css, /\.handoff-preview\b/, "and the preview panel");
+
+  const modal = html.match(/<dialog class="modal handoff-read" id="handoff-modal"[^>]*>([\s\S]*?)<\/dialog>/);
+  assert.ok(modal, "index.html has #handoff-modal");
+  assert.doesNotMatch(modal[1], /\sstyle=|<script/i);
+  assert.ok(html.includes('id="delete-warn-handoff"'), "the delete dialog carries the handoff warning");
+
+  const panel = helpTemplate().match(/<section class="help-panel" data-tab="dashboard">([\s\S]*?)<\/section>/);
+  assert.ok(panel && panel[1].includes("Pick it up here") && panel[1].includes("30-day sweep"), "Help explains handoff chips");
+});
+
+// The sign-off card: Approve comes before Show me it working, and an unpicked
+// approve verdict is outlined in the accent.
+test("sign-off: approve leads show, and the approve button wears the accent", () => {
+  const doc = (f) => fs.readFileSync(path.join(ROOT, "src", "web-console", f), "utf8");
+  for (const f of ["notes/implement.md", "building-review.md"]) {
+    const text = doc(f);
+    const approve = text.indexOf('{ "id": "approve", "label": "Approve this phase" }');
+    const show = text.indexOf('{ "id": "show", "label": "Show me it working" }');
+    assert.ok(approve > 0 && show > approve, `${f} lists Approve this phase before Show me it working`);
+  }
+  const app = doc("public/app.js");
+  assert.match(app, /v\.id === "approve" \? " is-approve"/, "an unpicked approve verdict gets is-approve");
+  assert.match(doc("public/app.css"), /\.btn\.is-approve\s*\{[^}]*border-color:\s*var\(--accent\)/, "is-approve borders in the accent");
+});
+
+// A fixed bug's chip: a visible Delete, one confirm, and "bug fixed" said once.
+test("bug fixed delete: a promoted Delete on the chip and a one-step confirm", () => {
+  const web = (f) => fs.readFileSync(path.join(ROOT, "src", "web-console", "public", f), "utf8");
+  const app = web("app.js");
+  const fn = (name, next) => app.slice(app.indexOf(`function ${name}(`), app.indexOf(next, app.indexOf(`function ${name}(`)));
+
+  const picker = fn("renderSpecPicker", "\nfunction ");
+  assert.ok(picker.includes('"spec-chip-del-label"') && picker.includes('"Delete"'), "renderSpecPicker builds a Delete button for a fixed bug");
+  assert.ok(picker.includes("chipDetail("), "the chip's detail line comes from chipDetail");
+  assert.doesNotMatch(picker, /spec\.detail\b/, "never the scan's detail directly");
+
+  const css = web("app.css");
+  assert.match(css, /\.spec-chip-del-label\s*\{/, "app.css styles the Delete button");
+  assert.match(css, /\.spec-chip-del-label:focus-visible/, "and gives it a focus outline");
+
+  const step = fn("deleteStep", "\nasync function ");
+  const fixedAt = step.indexOf('state === "fixed"');
+  const revealAt = step.indexOf('$("delete-confirm").hidden = false');
+  assert.ok(fixedAt > 0 && revealAt > 0 && fixedAt < revealAt, "deleteStep sends a fixed bug's delete before it would reveal the name step");
+  const open = fn("openDeleteConfirm", "\nfunction ");
+  assert.ok(open.includes('state === "fixed"') && open.includes("so this only clears the write-up"), "openDeleteConfirm sets up one step and the fixed warning");
+
+  const panel = helpTemplate().match(/<section class="help-panel" data-tab="dashboard">([\s\S]*?)<\/section>/);
+  assert.ok(panel && /fixed\s+bug[\s\S]*?Delete[\s\S]*?one\s+confirm/i.test(panel[1]), "Help says a fixed bug has its own Delete and needs one confirm");
+});
+
 test("update banner: the modal is in the page, with the exact command and no inline styles or scripts", () => {
   const html = fs.readFileSync(path.join(ROOT, "src", "web-console", "public", "index.html"), "utf8");
   const app = fs.readFileSync(path.join(ROOT, "src", "web-console", "public", "app.js"), "utf8");
@@ -280,12 +381,13 @@ test("update banner: built only on the dashboard, dismissed per session, and Hel
   assert.match(help[1], /releasesLink\(/, "the help version is a Releases link");
 });
 
-// The Changelog card sits left of Git, the last card. It is always clickable,
-// and a launch from it resumes the session under its own workflow.
-test("the Changelog card comes just before Git, Git is last, and Changelog is always on", () => {
+// The Changelog card sits left of Git, which sits left of Handoff, the last
+// card. It is always clickable, and a launch from it resumes the session under
+// its own workflow.
+test("the Changelog card comes just before Git, Handoff is last, and Changelog is always on", () => {
   const skills = SKILL_CATALOG.map((e) => e.skill);
   assert.equal(skills.indexOf("plan2code-changelog") + 1, skills.indexOf("plan2code-git"));
-  assert.equal(skills[skills.length - 1], "plan2code-git");
+  assert.deepEqual(skills.slice(-3), ["plan2code-changelog", "plan2code-git", "plan2code-handoff"]);
   const entry = SKILL_CATALOG.find((e) => e.skill === "plan2code-changelog");
   assert.equal(entry.workflow, "changelog");
   assert.equal(entry.command, "/plan2code-changelog");
@@ -313,6 +415,22 @@ test("help: the stuck tab is second, with a callout and four symptom rows before
   }
   assert.ok(panel.indexOf("help-rows") < panel.indexOf("help-figure"), "the rows come before the diagram");
   assert.match(panel, /<svg class="help-callout-icon"[^>]*aria-hidden="true"/, "the icon is decoration");
+});
+
+test("help: privacy names the handoffs folder and preferences says Cleanup never offers it", () => {
+  const tpl = helpTemplate();
+  const privacy = tpl.match(/<section class="help-panel" data-tab="privacy">([\s\S]*?)<\/section>/)[1];
+  const kept = privacy.slice(privacy.indexOf("<h4>What is kept, and where</h4>"));
+  assert.match(kept, /(<code>)?~\/\.plan2code\/handoffs\/(<\/code>)?/, "privacy lists ~/.plan2code/handoffs/");
+  assert.doesNotMatch(
+    kept,
+    /Everything lives under\s+<code>~\/\.plan2code\/console\/<\/code>/,
+    "the lead no longer says everything lives under the console folder"
+  );
+  const prefs = tpl.match(/<section class="help-panel" data-tab="prefs">([\s\S]*?)<\/section>/)[1];
+  const cleanup = prefs.slice(prefs.indexOf("<strong>Cleanup</strong>"), prefs.indexOf("<strong>Back to default</strong>"));
+  assert.match(cleanup, /handoffs/, "the Cleanup text names the handoffs folder");
+  assert.match(cleanup, /never\s+offered/, "the Cleanup text says the handoffs folder is never offered for removal");
 });
 
 // Every say(...) call in a source slice, as its top-level arguments (raw

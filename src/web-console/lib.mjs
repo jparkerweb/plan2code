@@ -580,9 +580,10 @@ export async function removeScratch(consoleDir, names) {
 // protected files, its sessions dir (old sessions go one by one, by age) and,
 // under PLAN2CODE_CONSOLE_HOME, its runtime dir; ~/.plan2code keeps the
 // console, the launcher (bin/, launcher.json), the install record that
-// `plan2code update` reads (install.json) and the models the person added.
+// `plan2code update` reads (install.json), the models the person added and
+// the handoffs (old ones go one by one, by age, on open: handoffs.mjs).
 const KEPT_CONSOLE_ENTRIES = new Set([...PROTECTED_CONSOLE_FILES, "sessions", "runtime"]);
-export const KEPT_PLAN2CODE_ENTRIES = new Set(["console", "bin", "launcher.json", "install.json", "models.json"]);
+export const KEPT_PLAN2CODE_ENTRIES = new Set(["console", "bin", "launcher.json", "install.json", "models.json", "handoffs"]);
 // A stray must sit untouched this long before Cleanup lists it. The same
 // folders hold files that live for milliseconds -- a held
 // `workspaces.json.lock`, a `<file>.<pid>.tmp` between its write and its

@@ -38,28 +38,15 @@ the next task (and shape the whole document around it), but still confirm.
 
 ## Where to write it
 
-Ask the user if they would like to save the file to the temporary directory of the user's OS (this should be the default) or to some other location like `./handoffs/` at the repo root. Then let the script pick the exact path, from the project root:
+No question to ask: every handoff lives in `~/.plan2code/handoffs/`, outside every repo. From the project root, let the console name the file:
 
 ```
-node "<S>/handoff-path.mjs" --dir temp        # or: --dir handoffs
+node "<D>/console.mjs" handoff new --workflow handoff --skill plan2code-handoff --spec specs/<feature> --title "<short title>"
 ```
 
-`<S>` is `scripts/` beside this SKILL.md (`~/.agents/skills/plan2code-handoff/scripts/` globally). It prints one JSON object: `path` is `<dir>/<YYYY-MM-DD-HHmm>-handoff.md` from the clock (suffixed `-2`, `-3`... rather than overwrite an earlier handoff), and the folder is created if missing. Write the document to exactly that `path`. Exit 5 means the folder could not be created (or `--dir` names a file): ask for another location.
+`<D>` is `references/web-console/` beside this SKILL.md, as in Interface. Pass `--spec` only when the work was inside a spec; the title is a few words naming the work. It prints one JSON object: write the document to exactly its `path`, and tell the person that path. Exit 3 means it could not write there: say so and stop.
 
-### Make sure you aren't leaking the file into version control
-
-The handoff is working state for the next session, not a project artifact, so it
-should stay out of commits and PRs. Don't assume it will — this skill may run in
-any repo. The same output's `git` block says:
-
-- `repo: false`, or `inRepo: false` (the OS temp dir): nothing to ignore; just tell the user where the file is.
-- `ignored: true`: git already ignores it (via any `.gitignore`, global or nested; `git check-ignore` is the check).
-- `ignored: false`: it would be tracked; `git.ignoreLine` is the line to offer, and the top-level `warning` says so.
-
-If it is **not** ignored, do not silently modify the user's `.gitignore`. Tell
-them the file would be tracked by git and offer to add the `ignoreLine` (e.g.
-`handoffs/`) to `.gitignore` — let them decide. Some users may want handoffs committed so
-teammates get them; that's a legitimate choice, so present it, don't force it.
+The dashboard lists the handoff for this checkout until it is picked up, and old ones go after 30 days.
 
 ## If this touched a plan2code spec
 
@@ -142,10 +129,3 @@ lives (env var name, secret manager entry) rather than its value.
 Tell the user the path you wrote to and give a one-line summary of the confirmed
 next task, so they know what the incoming agent will start on. Mention that a
 fresh session can be pointed at the file to resume the work.
-
-If your ignore check above found the file is in a repo and **not** gitignored
-(`git.ignored: false`, which includes a repo with no `.gitignore`), say so plainly
-here, e.g. "note: `handoffs/` isn't gitignored in this repo, so this file will
-show up in `git status` and could be committed", and offer to add the
-`ignoreLine`. Outside a repo there is nothing to ignore. Never leave
-the user unaware that the handoff might ride along into a commit.
