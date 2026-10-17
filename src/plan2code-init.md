@@ -78,6 +78,9 @@ When you make a mistake, get corrected, or discover something about this codebas
 2. Keep it specific to this repo. General advice belongs nowhere.
 3. If this fix is a workflow rather than a rule, put it in `.claude/skills/` and link it from here.
 4. Include the change in the same commit and mention it in your summary.
+5. A rule broken twice becomes an automated check (a test, a lint rule or a script), not more prose.
+6. Before adding a line, look for one on the same topic: sharpen or extend that one rather than adding a near-duplicate.
+7. Keep the log to 17 entries at most. Over the cap, first merge entries that share a cause, then drop the lowest-value ones: one-offs unlikely to recur, rules a test or script now enforces, and entries about code that no longer exists.
 
 ## Failure log
 
