@@ -723,6 +723,15 @@ test("a card with a note box over the git board flows at its own height, never s
   assert.ok(fn.includes("isGitBoard()"), "no box grows over the board");
 });
 
+test("a card and its pager in the git board's card slot fill the board's width, never shrink to their content", () => {
+  const css = fs.readFileSync(path.join(ROOT, "src", "web-console", "public", "app.css"), "utf8");
+  // .card and .pager centre with auto inline margins; in the slot's grid those
+  // would shrink a short confirm, and the pager under it, to fit their content.
+  assert.match(css, /\.card\s*\{[^}]*margin:\s*0 auto/, "the base card still centres outside the board");
+  assert.match(css, /\.pager\s*\{[^}]*margin:\s*0 auto/, "the base pager still centres outside the board");
+  assert.match(css, /\.git-cards > \.card,\s*\.git-cards > \.pager\s*\{\s*margin:\s*0;\s*\}/, "the card slot drops the auto margins for both");
+});
+
 test("long task lines, long words, a narrow board and a narrow Ask pane never widen the page", () => {
   const css = fs.readFileSync(path.join(ROOT, "src", "web-console", "public", "app.css"), "utf8");
   const rule = (sel) => {

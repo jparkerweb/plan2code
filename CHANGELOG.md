@@ -33,6 +33,9 @@ All notable changes to Plan2Code will be documented in this file.
 - **handoff**: every handoff now lives in `~/.plan2code/handoffs/` (a Markdown file plus a small `.json` beside it), owned by the web console, and handoffs older than 30 days are swept when the console opens. The Handoff skill writes there with no folder or `.gitignore` question, and Cleanup never lists the folder. Handoffs written to the OS temp folder or a `handoffs/` folder before this change are not listed.
 - **dashboard**: a **Bug fixed** spec has a visible **Delete** that needs one confirm, and its chip no longer repeats the "bug fixed" line.
 - **web console**: the review sign-off card lists **Approve this phase** before **Show me it working**, with the approve button outlined in the accent colour.
+- **web console**: a sign-off's **yes** button (Quick Task's **Build it**, Finalize's **Archive it**) is outlined in your highlight colour too, like **Approve**.
+- **init**, **init-update**: the *Keeping this file current* section they write into `AGENTS.md` gains three rules: a rule broken twice becomes an automated check, a new Failure log line first looks for one on the same topic to sharpen instead, and the log holds 17 entries at most (over the cap, merge entries that share a cause, then drop the lowest-value ones). Init update offers the missing rules to an existing section and tidies the log on every run, showing each merge and removal for a yes before it writes.
+- **contributors**: this repo's `AGENTS.md` follows the same Failure log rules, and its three post-sync grep entries are merged into one.
 
 ### 🗑️ Removed
 
@@ -40,6 +43,8 @@ All notable changes to Plan2Code will be documented in this file.
 
 ### 🐛 Fixed
 
+- **web console**: a short card on the git board (a confirm such as *Delete 2 branches?*) fills the board's width instead of sitting narrow in the middle.
+- **web console**: a redraw no longer throws you back to the top of the finished screen, a doc tab, the Overview or the dashboard menu (pressing **Review it now**, or an agent update landing while you read). The page kept your place only on question cards; it now keeps it for whatever is scrolling, as long as the same thing is still on screen.
 - **dashboard**: a bug folder whose diagnosis Quick Task had marked `Fixed` no longer sits on the dashboard forever as *Files on disk*, pre-selected as the most recent spec with no card to clear it. The scan reports it as a new spec state, **Bug fixed**: no pipeline card lights for it, the picker never opens on it (it opens on the most recent spec still in play, or *Start from scratch*), and it is hidden while *Hide unavailable workflows* is on, dimmed otherwise. Quick Task, right after marking a diagnosis-only folder `Fixed`, offers to archive it to `specs--completed/<bug>/` with the same `specs.mjs archive` Finalize uses (a confirm card on the web console).
 
 ## v2.8.1

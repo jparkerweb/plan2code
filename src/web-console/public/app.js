@@ -1604,26 +1604,61 @@ function trackAbout() {
 // stages an answer went through this path -- checkboxes, radios, the Yes/No
 // buttons -- because staging an answer is a full render.
 //
-// The scroll is restored only while the same question is on screen. Moving to
-// another one should start at its top, not part-way down it.
+// Not only a question card: the finished screen's card and the dashboard
+// menu scroll themselves too, and a doc or the Overview scrolls the column.
+// Each of those lost its place on every redraw (a click that staged a send,
+// an agent post landing mid-read), until all of them came through here.
+//
+// The scroll is restored only while the same thing is on screen: the same
+// question, the same kind of card, the same tab. Moving to another one should
+// start at its top, not part-way down it. The git board keeps its own place
+// per tab, so it is left to itself.
+const MAIN_SCROLLERS = ":scope > .card, :scope > .dash, :scope > .launching, :scope > .dash-confirm, :scope > .waiting-pane";
+
+// What a scrolling card shows: the question it holds, asked of the card
+// itself, else its kind ("card handoff"), without the state classes a redraw
+// may change. The `selected` variable is no use here: the rail and the pager
+// both set it and then call render, so by now it already names where we are
+// going.
+function scrollerKey(node) {
+  if (node.dataset.item) return "item:" + node.dataset.item;
+  return [...node.classList].filter((c) => !c.startsWith("is-") && !c.startsWith("has-")).join(" ");
+}
+
+function mainPlace() {
+  const main = $("main");
+  if (main.querySelector(":scope > .git-board")) return null;
+  const inner = main.querySelector(MAIN_SCROLLERS);
+  if (inner && inner.scrollTop) return { inner: true, key: scrollerKey(inner), top: inner.scrollTop };
+  if (main.scrollTop) return { inner: false, key: drawnView, top: main.scrollTop };
+  return null;
+}
+
+function restoreMainPlace(place) {
+  if (!place) return;
+  const main = $("main");
+  if (main.querySelector(":scope > .git-board")) return;
+  if (!place.inner) {
+    if (drawnView === place.key) main.scrollTop = place.top;
+    return;
+  }
+  const inner = main.querySelector(MAIN_SCROLLERS);
+  if (inner && scrollerKey(inner) === place.key) inner.scrollTop = place.top;
+}
+
 function withFocus(fn) {
   const a = document.activeElement;
   const keep =
     a && (a.tagName === "TEXTAREA" || a.tagName === "INPUT" || a.tagName === "SELECT") && a.id
       ? { id: a.id, start: a.selectionStart, end: a.selectionEnd }
       : null;
-  const before = $("main").querySelector(".card.question");
-  const place = before && before.scrollTop ? { of: before.dataset.item, top: before.scrollTop } : null;
+  const place = mainPlace();
 
   fn();
 
   // Scroll first, then focus: focusing an element that is off screen scrolls it
   // into view, which would undo the restore we just did.
-  const after = $("main").querySelector(".card.question");
-  // Which question the card on screen HOLDS, asked of the card itself. The
-  // `selected` variable is no use here: the rail and the pager both set it and
-  // then call render, so by now it already names where we are going.
-  if (place && after && after.dataset.item === place.of) after.scrollTop = place.top;
+  restoreMainPlace(place);
   if (keep) {
     const n = $(keep.id);
     if (n) {
@@ -5417,11 +5452,13 @@ function buildReview(card, item, staged) {
   for (const v of verdicts) {
     const on = staged && staged.verdict === v.id;
     // A picked danger verdict stays red (filled), so choosing "Abort" never
-    // reads like choosing the safe default. An unpicked approve is outlined
-    // in the accent, so the main way forward stands out.
+    // reads like choosing the safe default. An unpicked approve or yes (Build
+    // it, Archive it) is outlined in the accent, so the main way forward
+    // stands out.
+    const forward = v.id === "approve" || v.id === "yes";
     const b = el(
       "button",
-      "btn" + (on ? (v.danger ? " danger is-on" : " primary") : v.danger ? " danger" : v.id === "approve" ? " is-approve" : ""),
+      "btn" + (on ? (v.danger ? " danger is-on" : " primary") : v.danger ? " danger" : forward ? " is-approve" : ""),
       verdictText(v)
     );
     b.type = "button";

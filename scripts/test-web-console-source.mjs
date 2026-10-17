@@ -319,7 +319,8 @@ test("sign-off: approve leads show, and the approve button wears the accent", ()
     assert.ok(approve > 0 && show > approve, `${f} lists Approve this phase before Show me it working`);
   }
   const app = doc("public/app.js");
-  assert.match(app, /v\.id === "approve" \? " is-approve"/, "an unpicked approve verdict gets is-approve");
+  assert.match(app, /const forward = v\.id === "approve" \|\| v\.id === "yes";/, "approve and yes are the forward verdicts");
+  assert.match(app, /forward \? " is-approve"/, "an unpicked forward verdict gets is-approve");
   assert.match(doc("public/app.css"), /\.btn\.is-approve\s*\{[^}]*border-color:\s*var\(--accent\)/, "is-approve borders in the accent");
 });
 
@@ -553,4 +554,18 @@ test("getting started: the new help, status and finished-screen strings carry no
   const stuck = tpl.match(/<section class="help-panel" data-tab="stuck">([\s\S]*?)<\/section>/)[1];
   const fresh = stuck.slice(0, stuck.indexOf("<h4>Not running, or not connected?</h4>"));
   assert.ok(!fresh.includes(EM), "the callout and rows have no em dash");
+});
+
+test("a redraw keeps the place of whatever scrolls: question card, finished screen, doc column", () => {
+  const app = fs.readFileSync(path.join(ROOT, "src", "web-console", "public", "app.js"), "utf8");
+  const fn = app.slice(app.indexOf("function withFocus("), app.indexOf("// Scroll memory across tab switches."));
+  assert.ok(fn.includes("const place = mainPlace();") && fn.includes("restoreMainPlace(place);"), "withFocus saves and restores the main column's place");
+  assert.ok(!fn.includes('querySelector(".card.question")'), "not only a question card");
+  const scrollers = app.match(/const MAIN_SCROLLERS = "([^"]+)"/);
+  assert.ok(scrollers, "MAIN_SCROLLERS lists the column's scrolling children");
+  for (const s of [".card", ".dash", ".waiting-pane"]) assert.ok(scrollers[1].includes(":scope > " + s), `${s} keeps its place`);
+  const place = app.slice(app.indexOf("function mainPlace("), app.indexOf("function withFocus("));
+  assert.match(place, /if \(drawnView === place\.key\) main\.scrollTop = place\.top;/, "the doc column comes back only on the same tab");
+  assert.match(place, /scrollerKey\(inner\) === place\.key/, "a card comes back only while it shows the same thing");
+  assert.match(place, /:scope > \.git-board/, "the git board keeps its own per-tab place");
 });
