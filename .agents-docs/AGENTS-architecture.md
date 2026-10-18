@@ -287,7 +287,7 @@ Key design points:
 
   | File | Writer | Holds |
   |---|---|---|
-  | `workspace.json` | `server.mjs` | the folders (`id`, `path`, `name`, `description`, `original`, `nested`), `version`, the `changes` log, `missing` ids, and `remote` (`remoteWarning()` in `sessions.mjs`, computed by the server at boot) |
+  | `workspace.json` | the server (`workspace.mjs`) | the folders (`id`, `path`, `name`, `description`, `original`, `nested`), `version`, the `changes` log, `missing` ids, and `remote` (`remoteWarning()` in `sessions.mjs`, computed by the server at boot) |
   | `ledger.ndjson` | `console.mjs` | append-only, one JSON line per entry. Meter events: `launch` (every fresh `open` and every resume into another workflow), `run` (a post's `run`, id scoped by launch, with `tasks` when a built phase reports one) and `answer` (one per item the person answered in a collected send, written by `ledgerAnswers()`, id `<launch>:answer:<send stamp>:<item>`). Also `folder-issue` reports |
   | `workspace-cursor.json` | `console.mjs` | the last workspace `version` handed to the agent; advanced after the print, never backwards |
 
@@ -297,7 +297,7 @@ Key design points:
   | File | Writer | Holds |
   |---|---|---|
   | `~/.plan2code/console/subagents.json` | `server.mjs` | per project folder → workflow: `{ on, instruction, max }`, `instruction: null` being the shipped default; on `PROTECTED_CONSOLE_FILES` |
-  | `<session>/subagents-setting.json` | `server.mjs` | `{ workflow, on, instruction, max, revision }`: synced from the store at boot and on any workflow change (`syncSubagentSetting()`), `revision` bumped only by a real change |
+  | `<session>/subagents-setting.json` | the server (`settings.mjs`) | `{ workflow, on, instruction, max, revision }`: synced from the store at boot and on any workflow change (`serverSubagents().sync` in `settings.mjs`), `revision` bumped only by a real change |
   | `<session>/subagents-cursor.json` | `console.mjs` | `{ revision, state }`, the last block handed over; `open` resets it, and it moves only after the print |
   | `state.json` → `helpers` | `console.mjs post` | the helpers the agent reports, merged by `id`, checked by `checkHelpers()` plus the prose scan; dropped by `switchWorkflow()` on a dashboard hop |
 
