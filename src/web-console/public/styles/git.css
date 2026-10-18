@@ -88,6 +88,7 @@
 .git-tab-badge.is-next { color: var(--accent-ink); background: var(--accent); border-color: var(--accent); }
 .git-tab-badge.is-warn.is-next { color: var(--accent-ink); background: var(--warn); border-color: var(--warn); }
 .git-done { margin: 0 0 6px auto; }
+.git-done:not(:disabled) { border-color: var(--accent); }
 
 /* The next step: one primary button, at most one quieter one. */
 .git-step {
