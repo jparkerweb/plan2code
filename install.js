@@ -2840,4 +2840,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { update, UPDATE_STEPS, INSTALL_RECORD, INSTALL_PIECES, readInstallRecord, recordInstalled, forgetInstalled };
+module.exports = { update, UPDATE_STEPS, INSTALL_RECORD, INSTALL_PIECES, readInstallRecord, recordInstalled, forgetInstalled, SOURCE_PROMPTS, generateSkillName };

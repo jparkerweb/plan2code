@@ -21,7 +21,7 @@ import path from "node:path";
 import { execFileSync, spawnSync } from "node:child_process";
 import http from "node:http";
 import { fileURLToPath } from "node:url";
-import { readChat } from "../src/web-console/lib.mjs";
+import { readChat } from "../src/web-console/inbox.mjs";
 
 export const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 export const CONSOLE_CLI = path.join(ROOT, "src", "web-console", "console.mjs");
@@ -176,6 +176,14 @@ export const helpTemplate = () => {
   const html = fs.readFileSync(path.join(ROOT, "src", "web-console", "public", "index.html"), "utf8");
   const tpl = html.match(/<template id="help-content">([\s\S]*?)<\/template>/);
   assert.ok(tpl, "index.html has the help-content template");
+  return tpl[1];
+};
+
+// The Planny poses each skill's starting screen clones, from index.html.
+export const poseTemplate = () => {
+  const html = fs.readFileSync(path.join(ROOT, "src", "web-console", "public", "index.html"), "utf8");
+  const tpl = html.match(/<template id="start-poses">([\s\S]*?)<\/template>/);
+  assert.ok(tpl, "index.html has the start-poses template");
   return tpl[1];
 };
 

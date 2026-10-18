@@ -10,6 +10,9 @@
 // No DOM, no `local`, no fetch. If a function in here needs any of those, it
 // belongs in app.js instead.
 
+import { FIXED_REASON, SKILLS, labelFor, skillByName, skillFor } from "./skills.js";
+import { SPEC_STATES, stateFor } from "./spec-states.js";
+
 /* ----------------------------------------------------- the sent answer */
 
 /**
@@ -253,54 +256,18 @@ export function suggestionFrom(item) {
 
 // The badge each workflow wears. Shared with the server, which writes it into
 // the page it serves so the first paint already names the session instead of
-// flashing a placeholder until the script arrives.
-export const WORKFLOW_LABEL = {
-  dashboard: "Dashboard",
-  init: "Setting up",
-  "init-update": "Refreshing",
-  pathfinder: "Pathfinder",
-  plan: "Planning",
-  "revise-plan": "Revising the plan",
-  document: "Documenting",
-  implement: "Building",
-  "implement-review": "Building + review",
-  review: "Review",
-  "quick-task": "Quick task",
-  finalize: "Wrapping up",
-  handoff: "Handoff",
-  git: "Git",
-  changelog: "Changelog",
-  xray: "X-ray",
-  diagnose: "Diagnosing",
-};
+// flashing a placeholder until the script arrives. Derived from skills.js.
+export const WORKFLOW_LABEL = Object.fromEntries(SKILLS.map((s) => [s.workflow, s.label]));
 
 export function workflowLabel(workflow) {
-  return WORKFLOW_LABEL[workflow] || workflow || "Session";
+  return labelFor(workflow) || workflow || "Session";
 }
 
 // The workflows that ship the console (install.js bundles it into every
 // skill as `additionalReferences`). Any other next step has no browser page
 // to open, and asking for one would send the next session looking for
-// something that is not there.
-export const CONSOLE_WORKFLOWS = [
-  "/plan2code",
-  "/plan2code-init",
-  "/plan2code-init-update",
-  "/plan2code-0-pathfinder",
-  "/plan2code-quick-task",
-  "/plan2code-1-plan",
-  "/plan2code-1b-revise-plan",
-  "/plan2code-2-document",
-  "/plan2code-3-implement",
-  "/plan2code-3-implement-review",
-  "/plan2code-review",
-  "/plan2code-4-finalize",
-  "/plan2code-handoff",
-  "/plan2code-git",
-  "/plan2code-changelog",
-  "/plan2code-xray",
-  "/plan2code-diagnose",
-];
+// something that is not there. Derived from skills.js: every entry is one.
+export const CONSOLE_WORKFLOWS = SKILLS.map((s) => s.command);
 
 // Rides on the end of the command as part of the skill's argument. Every
 // console skill takes it as the answer to "web console or terminal?" instead
@@ -567,192 +534,15 @@ export const CATALOG_GROUPS = [
 
 // `spec: true` marks the cards that take a spec folder as their target: when
 // the picker has a spec selected, its `dir` rides along in the `__launch`
-// action so the launched skill knows which spec it was picked for.
-export const SKILL_CATALOG = [
-  {
-    skill: "plan2code-init",
-    command: "/plan2code-init",
-    workflow: "init",
-    group: "setup",
-    chip: "Set up",
-    title: "Set up this project",
-    blurb: "Reads your project and writes AGENTS.md, the guide every later step works from.",
-    about:
-      "Plan2Code reads the whole project: how it is organized, how it runs, and where the sharp edges are. Then it writes AGENTS.md, the guide every later step steers by. It asks a few questions as it goes, so nothing important gets guessed. Run this once per project, or again when the project has moved on.",
-  },
-  {
-    skill: "plan2code-init-update",
-    command: "/plan2code-init-update",
-    workflow: "init-update",
-    group: "setup",
-    chip: "Set up",
-    title: "Refresh AGENTS.md",
-    blurb: "Brings AGENTS.md and its notes up to date with what the project has learned lately.",
-    about:
-      "The project moved on since AGENTS.md was written: new commands, new habits, new gotchas. This re-reads the project, asks what changed, and folds it into AGENTS.md and the notes beside it. Cheaper than a fresh setup, and whatever is still right is kept.",
-  },
-  {
-    skill: "plan2code-0-pathfinder",
-    command: "/plan2code-0-pathfinder",
-    workflow: "pathfinder",
-    group: "pipeline",
-    chip: "Step 0",
-    spec: true,
-    title: "Pathfinder",
-    blurb: "A foggy idea becomes a clear list of decisions, settled one question at a time.",
-    about:
-      "You have a rough idea and a lot of unknowns. Pathfinder asks one question at a time: who it is for, what it must do, what could go wrong. Each answer is written down in a spec folder. It ends with a list of decisions clear enough to plan from, and nothing gets built yet.",
-  },
-  {
-    skill: "plan2code-1-plan",
-    command: "/plan2code-1-plan",
-    workflow: "plan",
-    group: "pipeline",
-    chip: "Step 1",
-    spec: true,
-    title: "Plan",
-    blurb: "Requirements, technical design and your approval: the shape of what gets built.",
-    about:
-      "Turns what you bring into a real plan: a finished Pathfinder map, a folder of design notes, or just the idea in your head. You get requirements, a technical design, a phase-by-phase breakdown, and a final version to approve before anything is built. This is where 'what are we building' becomes 'how it gets built'.",
-  },
-  {
-    skill: "plan2code-1b-revise-plan",
-    command: "/plan2code-1b-revise-plan",
-    workflow: "revise-plan",
-    group: "pipeline",
-    chip: "Step 1b",
-    spec: true,
-    title: "Revise the plan",
-    blurb: "Requirements changed mid-build? Adjust the plan without starting over.",
-    about:
-      "Requirements moved mid-build: a feature added, a rule dropped, a deadline pulled in. This adjusts the existing spec for the change, shows you what it affects, and only rewrites what actually has to move. The approved plan stays the plan.",
-  },
-  {
-    skill: "plan2code-2-document",
-    command: "/plan2code-2-document",
-    workflow: "document",
-    group: "pipeline",
-    chip: "Step 2",
-    spec: true,
-    title: "Document",
-    blurb: "The plan becomes a checklist of small tasks, grouped into phases, that a developer can just do.",
-    about:
-      "Writes the plan as numbered phase files. Each phase is a checklist of tasks small enough to just do, with the details a builder needs right there. This is the file the build step works from, and the thing a later session can pick up cold.",
-  },
-  {
-    skill: "plan2code-3-implement",
-    command: "/plan2code-3-implement",
-    workflow: "implement",
-    group: "pipeline",
-    chip: "Step 3",
-    spec: true,
-    title: "Implement",
-    blurb: "Builds the next phase, task by task, with a report and your sign-off at the end.",
-    about:
-      "Builds the next phase of the spec. Tasks get checked off one by one, with progress and the occasional decision landing on this page as it goes. It ends with a report of what was built and a sign-off card you approve before the phase counts as done.",
-  },
-  {
-    skill: "plan2code-3-implement-review",
-    command: "/plan2code-3-implement-review",
-    workflow: "implement-review",
-    group: "pipeline",
-    chip: "Step 3",
-    spec: true,
-    title: "Implement + review",
-    blurb: "One phase built, then a careful review of the changes, then your sign-off. All in one run.",
-    about:
-      "The same build as Implement, with a review folded in before sign-off. The phase is built, then a fresh pass hunts for problems in exactly what changed, you pick what gets fixed, and only then does the sign-off card arrive.",
-  },
-  {
-    skill: "plan2code-4-finalize",
-    command: "/plan2code-4-finalize",
-    workflow: "finalize",
-    group: "pipeline",
-    chip: "Step 4",
-    spec: true,
-    title: "Finalize",
-    blurb: "Checks the work, writes the summary, files the specs away and suggests the commit message.",
-    about:
-      "The closer. Checks every task against the spec, makes sure the build actually works, writes the summary into overview.md, updates the project docs, and suggests the commit message. Run it when the feature is done. It leaves the project tidy behind it.",
-  },
-  {
-    skill: "plan2code-quick-task",
-    command: "/plan2code-quick-task",
-    workflow: "quick-task",
-    group: "extra",
-    chip: "Utility",
-    title: "Quick task",
-    blurb: "Too small for the full process? A quick plan, then it just builds it.",
-    about:
-      "A fix, a tweak, a small feature. Not worth a spec folder. Describe it, confirm the one-line plan, and it builds it right there, with a report at the end. The fast lane for work the full process would over-plan.",
-  },
-  {
-    skill: "plan2code-review",
-    command: "/plan2code-review",
-    workflow: "review",
-    group: "extra",
-    chip: "Utility",
-    title: "Review",
-    blurb: "A second opinion on the changes. Problems ranked, and you pick what gets fixed.",
-    about:
-      "A fresh-eyes pass over what changed: bugs, gaps, and the things the builder was too close to see. Problems come back ranked with a suggestion each, you pick which ones get fixed, and it fixes them.",
-  },
-  {
-    skill: "plan2code-xray",
-    command: "/plan2code-xray",
-    workflow: "xray",
-    group: "extra",
-    chip: "Utility",
-    title: "Codebase X-ray",
-    blurb: "Explain how and why an area works, or find the rough spots worth fixing.",
-    about:
-      "Two ways into code you did not write. Explain an area: how it works, step by step, and why it is that way, citing the files and the commits and pull requests behind it. Or find the rough spots: files that always change together, thin layers, tangled boundaries and busy code with no tests, ranked with a concrete example each. You tick the ones worth fixing and they become a brief for Pathfinder or Plan. It never changes code.",
-  },
-  {
-    skill: "plan2code-diagnose",
-    command: "/plan2code-diagnose",
-    workflow: "diagnose",
-    group: "extra",
-    chip: "Utility",
-    title: "Diagnose a bug",
-    blurb: "Find a bug's cause and write it up, without fixing it.",
-    about:
-      "Something is broken and nobody knows why. Diagnose asks what goes wrong and how to see it, then builds a command that fails on the bug before it forms a theory. It narrows the cause down to a file and a function, says how sure it is, and sizes the fix. The write-up lands in a spec folder, and the dashboard then offers Quick Task to fix it, or Plan when the fix is big. It never changes code.",
-  },
-  {
-    skill: "plan2code-changelog",
-    command: "/plan2code-changelog",
-    workflow: "changelog",
-    group: "extra",
-    chip: "Utility",
-    title: "Changelog",
-    blurb: "Checks the CHANGELOG version against the main branch and suggests entries for what is new.",
-    about:
-      "Works out the right version from the default branch, then compares your branch with the latest CHANGELOG entry and suggests the entries it is missing. You edit them before anything is written, it keeps package.json in step, and it offers to commit the result in Git. If the newest version is not released or on another branch yet, it adds to that entry instead of starting a new one.",
-  },
-  {
-    skill: "plan2code-git",
-    command: "/plan2code-git",
-    workflow: "git",
-    group: "extra",
-    chip: "Utility",
-    title: "Git",
-    blurb: "Branches, pull, push and commits on one board that stays open while you work.",
-    about:
-      "Shows your branch, what is ahead or behind, and every local and remote branch. Switch, create, delete or clean up branches, pull (rebasing when they have split, with help on conflicts), push or publish, and commit with a clear message. It asks before every push, publish and delete, and never force-pushes.",
-  },
-  {
-    skill: "plan2code-handoff",
-    command: "/plan2code-handoff",
-    workflow: "handoff",
-    group: "extra",
-    chip: "Utility",
-    title: "Handoff",
-    blurb: "Pack the current session into a document a fresh session can pick up cold.",
-    about:
-      "Writes down everything a new session would need, as a single document: what was decided, what is done, what is left. Use it when a conversation got long, a machine changed, or tomorrow-you deserves the context today-you has.",
-  },
-];
+// action so the launched skill knows which spec it was picked for. Derived from
+// skills.js: the entries with a card, in their order, each card's fields
+// beside the skill's name, command and workflow.
+export const SKILL_CATALOG = SKILLS.filter((s) => s.card).map((s) => ({
+  skill: s.skill,
+  command: s.command,
+  workflow: s.workflow,
+  ...s.card,
+}));
 
 // A workflow by the name its dashboard card gives it ("Implement"), for the
 // screens that speak of it as a thing being started rather than as a badge.
@@ -764,74 +554,79 @@ export function workflowTitle(workflow) {
 // Every skill gets its own Planny on the starting and waiting screens, drawn
 // as a <template data-pose> in index.html. A skill that is a variant of
 // another borrows its pose. Anything else (the dashboard) keeps the flight.
-export const START_POSES = [
-  "init",
-  "pathfinder",
-  "plan",
-  "document",
-  "implement",
-  "finalize",
-  "quick-task",
-  "review",
-  "handoff",
-  "git",
-  "changelog",
-  "xray",
-  "diagnose",
-];
-
-const POSE_ALIASES = { "init-update": "init", "revise-plan": "plan", "implement-review": "implement" };
+// Derived from skills.js: every pose an entry names, once.
+export const START_POSES = [...new Set(SKILLS.map((s) => s.pose).filter(Boolean))];
 
 export function startPose(workflow) {
-  const pose = POSE_ALIASES[workflow] || workflow;
-  return START_POSES.includes(pose) ? pose : null;
+  return skillFor(workflow)?.pose || null;
 }
 
 export function catalogEntry(skill) {
-  return SKILL_CATALOG.find((e) => e.skill === skill) || null;
+  const entry = skillByName(skill);
+  return entry && entry.card ? SKILL_CATALOG.find((e) => e.skill === entry.skill) : null;
 }
 
 /* ------------------------------------------- dashboard card availability */
 
 // What the picker shows next to a spec's name — the pipeline position the
-// server's scan worked out, in plain words.
-export const SPEC_STATE_LABELS = {
-  diagnosed: "Bug diagnosed",
-  fixed: "Bug fixed",
-  exploring: "Exploring",
-  mapped: "Ready to plan",
-  planned: "Ready to document",
-  documented: "Ready to build",
-  building: "Building",
-  built: "Ready to finalize",
-  unrecognized: "Files on disk",
-};
+// server's scan worked out, in plain words. Derived from spec-states.js.
+export const SPEC_STATE_LABELS = Object.fromEntries(Object.entries(SPEC_STATES).map(([name, s]) => [name, s.label]));
 
 // The card each spec state exists to light up. Used as the fallback for the
-// "Suggested" pill when the agent's menu payload names nothing.
-const NEXT_FOR_STATE = {
-  diagnosed: "plan2code-quick-task",
-  exploring: "plan2code-0-pathfinder",
-  mapped: "plan2code-1-plan",
-  planned: "plan2code-2-document",
-  documented: "plan2code-3-implement",
-  building: "plan2code-3-implement",
-  built: "plan2code-4-finalize",
-};
+// "Suggested" pill when the agent's menu payload names nothing. Derived from
+// spec-states.js: the states that have one.
+const NEXT_FOR_STATE = Object.fromEntries(
+  Object.entries(SPEC_STATES)
+    .filter(([, s]) => s.next)
+    .map(([name, s]) => [name, s.next])
+);
 
 const ON = { on: true };
 export const GIT_INIT_NOTE = "Not a git repository yet: it offers to start one";
 export const pendingNote = (n) => `${n} file${n === 1 ? "" : "s"} to commit`;
 const off = (reason) => ({ on: false, reason });
-export const FIXED_REASON = "This bug is fixed. Delete it with the Delete button on its chip, or move it to specs--completed/.";
+// Pathfinder's and Plan's reason on a fixed bug, kept on skills.js.
+export { FIXED_REASON };
 
 /**
  * The spec the picker opens on: the most recently touched one that is still
- * in play. A fixed bug is finished, so it is never the default; with nothing
- * else on disk the picker opens on "start from scratch" (null).
+ * in play. A finished spec (a fixed bug) is never the default; with nothing
+ * else on disk the picker opens on "start from scratch" (null). `lookup` is
+ * stateFor unless a test hands in its own table.
  */
-export function defaultSpec(specs) {
-  return (Array.isArray(specs) ? specs : []).find((s) => s && s.state !== "fixed") || null;
+export function defaultSpec(specs, lookup = stateFor) {
+  return (Array.isArray(specs) ? specs : []).find((s) => s && !lookup(s.state)?.finished) || null;
+}
+
+/**
+ * The reassurance under "Starting up": a calm line at first, a pointer to the
+ * terminal once the start has taken longer than ninety seconds.
+ */
+export function startingHint(elapsedMs) {
+  return elapsedMs > 90000
+    ? "Still getting ready. Your terminal has the play-by-play if you want to watch it there."
+    : "This page fills in by itself the moment Plan2Code has something for you. No need to touch anything.";
+}
+
+/**
+ * Whether the picker still shows the spec it opened on: `picked` is the
+ * selected spec (or null for "start from scratch"), `first` the default one.
+ * The agent's menu note describes that spec only, so another pick gets the
+ * neutral line.
+ */
+export function onInitialPick(first, picked) {
+  return first ? Boolean(picked && picked.dir === first.dir) : !picked;
+}
+
+/**
+ * Which line the dashboard shows under its title: "agent" (the note the agent
+ * posted), "looking" (the agent has not posted its menu yet and is working)
+ * or "neutral".
+ */
+export function dashNoteKind({ menu, hasMenu, onInitial, working }) {
+  if (menu && typeof menu.note === "string" && menu.note.trim() && onInitial) return "agent";
+  if (!hasMenu && working) return "looking";
+  return "neutral";
 }
 
 /**
@@ -845,61 +640,32 @@ export function defaultSpec(specs) {
  *
  * Returns { on, reason?, note?, next? } — `reason` is the one line a greyed card
  * shows, `note` the one line a clickable card shows when there is something to
- * know before launching it, `next` marks the state's natural step.
+ * know before launching it, `next` marks the state's natural step. `lookup` is
+ * stateFor unless a test hands in its own table.
  */
-export function cardAvailability(entry, scan, sel) {
+export function cardAvailability(entry, scan, sel, lookup = stateFor) {
   const hasAgents = Boolean(scan && scan.hasAgents);
   const state = sel && sel.state && sel.state !== "unrecognized" ? sel.state : null;
   const next = sel ? Boolean(state) && NEXT_FOR_STATE[state] === entry.skill : entry.skill === "plan2code-0-pathfinder";
+  const rule = skillByName(entry.skill);
+  if (!rule || !rule.states) return ON;
 
-  switch (entry.skill) {
-    case "plan2code-init":
-      return hasAgents ? off("AGENTS.md is already written. Refresh it instead.") : ON;
-    case "plan2code-init-update":
-      return hasAgents ? ON : off("Needs an AGENTS.md. Set the project up first.");
-    case "plan2code-quick-task":
-      // Always on; a diagnosed bug is the one spec it is the next step for.
-      return next ? { ...ON, next } : ON;
-    case "plan2code-review":
-    case "plan2code-handoff":
-    case "plan2code-changelog":
-    case "plan2code-xray":
-    case "plan2code-diagnose":
-      return ON;
-    case "plan2code-git":
-      // Never greyed: a clean tree still has branches to switch, pull and push.
-      if (scan && scan.isGit === false) return { on: true, note: GIT_INIT_NOTE };
-      if (scan && Number.isInteger(scan.pending) && scan.pending > 0) return { on: true, note: pendingNote(scan.pending) };
-      return ON;
-    case "plan2code-0-pathfinder":
-      if (!state || state === "exploring") return { ...ON, next };
-      if (state === "diagnosed") return off("The cause is found. Fix it in a quick task, or plan it.");
-      if (state === "fixed") return off(FIXED_REASON);
-      return off("This spec is already past the questions");
-    case "plan2code-1-plan":
-      if (state === "exploring") return off("Pathfinder is not finished with this spec yet");
-      if (state === "fixed") return off(FIXED_REASON);
-      if (state === "documented" || state === "building" || state === "built")
-        return off("The plan is written. Revise it instead if it moved.");
-      return { ...ON, next };
-    case "plan2code-1b-revise-plan":
-      if (state === "documented" || state === "building") return ON;
-      return off(state === "built" ? "The spec is fully built" : "Needs a spec that is already written up");
-    case "plan2code-2-document":
-      if (state === "planned") return { ...ON, next };
-      if (state === "documented" || state === "building" || state === "built")
-        return off("The phases are already written up");
-      return off("Needs a drafted plan first");
-    case "plan2code-3-implement":
-    case "plan2code-3-implement-review":
-      if (state === "documented" || state === "building") return { ...ON, next };
-      return off(state === "built" ? "All tasks are already done" : "Needs the phase checklists written up first");
-    case "plan2code-4-finalize":
-      if (state === "built") return { ...ON, next };
-      return off("Needs a spec that is fully built");
-    default:
-      return ON;
+  // The three cards whose rules read the scan rather than the spec.
+  if (entry.skill === "plan2code-init") return hasAgents ? off(rule.greyed.default) : ON;
+  if (entry.skill === "plan2code-init-update") return hasAgents ? ON : off(rule.greyed.default);
+  if (entry.skill === "plan2code-git") {
+    // Never greyed: a clean tree still has branches to switch, pull and push.
+    if (scan && scan.isGit === false) return { on: true, note: GIT_INIT_NOTE };
+    if (scan && Number.isInteger(scan.pending) && scan.pending > 0) return { on: true, note: pendingNote(scan.pending) };
+    return ON;
   }
+
+  // Always on; a diagnosed bug is the one spec Quick Task is the next step for.
+  if (rule.states === "any") return next ? { ...ON, next } : ON;
+  // A state the table does not know is treated like files on disk.
+  const taken = !sel || !sel.state ? "none" : lookup(sel.state) ? sel.state : "unrecognized";
+  if (rule.states.includes(taken)) return rule.marksNext ? { ...ON, next } : ON;
+  return off(rule.greyed[taken] || (lookup(taken)?.finished && rule.greyed.finished) || rule.greyed.default);
 }
 
 /**
@@ -946,7 +712,7 @@ export function launchReply(entry, spec) {
 
 /**
  * Deleting a spec from the picker. The page only names the folder; the agent
- * deletes it (`console.mjs delete-spec`, which runs lib.mjs's removeSpec() on
+ * deletes it (`console.mjs delete-spec`, which runs scan.mjs's removeSpec() on
  * this same rule), because the console never writes into a project. A
  * deletable dir is exactly `specs/<one name>`: no deeper path, no `.` or `..`,
  * no dotfolder, no backslash, never specs--completed/.
@@ -996,10 +762,10 @@ export function handoffAge(written, now = Date.now()) {
   return `${days} day${days === 1 ? "" : "s"} ago`;
 }
 
-// The line under a spec's name on its chip. A fixed bug's label already says
-// "Bug fixed", so the scan's "bug fixed" detail would only repeat it.
+// The line under a spec's name on its chip. A finished spec's label already
+// says it ("Bug fixed"), so the scan's "bug fixed" detail would only repeat it.
 export function chipDetail(spec) {
-  return spec.state === "fixed" ? "" : spec.detail || "";
+  return stateFor(spec.state)?.finished ? "" : spec.detail || "";
 }
 
 export function deleteSummary(spec) {

@@ -12,7 +12,10 @@ import path from "node:path";
 import { execFileSync, spawn } from "node:child_process";
 import http from "node:http";
 import { meterView } from "../src/web-console/public/meter.js";
-import { cwdHash, readLedger, repoRoots, STATE_LOCK_FILE, validate, WORKSPACE_FILE } from "../src/web-console/lib.mjs";
+import { STATE_LOCK_FILE } from "../src/web-console/files.mjs";
+import { cwdHash, readLedger, repoRoots } from "../src/web-console/sessions.mjs";
+import { validate } from "../src/web-console/patches.mjs";
+import { WORKSPACE_FILE } from "../src/web-console/workspace.mjs";
 import {
   ROOT,
   CONSOLE_CLI,
@@ -47,7 +50,11 @@ test("helpers: a dashboard hop clears them, a same-workflow or paused resume kee
     cli(["open", "--resume", s.sid, "--no-open", "--workflow", "implement"]);
     assert.equal(readState(s.session).helpers.length, 2, "a resume into the same workflow keeps them");
 
-    assert.equal(postPatch(s, { finish: { headline: "Paused at Task 2" } }).status, 0);
+    // A finish is refused while a helper still shows as running, so the pause settles them.
+    assert.equal(
+      postPatch(s, { helpers: [reportedHelper("h1", { state: "done" }), reportedHelper("h2", { state: "failed" })], finish: { headline: "Paused at Task 2" } }).status,
+      0
+    );
     cli(["open", "--resume", s.sid, "--no-open"]);
     const resumed = readState(s.session);
     assert.equal("finish" in resumed, false, "the pause came down");
@@ -240,7 +247,7 @@ test("stop never kills a live process that does not answer /health as ours", () 
   const bystander = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { stdio: "ignore" });
   const sidForged = "20000101-000000-beef01";
   // Under the test home, as the CLI sees it: this process has no override of
-  // its own, and lib.mjs would name the real runtime dir.
+  // its own, and files.mjs would name the real runtime dir.
   const dir = path.join(HOME, "runtime", cwdHash(repoRoots(ROOT).project));
   fs.mkdirSync(dir, { recursive: true });
   const forged = path.join(dir, `${sidForged}.json`);

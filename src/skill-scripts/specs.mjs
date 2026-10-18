@@ -14,7 +14,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { EXIT, fail, out, parseArgs, run, readText, isDir, rel, eol, consoleLib, isoDate, phaseFiles, LOOP_TOKENS, scrapeHits } from "./common.mjs";
+import { EXIT, fail, out, parseArgs, run, readText, isDir, rel, eol, consoleModule, isoDate, phaseFiles, LOOP_TOKENS, scrapeHits } from "./common.mjs";
 
 const USAGE = `
 specs.mjs: spec state for the Plan2Code pipeline skills. JSON on stdout.
@@ -500,7 +500,7 @@ function nextPhase(phases, groups, haveChecklist, leftovers = []) {
 
 async function cmdList(args) {
   const root = path.resolve(args.root || ".");
-  const { scanProject } = await consoleLib();
+  const { scanProject } = await consoleModule("scan.mjs");
   const scan = scanProject(root);
   const specs = scan.specs.map((s) => {
     const dir = path.join(root, s.dir);

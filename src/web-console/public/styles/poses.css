@@ -1,0 +1,432 @@
+/* poses.css: The start-screen poses, one per skill. After the dashboard on purpose: its narrow-window rules override the dashboard's. */
+
+/* ------------------------------------------------------- skill poses
+
+   The starting and waiting screens of each skill swap the flight for Planny
+   acting the skill out (drawings in <template id="start-poses">, index.html). Drawn
+   in the page's own ink and highlight color, so the theme and the accent the
+   person picked carry through. Every part that moves sits in its own group,
+   because a CSS transform animation replaces a transform attribute. */
+.pose-stage {
+  height: 200px;
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+.pose { display: block; height: 100%; width: auto; margin: 0 auto; overflow: visible; }
+
+.pose .ln, .pose .lt, .pose .sh, .pose .es, .pose .as { fill: none; stroke-linecap: round; stroke-linejoin: round; }
+.pose .ln, .pose .sh { stroke: var(--ink-2); stroke-width: 6; }
+.pose .lt { stroke: var(--ink-2); stroke-width: 4; }
+.pose .sh { fill: var(--panel-2); }
+.pose .fl { fill: var(--ink-2); }
+.pose .ac { fill: var(--accent); }
+.pose .as { stroke: var(--accent); stroke-width: 4; }
+.pose .ey { fill: var(--ink); }
+.pose .es { stroke: var(--ink); stroke-width: 4; }
+.pose .shadow { fill: var(--ink-2); opacity: 0.16; }
+
+/* Not on anything carrying a transform attribute: transform-origin moves
+   that too, and the lean and lift drawn into the markup would shift. */
+.pose :where([class]:not([transform])) { transform-box: fill-box; transform-origin: center; }
+
+@keyframes pose-pulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.25); opacity: 0.7; }
+}
+@keyframes pose-blink {
+  0%, 94%, 100% { transform: scaleY(1); }
+  97% { transform: scaleY(0.1); }
+}
+@keyframes pose-bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+.pose .blink { animation: pose-blink 5.2s infinite; }
+/* The star turns slowly in every pose, as it does in the rail while the agent
+   works. `rotate` is its own property, so it never fights the blink's transform. */
+.pose .ey.blink { animation: pose-blink 5.2s infinite, pose-turn 7s linear infinite; }
+@keyframes pose-turn { to { rotate: 360deg; } }
+/* Quick Task runs: his feet step in time with the dash. */
+.pose-quick-task .foot.f1 { animation: pose-step-a 0.5s ease-in-out infinite; }
+.pose-quick-task .foot.f2 { animation: pose-step-b 0.5s ease-in-out infinite; }
+@keyframes pose-step-a { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+@keyframes pose-step-b { 0%, 100% { transform: translateY(-6px); } 50% { transform: translateY(0); } }
+.pose .bob { animation: pose-bob 3.4s ease-in-out infinite; }
+.pose .prop { animation: pose-bob 3s ease-in-out infinite; }
+.pose .prop.p2 { animation-delay: 0.5s; }
+
+/* 0 Pathfinder -- the ground rolls by, the spyglass sweeps, the eye follows. */
+.pose .pf-trail { fill: none; stroke: var(--ink-3); stroke-width: 4; stroke-linecap: round; stroke-dasharray: 0.1 14; animation: pf-walk 1.1s linear infinite; }
+@keyframes pf-walk { to { stroke-dashoffset: 14.1; } }
+.pose .pf-glass { transform-origin: 0% 100%; animation: pf-sweep 4s ease-in-out infinite; }
+@keyframes pf-sweep {
+  0%, 100% { transform: rotate(-7deg); }
+  50% { transform: rotate(5deg); }
+}
+.pose .pf-look { animation: pf-look 4s ease-in-out infinite; }
+@keyframes pf-look {
+  0%, 100% { transform: translate(-1px, 1px); }
+  50% { transform: translate(3px, -2px); }
+}
+.pose .twinkle { animation: pose-twinkle 2.2s ease-in-out infinite; }
+.pose .twinkle.t2 { animation-delay: 0.7s; }
+.pose .twinkle.t3 { animation-delay: 1.4s; }
+@keyframes pose-twinkle {
+  0%, 100% { transform: scale(0.4); opacity: 0.3; }
+  50% { transform: scale(1.3); opacity: 1; }
+}
+
+/* 1 Plan -- the question mark bounces while the list ticks itself off. */
+.pose-plan .bob { transform-origin: 50% 100%; animation: pl-ponder 4.8s ease-in-out infinite; }
+@keyframes pl-ponder {
+  0%, 100% { transform: rotate(-1.5deg); }
+  50% { transform: rotate(1.5deg); }
+}
+.pose .pl-q { animation: pl-q 1.6s ease-in-out infinite; }
+@keyframes pl-q {
+  0%, 100% { transform: translateY(0); }
+  40% { transform: translateY(-6px); }
+  60% { transform: translateY(-5px); }
+}
+.pose .pl-look { animation: pl-look 4.8s ease-in-out infinite; }
+@keyframes pl-look {
+  0%, 15%, 90%, 100% { transform: translate(0, 0); }
+  25%, 80% { transform: translate(-3px, 2px); }
+}
+.pose .pl-check { stroke-dasharray: 1; animation: 4.8s ease-out infinite; }
+.pose .pl-check.c1 { animation-name: pl-check-1; }
+.pose .pl-check.c2 { animation-name: pl-check-2; }
+.pose .pl-check.c3 { animation-name: pl-check-3; }
+@keyframes pl-check-1 {
+  0%, 25% { stroke-dashoffset: 1; opacity: 1; }
+  33%, 85% { stroke-dashoffset: 0; opacity: 1; }
+  95%, 100% { stroke-dashoffset: 0; opacity: 0; }
+}
+@keyframes pl-check-2 {
+  0%, 42% { stroke-dashoffset: 1; opacity: 1; }
+  50%, 85% { stroke-dashoffset: 0; opacity: 1; }
+  95%, 100% { stroke-dashoffset: 0; opacity: 0; }
+}
+@keyframes pl-check-3 {
+  0%, 59% { stroke-dashoffset: 1; opacity: 1; }
+  67%, 85% { stroke-dashoffset: 0; opacity: 1; }
+  95%, 100% { stroke-dashoffset: 0; opacity: 0; }
+}
+
+/* 2 Document -- the pencil walks each line and the line appears behind it. */
+.pose .dc-look { animation: dc-look 6s ease-in-out infinite; }
+@keyframes dc-look {
+  0%, 100% { transform: translate(1px, 1px); }
+  20%, 55% { transform: translate(3px, 1px); }
+  37%, 71% { transform: translate(4px, 2px); }
+}
+.pose .dc-line { stroke-dasharray: 1; animation: 6s linear infinite; }
+.pose .dc-line.d1 { animation-name: dc-line-1; }
+.pose .dc-line.d2 { animation-name: dc-line-2; }
+.pose .dc-line.d3 { animation-name: dc-line-3; }
+.pose .dc-line.d4 { animation-name: dc-line-4; }
+@keyframes dc-line-1 {
+  0%, 5% { stroke-dashoffset: 1; opacity: 1; }
+  20%, 88% { stroke-dashoffset: 0; opacity: 1; }
+  95%, 100% { stroke-dashoffset: 0; opacity: 0; }
+}
+@keyframes dc-line-2 {
+  0%, 22% { stroke-dashoffset: 1; opacity: 1; }
+  37%, 88% { stroke-dashoffset: 0; opacity: 1; }
+  95%, 100% { stroke-dashoffset: 0; opacity: 0; }
+}
+@keyframes dc-line-3 {
+  0%, 39% { stroke-dashoffset: 1; opacity: 1; }
+  54%, 88% { stroke-dashoffset: 0; opacity: 1; }
+  95%, 100% { stroke-dashoffset: 0; opacity: 0; }
+}
+@keyframes dc-line-4 {
+  0%, 56% { stroke-dashoffset: 1; opacity: 1; }
+  71%, 88% { stroke-dashoffset: 0; opacity: 1; }
+  95%, 100% { stroke-dashoffset: 0; opacity: 0; }
+}
+/* The pencil's tip rests at (186,130); each stop puts it at a line's start
+   or end, timed to the line keyframes above. */
+.pose .dc-pencil { animation: dc-pencil 6s ease-in-out infinite; }
+@keyframes dc-pencil {
+  0%, 88%, 100% { transform: translate(0, 0); }
+  5% { transform: translate(-2px, -32px); }
+  20% { transform: translate(14px, -32px); }
+  22% { transform: translate(-2px, -24px); }
+  37% { transform: translate(22px, -24px); }
+  39% { transform: translate(-2px, -16px); }
+  54% { transform: translate(18px, -16px); }
+  56% { transform: translate(-2px, -8px); }
+  71% { transform: translate(10px, -8px); }
+  78% { transform: translate(6px, -4px); }
+}
+
+/* 3 Implement -- crank, spark, jolt, on one 1.4s beat. */
+.pose-implement .bob { animation: im-jolt 1.4s ease-in-out infinite; }
+@keyframes im-jolt {
+  0%, 40%, 100% { transform: translateY(0); }
+  22% { transform: translateY(2px); }
+}
+.pose .im-wrench { transform-origin: 100% 100%; animation: im-crank 1.4s ease-in-out infinite; }
+@keyframes im-crank {
+  0%, 45%, 100% { transform: rotate(0deg); }
+  20% { transform: rotate(-24deg); }
+  28% { transform: rotate(-20deg); }
+}
+.pose .im-spark { transform-origin: 100% 50%; animation: im-spark 1.4s ease-out infinite; }
+@keyframes im-spark {
+  0%, 16%, 55%, 100% { opacity: 0; transform: scale(0.6); }
+  24% { opacity: 1; transform: scale(1.15); }
+}
+.pose .im-lt { animation: im-lt 1.4s ease-in-out infinite; }
+.pose .im-gt { animation: im-gt 1.4s ease-in-out infinite; }
+@keyframes im-lt { 50% { transform: translateX(-2px); } }
+@keyframes im-gt { 50% { transform: translateX(2px); } }
+.pose .im-slash { animation: im-slash 1.4s steps(1) infinite; }
+@keyframes im-slash { 50% { opacity: 0.35; } }
+
+/* 4 Finalize -- a happy hop with a squash on landing, the flag waving,
+   confetti drifting down past him. */
+.pose .fz-hop { transform-origin: 50% 100%; animation: fz-hop 1.6s ease-in-out infinite; }
+@keyframes fz-hop {
+  0%, 100% { transform: translateY(0) scale(1.04, 0.96); }
+  15%, 75% { transform: translateY(0) scale(1); }
+  45% { transform: translateY(-14px) scale(0.98, 1.02); }
+  85% { transform: translateY(0) scale(1.03, 0.97); }
+}
+.pose .fz-shadow { animation: fz-shadow 1.6s ease-in-out infinite; }
+@keyframes fz-shadow {
+  0%, 15%, 75%, 100% { transform: scale(1); opacity: 0.16; }
+  45% { transform: scale(0.7); opacity: 0.08; }
+}
+.pose .fz-tick { stroke: var(--accent-ink); }
+.pose .fz-flag { transform-origin: 0% 50%; animation: fz-wave 1.2s ease-in-out infinite; }
+@keyframes fz-wave {
+  0%, 100% { transform: skewY(0deg) scaleX(1); }
+  33% { transform: skewY(-7deg) scaleX(0.94); }
+  66% { transform: skewY(5deg) scaleX(1.02); }
+}
+.pose .cf { animation: fz-fall 3.2s linear infinite; }
+.pose .cf:nth-child(2) { animation-delay: -0.4s; }
+.pose .cf:nth-child(3) { animation-delay: -2.1s; }
+.pose .cf:nth-child(4) { animation-delay: -1.2s; }
+.pose .cf:nth-child(5) { animation-delay: -2.7s; }
+.pose .cf:nth-child(6) { animation-delay: -0.9s; }
+.pose .cf:nth-child(7) { animation-delay: -1.8s; }
+.pose .cf:nth-child(8) { animation-delay: -3s; }
+.pose .cf:nth-child(9) { animation-delay: -1.5s; }
+.pose .cf:nth-child(10) { animation-delay: -2.4s; }
+@keyframes fz-fall {
+  0% { transform: translateY(-10px) rotate(0deg); opacity: 0; }
+  15%, 80% { opacity: 1; }
+  100% { transform: translateY(30px) rotate(200deg); opacity: 0; }
+}
+
+/* Init -- the foundation goes down a block at a time, each landing with a
+   squash, and he watches every one of them come down. */
+.pose .blk {
+  fill: var(--panel-2);
+  stroke: var(--ink-2);
+  stroke-width: 4;
+  stroke-linejoin: round;
+  transform-origin: 50% 100%;
+  animation: 4.8s ease-in infinite;
+}
+.pose .blk.ac { fill: var(--accent); stroke: var(--accent); }
+.pose .in-b1 { animation-name: in-drop-1; }
+.pose .in-b2 { animation-name: in-drop-2; }
+.pose .in-b3 { animation-name: in-drop-3; }
+@keyframes in-drop-1 {
+  0% { transform: translateY(-48px); opacity: 0; }
+  4% { opacity: 1; }
+  14% { transform: translateY(0) scale(1.08, 0.86); }
+  19%, 86% { transform: none; opacity: 1; }
+  94%, 100% { transform: none; opacity: 0; }
+}
+@keyframes in-drop-2 {
+  0%, 22% { transform: translateY(-48px); opacity: 0; }
+  26% { opacity: 1; }
+  36% { transform: translateY(0) scale(1.08, 0.86); }
+  41%, 86% { transform: none; opacity: 1; }
+  94%, 100% { transform: none; opacity: 0; }
+}
+@keyframes in-drop-3 {
+  0%, 44% { transform: translateY(-48px); opacity: 0; }
+  48% { opacity: 1; }
+  58% { transform: translateY(0) scale(1.08, 0.86); }
+  63%, 86% { transform: none; opacity: 1; }
+  94%, 100% { transform: none; opacity: 0; }
+}
+.pose .in-look { animation: in-look 4.8s ease-in-out infinite; }
+@keyframes in-look {
+  0%, 22%, 44%, 96%, 100% { transform: translate(3px, -3px); }
+  14%, 36%, 58%, 86% { transform: translate(4px, 2px); }
+}
+
+/* Quick Task -- a dash: a quick bob, the streaks pouring off behind him and
+   the bolt ahead crackling. */
+.pose-quick-task .bob { animation: qt-dash 0.5s ease-in-out infinite; }
+@keyframes qt-dash {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-3px); }
+}
+.pose .qt-shadow { animation: qt-shadow 0.5s ease-in-out infinite; }
+@keyframes qt-shadow {
+  0%, 100% { transform: scaleX(1); }
+  50% { transform: scaleX(0.92); }
+}
+.pose .qt-line { animation: qt-streak 0.9s linear infinite; }
+.pose .qt-line.l2 { animation-delay: -0.3s; }
+.pose .qt-line.l3 { animation-delay: -0.6s; }
+.pose .qt-line.l4 { animation-delay: -0.15s; }
+@keyframes qt-streak {
+  0% { transform: translateX(10px); opacity: 0; }
+  25% { opacity: 1; }
+  100% { transform: translateX(-26px); opacity: 0; }
+}
+.pose .qt-zap { animation: qt-zap 1.8s ease-out infinite; }
+@keyframes qt-zap {
+  0%, 20%, 50%, 58%, 100% { transform: scale(1); opacity: 1; }
+  8% { opacity: 0.35; }
+  12% { transform: scale(1.12); opacity: 1; }
+  54% { opacity: 0.5; }
+}
+
+/* Review -- the glass works down the page, lingers on the bad line while
+   it lights up and a pin pops beside it, then goes back to the top. */
+.pose .rv-glass { animation: rv-scan 5s ease-in-out infinite; }
+@keyframes rv-scan {
+  0%, 6%, 94%, 100% { transform: translate(0, 0); }
+  18%, 24% { transform: translate(4px, 12px); }
+  36% { transform: translate(-2px, 24px); }
+  42% { transform: translate(2px, 24px); }
+  48%, 60% { transform: translate(0, 24px); }
+  74%, 80% { transform: translate(-4px, 36px); }
+}
+.pose .rv-flag { animation: rv-flag 5s ease-out infinite; }
+@keyframes rv-flag {
+  0%, 38% { opacity: 0; }
+  44%, 88% { opacity: 1; }
+  96%, 100% { opacity: 0; }
+}
+.pose .rv-pin { animation: rv-pin 5s ease-out infinite; }
+@keyframes rv-pin {
+  0%, 38% { opacity: 0; transform: scale(0.3); }
+  44% { opacity: 1; transform: scale(1.4); }
+  50%, 88% { opacity: 1; transform: scale(1); }
+  96%, 100% { opacity: 0; transform: scale(1); }
+}
+.pose .rv-look { animation: rv-look 5s ease-in-out infinite; }
+@keyframes rv-look {
+  0%, 6%, 94%, 100% { transform: translate(4px, -1px); }
+  18%, 24% { transform: translate(4px, 1px); }
+  36%, 60% { transform: translate(4px, 2px); }
+  74%, 80% { transform: translate(4px, 3px); }
+}
+
+/* Handoff -- the arms reach, the parcel goes with them, and the arrow keeps
+   pointing the way it is headed. */
+.pose .ho-reach { transform-origin: 0% 50%; animation: ho-reach 2.4s ease-in-out infinite; }
+@keyframes ho-reach {
+  0%, 100% { transform: scaleX(1); }
+  50% { transform: scaleX(1.2); }
+}
+.pose .ho-give { animation: ho-give 2.4s ease-in-out infinite; }
+@keyframes ho-give {
+  0%, 100% { transform: translateX(0); }
+  50% { transform: translateX(5px); }
+}
+.pose .ho-arrow { animation: ho-arrow 1.2s ease-in-out infinite; }
+@keyframes ho-arrow {
+  0% { transform: translateX(-4px); opacity: 0.35; }
+  60% { transform: translateX(4px); opacity: 1; }
+  100% { transform: translateX(8px); opacity: 0; }
+}
+
+/* Git -- the arm reaches out and a new commit settles onto the branch line in
+   step with it. */
+.pose .gc-reach { transform-origin: 0% 50%; animation: gc-reach 2.4s ease-in-out infinite; }
+@keyframes gc-reach {
+  0%, 100% { transform: scaleX(0.9); }
+  50% { transform: scaleX(1); }
+}
+.pose .gc-dot { animation: gc-dot 2.4s ease-in-out infinite; }
+@keyframes gc-dot {
+  0%, 15% { opacity: 0; transform: translateY(-8px); }
+  50%, 85% { opacity: 1; transform: translateY(0); }
+  100% { opacity: 0; transform: translateY(0); }
+}
+
+/* Changelog -- the arm reaches the page and the newest line is written in step. */
+.pose .cl-line { animation: gc-dot 2.4s ease-in-out infinite; }
+
+/* Codebase X-ray -- the scan line sweeps down the file, the rough spot lights
+   up as it passes, and the lens and his star follow it down. */
+.pose .xr-scan { animation: xr-scan 4s ease-in-out infinite; }
+@keyframes xr-scan {
+  0%, 10% { opacity: 0; transform: translateY(0); }
+  16% { opacity: 1; }
+  74% { opacity: 1; }
+  80%, 100% { opacity: 0; transform: translateY(88px); }
+}
+.pose .xr-spot { animation: xr-spot 4s ease-out infinite; }
+@keyframes xr-spot {
+  0%, 50% { opacity: 0; transform: scale(0.3); }
+  56% { opacity: 1; transform: scale(1.3); }
+  62%, 90% { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(1); }
+}
+.pose .xr-lens { animation: xr-lens 4s ease-in-out infinite; }
+@keyframes xr-lens {
+  0%, 10%, 100% { transform: translate(0, -3px); }
+  56%, 80% { transform: translate(0, 4px); }
+}
+.pose .xr-look { animation: xr-look 4s ease-in-out infinite; }
+@keyframes xr-look {
+  0%, 10%, 100% { transform: translate(4px, -1px); }
+  56%, 80% { transform: translate(4px, 2px); }
+}
+
+/* Diagnose a bug -- the bug scuttles along its line, the magnifier and his
+   star follow it until it is caught, and the red mark under the line shows
+   once it holds still. Held still, the bug sits caught under the lens. */
+.pose .dg-mark { fill: none; stroke: var(--warn); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+.pose .dg-leg { fill: none; stroke: var(--ink); stroke-width: 2; stroke-linecap: round; }
+.pose .dg-body { fill: var(--warn); }
+.pose .dg-head { fill: var(--ink); }
+.pose .dg-bug { animation: dg-bug 4s ease-in-out infinite; }
+@keyframes dg-bug {
+  0%, 100% { transform: translate(-7px, 0) rotate(-12deg); }
+  14% { transform: translate(-2px, 0) rotate(10deg); }
+  26% { transform: translate(4px, 0) rotate(-10deg); }
+  36% { transform: translate(1px, 0) rotate(8deg); }
+  44%, 88% { transform: translate(0, 0) rotate(0deg); }
+}
+.pose .dg-lens { animation: dg-lens 4s ease-in-out infinite; }
+@keyframes dg-lens {
+  0%, 100% { transform: translate(-9px, -2px); }
+  18% { transform: translate(-3px, -1px); }
+  30% { transform: translate(3px, 0); }
+  44%, 88% { transform: translate(0, 0); }
+}
+.pose .dg-mark { animation: dg-mark 4s ease-out infinite; }
+@keyframes dg-mark {
+  0%, 44% { opacity: 0; }
+  52%, 88% { opacity: 1; }
+  96%, 100% { opacity: 0; }
+}
+.pose .dg-look { animation: dg-look 4s ease-in-out infinite; }
+@keyframes dg-look {
+  0%, 100% { transform: translate(2px, 0); }
+  30% { transform: translate(5px, 0); }
+  44%, 88% { transform: translate(4px, 1px); }
+}
+
+@media (max-width: 720px) {
+  .dash { padding-top: 0; }
+  .launch-stage { height: 140px; }
+  .pose-stage { height: 150px; }
+  .waiting-pane .pose-stage { height: 100px; }
+  .launch-planny { width: 58px; height: 80px; margin-left: -29px; }
+}
+

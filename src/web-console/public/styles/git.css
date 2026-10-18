@@ -1,0 +1,253 @@
+/* git.css: The git board. */
+
+/* ------------------------------------------------------------ git board */
+
+/* The git workflow's main column holds the board, and the agent's card sits
+   inside it, in the card slot under the tab strip. A card that scrolled inside
+   a scrolling board would put a scrollbar inside a scrollbar, so here the
+   column takes the one scroll and both flow through it at natural height. */
+.main:has(> .git-board) {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+/* Listed with .is-primary.has-grow too: that rule (a card with a growing note
+   box takes the column's height and shrinks into it) outranks a plain .card
+   here, and a card shrunk under the board spilled its buttons beneath it. */
+.git-cards > .card,
+.git-cards > .card.is-primary.has-grow,
+.main:has(> .git-board) > .git-board {
+  flex: none;
+  overflow-y: visible;
+  min-height: 0;
+}
+/* In the board's card slot a card's boxes cannot fill the column (it flows,
+   it does not stretch), so a note box grows with what is typed instead, where
+   the browser can, rather than scrolling inside a 96px box. */
+.git-cards > .card textarea { field-sizing: content; max-height: 50vh; }
+/* The card and the pager centre themselves with auto inline margins, and a
+   grid item with auto margins shrinks to its content, so a short confirm sat
+   narrow in the middle of the board. In the slot both fill the board's width
+   instead; the slot's gap spaces them. */
+.git-cards > .card,
+.git-cards > .pager { margin: 0; }
+.main > .git-board {
+  padding-right: 32px;
+  display: grid;
+  /* minmax(0, …): the column never takes the branch table's no-wrap width. */
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+  gap: 14px;
+  max-width: var(--card-width);
+}
+/* The board is sized by its column, not the window: the narrow layout keys
+   off the board's own width. */
+.git-board { container-type: inline-size; container-name: git-board; }
+/* Plan2Code's card, between the tab strip and the tab's content. */
+.git-cards { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
+.git-cards:empty { display: none; }
+
+/* The tab strip: three tabs, Done with git on the right. */
+.git-tab-bar {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  border-bottom: 1px solid var(--rule);
+}
+.git-tabs { display: flex; gap: 2px; }
+.git-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  border-radius: 6px 6px 0 0;
+  background: transparent;
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+.git-tab:hover { background: var(--panel-2); color: var(--ink); }
+.git-tab[aria-selected="true"] { background: var(--accent-soft); color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+.git-tab:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.git-tab-badge {
+  min-width: 18px;
+  padding: 0 6px;
+  border: 1px solid var(--rule-2);
+  border-radius: 999px;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  line-height: 17px;
+  text-align: center;
+  color: var(--ink-2);
+}
+.git-tab-badge.is-dot { min-width: 0; font-weight: 700; }
+.git-tab-badge.is-warn { color: var(--warn); background: var(--warn-soft); border-color: var(--warn); }
+.git-tab-badge.is-next { color: var(--accent-ink); background: var(--accent); border-color: var(--accent); }
+.git-tab-badge.is-warn.is-next { color: var(--accent-ink); background: var(--warn); border-color: var(--warn); }
+.git-done { margin: 0 0 6px auto; }
+
+/* The next step: one primary button, at most one quieter one. */
+.git-step {
+  display: grid;
+  gap: 6px;
+  padding: 14px 18px;
+  background: var(--panel);
+  border: 1px solid var(--accent-line);
+  border-left-width: 4px;
+  border-radius: var(--radius);
+}
+.git-step.is-warn { border-color: var(--stage); background: var(--stage-soft); }
+.git-step.is-calm { border-color: var(--ok); background: var(--ok-soft); }
+.git-step-kicker { font-size: 12px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--ink-2); }
+.git-step.is-calm .git-step-kicker { color: var(--ok); }
+.git-step-title, .git-op-title { margin: 0; font: 600 18px/1.25 var(--serif); }
+.git-step-why, .git-step-label { margin: 0; font-size: 14px; color: var(--ink-2); }
+.git-step-label { font-weight: 600; color: var(--ink); }
+.git-step-actions, .git-sync-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.git-hint {
+  justify-self: start;
+  padding: 8px 12px;
+  border: 1px dashed var(--accent-line);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+.git-hint:hover { background: var(--accent-soft); }
+.git-hint:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.git-stale { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0; font-size: 13.5px; color: var(--stage); }
+.git-held { font-size: 13.5px; color: var(--ink-2); }
+.git-held .md-p { margin: 0; }
+.git-wait { margin: 0; font-size: 13.5px; color: var(--stage); }
+.git-fresh { margin: 0; font-size: 13px; color: var(--ink-3); }
+.git-fresh.is-stale { color: var(--stage); }
+.git-panel-tab { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
+.git-changes, .git-sync { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
+.git-sweep-offer { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0; font-size: 14px; color: var(--ink-2); }
+.git-pr-open.is-disabled { opacity: 0.5; cursor: not-allowed; }
+/* The board's header is a section lead, not a card: the framed elements are
+   the agent's card in the slot and the next step under it. */
+.git-head {
+  display: grid;
+  gap: 6px;
+  padding: 0 0 10px;
+  border-bottom: 1px solid var(--rule);
+}
+.git-head-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 14px; }
+.git-branch { margin: 0; font: 600 22px/1.2 var(--serif); overflow-wrap: anywhere; }
+.git-track { font-family: var(--mono); font-size: 14px; color: var(--ink-2); }
+.git-head-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; font-size: 13.5px; color: var(--ink-2); }
+.git-noremote { font-weight: 600; color: var(--stage); }
+.git-activity { color: var(--accent); }
+.git-pr { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding-top: 6px; border-top: 1px solid var(--rule); }
+.git-pr-open { text-decoration: none; }
+.git-pr-ask { font-size: 14px; color: var(--ink); }
+.git-pr-base { font-size: 13.5px; color: var(--ink-2); }
+.git-pr-base select, .git-field select, .git-field input, .git-search {
+  font: inherit;
+  font-size: 14px;
+  padding: 6px 10px;
+  color: var(--ink);
+  background: var(--panel);
+  border: 1px solid var(--rule-2);
+  border-radius: 8px;
+}
+.git-warn, .git-op {
+  padding: 12px 16px;
+  border: 1px solid var(--warn);
+  border-left-width: 4px;
+  border-radius: var(--radius);
+  background: var(--warn-soft);
+  color: var(--ink);
+}
+.git-op { display: grid; gap: 8px; border-color: var(--stage); background: var(--stage-soft); }
+.git-op-files { margin: 0; padding-left: 20px; font-size: 13.5px; }
+.git-op-left { color: var(--warn); }
+.git-op-clear { color: var(--ok); }
+.git-op-actions, .git-panel-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.git-note { margin: 0; color: var(--ink-2); }
+.git-result {
+  padding: 10px 16px;
+  border: 1px solid var(--accent-line);
+  border-radius: var(--radius);
+  background: var(--accent-soft);
+  font-size: 14px;
+}
+.git-result-body .md-p { margin: 4px 0 0; }
+/* The result box is the line length here: git's stderr runs the full width. */
+.git-result-body.md { max-width: none; }
+.git-panel {
+  display: grid;
+  gap: 10px;
+  padding: 14px 18px;
+  background: var(--panel);
+  border: 1px solid var(--accent-line);
+  border-radius: var(--radius);
+}
+.git-panel-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.git-panel-title { margin: 0; font-size: 16px; }
+.git-group-title { margin: 4px 0 0; font-size: 13.5px; color: var(--ink-2); }
+.git-field-row { display: flex; flex-wrap: wrap; align-items: end; gap: 10px; }
+.git-field { display: grid; gap: 4px; font-size: 13px; color: var(--ink-2); }
+.git-field.is-wide { flex: 1 1 16em; }
+.git-new-name { font-family: var(--mono); }
+.git-name-status { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0; font-size: 13.5px; color: var(--ink-2); }
+.git-name-status.is-free { color: var(--ok); }
+.git-name-status.is-invalid, .git-name-status.is-nested { color: var(--warn); }
+.git-name-status.is-local, .git-name-status.is-remote { color: var(--stage); }
+.git-offer { margin: 0 auto 0 0; font-size: 14px; }
+.git-sweep { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; font-family: var(--mono); font-size: 13.5px; }
+.git-ignore { margin-left: 8px; white-space: nowrap; }
+.git-tools { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+.git-search { flex: 1 1 auto; }
+.git-branches { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
+.git-table-wrap { overflow-x: auto; }
+.git-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.git-table th {
+  text-align: left;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--rule);
+}
+.git-table td { padding: 7px 8px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+.git-table tr.is-current td { background: var(--accent-soft); }
+.git-table tr.is-held td { color: var(--ink-2); }
+.git-cell-name { overflow-wrap: anywhere; }
+/* A branch name stays whole beside its badges (feature/export-csv never splits
+   as feature/export- / csv), and the headers stay on one line: a narrow column
+   scrolls the table sideways instead. */
+.git-cell-name .git-name { white-space: nowrap; }
+.git-table th { white-space: nowrap; }
+.git-name, .git-path { font-family: var(--mono); }
+.git-badge { margin-left: 6px; font-size: 10px; padding: 2px 6px; }
+.git-badge.is-merged { color: var(--ok); background: var(--ok-soft); border-color: var(--ok); }
+.git-badge.is-gone, .git-badge.is-held { color: var(--stage); background: var(--stage-soft); border-color: var(--stage); }
+.git-cell-track { font-family: var(--mono); white-space: nowrap; color: var(--ink-2); }
+/* Stacked with blocks, not `display: grid`: a grid <td> stops being a table
+   cell, and its row's separator no longer lines up with the others. */
+.git-cell-last > span { display: block; }
+.git-cell-last > .git-by { margin-top: 2px; }
+.git-by { font-size: 12px; color: var(--ink-3); }
+.git-cell-actions { white-space: nowrap; text-align: right; }
+.git-cell-actions .btn + .btn { margin-left: 6px; }
+.git-remote-only summary { cursor: pointer; font-weight: 600; color: var(--ink-2); padding: 4px 0; }
+.git-empty { margin: 0; font-size: 13.5px; color: var(--ink-3); }
+
+/* Last on purpose: the narrow layout overrides the board rules above it. */
+@container git-board (max-width: 720px) {
+  .git-tab-bar { flex-wrap: wrap; }
+  .git-tabs { flex-wrap: wrap; }
+  .git-done { margin: 0 0 6px; }
+  .git-head-meta { flex-direction: column; align-items: flex-start; }
+  .git-step-actions, .git-sync-actions, .git-op-actions, .git-panel-actions { flex-wrap: wrap; }
+  .git-step-actions .btn, .git-op-actions .btn { flex: 1 1 auto; }
+}

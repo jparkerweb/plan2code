@@ -90,12 +90,12 @@ Both are cheap to enforce mechanically in the server's write path.
 ```
 src/web-console/
   console.mjs             CLI: open | post | wait | status | stop
-  server.mjs              the HTTP server (spawned detached by `open`)
-  lib.mjs                 paths, atomic writes, patch merge, validate()
+  server.mjs              the HTTP server (spawned detached by `open`); routes.mjs lists its URLs
+  files.mjs, sessions.mjs, patches.mjs, scan.mjs, ...   paths, atomic writes, patch merge, validate(), the repo scan
   console.md              the agent-facing contract
   public/index.html       markup shell only
-  public/app.js           the client (no inline script, see CSP below)
-  public/app.css
+  public/app.js           the client's entry (no inline script, see CSP below); screens/ and state.js hold the rest
+  public/styles/          the stylesheet, joined by the server into /app.css
   public/render.js        markdown tokens to DOM nodes
   public/vendor/marked.esm.js   pinned 15.0.7, MIT, lexer only
 ```

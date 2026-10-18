@@ -38,6 +38,10 @@ All notable changes to Plan2Code will be documented in this file.
 - **init**, **init-update**: the *Keeping this file current* section they write into `AGENTS.md` gains three rules: a rule broken twice becomes an automated check, a new Failure log line first looks for one on the same topic to sharpen instead, and the log holds 17 entries at most (over the cap, merge entries that share a cause, then drop the lowest-value ones). Init update offers the missing rules to an existing section and tidies the log on every run, showing each merge and removal for a yes before it writes.
 - **contributors**: this repo's `AGENTS.md` follows the same Failure log rules, and its three post-sync grep entries are merged into one.
 
+- **contributors**: the web console's source is split by job: `lib.mjs`, `server.mjs`, `console.mjs`, `app.js` and `app.css` become `routes.mjs`, `static.mjs`, `cmd-*.mjs`, the by-job Node files, `public/screens/` and `public/styles/`. Nothing a person sees changes, and the page starts faster (ready in about 280 ms, was 450 ms).
+- **contributors**: the per-skill and per-spec-state tables live in two data files, `public/skills.js` and `public/spec-states.js`, so adding a skill or a state is a short list in `.agents-docs/AGENTS-development-commands.md` and `npm test` names anything missed. This replaces the long add-a-skill checklist noted above.
+- **contributors**: page tests drive the real console in Chrome or Edge through `playwright-core` inside `npm test` (running it needs Node 20 or newer; installed skills still need only Node 18). The screenshot and speed scripts use it too, with no hand install, and `scripts/css-snapshot.mjs` compares every computed style across a stylesheet change.
+- **contributors**: a test keeps the files table in `.agents-docs/AGENTS-architecture.md` complete: every console file needs a one-line row.
 ### 🗑️ Removed
 
 - **handoff**: the Handoff skill's `handoff-path.mjs` script is retired in favour of `console.mjs handoff new`, which every skill can reach.

@@ -29,7 +29,7 @@ import {
   unreadDot,
 } from "../src/web-console/public/chat.js";
 import { WEIGHTS } from "../src/web-console/public/meter.js";
-import { readChat } from "../src/web-console/lib.mjs";
+import { readChat } from "../src/web-console/inbox.mjs";
 import {
   ROOT,
   CONSOLE_CLI,

@@ -147,30 +147,33 @@ import {
 import {
   appendLedger,
   attachmentName,
-  chatReplyLines,
   checkDocument,
-  initialWorkspace,
   insideGitRepo,
   pendingFiles,
-  latestOpenCaps,
-  pendingWorkspaceChanges,
   PROTECTED_CONSOLE_FILES,
   readLedger,
+  repoRoots,
+} from "../src/web-console/sessions.mjs";
+import { scanProject, removeSpec, SPEC_STATES } from "../src/web-console/scan.mjs";
+import { validate } from "../src/web-console/patches.mjs";
+import { chatReplyLines } from "../src/web-console/inbox.mjs";
+import {
+  initialWorkspace,
+  pendingWorkspaceChanges,
+  readWorkspaceCursor,
+  WORKSPACE_FILE,
+  writeWorkspaceCursor,
+} from "../src/web-console/workspace.mjs";
+import {
+  latestOpenCaps,
   readSubagentCursor,
   readSubagentSetting,
-  readWorkspaceCursor,
   resetSubagentCursor,
   writeSubagentCursor,
   writeSubagentSetting,
-  repoRoots,
-  scanProject,
-  removeSpec,
-  SPEC_STATES,
-  validate,
-  WORKSPACE_FILE,
-  writeWorkspaceCursor,
-} from "../src/web-console/lib.mjs";
+} from "../src/web-console/settings.mjs";
 import { ROOT, HOME, cli, PDF, postPatch, ask } from "./web-console-test-helpers.mjs";
+import { joinedCss } from "./css-helpers.mjs";
 
 // Someone who worked the whole session in the browser should land back in it.
 // Every Plan2Code skill ships a console, so the sentence goes on all of
@@ -223,34 +226,17 @@ test("every console workflow the page names ships the console", () => {
     assert.ok(fs.existsSync(path.join(dir, "console.mjs")), `${skill} must bundle the console`);
     assert.ok(fs.existsSync(path.join(dir, "building.md")), `${skill} must bundle building.md`);
   }
-  // And the other way round: a skill that ships the console but is missing
-  // from the list would hand off a bare command, and its next session would
-  // ask the interface question of someone who was already in the browser.
-  for (const skill of fs.readdirSync(path.join(ROOT, "skills"))) {
-    if (!fs.existsSync(path.join(ROOT, "skills", skill, "references", "web-console"))) continue;
-    assert.ok(CONSOLE_WORKFLOWS.includes("/" + skill), `${skill} ships the console but is not in CONSOLE_WORKFLOWS`);
-  }
 });
 
-// The dashboard draws its cards from the page's own catalog, so the catalog
-// is the contract: every card has to be a skill that really installs, every
-// installed skill has to be a card (a skill that is missing launches nothing),
-// and every card's workflow has to be one the console names.
-test("the dashboard catalog is exactly the set of installable skills", () => {
+// The dashboard draws its cards from the page's own catalog, so every card
+// has to be filled in and launch into a real SKILL.md. Which skills have a
+// card is held against install.js in test-web-console-skills.mjs.
+test("every dashboard card is filled in and launches a real skill", () => {
   const skillsDir = path.join(ROOT, "skills");
-  const installed = fs.readdirSync(skillsDir).filter((d) => fs.statSync(path.join(skillsDir, d)).isDirectory());
-  const cataloged = SKILL_CATALOG.map((e) => e.skill);
-
   // The dashboard itself is the hub, not a card.
-  assert.ok(!cataloged.includes("plan2code"), "the dashboard does not launch itself");
+  assert.ok(!SKILL_CATALOG.some((e) => e.skill === "plan2code"), "the dashboard does not launch itself");
 
-  for (const skill of installed) {
-    if (skill === "plan2code") continue;
-    assert.ok(cataloged.includes(skill), `${skill} installs but has no card on the dashboard`);
-  }
   for (const e of SKILL_CATALOG) {
-    assert.ok(installed.includes(e.skill), `${e.skill} is a card but does not install`);
-    assert.ok(CONSOLE_WORKFLOWS.includes(e.command), `${e.command} must be a console workflow`);
     assert.ok(CATALOG_GROUPS.some((g) => g.id === e.group), `${e.skill}: unknown group ${e.group}`);
     for (const field of ["workflow", "chip", "title", "blurb"]) {
       assert.ok(e[field] && String(e[field]).trim(), `${e.skill}.${field} must be filled in`);
@@ -1773,7 +1759,6 @@ test("skip: the last open card goes to Send, a middle one to the next unstaged, 
 test("page: the Workspace dialog, meter pill and new modules are in the page, with no inline styles or scripts", () => {
   const dir = path.join(ROOT, "src", "web-console", "public");
   const html = fs.readFileSync(path.join(dir, "index.html"), "utf8");
-  const app = fs.readFileSync(path.join(dir, "app.js"), "utf8");
   for (const id of [
     "workspace-modal",
     "workspace-title",
@@ -1800,7 +1785,6 @@ test("page: the Workspace dialog, meter pill and new modules are in the page, wi
   assert.ok(pill[0].includes('class="meter-track"') && pill[0].includes('class="meter-fill"'));
   for (const m of ["workspace.js", "meter.js", "mentions.js", "favicon.js"]) {
     assert.ok(html.includes(`rel="modulepreload" href="/${m}"`), `the page preloads ${m}`);
-    assert.match(app, new RegExp(`^import [^;]+ from "\\./${m.replace(".", "\\.")}";`, "m"), `app.js imports ${m}`);
   }
   // The CSP refuses style attributes and inline script: the new markup has neither.
   const added = [
@@ -1812,23 +1796,18 @@ test("page: the Workspace dialog, meter pill and new modules are in the page, wi
     assert.doesNotMatch(block, /<script/i);
     assert.doesNotMatch(block, /\son[a-z]+=/i, "no inline event handlers");
   }
-  assert.doesNotMatch(app, /setAttribute\(\s*["']style["']/, "no style attributes set from script");
 });
 
 test("page: the footer label opens the workspace instead of copying", () => {
-  const app = fs.readFileSync(path.join(ROOT, "src", "web-console", "public", "app.js"), "utf8");
-  assert.ok(app.includes('$("footer-where").addEventListener("click", openWorkspace)'));
-  assert.doesNotMatch(app, /\$\("footer-where"\)\.addEventListener\("blur"/, "the copied-state blur handler is gone");
-  assert.ok(app.includes('"Open workspace: " + label'));
-  assert.ok(app.includes("footerLabel(") && app.includes("FOOTER_TIERS"));
   // The dashboard keeps the footer for the workspace label, minus the summary and Send.
-  const css = fs.readFileSync(path.join(ROOT, "src", "web-console", "public", "app.css"), "utf8");
-  assert.ok(app.includes('foot.classList.toggle("is-dash", Boolean(isDashboard() && !finish()))'));
-  assert.doesNotMatch(app, /foot\.hidden = Boolean\(isDashboard\(\)/, "the dashboard no longer hides the whole footer");
+  const css = joinedCss();
   assert.match(css, /\.footer\.is-dash \.footer-summary,\s*\.footer\.is-dash \.footer-actions \{ display: none; \}/);
   assert.match(css, /\.footer\.is-dash \.footer-where:not\(\[hidden\]\) \{ display: block;/, "narrow screens keep the label on the dashboard");
-  // Every typing place offers @name suggestions.
-  assert.equal((app.match(/attachMentions\((ta|input)\);/g) || []).length, 4, "Ask, card note, notes panel, text answer");
+  // Every typing place offers @name suggestions: the Ask pane and the notes panel
+  // (screens/ask.js) and the card note and text answer (screens/cards.js).
+  const read = (f) => fs.readFileSync(path.join(ROOT, "src", "web-console", "public", "screens", f), "utf8");
+  const count = (text) => (text.match(/attachMentions\((ta|input)\);/g) || []).length;
+  assert.equal(count(read("ask.js")) + count(read("cards.js")), 4, "Ask, card note, notes panel, text answer");
 });
 
 // The quoted flags between -NoProfile and -EncodedCommand, whichever quote style.
@@ -2086,7 +2065,7 @@ test("subagents: the store round-trips per project and workflow under the consol
   try {
     const project = path.join(home, "My Repo");
     const script = `
-      const lib = await import(${JSON.stringify(new URL("../src/web-console/lib.mjs", import.meta.url).href)});
+      const lib = await import(${JSON.stringify(new URL("../src/web-console/settings.mjs", import.meta.url).href)});
       const project = ${JSON.stringify(project)};
       lib.saveSubagentStoreEntry(project, "implement", { on: true, instruction: "Mine", max: 5 });
       const flipped = project.replace(/My Repo$/, "MY REPO");

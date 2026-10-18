@@ -13,6 +13,7 @@ import path from "node:path";
 // (it touches `document` at module scope and starts a session on import), which
 // is exactly why this lives in its own file.
 import { cardAvailability, SKILL_CATALOG } from "../src/web-console/public/answers.js";
+import { SKILLS } from "../src/web-console/public/skills.js";
 import { HELP_TABS } from "../src/web-console/public/help.js";
 import { FAVICON_BODY, FAVICON_COLORS, faviconState, faviconSvg } from "../src/web-console/public/favicon.js";
 import {
@@ -24,8 +25,9 @@ import {
   latestTag,
 } from "../src/web-console/update-check.mjs";
 import { runHint } from "../src/web-console/public/render.js";
-import { applyPatch } from "../src/web-console/lib.mjs";
+import { applyPatch } from "../src/web-console/patches.mjs";
 import { ROOT, cli, helpTemplate, sessionUrl } from "./web-console-test-helpers.mjs";
+import { joinedCss } from "./css-helpers.mjs";
 
 test("favicon: the dot follows the status line -- busy, ready, attention, plain", () => {
   // Anything with the spinning ring is busy, even a finished screen opening the dashboard.
@@ -82,7 +84,7 @@ test("runHint: command words (git included) get the hint, the rest nothing", () 
 });
 
 test("a reused item id does not inherit the previous answer's submitted record", async () => {
-  const { applyPatch } = await import("../src/web-console/lib.mjs");
+  const { applyPatch } = await import("../src/web-console/patches.mjs");
   const before = { items: [{ id: "q7", kind: "choice", title: "A", body: "old", status: "open", submitted: { at: "t", text: "old answer" } }] };
   const reworded = applyPatch(before, { items: [{ id: "q7", kind: "choice", title: "B", body: "new", status: "open" }] });
   assert.equal(reworded.items[0].submitted, undefined);
@@ -100,7 +102,7 @@ test("a reused item id does not inherit the previous answer's submitted record",
 });
 
 test("unansweredChat lists delivered Quick questions that still have no reply", async () => {
-  const { unansweredChat, appendChat, writeCursor } = await import("../src/web-console/lib.mjs");
+  const { unansweredChat, appendChat, writeCursor } = await import("../src/web-console/inbox.mjs");
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "p2c-chat-"));
   appendChat(dir, { kind: "reset", conversation: 1, workflow: "dashboard", reason: "start" });
   appendChat(dir, { kind: "message", conversation: 1, text: "run it" });
@@ -251,8 +253,7 @@ test("update check: the frame carries update only when a newer release is cached
 test("stop modal: handoff choice first, plain stop second, Keep going last, styled and wired", () => {
   const web = (f) => fs.readFileSync(path.join(ROOT, "src", "web-console", "public", f), "utf8");
   const html = web("index.html");
-  const app = web("app.js");
-  const css = web("app.css");
+  const css = joinedCss();
   const dialog = html.match(/<dialog class="modal" id="stop-modal"[^>]*>([\s\S]*?)<\/dialog>/);
   assert.ok(dialog, "index.html has the stop modal");
   const body = dialog[1];
@@ -262,39 +263,17 @@ test("stop modal: handoff choice first, plain stop second, Keep going last, styl
   assert.doesNotMatch(body, /\sstyle=|<script/i);
   assert.match(css, /\.stop-choice/, "app.css styles the choices");
   assert.match(css, /\.stop-choice:focus-visible/, "and gives them a focus outline");
-  const open = app.slice(app.indexOf("function openStopConfirm()"), app.indexOf("async function stopSession("));
-  assert.ok(open.includes("stop-handoff") && open.includes("isDashboard()"), "openStopConfirm hides the handoff on the dashboard");
-  assert.ok(app.includes("stopSession(true)") && app.includes("STOP_HANDOFF_REPLY") && app.includes("stopAction"), "app.js wires the handoff stop");
   const help = helpTemplate().match(/<section class="help-panel" data-tab="finishing">([\s\S]*?)<\/section>/);
   assert.ok(help && help[1].includes("Stop with a handoff") && help[1].includes("Just stop and save") && help[1].includes("~/.plan2code/handoffs/"), "Help names both choices and where handoffs land");
 });
 
-// The dashboard's handoff chips, preview and their four actions.
-test("dashboard handoffs: dashed chips, a preview with four buttons, and the cards give way", () => {
+// The dashboard's handoff chips, preview and their four actions. What they
+// do on the page is held by the page tests in test-web-console-page-dashboard.mjs;
+// this keeps the style, the modal markup and the Help.
+test("dashboard handoffs: the style, the read dialog and the delete warning ship, and Help explains the chips", () => {
   const web = (f) => fs.readFileSync(path.join(ROOT, "src", "web-console", "public", f), "utf8");
-  const app = web("app.js");
-  const css = web("app.css");
+  const css = joinedCss();
   const html = web("index.html");
-  const fn = (name, next) => app.slice(app.indexOf(`function ${name}(`), app.indexOf(next, app.indexOf(`function ${name}(`)));
-
-  const picker = fn("renderSpecPicker", "\nfunction ");
-  assert.ok(picker.includes("is-handoff") && picker.includes('"Handoff"'), "renderSpecPicker builds handoff chips");
-  assert.ok(picker.includes('"handoff:"'), "a handoff is picked as handoff:<id>");
-  const dash = fn("renderDashboard", "\n/* -----");
-  assert.ok(dash.includes("handoffList()"), "renderDashboard shows the picker for handoffs alone");
-  const early = dash.indexOf("renderHandoffPreview(");
-  assert.ok(early > 0 && early < dash.indexOf("hideUnavailableToggle()"), "the preview returns before the toggle and the card groups");
-  assert.match(app, /const selHandoff = \(\) =>/);
-  assert.match(app, /startsWith\("handoff:"\)/);
-
-  const preview = fn("renderHandoffPreview", "\nasync function ");
-  for (const label of ["Pick it up here", "Read it all", "Copy for a new conversation", "Delete"]) {
-    assert.ok(preview.includes(`"${label}"`), `the preview names ${label}`);
-  }
-  assert.ok(app.includes("pickupAction(") && app.includes('"/submit"'), "Pick it up here posts a __pickup to /submit");
-  assert.ok(app.includes('"/handoff?id="'), "Read it all fetches /handoff?id=");
-  assert.ok(app.includes("handoffCopyText("), "Copy puts the ready prompt on the clipboard");
-  assert.ok(app.includes("deleteHandoffAction(") && app.includes("function openHandoffDelete("), "Delete reuses the confirm dialog");
 
   assert.match(css, /\.spec-chip\.is-handoff/, "app.css styles handoff chips");
   assert.match(css, /\.handoff-preview\b/, "and the preview panel");
@@ -318,33 +297,17 @@ test("sign-off: approve leads show, and the approve button wears the accent", ()
     const show = text.indexOf('{ "id": "show", "label": "Show me it working" }');
     assert.ok(approve > 0 && show > approve, `${f} lists Approve this phase before Show me it working`);
   }
-  const app = doc("public/app.js");
-  assert.match(app, /const forward = v\.id === "approve" \|\| v\.id === "yes";/, "approve and yes are the forward verdicts");
-  assert.match(app, /forward \? " is-approve"/, "an unpicked forward verdict gets is-approve");
-  assert.match(doc("public/app.css"), /\.btn\.is-approve\s*\{[^}]*border-color:\s*var\(--accent\)/, "is-approve borders in the accent");
+  assert.match(joinedCss(), /\.btn\.is-approve\s*\{[^}]*border-color:\s*var\(--accent\)/, "is-approve borders in the accent");
 });
 
 // A fixed bug's chip: a visible Delete, one confirm, and "bug fixed" said once.
-test("bug fixed delete: a promoted Delete on the chip and a one-step confirm", () => {
+// What the fixed bug's chip and Delete do on the page is held by the page tests
+// in test-web-console-page-dashboard.mjs; this keeps the style and the Help.
+test("bug fixed delete: the Delete button is styled and Help explains the one confirm", () => {
   const web = (f) => fs.readFileSync(path.join(ROOT, "src", "web-console", "public", f), "utf8");
-  const app = web("app.js");
-  const fn = (name, next) => app.slice(app.indexOf(`function ${name}(`), app.indexOf(next, app.indexOf(`function ${name}(`)));
-
-  const picker = fn("renderSpecPicker", "\nfunction ");
-  assert.ok(picker.includes('"spec-chip-del-label"') && picker.includes('"Delete"'), "renderSpecPicker builds a Delete button for a fixed bug");
-  assert.ok(picker.includes("chipDetail("), "the chip's detail line comes from chipDetail");
-  assert.doesNotMatch(picker, /spec\.detail\b/, "never the scan's detail directly");
-
-  const css = web("app.css");
+  const css = joinedCss();
   assert.match(css, /\.spec-chip-del-label\s*\{/, "app.css styles the Delete button");
   assert.match(css, /\.spec-chip-del-label:focus-visible/, "and gives it a focus outline");
-
-  const step = fn("deleteStep", "\nasync function ");
-  const fixedAt = step.indexOf('state === "fixed"');
-  const revealAt = step.indexOf('$("delete-confirm").hidden = false');
-  assert.ok(fixedAt > 0 && revealAt > 0 && fixedAt < revealAt, "deleteStep sends a fixed bug's delete before it would reveal the name step");
-  const open = fn("openDeleteConfirm", "\nfunction ");
-  assert.ok(open.includes('state === "fixed"') && open.includes("so this only clears the write-up"), "openDeleteConfirm sets up one step and the fixed warning");
 
   const panel = helpTemplate().match(/<section class="help-panel" data-tab="dashboard">([\s\S]*?)<\/section>/);
   assert.ok(panel && /fixed\s+bug[\s\S]*?Delete[\s\S]*?one\s+confirm/i.test(panel[1]), "Help says a fixed bug has its own Delete and needs one confirm");
@@ -352,7 +315,7 @@ test("bug fixed delete: a promoted Delete on the chip and a one-step confirm", (
 
 test("update banner: the modal is in the page, with the exact command and no inline styles or scripts", () => {
   const html = fs.readFileSync(path.join(ROOT, "src", "web-console", "public", "index.html"), "utf8");
-  const app = fs.readFileSync(path.join(ROOT, "src", "web-console", "public", "app.js"), "utf8");
+  const dash = fs.readFileSync(path.join(ROOT, "src", "web-console", "public", "screens", "dashboard.js"), "utf8");
   const dialog = html.match(/<dialog class="modal" id="update-modal" aria-labelledby="update-title">([\s\S]*?)<\/dialog>/);
   assert.ok(dialog, "index.html has the update modal");
   assert.doesNotMatch(dialog[1], /\sstyle=/);
@@ -362,33 +325,26 @@ test("update banner: the modal is in the page, with the exact command and no inl
   assert.match(panel[1], /UPDATE AVAILABLE/, "the dashboard topic explains the banner");
   assert.doesNotMatch(panel[1], /\sstyle=/);
   assert.doesNotMatch(panel[1], /<script/i);
-  assert.ok(app.includes('"npx --allow-git=all git+https://github.com/jparkerweb/plan2code.git"'), "app.js copies the exact command");
+  assert.ok(dash.includes('"npx --allow-git=all git+https://github.com/jparkerweb/plan2code.git"'), "the dashboard copies the exact command");
 });
 
 test("update banner: built only on the dashboard, dismissed per session, and Help's version links to Releases", () => {
-  const app = fs.readFileSync(path.join(ROOT, "src", "web-console", "public", "app.js"), "utf8");
-  const start = app.indexOf("function renderDashboard(main) {");
-  assert.ok(start >= 0, "app.js has renderDashboard");
-  const end = app.indexOf("\n}\n", start);
-  const body = app.slice(start, end);
-  assert.match(body, /"dash-nudge update-banner"/, "renderDashboard builds the banner");
-  const outside = app.slice(0, start) + app.slice(end);
-  assert.doesNotMatch(outside, /update-banner/, "no other code builds it");
-  assert.match(app, /"p2c-update-dismissed:" \+ S\.sid/, "the dismissal is keyed by the session id");
-  assert.match(app, /const RELEASES_URL = "https:\/\/github\.com\/jparkerweb\/plan2code\/releases\/";/);
-  assert.match(app, /\.rel = "noopener noreferrer";/);
-  const help = app.match(/async function renderHelpVersion\(\) \{([\s\S]*?)\n\}/);
-  assert.ok(help, "app.js has renderHelpVersion");
-  assert.match(help[1], /releasesLink\(/, "the help version is a Releases link");
+  const dash = fs.readFileSync(path.join(ROOT, "src", "web-console", "public", "screens", "dashboard.js"), "utf8");
+  const render = fs.readFileSync(path.join(ROOT, "src", "web-console", "public", "render.js"), "utf8");
+  assert.match(dash, /"p2c-update-dismissed:" \+ page\.S\.sid/, "the dismissal is keyed by the session id");
+  assert.match(render, /const RELEASES_URL = "https:\/\/github\.com\/jparkerweb\/plan2code\/releases\/";/);
+  assert.match(render, /\.rel = "noopener noreferrer";/);
 });
 
 // The Changelog card sits left of Git, which sits left of Handoff, the last
 // card. It is always clickable, and a launch from it resumes the session under
 // its own workflow.
 test("the Changelog card comes just before Git, Handoff is last, and Changelog is always on", () => {
-  const skills = SKILL_CATALOG.map((e) => e.skill);
-  assert.equal(skills.indexOf("plan2code-changelog") + 1, skills.indexOf("plan2code-git"));
-  assert.deepEqual(skills.slice(-3), ["plan2code-changelog", "plan2code-git", "plan2code-handoff"]);
+  // The card order is skills.js's order.
+  const skills = SKILLS.filter((s) => s.card).map((s) => s.skill);
+  assert.equal(skills.indexOf("plan2code-changelog") + 1, skills.indexOf("plan2code-git"), "Changelog sits just before Git");
+  assert.equal(skills.indexOf("plan2code-git") + 1, skills.indexOf("plan2code-handoff"), "Git sits just before Handoff");
+  assert.equal(skills.at(-1), "plan2code-handoff", "Handoff is last");
   const entry = SKILL_CATALOG.find((e) => e.skill === "plan2code-changelog");
   assert.equal(entry.workflow, "changelog");
   assert.equal(entry.command, "/plan2code-changelog");
@@ -434,93 +390,17 @@ test("help: privacy names the handoffs folder and preferences says Cleanup never
   assert.match(cleanup, /never\s+offered/, "the Cleanup text says the handoffs folder is never offered for removal");
 });
 
-// Every say(...) call in a source slice, as its top-level arguments (raw
-// source text). String-aware, so commas and brackets inside a line are text.
-function sayCalls(source) {
-  const calls = [];
-  let at = 0;
-  while ((at = source.indexOf("say(", at)) !== -1) {
-    if (/[\w.]/.test(source[at - 1] || "")) {
-      at += 4;
-      continue;
-    }
-    const args = [];
-    let depth = 0;
-    let quote = null;
-    let start = at + 4;
-    let i = start;
-    for (; i < source.length; i++) {
-      const ch = source[i];
-      if (quote) {
-        if (ch === "\\") i++;
-        else if (ch === quote) quote = null;
-        continue;
-      }
-      if (ch === '"' || ch === "'" || ch === "`") quote = ch;
-      else if ("([{".includes(ch)) depth++;
-      else if (")]}".includes(ch)) {
-        if (depth === 0) break;
-        depth--;
-      } else if (ch === "," && depth === 0) {
-        args.push(source.slice(start, i).trim());
-        start = i + 1;
-      }
-    }
-    const last = source.slice(start, i).trim();
-    if (last) args.push(last);
-    calls.push(args);
-    at = i;
-  }
-  return calls;
-}
-
-test("status line: the quiet, Not running and Not connected lines offer What to check, opening Help on the stuck tab", () => {
-  const app = publicSource("app.js");
+test("help: the stuck tab is second, and openHelpOn only opens a tab that exists", () => {
+  const app = publicSource("screens/help-dialog.js");
   assert.equal(HELP_TABS.findIndex((t) => t.id === "stuck"), 1, "the stuck tab is second");
   const opener = app.match(/function openHelpOn\(id\) \{([\s\S]*?)\n\}/);
-  assert.ok(opener, "app.js has openHelpOn");
+  assert.ok(opener, "help-dialog.js has openHelpOn");
   assert.match(opener[1], /HELP_TABS\.some\(/, "openHelpOn only opens a tab that exists");
-  const render = app.slice(app.indexOf("function renderStatus()"), app.indexOf("/* ---------------------------------------------------------------- brief */"));
-  const sayDef = render.slice(render.indexOf("const say = ("), render.indexOf("text.replaceChildren("));
-  assert.match(sayDef, /help\.textContent = "What to check"/);
-  assert.match(sayDef, /help\.addEventListener\("click", \(\) => openHelpOn\("stuck"\)\)/, "the button opens Help on the stuck tab");
-  const calls = sayCalls(render.slice(render.indexOf("text.replaceChildren(")));
-  const checked = calls.filter((args) => args[4] && args[4] !== "false");
-  for (const needle of ["Not connected. Your answers are saved.", "Still working on it.", "is not running. Your answers are saved", "is not running right now."]) {
-    assert.ok(checked.some((args) => args.join(",").includes(needle)), `"${needle}" carries What to check`);
-  }
-  assert.ok(checked.some((args) => args[4] === "Boolean(hint)"), "the approval hint carries What to check");
-  // Nothing else does: the finished, working and adrift lines stay plain.
-  assert.equal(checked.length, 4, `four calls pass check, got: ${checked.map((a) => a[1]).join(" | ")}`);
-});
-
-test("finished screen: Before you close this waits while a hand-off they asked for is starting", () => {
-  const app = publicSource("app.js");
-  const handoff = app.slice(app.indexOf("function renderHandoff("));
-  const body = handoff.slice(0, handoff.indexOf("\n}\n"));
-  assert.match(body, /if \(!closeGuideHeld\(\)\) card\.appendChild\(renderCloseGuide\(shape, fin\)\)/);
-  const held = app.match(/function closeGuideHeld\(\) \{([\s\S]*?)\n\}/);
-  assert.ok(held, "app.js has closeGuideHeld");
-  const run = (gone, afterBuild, pending) =>
-    new Function("gone", "local", "reviewPending", held[1])(gone, { afterBuild }, () => pending);
-  for (const kind of ["review", "commit", "dashboard"]) {
-    assert.equal(run(false, kind, null), true, `held while ${kind} is starting`);
-  }
-  assert.equal(run(false, null, "asked"), true, "held while a review is asked");
-  assert.equal(run(false, null, "open"), false, "shown while the review is only on offer");
-  assert.equal(run(false, null, null), false, "shown on a plain finish");
-  assert.equal(run(false, "done", null), false, "shown once they said they are done");
-  assert.equal(run(true, "review", null), false, "shown once the server is gone: nothing is starting");
-  // The press re-renders the page, and so does the finish going away, so the
-  // panel follows the state.
-  const send = app.slice(app.indexOf("async function sendAfterBuild("), app.indexOf("/* ------------------------------------------------------------- dashboard */"));
-  assert.match(send, /local\.afterBuild = kind;[\s\S]*finally \{\s*render\(\);/);
-  assert.match(app, /if \(!finish\(\) && local\.afterBuild\) \{\s*local\.afterBuild = null;/);
 });
 
 test("models: Codex is a model CLI on the server and the page, with its own tab", () => {
-  const server = fs.readFileSync(path.join(ROOT, "src", "web-console", "server.mjs"), "utf8");
-  const app = publicSource("app.js");
+  const server = fs.readFileSync(path.join(ROOT, "src", "web-console", "routes.mjs"), "utf8");
+  const app = publicSource("screens/looks.js");
   const html = publicSource("index.html");
   const list = (src) => JSON.parse(src.match(/const MODEL_CLIS = (\[[^\]]*\]);/)[1]);
   assert.deepEqual(list(server), ["claude", "devin", "codex"]);
@@ -534,52 +414,9 @@ test("models: Codex is a model CLI on the server and the page, with its own tab"
   for (const cli of list(server)) assert.ok(Array.isArray(shipped[cli]), `the launcher's models.json has ${cli}`);
 });
 
-test("finished screen: every shape shows Before you close this, with three rows", () => {
-  const app = publicSource("app.js");
-  const handoff = app.slice(app.indexOf("function renderHandoff("));
-  assert.match(handoff.slice(0, handoff.indexOf("\n}\n")), /card\.appendChild\(renderCloseGuide\(shape, fin\)\)/);
-  const guide = app.slice(app.indexOf("function renderCloseGuide("), app.indexOf("function renderHandoff("));
-  for (const label of ["Safe to close", "Start fresh", "Carry on", "Before you close this"]) {
-    assert.ok(guide.includes(label), `the guide says "${label}"`);
-  }
-  assert.match(guide, /shape === "paused"/, "a pause changes the Start fresh sentence");
-  assert.match(guide, /resume command/);
-});
-
 test("getting started: the new help, status and finished-screen strings carry no em dash", () => {
-  const app = publicSource("app.js");
-  const guide = app.slice(app.indexOf("const GUIDE_ICONS"), app.indexOf("function renderHandoff("));
-  assert.ok(!guide.includes(EM), "the close guide has no em dash");
   const tpl = helpTemplate();
   const stuck = tpl.match(/<section class="help-panel" data-tab="stuck">([\s\S]*?)<\/section>/)[1];
   const fresh = stuck.slice(0, stuck.indexOf("<h4>Not running, or not connected?</h4>"));
   assert.ok(!fresh.includes(EM), "the callout and rows have no em dash");
-});
-
-test("a redraw keeps the place of whatever scrolls: question card, finished screen, doc column", () => {
-  const app = fs.readFileSync(path.join(ROOT, "src", "web-console", "public", "app.js"), "utf8");
-  const fn = app.slice(app.indexOf("function withFocus("), app.indexOf("// Scroll memory across tab switches."));
-  assert.ok(fn.includes("const place = mainPlace();") && fn.includes("restoreMainPlace(place);"), "withFocus saves and restores the main column's place");
-  assert.ok(!fn.includes('querySelector(".card.question")'), "not only a question card");
-  const scrollers = app.match(/const MAIN_SCROLLERS = "([^"]+)"/);
-  assert.ok(scrollers, "MAIN_SCROLLERS lists the column's scrolling children");
-  for (const s of [".card", ".dash", ".waiting-pane"]) assert.ok(scrollers[1].includes(":scope > " + s), `${s} keeps its place`);
-  const place = app.slice(app.indexOf("function mainPlace("), app.indexOf("function withFocus("));
-  assert.match(place, /if \(drawnView === place\.key\) main\.scrollTop = place\.top;/, "the doc column comes back only on the same tab");
-  assert.match(place, /scrollerKey\(inner\) === place\.key/, "a card comes back only while it shows the same thing");
-  assert.match(place, /:scope > \.git-board/, "the git board keeps its own per-tab place");
-});
-
-test("Skip this one is a small accent button, like a comment box's quick answer", () => {
-  const app = fs.readFileSync(path.join(ROOT, "src", "web-console", "public", "app.js"), "utf8");
-  assert.match(app, /const skip = el\("button", "btn tiny", skipped \? "Do not skip" : "Skip this one"\);/, "the skip button is btn tiny");
-  assert.match(app, /quick = el\("button", "btn tiny"/, "the quick answer it matches is btn tiny");
-});
-
-test("a confirm's yes and a recap's yes are outlined in the accent, a dangerous yes stays red", () => {
-  const app = fs.readFileSync(path.join(ROOT, "src", "web-console", "public", "app.js"), "utf8");
-  const confirm = app.slice(app.indexOf("function buildConfirm("), app.indexOf("row.appendChild(mk(noLabel"));
-  assert.match(confirm, /\(yes && !danger && !on \? " is-approve" : ""\)/, "an unpicked, safe yes gets is-approve");
-  assert.match(confirm, /\(danger && !on \? " danger" : ""\)/, "a dangerous yes stays red");
-  assert.match(app, /const ok = el\("button", "btn" \+ \(okOn \? " primary" : " is-approve"\)/, "the recap's yes gets is-approve");
 });

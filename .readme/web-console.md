@@ -803,13 +803,13 @@ origin.
 
 | | |
 | --- | --- |
-| Source | `src/web-console/` |
+| Source | `src/web-console/` (one row per file in the files table of `.agents-docs/AGENTS-architecture.md`; a test keeps it complete) |
 | Ships as | `skills/<every skill>/references/web-console/` |
 | Wiring | one `additionalReferences` entry per skill in `install.js`; the dashboard's menu lives in `public/answers.js` (`SKILL_CATALOG`) |
 | Agent contract | `src/web-console/console.md` (read once), its topic files (`console-*.md`), `notes/<workflow>.md`, and `building.md` / `building-review.md` for the builds; `console.mjs help <topic>` prints any of them |
 | Tests | `node --test scripts/test-web-console-*.mjs` (split by area, shared setup in `scripts/web-console-test-helpers.mjs`), also run by `npm test` |
-| Start-up benchmark | `node scripts/bench-web-console.mjs` (needs `puppeteer-core` and a local Chrome or Edge for the paint columns; `--browser-delay 900` models a real browser launch, `--roundtrip` times Send→agent and post→page) |
-| Screenshots | `node scripts/capture-screenshots.mjs` (needs `puppeteer-core` and a local Chrome or Edge) |
+| Start-up benchmark | `node scripts/bench-web-console.mjs` (needs a local Chrome or Edge for the paint columns, driven through `playwright-core` from `npm install`; `--browser-delay 900` models a real browser launch, `--roundtrip` times Send→agent and post→page) |
+| Screenshots | `node scripts/capture-screenshots.mjs` (needs a local Chrome or Edge, driven through `playwright-core` from `npm install`; `PLAN2CODE_TEST_BROWSER=chrome|msedge` forces one) |
 | Dependencies | none at runtime. `marked` 15.0.7 (MIT) is vendored for its lexer only |
 
 Edit `src/` only. `skills/` is a committed build artifact: regenerate it with
@@ -882,7 +882,6 @@ after any change a person would see on the page: a new layout, a renamed
 button, a different colour.
 
 ```bash
-npm i --no-save puppeteer-core                           # once; never added to package.json
 node scripts/capture-screenshots.mjs                     # every screen
 node scripts/capture-screenshots.mjs --only dashboard    # one screen
 ```

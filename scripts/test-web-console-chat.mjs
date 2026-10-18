@@ -9,7 +9,8 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { spawn } from "node:child_process";
-import { readChat, terminalLine } from "../src/web-console/lib.mjs";
+import { terminalLine } from "../src/web-console/sessions.mjs";
+import { readChat } from "../src/web-console/inbox.mjs";
 import {
   ROOT,
   CONSOLE_CLI,

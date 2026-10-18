@@ -12,7 +12,8 @@ import path from "node:path";
 import { spawn } from "node:child_process";
 import { defaultName } from "../src/web-console/public/workspace.js";
 import { meterView } from "../src/web-console/public/meter.js";
-import { readLedger, readWorkspaceCursor, WORKSPACE_FILE } from "../src/web-console/lib.mjs";
+import { readLedger } from "../src/web-console/sessions.mjs";
+import { readWorkspaceCursor, WORKSPACE_FILE } from "../src/web-console/workspace.mjs";
 import {
   ROOT,
   CONSOLE_CLI,

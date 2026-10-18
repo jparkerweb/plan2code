@@ -3,34 +3,21 @@
 // The source of truth for which workflows offer the switch, the instruction
 // each one ships with, the fixed frame every "on" block carries, the exact
 // lines the agent reads at a pickup (blockFor()), and the house rules for the
-// helpers an agent reports back (checkHelper()). No DOM access at module scope
-// and no imports: the server, console.mjs, the page and `node --test` all
-// import this file.
+// helpers an agent reports back (checkHelper()). No DOM access at module scope,
+// and its one import is the data-only skills.js: the server, console.mjs, the
+// page and `node --test` all import this file.
 
-// The one place a skill opts in (FR-1). Wording is behaviour-level and names
-// no harness tool, so any agent can follow it or harmlessly ignore it.
-export const SUBAGENT_WORKFLOWS = Object.freeze({
-  implement: Object.freeze({
-    instruction:
-      "Hand independent tasks in a phase to helpers: tasks that touch different files and do not depend on each other. Keep tasks that share files, the phase's tests and the sign-off with you.",
-  }),
-  "implement-review": Object.freeze({
-    instruction:
-      "Hand independent tasks in a phase to helpers: tasks that touch different files and do not depend on each other. Keep tasks that share files, the phase's tests and the sign-off with you.",
-  }),
-  "quick-task": Object.freeze({
-    instruction:
-      "Use helpers for side lookups, such as reading unfamiliar code or checking documentation, while you make the change yourself.",
-  }),
-  review: Object.freeze({
-    instruction:
-      "Run the review's analysis in one fresh helper briefed only with the spec and the change set (references/reviewer-brief.md); verify every finding yourself before you report.",
-  }),
-  pathfinder: Object.freeze({
-    instruction:
-      "Use helpers for codebase recon, sketches and lookups beside the conversation. Keep every question for the person with you.",
-  }),
-});
+import { SKILLS, subagentsFor } from "./skills.js";
+
+// The skills that offer the switch, each with its instruction: an entry's
+// `subagents` in skills.js is the one place a skill opts in (FR-1). Wording is
+// behaviour-level and names no harness tool, so any agent can follow it or
+// harmlessly ignore it.
+export const SUBAGENT_WORKFLOWS = Object.freeze(
+  Object.fromEntries(
+    SKILLS.filter((s) => subagentsFor(s.workflow)).map((s) => [s.workflow, Object.freeze({ instruction: subagentsFor(s.workflow) })])
+  )
+);
 
 export function offered(workflow) {
   return typeof workflow === "string" && Object.prototype.hasOwnProperty.call(SUBAGENT_WORKFLOWS, workflow);

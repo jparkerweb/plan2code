@@ -9,74 +9,47 @@
 // directory, which is what makes the console survivable: the human can finish
 // the form even if the agent session died, and a fresh agent picks the result up.
 //
+// This file is start-up and lifecycle: reading the handle and binding through
+// the handover, the cached reads the page's frame is built from, SSE, the
+// update check, state watching, the heartbeat, the idle deadline and listen.
+// Every request goes to routes.mjs, which lists every URL; the page's own
+// files are served by static.mjs, and the Workspace and Subagents helpers
+// live in workspace.mjs and settings.mjs.
+//
 // Node built-ins only.
 
 import fs from "node:fs";
 import http from "node:http";
-import os from "node:os";
 import path from "node:path";
-import crypto from "node:crypto";
 
+import {
+  HERE,
+  UPDATE_CHECK_FILE,
+  appendEvent,
+  ensureDir,
+  fileStamp,
+  nowIso,
+  parseArgs,
+  readJson,
+  writeJsonAtomic,
+} from "./files.mjs";
+import { LEDGER_FILE, handleFile, readLedger } from "./sessions.mjs";
 import {
   CHAT_CURSOR_FILE,
   CHAT_FILE,
-  LEDGER_FILE,
-  HERE,
-  LOOKS_FILE,
-  PUBLIC_DIR,
-  SHIPPED_MODELS_FILE,
-  SUBAGENTS_SETTING_FILE,
-  UPDATE_CHECK_FILE,
-  USER_MODELS_FILE,
-  WORKSPACE_FILE,
   appendChat,
-  appendEvent,
   chatForFrame,
-  checkDocument,
-  cleanupFindings,
   currentConversation,
-  ensureDir,
-  fileStamp,
-  handleFile,
-  initialWorkspace,
-  latestOpenCaps,
-  nowIso,
-  parseArgs,
-  pendingChatCount,
   readChat,
   readCursor,
-  readJson,
-  readLedger,
-  readOverview,
-  readSubagentSetting,
-  readWorkspace,
-  rememberWorkspace,
-  rememberedWorkspace,
-  removeCleanup,
-  remoteWarning,
-  SHOTS_DIR_NAME,
-  SHOT_NAME,
-  shotType,
-  saveSubagentStoreEntry,
-  PR_HOST_KINDS,
-  savePrHost,
-  specKey,
-  subagentStoreEntry,
-  typedCount,
-  withStateLock,
-  writeJsonAtomic,
-  writeSubagentSetting,
-  writeWorkspace,
-} from "./lib.mjs";
-import { DOC_TYPES, MAX_ATTACHMENTS, MAX_DOC_BYTES, docExt, workflowLabel, workflowTitle } from "./public/answers.js";
-import { CHAT_LIMIT, CHAT_MAX_CHARS, chatOffline } from "./public/chat.js";
+} from "./inbox.mjs";
+import { serverWorkspace } from "./workspace.mjs";
+import { serverSubagents } from "./settings.mjs";
+import { chatOffline } from "./public/chat.js";
 import { meterView } from "./public/meter.js";
-import { cleanSetting, defaultSetting, offered } from "./public/subagents.js";
-import { ACCENTS, DEFAULT_ACCENT, DEFAULT_CARD_WIDTH, cardWidth } from "./public/palette.js";
-import { defaultName, freeName, nameProblem } from "./public/workspace.js";
+import { SERVABLE, asset } from "./static.mjs";
+import { handle } from "./routes.mjs";
 import { checkForUpdate } from "./update-check.mjs";
-import { handoffsDir, isHandoffId } from "./handoffs.mjs";
-import { WORKSPACE_PICKER_PROMPT, pickFolder, pickerCommand } from "./picker.mjs";
 
 const args = parseArgs(process.argv.slice(2));
 // Canonicalise before anything derives a path from it: a session dir reached
@@ -123,168 +96,11 @@ const RESULT_FILE = path.join(DIR, "result.json");
 const CHAT_PATH = path.join(DIR, CHAT_FILE);
 const CURSOR_PATH = path.join(DIR, CHAT_CURSOR_FILE);
 
-// Images and documents attached to notes and quick questions. Only ever named
-// by the server (a UUID, plus `jpg` or an extension from DOC_TYPES), and only
-// ever resolved inside this directory: the client's file name is a label.
-// Images are served back as JPEG. A document is served under a fixed type
-// (PDF, or text/plain for everything else, sandboxed and never sniffed), so
-// the page can link it without ever letting a browser run it.
-const UPLOADS_DIR = path.join(DIR, "uploads");
-const UPLOAD_EXTS = ["jpg", ...Object.keys(DOC_TYPES)];
-const EXT_ALT = UPLOAD_EXTS.join("|");
-const UPLOAD_ANY_ROUTE = new RegExp(`^/uploads/([0-9a-f-]{36})\\.(${EXT_ALT})$`);
-const UPLOAD_NAME = new RegExp(`^[0-9a-f-]{36}\\.(${EXT_ALT})$`);
-
-// Screenshots the agent saved for a doc's image block (Show me it working),
-// only ever directly inside <session>/shots/ under SHOT_NAME's plain shape.
-const SHOTS_DIR = path.join(DIR, SHOTS_DIR_NAME);
-const SHOT_TYPES = { png: "image/png", jpeg: "image/jpeg", webp: "image/webp" };
-
-function shotPath(name) {
-  if (!SHOT_NAME.test(name)) return null;
-  const file = path.resolve(SHOTS_DIR, name);
-  if (!file.startsWith(path.resolve(SHOTS_DIR) + path.sep)) return null;
-  try {
-    const real = fs.realpathSync.native(file);
-    const fold = (p) => (process.platform === "win32" || process.platform === "darwin" ? p.toLowerCase() : p);
-    if (fold(path.dirname(real)) !== fold(fs.realpathSync.native(SHOTS_DIR))) return null;
-    return fs.statSync(real).isFile() ? real : null;
-  } catch {
-    return null;
-  }
-}
-
-// A kept attachment's name, as attachmentName() in lib.mjs writes it:
-// <slug>-<first 8 of the upload id>.<the upload's extension>.
-const KEPT_ROUTE = new RegExp(`^/attachments/([a-z0-9-]{1,40}-[0-9a-f-]{8}\\.(${EXT_ALT}))$`);
-
-function keptPath(name) {
-  const state = readState() || {};
-  if (typeof state.specDir !== "string" || !state.specDir.trim()) return null;
-  const root = path.resolve(state.worktree || process.cwd());
-  const dir = path.resolve(root, state.specDir, "attachments");
-  const file = path.join(dir, name);
-  try {
-    const real = fs.realpathSync.native(file);
-    const realDir = fs.realpathSync.native(dir);
-    const realRoot = fs.realpathSync.native(root);
-    const inside = (p, base) => {
-      const rel = path.relative(base.toLowerCase(), p.toLowerCase());
-      return rel && !rel.startsWith("..") && !path.isAbsolute(rel);
-    };
-    if (path.dirname(real).toLowerCase() !== realDir.toLowerCase() || !inside(real, realRoot)) return null;
-    return fs.statSync(real).isFile() ? real : null;
-  } catch {
-    return null;
-  }
-}
-
-function uploadPath(id, ext = "jpg") {
-  if (!UPLOAD_EXTS.includes(ext)) return null;
-  const result = path.join(UPLOADS_DIR, id + "." + ext);
-  return path.resolve(result).startsWith(path.resolve(UPLOADS_DIR) + path.sep) ? result : null;
-}
-
-// "image" for one of this session's JPEGs, "file" for one of its documents,
-// false for anything else.
-function isOwnUpload(p) {
-  if (typeof p !== "string") return false;
-  const fold = (s) => (process.platform === "win32" ? s.toLowerCase() : s);
-  const abs = path.resolve(p);
-  const base = fold(path.basename(abs));
-  if (fold(path.dirname(abs)) !== fold(path.resolve(UPLOADS_DIR)) || !UPLOAD_NAME.test(base)) return false;
-  return base.endsWith(".jpg") ? "image" : "file";
-}
-
-// A client-supplied label, safe to put on a reply line: control characters
-// become spaces, since a newline in a file name would split the line in two.
-function cleanLabel(name, fallback) {
-  return (
-    (typeof name === "string" ? name : "")
-      .replace(/[\u0000-\u001f\u007f]/g, " ")
-      .trim()
-      .slice(0, 200) || fallback
-  );
-}
-
-// The file name the page sent, decoded but not yet cleaned or cut short.
-function rawUploadName(req) {
-  try {
-    return decodeURIComponent(req.headers["x-p2c-name"] || "");
-  } catch {
-    return "";
-  }
-}
-
-function uploadLabel(req, fallback) {
-  return cleanLabel(rawUploadName(req), fallback);
-}
-
-// Whether a send's `images` and `files` are this session's uploads of the
-// right kind, within the combined cap. Absent lists are fine.
-function attachmentsOk(images, files) {
-  const listOk = (list, kind) =>
-    list === undefined ||
-    (Array.isArray(list) &&
-      list.every(
-        (a) =>
-          a &&
-          typeof a === "object" &&
-          isOwnUpload(a.path) === kind &&
-          fs.existsSync(a.path) &&
-          (a.name === undefined || typeof a.name === "string")
-      ));
-  const count = (Array.isArray(images) ? images.length : 0) + (Array.isArray(files) ? files.length : 0);
-  return { images: listOk(images, "image"), files: listOk(files, "file"), count: count <= MAX_ATTACHMENTS };
-}
-
 const STARTED = Date.now();
 let lastContact = Date.now();
 let browsers = 0;
 let rev = 0;
 let seq = 0;
-
-/* ------------------------------------------------------------ mime types */
-
-const TYPES = {
-  ".html": "text/html; charset=utf-8",
-  ".js": "text/javascript; charset=utf-8",
-  ".css": "text/css; charset=utf-8",
-  ".svg": "image/svg+xml",
-  ".mp3": "audio/mpeg",
-  ".png": "image/png",
-};
-
-// A hardcoded allow-list, not a filesystem lookup. Nothing to traverse.
-const SERVABLE = new Set([
-  "app.js",
-  "answers.js",
-  "app.css",
-  "render.js",
-  "palette.js",
-  "labels.js",
-  "boot.js",
-  "chat.js",
-  "help.js",
-  "starters.js",
-  "workspace.js",
-  "meter.js",
-  "subagents.js",
-  "mentions.js",
-  "favicon.js",
-  "git-board.js",
-  "git-board-view.js",
-  "pr-url.js",
-  "start-stop.mp3",
-  "next.mp3",
-  "insert.mp3",
-  "sleeping.mp3",
-  "bootup.mp3",
-  "start-skill.mp3",
-  "favicon.svg",
-  "favicon.png",
-  "vendor/marked.esm.js",
-]);
 
 /* -------------------------------------------------------------- helpers */
 
@@ -338,9 +154,6 @@ function resultFlags() {
   return resultSeen;
 }
 
-const pendingResult = () => resultFlags().pending;
-const pendingStop = () => resultFlags().stop;
-
 // The chat inbox as last parsed, re-read only when the file has moved: every
 // frame carries the conversation, and frames go out on every change.
 let chatSeen = { stamp: null, entries: [] };
@@ -371,156 +184,8 @@ function chatOfflineNow(state) {
 
 /* ------------------------------------------------------------ workspace */
 
-// workspace.json has one writer, this server; ledger.ndjson has one,
-// console.mjs. Both are re-read only when their file has moved.
-const WORKSPACE_PATH = path.join(DIR, WORKSPACE_FILE);
+// ledger.ndjson has one writer, console.mjs; re-read only when it has moved.
 const LEDGER_PATH = path.join(DIR, LEDGER_FILE);
-const FOLD_CASE = process.platform === "win32" || process.platform === "darwin";
-const foldPath = (p) => (FOLD_CASE ? p.toLowerCase() : p);
-
-let workspaceSeen = { stamp: null, ws: null };
-
-// The folder the session runs in: the state's own once it is written, else
-// the one `open` passed on the command line. Null while neither is known.
-const sessionWorktree = () => stateNow?.worktree || WORKTREE || null;
-
-// The session's workspace, created with just the original folder when absent.
-function workspaceNow() {
-  const stamp = fileStamp(WORKSPACE_PATH);
-  if (stamp && stamp === workspaceSeen.stamp) return workspaceSeen.ws;
-  const ws = (stamp && readWorkspace(DIR)) || null;
-  if (ws) {
-    workspaceSeen = { stamp, ws };
-    return ws;
-  }
-  const root = sessionWorktree();
-  const scope = specKey(stateNow?.specDir);
-  const remembered = root ? rememberedWorkspace(root, scope).entry : null;
-  const fresh = { ...initialWorkspace(root || PROJECT, remembered), scope, remote: remoteWarning().remote || "" };
-  // There but unreadable for now (a scanner's lock): never written over, and
-  // never cached, so the next call reads it again.
-  if (stamp) return workspaceSeen.ws || fresh;
-  // Nor saved while the session's folder is unknown: PROJECT is only a guess
-  // (the main checkout, for a linked worktree), and the file, once written,
-  // is what every later read trusts.
-  if (!root) return fresh;
-  try {
-    saveWorkspace(fresh);
-  } catch {}
-  return fresh;
-}
-
-function saveWorkspace(ws) {
-  writeWorkspace(DIR, ws);
-  workspaceSeen = { stamp: fileStamp(WORKSPACE_PATH), ws };
-}
-
-// One change: a new version, an entry in the change log the agent is handed,
-// the file, and every open page.
-function bumpWorkspace(ws, change, { remember = true } = {}) {
-  ws.version = (ws.version || 0) + 1;
-  ws.changes = [...(ws.changes || []), { ...change, version: ws.version }];
-  saveWorkspace(ws);
-  // Remembered for the next console session too. A folder gone missing or
-  // found again is not a change of mind, so it is not saved.
-  if (remember) rememberNow(ws);
-  pushState();
-}
-
-function rememberNow(ws) {
-  const root = sessionWorktree();
-  if (!root) return;
-  try {
-    rememberWorkspace(root, ws.scope || "", ws);
-  } catch {}
-}
-
-/**
- * Point the workspace at another spec ("" for the project's own list) and
- * swap in what was remembered there, logging each difference as a change so
- * the agent's cursor stays truthful. A spec with nothing saved starts from
- * the project's list (`seed: "project"`, the dashboard picker) or keeps the
- * list it has and saves it as the spec's (`seed: "current"`, a spec created
- * mid-run). Folders keep their ids when their path stays.
- */
-function setScope(ws, spec, seed = "project") {
-  const root = sessionWorktree();
-  const next = specKey(spec);
-  if (!root || (ws.scope || "") === next) return false;
-  const found = rememberedWorkspace(root, next);
-  ws.scope = next;
-  if (next && found.from !== "spec" && seed === "current") {
-    saveWorkspace(ws);
-    rememberNow(ws);
-    pushState();
-    return true;
-  }
-  const want = initialWorkspace(root, found.entry).folders;
-  const byPath = new Map(ws.folders.map((f) => [foldPath(path.resolve(f.path)), f]));
-  const kept = new Set();
-  const folders = [];
-  const changes = [];
-  for (const w of want) {
-    const have = w.original ? ws.folders.find((f) => f.original) : byPath.get(foldPath(path.resolve(w.path)));
-    if (!have) {
-      folders.push({ ...w, id: "pending" });
-      changes.push({ kind: "added", name: w.name, path: w.path, description: w.description });
-      continue;
-    }
-    kept.add(have);
-    if (have.name !== w.name) changes.push({ kind: "renamed", from: have.name, name: w.name, path: have.path });
-    if ((have.description || "") !== (w.description || "")) {
-      changes.push({ kind: "described", name: w.name, path: have.path, description: w.description || "" });
-    }
-    folders.push({ ...have, name: w.name, description: w.description || "" });
-  }
-  for (const f of ws.folders) {
-    if (!kept.has(f)) changes.unshift({ kind: "removed", name: f.name, path: f.path });
-  }
-  ws.folders = folders.filter((f) => f.id !== "pending");
-  for (const f of folders.filter((f) => f.id === "pending")) ws.folders.push({ ...f, id: nextFolderId(ws) });
-  ws.missing = (ws.missing || []).filter((id) => ws.folders.some((f) => f.id === id));
-  if (!changes.length) {
-    saveWorkspace(ws);
-    pushState();
-  }
-  for (const c of changes) bumpWorkspace(ws, c, { remember: false });
-  checkFolders(ws);
-  return true;
-}
-
-// A spec posted mid-run (Pathfinder or Plan making its folder, a skill that
-// learns its spec late) takes the workspace with it.
-function followSpecDir(state) {
-  const spec = specKey(state && state.specDir);
-  if (!spec || !fileStamp(WORKSPACE_PATH)) return;
-  const ws = workspaceNow();
-  if ((ws.scope || "") !== spec) setScope(ws, spec, "current");
-}
-
-function isFolder(p) {
-  try {
-    return fs.statSync(p).isDirectory();
-  } catch {
-    return false;
-  }
-}
-
-// A folder deleted on disk is marked missing, and unmarked when it comes back.
-function checkFolders(ws) {
-  ws.missing = ws.missing || [];
-  for (const f of ws.folders) {
-    const there = isFolder(f.path);
-    const marked = ws.missing.includes(f.id);
-    if (!there && !marked) {
-      ws.missing = [...ws.missing, f.id];
-      bumpWorkspace(ws, { kind: "missing", name: f.name, path: f.path }, { remember: false });
-    } else if (there && marked) {
-      ws.missing = ws.missing.filter((id) => id !== f.id);
-      bumpWorkspace(ws, { kind: "found", name: f.name, path: f.path }, { remember: false });
-    }
-  }
-}
 
 let ledgerSeen = { stamp: null, entries: [], launches: 0 };
 function ledgerEntries() {
@@ -532,112 +197,19 @@ function ledgerEntries() {
   return ledgerSeen.entries;
 }
 
-// What the agent reported it could not read during the current skill run:
-// folder-issue entries after the last launch, the latest per folder name.
-function folderIssues(entries) {
-  let from = 0;
-  entries.forEach((e, i) => e.kind === "launch" && (from = i + 1));
-  const latest = new Map();
-  for (const e of entries.slice(from)) {
-    if (e.kind !== "folder-issue") continue;
-    latest.set(e.name, { name: e.name, reason: e.reason, ...(e.hint ? { hint: e.hint } : {}) });
-  }
-  return [...latest.values()];
-}
+// The folder the session runs in: the state's own once it is written, else
+// the one `open` passed on the command line. Null while neither is known.
+const sessionWorktree = () => stateNow?.worktree || WORKTREE || null;
 
-function workspaceView() {
-  const { folders, missing, remote, scope } = workspaceNow();
-  return { folders, missing: missing || [], remote: remote || "", scope: scope || "", issues: folderIssues(ledgerEntries()) };
-}
-
-// Whether child sits strictly under parent.
-function within(parent, child) {
-  const rel = path.relative(foldPath(parent), foldPath(child));
-  return rel !== "" && rel !== ".." && !rel.startsWith(".." + path.sep) && !path.isAbsolute(rel);
-}
-
-const cleanDescription = (d) => (typeof d === "string" ? d.trim().slice(0, 200) : "");
-
-function nextFolderId(ws) {
-  const ns = ws.folders.map((f) => Number.parseInt(String(f.id).slice(1), 10)).filter(Number.isInteger);
-  return "f" + (Math.max(-1, ...ns) + 1);
-}
-
-// Each route below answers with [status, body]; validation always comes
-// before any change, so a refusal leaves the file as it was.
-function addFolder(ws, body) {
-  const raw = typeof body.path === "string" ? body.path.trim().replace(/^(["'])(.*)\1$/, "$2").trim() : "";
-  const input = raw.replace(/^~(?=$|[\\/])/, () => os.homedir());
-  const resolved = raw ? path.resolve(sessionWorktree() || PROJECT, input) : "";
-  if (!resolved || !isFolder(resolved)) return [400, { reason: "not-a-folder" }];
-  const same = ws.folders.find((f) => foldPath(path.resolve(f.path)) === foldPath(resolved));
-  if (same) return [400, { reason: "duplicate", name: same.name }];
-  const nested = ws.folders.some((f) => within(f.path, resolved));
-  const name = typeof body.name === "string" && body.name ? body.name : defaultName(resolved);
-  if (nameProblem(name)) return [400, { reason: "bad-name" }];
-  const taken = new Set(ws.folders.map((f) => f.name));
-  if (taken.has(name)) return [400, { reason: "name-taken", suggest: freeName(name, taken) }];
-  const entry = { id: nextFolderId(ws), path: resolved, name, description: cleanDescription(body.description), nested };
-  ws.folders = [...ws.folders, entry];
-  bumpWorkspace(ws, { kind: "added", name, path: resolved, description: entry.description });
-  return [200, entry];
-}
-
-function editFolder(ws, body) {
-  const entry = ws.folders.find((f) => f.id === body.id);
-  if (!entry) return [404, { reason: "unknown" }];
-  const rename = typeof body.name === "string" && body.name !== entry.name;
-  if (rename) {
-    if (nameProblem(body.name)) return [400, { reason: "bad-name" }];
-    const taken = new Set(ws.folders.filter((f) => f !== entry).map((f) => f.name));
-    if (taken.has(body.name)) return [400, { reason: "name-taken", suggest: freeName(body.name, taken) }];
-  }
-  const description = typeof body.description === "string" ? cleanDescription(body.description) : entry.description;
-  if (rename) {
-    const from = entry.name;
-    entry.name = body.name;
-    bumpWorkspace(ws, { kind: "renamed", from, name: entry.name, path: entry.path });
-  }
-  if (description !== entry.description) {
-    entry.description = description;
-    bumpWorkspace(ws, { kind: "described", name: entry.name, path: entry.path, description });
-  }
-  return [200, entry];
-}
-
-function removeFolder(ws, body) {
-  const entry = ws.folders.find((f) => f.id === body.id);
-  if (entry && entry.original) return [400, { reason: "original" }];
-  if (!entry) return [404, { reason: "unknown" }];
-  ws.folders = ws.folders.filter((f) => f !== entry);
-  ws.missing = (ws.missing || []).filter((id) => id !== entry.id);
-  bumpWorkspace(ws, { kind: "removed", name: entry.name, path: entry.path });
-  return [200, { ok: true }];
-}
-
-// Where the picker opens: beside the last folder added, else the original.
-function pickerStart(ws) {
-  const added = ws.folders.filter((f) => !f.original);
-  return added.length ? path.dirname(added[added.length - 1].path) : ws.folders[0]?.path || sessionWorktree() || PROJECT;
-}
-
-// One picker at a time. Spawned, never spawnSync: the dialog can sit open for
-// minutes, and every poll, chat message and `wait` health check has to keep
-// being answered meanwhile.
-let pickerBusy = false;
-
-function bootWorkspace() {
-  // Nothing to check yet: the first read once the state is written makes it.
-  if (!sessionWorktree() && !fileStamp(WORKSPACE_PATH)) return;
-  const ws = workspaceNow();
-  const remote = remoteWarning().remote || "";
-  if ((ws.remote || "") !== remote) {
-    ws.remote = remote;
-    saveWorkspace(ws);
-  }
-  checkFolders(ws);
-  followSpecDir(stateNow);
-}
+// The Workspace, kept by workspace.mjs: workspace.json has one writer, this server.
+const workspace = serverWorkspace({
+  dir: DIR,
+  project: PROJECT,
+  worktree: sessionWorktree,
+  state: () => stateNow,
+  ledger: ledgerEntries,
+  pushState: () => pushState(),
+});
 
 /**
  * Open a conversation when there is none, and a new one whenever the page
@@ -671,45 +243,9 @@ function ensureConversation(state) {
 
 /* ------------------------------------------------------------ subagents */
 
-// subagents-setting.json has one writer, this server, and the agent hears of
-// it only through what console.mjs reads there; events.ndjson's latest `open`
-// says whether the agent's console copy can carry it. Both re-read only when
-// their file has moved.
-const SUBAGENTS_SETTING_PATH = path.join(DIR, SUBAGENTS_SETTING_FILE);
-const EVENTS_PATH = path.join(DIR, "events.ndjson");
-
-let subagentSettingSeen = { stamp: null, setting: null };
-function subagentSettingNow() {
-  const stamp = fileStamp(SUBAGENTS_SETTING_PATH);
-  if (stamp !== subagentSettingSeen.stamp) subagentSettingSeen = { stamp, setting: readSubagentSetting(DIR) };
-  return subagentSettingSeen.setting;
-}
-
-let capsSeen = { stamp: null, caps: [] };
-function openCapsNow() {
-  const stamp = fileStamp(EVENTS_PATH);
-  if (stamp !== capsSeen.stamp) capsSeen = { stamp, caps: latestOpenCaps(DIR) };
-  return capsSeen.caps;
-}
-
-const sameSetting = (a, b) => a.workflow === b.workflow && a.on === b.on && a.instruction === b.instruction && a.max === b.max;
-
-/**
- * Turn the per-project store into this session's setting, for the workflow
- * the session is in now. The only place that happens (FR-7): a session an
- * older server ran has no setting file, so nothing is ever injected into it.
- * A record that already matches is left alone, revision and all, so a
- * restart alone never re-tells the agent anything.
- */
-function syncSubagentSetting(state) {
-  if (!state || typeof state.workflow !== "string") return;
-  const { workflow } = state;
-  const { on, instruction, max } = offered(workflow) ? subagentStoreEntry(sessionWorktree(), workflow) : defaultSetting(workflow);
-  const target = { workflow, on, instruction, max };
-  const current = readSubagentSetting(DIR);
-  if (current && sameSetting(current, target)) return;
-  writeSubagentSetting(DIR, { ...target, revision: (current ? current.revision : 0) + 1 });
-}
+// The Subagents switch, kept by settings.mjs: subagents-setting.json has one
+// writer, this server.
+const subagents = serverSubagents({ dir: DIR, worktree: sessionWorktree });
 
 // What the page needs to draw itself, in the shape of the SSE state frame.
 // `have` names that exact view, for the page to hand back when it opens its
@@ -723,326 +259,37 @@ function stateFrame(state) {
     pendingResult: pending,
     pendingStop: stop,
     chat: { ...chatForFrame(chatEntries(), state), pickedUp: chatPickedUp(), offline: chatOfflineNow(state) },
-    workspace: workspaceView(),
+    workspace: workspace.workspaceView(),
     meter: meterView(ledgerEntries()),
-    subagents: subagentsView(state),
+    subagents: subagents.view(state),
     ...(updateInfo ? { update: updateInfo } : {}),
     have: haveKey(),
   };
-}
-
-// The page shows the switch only when `offered && supported` (FR-3); the
-// frame says both and leaves combining them to the page. `instruction: null`
-// is the shipped default, which the page reads from subagents.js itself.
-function subagentsView(state) {
-  const workflow = state && state.workflow;
-  const { on, instruction, max, revision } = subagentSettingNow() || { ...defaultSetting(workflow), revision: 0 };
-  return { offered: offered(workflow), supported: openCapsNow().includes("subagents"), on, instruction, max, revision };
 }
 
 function haveKey() {
   const { pending, stop } = resultFlags();
   chatEntries();
   chatPickedUp();
-  workspaceNow();
+  workspace.workspaceNow();
   ledgerEntries();
-  subagentSettingNow();
-  openCapsNow();
+  subagents.settingNow();
+  subagents.capsNow();
   return (
     `${STARTED}.${rev}.${pending ? 1 : 0}${stop ? 1 : 0}.${chatSeen.stamp || ""}.${cursorSeen.stamp || ""}` +
-    `.${workspaceSeen.stamp || ""}.${ledgerSeen.stamp || ""}.${updateInfo ? updateInfo.latest : ""}` +
-    `.${subagentSettingSeen.stamp || ""}.${capsSeen.stamp || ""}`
+    `.${workspace.stamp() || ""}.${ledgerSeen.stamp || ""}.${updateInfo ? updateInfo.latest : ""}` +
+    `.${subagents.stamps()}`
   );
-}
-
-/**
- * Write what the person sent onto the item itself.
- *
- * The page shows a settled question's answer back to them, and the agent is
- * supposed to record one when it settles the question. This is the belt to that
- * braces: a model that forgets the `answer` field leaves someone staring at a
- * card marked "Settled" with nothing in it, and they cannot tell what they said.
- *
- * It never touches `status`. Only the agent decides when a question is settled,
- * and this must not look like an answer the agent has read.
- */
-function recordSubmitted(state, actions) {
-  if (!Array.isArray(state.items)) return;
-  const at = nowIso();
-  for (const action of actions) {
-    if (!action || typeof action !== "object") continue;
-    const item = state.items.find((i) => i && i.id === action.i);
-    if (!item) continue;
-    if (action.type === "comment") {
-      const pick = (list) => (Array.isArray(list) ? list.map(({ path, name }) => ({ path, name })) : []);
-      item.sentNote = { at, text: String(action.text || ""), images: pick(action.images), files: pick(action.files) };
-      // The person's side of the Notes thread. Left to the agent it was never
-      // written, so a question asked in a note vanished once it was picked up
-      // and the reply under it answered nothing on the page.
-      if (item.sentNote.text.trim() || item.sentNote.images.length || item.sentNote.files.length) {
-        item.thread = [...(Array.isArray(item.thread) ? item.thread : []), { who: "user", ...item.sentNote }];
-      }
-      continue;
-    }
-    const { i, type, ...rest } = action;
-    // JSON.parse makes "__proto__" an own property, and it would then be
-    // written back into state.json and re-read forever.
-    if (Object.prototype.hasOwnProperty.call(rest, "__proto__")) delete rest["__proto__"];
-    // A skip says so on the record, so settling it can record a skip.
-    item.submitted = { at, ...rest, ...(type === "skip" ? { skipped: true } : {}) };
-  }
-}
-
-function baseHeaders(extra = {}) {
-  return {
-    "cache-control": "no-store",
-    "x-content-type-options": "nosniff",
-    "referrer-policy": "no-referrer",
-    ...extra,
-  };
-}
-
-function send(res, code, body, type = "application/json", extra = {}) {
-  res.writeHead(code, baseHeaders({ "content-type": type, ...extra }));
-  res.end(body);
-}
-
-function json(res, code, obj, extra = {}) {
-  send(res, code, JSON.stringify(obj), "application/json", extra);
-}
-
-function timingSafeEq(a, b) {
-  const ab = Buffer.from(String(a));
-  const bb = Buffer.from(String(b));
-  if (ab.length !== bb.length) return false;
-  return crypto.timingSafeEqual(ab, bb);
-}
-
-// One cookie per port. Browsers scope cookies by host and ignore the port, so
-// with one shared name every session on 127.0.0.1 wrote over the one before
-// it, and the first session's tab went on sending the second one's token and
-// got nothing but 403s. The port is what makes a session's origin its own, and
-// a resumed server on a new port is reached again only through its /s/ link,
-// which sets the cookie under the new name.
-const cookieName = () => `p2c_console_${PORT}`;
-
-function cookieToken(req) {
-  const raw = req.headers.cookie || "";
-  const name = cookieName();
-  for (const part of raw.split(";")) {
-    const [k, ...v] = part.trim().split("=");
-    if (k === name) return v.join("=");
-  }
-  return null;
-}
-
-function authed(req) {
-  if (!TOKEN) return true;
-  const c = cookieToken(req);
-  return c ? timingSafeEq(c, TOKEN) : false;
-}
-
-/**
- * The DNS-rebinding defence, and the highest-value check in this file.
- *
- * Without it, any page the user visits can resolve its own hostname to
- * 127.0.0.1 and then talk to this server as same-origin. That is not
- * theoretical: it is the exact shape of Vite's GHSA-vg6x-rcgg-rjx6.
- */
-function hostOk(req, port) {
-  const host = req.headers.host;
-  if (!host) return false;
-  return host === `127.0.0.1:${port}` || host === `localhost:${port}`;
-}
-
-function originOk(req, port) {
-  const origin = req.headers.origin;
-  if (!origin) return true; // same-origin fetches and plain navigations send none
-  return origin === `http://127.0.0.1:${port}` || origin === `http://localhost:${port}`;
 }
 
 function touch() {
   lastContact = Date.now();
 }
 
-// The CLIs the launcher reads a model list for (src/launcher/plan2code.js listModels).
-const MODEL_CLIS = ["claude", "devin", "codex"];
-const MODEL_ID = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,99}$/;
-// Devin's XHigh and Max efforts are never offered, curated or added.
-const MODEL_EFFORT_BLOCKED = /-(xhigh|max)$/i;
-
-/**
- * The user's added models: { claude: [{id,label}], devin: [...], codex: [...] }. Returns { models } or
- * { error }. Blank rows are dropped; ids are trimmed and made unique per CLI; a label
- * defaults to the id. Nothing else in the body survives.
- */
-function cleanModels(input) {
-  if (!input || typeof input !== "object" || Array.isArray(input)) return { error: "models must be an object" };
-  const models = {};
-  for (const cli of MODEL_CLIS) {
-    const list = input[cli] == null ? [] : input[cli];
-    if (!Array.isArray(list) || list.length > 50) return { error: `${cli} must be a list of at most 50 models` };
-    const seen = new Set();
-    models[cli] = [];
-    for (const row of list) {
-      const id = String((row && row.id) ?? "").trim();
-      if (!id) continue;
-      if (!MODEL_ID.test(id)) return { error: `"${id}" is not a valid model id` };
-      if (MODEL_EFFORT_BLOCKED.test(id)) return { error: `"${id}": only Low, Medium and High efforts are allowed` };
-      if (seen.has(id)) continue;
-      seen.add(id);
-      const label = String((row && row.label) ?? "").trim().slice(0, 80) || id;
-      models[cli].push({ id, label });
-    }
-  }
-  return { models };
-}
-
-function shippedModels() {
-  const file = readJson(SHIPPED_MODELS_FILE, null) || {};
-  const out = {};
-  for (const cli of MODEL_CLIS) {
-    out[cli] = (Array.isArray(file[cli]) ? file[cli] : []).filter((m) => m && typeof m.id === "string");
-  }
-  return out;
-}
-
-/**
- * Whittle a POSTed settings object down to what a settings file may hold.
- * The page only sends { theme, accent } today, but the file is shared and
- * forward-compatible: any flat string/number/boolean may live in it. Nested
- * objects, arrays and a hundred-key dump may not — this is a preference file,
- * not free storage, and it is read back into the page unfiltered.
- */
-function cleanLooks(input) {
-  if (!input || typeof input !== "object" || Array.isArray(input)) return null;
-  const out = {};
-  for (const [k, v] of Object.entries(input)) {
-    if (k === "__proto__" || k.length > 64) continue;
-    const t = typeof v;
-    if (t === "number" || t === "boolean" || (t === "string" && v.length <= 256)) out[k] = v;
-    if (Object.keys(out).length > 40) return null;
-  }
-  return Object.keys(out).length ? out : null;
-}
-
-/* ---------------------------------------------------------------- assets */
-
-// Read once per server, from memory after that. Held for the server's whole
-// life on purpose: a skill reinstalled under a running session must not hand
-// one page a new app.js beside the old answers.js it imports.
-//
-// Revalidated rather than stored: `no-cache` plus an ETag makes a reload a
-// round of 304s instead of 400KB again. Every session is a new port, and so a
-// new origin with a cold cache, which is why the first load is made cheap by
-// other means (preload hints, the inline boot state) rather than by caching.
-const assets = new Map();
-
-function asset(rel) {
-  let a = assets.get(rel);
-  if (!a) {
-    let body = fs.readFileSync(path.join(PUBLIC_DIR, rel));
-    if (rel === "app.css") body = Buffer.concat([body, Buffer.from(accentCss())]);
-    const etag = `"${crypto.createHash("sha1").update(body).digest("base64url").slice(0, 20)}"`;
-    a = { body, etag, type: TYPES[path.extname(rel)] || "application/octet-stream" };
-    assets.set(rel, a);
-  }
-  return a;
-}
-
-// The saved highlight color, painted from the very first frame. The page's
-// script owns the colors once it runs (applyLooks clears the attribute these
-// hang off), but until then the only way to avoid flashing the default ocean
-// at someone who picked violet is a stylesheet rule the server can switch on
-// with an attribute: the CSP forbids inline styles, and the colors live in
-// palette.js, so they are generated from there rather than copied into CSS.
-function accentCss() {
-  const vars = (shades) =>
-    ["--accent", "--accent-soft", "--accent-ink", "--accent-line"].map((n, i) => `${n}:${shades[i]}`).join(";");
-  let css = "\n/* Generated by server.mjs from palette.js: the saved accent before app.js runs. */\n";
-  for (const [id, a] of Object.entries(ACCENTS)) {
-    if (id === DEFAULT_ACCENT) continue;
-    const sel = `:root[data-looks-accent="${id}"]`;
-    css += `${sel}{${vars(a.light)}}\n`;
-    css += `@media (prefers-color-scheme: dark){${sel}:not([data-theme="light"]){${vars(a.dark)}}}\n`;
-    css += `${sel}[data-theme="dark"]{${vars(a.dark)}}\n`;
-  }
-  return css;
-}
-
-// looks.json, re-read only when it changes: it is read into every page load.
-let looksSeen = { stamp: null, looks: null };
-function savedLooks() {
-  const stamp = fileStamp(LOOKS_FILE);
-  if (stamp !== looksSeen.stamp) {
-    const saved = stamp ? readJson(LOOKS_FILE, null) : null;
-    looksSeen = { stamp, looks: saved && saved.looks && typeof saved.looks === "object" ? saved.looks : null };
-  }
-  return looksSeen.looks;
-}
-
-const escHtml = (s) =>
-  String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
-
-let indexTemplate = null;
-
-/**
- * The page, with everything the first paint needs already in it.
- *
- * The page used to arrive as a blank template that said "Pathfinder" and
- * "Connecting…" whatever the session was, then fetch /state, then /looks, and
- * only then draw anything real. Now the server writes the session's name,
- * badge and theme into the markup and the whole first state into an inline
- * JSON block, so the script draws the real screen the moment it runs, with no
- * round trip in between. The block is data, not script: `application/json`
- * is never executed, so the CSP's ban on inline script stands untouched.
- * Every `<` in it is escaped, which is what keeps a `</script>` inside some
- * agent-written text from closing the block early.
- */
-function renderIndex() {
-  if (indexTemplate === null) indexTemplate = fs.readFileSync(path.join(PUBLIC_DIR, "index.html"), "utf8");
-  const state = readState();
-  const looks = savedLooks();
-  const boot = {
-    ...stateFrame(state),
-    draft: readJson(DRAFT_FILE, {}),
-    looks,
-  };
-  let htmlAttrs = "";
-  if (looks && (looks.theme === "light" || looks.theme === "dark")) htmlAttrs += ` data-theme="${looks.theme}"`;
-  if (looks && looks.accent !== DEFAULT_ACCENT && Object.hasOwn(ACCENTS, String(looks.accent))) {
-    htmlAttrs += ` data-looks-accent="${looks.accent}"`;
-  }
-  // The same first-paint reasoning as the accent: a Wide user never sees the
-  // column jump from the default width. The value is one of the fixed preset
-  // keys, so there is nothing to escape.
-  if (looks && cardWidth(looks.width) !== DEFAULT_CARD_WIDTH) {
-    htmlAttrs += ` data-width="${cardWidth(looks.width)}"`;
-  }
-  const title = (state && state.title) || "Session";
-  const workflow = state && state.workflow;
-  const json = JSON.stringify(boot).replace(/</g, "\\u003c");
-  // Function replacements throughout: a string replacement reads `$&` and
-  // `$'` in the inserted text as patterns, and titles and state are free text.
-  return indexTemplate
-    .replace('<html lang="en">', () => `<html lang="en"${htmlAttrs}>`)
-    .replace(
-      "<title>Plan2Code Console</title>",
-      () => `<title>${escHtml(title)} · #${escHtml(String(SID).slice(-6))} · Plan2Code</title>`
-    )
-    .replace('<h1 id="title">Plan2Code Console</h1>', () => `<h1 id="title">${escHtml(title)}</h1>`)
-    .replace(
-      '<span class="badge" id="badge">Pathfinder</span>',
-      () => `<span class="badge" id="badge">${escHtml(workflowLabel(workflow))}</span>`
-    )
-    .replace(
-      '<h2 class="launch-title" id="boot-title">Opening the console</h2>',
-      () =>
-        `<h2 class="launch-title" id="boot-title">${escHtml(
-          workflow === "dashboard" ? "Opening the dashboard" : `Starting ${workflowTitle(workflow)}`
-        )}</h2>`
-    )
-    .replace("<!-- p2c:boot -->", () => `<script type="application/json" id="boot">${json}</script>`);
+// A tab closing: with no page left, the server stops two minutes from now
+// rather than at the end of the idle window.
+function closedTab() {
+  if (clients.size === 0) lastContact = Date.now() - (IDLE_MS - 2 * 60 * 1000);
 }
 
 /* ------------------------------------------------------------------ SSE */
@@ -1112,849 +359,58 @@ function agentLastSeen() {
 // socket was bound by console.mjs, so `server.address()` has nothing to say.
 let PORT = 0;
 
-const server = http.createServer((req, res) => {
-  const port = PORT;
-  const url = new URL(req.url, `http://127.0.0.1:${port}`);
-  const pathname = url.pathname;
-
-  if (!hostOk(req, port)) return send(res, 403, "", "text/plain");
-
-  // /health is the liveness probe the CLI uses to distinguish "our server"
-  // from a process that merely inherited the PID. Deliberately unauthenticated
-  // and deliberately tells you nothing but the session id.
-  if (pathname === "/health") {
-    touch();
+// What routes.mjs reads from this server. Getters and setters where the
+// value moves, so a handler always sees the live one.
+const ctx = {
+  sid: SID,
+  token: TOKEN,
+  dir: DIR,
+  project: PROJECT,
+  files: { state: STATE_FILE, draft: DRAFT_FILE, result: RESULT_FILE },
+  port: () => PORT,
+  get rev() {
+    return rev;
+  },
+  set rev(n) {
+    rev = n;
+  },
+  get browsers() {
+    return browsers;
+  },
+  set browsers(n) {
+    browsers = n;
+  },
+  clients,
+  touch,
+  closedTab,
+  sawAgent: () => {
     agentSeenAt = Date.now();
-    return json(res, 200, { ok: true, sid: SID, browsers, rev, phase: readState()?.phase || "unknown" });
-  }
+  },
+  agentLastSeen,
+  readState,
+  resultFlags,
+  stateText: () => lastStateText,
+  adoptStateText,
+  stateFrame,
+  haveKey,
+  pushState,
+  broadcast,
+  chatEntries,
+  chatOffline: chatOfflineNow,
+  ensureConversation,
+  worktree: sessionWorktree,
+  workspace,
+  subagents,
+  installedVersion,
+  updateLatest: () => updateLatest,
+};
 
-  // Token in the PATH, not the query string. Two reasons: a query string would
-  // put an `&` in the URL, and `cmd /c start <url>` on Windows parses `&` as a
-  // command separator; and the 302 below gets the secret out of the address bar,
-  // out of history, and out of any screenshot the user pastes into a ticket.
-  if (pathname.startsWith("/s/")) {
-    const given = pathname.slice(3).replace(/\/$/, "");
-    if (!TOKEN || !timingSafeEq(given, TOKEN)) return send(res, 403, "Not found", "text/plain");
-    touch();
-    res.writeHead(
-      302,
-      baseHeaders({
-        location: "/",
-        "set-cookie": `${cookieName()}=${TOKEN}; HttpOnly; SameSite=Strict; Path=/`,
-      })
-    );
-    return res.end();
-  }
-
-  if (!authed(req)) return send(res, 403, "Open the link the terminal printed.", "text/plain");
-  touch();
-
-  if (pathname === "/" && req.method === "GET") {
-    let html;
-    try {
-      html = renderIndex();
-    } catch {
-      return send(res, 500, "index.html missing", "text/plain");
-    }
-    // No 'unsafe-inline'. That is why the client is separate .js/.css files
-    // rather than one inlined page: it makes an injected inline <script> or
-    // onerror= attribute inert even if the renderer has a bug.
-    const csp =
-      "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; " +
-      "font-src 'self'; connect-src 'self'; media-src 'self'; " +
-      "base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
-    return send(res, 200, html, TYPES[".html"], { "content-security-policy": csp });
-  }
-
-  if (req.method === "GET" && SERVABLE.has(pathname.slice(1))) {
-    const rel = pathname.slice(1);
-    const abs = path.join(PUBLIC_DIR, rel);
-    if (!abs.startsWith(PUBLIC_DIR)) return send(res, 403, "", "text/plain");
-    let a;
-    try {
-      a = asset(rel);
-    } catch {
-      return send(res, 404, "", "text/plain");
-    }
-    const headers = { "cache-control": "no-cache", etag: a.etag };
-    if (req.headers["if-none-match"] === a.etag) {
-      res.writeHead(304, baseHeaders(headers));
-      return res.end();
-    }
-    return send(res, 200, a.body, a.type, headers);
-  }
-
-  // The spec's overview.md, read-only. A dashboard honours ?spec= only for a
-  // spec its own scan found; every other workflow reads its own specDir.
-  // readOverview() keeps the read inside the project root.
-  if (pathname === "/overview" && req.method === "GET") {
-    const state = readState() || {};
-    const asked = url.searchParams.get("spec");
-    const spec =
-      state.workflow === "dashboard"
-        ? (state.scan?.specs || []).some((s) => s && s.dir === asked)
-          ? asked
-          : ""
-        : state.specDir;
-    // Most specs have no overview.md yet, which is normal, not an error: 204
-    // keeps the browser console free of a failed request per pick.
-    const noOverview = () => {
-      res.writeHead(204, baseHeaders({ "cache-control": "no-store" }));
-      res.end();
-    };
-    readOverview(state.worktree || state.project, spec)
-      .then((text) =>
-        typeof text === "string"
-          ? send(res, 200, text, "text/markdown; charset=utf-8", { "cache-control": "no-store" })
-          : noOverview()
-      )
-      .catch(noOverview);
-    return;
-  }
-
-  // A handoff's document, read-only, for the dashboard's "Read it all". Only a
-  // dashboard serves it, and only an id its own scan listed: a used or unknown
-  // id, or anything that is not a bare handoff id, is a 404.
-  if (pathname === "/handoff" && req.method === "GET") {
-    const state = readState() || {};
-    const id = url.searchParams.get("id");
-    const listed = state.workflow === "dashboard" && isHandoffId(id) && (state.scan?.handoffs || []).some((h) => h && h.id === id);
-    if (!listed) return send(res, 404, "", "text/plain");
-    fs.readFile(path.join(handoffsDir(), id + ".md"), "utf8", (err, text) => {
-      if (err) return send(res, 404, "", "text/plain");
-      send(res, 200, text, "text/markdown; charset=utf-8", { "cache-control": "no-store" });
-    });
-    return;
-  }
-
-  if (pathname === "/version" && req.method === "GET") {
-    const version = installedVersion();
-    if (version) return json(res, 200, { version, latest: updateLatest });
-    return json(res, 404, { error: "no version" });
-  }
-
-  if (pathname === "/state" && req.method === "GET") {
-    const state = readState();
-    if (!state) return json(res, 404, { error: "no state" });
-    return json(res, 200, { ...stateFrame(state), draft: readJson(DRAFT_FILE, {}) });
-  }
-
-  if (pathname === "/events" && req.method === "GET") {
-    res.writeHead(200, {
-      "content-type": "text/event-stream",
-      "cache-control": "no-cache, no-transform",
-      connection: "keep-alive",
-      "x-accel-buffering": "no",
-    });
-    // Without flushHeaders the browser sits on buffered headers and
-    // EventSource never fires onopen.
-    res.flushHeaders();
-    res.setTimeout(0);
-    clients.add(res);
-    browsers = clients.size;
-    res.write(`retry: 2000\n\n`);
-    const state = readState();
-    // pendingResult belongs in the FIRST frame as much as in every later one.
-    // The page decides from it whether a send is still in flight; leaving it
-    // out of the opening frame made a reconnecting tab briefly believe its last
-    // answers had already been dealt with.
-    //
-    // Unless the page already holds exactly this: it says what it drew from
-    // (`have`, from the state inlined into the page it was served), and a
-    // frame that matches it would only make it redraw the same screen. The
-    // server's start time is in the key, so a restarted server whose counter
-    // happens to land on the same number is never mistaken for this one.
-    if (state && url.searchParams.get("have") !== haveKey()) {
-      res.write(`event: state\ndata: ${JSON.stringify(stateFrame(state))}\n\n`);
-    }
-    req.on("close", () => {
-      clients.delete(res);
-      browsers = clients.size;
-    });
-    return;
-  }
-
-  if (pathname === "/draft" && req.method === "POST") {
-    if (!originOk(req, port)) return json(res, 403, { error: "bad origin" });
-    return readBody(req, (err, body) => {
-      if (err) return json(res, err.tooBig ? 413 : 400, { error: err.tooBig ? "too large" : "body must be JSON" });
-      // Debounced client-side; this is just the durable mirror. Twenty minutes
-      // of someone's structured answers must not die with a closed tab.
-      try {
-        writeJsonAtomic(DRAFT_FILE, { at: nowIso(), rev, ...body });
-      } catch (e) {
-        return json(res, 500, { error: String(e.message) });
-      }
-      return json(res, 200, { ok: true });
-    });
-  }
-
-  // The person's colors and theme, kept by the server rather than the browser:
-  // localStorage is tied to the origin and the origin carries the ephemeral
-  // port, so a new session on a new port starts on defaults. This file is the
-  // copy that follows the app instead of the port.
-  if (pathname === "/looks" && req.method === "GET") {
-    const saved = readJson(LOOKS_FILE, null);
-    if (!saved || !saved.looks) return json(res, 404, { error: "no looks saved" });
-    return json(res, 200, saved);
-  }
-
-  if (pathname === "/looks" && req.method === "POST") {
-    if (!originOk(req, port)) return json(res, 403, { error: "bad origin" });
-    return readBody(req, (err, body) => {
-      if (err) return json(res, err.tooBig ? 413 : 400, { error: err.tooBig ? "too large" : "body must be JSON" });
-      // `set` carries only the keys one tab changed, merged onto what is on
-      // disk, so a tab holding stale settings cannot undo another tab's change.
-      const set = body && body.set !== undefined ? cleanLooks(body.set) : null;
-      const looks = set ? { ...(readJson(LOOKS_FILE, null)?.looks || {}), ...set } : cleanLooks(body && body.looks);
-      if (!looks) return json(res, 400, { error: "looks must be an object of simple settings" });
-      try {
-        ensureDir(path.dirname(LOOKS_FILE));
-        writeJsonAtomic(LOOKS_FILE, { at: nowIso(), looks });
-      } catch (e) {
-        return json(res, 500, { error: String(e.message) });
-      }
-      return json(res, 200, { ok: true });
-    });
-  }
-
-  // The Subagents switch for the session's workflow. Saved per project folder
-  // for the next session, and applied to this one with a bumped revision, which
-  // is what console.mjs hands the agent at its next pickup. Never blocked by,
-  // and never blocking, a card send.
-  if (pathname === "/subagents" && req.method === "POST") {
-    if (!originOk(req, port)) return json(res, 403, { error: "bad origin" });
-    return readBody(req, (err, body) => {
-      if (err) return json(res, err.tooBig ? 413 : 400, { error: err.tooBig ? "too large" : "body must be JSON" });
-      const state = readState();
-      if (!state || !offered(state.workflow)) return json(res, 400, { error: "not-offered" });
-      const clean = cleanSetting(body);
-      if (clean.error) return json(res, 400, { error: clean.error });
-      const { on, instruction, max } = clean;
-      const current = readSubagentSetting(DIR);
-      const next = { workflow: state.workflow, on, instruction, max };
-      // The store is per project, so another session may have moved it since
-      // this one synced: it always takes the person's latest pick. Only a
-      // real change to this session's setting bumps what the agent hears.
-      const unchanged = Boolean(current && sameSetting(current, next));
-      try {
-        saveSubagentStoreEntry(sessionWorktree(), state.workflow, { on, instruction, max });
-        if (!unchanged) writeSubagentSetting(DIR, { ...next, revision: (current ? current.revision : 0) + 1 });
-      } catch (e) {
-        return json(res, 500, { error: String(e.message) });
-      }
-      if (unchanged) return json(res, 200, { ok: true, setting: current });
-      const setting = readSubagentSetting(DIR);
-      appendEvent(DIR, { type: "subagents", on, revision: setting.revision });
-      pushState();
-      return json(res, 200, { ok: true, setting });
-    });
-  }
-
-  // What an unknown git host is, for the git board's pull-request link. Saved
-  // to pr-hosts.json for every project; nothing is written under the project.
-  // The page follows it with a __git pr-host action, and the agent's reread
-  // rebuilds the link.
-  if (pathname === "/pr-host" && req.method === "POST") {
-    if (!originOk(req, port)) return json(res, 403, { error: "bad origin" });
-    return readBody(req, (err, body) => {
-      if (err) return json(res, err.tooBig ? 413 : 400, { error: err.tooBig ? "too large" : "body must be JSON" });
-      const { host: raw, kind } = body && typeof body === "object" ? body : {};
-      if (typeof raw !== "string" || !raw || raw.length > 253 || !/^[a-z0-9.-]+$/i.test(raw)) {
-        return json(res, 400, { error: "bad-host" });
-      }
-      // Hosts are looked up lowercased (git-repo.mjs parseRemoteUrl).
-      const host = raw.toLowerCase();
-      if (!PR_HOST_KINDS.has(kind)) return json(res, 400, { error: "bad-kind" });
-      const state = readState();
-      if (!state || state.workflow !== "git") return json(res, 400, { error: "not-git" });
-      try {
-        savePrHost(host, kind);
-      } catch (e) {
-        return json(res, 500, { error: String(e.message) });
-      }
-      appendEvent(DIR, { type: "pr-host", host, kind });
-      return json(res, 200, { ok: true });
-    });
-  }
-
-  // The launcher's model menu: what ships (read-only here) and what the user added.
-  if (pathname === "/models" && req.method === "GET") {
-    const saved = readJson(USER_MODELS_FILE, null) || {};
-    const { models } = cleanModels(saved);
-    return json(res, 200, { shipped: shippedModels(), user: models || Object.fromEntries(MODEL_CLIS.map((cli) => [cli, []])) });
-  }
-
-  if (pathname === "/models" && req.method === "POST") {
-    if (!originOk(req, port)) return json(res, 403, { error: "bad origin" });
-    return readBody(req, (err, body) => {
-      if (err) return json(res, err.tooBig ? 413 : 400, { error: err.tooBig ? "too large" : "body must be JSON" });
-      const { models, error } = cleanModels(body && body.models);
-      if (error) return json(res, 400, { error });
-      try {
-        ensureDir(path.dirname(USER_MODELS_FILE));
-        writeJsonAtomic(USER_MODELS_FILE, models);
-      } catch (e) {
-        return json(res, 500, { error: String(e.message) });
-      }
-      return json(res, 200, { ok: true, user: models });
-    });
-  }
-
-  // User Preferences -> Cleanup. `{ scan: true }` lists what is not needed in
-  // ~/.plan2code and the project's old completed specs; `{ delete: [id] }`
-  // removes those of the ids a fresh scan still finds. Never this session,
-  // never a path the page sent.
-  if (pathname === "/cleanup" && req.method === "POST") {
-    if (!originOk(req, port)) return json(res, 403, { error: "bad origin" });
-    return readBody(req, (err, body) => {
-      if (err) return json(res, err.tooBig ? 413 : 400, { error: err.tooBig ? "too large" : "body must be JSON" });
-      if (body && Array.isArray(body.delete)) {
-        return removeCleanup(body.delete, { skipSid: SID, project: sessionWorktree() || PROJECT })
-          .then((done) => json(res, 200, { ok: true, ...done }))
-          .catch((e) => json(res, 500, { error: String(e.message) }));
-      }
-      return cleanupFindings({ skipSid: SID, project: sessionWorktree() || PROJECT })
-        .then(({ items, bytes }) => json(res, 200, { ok: true, bytes, items: items.map(({ path: _p, ...item }) => item) }))
-        .catch((e) => json(res, 500, { error: String(e.message) }));
-    });
-  }
-
-  if (pathname === "/upload" && req.method === "POST") {
-    if (!originOk(req, port)) return json(res, 403, { error: "bad origin" });
-    const contentType = String(req.headers["content-type"] || "");
-    const store = (buf, ext) => {
-      const id = crypto.randomUUID();
-      const file = uploadPath(id, ext);
-      try {
-        ensureDir(UPLOADS_DIR);
-        fs.writeFileSync(file, buf, { flag: "wx" });
-      } catch (e) {
-        json(res, 500, { error: String(e.message) });
-        return null;
-      }
-      return { id, file };
-    };
-
-    if (contentType.startsWith("image/jpeg")) {
-      return readRaw(req, MAX_BODY, (err, buf) => {
-        if (err) return err.tooBig ? json(res, 413, { error: "too large" }) : json(res, 400, { error: String(err.message) });
-        if (buf.length < 3 || buf[0] !== 0xff || buf[1] !== 0xd8 || buf[2] !== 0xff) {
-          return json(res, 415, { error: "JPEG only" });
-        }
-        const saved = store(buf, "jpg");
-        if (!saved) return;
-        const { id, file } = saved;
-        appendEvent(DIR, { type: "upload", id, kind: "image", bytes: buf.length });
-        return json(res, 200, {
-          ok: true,
-          id,
-          kind: "image",
-          path: file,
-          url: "/uploads/" + id + ".jpg",
-          name: uploadLabel(req, "image.jpg"),
-          size: buf.length,
-        });
-      });
-    }
-
-    // A document: the extension comes from the allow-list via its name, and
-    // the bytes have to agree with it. No `url` comes back: the page builds
-    // the link from the path, as it does for the delete route.
-    if (contentType.startsWith("application/octet-stream")) {
-      // The extension comes from the whole name: the label is cut at 200
-      // characters, and a long name would lose it there.
-      const name = uploadLabel(req, "");
-      const ext = docExt(rawUploadName(req));
-      // Refused on its name alone, but drained first, so the page gets the 415.
-      if (!ext) return readRaw(req, 0, () => json(res, 415, { error: "type" }));
-      return readRaw(req, MAX_DOC_BYTES, (err, buf) => {
-        if (err) return err.tooBig ? json(res, 413, { error: "too large" }) : json(res, 400, { error: String(err.message) });
-        if (checkDocument(buf, ext)) return json(res, 415, { error: "type" });
-        const saved = store(buf, ext);
-        if (!saved) return;
-        const { id, file } = saved;
-        appendEvent(DIR, { type: "upload", id, kind: "file", bytes: buf.length });
-        return json(res, 200, { ok: true, id, kind: "file", path: file, name, size: buf.length });
-      });
-    }
-
-    return readRaw(req, 0, () => json(res, 415, { error: "type" }));
-  }
-
-  // A note attachment the agent kept into the spec (`console.mjs keep`), so a
-  // doc citing `attachments/<name>` shows the image or opens the file. Read
-  // only, and only one exact name shape (the one `keep` writes) directly
-  // inside <worktree>/<specDir>/attachments/: nothing else in the project.
-  if (pathname.startsWith("/attachments/") || req.url.startsWith("/attachments/")) {
-    if (req.method !== "GET") return json(res, 405, { error: "method" });
-    const m = KEPT_ROUTE.exec(req.url);
-    const file = m && m[0] === pathname ? keptPath(m[1]) : null;
-    if (!file) return json(res, 404, { error: "not found" });
-    let buf;
-    try {
-      buf = fs.readFileSync(file);
-    } catch {
-      return json(res, 404, { error: "not found" });
-    }
-    const ext = m[2].toLowerCase();
-    if (ext === "jpg") return send(res, 200, buf, "image/jpeg", { "cache-control": "private, max-age=3600" });
-    const pdf = DOC_TYPES[ext].kind === "pdf";
-    return send(res, 200, buf, pdf ? "application/pdf" : "text/plain; charset=utf-8", {
-      ...(pdf ? {} : { "content-security-policy": "sandbox" }),
-      "cache-control": "private, max-age=3600",
-    });
-  }
-
-  // A screenshot for a doc's image block. Matched on the raw request line too,
-  // like uploads: anything URL parsing had to fold (`..`) is not a shot.
-  if (pathname.startsWith("/shots/") || req.url.startsWith("/shots/")) {
-    if (req.method !== "GET") return json(res, 405, { error: "method" });
-    const name = pathname.slice("/shots/".length);
-    const file = req.url === pathname ? shotPath(name) : null;
-    if (!file) return json(res, 404, { error: "not found" });
-    let buf;
-    try {
-      buf = fs.readFileSync(file);
-    } catch {
-      return json(res, 404, { error: "not found" });
-    }
-    // The bytes, not the name, pick the type: the file may have changed since it was posted.
-    const type = SHOT_TYPES[shotType(buf)];
-    if (!type) return json(res, 404, { error: "not found" });
-    return send(res, 200, buf, type, { "cache-control": "no-store" });
-  }
-
-  // Matched on the raw request line as well as the parsed path: URL parsing
-  // folds `..` segments away, and nothing that needed folding is an upload.
-  // GET and DELETE take images and documents alike.
-  if (pathname.startsWith("/uploads/") || req.url.startsWith("/uploads/")) {
-    if (req.method === "GET") {
-      const m = UPLOAD_ANY_ROUTE.exec(req.url);
-      const file = m && m[0] === pathname ? uploadPath(m[1], m[2]) : null;
-      if (!file) return json(res, 404, { error: "not found" });
-      let buf;
-      try {
-        buf = fs.readFileSync(file);
-      } catch {
-        return json(res, 404, { error: "not found" });
-      }
-      const ext = m[2];
-      if (ext === "jpg") return send(res, 200, buf, "image/jpeg", { "cache-control": "private, max-age=86400" });
-      const pdf = DOC_TYPES[ext].kind === "pdf";
-      // A sandboxed PDF cannot load the browser's viewer, and one needs no
-      // sandbox: text is the only thing a browser might otherwise run.
-      return send(res, 200, buf, pdf ? "application/pdf" : "text/plain; charset=utf-8", {
-        ...(pdf ? {} : { "content-security-policy": "sandbox" }),
-        "cache-control": "private, max-age=86400",
-      });
-    }
-    if (req.method === "DELETE") {
-      if (!originOk(req, port)) return json(res, 403, { error: "bad origin" });
-      const m = UPLOAD_ANY_ROUTE.exec(req.url);
-      const file = m && m[0] === pathname ? uploadPath(m[1], m[2]) : null;
-      if (!file || !fs.existsSync(file)) return json(res, 404, { error: "not found" });
-      try {
-        fs.rmSync(file);
-      } catch (e) {
-        return json(res, 500, { error: String(e.message) });
-      }
-      appendEvent(DIR, { type: "upload-delete", id: m[1] });
-      res.writeHead(204, baseHeaders());
-      return res.end();
-    }
-    return json(res, 404, { error: "not found" });
-  }
-
-  if (pathname === "/submit" && req.method === "POST") {
-    if (!originOk(req, port)) return json(res, 403, { error: "bad origin" });
-    return readBody(req, (err, body) => {
-      if (err) return json(res, err.tooBig ? 413 : 400, { error: err.tooBig ? "too large" : "body must be JSON" });
-      if (!body || !Array.isArray(body.actions) || body.actions.length === 0) {
-        return json(res, 400, { error: "actions must be a non-empty array" });
-      }
-      const badAttachments = body.actions.some((a) => {
-        if (!a || typeof a !== "object" || a.type !== "comment") return false;
-        const ok = attachmentsOk(a.images, a.files);
-        return !(ok.images && ok.files && ok.count);
-      });
-      if (badAttachments) {
-        return json(res, 400, { error: "a comment carries at most 5 attachments, each uploaded to this session" });
-      }
-      const result = {
-        type: "submit",
-        at: nowIso(),
-        sid: SID,
-        rev,
-        actions: body.actions,
-        reply: body.reply || "",
-      };
-      // The result and the state change together, under the state lock: a
-      // `post` or an `open` landing in the middle of a send would otherwise
-      // write back a state read before it, and the send's record would go, or
-      // this write would carry an older state over the agent's new one.
-      let refused = null;
-      let written = null;
-      let agentWrote = false;
-      try {
-        written = withStateLock(DIR, () => {
-          // One send is one agent turn. Writing over a result the agent has not
-          // collected yet destroys everything in it, and the loss is silent: two
-          // tabs, or one impatient second press, and an approval disappears.
-          if (pendingResult()) {
-            refused = "pending";
-            return null;
-          }
-          try {
-            // Atomic: the waiter polls this file and will land mid-write eventually.
-            writeJsonAtomic(RESULT_FILE, result);
-          } catch (e) {
-            refused = String(e.message);
-            return null;
-          }
-          try {
-            // Read fresh from disk, never from the cache: an agent write the
-            // watcher has not reached yet is in the file and must be kept.
-            const text = fs.readFileSync(STATE_FILE, "utf8");
-            const state = JSON.parse(text);
-            agentWrote = text !== lastStateText;
-            state.phase = "submitted";
-            recordSubmitted(state, body.actions);
-            return { state, text: writeJsonAtomic(STATE_FILE, state) };
-          } catch {
-            // The answers are safe in result.json; the stamp is only a courtesy.
-            return null;
-          }
-        });
-      } catch (e) {
-        refused = String(e.message);
-      }
-      if (refused === "pending") {
-        return json(res, 409, {
-          error: "pending",
-          message:
-            "Your last answers have not been picked up yet. Nothing is lost, they are still on their way.",
-        });
-      }
-      if (refused) return json(res, 500, { error: refused });
-      appendEvent(DIR, { type: "submit", rev, count: body.actions.length });
-      if (written) {
-        // Account for our own write here rather than letting the watcher find
-        // it: the watcher reads a changed state.json as proof the AGENT is
-        // alive, and this write is not that. An agent write it swept up on the
-        // way is, and is handled as the watcher would have handled it.
-        adoptStateText(written.text, written.state);
-        rev++;
-        if (agentWrote) {
-          agentSeenAt = Date.now();
-          try {
-            ensureConversation(written.state);
-          } catch {}
-          try {
-            syncSubagentSetting(written.state);
-          } catch {}
-        }
-      }
-      // Name the items that went. A page with OTHER answers staged should drop
-      // only what was sent, and a brief request is a submit carrying no answers
-      // at all, so a blanket "everything is gone" is wrong for both.
-      broadcast("submitted", {
-        rev,
-        ids: body.actions.map((a) => a && a.i).filter(Boolean),
-      });
-      pushState();
-      return json(res, 200, { ok: true });
-    });
-  }
-
-  // A Quick question, or New conversation ({ reset: true }). Its own channel:
-  // this route never looks at result.json, so a card send waiting to be
-  // collected never holds up a question, and a question never holds up a card.
-  if (pathname === "/chat" && req.method === "POST") {
-    if (!originOk(req, port)) return json(res, 403, { error: "bad origin" });
-    return readBody(req, (err, body) => {
-      if (err && err.tooBig) return json(res, 413, { error: "too large" });
-      if (err || !body || typeof body !== "object" || Array.isArray(body)) return json(res, 400, { error: "bad" });
-      const state = readState() || {};
-      const current = currentConversation(chatEntries()).conversation;
-
-      if (body.reset === true) {
-        if (chatOfflineNow(state)) return json(res, 409, { error: "offline" });
-        if (body.conversation !== current) return json(res, 409, { error: "stale", conversation: current });
-        const entry = appendChat(DIR, {
-          kind: "reset",
-          conversation: current + 1,
-          workflow: state.workflow,
-          reason: "button",
-        });
-        appendEvent(DIR, { type: "chat-reset", reason: "button" });
-        rev++;
-        pushState();
-        return json(res, 200, { ok: true, seq: entry.seq, conversation: entry.conversation });
-      }
-
-      const text = typeof body.text === "string" ? body.text.trim() : "";
-      if (!text) return json(res, 400, { error: "bad" });
-      if (text.length > CHAT_MAX_CHARS) return json(res, 400, { error: "too-long" });
-      const a = body.about;
-      const aboutOk =
-        a === undefined ||
-        (a &&
-          typeof a === "object" &&
-          ["card", "section", "spec"].includes(a.kind) &&
-          typeof a.id === "string" &&
-          typeof a.label === "string");
-      if (!aboutOk) return json(res, 400, { error: "bad" });
-      const ok = attachmentsOk(body.images, body.files);
-      if (!ok.images) return json(res, 400, { error: "image" });
-      if (!ok.files) return json(res, 400, { error: "file" });
-      if (!ok.count) return json(res, 400, { error: body.files ? "file" : "image" });
-
-      if (chatOfflineNow(state)) return json(res, 409, { error: "offline" });
-      if (body.conversation !== current) return json(res, 409, { error: "stale", conversation: current });
-      if (typedCount(chatEntries(), current) >= CHAT_LIMIT) return json(res, 409, { error: "limit" });
-
-      const entry = appendChat(DIR, {
-        kind: "message",
-        conversation: current,
-        text,
-        about: a ? { kind: a.kind, id: a.id, label: a.label } : undefined,
-        // Names cleaned as /upload cleans them: a newline would split the line.
-        images: body.images
-          ? body.images.map((img) => ({ path: img.path, name: cleanLabel(img.name, "image.jpg") }))
-          : undefined,
-        files: body.files ? body.files.map((f) => ({ path: f.path, name: cleanLabel(f.name, "file") })) : undefined,
-      });
-      appendEvent(DIR, { type: "chat", seq: entry.seq });
-      rev++;
-      pushState();
-      return json(res, 200, { ok: true, seq: entry.seq, conversation: current });
-    });
-  }
-
-  // Approve or Decline on an edit the agent proposed in the chat. `re` is the
-  // proposing reply's id. Decisions never count toward the message limit.
-  if (pathname === "/chat/decision" && req.method === "POST") {
-    if (!originOk(req, port)) return json(res, 403, { error: "bad origin" });
-    return readBody(req, (err, body) => {
-      if (err && err.tooBig) return json(res, 413, { error: "too large" });
-      if (err || !body || typeof body !== "object" || Array.isArray(body)) return json(res, 400, { error: "bad" });
-      if (body.decision !== "approve" && body.decision !== "decline") return json(res, 400, { error: "bad" });
-      if (body.text !== undefined && typeof body.text !== "string") return json(res, 400, { error: "bad" });
-      const text = (body.text || "").trim();
-      if (text.length > CHAT_MAX_CHARS) return json(res, 400, { error: "too-long" });
-
-      const state = readState() || {};
-      const entries = chatEntries();
-      const current = currentConversation(entries).conversation;
-      if (chatOfflineNow(state)) return json(res, 409, { error: "offline" });
-      if (body.conversation !== current) return json(res, 409, { error: "stale", conversation: current });
-
-      const reply = (state.chat?.replies || []).find((r) => r && r.id === body.re);
-      const decided = entries.some((e) => e.kind === "decision" && e.re === body.re);
-      if (typeof body.re !== "string" || !reply || !reply.proposal || reply.conversation !== current || decided) {
-        return json(res, 400, { error: "bad" });
-      }
-
-      const entry = appendChat(DIR, {
-        kind: "decision",
-        conversation: current,
-        re: body.re,
-        decision: body.decision,
-        text: text || undefined,
-      });
-      appendEvent(DIR, { type: "chat-decision", decision: body.decision });
-      rev++;
-      pushState();
-      return json(res, 200, { ok: true, seq: entry.seq });
-    });
-  }
-
-  // The Workspace: the original folder plus any the person adds as context.
-  // The page changes it only through these routes; the agent hears of each
-  // change once, through console.mjs.
-  if (pathname === "/workspace" && req.method === "GET") {
-    try {
-      if (url.searchParams.get("check") === "1") checkFolders(workspaceNow());
-    } catch (e) {
-      return json(res, 500, { error: String(e.message) });
-    }
-    return json(res, 200, workspaceView());
-  }
-
-  const workspaceRoutes = { "/workspace/add": addFolder, "/workspace/edit": editFolder, "/workspace/remove": removeFolder };
-  if (Object.hasOwn(workspaceRoutes, pathname) && req.method === "POST") {
-    if (!originOk(req, port)) return json(res, 403, { error: "bad origin" });
-    return readBody(req, (err, body) => {
-      if (err && err.tooBig) return json(res, 413, { error: "too large" });
-      if (err || !body || typeof body !== "object" || Array.isArray(body)) return json(res, 400, { error: "bad" });
-      let answer;
-      try {
-        answer = workspaceRoutes[pathname](workspaceNow(), body);
-      } catch (e) {
-        return json(res, 500, { error: String(e.message) });
-      }
-      return json(res, answer[0], answer[1]);
-    });
-  }
-
-  // Which list the workspace is: a spec's, or the project's (`spec` empty).
-  // The dashboard's picker sends it as the selection moves and before a
-  // launch, so a skill opens on the list of the spec it was launched for.
-  if (pathname === "/workspace/scope" && req.method === "POST") {
-    if (!originOk(req, port)) return json(res, 403, { error: "bad origin" });
-    return readBody(req, (err, body) => {
-      if (err && err.tooBig) return json(res, 413, { error: "too large" });
-      if (err || !body || typeof body !== "object" || Array.isArray(body)) return json(res, 400, { error: "bad" });
-      const spec = typeof body.spec === "string" ? body.spec : "";
-      if (spec && !/^specs\/[^/\\]+$/.test(specKey(spec))) return json(res, 400, { reason: "bad-spec" });
-      try {
-        setScope(workspaceNow(), spec, "project");
-      } catch (e) {
-        return json(res, 500, { error: String(e.message) });
-      }
-      return json(res, 200, workspaceView());
-    });
-  }
-
-  // Only ever returns a path: the page then adds it through /workspace/add.
-  if (pathname === "/workspace/browse" && req.method === "POST") {
-    if (!originOk(req, port)) return json(res, 403, { error: "bad origin" });
-    return readBody(req, () => {
-      const ws = workspaceNow();
-      if (ws.remote) return json(res, 404, { reason: "no-picker" });
-      if (pickerBusy) return json(res, 409, { reason: "busy" });
-      // Tests only: stands in for the person, so no dialog ever opens.
-      const echo = process.env.PLAN2CODE_PICKER_ECHO;
-      if (echo) return json(res, 200, echo === "-" ? { cancelled: true } : { path: echo });
-      const start = pickerStart(ws);
-      if (!pickerCommand(start, WORKSPACE_PICKER_PROMPT)) return json(res, 404, { reason: "no-picker" });
-      pickerBusy = true;
-      pickFolder(start, WORKSPACE_PICKER_PROMPT)
-        .then((picked) => (picked.error ? json(res, 500, { reason: "picker-failed" }) : json(res, 200, picked)))
-        .catch(() => json(res, 500, { reason: "picker-failed" }))
-        .finally(() => {
-          pickerBusy = false;
-        });
-    });
-  }
-
-  if (pathname === "/cancel" && req.method === "POST") {
-    if (!originOk(req, port)) return json(res, 403, { error: "bad origin" });
-    const result = { type: "cancel", at: nowIso(), sid: SID, rev, actions: [], reply: "" };
-    // Under the state lock like a send, so `open` clearing a collected result
-    // can never take this one with it. As /submit: a cancel that never reached
-    // disk must not tell the page it did, or the page stands down while the
-    // agent waits on forever.
-    let pending = false;
-    try {
-      withStateLock(DIR, () => {
-        pending = pendingResult();
-        if (!pending) writeJsonAtomic(RESULT_FILE, result);
-      });
-    } catch (e) {
-      return json(res, 500, { error: String(e.message) });
-    }
-    if (pending) return json(res, 409, { error: "pending", message: "A send is still on its way." });
-    appendEvent(DIR, { type: "cancel", rev });
-    broadcast("cancelled", { rev });
-    return json(res, 200, { ok: true });
-  }
-
-  // The heartbeat answers with the two facts that change without state.json
-  // changing, and so reach the page no other way.
-  //
-  // The watcher only fires on state.json, which is the agent POSTING. An agent
-  // that merely collects a result touches result.json, and one that is alive
-  // but thinking touches nothing at all -- so a page could sit for minutes
-  // insisting nobody had picked its answers up when something already had.
-  // This request was already going out every five seconds carrying nothing.
-  if (pathname === "/ping" && req.method === "POST") {
-    const { pending, stop } = resultFlags();
-    return json(res, 200, {
-      ok: true,
-      rev,
-      agentLastSeen: agentLastSeen(),
-      pendingResult: pending,
-      pendingStop: stop,
-      pendingChat: pendingChatCount(DIR, readState()),
-    });
-  }
-
-  // Treat a departure as "shorten the deadline", never as "exit now": the user
-  // may simply be reloading.
-  if (pathname === "/bye") {
-    // It moves the shutdown deadline, so only the page itself may send it.
-    if (!originOk(req, port)) return json(res, 403, { error: "bad origin" });
-    if (clients.size === 0) lastContact = Date.now() - (IDLE_MS - 2 * 60 * 1000);
-    return json(res, 200, { ok: true });
-  }
-
-  return json(res, 404, { error: "not found" });
-});
-
-const MAX_BODY = 4 * 1024 * 1024;
-
-function readBody(req, cb) {
-  // Collect Buffers and decode once at the end. Appending each chunk to a
-  // string decodes it in isolation, so a multi-byte character split across a
-  // chunk boundary becomes U+FFFD. Rare, silent, and impossible to reproduce
-  // on demand, which is the worst combination.
-  const chunks = [];
-  let size = 0;
-  let tooBig = false;
-  req.on("data", (c) => {
-    size += c.length;
-    // Drain past the cap rather than destroy, exactly like readRaw: a
-    // destroyed request emits 'close', never 'end' or 'error', so cb would
-    // never run and the page would see a reset instead of the 413 that names
-    // the problem.
-    if (size > MAX_BODY) {
-      tooBig = true;
-      chunks.length = 0;
-      return;
-    }
-    chunks.push(c);
-  });
-  req.on("end", () => {
-    if (tooBig) return cb(Object.assign(new Error("too large"), { tooBig: true }));
-    try {
-      cb(null, JSON.parse(Buffer.concat(chunks).toString("utf8")));
-    } catch (e) {
-      cb(e);
-    }
-  });
-  req.on("error", (e) => cb(e));
-}
-
-// The binary sibling of readBody, for image and document uploads, each with
-// its own cap. Past the cap it stops keeping chunks but drains the rest
-// instead of destroying the request: a destroyed socket reaches the page as a
-// network error, never as the 413 that lets it say the file was too large.
-function readRaw(req, limit, cb) {
-  const chunks = [];
-  let size = 0;
-  let tooBig = false;
-  req.on("data", (c) => {
-    size += c.length;
-    if (size > limit) {
-      tooBig = true;
-      chunks.length = 0;
-      return;
-    }
-    chunks.push(c);
-  });
-  req.on("end", () => {
-    if (tooBig) return cb(Object.assign(new Error("too large"), { tooBig: true }));
-    cb(null, Buffer.concat(chunks));
-  });
-  req.on("error", (e) => cb(e));
-}
+const server = http.createServer((req, res) => handle(req, res, ctx));
 
 /* ------------------------------------------------------- state watching */
 
 // The agent writes state.json through `console.mjs post`, and the server only
-// through /submit; both under the state lock (updateState() in lib.mjs), so
+// through /submit; both under the state lock (updateState() in files.mjs), so
 // neither can write back a state read before the other's. Watch the DIRECTORY,
 // not the file: on Windows a watch on a file breaks the moment that file is
 // replaced by rename, which is exactly what an atomic write does.
@@ -1980,10 +436,10 @@ function checkState() {
         ensureConversation(parsed);
       } catch {}
       try {
-        syncSubagentSetting(parsed);
+        subagents.sync(parsed);
       } catch {}
       try {
-        followSpecDir(parsed);
+        workspace.followSpecDir(parsed);
       } catch {}
       pushState();
     }
@@ -2033,7 +489,7 @@ function checkLedger() {
   if (ledgerSeen.stamp === ledgerChecked.stamp) return;
   const newLaunch = ledgerSeen.launches > ledgerChecked.launches;
   ledgerChecked = { stamp: ledgerSeen.stamp, launches: ledgerSeen.launches };
-  if (newLaunch) checkFolders(workspaceNow());
+  if (newLaunch) workspace.checkFolders(workspace.workspaceNow());
   pushState();
 }
 setInterval(() => {
@@ -2154,10 +610,10 @@ function onListening(port) {
     ensureConversation(readState());
   } catch {}
   try {
-    bootWorkspace();
+    workspace.bootWorkspace();
   } catch {}
   try {
-    syncSubagentSetting(readState());
+    subagents.sync(readState());
   } catch {}
   process.stdout.write(JSON.stringify({ type: "ready", url, port, sid: SID }) + "\n");
   try {

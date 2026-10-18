@@ -51,7 +51,7 @@ const UPDATE_COMMAND = 'update';
 // nothing but Node built-ins (and update-check.mjs is ESM), so it keeps its own copy.
 const REPO_URL = 'https://github.com/jparkerweb/plan2code.git';
 // The web console's cached release check, and how long it counts as fresh (update-check.mjs
-// CACHE_MS). PLAN2CODE_CONSOLE_HOME moves the console's files, as in lib.mjs.
+// CACHE_MS). PLAN2CODE_CONSOLE_HOME moves the console's files, as in files.mjs.
 const CONSOLE_HOME = process.env.PLAN2CODE_CONSOLE_HOME || path.join(os.homedir(), '.plan2code', 'console');
 const UPDATE_CACHE_FILE = path.join(CONSOLE_HOME, 'update-check.json');
 const UPDATE_CACHE_MS = 60 * 60 * 1000;

@@ -14,12 +14,11 @@ import { spawnSync } from "node:child_process";
 // is exactly why this lives in its own file.
 import {
   cardAvailability,
-  CONSOLE_WORKFLOWS,
   GIT_INIT_NOTE,
   resumeCommand,
   SKILL_CATALOG,
-  START_POSES,
 } from "../src/web-console/public/answers.js";
+import { SKILLS } from "../src/web-console/public/skills.js";
 import { breakdownFrom, pointsFrom } from "../src/web-console/public/meter.js";
 import {
   BRANCH_TYPES,
@@ -38,7 +37,7 @@ import {
   refreshedLine,
 } from "../src/web-console/public/git-board.js";
 import { prUrl } from "../src/web-console/public/pr-url.js";
-import { PROTECTED_CONSOLE_FILES, readLedger } from "../src/web-console/lib.mjs";
+import { PROTECTED_CONSOLE_FILES, readLedger } from "../src/web-console/sessions.mjs";
 import {
   CONSOLE_CLI,
   HOME,
@@ -290,8 +289,6 @@ test("git: the Git card is never greyed, and its resume command is /plan2code-gi
   assert.deepEqual(cardAvailability(entry, { hasAgents: true, isGit: true, pending: 0 }, null), { on: true });
   assert.deepEqual(cardAvailability(entry, { hasAgents: true, isGit: true, pending: null }, null), { on: true });
   assert.equal(resumeCommand({ workflow: "git" }), "/plan2code-git");
-  assert.ok(CONSOLE_WORKFLOWS.includes("/plan2code-git"));
-  assert.ok(START_POSES.includes("git"));
 });
 
 test("git: the Git card's copy, place and availability are pinned (FR-58, FR-59)", async () => {
@@ -303,8 +300,11 @@ test("git: the Git card's copy, place and availability are pinned (FR-58, FR-59)
   );
   assert.equal(entry.group, "extra");
   assert.equal(entry.chip, "Utility");
-  assert.equal(SKILL_CATALOG.at(-2), entry, "the Git card comes right before Handoff");
-  assert.equal(SKILL_CATALOG.at(-1).skill, "plan2code-handoff", "the Handoff card is last");
+  // The card order is skills.js's order.
+  const order = SKILLS.filter((s) => s.card).map((s) => s.skill);
+  assert.equal(order.indexOf("plan2code-git") + 1, order.indexOf("plan2code-handoff"), "the Git card comes right before Handoff");
+  assert.equal(order.at(-1), "plan2code-handoff", "the Handoff card is last");
+  assert.deepEqual(SKILL_CATALOG.map((e) => e.skill), order, "the catalog draws in that order");
   for (const isGit of [true, false, undefined]) {
     for (const pending of [0, 3, null]) {
       const scan = { hasAgents: true, pending, ...(isGit === undefined ? {} : { isGit }) };
@@ -327,12 +327,10 @@ test("git: the board stays locked from a click until the agent's next post, not 
   assert.equal(boardAwaiting({ sentAt, updatedAt: "2026-10-10T05:15:51.000Z", cardsAwaiting: 2 }), true);
   assert.equal(boardAwaiting({ sentAt, cardsAwaiting: 1, adrift: true }), false, "an agent gone quiet releases the lock");
 
-  const app = fs.readFileSync(new URL("../src/web-console/public/app.js", import.meta.url), "utf8");
-  assert.match(app, /const gitMode = \(\) =>[^;]*gitAwaiting\(\)/, "the busy mode includes gitAwaiting()");
-  assert.match(app, /const gitLocked = \(\) => gitMode\(\) !== "idle";/, "gitLocked is anything but idle");
-  const send = app.slice(app.indexOf("async function sendGit("), app.indexOf("function renderGitBoard("));
-  assert.match(send, /local\.gitSentAt = Date\.now\(\);\s*save\(\);/, "a board click records when it was sent, and saves it");
-  assert.match(app, /sentAt: local\.gitSentAt[\s\S]{0,80}updatedAt: S\.updatedAt[\s\S]{0,80}cardsAwaiting: awaitingReply\(\)\.length/);
+  // gitMode, gitLocked and the click's gitSentAt are page tests now (the board
+  // stays locked in test-web-console-page-git.mjs); what feeds them is here.
+  const selectors = fs.readFileSync(new URL("../src/web-console/public/selectors.js", import.meta.url), "utf8");
+  assert.match(selectors, /sentAt: page\.local\.gitSentAt[\s\S]{0,80}updatedAt: page\.S\.updatedAt[\s\S]{0,80}cardsAwaiting: awaitingReply\(\)\.length/);
 });
 
 /* ------------------------------------------- the git board's pure helpers */
@@ -563,19 +561,12 @@ test("git board: boardPrLink builds the link for a pushed feature branch only", 
 
 test("git board: the page draws it from git-board.js, with no inline styles", () => {
   const dir = path.join(path.dirname(CONSOLE_CLI), "public");
-  const app = fs.readFileSync(path.join(dir, "app.js"), "utf8");
   const html = fs.readFileSync(path.join(dir, "index.html"), "utf8");
   const view = fs.readFileSync(path.join(dir, "git-board-view.js"), "utf8");
-  assert.match(app, /^import [^;]+ from "\.\/git-board\.js";/m, "app.js imports git-board.js");
-  assert.match(app, /^import [^;]+ from "\.\/git-board-view\.js";/m, "app.js imports git-board-view.js");
   for (const m of ["git-board.js", "git-board-view.js", "pr-url.js"]) assert.ok(html.includes(`rel="modulepreload" href="/${m}"`), `the page preloads ${m}`);
-  assert.match(app, /const isGitBoard = \(\) => S && S\.workflow === "git" && S\.git;/);
-  assert.match(app, /i: "__git", type: "git", op/, "a click is one __git action");
+  const selectors = fs.readFileSync(path.join(dir, "selectors.js"), "utf8");
+  assert.match(selectors, /const isGitBoard = \(\) => page\.S && page\.S\.workflow === "git" && page\.S\.git;/);
   assert.match(view, /a\.rel = "noopener"/, "the PR link opens with rel=noopener");
-  const start = app.indexOf("/* ------------------------------------------------------------ git board */");
-  const end = app.indexOf("/* ------------------------------------------------------------- welcome */");
-  assert.ok(start > 0 && end > start);
-  assert.doesNotMatch(app.slice(start, end), /setAttribute\(\s*["']style["']|\.style\./, "the board sets no inline styles");
   assert.doesNotMatch(view, /setAttribute\(\s*["']style["']|\.style\./, "nor does its view");
 });
 

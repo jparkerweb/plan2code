@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { spawn, spawnSync } from "node:child_process";
-import { parseArgs } from "../src/web-console/lib.mjs";
+import { parseArgs } from "../src/web-console/files.mjs";
 import { BASE, cli, consoleSession, cookieFor, ENV, HOME, payload, ROOT } from "./web-console-test-helpers.mjs";
 
 const SERVER_JS = path.join(ROOT, "src", "web-console", "server.mjs");

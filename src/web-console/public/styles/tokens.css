@@ -1,0 +1,135 @@
+/* tokens.css: Colours, type, sizes and the light and dark themes: the variables every other file reads. */
+
+/* Plan2Code Console.
+   Light by default, dark when the system asks. No external fonts: the page must
+   work offline and under a CSP with no 'unsafe-inline'. */
+
+:root {
+  --bg: #f6f3ee;
+  --panel: #ffffff;
+  --panel-2: #fbf9f6;
+  --ink: #1d1a17;
+  --ink-2: #5d564d;
+  --ink-3: #8f8779;
+  --rule: #e4ddd1;
+  --rule-2: #cfc6b6;
+  --accent: #206cc3;
+  --accent-soft: #ecf2f9;
+  --accent-ink: #ffffff;
+  --accent-line: #9ab4d3;
+  --ok: #2f6b45;
+  --ok-soft: #e4f0e8;
+  --stage: #9a6a12;
+  --stage-soft: #fbf0d8;
+  --warn: #9c3327;
+  --warn-soft: #fbe7e3;
+  --focus: #1f6feb;
+  --shadow: 0 1px 2px rgba(29, 26, 23, 0.05), 0 8px 24px rgba(29, 26, 23, 0.06);
+  /* A soft accent halo for the things that want noticing: the update banner
+     and an enabled Send. Built from --accent, so a picked accent glows too. */
+  --glow: 0 0 0 1px color-mix(in srgb, var(--accent) 30%, transparent), 0 0 12px color-mix(in srgb, var(--accent) 35%, transparent);
+  --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --serif: "Iowan Old Style", Charter, Georgia, Cambria, serif;
+  --mono: ui-monospace, SFMono-Regular, "Cascadia Mono", Menlo, Consolas, monospace;
+  --radius: 10px;
+  /* The column's width: the card, the pager and the documents. */
+  --card-width: 880px;
+}
+/* The card-width presets. These must agree with CARD_WIDTHS in palette.js,
+   which validates the saved choice and paints data-width on first load. */
+:root[data-width="narrow"] { --card-width: 720px; }
+:root[data-width="wide"] { --card-width: 1080px; }
+
+/* Dark is written twice on purpose, and the duplication is the whole mechanism.
+   The first copy follows the system unless the person has explicitly asked for
+   light; the second is the explicit ask. Without the `:not()` a system-dark
+   browser would win over someone who chose light in the settings panel. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #171513;
+    --panel: #201d1a;
+    --panel-2: #262220;
+    --ink: #f0ece5;
+    --ink-2: #b6afa3;
+    --ink-3: #8b8376;
+    --rule: #332e29;
+    --rule-2: #46403a;
+    --accent: #619fe5;
+    --accent-soft: #1a2533;
+    --accent-ink: #0c1117;
+    --accent-line: #3d5978;
+    --ok: #74c28f;
+    --ok-soft: #1c2d22;
+    --stage: #e0ab4c;
+    --stage-soft: #332a17;
+    --warn: #f0897a;
+    --warn-soft: #34201d;
+    --focus: #6aa3ff;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.35);
+    --glow: 0 0 0 1px color-mix(in srgb, var(--accent) 40%, transparent), 0 0 14px color-mix(in srgb, var(--accent) 45%, transparent);
+  }
+}
+
+:root[data-theme="dark"] {
+    --bg: #171513;
+  --panel: #201d1a;
+  --panel-2: #262220;
+  --ink: #f0ece5;
+  --ink-2: #b6afa3;
+  --ink-3: #8b8376;
+  --rule: #332e29;
+  --rule-2: #46403a;
+  --accent: #619fe5;
+  --accent-soft: #1a2533;
+  --accent-ink: #0c1117;
+  --accent-line: #3d5978;
+  --ok: #74c28f;
+  --ok-soft: #1c2d22;
+  --stage: #e0ab4c;
+  --stage-soft: #332a17;
+  --warn: #f0897a;
+  --warn-soft: #34201d;
+  --focus: #6aa3ff;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.35);
+  --glow: 0 0 0 1px color-mix(in srgb, var(--accent) 40%, transparent), 0 0 14px color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+* { box-sizing: border-box; }
+
+html, body { height: 100%; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 15px/1.55 var(--sans);
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  min-height: 100vh;
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.skip {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  background: var(--panel);
+  color: var(--ink);
+  padding: 10px 16px;
+  z-index: 50;
+  border-radius: 0 0 var(--radius) 0;
+}
+.skip:focus { left: 0; }
+
+/* Pin each region to its own row rather than relying on order: the banner
+   is fixed now and never a grid item, but keeping the rows explicit means a
+   future element that hides the same way cannot shuffle the tracks. */
+.topbar { grid-row: 1; }
+.layout { grid-row: 2; }
+.footer { grid-row: 3; }
+

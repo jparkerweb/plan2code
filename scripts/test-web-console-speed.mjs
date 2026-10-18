@@ -15,7 +15,9 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
-import { applyPatch, scanProject } from "../src/web-console/lib.mjs";
+import { scanProject } from "../src/web-console/scan.mjs";
+import { applyPatch } from "../src/web-console/patches.mjs";
+import { joinedCss } from "./css-helpers.mjs";
 import {
   ROOT,
   CONSOLE_CLI,
@@ -615,13 +617,6 @@ test("a wait with nothing open leaves a working agent working", () => {
   }
 });
 
-test("the git board lets go of a working agent that went adrift", () => {
-  const js = fs.readFileSync(path.join(ROOT, "src", "web-console", "public", "app.js"), "utf8");
-  const at = js.indexOf("const gitMode = ");
-  const line = js.slice(at, js.indexOf(";", at));
-  assert.ok(line.includes("(agentWorking() && !agentAdrift())"), line);
-});
-
 test("post --file - reads the patch from stdin, UTF-8 and a BOM included", () => {
   const s = openSession();
   try {
@@ -715,16 +710,13 @@ test("a finish ends the working stretch, and resuming a pause starts a fresh one
 });
 
 test("a card with a note box over the git board flows at its own height, never shrunk under the board", () => {
-  const css = fs.readFileSync(path.join(ROOT, "src", "web-console", "public", "app.css"), "utf8");
+  const css = joinedCss();
   const rule = css.slice(css.indexOf(".git-cards > .card,"), css.indexOf("{", css.indexOf(".git-cards > .card,")));
   assert.ok(rule.includes(".git-cards > .card.is-primary.has-grow"), "the board's natural-height rule outranks .has-grow");
-  const js = fs.readFileSync(path.join(ROOT, "src", "web-console", "public", "app.js"), "utf8");
-  const fn = js.slice(js.indexOf("function markGrowBox("), js.indexOf("function naturalHeight("));
-  assert.ok(fn.includes("isGitBoard()"), "no box grows over the board");
 });
 
 test("a card and its pager in the git board's card slot fill the board's width, never shrink to their content", () => {
-  const css = fs.readFileSync(path.join(ROOT, "src", "web-console", "public", "app.css"), "utf8");
+  const css = joinedCss();
   // .card and .pager centre with auto inline margins; in the slot's grid those
   // would shrink a short confirm, and the pager under it, to fit their content.
   assert.match(css, /\.card\s*\{[^}]*margin:\s*0 auto/, "the base card still centres outside the board");
@@ -733,7 +725,7 @@ test("a card and its pager in the git board's card slot fill the board's width, 
 });
 
 test("long task lines, long words, a narrow board and a narrow Ask pane never widen the page", () => {
-  const css = fs.readFileSync(path.join(ROOT, "src", "web-console", "public", "app.css"), "utf8");
+  const css = joinedCss();
   const rule = (sel) => {
     const at = css.indexOf("\n" + sel + " {");
     assert.ok(at > -1, `${sel} has a rule`);
@@ -750,12 +742,10 @@ test("long task lines, long words, a narrow board and a narrow Ask pane never wi
 });
 
 test("over the git board a note box grows with its text, and the no-repo note only points above when a card is there", () => {
-  const css = fs.readFileSync(path.join(ROOT, "src", "web-console", "public", "app.css"), "utf8");
+  const css = joinedCss();
   assert.match(css, /\.git-cards > \.card textarea \{ field-sizing: content; max-height: 50vh; \}/);
   const view = fs.readFileSync(path.join(ROOT, "src", "web-console", "public", "git-board-view.js"), "utf8");
   const fn = view.slice(view.indexOf("export function drawGitBoard("), view.indexOf("function header("));
   assert.ok(fn.includes("ctx.hasCard"), "the note checks for a card first");
   assert.ok(fn.includes("will ask what to do here in a moment"));
-  const js = fs.readFileSync(path.join(ROOT, "src", "web-console", "public", "app.js"), "utf8");
-  assert.match(js, /hasCard: Boolean\(card\)/, "the host says whether a card is in the slot");
 });

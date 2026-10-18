@@ -240,30 +240,38 @@ export function scrapeHits(text) {
 
 // The web console ships beside these scripts in every installed skill
 // (references/web-console/), and in this repo it sits at src/web-console/. Its
-// lib.mjs is the one home of the spec-state classifier and the loop-marker /
-// metrics-bait scan, so the scripts import it rather than keep a second copy.
-const CONSOLE_LIB_CANDIDATES = [
-  path.join(HERE, "..", "references", "web-console", "lib.mjs"), // installed skill
-  path.join(HERE, "..", "web-console", "lib.mjs"), // src/skill-scripts in the repo
+// scan.mjs is the one home of the spec-state classifier, and its settings.mjs
+// of the pull-request host store, so the scripts import them rather than keep
+// a second copy.
+const CONSOLE_DIR_CANDIDATES = [
+  path.join(HERE, "..", "references", "web-console"), // installed skill
+  path.join(HERE, "..", "web-console"), // src/skill-scripts in the repo
 ];
 
-let consoleLibPromise;
-export function consoleLib() {
-  consoleLibPromise ||= (async () => {
-    for (const candidate of CONSOLE_LIB_CANDIDATES) {
-      if (fs.existsSync(candidate)) return import(pathToFileURL(candidate).href);
-    }
-    fail(
-      EXIT.NOT_FOUND,
-      "console-lib-missing",
-      `The web console's lib.mjs is not beside this script (looked in ${CONSOLE_LIB_CANDIDATES.join(", ")}).`,
-      "The skill install is incomplete; reinstall the Plan2Code skills (node install.js)."
+const consoleModules = new Map();
+/** One of the web console's modules by file name ("scan.mjs"), imported once. */
+export function consoleModule(file) {
+  if (!consoleModules.has(file)) {
+    consoleModules.set(
+      file,
+      (async () => {
+        const candidates = CONSOLE_DIR_CANDIDATES.map((dir) => path.join(dir, file));
+        for (const candidate of candidates) {
+          if (fs.existsSync(candidate)) return import(pathToFileURL(candidate).href);
+        }
+        fail(
+          EXIT.NOT_FOUND,
+          "console-module-missing",
+          `The web console's ${file} is not beside this script (looked in ${candidates.join(", ")}).`,
+          "The skill install is incomplete; reinstall the Plan2Code skills (node install.js)."
+        );
+      })()
     );
-  })();
-  return consoleLibPromise;
+  }
+  return consoleModules.get(file);
 }
 
-// The one read-only git reader (git-repo.mjs) ships beside lib.mjs, so the git
+// The one read-only git reader (git-repo.mjs) ships beside scan.mjs, so the git
 // skill's scripts read the repository with exactly the code the console uses.
 const GIT_REPO_CANDIDATES = [
   path.join(HERE, "..", "references", "web-console", "git-repo.mjs"), // installed skill

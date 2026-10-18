@@ -1,12 +1,16 @@
 // Activity-line wording the page corrects on the way in. Kept out of app.js so
-// `node --test` can import it: no DOM access at module scope.
+// `node --test` can import it: no DOM access at module scope, and its one
+// import is the data-only skills.js.
 //
 // A build numbers its tasks "Task 4.2" after the phase, but a person watching
 // the page counts within the phase, so "Task 4.2 of 6" reads as nonsense
 // beside a progress bar that says 2 of 6.
 
-// The only workflows whose activity lines get rewritten.
-export const BUILD_WORKFLOWS = new Set(["implement", "implement-review"]);
+import { SKILLS, isPhased } from "./skills.js";
+
+// The only workflows whose activity lines get rewritten: the phased builds,
+// from skills.js.
+export const BUILD_WORKFLOWS = new Set(SKILLS.filter((s) => isPhased(s.workflow)).map((s) => s.workflow));
 
 const PHASE_TASK = /^Task (\d+)\.(\d+) of (\d+)/;
 

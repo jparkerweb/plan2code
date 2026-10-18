@@ -1,0 +1,133 @@
+/* ending.css: The end of a session: the hand-off and the stopping screen. */
+
+/* ----------------------------------------------------------- hand-off */
+
+/* The end of the session. Accented edge because it is the one card on the
+   page that is not a question and not a note: it is the way out. */
+.card.handoff { border-color: var(--accent-line); }
+
+.handoff-step {
+  margin: 20px 0 0;
+  padding: 16px 18px;
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-line);
+  border-radius: var(--radius);
+}
+.handoff-label {
+  margin: 0 0 6px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.handoff-where { margin: 0 0 10px; font-size: 13.5px; color: var(--ink-2); }
+
+/* The command and its Copy share a row until the row will not take them.
+   The text itself wraps: with the continue-in-the-browser sentence on the end
+   it rarely fits one line, and a sideways scroll would hide exactly the part
+   someone needs to read before pasting. Nobody retypes it; that is what Copy
+   is for. */
+.handoff-command {
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.handoff-code {
+  flex: 1 1 260px;
+  min-width: 0;
+  font: 13px/1.5 var(--mono);
+  color: var(--ink);
+  background: var(--panel);
+  border: 1px solid var(--rule-2);
+  border-radius: 8px;
+  padding: 10px 12px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+/* Always on show, unlike the Copy on a fenced code block, which waits for a
+   hover it may never get. This one IS the screen's reason to exist. */
+.handoff-copy { flex: none; }
+.handoff-note { margin: 8px 0 0; font-size: 12.5px; color: var(--ink-3); }
+
+/* A session with nothing left to run. Quieter than a real next step: no
+   accented box, plain body text and a small command, because there is
+   nothing they need to do. */
+.handoff-done { margin: 18px 0 0; color: var(--ink-2); }
+.handoff-done-text p { margin: 0 0 10px; }
+.handoff-done .handoff-code { flex-basis: 180px; font-size: 12px; padding: 6px 10px; }
+
+
+/* The review offer on a finished build. Louder than the next step, on
+   purpose: it has to happen here, before they leave, while the next step can
+   wait for a terminal. A solid accent edge and the big button carry that. */
+.review-offer {
+  margin: 20px 0 0;
+  padding: 18px 20px;
+  border: 2px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--panel);
+}
+.review-offer-title { margin: 0 0 6px; font-size: 18px; }
+.review-offer-text { margin: 0; color: var(--ink-2); font-size: 14px; }
+.review-offer .btn-row { margin-top: 14px; }
+.review-offer .review-go { padding: 12px 26px; font-size: 15.5px; }
+.review-offer .handoff-command { margin-top: 10px; }
+
+/* The way back to the dashboard on a finished screen. Quieter than the review
+   offer: no box, just the button and a small note about the conversation. */
+.dashboard-offer { margin: 20px 0 0; }
+.dashboard-offer > p:first-child { margin: 0; color: var(--ink-2); font-size: 14px; }
+.dashboard-offer .handoff-command { margin-top: 10px; }
+.dashboard-note { margin: 8px 0 0; font-size: 12.5px; color: var(--ink-3); }
+.handoff-fresh { margin: 16px 0 6px; font-size: 12.5px; color: var(--ink-2); }
+.handoff-fresh-row .handoff-code { flex-basis: 180px; font-size: 12px; padding: 6px 10px; }
+
+/* Quick picks under a long multi-select, the review's fix list above all. */
+.presets { margin-top: 12px; gap: 8px; }
+.presets-label { font-size: 12.5px; color: var(--ink-3); }
+
+/* "Before you close this": three rows on every finished screen. The icon sits
+   in a coloured circle and the label says the same thing, so no meaning rests
+   on colour alone. */
+.handoff-guide {
+  margin: 20px 0 0; padding: 14px 16px;
+  background: var(--panel-2); border: 1px solid var(--rule-2); border-radius: var(--radius);
+}
+.handoff-guide-title { margin: 0 0 10px; font: 600 15px/1.3 var(--serif); color: var(--ink); }
+.handoff-guide-rows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.handoff-guide-row { display: flex; align-items: flex-start; gap: 12px; font-size: 14px; color: var(--ink-2); }
+.handoff-guide-text { min-width: 0; overflow-wrap: anywhere; }
+.handoff-guide-label { color: var(--ink); }
+.handoff-guide-icon {
+  flex: none; display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; border-radius: 50%; border: 1.5px solid currentColor;
+}
+.handoff-guide-icon svg { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.handoff-guide-icon.is-safe { color: var(--ok); background: var(--ok-soft); }
+.handoff-guide-icon.is-fresh { color: var(--accent-ink); background: var(--accent); border-color: var(--accent); }
+.handoff-guide-icon.is-carry { color: var(--accent); background: var(--accent-soft); }
+.handoff-close { margin: 16px 0 0; color: var(--ink-2); }
+.handoff-tools { margin-top: 16px; }
+.handoff-unsent {
+  margin: 14px 0 0;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: var(--stage-soft);
+  color: var(--stage);
+  font-size: 13.5px;
+}
+
+/* ----------------------------------------------------------- stopping */
+
+.stop-steps { list-style: none; margin: 4px 0 16px; padding: 0; display: grid; gap: 10px; }
+.stop-steps li { display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--ink-2); }
+.stop-steps li.is-done { color: var(--ink); }
+.stop-steps li.is-later { color: var(--ink-3); }
+.stop-steps li.is-stuck { color: var(--stage); }
+.stop-mark { width: 13px; flex: none; text-align: center; font-weight: 700; }
+.stop-steps li.is-done .stop-mark { color: var(--ok); }
+.stop-note { margin: 0 0 12px; font-size: 13.5px; color: var(--ink-2); }
+.stopping .handoff-command { margin-bottom: 4px; }
+

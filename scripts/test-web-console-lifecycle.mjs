@@ -783,6 +783,19 @@ test("a finish is refused while its command still has a placeholder", () => {
   assert.match(res.stderr, /placeholder/);
 });
 
+// The Subagents tab would otherwise spin on a helper long after the session ended.
+test("a finish is refused while a reported helper still shows as running", () => {
+  const helper = (state, result) => ({ id: "h1", title: "Check the tests", ask: "Run them.", state, ...(result ? { result } : {}) });
+  const running = cli(["post", "--session", sid, "--file", payload("fin-h-run.json", { helpers: [helper("running")], finish: { headline: "Done", command: "/x" } })], {
+    expectFail: true,
+  });
+  assert.equal(running.status, 3);
+  assert.match(running.stderr, /still shows as running/);
+  assert.match(running.stderr, /"h1"/);
+  const settled = cli(["post", "--session", sid, "--file", payload("fin-h-done.json", { helpers: [helper("done", "All pass.")], finish: { headline: "Done", command: "/x" } })]);
+  assert.equal(settled.status, 0);
+});
+
 test("a finish faces the same jargon and completion-marker scan as everything else", () => {
   const jargon = cli(
     ["post", "--session", sid, "--file", payload("fin-j.json", { finish: { headline: "The grilling is over", command: "/x" } })],
