@@ -2,8 +2,10 @@
 //
 // The source of truth for which tabs Help has, in what order, and which one
 // opens. The content itself is HTML in <template id="help-content">
-// in index.html. No DOM access at module scope and no imports: the page and
-// `node --test` both import this file.
+// in index.html. No DOM access at module scope, and its one import is the
+// data-only skills.js: the page and `node --test` both import this file.
+
+import { SKILLS, isBuild } from "./skills.js";
 
 const tab = (id, label, diagram) => Object.freeze({ id, label, diagram });
 
@@ -29,8 +31,8 @@ export const HELP_TABS = Object.freeze([
 ]);
 
 // Not labels.js's BUILD_WORKFLOWS: that one leaves out quick-task, which is a
-// build as far as the person watching it is concerned.
-const HELP_BUILD_WORKFLOWS = new Set(["implement", "implement-review", "quick-task"]);
+// build as far as the person watching it is concerned. Every build in skills.js.
+const HELP_BUILD_WORKFLOWS = new Set(SKILLS.filter((s) => isBuild(s.workflow)).map((s) => s.workflow));
 
 // Which tab Help opens on, from where the person is. First match wins.
 export function helpTabFor({ view, dashboard, gone, adrift, finished, workflow, workspace, meterRed } = {}) {

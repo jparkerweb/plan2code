@@ -9,7 +9,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { defaultInstruction, offered } from "../src/web-console/public/subagents.js";
-import { readSubagentCursor } from "../src/web-console/lib.mjs";
+import { readSubagentCursor } from "../src/web-console/settings.mjs";
 import {
   ROOT,
   HOME,

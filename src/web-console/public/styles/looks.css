@@ -1,0 +1,65 @@
+/* looks.css: The looks button and the highlight swatches. */
+
+/* ------------------------------------------------------- looks button */
+
+.icon-btn {
+  appearance: none;
+  flex: none;
+  margin-left: 14px;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
+}
+.icon-btn:hover { background: var(--panel-2); border-color: var(--rule); }
+.icon-btn svg { width: 17px; height: 17px; }
+.icon-btn .ab-ring { fill: none; stroke: var(--ink-3); stroke-width: 1.4; }
+.icon-btn .ab-mark { fill: none; stroke: var(--ink-2); stroke-width: 1.5; stroke-linecap: round; }
+.icon-btn .ab-dot { fill: var(--ink-2); }
+.icon-btn:hover .ab-ring { stroke: var(--accent); }
+.icon-btn:hover .ab-mark, .icon-btn:hover .ab-dot { stroke: var(--accent); fill: none; }
+.icon-btn:hover .ab-dot { fill: var(--accent); }
+
+a.icon-btn { box-sizing: border-box; text-decoration: none; }
+/* A link in a dialog (the update modal's release, Help's version) keeps the
+   accent once visited: the browser's purple is unreadable on the dark theme. */
+.modal a:not(.btn), .modal a:not(.btn):visited { color: var(--accent); }
+.icon-btn .mg-body { fill: none; stroke: var(--ink-3); stroke-width: 1.4; stroke-linejoin: round; }
+.icon-btn .mg-line { fill: none; stroke: var(--ink-2); stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
+.icon-btn:hover .mg-body, .icon-btn:hover .mg-line { stroke: var(--accent); }
+
+.icon-btn .gr-teeth { fill: none; stroke: var(--ink-3); stroke-width: 2.2; }
+.icon-btn .gr-ring { fill: none; stroke: var(--ink-3); stroke-width: 1.6; }
+.icon-btn .gr-hub { fill: none; stroke: var(--ink-2); stroke-width: 1.4; }
+.icon-btn:hover .gr-teeth, .icon-btn:hover .gr-ring, .icon-btn:hover .gr-hub { stroke: var(--accent); }
+
+/* ------------------------------------------------------------ swatches */
+
+/* Thirty-two of them: a fixed sixteen-column grid so they sit in two even
+   rows in the wide dialog, and four even rows of eight on a narrow window,
+   rather than leaving a straggler alone on the last line. */
+.swatches { display: grid; grid-template-columns: repeat(16, minmax(0, 34px)); gap: 8px; }
+@media (max-width: 720px) {
+  .swatches { grid-template-columns: repeat(8, minmax(0, 34px)); }
+}
+
+.swatch {
+  appearance: none;
+  width: 100%;
+  aspect-ratio: 1;
+  padding: 0;
+  border-radius: 50%;
+  border: 2px solid var(--rule-2);
+  cursor: pointer;
+}
+.swatch:hover { border-color: var(--ink-3); }
+.swatch[aria-pressed="true"] {
+  border-color: var(--ink);
+  box-shadow: 0 0 0 2px var(--panel), 0 0 0 4px var(--ink);
+}
+

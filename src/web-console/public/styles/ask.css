@@ -1,0 +1,179 @@
+/* ask.css: The Ask pane and its Quick question chat. */
+
+/* ------------------------------------------------------------ ask pane */
+
+/* The Quick question chat: one card-framed pane that fills the column. The
+   conversation scrolls; the header and the composer stay put, so the counter,
+   New conversation and Send are always in reach. */
+.main > .ask-pane {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+.ask-head {
+  flex: none;
+  display: flex; align-items: center; gap: 12px;
+  padding: 16px 22px 14px;
+  border-bottom: 1px solid var(--rule);
+}
+.ask-head h2 { font: 600 21px/1.2 var(--serif); margin: 0; flex: 1; }
+.ask-counter { font: 700 12px/1 var(--mono); color: var(--ink-3); }
+
+.ask-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 18px 22px;
+  display: flex; flex-direction: column; gap: 10px;
+}
+/* An empty conversation's starter questions, centred where the list is empty. */
+.ask-starters { display: flex; flex-direction: column; gap: 6px; margin: auto 0; width: 100%; max-width: 520px; align-self: center; }
+.ask-starters-lead { color: var(--ink-3); font-size: 13.5px; margin: 0 0 4px; text-align: center; }
+.ask-starter {
+  width: 100%;
+  padding: 9px 13px;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--panel);
+  font: inherit;
+  font-size: 13.5px;
+  color: var(--ink-2);
+  text-align: left;
+  cursor: pointer;
+}
+.ask-starter:hover:not(:disabled) { background: var(--accent-soft); border-color: var(--accent-line); color: var(--ink); }
+.ask-starter:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.ask-starter:disabled { opacity: 0.55; cursor: not-allowed; }
+
+.ask-row {
+  max-width: 86%;
+  border-radius: var(--radius);
+  padding: 10px 14px;
+  font-size: 14px;
+  border: 1px solid var(--rule);
+}
+.ask-row.person { align-self: flex-end; background: var(--accent-soft); border-color: var(--accent-line); }
+.ask-row.pending { border-style: dashed; background: transparent; }
+.ask-row.agent { align-self: flex-start; background: var(--panel-2); }
+.ask-row.decision { align-self: flex-end; background: transparent; border-style: dashed; color: var(--ink-2); font-size: 13px; }
+.ask-row .md { max-width: none; }
+.ask-row .md > :first-child { margin-top: 0; }
+.ask-row .md > :last-child { margin-bottom: 0; }
+.ask-row .attach-tray { margin: 8px 0 0; }
+.ask-text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.ask-about { margin: 0 0 4px; font-size: 11.5px; font-weight: 600; color: var(--accent); }
+.ask-decision { margin: 0; font-weight: 600; }
+.ask-waiting { margin: 6px 0 0; font-size: 12px; color: var(--ink-3); display: flex; align-items: center; gap: 8px; }
+.ask-failed { color: var(--warn); }
+
+.ask-proposal {
+  margin-top: 10px; padding: 10px 12px;
+  border: 1px solid var(--stage); border-radius: 8px;
+  background: var(--stage-soft);
+}
+.ask-proposal .note-kicker { margin-bottom: 4px; }
+.ask-proposal-files, .ask-changed { margin: 6px 0 0; padding-left: 18px; font-size: 12.5px; }
+.ask-proposal-actions { display: flex; gap: 8px; align-items: center; margin-top: 10px; flex-wrap: wrap; }
+.ask-proposal-actions input[type="text"] { flex: 1 1 200px; width: auto; padding: 7px 10px; }
+.ask-decided { margin: 8px 0 0; font-weight: 700; font-size: 13px; }
+.ask-decided.approve { color: var(--ok); }
+.ask-decided.decline { color: var(--ink-2); }
+.ask-changed-count { font: 12px/1 var(--mono); color: var(--ink-3); }
+
+.ask-composer {
+  flex: none;
+  padding: 12px 22px 16px;
+  border-top: 1px solid var(--rule);
+  background: var(--panel);
+}
+.ask-composer.is-dropping { outline: 2px dashed var(--accent); outline-offset: -6px; background: var(--accent-soft); }
+.ask-composer textarea { min-height: 64px; max-height: 40vh; }
+.ask-composer textarea:disabled { opacity: 0.6; cursor: not-allowed; }
+.ask-about-chip {
+  display: inline-flex; align-items: center; gap: 8px;
+  margin-bottom: 8px; padding: 3px 4px 3px 11px;
+  border: 1px solid var(--accent-line); border-radius: 99px;
+  background: var(--accent-soft); color: var(--accent);
+  font-size: 12px; font-weight: 600;
+  max-width: 100%;
+}
+.ask-about-chip > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ask-about-chip .attach-remove { position: static; flex: none; }
+.ask-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 8px; }
+/* + Add context and its menu. It opens upward, over the list: the composer
+   sits at the bottom of a pane that clips anything hanging below it. */
+.ask-context { position: relative; }
+.ask-context-menu {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 4px);
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  min-width: 220px;
+  max-width: 340px;
+  max-height: 240px;
+  overflow-y: auto;
+  padding: 4px;
+  border: 1px solid var(--rule-2);
+  border-radius: var(--radius);
+  background: var(--panel);
+  box-shadow: var(--shadow);
+}
+.ask-context-item {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+.ask-context-item:hover,
+.ask-context-item:focus-visible { background: var(--accent-soft); outline: none; }
+.ask-context-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ask-context-kind { flex: none; font-size: 11px; color: var(--ink-3); }
+.ask-actions .btn.primary { margin-left: auto; }
+.ask-send-hint { margin-left: auto; font-size: 12px; color: var(--ink-3); white-space: nowrap; }
+.ask-send-hint + .btn.primary { margin-left: 0; }
+.ask-count { font: 12px/1 var(--mono); color: var(--ink-3); }
+.ask-count.is-over { color: var(--warn); font-weight: 700; }
+.ask-error { color: var(--warn); font-size: 13px; margin: 8px 0 0; }
+
+/* The two reasons Send is off read differently, as their wording does: the
+   limit is a plain fact, the missing agent is something to fix. */
+.ask-disabled-note { margin: 0; font-size: 12.5px; line-height: 1.35; padding: 6px 10px; border-radius: 8px; }
+.ask-disabled-note.is-limit, .ask-disabled-note.is-waiting { color: var(--ink-2); background: var(--panel-2); border: 1px solid var(--rule); }
+.ask-disabled-note.is-offline { color: var(--warn); background: var(--warn-soft); border: 1px solid var(--warn); }
+
+/* Waiting on Plan2Code (an Ask answer, or answers sent from Questions):
+   the tiny ring, left of the label. The extra .spinner is for specificity:
+   .spinner.tiny comes later and zeroes the margin otherwise. */
+.view-tab .spinner.tab-spin {
+  display: inline-block;
+  margin-right: 7px;
+  vertical-align: -1px;
+}
+
+/* A reply landed while another tab was open. */
+.view-tab .tab-dot {
+  display: inline-block;
+  width: 7px; height: 7px;
+  margin-left: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  vertical-align: middle;
+}
+

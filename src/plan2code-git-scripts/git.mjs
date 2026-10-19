@@ -15,7 +15,7 @@ import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { EXIT, consoleLib, fail, gitRepo, out, parseArgs, readText, run } from "./common.mjs";
+import { EXIT, consoleModule, fail, gitRepo, out, parseArgs, readText, run } from "./common.mjs";
 
 const USAGE = `
 git.mjs: read-only facts and exact commands for the Git skill. JSON on stdout.
@@ -182,7 +182,7 @@ const remoteNames = (root) => g(["remote"], root).out.split(/\r?\n/).filter(Bool
 const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
 async function prHosts() {
-  return (await consoleLib()).readPrHosts();
+  return (await consoleModule("settings.mjs")).readPrHosts();
 }
 
 function readStatus(root) {

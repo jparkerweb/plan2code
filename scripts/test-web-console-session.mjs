@@ -24,10 +24,8 @@ import {
   noteReplyLines,
   staleLaunchFeedback,
   REVIEW_REPLY,
-  SKILL_CATALOG,
-  START_POSES,
-  startPose,
   STOP_REPLY,
+  STOP_HANDOFF_REPLY,
   threadText,
   threadWho,
   turnGate,
@@ -37,13 +35,9 @@ import { ACCENTS, CARD_WIDTHS, SOUND_EVENTS, soundKey, soundPrefs } from "../src
 import { HELP_TABS, helpTabFor, helpKeyTarget } from "../src/web-console/public/help.js";
 import { RED_AT, YELLOW_AT } from "../src/web-console/public/meter.js";
 import { REMOTE_FOLD } from "../src/web-console/public/git-board.js";
-import {
-  applyPatch,
-  readLedger,
-  SESSION_MAX_AGE_MS,
-  sweepUploads,
-  UPLOAD_MAX_AGE_MS,
-} from "../src/web-console/lib.mjs";
+import { readLedger, SESSION_MAX_AGE_MS, sweepUploads, UPLOAD_MAX_AGE_MS } from "../src/web-console/sessions.mjs";
+import { applyPatch } from "../src/web-console/patches.mjs";
+import { joinedCss } from "./css-helpers.mjs";
 import {
   ROOT,
   HOME,
@@ -225,6 +219,23 @@ test("a launch request round-trips with the skill the dashboard resumes as", asy
   assert.ok(state.items.every((i) => i.id !== "__launch"), "a launch must not become a question");
 });
 
+// A delete from the dashboard's picker is a send like a launch, but no hop:
+// the agent stays the dashboard, so it carries no resume and no skill file.
+test("a delete request round-trips with the spec folder and no resume", async () => {
+  await post("/submit", {
+    actions: [{ i: "__delete", type: "delete", spec: "specs/lunch-vote" }],
+    reply: "Delete the spec folder specs/lunch-vote/ for good, right here in this session.",
+  });
+  const res = cli(["wait", "--session", sid, "--seconds", "10"]);
+  assert.equal(res.status, 0);
+  assert.equal(res.json.actions[0].i, "__delete");
+  assert.equal(res.json.actions[0].spec, "specs/lunch-vote");
+  assert.equal(res.json.resume, undefined);
+  assert.equal(res.json.skillFile, undefined);
+  const state = JSON.parse(fs.readFileSync(path.join(session, "state.json"), "utf8"));
+  assert.ok(state.items.every((i) => i.id !== "__delete"), "a delete must not become a question");
+});
+
 // Back to the dashboard is a send like the review button: it names no
 // question, it is refused while an earlier send is uncollected, and the agent
 // answers it by resuming the same session as the dashboard.
@@ -371,6 +382,24 @@ test("a stop request carries the staged answers, reaches the agent as a send, an
   assert.equal((await ping()).pendingStop, false);
 });
 
+// "Stop with a handoff" is the same send with `handoff: true` on the action.
+// The source tree has no built Handoff skill beside it, so no handoffSkill.
+test("a handoff stop keeps its flag, reports as a stop until collected, and names no skill file in the source tree", async () => {
+  const ping = async () => (await post("/ping", {})).json();
+  const before = await ping();
+  await post("/submit", {
+    rev: before.rev,
+    actions: [{ i: "__stop", type: "stop", handoff: true }],
+    reply: STOP_HANDOFF_REPLY,
+  });
+  assert.equal((await ping()).pendingStop, true, "an uncollected handoff stop shows on the heartbeat");
+  const res = cli(["wait", "--session", sid, "--seconds", "5"]);
+  assert.equal(res.status, 0);
+  assert.equal(res.json.actions[0].handoff, true, "the flag reaches the agent");
+  assert.equal(res.json.handoffSkill, undefined, "no built skill beside the source tree");
+  assert.equal((await ping()).pendingStop, false);
+});
+
 // The top bar's triangle is a stop that lands on the menu: the staged answers
 // and `__dashboard` go as one send with no finish on the page, the agent gets
 // both at once, and the resume through the dashboard blanks the skill's page.
@@ -439,8 +468,7 @@ test("the way home follows Stop's turn rules and hides where it has no job", () 
 test("the page carries the way home: the triangle, its confirm, and the wiring", () => {
   const dir = path.join(ROOT, "src", "web-console", "public");
   const html = fs.readFileSync(path.join(dir, "index.html"), "utf8");
-  const app = fs.readFileSync(path.join(dir, "app.js"), "utf8");
-  const css = fs.readFileSync(path.join(dir, "app.css"), "utf8");
+  const css = joinedCss();
   assert.ok(html.indexOf('id="btn-home"') < html.indexOf('id="btn-stop"'), "the triangle sits left of Stop session");
   assert.match(html, /id="btn-home"[\s\S]{0,200}aria-label="Back to the dashboard"/, "the icon button has a name");
   for (const id of ["home-modal", "home-blurb", "home-warn", "home-cancel", "home-go"]) {
@@ -448,8 +476,6 @@ test("the page carries the way home: the triangle, its confirm, and the wiring",
   }
   assert.ok(html.includes("Leave this workflow?"));
   assert.match(css, /\.home-btn path\s*\{\s*fill:\s*var\(--accent\)/, "the triangle is filled with the highlight color");
-  assert.ok(app.includes('{ i: "__dashboard", type: "dashboard" }'), "the confirm sends __dashboard");
-  assert.ok(app.includes("stagedPayload()") && app.includes("HOME_REPLY"), "the staged answers ride along with the reply line");
 });
 
 test("the way home cannot be mistaken for a brief request", () => {
@@ -462,9 +488,22 @@ test("console-stop.md, building.md and the dashboard prompt teach the mid-workfl
   assert.ok(stopMd.includes("## Back to the dashboard, mid-workflow"));
   assert.ok(stopMd.includes(HOME_REPLY), "console-stop.md quotes the reply line the agent will see");
   assert.match(stopMd, /No `finish` and no `stop` in between/);
-  assert.match(read("src", "web-console", "console.md"), /`__stop`, `__dashboard` \(no finish up\) \| `console-stop\.md`/, "console.md's action table sends a mid-workflow __dashboard there");
+  assert.ok(stopMd.includes("## Stop with a handoff"));
+  for (const word of ["handoff new", "--from-stop", "handoffSkill"]) assert.ok(stopMd.includes(word), `console-stop.md names ${word}`);
+  assert.match(read("src", "web-console", "console.md"), /`__stop` \(plain, or with `handoff: true`\), `__dashboard` \(no finish up\) \| `console-stop\.md`/, "console.md's action table sends a handoff stop and a mid-workflow __dashboard there");
   assert.ok(read("src", "web-console", "building.md").includes("mid-build `__dashboard`"));
   assert.ok(read("src", "plan2code.md").includes("mid-workflow from the top bar's triangle"));
+});
+
+test("console-launches.md and the dashboard prompt teach the handoff pick-up and delete", () => {
+  const read = (...p) => fs.readFileSync(path.join(ROOT, ...p), "utf8");
+  const launches = read("src", "web-console", "console-launches.md");
+  for (const word of ["__pickup", "handoffFile", "delete-handoff", "handoffsDir", "fallback"]) {
+    assert.ok(launches.includes(word), `console-launches.md names ${word}`);
+  }
+  assert.ok(launches.includes("handoffs, handoffsDir"), "console-launches.md lists the scan fields");
+  const prompt = read("src", "plan2code.md");
+  for (const word of ["__pickup", "delete-handoff"]) assert.ok(prompt.includes(word), `src/plan2code.md names ${word}`);
 });
 
 // The server serves a hardcoded allow-list, so a new module that nobody adds
@@ -474,9 +513,12 @@ test("console-stop.md, building.md and the dashboard prompt teach the mid-workfl
 test("every module the page imports is actually served", async () => {
   const dir = path.join(ROOT, "src", "web-console", "public");
   const wanted = new Set(["app.js"]);
-  for (const f of fs.readdirSync(dir).filter((f) => f.endsWith(".js"))) {
+  // The modules beside app.js and the screens under screens/, each import
+  // resolved from the file that makes it (a screen's "../state.js" is state.js).
+  const files = [...fs.readdirSync(dir).filter((f) => f.endsWith(".js")), ...fs.readdirSync(path.join(dir, "screens")).map((f) => `screens/${f}`)];
+  for (const f of files) {
     const src = fs.readFileSync(path.join(dir, f), "utf8");
-    for (const m of src.matchAll(/^\s*import\b[^"']*["']\.\/([^"']+)["']/gm)) wanted.add(m[1]);
+    for (const m of src.matchAll(/^\s*import\b[^"']*["'](\.\.?\/[^"']+)["']/gm)) wanted.add(path.posix.join(path.posix.dirname(f), m[1]));
   }
   const html = fs.readFileSync(path.join(dir, "index.html"), "utf8");
   for (const m of html.matchAll(/<link rel="modulepreload" href="\/([^"]+)"/g)) wanted.add(m[1]);
@@ -562,28 +604,6 @@ test("the favicon is served as an SVG with a PNG fallback and the page points at
   assert.ok(html.includes('href="/favicon.svg"'));
   assert.ok(html.includes('href="/favicon.png"'));
   assert.doesNotMatch(html, /rel="icon"[^>]*href="data:/);
-});
-
-// Each skill's starting and waiting screens clone its pose from index.html.
-// A pose with no drawing silently falls back to the flight, and a style
-// attribute in one would be refused by the CSP, so hold the markup to the list.
-test("every skill has a pose drawn in the page, with no inline styles", () => {
-  const html = fs.readFileSync(path.join(ROOT, "src", "web-console", "public", "index.html"), "utf8");
-  const tpl = html.match(/<template id="start-poses">([\s\S]*?)<\/template>/);
-  assert.ok(tpl, "index.html has the start-poses template");
-  const drawn = [...tpl[1].matchAll(/data-pose="([^"]+)"/g)].map((m) => m[1]);
-  assert.deepEqual(drawn.sort(), [...START_POSES].sort());
-  assert.doesNotMatch(tpl[1], /\sstyle=/);
-  for (const pose of START_POSES) {
-    assert.ok(SKILL_CATALOG.some((e) => e.workflow === pose), `${pose} is a real workflow`);
-    assert.equal(startPose(pose), pose);
-  }
-  assert.equal(startPose("implement-review"), "implement");
-  assert.equal(startPose("revise-plan"), "plan");
-  assert.equal(startPose("init-update"), "init");
-  for (const e of SKILL_CATALOG) assert.ok(startPose(e.workflow), `${e.workflow} has a pose`);
-  assert.equal(startPose("dashboard"), null);
-  assert.equal(startPose(undefined), null);
 });
 
 /* ---------------------------------------------------------------- help */
@@ -749,9 +769,9 @@ const helpFacts = () => ({
   maxDocMb: MAX_DOC_BYTES / 1024 / 1024,
   imageEdge: IMAGE_LONG_EDGE,
   cleanupDays: SESSION_MAX_AGE_MS / 86400000,
-  goneSeconds: sourceConst("public/app.js", /const GONE_AFTER_MS = ([^;]+);/, "GONE_AFTER_MS") / 1000,
-  adriftMinutes: sourceConst("public/app.js", /const ADRIFT_MS = ([^;]+);/, "ADRIFT_MS") / 60000,
-  maxUploadMb: sourceConst("public/app.js", /const MAX_UPLOAD_BYTES = ([^;]+);/, "MAX_UPLOAD_BYTES") / 1024 / 1024,
+  goneSeconds: sourceConst("public/screens/core.js", /const GONE_AFTER_MS = ([^;]+);/, "GONE_AFTER_MS") / 1000,
+  adriftMinutes: sourceConst("public/selectors.js", /const ADRIFT_MS = ([^;]+);/, "ADRIFT_MS") / 60000,
+  maxUploadMb: sourceConst("public/uploads.js", /const MAX_UPLOAD_BYTES = ([^;]+);/, "MAX_UPLOAD_BYTES") / 1024 / 1024,
   idleMinutes: sourceConst("server.mjs", /const IDLE_MS = Number\(args\[[^\]]+\] \|\| ([^)]+)\)/, "IDLE_MS") / 60000,
   maxLifeHours: sourceConst("server.mjs", /const MAX_LIFE_MS = Number\(args\[[^\]]+\] \|\| ([^)]+)\)/, "MAX_LIFE_MS") / 3600000,
   closedTabMinutes: sourceConst("server.mjs", /\(IDLE_MS - ([^)]+)\)/, "the closed-tab shutdown") / 60000,

@@ -22,7 +22,9 @@ free to close that terminal and kill them mid-write. While you wait, post
 and update the count as each returns. Never write a `finish.body` that says
 work "is running in the background" or "will finish on its own". Mark every
 reported helper `done` or `failed` before the finish, so the Subagents tab
-never ends on a row still running.
+never ends on a row still running: post each one's `done` in the same turn its
+notice arrives, and a `finish` is refused (exit `3`, naming the helper) while
+any row is still `running`.
 
 ## 1. Post the finish
 

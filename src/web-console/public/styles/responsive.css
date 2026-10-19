@@ -1,0 +1,120 @@
+/* responsive.css: Print, then the narrow-window rules: last, so its overrides come after everything they override. */
+
+/* ---------------------------------------------------------------- print */
+
+/* What gets printed is the document being read, on its own. Everything that
+   steers the session is furniture and has no business on paper. */
+@media print {
+  .topbar, .rail, .aside, .footer, .banner, .skip, .doc-tools, .pager, .modal, .arrival, .review-offer { display: none !important; }
+  html, body { height: auto; background: #fff; color: #000; }
+  body { display: block; }
+  .layout { display: block; overflow: visible; }
+  .main { overflow: visible; padding: 0; max-width: none; }
+  .main > * { max-width: none; }
+  .block, .card { break-inside: avoid; box-shadow: none; }
+  .doc-head { border-bottom: 1px solid #ccc; }
+  .md a { color: #000; }
+  .md-pre, .md-code { background: #f4f4f4; border-color: #ddd; }
+}
+
+/* ------------------------------------------------------------ responsive */
+
+@media (max-width: 1080px) {
+  .layout { grid-template-columns: 210px minmax(0, 1fr); }
+  .aside { grid-column: 1 / -1; border-left: 0; border-top: 1px solid var(--rule); }
+}
+
+@media (max-width: 720px) {
+  body { display: block; }
+  .layout { display: block; }
+  .rail { border-right: 0; border-bottom: 1px solid var(--rule); }
+  .sidebar, .aside { border: 0; border-bottom: 1px solid var(--rule); max-height: 30vh; }
+  .main { padding: 18px 16px 30px; }
+  .card { padding: 18px 16px; border-radius: 8px; }
+  .main > .card { padding-right: 22px; }
+  .card h2 { font-size: 21px; }
+  /* Back to a wrapping row: the summary and Send take two lines here and fill
+     the bar's middle, so the where slot has no room and goes. */
+  .footer { display: flex; flex-wrap: wrap; position: sticky; bottom: 0; z-index: 20; box-shadow: 0 -4px 14px rgba(0,0,0,0.07); }
+  .footer-summary { flex: 1; }
+  .footer-actions { white-space: normal; }
+  .footer-where { display: none; }
+  .footer.is-dash { justify-content: center; }
+  .footer.is-dash .footer-where:not([hidden]) { display: block; max-width: 100%; }
+  .progress-block { margin-left: 0; max-width: none; }
+  .topbar { padding: 12px 16px 0; }
+  .topbar-row.second { gap: 9px; }
+  .views-arrow { display: none; }
+  /* Side by side, because vertical space is the scarce thing here. */
+  .dock { flex-direction: row; text-align: left; gap: 12px; padding: 12px 16px; }
+  .planny { width: 32px; height: 44px; }
+  /* Three items on one line is one too many at this width, and the count is
+     the one that is only nice to have. */
+  .pager { gap: 8px; }
+  .pager-count { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+  /* Re-enable the indicators whose whole job is to show that time is passing.
+     Frozen, the spinner reads as a broken ring and Planny's star as a dead
+     light, so the star keeps turning, slowly. His lean, blink, arms and feet
+     are decoration and stay off. */
+  .spinner { animation: spin 1.6s linear infinite !important; }
+  .planny.is-work .eye { animation: planny-spin 4s linear infinite !important; }
+  /* The flight holds still rather than collapsing. Collapsed to its last
+     frame every star would sit off the left edge and the sky would be empty;
+     stopped, the field stays and Planny keeps his forward lean. */
+  .sky .star, .trail i, .dock.is-flying .planny { animation: none !important; }
+  /* The step poses hold their finished drawing -- every tick and line
+     written, confetti where it was drawn -- and keep only the star's pulse. */
+  .pose, .pose * { animation: none !important; }
+  .pose .ey.blink { animation: pose-pulse 2.4s ease-in-out infinite !important; }
+  /* Help's Planny moods are pictures, not indicators: all of them hold
+     still, the working star included. */
+  .help-mood-bot, .help-mood-bot *, .help-mood-bot.is-work .eye { animation: none !important; }
+  #btn-send { animation: none; }
+}
+
+/* User Preferences: the launcher's model menu. */
+.models-tabs { display: flex; gap: 6px; }
+.models-tabs .btn[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+.models-note { font-size: 0.9em; opacity: 0.85; }
+.models-note p, .models-note ul { margin: 0 0 6px; }
+.models-note ul { padding-left: 18px; }
+.models-list { display: grid; gap: 4px; max-height: 160px; overflow: auto; }
+.models-list:empty { display: none; }
+.models-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; gap: 6px; align-items: center; }
+.models-row.locked { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); font-size: 0.88em; opacity: 0.75; }
+.models-row input { min-width: 0; }
+.models-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.models-actions .help.error { color: var(--danger, #d64545); }
+
+/* User Preferences: Cleanup's list of what would go, shown before anything
+   is deleted. */
+.cleanup-list { display: grid; gap: 4px; max-height: 200px; overflow: auto; font-size: 0.88em; }
+.cleanup-list:empty { display: none; }
+.cleanup-summary { margin: 0 0 2px; font-weight: 600; }
+.cleanup-row { display: flex; justify-content: space-between; gap: 12px; }
+.cleanup-row span:first-child { min-width: 0; overflow-wrap: anywhere; font-family: var(--mono); }
+.cleanup-size { flex: none; color: var(--ink-3); }
+.cleanup-more { display: grid; gap: 4px; }
+.cleanup-more summary { cursor: pointer; color: var(--ink-2); }
+#cleanup-delete[hidden] { display: none; }
+
+/* A word the person has to type, bold and in their highlight color so it
+   does not get lost in the status sentence. */
+.agent-key {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+/* "What to check", beside the quiet and Not running lines. A link in a button's clothes. */
+.status-help {
+  font: inherit; font-size: 0.92em; font-weight: 600;
+  color: var(--accent); background: none; border: 0; padding: 0 2px;
+  text-decoration: underline; text-underline-offset: 2px; cursor: pointer;
+}
+.status-help:hover { text-decoration-thickness: 2px; }
+.status-help:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 3px; }
+

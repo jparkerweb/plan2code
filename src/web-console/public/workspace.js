@@ -2,7 +2,7 @@
 //
 // The source of truth for what a folder may be called, the name a new folder
 // gets by default, and the suggestion offered when a name is taken. Imported
-// by the server (its guards), lib.mjs and the page, so they can never disagree.
+// by the server (its guards), workspace.mjs and the page, so they can never disagree.
 // No DOM access at module scope and no imports: the page and `node --test`
 // both import this file.
 

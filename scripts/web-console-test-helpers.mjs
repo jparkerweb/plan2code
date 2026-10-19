@@ -21,13 +21,16 @@ import path from "node:path";
 import { execFileSync, spawnSync } from "node:child_process";
 import http from "node:http";
 import { fileURLToPath } from "node:url";
-import { readChat } from "../src/web-console/lib.mjs";
+import { readChat } from "../src/web-console/inbox.mjs";
 
 export const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 export const CONSOLE_CLI = path.join(ROOT, "src", "web-console", "console.mjs");
 
 export const HOME = fs.mkdtempSync(path.join(os.tmpdir(), "p2c-console-test-"));
 export const MODELS_DIR = path.join(HOME, "plan2code");
+// Handoffs are written outside every repo, under ~/.plan2code/handoffs, so
+// each test file gets its own throwaway folder for them too.
+export const HANDOFFS_DIR = path.join(HOME, "handoffs");
 // A spawned console server or CLI must not inherit relocation vars (an
 // exported GIT_DIR would redirect the board's reads), SSH markers (they set
 // `remote` in open output) or leftover PLAN2CODE_* knobs.
@@ -51,7 +54,7 @@ for (const k of AMBIENT_ENV_KEYS) delete scrubbed[k];
 // cannot open. An empty file is the portable "no global config".
 const EMPTY_GITCONFIG = path.join(HOME, "empty-gitconfig");
 fs.writeFileSync(EMPTY_GITCONFIG, "");
-export const ENV = { ...scrubbed, PLAN2CODE_CONSOLE_HOME: HOME, PLAN2CODE_MODELS_DIR: MODELS_DIR, PLAN2CODE_NO_BROWSER: "1", GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: EMPTY_GITCONFIG };
+export const ENV = { ...scrubbed, PLAN2CODE_CONSOLE_HOME: HOME, PLAN2CODE_MODELS_DIR: MODELS_DIR, PLAN2CODE_HANDOFFS_DIR: HANDOFFS_DIR, PLAN2CODE_NO_BROWSER: "1", GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: EMPTY_GITCONFIG };
 // Every server these tests start runs the release check at boot. A fresh
 // cached failure keeps the whole suite off the network and bannerless.
 fs.writeFileSync(path.join(HOME, "update-check.json"), JSON.stringify({ checkedAt: Date.now(), latest: null }));
@@ -173,6 +176,14 @@ export const helpTemplate = () => {
   const html = fs.readFileSync(path.join(ROOT, "src", "web-console", "public", "index.html"), "utf8");
   const tpl = html.match(/<template id="help-content">([\s\S]*?)<\/template>/);
   assert.ok(tpl, "index.html has the help-content template");
+  return tpl[1];
+};
+
+// The Planny poses each skill's starting screen clones, from index.html.
+export const poseTemplate = () => {
+  const html = fs.readFileSync(path.join(ROOT, "src", "web-console", "public", "index.html"), "utf8");
+  const tpl = html.match(/<template id="start-poses">([\s\S]*?)<\/template>/);
+  assert.ok(tpl, "index.html has the start-poses template");
   return tpl[1];
 };
 

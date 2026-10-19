@@ -47,7 +47,7 @@ If multiple active spec folders exist or nothing provided, ask user for:
 
 ## Process
 
-Complete steps in order. Report progress after each.
+Report progress after each step.
 
 ---
 
@@ -245,8 +245,9 @@ Ask: "Submit this feedback + run metrics to the maintainer via GitHub? (optional
 **Confirm with user before moving files.**
 
 1. Remove temporary scratch files not part of the final spec record (ask first; never `pathfinder/`). Everything left is the record: `overview.md` (with completion summary), every `phase-X.md`, `PLAN-DRAFT-*.md`, `PLAN-CONVERSATION-*.md`, `pathfinder/` (if present).
-2. `specs.mjs archive <spec> --dry-run` and show the user its `files`; on their yes, `specs.mjs archive <spec>`. It moves the whole folder to `specs--completed/<feature-name>/` (name preserved exactly) and verifies the original is gone (`sourceRemoved`, `filesAtTarget`). Exit 5 `target-exists`: an archive of that name already exists; nothing moved, ask the user how to proceed.
-3. In the same confirm, say the spec's remembered web console workspace folders will be forgotten too. After a successful move, on that yes: `node "<D>/console.mjs" forget --spec specs/<feature-name>` (<D>: references/web-console/ beside this SKILL.md). `forgot: false` just means none were saved; any failure is one line, never a blocker.
+2. `specs.mjs archive <spec> --dry-run` and show the user its `files`; ask "Archive it? (yes / no / show me)"; on their yes, `specs.mjs archive <spec>`. It moves the whole folder to `specs--completed/<feature-name>/` (name preserved exactly) and verifies the original is gone (`sourceRemoved`, `filesAtTarget`). Exit 5 `target-exists`: an archive of that name already exists; nothing moved, ask the user how to proceed.
+3. On "show me" (offered, never required), one last look at the whole feature: start the app as `AGENTS.md` Commands says (missing: work it out from `package.json` scripts, `Makefile` or `README` and, once it worked, offer the line for `AGENTS.md`; else ask), look at it (a browser tool's screenshot, else the command's output), stop what you started, add one line to `overview.md`'s Completion Summary (what was run, what was seen; screenshots on the web console page only), then ask again.
+4. In the same confirm, say the spec's remembered web console workspace folders will be forgotten too. After a successful move, on that yes: `node "<D>/console.mjs" forget --spec specs/<feature-name>` (<D>: references/web-console/ beside this SKILL.md). `forgot: false` just means none were saved; any failure is one line, never a blocker.
 
 ---
 

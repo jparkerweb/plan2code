@@ -3,7 +3,7 @@
 // it never ships inside a skill.
 //
 //   node scripts/capture-screenshots.mjs [--only <shot>] [--browser <path>]
-//        [--out <dir>]
+//        [--out <dir>] [--compare]
 //
 // Every shot is staged with no agent: a throwaway sample project called
 // `task-api`, a throwaway console home (PLAN2CODE_CONSOLE_HOME), then
@@ -14,16 +14,27 @@
 // it is the console's nearest to the Plan2Code blue the site and README use.
 //
 // Shots: dashboard, dashboard-utilities, question, doc, build, signoff, finish, ask, git.
+// --compare adds workspace, stop, delete, help, prefs and cleanup: screens the
+// docs never show, for checking a change by eye against a "before" set. Its
+// --out must be outside docs/screenshots/, so the set is never published.
 //
-// Needs puppeteer-core (`npm i --no-save puppeteer-core`, never added to
-// package.json) and a local Chrome or Edge. Writes nothing outside its temp
-// folders and --out.
+// --snapshot <file> (used by scripts/css-snapshot.mjs) takes no pictures: it
+// writes every element's computed style, per screen, theme and width, to <file>.
+// It sees what these shots stage: choice, multi, text, review and confirm cards;
+// a checklist, list, recap or menu card is not staged, so a rule only they use
+// is not covered.
+//
+// Needs playwright-core (a root devDependency, so `npm install` brings it) and
+// a local Chrome or Edge, launched through scripts/browser.mjs. Playwright has
+// no WebP screenshots, so each shot is taken over CDP. Writes nothing outside
+// its temp folders and --out.
 
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { launchBrowser } from "./browser.mjs";
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const CONSOLE_CLI = path.join(ROOT, "src", "web-console", "console.mjs");
@@ -72,6 +83,82 @@ const SHOTS = {
   git: { workflow: "git", posts: ["git"], repo: true },
 };
 
+// --compare only: the screens the docs never show, shot so a change to the
+// console can be checked against a "before" set by eye. `open` runs on the
+// page after every load and clicks through to the screen. Never published.
+const COMPARE_SHOTS = {
+  // The confirm dialog, with the handoff choice beside plain stop.
+  stop: {
+    workflow: "implement",
+    posts: ["stop"],
+    open: async (page) => {
+      await page.click("#btn-stop");
+      await page.waitForSelector("#stop-modal[open]", { timeout: 10000 });
+    },
+  },
+  // The first step of a spec chip's delete.
+  delete: {
+    workflow: "dashboard",
+    posts: ["delete"],
+    open: async (page) => {
+      await page.locator(".spec-chip-del").first().click({ force: true });
+      await page.waitForSelector("#delete-modal[open]", { timeout: 10000 });
+    },
+  },
+  // Help on its first tab, whatever topic it opened on.
+  help: {
+    workflow: "plan",
+    posts: ["help"],
+    open: async (page) => {
+      await page.click("#btn-about");
+      await page.locator("#help-tabs .help-tab").first().click();
+      await page.waitForSelector("#help-modal[open]", { timeout: 10000 });
+    },
+  },
+  prefs: {
+    workflow: "plan",
+    posts: ["prefs"],
+    open: async (page) => {
+      await page.click("#btn-looks");
+      await page.waitForSelector("#looks-modal[open]", { timeout: 10000 });
+    },
+  },
+  // Preferences scrolled to Cleanup once its scan has answered.
+  cleanup: {
+    workflow: "plan",
+    posts: ["cleanup"],
+    open: async (page) => {
+      await page.click("#btn-looks");
+      await page.waitForSelector("#looks-modal[open]", { timeout: 10000 });
+      await page.locator(".looks-cleanup").scrollIntoViewIfNeeded();
+      await page.click("#cleanup-scan");
+      await page.waitForFunction(() => document.getElementById("cleanup-status").textContent.trim() !== "", null, { timeout: 15000 }).catch(() => {});
+    },
+  },
+  // The panel open with two folders: the project and a sibling added once.
+  // Last, since the console remembers the folder for the project and every
+  // later shot's footer would count it.
+  workspace: {
+    workflow: "plan",
+    posts: ["workspace"],
+    open: async (page) => {
+      const extra = makeExtraFolder();
+      await page.evaluate(async (dir) => {
+        const now = await (await fetch("/workspace", { cache: "no-store" })).json();
+        if ((now.folders || []).length < 2) {
+          await fetch("/workspace/add", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ path: dir, name: "task-web", description: "The web app that calls the API" }),
+          });
+        }
+      }, extra);
+      await page.click("#footer-where");
+      await page.waitForSelector("#workspace-modal[open] #workspace-list li:nth-child(2)", { timeout: 10000 });
+    },
+  },
+};
+
 // On Windows the temp dir sits under the user's profile, and the page can
 // show the project's path, so the sample project goes at the drive root
 // instead. Elsewhere the temp dir carries no username. Each run makes its own
@@ -87,21 +174,6 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 function fail(message) {
   console.error(message);
   process.exit(1);
-}
-
-function findBrowser() {
-  if (typeof args.browser === "string") return fs.existsSync(args.browser) ? args.browser : null;
-  const candidates = [
-    "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
-    "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
-    "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
-    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-    "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
-    "/usr/bin/google-chrome",
-    "/usr/bin/chromium",
-    "/usr/bin/chromium-browser",
-  ];
-  return candidates.find((p) => fs.existsSync(p)) || null;
 }
 
 function phaseFile(n, name, tasks, done) {
@@ -169,6 +241,14 @@ function makeSampleProject() {
   return project;
 }
 
+// The Workspace shot's second folder, beside the sample project.
+function makeExtraFolder() {
+  const dir = path.join(SCRATCH, "task-web");
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, "README.md"), "# task-web\n\nThe web app that lists and edits a team's tasks.\n");
+  return dir;
+}
+
 function git(cwd, ...gitArgs) {
   const r = spawnSync("git", gitArgs, { cwd, env: ENV, encoding: "utf8" });
   if (r.status !== 0) throw new Error(`git ${gitArgs.join(" ")} failed: ${(r.stderr || "").trim()}`);
@@ -225,8 +305,7 @@ function post(project, sid, name) {
 }
 
 // Opens a session for the shot and posts its payloads. Returns { sid, url }.
-function stage(project, shot) {
-  const spec = SHOTS[shot];
+function stage(project, spec) {
   const r = cli(project, "open", "--workflow", spec.workflow, "--no-open");
   if (r.code !== 0 || !r.out || !r.out.url) throw new Error(`open failed (${r.code}): ${r.err.trim()}`);
   for (const name of spec.posts) post(project, r.out.sid, name);
@@ -236,9 +315,9 @@ function stage(project, shot) {
 // Waits for the page to draw real state, then lets the animations finish
 // (the dashboard's wake-up is the longest).
 async function settle(page) {
-  await page.waitForNetworkIdle({ idleTime: 500, timeout: 15000 }).catch(() => {});
+  await page.waitForLoadState("networkidle", { timeout: 15000 }).catch(() => {});
   await page.waitForSelector(".dash-card, .card, .handoff, .ask-pane, .doc, .git-board", { timeout: 15000 }).catch(() => {});
-  await sleep(3500);
+  await sleep(args.snapshot ? 1800 : 3500);
 }
 
 async function openTab(page, label) {
@@ -251,7 +330,7 @@ async function openTab(page, label) {
 
 async function scrollTo(page, { scrollTo: top, mustShow }) {
   const problem = await page.evaluate(
-    (topSel, showSel) => {
+    ([topSel, showSel]) => {
       const find = (sel) =>
         sel.startsWith("cmd:")
           ? [...document.querySelectorAll(".dash-card")].find((c) => c.querySelector(".dash-card-cmd")?.textContent.trim() === sel.slice(4))
@@ -265,24 +344,95 @@ async function scrollTo(page, { scrollTo: top, mustShow }) {
       const r = show.getBoundingClientRect();
       return r.top >= 0 && r.bottom <= window.innerHeight ? null : `${showSel} is not wholly in view`;
     },
-    top,
-    mustShow || null
+    [top, mustShow || null]
   );
   if (problem) console.log(`  warning: ${problem}`);
   await sleep(300);
 }
 
+// The properties that change how a stylesheet move would look.
+const SNAP_PROPS = [
+  "display", "position", "top", "right", "bottom", "left", "width", "height", "min-width", "max-width", "min-height", "max-height",
+  "margin-top", "margin-right", "margin-bottom", "margin-left", "padding-top", "padding-right", "padding-bottom", "padding-left",
+  "color", "background-color", "background-image", "border-top-width", "border-right-width", "border-bottom-width", "border-left-width",
+  "border-top-style", "border-top-color", "border-right-color", "border-bottom-color", "border-left-color", "border-top-left-radius",
+  "font-family", "font-size", "font-weight", "font-style", "line-height", "letter-spacing", "text-align", "text-transform",
+  "gap", "grid-template-columns", "grid-template-rows", "grid-column-start", "grid-column-end", "grid-row-start", "grid-row-end",
+  "flex-direction", "flex-wrap", "flex-grow", "flex-shrink", "flex-basis", "align-items", "justify-content", "align-self",
+  "overflow-x", "overflow-y", "opacity", "visibility", "transform", "z-index", "box-shadow", "cursor", "pointer-events", "white-space",
+  "content", "outline-style", "transform-origin", "fill", "stroke",
+];
+// Recorded after the properties above, for every element: what names its animation.
+// A property a running animation is moving is recorded as "~" (it differs from run
+// to run), so a rule that adds or removes an animation shows in these fields instead.
+const SNAP_ANIMATION = ["animation-name", "animation-duration", "animation-delay", "animation-iteration-count", "animation-timing-function", "animation-direction", "animation-fill-mode"];
+
+const SNAP = {};
+
+async function snapshotNow(page) {
+  return page.evaluate(
+    ([props, animation]) => {
+      const out = {};
+      const seen = new Map();
+      for (const el of document.querySelectorAll("*")) {
+        const parent = el.parentElement;
+        const key = parent ? (seen.get(parent) || "") : "";
+        const sib = parent ? [...parent.children].indexOf(el) : 0;
+        const cls = typeof el.className === "string" ? el.className.trim().split(/\s+/).filter(Boolean).slice(0, 3).join(".") : "";
+        const path = (parent ? key + ">" : "") + el.tagName.toLowerCase() + (el.id ? "#" + el.id : "") + (cls ? "." + cls : "") + "[" + sib + "]";
+        seen.set(el, path);
+        const cs = getComputedStyle(el);
+        const moving = new Set();
+        for (const a of el.getAnimations ? el.getAnimations() : []) {
+          for (const kf of a.effect && a.effect.getKeyframes ? a.effect.getKeyframes() : []) {
+            for (const k of Object.keys(kf)) if (!["offset", "easing", "composite", "computedOffset"].includes(k)) moving.add(k.replace(/[A-Z]/g, (c) => "-" + c.toLowerCase()));
+          }
+        }
+        out[path] = props.map((p) => (moving.has(p) ? "~" : cs.getPropertyValue(p))).concat(animation.map((p) => cs.getPropertyValue(p))).join("|");
+      }
+      return out;
+    },
+    [SNAP_PROPS, SNAP_ANIMATION]
+  );
+}
+
+async function snapshotShot(page, name, theme) {
+  for (const [w, h] of [[1280, 800], [390, 844]]) {
+    await page.setViewportSize({ width: w, height: h });
+    await sleep(1500);
+    SNAP[`${name}/${theme}/${w}`] = await snapshotNow(page);
+  }
+  await page.setViewportSize({ width: 1280, height: 800 });
+}
+
 async function shoot(page, name) {
   const written = [];
+  // Math.random picks Planny's mood variants; pinned so two runs draw the same page.
+  if (args.snapshot) await page.addInitScript(() => { Math.random = () => 0.5; });
   for (const theme of THEMES) {
-    await page.emulateMediaFeatures([{ name: "prefers-color-scheme", value: theme }]);
+    await page.emulateMedia({ colorScheme: theme });
     // The theme is applied at load, so reload rather than trust a live switch.
     await page.reload({ waitUntil: "domcontentloaded" });
     await settle(page);
     if (page.__tab) await openTab(page, page.__tab);
     if (page.__scroll && page.__scroll.scrollTo) await scrollTo(page, page.__scroll);
+    if (page.__open) {
+      await page.__open(page);
+      await sleep(600);
+    }
+    if (args.snapshot) {
+      await snapshotShot(page, name, theme);
+      continue;
+    }
     const file = path.join(OUT, `${name}-${theme}.webp`);
-    await page.screenshot({ type: "webp", quality: QUALITY, path: file });
+    const cdp = await page.context().newCDPSession(page);
+    // Without a clip the capture comes out in CSS pixels; a clip of the
+    // viewport at scale 2 is the twice-density shot (byte for byte what
+    // Playwright's own PNG screenshot takes).
+    const clip = { x: 0, y: 0, width: 1280, height: 800, scale: 2 };
+    const { data } = await cdp.send("Page.captureScreenshot", { format: "webp", quality: QUALITY, captureBeyondViewport: false, clip });
+    await cdp.detach();
+    fs.writeFileSync(file, Buffer.from(data, "base64"));
     const kb = Math.round(fs.statSync(file).size / 1024);
     console.log(`${path.basename(file)}  ${kb} KB`);
     if (kb > WARN_KB) console.log(`  warning: ${path.basename(file)} is over ${WARN_KB} KB`);
@@ -292,15 +442,15 @@ async function shoot(page, name) {
 }
 
 // Opens the page for a staged session and saves both themes.
-async function capture(browser, url, name, { tab, scrollTo: top, mustShow }) {
-  const ctx = await browser.createBrowserContext();
+async function capture(browser, url, name, { tab, scrollTo: top, mustShow, open }) {
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 2 });
   try {
     const page = await ctx.newPage();
-    await page.setViewport({ width: 1280, height: 800, deviceScaleFactor: 2 });
     await page.goto(url, { waitUntil: "domcontentloaded" });
     await settle(page);
     page.__tab = tab || null;
     page.__scroll = { scrollTo: top, mustShow };
+    page.__open = open || null;
     return await shoot(page, name);
   } finally {
     await ctx.close();
@@ -310,15 +460,14 @@ async function capture(browser, url, name, { tab, scrollTo: top, mustShow }) {
 // The Ask shot: a question typed and sent on the page, collected with `chat`
 // the way an agent would, and answered with a posted reply.
 async function captureAsk(browser, project, sid, url, question) {
-  const ctx = await browser.createBrowserContext();
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 2 });
   try {
     const page = await ctx.newPage();
-    await page.setViewport({ width: 1280, height: 800, deviceScaleFactor: 2 });
     await page.goto(url, { waitUntil: "domcontentloaded" });
     await settle(page);
     await openTab(page, "Ask");
     await page.waitForSelector("#ask-input:not([disabled])", { timeout: 10000 });
-    await page.type("#ask-input", question);
+    await page.locator("#ask-input").pressSequentially(question);
     await page.evaluate(() => {
       const send = [...document.querySelectorAll(".ask-composer button")].find((b) => b.textContent.trim() === "Send");
       if (send) send.click();
@@ -360,17 +509,14 @@ async function captureAsk(browser, project, sid, url, question) {
 }
 
 async function main() {
-  const names = args.only ? [args.only] : Object.keys(SHOTS);
-  for (const n of names) if (!SHOTS[n]) fail(`Unknown shot "${n}". Shots: ${Object.keys(SHOTS).join(", ")}`);
-
-  let puppeteer;
-  try {
-    puppeteer = (await import("puppeteer-core")).default;
-  } catch {
-    fail("puppeteer-core is not installed. Run: npm i --no-save puppeteer-core");
+  const docs = path.join(ROOT, "docs", "screenshots");
+  const fold = (p) => (process.platform === "win32" ? p.toLowerCase() : p);
+  if (args.compare && (fold(OUT) === fold(docs) || fold(OUT).startsWith(fold(docs) + path.sep))) {
+    fail(`--compare never writes into ${path.relative(ROOT, docs)}: pass --out with a folder outside it.`);
   }
-  const browserPath = findBrowser();
-  if (!browserPath) fail("No Chrome or Edge found. Pass one with --browser <path>.");
+  const table = args.compare ? { ...SHOTS, ...COMPARE_SHOTS } : SHOTS;
+  const names = args.only ? [args.only] : Object.keys(table);
+  for (const n of names) if (!table[n]) fail(`Unknown shot "${n}". Shots: ${Object.keys(table).join(", ")}`);
 
   SCRATCH = fs.mkdtempSync(path.join(SCRATCH_ROOT, "p2c-shots-"));
   HOME = path.join(SCRATCH, "console-home");
@@ -385,21 +531,21 @@ async function main() {
     // and the Ocean highlight is the console's nearest to the Plan2Code blue
     // the landing page uses.
     fs.writeFileSync(path.join(HOME, "looks.json"), JSON.stringify({ looks: { role: "engineer", accent: "ocean", welcomeSeen: true } }));
-    browser = await puppeteer.launch({
-      executablePath: browserPath,
-      headless: true,
+    browser = await launchBrowser({
+      ...(typeof args.browser === "string" ? { executablePath: args.browser } : {}),
       args: ["--no-first-run", "--no-default-browser-check", "--mute-audio"],
     });
     for (const name of names) {
-      const where = SHOTS[name].repo ? makeGitProject() : project;
-      const { sid, url } = stage(where, name);
+      const where = table[name].repo ? makeGitProject() : project;
+      const { sid, url } = stage(where, table[name]);
       try {
-        if (SHOTS[name].ask) await captureAsk(browser, where, sid, url, SHOTS[name].ask);
-        else await capture(browser, url, name, SHOTS[name]);
+        if (table[name].ask) await captureAsk(browser, where, sid, url, table[name].ask);
+        else await capture(browser, url, name, table[name]);
       } finally {
         cli(where, "stop", "--session", sid);
       }
     }
+    if (args.snapshot) fs.writeFileSync(path.resolve(String(args.snapshot)), JSON.stringify(SNAP));
   } finally {
     if (browser) await browser.close();
     if (project) cli(project, "stop", "--all");

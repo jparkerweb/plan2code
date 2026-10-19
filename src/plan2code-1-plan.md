@@ -40,8 +40,7 @@ Check if `./AGENTS.md` exists:
 - Resolve ambiguities through questions - do NOT assume
 - Document unavoidable assumptions clearly
 - Present/confirm technology decisions with user
-- NEVER write implementation code
-- Keep responses conceptual - detailed specs belong in final PLAN-DRAFT only
+- NEVER write implementation code; keep responses conceptual, detailed specs belong in the final PLAN-DRAFT only
 - If no file access, output content in code blocks with file path headers
 
 ---
@@ -52,7 +51,10 @@ Before Phase 1, run `node "<S>/specs.mjs" list` from the project root (`<S>`: `s
 - Status "Phase 3 Complete - Resume at Phase 4": Resume at Phase 4
 - Status "Escalated from Quick Task - Resume at Phase 2": Acknowledge, verify requirements, skip to Phase 2
 - Status "Draft" or "Complete": Ask user how to proceed
+- A spec folder holding a `DIAGNOSIS-*.md` (Diagnose's write-up of a bug): read it first, as the Phase 1 brief (the bug, its cause, the suggested fix); that folder's name is the feature name (do not ask for one), so the PLAN-DRAFT lands beside the diagnosis
 - No PLAN-DRAFT: Begin at Phase 1. Console: its idea card carries `"templates": "idea"` (console.md → The kinds)
+
+`node "<S>/specs.mjs" check-draft specs/<feature-name>` checks a written PLAN-DRAFT (Phase 7).
 
 ---
 
@@ -101,6 +103,7 @@ After confirmation, proceed with analysis:
    > 1. **Types**: Unit, Integration, E2E, or None
    > 2. **Phase testing**: Run after each phase?
    > 3. **Coverage**: Critical paths / Moderate (~60-80%) / Comprehensive (>80%)
+   > 4. **Approach**: Code first (default) or Test first (each task's test is written and seen failing before its code)
    >
    > Say 'skip testing' to omit."
 
@@ -124,7 +127,7 @@ After confirmation, proceed with analysis:
 
 ### PHASE 2: System Context Examination
 
-**Existing projects:**
+**Existing projects:** (unfamiliar code? `/plan2code-xray` explains an area first)
 1. Examine directory structure
 2. Review key files/components — verify behavior against actual code, not assumptions
 3. Identify patterns, conventions, code style
@@ -233,6 +236,8 @@ State assessment and ask user to confirm.
 
 Replace values with actuals. Optionally add plain `key: value` lines below for readability (no bold/markdown).
 
+5. Run `node "<S>/specs.mjs" check-draft specs/<feature-name>` and fix every error before the closing message.
+
 ## Templates
 
 ### PLAN-DRAFT Format
@@ -243,7 +248,7 @@ Header: Title, Created date, Status (Draft | Phase 3 Complete - Resume at Phase 
 
 Sections:
 1. **Executive Summary** — 2-3 sentences
-2. **Requirements** — 2.1 Functional (FR-N checklist), 2.2 Non-Functional (NFR-N checklist), 2.3 Out of Scope, 2.4 Testing Strategy table (Types, Phase Testing, Coverage)
+2. **Requirements** — 2.1 Functional (FR-N checklist), 2.2 Non-Functional (NFR-N checklist), 2.3 Out of Scope, 2.4 Testing Strategy table (Types, Phase Testing, Coverage, plus a `| Approach | Test first |` row only when picked; absent means code first)
 3. **Tech Stack** — table: Category / Technology / Version / Justification
 4. **Architecture** — 4.1 Pattern (name + rationale), 4.2 System Context Diagram, 4.3 Components table, 4.4 Data Model, 4.5 API Design
 5. **Implementation Phases** — Per phase: Name, Goal, Dependencies, Task checklist (Task N.N)
@@ -292,8 +297,3 @@ When complete (PLAN-DRAFT created), tell user:
 - **Abort:** Confirm with user, list files needing cleanup, stop workflow
 - **Lost context:** Attach PLAN-DRAFT, state phase
 - **Confidence stuck <90%:** List blockers, ask targeted questions
-
-## Reminders
-
-- Final phase: PLANNING PHASE 7: Transition Decision
-- Do NOT implement - design and present plan only

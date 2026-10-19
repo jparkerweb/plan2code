@@ -14,7 +14,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { EXIT, fail, out, parseArgs, run, readText, isDir, rel, eol, isoDate, stamp, now } from "./common.mjs";
+import { EXIT, fail, out, parseArgs, run, readText, isDir, rel, eol, isoDate, stamp, now, LOOP_TOKENS, scrapeHits } from "./common.mjs";
 
 const USAGE = `
 pathfinder.mjs: Pathfinder map bookkeeping. JSON on stdout (trail: --text prints the footer itself).
@@ -84,16 +84,6 @@ const SCHEMA_KEYS = ["Type", "State", "Blocked by", "Claimed", "Resolved", "Lock
 const TYPES = ["grill · HITL", "research · AFK", "sketch · HITL", "legwork · HITL", "legwork · AFK"];
 const STATES = ["open", "claimed", "resolved", "out-of-scope"];
 const GLYPH = { x: "●", "/": "◉", " ": "○", "!": "⊘", "-": "⊝" };
-const LOOP_TOKENS = /\b(TASK_COMPLETE|PHASE_COMPLETE|ALL_TASKS_COMPLETE|IMPLEMENTATION_COMPLETE|SPEC_COMPLETE|WORK_COMPLETE)\b/;
-// The metrics collector's own scrape patterns (plan2code-metrics/src/collector.ts).
-const SCRAPE = [
-  { name: "overall confidence with %", re: /(?:Overall|Final|Total)?\s*\**[Cc]onfidence\**[:\s*]+(\d{1,3})%/ },
-  { name: "confidence table cell", re: /[|]\s*[Cc]onfidence\s*[|]\s*(\d{1,3})/ },
-  { name: "bare Requirements + number", re: /[Rr]equirements?[:\s|]+(\d{1,2})/ },
-  { name: "bare Feasibility + number", re: /[Ff]easibility[:\s|]+(\d{1,2})/ },
-  { name: "bare Integration + number", re: /[Ii]ntegration[:\s|]+(\d{1,2})/ },
-  { name: "bare Risk + number", re: /[Rr]isk[:\s|]+(\d{1,2})/ },
-];
 const DIMENSIONS = [
   { key: "Requirements-clarity", word: "Requirements" },
   { key: "Feasibility-technical", word: "Feasibility" },
@@ -1056,15 +1046,6 @@ function walk(dir) {
     } else outList.push(p);
   }
   return outList;
-}
-
-function scrapeHits(text) {
-  const hits = [];
-  for (const s of SCRAPE) {
-    const m = text.match(s.re);
-    if (m) hits.push(`${s.name}: "${m[0].trim()}"`);
-  }
-  return hits;
 }
 
 async function cmdLint(loc) {

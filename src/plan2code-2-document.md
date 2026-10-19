@@ -16,6 +16,7 @@ The FIRST thing you do, before anything else — before Auto-Discovery: ask **we
 
 - `node "<S>/specs.mjs" list`: every active spec with its `planDrafts` (file and **Status:** line).
 - `node "<S>/specs.mjs" status <spec>`: once written, the phases, task counts, goals, parallel groups and `checks` the files produce.
+- `node "<S>/specs.mjs" check <spec>`: the written overview.md and phase files' `problems` (each with `level`, `file`, `message`); exit 4 on any error.
 - `node "<S>/specs.mjs" metrics <spec> --step document --set verification_items_added=<N>`: the METRICS_JSON line.
 
 ## Rules
@@ -74,11 +75,7 @@ If no plan exists and user wants to skip:
 | Action-oriented | Imperative: "Create...", "Implement..." |
 | Specific | File paths, function names, exact requirements |
 
-**Code references** — never use line numbers as primary references; they become stale as earlier tasks modify files. Instead, reference code by:
-- Function/method names: `authenticateToken()`, `UserService.createUser()`
-- Class/interface names: `UserRepository`, `AuthConfig`
-- Semantic descriptions: "the JWT verification logic", "the error handler for duplicate emails"
-- Code patterns: "the switch statement handling request types", "the validation block for email format"
+**Code references:** never use line numbers as primary references; they go stale as earlier tasks modify files. Name the function or class (`UserService.createUser()`, `AuthConfig`), or describe the code ("the JWT verification logic", "the switch statement handling request types").
 
 Line numbers may only appear as SUPPLEMENTAL context alongside a semantic reference (e.g., "Update `validateEmail()` (currently ~L45) to...").
 
@@ -110,12 +107,8 @@ Line numbers may only appear as SUPPLEMENTAL context alongside a semantic refere
    - Quick Reference (Key Files, Environment Variables, External Dependencies)
 7. **Write** each `phase-X.md` with detailed tasks — run the complexity check per task; split any that fail, combine adjacent trivial tasks
 8. **Analyze** parallel execution eligibility
-8a. **Check the structure:** `specs.mjs status specs/<feature-name>`. Fix every `error` and `warn` in `checks` (task numbering, a checkbox under Prerequisites or criteria, a checklist row with no phase file), and confirm `phases` and `parallelGroups` read back as you wrote them
-9. **Verify** all PLAN-DRAFT requirements covered:
-   - 9A: Re-read PLAN-DRAFT as source of truth
-   - 9B: Cross-reference each section against docs
-   - 9C: Fix gaps, update documentation
-   - 9D: Output verification summary
+8a. **Check the structure:** `specs.mjs check specs/<feature-name>`. Fix every error before step 9 and the sign-off; fix each warning or explain it in the summary. `status` should read `phases` and `parallelGroups` back as written
+9. **Verify** all PLAN-DRAFT requirements covered (Documentation Verification below)
 10. **Present** summary to user
 
 ### Parallel Eligibility Analysis
@@ -171,6 +164,7 @@ Use kebab-case for feature name (e.g., `user-authentication`).
 - "Run after each phase": Add testing task block at end of EVERY phase
 - "Dedicated phase only": Create final Phase N: Testing
 - "None" or empty: Omit testing tasks
+- `| Approach | Test first |` in 2.4: in every phase, order each task's test before its code and put a plain sub-bullet `  - Test: <where the test drives the behaviour>` directly under the task line (no checkbox, so the loop's task count is unchanged), for example ``  - Test: through `POST /votes` ``
 
 **Small Projects (1-2 phases):** Combine sections, still create separate overview.md and phase-1.md. Note: "Small project - phases combined"
 
@@ -188,7 +182,7 @@ Sections, in this order: Summary (from Executive Summary), Phase Checklist, Para
 
 Header: Phase name, Status on its own line as `**Status:** <value>` (Not Started | In Progress | Complete; `specs.mjs mark` updates it), Estimated Tasks count.
 
-Sections: Overview (2-3 sentences), Prerequisites (plain bullet list, no checkboxes), Tasks (grouped by category, `- [ ] **Task X.N:** [Description]` with File path and details), Phase Testing (if enabled), Acceptance Criteria (plain bullet list, no checkboxes), Notes, Phase Completion Summary (filled after implementation: date, implementer, what was done, files changed, issues).
+Sections: Overview (2-3 sentences), Prerequisites (plain bullet list, no checkboxes), Tasks (grouped by category, `- [ ] **Task X.N:** [Description]` with File path and details, plus a `  - Test:` sub-bullet under each task when the approach is Test first), Phase Testing (if enabled), Acceptance Criteria (plain bullet list, no checkboxes), Notes, Phase Completion Summary (filled after implementation: date, implementer, what was done, files changed, issues).
 
 ## Session End
 

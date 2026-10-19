@@ -1,0 +1,36 @@
+{
+  "workflow": "implement",
+  "title": "task-api: Phase 3",
+  "specDir": "specs/task-api",
+  "headline": {
+    "stage": "Phase 3: API endpoints",
+    "cleared": 2,
+    "total": 4
+  },
+  "docs": [
+    {
+      "id": "phase",
+      "title": "Phase 3 tasks",
+      "blocks": [
+        {
+          "id": "tasks",
+          "state": "settled",
+          "md": "- [x] **Task 3.1:** Add GET /tasks with cursor paging\n- [x] **Task 3.2:** Add POST /tasks\n- [ ] **Task 3.3:** Add PATCH /tasks/:id\n- [ ] **Task 3.4:** Add DELETE /tasks/:id"
+        }
+      ]
+    }
+  ],
+  "items": [
+    {
+      "id": "keep",
+      "kind": "confirm",
+      "title": "Tests are failing",
+      "body": "Two paging tests fail after Task 3.2. Fix them before going on?",
+      "yesLabel": "Fix them now",
+      "noLabel": "Note them and go on"
+    }
+  ],
+  "agent": {
+    "status": "waiting"
+  }
+}

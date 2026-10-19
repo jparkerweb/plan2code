@@ -210,34 +210,68 @@ export function rel(root, p) {
   return path.relative(root, p).split(path.sep).join("/") || ".";
 }
 
+/* ------------------------------------------------- planning-file patterns */
+
+// The loop completion markers. The loop scans specs/ for them, so no planning
+// file may contain one. The one copy every skill script checks against.
+export const LOOP_TOKENS = /\b(TASK_COMPLETE|PHASE_COMPLETE|ALL_TASKS_COMPLETE|IMPLEMENTATION_COMPLETE|SPEC_COMPLETE|WORK_COMPLETE)\b/;
+
+// The metrics collector's own scrape patterns (plan2code-metrics/src/collector.ts).
+export const SCRAPE = [
+  { name: "overall confidence with %", re: /(?:Overall|Final|Total)?\s*\**[Cc]onfidence\**[:\s*]+(\d{1,3})%/ },
+  { name: "confidence table cell", re: /[|]\s*[Cc]onfidence\s*[|]\s*(\d{1,3})/ },
+  { name: "bare Requirements + number", re: /[Rr]equirements?[:\s|]+(\d{1,2})/ },
+  { name: "bare Feasibility + number", re: /[Ff]easibility[:\s|]+(\d{1,2})/ },
+  { name: "bare Integration + number", re: /[Ii]ntegration[:\s|]+(\d{1,2})/ },
+  { name: "bare Risk + number", re: /[Rr]isk[:\s|]+(\d{1,2})/ },
+];
+
+/** Every SCRAPE pattern that matches `text`, as `<name>: "<match>"`. */
+export function scrapeHits(text) {
+  const hits = [];
+  for (const s of SCRAPE) {
+    const m = text.match(s.re);
+    if (m) hits.push(`${s.name}: "${m[0].trim()}"`);
+  }
+  return hits;
+}
+
 /* --------------------------------------------------------- the web console */
 
 // The web console ships beside these scripts in every installed skill
 // (references/web-console/), and in this repo it sits at src/web-console/. Its
-// lib.mjs is the one home of the spec-state classifier and the loop-marker /
-// metrics-bait scan, so the scripts import it rather than keep a second copy.
-const CONSOLE_LIB_CANDIDATES = [
-  path.join(HERE, "..", "references", "web-console", "lib.mjs"), // installed skill
-  path.join(HERE, "..", "web-console", "lib.mjs"), // src/skill-scripts in the repo
+// scan.mjs is the one home of the spec-state classifier, and its settings.mjs
+// of the pull-request host store, so the scripts import them rather than keep
+// a second copy.
+const CONSOLE_DIR_CANDIDATES = [
+  path.join(HERE, "..", "references", "web-console"), // installed skill
+  path.join(HERE, "..", "web-console"), // src/skill-scripts in the repo
 ];
 
-let consoleLibPromise;
-export function consoleLib() {
-  consoleLibPromise ||= (async () => {
-    for (const candidate of CONSOLE_LIB_CANDIDATES) {
-      if (fs.existsSync(candidate)) return import(pathToFileURL(candidate).href);
-    }
-    fail(
-      EXIT.NOT_FOUND,
-      "console-lib-missing",
-      `The web console's lib.mjs is not beside this script (looked in ${CONSOLE_LIB_CANDIDATES.join(", ")}).`,
-      "The skill install is incomplete; reinstall the Plan2Code skills (node install.js)."
+const consoleModules = new Map();
+/** One of the web console's modules by file name ("scan.mjs"), imported once. */
+export function consoleModule(file) {
+  if (!consoleModules.has(file)) {
+    consoleModules.set(
+      file,
+      (async () => {
+        const candidates = CONSOLE_DIR_CANDIDATES.map((dir) => path.join(dir, file));
+        for (const candidate of candidates) {
+          if (fs.existsSync(candidate)) return import(pathToFileURL(candidate).href);
+        }
+        fail(
+          EXIT.NOT_FOUND,
+          "console-module-missing",
+          `The web console's ${file} is not beside this script (looked in ${candidates.join(", ")}).`,
+          "The skill install is incomplete; reinstall the Plan2Code skills (node install.js)."
+        );
+      })()
     );
-  })();
-  return consoleLibPromise;
+  }
+  return consoleModules.get(file);
 }
 
-// The one read-only git reader (git-repo.mjs) ships beside lib.mjs, so the git
+// The one read-only git reader (git-repo.mjs) ships beside scan.mjs, so the git
 // skill's scripts read the repository with exactly the code the console uses.
 const GIT_REPO_CANDIDATES = [
   path.join(HERE, "..", "references", "web-console", "git-repo.mjs"), // installed skill

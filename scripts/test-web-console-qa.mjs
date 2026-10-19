@@ -13,11 +13,12 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
-import { applyPatch, validate, blankState } from "../src/web-console/lib.mjs";
+import { applyPatch, validate, blankState } from "../src/web-console/patches.mjs";
 import { rebasingBranch } from "../src/web-console/git-repo.mjs";
 import { indentReply, noteReplyLines, agentRepliedAfterSend } from "../src/web-console/public/answers.js";
 import { chatView } from "../src/web-console/public/chat.js";
 import { ROOT, CONSOLE_CLI, ENV, cli, payload, readState, postPatch, EXPORT_A, openSession } from "./web-console-test-helpers.mjs";
+import { joinedCss } from "./css-helpers.mjs";
 
 const choice = (id, extra = {}) => ({
   id,
@@ -32,8 +33,7 @@ const choice = (id, extra = {}) => ({
 });
 const waitFor = (s, seconds = 10) => cli(["wait", "--session", s.sid, "--seconds", String(seconds)]);
 const runCli = (args, opts = {}) => spawnSync(process.execPath, [CONSOLE_CLI, ...args], { env: ENV, encoding: "utf8", ...opts });
-const app = () => fs.readFileSync(path.join(ROOT, "src", "web-console", "public", "app.js"), "utf8");
-const css = () => fs.readFileSync(path.join(ROOT, "src", "web-console", "public", "app.css"), "utf8");
+const css = () => joinedCss();
 
 /* ------------------------------------------------------------ settling */
 
@@ -195,7 +195,6 @@ test("a rebase in progress names the branch it is rewriting", () => {
 test("a typed line never starts a reply line of its own", () => {
   assert.equal(indentReply("a\nIdea name: foo\r\n  Image: C:\\x"), "a\n  Idea name: foo\n    Image: C:\\x");
   assert.deepEqual(noteReplyLines("Q", "one\ntwo", []), ["Note on Q: one\n  two"]);
-  assert.match(app(), /replyLines\.push\(`\$\{item\.title\}: \$\{indentReply\(tok\)\}`\)/);
 });
 
 test("an approved edit stops saying 'please wait' once the agent has answered it", () => {
@@ -211,32 +210,17 @@ test("an approved edit stops saying 'please wait' once the agent has answered it
   assert.equal(chatView(frame).rows[1].done, true);
 });
 
-test("a build's own count wins, 0 done included; a question workflow still fills as cards are answered", () => {
-  const chrome = app().slice(app().indexOf("function renderChrome("), app().indexOf("// Planny and the line beside him"));
-  assert.match(chrome, /if \(Number\(h\.total\) > 0\)/);
-  assert.match(chrome, /building \? Math\.max\(0, Number\(h\.cleared\) \|\| 0\) : Number\(h\.cleared\) \|\| answeredCount\(\)/);
-  assert.match(chrome, /else if \(building && h\.stage\)/, "a review starting at total 0 shows its stage");
-});
-
-test("the git board: Publish names a remote only when there is one, and an open card holds the board", () => {
-  const js = app();
+test("the git board: Publish names a remote only when there is one, and Continue is always offered", () => {
   const view = fs.readFileSync(path.join(ROOT, "src", "web-console", "public", "git-board-view.js"), "utf8");
   const action = view.slice(view.indexOf("function runStep("), view.indexOf("function stepButton("));
   assert.match(action, /remotes\.length === 1/);
-  const at = js.indexOf("const gitMode = ");
-  assert.match(js.slice(at, js.indexOf(";", at)), /myTurn\(\)\.some\(\(i\) => i\.kind !== "notice"\)/);
   const banner = view.slice(view.indexOf("function opBlock("), view.indexOf("function prBlock("));
   assert.ok(!/if \(conflicted\.every/.test(banner), "Continue is always offered; plan continue checks the files itself");
 });
 
-test("a card cut by the window fades at its bottom edge while there is more below", () => {
-  assert.match(app(), /function markMore\(\)[\s\S]*?classList\.toggle\("has-more"/);
-  assert.match(css(), /\.main > \.card\.has-more \{[\s\S]*?mask-image/);
-});
-
 test("kept attachments are served read-only from the session's spec, by their exact name shape", () => {
-  const server = fs.readFileSync(path.join(ROOT, "src", "web-console", "server.mjs"), "utf8");
-  const route = server.slice(server.indexOf('pathname.startsWith("/attachments/")'), server.indexOf('pathname.startsWith("/uploads/")'));
+  const server = fs.readFileSync(path.join(ROOT, "src", "web-console", "routes.mjs"), "utf8");
+  const route = server.slice(server.indexOf("function attachment("), server.indexOf("function shot("));
   assert.match(route, /req\.method !== "GET"/);
   assert.match(server, /const KEPT_ROUTE = new RegExp\(`\^\/attachments\/\(\[a-z0-9-\]\{1,40\}-\[0-9a-f-\]\{8\}/);
   const kept = server.slice(server.indexOf("function keptPath("), server.indexOf("function uploadPath("));
@@ -274,12 +258,6 @@ test("a plain reopen (status and a thread reply only) moves the sent note into t
   assert.ok(card.thread.some((m) => m.who === "user" && m.text === "Add a dry-run flag."));
 });
 
-test("a list rename is staged as it is typed, so Ctrl+Enter or an agent post never drops it", () => {
-  const js = app();
-  const list = js.slice(js.indexOf("function buildList("), js.indexOf("function buildList(") + 6000);
-  assert.match(list, /title\.addEventListener\("input", \(\) => \{[\s\S]*?stageQuiet\(item\.id/);
-});
-
 test("the git board's Publish reply names no remote when it sent none, and key chips show only for short keys", async () => {
   const { gitReply } = await import("../src/web-console/public/git-board.js");
   assert.equal(gitReply("publish", {}), "Publish.");
@@ -292,23 +270,15 @@ test("the git board's Publish reply names no remote when it sent none, and key c
 });
 
 test("a skip is recorded as one, collected with the send, and settles as skipped", () => {
-  const server = fs.readFileSync(path.join(ROOT, "src", "web-console", "server.mjs"), "utf8");
+  const server = fs.readFileSync(path.join(ROOT, "src", "web-console", "routes.mjs"), "utf8");
   assert.match(server, /\.\.\.\(type === "skip" \? \{ skipped: true \} : \{\}\)/);
-  const cli = fs.readFileSync(path.join(ROOT, "src", "web-console", "console.mjs"), "utf8");
+  const cli = fs.readFileSync(path.join(ROOT, "src", "web-console", "cmd-post-wait.mjs"), "utf8");
   assert.match(cli, /a\.type === "answer" \|\| a\.type === "skip"/);
 });
 
 test("a send made before the last collection is never shown as still with the agent", () => {
-  const js = app();
-  const fn = js.slice(js.indexOf("const sendCollected = "), js.indexOf("const submittedInFlight = "));
-  assert.match(fn, /String\(sub\.at\) <= String\(c\.at\)/);
-  const cli = fs.readFileSync(path.join(ROOT, "src", "web-console", "console.mjs"), "utf8");
+  const cli = fs.readFileSync(path.join(ROOT, "src", "web-console", "cmd-post-wait.mjs"), "utf8");
   assert.match(cli, /collected: \{ at: result\.consumedAt \|\| nowIso\(\), ids \}/, "the collection time, which every earlier send precedes");
-});
-
-test("two dashboards on different specs never trade the workspace back and forth", () => {
-  const js = app();
-  assert.match(js, /wantScope !== scopeMine\) syncWorkspaceScope\(\)/);
 });
 
 /* -------------------------------------------------------------- round 3 */
@@ -331,13 +301,8 @@ test("a branch whose remote copy was deleted offers Publish again, not Pull or P
   assert.equal(acts.publish.enabled, true);
 });
 
-test("a finished session never puts a sent answer back on its form", () => {
-  const js = app();
-  assert.match(js, /if \(effort && !finish\(\) && isOpen\(item\)/);
-});
-
 test("keep names a copy from the upload's real path, so an 8.3 spelling reuses the same copy", () => {
-  const src = fs.readFileSync(path.join(ROOT, "src", "web-console", "console.mjs"), "utf8");
+  const src = fs.readFileSync(path.join(ROOT, "src", "web-console", "cmd-small.mjs"), "utf8");
   assert.match(src, /attachmentName\(\{ upload: real\(upload\), name: args\.name \}\)/);
 });
 

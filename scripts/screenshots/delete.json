@@ -1,0 +1,12 @@
+{
+  "menu": {
+    "note": "task-api is built up to Phase 2 of 4. Phase 3 is next.",
+    "recommend": "plan2code-3-implement",
+    "details": {
+      "plan2code-3-implement": "Phase 3 of 4 is next"
+    }
+  },
+  "agent": {
+    "status": "waiting"
+  }
+}

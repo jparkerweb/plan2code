@@ -16,15 +16,17 @@
 //   fcp        first contentful paint: the person sees something
 //   ready      the session is drawn from real state (the menu, or a question)
 //
-// plus the bytes and request count the page cost. Needs puppeteer-core in
-// node_modules and a local Chrome or Edge for the browser columns; without
-// them it still reports url/cliExit and an HTTP-only waterfall.
+// plus the bytes and request count the page cost. The browser columns need
+// playwright-core (from `npm install`) and a local Chrome or Edge, picked by
+// scripts/browser.mjs; without a browser it still reports url/cliExit and an
+// HTTP-only waterfall.
 
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { spawn, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { findBrowser, launchBrowser } from "./browser.mjs";
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const CONSOLE_CLI = path.join(ROOT, "src", "web-console", "console.mjs");
@@ -43,20 +45,6 @@ const ENV = { ...process.env, PLAN2CODE_CONSOLE_HOME: HOME, PLAN2CODE_NO_BROWSER
 // A fresh cached failure: the boot-time release check stays off the network,
 // so a slow GitHub never colours the timings.
 fs.writeFileSync(path.join(HOME, "update-check.json"), JSON.stringify({ checkedAt: Date.now(), latest: null }));
-
-function findBrowser() {
-  if (args.browser === "none") return null;
-  if (typeof args.browser === "string") return args.browser;
-  const candidates = [
-    "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
-    "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
-    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-    "/usr/bin/google-chrome",
-    "/usr/bin/chromium",
-    "/usr/bin/chromium-browser",
-  ];
-  return candidates.find((p) => fs.existsSync(p)) || null;
-}
 
 // Resolves at the first stdout line carrying a url, and again at exit.
 // --launch hook (default): `open` launches "the browser" the way it would for
@@ -211,18 +199,22 @@ async function roundtrip() {
 
 async function main() {
   if (args.roundtrip) return roundtrip();
-  const browserPath = findBrowser();
-  let puppeteer = null;
-  if (browserPath) {
+  // --browser none: no launch at all. --browser <path>: that executable.
+  // Otherwise the helper's pick; a browser problem is one line, then the
+  // HTTP-only waterfall.
+  let browser = null;
+  let browserName = null;
+  if (args.browser !== "none") {
+    const custom = typeof args.browser === "string" ? args.browser : null;
     try {
-      puppeteer = (await import("puppeteer-core")).default;
-    } catch {
-      console.error("puppeteer-core not installed; browser columns skipped");
+      browser = await launchBrowser(custom ? { executablePath: custom } : {});
+      const found = custom ? null : findBrowser();
+      browserName = found ? `${found.channel} (${found.path})` : custom;
+    } catch (e) {
+      if (!e.browserProblem) throw e;
+      console.error(e.message);
     }
   }
-  const browser = puppeteer
-    ? await puppeteer.launch({ executablePath: browserPath, headless: true, args: ["--no-first-run", "--no-default-browser-check"] })
-    : null;
 
   const rows = [];
   // One throwaway run so disk caches and the Node binary are warm; the person
@@ -231,7 +223,7 @@ async function main() {
     stopAll();
     // The tab exists before the clock starts: a person's browser is already
     // running, and creating a context is the harness's cost, not the page's.
-    const ctx = browser ? await browser.createBrowserContext() : null;
+    const ctx = browser ? await browser.newContext() : null;
     const page = ctx ? await ctx.newPage() : null;
     const { t0, urlP, exitP, openP } = runOpen();
     const o = await openP;
@@ -246,7 +238,7 @@ async function main() {
       page.on("response", async (res) => {
         requests++;
         try {
-          bytes += (await res.buffer()).length;
+          bytes += (await res.body()).length;
         } catch {}
       });
       if (BROWSER_DELAY) await new Promise((r) => setTimeout(r, Math.max(0, o.at + BROWSER_DELAY - Date.now())));
@@ -303,7 +295,7 @@ async function main() {
   };
   const summary = Object.fromEntries(cols.map((k) => [k, stat(k)]));
   console.log(`web console start-up, ${RUNS} runs, workflow=${WORKFLOW}, cwd=${CWD}`);
-  console.log(`browser: ${browser ? browserPath : "none (HTTP-only waterfall)"}`);
+  console.log(`browser: ${browser ? browserName : "none (HTTP-only waterfall)"}`);
   console.log("metric".padEnd(10) + "median".padStart(9) + "min".padStart(9) + "max".padStart(9));
   for (const k of cols) {
     const s = summary[k];

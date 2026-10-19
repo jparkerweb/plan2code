@@ -9,7 +9,7 @@ The page's top bar shows a meter of how much work this console session has
 done (green, yellow, red), so the person knows when a fresh session would be
 sharper. It is advice only and never blocks anything. The console counts
 launches itself: Plan, Revise plan, Document, Review, Quick task, Init, Init
-update, Finalize, Git and Changelog score when their session opens, and there is nothing to
+update, Finalize, Git, Changelog, X-ray and Diagnose score when their session opens, and there is nothing to
 post for them.
 
 It counts answers itself too: every card the person answers in a send adds to
@@ -27,7 +27,7 @@ Per-unit work is yours to report, with `run` in any post:
   nothing now: answers count instead), `pathfinder-research`, `plan`,
   `revise-plan`, `document`, `implement-phase`, `implement-review-phase`,
   `review`, `quick-task`, `init`, `init-update`, `finalize`, `handoff`,
-  `git`, `changelog`, `git-commits` and `git-conflict` (Git's own, see
+  `git`, `changelog`, `xray`, `diagnose`, `git-commits` and `git-conflict` (Git's own, see
   `notes/git.md`).
   An unknown event is exit `3`. Post only the events your notes name: a skill
   that scores when its session opens (the list above this one) already has its

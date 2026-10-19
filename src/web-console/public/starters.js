@@ -3,8 +3,10 @@
 // The source of truth for the Role list in User Preferences, the starter
 // templates on the first "What's the idea?" card of Pathfinder, Plan and Quick
 // Task, the order each role sees them in, and the starter questions an empty
-// Ask conversation offers. No DOM access at module scope and no imports: the
-// page and `node --test` both import this file.
+// Ask conversation offers. No DOM access at module scope, and its one import is
+// the data-only skills.js: the page and `node --test` both import this file.
+
+import { SKILLS, takesTemplates } from "./skills.js";
 
 const role = (id, label) => Object.freeze({ id, label });
 
@@ -20,7 +22,8 @@ export const ROLES = Object.freeze([
 export const ROLE_NOT_SET = "none";
 export const ROLE_NOT_SET_LABEL = "Not set / none of these";
 
-export const TEMPLATE_WORKFLOWS = Object.freeze(["pathfinder", "plan", "quick-task"]);
+// The workflows whose first idea card offers templates, from skills.js.
+export const TEMPLATE_WORKFLOWS = Object.freeze(SKILLS.filter((s) => takesTemplates(s.workflow)).map((s) => s.workflow));
 
 const ROLE_IDS = new Set(ROLES.map((r) => r.id));
 

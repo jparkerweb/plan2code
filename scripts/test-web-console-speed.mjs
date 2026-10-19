@@ -15,7 +15,9 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
-import { applyPatch, scanProject } from "../src/web-console/lib.mjs";
+import { scanProject } from "../src/web-console/scan.mjs";
+import { applyPatch } from "../src/web-console/patches.mjs";
+import { joinedCss } from "./css-helpers.mjs";
 import {
   ROOT,
   CONSOLE_CLI,
@@ -31,6 +33,7 @@ import {
   WEB_CONSOLE_DIR,
   consoleDoc,
   consoleDocFiles,
+  HANDOFFS_DIR,
 } from "./web-console-test-helpers.mjs";
 
 const choice = (id, extra = {}) => ({
@@ -321,6 +324,62 @@ test("settle and a defaulted reply id go through post end to end", async () => {
 
 /* ------------------------------------------------------------ session hops */
 
+// A pick-up hops into the stored workflow and spec; the page sends only the
+// id. A missing spec folder, a workflow that is not a workflow name, or the
+// Handoff skill's own handoff falls back to Quick Task, flagged. (No skills sit beside the source tree, so the
+// stored skill name stands there.)
+test("a pick-up comes with the stored skill's resume command, handoffFile, and falls back to Quick Task", async () => {
+  process.env.PLAN2CODE_HANDOFFS_DIR = HANDOFFS_DIR;
+  const store = await import("../src/web-console/handoffs.mjs");
+  const worktree = fs.mkdtempSync(path.join(os.tmpdir(), "p2c-pickup-"));
+  fs.mkdirSync(path.join(worktree, "specs", "lunch-vote"), { recursive: true });
+  const make = (rec) => {
+    const h = store.newHandoff({ worktree, project: worktree, workflow: "implement", skill: "plan2code-3-implement", title: "T", ...rec }, new Date(2026, 9, 17, 10, 0 + make.n++));
+    fs.writeFileSync(h.path, "# Handoff: T\n");
+    return h;
+  };
+  make.n = 0;
+  const s = consoleSession(["--workflow", "dashboard"]);
+  const resumeOf = (workflow, spec = "") =>
+    `node "${path.join(ROOT, "src", "web-console", "console.mjs")}" open --resume ${s.sid} --no-open --workflow ${workflow}${spec}`;
+  try {
+    const good = make({ spec: "specs/lunch-vote" });
+    const goneSpec = make({ spec: "specs/deleted" });
+    const badMeta = make({ spec: null });
+    const metaFile = path.join(HANDOFFS_DIR, badMeta.id + ".json");
+    fs.writeFileSync(metaFile, fs.readFileSync(metaFile, "utf8").replace('"workflow": "implement"', '"workflow": "Not A Workflow"'));
+    const cases = [
+      [good, resumeOf("implement", " --spec specs/lunch-vote"), undefined],
+      [goneSpec, resumeOf("quick-task"), true],
+      [badMeta, resumeOf("quick-task"), true],
+      // The Handoff skill's own handoff carries on in Quick Task, never in another handoff.
+      [make({ workflow: "handoff", skill: "plan2code-handoff" }), resumeOf("quick-task"), true],
+    ];
+    for (const [h, resume, fallback] of cases) {
+      assert.equal((await s.send("/submit", { actions: [{ i: "__pickup", type: "pickup", handoff: h.id }], reply: "pick up" })).status, 200);
+      const res = waitFor(s);
+      assert.equal(res.status, 0);
+      assert.equal(res.json.resume, resume);
+      assert.equal(res.json.handoffFile, h.path);
+      assert.equal(res.json.fallback, fallback);
+    }
+    // A stored spec with shell characters never reaches `resume`: Quick Task, flagged.
+    const hostile = make({ spec: "specs/x;touch pwned" });
+    assert.equal((await s.send("/submit", { actions: [{ i: "__pickup", type: "pickup", handoff: hostile.id }], reply: "pick up" })).status, 200);
+    const hot = waitFor(s).json;
+    assert.equal(hot.resume, resumeOf("quick-task"));
+    assert.equal(hot.fallback, true);
+    // An id that is not a handoff id gets the fallback and no handoffFile.
+    assert.equal((await s.send("/submit", { actions: [{ i: "__pickup", type: "pickup", handoff: "../x" }], reply: "pick up" })).status, 200);
+    const bad = waitFor(s).json;
+    assert.equal(bad.handoffFile, undefined);
+    assert.equal(bad.fallback, true);
+  } finally {
+    cli(["stop", "--session", s.sid]);
+    fs.rmSync(worktree, { recursive: true, force: true });
+  }
+});
+
 test("a launch, a dashboard press and Commit it now each come with their resume command", async () => {
   const s = consoleSession(["--workflow", "dashboard"]);
   try {
@@ -366,6 +425,15 @@ test("the built skills name the skill file to follow after a hop", async () => {
     assert.equal(res.status, 200);
     const got = run(["wait", "--session", opened.sid, "--seconds", "10"]).json;
     assert.equal(got.skillFile, path.join(ROOT, "skills", "plan2code-review", "SKILL.md"));
+    assert.equal(got.handoffSkill, undefined, "a launch is not a handoff stop");
+    const stopRes = await fetch(`${m[1]}/submit`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie, connection: "close" },
+      body: JSON.stringify({ actions: [{ i: "__stop", type: "stop", handoff: true }], reply: "stop with a handoff" }),
+    });
+    assert.equal(stopRes.status, 200);
+    const stopped = run(["wait", "--session", opened.sid, "--seconds", "10"]).json;
+    assert.equal(stopped.handoffSkill, path.join(ROOT, "skills", "plan2code-handoff", "SKILL.md"), "a handoff stop in a built skill names the Handoff skill file");
   } finally {
     run(["stop", "--session", opened.sid]);
   }
@@ -406,7 +474,8 @@ test("every console workflow has its notes, and its skill's Interface reads them
   const notesFor = {
     init: "init", "init-update": "init", pathfinder: "pathfinder", plan: "plan", "revise-plan": "revise-plan",
     document: "document", implement: "implement", "implement-review": "implement", "quick-task": "quick-task",
-    review: "review", finalize: "finalize", handoff: "handoff", changelog: "changelog", git: "git",
+    review: "review", finalize: "finalize", handoff: "handoff", changelog: "changelog", git: "git", xray: "xray",
+    diagnose: "diagnose",
   };
   const skills = fs.readdirSync(path.join(ROOT, "src")).filter((f) => /^plan2code(-.*)?\.md$/.test(f));
   for (const f of skills) {
@@ -548,13 +617,6 @@ test("a wait with nothing open leaves a working agent working", () => {
   }
 });
 
-test("the git board lets go of a working agent that went adrift", () => {
-  const js = fs.readFileSync(path.join(ROOT, "src", "web-console", "public", "app.js"), "utf8");
-  const at = js.indexOf("const gitMode = ");
-  const line = js.slice(at, js.indexOf(";", at));
-  assert.ok(line.includes("(agentWorking() && !agentAdrift())"), line);
-});
-
 test("post --file - reads the patch from stdin, UTF-8 and a BOM included", () => {
   const s = openSession();
   try {
@@ -648,16 +710,22 @@ test("a finish ends the working stretch, and resuming a pause starts a fresh one
 });
 
 test("a card with a note box over the git board flows at its own height, never shrunk under the board", () => {
-  const css = fs.readFileSync(path.join(ROOT, "src", "web-console", "public", "app.css"), "utf8");
+  const css = joinedCss();
   const rule = css.slice(css.indexOf(".git-cards > .card,"), css.indexOf("{", css.indexOf(".git-cards > .card,")));
   assert.ok(rule.includes(".git-cards > .card.is-primary.has-grow"), "the board's natural-height rule outranks .has-grow");
-  const js = fs.readFileSync(path.join(ROOT, "src", "web-console", "public", "app.js"), "utf8");
-  const fn = js.slice(js.indexOf("function markGrowBox("), js.indexOf("function naturalHeight("));
-  assert.ok(fn.includes("isGitBoard()"), "no box grows over the board");
+});
+
+test("a card and its pager in the git board's card slot fill the board's width, never shrink to their content", () => {
+  const css = joinedCss();
+  // .card and .pager centre with auto inline margins; in the slot's grid those
+  // would shrink a short confirm, and the pager under it, to fit their content.
+  assert.match(css, /\.card\s*\{[^}]*margin:\s*0 auto/, "the base card still centres outside the board");
+  assert.match(css, /\.pager\s*\{[^}]*margin:\s*0 auto/, "the base pager still centres outside the board");
+  assert.match(css, /\.git-cards > \.card,\s*\.git-cards > \.pager\s*\{\s*margin:\s*0;\s*\}/, "the card slot drops the auto margins for both");
 });
 
 test("long task lines, long words, a narrow board and a narrow Ask pane never widen the page", () => {
-  const css = fs.readFileSync(path.join(ROOT, "src", "web-console", "public", "app.css"), "utf8");
+  const css = joinedCss();
   const rule = (sel) => {
     const at = css.indexOf("\n" + sel + " {");
     assert.ok(at > -1, `${sel} has a rule`);
@@ -674,12 +742,10 @@ test("long task lines, long words, a narrow board and a narrow Ask pane never wi
 });
 
 test("over the git board a note box grows with its text, and the no-repo note only points above when a card is there", () => {
-  const css = fs.readFileSync(path.join(ROOT, "src", "web-console", "public", "app.css"), "utf8");
+  const css = joinedCss();
   assert.match(css, /\.git-cards > \.card textarea \{ field-sizing: content; max-height: 50vh; \}/);
   const view = fs.readFileSync(path.join(ROOT, "src", "web-console", "public", "git-board-view.js"), "utf8");
   const fn = view.slice(view.indexOf("export function drawGitBoard("), view.indexOf("function header("));
   assert.ok(fn.includes("ctx.hasCard"), "the note checks for a card first");
   assert.ok(fn.includes("will ask what to do here in a moment"));
-  const js = fs.readFileSync(path.join(ROOT, "src", "web-console", "public", "app.js"), "utf8");
-  assert.match(js, /hasCard: Boolean\(card\)/, "the host says whether a card is in the slot");
 });

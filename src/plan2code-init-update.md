@@ -75,6 +75,9 @@ When you make a mistake, get corrected, or discover something about this codebas
 2. Keep it specific to this repo. General advice belongs nowhere.
 3. If this fix is a workflow rather than a rule, put it in `.claude/skills/` and link it from here.
 4. Include the change in the same commit and mention it in your summary.
+5. A rule broken twice becomes an automated check (a test, a lint rule or a script), not more prose.
+6. Before adding a line, look for one on the same topic: sharpen or extend that one rather than adding a near-duplicate.
+7. Keep the log to 17 entries at most. Over the cap, first merge entries that share a cause, then drop the lowest-value ones: one-offs unlikely to recur, rules a test or script now enforces, and entries about code that no longer exists.
 
 ## Failure log
 
@@ -85,7 +88,11 @@ When you make a mistake, get corrected, or discover something about this codebas
 If the section is missing, flag it:
 > "Your Keeping this file current section is missing. Want me to add it?"
 
+If it exists but lacks any of rules 5 to 7, offer to add them (keep the repo's own wording of rules it already has).
+
 If user confirms, add/update the section before proceeding. If user declines, continue.
+
+**Tidy the log** on every run, per rules 6 and 7: find entries that share a topic or cause, and, over 17 entries, the lowest-value ones. Propose merges (each merged line, and the lines it replaces) and removals (each with its reason) as one preview; apply only on yes. Nothing to merge and at or under 17: say so in one line.
 
 Proceed to Step 2.
 
@@ -121,7 +128,7 @@ Present the user with update options:
 > "What would you like to add or update in AGENTS.md?"
 >
 > **Options:**
-> - **1. Commands** - Build, test, run, lint, or other CLI commands
+> - **1. Commands** - Build, test, run, lint, how to run and view the app, or other CLI commands
 > - **2. Architecture** - How components interact, data flow, key patterns
 > - **3. Gotchas/Pitfalls** - Traps to avoid, non-obvious behaviors
 > - **4. Testing** - Test patterns, how to run specific tests, fixtures
@@ -143,13 +150,13 @@ Present the user with update options:
 
 | Category | Questions |
 |----------|-----------|
-| Commands | Purpose? Flags? Prerequisites? |
+| Commands | Purpose? Flags? Prerequisites? How to run and view the app? |
 | Architecture | Components? Interactions? Pattern? |
 | Gotchas | What was unexpected? Workaround? |
 | Testing | Commands? Fixtures? Mocking? |
 | Environment | Local/CI/deploy? Env vars/files? |
 | Rules | Project-wide or specific? Why? |
-| Failure Log | What went wrong? Correct behaviour (imperative, one line)? |
+| Failure Log | What went wrong? Correct behaviour (imperative, one line)? Merge into an entry on the same topic if one exists; over 17 entries, propose what to prune (rule 7). |
 | Other | "Tell me what to add." |
 | Sync & Maintain | Scope: all surfaces or specific? Then follow the Sync & Maintain section. |
 | Review | Per section: "Still accurate?" |

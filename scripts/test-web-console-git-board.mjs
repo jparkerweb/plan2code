@@ -495,30 +495,24 @@ test("git board view: a .gitignore-only pick commits just .gitignore, and never 
   assert.equal(gitReply("commit", { files: ["a.js"], ignore: ["dist/"] }), "Commit this file: a.js. Add dist/ to .gitignore.");
 });
 
-test("git board host: app.js draws the board only through drawGitBoard, and the server serves the view", () => {
-  const app = fs.readFileSync(new URL("../src/web-console/public/app.js", import.meta.url), "utf8");
+test("git board host: the host draws the board only through drawGitBoard, and the server serves the view", () => {
+  const host = fs.readFileSync(new URL("../src/web-console/public/screens/git-host.js", import.meta.url), "utf8");
   for (const gone of ["gitActionBar", "gitBranches", "smallButton", "gitHeader", "gitCommitPanel"]) {
-    assert.ok(!app.includes(`function ${gone}(`), `app.js no longer defines ${gone}()`);
+    assert.ok(!host.includes(`function ${gone}(`), `git-host.js no longer defines ${gone}()`);
   }
-  const drawCalls = [...app.matchAll(/\bdrawGitBoard\(/g)].length;
+  const drawCalls = [...host.matchAll(/\bdrawGitBoard\(/g)].length;
   assert.equal(drawCalls, 1, "one call to drawGitBoard");
-  const host = app.slice(app.indexOf("function renderGitBoard("), app.indexOf("function rememberGitTabScroll("));
-  assert.ok(host.includes("drawGitBoard("), "renderGitBoard is the one that calls it");
-  const server = fs.readFileSync(new URL("../src/web-console/server.mjs", import.meta.url), "utf8");
+  const body = host.slice(host.indexOf("function renderGitBoard("), host.indexOf("function rememberGitTabScroll("));
+  assert.ok(body.includes("drawGitBoard("), "renderGitBoard is the one that calls it");
+  const server = fs.readFileSync(new URL("../src/web-console/static.mjs", import.meta.url), "utf8");
   const servable = server.slice(server.indexOf("const SERVABLE = new Set(["), server.indexOf("]);", server.indexOf("const SERVABLE = new Set([")));
   assert.ok(servable.includes('"git-board-view.js"'), "SERVABLE includes git-board-view.js");
+  assert.ok(servable.includes('"screens/git-host.js"'), "SERVABLE includes screens/git-host.js");
 });
 
-test("git board host: the always-on commit table keeps the person's ticks, and a click re-seeds them", () => {
-  const app = fs.readFileSync(new URL("../src/web-console/public/app.js", import.meta.url), "utf8");
-  const send = app.slice(app.indexOf("async function sendGit("), app.indexOf("const gitOn = {"));
-  assert.match(send, /board\.ticks = null;\s*board\.ignore = new Set\(\);/, "a click drops the old picks");
-  const commit = app.slice(app.indexOf("function openCommit("), app.indexOf("function openCleanup("));
-  assert.ok(!commit.includes("commitTicks("), "opening the panel never re-seeds over their ticks");
-  assert.ok(commit.includes("tablePicks(git)"), "a detached commit carries the table's picks");
-  const panel = app.slice(app.indexOf("function openPanel("), app.indexOf("const closePanel ="));
-  assert.match(panel, /opts\.commit && !opts\.files\) return openCreate\(git, \{ \.\.\.opts, \.\.\.tablePicks\(git\) \}\)/, "Start a branch takes what is ticked");
-});
+// The commit table's ticks and the click that re-seeds them are page tests now
+// ("the commit table keeps the person's ticks across an agent post, and a click
+// re-seeds them" and its neighbours in test-web-console-page-git.mjs).
 
 test("git board docs: the agent prose, Help topic and readme describe the tabbed board", () => {
   const read = (p) => fs.readFileSync(new URL(p, import.meta.url), "utf8");

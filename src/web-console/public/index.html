@@ -12,6 +12,29 @@
          can draw anything real. -->
     <link rel="modulepreload" href="/app.js" />
     <link rel="modulepreload" href="/answers.js" />
+    <link rel="modulepreload" href="/skills.js" />
+    <link rel="modulepreload" href="/spec-states.js" />
+    <link rel="modulepreload" href="/state.js" />
+    <link rel="modulepreload" href="/doc-files.js" />
+    <link rel="modulepreload" href="/send-state.js" />
+    <link rel="modulepreload" href="/mention-box.js" />
+    <link rel="modulepreload" href="/uploads.js" />
+    <link rel="modulepreload" href="/sound.js" />
+    <link rel="modulepreload" href="/looks.js" />
+    <link rel="modulepreload" href="/selectors.js" />
+    <link rel="modulepreload" href="/screens/core.js" />
+    <link rel="modulepreload" href="/screens/ending.js" />
+    <link rel="modulepreload" href="/screens/docs.js" />
+    <link rel="modulepreload" href="/screens/cards.js" />
+    <link rel="modulepreload" href="/screens/starting.js" />
+    <link rel="modulepreload" href="/screens/dashboard.js" />
+    <link rel="modulepreload" href="/screens/git-host.js" />
+    <link rel="modulepreload" href="/screens/looks.js" />
+    <link rel="modulepreload" href="/screens/cleanup.js" />
+    <link rel="modulepreload" href="/screens/help-dialog.js" />
+    <link rel="modulepreload" href="/screens/workspace.js" />
+    <link rel="modulepreload" href="/screens/ask.js" />
+    <link rel="modulepreload" href="/net.js" />
     <link rel="modulepreload" href="/render.js" />
     <link rel="modulepreload" href="/palette.js" />
     <link rel="modulepreload" href="/labels.js" />
@@ -592,6 +615,75 @@
               <line class="ln" x1="160" y1="126" x2="212" y2="142" />
               <circle class="fl" cx="212" cy="142" r="5.5" />
             </g>
+          </g>
+        </g>
+      </svg>
+      <!-- Codebase X-ray: seeing how it works. He holds a lens up to a file,
+           a scan line sweeps down it to show the structure inside, and a rough
+           spot lights up as the scan passes over it. -->
+      <svg class="pose pose-xray" data-pose="xray" viewBox="0 4 240 216" aria-hidden="true" focusable="false">
+        <ellipse class="shadow" cx="126" cy="198" rx="44" ry="5" />
+        <g class="prop">
+          <rect class="sh" x="182" y="60" width="44" height="112" rx="6" />
+          <line class="lt" x1="196" y1="76" x2="196" y2="152" />
+          <path class="lt" d="M196 96 L212 96 M196 124 L212 124" />
+          <circle class="ac" cx="196" cy="76" r="4" />
+          <circle class="ac" cx="212" cy="96" r="3.5" />
+          <circle class="ac" cx="212" cy="124" r="3.5" />
+          <circle class="ac" cx="196" cy="152" r="4" />
+          <g class="xr-spot"><circle class="as" cx="212" cy="124" r="8" /></g>
+          <line class="as xr-scan" x1="188" y1="70" x2="220" y2="70" />
+        </g>
+        <g class="bob">
+          <g transform="translate(-14 0)">
+            <rect class="fl foot f1" x="94" y="179" width="20" height="10" rx="5" />
+            <rect class="fl foot f2" x="126" y="179" width="20" height="10" rx="5" />
+            <rect class="sh" x="80" y="72" width="80" height="108" rx="16" />
+            <path class="ln" d="M80 126 L66 150" /><circle class="fl" cx="66" cy="150" r="5.5" />
+            <g class="xr-look"><path class="ey blink" d="M126 86 L129.64 94.98 L139.31 95.67 L131.9 101.92 L134.23 111.33 L126 106.2 L117.77 111.33 L120.1 101.92 L112.69 95.67 L122.36 94.98 Z" /></g>
+            <path class="es" d="M110 120 Q122 129 134 120" />
+            <line class="ln" x1="160" y1="126" x2="192" y2="132" />
+            <g class="xr-lens">
+              <line class="ln" x1="192" y1="132" x2="204" y2="120" />
+              <circle class="lt" cx="214" cy="110" r="14" />
+            </g>
+            <circle class="fl" cx="192" cy="132" r="5.5" />
+          </g>
+        </g>
+      </svg>
+      <!-- Diagnose a bug: finding the cause. A small bug scuttles along one
+           line of a file, his magnifier follows it until it is caught, and the
+           line it sits on is marked in red. He looks, he does not fix. -->
+      <svg class="pose pose-diagnose" data-pose="diagnose" viewBox="0 4 240 216" aria-hidden="true" focusable="false">
+        <ellipse class="shadow" cx="126" cy="198" rx="44" ry="5" />
+        <g class="prop">
+          <rect class="sh" x="176" y="60" width="46" height="112" rx="6" />
+          <line class="lt" x1="184" y1="78" x2="208" y2="78" />
+          <line class="lt" x1="188" y1="96" x2="214" y2="96" />
+          <path class="dg-mark" d="M184 124 Q187 120 190 124 T196 124 T202 124 T208 124 T214 124" />
+          <line class="lt" x1="188" y1="142" x2="208" y2="142" />
+          <line class="lt" x1="184" y1="158" x2="202" y2="158" />
+          <g class="dg-bug">
+            <path class="dg-leg" d="M195 111 L189 108 M195 115 L189 115 M195 119 L189 122 M205 111 L211 108 M205 115 L211 115 M205 119 L211 122 M198 104 L195 99 M202 104 L205 99" />
+            <ellipse class="dg-body" cx="200" cy="115" rx="5.5" ry="7" />
+            <circle class="dg-head" cx="200" cy="106" r="3.2" />
+          </g>
+        </g>
+        <g class="bob">
+          <g transform="translate(-14 0)">
+            <rect class="fl foot f1" x="94" y="179" width="20" height="10" rx="5" />
+            <rect class="fl foot f2" x="126" y="179" width="20" height="10" rx="5" />
+            <rect class="sh" x="80" y="72" width="80" height="108" rx="16" />
+            <path class="ln" d="M80 126 L66 150" /><circle class="fl" cx="66" cy="150" r="5.5" />
+            <g class="dg-look"><path class="ey blink" d="M126 86 L129.64 94.98 L139.31 95.67 L131.9 101.92 L134.23 111.33 L126 106.2 L117.77 111.33 L120.1 101.92 L112.69 95.67 L122.36 94.98 Z" /></g>
+            <path class="ln" d="M113 82 Q126 77 139 83" />
+            <line class="es" x1="114" y1="124" x2="128" y2="124" />
+            <line class="ln" x1="160" y1="126" x2="174" y2="140" />
+            <g class="dg-lens">
+              <line class="ln" x1="174" y1="140" x2="180" y2="127" />
+              <circle class="lt" cx="186" cy="114" r="14" />
+            </g>
+            <circle class="fl" cx="174" cy="140" r="5.5" />
           </g>
         </g>
       </svg>
@@ -1546,7 +1638,7 @@
         <p>
           When a newer Plan2Code release is out, the dashboard shows
           <strong>UPDATE AVAILABLE</strong> at the top. Click it for the command
-          to run in your terminal; × hides it until the next
+          to run in your terminal, <code>plan2code update</code>; × hides it until the next
           <code>/plan2code</code>. The version at the bottom of Help links to
           the Releases page.
         </p>
@@ -1574,6 +1666,8 @@
           <li><strong>Handoff.</strong> Pack the current session into a document a fresh session can pick up cold.</li>
           <li><strong>Changelog.</strong> Checks the CHANGELOG version against the main branch and suggests entries for what is new.</li>
           <li><strong>Git.</strong> Branches, pull, push and commits on one board, asking before anything leaves your machine. See "The git board".</li>
+          <li><strong>Codebase X-ray.</strong> Explains how and why an area of the code works, or finds the rough spots worth fixing.</li>
+          <li><strong>Diagnose a bug.</strong> Finds a bug's cause and writes it up without fixing it, ready to hand to Quick Task or Plan.</li>
         </ul>
         <h4>Picking a spec</h4>
         <p>
@@ -1589,6 +1683,23 @@
         <p>
           <strong>Hide unavailable workflows</strong>, under the picker, hides
           them instead. It is on to begin with, and remembered on this machine.
+        </p>
+        <p>
+          The <strong>✕</strong> on a spec deletes its folder, after two steps:
+          one says what goes, the other wants the spec's name typed. A fixed
+          bug has its own <strong>Delete</strong> button at the bottom of its
+          chip instead, and needs just one confirm, since the work is done.
+        </p>
+        <p>
+          A <strong>Handoff</strong> is a note a step left when you stopped it
+          with a handoff. It shows as a dashed chip after the specs. Pick one
+          and the cards give way to a preview with its Next task and four
+          buttons: <strong>Pick it up here</strong> carries on in the same step
+          and spec, <strong>Read it all</strong> shows the whole note,
+          <strong>Copy for a new conversation</strong> puts a ready prompt on
+          the clipboard, and <strong>Delete</strong> removes it. A picked-up
+          handoff drops off the list, but stays in
+          <code>~/.plan2code/handoffs/</code> until the 30-day sweep.
         </p>
         <h4>The Suggested flag</h4>
         <p>
@@ -2021,8 +2132,16 @@
             through writing your answers down.
           </li>
           <li>
-            It asks first. <strong>Keep going</strong> backs out;
-            <strong>Stop and save</strong> stops.
+            It asks first, and offers two ways to stop.
+            <strong>Stop with a handoff</strong> saves your place and writes a
+            note the dashboard can offer to pick up later;
+            <strong>Just stop and save</strong> saves what the step keeps on
+            disk and gives you a command to resume, without the conversation;
+            <strong>Keep going</strong> backs out.
+          </li>
+          <li>
+            A handoff lands in <code>~/.plan2code/handoffs/</code> and shows on
+            the dashboard, next to your specs, until you use or delete it.
           </li>
           <li>
             At points where nothing is saved yet, such as early in a plan, the
@@ -2174,7 +2293,9 @@
             that folder is usually gitignored and git can't restore it. It
             shows each one with its size, and <strong>Delete these</strong>
             removes exactly that list. Your preferences, saved folders, models,
-            the launcher and the session you are in always stay.
+            the launcher and the session you are in always stay, and the
+            <code>handoffs/</code> folder is Plan2Code's own, so it is never
+            offered for removal.
           </li>
           <li>
             <strong>Back to default</strong> puts everything back as it was, and
@@ -2225,7 +2346,10 @@
           this machine who has it can open the session.
         </p>
         <h4>What is kept, and where</h4>
-        <p>Everything lives under <code>~/.plan2code/console/</code> in your home folder:</p>
+        <p>
+          Everything lives in your home folder, under
+          <code>~/.plan2code/console/</code> unless noted:
+        </p>
         <ul>
           <li>
             each session's questions, your drafts and your answers, in
@@ -2243,7 +2367,13 @@
           </li>
           <li>
             your Subagents switch for each project and skill, in
-            <code>subagents.json</code>.
+            <code>subagents.json</code>;
+          </li>
+          <li>
+            handoffs you save when you stop or with the Handoff skill, in
+            <code>~/.plan2code/handoffs/</code>, one <code>.md</code> and one
+            <code>.json</code> each, removed after the same
+            <span data-fact="cleanupDays">30</span> days.
           </li>
         </ul>
         <p>
@@ -2514,9 +2644,54 @@
       <!-- Only when stopping now would lose answers. A button that says it
            saves has to be true about the times it cannot. -->
       <p class="modal-why" id="stop-warn" hidden></p>
+      <div class="stop-choices">
+        <button type="button" class="stop-choice suggested" id="stop-handoff">
+          <span class="stop-choice-icon" aria-hidden="true">&#x270E;</span>
+          <span class="stop-choice-text">
+            <span class="stop-choice-title">Stop with a handoff</span>
+            <span class="stop-choice-detail">Saves your place and writes a handoff note. Next time the dashboard offers to pick it up right where this left off.</span>
+          </span>
+        </button>
+        <button type="button" class="stop-choice" id="stop-go">
+          <span class="stop-choice-icon" aria-hidden="true">&#x25A0;</span>
+          <span class="stop-choice-text">
+            <span class="stop-choice-title">Just stop and save</span>
+            <span class="stop-choice-detail">Saves what this step keeps on disk and gives you a command to resume. What we talked about is not kept.</span>
+          </span>
+        </button>
+      </div>
       <div class="modal-actions">
         <button type="button" class="btn ghost" id="stop-cancel">Keep going</button>
-        <button type="button" class="btn primary" id="stop-go">Stop and save</button>
+      </div>
+    </dialog>
+
+    <!-- Deleting a spec from the dashboard's picker. Two deliberate steps: the
+         first says what goes and that it is for good, the second wants the
+         spec's name typed. A fixed bug takes the first step only. The page
+         only asks; the agent deletes. -->
+    <dialog class="modal" id="delete-modal" aria-labelledby="delete-title">
+      <h2 id="delete-title">Delete this spec?</h2>
+      <p class="modal-blurb" id="delete-blurb"></p>
+      <dl class="delete-facts" id="delete-facts"></dl>
+      <p class="modal-why" id="delete-warn">This is permanent. <code>specs/</code> is not tracked by git, so nothing can bring these files back.</p>
+      <p class="modal-why" id="delete-warn-handoff" hidden>Handoffs are not kept anywhere else.</p>
+      <div class="delete-confirm" id="delete-confirm" hidden>
+        <label for="delete-name">To delete it for good, type <strong id="delete-name-hint"></strong></label>
+        <input type="text" id="delete-name" autocomplete="off" spellcheck="false" />
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn ghost" id="delete-cancel">Keep it</button>
+        <button type="button" class="btn danger" id="delete-go">Delete this spec…</button>
+      </div>
+    </dialog>
+
+    <!-- A handoff's whole document, from the dashboard's "Read it all". Escape
+         closes it; the body is filled by the page with rendered markdown. -->
+    <dialog class="modal handoff-read" id="handoff-modal" aria-labelledby="handoff-title">
+      <h2 id="handoff-title">Handoff</h2>
+      <div class="handoff-body md" id="handoff-body"></div>
+      <div class="modal-actions">
+        <button type="button" class="btn ghost" id="handoff-close">Close</button>
       </div>
     </dialog>
 
@@ -2570,7 +2745,7 @@
     </dialog>
 
     <!-- Opened from the dashboard's UPDATE AVAILABLE banner. The versions and
-         the copy row are filled by app.js; the update itself runs in a
+         the two copy rows are filled by app.js; the update itself runs in a
          terminal, never from this page. -->
     <dialog class="modal" id="update-modal" aria-labelledby="update-title">
       <h2 id="update-title">A new Plan2Code is available</h2>
@@ -2579,7 +2754,11 @@
         <li>
           Run this in your terminal (not in this page or your agent):
           <div class="update-command" id="update-command"></div>
-          It opens the installer's menu. Back at your prompt with no output at all? npm
+          It updates everything that was installed (the skills, the <code>plan2code</code>
+          command and any extras you added), with no menu. If the <code>plan2code</code>
+          command is not installed, run this instead:
+          <div class="update-command" id="update-fallback"></div>
+          Back at your prompt with no output at all? npm
           could not reach the repository and hid the reason: run
           <code>git ls-remote https://github.com/jparkerweb/plan2code.git</code> to see it.
         </li>

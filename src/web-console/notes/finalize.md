@@ -12,7 +12,7 @@ know:
 | 3, Implementation Summary | Written to `overview.md` as usual; mirror it as a doc (marked `saved`, as a `file` block on `overview.md`) so the page reader sees it land. |
 | 4, Documentation Review | The proposed-updates table as a doc, and a `multi` naming the documents to update — every option ticked is "approve", unticked ones are skipped. A `review` works instead when the set is all-or-nothing. |
 | 5, User Feedback | Optional items, `required: false`: the rating as a `choice` of 1 to 10 or a `text`, the three reasons as `text`. The submit-to-maintainer consent is a `confirm`. |
-| 6, Spec Cleanup | A `confirm` before moving anything, the archive paths in `consequences`, and a line that the spec's remembered workspace folders are forgotten too (`console.mjs forget --spec specs/<feature>` after the move). |
+| 6, Spec Cleanup | A `review` item before moving anything (`doc`: Step 3's summary), verdicts `yes` ("Archive it"), `show` ("Show me it working", token `show me`) and `no`, the archive paths in `body`, and a line that the spec's remembered workspace folders are forgotten too (`console.mjs forget --spec specs/<feature>` after the move). On `show`, run it as `notes/implement.md` → Show me it working says (the summary line goes into `overview.md`'s Completion Summary), then reopen the card without `show`. |
 
 Post `activity` as each step starts, before its doc or question lands — reading
 the spec, running `specs.mjs status` or `archive --dry-run`, checking the

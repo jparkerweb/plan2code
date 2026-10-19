@@ -3,8 +3,10 @@
 // The source of truth for how much each piece of work weighs, how the count
 // is folded out of ledger.ndjson, and what the pill says at each level. The
 // count is never stored: it is always pointsFrom() over the ledger. No DOM
-// access at module scope and no imports: the server, console.mjs, the page
-// and `node --test` all import this file.
+// access at module scope, and its one import is the data-only skills.js: the
+// server, console.mjs, the page and `node --test` all import this file.
+
+import { SKILLS, isMetered, isPhased } from "./skills.js";
 
 // The one place the weights live (FR-12). Tune here.
 export const WEIGHTS = Object.freeze({
@@ -30,15 +32,16 @@ export const WEIGHTS = Object.freeze({
   "git-commits": 0,
   "git-conflict": 1,
   changelog: 1,
+  xray: 1,
+  diagnose: 1,
 });
 
 // Workflows whose launch itself scores WEIGHTS[workflow]. Pathfinder,
 // implement and implement-review score only through the agent's `run`
-// reports; dashboard and handoff never score; git and changelog score 1 on
-// launch (Git then adds its commit tally and conflict help).
-export const LAUNCH_COUNTED = Object.freeze(
-  new Set(["plan", "revise-plan", "document", "review", "quick-task", "init", "init-update", "finalize", "git", "changelog"])
-);
+// reports; dashboard and handoff never score; git, changelog, xray and diagnose score 1 on
+// launch (Git then adds its commit tally and conflict help). Derived from
+// skills.js (`metered`).
+export const LAUNCH_COUNTED = Object.freeze(new Set(SKILLS.filter((s) => isMetered(s.workflow)).map((s) => s.workflow)));
 
 // Git's commits weigh what they add up to: each `git-commits` run carries
 // `commits`, and a skill run scores one point per COMMITS_PER_POINT commits,
@@ -69,8 +72,9 @@ export const MAX_TASKS = 999;
 // writes a `progress` ledger entry whenever a build's `headline.cleared`
 // rises, and the build's row scores those tasks at TASKS_PER_POINT with no
 // bonus. The phase's `run` then takes the row over with its final score, so
-// the total only ever climbs. Workflows whose headline counts tasks:
-export const PROGRESS_WORKFLOWS = Object.freeze(new Set(["implement", "implement-review"]));
+// the total only ever climbs. Workflows whose headline counts tasks, derived
+// from skills.js (`phased`):
+export const PROGRESS_WORKFLOWS = Object.freeze(new Set(SKILLS.filter((s) => isPhased(s.workflow)).map((s) => s.workflow)));
 
 // Implement + Review reviews every phase as a stage of the build. A `review`
 // run inside it is that stage, so it scores the phase's TASK_BONUS when it
@@ -123,24 +127,9 @@ export function runPoints(event, tasks, { bonus = true } = {}) {
 // ANSWERS_PER_POINT answers, rounded down. Tune here.
 export const ANSWERS_PER_POINT = 2;
 
-// The skill names the answers row uses ("7 answers in Plan").
-const WORKFLOW_NAMES = Object.freeze({
-  dashboard: "the dashboard",
-  pathfinder: "Pathfinder",
-  plan: "Plan",
-  "revise-plan": "Revise plan",
-  document: "Document",
-  implement: "Implement",
-  "implement-review": "Implement + Review",
-  review: "Review",
-  "quick-task": "Quick task",
-  init: "Init",
-  "init-update": "Init update",
-  finalize: "Finalize",
-  handoff: "Handoff",
-  git: "Git",
-  changelog: "Changelog",
-});
+// The skill names the answers row uses ("7 answers in Plan"), derived from
+// skills.js (`name`).
+const WORKFLOW_NAMES = Object.freeze(Object.fromEntries(SKILLS.map((s) => [s.workflow, s.name])));
 
 // The skill run an entry belongs to, from its ledger id ("L3:..." -> "L3").
 const launchOf = (id) => (typeof id === "string" && id.includes(":") ? id.slice(0, id.indexOf(":")) : "L0");
@@ -157,6 +146,8 @@ const LAUNCH_LABELS = Object.freeze({
   finalize: "Finalize started",
   git: "Git started",
   changelog: "Changelog started",
+  xray: "X-ray started",
+  diagnose: "Diagnose started",
 });
 const RUN_LABELS = Object.freeze({
   "pathfinder-chart": "Pathfinder map written",
@@ -177,6 +168,8 @@ const RUN_LABELS = Object.freeze({
   "git-commits": "Commits in Git",
   "git-conflict": "Git conflict help",
   changelog: "Changelog run",
+  xray: "X-ray run",
+  diagnose: "Diagnose run",
 });
 
 // The unit a run names, from its ledger id ("L3:phase-2" -> "phase-2").

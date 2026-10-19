@@ -10,7 +10,19 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const DIR = path.join(ROOT, "src", "web-console", "public");
-const FILES = ["app.js", "answers.js", "render.js", "palette.js", "starters.js", "favicon.js"];
+// Every page module (vendored code aside), found by walking public/ so a new
+// screen is guarded without editing a list.
+function pageModules(dir, rel = "") {
+  const out = [];
+  for (const e of fs.readdirSync(path.join(dir, rel), { withFileTypes: true })) {
+    const p = rel ? `${rel}/${e.name}` : e.name;
+    if (e.isDirectory()) {
+      if (p !== "vendor") out.push(...pageModules(dir, p));
+    } else if (e.name.endsWith(".js")) out.push(p);
+  }
+  return out.sort();
+}
+const FILES = pageModules(DIR);
 
 let bad = 0;
 for (const name of FILES) {
@@ -20,7 +32,7 @@ for (const name of FILES) {
     console.log(`  ok  ${name}`);
   } catch (err) {
     // A module that parses but cannot run here (app.js touches `document` at
-    // import) is fine; only a parse failure is a real problem.
+    // import, and relative imports cannot resolve from a data: URL) is fine; only a parse failure is a real problem.
     const parseFailure = err instanceof SyntaxError;
     if (parseFailure) {
       bad++;

@@ -1,0 +1,21 @@
+{
+  "workflow": "plan",
+  "title": "Task API",
+  "headline": {
+    "stage": "Step 3 of 7: Signing in",
+    "cleared": 2,
+    "total": 7
+  },
+  "items": [
+    {
+      "id": "q4",
+      "kind": "text",
+      "title": "How callers sign in",
+      "body": "Do callers sign in as a person, or as an app with a key?",
+      "placeholder": "For example: apps use an API key per team."
+    }
+  ],
+  "agent": {
+    "status": "waiting"
+  }
+}

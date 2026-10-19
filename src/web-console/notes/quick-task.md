@@ -70,6 +70,21 @@ Workflow notes for `quick-task`, part of the web console contract
   Check for a Quick question between steps, and do not call `wait` until the
   build is done. Tick the Verify block's boxes too as the checks pass, in the
   post that reports them.
+- **See it running, before the finish:** a finished screen freezes every open
+  card, so ask first. Once the build is done, post a `review` item "See it
+  running" (`"doc": "plan"`, verdicts `show` ("Show me it working") and `fine`
+  ("No need, finish up"), token `show me` / `no`) with `--wait`. On `show`, run
+  it as `notes/implement.md` → Show me it working says, its one line going into
+  the work summary (the finish's `body`); then, or on `fine`, settle the card in
+  the same post as the finish.
+- **Archive a fixed bug, before the finish:** launched on a diagnosed folder
+  and now Fixed with nothing past the diagnosis, post a `confirm` card
+  "Archive this bug?" in the same post as "See it running": the dry run's
+  `files` in `body`, `yesLabel` "Archive it", `noLabel` "Keep it in specs/",
+  and `consequences` naming `specs--completed/<bug>/`. On yes, run
+  `node "<S>/specs.mjs" archive <spec>` (the skill file says where `<S>` is),
+  and say where it went in the finish's `body`. On no, the
+  dashboard lists the folder as "Bug fixed", never pre-selected.
 - **The finish after the build:** `command` is the commit command, filled in,
   in the project's commit format (AGENTS.md), with
   `"where": "When you are happy with it, commit it from your terminal:"`, and

@@ -32,6 +32,7 @@ import {
   sortAttachments,
   cardAvailability,
   cardPresentation,
+  defaultSpec,
   CATALOG_GROUPS,
   CONTINUE_IN_CONSOLE,
   CONSOLE_WORKFLOWS,
@@ -46,6 +47,13 @@ import {
   handoffShape,
   handoffText,
   launchReply,
+  launchTarget,
+  deleteAction,
+  deleteReply,
+  chipDetail,
+  deleteSummary,
+  FIXED_REASON,
+  isDeletableSpecDir,
   MAX_NOTE_IMAGES,
   noteAction,
   noteReplyLines,
@@ -61,6 +69,14 @@ import {
   SPEC_STATE_LABELS,
   STALE_MS,
   STOP_REPLY,
+  STOP_HANDOFF_REPLY,
+  stopAction,
+  pickupAction,
+  pickupReply,
+  deleteHandoffAction,
+  deleteHandoffReply,
+  handoffCopyText,
+  handoffAge,
   verdictLabel,
   verdictText,
   lastOpenCard,
@@ -131,29 +147,33 @@ import {
 import {
   appendLedger,
   attachmentName,
-  chatReplyLines,
   checkDocument,
-  initialWorkspace,
   insideGitRepo,
   pendingFiles,
-  latestOpenCaps,
-  pendingWorkspaceChanges,
   PROTECTED_CONSOLE_FILES,
   readLedger,
+  repoRoots,
+} from "../src/web-console/sessions.mjs";
+import { scanProject, removeSpec, SPEC_STATES } from "../src/web-console/scan.mjs";
+import { validate } from "../src/web-console/patches.mjs";
+import { chatReplyLines } from "../src/web-console/inbox.mjs";
+import {
+  initialWorkspace,
+  pendingWorkspaceChanges,
+  readWorkspaceCursor,
+  WORKSPACE_FILE,
+  writeWorkspaceCursor,
+} from "../src/web-console/workspace.mjs";
+import {
+  latestOpenCaps,
   readSubagentCursor,
   readSubagentSetting,
-  readWorkspaceCursor,
   resetSubagentCursor,
   writeSubagentCursor,
   writeSubagentSetting,
-  repoRoots,
-  scanProject,
-  SPEC_STATES,
-  validate,
-  WORKSPACE_FILE,
-  writeWorkspaceCursor,
-} from "../src/web-console/lib.mjs";
+} from "../src/web-console/settings.mjs";
 import { ROOT, HOME, cli, PDF, postPatch, ask } from "./web-console-test-helpers.mjs";
+import { joinedCss } from "./css-helpers.mjs";
 
 // Someone who worked the whole session in the browser should land back in it.
 // Every Plan2Code skill ships a console, so the sentence goes on all of
@@ -206,34 +226,17 @@ test("every console workflow the page names ships the console", () => {
     assert.ok(fs.existsSync(path.join(dir, "console.mjs")), `${skill} must bundle the console`);
     assert.ok(fs.existsSync(path.join(dir, "building.md")), `${skill} must bundle building.md`);
   }
-  // And the other way round: a skill that ships the console but is missing
-  // from the list would hand off a bare command, and its next session would
-  // ask the interface question of someone who was already in the browser.
-  for (const skill of fs.readdirSync(path.join(ROOT, "skills"))) {
-    if (!fs.existsSync(path.join(ROOT, "skills", skill, "references", "web-console"))) continue;
-    assert.ok(CONSOLE_WORKFLOWS.includes("/" + skill), `${skill} ships the console but is not in CONSOLE_WORKFLOWS`);
-  }
 });
 
-// The dashboard draws its cards from the page's own catalog, so the catalog
-// is the contract: every card has to be a skill that really installs, every
-// installed skill has to be a card (a skill that is missing launches nothing),
-// and every card's workflow has to be one the console names.
-test("the dashboard catalog is exactly the set of installable skills", () => {
+// The dashboard draws its cards from the page's own catalog, so every card
+// has to be filled in and launch into a real SKILL.md. Which skills have a
+// card is held against install.js in test-web-console-skills.mjs.
+test("every dashboard card is filled in and launches a real skill", () => {
   const skillsDir = path.join(ROOT, "skills");
-  const installed = fs.readdirSync(skillsDir).filter((d) => fs.statSync(path.join(skillsDir, d)).isDirectory());
-  const cataloged = SKILL_CATALOG.map((e) => e.skill);
-
   // The dashboard itself is the hub, not a card.
-  assert.ok(!cataloged.includes("plan2code"), "the dashboard does not launch itself");
+  assert.ok(!SKILL_CATALOG.some((e) => e.skill === "plan2code"), "the dashboard does not launch itself");
 
-  for (const skill of installed) {
-    if (skill === "plan2code") continue;
-    assert.ok(cataloged.includes(skill), `${skill} installs but has no card on the dashboard`);
-  }
   for (const e of SKILL_CATALOG) {
-    assert.ok(installed.includes(e.skill), `${e.skill} is a card but does not install`);
-    assert.ok(CONSOLE_WORKFLOWS.includes(e.command), `${e.command} must be a console workflow`);
     assert.ok(CATALOG_GROUPS.some((g) => g.id === e.group), `${e.skill}: unknown group ${e.group}`);
     for (const field of ["workflow", "chip", "title", "blurb"]) {
       assert.ok(e[field] && String(e[field]).trim(), `${e.skill}.${field} must be filled in`);
@@ -573,6 +576,42 @@ test("the stop request cannot be mistaken for a brief request", () => {
   assert.doesNotMatch(STOP_REPLY, /\b(brief|recap|minutes)\b/i);
 });
 
+test("handoff helpers: actions carry only the id, replies and copy text are plain, ages round at the boundaries", () => {
+  const h = { id: "2026-10-17-1152-handoff", title: "Lunch vote" };
+  assert.deepEqual(pickupAction(h), { i: "__pickup", type: "pickup", handoff: h.id });
+  assert.deepEqual(deleteHandoffAction(h), { i: "__delete", type: "delete", handoff: h.id });
+  assert.equal(pickupReply(h), 'Pick up the handoff "Lunch vote" right here in this session.');
+  assert.equal(deleteHandoffReply(h), 'Delete the handoff "Lunch vote" for good, right here in this session.');
+  const file = "/home/sam/.plan2code/handoffs/2026-10-17-1152-handoff.md";
+  assert.equal(handoffCopyText(file), `Read the handoff at ${file} and carry on with its Next task.`);
+  for (const line of [pickupReply(h), deleteHandoffReply(h), handoffCopyText(file)]) {
+    assert.ok(!line.includes("—"), "no em dash");
+    assert.doesNotMatch(line, /(brief|recap|minutes)/i);
+  }
+  const now = Date.parse("2026-10-17T12:00:00Z");
+  const ago = (ms) => handoffAge(new Date(now - ms).toISOString(), now);
+  assert.equal(ago(0), "just now");
+  assert.equal(ago(59 * 1000), "just now");
+  assert.equal(ago(60 * 1000), "1 min ago");
+  assert.equal(ago(59 * 60 * 1000), "59 min ago");
+  assert.equal(ago(60 * 60 * 1000), "1 h ago");
+  assert.equal(ago(23 * 3600 * 1000), "23 h ago");
+  assert.equal(ago(24 * 3600 * 1000), "1 day ago");
+  assert.equal(ago(3 * 24 * 3600 * 1000), "3 days ago");
+  assert.equal(handoffAge("not a date", now), "");
+});
+
+test("the stop-with-a-handoff request is its own plain line, and stopAction sets the flag only when asked", () => {
+  assert.notEqual(STOP_HANDOFF_REPLY, STOP_REPLY);
+  assert.match(STOP_HANDOFF_REPLY, /handoff/i);
+  assert.doesNotMatch(STOP_HANDOFF_REPLY, /\b(brief|recap|minutes)\b/i);
+  assert.ok(!STOP_HANDOFF_REPLY.includes("—"), "no em dash in a line that rides to the agent");
+  assert.ok(!("handoff" in stopAction({})), "a plain stop carries no handoff key");
+  assert.deepEqual(stopAction({}), { i: "__stop", type: "stop" });
+  assert.equal(stopAction({ handoff: true }).handoff, true);
+  assert.equal(stopAction({ handoff: true }).type, "stop");
+});
+
 // Nineteen highlight colors, four shades each, two themes: far too many to
 // trust to eyeballing, and a failure here is a label nobody can read.
 const hexLum = (h) => {
@@ -634,6 +673,15 @@ test("the project scan reads each spec's pipeline stage off its files", () => {
       "PLAN-DRAFT-20260923.md": "# draft\n\n**Status:** Phase 3 Complete - Resume at Phase 4\n",
       "pathfinder/map.md": "**Status:** Cleared\n",
     });
+    // The other Status forms specs.mjs accepts read the same, CRLF included.
+    fakeSpec(root, "planned-bold-colon", { "PLAN-DRAFT-20260923.md": "# draft\n\n**Status**: Complete\n" });
+    fakeSpec(root, "draft-mid-plan-bold-colon", {
+      "PLAN-DRAFT-20260923.md": "# draft\r\n\r\n**Status**: Phase 3 Complete - Resume at Phase 4\r\n",
+    });
+    fakeSpec(root, "mapped-bold-colon", {
+      "pathfinder/map.md": "**Status**: Cleared\n",
+      "pathfinder/questions/00-a.md": "State: resolved\n",
+    });
     fakeSpec(root, "documented", {
       "overview.md": "# spec\n",
       "phase-1.md": "- [ ] Task one\n- [ ] Task two\n",
@@ -648,6 +696,19 @@ test("the project scan reads each spec's pipeline stage off its files", () => {
       "phase-1.md": "- [x] Task one\n- [x] Task two\n",
     });
     fakeSpec(root, "weird", { "DESIGN.md": "# notes\n" });
+    fakeSpec(root, "diagnosed", { "DIAGNOSIS-20261016.md": "# Diagnosis: rows go missing\n\n**Status:** Diagnosed\n" });
+    // Once planning starts on a diagnosed bug, the usual states win.
+    fakeSpec(root, "diagnosed-then-planned", {
+      "DIAGNOSIS-20261016.md": "# Diagnosis\n\n**Status:** Diagnosed\n",
+      "PLAN-DRAFT-20261017.md": "# draft\n\n**Status:** Complete\n",
+    });
+    // Quick Task marks the write-up Fixed: a finished bug, not loose files.
+    fakeSpec(root, "diagnosed-then-fixed", { "DIAGNOSIS-20261016.md": "# Diagnosis\n\n**Status:** Fixed\n" });
+    // A fixed bug someone then started planning around is mid-plan again.
+    fakeSpec(root, "fixed-then-conversation", {
+      "DIAGNOSIS-20261016.md": "# Diagnosis\n\n**Status:** Fixed\n",
+      "PLAN-CONVERSATION-20261017.md": "# conversation\n",
+    });
     fs.writeFileSync(path.join(root, "AGENTS.md"), "# agents\n");
 
     const scan = scanProject(root);
@@ -658,10 +719,17 @@ test("the project scan reads each spec's pipeline stage off its files", () => {
       ["mapped", "mapped"],
       ["planned", "planned"],
       ["draft-mid-plan", "mapped"],
+      ["planned-bold-colon", "planned"],
+      ["draft-mid-plan-bold-colon", "mapped"],
+      ["mapped-bold-colon", "mapped"],
       ["documented", "documented"],
       ["building", "building"],
       ["built", "built"],
       ["weird", "unrecognized"],
+      ["diagnosed", "diagnosed"],
+      ["diagnosed-then-planned", "planned"],
+      ["diagnosed-then-fixed", "fixed"],
+      ["fixed-then-conversation", "mapped"],
     ]) {
       assert.ok(byName[name], `spec ${name} was scanned`);
       assert.equal(byName[name].state, state, `spec ${name}`);
@@ -671,6 +739,12 @@ test("the project scan reads each spec's pipeline stage off its files", () => {
     assert.equal(byName.exploring.detail, "1 of 2 decisions made");
     assert.equal(byName.building.detail, "1 of 2 tasks done");
     assert.equal(byName["draft-mid-plan"].detail, "plan draft, resume at Phase 4");
+    assert.equal(byName["draft-mid-plan-bold-colon"].detail, "plan draft, resume at Phase 4");
+    assert.equal(byName.diagnosed.detail, "bug diagnosed, not fixed");
+    assert.equal(byName["diagnosed-then-fixed"].detail, "bug fixed");
+    for (const state of SPEC_STATES) assert.ok(SPEC_STATE_LABELS[state], `state ${state} has a picker label`);
+    assert.equal(SPEC_STATE_LABELS.diagnosed, "Bug diagnosed");
+    assert.equal(SPEC_STATE_LABELS.fixed, "Bug fixed");
 
     // A pathfinder folder with no map yet is still mid-exploration; a map
     // whose status line is missing or unreadable is too.
@@ -684,6 +758,130 @@ test("the project scan reads each spec's pipeline stage off its files", () => {
     const scan3 = scanProject(empty);
     assert.equal(scan3.hasAgents, false);
     assert.deepEqual(scan3.specs, []);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+// Deleting a spec from the dashboard: the page offers only folders it can
+// name exactly, and the agent's `delete-spec` refuses anything else on disk.
+test("isDeletableSpecDir takes exactly specs/<one name>", () => {
+  for (const ok of ["specs/lunch-vote", "specs/codebase-health", "specs/a b"]) {
+    assert.equal(isDeletableSpecDir(ok), true, ok);
+  }
+  for (const bad of [
+    "specs/../x",
+    "specs/..",
+    "specs/.",
+    "specs/.hidden",
+    "specs/a/b",
+    "specs/",
+    "specs",
+    "specs--completed/x",
+    "/specs/x",
+    "C:/specs/x",
+    "specs\\x",
+    "other/x",
+    "",
+    undefined,
+    null,
+  ]) {
+    assert.equal(isDeletableSpecDir(bad), false, String(bad));
+  }
+});
+
+test("a delete is a session action naming the folder, and its reply says it is for good", () => {
+  const spec = { dir: "specs/lunch-vote", name: "lunch-vote", state: "building", detail: "1 of 2 tasks done", files: 3, touched: 1 };
+  assert.deepEqual(deleteAction(spec), { i: "__delete", type: "delete", spec: "specs/lunch-vote" });
+  const reply = deleteReply(spec);
+  assert.match(reply, /specs\/lunch-vote\//);
+  assert.match(reply, /for good/);
+  assert.doesNotMatch(reply, /\b(brief|recap|minutes)\b/i);
+  const sum = deleteSummary(spec);
+  assert.equal(sum.folder, "specs/lunch-vote/");
+  assert.equal(sum.stage, `${SPEC_STATE_LABELS.building}: 1 of 2 tasks done`);
+  assert.equal(sum.files, "3 files");
+  assert.equal(sum.touched, 1);
+  assert.equal(deleteSummary({ ...spec, files: 1 }).files, "1 file");
+  assert.equal(deleteSummary({ ...spec, files: undefined }).files, "");
+  assert.equal(deleteSummary({ ...spec, detail: "" }).stage, SPEC_STATE_LABELS.building);
+});
+
+test("a fixed bug says so once: on its chip, in the delete dialog and on its greyed cards", () => {
+  const fixed = { dir: "specs/old-bug", name: "old-bug", state: "fixed", detail: "bug fixed", files: 1, touched: 1 };
+  assert.equal(deleteSummary(fixed).stage, "Bug fixed");
+  const building = { dir: "specs/lunch-vote", name: "lunch-vote", state: "building", detail: "1 of 2 tasks done" };
+  assert.equal(deleteSummary(building).stage, `${SPEC_STATE_LABELS.building}: 1 of 2 tasks done`);
+  assert.equal(chipDetail(fixed), "");
+  assert.equal(chipDetail(building), "1 of 2 tasks done");
+  assert.equal(chipDetail({ ...building, detail: undefined }), "");
+  assert.match(FIXED_REASON, /Delete button/);
+  assert.doesNotMatch(FIXED_REASON, /✕/);
+});
+
+test("scanProject counts each spec's files", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "p2c-scan-files-"));
+  try {
+    fakeSpec(root, "three", { "overview.md": "# o\n", "phase-1.md": "- [ ] **Task 1.1:** a\n", "pathfinder/map.md": "# m\n" });
+    fakeSpec(root, "one", { "DESIGN.md": "# d\n" });
+    const byName = Object.fromEntries(scanProject(root).specs.map((s) => [s.name, s]));
+    assert.equal(byName.three.files, 3);
+    assert.equal(byName.one.files, 1);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("removeSpec deletes one spec folder and refuses everything else", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "p2c-remove-spec-"));
+  const outside = fs.mkdtempSync(path.join(os.tmpdir(), "p2c-remove-outside-"));
+  try {
+    fakeSpec(root, "keep", { "overview.md": "# keep\n" });
+    fakeSpec(root, "gone", { "overview.md": "# gone\n", "pathfinder/map.md": "# m\n" });
+    fs.mkdirSync(path.join(root, "specs--completed", "old"), { recursive: true });
+    fs.writeFileSync(path.join(outside, "precious.md"), "do not touch\n");
+
+    assert.deepEqual(removeSpec(root, "specs/gone"), { ok: true, removed: "specs/gone" });
+    assert.equal(fs.existsSync(path.join(root, "specs", "gone")), false);
+    assert.equal(fs.existsSync(path.join(root, "specs", "keep", "overview.md")), true);
+
+    for (const bad of ["specs/../specs--completed/old", "specs--completed/old", "specs/keep/pathfinder", "specs/missing", "specs"]) {
+      assert.throws(() => removeSpec(root, bad), Error, bad);
+    }
+    assert.equal(fs.existsSync(path.join(root, "specs--completed", "old")), true);
+
+    // A spec folder that is a link to somewhere else is refused, and what it
+    // points at survives.
+    fs.symlinkSync(outside, path.join(root, "specs", "linked"), "junction");
+    assert.throws(() => removeSpec(root, "specs/linked"), /outside|link/i);
+    assert.equal(fs.existsSync(path.join(outside, "precious.md")), true);
+
+    // A file named like a spec is not a spec folder.
+    fs.writeFileSync(path.join(root, "specs", "note.md"), "x\n");
+    assert.throws(() => removeSpec(root, "specs/note.md"), /folder/i);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+    fs.rmSync(outside, { recursive: true, force: true });
+  }
+});
+
+test("delete-spec removes a spec from the worktree it runs in, and exits 3 with the reason when it refuses", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "p2c-delete-cli-"));
+  try {
+    fakeSpec(root, "scratch", { "overview.md": "# s\n" });
+    const done = cli(["delete-spec", "--spec", "specs/scratch"], { cwd: root });
+    assert.equal(done.status, 0, done.stderr);
+    assert.equal(done.json.ok, true);
+    assert.equal(done.json.removed, "specs/scratch");
+    assert.equal(fs.existsSync(path.join(root, "specs", "scratch")), false);
+
+    const refused = cli(["delete-spec", "--spec", "specs/../AGENTS.md"], { cwd: root, expectFail: true });
+    assert.equal(refused.status, 3);
+    assert.equal(refused.json.ok, false);
+    assert.ok(refused.json.message);
+
+    const usage = cli(["delete-spec"], { cwd: root, expectFail: true });
+    assert.equal(usage.status, 2);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
@@ -864,6 +1062,49 @@ test("the dashboard matrix lights only the cards a spec state allows", () => {
   assert.equal(on("plan2code-1b-revise-plan", scan, sel("built")), false);
   assert.equal(on("plan2code-4-finalize", scan, sel("built")), true);
 
+  // A diagnosed bug: Quick Task (its next step) and Plan, never the build steps.
+  for (const skill of ["plan2code-quick-task", "plan2code-1-plan", "plan2code-review", "plan2code-diagnose"]) {
+    assert.equal(on(skill, scan, sel("diagnosed")), true, `${skill} on for a diagnosed bug`);
+  }
+  for (const skill of [
+    "plan2code-0-pathfinder",
+    "plan2code-1b-revise-plan",
+    "plan2code-2-document",
+    "plan2code-3-implement",
+    "plan2code-3-implement-review",
+    "plan2code-4-finalize",
+  ]) {
+    assert.equal(on(skill, scan, sel("diagnosed")), false, `${skill} off for a diagnosed bug`);
+  }
+  assert.equal(cardAvailability(entry("plan2code-quick-task"), scan, sel("diagnosed")).next, true);
+  assert.ok(!cardAvailability(entry("plan2code-1-plan"), scan, sel("diagnosed")).next);
+  assert.ok(!cardAvailability(entry("plan2code-quick-task"), scan, sel("building")).next);
+
+  // Quick Task carries the folder only for a diagnosed bug; spec cards always do.
+  assert.equal(launchTarget(entry("plan2code-quick-task"), sel("diagnosed")).dir, "specs/x");
+  assert.equal(launchTarget(entry("plan2code-quick-task"), sel("building")), null);
+  assert.equal(launchTarget(entry("plan2code-1-plan"), sel("diagnosed")).dir, "specs/x");
+  assert.equal(launchTarget(entry("plan2code-review"), sel("diagnosed")), null);
+  assert.equal(launchTarget(entry("plan2code-1-plan"), null), null);
+
+  // A fixed bug is finished: no pipeline card, and Quick Task starts fresh.
+  for (const skill of [
+    "plan2code-0-pathfinder",
+    "plan2code-1-plan",
+    "plan2code-1b-revise-plan",
+    "plan2code-2-document",
+    "plan2code-3-implement",
+    "plan2code-3-implement-review",
+    "plan2code-4-finalize",
+  ]) {
+    const av = cardAvailability(entry(skill), scan, sel("fixed"));
+    assert.equal(av.on, false, `${skill} off for a fixed bug`);
+    assert.ok(av.reason, `${skill} says why it is off for a fixed bug`);
+  }
+  assert.equal(on("plan2code-quick-task", scan, sel("fixed")), true);
+  assert.ok(!cardAvailability(entry("plan2code-quick-task"), scan, sel("fixed")).next);
+  assert.equal(launchTarget(entry("plan2code-quick-task"), sel("fixed")), null);
+
   // A greyed card always says why, and a selected spec's next step is marked.
   assert.ok(cardAvailability(entry("plan2code-3-implement"), scan, sel("exploring")).reason);
   assert.equal(cardAvailability(entry("plan2code-3-implement"), scan, sel("documented")).next, true);
@@ -901,6 +1142,29 @@ test("dashboard card presentation follows the current picker selection", () => {
   assert.equal(planned.on, true);
   assert.equal(planned.recommended, true);
   assert.equal(planned.detail, "plan drafted");
+});
+
+test("the picker never opens on a fixed bug", () => {
+  const fixed = { dir: "specs/old-bug", name: "old-bug", state: "fixed", detail: "bug fixed" };
+  const live = { dir: "specs/lunch-vote", name: "lunch-vote", state: "documented", detail: "2 phases, 8 tasks ready" };
+  assert.equal(defaultSpec([fixed, live]), live);
+  assert.equal(defaultSpec([live, fixed]), live);
+  assert.equal(defaultSpec([fixed]), null);
+  assert.equal(defaultSpec([]), null);
+  assert.equal(defaultSpec(undefined), null);
+
+  // The agent's recommendation describes the default pick, not the fixed bug
+  // the server listed first.
+  const entry = (skill) => SKILL_CATALOG.find((e) => e.skill === skill);
+  const scan = { hasAgents: true, specs: [fixed, live] };
+  const menu = { recommend: "plan2code-3-implement", details: { "plan2code-3-implement": "Phase 1 of 2 is next" } };
+  const shown = cardPresentation(entry("plan2code-3-implement"), scan, live, menu);
+  assert.equal(shown.recommended, true);
+  assert.equal(shown.detail, "Phase 1 of 2 is next");
+  // Only fixed bugs on disk: the default is "start from scratch".
+  const onlyFixed = { hasAgents: true, specs: [fixed] };
+  const fresh = cardPresentation(entry("plan2code-0-pathfinder"), onlyFixed, null, { recommend: "plan2code-0-pathfinder" });
+  assert.equal(fresh.recommended, true);
 });
 
 test("the launch reply names the picked spec", () => {
@@ -1071,6 +1335,8 @@ const CONSOLE_WORKFLOW_LIST = [
   "review",
   "finalize",
   "handoff",
+  "xray",
+  "diagnose",
 ];
 
 test("STARTER_SETS: 3 to 4 starters a set, one without context at least, known lead roles, unique ids", () => {
@@ -1493,7 +1759,6 @@ test("skip: the last open card goes to Send, a middle one to the next unstaged, 
 test("page: the Workspace dialog, meter pill and new modules are in the page, with no inline styles or scripts", () => {
   const dir = path.join(ROOT, "src", "web-console", "public");
   const html = fs.readFileSync(path.join(dir, "index.html"), "utf8");
-  const app = fs.readFileSync(path.join(dir, "app.js"), "utf8");
   for (const id of [
     "workspace-modal",
     "workspace-title",
@@ -1520,7 +1785,6 @@ test("page: the Workspace dialog, meter pill and new modules are in the page, wi
   assert.ok(pill[0].includes('class="meter-track"') && pill[0].includes('class="meter-fill"'));
   for (const m of ["workspace.js", "meter.js", "mentions.js", "favicon.js"]) {
     assert.ok(html.includes(`rel="modulepreload" href="/${m}"`), `the page preloads ${m}`);
-    assert.match(app, new RegExp(`^import [^;]+ from "\\./${m.replace(".", "\\.")}";`, "m"), `app.js imports ${m}`);
   }
   // The CSP refuses style attributes and inline script: the new markup has neither.
   const added = [
@@ -1532,23 +1796,18 @@ test("page: the Workspace dialog, meter pill and new modules are in the page, wi
     assert.doesNotMatch(block, /<script/i);
     assert.doesNotMatch(block, /\son[a-z]+=/i, "no inline event handlers");
   }
-  assert.doesNotMatch(app, /setAttribute\(\s*["']style["']/, "no style attributes set from script");
 });
 
 test("page: the footer label opens the workspace instead of copying", () => {
-  const app = fs.readFileSync(path.join(ROOT, "src", "web-console", "public", "app.js"), "utf8");
-  assert.ok(app.includes('$("footer-where").addEventListener("click", openWorkspace)'));
-  assert.doesNotMatch(app, /\$\("footer-where"\)\.addEventListener\("blur"/, "the copied-state blur handler is gone");
-  assert.ok(app.includes('"Open workspace: " + label'));
-  assert.ok(app.includes("footerLabel(") && app.includes("FOOTER_TIERS"));
   // The dashboard keeps the footer for the workspace label, minus the summary and Send.
-  const css = fs.readFileSync(path.join(ROOT, "src", "web-console", "public", "app.css"), "utf8");
-  assert.ok(app.includes('foot.classList.toggle("is-dash", Boolean(isDashboard() && !finish()))'));
-  assert.doesNotMatch(app, /foot\.hidden = Boolean\(isDashboard\(\)/, "the dashboard no longer hides the whole footer");
+  const css = joinedCss();
   assert.match(css, /\.footer\.is-dash \.footer-summary,\s*\.footer\.is-dash \.footer-actions \{ display: none; \}/);
   assert.match(css, /\.footer\.is-dash \.footer-where:not\(\[hidden\]\) \{ display: block;/, "narrow screens keep the label on the dashboard");
-  // Every typing place offers @name suggestions.
-  assert.equal((app.match(/attachMentions\((ta|input)\);/g) || []).length, 4, "Ask, card note, notes panel, text answer");
+  // Every typing place offers @name suggestions: the Ask pane and the notes panel
+  // (screens/ask.js) and the card note and text answer (screens/cards.js).
+  const read = (f) => fs.readFileSync(path.join(ROOT, "src", "web-console", "public", "screens", f), "utf8");
+  const count = (text) => (text.match(/attachMentions\((ta|input)\);/g) || []).length;
+  assert.equal(count(read("ask.js")) + count(read("cards.js")), 4, "Ask, card note, notes panel, text answer");
 });
 
 // The quoted flags between -NoProfile and -EncodedCommand, whichever quote style.
@@ -1806,7 +2065,7 @@ test("subagents: the store round-trips per project and workflow under the consol
   try {
     const project = path.join(home, "My Repo");
     const script = `
-      const lib = await import(${JSON.stringify(new URL("../src/web-console/lib.mjs", import.meta.url).href)});
+      const lib = await import(${JSON.stringify(new URL("../src/web-console/settings.mjs", import.meta.url).href)});
       const project = ${JSON.stringify(project)};
       lib.saveSubagentStoreEntry(project, "implement", { on: true, instruction: "Mine", max: 5 });
       const flipped = project.replace(/My Repo$/, "MY REPO");

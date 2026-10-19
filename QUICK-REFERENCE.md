@@ -15,7 +15,8 @@ The web console is the main way in: a local page where questions, documents, bui
 | ------------------------- | ------------------------------------ | -------------------------------------------------------------------------------------- |
 | From your project (shell) | `plan2code`                          | Opens Claude Code, Devin or Codex on the dashboard (`--cli claude` / `devin` / `codex` to choose) |
 | Inside any agent          | `/plan2code` (`$plan2code` in Codex) | Opens the dashboard: a card for every skill, launched on the same page                 |
-| Install / update          | `npx --allow-git=all git+https://github.com/jparkerweb/plan2code.git` | Installs the skills and the `plan2code` command; re-run it to update |
+| Install                   | `npx --allow-git=all git+https://github.com/jparkerweb/plan2code.git` | Installs the skills and the `plan2code` command (re-run it to update without the `plan2code` command) |
+| Update                    | `plan2code update`                   | Updates everything that was installed, with no menu; never uninstalls anything |
 | Straight into a skill     | `/plan2code-1-plan --web` (any step) | Skips the "web console or terminal?" question and opens the page                       |
 
 The install command always opens a menu. Back at your prompt with no output at all? npm could not reach the repository and hid the reason: run `git ls-remote https://github.com/jparkerweb/plan2code.git` to see it (usually the network, a proxy or the VPN).
@@ -41,6 +42,8 @@ Every command below is what a dashboard card runs. Typed on its own, each one as
 | 3+review   | /plan2code-3-implement-review | overview.md     | Reviewed implementation ready for approval (alternative to `/plan2code-3-implement`)                          |
 | 4          | /plan2code-4-finalize         | overview.md     | Archived specs                                                                                                |
 | handoff    | /plan2code-handoff            | Conversation    | Self-contained handoff doc (OS temp dir by default, or a folder you pick such as `handoffs/`)                 |
+| xray       | /plan2code-xray               | An area, or none | An explanation citing files and commits, or `ARCHITECTURE-BRIEF-<date>.md` with the rough spots you picked |
+| diagnose   | /plan2code-diagnose           | A bug, or none  | `DIAGNOSIS-<date>.md` with the cause and its evidence, then Quick Task (or Plan for a big fix) to fix it |
 | changelog  | /plan2code-changelog          | Your branch     | `CHANGELOG.md` entries and the `package.json` version, from the default branch's latest version |
 | git        | /plan2code-git                | Your repo       | Commits (`<subject>` / `AI Assisted`), branches, pull with conflict help, push, publish                       |
 

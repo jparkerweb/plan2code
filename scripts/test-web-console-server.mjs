@@ -34,10 +34,12 @@ import {
   STRAY_GRACE_MS,
   staleSessions,
   terminalLine,
-  validate,
-} from "../src/web-console/lib.mjs";
+} from "../src/web-console/sessions.mjs";
+import { validate } from "../src/web-console/patches.mjs";
+import { joinedCss } from "./css-helpers.mjs";
 import {
   ROOT,
+  HANDOFFS_DIR,
   HOME,
   ENV,
   cookieFor,
@@ -434,6 +436,9 @@ test("cleanup finds old sessions and strays in both folders, and keeps every pro
     backdate(path.join(plan2code, "busy"));
     kept.push(busy);
     stray(path.join(plan2code, "notes.txt"));
+    // Handoffs are Plan2Code's own, however old: swept by age on open, never offered here.
+    backdate(put(path.join(plan2code, "handoffs", "2025-01-01-0900-handoff.md")));
+    backdate(path.join(plan2code, "handoffs"));
     // In use right now: a held lock and a temp between its write and rename.
     const live = [put(path.join(consoleDir, "workspaces.json.lock"), ""), put(path.join(plan2code, "models.json.123.tmp"))];
     kept.push(...live);
@@ -448,6 +453,7 @@ test("cleanup finds old sessions and strays in both folders, and keeps every pro
       "root:notes.txt",
       "session:20250801-101010-aaaaaa",
     ]);
+    assert.equal(items.some((i) => i.id === "root:handoffs"), false, "the handoffs folder is never a stray");
     assert.equal(STRAY_GRACE_MS, 60 * 60 * 1000);
     assert.equal(items.find((i) => i.id === "console:p1.json").bytes, 5);
     assert.equal(items.find((i) => i.id === "root:console-dev").kind, "folder");
@@ -523,7 +529,7 @@ test("cleanup lists the project's completed specs untouched for 30 days, and rem
 
 test("User Preferences: wider, its body scrolls and the button bar stays put, without touching dialogs that borrow .looks", () => {
   const html = fs.readFileSync(path.join(ROOT, "src", "web-console", "public", "index.html"), "utf8");
-  const css = fs.readFileSync(path.join(ROOT, "src", "web-console", "public", "app.css"), "utf8");
+  const css = joinedCss();
   const dialog = html.match(/<dialog class="modal looks prefs" id="looks-modal"[^>]*>([\s\S]*?)<\/dialog>/);
   assert.ok(dialog, "the Preferences dialog carries the prefs class");
   const body = dialog[1].indexOf('<div class="prefs-body">');
@@ -659,6 +665,20 @@ test("open reports a month-old session under swept and removes it after printing
   assert.equal(fs.existsSync(oldDir), false);
 });
 
+test("open reports a month-old handoff under swept.handoffs and removes both its files", async () => {
+  const id = "2025-01-01-0900-handoff";
+  fs.mkdirSync(HANDOFFS_DIR, { recursive: true });
+  const files = [path.join(HANDOFFS_DIR, id + ".md"), path.join(HANDOFFS_DIR, id + ".json")];
+  fs.writeFileSync(files[0], "# Handoff: old\n");
+  fs.writeFileSync(files[1], "{}");
+  for (const f of files) backdate(f);
+  const res = cli(["open", "--workflow", "plan", "--no-open"]);
+  cli(["stop", "--session", res.json.sid]);
+  assert.deepEqual(res.json.swept.handoffs, [id]);
+  for (let i = 0; i < 20 && files.some((f) => fs.existsSync(f)); i++) await new Promise((r) => setTimeout(r, 100));
+  assert.deepEqual(files.filter((f) => fs.existsSync(f)), []);
+});
+
 test("post and wait hand back the terminal line; the collected result on disk does not carry it", async () => {
   const res = cli(["open", "--file", payload("tl.json", BASE), "--no-open"]);
   const s = sessionUrl(res.json.url);
@@ -703,16 +723,124 @@ test("notes/quick-task.md has a quick-task build tick the Plan tab's steps live"
   assert.ok(section.includes("- [x] **1.** Step one"));
 });
 
-test("the waiting pane points a quick-task build at its Plan tab", () => {
-  const js = fs.readFileSync(path.join(ROOT, "src", "web-console", "public", "app.js"), "utf8");
-  const fn = js.slice(js.indexOf("function renderWaiting("), js.indexOf("function renderNotice("));
-  assert.ok(fn.includes('S.workflow === "quick-task" && docs().find((d) => d.id === "plan")'));
-});
-
 test("notes/quick-task.md has the finished quick task offer Back to the dashboard as well as the review", () => {
   const md = fs.readFileSync(path.join(ROOT, "src", "web-console", "notes", "quick-task.md"), "utf8");
   const section = md.slice(md.indexOf("## Quick task (`quick-task`)"));
   const bullet = section.slice(section.indexOf("**The finish after the build:**"), section.indexOf("**Escalated / aborted:**"));
   assert.ok(bullet.includes('"dashboard": true'));
   assert.ok(bullet.includes("Review it now"));
+});
+
+// Show me it working: a screenshot saved under <session>/shots/ posts as an
+// image block and is served back; nothing else is reachable through /shots/.
+test("an image block under the session's shots folder round-trips, and /shots/ serves nothing else", async () => {
+  const res = cli(["open", "--workflow", "implement", "--no-open"]);
+  const m = res.json.url.match(/^(http:\/\/127\.0\.0\.1:\d+)\/s\/([^/]+)\//);
+  const cookie = cookieFor(m[1], m[2]);
+  try {
+    const shots = path.join(res.json.session, "shots");
+    fs.mkdirSync(shots, { recursive: true });
+    const png = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(32, 7)]);
+    fs.writeFileSync(path.join(shots, "home-page.png"), png);
+    const patch = { docs: [{ id: "shown", title: "Shown working", blocks: [{ id: "s1", image: "shots/home-page.png", alt: "The home page with the new button" }] }] };
+    cli(["post", "--session", res.json.sid, "--file", payload("shots-ok.json", patch)]);
+    const block = readState(res.json.session).docs.find((d) => d.id === "shown").blocks[0];
+    assert.equal(block.image, "shots/home-page.png", "stored session-relative");
+    assert.equal(block.md, undefined);
+
+    // Its alt text is a caption, held to the same vocabulary rule as a title.
+    const jargon = { docs: [{ id: "shown", blocks: [{ id: "s1", image: "shots/home-page.png", alt: "Grilling the home page" }] }] };
+    const refused = cli(["post", "--session", res.json.sid, "--file", payload("shots-jargon.json", jargon)], { expectFail: true });
+    assert.equal(refused.status, 3);
+    assert.match(refused.stderr, /alt text contains internal vocabulary/);
+    // A changed picture or caption is a new version of the doc.
+    const before = readState(res.json.session).docs.find((d) => d.id === "shown").version;
+    const recaption = { docs: [{ id: "shown", blocks: [{ id: "s1", image: "shots/home-page.png", alt: "The home page, after the fix" }] }] };
+    cli(["post", "--session", res.json.sid, "--file", payload("shots-recaption.json", recaption)]);
+    assert.equal(readState(res.json.session).docs.find((d) => d.id === "shown").version, before + 1);
+
+    const got = await fetch(m[1] + "/shots/home-page.png", { headers: { cookie } });
+    assert.equal(got.status, 200);
+    assert.equal(got.headers.get("content-type"), "image/png");
+    assert.equal(got.headers.get("cache-control"), "no-store");
+    assert.deepEqual(Buffer.from(await got.arrayBuffer()), png);
+
+    const anon = await fetch(m[1] + "/shots/home-page.png");
+    assert.equal(anon.status, 403, "the cookie is still required");
+    await anon.arrayBuffer();
+
+    // Raw request lines: fetch would fold the `..` away before sending.
+    const raw = (p) =>
+      new Promise((resolve, reject) => {
+        const req = http.request({ host: "127.0.0.1", port: Number(new URL(m[1]).port), path: p, headers: { cookie } }, (r) => {
+          r.resume();
+          r.on("end", () => resolve(r.statusCode));
+        });
+        req.on("error", reject);
+        req.end();
+      });
+    for (const p of ["/shots/../state.json", "/shots/..%2fstate.json", "/shots/missing.png", "/shots/home-page.png?x=1"]) {
+      assert.equal(await raw(p), 404, p);
+    }
+  } finally {
+    cli(["stop", "--session", res.json.sid]);
+  }
+});
+
+// /app.css is the files under public/styles/ joined in CSS_ORDER (one newline
+// after each), then the accent rules. The files themselves are never served.
+test("/app.css is the style files joined in CSS_ORDER with the accent rules last", async () => {
+  const { CSS_ORDER, asset, etagOf } = await import("../src/web-console/static.mjs");
+  const dir = path.join(ROOT, "src", "web-console", "public", "styles");
+  const res = cli(["open", "--workflow", "review", "--no-open"]);
+  const m = res.json.url.match(/^(http:\/\/127\.0\.0\.1:\d+)\/s\/([^/]+)\//);
+  const cookie = cookieFor(m[1], m[2]);
+  try {
+    const r = await fetch(m[1] + "/app.css", { headers: { cookie } });
+    assert.equal(r.status, 200);
+    assert.match(r.headers.get("content-type"), /^text\/css/);
+    const body = await r.text();
+    // One newline between files: each file's own last newline is that one.
+    const joined = CSS_ORDER.map((f) => fs.readFileSync(path.join(dir, f), "utf8").replace(/\n$/, "")).join("\n") + "\n";
+    assert.ok(body.startsWith(joined), "the body opens with the files, in CSS_ORDER, one newline between");
+    const accents = body.slice(joined.length);
+    assert.match(accents, /^\n*\/\* Generated by server\.mjs from palette\.js/, "the accent rules come last");
+    assert.ok(accents.includes(`:root[data-looks-accent="violet"]`));
+    // The tests' helper joins through the server's own function, so the two agree.
+    assert.equal(body, joinedCss() + accents, "joinedCss() plus the accent rules is the body the server returns");
+    // The ETag is a hash of the whole body, so a change to any one file moves it.
+    assert.equal(r.headers.get("etag"), etagOf(Buffer.from(body)));
+    assert.equal(asset("app.css").etag, etagOf(Buffer.from(body)));
+    for (const f of CSS_ORDER) {
+      const text = fs.readFileSync(path.join(dir, f), "utf8").replace(/\n$/, "");
+      assert.notEqual(etagOf(Buffer.from(body.replace(text, text + "\n/* changed */"))), r.headers.get("etag"), `a change to ${f} moves the ETag`);
+    }
+    for (const f of CSS_ORDER) {
+      const own = await fetch(m[1] + "/styles/" + f, { headers: { cookie } });
+      assert.equal(own.status, 404, `/styles/${f} is not served on its own`);
+      await own.arrayBuffer();
+    }
+  } finally {
+    cli(["stop", "--session", res.json.sid]);
+  }
+});
+
+// The skills the build writes carry public/styles/ with every file in CSS_ORDER,
+// and a console started from that tree serves the same /app.css as this one.
+test("the built skills tree serves the same /app.css as the source console", async (t) => {
+  const { CSS_ORDER, asset } = await import("../src/web-console/static.mjs");
+  const built = path.join(ROOT, "skills", "plan2code", "references", "web-console");
+  // npm test builds first; a bare run of this file may not have.
+  if (!fs.existsSync(path.join(built, "console.mjs"))) return t.skip("skills/ is not built: run npm run build:skills");
+  for (const f of CSS_ORDER) assert.ok(fs.existsSync(path.join(built, "public", "styles", f)), `the build is missing public/styles/${f}`);
+  const out = execFileSync(process.execPath, [path.join(built, "console.mjs"), "open", "--workflow", "review", "--no-open"], { env: ENV, encoding: "utf8", cwd: ROOT });
+  const json = JSON.parse(out.trim().split("\n").pop());
+  const m = json.url.match(/^(http:\/\/127\.0\.0\.1:\d+)\/s\/([^/]+)\//);
+  try {
+    const res = await fetch(m[1] + "/app.css", { headers: { cookie: cookieFor(m[1], m[2]) } });
+    assert.equal(res.status, 200);
+    assert.equal(await res.text(), asset("app.css").body.toString("utf8"));
+  } finally {
+    execFileSync(process.execPath, [path.join(built, "console.mjs"), "stop", "--session", json.sid], { env: ENV, cwd: ROOT });
+  }
 });

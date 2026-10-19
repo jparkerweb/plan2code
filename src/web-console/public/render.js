@@ -15,6 +15,7 @@
 // bypass. `html` tokens render as visible text, on purpose.
 
 import { marked } from "./vendor/marked.esm.js";
+import { APPROVAL_TIP } from "./answers.js";
 
 // A bare `/` path stays on this origin; `//host` (and `/\host`, which browsers
 // read the same way) is protocol-relative and would not, so it is refused.
@@ -359,3 +360,61 @@ function copyButton(text, className, source) {
 }
 
 export { el, copyButton, copyText, selectContents };
+
+// A line whose backticked commands read as code; everything else is text.
+export function textWithCode(tag, className, text) {
+  const node = el(tag, className);
+  text.split("`").forEach((part, n) => {
+    if (part) node.appendChild(n % 2 ? el("code", "md-code", part) : document.createTextNode(part));
+  });
+  return node;
+}
+
+export const RELEASES_URL = "https://github.com/jparkerweb/plan2code/releases/";
+
+export function releasesLink(text) {
+  const a = el("a", null, text);
+  a.href = RELEASES_URL;
+  a.target = "_blank";
+  a.rel = "noopener noreferrer";
+  return a;
+}
+
+// A quiet line under the menu and the starting screen: the page cannot see a
+// terminal approval prompt, so it says up front how to avoid one. Backticked
+// spans become <code>, built as nodes like everything else here.
+export function approvalTip() {
+  return textWithCode("p", "approval-tip", APPROVAL_TIP);
+}
+
+export const SVG_NS = "http://www.w3.org/2000/svg";
+
+// A time of day for a chat message; empty when the stamp does not parse.
+export function shortTime(iso) {
+  try {
+    return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  } catch {
+    return "";
+  }
+}
+
+export function isMac() {
+  return /mac/i.test(navigator.platform || navigator.userAgent);
+}
+
+// A click on the backdrop closes a dialog that holds nothing to lose. The
+// backdrop is the <dialog> itself to the event, and so is its own padding, so
+// the point has to fall outside its box -- for the press as well as the
+// release, or selecting text inside and letting go outside would close it.
+export function lightDismiss(dlg) {
+  const outside = (e) => {
+    const r = dlg.getBoundingClientRect();
+    return e.target === dlg && (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom);
+  };
+  let pressedOutside = false;
+  dlg.addEventListener("pointerdown", (e) => (pressedOutside = outside(e)));
+  dlg.addEventListener("click", (e) => {
+    if (pressedOutside && outside(e)) dlg.close();
+    pressedOutside = false;
+  });
+}

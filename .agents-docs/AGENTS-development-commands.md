@@ -5,7 +5,8 @@
 
 ```bash
 # Install dev dependencies (sets up husky pre-commit hooks only; each sub-package
-# below needs its own npm install, Node 18+)
+# below needs its own npm install. Running `npm test` needs Node 20+; users of
+# the installed skills still need only Node 18+)
 npm install
 
 # Run the interactive installer
@@ -21,15 +22,21 @@ npm test
 # One web console or launcher test
 node --test --test-name-pattern "<regex>" scripts/test-web-console-<area>.mjs
 
-# Web console start-up benchmark (puppeteer-core optional)
+# Web console start-up benchmark (the paint columns use a local Chrome or Edge through
+# playwright-core, which `npm install` already provides)
 node scripts/bench-web-console.mjs [--runs 7] [--workflow dashboard]
 
 # Refresh the web console screenshots in docs/screenshots/ (needs a local Chrome or Edge).
 # Rerun after any change a person would see on the console page, and open every image
 # before committing: right screen, both themes, no username or home path in frame.
-npm i --no-save puppeteer-core                         # once; never added to package.json
+# PLAN2CODE_TEST_BROWSER=chrome|msedge forces which browser the page tests and these scripts use
 node scripts/capture-screenshots.mjs                   # every screen
 node scripts/capture-screenshots.mjs --only dashboard  # one screen (dashboard-utilities scrolls to the utility cards)
+
+# Compare every element's computed style on every screen before and after a stylesheet change
+# (dev-only, not in npm test): take a baseline first, then compare after each move
+node scripts/css-snapshot.mjs --out before.json
+node scripts/css-snapshot.mjs --compare before.json
 
 # Plan2Code Loop
 cd plan2code-loop && npm install   # First time setup
@@ -51,7 +58,7 @@ The root `npm test` does not run the metrics or bot vitest suites; run them in t
 
 | Variable | Effect |
 |----------|--------|
-| `PLAN2CODE_CONSOLE_HOME` | Replaces `~/.plan2code/console`: sessions, `looks.json` and the runtime handle dir all move under it (`src/web-console/lib.mjs`). Always set it for scratch runs so `stop --all` cannot reach real sessions. |
+| `PLAN2CODE_CONSOLE_HOME` | Replaces `~/.plan2code/console`: sessions, `looks.json` and the runtime handle dir all move under it (`src/web-console/files.mjs`). Always set it for scratch runs so `stop --all` cannot reach real sessions. |
 | `PLAN2CODE_NO_BROWSER` | `open` does not launch a browser (`NO_BROWSER` also works). |
 | `PLAN2CODE_BROWSER` | Browser command line to run with the link appended, instead of the system default. |
 | `PLAN2CODE_MODELS_DIR` | Moves the launcher model menus (`bin/models.json`, `models.json`) away from `~/.plan2code`, for tests. |
@@ -84,12 +91,13 @@ The root `npm test` does not run the metrics or bot vitest suites; run them in t
 
 ## Non-Interactive Flags
 
-`install.js` takes no arguments for normal use, but exposes two build hooks. Any argument other than these two (when neither is present) exits 1 with usage; extra arguments beside either flag are ignored.
+`install.js` takes no arguments for normal use, but exposes two build hooks and the non-interactive update. Any argument other than these three (when none is present) exits 1 with usage; extra arguments beside `--build-skills` or `--verify-skills` are ignored, while `--update` must be the only argument.
 
 | Flag | Action |
 |------|--------|
 | `--build-skills` | Regenerate `skills/` from `src/`, pruning stale skills and reference files |
 | `--verify-skills` | Diff local `skills/` against `src/`; exits 1 on drift. Diagnostic only, the installer rebuilds anyway |
+| `--update` | No menu: reinstall what `~/.plan2code/install.json` lists (skills, launcher, statusline, loop, metrics, bot), never uninstalling; with no record, the skills and the `plan2code` command. `plan2code update` runs it through npx |
 
 ## How the Installer Works
 
@@ -134,6 +142,16 @@ See the `skills/` build-artifact gotcha in [Code Style & Gotchas](./AGENTS-code-
 ## Adding a New Workflow Prompt / Skill
 
 1. Create `src/plan2code-<name>.md` with body content only and keep it under 20,000 characters.
-2. Register it in `SOURCE_PROMPTS` in `install.js` (with the web-console `additionalReferences` entry every skill carries); add a `generateStepLabel()` case when needed. List any shared scripts it runs in `scripts: [...]`, and put its own scripts in `src/plan2code-<name>-scripts/`. Add it to the skill/workflow table and the "What each skill reads and writes" table in `src/plan2code.md` (the latter is checked by `scripts/check-skill-table.mjs`), and to the workflow lists in `src/web-console/public/answers.js`, `public/meter.js` and the `console.mjs` usage text.
-3. Update command inventories in `README.md`, `QUICK-REFERENCE.md`, `.agents-docs/AGENTS-architecture.md`, and `CHANGELOG.md`. Update `docs/index.html` only for core pipeline steps.
-4. Run `npm run build:skills` and `npm test`.
+2. Register it in `SOURCE_PROMPTS` in `install.js` (with the web-console `additionalReferences` entry every skill carries); add a `generateStepLabel()` case when needed. List any shared scripts it runs in `scripts: [...]`, and put its own scripts in `src/plan2code-<name>-scripts/` (with a `scripts/test-script-<name>.mjs` added to `package.json`'s `test` list).
+3. Register it with the web console (a short list; `npm test` names anything missed):
+   - `src/web-console/public/skills.js`: one entry (workflow, label, start pose, flags, subagents line) with its card, and the card's `states` and `greyed`. Utilities go in group `"extra"` before Changelog.
+   - `src/web-console/public/meter.js`: a `WEIGHTS` entry if its launch scores.
+   - `src/web-console/public/index.html`: its start pose, an `<svg class="pose pose-<workflow>" data-pose="<workflow>">` in `<template id="start-poses">` (pose CSS in `public/styles/poses.css`).
+   - Its help topic: a `src/web-console/notes/<workflow>.md` (named in the skill's Interface line) or a `HELP_TOPICS` alias in `src/web-console/cmd-help.mjs`.
+   - `src/plan2code.md`: the skill/workflow table and "What each skill reads and writes" (`scripts/check-skill-table.mjs`: every backticked token must appear in the skill's prompt).
+   - `console.md` (the `open --workflow` list and the `notes/<workflow>.md` row) and the `console.mjs` usage text.
+   - Optional: `STARTER_SET_FOR` in `public/starters.js` (unlisted gets "general").
+
+   **Adding a spec state** is shorter: one entry in `src/web-console/public/spec-states.js`, the detection in `classifySpec()` in `src/web-console/scan.mjs`, the `states` of each card in `skills.js` that takes it, and a line in the dashboard skill (`src/plan2code.md`); then `npm test`.
+4. Update command inventories in `README.md` (dashboard-card and command tables), `QUICK-REFERENCE.md`, `.agents-docs/AGENTS-architecture.md` (prompt table, own-script rows, notes list), and `CHANGELOG.md`. Update `docs/index.html` for core pipeline steps, and for a utility only when it is a headline change (its `.utils` block).
+5. Run `npm run build:skills` and `npm test`.

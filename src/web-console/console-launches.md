@@ -17,7 +17,7 @@ menu judgment and the launch steps; this is what the page does around them.
 ```
 
 `spec` is the picker's selected spec dir, present only when the launched skill
-takes a spec and the person picked one. `resume` is the one command to run
+takes a spec (or is Quick Task on a `diagnosed` spec) and the person picked one. `resume` is the one command to run
 first, before reading anything: it reuses the live server and turns the page
 from the menu into the skill's starting screen while you read. `skillFile` is
 the skill to read next (absent outside an install: then
@@ -47,7 +47,7 @@ first, and post before anything slow.
 
 ## What the page already knows
 
-`state.scan` is `{ hasAgents, isGit, pending, specs: [{ dir, name, state, detail, touched }] }`,
+`state.scan` is `{ hasAgents, isGit, pending, specs: [{ dir, name, state, detail, touched }], handoffs, handoffsDir }`,
 a snapshot of the last `open` (a spec created mid-session appears the next time
 the session resumes as a dashboard). `pending` is how many files a commit would
 take (`null` when git cannot say): the Git card never greys out, shows the count
@@ -63,3 +63,51 @@ person's turn by itself.
 
 A `__stop` before a pick ends the session the usual way: `finish` (paused
 headline, `"command": "/plan2code"`) then `stop` (`console-stop.md`).
+
+`handoffs` is this checkout's unused handoffs, newest first (`[{ id, title,
+next, written, spec, skill, workflow }]`, read from `~/.plan2code/handoffs/`
+by `open`, a dashboard only), and `handoffsDir` is that folder. The picker shows
+them as dashed **Handoff** chips after the specs.
+
+## A pick-up
+
+Selecting a handoff chip shows a preview and hides the skill cards. **Pick it up
+here** sends a hop like a launch, naming only the id:
+
+```jsonc
+{ "type": "submit",
+  "actions": [{ "i": "__pickup", "type": "pickup", "handoff": "2026-10-17-1152-handoff" }],
+  "reply": "Pick up the handoff \"Lunch vote\" right here in this session.",
+  "resume": "node \"…/console.mjs\" open --resume <sid> --no-open --workflow quick-task --spec specs/lunch-vote",
+  "skillFile": "…/plan2code-quick-task/SKILL.md",
+  "handoffFile": "~/.plan2code/handoffs/2026-10-17-1152-handoff.md" }
+```
+
+`wait` has already read the handoff's stored skill and spec, marked the handoff
+used (the next scan no longer lists it) and put the command in `resume`. Run
+`resume`, read `skillFile` with your file-read tool, then read `handoffFile`,
+follow the skill from where its real work starts, and carry on from the
+handoff's **Next task**. When the send carries `"fallback": true` the named
+skill or spec was gone, or the Handoff skill wrote it: say so in one line,
+since Quick Task is picking it up.
+The handoff's document stays on disk until the 30-day sweep.
+
+## A delete
+
+The ✕ on a picker chip, after the page's two-step confirm (what goes, then
+the spec's name typed), sends `{ "i": "__delete", "type": "delete", "spec":
+"specs/<name>" }` with a `reply` saying it is for good. It is no hop: it
+carries no `resume`, and you stay the dashboard. The console never writes into
+a project, so the page only asks; delete through
+`node "<CONSOLE>" delete-spec --spec <spec>`, never your own `rm`. It takes
+only an existing `specs/<name>` folder inside the worktree (never a link,
+never deeper, never `specs--completed/`), exits 3 with `message` on a refusal
+having touched nothing, and drops the workspace remembered for that spec.
+Then `open --resume <sid> --no-open --workflow dashboard` to rescan, and post
+the menu again with `--wait`, its note saying what went or why it did not.
+The page shows the chip as "Deleting…" until that rescan lands.
+
+A handoff's **Delete** sends the same `__delete`, with `handoff` (its id) where a
+spec has `spec`. Delete it through
+`node "<CONSOLE>" delete-handoff --handoff <id>` (exit 3 with `message` when it
+refuses, nothing touched), then rescan and post the menu as for a spec.

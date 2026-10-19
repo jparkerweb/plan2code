@@ -22,6 +22,11 @@
  * `--pick-folder` (passed by the desktop shortcut, never forwarded to the CLI) asks for the
  * project folder with a native folder picker first, starting on the folder picked last time.
  *
+ * `plan2code update` starts no agent: it re-runs the npx install with `--update`, which
+ * reinstalls whatever ~/.plan2code/install.json lists. Before an agent starts, one line says
+ * when a newer release is out (releaseNotice), read from the web console's cached release check
+ * and never waiting on the network.
+ *
  * On a terminal it opens with a Planny banner (renderBanner) and colors its headings, numbers,
  * defaults and errors (paint). Color is on only on a TTY (stdout and stderr each checked on
  * its own) with NO_COLOR unset; piped runs print plain text and no banner.
@@ -41,6 +46,15 @@ const STATE_FILE = path.join(os.homedir(), '.plan2code', 'launcher.json');
 // Menus longer than this print compactly (id-only, two columns).
 const MODELS_MENU_COMPACT_AT = 30;
 const PICKER_PROMPT = 'Choose the project folder to open Plan2Code in';
+const UPDATE_COMMAND = 'update';
+// The same URL src/web-console/update-check.mjs exports as REPO_URL. This file may require
+// nothing but Node built-ins (and update-check.mjs is ESM), so it keeps its own copy.
+const REPO_URL = 'https://github.com/jparkerweb/plan2code.git';
+// The web console's cached release check, and how long it counts as fresh (update-check.mjs
+// CACHE_MS). PLAN2CODE_CONSOLE_HOME moves the console's files, as in files.mjs.
+const CONSOLE_HOME = process.env.PLAN2CODE_CONSOLE_HOME || path.join(os.homedir(), '.plan2code', 'console');
+const UPDATE_CACHE_FILE = path.join(CONSOLE_HOME, 'update-check.json');
+const UPDATE_CACHE_MS = 60 * 60 * 1000;
 
 // The escape values install.js's COLORS uses, copied: this file is installed alone and may
 // require nothing but Node built-ins.
@@ -608,12 +622,89 @@ async function exitWith(code, fromShortcut) {
   process.exit(code);
 }
 
+/**
+ * Spawn a resolved command with `args`. A .cmd/.bat wrapper on Windows goes through cmd.exe,
+ * since Node refuses to spawn one without a shell.
+ */
+function spawnCommand(file, args, options) {
+  return IS_WINDOWS && /\.(cmd|bat)$/i.test(file)
+    ? spawn(
+        process.env.ComSpec || 'cmd.exe',
+        ['/d', '/s', '/c', `"${[file, ...args].map(quoteForCmd).join(' ')}"`],
+        { ...options, windowsVerbatimArguments: true }
+      )
+    : spawn(file, args, options);
+}
+
+/** `plan2code update`: the npx install with --update, passing npx's exit code through. No agent starts. */
+function runUpdate() {
+  console.log('Updating Plan2Code...');
+  const npx = findOnPath('npx');
+  if (!npx) {
+    console.error(`${ce.red('plan2code:')} npx was not found on your PATH. It comes with Node.js 18+ (https://nodejs.org).`);
+    return process.exit(127);
+  }
+  const child = spawnCommand(npx, ['--yes', '--allow-git=all', `git+${REPO_URL}`, '--update'], { stdio: 'inherit' });
+  for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) {
+    process.on(signal, () => {});
+  }
+  child.on('error', (error) => {
+    console.error(`${ce.red('plan2code:')} failed to start npx: ${error.message}`);
+    process.exit(1);
+  });
+  child.on('exit', (code) => process.exit(code ?? 1));
+}
+
+/** -1, 0 or 1 comparing two plain X.Y.Z versions; null unless both are X.Y.Z (as update-check.mjs). */
+function compareVersions(a, b) {
+  const semver = /^\d+\.\d+\.\d+$/;
+  if (typeof a !== 'string' || typeof b !== 'string' || !semver.test(a) || !semver.test(b)) return null;
+  const x = a.split('.').map(Number);
+  const y = b.split('.').map(Number);
+  for (let i = 0; i < 3; i++) {
+    if (x[i] !== y[i]) return x[i] < y[i] ? -1 : 1;
+  }
+  return 0;
+}
+
+/**
+ * One line when a newer release is out, from the console's cached check only. A missing or
+ * stale cache prints nothing and starts a detached refresh (the copied update-check.mjs) so
+ * the next start knows; the start never waits on it. Any error is swallowed: the notice must
+ * never stand between the person and their agent.
+ */
+async function releaseNotice() {
+  try {
+    const installed = (readJsonFile(path.join(__dirname, 'version.json')) || {}).version;
+    if (typeof installed !== 'string') return;
+    const cache = readJsonFile(UPDATE_CACHE_FILE);
+    if (cache && typeof cache.checkedAt === 'number' && Date.now() - cache.checkedAt < UPDATE_CACHE_MS) {
+      if (compareVersions(installed, cache.latest) === -1) {
+        console.log(c.yellow(`Plan2Code v${cache.latest} is out (you have v${installed}). Run: plan2code update`));
+      }
+      return;
+    }
+    const checker = path.join(__dirname, 'update-check.mjs');
+    if (!fs.existsSync(checker)) return;
+    const refresh =
+      'import(process.argv[1]).then((m) => m.checkForUpdate({ installed: process.argv[2], cacheFile: process.argv[3] })).catch(() => {});';
+    const href = require('url').pathToFileURL(checker).href;
+    spawn(process.execPath, ['-e', refresh, href, installed, UPDATE_CACHE_FILE], {
+      detached: true,
+      stdio: 'ignore',
+      windowsHide: true,
+    }).unref();
+  } catch {}
+}
+
 async function launch() {
   const argv = process.argv.slice(2);
+  if (argv[0] === UPDATE_COMMAND) return runUpdate();
   const fromShortcut = argv.includes(PICK_FOLDER_FLAG);
   const { cli: requestedCli, rest: extraArgs } = takeCliFlag(argv.filter((arg) => arg !== PICK_FOLDER_FLAG));
 
   printIntro();
+  await releaseNotice();
   const { cli, code } = await chooseCli(requestedCli);
   if (!cli) return exitWith(code, fromShortcut);
   saveState({ lastCli: cli.id });
@@ -636,14 +727,7 @@ async function launch() {
   const args = cli.args(extraArgs);
   const options = { cwd, stdio: 'inherit' };
 
-  const child =
-    IS_WINDOWS && /\.(cmd|bat)$/i.test(cli.path)
-      ? spawn(
-          process.env.ComSpec || 'cmd.exe',
-          ['/d', '/s', '/c', `"${[cli.path, ...args].map(quoteForCmd).join(' ')}"`],
-          { ...options, windowsVerbatimArguments: true }
-        )
-      : spawn(cli.path, args, options);
+  const child = spawnCommand(cli.path, args, options);
 
   // Ctrl+C reaches the CLI directly through the shared console; keep this wrapper alive so it
   // can hand back the CLI's exit status instead of dying first.
@@ -669,4 +753,4 @@ async function launch() {
 // Run only when invoked directly; requiring the file (the tests do) is load-only.
 if (require.main === module) launch();
 
-module.exports = { mergeModels, modelEntries, renderBanner, paint, hasModelFlag };
+module.exports = { mergeModels, modelEntries, renderBanner, paint, hasModelFlag, compareVersions };
