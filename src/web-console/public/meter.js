@@ -8,33 +8,24 @@
 
 import { SKILLS, isMetered, isPhased } from "./skills.js";
 
-// The one place the weights live (FR-12). Tune here.
-export const WEIGHTS = Object.freeze({
+// The weights (FR-12): the events that are not a skill's own launch live
+// here, and each skill's weight is its `weight` in skills.js. Tune there or here.
+const EVENT_WEIGHTS = {
   "pathfinder-chart": 2,
   // Scores 0: a Pathfinder question now counts through its answers (below).
   "pathfinder-question": 0,
   // Research reads sources and hands its findings back into the context, with
   // nobody answering anything, so each research question scores on its own.
   "pathfinder-research": 1,
-  plan: 2,
-  "revise-plan": 1,
-  document: 2,
   "implement-phase": 2,
   "implement-review-phase": 3,
-  review: 2,
-  "quick-task": 1,
-  init: 2,
-  "init-update": 2,
-  finalize: 1,
-  handoff: 0,
-  git: 1,
   // Scores 0 itself: Git's commits are tallied per run (COMMITS_PER_POINT).
   "git-commits": 0,
   "git-conflict": 1,
-  changelog: 1,
-  xray: 1,
-  diagnose: 1,
-});
+};
+// A skill's fields as a table by workflow, leaving out the entries without one.
+const bySkill = (field) => Object.fromEntries(SKILLS.filter((s) => s[field] !== null).map((s) => [s.workflow, s[field]]));
+export const WEIGHTS = Object.freeze({ ...EVENT_WEIGHTS, ...bySkill("weight") });
 
 // Workflows whose launch itself scores WEIGHTS[workflow]. Pathfinder,
 // implement and implement-review score only through the agent's `run`
@@ -134,42 +125,19 @@ const WORKFLOW_NAMES = Object.freeze(Object.fromEntries(SKILLS.map((s) => [s.wor
 // The skill run an entry belongs to, from its ledger id ("L3:..." -> "L3").
 const launchOf = (id) => (typeof id === "string" && id.includes(":") ? id.slice(0, id.indexOf(":")) : "L0");
 
-// What each scoring event is called in the meter's list of contributions.
-const LAUNCH_LABELS = Object.freeze({
-  plan: "Plan started",
-  "revise-plan": "Revise plan started",
-  document: "Document started",
-  review: "Review started",
-  "quick-task": "Quick task started",
-  init: "Init started",
-  "init-update": "Init update started",
-  finalize: "Finalize started",
-  git: "Git started",
-  changelog: "Changelog started",
-  xray: "X-ray started",
-  diagnose: "Diagnose started",
-});
-const RUN_LABELS = Object.freeze({
+// What each scoring event is called in the meter's list of contributions: a
+// skill's launch and run labels are its `started` and `ran` in skills.js, and
+// the events that are not a skill's own are named here.
+export const LAUNCH_LABELS = Object.freeze(bySkill("started"));
+export const RUN_LABELS = Object.freeze({
   "pathfinder-chart": "Pathfinder map written",
   "pathfinder-question": "Pathfinder question settled",
   "pathfinder-research": "Pathfinder research done",
-  plan: "Plan drafted",
-  "revise-plan": "Plan revised",
-  document: "Spec documented",
   "implement-phase": "Implement phase built",
   "implement-review-phase": "Implement + Review phase built",
-  review: "Code review run",
-  "quick-task": "Quick task built",
-  init: "Init run",
-  "init-update": "Init update run",
-  finalize: "Finalize run",
-  handoff: "Handoff written",
-  git: "Git run",
   "git-commits": "Commits in Git",
   "git-conflict": "Git conflict help",
-  changelog: "Changelog run",
-  xray: "X-ray run",
-  diagnose: "Diagnose run",
+  ...bySkill("ran"),
 });
 
 // The unit a run names, from its ledger id ("L3:phase-2" -> "phase-2").

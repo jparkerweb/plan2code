@@ -73,7 +73,7 @@ Never reset `[/]` to `[ ]`: started work stays marked so resuming is a conscious
 | `checkoff` | Every phase is approved but tasks in them are still open (manual steps, blockers). Never say "nothing left to do": run Manual Check-Off below. |
 | `none` | Nothing to implement: say why (`reason`). Every phase complete → `/plan2code-4-finalize --web` |
 
-After selection, claim it (Process 1), read `phase-X.md`, begin.
+Before acting on `ask-resume` or `choose`, read the Notes of each `[/]` phase on offer: a waiting `**Plan change:**` line replaces the resume question (Plan Change Mid-Phase). After selection, claim it (Process 1), read `phase-X.md`, begin.
 
 ### Manual Check-Off
 
@@ -245,7 +245,21 @@ If user says "abort", "cancel", or similar:
 | Issue | Solution |
 |-------|----------|
 | Lost context mid-phase | Attach specs, say "resume from Task X.Y" |
-| Need to change plan | Pause, use `/plan2code-1b-revise-plan` |
+| Need to change plan | Plan Change Mid-Phase, below |
+
+### Plan Change Mid-Phase
+
+When the person decides the plan must change before this phase can finish (a new phase first, tasks rewritten), the phase stays `[/]` and the brief goes into its Notes in this exact shape, then the session ends as a pause:
+
+```markdown
+### Paused <YYYY-MM-DD>
+**Plan change:** <what Revise the plan must add or change, complete enough to act on without this conversation>
+<done and still open by task id in prose ("done 9.1, 9.3-9.5; open 9.2, 9.6-9.9"), never checkbox lines; decisions made so far>
+```
+
+NEXT STEP: `/plan2code-1b-revise-plan specs/<feature>/overview.md --web`. The dashboard and Revise the plan look for that `**Plan change:**` line; Revise the plan rewrites it to `**Plan change (applied <date>):**` once the spec is updated.
+
+A phase whose Notes still hold a waiting `**Plan change:**` gets one question in place of "Resume?" (console: a `choice`): **Revise the plan first** (recommended) or **Resume Phase X anyway**. Revise first: change nothing and end as a pause with the NEXT STEP above (console: that `finish.command`, headline starting "Paused"). Resume anyway: rewrite the line to `**Plan change (dropped <YYYY-MM-DD>):**`, then carry on.
 
 ## Learning Capture
 

@@ -416,43 +416,12 @@ export function resumeCommand({ workflow, specDir } = {}) {
   // Only a real relative specs/ path. Anything else would be run verbatim by
   // someone with no way to tell it was wrong.
   const dir = /^specs\/[a-z0-9][a-z0-9._-]*$/i.test(raw) ? raw : "";
-  const withOverview = (cmd) => (dir ? `${cmd} ${dir}/overview.md` : cmd);
-  switch (workflow) {
-    case "dashboard":
-      return "/plan2code";
-    case "init":
-      return "/plan2code-init";
-    case "init-update":
-      return "/plan2code-init-update";
-    case "plan":
-      return "/plan2code-1-plan";
-    case "quick-task":
-      return "/plan2code-quick-task";
-    case "document":
-      return withOverview("/plan2code-2-document");
-    case "implement":
-      return withOverview("/plan2code-3-implement");
-    case "implement-review":
-      return withOverview("/plan2code-3-implement-review");
-    case "review":
-      return "/plan2code-review";
-    case "revise-plan":
-      return withOverview("/plan2code-1b-revise-plan");
-    case "finalize":
-      return withOverview("/plan2code-4-finalize");
-    case "handoff":
-      return "/plan2code-handoff";
-    case "git":
-      return "/plan2code-git";
-    case "changelog":
-      return "/plan2code-changelog";
-    case "xray":
-      return "/plan2code-xray";
-    case "diagnose":
-      return "/plan2code-diagnose";
-    default:
-      return dir ? `/plan2code-0-pathfinder ${dir}/pathfinder` : "/plan2code-0-pathfinder";
-  }
+  // What follows the command is the entry's `resume` (skills.js). A workflow
+  // the console does not know (an old session's) resumes as Pathfinder.
+  const entry = skillFor(workflow) || skillFor("pathfinder");
+  if (dir && entry.resume === "overview") return `${entry.command} ${dir}/overview.md`;
+  if (dir && entry.resume === "folder") return `${entry.command} ${dir}/pathfinder`;
+  return entry.command;
 }
 
 /* ------------------------------------------------ after a build is done */
@@ -541,6 +510,7 @@ export const SKILL_CATALOG = SKILLS.filter((s) => s.card).map((s) => ({
   skill: s.skill,
   command: s.command,
   workflow: s.workflow,
+  ...(s.review ? { review: s.review } : {}),
   ...s.card,
 }));
 
@@ -563,7 +533,20 @@ export function startPose(workflow) {
 
 export function catalogEntry(skill) {
   const entry = skillByName(skill);
-  return entry && entry.card ? SKILL_CATALOG.find((e) => e.skill === entry.skill) : null;
+  if (!entry) return null;
+  // A skill with no card of its own is launched from another's (Implement +
+  // Review from Implement's Review box).
+  const owner = entry.card ? entry : SKILLS.find((s) => s.review === entry.skill);
+  return owner ? SKILL_CATALOG.find((e) => e.skill === owner.skill) : null;
+}
+
+/**
+ * What a card launches: the card itself, or, when it has a Review box and the
+ * box is ticked, the review skill's entry under the card's title.
+ */
+export function launchVariant(entry, withReview) {
+  const alt = withReview && entry.review ? skillByName(entry.review) : null;
+  return alt ? { ...entry, skill: alt.skill, workflow: alt.workflow, command: alt.command, title: alt.name } : entry;
 }
 
 /* ------------------------------------------- dashboard card availability */

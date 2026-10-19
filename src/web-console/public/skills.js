@@ -19,6 +19,13 @@
 //              meter as the headline's `cleared` rises
 //   metered    the launch itself scores on the session meter
 //   templates  the first "What's the idea?" card offers starter templates
+//   weight     what the launch and its `run` event score on the session
+//              meter (meter.js WEIGHTS), or null when it has no weight there
+//   started    the meter's label for the launch ("Plan started"), or null
+//   ran        the meter's label for its `run` event ("Plan drafted"), or null
+//   resume     what the resume command takes after the skill's command:
+//              "overview" for <specDir>/overview.md, "folder" for
+//              <specDir>/pathfinder, null for no argument
 //   subagents  the Subagents switch's standing instruction, or null when the
 //              switch is not offered
 //   states     the spec states its card takes, as spec-states.js names them,
@@ -30,8 +37,12 @@
 //              wording differs, and `finished` for any finished state
 //              (spec-states.js); Init and Init update use `default` for the
 //              AGENTS.md check, which is a rule on the scan, not on the spec
+//   review     the skill the card launches instead when its Review box is
+//              ticked (Implement's card, which draws the box), or absent
 //   card       the dashboard card (group, chip, title, blurb, about, and
-//              `spec: true` when it takes the picked spec), or null
+//              `spec: true` when it takes the picked spec), or null; an
+//              optional `help` is Help's line for the card when it differs
+//              from `blurb`
 
 // Shared by Implement and Implement + Review.
 const BUILD_HELPERS =
@@ -58,6 +69,7 @@ export const SKILLS = Object.freeze([
     name: "Init",
     pose: "init",
     builds: false, phased: false, metered: true, templates: false,
+    weight: 2, started: "Init started", ran: "Init run", resume: null,
     subagents: null,
     states: "any",
     greyed: { default: "AGENTS.md is already written. Refresh it instead." },
@@ -77,6 +89,7 @@ export const SKILLS = Object.freeze([
     name: "Init update",
     pose: "init",
     builds: false, phased: false, metered: true, templates: false,
+    weight: 2, started: "Init update started", ran: "Init update run", resume: null,
     subagents: null,
     states: "any",
     greyed: { default: "Needs an AGENTS.md. Set the project up first." },
@@ -96,6 +109,7 @@ export const SKILLS = Object.freeze([
     name: "Pathfinder",
     pose: "pathfinder",
     builds: false, phased: false, metered: false, templates: true,
+    weight: null, started: null, ran: null, resume: "folder",
     subagents: "Use helpers for codebase recon, sketches and lookups beside the conversation. Keep every question for the person with you.",
     states: ["none", "unrecognized", "exploring"], marksNext: true,
     greyed: {
@@ -120,6 +134,7 @@ export const SKILLS = Object.freeze([
     name: "Plan",
     pose: "plan",
     builds: false, phased: false, metered: true, templates: true,
+    weight: 2, started: "Plan started", ran: "Plan drafted", resume: null,
     subagents: null,
     states: ["none", "unrecognized", "diagnosed", "mapped", "planned"], marksNext: true,
     greyed: {
@@ -144,6 +159,7 @@ export const SKILLS = Object.freeze([
     name: "Revise plan",
     pose: "plan",
     builds: false, phased: false, metered: true, templates: false,
+    weight: 1, started: "Revise plan started", ran: "Plan revised", resume: "overview",
     subagents: null,
     states: ["documented", "building"],
     greyed: { default: "Needs a spec that is already written up", built: "The spec is fully built" },
@@ -164,6 +180,7 @@ export const SKILLS = Object.freeze([
     name: "Document",
     pose: "document",
     builds: false, phased: false, metered: true, templates: false,
+    weight: 2, started: "Document started", ran: "Spec documented", resume: "overview",
     subagents: null,
     states: ["planned"], marksNext: true,
     greyed: {
@@ -189,7 +206,9 @@ export const SKILLS = Object.freeze([
     name: "Implement",
     pose: "implement",
     builds: true, phased: true, metered: false, templates: false,
+    weight: null, started: null, ran: null, resume: "overview",
     subagents: BUILD_HELPERS,
+    review: "plan2code-3-implement-review",
     states: ["documented", "building"], marksNext: true,
     greyed: BUILD_GREYED,
     card: {
@@ -197,9 +216,9 @@ export const SKILLS = Object.freeze([
       chip: "Step 3",
       spec: true,
       title: "Implement",
-      blurb: "Builds the next phase, task by task, with a report and your sign-off at the end.",
+      blurb: "Builds the next phase, task by task, then reviews it, with your sign-off at the end.",
       about:
-        "Builds the next phase of the spec. Tasks get checked off one by one, with progress and the occasional decision landing on this page as it goes. It ends with a report of what was built and a sign-off card you approve before the phase counts as done.",
+        "Builds the next phase of the spec. Tasks get checked off one by one, with progress and the occasional decision landing on this page as it goes. With Review ticked, a fresh pass then hunts for problems in exactly what changed and you pick what gets fixed. It ends with a report of what was built and a sign-off card you approve before the phase counts as done.",
     },
   }),
   skill({
@@ -209,18 +228,12 @@ export const SKILLS = Object.freeze([
     name: "Implement + Review",
     pose: "implement",
     builds: true, phased: true, metered: false, templates: false,
+    weight: null, started: null, ran: null, resume: "overview",
     subagents: BUILD_HELPERS,
     states: ["documented", "building"], marksNext: true,
     greyed: BUILD_GREYED,
-    card: {
-      group: "pipeline",
-      chip: "Step 3",
-      spec: true,
-      title: "Implement + review",
-      blurb: "One phase built, then a careful review of the changes, then your sign-off. All in one run.",
-      about:
-        "The same build as Implement, with a review folded in before sign-off. The phase is built, then a fresh pass hunts for problems in exactly what changed, you pick what gets fixed, and only then does the sign-off card arrive.",
-    },
+    // No card of its own: Implement's card launches it when Review is ticked.
+    card: null,
   }),
   skill({
     skill: "plan2code-4-finalize",
@@ -229,6 +242,7 @@ export const SKILLS = Object.freeze([
     name: "Finalize",
     pose: "finalize",
     builds: false, phased: false, metered: true, templates: false,
+    weight: 1, started: "Finalize started", ran: "Finalize run", resume: "overview",
     subagents: null,
     states: ["built"], marksNext: true,
     greyed: { default: "Needs a spec that is fully built" },
@@ -249,6 +263,7 @@ export const SKILLS = Object.freeze([
     name: "Quick task",
     pose: "quick-task",
     builds: true, phased: false, metered: true, templates: true,
+    weight: 1, started: "Quick task started", ran: "Quick task built", resume: null,
     subagents: "Use helpers for side lookups, such as reading unfamiliar code or checking documentation, while you make the change yourself.",
     states: "any",
     greyed: null,
@@ -268,6 +283,7 @@ export const SKILLS = Object.freeze([
     name: "Review",
     pose: "review",
     builds: false, phased: false, metered: true, templates: false,
+    weight: 2, started: "Review started", ran: "Code review run", resume: null,
     subagents: "Run the review's analysis in one fresh helper briefed only with the spec and the change set (references/reviewer-brief.md); verify every finding yourself before you report.",
     states: "any",
     greyed: null,
@@ -287,6 +303,7 @@ export const SKILLS = Object.freeze([
     name: "X-ray",
     pose: "xray",
     builds: false, phased: false, metered: true, templates: false,
+    weight: 1, started: "X-ray started", ran: "X-ray run", resume: null,
     subagents: null,
     states: "any",
     greyed: null,
@@ -306,6 +323,7 @@ export const SKILLS = Object.freeze([
     name: "Diagnose",
     pose: "diagnose",
     builds: false, phased: false, metered: true, templates: false,
+    weight: 1, started: "Diagnose started", ran: "Diagnose run", resume: null,
     subagents: null,
     states: "any",
     greyed: null,
@@ -314,6 +332,7 @@ export const SKILLS = Object.freeze([
       chip: "Utility",
       title: "Diagnose a bug",
       blurb: "Find a bug's cause and write it up, without fixing it.",
+      help: "Finds a bug's cause and writes it up without fixing it, ready to hand to Quick Task or Plan.",
       about:
         "Something is broken and nobody knows why. Diagnose asks what goes wrong and how to see it, then builds a command that fails on the bug before it forms a theory. It narrows the cause down to a file and a function, says how sure it is, and sizes the fix. The write-up lands in a spec folder, and the dashboard then offers Quick Task to fix it, or Plan when the fix is big. It never changes code.",
     },
@@ -325,6 +344,7 @@ export const SKILLS = Object.freeze([
     name: "Changelog",
     pose: "changelog",
     builds: false, phased: false, metered: true, templates: false,
+    weight: 1, started: "Changelog started", ran: "Changelog run", resume: null,
     subagents: null,
     states: "any",
     greyed: null,
@@ -344,6 +364,7 @@ export const SKILLS = Object.freeze([
     name: "Git",
     pose: "git",
     builds: false, phased: false, metered: true, templates: false,
+    weight: 1, started: "Git started", ran: "Git run", resume: null,
     subagents: null,
     states: "any",
     greyed: null,
@@ -352,6 +373,7 @@ export const SKILLS = Object.freeze([
       chip: "Utility",
       title: "Git",
       blurb: "Branches, pull, push and commits on one board that stays open while you work.",
+      help: "Branches, pull, push and commits on one board, asking before anything leaves your machine. See \"The git board\".",
       about:
         "Shows your branch, what is ahead or behind, and every local and remote branch. Switch, create, delete or clean up branches, pull (rebasing when they have split, with help on conflicts), push or publish, and commit with a clear message. It asks before every push, publish and delete, and never force-pushes.",
     },
@@ -363,6 +385,7 @@ export const SKILLS = Object.freeze([
     name: "Handoff",
     pose: "handoff",
     builds: false, phased: false, metered: false, templates: false,
+    weight: 0, started: null, ran: "Handoff written", resume: null,
     subagents: null,
     states: "any",
     greyed: null,
@@ -382,6 +405,7 @@ export const SKILLS = Object.freeze([
     name: "the dashboard",
     pose: null,
     builds: false, phased: false, metered: false, templates: false,
+    weight: null, started: null, ran: null, resume: null,
     subagents: null,
     states: null,
     greyed: null,
@@ -391,6 +415,14 @@ export const SKILLS = Object.freeze([
 
 const BY_WORKFLOW = new Map(SKILLS.map((s) => [s.workflow, s]));
 const BY_SKILL = new Map(SKILLS.map((s) => [s.skill, s]));
+
+// Every workflow name the console knows, in SKILLS order.
+export const WORKFLOWS = Object.freeze(SKILLS.map((s) => s.workflow));
+
+/** Whether a name is one of WORKFLOWS (`open --workflow`, `handoff new --workflow`). */
+export function isWorkflow(name) {
+  return typeof name === "string" && BY_WORKFLOW.has(name);
+}
 
 /** The entry for a workflow ("implement"), or null. */
 export function skillFor(workflow) {

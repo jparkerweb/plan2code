@@ -10,8 +10,69 @@ import os from "node:os";
 import path from "node:path";
 import { SPEC_STATES as TABLE, stateFor } from "../src/web-console/public/spec-states.js";
 import { SKILLS } from "../src/web-console/public/skills.js";
-import { SKILL_CATALOG, cardAvailability, defaultSpec } from "../src/web-console/public/answers.js";
+import { SKILL_CATALOG, cardAvailability, defaultSpec, launchVariant } from "../src/web-console/public/answers.js";
 import { scanProject } from "../src/web-console/scan.mjs";
+import { MARKERS, TASK_LINE_RE, TASK_ID_RE, CHECKBOX_RE, STATUS_RE, statusOf, countTasks } from "../src/web-console/spec-files.mjs";
+
+// The task pattern specs.mjs used before spec-files.mjs: TASK_ID_RE must take
+// a `-` task line apart into the same groups.
+const OLD_TASK_RE = /^\s*[-*] \[(.)\]\s+\*\*Task\s+(\d+)\.(\d+|[A-Za-z]+)([a-z]*)\b/;
+
+test("spec files: every marker names its state, and the table is frozen", () => {
+  assert.deepEqual(MARKERS, { " ": "pending", "/": "in-progress", x: "complete", X: "complete", "!": "blocked", "?": "assumed" });
+  assert.ok(Object.isFrozen(MARKERS));
+});
+
+test("spec files: -, * and numbered task lines all match, and TASK_ID_RE keeps the old groups", () => {
+  for (const line of ["- [ ] **Task 1.2:** Do it", "* [x] **Task 1.2:** Do it", "1. [/] **Task 1.2:** Do it", "  12. [?] **Task 3.4:** Do it"]) {
+    assert.ok(TASK_LINE_RE.test(line), `TASK_LINE_RE matches ${line}`);
+    assert.ok(TASK_ID_RE.test(line), `TASK_ID_RE matches ${line}`);
+    assert.ok(CHECKBOX_RE.test(line), `CHECKBOX_RE matches ${line}`);
+  }
+  assert.ok(!TASK_LINE_RE.test("- [ ] Acceptance: it works"), "a plain checkbox is no task line");
+  // A line TASK_ID_RE cannot take apart is no task line for the scan either.
+  for (const line of ["- [x] **task 1.1:** Lowercase", "-  [x] **Task 1.1:** Two spaces"]) {
+    assert.ok(!TASK_ID_RE.test(line) && !TASK_LINE_RE.test(line), `neither pattern takes ${line}`);
+  }
+  assert.ok(CHECKBOX_RE.test("- [ ] Acceptance: it works"), "but it is a checkbox");
+  for (const line of ["- [x] **Task 2.3:** Build it", "- [ ] **Task 1.B:** Name it", "- [/] **Task 4.2a:** Split it"]) {
+    assert.deepEqual([...line.match(TASK_ID_RE)], [...line.match(OLD_TASK_RE)], `the same groups for ${line}`);
+  }
+  assert.deepEqual("1. [x] **Task 2.3:** Build it".match(TASK_ID_RE).slice(1), ["x", "2", "3", ""], "a numbered line's groups");
+});
+
+test("spec files: statusOf() reads every Status form, LF or CRLF, and is null without one", () => {
+  const forms = { "**Status:** Complete": "Complete", "**Status**: In Progress": "In Progress", "Status: Not Started": "Not Started" };
+  for (const [line, value] of Object.entries(forms)) {
+    for (const eol of ["\n", "\r\n"]) {
+      const text = `# Phase 1${eol}${eol}${line}${eol}**Estimated Tasks:** 3${eol}`;
+      assert.equal(statusOf(text), value, `${line} with ${eol === "\n" ? "LF" : "CRLF"}`);
+      assert.equal(text.match(STATUS_RE)[1] + text.match(STATUS_RE)[2], line, "the prefix and value rebuild the line");
+    }
+  }
+  assert.equal(statusOf("# Phase 1\n\nNo status here.\n"), null);
+  assert.equal(statusOf(""), null);
+  assert.equal(statusOf(undefined), null);
+});
+
+test("spec files: countTasks() counts task lines only when there are any, every checkbox otherwise", () => {
+  const phase = [
+    "# Phase 1",
+    "- [x] **Task 1.1:** One",
+    "* [?] **Task 1.2:** Two",
+    "1. [ ] **Task 1.3:** Three",
+    "- [/] **Task 1.4:** Four",
+    "- [!] **Task 1.5:** Five",
+    "- [~] **Task 1.6:** An unknown marker",
+    "## Acceptance Criteria",
+    "- [ ] It works",
+    "- [x] It is fast",
+  ].join("\r\n");
+  assert.deepEqual(countTasks(phase), { done: 1, assumed: 1, open: 3, total: 5 });
+  const older = "# Phase 1\n\n- [x] Make it\n- [ ] Ship it\n- [?] Check it\n";
+  assert.deepEqual(countTasks(older), { done: 1, assumed: 1, open: 1, total: 3 });
+  assert.deepEqual(countTasks(""), { done: 0, assumed: 0, open: 0, total: 0 });
+});
 
 // What the picker labels each state and which card each state lights, as
 // answers.js's SPEC_STATE_LABELS and NEXT_FOR_STATE said before the table.
@@ -252,6 +313,9 @@ const CARDS = {
   },
 };
 
+// Implement's card also launches Implement + Review, which has the same rules.
+const CARD_ENTRIES = SKILL_CATALOG.flatMap((e) => (e.review ? [e, launchVariant(e, true)] : [e]));
+
 const SCAN_CASES = [
   [{ hasAgents: false, isGit: false, pending: null }, "plan2code-init", { on: true }],
   [{ hasAgents: false, isGit: false, pending: null }, "plan2code-init-update", { on: false, reason: "Needs an AGENTS.md. Set the project up first." }],
@@ -265,8 +329,8 @@ const SCAN_CASES = [
 ];
 
 test("card rules: every card gives the same answer for every spec state as before", () => {
-  assert.deepEqual(SKILL_CATALOG.map((e) => e.skill), Object.keys(CARDS), "one row per card, in card order");
-  for (const entry of SKILL_CATALOG) {
+  assert.deepEqual(CARD_ENTRIES.map((e) => e.skill), Object.keys(CARDS), "one row per card, in card order");
+  for (const entry of CARD_ENTRIES) {
     for (const [sel, want] of Object.entries(CARDS[entry.skill])) {
       const spec = sel === "none" ? null : { dir: "specs/x", name: "x", state: sel };
       assert.deepEqual(cardAvailability(entry, SCAN, spec), want, `${entry.skill} with ${sel}`);
@@ -275,7 +339,7 @@ test("card rules: every card gives the same answer for every spec state as befor
 });
 
 test("card rules: a state the table does not know is treated like files on disk", () => {
-  for (const entry of SKILL_CATALOG) {
+  for (const entry of CARD_ENTRIES) {
     const weird = cardAvailability(entry, SCAN, { dir: "specs/x", name: "x", state: "made-up" });
     assert.deepEqual(weird, CARDS[entry.skill].unrecognized, `${entry.skill} with an unknown state`);
   }
@@ -303,7 +367,7 @@ test("finished: any finished state is never the picker's default, not only fixed
 
   // The cards greyed for a fixed bug give a made-up finished state the same reason.
   const archived = { dir: "specs/a", name: "a", state: "archived" };
-  for (const entry of SKILL_CATALOG) {
+  for (const entry of CARD_ENTRIES) {
     const fixed = cardAvailability(entry, SCAN, { dir: "specs/b", name: "b", state: "fixed" });
     assert.deepEqual(cardAvailability(entry, SCAN, archived, lookup), fixed, `${entry.skill} treats archived as it treats fixed`);
   }
@@ -352,6 +416,30 @@ test("the scan: every state it can return is in the table, and a fixture reaches
   assert.deepEqual(scanProblems(short, TABLE), ["no fixture reaches built: add one, or drop it from spec-states.js"]);
   const { unrecognized, ...known } = TABLE;
   assert.deepEqual(scanProblems(FIXTURES, known), ["the scan returns unrecognized, which spec-states.js lacks"]);
+});
+
+test("the scan: an assumed task counts as done and is named, and numbered task lines count", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "p2c-spec-assumed-"));
+  const specs = {
+    mixed: "- [x] **Task 1.1:** One\n- [x] **Task 1.2:** Two\n- [?] **Task 1.3:** Three\n- [ ] **Task 1.4:** Four\n",
+    assumed: "- [?] **Task 1.1:** One\n- [?] **Task 1.2:** Two\n",
+    numbered: "1. [x] **Task 1.1:** One\n2. [ ] **Task 1.2:** Two\n3. [ ] **Task 1.3:** Three\n",
+    plain: "- [x] **Task 1.1:** One\n- [x] **Task 1.2:** Two\n",
+  };
+  try {
+    for (const [name, phase] of Object.entries(specs)) {
+      fs.mkdirSync(path.join(root, "specs", name), { recursive: true });
+      fs.writeFileSync(path.join(root, "specs", name, "overview.md"), "# Overview\n");
+      fs.writeFileSync(path.join(root, "specs", name, "phase-1.md"), "# Phase 1\n\n" + phase + "\n## Acceptance Criteria\n\n- [ ] It works\n");
+    }
+    const by = Object.fromEntries(scanProject(root).specs.map((sp) => [sp.name, sp]));
+    assert.deepEqual([by.mixed.state, by.mixed.detail], ["building", "3 of 4 tasks done, 1 assumed"]);
+    assert.deepEqual([by.assumed.state, by.assumed.detail], ["built", "all tasks done, 2 assumed"]);
+    assert.deepEqual([by.numbered.state, by.numbered.detail], ["building", "1 of 3 tasks done"]);
+    assert.deepEqual([by.plain.state, by.plain.detail], ["built", "all tasks done"], "no assumed tasks, no \", 0 assumed\"");
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
 });
 
 // The states no card names in its `states` list: a card that is on for "any"

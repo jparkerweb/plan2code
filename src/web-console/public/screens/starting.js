@@ -2,7 +2,8 @@
 
 import { page, redraw } from "../state.js";
 import { el, approvalTip } from "../render.js";
-import { startPose, startingHint, SKILL_CATALOG, staleLaunchFeedback, workflowTitle } from "../answers.js";
+import { startPose, startingHint, staleLaunchFeedback, workflowTitle } from "../answers.js";
+import { skillByName } from "../skills.js";
 import { agentAdrift, doingNow, docs } from "../selectors.js";
 
 const $ = (id) => document.getElementById(id);
@@ -92,7 +93,7 @@ function posePane(main, cls, workflow) {
 // while the hint points at the terminal, which narrates the same hand-off.
 export function renderLaunching(main) {
   const l = page.local.launching || {};
-  const pane = posePane(main, "launching", l.skill && SKILL_CATALOG.find((e) => e.skill === l.skill)?.workflow);
+  const pane = posePane(main, "launching", l.skill && skillByName(l.skill)?.workflow);
 
   const stale = staleLaunchFeedback(l.title, agentAdrift());
   pane.appendChild(el("p", "card-kicker", stale ? stale.kicker : "On it"));

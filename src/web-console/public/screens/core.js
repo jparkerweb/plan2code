@@ -44,6 +44,7 @@ import {
 } from "../chat.js";
 import { copyButton, el, isMac, textWithCode } from "../render.js";
 import { isBuild } from "../skills.js";
+import { startsClean } from "../hops.js";
 import { faviconState, setFavicon } from "../favicon.js";
 import { helperRows, showTab } from "../subagents.js";
 import { FOOTER_TIERS, footerLabel } from "../workspace.js";
@@ -67,6 +68,7 @@ import { renderWorkspace, tellFolderIssues } from "./workspace.js";
 import { openHelpOn } from "./help-dialog.js";
 import { askOfflineFlipped, askState, declineOpen, renderAside, renderAsk, renderSubagents, renderSubagentsButton } from "./ask.js";
 import { renderHandoff, renderHomeButton, renderStopButton, renderStopControls, renderStopping, stopInProgress, stopWarning } from "./ending.js";
+import { renderNotepadButton } from "./notepad.js";
 
 // What the entry needs from the screens at start-up, handed on from here: only
 // the core imports a screen.
@@ -80,6 +82,7 @@ export { maybeWelcome, openHelpOn, wireHelp } from "./help-dialog.js";
 export { wireCleanup } from "./cleanup.js";
 export { startLooks, wireLooks } from "./looks.js";
 export { wireEnding } from "./ending.js";
+export { wireNotepad } from "./notepad.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -255,14 +258,14 @@ export function adopt(body) {
       settleStaleUploads();
     }
   }
-  // The page passed through the dashboard (a launch from its menu, or back to
-  // it). The server already blanked the session; what this page kept for the
-  // last skill -- the question on screen, the open tab, anything staged or
-  // typed against its item ids -- goes too. The launch in flight and the
-  // dashboard's spec pick are about the hand-off itself, so they stay. A skill
-  // run inline from another (a quick task's review) keeps all of it.
-  const viaDashboard = prevWorkflow === "dashboard" || page.S.workflow === "dashboard";
-  if (prevWorkflow && prevWorkflow !== page.S.workflow && viaDashboard) {
+  // A hop that starts clean (hops.js: a launch from the dashboard menu, back
+  // to it, or into Git from anywhere). The server already blanked the
+  // session; what this page kept for the last skill -- the question on
+  // screen, the open tab, anything staged or typed against its item ids --
+  // goes too. The launch in flight and the dashboard's spec pick are about the
+  // hand-off itself, so they stay. A skill run inline from another (a quick
+  // task's review) keeps all of it.
+  if (startsClean(prevWorkflow, page.S.workflow)) {
     // The pick rides into the skill it launched, never back home: arriving at
     // the dashboard, the picker starts on the most recently touched spec still
     // in play, the one the agent's fresh menu recommends for.
@@ -697,6 +700,7 @@ export function render() {
     renderBriefButton();
     renderSubagentsButton();
     renderStopButton();
+    renderNotepadButton();
     renderHomeButton();
     tabAdded = renderViews();
     renderSidebar();
@@ -1270,7 +1274,7 @@ export function renderSidebar() {
         b.disabled = Boolean(page.local.launching) || page.gone || page.pendingResult || !av.on;
         if (!av.on && av.reason) b.title = av.reason;
         b.setAttribute("aria-current", String(Boolean(page.dashPick && page.dashPick.skill === e.skill)));
-        const isGoing = page.local.launching && page.local.launching.skill === e.skill;
+        const isGoing = page.local.launching && (page.local.launching.skill === e.skill || page.local.launching.skill === e.review);
         const isPicked = page.dashPick && page.dashPick.skill === e.skill;
         const mark = el(
           "span",

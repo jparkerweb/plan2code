@@ -46,7 +46,7 @@ Do not proceed without spec files.
 `🔄 [REVISION] Step 1: Change Analysis`
 
 1. Read all spec files
-2. Understand the requested change
+2. Understand the requested change. Before asking for one, look in the Notes of every `[/]` phase for a waiting `**Plan change:**` line: Implement paused there for this revision (`### Paused <date>` above it). Take that brief as the requested change and present it for confirmation rather than asking from scratch; what the person says in their argument or reply wins over it, and a brief they replace or decline is marked dropped at Step 3.
 3. Identify affected areas:
 
 | Affected Area | Files | Sections |
@@ -130,6 +130,8 @@ Approve the spec-update plan? (approve / refine / abort). Implementation of any 
      ```
    - Update overview.md: `[x]` → `[ ]` (`specs.mjs mark <spec> --phase <N> --to open`, which also sets that phase file's `**Status:**` back to In Progress)
    - Add comment: `<!-- Re-opened: [date] - [reason] -->`
+
+6. **A waiting brief:** rewrite its `**Plan change:**` line to `**Plan change (applied <YYYY-MM-DD>):**` when this revision covers it, or `**Plan change (dropped <YYYY-MM-DD>):**` when the person replaced or declined it at Step 1, so the dashboard and Implement stop pointing back here.
 
 ### STEP 4: Consistency Check
 

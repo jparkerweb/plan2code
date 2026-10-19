@@ -66,6 +66,7 @@ import {
   pendingNote,
   reviewOffer,
   SKILL_CATALOG,
+  launchVariant,
   SPEC_STATE_LABELS,
   STALE_MS,
   STOP_REPLY,
@@ -118,6 +119,8 @@ import {
   runPoints,
   tooltipFor,
   WEIGHTS,
+  LAUNCH_LABELS,
+  RUN_LABELS,
 } from "../src/web-console/public/meter.js";
 import {
   blockFor,
@@ -156,6 +159,7 @@ import {
 } from "../src/web-console/sessions.mjs";
 import { scanProject, removeSpec, SPEC_STATES } from "../src/web-console/scan.mjs";
 import { validate } from "../src/web-console/patches.mjs";
+import { startsClean } from "../src/web-console/public/hops.js";
 import { chatReplyLines } from "../src/web-console/inbox.mjs";
 import {
   initialWorkspace,
@@ -327,6 +331,34 @@ test("the page's own resume command is built only from what the session says", (
   assert.equal(resumeCommand({ workflow: "document" }), "/plan2code-2-document");
   assert.equal(resumeCommand({ workflow: "review" }), "/plan2code-review");
   assert.equal(resumeCommand({ workflow: "handoff" }), "/plan2code-handoff");
+});
+
+// resumeCommand() reads the entry's `resume`: one case per kind.
+test("the resume command follows the entry's resume kind, and an unknown workflow resumes as Pathfinder", () => {
+  // "overview"
+  assert.equal(resumeCommand({ workflow: "document", specDir: "specs/lunch-vote" }), "/plan2code-2-document specs/lunch-vote/overview.md");
+  assert.equal(resumeCommand({ workflow: "document" }), "/plan2code-2-document");
+  // "folder"
+  assert.equal(resumeCommand({ workflow: "pathfinder", specDir: "specs/lunch-vote" }), "/plan2code-0-pathfinder specs/lunch-vote/pathfinder");
+  assert.equal(resumeCommand({ workflow: "pathfinder" }), "/plan2code-0-pathfinder");
+  // null: a spec is ignored
+  assert.equal(resumeCommand({ workflow: "review", specDir: "specs/lunch-vote" }), "/plan2code-review");
+  // An old session's workflow the console no longer knows
+  assert.equal(resumeCommand({ workflow: "made-up", specDir: "specs/lunch-vote" }), "/plan2code-0-pathfinder specs/lunch-vote/pathfinder");
+  assert.equal(resumeCommand({}), "/plan2code-0-pathfinder");
+});
+
+test("a hop starts the page clean to or from the dashboard and into Git, and nowhere else", () => {
+  assert.equal(startsClean("implement", "dashboard"), true);
+  assert.equal(startsClean("dashboard", "plan"), true);
+  assert.equal(startsClean("changelog", "git"), true);
+  assert.equal(startsClean("finalize", "git"), true);
+  assert.equal(startsClean("git", "changelog"), false);
+  assert.equal(startsClean("implement", "review"), false);
+  assert.equal(startsClean("git", "git"), false);
+  assert.equal(startsClean("dashboard", "dashboard"), false);
+  assert.equal(startsClean(undefined, "git"), false);
+  assert.equal(startsClean("plan", undefined), false);
 });
 
 test("the review offer is read from true or a label, and absent otherwise", () => {
@@ -1017,7 +1049,10 @@ test("a verdict's button text never renders blank", () => {
 test("the dashboard matrix lights only the cards a spec state allows", () => {
   const scan = { hasAgents: true };
   const sel = (state) => ({ dir: "specs/x", name: "x", state });
-  const entry = (skill) => SKILL_CATALOG.find((e) => e.skill === skill);
+  const entry = (skill) => {
+    const own = SKILL_CATALOG.find((e) => e.skill === skill);
+    return own || launchVariant(SKILL_CATALOG.find((e) => e.review === skill), true);
+  };
   const on = (skill, sc, s) => cardAvailability(entry(skill), sc, s).on;
 
   // AGENTS.md gates the setup pair, whatever the picker holds.
@@ -2141,4 +2176,31 @@ test("initialWorkspace names the original folder after itself and marks it origi
   assert.equal(ws.folders.length, 1);
   assert.deepEqual(ws.folders[0], { id: "f0", path: path.join("C:", "git", "My Repo"), name: "my-repo", description: "", original: true });
   assert.deepEqual([ws.missing, ws.changes, ws.remote], [[], [], ""]);
+});
+
+// The meter's tables are built from skills.js plus the events that are not a
+// skill's own. Held to their values when they were written by hand.
+test("meter: the weights and labels built from the skill list are the ones written by hand before", () => {
+  assert.deepEqual({ ...WEIGHTS }, {
+    "pathfinder-chart": 2, "pathfinder-question": 0, "pathfinder-research": 1,
+    plan: 2, "revise-plan": 1, document: 2, "implement-phase": 2, "implement-review-phase": 3,
+    review: 2, "quick-task": 1, init: 2, "init-update": 2, finalize: 1, handoff: 0, git: 1,
+    "git-commits": 0, "git-conflict": 1, changelog: 1, xray: 1, diagnose: 1,
+  });
+  assert.deepEqual({ ...LAUNCH_LABELS }, {
+    plan: "Plan started", "revise-plan": "Revise plan started", document: "Document started",
+    review: "Review started", "quick-task": "Quick task started", init: "Init started",
+    "init-update": "Init update started", finalize: "Finalize started", git: "Git started",
+    changelog: "Changelog started", xray: "X-ray started", diagnose: "Diagnose started",
+  });
+  assert.deepEqual({ ...RUN_LABELS }, {
+    "pathfinder-chart": "Pathfinder map written", "pathfinder-question": "Pathfinder question settled",
+    "pathfinder-research": "Pathfinder research done", plan: "Plan drafted", "revise-plan": "Plan revised",
+    document: "Spec documented", "implement-phase": "Implement phase built",
+    "implement-review-phase": "Implement + Review phase built", review: "Code review run",
+    "quick-task": "Quick task built", init: "Init run", "init-update": "Init update run",
+    finalize: "Finalize run", handoff: "Handoff written", git: "Git run", "git-commits": "Commits in Git",
+    "git-conflict": "Git conflict help", changelog: "Changelog run", xray: "X-ray run", diagnose: "Diagnose run",
+  });
+  for (const t of [WEIGHTS, LAUNCH_LABELS, RUN_LABELS]) assert.ok(Object.isFrozen(t));
 });

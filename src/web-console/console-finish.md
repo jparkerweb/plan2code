@@ -56,7 +56,7 @@ The same closer you are about to print in the terminal, as data:
 | `review` | optional | A finished `quick-task` only: `true` or `{ "label": "..." }` puts a **Review it now** button on the finished screen (`notes/quick-task.md`, `building-review.md`). `implement` offers the review on its sign-off card instead — before approval, where it can still change the outcome. |
 
 **Write the bare command.** Every Plan2Code skill has a console — the
-dashboard and all twelve skills behind it — so for any of them the page
+dashboard and every skill behind it — so for any of them the page
 appends ` --web` to what it shows and copies, so someone who worked here
 lands back here instead of being asked the interface question as though
 they were new. Every one of those skills takes that flag in its argument as

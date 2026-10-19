@@ -5,6 +5,7 @@ import { page } from "../state.js";
 import { isDashboard, finish, agentAdrift } from "../selectors.js";
 import { releasesLink, el, copyButton, lightDismiss } from "../render.js";
 import { HELP_TABS, helpTabFor, helpKeyTarget } from "../help.js";
+import { CATALOG_GROUPS, SKILL_CATALOG } from "../answers.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -100,6 +101,22 @@ function buildHelp() {
     cell.appendChild(bot);
     cell.appendChild(el("span", null, label));
     moods.appendChild(cell);
+  }
+  // The dashboard topic lists the cards from the catalog, grouped and in the
+  // dashboard's order, so Help can never name a card the dashboard lacks.
+  // A card's help line, when it has one, says more than its blurb.
+  const cards = panels.querySelector(".help-cards");
+  for (const g of CATALOG_GROUPS) {
+    const head = el("p");
+    head.appendChild(el("strong", null, g.title));
+    const list = el("ul");
+    for (const e of SKILL_CATALOG.filter((x) => x.group === g.id)) {
+      const li = el("li");
+      li.appendChild(el("strong", null, e.title + "."));
+      li.appendChild(document.createTextNode(" " + (e.help || e.blurb)));
+      list.appendChild(li);
+    }
+    cards.append(head, list);
   }
   for (const row of panels.querySelectorAll("[data-copy]")) {
     const code = row.querySelector("code");

@@ -4,6 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { HERE } from "./files.mjs";
+import { WORKFLOWS, isBuild } from "./public/skills.js";
 
 // The CLI's own pieces, handed over by console.mjs through useCli() before
 // any command runs: console.mjs runs on import, so it cannot be imported back.
@@ -13,6 +14,25 @@ export function useCli(cli) {
 }
 
 /* ----------------------------------------------------------------- help */
+
+// The usage's workflow list, from skills.js: wrapped at the usage's width,
+// continuation lines indented under the first name.
+function workflowLines(width = 78) {
+  const lead = "  workflows: ";
+  const pad = " ".repeat(lead.length);
+  const lines = [];
+  let line = "";
+  WORKFLOWS.forEach((w, i) => {
+    const piece = i < WORKFLOWS.length - 1 ? `${w} ·` : w;
+    const start = lines.length ? pad : lead;
+    if (line && (start + line + " " + piece).length > width) {
+      lines.push(start + line);
+      line = piece;
+    } else line = line ? `${line} ${piece}` : piece;
+  });
+  lines.push((lines.length ? pad : lead) + line);
+  return lines.join("\n");
+}
 
 export function cmdHelp() {
   const topic = args._[0];
@@ -103,9 +123,7 @@ port, and the filesystem as transport; this CLI is the whole agent surface.
   stop    --session <sid> | --all
           Shut a session's server down. Always post finish first.
 
-  workflows: dashboard · init · init-update · pathfinder · quick-task · plan ·
-             revise-plan · document · implement · implement-review · review ·
-             finalize · handoff · git · changelog · xray · diagnose
+${workflowLines()}
 
   A session handed to you by the dashboard (a --session id): resume it with
   "open --resume <sid> --no-open --workflow <yours>" (the resume it carries) -- never a
@@ -113,7 +131,7 @@ port, and the filesystem as transport; this CLI is the whole agent surface.
 
   The contract is console.md beside this file, read once; the rest is
   read when its moment comes. help <topic> prints one; help topics lists
-  them. Build sessions (implement, implement-review, quick-task) also read
+  them. Build sessions (${WORKFLOWS.filter(isBuild).join(", ")}) also read
   building.md.
 `);
 }

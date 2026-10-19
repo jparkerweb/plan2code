@@ -171,21 +171,23 @@ function drawScaled(source, edge) {
   return canvas;
 }
 
-// The upload (a JPEG no longer than IMAGE_LONG_EDGE) and the tray's thumbnail
-// (a small data: URL), from one decode.
-async function reencode(file) {
+const toJpeg = (canvas, quality) =>
+  new Promise((resolve, reject) =>
+    canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("That image could not be converted."))), "image/jpeg", quality)
+  );
+
+// The upload (a JPEG no longer than IMAGE_LONG_EDGE) and its thumbnail, as a
+// small data: URL for a tray (`thumb`) and as a JPEG for a server that keeps
+// one (`thumbBlob`, the Notepad's), from one decode.
+export async function reencode(file) {
   const source = await decodeImage(file);
   try {
-    const blob = await new Promise((resolve, reject) =>
-      drawScaled(source, IMAGE_LONG_EDGE).toBlob(
-        (b) => (b ? resolve(b) : reject(new Error("That image could not be converted."))),
-        "image/jpeg",
-        IMAGE_QUALITY
-      )
-    );
+    const blob = await toJpeg(drawScaled(source, IMAGE_LONG_EDGE), IMAGE_QUALITY);
     if (blob.size > MAX_UPLOAD_BYTES) throw new Error("That image is too large even after shrinking it.");
-    const thumb = drawScaled(source, THUMB_EDGE).toDataURL("image/jpeg", 0.7);
-    return { blob, thumb };
+    const small = drawScaled(source, THUMB_EDGE);
+    const thumb = small.toDataURL("image/jpeg", 0.7);
+    const thumbBlob = await toJpeg(small, 0.7);
+    return { blob, thumb, thumbBlob };
   } finally {
     if (typeof source.close === "function") source.close();
   }

@@ -14,6 +14,7 @@ import assert from "node:assert/strict";
 import { pageSuite, openSession, tempProject, textOf, drawn } from "./page-test-helpers.mjs";
 import { HOME } from "./web-console-test-helpers.mjs";
 import { HELP_TABS } from "../src/web-console/public/help.js";
+import { CATALOG_GROUPS, SKILL_CATALOG } from "../src/web-console/public/answers.js";
 
 const suite = pageSuite(test);
 
@@ -202,6 +203,50 @@ test("the Welcome stays away when the person has seen it, and off the dashboard"
   const plan = await openSession(browser, { t, workflow: "plan", payload: PLAN_QUESTION });
   await plan.page.waitForTimeout(800);
   assert.equal(await plan.page.locator("#welcome-modal").isVisible(), false, "the Welcome showed on a workflow page");
+});
+
+test("Help's dashboard topic lists every card once, grouped and in the dashboard's order, by its Help line or blurb", async (t) => {
+  savedLooks(t, { welcomeSeen: true });
+  const s = await openSession(await suite.browser(), { t, workflow: "dashboard", payload: { agent: { status: "waiting" } }, project: tempProject() });
+  await toTheDashboard(s);
+  await openHelp(s);
+  await tabButton(s, "dashboard").click();
+  const panel = s.page.locator("#help-panel-dashboard");
+  await panel.waitFor();
+
+  // Read back as drawn: each group's heading, then its list's title and line.
+  const drawnGroups = await panel.locator(".help-cards").evaluate((box) => {
+    const out = [];
+    for (const node of box.children) {
+      if (node.tagName === "P") out.push({ title: node.textContent, cards: [] });
+      else
+        out.at(-1).cards.push(
+          ...[...node.children].map((li) => ({
+            title: li.firstElementChild.textContent,
+            line: li.textContent.slice(li.firstElementChild.textContent.length),
+          }))
+        );
+    }
+    return out;
+  });
+  const expected = CATALOG_GROUPS.map((g) => ({
+    title: g.title,
+    cards: SKILL_CATALOG.filter((e) => e.group === g.id).map((e) => ({ title: e.title + ".", line: " " + (e.help || e.blurb) })),
+  }));
+  assert.deepEqual(drawnGroups, expected);
+
+  // Each card's title and line appear exactly once in the whole topic.
+  const text = await panel.evaluate((n) => n.textContent);
+  const titles = await panel.locator(".help-cards li > strong").allTextContents();
+  for (const e of SKILL_CATALOG) {
+    assert.equal(titles.filter((x) => x === e.title + ".").length, 1, `${e.title} is listed once`);
+    assert.equal(text.split(e.help || e.blurb).length - 1, 1, `${e.title}'s line appears once`);
+  }
+  // Built once: a second open adds no second list.
+  await s.page.keyboard.press("Escape");
+  await helpModal(s).waitFor({ state: "hidden" });
+  await openHelp(s);
+  assert.equal(await panel.locator(".help-cards li").count(), SKILL_CATALOG.length);
 });
 
 // A newer release on record, so a console that boots now has an update to

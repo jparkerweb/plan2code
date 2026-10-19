@@ -485,6 +485,50 @@ test("the top bar's back triangle asks first, then sends __dashboard with the ty
   await s.page.waitForFunction(() => document.getElementById("btn-home").disabled);
 });
 
+// What a person sees break: Commit it now, or Changelog's commit offer, hops
+// into Git without the dashboard, and the board opens over the last skill's
+// staged answer, its selected question and its open tab.
+test("a hop into Git from another skill starts the page clean: nothing staged, nothing selected, the questions view", async (t) => {
+  const s = await openSession(await suite.browser(), {
+    t,
+    workflow: "changelog",
+    payload: {
+      items: [{ id: "q1", kind: "choice", title: "Which version", body: "The next version number.",
+        options: [{ k: "A", text: "A patch release" }, { k: "B", text: "A minor release" }] }],
+      docs: [{ id: "notes", title: "Release notes", blocks: [{ id: "b1", md: "## Draft\n\nTwo fixes." }] }],
+      agent: { status: "waiting" },
+    },
+  });
+  // The page's own state, from the module app.js loaded (same URL, same instance).
+  const local = () =>
+    s.page.evaluate(async () => {
+      const { page } = await import("/state.js");
+      return { workflow: page.S.workflow, staged: page.local.staged, selected: page.selected, view: page.view };
+    });
+  await itemCard(s.page, "q1").getByText("A minor release").click();
+  await s.page.locator(".view-tab", { hasText: "Release notes" }).click();
+  const before = await local();
+  assert.deepEqual(Object.keys(before.staged), ["q1"], "the answer was never staged");
+  assert.equal(before.selected, "q1");
+  assert.notEqual(before.view, "questions", "the Release notes tab never opened");
+  const draftFile = path.join(s.session, "draft.json");
+  assert.ok(await until(() => fs.existsSync(draftFile) && fs.readFileSync(draftFile, "utf8").includes('"q1"'), 5000), "the staged answer never reached the draft");
+
+  // What Commit it now and Changelog's commit offer run.
+  cli(["open", "--resume", s.sid, "--no-open", "--workflow", "git"], { cwd: s.project });
+  await s.page.waitForFunction(async () => (await import("/state.js")).page.S.workflow === "git", null, { timeout: 10000 });
+  // Long enough for the page's draft push (600 ms after a save) to have run.
+  await new Promise((r) => setTimeout(r, 1500));
+  const after = await local();
+  assert.deepEqual(after.staged, {}, `the page kept the last skill's staged answer: ${JSON.stringify(after.staged)}`);
+  assert.equal(after.selected, null, `the page kept the last skill's selection: ${after.selected}`);
+  assert.equal(after.view, "questions", `the page kept the last skill's tab: ${after.view}`);
+  const stored = await s.page.evaluate((key) => JSON.parse(localStorage.getItem(key) || "{}").staged || {}, `p2c-console:${s.sid}`);
+  assert.deepEqual(stored, {}, "the browser's copy kept the staged answer");
+  const draft = fs.existsSync(draftFile) ? JSON.parse(fs.readFileSync(draftFile, "utf8")) : {};
+  assert.deepEqual(draft.staged || {}, {}, "the server's draft kept the staged answer");
+});
+
 // What a person sees break: Back to default in Preferences does nothing.
 test("Back to default in Preferences returns the theme to follow the system and clears the chosen look", async (t) => {
   const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_QUESTION });

@@ -5,7 +5,7 @@ import path from "node:path";
 
 import { checkHelpers } from "./public/subagents.js";
 import { nowIso, SCHEMA } from "./files.mjs";
-import { TASK_LINE_RE } from "./scan.mjs";
+import { TASK_LINE_RE } from "./spec-files.mjs";
 
 /* ----------------------------------------------------------- patch merge */
 

@@ -10,6 +10,7 @@ import { isOpen } from "./patches.mjs";
 import { pendingChatCount } from "./inbox.mjs";
 import { forgetWorkspace, specKey } from "./workspace.mjs";
 import { newHandoff, removeHandoff } from "./handoffs.mjs";
+import { WORKFLOWS, isWorkflow } from "./public/skills.js";
 
 // The CLI's own pieces, handed over by console.mjs through useCli() before
 // any command runs: console.mjs runs on import, so it cannot be imported back.
@@ -153,6 +154,9 @@ export function cmdHandoff() {
   const usage = "handoff needs: handoff new --workflow <w> --skill <s> [--spec specs/<x>] [--title <t>] [--from-stop]";
   if (args._[0] !== "new" || args._.length > 1) die(usage, 2);
   if (typeof args.workflow !== "string" || typeof args.skill !== "string") die(usage, 2);
+  // newHandoff() takes any lowercase name; a handoff is only useful to a
+  // workflow the console can launch, so the name must be one it knows (FR-5).
+  if (!isWorkflow(args.workflow)) die(`unknown workflow "${args.workflow}"; one of: ${WORKFLOWS.join(", ")}`, 2);
   if ("from-stop" in args && args["from-stop"] !== true) die("--from-stop takes no value", 2);
   const { worktree, project } = repoRoots();
   try {

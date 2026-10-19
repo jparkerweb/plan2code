@@ -245,6 +245,29 @@ test("specs: open tasks under approved phases are a checkoff, and tick checks th
   assert.equal(S("tick", "lunch-vote", "--task", "nope").code, 2);
 });
 
+test("specs: numbered task lines are tasks, counted by status and ticked by tick", () => {
+  const root = specFixture();
+  // phase() writes "- [m]" lines; renumber phase 1 as a numbered list.
+  write(root, "specs/lunch-vote/phase-1.md", phase(1, "In Progress", [["x", "1.1"], [" ", "1.2"]]).replace("- [x] **Task 1.1:**", "1. [x] **Task 1.1:**").replace("- [ ] **Task 1.2:**", "2. [ ] **Task 1.2:**"));
+  assert.match(read(root, "specs/lunch-vote/phase-1.md"), /^1\. \[x\] \*\*Task 1\.1:\*\* Do 1\.1\n2\. \[ \] \*\*Task 1\.2:\*\* Do 1\.2$/m);
+  const S = (...a) => runScript("plan2code-3-implement", "specs.mjs", [...a, "--root", root]);
+  const st = S("status", "lunch-vote");
+  assert.equal(st.code, 0, st.stderr);
+  const p1 = st.json.phases.find((p) => p.number === 1);
+  assert.equal(p1.tasks.total, 2);
+  assert.equal(p1.tasks.complete, 1);
+  assert.deepEqual(p1.openTasks, ["1.2"]);
+  assert.ok(!st.json.checks.some((c) => c.code === "uncounted-task" && /phase-1/.test(c.message)), JSON.stringify(st.json.checks));
+
+  const t = S("tick", "lunch-vote", "--task", "1.2");
+  assert.equal(t.code, 0, t.stderr);
+  assert.equal(t.json.changed, true);
+  assert.match(read(root, "specs/lunch-vote/phase-1.md"), /^2\. \[x\] \*\*Task 1\.2:\*\* Do 1\.2\n  > Confirmed done by the user on \d{4}-\d{2}-\d{2}\.$/m);
+  const after = S("status", "lunch-vote").json.phases.find((p) => p.number === 1);
+  assert.equal(after.tasks.complete, 2);
+  assert.deepEqual(after.openTasks, []);
+});
+
 test("specs status: drift between the checklist and the phase files is an error", () => {
   const root = specFixture();
   write(root, "specs/lunch-vote/overview.md", OVERVIEW.replace("- [/] [Phase 2", "- [x] [Phase 2"));
@@ -516,7 +539,9 @@ test("specs: --set cannot override computed fields; empty overview exists; uncou
   assert.equal(runScript("plan2code-2-document", "specs.mjs", ["metrics", "lunch-vote", "--step", "document", "--set", "verification_items_added=1", "--set", "total_tasks=99", "--root", root]).code, 2);
   write(root, "specs/lunch-vote/phase-2.md", read(root, "specs/lunch-vote/phase-2.md") + "- [ ] **Task 2.4A:** odd\n1. [ ] **Task 2.5:** numbered\n");
   const j = runScript("plan2code-3-implement", "specs.mjs", ["status", "lunch-vote", "--root", root]).json;
-  assert.equal(j.checks.filter((c) => c.code === "uncounted-task").length, 2);
+  // Task 2.4A is flagged; a numbered task line is counted like any other (spec-files.mjs).
+  assert.equal(j.checks.filter((c) => c.code === "uncounted-task").length, 1);
+  assert.ok(j.phases.find((p) => p.number === 2).openTasks.includes("2.5"));
   write(root, "specs/lunch-vote/overview.md", "");
   const e = runScript("plan2code-3-implement", "specs.mjs", ["status", "lunch-vote", "--root", root]).json;
   assert.equal(e.overview, "overview.md");

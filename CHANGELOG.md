@@ -2,6 +2,27 @@
 
 All notable changes to Plan2Code will be documented in this file.
 
+## v2.10.0
+
+### ✨ Added
+
+- **web console**: a private **Notepad** in the top bar, on every screen. It opens a modal with a Markdown editor that styles as you type (OverType 2.6.1, vendored, MIT) and saves as you go, with pictures: paste, drag and drop or **Add image**, each shrunk to JPEG in the browser, shown as a thumbnail strip with an X that asks before deleting, and a full-screen preview. There is one notepad per project folder, kept in `~/.plan2code/notepads/` (`notepads.mjs`) and never shown to the agent. User Preferences → Cleanup offers a notepad for removal only when its newest file is 30 days old or more, as one item that removes the whole folder; the automatic sweep at open never touches it.
+
+### 🔧 Changed
+
+- **web console**: the dashboard has one Implement card instead of Implement and Implement + Review. Its confirm pane has a Review checkbox, ticked by default, that launches Implement + Review when ticked and plain Implement when not; the command shown follows the box.
+- **web console**: `open` and `handoff new` refuse a `--workflow` the console does not know (exit 2, naming the valid ones), instead of opening a session no skill answers. `open` with no `--workflow` still opens Pathfinder.
+- **web console**: Help's list of dashboard cards is built from the cards themselves, so it can never name a card the dashboard lacks: it follows the dashboard's order (Handoff last under *Useful any time*), and X-ray's line is its card's.
+- **web console**: a hop into Git from any skill now starts the page clean on both sides. The server always cleared it; the page kept the last skill's tab and staged answers.
+- **contributors**: the per-skill tables that were still kept by hand now come from `public/skills.js`: the meter's weights and labels (`WEIGHTS`, `LAUNCH_LABELS`, `RUN_LABELS` in `meter.js`), `resumeCommand()`'s switch in `answers.js`, Help's card list in `index.html` (now filled by `buildHelp()` in `screens/help-dialog.js`) and `cmd-help.mjs`'s workflow list. Each entry gains `weight`, `started`, `ran`, `resume` and an optional `card.help`, and `skills.js` exports `WORKFLOWS` and `isWorkflow()`. A test fails, naming the file and the name, when `console.md`, `src/plan2code.md` or the CLI's help drift from the list.
+- **contributors**: two new shared modules. `src/web-console/spec-files.mjs` holds the task markers and the task-line, checkbox and Status-line patterns with `statusOf()` and `countTasks()`, read by `scan.mjs` and the `specs.mjs` skill script, which no longer keep copies of their own; `patches.mjs` now takes `TASK_LINE_RE` from it instead of from `scan.mjs`. `src/web-console/public/hops.js` holds `startsClean()`, the rule for which hops start the page clean, called by `cmd-open.mjs`, `server.mjs` and `screens/core.js`.
+- **contributors**: for the upstream port, these moved: the meter tables, `resumeCommand()`'s switch, Help's card markup and `cmd-help`'s workflow list into `skills.js` fields; the markers and patterns in `scan.mjs` and `specs.mjs` into `spec-files.mjs` (and `TASK_LINE_RE` tightened on the way: exactly one space before the box and a case-sensitive `Task`, matching `TASK_ID_RE`; keep that when porting); the hop test in `cmd-open.mjs`, `server.mjs` and `screens/core.js` into `hops.js`. Port upstream's changes to those tables into `skills.js` and the two modules, not back into the old files.
+
+### 🐛 Fixed
+
+- **web console**: Workspace's Browse… folder picker (and the launcher's) no longer opens behind the browser on Windows. Windows refused the picker's `SetForegroundWindow`, because the picker is spawned by the detached console server and is not the process that last had input; the existing topmost flag is ignored by that dialog. It now waits until the dialog is visible, taps Alt (which lifts the foreground lock for the next call), and takes the foreground.
+- **dashboard**: an assumed task (`[?]`) counts as done and is named in the spec's line ("3 of 4 tasks done, 1 assumed"). It used to be left out of the count altogether, so that phase read "2 of 3 tasks done", and a spec whose tasks were all assumed read as not started. Numbered task lines (`1. [x] **Task ...`) count too, on the dashboard and in the `specs.mjs` skill script.
+
 ## v2.9.0
 
 ### ✨ Added

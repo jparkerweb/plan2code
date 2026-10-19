@@ -13,7 +13,7 @@ the next engineer all start from the same specs.
 
 One command opens it, every step is a card, and the terminal is always there if you prefer it.
 
-Version 2.9.0 · MIT · 📖 [plan2code.jparkerweb.com](https://plan2code.jparkerweb.com)
+Version 2.10.0 · MIT · 📖 [plan2code.jparkerweb.com](https://plan2code.jparkerweb.com)
 
 ---
 
@@ -417,7 +417,7 @@ edits out through the skills CLI.
 
 Core reference:
 
-- **[.readme/web-console.md](.readme/web-console.md)**: the full guide to the web console, from the dashboard to the last sign-off
+- **[.readme/web-console.md](.readme/web-console.md)**: the full guide to the web console, from the dashboard to the last sign-off, including the private Notepad in the top bar
 - **[QUICK-REFERENCE.md](QUICK-REFERENCE.md)** — the one-page card: commands, inputs, outputs, decision tree
 - **[.readme/walkthrough.md](.readme/walkthrough.md)** — one feature from a sentence to archived specs, session by session
 - **[AGENTS.md](AGENTS.md)** — architecture and contributor guide for this repo

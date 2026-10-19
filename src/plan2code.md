@@ -39,6 +39,7 @@ The page draws the cards itself — you never send the list. It also knows the r
   - `documented` ("Ready to build"): Implement is next.
   - `building` ("Building"): Implement is next.
   - `built` ("Ready to finalize"): Finalize is next.
+  - A `documented` or `building` spec whose `[/]` phase file holds a waiting `**Plan change:**` line in its Notes (Implement paused for a revision; `(applied <date>):` or `(dropped <date>):` means done): recommend Revise the plan instead, `details` "Plan change waiting from Phase N". On a `built` spec the Revise card is greyed, so name the waiting brief in `note`.
 - A spec that scans `unrecognized` ("files on disk") is input, not progress: its folder rides along on a Pathfinder or Plan launch as reference, and those are the only pipeline cards it lights. Read the files and recommend the fit — a settled design doc the person wrote is Plan's brief, loose notes are Pathfinder's. No skill generates such a doc; see the table below for what each one does write. Never flag Document or anything downstream of it for such a spec.
 - A `diagnosed` spec ("Bug diagnosed") is a bug Diagnose wrote up: recommend Quick Task, or Plan when its `DIAGNOSIS-<date>.md` sizes the fix as big; its folder rides along on either launch.
 - A `fixed` spec ("Bug fixed") is a diagnosed bug Quick Task fixed but did not archive: finished, so never recommend for it or name it in the note; the picker never pre-selects one and hides it while unavailable workflows are hidden. The person archives it (Quick Task offers that once the bug is fixed) or deletes it with the picker's ✕.
@@ -59,10 +60,10 @@ Ground truth for menu notes and Ask-tab answers. For anything beyond this table,
 | init-update | `AGENTS.md`, codebase | `AGENTS.md`, `.agents-docs/` |
 | 0-pathfinder | the idea, loose notes | `pathfinder/map.md`, `pathfinder/questions/NN-<slug>.md`; cleared → `PLAN-DRAFT-<date>.md` |
 | 1-plan | idea or `PLAN-DRAFT` | `PLAN-DRAFT-<date>.md`, `PLAN-CONVERSATION-<date>.md` |
-| 1b-revise-plan | `overview.md`, `phase-X.md` | the same, revised |
+| 1b-revise-plan | `overview.md`, `phase-X.md`, a waiting `**Plan change:**` brief | the same, revised; the brief marked applied or dropped |
 | quick-task | the ask; a `DIAGNOSIS-*.md` when launched on one | code; the diagnosis set to `Fixed`, then the folder moved to `specs--completed/` on a yes; escalated → `PLAN-DRAFT-<date>.md` |
 | 2-document | `PLAN-DRAFT`, `PLAN-CONVERSATION` (optional) | `overview.md`, `phase-X.md` |
-| 3-implement(-review) | `overview.md`, `phase-X.md` | code; `[x]` marks + completion summary in `phase-X.md` |
+| 3-implement(-review) | `overview.md`, `phase-X.md` | code; `[x]` marks + completion summary in `phase-X.md`; paused for a revision, a `**Plan change:**` brief in its Notes |
 | review | spec, diff | the fixes picked; no spec writes |
 | 4-finalize | spec + code | summary in `overview.md`; moves the spec to `specs--completed/` |
 | handoff | conversation, spec, git | `~/.plan2code/handoffs/<id>.md`, listed on the dashboard |
