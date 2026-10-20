@@ -77,6 +77,31 @@ test("a Quick question typed in Ask reaches the agent under chat, and the agent'
   assert.match(await textOf(s.page.locator(".ask-counter")), /1/);
 });
 
+// What a person sees break: a prompt the agent wrote for a new conversation with no
+// Copy button, or one that tells them to "paste it into the Ask tab" as though it
+// were a terminal command.
+test("an Ask reply with a fenced prompt shows Copy and no run hint, while a command block still gets the hint", async (t) => {
+  const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_QUESTION });
+  await openAsk(s);
+  await askQuestion(s, "Give me a prompt for adding the export to the report");
+  const [asked] = messages(collect(s));
+
+  const prompt = "Add the export to the report. Read src/export.js and src/report.js first. Do not touch the importer.";
+  const fence = "```";
+  const md = ["That is a separate job. Paste this into a new Quick Task:", "", fence, prompt, fence, "", "Or run this:", "", fence, "npm test", fence].join("\n");
+  s.post({ chat: { replies: [{ id: "r1", re: asked.seq, conversation: 1, md }] } });
+  const reply = s.page.locator(".ask-row.agent");
+  await reply.getByText("That is a separate job").waitFor();
+
+  const blocks = reply.locator("pre");
+  assert.equal(await blocks.count(), 2);
+  const first = blocks.nth(0).locator("xpath=..");
+  assert.equal(await first.getByRole("button", { name: "Copy" }).count(), 1, "the prompt block has a Copy button");
+  assert.equal(await first.locator(".md-run-hint").count(), 0, "a prompt block gets no run hint");
+  const second = blocks.nth(1).locator("xpath=..");
+  assert.equal(await second.locator(".md-run-hint").count(), 1, "a command block still gets the hint");
+});
+
 // What a person sees break: starters that send for them, or that are missing
 // from an empty conversation.
 test("an empty Ask offers starters, a click only fills the box, and nothing is sent until Send", async (t) => {

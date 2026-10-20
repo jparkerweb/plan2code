@@ -47,6 +47,7 @@ import { serverWorkspace } from "./workspace.mjs";
 import { serverSubagents } from "./settings.mjs";
 import { chatOffline } from "./public/chat.js";
 import { meterView } from "./public/meter.js";
+import { startsClean } from "./public/hops.js";
 import { SERVABLE, asset } from "./static.mjs";
 import { handle } from "./routes.mjs";
 import { checkForUpdate } from "./update-check.mjs";
@@ -224,12 +225,10 @@ function ensureConversation(state) {
   if (!last.conversation) {
     entry = appendChat(DIR, { kind: "reset", conversation: 1, workflow: state.workflow, reason: "start" });
   } else if (
-    last.workflow !== state.workflow &&
-    // The same switches `open --resume` treats as a hop (a blank page, the
-    // agent's replies included): through the dashboard, or into git from
-    // anywhere (Commit it now, Changelog's "Commit this now?"). Without a new
-    // conversation, the old questions would show as unanswered again.
-    (last.workflow === "dashboard" || state.workflow === "dashboard" || state.workflow === "git")
+    // The same hops `open --resume` treats as a fresh start, by the rule in
+    // public/hops.js (a blank page, the agent's replies included). Without a
+    // new conversation, the old questions would show as unanswered again.
+    startsClean(last.workflow, state.workflow)
   ) {
     entry = appendChat(DIR, {
       kind: "reset",

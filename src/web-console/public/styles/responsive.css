@@ -52,6 +52,19 @@
      the one that is only nice to have. */
   .pager { gap: 8px; }
   .pager-count { display: none; }
+  /* The Notepad takes the whole screen, and every control in it is a
+     fingertip wide. The pictures go under Add image rather than beside it, so
+     the strip gets the full width, and the preview's side columns narrow to
+     give the picture their room. */
+  .btn.notepad-btn { min-width: 44px; }
+  .modal.notepad { width: 100%; height: 100%; margin: 0; padding: 18px 16px 16px; border: 0; border-radius: 0; }
+  .modal.notepad .notepad-add,
+  .modal.notepad .modal-actions .btn,
+  .btn.notepad-preview-close { min-height: 44px; }
+  .notepad-images { flex-direction: column; align-items: stretch; }
+  .notepad-add { align-self: flex-start; }
+  .notepad-thumb .notepad-thumb-delete { width: 30px; height: 30px; font-size: 18px; }
+  .modal.notepad-preview[open] { grid-template-columns: 52px minmax(0, 1fr) 52px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

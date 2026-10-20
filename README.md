@@ -13,7 +13,7 @@ the next engineer all start from the same specs.
 
 One command opens it, every step is a card, and the terminal is always there if you prefer it.
 
-Version 2.9.0 · MIT · 📖 [plan2code.jparkerweb.com](https://plan2code.jparkerweb.com)
+Version 2.10.0 · MIT · 📖 [plan2code.jparkerweb.com](https://plan2code.jparkerweb.com)
 
 ---
 
@@ -150,7 +150,8 @@ next check-in, and it never holds up your answers.
 
 There is more on the page when you need it. Notes on any question can carry screenshots and
 documents. The folder label in the bottom bar opens your workspace, where you add other folders
-as read-only context and point at them by `@name`. The session meter in the top bar turns from green
+as read-only context and point at them by `@name`. The **Notepad** in the top bar is a private pad of your own for the
+folder, in Markdown with pictures, that the agent never sees. The session meter in the top bar turns from green
 to red as a session grows long and suggests a fresh one. **Stop session** saves your place and gives
 you the command to carry on later, and **Back to the dashboard** takes you home to pick the next
 step in the same session.
@@ -417,7 +418,7 @@ edits out through the skills CLI.
 
 Core reference:
 
-- **[.readme/web-console.md](.readme/web-console.md)**: the full guide to the web console, from the dashboard to the last sign-off
+- **[.readme/web-console.md](.readme/web-console.md)**: the full guide to the web console, from the dashboard to the last sign-off, including the private Notepad in the top bar
 - **[QUICK-REFERENCE.md](QUICK-REFERENCE.md)** — the one-page card: commands, inputs, outputs, decision tree
 - **[.readme/walkthrough.md](.readme/walkthrough.md)** — one feature from a sentence to archived specs, session by session
 - **[AGENTS.md](AGENTS.md)** — architecture and contributor guide for this repo

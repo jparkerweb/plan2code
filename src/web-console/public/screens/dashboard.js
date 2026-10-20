@@ -22,6 +22,8 @@ import {
   cardPresentation,
   CATALOG_GROUPS,
   SKILL_CATALOG,
+  catalogEntry,
+  launchVariant,
   SPEC_STATE_LABELS,
   chipDetail,
   isDeletableSpecDir,
@@ -534,7 +536,7 @@ function settleDeleting() {
 function renderHandoffPreview(h) {
   const box = el("section", "handoff-preview");
   box.appendChild(el("h3", "handoff-preview-title", h.title || "Handoff"));
-  const entry = SKILL_CATALOG.find((e) => e.skill === h.skill);
+  const entry = catalogEntry(h.skill);
   const meta = [
     "Written " + (h.written ? new Date(h.written).toLocaleString() : "at an unknown time"),
     h.spec ? "spec " + h.spec.replace(/^specs\//, "") : "no spec",
@@ -637,7 +639,7 @@ function dashCard(entry, menu) {
   // Other picker choices derive both from the scan, so stale context never
   // follows a person to a different spec or to "start from scratch". A greyed
   // recommendation also yields to the selected spec's actual next step.
-  const going = page.local.launching && page.local.launching.skill === entry.skill;
+  const going = page.local.launching && (page.local.launching.skill === entry.skill || page.local.launching.skill === entry.review);
   const b = el(
     "button",
     "dash-card" + (presentation.recommended ? " is-suggested" : "") + (going ? " is-going" : "")
@@ -719,15 +721,32 @@ export function renderConfirm(main, entry) {
     pane.appendChild(specLine);
   }
 
+  // Implement's card reviews the phase before sign-off unless this is unticked.
+  let review = null;
+  if (entry.review) {
+    pane.appendChild(el("hr", "confirm-rule"));
+    const label = el("label", "confirm-review");
+    review = el("input");
+    review.type = "checkbox";
+    review.checked = page.dashReview !== false;
+    review.addEventListener("change", () => {
+      page.dashReview = review.checked;
+      cmdCode.textContent = launchVariant(entry, review.checked).command;
+    });
+    label.append(review, el("span", null, "Auto Review: fresh agent pass over the phase's changes before sign-off"));
+    pane.appendChild(label);
+  }
+
   const cmd = el("p", "confirm-cmd");
-  cmd.appendChild(el("code", null, entry.command));
+  const cmdCode = el("code", null, launchVariant(entry, !review || review.checked).command);
+  cmd.appendChild(cmdCode);
   pane.appendChild(cmd);
 
   const actions = el("div", "confirm-actions");
   const start = el("button", "btn primary", "Start " + entry.title);
   start.type = "button";
   start.disabled = page.gone || page.pendingResult;
-  start.addEventListener("click", () => launchSkill(entry));
+  start.addEventListener("click", () => launchSkill(launchVariant(entry, Boolean(review) && review.checked)));
   const back = el("button", "btn ghost", "Back");
   back.type = "button";
   back.addEventListener("click", () => {
@@ -830,7 +849,7 @@ function openHandoffDelete(h) {
     facts.appendChild(el("dt", "", term));
     facts.appendChild(el("dd", "", value));
   };
-  const entry = SKILL_CATALOG.find((e) => e.skill === h.skill);
+  const entry = catalogEntry(h.skill);
   fact("Handoff", h.title || h.id);
   fact("Written", h.written ? new Date(h.written).toLocaleString() : "");
   fact("Spec", h.spec ? h.spec.replace(/^specs\//, "") : "");

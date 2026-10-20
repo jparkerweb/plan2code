@@ -42,6 +42,7 @@ import { cleanSetting, offered } from "./public/subagents.js";
 import { ACCENTS, DEFAULT_ACCENT, DEFAULT_CARD_WIDTH, cardWidth } from "./public/palette.js";
 import { SERVABLE, TYPES, asset } from "./static.mjs";
 import { handoffsDir, isHandoffId } from "./handoffs.mjs";
+import { NotepadError, addImage, addThumb, imagePath, readNotepad, removeImage, saveNote } from "./notepads.mjs";
 
 /* ---------------------------------------------------------------- routes */
 
@@ -69,6 +70,12 @@ const ROUTES = [
   { path: "/models", method: "POST", origin: true, run: modelsPost },
   { path: "/cleanup", method: "POST", origin: true, run: cleanup },
   { path: "/upload", method: "POST", origin: true, run: upload },
+  { path: "/notepad", method: "GET", run: notepadGet },
+  { path: "/notepad/text", method: "POST", origin: true, run: notepadText },
+  { path: "/notepad/image", method: "POST", origin: true, run: notepadImage },
+  { path: "/notepad/thumb", method: "POST", origin: true, run: notepadThumb },
+  { path: "/notepad/image/delete", method: "POST", origin: true, run: notepadDelete },
+  { match: (p, req) => p.startsWith("/notepad/images/") || req.url.startsWith("/notepad/images/"), method: "GET", run: notepadImageGet },
   { match: (p, req) => p.startsWith("/attachments/") || req.url.startsWith("/attachments/"), run: attachment },
   { match: (p, req) => p.startsWith("/shots/") || req.url.startsWith("/shots/"), run: shot },
   { match: (p, req) => p.startsWith("/uploads/") || req.url.startsWith("/uploads/"), run: uploads },
@@ -537,6 +544,99 @@ function cleanup(req, res, ctx) {
       .then(({ items, bytes }) => json(res, 200, { ok: true, bytes, items: items.map(({ path: _p, ...item }) => item) }))
       .catch((e) => json(res, 500, { error: String(e.message) }));
   });
+}
+
+/* ---------------------------------------------------------------- notepad */
+
+// The person's private notepad for the folder this session runs in, kept by
+// notepads.mjs outside the session. Nothing here writes to ctx.dir or the
+// event log: the agent reads both, and the notepad is never the agent's.
+const notepadRoot = (ctx) => ctx.worktree() || ctx.project;
+
+function notepadFail(res, e) {
+  if (e instanceof NotepadError) return json(res, e.status, { error: e.code });
+  return json(res, 500, { error: "bad" });
+}
+
+function notepadGet(req, res, ctx) {
+  try {
+    return json(res, 200, readNotepad(notepadRoot(ctx)));
+  } catch (e) {
+    return notepadFail(res, e);
+  }
+}
+
+function notepadText(req, res, ctx) {
+  return readBody(req, (err, body) => {
+    if (err) return json(res, err.tooBig ? 413 : 400, { error: err.tooBig ? "too-long" : "bad" });
+    try {
+      return json(res, 200, { ok: true, ...saveNote(notepadRoot(ctx), body && body.text) });
+    } catch (e) {
+      return notepadFail(res, e);
+    }
+  });
+}
+
+// A picture's bytes, raw: JPEG only (the page re-encodes everything first).
+function readJpeg(req, res, then) {
+  if (!String(req.headers["content-type"] || "").startsWith("image/jpeg")) {
+    req.resume();
+    return json(res, 415, { error: "not-jpeg" });
+  }
+  return readRaw(req, MAX_BODY, (err, buf) => {
+    if (err) return json(res, err.tooBig ? 413 : 400, { error: err.tooBig ? "too-large" : "bad" });
+    return then(buf);
+  });
+}
+
+function notepadImage(req, res, ctx) {
+  return readJpeg(req, res, (buf) => {
+    try {
+      return json(res, 200, { ok: true, ...addImage(notepadRoot(ctx), buf) });
+    } catch (e) {
+      return notepadFail(res, e);
+    }
+  });
+}
+
+function notepadThumb(req, res, ctx, url) {
+  return readJpeg(req, res, (buf) => {
+    try {
+      addThumb(notepadRoot(ctx), url.searchParams.get("id"), buf);
+      return json(res, 200, { ok: true });
+    } catch (e) {
+      return notepadFail(res, e);
+    }
+  });
+}
+
+function notepadDelete(req, res, ctx) {
+  return readBody(req, (err, body) => {
+    if (err) return json(res, err.tooBig ? 413 : 400, { error: "bad" });
+    try {
+      removeImage(notepadRoot(ctx), body && body.id);
+      return json(res, 200, { ok: true });
+    } catch (e) {
+      return notepadFail(res, e);
+    }
+  });
+}
+
+// Matched on the raw request line too, as /uploads/ is: URL parsing folds
+// `..` away, and nothing that needed folding is a notepad picture.
+const NOTEPAD_IMAGE_ROUTE = /^\/notepad\/images\/([0-9a-f-]{36})(\.thumb)?\.jpg$/;
+
+function notepadImageGet(req, res, ctx, url) {
+  const m = NOTEPAD_IMAGE_ROUTE.exec(req.url);
+  const file = m && m[0] === url.pathname ? imagePath(notepadRoot(ctx), m[1], Boolean(m[2])) : null;
+  if (!file) return json(res, 404, { error: "not-found" });
+  let buf;
+  try {
+    buf = fs.readFileSync(file);
+  } catch {
+    return json(res, 404, { error: "not-found" });
+  }
+  return send(res, 200, buf, "image/jpeg");
 }
 
 /* ------------------------------------------- uploads, shots, attachments */

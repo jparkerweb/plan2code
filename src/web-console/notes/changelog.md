@@ -19,5 +19,9 @@ the card, resume as `git` (`open --resume <sid> --no-open --workflow git`),
 then read `~/.agents/skills/plan2code-git/SKILL.md` with your file-read tool
 and start with its commit flow, in this same session, as a dashboard launch
 does (`console-launches.md`); the resume clears Changelog's page for it.
+Entered from **Update CHANGELOG first** on a finished Quick Task or Finalize
+(`console-finish.md`): the hop is the same as a dashboard launch, and nothing
+else changes. The yes above is the exit to Git as always, so the person lands in
+the commit flow with the CHANGELOG already updated.
 Finish, on a no: `"dashboard": true` and the version and entries in `body`,
 with no `command`. A stop's finish is the bare `/plan2code-changelog`.

@@ -122,19 +122,12 @@ function resolveSpec(root, arg, { allowArchived = false } = {}) {
 
 /* -------------------------------------------------------------- parsing */
 
-const MARKERS = { " ": "pending", "/": "in-progress", x: "complete", X: "complete", "!": "blocked", "?": "assumed" };
-// Task 2.3, a lettered sub-task 3.6a, or a named one such as a testing task 1.T.
-const TASK_RE = /^\s*[-*] \[(.)\]\s+\*\*Task\s+(\d+)\.(\d+|[A-Za-z]+)([a-z]*)\b/;
-const CHECKBOX_RE = /^\s*[-*] \[(.)\]/;
-// The Status line in any of the forms people write it: **Status:**, **Status**:
-// or a plain Status:, optionally as a list item. Groups: everything up to the
-// value (kept as written when the value is rewritten), the value, trailing blanks.
-const STATUS_RE = /^([ \t]*(?:[-*][ \t]*)?(?:\*\*Status:\*\*|\*\*Status\*\*:|Status:)[ \t]*)(.+?)([ \t]*)$/m;
-
-function statusOf(text) {
-  const m = (text || "").match(STATUS_RE);
-  return m ? m[2] : null;
-}
+// The task markers, the task-line (TASK_RE: marker, phase, task, sub-task
+// suffix), checkbox and Status-line patterns, and statusOf(), come from the web
+// console's spec-files.mjs, so this script and the dashboard read a spec the
+// same way. run() binds them once before any command, so the synchronous
+// readers below keep using them as plain module bindings.
+let MARKERS, TASK_RE, CHECKBOX_RE, STATUS_RE, statusOf;
 
 /** A markdown section's lines: from its heading to the next heading of the same or higher level. */
 function section(text, headingRe) {
@@ -268,8 +261,8 @@ function parsePhaseFile(file, number) {
       tasks.push({ id: `${t[2]}.${t[3]}${t[4]}`, phase: Number(t[2]), seq: named ? null : Number(t[3]), named, suffix: t[4], marker: t[1], state, line: i + 1, text: said, detail: taskDetail(lines, i) });
       return;
     }
-    // A line that looks like a task but is not counted as one (Task 1.4A,
-    // "1. [ ] **Task", a non-bold "- [ ] Task 1.3") would make the audit undercount.
+    // A line that looks like a task but is not counted as one (Task 1.4A, a
+    // non-bold "- [ ] Task 1.3") would make the audit undercount.
     if (/^\s*(?:[-*]|\d+\.)\s+\[.\].*\bTask\s+\d+\./i.test(line)) unmatchedTasks.push({ line: i + 1, text: line.trim().slice(0, 120) });
     if (CHECKBOX_RE.test(line)) strayCheckboxes.push({ line: i + 1, section: heading, text: line.trim().slice(0, 120) });
   });
@@ -905,6 +898,7 @@ async function cmdCheckDraft(args) {
 run(USAGE, async (argv) => {
   const args = parseArgs(argv, { booleans: ["dry-run"], values: ["root", "step", "phase", "to", "task"], lists: ["set"] });
   const cmd = args._[0];
+  ({ MARKERS, TASK_ID_RE: TASK_RE, CHECKBOX_RE, STATUS_RE, statusOf } = await consoleModule("spec-files.mjs"));
   const commands = { list: cmdList, status: cmdStatus, metrics: cmdMetrics, mark: cmdMark, tick: cmdTick, archive: cmdArchive, check: cmdCheck, "check-draft": cmdCheckDraft };
   if (!commands[cmd]) fail(EXIT.USAGE, "unknown-command", cmd ? `Unknown command "${cmd}".` : "No command given.", "Commands: list, status, check, check-draft, metrics, mark, tick, archive. Run with --help.");
   await commands[cmd](args);

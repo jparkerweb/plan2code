@@ -5,6 +5,9 @@ import {
   finishPaused,
   reviewOffer,
   commitOffer,
+  changelogOffer,
+  continueOffer,
+  continueReply,
   handoffShape,
   ALL_DONE_LEAD,
   ALL_DONE_REST,
@@ -23,6 +26,7 @@ import {
   DONE_REPLY,
   DASHBOARD_REPLY,
   COMMIT_REPLY,
+  CHANGELOG_REPLY,
 } from "../answers.js";
 import { hooks, page, saveNow, redraw } from "../state.js";
 
@@ -120,11 +124,11 @@ function renderCloseGuide(shape, fin = {}) {
   return panel;
 }
 
-// A review, a commit in Git or the dashboard the person just asked for is starting
+// A review, a commit in Git, the dashboard or the next step the person just asked for is starting
 // here, so the page is about to carry on rather than end.
 function closeGuideHeld() {
   if (page.gone) return false;
-  return ["review", "commit", "dashboard"].includes(page.local.afterBuild) || reviewPending() === "asked";
+  return ["review", "commit", "changelog", "dashboard", "launch"].includes(page.local.afterBuild) || reviewPending() === "asked";
 }
 
 export function renderHandoff(fin) {
@@ -136,13 +140,18 @@ export function renderHandoff(fin) {
   // A finished build offers its review first, above the next step, because it
   // is the one thing on this screen that has to happen before they leave.
   const offer = reviewOffer(fin);
-  if (offer && !["done", "dashboard", "commit"].includes(page.local.afterBuild)) {
+  if (offer && !["done", "dashboard", "commit", "changelog", "launch"].includes(page.local.afterBuild)) {
     card.appendChild(renderReviewOffer(offer));
   }
 
   // The commit, right after the review: one press starts Git's commit flow here.
   if (commitOffer(fin) && !page.gone && page.local.afterBuild !== "done" && page.local.afterBuild !== "dashboard") {
     card.appendChild(renderCommitOffer());
+  }
+
+  // Beside it: the CHANGELOG first, which hops into Changelog and on to Git.
+  if (changelogOffer(fin) && !page.gone && page.local.afterBuild !== "done" && page.local.afterBuild !== "dashboard") {
+    card.appendChild(renderChangelogOffer());
   }
 
   // Three shapes: a next step to run, a pause with its resume command, or a
@@ -186,6 +195,8 @@ export function renderHandoff(fin) {
     row.appendChild(code);
     row.appendChild(copyButton(text, "btn small handoff-copy", code));
     step.appendChild(row);
+    const next = continueOffer(fin);
+    if (next && continueLive()) step.appendChild(renderContinueOffer(next));
     if (text !== command) {
       step.appendChild(
         el(
@@ -355,6 +366,55 @@ function renderCommitOffer() {
   return box;
 }
 
+// Continue here shows while there is a server to carry the press, the person
+// has not already answered the finish another way, and the session is not red:
+// at red the agent may start missing things, so the fresh-session advice stands
+// alone (and this stays true to the meter pill, which reads the same frame).
+function continueLive() {
+  if (page.gone || ["done", "dashboard"].includes(page.local.afterBuild)) return false;
+  return !(page.meterFrame && page.meterFrame.level === "red");
+}
+
+// Start the next step right here, as a dashboard click would: the same
+// session, resumed under that skill. The command above stays for a new
+// conversation.
+function renderContinueOffer(next) {
+  const box = el("div", "continue-offer");
+  const { asked, disabled } = afterFinishButton(page.local.afterBuild, "launch", page.pendingResult);
+  const go = el("button", "btn primary continue-go", asked ? "Starting the next step…" : "Continue here");
+  go.type = "button";
+  go.disabled = disabled;
+  go.addEventListener("click", () => sendAfterBuild("launch", next));
+  box.appendChild(go);
+  box.appendChild(
+    el("p", "handoff-note", "Starts this step in the same conversation, so it carries everything said here.")
+  );
+  return box;
+}
+
+// Update the CHANGELOG before committing: like Commit it now, a request to an
+// agent still in its wait loop, so only drawn while the server is there.
+function renderChangelogOffer() {
+  const box = el("section", "review-offer");
+  box.appendChild(el("p", "handoff-label", "Update CHANGELOG first"));
+  box.appendChild(
+    el(
+      "p",
+      "review-offer-text",
+      "Changelog works out the version and the entries for this change, then offers to commit. It opens right here."
+    )
+  );
+  const { asked, disabled } = afterFinishButton(page.local.afterBuild, "changelog", page.pendingResult);
+  const row = el("div", "btn-row");
+  const go = el("button", "btn", asked ? "Opening Changelog…" : "Update CHANGELOG first");
+  go.type = "button";
+  go.disabled = disabled;
+  go.addEventListener("click", () => sendAfterBuild("changelog"));
+  row.appendChild(go);
+  box.appendChild(row);
+  return box;
+}
+
 // The way back to the dashboard, on a finished screen whose agent opted in
 // with `finish.dashboard`. Like the review button it is a request to an agent
 // still in its wait loop, so once the server is gone it turns into the
@@ -393,18 +453,20 @@ function renderDashboardOffer(primary) {
 
 // Any answer to a finished session's offers, as one send through the ordinary
 // submit. Like a brief, it names no question: `__review`, `__commit`, `__done`
-// and `__dashboard` are about the session.
-const AFTER_FINISH_REPLIES = { review: REVIEW_REPLY, done: DONE_REPLY, dashboard: DASHBOARD_REPLY, commit: COMMIT_REPLY };
+// and `__dashboard` are about the session. Continue here sends the dashboard's
+// own `__launch` (`launch`: { skill, workflow, spec }), which already makes the
+// server hand the agent a `resume`.
+const AFTER_FINISH_REPLIES = { review: REVIEW_REPLY, done: DONE_REPLY, dashboard: DASHBOARD_REPLY, commit: COMMIT_REPLY, changelog: CHANGELOG_REPLY };
 
-async function sendAfterBuild(kind) {
+async function sendAfterBuild(kind, launch = null) {
   if (page.gone || page.pendingResult || page.local.afterBuild) return;
   try {
     const res = await fetch("/submit", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        actions: [{ i: `__${kind}`, type: kind }],
-        reply: AFTER_FINISH_REPLIES[kind],
+        actions: [launch ? { i: "__launch", type: "launch", ...launch } : { i: `__${kind}`, type: kind }],
+        reply: launch ? continueReply(launch) : AFTER_FINISH_REPLIES[kind],
       }),
     });
     if (res.status === 409) {
@@ -420,6 +482,8 @@ async function sendAfterBuild(kind) {
       review: "Review requested. It starts here in a moment.",
       dashboard: "Opening the dashboard. It appears here in a moment.",
       commit: "Opening Git. It appears here in a moment.",
+      changelog: "Opening Changelog. It appears here in a moment.",
+      launch: "Starting the next step. It appears here in a moment.",
     }[kind];
     if (started) {
       hooks.banner(started, "good");

@@ -27,6 +27,8 @@ summary write — so a stop's finish just says where it paused and uses
 the finish's `command` is the suggested commit when Step 4 doc updates landed
 (with `"where": "When you are happy with it, commit it from your terminal:"`), otherwise leave `command` out.
 When the finish prints that suggested commit, it also carries `"commit": true`,
-so the finished screen offers **Commit it now** (`console-finish.md`). The
+so the finished screen offers **Commit it now** (`console-finish.md`), and
+`"changelog": true` beside it, for **Update CHANGELOG first** (it hops into
+Changelog and on to Git). Both only when the finish prints a commit. The
 completion summary is printed to a terminal the browser user is not watching,
 so put it in `finish.body`.

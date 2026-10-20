@@ -149,6 +149,6 @@ a question still owed, above the ending itself:
   commit command for the fixes, in the project's commit format.
 - `command`: one commit for the whole quick task, its changes and the fixes
   together, in the project's commit format (not a second command beside the
-  first), with `commit: true` so **Commit it now** is still on offer.
+  first), with `commit: true` so **Commit it now** is still on offer, and `changelog: true` so **Update CHANGELOG first** is too.
 - `headline`: the quick task's own again, e.g. `{ "cleared": 4, "total": 4 }`.
 - `doc`: `"review"`.

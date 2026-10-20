@@ -27,16 +27,21 @@ const CLEANUP_WHERE = { root: "~/.plan2code/", console: "~/.plan2code/console/",
 
 function cleanupLabel(item) {
   if (item.where === "session") return "Session " + item.name;
+  // One notepad is one item, named by the folder it belongs to; its key only
+  // when its meta.json is gone.
+  if (item.where === "notepad") return "Notepad for " + (item.folder || item.name);
   return CLEANUP_WHERE[item.where] + item.name + (item.kind === "folder" ? "/" : "");
 }
 
 function cleanupSummary(items, bytes) {
   const sessions = items.filter((i) => i.where === "session").length;
   const completed = items.filter((i) => i.where === "completed").length;
-  const strays = items.length - sessions - completed;
+  const notepads = items.filter((i) => i.where === "notepad").length;
+  const strays = items.length - sessions - completed - notepads;
   const parts = [];
   if (sessions) parts.push(sessions + (sessions === 1 ? " old session" : " old sessions"));
   if (completed) parts.push(completed + (completed === 1 ? " old completed spec" : " old completed specs"));
+  if (notepads) parts.push(notepads + (notepads === 1 ? " old notepad" : " old notepads"));
   if (strays) parts.push(strays + (strays === 1 ? " stray file or folder" : " stray files and folders"));
   return parts.join(", ") + " · " + formatBytes(bytes);
 }

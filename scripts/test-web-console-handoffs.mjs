@@ -339,6 +339,13 @@ test("handoff new refuses bad usage with 2 and a bad value with 3", () => {
     assert.equal(run(["handoff", "new", "--skill", "plan2code-quick-task"]).status, 2);
     assert.equal(run(["handoff", "list"]).status, 2);
     assert.equal(run(["handoff"]).status, 2);
+    // A name newHandoff() would take (lowercase and dashes) but no workflow
+    // the console knows: refused as usage before anything is written (FR-5).
+    const before = fs.existsSync(HANDOFFS_DIR) ? fs.readdirSync(HANDOFFS_DIR).sort() : [];
+    const unknown = run(["handoff", "new", "--workflow", "x-ray", "--skill", "plan2code-xray"]);
+    assert.equal(unknown.status, 2, unknown.stderr);
+    assert.match(unknown.stderr, /unknown workflow "x-ray"; one of: .*, xray, /);
+    assert.deepEqual(fs.existsSync(HANDOFFS_DIR) ? fs.readdirSync(HANDOFFS_DIR).sort() : [], before, "no new file in the handoffs folder");
     const bad = run(["handoff", "new", "--workflow", "quick-task", "--skill", "plan2code-quick-task", "--spec", "../x"]);
     assert.equal(bad.status, 3);
     assert.equal(bad.json.ok, false);

@@ -86,20 +86,28 @@ export function ensureDir(dir) {
 // hold transient locks that surface as EPERM/EBUSY from rename. It is intermittent,
 // unreproducible on demand, and looks exactly like a logic bug. Retry from day one.
 export function writeJsonAtomic(file, data) {
-  const tmp = file + "." + process.pid + ".tmp";
   const body = JSON.stringify(data, null, 2);
+  writeTextAtomic(file, body);
+  return body;
+}
+
+// The same write for plain text, as UTF-8 (a Buffer is written as is): a temp
+// file beside the target, fsync, then a rename, retried while Windows still
+// holds the old file.
+export function writeTextAtomic(file, text) {
+  const tmp = file + "." + process.pid + ".tmp";
   let lastErr;
   for (let attempt = 0; attempt < 4; attempt++) {
     try {
       const fd = fs.openSync(tmp, "w");
       try {
-        fs.writeFileSync(fd, body);
+        fs.writeFileSync(fd, text, "utf8");
         fs.fsyncSync(fd);
       } finally {
         fs.closeSync(fd);
       }
       fs.renameSync(tmp, file);
-      return body;
+      return;
     } catch (err) {
       lastErr = err;
       if (err.code !== "EPERM" && err.code !== "EBUSY" && err.code !== "EACCES") break;
@@ -122,6 +130,31 @@ export function fileStamp(file) {
   } catch {
     return "";
   }
+}
+
+// The newest mtime of anything under `p`, never following a symlink. A folder
+// counts by its files, since rewriting a file never touches its folder's
+// mtime; an empty folder counts by its own. Anything unreadable on the way
+// down answers Infinity, so it reads as just touched and stays. Cleanup ages
+// sessions, strays, completed specs and notepads by it.
+export function newestMtime(p) {
+  let st;
+  try {
+    st = fs.lstatSync(p);
+  } catch {
+    return Infinity;
+  }
+  if (!st.isDirectory()) return st.mtimeMs;
+  let entries;
+  try {
+    entries = fs.readdirSync(p);
+  } catch {
+    return Infinity;
+  }
+  if (!entries.length) return st.mtimeMs;
+  let newest = 0;
+  for (const name of entries) newest = Math.max(newest, newestMtime(path.join(p, name)));
+  return newest;
 }
 
 export function readJson(file, fallback = null) {

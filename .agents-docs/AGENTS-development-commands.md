@@ -143,13 +143,12 @@ See the `skills/` build-artifact gotcha in [Code Style & Gotchas](./AGENTS-code-
 
 1. Create `src/plan2code-<name>.md` with body content only and keep it under 20,000 characters.
 2. Register it in `SOURCE_PROMPTS` in `install.js` (with the web-console `additionalReferences` entry every skill carries); add a `generateStepLabel()` case when needed. List any shared scripts it runs in `scripts: [...]`, and put its own scripts in `src/plan2code-<name>-scripts/` (with a `scripts/test-script-<name>.mjs` added to `package.json`'s `test` list).
-3. Register it with the web console (a short list; `npm test` names anything missed):
-   - `src/web-console/public/skills.js`: one entry (workflow, label, start pose, flags, subagents line) with its card, and the card's `states` and `greyed`. Utilities go in group `"extra"` before Changelog.
-   - `src/web-console/public/meter.js`: a `WEIGHTS` entry if its launch scores.
-   - `src/web-console/public/index.html`: its start pose, an `<svg class="pose pose-<workflow>" data-pose="<workflow>">` in `<template id="start-poses">` (pose CSS in `public/styles/poses.css`).
+3. Register it with the web console. The meter's points and labels, the resume command, Help's card list and `console.mjs help`'s workflow list are all derived from `skills.js`, so the edits are `skills.js`, `install.js` (step 2), the skill's prompt (step 1), its pose and its notes; `npm test` names anything else left out:
+   - `src/web-console/public/skills.js`: one entry (workflow, label, start pose, flags, subagents line, the meter's `weight`, `started` and `ran`, and `resume`) with its card (plus `help` when Help's line should differ from the blurb), and the card's `states` and `greyed`. Utilities go in group `"extra"` before Changelog.
+   - `src/web-console/public/index.html`: its start pose, an `<svg class="pose pose-<workflow>" data-pose="<workflow>">` in `<template id="start-poses">` (pose CSS in `public/styles/poses.css`), unless its `pose` borrows an existing one (as Implement + Review borrows Implement's).
    - Its help topic: a `src/web-console/notes/<workflow>.md` (named in the skill's Interface line) or a `HELP_TOPICS` alias in `src/web-console/cmd-help.mjs`.
    - `src/plan2code.md`: the skill/workflow table and "What each skill reads and writes" (`scripts/check-skill-table.mjs`: every backticked token must appear in the skill's prompt).
-   - `console.md` (the `open --workflow` list and the `notes/<workflow>.md` row) and the `console.mjs` usage text.
+   - `console.md` (the `open --workflow` list and the `notes/<workflow>.md` row).
    - Optional: `STARTER_SET_FOR` in `public/starters.js` (unlisted gets "general").
 
    **Adding a spec state** is shorter: one entry in `src/web-console/public/spec-states.js`, the detection in `classifySpec()` in `src/web-console/scan.mjs`, the `states` of each card in `skills.js` that takes it, and a line in the dashboard skill (`src/plan2code.md`); then `npm test`.

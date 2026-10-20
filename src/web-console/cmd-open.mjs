@@ -48,6 +48,8 @@ import {
   writeWorkspaceCursor,
 } from "./workspace.mjs";
 import { readPrHosts, resetSubagentCursor } from "./settings.mjs";
+import { WORKFLOWS, isWorkflow } from "./public/skills.js";
+import { startsClean } from "./public/hops.js";
 import { snapshot } from "./git-repo.mjs";
 import { handoffsDir, listHandoffs, removeHandoffs, staleHandoffs } from "./handoffs.mjs";
 import {
@@ -95,6 +97,13 @@ function leavePointer() {
 
 export async function cmdOpen() {
   trace("open: start");
+  // A workflow the console does not know is refused first, before the pointer,
+  // the reap or any session folder: a fresh open would otherwise make a
+  // session under a name no page or skill can show, and a resume would write
+  // that name over a good one. No --workflow at all is still fine (FR-5).
+  if (args.workflow !== undefined && !isWorkflow(args.workflow)) {
+    die(`unknown workflow "${args.workflow}"; one of: ${WORKFLOWS.join(", ")}`, 2);
+  }
   leavePointer();
   const { project, worktree, branch } = repoRoots();
   reapHandles(project);
@@ -124,22 +133,11 @@ export async function cmdOpen() {
     // rather than a resume plus a whole extra post.
     const switching = args.workflow && args.workflow !== state.workflow;
     launched = Boolean(switching);
-    // Going through the dashboard is a fresh start: a skill launched from
-    // the menu gets a clean page, not the last skill's questions and tabs
-    // under its own name. The staged draft goes too, since its item ids
-    // belonged to the old questions. Git counts as a launch from anywhere:
-    // Commit it now on a finished screen and Changelog's "Commit this now?"
-    // both stand in for its dashboard card, and a finish left
-    // behind would keep the page on the old ending above the new questions
-    // (or the new board). A hop also drops the last run's state.git, since
-    // switchWorkflow() starts from a blank state.
-    // A skill run inline from another (a quick task's review) never switches
-    // through here, so it keeps the page.
-    const hop =
-      switching &&
-      (args.workflow === "dashboard" ||
-        state.workflow === "dashboard" ||
-        args.workflow === "git");
+    // A hop starts the new skill on a clean page, by the rule in
+    // public/hops.js (the page applies the same one). The staged draft goes
+    // too, since its item ids belonged to the old questions, and so does the
+    // last run's state.git, since switchWorkflow() starts from a blank state.
+    const hop = startsClean(state.workflow, args.workflow);
     if (hop) fs.rmSync(path.join(dir, "draft.json"), { force: true });
     reshape = (s) => {
       // Resuming takes a pause back down. A paused finish is a bookmark --

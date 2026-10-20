@@ -81,6 +81,21 @@ const SHOTS = {
   // The git board draws itself from a real repository, so this shot runs in
   // its own git sample project; the post only hands the board back to you.
   git: { workflow: "git", posts: ["git"], repo: true },
+  // The Notepad dialog over the plan question, with a few lines of Markdown
+  // typed into it. The store is the scratch folder's, never the real one.
+  notepad: {
+    workflow: "plan",
+    posts: ["question"],
+    open: async (page) => {
+      await page.click("#btn-notepad");
+      await page.waitForSelector("#notepad-modal[open]", { timeout: 10000 });
+      await page.waitForFunction(() => !document.querySelector("#notepad-modal textarea").readOnly, null, { timeout: 10000 });
+      await page.locator("#notepad-modal textarea").fill(
+        "# Before the call\n\n- Ask about **paging**: cursor or offset?\n- Who signs in to the API?\n- Check the `/tasks` limit with the team\n"
+      );
+      await sleep(1800);
+    },
+  },
 };
 
 // --compare only: the screens the docs never show, shot so a change to the
@@ -520,7 +535,7 @@ async function main() {
 
   SCRATCH = fs.mkdtempSync(path.join(SCRATCH_ROOT, "p2c-shots-"));
   HOME = path.join(SCRATCH, "console-home");
-  ENV = { ...process.env, PLAN2CODE_CONSOLE_HOME: HOME, PLAN2CODE_NO_BROWSER: "1" };
+  ENV = { ...process.env, PLAN2CODE_CONSOLE_HOME: HOME, PLAN2CODE_NOTEPADS_DIR: path.join(SCRATCH, "notepads"), PLAN2CODE_NO_BROWSER: "1" };
   fs.mkdirSync(HOME, { recursive: true });
   fs.mkdirSync(OUT, { recursive: true });
   let browser = null;

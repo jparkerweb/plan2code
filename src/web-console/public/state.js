@@ -20,7 +20,7 @@
 export function fresh() {
   // `stopping` is set once a stop request has been accepted, and kept here so
   // a reload in the middle of wrapping up comes back to the same screen.
-  // `afterBuild` is "review", "commit", "done" or "dashboard" once a finished session's
+  // `afterBuild` is "review", "commit", "changelog", "launch", "done" or "dashboard" once a finished session's
   // offer has been answered, so the buttons do not come back on a reload.
   // `homeward` is set once the top bar's Back to the dashboard request has
   // been accepted mid-workflow: { at }. The resume through the dashboard

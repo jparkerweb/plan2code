@@ -416,43 +416,12 @@ export function resumeCommand({ workflow, specDir } = {}) {
   // Only a real relative specs/ path. Anything else would be run verbatim by
   // someone with no way to tell it was wrong.
   const dir = /^specs\/[a-z0-9][a-z0-9._-]*$/i.test(raw) ? raw : "";
-  const withOverview = (cmd) => (dir ? `${cmd} ${dir}/overview.md` : cmd);
-  switch (workflow) {
-    case "dashboard":
-      return "/plan2code";
-    case "init":
-      return "/plan2code-init";
-    case "init-update":
-      return "/plan2code-init-update";
-    case "plan":
-      return "/plan2code-1-plan";
-    case "quick-task":
-      return "/plan2code-quick-task";
-    case "document":
-      return withOverview("/plan2code-2-document");
-    case "implement":
-      return withOverview("/plan2code-3-implement");
-    case "implement-review":
-      return withOverview("/plan2code-3-implement-review");
-    case "review":
-      return "/plan2code-review";
-    case "revise-plan":
-      return withOverview("/plan2code-1b-revise-plan");
-    case "finalize":
-      return withOverview("/plan2code-4-finalize");
-    case "handoff":
-      return "/plan2code-handoff";
-    case "git":
-      return "/plan2code-git";
-    case "changelog":
-      return "/plan2code-changelog";
-    case "xray":
-      return "/plan2code-xray";
-    case "diagnose":
-      return "/plan2code-diagnose";
-    default:
-      return dir ? `/plan2code-0-pathfinder ${dir}/pathfinder` : "/plan2code-0-pathfinder";
-  }
+  // What follows the command is the entry's `resume` (skills.js). A workflow
+  // the console does not know (an old session's) resumes as Pathfinder.
+  const entry = skillFor(workflow) || skillFor("pathfinder");
+  if (dir && entry.resume === "overview") return `${entry.command} ${dir}/overview.md`;
+  if (dir && entry.resume === "folder") return `${entry.command} ${dir}/pathfinder`;
+  return entry.command;
 }
 
 /* ------------------------------------------------ after a build is done */
@@ -465,6 +434,7 @@ export const REVIEW_REPLY =
 export const DONE_REPLY = "No review, thanks. I am done: close the session.";
 export const DASHBOARD_REPLY = "Take me back to the dashboard, right here in this session.";
 export const COMMIT_REPLY = "Commit what was just built: open Git's commit flow, right here in this session.";
+export const CHANGELOG_REPLY = "Update the CHANGELOG before I commit: open Changelog, right here in this session.";
 
 // Shown under the Back to the dashboard button: the press picks up in the same
 // conversation, which carries a long skill's context into the next one.
@@ -491,6 +461,42 @@ export function commitOffer(fin) {
 }
 
 /**
+ * Whether a finish offers to update the CHANGELOG before the commit. The agent
+ * opts in with `finish.changelog: true` on a finished quick task or finalize;
+ * the press opens Changelog in the same session, whose "Commit this now?" yes
+ * carries on to Git. A pause never offers it.
+ */
+export function changelogOffer(fin) {
+  return Boolean(fin && fin.changelog === true && !finishPaused(fin));
+}
+
+/**
+ * The skill a finish's next step names, when it is one the page can start in
+ * this session: `{ skill, workflow, spec }`, or null. The agent writes nothing
+ * new for it. The command's leading `/plan2code-...` is looked up in skills.js
+ * (a trailing `--web` and any other argument are ignored), and `spec` is the
+ * `specs/<name>` folder the command mentions, when it does. A pause, the
+ * dashboard's own `/plan2code` and any command that is not a skill (a git
+ * commit) offer nothing.
+ */
+export function continueOffer(fin) {
+  if (!fin || finishPaused(fin)) return null;
+  const first = String(fin.command || "").trim().split(/\s+/)[0];
+  if (!first.startsWith("/")) return null;
+  const entry = skillByName(first.slice(1));
+  if (!entry || entry.workflow === "dashboard") return null;
+  const match = /(?:^|[\s"'])(specs\/[A-Za-z0-9][A-Za-z0-9._-]*)(?=[/\s"']|$)/.exec(String(fin.command));
+  return { skill: entry.skill, workflow: entry.workflow, spec: match ? match[1] : undefined };
+}
+
+/** What Continue here reaches the agent as: a launch's sentence, naming the skill. */
+export function continueReply(offer) {
+  const entry = SKILLS.find((s) => s.skill === offer.skill);
+  const card = entry && entry.card ? entry.card.title : entry ? entry.name : offer.skill;
+  return launchReply({ title: card, command: entry ? entry.command : `/${offer.skill}` }, offer.spec ? { dir: offer.spec } : null);
+}
+
+/**
  * Whether a finish carries the offer to review what was just built. The agent
  * posts `finish.review` as `true` or as `{ "label": "..." }` on a finished
  * quick task (an implementation phase offers the review earlier, as a verdict
@@ -504,7 +510,7 @@ export function reviewOffer(fin) {
 }
 
 /**
- * One offer button on a finish (review, done, commit, dashboard). A press of
+ * One offer button on a finish (review, done, commit, changelog, dashboard, launch). A press of
  * any of them is the session's one answer, so it locks every button until the
  * finish goes away, not just until the agent collects the send: `asked` is
  * the pressed one, which keeps its "requested…" label.
@@ -541,6 +547,7 @@ export const SKILL_CATALOG = SKILLS.filter((s) => s.card).map((s) => ({
   skill: s.skill,
   command: s.command,
   workflow: s.workflow,
+  ...(s.review ? { review: s.review } : {}),
   ...s.card,
 }));
 
@@ -563,7 +570,20 @@ export function startPose(workflow) {
 
 export function catalogEntry(skill) {
   const entry = skillByName(skill);
-  return entry && entry.card ? SKILL_CATALOG.find((e) => e.skill === entry.skill) : null;
+  if (!entry) return null;
+  // A skill with no card of its own is launched from another's (Implement +
+  // Review from Implement's Review box).
+  const owner = entry.card ? entry : SKILLS.find((s) => s.review === entry.skill);
+  return owner ? SKILL_CATALOG.find((e) => e.skill === owner.skill) : null;
+}
+
+/**
+ * What a card launches: the card itself, or, when it has a Review box and the
+ * box is ticked, the review skill's entry under the card's title.
+ */
+export function launchVariant(entry, withReview) {
+  const alt = withReview && entry.review ? skillByName(entry.review) : null;
+  return alt ? { ...entry, skill: alt.skill, workflow: alt.workflow, command: alt.command, title: alt.name } : entry;
 }
 
 /* ------------------------------------------- dashboard card availability */

@@ -14,8 +14,10 @@ import {
   subagentsFor,
   takesTemplates,
   labelFor,
+  WORKFLOWS,
+  isWorkflow,
 } from "../src/web-console/public/skills.js";
-import { CONSOLE_WORKFLOWS, SKILL_CATALOG, START_POSES, WORKFLOW_LABEL, dashNoteKind, onInitialPick, startPose, startingHint } from "../src/web-console/public/answers.js";
+import { CONSOLE_WORKFLOWS, SKILL_CATALOG, catalogEntry, launchVariant, START_POSES, WORKFLOW_LABEL, dashNoteKind, onInitialPick, startPose, startingHint } from "../src/web-console/public/answers.js";
 import { LAUNCH_COUNTED, PROGRESS_WORKFLOWS } from "../src/web-console/public/meter.js";
 import { BUILD_WORKFLOWS } from "../src/web-console/public/labels.js";
 import { helpTabFor } from "../src/web-console/public/help.js";
@@ -106,6 +108,27 @@ test("the entries are frozen data", () => {
   }
 });
 
+test("the meter, resume and Help fields are well formed on every entry", () => {
+  const label = (v) => v === null || (typeof v === "string" && v.trim() !== "");
+  for (const s of SKILLS) {
+    const w = s.workflow;
+    assert.ok(Object.hasOwn(s, "weight") && (s.weight === null || (typeof s.weight === "number" && s.weight >= 0)), `${w}: weight is a number >= 0, or null`);
+    assert.ok(Object.hasOwn(s, "started") && label(s.started), `${w}: started is a label, or null`);
+    assert.ok(Object.hasOwn(s, "ran") && label(s.ran), `${w}: ran is a label, or null`);
+    assert.ok(Object.hasOwn(s, "resume") && ["overview", "folder", null].includes(s.resume), `${w}: resume is "overview", "folder" or null`);
+    if (s.card && Object.hasOwn(s.card, "help")) assert.ok(typeof s.card.help === "string" && s.card.help.trim(), `${w}: card.help is a line, or absent`);
+    if (s.metered) assert.ok(typeof s.weight === "number" && s.started, `${w}: a metered launch has a weight and a started label`);
+  }
+});
+
+test("WORKFLOWS lists every entry once, in order, and isWorkflow() knows only those", () => {
+  assert.deepEqual(WORKFLOWS, SKILLS.map((s) => s.workflow));
+  assert.equal(new Set(WORKFLOWS).size, WORKFLOWS.length);
+  assert.ok(Object.isFrozen(WORKFLOWS));
+  for (const w of WORKFLOWS) assert.equal(isWorkflow(w), true, w);
+  for (const bad of ["x-ray", "", undefined, null, 3, "Plan"]) assert.equal(isWorkflow(bad), false, String(bad));
+});
+
 test("the lookups answer by workflow or skill name, and say nothing for an unknown one", () => {
   assert.equal(skillFor("implement-review").skill, "plan2code-3-implement-review");
   assert.equal(skillByName("plan2code-git").workflow, "git");
@@ -159,7 +182,8 @@ function helpProblems(skills, topics) {
 
 // The skills with a card, plus the dashboard, are exactly what install.js builds.
 function installProblems(skills, installed) {
-  const named = skills.filter((s) => s.card || s.workflow === "dashboard").map((s) => s.skill);
+  const reviews = skills.map((s) => s.review).filter(Boolean);
+  const named = skills.filter((s) => s.card || s.workflow === "dashboard" || reviews.includes(s.skill)).map((s) => s.skill);
   return [
     ...named.filter((n) => !installed.includes(n)).map((n) => `${n} is in skills.js but not in install.js SOURCE_PROMPTS`),
     ...installed.filter((n) => !named.includes(n)).map((n) => `${n} is in install.js SOURCE_PROMPTS but has no card in skills.js`),
@@ -244,4 +268,115 @@ test("starting screen: the hint stays calm for ninety seconds, then points at th
   assert.match(startingHint(0), /fills in by itself/);
   assert.match(startingHint(90000), /fills in by itself/, "ninety seconds is still calm");
   assert.match(startingHint(90001), /terminal has the play-by-play/);
+});
+
+/* ---------------------------------------------- the docs held to the list */
+
+// What one prose list says against what it should say: the lines naming the
+// missing and the extra names, empty when they agree.
+function listProblems(file, said, want) {
+  const have = new Set(said);
+  const should = new Set(want);
+  return [
+    ...[...should].filter((n) => !have.has(n)).map((n) => `${file} is missing ${n}`),
+    ...[...have].filter((n) => !should.has(n)).map((n) => `${file} names ${n}, which is not in skills.js`),
+  ];
+}
+
+const readSrc = (...parts) => fs.readFileSync(path.join(ROOT, "src", ...parts), "utf8");
+
+// A markdown section's text: from its heading to the next heading of the same level.
+function sectionOf(text, heading) {
+  const at = text.indexOf(heading);
+  assert.ok(at >= 0, `no "${heading}" heading`);
+  const level = heading.match(/^#+/)[0];
+  const rest = text.slice(at + heading.length);
+  const next = rest.search(new RegExp(`\\n${level} `));
+  return next < 0 ? rest : rest.slice(0, next);
+}
+
+test("docs: console.md's open step names every workflow", () => {
+  const text = readSrc("web-console", "console.md");
+  const m = text.match(/where `<w>` is one of ([\s\S]*?)\. Get it right/);
+  assert.ok(m, "console.md: the open step's `<w>` sentence is not where the test looks");
+  const said = [...m[1].matchAll(/`([^`]+)`/g)].map((x) => x[1]);
+  assert.deepEqual(listProblems("src/web-console/console.md", said, WORKFLOWS), []);
+});
+
+test("docs: the dashboard skill's launch table maps every skill to its workflow", () => {
+  const section = sectionOf(readSrc("plan2code.md"), "## A pick arrives");
+  const pairs = [];
+  for (const line of section.split(/\r?\n/)) {
+    if (!/^\|\s*plan2code-/.test(line)) continue;
+    const cells = line.split("|").map((c) => c.trim()).filter(Boolean);
+    for (let i = 0; i + 1 < cells.length; i += 2) pairs.push(`${cells[i]} -> ${cells[i + 1]}`);
+  }
+  const want = SKILLS.filter((s) => s.workflow !== "dashboard").map((s) => `${s.skill} -> ${s.workflow}`);
+  assert.deepEqual(listProblems("src/plan2code.md (A pick arrives)", pairs, want), []);
+});
+
+test("docs: the dashboard skill's reads-and-writes table has a row for every skill", () => {
+  const section = sectionOf(readSrc("plan2code.md"), "## What each skill reads and writes");
+  const said = [];
+  for (const line of section.split(/\r?\n/)) {
+    const m = line.match(/^\|\s*([a-z0-9()-]+)\s*\|/);
+    if (!m || m[1] === "skill" || /^-+$/.test(m[1])) continue;
+    // `3-implement(-review)` stands for both build skills.
+    if (m[1] === "3-implement(-review)") said.push("3-implement", "3-implement-review");
+    else said.push(m[1]);
+  }
+  const want = SKILLS.filter((s) => s.workflow !== "dashboard").map((s) => s.skill.replace(/^plan2code-/, ""));
+  assert.deepEqual(listProblems("src/plan2code.md (What each skill reads and writes)", said, want), []);
+});
+
+test("docs: `console.mjs help` lists every workflow, in order", () => {
+  const out = cli(["help"]).stdout;
+  const m = out.match(/workflows: ([\s\S]*?)\n\s*\n/);
+  assert.ok(m, "console.mjs help prints no workflows: list");
+  const said = m[1].split(/[·\s]+/).filter(Boolean);
+  assert.deepEqual(listProblems("console.mjs help", said, WORKFLOWS), []);
+  assert.deepEqual(said, [...WORKFLOWS], "console.mjs help: the workflows are in skills.js order");
+});
+
+// A count goes stale the day a skill is added; the docs say "every skill".
+// Matched over the whole file, since the docs are hard-wrapped and a count can
+// sit on one line with "skills" on the next; the line is where the match starts.
+const SKILL_COUNT_RE = /\b(\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty)\s+skills\b/gi;
+function skillCounts(files) {
+  return files.flatMap(([file, text]) =>
+    [...text.matchAll(SKILL_COUNT_RE)].map((m) => `${file}:${text.slice(0, m.index).split("\n").length} states a skill count: ${m[0].replace(/\s+/g, " ")}`)
+  );
+}
+
+test("docs: no console doc states how many skills there are", () => {
+  const dir = path.join(ROOT, "src", "web-console");
+  const files = [];
+  const walk = (d) => {
+    for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+      const p = path.join(d, e.name);
+      if (e.isDirectory()) walk(p);
+      else if (e.name.endsWith(".md")) files.push([path.relative(ROOT, p).replace(/\\/g, "/"), fs.readFileSync(p, "utf8")]);
+    }
+  };
+  walk(dir);
+  assert.ok(files.some(([f]) => f.endsWith("notes/implement.md")), "the walk reaches notes/");
+  assert.deepEqual(skillCounts(files), []);
+  // The check names the line, and catches a count wrapped across two lines.
+  assert.deepEqual(skillCounts([["x.md", "Intro\nthe dashboard and all twelve skills behind it\n"]]), ["x.md:2 states a skill count: twelve skills"]);
+  assert.deepEqual(skillCounts([["y.md", "Intro\nthe dashboard and all twelve\nskills behind it\n"]]), ["y.md:2 states a skill count: twelve skills"]);
+});
+
+test("Implement's card launches Implement + Review when Review is ticked", () => {
+  const card = SKILL_CATALOG.find((e) => e.skill === "plan2code-3-implement");
+  assert.equal(card.title, "Implement");
+  assert.equal(SKILL_CATALOG.some((e) => e.skill === "plan2code-3-implement-review"), false, "no card of its own");
+  assert.equal(launchVariant(card, false), card);
+  const reviewed = launchVariant(card, true);
+  assert.equal(reviewed.skill, "plan2code-3-implement-review");
+  assert.equal(reviewed.workflow, "implement-review");
+  assert.equal(reviewed.command, "/plan2code-3-implement-review");
+  assert.equal(reviewed.spec, true, "still takes the picked spec");
+  assert.equal(catalogEntry("plan2code-3-implement-review").skill, "plan2code-3-implement", "handoffs and recommendations resolve to the card");
+  const quick = SKILL_CATALOG.find((e) => e.skill === "plan2code-quick-task");
+  assert.equal(launchVariant(quick, true), quick, "a card with no Review box is unchanged");
 });

@@ -146,6 +146,8 @@ Scroll down for the utilities. Outside a git repository the **Git** card says so
 - **Files in your notes.** Show instead of describe: attach a screenshot, a
   photo or a document to any note or quick question (see *Attachments in notes
   and questions* below).
+- **A notepad of your own.** One per project folder, for jottings and
+  screenshots that are yours, not the agent's (see *Your notepad* below).
 - **A nudge when it might be waiting on you.** Your agent may stop in the
   terminal to ask permission for something, and the page cannot see that. So
   the dashboard and every starting screen carry a one-line tip about hands-off
@@ -177,6 +179,8 @@ review has already reviewed the code, so its card has no review button.
 </picture>
 
 The **Ask** tab is a chat beside the cards, for a quick question at any point.
+When a question is really a new task, the answer ends with a ready-to-paste
+prompt in a block with a Copy button, to take into a new conversation.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="../docs/screenshots/ask-dark.webp">
@@ -406,6 +410,35 @@ Pathfinder, the agent can hand independent pieces of work to helpers
 - **Pathfinder's research** always uses helpers, whatever the switch says, and
   they show in the tab too.
 
+### Your notepad
+
+The **Notepad** icon in the top bar, on the dashboard, every skill and the
+finished screen, opens a large dialog with a scratch pad for the folder you are
+working in.
+
+- **Markdown, styled as you type.** Headings, lists, bold and code take their
+  look in place while the text itself stays plain Markdown (saved as
+  `note.md`, up to 1 MB).
+- **Pictures beside it.** Paste a screenshot, drop files on the dialog or press
+  **Add image**: each becomes a thumbnail in a strip under the text (up to 200).
+  Click one for a full-screen preview (arrow keys step through, Esc closes);
+  its **X** asks before it deletes.
+- **It saves itself**, about a second after you stop typing and when you close
+  the dialog. If the connection drops, your text stays in the page and is
+  retried, and the tab warns before you close it with something unsaved.
+- **One per folder, kept between sessions.** Every session started in the same
+  folder (each git worktree counts as its own) opens the same notepad, in
+  `~/.plan2code/notepads/<folder-name>-<12 hex>/`: `meta.json` (which folder it
+  belongs to), `note.md` and `images/`. Two pages open on one folder share it,
+  and the last save wins.
+- **Private.** It never goes into your project, your session or anything the
+  agent reads, so the agent never sees it. It stays on this machine.
+- **Removed only when you say.** No automatic cleanup touches it. Once the
+  newest file in a notepad is 30 days old or more, *User Preferences →
+  Cleanup* offers it as one item named after its folder's full path
+  (*Notepad for /home/sam/code/shop*),
+  and deleting it removes the whole notepad, text and pictures.
+
 ### Session meter
 
 A small ring pill in the top bar — **Session: fresh** (green), **Session:
@@ -489,6 +522,14 @@ your project. The paused card names the file, and the dashboard offers it as a
 chip until it is picked up. **Just stop and save** saves your place and gives
 the resume command, nothing more; where the step has nothing saved yet it reads
 *Stop anyway*, under a warning about what is lost.
+
+When the next step is another Plan2Code skill, the screen also has a
+**Continue here** button beside it: one press starts that skill in the same
+conversation, as a dashboard card would. It disappears once the session meter is
+red, when a fresh conversation is the better choice. A finished Quick Task or
+Finalize that ends on a commit can also offer **Update CHANGELOG first**, beside
+**Commit it now**: it opens Changelog right there, and Changelog's yes to
+*Commit this now?* carries on to Git.
 
 The first two also carry a **Back to the dashboard** button (beside the next
 step, or as the main button under "All done"). Press it and the same page turns
@@ -707,6 +748,7 @@ exception being the note attachments the agent keeps for a spec, above):
 | `~/.plan2code/console/sessions/<id>/workspace.json`, `ledger.ndjson`, `workspace-cursor.json` | the workspace's folders (paths, names, descriptions — never their contents), the session meter's events, and how far the agent has been told of workspace changes. Kept beside the session, so they outlive every dashboard hop | with the session |
 | `~/.plan2code/console/sessions/<id>/uploads/` | images and documents attached to notes and quick questions | 30 days after the session was last touched |
 | `~/.plan2code/handoffs/<id>.md`, `<id>.json` | each handoff's document, and which checkout, spec and skill it belongs to and whether it was picked up (`handoffs.mjs` is their one owner) | 30 days after it was last touched, picked up or not |
+| `~/.plan2code/notepads/<folder-name>-<12 hex>/` | your notepad for one folder: `meta.json`, `note.md` and `images/` (`notepads.mjs` is their one owner; the agent never reads them) | until you delete it through Cleanup, which offers it once its newest file is 30 days old |
 | `~/.plan2code/console/looks.json` | your role, theme, colors, sounds and card width | always |
 | `~/.plan2code/console/subagents.json` | your Subagents switch, instruction and limit, per project folder and skill | always |
 | `~/.plan2code/console/sessions/<id>/subagents-setting.json`, `subagents-cursor.json` | this session's copy of the switch, and how far the agent has been told of it | with the session |
@@ -738,8 +780,10 @@ needed: sessions untouched for 30 days (never the one you are in), anything at
 the top of `~/.plan2code/console/` other than `sessions/`, `looks.json`,
 `workspaces.json`, `subagents.json`, `console-dir` and `update-check.json`, and anything at the top of `~/.plan2code/` other than
 `console/`, `bin/`, `launcher.json`, `install.json` (what you installed, which
-`plan2code update` reads), `models.json` and `handoffs/` (old handoffs go by
-age, above). It also lists each
+`plan2code update` reads), `models.json`, `handoffs/` (old handoffs go by
+age, above) and `notepads/`. Each notepad whose newest file is 30 days old or
+more is listed as one item, *Notepad for* its folder, and goes whole; no
+automatic sweep ever removes one. It also lists each
 folder in the project's `specs--completed/` whose newest file is more than 30
 days old: archived specs Finalize moved there. Deleting one is permanent:
 `specs--completed/` is usually gitignored, so git can't restore it. A stray is listed once
@@ -778,7 +822,7 @@ this:
 
 ### Routes
 
-The upload routes, the send, the overview and handoff reads, and the workspace. Like every page route, they are on `127.0.0.1`
+The upload routes, the send, the overview and handoff reads, the workspace and the notepad. Like every page route, they are on `127.0.0.1`
 behind the session cookie, and the ones that write also check the request's
 origin.
 
@@ -797,6 +841,12 @@ origin.
 | `POST /workspace/edit` | `{ id, name?, description? }`. Renames or re-describes one folder: 400 `bad-name` / `name-taken`, 404 `unknown`. |
 | `POST /workspace/remove` | `{ id }`. 400 `original` for the folder the session started in, 404 `unknown`. |
 | `POST /workspace/browse` | Opens the system folder picker and answers `{ path }` or `{ cancelled: true }`; never adds anything itself. 409 `busy` while one is open, 404 `no-picker` when the session looks remote or no picker exists. |
+| `GET /notepad` | The notepad for the folder this session runs in: `{ text, savedAt, images: [{ id, url, thumb }] }`. Reading never creates a file. |
+| `POST /notepad/text` | `{ text }`. Saves `note.md` and answers `{ ok, savedAt }`; 400 `bad`, 413 `too-long` (over 1 MB). |
+| `POST /notepad/image` | Raw `image/jpeg` (the page re-encodes every picture first). Writes `images/<uuid>.jpg` and answers `{ ok, id, url }`; 415 `not-jpeg`, 413 `too-large` (over 4 MB), 409 `too-many` (200 pictures). |
+| `POST /notepad/thumb?id=<uuid>` | Raw `image/jpeg`: that picture's thumbnail. 404 `not-found`, 415 `not-jpeg`, 413 `too-large`. |
+| `POST /notepad/image/delete` | `{ id }`. Deletes a picture and its thumbnail; 404 `not-found`. |
+| `GET /notepad/images/<uuid>.jpg`, `<uuid>.thumb.jpg` | Serves a picture or its thumbnail as `image/jpeg`, only by a UUID name, a regular file (never a link) whose real path stays inside `~/.plan2code/notepads/`; anything else is 404. |
 | `POST /subagents` | `{ on, instruction, max }` (`instruction: null` for the shipped default). Saves the switch for this project and skill and answers `{ ok, setting }`; 400 `not-offered` on a skill without the switch, `bad`, `too-long` (over 2,000 characters) or `max` (outside 1 to 20). |
 
 ## For maintainers
@@ -805,12 +855,12 @@ origin.
 | --- | --- |
 | Source | `src/web-console/` (one row per file in the files table of `.agents-docs/AGENTS-architecture.md`; a test keeps it complete) |
 | Ships as | `skills/<every skill>/references/web-console/` |
-| Wiring | one `additionalReferences` entry per skill in `install.js`; the dashboard's menu lives in `public/answers.js` (`SKILL_CATALOG`) |
+| Wiring | one `additionalReferences` entry per skill in `install.js`; the dashboard's menu lives in `public/skills.js` (each entry's `card`; `SKILL_CATALOG` in `public/answers.js` is a lookup on it) |
 | Agent contract | `src/web-console/console.md` (read once), its topic files (`console-*.md`), `notes/<workflow>.md`, and `building.md` / `building-review.md` for the builds; `console.mjs help <topic>` prints any of them |
 | Tests | `node --test scripts/test-web-console-*.mjs` (split by area, shared setup in `scripts/web-console-test-helpers.mjs`), also run by `npm test` |
 | Start-up benchmark | `node scripts/bench-web-console.mjs` (needs a local Chrome or Edge for the paint columns, driven through `playwright-core` from `npm install`; `--browser-delay 900` models a real browser launch, `--roundtrip` times Send→agent and post→page) |
 | Screenshots | `node scripts/capture-screenshots.mjs` (needs a local Chrome or Edge, driven through `playwright-core` from `npm install`; `PLAN2CODE_TEST_BROWSER=chrome|msedge` forces one) |
-| Dependencies | none at runtime. `marked` 15.0.7 (MIT) is vendored for its lexer only |
+| Dependencies | none at runtime. `marked` 15.0.7 (MIT) is vendored for its lexer only, and OverType 2.6.1 (MIT) for the notepad's editor; the page's policy blocks the `<style>` OverType injects, so its CSS ships in `public/styles/notepad.css`, regenerated by `node scripts/vendor-overtype.mjs` after an upgrade (steps in the architecture doc's Notepad point) |
 
 Edit `src/` only. `skills/` is a committed build artifact: regenerate it with
 `npm run build:skills` and commit it with the source change, since `npm test`

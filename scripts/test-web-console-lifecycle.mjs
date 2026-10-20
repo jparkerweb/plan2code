@@ -22,6 +22,7 @@ import {
   noteAwaiting,
   suggestionFrom,
 } from "../src/web-console/public/answers.js";
+import { WORKFLOWS } from "../src/web-console/public/skills.js";
 import {
   HOME,
   MODELS_DIR,
@@ -212,6 +213,38 @@ test("open --resume restates workflow, title and spec on the live session", () =
 
   // Put it back for the tests that follow: the switch blanked the session.
   fs.writeFileSync(stateFile, snapshot);
+});
+
+// A workflow name the console does not know (x-ray for xray) is refused as bad
+// usage before anything is made: no session folder for a fresh open, and no
+// write over the resumed session's good name (FR-5).
+test("open refuses an unknown --workflow and makes no session folder", () => {
+  const sessionsDir = path.join(HOME, "sessions");
+  const before = fs.readdirSync(sessionsDir).sort();
+  const res = cli(["open", "--no-open", "--workflow", "x-ray"], { expectFail: true });
+  assert.equal(res.status, 2, res.stderr);
+  assert.match(res.stderr, /unknown workflow "x-ray"/);
+  for (const name of WORKFLOWS) assert.ok(res.stderr.includes(name), `stderr lists ${name}`);
+  assert.deepEqual(fs.readdirSync(sessionsDir).sort(), before, "no session folder was created");
+});
+
+test("open --resume refuses an unknown --workflow and leaves the state alone", () => {
+  const stateFile = path.join(session, "state.json");
+  const bytes = fs.readFileSync(stateFile);
+  const res = cli(["open", "--resume", sid, "--no-open", "--workflow", "x-ray"], { expectFail: true });
+  assert.equal(res.status, 2, res.stderr);
+  assert.match(res.stderr, /unknown workflow "x-ray"/);
+  assert.ok(fs.readFileSync(stateFile).equals(bytes), "state.json is byte for byte the same");
+});
+
+test("open with no --workflow still opens a Pathfinder session", () => {
+  const res = cli(["open", "--no-open"]);
+  try {
+    assert.equal(res.json.ok, true);
+    assert.equal(readState(res.json.session).workflow, "pathfinder");
+  } finally {
+    cli(["stop", "--session", res.json.sid]);
+  }
 });
 
 // Plan -> Back to the dashboard -> Document used to show Plan's questions,

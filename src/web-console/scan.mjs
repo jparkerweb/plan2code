@@ -7,6 +7,11 @@ import { isDeletableSpecDir } from "./public/answers.js";
 import { SPEC_STATES as STATE_TABLE } from "./public/spec-states.js";
 import { nowIso, readText } from "./files.mjs";
 import { insideGitRepo, pendingFiles } from "./sessions.mjs";
+import { countTasks, statusOf } from "./spec-files.mjs";
+
+// The task-line pattern lives in spec-files.mjs; re-exported for any importer
+// that still takes it from here.
+export { TASK_LINE_RE } from "./spec-files.mjs";
 
 /* ---------------------------------------------------------- project scan */
 
@@ -53,20 +58,6 @@ function maxMtime(dir, depth = 4, budget = { n: 400 }, tally = null) {
   return best;
 }
 
-// A spec file's Status line value, in any of the forms the skill scripts
-// accept (`**Status:**`, `**Status**:`, `Status:`). Same pattern as STATUS_RE
-// in src/skill-scripts/specs.mjs; the console cannot import it, so keep the
-// two copies in step. A CRLF file's trailing `\r` is dropped.
-const STATUS_LINE_RE = /^[ \t]*(?:[-*][ \t]*)?(?:\*\*Status:\*\*|\*\*Status\*\*:|Status:)[ \t]*(.+?)[ \t\r]*$/m;
-
-// A phase file's task line (`- [ ] **Task 1.2:**`). The scan counts by it,
-// and patches.mjs keeps only these lines for a doc block's `select: "tasks"`.
-export const TASK_LINE_RE = /^\s*(?:[-*]|\d+\.)\s+\[.\]\s+\*\*Task\s/i;
-function statusOf(text) {
-  const m = text.match(STATUS_LINE_RE);
-  return m ? m[1] : "";
-}
-
 // A spec folder's pipeline position, from its files alone. Furthest artifact
 // wins: an overview beats a draft beats a map, so a spec mid-way through two
 // stages reports the later one.
@@ -79,25 +70,27 @@ function classifySpec(dir, names) {
   const planDraft = drafts.length > 0;
   const planConv = has(/^PLAN-CONVERSATION.*\.md$/i);
   const liveDraft = drafts.filter((n) => !/-prev\.md$/i.test(n)).sort().reverse()[0] || drafts[0];
-  const draftStatus = liveDraft ? statusOf(readText(path.join(dir, liveDraft))) : "";
+  const draftStatus = liveDraft ? statusOf(readText(path.join(dir, liveDraft))) || "" : "";
   const resumeAt = draftStatus.match(/Resume at Phase\s*(\d+)/i);
 
   if (phases.length) {
+    // countTasks() counts a file's task lines (every checkbox in a file
+    // written before that format). An assumed-done task (`[?]`) counts as
+    // done, and the detail names how many there are.
     let done = 0;
+    let assumed = 0;
     let open = 0;
     for (const f of phases) {
-      const text = readText(path.join(dir, f));
-      // The task lines when the file has them (`- [ ] **Task 1.2:**`), so an
-      // Acceptance Criteria checkbox is not counted as a task; every checkbox
-      // in a file written before that format.
-      const tasks = text.split(/\r?\n/).filter((l) => TASK_LINE_RE.test(l));
-      const lines = tasks.length ? tasks.join("\n") : text;
-      done += (lines.match(/^\s*[-*] \[[xX]\]/gm) || []).length;
-      open += (lines.match(/^\s*[-*] \[[ /!]\]/gm) || []).length;
+      const n = countTasks(readText(path.join(dir, f)));
+      done += n.done;
+      assumed += n.assumed;
+      open += n.open;
     }
-    const total = done + open;
-    if (open === 0 && done > 0) return { state: "built", detail: "all tasks done" };
-    if (done > 0) return { state: "building", detail: `${done} of ${total} tasks done` };
+    const finished = done + assumed;
+    const total = finished + open;
+    const suffix = assumed > 0 ? `, ${assumed} assumed` : "";
+    if (open === 0 && finished > 0) return { state: "built", detail: `all tasks done${suffix}` };
+    if (finished > 0) return { state: "building", detail: `${finished} of ${total} tasks done${suffix}` };
     return {
       state: "documented",
       detail: `${phases.length} phase${phases.length === 1 ? "" : "s"}, ${total || "?"} tasks ready`,
@@ -115,14 +108,14 @@ function classifySpec(dir, names) {
   // Quick Task marks the write-up Fixed once the bug is gone: then the bug is
   // done, and the folder waits only to be archived.
   const diagnosis = names.filter((n) => /^DIAGNOSIS-.*\.md$/i.test(n)).sort().reverse()[0];
-  const diagnosisStatus = diagnosis ? statusOf(readText(path.join(dir, diagnosis))).replace(/\*+/g, "").trim() : "";
+  const diagnosisStatus = diagnosis ? (statusOf(readText(path.join(dir, diagnosis))) || "").replace(/\*+/g, "").trim() : "";
   if (diagnosis && !planConv && !fs.existsSync(path.join(pfDir, "map.md")))
     return /^fixed/i.test(diagnosisStatus)
       ? { state: "fixed", detail: "bug fixed" }
       : { state: "diagnosed", detail: "bug diagnosed, not fixed" };
   if (isDir(pfDir)) {
     const mapText = readText(path.join(pfDir, "map.md"));
-    const status = statusOf(mapText).replace(/\*+/g, "").trim();
+    const status = (statusOf(mapText) || "").replace(/\*+/g, "").trim();
     if (/^cleared/i.test(status)) return { state: "mapped", detail: "all decisions made" };
     let qTotal = 0;
     let qDone = 0;

@@ -335,6 +335,7 @@ footer a { color: inherit; }
       <div><h3>Review before you approve</h3><p>Review the code first, on the sign-off card, reviews exactly the files the phase changed. You tick which findings get fixed, then approve.</p></div>
       <div><h3>The Ask tab</h3><p>A chat beside the cards for anything you want to know. It is answered at the agent's next check-in and never holds up your answers.</p></div>
       <div><h3>Attachments on notes</h3><p>Paste a screenshot or attach a document to a note on any question, and show instead of describe.</p></div>
+      <div><h3>A notepad of your own</h3><p>A private pad for each project folder, in Markdown with pictures. It never goes into your project, and the agent never sees it.</p></div>
       <div><h3>Workspace folders</h3><p>Add a shared library or a design folder as read-only context, and point at it by its <code>@name</code>.</p></div>
       <div><h3>Session meter</h3><p>A ring in the top bar turns from green to red as a session grows long, and suggests when a fresh one would serve you better.</p></div>
       <div><h3>Runs on your machine</h3><p>A small program Plan2Code starts for you serves the page on <code>127.0.0.1</code>. No account, no dependencies, and nothing leaves your computer.</p></div>
@@ -353,6 +354,13 @@ footer a { color: inherit; }
           <img src="screenshots/finish-light.webp" width="2560" height="1600" loading="lazy" alt="The finished screen after a phase: what happened, the next command with a Copy button, and a Back to the dashboard button.">
         </picture>
         <figcaption>Every ending says what to run next.</figcaption>
+      </figure>
+      <figure style="grid-column:1/-1;max-width:calc(50% - 12px);justify-self:center">
+        <picture class="shot">
+          <source media="(prefers-color-scheme: dark)" srcset="screenshots/notepad-dark.webp">
+          <img src="screenshots/notepad-light.webp" width="2560" height="1600" loading="lazy" alt="The Notepad open over a question: a few lines of Markdown styled as they are typed.">
+        </picture>
+        <figcaption>Your own notepad, private to the folder.</figcaption>
       </figure>
     </div>
   </div>

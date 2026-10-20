@@ -34,6 +34,7 @@
     <link rel="modulepreload" href="/screens/help-dialog.js" />
     <link rel="modulepreload" href="/screens/workspace.js" />
     <link rel="modulepreload" href="/screens/ask.js" />
+    <link rel="modulepreload" href="/screens/notepad.js" />
     <link rel="modulepreload" href="/net.js" />
     <link rel="modulepreload" href="/render.js" />
     <link rel="modulepreload" href="/palette.js" />
@@ -51,6 +52,8 @@
     <link rel="modulepreload" href="/git-board-view.js" />
     <link rel="modulepreload" href="/pr-url.js" />
     <link rel="modulepreload" href="/vendor/marked.esm.js" />
+    <link rel="modulepreload" href="/notepad.js" />
+    <link rel="modulepreload" href="/vendor/overtype.esm.js" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="icon" type="image/png" sizes="192x192" href="/favicon.png" />
   </head>
@@ -210,6 +213,17 @@
               <circle cx="12.4" cy="8" r="1.5" class="sa-node" />
               <circle cx="12.4" cy="13" r="1.5" class="sa-node" />
             </svg>
+          </button>
+          <!-- Notepad: every screen, never hidden. The person's private notes for this
+               folder; nothing in it reaches the agent. -->
+          <button type="button" class="btn ghost small notepad-btn" id="btn-notepad" title="Notepad" aria-label="Notepad">
+            <!-- A pocket notebook: a closed cover with a spine line and an elastic band. -->
+            <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+              <rect class="np-page" x="3.5" y="1.8" width="9" height="12.4" rx="1.3" />
+              <path class="np-line" d="M10.2 1.8v12.4" />
+              <rect class="np-band" x="9.4" y="6.5" width="1.6" height="3" rx=".5" />
+            </svg>
+            <span class="notepad-label">Notepad</span>
           </button>
         </div>
         <div class="views-group">
@@ -1160,6 +1174,42 @@
             right. See "Sending and what happens next".
           </li>
         </ul>
+        <h4>Your notepad</h4>
+        <p>
+          The <strong>Notepad</strong> button, a small notebook with an elastic
+          band, sits beside Stop session on every screen. It opens a notepad of
+          your own for this folder, somewhere to jot things down as you go.
+        </p>
+        <ul>
+          <li>
+            Text is styled as you type. Write Markdown, such as
+            <code>**bold**</code> or <code># Heading</code>, and it shows that
+            way at once.
+          </li>
+          <li>
+            Images go in the strip under the text. Paste one, drop one on the
+            notepad or press <strong>Add image</strong>. Click a picture to see
+            it full screen: the arrow keys step through them and
+            <kbd>Esc</kbd> closes it. The <strong>×</strong> on a picture asks
+            before it deletes it.
+          </li>
+          <li>
+            Everything saves as you go, one notepad per project folder. There is
+            no Save button.
+          </li>
+          <li>
+            It is private to this machine and never sent to Plan2Code. Nothing
+            in it is shown to the agent.
+          </li>
+          <li>
+            Two open pages on the same folder share one notepad. If both change
+            it, the last save wins.
+          </li>
+          <li>
+            <strong>Cleanup</strong>, in User Preferences, offers to remove a
+            notepad only after a month untouched. Nothing removes it on its own.
+          </li>
+        </ul>
       </section>
 
       <!-- Tab 4: Your workspace -->
@@ -1644,31 +1694,7 @@
         </p>
         <h4>The cards</h4>
         <p>They come in three groups.</p>
-        <p><strong>First, the project</strong></p>
-        <ul>
-          <li><strong>Set up this project.</strong> Reads your project and writes AGENTS.md, the guide every later step works from.</li>
-          <li><strong>Refresh AGENTS.md.</strong> Brings AGENTS.md and its notes up to date with what the project has learned lately.</li>
-        </ul>
-        <p><strong>The steps, in order</strong></p>
-        <ul>
-          <li><strong>Pathfinder.</strong> A foggy idea becomes a clear list of decisions, settled one question at a time.</li>
-          <li><strong>Plan.</strong> Requirements, technical design and your approval: the shape of what gets built.</li>
-          <li><strong>Revise the plan.</strong> Requirements changed mid-build? Adjust the plan without starting over.</li>
-          <li><strong>Document.</strong> The plan becomes a checklist of small tasks, grouped into phases, that a developer can just do.</li>
-          <li><strong>Implement.</strong> Builds the next phase, task by task, with a report and your sign-off at the end.</li>
-          <li><strong>Implement + review.</strong> One phase built, then a careful review of the changes, then your sign-off. All in one run.</li>
-          <li><strong>Finalize.</strong> Checks the work, writes the summary, files the specs away and suggests the commit message.</li>
-        </ul>
-        <p><strong>Useful any time</strong></p>
-        <ul>
-          <li><strong>Quick task.</strong> Too small for the full process? A quick plan, then it just builds it.</li>
-          <li><strong>Review.</strong> A second opinion on the changes. Problems ranked, and you pick what gets fixed.</li>
-          <li><strong>Handoff.</strong> Pack the current session into a document a fresh session can pick up cold.</li>
-          <li><strong>Changelog.</strong> Checks the CHANGELOG version against the main branch and suggests entries for what is new.</li>
-          <li><strong>Git.</strong> Branches, pull, push and commits on one board, asking before anything leaves your machine. See "The git board".</li>
-          <li><strong>Codebase X-ray.</strong> Explains how and why an area of the code works, or finds the rough spots worth fixing.</li>
-          <li><strong>Diagnose a bug.</strong> Finds a bug's cause and writes it up without fixing it, ready to hand to Quick Task or Plan.</li>
-        </ul>
+        <div class="help-cards"></div>
         <h4>Picking a spec</h4>
         <p>
           Once your project has specs, <strong>Pick up a spec, or start
@@ -2034,6 +2060,14 @@
           it is on), and the work carries on meanwhile. Asking never holds up
           your answers to the cards, and sending those never holds up a question.
         </p>
+        <h4>Prompts to carry away</h4>
+        <p>
+          When what you ask is really a new task, or you ask for a prompt,
+          the answer ends with a ready-to-paste prompt in a box with a
+          <strong>Copy</strong> button. Copy it into a new conversation: it
+          names the skill to use and the files to read, so nothing said here
+          needs repeating.
+        </p>
         <h4>What it is about</h4>
         <p>
           The box starts with no context, so a question is a general one unless
@@ -2199,6 +2233,22 @@
           instead.
           After a long step, a new conversation is the better choice anyway: it
           starts with a clean slate.
+        </p>
+        <h4>Update CHANGELOG first</h4>
+        <p>
+          A finished quick task or finalize that ends on a commit can also show
+          <strong>Update CHANGELOG first</strong> beside <strong>Commit it
+          now</strong>. It opens Changelog right here; when Changelog asks
+          "Commit this now?" and you say yes, it carries on to Git.
+        </p>
+        <h4>Continue here</h4>
+        <p>
+          When the next step is another Plan2Code step, the Next step block also
+          has a <strong>Continue here</strong> button. It starts that step in
+          this same conversation, the way a dashboard card would, with this page
+          turning into the new step. It goes away once the session meter is red,
+          because a long conversation is the reason to start a fresh one: copy
+          the command above into a new conversation instead.
         </p>
       </section>
 
@@ -2527,6 +2577,37 @@
       <div class="modal-actions">
         <button type="button" class="btn ghost" id="subagents-cancel">Cancel</button>
         <button type="button" class="btn primary" id="subagents-save">Save</button>
+      </div>
+    </dialog>
+
+    <!-- The Notepad: the person's own notes for this folder, autosaved under
+         ~/.plan2code/notepads/ by the /notepad routes. Never part of the
+         session, so nothing in it reaches the agent. screens/notepad.js fills
+         the editor on open. -->
+    <dialog class="modal notepad" id="notepad-modal" aria-labelledby="notepad-title">
+      <h2 id="notepad-title">Notepad</h2>
+      <p class="modal-blurb">A private space to keep track of notes, uploaded images related to your in-progress work on this project. Saved on this machine and never shared to the AI Agent.</p>
+      <div class="notepad-editor" id="notepad-editor"></div>
+      <div class="notepad-images" id="notepad-images">
+        <button type="button" class="btn small ghost notepad-add" id="notepad-add">Add image</button>
+        <input type="file" accept="image/*" multiple id="notepad-file" hidden />
+        <ul class="notepad-strip" id="notepad-strip" role="list" aria-label="Notepad images"></ul>
+      </div>
+      <div class="modal-actions notepad-actions">
+        <p class="help notepad-status" id="notepad-status" aria-live="polite"></p>
+        <button type="button" class="btn ghost" id="notepad-close">Close</button>
+      </div>
+    </dialog>
+
+    <!-- The Notepad's full-screen picture preview, opened over the Notepad
+         from a thumbnail by screens/notepad.js. -->
+    <dialog class="modal notepad-preview" id="notepad-preview" aria-label="Image preview">
+      <img class="notepad-preview-img" id="notepad-preview-img" alt="" />
+      <button type="button" class="notepad-preview-step is-prev" id="notepad-preview-prev" aria-label="Previous image">‹</button>
+      <button type="button" class="notepad-preview-step is-next" id="notepad-preview-next" aria-label="Next image">›</button>
+      <div class="notepad-preview-bar">
+        <p class="notepad-preview-count" id="notepad-preview-count" aria-live="polite"></p>
+        <button type="button" class="btn small notepad-preview-close" id="notepad-preview-close">Close</button>
       </div>
     </dialog>
 

@@ -8,7 +8,7 @@ import { execFileSync } from "node:child_process";
 
 import { countPending } from "./git-repo.mjs";
 import { DOC_TYPES } from "./public/answers.js";
-import { appendJsonLine, HOME_DIR, nowIso, PLAN2CODE_DIR, readJson, readJsonLines, readText, RUNTIME_DIR, SESSIONS_DIR } from "./files.mjs";
+import { appendJsonLine, HOME_DIR, newestMtime, nowIso, PLAN2CODE_DIR, readJson, readJsonLines, readText, RUNTIME_DIR, SESSIONS_DIR } from "./files.mjs";
 
 /* -------------------------------------------------------------- sessions */
 
@@ -343,9 +343,10 @@ export async function removeScratch(consoleDir, names) {
 // under PLAN2CODE_CONSOLE_HOME, its runtime dir; ~/.plan2code keeps the
 // console, the launcher (bin/, launcher.json), the install record that
 // `plan2code update` reads (install.json), the models the person added and
-// the handoffs (old ones go one by one, by age, on open: handoffs.mjs).
+// the handoffs (old ones go one by one, by age, on open: handoffs.mjs) and
+// the notepads, removed only one at a time through Cleanup (notepads.mjs).
 const KEPT_CONSOLE_ENTRIES = new Set([...PROTECTED_CONSOLE_FILES, "sessions", "runtime"]);
-export const KEPT_PLAN2CODE_ENTRIES = new Set(["console", "bin", "launcher.json", "install.json", "models.json", "handoffs"]);
+export const KEPT_PLAN2CODE_ENTRIES = new Set(["console", "bin", "launcher.json", "install.json", "models.json", "handoffs", "notepads"]);
 // A stray must sit untouched this long before Cleanup lists it. The same
 // folders hold files that live for milliseconds -- a held
 // `workspaces.json.lock`, a `<file>.<pid>.tmp` between its write and its
@@ -372,29 +373,6 @@ async function diskBytes(p) {
   return total;
 }
 
-// The newest mtime of anything under `p`, never following a symlink. A folder
-// counts by its files, since rewriting a file never touches its folder's
-// mtime; an empty folder counts by its own. Anything unreadable on the way
-// down answers Infinity, so it reads as just touched and stays.
-function newestMtime(p) {
-  let st;
-  try {
-    st = fs.lstatSync(p);
-  } catch {
-    return Infinity;
-  }
-  if (!st.isDirectory()) return st.mtimeMs;
-  let entries;
-  try {
-    entries = fs.readdirSync(p);
-  } catch {
-    return Infinity;
-  }
-  if (!entries.length) return st.mtimeMs;
-  let newest = 0;
-  for (const name of entries) newest = Math.max(newest, newestMtime(path.join(p, name)));
-  return newest;
-}
 
 function entryKind(entry) {
   if (entry.isSymbolicLink()) return "link";
@@ -441,8 +419,11 @@ function completedSpecs(project, now, maxAgeMs) {
  * `plan2codeDir` -- anything at the top of `plan2codeDir` that is not kept. Strays
  * touched within `STRAY_GRACE_MS` are left for a later scan. A
  * console running from another home (tests, dev) never reaches ~/.plan2code.
- * Given a `project`, also its completed specs untouched for `maxAgeMs`.
- * Resolves to `{ items: [{ id, where, name, kind, bytes }], bytes }`.
+ * Given a `project`, also its completed specs untouched for `maxAgeMs`. Every
+ * notepad whose newest file is `maxAgeMs` old is listed too, one item per
+ * folder carrying the `folder` it belongs to (null when its meta.json is gone):
+ * this is the only way a notepad is ever removed.
+ * Resolves to `{ items: [{ id, where, name, kind, bytes, folder? }], bytes }`.
  */
 export async function cleanupFindings({
   consoleDir = HOME_DIR,
@@ -463,12 +444,21 @@ export async function cleanupFindings({
     found.push(...strayEntries(plan2codeDir, KEPT_PLAN2CODE_ENTRIES, "root", now));
   }
   if (project) found.push(...completedSpecs(project, now, maxAgeMs));
+  // Loaded here, not at the top: notepads.mjs reaches files.mjs through
+  // workspace.mjs, and files.mjs imports this module, so a static import
+  // would run workspace.mjs before files.mjs has defined HOME_DIR.
+  const { staleNotepads } = await import("./notepads.mjs");
+  for (const n of staleNotepads(now, maxAgeMs)) {
+    found.push({ id: "notepad:" + n.key, where: "notepad", name: n.key, kind: "folder", path: n.path, folder: n.folder });
+  }
   const items = [];
   let bytes = 0;
   for (const f of found) {
     const size = await diskBytes(f.path);
     bytes += size;
-    items.push({ id: f.id, where: f.where, name: f.name, kind: f.kind, bytes: size, path: f.path });
+    const item = { id: f.id, where: f.where, name: f.name, kind: f.kind, bytes: size, path: f.path };
+    if (f.where === "notepad") item.folder = f.folder;
+    items.push(item);
   }
   return { items, bytes };
 }
@@ -483,13 +473,15 @@ export async function cleanupFindings({
 export async function removeCleanup(ids, opts = {}) {
   const wanted = new Set((Array.isArray(ids) ? ids : []).filter((id) => typeof id === "string"));
   const { items } = await cleanupFindings(opts);
+  const { removeNotepad } = await import("./notepads.mjs");
   const removed = [];
   const failed = [];
   let bytes = 0;
   for (const item of items) {
     if (!wanted.has(item.id)) continue;
     try {
-      if (item.kind === "link") await fs.promises.unlink(item.path);
+      if (item.where === "notepad") removeNotepad(item.name);
+      else if (item.kind === "link") await fs.promises.unlink(item.path);
       else await fs.promises.rm(item.path, { recursive: true, force: true });
       removed.push(item.id);
       bytes += item.bytes;

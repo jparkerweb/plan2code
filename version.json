@@ -1,6 +1,6 @@
 {
   "name": "Plan2Code",
-  "version": "2.9.0",
+  "version": "2.10.0",
   "description": "A structured 4-step workflow methodology for AI-assisted software development",
   "keywords": [
     "ai",
@@ -17,6 +17,6 @@
     "url": "https://github.com/jparkerweb/plan2code"
   },
   "homepage": "https://github.com/jparkerweb/plan2code",
-  "releaseDate": "2026-10-17",
+  "releaseDate": "2026-10-19",
   "mode": "utility"
 }
