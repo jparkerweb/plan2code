@@ -150,7 +150,8 @@ next check-in, and it never holds up your answers.
 
 There is more on the page when you need it. Notes on any question can carry screenshots and
 documents. The folder label in the bottom bar opens your workspace, where you add other folders
-as read-only context and point at them by `@name`. The session meter in the top bar turns from green
+as read-only context and point at them by `@name`. The **Notepad** in the top bar is a private pad of your own for the
+folder, in Markdown with pictures, that the agent never sees. The session meter in the top bar turns from green
 to red as a session grows long and suggests a fresh one. **Stop session** saves your place and gives
 you the command to carry on later, and **Back to the dashboard** takes you home to pick the next
 step in the same session.
