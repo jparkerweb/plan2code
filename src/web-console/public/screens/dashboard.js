@@ -724,6 +724,7 @@ export function renderConfirm(main, entry) {
   // Implement's card reviews the phase before sign-off unless this is unticked.
   let review = null;
   if (entry.review) {
+    pane.appendChild(el("hr", "confirm-rule"));
     const label = el("label", "confirm-review");
     review = el("input");
     review.type = "checkbox";
@@ -732,7 +733,7 @@ export function renderConfirm(main, entry) {
       page.dashReview = review.checked;
       cmdCode.textContent = launchVariant(entry, review.checked).command;
     });
-    label.append(review, el("span", null, "Review: a fresh pass over the phase's changes before sign-off"));
+    label.append(review, el("span", null, "Auto Review: fresh agent pass over the phase's changes before sign-off"));
     pane.appendChild(label);
   }
 

@@ -956,8 +956,12 @@
 }
 
 /* The top bar's Notepad button: drawn and lit like the Subagents button. */
-.notepad-btn { border-color: var(--rule-2); color: var(--ink-2); display: inline-flex; align-items: center; justify-content: center; }
-.btn.notepad-btn { padding: 0 6px; align-self: stretch; }
+.notepad-btn { border-color: var(--rule-2); color: var(--ink-2); display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+.btn.notepad-btn { padding: 0 8px; align-self: stretch; }
+.notepad-btn .notepad-label { font-size: 13px; line-height: 1; }
+.notepad-btn .np-band { fill: var(--ink-2); stroke: none; }
+.notepad-btn:hover:not(:disabled) .np-band { fill: var(--accent); }
+.notepad-btn:disabled .np-band { fill: var(--ink-3); }
 .notepad-btn svg { width: 16px; height: 16px; display: block; }
 .notepad-btn .np-page,
 .notepad-btn .np-ring,

@@ -409,6 +409,7 @@
 .confirm-detail { margin: 0; font-size: 13px; color: var(--accent); }
 .confirm-spec { margin: 0; font-size: 13px; color: var(--ink-2); }
 .confirm-spec code { font-family: var(--mono); font-size: 12px; }
+.confirm-rule { width: 100%; height: 0; margin: 6px 0 2px; border: 0; border-top: 1px solid var(--accent); }
 .confirm-review { display: flex; gap: 8px; align-items: center; margin: 4px 0 8px; color: var(--ink-2); cursor: pointer; }
 .confirm-review input { accent-color: var(--accent, currentColor); }
 .confirm-cmd { margin: 2px 0 0; }
