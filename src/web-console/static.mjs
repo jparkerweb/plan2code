@@ -70,10 +70,13 @@ export const SERVABLE = new Set([
   "screens/workspace.js",
   "screens/ask.js",
   "screens/notepad.js",
+  "notepad-tabs.js",
   "net.js",
   "notepad.js",
+  "notepad-editor.js",
+  "notepad-editor.css",
   "vendor/marked.esm.js",
-  "vendor/overtype.esm.js",
+  "vendor/codemirror.esm.js",
 ]);
 
 /* ------------------------------------------------------------ stylesheet */

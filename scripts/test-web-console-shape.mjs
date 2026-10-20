@@ -186,7 +186,8 @@ test("shape: no page module sets a style attribute from script", () => {
 const ROUTE_ORDER = [
   "/health", "/s/", "/", "SERVABLE", "/overview", "/handoff", "/version", "/state", "/events", "/draft",
   "/looks", "/looks", "/subagents", "/pr-host", "/models", "/models", "/cleanup", "/upload",
-  "/notepad", "/notepad/text", "/notepad/image", "/notepad/thumb", "/notepad/image/delete", "/notepad/images/",
+  "/notepad", "/notepad/text", "/notepad/image", "/notepad/thumb", "/notepad/image/delete", "/notepad/tab",
+  "/notepad/tab/rename", "/notepad/tab/delete", "/notepad/tab/order", "/notepad/tab/last", "/notepad/images/",
   "/attachments/", "/shots/", "/uploads/", "/submit", "/chat", "/chat/decision", "/workspace",
   "WORKSPACE_EDITS", "/workspace/scope", "/workspace/browse", "/cancel", "/ping", "/bye",
 ];

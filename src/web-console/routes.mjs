@@ -42,7 +42,21 @@ import { cleanSetting, offered } from "./public/subagents.js";
 import { ACCENTS, DEFAULT_ACCENT, DEFAULT_CARD_WIDTH, cardWidth } from "./public/palette.js";
 import { SERVABLE, TYPES, asset } from "./static.mjs";
 import { handoffsDir, isHandoffId } from "./handoffs.mjs";
-import { NotepadError, addImage, addThumb, imagePath, readNotepad, removeImage, saveNote } from "./notepads.mjs";
+import {
+  NotepadError,
+  addImage,
+  addThumb,
+  createTab,
+  defaultTabId,
+  deleteTab,
+  imagePath,
+  readNotepad,
+  removeImage,
+  renameTab,
+  reorderTabs,
+  saveNote,
+  setLastTab,
+} from "./notepads.mjs";
 
 /* ---------------------------------------------------------------- routes */
 
@@ -75,6 +89,11 @@ const ROUTES = [
   { path: "/notepad/image", method: "POST", origin: true, run: notepadImage },
   { path: "/notepad/thumb", method: "POST", origin: true, run: notepadThumb },
   { path: "/notepad/image/delete", method: "POST", origin: true, run: notepadDelete },
+  { path: "/notepad/tab", method: "POST", origin: true, run: notepadTabNew },
+  { path: "/notepad/tab/rename", method: "POST", origin: true, run: notepadTabRename },
+  { path: "/notepad/tab/delete", method: "POST", origin: true, run: notepadTabDelete },
+  { path: "/notepad/tab/order", method: "POST", origin: true, run: notepadTabOrder },
+  { path: "/notepad/tab/last", method: "POST", origin: true, run: notepadTabLast },
   { match: (p, req) => p.startsWith("/notepad/images/") || req.url.startsWith("/notepad/images/"), method: "GET", run: notepadImageGet },
   { match: (p, req) => p.startsWith("/attachments/") || req.url.startsWith("/attachments/"), run: attachment },
   { match: (p, req) => p.startsWith("/shots/") || req.url.startsWith("/shots/"), run: shot },
@@ -558,19 +577,30 @@ function notepadFail(res, e) {
   return json(res, 500, { error: "bad" });
 }
 
-function notepadGet(req, res, ctx) {
+function notepadGet(req, res, ctx, url) {
   try {
-    return json(res, 200, readNotepad(notepadRoot(ctx)));
+    return json(res, 200, readNotepad(notepadRoot(ctx), url.searchParams.get("tab")));
   } catch (e) {
     return notepadFail(res, e);
   }
 }
 
-function notepadText(req, res, ctx) {
+// The tab a text or picture request means: the `tab` query value when there
+// is one (the store refuses an unknown or malformed id), else the last tab
+// used, else the first. With no tab at all, `create` makes the first one,
+// Notes, so a page that never sends `tab` keeps working; the rest refuse.
+function notepadTab(ctx, url, create) {
+  const given = url.searchParams.get("tab");
+  if (given !== null) return given;
+  const root = notepadRoot(ctx);
+  return defaultTabId(root) ?? (create ? createTab(root, "Notes").id : null);
+}
+
+function notepadText(req, res, ctx, url) {
   return readBody(req, (err, body) => {
     if (err) return json(res, err.tooBig ? 413 : 400, { error: err.tooBig ? "too-long" : "bad" });
     try {
-      return json(res, 200, { ok: true, ...saveNote(notepadRoot(ctx), body && body.text) });
+      return json(res, 200, { ok: true, ...saveNote(notepadRoot(ctx), notepadTab(ctx, url, true), body && body.text) });
     } catch (e) {
       return notepadFail(res, e);
     }
@@ -589,10 +619,10 @@ function readJpeg(req, res, then) {
   });
 }
 
-function notepadImage(req, res, ctx) {
+function notepadImage(req, res, ctx, url) {
   return readJpeg(req, res, (buf) => {
     try {
-      return json(res, 200, { ok: true, ...addImage(notepadRoot(ctx), buf) });
+      return json(res, 200, { ok: true, ...addImage(notepadRoot(ctx), notepadTab(ctx, url, true), buf) });
     } catch (e) {
       return notepadFail(res, e);
     }
@@ -602,7 +632,7 @@ function notepadImage(req, res, ctx) {
 function notepadThumb(req, res, ctx, url) {
   return readJpeg(req, res, (buf) => {
     try {
-      addThumb(notepadRoot(ctx), url.searchParams.get("id"), buf);
+      addThumb(notepadRoot(ctx), notepadTab(ctx, url, false), url.searchParams.get("id"), buf);
       return json(res, 200, { ok: true });
     } catch (e) {
       return notepadFail(res, e);
@@ -610,25 +640,57 @@ function notepadThumb(req, res, ctx, url) {
   });
 }
 
-function notepadDelete(req, res, ctx) {
+function notepadDelete(req, res, ctx, url) {
   return readBody(req, (err, body) => {
     if (err) return json(res, err.tooBig ? 413 : 400, { error: "bad" });
     try {
-      removeImage(notepadRoot(ctx), body && body.id);
+      removeImage(notepadRoot(ctx), notepadTab(ctx, url, false), body && body.id);
       return json(res, 200, { ok: true });
     } catch (e) {
       return notepadFail(res, e);
     }
   });
+}
+
+// The tab routes: each reads a small JSON body, calls the store and answers
+// `{ ok, ... }`. Like the rest of the notepad they write nothing under
+// ctx.dir and add nothing to the event log.
+function notepadTabRoute(act) {
+  return (req, res, ctx) =>
+    readBody(req, (err, body) => {
+      if (err) return json(res, err.tooBig ? 413 : 400, { error: "bad" });
+      try {
+        return json(res, 200, { ok: true, ...act(notepadRoot(ctx), body && typeof body === "object" ? body : {}) });
+      } catch (e) {
+        return notepadFail(res, e);
+      }
+    });
+}
+
+// Declarations, not consts: ROUTES above names them before this line runs.
+function notepadTabNew(req, res, ctx) {
+  return notepadTabRoute((root, body) => createTab(root, body.name))(req, res, ctx);
+}
+function notepadTabRename(req, res, ctx) {
+  return notepadTabRoute((root, body) => renameTab(root, body.id, body.name))(req, res, ctx);
+}
+function notepadTabDelete(req, res, ctx) {
+  return notepadTabRoute((root, body) => deleteTab(root, body.id))(req, res, ctx);
+}
+function notepadTabOrder(req, res, ctx) {
+  return notepadTabRoute((root, body) => reorderTabs(root, body.order))(req, res, ctx);
+}
+function notepadTabLast(req, res, ctx) {
+  return notepadTabRoute((root, body) => setLastTab(root, body.id))(req, res, ctx);
 }
 
 // Matched on the raw request line too, as /uploads/ is: URL parsing folds
 // `..` away, and nothing that needed folding is a notepad picture.
-const NOTEPAD_IMAGE_ROUTE = /^\/notepad\/images\/([0-9a-f-]{36})(\.thumb)?\.jpg$/;
+const NOTEPAD_IMAGE_ROUTE = /^\/notepad\/images\/([0-9a-f]{12})\/([0-9a-f-]{36})(\.thumb)?\.jpg$/;
 
 function notepadImageGet(req, res, ctx, url) {
   const m = NOTEPAD_IMAGE_ROUTE.exec(req.url);
-  const file = m && m[0] === url.pathname ? imagePath(notepadRoot(ctx), m[1], Boolean(m[2])) : null;
+  const file = m && m[0] === url.pathname ? imagePath(notepadRoot(ctx), m[1], m[2], Boolean(m[3])) : null;
   if (!file) return json(res, 404, { error: "not-found" });
   let buf;
   try {

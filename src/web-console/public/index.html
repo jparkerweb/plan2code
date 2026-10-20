@@ -53,7 +53,7 @@
     <link rel="modulepreload" href="/pr-url.js" />
     <link rel="modulepreload" href="/vendor/marked.esm.js" />
     <link rel="modulepreload" href="/notepad.js" />
-    <link rel="modulepreload" href="/vendor/overtype.esm.js" />
+    <link rel="modulepreload" href="/notepad-tabs.js" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="icon" type="image/png" sizes="192x192" href="/favicon.png" />
   </head>
@@ -214,16 +214,16 @@
               <circle cx="12.4" cy="13" r="1.5" class="sa-node" />
             </svg>
           </button>
-          <!-- Notepad: every screen, never hidden. The person's private notes for this
+          <!-- Notebook: every screen, never hidden. The person's private notes for this
                folder; nothing in it reaches the agent. -->
-          <button type="button" class="btn ghost small notepad-btn" id="btn-notepad" title="Notepad" aria-label="Notepad">
+          <button type="button" class="btn ghost small notepad-btn" id="btn-notepad" title="Notebook" aria-label="Notebook">
             <!-- A pocket notebook: a closed cover with a spine line and an elastic band. -->
             <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
               <rect class="np-page" x="3.5" y="1.8" width="9" height="12.4" rx="1.3" />
               <path class="np-line" d="M10.2 1.8v12.4" />
               <rect class="np-band" x="9.4" y="6.5" width="1.6" height="3" rx=".5" />
             </svg>
-            <span class="notepad-label">Notepad</span>
+            <span class="notepad-label">Notebook</span>
           </button>
         </div>
         <div class="views-group">
@@ -1174,40 +1174,59 @@
             right. See "Sending and what happens next".
           </li>
         </ul>
-        <h4>Your notepad</h4>
+        <h4>Your notebook</h4>
         <p>
-          The <strong>Notepad</strong> button, a small notebook with an elastic
-          band, sits beside Stop session on every screen. It opens a notepad of
+          The <strong>Notebook</strong> button, a small notebook with an elastic
+          band, sits beside Stop session on every screen. It opens a notebook of
           your own for this folder, somewhere to jot things down as you go.
         </p>
         <ul>
           <li>
+            A notebook is a row of <strong>tabs</strong>, each with its own text
+            and its own pictures. <strong>+ New tab</strong> asks for a name
+            first. Notes you made before tabs existed show up as a tab called
+            Notes.
+          </li>
+          <li>
+            Under the row, <strong>Rename</strong> changes the current tab's
+            name (double-click a tab or press <kbd>F2</kbd> works too). Drag a
+            tab to reorder it, or use <strong>Move left</strong> and
+            <strong>Move right</strong>, or <kbd>Alt</kbd> with the arrow keys.
+            The tab you leave open is the one you come back to.
+          </li>
+          <li>
+            <strong>Delete</strong> asks twice before it removes a tab, and
+            takes its text and its pictures with it. That cannot be undone.
+            With no tabs left, you are asked to make one.
+          </li>
+          <li>
             Text is styled as you type. Write Markdown, such as
-            <code>**bold**</code> or <code># Heading</code>, and it shows that
-            way at once.
+            <code>**bold**</code> or <code># Heading</code>, and headings grow
+            and bullets draw in place. The marks come back on the line you are
+            on.
           </li>
           <li>
             Images go in the strip under the text. Paste one, drop one on the
-            notepad or press <strong>Add image</strong>. Click a picture to see
+            notebook or press <strong>Add image</strong>. Click a picture to see
             it full screen: the arrow keys step through them and
             <kbd>Esc</kbd> closes it. The <strong>×</strong> on a picture asks
             before it deletes it.
           </li>
           <li>
-            Everything saves as you go, one notepad per project folder. There is
-            no Save button.
+            Everything saves as you go, one notebook per project folder and one
+            folder per tab on disk. There is no Save button.
           </li>
           <li>
             It is private to this machine and never sent to Plan2Code. Nothing
             in it is shown to the agent.
           </li>
           <li>
-            Two open pages on the same folder share one notepad. If both change
+            Two open pages on the same folder share one notebook. If both change
             it, the last save wins.
           </li>
           <li>
             <strong>Cleanup</strong>, in User Preferences, offers to remove a
-            notepad only after a month untouched. Nothing removes it on its own.
+            notebook only after a month untouched. Nothing removes it on its own.
           </li>
         </ul>
       </section>
@@ -1609,6 +1628,11 @@
         </p>
         <h4>Printing and saving</h4>
         <ul>
+          <li>
+            <strong>Back to Questions</strong> (Dashboard or Git on those
+            screens) takes you back to the main flow. The row with it stays at
+            the top of the tab while you scroll.
+          </li>
           <li>
             <strong>Print</strong> prints the document alone, without the rest of
             the page. Choose "Save as PDF" in the print dialog for a PDF.
@@ -2580,18 +2604,28 @@
       </div>
     </dialog>
 
-    <!-- The Notepad: the person's own notes for this folder, autosaved under
+    <!-- The Notebook: the person's own notes for this folder, autosaved under
          ~/.plan2code/notepads/ by the /notepad routes. Never part of the
          session, so nothing in it reaches the agent. screens/notepad.js fills
          the editor on open. -->
     <dialog class="modal notepad" id="notepad-modal" aria-labelledby="notepad-title">
-      <h2 id="notepad-title">Notepad</h2>
-      <p class="modal-blurb">A private space to keep track of notes, uploaded images related to your in-progress work on this project. Saved on this machine and never shared to the AI Agent.</p>
-      <div class="notepad-editor" id="notepad-editor"></div>
-      <div class="notepad-images" id="notepad-images">
-        <button type="button" class="btn small ghost notepad-add" id="notepad-add">Add image</button>
-        <input type="file" accept="image/*" multiple id="notepad-file" hidden />
-        <ul class="notepad-strip" id="notepad-strip" role="list" aria-label="Notepad images"></ul>
+      <h2 id="notepad-title">Notebook</h2>
+      <p class="modal-blurb">A private space to keep track of notes, uploaded images related to your in-progress work on this project. Saved on this machine and <strong class="private-note">never shared to the AI Agent</strong>.</p>
+      <div class="notepad-tabbar">
+        <div class="notepad-tabs" id="notepad-tabs" role="tablist" aria-label="Notebook tabs"></div>
+        <button type="button" class="btn small ghost notepad-tab-new" id="notepad-tab-new">+ New tab</button>
+      </div>
+      <div class="notepad-empty" id="notepad-empty" hidden>
+        <p>No tabs yet. Make one to start writing.</p>
+        <button type="button" class="btn small primary" id="notepad-empty-new">+ New tab</button>
+      </div>
+      <div class="notepad-body" id="notepad-body">
+        <div class="notepad-editor" id="notepad-editor"></div>
+        <div class="notepad-images" id="notepad-images">
+          <button type="button" class="btn small ghost notepad-add" id="notepad-add">Add image</button>
+          <input type="file" accept="image/*" multiple id="notepad-file" hidden />
+          <ul class="notepad-strip" id="notepad-strip" role="list" aria-label="Notebook images"></ul>
+        </div>
       </div>
       <div class="modal-actions notepad-actions">
         <p class="help notepad-status" id="notepad-status" aria-live="polite"></p>
@@ -2599,7 +2633,31 @@
       </div>
     </dialog>
 
-    <!-- The Notepad's full-screen picture preview, opened over the Notepad
+    <!-- The Notebook's name and delete questions: small dialogs over the Notebook.
+         A tab's double-click (or F2) opens the name one for Rename, + New tab
+         opens it for a new name, and a tab's x opens the delete one, which asks twice. -->
+    <dialog class="modal notepad-sub" id="notepad-name-dlg" aria-labelledby="notepad-name-label">
+      <form class="notepad-name-form" id="notepad-name-form" novalidate>
+        <h2 id="notepad-name-label">Name this tab</h2>
+        <input type="text" id="notepad-name" autocomplete="off" spellcheck="false" aria-describedby="notepad-name-error" />
+        <p class="help notepad-name-error" id="notepad-name-error" aria-live="polite"></p>
+        <div class="modal-actions">
+          <button type="button" class="btn ghost" id="notepad-name-cancel">Cancel</button>
+          <button type="submit" class="btn primary" id="notepad-name-save">Save</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog class="modal notepad-sub notepad-delete" id="notepad-delete" aria-labelledby="notepad-delete-title" aria-describedby="notepad-delete-text">
+      <h2 id="notepad-delete-title">Delete this tab?</h2>
+      <p id="notepad-delete-text"></p>
+      <div class="modal-actions">
+        <button type="button" class="btn ghost" id="notepad-delete-keep">Keep tab</button>
+        <button type="button" class="btn danger" id="notepad-delete-go">Delete tab…</button>
+      </div>
+    </dialog>
+
+    <!-- The Notebook's full-screen picture preview, opened over the Notebook
          from a thumbnail by screens/notepad.js. -->
     <dialog class="modal notepad-preview" id="notepad-preview" aria-label="Image preview">
       <img class="notepad-preview-img" id="notepad-preview-img" alt="" />
