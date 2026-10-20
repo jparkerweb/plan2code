@@ -179,6 +179,8 @@ review has already reviewed the code, so its card has no review button.
 </picture>
 
 The **Ask** tab is a chat beside the cards, for a quick question at any point.
+When a question is really a new task, the answer ends with a ready-to-paste
+prompt in a block with a Copy button, to take into a new conversation.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="../docs/screenshots/ask-dark.webp">
@@ -520,6 +522,14 @@ your project. The paused card names the file, and the dashboard offers it as a
 chip until it is picked up. **Just stop and save** saves your place and gives
 the resume command, nothing more; where the step has nothing saved yet it reads
 *Stop anyway*, under a warning about what is lost.
+
+When the next step is another Plan2Code skill, the screen also has a
+**Continue here** button beside it: one press starts that skill in the same
+conversation, as a dashboard card would. It disappears once the session meter is
+red, when a fresh conversation is the better choice. A finished Quick Task or
+Finalize that ends on a commit can also offer **Update CHANGELOG first**, beside
+**Commit it now**: it opens Changelog right there, and Changelog's yes to
+*Commit this now?* carries on to Git.
 
 The first two also carry a **Back to the dashboard** button (beside the next
 step, or as the main button under "All done"). Press it and the same page turns

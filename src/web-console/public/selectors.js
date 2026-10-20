@@ -108,7 +108,7 @@ export const selHandoff = () => {
 // the finish goes away, which is the agent taking the review up.
 export function reviewPending() {
   const fin = finish();
-  if (!fin || !reviewOffer(fin) || ["done", "dashboard", "commit"].includes(page.local.afterBuild)) return null;
+  if (!fin || !reviewOffer(fin) || ["done", "dashboard", "commit", "changelog", "launch"].includes(page.local.afterBuild)) return null;
   if (page.local.afterBuild === "review") return page.gone ? null : "asked";
   return page.gone ? null : "open";
 }

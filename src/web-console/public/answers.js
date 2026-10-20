@@ -434,6 +434,7 @@ export const REVIEW_REPLY =
 export const DONE_REPLY = "No review, thanks. I am done: close the session.";
 export const DASHBOARD_REPLY = "Take me back to the dashboard, right here in this session.";
 export const COMMIT_REPLY = "Commit what was just built: open Git's commit flow, right here in this session.";
+export const CHANGELOG_REPLY = "Update the CHANGELOG before I commit: open Changelog, right here in this session.";
 
 // Shown under the Back to the dashboard button: the press picks up in the same
 // conversation, which carries a long skill's context into the next one.
@@ -460,6 +461,42 @@ export function commitOffer(fin) {
 }
 
 /**
+ * Whether a finish offers to update the CHANGELOG before the commit. The agent
+ * opts in with `finish.changelog: true` on a finished quick task or finalize;
+ * the press opens Changelog in the same session, whose "Commit this now?" yes
+ * carries on to Git. A pause never offers it.
+ */
+export function changelogOffer(fin) {
+  return Boolean(fin && fin.changelog === true && !finishPaused(fin));
+}
+
+/**
+ * The skill a finish's next step names, when it is one the page can start in
+ * this session: `{ skill, workflow, spec }`, or null. The agent writes nothing
+ * new for it. The command's leading `/plan2code-...` is looked up in skills.js
+ * (a trailing `--web` and any other argument are ignored), and `spec` is the
+ * `specs/<name>` folder the command mentions, when it does. A pause, the
+ * dashboard's own `/plan2code` and any command that is not a skill (a git
+ * commit) offer nothing.
+ */
+export function continueOffer(fin) {
+  if (!fin || finishPaused(fin)) return null;
+  const first = String(fin.command || "").trim().split(/\s+/)[0];
+  if (!first.startsWith("/")) return null;
+  const entry = skillByName(first.slice(1));
+  if (!entry || entry.workflow === "dashboard") return null;
+  const match = /(?:^|[\s"'])(specs\/[A-Za-z0-9][A-Za-z0-9._-]*)(?=[/\s"']|$)/.exec(String(fin.command));
+  return { skill: entry.skill, workflow: entry.workflow, spec: match ? match[1] : undefined };
+}
+
+/** What Continue here reaches the agent as: a launch's sentence, naming the skill. */
+export function continueReply(offer) {
+  const entry = SKILLS.find((s) => s.skill === offer.skill);
+  const card = entry && entry.card ? entry.card.title : entry ? entry.name : offer.skill;
+  return launchReply({ title: card, command: entry ? entry.command : `/${offer.skill}` }, offer.spec ? { dir: offer.spec } : null);
+}
+
+/**
  * Whether a finish carries the offer to review what was just built. The agent
  * posts `finish.review` as `true` or as `{ "label": "..." }` on a finished
  * quick task (an implementation phase offers the review earlier, as a verdict
@@ -473,7 +510,7 @@ export function reviewOffer(fin) {
 }
 
 /**
- * One offer button on a finish (review, done, commit, dashboard). A press of
+ * One offer button on a finish (review, done, commit, changelog, dashboard, launch). A press of
  * any of them is the session's one answer, so it locks every button until the
  * finish goes away, not just until the agent collects the send: `asked` is
  * the pressed one, which keeps its "requested…" label.

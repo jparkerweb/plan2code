@@ -90,7 +90,8 @@ Workflow notes for `quick-task`, part of the web console contract
   `"where": "When you are happy with it, commit it from your terminal:"`, and
   `review` on offer — the **Review it now** button, since a quick task has no
   sign-off card to put it on — `"commit": true` (the **Commit it now** button;
-  `console-finish.md`) and `"dashboard": true`, so the finished screen
+  `console-finish.md`), `"changelog": true` (**Update CHANGELOG first**, beside
+  it; it hops into Changelog and on to Git) and `"dashboard": true`, so the finished screen
   also offers **Back to the dashboard**. Review and dashboard are required: a finish without
   `dashboard` leaves the person on a dead end. Keep waiting for whichever
   button is pressed, and everything after that is `building-review.md`.

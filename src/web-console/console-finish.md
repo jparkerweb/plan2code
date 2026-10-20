@@ -53,7 +53,17 @@ The same closer you are about to print in the terminal, as data:
 | `doc` | optional | Id of the document to offer as a Markdown download on the way out. Defaults to the first one. |
 | `console` | optional | Whether the copied text asks the next session to use the web console. Leave it out: it follows from the command. |
 | `commit` | optional | `true` on a finished `quick-task`, `implement`, `implement-review`, `review` or `finalize` whose finish prints a git command puts a **Commit it now** button on the finished screen. The press arrives as `__commit` (below). |
+| `changelog` | optional | `true` on a finished `quick-task` or `finalize` that also carries `commit: true` puts an **Update CHANGELOG first** button beside **Commit it now**. Refused (exit 3) on any other workflow, `implement` included. The press arrives as `__changelog` (below). |
 | `review` | optional | A finished `quick-task` only: `true` or `{ "label": "..." }` puts a **Review it now** button on the finished screen (`notes/quick-task.md`, `building-review.md`). `implement` offers the review on its sign-off card instead — before approval, where it can still change the outcome. |
+
+**Continue here.** Nothing to set: when `command` starts with a Plan2Code skill
+(`/plan2code-2-document specs/lunch-vote/PLAN-DRAFT-20261019.md`, with or
+without `--web`) and the finish is not a pause, the page puts a **Continue
+here** button beside the Next step block, unless the session meter is red
+(then the fresh-session advice stands alone). A finish whose command is a git
+commit, or that has none, gets no button. You write nothing new; you only
+handle the `__launch` it sends (below). The `spec` it carries is the
+`specs/<name>` folder the command mentions.
 
 **Write the bare command.** Every Plan2Code skill has a console — the
 dashboard and every skill behind it — so for any of them the page
@@ -100,6 +110,8 @@ works like a press a minute later.
 | What arrives | What you do |
 | --- | --- |
 | An action `{ "i": "__dashboard", "type": "dashboard" }` | Run the `resume` it carries (`open --resume <sid> --no-open --workflow dashboard`; it re-runs the project scan and clears the page, the finish included), read the dashboard skill (`skillFile`, or `~/.agents/skills/plan2code/SKILL.md`), then post its `menu` with `--wait` and carry on as the dashboard from its "Coming back from another skill", in this same conversation. |
+| An action `{ "i": "__changelog", "type": "changelog" }` | Update CHANGELOG first: run the `resume` it carries (`open --resume <sid> --no-open --workflow changelog`; no `finish`, no `stop`; the hop gives Changelog a clean page, the finish included), then open the Changelog skill (`skillFile`, or `~/.agents/skills/plan2code-changelog/SKILL.md`) with your file-read tool and follow it from the top (`notes/changelog.md`). Its "Commit this now?" yes carries on to Git. Leave the commit command you printed in the finish where it is for the terminal. |
+| An action `{ "i": "__launch", "type": "launch", "skill": ..., "workflow": ..., "spec": ... }` | Continue here: the same hop as a dashboard pick (`console-launches.md` → A pick). Run the `resume` it carries (the hop gives the next skill a clean page, the finish included), read its `skillFile` with your file-read tool (never a skill-invocation tool), and follow it from the top in this same conversation. No `stop`. A hop into a different skill gives it a clean page, the finish included; when the `resume` keeps your own workflow (a phase finish whose next step is the same Implement), nothing clears the page, so your first post of the new run carries `"finish": null`. |
 | An action `__review` or `__done` | As `building-review.md` says (quick task only). |
 | An action `{ "i": "__commit", "type": "commit" }` | Commit it now: run the `resume` it carries (`open --resume <sid> --no-open --workflow git`; no `finish`, no `stop`; the resume gives Git a clean page, the finish included, as a dashboard launch does), then open the Git skill (`skillFile`, or `~/.agents/skills/plan2code-git/SKILL.md`) with your file-read tool and follow it, starting with the commit flow over the board (the person pressed Commit it now), then the board with Push lit. Leave the commit command you printed in the finish where it is for the terminal. |
 | `wait` exit `20` | The server is gone. `open --resume <sid> --workflow <yours>` (it gets a new link: give it to them; the browser opens it), then keep waiting: their Ask messages and the dashboard button still need you. Give up only when the resume itself fails. |

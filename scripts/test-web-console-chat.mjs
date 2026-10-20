@@ -432,3 +432,17 @@ test("a reply proposing an edit under the running spec is refused; a valid reply
     cli(["stop", "--session", s.sid]);
   }
 });
+
+// The Ask tab's prompt blocks are contract only: the page already draws Copy on a
+// fenced block, so the agent has to be told when and how to write one.
+test("console-chat.md teaches the prompt block: when, what it holds, and not to open it with a command word", () => {
+  const text = fs.readFileSync(path.join(ROOT, "src", "web-console", "console-chat.md"), "utf8");
+  const section = text.split(/^## /m).find((s) => s.startsWith("Prompts to carry away"));
+  assert.ok(section, "console-chat.md has no 'Prompts to carry away' section");
+  assert.match(section, /fenced block/);
+  assert.match(section, /Copy/);
+  assert.match(section, /paste it into the Ask tab/);
+  assert.match(section, /out of scope/);
+  assert.match(section, /files to read/);
+  assert.doesNotMatch(section, /\u2014/, "no em dash in the section");
+});

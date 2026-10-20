@@ -85,6 +85,34 @@ replied to: treat that as a stop-and-reply.
 - When `about` is set, answer from that context: the card, doc section or
   spec the person was looking at.
 
+## Prompts to carry away
+
+Some questions are really a new task: the person asks for "a prompt", or the
+right answer is work for a separate Plan, Quick Task or another skill rather
+than something to do inside this session. Do not start that work here and do
+not make them retype your answer. Reply with the explanation first, then ONE
+self-contained prompt in a fenced block with no info string. The page draws
+every fenced block with a **Copy** button, so the person copies it into a new
+conversation.
+
+A good prompt block:
+
+- opens with plain prose, never a command word. A block whose first line looks
+  like a terminal command (`git`, `npm`, `node`, `rm` and the like, or `#!`)
+  gets the muted "paste it into the Ask tab" hint, which is wrong for a prompt.
+  The check is case-insensitive and also catches everyday verbs that are shell
+  commands (Make, Go, Source, Export, Service, Cat, Echo, Zip, Tar, Cd, Ls), so
+  "Make the report export..." trips it. Start with "In this repo, ..." or "Using
+  the Quick Task skill, ...". A leading skill command (`/plan2code-quick-task ...`)
+  is fine: it gets none;
+- names the skill to paste it into, the files to read first, and what to do;
+- states what is out of scope, so the new conversation does not wander;
+- stands alone: it assumes nothing said in this session, because the new
+  conversation has none of it.
+
+One block per reply, and only when the work is likely to move to a new
+conversation. A plain answer stays a plain answer.
+
 ## Never steer the workflow
 
 A chat answer never changes a card's answer, a gate, or where the workflow

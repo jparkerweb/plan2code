@@ -82,7 +82,7 @@ port, and the filesystem as transport; this CLI is the whole agent surface.
           Exit 0 may also carry "subagents" (a console setting, not typed
           by the person, with its "Subagents: ..." lines last in reply); a
           setting change alone never ends a slice either. A hop
-          (__launch, __dashboard, __commit) carries resume, the exact
+          (__launch, __dashboard, __commit, __changelog) carries resume, the exact
           open --resume command, and skillFile when installed. Collecting
           a send sets the page to working; a wait with a question open
           hands the turn back.

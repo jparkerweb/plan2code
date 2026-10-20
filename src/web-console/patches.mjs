@@ -712,6 +712,15 @@ export function validate(state) {
       if (fin.commit != null && typeof fin.commit !== "boolean") {
         problems.push('"finish.commit" must be true or false (or left out: no commit button)');
       }
+      // (The pause test is the page's finishPaused() in public/answers.js: keep them in step.)
+      // Update CHANGELOG first: only the builds that end on a commit and have
+      // no sign-off to put it on. An implementation phase never offers it. A
+      // pause ignores it.
+      if (fin.changelog != null && typeof fin.changelog !== "boolean") {
+        problems.push('"finish.changelog" must be true or false (or left out: no changelog button)');
+      } else if (fin.changelog === true && !/^\s*paused\b/i.test(String(fin.headline || "")) && !["quick-task", "finalize"].includes(state.workflow)) {
+        problems.push('"finish.changelog" is only for a finished quick-task or finalize');
+      }
       // The review offer on a finished build: true, or an object carrying the
       // button's heading. The heading is read by the person, so it faces the
       // same vocabulary check as a title.

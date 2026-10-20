@@ -63,6 +63,9 @@ import {
   REVIEW_REPLY,
   afterFinishButton,
   commitOffer,
+  changelogOffer,
+  continueOffer,
+  continueReply,
   pendingNote,
   reviewOffer,
   SKILL_CATALOG,
@@ -348,12 +351,17 @@ test("the resume command follows the entry's resume kind, and an unknown workflo
   assert.equal(resumeCommand({}), "/plan2code-0-pathfinder");
 });
 
-test("a hop starts the page clean to or from the dashboard and into Git, and nowhere else", () => {
+test("a hop starts the page clean to or from the dashboard, into Git and between skills, but not out of Git or into Review", () => {
   assert.equal(startsClean("implement", "dashboard"), true);
   assert.equal(startsClean("dashboard", "plan"), true);
   assert.equal(startsClean("changelog", "git"), true);
   assert.equal(startsClean("finalize", "git"), true);
+  // A launch from a finished screen (Continue here, Update CHANGELOG first)
+  assert.equal(startsClean("plan", "document"), true);
+  assert.equal(startsClean("quick-task", "changelog"), true);
+  assert.equal(startsClean("finalize", "changelog"), true);
   assert.equal(startsClean("git", "changelog"), false);
+  assert.equal(startsClean("git", "plan"), false);
   assert.equal(startsClean("implement", "review"), false);
   assert.equal(startsClean("git", "git"), false);
   assert.equal(startsClean("dashboard", "dashboard"), false);
@@ -1023,6 +1031,48 @@ test("the commit offer is read from finish.commit and a pause never carries it",
   assert.equal(commitOffer({ headline: "Done" }), false);
   assert.equal(commitOffer({ headline: "Paused here", commit: true }), false);
   assert.equal(commitOffer(null), false);
+});
+
+test("the changelog offer is read from finish.changelog and a pause never carries it", () => {
+  assert.equal(changelogOffer({ headline: "Done", changelog: true }), true);
+  assert.equal(changelogOffer({ headline: "Done", changelog: false }), false);
+  assert.equal(changelogOffer({ headline: "Done" }), false);
+  assert.equal(changelogOffer({ headline: "Paused here", changelog: true }), false);
+  assert.equal(changelogOffer(null), false);
+});
+
+test("Continue here is offered for a skill command, with the spec it names, and never for a pause or a non-skill", () => {
+  const offer = (command, rest = {}) => continueOffer({ headline: "Done", command, ...rest });
+  assert.deepEqual(offer("/plan2code-2-document"), { skill: "plan2code-2-document", workflow: "document", spec: undefined });
+  assert.deepEqual(offer("/plan2code-2-document --web"), { skill: "plan2code-2-document", workflow: "document", spec: undefined });
+  assert.deepEqual(offer("/plan2code-3-implement specs/lunch-vote/overview.md --web"), {
+    skill: "plan2code-3-implement",
+    workflow: "implement",
+    spec: "specs/lunch-vote",
+  });
+  assert.deepEqual(offer("/plan2code-2-document specs/lunch-vote/PLAN-DRAFT-20261019.md"), {
+    skill: "plan2code-2-document",
+    workflow: "document",
+    spec: "specs/lunch-vote",
+  });
+  assert.equal(offer("/plan2code-4-finalize specs--completed/old/overview.md").spec, undefined);
+  assert.equal(offer("/plan2code-3-implement specs/lunch-vote/overview.md", { headline: "Paused at Phase 2" }), null);
+  assert.equal(offer("/plan2code"), null);
+  assert.equal(offer("/plan2code --web"), null);
+  assert.equal(offer("git add -A && git commit -m x -m y"), null);
+  assert.equal(offer("/not-a-plan2code-skill"), null);
+  assert.equal(offer(""), null);
+  assert.equal(continueOffer(null), null);
+});
+
+test("the Continue here reply names the skill and its spec like a dashboard launch, in plain words", () => {
+  const reply = continueReply({ skill: "plan2code-3-implement", workflow: "implement", spec: "specs/lunch-vote" });
+  assert.equal(reply, "Start Implement (/plan2code-3-implement) for specs/lunch-vote, right here in this session.");
+  assert.equal(
+    continueReply({ skill: "plan2code-2-document", workflow: "document" }),
+    "Start Document (/plan2code-2-document), right here in this session."
+  );
+  assert.doesNotMatch(reply, /(brief|recap|minutes)/i);
 });
 
 test("one press on a finish locks every offer button, even after the agent collects it", () => {

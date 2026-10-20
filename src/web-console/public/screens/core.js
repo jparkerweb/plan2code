@@ -1061,6 +1061,8 @@ export function renderStatus() {
     // there to take the press.
     if (page.local.afterBuild === "dashboard" && !page.gone) return say("work", "Opening the dashboard…", "", true);
     if (page.local.afterBuild === "commit" && !page.gone) return say("work", "Opening Git…", "", true);
+    if (page.local.afterBuild === "changelog" && !page.gone) return say("work", "Opening Changelog…", "", true);
+    if (page.local.afterBuild === "launch" && !page.gone) return say("work", "Starting the next step…", "", true);
     const offer = reviewPending();
     if (dashboardLive(finish()) && !page.gone && !offer) {
       return say("point", "Done. Head back to the dashboard, or close this tab.");

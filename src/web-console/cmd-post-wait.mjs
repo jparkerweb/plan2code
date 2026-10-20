@@ -574,6 +574,7 @@ const HOP_ACTIONS = {
   launch: (a) => ({ workflow: a.workflow, spec: a.spec, skill: a.skill }),
   dashboard: () => ({ workflow: "dashboard", skill: "plan2code" }),
   commit: () => ({ workflow: "git", skill: "plan2code-git" }),
+  changelog: () => ({ workflow: "changelog", skill: "plan2code-changelog" }),
   pickup: pickupHop,
 };
 

@@ -380,13 +380,14 @@ test("a pick-up comes with the stored skill's resume command, handoffFile, and f
   }
 });
 
-test("a launch, a dashboard press and Commit it now each come with their resume command", async () => {
+test("a launch, a dashboard press, Commit it now and Update CHANGELOG first each come with their resume command", async () => {
   const s = consoleSession(["--workflow", "dashboard"]);
   try {
     const cases = [
       [{ i: "__launch", type: "launch", skill: "plan2code-3-implement", workflow: "implement", spec: "specs/lunch vote" }, "implement", ' --spec "specs/lunch vote"'],
       [{ i: "__dashboard", type: "dashboard" }, "dashboard", ""],
       [{ i: "__commit", type: "commit" }, "git", ""],
+      [{ i: "__changelog", type: "changelog" }, "changelog", ""],
     ];
     for (const [action, workflow, spec] of cases) {
       assert.equal((await s.send("/submit", { actions: [action], reply: "go" })).status, 200);

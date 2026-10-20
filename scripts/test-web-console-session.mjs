@@ -36,7 +36,7 @@ import { HELP_TABS, helpTabFor, helpKeyTarget } from "../src/web-console/public/
 import { RED_AT, YELLOW_AT } from "../src/web-console/public/meter.js";
 import { REMOTE_FOLD } from "../src/web-console/public/git-board.js";
 import { readLedger, SESSION_MAX_AGE_MS, sweepUploads, UPLOAD_MAX_AGE_MS } from "../src/web-console/sessions.mjs";
-import { applyPatch } from "../src/web-console/patches.mjs";
+import { applyPatch, validate } from "../src/web-console/patches.mjs";
 import { joinedCss } from "./css-helpers.mjs";
 import {
   ROOT,
@@ -217,6 +217,41 @@ test("a launch request round-trips with the skill the dashboard resumes as", asy
   assert.equal(res.json.actions[0].workflow, "implement");
   const state = JSON.parse(fs.readFileSync(path.join(session, "state.json"), "utf8"));
   assert.ok(state.items.every((i) => i.id !== "__launch"), "a launch must not become a question");
+});
+
+// Continue here sends the same launch from a finished screen, so the hop's
+// resume names the next skill's workflow and the spec, and the skill file to read.
+test("a launch sent from a finished screen carries the resume for the next skill and spec", async () => {
+  await post("/submit", {
+    actions: [{ i: "__launch", type: "launch", skill: "plan2code-2-document", workflow: "document", spec: "specs/lunch-vote" }],
+    reply: "Start Document (/plan2code-2-document) for specs/lunch-vote, right here in this session.",
+  });
+  const res = cli(["wait", "--session", sid, "--seconds", "10"]);
+  assert.equal(res.status, 0);
+  assert.equal(res.json.actions[0].i, "__launch");
+  assert.match(res.json.resume, /--no-open --workflow document --spec specs\/lunch-vote$/);
+});
+
+// The page tells the person the hop gives the next skill a clean page: a resume
+// into a different workflow drops the finish it was launched from.
+test("resuming into another skill after Continue here drops the finish", async () => {
+  const stateFile = path.join(session, "state.json");
+  const readState = () => JSON.parse(fs.readFileSync(stateFile, "utf8"));
+  cli(["post", "--session", sid, "--file", payload("fin-continue.json", {
+    finish: { headline: "The plan is documented", command: "/plan2code-5-changelog", dashboard: true },
+  })]);
+  const snapshot = fs.readFileSync(stateFile, "utf8");
+  await post("/submit", {
+    actions: [{ i: "__launch", type: "launch", skill: "plan2code-changelog", workflow: "changelog" }],
+    reply: "Start Changelog (/plan2code-changelog), right here in this session.",
+  });
+  const res = cli(["wait", "--session", sid, "--seconds", "10"]);
+  assert.equal(res.status, 0);
+  cli(["open", "--resume", sid, "--no-open", "--workflow", "changelog"]);
+  const resumed = readState();
+  assert.equal(resumed.workflow, "changelog");
+  assert.equal(resumed.finish, undefined, "the old finish is gone");
+  fs.writeFileSync(stateFile, snapshot);
 });
 
 // A delete from the dashboard's picker is a send like a launch, but no hop:
@@ -1335,6 +1370,32 @@ test("patches merge by id and append threads", () => {
   const replies = q1.thread.filter((m) => m.who === "agent");
   assert.equal(replies.length, 1);
   assert.ok(replies[0].at, "the server stamps the time the agent left out");
+});
+
+test("finish.changelog is accepted on quick-task and finalize, and refused on implement and on a non-boolean", () => {
+  const problems = (workflow, changelog, headline = "Done") =>
+    validate({ workflow, items: [], finish: { headline, command: "git add -A", commit: true, changelog } });
+  for (const workflow of ["quick-task", "finalize"]) assert.deepEqual(problems(workflow, true), [], workflow);
+  assert.match(problems("implement", true).join(), /only for a finished quick-task or finalize/);
+  assert.match(problems("implement-review", true).join(), /only for a finished quick-task or finalize/);
+  assert.match(problems("quick-task", "yes").join(), /must be true or false/);
+  // false is always fine, and a pause ignores it
+  assert.deepEqual(problems("implement", false), []);
+  assert.deepEqual(problems("implement", true, "Paused at Phase 2"), []);
+});
+
+// Update CHANGELOG first is a hop like Commit it now, into Changelog.
+test("a changelog request from a finished screen carries the resume into the changelog workflow and its skill file", async () => {
+  await post("/submit", {
+    actions: [{ i: "__changelog", type: "changelog" }],
+    reply: "Update the CHANGELOG before I commit: open Changelog, right here in this session.",
+  });
+  const res = cli(["wait", "--session", sid, "--seconds", "10"]);
+  assert.equal(res.status, 0);
+  assert.equal(res.json.actions[0].i, "__changelog");
+  assert.match(res.json.resume, /--no-open --workflow changelog$/);
+  const state = JSON.parse(fs.readFileSync(path.join(session, "state.json"), "utf8"));
+  assert.ok(state.items.every((i) => i.id !== "__changelog"), "a changelog request must not become a question");
 });
 
 test("a thread reply in another shape is lifted into { who, text }, and an empty one is refused", () => {

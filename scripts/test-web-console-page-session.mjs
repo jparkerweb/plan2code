@@ -93,6 +93,74 @@ test("the finished screen shows the next command with --web, copies it, turns Se
   );
 });
 
+// What a person sees break: no Continue here on a finish that names a skill, one
+// beside a git command or a pause, one at the red meter level, or a press that
+// reaches the agent as anything but the dashboard's own launch.
+test("Continue here shows beside a skill's next step while the meter is not red and sends a launch with the skill and spec", async (t) => {
+  const browser = await suite.browser();
+  const next = { headline: "The plan is documented", command: "/plan2code-3-implement specs/audit-export/overview.md", dashboard: true };
+  const s = await openSession(browser, { t, workflow: "document", payload: { agent: { status: "working", activity: "Writing" } } });
+  s.post({ finish: next });
+  const main = s.page.locator("#main");
+  const go = main.getByRole("button", { name: "Continue here" });
+  await go.waitFor();
+  assert.equal(await go.count(), 1);
+
+  await go.click();
+  const got = collect(s);
+  assert.deepEqual(got.actions, [
+    { i: "__launch", type: "launch", skill: "plan2code-3-implement", workflow: "implement", spec: "specs/audit-export" },
+  ]);
+  assert.equal(got.reply, "Start Implement (/plan2code-3-implement) for specs/audit-export, right here in this session.");
+  // The hop's resume is the dashboard's: the skill's workflow and the spec.
+  assert.match(got.resume, /--workflow implement --spec specs\/audit-export$/);
+  await main.getByRole("button", { name: "Starting the next step…" }).waitFor();
+  assert.equal(await main.getByRole("button", { name: "Back to the dashboard" }).isDisabled(), true, "one press locks the other buttons");
+
+  // No skill to continue into: a git command, or a pause.
+  const git = await openSession(browser, { t, workflow: "quick-task", payload: { agent: { status: "working", activity: "Task 1 of 1" } } });
+  git.post({ finish: { headline: "Quick task done", command: "git add -A && git commit -m x -m y", dashboard: true } });
+  await git.page.locator("#main").getByRole("heading", { name: "Quick task done" }).waitFor();
+  assert.equal(await git.page.getByRole("button", { name: "Continue here" }).count(), 0, "a git command is not a skill");
+  const paused = await openSession(browser, { t, workflow: "implement", payload: { agent: { status: "working", activity: "Task 1 of 1" } } });
+  paused.post({ finish: { headline: "Paused at Phase 2", command: "/plan2code-3-implement specs/audit-export/overview.md" } });
+  await paused.page.locator("#main").getByRole("heading", { name: "Paused at Phase 2" }).waitFor();
+  assert.equal(await paused.page.getByRole("button", { name: "Continue here" }).count(), 0, "a pause is not continued");
+});
+
+test("Update CHANGELOG first shows beside Commit it now only when the finish asks for it, and sends __changelog", async (t) => {
+  const browser = await suite.browser();
+  const base = { headline: "Quick task done", command: "git add -A && git commit -m x -m y", commit: true, dashboard: true };
+  const plain = await openSession(browser, { t, workflow: "quick-task", payload: { agent: { status: "working", activity: "Task 1 of 1" } } });
+  plain.post({ finish: base });
+  await plain.page.locator("#main").getByRole("button", { name: "Commit it now" }).waitFor();
+  assert.equal(await plain.page.getByRole("button", { name: "Update CHANGELOG first" }).count(), 0, "no flag, no button");
+
+  const s = await openSession(browser, { t, workflow: "quick-task", payload: { agent: { status: "working", activity: "Task 1 of 1" } } });
+  s.post({ finish: { ...base, changelog: true } });
+  const main = s.page.locator("#main");
+  const go = main.getByRole("button", { name: "Update CHANGELOG first" });
+  await go.waitFor();
+  assert.equal(await main.getByRole("button", { name: "Commit it now" }).count(), 1);
+  await go.click();
+  assert.deepEqual(collect(s).actions.map(({ i, type }) => ({ i, type })), [{ i: "__changelog", type: "changelog" }]);
+  await main.getByRole("button", { name: "Opening Changelog…" }).waitFor();
+  assert.equal(await main.getByRole("button", { name: "Commit it now" }).isDisabled(), true, "one press locks the other buttons");
+});
+
+test("Continue here is hidden once the session meter is red, and the command and fresh-session advice stay", async (t) => {
+  const s = await openSession(await suite.browser(), { t, workflow: "implement", payload: { agent: { status: "working", activity: "Task 1 of 1" } } });
+  // Ten points: a thirty-task phase scores ten, the red level.
+  s.post({ run: { event: "implement-phase", id: "phase-1", tasks: 30 } });
+  await s.page.locator("#meter-pill[data-level='red']").waitFor();
+  s.post({ finish: { headline: "Phase 1 is done", command: "/plan2code-3-implement specs/audit-export/overview.md", dashboard: true } });
+  const main = s.page.locator("#main");
+  await main.getByRole("heading", { name: "Phase 1 is done" }).waitFor();
+  assert.equal(await main.getByRole("button", { name: "Continue here" }).count(), 0, "Continue here at red");
+  assert.ok(await main.locator("code").filter({ hasText: /^\/plan2code-3-implement specs\/audit-export\/overview\.md --web$/ }).count(), "the command stays");
+  assert.equal(await closeGuide(s).count(), 1, "the fresh-session advice stays");
+});
+
 test("Stop session, confirmed, sends __stop with no handoff", async (t) => {
   const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_QUESTION });
   await s.page.click("#btn-stop");

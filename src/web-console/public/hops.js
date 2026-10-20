@@ -14,10 +14,17 @@
 //   - Git counts as a launch from anywhere: Commit it now on a finished
 //     screen and Changelog's "Commit this now?" both stand in for its
 //     dashboard card, and a finish left behind would keep the page on the old
-//     ending above the new board.
+//     ending above the new board;
+//   - a launch from a finished screen (Continue here, Update CHANGELOG first)
+//     goes from one skill into another and gets a clean page too, since the
+//     finish it leaves behind would keep the page on the old ending. Two
+//     pairs are not that: out of Git (its board hops into Changelog on its
+//     own and keeps its state) and into Review (a skill's review runs inline
+//     and never switches workflow).
 // A skill run inline from another (a quick task's review) never switches
 // workflow, so it keeps the page; nor does a resume into the same workflow.
 export function startsClean(from, to) {
   if (typeof from !== "string" || typeof to !== "string" || !from || !to || from === to) return false;
-  return from === "dashboard" || to === "dashboard" || to === "git";
+  if (from === "dashboard" || to === "dashboard" || to === "git") return true;
+  return from !== "git" && to !== "review";
 }
