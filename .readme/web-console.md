@@ -419,12 +419,12 @@ working in.
 
 - **Tabs.** A row of named tabs sits across the top, each with its own text and
   its own pictures. **+ New tab** asks for a name first (1 to 40 characters, no
-  two the same in any case, up to 20 tabs). Under the row, **Rename** changes
-  the current tab's name (a double-click or **F2** on a tab does too), **Move
-  left** and **Move right** (or **Alt** with the arrow keys) reorder it, and
-  tabs can be dragged. The tab you left open is the one you come back to.
-  **Delete** asks twice and takes the tab's text and pictures with it; with no
-  tab left, the dialog asks you to make one. A notebook from before tabs opens
+  two the same in any case, up to 20 tabs), in a small dialog. There is no
+  toolbar under the row: a double-click (or **F2**) on a tab renames it, the **x**
+  beside its name deletes it (the **Delete** key does too), and tabs are moved
+  only by dragging them. The tab you left open is the one you come back to.
+  Delete opens a dialog that asks twice and takes the tab's text and pictures
+  with it; with no tab left, the dialog asks you to make one. A notebook from before tabs opens
   as one tab called **Notes**.
 - **Markdown, styled as you type.** The editor shows Markdown in place:
   headings grow, bullets draw, bold, code, quotes and links take their look, and

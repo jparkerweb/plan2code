@@ -1,11 +1,12 @@
 // Plan2Code Web Console - the Notebook's tab bar.
 //
 // Draws #notepad-tabs from a list of { id, name } and tells screens/notepad.js
-// what the person did: pick a tab (onSwitch), reorder with the keyboard or a
-// drag, or ask to rename (onChange). No fetches here: the screen owns every
-// request, and notepad.js owns the rules for order.
+// what the person did: pick a tab (onSwitch), reorder with a drag, ask to
+// rename (a double-click or F2) or ask to delete (the x beside the name, or the
+// Delete key) (onChange). No fetches here: the screen owns every request, and
+// notepad.js owns the rules for order.
 
-import { dropTab, moveTab } from "./notepad.js";
+import { dropTab } from "./notepad.js";
 import { el } from "./render.js";
 
 const $ = (id) => document.getElementById(id);
@@ -15,7 +16,7 @@ const DRAG_TYPE = "application/x-plan2code-notepad-tab";
 /**
  * `onSwitch(id)` runs when a tab is picked. `onChange(event)` runs for
  * `{ type: "order", order, focus }` (a new order to save, focus the moved tab
- * afterwards) and `{ type: "rename", id }`.
+ * afterwards), `{ type: "rename", id }` and `{ type: "delete", id }`.
  */
 export function createTabs({ onSwitch, onChange }) {
   const bar = $("notepad-tabs");
@@ -25,6 +26,7 @@ export function createTabs({ onSwitch, onChange }) {
   // or text dragged over the bar does nothing.
   let dragging = null;
 
+  // The tab buttons; each sits in a wrapper with its x.
   const buttons = () => Array.from(bar.querySelectorAll(".notepad-tab"));
   const buttonFor = (id) => buttons().find((b) => b.dataset.id === id) || null;
   const ids = () => tabs.map((t) => t.id);
@@ -43,7 +45,6 @@ export function createTabs({ onSwitch, onChange }) {
     const left = e.key === "ArrowLeft";
     if (left || e.key === "ArrowRight") {
       e.preventDefault();
-      if (e.altKey) return reorder(moveTab(ids(), id, left ? -1 : 1), id);
       const list = buttons();
       const at = list.findIndex((b) => b.dataset.id === id);
       const next = list[Math.max(0, Math.min(list.length - 1, at + (left ? -1 : 1)))];
@@ -55,6 +56,9 @@ export function createTabs({ onSwitch, onChange }) {
     } else if (e.key === "F2") {
       e.preventDefault();
       onChange({ type: "rename", id });
+    } else if (e.key === "Delete") {
+      e.preventDefault();
+      onChange({ type: "delete", id });
     }
   }
 
@@ -82,14 +86,25 @@ export function createTabs({ onSwitch, onChange }) {
       dragging = null;
       clearMarks();
     });
-    b.addEventListener("dragover", (e) => {
+    // The x is a button of its own beside the name, so the tab's text stays
+    // its name and a double-click or a drag on the name never reaches it.
+    const x = el("button", "notepad-tab-x", "×");
+    x.type = "button";
+    x.setAttribute("aria-label", "Delete " + tab.name);
+    x.title = "Delete tab";
+    x.tabIndex = active ? 0 : -1;
+    x.addEventListener("click", () => onChange({ type: "delete", id: tab.id }));
+    const wrap = el("div", "notepad-tabwrap");
+    wrap.setAttribute("role", "presentation");
+    wrap.append(b, x);
+    wrap.addEventListener("dragover", (e) => {
       if (dragging === null) return;
       e.preventDefault();
       e.dataTransfer.dropEffect = "move";
       clearMarks();
       if (tab.id !== dragging) b.classList.add("is-drop-before");
     });
-    b.addEventListener("drop", (e) => {
+    wrap.addEventListener("drop", (e) => {
       if (dragging === null) return;
       e.preventDefault();
       e.stopPropagation();
@@ -98,7 +113,7 @@ export function createTabs({ onSwitch, onChange }) {
       clearMarks();
       reorder(dropTab(ids(), id, tab.id), id);
     });
-    return b;
+    return wrap;
   }
 
   // Dropping on the empty part of the bar moves the tab to the end.
@@ -131,10 +146,6 @@ export function createTabs({ onSwitch, onChange }) {
       const empty = tabs.length === 0;
       $("notepad-empty").hidden = !empty;
       $("notepad-body").hidden = empty;
-      $("notepad-tab-tools").hidden = empty;
-      const at = tabs.findIndex((t) => t.id === activeId);
-      $("notepad-tab-left").disabled = at <= 0;
-      $("notepad-tab-right").disabled = at < 0 || at >= tabs.length - 1;
       // A long row scrolls the current tab into view.
       buttonFor(activeId)?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
     },

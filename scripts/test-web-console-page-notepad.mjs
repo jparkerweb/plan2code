@@ -405,16 +405,19 @@ const tabNames = (s) => tabButtons(s).evaluateAll((bs) => bs.map((b) => b.textCo
 const selectedName = (s) => s.page.locator('#notepad-tabs .notepad-tab[aria-selected="true"]').evaluateAll((bs) => bs.map((b) => b.textContent));
 const status = (s) => s.page.locator("#notepad-status").textContent();
 const idOf = (s, name) => listTabs(s.project).tabs.find((tab) => tab.name === name)?.id;
+// The x beside a tab's name: the current tab's, or the one named.
+const X_SELECTED = '#notepad-tabs .notepad-tab[aria-selected="true"] + .notepad-tab-x';
+const xOf = (s, name) => s.page.locator(`#notepad-tabs .notepad-tab-x[aria-label="Delete ${name}"]`);
 const nameError = (s) => s.page.locator("#notepad-name-error").textContent();
 
 // Makes a tab through the page: the button, the name form, Enter.
 async function newTab(s, name, shown = name) {
   await s.page.click("#notepad-tab-new");
-  await s.page.locator("#notepad-name-form:not([hidden])").waitFor();
+  await s.page.locator("#notepad-name-dlg[open]").waitFor();
   await s.page.fill("#notepad-name", name);
   await s.page.keyboard.press("Enter");
   await s.page.waitForFunction((n) => [...document.querySelectorAll("#notepad-tabs .notepad-tab")].some((b) => b.textContent === n && b.getAttribute("aria-selected") === "true"), shown);
-  await s.page.waitForFunction(() => document.getElementById("notepad-name-form").hidden);
+  await s.page.waitForFunction(() => !document.getElementById("notepad-name-dlg").open);
 }
 
 // A notepad in its first shape: meta.json v1, note.md and images/ at the top.
@@ -455,7 +458,7 @@ test("New tab asks for a name, refuses a bad or duplicate one, and Escape backs 
   const violations = await watchViolations(s);
   await openNotepad(s);
   await s.page.click("#notepad-tab-new");
-  await s.page.locator("#notepad-name-form:not([hidden])").waitFor();
+  await s.page.locator("#notepad-name-dlg[open]").waitFor();
   assert.equal(await s.page.locator("#notepad-name-label").textContent(), "Name this tab");
   assert.equal(await s.page.evaluate(() => document.activeElement.id), "notepad-name", "the field has the focus");
   assert.equal(await s.page.inputValue("#notepad-name"), "");
@@ -476,13 +479,13 @@ test("New tab asks for a name, refuses a bad or duplicate one, and Escape backs 
 
   // Escape closes the form, not the Notebook, and gives the focus back.
   await s.page.keyboard.press("Escape");
-  await s.page.waitForFunction(() => document.getElementById("notepad-name-form").hidden);
+  await s.page.waitForFunction(() => !document.getElementById("notepad-name-dlg").open);
   assert.equal(await s.page.evaluate(() => document.getElementById("notepad-modal").open), true);
   assert.equal(await s.page.evaluate(() => document.activeElement.id), "notepad-tab-new");
   // Cancel does the same.
   await s.page.click("#notepad-tab-new");
   await s.page.click("#notepad-name-cancel");
-  await s.page.waitForFunction(() => document.getElementById("notepad-name-form").hidden);
+  await s.page.waitForFunction(() => !document.getElementById("notepad-name-dlg").open);
 
   await newTab(s, "  Big   ideas ", "Big ideas");
   assert.deepEqual(await tabNames(s), ["Notes", "Big ideas"]);
@@ -559,27 +562,28 @@ test("each tab keeps its own text and pictures, and switching never saves into t
   assert.deepEqual(await violations(), []);
 });
 
-test("Rename opens the same form with the name selected; F2 and double-click work too", async (t) => {
+test("Double-click opens the rename modal with the name selected; F2 works too, and there is no Rename button", async (t) => {
   const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_QUESTION });
   await openNotepad(s);
   await newTab(s, "Ideas");
   const ideas = idOf(s, "Ideas");
 
-  await s.page.click("#notepad-tab-rename");
-  await s.page.locator("#notepad-name-form:not([hidden])").waitFor();
+  assert.equal(await s.page.locator("#notepad-tab-rename, #notepad-tab-tools").count(), 0, "the bottom toolbar is gone");
+  await tabNamed(s, "Ideas").dblclick();
+  await s.page.locator("#notepad-name-dlg[open]").waitFor();
   assert.equal(await s.page.locator("#notepad-name-label").textContent(), "Rename this tab");
   assert.equal(await s.page.inputValue("#notepad-name"), "Ideas");
   assert.equal(await s.page.evaluate(() => document.getElementById("notepad-name").selectionEnd - document.getElementById("notepad-name").selectionStart), 5, "the name is selected");
   // Its own name is not a duplicate; another tab's is.
   await s.page.keyboard.press("Enter");
-  await s.page.waitForFunction(() => document.getElementById("notepad-name-form").hidden);
-  await s.page.click("#notepad-tab-rename");
+  await s.page.waitForFunction(() => !document.getElementById("notepad-name-dlg").open);
+  await tabNamed(s, "Ideas").dblclick();
   await s.page.fill("#notepad-name", "notes");
   await s.page.keyboard.press("Enter");
   assert.equal(await nameError(s), errorSentence("duplicate-name"));
   await s.page.fill("#notepad-name", "Plans");
   await s.page.keyboard.press("Enter");
-  await s.page.waitForFunction(() => document.getElementById("notepad-name-form").hidden);
+  await s.page.waitForFunction(() => !document.getElementById("notepad-name-dlg").open);
   assert.deepEqual(await tabNames(s), ["Notes", "Plans"]);
   assert.equal(listTabs(s.project).tabs.find((tab) => tab.id === ideas).name, "Plans");
   assert.equal(await s.page.evaluate(() => document.activeElement.textContent), "Plans", "the focus is back on the tab");
@@ -587,11 +591,11 @@ test("Rename opens the same form with the name selected; F2 and double-click wor
   // F2 on a focused tab, and a double-click.
   await tabNamed(s, "Plans").focus();
   await s.page.keyboard.press("F2");
-  await s.page.locator("#notepad-name-form:not([hidden])").waitFor();
+  await s.page.locator("#notepad-name-dlg[open]").waitFor();
   assert.equal(await s.page.inputValue("#notepad-name"), "Plans");
   await s.page.keyboard.press("Escape");
   await tabNamed(s, "Notes").dblclick();
-  await s.page.locator("#notepad-name-form:not([hidden])").waitFor();
+  await s.page.locator("#notepad-name-dlg[open]").waitFor();
   assert.equal(await s.page.inputValue("#notepad-name"), "Notes");
   assert.deepEqual(await selectedName(s), ["Notes"], "double-click picked the tab it renames");
 });
@@ -617,42 +621,29 @@ const drag = (s, from, to, { kind = "tab" } = {}) =>
     { from, to, kind },
   );
 
-test("tabs reorder by drag and by keyboard, and the order is kept", async (t) => {
+test("tabs reorder by drag only, and the order is kept", async (t) => {
   const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_QUESTION });
   await openNotepad(s);
   for (const name of ["Ideas", "Plans", "Done"]) await newTab(s, name);
   assert.deepEqual(await tabNames(s), ["Notes", "Ideas", "Plans", "Done"]);
   const order = () => listTabs(s.project).tabs.map((tab) => tab.name);
 
-  // Keyboard: Alt+Left and Alt+Right on a focused tab, focus stays on it.
+  // No buttons and no Alt+Arrow: a drag is the only way to move a tab.
+  assert.equal(await s.page.locator("#notepad-tab-left, #notepad-tab-right").count(), 0);
   await tabNamed(s, "Done").focus();
   await s.page.keyboard.press("Alt+ArrowLeft");
-  await until(() => order().join() === "Notes,Ideas,Done,Plans", 4000);
-  assert.deepEqual(await tabNames(s), ["Notes", "Ideas", "Done", "Plans"]);
-  assert.equal(await s.page.evaluate(() => document.activeElement.textContent), "Done");
-  assert.equal(await status(s), "Moved Done to position 3 of 4", "the move is announced");
-  await s.page.keyboard.press("Alt+ArrowLeft");
-  await s.page.keyboard.press("Alt+ArrowLeft");
-  await s.page.keyboard.press("Alt+ArrowLeft");
-  await until(() => order().join() === "Done,Notes,Ideas,Plans", 4000);
-  assert.equal(await status(s), "Moved Done to position 1 of 4", "and it stops at the first place");
-  // Plain arrows move the focus without moving the tab.
-  await s.page.keyboard.press("ArrowRight");
-  assert.equal(await s.page.evaluate(() => document.activeElement.textContent), "Notes");
-  assert.equal(order().join(), "Done,Notes,Ideas,Plans");
-
-  // The visible buttons act on the current tab.
-  await tabNamed(s, "Plans").click();
-  await s.page.click("#notepad-tab-left");
-  await until(() => order().join() === "Done,Notes,Plans,Ideas", 4000);
-  await s.page.click("#notepad-tab-right");
-  await until(() => order().join() === "Done,Notes,Ideas,Plans", 4000);
-  assert.equal(await s.page.locator("#notepad-tab-right").isDisabled(), true, "the last tab cannot move right");
+  await s.page.waitForTimeout(300);
+  assert.equal(order().join(), "Notes,Ideas,Plans,Done", "Alt+Arrow moved nothing");
+  // Arrows only move the focus, with or without Alt, and never the tab.
+  assert.equal(await s.page.evaluate(() => document.activeElement.textContent), "Plans");
+  await s.page.keyboard.press("ArrowLeft");
+  assert.equal(await s.page.evaluate(() => document.activeElement.textContent), "Ideas");
+  assert.equal(order().join(), "Notes,Ideas,Plans,Done");
 
   // Drag: the target shows a mark, the dragged tab lands just before it.
-  assert.equal(await drag(s, "Plans", "Done"), true, "the target is marked while dragged over");
-  await until(() => order().join() === "Plans,Done,Notes,Ideas", 4000);
-  assert.deepEqual(await tabNames(s), ["Plans", "Done", "Notes", "Ideas"]);
+  assert.equal(await drag(s, "Done", "Notes"), true, "the target is marked while dragged over");
+  await until(() => order().join() === "Done,Notes,Ideas,Plans", 4000);
+  assert.deepEqual(await tabNames(s), ["Done", "Notes", "Ideas", "Plans"]);
   assert.equal(await s.page.locator("#notepad-tabs .is-drop-before").count(), 0, "the mark is gone after the drop");
 
   // Text dragged over a tab does nothing.
@@ -660,14 +651,14 @@ test("tabs reorder by drag and by keyboard, and the order is kept", async (t) =>
   s.page.on("request", (r) => r.url().includes("/notepad/tab/order") && posted.push(r.url()));
   assert.equal(await drag(s, "Plans", "Ideas", { kind: "text" }), false);
   await s.page.waitForTimeout(300);
-  assert.equal(order().join(), "Plans,Done,Notes,Ideas");
+  assert.equal(order().join(), "Done,Notes,Ideas,Plans");
   assert.equal(posted.length, 0);
 
   // Reopened, the order stands.
   await s.page.reload({ waitUntil: "domcontentloaded" });
   await drawn(s.page);
   await openNotepad(s);
-  assert.deepEqual(await tabNames(s), ["Plans", "Done", "Notes", "Ideas"]);
+  assert.deepEqual(await tabNames(s), ["Done", "Notes", "Ideas", "Plans"]);
 });
 
 test("Delete asks twice, Escape backs out of either, and only the second confirm removes the tab and its folder", async (t) => {
@@ -688,7 +679,7 @@ test("Delete asks twice, Escape backs out of either, and only the second confirm
 
   const panel = s.page.locator("#notepad-delete");
   const text = () => s.page.locator("#notepad-delete-text").textContent();
-  await s.page.click("#notepad-tab-delete");
+  await s.page.click(X_SELECTED);
   await panel.waitFor({ state: "visible" });
   assert.equal(await text(), "This deletes the tab Ideas, its text and its 2 pictures. This cannot be undone.");
   assert.equal(await s.page.evaluate(() => document.activeElement.textContent), "Keep tab", "Keep tab has the focus");
@@ -700,7 +691,7 @@ test("Delete asks twice, Escape backs out of either, and only the second confirm
   assert.equal(await s.page.evaluate(() => document.activeElement.textContent), "Ideas");
 
   // Step one then Escape: nothing deleted, and the Notebook stays open.
-  await s.page.click("#notepad-tab-delete");
+  await s.page.click(X_SELECTED);
   await s.page.click("#notepad-delete-go");
   assert.equal(await text(), "Really delete Ideas for good?");
   assert.equal(await s.page.locator("#notepad-delete-go").textContent(), "Yes, delete it");
@@ -710,13 +701,13 @@ test("Delete asks twice, Escape backs out of either, and only the second confirm
   assert.equal(await s.page.evaluate(() => document.getElementById("notepad-modal").open), true);
   assert.equal(fs.existsSync(folder), true);
   // Escape at the first step too.
-  await s.page.click("#notepad-tab-delete");
+  await s.page.click(X_SELECTED);
   await s.page.keyboard.press("Escape");
   await panel.waitFor({ state: "hidden" });
   assert.equal(fs.existsSync(folder), true);
 
   // Both confirms: gone, with its folder, and the neighbour is shown.
-  await s.page.click("#notepad-tab-delete");
+  await s.page.click(X_SELECTED);
   await s.page.click("#notepad-delete-go");
   await s.page.click("#notepad-delete-go");
   await until(() => !fs.existsSync(folder), 4000);
@@ -726,7 +717,7 @@ test("Delete asks twice, Escape backs out of either, and only the second confirm
   assert.equal(listTabs(s.project).last, idOf(s, "Notes"), "the neighbour became the last tab");
 
   // Delete the last tab: the empty state, with the focus on its button.
-  await s.page.click("#notepad-tab-delete");
+  await s.page.click(X_SELECTED);
   await s.page.click("#notepad-delete-go");
   await s.page.click("#notepad-delete-go");
   await s.page.locator("#notepad-empty").waitFor({ state: "visible" });
@@ -754,7 +745,7 @@ test("text typed into a tab that is then deleted is never saved, and a tab delet
   const saves = [];
   s.page.on("request", (r) => r.url().includes("/notepad/text") && saves.push(r.url()));
   await typeInto(s, "typed then deleted");
-  await s.page.click("#notepad-tab-delete");
+  await s.page.click(X_SELECTED);
   await s.page.click("#notepad-delete-go");
   await s.page.click("#notepad-delete-go");
   await s.page.waitForFunction(() => document.querySelectorAll("#notepad-tabs .notepad-tab").length === 1);
@@ -772,31 +763,38 @@ test("text typed into a tab that is then deleted is never saved, and a tab delet
   assert.deepEqual(await tabNames(s), ["Notes"]);
 });
 
-test("a name form or delete question open on one tab closes when another tab is picked", async (t) => {
+test("a double-click or an x acts on the tab it was made on, even when another is showing", async (t) => {
   const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_QUESTION });
   await openNotepad(s);
   await newTab(s, "Ideas");
   const notes = idOf(s, "Notes");
+  assert.deepEqual(await selectedName(s), ["Ideas"]);
 
-  // Rename opened on Ideas, then Notes picked: the form goes, and Notes keeps its name.
-  await s.page.click("#notepad-tab-rename");
-  await s.page.locator("#notepad-name-form:not([hidden])").waitFor();
-  await tabNamed(s, "Notes").click();
-  await s.page.waitForFunction(() => document.getElementById("notepad-name-form").hidden);
+  // Double-click on Notes while Ideas shows: Notes is picked and is the one renamed.
+  await tabNamed(s, "Notes").dblclick();
+  await s.page.locator("#notepad-name-dlg[open]").waitFor();
+  assert.equal(await s.page.inputValue("#notepad-name"), "Notes");
   await until(async () => (await selectedName(s)).join() === "Notes", 4000);
-  assert.equal(listTabs(s.project).tabs.find((tab) => tab.id === notes).name, "Notes");
+  await s.page.keyboard.press("Escape");
+  await s.page.waitForFunction(() => !document.getElementById("notepad-name-dlg").open);
+  assert.equal(listTabs(s.project).tabs.find((tab) => tab.id === notes).name, "Notes", "Escape left the name alone");
 
-  // Delete opened (and moved on to its second step) on Notes, then Ideas picked: the question goes.
-  await s.page.click("#notepad-tab-delete");
-  await s.page.click("#notepad-delete-go");
-  assert.equal(await s.page.locator("#notepad-delete-text").textContent(), "Really delete Notes for good?");
-  await tabNamed(s, "Ideas").click();
-  await s.page.locator("#notepad-delete").waitFor({ state: "hidden" });
-  await until(async () => (await selectedName(s)).join() === "Ideas", 4000);
-  assert.deepEqual(await tabNames(s), ["Notes", "Ideas"], "nothing was deleted");
-  // Asking again starts at the first step, naming the tab now open.
-  await s.page.click("#notepad-tab-delete");
+  // The x on Ideas while Notes shows: the question names Ideas, and Keep leaves both.
+  await xOf(s, "Ideas").click();
+  await s.page.locator("#notepad-delete").waitFor({ state: "visible" });
   assert.match(await s.page.locator("#notepad-delete-text").textContent(), /^This deletes the tab Ideas,/);
+  await s.page.click("#notepad-delete-keep");
+  await s.page.locator("#notepad-delete").waitFor({ state: "hidden" });
+  assert.deepEqual(await tabNames(s), ["Notes", "Ideas"], "nothing was deleted");
+
+  // Both confirms on the x of the tab that is not showing now remove that one.
+  await tabNamed(s, "Notes").click();
+  await until(async () => (await selectedName(s)).join() === "Notes", 4000);
+  await xOf(s, "Ideas").click();
+  await s.page.click("#notepad-delete-go");
+  await s.page.click("#notepad-delete-go");
+  await s.page.waitForFunction(() => document.querySelectorAll("#notepad-tabs .notepad-tab").length === 1);
+  assert.deepEqual(await tabNames(s), ["Notes"]);
 });
 
 test("when the tab after a delete cannot be loaded, the deleted text is not left on screen", async (t) => {
@@ -809,7 +807,7 @@ test("when the tab after a delete cannot be loaded, the deleted text is not left
   await until(() => readNotepad(s.project, ideas).text === "doomed text", 4000);
   // The neighbour's read fails, as if the connection dropped right after the delete.
   await s.page.route("**/notepad?tab=*", (route) => route.abort());
-  await s.page.click("#notepad-tab-delete");
+  await s.page.click(X_SELECTED);
   await s.page.click("#notepad-delete-go");
   await s.page.click("#notepad-delete-go");
   await s.page.waitForFunction(() => document.querySelectorAll("#notepad-tabs .notepad-tab").length === 1);

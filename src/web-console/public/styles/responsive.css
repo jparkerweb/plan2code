@@ -64,11 +64,10 @@
   .notepad-images { flex-direction: column; align-items: stretch; }
   .notepad-tabbar { flex-wrap: wrap; }
   .modal.notepad .notepad-tab-new,
-  .modal.notepad .notepad-tab-tools .btn,
-  .modal.notepad .notepad-name-row .btn,
-  .modal.notepad .notepad-delete-row .btn,
-  .notepad-tab { min-height: 44px; }
-  .notepad-name-row { flex-wrap: wrap; }
+  .modal.notepad-sub .modal-actions .btn,
+  .notepad-tab,
+  .notepad-tab-x { min-height: 44px; }
+  .notepad-tab-x { width: 32px; }
   .notepad-add { align-self: flex-start; }
   .notepad-thumb .notepad-thumb-delete { width: 30px; height: 30px; font-size: 18px; }
   .modal.notepad-preview[open] { grid-template-columns: 52px minmax(0, 1fr) 52px; }

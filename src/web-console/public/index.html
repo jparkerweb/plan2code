@@ -2615,28 +2615,6 @@
         <div class="notepad-tabs" id="notepad-tabs" role="tablist" aria-label="Notebook tabs"></div>
         <button type="button" class="btn small ghost notepad-tab-new" id="notepad-tab-new">+ New tab</button>
       </div>
-      <div class="notepad-tab-tools" id="notepad-tab-tools" role="group" aria-label="This tab" hidden>
-        <button type="button" class="btn tiny ghost" id="notepad-tab-rename">Rename</button>
-        <button type="button" class="btn tiny ghost" id="notepad-tab-left">Move left</button>
-        <button type="button" class="btn tiny ghost" id="notepad-tab-right">Move right</button>
-        <button type="button" class="btn tiny ghost notepad-tab-delete" id="notepad-tab-delete">Delete</button>
-      </div>
-      <form class="notepad-name-form" id="notepad-name-form" hidden novalidate>
-        <label for="notepad-name" id="notepad-name-label">Name this tab</label>
-        <div class="notepad-name-row">
-          <input type="text" id="notepad-name" autocomplete="off" spellcheck="false" aria-describedby="notepad-name-error" />
-          <button type="submit" class="btn small primary" id="notepad-name-save">Save</button>
-          <button type="button" class="btn small ghost" id="notepad-name-cancel">Cancel</button>
-        </div>
-        <p class="help notepad-name-error" id="notepad-name-error" aria-live="polite"></p>
-      </form>
-      <div class="notepad-delete" id="notepad-delete" role="group" aria-labelledby="notepad-delete-text" hidden>
-        <p id="notepad-delete-text"></p>
-        <div class="notepad-delete-row">
-          <button type="button" class="btn small" id="notepad-delete-keep">Keep tab</button>
-          <button type="button" class="btn small danger" id="notepad-delete-go">Delete tab…</button>
-        </div>
-      </div>
       <div class="notepad-empty" id="notepad-empty" hidden>
         <p>No tabs yet. Make one to start writing.</p>
         <button type="button" class="btn small primary" id="notepad-empty-new">+ New tab</button>
@@ -2652,6 +2630,30 @@
       <div class="modal-actions notepad-actions">
         <p class="help notepad-status" id="notepad-status" aria-live="polite"></p>
         <button type="button" class="btn ghost" id="notepad-close">Close</button>
+      </div>
+    </dialog>
+
+    <!-- The Notebook's name and delete questions: small dialogs over the Notebook.
+         A tab's double-click (or F2) opens the name one for Rename, + New tab
+         opens it for a new name, and a tab's x opens the delete one, which asks twice. -->
+    <dialog class="modal notepad-sub" id="notepad-name-dlg" aria-labelledby="notepad-name-label">
+      <form class="notepad-name-form" id="notepad-name-form" novalidate>
+        <h2 id="notepad-name-label">Name this tab</h2>
+        <input type="text" id="notepad-name" autocomplete="off" spellcheck="false" aria-describedby="notepad-name-error" />
+        <p class="help notepad-name-error" id="notepad-name-error" aria-live="polite"></p>
+        <div class="modal-actions">
+          <button type="button" class="btn ghost" id="notepad-name-cancel">Cancel</button>
+          <button type="submit" class="btn primary" id="notepad-name-save">Save</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog class="modal notepad-sub notepad-delete" id="notepad-delete" aria-labelledby="notepad-delete-title" aria-describedby="notepad-delete-text">
+      <h2 id="notepad-delete-title">Delete this tab?</h2>
+      <p id="notepad-delete-text"></p>
+      <div class="modal-actions">
+        <button type="button" class="btn ghost" id="notepad-delete-keep">Keep tab</button>
+        <button type="button" class="btn danger" id="notepad-delete-go">Delete tab…</button>
       </div>
     </dialog>
 

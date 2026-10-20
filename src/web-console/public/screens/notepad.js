@@ -21,7 +21,6 @@ import {
   cleanTabName,
   errorSentence,
   keepsText,
-  moveTab,
   nextDelete,
   nextSave,
   noteBytes,
@@ -246,19 +245,10 @@ async function readNote(tab) {
 
 const nameOf = (id) => (tabs.find((t) => t.id === id) || {}).name || "";
 
-const ids = () => tabs.map((t) => t.id);
-
 function drawTabs() {
   tabBar.draw(tabs, activeId);
-  const none = !activeId;
-  $("notepad-tab-rename").disabled = none || busy;
-  $("notepad-tab-delete").disabled = none || busy;
   $("notepad-tab-new").disabled = busy;
   $("notepad-empty-new").disabled = busy;
-  if (busy) {
-    $("notepad-tab-left").disabled = true;
-    $("notepad-tab-right").disabled = true;
-  }
   $("notepad-name-save").disabled = busy;
 }
 
@@ -342,13 +332,6 @@ async function reorder(order, focus) {
   drawTabs();
 }
 
-// The current tab one place to the left or right.
-function moveCurrent(delta) {
-  if (!activeId || busy) return;
-  const order = moveTab(ids(), activeId, delta);
-  if (order.join() !== ids().join()) reorder(order, activeId);
-}
-
 // A tab is no longer there (deleted here, or from another page): off the bar,
 // its unsaved text dropped without a save, and its neighbour on screen.
 async function gone(id, index = tabs.findIndex((t) => t.id === id), announce = true) {
@@ -387,8 +370,8 @@ function openNameForm(mode) {
   closeDelete();
   naming = mode;
   $("notepad-name-label").textContent = mode === "new" ? "Name this tab" : "Rename this tab";
-  $("notepad-name-form").hidden = false;
   $("notepad-name-error").textContent = "";
+  if (!$("notepad-name-dlg").open) $("notepad-name-dlg").showModal();
   const input = $("notepad-name");
   input.value = mode === "rename" ? nameOf(activeId) : "";
   input.focus();
@@ -399,7 +382,7 @@ function closeNameForm(toFocus = true) {
   if (!naming) return;
   const was = naming;
   naming = null;
-  $("notepad-name-form").hidden = true;
+  $("notepad-name-dlg").close();
   if (!toFocus) return;
   if (was === "rename") tabBar.focusTab(activeId);
   else (tabs.length ? $("notepad-tab-new") : $("notepad-empty-new")).focus();
@@ -456,8 +439,9 @@ async function submitName() {
 /* ------------------------------------------------------------ delete */
 
 function paintDelete() {
-  $("notepad-delete").hidden = stage === "none";
-  if (stage === "none") return;
+  const dlg = $("notepad-delete");
+  if (stage === "none") return void (dlg.open && dlg.close());
+  if (!dlg.open) dlg.showModal();
   const name = nameOf(activeId);
   const count = images.filter((img) => img.id).length;
   const pics = count === 1 ? "1 picture" : `${count} pictures`;
@@ -914,7 +898,7 @@ export async function openNotepad() {
   tell("");
   inform("");
   naming = null;
-  $("notepad-name-form").hidden = true;
+  $("notepad-name-dlg").close();
   stage = "none";
   paintDelete();
   if (!dlg.open) dlg.showModal();
@@ -928,9 +912,12 @@ export function wireNotepad() {
     onSwitch: (id) => switchTo(id),
     onChange: async (event) => {
       if (event.type === "order") return reorder(event.order, event.focus);
-      // Rename acts on the current tab: a double-click or F2 on another one picks it first.
+      // Rename and delete act on the current tab: a double-click, F2 or x on
+      // another one picks it first.
       if (event.id && event.id !== activeId) await switchTo(event.id);
-      if (!event.id || event.id === activeId) openNameForm("rename");
+      if (event.id && event.id !== activeId) return;
+      if (event.type === "delete") openDelete();
+      else openNameForm("rename");
     },
   });
   lightDismiss(dlg);
@@ -940,10 +927,6 @@ export function wireNotepad() {
   $("notepad-close").addEventListener("click", () => dlg.close());
   $("notepad-tab-new").addEventListener("click", () => openNameForm("new"));
   $("notepad-empty-new").addEventListener("click", () => openNameForm("new"));
-  $("notepad-tab-rename").addEventListener("click", () => openNameForm("rename"));
-  $("notepad-tab-left").addEventListener("click", () => moveCurrent(-1));
-  $("notepad-tab-right").addEventListener("click", () => moveCurrent(1));
-  $("notepad-tab-delete").addEventListener("click", openDelete);
   $("notepad-delete-keep").addEventListener("click", () => closeDelete(true));
   $("notepad-delete-go").addEventListener("click", confirmDelete);
   $("notepad-name-cancel").addEventListener("click", () => closeNameForm());
@@ -951,15 +934,10 @@ export function wireNotepad() {
     e.preventDefault();
     submitName();
   });
-  // Esc backs out of the name form or the delete question first, and only
-  // then closes the dialog.
-  dlg.addEventListener("keydown", (e) => {
-    if (e.key !== "Escape" || (!naming && stage === "none")) return;
-    e.preventDefault();
-    e.stopPropagation();
-    if (naming) closeNameForm();
-    else closeDelete(true);
-  });
+  // The two small dialogs are modal over the Notebook, so Esc (or any other
+  // way they close) backs out of them alone and the state follows the dialog.
+  $("notepad-name-dlg").addEventListener("close", () => closeNameForm());
+  $("notepad-delete").addEventListener("close", () => closeDelete(true));
   dlg.addEventListener("close", () => {
     flush();
     $("btn-notepad").focus();
