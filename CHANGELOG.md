@@ -2,6 +2,21 @@
 
 All notable changes to Plan2Code will be documented in this file.
 
+## v2.11.0
+
+### ✨ Added
+
+- **web console**: the Notebook has named **tabs**. Each tab is its own Markdown note with its own pictures, kept in its own folder under the notebook's (`tabs/<id>/note.md` and `images/`, with a `tabs.json` index). **+ New tab** asks for a name (1 to 40 characters, no two alike in any case, up to 20 tabs). A tab can be renamed (button, double-click or F2), reordered (drag, Move left and Move right, or Alt with the arrow keys) and deleted, which asks twice and removes its text and pictures. The tab left open is the one that opens next, and with no tab left the dialog offers to make one. Saves and pictures are bound to the tab they were made in, so switching never moves either; a switch that cannot save first stays put and says why.
+- **web console**: five routes (`POST /notepad/tab`, `/tab/rename`, `/tab/delete`, `/tab/order`, `/tab/last`), `?tab=` on the text and picture routes, and picture addresses that carry the tab (`/notepad/images/<tab>/<uuid>.jpg`).
+
+### 🔧 Changed
+
+- **web console**: the Notepad is now called the **Notebook** (the icon is unchanged), in the top bar, the dialog, the Help, the docs and the screenshots. Code names, routes and the `~/.plan2code/notepads/` folder keep their names, so nothing already saved moves. The dialog's line about it being never shared to the AI Agent is bold, in the highlight color.
+- **web console**: every document tab and the Overview has a **Back to Questions** button (Dashboard or Git on those screens) left of Print and Download, with a highlight border, and that header row stays at the top of the pane while the document scrolls.
+- **web console**: the Notebook editor is now CodeMirror 6 with live in-place Markdown: headings grow, bullets draw and the marks come back on the line the cursor is on. It replaces OverType after a spike showed typing in a 200 KB note about four times faster. The editor ships as one vendored file loaded only when the Notebook first opens, and runs in a shadow root so the page's content-security policy stays as strict as before.
+- **web console**: an existing notebook opens as one tab called **Notes**. Reading it writes nothing; the first edit moves the note and pictures into the tab, and a crash part way is finished by the next write.
+- **contributors**: `scripts/vendor-codemirror.mjs` and its lock file build the editor bundle reproducibly; the OverType vendor script, its CSS and its page helpers are gone.
+
 ## v2.10.0
 
 ### ✨ Added

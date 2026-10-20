@@ -146,8 +146,9 @@ Scroll down for the utilities. Outside a git repository the **Git** card says so
 - **Files in your notes.** Show instead of describe: attach a screenshot, a
   photo or a document to any note or quick question (see *Attachments in notes
   and questions* below).
-- **A notepad of your own.** One per project folder, for jottings and
-  screenshots that are yours, not the agent's (see *Your notepad* below).
+- **A notebook of your own.** One per project folder, in named tabs, for
+  jottings and screenshots that are yours, not the agent's (see *Your notebook*
+  below).
 - **A nudge when it might be waiting on you.** Your agent may stop in the
   terminal to ask permission for something, and the page cannot see that. So
   the dashboard and every starting screen carry a one-line tip about hands-off
@@ -410,34 +411,47 @@ Pathfinder, the agent can hand independent pieces of work to helpers
 - **Pathfinder's research** always uses helpers, whatever the switch says, and
   they show in the tab too.
 
-### Your notepad
+### Your notebook
 
-The **Notepad** icon in the top bar, on the dashboard, every skill and the
+The **Notebook** icon in the top bar, on the dashboard, every skill and the
 finished screen, opens a large dialog with a scratch pad for the folder you are
 working in.
 
-- **Markdown, styled as you type.** Headings, lists, bold and code take their
-  look in place while the text itself stays plain Markdown (saved as
-  `note.md`, up to 1 MB).
+- **Tabs.** A row of named tabs sits across the top, each with its own text and
+  its own pictures. **+ New tab** asks for a name first (1 to 40 characters, no
+  two the same in any case, up to 20 tabs). Under the row, **Rename** changes
+  the current tab's name (a double-click or **F2** on a tab does too), **Move
+  left** and **Move right** (or **Alt** with the arrow keys) reorder it, and
+  tabs can be dragged. The tab you left open is the one you come back to.
+  **Delete** asks twice and takes the tab's text and pictures with it; with no
+  tab left, the dialog asks you to make one. A notebook from before tabs opens
+  as one tab called **Notes**.
+- **Markdown, styled as you type.** The editor shows Markdown in place:
+  headings grow, bullets draw, bold, code, quotes and links take their look, and
+  the marks come back on the line you are on. The text itself stays plain
+  Markdown (saved as the tab's `note.md`, up to 1 MB).
 - **Pictures beside it.** Paste a screenshot, drop files on the dialog or press
-  **Add image**: each becomes a thumbnail in a strip under the text (up to 200).
-  Click one for a full-screen preview (arrow keys step through, Esc closes);
-  its **X** asks before it deletes.
-- **It saves itself**, about a second after you stop typing and when you close
-  the dialog. If the connection drops, your text stays in the page and is
-  retried, and the tab warns before you close it with something unsaved.
+  **Add image**: each becomes a thumbnail in a strip under the text (up to 200
+  per tab). Click one for a full-screen preview (arrow keys step through, Esc
+  closes); its **X** asks before it deletes.
+- **It saves itself**, about a second after you stop typing, when you close the
+  dialog and before you switch tabs. If a tab's text cannot be saved, switching
+  is refused ("Not saved yet, so staying on this tab") rather than losing it.
+  If the connection drops, your text stays in the page and is retried, and the
+  browser tab warns before you close it with something unsaved.
 - **One per folder, kept between sessions.** Every session started in the same
-  folder (each git worktree counts as its own) opens the same notepad, in
+  folder (each git worktree counts as its own) opens the same notebook, in
   `~/.plan2code/notepads/<folder-name>-<12 hex>/`: `meta.json` (which folder it
-  belongs to), `note.md` and `images/`. Two pages open on one folder share it,
-  and the last save wins.
+  belongs to), `tabs.json` (the tabs, their order and the last one open) and one
+  folder per tab, `tabs/<id>/`, holding its `note.md` and `images/`. Two pages
+  open on one folder share it, and the last save wins.
 - **Private.** It never goes into your project, your session or anything the
   agent reads, so the agent never sees it. It stays on this machine.
 - **Removed only when you say.** No automatic cleanup touches it. Once the
-  newest file in a notepad is 30 days old or more, *User Preferences →
+  newest file in a notebook is 30 days old or more, *User Preferences →
   Cleanup* offers it as one item named after its folder's full path
-  (*Notepad for /home/sam/code/shop*),
-  and deleting it removes the whole notepad, text and pictures.
+  (*Notebook for /home/sam/code/shop*),
+  and deleting it removes the whole notebook, every tab's text and pictures.
 
 ### Session meter
 
@@ -748,7 +762,7 @@ exception being the note attachments the agent keeps for a spec, above):
 | `~/.plan2code/console/sessions/<id>/workspace.json`, `ledger.ndjson`, `workspace-cursor.json` | the workspace's folders (paths, names, descriptions — never their contents), the session meter's events, and how far the agent has been told of workspace changes. Kept beside the session, so they outlive every dashboard hop | with the session |
 | `~/.plan2code/console/sessions/<id>/uploads/` | images and documents attached to notes and quick questions | 30 days after the session was last touched |
 | `~/.plan2code/handoffs/<id>.md`, `<id>.json` | each handoff's document, and which checkout, spec and skill it belongs to and whether it was picked up (`handoffs.mjs` is their one owner) | 30 days after it was last touched, picked up or not |
-| `~/.plan2code/notepads/<folder-name>-<12 hex>/` | your notepad for one folder: `meta.json`, `note.md` and `images/` (`notepads.mjs` is their one owner; the agent never reads them) | until you delete it through Cleanup, which offers it once its newest file is 30 days old |
+| `~/.plan2code/notepads/<folder-name>-<12 hex>/` | your notebook for one folder: `meta.json`, `tabs.json` and, per tab, `tabs/<id>/note.md` and `tabs/<id>/images/` (`notepads.mjs` is their one owner; the agent never reads them) | until you delete it through Cleanup, which offers it once its newest file is 30 days old |
 | `~/.plan2code/console/looks.json` | your role, theme, colors, sounds and card width | always |
 | `~/.plan2code/console/subagents.json` | your Subagents switch, instruction and limit, per project folder and skill | always |
 | `~/.plan2code/console/sessions/<id>/subagents-setting.json`, `subagents-cursor.json` | this session's copy of the switch, and how far the agent has been told of it | with the session |
@@ -781,8 +795,8 @@ the top of `~/.plan2code/console/` other than `sessions/`, `looks.json`,
 `workspaces.json`, `subagents.json`, `console-dir` and `update-check.json`, and anything at the top of `~/.plan2code/` other than
 `console/`, `bin/`, `launcher.json`, `install.json` (what you installed, which
 `plan2code update` reads), `models.json`, `handoffs/` (old handoffs go by
-age, above) and `notepads/`. Each notepad whose newest file is 30 days old or
-more is listed as one item, *Notepad for* its folder, and goes whole; no
+age, above) and `notepads/`. Each notebook whose newest file is 30 days old or
+more is listed as one item, *Notebook for* its folder, and goes whole; no
 automatic sweep ever removes one. It also lists each
 folder in the project's `specs--completed/` whose newest file is more than 30
 days old: archived specs Finalize moved there. Deleting one is permanent:
@@ -822,7 +836,7 @@ this:
 
 ### Routes
 
-The upload routes, the send, the overview and handoff reads, the workspace and the notepad. Like every page route, they are on `127.0.0.1`
+The upload routes, the send, the overview and handoff reads, the workspace and the notebook. Like every page route, they are on `127.0.0.1`
 behind the session cookie, and the ones that write also check the request's
 origin.
 
@@ -841,12 +855,17 @@ origin.
 | `POST /workspace/edit` | `{ id, name?, description? }`. Renames or re-describes one folder: 400 `bad-name` / `name-taken`, 404 `unknown`. |
 | `POST /workspace/remove` | `{ id }`. 400 `original` for the folder the session started in, 404 `unknown`. |
 | `POST /workspace/browse` | Opens the system folder picker and answers `{ path }` or `{ cancelled: true }`; never adds anything itself. 409 `busy` while one is open, 404 `no-picker` when the session looks remote or no picker exists. |
-| `GET /notepad` | The notepad for the folder this session runs in: `{ text, savedAt, images: [{ id, url, thumb }] }`. Reading never creates a file. |
-| `POST /notepad/text` | `{ text }`. Saves `note.md` and answers `{ ok, savedAt }`; 400 `bad`, 413 `too-long` (over 1 MB). |
-| `POST /notepad/image` | Raw `image/jpeg` (the page re-encodes every picture first). Writes `images/<uuid>.jpg` and answers `{ ok, id, url }`; 415 `not-jpeg`, 413 `too-large` (over 4 MB), 409 `too-many` (200 pictures). |
-| `POST /notepad/thumb?id=<uuid>` | Raw `image/jpeg`: that picture's thumbnail. 404 `not-found`, 415 `not-jpeg`, 413 `too-large`. |
-| `POST /notepad/image/delete` | `{ id }`. Deletes a picture and its thumbnail; 404 `not-found`. |
-| `GET /notepad/images/<uuid>.jpg`, `<uuid>.thumb.jpg` | Serves a picture or its thumbnail as `image/jpeg`, only by a UUID name, a regular file (never a link) whose real path stays inside `~/.plan2code/notepads/`; anything else is 404. |
+| `GET /notepad[?tab=<id>]` | The notepad for the folder this session runs in: `{ tabs: [{ id, name }], last, tab: { id, text, savedAt, images: [{ id, url, thumb }] } | null }`, with the tab's `text`, `savedAt` and `images` repeated at the top. Without `tab` it answers the last one used; 404 `no-such-tab` for an id it does not have. A notepad in the first shape answers one virtual tab, Notes. Reading never creates or moves a file. |
+| `POST /notepad/text?tab=<id>` | `{ text }`. Saves that tab's `note.md` and answers `{ ok, savedAt }`; 400 `bad`, 404 `no-such-tab`, 413 `too-long` (over 1 MB). |
+| `POST /notepad/image?tab=<id>` | Raw `image/jpeg` (the page re-encodes every picture first). Writes the tab's `images/<uuid>.jpg` and answers `{ ok, id, url }`; 415 `not-jpeg`, 413 `too-large` (over 4 MB), 409 `too-many` (200 pictures in the tab). |
+| `POST /notepad/thumb?id=<uuid>&tab=<id>` | Raw `image/jpeg`: that picture's thumbnail. 404 `not-found` or `no-such-tab`, 415 `not-jpeg`, 413 `too-large`. |
+| `POST /notepad/image/delete?tab=<id>` | `{ id }`. Deletes a picture and its thumbnail; 404 `not-found` or `no-such-tab`. |
+| `POST /notepad/tab` | `{ name }`. Makes a tab, which becomes the last one used, and answers `{ ok, id, name }`; 400 `bad-name`, 409 `duplicate-name` (any case) or `too-many-tabs` (20). |
+| `POST /notepad/tab/rename` | `{ id, name }`. Answers `{ ok, id, name }`; 400 `bad-name`, 404 `no-such-tab`, 409 `duplicate-name`. |
+| `POST /notepad/tab/delete` | `{ id }`. Removes the tab from the index, then its folder (text and pictures); 404 `no-such-tab`. |
+| `POST /notepad/tab/order` | `{ order: [id] }`, every current id exactly once; 400 `bad` otherwise. |
+| `POST /notepad/tab/last` | `{ id }`. Remembers the open tab; 404 `no-such-tab`. |
+| `GET /notepad/images/<tab>/<uuid>.jpg`, `<uuid>.thumb.jpg` | Serves a picture or its thumbnail as `image/jpeg`, only by a tab id and a UUID name, a regular file (never a link) whose real path stays inside `~/.plan2code/notepads/`; anything else is 404. |
 | `POST /subagents` | `{ on, instruction, max }` (`instruction: null` for the shipped default). Saves the switch for this project and skill and answers `{ ok, setting }`; 400 `not-offered` on a skill without the switch, `bad`, `too-long` (over 2,000 characters) or `max` (outside 1 to 20). |
 
 ## For maintainers
@@ -860,7 +879,7 @@ origin.
 | Tests | `node --test scripts/test-web-console-*.mjs` (split by area, shared setup in `scripts/web-console-test-helpers.mjs`), also run by `npm test` |
 | Start-up benchmark | `node scripts/bench-web-console.mjs` (needs a local Chrome or Edge for the paint columns, driven through `playwright-core` from `npm install`; `--browser-delay 900` models a real browser launch, `--roundtrip` times Send→agent and post→page) |
 | Screenshots | `node scripts/capture-screenshots.mjs` (needs a local Chrome or Edge, driven through `playwright-core` from `npm install`; `PLAN2CODE_TEST_BROWSER=chrome|msedge` forces one) |
-| Dependencies | none at runtime. `marked` 15.0.7 (MIT) is vendored for its lexer only, and OverType 2.6.1 (MIT) for the notepad's editor; the page's policy blocks the `<style>` OverType injects, so its CSS ships in `public/styles/notepad.css`, regenerated by `node scripts/vendor-overtype.mjs` after an upgrade (steps in the architecture doc's Notepad point) |
+| Dependencies | none at runtime. `marked` 15.0.7 (MIT) is vendored for its lexer only, and CodeMirror 6 (MIT) for the notebook's editor as one bundled file, `public/vendor/codemirror.esm.js`, made by the dev-only `node scripts/vendor-codemirror.mjs` from a pinned lock (about 500 KB, loaded only when the Notebook is first opened); the page's policy blocks the `<style>` element CodeMirror writes, so the editor lives in a shadow root where it adopts its rules as a constructed stylesheet (steps in the architecture doc's Notebook point) |
 
 Edit `src/` only. `skills/` is a committed build artifact: regenerate it with
 `npm run build:skills` and commit it with the source change, since `npm test`

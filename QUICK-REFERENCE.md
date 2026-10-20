@@ -23,7 +23,7 @@ The install command always opens a menu. Back at your prompt with no output at a
 
 Pick a skill on the dashboard and the same page becomes that session. Details: [.readme/web-console.md](.readme/web-console.md) · worked example: [.readme/walkthrough.md](.readme/walkthrough.md).
 
-The **Notepad** icon in the top bar opens a private scratch pad for the folder you are in (Markdown and pictures, kept in `~/.plan2code/notepads/`, never shown to the agent).
+The **Notebook** icon in the top bar opens a private scratch pad for the folder you are in (Markdown and pictures, kept in `~/.plan2code/notepads/`, never shown to the agent).
 
 ## Commands
 

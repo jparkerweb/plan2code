@@ -132,6 +132,7 @@ export function renderDoc(main, id) {
   }
 
   const tools = el("div", "doc-tools");
+  tools.appendChild(backButton());
   // A brief is handed to people who were not in the room, so it gets a copy
   // that opens in any browser, formatting and all.
   if (doc.id === "brief") {
@@ -193,6 +194,22 @@ export function renderDoc(main, id) {
   });
 }
 
+// The way home from a document, in the highlight color so it is the easiest
+// thing to find after reading. A finished session's first tab is its finish
+// screen, the same as the tab itself.
+function backButton() {
+  const flow = page.S.workflow;
+  const home = flow === "dashboard" ? "Dashboard" : flow === "git" ? "Git" : "Questions";
+  const back = el("button", "btn small back-home", "Back to " + home);
+  back.type = "button";
+  back.addEventListener("click", () => {
+    page.view = finish() ? "end" : "questions";
+    redraw();
+    $("main").focus();
+  });
+  return back;
+}
+
 function printButton() {
   const print = el("button", "btn small", "Print");
   print.type = "button";
@@ -209,6 +226,7 @@ export function renderOverview(main) {
   const head = el("div", "doc-head");
   head.appendChild(el("h2", null, "Overview"));
   const tools = el("div", "doc-tools");
+  tools.appendChild(backButton());
   tools.appendChild(printButton());
   head.appendChild(tools);
   main.appendChild(head);

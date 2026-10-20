@@ -178,7 +178,7 @@ const toJpeg = (canvas, quality) =>
 
 // The upload (a JPEG no longer than IMAGE_LONG_EDGE) and its thumbnail, as a
 // small data: URL for a tray (`thumb`) and as a JPEG for a server that keeps
-// one (`thumbBlob`, the Notepad's), from one decode.
+// one (`thumbBlob`, the Notebook's), from one decode.
 export async function reencode(file) {
   const source = await decodeImage(file);
   try {

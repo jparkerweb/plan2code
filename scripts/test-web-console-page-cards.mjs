@@ -669,6 +669,30 @@ test("Download offers a Markdown file with the doc's title, blocks and marks", a
   assert.equal(Buffer.concat(chunks).toString("utf8"), "# What we've agreed\n\nRuns nightly.\n\n> **Assumed for now, still open.**\n\nOutput is CSV.");
 });
 
+// What a person sees break: a long document has no way home but the first
+// tab, or its header scrolls away with the text.
+test("a document's header stays on screen and its Back to Questions button returns to the questions", async (t) => {
+  const blocks = Array.from({ length: 60 }, (_, i) => ({ id: "b" + i, state: "settled", md: `Paragraph ${i}. ` + "More words. ".repeat(40) }));
+  const s = await openSession(await suite.browser(), {
+    t,
+    workflow: "plan",
+    payload: {
+      items: [{ id: "q1", kind: "text", title: "A question", body: "Say something." }],
+      docs: [{ id: "map", title: "What we've agreed", blocks }],
+    },
+  });
+  await s.page.locator("#views").getByRole("button", { name: /What we've agreed/ }).click();
+  const back = s.page.getByRole("button", { name: "Back to Questions" });
+  await back.waitFor();
+  await s.page.evaluate(() => { document.getElementById("main").scrollTop = 4000; });
+  const box = await back.boundingBox();
+  const main = await s.page.locator("#main").boundingBox();
+  assert.ok(box && box.y >= main.y - 1 && box.y < main.y + 80, "the header row is still at the top of the pane after scrolling");
+  await back.click();
+  await s.page.getByText("Say something.").waitFor();
+  assert.equal(await s.page.getByRole("button", { name: "Back to Questions" }).count(), 0, "the questions view has no Back button");
+});
+
 // What a person sees break: the brief button turns up where no playbook
 // answers it, or sends a different range than the one picked.
 test("a pathfinder session offers Write a brief, and the picked range reaches the agent", async (t) => {

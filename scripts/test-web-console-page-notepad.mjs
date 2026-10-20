@@ -1,34 +1,52 @@
-// Page tests for the Notepad: the top bar icon on every screen, the styled
-// editor, autosave and what survives a reload or a restart, one notepad per
-// folder, the page's content-security policy with the editor open, hostile
-// Markdown, typing speed on a long note, the editor's two layers lining up,
-// both themes, and the pictures: adding, deleting, the preview and the cap.
+// Page tests for the Notebook: the top bar icon on every screen, the tabs (made
+// by naming them, renamed, reordered, deleted after two confirms), the live
+// Markdown editor, autosave per tab and what survives a reload or a restart,
+// one notepad per folder, the page's content-security policy with the editor
+// open, hostile Markdown, typing speed on a long note, both themes, and the
+// pictures: adding, deleting, the preview and the cap.
 // Run with:
 // node --test scripts/test-web-console-page-notepad.mjs
 //
 // Each test drives the real console in a real Chrome or Edge through
 // scripts/page-test-helpers.mjs: one browser for the file, a fresh console
 // session per test. Notes land in the file's throwaway NOTEPADS_DIR.
+//
+// The editor lives in the open shadow root of `.notepad-cm-host`: Playwright's
+// CSS locators pierce it, `page.evaluate` code reaches in through `shadowRoot`,
+// and the text is read from the editor's own state (`docText`), since lines
+// the cursor is not on draw without their Markdown marks.
 
 import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { pageSuite, openSession, drawn } from "./page-test-helpers.mjs";
-import { backdate, cli, until } from "./web-console-test-helpers.mjs";
+import { JPEG, backdate, cli, until } from "./web-console-test-helpers.mjs";
 import {
+  LEGACY_TAB_ID,
   NOTEPAD_MAX_IMAGES,
   NOTE_MAX_BYTES,
-  addImage,
+  addImage as addImageTo,
+  createTab,
+  defaultTabId,
+  deleteTab,
+  listTabs,
   notepadFolder,
   notepadKey,
   readNotepad,
-  removeImage,
-  saveNote,
+  removeImage as removeImageFrom,
+  saveNote as saveNoteTo,
 } from "../src/web-console/notepads.mjs";
 import { NOT_LOADED, SAVE_DEBOUNCE_MS, errorSentence } from "../src/web-console/public/notepad.js";
 
 const suite = pageSuite(test);
+
+// The store calls here name the tab they use: the last one, with Notes made
+// first when the notepad has none.
+const openTab = (folder) => defaultTabId(folder) ?? createTab(folder, "Notes").id;
+const saveNote = (folder, text) => saveNoteTo(folder, openTab(folder), text);
+const addImage = (folder, buf) => addImageTo(folder, openTab(folder), buf);
+const removeImage = (folder, id) => removeImageFrom(folder, openTab(folder), id);
 
 // A plan session on the person's turn.
 const PLAN_QUESTION = {
@@ -36,15 +54,40 @@ const PLAN_QUESTION = {
   agent: { status: "waiting" },
 };
 
-const input = (s) => s.page.locator("#notepad-editor .overtype-input");
+// The editor's editable surface (the locator pierces the shadow root).
+const input = (s) => s.page.locator("#notepad-editor .cm-content");
+
+// The editor's whole text.
+const docText = (s) =>
+  s.page.evaluate(async () => {
+    const { EditorView } = await import("/vendor/codemirror.esm.js");
+    const content = document.querySelector(".notepad-cm-host").shadowRoot.querySelector(".cm-content");
+    return EditorView.findFromDOM(content).state.doc.toString();
+  });
+
+// Replaces the text the way typing does: through the editor, so autosave runs.
+const setDoc = (s, text) =>
+  s.page.evaluate(async (t) => {
+    const { EditorView } = await import("/vendor/codemirror.esm.js");
+    const content = document.querySelector(".notepad-cm-host").shadowRoot.querySelector(".cm-content");
+    const view = EditorView.findFromDOM(content);
+    view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: t }, selection: { anchor: t.length } });
+  }, text);
 
 // Opens the notepad and, unless told the note cannot load, waits until it has:
-// the editor is read-only until then.
-async function openNotepad(s, { loads = true } = {}) {
+// the editor is read-only until then. A notepad with no tab gets Notes first,
+// unless `tabs: false`, since an empty one shows the empty state instead.
+async function openNotepad(s, { loads = true, tabs = true } = {}) {
+  if (tabs && !listTabs(s.project).tabs.length) createTab(s.project, "Notes");
   await s.page.click("#btn-notepad");
   await s.page.locator("#notepad-modal[open]").waitFor();
-  await input(s).waitFor();
-  if (loads) await s.page.waitForFunction(() => !document.querySelector("#notepad-editor .overtype-input").readOnly);
+  if (tabs) await input(s).waitFor();
+  if (loads && tabs) {
+    await s.page.waitForFunction(() => {
+      const c = document.querySelector(".notepad-cm-host")?.shadowRoot?.querySelector(".cm-content");
+      return Boolean(c) && c.getAttribute("aria-readonly") !== "true";
+    });
+  }
 }
 
 async function closeNotepad(s) {
@@ -55,19 +98,39 @@ async function closeNotepad(s) {
 // The editor's text once the page has read the note in: opening reads it from
 // the server, so the first value can still be the empty editor.
 async function shows(s, text) {
-  await s.page.waitForFunction((want) => document.querySelector("#notepad-editor .overtype-input").value === want, text, { timeout: 5000 });
-  return input(s).inputValue();
+  await until(async () => (await docText(s)) === text, 5000);
+  return docText(s);
 }
 
-// The note on disk for the session's folder, as the store reads it.
+// Types as a person does, into the end of the text.
+async function typeInto(s, text) {
+  await input(s).click();
+  await s.page.keyboard.press("Control+End");
+  await s.page.keyboard.type(text);
+}
+
+// The note on disk for the session's folder (its last tab), as the store reads it.
 const onDisk = (s) => readNotepad(s.project).text;
+
+// Records content-security violations from now on; the getter lists them.
+async function watchViolations(s) {
+  await s.context.addInitScript(() => {
+    window.__violations = [];
+    document.addEventListener("securitypolicyviolation", (e) =>
+      window.__violations.push(`${e.violatedDirective} ${e.blockedURI} ${e.sourceFile}:${e.lineNumber} ${e.sample}`),
+    );
+  });
+  await s.page.reload({ waitUntil: "domcontentloaded" });
+  await drawn(s.page);
+  return () => s.page.evaluate(() => window.__violations);
+}
 
 async function iconUsable(s, where) {
   const btn = s.page.locator("#btn-notepad");
   assert.ok(await btn.isVisible(), `the icon shows on ${where}`);
   assert.ok(await btn.isEnabled(), `the icon is usable on ${where}`);
-  assert.equal(await btn.getAttribute("aria-label"), "Notepad");
-  assert.equal(await btn.getAttribute("title"), "Notepad");
+  assert.equal(await btn.getAttribute("aria-label"), "Notebook");
+  assert.equal(await btn.getAttribute("title"), "Notebook");
 }
 
 test("the notepad icon shows on the dashboard, a skill session and a finished screen", async (t) => {
@@ -93,14 +156,19 @@ test("the notepad icon shows on the dashboard, a skill session and a finished sc
 test("typing Markdown styles it in place, saves within two seconds, and survives close, reload and a restart", async (t) => {
   const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_QUESTION });
   await openNotepad(s);
-  assert.equal(await input(s).getAttribute("aria-label"), "Notepad text");
-  await input(s).focus();
-  await s.page.keyboard.type("# Shopping list\n\nSome **bold** text");
+  assert.equal(await input(s).getAttribute("aria-label"), "Notebook text");
+  await typeInto(s, "# Shopping list\n\nSome **bold** text");
   const typedAt = Date.now();
-  // Styled in place: the preview layer under the textarea holds a heading.
-  await s.page.locator("#notepad-editor .overtype-preview h1").waitFor();
-  assert.match(await s.page.locator("#notepad-editor .overtype-preview h1").innerText(), /Shopping list/);
-  assert.equal(await s.page.locator("#notepad-editor .overtype-preview strong").count(), 1);
+  // Styled in place: the heading line is drawn large, the bold run bold.
+  await s.page.locator("#notepad-editor .cm-h1").waitFor();
+  assert.match(await s.page.locator("#notepad-editor .cm-h1").innerText(), /Shopping list/);
+  const sizes = await s.page.evaluate(() => {
+    const root = document.querySelector(".notepad-cm-host").shadowRoot;
+    const px = (el) => parseFloat(getComputedStyle(el).fontSize);
+    return { heading: px(root.querySelector(".cm-h1")), body: px(root.querySelector(".cm-content")) };
+  });
+  assert.ok(sizes.heading > sizes.body * 1.4, `the heading is larger than the text (${sizes.heading}px against ${sizes.body}px)`);
+  assert.equal(await s.page.locator("#notepad-editor .cm-strong").count(), 1);
 
   await until(() => onDisk(s) === "# Shopping list\n\nSome **bold** text", 4000);
   assert.ok(Date.now() - typedAt < 2000, `saved ${Date.now() - typedAt} ms after the last key`);
@@ -135,11 +203,11 @@ test("two sessions in two folders keep two separate notepads", async (t) => {
   const a = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_QUESTION });
   const b = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_QUESTION });
   await openNotepad(a);
-  await input(a).fill("Folder A's note");
+  await setDoc(a, "Folder A's note");
   await until(() => onDisk(a) === "Folder A's note", 4000);
   await openNotepad(b);
-  assert.equal(await input(b).inputValue(), "", "the second folder starts empty");
-  await input(b).fill("Folder B's note");
+  assert.equal(await docText(b), "", "the second folder starts empty");
+  await setDoc(b, "Folder B's note");
   await until(() => onDisk(b) === "Folder B's note", 4000);
   assert.equal(onDisk(a), "Folder A's note");
   // Reopening each shows its own.
@@ -154,46 +222,42 @@ test("the editor breaks no content-security rule, and hostile Markdown runs noth
   s.page.on("console", (m) => {
     if (m.type() === "error") consoleErrors.push(m.text());
   });
-  await s.context.addInitScript(() => {
-    window.__violations = [];
-    document.addEventListener("securitypolicyviolation", (e) =>
-      window.__violations.push(`${e.violatedDirective} ${e.blockedURI} ${e.sourceFile}:${e.lineNumber} ${e.sample}`),
-    );
-  });
-  await s.page.reload({ waitUntil: "domcontentloaded" });
-  await drawn(s.page);
+  const violations = await watchViolations(s);
   await openNotepad(s);
-  await input(s).focus();
-  await s.page.keyboard.type(
+  await typeInto(
+    s,
     "# Title\n\n- a list with `code` and [a link](https://example.com)\n> quoted\n\n" +
       '<img src=x onerror="window.__pwned = 1">\n<script>window.__pwned2 = 1</script>\n' +
       '<a href="javascript:window.__pwned3 = 1">click</a>\n',
   );
   await until(() => onDisk(s).includes("__pwned3"), 4000);
   await s.page.waitForTimeout(300);
-  const result = await s.page.evaluate(() => ({
-    violations: window.__violations,
-    pwned: [window.__pwned, window.__pwned2, window.__pwned3],
-    imgs: document.querySelectorAll("#notepad-editor .overtype-preview img").length,
-    scripts: document.querySelectorAll("#notepad-editor script").length,
-    styleTag: Boolean(document.querySelector("style.overtype-styles")),
-  }));
-  assert.deepEqual(result.violations, [], "no content-security violations with the notepad open");
+  const result = await s.page.evaluate(() => {
+    const root = document.querySelector(".notepad-cm-host").shadowRoot;
+    return {
+      pwned: [window.__pwned, window.__pwned2, window.__pwned3],
+      // CodeMirror's own empty spacer images (aria-hidden) beside widgets are not typed HTML.
+      imgs: root.querySelectorAll("img:not(.cm-widgetBuffer)").length,
+      scripts: root.querySelectorAll("script").length,
+      styleTags: root.querySelectorAll("style").length + document.querySelectorAll("style").length,
+    };
+  });
+  assert.deepEqual(await violations(), [], "no content-security violations with the notepad open");
   assert.deepEqual(result.pwned, [undefined, undefined, undefined], "nothing typed ran");
   assert.equal(result.imgs, 0, "typed HTML stays text");
   assert.equal(result.scripts, 0);
-  assert.equal(result.styleTag, false, "OverType injected no <style>");
+  assert.equal(result.styleTags, 0, "the editor added no <style> element");
   assert.deepEqual(consoleErrors.filter((e) => /Content.Security.Policy|Refused to/i.test(e)), []);
   // The heading is styled from the stylesheet the page ships.
-  const h1 = await s.page.locator("#notepad-editor .overtype-preview h1").evaluate((el) => getComputedStyle(el).fontWeight);
+  const h1 = await s.page.locator("#notepad-editor .cm-h1").evaluate((el) => getComputedStyle(el).fontWeight);
   assert.ok(Number(h1) >= 600 || h1 === "bold", `the heading is bold (${h1})`);
 });
 
-// The editor redraws only the lines that changed (patchPreview in
-// screens/notepad.js): about 90 ms a key at 200 KB on a quiet machine, against
-// about 310 ms when every key redrew the whole note. The bar is higher than
-// that because `npm test` runs every test file at once, which alone adds 50 ms
-// or more; it still catches a slide back toward whole-note redraws.
+// The editor redraws only the lines in view, so a key costs the same at 200 KB
+// as at 2 KB: about 25 ms on a quiet machine (OverType, which it replaced,
+// took about 95). The bar is higher than that because `npm test` runs every
+// test file at once, which alone adds 50 ms or more; it still catches a slide
+// back toward whole-note redraws.
 const KEY_BUDGET_MS = 200;
 
 test("typing into a 200 KB note keeps input-to-paint under the key budget on average", async (t) => {
@@ -201,7 +265,9 @@ test("typing into a 200 KB note keeps input-to-paint under the key budget on ave
   const block = "## Heading\n\nSome **bold** text with `code` and a [link](https://example.com).\n\n- an item\n- another\n\n";
   saveNote(s.project, block.repeat(Math.ceil((200 * 1024) / block.length)));
   await openNotepad(s);
-  await s.page.waitForFunction(() => document.querySelector("#notepad-editor .overtype-input").value.length > 200000);
+  await until(async () => (await docText(s)).length > 200000, 5000);
+  await input(s).click();
+  await s.page.keyboard.press("Control+End");
   await s.page.evaluate(() => {
     window.__lags = [];
     window.addEventListener(
@@ -212,9 +278,6 @@ test("typing into a 200 KB note keeps input-to-paint under the key budget on ave
       },
       { capture: true },
     );
-    const ta = document.querySelector("#notepad-editor .overtype-input");
-    ta.focus();
-    ta.setSelectionRange(ta.value.length, ta.value.length);
   });
   // `npm test` runs every test file at once, and a round that lands in another
   // file's busiest moment measures the machine rather than the editor: the
@@ -233,45 +296,11 @@ test("typing into a 200 KB note keeps input-to-paint under the key budget on ave
   assert.ok(best < KEY_BUDGET_MS, `average input-to-paint ${averages.map((a) => a.toFixed(1)).join(", ")} ms`);
 });
 
-test("the textarea and the styled layer line up, line for line", async (t) => {
-  const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_QUESTION });
-  await openNotepad(s);
-  await input(s).fill(
-    "# A heading\n## A smaller one\nPlain text with **bold**, *em* and `code`.\n> a quote\n- a list item\n\n" +
-      "A long line that wraps: " + "word ".repeat(80) + "\nThe last line",
-  );
-  const m = await s.page.evaluate(() => {
-    const ta = document.querySelector("#notepad-editor .overtype-input");
-    const pv = document.querySelector("#notepad-editor .overtype-preview");
-    const cs = (el) => getComputedStyle(el);
-    const lineHeight = parseFloat(cs(ta).lineHeight);
-    const lines = [...pv.children];
-    const top0 = lines[0].getBoundingClientRect().top;
-    return {
-      lineHeight,
-      count: lines.length,
-      offsets: lines.map((el) => (el.getBoundingClientRect().top - top0) / lineHeight),
-      heights: [ta.scrollHeight, pv.scrollHeight],
-      fonts: [ta, pv, pv.querySelector("h1"), pv.querySelector("h2"), pv.querySelector("strong"), pv.querySelector("code")].map(
-        (el) => `${cs(el).fontFamily} ${cs(el).fontSize}`,
-      ),
-      padding: [cs(ta).paddingTop, cs(pv).paddingTop, cs(ta).paddingLeft, cs(pv).paddingLeft],
-    };
-  });
-  assert.equal(m.count, 8, "one preview line per text line");
-  for (const [i, offset] of m.offsets.entries()) {
-    assert.ok(Math.abs(offset - Math.round(offset)) < 0.05, `line ${i + 1} sits on the grid (${offset})`);
-  }
-  assert.ok(Math.abs(m.heights[0] - m.heights[1]) <= 1, `same height: ${m.heights.join(" vs ")}`);
-  assert.equal(new Set(m.fonts).size, 1, `one font and size everywhere: ${[...new Set(m.fonts)].join(" | ")}`);
-  assert.equal(m.padding[0], m.padding[1]);
-  assert.equal(m.padding[2], m.padding[3]);
-});
-
 test("the editor follows the console's light and dark themes", async (t) => {
   const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_QUESTION });
   await openNotepad(s);
-  await input(s).fill("# Heading\n\nText");
+  await setDoc(s, "# Heading\n\nText");
+  await s.page.locator("#notepad-editor .cm-h1").waitFor();
   const colours = (theme) =>
     s.page.evaluate((th) => {
       document.documentElement.setAttribute("data-theme", th);
@@ -284,16 +313,16 @@ test("the editor follows the console's light and dark themes", async (t) => {
         el.remove();
         return out;
       };
-      const ta = document.querySelector("#notepad-editor .overtype-input");
-      const pv = document.querySelector("#notepad-editor .overtype-preview");
+      const shadow = document.querySelector(".notepad-cm-host").shadowRoot;
+      const content = shadow.querySelector(".cm-content");
       return {
         ink: probe(root.getPropertyValue("--ink")),
         accent: probe(root.getPropertyValue("--accent")),
         panel: probe(root.getPropertyValue("--panel"), "backgroundColor"),
-        text: getComputedStyle(pv).color,
-        heading: getComputedStyle(pv.querySelector("h1")).color,
-        caret: getComputedStyle(ta).caretColor,
-        background: getComputedStyle(document.querySelector("#notepad-editor .overtype-wrapper")).backgroundColor,
+        text: getComputedStyle(content).color,
+        heading: getComputedStyle(shadow.querySelector(".cm-h1")).color,
+        caret: getComputedStyle(content).caretColor,
+        background: getComputedStyle(shadow.querySelector(".cm-editor")).backgroundColor,
       };
     }, theme);
   const light = await colours("light");
@@ -308,84 +337,42 @@ test("the editor follows the console's light and dark themes", async (t) => {
   assert.notEqual(light.background, dark.background);
 });
 
-test("after edits anywhere, the styled layer matches a full redraw", async (t) => {
+test("headings grow, bullets draw, and marks come back on the line the cursor is on", async (t) => {
   const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_QUESTION });
-  const block = "## Heading\n\nSome **bold** and a [link](https://example.com).\n\n- an item\n- another\n1. first\n2. second\n\n```js\nconst x = 1;\n```\n> quote\n";
-  saveNote(s.project, block.repeat(40));
+  saveNote(s.project, "# Big\n\n## Smaller\n\n- one\n- two\n\nplain\n");
   await openNotepad(s);
-  await s.page.waitForFunction(() => document.querySelector("#notepad-editor .overtype-input").value.length > 1000);
-  // The layer on the page against one drawn from scratch from the same text.
-  const matches = () =>
-    s.page.evaluate(async () => {
-      const { withoutStyleAttrs } = await import("/notepad.js");
-      const ta = document.querySelector("#notepad-editor .overtype-input");
-      const pv = document.querySelector("#notepad-editor .overtype-preview");
-      const parser = ta.closest(".overtype-wrapper")._instance.constructor.MarkdownParser;
-      const fresh = document.createElement("div");
-      fresh.className = "overtype-preview";
-      // Parsed into an inert template, so nothing in it reaches the page.
-      const tpl = document.createElement("template");
-      tpl.innerHTML = withoutStyleAttrs(parser.parse(ta.value, -1, false, undefined, false));
-      fresh.append(tpl.content);
-      // OverType shades code fences in pairs, in order, after drawing
-      // (_applyCodeBlockBackgrounds): the fresh copy gets the same, so a stale
-      // mark left on the page shows as a difference.
-      const fences = fresh.querySelectorAll(".code-fence");
-      for (let i = 0; i < fences.length - 1; i += 2) {
-        for (const f of [fences[i], fences[i + 1]]) {
-          f.parentElement.classList.add("code-block-line");
-          f.style.display = "block";
-        }
-      }
-      // An emptied style or class attribute looks exactly like none.
-      const plain = (html) => html.replace(/ (style|class)=""/g, "");
-      return plain(pv.innerHTML) === plain(fresh.innerHTML);
+  await until(async () => (await docText(s)).startsWith("# Big"), 5000);
+  const lines = () =>
+    s.page.evaluate(() => {
+      const root = document.querySelector(".notepad-cm-host").shadowRoot;
+      return [...root.querySelectorAll(".cm-line")].map((l) => ({ text: l.textContent, size: parseFloat(getComputedStyle(l).fontSize) }));
     });
-  const at = (pos) =>
-    s.page.evaluate((p) => {
-      const ta = document.querySelector("#notepad-editor .overtype-input");
-      const i = p < 0 ? ta.value.length + p : p;
-      ta.focus();
-      ta.setSelectionRange(i, i);
-    }, pos);
-  await at(0);
-  await s.page.keyboard.type("# A new first line\n");
-  assert.ok(await matches(), "typing at the top");
-  await at(600);
-  await s.page.keyboard.type("\n- a list item added in the middle\n[another link](https://example.org) ");
-  assert.ok(await matches(), "typing in the middle, adding a link before others");
-  await at(900);
-  for (let i = 0; i < 30; i++) await s.page.keyboard.press("Backspace");
-  assert.ok(await matches(), "deleting across lines");
-  await at(-5);
-  await s.page.keyboard.type("\n```\nopen fence at the end");
-  assert.ok(await matches(), "an unclosed fence at the end");
-  await s.page.keyboard.press("Control+a");
-  await s.page.keyboard.press("Backspace");
-  assert.ok(await matches(), "clearing it all");
-  await s.page.keyboard.type("# Back again");
-  assert.ok(await matches(), "typing into the empty note");
-  // Four fences, two shaded blocks; deleting the first fence leaves three, and
-  // the last one, kept from the drawing before, is no longer paired.
-  // Ending on the last fence, so its line is the one kept unchanged.
-  await s.page.keyboard.type("\n```\ncode\n```\ntext\n```\nmore\n```");
-  assert.ok(await matches(), "two fenced blocks");
-  const firstFence = await s.page.evaluate(() => document.querySelector("#notepad-editor .overtype-input").value.indexOf("```"));
-  await at(firstFence + 4);
-  for (let i = 0; i < 4; i++) await s.page.keyboard.press("Backspace");
-  assert.ok(await matches(), "the first fence deleted, unpairing the last");
+  // The cursor starts on line 1 (the "# Big" heading): its mark shows, the
+  // second heading's does not.
+  let seen = await lines();
+  assert.equal(seen[0].text, "# Big");
+  assert.equal(seen[2].text, "Smaller", "off the cursor line the mark is hidden");
+  assert.ok(seen[0].size > seen[2].size && seen[2].size > seen[7].size, `heading sizes step down: ${seen.map((l) => l.size).join(", ")}`);
+  assert.ok(seen[4].text.startsWith("•") || !seen[4].text.startsWith("-"), `a bullet is drawn, not a hyphen: "${seen[4].text}"`);
+  // Click the second heading: its mark comes back.
+  await s.page.locator("#notepad-editor .cm-h2").click();
+  seen = await lines();
+  assert.equal(seen[2].text, "## Smaller");
+  assert.equal(seen[0].text, "Big");
 });
 
 test("a note that cannot be read leaves the editor read-only, and nothing typed reaches the stored note", async (t) => {
   const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_QUESTION });
   saveNote(s.project, "The real note");
   await s.page.route("**/notepad", (route) => (route.request().method() === "GET" ? route.abort() : route.continue()));
-  await openNotepad(s, { loads: false });
+  await s.page.click("#btn-notepad");
+  await s.page.locator("#notepad-modal[open]").waitFor();
+  await input(s).waitFor();
   await s.page.waitForFunction((want) => document.getElementById("notepad-status").textContent === want, NOT_LOADED);
-  assert.equal(await input(s).evaluate((el) => el.readOnly), true);
-  await input(s).focus();
+  assert.equal(await input(s).getAttribute("aria-readonly"), "true");
+  await input(s).click();
   await s.page.keyboard.type("typed into the empty editor");
-  assert.equal(await input(s).inputValue(), "", "nothing could be typed");
+  assert.equal(await docText(s), "", "nothing could be typed");
   await s.page.waitForTimeout(SAVE_DEBOUNCE_MS + 400);
   assert.equal(onDisk(s), "The real note");
   // Once it can be read, reopening loads it and the editor opens up.
@@ -401,22 +388,445 @@ test("a note too long to save keeps its text when the notepad is closed and open
   await openNotepad(s);
   await shows(s, "Saved earlier");
   const long = "x".repeat(NOTE_MAX_BYTES) + " and some more";
-  await input(s).fill(long);
+  await setDoc(s, long);
   await s.page.waitForFunction(() => document.getElementById("notepad-status").textContent.startsWith("Too long to save"));
   await closeNotepad(s);
   await openNotepad(s);
   await s.page.waitForTimeout(300);
-  assert.equal((await input(s).inputValue()).length, long.length, "the long text is still in the editor");
+  assert.equal((await docText(s)).length, long.length, "the long text is still in the editor");
   assert.equal(onDisk(s), "Saved earlier", "and nothing over the cap was saved");
 });
 
+/* ------------------------------------------------------------------ tabs */
+
+const tabButtons = (s) => s.page.locator("#notepad-tabs .notepad-tab");
+const tabNamed = (s, name) => s.page.locator("#notepad-tabs .notepad-tab", { hasText: new RegExp(`^${name}$`) });
+const tabNames = (s) => tabButtons(s).evaluateAll((bs) => bs.map((b) => b.textContent));
+const selectedName = (s) => s.page.locator('#notepad-tabs .notepad-tab[aria-selected="true"]').evaluateAll((bs) => bs.map((b) => b.textContent));
+const status = (s) => s.page.locator("#notepad-status").textContent();
+const idOf = (s, name) => listTabs(s.project).tabs.find((tab) => tab.name === name)?.id;
+const nameError = (s) => s.page.locator("#notepad-name-error").textContent();
+
+// Makes a tab through the page: the button, the name form, Enter.
+async function newTab(s, name, shown = name) {
+  await s.page.click("#notepad-tab-new");
+  await s.page.locator("#notepad-name-form:not([hidden])").waitFor();
+  await s.page.fill("#notepad-name", name);
+  await s.page.keyboard.press("Enter");
+  await s.page.waitForFunction((n) => [...document.querySelectorAll("#notepad-tabs .notepad-tab")].some((b) => b.textContent === n && b.getAttribute("aria-selected") === "true"), shown);
+  await s.page.waitForFunction(() => document.getElementById("notepad-name-form").hidden);
+}
+
+// A notepad in its first shape: meta.json v1, note.md and images/ at the top.
+const U1 = "11111111-1111-4111-8111-111111111111";
+const U2 = "22222222-2222-4222-8222-222222222222";
+function legacyNotepad(folder, note) {
+  const dir = notepadFolder(folder);
+  fs.mkdirSync(path.join(dir, "images"), { recursive: true });
+  fs.writeFileSync(path.join(dir, "meta.json"), JSON.stringify({ v: 1, folder: path.resolve(folder), created: "2026-01-01T00:00:00.000Z" }));
+  fs.writeFileSync(path.join(dir, "note.md"), note);
+  for (const id of [U1, U2]) fs.writeFileSync(path.join(dir, "images", id + ".jpg"), JPEG);
+  fs.writeFileSync(path.join(dir, "images", U1 + ".thumb.jpg"), JPEG);
+  return dir;
+}
+
+test("an old notepad opens as one tab, Notes, with its text and pictures, and reading it writes nothing", async (t) => {
+  const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_QUESTION });
+  const dir = legacyNotepad(s.project, "old note\n");
+  const before = fs.readdirSync(dir).sort();
+  await openNotepad(s, { tabs: false });
+  await input(s).waitFor();
+  await s.page.waitForFunction(() => document.querySelectorAll("#notepad-strip > li").length === 2);
+  assert.deepEqual(await tabNames(s), ["Notes"]);
+  assert.deepEqual(await selectedName(s), ["Notes"]);
+  assert.equal(await shows(s, "old note\n"), "old note\n");
+  assert.equal(await s.page.locator("#notepad-empty").isHidden(), true);
+  assert.deepEqual(fs.readdirSync(dir).sort(), before, "opening it moved and wrote nothing");
+  // The first edit moves it into the Notes tab.
+  await typeInto(s, "more");
+  await until(() => fs.existsSync(path.join(dir, "tabs.json")), 4000);
+  await until(() => readNotepad(s.project, LEGACY_TAB_ID).text === "old note\nmore", 4000);
+  assert.equal(fs.existsSync(path.join(dir, "note.md")), false, "the top-level note moved into the tab");
+  assert.equal(readNotepad(s.project, LEGACY_TAB_ID).images.length, 2, "and so did the pictures");
+});
+
+test("New tab asks for a name, refuses a bad or duplicate one, and Escape backs out", async (t) => {
+  const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_QUESTION });
+  const violations = await watchViolations(s);
+  await openNotepad(s);
+  await s.page.click("#notepad-tab-new");
+  await s.page.locator("#notepad-name-form:not([hidden])").waitFor();
+  assert.equal(await s.page.locator("#notepad-name-label").textContent(), "Name this tab");
+  assert.equal(await s.page.evaluate(() => document.activeElement.id), "notepad-name", "the field has the focus");
+  assert.equal(await s.page.inputValue("#notepad-name"), "");
+
+  await s.page.keyboard.press("Enter");
+  assert.equal(await nameError(s), "Give the tab a name.");
+  await s.page.fill("#notepad-name", "   ");
+  await s.page.click("#notepad-name-save");
+  assert.equal(await nameError(s), "Give the tab a name.");
+  await s.page.fill("#notepad-name", "x".repeat(41));
+  await s.page.keyboard.press("Enter");
+  assert.match(await nameError(s), /40 characters or fewer/);
+  await s.page.fill("#notepad-name", "nOtEs");
+  await s.page.keyboard.press("Enter");
+  assert.equal(await nameError(s), errorSentence("duplicate-name"));
+  assert.deepEqual(await tabNames(s), ["Notes"], "nothing was made");
+  assert.equal(listTabs(s.project).tabs.length, 1);
+
+  // Escape closes the form, not the Notebook, and gives the focus back.
+  await s.page.keyboard.press("Escape");
+  await s.page.waitForFunction(() => document.getElementById("notepad-name-form").hidden);
+  assert.equal(await s.page.evaluate(() => document.getElementById("notepad-modal").open), true);
+  assert.equal(await s.page.evaluate(() => document.activeElement.id), "notepad-tab-new");
+  // Cancel does the same.
+  await s.page.click("#notepad-tab-new");
+  await s.page.click("#notepad-name-cancel");
+  await s.page.waitForFunction(() => document.getElementById("notepad-name-form").hidden);
+
+  await newTab(s, "  Big   ideas ", "Big ideas");
+  assert.deepEqual(await tabNames(s), ["Notes", "Big ideas"]);
+  assert.deepEqual(await selectedName(s), ["Big ideas"]);
+  assert.equal(await docText(s), "", "the new tab starts empty");
+  assert.equal(await input(s).getAttribute("aria-readonly"), null, "and can be typed in");
+  assert.deepEqual(listTabs(s.project).tabs.map((tab) => tab.name), ["Notes", "Big ideas"]);
+  assert.deepEqual(await violations(), []);
+});
+
+test("each tab keeps its own text and pictures, and switching never saves into the wrong tab", async (t) => {
+  const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_QUESTION });
+  const violations = await watchViolations(s);
+  await openNotepad(s);
+  await typeInto(s, "notes text");
+  await newTab(s, "Ideas");
+  const notes = idOf(s, "Notes");
+  const ideas = idOf(s, "Ideas");
+  await until(() => readNotepad(s.project, notes).text === "notes text", 4000);
+  await typeInto(s, "ideas text");
+  // Switch at once, before the debounce: the text still goes to Ideas.
+  await tabNamed(s, "Notes").click();
+  assert.equal(await shows(s, "notes text"), "notes text");
+  assert.equal(readNotepad(s.project, ideas).text, "ideas text", "typed just before the switch, saved into its own tab");
+  assert.equal(readNotepad(s.project, notes).text, "notes text", "and not into the other");
+
+  await typeInto(s, " (edited)");
+  await tabNamed(s, "Ideas").click();
+  assert.equal(await shows(s, "ideas text"), "ideas text");
+  assert.equal(readNotepad(s.project, notes).text, "notes text (edited)");
+  assert.equal(await selectedName(s).then((n) => n.join()), "Ideas");
+
+  // A picture added to Ideas is not in Notes.
+  const png = await s.page.evaluate(async () => {
+    const c = document.createElement("canvas");
+    c.width = c.height = 40;
+    c.getContext("2d").fillRect(0, 0, 40, 40);
+    const blob = await new Promise((r) => c.toBlob(r, "image/png"));
+    let bin = "";
+    for (const b of new Uint8Array(await blob.arrayBuffer())) bin += String.fromCharCode(b);
+    return btoa(bin);
+  });
+  await s.page.setInputFiles("#notepad-file", { name: "p.png", mimeType: "image/png", buffer: Buffer.from(png, "base64") });
+  await until(() => readNotepad(s.project, ideas).images.length === 1, 5000);
+  await s.page.waitForFunction(() => document.querySelectorAll("#notepad-strip > li.is-ready").length === 1);
+  assert.equal(readNotepad(s.project, notes).images.length, 0);
+  await tabNamed(s, "Notes").click();
+  await s.page.waitForFunction(() => document.querySelectorAll("#notepad-strip > li").length === 0);
+  await tabNamed(s, "Ideas").click();
+  await s.page.waitForFunction(() => document.querySelectorAll("#notepad-strip > li.is-ready").length === 1);
+  const src = await s.page.locator("#notepad-strip img").getAttribute("src");
+  assert.match(src, new RegExp(`^/notepad/images/${ideas}/`), "the picture's address names its tab");
+
+  // A save that cannot reach the server keeps you on the tab, with why.
+  await s.page.route("**/notepad/text*", (route) => route.abort());
+  await typeInto(s, " unsaved");
+  await tabNamed(s, "Notes").click();
+  await s.page.waitForFunction((want) => document.getElementById("notepad-status").textContent.includes(want), "Not saved yet, so staying on this tab.");
+  assert.deepEqual(await selectedName(s), ["Ideas"], "still on the tab with the unsaved text");
+  assert.equal(await docText(s), "ideas text unsaved");
+  await s.page.unroute("**/notepad/text*");
+  await until(() => readNotepad(s.project, ideas).text === "ideas text unsaved", 40000);
+  await tabNamed(s, "Notes").click();
+  assert.equal(await shows(s, "notes text (edited)"), "notes text (edited)");
+
+  // The last tab is remembered across a reload.
+  await tabNamed(s, "Ideas").click();
+  await until(() => listTabs(s.project).last === ideas, 4000);
+  await s.page.reload({ waitUntil: "domcontentloaded" });
+  await drawn(s.page);
+  await openNotepad(s);
+  assert.deepEqual(await selectedName(s), ["Ideas"]);
+  assert.equal(await shows(s, "ideas text unsaved"), "ideas text unsaved");
+  assert.deepEqual(await violations(), []);
+});
+
+test("Rename opens the same form with the name selected; F2 and double-click work too", async (t) => {
+  const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_QUESTION });
+  await openNotepad(s);
+  await newTab(s, "Ideas");
+  const ideas = idOf(s, "Ideas");
+
+  await s.page.click("#notepad-tab-rename");
+  await s.page.locator("#notepad-name-form:not([hidden])").waitFor();
+  assert.equal(await s.page.locator("#notepad-name-label").textContent(), "Rename this tab");
+  assert.equal(await s.page.inputValue("#notepad-name"), "Ideas");
+  assert.equal(await s.page.evaluate(() => document.getElementById("notepad-name").selectionEnd - document.getElementById("notepad-name").selectionStart), 5, "the name is selected");
+  // Its own name is not a duplicate; another tab's is.
+  await s.page.keyboard.press("Enter");
+  await s.page.waitForFunction(() => document.getElementById("notepad-name-form").hidden);
+  await s.page.click("#notepad-tab-rename");
+  await s.page.fill("#notepad-name", "notes");
+  await s.page.keyboard.press("Enter");
+  assert.equal(await nameError(s), errorSentence("duplicate-name"));
+  await s.page.fill("#notepad-name", "Plans");
+  await s.page.keyboard.press("Enter");
+  await s.page.waitForFunction(() => document.getElementById("notepad-name-form").hidden);
+  assert.deepEqual(await tabNames(s), ["Notes", "Plans"]);
+  assert.equal(listTabs(s.project).tabs.find((tab) => tab.id === ideas).name, "Plans");
+  assert.equal(await s.page.evaluate(() => document.activeElement.textContent), "Plans", "the focus is back on the tab");
+
+  // F2 on a focused tab, and a double-click.
+  await tabNamed(s, "Plans").focus();
+  await s.page.keyboard.press("F2");
+  await s.page.locator("#notepad-name-form:not([hidden])").waitFor();
+  assert.equal(await s.page.inputValue("#notepad-name"), "Plans");
+  await s.page.keyboard.press("Escape");
+  await tabNamed(s, "Notes").dblclick();
+  await s.page.locator("#notepad-name-form:not([hidden])").waitFor();
+  assert.equal(await s.page.inputValue("#notepad-name"), "Notes");
+  assert.deepEqual(await selectedName(s), ["Notes"], "double-click picked the tab it renames");
+});
+
+// A drag the way the browser sends one: the events, in order, with one shared
+// DataTransfer, so the page's handlers see what a person's drag would.
+const drag = (s, from, to, { kind = "tab" } = {}) =>
+  s.page.evaluate(
+    ({ from, to, kind }) => {
+      const tabs = [...document.querySelectorAll("#notepad-tabs .notepad-tab")];
+      const source = tabs.find((b) => b.textContent === from);
+      const target = tabs.find((b) => b.textContent === to);
+      const dt = new DataTransfer();
+      if (kind === "text") dt.setData("text/plain", "dragged text");
+      const fire = (el, type) => el.dispatchEvent(new DragEvent(type, { dataTransfer: dt, bubbles: true, cancelable: true }));
+      if (kind === "tab") fire(source, "dragstart");
+      fire(target, "dragover");
+      const marked = target.classList.contains("is-drop-before");
+      fire(target, "drop");
+      if (kind === "tab") fire(source, "dragend");
+      return marked;
+    },
+    { from, to, kind },
+  );
+
+test("tabs reorder by drag and by keyboard, and the order is kept", async (t) => {
+  const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_QUESTION });
+  await openNotepad(s);
+  for (const name of ["Ideas", "Plans", "Done"]) await newTab(s, name);
+  assert.deepEqual(await tabNames(s), ["Notes", "Ideas", "Plans", "Done"]);
+  const order = () => listTabs(s.project).tabs.map((tab) => tab.name);
+
+  // Keyboard: Alt+Left and Alt+Right on a focused tab, focus stays on it.
+  await tabNamed(s, "Done").focus();
+  await s.page.keyboard.press("Alt+ArrowLeft");
+  await until(() => order().join() === "Notes,Ideas,Done,Plans", 4000);
+  assert.deepEqual(await tabNames(s), ["Notes", "Ideas", "Done", "Plans"]);
+  assert.equal(await s.page.evaluate(() => document.activeElement.textContent), "Done");
+  assert.equal(await status(s), "Moved Done to position 3 of 4", "the move is announced");
+  await s.page.keyboard.press("Alt+ArrowLeft");
+  await s.page.keyboard.press("Alt+ArrowLeft");
+  await s.page.keyboard.press("Alt+ArrowLeft");
+  await until(() => order().join() === "Done,Notes,Ideas,Plans", 4000);
+  assert.equal(await status(s), "Moved Done to position 1 of 4", "and it stops at the first place");
+  // Plain arrows move the focus without moving the tab.
+  await s.page.keyboard.press("ArrowRight");
+  assert.equal(await s.page.evaluate(() => document.activeElement.textContent), "Notes");
+  assert.equal(order().join(), "Done,Notes,Ideas,Plans");
+
+  // The visible buttons act on the current tab.
+  await tabNamed(s, "Plans").click();
+  await s.page.click("#notepad-tab-left");
+  await until(() => order().join() === "Done,Notes,Plans,Ideas", 4000);
+  await s.page.click("#notepad-tab-right");
+  await until(() => order().join() === "Done,Notes,Ideas,Plans", 4000);
+  assert.equal(await s.page.locator("#notepad-tab-right").isDisabled(), true, "the last tab cannot move right");
+
+  // Drag: the target shows a mark, the dragged tab lands just before it.
+  assert.equal(await drag(s, "Plans", "Done"), true, "the target is marked while dragged over");
+  await until(() => order().join() === "Plans,Done,Notes,Ideas", 4000);
+  assert.deepEqual(await tabNames(s), ["Plans", "Done", "Notes", "Ideas"]);
+  assert.equal(await s.page.locator("#notepad-tabs .is-drop-before").count(), 0, "the mark is gone after the drop");
+
+  // Text dragged over a tab does nothing.
+  const posted = [];
+  s.page.on("request", (r) => r.url().includes("/notepad/tab/order") && posted.push(r.url()));
+  assert.equal(await drag(s, "Plans", "Ideas", { kind: "text" }), false);
+  await s.page.waitForTimeout(300);
+  assert.equal(order().join(), "Plans,Done,Notes,Ideas");
+  assert.equal(posted.length, 0);
+
+  // Reopened, the order stands.
+  await s.page.reload({ waitUntil: "domcontentloaded" });
+  await drawn(s.page);
+  await openNotepad(s);
+  assert.deepEqual(await tabNames(s), ["Plans", "Done", "Notes", "Ideas"]);
+});
+
+test("Delete asks twice, Escape backs out of either, and only the second confirm removes the tab and its folder", async (t) => {
+  const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_QUESTION });
+  const violations = await watchViolations(s);
+  await openNotepad(s);
+  await typeInto(s, "keep me");
+  await newTab(s, "Ideas");
+  await typeInto(s, "doomed text");
+  const ideas = idOf(s, "Ideas");
+  const folder = path.join(notepadFolder(s.project), "tabs", ideas);
+  await until(() => readNotepad(s.project, ideas).text === "doomed text", 4000);
+  addImageTo(s.project, ideas, JPEG);
+  addImageTo(s.project, ideas, JPEG);
+  await tabNamed(s, "Notes").click();
+  await tabNamed(s, "Ideas").click();
+  await s.page.waitForFunction(() => document.querySelectorAll("#notepad-strip > li").length === 2);
+
+  const panel = s.page.locator("#notepad-delete");
+  const text = () => s.page.locator("#notepad-delete-text").textContent();
+  await s.page.click("#notepad-tab-delete");
+  await panel.waitFor({ state: "visible" });
+  assert.equal(await text(), "This deletes the tab Ideas, its text and its 2 pictures. This cannot be undone.");
+  assert.equal(await s.page.evaluate(() => document.activeElement.textContent), "Keep tab", "Keep tab has the focus");
+  assert.equal(await s.page.locator("#notepad-delete-go").textContent(), "Delete tab…");
+  // Keep tab: nothing happens.
+  await s.page.click("#notepad-delete-keep");
+  await panel.waitFor({ state: "hidden" });
+  assert.equal(fs.existsSync(folder), true);
+  assert.equal(await s.page.evaluate(() => document.activeElement.textContent), "Ideas");
+
+  // Step one then Escape: nothing deleted, and the Notebook stays open.
+  await s.page.click("#notepad-tab-delete");
+  await s.page.click("#notepad-delete-go");
+  assert.equal(await text(), "Really delete Ideas for good?");
+  assert.equal(await s.page.locator("#notepad-delete-go").textContent(), "Yes, delete it");
+  assert.equal(await s.page.evaluate(() => document.activeElement.textContent), "Keep tab", "Keep tab has the focus on the second step too");
+  await s.page.keyboard.press("Escape");
+  await panel.waitFor({ state: "hidden" });
+  assert.equal(await s.page.evaluate(() => document.getElementById("notepad-modal").open), true);
+  assert.equal(fs.existsSync(folder), true);
+  // Escape at the first step too.
+  await s.page.click("#notepad-tab-delete");
+  await s.page.keyboard.press("Escape");
+  await panel.waitFor({ state: "hidden" });
+  assert.equal(fs.existsSync(folder), true);
+
+  // Both confirms: gone, with its folder, and the neighbour is shown.
+  await s.page.click("#notepad-tab-delete");
+  await s.page.click("#notepad-delete-go");
+  await s.page.click("#notepad-delete-go");
+  await until(() => !fs.existsSync(folder), 4000);
+  await s.page.waitForFunction(() => document.querySelectorAll("#notepad-tabs .notepad-tab").length === 1);
+  assert.deepEqual(await selectedName(s), ["Notes"]);
+  assert.equal(await shows(s, "keep me"), "keep me");
+  assert.equal(listTabs(s.project).last, idOf(s, "Notes"), "the neighbour became the last tab");
+
+  // Delete the last tab: the empty state, with the focus on its button.
+  await s.page.click("#notepad-tab-delete");
+  await s.page.click("#notepad-delete-go");
+  await s.page.click("#notepad-delete-go");
+  await s.page.locator("#notepad-empty").waitFor({ state: "visible" });
+  assert.equal(await s.page.locator("#notepad-body").isHidden(), true, "the editor and pictures are hidden");
+  assert.equal(await s.page.locator("#notepad-empty").innerText().then((x) => x.startsWith("No tabs yet. Make one to start writing.")), true);
+  assert.equal(await s.page.evaluate(() => document.activeElement.id), "notepad-empty-new");
+  assert.equal(listTabs(s.project).tabs.length, 0);
+  // Reopened, still empty; a new tab from the empty state works.
+  await closeNotepad(s);
+  await openNotepad(s, { tabs: false });
+  await s.page.locator("#notepad-empty").waitFor({ state: "visible" });
+  await s.page.click("#notepad-empty-new");
+  await s.page.fill("#notepad-name", "Fresh");
+  await s.page.keyboard.press("Enter");
+  await s.page.locator("#notepad-body").waitFor({ state: "visible" });
+  assert.deepEqual(await tabNames(s), ["Fresh"]);
+  assert.deepEqual(await violations(), []);
+});
+
+test("text typed into a tab that is then deleted is never saved, and a tab deleted elsewhere leaves the bar with why", async (t) => {
+  const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_QUESTION });
+  await openNotepad(s);
+  await newTab(s, "Ideas");
+  const ideas = idOf(s, "Ideas");
+  const saves = [];
+  s.page.on("request", (r) => r.url().includes("/notepad/text") && saves.push(r.url()));
+  await typeInto(s, "typed then deleted");
+  await s.page.click("#notepad-tab-delete");
+  await s.page.click("#notepad-delete-go");
+  await s.page.click("#notepad-delete-go");
+  await s.page.waitForFunction(() => document.querySelectorAll("#notepad-tabs .notepad-tab").length === 1);
+  await s.page.waitForTimeout(SAVE_DEBOUNCE_MS + 500);
+  assert.equal(saves.filter((u) => u.includes("tab=" + ideas)).length, 0, "no save was sent for the deleted tab");
+  assert.equal(fs.existsSync(path.join(notepadFolder(s.project), "tabs", ideas)), false);
+
+  // Deleted from another page: picking it says so and shows what is left.
+  await newTab(s, "Elsewhere");
+  const elsewhere = idOf(s, "Elsewhere");
+  await tabNamed(s, "Notes").click();
+  deleteTab(s.project, elsewhere);
+  await tabNamed(s, "Elsewhere").click();
+  await s.page.waitForFunction((want) => document.getElementById("notepad-status").textContent.includes(want), errorSentence("no-such-tab"));
+  assert.deepEqual(await tabNames(s), ["Notes"]);
+});
+
+test("a name form or delete question open on one tab closes when another tab is picked", async (t) => {
+  const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_QUESTION });
+  await openNotepad(s);
+  await newTab(s, "Ideas");
+  const notes = idOf(s, "Notes");
+
+  // Rename opened on Ideas, then Notes picked: the form goes, and Notes keeps its name.
+  await s.page.click("#notepad-tab-rename");
+  await s.page.locator("#notepad-name-form:not([hidden])").waitFor();
+  await tabNamed(s, "Notes").click();
+  await s.page.waitForFunction(() => document.getElementById("notepad-name-form").hidden);
+  await until(async () => (await selectedName(s)).join() === "Notes", 4000);
+  assert.equal(listTabs(s.project).tabs.find((tab) => tab.id === notes).name, "Notes");
+
+  // Delete opened (and moved on to its second step) on Notes, then Ideas picked: the question goes.
+  await s.page.click("#notepad-tab-delete");
+  await s.page.click("#notepad-delete-go");
+  assert.equal(await s.page.locator("#notepad-delete-text").textContent(), "Really delete Notes for good?");
+  await tabNamed(s, "Ideas").click();
+  await s.page.locator("#notepad-delete").waitFor({ state: "hidden" });
+  await until(async () => (await selectedName(s)).join() === "Ideas", 4000);
+  assert.deepEqual(await tabNames(s), ["Notes", "Ideas"], "nothing was deleted");
+  // Asking again starts at the first step, naming the tab now open.
+  await s.page.click("#notepad-tab-delete");
+  assert.match(await s.page.locator("#notepad-delete-text").textContent(), /^This deletes the tab Ideas,/);
+});
+
+test("when the tab after a delete cannot be loaded, the deleted text is not left on screen", async (t) => {
+  const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_QUESTION });
+  await openNotepad(s);
+  await typeInto(s, "notes text");
+  await newTab(s, "Ideas");
+  await typeInto(s, "doomed text");
+  const ideas = idOf(s, "Ideas");
+  await until(() => readNotepad(s.project, ideas).text === "doomed text", 4000);
+  // The neighbour's read fails, as if the connection dropped right after the delete.
+  await s.page.route("**/notepad?tab=*", (route) => route.abort());
+  await s.page.click("#notepad-tab-delete");
+  await s.page.click("#notepad-delete-go");
+  await s.page.click("#notepad-delete-go");
+  await s.page.waitForFunction(() => document.querySelectorAll("#notepad-tabs .notepad-tab").length === 1);
+  await s.page.waitForFunction(() => document.getElementById("notepad-status").textContent.length > 0);
+  assert.equal(await docText(s), "", "the deleted tab's text is gone from the editor");
+  assert.equal(await input(s).getAttribute("aria-readonly"), "true", "and the editor does not take typing it would never save");
+  await s.page.unroute("**/notepad?tab=*");
+});
+
 /* ------------------------------------------------------------ pictures */
+
 
 // The stored pictures for the session's folder, and whether each of a
 // picture's two files is on disk.
 const stored = (s) => readNotepad(s.project).images;
 const filesOf = (s, id) => {
-  const dir = path.join(notepadFolder(s.project), "images");
+  const dir = path.join(notepadFolder(s.project), "tabs", openTab(s.project), "images");
   return [fs.existsSync(path.join(dir, id + ".jpg")), fs.existsSync(path.join(dir, id + ".thumb.jpg"))];
 };
 
@@ -464,11 +874,11 @@ const sendPicture = (s, kind, colour) =>
       const blob = await new Promise((resolve) => c.toBlob(resolve, "image/png"));
       const dt = new DataTransfer();
       dt.items.add(new File([blob], "pasted.png", { type: "image/png" }));
-      const ta = document.querySelector("#notepad-editor .overtype-input");
-      if (kind === "paste") return !ta.dispatchEvent(new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true }));
-      ta.dispatchEvent(new DragEvent("dragover", { dataTransfer: dt, bubbles: true, cancelable: true }));
+      const ta = document.querySelector(".notepad-cm-host").shadowRoot.querySelector(".cm-content");
+      if (kind === "paste") return !ta.dispatchEvent(new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true, composed: true }));
+      ta.dispatchEvent(new DragEvent("dragover", { dataTransfer: dt, bubbles: true, cancelable: true, composed: true }));
       const lit = document.getElementById("notepad-modal").classList.contains("is-drop");
-      ta.dispatchEvent(new DragEvent("drop", { dataTransfer: dt, bubbles: true, cancelable: true }));
+      ta.dispatchEvent(new DragEvent("drop", { dataTransfer: dt, bubbles: true, cancelable: true, composed: true }));
       return lit;
     },
     { kind, fill: colour },
@@ -488,10 +898,10 @@ test("Add image, paste and drop each add a thumbnail whose files are on disk and
   await until(() => stored(s).length === 3 && filesOf(s, stored(s)[2].id).every(Boolean), 5000);
   await readyCount(s, 3);
   assert.equal(await s.page.locator("#notepad-modal.is-drop").count(), 0, "the highlight is gone after the drop");
-  assert.equal(await input(s).inputValue(), "", "no picture landed in the text");
+  assert.equal(await docText(s), "", "no picture landed in the text");
 
   const alts = await s.page.locator("#notepad-strip img").evaluateAll((imgs) => imgs.map((i) => i.alt));
-  assert.deepEqual(alts, ["Notepad image 1", "Notepad image 2", "Notepad image 3"]);
+  assert.deepEqual(alts, ["Notebook image 1", "Notebook image 2", "Notebook image 3"]);
   const xs = await s.page.locator("#notepad-strip .notepad-thumb-delete").evaluateAll((b) => b.map((x) => x.getAttribute("aria-label")));
   assert.deepEqual(xs, ["Delete image 1", "Delete image 2", "Delete image 3"]);
 
@@ -506,7 +916,7 @@ test("Add image, paste and drop each add a thumbnail whose files are on disk and
     return imgs.length === 3 && imgs.every((i) => new URL(i.src).pathname.startsWith("/notepad/images/"));
   });
   const srcs = await s.page.locator("#notepad-strip img").evaluateAll((imgs) => imgs.map((i) => new URL(i.src).pathname));
-  assert.deepEqual(srcs, ids.map((id) => `/notepad/images/${id}.thumb.jpg`));
+  assert.deepEqual(srcs, ids.map((id) => `/notepad/images/${openTab(s.project)}/${id}.thumb.jpg`));
   await s.page.waitForFunction(() => [...document.querySelectorAll("#notepad-strip img")].every((i) => i.complete && i.naturalWidth > 0));
 });
 
@@ -515,7 +925,7 @@ test("a pasted text snippet still lands in the editor", async (t) => {
   await s.context.grantPermissions(["clipboard-read", "clipboard-write"], { origin: new URL(s.url).origin });
   await openNotepad(s);
   await s.page.evaluate(() => navigator.clipboard.writeText("a pasted snippet"));
-  await input(s).focus();
+  await input(s).click();
   await s.page.keyboard.press("Control+V");
   await shows(s, "a pasted snippet");
   await until(() => onDisk(s) === "a pasted snippet", 4000);
@@ -546,10 +956,10 @@ test("the X asks first: Keep keeps the picture, Delete removes both its files", 
   await until(() => !filesOf(s, first).some(Boolean), 4000);
   await s.page.waitForFunction(() => document.querySelectorAll("#notepad-strip > li").length === 1);
   assert.deepEqual(stored(s).map((img) => img.id), [second]);
-  assert.equal(await s.page.locator("#notepad-strip img").getAttribute("alt"), "Notepad image 1");
+  assert.equal(await s.page.locator("#notepad-strip img").getAttribute("alt"), "Notebook image 1");
 });
 
-test("the preview opens at the clicked picture, steps and wraps, and Esc closes it before the Notepad", async (t) => {
+test("the preview opens at the clicked picture, steps and wraps, and Esc closes it before the Notebook", async (t) => {
   const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_QUESTION });
   await openNotepad(s);
   for (const colour of ["#c33", "#3c3", "#33c"]) await addViaButton(s, colour);
@@ -580,7 +990,7 @@ test("the preview opens at the clicked picture, steps and wraps, and Esc closes 
 
   await s.page.keyboard.press("Escape");
   await s.page.waitForFunction(() => !document.getElementById("notepad-preview").open);
-  assert.equal(await s.page.evaluate(() => document.getElementById("notepad-modal").open), true, "the Notepad stays open");
+  assert.equal(await s.page.evaluate(() => document.getElementById("notepad-modal").open), true, "the Notebook stays open");
   assert.equal(
     await s.page.evaluate(() => document.activeElement.closest("li") === document.querySelector("#notepad-strip li:nth-child(2)")),
     true,
@@ -693,11 +1103,11 @@ test("User Preferences, Cleanup offers a month-old notepad by its folder and rem
   await s.page.click("#btn-looks");
   await s.page.click("#cleanup-scan");
   const list = s.page.locator("#cleanup-list");
-  const row = list.locator(".cleanup-row").filter({ hasText: "Notepad for" });
+  const row = list.locator(".cleanup-row").filter({ hasText: "Notebook for" });
   await row.waitFor();
   assert.equal(await row.count(), 1, "one item for the whole notepad");
-  assert.equal((await row.locator("span").first().innerText()).trim(), "Notepad for " + path.resolve(s.project));
-  assert.ok((await list.locator(".cleanup-summary").innerText()).includes("1 old notepad"), "the summary counts it as a notepad");
+  assert.equal((await row.locator("span").first().innerText()).trim(), "Notebook for " + path.resolve(s.project));
+  assert.ok((await list.locator(".cleanup-summary").innerText()).includes("1 old notebook"), "the summary counts it as a notepad");
   assert.equal(await list.locator(".cleanup-row").filter({ hasText: "notepads/" }).count(), 0, "the notepads folder is no stray");
   assert.equal(fs.existsSync(notepadFolder(s.project)), true, "a scan only looks");
 
@@ -746,9 +1156,9 @@ test("Help's Getting around panel describes the notepad", async (t) => {
   await s.page.locator("#help-modal").waitFor();
   await s.page.click("#help-tab-around");
   const panel = s.page.locator("#help-panel-around");
-  await panel.getByRole("heading", { name: "Your notepad" }).waitFor();
+  await panel.getByRole("heading", { name: "Your notebook" }).waitFor();
   const text = await panel.innerText();
-  for (const words of ["Notepad", "never sent to Plan2Code", "last save wins", "Cleanup"]) {
+  for (const words of ["Notebook", "never sent to Plan2Code", "last save wins", "Cleanup"]) {
     assert.ok(text.includes(words), `the panel mentions ${words}`);
   }
 });

@@ -1,86 +1,117 @@
-// Plan2Code Web Console - the Notepad: the top bar's icon, its dialog, the editor and autosave.
+// Plan2Code Web Console - the Notebook: the top bar's icon, its dialog, the tabs, the editor and autosave.
 //
 // The person's own notes for the folder this session runs in, kept by the
 // server under ~/.plan2code/notepads/ through the /notepad routes, never in
-// the session, so nothing typed here reaches the agent. The editor is the
-// vendored OverType, which styles Markdown in place over a real textarea. Its
-// CSS ships in styles/notepad.css, because the page's policy blocks the
-// <style> OverType would inject. When to save and what the status line says
-// are notepad.js's pure rules; this file only runs the timers and requests.
+// the session, so nothing typed here reaches the agent. A notepad is a row of
+// tabs, each its own note with its own pictures; one tab is on screen. The
+// editor is CodeMirror (notepad-editor.js), loaded the first time the Notebook
+// opens. When to save, what the status line says, the tab name rules and the
+// order moves are notepad.js's pure rules; the bar itself is notepad-tabs.js;
+// this file runs the timers and requests, and binds every save and every
+// picture to the tab it was made in, so a switch can never move either.
 
 import { page } from "../state.js";
 import {
+  EDITOR_NOT_LOADED,
   IMAGE_ID_RE,
   NOTEPAD_MAX_IMAGES,
   NOT_LOADED,
   SAVE_START,
-  changedRange,
+  TAB_ID_RE,
+  cleanTabName,
   errorSentence,
   keepsText,
+  moveTab,
+  nextDelete,
   nextSave,
   noteBytes,
   saveStatus,
   step,
-  topLevelParts,
+  tabNameProblem,
+  tabSwitch,
   unsaved,
-  withoutStyleAttrs,
 } from "../notepad.js";
 import { el, lightDismiss } from "../render.js";
 import { postJson } from "../net.js";
 import { reencode } from "../uploads.js";
-import { OverType } from "../vendor/overtype.esm.js";
+import { createTabs } from "../notepad-tabs.js";
 
 const $ = (id) => document.getElementById(id);
 
 const NOT_CONNECTED = "Not connected right now.";
+const STAY = "Not saved yet, so staying on this tab.";
 
-// One editor for the page's life, made on first open.
+// One editor for the page's life, made on first open, and the tab bar, made
+// when the page is wired.
 let editor = null;
+let tabBar = null;
+
+// The page's view of the notepad: the tabs in order, and the one on screen
+// (null when there are none).
+let tabs = [];
+let activeId = null;
 
 // The save state (notepad.js), the one timer it arms, and the request in
 // flight. `rev` counts changes, so an answer to an older text never marks a
-// newer one saved.
+// newer one saved. `saveTab` is the tab the unsaved text belongs to, fixed
+// when the change is made, never read when it is sent.
 let save = SAVE_START;
 let timer = null;
 let sending = false;
 let rev = 0;
 let problem = "";
+let saveTab = null;
 
-// True while the page itself sets the editor's text: OverType reports that as
-// a change, and it is not the person typing.
+// True while the page itself sets the editor's text: the editor may report
+// that as a change, and it is not the person typing.
 let loading = false;
 
-// Whether the note has been read into the editor yet. Until it has, the
-// editor is read-only: text typed into the empty editor would be saved over
-// the real note.
+// Whether a note has been read into the editor yet. Until it has, the editor
+// is read-only: text typed into the empty editor would be saved over the real
+// note.
 let loaded = false;
+
+// While a create, a rename or a delete is out, the controls do nothing.
+let busy = false;
+
+// What the one name form is open for ("new" or "rename"), or null; and the
+// two-confirm delete's stage ("none", "ask" or "sure": notepad.js nextDelete).
+let naming = null;
+let stage = "none";
 
 // Drawn from the render pass beside Stop: always shown, unusable while the
 // server is gone (nothing could load or save).
 export function renderNotepadButton() {
   const btn = $("btn-notepad");
   btn.disabled = Boolean(page.gone);
-  btn.title = page.gone ? NOT_CONNECTED : "Notepad";
+  btn.title = page.gone ? NOT_CONNECTED : "Notebook";
 }
 
 // The last thing a picture went wrong with, said after the save words until
 // the next batch of pictures starts or the notepad is opened again; and the
-// picture it was about, if one, whose Retry landing clears it.
+// picture it was about, if one, whose Retry landing clears it. `info` is a
+// plain announcement (a tab moved), not styled as a problem.
 let notice = "";
 let noticeKey = null;
+let info = "";
 
 function paintStatus() {
   const line = $("notepad-status");
   const words = saveStatus(save);
   const failed = save.status === "failed" || save.status === "too-long";
   const saving = save.status === "failed" && problem ? `${words}. ${problem}` : words;
-  line.textContent = [saving, notice].filter(Boolean).join(" ");
+  line.textContent = [saving, notice, info].filter(Boolean).join(" ");
   line.classList.toggle("is-problem", failed || Boolean(notice));
 }
 
 function tell(sentence, key = null) {
   notice = sentence;
   noticeKey = key;
+  paintStatus();
+}
+
+function inform(sentence) {
+  info = sentence;
   paintStatus();
 }
 
@@ -95,40 +126,82 @@ function dispatch(event) {
   arm(next.timer);
   paintStatus();
   if (save.status === "saving") send();
+  check();
+}
+
+// Everyone waiting for the text to reach the disk before the tab changes.
+const waiters = [];
+
+// Resolves the waiters once nothing is pending or out: true when the text is
+// safe (saved, or nothing to save), false when a save failed or cannot be made.
+function check() {
+  if (!waiters.length) return;
+  if (save.status === "pending") return dispatch("due");
+  if (sending || save.status === "saving") return;
+  const ok = !keepsText(save);
+  for (const resolve of waiters.splice(0)) resolve(ok);
+}
+
+// Save the tab on screen now; whether its text is on disk.
+function settled() {
+  if (!tabSwitch(save)) return Promise.resolve(true);
+  return new Promise((resolve) => {
+    waiters.push(resolve);
+    flush();
+    check();
+  });
 }
 
 // One save at a time. A save that comes due while another is out goes as
 // soon as that one answers.
 async function send() {
-  if (sending || !editor) return;
+  if (sending || !editor || !saveTab) return;
   sending = true;
   const sent = rev;
-  const res = await postJson("/notepad/text", { text: editor.getValue() });
+  const tab = saveTab;
+  const res = await postJson("/notepad/text?tab=" + tab, { text: editor.getValue() });
   sending = false;
+  // The tab was deleted or left behind while this was out: nothing in the
+  // answer applies to what is on screen now.
+  if (tab !== saveTab) return check();
   if (rev !== sent) {
     // Typed while it was out: the newer text has its own debounce running, or
     // is already due and waiting for this request to finish.
     if (save.status === "saving") send();
-    return;
+    return check();
   }
   if (res.status === 200) {
     problem = "";
     return dispatch("ok");
   }
   const code = res.body && res.body.error;
+  if (code === "no-such-tab") return gone(tab);
   problem = errorSentence(res.status === 0 ? null : code);
   dispatch({ type: "error", code });
 }
 
 function changed(text) {
-  if (loading) return;
+  if (loading || !activeId) return;
   rev += 1;
+  saveTab = activeId;
   dispatch({ type: "typed", bytes: noteBytes(text) });
 }
 
 // Save now rather than after the debounce: closing, the tab going hidden.
 function flush() {
   if (save.status === "pending" || save.status === "failed") dispatch("due");
+}
+
+// Forget the text on screen without saving it: the tab it belongs to is gone.
+function discard() {
+  clearTimeout(timer);
+  timer = null;
+  save = SAVE_START;
+  saveTab = null;
+  problem = "";
+  rev += 1;
+  paintStatus();
+  check();
 }
 
 function setText(text) {
@@ -140,120 +213,310 @@ function setText(text) {
   }
 }
 
-// OverType writes inline style attributes into the HTML it sets: one on every
-// link it draws (its tooltip's anchor name) and two in the link tooltip. The
-// page's policy refuses each one with a report, on every keystroke. While the
-// editor is built, the elements it makes get an innerHTML that drops them
-// (withoutStyleAttrs); the preview and the tooltip are among them, so this
-// holds for every later render too. The tooltip then finds a link by the data
-// attribute its anchor name moved to.
-function buildWithoutStyleAttrs(build) {
-  const create = document.createElement;
-  const inner = Object.getOwnPropertyDescriptor(Element.prototype, "innerHTML");
-  document.createElement = function (...args) {
-    const node = create.apply(this, args);
-    Object.defineProperty(node, "innerHTML", {
-      configurable: true,
-      get() {
-        return inner.get.call(this);
-      },
-      set(html) {
-        const clean = withoutStyleAttrs(String(html));
-        if (this.classList.contains("overtype-preview")) patchPreview(this, clean);
-        else inner.set.call(this, clean);
-      },
-    });
-    return node;
-  };
-  try {
-    return build();
-  } finally {
-    document.createElement = create;
-  }
-}
-
-// The styled layer as OverType last drew it, one HTML string per top-level
-// element (topLevelParts), matching the preview's children one for one.
-let drawn = [];
-
-const parseParts = (html) => {
-  const tpl = document.createElement("template");
-  tpl.innerHTML = html;
-  return [...tpl.content.childNodes];
-};
-
-// OverType redraws the whole styled layer on every key: about 43,000 elements
-// in a 200 KB note, and parsing and laying those out is most of the wait for a
-// key to show. Only the lines between the first and the last that differ from
-// the last drawing are parsed and swapped; the rest stays as it was.
-function patchPreview(preview, html) {
-  const parts = topLevelParts(html);
-  const shown = [...preview.childNodes];
-  const redraw = () => {
-    preview.replaceChildren(...parseParts(html));
-    drawn = parts && preview.childNodes.length === parts.length ? parts : [];
-  };
-  if (!parts || shown.length !== drawn.length) return redraw();
-  const { head, tail } = changedRange(drawn, parts);
-  const changed = parts.slice(head, parts.length - tail);
-  const fresh = parseParts(changed.join(""));
-  // One element per part, or the cut was wrong: draw it all.
-  if (fresh.length !== changed.length) return redraw();
-  const after = shown[shown.length - tail] || null;
-  for (const old of shown.slice(head, shown.length - tail)) old.remove();
-  for (const node of fresh) preview.insertBefore(node, after);
-  drawn = parts;
-  // OverType shades each pair of code fences right after this, and never
-  // takes the shading off: a kept line whose fence lost its partner would keep
-  // it. Cleared here (the attributes removed outright, so a cleared line is
-  // the line OverType drew), and OverType marks only the pairs that still are.
-  for (const line of preview.querySelectorAll(".code-block-line")) {
-    line.classList.remove("code-block-line");
-    if (!line.classList.length) line.removeAttribute("class");
-  }
-  for (const fence of preview.querySelectorAll(".code-fence")) fence.removeAttribute("style");
-}
-
-function makeEditor() {
-  // Before the first instance, or it injects its <style> (which the policy
-  // blocks) and the flag would come too late.
-  OverType.stylesInjected = true;
-  // OverType reports its first, empty value as a change: not the person typing,
-  // and saved it would wipe the note.
+async function makeEditor() {
+  const { makeCodeMirrorEditor } = await import("../notepad-editor.js");
+  // The editor may report its first, empty value as a change: not the person
+  // typing, and saved it would wipe the note.
   loading = true;
   try {
-    [editor] = buildWithoutStyleAttrs(
-      () =>
-        new OverType($("notepad-editor"), {
-          toolbar: false,
-          textareaProps: { "aria-label": "Notepad text" },
-          onChange: changed,
-        }),
-    );
+    editor = makeCodeMirrorEditor($("notepad-editor"), { onChange: changed, label: "Notebook text" });
   } finally {
     loading = false;
   }
-  editor.linkTooltip.findAnchorElement = (index) => editor.preview.querySelector(`a[data-anchor="--link-${index}"]`);
 }
 
-// The stored note (`{ text, images }`), or null when it could not be read.
-async function readNote() {
+// One read of the notepad: `{ ok: true, body }`, or `{ ok: false, code }`
+// with the server's refusal (`no-such-tab`), or code null when it could not
+// be reached or answered oddly.
+async function readNote(tab) {
   try {
-    const res = await fetch("/notepad", { cache: "no-store" });
-    if (!res.ok) return null;
-    const body = await res.json();
-    return body && typeof body.text === "string" ? body : null;
+    const res = await fetch("/notepad" + (tab ? "?tab=" + encodeURIComponent(tab) : ""), { cache: "no-store" });
+    let body = null;
+    try {
+      body = await res.json();
+    } catch {}
+    if (!res.ok) return { ok: false, code: body && typeof body.error === "string" ? body.error : null };
+    return body && Array.isArray(body.tabs) ? { ok: true, body } : { ok: false, code: null };
   } catch {
-    return null;
+    return { ok: false, code: null };
   }
+}
+
+/* ------------------------------------------------------------ tabs */
+
+const nameOf = (id) => (tabs.find((t) => t.id === id) || {}).name || "";
+
+const ids = () => tabs.map((t) => t.id);
+
+function drawTabs() {
+  tabBar.draw(tabs, activeId);
+  const none = !activeId;
+  $("notepad-tab-rename").disabled = none || busy;
+  $("notepad-tab-delete").disabled = none || busy;
+  $("notepad-tab-new").disabled = busy;
+  $("notepad-empty-new").disabled = busy;
+  if (busy) {
+    $("notepad-tab-left").disabled = true;
+    $("notepad-tab-right").disabled = true;
+  }
+  $("notepad-name-save").disabled = busy;
+}
+
+// Put a read tab on screen: its text, its pictures, the bar. `keep` leaves
+// the text and the tab alone (the notepad was only reopened while text was
+// still unsaved), taking the bar and the pictures from the server.
+function show(body, keep = false) {
+  tabs = body.tabs.map((t) => ({ id: t.id, name: t.name }));
+  const tab = body.tab;
+  if (keep) {
+    takeStored(tab && tab.id === activeId ? tab.images : [], activeId);
+    return drawTabs();
+  }
+  activeId = tab ? tab.id : null;
+  setText(tab ? tab.text : "");
+  save = SAVE_START;
+  saveTab = null;
+  problem = "";
+  rev += 1;
+  loaded = true;
+  editor.setReadOnly(!tab);
+  takeStored(tab ? tab.images : [], activeId);
+  drawTabs();
+  paintStatus();
+}
+
+// Put the tab `id` (the server's pick when null) on screen, after the one
+// before it was saved; whether it is there now.
+async function showTab(id, remember = true) {
+  const mark = rev;
+  let res = await readNote(id);
+  if (!res.ok && res.code === "no-such-tab" && id) {
+    // Gone since the bar was drawn: say so, and show what is there.
+    tell(errorSentence("no-such-tab"));
+    res = await readNote(null);
+  }
+  if (!res.ok) {
+    tell(res.code ? errorSentence(res.code) : NOT_LOADED);
+    return false;
+  }
+  // Typed while the tab was loading: that text is not saved yet, so stay.
+  if (activeId && rev !== mark && tabSwitch(save)) {
+    tell(STAY);
+    return false;
+  }
+  show(res.body);
+  if (remember && activeId) postJson("/notepad/tab/last", { id: activeId });
+  return true;
+}
+
+async function switchTo(id) {
+  if (id === activeId || busy) return;
+  // The name form and the delete question belong to the tab they were opened on.
+  closeNameForm(false);
+  closeDelete();
+  if (!(await settled())) {
+    tell(STAY);
+    return tabBar.focusTab(activeId);
+  }
+  tell("");
+  inform("");
+  if (await showTab(id)) tabBar.focusTab(activeId);
+}
+
+async function reorder(order, focus) {
+  const before = tabs;
+  const byId = new Map(tabs.map((t) => [t.id, t]));
+  tabs = order.map((id) => byId.get(id)).filter(Boolean);
+  drawTabs();
+  tabBar.focusTab(focus);
+  const at = order.indexOf(focus);
+  if (at >= 0) inform(`Moved ${nameOf(focus)} to position ${at + 1} of ${order.length}`);
+  const res = await postJson("/notepad/tab/order", { order });
+  if (res.status === 200) return;
+  // Refused: draw what the server has, and say why.
+  tabs = before;
+  inform("");
+  tell(errorSentence(res.status === 0 ? null : res.body && res.body.error));
+  const again = await readNote(activeId);
+  if (again.ok) tabs = again.body.tabs.map((t) => ({ id: t.id, name: t.name }));
+  drawTabs();
+}
+
+// The current tab one place to the left or right.
+function moveCurrent(delta) {
+  if (!activeId || busy) return;
+  const order = moveTab(ids(), activeId, delta);
+  if (order.join() !== ids().join()) reorder(order, activeId);
+}
+
+// A tab is no longer there (deleted here, or from another page): off the bar,
+// its unsaved text dropped without a save, and its neighbour on screen.
+async function gone(id, index = tabs.findIndex((t) => t.id === id), announce = true) {
+  const here = id === activeId;
+  if (here || id === saveTab) discard();
+  const rest = tabs.filter((t) => t.id !== id);
+  const next = here ? rest[index] || rest[index - 1] || null : null;
+  tabs = rest;
+  if (announce) tell(errorSentence("no-such-tab"));
+  if (!here) return drawTabs();
+  activeId = null;
+  images = [];
+  pending.clear();
+  drawStrip();
+  // Nothing of the deleted tab stays on screen or editable, whatever loads next.
+  setText("");
+  editor.setReadOnly(true);
+  if (next) {
+    drawTabs();
+    if (await showTab(next.id)) tabBar.focusTab(activeId);
+    return;
+  }
+  drawTabs();
+  $("notepad-empty-new").focus();
+}
+
+/* ------------------------------------------------------------ name form */
+
+function nameError(sentence) {
+  $("notepad-name-error").textContent = sentence;
+  $("notepad-name").focus();
+}
+
+function openNameForm(mode) {
+  if (busy || (mode === "rename" && !activeId)) return;
+  closeDelete();
+  naming = mode;
+  $("notepad-name-label").textContent = mode === "new" ? "Name this tab" : "Rename this tab";
+  $("notepad-name-form").hidden = false;
+  $("notepad-name-error").textContent = "";
+  const input = $("notepad-name");
+  input.value = mode === "rename" ? nameOf(activeId) : "";
+  input.focus();
+  input.select();
+}
+
+function closeNameForm(toFocus = true) {
+  if (!naming) return;
+  const was = naming;
+  naming = null;
+  $("notepad-name-form").hidden = true;
+  if (!toFocus) return;
+  if (was === "rename") tabBar.focusTab(activeId);
+  else (tabs.length ? $("notepad-tab-new") : $("notepad-empty-new")).focus();
+}
+
+async function createNamed(name) {
+  // The tab on screen is saved first, then the new one is made and shown.
+  if (!(await settled())) return nameError(STAY);
+  const res = await postJson("/notepad/tab", { name });
+  const id = res.body && res.body.id;
+  if (res.status !== 200 || !TAB_ID_RE.test(String(id))) {
+    return nameError(errorSentence(res.status === 0 ? null : res.body && res.body.error));
+  }
+  closeNameForm(false);
+  busy = false;
+  tell("");
+  inform("");
+  if (await showTab(id, false)) tabBar.focusTab(activeId);
+}
+
+async function renameTo(name) {
+  const id = activeId;
+  const res = await postJson("/notepad/tab/rename", { id, name });
+  if (res.status !== 200) {
+    const code = res.status === 0 ? null : res.body && res.body.error;
+    if (code !== "no-such-tab") return nameError(errorSentence(code));
+    closeNameForm(false);
+    return gone(id);
+  }
+  const kept = tabs.find((t) => t.id === id);
+  if (kept) kept.name = (res.body && typeof res.body.name === "string" && res.body.name) || name;
+  closeNameForm(false);
+  busy = false;
+  drawTabs();
+  tabBar.focusTab(id);
+}
+
+async function submitName() {
+  if (!naming || busy) return;
+  const mode = naming;
+  const raw = $("notepad-name").value;
+  const sentence = tabNameProblem(tabs, raw, mode === "rename" ? activeId : undefined);
+  if (sentence) return nameError(sentence);
+  busy = true;
+  drawTabs();
+  try {
+    await (mode === "new" ? createNamed(cleanTabName(raw).name) : renameTo(cleanTabName(raw).name));
+  } finally {
+    busy = false;
+    drawTabs();
+  }
+}
+
+/* ------------------------------------------------------------ delete */
+
+function paintDelete() {
+  $("notepad-delete").hidden = stage === "none";
+  if (stage === "none") return;
+  const name = nameOf(activeId);
+  const count = images.filter((img) => img.id).length;
+  const pics = count === 1 ? "1 picture" : `${count} pictures`;
+  $("notepad-delete-text").textContent =
+    stage === "ask" ? `This deletes the tab ${name}, its text and its ${pics}. This cannot be undone.` : `Really delete ${name} for good?`;
+  $("notepad-delete-go").textContent = stage === "ask" ? "Delete tab…" : "Yes, delete it";
+  $("notepad-delete-keep").disabled = $("notepad-delete-go").disabled = busy;
+}
+
+function openDelete() {
+  if (!activeId || busy) return;
+  closeNameForm(false);
+  stage = nextDelete("none", "click");
+  paintDelete();
+  $("notepad-delete-keep").focus();
+}
+
+function closeDelete(toFocus = false) {
+  if (stage === "none") return;
+  stage = nextDelete(stage, "cancel");
+  paintDelete();
+  if (toFocus) tabBar.focusTab(activeId);
+}
+
+// Only the second press posts: the first moves to "Really delete…?".
+async function confirmDelete() {
+  if (busy || stage === "none") return;
+  stage = nextDelete(stage, "confirm");
+  if (stage === "sure") {
+    paintDelete();
+    return $("notepad-delete-keep").focus();
+  }
+  const id = activeId;
+  const at = tabs.findIndex((t) => t.id === id);
+  busy = true;
+  drawTabs();
+  paintDelete();
+  const res = await postJson("/notepad/tab/delete", { id });
+  const code = res.status === 0 ? null : res.body && res.body.error;
+  busy = false;
+  stage = "none";
+  paintDelete();
+  if (res.status !== 200 && code !== "no-such-tab") {
+    drawTabs();
+    tell(errorSentence(code));
+    return tabBar.focusTab(id);
+  }
+  // Gone for good (deleted from another page counts, with its sentence).
+  await gone(id, at, code === "no-such-tab");
 }
 
 /* ------------------------------------------------------------ pictures */
 
-// The strip's pictures, oldest first, as { key, id, url, thumb, status }:
-// `key` is the page's own handle, `id` and `url` come from the server once
-// the upload lands, `thumb` is the stored thumbnail's URL or, for one added
-// here, the data: URL reencode() made. `status` is ready, uploading or failed.
+// The strip's pictures, oldest first, as { key, id, tab, url, thumb, status }:
+// `key` is the page's own handle, `tab` the tab the picture was added to (fixed
+// then, so a switch mid-upload cannot move it), `id` and `url` come from the
+// server once the upload lands, `thumb` is the stored thumbnail's URL or, for
+// one added here, the data: URL reencode() made. `status` is ready, uploading
+// or failed. Only the tab on screen has entries here.
 let images = [];
 
 // What a failed upload needs to go again, by key: the re-encoded picture and
@@ -282,24 +545,30 @@ const drop = (key) => {
   pending.delete(key);
 };
 
+// Whether the picture is still on screen: one added to a tab since left
+// finishes in the background and touches nothing here.
+const live = (entry) => images.includes(entry);
+
 // The picture, then its thumbnail. One whose picture already landed (only
 // the thumbnail failed) sends just the thumbnail again.
 async function upload(entry) {
   const encoded = pending.get(entry.key);
   if (!encoded) return;
   entry.status = "uploading";
-  drawStrip();
+  if (live(entry)) drawStrip();
   if (!entry.id) {
-    const res = await postJpeg("/notepad/image", encoded.blob);
+    const res = await postJpeg("/notepad/image?tab=" + entry.tab, encoded.blob);
     const id = res.body && res.body.id;
     if (res.status !== 200 || !IMAGE_ID_RE.test(String(id))) return failed(entry, res);
     entry.id = id;
-    entry.url = "/notepad/images/" + id + ".jpg";
+    // The server names the URL (it carries the tab).
+    entry.url = res.body.url;
   }
-  const res = await postJpeg("/notepad/thumb?id=" + entry.id, encoded.thumbBlob);
+  const res = await postJpeg("/notepad/thumb?id=" + entry.id + "&tab=" + entry.tab, encoded.thumbBlob);
   if (res.status !== 200) return failed(entry, res);
   pending.delete(entry.key);
   entry.status = "ready";
+  if (!live(entry)) return;
   // Only this picture's own failure goes: a sentence about the batch (the
   // cap) or another picture stays up while the rest land.
   if (noticeKey === entry.key) tell("");
@@ -309,26 +578,30 @@ async function upload(entry) {
 function failed(entry, res) {
   const code = res.status === 0 ? null : res.body && res.body.error;
   // The server said no for good: going again would only be refused again.
-  if (code === "too-many" || code === "not-jpeg" || code === "too-large" || code === "not-found") drop(entry.key);
+  if (code === "too-many" || code === "not-jpeg" || code === "too-large" || code === "not-found" || code === "no-such-tab") drop(entry.key);
   else entry.status = "failed";
+  // One added to a tab since left says nothing here.
+  if (entry.tab !== activeId) return;
   drawStrip();
   tell(errorSentence(code), entry.key);
 }
 
 export async function addNotepadImages(files) {
   const given = imageFiles(files);
-  if (!given.length) return;
+  const tab = activeId;
+  if (!given.length || !tab) return;
   const room = Math.max(0, NOTEPAD_MAX_IMAGES - images.length);
   tell(given.length > room ? errorSentence("too-many") : "");
   await Promise.all(
     given.slice(0, room).map(async (file) => {
-      const entry = { key: crypto.randomUUID(), id: null, url: null, thumb: null, status: "uploading" };
+      const entry = { key: crypto.randomUUID(), id: null, tab, url: null, thumb: null, status: "uploading" };
       images.push(entry);
       drawStrip();
       let encoded;
       try {
         encoded = await reencode(file);
       } catch (err) {
+        if (!live(entry)) return;
         drop(entry.key);
         drawStrip();
         return tell(err.message);
@@ -352,9 +625,9 @@ function thumbItem(entry, n) {
   if (src) {
     const pic = el("img");
     pic.src = src;
-    pic.alt = `Notepad image ${n}`;
+    pic.alt = `Notebook image ${n}`;
     open.appendChild(pic);
-  } else open.setAttribute("aria-label", `Notepad image ${n}`);
+  } else open.setAttribute("aria-label", `Notebook image ${n}`);
   // Never `disabled`, which would push the focus out of the strip while the
   // picture uploads: it only does nothing until there is a picture to show.
   const viewable = Boolean(entry.url) && entry.status !== "uploading";
@@ -447,17 +720,19 @@ async function remove(entry) {
   if (entry.id) {
     entry.deleting = true;
     drawStrip();
-    const res = await postJson("/notepad/image/delete", { id: entry.id });
+    const res = await postJson("/notepad/image/delete?tab=" + entry.tab, { id: entry.id });
     entry.deleting = false;
+    // The tab was left (or deleted) while this was out: nothing here to update.
+    if (!live(entry)) return;
     const code = res.status === 0 ? null : res.body && res.body.error;
-    if (res.status !== 200 && code !== "not-found") {
+    if (res.status !== 200 && code !== "not-found" && code !== "no-such-tab") {
       entry.asking = false;
       drawStrip();
       focusIn(entry.key, ".notepad-thumb-delete");
       return tell(errorSentence(code));
     }
     // Already gone (deleted from another page): off the strip too, with why.
-    if (code === "not-found") tell(errorSentence(code));
+    if (code === "not-found" || code === "no-such-tab") tell(errorSentence(code));
   }
   const at = images.indexOf(entry);
   drop(entry.key);
@@ -467,14 +742,15 @@ async function remove(entry) {
   else $("notepad-add").focus();
 }
 
-// The stored pictures from GET /notepad, oldest first, then any added here
-// that are still on their way or waiting for Retry.
-function takeStored(list) {
+// The stored pictures of the tab `tabId` from GET /notepad, oldest first, then
+// any added to it here that are still on their way or waiting for Retry.
+// Pictures of any other tab are not kept: they finish in the background.
+function takeStored(list, tabId) {
   const stored = (Array.isArray(list) ? list : [])
     .filter((img) => img && IMAGE_ID_RE.test(String(img.id)))
-    .map((img) => ({ key: img.id, id: img.id, url: img.url, thumb: img.thumb || null, status: "ready" }));
+    .map((img) => ({ key: img.id, id: img.id, tab: tabId, url: img.url, thumb: img.thumb || null, status: "ready" }));
   const ids = new Set(stored.map((img) => img.id));
-  const local = images.filter((img) => img.status !== "ready" && !(img.id && ids.has(img.id)));
+  const local = images.filter((img) => img.tab === tabId && img.status !== "ready" && !(img.id && ids.has(img.id)));
   for (const key of pending.keys()) if (!local.some((img) => img.key === key)) pending.delete(key);
   images = [...stored, ...local];
   drawStrip();
@@ -492,7 +768,7 @@ function showAt(index) {
   viewing.index = index;
   const pic = $("notepad-preview-img");
   pic.src = entry.url;
-  pic.alt = `Notepad image ${images.indexOf(entry) + 1}`;
+  pic.alt = `Notebook image ${images.indexOf(entry) + 1}`;
   $("notepad-preview-count").textContent = `${index + 1} of ${list.length}`;
   $("notepad-preview-prev").hidden = $("notepad-preview-next").hidden = list.length < 2;
 }
@@ -514,7 +790,7 @@ function move(delta) {
 }
 
 // Esc is taken here and closes the preview alone: left to the browser, it
-// could reach the Notepad underneath too.
+// could reach the Notebook underneath too.
 function wirePreview() {
   const dlg = $("notepad-preview");
   $("notepad-preview-prev").addEventListener("click", () => move(-1));
@@ -597,45 +873,93 @@ function wireImages(dlg) {
   );
 }
 
+/* ------------------------------------------------------------ opening */
+
 // Read again on every open, so saves from another page on the same folder
 // show up. Text typed here and not yet saved (or too long to save) is never
-// replaced.
+// replaced; the tab it belongs to stays on screen.
 async function load() {
-  const note = await readNote();
-  if (note === null) {
+  const keep = keepsText(save);
+  let res = await readNote(activeId);
+  if (!res.ok && res.code === "no-such-tab" && activeId && !keep) res = await readNote(null);
+  if (!res.ok) {
     if (loaded) return;
     const line = $("notepad-status");
     line.textContent = NOT_LOADED;
     line.classList.add("is-problem");
     return;
   }
-  takeStored(note.images);
-  if (keepsText(save)) return;
-  setText(note.text);
-  save = SAVE_START;
-  loaded = true;
-  editor.textarea.readOnly = false;
+  show(res.body, keep);
   paintStatus();
+  if (!tabs.length) $("notepad-empty-new").focus();
 }
+
+// The one editor being made, so a second click while it loads waits for it
+// instead of building another beside it.
+let making = null;
 
 export async function openNotepad() {
   if ($("btn-notepad").disabled) return;
   const dlg = $("notepad-modal");
-  if (!editor) makeEditor();
-  editor.textarea.readOnly = !loaded;
+  if (!editor) {
+    try {
+      await (making ??= makeEditor().finally(() => (making = null)));
+    } catch {
+      // The editor file could not be loaded: say so, and let the next click try again.
+      if (!dlg.open) dlg.showModal();
+      return tell(EDITOR_NOT_LOADED);
+    }
+  }
+  editor.setReadOnly(!loaded || !activeId);
   tell("");
+  inform("");
+  naming = null;
+  $("notepad-name-form").hidden = true;
+  stage = "none";
+  paintDelete();
   if (!dlg.open) dlg.showModal();
-  editor.textarea.focus();
+  editor.focus();
   await load();
 }
 
 export function wireNotepad() {
   const dlg = $("notepad-modal");
+  tabBar = createTabs({
+    onSwitch: (id) => switchTo(id),
+    onChange: async (event) => {
+      if (event.type === "order") return reorder(event.order, event.focus);
+      // Rename acts on the current tab: a double-click or F2 on another one picks it first.
+      if (event.id && event.id !== activeId) await switchTo(event.id);
+      if (!event.id || event.id === activeId) openNameForm("rename");
+    },
+  });
   lightDismiss(dlg);
   wireImages(dlg);
   wirePreview();
   $("btn-notepad").addEventListener("click", openNotepad);
   $("notepad-close").addEventListener("click", () => dlg.close());
+  $("notepad-tab-new").addEventListener("click", () => openNameForm("new"));
+  $("notepad-empty-new").addEventListener("click", () => openNameForm("new"));
+  $("notepad-tab-rename").addEventListener("click", () => openNameForm("rename"));
+  $("notepad-tab-left").addEventListener("click", () => moveCurrent(-1));
+  $("notepad-tab-right").addEventListener("click", () => moveCurrent(1));
+  $("notepad-tab-delete").addEventListener("click", openDelete);
+  $("notepad-delete-keep").addEventListener("click", () => closeDelete(true));
+  $("notepad-delete-go").addEventListener("click", confirmDelete);
+  $("notepad-name-cancel").addEventListener("click", () => closeNameForm());
+  $("notepad-name-form").addEventListener("submit", (e) => {
+    e.preventDefault();
+    submitName();
+  });
+  // Esc backs out of the name form or the delete question first, and only
+  // then closes the dialog.
+  dlg.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape" || (!naming && stage === "none")) return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (naming) closeNameForm();
+    else closeDelete(true);
+  });
   dlg.addEventListener("close", () => {
     flush();
     $("btn-notepad").focus();

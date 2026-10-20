@@ -81,18 +81,46 @@ const SHOTS = {
   // The git board draws itself from a real repository, so this shot runs in
   // its own git sample project; the post only hands the board back to you.
   git: { workflow: "git", posts: ["git"], repo: true },
-  // The Notepad dialog over the plan question, with a few lines of Markdown
-  // typed into it. The store is the scratch folder's, never the real one.
+  // The Notebook dialog over the plan question, with two named tabs: Call notes
+  // (a heading, bullets and bold, shown live) and Ideas, with the first one
+  // open. The store is the scratch folder's, never the real one.
   notepad: {
     workflow: "plan",
     posts: ["question"],
     open: async (page) => {
       await page.click("#btn-notepad");
       await page.waitForSelector("#notepad-modal[open]", { timeout: 10000 });
-      await page.waitForFunction(() => !document.querySelector("#notepad-modal textarea").readOnly, null, { timeout: 10000 });
-      await page.locator("#notepad-modal textarea").fill(
-        "# Before the call\n\n- Ask about **paging**: cursor or offset?\n- Who signs in to the API?\n- Check the `/tasks` limit with the team\n"
+      const editor = page.locator("#notepad-editor .cm-content");
+      const newTab = async (name) => {
+        await page.click((await page.locator("#notepad-empty").isVisible()) ? "#notepad-empty-new" : "#notepad-tab-new");
+        await page.fill("#notepad-name", name);
+        await page.keyboard.press("Enter");
+        await page.waitForFunction(
+          (n) => [...document.querySelectorAll("#notepad-tabs .notepad-tab")].some((b) => b.textContent === n && b.getAttribute("aria-selected") === "true"),
+          name,
+          { timeout: 10000 },
+        );
+        await editor.click();
+      };
+      // The second theme's run finds the first one's tabs, kept in the same store.
+      await page.waitForFunction(
+        () => document.querySelector("#notepad-tabs .notepad-tab") || !document.getElementById("notepad-empty").hidden,
+        null,
+        { timeout: 10000 },
       );
+      if (!(await page.locator("#notepad-tabs .notepad-tab").count())) {
+        // The list marker is typed once: the editor carries a list on at Enter.
+        await newTab("Call notes");
+        await page.keyboard.type(
+          "# Before the call\n\n- Ask about **paging**: cursor or offset?\nWho signs in to the API?\nCheck the `/tasks` limit with the team\n\n"
+        );
+        await newTab("Ideas");
+        await page.keyboard.type("Retry policy for the export job.\nWhat should the page size cap be?");
+      }
+      await sleep(1000);
+      await page.locator("#notepad-tabs .notepad-tab", { hasText: /^Call notes$/ }).click();
+      await page.locator("#notepad-editor .cm-h1").waitFor({ timeout: 10000 });
+      await page.locator("#notepad-editor .cm-line").last().click();
       await sleep(1800);
     },
   },
