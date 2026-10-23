@@ -10,24 +10,24 @@
     html, body { margin: 0; height: 100%; font-family: system-ui, sans-serif; background: #1e1e1e; color: #ddd; }
     body { display: flex; flex-direction: column; overflow: hidden; }
 
-    #bar { flex: none; display: flex; flex-direction: column; border-bottom: 1px solid #444; }
-    #bar-top { height: 32px; flex: none; display: flex; align-items: center; gap: 12px; padding: 0 10px; white-space: nowrap; overflow-x: auto; overflow-y: hidden; }
-    #bar-status { flex: none; display: flex; align-items: center; gap: 12px; padding: 3px 10px; font-size: 12px; white-space: nowrap; overflow-x: auto; overflow-y: hidden; border-top: 1px solid #2a2a2a; }
-    #title { font-weight: 600; }
-    #project-dir { color: #9ab; overflow: hidden; text-overflow: ellipsis; min-width: 0; max-width: 40%; }
+    #bar { flex: none; border-bottom: 1px solid #444; }
+    #bar-row { height: 34px; flex: none; display: flex; align-items: center; gap: 10px; padding: 0 10px; font-size: 12px; white-space: nowrap; overflow-x: auto; overflow-y: hidden; }
+    #bar-sep { flex: none; align-self: stretch; width: 1px; margin: 8px 0; background: #3a3a3a; }
+    #title { font-weight: 600; font-size: 13px; }
+    #project-dir { color: #9ab; overflow: hidden; text-overflow: ellipsis; min-width: 0; max-width: 220px; }
     #current-page { color: #8c8; }
     #current-page:not(:empty)::before { content: "page: "; color: #666; }
     #agent-name { color: #9ab; }
     #agent-name:not(:empty)::before { content: "agent: "; color: #666; }
-    #console-status, #agent-status { color: #d7ba7d; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+    #console-status, #agent-status { color: #d7ba7d; overflow: hidden; text-overflow: ellipsis; min-width: 0; max-width: 260px; }
     #agent-restart[hidden], #change-agent[hidden] { display: none; }
     .bar-slot { flex: none; }
     #permissions-note { color: #888; }
-    #context-nudge { display: flex; align-items: center; gap: 6px; color: #d7ba7d; font-size: 12px; }
+    #context-nudge { display: flex; align-items: center; gap: 6px; color: #d7ba7d; }
     #context-nudge[hidden] { display: none; }
-    #version-update { display: flex; align-items: center; gap: 6px; color: #d7ba7d; font-size: 12px; }
+    #version-update { display: flex; align-items: center; gap: 6px; color: #d7ba7d; }
     #version-update[hidden], #version-update-button[hidden] { display: none; }
-    #bar-slot-meter { display: flex; align-items: center; gap: 6px; color: #9ab; font-size: 12px; }
+    #bar-slot-meter { display: flex; align-items: center; gap: 6px; color: #9ab; }
     #bar-slot-meter:empty { display: none; }
     .meter-track { display: inline-block; width: 64px; height: 8px; border: 1px solid #666; border-radius: 2px; overflow: hidden; background: #2a2a2a; }
     .meter-track.estimate { border-style: dashed; }
@@ -127,14 +127,13 @@
 </head>
 <body>
   <header id="bar">
-    <div id="bar-top">
+    <div id="bar-row">
       <span id="title">Plan2Code</span>
       <span id="project-dir"></span>
       <span id="bar-slot-restart" class="bar-slot"><button id="agent-restart" hidden>Restart</button></span>
       <span id="bar-slot-change-agent" class="bar-slot"><button id="change-agent" hidden>Change agent</button></span>
       <span id="bar-slot-change-project" class="bar-slot"><button id="change-project">Change project</button></span>
-    </div>
-    <div id="bar-status">
+      <span id="bar-sep" aria-hidden="true"></span>
       <span id="current-page" title="The page the agent opened"></span>
       <span id="agent-name"></span>
       <span id="agent-status" role="status"></span>

@@ -168,6 +168,13 @@ fn sync_agent_env(app: &tauri::AppHandle) {
     agent.set_env(env);
 }
 
+// `on_output` is deliberately not a parameter here: `agent_reattach` already
+// registered `state.page` when the page mounted (`main()` on the frontend
+// calls it before this), and that registration must stay the only one. Every
+// Channel argument Tauri deserializes for an invoke is a fresh wrapper around
+// the same frontend id; dropping one (as happened here when it replaced the
+// reattach registration) sends the frontend an "end" message that
+// unregisters that id for good, breaking all future sends through it.
 #[tauri::command]
 fn agent_start(
     app: tauri::AppHandle,
@@ -178,11 +185,9 @@ fn agent_start(
     mode: String,
     cols: u16,
     rows: u16,
-    on_output: Channel<InvokeResponseBody>,
 ) -> Result<(), String> {
     let kind = AgentKind::from_id(&kind).ok_or_else(|| format!("unknown agent: {kind}"))?;
     let mode = PermissionMode::from_id(&mode).ok_or_else(|| format!("unknown permission mode: {mode}"))?;
-    *state.page.lock().map_err(|e| e.to_string())? = Some(on_output);
     let agent = agent_for_project(&state)?;
     agent.resize(cols, rows)?;
     sync_agent_env(&app);
@@ -459,15 +464,19 @@ fn pick_project_folder(app: tauri::AppHandle, state: State<'_, AppState>) -> Res
 
 /// Stops the old project's agent and console and clears both from state, so
 /// neither `agent_for_project` nor `console_start` can hand either back once
-/// the project has moved on (Task 9.5). The old agent's `Idle` state still
-/// reaches the page's current channel here; only after that does this take
-/// the channel away.
+/// the project has moved on (Task 9.5). `state.page` is deliberately left
+/// alone: it is the page's own output channel, not the project's, and it must
+/// stay the single live registration for `agentChannel`'s id for the page's
+/// whole lifetime. Dropping it here (even briefly, to `None`) sends the
+/// frontend an "end" message that unregisters that id for good — no later
+/// command can ever re-register the same frontend `Channel` object after
+/// that, whatever it passes, so a project switch would silently and
+/// permanently cut the new agent's output off from the page.
 fn teardown_project(state: &AppState) -> Result<(), String> {
     if let Some(agent) = current_agent(state) {
         agent.stop();
     }
     *state.agent.lock().map_err(|e| e.to_string())? = None;
-    *state.page.lock().map_err(|e| e.to_string())? = None;
     if let Ok(mut guard) = state.console.lock() {
         if let Some(mut sup) = guard.take() {
             let _ = sup.stop();

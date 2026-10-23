@@ -138,11 +138,7 @@ function applyAgentState(next, { skipReset } = {}) {
   // The agent is back (a fresh generation, running): the restart message stays
   // on screen (restarting() below) until its dashboard page is announced.
   if (restarting && freshScreen && agent.state === 'running') {
-    terminal.write('
-
-[Fresh agent started. Waiting for the dashboard...]
-
-');
+    terminal.write('\r\n\r\n[Fresh agent started. Waiting for the dashboard...]\r\n\r\n');
   }
 
   if (agent.state === 'ended') {
@@ -330,7 +326,7 @@ async function startAgent(event) {
   showState('Waiting for the agent to open the dashboard');
   const { cols, rows } = terminal.size();
   try {
-    await invoke('agent_start', { kind, model, effort, mode, cols, rows, onOutput: agentChannel });
+    await invoke('agent_start', { kind, model, effort, mode, cols, rows });
     terminal.focus();
   } catch (error) {
     agentStatusEl.textContent = `Could not start the agent: ${error}`;
@@ -774,7 +770,6 @@ async function autoStartAgent(state) {
       mode: 'bypass',
       cols,
       rows,
-      onOutput: agentChannel,
     });
     terminal.focus();
   } catch (error) {
