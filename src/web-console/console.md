@@ -382,6 +382,10 @@ A patch that breaks one is refused, exit `3`, with the reason:
 7. **`run`, `folderIssue` and `helpers` are well formed** (their topic files).
 8. **A doc's `version` never goes back.**
 9. **A finish `command` has no placeholders** (`<` or `>`).
+10. **Every note gets a reply.** A card whose thread ends with the person's own
+    words stays that way until a patch adds an agent reply to it; settling or
+    reopening it does not count. Exempt once the item is deleted, or the whole
+    session is ending.
 
 ---
 

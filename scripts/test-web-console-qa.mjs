@@ -106,6 +106,56 @@ test("the dashboard refuses question cards: nothing there would draw them", () =
   assert.ok(validate(state).some((p) => p.includes("dashboard draws no question cards")));
 });
 
+test("an unanswered note blocks a settle that ignores it", () => {
+  const withNote = {
+    ...choice("q1"),
+    thread: [{ who: "user", text: "Why this option?" }],
+    submitted: { k: "A", at: "2026-01-01T00:00:00.000Z" },
+  };
+  const state = { ...blankState({ sid: "x", project: "p", workflow: "plan" }), items: [withNote] };
+  const next = applyPatch(state, { settle: ["q1"] });
+  assert.ok(validate(next).some((p) => p.includes('item "q1" has an unanswered note')));
+});
+
+test("adding a thread reply in the same patch clears the note and allows the settle", () => {
+  const withNote = {
+    ...choice("q1"),
+    thread: [{ who: "user", text: "Why this option?" }],
+    submitted: { k: "A", at: "2026-01-01T00:00:00.000Z" },
+  };
+  const state = { ...blankState({ sid: "x", project: "p", workflow: "plan" }), items: [withNote] };
+  const next = applyPatch(state, {
+    items: [{ id: "q1", thread: [{ who: "agent", text: "Because it matches the brief." }] }],
+    settle: ["q1"],
+  });
+  assert.deepEqual(validate(next), []);
+});
+
+test("an item with no user note left unanswered is unaffected", () => {
+  const state = { ...blankState({ sid: "x", project: "p", workflow: "plan" }), items: [choice("q1"), choice("q2")] };
+  assert.deepEqual(validate(state), []);
+  const answered = {
+    ...choice("q3"),
+    thread: [{ who: "user", text: "Note" }, { who: "agent", text: "Reply." }],
+  };
+  assert.deepEqual(validate({ ...state, items: [answered] }), []);
+});
+
+test("deleting the item in the same patch is exempt from the unanswered-note check", () => {
+  const withNote = { ...choice("q1"), thread: [{ who: "user", text: "Why this option?" }] };
+  const state = { ...blankState({ sid: "x", project: "p", workflow: "plan" }), items: [withNote] };
+  const next = applyPatch(state, { items: [{ id: "q1", _delete: true }] });
+  assert.deepEqual(next.items, []);
+  assert.deepEqual(validate(next), []);
+});
+
+test("a finish patch is exempt from the unanswered-note check", () => {
+  const withNote = { ...choice("q1"), thread: [{ who: "user", text: "Why this option?" }] };
+  const state = { ...blankState({ sid: "x", project: "p", workflow: "plan" }), items: [withNote] };
+  const next = applyPatch(state, { finish: { headline: "Done" } });
+  assert.deepEqual(validate(next), []);
+});
+
 /* ------------------------------------------------------------- the CLI */
 
 test("post --file reads a patch PowerShell wrote: a UTF-8 BOM, or UTF-16", () => {

@@ -176,7 +176,7 @@ const CARDS = {
     planned: { on: false, reason: "Needs a spec that is already written up" },
     documented: { on: true },
     building: { on: true },
-    built: { on: false, reason: "The spec is fully built" },
+    built: { on: true },
     unrecognized: { on: false, reason: "Needs a spec that is already written up" },
   },
   "plan2code-2-document": {

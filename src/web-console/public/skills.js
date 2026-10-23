@@ -161,8 +161,8 @@ export const SKILLS = Object.freeze([
     builds: false, phased: false, metered: true, templates: false,
     weight: 1, started: "Revise plan started", ran: "Plan revised", resume: "overview",
     subagents: null,
-    states: ["documented", "building"],
-    greyed: { default: "Needs a spec that is already written up", built: "The spec is fully built" },
+    states: ["documented", "building", "built"],
+    greyed: { default: "Needs a spec that is already written up" },
     card: {
       group: "pipeline",
       chip: "Step 1b",

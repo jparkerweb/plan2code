@@ -22,8 +22,12 @@
  * `--pick-folder` (passed by the desktop shortcut, never forwarded to the CLI) asks for the
  * project folder with a native folder picker first, starting on the folder picked last time.
  *
+ * When the desktop app is installed (~/.plan2code/app/) and a display exists, `plan2code` opens
+ * the app on the chosen folder, agent and model instead of running the agent in this terminal.
+ * `--classic` (never forwarded to the CLI), no app, and no display on Linux keep the flow above.
+ *
  * `plan2code update` starts no agent: it re-runs the npx install with `--update`, which
- * reinstalls whatever ~/.plan2code/install.json lists. Before an agent starts, one line says
+ * reinstalls whatever ~/.plan2code/install.json lists (the desktop app included). Before an agent starts, one line says
  * when a newer release is out (releaseNotice), read from the web console's cached release check
  * and never waiting on the network.
  *
@@ -42,6 +46,13 @@ const IS_WINDOWS = process.platform === 'win32';
 const IS_MAC = process.platform === 'darwin';
 const PICK_FOLDER_FLAG = '--pick-folder';
 const CLI_FLAG = '--cli';
+const CLASSIC_FLAG = '--classic';
+// Where install.js puts the desktop app, and the one file in it the launcher starts.
+// PLAN2CODE_APP names a different executable (the tests start a stand-in this way).
+const APP_DIR = path.join(os.homedir(), '.plan2code', 'app');
+const APP_FILE = IS_WINDOWS ? 'plan2code-app.exe' : 'plan2code-app';
+// How long a freshly started app may take to fall over before the launcher calls it started.
+const APP_START_GRACE_MS = 1200;
 const STATE_FILE = path.join(os.homedir(), '.plan2code', 'launcher.json');
 // Menus longer than this print compactly (id-only, two columns).
 const MODELS_MENU_COMPACT_AT = 30;
@@ -541,6 +552,74 @@ async function chooseModel(cli, extraArgs) {
   }
 }
 
+/** A window can open: assumed on Windows and macOS, and on Linux only with an X11 or Wayland display. */
+function hasDisplay() {
+  // sshd sets one of these for an SSH login on both platforms, and there is no window to open
+  // there. A plain background/service context (no SSH, no desktop) cannot be told apart from an
+  // ordinary desktop login on Windows or macOS without a new dependency, so SSH is as far as this goes.
+  if ((IS_WINDOWS || IS_MAC) && (process.env.SSH_CONNECTION || process.env.SSH_TTY)) return false;
+  return IS_WINDOWS || IS_MAC || Boolean(process.env.DISPLAY || process.env.WAYLAND_DISPLAY);
+}
+
+/** The installed desktop app's executable, or null when it is not installed. */
+function findApp() {
+  const file = process.env.PLAN2CODE_APP || path.join(APP_DIR, APP_FILE);
+  try {
+    return fs.statSync(file).isFile() ? file : null;
+  } catch {
+    return null;
+  }
+}
+
+/** The model the forwarded arguments pick (`--model x`, `--model=x`, Codex's `-m x`), or null. */
+function modelFrom(args, cliId) {
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg === '--model' || (cliId === 'codex' && arg === '-m')) return args[i + 1] || null;
+    if (arg.startsWith('--model=')) return arg.slice('--model='.length) || null;
+    if (cliId === 'codex' && arg.startsWith('-m=')) return arg.slice(3) || null;
+  }
+  return null;
+}
+
+/**
+ * Start the desktop app on the folder, agent and model and let it run on its own. Resolves true
+ * once it has started, false (after one line saying why) when it could not, so the caller can
+ * carry on with today's terminal flow.
+ */
+function startApp(app, { cwd, cliId, model }) {
+  const args = ['--project', cwd, '--agent', cliId, ...(model ? ['--model', model] : [])];
+  return new Promise((resolve) => {
+    let child;
+    try {
+      child = spawnCommand(app, args, { cwd, detached: true, stdio: 'ignore' });
+    } catch (error) {
+      console.error(`${ce.yellow('plan2code:')} could not start the app (${error.message}); opening in this terminal instead.`);
+      return resolve(false);
+    }
+    child.once('error', (error) => {
+      console.error(`${ce.yellow('plan2code:')} could not start the app (${error.message}); opening in this terminal instead.`);
+      resolve(false);
+    });
+    child.once('spawn', () => {
+      // A program that starts and then dies (a missing system library is reported after the
+      // exec, not as a spawn error) must not strand the person with a closed terminal: an exit
+      // with a failure inside the grace period falls back to the terminal flow.
+      const timer = setTimeout(() => {
+        child.removeAllListeners('exit');
+        child.unref();
+        resolve(true);
+      }, APP_START_GRACE_MS);
+      child.once('exit', (code, signal) => {
+        clearTimeout(timer);
+        if (code === 0) return resolve(true);
+        console.error(`${ce.yellow('plan2code:')} the app exited at once (${signal ? `signal ${signal}` : `code ${code}`}); opening in this terminal instead.`);
+        resolve(false);
+      });
+    });
+  });
+}
+
 /**
  * The native folder picker for this OS, as a command to run: it prints the chosen folder, or
  * nothing when the person cancels. Null when this OS has no picker we can drive.
@@ -588,7 +667,7 @@ function getPickerCommand(start) {
     };
   }
 
-  if (!process.env.DISPLAY && !process.env.WAYLAND_DISPLAY) return null;
+  if (!hasDisplay()) return null;
   if (findOnPath('zenity')) {
     return { command: 'zenity', args: ['--file-selection', '--directory', `--title=${PICKER_PROMPT}`, `--filename=${start}${path.sep}`] };
   }
@@ -596,6 +675,39 @@ function getPickerCommand(start) {
     return { command: 'kdialog', args: ['--title', PICKER_PROMPT, '--getexistingdirectory', start] };
   }
   return null;
+}
+
+/**
+ * A git repo (a `.git` entry, file or directory since worktrees use a file), or has `AGENTS.md`
+ * or a `specs/` folder: enough to call `dir` a project without asking first.
+ */
+function looksLikeProject(dir) {
+  return (
+    fs.existsSync(path.join(dir, '.git')) ||
+    fs.existsSync(path.join(dir, 'AGENTS.md')) ||
+    isDirectory(path.join(dir, 'specs'))
+  );
+}
+
+/**
+ * True to proceed with `cwd`: it already looks like a project, or the person confirmed it when
+ * asked. Without a terminal to ask there is nobody to confirm, so it refuses rather than risk
+ * opening the app (or the terminal flow) on the wrong folder.
+ */
+async function confirmProject(cwd) {
+  if (looksLikeProject(cwd)) return true;
+  if (!process.stdin.isTTY) {
+    console.error(
+      `${ce.yellow('plan2code:')} ${cwd} doesn't look like a project (no git repo, AGENTS.md or specs folder); run \`plan2code\` there from a terminal to confirm, or cd into a project first.`
+    );
+    return false;
+  }
+  const answer = (
+    await ask(`${c.yellow(cwd)} doesn't look like a project (no git repo, AGENTS.md or specs folder). Open Plan2Code there anyway? [y/N]: `)
+  )
+    .trim()
+    .toLowerCase();
+  return answer === 'y' || answer === 'yes';
 }
 
 /**
@@ -660,15 +772,24 @@ function spawnCommand(file, args, options) {
     : spawn(file, args, options);
 }
 
-/** `plan2code update`: the npx install with --update, passing npx's exit code through. No agent starts. */
-function runUpdate() {
+/**
+ * `plan2code update`: the npx install with --update, passing npx's exit code through. No agent
+ * starts. That one install updates the skills, this launcher and the desktop app (when it is
+ * installed) together, so the three never drift apart.
+ */
+/** `tag` pins the install to that release (the desktop app's own Update skills button, so it
+ * never pulls in work a published release does not have yet); omitted, `plan2code update` keeps
+ * pulling the latest off `main` as it always has. */
+function runUpdate(tag) {
   console.log('Updating Plan2Code...');
+  console.log(c.dim('One update covers the skills, the plan2code command and the desktop app (when installed).'));
   const npx = findOnPath('npx');
   if (!npx) {
     console.error(`${ce.red('plan2code:')} npx was not found on your PATH. It comes with Node.js 18+ (https://nodejs.org).`);
     return process.exit(127);
   }
-  const child = spawnCommand(npx, ['--yes', '--allow-git=all', `git+${REPO_URL}`, '--update'], { stdio: 'inherit' });
+  const spec = tag ? `git+${REPO_URL}#${tag}` : `git+${REPO_URL}`;
+  const child = spawnCommand(npx, ['--yes', '--allow-git=all', spec, '--update'], { stdio: 'inherit' });
   for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) {
     process.on(signal, () => {});
   }
@@ -723,9 +844,15 @@ async function releaseNotice() {
 
 async function launch() {
   const argv = process.argv.slice(2);
-  if (argv[0] === UPDATE_COMMAND) return runUpdate();
+  if (argv[0] === UPDATE_COMMAND) {
+    const tagAt = argv.indexOf('--tag');
+    return runUpdate(tagAt >= 0 ? argv[tagAt + 1] : undefined);
+  }
   const fromShortcut = argv.includes(PICK_FOLDER_FLAG);
-  const { cli: requestedCli, rest: extraArgs } = takeCliFlag(argv.filter((arg) => arg !== PICK_FOLDER_FLAG));
+  const classic = argv.includes(CLASSIC_FLAG);
+  const { cli: requestedCli, rest: extraArgs } = takeCliFlag(
+    argv.filter((arg) => arg !== PICK_FOLDER_FLAG && arg !== CLASSIC_FLAG)
+  );
 
   printIntro();
   await releaseNotice();
@@ -746,7 +873,16 @@ async function launch() {
     console.log(`Opening Plan2Code in ${c.cyan(folder)}`);
   }
 
+  if (!(await confirmProject(cwd))) return process.exit(0);
+
   if (!hasModelFlag(extraArgs, cli.id)) await chooseModel(cli, extraArgs);
+
+  // The app takes over from here when it is installed, a window can open and --classic is absent.
+  const app = !classic && hasDisplay() ? findApp() : null;
+  if (app && (await startApp(app, { cwd, cliId: cli.id, model: modelFrom(extraArgs, cli.id) }))) {
+    console.log(`Opened the Plan2Code app in ${c.cyan(cwd)} ${c.dim('(run `plan2code --classic` to stay in this terminal)')}`);
+    return process.exit(0);
+  }
 
   const args = cli.args(extraArgs);
   const options = { cwd, stdio: 'inherit' };
@@ -777,4 +913,4 @@ async function launch() {
 // Run only when invoked directly; requiring the file (the tests do) is load-only.
 if (require.main === module) launch();
 
-module.exports = { mergeModels, modelEntries, renderBanner, paint, hasModelFlag, compareVersions };
+module.exports = { mergeModels, modelEntries, renderBanner, paint, hasModelFlag, compareVersions, modelFrom, hasDisplay, looksLikeProject };

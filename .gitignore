@@ -24,3 +24,8 @@ SYNC.md
 # Throwaway design prototypes (ai-assist-prototype). The decision they
 # recorded lives in the code and the CHANGELOG; the files stay local.
 prototypes/
+
+# The Tauri app (plan2code-app/)
+plan2code-app/target/
+plan2code-app/src-tauri/gen/
+plan2code-app/ui/vendor/

@@ -88,6 +88,28 @@ Claude Code, Devin or Codex CLI on your `PATH`. It starts the agent with permiss
 which opens a folder picker first. Uninstalling (`U`) removes both.
 </details>
 
+<details>
+<summary>About the desktop app</summary>
+
+The installer also offers the **Plan2Code desktop app**: one window with the dashboard and your agent's
+terminal side by side, docked bottom or right and collapsible. Every console page, not only the
+dashboard, opens inside it. A launch card asks which agent, model and effort to start on, with
+permission checks off as its own opt-in tick (off by default); a **Restart** button then replaces the
+agent with a fresh one on a brief built from the session, and a status strip below the top bar shows
+the agent, the page open and a context meter that nudges you toward Restart once Claude's or Codex's
+context is getting full. Once it is installed, `plan2code` opens the app instead of running the agent
+in your terminal. `plan2code --classic` keeps the terminal flow, and so does a Linux machine with no
+display (over SSH, say) or any machine over an SSH session. `plan2code update` updates the skills, the
+command and the app together, and the bar offers the same **Update skills** when the app and the
+installed skills disagree.
+
+The first release is unsigned, so macOS (**Open Anyway** in System Settings, Privacy & Security) or
+Windows (**More info**, then **Run anyway**) may ask you to allow it once. The app starts the agent
+with its normal approval prompts unless you tick the launch card's permission-checks-off option (the
+plain `plan2code` command above, without the app, still starts with checks off by default). Details:
+[docs/desktop-app.md](docs/desktop-app.md).
+</details>
+
 **Supported tools:** every agent supported by the skills CLI, including Claude Code · Cursor ·
 GitHub Copilot · Windsurf · Codex · Continue · Codeium · Zed · Amp · OpenCode · Devin · Crush · Pi ·
 Gemini CLI · Cline · Roo · Kilo · Goose · Trae · Qwen Code.
@@ -186,7 +208,7 @@ The dashboard's cards, and when each one lights up for the spec you pick:
 | Refresh AGENTS.md | Brings AGENTS.md and its notes up to date with what the project has learned lately. | The project has an AGENTS.md |
 | Pathfinder | A foggy idea becomes a clear list of decisions, settled one question at a time. | You start fresh, or the spec is still being explored |
 | Plan | Requirements, technical design and your approval: the shape of what gets built. | You start fresh, or the spec has a finished Pathfinder map, a drafted plan or a bug diagnosis |
-| Revise the plan | Requirements changed mid-build? Adjust the plan without starting over. | The spec is written up into phases and not fully built |
+| Revise the plan | Requirements changed mid-build? Adjust the plan without starting over. | The spec is written up into phases, built or not |
 | Document | The plan becomes a checklist of small tasks, grouped into phases, that a developer can just do. | The spec has a drafted plan |
 | Implement | Builds the next phase, task by task, with a report and your sign-off at the end. | The spec has phases with tasks still to build |
 | Implement + review | One phase built, then a careful review of the changes, then your sign-off. All in one run. | The spec has phases with tasks still to build |

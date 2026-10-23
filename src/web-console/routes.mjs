@@ -151,17 +151,36 @@ function signIn(req, res, ctx, url) {
   const given = url.pathname.slice(3).replace(/\/$/, "");
   if (!ctx.token || !timingSafeEq(given, ctx.token)) return send(res, 403, "Not found", "text/plain");
   ctx.touch();
+  // Inside the app's frame the page is cross-site, and SameSite=Strict would
+  // never be sent back, so embed mode loosens the cookie to None; Secure, which
+  // loopback counts as a trustworthy origin for. Anywhere else it stays Strict.
   res.writeHead(
     302,
     baseHeaders({
       location: "/",
-      "set-cookie": `${cookieName(ctx)}=${ctx.token}; HttpOnly; SameSite=Strict; Path=/`,
+      "set-cookie": `${cookieName(ctx)}=${ctx.token}; HttpOnly; ${embedAncestor() === "'none'" ? "SameSite=Strict" : "SameSite=None; Secure"}; Path=/`,
     })
   );
   return res.end();
 }
 
 /* -------------------------------------------------------- the page itself */
+
+// PLAN2CODE_EMBED_ORIGIN is an opt-in widening of frame-ancestors for a shell
+// that embeds the page. The whole value must be exactly one allowed origin:
+// a loopback http origin with a real port, or one of the three tauri origins,
+// which name the embedding app page itself (that page is not on 127.0.0.1).
+// Anything else (a list, a wildcard, a bare host, another scheme) is ignored
+// and the directive keeps 'none'.
+function embedAncestor() {
+  const value = process.env.PLAN2CODE_EMBED_ORIGIN;
+  if (!value) return "'none'";
+  if (value === "http://tauri.localhost" || value === "https://tauri.localhost" || value === "tauri://localhost") return value;
+  const m = /^http:\/\/(127\.0\.0\.1|localhost):(\d{1,5})$/.exec(value);
+  if (!m) return "'none'";
+  const port = Number(m[2]);
+  return port >= 1 && port <= 65535 ? value : "'none'";
+}
 
 function page(req, res, ctx) {
   let html;
@@ -176,7 +195,7 @@ function page(req, res, ctx) {
   const csp =
     "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; " +
     "font-src 'self'; connect-src 'self'; media-src 'self'; " +
-    "base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
+    "base-uri 'none'; form-action 'none'; frame-ancestors " + embedAncestor();
   return send(res, 200, html, TYPES[".html"], { "content-security-policy": csp });
 }
 

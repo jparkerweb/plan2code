@@ -2,6 +2,25 @@
 
 All notable changes to Plan2Code will be documented in this file.
 
+## v3.0.0
+
+### ✨ Added
+
+- **desktop app**: a cross-platform app (Rust, Tauri) that is the single window for working with an AI agent. It opens the Plan2Code dashboard as its main surface, runs Claude Code, Devin or Codex in a pseudo-terminal panel it owns, and adds a **Restart** button that replaces the agent with a fresh one on a brief the app builds from its own record of the session, with the in-progress work and recent activity carried over. Every console page (Ask, Workspace, Help, Preferences, Git, Notebook) opens inside the app, not a separate browser tab.
+- **desktop app**: a context meter in the bar reads how full the running agent's context window is: a real-ish number from Claude's own transcript or Codex's session log (labeled best-effort, since both formats are undocumented), a clearly labeled estimate for Devin or any agent with no documented signal, and a gentle nudge near 70% suggesting Restart, shown only for a real or best-effort reading.
+- **desktop app**: **Update skills** in the bar brings the installed skills level with the app from the exact release the app ships, with live progress and a **Restart the console** offer once it finishes; an app older than the installed skills says so instead of trying to fix it by updating skills again.
+- `plan2code` opens the app automatically when a desktop is available; `plan2code --classic` (or no desktop, e.g. over SSH) keeps today's terminal-only flow unchanged, and the installer brings the app in alongside the skills and the command.
+
+### 🔧 Changed
+
+- **launcher**: `plan2code` no longer treats an SSH or service session on macOS or Windows as having a desktop, and asks before opening a folder that looks like it is not a project (no `.git`, `AGENTS.md` or `specs/`).
+
+## v2.11.1
+
+### 🐛 Fixed
+
+- **web console**: a card whose thread ends with the person's own words now blocks the patch that settles or reopens it, until the agent replies in the same thread. Exempt once the item is deleted, or the whole session is ending.
+
 ## v2.11.0
 
 ### ✨ Added

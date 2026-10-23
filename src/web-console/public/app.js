@@ -66,3 +66,14 @@ connect();
 setTimeout(() => {
   if (!wakeHoldsChime) sound("sessionStart");
 }, 0);
+
+// Inside the desktop app's frame, tell the app this page drew. A frame the
+// browser refused (or a server that died) never sends it, which is how the app
+// tells a blocked page from a slow one. The message carries no data.
+if (window.parent && window.parent !== window) {
+  try {
+    window.parent.postMessage({ plan2code: "console-ready" }, "*");
+  } catch {
+    /* no parent to tell */
+  }
+}

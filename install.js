@@ -20,6 +20,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const readline = require('readline');
+const crypto = require('crypto');
 
 // Load project version metadata
 let projectVersion = { name: 'Plan2Code', version: 'unknown' };
@@ -983,6 +984,9 @@ async function install({ unattended = false, outcome = {} } = {}) {
   const launcherFailed = failed ? false : (await installLauncher({ quiet: true, unattended })) !== 0;
   outcome.launcher = !failed && !launcherFailed;
 
+  // The desktop app comes last and is an extra: its failure leaves the install a success.
+  if (!failed && !launcherFailed) await offerDesktopApp({ unattended, outcome });
+
   // Summary
   console.log(`${COLORS.CYAN}╔═══════════════════════════════════════════════════════════════════════════╗${COLORS.RESET}`);
   console.log(`${COLORS.CYAN}║${COLORS.RESET}${' '.repeat(75)}${COLORS.CYAN}║${COLORS.RESET}`);
@@ -1212,6 +1216,7 @@ function runInteractive() {
         const botResult = uninstallPlan2CodeBot();
         const statusLineResult = uninstallStatusLine();
         const launcherResult = uninstallLauncher();
+        uninstallDesktopApp();
         const exitCode = uninstallResult !== 0 ? uninstallResult : loopResult !== 0 ? loopResult : metricsResult !== 0 ? metricsResult : botResult !== 0 ? botResult : statusLineResult !== 0 ? statusLineResult : launcherResult;
         process.exit(exitCode);
       } else {
@@ -2317,10 +2322,14 @@ const UPDATE_CHECK_DEST = path.join(path.dirname(LAUNCHER_DEST), 'update-check.m
 const LAUNCHER_VERSION_DEST = path.join(path.dirname(LAUNCHER_DEST), 'version.json');
 // What a global install put on this machine, so `plan2code update` reinstalls exactly that.
 const INSTALL_RECORD = path.join(os.homedir(), '.plan2code', 'install.json');
-const INSTALL_PIECES = ['skills', 'launcher', 'statusline', 'loop', 'metrics', 'bot'];
+const INSTALL_PIECES = ['skills', 'launcher', 'app', 'statusline', 'loop', 'metrics', 'bot'];
 const LAUNCHER_PICK_FOLDER_FLAG = '--pick-folder';
 
-/** `~/.plan2code/install.json` as `{ version, scope, pieces }`, or null when missing or unparsable. */
+/**
+ * `~/.plan2code/install.json` as `{ version, scope, pieces }`, or null when missing or unparsable.
+ * `skipped` lists optional pieces (the desktop app) the person said no to, so an unattended
+ * `plan2code update` does not install them; it is left out of the file while empty.
+ */
 function readInstallRecord() {
   try {
     const record = JSON.parse(fs.readFileSync(INSTALL_RECORD, 'utf8'));
@@ -2330,12 +2339,14 @@ function readInstallRecord() {
 }
 
 /** Temp file, then rename, so a crash never leaves a half-written record. A failure only skips the record. */
-function writeInstallRecord(pieces) {
+function writeInstallRecord(pieces, skipped = (readInstallRecord() || {}).skipped || []) {
   const record = {
     version: projectVersion.version,
     scope: 'global',
     pieces: [...new Set(pieces)].filter((piece) => INSTALL_PIECES.includes(piece)).sort(),
   };
+  const declined = [...new Set(skipped)].filter((piece) => INSTALL_PIECES.includes(piece) && !record.pieces.includes(piece)).sort();
+  if (declined.length > 0) record.skipped = declined;
   const tmp = `${INSTALL_RECORD}.${process.pid}.tmp`;
   try {
     fs.mkdirSync(path.dirname(INSTALL_RECORD), { recursive: true });
@@ -2352,6 +2363,12 @@ function writeInstallRecord(pieces) {
 function recordInstalled(piece) {
   const record = readInstallRecord();
   writeInstallRecord([...(record ? record.pieces : []), piece]);
+}
+
+/** Remember that an optional piece was declined. Needs a record: one holding no pieces would make update do nothing. */
+function recordSkipped(piece) {
+  const record = readInstallRecord();
+  if (record) writeInstallRecord(record.pieces, [...(record.skipped || []), piece]);
 }
 
 /** Drop a piece after its uninstall; no record means nothing to forget. */
@@ -2539,6 +2556,8 @@ function isOurShortcut(file) {
 /**
  * Put a shortcut on the desktop that runs `plan2code --pick-folder` through the shim in
  * `binDir`, so the person picks the project folder in a native dialog before the CLI opens.
+ * It is the same `plan2code` command as a typed one, so it opens the desktop app instead
+ * when the app is installed (the launcher decides; the shortcut never names the app).
  * On Windows it opens in PowerShell — PowerShell 7 (`pwsh`) when installed, Windows
  * PowerShell otherwise — running the `.ps1` shim, rather than cmd.exe running the `.cmd` one.
  */
@@ -2575,7 +2594,7 @@ function installDesktopShortcut(binDir, file) {
           P2C_FILE: file,
           P2C_SCRIPT: `${shim}.ps1`,
           P2C_ARGS: LAUNCHER_PICK_FOLDER_FLAG,
-          P2C_DESCRIPTION: 'Open the Plan2Code dashboard in Claude Code, Devin or Codex',
+          P2C_DESCRIPTION: 'Open Plan2Code: the desktop app when it is installed, otherwise your agent in a terminal',
           P2C_ICON: icon,
         }
       );
@@ -2595,7 +2614,7 @@ function installDesktopShortcut(binDir, file) {
           `# ${LAUNCHER_MARKER}`,
           'Type=Application',
           `Name=${SHORTCUT_NAME}`,
-          'Comment=Open the Plan2Code dashboard in Claude Code, Devin or Codex',
+          'Comment=Open Plan2Code: the desktop app when it is installed, otherwise your agent in a terminal',
           `Exec="${shim}" ${LAUNCHER_PICK_FOLDER_FLAG}`,
           ...(icon ? [`Icon=${icon}`] : []),
           'Terminal=true',
@@ -2746,6 +2765,210 @@ function uninstallLauncher() {
 }
 
 // ============================================================================
+// DESKTOP APP
+// ============================================================================
+
+/**
+ * The desktop app is one plain executable per system, attached to each GitHub release by
+ * .github/workflows/release-app.yml as `plan2code-app-<version>-<os>-<arch>[.exe]` beside
+ * `plan2code-app-<version>-SHA256SUMS.txt`. Installing it downloads the file for this machine,
+ * checks it against that list and puts it in ~/.plan2code/app/, where the launcher looks.
+ * PLAN2CODE_RELEASE_BASE replaces the release download URL (the tests serve a stand-in).
+ * The app is an extra on top of the skills and the command: when it cannot be installed they
+ * stay installed, and `plan2code --classic` is today's flow.
+ */
+const APP_DIR = path.join(os.homedir(), '.plan2code', 'app');
+const APP_DEST = path.join(APP_DIR, process.platform === 'win32' ? 'plan2code-app.exe' : 'plan2code-app');
+const APP_DOWNLOAD_TIMEOUT_MS = 120000;
+
+function releaseBase(version) {
+  const base = process.env.PLAN2CODE_RELEASE_BASE || `https://github.com/jparkerweb/plan2code/releases/download/v${version}`;
+  return base.replace(/\/+$/, '');
+}
+
+/** The release file for a system, or null when the app is not built for it. */
+function appAssetName(version, platform = process.platform, arch = process.arch) {
+  const system = { win32: 'windows', darwin: 'macos', linux: 'linux' }[platform];
+  const cpu = { x64: 'x64', arm64: 'arm64' }[arch];
+  if (!system || !cpu) return null;
+  return `plan2code-app-${version}-${system}-${cpu}${platform === 'win32' ? '.exe' : ''}`;
+}
+
+/** The SHA-256 a checksum list (`<hex>  <name>` or `<hex> *<name>` lines) gives for `name`, or null. */
+function checksumFor(list, name) {
+  for (const line of list.split(/\r?\n/)) {
+    const match = line.trim().match(/^([0-9a-fA-F]{64})\s+\*?(.+)$/);
+    if (match && match[2] === name) return match[1].toLowerCase();
+  }
+  return null;
+}
+
+/** The bytes at `url`; an HTTP error is thrown with its `status`. */
+async function download(url) {
+  const response = await fetch(url, { signal: AbortSignal.timeout(APP_DOWNLOAD_TIMEOUT_MS) });
+  if (!response.ok) {
+    const error = new Error(`HTTP ${response.status} from ${url}`);
+    error.status = response.status;
+    throw error;
+  }
+  return Buffer.from(await response.arrayBuffer());
+}
+
+/**
+ * Put the app at `dest`, replacing an older one. The new file is written beside it first, and
+ * the old one is renamed aside rather than overwritten: Windows will not overwrite a running
+ * program but will rename it, and the old file goes when the app next ends.
+ */
+function placeApp(bytes, dest) {
+  fs.mkdirSync(path.dirname(dest), { recursive: true });
+  const tmp = `${dest}.${process.pid}.tmp`;
+  const aside = `${dest}.old`;
+  fs.writeFileSync(tmp, bytes, { mode: 0o755 });
+  try {
+    fs.rmSync(aside, { force: true });
+  } catch {}
+  let movedAside = false;
+  try {
+    fs.renameSync(dest, aside);
+    movedAside = true;
+  } catch (error) {
+    if (error.code !== 'ENOENT') {
+      fs.rmSync(tmp, { force: true });
+      throw error;
+    }
+  }
+  try {
+    fs.renameSync(tmp, dest);
+  } catch (error) {
+    if (movedAside) {
+      try {
+        fs.renameSync(aside, dest);
+      } catch {}
+    }
+    fs.rmSync(tmp, { force: true });
+    throw error;
+  }
+  try {
+    fs.rmSync(aside, { force: true });
+  } catch {}
+  if (process.platform !== 'win32') fs.chmodSync(dest, 0o755);
+}
+
+/**
+ * Download, verify and place the desktop app for this release. Returns 0, or 1 after saying
+ * plainly why not (and that the skills and the command are fine); `outcome.app` is true or false.
+ */
+async function installDesktopApp({ quiet = false, unattended = false, outcome = {} } = {}) {
+  if (quiet) {
+    console.log(`${COLORS.YELLOW}${SYMBOLS.ACTIVE} INSTALLING THE DESKTOP APP${COLORS.RESET}`);
+  } else {
+    displaySectionHeader('DESKTOP APP', '[ INSTALL ]');
+  }
+  const version = projectVersion.version;
+  const name = appAssetName(version);
+  const base = releaseBase(version);
+  const fail = (reason) => {
+    console.log(`  ${COLORS.RED}${SYMBOLS.ERROR}${COLORS.RESET} The desktop app was not installed: ${reason}`);
+    console.log(`  ${COLORS.DIM}The skills and the plan2code command are installed and work as before; run ${COLORS.CYAN}plan2code --classic${COLORS.DIM} to stay in your terminal, or install again later.${COLORS.RESET}`);
+    console.log('');
+    outcome.app = false;
+    return 1;
+  };
+  // No build for this system or this release yet (the version is bumped on main before the
+  // release's files are attached): not a failure when unattended, since an update must not fail
+  // for it and an app that is installed stays as it is.
+  const noBuild = (reason) => {
+    if (!unattended) return fail(reason);
+    outcome.app = false;
+    outcome.appMissing = reason;
+    console.log(`  ${COLORS.DIM}${SYMBOLS.INFO} No desktop app update: ${reason}${COLORS.RESET}`);
+    console.log('');
+    return 0;
+  };
+
+  if (!name) return noBuild(`there is no desktop app build for ${process.platform}-${process.arch}.`);
+  let bytes;
+  try {
+    const list = (await download(`${base}/plan2code-app-${version}-SHA256SUMS.txt`)).toString('utf8');
+    const expected = checksumFor(list, name);
+    if (!expected) return fail(`the release's checksum list has no entry for ${name}.`);
+    bytes = await download(`${base}/${name}`);
+    const actual = crypto.createHash('sha256').update(bytes).digest('hex');
+    if (actual !== expected) {
+      return fail(`${name} does not match its checksum (expected ${expected.slice(0, 12)}..., got ${actual.slice(0, 12)}...), so it was thrown away.`);
+    }
+  } catch (error) {
+    return error.status === 404
+      ? noBuild(`release v${version} has no desktop app file for ${process.platform}-${process.arch} yet.`)
+      : fail(`could not download it (${error.message}).`);
+  }
+  try {
+    placeApp(bytes, APP_DEST);
+  } catch (error) {
+    return fail(`the file was verified but could not be put in ${APP_DIR} (${error.message}); close the app and try again.`);
+  }
+  recordInstalled('app');
+  console.log(`  ${COLORS.GREEN}${SYMBOLS.SUCCESS}${COLORS.RESET} Installed: ${APP_DEST}`);
+  console.log(`  ${COLORS.YELLOW}${SYMBOLS.WARNING}${COLORS.RESET} The app is unsigned, and it starts the agent with permission checks off. See docs/desktop-app.md for how to allow it on macOS and Windows.`);
+  console.log('');
+  outcome.app = true;
+  return 0;
+}
+
+/**
+ * The app step of a skills install. Interactive: ask (default yes), and remember a no.
+ * Unattended (`plan2code update`): yes, without asking, unless the app is already recorded (the
+ * update loop updates it as its own piece) or was declined before.
+ */
+async function offerDesktopApp({ unattended = false, outcome = {} } = {}) {
+  const record = readInstallRecord();
+  // A system the app is not built for is never asked about, or retried on every update.
+  if (!appAssetName(projectVersion.version)) {
+    if (!unattended) console.log(`  ${COLORS.DIM}${SYMBOLS.INFO} No desktop app is built for ${process.platform}-${process.arch}; skipping it.${COLORS.RESET}`);
+    return;
+  }
+  if (unattended) {
+    if (record && (record.pieces.includes('app') || (record.skipped || []).includes('app'))) return;
+    await installDesktopApp({ quiet: true, unattended, outcome });
+    return;
+  }
+  if (!process.stdin.isTTY) return;
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  const answer = await new Promise((resolve) => {
+    rl.question(`  ${COLORS.CYAN}Also install the Plan2Code desktop app?${COLORS.RESET} (Y/n): `, resolve);
+  });
+  rl.close();
+  if (answer.trim().toLowerCase().startsWith('n')) {
+    recordSkipped('app');
+    return;
+  }
+  await installDesktopApp({ quiet: true, outcome });
+}
+
+/** Remove the desktop app and what the installer left beside it. */
+function uninstallDesktopApp() {
+  displaySectionHeader('DESKTOP APP', '[ UNINSTALL ]');
+  let removed = false;
+  for (const file of [APP_DEST, `${APP_DEST}.old`]) {
+    if (!fs.existsSync(file)) continue;
+    try {
+      fs.rmSync(file, { force: true });
+      console.log(`  ${COLORS.GREEN}${SYMBOLS.SUCCESS}${COLORS.RESET} Removed: ${file}`);
+      removed = true;
+    } catch (error) {
+      console.log(`  ${COLORS.RED}${SYMBOLS.ERROR}${COLORS.RESET} Failed to remove ${file}: ${error.message}`);
+    }
+  }
+  forgetInstalled('app');
+  try {
+    fs.rmdirSync(APP_DIR);
+  } catch {}
+  if (!removed) console.log(`  ${COLORS.DIM}${SYMBOLS.INFO} No desktop app found${COLORS.RESET}`);
+  console.log('');
+  return 0;
+}
+
+// ============================================================================
 // UPDATE (`plan2code update` runs the npx install with --update)
 // ============================================================================
 
@@ -2757,6 +2980,7 @@ function uninstallLauncher() {
 const UPDATE_STEPS = {
   skills: install,
   launcher: installLauncher,
+  app: installDesktopApp,
   statusline: installStatusLine,
   loop: installPlan2CodeLoop,
   metrics: installPlan2CodeMetrics,
@@ -2786,6 +3010,8 @@ async function update({ steps = UPDATE_STEPS } = {}) {
     try {
       const code = await steps[piece]({ quiet: true, unattended: true, outcome });
       results[piece] = code === 0 ? 'updated' : 'failed: see the messages above';
+      // The release has no app file yet: the installed one stays, and the update does not fail.
+      if (piece === 'app' && code === 0 && outcome.appMissing) results[piece] = 'kept (no new desktop app file yet)';
     } catch (error) {
       results[piece] = `failed: ${error.message}`;
     }
@@ -2796,13 +3022,15 @@ async function update({ steps = UPDATE_STEPS } = {}) {
       results.skills = outcome.skills ? 'updated' : 'failed: see the messages above';
     }
     if (piece === 'skills' && outcome.launcher === true) results.launcher = 'updated';
+    // The same for the app, when install() brought it in for the first time.
+    if (piece === 'skills' && outcome.app === true) results.app = 'updated';
     console.log('');
   }
 
   console.log(`${COLORS.BRIGHT}UPDATE SUMMARY${COLORS.RESET}`);
   const failed = [];
   for (const piece of INSTALL_PIECES.filter((p) => p in results)) {
-    const ok = results[piece] === 'updated';
+    const ok = results[piece] === 'updated' || results[piece].startsWith('kept');
     if (!ok) failed.push(piece);
     console.log(`  ${ok ? COLORS.GREEN + SYMBOLS.SUCCESS : COLORS.RED + SYMBOLS.ERROR}${COLORS.RESET} ${piece}: ${results[piece]}`);
   }
@@ -2840,4 +3068,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { update, UPDATE_STEPS, INSTALL_RECORD, INSTALL_PIECES, readInstallRecord, recordInstalled, forgetInstalled, SOURCE_PROMPTS, generateSkillName };
+module.exports = { update, installDesktopApp, offerDesktopApp, recordSkipped, appAssetName, checksumFor, APP_DEST, UPDATE_STEPS, INSTALL_RECORD, INSTALL_PIECES, readInstallRecord, recordInstalled, forgetInstalled, SOURCE_PROMPTS, generateSkillName };

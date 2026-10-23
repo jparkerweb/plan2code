@@ -303,9 +303,10 @@
 .handoff-preview-next { margin: 0 0 16px; font-size: 14px; color: var(--ink); }
 .handoff-preview-actions { display: flex; flex-wrap: wrap; gap: 10px; }
 .handoff-preview-actions .btn.danger { margin-left: auto; }
-.modal.handoff-read { max-width: 720px; }
+.modal.handoff-read { width: min(960px, calc(100vw - 32px)); max-width: none; }
 .modal.handoff-read[open] { display: flex; flex-direction: column; max-height: calc(100vh - 48px); }
 .handoff-body { flex: 1; min-height: 0; overflow-y: auto; margin-top: 8px; }
+.handoff-body.md { max-width: none; }
 .modal.handoff-read .modal-actions { flex: none; }
 
 /* A spec's Delete button sits beside its chip, not inside it: a button cannot

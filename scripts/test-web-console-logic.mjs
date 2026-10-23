@@ -1144,7 +1144,8 @@ test("the dashboard matrix lights only the cards a spec state allows", () => {
       assert.equal(on(skill, scan, s), true, `${skill} on for ${s.state}`);
     }
   }
-  assert.equal(on("plan2code-1b-revise-plan", scan, sel("built")), false);
+  // Revise stays lit on a built spec: a change found in the last manual checks is still a plan change.
+  assert.equal(on("plan2code-1b-revise-plan", scan, sel("built")), true);
   assert.equal(on("plan2code-4-finalize", scan, sel("built")), true);
 
   // A diagnosed bug: Quick Task (its next step) and Plan, never the build steps.

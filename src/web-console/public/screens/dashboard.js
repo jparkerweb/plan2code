@@ -11,7 +11,7 @@ import {
   finish,
 } from "../selectors.js";
 import { hooks, page, redraw, saveNow } from "../state.js";
-import { el, approvalTip, mdInto, releasesLink, copyButton } from "../render.js";
+import { el, approvalTip, mdInto, releasesLink, copyButton, lightDismiss } from "../render.js";
 import { needsRoleNudge, ROLE_NOT_SET } from "../starters.js";
 import { looks, renderSwatches, saveLooks } from "../looks.js";
 import { RED_BANNER } from "../meter.js";
@@ -990,6 +990,7 @@ export function wireDashboard() {
   $("update-done").addEventListener("click", () => $("update-modal").close());
   $("delete-cancel").addEventListener("click", () => $("delete-modal").close());
   $("handoff-close").addEventListener("click", () => $("handoff-modal").close());
+  lightDismiss($("handoff-modal"));
   $("delete-go").addEventListener("click", deleteStep);
   $("delete-name").addEventListener("input", () => {
     $("delete-go").disabled = !deleteTarget || $("delete-name").value.trim() !== deleteTarget.name;

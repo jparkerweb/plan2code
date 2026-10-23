@@ -25,8 +25,11 @@ const NOTICE = "will use the model you last used in it";
  * `installed: "X.Y.Z"` runs an installed copy instead, as install.js lays it out: the launcher,
  * models.json and update-check.mjs in <home>/.plan2code/bin/ beside a version.json saying X.Y.Z.
  */
-function sandbox(clis, { installed } = {}) {
+function sandbox(clis, { installed, project = true } = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "p2c-launcher-"));
+  // `dir` is the launcher's cwd below; mark it as a project so the project-confirmation gate
+  // does not fire in every other test here. The gate's own tests pass `project: false`.
+  if (project) fs.writeFileSync(path.join(dir, "AGENTS.md"), "");
   const home = path.join(dir, "home");
   const bin = path.join(dir, "bin");
   fs.mkdirSync(home);
@@ -57,8 +60,31 @@ function sandbox(clis, { installed } = {}) {
       fs.chmodSync(file, 0o755);
     }
   }
+  // A stand-in for the desktop app that records its arguments like the CLIs do. It is not
+  // on PATH: the launcher finds it through PLAN2CODE_APP, set only for the run that wants it.
+  const appDir = path.join(dir, "app");
+  fs.mkdirSync(appDir);
+  const appFile = path.join(appDir, IS_WINDOWS ? "stand-in-app.cmd" : "stand-in-app");
+  if (IS_WINDOWS) {
+    // The first line leaves the sandbox folder (the app's working directory) so nothing holds it open.
+    fs.writeFileSync(appFile, `@cd /d "${os.tmpdir()}"\r\n@"${process.execPath}" "${recorder}" app %*\r\n`);
+  } else {
+    fs.writeFileSync(appFile, `#!/bin/sh\ncd "${os.tmpdir()}" && exec "${process.execPath}" "${recorder}" app "$@"\n`);
+    fs.chmodSync(appFile, 0o755);
+  }
+  // One that starts and dies at once, as a program with a missing system library does.
+  const crashFile = path.join(appDir, IS_WINDOWS ? "crashing-app.cmd" : "crashing-app");
+  if (IS_WINDOWS) {
+    fs.writeFileSync(crashFile, "@exit /b 3\r\n");
+  } else {
+    fs.writeFileSync(crashFile, "#!/bin/sh\nexit 3\n");
+    fs.chmodSync(crashFile, 0o755);
+  }
   return {
+    dir,
     home,
+    appFile,
+    crashFile,
     stateFile: path.join(home, ".plan2code", "launcher.json"),
     cacheFile: path.join(consoleHome, "update-check.json"),
     run: (args, env = {}) =>
@@ -72,8 +98,28 @@ function sandbox(clis, { installed } = {}) {
       const file = path.join(bin, `${cli}.json`);
       return fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, "utf8")) : null;
     },
+    // The app starts detached and the launcher exits at once, so its record can land a moment later.
+    appArgs: () => {
+      const file = path.join(bin, "app.json");
+      for (let waited = 0; waited < 10000 && !fs.existsSync(file); waited += 50) {
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50);
+      }
+      return fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, "utf8")) : null;
+    },
+    appExists: () => fs.existsSync(path.join(bin, "app.json")),
     // A detached release-check refresh may still be writing its cache; retry rather than fail.
-    cleanup: () => fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }),
+    // The stand-in app runs detached with the sandbox as its folder, so on Windows it can hold
+    // the directory for a moment after its record lands, and rmSync's own retries give up on
+    // that EPERM at once. Try again for a few seconds; a temp folder left behind is harmless.
+    cleanup: () => {
+      for (let attempt = 0; attempt < 25; attempt++) {
+        try {
+          return fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+        } catch {
+          Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 200);
+        }
+      }
+    },
   };
 }
 
@@ -379,3 +425,185 @@ test("launcher: a piped run prints no escape codes, with or without NO_COLOR", (
   }
 });
 
+
+// The desktop app hand-off. The stand-in app is found through PLAN2CODE_APP; "no display" is
+// only something a Linux run can ask for, since Windows and macOS always count as having one.
+const NO_DISPLAY = { DISPLAY: "", WAYLAND_DISPLAY: "" };
+const CLASSIC_ARGS = ["/plan2code", "--permission-mode", "bypassPermissions"];
+
+test("launcher app: with no app installed the agent starts exactly as before", (t) => {
+  const box = sandbox(["claude"]);
+  t.after(box.cleanup);
+  const result = box.run([]);
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(box.argsOf("claude"), CLASSIC_ARGS);
+  assert.equal(box.appExists(), false);
+});
+
+test("launcher app: --classic runs today's flow even with the app installed, and is never forwarded", (t) => {
+  const box = sandbox(["claude"]);
+  t.after(box.cleanup);
+  const result = box.run(["--classic", "--verbose"], { PLAN2CODE_APP: box.appFile });
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(box.argsOf("claude"), [...CLASSIC_ARGS, "--verbose"]);
+  assert.equal(box.appExists(), false);
+});
+
+test("launcher app: no display on Linux runs today's flow even with the app installed", { skip: process.platform !== "linux" }, (t) => {
+  const box = sandbox(["claude"]);
+  t.after(box.cleanup);
+  const result = box.run([], { PLAN2CODE_APP: box.appFile, ...NO_DISPLAY });
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(box.argsOf("claude"), CLASSIC_ARGS);
+  assert.equal(box.appExists(), false);
+});
+
+test("launcher app: with the app and a display it starts the app on the folder, agent and model, and no agent", (t) => {
+  const box = sandbox(["claude", "codex"]);
+  t.after(box.cleanup);
+  const display = process.platform === "linux" ? { DISPLAY: ":0" } : {};
+  const result = box.run(["--cli", "codex", "--model", "gpt-5"], { PLAN2CODE_APP: box.appFile, ...display });
+  assert.equal(result.status, 0, result.stderr);
+  const appArgs = box.appArgs();
+  assert.ok(appArgs, "the stand-in app was never started");
+  // The launcher runs in the sandbox folder, so that folder is the project.
+  assert.equal(appArgs[0], "--project");
+  assert.equal(fs.realpathSync(appArgs[1]), fs.realpathSync(box.dir));
+  assert.deepEqual(appArgs.slice(2), ["--agent", "codex", "--model", "gpt-5"]);
+  assert.equal(box.argsOf("claude"), null);
+  assert.equal(box.argsOf("codex"), null);
+  assert.match(result.stdout, /Opened the Plan2Code app/);
+});
+
+test("launcher app: a model is left out of the app's arguments when none was chosen", (t) => {
+  const box = sandbox(["claude"]);
+  t.after(box.cleanup);
+  const display = process.platform === "linux" ? { DISPLAY: ":0" } : {};
+  const result = box.run([], { PLAN2CODE_APP: box.appFile, ...display });
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(box.appArgs().slice(2), ["--agent", "claude"]);
+});
+
+test("launcher app: an app that cannot start falls back to the terminal flow", (t) => {
+  const box = sandbox(["claude"]);
+  t.after(box.cleanup);
+  const display = process.platform === "linux" ? { DISPLAY: ":0" } : {};
+  // Present but not runnable (no execute bit on POSIX, not a program on Windows).
+  const broken = path.join(path.dirname(box.appFile), IS_WINDOWS ? "broken.exe" : "broken");
+  fs.writeFileSync(broken, "not a program");
+  const result = box.run([], { PLAN2CODE_APP: broken, ...display });
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stderr, /could not start the app/);
+  assert.deepEqual(box.argsOf("claude"), CLASSIC_ARGS);
+});
+
+test("launcher app: modelFrom reads --model, --model= and Codex's -m", () => {
+  const { modelFrom } = require(LAUNCHER);
+  assert.equal(modelFrom(["--model", "x"], "claude"), "x");
+  assert.equal(modelFrom(["--model=x"], "claude"), "x");
+  assert.equal(modelFrom(["-m", "x"], "codex"), "x");
+  assert.equal(modelFrom(["-m=x"], "codex"), "x");
+  assert.equal(modelFrom(["-m", "x"], "claude"), null);
+  assert.equal(modelFrom(["--verbose"], "claude"), null);
+});
+
+test("launcher app: an app that starts and then exits with a failure falls back to the terminal flow", (t) => {
+  const box = sandbox(["claude"]);
+  t.after(box.cleanup);
+  const display = process.platform === "linux" ? { DISPLAY: ":0" } : {};
+  const result = box.run([], { PLAN2CODE_APP: box.crashFile, ...display });
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stderr, /the app exited at once \(code 3\)/);
+  assert.deepEqual(box.argsOf("claude"), CLASSIC_ARGS);
+  assert.doesNotMatch(result.stdout, /Opened the Plan2Code app/);
+});
+
+test("launcher app: hasDisplay refuses an SSH session on Windows and macOS, but Linux only cares about DISPLAY", () => {
+  const launcherPath = require.resolve(LAUNCHER);
+  const realPlatform = process.platform;
+  const saved = {
+    DISPLAY: process.env.DISPLAY,
+    WAYLAND_DISPLAY: process.env.WAYLAND_DISPLAY,
+    SSH_CONNECTION: process.env.SSH_CONNECTION,
+    SSH_TTY: process.env.SSH_TTY,
+  };
+  for (const key of Object.keys(saved)) delete process.env[key];
+
+  // IS_WINDOWS/IS_MAC are consts captured from process.platform at require time, so testing a
+  // platform other than this machine's needs a fresh module instance loaded under a faked one.
+  function hasDisplayOn(platform) {
+    Object.defineProperty(process, "platform", { value: platform, configurable: true });
+    delete require.cache[launcherPath];
+    try {
+      return require(LAUNCHER).hasDisplay();
+    } finally {
+      Object.defineProperty(process, "platform", { value: realPlatform, configurable: true });
+      delete require.cache[launcherPath];
+    }
+  }
+
+  try {
+    for (const platform of ["win32", "darwin"]) {
+      assert.equal(hasDisplayOn(platform), true, platform);
+      process.env.SSH_CONNECTION = "10.0.0.1 51000 10.0.0.2 22";
+      assert.equal(hasDisplayOn(platform), false, `${platform} SSH_CONNECTION`);
+      delete process.env.SSH_CONNECTION;
+      process.env.SSH_TTY = "/dev/ttys000";
+      assert.equal(hasDisplayOn(platform), false, `${platform} SSH_TTY`);
+      delete process.env.SSH_TTY;
+    }
+    // Linux never looks at the SSH env vars; DISPLAY/WAYLAND_DISPLAY alone still decides.
+    process.env.SSH_CONNECTION = "10.0.0.1 51000 10.0.0.2 22";
+    assert.equal(hasDisplayOn("linux"), false);
+    process.env.DISPLAY = ":0";
+    assert.equal(hasDisplayOn("linux"), true);
+    delete process.env.DISPLAY;
+    delete process.env.SSH_CONNECTION;
+  } finally {
+    for (const [key, value] of Object.entries(saved)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+    // Re-require with the real platform so later tests in this file see the host's own module.
+    delete require.cache[launcherPath];
+    require(LAUNCHER);
+  }
+});
+
+test("launcher app: looksLikeProject checks for a .git entry, AGENTS.md or a specs folder", () => {
+  const { looksLikeProject } = require(LAUNCHER);
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "p2c-project-"));
+  try {
+    assert.equal(looksLikeProject(dir), false);
+    fs.writeFileSync(path.join(dir, "AGENTS.md"), "");
+    assert.equal(looksLikeProject(dir), true);
+    fs.rmSync(path.join(dir, "AGENTS.md"));
+    // A worktree's .git is a file, not a directory, and still counts.
+    fs.writeFileSync(path.join(dir, ".git"), "gitdir: ../elsewhere/.git/worktrees/x\n");
+    assert.equal(looksLikeProject(dir), true);
+    fs.rmSync(path.join(dir, ".git"));
+    assert.equal(looksLikeProject(dir), false);
+    fs.mkdirSync(path.join(dir, "specs"));
+    assert.equal(looksLikeProject(dir), true);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("launcher app: a folder that doesn't look like a project is refused without a terminal to confirm it", (t) => {
+  const box = sandbox(["claude"], { project: false });
+  t.after(box.cleanup);
+  const result = box.run([]);
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stderr, /doesn't look like a project/);
+  assert.equal(box.argsOf("claude"), null);
+});
+
+test("launcher app: an AGENTS.md marks the folder as a project, so the agent starts as usual", (t) => {
+  const box = sandbox(["claude"]);
+  t.after(box.cleanup);
+  const result = box.run([]);
+  assert.equal(result.status, 0, result.stderr);
+  assert.doesNotMatch(result.stderr, /doesn't look like a project/);
+  assert.notEqual(box.argsOf("claude"), null);
+});
