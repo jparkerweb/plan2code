@@ -1,0 +1,101 @@
+name: app
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  app:
+    name: app (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    defaults:
+      run:
+        working-directory: plan2code-app
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - uses: actions/setup-node@v4.4.0
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: plan2code-app/package-lock.json
+      - name: Check the versions agree
+        working-directory: .
+        run: node scripts/check-versions.mjs
+      - name: Install the pinned Rust toolchain
+        shell: bash
+        # clippy and rustfmt are not part of rust-toolchain.toml's minimal profile.
+        run: rustup toolchain install "$(grep channel rust-toolchain.toml | cut -d '"' -f2)" --profile minimal --component clippy --component rustfmt
+      - name: Cache the Cargo registry and build output
+        uses: actions/cache@v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            plan2code-app/target
+          key: cargo-${{ runner.os }}-${{ hashFiles('plan2code-app/Cargo.lock') }}
+          restore-keys: |
+            cargo-${{ runner.os }}-
+      - name: Install Linux system packages
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev xvfb
+      - name: Install the app's packages
+        run: npm ci
+      - name: Vendor the xterm files cargo needs
+        # `tauri build` runs this itself (beforeBuildCommand in tauri.conf.json); the cargo
+        # steps below call straight into cargo and skip that, so they need it run by hand.
+        run: node scripts/vendor.mjs
+      - name: Format check
+        run: cargo fmt --check
+      - name: Lint
+        run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: Test
+        run: cargo test --workspace
+      - name: Build
+        run: cargo build --workspace
+      - name: Build the app (tauri build --no-bundle)
+        run: npm run tauri -- build --no-bundle
+      - name: Smoke-test the built app against the fake agent
+        shell: bash
+        # Points the real app at tests/agent_manager.rs's fake-agent fixture (already built
+        # by the "Build" step above, in target/debug) and checks the real binary comes up and
+        # stays up for a few seconds instead of crashing. Linux has no display by default.
+        run: |
+          exe=plan2code-app
+          agent=fake-agent
+          if [ "${{ runner.os }}" = "Windows" ]; then exe="$exe.exe"; agent="$agent.exe"; fi
+          export PLAN2CODE_APP_AGENT_BIN="$(pwd)/target/debug/$agent"
+          launch=("target/release/$exe")
+          if [ "${{ runner.os }}" = "Linux" ]; then launch=(xvfb-run -a "target/release/$exe"); fi
+          "${launch[@]}" &
+          pid=$!
+          sleep 5
+          if kill -0 "$pid" 2>/dev/null; then
+            echo "plan2code-app is still running after 5s; smoke test passed"
+            kill "$pid"
+          else
+            wait "$pid"
+            echo "plan2code-app exited within 5s (exit code $?); smoke test failed"
+            exit 1
+          fi
+
+  node-tests:
+    name: npm test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - uses: actions/setup-node@v4.4.0
+        with:
+          node-version: 20
+      - run: npm install
+      - run: npm test

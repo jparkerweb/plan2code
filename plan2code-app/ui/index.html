@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self' ipc: http://ipc.localhost; frame-src http://127.0.0.1:*; object-src 'none'; base-uri 'none'">
+  <title>Plan2Code</title>
+  <link rel="stylesheet" href="vendor/xterm.css">
+  <style>
+    html, body { margin: 0; height: 100%; font-family: system-ui, sans-serif; background: #1e1e1e; color: #ddd; }
+    body { display: flex; flex-direction: column; overflow: hidden; }
+
+    #bar { flex: none; display: flex; flex-direction: column; border-bottom: 1px solid #444; }
+    #bar-top { height: 32px; flex: none; display: flex; align-items: center; gap: 12px; padding: 0 10px; white-space: nowrap; overflow-x: auto; overflow-y: hidden; }
+    #bar-status { flex: none; display: flex; align-items: center; gap: 12px; padding: 3px 10px; font-size: 12px; white-space: nowrap; overflow-x: auto; overflow-y: hidden; border-top: 1px solid #2a2a2a; }
+    #title { font-weight: 600; }
+    #project-dir { color: #9ab; overflow: hidden; text-overflow: ellipsis; min-width: 0; max-width: 40%; }
+    #current-page { color: #8c8; }
+    #current-page:not(:empty)::before { content: "page: "; color: #666; }
+    #agent-name { color: #9ab; }
+    #agent-name:not(:empty)::before { content: "agent: "; color: #666; }
+    #console-status, #agent-status { color: #d7ba7d; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+    #agent-restart[hidden], #change-agent[hidden] { display: none; }
+    .bar-slot { flex: none; }
+    #permissions-note { color: #888; }
+    #context-nudge { display: flex; align-items: center; gap: 6px; color: #d7ba7d; font-size: 12px; }
+    #context-nudge[hidden] { display: none; }
+    #version-update { display: flex; align-items: center; gap: 6px; color: #d7ba7d; font-size: 12px; }
+    #version-update[hidden], #version-update-button[hidden] { display: none; }
+    #bar-slot-meter { display: flex; align-items: center; gap: 6px; color: #9ab; font-size: 12px; }
+    #bar-slot-meter:empty { display: none; }
+    .meter-track { display: inline-block; width: 64px; height: 8px; border: 1px solid #666; border-radius: 2px; overflow: hidden; background: #2a2a2a; }
+    .meter-track.estimate { border-style: dashed; }
+    .meter-fill { display: block; height: 100%; background: #6a9955; }
+    .meter-track.estimate .meter-fill { background: repeating-linear-gradient(45deg, #6a9955 0 4px, transparent 4px 8px); }
+    .meter-tag { color: #d7ba7d; font-style: italic; }
+
+    #workspace { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+    #workspace.dock-right { flex-direction: row; }
+
+    #dashboard { flex: 1; min-height: 0; min-width: 0; position: relative; }
+    #console-frame { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: #1e1e1e; }
+    #dashboard-state { position: absolute; inset: 0; z-index: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; background: #1e1e1e; text-align: center; padding: 16px; box-sizing: border-box; }
+    #dashboard-state[hidden] { display: none; }
+    #dashboard-state-text { margin: 0; max-width: 60ch; overflow-wrap: anywhere; color: #bbb; }
+
+    #launch-card {
+      position: absolute; inset: 0; z-index: 1; display: flex; flex-direction: column;
+      align-items: stretch; justify-content: center; gap: 10px; background: #1e1e1e;
+      padding: 24px; box-sizing: border-box; width: min(360px, 100%); margin: 0 auto;
+    }
+    #launch-card[hidden] { display: none; }
+    #launch-card h2 { margin: 0 0 6px; font-size: 17px; text-align: center; }
+    #launch-card label { font-size: 12px; color: #9ab; }
+    #launch-card select, #launch-card input[type="text"] {
+      width: 100%; box-sizing: border-box; margin: 4px 0 2px; padding: 6px 8px;
+      background: #2a2a2a; color: #ddd; border: 1px solid #555; border-radius: 4px; font: inherit;
+    }
+    #launch-missing { margin: 0; font-size: 12px; color: #d7ba7d; }
+    #launch-missing code { color: #ddd; }
+    #launch-effort-row[hidden] { display: none; }
+    #launch-bypass-row { display: flex; align-items: center; gap: 8px; color: #ccc; font-size: 13px; cursor: pointer; }
+    #launch-bypass-row input { margin: 0; }
+    #launch-bypass-warning { margin: 0; font-size: 12px; color: #d7ba7d; }
+    #launch-bypass-warning[hidden] { display: none; }
+    #launch-start {
+      margin-top: 6px; padding: 8px; background: #2d6a4f; color: #fff; border: 0; border-radius: 4px;
+      font: inherit; font-weight: 600; cursor: pointer;
+    }
+    #launch-start:hover { background: #357a5c; }
+    #launch-start:disabled { background: #444; color: #888; cursor: not-allowed; }
+
+    #first-run {
+      position: absolute; inset: 0; z-index: 1; display: flex; flex-direction: column;
+      align-items: stretch; justify-content: center; gap: 14px; background: #1e1e1e;
+      padding: 24px; box-sizing: border-box; width: min(420px, 100%); margin: 0 auto;
+    }
+    #first-run[hidden] { display: none; }
+    #first-run h2 { margin: 0; font-size: 17px; text-align: center; }
+    #first-run-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+    .first-run-row { display: flex; align-items: flex-start; gap: 8px; font-size: 13px; }
+    .first-run-mark { flex: none; width: 16px; text-align: center; font-weight: 700; }
+    .first-run-row.is-pass .first-run-mark { color: #6a9955; }
+    .first-run-row.is-fail .first-run-mark { color: #d7ba7d; }
+    .first-run-body { flex: 1; min-width: 0; }
+    .first-run-title { color: #ddd; }
+    .first-run-detail { color: #9ab; font-size: 12px; margin-top: 2px; }
+    .first-run-detail code { color: #ddd; }
+    .first-run-row button {
+      margin-top: 4px; background: none; border: 1px solid #555; color: #ccc; border-radius: 3px;
+      font: inherit; font-size: 12px; padding: 3px 8px; cursor: pointer;
+    }
+    .first-run-row button:hover { background: #333; }
+    #first-run-start {
+      margin-top: 6px; padding: 8px; background: #2d6a4f; color: #fff; border: 0; border-radius: 4px;
+      font: inherit; font-weight: 600; cursor: pointer;
+    }
+    #first-run-start:hover { background: #357a5c; }
+    #first-run-start:disabled { background: #444; color: #888; cursor: not-allowed; }
+
+    #term-handle { flex: none; background: #2a2a2a; }
+    #term-handle:hover { background: #3d3d3d; }
+    #term-handle[hidden] { display: none; }
+    #workspace:not(.dock-right) #term-handle { height: 6px; cursor: row-resize; }
+    #workspace.dock-right #term-handle { width: 6px; cursor: col-resize; }
+
+    #term-panel { flex: none; display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+    #workspace:not(.dock-right) #term-panel { border-top: 1px solid #444; }
+    #workspace.dock-right #term-panel { border-left: 1px solid #444; }
+    #term-panel.collapsed { height: 28px !important; }
+    #workspace.dock-right #term-panel.collapsed { width: 28px !important; height: auto !important; }
+    #term-panel.collapsed #term { display: none; }
+    #term-toolbar { flex: none; display: flex; align-items: center; gap: 6px; padding: 3px 6px; background: #252525; font-size: 11px; }
+    #workspace.dock-right #term-toolbar { flex-direction: column; align-items: stretch; }
+    #term-toolbar-spacer { flex: 1; min-height: 0; }
+    #term-toolbar button {
+      background: none; border: 1px solid #555; color: #ccc; border-radius: 3px;
+      font-size: 11px; padding: 2px 6px; cursor: pointer; font-family: inherit;
+    }
+    #term-toolbar button:hover { background: #333; }
+    #term-toolbar button[aria-pressed="true"] { color: #fff; border-color: #888; }
+    #term-panel.collapsed #term-dock, #term-panel.collapsed #term-maximize { display: none; }
+    #term-badge { color: #d7ba7d; font-size: 14px; line-height: 1; }
+    #term-badge[hidden] { display: none; }
+    #term { flex: 1; min-height: 0; min-width: 0; padding: 4px; }
+  </style>
+</head>
+<body>
+  <header id="bar">
+    <div id="bar-top">
+      <span id="title">Plan2Code</span>
+      <span id="project-dir"></span>
+      <span id="bar-slot-restart" class="bar-slot"><button id="agent-restart" hidden>Restart</button></span>
+      <span id="bar-slot-change-agent" class="bar-slot"><button id="change-agent" hidden>Change agent</button></span>
+      <span id="bar-slot-change-project" class="bar-slot"><button id="change-project">Change project</button></span>
+    </div>
+    <div id="bar-status">
+      <span id="current-page" title="The page the agent opened"></span>
+      <span id="agent-name"></span>
+      <span id="agent-status" role="status"></span>
+      <span id="console-status"></span>
+      <button id="console-again" hidden>Start it again</button>
+      <span id="context-nudge" class="bar-slot" hidden>
+        <span>Context is getting full: consider Restart</span>
+        <button id="context-restart">Restart</button>
+      </span>
+      <!-- Shown only when the app and the installed skills are on different versions. -->
+      <span id="version-update" class="bar-slot" hidden>
+        <span id="version-update-text"></span>
+        <button id="version-update-button">Update skills</button>
+        <button id="version-update-restart" hidden>Restart the console</button>
+      </span>
+      <span id="bar-slot-meter" class="bar-slot"></span>
+      <!-- Shown only while an agent is running, naming the real mode it started with. -->
+      <span id="permissions-note" hidden></span>
+    </div>
+  </header>
+  <div id="workspace">
+    <main id="dashboard">
+      <iframe id="console-frame" title="Plan2Code console dashboard"></iframe>
+      <div id="dashboard-state" hidden>
+        <p id="dashboard-state-text"></p>
+        <span>
+          <button id="dashboard-state-button" hidden></button>
+          <button id="dashboard-state-cancel" hidden>Cancel</button>
+        </span>
+      </div>
+      <div id="first-run" hidden>
+        <h2>Before you start</h2>
+        <ul id="first-run-list"></ul>
+        <button id="first-run-start" type="button" disabled>Start</button>
+      </div>
+      <form id="launch-card" hidden>
+        <h2>Start an agent</h2>
+        <label for="launch-agent">Agent</label>
+        <select id="launch-agent">
+          <option value="claude">Claude Code</option>
+          <option value="devin">Devin</option>
+          <option value="codex">Codex</option>
+        </select>
+        <p id="launch-missing" hidden></p>
+        <label for="launch-model">Model</label>
+        <input id="launch-model" type="text" placeholder="Default (your account setting)" autocomplete="off">
+        <div id="launch-effort-row">
+          <label for="launch-effort">Effort</label>
+          <select id="launch-effort"></select>
+        </div>
+        <label id="launch-bypass-row">
+          <input id="launch-bypass" type="checkbox">
+          Turn permission checks off for this agent
+        </label>
+        <p id="launch-bypass-warning" hidden>Permission checks will be off: the agent can run commands and change files without asking first.</p>
+        <button id="launch-start" type="submit">Start agent</button>
+      </form>
+    </main>
+    <div id="term-handle" title="Drag to resize the terminal panel"></div>
+    <section id="term-panel">
+      <div id="term-toolbar">
+        <span id="term-badge" title="The agent has been quiet a while" hidden>●</span>
+        <span id="term-toolbar-spacer"></span>
+        <button id="term-dock" type="button">Dock right</button>
+        <button id="term-maximize" type="button" aria-pressed="false">Maximize</button>
+        <button id="term-collapse" type="button" aria-pressed="false">Collapse</button>
+      </div>
+      <div id="term"></div>
+    </section>
+  </div>
+  <script src="vendor/xterm.js"></script>
+  <script src="vendor/addon-fit.js"></script>
+  <script type="module" src="app.js"></script>
+</body>
+</html>

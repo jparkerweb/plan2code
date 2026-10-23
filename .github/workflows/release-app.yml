@@ -1,0 +1,119 @@
+name: release-app
+
+# Builds the desktop app on four systems when a GitHub release is published, or a v* tag is
+# pushed ahead of one, and attaches one file per system, named
+# plan2code-app-<version>-<os>-<arch>[.exe], plus one checksum file
+# (plan2code-app-<version>-SHA256SUMS.txt). install.js fetches the matching file and checks it
+# against that list. Linux ships the plain binary, not an AppImage: docs/desktop-app.md documents
+# its WebKitGTK 4.1 dependency instead. The first release is unsigned: docs/desktop-app.md says
+# how to allow it.
+
+on:
+  release:
+    types: [published]
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: build (${{ matrix.label }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { runner: windows-latest, label: windows-x64, built: plan2code-app.exe, suffix: .exe }
+          - { runner: macos-latest, label: macos-arm64, built: plan2code-app, suffix: '' }
+          - { runner: macos-13, label: macos-x64, built: plan2code-app, suffix: '' }
+          - { runner: ubuntu-latest, label: linux-x64, built: plan2code-app, suffix: '' }
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - uses: actions/setup-node@v4.4.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: plan2code-app/package-lock.json
+      - name: Check the versions agree with the release tag
+        env:
+          TAG: ${{ github.event.release.tag_name || github.ref_name }}
+        run: node scripts/check-versions.mjs --tag "$TAG"
+      - name: Install the pinned Rust toolchain
+        working-directory: plan2code-app
+        run: rustup toolchain install "$(grep channel rust-toolchain.toml | cut -d '"' -f2)" --profile minimal
+      - name: Cache the Cargo registry and build output
+        uses: actions/cache@v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            plan2code-app/target
+          key: cargo-release-${{ matrix.label }}-${{ hashFiles('plan2code-app/Cargo.lock') }}
+          restore-keys: |
+            cargo-release-${{ matrix.label }}-
+      - name: Install Linux system packages
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
+      - name: Install the app's packages
+        working-directory: plan2code-app
+        run: npm ci
+      # One plain executable per system: the web page is built into it, so it needs no installer.
+      - name: Build
+        working-directory: plan2code-app
+        run: npm run tauri -- build --no-bundle
+      - name: Name the file
+        run: |
+          VERSION="$(node -p "require('./plan2code-app/src-tauri/tauri.conf.json').version")"
+          mkdir -p dist
+          cp "plan2code-app/target/release/${{ matrix.built }}" "dist/plan2code-app-${VERSION}-${{ matrix.label }}${{ matrix.suffix }}"
+      - uses: actions/upload-artifact@v4.6.2
+        with:
+          name: app-${{ matrix.label }}
+          path: dist/*
+          if-no-files-found: error
+
+  publish:
+    name: attach to the release
+    needs: build
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ github.event.release.tag_name || github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - uses: actions/download-artifact@v4.3.0
+        with:
+          path: dist
+          pattern: app-*
+          merge-multiple: true
+      - name: Verify every system's file is here
+        run: |
+          VERSION="$(node -p "require('./plan2code-app/src-tauri/tauri.conf.json').version")"
+          cd dist
+          missing=0
+          for name in "plan2code-app-${VERSION}-windows-x64.exe" "plan2code-app-${VERSION}-macos-arm64" "plan2code-app-${VERSION}-macos-x64" "plan2code-app-${VERSION}-linux-x64"; do
+            if [ ! -f "$name" ]; then
+              echo "::error::missing release asset $name"
+              missing=1
+            fi
+          done
+          [ "$missing" -eq 0 ]
+      - name: Write the checksum file
+        run: |
+          VERSION="$(node -p "require('./plan2code-app/src-tauri/tauri.conf.json').version")"
+          cd dist
+          sha256sum plan2code-app-* > "plan2code-app-${VERSION}-SHA256SUMS.txt"
+          cat "plan2code-app-${VERSION}-SHA256SUMS.txt"
+      - name: Make sure the release exists
+        # A tag push alone names no release; create one (same tag, generated notes) so the
+        # upload below always has somewhere to go, whichever trigger ran it.
+        run: gh release view "$TAG" || gh release create "$TAG" --title "$TAG" --generate-notes
+      - name: Attach to the release
+        run: gh release upload "$TAG" dist/* --clobber

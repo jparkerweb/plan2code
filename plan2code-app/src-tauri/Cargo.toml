@@ -1,0 +1,30 @@
+[package]
+name = "plan2code-app"
+version = "3.0.0"
+description = "Plan2Code desktop app"
+edition = "2021"
+publish = false
+
+[lib]
+name = "plan2code_app_lib"
+path = "src/lib.rs"
+
+[build-dependencies]
+tauri-build = { version = "2.5", features = [] }
+
+[dependencies]
+tauri = { version = "2.12", features = [] }
+tauri-plugin-dialog = "2"
+portable-pty = "0.9.0"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+chrono = "0.4"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[target.'cfg(windows)'.dependencies]
+# Already pulled in by portable-pty itself; named directly here only for the
+# Job Object APIs it does not expose (ending a `cmd /c` npm shim's whole
+# process tree, not just the shim).
+winapi = { version = "0.3.9", features = ["handleapi", "jobapi2", "minwindef", "ntdef", "winnt"] }
