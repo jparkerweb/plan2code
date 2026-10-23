@@ -27,7 +27,7 @@ jobs:
         include:
           - { runner: windows-latest, label: windows-x64, built: plan2code-app.exe, suffix: .exe }
           - { runner: macos-latest, label: macos-arm64, built: plan2code-app, suffix: '' }
-          - { runner: macos-13, label: macos-x64, built: plan2code-app, suffix: '' }
+          - { runner: macos-15-intel, label: macos-x64, built: plan2code-app, suffix: '' }
           - { runner: ubuntu-latest, label: linux-x64, built: plan2code-app, suffix: '' }
     defaults:
       run:
