@@ -207,6 +207,28 @@ test("Stop with a handoff sends __stop with handoff, and the paused finish and s
   assert.ok(await main.locator("code").filter({ hasText: /^\/plan2code-1-plan --web$/ }).count(), "the resume command is gone");
 });
 
+// Someone who presses Stop and steps away comes back to an answer: the
+// wrapping-up dialog turns into Done once the stop lands and stays up until
+// it is closed, rather than quietly going away.
+test("the wrapping-up dialog says Done when the stop lands, and stays until closed", async (t) => {
+  const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_QUESTION });
+  await s.page.click("#btn-stop");
+  await s.page.locator("#stop-go").click();
+  const dlg = s.page.locator("#stopping-modal");
+  await dlg.waitFor();
+  assert.equal(await s.page.locator("#stopping-title").textContent(), "Wrapping up");
+  assert.doesNotMatch(await dlg.innerText(), /close the (window|tab)/i, "no advice to close the page mid-stop");
+
+  collect(s);
+  s.post({ settle: true, finish: { headline: "Paused at the naming question", body: "Your place is saved.", command: "/plan2code-1-plan" } });
+  await s.page.locator("#main").getByRole("heading", { name: "Paused at the naming question" }).waitFor();
+  await s.page.locator("#stopping-title").getByText("Done", { exact: true }).waitFor();
+  assert.equal(await s.page.locator("#stop-steps li.is-done").count(), 3, "every step ticked");
+  assert.ok(await holds(async () => dlg.isVisible(), 2000), "Done stays up on its own");
+  await s.page.locator("#stopping-hide").getByText("Close", { exact: true }).click();
+  await dlg.waitFor({ state: "hidden" });
+});
+
 test("a page that loses its server goes offline, and after a resume it shows the session again with the unsent answer still typed", async (t) => {
   const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_QUESTION });
   const field = () => itemCard(s.page, "q1").locator("textarea, input[type=text]").first();

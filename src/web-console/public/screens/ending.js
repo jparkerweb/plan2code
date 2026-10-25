@@ -497,6 +497,10 @@ async function sendAfterBuild(kind, launch = null) {
 }
 
 let stoppingHidden = false;
+// The wrapping-up dialog stays up once the stop has landed, saying it is done,
+// until it is closed: someone who pressed Stop and stepped away comes back to
+// an answer rather than to a dialog that quietly went away.
+let stopDoneShown = false;
 
 // A stop is under way if this browser sent one, or if the server is holding
 // one nobody has collected: the second covers a reload on a resumed session,
@@ -690,18 +694,21 @@ async function stopSession(handoff = false) {
 // whether the finish has landed.
 export function renderStopping() {
   const dlg = $("stopping-modal");
+  if (stopDoneShown) return;
   const stopping = page.S && stopInProgress();
   if (!stopping) {
     if (dlg.open) dlg.close();
     return;
   }
   // The finish is the end of it: the hand-off card on the page says the rest.
+  // Shown, the dialog says so and waits to be closed; hidden, it stays hidden.
   if (finish()) {
     page.local.stopping = null;
     saveNow();
-    if (dlg.open) dlg.close();
+    if (dlg.open) showStopDone(stopping.answers);
     return;
   }
+  setStoppingDone(false);
 
   const sent = stopping.answers;
   const collected = !page.pendingResult;
@@ -717,19 +724,7 @@ export function renderStopping() {
     },
     { text: "Saving your place and writing the command to pick it up", state: collected ? (stuck ? "stuck" : "now") : "later" },
   ];
-  const list = $("stop-steps");
-  list.replaceChildren(
-    ...steps.map((s) => {
-      const li = el("li", "is-" + s.state);
-      li.appendChild(
-        s.state === "now"
-          ? el("span", "spinner tiny")
-          : el("span", "stop-mark", s.state === "done" ? "✓" : s.state === "stuck" ? "!" : "·")
-      );
-      li.appendChild(el("span", null, s.text));
-      return li;
-    })
-  );
+  drawStopSteps(steps);
 
   const extra = $("stop-extra");
   extra.replaceChildren();
@@ -756,12 +751,54 @@ export function renderStopping() {
         "stop-note",
         agentWorking() && !collected
           ? "Plan2Code is in the middle of something. It stops as soon as that is done."
-          : "This usually takes a moment. You can close the tab if you need to: the command also appears in the terminal."
+          : "This usually takes a moment."
       )
     );
   }
 
   if (!stoppingHidden && !dlg.open) dlg.showModal();
+}
+
+function drawStopSteps(steps) {
+  $("stop-steps").replaceChildren(
+    ...steps.map((s) => {
+      const li = el("li", "is-" + s.state);
+      li.appendChild(
+        s.state === "now"
+          ? el("span", "spinner tiny")
+          : el("span", "stop-mark", s.state === "done" ? "✓" : s.state === "stuck" ? "!" : "·")
+      );
+      li.appendChild(el("span", null, s.text));
+      return li;
+    })
+  );
+}
+
+// The title and the button, between wrapping up and done.
+function setStoppingDone(done) {
+  $("stopping-title").textContent = done ? "Done" : "Wrapping up";
+  $("stopping-hide").textContent = done ? "Close" : "Back to the page";
+}
+
+// The stop has landed: every step ticked, and a line on where the rest is.
+function showStopDone(sent) {
+  stopDoneShown = true;
+  setStoppingDone(true);
+  drawStopSteps([
+    { text: sent ? `Sent your ${sent === 1 ? "answer" : sent + " answers"} and the stop` : "Sent the stop", state: "done" },
+    { text: "Plan2Code picked it up", state: "done" },
+    { text: "Saved your place and wrote the command to pick it up", state: "done" },
+  ]);
+  $("stop-extra").replaceChildren(
+    el("p", "stop-note stop-done-note", "The session is stopped. The page behind this shows what was saved and the command to pick it up.")
+  );
+}
+
+// Closed by its button or Esc: done is read, so the next stop starts fresh.
+function closeStopping() {
+  stoppingHidden = true;
+  stopDoneShown = false;
+  setStoppingDone(false);
 }
 
 // The top bar's way home and Stop, wired once at start-up.
@@ -774,12 +811,12 @@ export function wireEnding() {
   $("stop-handoff").addEventListener("click", () => stopSession(true));
   $("stop-go").addEventListener("click", () => stopSession(false));
   $("stopping-hide").addEventListener("click", () => {
-    stoppingHidden = true;
+    closeStopping();
     $("stopping-modal").close();
   });
   // Esc on a native dialog closes it without our say; count that as hiding, or
   // the next render would open it straight back up.
-  $("stopping-modal").addEventListener("cancel", () => (stoppingHidden = true));
+  $("stopping-modal").addEventListener("cancel", closeStopping);
 }
 
 // The three stop-related controls, drawn again when the agent comes or goes.
