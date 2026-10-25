@@ -455,15 +455,15 @@ function subagentsPost(req, res, ctx) {
     if (!state || !offered(state.workflow)) return json(res, 400, { error: "not-offered" });
     const clean = cleanSetting(body);
     if (clean.error) return json(res, 400, { error: clean.error });
-    const { on, instruction, max } = clean;
+    const { on, instruction, max, strength } = clean;
     const current = readSubagentSetting(ctx.dir);
-    const next = { workflow: state.workflow, on, instruction, max };
+    const next = { workflow: state.workflow, on, instruction, max, strength };
     // The store is per project, so another session may have moved it since
     // this one synced: it always takes the person's latest pick. Only a
     // real change to this session's setting bumps what the agent hears.
     const unchanged = Boolean(current && sameSetting(current, next));
     try {
-      saveSubagentStoreEntry(ctx.worktree(), state.workflow, { on, instruction, max });
+      saveSubagentStoreEntry(ctx.worktree(), state.workflow, { on, instruction, max, strength });
       if (!unchanged) writeSubagentSetting(ctx.dir, { ...next, revision: (current ? current.revision : 0) + 1 });
     } catch (e) {
       return json(res, 500, { error: String(e.message) });

@@ -2086,6 +2086,31 @@
           </li>
           <li>The button only appears on skills that use helpers, and only when Plan2Code can pass the setting on.</li>
         </ul>
+        <h4>Helper strength</h4>
+        <p>
+          Under Helpers, the dialog also asks how strong the helpers should be.
+          Like the rest of the dialog it is saved for this project and this
+          skill, and it does nothing under <strong>Work alone</strong>.
+        </p>
+        <ul>
+          <li>
+            <strong>Balanced</strong> (the default): each helper gets the
+            strength its job needs: light for lookups, stronger for reviews and
+            design work.
+          </li>
+          <li>
+            <strong>Thrifty</strong>: one step lighter everywhere to save cost;
+            reviews stay at standard or above.
+          </li>
+          <li>
+            <strong>Best</strong>: the strongest model and high effort for
+            everything except lookups.
+          </li>
+          <li>
+            <strong>Match my session</strong>: helpers run on whatever your
+            session uses; nothing is set for them.
+          </li>
+        </ul>
         <h4>The Subagents tab</h4>
         <ul>
           <li>
@@ -2098,6 +2123,12 @@
             Helpers report through Plan2Code, so the rows change at its
             check-ins, not live. The page cannot stop a helper; ask Plan2Code
             on the Ask tab if one should stop.
+          </li>
+          <li>
+            Under each helper, a line such as "Standard, medium effort" shows
+            what that helper actually ran with. "Session model" means the agent
+            could not set a strength for it, so it ran on the session's own
+            model. A helper that reported neither shows no line.
           </li>
           <li>
             <strong>Working alone</strong> means your agent reported it has no
@@ -2638,6 +2669,14 @@
         <legend>Helpers</legend>
         <label><input type="radio" name="subagents-on" value="on" /> <span>Use helpers</span></label>
         <label><input type="radio" name="subagents-on" value="off" checked /> <span>Work alone</span></label>
+      </fieldset>
+      <fieldset class="modal-ranges looks-row" id="subagents-strength-row">
+        <legend>Helper strength</legend>
+        <label><input type="radio" name="subagents-strength" value="balanced" checked /> <span>Balanced</span></label>
+        <label><input type="radio" name="subagents-strength" value="thrifty" /> <span>Thrifty</span></label>
+        <label><input type="radio" name="subagents-strength" value="best" /> <span>Best</span></label>
+        <label><input type="radio" name="subagents-strength" value="session" /> <span>Match my session</span></label>
+        <p class="help" id="subagents-strength-help"></p>
       </fieldset>
       <fieldset class="modal-ranges">
         <legend>Instruction</legend>

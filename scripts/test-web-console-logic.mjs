@@ -1999,7 +1999,7 @@ test("subagents: only the five opted-in workflows offer the switch", () => {
     assert.equal(defaultInstruction(w), "");
   }
   assert.equal(Object.keys(SUBAGENT_WORKFLOWS).length, 5);
-  assert.deepEqual(defaultSetting("review"), { workflow: "review", on: true, instruction: null, max: 3 });
+  assert.deepEqual(defaultSetting("review"), { workflow: "review", on: true, instruction: null, max: 3, strength: "balanced" });
   assert.equal(defaultSetting("plan").on, false, "a skill without the switch is never on");
   assert.equal(effectiveInstruction({ workflow: "review", instruction: "  " }), defaultInstruction("review"));
   assert.equal(effectiveInstruction({ workflow: "review", instruction: " Mine " }), "Mine");
@@ -2015,7 +2015,7 @@ test("subagents: blockFor walks every switch transition, and never says off to a
   const on = blockFor(setting(true, 2), none);
   assert.equal(on.lines[0], "Subagents: on (revision 2) — a console setting, not typed by the person.");
   assert.ok(!on.lines[0].includes("replaces"));
-  assert.deepEqual(on.field, { state: "on", revision: 2, max: 3, instruction: defaultInstruction("implement") });
+  assert.deepEqual(on.field, { state: "on", revision: 2, max: 3, instruction: defaultInstruction("implement"), strength: "balanced" });
   assert.deepEqual(on.cursor, { revision: 2, state: "on" });
   assert.equal(on.lines[on.lines.length - 1], "  At most 3 helpers at once.");
   for (const frame of FRAME_LINES) assert.ok(on.lines.includes("  " + frame), frame);
@@ -2025,7 +2025,7 @@ test("subagents: blockFor walks every switch transition, and never says off to a
   assert.ok(edit.lines.includes("  First line") && edit.lines.includes("  Second line"), "the instruction's own lines are indented");
   assert.ok(!edit.lines.some((line) => !line.trim()), "blank instruction lines are dropped");
   const nested = blockFor(setting(true, 2, { instruction: "- a\r\n  - b\n   \n" }), none);
-  assert.deepEqual(nested.lines.slice(-3, -1), ["  - a", "    - b"], "the person's own indentation survives, CRLF and blank lines do not");
+  assert.deepEqual(nested.lines.slice(-4, -2), ["  - a", "    - b"], "the person's own indentation survives, CRLF and blank lines do not");
   assert.equal(edit.field.max, 7);
   for (const line of edit.lines.slice(1)) assert.match(line, /^ {2}\S/, "only the first line starts at column 0");
 
@@ -2053,9 +2053,26 @@ test("subagents: the injected wording names no harness tool", () => {
   }
 });
 
+// Guards NFR-1: the strength guidance and the wording the console injects speak
+// in strength words only, never a model or vendor name, so they stay right on
+// every harness and every model line-up.
+const MODEL_NAMES = /\b(haiku|sonnet|opus|fable|gpt|o\d|codex|gemini|flash|pro|claude|anthropic|openai|google|swe-\d)\b/i;
+
+test("subagents: the strength guidance and the injected wording name no model or vendor", () => {
+  const texts = [
+    fs.readFileSync(path.join(ROOT, "src", "shared-references", "helper-strength.md"), "utf8"),
+    ...FRAME_LINES,
+    ...Object.keys(SUBAGENT_WORKFLOWS).map(defaultInstruction),
+  ];
+  for (const text of texts) assert.doesNotMatch(text, MODEL_NAMES);
+  assert.match("Start it on Sonnet at high effort.", MODEL_NAMES, "the check catches a model name");
+});
+
 test("subagents: cleanSetting accepts a good setting and names the field that fails", () => {
-  assert.deepEqual(cleanSetting({ on: true, instruction: null, max: 3 }), { on: true, instruction: null, max: 3 });
-  assert.deepEqual(cleanSetting({ on: false, instruction: "  Do it  ", max: 20 }), { on: false, instruction: "Do it", max: 20 });
+  assert.deepEqual(cleanSetting({ on: true, instruction: null, max: 3 }), { on: true, instruction: null, max: 3, strength: "balanced" });
+  assert.deepEqual(cleanSetting({ on: false, instruction: "  Do it  ", max: 20, strength: "best" }), { on: false, instruction: "Do it", max: 20, strength: "best" });
+  assert.equal(cleanSetting({ on: true, instruction: null, max: 3, strength: null }).strength, "balanced", "a null strength is the default");
+  for (const strength of ["fast", "Balanced", 1, ""]) assert.deepEqual(cleanSetting({ on: true, instruction: null, max: 3, strength }), { error: "strength" }, String(strength));
   assert.equal(cleanSetting({ on: true, instruction: "", max: 1 }).instruction, null, "an empty instruction is the default");
   for (const max of [0, 21, 2.5, "3"]) assert.deepEqual(cleanSetting({ on: true, instruction: null, max }), { error: "max" }, String(max));
   assert.deepEqual(cleanSetting({ on: true, instruction: "x".repeat(2001), max: 3 }), { error: "too-long" });
@@ -2129,6 +2146,28 @@ test("subagents: helperRows labels each state, shows a result only once a helper
   assert.equal(rows[2].result, "Timed out");
 });
 
+test("subagents: helperRows turns a reported strength and effort into one line, and leaves it out when neither was reported", () => {
+  const line = (extra) => helperRows([{ id: "h1", title: "One", ask: "a", state: "running", ...extra }]).rows[0];
+  const cases = [
+    [{ strength: "standard", effort: "medium" }, "Standard, medium effort"],
+    [{ strength: "light" }, "Light"],
+    [{ strength: "strongest", effort: "high" }, "Strongest, high effort"],
+    [{ strength: "inherit", effort: "high" }, "Session model, high effort"],
+    [{ strength: "inherit" }, "Session model"],
+    [{ effort: "low" }, "Low effort"],
+  ];
+  for (const [extra, want] of cases) {
+    const row = line(extra);
+    assert.equal(row.strengthLine, want, JSON.stringify(extra));
+    assert.equal(row.strength, extra.strength);
+    assert.equal(row.effort, extra.effort);
+  }
+  for (const extra of [{}, { strength: "huge", effort: "max" }]) {
+    const row = line(extra);
+    for (const key of ["strengthLine", "strength", "effort"]) assert.equal(key in row, false, `${JSON.stringify(extra)}: no ${key}`);
+  }
+});
+
 test("page: the Subagents button sits right after Write a brief, and its dialog is in the page with no inline styles or scripts", () => {
   const html = fs.readFileSync(path.join(ROOT, "src", "web-console", "public", "index.html"), "utf8");
   const row = html.match(/<div class="row-left">([\s\S]*?)<\/div>\s*<div class="views-group">/);
@@ -2153,7 +2192,7 @@ test("subagents: the store round-trips per project and workflow under the consol
     const script = `
       const lib = await import(${JSON.stringify(new URL("../src/web-console/settings.mjs", import.meta.url).href)});
       const project = ${JSON.stringify(project)};
-      lib.saveSubagentStoreEntry(project, "implement", { on: true, instruction: "Mine", max: 5 });
+      lib.saveSubagentStoreEntry(project, "implement", { on: true, instruction: "Mine", max: 5, strength: "best" });
       const flipped = project.replace(/My Repo$/, "MY REPO");
       console.log(JSON.stringify({
         file: lib.SUBAGENTS_FILE,
@@ -2169,11 +2208,11 @@ test("subagents: the store round-trips per project and workflow under the consol
     assert.equal(res.status, 0, res.stderr);
     const out = JSON.parse(res.stdout);
     assert.equal(out.file, path.join(home, "subagents.json"), "the store follows PLAN2CODE_CONSOLE_HOME");
-    assert.deepEqual(out.saved, { on: true, instruction: "Mine", max: 5 });
+    assert.deepEqual(out.saved, { on: true, instruction: "Mine", max: 5, strength: "best" });
     if (process.platform === "win32" || process.platform === "darwin") {
       assert.deepEqual(out.otherCase, out.saved, "a different-case path reads the same entry");
     }
-    assert.deepEqual(out.unsaved, { on: true, instruction: null, max: 3 }, "nothing saved means on");
+    assert.deepEqual(out.unsaved, { on: true, instruction: null, max: 3, strength: "balanced" }, "nothing saved means on, at balanced");
     assert.ok(!fs.existsSync(path.join(home, "subagents.json.lock")), "the lock is released");
   } finally {
     fs.rmSync(home, { recursive: true, force: true });

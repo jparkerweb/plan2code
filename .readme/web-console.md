@@ -397,7 +397,11 @@ Pathfinder, the agent can hand independent pieces of work to helpers
 - **The dialog.** A click opens it; the button never switches anything by
   itself. **Use helpers** or **Work alone**, the instruction the agent follows
   (**Reset to default** puts the shipped one back), and how many helpers may
-  run at once (1 to 20; your agent's own limit still applies). **Save** sends
+  run at once (1 to 20; your agent's own limit still applies). Under Helpers,
+  **Helper strength** sets how strong a model and how much effort helpers get:
+  **Balanced** (the default), **Thrifty** (one step lighter; reviews never
+  below standard), **Best** (strongest and high effort, except lookups) or
+  **Match my session** (nothing set on helpers). **Save** sends
   it; the agent hears of it at its next check-in, as a setting, not as
   something you typed.
 - **Saved per project and per skill**, on until switched off, in
@@ -407,7 +411,10 @@ Pathfinder, the agent can hand independent pieces of work to helpers
   appears before Ask: one row per helper with what it was asked and whether it
   is running, done or failed, plus a one-line result at the end. Rows change at
   the agent's check-ins, not live. *Working alone* means your agent has no way
-  to start helpers here. The tab clears when you go back to the dashboard.
+  to start helpers here. Each row may carry one quiet line such as "Standard,
+  medium effort" ("Session model" when the helper runs on yours). The rules
+  live in `helper-strength.md` and apply in terminal sessions too. The tab
+  clears when you go back to the dashboard.
 - **Pathfinder's research** always uses helpers, whatever the switch says, and
   they show in the tab too.
 

@@ -46,7 +46,7 @@
 
 // Shared by Implement and Implement + Review.
 const BUILD_HELPERS =
-  "Hand independent tasks in a phase to helpers: tasks that touch different files and do not depend on each other. Keep tasks that share files, the phase's tests and the sign-off with you.";
+  "Hand independent tasks in a phase to helpers: tasks that touch different files and do not depend on each other. Keep tasks that share files, the phase's tests and the sign-off with you. Pick each helper's strength and effort from helper-strength.md's table: light for a 1-2 file task the task file spells out, standard for multi-file or debugging work.";
 
 // Pathfinder's and Plan's reason on a finished spec (a fixed bug).
 export const FIXED_REASON = "This bug is fixed. Delete it with the Delete button on its chip, or move it to specs--completed/.";
@@ -110,7 +110,7 @@ export const SKILLS = Object.freeze([
     pose: "pathfinder",
     builds: false, phased: false, metered: false, templates: true,
     weight: null, started: null, ran: null, resume: "folder",
-    subagents: "Use helpers for codebase recon, sketches and lookups beside the conversation. Keep every question for the person with you.",
+    subagents: "Use helpers for codebase recon, sketches and lookups beside the conversation. Keep every question for the person with you. Recon and lookups at light strength, research questions at standard.",
     states: ["none", "unrecognized", "exploring"], marksNext: true,
     greyed: {
       default: "This spec is already past the questions",
@@ -264,7 +264,7 @@ export const SKILLS = Object.freeze([
     pose: "quick-task",
     builds: true, phased: false, metered: true, templates: true,
     weight: 1, started: "Quick task started", ran: "Quick task built", resume: null,
-    subagents: "Use helpers for side lookups, such as reading unfamiliar code or checking documentation, while you make the change yourself.",
+    subagents: "Use helpers for side lookups, such as reading unfamiliar code or checking documentation, while you make the change yourself. Side lookups at light strength, low effort.",
     states: "any",
     greyed: null,
     card: {
@@ -284,7 +284,7 @@ export const SKILLS = Object.freeze([
     pose: "review",
     builds: false, phased: false, metered: true, templates: false,
     weight: 2, started: "Review started", ran: "Code review run", resume: null,
-    subagents: "Run the review's analysis in one fresh helper briefed only with the spec and the change set (references/reviewer-brief.md); verify every finding yourself before you report.",
+    subagents: "Run the review's analysis in one fresh helper briefed only with the spec and the change set (references/reviewer-brief.md); verify every finding yourself before you report. At standard strength or above (strongest for branch or full scope), high effort.",
     states: "any",
     greyed: null,
     card: {

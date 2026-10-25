@@ -51,7 +51,7 @@ port, and the filesystem as transport; this CLI is the whole agent surface.
           path, description?, original? }], missing? }, the folders this
           console session reads as context, addressed as @name. The list is
           remembered per folder and spec in workspaces.json beside looks.json.
-          May also print subagents: { state, revision, max, instruction } and
+          May also print subagents: { state, revision, max, instruction, strength } and
           a reply holding only its "Subagents: ..." lines, when a standing
           instruction (the page's Subagents switch) is owed to you.
   post    --session <sid> --file <patch.json | -> [--wait <N>]
@@ -66,9 +66,9 @@ port, and the filesystem as transport; this CLI is the whole agent surface.
           carry run: { event, id, tasks? } (session meter points) and folderIssue:
           { name, reason, hint? } (a workspace folder you could not read);
           both go to the ledger, never into the state. A patch may also
-          carry helpers: [{ id, title, ask, state, result? }] or one
-          { id: "alone", alone: true }, merged by id, for the Subagents tab
-          (help subagents).
+          carry helpers: [{ id, title, ask, state, result?, strength?,
+          effort? }] or one { id: "alone", alone: true }, merged by id, for
+          the Subagents tab (help subagents).
   wait    --session <sid> [--seconds <N>]
           A bounded wait slice, sized below your shell timeout. Exit 0 = the
           result is on stdout, 10 = still waiting ("Waiting on your answer

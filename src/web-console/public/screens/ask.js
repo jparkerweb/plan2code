@@ -10,7 +10,7 @@ import { thumbs, uploadUrl, docChip, attachTray, CHAT_IMAGES, attachFiles, incom
 import { attachMentions } from "../mention-box.js";
 import { pickerAccept, attachmentKind, noteAwaiting, threadWho, threadText } from "../answers.js";
 import { postJson } from "../net.js";
-import { CHECKIN_LINE, helperRows, showSwitch, switchLabel, defaultInstruction, PATHFINDER_RESEARCH_LINE } from "../subagents.js";
+import { CHECKIN_LINE, helperRows, showSwitch, switchLabel, defaultInstruction, PATHFINDER_RESEARCH_LINE, STRENGTHS, DEFAULT_STRENGTH, STRENGTH_HELP } from "../subagents.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -724,6 +724,7 @@ export function renderSubagents(main) {
     head.appendChild(pill);
     item.appendChild(head);
     item.appendChild(el("p", "sa-ask", row.ask));
+    if (row.strengthLine) item.appendChild(el("p", "sa-strength", row.strengthLine));
     if (row.result) item.appendChild(el("p", "sa-result", row.result));
     list.appendChild(item);
   }
@@ -755,6 +756,9 @@ export function openSubagents() {
   }
   $("subagents-instruction").value = page.subagentsFrame.instruction ?? defaultInstruction(page.S.workflow);
   $("subagents-max").value = String(page.subagentsFrame.max);
+  const strength = STRENGTHS.includes(page.subagentsFrame.strength) ? page.subagentsFrame.strength : DEFAULT_STRENGTH;
+  for (const radio of document.querySelectorAll('input[name="subagents-strength"]')) radio.checked = radio.value === strength;
+  syncStrengthHelp();
   $("subagents-checkin").textContent = CHECKIN_LINE;
   const research = $("subagents-research");
   research.textContent = PATHFINDER_RESEARCH_LINE;
@@ -767,17 +771,25 @@ export function openSubagents() {
   if (checked) checked.focus();
 }
 
-// Instruction and "at most" only mean anything with helpers on, so they are
-// inert under Work alone (kept as typed, for when helpers go back on).
+// Instruction, "at most" and strength only mean anything with helpers on, so
+// they are inert under Work alone (kept as picked, for when helpers go back on).
 export function syncSubagentsFields() {
   const picked = document.querySelector('input[name="subagents-on"]:checked');
   const off = !picked || picked.value !== "on";
   for (const id of ["subagents-instruction", "subagents-max", "subagents-default"]) $(id).disabled = off;
+  for (const radio of document.querySelectorAll('input[name="subagents-strength"]')) radio.disabled = off;
+}
+
+// The line under the strength radios explains the picked one.
+function syncStrengthHelp() {
+  const picked = document.querySelector('input[name="subagents-strength"]:checked');
+  $("subagents-strength-help").textContent = STRENGTH_HELP[picked ? picked.value : DEFAULT_STRENGTH];
 }
 
 const SUBAGENTS_ERRORS = {
   max: "Pick a number from 1 to 20.",
   "too-long": "The instruction is over 2,000 characters.",
+  strength: "That strength isn't one of the four choices.",
   "not-offered": "This skill doesn't use helpers.",
   bad: "That didn't save. Try again.",
 };
@@ -792,7 +804,13 @@ export async function saveSubagents() {
   // The shipped default is stored as null, so a later release's wording
   // reaches everyone who never changed it.
   const instruction = text === defaultInstruction(page.S.workflow) ? null : text;
-  const body = { on: Boolean(picked && picked.value === "on"), instruction, max: Number($("subagents-max").value) };
+  const strength = document.querySelector('input[name="subagents-strength"]:checked');
+  const body = {
+    on: Boolean(picked && picked.value === "on"),
+    instruction,
+    max: Number($("subagents-max").value),
+    strength: strength ? strength.value : DEFAULT_STRENGTH,
+  };
   save.disabled = true;
   status.textContent = "";
   const res = await postJson("/subagents", body);
@@ -811,6 +829,7 @@ export const askOfflineFlipped = () => (askState().send.state === "offline") !==
 // The Subagents dialog's buttons, and dropping files onto the notes panel.
 export function wireAsk() {
   for (const radio of document.querySelectorAll('input[name="subagents-on"]')) radio.addEventListener("change", syncSubagentsFields);
+  for (const radio of document.querySelectorAll('input[name="subagents-strength"]')) radio.addEventListener("change", syncStrengthHelp);
   lightDismiss($("subagents-modal"));
   $("btn-subagents").addEventListener("click", openSubagents);
   $("subagents-default").addEventListener("click", () => {

@@ -161,7 +161,10 @@ const SOURCE_PROMPTS = [
     name: 'pathfinder',
     displayName: 'Pathfinder Mode',
     description: 'charting of a foggy idea as a map of decision questions, cleared one at a time',
-    additionalReferences: [{ source: 'web-console', target: 'web-console' }]
+    additionalReferences: [
+      { source: 'web-console', target: 'web-console' },
+      { source: 'shared-references/helper-strength.md', target: 'helper-strength.md' }
+    ]
   },
   {
     source: 'plan2code-quick-task.md',
@@ -176,6 +179,7 @@ const SOURCE_PROMPTS = [
     additionalReferences: [
       { source: 'web-console', target: 'web-console' },
       { source: 'shared-references/building-habits.md', target: 'building-habits.md' },
+      { source: 'shared-references/helper-strength.md', target: 'helper-strength.md' },
       { source: 'plan2code-review.md', target: 'review.md' },
       { source: 'plan2code-review-references' }
     ]
@@ -219,6 +223,7 @@ const SOURCE_PROMPTS = [
     additionalReferences: [
       { source: 'web-console', target: 'web-console' },
       { source: 'shared-references/building-habits.md', target: 'building-habits.md' },
+      { source: 'shared-references/helper-strength.md', target: 'helper-strength.md' },
       { source: 'plan2code-review.md', target: 'review.md' },
       { source: 'plan2code-review-references' }
     ]
@@ -234,6 +239,7 @@ const SOURCE_PROMPTS = [
       { source: 'web-console', target: 'web-console' },
       { source: 'plan2code-3-implement.md', target: 'implement.md' },
       { source: 'shared-references/building-habits.md', target: 'building-habits.md' },
+      { source: 'shared-references/helper-strength.md', target: 'helper-strength.md' },
       { source: 'plan2code-review.md', target: 'review.md' },
       { source: 'plan2code-review-references' }
     ]
@@ -246,7 +252,10 @@ const SOURCE_PROMPTS = [
     description: 'Comprehensive post-implementation review with spec compliance checking',
     isUtility: true,
     scripts: ['specs.mjs', 'commit-msg.mjs', 'review-scope.mjs'],
-    additionalReferences: [{ source: 'web-console', target: 'web-console' }]
+    additionalReferences: [
+      { source: 'web-console', target: 'web-console' },
+      { source: 'shared-references/helper-strength.md', target: 'helper-strength.md' }
+    ]
   },
   {
     source: 'plan2code-4-finalize.md',

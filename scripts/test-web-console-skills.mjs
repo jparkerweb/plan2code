@@ -25,6 +25,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { createRequire } from "node:module";
+import { execFileSync } from "node:child_process";
 import { ROOT, cli, poseTemplate } from "./web-console-test-helpers.mjs";
 import { SUBAGENT_WORKFLOWS } from "../src/web-console/public/subagents.js";
 import { TEMPLATE_WORKFLOWS } from "../src/web-console/public/starters.js";
@@ -379,4 +380,20 @@ test("Implement's card launches Implement + Review when Review is ticked", () =>
   assert.equal(catalogEntry("plan2code-3-implement-review").skill, "plan2code-3-implement", "handoffs and recommendations resolve to the card");
   const quick = SKILL_CATALOG.find((e) => e.skill === "plan2code-quick-task");
   assert.equal(launchVariant(quick, true), quick, "a card with no Review box is unchanged");
+});
+
+test("helper-strength.md ships in the five skills that start helpers, and in no other", () => {
+  // npm test has just built skills/; a direct run builds it so the check never reads a stale tree.
+  if (process.env.npm_lifecycle_event !== "test") {
+    execFileSync(process.execPath, [path.join(ROOT, "install.js"), "--build-skills"], { stdio: "ignore" });
+  }
+  const built = path.join(ROOT, "skills");
+  const having = fs.readdirSync(built).filter((dir) => fs.existsSync(path.join(built, dir, "references", "helper-strength.md")));
+  assert.deepEqual(having.sort(), [
+    "plan2code-0-pathfinder",
+    "plan2code-3-implement",
+    "plan2code-3-implement-review",
+    "plan2code-quick-task",
+    "plan2code-review",
+  ]);
 });

@@ -161,6 +161,7 @@
   margin: 4px 0 0; color: var(--ink-2); font-size: 13.5px;
   display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden;
 }
+.sa-strength { margin: 4px 0 0; color: var(--ink-3); font-size: 12.5px; }
 .sa-result { margin: 8px 0 0; padding-top: 8px; border-top: 1px solid var(--rule); font-size: 13.5px; }
 .sa-pill { display: inline-flex; align-items: center; gap: 6px; flex: none; }
 .sa-pill.is-running { background: var(--accent-soft); color: var(--accent); border-color: var(--accent-line); }

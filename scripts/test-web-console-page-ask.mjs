@@ -211,3 +211,64 @@ test("posting helpers adds a Subagents tab that lists each with its state and re
   assert.match(await textOf(done), /All 9 pass\./);
   assert.match(await textOf(running), /Find the callers of applyPatch/);
 });
+
+// What a person sees break: the strength they saved not shown when the dialog
+// opens again, a help line that ignores their pick, or Save dropping it.
+test("the Subagents dialog shows the saved strength, explains the picked one, goes inert under Work alone and saves it", async (t) => {
+  const s = await openSession(await suite.browser(), {
+    t,
+    workflow: "implement",
+    payload: { agent: { status: "working", activity: "Task 1 of 2" } },
+  });
+  const modal = s.page.locator("#subagents-modal");
+  const radio = (value) => modal.locator(`input[name="subagents-strength"][value="${value}"]`);
+  const help = modal.locator("#subagents-strength-help");
+  const open = async () => {
+    await s.page.locator("#btn-subagents").click();
+    await modal.waitFor();
+  };
+
+  await open();
+  assert.equal(await radio("balanced").isChecked(), true, "an unsaved strength opens as Balanced");
+  assert.match(await textOf(help), /light for lookups/);
+  await radio("thrifty").check();
+  assert.match(await textOf(help), /One step lighter everywhere/);
+  await modal.locator('input[name="subagents-on"][value="off"]').check();
+  for (const value of ["balanced", "thrifty", "best", "session"]) assert.equal(await radio(value).isDisabled(), true, `${value} is inert under Work alone`);
+  await modal.locator('input[name="subagents-on"][value="on"]').check();
+  assert.equal(await radio("thrifty").isEnabled(), true);
+
+  const posted = s.page.waitForRequest((r) => r.url().endsWith("/subagents") && r.method() === "POST");
+  await modal.getByRole("button", { name: "Save", exact: true }).click();
+  assert.equal(JSON.parse((await posted).postData()).strength, "thrifty");
+  await modal.waitFor({ state: "hidden" });
+
+  // The next frame carries the saved strength; the dialog opens on it.
+  await s.page.waitForFunction(async () => (await (await fetch("/state")).json()).subagents.strength === "thrifty");
+  await open();
+  assert.equal(await radio("thrifty").isChecked(), true, "the saved strength is checked");
+  assert.match(await textOf(help), /One step lighter everywhere/);
+});
+
+// What a person sees break: the strength a helper ran with missing from the
+// tab, or a stray line under a helper that reported none.
+test("the Subagents tab shows a reported helper's strength line and none for a helper without one", async (t) => {
+  const s = await openSession(await suite.browser(), {
+    t,
+    workflow: "implement",
+    payload: { agent: { status: "working", activity: "Task 1 of 2" } },
+  });
+  s.post({
+    helpers: [
+      reportedHelper("h1", { title: "Read the store helpers", strength: "standard", effort: "medium" }),
+      reportedHelper("h2", { title: "Check the tests" }),
+    ],
+  });
+  const tab = s.page.locator("nav").getByRole("button", { name: /^Subagents/ });
+  await tab.waitFor();
+  await tab.click();
+  const rows = s.page.locator("#main .sa-card .sa-row");
+  await rows.first().waitFor();
+  assert.equal(await textOf(rows.filter({ hasText: "Read the store helpers" }).locator(".sa-strength")), "Standard, medium effort");
+  assert.equal(await rows.filter({ hasText: "Check the tests" }).locator(".sa-strength").count(), 0);
+});

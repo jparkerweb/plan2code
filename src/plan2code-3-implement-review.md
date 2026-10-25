@@ -54,7 +54,7 @@ Run Review Mode with this explicit scope:
 - Use overview.md and the active phase file for spec-compliance context; they do not broaden scope to other phases.
 - Read related callers, dependencies, and project files when needed to verify a finding, but do not turn them into unrelated review targets.
 - Review all changed files completely and apply the full focused-review depth required by Review Mode.
-- Review Mode's helper rule applies: a fresh helper runs the analysis when available, this session verifies every finding, and the Stage 4 report carries the Reviewed by line. The helper's brief carries the phase's `phase-X.md` and its change set only, never Stage 1's work notes.
+- Review Mode's helper rule applies: a fresh helper runs the analysis when available, at the strength `helper-strength.md` gives for the phase's review (standard and high, or strongest and high when the phase touches security, auth or data), this session verifies every finding, and the Stage 4 report carries the Reviewed by line. The helper's brief carries the phase's `phase-X.md` and its change set only, never Stage 1's work notes.
 
 Override Review Mode's completion and session-end behavior:
 
