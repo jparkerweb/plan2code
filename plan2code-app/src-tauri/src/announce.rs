@@ -228,6 +228,15 @@ impl AnnounceServer {
         self.current.lock().ok().and_then(|slot| slot.clone())
     }
 
+    /// Forget the page most recently announced, so the next agent's `open`
+    /// starts a session of its own instead of joining that one. New Session
+    /// does this: a fresh agent's session meter starts over with it.
+    pub fn forget_current(&self) {
+        if let Ok(mut slot) = self.current.lock() {
+            *slot = None;
+        }
+    }
+
     /// What goes on the agent's process so its `console.mjs open` shows pages
     /// here. Every value belongs to this window. `embed_origin` is the origin of
     /// the app page, so a console the agent starts allows being framed by it.
@@ -361,5 +370,8 @@ mod tests {
         assert!(ask(server.token()).contains(r#""sid":"s1""#));
         assert!(ask("wrong").starts_with("HTTP/1.1 403"));
         assert_eq!(server.current().unwrap().workflow, "plan");
+        server.forget_current();
+        assert!(ask(server.token()).ends_with("null"), "forgotten: the next open starts its own session");
+        assert_eq!(server.current(), None);
     }
 }

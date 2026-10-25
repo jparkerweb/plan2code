@@ -3,7 +3,8 @@
 One window for working with an AI agent. The app opens the Plan2Code dashboard as its main surface,
 runs your agent (Claude Code, Devin or Codex) in a terminal panel it owns, and has a **Restart**
 button that replaces the agent with a fresh one on a brief the app builds from its own record of the
-session. It is an addition: `/plan2code` typed inside an agent works exactly as before, with or
+session. The fresh agent gets a console session of its own, so the Session meter starts over with it.
+It is an addition: `/plan2code` typed inside an agent works exactly as before, with or
 without the app.
 
 ## Get it

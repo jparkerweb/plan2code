@@ -4,7 +4,7 @@
 use std::sync::{Arc, Mutex};
 
 use plan2code_app_lib::announce::AnnounceServer;
-use plan2code_app_lib::agent_manager::{AgentEvent, AgentManager, AgentState, Sink};
+use plan2code_app_lib::agent_manager::{AgentEvent, AgentManager, AgentState, BeforeFresh, Sink};
 use plan2code_app_lib::agents::{self, AgentKind, PermissionMode};
 use plan2code_app_lib::console_supervisor::{app_origin, origin_of, ConsoleSupervisor};
 use plan2code_app_lib::context::claude::ClaudeReader;
@@ -35,7 +35,7 @@ struct AppState {
     // How much text the running agent has produced and been given, for the meter.
     context: Arc<Mutex<Meter>>,
     // This window's endpoint for pages the agent's `console.mjs open` wants shown here.
-    announce: Mutex<Option<AnnounceServer>>,
+    announce: Arc<Mutex<Option<AnnounceServer>>>,
     // The Node version `main()` found before opening the window (Task 1.7 exits
     // cleanly on anything else, so this is always a passing version once the
     // window exists), and which binary that was, with `resolved_path`'s PATH
@@ -127,14 +127,30 @@ fn agent_for_project(state: &AppState) -> Result<Arc<AgentManager>, String> {
     }
     let sink = page_sink(Arc::clone(&state.page), Arc::clone(&state.context));
     let agent = Arc::new(AgentManager::new(dir, sink));
-    // A Restart leaves the brief for the dashboard, from the console that is running now.
-    let console = Arc::clone(&state.console);
-    agent.set_before_fresh(Arc::new(move || {
-        let sid = console.lock().ok()?.as_ref()?.session().sid.clone();
-        restart_brief::note_for_restart(&sid)
-    }));
+    agent.set_before_fresh(before_fresh_hook(state));
     *guard = Some(Arc::clone(&agent));
     Ok(agent)
+}
+
+// What New Session does before the fresh agent starts. It leaves the brief for
+// the dashboard, from the console session running now, then forgets that
+// session, so the fresh agent's `open` starts one of its own: a session that
+// joined the old one would carry its meter along, still red after the very
+// press the red meter asks for. The old console is left to shut itself down
+// once the frame moves on to the new page.
+fn before_fresh_hook(state: &AppState) -> BeforeFresh {
+    let console = Arc::clone(&state.console);
+    let announce = Arc::clone(&state.announce);
+    Arc::new(move || {
+        let sid = console.lock().ok().and_then(|guard| guard.as_ref().map(|sup| sup.session().sid.clone()));
+        let note = sid.and_then(|sid| restart_brief::note_for_restart(&sid));
+        if let Ok(guard) = announce.lock() {
+            if let Some(server) = guard.as_ref() {
+                server.forget_current();
+            }
+        }
+        note
+    })
 }
 
 fn current_agent(state: &AppState) -> Option<Arc<AgentManager>> {
@@ -689,6 +705,32 @@ mod tests {
         let second = agent_for_project(&state).expect("a manager for project-b");
         assert_eq!(second.folder(), &PathBuf::from("project-b"));
         assert!(!Arc::ptr_eq(&first, &second), "project-a's manager must never stand in for project-b's");
+    }
+
+    #[test]
+    fn new_session_forgets_the_windows_session_so_the_fresh_agent_starts_its_own() {
+        let state = state_for("project-a");
+        let server = AnnounceServer::start(Arc::new(|_| {})).unwrap();
+        let port: u16 = server.url().rsplit_once(':').unwrap().1.trim_end_matches("/page").parse().unwrap();
+        *state.announce.lock().unwrap() = Some(server);
+        let body = r#"{"url":"http://127.0.0.1:5000/s/abc/","sid":"s1","workflow":"plan"}"#;
+        let mut stream = std::net::TcpStream::connect(("127.0.0.1", port)).unwrap();
+        let token = state.announce.lock().unwrap().as_ref().unwrap().token().to_string();
+        use std::io::{Read, Write};
+        write!(
+            stream,
+            "POST /page HTTP/1.1\r\nHost: 127.0.0.1\r\nx-plan2code-token: {token}\r\ncontent-length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        )
+        .unwrap();
+        let mut answer = String::new();
+        stream.read_to_string(&mut answer).unwrap();
+        assert!(answer.starts_with("HTTP/1.1 204"), "the page was announced: {answer}");
+        assert_eq!(state.announce.lock().unwrap().as_ref().unwrap().current().map(|n| n.sid), Some("s1".to_string()));
+
+        // No console supervised here, so no brief to write: only the forgetting.
+        assert_eq!(before_fresh_hook(&state)(), None);
+        assert_eq!(state.announce.lock().unwrap().as_ref().unwrap().current(), None, "the fresh agent's open must not join s1");
     }
 
     #[test]

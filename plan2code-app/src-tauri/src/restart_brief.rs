@@ -19,20 +19,23 @@ pub const READY_NOTE: &str = "Brief ready on the dashboard";
 /// has not picked it up, so unused briefs do not pile up as chips.
 static LAST_BRIEF: Mutex<Option<String>> = Mutex::new(None);
 
-/// The skill named on a handoff record for a workflow `brief::skill_for_workflow`
-/// does not map, such as `dashboard`: the console's own name for that pseudo-skill.
-const UNMAPPED_SKILL: &str = "plan2code";
-
-/// Write the brief for session `sid` as a handoff. A workflow with no mapped
-/// skill (a dashboard, or one not yet known) still gets a short, honest chip
-/// rather than nothing. Returns the handoff's id, or `None` when there is
-/// truly nothing to write (the session names no worktree is an error, not a
-/// `None`, since that is a broken session rather than an empty one).
+/// Write the brief for session `sid` as a handoff. Returns the handoff's id,
+/// or `None` when there is nothing worth picking up: a workflow with no mapped
+/// skill (the dashboard, or one not yet known), whose only next step would be
+/// "Open the dashboard" where the fresh agent lands anyway, and a session that
+/// finished, whose finished screen already named what comes next, and one
+/// that has posted nothing yet (no spec, progress, activity or questions),
+/// whose brief would only repeat the skill's name. A session
+/// that names no worktree is an error, not a `None`, since that is a broken
+/// session rather than an empty one.
 pub fn leave_brief(console_home: &Path, handoffs: &Path, sid: &str, when: DateTime<Local>) -> Result<Option<String>, String> {
     let session = session_reader::load(console_home, sid).map_err(|e| e.to_string())?;
     let state = &session.state;
     let workflow = text(state, "workflow").unwrap_or("");
-    let skill = brief::skill_for_workflow(workflow);
+    let Some(skill) = brief::skill_for_workflow(workflow) else { return Ok(None) };
+    if finished(state) || empty(state) {
+        return Ok(None);
+    }
     let worktree = text(state, "worktree").ok_or("the session names no worktree")?;
     let project = text(state, "project").unwrap_or(worktree);
     let spec = text(state, "specDir").filter(|s| valid_spec(s));
@@ -40,14 +43,11 @@ pub fn leave_brief(console_home: &Path, handoffs: &Path, sid: &str, when: DateTi
     let git = brief::git_summary(Path::new(worktree));
     let events = session_reader::read_ndjson(&session.dir.join("events.ndjson"));
     let body = brief::build_brief(state, spec_dir.as_deref(), git.as_ref(), &events);
-    let title = match skill {
-        Some(skill) => match spec {
-            Some(spec) => format!("Restart of {skill} on {spec}"),
-            None => format!("Restart of {skill}"),
-        },
-        None => format!("Restart while on {workflow}"),
+    let title = match spec {
+        Some(spec) => format!("Restart of {skill} on {spec}"),
+        None => format!("Restart of {skill}"),
     };
-    let record = handoff::Record { title: &title, worktree, project, spec, workflow, skill: skill.unwrap_or(UNMAPPED_SKILL) };
+    let record = handoff::Record { title: &title, worktree, project, spec, workflow, skill };
     handoff::write(handoffs, when, &record, &body).map(Some)
 }
 
@@ -71,6 +71,22 @@ pub fn note_for_restart(sid: &str) -> Option<String> {
 
 fn text<'a>(state: &'a Value, key: &str) -> Option<&'a str> {
     state.get(key).and_then(Value::as_str).filter(|s| !s.is_empty())
+}
+
+/// The session posted a `finish` that is not a pause. A pause's headline starts
+/// with "Paused" (the page's `finishPaused`) and keeps a place worth picking up.
+fn finished(state: &Value) -> bool {
+    let Some(finish) = state.get("finish").filter(|f| f.is_object()) else { return false };
+    let headline = finish.get("headline").and_then(Value::as_str).unwrap_or("").trim_start();
+    !headline.get(..6).is_some_and(|word| word.eq_ignore_ascii_case("paused"))
+}
+
+/// Nothing a fresh agent could pick up beyond the skill's name.
+fn empty(state: &Value) -> bool {
+    let stage = state.get("headline").and_then(|h| text(h, "stage"));
+    let activity = state.get("agent").and_then(|a| text(a, "activity")).filter(|a| !a.trim().is_empty());
+    let items = state.get("items").and_then(Value::as_array).is_some_and(|items| !items.is_empty());
+    text(state, "specDir").is_none() && stage.is_none() && activity.is_none() && !items
 }
 
 fn valid_spec(spec: &str) -> bool {
@@ -135,16 +151,34 @@ mod tests {
     }
 
     #[test]
-    fn a_dashboard_session_still_leaves_a_chip() {
+    fn a_dashboard_session_leaves_nothing() {
         let (home, _, handoffs) = session("dashboard", "dashboard", None);
-        let id = leave_brief(&home, &handoffs, "s1", when()).unwrap().expect("a handoff");
-        let record: Value = serde_json::from_str(&fs::read_to_string(handoffs.join(format!("{id}.json"))).unwrap()).unwrap();
-        assert_eq!(record["title"], "Restart while on dashboard");
-        assert_eq!(record["skill"], "plan2code");
-        assert_eq!(record["workflow"], "dashboard");
-        let doc = fs::read_to_string(handoffs.join(format!("{id}.md"))).unwrap();
-        assert!(doc.contains("- Workflow: `dashboard`"));
-        assert!(doc.contains("## Next task\n\nOpen the dashboard"));
+        assert_eq!(leave_brief(&home, &handoffs, "s1", when()).unwrap(), None);
+        assert!(!handoffs.exists());
+    }
+
+    #[test]
+    fn a_skill_that_has_posted_nothing_leaves_nothing() {
+        let (home, _, handoffs) = session("blank", "quick-task", None);
+        let file = home.join("sessions").join("s1").join("state.json");
+        let mut state: Value = serde_json::from_str(&fs::read_to_string(&file).unwrap()).unwrap();
+        state["headline"] = Value::Null;
+        fs::write(&file, state.to_string()).unwrap();
+        assert_eq!(leave_brief(&home, &handoffs, "s1", when()).unwrap(), None);
+    }
+
+    #[test]
+    fn a_finished_session_leaves_nothing_but_a_paused_one_does() {
+        let (home, _, handoffs) = session("finished", "implement", Some("specs/feature"));
+        let file = home.join("sessions").join("s1").join("state.json");
+        let mut state: Value = serde_json::from_str(&fs::read_to_string(&file).unwrap()).unwrap();
+        state["finish"] = serde_json::json!({ "headline": "Phase 5 is built", "dashboard": true });
+        fs::write(&file, state.to_string()).unwrap();
+        assert_eq!(leave_brief(&home, &handoffs, "s1", when()).unwrap(), None);
+
+        state["finish"] = serde_json::json!({ "headline": "Paused at Phase 5" });
+        fs::write(&file, state.to_string()).unwrap();
+        assert!(leave_brief(&home, &handoffs, "s1", when()).unwrap().is_some());
     }
 
     #[test]
