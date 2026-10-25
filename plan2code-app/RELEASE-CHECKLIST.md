@@ -26,7 +26,7 @@ failure.
       the `plan2code` command are still installed
 - [ ] `plan2code` in a project asks for the agent and model, then opens the app on that folder
 - [ ] The agent and model picked in the launcher are the ones the app starts at once, with no
-      launch card or checklist shown first, and Restart keeps them
+      launch card or checklist shown first, and New Session keeps them
 - [ ] `plan2code --classic` runs the agent in the terminal with the app installed
 - [ ] Linux only: with `DISPLAY` and `WAYLAND_DISPLAY` unset, `plan2code` runs the terminal flow
 - [ ] The desktop shortcut opens the folder picker and then the app
@@ -44,8 +44,11 @@ failure.
 
 - [ ] The dashboard shows in the frame and the terminal panel is visible beneath it
 - [ ] Resizing the window keeps both usable; dragging the handle resizes the panel
-- [ ] The bar shows the project folder and the context meter; the permission note appears only
-      while an agent started with checks off is running, never otherwise
+- [ ] The bar shows the project folder; the permission note appears only while an agent started
+      with checks off is running, never otherwise
+- [ ] The OS window title (and so the taskbar entry) reads **Plan2Code - &lt;folder name&gt;**,
+      not just **Plan2Code**; open a second window on a different folder and confirm they read
+      apart in the taskbar without needing to restore either one
 - [ ] The first run (no `firstRunDone` saved yet) shows the checklist (Node, an agent CLI, the
       project folder, the skills version) before the launch card; a later launch goes straight to
       the launch card
@@ -58,14 +61,17 @@ failure.
       before collapsing is remembered
 - [ ] Collapse the terminal (or shrink it small), let the agent go quiet for a while mid-answer: the
       "agent may need you" badge appears on the strip; expanding it clears the badge
-- [ ] **Change project** in the top bar, with an agent running: it asks first, then the folder
+- [ ] The top bar's project and agent menus open under their name, close on a click elsewhere (the
+      console frame and the terminal included) or Escape, and are not cut off by the bar
+- [ ] **Change project** in the top bar's project menu, with an agent running: it asks first, then the folder
       picker opens; cancelling the picker leaves the running agent and its project untouched
 - [ ] Change project, pick a different folder: the old agent and console stop, the new folder opens
       on the launch card (or the checklist, if its own first run has not passed yet)
 - [ ] Reload the window (or navigate away and back) while an agent is running: the terminal redraws
       from where it was, not blank, and the dashboard reconnects to the same session
-- [ ] When the app and the installed skills differ in version, the bar offers **Update skills**, and
-      nothing updates until it is pressed
+- [ ] When the app and the installed skills differ in version, the bar's right end offers **Update
+      skills**, and nothing updates until it is pressed; with the console stopped as well, Reconnect
+      the console shows first and "+1 more" names the update
 
 ## The terminal panel, with each real agent (each system)
 
@@ -79,25 +85,20 @@ Do each of Claude Code, Devin and Codex for a few minutes:
 - [ ] A line with Unicode and emoji
 - [ ] Select text in the terminal: it copies on its own; Ctrl+Shift+C (Windows, Linux) or Cmd+C
       (macOS) copies the selection too; Ctrl+V / Cmd+V pastes
-- [ ] Exiting the agent: the bar says it ended and offers Restart
+- [ ] Exiting the agent: the agent menu reads "ended" with the reason beside it, and New Session stays
+      just left of it
 
 ## Agent lifecycle
 
-- [ ] Start, then **Restart**: it confirms once, then a fresh agent starts on the same agent, model,
-      effort and permission mode, and the dashboard shows the pick-up chip with a brief that
-      matches the session
-- [ ] An agent that ends by itself leaves the app asking nothing until Restart or **Change agent**
-      is pressed; Change agent reopens the launch card with a real choice to make again
+- [ ] Start, then **New Session**: it confirms once, with no claim about unsaved
+      work, then a fresh agent starts on the same agent, model, effort and permission mode, and the
+      dashboard shows the pick-up chip with a brief that matches the session
+- [ ] An agent that ends by itself leaves the app asking nothing until New Session or **Change agent**
+      (in the agent menu) is pressed; Change agent reopens the launch card with a real choice to make again
 - [ ] Closing the window while an agent runs asks first, and "no" keeps the window open
 - [ ] Cmd+Q on macOS asks the same
-- [ ] Windows only: start a CLI installed through npm (a `.cmd` shim), then Restart; check Task
+- [ ] Windows only: start a CLI installed through npm (a `.cmd` shim), then New Session; check Task
       Manager and confirm no leftover `node.exe` (or the CLI's own process) is left running
-
-## Context meter
-
-- [ ] Claude Code and Codex: the meter moves during a long session and the nudge appears once
-- [ ] Devin: the meter is labeled as an estimate
-- [ ] `~/.claude/settings.json` and your own status line are byte-identical before and after a session
 
 ## Standalone path
 

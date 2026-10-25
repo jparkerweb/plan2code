@@ -236,9 +236,19 @@ function appJsReaders(dir) {
     .filter((f) => f.endsWith(".mjs") && f !== "test-web-console-shape.mjs" && !MAY_NAME_APP_JS.has(f))
     .filter((f) => {
       const text = fs.readFileSync(path.join(dir, f), "utf8");
+      // A bare readFileSync/readFile only counts against the web console's
+      // own public/app.js, named somewhere in the same statement: otherwise
+      // this would also catch a test reading some other app.js entirely,
+      // such as plan2code-app/ui/app.js (the desktop app's, a different file
+      // with its own shape rules in its own test). publicSource() implies
+      // the public dir by its own name, so any app.js it is handed counts.
       const oneStatement = text
         .split(";")
-        .some((statement) => /\b(readFileSync|readFile|publicSource)\s*\(/.test(statement) && /["'/]app\.js["']/.test(statement));
+        .some(
+          (statement) =>
+            /["'/]app\.js["']/.test(statement) &&
+            (/\bpublicSource\s*\(/.test(statement) || (/\b(readFileSync|readFile)\s*\(/.test(statement) && /\bpublic\b/.test(statement)))
+        );
       const handedToAHelper = /\w\(\s*["'](?:(?:src\/web-console\/)?public\/)?app\.js["']\s*\)/.test(text);
       const publicPath = /["']public["']\s*,\s*["']app\.js["']|\bpublic\/app\.js/.test(text) && /\breadFile(Sync)?\b/.test(text);
       return oneStatement || handedToAHelper || publicPath;

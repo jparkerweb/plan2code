@@ -5,7 +5,6 @@ pub mod agents;
 pub mod announce;
 pub mod brief;
 pub mod console_supervisor;
-pub mod context;
 pub mod handoff;
 pub mod node_check;
 pub mod project;

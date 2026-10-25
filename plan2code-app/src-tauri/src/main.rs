@@ -4,12 +4,9 @@
 use std::sync::{Arc, Mutex};
 
 use plan2code_app_lib::announce::AnnounceServer;
-use plan2code_app_lib::agent_manager::{AgentEvent, AgentManager, AgentState, BeforeFresh, Sink};
+use plan2code_app_lib::agent_manager::{AgentEvent, AgentManager, BeforeFresh, Sink};
 use plan2code_app_lib::agents::{self, AgentKind, PermissionMode};
 use plan2code_app_lib::console_supervisor::{app_origin, origin_of, ConsoleSupervisor};
-use plan2code_app_lib::context::claude::ClaudeReader;
-use plan2code_app_lib::context::codex::CodexReader;
-use plan2code_app_lib::context::{self, ContextReader, ContextReading, Meter};
 use plan2code_app_lib::node_check;
 use plan2code_app_lib::project::{self, ProjectDir};
 use plan2code_app_lib::restart_brief;
@@ -32,8 +29,6 @@ struct AppState {
     agent: Mutex<Option<Arc<AgentManager>>>,
     // Where the agent's output and state changes go: the page's latest channel.
     page: PageChannel,
-    // How much text the running agent has produced and been given, for the meter.
-    context: Arc<Mutex<Meter>>,
     // This window's endpoint for pages the agent's `console.mjs open` wants shown here.
     announce: Arc<Mutex<Option<AnnounceServer>>>,
     // The Node version `main()` found before opening the window (Task 1.7 exits
@@ -83,19 +78,8 @@ fn windows_build() -> Option<u32> {
 
 // Sends the agent's output as raw bytes and its state changes as JSON, on the
 // page's latest channel. Nothing is sent while no page has registered one.
-// The meter sees every output and state change too, page or no page.
-fn page_sink(page: PageChannel, meter: Arc<Mutex<Meter>>) -> Sink {
+fn page_sink(page: PageChannel) -> Sink {
     Arc::new(move |event| {
-        if let Ok(mut meter) = meter.lock() {
-            match &event {
-                AgentEvent::Output(bytes) => meter.add_output(bytes),
-                AgentEvent::State(snapshot) => {
-                    let running = snapshot.state == AgentState::Running;
-                    meter.observe(snapshot.generation, running);
-                    meter.set_kind(snapshot.kind);
-                }
-            }
-        }
         let Ok(guard) = page.lock() else { return };
         let Some(channel) = guard.as_ref() else { return };
         let body = match event {
@@ -125,7 +109,7 @@ fn agent_for_project(state: &AppState) -> Result<Arc<AgentManager>, String> {
             return Ok(Arc::clone(agent));
         }
     }
-    let sink = page_sink(Arc::clone(&state.page), Arc::clone(&state.context));
+    let sink = page_sink(Arc::clone(&state.page));
     let agent = Arc::new(AgentManager::new(dir, sink));
     agent.set_before_fresh(before_fresh_hook(state));
     *guard = Some(Arc::clone(&agent));
@@ -217,9 +201,6 @@ fn agent_start(
 
 #[tauri::command]
 fn agent_input(state: State<'_, AppState>, data: String) -> Result<(), String> {
-    if let Ok(mut meter) = state.context.lock() {
-        meter.add(data.len());
-    }
     match current_agent(&state) {
         Some(agent) => agent.input(data.as_bytes()),
         None => Ok(()),
@@ -239,14 +220,6 @@ fn agent_restart(state: State<'_, AppState>) -> Result<(), String> {
     current_agent(&state).ok_or("no agent has been started")?.restart()
 }
 
-#[tauri::command]
-fn agent_state(state: State<'_, AppState>) -> serde_json::Value {
-    match current_agent(&state) {
-        Some(agent) => serde_json::to_value(agent.snapshot()).unwrap_or_default(),
-        None => idle_snapshot_json(),
-    }
-}
-
 fn idle_snapshot_json() -> serde_json::Value {
     serde_json::json!({ "state": "idle", "kind": null, "mode": null, "generation": 0 })
 }
@@ -255,7 +228,7 @@ fn idle_snapshot_json() -> serde_json::Value {
 /// agent survived it) registers its output channel here instead of through
 /// `agent_start`, which would try to start a second agent. Replays the
 /// current generation's recent output on it at once, so the terminal does
-/// not come up blank, and returns the same shape `agent_state` does.
+/// not come up blank.
 #[tauri::command]
 fn agent_reattach(state: State<'_, AppState>, on_output: Channel<InvokeResponseBody>) -> Result<serde_json::Value, String> {
     let agent = current_agent(&state);
@@ -270,65 +243,6 @@ fn agent_reattach(state: State<'_, AppState>, on_output: Channel<InvokeResponseB
         Some(agent) => serde_json::to_value(agent.snapshot()).unwrap_or_default(),
         None => idle_snapshot_json(),
     })
-}
-
-// The bar's meter, polled at most every two seconds: how full the running
-// agent's context looks, labeled by how it was read.
-#[tauri::command]
-fn agent_context(state: State<'_, AppState>) -> serde_json::Value {
-    let (estimate, kind, since) = match state.context.lock() {
-        Ok(meter) => (meter.read(), meter.kind(), meter.since()),
-        Err(_) => (ContextReading::Unknown, None, None),
-    };
-    let agent = current_agent(&state);
-    let model = agent.as_ref().and_then(|agent| agent.model_and_effort().0);
-    // Claude's own transcript, or Codex's own log, is read when there is one;
-    // an unknown reading from either falls back to the labeled estimate.
-    // Nothing is read while no agent runs.
-    let reading = match (estimate, kind, agent, since) {
-        (ContextReading::Unknown, _, _, _) => ContextReading::Unknown,
-        (_, Some(AgentKind::Claude), Some(agent), Some(since)) => {
-            // `window_for` always has a window for Claude; the fallback here only
-            // guards against a future change to that rule.
-            let window = context::window_for(kind, model.as_deref()).unwrap_or(context::ESTIMATE_TOKEN_WINDOW);
-            let claude = ClaudeReader { projects_dir: claude_projects_dir(), folder: agent.folder().clone(), since, window };
-            match claude.read() {
-                ContextReading::Unknown => estimate,
-                read => read,
-            }
-        }
-        (_, Some(AgentKind::Codex), Some(agent), Some(since)) => {
-            let codex = CodexReader {
-                sessions_dir: codex_sessions_dir(),
-                folder: agent.folder().clone(),
-                since,
-            };
-            match codex.read() {
-                ContextReading::Unknown => estimate,
-                read => read,
-            }
-        }
-        _ => estimate,
-    };
-    serde_json::to_value(reading).unwrap_or_default()
-}
-
-// Claude Code's transcripts folder: `CLAUDE_CONFIG_DIR` when it is set, else `~/.claude`.
-fn claude_projects_dir() -> std::path::PathBuf {
-    let home = std::env::var_os("CLAUDE_CONFIG_DIR")
-        .map(std::path::PathBuf::from)
-        .or_else(|| std::env::home_dir().map(|home| home.join(".claude")))
-        .unwrap_or_default();
-    home.join("projects")
-}
-
-// Codex's sessions folder: `CODEX_HOME` when it is set, else `~/.codex`.
-fn codex_sessions_dir() -> std::path::PathBuf {
-    let home = std::env::var_os("CODEX_HOME")
-        .map(std::path::PathBuf::from)
-        .or_else(|| std::env::home_dir().map(|home| home.join(".codex")))
-        .unwrap_or_default();
-    home.join("sessions")
 }
 
 // Asks before quitting while an agent runs; "no" keeps the app open.
@@ -379,9 +293,6 @@ fn app_state(state: State<'_, AppState>) -> serde_json::Value {
         .agent
         .or_else(|| settings_file.as_ref().and_then(|file| settings::load_last_agent(file)))
         .or_else(project::remembered_agent);
-    let nudge = settings_file
-        .as_ref()
-        .map_or(settings::DEFAULT_NUDGE_PERCENT, |file| settings::load_nudge_percent(file));
     let term_panel = settings_file.as_ref().map_or(
         settings::TermPanelSettings {
             dock: settings::DEFAULT_TERM_DOCK.to_string(),
@@ -396,7 +307,6 @@ fn app_state(state: State<'_, AppState>) -> serde_json::Value {
         "projectDirSource": project.as_ref().map(|p| p.source),
         "lastAgent": last_agent.map(|kind| kind.id()),
         "launchModel": state.launch.model,
-        "contextNudgePercent": nudge,
         // Task 1.7 already exits before the window opens on a missing or too-old
         // Node, so this is always a pass; the checklist's Node row just names it.
         "nodeVersion": state.node_version,
@@ -595,9 +505,7 @@ fn main() {
             agent_input,
             agent_resize,
             agent_restart,
-            agent_state,
             agent_reattach,
-            agent_context,
             app_state,
             save_term_panel,
             save_first_run_done,

@@ -7,15 +7,10 @@ use std::path::{Path, PathBuf};
 use crate::agents::AgentKind;
 
 const LAST_AGENT_KEY: &str = "lastAgent";
-const NUDGE_KEY: &str = "CONTEXT_NUDGE_PERCENT";
 const TERM_DOCK_KEY: &str = "termDock";
 const TERM_FRACTION_KEY: &str = "termFraction";
 const TERM_COLLAPSED_KEY: &str = "termCollapsed";
 const FIRST_RUN_DONE_KEY: &str = "firstRunDone";
-
-/// The context percent at which the bar suggests a Restart, when the file
-/// names no other.
-pub const DEFAULT_NUDGE_PERCENT: u8 = 70;
 
 /// The terminal pane's remembered shape: which edge it docks to, how much of
 /// the window it takes (a fraction, not collapsed or maximized), and whether
@@ -46,16 +41,6 @@ fn read(file: &Path) -> serde_json::Map<String, serde_json::Value> {
 /// The agent saved in `file`, when it still names one the app can run.
 pub fn load_last_agent(file: &Path) -> Option<AgentKind> {
     AgentKind::from_id(read(file).get(LAST_AGENT_KEY)?.as_str()?)
-}
-
-/// The context percent that triggers the Restart suggestion. A value outside
-/// 1 to 100, or one that is not a number, means the default.
-pub fn load_nudge_percent(file: &Path) -> u8 {
-    read(file)
-        .get(NUDGE_KEY)
-        .and_then(|value| value.as_u64())
-        .filter(|percent| (1..=100).contains(percent))
-        .map_or(DEFAULT_NUDGE_PERCENT, |percent| percent as u8)
 }
 
 /// Save the pick, keeping any other key the file holds.
@@ -148,35 +133,6 @@ mod tests {
         assert_eq!(load_last_agent(&file), Some(AgentKind::Devin));
         assert!(std::fs::read_to_string(&file).unwrap().contains("\"other\""));
         let _ = std::fs::remove_dir_all(file.parent().unwrap());
-    }
-
-    #[test]
-    fn the_nudge_defaults_to_seventy() {
-        assert_eq!(load_nudge_percent(&temp_file("nudge-missing")), 70);
-    }
-
-    #[test]
-    fn the_nudge_reads_a_named_percent() {
-        let file = temp_file("nudge-set");
-        std::fs::create_dir_all(file.parent().unwrap()).unwrap();
-        std::fs::write(&file, r#"{"CONTEXT_NUDGE_PERCENT": 85}"#).unwrap();
-        assert_eq!(load_nudge_percent(&file), 85);
-        let _ = std::fs::remove_dir_all(file.parent().unwrap());
-    }
-
-    #[test]
-    fn a_nudge_outside_one_to_one_hundred_or_not_a_number_is_the_default() {
-        for text in [
-            r#"{"CONTEXT_NUDGE_PERCENT": 0}"#,
-            r#"{"CONTEXT_NUDGE_PERCENT": 150}"#,
-            r#"{"CONTEXT_NUDGE_PERCENT": "high"}"#,
-        ] {
-            let file = temp_file("nudge-bad");
-            std::fs::create_dir_all(file.parent().unwrap()).unwrap();
-            std::fs::write(&file, text).unwrap();
-            assert_eq!(load_nudge_percent(&file), 70, "{text}");
-            let _ = std::fs::remove_dir_all(file.parent().unwrap());
-        }
     }
 
     #[test]

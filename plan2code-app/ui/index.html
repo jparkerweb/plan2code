@@ -10,30 +10,75 @@
     html, body { margin: 0; height: 100%; font-family: system-ui, sans-serif; background: #1e1e1e; color: #ddd; }
     body { display: flex; flex-direction: column; overflow: hidden; }
 
+    /* The console's dark tokens and its default highlight (Ocean). app.js sets
+       the four accent ones to the person's own highlight once the console page
+       says which it is, and keeps them for the next launch. */
+    :root {
+      --panel: #201d1a; --panel-2: #262220; --ink: #f0ece5; --ink-2: #b6afa3; --ink-3: #8b8376; --rule-2: #46403a;
+      --accent: #619fe5; --accent-soft: #1a2533; --accent-ink: #0c1117; --accent-line: #3d5978;
+    }
+
     #bar { flex: none; border-bottom: 1px solid #444; }
+    /* The console's top bar buttons (.btn small ghost), sized to this bar:
+       quiet until hovered, then in the highlight color. New Session is the
+       one that is often the next step, so it wears the highlight outline at
+       rest, like the console's standby buttons. */
+    #bar button {
+      appearance: none; font: inherit; font-size: 12px; font-weight: 600; line-height: 1.2;
+      padding: 4px 10px; border-radius: 8px; cursor: pointer;
+      border: 1px solid var(--rule-2); background: var(--panel); color: var(--ink-2);
+      transition: background 0.12s, border-color 0.12s, color 0.12s;
+    }
+    #bar button:hover:not(:disabled) { color: var(--accent); border-color: var(--accent-line); background: var(--panel-2); }
+    #bar button:disabled { opacity: 0.45; cursor: not-allowed; }
+    #bar button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    #bar #agent-restart { background: transparent; border-color: var(--accent-line); color: var(--accent); }
+    #bar #agent-restart:hover:not(:disabled) { background: var(--accent-soft); border-color: var(--accent); }
     #bar-row { height: 34px; flex: none; display: flex; align-items: center; gap: 10px; padding: 0 10px; font-size: 12px; white-space: nowrap; overflow-x: auto; overflow-y: hidden; }
-    #bar-sep { flex: none; align-self: stretch; width: 1px; margin: 8px 0; background: #3a3a3a; }
-    #title { font-weight: 600; font-size: 13px; }
-    #project-dir { color: #9ab; overflow: hidden; text-overflow: ellipsis; min-width: 0; max-width: 220px; }
-    #current-page { color: #8c8; }
-    #current-page:not(:empty)::before { content: "page: "; color: #666; }
-    #agent-name { color: #9ab; }
-    #agent-name:not(:empty)::before { content: "agent: "; color: #666; }
-    #console-status, #agent-status { color: #d7ba7d; overflow: hidden; text-overflow: ellipsis; min-width: 0; max-width: 260px; }
-    #agent-restart[hidden], #change-agent[hidden] { display: none; }
-    .bar-slot { flex: none; }
-    #permissions-note { color: #888; }
-    #context-nudge { display: flex; align-items: center; gap: 6px; color: #d7ba7d; }
-    #context-nudge[hidden] { display: none; }
-    #version-update { display: flex; align-items: center; gap: 6px; color: #d7ba7d; }
-    #version-update[hidden], #version-update-button[hidden] { display: none; }
-    #bar-slot-meter { display: flex; align-items: center; gap: 6px; color: #9ab; }
-    #bar-slot-meter:empty { display: none; }
-    .meter-track { display: inline-block; width: 64px; height: 8px; border: 1px solid #666; border-radius: 2px; overflow: hidden; background: #2a2a2a; }
-    .meter-track.estimate { border-style: dashed; }
-    .meter-fill { display: block; height: 100%; background: #6a9955; }
-    .meter-track.estimate .meter-fill { background: repeating-linear-gradient(45deg, #6a9955 0 4px, transparent 4px 8px); }
-    .meter-tag { color: #d7ba7d; font-style: italic; }
+    #bar [hidden] { display: none !important; }
+    /* The project and agent menus' triggers: plain text until hovered, a
+       caret saying there is more behind them. */
+    #bar .bar-menu { display: inline-flex; align-items: center; gap: 6px; flex: none; border-color: transparent; background: transparent; color: var(--ink); padding: 4px 8px; }
+    #bar .bar-menu:hover:not(:disabled), #bar .bar-menu[aria-expanded="true"] { background: var(--panel-2); border-color: transparent; color: var(--ink); }
+    .bar-caret { color: var(--ink-3); font-size: 10px; }
+    #project-name { max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
+    .agent-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: #666; }
+    .agent-dot.is-ok { background: #6a9955; }
+    .agent-dot.is-warn { background: #d7ba7d; }
+    #agent-ended { color: var(--ink-3); font-weight: 400; }
+    #agent-bypass { flex: none; font-size: 11px; font-weight: 600; line-height: 1.3; padding: 0 7px; border-radius: 999px; border: 1px solid #d7ba7d; color: #d7ba7d; }
+    #agent-none { color: var(--ink-3); }
+    #agent-status { color: var(--ink-3); overflow: hidden; text-overflow: ellipsis; min-width: 0; max-width: 320px; }
+    #agent-status.is-error { color: #f48771; }
+    #bar-grow { flex: 1; min-width: 0; }
+    /* The one next step for the console or the skills, at the right end. */
+    #next-step { display: flex; align-items: center; gap: 8px; flex: none; }
+    #next-step-text { overflow: hidden; text-overflow: ellipsis; max-width: 320px; }
+    #next-step-text.is-ok { color: #6a9955; }
+    #next-step-text.is-warn { color: #d7ba7d; }
+    #next-step-text.is-err { color: #f48771; }
+    #next-step-text.is-busy::before {
+      content: ""; display: inline-block; width: 8px; height: 8px; margin-right: 6px; vertical-align: -1px;
+      border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: bar-spin 0.8s linear infinite;
+    }
+    @keyframes bar-spin { to { transform: rotate(360deg); } }
+    #bar #next-step-button { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+    #bar #next-step-button:hover:not(:disabled) { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); filter: brightness(1.12); }
+    #next-step-more { color: var(--ink-3); font-size: 11px; border-bottom: 1px dotted var(--ink-3); cursor: help; }
+    /* The menus sit outside the scrolling row (fixed, placed under their
+       trigger by app.js), so the row's overflow never clips them. */
+    .bar-dropdown {
+      position: fixed; z-index: 20; min-width: 240px; max-width: 380px; padding: 6px; box-sizing: border-box;
+      font-size: 12px; background: var(--panel); border: 1px solid var(--rule-2); border-radius: 8px; box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
+    }
+    .bar-dropdown-head { margin: 0; padding: 4px 8px 8px; color: var(--ink-3); line-height: 1.45; overflow-wrap: anywhere; }
+    .bar-dropdown-head b { color: var(--ink); font-weight: 600; }
+    .bar-dropdown-head .is-warn { color: #d7ba7d; }
+    #bar .bar-dropdown button {
+      display: block; width: 100%; text-align: left; font-weight: 400; padding: 6px 8px; border: 0; border-radius: 6px;
+      background: transparent; color: var(--ink);
+    }
+    #bar .bar-dropdown button:hover:not(:disabled), #bar .bar-dropdown button:focus-visible { background: var(--panel-2); color: var(--accent); }
 
     #workspace { flex: 1; min-height: 0; display: flex; flex-direction: column; }
     #workspace.dock-right { flex-direction: row; }
@@ -128,30 +173,27 @@
 <body>
   <header id="bar">
     <div id="bar-row">
-      <span id="title">Plan2Code</span>
-      <span id="project-dir"></span>
-      <span id="bar-slot-restart" class="bar-slot"><button id="agent-restart" hidden>Restart</button></span>
-      <span id="bar-slot-change-agent" class="bar-slot"><button id="change-agent" hidden>Change agent</button></span>
-      <span id="bar-slot-change-project" class="bar-slot"><button id="change-project">Change project</button></span>
-      <span id="bar-sep" aria-hidden="true"></span>
-      <span id="current-page" title="The page the agent opened"></span>
-      <span id="agent-name"></span>
+      <button id="project-menu-button" class="bar-menu" aria-haspopup="menu" aria-expanded="false" aria-controls="project-menu" hidden><span id="project-name"></span><span class="bar-caret" aria-hidden="true">&#9662;</span></button>
+      <!-- Whenever an agent exists, running or ended, just left of its menu. -->
+      <button id="agent-restart" hidden>New Session</button>
+      <button id="agent-menu-button" class="bar-menu" aria-haspopup="menu" aria-expanded="false" aria-controls="agent-menu" hidden><span id="agent-dot" class="agent-dot" aria-hidden="true"></span><span id="agent-name"></span><span id="agent-ended" hidden>ended</span><span id="agent-bypass" title="Permission checks are off: the agent runs commands and changes files without asking" hidden>checks off</span><span class="bar-caret" aria-hidden="true">&#9662;</span></button>
+      <span id="agent-none">No agent</span>
       <span id="agent-status" role="status"></span>
-      <span id="console-status"></span>
-      <button id="console-again" hidden>Start it again</button>
-      <span id="context-nudge" class="bar-slot" hidden>
-        <span>Context is getting full: consider Restart</span>
-        <button id="context-restart">Restart</button>
+      <span id="bar-grow"></span>
+      <!-- The console's or the skills' one next step (meter.js barNextSteps), when there is one. -->
+      <span id="next-step" role="status" hidden>
+        <span id="next-step-text"></span>
+        <button id="next-step-button" hidden></button>
+        <span id="next-step-more" hidden></span>
       </span>
-      <!-- Shown only when the app and the installed skills are on different versions. -->
-      <span id="version-update" class="bar-slot" hidden>
-        <span id="version-update-text"></span>
-        <button id="version-update-button">Update skills</button>
-        <button id="version-update-restart" hidden>Restart the console</button>
-      </span>
-      <span id="bar-slot-meter" class="bar-slot"></span>
-      <!-- Shown only while an agent is running, naming the real mode it started with. -->
-      <span id="permissions-note" hidden></span>
+    </div>
+    <div id="project-menu" class="bar-dropdown" role="menu" aria-label="Project" hidden>
+      <p class="bar-dropdown-head">Project<br><b id="project-path"></b></p>
+      <button id="change-project" role="menuitem">Change project...</button>
+    </div>
+    <div id="agent-menu" class="bar-dropdown" role="menu" aria-label="Agent" hidden>
+      <p id="agent-menu-head" class="bar-dropdown-head"></p>
+      <button id="change-agent" role="menuitem" hidden>Change agent...</button>
     </div>
   </header>
   <div id="workspace">

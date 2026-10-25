@@ -2,16 +2,27 @@
 // agent's terminal panel docked at the bottom with a drag handle.
 
 import { mountTerminal } from './terminal.js';
-import { nudgeDue } from './meter.js';
+import { barNextSteps, folderName, windowTitleFor } from './meter.js';
 
 const { invoke, Channel } = window.__TAURI__.core;
 
-const projectDirEl = document.getElementById('project-dir');
+const projectMenuBtn = document.getElementById('project-menu-button');
+const projectNameEl = document.getElementById('project-name');
+const projectPathEl = document.getElementById('project-path');
+const projectMenu = document.getElementById('project-menu');
+const agentMenuBtn = document.getElementById('agent-menu-button');
+const agentMenu = document.getElementById('agent-menu');
+const agentMenuHeadEl = document.getElementById('agent-menu-head');
+const agentDotEl = document.getElementById('agent-dot');
 const agentNameEl = document.getElementById('agent-name');
+const agentEndedEl = document.getElementById('agent-ended');
+const agentBypassEl = document.getElementById('agent-bypass');
+const agentNoneEl = document.getElementById('agent-none');
 const agentStatusEl = document.getElementById('agent-status');
 const restartBtn = document.getElementById('agent-restart');
 const changeAgentBtn = document.getElementById('change-agent');
 const changeProjectBtn = document.getElementById('change-project');
+const barRowEl = document.getElementById('bar-row');
 const launchCard = document.getElementById('launch-card');
 const launchAgentEl = document.getElementById('launch-agent');
 const launchMissingEl = document.getElementById('launch-missing');
@@ -24,16 +35,10 @@ const launchStartBtn = document.getElementById('launch-start');
 const firstRunEl = document.getElementById('first-run');
 const firstRunListEl = document.getElementById('first-run-list');
 const firstRunStartBtn = document.getElementById('first-run-start');
-const meterSlot = document.getElementById('bar-slot-meter');
-const nudgeEl = document.getElementById('context-nudge');
-const nudgeRestartBtn = document.getElementById('context-restart');
-const versionEl = document.getElementById('version-update');
-const versionTextEl = document.getElementById('version-update-text');
-const versionBtn = document.getElementById('version-update-button');
-const versionRestartBtn = document.getElementById('version-update-restart');
-const consoleStatusEl = document.getElementById('console-status');
-const permissionsNoteEl = document.getElementById('permissions-note');
-const consoleAgainBtn = document.getElementById('console-again');
+const nextStepEl = document.getElementById('next-step');
+const nextStepTextEl = document.getElementById('next-step-text');
+const nextStepBtn = document.getElementById('next-step-button');
+const nextStepMoreEl = document.getElementById('next-step-more');
 const frame = document.getElementById('console-frame');
 const stateBox = document.getElementById('dashboard-state');
 const stateText = document.getElementById('dashboard-state-text');
@@ -46,10 +51,8 @@ const termDockBtn = document.getElementById('term-dock');
 const termMaximizeBtn = document.getElementById('term-maximize');
 const termCollapseBtn = document.getElementById('term-collapse');
 const termBadgeEl = document.getElementById('term-badge');
-const currentPageEl = document.getElementById('current-page');
 
 const STATUS_POLL_MS = 5000;
-const METER_POLL_MS = 2000;
 const BADGE_POLL_MS = 2000;
 const MIN_PANE = 0.10;
 const MAX_PANE = 0.60;
@@ -70,12 +73,6 @@ const EFFORT_OPTIONS = {
 // What the Rust agent host last said: idle, running or ended.
 let agent = { state: 'idle', kind: null, generation: 0 };
 const agentActive = () => agent.state === 'running';
-
-// The context percent that triggers the Restart suggestion, from the app's
-// settings (main() reads it), and the agent run the suggestion was shown for:
-// it appears once per run, not again after it is dismissed by a Restart.
-let nudgePercent = 70;
-let nudgeShownFor = null;
 
 const terminal = await mountTerminal(document.getElementById('term'), {
   onInput: (data) => {
@@ -114,7 +111,7 @@ function applyAgentState(next, { skipReset } = {}) {
   const label = AGENT_LABELS[agent.kind] || '';
   const active = agentActive();
 
-  agentNameEl.textContent = active ? label : '';
+  const ended = agent.state === 'ended';
   if (active) {
     // Only ever auto-*hides* the card (the agent just started); it must
     // never auto-*show* it on 'ended' or 'idle' — that is Change agent's
@@ -122,38 +119,117 @@ function applyAgentState(next, { skipReset } = {}) {
     launchCard.hidden = true;
     hideFirstRun();
   }
-  // One rule throughout: Restart while running or ended (it keeps the
-  // previous agent, model, effort and mode); Change agent only once ended,
-  // when there is a real choice to make again.
-  restartBtn.hidden = !(active || agent.state === 'ended');
-  changeAgentBtn.hidden = agent.state !== 'ended';
-  // Checked mode needs no banner; bypass always gets one, naming the agent it
-  // applies to, for exactly as long as that agent runs.
+  // One rule throughout: New Session and the agent menu while running or
+  // ended (New Session keeps the previous agent, model, effort and mode);
+  // Change agent, in that menu, only once ended, when there is a real choice
+  // to make again.
+  restartBtn.hidden = !(active || ended);
+  changeAgentBtn.hidden = !ended;
+  // Checked mode needs no marker; bypass always gets the "checks off" badge
+  // on the agent, for exactly as long as that agent runs.
   const bypassActive = active && agent.mode === 'bypass';
-  permissionsNoteEl.hidden = !bypassActive;
-  permissionsNoteEl.textContent = bypassActive ? `Permission checks are off for ${label || 'the running agent'}` : '';
-  restartBtn.title = agent.state === 'ended' ? 'Start a fresh agent on the same brief' : 'Replace the agent with a fresh one, on a fresh context window';
-  if (freshScreen || agent.state !== 'running') nudgeEl.hidden = true;
-  if (!agentActive()) renderMeter({ kind: 'unknown' });
+  agentMenuBtn.hidden = !(active || ended);
+  agentNoneEl.hidden = active || ended;
+  agentNameEl.textContent = active || ended ? label || 'The agent' : '';
+  agentDotEl.className = `agent-dot${active ? (bypassActive ? ' is-warn' : ' is-ok') : ''}`;
+  agentEndedEl.hidden = !ended;
+  agentBypassEl.hidden = !bypassActive;
+  renderAgentMenuHead(label || 'The agent', { active, ended, bypassActive });
+  if (agentMenu.hidden === false && agentMenuBtn.hidden) closeBarMenus();
+  restartBtn.title = ended ? 'Start a fresh agent on the same brief' : 'Replace the agent with a fresh one, on a fresh context window';
   // The agent is back (a fresh generation, running): the restart message stays
   // on screen (restarting() below) until its dashboard page is announced.
   if (restarting && freshScreen && agent.state === 'running') {
     terminal.write('\r\n\r\n[Fresh agent started. Waiting for the dashboard...]\r\n\r\n');
   }
 
-  if (agent.state === 'ended') {
-    agentStatusEl.textContent = `${label || 'The agent'} ended: ${agent.reason}. Nothing starts until you press Restart.`;
+  if (ended) {
+    // The why sits beside the agent's menu; the menu says the rest.
+    setAgentStatus(agent.reason);
     // A failed Restart clears the screen too, so it says so again.
     if (!wasEnded || freshScreen) {
-      terminal.write(`\r\n[${label || 'The agent'} ended: ${agent.reason}. Press Restart in the bar to start a fresh one.]\r\n`);
+      terminal.write(`\r\n[${label || 'The agent'} ended: ${agent.reason}. Press New Session in the bar to start a fresh one.]\r\n`);
     }
   } else {
     // After a Restart the bar says what it left for the dashboard, if anything.
-    agentStatusEl.textContent = agent.briefNote || '';
+    setAgentStatus(agent.briefNote || '');
   }
-  agentStatusEl.title = agentStatusEl.textContent;
   updateBadge();
 }
+
+// The short line after the agent's menu: an ended agent's reason or a
+// Restart's brief note (quiet), or something that went wrong (in red).
+function setAgentStatus(text, { error = false } = {}) {
+  agentStatusEl.textContent = text;
+  agentStatusEl.title = text;
+  agentStatusEl.classList.toggle('is-error', error && Boolean(text));
+}
+
+// The agent menu's first lines: what the agent is doing and, while it runs,
+// which permission mode it started with.
+function renderAgentMenuHead(label, { active, ended, bypassActive }) {
+  const name = document.createElement('b');
+  name.textContent = label;
+  if (active) {
+    const mode = document.createElement('span');
+    if (bypassActive) {
+      mode.className = 'is-warn';
+      mode.textContent = 'off';
+    } else {
+      mode.textContent = 'on';
+    }
+    agentMenuHeadEl.replaceChildren(name, ' is running', document.createElement('br'), 'Permission checks are ', mode);
+    if (bypassActive) agentMenuHeadEl.append(': it runs commands and changes files without asking');
+  } else if (ended) {
+    agentMenuHeadEl.replaceChildren(name, ` ended: ${agent.reason}`, document.createElement('br'), 'Nothing starts until you press New Session.');
+  } else {
+    agentMenuHeadEl.replaceChildren();
+  }
+}
+
+// The bar's two menus (project, agent). They hang outside the scrolling bar
+// row, fixed under their trigger, so the row's overflow never clips them.
+// Clicking anywhere else (the console frame and the terminal too), Escape,
+// a resize or a scroll of the row all close them.
+let openBarMenu = null;
+
+function closeBarMenus() {
+  for (const [button, menu] of [[projectMenuBtn, projectMenu], [agentMenuBtn, agentMenu]]) {
+    menu.hidden = true;
+    button.setAttribute('aria-expanded', 'false');
+  }
+  openBarMenu = null;
+}
+
+function toggleBarMenu(button, menu) {
+  const wasOpen = openBarMenu === menu;
+  closeBarMenus();
+  if (wasOpen) return;
+  menu.hidden = false;
+  const at = button.getBoundingClientRect();
+  const left = Math.max(8, Math.min(at.left, window.innerWidth - menu.offsetWidth - 8));
+  menu.style.left = `${left}px`;
+  menu.style.top = `${at.bottom + 4}px`;
+  button.setAttribute('aria-expanded', 'true');
+  openBarMenu = menu;
+}
+
+projectMenuBtn.onclick = () => toggleBarMenu(projectMenuBtn, projectMenu);
+agentMenuBtn.onclick = () => toggleBarMenu(agentMenuBtn, agentMenu);
+document.addEventListener('pointerdown', (event) => {
+  if (!openBarMenu) return;
+  if (openBarMenu.contains(event.target) || projectMenuBtn.contains(event.target) || agentMenuBtn.contains(event.target)) return;
+  closeBarMenus();
+});
+document.addEventListener('keydown', (event) => {
+  if (event.key !== 'Escape' || !openBarMenu) return;
+  const trigger = openBarMenu === projectMenu ? projectMenuBtn : agentMenuBtn;
+  closeBarMenus();
+  trigger.focus();
+});
+window.addEventListener('blur', closeBarMenus);
+window.addEventListener('resize', closeBarMenus);
+barRowEl.addEventListener('scroll', closeBarMenus);
 
 // True from a confirmed Restart until the fresh agent's dashboard page is
 // announced (showAnnounced below): the frame stays blanked with a message the
@@ -167,13 +243,12 @@ function confirmRestart(onYes) {
     return;
   }
   showState(
-    'Restart the agent on a fresh context window? What it was doing is not saved.',
-    'Restart',
+    'Restart the agent on a fresh context window?',
+    'New Session',
     () => {
       restarting = true;
       currentUrl = null;
       frameReady = false;
-      currentPageEl.textContent = '';
       showState('The agent is restarting on a fresh context window. Please wait for the dashboard to load.');
       onYes();
     },
@@ -322,14 +397,14 @@ async function startAgent(event) {
   const model = launchModelEl.value.trim() || null;
   const effort = (EFFORT_OPTIONS[kind] || []).length > 0 ? launchEffortEl.value || null : null;
   const mode = launchBypassEl.checked ? 'bypass' : 'checked';
-  agentStatusEl.textContent = '';
+  setAgentStatus('');
   showState('Waiting for the agent to open the dashboard');
   const { cols, rows } = terminal.size();
   try {
     await invoke('agent_start', { kind, model, effort, mode, cols, rows });
     terminal.focus();
   } catch (error) {
-    agentStatusEl.textContent = `Could not start the agent: ${error}`;
+    setAgentStatus(`Could not start the agent: ${error}`, { error: true });
     showLaunchCard();
   }
 }
@@ -339,15 +414,17 @@ async function agentAction(command) {
     await invoke(command);
     terminal.focus();
   } catch (error) {
-    agentStatusEl.textContent = String(error);
+    setAgentStatus(String(error), { error: true });
   }
 }
 
 launchCard.addEventListener('submit', startAgent);
 restartBtn.onclick = () => confirmRestart(() => agentAction('agent_restart'));
-nudgeRestartBtn.onclick = () => confirmRestart(() => agentAction('agent_restart'));
 // Only ever enabled once the agent has ended: nothing active to lose, so no confirm.
-changeAgentBtn.onclick = () => showLaunchCard();
+changeAgentBtn.onclick = () => {
+  closeBarMenus();
+  showLaunchCard();
+};
 
 // The pane's shape: which edge it docks to, its share of the window when it
 // is neither collapsed nor maximized (dragging and the settings file both
@@ -455,13 +532,63 @@ function loadFrame(url) {
   frame.src = url;
 }
 
+// What the console page may ask of this window. Each is a named request with
+// no free text, so the page can never type anything but "continue".
 window.addEventListener('message', (event) => {
   if (event.source !== frame.contentWindow) return;
-  if (!event.data || event.data.plan2code !== 'console-ready') return;
-  frameReady = true;
-  clearTimeout(helloTimer);
-  hideState();
+  const kind = event.data && event.data.plan2code;
+  if (kind === 'console-ready') {
+    frameReady = true;
+    clearTimeout(helloTimer);
+    hideState();
+  } else if (kind === 'agent-continue') {
+    typeContinue();
+  } else if (kind === 'new-session') {
+    // The bar's own button, so the press is confirmed exactly the same way.
+    if (!restartBtn.hidden) restartBtn.click();
+  } else if (kind === 'looks') {
+    applyAccent(event.data.accent, { save: true });
+  }
 });
+
+// Its "Not running... type continue" line, pressed: the word, then Enter on
+// its own a moment later, so an agent that treats one burst of input as a
+// paste still reads the Enter as a submit.
+const ENTER_AFTER_MS = 120;
+
+function typeContinue() {
+  if (!agentActive()) return;
+  invoke('agent_input', { data: 'continue' })
+    .then(() => new Promise((resolve) => setTimeout(resolve, ENTER_AFTER_MS)))
+    .then(() => invoke('agent_input', { data: '\r' }))
+    .catch((error) => {
+      setAgentStatus(`Could not type continue: ${error}`, { error: true });
+    });
+}
+
+// The person's highlight color, as the console page last sent it (its dark
+// shades: fill, soft, ink, line), so the bar's buttons light in it too. Kept
+// here for the next launch, which paints the bar before any page has loaded.
+const ACCENT_KEY = 'p2c-app:accent';
+const ACCENT_VARS = ['--accent', '--accent-soft', '--accent-ink', '--accent-line'];
+
+function applyAccent(shades, { save = false } = {}) {
+  if (!Array.isArray(shades) || shades.length !== ACCENT_VARS.length) return;
+  if (!shades.every((c) => typeof c === 'string' && /^#[0-9a-f]{6}$/i.test(c))) return;
+  ACCENT_VARS.forEach((name, i) => document.documentElement.style.setProperty(name, shades[i]));
+  if (!save) return;
+  try {
+    localStorage.setItem(ACCENT_KEY, JSON.stringify(shades));
+  } catch {
+    // Not remembered is fine: the stylesheet's default shows until a page loads.
+  }
+}
+
+try {
+  applyAccent(JSON.parse(localStorage.getItem(ACCENT_KEY)));
+} catch {
+  // Nothing saved, or storage is blocked: the stylesheet's default stands.
+}
 
 // No hello in time: ask the console why, and say so with a way forward.
 async function onNoHello() {
@@ -473,7 +600,7 @@ async function onNoHello() {
     // The status check itself failed; treat it as a console that is not answering.
   }
   if (!status || status.state !== 'running') {
-    showState('The console stopped, so the page could not show.', 'Restart the console', reconnectConsole);
+    showState('The console stopped, so the page could not show.', 'Reconnect the console', reconnectConsole);
   } else {
     showState('The console is running but its page did not show in this window.', 'Reload the page', () => {
       showState('Reloading the page');
@@ -512,10 +639,7 @@ async function reconnectConsole() {
   } catch (error) {
     showState(`The console could not be reached: ${error}`, 'Retry', reconnectConsole);
     // An old console cannot be framed: the fix is the skills update, so offer it.
-    if (String(error).includes('too old')) {
-      versionTextEl.textContent = 'The installed console is too old for the app';
-      versionEl.hidden = false;
-    }
+    if (String(error).includes('too old')) setVersionState({ kind: 'too-old' });
   }
 }
 
@@ -545,113 +669,55 @@ async function pollConsole() {
   }
 }
 
-// The meter: a bar and a percent for a real or best-effort reading, a dashed
-// bar with "about N%" and an "estimate" tag for an estimate, "unknown" when
-// nothing is available. Built with DOM calls, never innerHTML.
-function renderMeter(reading) {
-  meterSlot.replaceChildren();
-  // Left empty, not even an "unknown" label: #bar-slot-meter:empty hides it,
-  // so the bar carries nothing until the reading means something.
-  if (reading.kind === 'unknown') return;
-  const label = document.createElement('span');
-  const track = document.createElement('span');
-  track.className = `meter-track ${reading.kind}`;
-  const fill = document.createElement('span');
-  fill.className = 'meter-fill';
-  fill.style.width = `${reading.percent}%`;
-  track.append(fill);
-  label.textContent = reading.kind === 'estimate' ? `about ${reading.percent}%` : `${reading.percent}%`;
-  meterSlot.append(track, label);
-  if (reading.kind === 'estimate') {
-    const tag = document.createElement('span');
-    tag.className = 'meter-tag';
-    tag.textContent = 'estimate';
-    meterSlot.append(tag);
-    meterSlot.title = 'Estimated from the text so far: the agent does not report its context size';
-  } else if (reading.kind === 'besteffort') {
-    meterSlot.title = 'Read from the agent\'s session log: undocumented, so it may stop working after an update';
-  } else {
-    meterSlot.title = 'How full the agent context is, as the agent reports it';
-  }
-}
-
-// Every two seconds while an agent runs: draw the meter and, once per run,
-// suggest a Restart when the context reaches the nudge percent.
-async function pollMeter() {
-  if (!agentActive()) return;
-  try {
-    // The reading may land after a Restart: only a reading for the same run counts.
-    const { generation, state } = agent;
-    const reading = await invoke('agent_context');
-    if (agent.generation !== generation || agent.state !== state) return;
-    renderMeter(reading);
-    if (nudgeDue(reading, nudgePercent) && state === 'running' && nudgeShownFor !== generation) {
-      nudgeShownFor = generation;
-      nudgeEl.hidden = false;
-    }
-  } catch {
-    // A failed read is not a reading: look again on the next tick.
-  }
-}
-
 // Once, at start: when the app and the installed skills are on different versions the bar
 // says so and offers Update skills. Nothing runs until that button is pressed.
 async function checkVersions() {
   try {
     const status = await invoke('version_status');
     if (!status.mismatch) return;
-    if (status.skills_ahead) {
-      // The skills are ahead of this app: another Update skills run cannot help.
-      versionTextEl.textContent = `The installed skills are v${status.skills}, newer than this app (v${status.app}). Get the new app.`;
-      versionBtn.hidden = true;
-    } else {
-      versionTextEl.textContent = `Skills are v${status.skills}, this app is v${status.app}`;
-      versionBtn.hidden = false;
-    }
-    versionEl.hidden = false;
+    // Skills ahead of this app: another Update skills run cannot help, so
+    // that state offers no button.
+    setVersionState({ kind: status.skills_ahead ? 'ahead' : 'mismatch', skills: status.skills, app: status.app });
   } catch {
     // No version to compare is no reason to nag.
   }
 }
 
-versionBtn.onclick = async () => {
-  versionBtn.disabled = true;
-  versionRestartBtn.hidden = true;
-  versionTextEl.textContent = 'Updating Plan2Code...';
+async function updateSkills() {
+  setVersionState({ kind: 'updating', line: 'Updating Plan2Code...' });
   const progress = new Channel();
   progress.onmessage = (line) => {
-    if (line) versionTextEl.textContent = line;
+    if (line && versionState && versionState.kind === 'updating') setVersionState({ kind: 'updating', line });
   };
   try {
     const outcome = await invoke('update_skills', { progress });
-    versionTextEl.textContent = outcome.status.mismatch
-      ? `Updated, but the mismatch remains (skills v${outcome.status.skills}, app v${outcome.status.app}).`
-      : 'Updated. Restart the console to use the new version.';
-    versionBtn.hidden = true;
-    versionRestartBtn.hidden = outcome.status.mismatch;
+    setVersionState(
+      outcome.status.mismatch
+        ? { kind: 'remains', skills: outcome.status.skills, app: outcome.status.app }
+        : { kind: 'updated' }
+    );
   } catch (error) {
-    versionTextEl.textContent = String(error);
-    versionBtn.disabled = false;
+    setVersionState({ kind: 'failed', error: String(error) });
   }
-};
+}
 
-versionRestartBtn.onclick = async () => {
-  versionRestartBtn.disabled = true;
+// After an update: stop the old console first, so the new skills are really
+// picked up, then bring a fresh one back on the same session.
+async function restartConsole() {
   try {
     await invoke('console_stop');
   } catch {
     // Nothing to stop is fine: reconnectConsole starts a fresh one either way.
   }
-  versionEl.hidden = true;
+  setVersionState(null);
   await reconnectConsole();
-};
+}
 
-// A page the agent's `console.mjs open` asked this window to show.
-const pageLabel = (workflow) => (workflow || '').replace(/-/g, ' ').replace(/^./, (c) => c.toUpperCase());
-
+// A page the agent's `console.mjs open` asked this window to show. Which page
+// it is shows inside the frame itself (the console's own badge and title),
+// not repeated here.
 function showAnnounced(notice) {
   restarting = false;
-  currentPageEl.textContent = pageLabel(notice.workflow);
   if (!consoleKnown) {
     consoleKnown = true;
     if (!pollTimer) pollTimer = setInterval(pollConsole, STATUS_POLL_MS);
@@ -665,21 +731,62 @@ function showAnnounced(notice) {
 
 window.__TAURI__.event.listen('console-page', (event) => showAnnounced(event.payload));
 
+// The right end of the bar: whether the console stopped answering and where
+// the skills stand against this app, drawn as one next step (meter.js
+// barNextSteps decides which, and its button), with the rest as "+N more".
+let consoleDead = false;
+let versionState = null;
+const NEXT_STEP_ACTIONS = { reconnect: reconnectConsole, 'restart-console': restartConsole, update: updateSkills };
+let nextStepAction = null;
+
+function renderNextStep() {
+  const steps = barNextSteps({ consoleDead, version: versionState });
+  nextStepEl.hidden = steps.length === 0;
+  const [first, ...rest] = steps;
+  nextStepTextEl.textContent = first ? first.text : '';
+  nextStepTextEl.title = first ? first.title : '';
+  nextStepTextEl.className = first ? `is-${first.tone}${first.busy ? ' is-busy' : ''}` : '';
+  nextStepAction = first && first.action ? NEXT_STEP_ACTIONS[first.action] : null;
+  nextStepBtn.hidden = !nextStepAction;
+  nextStepBtn.disabled = false;
+  nextStepBtn.textContent = first && first.label ? first.label : '';
+  nextStepMoreEl.hidden = rest.length === 0;
+  nextStepMoreEl.textContent = `+${rest.length} more`;
+  nextStepMoreEl.title = rest.map((step) => step.title).join('\n');
+}
+
+function setVersionState(next) {
+  versionState = next;
+  renderNextStep();
+}
+
 function markConsoleAlive() {
-  consoleStatusEl.textContent = '';
-  consoleAgainBtn.hidden = true;
+  consoleDead = false;
+  renderNextStep();
 }
 
 function markConsoleDead() {
-  consoleStatusEl.textContent = 'The console stopped.';
-  consoleAgainBtn.hidden = false;
+  consoleDead = true;
+  renderNextStep();
 }
 
-consoleAgainBtn.onclick = () => reconnectConsole();
+nextStepBtn.onclick = () => {
+  if (!nextStepAction) return;
+  // Pressed once per step: whatever it starts draws the next state itself.
+  nextStepBtn.disabled = true;
+  nextStepAction();
+};
 
 function setProjectDir(dir) {
-  projectDirEl.textContent = dir;
-  projectDirEl.title = dir;
+  // The bar names the folder; its menu holds the full path.
+  projectNameEl.textContent = folderName(dir);
+  projectMenuBtn.title = dir;
+  projectPathEl.textContent = dir;
+  projectMenuBtn.hidden = !dir;
+  // So two or more windows read apart in the taskbar without opening each
+  // one: a setTitle that fails (an old Tauri runtime, say) just leaves the
+  // static "Plan2Code" title from tauri.conf.json, never breaks the start.
+  window.__TAURI__.window.getCurrentWindow().setTitle(windowTitleFor(dir)).catch(() => {});
 }
 
 // The state `main()` read at startup: `pickFolder()` and the first-run
@@ -731,7 +838,6 @@ async function doChangeProject() {
     restarting = false;
     currentUrl = null;
     frameReady = false;
-    currentPageEl.textContent = '';
     afterProjectKnown();
   } catch (error) {
     showState(`Could not switch project: ${error}`, 'Try again', doChangeProject);
@@ -751,7 +857,10 @@ function changeProject() {
   doChangeProject();
 }
 
-changeProjectBtn.onclick = changeProject;
+changeProjectBtn.onclick = () => {
+  closeBarMenus();
+  changeProject();
+};
 
 // The launcher passed `--agent`: start it at once, on its model, with the
 // same bypass flags the terminal launcher itself always runs that agent with
@@ -759,7 +868,7 @@ changeProjectBtn.onclick = changeProject;
 async function autoStartAgent(state) {
   launchAgentEl.value = state.autoStart;
   if (typeof state.launchModel === 'string' && state.launchModel) launchModelEl.value = state.launchModel;
-  agentStatusEl.textContent = '';
+  setAgentStatus('');
   showState('Starting the agent...');
   const { cols, rows } = terminal.size();
   try {
@@ -773,7 +882,7 @@ async function autoStartAgent(state) {
     });
     terminal.focus();
   } catch (error) {
-    agentStatusEl.textContent = `Could not start the agent: ${error}`;
+    setAgentStatus(`Could not start the agent: ${error}`, { error: true });
     showLaunchCard();
   }
 }
@@ -811,7 +920,6 @@ async function main() {
   appState = state;
   if (AGENT_LABELS[state.lastAgent]) launchAgentEl.value = state.lastAgent;
   if (typeof state.launchModel === 'string' && state.launchModel) launchModelEl.value = state.launchModel;
-  if (Number.isInteger(state.contextNudgePercent)) nudgePercent = state.contextNudgePercent;
   if (state.termPanel) {
     paneDock = state.termPanel.dock === 'right' ? 'right' : 'bottom';
     paneFraction = state.termPanel.fraction;
@@ -820,7 +928,6 @@ async function main() {
   applyPaneLayout();
   await loadAgentAvailability();
   refreshLaunchCard();
-  setInterval(pollMeter, METER_POLL_MS);
   setInterval(updateBadge, BADGE_POLL_MS);
   checkVersions();
 

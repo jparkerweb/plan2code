@@ -1,7 +1,7 @@
 # The Plan2Code desktop app
 
 One window for working with an AI agent. The app opens the Plan2Code dashboard as its main surface,
-runs your agent (Claude Code, Devin or Codex) in a terminal panel it owns, and has a **Restart**
+runs your agent (Claude Code, Devin or Codex) in a terminal panel it owns, and has a **New Session**
 button that replaces the agent with a fresh one on a brief the app builds from its own record of the
 session. The fresh agent gets a console session of its own, so the Session meter starts over with it.
 It is an addition: `/plan2code` typed inside an agent works exactly as before, with or
@@ -60,18 +60,42 @@ The first time the app opens on a folder, a checklist confirms Node, the agent C
 folder and the skills version before anything else shows; a later launch skips straight past it.
 
 A **launch card** then asks which agent (Claude, Devin or Codex), model and effort (Claude and Codex
-only) to start on. Permission checks off is its own tick, unchanged unless you choose it (Restart
+only) to start on. Permission checks off is its own tick, unchanged unless you choose it (New Session
 keeps whatever you picked); a CLI the app cannot find is named, with how to install it, instead of
 just being greyed out. The card is skipped when the launcher already passed an agent to start.
 
-Once an agent is running, a slim top bar holds the project name, **Restart** and **Change project**,
-and a status strip beneath it shows the page the agent opened (not only the dashboard — every console
-page, including Ask, Workspace, Notebook, Help, Preferences and Git, opens inside the window), the
-agent's name and status, a context meter once one is readable, and the permission mode in use. The
-terminal panel has its own toolbar: dock it to the bottom or the right, collapse it to a thin strip,
-or maximize it; its size is remembered. An "agent may need you" badge appears on a collapsed or small
-panel once the agent has sat quiet for a while. **Change project** asks first if an agent is running,
-then stops it and the console before opening the new folder.
+The window's own title (and so its taskbar entry) reads **Plan2Code - &lt;folder name&gt;** once a
+project is open, so two or more windows on different projects read apart without opening each one
+to check.
+
+A slim top bar reads, left to right: the project folder's name, a menu holding its full path and
+**Change project**; **New Session**, whenever an agent exists; the agent's own menu, with a dot for its
+state, an amber **checks off** badge while permission checks are off, and **Change agent** once it has
+ended; a short line (why the agent ended, a New Session's brief, or what went wrong); and, at the right
+end, the one next step for the console or the skills when there is one (**Reconnect the console**,
+**Update skills**), with "+N more" if anything else is waiting behind it. The console itself, opening inside the
+window (not only the dashboard — every console page, including Ask, Workspace, Notebook, Help,
+Preferences and Git), already shows which page is open and its own **Session** meter (how much plan2code
+work this session has done) in its own bar, so the app's bar does not repeat either. That Session meter
+is the one place for "is this session getting long" under the app, too: the app does not keep a second,
+separate context-window meter of its own, so there is only ever one gauge to read and only one place its
+threshold is tuned. The terminal panel has its own toolbar: dock it to the bottom or the right, collapse
+it to a thin strip, or maximize it; its size is remembered. An "agent may need you" badge appears on a
+collapsed or small panel once the agent has sat quiet for a while. **Change project** (in the project
+menu) asks first if an agent is running, then stops it and the console before opening the new folder.
+
+If the console itself ever needs reconnecting (it stopped, or the skills were just updated), every path
+to that offers the same **Reconnect the console** button — never "Restart the console" in one place and
+"Start it again" in another for the same action — and only one shows at a time.
+
+The console also knows when it is running inside the app (the agent it talks to carries that signal):
+its session meter, the "Before you close this" guide on a finished step, and the dashboard's red-session
+banner all point at the app's own **New Session** button instead of a command to paste into a new
+conversation, since New Session already does that in one click; and the console's own "update available"
+banner never shows, since the app's **Update skills** button (below) already covers it with no shell
+involved. A slash command still offered to continue a step (such as `/plan2code-4-finalize`) stays
+exactly as it would in a terminal: paste it into the app's own terminal panel, which runs the real
+agent CLI.
 
 ## Keep it up to date
 
