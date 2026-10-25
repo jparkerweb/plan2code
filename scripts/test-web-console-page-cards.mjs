@@ -395,6 +395,23 @@ test("Skip this one and a comment box's quick answer are the same small accent b
   assert.equal(colour, await accentOf(s.page), "in the accent");
 });
 
+// What a person sees break: Combine phases is missing from a plan's breakdown,
+// fills nothing, or shows on a list that is not phases.
+test("a plan's breakdown offers Combine phases beside No changes, and other workflows do not", async (t) => {
+  const rows = [{ id: "a", title: "Read the data", body: "x" }];
+  let s = await openSession(await suite.browser(), { t, workflow: "plan" });
+  let card = await ask(s, { id: "l1", kind: "list", title: "Build order", body: "Reorder.", rows });
+  const quicks = card.locator(".quick-answer");
+  assert.deepEqual(await quicks.allTextContents(), ["No changes", "Combine phases"]);
+  await card.getByRole("button", { name: "Combine phases" }).click();
+  const got = await sendAndCollect(s);
+  assert.match(answerTo(got, "l1").text, /^Combine phases where possible/);
+
+  s = await openSession(await suite.browser(), { t, workflow: "quick-task" });
+  card = await ask(s, { id: "l2", kind: "list", title: "Steps", body: "Reorder.", rows });
+  assert.deepEqual(await card.locator(".quick-answer").allTextContents(), ["No changes"]);
+});
+
 // What a person sees break: a safe yes looks like any button, or a risky yes
 // stops warning.
 test("a confirm's safe yes and a recap's yes are outlined in the accent, and a dangerous yes stays red", async (t) => {

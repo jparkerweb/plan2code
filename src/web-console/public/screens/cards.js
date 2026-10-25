@@ -1495,22 +1495,29 @@ function buildList(card, item, staged) {
   }
   card.appendChild(row);
   card.appendChild(el("p", "help", "Drag to reorder, click a name to rename it."));
-  commentField(card, item, "Anything else about this breakdown?", false, "no changes");
+  const quick = [{ label: "No changes", text: "no changes" }];
+  // Only a plan's breakdown is phases; a list card elsewhere is something else.
+  if (PHASE_WORKFLOWS.includes(page.S.workflow)) quick.push({ label: "Combine phases", text: COMBINE_PHASES });
+  commentField(card, item, "Anything else about this breakdown?", false, quick);
 }
 
-function commentField(card, item, labelText, required, quickText) {
+const PHASE_WORKFLOWS = ["plan", "revise-plan"];
+const COMBINE_PHASES =
+  "Combine phases where possible to simplify and reduce the total number of phases, while still keeping a clear separation of concerns.";
+
+function commentField(card, item, labelText, required, quickAnswers = []) {
   const wrap = el("div", "field");
   const id = "note-" + item.id;
   const label = el("label", null, labelText);
   label.htmlFor = id;
   wrap.appendChild(label);
-  let quick = null;
-  if (quickText) {
-    quick = el("button", "btn tiny", quickText.charAt(0).toUpperCase() + quickText.slice(1));
-    quick.type = "button";
-    quick.title = "Fill in \"" + quickText + "\"";
-    wrap.appendChild(quick);
-  }
+  const quicks = quickAnswers.map(({ label, text }) => {
+    const b = el("button", "btn tiny quick-answer", label);
+    b.type = "button";
+    b.title = "Fill in \"" + text + "\"";
+    wrap.appendChild(b);
+    return [b, text];
+  });
   const ta = el("textarea");
   ta.id = id;
   ta.placeholder = required ? "Tell Plan2Code what to change." : "Optional.";
@@ -1531,9 +1538,9 @@ function commentField(card, item, labelText, required, quickText) {
     stagedChanged();
   });
   wrap.appendChild(ta);
-  if (quick)
-    quick.addEventListener("click", () => {
-      ta.value = quickText;
+  for (const [b, text] of quicks)
+    b.addEventListener("click", () => {
+      ta.value = text;
       ta.dispatchEvent(new Event("input", { bubbles: true }));
       ta.focus();
     });

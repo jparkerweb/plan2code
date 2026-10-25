@@ -441,6 +441,7 @@ input[type="text"].invalid { border-color: var(--warn); }
   margin-bottom: 6px;
 }
 .btn.tiny:hover:not(:disabled) { background: var(--accent-soft); filter: brightness(1.04); }
+.quick-answer + .quick-answer { margin-left: 6px; }
 
 .btn-row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 18px; align-items: center; }
 

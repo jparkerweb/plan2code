@@ -14,6 +14,7 @@ All notable changes to Plan2Code will be documented in this file.
 ### 🔧 Changed
 
 - **launcher**: `plan2code` no longer treats an SSH or service session on macOS or Windows as having a desktop, and asks before opening a folder that looks like it is not a project (no `.git`, `AGENTS.md` or `specs/`).
+- **web console**: a plan's **Build order** card has a **Combine phases** button beside **No changes**. One click fills the box with a request to merge phases where possible while keeping each to a clear concern. It shows only in Plan and Revise plan, where the breakdown is phases.
 
 ## v2.11.1
 
