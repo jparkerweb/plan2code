@@ -123,6 +123,19 @@ test("setProjectDir sets the OS window title through windowTitleFor, with a real
   assert.ok(caps.permissions.includes("core:window:allow-set-title"), "the capability to call setTitle must be granted, or the call is silently refused at runtime");
 });
 
+test("app.js never sets statePlannyEl.hidden directly: SVGElement does not reflect that property to the attribute", () => {
+  assert.doesNotMatch(APP_JS, /statePlannyEl\.hidden\s*=/, "must use toggleAttribute, not the .hidden property, on an <svg>");
+  assert.match(APP_JS, /statePlannyEl\.toggleAttribute\('hidden', !tired\)/);
+});
+
+test("the Restart confirmation no longer claims unsaved work, and offers New Session with the tired Planny", () => {
+  const confirmRestart = APP_JS.slice(APP_JS.indexOf("function confirmRestart"), APP_JS.indexOf("function confirmRestart") + 600);
+  assert.doesNotMatch(confirmRestart, /not saved/, "not always true, so it is gone from this dialog specifically");
+  assert.match(confirmRestart, /'Restart the agent on a fresh context window\?',\s*\n\s*'New Session',/);
+  assert.match(confirmRestart, /\{ tired: true \}/, "the confirm dialog asks for the tired Planny");
+  assert.match(INDEX_HTML, /<svg id="dashboard-state-planny"[^>]*hidden>/, "the tired Planny starts hidden in the markup");
+});
+
 test("defaultRightFraction gives the terminal a roomy width when the window has space for it, down to the floor when it does not", () => {
   const opts = { minFraction: 0.1, maxFraction: 0.6 };
   // Plenty of room: the ideal 440px pane, well inside both the console's own
@@ -175,3 +188,31 @@ test("docked right and collapsed, the terminal panel's Expand button fits the st
   }
 });
 
+test("toggling the tired Planny <svg>'s hidden attribute the way app.js does actually shows and hides it", async (t) => {
+  if (!findBrowser()) return t.skip("no Chrome or Edge installed");
+  const browser = await launchBrowser();
+  try {
+    const page = await browser.newPage({ viewport: { width: 700, height: 500 } });
+    page.on("pageerror", () => {});
+    await page.goto(pathToFileURL(INDEX_HTML_PATH).href);
+    // Setting the .hidden *property* on an <svg> does not reflect to the
+    // attribute the way it does on an HTMLElement; app.js uses
+    // toggleAttribute for exactly this reason. This exercises that real path.
+    const shown = await page.evaluate(() => {
+      document.getElementById("dashboard-state").hidden = false; // a plain div: the .hidden property works fine here
+      const el = document.getElementById("dashboard-state-planny");
+      el.toggleAttribute("hidden", false);
+      return { display: getComputedStyle(el).display, rect: el.getBoundingClientRect() };
+    });
+    assert.notEqual(shown.display, "none", "toggleAttribute(false) makes it visible");
+    assert.ok(shown.rect.width > 0 && shown.rect.height > 0, "it actually takes up space, not just display != none");
+    const hiddenAgain = await page.evaluate(() => {
+      const el = document.getElementById("dashboard-state-planny");
+      el.toggleAttribute("hidden", true);
+      return getComputedStyle(el).display;
+    });
+    assert.equal(hiddenAgain, "none", "toggleAttribute(true) hides it again");
+  } finally {
+    await browser.close();
+  }
+});

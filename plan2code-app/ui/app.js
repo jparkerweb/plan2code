@@ -41,6 +41,7 @@ const nextStepBtn = document.getElementById('next-step-button');
 const nextStepMoreEl = document.getElementById('next-step-more');
 const frame = document.getElementById('console-frame');
 const stateBox = document.getElementById('dashboard-state');
+const statePlannyEl = document.getElementById('dashboard-state-planny');
 const stateText = document.getElementById('dashboard-state-text');
 const stateButton = document.getElementById('dashboard-state-button');
 const stateCancelEl = document.getElementById('dashboard-state-cancel');
@@ -252,7 +253,8 @@ function confirmRestart(onYes) {
       showState('The agent is restarting on a fresh context window. Please wait for the dashboard to load.');
       onYes();
     },
-    () => (frameReady ? hideState() : showState('No dashboard has loaded yet.'))
+    () => (frameReady ? hideState() : showState('No dashboard has loaded yet.')),
+    { tired: true }
   );
 }
 
@@ -609,9 +611,13 @@ async function onNoHello() {
   }
 }
 
-function showState(text, buttonLabel, onButton, onCancel) {
+function showState(text, buttonLabel, onButton, onCancel, { tired = false } = {}) {
   hideLaunchCard();
   hideFirstRun();
+  // statePlannyEl is an <svg>: unlike HTMLElement, it does not reflect the
+  // `.hidden` property to the attribute, so toggling the property alone left
+  // `hidden` in the markup forever. The attribute itself always works.
+  statePlannyEl.toggleAttribute('hidden', !tired);
   stateText.textContent = text;
   stateButton.hidden = !buttonLabel;
   stateButton.textContent = buttonLabel || '';

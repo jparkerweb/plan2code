@@ -93,7 +93,7 @@ Do each of Claude Code, Devin and Codex for a few minutes:
 
 ## Agent lifecycle
 
-- [ ] Start, then **New Session**: it confirms once, with no claim about unsaved
+- [ ] Start, then **New Session**: it confirms once, with Planny on a coffee break and no claim about unsaved
       work, then a fresh agent starts on the same agent, model, effort and permission mode, and the
       dashboard shows the pick-up chip with a brief that matches the session
 - [ ] An agent that ends by itself leaves the app asking nothing until New Session or **Change agent**
