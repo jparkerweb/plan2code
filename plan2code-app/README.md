@@ -1,6 +1,6 @@
 # plan2code-app
 
-The Plan2Code desktop app (v3.0): one window with the dashboard, a terminal panel for the agent, and a Restart button. Built with Tauri 2 (Rust and a web view).
+The Plan2Code desktop app (v3.0): one window with the dashboard, a terminal panel for the agent, and a **New Session** button. Built with Tauri 2 (Rust and a web view).
 
 The app is optional. The Node web console and the skills never depend on it, so running `/plan2code` inside an agent with no app works exactly as before.
 

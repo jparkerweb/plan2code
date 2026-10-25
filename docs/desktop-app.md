@@ -66,7 +66,7 @@ The first time the app opens on a folder, a checklist confirms Node, the agent C
 folder and the skills version before anything else shows; a later launch skips straight past it.
 
 A **launch card** then asks which agent (Claude, Devin or Codex), model and effort (Claude and Codex
-only) to start on. Permission checks off is its own tick, unchanged unless you choose it (New Session
+only) to start on. Permission checks off is its own tick, on by default (see below; New Session
 keeps whatever you picked); a CLI the app cannot find is named, with how to install it, instead of
 just being greyed out. The card is skipped when the launcher already passed an agent to start.
 
@@ -129,8 +129,8 @@ anyway**.
 The launch card's permission-mode tick is **on by default** (checks off), matching `plan2code` run the
 plain way: the agent starts with checks off (`--permission-mode bypassPermissions` in Claude Code,
 `--permission-mode bypass` in Devin, `--dangerously-bypass-approvals-and-sandbox` in Codex), reading,
-writing and running commands in your project folder without asking; the status strip says so while that
-agent runs (the agent's **checks off** badge in the top bar). Untick it before pressing Start agent to keep the agent's normal approval prompts instead.
+writing and running commands in your project folder without asking; the agent's amber **checks off** badge in
+the top bar says so while that agent runs. Untick it before pressing Start agent to keep the agent's normal approval prompts instead.
 New Session keeps the same choice. Work in a folder you are happy for the agent to change, and keep it under
 version control.
 

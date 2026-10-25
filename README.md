@@ -13,7 +13,7 @@ the next engineer all start from the same specs.
 
 One command opens it, every step is a card, and the terminal is always there if you prefer it.
 
-Version 2.11.0 · MIT · 📖 [plan2code.jparkerweb.com](https://plan2code.jparkerweb.com)
+Version 3.0.0 · MIT · 📖 [plan2code.jparkerweb.com](https://plan2code.jparkerweb.com)
 
 ---
 
@@ -92,12 +92,12 @@ which opens a folder picker first. Uninstalling (`U`) removes both.
 <summary>About the desktop app</summary>
 
 The installer also offers the **Plan2Code desktop app**: one window with the dashboard and your agent's
-terminal side by side, docked bottom or right and collapsible. Every console page, not only the
+terminal side by side, docked right (or bottom) and collapsible. Every console page, not only the
 dashboard, opens inside it. A launch card asks which agent, model and effort to start on, with
-permission checks off as its own opt-in tick (off by default); a **Restart** button then replaces the
-agent with a fresh one on a brief built from the session, and a status strip below the top bar shows
-the agent, the page open and a context meter that nudges you toward Restart once Claude's or Codex's
-context is getting full. Once it is installed, `plan2code` opens the app instead of running the agent
+permission checks off as its own tick (on by default, matching the terminal flow; untick it to keep
+the agent's approval prompts). A **New Session** button in the top bar replaces the agent with a fresh
+one on a brief built from the session, and the console's own Session meter points at it when a
+session is getting long. Once it is installed, `plan2code` opens the app instead of running the agent
 in your terminal. `plan2code --classic` keeps the terminal flow, and so does a Linux machine with no
 display (over SSH, say) or any machine over an SSH session. `plan2code update` updates the skills, the
 command and the app together, and the bar offers the same **Update skills** when the app and the
