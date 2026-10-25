@@ -53,8 +53,9 @@ failure.
       project folder, the skills version) before the launch card; a later launch goes straight to
       the launch card
 - [ ] The launch card offers agent, model, effort (Claude and Codex only) and permission mode
-      (off is an explicit tick, never the default); a CLI it could not find is named, not just
-      disabled
+      (checks off is ticked by default, matching the plain `plan2code` launcher; untick it for
+      an agent that keeps its normal approval prompts); a CLI it could not find is named, not
+      just disabled
 - [ ] **Dock the terminal to the right**: the splitter becomes vertical, the toolbar stacks, and the
       dashboard keeps the rest of the width; dock it back to the bottom
 - [ ] **Collapse** the terminal to a thin strip (either dock) and **Expand** it back; its size from

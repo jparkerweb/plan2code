@@ -118,15 +118,15 @@ anyway**.
 **Linux.** Nothing to allow. If the file is not executable, run
 `chmod +x ~/.plan2code/app/plan2code-app`.
 
-## Permission checks are off, if you choose it
+## Permission checks are off by default, same as the terminal
 
-The launch card's permission-mode tick is off by default: leave it off and the agent keeps its normal
-approval prompts. Turn it on and the agent starts with checks off instead
-(`--permission-mode bypassPermissions` in Claude Code, `--permission-mode bypass` in Devin,
-`--dangerously-bypass-approvals-and-sandbox` in Codex), reading, writing and running commands in your
-project folder without asking; the status strip says so while that agent runs. Restart keeps the same
-choice. Work in a folder you are happy for the agent to change, and keep it under version control,
-before turning checks off.
+The launch card's permission-mode tick is **on by default** (checks off), matching `plan2code` run the
+plain way: the agent starts with checks off (`--permission-mode bypassPermissions` in Claude Code,
+`--permission-mode bypass` in Devin, `--dangerously-bypass-approvals-and-sandbox` in Codex), reading,
+writing and running commands in your project folder without asking; the status strip says so while that
+agent runs (the agent's **checks off** badge in the top bar). Untick it before pressing Start agent to keep the agent's normal approval prompts instead.
+New Session keeps the same choice. Work in a folder you are happy for the agent to change, and keep it under
+version control.
 
 ## Remove it
 

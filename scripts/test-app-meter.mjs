@@ -95,6 +95,18 @@ test("the context-window meter is gone for good: no stray element, poll, or back
   }
 });
 
+test("the launch card's permission-mode tick starts checked (off), matching the plain terminal launcher's own always-off default", () => {
+  assert.match(
+    INDEX_HTML,
+    /<input id="launch-bypass" type="checkbox" checked>/,
+    "the checkbox markup itself must carry `checked`, not something app.js sets later"
+  );
+  // The warning sentence starts visible along with it: no `hidden` attribute on this element.
+  assert.match(INDEX_HTML, /<p id="launch-bypass-warning">Permission checks will be off/);
+  // Nothing in app.js resets it back to unchecked on every card show.
+  assert.doesNotMatch(APP_JS, /launchBypassEl\.checked\s*=\s*false/, "no reset back to unchecked anywhere");
+});
+
 test("windowTitleFor names the project folder after Plan2Code, so two or more windows read apart in a taskbar", () => {
   assert.equal(windowTitleFor("C:\\git\\azw3-to-pdf"), "Plan2Code - azw3-to-pdf");
   assert.equal(windowTitleFor("/home/me/projects/plan2code"), "Plan2Code - plan2code");
