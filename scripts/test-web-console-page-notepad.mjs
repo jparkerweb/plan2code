@@ -760,6 +760,9 @@ test("text typed into a tab that is then deleted is never saved, and a tab delet
   deleteTab(s.project, elsewhere);
   await tabNamed(s, "Elsewhere").click();
   await s.page.waitForFunction((want) => document.getElementById("notepad-status").textContent.includes(want), errorSentence("no-such-tab"));
+  // The status line updates first; the bar itself waits on a second, separate
+  // fetch (readNote(null), after the first one 404s) that lands after it.
+  await s.page.waitForFunction(() => document.querySelectorAll("#notepad-tabs .notepad-tab").length === 1);
   assert.deepEqual(await tabNames(s), ["Notes"]);
 });
 

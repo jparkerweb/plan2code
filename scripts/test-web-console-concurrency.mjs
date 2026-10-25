@@ -291,8 +291,9 @@ test("open from a linked worktree seeds the workspace with the worktree, not the
   } finally {
     if (sidOpened) cliIn(wt, ["stop", "--session", sidOpened]);
     // A stopped server can take a while to let go of its working directory on
-    // Windows, and longer while other test files load the machine.
-    fs.rmSync(base, { recursive: true, force: true, maxRetries: 20, retryDelay: 250 });
+    // Windows, and longer while other test files load the machine: under a
+    // full-suite run this needed more than the 5s a 20x250ms retry gave it.
+    fs.rmSync(base, { recursive: true, force: true, maxRetries: 40, retryDelay: 250 });
   }
 });
 

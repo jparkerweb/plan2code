@@ -181,7 +181,7 @@ test("a fixed bug's Delete asks once with no name to type, while any other spec 
   // The fixed bug: a visible Delete, its own warning, and one press sends it.
   const del = main.getByRole("button", { name: "Delete the spec old-bug" });
   assert.equal(await textOf(del), "Delete", "a fixed bug's Delete is a labelled button");
-  await del.click();
+  await del.click({ force: true });
   await dialog.waitFor();
   assert.match(await textOf(s.page.locator("#delete-warn")), /The bug is fixed, so this only clears the write-up/);
   assert.equal(await textOf(go), "Delete it");

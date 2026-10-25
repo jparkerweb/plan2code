@@ -52,9 +52,14 @@ test("stress: 200 posts interleaved with 200 chat messages lose no message from 
       const c = spawn(process.execPath, [CONSOLE_CLI, "post", "--session", s.sid, "--file", patchFile], {
         env: ENV,
         cwd: ROOT,
-        stdio: "ignore",
+        stdio: ["ignore", "ignore", "pipe"],
       });
-      c.on("exit", (code) => resolve(code));
+      let err = "";
+      c.stderr.on("data", (d) => (err += d));
+      c.on("exit", (code) => {
+        if (code !== 0) process.stderr.write(`[repro] exit ${code}: ${err}\n`);
+        resolve(code);
+      });
     });
   try {
     for (let block = 0; block < 20; block++) {

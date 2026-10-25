@@ -96,6 +96,13 @@ export async function openSession(browser, { t, workflow, payload: first, projec
   s.context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
   if (clock) await s.context.clock.install();
   s.page = await s.context.newPage();
+  // Playwright's own default (30s) assumes a dedicated machine: the whole
+  // suite runs dozens of these pages at once, and a host under that load can
+  // leave one of them waiting past 30s for its turn at the CPU to paint a
+  // dropdown or settle a click, with nothing wrong in the page itself. Twice
+  // the default still catches a genuinely broken page, just gives a busy host
+  // room to breathe.
+  s.page.setDefaultTimeout(60000);
   s.page.on("pageerror", (e) => s.errors.push(e.message));
   await s.page.goto(s.url, { waitUntil: "domcontentloaded" });
   await drawn(s.page);
@@ -105,7 +112,7 @@ export async function openSession(browser, { t, workflow, payload: first, projec
 // The page has adopted a state frame: app.js has replaced the boot pane the
 // markup ships with.
 export async function drawn(page) {
-  await page.waitForFunction(() => !document.querySelector("#main .boot-pane"), null, { timeout: 15000 });
+  await page.waitForFunction(() => !document.querySelector("#main .boot-pane"), null, { timeout: 30000 });
 }
 
 // Presses Send on the page and collects the send the way an agent's `wait`

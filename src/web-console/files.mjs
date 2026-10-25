@@ -192,7 +192,11 @@ export function appendEvent(dir, event) {
 // past the stale age, so a writer always gets in eventually.
 export const STATE_LOCK_FILE = "state.json.lock";
 const LOCK_STALE_MS = 5000;
-const LOCK_WAIT_MS = 7000;
+// A pile-up of many writers (a burst of concurrent `post`s) queues behind
+// each other's hold, milliseconds long apiece; 7s left too little headroom
+// for that queue to drain under real machine load, throwing "busy" on a
+// writer that was never going to be denied, just slow to get its turn.
+const LOCK_WAIT_MS = 20000;
 
 function lockStale(lock) {
   try {
