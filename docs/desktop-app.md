@@ -32,6 +32,12 @@ Releases carry one file per system:
 
 On any other system the installer says there is no build for it and carries on without the app.
 
+Each of those is a plain executable, not an OS-level installer package (no `.msi`, no NSIS `.exe`
+setup, no `.dmg` with a drag-to-Applications step): the installer above places it directly, already
+verified. `plan2code-app`'s own `npm run build` can produce `.msi`/NSIS/`.dmg`/`.deb` bundles locally
+(Tauri's bundler is on), but the release workflow does not build or publish them; nothing today
+downloads or runs one.
+
 You also need Node.js 18 or newer (the app checks at start and says what to install) and:
 
 - **Windows:** the WebView2 runtime, which comes with Windows 11 and current Windows 10.

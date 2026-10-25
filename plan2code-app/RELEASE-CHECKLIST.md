@@ -8,6 +8,12 @@ Work from the pre-release build: publish a GitHub pre-release so `release-app.ym
 then install from it. Tick each box per system and note anything that is a rough edge rather than a
 failure.
 
+`npm run build` here runs `tauri build` with bundling on, so a local build also produces `.msi`/NSIS
+`.exe`/`.dmg`/`.deb` installer packages under `src-tauri/target/release/bundle/`. Ignore those: the
+release workflow builds with `--no-bundle` and attaches only the plain executable per system (see
+`.github/workflows/release-app.yml`); `install.js` is the only installer, and it places that plain
+file directly after checking it against the release's checksum list.
+
 ## Before you start
 
 - [ ] `node scripts/check-versions.mjs --tag v<version>` passes (version.json, package.json,
