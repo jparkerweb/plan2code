@@ -59,6 +59,27 @@ export function barNextSteps({ consoleDead = false, version = null } = {}) {
   return steps.map((step) => ({ ...step, label: step.action ? NEXT_STEP_LABELS[step.action] : null }));
 }
 
+// Below this many px of its own width, the console's "Notes on this" aside
+// stacks under the main column instead of sitting beside it
+// (src/web-console/public/styles/responsive.css's 1080px breakpoint).
+export const CONSOLE_ASIDE_BREAKPOINT_PX = 1080;
+// A roomy default width for the terminal docked at the side, before the
+// console's own width is taken into account.
+const IDEAL_RIGHT_PANE_PX = 440;
+
+/**
+ * The terminal panel's width, as a share of the window, for a first run with
+ * nothing saved yet: docked right, at whatever width keeps the console's own
+ * aside panel from stacking, down to `minFraction` when the window is too
+ * narrow for both (its own minimum still wins over squeezing the console).
+ */
+export function defaultRightFraction(windowWidth, { minFraction, maxFraction, idealPanePx = IDEAL_RIGHT_PANE_PX, consoleMinPx = CONSOLE_ASIDE_BREAKPOINT_PX } = {}) {
+  const roomForConsole = Math.max(0, windowWidth - consoleMinPx);
+  const panePx = Math.min(idealPanePx, roomForConsole);
+  const fraction = windowWidth > 0 ? panePx / windowWidth : minFraction;
+  return Math.min(maxFraction, Math.max(minFraction, fraction));
+}
+
 /**
  * The OS window title for a project folder: its own name (the repo's, most
  * of the time) after "Plan2Code - ", so two or more windows read apart in a

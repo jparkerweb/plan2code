@@ -2,7 +2,7 @@
 // agent's terminal panel docked at the bottom with a drag handle.
 
 import { mountTerminal } from './terminal.js';
-import { barNextSteps, folderName, windowTitleFor } from './meter.js';
+import { barNextSteps, defaultRightFraction, folderName, windowTitleFor } from './meter.js';
 
 const { invoke, Channel } = window.__TAURI__.core;
 
@@ -924,6 +924,13 @@ async function main() {
     paneDock = state.termPanel.dock === 'right' ? 'right' : 'bottom';
     paneFraction = state.termPanel.fraction;
     paneCollapsed = Boolean(state.termPanel.collapsed);
+  } else {
+    // Nothing saved yet: start docked right, wide enough to keep the
+    // console's own side-by-side panels from stacking, where the window
+    // allows it.
+    paneDock = 'right';
+    paneFraction = defaultRightFraction(window.innerWidth, { minFraction: MIN_PANE, maxFraction: MAX_PANE });
+    savePaneSettings();
   }
   applyPaneLayout();
   await loadAgentAvailability();

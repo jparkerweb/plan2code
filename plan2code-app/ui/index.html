@@ -165,6 +165,13 @@
     #term-toolbar button:hover { background: #333; }
     #term-toolbar button[aria-pressed="true"] { color: #fff; border-color: #888; }
     #term-panel.collapsed #term-dock, #term-panel.collapsed #term-maximize { display: none; }
+    /* Docked right and collapsed, the panel is a 28px-wide strip: "Expand"
+       does not fit sideways, so it reads top-to-bottom instead, rotated the
+       same way a reader would turn the panel to read it. */
+    #workspace.dock-right #term-panel.collapsed #term-toolbar { padding: 6px 2px; align-items: center; }
+    #workspace.dock-right #term-panel.collapsed #term-collapse {
+      writing-mode: vertical-rl; text-orientation: mixed; padding: 6px 2px;
+    }
     #term-badge { color: #d7ba7d; font-size: 14px; line-height: 1; }
     #term-badge[hidden] { display: none; }
     #term { flex: 1; min-height: 0; min-width: 0; padding: 4px; }

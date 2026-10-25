@@ -11,7 +11,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { barNextSteps, folderName, windowTitleFor, NEXT_STEP_LABELS } from "../plan2code-app/ui/meter.js";
+import { barNextSteps, defaultRightFraction, folderName, windowTitleFor, CONSOLE_ASIDE_BREAKPOINT_PX, NEXT_STEP_LABELS } from "../plan2code-app/ui/meter.js";
 import { findBrowser, launchBrowser } from "./browser.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -109,5 +109,57 @@ test("setProjectDir sets the OS window title through windowTitleFor, with a real
   assert.match(APP_JS, /window\.__TAURI__\.window\.getCurrentWindow\(\)\.setTitle\(windowTitleFor\(dir\)\)/, "setProjectDir is the one place every project-dir change flows through");
   const caps = JSON.parse(fs.readFileSync(path.join(HERE, "../plan2code-app/src-tauri/capabilities/default.json"), "utf8"));
   assert.ok(caps.permissions.includes("core:window:allow-set-title"), "the capability to call setTitle must be granted, or the call is silently refused at runtime");
+});
+
+test("defaultRightFraction gives the terminal a roomy width when the window has space for it, down to the floor when it does not", () => {
+  const opts = { minFraction: 0.1, maxFraction: 0.6 };
+  // Plenty of room: the ideal 440px pane, well inside both the console's own
+  // 1080px minimum and the 0.6 ceiling.
+  assert.equal(defaultRightFraction(1920, opts), 440 / 1920);
+  // Just enough room for the console at 1080px and nothing more for the pane
+  // than that leaves: the pane shrinks to fit, never pushing the console under.
+  assert.equal(defaultRightFraction(1200, opts), 120 / 1200);
+  // No room at all for the console's own 1080px minimum: the pane's floor
+  // wins rather than vanishing to 0 or going negative.
+  assert.equal(defaultRightFraction(1000, opts), 0.1);
+  // The ceiling still applies even with abundant width.
+  assert.equal(defaultRightFraction(3000, { minFraction: 0.1, maxFraction: 0.1 }), 0.1);
+  assert.equal(CONSOLE_ASIDE_BREAKPOINT_PX, 1080, "matches responsive.css's own breakpoint");
+});
+
+test("with nothing saved yet, app.js starts the terminal docked right via defaultRightFraction, not the bottom default", () => {
+  assert.match(APP_JS, /paneDock = 'right';\s*\n\s*paneFraction = defaultRightFraction\(/, "the no-saved-state branch sets dock right");
+  assert.match(APP_JS, /\} else \{[\s\S]{0,200}paneDock = 'right'/, "this only runs when state.termPanel is absent, never overriding a saved choice");
+});
+
+// Docked right and collapsed, the terminal panel is a 28px-wide strip: the
+// Expand/Collapse button's text used to run horizontally off the edge of it
+// (visible, unreadable). It now reads top-to-bottom instead.
+test("docked right and collapsed, the terminal panel's Expand button fits the strip instead of overflowing it", async (t) => {
+  if (!findBrowser()) return t.skip("no Chrome or Edge installed");
+  const browser = await launchBrowser();
+  try {
+    const page = await browser.newPage({ viewport: { width: 1000, height: 600 } });
+    page.on("pageerror", () => {}); // app.js calls into __TAURI__, absent here; the markup and CSS still load fine
+    await page.goto(pathToFileURL(INDEX_HTML_PATH).href);
+    await page.evaluate(() => {
+      document.getElementById("workspace").classList.add("dock-right");
+      document.getElementById("term-panel").classList.add("collapsed");
+      document.getElementById("term-collapse").textContent = "Expand";
+    });
+    const fit = await page.evaluate(() => {
+      const el = document.getElementById("term-collapse");
+      return {
+        writingMode: getComputedStyle(el).writingMode,
+        overflowsWidth: el.scrollWidth > el.clientWidth,
+        overflowsPanel: el.getBoundingClientRect().right > document.getElementById("term-panel").getBoundingClientRect().right,
+      };
+    });
+    assert.equal(fit.writingMode, "vertical-rl", "the label is set to run top-to-bottom, not sideways");
+    assert.equal(fit.overflowsWidth, false, "the label text does not overflow its own box");
+    assert.equal(fit.overflowsPanel, false, "the button does not spill past the collapsed panel's edge");
+  } finally {
+    await browser.close();
+  }
 });
 
