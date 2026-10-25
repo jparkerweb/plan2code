@@ -127,6 +127,15 @@
   color: var(--accent);
   font-weight: 700;
 }
+/* Under the app, the word is a button that types it into the agent's terminal. */
+.agent-key-btn {
+  font: inherit; font-weight: 700; color: var(--accent);
+  background: var(--accent-soft); border: 1px solid var(--accent-line); border-radius: 6px;
+  padding: 0 6px; cursor: pointer;
+}
+.agent-key-btn:hover:not(:disabled) { border-color: var(--accent); }
+.agent-key-btn:disabled { opacity: 0.55; cursor: default; }
+.agent-key-btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 
 /* "What to check", beside the quiet and Not running lines. A link in a button's clothes. */
 .status-help {

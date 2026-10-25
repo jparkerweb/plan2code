@@ -80,7 +80,9 @@ terminal — that path loses nothing, and they can switch either way at any time
    first so the page says what you are doing.
 4. Tell the person, in one line, the link and how many questions are waiting.
    While the session is open, end every terminal message with the latest
-   `terminalLine`, verbatim.
+   `terminalLine`, verbatim. When `open` printed `"inApp":true` the page is
+   already in the desktop app's window: never print the link (here, after a
+   resume or anywhere else), only the count; `terminalLine` leaves it out too.
 
 Keep `sid`: every later command takes `--session <sid>`.
 

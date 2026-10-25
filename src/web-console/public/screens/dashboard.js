@@ -14,7 +14,7 @@ import { hooks, page, redraw, saveNow } from "../state.js";
 import { el, approvalTip, mdInto, releasesLink, copyButton, lightDismiss } from "../render.js";
 import { needsRoleNudge, ROLE_NOT_SET } from "../starters.js";
 import { looks, renderSwatches, saveLooks } from "../looks.js";
-import { RED_BANNER } from "../meter.js";
+import { RED_BANNER, RED_BANNER_IN_APP } from "../meter.js";
 import {
   dashNoteKind,
   defaultSpec,
@@ -148,12 +148,14 @@ export function renderDashboard(main) {
   if (needsRoleNudge(looks)) wrap.appendChild(roleNudge());
   // Advice only: words, never a button, and nothing is blocked.
   if (page.meterFrame && page.meterFrame.level === "red") {
-    const warn = el("div", "dash-nudge meter-banner", RED_BANNER);
+    const warn = el("div", "dash-nudge meter-banner", page.inApp ? RED_BANNER_IN_APP : RED_BANNER);
     warn.setAttribute("role", "status");
     wrap.appendChild(warn);
   }
-  // Built here only, so no other workflow's page ever shows it.
-  if (page.updateFrame && !updateDismissed()) {
+  // Built here only, so no other workflow's page ever shows it. Under the app
+  // this never shows at all: the app's own top bar already says so and, unlike
+  // this banner's copy-pasted command, updates the skills itself in one click.
+  if (page.updateFrame && !page.inApp && !updateDismissed()) {
     const notice = el("div", "dash-nudge update-banner");
     notice.setAttribute("role", "status");
     const open = el("button", "update-banner-open", "UPDATE AVAILABLE · v" + page.updateFrame.latest);
@@ -556,13 +558,14 @@ function renderHandoffPreview(h) {
   const read = el("button", "btn", "Read it all");
   read.type = "button";
   read.addEventListener("click", () => readHandoff(h));
-  const copy = el("button", "btn", "Copy for a new conversation");
+  const copyLabel = page.inApp ? "Copy for another session" : "Copy for a new conversation";
+  const copy = el("button", "btn", copyLabel);
   copy.type = "button";
   copy.addEventListener("click", () => {
     const dir = (scan() && scan().handoffsDir) || "";
     const sep = dir.includes("\\") ? "\\" : "/";
     const file = dir ? dir.replace(/[\\/]+$/, "") + sep + h.id + ".md" : h.id + ".md";
-    copyHandoffText(handoffCopyText(file), copy);
+    copyHandoffText(handoffCopyText(file), copy, copyLabel);
   });
   const del = el("button", "btn danger", "Delete");
   del.type = "button";
@@ -575,14 +578,14 @@ function renderHandoffPreview(h) {
 
 // The prompt that sends a new conversation to the handoff. A refused
 // clipboard gets a plain word on the button instead of a silent nothing.
-async function copyHandoffText(text, button) {
+async function copyHandoffText(text, button, label) {
   try {
     await navigator.clipboard.writeText(text);
     button.textContent = "Copied";
   } catch {
     button.textContent = "Copy was refused";
   }
-  setTimeout(() => (button.textContent = "Copy for a new conversation"), 1500);
+  setTimeout(() => (button.textContent = label), 1500);
 }
 
 // Pick it up here: a hop like a card launch. The page sends only the id; the

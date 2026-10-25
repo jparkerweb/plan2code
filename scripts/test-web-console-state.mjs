@@ -43,6 +43,7 @@ test("state: the rest of the shared state starts as app.js always started it", (
     wsFrame: null,
     meterFrame: null,
     updateFrame: null,
+    inApp: false,
     subagentsFrame: null,
     overview: { key: null, text: null },
     wake: null,

@@ -161,6 +161,98 @@ test("Continue here is hidden once the session meter is red, and the command and
   assert.equal(await closeGuide(s).count(), 1, "the fresh-session advice stays");
 });
 
+// Under the desktop app (PLAN2CODE_IN_APP=1) the fresh-session advice in the
+// meter's popover and the dashboard's red banner must point at the app's own
+// New Session, never a command to copy into a terminal that is not there:
+// the popover's is a button filled with the user's highlight colour.
+test("under the app, the meter popover and the dashboard's red banner point at New Session, not a command", async (t) => {
+  const s = await openSession(await suite.browser(), {
+    t,
+    workflow: "implement",
+    payload: { agent: { status: "working", activity: "Task 1 of 1" } },
+    env: { PLAN2CODE_IN_APP: "1" },
+  });
+  s.post({ run: { event: "implement-phase", id: "phase-1", tasks: 30 } });
+  const pill = s.page.locator("#meter-pill[data-level='red']");
+  await pill.waitFor();
+  await pill.click();
+  const fresh = s.page.locator("#meter-fresh");
+  const press = fresh.getByRole("button", { name: "Start a New Session" });
+  await press.waitFor();
+  assert.equal(await fresh.locator(".meter-fresh-text").count(), 0, "the button is the whole note, no sentence around it");
+  // The page's highlight, resolved the same way the button's fill is.
+  const [fill, highlight] = await press.evaluate((n) => {
+    const probe = document.createElement("i");
+    probe.style.color = "var(--accent)";
+    n.append(probe);
+    const colour = getComputedStyle(probe).color;
+    probe.remove();
+    return [getComputedStyle(n).backgroundColor, colour];
+  });
+  assert.equal(fill, highlight, "filled with the user's highlight colour");
+  assert.equal(await fresh.locator("code").count(), 0, "no command to copy under the app");
+});
+
+// The desktop app's frame, as the page sees it: a parent that keeps every
+// message posted to it, for the test to read back.
+const FAKE_APP_FRAME = () => {
+  window.__toApp = [];
+  Object.defineProperty(window, "parent", { configurable: true, get: () => ({ postMessage: (m) => window.__toApp.push(m) }) });
+};
+const toApp = (s, kind) => s.page.evaluate((k) => window.__toApp.filter((m) => m.plan2code === k), kind);
+
+test("under the app, the meter popover's Start a New Session button asks the app for its New Session", async (t) => {
+  const s = await openSession(await suite.browser(), {
+    t,
+    workflow: "implement",
+    payload: { agent: { status: "working", activity: "Task 1 of 1" } },
+    env: { PLAN2CODE_IN_APP: "1" },
+    init: FAKE_APP_FRAME,
+  });
+  s.post({ run: { event: "implement-phase", id: "phase-1", tasks: 30 } });
+  const pill = s.page.locator("#meter-pill[data-level='red']");
+  await pill.waitFor();
+  await pill.click();
+  await s.page.locator("#meter-fresh").getByRole("button", { name: "Start a New Session" }).click();
+  await until(async () => (await toApp(s, "new-session")).length === 1, 5000);
+  assert.deepEqual(await toApp(s, "new-session"), [{ plan2code: "new-session" }], "a named request, nothing else in it");
+});
+
+test("under the app, the not running line's continue is a button that asks the app to type it, and the page hands the app its highlight", async (t) => {
+  const s = await openSession(await suite.browser(), {
+    t,
+    workflow: "implement",
+    clock: true,
+    payload: { items: [{ id: "q1", kind: "text", title: "What to call it", body: "A short name." }], agent: { status: "waiting" } },
+    env: { PLAN2CODE_IN_APP: "1" },
+    init: FAKE_APP_FRAME,
+  });
+  const looks = await toApp(s, "looks");
+  assert.ok(looks.length >= 1, "the page told the app its highlight");
+  assert.deepEqual(looks.at(-1).accent, ["#619fe5", "#1a2533", "#0c1117", "#3d5978"], "the default highlight, in its dark shades");
+
+  await s.page.clock.fastForward(200_000);
+  await lineSays(s, /^Plan2Code is not running right now\./);
+  const press = s.page.locator("#agent-text .agent-key-btn");
+  assert.equal(await press.textContent(), "continue");
+  await press.click();
+  await until(async () => (await toApp(s, "agent-continue")).length === 1, 5000);
+  assert.ok(await press.isDisabled(), "held off, so a double press does not type it twice");
+});
+
+test("outside the app, the not running line's continue stays a word to type", async (t) => {
+  const s = await openSession(await suite.browser(), {
+    t,
+    workflow: "implement",
+    clock: true,
+    payload: { items: [{ id: "q1", kind: "text", title: "What to call it", body: "A short name." }], agent: { status: "waiting" } },
+  });
+  await s.page.clock.fastForward(200_000);
+  await lineSays(s, /^Plan2Code is not running right now\./);
+  assert.equal(await s.page.locator("#agent-text .agent-key-btn").count(), 0);
+  assert.equal(await s.page.locator("#agent-text strong.agent-key").textContent(), "continue");
+});
+
 test("Stop session, confirmed, sends __stop with no handoff", async (t) => {
   const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_QUESTION });
   await s.page.click("#btn-stop");
@@ -553,6 +645,71 @@ test("every finished shape shows Before you close this with its three rows, and 
   assert.equal(await s.page.locator("#btn-home").isVisible(), false, "a finished screen carries its own way back");
 });
 
+// Under the app the same three rows point at the app's own controls instead:
+// New Session for "Start fresh", the top bar's dashboard button for "Carry
+// on", and no stray command to copy into a shell that is not there.
+test("under the app, Before you close this points at New Session, and never at a \"new conversation\" that does not exist there", async (t) => {
+  const s = await openSession(await suite.browser(), {
+    t,
+    workflow: "implement",
+    payload: { agent: { status: "working", activity: "Task 1 of 1" } },
+    env: { PLAN2CODE_IN_APP: "1" },
+  });
+  const main = s.page.locator("#main");
+  s.post({ finish: { headline: "A skill next", command: "/plan2code-4-finalize" } });
+  await main.getByRole("heading", { name: "A skill next" }).waitFor();
+  const guide = closeGuide(s);
+  const text = await textOf(guide);
+  assert.ok(text.includes("Press New Session at the top of the window to start the agent fresh."), "Start fresh points at New Session");
+  assert.ok(text.includes("Paste the command above into the terminal panel, or start from the dashboard with /plan2code."), "Carry on names the terminal panel");
+  assert.ok(!text.includes("new session") && !text.includes("new conversation"), "no classic-mode wording under the app");
+  // The extra "To start something else..." paragraph a classic finish also
+  // shows is left out here: the row above already says it once.
+  assert.equal(await main.getByText("To start something else, run").count(), 0, "no second mention of the same command");
+
+  // Nothing left to run: the all-done shape still offers the command (the
+  // app's terminal panel is a real terminal the agent runs in, so pasting it
+  // there works), worded for the one panel rather than a new conversation.
+  s.post({ finish: { headline: "AGENTS.md is updated" } });
+  await main.getByText(/paste .* into the terminal panel below/).waitFor();
+  assert.ok(await main.locator("code").filter({ hasText: /^\/plan2code --web$/ }).count(), "the command is still offered");
+
+  // The live dashboard button's own note, under it, also points at New
+  // Session instead of typing `/clear` by hand.
+  s.post({ finish: { headline: "A skill next, with a live dashboard offer", command: "/plan2code-4-finalize", dashboard: true } });
+  await main.getByRole("button", { name: "Back to the dashboard" }).waitFor();
+  assert.ok(await main.getByText("press New Session at the top of the window for a clean start instead").count(), "the dashboard note points at New Session");
+  assert.equal(await main.getByText("type `/clear`", { exact: false }).count(), 0, "no hand-typed /clear under the app");
+});
+
+// Once the console server itself is gone (not just finished), the review and
+// dashboard offers' own "new conversation" fallback text must say the same:
+// paste into the terminal panel, under the app, and never claim a command is
+// needed to reconnect, since the app's own bar already does that on its own.
+test("under the app, a gone session's review and dashboard fallbacks name the terminal panel, and reconnect needs no command", async (t) => {
+  const s = await openSession(await suite.browser(), {
+    t,
+    workflow: "quick-task",
+    payload: { agent: { status: "working", activity: "Task 1 of 1" } },
+    env: { PLAN2CODE_IN_APP: "1" },
+    clock: true,
+  });
+  s.post({ finish: OFFERS });
+  await s.page.locator("#main").getByRole("heading", { name: "Quick task done" }).waitFor();
+  await s.page.locator("#main").getByRole("button", { name: "Review it now" }).click();
+  collect(s);
+  await stopServer(s);
+  for (let i = 0; i < 20 && !(await s.page.locator("#planny.is-gone").count()); i++) {
+    await s.page.clock.fastForward(GONE_AFTER_MS);
+    await new Promise((r) => setTimeout(r, 250));
+  }
+  const main = s.page.locator("#main");
+  await main.getByText(/paste this into the terminal panel/i).first().waitFor();
+  assert.equal(await main.getByText(/new conversation/i).count(), 0, "no classic-mode wording under the app");
+  await main.getByText("Plan2Code will try to reconnect the console on its own; if it cannot, the app's bar offers Reconnect the console.").waitFor();
+  assert.equal(await main.getByText(/run this in a new conversation/i).count(), 0, "no stray reconnect command under the app");
+});
+
 // What a person sees break: the triangle leaving answers behind, or sending a
 // finish-style stop instead of the way home.
 test("the top bar's back triangle asks first, then sends __dashboard with the typed answers and the home reply", async (t) => {
@@ -628,4 +785,19 @@ test("Back to default in Preferences returns the theme to follow the system and 
   await s.page.click("#looks-reset");
   await s.page.waitForFunction(() => !document.documentElement.hasAttribute("data-theme"));
   assert.equal(await s.page.locator('input[name="looks-theme"][value="system"]').isChecked(), true, "the system choice is ticked again");
+});
+
+// Planny's own spoken line said "close this tab": under the app there is no
+// tab, only the one window.
+test("under the app, Planny's finished line says to close the window, not the tab", async (t) => {
+  const s = await openSession(await suite.browser(), {
+    t,
+    workflow: "implement",
+    payload: { agent: { status: "working", activity: "Task 1 of 1" } },
+    env: { PLAN2CODE_IN_APP: "1" },
+  });
+  s.post({ finish: { headline: "All done", dashboard: true } });
+  await s.page.locator("#main").getByRole("heading", { name: "All done" }).waitFor();
+  const line = await lineSays(s, /close this window/);
+  assert.doesNotMatch(line, /close this tab/, "no classic-mode wording under the app");
 });

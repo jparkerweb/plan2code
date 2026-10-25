@@ -101,6 +101,10 @@ export const page = {
   // The frame's update ({ installed, latest }), present only when a newer
   // release is out; null otherwise.
   updateFrame: null,
+  // Whether the desktop app is driving this session (the frame's `inApp`):
+  // false until the first frame lands, same as every other flag here, and
+  // from an older server that sends none.
+  inApp: false,
   // The frame's Subagents switch ({ offered, supported, on, instruction, max,
   // revision }), or null before a server that sends it.
   subagentsFrame: null,

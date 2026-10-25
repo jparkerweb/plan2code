@@ -14,8 +14,11 @@ All notable changes to Plan2Code will be documented in this file.
 ### 🔧 Changed
 
 - **launcher**: `plan2code` no longer treats an SSH or service session on macOS or Windows as having a desktop, and asks before opening a folder that looks like it is not a project (no `.git`, `AGENTS.md` or `specs/`).
+- **web console**: Help's "When an update is out" line now knows when it is read inside the app too: there, it names **Update skills** in the bar instead of describing the dashboard's UPDATE AVAILABLE banner and a terminal command, since that banner never shows under the app and the command has no terminal to run in.
+- **desktop app**: the agent no longer prints the console's web address in the terminal panel, since the page is already in the window beside it: `terminalLine` under the app points at the dashboard instead, and the agent contract says to give no link there.
 - **web console**: the **Wrapping up** dialog after **Stop session** no longer closes itself when the stop lands: it turns into **Done**, with every step ticked, and stays up until you close it, so someone who stepped away comes back to an answer. Its "you can close the window/tab if you need to" line is gone.
 - **web console**: a plan's **Build order** card has a **Combine phases** button beside **No changes**. One click fills the box with a request to merge phases where possible while keeping each to a clear concern. It shows only in Plan and Revise plan, where the breakdown is phases.
+- **web console**: Help now reads right in the desktop app throughout, not just in the topics fixed before: what this page is and how long it runs, the troubleshooting table and its diagram, scroll memory, drafts, the session meter's red advice, Ask's "no agent" line and Privacy's link and address notes all name the app's window, its terminal panel, **New Session** and **Reconnect the console** instead of a browser tab, a link or a new conversation. The status line's approval hint says "the terminal panel" there too. In a browser, Help is unchanged.
 
 ## v2.11.1
 

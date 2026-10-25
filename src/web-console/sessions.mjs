@@ -514,7 +514,10 @@ export async function readOverview(root, specDir) {
 }
 
 // The line every CLI command hands the agent to end its terminal messages with.
-export function terminalLine(url) {
+// Under the desktop app the page is already in the window beside the terminal,
+// so the address would only be noise there: the line points at the window.
+export function terminalLine(url, env = process.env) {
+  if (env.PLAN2CODE_IN_APP === "1") return "→ Look at the dashboard beside this terminal.";
   return `→ Look at the web console: ${url}`;
 }
 

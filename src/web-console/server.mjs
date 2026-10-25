@@ -45,6 +45,7 @@ import {
 } from "./inbox.mjs";
 import { serverWorkspace } from "./workspace.mjs";
 import { serverSubagents } from "./settings.mjs";
+import { inAppSignal } from "./in-app.mjs";
 import { chatOffline } from "./public/chat.js";
 import { meterView } from "./public/meter.js";
 import { startsClean } from "./public/hops.js";
@@ -246,6 +247,13 @@ function ensureConversation(state) {
 // writer, this server.
 const subagents = serverSubagents({ dir: DIR, worktree: sessionWorktree });
 
+// Whether the agent driving this session is the desktop app: fixed for the
+// process's whole life (the env var that says so is set once, at spawn), so
+// read once rather than on every frame. The page uses it to drop advice that
+// only makes sense in a plain terminal (a command to copy into a new
+// conversation) in favour of the app's own Restart and Update skills buttons.
+const IN_APP = Boolean(inAppSignal());
+
 // What the page needs to draw itself, in the shape of the SSE state frame.
 // `have` names that exact view, for the page to hand back when it opens its
 // stream (see /events).
@@ -261,6 +269,7 @@ function stateFrame(state) {
     workspace: workspace.workspaceView(),
     meter: meterView(ledgerEntries()),
     subagents: subagents.view(state),
+    inApp: IN_APP,
     ...(updateInfo ? { update: updateInfo } : {}),
     have: haveKey(),
   };

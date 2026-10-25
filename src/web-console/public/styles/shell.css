@@ -146,6 +146,8 @@
 .meter-fresh { margin: 0 0 8px; padding-top: 6px; border-top: 1px solid var(--rule); }
 .meter-fresh[hidden] { display: none; }
 .meter-fresh-text { margin: 0 0 6px; font-size: 12px; color: var(--ink-2); }
+/* Under the app the whole note is one button: a press is the bar's New Session. */
+.meter-fresh-btn { display: block; width: 100%; margin: 2px 0 6px; }
 .meter-fresh-row .handoff-code { flex-basis: 180px; font-size: 12px; padding: 6px 10px; }
 .meter-item-points { flex: none; font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; }
 

@@ -46,10 +46,10 @@ export function tempProject(files = {}) {
 // test still cleans up, and a page error fails the test. `clock: true` gives
 // the page Playwright's fake clock before it loads (s.page.clock), so a test
 // can jump past the page's silence limits instead of sitting through them.
-export async function openSession(browser, { t, workflow, payload: first, project, open = [], clock = false }) {
+export async function openSession(browser, { t, workflow, payload: first, project, open = [], clock = false, env, init } = {}) {
   fs.rmSync(REMEMBERED, { force: true });
   const cwd = project || tempProject();
-  const opened = cli(["open", "--workflow", workflow, "--no-open", ...open], { cwd }).json;
+  const opened = cli(["open", "--workflow", workflow, "--no-open", ...open], { cwd, env }).json;
   const s = {
     sid: opened.sid,
     session: opened.session,
@@ -95,6 +95,8 @@ export async function openSession(browser, { t, workflow, payload: first, projec
   if (first) s.post(first);
   s.context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
   if (clock) await s.context.clock.install();
+  // A script run before the page's own, such as a stand-in for the app's frame.
+  if (init) await s.context.addInitScript(init);
   s.page = await s.context.newPage();
   // Playwright's own default (30s) assumes a dedicated machine: the whole
   // suite runs dozens of these pages at once, and a host under that load can

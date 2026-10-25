@@ -8,6 +8,7 @@ import { DEFAULT_ACCENT, soundPrefs, DEFAULT_CARD_WIDTH, ACCENTS, cardWidth, sou
 import { normalizeRole, ROLE_NOT_SET } from "./starters.js";
 import { bootData, hooks } from "./state.js";
 import { el } from "./render.js";
+import { tellApp } from "./app-bridge.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -129,6 +130,9 @@ const effectiveTheme = () => (looks.theme === "system" ? (systemDark() ? "dark" 
 
 export function applyLooks() {
   const root = document.documentElement;
+  // The desktop app's bar lights its buttons in the same highlight. That bar
+  // is always dark, so it gets the dark shades whatever this page's theme is.
+  tellApp("looks", { accent: ACCENTS[looks.accent].dark });
   // The server's stand-in for the saved accent, which only has to last until
   // this runs. From here on the colors are set below, and a stale rule left
   // switched on would win over "Back to default".

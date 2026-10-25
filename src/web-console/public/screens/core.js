@@ -19,6 +19,7 @@ import {
   STALE_MS,
   agentRepliedAfterSend,
   approvalHint,
+  APPROVAL_HINT_IN_APP,
   cardAvailability,
   cardPresentation,
   finishPaused,
@@ -66,6 +67,7 @@ import { renderBriefButton, renderDoc, renderOverview } from "./docs.js";
 import { board, renderGitBoard, resetBoard } from "./git-host.js";
 import { renderWorkspace, tellFolderIssues } from "./workspace.js";
 import { openHelpOn } from "./help-dialog.js";
+import { tellApp } from "../app-bridge.js";
 import { askOfflineFlipped, askState, declineOpen, renderAside, renderAsk, renderSubagents, renderSubagentsButton } from "./ask.js";
 import { renderHandoff, renderHomeButton, renderStopButton, renderStopControls, renderStopping, stopInProgress, stopWarning } from "./ending.js";
 import { renderNotepadButton } from "./notepad.js";
@@ -238,6 +240,10 @@ export function adopt(body) {
   page.chatFrame = body.chat || null;
   if (body.workspace) page.wsFrame = body.workspace;
   if (body.meter) page.meterFrame = body.meter;
+  // Fixed for the session's whole life, but cheap enough to just copy.
+  page.inApp = Boolean(body.inApp);
+  // Help's `.for-app` / `.for-browser` wording switches on this (help.css).
+  document.documentElement.classList.toggle("in-app", page.inApp);
   // Always replaced: an absent key means no update.
   page.updateFrame = body.update || null;
   // Always replaced too: an older server sends none, and then there is no switch.
@@ -925,11 +931,21 @@ function renderMeter() {
       return li;
     })
   );
-  // Once the session is past fresh, say how to start a new one.
+  // Once the session is past fresh, say how to start a new one. Under the app
+  // that is one button doing what the app bar's New Session does, instead of
+  // a command to copy into a new conversation.
   const fresh = $("meter-fresh");
   fresh.hidden = page.meterFrame.level === "green";
   if (fresh.hidden || fresh.dataset.built) return;
   fresh.dataset.built = "1";
+  if (page.inApp) {
+    // The same press as the app bar's New Session, confirm and all.
+    const press = el("button", "btn small primary meter-fresh-btn", "Start a New Session");
+    press.type = "button";
+    press.addEventListener("click", () => tellApp("new-session"));
+    fresh.append(press);
+    return;
+  }
   const text = handoffText({ command: DASHBOARD_COMMAND });
   const code = el("code", "handoff-code", text);
   const row = el("div", "handoff-command meter-fresh-row");
@@ -1007,6 +1023,23 @@ let moodNow = null;
 
 let moodVar = 0;
 
+// The status line's **continue**, under the app: a press asks the app to type
+// it into the agent's terminal. Held off for a few seconds after, so a double
+// press does not send it twice.
+const CONTINUE_HOLD_MS = 4000;
+
+function continueButton() {
+  const btn = el("button", "agent-key agent-key-btn", "continue");
+  btn.type = "button";
+  btn.title = "Type continue in the agent's terminal";
+  btn.addEventListener("click", () => {
+    btn.disabled = true;
+    tellApp("agent-continue");
+    setTimeout(() => (btn.disabled = false), CONTINUE_HOLD_MS);
+  });
+  return btn;
+}
+
 export function renderStatus() {
   if (!page.S) return;
   const bot = $("planny");
@@ -1031,6 +1064,9 @@ export function renderStatus() {
       text.dataset.line = shown;
       const parts = line.split(/\*\*(.+?)\*\*/).map((part, i) => {
         if (i % 2 === 0) return document.createTextNode(part);
+        // Under the app the terminal is in the same window, so the word to
+        // type is a button that types it there instead.
+        if (page.inApp && part === "continue") return continueButton();
         const key = document.createElement("strong");
         key.className = "agent-key";
         key.textContent = part;
@@ -1064,15 +1100,17 @@ export function renderStatus() {
     if (page.local.afterBuild === "changelog" && !page.gone) return say("work", "Opening Changelog…", "", true);
     if (page.local.afterBuild === "launch" && !page.gone) return say("work", "Starting the next step…", "", true);
     const offer = reviewPending();
+    // There is no tab to close under the app, only the one window.
+    const closeWord = page.inApp ? "window" : "tab";
     if (dashboardLive(finish()) && !page.gone && !offer) {
-      return say("point", "Done. Head back to the dashboard, or close this tab.");
+      return say("point", `Done. Head back to the dashboard, or close this ${closeWord}.`);
     }
     if (offer === "asked") return say("work", "Review requested. Plan2Code is starting it.", "", true);
-    if (offer === "open") return say("point", "Done. Review it here first, or close this tab.");
+    if (offer === "open") return say("point", `Done. Review it here first, or close this ${closeWord}.`);
     // A stop past a warning kept nothing, so it promises no saved place.
     if (finishPaused(finish()))
       return say("done", stopWarning() ? "Paused. The command above starts it again." : "Paused. Your place is saved: the command above picks it up.");
-    return say("done", "All done. You can close this tab.");
+    return say("done", `All done. You can close this ${closeWord}.`);
   }
   if (page.gone) return say("gone", "Not connected. Your answers are saved.", "", false, true);
   // On the way home: the request is sent, and the page stays this skill's
@@ -1121,7 +1159,8 @@ export function renderStatus() {
     }
     // Same clock as agentStale(), so the soft line at 30 s hands over to the
     // stale message at two minutes on one timeline.
-    const hint = page.agentLastSeen ? approvalHint(page.S.agent, Date.now() - Date.parse(page.agentLastSeen)) : "";
+    const quiet = page.agentLastSeen ? approvalHint(page.S.agent, Date.now() - Date.parse(page.agentLastSeen)) : "";
+    const hint = quiet && page.inApp ? APPROVAL_HINT_IN_APP : quiet;
     return say("work", hint || activity() || "Plan2Code is thinking…", fmtMs(workingMs()), true, Boolean(hint));
   }
   // Between pressing Send and the agent picking it up, the agent's own status

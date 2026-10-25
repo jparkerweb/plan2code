@@ -48,6 +48,7 @@
     <link rel="modulepreload" href="/subagents.js" />
     <link rel="modulepreload" href="/mentions.js" />
     <link rel="modulepreload" href="/favicon.js" />
+    <link rel="modulepreload" href="/app-bridge.js" />
     <link rel="modulepreload" href="/git-board.js" />
     <link rel="modulepreload" href="/git-board-view.js" />
     <link rel="modulepreload" href="/pr-url.js" />
@@ -825,12 +826,12 @@
             <rect class="hd-box" x="304" y="42" width="100" height="64" rx="8" />
             <rect class="hd-box" x="448" y="42" width="100" height="64" rx="8" />
             <text class="hd-label" x="66" y="70" text-anchor="middle">You</text>
-            <text class="hd-label small" x="66" y="88" text-anchor="middle">in your browser</text>
+            <text class="hd-label small" x="66" y="88" text-anchor="middle" data-app="in the app">in your browser</text>
             <text class="hd-label" x="210" y="79" text-anchor="middle">This page</text>
             <text class="hd-label" x="354" y="70" text-anchor="middle">Small program</text>
             <text class="hd-label small" x="354" y="88" text-anchor="middle">on 127.0.0.1</text>
             <text class="hd-label" x="498" y="70" text-anchor="middle">Plan2Code</text>
-            <text class="hd-label small" x="498" y="88" text-anchor="middle">in your terminal</text>
+            <text class="hd-label small" x="498" y="88" text-anchor="middle" data-app="in its terminal panel">in your terminal</text>
             <path class="hd-line" d="M120 74 H156" marker-start="url(#hd-about-arrow)" marker-end="url(#hd-about-arrow)" />
             <path class="hd-line" d="M264 74 H300" marker-start="url(#hd-about-arrow)" marker-end="url(#hd-about-arrow)" />
             <path class="hd-line" d="M408 74 H444" marker-start="url(#hd-about-arrow)" marker-end="url(#hd-about-arrow)" />
@@ -840,18 +841,24 @@
         </figure>
         <p>
           A small program running on your own machine, started for you by
-          Plan2Code in your terminal. Nothing here goes over the internet, and
+          <span data-app="Plan2Code in the terminal panel">Plan2Code in your terminal</span>. Nothing here goes over the internet, and
           there is no account and nothing to install.
         </p>
         <h4>On this machine only</h4>
-        <p>
+        <p class="for-browser">
           The address starts with <strong>127.0.0.1</strong>, which always means
           "this computer". Nothing you type leaves your machine, and a colleague
           cannot open your link from theirs. To work through a session together,
           share your screen.
         </p>
+        <p class="for-app">
+          The app loads this page from <strong>127.0.0.1</strong>, which always
+          means "this computer". Nothing you type leaves your machine, and the
+          page's address stays inside the app, so there is no link to pass
+          around. To work through a session together, share your screen.
+        </p>
         <h4>How long it runs</h4>
-        <p>
+        <p class="for-browser">
           <strong>It stays up while this tab is open.</strong> Close the tab and
           it shuts itself down <span data-fact="closedTabMinutes">2</span> minutes
           later. It also stops after <span data-fact="idleMinutes">30</span>
@@ -859,19 +866,35 @@
           <span data-fact="maxLifeHours">4</span> hours regardless. Reopening the same link brings everything back: nothing you
           typed is kept in the browser alone.
         </p>
+        <p class="for-app">
+          <strong>It stays up while the app's window shows it.</strong> Close the
+          window and it shuts itself down <span data-fact="closedTabMinutes">2</span>
+          minutes later. It also stops after <span data-fact="idleMinutes">30</span>
+          minutes without hearing from anyone, and after
+          <span data-fact="maxLifeHours">4</span> hours regardless. When it
+          stops, the app's own bar notices and brings it back on the same
+          session, or offers <strong>Reconnect the console</strong>: nothing you
+          typed is kept in the window alone.
+        </p>
         <h4>Two halves, both running</h4>
-        <p>
+        <p class="for-browser">
           <strong>The terminal is the other half.</strong> This page collects your
           answers; Plan2Code, in the terminal you started it from, is what reads
           them and writes the files. Both have to be running for a question to
           reach you or an answer to reach it.
+        </p>
+        <p class="for-app">
+          <strong>The terminal panel is the other half.</strong> This page collects
+          your answers; Plan2Code, the agent running in the app's terminal panel,
+          is what reads them and writes the files. Both have to be running for a
+          question to reach you or an answer to reach it.
         </p>
         <p id="about-live" class="about-live"></p>
         <p>
           <strong>If it stops.</strong> Press Send anyway. Answers are written to
           disk the moment they leave this page and are held until something
           collects them, so starting Plan2Code again picks them up where you
-          left off. Nothing is lost by closing this tab either.
+          left off. <span data-app="Nothing is lost by closing the window either.">Nothing is lost by closing this tab either.</span>
         </p>
       </section>
 
@@ -879,7 +902,7 @@
       <section class="help-panel" data-tab="stuck">
         <h3>When something looks stuck</h3>
         <p class="help-lead">
-          This page and Plan2Code in your terminal are two programs, and either
+          This page and <span data-app="Plan2Code in the terminal panel">Plan2Code in your terminal</span> are two programs, and either
           can stop without the other. Nothing you have typed is lost either way.
         </p>
         <div class="help-callout" role="note">
@@ -891,7 +914,7 @@
           <div>
             <strong class="help-callout-label">Check this first</strong>
             <p>
-              If nothing seems to be happening, look at your terminal. Plan2Code
+              If nothing seems to be happening, <span data-app="look at the terminal panel (collapsed, it shows a dot once the agent has gone quiet)">look at your terminal</span>. Plan2Code
               often stops there to ask your permission, and this page cannot see it.
             </p>
           </div>
@@ -901,7 +924,7 @@
             <li class="help-row">
               <dl>
                 <dt>You see</dt><dd>The line beside Planny stays quiet for half a minute or more while it is working.</dd>
-                <dt>Likely cause</dt><dd>A permission prompt is waiting in your terminal.</dd>
+                <dt>Likely cause</dt><dd data-app="A permission prompt is waiting in the terminal panel.">A permission prompt is waiting in your terminal.</dd>
                 <dt>Do this</dt><dd>Switch to the terminal and answer it.</dd>
               </dl>
             </li>
@@ -909,14 +932,14 @@
               <dl>
                 <dt>You see</dt><dd><strong>Not running</strong> (Planny grey and still).</dd>
                 <dt>Likely cause</dt><dd>Plan2Code has not checked in for a few minutes.</dd>
-                <dt>Do this</dt><dd>Look at the terminal. If it is idle, type <code>continue</code> there.</dd>
+                <dt>Do this</dt><dd class="for-browser">Look at the terminal. If it is idle, type <code>continue</code> there.</dd><dd class="for-app">Look at the terminal panel. If it is idle, press <strong>continue</strong> in the line beside Planny, which types it there for you.</dd>
               </dl>
             </li>
             <li class="help-row">
               <dl>
                 <dt>You see</dt><dd><strong>Not connected</strong> (Planny faded, his star shut).</dd>
                 <dt>Likely cause</dt><dd>The program behind this page shut itself down.</dd>
-                <dt>Do this</dt><dd>Ask Plan2Code to resume the session (or run the command again), and use the new link.</dd>
+                <dt>Do this</dt><dd id="help-stuck-table-reconnect-text">Ask Plan2Code to resume the session (or run the command again), and use the new link.</dd>
               </dl>
             </li>
             <li class="help-row">
@@ -947,8 +970,8 @@
             <text class="hd-label" x="110" y="46" text-anchor="middle">Says Not</text>
             <text class="hd-label" x="110" y="63" text-anchor="middle">connected?</text>
             <rect class="hd-box" x="260" y="26" width="284" height="48" rx="8" />
-            <text class="hd-label" x="402" y="46" text-anchor="middle">Run the command again,</text>
-            <text class="hd-label" x="402" y="63" text-anchor="middle">use the new link</text>
+            <text class="hd-label" x="402" y="46" text-anchor="middle" data-app="Press Reconnect the console">Run the command again,</text>
+            <text class="hd-label" x="402" y="63" text-anchor="middle" data-app="in the app's own bar">use the new link</text>
             <path class="hd-line" d="M202 50 H256" marker-end="url(#hd-stuck-arrow)" />
             <text class="hd-label small" x="228" y="43" text-anchor="middle">yes</text>
             <path class="hd-line" d="M110 86 V112" marker-end="url(#hd-stuck-arrow)" />
@@ -984,7 +1007,7 @@
             <strong>Not connected</strong> (Planny faded, arms hanging, his star shut in red):
             this page cannot reach its own program, after
             <span data-fact="goneSeconds">8</span> seconds without contact.
-            Usually it has shut itself down; see "Getting a new link" below.
+            Usually it has shut itself down; <span id="help-stuck-not-connected-ref">see "Getting a new link" below</span>.
           </li>
         </ul>
         <p>"Reading Planny" shows every mood side by side.</p>
@@ -993,8 +1016,8 @@
           Plan2Code sometimes stops in the terminal to ask your permission
           before it runs a command or changes a file, and this page cannot see
           that. After about 30 seconds of silence while it is working, the line
-          beside Planny asks "Still working, or waiting on an approval in your
-          terminal?" Have a look at the terminal: answering there sets it going
+          beside Planny asks <span data-app="&quot;Still working, or waiting on an approval in the terminal panel?&quot;">"Still working, or waiting on an approval in your
+          terminal?"</span> Have a look at the terminal: answering there sets it going
           again.
         </p>
         <p>
@@ -1016,12 +1039,16 @@
           What you send is written to disk and held until something collects it,
           so starting Plan2Code again picks it up where you left off.
         </p>
-        <h4>Getting a new link</h4>
+        <h4 id="help-stuck-reconnect-title">Getting a new link</h4>
         <p>The program behind this page shuts itself down:</p>
         <ul>
-          <li>
+          <li class="for-browser">
             <span data-fact="closedTabMinutes">2</span> minutes after the last tab
             showing it closes,
+          </li>
+          <li class="for-app">
+            <span data-fact="closedTabMinutes">2</span> minutes after the app's
+            window closes,
           </li>
           <li>
             after <span data-fact="idleMinutes">30</span> minutes without hearing
@@ -1032,12 +1059,12 @@
             happening.
           </li>
         </ul>
-        <p>
+        <p id="help-stuck-reconnect-text">
           To get it back, ask Plan2Code in the terminal to resume the session,
           or run the step's command again, and use the new link it gives you.
           Everything you typed, sent or not, is still there.
         </p>
-        <div class="handoff-command" data-copy>
+        <div class="handoff-command" data-copy id="help-stuck-reconnect-command">
           <code class="handoff-code">resume the session and print the web console address here</code>
         </div>
       </section>
@@ -1119,9 +1146,13 @@
             beside it opens <strong>User Preferences</strong>: your role first,
             then your colors, theme, card width and sounds.
           </li>
-          <li>
+          <li class="for-browser">
             The <strong>megaphone</strong> button at the far right opens GitHub in a
             new tab, where you can report a bug or suggest an idea.
+          </li>
+          <li class="for-app">
+            The <strong>megaphone</strong> button at the far right opens Plan2Code's
+            GitHub issues, where you can report a bug or suggest an idea.
           </li>
           <li>
             <strong>Stop session</strong> ends the session and saves your place.
@@ -1146,8 +1177,8 @@
           <strong>Overview</strong> when the session is working on a spec, then
           one tab per document Plan2Code has written, and <strong>Ask</strong>,
           always last.
-          Each tab remembers where you scrolled for as long as this browser tab
-          stays open.
+          <span data-app="Each tab remembers where you scrolled for as long as the app's window stays open.">Each tab remembers where you scrolled for as long as this browser tab
+          stays open.</span>
         </p>
         <h4>Moving between questions</h4>
         <p>
@@ -1342,8 +1373,8 @@
         <p>
           Star turning, arms pumping, feet walking on the spot. Plan2Code has your answers and is thinking, or is
           busy building. The line beside him says what it is doing. After about
-          30 seconds of silence it asks "Still working, or waiting on an approval
-          in your terminal?", because the terminal may have stopped to ask your
+          30 seconds of silence it asks <span data-app="&quot;Still working, or waiting on an approval in the terminal panel?&quot;">"Still working, or waiting on an approval
+          in your terminal?"</span>, because the terminal may have stopped to ask your
           permission for something, and this page cannot see that.
         </p>
         <h4>All caught up</h4>
@@ -1352,7 +1383,7 @@
           answered and Plan2Code has nothing new yet.
         </p>
         <h4>Done</h4>
-        <p>A green star and both arms up. The session is finished. You can close the tab.</p>
+        <p id="help-planny-done-text">A green star and both arms up. The session is finished. You can close the tab.</p>
         <h4>Not running</h4>
         <p>
           Grey, still, arms down out of sight. This page is fine, but Plan2Code has not checked in
@@ -1488,9 +1519,13 @@
             Everything you pick or type is a draft that Plan2Code cannot see
             yet, and every bit of it can be undone.
           </li>
-          <li>
+          <li class="for-browser">
             Drafts survive a closed tab and a reload: open the same link again and
             your half-typed answers are still there.
+          </li>
+          <li class="for-app">
+            Drafts survive a closed window and a reload: when the app shows this
+            session again, your half-typed answers are still there.
           </li>
           <li>
             The footer says what is ready to go, and the Send button pulses gently
@@ -1560,7 +1595,7 @@
             images and documents counted together.
           </li>
           <li>
-            <strong>Images</strong> are shrunk in your browser to a JPEG at most
+            <strong>Images</strong> are shrunk <span data-app="on this machine">in your browser</span> to a JPEG at most
             <span data-fact="imageEdge">2000</span> px on the long edge, and must
             be under <span data-fact="maxUploadMb">4</span> MB after shrinking.
           </li>
@@ -1709,7 +1744,7 @@
           button.
         </p>
         <h4>When an update is out</h4>
-        <p>
+        <p id="help-update-text">
           When a newer Plan2Code release is out, the dashboard shows
           <strong>UPDATE AVAILABLE</strong> at the top. Click it for the command
           to run in your terminal, <code>plan2code update</code>; × hides it until the next
@@ -1740,7 +1775,7 @@
           bug has its own <strong>Delete</strong> button at the bottom of its
           chip instead, and needs just one confirm, since the work is done.
         </p>
-        <p>
+        <p id="help-handoff-copy-text">
           A <strong>Handoff</strong> is a note a step left when you stopped it
           with a handoff. It shows as a dashed chip after the specs. Pick one
           and the cards give way to a preview with its Next task and four
@@ -1812,11 +1847,18 @@
           miss things, and the ring is there to remind you.
         </p>
         <h4>What red means</h4>
-        <p>
+        <p class="for-browser">
           Starting a <strong>new console session</strong> will keep Plan2Code
           sharp: stop this one, then start Plan2Code again in a new
           conversation. Resuming this session carries its count along, so it
           does not help. Your work is all on disk, so nothing is lost.
+        </p>
+        <p class="for-app">
+          A fresh start will keep Plan2Code sharp: finish the step, then press
+          <strong>New Session</strong> at the top of the window. The agent starts
+          again on a clean context, in a new console session whose meter starts
+          over, and the dashboard offers a brief of where you were. Your work is
+          all on disk, so nothing is lost.
         </p>
         <p>
           The meter never blocks anything. Red is advice; you can keep going.
@@ -2085,7 +2127,7 @@
           your answers to the cards, and sending those never holds up a question.
         </p>
         <h4>Prompts to carry away</h4>
-        <p>
+        <p id="help-ask-prompt-text">
           When what you ask is really a new task, or you ask for a prompt,
           the answer ends with a ready-to-paste prompt in a box with a
           <strong>Copy</strong> button. Copy it into a new conversation: it
@@ -2155,10 +2197,15 @@
             "That's 10 questions in this conversation" means press
             <strong>New conversation</strong> to keep going.
           </li>
-          <li>
+          <li class="for-browser">
             "No agent is available right now" means the session has finished or
             Plan2Code has gone quiet. Check the terminal, or resume the session,
             to ask.
+          </li>
+          <li class="for-app">
+            "No agent is available right now" means the session has finished or
+            Plan2Code has gone quiet. Check the terminal panel, or press
+            <strong>New Session</strong> if the agent has ended, to ask.
           </li>
         </ul>
         <p>Either way, the conversation above stays readable.</p>
@@ -2177,7 +2224,7 @@
           run next, whether it finished on its own or you stopped it.
         </p>
         <h4>Stopping early</h4>
-        <p>
+        <p id="help-finishing-stop-text">
           <strong>Stop session</strong>, at the top, ends the session and saves
           your place. Any answers you have ready go with it, and Plan2Code
           gives you a command to pick up where you left off, in a new
@@ -2239,7 +2286,7 @@
           this step is over.
         </p>
         <h4>Running the next command</h4>
-        <p>
+        <p id="help-finishing-command-text">
           Press <strong>Copy</strong>, then paste the command into the terminal
           where you started Plan2Code, in a new conversation. When the next
           step is another Plan2Code step, the command already ends with
@@ -2247,7 +2294,7 @@
           you carry on here rather than in the terminal.
         </p>
         <h4>Back to the dashboard</h4>
-        <p>
+        <p id="help-finishing-dashboard-text">
           A finished screen (never a paused one) has a <strong>Back to the
           dashboard</strong> button. It turns this page back into the cards, in
           the same conversation, so the next step starts right here.
@@ -2266,7 +2313,7 @@
           "Commit this now?" and you say yes, it carries on to Git.
         </p>
         <h4>Continue here</h4>
-        <p>
+        <p id="help-finishing-continue-text">
           When the next step is another Plan2Code step, the Next step block also
           has a <strong>Continue here</strong> button. It starts that step in
           this same conversation, the way a dashboard card would, with this page
@@ -2405,19 +2452,32 @@
           your project.
         </p>
         <h4>On this machine only</h4>
-        <p>
+        <p class="for-browser">
           The page is served on <strong>127.0.0.1</strong>, which only this
           computer can reach. It is not visible on your network, so sharing the
           link with someone on another machine will not work, by design. To work
           through a session together, share your screen.
         </p>
+        <p class="for-app">
+          The page is served on <strong>127.0.0.1</strong>, which only this
+          computer can reach. It is not visible on your network, and the app
+          shows it in its own window, so there is no link to share. To work
+          through a session together, share your screen.
+        </p>
         <h4>The link is a key</h4>
-        <p>
+        <p class="for-browser">
           The link carries a long private code. The first time it is opened, the
           page swaps that code for a cookie in this browser and takes it out of
           the address bar, so it does not linger in your history or show in a
           screenshot. Treat the link like a password all the same: anyone on
           this machine who has it can open the session.
+        </p>
+        <p class="for-app">
+          The page's address carries a long private code. The app opens it for
+          you, and the page swaps that code for a cookie in the app's own web
+          view, so it never shows in the window, and the agent leaves it out of
+          the terminal panel. Anyone on this machine who has the address can
+          still open the session, so treat it like a password if you ever see it.
         </p>
         <h4>What is kept, and where</h4>
         <p>
@@ -2755,7 +2815,7 @@
             <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false"><circle cx="10" cy="10" r="7" opacity="0.35" /><circle cx="10" cy="10" r="7" pathLength="100" stroke-dasharray="50 100" stroke-dashoffset="25" transform="rotate(-90 10 10)" /></svg>
           </span>
           <h3>Refresh at half way</h3>
-          <p>Once the session meter passes half, finish the step and start a new conversation.</p>
+          <p id="welcome-refresh-text">Once the session meter passes half, finish the step and start a new conversation.</p>
         </div>
         <div class="welcome-col">
           <span class="welcome-dot is-bare">

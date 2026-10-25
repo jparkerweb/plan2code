@@ -256,6 +256,10 @@ test("a working agent's line falls back to its headline note", () => {
 
 test("the terminal line is the exact text every command hands back", () => {
   assert.equal(terminalLine("http://127.0.0.1:1/s/abc/"), "→ Look at the web console: http://127.0.0.1:1/s/abc/");
+  // Under the desktop app the page is beside the terminal: no address to print.
+  const inApp = terminalLine("http://127.0.0.1:1/s/abc/", { PLAN2CODE_IN_APP: "1" });
+  assert.equal(inApp.includes("127.0.0.1"), false, "no address under the app");
+  assert.equal(terminalLine("http://127.0.0.1:1/s/abc/", {}), "→ Look at the web console: http://127.0.0.1:1/s/abc/");
 });
 
 test("repoRoots reads the branch off disk: named, detached, a linked worktree's own, and none", () => {

@@ -257,9 +257,9 @@ function handoffProject(t) {
   return { project, made };
 }
 
-async function openHandoffMenu(t) {
+async function openHandoffMenu(t, env) {
   const { project, made } = handoffProject(t);
-  const s = await openSession(await suite.browser(), { t, workflow: "dashboard", payload: MENU, project });
+  const s = await openSession(await suite.browser(), { t, workflow: "dashboard", payload: MENU, project, env });
   const main = await toTheMenu(s);
   const chip = chipFor(main, "Lunch vote");
   await chip.waitFor();
@@ -320,6 +320,20 @@ test("Read it all opens the handoff's text, and Copy puts a prompt naming its fi
   assert.ok(text.includes(made.id), `the prompt names the handoff's file: ${text}`);
 });
 
+// Under the app, "a new conversation" is this console's own wording for what
+// New Session does, so the handoff's copy button says "another session"
+// instead, still naming the same clipboard prompt.
+test("under the app, a handoff's copy button says Copy for another session, and still works", async (t) => {
+  const { s, main, chip } = await openHandoffMenu(t, { PLAN2CODE_IN_APP: "1" });
+  await s.context.grantPermissions(["clipboard-read", "clipboard-write"], { origin: new URL(s.url).origin });
+  await chip.click();
+  assert.equal(await main.getByRole("button", { name: "Copy for a new conversation" }).count(), 0, "no classic-mode wording under the app");
+  const copy = main.getByRole("button", { name: "Copy for another session" });
+  await copy.click();
+  await main.getByRole("button", { name: "Copied" }).waitFor();
+  await copy.waitFor();
+});
+
 // What a person would see break: Delete asks for a name, or sends a spec
 // delete instead of the handoff's.
 test("a handoff's Delete asks once in its own dialog and sends a delete naming the handoff", async (t) => {
@@ -364,6 +378,39 @@ test("the update banner shows on the dashboard only, and its dismiss hides it", 
 
   await main.getByRole("button", { name: "Dismiss until next time" }).click();
   await banner.waitFor({ state: "hidden" });
+});
+
+// Under the desktop app (PLAN2CODE_IN_APP=1) the app's own top bar already
+// nags about a skills/app mismatch and updates in one click, so this banner
+// (a copy-pasted shell command) must never show there, newer release or not.
+test("under the app, the update banner never shows", async (t) => {
+  aNewerReleaseExists(t);
+  const dash = await openSession(await suite.browser(), {
+    t,
+    workflow: "dashboard",
+    payload: MENU,
+    project: tempProject(DRAFT_PROJECT),
+    env: { PLAN2CODE_IN_APP: "1" },
+  });
+  const main = await toTheMenu(dash);
+  await main.getByText("One spec on disk, with a plan drafted.").waitFor();
+  assert.equal(await main.getByText("UPDATE AVAILABLE").count(), 0, "no banner under the app");
+});
+
+// Same reasoning for the dashboard's own red-meter banner: under the app it
+// must point at New Session, never at starting a new console session.
+test("under the app, the dashboard's red-meter banner points at New Session", async (t) => {
+  const dash = await openSession(await suite.browser(), {
+    t,
+    workflow: "dashboard",
+    payload: MENU,
+    project: tempProject(DRAFT_PROJECT),
+    env: { PLAN2CODE_IN_APP: "1" },
+  });
+  const main = await toTheMenu(dash);
+  dash.post({ run: { event: "implement-phase", id: "phase-1", tasks: 30 } });
+  await main.getByText("Press New Session at the top of the window to start the agent fresh.").waitFor();
+  assert.equal(await main.getByText("Starting a new console session").count(), 0, "no classic-mode wording under the app");
 });
 
 // What a person would see break: two dashboard tabs of one session, on
