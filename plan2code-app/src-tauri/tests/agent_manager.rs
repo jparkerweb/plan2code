@@ -8,7 +8,7 @@ use std::sync::{Arc, Mutex, Once};
 use std::time::{Duration, Instant};
 
 use plan2code_app_lib::agent_manager::{AgentEvent, AgentManager, AgentSnapshot, AgentState};
-use plan2code_app_lib::agents::{Agent, AgentKind, PermissionMode, AGENT_BIN_ENV};
+use plan2code_app_lib::agents::{agent_launch_spec, parse_agents_file, Agent, AgentKind, PermissionMode, AGENT_BIN_ENV};
 
 mod common;
 use common::process_alive;
@@ -297,5 +297,24 @@ fn an_agent_with_no_signal_set_gets_none() {
     h.type_line("ENV PLAN2CODE_IN_APP");
     h.wait_for_output("ENV PLAN2CODE_IN_APP=", 1);
     assert!(!h.seen.contains("ENV PLAN2CODE_IN_APP=1"));
+    h.manager.stop();
+}
+
+#[test]
+fn a_custom_agent_runs_the_override_too_and_restart_keeps_its_id() {
+    let mut h = Harness::new();
+    // Its command is nowhere on PATH: the override replaces it, as for a built-in.
+    let (mut agents, warnings) = parse_agents_file(r#"{"schema":1,"agents":[{"id":"goose","name":"Goose","command":"goose-not-installed","bypassArgs":["--yes"]}]}"#);
+    assert!(warnings.is_empty(), "{warnings:?}");
+    let goose = Agent::Custom(agents.remove(0));
+    let spec = agent_launch_spec(&goose, &std::env::temp_dir(), Some("m"), None, PermissionMode::Bypass, "/plan2code");
+    assert_eq!(PathBuf::from(&spec.program), common::fake_agent());
+    assert!(spec.args.is_empty());
+    h.manager.start(goose, None, None, PermissionMode::Checked, None).expect("start the custom agent");
+    h.wait_for_output(READY, 1);
+    assert_eq!(h.manager.snapshot().kind, Some("goose".to_string()));
+    h.manager.restart().unwrap();
+    h.wait_for_output(READY, 2);
+    assert_eq!(h.manager.snapshot().kind, Some("goose".to_string()), "restart must keep the custom agent");
     h.manager.stop();
 }

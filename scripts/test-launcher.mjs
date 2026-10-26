@@ -704,6 +704,31 @@ test("launcher agents: the model menu is the agent's own models, with no shipped
   assert.deepEqual(cli.args(["--model=m2", "-x"]), ["--yes", "/plan2code", "--model", "m2", "--bypass", "-x"]);
 });
 
+test("launcher agents: the menu lists the built-ins found first, then the custom agents that resolve", (t) => {
+  const box = sandbox(["goose", "codex", "claude"]);
+  t.after(box.cleanup);
+  const file = writeAgents(box, { schema: 1, agents: [GOOSE, { id: "ghost", name: "Ghost", command: "ghost-cmd" }] });
+  const { customClis, runnableClis } = require(LAUNCHER);
+  const realPath = process.env.PATH;
+  process.env.PATH = path.join(box.dir, "bin");
+  t.after(() => {
+    process.env.PATH = realPath;
+  });
+  const { installed, missing } = runnableClis(customClis(file, false));
+  assert.deepEqual(installed.map((cli) => cli.id), ["claude", "codex", "goose"]);
+  assert.deepEqual(missing.map((cli) => cli.id), ["ghost"]);
+});
+
+test("launcher agents: with no terminal to ask, a custom agent's model line names its own default", (t) => {
+  const box = sandbox(["goose"]);
+  t.after(box.cleanup);
+  writeAgents(box, goose());
+  const result = box.run(["--cli", "goose"]);
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /Goose will start with its own default model\. To pick one, run `plan2code --model <id>`\./);
+  assert.doesNotMatch(result.stdout, /last used/);
+});
+
 test("launcher agents: a custom agent whose command is not found is left out and named when nothing can run", (t) => {
   const box = sandbox(["claude"]);
   t.after(box.cleanup);
@@ -769,13 +794,17 @@ test("launcher agents: a full-path command starts, and on Windows a .cmd in a fo
   if (IS_WINDOWS) {
     file = path.join(spaced, "spaced.cmd");
     fs.writeFileSync(file, `@"${process.execPath}" "${recorder}" spaced %*\r\n`);
+    // A same-named file in the project folder (the launcher's cwd) must not run instead.
+    fs.writeFileSync(path.join(box.dir, "spaced.cmd"), `@"${process.execPath}" "${recorder}" decoy %*\r\n`);
   } else {
     file = path.join(spaced, "spaced");
     fs.writeFileSync(file, `#!/bin/sh\nexec "${process.execPath}" "${recorder}" spaced "$@"\n`);
     fs.chmodSync(file, 0o755);
   }
   writeAgents(box, { schema: 1, agents: [{ id: "spaced", name: "Spaced", command: file, args: ["{prompt}"] }] });
-  const result = box.run(["--cli", "spaced", "--note", "a b"]);
+  // Some shells already set the switch the launcher sets; the run starts without it.
+  const result = box.run(["--cli", "spaced", "--note", "a b"], { NoDefaultCurrentDirectoryInExePath: undefined });
   assert.equal(result.status, 0, result.stderr);
   assert.deepEqual(box.argsOf("spaced"), ["/plan2code", "--note", "a b"]);
+  assert.equal(box.argsOf("decoy"), null);
 });

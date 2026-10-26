@@ -7,6 +7,7 @@ import { ROLES, ROLE_NOT_SET, ROLE_NOT_SET_LABEL, needsRoleNudge, normalizeRole 
 import { isDashboard } from "../selectors.js";
 import { el, lightDismiss } from "../render.js";
 import { page, redraw } from "../state.js";
+import { framed, onAppMessage, tellApp } from "../app-bridge.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -552,4 +553,14 @@ export function wireLooks() {
     saveModels();
     renderModels();
   });
+
+  // Desktop app: the taskbar switch, kept by the app in its own app.json. The
+  // app says what it holds once the page is up; checked until it does.
+  if (framed()) {
+    $("looks-desktop").hidden = false;
+    onAppMessage("taskbar-state", (data) => {
+      if (typeof data.on === "boolean") $("looks-taskbar").checked = data.on;
+    });
+    $("looks-taskbar").addEventListener("change", (e) => tellApp("taskbar", { on: e.target.checked }));
+  }
 }

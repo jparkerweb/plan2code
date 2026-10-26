@@ -2,7 +2,7 @@
 // agent's terminal panel docked at the bottom with a drag handle.
 
 import { mountTerminal } from './terminal.js';
-import { barNextSteps, continueKeys, defaultRightFraction, folderName, pickDefaultAgent, windowTitleFor } from './meter.js';
+import { attentionSignal, barNextSteps, continueKeys, defaultRightFraction, folderName, pickDefaultAgent, taskbarSwitch, windowTitleFor } from './meter.js';
 
 const { invoke, Channel } = window.__TAURI__.core;
 
@@ -26,6 +26,7 @@ const barRowEl = document.getElementById('bar-row');
 const launchCard = document.getElementById('launch-card');
 const launchAgentEl = document.getElementById('launch-agent');
 const launchMissingEl = document.getElementById('launch-missing');
+const launchWarningEl = document.getElementById('launch-agents-warning');
 const launchModelEl = document.getElementById('launch-model');
 const launchModelListEl = document.getElementById('launch-model-list');
 const launchEffortRow = document.getElementById('launch-effort-row');
@@ -267,14 +268,21 @@ function confirmRestart(onYes) {
 // keeps the order Rust sent (built-ins, then custom agents); the map is by id.
 let agentList = [];
 let agentAvailability = {};
+// What was skipped in agents.json, shown under the picker.
+let agentWarnings = [];
 
-async function loadAgentAvailability() {
+// `refresh` (Check again) also has the app work its PATH out again, so a CLI
+// whose installer added a new folder is found without a restart.
+async function loadAgentAvailability(refresh = false) {
   try {
-    agentList = await invoke('agent_availability');
+    const result = await invoke('agent_availability', { refresh });
+    agentList = result.agents || [];
+    agentWarnings = result.warnings || [];
     agentAvailability = Object.fromEntries(agentList.map((entry) => [entry.id, entry]));
   } catch {
     // Nothing to show is not a reason to block the card: Start just tries it.
     agentList = [];
+    agentWarnings = [];
     agentAvailability = {};
   }
 }
@@ -346,7 +354,7 @@ function noAgentExplainer() {
 // Re-read the agents from disk (a CLI installed or a custom agent added since),
 // then redraw whatever shows them and pick the default again.
 async function checkAgentsAgain() {
-  await loadAgentAvailability();
+  await loadAgentAvailability(true);
   applyDefaultAgent((appState && appState.lastAgent) || launchAgentEl.value);
   if (!firstRunEl.hidden && appState) renderFirstRun(appState);
 }
@@ -371,6 +379,8 @@ function refreshLaunchCard() {
       }
     }
   }
+  launchWarningEl.hidden = agentWarnings.length === 0;
+  launchWarningEl.textContent = agentWarnings.map((warning) => `agents.json: ${warning}`).join('\n');
   // A custom agent has no separate effort, and offers its models as
   // suggestions in the (still free-text) model field.
   launchModelListEl.replaceChildren();
@@ -626,13 +636,20 @@ let consoleKnown = false;
 function loadFrame(url) {
   currentUrl = url;
   frameReady = false;
+  // The page going away takes its taskbar dot with it; the new one tells its own.
+  clearAttention();
   clearTimeout(helloTimer);
   helloTimer = setTimeout(onNoHello, HELLO_WAIT_MS);
   frame.src = url;
 }
 
+function clearAttention() {
+  invoke('clear_attention_cmd').catch(() => {});
+}
+
 // What the console page may ask of this window. Each is a named request with
-// no free text, so the page can never type anything but "continue".
+// no free text, so the page can never type anything but "continue", and the
+// taskbar's two take only their fixed words and a boolean (meter.js).
 window.addEventListener('message', (event) => {
   if (event.source !== frame.contentWindow) return;
   const kind = event.data && event.data.plan2code;
@@ -640,6 +657,17 @@ window.addEventListener('message', (event) => {
     frameReady = true;
     clearTimeout(helloTimer);
     hideState();
+    // The Desktop app switch in its User Preferences shows what app.json holds.
+    const on = !appState || appState.taskbarSignal !== false;
+    event.source.postMessage({ plan2code: 'taskbar-state', on }, '*');
+  } else if (kind === 'attention') {
+    const signal = attentionSignal(event.data);
+    if (signal) invoke('set_attention', { signal }).catch(() => {});
+  } else if (kind === 'taskbar') {
+    const on = taskbarSwitch(event.data);
+    if (on === null) return;
+    if (appState) appState.taskbarSignal = on;
+    invoke('set_taskbar_signal', { on }).catch(() => {});
   } else if (kind === 'agent-continue') {
     typeContinue();
   } else if (kind === 'new-session') {
@@ -697,6 +725,8 @@ try {
 // No hello in time: ask the console why, and say so with a way forward.
 async function onNoHello() {
   if (frameReady || !consoleKnown || restarting) return;
+  // A page that does not answer cannot say it is done needing the person.
+  clearAttention();
   let status = null;
   try {
     status = await invoke('console_status');
@@ -901,7 +931,7 @@ function setProjectDir(dir) {
 // checklist both need it once a folder lands, after the fact.
 let appState = null;
 
-// Opens the OS folder picker. A cancelled pick (or a failed one) lands on the
+// Opens the OS folder picker. A canceled pick (or a failed one) lands on the
 // "No project folder chosen" state with a button that tries again.
 async function pickFolder() {
   try {
@@ -930,7 +960,7 @@ function afterProjectKnown() {
 
 // Switches to a folder picked fresh: the Rust side tears the old project's
 // agent and console down before the new one is remembered, so nothing from
-// it carries over. Picking nothing (cancelled) leaves the current project as
+// it carries over. Picking nothing (canceled) leaves the current project as
 // it was.
 async function doChangeProject() {
   showState('Choose the new project folder...');

@@ -11,7 +11,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { barNextSteps, continueKeys, defaultRightFraction, folderName, pickDefaultAgent, windowTitleFor, CONSOLE_ASIDE_BREAKPOINT_PX, NEXT_STEP_LABELS } from "../plan2code-app/ui/meter.js";
+import { attentionSignal, barNextSteps, continueKeys, defaultRightFraction, folderName, pickDefaultAgent, taskbarSwitch, windowTitleFor, CONSOLE_ASIDE_BREAKPOINT_PX, NEXT_STEP_LABELS } from "../plan2code-app/ui/meter.js";
 import { findBrowser, launchBrowser } from "./browser.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -257,4 +257,44 @@ test("pickDefaultAgent with nothing installed returns the remembered id, else th
   assert.equal(pickDefaultAgent(none, "devin"), "devin");
   assert.equal(pickDefaultAgent(none, null), "claude");
   assert.equal(pickDefaultAgent([], null), null);
+});
+
+test("pickDefaultAgent drops a remembered id the list no longer has, unless there is no list at all", () => {
+  const none = AVAIL([["claude", false], ["devin", false], ["codex", false]]);
+  // A custom agent deleted since: the picker could not show it, so the first entry it can.
+  assert.equal(pickDefaultAgent(none, "gone"), "claude");
+  // The availability check failed: the fixed options are on the card, the remembered id stands.
+  assert.equal(pickDefaultAgent([], "devin"), "devin");
+});
+
+test("the launch card shows agents.json warnings, and Check again asks for a fresh PATH", () => {
+  assert.match(INDEX_HTML, /<p id="launch-agents-warning" hidden><\/p>/);
+  assert.match(APP_JS, /invoke\('agent_availability', \{ refresh \}\)/);
+  assert.match(APP_JS, /async function checkAgentsAgain\(\) \{\n  await loadAgentAvailability\(true\);/);
+});
+
+// The console page's taskbar messages reach the app only as one of four fixed
+// words or a boolean (attention.rs decides what they mean); app.js forwards
+// them through these checks and nothing else.
+test("attentionSignal passes only the four favicon states, and taskbarSwitch only a boolean", () => {
+  for (const state of ["busy", "ready", "attention", "plain"]) {
+    assert.equal(attentionSignal({ plan2code: "attention", state }), state);
+  }
+  for (const data of [{ state: "Ready" }, { state: "urgent" }, { state: "" }, { state: 1 }, {}, null, undefined]) {
+    assert.equal(attentionSignal(data), null, `${JSON.stringify(data)} is not forwarded`);
+  }
+  assert.equal(taskbarSwitch({ on: true }), true);
+  assert.equal(taskbarSwitch({ on: false }), false);
+  for (const data of [{ on: "false" }, { on: 0 }, { on: null }, {}, null]) {
+    assert.equal(taskbarSwitch(data), null, `${JSON.stringify(data)} is not forwarded`);
+  }
+});
+
+test("app.js forwards attention and taskbar through those checks, and clears the dot on a new frame and a lost hello", () => {
+  assert.match(APP_JS, /const signal = attentionSignal\(event\.data\);\s+if \(signal\) invoke\('set_attention', \{ signal \}\)/);
+  assert.match(APP_JS, /const on = taskbarSwitch\(event\.data\);\s+if \(on === null\) return;/);
+  assert.match(APP_JS, /invoke\('set_taskbar_signal', \{ on \}\)/);
+  assert.match(APP_JS, /function loadFrame\(url\) \{[^}]*clearAttention\(\);[^}]*frame\.src = url;/);
+  assert.match(APP_JS, /async function onNoHello\(\) \{\s+if \(frameReady \|\| !consoleKnown \|\| restarting\) return;[\s\S]{0,120}clearAttention\(\);/);
+  assert.match(APP_JS, /plan2code: 'taskbar-state', on/, "the page hears the saved switch on its hello");
 });

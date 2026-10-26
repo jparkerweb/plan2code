@@ -1,11 +1,12 @@
 // Hide the extra console window on Windows release builds.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 
 use plan2code_app_lib::announce::{AnnounceServer, PageNotice};
-use plan2code_app_lib::agent_manager::{AgentEvent, AgentManager, BeforeFresh, Sink};
+use plan2code_app_lib::agent_manager::{AgentEvent, AgentManager, AgentState, BeforeFresh, Sink};
 use plan2code_app_lib::agents::{self, Agent, AgentKind, PermissionMode};
+use plan2code_app_lib::attention::{self, Badge, Signal};
 use plan2code_app_lib::console_supervisor::{app_origin, origin_of, session_on_disk, ConsoleSupervisor};
 use plan2code_app_lib::node_check;
 use plan2code_app_lib::project::{self, ProjectDir};
@@ -37,6 +38,24 @@ struct AppState {
     // (Task 9.9): the first-run checklist's Node row names both.
     node_version: Option<String>,
     node_binary: Option<String>,
+    // What the taskbar entry last said, and whether it may say anything.
+    attention: Mutex<AttentionState>,
+    // The app itself, once it is set up: the agent's sink clears the taskbar
+    // through it when the agent ends.
+    app: Arc<OnceLock<tauri::AppHandle>>,
+}
+
+// The console page's last state as the taskbar shows it (attention.rs), and
+// the Desktop app switch, `taskbarSignal` in app.json.
+struct AttentionState {
+    last: Option<Signal>,
+    enabled: bool,
+}
+
+impl Default for AttentionState {
+    fn default() -> Self {
+        AttentionState { last: None, enabled: true }
+    }
 }
 
 // The operating system and, on Windows, the build number xterm needs for ConPTY.
@@ -47,9 +66,15 @@ fn platform_info() -> serde_json::Value {
 }
 
 // What the launch card offers per agent: whether its CLI is on PATH (else how
-// to install it), and whether it takes its own reasoning effort.
+// to install it), and whether it takes its own reasoning effort; plus the
+// warnings about agents.json.
 #[tauri::command]
-fn agent_availability() -> serde_json::Value {
+fn agent_availability(refresh: Option<bool>) -> serde_json::Value {
+    // "Check again" also works the PATH out again, so a CLI whose installer
+    // added a new folder to it is found without restarting the app.
+    if refresh == Some(true) {
+        node_check::refresh_path();
+    }
     // Built-ins first, then the custom agents, read afresh on every call so
     // "Check again" sees a change to agents.json.
     let mut entries: Vec<_> = AgentKind::ALL
@@ -70,7 +95,8 @@ fn agent_availability() -> serde_json::Value {
             })
         })
         .collect();
-    for custom in agents::custom_agents() {
+    let (customs, warnings) = agents::custom_agents();
+    for custom in customs {
         let at = Agent::Custom(custom.clone()).installed_at();
         entries.push(serde_json::json!({
             "id": custom.id,
@@ -84,7 +110,9 @@ fn agent_availability() -> serde_json::Value {
             "models": custom.models,
         }));
     }
-    serde_json::json!(entries)
+    // What was skipped in agents.json, so a custom agent that vanished from
+    // the picker is explained, as the launcher and the console do.
+    serde_json::json!({ "agents": entries, "warnings": warnings })
 }
 
 // Opens a built-in agent install page in the default browser. Any other id
@@ -130,9 +158,15 @@ fn windows_build() -> Option<u32> {
 }
 
 // Sends the agent's output as raw bytes and its state changes as JSON, on the
-// page's latest channel. Nothing is sent while no page has registered one.
-fn page_sink(page: PageChannel) -> Sink {
+// page's latest channel. Nothing is sent while no page has registered one. An
+// agent that ends takes the taskbar's dot with it, page or no page.
+fn page_sink(page: PageChannel, app: Arc<OnceLock<tauri::AppHandle>>) -> Sink {
     Arc::new(move |event| {
+        if let AgentEvent::State(snapshot) = &event {
+            if let (AgentState::Ended { .. }, Some(app)) = (&snapshot.state, app.get()) {
+                clear_attention(app);
+            }
+        }
         let Ok(guard) = page.lock() else { return };
         let Some(channel) = guard.as_ref() else { return };
         let body = match event {
@@ -162,7 +196,7 @@ fn agent_for_project(state: &AppState) -> Result<Arc<AgentManager>, String> {
             return Ok(Arc::clone(agent));
         }
     }
-    let sink = page_sink(Arc::clone(&state.page));
+    let sink = page_sink(Arc::clone(&state.page), Arc::clone(&state.app));
     let agent = Arc::new(AgentManager::new(dir, sink));
     agent.set_before_fresh(before_fresh_hook(state));
     *guard = Some(Arc::clone(&agent));
@@ -361,6 +395,99 @@ fn quit_app(app: &tauri::AppHandle) {
     app.exit(0);
 }
 
+// The console page's state, told on every change (`attention` from the page):
+// the taskbar's dot for this system, and one flash on a change into the
+// person's move or needs attention while the window is not focused. An
+// unknown word does nothing.
+#[tauri::command]
+fn set_attention(app: tauri::AppHandle, state: State<'_, AppState>, signal: String) {
+    let Some(next) = Signal::from_id(&signal) else { return };
+    let Some(window) = app.get_webview_window("main") else { return };
+    let (prev, enabled) = {
+        let Ok(mut guard) = state.attention.lock() else { return };
+        (guard.last.replace(next), guard.enabled)
+    };
+    apply_badge(&window, attention::badge_for(next, std::env::consts::OS, enabled));
+    if attention::should_flash(prev, next, window.is_focused().unwrap_or(true), enabled) {
+        let _ = window.request_user_attention(Some(tauri::UserAttentionType::Informational));
+    }
+}
+
+// The one place a badge reaches the window, in each system's own form. A call
+// that fails changes nothing else: the taskbar is a hint, never a blocker.
+#[cfg_attr(not(any(target_os = "windows", target_os = "macos", target_os = "linux")), allow(unused_variables))]
+fn apply_badge(window: &tauri::WebviewWindow, badge: Badge) {
+    #[cfg(target_os = "windows")]
+    {
+        let icon = match badge {
+            Badge::Dot(color) => Some(tauri::image::Image::new_owned(
+                attention::dot_rgba(color, attention::DOT_SIZE),
+                attention::DOT_SIZE,
+                attention::DOT_SIZE,
+            )),
+            _ => None,
+        };
+        let _ = window.set_overlay_icon(icon);
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let label = match badge {
+            Badge::Label(text) => Some(text.to_string()),
+            _ => None,
+        };
+        let _ = window.set_badge_label(label);
+    }
+    #[cfg(target_os = "linux")]
+    {
+        let count = match badge {
+            Badge::Count(count) => Some(count),
+            _ => None,
+        };
+        let _ = window.set_badge_count(count);
+    }
+}
+
+// No dot and no flash: the agent ended, the page went away, or the switch was
+// turned off. The next state the page tells starts from plain.
+fn clear_attention(app: &tauri::AppHandle) {
+    if let Ok(mut guard) = app.state::<AppState>().attention.lock() {
+        guard.last = Some(Signal::Plain);
+    }
+    let Some(window) = app.get_webview_window("main") else { return };
+    apply_badge(&window, Badge::None);
+    let _ = window.request_user_attention(None);
+}
+
+// The app page clears it when a new page loads in the frame or none answers.
+#[tauri::command]
+fn clear_attention_cmd(app: tauri::AppHandle) {
+    clear_attention(&app);
+}
+
+// The Desktop app switch in the console's User Preferences (`taskbar` from the
+// page). Off clears the dot and stops flashes; on shows the dot for the state
+// the page last told at once, since the page only tells it again on a change.
+// Either way the last state is kept. Saved in the app's own app.json, never
+// in the console's files.
+#[tauri::command]
+fn set_taskbar_signal(app: tauri::AppHandle, state: State<'_, AppState>, on: bool) -> Result<(), String> {
+    let saved = settings::settings_file()
+        .ok_or_else(|| "no home folder found".to_string())
+        .and_then(|file| settings::save_taskbar_signal(&file, on));
+    let last = {
+        let Ok(mut guard) = state.attention.lock() else { return saved };
+        guard.enabled = on;
+        guard.last.unwrap_or(Signal::Plain)
+    };
+    if let Some(window) = app.get_webview_window("main") {
+        apply_badge(&window, attention::badge_for(last, std::env::consts::OS, on));
+        if !on {
+            let _ = window.request_user_attention(None);
+        }
+    }
+    saved
+}
+
 /// What the page draws its bar from: the folder (or that none is chosen yet)
 /// and the agent the picker starts on.
 #[tauri::command]
@@ -402,6 +529,8 @@ fn app_state(state: State<'_, AppState>) -> serde_json::Value {
         // or launch card shown.
         "autoStart": state.launch.agent,
         "termPanel": term_panel,
+        // The Desktop app switch, for the page's User Preferences.
+        "taskbarSignal": state.attention.lock().map_or(true, |guard| guard.enabled),
     })
 }
 
@@ -499,7 +628,7 @@ fn teardown_project(state: &AppState) -> Result<(), String> {
 /// the old one (its agent stopped, its console stopped) before the new
 /// folder is remembered, so `agent_for_project` and `console_start` start
 /// fresh for it rather than reusing anything from the one just left. Picking
-/// nothing (cancelled) leaves the current project untouched. One project per
+/// nothing (canceled) leaves the current project untouched. One project per
 /// window stays; this replaces it, it does not add a second.
 #[tauri::command]
 fn change_project(app: tauri::AppHandle, state: State<'_, AppState>) -> Result<Option<String>, String> {
@@ -580,6 +709,10 @@ fn main() {
             launch: project::launch_choice(&args),
             node_version,
             node_binary,
+            attention: Mutex::new(AttentionState {
+                last: None,
+                enabled: settings::settings_file().map_or(true, |file| settings::load_taskbar_signal(&file)),
+            }),
             ..AppState::default()
         })
         .invoke_handler(tauri::generate_handler![
@@ -600,9 +733,16 @@ fn main() {
             change_project,
             console_start,
             console_status,
-            console_stop
+            console_stop,
+            set_attention,
+            clear_attention_cmd,
+            set_taskbar_signal
         ])
         .on_window_event(|window, event| {
+            // Looking at the window is the answer to its flash.
+            if let tauri::WindowEvent::Focused(true) = event {
+                let _ = window.request_user_attention(None);
+            }
             // Closing with an agent running asks first; "no" keeps the window open.
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 let app = window.app_handle().clone();
@@ -613,6 +753,7 @@ fn main() {
             }
         })
         .setup(move |app| {
+            let _ = app.state::<AppState>().app.set(app.handle().clone());
             // Pages the agent's `open` announces: the supervisor and the agent's
             // environment follow the console, and the page frame shows it.
             let handle = app.handle().clone();

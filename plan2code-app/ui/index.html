@@ -89,7 +89,7 @@
     #dashboard-state[hidden] { display: none; }
     #dashboard-state-text { margin: 0; max-width: 60ch; overflow-wrap: anywhere; color: #bbb; }
     #dashboard-state-planny[hidden] { display: none; }
-    /* Drawn and coloured like the console's own Planny (styles/planny.css):
+    /* Drawn and colored like the console's own Planny (styles/planny.css):
        an outlined shell, the star eye, a lip of a smile, round hands. */
     #dashboard-state-planny { width: 104px; height: auto; overflow: visible; }
     #dashboard-state-planny :is(.ps-shell, .ps-smile, .ps-arm path, .ps-mug, .ps-handle) {
@@ -146,6 +146,8 @@
     }
     #launch-missing { margin: 0; font-size: 12px; color: #d7ba7d; }
     #launch-missing code { color: #ddd; }
+    #launch-agents-warning { margin: 0; font-size: 12px; color: #d7ba7d; white-space: pre-line; }
+    #launch-agents-warning[hidden] { display: none; }
     .agent-explainer { margin: 0; font-size: 12px; line-height: 1.5; }
     .agent-explainer ul { margin: 4px 0; padding-left: 18px; }
     .agent-explainer code { color: #ddd; }
@@ -296,6 +298,7 @@
           <option value="codex">Codex</option>
         </select>
         <p id="launch-missing" hidden></p>
+        <p id="launch-agents-warning" hidden></p>
         <label for="launch-model">Model</label>
         <input id="launch-model" type="text" placeholder="Default (your account setting)" autocomplete="off" list="launch-model-list">
         <datalist id="launch-model-list"></datalist>

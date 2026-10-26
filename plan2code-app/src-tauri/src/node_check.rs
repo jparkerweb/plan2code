@@ -9,7 +9,7 @@
 //! `console_supervisor`, `versions` and `agents` all use it.
 
 use std::process::Command;
-use std::sync::OnceLock;
+use std::sync::Mutex;
 
 pub const MIN_NODE_MAJOR: u32 = 18;
 
@@ -73,28 +73,108 @@ fn login_shell_path() -> Option<String> {
     (out.status.success() && !path.is_empty()).then_some(path)
 }
 
+static RESOLVED_PATH: Mutex<Option<String>> = Mutex::new(None);
+
 /// The PATH every process this app spawns should run with: an explicit
 /// `--node`'s directory first, then (macOS and Linux) the login shell's own
-/// PATH, then this process's own PATH, each included only once. Resolved
-/// once per launch: none of these change while the app runs.
-pub fn resolved_path() -> &'static str {
-    static PATH: OnceLock<String> = OnceLock::new();
-    PATH.get_or_init(|| {
-        let args: Vec<String> = std::env::args().collect();
-        let inherited = std::env::var("PATH").unwrap_or_default();
-        let mut parts = Vec::new();
-        if let Some(dir) = node_override_dir(&args) {
-            parts.push(dir);
-        }
-        #[cfg(unix)]
-        if let Some(login) = login_shell_path() {
-            parts.push(login);
-        }
-        if !inherited.is_empty() {
-            parts.push(inherited);
-        }
-        parts.join(if cfg!(windows) { ";" } else { ":" })
+/// PATH, then this process's own PATH, each included only once. Worked out
+/// once per launch, and again only on `refresh_path`.
+pub fn resolved_path() -> String {
+    let mut cached = RESOLVED_PATH.lock().unwrap_or_else(|e| e.into_inner());
+    cached.get_or_insert_with(|| build_path(false)).clone()
+}
+
+/// Work the PATH out again, for "Check again" after an agent CLI was
+/// installed: an installer may have added a folder (the login shell's
+/// profile on macOS and Linux, the saved user or system PATH on Windows)
+/// that this process's own PATH has never had.
+pub fn refresh_path() {
+    let fresh = build_path(true);
+    *RESOLVED_PATH.lock().unwrap_or_else(|e| e.into_inner()) = Some(fresh);
+}
+
+fn build_path(fresh: bool) -> String {
+    let args: Vec<String> = std::env::args().collect();
+    let inherited = std::env::var("PATH").unwrap_or_default();
+    let mut parts = Vec::new();
+    if let Some(dir) = node_override_dir(&args) {
+        parts.push(dir);
+    }
+    #[cfg(unix)]
+    if let Some(login) = login_shell_path() {
+        parts.push(login);
+    }
+    // At start this process's PATH already is the saved one; only a refresh
+    // needs to read it again.
+    #[cfg(windows)]
+    if fresh {
+        parts.extend(saved_windows_path());
+    }
+    #[cfg(not(windows))]
+    let _ = fresh;
+    if !inherited.is_empty() {
+        parts.push(inherited);
+    }
+    parts.join(if cfg!(windows) { ";" } else { ":" })
+}
+
+/// The system then the user PATH as saved in the registry, with `%NAME%`
+/// expanded: what a newly opened terminal would get.
+#[cfg(windows)]
+fn saved_windows_path() -> Vec<String> {
+    use std::os::windows::process::CommandExt;
+    let keys = [r"HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment", r"HKCU\Environment"];
+    keys.iter()
+        .filter_map(|key| {
+            let out = Command::new("reg")
+                .args(["query", key, "/v", "Path"])
+                .creation_flags(0x0800_0000) // CREATE_NO_WINDOW
+                .output()
+                .ok()?;
+            let value = parse_reg_query_value(&String::from_utf8_lossy(&out.stdout))?;
+            Some(expand_percent_vars(&value, |name| std::env::var(name).ok()))
+        })
+        .collect()
+}
+
+/// The value from `reg query <key> /v <name>` output: the text after the
+/// `REG_SZ` or `REG_EXPAND_SZ` column on its line.
+#[cfg_attr(not(windows), allow(dead_code))]
+fn parse_reg_query_value(output: &str) -> Option<String> {
+    output.lines().find_map(|line| {
+        let (_, rest) = line.split_once("REG_EXPAND_SZ").or_else(|| line.split_once("REG_SZ"))?;
+        let value = rest.trim();
+        (!value.is_empty()).then(|| value.to_string())
     })
+}
+
+/// `%NAME%` replaced with `lookup(NAME)`; an unknown name stays as written.
+#[cfg_attr(not(windows), allow(dead_code))]
+fn expand_percent_vars(text: &str, lookup: impl Fn(&str) -> Option<String>) -> String {
+    let mut out = String::new();
+    let mut rest = text;
+    while let Some(start) = rest.find('%') {
+        out.push_str(&rest[..start]);
+        let after = &rest[start + 1..];
+        match after.find('%') {
+            Some(end) if end > 0 => match lookup(&after[..end]) {
+                Some(value) => {
+                    out.push_str(&value);
+                    rest = &after[end + 1..];
+                }
+                None => {
+                    out.push('%');
+                    rest = after;
+                }
+            },
+            _ => {
+                out.push('%');
+                rest = after;
+            }
+        }
+    }
+    out.push_str(rest);
+    out
 }
 
 /// Where `node` actually resolves, with `resolved_path`: for the first-run
@@ -171,5 +251,30 @@ mod tests {
         assert_eq!(node_override_dir(&args(&["--node"])), None);
         assert_eq!(node_override_dir(&args(&["--node="])), None);
         assert_eq!(node_override_dir(&args(&["--agent", "claude"])), None);
+    }
+
+    #[test]
+    fn reads_the_saved_path_out_of_reg_query_output() {
+        let out = "\r\nHKEY_CURRENT_USER\\Environment\r\n    Path    REG_EXPAND_SZ    %USERPROFILE%\\.local\\bin;C:\\Tools\r\n\r\n";
+        assert_eq!(parse_reg_query_value(out).as_deref(), Some("%USERPROFILE%\\.local\\bin;C:\\Tools"));
+        let plain = "HKEY_LOCAL_MACHINE\\x\r\n    Path    REG_SZ    C:\\Windows\r\n";
+        assert_eq!(parse_reg_query_value(plain).as_deref(), Some("C:\\Windows"));
+        assert_eq!(parse_reg_query_value("ERROR: The system was unable to find the specified registry key or value.\r\n"), None);
+    }
+
+    #[test]
+    fn expands_known_percent_names_and_keeps_the_rest() {
+        let lookup = |name: &str| (name == "USERPROFILE").then(|| "C:\\Users\\sam".to_string());
+        assert_eq!(expand_percent_vars("%USERPROFILE%\\.local\\bin;C:\\x", lookup), "C:\\Users\\sam\\.local\\bin;C:\\x");
+        assert_eq!(expand_percent_vars("%NOPE%\\bin;%USERPROFILE%", lookup), "%NOPE%\\bin;C:\\Users\\sam");
+        assert_eq!(expand_percent_vars("50%", lookup), "50%");
+        assert_eq!(expand_percent_vars("a%%b", lookup), "a%%b");
+    }
+
+    #[test]
+    fn refresh_path_keeps_this_process_path() {
+        refresh_path();
+        let inherited = std::env::var("PATH").unwrap_or_default();
+        assert!(resolved_path().ends_with(&inherited));
     }
 }

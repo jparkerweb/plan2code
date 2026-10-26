@@ -89,6 +89,23 @@ which opens a folder picker first. Uninstalling (`U`) removes both.
 </details>
 
 <details>
+<summary>Using another agent CLI, or none yet</summary>
+
+Plan2Code runs inside an AI coding agent CLI. If `plan2code` finds none of Claude Code, Devin or Codex on
+your `PATH`, it says so and prints each one's install command and official page, then exits; the desktop app
+shows the same help in a panel with an **Install page** link per agent and a **Check again** button, so you
+can install one and carry on without restarting.
+
+To use a different agent CLI, open the web console's **User Preferences → Agents** and add it: a name, the
+command, and (optionally) its arguments, the start prompt, arguments for skipping permission prompts, and
+how it takes a model. Custom agents are saved in `~/.plan2code/agents.json` and used by both the
+`plan2code` command (listed after the built-ins; `--cli <id>` picks one) and the desktop app's picker. The
+`/plan2code` start prompt only does something in an agent that loads the installed Plan2Code skills; for
+any other, leave the start prompt blank and start a skill yourself. Details in
+[.readme/web-console.md](.readme/web-console.md#agents-and-the-desktop-app-in-user-preferences).
+</details>
+
+<details>
 <summary>About the desktop app</summary>
 
 The installer also offers the **Plan2Code desktop app**: one window with the dashboard and your agent's
@@ -395,7 +412,7 @@ console or the terminal; add `--web` to skip the question and go straight to the
 
 ## Troubleshooting
 
-**The skills aren't recognised.** Re-run the installer and restart your AI tool. Confirm the global
+**The skills aren't recognized.** Re-run the installer and restart your AI tool. Confirm the global
 install with `npx skills list -g`. For a project install, check the generated directories aren't
 gitignored.
 

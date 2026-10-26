@@ -23,6 +23,19 @@ export function linkLeavesPage(href, origin) {
   return (url.protocol === "http:" || url.protocol === "https:") && url.origin !== origin;
 }
 
+/**
+ * Call `handler(data)` for each `{ plan2code: kind, ... }` message the frame's
+ * parent sends, and for nothing from anywhere else (another frame, the page
+ * itself). The app's only answer today is `taskbar-state`.
+ */
+export function onAppMessage(kind, handler) {
+  window.addEventListener("message", (event) => {
+    if (!framed() || event.source !== window.parent) return;
+    const data = event.data;
+    if (data && typeof data === "object" && data.plan2code === kind) handler(data);
+  });
+}
+
 /** Post `message` to the frame's parent, as `{ plan2code: kind, ...extra }`; nothing outside a frame. */
 export function tellApp(kind, extra = {}) {
   if (!framed()) return;

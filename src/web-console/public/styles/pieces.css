@@ -57,7 +57,7 @@
 }
 
 /* Folded-in sections. A page holds one card; what used to be cards of their
-   own (the "all caught up" lull, the session notes) is a labelled section
+   own (the "all caught up" lull, the session notes) is a labeled section
    inside it instead. */
 .card-lead { margin: 0 0 16px; }
 .card-extra { margin: 18px 0 0; }
@@ -162,7 +162,7 @@
   display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden;
 }
 .sa-strength { margin: 8px 0 0; display: flex; flex-wrap: wrap; gap: 6px; }
-/* A helper's strength and effort, coloured by rank: calm teal, amber, violet. */
+/* A helper's strength and effort, colored by rank: calm teal, amber, violet. */
 .sa-badge {
   --b: var(--ink-2);
   --b-soft: var(--panel);
@@ -755,7 +755,10 @@ h4.md-h, h5.md-h, h6.md-h { font-size: 15px; }
 .modal.looks .modal-ranges + .modal-ranges { margin-top: 18px; }
 .looks-row { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .looks-row .help { grid-column: 1 / -1; }
-/* The per-cue boxes sit under the master switch, greyed and locked while it
+/* The Desktop app group exists only inside the app; elsewhere it stays hidden
+   in spite of the grid above. */
+.looks-desktop[hidden] { display: none; }
+/* The per-cue boxes sit under the master switch, grayed and locked while it
    is off rather than hidden, so the picks stay visible. */
 .looks-sound-events { display: grid; gap: 8px; }
 .looks-sound-events.is-off { opacity: 0.45; }

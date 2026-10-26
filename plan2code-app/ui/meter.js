@@ -31,7 +31,9 @@ export function continueKeys(kind) {
  * (built-ins first, then custom agents): the remembered id when it is
  * installed, else the first installed built-in, else the first installed
  * custom agent, else the remembered id or the first entry, so the card's
- * missing-agent line explains what is wrong instead of picking silently.
+ * missing-agent line explains what is wrong instead of picking silently. A
+ * remembered id the list no longer has (a custom agent deleted since) is not
+ * kept, since the picker could not show it; with no list at all it is.
  */
 export function pickDefaultAgent(availability, remembered) {
   const list = Array.isArray(availability) ? availability : [];
@@ -41,7 +43,7 @@ export function pickDefaultAgent(availability, remembered) {
   if (builtIn) return builtIn.id;
   const custom = list.find((a) => a.installed && a.custom);
   if (custom) return custom.id;
-  if (remembered) return remembered;
+  if (remembered && (rememberedEntry || list.length === 0)) return remembered;
   return list.length > 0 ? list[0].id : null;
 }
 
@@ -142,4 +144,22 @@ function lastSegment(dir) {
     .split(/[\\/]/)
     .filter(Boolean)
     .pop();
+}
+
+/**
+ * The console page's taskbar messages, checked here before anything reaches
+ * the app (attention.rs decides what they mean). `attention` carries one of
+ * the four states the page's favicon has; `taskbar` carries the Desktop app
+ * switch as a boolean. Anything else is null, and nothing is forwarded.
+ */
+export const ATTENTION_STATES = Object.freeze(['busy', 'ready', 'attention', 'plain']);
+
+export function attentionSignal(data) {
+  const state = data && data.state;
+  return ATTENTION_STATES.includes(state) ? state : null;
+}
+
+export function taskbarSwitch(data) {
+  const on = data && data.on;
+  return typeof on === 'boolean' ? on : null;
 }

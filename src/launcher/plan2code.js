@@ -632,13 +632,10 @@ function announceCli(cli) {
 }
 
 /**
- * Choose the CLI from those installed: the `--cli` pick, the only one installed, or a numbered
- * menu defaulting to the last pick. Returns `{ cli }` with its resolved `path`, or `{ code }` (the
- * exit code) after printing why none can be used.
+ * The CLIs that can run, in menu order (the built-ins found on PATH, then the custom agents whose
+ * command resolves), and the custom agents left out because theirs does not.
  */
-async function chooseCli(requested) {
-  const customs = customClis();
-  const all = [...CLIS, ...customs];
+function runnableClis(customs) {
   const installed = CLIS.map((cli) => ({ ...cli, path: findOnPath(cli.id) })).filter((cli) => cli.path);
   // A custom agent whose command does not resolve is left out of the menu and named when nothing can run.
   const missing = [];
@@ -647,6 +644,18 @@ async function chooseCli(requested) {
     if (found) installed.push({ ...cli, ...found });
     else missing.push(cli);
   }
+  return { installed, missing };
+}
+
+/**
+ * Choose the CLI from those installed: the `--cli` pick, the only one installed, or a numbered
+ * menu defaulting to the last pick. Returns `{ cli }` with its resolved `path`, or `{ code }` (the
+ * exit code) after printing why none can be used.
+ */
+async function chooseCli(requested) {
+  const customs = customClis();
+  const all = [...CLIS, ...customs];
+  const { installed, missing } = runnableClis(customs);
 
   if (requested !== undefined) {
     const known = all.find((cli) => cli.id === requested);
@@ -743,13 +752,20 @@ function listModels(cli) {
 }
 
 /**
- * Ask which model to run: a numbered list with Enter keeping the model the CLI last used.
+ * Ask which model to run: a numbered list with Enter keeping the model the CLI last used (a
+ * custom agent: its own default).
  * A pick appends `--model <id>` to `extraArgs`. Without an interactive terminal there is
  * nobody to ask, so it just says which model will be used, as it always has.
  */
 async function chooseModel(cli, extraArgs) {
   if (cli.custom && !listModels(cli).length) return;
+  // A custom agent has no last-used model to keep: left alone it starts on its own default.
+  const keep = cli.custom ? 'its own default model' : 'the last-used model';
   if (!process.stdin.isTTY) {
+    if (cli.custom) {
+      console.log(`${cli.label} will start with its own default model. To pick one, run \`plan2code --model <id>\`.`);
+      return;
+    }
     console.log(`${cli.label} will use the model you last used in it. To use a different model, open`);
     console.log(`\`${cli.id}\` on its own and switch model there, or run \`plan2code --model <name>\`.`);
     return;
@@ -773,7 +789,7 @@ async function chooseModel(cli, extraArgs) {
     models.forEach((model, i) => console.log(!model.label ? `  ${c.cyan(`${i + 1})`)} ${model.id}` : `  ${c.cyan(`${i + 1})`)} ${model.id} — ${model.label}`));
   }
   for (;;) {
-    const answer = (await ask(`Choice ${c.green('[keep last used]')}: `)).trim().toLowerCase();
+    const answer = (await ask(`Choice ${c.green(cli.custom ? '[default]' : '[keep last used]')}: `)).trim().toLowerCase();
     if (!answer) return;
     const byNumber = models[Number(answer) - 1];
     const byName = models.find((model) => model.id === answer || model.label.toLowerCase() === answer);
@@ -782,7 +798,7 @@ async function chooseModel(cli, extraArgs) {
       extraArgs.push('--model', model.id);
       return;
     }
-    console.log(c.yellow(`Type a number from 1 to ${models.length}, a model name, or press Enter to keep the last-used model.`));
+    console.log(c.yellow(`Type a number from 1 to ${models.length}, a model name, or press Enter to keep ${keep}.`));
   }
 }
 
@@ -946,7 +962,7 @@ async function confirmProject(cwd) {
 
 /**
  * Ask for the project folder: the native picker when there is one, a typed path otherwise.
- * Returns the folder, or null when the person cancelled.
+ * Returns the folder, or null when the person canceled.
  */
 async function pickFolder() {
   const start = readLastFolder();
@@ -962,7 +978,7 @@ async function pickFolder() {
       windowsHide: true,
     });
     const folder = (result.stdout || '').trim();
-    // Pickers exit 0 or 1 with nothing printed when cancelled; anything else means the picker
+    // Pickers exit 0 or 1 with nothing printed when canceled; anything else means the picker
     // itself failed, so fall through to the typed prompt rather than giving up.
     if (!result.error && folder && result.status === 0) return path.resolve(folder);
     if (!result.error && !folder && (result.status === 0 || result.status === 1)) return null;
@@ -1013,6 +1029,9 @@ function spawnCommand(file, args, options) {
   // Windows env names are case-insensitive and the copy keeps the original spelling (Path).
   const pathKey = Object.keys(env).find((key) => key.toUpperCase() === 'PATH') || 'PATH';
   env[pathKey] = path.dirname(file) + path.delimiter + (env[pathKey] || '');
+  // cmd looks in the current folder (the project) before PATH: a same-named
+  // file there must not run in the agent's place.
+  env.NoDefaultCurrentDirectoryInExePath = '1';
   return spawn(shell, ['/d', '/s', '/c', `"${[path.basename(file), ...args].map(quoteForCmd).join(' ')}"`], {
     ...spawnOptions,
     env,
@@ -1161,4 +1180,4 @@ async function launch() {
 // Run only when invoked directly; requiring the file (the tests do) is load-only.
 if (require.main === module) launch();
 
-module.exports = { normalizeAgents, buildArgs, customClis, resolveCustomCommand, listModels, mergeModels, modelEntries, renderBanner, paint, hasModelFlag, compareVersions, modelFrom, hasDisplay, looksLikeProject };
+module.exports = { normalizeAgents, buildArgs, customClis, resolveCustomCommand, runnableClis, listModels, mergeModels, modelEntries, renderBanner, paint, hasModelFlag, compareVersions, modelFrom, hasDisplay, looksLikeProject };

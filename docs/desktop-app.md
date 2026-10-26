@@ -65,14 +65,31 @@ Three things keep today's terminal flow:
 The first time the app opens on a folder, a checklist confirms Node, the agent CLI, the project
 folder and the skills version before anything else shows; a later launch skips straight past it.
 
-A **launch card** then asks which agent (Claude, Devin or Codex), model and effort (Claude and Codex
-only) to start on. Permission checks off is its own tick, on by default (see below; New Session
-keeps whatever you picked); a CLI the app cannot find is named, with how to install it, instead of
-just being greyed out. The card is skipped when the launcher already passed an agent to start.
+A **launch card** then asks which agent, model and effort (Claude and Codex only) to start on. The
+picker lists Claude Code, Devin and Codex, then any custom agents you added in the web console's
+**User Preferences → Agents** (saved in `~/.plan2code/agents.json`, shared with the `plan2code`
+command), and starts on one that is actually installed, so a machine with only Devin or Codex is ready
+to go. Permission checks off is its own tick, on by default (see below; New Session keeps whatever
+you picked, and reuses the same agent); a CLI the app cannot find is named, with how to install it,
+instead of just being grayed out. The card is skipped when the launcher already passed an agent to
+start.
+
+With no agent installed at all, the checklist and the launch card explain what an agent CLI is and
+show each built-in's install command with an **Install page** link. Install one (or add a custom
+agent) and press **Check again**: the app finds it without a restart.
 
 The window's own title (and so its taskbar entry) reads **Plan2Code - &lt;folder name&gt;** once a
 project is open, so two or more windows on different projects read apart without opening each one
 to check.
+
+The taskbar entry also shows when Plan2Code needs you, the same states as the console's tab icon in
+a browser. On Windows a green dot means it is your move and a red dot means it needs attention, with
+one short burst of flashes when the window is not focused; on macOS the dock shows a red `!` badge on
+needs attention and bounces once; on Linux a count badge appears where the desktop supports it. There
+is no dot while the agent is busy or the step is finished, and it clears when the agent ends or the
+page reloads. Turn it off with **Show on the taskbar when Plan2Code needs me** under **User
+Preferences → Desktop app** (shown only inside the app). The per-system details are in
+[plan2code-app/README.md](../plan2code-app/README.md#agents-and-the-taskbar).
 
 A slim top bar reads, left to right: the project folder's name, a menu holding its full path and
 **Change project**; **New Session**, whenever an agent exists; the agent's own menu, with a dot for its

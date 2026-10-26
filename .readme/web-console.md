@@ -211,7 +211,7 @@ explains how and why an area works, or ranks its rough spots into
 available: it finds a bug's cause and writes it up as
 `specs/<bug-name>/DIAGNOSIS-<date>.md` without fixing it. Pick such a spec in
 the picker and it reads *Bug diagnosed*: Quick Task (suggested) and Plan light
-up, while Document, Implement, Implement + Review and Finalize stay greyed. Once
+up, while Document, Implement, Implement + Review and Finalize stay grayed. Once
 Quick Task has fixed it, the folder reads *Bug fixed*: Quick Task offers to
 archive it to `specs--completed/`, and until then the picker never opens on it
 and hides it while *Hide unavailable workflows* is on. Its chip has a visible
@@ -701,6 +701,19 @@ keyboard-only navigation work.
 
 The `plan2code` launcher's model menu comes from `models.json`, which every install overwrites with the authors' curated list. **User Preferences → Models** (Claude, Devin and Codex tabs) lets you add a model that came out before Plan2Code was updated; additions are kept in `~/.plan2code/models.json`, and **Reset to default** removes them. Restart `plan2code` to see a change. You can always run `plan2code --model <id>`, or switch model inside your agent before running a skill. Devin ids ending `-xhigh` or `-max` are refused. Maintainers refresh the curated list with the repo-local `/plan2code-model-update` skill, which shows a diff and changes only what they approve.
 
+## Agents and the desktop app in User Preferences
+
+**User Preferences → Agents** adds agent CLIs Plan2Code did not find on its own. Each one has a name, the command to run (a bare name looked up on `PATH`, or a full path), and optional fields:
+
+- **Arguments**: one per row. `{prompt}` is replaced by the start prompt (for example `--message={prompt}`); with no `{prompt}` anywhere, the prompt is added last.
+- **Start prompt**: `/plan2code` by default. Leave it blank to start the agent with nothing typed.
+- **Bypass arguments**: added when permission checks are off.
+- **Model arguments**: added when a model is chosen, with `{model}` replaced (`--model` and `{model}` by default), and a list of **models** to offer, each an id and an optional label.
+
+**Test** on a card shows where the command is found, or "Not found on PATH", and never runs it. Saving a duplicate name, a blank command or a built-in id marks the card and field and writes nothing. The list is plain text in `~/.plan2code/agents.json`, shared by the `plan2code` command and the desktop app; this page is the only thing that writes it, and a broken file or entry is skipped with a warning shown under the list, never a crash. If the file holds something the page could not read, saving asks first (**Save anyway**). `/plan2code` works only in agents that load the installed Plan2Code skills.
+
+**Desktop app** appears only when the page is open inside the desktop app. Its switch, **Show on the taskbar when Plan2Code needs me** (on by default), controls the app's taskbar signal: on Windows a green dot on your move and a red one when it needs attention, plus one short burst of flashes when the window is not focused (the button stays lit until you look); on macOS a red `!` dock badge when it needs attention and one bounce; on Linux a badge where your desktop supports it. Turning it off clears the dot and stops flashes. The choice is kept by the app in its own `~/.plan2code/app.json`.
+
 ---
 
 ## Troubleshooting
@@ -773,6 +786,7 @@ exception being the note attachments the agent keeps for a spec, above):
 | `~/.plan2code/console/looks.json` | your role, theme, colors, sounds and card width | always |
 | `~/.plan2code/console/subagents.json` | your Subagents switch, instruction and limit, per project folder and skill | always |
 | `~/.plan2code/console/sessions/<id>/subagents-setting.json`, `subagents-cursor.json` | this session's copy of the switch, and how far the agent has been told of it | with the session |
+| `~/.plan2code/agents.json` | your custom agent CLIs (User Preferences → Agents), read by the `plan2code` command and the desktop app | always |
 | your system temp directory | the port, process id and session token | until reboot |
 
 Each of the workspace and meter files has exactly one writer: the server owns
@@ -948,14 +962,14 @@ session without searching the skill install dirs.
 The vendored file is `src/web-console/public/vendor/marked.esm.js`,
 sha256 `7a7d9a521ac9384e0c3a075120a7c486cbd0c3c32cc5601bbb79a23e97403690`.
 Only `marked.lexer()` is used; the rendering is ours, in `public/render.js`, and
-builds DOM nodes rather than HTML so nothing needs sanitising.
+builds DOM nodes rather than HTML so nothing needs sanitizing.
 
 ### Refreshing the screenshots
 
 The docs and the landing page show the console through the images in
 `docs/screenshots/`, one light and one dark WebP per screen. Rerun the capture
 after any change a person would see on the page: a new layout, a renamed
-button, a different colour.
+button, a different color.
 
 ```bash
 node scripts/capture-screenshots.mjs                     # every screen

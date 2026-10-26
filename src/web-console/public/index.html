@@ -64,7 +64,7 @@
     <div id="banner" class="banner" role="status" hidden></div>
 
     <!-- Planny's wake-up on a freshly opened dashboard: a large copy of the
-         rail drawing that powers on centre stage, then glides into the rail.
+         rail drawing that powers on center stage, then glides into the rail.
          Hidden unless boot.js is playing it; placed entirely by app.css,
          because the CSP refuses style attributes. -->
     <div class="wake" id="wake" hidden>
@@ -97,7 +97,7 @@
           <span class="badge" id="badge">Pathfinder</span>
           <h1 id="title">Plan2Code Console</h1>
           <!-- The session meter: how much this console session has done. The
-               ring fills with the points (full at 15); the colour is the
+               ring fills with the points (full at 15); the color is the
                level. Hidden until a frame carries `meter`. -->
           <span class="meter-slot">
             <button
@@ -812,7 +812,7 @@
               Four boxes in a row, each talking both ways with the next: you in
               your browser, this page, a small program on 127.0.0.1, and
               Plan2Code in your terminal. A dashed outline around all four is
-              labelled "Your machine only".
+              labeled "Your machine only".
             </desc>
             <defs>
               <marker id="hd-about-arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
@@ -930,7 +930,7 @@
             </li>
             <li class="help-row">
               <dl>
-                <dt>You see</dt><dd><strong>Not running</strong> (Planny grey and still).</dd>
+                <dt>You see</dt><dd><strong>Not running</strong> (Planny gray and still).</dd>
                 <dt>Likely cause</dt><dd>Plan2Code has not checked in for a few minutes.</dd>
                 <dt>Do this</dt><dd class="for-browser">Look at the terminal. If it is idle, type <code>continue</code> there.</dd><dd class="for-app">Look at the terminal panel. If it is idle, press <strong>continue</strong> in the line beside Planny, which types it there for you.</dd>
               </dl>
@@ -998,7 +998,7 @@
         <h4>Not running, or not connected?</h4>
         <ul>
           <li>
-            <strong>Not running</strong> (Planny grey and still): this page is
+            <strong>Not running</strong> (Planny gray and still): this page is
             fine, but Plan2Code in the terminal has not checked in for
             <span data-fact="adriftMinutes">3</span> minutes. It may have finished
             its turn, hit an error, or be waiting on you there.
@@ -1386,7 +1386,7 @@
         <p id="help-planny-done-text">A green star and both arms up. The session is finished. You can close the tab.</p>
         <h4>Not running</h4>
         <p>
-          Grey, still, arms down out of sight. This page is fine, but Plan2Code has not checked in
+          Gray, still, arms down out of sight. This page is fine, but Plan2Code has not checked in
           for <span data-fact="adriftMinutes">3</span> minutes. Anything you answer
           is still saved.
         </p>
@@ -1762,7 +1762,7 @@
           <strong>Start from scratch</strong> for a new idea. The one you pick is
           what a step works on, and it decides which cards make sense: a spec
           that is half built has no use for Pathfinder, and a new idea cannot be
-          implemented yet. Cards that do not fit are greyed out with the reason
+          implemented yet. Cards that do not fit are grayed out with the reason
           why.
         </p>
         <p>
@@ -2026,7 +2026,7 @@
         <h4>While something is running</h4>
         <ul>
           <li>
-            Everything greys out except switching tabs, searching and opening
+            Everything grays out except switching tabs, searching and opening
             folds, so nothing queues up behind the running command.
           </li>
           <li>What is running shows where the next step usually sits.</li>
@@ -2049,7 +2049,7 @@
           <strong>Done with git</strong> ends the board. If anything happened, the
           last screen lists the commits, pushes and branches created or deleted,
           with <strong>Back to the dashboard</strong>; if nothing did, the page
-          goes straight back to the dashboard. It greys while a command runs and
+          goes straight back to the dashboard. It grays while a command runs and
           comes back when it is done; if Plan2Code stops checking in,
           <strong>Stop session</strong> in the top bar ends the session instead.
           While a question of Plan2Code's waits, it cancels that question and
@@ -2423,7 +2423,7 @@
           </li>
           <li>
             <strong>Highlight color</strong>: one of
-            <span data-fact="accentCount">32</span>, ocean blue to begin with. It marks
+            <span data-fact="accentCount">38</span>, ocean blue to begin with. It marks
             what is yours to do, and Planny's star uses it while he works.
           </li>
           <li>
@@ -2663,6 +2663,16 @@
             <button type="button" class="btn small danger" id="agents-replace" hidden>Save anyway</button>
             <span class="help" id="agents-status" role="status"></span>
           </div>
+        </fieldset>
+        <!-- Only inside the desktop app (framed()): the app saves the switch in its own app.json. -->
+        <fieldset class="modal-ranges looks-desktop" id="looks-desktop" hidden>
+          <legend>Desktop app</legend>
+          <label><input type="checkbox" id="looks-taskbar" checked /> <span>Show on the taskbar when Plan2Code needs me</span></label>
+          <p class="help">
+            Windows: a colored dot on the taskbar button (green on your move, red when it
+            needs you) and a short burst of flashes. macOS: a red badge on the dock icon when it needs
+            you, and a bounce. Linux: depends on your desktop.
+          </p>
         </fieldset>
       </div>
       <div class="modal-actions">

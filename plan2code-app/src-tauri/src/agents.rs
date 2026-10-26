@@ -139,7 +139,7 @@ pub fn find_on_path(program: &str, path_var: &str) -> Option<PathBuf> {
 pub fn installed_at(kind: AgentKind) -> Option<PathBuf> {
     let bin = std::env::var(AGENT_BIN_ENV).ok().filter(|b| !b.is_empty());
     let program = bin.unwrap_or_else(|| kind.program_name().to_string());
-    find_on_path(&program, crate::node_check::resolved_path())
+    find_on_path(&program, &crate::node_check::resolved_path())
 }
 
 /// Whether `kind`'s CLI can be run at all.
@@ -244,7 +244,7 @@ fn launch_spec_with(
     // A Dock or Start-menu launch often lacks nvm, Homebrew or Volta's
     // directories (Task 9.9): the agent CLI itself, and anything it shells
     // out to, needs a PATH that finds them anyway.
-    let env = vec![("PATH".to_string(), crate::node_check::resolved_path().to_string())];
+    let env = vec![("PATH".to_string(), crate::node_check::resolved_path())];
     LaunchSpec { program: program.to_string(), args, env, cwd }
 }
 
@@ -546,7 +546,7 @@ impl Agent {
             Agent::Custom(agent) => {
                 let bin = std::env::var(AGENT_BIN_ENV).ok().filter(|b| !b.is_empty());
                 let command = bin.as_deref().unwrap_or(&agent.command);
-                resolve_command(command, crate::node_check::resolved_path())
+                resolve_command(command, &crate::node_check::resolved_path())
             }
         }
     }
@@ -566,9 +566,10 @@ pub fn find_agent_in(id: &str, file: Option<&Path>) -> Option<Agent> {
     agents.into_iter().find(|agent| agent.id == id).map(Agent::Custom)
 }
 
-/// Every custom agent in `~/.plan2code/agents.json`, read afresh.
-pub fn custom_agents() -> Vec<CustomAgent> {
-    agents_file().map(|file| load_custom_agents(&file).0).unwrap_or_default()
+/// Every custom agent in `~/.plan2code/agents.json`, read afresh, with the
+/// warnings about anything in the file that was skipped.
+pub fn custom_agents() -> (Vec<CustomAgent>, Vec<String>) {
+    agents_file().map(|file| load_custom_agents(&file)).unwrap_or_default()
 }
 
 fn clean_command(command: &str) -> &str {
@@ -644,7 +645,7 @@ pub fn agent_launch_spec(
                 model,
                 mode,
                 prompt,
-                crate::node_check::resolved_path(),
+                &crate::node_check::resolved_path(),
                 cfg!(windows),
             )
         }
@@ -668,6 +669,7 @@ fn custom_launch_spec(
     let mut path = base_path.to_string();
     let mut program =
         resolved.map_or_else(|| clean_command(&custom.command).to_string(), |p| p.to_string_lossy().into_owned());
+    let mut extra_env = Vec::new();
     if windows {
         let ext = resolved.and_then(|p| p.extension()).map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default();
         if let (true, Some(file)) = (ext == "cmd" || ext == "bat", resolved) {
@@ -680,13 +682,36 @@ fn custom_launch_spec(
                     path = format!("{};{}", dir.to_string_lossy(), base_path);
                 }
             }
-            let mut wrapped = vec!["/c".to_string(), file_name];
-            wrapped.append(&mut args);
-            args = wrapped;
+            // The pseudo-terminal quotes only arguments with a space or a quote,
+            // so `cmd` would read `&`, `|` or `%` in the rest itself. The line is
+            // quoted as the launcher's `quoteForCmd` does and handed over in a
+            // variable: `cmd` expands it once and then parses it, so its quotes
+            // hold and a `%` inside it is not expanded again.
+            let line: Vec<String> = std::iter::once(file_name).chain(args).map(|arg| quote_for_cmd(&arg)).collect();
+            extra_env.push((CMD_LINE_ENV.to_string(), line.join(" ")));
+            // `cmd` looks in the current folder (the project) before PATH: a
+            // same-named file there must not run in the agent's place.
+            extra_env.push(("NoDefaultCurrentDirectoryInExePath".to_string(), "1".to_string()));
+            args = vec!["/d".to_string(), "/c".to_string(), format!("%{CMD_LINE_ENV}%")];
             program = "cmd".to_string();
         }
     }
-    LaunchSpec { program, args, env: vec![("PATH".to_string(), path)], cwd: folder.to_path_buf() }
+    let mut env = vec![("PATH".to_string(), path)];
+    env.append(&mut extra_env);
+    LaunchSpec { program, args, env, cwd: folder.to_path_buf() }
+}
+
+/// The variable a custom `.cmd` or `.bat` agent's command line reaches `cmd` in.
+const CMD_LINE_ENV: &str = "PLAN2CODE_AGENT_LINE";
+
+/// One argument of a `cmd` line, quoted when `cmd` would otherwise read it: the
+/// launcher's `quoteForCmd`.
+fn quote_for_cmd(arg: &str) -> String {
+    let special = |c: char| c.is_whitespace() || "\"&|<>^%!()".contains(c);
+    if !arg.is_empty() && !arg.chars().any(special) {
+        return arg.to_string();
+    }
+    format!("\"{}\"", arg.replace('"', "\"\""))
 }
 
 /// The page a built-in agent installs from; any other id is an error.
@@ -1013,26 +1038,55 @@ mod tests {
         let found = Path::new("C:\\with space").join("goose.cmd");
         let spec = custom_launch_spec(&full, Some(&found), &folder(), None, PermissionMode::Checked, "/p", "BASE", true);
         assert_eq!(spec.program, "cmd");
-        assert_eq!(spec.args, ["/c", "goose.cmd", "/p"]);
+        assert_eq!(spec.args, ["/d", "/c", "%PLAN2CODE_AGENT_LINE%"]);
         assert_eq!(spec.env[0].1, format!("{};BASE", found.parent().unwrap().to_string_lossy()));
+        assert_eq!(spec.env[1], ("PLAN2CODE_AGENT_LINE".to_string(), "goose.cmd /p".to_string()));
+        assert_eq!(spec.env[2], ("NoDefaultCurrentDirectoryInExePath".to_string(), "1".to_string()));
         // A bare name keeps the plain PATH.
         let bare = custom_launch_spec(&goose(), Some(&found), &folder(), None, PermissionMode::Checked, "/p", "BASE", true);
         assert_eq!((bare.program.as_str(), bare.env[0].1.as_str()), ("cmd", "BASE"));
     }
 
+    #[test]
+    fn a_cmd_line_quotes_what_cmd_would_read_as_the_launcher_does() {
+        assert_eq!(quote_for_cmd("--yes"), "--yes");
+        assert_eq!(quote_for_cmd(""), "\"\"");
+        assert_eq!(quote_for_cmd("a|b"), "\"a|b\"");
+        assert_eq!(quote_for_cmd("%X%"), "\"%X%\"");
+        assert_eq!(quote_for_cmd("say \"hi\""), "\"say \"\"hi\"\"\"");
+        let mut agent = goose();
+        agent.args = vec!["--filter=a|b".to_string(), "{prompt}".to_string()];
+        let found = Path::new("C:\\tools").join("goose.cmd");
+        let spec = custom_launch_spec(&agent, Some(&found), &folder(), None, PermissionMode::Checked, "/p & x", "BASE", true);
+        assert_eq!(spec.env[1].1, "goose.cmd \"--filter=a|b\" \"/p & x\"");
+    }
+
     #[cfg(windows)]
     #[test]
-    fn a_full_path_cmd_in_a_spaced_folder_resolves_and_wraps() {
-        let dir = temp_dir("spaced").join("with space");
+    fn a_full_path_cmd_in_a_spaced_folder_runs_with_its_arguments_intact_and_not_a_project_copy() {
+        let root = temp_dir("spaced");
+        let dir = root.join("with space");
+        let project = root.join("project");
         std::fs::create_dir_all(&dir).unwrap();
-        std::fs::write(dir.join("goose.cmd"), "@echo off").unwrap();
+        std::fs::create_dir_all(&project).unwrap();
+        std::fs::write(dir.join("goose.cmd"), "@echo off\r\necho REAL [%1] [%2]\r\n").unwrap();
+        // A same-named file in the project folder must not run instead.
+        std::fs::write(project.join("goose.cmd"), "@echo off\r\necho DECOY\r\n").unwrap();
         let mut agent = goose();
         agent.command = dir.join("goose.cmd").to_string_lossy().into_owned();
+        agent.args = vec!["a|b".to_string(), "%PATH%".to_string()];
         let found = Agent::Custom(agent.clone()).installed_at().expect("resolves");
-        let spec = custom_launch_spec(&agent, Some(&found), &folder(), None, PermissionMode::Checked, "/p", "BASE", true);
-        assert_eq!((spec.program.as_str(), spec.args[1].as_str()), ("cmd", "goose.cmd"));
-        assert!(spec.env[0].1.starts_with(&dir.to_string_lossy().to_string()));
-        let _ = std::fs::remove_dir_all(dir.parent().unwrap());
+        let spec = custom_launch_spec(&agent, Some(&found), &project, None, PermissionMode::Checked, "", &std::env::var("PATH").unwrap_or_default(), true);
+        let mut command = std::process::Command::new(&spec.program);
+        // Some shells already set the switch the spec sets; start without it.
+        command.args(&spec.args).current_dir(&spec.cwd).env_remove("NoDefaultCurrentDirectoryInExePath");
+        for (key, value) in &spec.env {
+            command.env(key, value);
+        }
+        let out = command.output().expect("cmd runs");
+        let text = String::from_utf8_lossy(&out.stdout);
+        assert_eq!(text.trim(), "REAL [\"a|b\"] [\"%PATH%\"]", "{text}");
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     #[test]

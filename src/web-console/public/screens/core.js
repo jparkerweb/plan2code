@@ -1044,6 +1044,16 @@ function continueButton() {
   return btn;
 }
 
+// The favicon state last told to the app (attention.rs turns it into the
+// taskbar's dot). Told only when it changes, never on every status redraw.
+let lastAttention = null;
+
+function tellAttention(state) {
+  if (state === lastAttention) return;
+  lastAttention = state;
+  tellApp("attention", { state });
+}
+
 export function renderStatus() {
   if (!page.S) return;
   const bot = $("planny");
@@ -1089,8 +1099,11 @@ export function renderStatus() {
     tick.textContent = count || "";
     $("agent-spin").hidden = !spin;
     $("dock").classList.toggle("is-flying", Boolean(spin));
-    // The tab icon's bar says the same thing from another tab (favicon.js).
-    setFavicon(faviconState({ mood, spin, finished: Boolean(finish()) }));
+    // The tab icon's bar says the same thing from another tab (favicon.js),
+    // and the app's taskbar entry from another window.
+    const icon = faviconState({ mood, spin, finished: Boolean(finish()) });
+    setFavicon(icon);
+    tellAttention(icon);
   };
 
   // Before `gone`, deliberately. Once a session has finished, no server is the
@@ -1311,7 +1324,7 @@ export function renderSidebar() {
       box.appendChild(head);
       for (const e of SKILL_CATALOG.filter((x) => x.group === g.id)) {
         const av = cardPresentation(e, scan(), selSpec(), menu);
-        // Unavailable for the selected spec fades hard; the brief greying
+        // Unavailable for the selected spec fades hard; the brief graying
         // while a launch is in flight or the server is away does not.
         const b = el(
           "button",
@@ -1439,7 +1452,7 @@ function paintMain(main) {
   if (isDashboard() && !finish()) {
     if (page.local.launching) renderLaunching(main);
     else if (page.dashPick) {
-      // A spec-switch under an open confirm can grey the pick out. Rather
+      // A spec-switch under an open confirm can gray the pick out. Rather
       // than offer START on a card that cannot launch, drop back to the
       // menu — the picker's new selection speaks for itself there.
       if (cardAvailability(page.dashPick, scan(), selSpec()).on) renderConfirm(main, page.dashPick);
@@ -1620,7 +1633,7 @@ export function renderFooter() {
   const hint = $("send-hint");
   hint.replaceChildren();
   hint.title = state.why;
-  // Something is turning while the turn is not theirs. A line of grey text
+  // Something is turning while the turn is not theirs. A line of gray text
   // saying "one moment" reads the same whether the agent is working on it or
   // has quietly died; a spinner is the difference between the two at a glance.
   // A spinner says "something is happening". Nothing is, once the other end
@@ -1932,6 +1945,8 @@ export function wireChrome() {
     try {
       navigator.sendBeacon("/bye");
     } catch {}
+    // A page that goes away leaves no dot on the app's taskbar behind it.
+    tellAttention("plain");
   });
 
   // Under the app, a link off the page goes to the default browser through

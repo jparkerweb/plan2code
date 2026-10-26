@@ -10,7 +10,8 @@ import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
 import { spawn } from "node:child_process";
-import { CONSOLE_CLI, ENV, HOME, cli } from "./web-console-test-helpers.mjs";
+import { CONSOLE_CLI, ENV, HOME, cli, until } from "./web-console-test-helpers.mjs";
+import { openSession, pageSuite } from "./page-test-helpers.mjs";
 import { announcePage, inAppSignal } from "../src/web-console/in-app.mjs";
 
 // A stand-in for the app's announce endpoint: records every POST it accepts.
@@ -267,4 +268,66 @@ test("with nothing shown in the window yet, open makes the first session and ann
   } finally {
     app.close();
   }
+});
+
+// The page inside the app's frame: the taskbar's two messages. Driven in a
+// real browser (page-test-helpers.mjs), with a parent that keeps every
+// message posted to it.
+const pages = pageSuite(test);
+const FAKE_APP_FRAME = () => {
+  window.__toApp = [];
+  Object.defineProperty(window, "parent", { configurable: true, get: () => ({ postMessage: (m) => window.__toApp.push(m) }) });
+};
+const toApp = (s, kind) => s.page.evaluate((k) => window.__toApp.filter((m) => m.plan2code === k), kind);
+const ASKING = { items: [{ id: "q1", kind: "text", title: "What to call it", body: "A short name." }], agent: { status: "waiting" } };
+
+test("framed, the page tells the app its state once per change, never on a redraw, and plain when it goes away", async (t) => {
+  const s = await openSession(await pages.browser(), { t, workflow: "implement", clock: true, payload: ASKING, env: { PLAN2CODE_IN_APP: "1" }, init: FAKE_APP_FRAME });
+  await until(async () => (await toApp(s, "attention")).length >= 1, 5000);
+  assert.deepEqual((await toApp(s, "attention")).at(-1), { plan2code: "attention", state: "ready" }, "a question waiting is the person's move, as a named request");
+  const before = (await toApp(s, "attention")).length;
+  await s.page.clock.fastForward(5_000);
+  assert.equal((await toApp(s, "attention")).length, before, "the status line's tick redraws without telling the app again");
+
+  s.post({ settle: true, items: [{ id: "q1", status: "answered", answer: { text: "x" } }], agent: { status: "working", activity: "Task 1 of 2" } });
+  await until(async () => (await toApp(s, "attention")).at(-1).state !== "ready", 5000);
+  const states = (await toApp(s, "attention")).map((m) => m.state);
+  assert.ok(states.every((state) => ["busy", "ready", "attention", "plain"].includes(state)), states.join(", "));
+  assert.ok(states.every((state, i) => i === 0 || state !== states[i - 1]), `no state is told twice in a row: ${states.join(", ")}`);
+
+  await s.page.evaluate(() => dispatchEvent(new Event("pagehide")));
+  assert.deepEqual((await toApp(s, "attention")).at(-1), { plan2code: "attention", state: "plain" });
+});
+
+test("the Desktop app group shows only in the app's frame, reflects the app's saved switch and tells the app when it changes", async (t) => {
+  const browser = await pages.browser();
+  const plain = await openSession(browser, { t, workflow: "implement", payload: ASKING });
+  await plain.page.locator("#btn-looks").click();
+  assert.equal(await plain.page.locator("#looks-desktop").isVisible(), false, "not in a browser tab");
+
+  const s = await openSession(browser, { t, workflow: "implement", payload: ASKING, env: { PLAN2CODE_IN_APP: "1" }, init: FAKE_APP_FRAME });
+  await s.page.locator("#btn-looks").click();
+  const box = s.page.locator("#looks-taskbar");
+  assert.ok(await s.page.locator("#looks-desktop").isVisible(), "shown inside the app");
+  assert.ok(await box.isChecked(), "on until the app says otherwise");
+
+  // The app's answer to the page's hello, from a real window standing in as
+  // the parent. The same answer from anywhere else is ignored.
+  await s.page.evaluate(() => {
+    const frame = document.createElement("iframe");
+    document.body.append(frame);
+    const app = frame.contentWindow;
+    app.postMessage = (m) => window.__toApp.push(m);
+    Object.defineProperty(window, "parent", { configurable: true, get: () => app });
+    window.__app = app;
+    dispatchEvent(new MessageEvent("message", { data: { plan2code: "taskbar-state", on: false }, source: window }));
+  });
+  assert.equal(await box.isChecked(), true, "a taskbar-state from anywhere but the parent changes nothing");
+  await s.page.evaluate(() => {
+    dispatchEvent(new MessageEvent("message", { data: { plan2code: "taskbar-state", on: false }, source: window.__app }));
+  });
+  assert.equal(await box.isChecked(), false, "the parent's saved value");
+
+  await box.check();
+  assert.deepEqual(await toApp(s, "taskbar"), [{ plan2code: "taskbar", on: true }], "a named request with one boolean");
 });

@@ -73,7 +73,7 @@ file directly after checking it against the release's checksum list.
 - [ ] The top bar's project and agent menus open under their name, close on a click elsewhere (the
       console frame and the terminal included) or Escape, and are not cut off by the bar
 - [ ] **Change project** in the top bar's project menu, with an agent running: it asks first, then the folder
-      picker opens; cancelling the picker leaves the running agent and its project untouched
+      picker opens; canceling the picker leaves the running agent and its project untouched
 - [ ] Change project, pick a different folder: the old agent and console stop, the new folder opens
       on the launch card (or the checklist, if its own first run has not passed yet)
 - [ ] Reload the window (or navigate away and back) while an agent is running: the terminal redraws
@@ -108,6 +108,20 @@ Do each of Claude Code, Devin and Codex for a few minutes:
 - [ ] Cmd+Q on macOS asks the same
 - [ ] Windows only: start a CLI installed through npm (a `.cmd` shim), then New Session; check Task
       Manager and confirm no leftover `node.exe` (or the CLI's own process) is left running
+
+## Agents and the taskbar (each system)
+
+- [ ] A custom agent added in the console's User Preferences → Agents (the fake agent in `fake-agent/` works) shows in the launch card's picker after the built-ins, starts, and **New Session** starts the same agent again; the bypass box adds its bypass arguments
+- [ ] With no agent CLI on `PATH` and no custom agent, the first-run checklist and the launch card show the explainer with each install command and an **Install page** link, and Start is off
+- [ ] Each **Install page** link opens the right page in the default browser (Claude Code, Devin, Codex)
+- [ ] Install an agent (or add a custom one), press **Check again**: it appears and Start turns on without restarting the app
+- [ ] With only one agent installed and nothing remembered, the launch card starts on that agent, not Claude Code
+- [ ] Windows: the taskbar button shows a green dot when it is your move and a red dot when Plan2Code needs attention, and no dot while the agent is busy or after it ends
+- [ ] Windows: with the window unfocused, the button gives one short burst of flashes when it becomes your move or needs attention (not again on a repeat) and stays lit until the window gets focus
+- [ ] macOS: the dock shows a red `!` badge when Plan2Code needs attention (no badge on your move), and bounces once when it becomes your move or needs attention while the app is in the background
+- [ ] Linux: where the desktop shows badges, a count of 1 appears on needs attention, and the window is marked as wanting attention while unfocused
+- [ ] Reloading the window, or ending the agent, clears the dot
+- [ ] User Preferences → Desktop app (shown only inside the app, not in a browser tab) has **Show on the taskbar when Plan2Code needs me**, on by default; switching it off clears the dot at once and stops flashes, and the choice is still off after quitting and reopening the app
 
 ## Standalone path
 

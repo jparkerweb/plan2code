@@ -9,6 +9,7 @@ const TERM_DOCK_KEY: &str = "termDock";
 const TERM_FRACTION_KEY: &str = "termFraction";
 const TERM_COLLAPSED_KEY: &str = "termCollapsed";
 const FIRST_RUN_DONE_KEY: &str = "firstRunDone";
+const TASKBAR_SIGNAL_KEY: &str = "taskbarSignal";
 
 /// The terminal pane's remembered shape: which edge it docks to, how much of
 /// the window it takes (a fraction, not collapsed or maximized), and whether
@@ -100,6 +101,20 @@ pub fn save_first_run_done(file: &Path) -> Result<(), String> {
     write(file, settings)
 }
 
+/// Whether the taskbar entry shows when Plan2Code needs the person (the
+/// Desktop app switch in the console's User Preferences). On unless the file
+/// says `false`; anything but a boolean reads as on.
+pub fn load_taskbar_signal(file: &Path) -> bool {
+    read(file).get(TASKBAR_SIGNAL_KEY).and_then(|v| v.as_bool()).unwrap_or(true)
+}
+
+/// Save the switch, keeping any other key the file holds.
+pub fn save_taskbar_signal(file: &Path, on: bool) -> Result<(), String> {
+    let mut settings = read(file);
+    settings.insert(TASKBAR_SIGNAL_KEY.to_string(), serde_json::Value::Bool(on));
+    write(file, settings)
+}
+
 fn write(file: &Path, settings: serde_json::Map<String, serde_json::Value>) -> Result<(), String> {
     if let Some(parent) = file.parent() {
         std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
@@ -183,6 +198,21 @@ mod tests {
         std::fs::write(&file, r#"{"other": 1}"#).unwrap();
         save_first_run_done(&file).unwrap();
         assert!(load_first_run_done(&file));
+        assert!(std::fs::read_to_string(&file).unwrap().contains("\"other\""));
+        let _ = std::fs::remove_dir_all(file.parent().unwrap());
+    }
+
+    #[test]
+    fn the_taskbar_signal_is_on_until_it_is_switched_off() {
+        assert!(load_taskbar_signal(&temp_file("taskbar-missing")));
+        let file = temp_file("taskbar");
+        std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+        std::fs::write(&file, r#"{"other": 1, "taskbarSignal": "no"}"#).unwrap();
+        assert!(load_taskbar_signal(&file), "not a boolean reads as on");
+        save_taskbar_signal(&file, false).unwrap();
+        assert!(!load_taskbar_signal(&file));
+        save_taskbar_signal(&file, true).unwrap();
+        assert!(load_taskbar_signal(&file));
         assert!(std::fs::read_to_string(&file).unwrap().contains("\"other\""));
         let _ = std::fs::remove_dir_all(file.parent().unwrap());
     }

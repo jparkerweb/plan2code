@@ -3,6 +3,7 @@
 pub mod agent_manager;
 pub mod agents;
 pub mod announce;
+pub mod attention;
 pub mod brief;
 pub mod console_supervisor;
 pub mod handoff;
