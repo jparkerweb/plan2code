@@ -12,6 +12,20 @@ export const NEXT_STEP_LABELS = {
 };
 
 /**
+ * What the console page's **continue** button types into the agent's
+ * terminal, one write each: the word, then Enter. Claude Code holds typed
+ * text as a queued message while its turn is busy, and the button only shows
+ * once the agent stopped checking in with the console, so by then the turn is
+ * stuck and the queued word would never send by itself: for it, the send-now
+ * chord (ctrl+x ctrl+s) follows.
+ */
+export function continueKeys(kind) {
+  const keys = ['continue', '\r'];
+  if (kind === 'claude') keys.push('\x18\x13');
+  return keys;
+}
+
+/**
  * What the right end of the bar offers, most pressing first: the bar shows
  * the first step (short text plus its one button) and counts the rest as
  * "+N more". `consoleDead` is whether the console stopped answering;

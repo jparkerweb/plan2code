@@ -11,7 +11,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { barNextSteps, defaultRightFraction, folderName, windowTitleFor, CONSOLE_ASIDE_BREAKPOINT_PX, NEXT_STEP_LABELS } from "../plan2code-app/ui/meter.js";
+import { barNextSteps, continueKeys, defaultRightFraction, folderName, windowTitleFor, CONSOLE_ASIDE_BREAKPOINT_PX, NEXT_STEP_LABELS } from "../plan2code-app/ui/meter.js";
 import { findBrowser, launchBrowser } from "./browser.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -67,6 +67,22 @@ test("app.js draws the bar's right end through barNextSteps, not a hand-rolled c
   for (const gone of ["console-again", "version-update", "permissions-note", "console-status", "project-dir"]) {
     assert.ok(!INDEX_HTML.includes(`id="${gone}"`), `index.html still has #${gone}`);
   }
+});
+
+// Claude Code holds typed text as a queued message while its turn is busy,
+// and the continue button only shows once the agent stopped checking in, so
+// by then the turn is stuck and the queued word would never send by itself.
+test("continueKeys types continue and Enter, and under Claude Code also its send-now chord (ctrl+x ctrl+s)", () => {
+  assert.deepEqual(continueKeys("claude"), ["continue", "\r", "\x18\x13"]);
+  for (const kind of ["devin", "codex", null, undefined, "something-new"]) {
+    assert.deepEqual(continueKeys(kind), ["continue", "\r"], `${kind} gets the plain word and Enter`);
+  }
+});
+
+test("app.js types the continue button's keystrokes through continueKeys, for the running agent's kind", () => {
+  const typeContinue = APP_JS.slice(APP_JS.indexOf("function typeContinue"), APP_JS.indexOf("function typeContinue") + 800);
+  assert.match(typeContinue, /continueKeys\(agent\.kind\)/, "the keystrokes come from continueKeys");
+  assert.doesNotMatch(typeContinue, /data: 'continue'/, "no hand-typed word left beside it");
 });
 
 test("the bar reads project menu, New Session, agent menu, with both menus outside the scrolling row", () => {

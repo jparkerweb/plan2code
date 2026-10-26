@@ -240,6 +240,48 @@ test("under the app, the not running line's continue is a button that asks the a
   assert.ok(await press.isDisabled(), "held off, so a double press does not type it twice");
 });
 
+// The app's webview opens no new windows, so a link off the page asks the
+// console to open it in the default browser instead, and says where to paste
+// it when that fails.
+const FEEDBACK_URL = "https://github.com/jparkerweb/plan2code/issues/new/choose";
+
+test("under the app, a link off the page goes to the default browser through the console, not a new window", async (t) => {
+  const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_QUESTION, env: { PLAN2CODE_IN_APP: "1" }, init: FAKE_APP_FRAME });
+  const asked = [];
+  await s.page.route("**/open-link", async (route) => {
+    asked.push(route.request().postDataJSON());
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true, url: FEEDBACK_URL }) });
+  });
+  let popups = 0;
+  s.page.context().on("page", () => popups++);
+  await s.page.locator("#btn-feedback").click();
+  await until(async () => asked.length === 1, 5000);
+  assert.deepEqual(asked, [{ url: FEEDBACK_URL }]);
+  await new Promise((r) => setTimeout(r, 300));
+  assert.equal(popups, 0, "no window opened inside the app");
+});
+
+test("under the app, a link the console cannot open is shown to paste into a browser", async (t) => {
+  const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_QUESTION, env: { PLAN2CODE_IN_APP: "1" }, init: FAKE_APP_FRAME });
+  await s.page.route("**/open-link", (route) => route.fulfill({ status: 500, contentType: "application/json", body: "{}" }));
+  await s.page.locator("#btn-feedback").click();
+  await s.page.waitForFunction((u) => document.getElementById("banner").textContent.includes(u), FEEDBACK_URL, { timeout: 5000 });
+  assert.match(await s.page.locator("#banner").innerText(), /paste it into your browser/i);
+});
+
+test("outside the app, a link off the page opens as a plain link, with no detour through the console", async (t) => {
+  const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_QUESTION });
+  let asked = 0;
+  await s.page.route("**/open-link", (route) => {
+    asked++;
+    return route.fulfill({ status: 200, contentType: "application/json", body: "{}" });
+  });
+  const popup = s.page.context().waitForEvent("page", { timeout: 5000 });
+  await s.page.locator("#btn-feedback").click();
+  await (await popup).close();
+  assert.equal(asked, 0);
+});
+
 test("outside the app, the not running line's continue stays a word to type", async (t) => {
   const s = await openSession(await suite.browser(), {
     t,
@@ -412,6 +454,83 @@ test("the quiet, not running and not connected lines offer What to check, openin
   }
   await lineSays(s, /^Not connected\. Your answers are saved\./);
   assert.equal(await whatToCheck(s).count(), 1, "the not connected line carries What to check");
+});
+
+// An agent sitting in `wait` pings every five seconds and collects a send at
+// once, so answers still uncollected after a minute of its silence mean
+// nothing is listening: the wake-up help shows then, not after three minutes.
+test("answers a waiting agent never collects bring up the saved-and-waiting line after a minute of silence, not before", async (t) => {
+  const s = await openSession(await suite.browser(), { t, workflow: "plan", clock: true, payload: PLAN_QUESTION });
+  await itemCard(s.page, "q1").locator("textarea, input[type=text]").first().fill("audit-export");
+  await s.page.click("#btn-send");
+  await lineSays(s, /^Sent\. Waiting for Plan2Code\./);
+  await s.page.clock.fastForward(30_000);
+  await lineSays(s, /^Sent\. Waiting for Plan2Code\./);
+  await s.page.clock.fastForward(40_000);
+  await lineSays(s, /^Plan2Code is not running\. Your answers are saved and waiting for it\./);
+  assert.equal(await whatToCheck(s).count(), 1, "the line carries What to check");
+});
+
+// An agent that asked and carried on working collects at its next `wait`, so
+// a minute is no proof against it; three minutes of silence is, whatever
+// longer quiet allowance it gave itself before it went.
+test("answers a working agent has not collected bring up the saved-and-waiting line after three minutes, not its long quiet allowance", async (t) => {
+  const s = await openSession(await suite.browser(), { t, workflow: "implement", clock: true, payload: PLAN_QUESTION });
+  await itemCard(s.page, "q1").locator("textarea, input[type=text]").first().fill("audit-export");
+  await s.page.click("#btn-send");
+  await lineSays(s, /^Sent\. Waiting for Plan2Code\./);
+  // Its last word before it went quiet: working, with half an hour to spare.
+  s.post({ agent: { status: "working", activity: "Task 1 of 3: the reader", quietMinutes: 30 } });
+  await lineSays(s, /Task 1 of 3: the reader/);
+  await s.page.clock.fastForward(70_000);
+  await lineSays(s, /Task 1 of 3: the reader/);
+  await s.page.clock.fastForward(130_000);
+  await lineSays(s, /^Plan2Code is not running\. Your answers are saved and waiting for it\./);
+  assert.equal(await whatToCheck(s).count(), 1, "the line carries What to check");
+});
+
+// A failed Send says why at once, rather than one line for every cause and
+// the real state only showing once the page's own timers catch up.
+test("a Send that finds the server gone says so at once, with the reconnect help", async (t) => {
+  const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_QUESTION });
+  await itemCard(s.page, "q1").locator("textarea, input[type=text]").first().fill("audit-export");
+  await stopServer(s);
+  await s.page.click("#btn-send");
+  await s.page.waitForFunction(() => document.getElementById("planny").classList.contains("is-gone"), null, { timeout: 3000 });
+  assert.match(await s.page.locator("#banner").innerText(), LOST_CONTACT);
+  assert.match(await textOf(statusLine(s)), /^Not connected\. Your answers are saved\./);
+  assert.equal(await whatToCheck(s).count(), 1, "the not connected line carries What to check");
+});
+
+test("a Send the server refuses shows the server's reason", async (t) => {
+  const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_QUESTION });
+  await s.page.route("**/submit", (route) =>
+    route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ error: "the disk is full" }) })
+  );
+  await itemCard(s.page, "q1").locator("textarea, input[type=text]").first().fill("audit-export");
+  await s.page.click("#btn-send");
+  await s.page.waitForFunction(() => /the disk is full/.test(document.getElementById("banner").textContent), null, { timeout: 3000 });
+  assert.match(await s.page.locator("#banner").innerText(), /Nothing was lost/);
+});
+
+test("a Send the server refuses as too large says to remove an attachment, not to try the same send again", async (t) => {
+  const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_QUESTION });
+  await s.page.route("**/submit", (route) =>
+    route.fulfill({ status: 413, contentType: "application/json", body: JSON.stringify({ error: "too large" }) })
+  );
+  await itemCard(s.page, "q1").locator("textarea, input[type=text]").first().fill("audit-export");
+  await s.page.click("#btn-send");
+  await s.page.waitForFunction(() => /remove an attachment/.test(document.getElementById("banner").textContent), null, { timeout: 3000 });
+  assert.doesNotMatch(await s.page.locator("#banner").innerText(), /try Send again/);
+});
+
+test("a Send lost on the way, with the server still up, says the console is there and to send again", async (t) => {
+  const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_QUESTION });
+  await s.page.route("**/submit", (route) => route.abort());
+  await itemCard(s.page, "q1").locator("textarea, input[type=text]").first().fill("audit-export");
+  await s.page.click("#btn-send");
+  await s.page.waitForFunction(() => /console is still up/.test(document.getElementById("banner").textContent), null, { timeout: 3000 });
+  assert.equal(await s.page.locator("#planny").evaluate((n) => n.classList.contains("is-gone")), false, "not called gone");
 });
 
 test("an answered finish offer comes back unanswered on a later finish, once the first finish has gone", async (t) => {

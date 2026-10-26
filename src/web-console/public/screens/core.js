@@ -67,7 +67,7 @@ import { renderBriefButton, renderDoc, renderOverview } from "./docs.js";
 import { board, renderGitBoard, resetBoard } from "./git-host.js";
 import { renderWorkspace, tellFolderIssues } from "./workspace.js";
 import { openHelpOn } from "./help-dialog.js";
-import { tellApp } from "../app-bridge.js";
+import { linkLeavesPage, tellApp } from "../app-bridge.js";
 import { askOfflineFlipped, askState, declineOpen, renderAside, renderAsk, renderSubagents, renderSubagentsButton } from "./ask.js";
 import { renderHandoff, renderHomeButton, renderStopButton, renderStopControls, renderStopping, stopInProgress, stopWarning } from "./ending.js";
 import { renderNotepadButton } from "./notepad.js";
@@ -1023,6 +1023,10 @@ let moodNow = null;
 
 let moodVar = 0;
 
+// Sent answers that nothing is collecting (stranded() in selectors.js).
+const STRANDED_LINE =
+  "Plan2Code is not running. Your answers are saved and waiting for it. If the terminal is idle, type **continue** there and it will pick them up; it may also be waiting for your permission approval.";
+
 // The status line's **continue**, under the app: a press asks the app to type
 // it into the agent's terminal. Held off for a few seconds after, so a double
 // press does not send it twice.
@@ -1145,6 +1149,10 @@ export function renderStatus() {
     return say("work", `Starting ${workflowTitle(page.S.workflow)}…`, "", true);
   }
 
+  // Answers nobody collected outrank a working line: the agent's last word
+  // was "working", but it is not in `wait` to take them (agentAdrift).
+  if (stranded()) return say("adrift", STRANDED_LINE, "", false, true);
+
   // Show the AGENT's liveness, not the server's: if the agent's turn crashed
   // the server is still happily up, and a plain spinner would lie forever.
   if (agentWorking()) {
@@ -1172,9 +1180,7 @@ export function renderStatus() {
   if (agentAdrift()) {
     return say(
       "adrift",
-      stranded()
-        ? "Plan2Code is not running. Your answers are saved and waiting for it. If the terminal is idle, type **continue** there and it will pick them up; it may also be waiting for your permission approval."
-        : "Plan2Code is not running right now. Anything you answer here is saved. If the terminal is idle, type **continue** there to wake it; it may also be waiting for your permission approval.",
+      "Plan2Code is not running right now. Anything you answer here is saved. If the terminal is idle, type **continue** there to wake it; it may also be waiting for your permission approval.",
       "",
       false,
       true
@@ -1789,7 +1795,13 @@ export async function send() {
       e.pending = true;
       throw e;
     }
-    if (!res.ok) throw new Error(String(res.status));
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      const e = new Error(String(res.status));
+      e.reason = (body && (body.message || body.error)) || `error ${res.status}`;
+      e.status = res.status;
+      throw e;
+    }
     markSent(payload);
     banner("Sent. Plan2Code is picking it up now.", "good");
     setTimeout(() => banner(null), 4000);
@@ -1801,13 +1813,45 @@ export async function send() {
       );
       page.pendingBannerUp = true;
       page.pendingResult = true;
+    } else if (err && err.reason) {
+      banner(refusedLine(err), "warn");
     } else {
-      banner("That did not go through. Nothing was lost, try Send again.", "warn");
+      await sendLost();
     }
   } finally {
     btn.textContent = "Send to Plan2Code";
     render();
   }
+}
+
+// A send that never reached an answer: ask the server at once, rather than
+// leaving one line for every cause until the page's own timers catch up. No
+// server is the lost-contact state now, with its reconnect help; a server
+// still there was a blip, and Send is the whole fix.
+async function sendLost() {
+  const up = await fetch("/state", { cache: "no-store" })
+    .then((res) => res.ok)
+    .catch(() => false);
+  if (up) {
+    banner("That did not go through, but the console is still up. Nothing was lost, press Send again.", "warn");
+    return;
+  }
+  lastContact = 0;
+  markGone();
+  // A stream left half open (after the machine slept) still reads as
+  // connected, so markGone() can leave the page up: the send still needs
+  // saying it did not go.
+  if (!page.gone) {
+    banner("That did not go through. Nothing was lost, try Send again.", "warn");
+  }
+}
+
+// The server said no. A 5xx can pass on a retry; a 4xx is the same refusal
+// every time, so it gets no "try again", and the one a person can fix says how.
+function refusedLine(err) {
+  if (err.status === 413) return "That is too big to send in one go. Nothing was lost: remove an attachment, then press Send.";
+  if (err.status >= 400 && err.status < 500) return `The console turned that send down: ${err.reason}. Nothing was lost.`;
+  return `The console turned that send down: ${err.reason}. Nothing was lost, try Send again.`;
 }
 
 const STATE_WORDS = { done: "all done", blocked: "blocked", help: "need help", defer: "later" };
@@ -1868,12 +1912,42 @@ let whereResizeTimer = null;
 
 // The listeners that belong to no screen: leaving the page, the session meter's
 // pop-over, the footer's label on a resize, Send, Clear, and the page-wide keys.
+// A link the console could not hand to a browser is shown, with a Copy
+// button, for the person to paste into one.
+async function openOutside(href) {
+  const ok = await fetch("/open-link", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ url: href }),
+  })
+    .then((res) => res.ok)
+    .catch(() => false);
+  if (ok) return;
+  const link = el("code", "banner-link", href);
+  banner("That link could not open from here. Copy it and paste it into your browser: ", "warn", [link, document.createTextNode(" "), copyButton(href, "btn small", link)]);
+}
+
 export function wireChrome() {
   addEventListener("pagehide", () => {
     try {
       navigator.sendBeacon("/bye");
     } catch {}
   });
+
+  // Under the app, a link off the page goes to the default browser through
+  // the console: the app's window opens no new ones, so the click alone would
+  // do nothing. Capture phase, ahead of any handler on the link itself.
+  document.addEventListener(
+    "click",
+    (e) => {
+      if (!page.inApp || e.defaultPrevented || !(e.target instanceof Element)) return;
+      const a = e.target.closest("a[href]");
+      if (!a || !linkLeavesPage(a.href, location.origin)) return;
+      e.preventDefault();
+      openOutside(a.href);
+    },
+    true
+  );
 
   $("meter-pill").addEventListener("click", () => toggleMeterPop());
   $("meter-help").addEventListener("click", () => {

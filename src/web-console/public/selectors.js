@@ -202,7 +202,20 @@ export const doingNow = () => workingLine(page.S && page.S.agent, page.S && page
 // itself "working", and the normal state while someone answers is "waiting".
 export function agentAdrift() {
   if (!page.agentLastSeen || page.gone || finish()) return false;
-  return Date.now() - Date.parse(page.agentLastSeen) > patience(ADRIFT_MS);
+  const silent = Date.now() - Date.parse(page.agentLastSeen);
+  return silent > (page.pendingResult ? uncollectedLimit() : patience(ADRIFT_MS));
+}
+
+// With answers sent and nothing collecting them, the agent's quiet allowance
+// stops counting: those answers are what it is meant to come back for. An
+// agent that said it is waiting pings from `wait` every five seconds, so a
+// minute of silence means it is not there. One that said it is working (it
+// asked and carried on) collects at its next `wait`, so it gets the plain
+// three minutes, never the half hour a build task may have asked for.
+const UNCOLLECTED_MS = 60 * 1000;
+
+function uncollectedLimit() {
+  return agentWorking() ? ADRIFT_MS : UNCOLLECTED_MS;
 }
 
 // Answers that went nowhere: pressed Send, and nothing has collected them.

@@ -2,7 +2,7 @@
 // agent's terminal panel docked at the bottom with a drag handle.
 
 import { mountTerminal } from './terminal.js';
-import { barNextSteps, defaultRightFraction, folderName, windowTitleFor } from './meter.js';
+import { barNextSteps, continueKeys, defaultRightFraction, folderName, windowTitleFor } from './meter.js';
 
 const { invoke, Channel } = window.__TAURI__.core;
 
@@ -553,16 +553,21 @@ window.addEventListener('message', (event) => {
   }
 });
 
-// Its "Not running... type continue" line, pressed: the word, then Enter on
-// its own a moment later, so an agent that treats one burst of input as a
-// paste still reads the Enter as a submit.
+// Its "Not running... type continue" line, pressed: the keystrokes
+// continueKeys names, each on its own a moment after the last, so an agent
+// that treats one burst of input as a paste still reads the Enter as a submit.
 const ENTER_AFTER_MS = 120;
 
 function typeContinue() {
   if (!agentActive()) return;
-  invoke('agent_input', { data: 'continue' })
-    .then(() => new Promise((resolve) => setTimeout(resolve, ENTER_AFTER_MS)))
-    .then(() => invoke('agent_input', { data: '\r' }))
+  continueKeys(agent.kind)
+    .reduce(
+      (typed, data, i) =>
+        typed
+          .then(() => (i ? new Promise((resolve) => setTimeout(resolve, ENTER_AFTER_MS)) : null))
+          .then(() => invoke('agent_input', { data })),
+      Promise.resolve()
+    )
     .catch((error) => {
       setAgentStatus(`Could not type continue: ${error}`, { error: true });
     });
