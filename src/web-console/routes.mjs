@@ -42,6 +42,7 @@ import { cleanSetting, offered } from "./public/subagents.js";
 import { ACCENTS, DEFAULT_ACCENT, DEFAULT_CARD_WIDTH, cardWidth } from "./public/palette.js";
 import { SERVABLE, TYPES, asset } from "./static.mjs";
 import { handoffsDir, isHandoffId } from "./handoffs.mjs";
+import { linkToOpen, openLink } from "./open-link.mjs";
 import {
   NotepadError,
   addImage,
@@ -99,6 +100,7 @@ const ROUTES = [
   { match: (p, req) => p.startsWith("/shots/") || req.url.startsWith("/shots/"), run: shot },
   { match: (p, req) => p.startsWith("/uploads/") || req.url.startsWith("/uploads/"), run: uploads },
   { path: "/submit", method: "POST", origin: true, run: submit },
+  { path: "/open-link", method: "POST", origin: true, run: openLinkRoute },
   { path: "/chat", method: "POST", origin: true, run: chat },
   { path: "/chat/decision", method: "POST", origin: true, run: chatDecision },
   { path: "/workspace", method: "GET", run: workspaceGet },
@@ -1023,6 +1025,18 @@ function recordSubmitted(state, actions) {
     // A skip says so on the record, so settling it can record a skip.
     item.submitted = { at, ...rest, ...(type === "skip" ? { skipped: true } : {}) };
   }
+}
+
+// A link the page inside the desktop app cannot open itself (open-link.mjs).
+// http and https only; the page shows the link to paste when this says no.
+function openLinkRoute(req, res) {
+  return readBody(req, (err, body) => {
+    if (err) return json(res, err.tooBig ? 413 : 400, { error: err.tooBig ? "too large" : "body must be JSON" });
+    const href = linkToOpen(body && body.url);
+    if (!href) return json(res, 400, { error: "only http and https links open" });
+    if (!openLink(href)) return json(res, 500, { error: "no browser could be started" });
+    return json(res, 200, { ok: true, url: href });
+  });
 }
 
 function submit(req, res, ctx) {

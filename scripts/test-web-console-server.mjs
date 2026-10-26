@@ -853,3 +853,36 @@ test("the built skills tree serves the same /app.css as the source console", asy
     execFileSync(process.execPath, [path.join(built, "console.mjs"), "stop", "--session", json.sid], { env: ENV, cwd: ROOT });
   }
 });
+
+// The desktop app's webview opens no new windows, so a link the page shows
+// there goes through /open-link, which hands it to the default browser. Only
+// http and https: anything else would be the page asking the machine to run
+// whatever a link names.
+test("/open-link takes an http or https link and refuses every other kind", async () => {
+  const res = cli(["open", "--workflow", "git", "--no-open"]);
+  const m = res.json.url.match(/^(http:\/\/127\.0\.0\.1:\d+)\/s\/([^/]+)\//);
+  const cookie = cookieFor(m[1], m[2]);
+  const open = (url) =>
+    fetch(`${m[1]}/open-link`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie, origin: m[1], connection: "close" },
+      body: JSON.stringify({ url }),
+    });
+  try {
+    const ok = await open("https://github.com/jparkerweb/plan2code/compare/main...feature?expand=1");
+    assert.equal(ok.status, 200);
+    assert.deepEqual(await ok.json(), { ok: true, url: "https://github.com/jparkerweb/plan2code/compare/main...feature?expand=1" });
+    for (const bad of ["javascript:alert(1)", "file:///C:/Windows/System32/calc.exe", "ms-settings:", "not a link", "", 42]) {
+      const no = await open(bad);
+      assert.equal(no.status, 400, `${JSON.stringify(bad)} was not refused`);
+    }
+    const foreign = await fetch(`${m[1]}/open-link`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie, origin: "https://evil.example", connection: "close" },
+      body: JSON.stringify({ url: "https://example.com/" }),
+    });
+    assert.notEqual(foreign.status, 200, "another site's page cannot open links through the console");
+  } finally {
+    cli(["stop", "--session", res.json.sid]);
+  }
+});
