@@ -4,7 +4,7 @@
 // `looks` is a live binding: every file reads the current object, and only
 // this file replaces it.
 
-import { DEFAULT_ACCENT, soundPrefs, DEFAULT_CARD_WIDTH, ACCENTS, cardWidth, soundKey } from "./palette.js";
+import { DEFAULT_ACCENT, soundPrefs, DEFAULT_CARD_WIDTH, ACCENTS, accentId, cardWidth, soundKey } from "./palette.js";
 import { normalizeRole, ROLE_NOT_SET } from "./starters.js";
 import { bootData, hooks } from "./state.js";
 import { el } from "./render.js";
@@ -40,7 +40,7 @@ export let looksReady = false;
 
 export function adoptLooks(saved) {
   looks = { ...DEFAULT_LOOKS, ...saved };
-  if (!ACCENTS[looks.accent]) looks.accent = DEFAULT_LOOKS.accent;
+  looks.accent = accentId(looks.accent);
   if (!["system", "light", "dark"].includes(looks.theme)) looks.theme = DEFAULT_LOOKS.theme;
   if (typeof looks.sound !== "boolean") looks.sound = DEFAULT_LOOKS.sound;
   Object.assign(looks, soundPrefs(looks));

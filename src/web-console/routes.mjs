@@ -42,7 +42,7 @@ import {
 import { DOC_TYPES, MAX_ATTACHMENTS, MAX_DOC_BYTES, docExt, workflowLabel, workflowTitle } from "./public/answers.js";
 import { CHAT_LIMIT, CHAT_MAX_CHARS } from "./public/chat.js";
 import { cleanSetting, offered } from "./public/subagents.js";
-import { ACCENTS, DEFAULT_ACCENT, DEFAULT_CARD_WIDTH, cardWidth } from "./public/palette.js";
+import { DEFAULT_ACCENT, DEFAULT_CARD_WIDTH, accentId, cardWidth } from "./public/palette.js";
 import { SERVABLE, TYPES, asset } from "./static.mjs";
 import { handoffsDir, isHandoffId } from "./handoffs.mjs";
 import { linkToOpen, openLink } from "./open-link.mjs";
@@ -265,8 +265,8 @@ function renderIndex(ctx) {
   };
   let htmlAttrs = "";
   if (looks && (looks.theme === "light" || looks.theme === "dark")) htmlAttrs += ` data-theme="${looks.theme}"`;
-  if (looks && looks.accent !== DEFAULT_ACCENT && Object.hasOwn(ACCENTS, String(looks.accent))) {
-    htmlAttrs += ` data-looks-accent="${looks.accent}"`;
+  if (looks && accentId(looks.accent) !== DEFAULT_ACCENT) {
+    htmlAttrs += ` data-looks-accent="${accentId(looks.accent)}"`;
   }
   // The same first-paint reasoning as the accent: a Wide user never sees the
   // column jump from the default width. The value is one of the fixed preset
@@ -302,7 +302,7 @@ function renderIndex(ctx) {
 
 /* ------------------------------------------------------ read-only routes */
 
-// The spec's overview.md, read-only. A dashboard honours ?spec= only for a
+// The spec's overview.md, read-only. A dashboard honors ?spec= only for a
 // spec its own scan found; every other workflow reads its own specDir.
 // readOverview() keeps the read inside the project root.
 function overview(req, res, ctx, url) {
@@ -1453,7 +1453,7 @@ function authed(req, ctx) {
 }
 
 /**
- * The DNS-rebinding defence, and the highest-value check in this file.
+ * The DNS-rebinding defense, and the highest-value check in this file.
  *
  * Without it, any page the user visits can resolve its own hostname to
  * 127.0.0.1 and then talk to this server as same-origin. That is not

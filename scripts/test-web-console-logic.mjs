@@ -87,7 +87,7 @@ import {
   nextOpenAfter,
 } from "../src/web-console/public/answers.js";
 import { chatView } from "../src/web-console/public/chat.js";
-import { ACCENTS, DEFAULT_ACCENT } from "../src/web-console/public/palette.js";
+import { ACCENTS, DEFAULT_ACCENT, RETIRED_ACCENTS, accentId } from "../src/web-console/public/palette.js";
 import {
   needsRoleNudge,
   normalizeRole,
@@ -665,7 +665,8 @@ const contrast = (a, b) => {
 
 test("every highlight color is readable in both themes", () => {
   const panel = { light: "#ffffff", dark: "#201d1a" };
-  assert.ok(Object.keys(ACCENTS).length >= 32);
+  // Nineteen a row in the wide Preferences dialog, two rows at most.
+  assert.ok(Object.keys(ACCENTS).length >= 32 && Object.keys(ACCENTS).length <= 38);
   assert.ok(ACCENTS[DEFAULT_ACCENT], "the default must be in the list");
   const names = new Set();
   for (const [id, a] of Object.entries(ACCENTS)) {
@@ -681,11 +682,22 @@ test("every highlight color is readable in both themes", () => {
   }
 });
 
+test("a retired highlight color keeps its closest twin, an unknown one the default", () => {
+  for (const [old, now] of Object.entries(RETIRED_ACCENTS)) {
+    assert.ok(!ACCENTS[old], `${old} is retired, so it is not offered`);
+    assert.ok(ACCENTS[now], `${old} maps to ${now}, which must exist`);
+    assert.equal(accentId(old), now);
+  }
+  assert.equal(accentId("violet"), "violet");
+  assert.equal(accentId("nope"), DEFAULT_ACCENT);
+  assert.equal(accentId(undefined), DEFAULT_ACCENT);
+});
+
 /* ------------------------------------------------- the spec-aware dashboard */
 
 // The console scans the repo itself, so the states the picker shows have to
 // be read off real folder shapes — a fixture per stage, then the matrix that
-// turns a stage into lit or greyed cards.
+// turns a stage into lit or grayed cards.
 function fakeSpec(root, name, files) {
   const dir = path.join(root, "specs", name);
   for (const [rel, text] of Object.entries(files)) {
@@ -847,7 +859,7 @@ test("a delete is a session action naming the folder, and its reply says it is f
   assert.equal(deleteSummary({ ...spec, detail: "" }).stage, SPEC_STATE_LABELS.building);
 });
 
-test("a fixed bug says so once: on its chip, in the delete dialog and on its greyed cards", () => {
+test("a fixed bug says so once: on its chip, in the delete dialog and on its grayed cards", () => {
   const fixed = { dir: "specs/old-bug", name: "old-bug", state: "fixed", detail: "bug fixed", files: 1, touched: 1 };
   assert.equal(deleteSummary(fixed).stage, "Bug fixed");
   const building = { dir: "specs/lunch-vote", name: "lunch-vote", state: "building", detail: "1 of 2 tasks done" };
@@ -984,7 +996,7 @@ test("the Git card stays clickable outside a repository and says what happens", 
   assert.equal(cardPresentation(entry, withSpec, withSpec.specs[0], menu).detail, "Two changes ready");
 });
 
-test("the Git card is never greyed", () => {
+test("the Git card is never grayed", () => {
   const entry = SKILL_CATALOG.find((e) => e.skill === "plan2code-git");
   const clean = cardAvailability(entry, { hasAgents: true, isGit: true, pending: 0 }, null);
   assert.equal(clean.on, true);
@@ -1191,7 +1203,7 @@ test("the dashboard matrix lights only the cards a spec state allows", () => {
   assert.ok(!cardAvailability(entry("plan2code-quick-task"), scan, sel("fixed")).next);
   assert.equal(launchTarget(entry("plan2code-quick-task"), sel("fixed")), null);
 
-  // A greyed card always says why, and a selected spec's next step is marked.
+  // A grayed card always says why, and a selected spec's next step is marked.
   assert.ok(cardAvailability(entry("plan2code-3-implement"), scan, sel("exploring")).reason);
   assert.equal(cardAvailability(entry("plan2code-3-implement"), scan, sel("documented")).next, true);
   assert.ok(!cardAvailability(entry("plan2code-1-plan"), scan, sel("documented")).next);
@@ -2168,18 +2180,6 @@ test("subagents: helperRows turns a reported strength and effort into one line, 
   }
 });
 
-test("page: the Subagents button sits right after Write a brief, and its dialog is in the page with no inline styles or scripts", () => {
-  const html = fs.readFileSync(path.join(ROOT, "src", "web-console", "public", "index.html"), "utf8");
-  const row = html.match(/<div class="row-left">([\s\S]*?)<\/div>\s*<div class="views-group">/);
-  assert.ok(row, "index.html has the second row's left cluster");
-  const ids = [...row[1].matchAll(/<button[^>]*\bid="([^"]+)"/g)].map((m) => m[1]);
-  assert.equal(ids[ids.indexOf("btn-brief") + 1], "btn-subagents", "the Subagents button follows Write a brief");
-  assert.match(row[1], /<button[^>]*id="btn-subagents"[^>]*\bhidden\b/, "the button starts hidden");
-  for (const part of ["sa-hub", "sa-node", "sa-link"]) assert.ok(row[1].includes(`class="${part}"`), `the icon has ${part}`);
-  const dialog = html.match(/<dialog class="modal looks subagents" id="subagents-modal" aria-labelledby="subagents-title">([\s\S]*?)<\/dialog>/);
-  assert.ok(dialog, "index.html has the Subagents dialog");
-  for (const id of ["subagents-instruction", "subagents-default", "subagents-max", "subagents-checkin", "subagents-research", "subagents-status", "subagents-cancel", "subagents-save"]) {
-    assert.ok(dialog[1].includes(`id="${id}"`), `the dialog carries #${id}`);
 test("subagents: helperRows gives each reported strength and effort a badge ranked 1-3, and the session's own model rank 0", () => {
   const badges = (extra) => helperRows([{ id: "h1", title: "One", ask: "a", state: "running", ...extra }]).rows[0].badges;
   assert.deepEqual(badges({ strength: "standard", effort: "high" }), [
@@ -2194,6 +2194,18 @@ test("subagents: helperRows gives each reported strength and effort a badge rank
   ]);
 });
 
+test("page: the Subagents button sits right after Write a brief, and its dialog is in the page with no inline styles or scripts", () => {
+  const html = fs.readFileSync(path.join(ROOT, "src", "web-console", "public", "index.html"), "utf8");
+  const row = html.match(/<div class="row-left">([\s\S]*?)<\/div>\s*<div class="views-group">/);
+  assert.ok(row, "index.html has the second row's left cluster");
+  const ids = [...row[1].matchAll(/<button[^>]*\bid="([^"]+)"/g)].map((m) => m[1]);
+  assert.equal(ids[ids.indexOf("btn-brief") + 1], "btn-subagents", "the Subagents button follows Write a brief");
+  assert.match(row[1], /<button[^>]*id="btn-subagents"[^>]*\bhidden\b/, "the button starts hidden");
+  for (const part of ["sa-hub", "sa-node", "sa-link"]) assert.ok(row[1].includes(`class="${part}"`), `the icon has ${part}`);
+  const dialog = html.match(/<dialog class="modal looks subagents" id="subagents-modal" aria-labelledby="subagents-title">([\s\S]*?)<\/dialog>/);
+  assert.ok(dialog, "index.html has the Subagents dialog");
+  for (const id of ["subagents-instruction", "subagents-default", "subagents-max", "subagents-checkin", "subagents-research", "subagents-status", "subagents-cancel", "subagents-save"]) {
+    assert.ok(dialog[1].includes(`id="${id}"`), `the dialog carries #${id}`);
   }
   assert.doesNotMatch(dialog[1], /\sstyle=/);
   assert.doesNotMatch(dialog[1], /<script/i);

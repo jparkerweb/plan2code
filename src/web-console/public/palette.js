@@ -1,5 +1,5 @@
 // The highlight colors, as data. Kept out of app.js for one reason: app.js
-// cannot be imported outside a browser, and thirty-two colors each with four
+// cannot be imported outside a browser, and thirty-eight colors each with four
 // shades in two themes is far too many to trust to eyeballing. The test suite
 // imports this and checks every one.
 //
@@ -19,12 +19,20 @@
 // also badge text on the soft tint). Everything after the first five was
 // found by stepping lightness until both held, not picked by eye.
 //
-// Order is the order of the picker: round the wheel, then the greys. Sixteen
-// a row, so the warm half and the greens sit on the first, the blues, purples,
-// pinks and greys on the second.
+// Order is the order of the picker: round the wheel, then the grays and Mono
+// (near-black in light, near-white in dark). Nineteen a row, so the reds,
+// browns, yellows and greens sit on the first, the blues, purples, pinks and
+// grays on the second. The pale ones (Peach, Cream, Mint, Aqua, Lavender,
+// Pink) are pastels only in dark mode: in light mode a fill has to carry a
+// white label, so they come out as deeper shades of the same hue.
 
 export const ACCENTS = {
   // name              fill       soft       ink        line
+  maroon: {
+    name: "Maroon",
+    light: ["#7c1d2d",  "#fbeef1",  "#ffffff",  "#cea1a9"],
+    dark: ["#da818f",  "#321b1f",  "#140b0c",  "#76424b"],
+  },
   crimson: {
     name: "Crimson",
     light: ["#cd1d41",  "#fbe9ed",  "#ffffff",  "#dcaab4"],
@@ -40,40 +48,45 @@ export const ACCENTS = {
     light: ["#c83510",  "#fbede9",  "#ffffff",  "#dcaca0"],
     dark: ["#ef5b37",  "#321f1b",  "#140d0b",  "#6f4237"],
   },
-  rust: {
-    name: "Rust",
-    light: ["#ae4f2b",  "#fbeee7",  "#ffffff",  "#dd9b7e"],
-    dark: ["#e8825a",  "#34211a",  "#1a120e",  "#8a4f36"],
+  peach: {
+    name: "Peach",
+    light: ["#b44c2d",  "#fbf2ef",  "#ffffff",  "#cdaca2"],
+    dark: ["#f9a48b",  "#32201b",  "#140d0b",  "#764e42"],
   },
   tangerine: {
     name: "Tangerine",
     light: ["#b15209",  "#fbf1e9",  "#ffffff",  "#d9af8f"],
     dark: ["#f2700d",  "#32251b",  "#140f0b",  "#664830"],
   },
-  copper: {
-    name: "Copper",
-    light: ["#a2592f",  "#f9f0eb",  "#ffffff",  "#cdb2a2"],
-    dark: ["#cb7a4b",  "#32231b",  "#140e0b",  "#5f493d"],
+  rust: {
+    name: "Rust",
+    light: ["#ae4f2b",  "#fbeee7",  "#ffffff",  "#dd9b7e"],
+    dark: ["#e8825a",  "#34211a",  "#1a120e",  "#8a4f36"],
+  },
+  brown: {
+    name: "Brown",
+    light: ["#6f472a",  "#f9f4f0",  "#ffffff",  "#c8b5a8"],
+    dark: ["#c59877",  "#32241b",  "#140f0b",  "#765842"],
   },
   clay: {
     name: "Clay",
     light: ["#8d644c",  "#f5f2f0",  "#ffffff",  "#bfafa6"],
     dark: ["#ba957f",  "#2b2521",  "#17100c",  "#62544b"],
   },
-  marigold: {
-    name: "Marigold",
-    light: ["#9a6406",  "#fbf5e9",  "#ffffff",  "#d3b279"],
-    dark: ["#f59f0a",  "#32291b",  "#14110b",  "#5e4c2c"],
-  },
   gold: {
     name: "Gold",
     light: ["#896b09",  "#fbf7e9",  "#ffffff",  "#ccb66d"],
     dark: ["#f0bb0f",  "#322c1b",  "#14120b",  "#584d2a"],
   },
-  mustard: {
-    name: "Mustard",
-    light: ["#806f1b",  "#fbf8ea",  "#ffffff",  "#c3b881"],
-    dark: ["#d2b72d",  "#322e1b",  "#14120b",  "#544e31"],
+  cream: {
+    name: "Cream",
+    light: ["#776740",  "#f8f6f2",  "#ffffff",  "#c0b9aa"],
+    dark: ["#f1e1bc",  "#322b1b",  "#14110b",  "#766642"],
+  },
+  lemon: {
+    name: "Lemon",
+    light: ["#7e7607",  "#fcfbee",  "#ffffff",  "#c5bf67"],
+    dark: ["#f0e442",  "#32301b",  "#14130b",  "#767242"],
   },
   olive: {
     name: "Olive",
@@ -90,20 +103,30 @@ export const ACCENTS = {
     light: ["#577740",  "#f2f6ee",  "#ffffff",  "#acbca1"],
     dark: ["#79a659",  "#24321b",  "#0f140b",  "#475140"],
   },
+  forest: {
+    name: "Forest",
+    light: ["#216337",  "#f0faf3",  "#ffffff",  "#9cc4a9"],
+    dark: ["#6bbd86",  "#1b3222",  "#0b140e",  "#427653"],
+  },
   emerald: {
     name: "Emerald",
     light: ["#207e47",  "#ebfaf1",  "#ffffff",  "#8ac4a2"],
     dark: ["#33cc73",  "#1b3224",  "#0b140f",  "#345542"],
   },
-  jade: {
-    name: "Jade",
-    light: ["#297c61",  "#ecf9f4",  "#ffffff",  "#92c1b1"],
-    dark: ["#40bf95",  "#1b322a",  "#0b1411",  "#38544b"],
+  mint: {
+    name: "Mint",
+    light: ["#25805a",  "#effaf6",  "#ffffff",  "#97c4b1"],
+    dark: ["#8be4bf",  "#1b3228",  "#0b1410",  "#427660"],
   },
   teal: {
     name: "Teal",
     light: ["#0f766e",  "#e2f1ef",  "#ffffff",  "#6fb3aa"],
     dark: ["#5ecfc0",  "#14302c",  "#0b1a18",  "#3a7d74"],
+  },
+  aqua: {
+    name: "Aqua",
+    light: ["#177e82",  "#eefbfc",  "#ffffff",  "#8dc6c8"],
+    dark: ["#84e8eb",  "#1b3132",  "#0b1414",  "#427476"],
   },
   cyan: {
     name: "Cyan",
@@ -120,30 +143,30 @@ export const ACCENTS = {
     light: ["#206cc3",  "#ecf2f9",  "#ffffff",  "#9ab4d3"],
     dark: ["#619fe5",  "#1a2533",  "#0c1117",  "#3d5978"],
   },
-  navy: {
-    name: "Navy",
-    light: ["#24396b",  "#eef0f7",  "#ffffff",  "#a7b3cd"],
-    dark: ["#819ad5",  "#1e232f",  "#0c1017",  "#4a5775"],
-  },
   cobalt: {
     name: "Cobalt",
     light: ["#405ce7",  "#ebeef9",  "#ffffff",  "#a8b0dc"],
     dark: ["#7b8fef",  "#191d34",  "#0c0e17",  "#465392"],
+  },
+  navy: {
+    name: "Navy",
+    light: ["#24396b",  "#eef0f7",  "#ffffff",  "#a7b3cd"],
+    dark: ["#819ad5",  "#1e232f",  "#0c1017",  "#4a5775"],
   },
   indigo: {
     name: "Indigo",
     light: ["#4f46e5",  "#ecebfb",  "#ffffff",  "#9b95ef"],
     dark: ["#a5a0ff",  "#1e1d3a",  "#121129",  "#5f5ba8"],
   },
+  lavender: {
+    name: "Lavender",
+    light: ["#6f61b8",  "#f2f1f9",  "#ffffff",  "#afaac5"],
+    dark: ["#b9acf6",  "#1f1b32",  "#0c0b14",  "#4d4479"],
+  },
   violet: {
     name: "Violet",
     light: ["#7f4dd5",  "#f1edf8",  "#ffffff",  "#bbabd6"],
     dark: ["#a785e2",  "#231c31",  "#100c17",  "#624c87"],
-  },
-  lilac: {
-    name: "Lilac",
-    light: ["#8b51b8",  "#f3eff6",  "#ffffff",  "#beaccb"],
-    dark: ["#b189cf",  "#271f2d",  "#130c17",  "#634f73"],
   },
   orchid: {
     name: "Orchid",
@@ -165,6 +188,16 @@ export const ACCENTS = {
     light: ["#c42e6a",  "#f8edf1",  "#ffffff",  "#d3a6b8"],
     dark: ["#df77a0",  "#311c24",  "#170c11",  "#7c465b"],
   },
+  pink: {
+    name: "Pink",
+    light: ["#b23875",  "#faeff5",  "#ffffff",  "#caa5b8"],
+    dark: ["#f7a1cc",  "#321b26",  "#140b0f",  "#76425c"],
+  },
+  mauve: {
+    name: "Mauve",
+    light: ["#816281",  "#f4f1f4",  "#ffffff",  "#bbafbb"],
+    dark: ["#ae93ae",  "#292329",  "#170c17",  "#5f545f"],
+  },
   steel: {
     name: "Steel",
     light: ["#50737c",  "#f0f3f4",  "#ffffff",  "#a5b5b8"],
@@ -175,19 +208,29 @@ export const ACCENTS = {
     light: ["#5b6e88",  "#f0f2f4",  "#ffffff",  "#acb3bc"],
     dark: ["#8e9eb4",  "#23262a",  "#0c1117",  "#515861"],
   },
-  mauve: {
-    name: "Mauve",
-    light: ["#816281",  "#f4f1f4",  "#ffffff",  "#bbafbb"],
-    dark: ["#ae93ae",  "#292329",  "#170c17",  "#5f545f"],
-  },
   graphite: {
     name: "Graphite",
     light: ["#4a4640",  "#eeedea",  "#ffffff",  "#a8a196"],
     dark: ["#cfc7bb",  "#2b2a28",  "#161513",  "#7a7369"],
   },
+  mono: {
+    name: "Mono",
+    light: ["#1f1f1f",  "#efefef",  "#ffffff",  "#a3a3a3"],
+    dark: ["#ececec",  "#2a2a2a",  "#141414",  "#6e6e6e"],
+  },
 };
 
 export const DEFAULT_ACCENT = "ocean";
+
+// Colors that were merged into a near twin when the picker grew to Paint's
+// range. A looks.json saved with one keeps the closest color, not the default.
+export const RETIRED_ACCENTS = { copper: "rust", marigold: "gold", mustard: "lemon", jade: "emerald", lilac: "violet" };
+
+export function accentId(value) {
+  const id = String(value);
+  if (Object.hasOwn(ACCENTS, id)) return id;
+  return Object.hasOwn(RETIRED_ACCENTS, id) ? RETIRED_ACCENTS[id] : DEFAULT_ACCENT;
+}
 
 // The card-width presets. Here for the same reason the accents are: the page
 // validates a saved `looks.width` with cardWidth(), and the server uses it to
