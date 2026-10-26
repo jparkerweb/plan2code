@@ -243,12 +243,12 @@ test("subagents: a save that matches this session still becomes the project's se
 });
 
 test("subagents: a workflow without the switch refuses it, bad bodies name the field, and an older copy's open hides it", async () => {
-  const plan = subagentsSession({ workflow: "plan" });
+  const doc = subagentsSession({ workflow: "document" });
   const s = subagentsSession();
   try {
-    assert.deepEqual(await setSubagents(plan, ON3), { status: 400, body: { error: "not-offered" } });
-    assert.equal((await frameSubagents(plan)).offered, false);
-    assert.equal("subagents" in (await submitAndWait(plan)).json, false);
+    assert.deepEqual(await setSubagents(doc, ON3), { status: 400, body: { error: "not-offered" } });
+    assert.equal((await frameSubagents(doc)).offered, false);
+    assert.equal("subagents" in (await submitAndWait(doc)).json, false);
 
     assert.deepEqual(await setSubagents(s, { ...ON3, max: 0 }), { status: 400, body: { error: "max" } });
     assert.deepEqual(await setSubagents(s, { ...ON3, max: 21 }), { status: 400, body: { error: "max" } });
@@ -268,7 +268,7 @@ test("subagents: a workflow without the switch refuses it, bad bodies name the f
     fs.rmSync(path.join(s.session, "subagents-setting.json"), { force: true });
     assert.equal("subagents" in (await submitAndWait(s)).json, false);
   } finally {
-    cli(["stop", "--session", plan.sid]);
+    cli(["stop", "--session", doc.sid]);
     cli(["stop", "--session", s.sid]);
   }
 });

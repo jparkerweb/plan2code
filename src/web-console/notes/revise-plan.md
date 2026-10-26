@@ -16,3 +16,11 @@ offers to execute or implement.** Pass `--spec specs/<feature>` to `open`, or
 post `specDir` once you know it. The finish command is
 `/plan2code-3-implement specs/<feature>/overview.md`; an abort's is
 `/plan2code-1b-revise-plan specs/<feature>/overview.md`.
+
+Revision offers the Subagents switch. A `Subagents:` block may arrive on
+`open` output or a `wait` / `chat` pickup: follow `console-subagents.md` and
+the skill's Helpers section, and report each helper as `helpers`. Lookup
+helpers report back before the Step 2 review item goes up; phase-file helpers
+report back before the Step 4 check. Every gate stays with you, and a helper's
+`title`, `ask` and `result` follow the same rule as every label: nothing
+offers to execute or implement.

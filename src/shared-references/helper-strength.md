@@ -1,5 +1,5 @@
 # Helper Strength
-> Shared by the skills that start helpers (subagents): Pathfinder, Quick Task, Implement, Implement + Review and Review. Read it when you first start a helper in a session. Never invoked as a skill.
+> Shared by the skills that start helpers (subagents): Pathfinder, Plan, Revise Plan, Quick Task, Implement, Implement + Review and Review. Read it when you first start a helper in a session. Never invoked as a skill.
 
 ## The words
 
@@ -17,10 +17,12 @@ Never write a model or vendor name in a brief, a report or a file, and never inv
 | Helper's job | Strength | Effort |
 |---|---|---|
 | Lookups, reading code, checking docs, recon | light | low |
+| Revise Plan edit to one phase file, spelled out in the approved plan | light | medium |
 | Build task in 1 or 2 files, with the change spelled out in the task | light | medium |
 | Build task across several files, integration work, debugging | standard | medium |
 | Build task needing a design decision the spec leaves open | strongest (or keep it yourself) | high |
 | Pathfinder research question, sketch | standard | medium |
+| Plan's PLAN-DRAFT cross-check against the conversation | standard | medium |
 | Review analysis, focused scope | standard | high |
 | Review analysis, branch or full scope, or touching security, auth or data | strongest | high |
 
@@ -28,7 +30,7 @@ Decide from these signals: how many files the job touches, whether the task spel
 
 ## Floor and escalation
 
-- A review helper never runs below `standard`.
+- A review helper, or Plan's PLAN-DRAFT cross-check, never runs below `standard`.
 - A retry, after a helper fails or after its work fails the phase's tests, goes one strength up and at least `medium` effort. Never retry at the same strength.
 - When a `strongest` helper fails, its task comes back to you.
 

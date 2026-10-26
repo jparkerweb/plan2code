@@ -4,7 +4,7 @@ Part of the web console contract (`console.md`). Read when a `Subagents:` block
 arrives, or when your workflow notes say to report helpers.
 
 On the skills that offer it (`implement`, `implement-review`, `quick-task`,
-`review`, `pathfinder`), the person can turn **helpers** (subagents) on or off
+`review`, `pathfinder`, `plan`, `revise-plan`), the person can turn **helpers** (subagents) on or off
 from the top bar's Subagents button. Their pick is saved per project and per
 skill, on until switched off, and reaches you as a standing instruction, only when it
 changes.

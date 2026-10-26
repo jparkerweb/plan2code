@@ -31,6 +31,14 @@ The FIRST thing you do, before anything else in this file — before Step 1, bef
 - `node "<S>/specs.mjs" status <spec>`: phases, task counts by marker, `checks`, `pending`.
 - `node "<S>/specs.mjs" mark <spec> --phase <N> --to open`: re-open a completed phase in overview.md.
 
+## Helpers
+
+When your tool can start helpers (subagents) and they are not switched off for this run (on the web console a `Subagents:` block says which, console-subagents.md):
+- **Steps 1 and 2, read-only lookups:** the code behind each affected task (its functions and files as they stand now, for Step 3's code references), and the code behind completed tasks the change could undo, so **Completed Work at Risk** rests on evidence. One area per helper.
+- **Step 3, only after approval, when the revision touches 3 or more phase files:** one helper per `phase-X.md` whose edits the approved plan spells out. Run `mark` for every re-opened phase before starting them, since it rewrites that phase file too. Its brief carries that file's approved changes, the `🔄 REVISED` / `🆕 ADDED` formats, and the rule that it edits that one file under `specs/` and nothing else.
+
+Keep with you: every question, the Step 2 approval, overview.md (`mark`, Revision History), the waiting brief's line, dependencies and numbering across phases, and Steps 4 to 6. Re-read every file a helper edited against the approved plan before Step 4. Strength and effort per references/helper-strength.md. No helpers? Do the same work yourself.
+
 ## Required Context
 
 Find the spec with `specs.mjs list`, then request these files if not provided:

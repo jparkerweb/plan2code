@@ -1989,18 +1989,18 @@ test("workspace cursor never moves backwards, and only changes past it are pendi
   }
 });
 
-test("subagents: only the five opted-in workflows offer the switch", () => {
-  for (const w of ["implement", "implement-review", "quick-task", "review", "pathfinder"]) {
+test("subagents: only the seven opted-in workflows offer the switch", () => {
+  for (const w of ["implement", "implement-review", "quick-task", "review", "pathfinder", "plan", "revise-plan"]) {
     assert.equal(offered(w), true, w);
     assert.ok(defaultInstruction(w).length > 0, `${w} has a default instruction`);
   }
-  for (const w of ["dashboard", "plan", "document", "init", "handoff", "constructor", "toString", undefined]) {
+  for (const w of ["dashboard", "document", "finalize", "init", "handoff", "constructor", "toString", undefined]) {
     assert.equal(offered(w), false, String(w));
     assert.equal(defaultInstruction(w), "");
   }
-  assert.equal(Object.keys(SUBAGENT_WORKFLOWS).length, 5);
+  assert.equal(Object.keys(SUBAGENT_WORKFLOWS).length, 7);
   assert.deepEqual(defaultSetting("review"), { workflow: "review", on: true, instruction: null, max: 3, strength: "balanced" });
-  assert.equal(defaultSetting("plan").on, false, "a skill without the switch is never on");
+  assert.equal(defaultSetting("document").on, false, "a skill without the switch is never on");
   assert.equal(effectiveInstruction({ workflow: "review", instruction: "  " }), defaultInstruction("review"));
   assert.equal(effectiveInstruction({ workflow: "review", instruction: " Mine " }), "Mine");
 });
@@ -2041,7 +2041,7 @@ test("subagents: blockFor walks every switch transition, and never says off to a
 
   assert.equal(blockFor(setting(true, 6), none).lines[0], "Subagents: on (revision 6) — a console setting, not typed by the person.", "a reset cursor re-states on");
   assert.equal(blockFor(setting(false, 6), none), null, "a reset cursor with it off: nothing");
-  assert.equal(blockFor({ ...setting(true, 9), workflow: "plan" }, none), null, "a workflow that does not offer it: nothing");
+  assert.equal(blockFor({ ...setting(true, 9), workflow: "document" }, none), null, "a workflow that does not offer it: nothing");
 });
 
 test("subagents: the injected wording names no harness tool", () => {

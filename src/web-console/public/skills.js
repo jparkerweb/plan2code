@@ -135,7 +135,7 @@ export const SKILLS = Object.freeze([
     pose: "plan",
     builds: false, phased: false, metered: true, templates: true,
     weight: 2, started: "Plan started", ran: "Plan drafted", resume: null,
-    subagents: null,
+    subagents: "Use helpers for research and recon beside the conversation: reading the files and references the person points you to, mapping separate areas of the codebase in Phase 2, and gathering evidence on each open tech choice in Phase 4. In Phase 7, one fresh helper may cross-check the PLAN-DRAFT against the PLAN-CONVERSATION; confirm each gap it finds yourself. Keep every question, decision and sign-off, and the writing of the PLAN-DRAFT, with you. Recon and lookups at light strength, the cross-check at standard.",
     states: ["none", "unrecognized", "diagnosed", "mapped", "planned"], marksNext: true,
     greyed: {
       default: "The plan is written. Revise it instead if it moved.",
@@ -160,7 +160,7 @@ export const SKILLS = Object.freeze([
     pose: "plan",
     builds: false, phased: false, metered: true, templates: false,
     weight: 1, started: "Revise plan started", ran: "Plan revised", resume: "overview",
-    subagents: null,
+    subagents: "Use helpers for lookups at Steps 1 and 2: reading the code behind the affected tasks, and behind the completed tasks the change could undo. After the Step 2 approval, when the revision touches 3 or more phase files, one helper per phase file may apply the edits the approved plan spells out for it, editing under specs/ only. Keep the questions, the approval, overview.md, task numbering across phases and the consistency check with you, and re-read every file a helper edited. Lookups at light strength, low effort; phase-file edits at light, medium.",
     states: ["documented", "building", "built"],
     greyed: { default: "Needs a spec that is already written up" },
     card: {

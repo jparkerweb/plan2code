@@ -15,3 +15,8 @@ Workflow notes for `plan`, part of the web console contract (`console.md`).
   browser user is not watching.
 - The Large checkpoint finish is a pause: a headline starting "Paused", no
   `dashboard`, and `stop` at once.
+- Plan offers the Subagents switch. A `Subagents:` block may arrive on `open`
+  output or a `wait` / `chat` pickup: follow `console-subagents.md` and the
+  skill's Helpers section, and report each helper as `helpers`. Post a helper
+  as `done` or `failed` before the sign-off it feeds, and every one before a
+  `finish`. Questions, sign-offs and the PLAN-DRAFT stay with you.

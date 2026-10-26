@@ -191,7 +191,10 @@ const SOURCE_PROMPTS = [
     displayName: 'Planning Mode',
     description: 'Requirements analysis and architecture design',
     scripts: ['specs.mjs'],
-    additionalReferences: [{ source: 'web-console', target: 'web-console' }]
+    additionalReferences: [
+      { source: 'web-console', target: 'web-console' },
+      { source: 'shared-references/helper-strength.md', target: 'helper-strength.md' }
+    ]
   },
   {
     source: 'plan2code-1b-revise-plan.md',
@@ -200,7 +203,10 @@ const SOURCE_PROMPTS = [
     displayName: 'Revision Mode',
     description: 'Modify specs mid-implementation when requirements change',
     scripts: ['specs.mjs'],
-    additionalReferences: [{ source: 'web-console', target: 'web-console' }]
+    additionalReferences: [
+      { source: 'web-console', target: 'web-console' },
+      { source: 'shared-references/helper-strength.md', target: 'helper-strength.md' }
+    ]
   },
   {
     source: 'plan2code-2-document.md',
