@@ -11,7 +11,7 @@ import { SKILLS, subagentsFor } from "./skills.js";
 
 // The skills that offer the switch, each with its instruction: an entry's
 // `subagents` in skills.js is the one place a skill opts in (FR-1). Wording is
-// behaviour-level and names no harness tool, so any agent can follow it or
+// behavior-level and names no harness tool, so any agent can follow it or
 // harmlessly ignore it.
 export const SUBAGENT_WORKFLOWS = Object.freeze(
   Object.fromEntries(
@@ -222,7 +222,7 @@ export function switchLabel(frame) {
 // working-alone marker, so the note only draws when no helper was ever
 // reported. A result shows once the helper ended, and a reported strength or
 // effort as one line ("Standard, medium effort") plus a badge each, ranked 1-3
-// so the page can colour them (0 for the session's own model, which has no rank).
+// so the page can color them (0 for the session's own model, which has no rank).
 export function helperRows(helpers) {
   const list = Array.isArray(helpers) ? helpers.filter(isPlainObject) : [];
   const real = list.filter((h) => h.alone !== true);
@@ -248,7 +248,7 @@ export function helperRows(helpers) {
 }
 
 const HELPER_STRENGTH_WORDS = Object.freeze({ light: "Light", standard: "Standard", strongest: "Strongest", inherit: "Session model" });
-// Each value's rank for its badge colour; the session's own model has none.
+// Each value's rank for its badge color; the session's own model has none.
 const HELPER_STRENGTH_LEVELS = Object.freeze({ light: 1, standard: 2, strongest: 3, inherit: 0 });
 const HELPER_EFFORT_LEVELS = Object.freeze({ low: 1, medium: 2, high: 3 });
 

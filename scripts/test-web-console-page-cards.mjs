@@ -171,7 +171,7 @@ test("a sign-off card opens its document, and each verdict reaches the agent", a
   await card.getByRole("button", { name: /Read .*Completion report.* in full/ }).click();
   await s.page.getByText("Phase 3 adds the /tasks endpoints.").waitFor();
   assert.ok(await s.page.getByText("Phase 3 adds the /tasks endpoints.").isVisible(), "the report is on screen");
-  // The danger verdict is marked as such: here the class is the behaviour.
+  // The danger verdict is marked as such: here the class is the behavior.
   await s.page.locator("#views").getByRole("button", { name: /^Questions/ }).click();
   card = itemCard(s.page, "so1");
   assert.match(await card.getByRole("button", { name: "Throw it away" }).getAttribute("class"), /danger/);
@@ -338,16 +338,16 @@ test("a redraw keeps the place of the dashboard, the waiting screen and the fini
   assert.equal(await itemCard(s.page, "q2").evaluate((el) => el.scrollTop), 0, "the new question opened part-way down");
 });
 
-// The accent colour as the browser resolves it, and a button's outline colour,
+// The accent color as the browser resolves it, and a button's outline color,
 // so "wears the accent" is read off the screen, not off a class name.
 const accentOf = (page) =>
   page.evaluate(() => {
     const probe = document.createElement("i");
     probe.style.color = "var(--accent)";
     document.body.appendChild(probe);
-    const colour = getComputedStyle(probe).color;
+    const color = getComputedStyle(probe).color;
     probe.remove();
-    return colour;
+    return color;
   });
 const outlineOf = (button) => button.evaluate((b) => getComputedStyle(b).borderTopColor);
 const warnOf = (page) =>
@@ -355,9 +355,9 @@ const warnOf = (page) =>
     const probe = document.createElement("i");
     probe.style.color = "var(--warn)";
     document.body.appendChild(probe);
-    const colour = getComputedStyle(probe).color;
+    const color = getComputedStyle(probe).color;
     probe.remove();
-    return colour;
+    return color;
   });
 
 // What a person sees break: the way forward on a sign-off card looks like any
@@ -390,9 +390,9 @@ test("Skip this one and a comment box's quick answer are the same small accent b
   const quick = card.getByRole("button", { name: "No changes" });
   const look = (b) => b.evaluate((x) => { const c = getComputedStyle(x); return [c.fontSize, c.paddingTop, c.paddingLeft, c.color]; });
   assert.deepEqual(await look(skip), await look(quick), "the two chips look alike");
-  const [size, , , colour] = await look(skip);
+  const [size, , , color] = await look(skip);
   assert.equal(size, "12px", "small, not a full-size button");
-  assert.equal(colour, await accentOf(s.page), "in the accent");
+  assert.equal(color, await accentOf(s.page), "in the accent");
 });
 
 // What a person sees break: Combine phases is missing from a plan's breakdown,

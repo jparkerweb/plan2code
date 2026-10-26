@@ -1235,7 +1235,7 @@ function runInteractive() {
         const exitCode = uninstallResult !== 0 ? uninstallResult : loopResult !== 0 ? loopResult : metricsResult !== 0 ? metricsResult : botResult !== 0 ? botResult : statusLineResult !== 0 ? statusLineResult : launcherResult;
         process.exit(exitCode);
       } else {
-        console.log(`\n${COLORS.YELLOW}${SYMBOLS.WARNING} CANCELLED${COLORS.RESET}\n`);
+        console.log(`\n${COLORS.YELLOW}${SYMBOLS.WARNING} CANCELED${COLORS.RESET}\n`);
         rl.close();
         process.exit(0);
       }
@@ -1322,7 +1322,7 @@ function runInteractive() {
 
     // Q — exit
     if (input === 'Q') {
-      console.log(`\n${COLORS.YELLOW}${SYMBOLS.WARNING} CANCELLED${COLORS.RESET}\n`);
+      console.log(`\n${COLORS.YELLOW}${SYMBOLS.WARNING} CANCELED${COLORS.RESET}\n`);
       rl.close();
       process.exit(0);
     }

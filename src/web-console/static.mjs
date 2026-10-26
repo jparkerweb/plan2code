@@ -1,4 +1,4 @@
-// Plan2Code Web Console - serving the page's own files: the allow-list, types, caching and the accent colours.
+// Plan2Code Web Console - serving the page's own files: the allow-list, types, caching and the accent colors.
 
 import fs from "node:fs";
 import path from "node:path";

@@ -25,7 +25,7 @@
    it does not stretch), so a note box grows with what is typed instead, where
    the browser can, rather than scrolling inside a 96px box. */
 .git-cards > .card textarea { field-sizing: content; max-height: 50vh; }
-/* The card and the pager centre themselves with auto inline margins, and a
+/* The card and the pager center themselves with auto inline margins, and a
    grid item with auto margins shrinks to its content, so a short confirm sat
    narrow in the middle of the board. In the slot both fill the board's width
    instead; the slot's gap spaces them. */

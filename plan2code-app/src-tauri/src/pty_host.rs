@@ -75,7 +75,7 @@ impl PtyHost {
 
         let mut command = CommandBuilder::new(&options.program);
         command.args(&options.args);
-        // What the agent CLIs expect from a terminal that can show colour.
+        // What the agent CLIs expect from a terminal that can show color.
         command.env("TERM", "xterm-256color");
         command.env("COLORTERM", "truecolor");
         for (key, value) in &options.env {

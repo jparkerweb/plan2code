@@ -19,7 +19,7 @@ If `open` fails outright, fall back without drama: list the skills in the termin
 
 ## The menu
 
-The page draws the cards itself — you never send the list. It also knows the repo already: `open` scans `AGENTS.md` and `specs/` into `state.scan` (`{ hasAgents, isGit, specs: [{ dir, name, state, detail, touched }] }`), and the picker at the top enables or greys every card from it — the spec the person picks there is the target their launch carries. What you post is your judgment on top of that:
+The page draws the cards itself — you never send the list. It also knows the repo already: `open` scans `AGENTS.md` and `specs/` into `state.scan` (`{ hasAgents, isGit, specs: [{ dir, name, state, detail, touched }] }`), and the picker at the top enables or grays every card from it — the spec the person picks there is the target their launch carries. What you post is your judgment on top of that:
 
 ```jsonc
 {
@@ -137,6 +137,6 @@ You arrive here mid-conversation after a `__dashboard` press — from a finished
 
 ## While it waits
 
-- Bounded slices per console.md, using the longest safe slice: exit 10 → relay one line and immediately wait again — never end the turn after an arbitrary number of slices; exit 20 → `open --resume <sid>` (no `--workflow` — it stays `dashboard` until a launch overwrites it); exit 30 → they cancelled, ask in the terminal what they want.
+- Bounded slices per console.md, using the longest safe slice: exit 10 → relay one line and immediately wait again — never end the turn after an arbitrary number of slices; exit 20 → `open --resume <sid>` (no `--workflow` — it stays `dashboard` until a launch overwrites it); exit 30 → they canceled, ask in the terminal what they want.
 - A `__stop` action is the person ending the session before picking: post `finish` (a headline that says paused, `"command": "/plan2code"`) then `stop`, per console-stop.md.
 - The console keeps `agent.status` honest: collecting a pick sets `working`, and waiting on the menu sets `waiting`. Post an `activity` while a launch becomes a skill.

@@ -21,7 +21,7 @@ const LAUNCH_QUIPS = [
 
 let launchTicker = null;
 
-// Planny flies centre stage: the same drawing as the dock's, cloned so the
+// Planny flies center stage: the same drawing as the dock's, cloned so the
 // markup stays the single source of him, and the same sky the dock fills.
 function flightStage() {
   const stage = el("div", "launch-stage");

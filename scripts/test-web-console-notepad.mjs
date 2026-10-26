@@ -310,7 +310,7 @@ test("reorderTabs needs exactly the current ids once each, and setLastTab rememb
   refusal(() => readNotepad(folder, "../x"), "no-such-tab");
 });
 
-test("deleteTab: the folder goes, last moves to a neighbour, and the last tab left leaves an empty list", () => {
+test("deleteTab: the folder goes, last moves to a neighbor, and the last tab left leaves an empty list", () => {
   const folder = freshFolder();
   const [a, b, c] = ["A", "B", "C"].map((n) => createTab(folder, n).id);
   saveNote(folder, b, "bye");

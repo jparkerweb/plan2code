@@ -7,11 +7,11 @@
 // that reads and writes the user's files and holds the session cookie. Script
 // running here could post arbitrary answers back to the agent, which would then
 // act on them with the agent's full tool permissions. And the markdown is only
-// nominally agent-authored: in practice the agent is summarising a dependency
+// nominally agent-authored: in practice the agent is summarizing a dependency
 // README, a scraped page, a PR description, a log. Treat it as hostile.
 //
 // Building nodes rather than parsing a string makes injection structurally
-// impossible instead of filtered, so there is nothing for a sanitiser bypass to
+// impossible instead of filtered, so there is nothing for a sanitizer bypass to
 // bypass. `html` tokens render as visible text, on purpose.
 
 import { marked } from "./vendor/marked.esm.js";

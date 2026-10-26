@@ -718,10 +718,10 @@ test("a card with a note box over the git board flows at its own height, never s
 
 test("a card and its pager in the git board's card slot fill the board's width, never shrink to their content", () => {
   const css = joinedCss();
-  // .card and .pager centre with auto inline margins; in the slot's grid those
+  // .card and .pager center with auto inline margins; in the slot's grid those
   // would shrink a short confirm, and the pager under it, to fit their content.
-  assert.match(css, /\.card\s*\{[^}]*margin:\s*0 auto/, "the base card still centres outside the board");
-  assert.match(css, /\.pager\s*\{[^}]*margin:\s*0 auto/, "the base pager still centres outside the board");
+  assert.match(css, /\.card\s*\{[^}]*margin:\s*0 auto/, "the base card still centers outside the board");
+  assert.match(css, /\.pager\s*\{[^}]*margin:\s*0 auto/, "the base pager still centers outside the board");
   assert.match(css, /\.git-cards > \.card,\s*\.git-cards > \.pager\s*\{\s*margin:\s*0;\s*\}/, "the card slot drops the auto margins for both");
 });
 

@@ -365,7 +365,7 @@ test("finished: any finished state is never the picker's default, not only fixed
   assert.equal(defaultSpec(specs.slice(0, 2), lookup), null, "only finished specs: start from scratch");
   assert.equal(defaultSpec(specs)?.dir, "specs/a", "the real table does not know archived, so it is in play");
 
-  // The cards greyed for a fixed bug give a made-up finished state the same reason.
+  // The cards grayed for a fixed bug give a made-up finished state the same reason.
   const archived = { dir: "specs/a", name: "a", state: "archived" };
   for (const entry of CARD_ENTRIES) {
     const fixed = cardAvailability(entry, SCAN, { dir: "specs/b", name: "b", state: "fixed" });
@@ -463,12 +463,12 @@ test("card rules: every state still in play is taken by at least one card", () =
   assert.deepEqual(untakenStates(without, TABLE), ["no card's states take planned: add it to the skills.js entries whose card it lights"]);
 });
 
-test("card rules: a card's states and greyed reasons name only real states", () => {
+test("card rules: a card's states and grayed reasons name only real states", () => {
   const known = new Set([...Object.keys(TABLE), "none"]);
   for (const sk of SKILLS) {
     if (Array.isArray(sk.states)) for (const st of sk.states) assert.ok(known.has(st), `${sk.skill} takes ${st}, which is no state`);
-    for (const key of Object.keys(sk.greyed || {})) assert.ok(key === "default" || key === "finished" || known.has(key), `${sk.skill}'s greyed names ${key}, which is no state`);
-    if (Array.isArray(sk.states) && sk.card) assert.ok(sk.greyed && sk.greyed.default, `${sk.skill} has a default greyed reason`);
+    for (const key of Object.keys(sk.greyed || {})) assert.ok(key === "default" || key === "finished" || known.has(key), `${sk.skill}'s grayed names ${key}, which is no state`);
+    if (Array.isArray(sk.states) && sk.card) assert.ok(sk.greyed && sk.greyed.default, `${sk.skill} has a default grayed reason`);
   }
 });
 

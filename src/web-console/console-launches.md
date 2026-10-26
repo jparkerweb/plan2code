@@ -50,9 +50,9 @@ first, and post before anything slow.
 `state.scan` is `{ hasAgents, isGit, pending, specs: [{ dir, name, state, detail, touched }], handoffs, handoffsDir }`,
 a snapshot of the last `open` (a spec created mid-session appears the next time
 the session resumes as a dashboard). `pending` is how many files a commit would
-take (`null` when git cannot say): the Git card never greys out, shows the count
+take (`null` when git cannot say): the Git card never grays out, shows the count
 when there is one, and outside a repository says Git can start one. The picker
-greys the cards that do not fit the selected spec — or hides them, while the
+grays the cards that do not fit the selected spec — or hides them, while the
 **Hide unavailable workflows** switch under it is on (the default).
 
 The `menu` you post (`note`, `recommend`, `details`) describes the initially

@@ -115,7 +115,7 @@ Conventions to follow, drawn from existing entries:
 
 - Bold lead-in naming the prompt, file, or area, then an em dash (`—`), then the description.
 - Reference prompts by their command (`/plan2code-1-plan`) or path (`src/plan2code-init.md`), not by informal name.
-- One paragraph per bullet is fine — this CHANGELOG favours substantive entries over terse one-liners, and a bullet may carry extra indented paragraphs for detail.
+- One paragraph per bullet is fine — this CHANGELOG favors substantive entries over terse one-liners, and a bullet may carry extra indented paragraphs for detail.
 - A release with a big theme may open with a one-line summary paragraph directly under the `## vX.Y.Z` heading, before the first `###`.
 
 Insert the new section directly below the `All notable changes...` line and above the previous version's heading.

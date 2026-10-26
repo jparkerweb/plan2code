@@ -1,4 +1,4 @@
-// Planny's wake-up on a freshly opened dashboard: he sits powered down centre
+// Planny's wake-up on a freshly opened dashboard: he sits powered down center
 // stage until the first click or key, gets nudged awake (he rocks side to side
 // for one snore), then about five seconds of him powering on, then a glide
 // into the rail as the menu comes in.
@@ -68,7 +68,7 @@ export function playWake({ stage, bot, target, skipEl, stir, onStart, onGlide, o
       // between the two top-left corners and the scale is the width ratio.
       // The target's own box, not its bounding rect: the rail's Planny is
       // usually tilted mid-flight, and a tilted box measures wider than he
-      // is. Centred on the rect, which the tilt barely moves.
+      // is. Centered on the rect, which the tilt barely moves.
       const from = bot.getBoundingClientRect();
       const rect = target.getBoundingClientRect();
       const w = target.clientWidth || rect.width;

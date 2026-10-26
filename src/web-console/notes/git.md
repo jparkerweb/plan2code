@@ -64,7 +64,7 @@ answer. `__git` names no question, like `__stop`.
 | `plan` says | On the page |
 | --- | --- |
 | `confirm` | A `confirm` card with its `title`, `body`, `danger` and `consequences` verbatim (the consequences end with the exact command). Where the plan names files, add them as `files: [{ "path", "state" }]`. |
-| `card.kind: "switch"` | A `choice`, "Bring your changes?": exactly the `options` given, labelled **Switch and bring them** (`bring`), **Commit first** (`commit-first`), **Cancel** (`cancel`); the files in `body`, and `reason` when git would refuse (then there is no `bring`). `allowOther: false`. |
+| `card.kind: "switch"` | A `choice`, "Bring your changes?": exactly the `options` given, labeled **Switch and bring them** (`bring`), **Commit first** (`commit-first`), **Cancel** (`cancel`); the files in `body`, and `reason` when git would refuse (then there is no `bring`). `allowOther: false`. |
 | `card.kind: "dirty"` | The same `choice` for a pull that needs a clean tree: **Commit first** / **Cancel**, `reason` in `body`. |
 | `card.kind: "remote"` | A `choice`, "Publish to which remote?": one option per remote, `preset` recommended. Then `plan publish --remote <it>` and its `confirm`. |
 | `ask: false` | No card: run it on the click. |
@@ -109,9 +109,9 @@ after each commit step (N commits made), and `run: { "event": "git-conflict",
 "id": "conflict-<n>" }` once per conflict help, resolved or aborted.
 
 **Finishing** (`console-finish.md`). **Done with git** (`op: "done"`). A `done`
-that arrives while one of your cards is still open is the person cancelling it:
-record that card as cancelled (`{ "items": [{ "id": "<id>", "status":
-"answered", "answer": { "text": "Cancelled by Done with git" } }] }`, not
+that arrives while one of your cards is still open is the person canceling it:
+record that card as canceled (`{ "items": [{ "id": "<id>", "status":
+"answered", "answer": { "text": "Canceled by Done with git" } }] }`, not
 `settle`, which refuses a card nothing was sent to) in the same post as the
 finish, or, with nothing done, before resuming as the dashboard. Never run what
 the card was asking for. With something done this session: a `finish` with a

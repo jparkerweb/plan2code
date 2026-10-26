@@ -671,7 +671,7 @@ test("help: the template's icons and panels match HELP_TABS in order, headed by 
   }
 });
 
-test("help: every diagram tab has one labelled picture, the rest none; no inline styles or scripts", () => {
+test("help: every diagram tab has one labeled picture, the rest none; no inline styles or scripts", () => {
   const tpl = helpTemplate();
   assert.doesNotMatch(tpl, /\sstyle=/);
   assert.doesNotMatch(tpl, /<script/i);
@@ -691,7 +691,7 @@ test("help: every diagram tab has one labelled picture, the rest none; no inline
     assert.doesNotMatch(body, /<div class="help-figure"[^>]*><\/div>/, `${t.id}'s insertion point is filled`);
     if (t.id === "planny") {
       const fig = body.match(/<figure class="help-figure help-moods"[^>]*role="img"[^>]*aria-labelledby="hd-planny-title"/);
-      assert.ok(fig, "the Planny moods are one labelled role=img figure");
+      assert.ok(fig, "the Planny moods are one labeled role=img figure");
       const label = body.match(/id="hd-planny-title"[^>]*>([^<]*)</);
       assert.ok(label && label[1].trim(), "the moods figure's label exists and says something");
       continue;
@@ -700,9 +700,9 @@ test("help: every diagram tab has one labelled picture, the rest none; no inline
     assert.ok(svg, `${t.id} draws an svg diagram`);
     const open = svg[0].slice(0, svg[0].indexOf(">"));
     assert.match(open, /role="img"/, `${t.id}'s diagram is an image`);
-    const labelled = open.match(/aria-labelledby="([^"]+)"/);
-    assert.ok(labelled, `${t.id}'s diagram is labelled`);
-    for (const id of labelled[1].split(/\s+/)) {
+    const labeled = open.match(/aria-labelledby="([^"]+)"/);
+    assert.ok(labeled, `${t.id}'s diagram is labeled`);
+    for (const id of labeled[1].split(/\s+/)) {
       const ref = svg[1].match(new RegExp(`<(title|desc) id="${id}">([\\s\\S]*?)</\\1>`));
       assert.ok(ref && ref[2].trim(), `${t.id}'s diagram has a non-empty #${id}`);
     }

@@ -225,7 +225,7 @@ export function renderDashboard(main) {
   if (!page.local.launching && !page.launchScoping && wantScope !== page.scopeMine) hooks.syncWorkspaceScope();
 
   // "Unavailable" is the scan's verdict for the selected spec, not the
-  // momentary greying while a launch is in flight or the server is away, so
+  // momentary graying while a launch is in flight or the server is away, so
   // cards never blink out of the menu mid-handoff.
   const hide = looks.hideUnavailable;
   const sel = selSpec();
@@ -640,7 +640,7 @@ function dashCard(entry, menu) {
   const presentation = cardPresentation(entry, scan(), selSpec(), menu);
   // The agent's `recommend` and detail describe the initially selected spec.
   // Other picker choices derive both from the scan, so stale context never
-  // follows a person to a different spec or to "start from scratch". A greyed
+  // follows a person to a different spec or to "start from scratch". A grayed
   // recommendation also yields to the selected spec's actual next step.
   const going = page.local.launching && (page.local.launching.skill === entry.skill || page.local.launching.skill === entry.review);
   const b = el(

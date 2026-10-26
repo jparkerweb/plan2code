@@ -206,7 +206,7 @@ function parseGroups(overview) {
     if (cells.length < 2 || /^group$/i.test(cells[0])) continue;
     const id = plainText(cells[0]);
     const phases = phaseList(cells[1]);
-    // "None", a dash, a single phase, a group its author labelled sequential
+    // "None", a dash, a single phase, a group its author labeled sequential
     // ("A (sequential)"), or a Phases cell written as a chain ("1 → 2") is not
     // a parallel group.
     if (!id || /^(none|-|–|—)$/i.test(id) || /\bsequential\b/i.test(id) || /→|->|\bthen\b/i.test(cells[1]) || phases.length < 2) continue;

@@ -244,7 +244,7 @@ export function suggestionFrom(item) {
   if (!raw) return "";
   const stripped = raw.replace(EXAMPLE_LEAD, "").trim();
   if (!stripped) return "";
-  // Recapitalise only when a lead-in was actually removed, and never on a
+  // Recapitalize only when a lead-in was actually removed, and never on a
   // field with a shape to match: "audit-export" must not become "Audit-export".
   if (stripped !== raw && !item.pattern && /^[a-z]/.test(stripped)) {
     return stripped[0].toUpperCase() + stripped.slice(1);
@@ -358,7 +358,7 @@ export function stopAction({ handoff } = {}) {
  * answers into the files, and a request landing then is how a question ends up
  * half recorded. `waiting` is the caller's "the agent is working or a reply is
  * owed, and it has not gone adrift" -- an agent that has stopped checking in
- * never replies, and a button greyed out forever would lock the person in. An
+ * never replies, and a button grayed out forever would lock the person in. An
  * uncollected send still blocks even then, because the server takes one at a
  * time.
  */
@@ -665,7 +665,7 @@ export function dashNoteKind({ menu, hasMenu, onInitial, working }) {
  * availability — but its folder still goes along on a Pathfinder or Plan
  * launch, since the files may be reference docs.
  *
- * Returns { on, reason?, note?, next? } — `reason` is the one line a greyed card
+ * Returns { on, reason?, note?, next? } — `reason` is the one line a grayed card
  * shows, `note` the one line a clickable card shows when there is something to
  * know before launching it, `next` marks the state's natural step. `lookup` is
  * stateFor unless a test hands in its own table.
@@ -681,7 +681,7 @@ export function cardAvailability(entry, scan, sel, lookup = stateFor) {
   if (entry.skill === "plan2code-init") return hasAgents ? off(rule.greyed.default) : ON;
   if (entry.skill === "plan2code-init-update") return hasAgents ? ON : off(rule.greyed.default);
   if (entry.skill === "plan2code-git") {
-    // Never greyed: a clean tree still has branches to switch, pull and push.
+    // Never grayed: a clean tree still has branches to switch, pull and push.
     if (scan && scan.isGit === false) return { on: true, note: GIT_INIT_NOTE };
     if (scan && Number.isInteger(scan.pending) && scan.pending > 0) return { on: true, note: pendingNote(scan.pending) };
     return ON;

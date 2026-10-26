@@ -301,7 +301,7 @@ test("the editor follows the console's light and dark themes", async (t) => {
   await openNotepad(s);
   await setDoc(s, "# Heading\n\nText");
   await s.page.locator("#notepad-editor .cm-h1").waitFor();
-  const colours = (theme) =>
+  const colors = (theme) =>
     s.page.evaluate((th) => {
       document.documentElement.setAttribute("data-theme", th);
       const root = getComputedStyle(document.documentElement);
@@ -325,13 +325,13 @@ test("the editor follows the console's light and dark themes", async (t) => {
         background: getComputedStyle(shadow.querySelector(".cm-editor")).backgroundColor,
       };
     }, theme);
-  const light = await colours("light");
-  const dark = await colours("dark");
+  const light = await colors("light");
+  const dark = await colors("dark");
   for (const [name, c] of Object.entries({ light, dark })) {
     assert.equal(c.text, c.ink, `${name}: text in the console's ink`);
-    assert.equal(c.heading, c.accent, `${name}: headings in the highlight colour`);
-    assert.equal(c.caret, c.accent, `${name}: the caret in the highlight colour`);
-    assert.equal(c.background, c.panel, `${name}: the editor on the panel colour`);
+    assert.equal(c.heading, c.accent, `${name}: headings in the highlight color`);
+    assert.equal(c.caret, c.accent, `${name}: the caret in the highlight color`);
+    assert.equal(c.background, c.panel, `${name}: the editor on the panel color`);
   }
   assert.notEqual(light.text, dark.text, "the two themes differ");
   assert.notEqual(light.background, dark.background);
@@ -706,7 +706,7 @@ test("Delete asks twice, Escape backs out of either, and only the second confirm
   await panel.waitFor({ state: "hidden" });
   assert.equal(fs.existsSync(folder), true);
 
-  // Both confirms: gone, with its folder, and the neighbour is shown.
+  // Both confirms: gone, with its folder, and the neighbor is shown.
   await s.page.click(X_SELECTED);
   await s.page.click("#notepad-delete-go");
   await s.page.click("#notepad-delete-go");
@@ -714,7 +714,7 @@ test("Delete asks twice, Escape backs out of either, and only the second confirm
   await s.page.waitForFunction(() => document.querySelectorAll("#notepad-tabs .notepad-tab").length === 1);
   assert.deepEqual(await selectedName(s), ["Notes"]);
   assert.equal(await shows(s, "keep me"), "keep me");
-  assert.equal(listTabs(s.project).last, idOf(s, "Notes"), "the neighbour became the last tab");
+  assert.equal(listTabs(s.project).last, idOf(s, "Notes"), "the neighbor became the last tab");
 
   // Delete the last tab: the empty state, with the focus on its button.
   await s.page.click(X_SELECTED);
@@ -808,7 +808,7 @@ test("when the tab after a delete cannot be loaded, the deleted text is not left
   await typeInto(s, "doomed text");
   const ideas = idOf(s, "Ideas");
   await until(() => readNotepad(s.project, ideas).text === "doomed text", 4000);
-  // The neighbour's read fails, as if the connection dropped right after the delete.
+  // The neighbor's read fails, as if the connection dropped right after the delete.
   await s.page.route("**/notepad?tab=*", (route) => route.abort());
   await s.page.click(X_SELECTED);
   await s.page.click("#notepad-delete-go");
@@ -836,8 +836,8 @@ const readyCount = (s, n) =>
   s.page.waitForFunction((want) => document.querySelectorAll("#notepad-strip > li.is-ready").length === want, n, { timeout: 5000 });
 
 // A small PNG drawn in the page, as base64: a real picture for reencode() to
-// decode, one colour per call so the pictures differ.
-const pngBase64 = (s, colour) =>
+// decode, one color per call so the pictures differ.
+const pngBase64 = (s, color) =>
   s.page.evaluate(async (fill) => {
     const c = document.createElement("canvas");
     c.width = 320;
@@ -849,13 +849,13 @@ const pngBase64 = (s, colour) =>
     let bin = "";
     for (const b of new Uint8Array(await blob.arrayBuffer())) bin += String.fromCharCode(b);
     return btoa(bin);
-  }, colour);
+  }, color);
 
-const pngFile = async (s, colour, name = "shot.png") => ({ name, mimeType: "image/png", buffer: Buffer.from(await pngBase64(s, colour), "base64") });
+const pngFile = async (s, color, name = "shot.png") => ({ name, mimeType: "image/png", buffer: Buffer.from(await pngBase64(s, color), "base64") });
 
-async function addViaButton(s, colour) {
+async function addViaButton(s, color) {
   const before = stored(s).length;
-  await s.page.setInputFiles("#notepad-file", await pngFile(s, colour));
+  await s.page.setInputFiles("#notepad-file", await pngFile(s, color));
   await until(() => stored(s).length === before + 1 && filesOf(s, stored(s).at(-1).id).every(Boolean), 5000);
   await readyCount(s, before + 1);
 }
@@ -863,7 +863,7 @@ async function addViaButton(s, colour) {
 // A synthetic paste or drop of one PNG, sent to the editor, where a person's
 // would land. A paste answers whether the page took it from the editor, a
 // drop whether the dialog lit up while it was dragged over.
-const sendPicture = (s, kind, colour) =>
+const sendPicture = (s, kind, color) =>
   s.page.evaluate(
     async ({ kind, fill }) => {
       const c = document.createElement("canvas");
@@ -882,7 +882,7 @@ const sendPicture = (s, kind, colour) =>
       ta.dispatchEvent(new DragEvent("drop", { dataTransfer: dt, bubbles: true, cancelable: true, composed: true }));
       return lit;
     },
-    { kind, fill: colour },
+    { kind, fill: color },
   );
 
 test("Add image, paste and drop each add a thumbnail whose files are on disk and which survives closing", async (t) => {
@@ -963,7 +963,7 @@ test("the X asks first: Keep keeps the picture, Delete removes both its files", 
 test("the preview opens at the clicked picture, steps and wraps, and Esc closes it before the Notebook", async (t) => {
   const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_QUESTION });
   await openNotepad(s);
-  for (const colour of ["#c33", "#3c3", "#33c"]) await addViaButton(s, colour);
+  for (const color of ["#c33", "#3c3", "#33c"]) await addViaButton(s, color);
   const urls = stored(s).map((img) => img.url);
   const shown = () =>
     s.page.evaluate(() => ({

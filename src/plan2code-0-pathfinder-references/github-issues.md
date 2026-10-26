@@ -4,7 +4,7 @@
 >
 > **Local-file maps never load this file.** If `## Ground rules` says `**Backend:** local`, close it and use `questions.md`.
 
-Everything the skill says about *judgement* is unchanged by the backend: the fog-vs-question test, the destination grill, one question at a time, the decide-menu-checkpoint cadence, HITL is never self-answered, the Clearing Gate rubric. This file changes only *where the bytes go*.
+Everything the skill says about *judgment* is unchanged by the backend: the fog-vs-question test, the destination grill, one question at a time, the decide-menu-checkpoint cadence, HITL is never self-answered, the Clearing Gate rubric. This file changes only *where the bytes go*.
 
 ---
 
@@ -17,13 +17,13 @@ A map on GitHub Issues buys three things local files cannot:
 | | Local files | GitHub Issues |
 |---|---|---|
 | Visibility | One machine, one person | Anyone with repo access, in a UI they already have open |
-| Blocking | A `Blocked by:` line only an agent reads | Native issue dependencies — GitHub greys out blocked issues in its own UI |
+| Blocking | A `Blocked by:` line only an agent reads | Native issue dependencies — GitHub grays out blocked issues in its own UI |
 | Concurrency | One session at a time by construction | Several people can work unblocked questions at once; the assignee is a real lock |
 
 It costs three things too, and the human must know all three before they pick it:
 
 1. **Issues on a public repo are public.** The destination, the rejected alternatives, the codebase recon, the technical debt in the blast radius — all of it is world-readable the moment it is written. Never chart to a public repo's tracker anything that would embarrass the project or leak a customer.
-2. **It writes to shared state.** A local map costs nothing to abandon. Twelve stale issues labelled `pathfinder:grill-hitl` on a team's tracker is litter someone has to clean.
+2. **It writes to shared state.** A local map costs nothing to abandon. Twelve stale issues labeled `pathfinder:grill-hitl` on a team's tracker is litter someone has to clean.
 3. **It needs `gh`, auth, and issues enabled.** More that can break, in a step whose whole job is to remove friction.
 
 ---
@@ -69,7 +69,7 @@ This is the whole mapping. Everything below expands a row.
 
 | Local file model | GitHub Issues model |
 |---|---|
-| `specs/<idea>/pathfinder/map.md` | One issue, labelled `pathfinder:map`, titled `Map: <idea>` |
+| `specs/<idea>/pathfinder/map.md` | One issue, labeled `pathfinder:map`, titled `Map: <idea>` |
 | `questions/NN-<slug>.md` | A **sub-issue** of the map, titled with the question name |
 | `NN` ordering | The map's sub-issue order — the order they were created, which is dependency order |
 | `## Question` in the file | The issue body |
@@ -79,7 +79,7 @@ This is the whole mapping. Everything below expands a row.
 | `State: open` | Issue open, **no assignee** |
 | `State: claimed` | Issue open, **assigned** |
 | `State: resolved` | Issue **closed as completed**, with an `## Answer` comment |
-| `State: out-of-scope` | Issue **closed as not planned**, labelled `pathfinder:out-of-scope`, no `## Answer` |
+| `State: out-of-scope` | Issue **closed as not planned**, labeled `pathfinder:out-of-scope`, no `## Answer` |
 | `Blocked by: 02, 04` | Native issue dependencies (`dependencies/blocked_by`) |
 | `Locked: yes` | The `pathfinder:locked` label |
 | `Claimed: <timestamp>` | GitHub's own assignment event in the timeline |
@@ -221,7 +221,7 @@ gh api --method POST repos/<owner>/<repo>/issues/<blocked-number>/dependencies/b
 
 **The database id is the single most common failure in this backend.** `gh api repos/o/r/issues/42 --jq .id` returns something like `2716143027`. The `42` is the *number*; `I_kwDO...` is the *node id*. The node id is rejected outright. The *number* is worse: a small integer like `42` is itself a perfectly valid database id — of some unrelated issue created years ago — so the call can succeed and silently attach the wrong thing. Fetch `.id` for every issue you are about to reference, and never hand-assemble one.
 
-Charting still writes `00-codebase-context`'s equivalent — the Step 3 recon you held. Create it **first**, labelled `pathfinder:legwork-afk`, post the recon as an `## Answer` comment, and close it as completed in the same pass. It is resolved on arrival, exactly as in local mode, and it is what the handoff's `## System Context` is built from.
+Charting still writes `00-codebase-context`'s equivalent — the Step 3 recon you held. Create it **first**, labeled `pathfinder:legwork-afk`, post the recon as an `## Answer` comment, and close it as completed in the same pass. It is resolved on arrival, exactly as in local mode, and it is what the handoff's `## System Context` is built from.
 
 ### If the endpoints are unavailable
 
@@ -384,7 +384,7 @@ Research subagents work the same way with one substitution: the brief carries th
 
 Identical in shape; the inputs come from the query instead of the checklist.
 
-- **Heading** — `🧭 <idea> · <Status> · <closed>/<total> cleared`, where `<total>` excludes anything labelled `pathfinder:out-of-scope`.
+- **Heading** — `🧭 <idea> · <Status> · <closed>/<total> cleared`, where `<total>` excludes anything labeled `pathfinder:out-of-scope`.
 - **Glyph order** — sub-issue order, the same order Chart Step 6 created them in.
 - **Glyphs** — `●` closed as completed · `◉` open and assigned to you · `○` open, unassigned, unblocked · `⊘` open with `blocked_by > 0` · `⊝` closed as not planned.
 - **Named legend** — names, never `#numbers`. `(blocked:<name>)` names the blocker rather than numbering it, since there is no stable `NN` to point at.

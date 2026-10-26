@@ -73,7 +73,7 @@ port, and the filesystem as transport; this CLI is the whole agent surface.
           A bounded wait slice, sized below your shell timeout. Exit 0 = the
           result is on stdout, 10 = still waiting ("Waiting on your answer
           in the web console"; call again), 20 = server gone (open --resume
-          <sid>), 30 = cancelled. Exits 0 and 10 carry terminalLine.
+          <sid>), 30 = canceled. Exits 0 and 10 carry terminalLine.
           Exit 0 may carry "chat" (Quick questions); with no card send it
           is type: "chat" and actions is empty. Exit 0 may also carry
           "workspace" (changes since you last heard, each once, with a

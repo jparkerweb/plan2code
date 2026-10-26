@@ -71,7 +71,7 @@ A reproduction written as a new test inside the project is offered, never assume
 ### Step 3: Narrow
 
 - **A known-good version exists** (it worked before): `git bisect` with the reproduction as the check, in a throwaway worktree (`git worktree add <tmp> HEAD`, removed at the end) so the person's checkout never moves; in place only on a clean tree, with `git bisect reset` before you finish. Then read the commit it lands on.
-- **Otherwise:** read the code path from the entry point the reproduction hits to where the wrong value or behaviour first appears.
+- **Otherwise:** read the code path from the entry point the reproduction hits to where the wrong value or behavior first appears.
 - Temporary logging only outside the source tree, or reverted at once.
 
 Stop when you can name the line where right turns into wrong.

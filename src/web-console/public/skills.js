@@ -33,7 +33,7 @@
 //              always on whatever is picked; null for no card
 //   marksNext  the card can be a state's natural next step, so its answer
 //              always says whether it is (`next`)
-//   greyed     its greyed reasons: `default`, plus one per state whose
+//   greyed     (the field keeps its old spelling) its grayed reasons: `default`, plus one per state whose
 //              wording differs, and `finished` for any finished state
 //              (spec-states.js); Init and Init update use `default` for the
 //              AGENTS.md check, which is a rule on the scan, not on the spec

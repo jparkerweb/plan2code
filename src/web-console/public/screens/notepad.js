@@ -333,7 +333,7 @@ async function reorder(order, focus) {
 }
 
 // A tab is no longer there (deleted here, or from another page): off the bar,
-// its unsaved text dropped without a save, and its neighbour on screen.
+// its unsaved text dropped without a save, and its neighbor on screen.
 async function gone(id, index = tabs.findIndex((t) => t.id === id), announce = true) {
   const here = id === activeId;
   if (here || id === saveTab) discard();

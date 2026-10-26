@@ -164,7 +164,7 @@ test("Continue here is hidden once the session meter is red, and the command and
 // Under the desktop app (PLAN2CODE_IN_APP=1) the fresh-session advice in the
 // meter's popover and the dashboard's red banner must point at the app's own
 // New Session, never a command to copy into a terminal that is not there:
-// the popover's is a button filled with the user's highlight colour.
+// the popover's is a button filled with the user's highlight color.
 test("under the app, the meter popover and the dashboard's red banner point at New Session, not a command", async (t) => {
   const s = await openSession(await suite.browser(), {
     t,
@@ -185,11 +185,11 @@ test("under the app, the meter popover and the dashboard's red banner point at N
     const probe = document.createElement("i");
     probe.style.color = "var(--accent)";
     n.append(probe);
-    const colour = getComputedStyle(probe).color;
+    const color = getComputedStyle(probe).color;
     probe.remove();
-    return [getComputedStyle(n).backgroundColor, colour];
+    return [getComputedStyle(n).backgroundColor, color];
   });
-  assert.equal(fill, highlight, "filled with the user's highlight colour");
+  assert.equal(fill, highlight, "filled with the user's highlight color");
   assert.equal(await fresh.locator("code").count(), 0, "no command to copy under the app");
 });
 

@@ -51,13 +51,13 @@ For each CLI, compare the discovered list with the current one by `id` and show 
 | --- | --- | --- | --- | --- |
 | added | `new-id` | — | New label | `devin models list` |
 | gone | `old-id` | Old label | — | not in `devin models list` |
-| relabelled | `same-id` | Old label | New label | Claude Code docs: <page> |
+| relabeled | `same-id` | Old label | New label | Claude Code docs: <page> |
 
 - **added:** offered by the CLI, not in the file.
 - **gone:** in the file, no longer offered.
-- **relabelled:** same `id`, a better or changed label. Propose a label in the file's existing style.
+- **relabeled:** same `id`, a better or changed label. Propose a label in the file's existing style.
 
-Summarise unchanged entries as a count under the table ("19 Devin entries unchanged") instead of listing them. If approving every **added** Devin row would take the list past 30 entries, say so above the table and by how many. Call out any likely rename before approval (see the rename warning under Validation rules). If both tables are empty, say the file is current and stop.
+Summarize unchanged entries as a count under the table ("19 Devin entries unchanged") instead of listing them. If approving every **added** Devin row would take the list past 30 entries, say so above the table and by how many. Call out any likely rename before approval (see the rename warning under Validation rules). If both tables are empty, say the file is current and stop.
 
 ### Step 6 — Approve each change
 
@@ -68,7 +68,7 @@ Ask about each row, one at a time: **yes**, **no**, or **edit the label** (they 
 Apply only the approved rows:
 
 - Keep `_note` verbatim.
-- Keep the existing order. Remove a **gone** entry where it stands, change a **relabelled** label in place, and append each **added** entry at the end of its list.
+- Keep the existing order. Remove a **gone** entry where it stands, change a **relabeled** label in place, and append each **added** entry at the end of its list.
 - Write two-space-indented JSON with a trailing newline, matching the file's current formatting.
 
 ### Step 8 — Validate

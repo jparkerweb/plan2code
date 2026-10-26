@@ -245,7 +245,7 @@ export function buildPager(item) {
   // Once this question is answered, the step is the next unanswered one, not
   // Send. Send lighting up the moment a single answer is staged pulls people
   // into sending one question at a time, which is three round trips where the
-  // workflow wanted one. So the emphasis moves to whichever neighbour still
+  // workflow wanted one. So the emphasis moves to whichever neighbor still
   // needs them, and Send goes quiet until nothing does.
   const here = Boolean(page.local.staged[item.id]);
   const nextT = open[at + 1];
@@ -257,7 +257,7 @@ export function buildPager(item) {
   const leadNext = here && needs(nextT);
   const leadPrev = here && !leadNext && needs(prevT);
 
-  // An end of the queue is an empty slot, not a disabled button. A greyed
+  // An end of the queue is an empty slot, not a disabled button. A grayed
   // "Previous" pointing at nothing is a control that exists only to say no.
   const mk = (target, back, lead) => {
     if (!target) return el("span", "pager-slot");
@@ -1348,7 +1348,7 @@ function buildList(card, item, staged) {
   // over the array from render time. A reorder replaces that array, so a stale
   // closure would quietly undo the reorder the next time a rename committed.
   // A name still being typed counts too: the tool buttons below keep the
-  // field's focus (their mousedown is cancelled), so its `change` has not
+  // field's focus (their mousedown is canceled), so its `change` has not
   // fired yet when they act, and the re-render would otherwise drop it.
   const ul = el("ul", "rows");
   const baseRows = () => {

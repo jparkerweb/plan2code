@@ -59,7 +59,7 @@ export class NotepadError extends Error {
 
 /* ------------------------------------------------------------------ names */
 
-// `<folder-name>-<first 12 hex of sha256(foldKey(folder))>`: recognisable in a
+// `<folder-name>-<first 12 hex of sha256(foldKey(folder))>`: recognizable in a
 // file browser, safe on every OS, and one notepad per folder however its case
 // is typed where the file system ignores case.
 export function notepadKey(folder) {

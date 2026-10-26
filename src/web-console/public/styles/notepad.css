@@ -101,7 +101,7 @@
 
 /* The full-screen preview: the whole viewport, the picture contained in it,
    on a near-black backdrop in both themes (a picture is judged against dark,
-   whatever the page's theme), so its colours are fixed, not tokens. */
+   whatever the page's theme), so its colors are fixed, not tokens. */
 .modal.notepad-preview {
   inset: 0;
   width: 100vw;

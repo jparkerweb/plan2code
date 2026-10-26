@@ -253,7 +253,7 @@ function appJsReaders(dir) {
       const publicPath = /["']public["']\s*,\s*["']app\.js["']|\bpublic\/app\.js/.test(text) && /\breadFile(Sync)?\b/.test(text);
       return oneStatement || handedToAHelper || publicPath;
     })
-    .map((f) => `${f} reads public/app.js as text: test the behaviour in a page test, or read the screen file that holds it`);
+    .map((f) => `${f} reads public/app.js as text: test the behavior in a page test, or read the screen file that holds it`);
 }
 
 test("shape: no test in scripts/ reads public/app.js as text", () => {
@@ -266,10 +266,10 @@ test("shape: the app.js check names the test file that reads it", () => {
     fs.writeFileSync(path.join(dir, "test-fine.mjs"), 'const r = await fetch(base + "/app.js");\nfs.appendFileSync(path.join(d, "src", "app.js"), "x");\n');
     assert.deepEqual(appJsReaders(dir), []);
     fs.writeFileSync(path.join(dir, "test-reads-it.mjs"), 'const app = fs.readFileSync(path.join(ROOT, "public", "app.js"), "utf8");\n');
-    assert.deepEqual(appJsReaders(dir), ["test-reads-it.mjs reads public/app.js as text: test the behaviour in a page test, or read the screen file that holds it"]);
+    assert.deepEqual(appJsReaders(dir), ["test-reads-it.mjs reads public/app.js as text: test the behavior in a page test, or read the screen file that holds it"]);
     fs.rmSync(path.join(dir, "test-reads-it.mjs"));
     fs.writeFileSync(path.join(dir, "test-alias.mjs"), 'const web = (f) => fs.readFileSync(path.join(ROOT, "public", f), "utf8");\nconst app = web("app.js");\n');
-    assert.deepEqual(appJsReaders(dir), ["test-alias.mjs reads public/app.js as text: test the behaviour in a page test, or read the screen file that holds it"]);
+    assert.deepEqual(appJsReaders(dir), ["test-alias.mjs reads public/app.js as text: test the behavior in a page test, or read the screen file that holds it"]);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }

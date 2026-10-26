@@ -73,7 +73,7 @@ export function useCli(cli) {
 
 // PLAN2CODE_CONSOLE_TRACE=1 prints where the time goes, to stderr: the
 // start path is what stands between someone and their first look at the page,
-// and it is only worth optimising with numbers in hand.
+// and it is only worth optimizing with numbers in hand.
 const TRACE = Boolean(process.env.PLAN2CODE_CONSOLE_TRACE);
 function trace(what) {
   if (TRACE) process.stderr.write(`trace ${Math.round(performance.now())}ms ${what}\n`);

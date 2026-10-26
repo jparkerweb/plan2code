@@ -11,7 +11,7 @@
 //
 // PLAN2CODE_PICKER_ECHO (tests only, beside PLAN2CODE_NO_BROWSER): when set
 // in the server's environment, /workspace/browse returns it as the picked
-// folder instead of opening a picker, and "-" as a cancelled one.
+// folder instead of opening a picker, and "-" as a canceled one.
 
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -26,7 +26,7 @@ import { readChat } from "../src/web-console/inbox.mjs";
 export const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 export const CONSOLE_CLI = path.join(ROOT, "src", "web-console", "console.mjs");
 
-// Canonicalised the same way server.mjs canonicalises a session dir (DIR,
+// Canonicalized the same way server.mjs canonicalizes a session dir (DIR,
 // server.mjs): on a machine whose %TEMP% itself resolves through an 8.3
 // short name (seen in the wild on Windows), a server started later writes
 // `state.worktree` in its realpath'd form, while anything in a test that

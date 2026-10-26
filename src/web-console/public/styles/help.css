@@ -144,7 +144,7 @@
 .help-mood-bot { width: 40px; height: 56px; }
 .help-mood span { font-size: 12.5px; color: var(--ink-2); text-align: center; }
 
-/* The travelling highlight on the flow diagrams: only on the visible panel,
+/* The traveling highlight on the flow diagrams: only on the visible panel,
    only while the dialog is open, and only when the system allows motion.
    Otherwise the dashes simply sit still. */
 @media (prefers-reduced-motion: no-preference) {

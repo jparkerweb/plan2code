@@ -59,7 +59,7 @@ On the console the page draws the board itself from `state.git`; you never post 
 
 1. Post an `activity` line ("Pulling from origin…"); collecting the click already set the page to working.
 2. Run `git.mjs plan <op>` with the action's fields as flags.
-3. With `ask: true`: a `confirm` becomes a `confirm` card, posted verbatim (`danger` and `consequences` as given; `files` as a `[{ path, state }]` table where the plan names files). A `card` of kind `switch`, `dirty` or `remote` becomes a `choice` card with exactly its `options`, labelled **Switch and bring them** (`bring`), **Commit first** (`commit-first`) and **Cancel** (`cancel`), or for `remote` one option per remote with `preset` recommended; put git's `reason` in `body` when given. Then wait for the answer. A `remote` pick plans `publish --remote <it>` again and asks its `confirm`.
+3. With `ask: true`: a `confirm` becomes a `confirm` card, posted verbatim (`danger` and `consequences` as given; `files` as a `[{ path, state }]` table where the plan names files). A `card` of kind `switch`, `dirty` or `remote` becomes a `choice` card with exactly its `options`, labeled **Switch and bring them** (`bring`), **Commit first** (`commit-first`) and **Cancel** (`cancel`), or for `remote` one option per remote with `preset` recommended; put git's `reason` in `body` when given. Then wait for the answer. A `remote` pick plans `publish --remote <it>` again and asks its `confirm`.
 4. Run the command(s).
 5. In ONE post: `{ "reread": true }`, the `git-result` notice (one line: what happened, with short hashes, and after a push or publish the link from `pr-url`), `board: { describe }` when changes remain (a short kebab-case description of them, for the Create prompt), posted with `--wait`.
 
@@ -74,7 +74,7 @@ On a non-zero exit, save git's stderr to the session folder, run `classify-error
 - **commit** commits only the paths in `files`. With `ignore[]`, first propose those `.gitignore` lines as a doc plus a `review` card (approve / change), write them on approve, and add `.gitignore` to the commit.
 - **abort**, **continue**: `plan abort` / `plan continue`, then `reread`.
 - **pr-host**: the server already saved the answer; post `reread` only.
-- **done** (Done with git): Session End; a card of yours still open is cancelled first (notes/git.md).
+- **done** (Done with git): Session End; a card of yours still open is canceled first (notes/git.md).
 - Deleting a branch on the remote is never offered and never run.
 
 ## Conflict help

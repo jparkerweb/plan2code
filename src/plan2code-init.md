@@ -74,7 +74,7 @@ The `Failure log` section below is a recording of mistakes made by previous AI A
 
 When you make a mistake, get corrected, or discover something about this codebase that wasn't written down:
 
-1. Add one line to the `Failure log` below, in the imperative, describing the correct behaviour.
+1. Add one line to the `Failure log` below, in the imperative, describing the correct behavior.
 2. Keep it specific to this repo. General advice belongs nowhere.
 3. If this fix is a workflow rather than a rule, put it in `.claude/skills/` and link it from here.
 4. Include the change in the same commit and mention it in your summary.

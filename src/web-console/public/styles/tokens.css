@@ -1,4 +1,4 @@
-/* tokens.css: Colours, type, sizes and the light and dark themes: the variables every other file reads. */
+/* tokens.css: Colors, type, sizes and the light and dark themes: the variables every other file reads. */
 
 /* Plan2Code Console.
    Light by default, dark when the system asks. No external fonts: the page must
@@ -24,7 +24,7 @@
   --warn: #9c3327;
   --warn-soft: #fbe7e3;
   --focus: #1f6feb;
-  /* Rank colours for low / mid / high badges (a helper's strength and effort). */
+  /* Rank colors for low / mid / high badges (a helper's strength and effort). */
   --lvl-1: #23716a;
   --lvl-1-soft: #e1f1ee;
   --lvl-2: #9a6a12;

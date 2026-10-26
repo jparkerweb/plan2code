@@ -247,7 +247,7 @@ test("nextAbout: pick sets about, drop and sent clear it, the old Ask events do 
   assert.equal(JSON.stringify(picked), before, "prev is never mutated");
 });
 
-test("nextAbout: an old { about, frozen, dropped } tracker normalises to the new shape", () => {
+test("nextAbout: an old { about, frozen, dropped } tracker normalizes to the new shape", () => {
   const old = { about: CARD_Q1, frozen: true, dropped: false };
   assert.deepEqual(nextAbout(old, { type: "leave-ask" }), { history: [], about: CARD_Q1 });
   assert.deepEqual(nextAbout({ frozen: false, dropped: true }, {}), { history: [], about: null });

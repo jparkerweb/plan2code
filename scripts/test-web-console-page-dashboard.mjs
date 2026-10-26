@@ -19,7 +19,7 @@ const suite = pageSuite(test);
 // A project that is set up (AGENTS.md) with one spec holding a Plan draft.
 // A PLAN-DRAFT whose Status line says only "Draft" (no "Resume at Phase N")
 // scans as `planned`, which the picker labels "Ready to document". Plan is
-// still lit for it (only exploring, fixed and documented-or-later grey Plan
+// still lit for it (only exploring, fixed and documented-or-later gray Plan
 // out); Document is the state's own next step.
 const DRAFT_PROJECT = {
   "AGENTS.md": "# AGENTS.md\n\nA small demo project.\n",
@@ -60,7 +60,7 @@ test("a Plan launch from the dashboard carries the picked spec, and its resume t
 
   // The Plan card is lit for this spec; picking it asks to confirm.
   const planCard = main.getByRole("button").filter({ has: s.page.locator("code", { hasText: /^\/plan2code-1-plan$/ }) });
-  assert.equal(await planCard.isEnabled(), true, "the Plan card is greyed for a drafted plan");
+  assert.equal(await planCard.isEnabled(), true, "the Plan card is grayed for a drafted plan");
   await planCard.click();
   await main.getByRole("button", { name: "Start Plan" }).click();
 
@@ -146,7 +146,7 @@ test("a fixed bug is hidden while unavailable workflows are, dimmed when they sh
   assert.equal(await demo.getAttribute("aria-current"), "true", "the picker opens on the plan, not the newer fixed bug");
   assert.equal(await chipFor(main, "old-bug").count(), 0, "the fixed bug's chip is hidden while unavailable workflows are");
 
-  // Switched off: the chip shows, labelled and dimmed, and still not picked.
+  // Switched off: the chip shows, labeled and dimmed, and still not picked.
   await hideUnavailable(main, false);
   const bug = chipFor(main, "old-bug");
   await bug.waitFor();
@@ -180,7 +180,7 @@ test("a fixed bug's Delete asks once with no name to type, while any other spec 
 
   // The fixed bug: a visible Delete, its own warning, and one press sends it.
   const del = main.getByRole("button", { name: "Delete the spec old-bug" });
-  assert.equal(await textOf(del), "Delete", "a fixed bug's Delete is a labelled button");
+  assert.equal(await textOf(del), "Delete", "a fixed bug's Delete is a labeled button");
   await del.click({ force: true });
   await dialog.waitFor();
   assert.match(await textOf(s.page.locator("#delete-warn")), /The bug is fixed, so this only clears the write-up/);
@@ -203,17 +203,17 @@ const pickedChip = (main, name) => main.locator('button[aria-current="true"]', {
 
 // What a person would see break: picking another target leaves the launch
 // aimed at the old spec, or the cards lit for it.
-test("picking Start from scratch instead of a spec greys Document, and a launch then carries no spec", async (t) => {
+test("picking Start from scratch instead of a spec grays Document, and a launch then carries no spec", async (t) => {
   const s = await openSession(await suite.browser(), { t, workflow: "dashboard", payload: MENU, project: tempProject(DRAFT_PROJECT) });
   const main = await toTheMenu(s);
   const document = lightOf(main, "/plan2code-2-document");
   await pickedChip(main, "demo").waitFor();
   assert.equal(await document.isEnabled(), true, "Document is lit for the drafted spec");
 
-  // From scratch there is no draft to document: the card greys.
+  // From scratch there is no draft to document: the card grays.
   await chipFor(main, "Start from scratch").click();
   await pickedChip(main, "Start from scratch").waitFor();
-  assert.equal(await document.isDisabled(), true, "Document is greyed with no spec picked");
+  assert.equal(await document.isDisabled(), true, "Document is grayed with no spec picked");
   assert.equal(await chipFor(main, "demo").getAttribute("aria-current"), "false");
 
   // Back on the spec it is lit again; then from scratch once more to launch.
@@ -270,7 +270,7 @@ async function openHandoffMenu(t, env) {
 // project has, or picking it still shows the skill cards beside the preview.
 test("a handoff shows as a dashed Handoff chip even with no spec, and picking it swaps the cards for a preview of four buttons", async (t) => {
   const { main, chip } = await openHandoffMenu(t);
-  assert.match(await textOf(chip), /Handoff/i, "the chip is labelled Handoff");
+  assert.match(await textOf(chip), /Handoff/i, "the chip is labeled Handoff");
   assert.equal(await chip.getAttribute("aria-current"), "false", "a handoff is offered, not picked for you");
   assert.equal(await chip.evaluate((b) => getComputedStyle(b).borderTopStyle), "dashed", "the chip's border is dashed");
   assert.ok(await lightOf(main, "/plan2code-1-plan").isVisible(), "the cards show before a handoff is picked");

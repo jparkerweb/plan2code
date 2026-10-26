@@ -12,7 +12,7 @@
 // className, id, type, value, checked, disabled, textContent, placeholder,
 // title, open, href, target, rel, tabIndex. Text runs are h.el("span", null, text).
 //
-// Every button, input and select is made through control(), which greys it
+// Every button, input and select is made through control(), which grays it
 // out whenever controlAllowed(mode, role) says no and stamps data-gate with
 // its role; one disabled for a reason of the view's own also carries
 // data-own. The guard test in scripts/test-web-console-git-board.mjs holds
@@ -64,7 +64,7 @@ function control(ctx, tag, className, label, { role = "action", onClick, onInput
   return node;
 }
 
-// A copy button is a control like any other: greyed while busy.
+// A copy button is a control like any other: grayed while busy.
 function copy(ctx, text, cls, codeEl) {
   const b = ctx.h.copyButton(text, cls, codeEl);
   b.setAttribute("data-gate", "action");

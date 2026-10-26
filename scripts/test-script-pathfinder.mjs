@@ -378,7 +378,7 @@ test("pathfinder brief-data: calendar dates only, no future since, no NNs or lin
 
 /* ===================================================== review-fix regressions */
 
-test("pathfinder: claim, resolve and rule-out honour --dry-run", () => {
+test("pathfinder: claim, resolve and rule-out honor --dry-run", () => {
   const { root, pf } = mapFixture();
   const P = (...a) => runScript("plan2code-0-pathfinder", "pathfinder.mjs", [...a, "--root", root]);
   P("reconcile", "audit-export");

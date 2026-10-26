@@ -1097,31 +1097,31 @@ async function cmdLint(loc) {
       if (b === q.nn) add("error", q.path, "is blocked by itself");
     }
   }
-  // Cycles in Blocked by: a three-colour depth-first search (grey = on the
+  // Cycles in Blocked by: a three-color depth-first search (gray = on the
   // current path, black = fully explored), so each question is explored once
   // however densely the questions block each other. Every back edge is a
   // cycle, reported once, against the question it starts from.
   const reported = new Set();
-  const colour = new Map();
+  const color = new Map();
   const pathStack = [];
   const visit = (nn) => {
-    colour.set(nn, "grey");
+    color.set(nn, "gray");
     pathStack.push(nn);
     for (const b of byNN.get(nn).blockedBy) {
       if (!byNN.has(b)) continue;
-      if (colour.get(b) === "grey") {
+      if (color.get(b) === "gray") {
         const c = [...pathStack.slice(pathStack.indexOf(b)), b];
         const key = [...new Set(c)].sort().join(",");
         if (!reported.has(key)) {
           reported.add(key);
           add("error", byNN.get(b).path, `Blocked by: cycle ${c.join(" -> ")}; a cycle is one decision phrased twice (merge them or drop an edge)`);
         }
-      } else if (!colour.has(b)) visit(b);
+      } else if (!color.has(b)) visit(b);
     }
     pathStack.pop();
-    colour.set(nn, "black");
+    color.set(nn, "black");
   };
-  for (const q of questions) if (!colour.has(q.nn)) visit(q.nn);
+  for (const q of questions) if (!color.has(q.nn)) visit(q.nn);
   // Scraper bait in the files the collector or a reader treats as planning output.
   const baitFiles = [loc.mapPath, ...walk(path.join(loc.pf, "briefs"))];
   for (const n of fs.existsSync(loc.ideaDir) ? fs.readdirSync(loc.ideaDir) : []) {

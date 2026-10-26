@@ -38,7 +38,7 @@ plan2code-metrics   # → "View metrics status"            the dashboard
 |------|--------------|
 | **1** | Raw data and a basic dashboard. Start here. |
 | **3+** | AI analysis unlocks. Pattern detection starts working. |
-| **5–10+** | Averages stabilise; generation-over-generation comparisons become meaningful. |
+| **5–10+** | Averages stabilize; generation-over-generation comparisons become meaningful. |
 
 You're looking for trends, not individual scores.
 
@@ -46,7 +46,7 @@ You're looking for trends, not individual scores.
 
 ## Sending feedback upstream
 
-`/plan2code-4-finalize` can submit an anonymised metrics payload to the maintainers as a
+`/plan2code-4-finalize` can submit an anonymized metrics payload to the maintainers as a
 `community-feedback` issue on the repo. Community runs are cohorted by the Plan2Code version that
 produced them, so your data improves the prompts everyone installs — without displacing the
 maintainer's own measurements.

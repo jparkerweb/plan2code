@@ -8,7 +8,7 @@
 
 import { spawn } from "node:child_process";
 
-/** The link to open, normalised, or null when it is not a plain http or https link. */
+/** The link to open, normalized, or null when it is not a plain http or https link. */
 export function linkToOpen(raw) {
   if (typeof raw !== "string" || raw.length > 4096) return null;
   let url;
