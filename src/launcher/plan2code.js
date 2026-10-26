@@ -19,6 +19,10 @@
  * Self-contained, Node built-ins only: install.js copies this file to ~/.plan2code/bin/ and
  * points the global shims at it.
  *
+ * Custom agents: the person's own agent CLIs in ~/.plan2code/agents.json (written by User
+ * Preferences in the web console) are listed after the built-ins and started the same way, with
+ * `--cli <id>` or from the menu. Their rules are copied from src/web-console/agents.mjs below.
+ *
  * `--pick-folder` (passed by the desktop shortcut, never forwarded to the CLI) asks for the
  * project folder with a native folder picker first, starting on the folder picked last time.
  *
@@ -54,6 +58,7 @@ const APP_FILE = IS_WINDOWS ? 'plan2code-app.exe' : 'plan2code-app';
 // How long a freshly started app may take to fall over before the launcher calls it started.
 const APP_START_GRACE_MS = 1200;
 const STATE_FILE = path.join(os.homedir(), '.plan2code', 'launcher.json');
+const USER_AGENTS_FILE = path.join(os.homedir(), '.plan2code', 'agents.json');
 // Menus longer than this print compactly (id-only, two columns).
 const MODELS_MENU_COMPACT_AT = 30;
 const PICKER_PROMPT = 'Choose the project folder to open Plan2Code in';
@@ -128,6 +133,7 @@ const CLIS = [
     id: 'claude',
     label: 'Claude Code',
     install: 'npm i -g @anthropic-ai/claude-code',
+    installUrl: 'https://code.claude.com/docs/en/setup',
     prompt: '/plan2code',
     args: (extra) => ['/plan2code', '--permission-mode', 'bypassPermissions', ...extra],
   },
@@ -135,6 +141,7 @@ const CLIS = [
     id: 'devin',
     label: 'Devin',
     install: 'https://devin.ai',
+    installUrl: 'https://docs.devin.ai/work-with-devin/devin-cli',
     prompt: '/plan2code',
     args: (extra) => ['--permission-mode', 'bypass', ...extra, '--', '/plan2code'],
   },
@@ -142,24 +149,241 @@ const CLIS = [
     id: 'codex',
     label: 'Codex',
     install: 'npm i -g @openai/codex',
+    installUrl: 'https://github.com/openai/codex',
     prompt: '$plan2code',
     // Codex mentions a skill with `$name`; the prompt is its one positional argument.
     args: (extra) => ['--dangerously-bypass-approvals-and-sandbox', ...extra, '$plan2code'],
   },
 ];
 
-/** What to do when no agent is installed: how to get one and how to run the skill from it. */
-const SKILL_STEPS = [
-  'Plan2Code runs inside an AI coding agent. To use it:',
-  '  1. Install one: Claude Code (npm i -g @anthropic-ai/claude-code), Codex (npm i -g @openai/codex) or Devin (https://devin.ai).',
-  '  2. Open a new terminal and cd into the project you want to work on.',
-  '  3. Start your agent there, then type /plan2code (Claude Code, Devin) or $plan2code (Codex).',
-];
-
 /** The CLI ids as prose: "`claude`, `devin` or `codex`", or without the backticks for `quote` ''. */
-function cliIdList(quote = '`') {
-  const ids = CLIS.map((cli) => quote + cli.id + quote);
+function cliIdList(quote = '`', clis = CLIS) {
+  const ids = clis.map((cli) => quote + cli.id + quote);
   return `${ids.slice(0, -1).join(', ')} or ${ids[ids.length - 1]}`;
+}
+
+/** An install command with its official page after it, unless the command is the page. */
+function installLine(cli) {
+  return cli.installUrl && cli.installUrl !== cli.install ? `${cli.install} (${cli.installUrl})` : cli.install;
+}
+
+/**
+ * What to do when no agent can run: what an agent CLI is, how to get each built-in, where to add
+ * another, and how to run the skill from an agent. `missing` names custom agents whose command
+ * was not found. Printed to stderr; the caller exits 127.
+ */
+function printNoAgentGuidance(missing = []) {
+  console.error(`${ce.red('plan2code:')} Plan2Code runs inside an AI coding agent CLI, and none was found on your PATH.`);
+  console.error('');
+  console.error(ce.bright('Install one:'));
+  for (const cli of CLIS) console.error(`  ${ce.cyan(cli.label)}: ${installLine(cli)}`);
+  console.error('');
+  console.error('Already use another agent CLI? Add it in User Preferences (web console) under Agents, then run `plan2code` again.');
+  for (const cli of missing) console.error(ce.yellow(`Custom agent ${cli.label}: ${cli.entry.command} not found`));
+  console.error('');
+  console.error('After installing, open a new terminal, cd into the project you want to work on and run `plan2code`.');
+  console.error('Or open your agent in your project and type /plan2code ($plan2code in Codex).');
+}
+
+// ---------------------------------------------------------------------------------------------
+// Custom agents. normalizeAgents and buildArgs are copies of the rules in
+// src/web-console/agents.mjs (this file is installed alone and cannot import it). The shared
+// cases in scripts/fixtures/agents-cases.json are the contract: change a rule there first.
+
+const AGENTS_SCHEMA = 1;
+const MAX_AGENTS = 50;
+const BUILTIN_AGENT_IDS = ['claude', 'devin', 'codex'];
+const AGENT_ID = /^[a-z0-9][a-z0-9-]{0,31}$/;
+const MAX_NAME = 60;
+const DEFAULT_PROMPT = '/plan2code';
+const DEFAULT_MODEL_ARGS = ['--model', '{model}'];
+const LIST_FIELDS = ['args', 'bypassArgs', 'modelArgs'];
+
+/**
+ * The file as the launcher uses it: `raw` is its text (or the parsed value; undefined or null
+ * when there is no file). Bad entries are skipped and named in `warnings`, and a bad file means
+ * no agents. Never throws.
+ */
+function normalizeAgents(raw) {
+  const warnings = [];
+  if (raw === undefined || raw === null) return { agents: [], warnings };
+  let file = raw;
+  if (typeof raw === 'string') {
+    try {
+      file = JSON.parse(raw);
+    } catch {
+      return { agents: [], warnings: ['agents.json is not valid JSON, so no custom agents are used'] };
+    }
+  }
+  if (!file || typeof file !== 'object' || Array.isArray(file)) {
+    return { agents: [], warnings: ['agents.json is not an object, so no custom agents are used'] };
+  }
+  if (file.schema !== AGENTS_SCHEMA) {
+    return { agents: [], warnings: [`agents.json has schema ${JSON.stringify(file.schema)}, not ${AGENTS_SCHEMA}, so no custom agents are used`] };
+  }
+  if (file.agents === undefined || file.agents === null) return { agents: [], warnings };
+  if (!Array.isArray(file.agents)) return { agents: [], warnings: ['agents.json: agents is not a list, so no custom agents are used'] };
+
+  let list = file.agents;
+  if (list.length > MAX_AGENTS) {
+    warnings.push(`agents.json lists ${list.length} agents; only the first ${MAX_AGENTS} are used`);
+    list = list.slice(0, MAX_AGENTS);
+  }
+  const agents = [];
+  const ids = new Set();
+  const names = new Set();
+  list.forEach((entry, index) => {
+    const out = checkAgentEntry(entry, ids, names);
+    if (out.error) return warnings.push(`agents[${index}] skipped: ${out.error}`);
+    ids.add(out.agent.id);
+    names.add(out.agent.name.toLowerCase());
+    agents.push(out.agent);
+  });
+  return { agents, warnings };
+}
+
+// One entry against the rules: { agent } with the defaults filled and any unknown keys kept,
+// or { error } naming the first thing wrong.
+function checkAgentEntry(entry, ids, names) {
+  if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return { error: 'not an object' };
+  const { id } = entry;
+  if (typeof id !== 'string' || !id) return { error: 'id is missing' };
+  if (BUILTIN_AGENT_IDS.includes(id)) return { error: `id "${id}" belongs to a built-in agent` };
+  if (!AGENT_ID.test(id)) return { error: `id "${id}" must be 1 to 32 lowercase letters, digits or dashes, starting with a letter or digit` };
+  if (ids.has(id)) return { error: `id "${id}" is already used` };
+
+  const name = typeof entry.name === 'string' ? entry.name.trim() : '';
+  if (!name) return { error: 'name is missing' };
+  if (name.length > MAX_NAME) return { error: `name is longer than ${MAX_NAME} characters` };
+  if (names.has(name.toLowerCase())) return { error: `name "${name}" is already used` };
+
+  const command = typeof entry.command === 'string' ? entry.command.trim() : '';
+  if (!command) return { error: 'command is missing' };
+
+  const agent = { ...entry, id, name, command };
+  for (const field of LIST_FIELDS) {
+    const value = entry[field];
+    if (value === undefined || value === null) {
+      agent[field] = field === 'modelArgs' ? [...DEFAULT_MODEL_ARGS] : [];
+    } else if (!Array.isArray(value) || value.some((v) => typeof v !== 'string')) {
+      return { error: `${field} must be a list of text` };
+    } else agent[field] = [...value];
+  }
+
+  if (entry.prompt === undefined || entry.prompt === null) agent.prompt = DEFAULT_PROMPT;
+  else if (typeof entry.prompt !== 'string') return { error: 'prompt must be text' };
+
+  if (entry.models === undefined || entry.models === null) agent.models = [];
+  else if (!Array.isArray(entry.models)) return { error: 'models must be a list' };
+  else {
+    agent.models = [];
+    const seen = new Set();
+    for (const model of entry.models) {
+      if (!model || typeof model !== 'object' || typeof model.id !== 'string') return { error: 'every model in models needs an id' };
+      const modelId = model.id.trim();
+      if (!modelId || seen.has(modelId)) continue;
+      seen.add(modelId);
+      const label = typeof model.label === 'string' ? model.label.trim() : '';
+      agent.models.push(label ? { id: modelId, label } : { id: modelId });
+    }
+  }
+  return { agent };
+}
+
+/**
+ * The arguments that start an entry, in order: `args` with {prompt} filled (the prompt appended
+ * when no argument holds it), then `modelArgs` when a model is chosen, then `bypassArgs` when
+ * checks are off. `prompt` defaults to the entry's own; a blank one drops an argument that is
+ * exactly {prompt}. Plain text in, plain text out: no quoting for any shell.
+ */
+function buildArgs(entry, { prompt, model, bypass } = {}) {
+  const text = prompt === undefined ? (typeof entry.prompt === 'string' ? entry.prompt : DEFAULT_PROMPT) : String(prompt ?? '');
+  const blank = !text.trim();
+  const out = [];
+  let placed = false;
+  for (const arg of entry.args || []) {
+    if (!arg.includes('{prompt}')) {
+      out.push(arg);
+      continue;
+    }
+    placed = true;
+    if (arg === '{prompt}' && blank) continue;
+    out.push(arg.split('{prompt}').join(text));
+  }
+  if (!placed && !blank) out.push(text);
+  if (model) {
+    for (const arg of entry.modelArgs || DEFAULT_MODEL_ARGS) out.push(arg.split('{model}').join(model));
+  }
+  if (bypass) out.push(...(entry.bypassArgs || []));
+  return out;
+}
+
+/** `args` without `--model <x>` / `--model=<x>`: a custom agent gets its model through modelArgs. */
+function withoutModelFlag(args) {
+  const out = [];
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === '--model') i++;
+    else if (!args[i].startsWith('--model=')) out.push(args[i]);
+  }
+  return out;
+}
+
+/**
+ * The custom agents in agents.json as CLIS-shaped entries, none resolved yet. A missing or
+ * malformed file gives an empty list (and, with `print` on, which is a terminal only, one stderr
+ * line per warning), never an error. chooseCli() asks once, so each warning shows once per run.
+ */
+function customClis(file = USER_AGENTS_FILE, print = Boolean(process.stderr.isTTY)) {
+  let raw = null;
+  try {
+    raw = fs.readFileSync(file, 'utf8');
+  } catch {}
+  const { agents, warnings } = normalizeAgents(raw);
+  if (print) for (const warning of warnings) console.error(`${ce.yellow('plan2code:')} agents.json: ${warning}`);
+  return agents.map((entry) => ({
+    id: entry.id,
+    label: entry.name,
+    install: null,
+    prompt: entry.prompt,
+    custom: true,
+    entry,
+    args: (extra) => [...buildArgs(entry, { bypass: true, model: modelFrom(extra, entry.id) }), ...withoutModelFlag(extra)],
+  }));
+}
+
+/**
+ * Where a custom agent's command runs from, as { path, fullPath }, or null. A command with a
+ * path separator is checked as a file (PATHEXT tried on Windows when it has no extension); a
+ * bare name is looked for on PATH. Never runs anything.
+ */
+function resolveCustomCommand(command) {
+  const name = String(command ?? '').trim().replace(/^"(.*)"$/, '$1');
+  if (!name) return null;
+  const isFile = (file) => {
+    try {
+      return fs.statSync(file).isFile();
+    } catch {
+      return false;
+    }
+  };
+  const extensions = IS_WINDOWS ? (process.env.PATHEXT || '.EXE;.CMD;.BAT;.COM').split(';').filter(Boolean) : [];
+  if (name.includes('/') || (IS_WINDOWS && name.includes('\\'))) {
+    const full = path.resolve(name);
+    const found = (IS_WINDOWS && !path.extname(full) ? extensions.map((ext) => full + ext) : [full]).find(isFile);
+    return found ? { path: found, fullPath: true } : null;
+  }
+  let found = findOnPath(name);
+  // A bare name that already has an extension (goose.cmd) is not found by findOnPath, which adds one.
+  if (!found && IS_WINDOWS && path.extname(name)) {
+    for (const dir of (process.env.PATH || '').split(path.delimiter).filter(Boolean)) {
+      const candidate = path.join(dir.replace(/^"|"$/g, ''), name);
+      if (isFile(candidate)) {
+        found = candidate;
+        break;
+      }
+    }
+  }
+  return found ? { path: found, fullPath: false } : null;
 }
 
 // The curated menu ships beside this file (models.json, overwritten by every install); models
@@ -413,20 +637,31 @@ function announceCli(cli) {
  * exit code) after printing why none can be used.
  */
 async function chooseCli(requested) {
+  const customs = customClis();
+  const all = [...CLIS, ...customs];
   const installed = CLIS.map((cli) => ({ ...cli, path: findOnPath(cli.id) })).filter((cli) => cli.path);
+  // A custom agent whose command does not resolve is left out of the menu and named when nothing can run.
+  const missing = [];
+  for (const cli of customs) {
+    const found = resolveCustomCommand(cli.entry.command);
+    if (found) installed.push({ ...cli, ...found });
+    else missing.push(cli);
+  }
 
   if (requested !== undefined) {
-    const known = CLIS.find((cli) => cli.id === requested);
+    const known = all.find((cli) => cli.id === requested);
     if (!known) {
-      console.error(`${ce.red('plan2code:')} --cli takes ${cliIdList('')}${requested ? `, not "${requested}"` : ''}.`);
+      console.error(`${ce.red('plan2code:')} --cli takes ${cliIdList('', all)}${requested ? `, not "${requested}"` : ''}.`);
       return { code: 2 };
     }
     const found = installed.find((cli) => cli.id === requested);
-    if (!found) {
+    if (!found && known.custom) {
+      console.error(`${ce.red('plan2code:')} Custom agent ${known.label}: ${known.entry.command} not found`);
+    } else if (!found) {
       console.error(`${ce.red('plan2code:')} the \`${known.id}\` CLI was not found on your PATH.`);
       console.error('');
       console.error(`To use ${known.label}:`);
-      console.error(`  1. Install it: ${known.install}`);
+      console.error(`  1. Install it: ${installLine(known)}`);
       console.error('  2. Open a new terminal and cd into the project you want to work on.');
       console.error(`  3. Run \`plan2code --cli ${known.id}\` there, or start ${known.label} and type ${known.prompt}.`);
     }
@@ -435,11 +670,7 @@ async function chooseCli(requested) {
   }
 
   if (installed.length === 0) {
-    console.error(`${ce.red('plan2code:')} none of ${cliIdList()} was found on your PATH.`);
-    console.error('');
-    for (const step of SKILL_STEPS) console.error(step);
-    console.error('');
-    console.error('Already have an agent? Open it in your project and type /plan2code ($plan2code in Codex), or install it and run `plan2code` again.');
+    printNoAgentGuidance(missing);
     return { code: 127 };
   }
   if (installed.length === 1 || !process.stdin.isTTY) {
@@ -503,6 +734,8 @@ function readJsonFile(file) {
 
 /** The model menu for one CLI: the curated list plus the user's additions from User Preferences. */
 function listModels(cli) {
+  // A custom agent's menu is its own models: no shipped list and no User Preferences additions.
+  if (cli.custom) return cli.entry.models.map((m) => ({ id: m.id, label: m.label || '' }));
   return mergeModels(
     modelEntries(readJsonFile(SHIPPED_MODELS_FILE), cli.id),
     modelEntries(readJsonFile(USER_MODELS_FILE), cli.id)
@@ -515,6 +748,7 @@ function listModels(cli) {
  * nobody to ask, so it just says which model will be used, as it always has.
  */
 async function chooseModel(cli, extraArgs) {
+  if (cli.custom && !listModels(cli).length) return;
   if (!process.stdin.isTTY) {
     console.log(`${cli.label} will use the model you last used in it. To use a different model, open`);
     console.log(`\`${cli.id}\` on its own and switch model there, or run \`plan2code --model <name>\`.`);
@@ -536,7 +770,7 @@ async function chooseModel(cli, extraArgs) {
       console.log(left.replace(`${i + 1})`, c.cyan(`${i + 1})`)) + right);
     }
   } else {
-    models.forEach((model, i) => console.log(`  ${c.cyan(`${i + 1})`)} ${model.id} — ${model.label}`));
+    models.forEach((model, i) => console.log(!model.label ? `  ${c.cyan(`${i + 1})`)} ${model.id}` : `  ${c.cyan(`${i + 1})`)} ${model.id} — ${model.label}`));
   }
   for (;;) {
     const answer = (await ask(`Choice ${c.green('[keep last used]')}: `)).trim().toLowerCase();
@@ -760,16 +994,30 @@ async function exitWith(code, fromShortcut) {
 
 /**
  * Spawn a resolved command with `args`. A .cmd/.bat wrapper on Windows goes through cmd.exe,
- * since Node refuses to spawn one without a shell.
+ * since Node refuses to spawn one without a shell. `options.fromFullPath` (never passed on to
+ * spawn) marks a custom agent whose command was given as a full path: that wrapper runs as
+ * `cmd /c <file name> ...args` with its folder first on the child's PATH, so a space in the
+ * folder is never in the cmd line itself.
  */
 function spawnCommand(file, args, options) {
-  return IS_WINDOWS && /\.(cmd|bat)$/i.test(file)
-    ? spawn(
-        process.env.ComSpec || 'cmd.exe',
-        ['/d', '/s', '/c', `"${[file, ...args].map(quoteForCmd).join(' ')}"`],
-        { ...options, windowsVerbatimArguments: true }
-      )
-    : spawn(file, args, options);
+  const { fromFullPath, ...spawnOptions } = options || {};
+  if (!(IS_WINDOWS && /\.(cmd|bat)$/i.test(file))) return spawn(file, args, spawnOptions);
+  const shell = process.env.ComSpec || 'cmd.exe';
+  if (!fromFullPath) {
+    return spawn(shell, ['/d', '/s', '/c', `"${[file, ...args].map(quoteForCmd).join(' ')}"`], {
+      ...spawnOptions,
+      windowsVerbatimArguments: true,
+    });
+  }
+  const env = { ...(spawnOptions.env || process.env) };
+  // Windows env names are case-insensitive and the copy keeps the original spelling (Path).
+  const pathKey = Object.keys(env).find((key) => key.toUpperCase() === 'PATH') || 'PATH';
+  env[pathKey] = path.dirname(file) + path.delimiter + (env[pathKey] || '');
+  return spawn(shell, ['/d', '/s', '/c', `"${[path.basename(file), ...args].map(quoteForCmd).join(' ')}"`], {
+    ...spawnOptions,
+    env,
+    windowsVerbatimArguments: true,
+  });
 }
 
 /**
@@ -885,7 +1133,7 @@ async function launch() {
   }
 
   const args = cli.args(extraArgs);
-  const options = { cwd, stdio: 'inherit' };
+  const options = { cwd, stdio: 'inherit', ...(cli.fullPath ? { fromFullPath: true } : {}) };
 
   const child = spawnCommand(cli.path, args, options);
 
@@ -913,4 +1161,4 @@ async function launch() {
 // Run only when invoked directly; requiring the file (the tests do) is load-only.
 if (require.main === module) launch();
 
-module.exports = { mergeModels, modelEntries, renderBanner, paint, hasModelFlag, compareVersions, modelFrom, hasDisplay, looksLikeProject };
+module.exports = { normalizeAgents, buildArgs, customClis, resolveCustomCommand, listModels, mergeModels, modelEntries, renderBanner, paint, hasModelFlag, compareVersions, modelFrom, hasDisplay, looksLikeProject };

@@ -15,15 +15,18 @@ import {
   LOOKS_FILE,
   PUBLIC_DIR,
   SHIPPED_MODELS_FILE,
+  USER_AGENTS_FILE,
   USER_MODELS_FILE,
   appendEvent,
   ensureDir,
   fileStamp,
   nowIso,
   readJson,
+  readText,
   withStateLock,
   writeJsonAtomic,
 } from "./files.mjs";
+import { AGENTS_SCHEMA, normalizeAgents, resolveCommand, validateForSave } from "./agents.mjs";
 import { checkDocument, cleanupFindings, readOverview, removeCleanup } from "./sessions.mjs";
 import { SHOTS_DIR_NAME, SHOT_NAME, shotType } from "./patches.mjs";
 import { appendChat, currentConversation, pendingChatCount, typedCount } from "./inbox.mjs";
@@ -83,6 +86,9 @@ const ROUTES = [
   { path: "/pr-host", method: "POST", origin: true, run: prHost },
   { path: "/models", method: "GET", run: modelsGet },
   { path: "/models", method: "POST", origin: true, run: modelsPost },
+  { path: "/agents", method: "GET", run: agentsGet },
+  { path: "/agents", method: "POST", origin: true, run: agentsPost },
+  { path: "/agents/test", method: "POST", origin: true, run: agentsTest },
   { path: "/cleanup", method: "POST", origin: true, run: cleanup },
   { path: "/upload", method: "POST", origin: true, run: upload },
   { path: "/notepad", method: "GET", run: notepadGet },
@@ -565,6 +571,55 @@ function modelsPost(req, res) {
       return json(res, 500, { error: String(e.message) });
     }
     return json(res, 200, { ok: true, user: models });
+  });
+}
+
+// The person's custom agents (agents.mjs has the rules). Read as text, not
+// with readJson: a half-written or broken file has to come back as a warning,
+// which readJson would turn into the same nothing as a missing file.
+function agentsGet(req, res) {
+  const raw = fs.existsSync(USER_AGENTS_FILE) ? readText(USER_AGENTS_FILE) : undefined;
+  return json(res, 200, normalizeAgents(raw));
+}
+
+// The whole list from User Preferences, checked, then written atomically. The
+// first failure names the entry and field so the page can mark them, and
+// nothing is written. Top-level keys the file already had are kept. A file
+// holding anything GET /agents could not read (another schema, a skipped
+// entry) is refused with 409 unless the page says `replace: true`, so a save
+// never silently drops what the person wrote there by hand.
+function agentsPost(req, res) {
+  return readBody(req, (err, body) => {
+    if (err) return json(res, err.tooBig ? 413 : 400, { error: err.tooBig ? "too large" : "body must be JSON" });
+    const { agents, error, index, field } = validateForSave(body && body.agents);
+    if (error) return json(res, 400, { error, index, field });
+    if (body.replace !== true && fs.existsSync(USER_AGENTS_FILE)) {
+      const { warnings } = normalizeAgents(readText(USER_AGENTS_FILE));
+      if (warnings.length) {
+        return json(res, 409, { error: "agents.json holds entries this page could not read. Saving replaces them.", warnings });
+      }
+    }
+    const saved = readJson(USER_AGENTS_FILE, null);
+    const kept = saved && typeof saved === "object" && !Array.isArray(saved) ? saved : {};
+    try {
+      ensureDir(path.dirname(USER_AGENTS_FILE));
+      writeJsonAtomic(USER_AGENTS_FILE, { ...kept, schema: AGENTS_SCHEMA, agents });
+    } catch (e) {
+      return json(res, 500, { error: String(e.message) });
+    }
+    return json(res, 200, { ok: true, agents });
+  });
+}
+
+// Where a command would run from, for the form's Test button. Only looks: it
+// never runs the command.
+function agentsTest(req, res) {
+  return readBody(req, (err, body) => {
+    if (err) return json(res, err.tooBig ? 413 : 400, { error: err.tooBig ? "too large" : "body must be JSON" });
+    const command = typeof body?.command === "string" ? body.command.trim() : "";
+    if (!command || command.length > 1024) return json(res, 400, { error: "command must be 1 to 1024 characters" });
+    const found = resolveCommand(command);
+    return json(res, 200, found ? { found: true, path: found } : { found: false });
   });
 }
 

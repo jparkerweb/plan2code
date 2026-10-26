@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 
 use serde::Serialize;
 
-use crate::agents::AgentKind;
+use crate::agents;
 
 /// Where the project folder came from, in the order it is tried.
 #[derive(Clone, Copy, Serialize)]
@@ -45,10 +45,11 @@ fn remembered_folder() -> Option<PathBuf> {
     dir.is_dir().then_some(dir)
 }
 
-/// The agent the launcher last ran. The bar's picker starts on it until the
-/// app has a choice of its own (`settings.rs`).
-pub fn remembered_agent() -> Option<AgentKind> {
-    AgentKind::from_id(read_launcher().get("lastCli")?.as_str()?)
+/// The id of the agent the launcher last ran (it may be a custom one). The
+/// bar's picker starts on it until the app has a choice of its own
+/// (`settings.rs`); a caller ignores an id that no longer resolves.
+pub fn remembered_agent() -> Option<String> {
+    Some(read_launcher().get("lastCli")?.as_str()?.to_string()).filter(|id| !id.is_empty())
 }
 
 /// `--project <dir>`, `--project=<dir>` or the first bare argument: the folder
@@ -85,7 +86,8 @@ fn argument_folder(args: &[String]) -> Option<PathBuf> {
 /// an agent, since a model name belongs to one agent.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct LaunchChoice {
-    pub agent: Option<AgentKind>,
+    /// An agent id, built-in or custom; resolved at use through `agents::find_agent`.
+    pub agent: Option<String>,
     pub model: Option<String>,
 }
 
@@ -106,8 +108,15 @@ fn flag_value(args: &[String], flag: &str) -> Option<String> {
 }
 
 pub fn launch_choice(args: &[String]) -> LaunchChoice {
-    let agent = flag_value(args, "--agent").and_then(|id| AgentKind::from_id(&id.to_lowercase()));
-    let model = agent.and_then(|_| flag_value(args, "--model"));
+    launch_choice_in(args, agents::agents_file().as_deref())
+}
+
+/// `launch_choice` with the custom agents read from `agents_file` (`None`: built-ins only).
+pub fn launch_choice_in(args: &[String], agents_file: Option<&Path>) -> LaunchChoice {
+    let agent = flag_value(args, "--agent")
+        .map(|id| id.to_lowercase())
+        .filter(|id| agents::find_agent_in(id, agents_file).is_some());
+    let model = agent.as_ref().and_then(|_| flag_value(args, "--model"));
     LaunchChoice { agent, model }
 }
 
@@ -140,6 +149,11 @@ pub fn remember_folder(dir: &Path) -> Result<ProjectDir, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::agents::AgentKind;
+
+    fn launch_choice(args: &[String]) -> LaunchChoice {
+        launch_choice_in(args, None)
+    }
 
     fn args(list: &[&str]) -> Vec<String> {
         std::iter::once("plan2code-app").chain(list.iter().copied()).map(str::to_string).collect()
@@ -147,7 +161,7 @@ mod tests {
 
     #[test]
     fn the_launcher_choice_reads_agent_and_model_in_both_forms() {
-        let want = LaunchChoice { agent: Some(AgentKind::Codex), model: Some("gpt-5".into()) };
+        let want = LaunchChoice { agent: Some(AgentKind::Codex.id().to_string()), model: Some("gpt-5".into()) };
         assert_eq!(launch_choice(&args(&["--project", ".", "--agent", "codex", "--model", "gpt-5"])), want);
         assert_eq!(launch_choice(&args(&["--agent=codex", "--model=gpt-5"])), want);
         assert_eq!(launch_choice(&args(&["--agent", "CODEX", "--model", "gpt-5"])), want);
@@ -157,7 +171,7 @@ mod tests {
     fn an_agent_alone_is_a_choice_and_a_model_alone_is_not() {
         assert_eq!(
             launch_choice(&args(&["--agent", "claude"])),
-            LaunchChoice { agent: Some(AgentKind::Claude), model: None }
+            LaunchChoice { agent: Some(AgentKind::Claude.id().to_string()), model: None }
         );
         assert_eq!(launch_choice(&args(&["--model", "opus"])), LaunchChoice::default());
     }
@@ -171,8 +185,21 @@ mod tests {
         assert_eq!(launch_choice(&args(&[])), LaunchChoice::default());
         assert_eq!(
             launch_choice(&args(&["--agent", "devin", "--model"])),
-            LaunchChoice { agent: Some(AgentKind::Devin), model: None }
+            LaunchChoice { agent: Some(AgentKind::Devin.id().to_string()), model: None }
         );
+    }
+
+    #[test]
+    fn a_custom_agent_id_is_accepted_when_the_file_names_it() {
+        let dir = std::env::temp_dir().join(format!("p2c-project-custom-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("agents.json");
+        std::fs::write(&file, r#"{"schema":1,"agents":[{"id":"goose","name":"Goose","command":"goose"}]}"#).unwrap();
+        let want = LaunchChoice { agent: Some("goose".into()), model: Some("m1".into()) };
+        assert_eq!(launch_choice_in(&args(&["--agent", "goose", "--model", "m1"]), Some(&file)), want);
+        assert_eq!(launch_choice_in(&args(&["--agent", "other", "--model", "m1"]), Some(&file)), LaunchChoice::default());
+        assert_eq!(launch_choice_in(&args(&["--agent", "goose"]), None), LaunchChoice::default());
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

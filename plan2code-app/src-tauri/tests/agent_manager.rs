@@ -8,7 +8,7 @@ use std::sync::{Arc, Mutex, Once};
 use std::time::{Duration, Instant};
 
 use plan2code_app_lib::agent_manager::{AgentEvent, AgentManager, AgentSnapshot, AgentState};
-use plan2code_app_lib::agents::{AgentKind, PermissionMode, AGENT_BIN_ENV};
+use plan2code_app_lib::agents::{Agent, AgentKind, PermissionMode, AGENT_BIN_ENV};
 
 mod common;
 use common::process_alive;
@@ -99,7 +99,7 @@ impl Harness {
     }
 
     fn start_and_wait_ready(&mut self) {
-        self.manager.start(AgentKind::Claude, None, None, PermissionMode::Bypass, None).expect("start the fake agent");
+        self.manager.start(Agent::Builtin(AgentKind::Claude), None, None, PermissionMode::Bypass, None).expect("start the fake agent");
         self.wait_for_output(READY, 1);
     }
 
@@ -118,7 +118,7 @@ fn a_second_start_while_running_is_refused() {
     h.start_and_wait_ready();
     let generation = h.manager.snapshot().generation;
 
-    let refused = h.manager.start(AgentKind::Devin, None, None, PermissionMode::Bypass, None);
+    let refused = h.manager.start(Agent::Builtin(AgentKind::Devin), None, None, PermissionMode::Bypass, None);
     assert!(refused.is_err(), "a second start must be refused");
     let after = h.manager.snapshot();
     assert_eq!(after.state, AgentState::Running);
@@ -130,18 +130,18 @@ fn a_second_start_while_running_is_refused() {
 fn restart_keeps_the_previous_agent_kind_mode_model_and_effort() {
     let mut h = Harness::new();
     h.manager
-        .start(AgentKind::Codex, Some("gpt-5".to_string()), Some("high".to_string()), PermissionMode::Checked, None)
+        .start(Agent::Builtin(AgentKind::Codex), Some("gpt-5".to_string()), Some("high".to_string()), PermissionMode::Checked, None)
         .expect("start the fake agent");
     h.wait_for_output(READY, 1);
     let before = h.manager.snapshot();
-    assert_eq!(before.kind, Some(AgentKind::Codex));
+    assert_eq!(before.kind, Some("codex".to_string()));
     assert_eq!(before.mode, Some(PermissionMode::Checked));
     assert_eq!(h.manager.model_and_effort(), (Some("gpt-5".to_string()), Some("high".to_string())));
 
     h.manager.restart().unwrap();
     h.wait_for_output(READY, 2);
     let after = h.manager.snapshot();
-    assert_eq!(after.kind, Some(AgentKind::Codex), "restart must keep the same agent");
+    assert_eq!(after.kind, Some("codex".to_string()), "restart must keep the same agent");
     assert_eq!(after.mode, Some(PermissionMode::Checked), "restart must keep the same permission mode");
     assert_eq!(
         h.manager.model_and_effort(),

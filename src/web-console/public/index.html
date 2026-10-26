@@ -2648,6 +2648,22 @@
             <span class="help" id="models-status" role="status"></span>
           </div>
         </fieldset>
+        <fieldset class="modal-ranges looks-models looks-agents">
+          <legend>Agents</legend>
+          <div class="models-note">
+            <p>Agent CLIs Plan2Code did not find on its own. The <code>plan2code</code> command and the desktop app list the ones that are installed.</p>
+            <ul>
+              <li><code>/plan2code</code> works only in agents that load the installed Plan2Code skills. A blank start prompt starts the agent with nothing typed.</li>
+              <li>The list is saved as plain text in <code>~/.plan2code/agents.json</code>.</li>
+            </ul>
+          </div>
+          <div class="agents-list" id="agents-list" aria-label="Agents you added"></div>
+          <div class="models-actions">
+            <button type="button" class="btn small" id="agents-add">Add agent</button>
+            <button type="button" class="btn small danger" id="agents-replace" hidden>Save anyway</button>
+            <span class="help" id="agents-status" role="status"></span>
+          </div>
+        </fieldset>
       </div>
       <div class="modal-actions">
         <button type="button" class="btn ghost" id="looks-reset">Back to default</button>

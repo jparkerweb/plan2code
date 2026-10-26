@@ -10,7 +10,7 @@ use std::thread;
 
 use serde::Serialize;
 
-use crate::agents::{launch_spec, AgentKind, PermissionMode};
+use crate::agents::{agent_launch_spec, Agent, PermissionMode};
 use crate::pty_host::{PtyHost, StartOptions};
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
@@ -33,7 +33,7 @@ pub type BeforeFresh = Arc<dyn Fn() -> Option<String> + Send + Sync>;
 pub struct AgentSnapshot {
     #[serde(flatten)]
     pub state: AgentState,
-    pub kind: Option<AgentKind>,
+    pub kind: Option<String>,
     pub generation: u64,
     /// The running (or last started) agent's permission mode, so the bar's
     /// note can name it instead of assuming bypass.
@@ -61,7 +61,7 @@ struct Running {
 /// whole, unchanged choice (Task 9.6).
 #[derive(Clone)]
 struct StartChoice {
-    kind: AgentKind,
+    kind: Agent,
     model: Option<String>,
     effort: Option<String>,
     mode: PermissionMode,
@@ -156,13 +156,13 @@ impl AgentManager {
         }
     }
 
-    /// Start `kind` on `model`, `effort` and `mode`, with `brief` (`None` is
+    /// Start `kind` (built-in or custom) on `model`, `effort` and `mode`, with `brief` (`None` is
     /// the placeholder brief: the plain `/plan2code` prompt, which opens the
     /// dashboard). A second start while an agent runs is refused. Restart
     /// reuses this exact choice, so a later call replaces it for good.
     pub fn start(
         &self,
-        kind: AgentKind,
+        kind: Agent,
         model: Option<String>,
         effort: Option<String>,
         mode: PermissionMode,
@@ -271,7 +271,7 @@ impl Shared {
     fn snapshot(&self, inner: &Inner) -> AgentSnapshot {
         AgentSnapshot {
             state: inner.state.clone(),
-            kind: inner.last_start.as_ref().map(|(choice, _)| choice.kind),
+            kind: inner.last_start.as_ref().map(|(choice, _)| choice.kind.id().to_string()),
             mode: inner.last_start.as_ref().map(|(choice, _)| choice.mode),
             generation: self.generation.load(Ordering::SeqCst),
             brief_note: inner.brief_note.clone(),
@@ -287,7 +287,7 @@ impl Shared {
         let (choice, brief) = inner.last_start.clone().ok_or("no agent has been started")?;
         let prompt = brief.unwrap_or_else(|| choice.kind.default_prompt().to_string());
         let mut spec =
-            launch_spec(choice.kind, &self.folder, choice.model.as_deref(), choice.effort.as_deref(), choice.mode, &prompt);
+            agent_launch_spec(&choice.kind, &self.folder, choice.model.as_deref(), choice.effort.as_deref(), choice.mode, &prompt);
         if let Ok(extra) = self.extra_env.lock() {
             spec.env.extend(extra.iter().cloned());
         }

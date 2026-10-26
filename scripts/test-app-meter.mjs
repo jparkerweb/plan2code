@@ -11,7 +11,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { barNextSteps, continueKeys, defaultRightFraction, folderName, windowTitleFor, CONSOLE_ASIDE_BREAKPOINT_PX, NEXT_STEP_LABELS } from "../plan2code-app/ui/meter.js";
+import { barNextSteps, continueKeys, defaultRightFraction, folderName, pickDefaultAgent, windowTitleFor, CONSOLE_ASIDE_BREAKPOINT_PX, NEXT_STEP_LABELS } from "../plan2code-app/ui/meter.js";
 import { findBrowser, launchBrowser } from "./browser.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -231,4 +231,30 @@ test("toggling the tired Planny <svg>'s hidden attribute the way app.js does act
   } finally {
     await browser.close();
   }
+});
+
+test("continueKeys gives a custom agent id the plain word and Enter", () => {
+  assert.deepEqual(continueKeys("my-aider"), ["continue", "\r"]);
+});
+
+const AVAIL = (spec) =>
+  spec.map(([id, installed, custom = false]) => ({ id, label: id, installed, custom }));
+
+test("pickDefaultAgent keeps the remembered agent when it is installed, custom ones included", () => {
+  const list = AVAIL([["claude", true], ["devin", true], ["codex", true], ["mine", true, true]]);
+  assert.equal(pickDefaultAgent(list, "codex"), "codex");
+  assert.equal(pickDefaultAgent(list, "mine"), "mine");
+});
+
+test("pickDefaultAgent falls back to the first installed built-in, then the first installed custom agent", () => {
+  assert.equal(pickDefaultAgent(AVAIL([["claude", false], ["devin", false], ["codex", true]]), null), "codex");
+  assert.equal(pickDefaultAgent(AVAIL([["claude", false], ["devin", true], ["codex", true]]), "claude"), "devin");
+  assert.equal(pickDefaultAgent(AVAIL([["claude", false], ["devin", false], ["codex", false], ["mine", true, true]]), "claude"), "mine");
+});
+
+test("pickDefaultAgent with nothing installed returns the remembered id, else the first entry, else null", () => {
+  const none = AVAIL([["claude", false], ["devin", false], ["codex", false]]);
+  assert.equal(pickDefaultAgent(none, "devin"), "devin");
+  assert.equal(pickDefaultAgent(none, null), "claude");
+  assert.equal(pickDefaultAgent([], null), null);
 });

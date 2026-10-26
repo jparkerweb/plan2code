@@ -4,8 +4,6 @@
 
 use std::path::{Path, PathBuf};
 
-use crate::agents::AgentKind;
-
 const LAST_AGENT_KEY: &str = "lastAgent";
 const TERM_DOCK_KEY: &str = "termDock";
 const TERM_FRACTION_KEY: &str = "termFraction";
@@ -38,15 +36,16 @@ fn read(file: &Path) -> serde_json::Map<String, serde_json::Value> {
         .unwrap_or_default()
 }
 
-/// The agent saved in `file`, when it still names one the app can run.
-pub fn load_last_agent(file: &Path) -> Option<AgentKind> {
-    AgentKind::from_id(read(file).get(LAST_AGENT_KEY)?.as_str()?)
+/// The agent id saved in `file` (built-in or custom). Whether it still
+/// resolves is the caller's check (`agents::find_agent`).
+pub fn load_last_agent(file: &Path) -> Option<String> {
+    Some(read(file).get(LAST_AGENT_KEY)?.as_str()?.to_string()).filter(|id| !id.is_empty())
 }
 
 /// Save the pick, keeping any other key the file holds.
-pub fn save_last_agent(file: &Path, kind: AgentKind) -> Result<(), String> {
+pub fn save_last_agent(file: &Path, id: &str) -> Result<(), String> {
     let mut settings = read(file);
-    settings.insert(LAST_AGENT_KEY.to_string(), serde_json::Value::String(kind.id().to_string()));
+    settings.insert(LAST_AGENT_KEY.to_string(), serde_json::Value::String(id.to_string()));
     write(file, settings)
 }
 
@@ -129,18 +128,21 @@ mod tests {
         let file = temp_file("round-trip");
         std::fs::create_dir_all(file.parent().unwrap()).unwrap();
         std::fs::write(&file, r#"{"other": 1}"#).unwrap();
-        save_last_agent(&file, AgentKind::Devin).unwrap();
-        assert_eq!(load_last_agent(&file), Some(AgentKind::Devin));
+        save_last_agent(&file, "devin").unwrap();
+        assert_eq!(load_last_agent(&file), Some("devin".to_string()));
+        save_last_agent(&file, "goose").unwrap();
+        assert_eq!(load_last_agent(&file), Some("goose".to_string()), "a custom id round-trips");
         assert!(std::fs::read_to_string(&file).unwrap().contains("\"other\""));
         let _ = std::fs::remove_dir_all(file.parent().unwrap());
     }
 
     #[test]
-    fn an_unknown_agent_is_ignored() {
+    fn an_id_is_returned_as_stored_and_the_caller_checks_it() {
         let file = temp_file("unknown");
         std::fs::create_dir_all(file.parent().unwrap()).unwrap();
         std::fs::write(&file, r#"{"lastAgent": "nope"}"#).unwrap();
-        assert_eq!(load_last_agent(&file), None);
+        assert_eq!(load_last_agent(&file), Some("nope".to_string()));
+        assert!(crate::agents::find_agent_in("nope", None).is_none());
         let _ = std::fs::remove_dir_all(file.parent().unwrap());
     }
 

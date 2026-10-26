@@ -484,6 +484,83 @@ test("models: the user's additions round-trip, XHigh and Max are refused, and th
   assert.deepEqual((await get()).user, { claude: [], devin: [], codex: [] });
 });
 
+test("agents: no file is an empty list, a save is written whole and keeps unknown keys, and a bad save names its entry and field", async (t) => {
+  const file = path.join(MODELS_DIR, "agents.json");
+  t.after(() => fs.rmSync(file, { force: true }));
+  fs.rmSync(file, { force: true });
+  const get = async () => (await fetch(baseUrl + "/agents", { headers: { cookie: cookieFor(baseUrl, token) } })).json();
+
+  assert.deepEqual(await get(), { agents: [], warnings: [] }, "no file");
+  fs.mkdirSync(MODELS_DIR, { recursive: true });
+  fs.writeFileSync(file, "{ \"schema\": 1, \"agents\": [");
+  const broken = await get();
+  assert.deepEqual(broken.agents, [], "a half-written file is no agents");
+  assert.match(broken.warnings.join(" "), /not valid JSON/, "and says why");
+
+  fs.writeFileSync(file, JSON.stringify({ schema: 1, theme: "kept", agents: [] }));
+  const saved = await post("/agents", { agents: [{ name: "My Agent", command: " my-agent ", note: "mine" }] });
+  assert.equal(saved.status, 200);
+  const body = await saved.json();
+  assert.equal(body.ok, true);
+  assert.equal(body.agents[0].id, "my-agent", "an id is made from the name");
+  const written = JSON.parse(fs.readFileSync(file, "utf8"));
+  assert.equal(written.schema, 1);
+  assert.equal(written.theme, "kept", "a top-level key the file had survives the rewrite");
+  assert.deepEqual(written.agents, [
+    { name: "My Agent", command: "my-agent", note: "mine", id: "my-agent", args: [], bypassArgs: [], modelArgs: ["--model", "{model}"], prompt: "/plan2code", models: [] },
+  ]);
+  assert.deepEqual(fs.readdirSync(MODELS_DIR).filter((n) => n.startsWith("agents.json.")), [], "no temp file left behind");
+  assert.deepEqual((await get()).agents.map((a) => a.id), ["my-agent"]);
+
+  const before = fs.readFileSync(file, "utf8");
+  const dup = await post("/agents", { agents: [{ id: "my-agent", name: "My Agent", command: "my-agent" }, { name: "MY AGENT", command: "x" }] });
+  assert.equal(dup.status, 400);
+  assert.deepEqual(await dup.json(), { error: 'name "MY AGENT" is already used', index: 1, field: "name" });
+  for (const agents of [[{ name: "A", command: "  " }], [{ id: "codex", name: "A", command: "a" }], "nope"]) {
+    assert.equal((await post("/agents", { agents })).status, 400, JSON.stringify(agents));
+  }
+  assert.equal((await raw("POST", "/agents", "not json")).status, 400);
+  assert.equal(fs.readFileSync(file, "utf8"), before, "a refused save writes nothing");
+});
+
+test("agents: a file with entries the page could not read is not overwritten unless the save says replace", async (t) => {
+  const file = path.join(MODELS_DIR, "agents.json");
+  t.after(() => fs.rmSync(file, { force: true }));
+  fs.mkdirSync(MODELS_DIR, { recursive: true });
+  const mine = { agents: [{ name: "Mine", command: "mine" }] };
+
+  for (const text of [
+    JSON.stringify({ schema: 2, agents: [{ id: "future", name: "Future", command: "future" }] }),
+    JSON.stringify({ schema: 1, agents: [{ id: "Hand", name: "Hand", command: "hand" }] }),
+    "{ \"schema\": 1, \"agents\": [",
+  ]) {
+    fs.writeFileSync(file, text);
+    const refused = await post("/agents", mine);
+    assert.equal(refused.status, 409, text);
+    const body = await refused.json();
+    assert.match(body.error, /could not read/);
+    assert.ok(body.warnings.length > 0, "the warnings come back with it");
+    assert.equal(fs.readFileSync(file, "utf8"), text, "nothing is written");
+  }
+
+  const replaced = await post("/agents", { ...mine, replace: true });
+  assert.equal(replaced.status, 200, "replace: true writes anyway");
+  const written = JSON.parse(fs.readFileSync(file, "utf8"));
+  assert.equal(written.schema, 1);
+  assert.deepEqual(written.agents.map((a) => a.id), ["mine"]);
+  assert.equal((await post("/agents", mine)).status, 200, "a file the page reads whole saves as usual");
+});
+
+test("agents/test: finds a command on PATH or says it is not there, and never runs it", async () => {
+  const found = await (await post("/agents/test", { command: "node" })).json();
+  assert.equal(found.found, true);
+  assert.ok(fs.statSync(found.path).isFile(), found.path);
+  assert.deepEqual(await (await post("/agents/test", { command: "p2c-no-such-agent-cli" })).json(), { found: false });
+  for (const command of ["", "   ", 7, "x".repeat(1025)]) {
+    assert.equal((await post("/agents/test", { command })).status, 400, String(command).slice(0, 20));
+  }
+});
+
 test("cleanup over HTTP: a scan lists strays in the console home, and a delete removes only what the scan found", async () => {
   const stray = path.join(HOME, "stray-cleanup.json");
   fs.writeFileSync(stray, "{}");

@@ -307,14 +307,25 @@ test("launcher: the shipped models.json is curated Devin at low/medium/high only
   }
 });
 
-test("launcher: with no CLI installed it exits 127 and says how to run the skill from an agent", (t) => {
+test("launcher: with no CLI installed it exits 127 and explains how to get one and how to run the skill from an agent", (t) => {
   const box = sandbox([]);
   t.after(box.cleanup);
   const result = box.run([]);
   assert.equal(result.status, 127);
-  assert.match(result.stderr, /none of `claude`, `devin` or `codex` was found/);
-  assert.ok(result.stderr.includes("type /plan2code"));
-  assert.ok(result.stderr.includes("$plan2code (Codex)"));
+  assert.match(result.stderr, /Plan2Code runs inside an AI coding agent CLI, and none was found/);
+  // Every built-in's label, install command and official page.
+  for (const part of [
+    "Claude Code: npm i -g @anthropic-ai/claude-code",
+    "https://code.claude.com/docs/en/setup",
+    "Codex: npm i -g @openai/codex",
+    "https://github.com/openai/codex",
+    "Devin: https://devin.ai",
+    "https://docs.devin.ai/work-with-devin/devin-cli",
+  ]) {
+    assert.ok(result.stderr.includes(part), part);
+  }
+  assert.ok(result.stderr.includes("Add it in User Preferences (web console) under Agents, then run `plan2code` again."));
+  assert.ok(result.stderr.includes("type /plan2code ($plan2code in Codex)"));
   assert.match(result.stderr, /cd into the project/);
 });
 
@@ -606,4 +617,165 @@ test("launcher app: an AGENTS.md marks the folder as a project, so the agent sta
   assert.equal(result.status, 0, result.stderr);
   assert.doesNotMatch(result.stderr, /doesn't look like a project/);
   assert.notEqual(box.argsOf("claude"), null);
+});
+
+// Custom agents (~/.plan2code/agents.json). The shared fixture is the contract the console and
+// the desktop app read too; the rest starts real stand-ins from a temp home.
+const CASES = JSON.parse(fs.readFileSync(path.join(ROOT, "scripts", "fixtures", "agents-cases.json"), "utf8"));
+const GOOSE = {
+  id: "goose",
+  name: "Goose",
+  command: "goose",
+  args: ["--yes", "{prompt}"],
+  bypassArgs: ["--bypass"],
+  models: [{ id: "m1", label: "Model one" }, { id: "m2" }],
+};
+
+/** Write ~/.plan2code/agents.json (an object is stringified; a string goes in as it is). */
+function writeAgents(box, file) {
+  const target = path.join(box.home, ".plan2code", "agents.json");
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  fs.writeFileSync(target, typeof file === "string" ? file : JSON.stringify(file));
+  return target;
+}
+
+const goose = (extra = {}) => ({ schema: 1, agents: [{ ...GOOSE, ...extra }] });
+
+for (const c of CASES.files) {
+  test(`launcher agents file: ${c.name}`, () => {
+    const { normalizeAgents } = require(LAUNCHER);
+    const { agents, warnings } = normalizeAgents(c.raw);
+    assert.deepEqual(agents, c.agents);
+    if (!c.warnings.length) assert.deepEqual(warnings, []);
+    for (const part of c.warnings) {
+      assert.ok(warnings.some((w) => w.includes(part)), `a warning names "${part}": ${JSON.stringify(warnings)}`);
+    }
+  });
+}
+
+for (const c of CASES.buildArgs) {
+  test(`launcher buildArgs: ${c.name}`, () => {
+    const { buildArgs } = require(LAUNCHER);
+    assert.deepEqual(buildArgs(c.entry, c.options), c.args);
+  });
+}
+
+test("launcher agents: --cli <custom id> starts it with args, the model through modelArgs, then bypassArgs and the forwarded args", (t) => {
+  const box = sandbox(["claude", "goose"]);
+  t.after(box.cleanup);
+  writeAgents(box, goose());
+  const result = box.run(["--cli", "goose", "--model", "m1", "--verbose"]);
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(box.argsOf("goose"), ["--yes", "/plan2code", "--model", "m1", "--bypass", "--verbose"]);
+  assert.equal(box.argsOf("claude"), null);
+  assert.equal(JSON.parse(fs.readFileSync(box.stateFile, "utf8")).lastCli, "goose");
+  // No model chosen and no models flag: the model arguments are left out.
+  assert.equal(box.run(["--cli=goose"]).status, 0);
+  assert.deepEqual(box.argsOf("goose"), ["--yes", "/plan2code", "--bypass"]);
+});
+
+test("launcher agents: the last pick can be a custom id, and the --cli error names custom ids", (t) => {
+  const box = sandbox(["claude", "goose"]);
+  t.after(box.cleanup);
+  writeAgents(box, goose());
+  fs.mkdirSync(path.dirname(box.stateFile), { recursive: true });
+  fs.writeFileSync(box.stateFile, JSON.stringify({ lastCli: "goose" }));
+  assert.equal(box.run([]).status, 0);
+  assert.notEqual(box.argsOf("goose"), null);
+  assert.equal(box.argsOf("claude"), null);
+  const bad = box.run(["--cli", "bogus"]);
+  assert.equal(bad.status, 2);
+  assert.match(bad.stderr, /--cli takes claude, devin, codex or goose, not "bogus"/);
+});
+
+test("launcher agents: the model menu is the agent's own models, with no shipped list or user models.json", (t) => {
+  const box = sandbox([]);
+  t.after(box.cleanup);
+  fs.mkdirSync(path.join(box.home, ".plan2code"), { recursive: true });
+  const file = writeAgents(box, goose());
+  const { customClis, listModels, hasModelFlag } = require(LAUNCHER);
+  const [cli] = customClis(file, false);
+  assert.deepEqual(listModels(cli), [{ id: "m1", label: "Model one" }, { id: "m2", label: "" }]);
+  assert.deepEqual(listModels(customClis(writeAgents(box, goose({ models: [] })), false)[0]), []);
+  // Only --model counts for a custom agent: Codex's -m does not.
+  assert.equal(hasModelFlag(["--model", "x"], "goose"), true);
+  assert.equal(hasModelFlag(["-m", "x"], "goose"), false);
+  // A model given on the command line goes through modelArgs, once.
+  assert.deepEqual(cli.args(["--model=m2", "-x"]), ["--yes", "/plan2code", "--model", "m2", "--bypass", "-x"]);
+});
+
+test("launcher agents: a custom agent whose command is not found is left out and named when nothing can run", (t) => {
+  const box = sandbox(["claude"]);
+  t.after(box.cleanup);
+  writeAgents(box, { schema: 1, agents: [{ id: "ghost", name: "Ghost", command: "ghost-cmd" }] });
+  // Left out of the way: claude still starts.
+  assert.equal(box.run([]).status, 0);
+  assert.notEqual(box.argsOf("claude"), null);
+  const asked = box.run(["--cli", "ghost"]);
+  assert.equal(asked.status, 127);
+  assert.match(asked.stderr, /Custom agent Ghost: ghost-cmd not found/);
+
+  const none = sandbox([]);
+  t.after(none.cleanup);
+  writeAgents(none, { schema: 1, agents: [{ id: "ghost", name: "Ghost", command: "ghost-cmd" }] });
+  const result = none.run([]);
+  assert.equal(result.status, 127);
+  assert.match(result.stderr, /Custom agent Ghost: ghost-cmd not found/);
+  assert.ok(result.stderr.includes("User Preferences"));
+});
+
+test("launcher agents: a malformed agents.json warns on a terminal, never crashes, and gives no agents", (t) => {
+  const box = sandbox(["claude"]);
+  t.after(box.cleanup);
+  const file = writeAgents(box, "{ not json");
+  const { customClis } = require(LAUNCHER);
+  const lines = [];
+  const realError = console.error;
+  console.error = (line) => lines.push(String(line));
+  try {
+    assert.deepEqual(customClis(file, true), []);
+    assert.deepEqual(customClis(path.join(box.home, "missing.json"), true), []);
+  } finally {
+    console.error = realError;
+  }
+  assert.equal(lines.length, 1);
+  assert.match(lines[0], /plan2code: agents\.json: agents\.json is not valid JSON/);
+  // A piped run prints no warning, and the built-ins carry on.
+  const result = box.run([]);
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stderr, "");
+  assert.notEqual(box.argsOf("claude"), null);
+});
+
+test("launcher agents: the app hand-over passes a custom id and its model unchanged", (t) => {
+  const box = sandbox(["goose"]);
+  t.after(box.cleanup);
+  writeAgents(box, goose());
+  const display = process.platform === "linux" ? { DISPLAY: ":0" } : {};
+  const result = box.run(["--cli", "goose", "--model", "m2"], { PLAN2CODE_APP: box.appFile, ...display });
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(box.appArgs().slice(2), ["--agent", "goose", "--model", "m2"]);
+  assert.equal(box.argsOf("goose"), null);
+  assert.equal(JSON.parse(fs.readFileSync(box.stateFile, "utf8")).lastCli, "goose");
+});
+
+test("launcher agents: a full-path command starts, and on Windows a .cmd in a folder with a space too", (t) => {
+  const box = sandbox([]);
+  t.after(box.cleanup);
+  const spaced = path.join(box.dir, "with space");
+  fs.mkdirSync(spaced);
+  const recorder = path.join(box.dir, "bin", "record.js");
+  let file;
+  if (IS_WINDOWS) {
+    file = path.join(spaced, "spaced.cmd");
+    fs.writeFileSync(file, `@"${process.execPath}" "${recorder}" spaced %*\r\n`);
+  } else {
+    file = path.join(spaced, "spaced");
+    fs.writeFileSync(file, `#!/bin/sh\nexec "${process.execPath}" "${recorder}" spaced "$@"\n`);
+    fs.chmodSync(file, 0o755);
+  }
+  writeAgents(box, { schema: 1, agents: [{ id: "spaced", name: "Spaced", command: file, args: ["{prompt}"] }] });
+  const result = box.run(["--cli", "spaced", "--note", "a b"]);
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(box.argsOf("spaced"), ["/plan2code", "--note", "a b"]);
 });

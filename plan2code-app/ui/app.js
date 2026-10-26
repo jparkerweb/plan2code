@@ -2,7 +2,7 @@
 // agent's terminal panel docked at the bottom with a drag handle.
 
 import { mountTerminal } from './terminal.js';
-import { barNextSteps, continueKeys, defaultRightFraction, folderName, windowTitleFor } from './meter.js';
+import { barNextSteps, continueKeys, defaultRightFraction, folderName, pickDefaultAgent, windowTitleFor } from './meter.js';
 
 const { invoke, Channel } = window.__TAURI__.core;
 
@@ -27,6 +27,7 @@ const launchCard = document.getElementById('launch-card');
 const launchAgentEl = document.getElementById('launch-agent');
 const launchMissingEl = document.getElementById('launch-missing');
 const launchModelEl = document.getElementById('launch-model');
+const launchModelListEl = document.getElementById('launch-model-list');
 const launchEffortRow = document.getElementById('launch-effort-row');
 const launchEffortEl = document.getElementById('launch-effort');
 const launchBypassEl = document.getElementById('launch-bypass');
@@ -63,7 +64,10 @@ const MAXIMIZED_PANE = 0.80;
 const SMALL_PANE = 0.15;
 const QUIET_BADGE_MS = 10000;
 
-const AGENT_LABELS = { claude: 'Claude Code', devin: 'Devin', codex: 'Codex' };
+// Only the bar's fallback, before (or without) agent_availability: the launch
+// card and the bar otherwise read each agent's label from that list.
+const FALLBACK_LABELS = { claude: 'Claude Code', devin: 'Devin', codex: 'Codex' };
+const agentLabel = (id) => (agentAvailability[id] && agentAvailability[id].label) || FALLBACK_LABELS[id] || id || '';
 // Devin's model ids already carry their effort (`swe-2-high`); only these two
 // take a separate effort, at the levels their own CLI documents.
 const EFFORT_OPTIONS = {
@@ -109,7 +113,7 @@ function applyAgentState(next, { skipReset } = {}) {
     lastOutputAt = Date.now();
   }
   agent = next;
-  const label = AGENT_LABELS[agent.kind] || '';
+  const label = agentLabel(agent.kind);
   const active = agentActive();
 
   const ended = agent.state === 'ended';
@@ -259,17 +263,92 @@ function confirmRestart(onYes) {
 }
 
 // What the launch card offers for each agent: whether its CLI was found on
-// PATH (else how to install it) and whether it takes its own effort.
+// PATH (else how to install it) and whether it takes its own effort. The list
+// keeps the order Rust sent (built-ins, then custom agents); the map is by id.
+let agentList = [];
 let agentAvailability = {};
 
 async function loadAgentAvailability() {
   try {
-    const list = await invoke('agent_availability');
-    agentAvailability = Object.fromEntries(list.map((entry) => [entry.id, entry]));
+    agentList = await invoke('agent_availability');
+    agentAvailability = Object.fromEntries(agentList.map((entry) => [entry.id, entry]));
   } catch {
     // Nothing to show is not a reason to block the card: Start just tries it.
+    agentList = [];
     agentAvailability = {};
   }
+}
+
+// The launch card's agent choices, from the availability list. With nothing
+// to list (the check failed) the fixed options in index.html stay as they are.
+function populateAgentSelect(selected) {
+  if (agentList.length === 0) return;
+  launchAgentEl.replaceChildren(
+    ...agentList.map((entry) => {
+      const option = document.createElement('option');
+      option.value = entry.id;
+      option.textContent = entry.label || entry.id;
+      return option;
+    })
+  );
+  if (selected) launchAgentEl.value = selected;
+}
+
+// Pick the agent to start on and show the card's state for it.
+function applyDefaultAgent(remembered) {
+  populateAgentSelect(pickDefaultAgent(agentList, remembered));
+  refreshLaunchCard();
+}
+
+// A button that opens a built-in agent's install page in the browser.
+function installPageButton(id) {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'agent-link';
+  button.textContent = 'Install page';
+  button.onclick = () => {
+    invoke('open_install_page', { id }).catch((error) => {
+      setAgentStatus(`Could not open the install page: ${error}`, { error: true });
+    });
+  };
+  return button;
+}
+
+// Shown when no agent CLI is installed, in the first-run checklist and on the
+// launch card: what an agent CLI is, each built-in's install command and page,
+// and a way to look again once one is installed.
+function noAgentExplainer() {
+  const box = document.createElement('div');
+  box.className = 'agent-explainer';
+  const intro = document.createElement('p');
+  intro.className = 'agent-explainer';
+  intro.textContent = 'An agent CLI is the AI coding assistant Plan2Code runs for you in its terminal. None was found on PATH. Install one of these:';
+  const list = document.createElement('ul');
+  for (const entry of agentList.filter((a) => !a.custom)) {
+    const item = document.createElement('li');
+    item.append(`${entry.label}: `);
+    const code = document.createElement('code');
+    code.textContent = entry.installHint || '';
+    item.append(code, installPageButton(entry.id));
+    list.append(item);
+  }
+  const other = document.createElement('p');
+  other.className = 'agent-explainer';
+  other.textContent = 'Already use another agent CLI? Add it in User Preferences under Agents.';
+  const check = document.createElement('button');
+  check.type = 'button';
+  check.textContent = 'Check again';
+  check.onclick = checkAgentsAgain;
+  box.append(intro, list, other, check);
+  return box;
+}
+
+// Re-read the agents from disk (a CLI installed or a custom agent added since),
+// then redraw whatever shows them and pick the default again.
+async function checkAgentsAgain() {
+  await loadAgentAvailability();
+  applyDefaultAgent((appState && appState.lastAgent) || launchAgentEl.value);
+  if (!firstRunEl.hidden && appState) renderFirstRun(appState);
 }
 
 function refreshLaunchCard() {
@@ -280,13 +359,28 @@ function refreshLaunchCard() {
   launchMissingEl.hidden = installed;
   launchMissingEl.replaceChildren();
   if (!installed) {
-    const label = (info && info.label) || AGENT_LABELS[kind] || kind;
-    launchMissingEl.append(`${label} was not found on PATH. Install it: `);
-    const code = document.createElement('code');
-    code.textContent = (info && info.installHint) || '';
-    launchMissingEl.append(code);
+    if (!agentList.some((a) => a.installed)) {
+      launchMissingEl.append(noAgentExplainer());
+    } else {
+      launchMissingEl.append(`${agentLabel(kind)} was not found on PATH.`);
+      if (info && !info.custom) {
+        launchMissingEl.append(' Install it: ');
+        const code = document.createElement('code');
+        code.textContent = info.installHint || '';
+        launchMissingEl.append(code, installPageButton(kind));
+      }
+    }
   }
-  const levels = EFFORT_OPTIONS[kind] || [];
+  // A custom agent has no separate effort, and offers its models as
+  // suggestions in the (still free-text) model field.
+  launchModelListEl.replaceChildren();
+  for (const model of (info && info.custom && info.models) || []) {
+    const option = document.createElement('option');
+    option.value = model.id;
+    if (model.label) option.label = model.label;
+    launchModelListEl.append(option);
+  }
+  const levels = info && info.custom ? [] : EFFORT_OPTIONS[kind] || [];
   launchEffortRow.hidden = levels.length === 0;
   launchEffortEl.replaceChildren();
   const def = document.createElement('option');
@@ -350,11 +444,13 @@ function renderFirstRun(state) {
   const nodeDetail = `${state.nodeVersion || 'found'} (18 or newer)${state.nodeBinary ? ` — ${state.nodeBinary}` : ''}`;
   firstRunListEl.append(firstRunRow(true, 'Node.js', nodeDetail));
 
-  const agentsKnown = Object.values(agentAvailability);
+  const agentsKnown = agentList;
   const anyAgentInstalled = agentsKnown.length === 0 || agentsKnown.some((a) => a.installed);
   const agentsDetail = document.createElement('span');
   if (agentsKnown.length === 0) {
     agentsDetail.textContent = 'Could not check.';
+  } else if (!anyAgentInstalled) {
+    agentsDetail.append(noAgentExplainer());
   } else {
     agentsKnown.forEach((a, i) => {
       if (i > 0) agentsDetail.append(', ');
@@ -397,7 +493,8 @@ async function startAgent(event) {
   if (event) event.preventDefault();
   const kind = launchAgentEl.value;
   const model = launchModelEl.value.trim() || null;
-  const effort = (EFFORT_OPTIONS[kind] || []).length > 0 ? launchEffortEl.value || null : null;
+  const info = agentAvailability[kind];
+  const effort = !(info && info.custom) && (EFFORT_OPTIONS[kind] || []).length > 0 ? launchEffortEl.value || null : null;
   const mode = launchBypassEl.checked ? 'bypass' : 'checked';
   setAgentStatus('');
   showState('Waiting for the agent to open the dashboard');
@@ -929,7 +1026,6 @@ async function main() {
     return;
   }
   appState = state;
-  if (AGENT_LABELS[state.lastAgent]) launchAgentEl.value = state.lastAgent;
   if (typeof state.launchModel === 'string' && state.launchModel) launchModelEl.value = state.launchModel;
   if (state.termPanel) {
     paneDock = state.termPanel.dock === 'right' ? 'right' : 'bottom';
@@ -945,7 +1041,7 @@ async function main() {
   }
   applyPaneLayout();
   await loadAgentAvailability();
-  refreshLaunchCard();
+  applyDefaultAgent(state.lastAgent);
   setInterval(updateBadge, BADGE_POLL_MS);
   checkVersions();
 

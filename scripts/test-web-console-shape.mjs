@@ -185,7 +185,7 @@ test("shape: no page module sets a style attribute from script", () => {
 // no routes of its own: its buttons are sends (`__git`), through /submit.
 const ROUTE_ORDER = [
   "/health", "/s/", "/", "SERVABLE", "/overview", "/handoff", "/version", "/state", "/events", "/draft",
-  "/looks", "/looks", "/subagents", "/pr-host", "/models", "/models", "/cleanup", "/upload",
+  "/looks", "/looks", "/subagents", "/pr-host", "/models", "/models", "/agents", "/agents", "/agents/test", "/cleanup", "/upload",
   "/notepad", "/notepad/text", "/notepad/image", "/notepad/thumb", "/notepad/image/delete", "/notepad/tab",
   "/notepad/tab/rename", "/notepad/tab/delete", "/notepad/tab/order", "/notepad/tab/last", "/notepad/images/",
   "/attachments/", "/shots/", "/uploads/", "/submit", "/open-link", "/chat", "/chat/decision", "/workspace",

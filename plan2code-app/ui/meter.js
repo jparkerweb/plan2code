@@ -17,12 +17,32 @@ export const NEXT_STEP_LABELS = {
  * text as a queued message while its turn is busy, and the button only shows
  * once the agent stopped checking in with the console, so by then the turn is
  * stuck and the queued word would never send by itself: for it, the send-now
- * chord (ctrl+x ctrl+s) follows.
+ * chord (ctrl+x ctrl+s) follows. Any id it does not know (a custom agent)
+ * gets the plain word and Enter.
  */
 export function continueKeys(kind) {
   const keys = ['continue', '\r'];
   if (kind === 'claude') keys.push('\x18\x13');
   return keys;
+}
+
+/**
+ * Which agent the launch card starts on, from `agent_availability`'s list
+ * (built-ins first, then custom agents): the remembered id when it is
+ * installed, else the first installed built-in, else the first installed
+ * custom agent, else the remembered id or the first entry, so the card's
+ * missing-agent line explains what is wrong instead of picking silently.
+ */
+export function pickDefaultAgent(availability, remembered) {
+  const list = Array.isArray(availability) ? availability : [];
+  const rememberedEntry = list.find((a) => a.id === remembered);
+  if (rememberedEntry && rememberedEntry.installed) return remembered;
+  const builtIn = list.find((a) => a.installed && !a.custom);
+  if (builtIn) return builtIn.id;
+  const custom = list.find((a) => a.installed && a.custom);
+  if (custom) return custom.id;
+  if (remembered) return remembered;
+  return list.length > 0 ? list[0].id : null;
 }
 
 /**
