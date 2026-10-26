@@ -39,6 +39,8 @@ All notable changes to Plan2Code will be documented in this file.
 - **desktop app**: links that leave the console (**Open pull request**, links in documents, the feedback button) open in the default browser instead of doing nothing; when no browser can be started, the page shows the link with a **Copy** button to paste into one.
 - **web console**: answers sent and not picked up bring up the "not running, type **continue**" help after a minute of the agent's silence (three when it said it was working), instead of after its quiet allowance, which a build can set to half an hour.
 - **web console**: a failed Send says why: the lost-contact state and its reconnect help at once when the console is gone, the console's reason when it refuses the send, or that the console is still up and Send can be pressed again.
+- **desktop app**: a test console started inside the app (for example by `cargo test` during a build) can no longer take over the window. Before, the window followed it, then fell back to an empty dashboard once the test shut it down, and the build's question sat on a page no one could see. The app now ignores any page whose session is not in its own console store.
+- **desktop app**: a console too busy to answer a health check in time (a machine running a test suite) is given a second, longer look and then resumed on the same session. It is no longer swapped for a fresh, empty dashboard mid-build.
 
 ## v2.11.1
 

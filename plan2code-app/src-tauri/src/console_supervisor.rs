@@ -10,9 +10,16 @@ use std::time::Duration;
 
 use serde::Serialize;
 
+use crate::session_reader;
+
 /// How long a health check waits for the console before calling it dead. The
 /// server is on loopback, so anything longer is a hang, not a slow network.
 const HEALTH_TIMEOUT: Duration = Duration::from_secs(3);
+
+/// The second, longer look a server gets before it is restarted, as the
+/// console's own `open` gives one: a machine busy with a test run can keep a
+/// healthy server from answering inside the first.
+const BUSY_HEALTH_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// A running console session, as `console.mjs open` reports it.
 #[derive(Clone, Serialize)]
@@ -247,6 +254,10 @@ impl ConsoleSupervisor {
 
     /// A GET on the session URL: any HTTP answer means the server is alive.
     pub fn health(&self) -> bool {
+        self.health_within(HEALTH_TIMEOUT)
+    }
+
+    fn health_within(&self, timeout: Duration) -> bool {
         if self.stopped {
             return false;
         }
@@ -257,11 +268,11 @@ impl ConsoleSupervisor {
         else {
             return false;
         };
-        let Ok(mut stream) = TcpStream::connect_timeout(&addr, HEALTH_TIMEOUT) else {
+        let Ok(mut stream) = TcpStream::connect_timeout(&addr, timeout) else {
             return false;
         };
-        let _ = stream.set_read_timeout(Some(HEALTH_TIMEOUT));
-        let _ = stream.set_write_timeout(Some(HEALTH_TIMEOUT));
+        let _ = stream.set_read_timeout(Some(timeout));
+        let _ = stream.set_write_timeout(Some(timeout));
         let request = format!("GET {path} HTTP/1.1\r\nHost: {host}\r\nConnection: close\r\n\r\n");
         if stream.write_all(request.as_bytes()).is_err() {
             return false;
@@ -277,14 +288,15 @@ impl ConsoleSupervisor {
     /// when a new session was started. Never loops: the caller (the bar) asks
     /// and shows the outcome.
     pub fn restart_if_dead(&mut self) -> Result<bool, String> {
-        if self.stopped || self.health() {
+        if self.stopped || self.health() || self.health_within(BUSY_HEALTH_TIMEOUT) {
             return Ok(false);
         }
-        // The same session first, so the page and a skill's place in it survive;
-        // a session that cannot be resumed (gone from disk) starts a new one.
         let sid = self.session.sid.clone();
-        self.session = Self::open_session(&self.console_dir, &self.project_dir, &self.embed_origin, Some(&sid))
-            .or_else(|_| Self::open_session(&self.console_dir, &self.project_dir, &self.embed_origin, None))?;
+        let on_disk = session_on_disk(&sid);
+        let (console_dir, project_dir, embed_origin) = (&self.console_dir, &self.project_dir, &self.embed_origin);
+        self.session = resume_or_fresh(&sid, on_disk, |resume| {
+            Self::open_session(console_dir, project_dir, embed_origin, resume)
+        })?;
         self.stopped = false;
         Ok(true)
     }
@@ -308,6 +320,31 @@ impl ConsoleSupervisor {
         }
         Ok(())
     }
+}
+
+/// Is the session's folder still in the console's home. Unknown (no home
+/// directory) counts as there, so the answer never throws a session away. A
+/// sid that is not a plain folder name (empty, `..`, a path) is never there.
+pub fn session_on_disk(sid: &str) -> bool {
+    if Path::new(sid).file_name() != Some(std::ffi::OsStr::new(sid)) {
+        return false;
+    }
+    session_reader::console_home().map_or(true, |home| session_reader::session_dir(&home, sid).is_dir())
+}
+
+/// The same session, so the page and a skill's place in it survive, tried
+/// twice. Only a session gone from disk starts a new one: falling back to a
+/// fresh dashboard while the folder is still there once swapped a build's page
+/// for an empty dashboard mid-run, and the agent went on posting to a session
+/// the window no longer showed. A failure is the bar's to report, with Retry.
+fn resume_or_fresh<F>(sid: &str, on_disk: bool, mut open: F) -> Result<ConsoleSession, String>
+where
+    F: FnMut(Option<&str>) -> Result<ConsoleSession, String>,
+{
+    if !on_disk {
+        return open(None);
+    }
+    open(Some(sid)).or_else(|_| open(Some(sid)))
 }
 
 impl Drop for ConsoleSupervisor {
@@ -356,6 +393,56 @@ mod tests {
         assert_eq!((sup.session().port, sup.session().sid.as_str()), (6000, "sid-10"));
         // Never started a server here: nothing for Drop to stop.
         sup.stopped = true;
+    }
+
+    fn opened(sid: &str) -> ConsoleSession {
+        ConsoleSession { sid: sid.to_string(), url: "http://127.0.0.1:5/s/t/".into(), pid: 1, port: 5, embed: true }
+    }
+
+    #[test]
+    fn only_a_plain_folder_name_can_be_a_session_on_disk() {
+        // `<home>/sessions/` and `<home>` are folders too: these must not pass.
+        for sid in ["", ".", "..", "../x", "a/b", "a\\b"] {
+            assert!(!session_on_disk(sid), "{sid:?} counted as a session");
+        }
+    }
+
+    #[test]
+    fn a_failed_resume_of_a_session_still_on_disk_never_opens_a_fresh_dashboard() {
+        // A build's console that was slow to answer: swapping its page for a
+        // new dashboard left the agent posting to a session nobody could see.
+        let mut calls = Vec::new();
+        let result = resume_or_fresh("s1", true, |resume| {
+            calls.push(resume.map(str::to_string));
+            Err("busy".to_string())
+        });
+        assert!(result.is_err(), "the failure is reported, not papered over");
+        assert!(calls.iter().all(|c| c.as_deref() == Some("s1")), "only ever resumed: {calls:?}");
+        assert_eq!(calls.len(), 2, "the resume is tried twice");
+    }
+
+    #[test]
+    fn a_resume_that_works_the_second_time_keeps_the_session() {
+        let mut tries = 0;
+        let session = resume_or_fresh("s1", true, |resume| {
+            tries += 1;
+            assert_eq!(resume, Some("s1"));
+            if tries == 1 { Err("busy".to_string()) } else { Ok(opened("s1")) }
+        })
+        .unwrap();
+        assert_eq!(session.sid, "s1");
+    }
+
+    #[test]
+    fn a_session_gone_from_disk_starts_a_fresh_dashboard() {
+        let mut calls = Vec::new();
+        let session = resume_or_fresh("s1", false, |resume| {
+            calls.push(resume.map(str::to_string));
+            Ok(opened(if resume.is_some() { "s1" } else { "s2" }))
+        })
+        .unwrap();
+        assert_eq!(session.sid, "s2");
+        assert_eq!(calls, vec![None], "nothing on disk to resume");
     }
 
     #[test]

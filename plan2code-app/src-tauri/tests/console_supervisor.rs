@@ -37,6 +37,11 @@ fn setup() -> Option<PathBuf> {
     std::env::set_var("PLAN2CODE_CONSOLE_DIR", &console);
     std::env::set_var("PLAN2CODE_CONSOLE_HOME", temp_dir("home"));
     std::env::set_var("PLAN2CODE_NO_BROWSER", "1");
+    // Run inside the desktop app, the agent's in-app variables would have this
+    // console announce itself to the live window and take it over.
+    for name in ["PLAN2CODE_IN_APP", "PLAN2CODE_APP_ANNOUNCE", "PLAN2CODE_APP_TOKEN", "PLAN2CODE_CONSOLE_SID"] {
+        std::env::remove_var(name);
+    }
     Some(temp_dir("project"))
 }
 

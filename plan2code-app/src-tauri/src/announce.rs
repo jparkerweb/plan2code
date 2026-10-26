@@ -27,7 +27,9 @@ pub struct PageNotice {
     pub workflow: String,
 }
 
-pub type OnPage = Arc<dyn Fn(PageNotice) + Send + Sync>;
+/// Says whether the window took the page. Only a page it took becomes the
+/// window's current session, so a refused one never steers the next `open`.
+pub type OnPage = Arc<dyn Fn(PageNotice) -> bool + Send + Sync>;
 
 pub struct AnnounceServer {
     port: u16,
@@ -197,11 +199,15 @@ impl AnnounceServer {
                     .and_then(|(head, body)| check_request(&head, &body, &expected))
                 {
                     Ok(Request::Page(notice)) => {
-                        if let Ok(mut slot) = shared.lock() {
-                            *slot = Some(notice.clone());
+                        if on_page(notice.clone()) {
+                            if let Ok(mut slot) = shared.lock() {
+                                *slot = Some(notice);
+                            }
+                            (204, String::new())
+                        } else {
+                            // `open` reads anything but 2xx as "the app did not take the page".
+                            (409, String::new())
                         }
-                        on_page(notice);
-                        (204, String::new())
                     }
                     Ok(Request::Session) => {
                         let now = shared.lock().ok().and_then(|slot| slot.clone());
@@ -330,8 +336,8 @@ mod tests {
         let (tx_a, rx_a) = channel();
         let (tx_b, rx_b) = channel();
         let (tx_a, tx_b) = (Mutex::new(tx_a), Mutex::new(tx_b));
-        let a = AnnounceServer::start(Arc::new(move |n| tx_a.lock().unwrap().send(n).unwrap())).unwrap();
-        let b = AnnounceServer::start(Arc::new(move |n| tx_b.lock().unwrap().send(n).unwrap())).unwrap();
+        let a = AnnounceServer::start(Arc::new(move |n| tx_a.lock().unwrap().send(n).is_ok())).unwrap();
+        let b = AnnounceServer::start(Arc::new(move |n| tx_b.lock().unwrap().send(n).is_ok())).unwrap();
         assert_ne!(a.url(), b.url());
         let port = |s: &AnnounceServer| s.url().rsplit_once(':').unwrap().1.trim_end_matches("/page").parse::<u16>().unwrap();
 
@@ -343,7 +349,7 @@ mod tests {
 
     #[test]
     fn agent_env_names_this_windows_values() {
-        let server = AnnounceServer::start(Arc::new(|_| {})).unwrap();
+        let server = AnnounceServer::start(Arc::new(|_| true)).unwrap();
         let env = server.agent_env("http://127.0.0.1:1430", "3.0.0");
         let get = |key: &str| env.iter().find(|(k, _)| k == key).map(|(_, v)| v.clone());
         assert_eq!(get("PLAN2CODE_IN_APP").as_deref(), Some("1"));
@@ -356,7 +362,7 @@ mod tests {
 
     #[test]
     fn the_current_session_is_what_was_announced_last() {
-        let server = AnnounceServer::start(Arc::new(|_| {})).unwrap();
+        let server = AnnounceServer::start(Arc::new(|_| true)).unwrap();
         let port: u16 = server.url().rsplit_once(':').unwrap().1.trim_end_matches("/page").parse().unwrap();
         let ask = |token: &str| {
             let mut stream = TcpStream::connect(("127.0.0.1", port)).unwrap();
@@ -372,6 +378,16 @@ mod tests {
         assert_eq!(server.current().unwrap().workflow, "plan");
         server.forget_current();
         assert!(ask(server.token()).ends_with("null"), "forgotten: the next open starts its own session");
+        assert_eq!(server.current(), None);
+    }
+
+    #[test]
+    fn a_page_the_window_refuses_is_not_its_session() {
+        // A test's throwaway console: remembered, it would steer the next
+        // agent `open` away from the window's real session.
+        let server = AnnounceServer::start(Arc::new(|_| false)).unwrap();
+        let port: u16 = server.url().rsplit_once(':').unwrap().1.trim_end_matches("/page").parse().unwrap();
+        assert_eq!(post(port, server.token(), GOOD), 409, "open hears that the app did not take it");
         assert_eq!(server.current(), None);
     }
 }
