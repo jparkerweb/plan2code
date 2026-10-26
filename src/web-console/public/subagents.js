@@ -221,7 +221,8 @@ export function switchLabel(frame) {
 // in the order the agent reported them. A real helper supersedes the
 // working-alone marker, so the note only draws when no helper was ever
 // reported. A result shows once the helper ended, and a reported strength or
-// effort as one line ("Standard, medium effort").
+// effort as one line ("Standard, medium effort") plus a badge each, ranked 1-3
+// so the page can colour them (0 for the session's own model, which has no rank).
 export function helperRows(helpers) {
   const list = Array.isArray(helpers) ? helpers.filter(isPlainObject) : [];
   const real = list.filter((h) => h.alone !== true);
@@ -240,13 +241,24 @@ export function helperRows(helpers) {
       stateLabel: STATE_LABELS[state] || STATE_LABELS.running,
       ...((state === "done" || state === "failed") && typeof result === "string" && result ? { result } : {}),
       ...ran,
-      ...(line ? { strengthLine: line } : {}),
+      ...(line ? { strengthLine: line, badges: strengthBadges(ran.strength, ran.effort) } : {}),
     };
   });
   return { alone: false, rows };
 }
 
 const HELPER_STRENGTH_WORDS = Object.freeze({ light: "Light", standard: "Standard", strongest: "Strongest", inherit: "Session model" });
+// Each value's rank for its badge colour; the session's own model has none.
+const HELPER_STRENGTH_LEVELS = Object.freeze({ light: 1, standard: 2, strongest: 3, inherit: 0 });
+const HELPER_EFFORT_LEVELS = Object.freeze({ low: 1, medium: 2, high: 3 });
+
+// One badge per reported value: its kind, its words and its rank.
+function strengthBadges(strength, effort) {
+  const badges = [];
+  if (strength) badges.push({ kind: "strength", label: HELPER_STRENGTH_WORDS[strength], level: HELPER_STRENGTH_LEVELS[strength] });
+  if (effort) badges.push({ kind: "effort", label: `${effort[0].toUpperCase()}${effort.slice(1)} effort`, level: HELPER_EFFORT_LEVELS[effort] });
+  return badges;
+}
 
 // "Standard, medium effort", "Light", "Medium effort", or "" when neither was reported.
 function strengthLine(strength, effort) {

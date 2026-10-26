@@ -269,6 +269,11 @@ test("the Subagents tab shows a reported helper's strength line and none for a h
   await tab.click();
   const rows = s.page.locator("#main .sa-card .sa-row");
   await rows.first().waitFor();
-  assert.equal(await textOf(rows.filter({ hasText: "Read the store helpers" }).locator(".sa-strength")), "Standard, medium effort");
+  const strength = rows.filter({ hasText: "Read the store helpers" }).locator(".sa-strength");
+  assert.equal(await strength.getAttribute("aria-label"), "Standard, medium effort");
+  const badges = strength.locator(".sa-badge");
+  assert.deepEqual(await badges.allTextContents(), ["Standard", "Medium effort"]);
+  assert.deepEqual(await badges.evaluateAll((els) => els.map((e) => e.className)), ["sa-badge is-strength lvl-2", "sa-badge is-effort lvl-2"]);
+  assert.equal(await badges.first().locator(".sa-bars i.on").count(), 2);
   assert.equal(await rows.filter({ hasText: "Check the tests" }).locator(".sa-strength").count(), 0);
 });

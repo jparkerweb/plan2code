@@ -2164,7 +2164,7 @@ test("subagents: helperRows turns a reported strength and effort into one line, 
   }
   for (const extra of [{}, { strength: "huge", effort: "max" }]) {
     const row = line(extra);
-    for (const key of ["strengthLine", "strength", "effort"]) assert.equal(key in row, false, `${JSON.stringify(extra)}: no ${key}`);
+    for (const key of ["strengthLine", "badges", "strength", "effort"]) assert.equal(key in row, false, `${JSON.stringify(extra)}: no ${key}`);
   }
 });
 
@@ -2180,6 +2180,20 @@ test("page: the Subagents button sits right after Write a brief, and its dialog 
   assert.ok(dialog, "index.html has the Subagents dialog");
   for (const id of ["subagents-instruction", "subagents-default", "subagents-max", "subagents-checkin", "subagents-research", "subagents-status", "subagents-cancel", "subagents-save"]) {
     assert.ok(dialog[1].includes(`id="${id}"`), `the dialog carries #${id}`);
+test("subagents: helperRows gives each reported strength and effort a badge ranked 1-3, and the session's own model rank 0", () => {
+  const badges = (extra) => helperRows([{ id: "h1", title: "One", ask: "a", state: "running", ...extra }]).rows[0].badges;
+  assert.deepEqual(badges({ strength: "standard", effort: "high" }), [
+    { kind: "strength", label: "Standard", level: 2 },
+    { kind: "effort", label: "High effort", level: 3 },
+  ]);
+  assert.deepEqual(badges({ strength: "light" }), [{ kind: "strength", label: "Light", level: 1 }]);
+  assert.deepEqual(badges({ strength: "strongest", effort: "low" }).map((b) => b.level), [3, 1]);
+  assert.deepEqual(badges({ strength: "inherit", effort: "medium" }), [
+    { kind: "strength", label: "Session model", level: 0 },
+    { kind: "effort", label: "Medium effort", level: 2 },
+  ]);
+});
+
   }
   assert.doesNotMatch(dialog[1], /\sstyle=/);
   assert.doesNotMatch(dialog[1], /<script/i);

@@ -724,7 +724,24 @@ export function renderSubagents(main) {
     head.appendChild(pill);
     item.appendChild(head);
     item.appendChild(el("p", "sa-ask", row.ask));
-    if (row.strengthLine) item.appendChild(el("p", "sa-strength", row.strengthLine));
+    if (row.strengthLine) {
+      // Badges for the eye, the plain line for screen readers and the tooltip.
+      const strength = el("p", "sa-strength");
+      strength.setAttribute("aria-label", row.strengthLine);
+      strength.title = row.strengthLine;
+      for (const badge of row.badges) {
+        const chip = el("span", `sa-badge is-${badge.kind} lvl-${badge.level}`);
+        chip.setAttribute("aria-hidden", "true");
+        if (badge.level) {
+          const bars = el("span", "sa-bars");
+          for (let i = 1; i <= 3; i++) bars.appendChild(el("i", i <= badge.level ? "on" : null));
+          chip.appendChild(bars);
+        }
+        chip.appendChild(document.createTextNode(badge.label));
+        strength.appendChild(chip);
+      }
+      item.appendChild(strength);
+    }
     if (row.result) item.appendChild(el("p", "sa-result", row.result));
     list.appendChild(item);
   }
