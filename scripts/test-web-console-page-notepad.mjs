@@ -348,15 +348,23 @@ test("headings grow, bullets draw, and marks come back on the line the cursor is
       return [...root.querySelectorAll(".cm-line")].map((l) => ({ text: l.textContent, size: parseFloat(getComputedStyle(l).fontSize) }));
     });
   // The cursor starts on line 1 (the "# Big" heading): its mark shows, the
-  // second heading's does not.
-  let seen = await lines();
+  // second heading's does not. The editor hides marks and draws bullets a
+  // little after the text lands, so wait for that before looking.
+  let seen;
+  await until(async () => {
+    seen = await lines();
+    return seen[2]?.text === "Smaller" && seen[4] && !seen[4].text.startsWith("-");
+  }, 5000);
   assert.equal(seen[0].text, "# Big");
   assert.equal(seen[2].text, "Smaller", "off the cursor line the mark is hidden");
   assert.ok(seen[0].size > seen[2].size && seen[2].size > seen[7].size, `heading sizes step down: ${seen.map((l) => l.size).join(", ")}`);
   assert.ok(seen[4].text.startsWith("•") || !seen[4].text.startsWith("-"), `a bullet is drawn, not a hyphen: "${seen[4].text}"`);
   // Click the second heading: its mark comes back.
   await s.page.locator("#notepad-editor .cm-h2").click();
-  seen = await lines();
+  await until(async () => {
+    seen = await lines();
+    return seen[2].text === "## Smaller";
+  }, 5000);
   assert.equal(seen[2].text, "## Smaller");
   assert.equal(seen[0].text, "Big");
 });
@@ -712,6 +720,8 @@ test("Delete asks twice, Escape backs out of either, and only the second confirm
   await s.page.click("#notepad-delete-go");
   await until(() => !fs.existsSync(folder), 4000);
   await s.page.waitForFunction(() => document.querySelectorAll("#notepad-tabs .notepad-tab").length === 1);
+  // The strip redraws before the neighbor is marked selected.
+  await until(async () => (await selectedName(s)).length === 1, 4000);
   assert.deepEqual(await selectedName(s), ["Notes"]);
   assert.equal(await shows(s, "keep me"), "keep me");
   assert.equal(listTabs(s.project).last, idOf(s, "Notes"), "the neighbor became the last tab");

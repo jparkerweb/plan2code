@@ -99,6 +99,11 @@ export function gitInit(dir, branch = "main") {
   g("config", "user.email", "t@example.com");
   g("config", "user.name", "Test");
   g("config", "commit.gpgsign", "false");
+  // No background maintenance after a commit: on macOS it held
+  // .git/objects/maintenance.lock while copyFixture copied the template, and
+  // the copy failed with ENOENT once the lock was gone.
+  g("config", "maintenance.auto", "false");
+  g("config", "gc.auto", "0");
   return g;
 }
 
