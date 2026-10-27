@@ -148,6 +148,30 @@ test("Update CHANGELOG first shows beside Commit it now only when the finish ask
   assert.equal(await main.getByRole("button", { name: "Commit it now" }).isDisabled(), true, "one press locks the other buttons");
 });
 
+// Pressed, then left: the agent's turn had ended, so nothing collects the
+// press. The line stops promising it is opening and offers continue instead.
+test("a finished screen's press that nothing collects says Plan2Code is not running, with continue as a button under the app", async (t) => {
+  const s = await openSession(await suite.browser(), {
+    t,
+    workflow: "quick-task",
+    clock: true,
+    payload: { agent: { status: "working", activity: "Task 1 of 1" } },
+    env: { PLAN2CODE_IN_APP: "1" },
+    init: FAKE_APP_FRAME,
+  });
+  s.post({ finish: { headline: "Quick task done", command: "git add -A && git commit -m x -m y", commit: true, changelog: true, dashboard: true } });
+  const main = s.page.locator("#main");
+  await main.getByRole("button", { name: "Update CHANGELOG first" }).click();
+  await lineSays(s, /^Opening Changelog…/);
+  await s.page.clock.fastForward(200_000);
+  await lineSays(s, /^Plan2Code is not running\. Your choice is saved/);
+  assert.match(await s.page.locator("#planny").getAttribute("class"), /\bis-adrift\b/);
+  const press = s.page.locator("#agent-text .agent-key-btn");
+  assert.equal(await press.textContent(), "continue");
+  await press.click();
+  await until(async () => (await toApp(s, "agent-continue")).length === 1, 5000);
+});
+
 test("Continue here is hidden once the session meter is red, and the command and fresh-session advice stay", async (t) => {
   const s = await openSession(await suite.browser(), { t, workflow: "implement", payload: { agent: { status: "working", activity: "Task 1 of 1" } } });
   // Ten points: a thirty-task phase scores ten, the red level.

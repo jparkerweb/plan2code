@@ -223,6 +223,19 @@ function uncollectedLimit() {
 // them up -- but "Sent. Waiting for Plan2Code." forever does not say that.
 export const stranded = () => page.pendingResult && agentAdrift();
 
+// A press on a finished screen (Commit it now, Update CHANGELOG first, the way
+// back to the dashboard, Continue here, a review) that nothing has collected.
+// agentAdrift() stays quiet after a finish, where no agent is the normal end,
+// but a press sent to one means somebody is waiting on it: an agent still in
+// `wait` pings every five seconds, so a minute of silence says it is gone (its
+// turn ended while the person was away) and the press sits saved until it
+// is woken.
+export function pressStranded() {
+  if (!finish() || page.gone || !page.pendingResult || !page.agentLastSeen) return false;
+  if (!page.local.afterBuild || page.local.afterBuild === "done") return false;
+  return Date.now() - Date.parse(page.agentLastSeen) > UNCOLLECTED_MS;
+}
+
 // The spec whose overview.md the Overview tab shows: the dashboard picker's
 // selection on the dashboard, the session's own spec everywhere else.
 export const overviewSpec = () => (isDashboard() ? selSpec()?.dir || "" : (page.S && page.S.specDir) || "");
