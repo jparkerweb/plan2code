@@ -194,6 +194,24 @@
 .sa-pill.is-done { background: var(--ok-soft); color: var(--ok); }
 .sa-pill.is-failed { background: var(--warn-soft); color: var(--warn); }
 .sa-pill .spinner.tiny { width: 10px; height: 10px; }
+/* The Subagents dialog: wide like the Notebook, so it lays its choices out
+   in rows instead of a tall stack. Back to a stack on a narrow window. */
+.modal.looks.subagents { width: min(1000px, 90vw); max-width: none; }
+.subagents-top { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 18px; align-items: start; }
+.modal.looks .subagents-top .modal-ranges + .modal-ranges { margin-top: 0; }
+.subagents-top .looks-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.subagents-top + .modal-ranges { margin-top: 18px; }
+.subagents #subagents-strength-row { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+/* Each strength radio carries the tab's badge; the session's own model has no
+   rank, so it keeps the badge's plain ink. A locked row dims with its radios. */
+.subagents #subagents-strength-row .sa-badge { font-size: 13px; padding: 5px 10px; }
+.subagents #subagents-strength-row label:has(input:checked) { border-color: var(--accent-line); }
+.subagents #subagents-strength-row label:has(input:disabled) .sa-badge { opacity: 0.5; }
+@media (max-width: 720px) {
+  .subagents-top,
+  .subagents-top .looks-row,
+  .subagents #subagents-strength-row { grid-template-columns: 1fr; }
+}
 /* The dialog's number box, themed like the page's other inputs. */
 .subagents input[type="number"] {
   width: 5em; font: inherit; color: var(--ink); background: var(--panel-2);

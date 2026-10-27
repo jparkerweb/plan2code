@@ -2691,17 +2691,32 @@
         Let Plan2Code hand independent work to helpers in this skill. Saved for this
         project and this skill.
       </p>
-      <fieldset class="modal-ranges looks-row">
-        <legend>Helpers</legend>
-        <label><input type="radio" name="subagents-on" value="on" /> <span>Use helpers</span></label>
-        <label><input type="radio" name="subagents-on" value="off" checked /> <span>Work alone</span></label>
-      </fieldset>
+      <!-- On a wide dialog the switch and the cap share a row, and the four
+           strengths sit side by side, so the dialog stays short. -->
+      <div class="subagents-top">
+        <fieldset class="modal-ranges looks-row">
+          <legend>Helpers</legend>
+          <label><input type="radio" name="subagents-on" value="on" /> <span>Use helpers</span></label>
+          <label><input type="radio" name="subagents-on" value="off" checked /> <span>Work alone</span></label>
+        </fieldset>
+        <fieldset class="modal-ranges">
+          <legend>At most</legend>
+          <label>
+            <input type="number" id="subagents-max" min="1" max="20" step="1" aria-label="At most this many helpers at once" />
+            <span>helpers at once</span>
+          </label>
+          <p class="help">Advisory: your agent's own limit still applies.</p>
+        </fieldset>
+      </div>
+      <!-- Each strength wears the Subagents tab's badge for the rank it leans
+           to: Thrifty light, Balanced standard, Best strongest, and the
+           session's own model with no rank. -->
       <fieldset class="modal-ranges looks-row" id="subagents-strength-row">
         <legend>Helper strength</legend>
-        <label><input type="radio" name="subagents-strength" value="balanced" checked /> <span>Balanced</span></label>
-        <label><input type="radio" name="subagents-strength" value="thrifty" /> <span>Thrifty</span></label>
-        <label><input type="radio" name="subagents-strength" value="best" /> <span>Best</span></label>
-        <label><input type="radio" name="subagents-strength" value="session" /> <span>Match my session</span></label>
+        <label><input type="radio" name="subagents-strength" value="thrifty" /> <span class="sa-badge lvl-1"><span class="sa-bars" aria-hidden="true"><i class="on"></i><i></i><i></i></span>Thrifty</span></label>
+        <label><input type="radio" name="subagents-strength" value="balanced" checked /> <span class="sa-badge lvl-2"><span class="sa-bars" aria-hidden="true"><i class="on"></i><i class="on"></i><i></i></span>Balanced</span></label>
+        <label><input type="radio" name="subagents-strength" value="best" /> <span class="sa-badge lvl-3"><span class="sa-bars" aria-hidden="true"><i class="on"></i><i class="on"></i><i class="on"></i></span>Best</span></label>
+        <label><input type="radio" name="subagents-strength" value="session" /> <span class="sa-badge lvl-0">Match my session</span></label>
         <p class="help" id="subagents-strength-help"></p>
       </fieldset>
       <fieldset class="modal-ranges">
@@ -2711,14 +2726,6 @@
           <button type="button" class="btn small ghost" id="subagents-default">Reset to default</button>
           <span class="help">Passed to the agent as written, at its next check-in.</span>
         </div>
-      </fieldset>
-      <fieldset class="modal-ranges">
-        <legend>At most</legend>
-        <label>
-          <input type="number" id="subagents-max" min="1" max="20" step="1" aria-label="At most this many helpers at once" />
-          <span>helpers at once</span>
-        </label>
-        <p class="help">Advisory: your agent's own limit still applies.</p>
       </fieldset>
       <p class="help" id="subagents-checkin"></p>
       <p class="help" id="subagents-research" hidden></p>
