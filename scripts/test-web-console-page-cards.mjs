@@ -41,6 +41,25 @@ test("a text answer typed on the page reaches the agent as it was typed", async 
 
 // The agent's side of one question: settle what came before, post `item`
 // alone, and wait for its card.
+// Scrolls the card `locator` names to `top` ("end" for its bottom) and returns
+// where it landed. A redraw can replace the card between Playwright finding it
+// and the scroll, and a card not laid out yet cannot scroll, so it scrolls
+// again until the card on the page holds the place.
+async function scrollCard(locator, top) {
+  const deadline = Date.now() + 5000;
+  for (;;) {
+    const at = await locator.evaluate((el, want) => {
+      if (!el.isConnected) return null;
+      el.scrollTop = want === "end" ? el.scrollHeight : want;
+      const held = want === "end" ? el.scrollTop + el.clientHeight >= el.scrollHeight - 1 : el.scrollTop === want;
+      return held ? el.scrollTop : null;
+    }, top);
+    if (at !== null) return at;
+    if (Date.now() > deadline) throw new Error(`the card never held a scroll to ${top}`);
+    await new Promise((r) => setTimeout(r, 50));
+  }
+}
+
 async function ask(s, item) {
   s.post({ settle: true, items: [item] });
   const card = itemCard(s.page, item.id);
@@ -209,8 +228,7 @@ test("a redraw keeps your place: the scroll and the focused field survive an age
 
   // Reading a question part-way down: the card scrolls itself.
   const card = itemCard(s.page, "q1");
-  await card.evaluate((el) => (el.scrollTop = 400));
-  assert.equal(await card.evaluate((el) => el.scrollTop), 400, "the question card scrolls");
+  assert.equal(await scrollCard(card, 400), 400, "the question card scrolls");
   await unrelatedPost(s, "Audit export, take two");
   assert.equal(await itemCard(s.page, "q1").evaluate((el) => el.scrollTop), 400);
 
@@ -349,7 +367,20 @@ const accentOf = (page) =>
     probe.remove();
     return color;
   });
-const outlineOf = (button) => button.evaluate((b) => getComputedStyle(b).borderTopColor);
+// The computed `props` of the element `locator` names. A redraw can replace the
+// element between Playwright finding it and the read, and an element off the
+// page reads "" for every style, so a read of one is taken again.
+async function stylesOf(locator, props) {
+  const deadline = Date.now() + 5000;
+  for (;;) {
+    const got = await locator.evaluate((x, ps) => (x.isConnected ? Object.fromEntries(ps.map((p) => [p, getComputedStyle(x)[p]])) : null), props);
+    if (got) return got;
+    if (Date.now() > deadline) throw new Error(`${props.join(", ")}: the element never stayed on the page long enough to read`);
+    await new Promise((r) => setTimeout(r, 50));
+  }
+}
+const styleOf = async (locator, prop) => (await stylesOf(locator, [prop]))[prop];
+const outlineOf = (button) => styleOf(button, "borderTopColor");
 const warnOf = (page) =>
   page.evaluate(() => {
     const probe = document.createElement("i");
@@ -373,7 +404,7 @@ test("on a sign-off card, approve and yes are outlined in the accent until picke
   assert.notEqual(await outlineOf(card.getByRole("button", { name: "I want changes" })), accent, "the other verdict is not");
   await approve.click();
   await s.page.waitForFunction(() => document.querySelector("#btn-send:not(:disabled)"));
-  assert.equal(await approve.evaluate((b) => getComputedStyle(b).backgroundColor), accent, "picked, approve fills with the accent");
+  assert.equal(await styleOf(approve, "backgroundColor"), accent, "picked, approve fills with the accent");
 
   card = await ask(s, review("so2", [{ id: "yes", label: "Build it" }, { id: "no", label: "Not yet" }]));
   assert.equal(await outlineOf(card.getByRole("button", { name: "Build it" })), accent, "an unpicked yes is outlined too");
@@ -388,7 +419,7 @@ test("Skip this one and a comment box's quick answer are the same small accent b
   const card = await ask(s, { id: "l1", kind: "list", title: "The steps", body: "Rename.", required: false, rows });
   const skip = card.getByRole("button", { name: "Skip this one" });
   const quick = card.getByRole("button", { name: "No changes" });
-  const look = (b) => b.evaluate((x) => { const c = getComputedStyle(x); return [c.fontSize, c.paddingTop, c.paddingLeft, c.color]; });
+  const look = async (b) => Object.values(await stylesOf(b, ["fontSize", "paddingTop", "paddingLeft", "color"]));
   assert.deepEqual(await look(skip), await look(quick), "the two chips look alike");
   const [size, , , color] = await look(skip);
   assert.equal(size, "12px", "small, not a full-size button");
@@ -425,7 +456,7 @@ test("a confirm's safe yes and a recap's yes are outlined in the accent, and a d
   assert.notEqual(await outlineOf(card.getByRole("button", { name: "No" })), accent, "the no does not");
   await yes.click();
   await s.page.waitForFunction(() => document.querySelector("#btn-send:not(:disabled)"));
-  assert.equal(await yes.evaluate((b) => getComputedStyle(b).backgroundColor), accent, "picked, it fills");
+  assert.equal(await styleOf(yes, "backgroundColor"), accent, "picked, it fills");
 
   card = await ask(s, { id: "y2", kind: "confirm", title: "Delete it", body: "Really?", danger: true });
   assert.equal(await outlineOf(card.getByRole("button", { name: "Yes" })), warn, "a dangerous yes stays red");
@@ -440,11 +471,11 @@ test("a card cut by the window fades at its bottom edge while there is more belo
   const s = await openSession(await suite.browser(), { t, workflow: "plan" });
   await s.page.setViewportSize({ width: 1280, height: 420 });
   const card = await ask(s, { id: "q1", kind: "text", title: "What to call it", body: longText(40) });
-  const fades = () => card.evaluate((el) => { const c = getComputedStyle(el); return (c.maskImage || c.webkitMaskImage || "none") !== "none"; });
+  const fades = async () => { const c = await stylesOf(card, ["maskImage", "webkitMaskImage"]); return (c.maskImage || c.webkitMaskImage || "none") !== "none"; };
   await s.page.waitForFunction(() => { const c = document.querySelector("#main > .card"); return c && c.scrollHeight > c.clientHeight + 4; });
   await s.page.waitForFunction(() => { const c = document.querySelector("#main > .card"); const m = getComputedStyle(c); return (m.maskImage || m.webkitMaskImage || "none") !== "none"; });
   assert.equal(await fades(), true, "a cut card fades at the bottom");
-  await card.evaluate((el) => (el.scrollTop = el.scrollHeight));
+  await scrollCard(card, "end");
   await s.page.waitForFunction(() => { const c = document.querySelector("#main > .card"); const m = getComputedStyle(c); return (m.maskImage || m.webkitMaskImage || "none") === "none"; });
   assert.equal(await fades(), false, "at the end, the fade is gone");
 });
