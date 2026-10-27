@@ -73,6 +73,10 @@ test("an @ in a note offers the workspace's folders, and picking one writes its 
   await addFolderFromDialog(s, datasetsFolder());
   await s.page.locator("#workspace-done").click();
   await s.page.locator("#workspace-modal[open]").waitFor({ state: "detached" });
+  // The @ list is the page's workspace frame, which can land after the
+  // dialog closes; typed before then, the @ has nothing to offer. The footer
+  // reads the same frame.
+  await s.page.waitForFunction(() => (document.getElementById("footer-where").dataset.key || "").includes("+ 1 folder"));
 
   const note = s.page.locator("#aside #thread-q1");
   await note.click();

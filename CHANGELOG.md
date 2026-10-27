@@ -45,6 +45,8 @@ All notable changes to Plan2Code will be documented in this file.
 
 ### 🐛 Fixed
 
+- **web console**: on the dashboard, canceling one spec's Delete and quickly opening another's no longer leaves **Delete it** doing nothing; the first dialog's late close cleared the second dialog's spec.
+- **web console**: a handoff's **Copy** button keeps showing **Copied** (or **Copy was refused**) when the dashboard redraws while the clipboard answers, instead of the word landing on a button that was already replaced.
 - **web console**: a finished screen's press (**Commit it now**, **Update CHANGELOG first**, **Back to the dashboard**, **Continue here**, a review) that nothing picks up, because the agent's turn ended while the screen waited, no longer says "Opening Changelog…" forever. After a minute of silence the line beside Planny says Plan2Code is not running and the choice is saved, with **continue** to type in the terminal (a button that types it there, under the app).
 - **desktop app**: under Claude Code, the console's **continue** button also sends Claude Code's send-now chord (ctrl+x ctrl+s), so a `continue` it held as a queued message behind a stuck turn is delivered in one press instead of waiting in the terminal.
 - **desktop app**: links that leave the console (**Open pull request**, links in documents, the feedback button) open in the default browser instead of doing nothing; when no browser can be started, the page shows the link with a **Copy** button to paste into one.

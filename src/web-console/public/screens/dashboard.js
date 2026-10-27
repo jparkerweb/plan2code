@@ -559,13 +559,15 @@ function renderHandoffPreview(h) {
   read.type = "button";
   read.addEventListener("click", () => readHandoff(h));
   const copyLabel = page.inApp ? "Copy for another session" : "Copy for a new conversation";
-  const copy = el("button", "btn", copyLabel);
+  const shown = handoffCopied && handoffCopied.id === h.id && Date.now() < handoffCopied.until ? handoffCopied.word : copyLabel;
+  const copy = el("button", "btn", shown);
   copy.type = "button";
+  copy.dataset.handoffCopy = h.id;
   copy.addEventListener("click", () => {
     const dir = (scan() && scan().handoffsDir) || "";
     const sep = dir.includes("\\") ? "\\" : "/";
     const file = dir ? dir.replace(/[\\/]+$/, "") + sep + h.id + ".md" : h.id + ".md";
-    copyHandoffText(handoffCopyText(file), copy, copyLabel);
+    copyHandoffText(handoffCopyText(file), h.id, copyLabel);
   });
   const del = el("button", "btn danger", "Delete");
   del.type = "button";
@@ -578,14 +580,29 @@ function renderHandoffPreview(h) {
 
 // The prompt that sends a new conversation to the handoff. A refused
 // clipboard gets a plain word on the button instead of a silent nothing.
-async function copyHandoffText(text, button, label) {
+// A redraw while the clipboard answers rebuilds the button, so the word is
+// kept in handoffCopied (which the rebuilt button reads) and put on whichever
+// button is on the page when the answer comes.
+let handoffCopied = null;
+const handoffCopyButton = (id) => document.querySelector(`button[data-handoff-copy="${CSS.escape(id)}"]`);
+async function copyHandoffText(text, id, label) {
+  let word;
   try {
     await navigator.clipboard.writeText(text);
-    button.textContent = "Copied";
+    word = "Copied";
   } catch {
-    button.textContent = "Copy was refused";
+    word = "Copy was refused";
   }
-  setTimeout(() => (button.textContent = label), 1500);
+  const mark = { id, word, until: Date.now() + 1500 };
+  handoffCopied = mark;
+  const shown = handoffCopyButton(id);
+  if (shown) shown.textContent = word;
+  setTimeout(() => {
+    if (handoffCopied !== mark) return;
+    handoffCopied = null;
+    const live = handoffCopyButton(id);
+    if (live) live.textContent = label;
+  }, 1500);
 }
 
 // Pick it up here: a hop like a card launch. The page sends only the id; the
@@ -1004,7 +1021,9 @@ export function wireDashboard() {
       deleteStep();
     }
   });
+  // `close` is queued, so it can land after the dialog was opened again for
+  // another spec; that new target must survive it.
   $("delete-modal").addEventListener("close", () => {
-    deleteTarget = null;
+    if (!$("delete-modal").open) deleteTarget = null;
   });
 }
