@@ -28,11 +28,18 @@ static LAST_BRIEF: Mutex<Option<String>> = Mutex::new(None);
 /// whose brief would only repeat the skill's name. A session
 /// that names no worktree is an error, not a `None`, since that is a broken
 /// session rather than an empty one.
-pub fn leave_brief(console_home: &Path, handoffs: &Path, sid: &str, when: DateTime<Local>) -> Result<Option<String>, String> {
+pub fn leave_brief(
+    console_home: &Path,
+    handoffs: &Path,
+    sid: &str,
+    when: DateTime<Local>,
+) -> Result<Option<String>, String> {
     let session = session_reader::load(console_home, sid).map_err(|e| e.to_string())?;
     let state = &session.state;
     let workflow = text(state, "workflow").unwrap_or("");
-    let Some(skill) = brief::skill_for_workflow(workflow) else { return Ok(None) };
+    let Some(skill) = brief::skill_for_workflow(workflow) else {
+        return Ok(None);
+    };
     if finished(state) || empty(state) {
         return Ok(None);
     }
@@ -47,7 +54,14 @@ pub fn leave_brief(console_home: &Path, handoffs: &Path, sid: &str, when: DateTi
         Some(spec) => format!("Restart of {skill} on {spec}"),
         None => format!("Restart of {skill}"),
     };
-    let record = handoff::Record { title: &title, worktree, project, spec, workflow, skill };
+    let record = handoff::Record {
+        title: &title,
+        worktree,
+        project,
+        spec,
+        workflow,
+        skill,
+    };
     handoff::write(handoffs, when, &record, &body).map(Some)
 }
 
@@ -58,7 +72,10 @@ pub fn note_for_restart(sid: &str) -> Option<String> {
     let handoffs = handoff::handoffs_dir()?;
     match leave_brief(&console_home, &handoffs, sid, handoff::now()) {
         Ok(Some(id)) => {
-            let previous = LAST_BRIEF.lock().ok().and_then(|mut last| last.replace(id.clone()));
+            let previous = LAST_BRIEF
+                .lock()
+                .ok()
+                .and_then(|mut last| last.replace(id.clone()));
             if let Some(previous) = previous.filter(|p| *p != id) {
                 let _ = handoff::retire_if_unused(&handoffs, &previous);
             }
@@ -70,27 +87,46 @@ pub fn note_for_restart(sid: &str) -> Option<String> {
 }
 
 fn text<'a>(state: &'a Value, key: &str) -> Option<&'a str> {
-    state.get(key).and_then(Value::as_str).filter(|s| !s.is_empty())
+    state
+        .get(key)
+        .and_then(Value::as_str)
+        .filter(|s| !s.is_empty())
 }
 
 /// The session posted a `finish` that is not a pause. A pause's headline starts
 /// with "Paused" (the page's `finishPaused`) and keeps a place worth picking up.
 fn finished(state: &Value) -> bool {
-    let Some(finish) = state.get("finish").filter(|f| f.is_object()) else { return false };
-    let headline = finish.get("headline").and_then(Value::as_str).unwrap_or("").trim_start();
-    !headline.get(..6).is_some_and(|word| word.eq_ignore_ascii_case("paused"))
+    let Some(finish) = state.get("finish").filter(|f| f.is_object()) else {
+        return false;
+    };
+    let headline = finish
+        .get("headline")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .trim_start();
+    !headline
+        .get(..6)
+        .is_some_and(|word| word.eq_ignore_ascii_case("paused"))
 }
 
 /// Nothing a fresh agent could pick up beyond the skill's name.
 fn empty(state: &Value) -> bool {
     let stage = state.get("headline").and_then(|h| text(h, "stage"));
-    let activity = state.get("agent").and_then(|a| text(a, "activity")).filter(|a| !a.trim().is_empty());
-    let items = state.get("items").and_then(Value::as_array).is_some_and(|items| !items.is_empty());
+    let activity = state
+        .get("agent")
+        .and_then(|a| text(a, "activity"))
+        .filter(|a| !a.trim().is_empty());
+    let items = state
+        .get("items")
+        .and_then(Value::as_array)
+        .is_some_and(|items| !items.is_empty());
     text(state, "specDir").is_none() && stage.is_none() && activity.is_none() && !items
 }
 
 fn valid_spec(spec: &str) -> bool {
-    spec.strip_prefix("specs/").is_some_and(|name| !name.is_empty() && name != "." && name != ".." && !name.contains(['/', '\\']))
+    spec.strip_prefix("specs/").is_some_and(|name| {
+        !name.is_empty() && name != "." && name != ".." && !name.contains(['/', '\\'])
+    })
 }
 
 #[cfg(test)]
@@ -101,7 +137,8 @@ mod tests {
     use std::path::PathBuf;
 
     fn fixture(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("plan2code-restart-{}-{name}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("plan2code-restart-{}-{name}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
         dir
@@ -137,12 +174,24 @@ mod tests {
         let (home, project, handoffs) = session("pickup", "implement", Some("specs/feature"));
         let spec = project.join("specs").join("feature");
         fs::create_dir_all(&spec).unwrap();
-        fs::write(spec.join("overview.md"), "- [/] [Phase 5: Restart](./phase-5.md)\n").unwrap();
-        fs::write(spec.join("phase-5.md"), "- [ ] **Task 5.1:** Create the reader\n").unwrap();
+        fs::write(
+            spec.join("overview.md"),
+            "- [/] [Phase 5: Restart](./phase-5.md)\n",
+        )
+        .unwrap();
+        fs::write(
+            spec.join("phase-5.md"),
+            "- [ ] **Task 5.1:** Create the reader\n",
+        )
+        .unwrap();
 
-        let id = leave_brief(&home, &handoffs, "s1", when()).unwrap().expect("a handoff");
+        let id = leave_brief(&home, &handoffs, "s1", when())
+            .unwrap()
+            .expect("a handoff");
         assert_eq!(id, "2026-10-21-1405-handoff");
-        let record: Value = serde_json::from_str(&fs::read_to_string(handoffs.join(format!("{id}.json"))).unwrap()).unwrap();
+        let record: Value =
+            serde_json::from_str(&fs::read_to_string(handoffs.join(format!("{id}.json"))).unwrap())
+                .unwrap();
         assert_eq!(record["workflow"], "implement");
         assert_eq!(record["spec"], "specs/feature");
         let doc = fs::read_to_string(handoffs.join(format!("{id}.md"))).unwrap();
@@ -178,14 +227,17 @@ mod tests {
 
         state["finish"] = serde_json::json!({ "headline": "Paused at Phase 5" });
         fs::write(&file, state.to_string()).unwrap();
-        assert!(leave_brief(&home, &handoffs, "s1", when()).unwrap().is_some());
+        assert!(leave_brief(&home, &handoffs, "s1", when())
+            .unwrap()
+            .is_some());
     }
 
     #[test]
     fn the_brief_carries_the_agent_activity_and_recent_events() {
         let (home, _project, handoffs) = session("activity", "implement", None);
         let dir = home.join("sessions").join("s1");
-        let mut state: Value = serde_json::from_str(&fs::read_to_string(dir.join("state.json")).unwrap()).unwrap();
+        let mut state: Value =
+            serde_json::from_str(&fs::read_to_string(dir.join("state.json")).unwrap()).unwrap();
         state["agent"] = serde_json::json!({ "status": "working", "activity": "Spiking Claude's context signal (Task 10.1)" });
         fs::write(dir.join("state.json"), state.to_string()).unwrap();
         fs::write(
@@ -194,7 +246,9 @@ mod tests {
         )
         .unwrap();
 
-        let id = leave_brief(&home, &handoffs, "s1", when()).unwrap().expect("a handoff");
+        let id = leave_brief(&home, &handoffs, "s1", when())
+            .unwrap()
+            .expect("a handoff");
         let doc = fs::read_to_string(handoffs.join(format!("{id}.md"))).unwrap();
         assert!(doc.contains("Doing: Spiking Claude's context signal (Task 10.1)"));
         assert!(doc.contains("## Recent activity\n\n- post (0 items)\n- consume: submit\n"));
@@ -209,8 +263,12 @@ mod tests {
     #[test]
     fn a_spec_that_is_not_one_folder_is_left_out_of_the_record() {
         let (home, _, handoffs) = session("badspec", "pathfinder", Some("specs/a/b"));
-        let id = leave_brief(&home, &handoffs, "s1", when()).unwrap().unwrap();
-        let record: Value = serde_json::from_str(&fs::read_to_string(handoffs.join(format!("{id}.json"))).unwrap()).unwrap();
+        let id = leave_brief(&home, &handoffs, "s1", when())
+            .unwrap()
+            .unwrap();
+        let record: Value =
+            serde_json::from_str(&fs::read_to_string(handoffs.join(format!("{id}.json"))).unwrap())
+                .unwrap();
         assert!(record["spec"].is_null());
     }
 }

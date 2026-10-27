@@ -34,7 +34,12 @@ pub struct Record<'a> {
 /// id made from `when`'s local minute. Returns the id. The record is claimed
 /// exclusively, so two writes in the same minute never share an id; a failed
 /// write leaves nothing behind.
-pub fn write(dir: &Path, when: DateTime<Local>, record: &Record, body: &str) -> Result<String, String> {
+pub fn write(
+    dir: &Path,
+    when: DateTime<Local>,
+    record: &Record,
+    body: &str,
+) -> Result<String, String> {
     validate(record)?;
     fs::create_dir_all(dir).map_err(|e| e.to_string())?;
     let base = format!(
@@ -45,15 +50,25 @@ pub fn write(dir: &Path, when: DateTime<Local>, record: &Record, body: &str) -> 
         when.hour(),
         when.minute()
     );
-    let written = when.with_timezone(&Utc).to_rfc3339_opts(SecondsFormat::Millis, true);
+    let written = when
+        .with_timezone(&Utc)
+        .to_rfc3339_opts(SecondsFormat::Millis, true);
     for n in 1.. {
-        let id = if n == 1 { base.clone() } else { format!("{base}-{n}") };
+        let id = if n == 1 {
+            base.clone()
+        } else {
+            format!("{base}-{n}")
+        };
         let md = dir.join(format!("{id}.md"));
         let json_file = dir.join(format!("{id}.json"));
         if md.exists() {
             continue;
         }
-        let mut claim = match OpenOptions::new().write(true).create_new(true).open(&json_file) {
+        let mut claim = match OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&json_file)
+        {
             Ok(file) => file,
             Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
             Err(e) => return Err(e.to_string()),
@@ -86,8 +101,13 @@ pub fn write(dir: &Path, when: DateTime<Local>, record: &Record, body: &str) -> 
 }
 
 fn write_document(md: &Path, heading: &str, body: &str) -> Result<(), String> {
-    let mut file = OpenOptions::new().write(true).create_new(true).open(md).map_err(|e| e.to_string())?;
-    file.write_all(format!("{heading}\n\n{body}").as_bytes()).map_err(|e| e.to_string())
+    let mut file = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(md)
+        .map_err(|e| e.to_string())?;
+    file.write_all(format!("{heading}\n\n{body}").as_bytes())
+        .map_err(|e| e.to_string())
 }
 
 fn title_line(title: &str) -> String {
@@ -98,8 +118,12 @@ fn title_line(title: &str) -> String {
 /// both files. A picked-up one, or one already gone, is left alone.
 pub fn retire_if_unused(dir: &Path, id: &str) -> Result<(), String> {
     let json_file = dir.join(format!("{id}.json"));
-    let Ok(text) = fs::read_to_string(&json_file) else { return Ok(()) };
-    let used = serde_json::from_str::<serde_json::Value>(&text).ok().is_some_and(|meta| !meta["usedAt"].is_null());
+    let Ok(text) = fs::read_to_string(&json_file) else {
+        return Ok(());
+    };
+    let used = serde_json::from_str::<serde_json::Value>(&text)
+        .ok()
+        .is_some_and(|meta| !meta["usedAt"].is_null());
     if used {
         return Ok(());
     }
@@ -116,17 +140,30 @@ pub fn retire_if_unused(dir: &Path, id: &str) -> Result<(), String> {
 /// The same rules the console applies to the record, so a bad field is refused
 /// here rather than written and then ignored.
 fn validate(record: &Record) -> Result<(), String> {
-    let lower_dashes = |s: &str| !s.is_empty() && s.chars().all(|c| c.is_ascii_lowercase() || c == '-');
+    let lower_dashes =
+        |s: &str| !s.is_empty() && s.chars().all(|c| c.is_ascii_lowercase() || c == '-');
     if !lower_dashes(record.workflow) {
-        return Err(format!("workflow must be lowercase letters and dashes, got {:?}", record.workflow));
+        return Err(format!(
+            "workflow must be lowercase letters and dashes, got {:?}",
+            record.workflow
+        ));
     }
-    let skill_ok = !record.skill.is_empty() && record.skill.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-');
+    let skill_ok = !record.skill.is_empty()
+        && record
+            .skill
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-');
     if !skill_ok {
-        return Err(format!("skill must be a skill name, got {:?}", record.skill));
+        return Err(format!(
+            "skill must be a skill name, got {:?}",
+            record.skill
+        ));
     }
     if let Some(spec) = record.spec {
         let name = spec.strip_prefix("specs/");
-        if name.is_none_or(|n| n.is_empty() || n == "." || n == ".." || n.contains('/') || n.contains('\\')) {
+        if name.is_none_or(|n| {
+            n.is_empty() || n == "." || n == ".." || n.contains('/') || n.contains('\\')
+        }) {
             return Err(format!("spec must be specs/<name>, got {spec:?}"));
         }
     }
@@ -144,7 +181,8 @@ mod tests {
     use chrono::TimeZone;
 
     fn fixture(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("plan2code-handoff-{}-{name}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("plan2code-handoff-{}-{name}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         dir
     }
@@ -161,7 +199,9 @@ mod tests {
     }
 
     fn at(hour: u32, minute: u32) -> DateTime<Local> {
-        Local.with_ymd_and_hms(2026, 10, 21, hour, minute, 0).unwrap()
+        Local
+            .with_ymd_and_hms(2026, 10, 21, hour, minute, 0)
+            .unwrap()
     }
 
     #[test]
@@ -169,7 +209,9 @@ mod tests {
         let dir = fixture("shape");
         let id = write(&dir, at(13, 52), &record(), "## Next task\n\nTask 5.2").unwrap();
         assert_eq!(id, "2026-10-21-1352-handoff");
-        let meta: serde_json::Value = serde_json::from_str(&fs::read_to_string(dir.join(format!("{id}.json"))).unwrap()).unwrap();
+        let meta: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(dir.join(format!("{id}.json"))).unwrap())
+                .unwrap();
         assert_eq!(meta["v"], 1);
         assert_eq!(meta["id"], id.as_str());
         assert_eq!(meta["workflow"], "implement");
@@ -206,7 +248,11 @@ mod tests {
         let dir = fixture("retire");
         let unused = write(&dir, at(10, 0), &record(), "one").unwrap();
         let used = write(&dir, at(10, 1), &record(), "two").unwrap();
-        fs::write(dir.join(format!("{used}.json")), r#"{"v":1,"usedAt":"2026-10-21T10:02:00.000Z"}"#).unwrap();
+        fs::write(
+            dir.join(format!("{used}.json")),
+            r#"{"v":1,"usedAt":"2026-10-21T10:02:00.000Z"}"#,
+        )
+        .unwrap();
         retire_if_unused(&dir, &unused).unwrap();
         retire_if_unused(&dir, &used).unwrap();
         assert!(!dir.join(format!("{unused}.json")).exists());

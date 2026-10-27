@@ -97,7 +97,10 @@ fn kill_ends_a_running_step() {
     let started = Instant::now();
     host.kill().unwrap();
     host.wait().unwrap();
-    assert!(started.elapsed() < Duration::from_secs(10), "kill took too long");
+    assert!(
+        started.elapsed() < Duration::from_secs(10),
+        "kill took too long"
+    );
 }
 
 /// An npm `.cmd` shim: `cmd.exe` is the directly spawned process, the real
@@ -113,15 +116,30 @@ fn kill_ends_a_cmd_wrapped_grandchild_too() {
     let _ = fs::remove_dir_all(&dir);
     fs::create_dir_all(&dir).unwrap();
     let shim = dir.join("shim.cmd");
-    fs::write(&shim, format!("@echo off\r\n\"{}\" %*\r\n", fake_agent().display())).unwrap();
+    fs::write(
+        &shim,
+        format!("@echo off\r\n\"{}\" %*\r\n", fake_agent().display()),
+    )
+    .unwrap();
 
     let (program, args) = windows_command("shim", vec![], &dir.to_string_lossy());
-    let path = format!("{};{}", dir.to_string_lossy(), std::env::var("PATH").unwrap_or_default());
+    let path = format!(
+        "{};{}",
+        dir.to_string_lossy(),
+        std::env::var("PATH").unwrap_or_default()
+    );
     let (tx, rx) = channel();
     let host = PtyHost::start(
         // `cmd /c shim.cmd` is a bare name: like a real npm shim, cmd.exe
         // only finds it on PATH, never by the current directory alone.
-        StartOptions { program, args, env: vec![("PATH".to_string(), path)], cwd: None, cols: 80, rows: 24 },
+        StartOptions {
+            program,
+            args,
+            env: vec![("PATH".to_string(), path)],
+            cwd: None,
+            cols: 80,
+            rows: 24,
+        },
         move |bytes| {
             let _ = tx.send(bytes);
         },
@@ -142,7 +160,10 @@ fn kill_ends_a_cmd_wrapped_grandchild_too() {
         .unwrap()
         .parse()
         .expect("the grandchild's pid");
-    assert!(process_alive(pid), "the grandchild should be running before kill");
+    assert!(
+        process_alive(pid),
+        "the grandchild should be running before kill"
+    );
 
     host.kill().unwrap();
     let deadline = Instant::now() + Duration::from_secs(10);

@@ -90,7 +90,9 @@ pub fn acceptable_url(url: &str) -> bool {
     let Some((port, path)) = rest.split_once('/') else {
         return false;
     };
-    port.parse::<u16>().is_ok_and(|p| p > 0) && path.starts_with("s/") && !url.contains(char::is_whitespace)
+    port.parse::<u16>().is_ok_and(|p| p > 0)
+        && path.starts_with("s/")
+        && !url.contains(char::is_whitespace)
 }
 
 /// Check one request (its head as text, its body as bytes) against `token`.
@@ -103,7 +105,9 @@ pub fn check_request(head: &str, body: &[u8], token: &str) -> Result<Request, Re
     }
     let mut given = None;
     for line in lines {
-        let Some((name, value)) = line.split_once(':') else { continue };
+        let Some((name, value)) = line.split_once(':') else {
+            continue;
+        };
         match name.trim().to_ascii_lowercase().as_str() {
             "x-plan2code-token" => given = Some(value.trim().to_string()),
             // A browser page sending this would be some site guessing at the port.
@@ -186,7 +190,8 @@ impl AnnounceServer {
     /// Listen on a random loopback port. `on_page` runs on the server's own
     /// thread for every accepted notice.
     pub fn start(on_page: OnPage) -> Result<AnnounceServer, String> {
-        let listener = TcpListener::bind(SocketAddr::from((Ipv4Addr::LOCALHOST, 0))).map_err(|e| e.to_string())?;
+        let listener = TcpListener::bind(SocketAddr::from((Ipv4Addr::LOCALHOST, 0)))
+            .map_err(|e| e.to_string())?;
         let port = listener.local_addr().map_err(|e| e.to_string())?.port();
         let token = random_token();
         let expected = token.clone();
@@ -211,14 +216,21 @@ impl AnnounceServer {
                     }
                     Ok(Request::Session) => {
                         let now = shared.lock().ok().and_then(|slot| slot.clone());
-                        (200, serde_json::to_string(&now).unwrap_or_else(|_| "null".to_string()))
+                        (
+                            200,
+                            serde_json::to_string(&now).unwrap_or_else(|_| "null".to_string()),
+                        )
                     }
                     Err(Refused(status, _)) => (status, String::new()),
                 };
                 respond(&mut stream, status, &body);
             }
         });
-        Ok(AnnounceServer { port, token, current })
+        Ok(AnnounceServer {
+            port,
+            token,
+            current,
+        })
     }
 
     pub fn url(&self) -> String {
@@ -250,7 +262,10 @@ impl AnnounceServer {
         vec![
             ("PLAN2CODE_IN_APP".to_string(), "1".to_string()),
             ("PLAN2CODE_APP_VERSION".to_string(), app_version.to_string()),
-            ("PLAN2CODE_EMBED_ORIGIN".to_string(), embed_origin.to_string()),
+            (
+                "PLAN2CODE_EMBED_ORIGIN".to_string(),
+                embed_origin.to_string(),
+            ),
             ("PLAN2CODE_APP_ANNOUNCE".to_string(), self.url()),
             ("PLAN2CODE_APP_TOKEN".to_string(), self.token.clone()),
         ]
@@ -275,39 +290,76 @@ mod tests {
     #[test]
     fn accepts_a_good_notice() {
         let (head, body) = request("t", GOOD);
-        let Ok(Request::Page(notice)) = check_request(&head, &body, "t") else { panic!("not accepted") };
-        assert_eq!((notice.sid.as_str(), notice.workflow.as_str()), ("s1", "plan"));
+        let Ok(Request::Page(notice)) = check_request(&head, &body, "t") else {
+            panic!("not accepted")
+        };
+        assert_eq!(
+            (notice.sid.as_str(), notice.workflow.as_str()),
+            ("s1", "plan")
+        );
         let get = "GET /session HTTP/1.1\r\nx-plan2code-token: t";
         assert_eq!(check_request(get, b"", "t"), Ok(Request::Session));
-        assert_eq!(check_request(get, b"", "other"), Err(Refused(403, "bad token")));
+        assert_eq!(
+            check_request(get, b"", "other"),
+            Err(Refused(403, "bad token"))
+        );
     }
 
     #[test]
     fn refuses_a_wrong_or_missing_token() {
         let (head, body) = request("nope", GOOD);
-        assert_eq!(check_request(&head, &body, "t"), Err(Refused(403, "bad token")));
+        assert_eq!(
+            check_request(&head, &body, "t"),
+            Err(Refused(403, "bad token"))
+        );
         let head = "POST /page HTTP/1.1\r\nHost: x";
-        assert_eq!(check_request(head, GOOD.as_bytes(), "t"), Err(Refused(403, "bad token")));
+        assert_eq!(
+            check_request(head, GOOD.as_bytes(), "t"),
+            Err(Refused(403, "bad token"))
+        );
     }
 
     #[test]
     fn refuses_a_browser_origin_and_other_routes() {
         let (head, body) = request("t", GOOD);
         let with_origin = format!("{head}\r\nOrigin: http://evil.example");
-        assert_eq!(check_request(&with_origin, &body, "t"), Err(Refused(403, "not from a page")));
+        assert_eq!(
+            check_request(&with_origin, &body, "t"),
+            Err(Refused(403, "not from a page"))
+        );
         let other = head.replace("/page", "/other");
-        assert_eq!(check_request(&other, &body, "t"), Err(Refused(404, "not found")));
+        assert_eq!(
+            check_request(&other, &body, "t"),
+            Err(Refused(404, "not found"))
+        );
         let get = head.replace("POST", "GET");
-        assert_eq!(check_request(&get, &body, "t"), Err(Refused(404, "not found")), "GET is for /session only");
+        assert_eq!(
+            check_request(&get, &body, "t"),
+            Err(Refused(404, "not found")),
+            "GET is for /session only"
+        );
     }
 
     #[test]
     fn refuses_a_bad_body_and_a_url_that_is_not_the_console() {
         let (head, _) = request("t", "x");
-        assert_eq!(check_request(&head, b"not json", "t"), Err(Refused(400, "bad body")));
-        for url in ["http://example.com/s/abc/", "https://127.0.0.1:5/s/a/", "http://127.0.0.1:5/other", "javascript:alert(1)", "http://127.0.0.1:0/s/a/"] {
+        assert_eq!(
+            check_request(&head, b"not json", "t"),
+            Err(Refused(400, "bad body"))
+        );
+        for url in [
+            "http://example.com/s/abc/",
+            "https://127.0.0.1:5/s/a/",
+            "http://127.0.0.1:5/other",
+            "javascript:alert(1)",
+            "http://127.0.0.1:0/s/a/",
+        ] {
             let body = format!(r#"{{"url":"{url}","sid":"s","workflow":"w"}}"#);
-            assert_eq!(check_request(&head, body.as_bytes(), "t"), Err(Refused(400, "bad page")), "{url}");
+            assert_eq!(
+                check_request(&head, body.as_bytes(), "t"),
+                Err(Refused(400, "bad page")),
+                "{url}"
+            );
         }
     }
 
@@ -336,13 +388,27 @@ mod tests {
         let (tx_a, rx_a) = channel();
         let (tx_b, rx_b) = channel();
         let (tx_a, tx_b) = (Mutex::new(tx_a), Mutex::new(tx_b));
-        let a = AnnounceServer::start(Arc::new(move |n| tx_a.lock().unwrap().send(n).is_ok())).unwrap();
-        let b = AnnounceServer::start(Arc::new(move |n| tx_b.lock().unwrap().send(n).is_ok())).unwrap();
+        let a =
+            AnnounceServer::start(Arc::new(move |n| tx_a.lock().unwrap().send(n).is_ok())).unwrap();
+        let b =
+            AnnounceServer::start(Arc::new(move |n| tx_b.lock().unwrap().send(n).is_ok())).unwrap();
         assert_ne!(a.url(), b.url());
-        let port = |s: &AnnounceServer| s.url().rsplit_once(':').unwrap().1.trim_end_matches("/page").parse::<u16>().unwrap();
+        let port = |s: &AnnounceServer| {
+            s.url()
+                .rsplit_once(':')
+                .unwrap()
+                .1
+                .trim_end_matches("/page")
+                .parse::<u16>()
+                .unwrap()
+        };
 
         assert_eq!(post(port(&a), a.token(), GOOD), 204);
-        assert_eq!(post(port(&b), a.token(), GOOD), 403, "window A's token does nothing in window B");
+        assert_eq!(
+            post(port(&b), a.token(), GOOD),
+            403,
+            "window A's token does nothing in window B"
+        );
         assert_eq!(rx_a.recv_timeout(Duration::from_secs(3)).unwrap().sid, "s1");
         assert!(rx_b.recv_timeout(Duration::from_millis(300)).is_err());
     }
@@ -353,17 +419,31 @@ mod tests {
         let env = server.agent_env("http://127.0.0.1:1430", "3.0.0");
         let get = |key: &str| env.iter().find(|(k, _)| k == key).map(|(_, v)| v.clone());
         assert_eq!(get("PLAN2CODE_IN_APP").as_deref(), Some("1"));
-        assert_eq!(get("PLAN2CODE_EMBED_ORIGIN").as_deref(), Some("http://127.0.0.1:1430"));
+        assert_eq!(
+            get("PLAN2CODE_EMBED_ORIGIN").as_deref(),
+            Some("http://127.0.0.1:1430")
+        );
         assert_eq!(get("PLAN2CODE_APP_VERSION").as_deref(), Some("3.0.0"));
         assert_eq!(get("PLAN2CODE_APP_ANNOUNCE"), Some(server.url()));
         assert_eq!(get("PLAN2CODE_APP_TOKEN").as_deref(), Some(server.token()));
-        assert_eq!(get("PLAN2CODE_CONSOLE_SID"), None, "the window's session is asked for, not fixed at start");
+        assert_eq!(
+            get("PLAN2CODE_CONSOLE_SID"),
+            None,
+            "the window's session is asked for, not fixed at start"
+        );
     }
 
     #[test]
     fn the_current_session_is_what_was_announced_last() {
         let server = AnnounceServer::start(Arc::new(|_| true)).unwrap();
-        let port: u16 = server.url().rsplit_once(':').unwrap().1.trim_end_matches("/page").parse().unwrap();
+        let port: u16 = server
+            .url()
+            .rsplit_once(':')
+            .unwrap()
+            .1
+            .trim_end_matches("/page")
+            .parse()
+            .unwrap();
         let ask = |token: &str| {
             let mut stream = TcpStream::connect(("127.0.0.1", port)).unwrap();
             write!(stream, "GET /session HTTP/1.1\r\nHost: 127.0.0.1\r\nx-plan2code-token: {token}\r\nConnection: close\r\n\r\n").unwrap();
@@ -371,13 +451,19 @@ mod tests {
             stream.read_to_string(&mut answer).unwrap();
             answer
         };
-        assert!(ask(server.token()).ends_with("null"), "nothing announced yet");
+        assert!(
+            ask(server.token()).ends_with("null"),
+            "nothing announced yet"
+        );
         assert_eq!(post(port, server.token(), GOOD), 204);
         assert!(ask(server.token()).contains(r#""sid":"s1""#));
         assert!(ask("wrong").starts_with("HTTP/1.1 403"));
         assert_eq!(server.current().unwrap().workflow, "plan");
         server.forget_current();
-        assert!(ask(server.token()).ends_with("null"), "forgotten: the next open starts its own session");
+        assert!(
+            ask(server.token()).ends_with("null"),
+            "forgotten: the next open starts its own session"
+        );
         assert_eq!(server.current(), None);
     }
 
@@ -386,8 +472,19 @@ mod tests {
         // A test's throwaway console: remembered, it would steer the next
         // agent `open` away from the window's real session.
         let server = AnnounceServer::start(Arc::new(|_| false)).unwrap();
-        let port: u16 = server.url().rsplit_once(':').unwrap().1.trim_end_matches("/page").parse().unwrap();
-        assert_eq!(post(port, server.token(), GOOD), 409, "open hears that the app did not take it");
+        let port: u16 = server
+            .url()
+            .rsplit_once(':')
+            .unwrap()
+            .1
+            .trim_end_matches("/page")
+            .parse()
+            .unwrap();
+        assert_eq!(
+            post(port, server.token(), GOOD),
+            409,
+            "open hears that the app did not take it"
+        );
         assert_eq!(server.current(), None);
     }
 }

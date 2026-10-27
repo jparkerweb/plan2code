@@ -102,7 +102,10 @@ fn main() {
             }
             Command::Size => say(&size_text().unwrap_or_else(|| "SIZE unknown".into())),
             Command::Pid => say(&format!("PID {}", std::process::id())),
-            Command::Env(name) => say(&format!("ENV {name}={}", std::env::var(&name).unwrap_or_default())),
+            Command::Env(name) => say(&format!(
+                "ENV {name}={}",
+                std::env::var(&name).unwrap_or_default()
+            )),
             Command::Echo(text) => say(&format!("echo: {text}")),
         }
     }
@@ -118,7 +121,10 @@ mod tests {
         assert_eq!(parse("EXIT 7\r\n"), Command::Exit(7));
         assert_eq!(parse("SIZE"), Command::Size);
         assert_eq!(parse("PID"), Command::Pid);
-        assert_eq!(parse("ENV PLAN2CODE_IN_APP"), Command::Env("PLAN2CODE_IN_APP".into()));
+        assert_eq!(
+            parse("ENV PLAN2CODE_IN_APP"),
+            Command::Env("PLAN2CODE_IN_APP".into())
+        );
         assert_eq!(parse("hello there"), Command::Echo("hello there".into()));
     }
 

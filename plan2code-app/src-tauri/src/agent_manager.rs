@@ -19,7 +19,9 @@ pub enum AgentState {
     Idle,
     Running,
     /// The agent ended without a Restart press, or could not be started.
-    Ended { reason: String },
+    Ended {
+        reason: String,
+    },
 }
 
 /// Runs just before a Restart starts the fresh agent, and returns the line the
@@ -114,7 +116,9 @@ pub struct AgentManager {
 
 fn lock(inner: &Mutex<Inner>) -> MutexGuard<'_, Inner> {
     // A panic in another thread must not take the whole app's agent control down.
-    inner.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+    inner
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
 impl AgentManager {
@@ -173,7 +177,15 @@ impl AgentManager {
             return Err("an agent is already running for this project".to_string());
         }
         inner.brief_note = None;
-        let previous = inner.last_start.replace((StartChoice { kind, model, effort, mode }, brief));
+        let previous = inner.last_start.replace((
+            StartChoice {
+                kind,
+                model,
+                effort,
+                mode,
+            },
+            brief,
+        ));
         match self.shared.spawn(&mut inner) {
             Ok(()) => Ok(()),
             Err(e) => {
@@ -210,7 +222,10 @@ impl AgentManager {
     }
 
     pub fn input(&self, bytes: &[u8]) -> Result<(), String> {
-        let host = lock(&self.shared.inner).running.as_ref().map(|r| Arc::clone(&r.host));
+        let host = lock(&self.shared.inner)
+            .running
+            .as_ref()
+            .map(|r| Arc::clone(&r.host));
         match host {
             Some(host) => host.write(bytes),
             None => Ok(()),
@@ -271,7 +286,10 @@ impl Shared {
     fn snapshot(&self, inner: &Inner) -> AgentSnapshot {
         AgentSnapshot {
             state: inner.state.clone(),
-            kind: inner.last_start.as_ref().map(|(choice, _)| choice.kind.id().to_string()),
+            kind: inner
+                .last_start
+                .as_ref()
+                .map(|(choice, _)| choice.kind.id().to_string()),
             mode: inner.last_start.as_ref().map(|(choice, _)| choice.mode),
             generation: self.generation.load(Ordering::SeqCst),
             brief_note: inner.brief_note.clone(),
@@ -284,10 +302,19 @@ impl Shared {
 
     /// Start the agent in `inner.last_start` and watch for it to end.
     fn spawn(self: &Arc<Self>, inner: &mut Inner) -> Result<(), String> {
-        let (choice, brief) = inner.last_start.clone().ok_or("no agent has been started")?;
+        let (choice, brief) = inner
+            .last_start
+            .clone()
+            .ok_or("no agent has been started")?;
         let prompt = brief.unwrap_or_else(|| choice.kind.default_prompt().to_string());
-        let mut spec =
-            agent_launch_spec(&choice.kind, &self.folder, choice.model.as_deref(), choice.effort.as_deref(), choice.mode, &prompt);
+        let mut spec = agent_launch_spec(
+            &choice.kind,
+            &self.folder,
+            choice.model.as_deref(),
+            choice.effort.as_deref(),
+            choice.mode,
+            &prompt,
+        );
         if let Ok(extra) = self.extra_env.lock() {
             spec.env.extend(extra.iter().cloned());
         }
@@ -329,7 +356,9 @@ impl Shared {
             on_output,
         )?);
 
-        inner.running = Some(Running { host: Arc::clone(&host) });
+        inner.running = Some(Running {
+            host: Arc::clone(&host),
+        });
         inner.state = AgentState::Running;
         // A fresh agent starts on a clean screen; its replay must too.
         inner.replay.clear();
@@ -360,7 +389,9 @@ impl Shared {
         match self.spawn(inner) {
             Ok(()) => Ok(()),
             Err(e) => {
-                inner.state = AgentState::Ended { reason: format!("could not start the agent: {e}") };
+                inner.state = AgentState::Ended {
+                    reason: format!("could not start the agent: {e}"),
+                };
                 self.emit(inner);
                 Err(e)
             }

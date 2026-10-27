@@ -29,7 +29,11 @@ fn err<E: std::fmt::Display>(e: E) -> String {
 }
 
 fn launcher_file() -> Option<PathBuf> {
-    Some(std::env::home_dir()?.join(".plan2code").join("launcher.json"))
+    Some(
+        std::env::home_dir()?
+            .join(".plan2code")
+            .join("launcher.json"),
+    )
 }
 
 fn read_launcher() -> serde_json::Map<String, serde_json::Value> {
@@ -97,7 +101,10 @@ fn flag_value(args: &[String], flag: &str) -> Option<String> {
     while i < args.len() {
         let arg = &args[i];
         if arg == flag {
-            return args.get(i + 1).filter(|v| !v.is_empty() && !v.starts_with('-')).cloned();
+            return args
+                .get(i + 1)
+                .filter(|v| !v.is_empty() && !v.starts_with('-'))
+                .cloned();
         }
         if let Some(value) = arg.strip_prefix(&prefix) {
             return (!value.is_empty()).then(|| value.to_string());
@@ -124,9 +131,15 @@ pub fn launch_choice_in(args: &[String], agents_file: Option<&Path>) -> LaunchCh
 /// nothing (the page asks with the folder picker).
 pub fn resolve(args: &[String]) -> Option<ProjectDir> {
     if let Some(dir) = argument_folder(args) {
-        return Some(ProjectDir { dir, source: ProjectSource::Argument });
+        return Some(ProjectDir {
+            dir,
+            source: ProjectSource::Argument,
+        });
     }
-    remembered_folder().map(|dir| ProjectDir { dir, source: ProjectSource::Remembered })
+    remembered_folder().map(|dir| ProjectDir {
+        dir,
+        source: ProjectSource::Remembered,
+    })
 }
 
 /// A folder the person picked becomes the remembered one, so the next start
@@ -143,7 +156,10 @@ pub fn remember_folder(dir: &Path) -> Result<ProjectDir, String> {
     }
     let json = serde_json::to_string_pretty(&serde_json::Value::Object(state)).map_err(err)?;
     std::fs::write(file, json).map_err(err)?;
-    Ok(ProjectDir { dir: dir.to_path_buf(), source: ProjectSource::Picked })
+    Ok(ProjectDir {
+        dir: dir.to_path_buf(),
+        source: ProjectSource::Picked,
+    })
 }
 
 #[cfg(test)]
@@ -156,36 +172,76 @@ mod tests {
     }
 
     fn args(list: &[&str]) -> Vec<String> {
-        std::iter::once("plan2code-app").chain(list.iter().copied()).map(str::to_string).collect()
+        std::iter::once("plan2code-app")
+            .chain(list.iter().copied())
+            .map(str::to_string)
+            .collect()
     }
 
     #[test]
     fn the_launcher_choice_reads_agent_and_model_in_both_forms() {
-        let want = LaunchChoice { agent: Some(AgentKind::Codex.id().to_string()), model: Some("gpt-5".into()) };
-        assert_eq!(launch_choice(&args(&["--project", ".", "--agent", "codex", "--model", "gpt-5"])), want);
-        assert_eq!(launch_choice(&args(&["--agent=codex", "--model=gpt-5"])), want);
-        assert_eq!(launch_choice(&args(&["--agent", "CODEX", "--model", "gpt-5"])), want);
+        let want = LaunchChoice {
+            agent: Some(AgentKind::Codex.id().to_string()),
+            model: Some("gpt-5".into()),
+        };
+        assert_eq!(
+            launch_choice(&args(&[
+                "--project",
+                ".",
+                "--agent",
+                "codex",
+                "--model",
+                "gpt-5"
+            ])),
+            want
+        );
+        assert_eq!(
+            launch_choice(&args(&["--agent=codex", "--model=gpt-5"])),
+            want
+        );
+        assert_eq!(
+            launch_choice(&args(&["--agent", "CODEX", "--model", "gpt-5"])),
+            want
+        );
     }
 
     #[test]
     fn an_agent_alone_is_a_choice_and_a_model_alone_is_not() {
         assert_eq!(
             launch_choice(&args(&["--agent", "claude"])),
-            LaunchChoice { agent: Some(AgentKind::Claude.id().to_string()), model: None }
+            LaunchChoice {
+                agent: Some(AgentKind::Claude.id().to_string()),
+                model: None
+            }
         );
-        assert_eq!(launch_choice(&args(&["--model", "opus"])), LaunchChoice::default());
+        assert_eq!(
+            launch_choice(&args(&["--model", "opus"])),
+            LaunchChoice::default()
+        );
     }
 
     #[test]
     fn an_unknown_agent_or_a_missing_value_is_ignored() {
-        assert_eq!(launch_choice(&args(&["--agent", "emacs", "--model", "x"])), LaunchChoice::default());
+        assert_eq!(
+            launch_choice(&args(&["--agent", "emacs", "--model", "x"])),
+            LaunchChoice::default()
+        );
         assert_eq!(launch_choice(&args(&["--agent"])), LaunchChoice::default());
-        assert_eq!(launch_choice(&args(&["--agent", "--model", "x"])), LaunchChoice::default());
-        assert_eq!(launch_choice(&args(&["--agent=", "--model=x"])), LaunchChoice::default());
+        assert_eq!(
+            launch_choice(&args(&["--agent", "--model", "x"])),
+            LaunchChoice::default()
+        );
+        assert_eq!(
+            launch_choice(&args(&["--agent=", "--model=x"])),
+            LaunchChoice::default()
+        );
         assert_eq!(launch_choice(&args(&[])), LaunchChoice::default());
         assert_eq!(
             launch_choice(&args(&["--agent", "devin", "--model"])),
-            LaunchChoice { agent: Some(AgentKind::Devin.id().to_string()), model: None }
+            LaunchChoice {
+                agent: Some(AgentKind::Devin.id().to_string()),
+                model: None
+            }
         );
     }
 
@@ -194,11 +250,27 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("p2c-project-custom-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let file = dir.join("agents.json");
-        std::fs::write(&file, r#"{"schema":1,"agents":[{"id":"goose","name":"Goose","command":"goose"}]}"#).unwrap();
-        let want = LaunchChoice { agent: Some("goose".into()), model: Some("m1".into()) };
-        assert_eq!(launch_choice_in(&args(&["--agent", "goose", "--model", "m1"]), Some(&file)), want);
-        assert_eq!(launch_choice_in(&args(&["--agent", "other", "--model", "m1"]), Some(&file)), LaunchChoice::default());
-        assert_eq!(launch_choice_in(&args(&["--agent", "goose"]), None), LaunchChoice::default());
+        std::fs::write(
+            &file,
+            r#"{"schema":1,"agents":[{"id":"goose","name":"Goose","command":"goose"}]}"#,
+        )
+        .unwrap();
+        let want = LaunchChoice {
+            agent: Some("goose".into()),
+            model: Some("m1".into()),
+        };
+        assert_eq!(
+            launch_choice_in(&args(&["--agent", "goose", "--model", "m1"]), Some(&file)),
+            want
+        );
+        assert_eq!(
+            launch_choice_in(&args(&["--agent", "other", "--model", "m1"]), Some(&file)),
+            LaunchChoice::default()
+        );
+        assert_eq!(
+            launch_choice_in(&args(&["--agent", "goose"]), None),
+            LaunchChoice::default()
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 

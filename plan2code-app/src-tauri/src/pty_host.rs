@@ -55,7 +55,12 @@ pub struct PtyHost {
 }
 
 fn size(cols: u16, rows: u16) -> PtySize {
-    PtySize { rows, cols, pixel_width: 0, pixel_height: 0 }
+    PtySize {
+        rows,
+        cols,
+        pixel_width: 0,
+        pixel_height: 0,
+    }
 }
 
 fn err<E: std::fmt::Display>(e: E) -> String {
@@ -159,7 +164,11 @@ impl PtyHost {
 
     /// Tell the command the terminal changed size.
     pub fn resize(&self, cols: u16, rows: u16) -> Result<(), String> {
-        self.master.lock().map_err(err)?.resize(size(cols, rows)).map_err(err)
+        self.master
+            .lock()
+            .map_err(err)?
+            .resize(size(cols, rows))
+            .map_err(err)
     }
 
     /// End the command. Safe to call while `wait` is blocked in another thread.
@@ -236,8 +245,13 @@ mod windows_job {
     use winapi::shared::minwindef::DWORD;
     use winapi::shared::ntdef::HANDLE;
     use winapi::um::handleapi::CloseHandle;
-    use winapi::um::jobapi2::{AssignProcessToJobObject, CreateJobObjectW, SetInformationJobObject, TerminateJobObject};
-    use winapi::um::winnt::{JobObjectExtendedLimitInformation, JOBOBJECT_EXTENDED_LIMIT_INFORMATION, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE};
+    use winapi::um::jobapi2::{
+        AssignProcessToJobObject, CreateJobObjectW, SetInformationJobObject, TerminateJobObject,
+    };
+    use winapi::um::winnt::{
+        JobObjectExtendedLimitInformation, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
+        JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
+    };
 
     /// Create a job, set it to kill everything in it when its last handle
     /// closes, and assign `child` to it. `None` on any failure (an older

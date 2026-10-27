@@ -66,7 +66,12 @@ const GIT_TIMEOUT: Duration = Duration::from_secs(2);
 
 fn git(folder: &Path, args: &[&str]) -> Option<String> {
     let mut command = Command::new("git");
-    command.arg("-C").arg(folder).args(args).stdout(Stdio::piped()).stderr(Stdio::null());
+    command
+        .arg("-C")
+        .arg(folder)
+        .args(args)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null());
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
@@ -92,14 +97,21 @@ fn git(folder: &Path, args: &[&str]) -> Option<String> {
         thread::sleep(Duration::from_millis(20));
     };
     let bytes = reader.join().ok()?;
-    status.success().then(|| String::from_utf8_lossy(&bytes).trim_end().to_string())
+    status
+        .success()
+        .then(|| String::from_utf8_lossy(&bytes).trim_end().to_string())
 }
 
 /// The brief as Markdown. `state` is a session's `state.json`; `spec_dir` is
 /// the spec folder on disk, when the session has one; `git` is the repository
 /// summary, when the folder is one; `events` is the session's `events.ndjson`,
 /// oldest first.
-pub fn build_brief(state: &Value, spec_dir: Option<&Path>, git: Option<&GitSummary>, events: &[Value]) -> String {
+pub fn build_brief(
+    state: &Value,
+    spec_dir: Option<&Path>,
+    git: Option<&GitSummary>,
+    events: &[Value],
+) -> String {
     let workflow = str_field(state, "workflow").unwrap_or("");
     let skill = skill_for_workflow(workflow);
     let spec = str_field(state, "specDir");
@@ -119,9 +131,19 @@ pub fn build_brief(state: &Value, spec_dir: Option<&Path>, git: Option<&GitSumma
     out.push_str("## Progress\n\n");
     let headline = state.get("headline");
     let stage = headline.and_then(|h| str_field(h, "stage")).unwrap_or("");
-    let cleared = headline.and_then(|h| h.get("cleared")).and_then(Value::as_u64).unwrap_or(0);
-    let total = headline.and_then(|h| h.get("total")).and_then(Value::as_u64).unwrap_or(0);
-    let activity = state.get("agent").and_then(|a| str_field(a, "activity")).map(str::trim).filter(|a| !a.is_empty());
+    let cleared = headline
+        .and_then(|h| h.get("cleared"))
+        .and_then(Value::as_u64)
+        .unwrap_or(0);
+    let total = headline
+        .and_then(|h| h.get("total"))
+        .and_then(Value::as_u64)
+        .unwrap_or(0);
+    let activity = state
+        .get("agent")
+        .and_then(|a| str_field(a, "activity"))
+        .map(str::trim)
+        .filter(|a| !a.is_empty());
     if !stage.is_empty() {
         out.push_str(&format!("{stage}: {cleared} of {total} done.\n"));
         if let Some(activity) = activity {
@@ -134,10 +156,17 @@ pub fn build_brief(state: &Value, spec_dir: Option<&Path>, git: Option<&GitSumma
         out.push_str("No progress posted yet.\n\n");
     }
 
-    let items = state.get("items").and_then(Value::as_array).map(Vec::as_slice).unwrap_or(&[]);
+    let items = state
+        .get("items")
+        .and_then(Value::as_array)
+        .map(Vec::as_slice)
+        .unwrap_or(&[]);
 
     out.push_str("### Open questions\n\n");
-    let open: Vec<&Value> = items.iter().filter(|i| matches!(str_field(i, "status"), Some("open" | "reopened"))).collect();
+    let open: Vec<&Value> = items
+        .iter()
+        .filter(|i| matches!(str_field(i, "status"), Some("open" | "reopened")))
+        .collect();
     if open.is_empty() {
         out.push_str("None.\n\n");
     } else {
@@ -148,14 +177,21 @@ pub fn build_brief(state: &Value, spec_dir: Option<&Path>, git: Option<&GitSumma
     }
 
     out.push_str("## Recent answers and decisions\n\n");
-    let answered: Vec<&Value> = items.iter().filter(|i| str_field(i, "status") == Some("answered")).collect();
+    let answered: Vec<&Value> = items
+        .iter()
+        .filter(|i| str_field(i, "status") == Some("answered"))
+        .collect();
     let recent = &answered[answered.len().saturating_sub(RECENT_ANSWERS)..];
     if recent.is_empty() {
         out.push_str("None yet.\n\n");
     } else {
         for item in recent {
             let answer = answer_text(item);
-            let answer = if answer.is_empty() { "answered".to_string() } else { answer };
+            let answer = if answer.is_empty() {
+                "answered".to_string()
+            } else {
+                answer
+            };
             out.push_str(&format!("- {}: {answer}\n", title_of(item)));
         }
         out.push('\n');
@@ -164,7 +200,11 @@ pub fn build_brief(state: &Value, spec_dir: Option<&Path>, git: Option<&GitSumma
     if let Some(git) = git {
         out.push_str("## Git\n\n");
         out.push_str("Changes:\n\n```\n");
-        out.push_str(if git.status.is_empty() { "clean" } else { &git.status });
+        out.push_str(if git.status.is_empty() {
+            "clean"
+        } else {
+            &git.status
+        });
         out.push_str("\n```\n\n");
         if !git.log.is_empty() {
             out.push_str("Last commits:\n\n```\n");
@@ -202,7 +242,11 @@ fn render_event(event: &Value) -> String {
             None => "consume".to_string(),
         },
         "open" => {
-            if event.get("resumed").and_then(Value::as_bool).unwrap_or(false) {
+            if event
+                .get("resumed")
+                .and_then(Value::as_bool)
+                .unwrap_or(false)
+            {
                 "open (resumed)".to_string()
             } else {
                 "open".to_string()
@@ -230,7 +274,10 @@ fn open_task(spec_dir: &Path) -> Option<String> {
     let overview = fs::read_to_string(spec_dir.join("overview.md")).ok()?;
     let phase = active_phase(&overview)?;
     let text = fs::read_to_string(spec_dir.join(format!("phase-{phase}.md"))).ok()?;
-    let line = text.lines().map(str::trim_start).find(|l| l.starts_with("- [ ]"))?;
+    let line = text
+        .lines()
+        .map(str::trim_start)
+        .find(|l| l.starts_with("- [ ]"))?;
     Some(line.trim_start_matches("- [ ]").trim().replace("**", ""))
 }
 
@@ -242,8 +289,16 @@ fn active_phase(overview: &str) -> Option<u32> {
         let digits: String = rest.chars().take_while(|c| c.is_ascii_digit()).collect();
         digits.parse::<u32>().ok()
     };
-    let rows = || overview.lines().map(str::trim_start).filter(|l| l.starts_with("- ["));
-    rows().find(|l| l.starts_with("- [/]")).and_then(phase_of).or_else(|| rows().find(|l| l.starts_with("- [ ]")).and_then(phase_of))
+    let rows = || {
+        overview
+            .lines()
+            .map(str::trim_start)
+            .filter(|l| l.starts_with("- ["))
+    };
+    rows()
+        .find(|l| l.starts_with("- [/]"))
+        .and_then(phase_of)
+        .or_else(|| rows().find(|l| l.starts_with("- [ ]")).and_then(phase_of))
 }
 
 fn cut(text: &str) -> String {
@@ -259,14 +314,18 @@ fn str_field<'a>(value: &'a Value, key: &str) -> Option<&'a str> {
 }
 
 fn title_of(item: &Value) -> String {
-    let title = str_field(item, "title").or_else(|| str_field(item, "id")).unwrap_or("(untitled)");
+    let title = str_field(item, "title")
+        .or_else(|| str_field(item, "id"))
+        .unwrap_or("(untitled)");
     title.trim().to_string()
 }
 
 /// An answer as the person gave it: the option's label for a pick, plus any
 /// words they typed. Empty when the answer carries nothing to show.
 fn answer_text(item: &Value) -> String {
-    let Some(answer) = item.get("answer") else { return String::new() };
+    let Some(answer) = item.get("answer") else {
+        return String::new();
+    };
     let options = item.get("options").and_then(Value::as_array);
     let label = |k: &str| {
         options
@@ -291,7 +350,10 @@ fn answer_text(item: &Value) -> String {
     if let Some(verdict) = str_field(answer, "verdict") {
         parts.push(verdict.to_string());
     }
-    if let Some(text) = str_field(answer, "text").map(str::trim).filter(|t| !t.is_empty()) {
+    if let Some(text) = str_field(answer, "text")
+        .map(str::trim)
+        .filter(|t| !t.is_empty())
+    {
         parts.push(text.to_string());
     }
     parts.join("; ")
@@ -303,7 +365,8 @@ mod tests {
     use serde_json::json;
 
     fn fixture(name: &str) -> std::path::PathBuf {
-        let dir = std::env::temp_dir().join(format!("plan2code-brief-{}-{name}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("plan2code-brief-{}-{name}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
         dir
@@ -340,7 +403,10 @@ mod tests {
     #[test]
     fn a_mid_implement_session_carries_every_section() {
         let spec = mid_implement_spec();
-        let git = GitSummary { status: " M src/lib.rs".to_string(), log: "abc1234 Add the reader".to_string() };
+        let git = GitSummary {
+            status: " M src/lib.rs".to_string(),
+            log: "abc1234 Add the reader".to_string(),
+        };
         let brief = build_brief(&mid_implement_state(), Some(&spec), Some(&git), &[]);
         assert!(brief.contains("Skill: plan2code-3-implement (workflow `implement`)"));
         assert!(brief.contains("Spec: specs/feature"));
@@ -379,7 +445,9 @@ mod tests {
     #[test]
     fn a_session_with_no_spec_and_no_skill_opens_the_dashboard() {
         let state = json!({ "schema": 1, "workflow": "dashboard" });
-        assert!(build_brief(&state, None, None, &[]).ends_with("## Next task\n\nOpen the dashboard\n"));
+        assert!(
+            build_brief(&state, None, None, &[]).ends_with("## Next task\n\nOpen the dashboard\n")
+        );
     }
 
     #[test]
@@ -387,8 +455,16 @@ mod tests {
         let home = fixture("chat");
         let dir = home.join("sessions").join("s1");
         fs::create_dir_all(&dir).unwrap();
-        fs::write(dir.join("state.json"), r#"{"schema": 1, "workflow": "implement"}"#).unwrap();
-        fs::write(dir.join("chat.ndjson"), "{\"kind\":\"ask\",\"text\":\"CHAT-ONLY-WORDS\"}\n").unwrap();
+        fs::write(
+            dir.join("state.json"),
+            r#"{"schema": 1, "workflow": "implement"}"#,
+        )
+        .unwrap();
+        fs::write(
+            dir.join("chat.ndjson"),
+            "{\"kind\":\"ask\",\"text\":\"CHAT-ONLY-WORDS\"}\n",
+        )
+        .unwrap();
         let session = crate::session_reader::load(&home, "s1").unwrap();
         let brief = build_brief(&session.state, None, None, &[]);
         assert!(!brief.contains("CHAT-ONLY-WORDS"));
@@ -408,7 +484,9 @@ mod tests {
             "agent": { "status": "working", "activity": "Spiking Claude's context signal (Task 10.1)" },
         });
         let brief = build_brief(&state, None, None, &[]);
-        assert!(brief.contains("Phase 2: Restart: 1 of 3 done.\nDoing: Spiking Claude's context signal (Task 10.1)\n"));
+        assert!(brief.contains(
+            "Phase 2: Restart: 1 of 3 done.\nDoing: Spiking Claude's context signal (Task 10.1)\n"
+        ));
     }
 
     #[test]
@@ -442,7 +520,9 @@ mod tests {
     #[test]
     fn only_the_last_five_events_are_named() {
         let state = json!({ "schema": 1, "workflow": "implement" });
-        let events: Vec<Value> = (0..8).map(|n| json!({ "type": "upload", "id": format!("f{n}") })).collect();
+        let events: Vec<Value> = (0..8)
+            .map(|n| json!({ "type": "upload", "id": format!("f{n}") }))
+            .collect();
         let brief = build_brief(&state, None, None, &events);
         assert_eq!(brief.matches("- upload\n").count(), RECENT_EVENTS);
     }
@@ -455,7 +535,10 @@ mod tests {
 
     #[test]
     fn a_skill_name_maps_to_its_workflow() {
-        assert_eq!(skill_for_workflow("quick-task"), Some("plan2code-quick-task"));
+        assert_eq!(
+            skill_for_workflow("quick-task"),
+            Some("plan2code-quick-task")
+        );
         assert_eq!(skill_for_workflow("unknown"), None);
     }
 }

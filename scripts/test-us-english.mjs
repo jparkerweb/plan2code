@@ -39,6 +39,7 @@ const CONTRACTS = [
   /\bconst greyed\b/g,
   /\bgreyed(?=, card)/g,
   /^\/\/\s+greyed\b/gm,
+  /`greyed`/g,
   /\bcancelled(?=\s*:)/g,
   /\.cancelled\b/g,
   /"cancelled"/g,

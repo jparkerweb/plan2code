@@ -8,7 +8,9 @@ use std::sync::{Arc, Mutex, Once};
 use std::time::{Duration, Instant};
 
 use plan2code_app_lib::agent_manager::{AgentEvent, AgentManager, AgentSnapshot, AgentState};
-use plan2code_app_lib::agents::{agent_launch_spec, parse_agents_file, Agent, AgentKind, PermissionMode, AGENT_BIN_ENV};
+use plan2code_app_lib::agents::{
+    agent_launch_spec, parse_agents_file, Agent, AgentKind, PermissionMode, AGENT_BIN_ENV,
+};
 
 mod common;
 use common::process_alive;
@@ -36,7 +38,13 @@ impl Harness {
         let sink = Arc::new(move |event| {
             let _ = tx.lock().unwrap().send(event);
         });
-        Harness { manager: AgentManager::new(PathBuf::from("."), sink), rx, seen: String::new(), states: Vec::new(), cursor: 0 }
+        Harness {
+            manager: AgentManager::new(PathBuf::from("."), sink),
+            rx,
+            seen: String::new(),
+            states: Vec::new(),
+            cursor: 0,
+        }
     }
 
     fn take(&mut self, event: AgentEvent) {
@@ -80,7 +88,11 @@ impl Harness {
     }
 
     /// The next state change (after the last one this returned) that matches.
-    fn wait_state(&mut self, what: &str, matches: impl Fn(&AgentSnapshot) -> bool) -> AgentSnapshot {
+    fn wait_state(
+        &mut self,
+        what: &str,
+        matches: impl Fn(&AgentSnapshot) -> bool,
+    ) -> AgentSnapshot {
         let deadline = Instant::now() + TIMEOUT;
         loop {
             while self.cursor < self.states.len() {
@@ -99,7 +111,15 @@ impl Harness {
     }
 
     fn start_and_wait_ready(&mut self) {
-        self.manager.start(Agent::Builtin(AgentKind::Claude), None, None, PermissionMode::Bypass, None).expect("start the fake agent");
+        self.manager
+            .start(
+                Agent::Builtin(AgentKind::Claude),
+                None,
+                None,
+                PermissionMode::Bypass,
+                None,
+            )
+            .expect("start the fake agent");
         self.wait_for_output(READY, 1);
     }
 
@@ -118,11 +138,20 @@ fn a_second_start_while_running_is_refused() {
     h.start_and_wait_ready();
     let generation = h.manager.snapshot().generation;
 
-    let refused = h.manager.start(Agent::Builtin(AgentKind::Devin), None, None, PermissionMode::Bypass, None);
+    let refused = h.manager.start(
+        Agent::Builtin(AgentKind::Devin),
+        None,
+        None,
+        PermissionMode::Bypass,
+        None,
+    );
     assert!(refused.is_err(), "a second start must be refused");
     let after = h.manager.snapshot();
     assert_eq!(after.state, AgentState::Running);
-    assert_eq!(after.generation, generation, "the running agent was replaced");
+    assert_eq!(
+        after.generation, generation,
+        "the running agent was replaced"
+    );
     h.manager.stop();
 }
 
@@ -130,19 +159,36 @@ fn a_second_start_while_running_is_refused() {
 fn restart_keeps_the_previous_agent_kind_mode_model_and_effort() {
     let mut h = Harness::new();
     h.manager
-        .start(Agent::Builtin(AgentKind::Codex), Some("gpt-5".to_string()), Some("high".to_string()), PermissionMode::Checked, None)
+        .start(
+            Agent::Builtin(AgentKind::Codex),
+            Some("gpt-5".to_string()),
+            Some("high".to_string()),
+            PermissionMode::Checked,
+            None,
+        )
         .expect("start the fake agent");
     h.wait_for_output(READY, 1);
     let before = h.manager.snapshot();
     assert_eq!(before.kind, Some("codex".to_string()));
     assert_eq!(before.mode, Some(PermissionMode::Checked));
-    assert_eq!(h.manager.model_and_effort(), (Some("gpt-5".to_string()), Some("high".to_string())));
+    assert_eq!(
+        h.manager.model_and_effort(),
+        (Some("gpt-5".to_string()), Some("high".to_string()))
+    );
 
     h.manager.restart().unwrap();
     h.wait_for_output(READY, 2);
     let after = h.manager.snapshot();
-    assert_eq!(after.kind, Some("codex".to_string()), "restart must keep the same agent");
-    assert_eq!(after.mode, Some(PermissionMode::Checked), "restart must keep the same permission mode");
+    assert_eq!(
+        after.kind,
+        Some("codex".to_string()),
+        "restart must keep the same agent"
+    );
+    assert_eq!(
+        after.mode,
+        Some(PermissionMode::Checked),
+        "restart must keep the same permission mode"
+    );
     assert_eq!(
         h.manager.model_and_effort(),
         (Some("gpt-5".to_string()), Some("high".to_string())),
@@ -179,8 +225,15 @@ fn restart_mid_step_kills_the_step_at_once_instead_of_waiting_for_it() {
     // Running again straight away: no wait for the step to finish.
     h.wait_state("Running again", is_running);
     h.wait_for_output(READY, 2);
-    assert!(started.elapsed() < Duration::from_secs(5), "restart must not wait on the step; took {:?}", started.elapsed());
-    assert!(!h.seen.contains("STEP DONE"), "the step should have been cut short, not finished");
+    assert!(
+        started.elapsed() < Duration::from_secs(5),
+        "restart must not wait on the step; took {:?}",
+        started.elapsed()
+    );
+    assert!(
+        !h.seen.contains("STEP DONE"),
+        "the step should have been cut short, not finished"
+    );
     h.manager.stop();
 }
 
@@ -198,8 +251,15 @@ fn an_agent_that_exits_by_itself_ends_with_its_code_and_nothing_restarts() {
 
     // Nothing starts without a press.
     h.pump_for(Duration::from_millis(1500));
-    assert!(matches!(h.manager.snapshot().state, AgentState::Ended { .. }));
-    assert_eq!(h.seen.matches(READY).count(), 1, "an agent started by itself");
+    assert!(matches!(
+        h.manager.snapshot().state,
+        AgentState::Ended { .. }
+    ));
+    assert_eq!(
+        h.seen.matches(READY).count(),
+        1,
+        "an agent started by itself"
+    );
     assert!(!h.manager.is_active());
 
     // A press of Restart starts a fresh one on the same brief.
@@ -216,8 +276,21 @@ fn quitting_with_a_running_agent_stops_it() {
     assert!(h.manager.is_active());
     h.type_line("PID");
     h.wait_for_output("PID ", 1);
-    let pid = h.seen.rsplit("PID ").next().unwrap().trim_start().split(|c: char| !c.is_ascii_digit()).next().unwrap().parse::<u32>().expect("the agent's pid");
-    assert!(process_alive(pid), "the agent should be running before the stop");
+    let pid = h
+        .seen
+        .rsplit("PID ")
+        .next()
+        .unwrap()
+        .trim_start()
+        .split(|c: char| !c.is_ascii_digit())
+        .next()
+        .unwrap()
+        .parse::<u32>()
+        .expect("the agent's pid");
+    assert!(
+        process_alive(pid),
+        "the agent should be running before the stop"
+    );
 
     h.manager.stop();
 
@@ -228,8 +301,14 @@ fn quitting_with_a_running_agent_stops_it() {
     // The stopped agent does not come back or print again.
     let before = h.seen.len();
     h.pump_for(Duration::from_millis(1000));
-    assert!(!h.seen[before..].contains(READY), "an agent started after the stop");
-    assert!(h.manager.restart().is_err(), "there is nothing left to restart");
+    assert!(
+        !h.seen[before..].contains(READY),
+        "an agent started after the stop"
+    );
+    assert!(
+        h.manager.restart().is_err(),
+        "there is nothing left to restart"
+    );
 }
 
 #[test]
@@ -237,12 +316,19 @@ fn the_replay_buffer_holds_recent_output_and_clears_on_a_fresh_agent() {
     let mut h = Harness::new();
     h.start_and_wait_ready();
     let replay = String::from_utf8_lossy(&h.manager.replay()).into_owned();
-    assert!(replay.contains(READY), "replay should hold what was just printed; got {replay:?}");
+    assert!(
+        replay.contains(READY),
+        "replay should hold what was just printed; got {replay:?}"
+    );
 
     h.manager.restart().unwrap();
     h.wait_for_output(READY, 2);
     let replay = String::from_utf8_lossy(&h.manager.replay()).into_owned();
-    assert_eq!(replay.matches(READY).count(), 1, "a fresh agent's replay must not carry the old one's output");
+    assert_eq!(
+        replay.matches(READY).count(),
+        1,
+        "a fresh agent's replay must not carry the old one's output"
+    );
     h.manager.stop();
 }
 
@@ -261,8 +347,15 @@ fn a_restart_runs_the_brief_hook_and_the_bar_gets_its_note() {
 
     h.manager.restart().unwrap();
 
-    assert_eq!(*runs.lock().unwrap(), 1, "the restart did not run the brief once");
-    assert_eq!(h.manager.snapshot().brief_note.as_deref(), Some("Brief ready on the dashboard"));
+    assert_eq!(
+        *runs.lock().unwrap(),
+        1,
+        "the restart did not run the brief once"
+    );
+    assert_eq!(
+        h.manager.snapshot().brief_note.as_deref(),
+        Some("Brief ready on the dashboard")
+    );
     h.manager.stop();
 }
 
@@ -271,7 +364,10 @@ fn the_agent_gets_the_in_app_signal_and_a_restart_keeps_it() {
     let mut h = Harness::new();
     h.manager.set_env(vec![
         ("PLAN2CODE_IN_APP".to_string(), "1".to_string()),
-        ("PLAN2CODE_CONSOLE_SID".to_string(), "sid-window-a".to_string()),
+        (
+            "PLAN2CODE_CONSOLE_SID".to_string(),
+            "sid-window-a".to_string(),
+        ),
     ]);
     h.start_and_wait_ready();
     h.type_line("ENV PLAN2CODE_IN_APP");
@@ -280,7 +376,10 @@ fn the_agent_gets_the_in_app_signal_and_a_restart_keeps_it() {
     h.wait_for_output("ENV PLAN2CODE_CONSOLE_SID=sid-window-a", 1);
 
     // The signal changes with the console; a Restart starts on the newest.
-    h.manager.set_env(vec![("PLAN2CODE_CONSOLE_SID".to_string(), "sid-window-b".to_string())]);
+    h.manager.set_env(vec![(
+        "PLAN2CODE_CONSOLE_SID".to_string(),
+        "sid-window-b".to_string(),
+    )]);
     h.manager.restart().unwrap();
     h.wait_for_output(READY, 2);
     h.type_line("ENV PLAN2CODE_CONSOLE_SID");
@@ -304,17 +403,32 @@ fn an_agent_with_no_signal_set_gets_none() {
 fn a_custom_agent_runs_the_override_too_and_restart_keeps_its_id() {
     let mut h = Harness::new();
     // Its command is nowhere on PATH: the override replaces it, as for a built-in.
-    let (mut agents, warnings) = parse_agents_file(r#"{"schema":1,"agents":[{"id":"goose","name":"Goose","command":"goose-not-installed","bypassArgs":["--yes"]}]}"#);
+    let (mut agents, warnings) = parse_agents_file(
+        r#"{"schema":1,"agents":[{"id":"goose","name":"Goose","command":"goose-not-installed","bypassArgs":["--yes"]}]}"#,
+    );
     assert!(warnings.is_empty(), "{warnings:?}");
     let goose = Agent::Custom(agents.remove(0));
-    let spec = agent_launch_spec(&goose, &std::env::temp_dir(), Some("m"), None, PermissionMode::Bypass, "/plan2code");
+    let spec = agent_launch_spec(
+        &goose,
+        &std::env::temp_dir(),
+        Some("m"),
+        None,
+        PermissionMode::Bypass,
+        "/plan2code",
+    );
     assert_eq!(PathBuf::from(&spec.program), common::fake_agent());
     assert!(spec.args.is_empty());
-    h.manager.start(goose, None, None, PermissionMode::Checked, None).expect("start the custom agent");
+    h.manager
+        .start(goose, None, None, PermissionMode::Checked, None)
+        .expect("start the custom agent");
     h.wait_for_output(READY, 1);
     assert_eq!(h.manager.snapshot().kind, Some("goose".to_string()));
     h.manager.restart().unwrap();
     h.wait_for_output(READY, 2);
-    assert_eq!(h.manager.snapshot().kind, Some("goose".to_string()), "restart must keep the custom agent");
+    assert_eq!(
+        h.manager.snapshot().kind,
+        Some("goose".to_string()),
+        "restart must keep the custom agent"
+    );
     h.manager.stop();
 }

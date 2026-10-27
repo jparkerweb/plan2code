@@ -43,7 +43,10 @@ impl std::fmt::Display for ReadError {
             ReadError::Unreadable(why) => write!(f, "could not read the session: {why}"),
             ReadError::Malformed(why) => write!(f, "the session file is not valid: {why}"),
             ReadError::Schema(found) => {
-                write!(f, "session schema {found} is not supported (this app reads schema {SCHEMA})")
+                write!(
+                    f,
+                    "session schema {found} is not supported (this app reads schema {SCHEMA})"
+                )
             }
         }
     }
@@ -73,7 +76,9 @@ pub fn session_dir(console_home: &Path, sid: &str) -> PathBuf {
 /// Open and parse the session `sid` under `console_home`.
 pub fn load(console_home: &Path, sid: &str) -> Result<Session, ReadError> {
     let dir = session_dir(console_home, sid);
-    let text = read_with_retry(&dir.join("state.json"), |file| std::fs::read_to_string(file))?;
+    let text = read_with_retry(&dir.join("state.json"), |file| {
+        std::fs::read_to_string(file)
+    })?;
     let state = parse_state(&text)?;
     Ok(Session { dir, state })
 }
@@ -90,7 +95,9 @@ where
     loop {
         match read(file) {
             Ok(text) => return Ok(text),
-            Err(e) if e.kind() == io::ErrorKind::NotFound => return Err(ReadError::Missing(file.to_path_buf())),
+            Err(e) if e.kind() == io::ErrorKind::NotFound => {
+                return Err(ReadError::Missing(file.to_path_buf()))
+            }
             Err(e) if is_locked(&e) => {
                 if retries == LOCKED_RETRIES {
                     return Err(ReadError::Busy);
@@ -104,12 +111,15 @@ where
 }
 
 fn is_locked(e: &io::Error) -> bool {
-    e.kind() == io::ErrorKind::PermissionDenied || e.raw_os_error().is_some_and(|code| WINDOWS_SHARING.contains(&code))
+    e.kind() == io::ErrorKind::PermissionDenied
+        || e.raw_os_error()
+            .is_some_and(|code| WINDOWS_SHARING.contains(&code))
 }
 
 /// Parse `state.json` text: a JSON object whose `schema` is `SCHEMA`.
 pub fn parse_state(text: &str) -> Result<Value, ReadError> {
-    let state: Value = serde_json::from_str(text).map_err(|e| ReadError::Malformed(e.to_string()))?;
+    let state: Value =
+        serde_json::from_str(text).map_err(|e| ReadError::Malformed(e.to_string()))?;
     if !state.is_object() {
         return Err(ReadError::Malformed("not a JSON object".to_string()));
     }
@@ -134,7 +144,10 @@ pub fn read_ndjson(file: &Path) -> Vec<Value> {
 }
 
 pub fn parse_ndjson(text: &str) -> Vec<Value> {
-    text.lines().filter(|line| !line.trim().is_empty()).filter_map(|line| serde_json::from_str(line).ok()).collect()
+    text.lines()
+        .filter(|line| !line.trim().is_empty())
+        .filter_map(|line| serde_json::from_str(line).ok())
+        .collect()
 }
 
 #[cfg(test)]
@@ -143,13 +156,15 @@ mod tests {
     use std::cell::Cell;
 
     fn fixture(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("plan2code-reader-{}-{name}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("plan2code-reader-{}-{name}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         dir
     }
 
-    const STATE: &str = r#"{"schema": 1, "sid": "s1", "workflow": "implement", "specDir": "specs/x"}"#;
+    const STATE: &str =
+        r#"{"schema": 1, "sid": "s1", "workflow": "implement", "specDir": "specs/x"}"#;
 
     #[test]
     fn a_complete_session_loads() {
@@ -165,7 +180,10 @@ mod tests {
     #[test]
     fn a_partial_last_line_is_dropped() {
         let lines = parse_ndjson("{\"a\":1}\n{\"b\":2}\n{\"c\":");
-        assert_eq!(lines, vec![serde_json::json!({"a": 1}), serde_json::json!({"b": 2})]);
+        assert_eq!(
+            lines,
+            vec![serde_json::json!({"a": 1}), serde_json::json!({"b": 2})]
+        );
     }
 
     #[test]

@@ -46,7 +46,10 @@ pub fn load_last_agent(file: &Path) -> Option<String> {
 /// Save the pick, keeping any other key the file holds.
 pub fn save_last_agent(file: &Path, id: &str) -> Result<(), String> {
     let mut settings = read(file);
-    settings.insert(LAST_AGENT_KEY.to_string(), serde_json::Value::String(id.to_string()));
+    settings.insert(
+        LAST_AGENT_KEY.to_string(),
+        serde_json::Value::String(id.to_string()),
+    );
     write(file, settings)
 }
 
@@ -65,13 +68,25 @@ pub fn load_term_panel(file: &Path) -> TermPanelSettings {
         .and_then(|v| v.as_f64())
         .filter(|f| (TERM_FRACTION_MIN..=TERM_FRACTION_MAX).contains(f))
         .unwrap_or(DEFAULT_TERM_FRACTION);
-    let collapsed = settings.get(TERM_COLLAPSED_KEY).and_then(|v| v.as_bool()).unwrap_or(false);
-    TermPanelSettings { dock, fraction, collapsed }
+    let collapsed = settings
+        .get(TERM_COLLAPSED_KEY)
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    TermPanelSettings {
+        dock,
+        fraction,
+        collapsed,
+    }
 }
 
 /// Save the terminal pane's shape, keeping any other key the file holds. An
 /// invalid dock or an out-of-range fraction is rejected rather than saved.
-pub fn save_term_panel(file: &Path, dock: &str, fraction: f64, collapsed: bool) -> Result<(), String> {
+pub fn save_term_panel(
+    file: &Path,
+    dock: &str,
+    fraction: f64,
+    collapsed: bool,
+) -> Result<(), String> {
     if dock != "bottom" && dock != "right" {
         return Err(format!("unknown dock: {dock}"));
     }
@@ -79,25 +94,39 @@ pub fn save_term_panel(file: &Path, dock: &str, fraction: f64, collapsed: bool) 
         return Err(format!("fraction out of range: {fraction}"));
     }
     let mut settings = read(file);
-    settings.insert(TERM_DOCK_KEY.to_string(), serde_json::Value::String(dock.to_string()));
+    settings.insert(
+        TERM_DOCK_KEY.to_string(),
+        serde_json::Value::String(dock.to_string()),
+    );
     settings.insert(
         TERM_FRACTION_KEY.to_string(),
-        serde_json::Number::from_f64(fraction).map(serde_json::Value::Number).unwrap_or(serde_json::Value::Null),
+        serde_json::Number::from_f64(fraction)
+            .map(serde_json::Value::Number)
+            .unwrap_or(serde_json::Value::Null),
     );
-    settings.insert(TERM_COLLAPSED_KEY.to_string(), serde_json::Value::Bool(collapsed));
+    settings.insert(
+        TERM_COLLAPSED_KEY.to_string(),
+        serde_json::Value::Bool(collapsed),
+    );
     write(file, settings)
 }
 
 /// Whether the first-run checklist has already passed once. Once it has,
 /// later launches go straight to the launch card (Task 9.4).
 pub fn load_first_run_done(file: &Path) -> bool {
-    read(file).get(FIRST_RUN_DONE_KEY).and_then(|v| v.as_bool()).unwrap_or(false)
+    read(file)
+        .get(FIRST_RUN_DONE_KEY)
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false)
 }
 
 /// Remember that the checklist passed, keeping any other key the file holds.
 pub fn save_first_run_done(file: &Path) -> Result<(), String> {
     let mut settings = read(file);
-    settings.insert(FIRST_RUN_DONE_KEY.to_string(), serde_json::Value::Bool(true));
+    settings.insert(
+        FIRST_RUN_DONE_KEY.to_string(),
+        serde_json::Value::Bool(true),
+    );
     write(file, settings)
 }
 
@@ -105,7 +134,10 @@ pub fn save_first_run_done(file: &Path) -> Result<(), String> {
 /// Desktop app switch in the console's User Preferences). On unless the file
 /// says `false`; anything but a boolean reads as on.
 pub fn load_taskbar_signal(file: &Path) -> bool {
-    read(file).get(TASKBAR_SIGNAL_KEY).and_then(|v| v.as_bool()).unwrap_or(true)
+    read(file)
+        .get(TASKBAR_SIGNAL_KEY)
+        .and_then(|v| v.as_bool())
+        .unwrap_or(true)
 }
 
 /// Save the switch, keeping any other key the file holds.
@@ -119,7 +151,8 @@ fn write(file: &Path, settings: serde_json::Map<String, serde_json::Value>) -> R
     if let Some(parent) = file.parent() {
         std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
-    let json = serde_json::to_string_pretty(&serde_json::Value::Object(settings)).map_err(|e| e.to_string())?;
+    let json = serde_json::to_string_pretty(&serde_json::Value::Object(settings))
+        .map_err(|e| e.to_string())?;
     std::fs::write(file, json).map_err(|e| e.to_string())
 }
 
@@ -128,7 +161,8 @@ mod tests {
     use super::*;
 
     fn temp_file(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("plan2code-settings-{}-{name}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("plan2code-settings-{}-{name}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         dir.join("app.json")
     }
@@ -146,8 +180,14 @@ mod tests {
         save_last_agent(&file, "devin").unwrap();
         assert_eq!(load_last_agent(&file), Some("devin".to_string()));
         save_last_agent(&file, "goose").unwrap();
-        assert_eq!(load_last_agent(&file), Some("goose".to_string()), "a custom id round-trips");
-        assert!(std::fs::read_to_string(&file).unwrap().contains("\"other\""));
+        assert_eq!(
+            load_last_agent(&file),
+            Some("goose".to_string()),
+            "a custom id round-trips"
+        );
+        assert!(std::fs::read_to_string(&file)
+            .unwrap()
+            .contains("\"other\""));
         let _ = std::fs::remove_dir_all(file.parent().unwrap());
     }
 
@@ -163,7 +203,11 @@ mod tests {
 
     #[test]
     fn the_term_panel_defaults_to_bottom_at_a_quarter() {
-        let want = TermPanelSettings { dock: "bottom".into(), fraction: 0.25, collapsed: false };
+        let want = TermPanelSettings {
+            dock: "bottom".into(),
+            fraction: 0.25,
+            collapsed: false,
+        };
         assert_eq!(load_term_panel(&temp_file("term-missing")), want);
     }
 
@@ -175,9 +219,15 @@ mod tests {
         save_term_panel(&file, "right", 0.4, true).unwrap();
         assert_eq!(
             load_term_panel(&file),
-            TermPanelSettings { dock: "right".into(), fraction: 0.4, collapsed: true }
+            TermPanelSettings {
+                dock: "right".into(),
+                fraction: 0.4,
+                collapsed: true
+            }
         );
-        assert!(std::fs::read_to_string(&file).unwrap().contains("\"other\""));
+        assert!(std::fs::read_to_string(&file)
+            .unwrap()
+            .contains("\"other\""));
         let _ = std::fs::remove_dir_all(file.parent().unwrap());
     }
 
@@ -198,7 +248,9 @@ mod tests {
         std::fs::write(&file, r#"{"other": 1}"#).unwrap();
         save_first_run_done(&file).unwrap();
         assert!(load_first_run_done(&file));
-        assert!(std::fs::read_to_string(&file).unwrap().contains("\"other\""));
+        assert!(std::fs::read_to_string(&file)
+            .unwrap()
+            .contains("\"other\""));
         let _ = std::fs::remove_dir_all(file.parent().unwrap());
     }
 
@@ -213,7 +265,9 @@ mod tests {
         assert!(!load_taskbar_signal(&file));
         save_taskbar_signal(&file, true).unwrap();
         assert!(load_taskbar_signal(&file));
-        assert!(std::fs::read_to_string(&file).unwrap().contains("\"other\""));
+        assert!(std::fs::read_to_string(&file)
+            .unwrap()
+            .contains("\"other\""));
         let _ = std::fs::remove_dir_all(file.parent().unwrap());
     }
 

@@ -156,7 +156,9 @@ fn parse_open_output(stdout: &[u8]) -> Result<ConsoleSession, String> {
 /// Split `http://<host>:<port><path>` into its parts; the console only ever
 /// listens on loopback http.
 fn split_url(url: &str) -> Result<(String, u16, String), String> {
-    let rest = url.strip_prefix("http://").ok_or_else(|| format!("not an http url: {url}"))?;
+    let rest = url
+        .strip_prefix("http://")
+        .ok_or_else(|| format!("not an http url: {url}"))?;
     let (authority, path) = match rest.split_once('/') {
         Some((a, p)) => (a, format!("/{p}")),
         None => (rest, "/".to_string()),
@@ -164,7 +166,9 @@ fn split_url(url: &str) -> Result<(String, u16, String), String> {
     let (host, port) = authority
         .rsplit_once(':')
         .ok_or_else(|| format!("no port in url: {url}"))?;
-    let port: u16 = port.parse().map_err(|_| format!("bad port in url: {url}"))?;
+    let port: u16 = port
+        .parse()
+        .map_err(|_| format!("bad port in url: {url}"))?;
     Ok((host.to_string(), port, path))
 }
 
@@ -175,7 +179,13 @@ impl ConsoleSupervisor {
     pub fn start(project_dir: PathBuf, embed_origin: String) -> Result<ConsoleSupervisor, String> {
         let console_dir = find_console_dir()?;
         let session = Self::open_session(&console_dir, &project_dir, &embed_origin, None)?;
-        Ok(ConsoleSupervisor { console_dir, project_dir, embed_origin, session, stopped: false })
+        Ok(ConsoleSupervisor {
+            console_dir,
+            project_dir,
+            embed_origin,
+            session,
+            stopped: false,
+        })
     }
 
     /// `open` for the dashboard, or, with `resume`, the same session again on
@@ -190,8 +200,20 @@ impl ConsoleSupervisor {
     ) -> Result<ConsoleSupervisor, String> {
         let console_dir = find_console_dir()?;
         let (_, port, _) = split_url(url)?;
-        let session = ConsoleSession { sid: sid.to_string(), url: url.to_string(), pid: 0, port, embed: true };
-        Ok(ConsoleSupervisor { console_dir, project_dir, embed_origin, session, stopped: false })
+        let session = ConsoleSession {
+            sid: sid.to_string(),
+            url: url.to_string(),
+            pid: 0,
+            port,
+            embed: true,
+        };
+        Ok(ConsoleSupervisor {
+            console_dir,
+            project_dir,
+            embed_origin,
+            session,
+            stopped: false,
+        })
     }
 
     fn open_session(
@@ -264,7 +286,10 @@ impl ConsoleSupervisor {
         let Ok((host, port, path)) = split_url(&self.session.url) else {
             return false;
         };
-        let Some(addr) = (host.as_str(), port).to_socket_addrs().ok().and_then(|mut a| a.next())
+        let Some(addr) = (host.as_str(), port)
+            .to_socket_addrs()
+            .ok()
+            .and_then(|mut a| a.next())
         else {
             return false;
         };
@@ -293,7 +318,8 @@ impl ConsoleSupervisor {
         }
         let sid = self.session.sid.clone();
         let on_disk = session_on_disk(&sid);
-        let (console_dir, project_dir, embed_origin) = (&self.console_dir, &self.project_dir, &self.embed_origin);
+        let (console_dir, project_dir, embed_origin) =
+            (&self.console_dir, &self.project_dir, &self.embed_origin);
         self.session = resume_or_fresh(&sid, on_disk, |resume| {
             Self::open_session(console_dir, project_dir, embed_origin, resume)
         })?;
@@ -329,7 +355,8 @@ pub fn session_on_disk(sid: &str) -> bool {
     if Path::new(sid).file_name() != Some(std::ffi::OsStr::new(sid)) {
         return false;
     }
-    session_reader::console_home().map_or(true, |home| session_reader::session_dir(&home, sid).is_dir())
+    session_reader::console_home()
+        .is_none_or(|home| session_reader::session_dir(&home, sid).is_dir())
 }
 
 /// The same session, so the page and a skill's place in it survive, tried
@@ -362,7 +389,10 @@ mod tests {
     #[test]
     fn splits_the_session_url() {
         let (host, port, path) = split_url("http://127.0.0.1:51617/s/abc/").unwrap();
-        assert_eq!((host.as_str(), port, path.as_str()), ("127.0.0.1", 51617, "/s/abc/"));
+        assert_eq!(
+            (host.as_str(), port, path.as_str()),
+            ("127.0.0.1", 51617, "/s/abc/")
+        );
         let (_, _, path) = split_url("http://localhost:9").unwrap();
         assert_eq!(path, "/");
         assert!(split_url("https://127.0.0.1:1/x").is_err());
@@ -371,10 +401,22 @@ mod tests {
 
     #[test]
     fn origin_comes_from_the_pages_own_url() {
-        assert_eq!(origin_of("http://127.0.0.1:1430/index.html").as_deref(), Some("http://127.0.0.1:1430"));
-        assert_eq!(origin_of("http://tauri.localhost/").as_deref(), Some("http://tauri.localhost"));
-        assert_eq!(origin_of("https://tauri.localhost").as_deref(), Some("https://tauri.localhost"));
-        assert_eq!(origin_of("tauri://localhost/index.html?x=1").as_deref(), Some("tauri://localhost"));
+        assert_eq!(
+            origin_of("http://127.0.0.1:1430/index.html").as_deref(),
+            Some("http://127.0.0.1:1430")
+        );
+        assert_eq!(
+            origin_of("http://tauri.localhost/").as_deref(),
+            Some("http://tauri.localhost")
+        );
+        assert_eq!(
+            origin_of("https://tauri.localhost").as_deref(),
+            Some("https://tauri.localhost")
+        );
+        assert_eq!(
+            origin_of("tauri://localhost/index.html?x=1").as_deref(),
+            Some("tauri://localhost")
+        );
         assert_eq!(origin_of("file:///x"), None);
         assert_eq!(origin_of("not a url"), None);
         assert_eq!(origin_of("http:///x"), None);
@@ -385,18 +427,38 @@ mod tests {
         // Only needs a console to be installed; skipped where there is none.
         let Ok(dir) = find_console_dir() else { return };
         let _ = dir;
-        let mut sup = ConsoleSupervisor::adopt(PathBuf::from("."), "http://tauri.localhost".into(), "http://127.0.0.1:5555/s/t/", "sid-9").unwrap();
-        assert_eq!((sup.session().port, sup.session().sid.as_str()), (5555, "sid-9"));
+        let mut sup = ConsoleSupervisor::adopt(
+            PathBuf::from("."),
+            "http://tauri.localhost".into(),
+            "http://127.0.0.1:5555/s/t/",
+            "sid-9",
+        )
+        .unwrap();
+        assert_eq!(
+            (sup.session().port, sup.session().sid.as_str()),
+            (5555, "sid-9")
+        );
         assert!(sup.session().embed);
-        assert!(ConsoleSupervisor::adopt(PathBuf::from("."), String::new(), "https://x/", "s").is_err());
+        assert!(
+            ConsoleSupervisor::adopt(PathBuf::from("."), String::new(), "https://x/", "s").is_err()
+        );
         sup.follow("http://127.0.0.1:6000/s/u/", "sid-10");
-        assert_eq!((sup.session().port, sup.session().sid.as_str()), (6000, "sid-10"));
+        assert_eq!(
+            (sup.session().port, sup.session().sid.as_str()),
+            (6000, "sid-10")
+        );
         // Never started a server here: nothing for Drop to stop.
         sup.stopped = true;
     }
 
     fn opened(sid: &str) -> ConsoleSession {
-        ConsoleSession { sid: sid.to_string(), url: "http://127.0.0.1:5/s/t/".into(), pid: 1, port: 5, embed: true }
+        ConsoleSession {
+            sid: sid.to_string(),
+            url: "http://127.0.0.1:5/s/t/".into(),
+            pid: 1,
+            port: 5,
+            embed: true,
+        }
     }
 
     #[test]
@@ -417,7 +479,10 @@ mod tests {
             Err("busy".to_string())
         });
         assert!(result.is_err(), "the failure is reported, not papered over");
-        assert!(calls.iter().all(|c| c.as_deref() == Some("s1")), "only ever resumed: {calls:?}");
+        assert!(
+            calls.iter().all(|c| c.as_deref() == Some("s1")),
+            "only ever resumed: {calls:?}"
+        );
         assert_eq!(calls.len(), 2, "the resume is tried twice");
     }
 
@@ -427,7 +492,11 @@ mod tests {
         let session = resume_or_fresh("s1", true, |resume| {
             tries += 1;
             assert_eq!(resume, Some("s1"));
-            if tries == 1 { Err("busy".to_string()) } else { Ok(opened("s1")) }
+            if tries == 1 {
+                Err("busy".to_string())
+            } else {
+                Ok(opened("s1"))
+            }
         })
         .unwrap();
         assert_eq!(session.sid, "s1");
@@ -447,13 +516,20 @@ mod tests {
 
     #[test]
     fn parses_open_output() {
-        let json = br#"{"ok":true,"sid":"s1","url":"http://127.0.0.1:5/s/t/","port":5,"pid":42,"embed":1}
+        let json =
+            br#"{"ok":true,"sid":"s1","url":"http://127.0.0.1:5/s/t/","port":5,"pid":42,"embed":1}
 "#;
         let session = parse_open_output(json).unwrap();
-        assert_eq!((session.sid.as_str(), session.port, session.pid), ("s1", 5, 42));
+        assert_eq!(
+            (session.sid.as_str(), session.port, session.pid),
+            ("s1", 5, 42)
+        );
         assert!(session.embed);
         let old = br#"{"ok":true,"sid":"s1","url":"http://127.0.0.1:5/s/t/","port":5,"pid":42}"#;
-        assert!(!parse_open_output(old).unwrap().embed, "a console that does not say it embeds is too old");
+        assert!(
+            !parse_open_output(old).unwrap().embed,
+            "a console that does not say it embeds is too old"
+        );
         assert!(parse_open_output(b"not json\n").is_err());
         assert!(parse_open_output(br#"{"ok":true,"sid":"s1"}"#).is_err());
     }

@@ -9,10 +9,19 @@ use std::sync::Once;
 #[allow(dead_code)]
 pub fn process_alive(pid: u32) -> bool {
     if cfg!(windows) {
-        let out = Command::new("tasklist").args(["/FI", &format!("PID eq {pid}"), "/NH"]).output().unwrap();
-        String::from_utf8_lossy(&out.stdout).split_whitespace().any(|word| word == pid.to_string())
+        let out = Command::new("tasklist")
+            .args(["/FI", &format!("PID eq {pid}"), "/NH"])
+            .output()
+            .unwrap();
+        String::from_utf8_lossy(&out.stdout)
+            .split_whitespace()
+            .any(|word| word == pid.to_string())
     } else {
-        Command::new("kill").args(["-0", &pid.to_string()]).status().map(|s| s.success()).unwrap_or(false)
+        Command::new("kill")
+            .args(["-0", &pid.to_string()])
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false)
     }
 }
 
@@ -33,6 +42,10 @@ pub fn fake_agent() -> PathBuf {
         .and_then(|deps| deps.parent())
         .unwrap()
         .join(format!("fake-agent{}", std::env::consts::EXE_SUFFIX));
-    assert!(path.exists(), "{} is missing after building the fake agent", path.display());
+    assert!(
+        path.exists(),
+        "{} is missing after building the fake agent",
+        path.display()
+    );
     path
 }

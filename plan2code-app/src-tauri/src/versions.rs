@@ -65,7 +65,12 @@ pub fn status(app: &str, skills: Option<String>) -> VersionStatus {
         (Some(a), Some(s)) => (a != s, s > a),
         _ => (false, false),
     };
-    VersionStatus { app: app.to_string(), skills, mismatch, skills_ahead }
+    VersionStatus {
+        app: app.to_string(),
+        skills,
+        mismatch,
+        skills_ahead,
+    }
 }
 
 /// Run the existing installer's update (`plan2code update`, through the launcher's own copy),
@@ -80,10 +85,19 @@ pub fn run_update(app_version: &str, on_line: impl FnMut(&str)) -> Result<String
 
 /// `run_update`, with the timeout as a parameter so a test can use a short one instead of
 /// `UPDATE_TIMEOUT`'s real five minutes.
-fn run_update_within(app_version: &str, timeout: Duration, mut on_line: impl FnMut(&str)) -> Result<String, String> {
-    let launcher = launcher_dir().ok_or("no home folder found")?.join("plan2code.js");
+fn run_update_within(
+    app_version: &str,
+    timeout: Duration,
+    mut on_line: impl FnMut(&str),
+) -> Result<String, String> {
+    let launcher = launcher_dir()
+        .ok_or("no home folder found")?
+        .join("plan2code.js");
     if !launcher.is_file() {
-        return Err(format!("the plan2code command is not installed ({} is missing)", launcher.display()));
+        return Err(format!(
+            "the plan2code command is not installed ({} is missing)",
+            launcher.display()
+        ));
     }
     let mut command = Command::new("node");
     // A Dock or Start-menu launch often lacks nvm, Homebrew or Volta's
@@ -103,7 +117,9 @@ fn run_update_within(app_version: &str, timeout: Duration, mut on_line: impl FnM
         use std::os::windows::process::CommandExt;
         command.creation_flags(0x08000000); // CREATE_NO_WINDOW, as the console calls are
     }
-    let mut child = command.spawn().map_err(|e| format!("could not run node: {e}"))?;
+    let mut child = command
+        .spawn()
+        .map_err(|e| format!("could not run node: {e}"))?;
     let stdout = child.stdout.take().ok_or("no stdout from the update")?;
     let stderr = child.stderr.take().ok_or("no stderr from the update")?;
     let (tx, rx) = mpsc::channel::<String>();
@@ -169,7 +185,12 @@ mod tests {
         let s = status("3.0.0", Some("3.0.0".into()));
         assert_eq!(
             s,
-            VersionStatus { app: "3.0.0".into(), skills: Some("3.0.0".into()), mismatch: false, skills_ahead: false }
+            VersionStatus {
+                app: "3.0.0".into(),
+                skills: Some("3.0.0".into()),
+                mismatch: false,
+                skills_ahead: false
+            }
         );
     }
 
@@ -202,7 +223,9 @@ mod tests {
 
     #[test]
     fn a_missing_or_broken_version_file_reads_as_none() {
-        let missing = std::env::temp_dir().join("p2c-versions-does-not-exist").join("version.json");
+        let missing = std::env::temp_dir()
+            .join("p2c-versions-does-not-exist")
+            .join("version.json");
         assert_eq!(version_in(&missing), None);
         assert_eq!(version_in(&temp_file("broken", "{ not json")), None);
         assert_eq!(version_in(&temp_file("nover", r#"{ "name": "x" }"#)), None);
@@ -215,7 +238,10 @@ mod tests {
     /// source, no quoting needed), runs `body`, then restores the environment.
     fn with_fake_launcher<T>(name: &str, script: &str, body: impl FnOnce() -> T) -> T {
         let _guard = ENV_LOCK.lock().unwrap();
-        let dir = std::env::temp_dir().join(format!("p2c-versions-launcher-{}-{name}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!(
+            "p2c-versions-launcher-{}-{name}",
+            std::process::id()
+        ));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(dir.join("plan2code.js"), script).unwrap();
@@ -229,11 +255,17 @@ mod tests {
     #[test]
     fn run_update_streams_lines_live_and_returns_the_last_one_on_success() {
         let lines = std::sync::Mutex::new(Vec::<String>::new());
-        let result = with_fake_launcher("ok", "console.log('line1'); console.log('line2');", || {
-            run_update_within("9.9.9", Duration::from_secs(10), |line| lines.lock().unwrap().push(line.to_string()))
-        });
+        let result =
+            with_fake_launcher("ok", "console.log('line1'); console.log('line2');", || {
+                run_update_within("9.9.9", Duration::from_secs(10), |line| {
+                    lines.lock().unwrap().push(line.to_string())
+                })
+            });
         assert_eq!(result, Ok("line2".to_string()));
-        assert_eq!(*lines.lock().unwrap(), vec!["line1".to_string(), "line2".to_string()]);
+        assert_eq!(
+            *lines.lock().unwrap(),
+            vec!["line1".to_string(), "line2".to_string()]
+        );
     }
 
     #[test]

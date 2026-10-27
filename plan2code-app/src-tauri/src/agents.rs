@@ -124,14 +124,25 @@ impl PermissionMode {
 /// or with `.exe`, `.cmd` or `.bat` on Windows (as `windows_command` resolves
 /// a program to run).
 pub fn find_on_path(program: &str, path_var: &str) -> Option<PathBuf> {
-    let exts: &[&str] = if cfg!(windows) { &["exe", "cmd", "bat"] } else { &[""] };
-    path_var.split(if cfg!(windows) { ';' } else { ':' }).filter(|dir| !dir.is_empty()).find_map(|dir| {
-        exts.iter().find_map(|ext| {
-            let name = if ext.is_empty() { program.to_string() } else { format!("{program}.{ext}") };
-            let candidate = Path::new(dir).join(name);
-            candidate.is_file().then_some(candidate)
+    let exts: &[&str] = if cfg!(windows) {
+        &["exe", "cmd", "bat"]
+    } else {
+        &[""]
+    };
+    path_var
+        .split(if cfg!(windows) { ';' } else { ':' })
+        .filter(|dir| !dir.is_empty())
+        .find_map(|dir| {
+            exts.iter().find_map(|ext| {
+                let name = if ext.is_empty() {
+                    program.to_string()
+                } else {
+                    format!("{program}.{ext}")
+                };
+                let candidate = Path::new(dir).join(name);
+                candidate.is_file().then_some(candidate)
+            })
         })
-    })
 }
 
 /// Where `kind`'s CLI runs from: the test override when it is set, else its
@@ -166,11 +177,17 @@ pub fn launch_spec(
     mode: PermissionMode,
     prompt: &str,
 ) -> LaunchSpec {
-    let bin = std::env::var(AGENT_BIN_ENV).ok().filter(|bin| !bin.is_empty());
+    let bin = std::env::var(AGENT_BIN_ENV)
+        .ok()
+        .filter(|bin| !bin.is_empty());
     let mut spec = launch_spec_with(kind, folder, model, effort, mode, prompt, bin.as_deref());
     // The override names a program to run as it is; a real agent is looked up on PATH.
     if cfg!(windows) && bin.is_none() {
-        let (program, args) = windows_command(&spec.program, spec.args, &std::env::var("PATH").unwrap_or_default());
+        let (program, args) = windows_command(
+            &spec.program,
+            spec.args,
+            &std::env::var("PATH").unwrap_or_default(),
+        );
         spec.program = program;
         spec.args = args;
     }
@@ -188,7 +205,12 @@ fn launch_spec_with(
 ) -> LaunchSpec {
     let cwd = folder.to_path_buf();
     if let Some(bin) = bin_override {
-        return LaunchSpec { program: bin.to_string(), args: vec![], env: vec![], cwd };
+        return LaunchSpec {
+            program: bin.to_string(),
+            args: vec![],
+            env: vec![],
+            cwd,
+        };
     }
 
     let strings = |list: &[&str]| list.iter().map(|s| s.to_string()).collect::<Vec<_>>();
@@ -245,7 +267,12 @@ fn launch_spec_with(
     // directories (Task 9.9): the agent CLI itself, and anything it shells
     // out to, needs a PATH that finds them anyway.
     let env = vec![("PATH".to_string(), crate::node_check::resolved_path())];
-    LaunchSpec { program: program.to_string(), args, env, cwd }
+    LaunchSpec {
+        program: program.to_string(),
+        args,
+        env,
+        cwd,
+    }
 }
 
 /// An agent installed with npm is, on Windows, a `.cmd` shim beside an
@@ -330,7 +357,12 @@ pub fn load_custom_agents(file: &Path) -> (Vec<CustomAgent>, Vec<String>) {
     match std::fs::read_to_string(file) {
         Ok(text) => parse_agents_file(&text),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => (Vec::new(), Vec::new()),
-        Err(e) => (Vec::new(), vec![format!("agents.json could not be read ({e}), so no custom agents are used")]),
+        Err(e) => (
+            Vec::new(),
+            vec![format!(
+                "agents.json could not be read ({e}), so no custom agents are used"
+            )],
+        ),
     }
 }
 
@@ -344,19 +376,30 @@ pub fn parse_agents_file(text: &str) -> (Vec<CustomAgent>, Vec<String>) {
         return none("agents.json is not an object, so no custom agents are used".to_string());
     };
     if file.get("schema").and_then(Value::as_f64) != Some(1.0) {
-        let shown = file.get("schema").map_or("undefined".to_string(), |v| v.to_string());
-        return none(format!("agents.json has schema {shown}, not 1, so no custom agents are used"));
+        let shown = file
+            .get("schema")
+            .map_or("undefined".to_string(), |v| v.to_string());
+        return none(format!(
+            "agents.json has schema {shown}, not 1, so no custom agents are used"
+        ));
     }
     let list = match file.get("agents") {
         None | Some(Value::Null) => return (Vec::new(), Vec::new()),
         Some(Value::Array(list)) => list,
-        Some(_) => return none("agents.json: agents is not a list, so no custom agents are used".to_string()),
+        Some(_) => {
+            return none(
+                "agents.json: agents is not a list, so no custom agents are used".to_string(),
+            )
+        }
     };
 
     let mut warnings = Vec::new();
     let mut list: &[Value] = list;
     if list.len() > MAX_CUSTOM_AGENTS {
-        warnings.push(format!("agents.json lists {} agents; only the first {MAX_CUSTOM_AGENTS} are used", list.len()));
+        warnings.push(format!(
+            "agents.json lists {} agents; only the first {MAX_CUSTOM_AGENTS} are used",
+            list.len()
+        ));
         list = &list[..MAX_CUSTOM_AGENTS];
     }
     let mut agents: Vec<CustomAgent> = Vec::new();
@@ -377,8 +420,12 @@ pub fn parse_agents_file(text: &str) -> (Vec<CustomAgent>, Vec<String>) {
 
 fn valid_agent_id(id: &str) -> bool {
     let mut chars = id.chars();
-    let first_ok = chars.next().is_some_and(|c| c.is_ascii_lowercase() || c.is_ascii_digit());
-    first_ok && id.len() <= 32 && chars.all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+    let first_ok = chars
+        .next()
+        .is_some_and(|c| c.is_ascii_lowercase() || c.is_ascii_digit());
+    first_ok
+        && id.len() <= 32
+        && chars.all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
 }
 
 fn text_list(entry: &Value, field: &str, default: Vec<String>) -> Result<Vec<String>, String> {
@@ -394,8 +441,14 @@ fn text_list(entry: &Value, field: &str, default: Vec<String>) -> Result<Vec<Str
 }
 
 // One entry against the rules, in the same order as `checkEntry` in agents.mjs.
-fn check_entry(entry: &Value, ids: &HashSet<String>, names: &HashSet<String>) -> Result<CustomAgent, String> {
-    let Some(object) = entry.as_object() else { return Err("not an object".to_string()) };
+fn check_entry(
+    entry: &Value,
+    ids: &HashSet<String>,
+    names: &HashSet<String>,
+) -> Result<CustomAgent, String> {
+    let Some(object) = entry.as_object() else {
+        return Err("not an object".to_string());
+    };
     let id = match object.get("id").and_then(Value::as_str) {
         Some(id) if !id.is_empty() => id,
         _ => return Err("id is missing".to_string()),
@@ -412,7 +465,10 @@ fn check_entry(entry: &Value, ids: &HashSet<String>, names: &HashSet<String>) ->
         return Err(format!("id \"{id}\" is already used"));
     }
 
-    let name = object.get("name").and_then(Value::as_str).map_or("", str::trim);
+    let name = object
+        .get("name")
+        .and_then(Value::as_str)
+        .map_or("", str::trim);
     if name.is_empty() {
         return Err("name is missing".to_string());
     }
@@ -423,7 +479,10 @@ fn check_entry(entry: &Value, ids: &HashSet<String>, names: &HashSet<String>) ->
         return Err(format!("name \"{name}\" is already used"));
     }
 
-    let command = object.get("command").and_then(Value::as_str).map_or("", str::trim);
+    let command = object
+        .get("command")
+        .and_then(Value::as_str)
+        .map_or("", str::trim);
     if command.is_empty() {
         return Err("command is missing".to_string());
     }
@@ -451,8 +510,15 @@ fn check_entry(entry: &Value, ids: &HashSet<String>, names: &HashSet<String>) ->
                 if model_id.is_empty() || !seen.insert(model_id.to_string()) {
                     continue;
                 }
-                let label = item.get("label").and_then(Value::as_str).map(str::trim).filter(|l| !l.is_empty());
-                models.push(CustomModel { id: model_id.to_string(), label: label.map(str::to_string) });
+                let label = item
+                    .get("label")
+                    .and_then(Value::as_str)
+                    .map(str::trim)
+                    .filter(|l| !l.is_empty());
+                models.push(CustomModel {
+                    id: model_id.to_string(),
+                    label: label.map(str::to_string),
+                });
             }
         }
         Some(_) => return Err("models must be a list".to_string()),
@@ -475,7 +541,12 @@ fn check_entry(entry: &Value, ids: &HashSet<String>, names: &HashSet<String>) ->
 /// argument holds it), then `model_args` when a model is chosen, then
 /// `bypass_args` when checks are off. `prompt` defaults to the entry's own; a
 /// blank one drops an argument that is exactly `{prompt}`. Plain text only.
-pub fn build_custom_args(agent: &CustomAgent, prompt: Option<&str>, model: Option<&str>, bypass: bool) -> Vec<String> {
+pub fn build_custom_args(
+    agent: &CustomAgent,
+    prompt: Option<&str>,
+    model: Option<&str>,
+    bypass: bool,
+) -> Vec<String> {
     let text = prompt.unwrap_or(&agent.prompt);
     let blank = text.trim().is_empty();
     let mut out = Vec::new();
@@ -495,7 +566,12 @@ pub fn build_custom_args(agent: &CustomAgent, prompt: Option<&str>, model: Optio
         out.push(text.to_string());
     }
     if let Some(model) = model.filter(|m| !m.is_empty()) {
-        out.extend(agent.model_args.iter().map(|arg| arg.replace("{model}", model)));
+        out.extend(
+            agent
+                .model_args
+                .iter()
+                .map(|arg| arg.replace("{model}", model)),
+        );
     }
     if bypass {
         out.extend(agent.bypass_args.iter().cloned());
@@ -563,18 +639,26 @@ pub fn find_agent_in(id: &str, file: Option<&Path>) -> Option<Agent> {
         return Some(Agent::Builtin(kind));
     }
     let (agents, _) = load_custom_agents(file?);
-    agents.into_iter().find(|agent| agent.id == id).map(Agent::Custom)
+    agents
+        .into_iter()
+        .find(|agent| agent.id == id)
+        .map(Agent::Custom)
 }
 
 /// Every custom agent in `~/.plan2code/agents.json`, read afresh, with the
 /// warnings about anything in the file that was skipped.
 pub fn custom_agents() -> (Vec<CustomAgent>, Vec<String>) {
-    agents_file().map(|file| load_custom_agents(&file)).unwrap_or_default()
+    agents_file()
+        .map(|file| load_custom_agents(&file))
+        .unwrap_or_default()
 }
 
 fn clean_command(command: &str) -> &str {
     let command = command.trim();
-    command.strip_prefix('"').and_then(|c| c.strip_suffix('"')).unwrap_or(command)
+    command
+        .strip_prefix('"')
+        .and_then(|c| c.strip_suffix('"'))
+        .unwrap_or(command)
 }
 
 fn has_separator(command: &str, windows: bool) -> bool {
@@ -634,8 +718,16 @@ pub fn agent_launch_spec(
     match agent {
         Agent::Builtin(kind) => launch_spec(*kind, folder, model, effort, mode, prompt),
         Agent::Custom(custom) => {
-            if let Some(bin) = std::env::var(AGENT_BIN_ENV).ok().filter(|bin| !bin.is_empty()) {
-                return LaunchSpec { program: bin, args: vec![], env: vec![], cwd: folder.to_path_buf() };
+            if let Some(bin) = std::env::var(AGENT_BIN_ENV)
+                .ok()
+                .filter(|bin| !bin.is_empty())
+            {
+                return LaunchSpec {
+                    program: bin,
+                    args: vec![],
+                    env: vec![],
+                    cwd: folder.to_path_buf(),
+                };
             }
             let resolved = agent.installed_at();
             custom_launch_spec(
@@ -667,13 +759,21 @@ fn custom_launch_spec(
 ) -> LaunchSpec {
     let mut args = build_custom_args(custom, Some(prompt), model, mode == PermissionMode::Bypass);
     let mut path = base_path.to_string();
-    let mut program =
-        resolved.map_or_else(|| clean_command(&custom.command).to_string(), |p| p.to_string_lossy().into_owned());
+    let mut program = resolved.map_or_else(
+        || clean_command(&custom.command).to_string(),
+        |p| p.to_string_lossy().into_owned(),
+    );
     let mut extra_env = Vec::new();
     if windows {
-        let ext = resolved.and_then(|p| p.extension()).map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default();
+        let ext = resolved
+            .and_then(|p| p.extension())
+            .map(|e| e.to_string_lossy().to_lowercase())
+            .unwrap_or_default();
         if let (true, Some(file)) = (ext == "cmd" || ext == "bat", resolved) {
-            let file_name = file.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+            let file_name = file
+                .file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_default();
             // A full path may have a space in its folder, and `cmd /c` mangles a
             // command line that starts with a quote: run the bare file name with
             // its folder at the front of the child's PATH instead.
@@ -687,18 +787,33 @@ fn custom_launch_spec(
             // quoted as the launcher's `quoteForCmd` does and handed over in a
             // variable: `cmd` expands it once and then parses it, so its quotes
             // hold and a `%` inside it is not expanded again.
-            let line: Vec<String> = std::iter::once(file_name).chain(args).map(|arg| quote_for_cmd(&arg)).collect();
+            let line: Vec<String> = std::iter::once(file_name)
+                .chain(args)
+                .map(|arg| quote_for_cmd(&arg))
+                .collect();
             extra_env.push((CMD_LINE_ENV.to_string(), line.join(" ")));
             // `cmd` looks in the current folder (the project) before PATH: a
             // same-named file there must not run in the agent's place.
-            extra_env.push(("NoDefaultCurrentDirectoryInExePath".to_string(), "1".to_string()));
-            args = vec!["/d".to_string(), "/c".to_string(), format!("%{CMD_LINE_ENV}%")];
+            extra_env.push((
+                "NoDefaultCurrentDirectoryInExePath".to_string(),
+                "1".to_string(),
+            ));
+            args = vec![
+                "/d".to_string(),
+                "/c".to_string(),
+                format!("%{CMD_LINE_ENV}%"),
+            ];
             program = "cmd".to_string();
         }
     }
     let mut env = vec![("PATH".to_string(), path)];
     env.append(&mut extra_env);
-    LaunchSpec { program, args, env, cwd: folder.to_path_buf() }
+    LaunchSpec {
+        program,
+        args,
+        env,
+        cwd: folder.to_path_buf(),
+    }
 }
 
 /// The variable a custom `.cmd` or `.bat` agent's command line reaches `cmd` in.
@@ -716,7 +831,9 @@ fn quote_for_cmd(arg: &str) -> String {
 
 /// The page a built-in agent installs from; any other id is an error.
 pub fn install_page_url(id: &str) -> Result<&'static str, String> {
-    AgentKind::from_id(id).map(AgentKind::install_url).ok_or_else(|| format!("no install page for agent: {id}"))
+    AgentKind::from_id(id)
+        .map(AgentKind::install_url)
+        .ok_or_else(|| format!("no install page for agent: {id}"))
 }
 
 #[cfg(test)]
@@ -727,15 +844,31 @@ mod tests {
         PathBuf::from("project")
     }
 
-    fn args(kind: AgentKind, model: Option<&str>, mode: PermissionMode, prompt: &str) -> Vec<String> {
+    fn args(
+        kind: AgentKind,
+        model: Option<&str>,
+        mode: PermissionMode,
+        prompt: &str,
+    ) -> Vec<String> {
         launch_spec_with(kind, &folder(), model, None, mode, prompt, None).args
     }
 
     #[test]
     fn claude_puts_the_prompt_first() {
-        let spec = launch_spec_with(AgentKind::Claude, &folder(), None, None, PermissionMode::Bypass, "/plan2code", None);
+        let spec = launch_spec_with(
+            AgentKind::Claude,
+            &folder(),
+            None,
+            None,
+            PermissionMode::Bypass,
+            "/plan2code",
+            None,
+        );
         assert_eq!(spec.program, "claude");
-        assert_eq!(spec.args, ["/plan2code", "--permission-mode", "bypassPermissions"]);
+        assert_eq!(
+            spec.args,
+            ["/plan2code", "--permission-mode", "bypassPermissions"]
+        );
         assert_eq!(spec.cwd, folder());
         // A PATH that can still find nvm, Homebrew or Volta's directories (Task 9.9).
         assert_eq!(spec.env.iter().filter(|(k, _)| k == "PATH").count(), 1);
@@ -744,21 +877,56 @@ mod tests {
     #[test]
     fn claude_with_a_model() {
         assert_eq!(
-            args(AgentKind::Claude, Some("sonnet"), PermissionMode::Bypass, "/plan2code"),
-            ["/plan2code", "--permission-mode", "bypassPermissions", "--model", "sonnet"]
+            args(
+                AgentKind::Claude,
+                Some("sonnet"),
+                PermissionMode::Bypass,
+                "/plan2code"
+            ),
+            [
+                "/plan2code",
+                "--permission-mode",
+                "bypassPermissions",
+                "--model",
+                "sonnet"
+            ]
         );
     }
 
     #[test]
     fn claude_checked_mode_skips_the_bypass_flag() {
-        assert_eq!(args(AgentKind::Claude, None, PermissionMode::Checked, "/plan2code"), ["/plan2code"]);
+        assert_eq!(
+            args(
+                AgentKind::Claude,
+                None,
+                PermissionMode::Checked,
+                "/plan2code"
+            ),
+            ["/plan2code"]
+        );
     }
 
     #[test]
     fn claude_with_an_effort() {
-        let spec =
-            launch_spec_with(AgentKind::Claude, &folder(), None, Some("high"), PermissionMode::Bypass, "/plan2code", None);
-        assert_eq!(spec.args, ["/plan2code", "--permission-mode", "bypassPermissions", "--effort", "high"]);
+        let spec = launch_spec_with(
+            AgentKind::Claude,
+            &folder(),
+            None,
+            Some("high"),
+            PermissionMode::Bypass,
+            "/plan2code",
+            None,
+        );
+        assert_eq!(
+            spec.args,
+            [
+                "/plan2code",
+                "--permission-mode",
+                "bypassPermissions",
+                "--effort",
+                "high"
+            ]
+        );
     }
 
     #[test]
@@ -774,7 +942,15 @@ mod tests {
         );
         assert_eq!(
             spec.args,
-            ["/plan2code", "--permission-mode", "bypassPermissions", "--model", "opus", "--effort", "xhigh"]
+            [
+                "/plan2code",
+                "--permission-mode",
+                "bypassPermissions",
+                "--model",
+                "opus",
+                "--effort",
+                "xhigh"
+            ]
         );
         let checked = launch_spec_with(
             AgentKind::Codex,
@@ -785,72 +961,171 @@ mod tests {
             "$plan2code",
             None,
         );
-        assert_eq!(checked.args, ["--model", "gpt-5", "-c", "model_reasoning_effort=medium", "$plan2code"]);
+        assert_eq!(
+            checked.args,
+            [
+                "--model",
+                "gpt-5",
+                "-c",
+                "model_reasoning_effort=medium",
+                "$plan2code"
+            ]
+        );
     }
 
     #[test]
     fn devin_puts_the_prompt_after_a_double_dash() {
-        let spec = launch_spec_with(AgentKind::Devin, &folder(), None, None, PermissionMode::Bypass, "/plan2code", None);
+        let spec = launch_spec_with(
+            AgentKind::Devin,
+            &folder(),
+            None,
+            None,
+            PermissionMode::Bypass,
+            "/plan2code",
+            None,
+        );
         assert_eq!(spec.program, "devin");
-        assert_eq!(spec.args, ["--permission-mode", "bypass", "--", "/plan2code"]);
+        assert_eq!(
+            spec.args,
+            ["--permission-mode", "bypass", "--", "/plan2code"]
+        );
     }
 
     #[test]
     fn devin_with_a_model_keeps_the_prompt_last() {
         assert_eq!(
-            args(AgentKind::Devin, Some("opus"), PermissionMode::Bypass, "/plan2code"),
-            ["--permission-mode", "bypass", "--model", "opus", "--", "/plan2code"]
+            args(
+                AgentKind::Devin,
+                Some("opus"),
+                PermissionMode::Bypass,
+                "/plan2code"
+            ),
+            [
+                "--permission-mode",
+                "bypass",
+                "--model",
+                "opus",
+                "--",
+                "/plan2code"
+            ]
         );
     }
 
     #[test]
     fn devin_checked_mode_skips_the_bypass_flag() {
-        assert_eq!(args(AgentKind::Devin, None, PermissionMode::Checked, "/plan2code"), ["--", "/plan2code"]);
+        assert_eq!(
+            args(
+                AgentKind::Devin,
+                None,
+                PermissionMode::Checked,
+                "/plan2code"
+            ),
+            ["--", "/plan2code"]
+        );
     }
 
     #[test]
     fn codex_uses_its_own_flag_and_dollar_prompt() {
         let prompt = AgentKind::Codex.default_prompt();
-        let spec = launch_spec_with(AgentKind::Codex, &folder(), None, None, PermissionMode::Bypass, prompt, None);
+        let spec = launch_spec_with(
+            AgentKind::Codex,
+            &folder(),
+            None,
+            None,
+            PermissionMode::Bypass,
+            prompt,
+            None,
+        );
         assert_eq!(spec.program, "codex");
-        assert_eq!(spec.args, ["--dangerously-bypass-approvals-and-sandbox", "$plan2code"]);
+        assert_eq!(
+            spec.args,
+            ["--dangerously-bypass-approvals-and-sandbox", "$plan2code"]
+        );
     }
 
     #[test]
     fn codex_with_a_model() {
         assert_eq!(
-            args(AgentKind::Codex, Some("gpt-5"), PermissionMode::Bypass, "$plan2code"),
-            ["--dangerously-bypass-approvals-and-sandbox", "--model", "gpt-5", "$plan2code"]
+            args(
+                AgentKind::Codex,
+                Some("gpt-5"),
+                PermissionMode::Bypass,
+                "$plan2code"
+            ),
+            [
+                "--dangerously-bypass-approvals-and-sandbox",
+                "--model",
+                "gpt-5",
+                "$plan2code"
+            ]
         );
     }
 
     #[test]
     fn codex_with_an_effort_uses_a_config_override() {
-        let spec =
-            launch_spec_with(AgentKind::Codex, &folder(), None, Some("low"), PermissionMode::Bypass, "$plan2code", None);
+        let spec = launch_spec_with(
+            AgentKind::Codex,
+            &folder(),
+            None,
+            Some("low"),
+            PermissionMode::Bypass,
+            "$plan2code",
+            None,
+        );
         assert_eq!(
             spec.args,
-            ["--dangerously-bypass-approvals-and-sandbox", "-c", "model_reasoning_effort=low", "$plan2code"]
+            [
+                "--dangerously-bypass-approvals-and-sandbox",
+                "-c",
+                "model_reasoning_effort=low",
+                "$plan2code"
+            ]
         );
     }
 
     #[test]
     fn codex_checked_mode_skips_the_bypass_flag() {
-        assert_eq!(args(AgentKind::Codex, None, PermissionMode::Checked, "$plan2code"), ["$plan2code"]);
+        assert_eq!(
+            args(
+                AgentKind::Codex,
+                None,
+                PermissionMode::Checked,
+                "$plan2code"
+            ),
+            ["$plan2code"]
+        );
     }
 
     #[test]
     fn no_prompt_means_nothing_typed() {
-        assert_eq!(args(AgentKind::Claude, None, PermissionMode::Bypass, ""), ["--permission-mode", "bypassPermissions"]);
-        assert_eq!(args(AgentKind::Devin, None, PermissionMode::Bypass, ""), ["--permission-mode", "bypass"]);
-        assert_eq!(args(AgentKind::Codex, None, PermissionMode::Bypass, ""), ["--dangerously-bypass-approvals-and-sandbox"]);
+        assert_eq!(
+            args(AgentKind::Claude, None, PermissionMode::Bypass, ""),
+            ["--permission-mode", "bypassPermissions"]
+        );
+        assert_eq!(
+            args(AgentKind::Devin, None, PermissionMode::Bypass, ""),
+            ["--permission-mode", "bypass"]
+        );
+        assert_eq!(
+            args(AgentKind::Codex, None, PermissionMode::Bypass, ""),
+            ["--dangerously-bypass-approvals-and-sandbox"]
+        );
     }
 
     #[test]
     fn a_custom_prompt_is_passed_through() {
         assert_eq!(
-            args(AgentKind::Claude, None, PermissionMode::Bypass, "/plan2code pick up the brief"),
-            ["/plan2code pick up the brief", "--permission-mode", "bypassPermissions"]
+            args(
+                AgentKind::Claude,
+                None,
+                PermissionMode::Bypass,
+                "/plan2code pick up the brief"
+            ),
+            [
+                "/plan2code pick up the brief",
+                "--permission-mode",
+                "bypassPermissions"
+            ]
         );
     }
 
@@ -912,13 +1187,23 @@ mod tests {
 
         let (program, wrapped) = windows_command("tool", args.clone(), &path);
         assert_eq!(program, "cmd");
-        assert_eq!(wrapped, ["/c".to_string(), "tool.cmd".to_string(), "--flag".to_string()]);
+        assert_eq!(
+            wrapped,
+            [
+                "/c".to_string(),
+                "tool.cmd".to_string(),
+                "--flag".to_string()
+            ]
+        );
 
         let (program, same) = windows_command("real", args.clone(), &path);
         assert_eq!(program, dir.join("real.exe").to_string_lossy());
         assert_eq!(same, args);
 
-        assert_eq!(windows_command("missing", args.clone(), &path), ("missing".to_string(), args));
+        assert_eq!(
+            windows_command("missing", args.clone(), &path),
+            ("missing".to_string(), args)
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -957,7 +1242,10 @@ mod tests {
             }
             for part in parts {
                 let part = part.as_str().unwrap();
-                assert!(warnings.iter().any(|w| w.contains(part)), "{name}: no warning names {part}: {warnings:?}");
+                assert!(
+                    warnings.iter().any(|w| w.contains(part)),
+                    "{name}: no warning names {part}: {warnings:?}"
+                );
             }
         }
     }
@@ -983,7 +1271,8 @@ mod tests {
     }
 
     fn temp_dir(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("plan2code-agents-{}-{name}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("plan2code-agents-{}-{name}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         dir
@@ -994,7 +1283,10 @@ mod tests {
     #[test]
     fn a_missing_file_is_empty_and_a_bad_one_warns() {
         let dir = temp_dir("load");
-        assert_eq!(load_custom_agents(&dir.join("agents.json")), (Vec::new(), Vec::new()));
+        assert_eq!(
+            load_custom_agents(&dir.join("agents.json")),
+            (Vec::new(), Vec::new())
+        );
         std::fs::write(dir.join("agents.json"), "{ nope").unwrap();
         let (agents, warnings) = load_custom_agents(&dir.join("agents.json"));
         assert!(agents.is_empty() && warnings.len() == 1);
@@ -1006,9 +1298,20 @@ mod tests {
         let dir = temp_dir("find");
         let file = dir.join("agents.json");
         std::fs::write(&file, GOOSE).unwrap();
-        assert_eq!(find_agent_in("claude", Some(&file)), Some(Agent::Builtin(AgentKind::Claude)));
+        assert_eq!(
+            find_agent_in("claude", Some(&file)),
+            Some(Agent::Builtin(AgentKind::Claude))
+        );
         let goose = find_agent_in("goose", Some(&file)).unwrap();
-        assert_eq!((goose.id(), goose.label(), goose.has_effort(), goose.default_prompt()), ("goose", "Goose", false, "/plan2code"));
+        assert_eq!(
+            (
+                goose.id(),
+                goose.label(),
+                goose.has_effort(),
+                goose.default_prompt()
+            ),
+            ("goose", "Goose", false, "/plan2code")
+        );
         assert_eq!(find_agent_in("goose", None), None);
         assert_eq!(find_agent_in("nope", Some(&file)), None);
         let _ = std::fs::remove_dir_all(&dir);
@@ -1021,13 +1324,40 @@ mod tests {
     #[test]
     fn a_custom_launch_spec_has_its_program_and_arguments() {
         let bin = Path::new("tools").join("goose");
-        let spec = custom_launch_spec(&goose(), Some(&bin), &folder(), None, PermissionMode::Checked, "/plan2code", "P", false);
+        let spec = custom_launch_spec(
+            &goose(),
+            Some(&bin),
+            &folder(),
+            None,
+            PermissionMode::Checked,
+            "/plan2code",
+            "P",
+            false,
+        );
         assert_eq!(spec.program, bin.to_string_lossy());
         assert_eq!(spec.args, ["/plan2code"]);
         assert_eq!(spec.env, [("PATH".to_string(), "P".to_string())]);
-        let spec = custom_launch_spec(&goose(), Some(&bin), &folder(), Some("m"), PermissionMode::Bypass, "/plan2code", "P", false);
+        let spec = custom_launch_spec(
+            &goose(),
+            Some(&bin),
+            &folder(),
+            Some("m"),
+            PermissionMode::Bypass,
+            "/plan2code",
+            "P",
+            false,
+        );
         assert_eq!(spec.args, ["/plan2code", "--model", "m", "--yes"]);
-        let spec = custom_launch_spec(&goose(), None, &folder(), None, PermissionMode::Checked, "", "P", false);
+        let spec = custom_launch_spec(
+            &goose(),
+            None,
+            &folder(),
+            None,
+            PermissionMode::Checked,
+            "",
+            "P",
+            false,
+        );
         assert_eq!((spec.program.as_str(), spec.args.len()), ("goose", 0));
     }
 
@@ -1036,15 +1366,51 @@ mod tests {
         let mut full = goose();
         full.command = "C:\\with space\\goose.cmd".to_string();
         let found = Path::new("C:\\with space").join("goose.cmd");
-        let spec = custom_launch_spec(&full, Some(&found), &folder(), None, PermissionMode::Checked, "/p", "BASE", true);
+        let spec = custom_launch_spec(
+            &full,
+            Some(&found),
+            &folder(),
+            None,
+            PermissionMode::Checked,
+            "/p",
+            "BASE",
+            true,
+        );
         assert_eq!(spec.program, "cmd");
         assert_eq!(spec.args, ["/d", "/c", "%PLAN2CODE_AGENT_LINE%"]);
-        assert_eq!(spec.env[0].1, format!("{};BASE", found.parent().unwrap().to_string_lossy()));
-        assert_eq!(spec.env[1], ("PLAN2CODE_AGENT_LINE".to_string(), "goose.cmd /p".to_string()));
-        assert_eq!(spec.env[2], ("NoDefaultCurrentDirectoryInExePath".to_string(), "1".to_string()));
+        assert_eq!(
+            spec.env[0].1,
+            format!("{};BASE", found.parent().unwrap().to_string_lossy())
+        );
+        assert_eq!(
+            spec.env[1],
+            (
+                "PLAN2CODE_AGENT_LINE".to_string(),
+                "goose.cmd /p".to_string()
+            )
+        );
+        assert_eq!(
+            spec.env[2],
+            (
+                "NoDefaultCurrentDirectoryInExePath".to_string(),
+                "1".to_string()
+            )
+        );
         // A bare name keeps the plain PATH.
-        let bare = custom_launch_spec(&goose(), Some(&found), &folder(), None, PermissionMode::Checked, "/p", "BASE", true);
-        assert_eq!((bare.program.as_str(), bare.env[0].1.as_str()), ("cmd", "BASE"));
+        let bare = custom_launch_spec(
+            &goose(),
+            Some(&found),
+            &folder(),
+            None,
+            PermissionMode::Checked,
+            "/p",
+            "BASE",
+            true,
+        );
+        assert_eq!(
+            (bare.program.as_str(), bare.env[0].1.as_str()),
+            ("cmd", "BASE")
+        );
     }
 
     #[test]
@@ -1057,7 +1423,16 @@ mod tests {
         let mut agent = goose();
         agent.args = vec!["--filter=a|b".to_string(), "{prompt}".to_string()];
         let found = Path::new("C:\\tools").join("goose.cmd");
-        let spec = custom_launch_spec(&agent, Some(&found), &folder(), None, PermissionMode::Checked, "/p & x", "BASE", true);
+        let spec = custom_launch_spec(
+            &agent,
+            Some(&found),
+            &folder(),
+            None,
+            PermissionMode::Checked,
+            "/p & x",
+            "BASE",
+            true,
+        );
         assert_eq!(spec.env[1].1, "goose.cmd \"--filter=a|b\" \"/p & x\"");
     }
 
@@ -1069,17 +1444,35 @@ mod tests {
         let project = root.join("project");
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::create_dir_all(&project).unwrap();
-        std::fs::write(dir.join("goose.cmd"), "@echo off\r\necho REAL [%1] [%2]\r\n").unwrap();
+        std::fs::write(
+            dir.join("goose.cmd"),
+            "@echo off\r\necho REAL [%1] [%2]\r\n",
+        )
+        .unwrap();
         // A same-named file in the project folder must not run instead.
         std::fs::write(project.join("goose.cmd"), "@echo off\r\necho DECOY\r\n").unwrap();
         let mut agent = goose();
         agent.command = dir.join("goose.cmd").to_string_lossy().into_owned();
         agent.args = vec!["a|b".to_string(), "%PATH%".to_string()];
-        let found = Agent::Custom(agent.clone()).installed_at().expect("resolves");
-        let spec = custom_launch_spec(&agent, Some(&found), &project, None, PermissionMode::Checked, "", &std::env::var("PATH").unwrap_or_default(), true);
+        let found = Agent::Custom(agent.clone())
+            .installed_at()
+            .expect("resolves");
+        let spec = custom_launch_spec(
+            &agent,
+            Some(&found),
+            &project,
+            None,
+            PermissionMode::Checked,
+            "",
+            &std::env::var("PATH").unwrap_or_default(),
+            true,
+        );
         let mut command = std::process::Command::new(&spec.program);
         // Some shells already set the switch the spec sets; start without it.
-        command.args(&spec.args).current_dir(&spec.cwd).env_remove("NoDefaultCurrentDirectoryInExePath");
+        command
+            .args(&spec.args)
+            .current_dir(&spec.cwd)
+            .env_remove("NoDefaultCurrentDirectoryInExePath");
         for (key, value) in &spec.env {
             command.env(key, value);
         }
@@ -1091,7 +1484,10 @@ mod tests {
 
     #[test]
     fn install_pages_are_for_built_ins_only() {
-        assert_eq!(install_page_url("codex").unwrap(), "https://github.com/openai/codex");
+        assert_eq!(
+            install_page_url("codex").unwrap(),
+            "https://github.com/openai/codex"
+        );
         assert!(install_page_url("goose").is_err());
         for kind in AgentKind::ALL {
             assert!(kind.install_url().starts_with("https://"));

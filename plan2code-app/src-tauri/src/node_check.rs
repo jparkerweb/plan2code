@@ -37,7 +37,11 @@ pub fn classify(output: &str) -> NodeStatus {
 }
 
 pub fn check_node() -> NodeStatus {
-    match Command::new("node").env("PATH", resolved_path()).arg("--version").output() {
+    match Command::new("node")
+        .env("PATH", resolved_path())
+        .arg("--version")
+        .output()
+    {
         Ok(out) if out.status.success() => classify(&String::from_utf8_lossy(&out.stdout)),
         _ => NodeStatus::Missing,
     }
@@ -55,7 +59,9 @@ fn node_override_dir(args: &[String]) -> Option<String> {
             args[i].strip_prefix("--node=").map(str::to_string)
         };
         if let Some(path) = value.filter(|v| !v.is_empty()) {
-            return std::path::Path::new(&path).parent().map(|dir| dir.to_string_lossy().into_owned());
+            return std::path::Path::new(&path)
+                .parent()
+                .map(|dir| dir.to_string_lossy().into_owned());
         }
         i += 1;
     }
@@ -68,7 +74,10 @@ fn node_override_dir(args: &[String]) -> Option<String> {
 #[cfg(unix)]
 fn login_shell_path() -> Option<String> {
     let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string());
-    let out = Command::new(&shell).args(["-lc", "echo $PATH"]).output().ok()?;
+    let out = Command::new(&shell)
+        .args(["-lc", "echo $PATH"])
+        .output()
+        .ok()?;
     let path = String::from_utf8_lossy(&out.stdout).trim().to_string();
     (out.status.success() && !path.is_empty()).then_some(path)
 }
@@ -123,7 +132,10 @@ fn build_path(fresh: bool) -> String {
 #[cfg(windows)]
 fn saved_windows_path() -> Vec<String> {
     use std::os::windows::process::CommandExt;
-    let keys = [r"HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment", r"HKCU\Environment"];
+    let keys = [
+        r"HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment",
+        r"HKCU\Environment",
+    ];
     keys.iter()
         .filter_map(|key| {
             let out = Command::new("reg")
@@ -142,7 +154,9 @@ fn saved_windows_path() -> Vec<String> {
 #[cfg_attr(not(windows), allow(dead_code))]
 fn parse_reg_query_value(output: &str) -> Option<String> {
     output.lines().find_map(|line| {
-        let (_, rest) = line.split_once("REG_EXPAND_SZ").or_else(|| line.split_once("REG_SZ"))?;
+        let (_, rest) = line
+            .split_once("REG_EXPAND_SZ")
+            .or_else(|| line.split_once("REG_SZ"))?;
         let value = rest.trim();
         (!value.is_empty()).then(|| value.to_string())
     })
@@ -180,12 +194,25 @@ fn expand_percent_vars(text: &str, lookup: impl Fn(&str) -> Option<String>) -> S
 /// Where `node` actually resolves, with `resolved_path`: for the first-run
 /// checklist to name (Task 9.9), not for `check_node` itself to decide with.
 pub fn node_binary_path() -> Option<String> {
-    let (program, arg) = if cfg!(windows) { ("where", "node") } else { ("which", "node") };
-    let out = Command::new(program).env("PATH", resolved_path()).arg(arg).output().ok()?;
+    let (program, arg) = if cfg!(windows) {
+        ("where", "node")
+    } else {
+        ("which", "node")
+    };
+    let out = Command::new(program)
+        .env("PATH", resolved_path())
+        .arg(arg)
+        .output()
+        .ok()?;
     if !out.status.success() {
         return None;
     }
-    String::from_utf8_lossy(&out.stdout).lines().next().map(str::trim).filter(|s| !s.is_empty()).map(str::to_string)
+    String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .next()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
 }
 
 /// The plain message shown when the check fails; `None` when Node is fine.
@@ -229,20 +256,41 @@ mod tests {
     #[test]
     fn message_only_for_a_problem() {
         assert!(problem_message(&NodeStatus::Ok("v20.0.0".into())).is_none());
-        assert!(problem_message(&NodeStatus::Missing).unwrap().contains("nodejs.org"));
-        assert!(problem_message(&NodeStatus::TooOld("v16.0.0".into())).unwrap().contains("v16.0.0"));
+        assert!(problem_message(&NodeStatus::Missing)
+            .unwrap()
+            .contains("nodejs.org"));
+        assert!(problem_message(&NodeStatus::TooOld("v16.0.0".into()))
+            .unwrap()
+            .contains("v16.0.0"));
     }
 
     fn args(list: &[&str]) -> Vec<String> {
-        std::iter::once("plan2code-app").chain(list.iter().copied()).map(str::to_string).collect()
+        std::iter::once("plan2code-app")
+            .chain(list.iter().copied())
+            .map(str::to_string)
+            .collect()
     }
 
     #[test]
     fn the_node_override_names_its_directory_in_both_forms() {
-        let want = if cfg!(windows) { "C:\\nvm\\v20" } else { "/home/x/.nvm/v20" };
-        let bin = if cfg!(windows) { "C:\\nvm\\v20\\node.exe" } else { "/home/x/.nvm/v20/node" };
-        assert_eq!(node_override_dir(&args(&["--node", bin])).as_deref(), Some(want));
-        assert_eq!(node_override_dir(&args(&[&format!("--node={bin}")])).as_deref(), Some(want));
+        let want = if cfg!(windows) {
+            "C:\\nvm\\v20"
+        } else {
+            "/home/x/.nvm/v20"
+        };
+        let bin = if cfg!(windows) {
+            "C:\\nvm\\v20\\node.exe"
+        } else {
+            "/home/x/.nvm/v20/node"
+        };
+        assert_eq!(
+            node_override_dir(&args(&["--node", bin])).as_deref(),
+            Some(want)
+        );
+        assert_eq!(
+            node_override_dir(&args(&[&format!("--node={bin}")])).as_deref(),
+            Some(want)
+        );
     }
 
     #[test]
@@ -256,17 +304,31 @@ mod tests {
     #[test]
     fn reads_the_saved_path_out_of_reg_query_output() {
         let out = "\r\nHKEY_CURRENT_USER\\Environment\r\n    Path    REG_EXPAND_SZ    %USERPROFILE%\\.local\\bin;C:\\Tools\r\n\r\n";
-        assert_eq!(parse_reg_query_value(out).as_deref(), Some("%USERPROFILE%\\.local\\bin;C:\\Tools"));
+        assert_eq!(
+            parse_reg_query_value(out).as_deref(),
+            Some("%USERPROFILE%\\.local\\bin;C:\\Tools")
+        );
         let plain = "HKEY_LOCAL_MACHINE\\x\r\n    Path    REG_SZ    C:\\Windows\r\n";
         assert_eq!(parse_reg_query_value(plain).as_deref(), Some("C:\\Windows"));
-        assert_eq!(parse_reg_query_value("ERROR: The system was unable to find the specified registry key or value.\r\n"), None);
+        assert_eq!(
+            parse_reg_query_value(
+                "ERROR: The system was unable to find the specified registry key or value.\r\n"
+            ),
+            None
+        );
     }
 
     #[test]
     fn expands_known_percent_names_and_keeps_the_rest() {
         let lookup = |name: &str| (name == "USERPROFILE").then(|| "C:\\Users\\sam".to_string());
-        assert_eq!(expand_percent_vars("%USERPROFILE%\\.local\\bin;C:\\x", lookup), "C:\\Users\\sam\\.local\\bin;C:\\x");
-        assert_eq!(expand_percent_vars("%NOPE%\\bin;%USERPROFILE%", lookup), "%NOPE%\\bin;C:\\Users\\sam");
+        assert_eq!(
+            expand_percent_vars("%USERPROFILE%\\.local\\bin;C:\\x", lookup),
+            "C:\\Users\\sam\\.local\\bin;C:\\x"
+        );
+        assert_eq!(
+            expand_percent_vars("%NOPE%\\bin;%USERPROFILE%", lookup),
+            "%NOPE%\\bin;C:\\Users\\sam"
+        );
         assert_eq!(expand_percent_vars("50%", lookup), "50%");
         assert_eq!(expand_percent_vars("a%%b", lookup), "a%%b");
     }

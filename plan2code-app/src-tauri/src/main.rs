@@ -3,11 +3,13 @@
 
 use std::sync::{Arc, Mutex, OnceLock};
 
-use plan2code_app_lib::announce::{AnnounceServer, PageNotice};
 use plan2code_app_lib::agent_manager::{AgentEvent, AgentManager, AgentState, BeforeFresh, Sink};
 use plan2code_app_lib::agents::{self, Agent, AgentKind, PermissionMode};
+use plan2code_app_lib::announce::{AnnounceServer, PageNotice};
 use plan2code_app_lib::attention::{self, Badge, Signal};
-use plan2code_app_lib::console_supervisor::{app_origin, origin_of, session_on_disk, ConsoleSupervisor};
+use plan2code_app_lib::console_supervisor::{
+    app_origin, origin_of, session_on_disk, ConsoleSupervisor,
+};
 use plan2code_app_lib::node_check;
 use plan2code_app_lib::project::{self, ProjectDir};
 use plan2code_app_lib::restart_brief;
@@ -54,7 +56,10 @@ struct AttentionState {
 
 impl Default for AttentionState {
     fn default() -> Self {
-        AttentionState { last: None, enabled: true }
+        AttentionState {
+            last: None,
+            enabled: true,
+        }
     }
 }
 
@@ -135,23 +140,35 @@ fn open_install_page(id: String) -> Result<(), String> {
         c.arg(url);
         c
     } else {
-        let browser = std::env::var("BROWSER").ok().filter(|b| !b.is_empty()).unwrap_or_else(|| "xdg-open".to_string());
+        let browser = std::env::var("BROWSER")
+            .ok()
+            .filter(|b| !b.is_empty())
+            .unwrap_or_else(|| "xdg-open".to_string());
         let mut c = std::process::Command::new(browser);
         c.arg(url);
         c
     };
-    command.stdin(std::process::Stdio::null()).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null());
+    command
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null());
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
         command.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
     }
-    command.spawn().map(|_| ()).map_err(|e| format!("could not open {url}: {e}"))
+    command
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| format!("could not open {url}: {e}"))
 }
 
 // `cmd /c ver` prints e.g. `Microsoft Windows [Version 10.0.26300.1234]`.
 fn windows_build() -> Option<u32> {
-    let out = std::process::Command::new("cmd").args(["/c", "ver"]).output().ok()?;
+    let out = std::process::Command::new("cmd")
+        .args(["/c", "ver"])
+        .output()
+        .ok()?;
     let text = String::from_utf8_lossy(&out.stdout);
     let version = text.split("Version ").nth(1)?;
     version.split('.').nth(2)?.trim().parse().ok()
@@ -168,7 +185,9 @@ fn page_sink(page: PageChannel, app: Arc<OnceLock<tauri::AppHandle>>) -> Sink {
             }
         }
         let Ok(guard) = page.lock() else { return };
-        let Some(channel) = guard.as_ref() else { return };
+        let Some(channel) = guard.as_ref() else {
+            return;
+        };
         let body = match event {
             AgentEvent::Output(bytes) => InvokeResponseBody::Raw(bytes),
             AgentEvent::State(snapshot) => match serde_json::to_string(&snapshot) {
@@ -185,7 +204,10 @@ fn page_sink(page: PageChannel, app: Arc<OnceLock<tauri::AppHandle>>) -> Sink {
 fn agent_for_project(state: &AppState) -> Result<Arc<AgentManager>, String> {
     let dir = {
         let project = state.project.lock().map_err(|e| e.to_string())?;
-        project.as_ref().map(|p| p.dir.clone()).ok_or("no project folder chosen")?
+        project
+            .as_ref()
+            .map(|p| p.dir.clone())
+            .ok_or("no project folder chosen")?
     };
     let mut guard = state.agent.lock().map_err(|e| e.to_string())?;
     if let Some(agent) = guard.as_ref() {
@@ -213,7 +235,10 @@ fn before_fresh_hook(state: &AppState) -> BeforeFresh {
     let console = Arc::clone(&state.console);
     let announce = Arc::clone(&state.announce);
     Arc::new(move || {
-        let sid = console.lock().ok().and_then(|guard| guard.as_ref().map(|sup| sup.session().sid.clone()));
+        let sid = console
+            .lock()
+            .ok()
+            .and_then(|guard| guard.as_ref().map(|sup| sup.session().sid.clone()));
         let note = sid.and_then(|sid| restart_brief::note_for_restart(&sid));
         if let Ok(guard) = announce.lock() {
             if let Some(server) = guard.as_ref() {
@@ -238,7 +263,12 @@ fn current_agent(state: &AppState) -> Option<Arc<AgentManager>> {
 /// once announced a test's throwaway console, the window followed it, and
 /// when the test shut it down the reconnect opened an empty dashboard, so the
 /// build's own page was never seen again.
-fn take_announced(state: &AppState, notice: &PageNotice, origin: String, on_disk: impl Fn(&str) -> bool) -> bool {
+fn take_announced(
+    state: &AppState,
+    notice: &PageNotice,
+    origin: String,
+    on_disk: impl Fn(&str) -> bool,
+) -> bool {
     if !on_disk(&notice.sid) {
         return false;
     }
@@ -246,9 +276,14 @@ fn take_announced(state: &AppState, notice: &PageNotice, origin: String, on_disk
         match guard.as_mut() {
             Some(sup) => sup.follow(&notice.url, &notice.sid),
             None => {
-                let dir = state.project.lock().ok().and_then(|p| p.as_ref().map(|p| p.dir.clone()));
+                let dir = state
+                    .project
+                    .lock()
+                    .ok()
+                    .and_then(|p| p.as_ref().map(|p| p.dir.clone()));
                 if let Some(dir) = dir {
-                    if let Ok(sup) = ConsoleSupervisor::adopt(dir, origin, &notice.url, &notice.sid) {
+                    if let Ok(sup) = ConsoleSupervisor::adopt(dir, origin, &notice.url, &notice.sid)
+                    {
                         *guard = Some(sup);
                     }
                 }
@@ -271,11 +306,15 @@ fn window_origin(app: &tauri::AppHandle) -> String {
 // agent gets nothing and opens pages the plain way.
 fn sync_agent_env(app: &tauri::AppHandle) {
     let state = app.state::<AppState>();
-    let Some(agent) = current_agent(&state) else { return };
+    let Some(agent) = current_agent(&state) else {
+        return;
+    };
     let env = match state.announce.lock().ok() {
         Some(guard) => guard
             .as_ref()
-            .map(|server| server.agent_env(&window_origin(app), &app.package_info().version.to_string()))
+            .map(|server| {
+                server.agent_env(&window_origin(app), &app.package_info().version.to_string())
+            })
             .unwrap_or_default(),
         None => Vec::new(),
     };
@@ -290,6 +329,7 @@ fn sync_agent_env(app: &tauri::AppHandle) {
 // reattach registration) sends the frontend an "end" message that
 // unregisters that id for good, breaking all future sends through it.
 #[tauri::command]
+#[allow(clippy::too_many_arguments)] // one argument per key the frontend passes to invoke
 fn agent_start(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
@@ -301,7 +341,8 @@ fn agent_start(
     rows: u16,
 ) -> Result<(), String> {
     let kind = agents::find_agent(&kind).ok_or_else(|| format!("unknown agent: {kind}"))?;
-    let mode = PermissionMode::from_id(&mode).ok_or_else(|| format!("unknown permission mode: {mode}"))?;
+    let mode =
+        PermissionMode::from_id(&mode).ok_or_else(|| format!("unknown permission mode: {mode}"))?;
     let agent = agent_for_project(&state)?;
     agent.resize(cols, rows)?;
     sync_agent_env(&app);
@@ -331,7 +372,9 @@ fn agent_resize(state: State<'_, AppState>, cols: u16, rows: u16) -> Result<(), 
 
 #[tauri::command]
 fn agent_restart(state: State<'_, AppState>) -> Result<(), String> {
-    current_agent(&state).ok_or("no agent has been started")?.restart()
+    current_agent(&state)
+        .ok_or("no agent has been started")?
+        .restart()
 }
 
 fn idle_snapshot_json() -> serde_json::Value {
@@ -344,7 +387,10 @@ fn idle_snapshot_json() -> serde_json::Value {
 /// current generation's recent output on it at once, so the terminal does
 /// not come up blank.
 #[tauri::command]
-fn agent_reattach(state: State<'_, AppState>, on_output: Channel<InvokeResponseBody>) -> Result<serde_json::Value, String> {
+fn agent_reattach(
+    state: State<'_, AppState>,
+    on_output: Channel<InvokeResponseBody>,
+) -> Result<serde_json::Value, String> {
     let agent = current_agent(&state);
     *state.page.lock().map_err(|e| e.to_string())? = Some(on_output.clone());
     if let Some(agent) = &agent {
@@ -401,13 +447,22 @@ fn quit_app(app: &tauri::AppHandle) {
 // unknown word does nothing.
 #[tauri::command]
 fn set_attention(app: tauri::AppHandle, state: State<'_, AppState>, signal: String) {
-    let Some(next) = Signal::from_id(&signal) else { return };
-    let Some(window) = app.get_webview_window("main") else { return };
+    let Some(next) = Signal::from_id(&signal) else {
+        return;
+    };
+    let Some(window) = app.get_webview_window("main") else {
+        return;
+    };
     let (prev, enabled) = {
-        let Ok(mut guard) = state.attention.lock() else { return };
+        let Ok(mut guard) = state.attention.lock() else {
+            return;
+        };
         (guard.last.replace(next), guard.enabled)
     };
-    apply_badge(&window, attention::badge_for(next, std::env::consts::OS, enabled));
+    apply_badge(
+        &window,
+        attention::badge_for(next, std::env::consts::OS, enabled),
+    );
     if attention::should_flash(prev, next, window.is_focused().unwrap_or(true), enabled) {
         let _ = window.request_user_attention(Some(tauri::UserAttentionType::Informational));
     }
@@ -415,7 +470,10 @@ fn set_attention(app: tauri::AppHandle, state: State<'_, AppState>, signal: Stri
 
 // The one place a badge reaches the window, in each system's own form. A call
 // that fails changes nothing else: the taskbar is a hint, never a blocker.
-#[cfg_attr(not(any(target_os = "windows", target_os = "macos", target_os = "linux")), allow(unused_variables))]
+#[cfg_attr(
+    not(any(target_os = "windows", target_os = "macos", target_os = "linux")),
+    allow(unused_variables)
+)]
 fn apply_badge(window: &tauri::WebviewWindow, badge: Badge) {
     #[cfg(target_os = "windows")]
     {
@@ -453,7 +511,9 @@ fn clear_attention(app: &tauri::AppHandle) {
     if let Ok(mut guard) = app.state::<AppState>().attention.lock() {
         guard.last = Some(Signal::Plain);
     }
-    let Some(window) = app.get_webview_window("main") else { return };
+    let Some(window) = app.get_webview_window("main") else {
+        return;
+    };
     apply_badge(&window, Badge::None);
     let _ = window.request_user_attention(None);
 }
@@ -470,17 +530,26 @@ fn clear_attention_cmd(app: tauri::AppHandle) {
 // Either way the last state is kept. Saved in the app's own app.json, never
 // in the console's files.
 #[tauri::command]
-fn set_taskbar_signal(app: tauri::AppHandle, state: State<'_, AppState>, on: bool) -> Result<(), String> {
+fn set_taskbar_signal(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    on: bool,
+) -> Result<(), String> {
     let saved = settings::settings_file()
         .ok_or_else(|| "no home folder found".to_string())
         .and_then(|file| settings::save_taskbar_signal(&file, on));
     let last = {
-        let Ok(mut guard) = state.attention.lock() else { return saved };
+        let Ok(mut guard) = state.attention.lock() else {
+            return saved;
+        };
         guard.enabled = on;
         guard.last.unwrap_or(Signal::Plain)
     };
     if let Some(window) = app.get_webview_window("main") {
-        apply_badge(&window, attention::badge_for(last, std::env::consts::OS, on));
+        apply_badge(
+            &window,
+            attention::badge_for(last, std::env::consts::OS, on),
+        );
         if !on {
             let _ = window.request_user_attention(None);
         }
@@ -502,7 +571,12 @@ fn app_state(state: State<'_, AppState>) -> serde_json::Value {
         .agent
         .clone()
         .filter(known)
-        .or_else(|| settings_file.as_ref().and_then(|file| settings::load_last_agent(file)).filter(known))
+        .or_else(|| {
+            settings_file
+                .as_ref()
+                .and_then(|file| settings::load_last_agent(file))
+                .filter(known)
+        })
         .or_else(|| project::remembered_agent().filter(known));
     let term_panel = settings_file.as_ref().map_or(
         settings::TermPanelSettings {
@@ -512,7 +586,9 @@ fn app_state(state: State<'_, AppState>) -> serde_json::Value {
         },
         |file| settings::load_term_panel(file),
     );
-    let first_run_done = settings_file.as_ref().is_some_and(|file| settings::load_first_run_done(file));
+    let first_run_done = settings_file
+        .as_ref()
+        .is_some_and(|file| settings::load_first_run_done(file));
     serde_json::json!({
         "projectDir": project.as_ref().map(|p| p.dir.to_string_lossy().into_owned()),
         "projectDirSource": project.as_ref().map(|p| p.source),
@@ -555,7 +631,10 @@ fn save_first_run_done() -> Result<(), String> {
 /// installed skills' version. The bar shows its Update line when they differ (FR-14).
 #[tauri::command]
 fn version_status(app: tauri::AppHandle) -> versions::VersionStatus {
-    versions::status(&app.package_info().version.to_string(), versions::installed_skills_version())
+    versions::status(
+        &app.package_info().version.to_string(),
+        versions::installed_skills_version(),
+    )
 }
 
 /// What `update_skills` resolves with: the installer's last line, and the version status
@@ -570,7 +649,10 @@ struct UpdateOutcome {
 /// button asks for it: never silently. `progress` carries each line of the installer's own
 /// output live, for the bar to show while it runs.
 #[tauri::command]
-async fn update_skills(app: tauri::AppHandle, progress: Channel<String>) -> Result<UpdateOutcome, String> {
+async fn update_skills(
+    app: tauri::AppHandle,
+    progress: Channel<String>,
+) -> Result<UpdateOutcome, String> {
     let version = app.package_info().version.to_string();
     let message = tauri::async_runtime::spawn_blocking(move || {
         versions::run_update(&version, |line| {
@@ -579,14 +661,20 @@ async fn update_skills(app: tauri::AppHandle, progress: Channel<String>) -> Resu
     })
     .await
     .map_err(|e| e.to_string())??;
-    let status = versions::status(&app.package_info().version.to_string(), versions::installed_skills_version());
+    let status = versions::status(
+        &app.package_info().version.to_string(),
+        versions::installed_skills_version(),
+    );
     Ok(UpdateOutcome { message, status })
 }
 
 /// The OS folder picker, shown when no folder is known; a choice becomes the
 /// launcher's remembered folder.
 #[tauri::command]
-fn pick_project_folder(app: tauri::AppHandle, state: State<'_, AppState>) -> Result<Option<String>, String> {
+fn pick_project_folder(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+) -> Result<Option<String>, String> {
     let picked = app
         .dialog()
         .file()
@@ -631,7 +719,10 @@ fn teardown_project(state: &AppState) -> Result<(), String> {
 /// nothing (canceled) leaves the current project untouched. One project per
 /// window stays; this replaces it, it does not add a second.
 #[tauri::command]
-fn change_project(app: tauri::AppHandle, state: State<'_, AppState>) -> Result<Option<String>, String> {
+fn change_project(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+) -> Result<Option<String>, String> {
     let picked = app
         .dialog()
         .file()
@@ -650,7 +741,7 @@ fn change_project(app: tauri::AppHandle, state: State<'_, AppState>) -> Result<O
 }
 
 /// The console the agent opened, alive and as it is now, or restarted on the
-    /// same session when it died. The app never starts a dashboard of its own:
+/// same session when it died. The app never starts a dashboard of its own:
 /// the agent does, by running the skill, and announces it. Nothing to show yet
 /// is an error the page words for the person.
 #[tauri::command]
@@ -660,7 +751,9 @@ fn console_start(state: State<'_, AppState>) -> Result<serde_json::Value, String
 
 fn console_start_impl(state: &AppState) -> Result<serde_json::Value, String> {
     let mut guard = state.console.lock().map_err(|e| e.to_string())?;
-    let sup = guard.as_mut().ok_or("The agent has not opened the dashboard yet.")?;
+    let sup = guard
+        .as_mut()
+        .ok_or("The agent has not opened the dashboard yet.")?;
     if !sup.health() {
         sup.restart_if_dead()?;
     }
@@ -676,7 +769,9 @@ fn console_status(state: State<'_, AppState>) -> serde_json::Value {
     };
     match guard.as_ref() {
         Some(sup) if sup.stopped() => serde_json::json!({ "state": "none", "url": null }),
-        Some(sup) if sup.health() => serde_json::json!({ "state": "running", "url": sup.session().url }),
+        Some(sup) if sup.health() => {
+            serde_json::json!({ "state": "running", "url": sup.session().url })
+        }
         Some(sup) => serde_json::json!({ "state": "dead", "url": sup.session().url }),
         None => serde_json::json!({ "state": "none", "url": null }),
     }
@@ -699,7 +794,9 @@ fn main() {
         node_check::NodeStatus::Ok(version) => Some(version.clone()),
         _ => None,
     };
-    let node_binary = node_version.as_ref().and_then(|_| node_check::node_binary_path());
+    let node_binary = node_version
+        .as_ref()
+        .and_then(|_| node_check::node_binary_path());
 
     let args = std::env::args().collect::<Vec<_>>();
     tauri::Builder::default()
@@ -711,7 +808,8 @@ fn main() {
             node_binary,
             attention: Mutex::new(AttentionState {
                 last: None,
-                enabled: settings::settings_file().map_or(true, |file| settings::load_taskbar_signal(&file)),
+                enabled: settings::settings_file()
+                    .is_none_or(|file| settings::load_taskbar_signal(&file)),
             }),
             ..AppState::default()
         })
@@ -759,11 +857,15 @@ fn main() {
             let handle = app.handle().clone();
             let server = AnnounceServer::start(Arc::new(move |notice| {
                 let state = handle.state::<AppState>();
-                let taken = take_announced(&state, &notice, window_origin(&handle), session_on_disk);
+                let taken =
+                    take_announced(&state, &notice, window_origin(&handle), session_on_disk);
                 if taken {
                     let _ = handle.emit("console-page", &notice);
                 } else {
-                    eprintln!("plan2code: ignored a page outside the console store: {}", notice.sid);
+                    eprintln!(
+                        "plan2code: ignored a page outside the console store: {}",
+                        notice.sid
+                    );
                 }
                 taken
             }));
@@ -791,7 +893,10 @@ fn main() {
         .run(|app, event| {
             // Cmd+Q and the app menu's Quit on macOS end the app without closing the
             // window first. An exit asked for in code (`code` is set) is `quit_app`'s own.
-            if let tauri::RunEvent::ExitRequested { api, code: None, .. } = event {
+            if let tauri::RunEvent::ExitRequested {
+                api, code: None, ..
+            } = event
+            {
                 if agent_is_active(app) {
                     api.prevent_exit();
                     confirm_quit(app);
@@ -807,25 +912,48 @@ mod tests {
 
     fn state_for(dir: &str) -> AppState {
         AppState {
-            project: Mutex::new(Some(ProjectDir { dir: PathBuf::from(dir), source: project::ProjectSource::Picked })),
+            project: Mutex::new(Some(ProjectDir {
+                dir: PathBuf::from(dir),
+                source: project::ProjectSource::Picked,
+            })),
             ..AppState::default()
         }
     }
 
     fn notice(sid: &str) -> PageNotice {
-        PageNotice { url: "http://127.0.0.1:5555/s/t/".into(), sid: sid.into(), workflow: "dashboard".into() }
+        PageNotice {
+            url: "http://127.0.0.1:5555/s/t/".into(),
+            sid: sid.into(),
+            workflow: "dashboard".into(),
+        }
     }
 
     /// A supervisor following the build's console, adopted with the repo's own
     /// console source so it never depends on an installed one.
     fn following_the_build() -> ConsoleSupervisor {
-        std::env::set_var("PLAN2CODE_CONSOLE_DIR", PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../src/web-console"));
-        ConsoleSupervisor::adopt(PathBuf::from("."), app_origin().to_string(), "http://127.0.0.1:4444/s/b/", "build")
-            .expect("adopt with the repo's console")
+        std::env::set_var(
+            "PLAN2CODE_CONSOLE_DIR",
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../src/web-console"),
+        );
+        ConsoleSupervisor::adopt(
+            PathBuf::from("."),
+            app_origin().to_string(),
+            "http://127.0.0.1:4444/s/b/",
+            "build",
+        )
+        .expect("adopt with the repo's console")
     }
 
     fn sid_followed(state: &AppState) -> String {
-        state.console.lock().unwrap().as_ref().unwrap().session().sid.clone()
+        state
+            .console
+            .lock()
+            .unwrap()
+            .as_ref()
+            .unwrap()
+            .session()
+            .sid
+            .clone()
     }
 
     /// Adopted, never started here: skip Drop's `stop`.
@@ -839,12 +967,22 @@ mod tests {
         // the agent's in-app variables: following it swapped a build's page for
         // the test's, then for an empty dashboard once the test shut it down.
         let state = state_for("project-a");
-        assert!(!take_announced(&state, &notice("test-console"), app_origin().to_string(), |_| false));
+        assert!(!take_announced(
+            &state,
+            &notice("test-console"),
+            app_origin().to_string(),
+            |_| false
+        ));
         assert!(state.console.lock().unwrap().is_none(), "nothing adopted");
 
         // Already following the build's own console: it stays on that one.
         *state.console.lock().unwrap() = Some(following_the_build());
-        assert!(!take_announced(&state, &notice("test-console"), app_origin().to_string(), |_| false));
+        assert!(!take_announced(
+            &state,
+            &notice("test-console"),
+            app_origin().to_string(),
+            |_| false
+        ));
         assert_eq!(sid_followed(&state), "build");
         let_go(&state);
     }
@@ -853,7 +991,12 @@ mod tests {
     fn a_page_from_the_console_store_is_followed() {
         let state = state_for("project-a");
         *state.console.lock().unwrap() = Some(following_the_build());
-        assert!(take_announced(&state, &notice("next"), app_origin().to_string(), |_| true));
+        assert!(take_announced(
+            &state,
+            &notice("next"),
+            app_origin().to_string(),
+            |_| true
+        ));
         assert_eq!(sid_followed(&state), "next");
         let_go(&state);
     }
@@ -871,21 +1014,41 @@ mod tests {
 
         // The project moved on; the slot still holds project-a's manager
         // until a fresh call replaces it.
-        *state.project.lock().unwrap() = Some(ProjectDir { dir: PathBuf::from("project-b"), source: project::ProjectSource::Picked });
+        *state.project.lock().unwrap() = Some(ProjectDir {
+            dir: PathBuf::from("project-b"),
+            source: project::ProjectSource::Picked,
+        });
         let second = agent_for_project(&state).expect("a manager for project-b");
         assert_eq!(second.folder(), &PathBuf::from("project-b"));
-        assert!(!Arc::ptr_eq(&first, &second), "project-a's manager must never stand in for project-b's");
+        assert!(
+            !Arc::ptr_eq(&first, &second),
+            "project-a's manager must never stand in for project-b's"
+        );
     }
 
     #[test]
     fn new_session_forgets_the_windows_session_so_the_fresh_agent_starts_its_own() {
         let state = state_for("project-a");
         let server = AnnounceServer::start(Arc::new(|_| true)).unwrap();
-        let port: u16 = server.url().rsplit_once(':').unwrap().1.trim_end_matches("/page").parse().unwrap();
+        let port: u16 = server
+            .url()
+            .rsplit_once(':')
+            .unwrap()
+            .1
+            .trim_end_matches("/page")
+            .parse()
+            .unwrap();
         *state.announce.lock().unwrap() = Some(server);
         let body = r#"{"url":"http://127.0.0.1:5000/s/abc/","sid":"s1","workflow":"plan"}"#;
         let mut stream = std::net::TcpStream::connect(("127.0.0.1", port)).unwrap();
-        let token = state.announce.lock().unwrap().as_ref().unwrap().token().to_string();
+        let token = state
+            .announce
+            .lock()
+            .unwrap()
+            .as_ref()
+            .unwrap()
+            .token()
+            .to_string();
         use std::io::{Read, Write};
         write!(
             stream,
@@ -895,12 +1058,29 @@ mod tests {
         .unwrap();
         let mut answer = String::new();
         stream.read_to_string(&mut answer).unwrap();
-        assert!(answer.starts_with("HTTP/1.1 204"), "the page was announced: {answer}");
-        assert_eq!(state.announce.lock().unwrap().as_ref().unwrap().current().map(|n| n.sid), Some("s1".to_string()));
+        assert!(
+            answer.starts_with("HTTP/1.1 204"),
+            "the page was announced: {answer}"
+        );
+        assert_eq!(
+            state
+                .announce
+                .lock()
+                .unwrap()
+                .as_ref()
+                .unwrap()
+                .current()
+                .map(|n| n.sid),
+            Some("s1".to_string())
+        );
 
         // No console supervised here, so no brief to write: only the forgetting.
         assert_eq!(before_fresh_hook(&state)(), None);
-        assert_eq!(state.announce.lock().unwrap().as_ref().unwrap().current(), None, "the fresh agent's open must not join s1");
+        assert_eq!(
+            state.announce.lock().unwrap().as_ref().unwrap().current(),
+            None,
+            "the fresh agent's open must not join s1"
+        );
     }
 
     #[test]
@@ -908,11 +1088,18 @@ mod tests {
         let state = state_for("project-a");
         let first = agent_for_project(&state).unwrap();
         let second = agent_for_project(&state).unwrap();
-        assert!(Arc::ptr_eq(&first, &second), "the same folder should not make a second manager");
+        assert!(
+            Arc::ptr_eq(&first, &second),
+            "the same folder should not make a second manager"
+        );
     }
 
     fn have_node() -> bool {
-        std::process::Command::new("node").arg("--version").output().map(|o| o.status.success()).unwrap_or(false)
+        std::process::Command::new("node")
+            .arg("--version")
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false)
     }
 
     /// A real console, the same way `tests/console_supervisor.rs` sets one
@@ -925,18 +1112,29 @@ mod tests {
         }
         let console_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../src/web-console");
         if !console_dir.join("console.mjs").is_file() {
-            eprintln!("skipping: console source missing at {}", console_dir.display());
+            eprintln!(
+                "skipping: console source missing at {}",
+                console_dir.display()
+            );
             return None;
         }
         let pid = std::process::id();
         let project = std::env::temp_dir().join(format!("p2c-main-test-project-{pid}"));
         std::fs::create_dir_all(&project).unwrap();
         std::env::set_var("PLAN2CODE_CONSOLE_DIR", &console_dir);
-        std::env::set_var("PLAN2CODE_CONSOLE_HOME", std::env::temp_dir().join(format!("p2c-main-test-home-{pid}")));
+        std::env::set_var(
+            "PLAN2CODE_CONSOLE_HOME",
+            std::env::temp_dir().join(format!("p2c-main-test-home-{pid}")),
+        );
         std::env::set_var("PLAN2CODE_NO_BROWSER", "1");
         // Run inside the desktop app, the agent's in-app variables would have this
         // console announce itself to the live window and take it over.
-        for name in ["PLAN2CODE_IN_APP", "PLAN2CODE_APP_ANNOUNCE", "PLAN2CODE_APP_TOKEN", "PLAN2CODE_CONSOLE_SID"] {
+        for name in [
+            "PLAN2CODE_IN_APP",
+            "PLAN2CODE_APP_ANNOUNCE",
+            "PLAN2CODE_APP_TOKEN",
+            "PLAN2CODE_CONSOLE_SID",
+        ] {
             std::env::remove_var(name);
         }
         Some(
@@ -953,11 +1151,18 @@ mod tests {
         let Some(sup) = real_console() else { return };
         let state = state_for("project-a");
         *state.console.lock().unwrap() = Some(sup);
-        assert!(console_start_impl(&state).is_ok(), "console_start should work before the project changes");
+        assert!(
+            console_start_impl(&state).is_ok(),
+            "console_start should work before the project changes"
+        );
 
         teardown_project(&state).unwrap();
 
-        let err = console_start_impl(&state).expect_err("console_start must refuse, not reconnect to the old session");
-        assert!(err.contains("has not opened the dashboard"), "unexpected message: {err:?}");
+        let err = console_start_impl(&state)
+            .expect_err("console_start must refuse, not reconnect to the old session");
+        assert!(
+            err.contains("has not opened the dashboard"),
+            "unexpected message: {err:?}"
+        );
     }
 }

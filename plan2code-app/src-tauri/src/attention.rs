@@ -121,7 +121,12 @@ fn parse_hex(hex: &str) -> [u8; 3] {
 mod tests {
     use super::*;
 
-    const SIGNALS: [Signal; 4] = [Signal::Busy, Signal::Ready, Signal::Attention, Signal::Plain];
+    const SIGNALS: [Signal; 4] = [
+        Signal::Busy,
+        Signal::Ready,
+        Signal::Attention,
+        Signal::Plain,
+    ];
 
     fn pixel(buf: &[u8], size: u32, x: u32, y: u32) -> [u8; 4] {
         let i = ((y * size + x) * 4) as usize;
@@ -149,8 +154,16 @@ mod tests {
             (Signal::Plain, "freebsd", Badge::None),
         ];
         for (signal, os, want) in table {
-            assert_eq!(badge_for(signal, os, true), want, "{signal:?} on {os}, enabled");
-            assert_eq!(badge_for(signal, os, false), Badge::None, "{signal:?} on {os}, disabled");
+            assert_eq!(
+                badge_for(signal, os, true),
+                want,
+                "{signal:?} on {os}, enabled"
+            );
+            assert_eq!(
+                badge_for(signal, os, false),
+                Badge::None,
+                "{signal:?} on {os}, disabled"
+            );
         }
     }
 
@@ -177,22 +190,41 @@ mod tests {
 
     #[test]
     fn no_flash_for_a_repeat_of_the_same_signal() {
-        assert!(!should_flash(Some(Signal::Ready), Signal::Ready, false, true));
-        assert!(!should_flash(Some(Signal::Attention), Signal::Attention, false, true));
+        assert!(!should_flash(
+            Some(Signal::Ready),
+            Signal::Ready,
+            false,
+            true
+        ));
+        assert!(!should_flash(
+            Some(Signal::Attention),
+            Signal::Attention,
+            false,
+            true
+        ));
     }
 
     #[test]
     fn no_flash_for_busy_or_plain() {
         for prev in [None, Some(Signal::Ready), Some(Signal::Attention)] {
-            assert!(!should_flash(prev, Signal::Busy, false, true), "busy from {prev:?}");
-            assert!(!should_flash(prev, Signal::Plain, false, true), "plain from {prev:?}");
+            assert!(
+                !should_flash(prev, Signal::Busy, false, true),
+                "busy from {prev:?}"
+            );
+            assert!(
+                !should_flash(prev, Signal::Plain, false, true),
+                "plain from {prev:?}"
+            );
         }
     }
 
     #[test]
     fn no_flash_when_flashing_is_turned_off() {
         for signal in SIGNALS.iter().copied() {
-            assert!(!should_flash(Some(Signal::Busy), signal, false, false), "{signal:?} while disabled");
+            assert!(
+                !should_flash(Some(Signal::Busy), signal, false, false),
+                "{signal:?} while disabled"
+            );
         }
     }
 
@@ -210,7 +242,11 @@ mod tests {
         assert_eq!(pixel(&buf, size, 0, 0)[3], 0, "a corner is transparent");
         let center = pixel(&buf, size, 8, 8);
         assert_eq!(center[3], 255, "the middle is opaque");
-        assert_eq!(&center[..3], &parse_hex(GREEN_HEX)[..], "the middle is the green fill");
+        assert_eq!(
+            &center[..3],
+            &parse_hex(GREEN_HEX)[..],
+            "the middle is the green fill"
+        );
     }
 
     #[test]
@@ -221,14 +257,27 @@ mod tests {
         assert_eq!(pixel(&buf, size, 0, 0)[3], 0, "a corner is transparent");
         let center = pixel(&buf, size, 8, 8);
         assert_eq!(center[3], 255, "the middle is opaque");
-        assert_eq!(&center[..3], &parse_hex(RED_HEX)[..], "the middle is the red fill");
+        assert_eq!(
+            &center[..3],
+            &parse_hex(RED_HEX)[..],
+            "the middle is the red fill"
+        );
     }
 
     #[test]
     fn the_fill_colors_match_the_web_console_favicon() {
-        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../src/web-console/public/favicon.js");
+        let path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../src/web-console/public/favicon.js"
+        );
         let text = std::fs::read_to_string(path).unwrap();
-        assert!(text.contains(&format!("ready: \"{GREEN_HEX}\"")), "ready color in favicon.js");
-        assert!(text.contains(&format!("attention: \"{RED_HEX}\"")), "attention color in favicon.js");
+        assert!(
+            text.contains(&format!("ready: \"{GREEN_HEX}\"")),
+            "ready color in favicon.js"
+        );
+        assert!(
+            text.contains(&format!("attention: \"{RED_HEX}\"")),
+            "attention color in favicon.js"
+        );
     }
 }

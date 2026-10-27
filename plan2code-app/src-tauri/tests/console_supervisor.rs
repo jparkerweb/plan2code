@@ -33,13 +33,22 @@ fn setup() -> Option<PathBuf> {
         return None;
     }
     let console = repo_console_dir();
-    assert!(console.join("console.mjs").is_file(), "console source missing at {}", console.display());
+    assert!(
+        console.join("console.mjs").is_file(),
+        "console source missing at {}",
+        console.display()
+    );
     std::env::set_var("PLAN2CODE_CONSOLE_DIR", &console);
     std::env::set_var("PLAN2CODE_CONSOLE_HOME", temp_dir("home"));
     std::env::set_var("PLAN2CODE_NO_BROWSER", "1");
     // Run inside the desktop app, the agent's in-app variables would have this
     // console announce itself to the live window and take it over.
-    for name in ["PLAN2CODE_IN_APP", "PLAN2CODE_APP_ANNOUNCE", "PLAN2CODE_APP_TOKEN", "PLAN2CODE_CONSOLE_SID"] {
+    for name in [
+        "PLAN2CODE_IN_APP",
+        "PLAN2CODE_APP_ANNOUNCE",
+        "PLAN2CODE_APP_TOKEN",
+        "PLAN2CODE_CONSOLE_SID",
+    ] {
         std::env::remove_var(name);
     }
     Some(temp_dir("project"))
@@ -76,7 +85,10 @@ fn starts_answers_and_stops() {
     assert!(until_health(&sup, true), "the console URL never answered");
 
     sup.stop().expect("stop");
-    assert!(until_health(&sup, false), "the console still answered after stop()");
+    assert!(
+        until_health(&sup, false),
+        "the console still answered after stop()"
+    );
 }
 
 #[test]
@@ -87,11 +99,24 @@ fn a_killed_console_is_dead_and_restarts() {
     let first_sid = sup.session().sid.clone();
 
     kill_pid(sup.session().pid);
-    assert!(until_health(&sup, false), "a killed console still looked alive");
+    assert!(
+        until_health(&sup, false),
+        "a killed console still looked alive"
+    );
 
-    assert!(sup.restart_if_dead().expect("restart"), "restart_if_dead did nothing");
-    assert_eq!(sup.session().sid, first_sid, "a dead console comes back on the same session, so its page and place survive");
-    assert!(until_health(&sup, true), "the restarted console never answered");
+    assert!(
+        sup.restart_if_dead().expect("restart"),
+        "restart_if_dead did nothing"
+    );
+    assert_eq!(
+        sup.session().sid,
+        first_sid,
+        "a dead console comes back on the same session, so its page and place survive"
+    );
+    assert!(
+        until_health(&sup, true),
+        "the restarted console never answered"
+    );
     sup.stop().expect("stop");
 }
 
