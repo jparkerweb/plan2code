@@ -108,9 +108,10 @@ export const page = {
   // The frame's Subagents switch ({ offered, supported, on, instruction, max,
   // revision }), or null before a server that sends it.
   subagentsFrame: null,
-  // The spec's overview.md as last fetched: `key` is the spec dir it was read
-  // for, `text` the file, or null when there is none. See loadOverview().
-  overview: { key: null, text: null },
+  // The spec's files as last fetched: `key` is the spec dir they were read
+  // for, `files` maps each SPEC_FILES kind (overview, map, draft) that exists
+  // to `{ file, text }`. See loadOverview().
+  overview: { key: null, files: {} },
   // The dashboard's first-open wake-up (boot.js), while it runs. `cards` turns
   // true at the glide, which lets the menu in; `entered` once its entrance has
   // played; `typed` is how many characters of the note show, or null once all

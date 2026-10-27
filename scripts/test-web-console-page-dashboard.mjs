@@ -229,6 +229,51 @@ test("picking Start from scratch instead of a spec grays Document, and a launch 
   assert.ok(!launch.spec, `a launch from scratch names no spec: ${JSON.stringify(launch)}`);
 });
 
+// What a person would see break: a spec not documented yet offers nothing to
+// read, or its Map and Plan draft tabs stay up for a spec that has an
+// overview (or for no spec at all).
+test("a spec not documented yet shows its Map and Plan draft as tabs, and a documented one shows only Overview", async (t) => {
+  const project = tempProject({
+    ...DRAFT_PROJECT,
+    "specs/demo/pathfinder/map.md": "# Map: demo\n\n**Status:** Cleared\n\nWho votes for lunch.\n",
+    "specs/done/overview.md": "# Overview: done\n\nAll written up.\n",
+    "specs/done/phase-1.md": "- [ ] **Task 1.1:** x\n",
+  });
+  const s = await openSession(await suite.browser(), { t, workflow: "dashboard", payload: MENU, project });
+  const main = await toTheMenu(s);
+  const tab = (name) => s.page.locator("#views .view-tab", { hasText: new RegExp(`^${name}$`) });
+
+  await chipFor(main, "demo").click();
+  await pickedChip(main, "demo").waitFor();
+  await tab("Map").waitFor();
+  await tab("Plan draft").waitFor();
+  assert.equal(await tab("Overview").count(), 0, "no overview.md, no Overview tab");
+
+  await tab("Plan draft").click();
+  await main.getByRole("heading", { name: "Plan draft", exact: true }).waitFor();
+  assert.match(await textOf(main), /specs\/demo\/PLAN-DRAFT-20261017\.md · read-only/);
+  assert.match(await textOf(main), /A lunch vote for the team\./);
+  await tab("Map").click();
+  await main.getByRole("heading", { name: "Map", exact: true }).waitFor();
+  assert.match(await textOf(main), /specs\/demo\/pathfinder\/map\.md · read-only/);
+  assert.match(await textOf(main), /Who votes for lunch\./);
+
+  // The documented spec trades both for its Overview, and the open Map tab,
+  // gone with them, sends the person home.
+  await tab("Dashboard").click();
+  await chipFor(main, "done").click();
+  await pickedChip(main, "done").waitFor();
+  await tab("Overview").waitFor();
+  assert.ok(
+    await until(async () => (await tab("Map").count()) === 0 && (await tab("Plan draft").count()) === 0),
+    "the Map and Plan draft tabs go"
+  );
+
+  await chipFor(main, "Start from scratch").click();
+  await pickedChip(main, "Start from scratch").waitFor();
+  assert.ok(await until(async () => (await tab("Overview").count()) === 0), "no spec, no spec tabs");
+});
+
 // What a person would see break: the intro cannot be skipped, or it replays
 // on every reload of the same tab.
 test("Skip the intro ends the first-open wake-up at once, and a reload of the tab does not play it again", async (t) => {

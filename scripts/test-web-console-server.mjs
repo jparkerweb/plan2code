@@ -25,6 +25,7 @@ import {
   handOff,
   PROTECTED_CONSOLE_FILES,
   readOverview,
+  readSpecFile,
   removeCleanup,
   removeScratch,
   removeSessions,
@@ -562,6 +563,12 @@ function overviewProject() {
   fs.writeFileSync(path.join(root, "specs", "a", "overview.md"), "# Overview A\n");
   fs.writeFileSync(path.join(root, "specs", "a", "phase-1.md"), "- [ ] **Task 1.1:** x\n");
   fs.writeFileSync(path.join(root, "specs", "b", "notes.md"), "notes\n");
+  // Planned, not documented: a Pathfinder map and a live draft beside the
+  // copy Revise plan keeps of the last one.
+  fs.mkdirSync(path.join(root, "specs", "c", "pathfinder"), { recursive: true });
+  fs.writeFileSync(path.join(root, "specs", "c", "pathfinder", "map.md"), "# Map C\n");
+  fs.writeFileSync(path.join(root, "specs", "c", "PLAN-DRAFT-20261020.md"), "# Draft C\n");
+  fs.writeFileSync(path.join(root, "specs", "c", "PLAN-DRAFT-20261020-prev.md"), "# Old draft C\n");
   fs.mkdirSync(path.join(base, "outside"));
   fs.writeFileSync(path.join(base, "outside", "overview.md"), "# SECRET\n");
   return { base, root };
@@ -598,6 +605,22 @@ test("readOverview reads a spec's overview and nothing outside the root", async 
   }
 });
 
+test("readSpecFile reads a spec's map and live plan draft, and names the file", async () => {
+  const { base, root } = overviewProject();
+  try {
+    assert.deepEqual(await readSpecFile(root, "specs/c", "map"), { file: "pathfinder/map.md", text: "# Map C\n" });
+    assert.deepEqual(await readSpecFile(root, "specs/c", "draft"), { file: "PLAN-DRAFT-20261020.md", text: "# Draft C\n" });
+    assert.deepEqual(await readSpecFile(root, "specs/a", "overview"), { file: "overview.md", text: "# Overview A\n" });
+    assert.equal(await readSpecFile(root, "specs/c", "overview"), null);
+    assert.equal(await readSpecFile(root, "specs/a", "map"), null);
+    assert.equal(await readSpecFile(root, "specs/a", "draft"), null);
+    assert.equal(await readSpecFile(root, "specs/c", "phase-1.md"), null, "only the known kinds");
+    assert.equal(await readSpecFile(root, "../outside", "draft"), null);
+  } finally {
+    fs.rmSync(base, { recursive: true, force: true });
+  }
+});
+
 test("GET /overview serves the session's spec, and on the dashboard only a scanned one", async () => {
   const { base, root } = overviewProject();
   const sids = [];
@@ -628,6 +651,16 @@ test("GET /overview serves the session's spec, and on the dashboard only a scann
     assert.equal((await get(d, "?spec=specs/b")).status, 204);
     assert.equal((await get(d, "?spec=specs/../..")).status, 204);
     assert.equal((await get(d, "?spec=specs/not-scanned")).status, 204);
+    // ?file= picks the map or the live draft, and names it for the page.
+    const map = await get(d, "?spec=specs/c&file=map");
+    assert.equal(map.status, 200);
+    assert.equal(map.headers.get("x-spec-file"), encodeURIComponent("pathfinder/map.md"));
+    assert.equal(await map.text(), "# Map C\n");
+    const draft = await get(d, "?spec=specs/c&file=draft");
+    assert.equal(draft.headers.get("x-spec-file"), "PLAN-DRAFT-20261020.md");
+    assert.equal(await draft.text(), "# Draft C\n");
+    assert.equal((await get(d, "?spec=specs/c")).status, 204, "no overview.md yet");
+    assert.equal((await get(d, "?spec=specs/c&file=nope")).status, 204);
   } finally {
     for (const s of sids) cliIn(root, ["stop", "--session", s]);
     fs.rmSync(base, { recursive: true, force: true });

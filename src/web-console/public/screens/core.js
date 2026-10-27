@@ -51,8 +51,8 @@ import { helperRows, showTab } from "../subagents.js";
 import { FOOTER_TIERS, footerLabel } from "../workspace.js";
 import {
   activity, agentAdrift, agentWorking, asked, awaitingReply, byId, dashboardLive, docs, doingNow,
-  finish, gitAwaiting, isDashboard, isGitBoard, isOpen, items, loadOverview, myTurn, openItems,
-  overviewSpec, patience, pressStranded, reviewPending, scan, selSpec, sendCollected, stagedCount, stranded,
+  finish, gitAwaiting, isDashboard, isGitBoard, isOpen, isSpecFileView, items, loadOverview, myTurn, openItems,
+  patience, pressStranded, reviewPending, scan, selSpec, sendCollected, specFileTabs, stagedCount, stranded,
   topics, workingMs, WORKING_GRACE_MS,
   workspaceFolders,
 } from "../selectors.js";
@@ -433,9 +433,9 @@ export function adopt(body) {
   render();
   if ($("workspace-modal").open) renderWorkspace();
   tellFolderIssues();
-  // The Overview tab's file changes under a build, so a tab you are watching
+  // A spec file tab's file changes under a build, so a tab you are watching
   // refetches on every new frame too, not only on the click that opened it.
-  if (firstLoad || page.S.specDir !== prevSpecDir || page.S.workflow !== prevWorkflow || page.view === "overview") loadOverview();
+  if (firstLoad || page.S.specDir !== prevSpecDir || page.S.workflow !== prevWorkflow || isSpecFileView(page.view)) loadOverview();
   if (announce) showArrival(announce);
   // New entries land at the bottom of the rail. Gliding down to them beats
   // leaving the list parked where it was while it grew underneath.
@@ -860,7 +860,7 @@ function withFocus(fn) {
 // (the dashboard menu, the end page).
 function currentScroller() {
   if (!drawnView) return null;
-  if (drawnView.startsWith("doc:") || drawnView === "overview") return $("main");
+  if (drawnView.startsWith("doc:") || isSpecFileView(drawnView)) return $("main");
   if (drawnView === "questions") return $("main").querySelector(":scope > .card.question");
   if (drawnView === "ask") return $("main").querySelector(".ask-list");
   return null;
@@ -1249,10 +1249,11 @@ function renderViews() {
     },
   ];
   // Built in rather than posted: present exactly while the spec in view has
-  // an overview.md. A tab that vanishes under the person sends them home.
-  const hasOverview = typeof page.overview.text === "string" && page.overview.key === overviewSpec();
-  if (hasOverview) tabs.push({ id: "overview", label: "Overview", count: 0 });
-  else if (page.view === "overview") page.view = "questions";
+  // the file (an overview.md, or before one a map or a plan draft). A tab
+  // that vanishes under the person sends them home.
+  const fileTabs = specFileTabs();
+  for (const f of fileTabs) tabs.push({ id: f.id, label: f.label, count: 0 });
+  if (isSpecFileView(page.view) && !fileTabs.some((f) => f.id === page.view)) page.view = "questions";
   for (const d of docs()) tabs.push({ id: "doc:" + d.id, label: d.title || "Document", count: 0 });
   // The helpers the agent reported, from the first one on; cleared by a
   // dashboard hop, which sends the person home like the Overview tab does.
@@ -1301,7 +1302,7 @@ function renderViews() {
       // The cached text paints at once; the fresh read repaints if the file
       // changed on disk since.
       render();
-      if (t.id === "overview") loadOverview();
+      if (isSpecFileView(t.id)) loadOverview();
     });
     nav.appendChild(b);
   }
@@ -1436,11 +1437,11 @@ function renderMain() {
 }
 
 function paintMain(main) {
-  main.classList.toggle("is-doc", page.view.startsWith("doc:") || page.view === "overview");
+  main.classList.toggle("is-doc", page.view.startsWith("doc:") || isSpecFileView(page.view));
   main.classList.toggle("is-ask", page.view === "ask");
 
   if (page.view.startsWith("doc:")) return renderDoc(main, page.view.slice(4));
-  if (page.view === "overview") return renderOverview(main);
+  if (isSpecFileView(page.view)) return renderOverview(main, page.view);
   if (page.view === "ask") return renderAsk(main);
   if (page.view === "subagents") return renderSubagents(main);
 

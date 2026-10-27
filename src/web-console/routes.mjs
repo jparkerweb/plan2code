@@ -27,7 +27,7 @@ import {
   writeJsonAtomic,
 } from "./files.mjs";
 import { AGENTS_SCHEMA, normalizeAgents, resolveCommand, validateForSave } from "./agents.mjs";
-import { checkDocument, cleanupFindings, readOverview, removeCleanup } from "./sessions.mjs";
+import { checkDocument, cleanupFindings, readSpecFile, removeCleanup } from "./sessions.mjs";
 import { SHOTS_DIR_NAME, SHOT_NAME, shotType } from "./patches.mjs";
 import { appendChat, currentConversation, pendingChatCount, typedCount } from "./inbox.mjs";
 import { specKey } from "./workspace.mjs";
@@ -302,12 +302,15 @@ function renderIndex(ctx) {
 
 /* ------------------------------------------------------ read-only routes */
 
-// The spec's overview.md, read-only. A dashboard honors ?spec= only for a
-// spec its own scan found; every other workflow reads its own specDir.
-// readOverview() keeps the read inside the project root.
+// One of the spec's files, read-only: overview.md by default, or with
+// ?file=draft or ?file=map the live PLAN-DRAFT or the Pathfinder map. A
+// dashboard honors ?spec= only for a spec its own scan found; every other
+// workflow reads its own specDir. readSpecFile() keeps the read inside the
+// project root, and names the file it read in X-Spec-File.
 function overview(req, res, ctx, url) {
   const state = ctx.readState() || {};
   const asked = url.searchParams.get("spec");
+  const kind = url.searchParams.get("file") || "overview";
   const spec =
     state.workflow === "dashboard"
       ? (state.scan?.specs || []).some((s) => s && s.dir === asked)
@@ -320,10 +323,14 @@ function overview(req, res, ctx, url) {
     res.writeHead(204, baseHeaders({ "cache-control": "no-store" }));
     res.end();
   };
-  readOverview(state.worktree || state.project, spec)
-    .then((text) =>
-      typeof text === "string"
-        ? send(res, 200, text, "text/markdown; charset=utf-8", { "cache-control": "no-store" })
+  readSpecFile(state.worktree || state.project, spec, kind)
+    .then((found) =>
+      found
+        ? send(res, 200, found.text, "text/markdown; charset=utf-8", {
+            "cache-control": "no-store",
+            // Encoded: a header value is bytes, and a file name need not be ASCII.
+            "x-spec-file": encodeURIComponent(found.file),
+          })
         : noOverview()
     )
     .catch(noOverview);

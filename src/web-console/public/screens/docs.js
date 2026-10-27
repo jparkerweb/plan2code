@@ -1,6 +1,6 @@
 // Plan2Code Web Console - documents: tabs, blocks, print and download, and the brief button; defines only.
 
-import { docs, agentWorking, workingMs, patience, WORKING_GRACE_MS, finish } from "../selectors.js";
+import { docs, agentWorking, workingMs, patience, WORKING_GRACE_MS, finish, SPEC_FILES } from "../selectors.js";
 import { el, md } from "../render.js";
 import { downloadDocHtml, docSavedNote, downloadDoc, blockBody } from "../doc-files.js";
 import { hooks, page, redraw } from "../state.js";
@@ -220,19 +220,22 @@ function printButton() {
   return print;
 }
 
-// The spec's overview.md, read-only and drawn through the same markdown path
-// as every doc. No Download: the file is already on disk.
-export function renderOverview(main) {
+// One of the spec's files (overview.md, the Pathfinder map, the Plan draft),
+// read-only and drawn through the same markdown path as every doc. No
+// Download: the file is already on disk.
+export function renderOverview(main, kind = "overview") {
+  const spec = SPEC_FILES.find((f) => f.id === kind) || SPEC_FILES[0];
+  const found = page.overview.files[spec.id];
   const head = el("div", "doc-head");
-  head.appendChild(el("h2", null, "Overview"));
+  head.appendChild(el("h2", null, spec.label));
   const tools = el("div", "doc-tools");
   tools.appendChild(backButton());
   tools.appendChild(printButton());
   head.appendChild(tools);
   main.appendChild(head);
-  main.appendChild(el("p", "help", `${page.overview.key}/overview.md · read-only, straight from disk`));
+  main.appendChild(el("p", "help", `${page.overview.key}/${found ? found.file : ""} · read-only, straight from disk`));
   const box = el("div", "block settled");
-  box.appendChild(md(page.overview.text, "md"));
+  box.appendChild(md(found ? found.text : "", "md"));
   main.appendChild(box);
 }
 

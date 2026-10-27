@@ -236,26 +236,61 @@ export function pressStranded() {
   return Date.now() - Date.parse(page.agentLastSeen) > UNCOLLECTED_MS;
 }
 
-// The spec whose overview.md the Overview tab shows: the dashboard picker's
+// The spec whose files the spec file tabs show: the dashboard picker's
 // selection on the dashboard, the session's own spec everywhere else.
 export const overviewSpec = () => (isDashboard() ? selSpec()?.dir || "" : (page.S && page.S.specDir) || "");
 
-// Fresh from disk every time, never cached: the file changes under a build,
-// and the tab is only worth having if it shows what is there now. Repaints
-// only when the tab would appear, vanish or show different text.
+// The spec files a tab can show, in tab order: each a view id, which is also
+// the server's ?file= kind. Document's overview stands for the whole spec
+// once it exists; before that the dashboard offers Pathfinder's map and
+// Plan's draft.
+export const SPEC_FILES = [
+  { id: "overview", label: "Overview" },
+  { id: "map", label: "Map" },
+  { id: "draft", label: "Plan draft" },
+];
+export const isSpecFileView = (v) => SPEC_FILES.some((f) => f.id === v);
+
+// The spec file tabs to draw now: Overview alone when the spec has one, else
+// the map and the draft that exist. Only for the spec in view, so a pick that
+// moved on never shows the last spec's files.
+export function specFileTabs() {
+  if (page.overview.key !== overviewSpec()) return [];
+  const has = (id) => Boolean(page.overview.files[id]);
+  if (has("overview")) return SPEC_FILES.filter((f) => f.id === "overview");
+  return SPEC_FILES.filter((f) => f.id !== "overview" && has(f.id));
+}
+
+async function fetchSpecFile(spec, kind) {
+  try {
+    const res = await fetch("/overview?spec=" + encodeURIComponent(spec) + "&file=" + kind, { cache: "no-store" });
+    if (res.status !== 200) return null;
+    const file = decodeURIComponent(res.headers.get("x-spec-file") || "") || kind;
+    return { file, text: await res.text() };
+  } catch {
+    return null;
+  }
+}
+
+// Fresh from disk every time, never cached: the files change under a build,
+// and the tabs are only worth having if they show what is there now. Away
+// from the dashboard only the overview is read: a session's own map or draft
+// is the work already in front of it. Repaints only when a tab would appear,
+// vanish or show different text.
 export async function loadOverview() {
   const spec = overviewSpec();
-  let text = null;
+  const kinds = isDashboard() ? SPEC_FILES.map((f) => f.id) : ["overview"];
+  const files = {};
   if (spec) {
-    try {
-      const res = await fetch("/overview?spec=" + encodeURIComponent(spec), { cache: "no-store" });
-      if (res.status === 200) text = await res.text();
-    } catch {}
+    const found = await Promise.all(kinds.map((k) => fetchSpecFile(spec, k)));
+    kinds.forEach((k, i) => {
+      if (found[i]) files[k] = found[i];
+    });
   }
   // The selection moved on while this was in flight; its own fetch will land.
   if (spec !== overviewSpec()) return;
-  const changed = page.overview.key !== spec || page.overview.text !== text;
-  page.overview = { key: spec, text };
+  const changed = page.overview.key !== spec || JSON.stringify(page.overview.files) !== JSON.stringify(files);
+  page.overview = { key: spec, files };
   if (changed) redraw();
 }
 

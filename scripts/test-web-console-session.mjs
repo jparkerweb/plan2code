@@ -734,6 +734,8 @@ test("help: helpTabFor opens on the tab for where the person is", () => {
     [{ dashboard: true, meterRed: true, view: "ask" }, "ask"],
     [{ meterRed: true }, "about"],
     [{ view: "overview" }, "docs"],
+    [{ view: "map" }, "docs"],
+    [{ view: "draft" }, "docs"],
     [{ view: "doc:plan" }, "docs"],
     [{ view: "doc:plan", workflow: "implement" }, "docs"],
     [{ workflow: "implement" }, "build"],

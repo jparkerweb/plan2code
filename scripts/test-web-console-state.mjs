@@ -45,7 +45,7 @@ test("state: the rest of the shared state starts as app.js always started it", (
     updateFrame: null,
     inApp: false,
     subagentsFrame: null,
-    overview: { key: null, text: null },
+    overview: { key: null, files: {} },
     wake: null,
     dashPick: null,
     mentionPop: null,

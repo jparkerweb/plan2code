@@ -500,15 +500,38 @@ export async function removeCleanup(ids, opts = {}) {
  * and a symlink pointing outside all come back null.
  */
 export async function readOverview(root, specDir) {
+  const found = await readSpecFile(root, specDir, "overview");
+  return found ? found.text : null;
+}
+
+// The files a spec folder can show as a tab, by kind: Document's overview,
+// Plan's live draft (the newest PLAN-DRAFT that is not a `-prev` copy, as in
+// scan.mjs) and Pathfinder's map.
+async function specFileName(dir, kind) {
+  if (kind === "overview") return "overview.md";
+  if (kind === "map") return "pathfinder/map.md";
+  if (kind !== "draft") return null;
+  const drafts = (await fs.promises.readdir(dir)).filter((n) => /^PLAN-DRAFT.*\.md$/i.test(n));
+  return drafts.filter((n) => !/-prev\.md$/i.test(n)).sort().reverse()[0] || drafts[0] || null;
+}
+
+/**
+ * One of a spec's files (`kind`: overview, draft or map), read-only, as
+ * `{ file, text }` with `file` relative to the spec folder, or null. Kept
+ * inside the root the same way readOverview() is.
+ */
+export async function readSpecFile(root, specDir, kind) {
   if (!root || !specDir || typeof specDir !== "string" || path.isAbsolute(specDir)) return null;
   try {
-    const file = path.resolve(root, specDir, "overview.md");
+    const name = await specFileName(path.resolve(root, specDir), kind);
+    if (!name) return null;
+    const file = path.resolve(root, specDir, name);
     const [realFile, realRoot] = await Promise.all([fs.promises.realpath(file), fs.promises.realpath(root)]);
     // path.relative, not a prefix test: a root of `C:\` or `/` already ends
     // in the separator, and `root + sep` would then match nothing at all.
     const rel = path.relative(realRoot, realFile);
     if (!rel || rel === ".." || rel.startsWith(".." + path.sep) || path.isAbsolute(rel)) return null;
-    return await fs.promises.readFile(realFile, "utf8");
+    return { file: name, text: await fs.promises.readFile(realFile, "utf8") };
   } catch {
     return null;
   }
