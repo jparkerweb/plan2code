@@ -65,9 +65,9 @@ file directly after checking it against the release's checksum list.
       just disabled
 - [ ] **Dock the terminal to the right**: the splitter becomes vertical, the toolbar stacks, and the
       dashboard keeps the rest of the width; dock it back to the bottom
-- [ ] **Collapse** the terminal to a thin strip (either dock) and **Expand** it back; its size from
-      before collapsing is remembered
-- [ ] Docked right, collapsed: the **Expand** label reads top-to-bottom and fits inside the strip,
+- [ ] **Collapse** the terminal to a thin strip (either dock) and **View Agent Terminal** brings it
+      back; its size from before collapsing is remembered
+- [ ] Docked right, collapsed: the **View Agent Terminal** label reads top-to-bottom and fits inside the strip,
       not sideways text running off the edge
 - [ ] Collapse the terminal (or shrink it small), let the agent go quiet for a while mid-answer: the
       "agent may need you" badge appears on the strip; expanding it clears the badge

@@ -563,7 +563,7 @@ function applyPaneLayout() {
   termDockBtn.textContent = paneDock === 'right' ? 'Dock bottom' : 'Dock right';
   termMaximizeBtn.textContent = paneMaximized ? 'Restore' : 'Maximize';
   termMaximizeBtn.setAttribute('aria-pressed', String(paneMaximized));
-  termCollapseBtn.textContent = paneCollapsed ? 'Expand' : 'Collapse';
+  termCollapseBtn.textContent = paneCollapsed ? 'View Agent Terminal' : 'Collapse';
   termCollapseBtn.setAttribute('aria-pressed', String(paneCollapsed));
   updateBadge();
 }

@@ -174,9 +174,9 @@ test("with nothing saved yet, app.js starts the terminal docked right via defaul
 });
 
 // Docked right and collapsed, the terminal panel is a 28px-wide strip: the
-// Expand/Collapse button's text used to run horizontally off the edge of it
+// collapse button's text used to run horizontally off the edge of it
 // (visible, unreadable). It now reads top-to-bottom instead.
-test("docked right and collapsed, the terminal panel's Expand button fits the strip instead of overflowing it", async (t) => {
+test("docked right and collapsed, the terminal panel's View Agent Terminal button fits the strip instead of overflowing it", async (t) => {
   if (!findBrowser()) return t.skip("no Chrome or Edge installed");
   const browser = await launchBrowser();
   try {
@@ -186,7 +186,7 @@ test("docked right and collapsed, the terminal panel's Expand button fits the st
     await page.evaluate(() => {
       document.getElementById("workspace").classList.add("dock-right");
       document.getElementById("term-panel").classList.add("collapsed");
-      document.getElementById("term-collapse").textContent = "Expand";
+      document.getElementById("term-collapse").textContent = "View Agent Terminal";
     });
     const fit = await page.evaluate(() => {
       const el = document.getElementById("term-collapse");
