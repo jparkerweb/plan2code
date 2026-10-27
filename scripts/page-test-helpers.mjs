@@ -134,3 +134,38 @@ export const textOf = async (locator) => (await locator.innerText()).trim();
 
 // The scroll offset of the first element matching `selector`.
 export const scrollTopOf = (page, selector) => page.$eval(selector, (el) => el.scrollTop);
+
+// Scrolls what `locator` names to `top` ("end" for its bottom), or as far as
+// it goes when that is less, and returns where it landed. A redraw can replace
+// the element between Playwright finding it and the scroll, and one not laid
+// out yet cannot scroll, so it scrolls again until the element on the page
+// holds a place past its top.
+export async function scrollCard(locator, top) {
+  const deadline = Date.now() + 5000;
+  for (;;) {
+    const at = await locator.evaluate((el, want) => {
+      if (!el.isConnected) return null;
+      const max = el.scrollHeight - el.clientHeight;
+      const target = want === "end" ? max : Math.min(want, max);
+      el.scrollTop = target;
+      return max > 0 && Math.abs(el.scrollTop - target) < 1 ? el.scrollTop : null;
+    }, top);
+    if (at !== null) return at;
+    if (Date.now() > deadline) throw new Error(`the element never held a scroll to ${top}`);
+    await new Promise((r) => setTimeout(r, 50));
+  }
+}
+
+// The computed `props` of the element `locator` names. A redraw can replace the
+// element between Playwright finding it and the read, and an element off the
+// page reads "" for every style, so a read of one is taken again.
+export async function stylesOf(locator, props) {
+  const deadline = Date.now() + 5000;
+  for (;;) {
+    const got = await locator.evaluate((x, ps) => (x.isConnected ? Object.fromEntries(ps.map((p) => [p, getComputedStyle(x)[p]])) : null), props);
+    if (got) return got;
+    if (Date.now() > deadline) throw new Error(`${props.join(", ")}: the element never stayed on the page long enough to read`);
+    await new Promise((r) => setTimeout(r, 50));
+  }
+}
+export const styleOf = async (locator, prop) => (await stylesOf(locator, [prop]))[prop];

@@ -11,7 +11,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { gitInit } from "./skill-script-helpers.mjs";
-import { pageSuite, openSession, tempProject, sendAndCollect, itemCard, scrollTopOf } from "./page-test-helpers.mjs";
+import { pageSuite, openSession, tempProject, sendAndCollect, itemCard, scrollTopOf, scrollCard, stylesOf, styleOf } from "./page-test-helpers.mjs";
 
 const suite = pageSuite(test);
 
@@ -41,25 +41,6 @@ test("a text answer typed on the page reaches the agent as it was typed", async 
 
 // The agent's side of one question: settle what came before, post `item`
 // alone, and wait for its card.
-// Scrolls the card `locator` names to `top` ("end" for its bottom) and returns
-// where it landed. A redraw can replace the card between Playwright finding it
-// and the scroll, and a card not laid out yet cannot scroll, so it scrolls
-// again until the card on the page holds the place.
-async function scrollCard(locator, top) {
-  const deadline = Date.now() + 5000;
-  for (;;) {
-    const at = await locator.evaluate((el, want) => {
-      if (!el.isConnected) return null;
-      el.scrollTop = want === "end" ? el.scrollHeight : want;
-      const held = want === "end" ? el.scrollTop + el.clientHeight >= el.scrollHeight - 1 : el.scrollTop === want;
-      return held ? el.scrollTop : null;
-    }, top);
-    if (at !== null) return at;
-    if (Date.now() > deadline) throw new Error(`the card never held a scroll to ${top}`);
-    await new Promise((r) => setTimeout(r, 50));
-  }
-}
-
 async function ask(s, item) {
   s.post({ settle: true, items: [item] });
   const card = itemCard(s.page, item.id);
@@ -247,7 +228,7 @@ test("a redraw keeps your place: the scroll and the focused field survive an age
   // On a doc: the column scrolls.
   await s.page.locator("#views").getByRole("button", { name: /What we've agreed/ }).click();
   await s.page.getByText("Paragraph 80.").waitFor();
-  await s.page.locator("#main").evaluate((el) => (el.scrollTop = 900));
+  await scrollCard(s.page.locator("#main"), 900);
   const docBefore = await scrollTopOf(s.page, "#main");
   assert.ok(docBefore > 0, "the doc column scrolls");
   await unrelatedPost(s, "Audit export, take four");
@@ -314,7 +295,7 @@ test("a redraw keeps the place of the dashboard, the waiting screen and the fini
   const welcomeDone = s.page.getByRole("button", { name: "Start building" });
   if (await welcomeDone.isVisible()) await welcomeDone.click();
   await welcomeDone.waitFor({ state: "hidden" });
-  await s.page.locator("#main > .dash").evaluate((el) => (el.scrollTop = 150));
+  await scrollCard(s.page.locator("#main > .dash"), 150);
   assert.equal(await scrollTopOf(s.page, "#main > .dash"), 150, "the dashboard scrolls");
   await unrelatedPost(s, "Dashboard, take two");
   assert.equal(await scrollTopOf(s.page, "#main > .dash"), 150, "the dashboard lost its place");
@@ -329,7 +310,7 @@ test("a redraw keeps the place of the dashboard, the waiting screen and the fini
   await s.page.setViewportSize({ width: 1280, height: 300 });
   const pane = "#main > .waiting-pane";
   await s.page.locator(pane).waitFor();
-  await s.page.locator(pane).evaluate((el) => (el.scrollTop = 60));
+  await scrollCard(s.page.locator(pane), 60);
   const waitingAt = await scrollTopOf(s.page, pane);
   assert.ok(waitingAt > 0, "the waiting screen scrolls");
   await unrelatedPost(s, "Phase 1, take two");
@@ -338,7 +319,7 @@ test("a redraw keeps the place of the dashboard, the waiting screen and the fini
   s.post({ finish: { headline: "Phase 1 is done", body: longText(30), command: "/plan2code-3-implement specs/audit-export/overview.md" } });
   await s.page.locator("#main").getByRole("heading", { name: "Phase 1 is done" }).waitFor();
   const end = "#main > .card";
-  await s.page.locator(end).evaluate((el) => (el.scrollTop = 300));
+  await scrollCard(s.page.locator(end), 300);
   assert.equal(await scrollTopOf(s.page, end), 300, "the finished screen scrolls");
   await unrelatedPost(s, "Phase 1, take three");
   assert.equal(await scrollTopOf(s.page, end), 300, "the finished screen lost its place");
@@ -350,7 +331,7 @@ test("a redraw keeps the place of the dashboard, the waiting screen and the fini
     workflow: "plan",
     payload: { items: [{ id: "q1", kind: "text", title: "What to call it", body: longText(40) }] },
   });
-  await itemCard(s.page, "q1").evaluate((el) => (el.scrollTop = 400));
+  await scrollCard(itemCard(s.page, "q1"), 400);
   s.post({ items: [{ id: "q2", kind: "text", title: "Who uses it", body: longText(40) }] });
   await itemCard(s.page, "q2").waitFor();
   assert.equal(await itemCard(s.page, "q2").evaluate((el) => el.scrollTop), 0, "the new question opened part-way down");
@@ -367,19 +348,6 @@ const accentOf = (page) =>
     probe.remove();
     return color;
   });
-// The computed `props` of the element `locator` names. A redraw can replace the
-// element between Playwright finding it and the read, and an element off the
-// page reads "" for every style, so a read of one is taken again.
-async function stylesOf(locator, props) {
-  const deadline = Date.now() + 5000;
-  for (;;) {
-    const got = await locator.evaluate((x, ps) => (x.isConnected ? Object.fromEntries(ps.map((p) => [p, getComputedStyle(x)[p]])) : null), props);
-    if (got) return got;
-    if (Date.now() > deadline) throw new Error(`${props.join(", ")}: the element never stayed on the page long enough to read`);
-    await new Promise((r) => setTimeout(r, 50));
-  }
-}
-const styleOf = async (locator, prop) => (await stylesOf(locator, [prop]))[prop];
 const outlineOf = (button) => styleOf(button, "borderTopColor");
 const warnOf = (page) =>
   page.evaluate(() => {

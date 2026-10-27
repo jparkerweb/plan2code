@@ -11,7 +11,7 @@ import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { pageSuite, openSession, tempProject, textOf } from "./page-test-helpers.mjs";
+import { pageSuite, openSession, tempProject, textOf, styleOf } from "./page-test-helpers.mjs";
 import { cli, until, CONSOLE_CLI, HOME } from "./web-console-test-helpers.mjs";
 
 const suite = pageSuite(test);
@@ -153,7 +153,7 @@ test("a fixed bug is hidden while unavailable workflows are, dimmed when they sh
   assert.match(await textOf(bug), /Bug fixed/i, "the chip names its state");
   assert.doesNotMatch(await textOf(bug), /bug fixed\s+bug fixed/i, "the scan's detail does not repeat the label");
   assert.equal(await bug.getAttribute("aria-current"), "false", "the fixed bug is not picked");
-  const opacity = await bug.evaluate((b) => Number(getComputedStyle(b).opacity));
+  const opacity = Number(await styleOf(bug, "opacity"));
   assert.ok(opacity < 1, `the fixed bug's chip is dimmed (opacity ${opacity})`);
   assert.equal(await demo.getAttribute("aria-current"), "true", "the plan stays picked");
 });
@@ -317,7 +317,7 @@ test("a handoff shows as a dashed Handoff chip even with no spec, and picking it
   const { main, chip } = await openHandoffMenu(t);
   assert.match(await textOf(chip), /Handoff/i, "the chip is labeled Handoff");
   assert.equal(await chip.getAttribute("aria-current"), "false", "a handoff is offered, not picked for you");
-  assert.equal(await chip.evaluate((b) => getComputedStyle(b).borderTopStyle), "dashed", "the chip's border is dashed");
+  assert.equal(await styleOf(chip, "borderTopStyle"), "dashed", "the chip's border is dashed");
   assert.ok(await lightOf(main, "/plan2code-1-plan").isVisible(), "the cards show before a handoff is picked");
 
   await chip.click();

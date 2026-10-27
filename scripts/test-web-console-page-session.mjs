@@ -704,6 +704,9 @@ test("a workflow page uses its modules: the full footer, the session meter, @ su
   await s.page.locator("#meter-pill").waitFor();
   assert.ok((await textOf(s.page.locator("#meter-words"))).length, "the meter pill has no words");
   // mentions.js: an @ in a text box offers the workspace's folders.
+  // The @ list is the workspace frame, which can land after the page draws;
+  // the footer has one label per width tier once it has.
+  await s.page.waitForFunction(() => (document.getElementById("footer-where").dataset.key || "").includes("\n"));
   const box = itemCard(s.page, "q1").locator("textarea");
   await box.click();
   await box.pressSequentially("See @");

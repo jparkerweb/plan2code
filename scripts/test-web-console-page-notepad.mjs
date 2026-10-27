@@ -20,7 +20,7 @@ import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { pageSuite, openSession, drawn } from "./page-test-helpers.mjs";
+import { pageSuite, openSession, drawn, styleOf } from "./page-test-helpers.mjs";
 import { JPEG, backdate, cli, until } from "./web-console-test-helpers.mjs";
 import {
   LEGACY_TAB_ID,
@@ -249,7 +249,7 @@ test("the editor breaks no content-security rule, and hostile Markdown runs noth
   assert.equal(result.styleTags, 0, "the editor added no <style> element");
   assert.deepEqual(consoleErrors.filter((e) => /Content.Security.Policy|Refused to/i.test(e)), []);
   // The heading is styled from the stylesheet the page ships.
-  const h1 = await s.page.locator("#notepad-editor .cm-h1").evaluate((el) => getComputedStyle(el).fontWeight);
+  const h1 = await styleOf(s.page.locator("#notepad-editor .cm-h1"), "fontWeight");
   assert.ok(Number(h1) >= 600 || h1 === "bold", `the heading is bold (${h1})`);
 });
 
