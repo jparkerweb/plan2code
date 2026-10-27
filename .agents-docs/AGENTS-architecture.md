@@ -58,6 +58,7 @@ plan2code/
 │   ├── parse-check.mjs         # Imports every shipped browser module as real ESM
 │   ├── screenshots/            # JSON payloads posted per shot (`ask` reuses `question.json`; `finish` follows `signoff.json`)
 │   ├── test-web-console-*.mjs, web-console-test-helpers.mjs  # Web console suites, split by area (the page tests are `-page-*`, the source shape `-shape`), and their shared setup
+│   ├── node-test.mjs, page-test-helpers.mjs  # `npm test`'s `node --test`, files at once capped at one per spare core; the page tests' browser sessions and their redraw-safe `styleOf()`, `stylesOf()`, `scrollCard()`
 │   ├── test-launcher.mjs, test-getting-started.mjs  # Launcher suite; newcomer docs kept in step
 │   ├── test-skill-scripts.mjs, test-script-<skill>.mjs, test-git-repo.mjs, skill-script-helpers.mjs, fixture-helpers.mjs  # Skill script suites and fixtures
 │   └── validate-char-count.js  # Pre-commit character count validator

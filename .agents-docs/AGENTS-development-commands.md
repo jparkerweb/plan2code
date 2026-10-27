@@ -47,12 +47,20 @@ cd plan2code-metrics && npm install   # First time setup
 cd plan2code-metrics && npm run build # Build the CLI
 cd plan2code-metrics && npm test      # vitest (aggregator, community, improver)
 
+# Desktop app (plan2code-app/, Rust + Tauri). CI's `app` workflow runs all three on
+# Windows, macOS and Linux and fails on any rustfmt difference or clippy warning, so run
+# them before pushing, not only cargo test (see plan2code-app/README.md "Tests").
+# First time: rustup component add rustfmt clippy (for the toolchain in rust-toolchain.toml)
+cd plan2code-app && node scripts/vendor.mjs && cargo fmt --check
+cd plan2code-app && cargo clippy --workspace --all-targets -- -D warnings
+cd plan2code-app && cargo test --workspace
+
 # Plan2Code Bot (end-to-end workflow runner, Claude Agent SDK)
 cd plan2code-bot && npm install && npm run build
 cd plan2code-bot && npm test          # vitest
 ```
 
-The root `npm test` does not run the metrics or bot vitest suites; run them in their package. `npm run dev` in loop, metrics and bot is `tsup --watch`. The web console and launcher suites isolate themselves with `PLAN2CODE_CONSOLE_HOME`, `PLAN2CODE_MODELS_DIR` and `PLAN2CODE_NO_BROWSER=1` (`scripts/web-console-test-helpers.mjs`), so they never open a browser or touch your real console home. The web console suites are split by area so `node --test` runs them in parallel.
+The root `npm test` does not run the metrics or bot vitest suites; run them in their package. `npm run dev` in loop, metrics and bot is `tsup --watch`. The web console and launcher suites isolate themselves with `PLAN2CODE_CONSOLE_HOME`, `PLAN2CODE_MODELS_DIR` and `PLAN2CODE_NO_BROWSER=1` (`scripts/web-console-test-helpers.mjs`), so they never open a browser or touch your real console home. The web console suites are split by area so `node --test` runs them in parallel. `npm test` runs them through `scripts/node-test.mjs`, which caps the files run at once at one per spare core (8 at most): each page test file drives a browser, and more at once than the cores can carry fails page tests at random (a flat 8 did on 3 and 4 core CI runners). Page tests (`test-web-console-page-*.mjs`) read styles and set scrolls only through `styleOf()`, `stylesOf()` and `scrollCard()` from `page-test-helpers.mjs`, which retry until the element is still on the page; `test-web-console-shape.mjs` fails a raw `locator.evaluate` that does either.
 
 ## Test/Dev Env Vars
 

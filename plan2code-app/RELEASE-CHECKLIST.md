@@ -19,7 +19,8 @@ file directly after checking it against the release's checksum list.
 - [ ] `node scripts/check-versions.mjs --tag v<version>` passes (version.json, package.json,
       CHANGELOG.md and the app's tauri.conf.json, package.json and Cargo.toml all agree)
 - [ ] `npm test` passes at the repo root, with the app absent
-- [ ] `cargo test --workspace` passes in `plan2code-app/`, and the `app` workflow is green on all
+- [ ] `cargo fmt --check`, `cargo clippy --workspace --all-targets -- -D warnings` and
+      `cargo test --workspace` pass in `plan2code-app/`, and the `app` workflow is green on all
       three systems
 - [ ] The pre-release has one `plan2code-app-<version>-<os>-<arch>` file per system and a
       `plan2code-app-<version>-SHA256SUMS.txt`

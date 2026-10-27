@@ -335,3 +335,49 @@ test("shape: the docs-table check names a file with no row, and passes one that 
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+// A page test that reads a style or sets a scroll through locator.evaluate
+// acts on whatever element the locator found, and a redraw can replace that
+// element before the call runs: one off the page reads "" for every style and
+// scrolls nothing anyone sees. On 3 and 4 core CI runners that failed a
+// different page test at random on each run until the reads went through
+// page-test-helpers.mjs's styleOf(), stylesOf() and scrollCard(), which retry
+// until the element is still on the page. page.evaluate and waitForFunction
+// look the element up afresh, so they are not flagged.
+const RACY_STYLE = /(?<!\bpage)\.evaluate\(\s*\((\w+)\)\s*=>[^\n]*getComputedStyle\(\1\)/;
+const RACY_SCROLL = /(?<!\bpage)\.evaluate\(\s*\((\w+)\)\s*=>\s*\(?\s*\1\.scrollTop\s*=[^=]/;
+
+function racyPageReads(name, text) {
+  const problems = [];
+  text.split("\n").forEach((line, i) => {
+    if (RACY_STYLE.test(line)) problems.push(`${name}:${i + 1}: read the style with styleOf() or stylesOf() from page-test-helpers.mjs`);
+    if (RACY_SCROLL.test(line)) problems.push(`${name}:${i + 1}: scroll with scrollCard() from page-test-helpers.mjs`);
+  });
+  return problems;
+}
+
+test("shape: page tests read styles and set scrolls through the redraw-safe helpers", () => {
+  const dir = path.join(ROOT, "scripts");
+  const pageTests = fs.readdirSync(dir).filter((f) => /^test-web-console-page-.*\.mjs$/.test(f));
+  assert.ok(pageTests.length > 0, "the page tests were found");
+  const problems = pageTests.flatMap((f) => racyPageReads(f, fs.readFileSync(path.join(dir, f), "utf8")));
+  assert.deepEqual(problems, []);
+});
+
+test("shape: the redraw-safe check names a locator's style read and scroll, and passes page-wide ones", () => {
+  const racy = [
+    'await card.evaluate((el) => (el.scrollTop = 400));',
+    'const c = await chip.evaluate((b) => getComputedStyle(b).borderTopStyle);',
+  ].join("\n");
+  assert.deepEqual(racyPageReads("x.mjs", racy), [
+    "x.mjs:1: scroll with scrollCard() from page-test-helpers.mjs",
+    "x.mjs:2: read the style with styleOf() or stylesOf() from page-test-helpers.mjs",
+  ]);
+  const fine = [
+    'await s.page.evaluate(() => { document.getElementById("main").scrollTop = 4000; });',
+    'const top = await card.evaluate((el) => el.scrollTop === 0);',
+    'await s.page.waitForFunction(() => getComputedStyle(document.body).color);',
+    'const color = await s.page.evaluate((el) => getComputedStyle(el).color);',
+  ].join("\n");
+  assert.deepEqual(racyPageReads("x.mjs", fine), []);
+});

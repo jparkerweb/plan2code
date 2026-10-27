@@ -44,7 +44,12 @@ npm run build      # build the installable bundle
 
 ```
 cd plan2code-app
+node scripts/vendor.mjs    # once: the xterm files cargo builds against
+cargo fmt --check
+cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 ```
+
+The `app` workflow runs all three on Windows, macOS and Linux, and fails on any rustfmt difference or clippy warning, so run them before pushing, not only `cargo test`. Clippy on one system does not see code for another: an import used only inside a `#[cfg(windows)]` test is clean on Windows and an unused-import error on macOS and Linux, so put such imports inside the `cfg`'d item.
 
 Real Claude, Devin and Codex are never started by a test. The real window and terminal panel are checked by hand before each release.
