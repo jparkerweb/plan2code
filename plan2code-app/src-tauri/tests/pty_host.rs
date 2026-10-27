@@ -7,7 +7,7 @@ use std::time::{Duration, Instant};
 use plan2code_app_lib::pty_host::{PtyHost, StartOptions};
 
 mod common;
-use common::{fake_agent, process_alive};
+use common::fake_agent;
 
 fn start_fake() -> (PtyHost, Receiver<Vec<u8>>) {
     let (tx, rx) = channel();
@@ -109,6 +109,7 @@ fn kill_ends_a_running_step() {
 #[cfg(windows)]
 #[test]
 fn kill_ends_a_cmd_wrapped_grandchild_too() {
+    use common::process_alive;
     use plan2code_app_lib::agents::windows_command;
     use std::fs;
 
