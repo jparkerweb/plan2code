@@ -44,6 +44,7 @@ import {
   isDashboard,
 } from "../selectors.js";
 import { docSavedNote, downloadDoc } from "../doc-files.js";
+import { startNewSession } from "../app-bridge.js";
 import { pendingNotes } from "../uploads.js";
 
 // The end of the session, and the only screen in this page whose job is to
@@ -220,6 +221,17 @@ export function renderHandoff(fin) {
     row.appendChild(code);
     row.appendChild(copyButton(text, "btn small handoff-copy", code));
     step.appendChild(row);
+    // Under the app a clean start is the bar's New Session: one press, with
+    // the command already on the clipboard to paste into the new terminal.
+    if (page.inApp && command.startsWith("/") && !page.gone) {
+      const fresh = el("div", "handoff-newsession");
+      const press = el("button", "btn small", "Start a New Session");
+      press.type = "button";
+      press.addEventListener("click", () => startNewSession(text));
+      fresh.appendChild(press);
+      fresh.appendChild(el("p", "handoff-note", "The command above is copied first: paste it into the terminal panel once the new session opens."));
+      step.appendChild(fresh);
+    }
     const next = continueOffer(fin);
     if (next && continueLive()) step.appendChild(renderContinueOffer(next));
     if (text !== command) {

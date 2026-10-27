@@ -947,7 +947,7 @@ async function cmdTrail(loc, args) {
     menu = {
       header: "Next step",
       question: checkpoint ? "Continue here, or start fresh? Everything is saved. I recommend starting fresh, to keep me sharp." : "Continue here, or start fresh? Everything is saved.",
-      options: [...options, { label: "Start fresh" }],
+      options: [...options, { label: "Start fresh", fresh: true }],
       recommended: checkpoint ? "Start fresh" : options[0].label,
       why: checkpoint ? (args.heavy ? "a heavy, contested or locked decision just landed" : `${resolvedThisSession} questions resolved this session`) : "lowest NN on the frontier",
       ...(f.frontier.length > 3 ? { more: f.frontier.slice(3).map((x) => displayName(map, byNN.get(x.nn))) } : {}),

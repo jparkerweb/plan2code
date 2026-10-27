@@ -52,7 +52,7 @@ import { FOOTER_TIERS, footerLabel } from "../workspace.js";
 import {
   activity, agentAdrift, agentWorking, asked, awaitingReply, byId, dashboardLive, docs, doingNow,
   finish, gitAwaiting, isDashboard, isGitBoard, isOpen, items, loadOverview, myTurn, openItems,
-  overviewSpec, patience, reviewPending, scan, selSpec, sendCollected, stagedCount, stranded,
+  overviewSpec, patience, pressStranded, reviewPending, scan, selSpec, sendCollected, stagedCount, stranded,
   topics, workingMs, WORKING_GRACE_MS,
   workspaceFolders,
 } from "../selectors.js";
@@ -67,7 +67,7 @@ import { renderBriefButton, renderDoc, renderOverview } from "./docs.js";
 import { board, renderGitBoard, resetBoard } from "./git-host.js";
 import { renderWorkspace, tellFolderIssues } from "./workspace.js";
 import { openHelpOn } from "./help-dialog.js";
-import { linkLeavesPage, tellApp } from "../app-bridge.js";
+import { linkLeavesPage, startNewSession, tellApp } from "../app-bridge.js";
 import { askOfflineFlipped, askState, declineOpen, renderAside, renderAsk, renderSubagents, renderSubagentsButton } from "./ask.js";
 import { renderHandoff, renderHomeButton, renderStopButton, renderStopControls, renderStopping, stopInProgress, stopWarning } from "./ending.js";
 import { renderNotepadButton } from "./notepad.js";
@@ -1027,6 +1027,10 @@ let moodVar = 0;
 const STRANDED_LINE =
   "Plan2Code is not running. Your answers are saved and waiting for it. If the terminal is idle, type **continue** there and it will pick them up; it may also be waiting for your permission approval.";
 
+// A finished screen's press that nothing is collecting (pressStranded()).
+const PRESS_STRANDED_LINE =
+  "Plan2Code is not running. Your choice is saved and waiting for it. If the terminal is idle, type **continue** there and it will pick it up; it may also be waiting for your permission approval.";
+
 // The status line's **continue**, under the app: a press asks the app to type
 // it into the agent's terminal. Held off for a few seconds after, so a double
 // press does not send it twice.
@@ -1109,6 +1113,10 @@ export function renderStatus() {
   // Before `gone`, deliberately. Once a session has finished, no server is the
   // expected state, and Planny shutting his eye over it reads as a breakage.
   if (finish()) {
+    // A press the agent never came back for: its turn ended while the screen
+    // waited. The press is saved, and **continue** in the terminal collects
+    // it (a button that types it there, under the app).
+    if (pressStranded()) return say("adrift", PRESS_STRANDED_LINE, "", false, true);
     // A finish with the review or the way back to the dashboard still on
     // offer has something left to press here, and only while the server is
     // there to take the press.
@@ -1788,6 +1796,15 @@ export function markSent({ sentIds, sentNotes = {}, summaries, values }) {
   save();
 }
 
+// The menu card whose staged pick is an option marked `fresh`, if any.
+function freshMenuPick(actions) {
+  for (const a of actions) {
+    const item = a.kind === "menu" ? byId(a.i) : null;
+    if (item && (item.options || []).some((o) => o.k === a.k && o.fresh === true)) return item;
+  }
+  return null;
+}
+
 export async function send() {
   if (sendState().disabled) return;
   const payload = stagedPayload();
@@ -1818,6 +1835,11 @@ export async function send() {
     markSent(payload);
     banner("Sent. Plan2Code is picking it up now.", "good");
     setTimeout(() => banner(null), 4000);
+    // A menu option the agent marked `fresh` is a clean start, which under the
+    // app is the bar's New Session; the agent still gets the pick, so a
+    // declined confirm carries on with its usual finish.
+    const freshMenu = page.inApp ? freshMenuPick(actions) : null;
+    if (freshMenu) startNewSession(freshMenu.command ? handoffText({ command: freshMenu.command }) : "");
   } catch (err) {
     if (err && err.pending) {
       banner(

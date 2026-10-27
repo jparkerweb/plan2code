@@ -36,6 +36,23 @@ export function onAppMessage(kind, handler) {
   });
 }
 
+/**
+ * Ask the app for what its bar's New Session button does, confirm and all.
+ * `command`, when there is one, goes on the clipboard first so it can be
+ * pasted into the new terminal; a refused copy loses nothing, the page still
+ * shows it.
+ */
+export async function startNewSession(command = "") {
+  if (command) {
+    try {
+      await navigator.clipboard.writeText(command);
+    } catch {
+      /* the command stays on the page to copy by hand */
+    }
+  }
+  tellApp("new-session");
+}
+
 /** Post `message` to the frame's parent, as `{ plan2code: kind, ...extra }`; nothing outside a frame. */
 export function tellApp(kind, extra = {}) {
   if (!framed()) return;

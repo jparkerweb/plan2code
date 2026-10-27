@@ -174,6 +174,7 @@ test("pathfinder trail: exact footer for forms A, B and C", () => {
   assert.ok(c.json.text.endsWith("OR START FRESH · new conversation, paste:\n`/plan2code-0-pathfinder specs/audit-export/pathfinder --web`"));
   assert.deepEqual(c.json.menu.options.map((o) => o.label), ["Row-count ceiling", "Start fresh"]);
   assert.equal(c.json.menu.recommended, "Start fresh", "the checkpoint after ~3 decisions");
+  assert.equal(c.json.menu.options.find((o) => o.label === "Start fresh").fresh, true, "the page reads it as a clean start");
   assert.equal(P("trail", "audit-export", "--form", "C").json.menu.recommended, "Row-count ceiling");
 });
 

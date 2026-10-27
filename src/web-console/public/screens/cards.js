@@ -1317,11 +1317,13 @@ function buildMenu(card, item, staged) {
     radio.id = optionId(item, o, i);
     radio.value = o.k;
     radio.checked = Boolean(picked);
-    radio.setAttribute("aria-label", o.k ? `${o.k}: ${o.text}` : o.text);
+    // Under the app a fresh start is the bar's New Session, so say that.
+    const text = page.inApp && o.fresh === true ? "Start New Session" : o.text;
+    radio.setAttribute("aria-label", o.k ? `${o.k}: ${text}` : text);
     radio.addEventListener("change", () => stage(item.id, { type: "answer", kind: "menu", k: o.k }));
     const body = el("div", "option-body");
     const head = el("div", "option-label");
-    head.appendChild(el("span", null, o.text));
+    head.appendChild(el("span", null, text));
     if (o.recommended) head.appendChild(el("span", "pill suggested", "Suggested"));
     body.appendChild(head);
     if (o.detail) body.appendChild(el("p", "option-detail", o.detail));

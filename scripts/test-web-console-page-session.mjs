@@ -218,6 +218,71 @@ test("under the app, the meter popover's Start a New Session button asks the app
   assert.deepEqual(await toApp(s, "new-session"), [{ plan2code: "new-session" }], "a named request, nothing else in it");
 });
 
+// A menu option the agent marks `fresh` (Pathfinder's "Start fresh") is a clean
+// start: under the app it reads Start New Session and sending it asks the app
+// for its New Session; any other option, and the classic console, do not.
+const FRESH_MENU = {
+  items: [
+    {
+      id: "q1",
+      kind: "menu",
+      title: "Next step",
+      body: "Continue here, or start fresh?",
+      command: "/plan2code-0-pathfinder specs/x/pathfinder",
+      options: [
+        { k: "1", text: "Row-count ceiling" },
+        { k: "2", text: "Start fresh", fresh: true },
+      ],
+    },
+  ],
+  agent: { status: "waiting" },
+};
+
+test("under the app, a fresh menu option reads Start New Session, and picking another option starts nothing", async (t) => {
+  const s = await openSession(await suite.browser(), { t, workflow: "pathfinder", payload: FRESH_MENU, env: { PLAN2CODE_IN_APP: "1" }, init: FAKE_APP_FRAME });
+  assert.equal(await s.page.getByRole("radio", { name: /Start New Session/ }).count(), 1, "the app's wording");
+  assert.equal(await s.page.getByText("Start fresh", { exact: true }).count(), 0, "replaces the classic one");
+  await s.page.getByRole("radio", { name: /Row-count ceiling/ }).check();
+  await s.page.click("#btn-send");
+  await s.page.locator("#btn-send:has-text('Send to Plan2Code')").waitFor();
+  assert.equal((await toApp(s, "new-session")).length, 0, "another option starts nothing");
+});
+
+test("under the app, picking the fresh menu option and sending it posts new-session", async (t) => {
+  const s = await openSession(await suite.browser(), { t, workflow: "pathfinder", payload: FRESH_MENU, env: { PLAN2CODE_IN_APP: "1" }, init: FAKE_APP_FRAME });
+  await s.page.getByRole("radio", { name: /Start New Session/ }).check();
+  await s.page.click("#btn-send");
+  await until(async () => (await toApp(s, "new-session")).length === 1, 5000);
+  assert.deepEqual(await toApp(s, "new-session"), [{ plan2code: "new-session" }], "a named request, nothing else in it");
+});
+
+test("outside the app, a fresh menu option keeps its own wording and starts no session", async (t) => {
+  const s = await openSession(await suite.browser(), { t, workflow: "pathfinder", payload: FRESH_MENU });
+  assert.equal(await s.page.getByRole("radio", { name: /Start New Session/ }).count(), 0);
+  await s.page.getByRole("radio", { name: /Start fresh/ }).check();
+  await s.page.click("#btn-send");
+  await s.page.locator("#btn-send:has-text('Send to Plan2Code')").waitFor();
+});
+
+test("under the app, a finish with a skill command offers Start a New Session; outside it does not", async (t) => {
+  const inApp = await openSession(await suite.browser(), {
+    t,
+    workflow: "implement",
+    payload: { agent: { status: "working", activity: "Task 1 of 1" } },
+    env: { PLAN2CODE_IN_APP: "1" },
+    init: FAKE_APP_FRAME,
+  });
+  inApp.post({ finish: { headline: "A skill next", command: "/plan2code-4-finalize" } });
+  await inApp.page.getByRole("heading", { name: "A skill next" }).waitFor();
+  await inApp.page.getByRole("button", { name: "Start a New Session" }).click();
+  await until(async () => (await toApp(inApp, "new-session")).length === 1, 5000);
+
+  const plain = await openSession(await suite.browser(), { t, workflow: "implement", payload: { agent: { status: "working", activity: "Task 1 of 1" } } });
+  plain.post({ finish: { headline: "A skill next", command: "/plan2code-4-finalize" } });
+  await plain.page.getByRole("heading", { name: "A skill next" }).waitFor();
+  assert.equal(await plain.page.getByRole("button", { name: "Start a New Session" }).count(), 0);
+});
+
 test("under the app, the not running line's continue is a button that asks the app to type it, and the page hands the app its highlight", async (t) => {
   const s = await openSession(await suite.browser(), {
     t,
