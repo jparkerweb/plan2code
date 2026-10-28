@@ -22,7 +22,7 @@ import {
   adopt, banner, connect, fillSky, fitGrowBox, loadState, markSent, maybeWelcome, render, renderFooter,
   renderSidebar, renderWhere, save, startClock, startLooks, stagedPayload, syncWorkspaceScope,
   wakeHoldsChime, wireAsk, wireCards, wireChrome, wireCleanup, wireDashboard, wireDocs, wireEnding,
-  wireHelp, wireLooks, wireNotepad, wireWorkspace,
+  wireActivities, wireHelp, wireLooks, wireNotepad, wireWorkspace,
 } from "./screens/core.js";
 import { sound } from "./sound.js";
 
@@ -50,6 +50,7 @@ wireCleanup();
 wireDocs();
 wireAsk();
 wireNotepad();
+wireActivities();
 wireChrome();
 startClock();
 

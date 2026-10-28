@@ -515,6 +515,13 @@ export function wireLooks() {
     const preview = ["question", ...Object.keys(SOUND_EVENTS)].find(soundOn);
     if (preview) sound(preview);
   });
+  $("looks-activities").addEventListener("change", (e) => {
+    looks.hideActivities = !e.target.checked;
+    saveLooks();
+    // The die comes and goes with the next render, which also closes an open
+    // Activities window, paused.
+    redraw();
+  });
   for (const box of document.querySelectorAll("input[data-sound]")) {
     box.addEventListener("change", () => {
       const event = box.dataset.sound;

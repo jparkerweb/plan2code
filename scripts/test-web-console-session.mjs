@@ -644,16 +644,22 @@ test("the favicon is served as an SVG with a PNG fallback and the page points at
 /* ---------------------------------------------------------------- help */
 
 
-test("help: 18 tabs with unique ids", () => {
-  assert.equal(HELP_TABS.length, 18);
-  assert.equal(new Set(HELP_TABS.map((t) => t.id)).size, 18);
+test("help: 19 tabs with unique ids", () => {
+  assert.equal(HELP_TABS.length, 19);
+  assert.equal(new Set(HELP_TABS.map((t) => t.id)).size, 19);
   assert.ok(Object.isFrozen(HELP_TABS) && HELP_TABS.every((t) => Object.isFrozen(t)), "the tab list is frozen");
   const ids = HELP_TABS.map((t) => t.id);
   assert.equal(ids.indexOf("git"), ids.indexOf("build") + 1, "The git board comes right after Watching a build");
   assert.equal(HELP_TABS[ids.indexOf("git")].label, "The git board");
   assert.equal(helpTabFor({ workflow: "git" }), "git");
+  assert.equal(ids.indexOf("activities"), ids.indexOf("ask") + 1, "Activities comes right after Ask a quick question");
+  assert.equal(HELP_TABS[ids.indexOf("activities")].label, "Activities");
   const tpl = helpTemplate();
   for (const id of ids) assert.match(tpl, new RegExp(`<section class="help-panel" data-tab="${id}">`), `${id} has a section`);
+  // The die sits right of the megaphone, so the megaphone is no longer the far-right button.
+  assert.doesNotMatch(tpl, /far right/, "no line calls a top-bar button the far-right one");
+  const around = tpl.match(/<section class="help-panel" data-tab="around">([\s\S]*?)<\/section>/)[1];
+  assert.match(around, /<strong>die<\/strong>[\s\S]*?"Activities"/, "Finding your way around points the die at the Activities topic");
 });
 
 test("help: the template's icons and panels match HELP_TABS in order, headed by their labels", () => {
