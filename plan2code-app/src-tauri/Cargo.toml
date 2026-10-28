@@ -26,5 +26,6 @@ libc = "0.2"
 [target.'cfg(windows)'.dependencies]
 # Already pulled in by portable-pty itself; named directly here only for the
 # Job Object APIs it does not expose (ending a `cmd /c` npm shim's whole
-# process tree, not just the shim).
-winapi = { version = "0.3.9", features = ["handleapi", "jobapi2", "minwindef", "ntdef", "winnt"] }
+# process tree, not just the shim), and for the quit check's own TaskDialog
+# (task_dialog.rs).
+winapi = { version = "0.3.9", features = ["commctrl", "handleapi", "jobapi2", "minwindef", "ntdef", "windef", "winerror", "winnt", "winuser"] }

@@ -1,6 +1,7 @@
 // Hide the extra console window on Windows release builds.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 
 use plan2code_app_lib::agent_manager::{AgentEvent, AgentManager, AgentState, BeforeFresh, Sink};
@@ -12,8 +13,11 @@ use plan2code_app_lib::console_supervisor::{
 };
 use plan2code_app_lib::node_check;
 use plan2code_app_lib::project::{self, ProjectDir};
+use plan2code_app_lib::quit_prompt::{quit_prompt, QuitCase};
 use plan2code_app_lib::restart_brief;
 use plan2code_app_lib::settings;
+#[cfg(windows)]
+use plan2code_app_lib::task_dialog;
 use plan2code_app_lib::versions;
 use tauri::ipc::{Channel, InvokeResponseBody};
 use tauri::{Emitter, Manager, State};
@@ -405,17 +409,70 @@ fn agent_reattach(
     })
 }
 
-// Asks before quitting while an agent runs; "no" keeps the app open.
+// Set while a quit box is open, so a second close or quit does not stack another.
+static QUIT_OPEN: AtomicBool = AtomicBool::new(false);
+
+// Clears QUIT_OPEN when the box closes, however its handler ends.
+struct QuitOpen;
+
+impl Drop for QuitOpen {
+    fn drop(&mut self) {
+        QUIT_OPEN.store(false, Ordering::SeqCst);
+    }
+}
+
+// Asks before quitting while an agent runs; anything but Quit keeps the app
+// open. The words follow whose turn the page last reported (quit_prompt.rs).
 fn confirm_quit(app: &tauri::AppHandle) {
+    if QUIT_OPEN.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    let open = QuitOpen;
+    let last = app
+        .state::<AppState>()
+        .attention
+        .lock()
+        .ok()
+        .and_then(|guard| guard.last);
+    let prompt = quit_prompt(last);
+    #[cfg(windows)]
+    {
+        if let Some(parent) = app
+            .get_webview_window("main")
+            .and_then(|window| window.hwnd().ok())
+        {
+            // TaskDialog blocks until it closes, so it runs off the event loop.
+            let app = app.clone();
+            let parent = parent.0 as isize;
+            std::thread::spawn(move || {
+                let _open = open;
+                if task_dialog::ask(parent as _, &prompt) {
+                    quit_app(&app);
+                }
+            });
+            return;
+        }
+    }
+    let kind = match prompt.case {
+        QuitCase::Waiting => MessageDialogKind::Info,
+        QuitCase::Working => MessageDialogKind::Warning,
+    };
+    // The plugin makes its first button the default, so off Windows Enter
+    // means Quit. Stay first would make Esc quit instead, since the plugin
+    // reads Esc as "not the first button".
     let app = app.clone();
     app.dialog()
-        .message("An agent is still running. Quit and stop it?")
-        .title("Quit Plan2Code")
-        .kind(MessageDialogKind::Warning)
-        .buttons(MessageDialogButtons::YesNo)
+        .message(prompt.message)
+        .title(prompt.heading)
+        .kind(kind)
+        .buttons(MessageDialogButtons::OkCancelCustom(
+            prompt.quit.to_string(),
+            prompt.stay.to_string(),
+        ))
         .show({
             let app = app.clone();
             move |quit| {
+                let _open = open;
                 if quit {
                     quit_app(&app);
                 }
@@ -506,10 +563,11 @@ fn apply_badge(window: &tauri::WebviewWindow, badge: Badge) {
 }
 
 // No dot and no flash: the agent ended, the page went away, or the switch was
-// turned off. The next state the page tells starts from plain.
+// turned off. Whose turn it is is unknown until the page tells again, so the
+// quit check uses its working words meanwhile (the agent may be mid-step).
 fn clear_attention(app: &tauri::AppHandle) {
     if let Ok(mut guard) = app.state::<AppState>().attention.lock() {
-        guard.last = Some(Signal::Plain);
+        guard.last = None;
     }
     let Some(window) = app.get_webview_window("main") else {
         return;
