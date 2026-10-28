@@ -2317,8 +2317,8 @@ function uninstallPlan2CodeBot() {
 
 /**
  * `plan2code` typed in any directory opens the dashboard skill there in Claude Code
- * (`claude /plan2code --permission-mode bypassPermissions`) or Devin
- * (`devin --permission-mode bypass -- /plan2code`), asking which when both are installed.
+ * (`claude /plan2code`), Devin (`devin -- /plan2code`) or Codex (`codex $plan2code`), asking
+ * which when more than one is installed, then whether to turn permission prompts off.
  * The launcher is copied out of the package into ~/.plan2code/bin/ because the installer
  * normally runs from an npx cache directory that npm is free to delete; the shims in the bin
  * directory point at that stable copy.
@@ -2730,7 +2730,6 @@ async function installLauncher({ quiet = false, unattended = false } = {}) {
   recordInstalled('launcher');
   // The shortcut is a convenience on top of the command, so a failure here only warns.
   if (!unattended) await offerDesktopShortcut(binDir);
-  console.log(`  ${COLORS.YELLOW}${SYMBOLS.WARNING}${COLORS.RESET} The ${LAUNCHER_COMMAND} command starts the agent with permission prompts off (${COLORS.CYAN}--permission-mode bypassPermissions${COLORS.RESET} in Claude Code, ${COLORS.CYAN}bypass${COLORS.RESET} in Devin, ${COLORS.CYAN}--dangerously-bypass-approvals-and-sandbox${COLORS.RESET} in Codex). Run ${COLORS.CYAN}claude /plan2code${COLORS.RESET} yourself if you want prompts.`);
   console.log('');
   // Inside install() the final summary prints the steps once, after everything else.
   if (!quiet) printGettingStarted({ commandInstalled: true });

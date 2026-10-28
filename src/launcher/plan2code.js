@@ -5,17 +5,20 @@
  * `plan2code`: open the Plan2Code dashboard skill in Claude Code, Devin or Codex, in the
  * current directory.
  *
- * Runs one of:
- *   claude /plan2code --permission-mode bypassPermissions [extra args]
- *   devin --permission-mode bypass [extra args] -- /plan2code
- *   codex --dangerously-bypass-approvals-and-sandbox [extra args] $plan2code
+ * Runs one of (the bracketed flags only when permission prompts are turned off):
+ *   claude /plan2code [--permission-mode bypassPermissions] [extra args]
+ *   devin [--permission-mode bypass] [extra args] -- /plan2code
+ *   codex [--dangerously-bypass-approvals-and-sandbox] [extra args] $plan2code
  *
  * Codex starts a skill with `$name` rather than `/name`. When more than one CLI is installed
  * it asks which one, with the last pick as the default; with only one installed it uses that.
  * `--cli claude` / `--cli devin` / `--cli codex` skips the question. Before starting it asks
  * which model to run, from the curated list in models.json (shipped with every install) plus
  * any models the user added in User Preferences; Enter keeps the model the CLI last used, and
- * `--model` (or Codex's `-m`) skips the question. Any other arguments are forwarded to the CLI.
+ * `--model` (or Codex's `-m`) skips the question. Right after the agent is chosen, when it has a
+ * flag for skipping permission prompts (every built-in does; a custom agent only with bypassArgs),
+ * it asks whether to turn them off, Yes by default; `--keep-permissions` answers no, and with no
+ * terminal to ask on they are off. Any other arguments are forwarded to the CLI.
  * Self-contained, Node built-ins only: install.js copies this file to ~/.plan2code/bin/ and
  * points the global shims at it.
  *
@@ -51,6 +54,7 @@ const IS_MAC = process.platform === 'darwin';
 const PICK_FOLDER_FLAG = '--pick-folder';
 const CLI_FLAG = '--cli';
 const CLASSIC_FLAG = '--classic';
+const KEEP_PERMISSIONS_FLAG = '--keep-permissions';
 // Where install.js puts the desktop app, and the one file in it the launcher starts.
 // PLAN2CODE_APP names a different executable (the tests start a stand-in this way).
 const APP_DIR = path.join(os.homedir(), '.plan2code', 'app');
@@ -127,7 +131,10 @@ function printIntro() {
   console.log('');
 }
 
-/** The CLIs that can open the dashboard, in menu order. `args` builds the full argument list. */
+/**
+ * The CLIs that can open the dashboard, in menu order. `args(extra, { bypass })` builds the full
+ * argument list, with `bypassArgs` in it only when permission prompts are off.
+ */
 const CLIS = [
   {
     id: 'claude',
@@ -135,7 +142,10 @@ const CLIS = [
     install: 'npm i -g @anthropic-ai/claude-code',
     installUrl: 'https://code.claude.com/docs/en/setup',
     prompt: '/plan2code',
-    args: (extra) => ['/plan2code', '--permission-mode', 'bypassPermissions', ...extra],
+    bypassArgs: ['--permission-mode', 'bypassPermissions'],
+    args(extra, { bypass } = {}) {
+      return ['/plan2code', ...(bypass ? this.bypassArgs : []), ...extra];
+    },
   },
   {
     id: 'devin',
@@ -143,7 +153,10 @@ const CLIS = [
     install: 'https://devin.ai',
     installUrl: 'https://docs.devin.ai/work-with-devin/devin-cli',
     prompt: '/plan2code',
-    args: (extra) => ['--permission-mode', 'bypass', ...extra, '--', '/plan2code'],
+    bypassArgs: ['--permission-mode', 'bypass'],
+    args(extra, { bypass } = {}) {
+      return [...(bypass ? this.bypassArgs : []), ...extra, '--', '/plan2code'];
+    },
   },
   {
     id: 'codex',
@@ -151,8 +164,11 @@ const CLIS = [
     install: 'npm i -g @openai/codex',
     installUrl: 'https://github.com/openai/codex',
     prompt: '$plan2code',
+    bypassArgs: ['--dangerously-bypass-approvals-and-sandbox'],
     // Codex mentions a skill with `$name`; the prompt is its one positional argument.
-    args: (extra) => ['--dangerously-bypass-approvals-and-sandbox', ...extra, '$plan2code'],
+    args(extra, { bypass } = {}) {
+      return [...(bypass ? this.bypassArgs : []), ...extra, '$plan2code'];
+    },
   },
 ];
 
@@ -347,7 +363,8 @@ function customClis(file = USER_AGENTS_FILE, print = Boolean(process.stderr.isTT
     prompt: entry.prompt,
     custom: true,
     entry,
-    args: (extra) => [...buildArgs(entry, { bypass: true, model: modelFrom(extra, entry.id) }), ...withoutModelFlag(extra)],
+    bypassArgs: entry.bypassArgs,
+    args: (extra, { bypass } = {}) => [...buildArgs(entry, { bypass, model: modelFrom(extra, entry.id) }), ...withoutModelFlag(extra)],
   }));
 }
 
@@ -705,6 +722,25 @@ async function chooseCli(requested) {
     if (/^\d+$/.test(answer) && byNumber) return { cli: byNumber };
     if (byName) return { cli: byName };
     console.log(c.yellow(`Type a number from 1 to ${installed.length}, or press Enter for ${installed[defaultIndex].label}.`));
+  }
+}
+
+/**
+ * Whether to start the agent with permission prompts off. Asked only for an agent that has a flag
+ * for it (a custom agent may have none), with Yes as the default; `--keep-permissions` answers no
+ * without asking, and with no terminal to ask on the prompts are off.
+ */
+async function chooseBypass(cli, keep) {
+  if (!cli.bypassArgs || !cli.bypassArgs.length || keep) return false;
+  if (!process.stdin.isTTY) return true;
+  console.log('');
+  console.log(c.bright(`Turn ${cli.label}'s permission prompts off?`));
+  console.log(c.dim(`It would read, edit and run commands in this project without asking (${cli.bypassArgs.join(' ')}).`));
+  for (;;) {
+    const answer = (await ask(`Prompts off? ${c.green('[Y/n]')}: `)).trim().toLowerCase();
+    if (!answer || answer === 'y' || answer === 'yes') return true;
+    if (answer === 'n' || answer === 'no') return false;
+    console.log(c.yellow('Type n to keep the prompts, or press Enter to turn them off.'));
   }
 }
 
@@ -1117,8 +1153,9 @@ async function launch() {
   }
   const fromShortcut = argv.includes(PICK_FOLDER_FLAG);
   const classic = argv.includes(CLASSIC_FLAG);
+  const keepPermissions = argv.includes(KEEP_PERMISSIONS_FLAG);
   const { cli: requestedCli, rest: extraArgs } = takeCliFlag(
-    argv.filter((arg) => arg !== PICK_FOLDER_FLAG && arg !== CLASSIC_FLAG)
+    argv.filter((arg) => arg !== PICK_FOLDER_FLAG && arg !== CLASSIC_FLAG && arg !== KEEP_PERMISSIONS_FLAG)
   );
 
   printIntro();
@@ -1126,6 +1163,11 @@ async function launch() {
   const { cli, code } = await chooseCli(requestedCli);
   if (!cli) return exitWith(code, fromShortcut);
   saveState({ lastCli: cli.id });
+
+  // The app has its own permission tick on its launch card, so the question is only for the
+  // terminal flow (asked late if the app fails to start).
+  const app = !classic && hasDisplay() ? findApp() : null;
+  let bypass = app ? null : await chooseBypass(cli, keepPermissions);
 
   let cwd = process.cwd();
   if (fromShortcut) {
@@ -1145,13 +1187,13 @@ async function launch() {
   if (!hasModelFlag(extraArgs, cli.id)) await chooseModel(cli, extraArgs);
 
   // The app takes over from here when it is installed, a window can open and --classic is absent.
-  const app = !classic && hasDisplay() ? findApp() : null;
   if (app && (await startApp(app, { cwd, cliId: cli.id, model: modelFrom(extraArgs, cli.id) }))) {
     console.log(`Opened the Plan2Code app in ${c.cyan(cwd)} ${c.dim('(run `plan2code --classic` to stay in this terminal)')}`);
     return process.exit(0);
   }
+  if (bypass === null) bypass = await chooseBypass(cli, keepPermissions);
 
-  const args = cli.args(extraArgs);
+  const args = cli.args(extraArgs, { bypass });
   const options = { cwd, stdio: 'inherit', ...(cli.fullPath ? { fromFullPath: true } : {}) };
 
   const child = spawnCommand(cli.path, args, options);

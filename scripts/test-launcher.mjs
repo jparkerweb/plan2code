@@ -156,6 +156,21 @@ test("launcher: Codex gets the bypass flag, the forwarded args, then the $plan2c
   assert.deepEqual(box.argsOf("codex"), ["--dangerously-bypass-approvals-and-sandbox", "--verbose", "$plan2code"]);
 });
 
+test("launcher: --keep-permissions keeps every built-in's permission prompts, and is never forwarded", (t) => {
+  const box = sandbox(["claude", "devin", "codex"]);
+  t.after(box.cleanup);
+  const expected = {
+    claude: ["/plan2code", "--verbose"],
+    devin: ["--verbose", "--", "/plan2code"],
+    codex: ["--verbose", "$plan2code"],
+  };
+  for (const [cli, args] of Object.entries(expected)) {
+    const result = box.run(["--cli", cli, "--keep-permissions", "--verbose"]);
+    assert.equal(result.status, 0, result.stderr);
+    assert.deepEqual(box.argsOf(cli), args, cli);
+  }
+});
+
 test("launcher: --cli codex picks Codex when it is installed beside another CLI", (t) => {
   const box = sandbox(["claude", "codex"]);
   t.after(box.cleanup);
@@ -672,6 +687,19 @@ test("launcher agents: --cli <custom id> starts it with args, the model through 
   // No model chosen and no models flag: the model arguments are left out.
   assert.equal(box.run(["--cli=goose"]).status, 0);
   assert.deepEqual(box.argsOf("goose"), ["--yes", "/plan2code", "--bypass"]);
+  // --keep-permissions leaves bypassArgs out.
+  assert.equal(box.run(["--cli=goose", "--keep-permissions"]).status, 0);
+  assert.deepEqual(box.argsOf("goose"), ["--yes", "/plan2code"]);
+});
+
+test("launcher agents: a custom agent with no bypassArgs is never asked about prompts and starts with its own", (t) => {
+  const box = sandbox(["goose"]);
+  t.after(box.cleanup);
+  writeAgents(box, goose({ bypassArgs: [] }));
+  const result = box.run(["--cli", "goose"]);
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(box.argsOf("goose"), ["--yes", "/plan2code"]);
+  assert.doesNotMatch(result.stdout, /permission prompts off/);
 });
 
 test("launcher agents: the last pick can be a custom id, and the --cli error names custom ids", (t) => {
@@ -701,7 +729,8 @@ test("launcher agents: the model menu is the agent's own models, with no shipped
   assert.equal(hasModelFlag(["--model", "x"], "goose"), true);
   assert.equal(hasModelFlag(["-m", "x"], "goose"), false);
   // A model given on the command line goes through modelArgs, once.
-  assert.deepEqual(cli.args(["--model=m2", "-x"]), ["--yes", "/plan2code", "--model", "m2", "--bypass", "-x"]);
+  assert.deepEqual(cli.args(["--model=m2", "-x"], { bypass: true }), ["--yes", "/plan2code", "--model", "m2", "--bypass", "-x"]);
+  assert.deepEqual(cli.args(["-x"]), ["--yes", "/plan2code", "-x"]);
 });
 
 test("launcher agents: the menu lists the built-ins found first, then the custom agents that resolve", (t) => {
