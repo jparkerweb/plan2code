@@ -82,9 +82,10 @@ Install (`I`) adds `plan2code` as a global command (Advanced `A` → `D` adds ju
 dashboard opens right there, in **Claude Code**, **Devin** or **Codex**. With more than one installed it asks which and
 remembers your pick; `plan2code --cli claude`, `--cli devin` or `--cli codex` skips the question, and `--model <name>`
 chooses the model. It works in cmd, PowerShell, Git Bash, macOS and Linux shells, and needs the
-Claude Code, Devin or Codex CLI on your `PATH`. It starts the agent with permission prompts off
-(`--permission-mode bypassPermissions` in Claude Code, `--permission-mode bypass` in Devin, `--dangerously-bypass-approvals-and-sandbox` in Codex); run
-`claude /plan2code` yourself if you want prompts. The installer then offers a desktop shortcut (answer `y`),
+Claude Code, Devin or Codex CLI on your `PATH`. After you pick the agent it asks whether to turn its
+permission prompts off (Yes by default; `--permission-mode bypassPermissions` in Claude Code, `--permission-mode bypass`
+in Devin, `--dangerously-bypass-approvals-and-sandbox` in Codex, a custom agent's bypass arguments, and no question for a
+custom agent that has none). `plan2code --keep-permissions` keeps the prompts without asking. The installer then offers a desktop shortcut (answer `y`),
 which opens a folder picker first. Uninstalling (`U`) removes both.
 </details>
 
@@ -123,7 +124,7 @@ installed skills disagree.
 The first release is unsigned, so macOS (**Open Anyway** in System Settings, Privacy & Security) or
 Windows (**More info**, then **Run anyway**) may ask you to allow it once. The app starts the agent
 with its normal approval prompts unless you tick the launch card's permission-checks-off option (the
-plain `plan2code` command above, without the app, still starts with checks off by default). Details:
+plain `plan2code` command above, without the app, asks instead, with prompts off by default too). Details:
 [docs/desktop-app.md](docs/desktop-app.md).
 </details>
 
@@ -190,7 +191,9 @@ next check-in, and it never holds up your answers.
 There is more on the page when you need it. Notes on any question can carry screenshots and
 documents. The folder label in the bottom bar opens your workspace, where you add other folders
 as read-only context and point at them by `@name`. The **Notebook** in the top bar is a private pad of your own for the
-folder, in Markdown with pictures, that the agent never sees. The session meter in the top bar turns from green
+folder, in Markdown with pictures, that the agent reads only when you start a workflow from one of its tabs on
+the dashboard and send the box it fills. The **die** beside it opens **Activities**,
+two small games (Snake and Mini golf) to play through a long wait, which pause the moment it is your turn. The session meter in the top bar turns from green
 to red as a session grows long and suggests a fresh one. **Stop session** saves your place and gives
 you the command to carry on later, and **Back to the dashboard** takes you home to pick the next
 step in the same session.
@@ -457,7 +460,7 @@ edits out through the skills CLI.
 
 Core reference:
 
-- **[.readme/web-console.md](.readme/web-console.md)**: the full guide to the web console, from the dashboard to the last sign-off, including the private Notebook in the top bar
+- **[.readme/web-console.md](.readme/web-console.md)**: the full guide to the web console, from the dashboard to the last sign-off, including the private Notebook and Activities in the top bar
 - **[QUICK-REFERENCE.md](QUICK-REFERENCE.md)** — the one-page card: commands, inputs, outputs, decision tree
 - **[.readme/walkthrough.md](.readme/walkthrough.md)** — one feature from a sentence to archived specs, session by session
 - **[AGENTS.md](AGENTS.md)** — architecture and contributor guide for this repo
