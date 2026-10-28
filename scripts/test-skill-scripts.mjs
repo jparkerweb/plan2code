@@ -158,7 +158,7 @@ test("specs status: checklist formats, groups, task markers, numbering, totals, 
     [3, "Web UI", "pending"],
     [4, "Docs", "pending"],
   ]);
-  assert.deepEqual(j.parallelGroups.map((g) => [g.id, g.phases]), [["A", [3, 4]]], "a group labelled sequential is not a parallel group");
+  assert.deepEqual(j.parallelGroups.map((g) => [g.id, g.phases]), [["A", [3, 4]]], "a group labeled sequential is not a parallel group");
   assert.deepEqual(j.totals, { total: 11, complete: 4, assumed: 1, pending: 5, "in-progress": 0, blocked: 1, unknown: 0, completed: 5, incomplete: 5 });
   assert.equal(j.completionPercent, 45);
   assert.equal(j.phases[0].tasks.total, 3, "a named testing task (1.T) counts");

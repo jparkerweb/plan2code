@@ -368,7 +368,7 @@ test("git board view: no control leaks the busy lock, in any state, mode, tab or
       assert.ok(["nav", "action", "done"].includes(gate), `${where}: "${words(c)}" (${c.tag}) has no data-gate`);
       const own = c.attrs["data-own"] === "true";
       if (!controlAllowed(mode, gate)) assert.ok(isOff(c), `${where}: "${words(c)}" is live while busy`);
-      else assert.equal(isOff(c), own, `${where}: "${words(c)}" is ${isOff(c) ? "greyed with no reason of its own" : "live despite its own reason"}`);
+      else assert.equal(isOff(c), own, `${where}: "${words(c)}" is ${isOff(c) ? "grayed with no reason of its own" : "live despite its own reason"}`);
       checked++;
     }
     const done = all.filter((c) => c.textContent === "Done with git");
@@ -512,7 +512,7 @@ test("git board host: the host draws the board only through drawGitBoard, and th
 
 // The commit table's ticks and the click that re-seeds them are page tests now
 // ("the commit table keeps the person's ticks across an agent post, and a click
-// re-seeds them" and its neighbours in test-web-console-page-git.mjs).
+// re-seeds them" and its neighbors in test-web-console-page-git.mjs).
 
 test("git board docs: the agent prose, Help topic and readme describe the tabbed board", () => {
   const read = (p) => fs.readFileSync(new URL(p, import.meta.url), "utf8");

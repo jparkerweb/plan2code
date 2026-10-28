@@ -25,6 +25,7 @@ import {
   handOff,
   PROTECTED_CONSOLE_FILES,
   readOverview,
+  readSpecFile,
   removeCleanup,
   removeScratch,
   removeSessions,
@@ -256,6 +257,10 @@ test("a working agent's line falls back to its headline note", () => {
 
 test("the terminal line is the exact text every command hands back", () => {
   assert.equal(terminalLine("http://127.0.0.1:1/s/abc/"), "→ Look at the web console: http://127.0.0.1:1/s/abc/");
+  // Under the desktop app the page is beside the terminal: no address to print.
+  const inApp = terminalLine("http://127.0.0.1:1/s/abc/", { PLAN2CODE_IN_APP: "1" });
+  assert.equal(inApp.includes("127.0.0.1"), false, "no address under the app");
+  assert.equal(terminalLine("http://127.0.0.1:1/s/abc/", {}), "→ Look at the web console: http://127.0.0.1:1/s/abc/");
 });
 
 test("repoRoots reads the branch off disk: named, detached, a linked worktree's own, and none", () => {
@@ -439,6 +444,11 @@ test("cleanup finds old sessions and strays in both folders, and keeps every pro
     // Handoffs are Plan2Code's own, however old: swept by age on open, never offered here.
     backdate(put(path.join(plan2code, "handoffs", "2025-01-01-0900-handoff.md")));
     backdate(path.join(plan2code, "handoffs"));
+    // The desktop app and its settings are Plan2Code's own too, however old.
+    backdate(put(path.join(plan2code, "app", "plan2code-app"), "x"));
+    backdate(path.join(plan2code, "app"));
+    backdate(put(path.join(plan2code, "app.json")));
+    backdate(put(path.join(plan2code, "agents.json")));
     // In use right now: a held lock and a temp between its write and rename.
     const live = [put(path.join(consoleDir, "workspaces.json.lock"), ""), put(path.join(plan2code, "models.json.123.tmp"))];
     kept.push(...live);
@@ -454,6 +464,7 @@ test("cleanup finds old sessions and strays in both folders, and keeps every pro
       "session:20250801-101010-aaaaaa",
     ]);
     assert.equal(items.some((i) => i.id === "root:handoffs"), false, "the handoffs folder is never a stray");
+    for (const id of ["root:app", "root:app.json", "root:agents.json"]) assert.equal(items.some((i) => i.id === id), false, `${id} is never a stray`);
     assert.equal(STRAY_GRACE_MS, 60 * 60 * 1000);
     assert.equal(items.find((i) => i.id === "console:p1.json").bytes, 5);
     assert.equal(items.find((i) => i.id === "root:console-dev").kind, "folder");
@@ -552,6 +563,12 @@ function overviewProject() {
   fs.writeFileSync(path.join(root, "specs", "a", "overview.md"), "# Overview A\n");
   fs.writeFileSync(path.join(root, "specs", "a", "phase-1.md"), "- [ ] **Task 1.1:** x\n");
   fs.writeFileSync(path.join(root, "specs", "b", "notes.md"), "notes\n");
+  // Planned, not documented: a Pathfinder map and a live draft beside the
+  // copy Revise plan keeps of the last one.
+  fs.mkdirSync(path.join(root, "specs", "c", "pathfinder"), { recursive: true });
+  fs.writeFileSync(path.join(root, "specs", "c", "pathfinder", "map.md"), "# Map C\n");
+  fs.writeFileSync(path.join(root, "specs", "c", "PLAN-DRAFT-20261020.md"), "# Draft C\n");
+  fs.writeFileSync(path.join(root, "specs", "c", "PLAN-DRAFT-20261020-prev.md"), "# Old draft C\n");
   fs.mkdirSync(path.join(base, "outside"));
   fs.writeFileSync(path.join(base, "outside", "overview.md"), "# SECRET\n");
   return { base, root };
@@ -588,6 +605,22 @@ test("readOverview reads a spec's overview and nothing outside the root", async 
   }
 });
 
+test("readSpecFile reads a spec's map and live plan draft, and names the file", async () => {
+  const { base, root } = overviewProject();
+  try {
+    assert.deepEqual(await readSpecFile(root, "specs/c", "map"), { file: "pathfinder/map.md", text: "# Map C\n" });
+    assert.deepEqual(await readSpecFile(root, "specs/c", "draft"), { file: "PLAN-DRAFT-20261020.md", text: "# Draft C\n" });
+    assert.deepEqual(await readSpecFile(root, "specs/a", "overview"), { file: "overview.md", text: "# Overview A\n" });
+    assert.equal(await readSpecFile(root, "specs/c", "overview"), null);
+    assert.equal(await readSpecFile(root, "specs/a", "map"), null);
+    assert.equal(await readSpecFile(root, "specs/a", "draft"), null);
+    assert.equal(await readSpecFile(root, "specs/c", "phase-1.md"), null, "only the known kinds");
+    assert.equal(await readSpecFile(root, "../outside", "draft"), null);
+  } finally {
+    fs.rmSync(base, { recursive: true, force: true });
+  }
+});
+
 test("GET /overview serves the session's spec, and on the dashboard only a scanned one", async () => {
   const { base, root } = overviewProject();
   const sids = [];
@@ -618,6 +651,16 @@ test("GET /overview serves the session's spec, and on the dashboard only a scann
     assert.equal((await get(d, "?spec=specs/b")).status, 204);
     assert.equal((await get(d, "?spec=specs/../..")).status, 204);
     assert.equal((await get(d, "?spec=specs/not-scanned")).status, 204);
+    // ?file= picks the map or the live draft, and names it for the page.
+    const map = await get(d, "?spec=specs/c&file=map");
+    assert.equal(map.status, 200);
+    assert.equal(map.headers.get("x-spec-file"), encodeURIComponent("pathfinder/map.md"));
+    assert.equal(await map.text(), "# Map C\n");
+    const draft = await get(d, "?spec=specs/c&file=draft");
+    assert.equal(draft.headers.get("x-spec-file"), "PLAN-DRAFT-20261020.md");
+    assert.equal(await draft.text(), "# Draft C\n");
+    assert.equal((await get(d, "?spec=specs/c")).status, 204, "no overview.md yet");
+    assert.equal((await get(d, "?spec=specs/c&file=nope")).status, 204);
   } finally {
     for (const s of sids) cliIn(root, ["stop", "--session", s]);
     fs.rmSync(base, { recursive: true, force: true });
@@ -842,5 +885,38 @@ test("the built skills tree serves the same /app.css as the source console", asy
     assert.equal(await res.text(), asset("app.css").body.toString("utf8"));
   } finally {
     execFileSync(process.execPath, [path.join(built, "console.mjs"), "stop", "--session", json.sid], { env: ENV, cwd: ROOT });
+  }
+});
+
+// The desktop app's webview opens no new windows, so a link the page shows
+// there goes through /open-link, which hands it to the default browser. Only
+// http and https: anything else would be the page asking the machine to run
+// whatever a link names.
+test("/open-link takes an http or https link and refuses every other kind", async () => {
+  const res = cli(["open", "--workflow", "git", "--no-open"]);
+  const m = res.json.url.match(/^(http:\/\/127\.0\.0\.1:\d+)\/s\/([^/]+)\//);
+  const cookie = cookieFor(m[1], m[2]);
+  const open = (url) =>
+    fetch(`${m[1]}/open-link`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie, origin: m[1], connection: "close" },
+      body: JSON.stringify({ url }),
+    });
+  try {
+    const ok = await open("https://github.com/jparkerweb/plan2code/compare/main...feature?expand=1");
+    assert.equal(ok.status, 200);
+    assert.deepEqual(await ok.json(), { ok: true, url: "https://github.com/jparkerweb/plan2code/compare/main...feature?expand=1" });
+    for (const bad of ["javascript:alert(1)", "file:///C:/Windows/System32/calc.exe", "ms-settings:", "not a link", "", 42]) {
+      const no = await open(bad);
+      assert.equal(no.status, 400, `${JSON.stringify(bad)} was not refused`);
+    }
+    const foreign = await fetch(`${m[1]}/open-link`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie, origin: "https://evil.example", connection: "close" },
+      body: JSON.stringify({ url: "https://example.com/" }),
+    });
+    assert.notEqual(foreign.status, 200, "another site's page cannot open links through the console");
+  } finally {
+    cli(["stop", "--session", res.json.sid]);
   }
 });

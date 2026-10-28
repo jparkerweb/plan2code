@@ -51,6 +51,7 @@ import { readPrHosts, resetSubagentCursor } from "./settings.mjs";
 import { WORKFLOWS, isWorkflow } from "./public/skills.js";
 import { startsClean } from "./public/hops.js";
 import { snapshot } from "./git-repo.mjs";
+import { announcePage, currentSession, inAppSignal } from "./in-app.mjs";
 import { handoffsDir, listHandoffs, removeHandoffs, staleHandoffs } from "./handoffs.mjs";
 import {
   readPatch,
@@ -72,7 +73,7 @@ export function useCli(cli) {
 
 // PLAN2CODE_CONSOLE_TRACE=1 prints where the time goes, to stderr: the
 // start path is what stands between someone and their first look at the page,
-// and it is only worth optimising with numbers in hand.
+// and it is only worth optimizing with numbers in hand.
 const TRACE = Boolean(process.env.PLAN2CODE_CONSOLE_TRACE);
 function trace(what) {
   if (TRACE) process.stderr.write(`trace ${Math.round(performance.now())}ms ${what}\n`);
@@ -95,6 +96,10 @@ function leavePointer() {
   }
 }
 
+// Printed on every `open`: this console can be framed by the desktop app (the
+// embed mode, and the in-app signal). The app refuses a console without it.
+const EMBED_API = 1;
+
 export async function cmdOpen() {
   trace("open: start");
   // A workflow the console does not know is refused first, before the pointer,
@@ -105,6 +110,20 @@ export async function cmdOpen() {
     die(`unknown workflow "${args.workflow}"; one of: ${WORKFLOWS.join(", ")}`, 2);
   }
   leavePointer();
+  // Under the desktop app the page belongs in the app's window: never the
+  // browser, and (unless a session was named) the app's own session, so one
+  // console serves the whole window. A session that is gone is simply not
+  // reused: the open below makes a new one and announces its address.
+  const inApp = inAppSignal();
+  if (inApp) {
+    args["no-open"] = true;
+    const named = args.resume || args.session;
+    if (!named) {
+      // The window knows its current session; the environment's is only a fallback.
+      const sid = path.basename((await currentSession(inApp)) || inApp.sid || "");
+      if (sid && fs.existsSync(sessionDir(sid))) args.resume = sid;
+    }
+  }
   const { project, worktree, branch } = repoRoots();
   reapHandles(project);
   trace("open: project found");
@@ -369,13 +388,16 @@ export async function cmdOpen() {
   // Reuse a live server if one is already serving this session.
   if (existing && (await reusable)) {
     if (!args["no-open"]) openBrowser(existing.url);
+    const inAppReport = await tellApp(inApp, { url: existing.url, sid, workflow: state.workflow });
     const [owed, subCursor] = subagentsOwed();
     print({
       ok: true,
       sid,
       session: dir,
       url: existing.url,
+      embed: EMBED_API,
       reused: true,
+      ...inAppReport,
       pendingResult: carried,
       terminalLine: terminalLine(existing.url),
       workspace,
@@ -416,12 +438,18 @@ export async function cmdOpen() {
   const notes = [];
   if (remote.note) notes.push(remote.note);
   if (carried) notes.push("Answers are already waiting. Run `wait` to collect them.");
+  const inAppReport = await tellApp(inApp, { url: handle.url, sid, workflow: state.workflow });
+  if (inAppReport.inApp && !inAppReport.announced) {
+    notes.push(`The app did not take the page. Open ${handle.url} in a browser, or press Reload in the app.`);
+  }
   const [owed, subCursor] = subagentsOwed();
   print({
     ok: true,
     sid,
     session: dir,
     url: handle.url,
+    embed: EMBED_API,
+    ...inAppReport,
     port: handle.port,
     pid: handle.pid,
     pendingResult: carried,
@@ -435,6 +463,16 @@ export async function cmdOpen() {
   advanceSubagents(dir, subCursor);
   // After the print, never before it: the page and the link wait for nothing.
   sweep();
+}
+
+/**
+ * Under the app, say which page to show; outside it, nothing and no keys.
+ * The report rides on `open`'s output so the agent can tell what happened.
+ */
+async function tellApp(signal, page) {
+  if (!signal) return {};
+  const announced = signal.announce ? await announcePage(signal, page) : false;
+  return { inApp: true, announced };
 }
 
 /**

@@ -52,9 +52,14 @@ test("stress: 200 posts interleaved with 200 chat messages lose no message from 
       const c = spawn(process.execPath, [CONSOLE_CLI, "post", "--session", s.sid, "--file", patchFile], {
         env: ENV,
         cwd: ROOT,
-        stdio: "ignore",
+        stdio: ["ignore", "ignore", "pipe"],
       });
-      c.on("exit", (code) => resolve(code));
+      let err = "";
+      c.stderr.on("data", (d) => (err += d));
+      c.on("exit", (code) => {
+        if (code !== 0) process.stderr.write(`[repro] exit ${code}: ${err}\n`);
+        resolve(code);
+      });
     });
   try {
     for (let block = 0; block < 20; block++) {
@@ -242,7 +247,7 @@ test("nextAbout: pick sets about, drop and sent clear it, the old Ask events do 
   assert.equal(JSON.stringify(picked), before, "prev is never mutated");
 });
 
-test("nextAbout: an old { about, frozen, dropped } tracker normalises to the new shape", () => {
+test("nextAbout: an old { about, frozen, dropped } tracker normalizes to the new shape", () => {
   const old = { about: CARD_Q1, frozen: true, dropped: false };
   assert.deepEqual(nextAbout(old, { type: "leave-ask" }), { history: [], about: CARD_Q1 });
   assert.deepEqual(nextAbout({ frozen: false, dropped: true }, {}), { history: [], about: null });

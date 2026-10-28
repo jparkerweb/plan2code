@@ -310,7 +310,7 @@ test("reorderTabs needs exactly the current ids once each, and setLastTab rememb
   refusal(() => readNotepad(folder, "../x"), "no-such-tab");
 });
 
-test("deleteTab: the folder goes, last moves to a neighbour, and the last tab left leaves an empty list", () => {
+test("deleteTab: the folder goes, last moves to a neighbor, and the last tab left leaves an empty list", () => {
   const folder = freshFolder();
   const [a, b, c] = ["A", "B", "C"].map((n) => createTab(folder, n).id);
   saveNote(folder, b, "bye");
@@ -915,6 +915,79 @@ test("the tab routes refuse bad bodies, unknown tabs and every foreign caller", 
   assert.equal(del.status, 200);
   assert.equal(fs.existsSync(tabDir(ROOT, made.body.id)), false);
   assert.equal((await getJson(s, "/notepad")).body.last, other.id);
+});
+
+test("markTabSent records, replaces and validates a tab's last send, and listTabs and readNotepad return it", () => {
+  const folder = freshFolder();
+  const a = tabOf(folder, "A");
+  const b = tabOf(folder, "B");
+  assert.deepEqual(listTabs(folder).tabs, [{ id: a, name: "A" }, { id: b, name: "B" }], "no sent until a send");
+
+  const first = store.markTabSent(folder, a, { workflow: "plan" });
+  assert.equal(first.id, a);
+  assert.deepEqual(Object.keys(first.sent).sort(), ["at", "workflow"]);
+  assert.equal(first.sent.workflow, "plan");
+  assert.ok(!Number.isNaN(Date.parse(first.sent.at)));
+  assert.deepEqual(listTabs(folder).tabs[0], { id: a, name: "A", sent: first.sent });
+  assert.equal(listTabs(folder).tabs[1].sent, undefined, "only the sent tab carries it");
+
+  const second = store.markTabSent(folder, a, { workflow: "revise-plan", spec: "specs/lunch-vote" });
+  assert.deepEqual(second.sent, { workflow: "revise-plan", spec: "specs/lunch-vote", at: second.sent.at }, "replaces the earlier one");
+  const read = readNotepad(folder, a);
+  assert.deepEqual(read.tabs[0].sent, second.sent);
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(notepadFolder(folder), "tabs.json"), "utf8")).tabs[a].sent, second.sent);
+
+  // A rename keeps the record; it is the tab's, not the name's.
+  renameTab(folder, a, "A2");
+  assert.deepEqual(listTabs(folder).tabs[0].sent, second.sent);
+
+  for (const bad of [{}, { workflow: "implement" }, { workflow: "plan", spec: "lunch-vote" }, { workflow: "plan", spec: "specs/a/b" }, { workflow: "plan", spec: 5 }]) {
+    refusal(() => store.markTabSent(folder, b, bad), "bad-sent");
+  }
+  refusal(() => store.markTabSent(folder, "ffffffffffff", { workflow: "plan" }), "no-such-tab");
+  refusal(() => store.markTabSent(folder, "nope", { workflow: "plan" }), "no-such-tab");
+  assert.equal(listTabs(folder).tabs[1].sent, undefined, "refusals recorded nothing");
+});
+
+test("a sent record that does not hold up is dropped on read, never the index", () => {
+  const folder = freshFolder();
+  const a = tabOf(folder, "A");
+  const file = path.join(notepadFolder(folder), "tabs.json");
+  const index = JSON.parse(fs.readFileSync(file, "utf8"));
+  index.tabs[a].sent = { workflow: "implement", at: "2026-10-27T00:00:00.000Z" };
+  fs.writeFileSync(file, JSON.stringify(index));
+  assert.deepEqual(listTabs(folder).tabs, [{ id: a, name: "A" }]);
+});
+
+test("POST /notepad/tab/sent answers 200, 400 and 404, and GET /notepad carries the record", async (t) => {
+  const s = openSession();
+  t.after(() => fs.rmSync(notepadFolder(ROOT), { recursive: true, force: true }));
+  fs.rmSync(notepadFolder(ROOT), { recursive: true, force: true });
+  const post = async (body) => {
+    const res = await s.send("/notepad/tab/sent", body);
+    return { status: res.status, body: await res.json() };
+  };
+  const id = (await (await s.send("/notepad/tab", { name: "Idea" })).json()).id;
+  const ok = await post({ id, workflow: "quick-task" });
+  assert.equal(ok.status, 200);
+  assert.equal(ok.body.ok, true);
+  assert.equal(ok.body.sent.workflow, "quick-task");
+  assert.deepEqual((await getJson(s, "/notepad")).body.tabs, [{ id, name: "Idea", sent: ok.body.sent }]);
+  assert.deepEqual(await post({ id, workflow: "document" }), { status: 400, body: { error: "bad-sent" } });
+  assert.deepEqual(await post({ id, workflow: "revise-plan", spec: "../x" }), { status: 400, body: { error: "bad-sent" } });
+  assert.deepEqual(await post({ id: "ffffffffffff", workflow: "plan" }), { status: 404, body: { error: "no-such-tab" } });
+  assert.deepEqual(await post({ workflow: "plan" }), { status: 404, body: { error: "no-such-tab" } });
+
+  const body = JSON.stringify({ id, workflow: "plan" });
+  const noCookie = await fetch(`${s.base}/notepad/tab/sent`, { method: "POST", headers: { "content-type": "application/json", connection: "close" }, body });
+  assert.equal(noCookie.status, 403);
+  const foreign = await fetch(`${s.base}/notepad/tab/sent`, {
+    method: "POST",
+    headers: { "content-type": "application/json", cookie: s.cookie, origin: "http://evil.example", connection: "close" },
+    body,
+  });
+  assert.equal(foreign.status, 403);
+  assert.equal((await getJson(s, "/notepad")).body.tabs[0].sent.workflow, "quick-task", "the refused calls changed nothing");
 });
 
 test("pictures through ?tab=: upload, thumb, fetch and delete, each under the tab that holds it", async (t) => {

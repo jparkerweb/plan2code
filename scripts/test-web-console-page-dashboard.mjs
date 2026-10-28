@@ -11,15 +11,16 @@ import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { pageSuite, openSession, tempProject, textOf } from "./page-test-helpers.mjs";
-import { cli, until, CONSOLE_CLI, HOME } from "./web-console-test-helpers.mjs";
+import { pageSuite, openSession, tempProject, textOf, styleOf } from "./page-test-helpers.mjs";
+import { cli, until, CONSOLE_CLI, HOME, JPEG } from "./web-console-test-helpers.mjs";
+import { addImage, createTab, deleteTab, markTabSent, saveNote } from "../src/web-console/notepads.mjs";
 
 const suite = pageSuite(test);
 
 // A project that is set up (AGENTS.md) with one spec holding a Plan draft.
 // A PLAN-DRAFT whose Status line says only "Draft" (no "Resume at Phase N")
 // scans as `planned`, which the picker labels "Ready to document". Plan is
-// still lit for it (only exploring, fixed and documented-or-later grey Plan
+// still lit for it (only exploring, fixed and documented-or-later gray Plan
 // out); Document is the state's own next step.
 const DRAFT_PROJECT = {
   "AGENTS.md": "# AGENTS.md\n\nA small demo project.\n",
@@ -60,7 +61,7 @@ test("a Plan launch from the dashboard carries the picked spec, and its resume t
 
   // The Plan card is lit for this spec; picking it asks to confirm.
   const planCard = main.getByRole("button").filter({ has: s.page.locator("code", { hasText: /^\/plan2code-1-plan$/ }) });
-  assert.equal(await planCard.isEnabled(), true, "the Plan card is greyed for a drafted plan");
+  assert.equal(await planCard.isEnabled(), true, "the Plan card is grayed for a drafted plan");
   await planCard.click();
   await main.getByRole("button", { name: "Start Plan" }).click();
 
@@ -146,14 +147,14 @@ test("a fixed bug is hidden while unavailable workflows are, dimmed when they sh
   assert.equal(await demo.getAttribute("aria-current"), "true", "the picker opens on the plan, not the newer fixed bug");
   assert.equal(await chipFor(main, "old-bug").count(), 0, "the fixed bug's chip is hidden while unavailable workflows are");
 
-  // Switched off: the chip shows, labelled and dimmed, and still not picked.
+  // Switched off: the chip shows, labeled and dimmed, and still not picked.
   await hideUnavailable(main, false);
   const bug = chipFor(main, "old-bug");
   await bug.waitFor();
   assert.match(await textOf(bug), /Bug fixed/i, "the chip names its state");
   assert.doesNotMatch(await textOf(bug), /bug fixed\s+bug fixed/i, "the scan's detail does not repeat the label");
   assert.equal(await bug.getAttribute("aria-current"), "false", "the fixed bug is not picked");
-  const opacity = await bug.evaluate((b) => Number(getComputedStyle(b).opacity));
+  const opacity = Number(await styleOf(bug, "opacity"));
   assert.ok(opacity < 1, `the fixed bug's chip is dimmed (opacity ${opacity})`);
   assert.equal(await demo.getAttribute("aria-current"), "true", "the plan stays picked");
 });
@@ -180,8 +181,8 @@ test("a fixed bug's Delete asks once with no name to type, while any other spec 
 
   // The fixed bug: a visible Delete, its own warning, and one press sends it.
   const del = main.getByRole("button", { name: "Delete the spec old-bug" });
-  assert.equal(await textOf(del), "Delete", "a fixed bug's Delete is a labelled button");
-  await del.click();
+  assert.equal(await textOf(del), "Delete", "a fixed bug's Delete is a labeled button");
+  await del.click({ force: true });
   await dialog.waitFor();
   assert.match(await textOf(s.page.locator("#delete-warn")), /The bug is fixed, so this only clears the write-up/);
   assert.equal(await textOf(go), "Delete it");
@@ -203,17 +204,17 @@ const pickedChip = (main, name) => main.locator('button[aria-current="true"]', {
 
 // What a person would see break: picking another target leaves the launch
 // aimed at the old spec, or the cards lit for it.
-test("picking Start from scratch instead of a spec greys Document, and a launch then carries no spec", async (t) => {
+test("picking Start from scratch instead of a spec grays Document, and a launch then carries no spec", async (t) => {
   const s = await openSession(await suite.browser(), { t, workflow: "dashboard", payload: MENU, project: tempProject(DRAFT_PROJECT) });
   const main = await toTheMenu(s);
   const document = lightOf(main, "/plan2code-2-document");
   await pickedChip(main, "demo").waitFor();
   assert.equal(await document.isEnabled(), true, "Document is lit for the drafted spec");
 
-  // From scratch there is no draft to document: the card greys.
+  // From scratch there is no draft to document: the card grays.
   await chipFor(main, "Start from scratch").click();
   await pickedChip(main, "Start from scratch").waitFor();
-  assert.equal(await document.isDisabled(), true, "Document is greyed with no spec picked");
+  assert.equal(await document.isDisabled(), true, "Document is grayed with no spec picked");
   assert.equal(await chipFor(main, "demo").getAttribute("aria-current"), "false");
 
   // Back on the spec it is lit again; then from scratch once more to launch.
@@ -227,6 +228,51 @@ test("picking Start from scratch instead of a spec greys Document, and a launch 
   const launch = collect(s).actions.find((a) => a.i === "__launch");
   assert.equal(launch.skill, "plan2code-1-plan");
   assert.ok(!launch.spec, `a launch from scratch names no spec: ${JSON.stringify(launch)}`);
+});
+
+// What a person would see break: a spec not documented yet offers nothing to
+// read, or its Map and Plan draft tabs stay up for a spec that has an
+// overview (or for no spec at all).
+test("a spec not documented yet shows its Map and Plan draft as tabs, and a documented one shows only Overview", async (t) => {
+  const project = tempProject({
+    ...DRAFT_PROJECT,
+    "specs/demo/pathfinder/map.md": "# Map: demo\n\n**Status:** Cleared\n\nWho votes for lunch.\n",
+    "specs/done/overview.md": "# Overview: done\n\nAll written up.\n",
+    "specs/done/phase-1.md": "- [ ] **Task 1.1:** x\n",
+  });
+  const s = await openSession(await suite.browser(), { t, workflow: "dashboard", payload: MENU, project });
+  const main = await toTheMenu(s);
+  const tab = (name) => s.page.locator("#views .view-tab", { hasText: new RegExp(`^${name}$`) });
+
+  await chipFor(main, "demo").click();
+  await pickedChip(main, "demo").waitFor();
+  await tab("Map").waitFor();
+  await tab("Plan draft").waitFor();
+  assert.equal(await tab("Overview").count(), 0, "no overview.md, no Overview tab");
+
+  await tab("Plan draft").click();
+  await main.getByRole("heading", { name: "Plan draft", exact: true }).waitFor();
+  assert.match(await textOf(main), /specs\/demo\/PLAN-DRAFT-20261017\.md · read-only/);
+  assert.match(await textOf(main), /A lunch vote for the team\./);
+  await tab("Map").click();
+  await main.getByRole("heading", { name: "Map", exact: true }).waitFor();
+  assert.match(await textOf(main), /specs\/demo\/pathfinder\/map\.md · read-only/);
+  assert.match(await textOf(main), /Who votes for lunch\./);
+
+  // The documented spec trades both for its Overview, and the open Map tab,
+  // gone with them, sends the person home.
+  await tab("Dashboard").click();
+  await chipFor(main, "done").click();
+  await pickedChip(main, "done").waitFor();
+  await tab("Overview").waitFor();
+  assert.ok(
+    await until(async () => (await tab("Map").count()) === 0 && (await tab("Plan draft").count()) === 0),
+    "the Map and Plan draft tabs go"
+  );
+
+  await chipFor(main, "Start from scratch").click();
+  await pickedChip(main, "Start from scratch").waitFor();
+  assert.ok(await until(async () => (await tab("Overview").count()) === 0), "no spec, no spec tabs");
 });
 
 // What a person would see break: the intro cannot be skipped, or it replays
@@ -257,9 +303,9 @@ function handoffProject(t) {
   return { project, made };
 }
 
-async function openHandoffMenu(t) {
+async function openHandoffMenu(t, env) {
   const { project, made } = handoffProject(t);
-  const s = await openSession(await suite.browser(), { t, workflow: "dashboard", payload: MENU, project });
+  const s = await openSession(await suite.browser(), { t, workflow: "dashboard", payload: MENU, project, env });
   const main = await toTheMenu(s);
   const chip = chipFor(main, "Lunch vote");
   await chip.waitFor();
@@ -270,9 +316,9 @@ async function openHandoffMenu(t) {
 // project has, or picking it still shows the skill cards beside the preview.
 test("a handoff shows as a dashed Handoff chip even with no spec, and picking it swaps the cards for a preview of four buttons", async (t) => {
   const { main, chip } = await openHandoffMenu(t);
-  assert.match(await textOf(chip), /Handoff/i, "the chip is labelled Handoff");
+  assert.match(await textOf(chip), /Handoff/i, "the chip is labeled Handoff");
   assert.equal(await chip.getAttribute("aria-current"), "false", "a handoff is offered, not picked for you");
-  assert.equal(await chip.evaluate((b) => getComputedStyle(b).borderTopStyle), "dashed", "the chip's border is dashed");
+  assert.equal(await styleOf(chip, "borderTopStyle"), "dashed", "the chip's border is dashed");
   assert.ok(await lightOf(main, "/plan2code-1-plan").isVisible(), "the cards show before a handoff is picked");
 
   await chip.click();
@@ -320,6 +366,20 @@ test("Read it all opens the handoff's text, and Copy puts a prompt naming its fi
   assert.ok(text.includes(made.id), `the prompt names the handoff's file: ${text}`);
 });
 
+// Under the app, "a new conversation" is this console's own wording for what
+// New Session does, so the handoff's copy button says "another session"
+// instead, still naming the same clipboard prompt.
+test("under the app, a handoff's copy button says Copy for another session, and still works", async (t) => {
+  const { s, main, chip } = await openHandoffMenu(t, { PLAN2CODE_IN_APP: "1" });
+  await s.context.grantPermissions(["clipboard-read", "clipboard-write"], { origin: new URL(s.url).origin });
+  await chip.click();
+  assert.equal(await main.getByRole("button", { name: "Copy for a new conversation" }).count(), 0, "no classic-mode wording under the app");
+  const copy = main.getByRole("button", { name: "Copy for another session" });
+  await copy.click();
+  await main.getByRole("button", { name: "Copied" }).waitFor();
+  await copy.waitFor();
+});
+
 // What a person would see break: Delete asks for a name, or sends a spec
 // delete instead of the handoff's.
 test("a handoff's Delete asks once in its own dialog and sends a delete naming the handoff", async (t) => {
@@ -364,6 +424,39 @@ test("the update banner shows on the dashboard only, and its dismiss hides it", 
 
   await main.getByRole("button", { name: "Dismiss until next time" }).click();
   await banner.waitFor({ state: "hidden" });
+});
+
+// Under the desktop app (PLAN2CODE_IN_APP=1) the app's own top bar already
+// nags about a skills/app mismatch and updates in one click, so this banner
+// (a copy-pasted shell command) must never show there, newer release or not.
+test("under the app, the update banner never shows", async (t) => {
+  aNewerReleaseExists(t);
+  const dash = await openSession(await suite.browser(), {
+    t,
+    workflow: "dashboard",
+    payload: MENU,
+    project: tempProject(DRAFT_PROJECT),
+    env: { PLAN2CODE_IN_APP: "1" },
+  });
+  const main = await toTheMenu(dash);
+  await main.getByText("One spec on disk, with a plan drafted.").waitFor();
+  assert.equal(await main.getByText("UPDATE AVAILABLE").count(), 0, "no banner under the app");
+});
+
+// Same reasoning for the dashboard's own red-meter banner: under the app it
+// must point at New Session, never at starting a new console session.
+test("under the app, the dashboard's red-meter banner points at New Session", async (t) => {
+  const dash = await openSession(await suite.browser(), {
+    t,
+    workflow: "dashboard",
+    payload: MENU,
+    project: tempProject(DRAFT_PROJECT),
+    env: { PLAN2CODE_IN_APP: "1" },
+  });
+  const main = await toTheMenu(dash);
+  dash.post({ run: { event: "implement-phase", id: "phase-1", tasks: 30 } });
+  await main.getByText("Press New Session at the top of the window to start the agent fresh.").waitFor();
+  assert.equal(await main.getByText("Starting a new console session").count(), 0, "no classic-mode wording under the app");
 });
 
 // What a person would see break: two dashboard tabs of one session, on
@@ -444,4 +537,141 @@ test("a quick-task build's waiting pane points at its Plan tab, and a plan sessi
   const otherPane = other.page.locator("#main > .waiting-pane");
   await otherPane.waitFor();
   assert.equal(await otherPane.getByRole("button", { name: "Plan", exact: true }).count(), 0, "a plan session has no live task list to point at");
+});
+
+// A project with a drafted plan (demo), a documented spec (ready) and one
+// paused mid-build with a Plan change brief waiting (paused).
+const NOTE_PROJECT = {
+  ...DRAFT_PROJECT,
+  "specs/ready/overview.md": "# Overview\n\n## Phase Checklist\n\n- [ ] Phase 1: One\n",
+  "specs/ready/phase-1.md": "# Phase 1\n\n- [ ] **Task 1.1:** One\n",
+  "specs/paused/overview.md": "# Overview\n\n## Phase Checklist\n\n- [/] Phase 1: One\n",
+  "specs/paused/phase-1.md":
+    "# Phase 1\n\n- [x] **Task 1.1:** One\n- [ ] **Task 1.2:** Two\n\n## Notes\n\n### Paused 2026-10-27\n**Plan change:** add a phase first\n",
+};
+
+const noteSwitch = (main) => main.getByRole("checkbox", { name: "Start with a note from your Notebook" });
+
+// Picks `chip` in the picker, opens `command`'s card and says whether its
+// confirm pane offers the switch; Back returns to the menu.
+async function offersNote(main, chip, command) {
+  await chipFor(main, chip).click();
+  await pickedChip(main, chip).waitFor();
+  const card = lightOf(main, command);
+  if (!(await card.isVisible()) || (await card.isDisabled())) return null;
+  await card.click();
+  await main.getByRole("button", { name: "Back" }).waitFor();
+  const shows = (await noteSwitch(main).count()) === 1;
+  await main.getByRole("button", { name: "Back" }).click();
+  await main.getByRole("heading", { name: "What are we doing today?" }).waitFor();
+  return shows;
+}
+
+test("the Notebook switch shows on Start fresh for Pathfinder, Plan and Quick Task, and on Revise plan only with no brief waiting", async (t) => {
+  const s = await openSession(await suite.browser(), { t, workflow: "dashboard", payload: MENU, project: tempProject(NOTE_PROJECT) });
+  const main = await toTheMenu(s);
+  await hideUnavailable(main, false);
+  for (const command of ["/plan2code-0-pathfinder", "/plan2code-1-plan", "/plan2code-quick-task"]) {
+    assert.equal(await offersNote(main, "Start from scratch", command), true, `${command} on Start fresh`);
+  }
+  assert.equal(await offersNote(main, "demo", "/plan2code-1-plan"), false, "Plan on a picked spec");
+  assert.equal(await offersNote(main, "ready", "/plan2code-1b-revise-plan"), true, "Revise plan with no brief waiting");
+  assert.equal(await offersNote(main, "paused", "/plan2code-1b-revise-plan"), false, "Revise plan with a brief waiting");
+  assert.equal(await offersNote(main, "ready", "/plan2code-3-implement"), false, "Implement never");
+  assert.equal(await offersNote(main, "Start from scratch", "/plan2code-xray"), false, "a utility never");
+});
+
+test("the switch lists the Notebook's tabs beside a preview: an empty tab grayed, five ticks at most, a Long tab note, and + note: on the command", async (t) => {
+  const project = tempProject(DRAFT_PROJECT);
+  const s = await openSession(await suite.browser(), { t, workflow: "dashboard", payload: MENU, project });
+  createTab(s.project, "Empty");
+  const big = createTab(s.project, "Big").id;
+  const small = createTab(s.project, "Small").id;
+  saveNote(s.project, big, "# Big idea\n\n" + "x".repeat(52 * 1024));
+  for (let i = 0; i < 7; i++) addImage(s.project, big, JPEG);
+  saveNote(s.project, small, "A small **idea**.");
+  markTabSent(s.project, small, { workflow: "plan" });
+
+  const main = await toTheMenu(s);
+  await chipFor(main, "Start from scratch").click();
+  await pickedChip(main, "Start from scratch").waitFor();
+  await lightOf(main, "/plan2code-0-pathfinder").click();
+  const toggle = noteSwitch(main);
+  assert.equal(await toggle.isChecked(), false, "off by default");
+  const cmd = main.locator(".confirm-cmd");
+  assert.equal(await cmd.locator(".confirm-cmd-note").isHidden(), true);
+  await toggle.check();
+
+  const tabs = main.locator(".confirm-note-tabs");
+  await tabs.locator(".confirm-note-tab").nth(2).waitFor();
+  const tab = (name) => tabs.locator(".confirm-note-tab", { has: s.page.locator(".confirm-note-tab-name", { hasText: new RegExp(`^${name}$`) }) });
+  assert.equal(await tab("Empty").isDisabled(), true, "an empty tab cannot be picked");
+  assert.ok(parseFloat(await styleOf(tab("Empty"), "opacity")) < 1, "and is grayed");
+  assert.equal(await tab("Big").isEnabled(), true);
+  assert.equal(await tab("Small").locator(".notepad-sent-badge").count(), 1, "a sent tab shows its badge");
+  assert.equal(await tab("Big").locator(".notepad-sent-badge").count(), 0);
+
+  // Small: its text, rendered, and no Long tab note.
+  await tab("Small").click();
+  const preview = main.locator(".confirm-note-preview");
+  await preview.locator("strong", { hasText: "idea" }).waitFor();
+  assert.equal(await preview.locator(".confirm-note-long").count(), 0);
+  assert.equal(await textOf(cmd.locator(".confirm-cmd-note")), "+ note: Small");
+
+  // Big: over 50 KB, seven pictures, the first five ticked.
+  await tab("Big").click();
+  await preview.locator(".md-h", { hasText: "Big idea" }).waitFor();
+  assert.match(await textOf(preview.locator(".confirm-note-long")), /^Long tab: /);
+  assert.equal(await textOf(cmd.locator(".confirm-cmd-note")), "+ note: Big");
+  const ticks = preview.locator(".confirm-note-pic input[type=checkbox]");
+  assert.equal(await ticks.count(), 7);
+  const states = async () => ticks.evaluateAll((bs) => bs.map((b) => (b.checked ? "x" : b.disabled ? "-" : "o")).join(""));
+  assert.equal(await states(), "xxxxx--", "the first five ticked, no more can be");
+  await ticks.nth(1).uncheck();
+  await until(async () => (await states()) === "xoxxxoo", 3000);
+  await ticks.nth(6).check();
+  await until(async () => (await states()) === "x-xxx-x", 3000);
+
+  // Off again: no note on the command line.
+  await noteSwitch(main).uncheck();
+  await until(async () => await cmd.locator(".confirm-cmd-note").isHidden(), 3000);
+  assert.equal(await tabs.count(), 0);
+});
+
+test("the switch reads the Notebook again when it closes, and starts off again after Back", async (t) => {
+  const s = await openSession(await suite.browser(), { t, workflow: "dashboard", payload: MENU, project: tempProject(DRAFT_PROJECT) });
+  const keep = createTab(s.project, "Keep").id;
+  const gone = createTab(s.project, "Gone").id;
+  saveNote(s.project, keep, "first words");
+  saveNote(s.project, gone, "soon deleted");
+
+  const main = await toTheMenu(s);
+  await chipFor(main, "Start from scratch").click();
+  await pickedChip(main, "Start from scratch").waitFor();
+  await lightOf(main, "/plan2code-1-plan").click();
+  await noteSwitch(main).check();
+  const tabs = main.locator(".confirm-note-tabs");
+  const tab = (name) => tabs.locator(".confirm-note-tab", { has: s.page.locator(".confirm-note-tab-name", { hasText: new RegExp(`^${name}$`) }) });
+  await tab("Keep").click();
+  const preview = main.locator(".confirm-note-preview");
+  await preview.getByText("first words").waitFor();
+  assert.equal(await preview.getAttribute("role"), "region");
+
+  // Changed in the Notebook while the pane is open: closing it reads again.
+  saveNote(s.project, keep, "second words");
+  deleteTab(s.project, gone);
+  await s.page.click("#btn-notepad");
+  await s.page.locator("#notepad-modal[open]").waitFor();
+  await s.page.click("#notepad-close");
+  await preview.getByText("second words").waitFor();
+  await until(async () => (await tab("Gone").count()) === 0, 5000);
+  assert.equal(await textOf(main.locator(".confirm-cmd-note")), "+ note: Keep", "the pick survives a read that still has its tab");
+
+  // Back, then the same card again: the switch is off and nothing is picked.
+  await main.getByRole("button", { name: "Back" }).click();
+  await main.getByRole("heading", { name: "What are we doing today?" }).waitFor();
+  await lightOf(main, "/plan2code-1-plan").click();
+  assert.equal(await noteSwitch(main).isChecked(), false);
+  assert.equal(await main.locator(".confirm-cmd-note").isHidden(), true);
+  assert.equal(await tabs.count(), 0);
 });

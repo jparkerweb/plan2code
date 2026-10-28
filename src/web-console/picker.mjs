@@ -249,7 +249,7 @@ export function pickerCommand(start, prompt) {
  * Show the picker and settle on what the person did: `{ path }` for a pick,
  * `{ cancelled: true }` when they closed it, `{ error }` when the picker
  * itself failed or this OS has none. Pickers exit 0 or 1 with nothing printed
- * when cancelled.
+ * when canceled.
  */
 export function pickFolder(start, prompt, { spawnImpl = spawn } = {}) {
   const picker = pickerCommand(start, prompt);

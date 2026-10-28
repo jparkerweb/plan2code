@@ -11,11 +11,13 @@ import {
   handoffShape,
   ALL_DONE_LEAD,
   ALL_DONE_REST,
+  ALL_DONE_REST_IN_APP,
   handoffText,
   DASHBOARD_COMMAND,
   resumeCommand,
   afterFinishButton,
   DASHBOARD_NOTE,
+  DASHBOARD_NOTE_IN_APP,
   turnGate,
   homeButtonState,
   HOME_REPLY,
@@ -42,6 +44,7 @@ import {
   isDashboard,
 } from "../selectors.js";
 import { docSavedNote, downloadDoc } from "../doc-files.js";
+import { startNewSession } from "../app-bridge.js";
 import { pendingNotes } from "../uploads.js";
 
 // The end of the session, and the only screen in this page whose job is to
@@ -88,25 +91,43 @@ function renderCloseGuide(shape, fin = {}) {
   const title = el("h3", "handoff-guide-title", "Before you close this");
   title.id = "handoff-guide-title";
   panel.appendChild(title);
+  // Under the app this reads differently: there is one window, not a tab, and
+  // the app's own New Session button already starts the agent fresh in one
+  // click, so nothing here asks anyone to close a session or open another.
   const rows = [
-    ["safe", "Safe to close", "This tab is only a window: whatever this session wrote is on disk, and nothing here needs you."],
+    [
+      "safe",
+      "Safe to close",
+      page.inApp
+        ? "This window is only a view: whatever this session wrote is on disk, and nothing here needs you."
+        : "This tab is only a window: whatever this session wrote is on disk, and nothing here needs you.",
+    ],
     [
       "fresh",
       "Start fresh",
-      shape === "paused"
-        ? stopWarning()
-          ? "Restart your agent window, or close the old session and start a new one. The command above starts it again."
-          : "Restart your agent window, or close the old session and start a new one. Your saved place is picked up by the resume command above."
-        : "Restart your agent window, or close the old session and start a new one. A new session starts from clean context. This one is full of this step's instructions, so continuing in it is slower and can confuse the next step.",
+      page.inApp
+        ? "Press New Session at the top of the window to start the agent fresh."
+        : shape === "paused"
+          ? stopWarning()
+            ? "Restart your agent window, or close the old session and start a new one. The command above starts it again."
+            : "Restart your agent window, or close the old session and start a new one. Your saved place is picked up by the resume command above."
+          : "Restart your agent window, or close the old session and start a new one. A new session starts from clean context. This one is full of this step's instructions, so continuing in it is slower and can confuse the next step.",
     ],
     [
       "carry",
       "Carry on",
+      // The app's terminal panel runs the agent itself, so a slash command
+      // still goes there, not into some other "new session" or "new
+      // conversation" that does not exist under the app.
       shape === "all-done"
-        ? `In the new session, start from the dashboard with \`${DASHBOARD_COMMAND}\`.`
+        ? page.inApp
+          ? `In the terminal panel, start from the dashboard with \`${DASHBOARD_COMMAND}\`.`
+          : `In the new session, start from the dashboard with \`${DASHBOARD_COMMAND}\`.`
         : shell
           ? `Run the command above in your terminal, then start the next step from the dashboard with \`${DASHBOARD_COMMAND}\`.`
-          : `Paste the command above in the new session, or start from the dashboard with \`${DASHBOARD_COMMAND}\`.`,
+          : page.inApp
+            ? `Paste the command above into the terminal panel, or start from the dashboard with \`${DASHBOARD_COMMAND}\`.`
+            : `Paste the command above in the new session, or start from the dashboard with \`${DASHBOARD_COMMAND}\`.`,
     ],
   ];
   const list = el("ul", "handoff-guide-rows");
@@ -160,7 +181,10 @@ export function renderHandoff(fin) {
   const shape = handoffShape(fin);
   if (shape === "all-done") {
     const done = el("div", "handoff-done");
-    done.appendChild(md(`${ALL_DONE_LEAD} ${ALL_DONE_REST}`, "md handoff-done-text"));
+    done.appendChild(md(`${ALL_DONE_LEAD} ${page.inApp ? ALL_DONE_REST_IN_APP : ALL_DONE_REST}`, "md handoff-done-text"));
+    // The command still works under the app: its terminal panel runs the
+    // agent itself, so pasting this there reaches the dashboard exactly as
+    // it would in a plain terminal.
     const text = handoffText({ command: DASHBOARD_COMMAND });
     const row = el("div", "handoff-command");
     const code = el("code", "handoff-code", text);
@@ -182,7 +206,9 @@ export function renderHandoff(fin) {
         "handoff-where",
         fin.where ||
           (command.startsWith("/")
-            ? "Run this in the terminal where you started Plan2Code, in a new conversation:"
+            ? page.inApp
+              ? "Paste this into the terminal panel below:"
+              : "Run this in the terminal where you started Plan2Code, in a new conversation:"
             : "Run this in your terminal:")
       )
     );
@@ -195,6 +221,17 @@ export function renderHandoff(fin) {
     row.appendChild(code);
     row.appendChild(copyButton(text, "btn small handoff-copy", code));
     step.appendChild(row);
+    // Under the app a clean start is the bar's New Session: one press, with
+    // the command already on the clipboard to paste into the new terminal.
+    if (page.inApp && command.startsWith("/") && !page.gone) {
+      const fresh = el("div", "handoff-newsession");
+      const press = el("button", "btn small", "Start a New Session");
+      press.type = "button";
+      press.addEventListener("click", () => startNewSession(text));
+      fresh.appendChild(press);
+      fresh.appendChild(el("p", "handoff-note", "The command above is copied first: paste it into the terminal panel once the new session opens."));
+      step.appendChild(fresh);
+    }
     const next = continueOffer(fin);
     if (next && continueLive()) step.appendChild(renderContinueOffer(next));
     if (text !== command) {
@@ -213,7 +250,12 @@ export function renderHandoff(fin) {
     if (shape === "next") {
       const offerDash = dashboardLive(fin);
       if (offerDash) card.appendChild(renderDashboardOffer(false));
-      if (!(offerDash && page.gone)) {
+      // Under the app this paragraph never shows: renderCloseGuide's own
+      // "carry" row already says the same thing ("Paste the command above
+      // into the terminal panel, or start from the dashboard with
+      // `/plan2code`"), right below this card, so repeating it here would
+      // be the third mention of the one action on this screen.
+      if (!page.inApp && !(offerDash && page.gone)) {
         card.appendChild(
           textWithCode(
             "p",
@@ -303,9 +345,13 @@ function renderReviewOffer(offer) {
       el(
         "p",
         "review-offer-text",
-        asked
-          ? "The session closed before the review could start. To run it now, use this in the terminal, in a new conversation:"
-          : "This session has closed, so the review cannot start from here any more. To run it, use this in the terminal, in a new conversation:"
+        page.inApp
+          ? asked
+            ? "The session closed before the review could start. To run it now, paste this into the terminal panel:"
+            : "This session has closed, so the review cannot start from here any more. To run it, paste this into the terminal panel:"
+          : asked
+            ? "The session closed before the review could start. To run it now, use this in the terminal, in a new conversation:"
+            : "This session has closed, so the review cannot start from here any more. To run it, use this in the terminal, in a new conversation:"
       )
     );
     const text = "/plan2code-review";
@@ -422,6 +468,19 @@ function renderChangelogOffer() {
 function renderDashboardOffer(primary) {
   const box = el("section", "dashboard-offer");
   if (page.gone) {
+    if (page.inApp) {
+      // The app's own bar already notices a dead console and offers to
+      // reconnect it (its next-step slot, "Reconnect the console"); nothing here
+      // is a command for anyone to run themselves.
+      box.appendChild(
+        el(
+          "p",
+          null,
+          "This session has closed. Plan2Code will try to reconnect the console on its own; if it cannot, the app's bar offers Reconnect the console."
+        )
+      );
+      return box;
+    }
     box.appendChild(
       el(
         "p",
@@ -447,7 +506,7 @@ function renderDashboardOffer(primary) {
   go.disabled = disabled;
   go.addEventListener("click", () => sendAfterBuild("dashboard"));
   box.appendChild(go);
-  box.appendChild(textWithCode("p", "dashboard-note", DASHBOARD_NOTE));
+  box.appendChild(textWithCode("p", "dashboard-note", page.inApp ? DASHBOARD_NOTE_IN_APP : DASHBOARD_NOTE));
   return box;
 }
 
@@ -497,6 +556,10 @@ async function sendAfterBuild(kind, launch = null) {
 }
 
 let stoppingHidden = false;
+// The wrapping-up dialog stays up once the stop has landed, saying it is done,
+// until it is closed: someone who pressed Stop and stepped away comes back to
+// an answer rather than to a dialog that quietly went away.
+let stopDoneShown = false;
 
 // A stop is under way if this browser sent one, or if the server is holding
 // one nobody has collected: the second covers a reload on a resumed session,
@@ -690,18 +753,21 @@ async function stopSession(handoff = false) {
 // whether the finish has landed.
 export function renderStopping() {
   const dlg = $("stopping-modal");
+  if (stopDoneShown) return;
   const stopping = page.S && stopInProgress();
   if (!stopping) {
     if (dlg.open) dlg.close();
     return;
   }
   // The finish is the end of it: the hand-off card on the page says the rest.
+  // Shown, the dialog says so and waits to be closed; hidden, it stays hidden.
   if (finish()) {
     page.local.stopping = null;
     saveNow();
-    if (dlg.open) dlg.close();
+    if (dlg.open) showStopDone(stopping.answers);
     return;
   }
+  setStoppingDone(false);
 
   const sent = stopping.answers;
   const collected = !page.pendingResult;
@@ -717,19 +783,7 @@ export function renderStopping() {
     },
     { text: "Saving your place and writing the command to pick it up", state: collected ? (stuck ? "stuck" : "now") : "later" },
   ];
-  const list = $("stop-steps");
-  list.replaceChildren(
-    ...steps.map((s) => {
-      const li = el("li", "is-" + s.state);
-      li.appendChild(
-        s.state === "now"
-          ? el("span", "spinner tiny")
-          : el("span", "stop-mark", s.state === "done" ? "✓" : s.state === "stuck" ? "!" : "·")
-      );
-      li.appendChild(el("span", null, s.text));
-      return li;
-    })
-  );
+  drawStopSteps(steps);
 
   const extra = $("stop-extra");
   extra.replaceChildren();
@@ -738,9 +792,13 @@ export function renderStopping() {
       el(
         "p",
         "stop-note",
-        page.gone
-          ? "The session closed without saying how to pick it up. Your answers and the stop are saved, and the next session collects them. To carry on, run this in the terminal, in a new conversation (or alternatively run `/plan2code` to relaunch the dashboard):"
-          : "Plan2Code is not running right now, so nothing new has been saved yet. Your answers and the stop are held, and the next session collects them. To carry on, run this in the terminal, in a new conversation (or alternatively run `/plan2code` to relaunch the dashboard):"
+        page.inApp
+          ? (page.gone
+              ? "The session closed without saying how to pick it up. Your answers and the stop are saved, and the next session collects them. Paste this into the terminal panel below to carry on:"
+              : "Plan2Code is not running right now, so nothing new has been saved yet. Your answers and the stop are held, and the next session collects them. Paste this into the terminal panel below to carry on:")
+          : page.gone
+            ? "The session closed without saying how to pick it up. Your answers and the stop are saved, and the next session collects them. To carry on, run this in the terminal, in a new conversation (or alternatively run `/plan2code` to relaunch the dashboard):"
+            : "Plan2Code is not running right now, so nothing new has been saved yet. Your answers and the stop are held, and the next session collects them. To carry on, run this in the terminal, in a new conversation (or alternatively run `/plan2code` to relaunch the dashboard):"
       )
     );
     const text = handoffText({ command: resumeCommand(page.S) });
@@ -756,12 +814,54 @@ export function renderStopping() {
         "stop-note",
         agentWorking() && !collected
           ? "Plan2Code is in the middle of something. It stops as soon as that is done."
-          : "This usually takes a moment. You can close the tab if you need to: the command also appears in the terminal."
+          : "This usually takes a moment."
       )
     );
   }
 
   if (!stoppingHidden && !dlg.open) dlg.showModal();
+}
+
+function drawStopSteps(steps) {
+  $("stop-steps").replaceChildren(
+    ...steps.map((s) => {
+      const li = el("li", "is-" + s.state);
+      li.appendChild(
+        s.state === "now"
+          ? el("span", "spinner tiny")
+          : el("span", "stop-mark", s.state === "done" ? "✓" : s.state === "stuck" ? "!" : "·")
+      );
+      li.appendChild(el("span", null, s.text));
+      return li;
+    })
+  );
+}
+
+// The title and the button, between wrapping up and done.
+function setStoppingDone(done) {
+  $("stopping-title").textContent = done ? "Done" : "Wrapping up";
+  $("stopping-hide").textContent = done ? "Close" : "Back to the page";
+}
+
+// The stop has landed: every step ticked, and a line on where the rest is.
+function showStopDone(sent) {
+  stopDoneShown = true;
+  setStoppingDone(true);
+  drawStopSteps([
+    { text: sent ? `Sent your ${sent === 1 ? "answer" : sent + " answers"} and the stop` : "Sent the stop", state: "done" },
+    { text: "Plan2Code picked it up", state: "done" },
+    { text: "Saved your place and wrote the command to pick it up", state: "done" },
+  ]);
+  $("stop-extra").replaceChildren(
+    el("p", "stop-note stop-done-note", "The session is stopped. The page behind this shows what was saved and the command to pick it up.")
+  );
+}
+
+// Closed by its button or Esc: done is read, so the next stop starts fresh.
+function closeStopping() {
+  stoppingHidden = true;
+  stopDoneShown = false;
+  setStoppingDone(false);
 }
 
 // The top bar's way home and Stop, wired once at start-up.
@@ -774,12 +874,12 @@ export function wireEnding() {
   $("stop-handoff").addEventListener("click", () => stopSession(true));
   $("stop-go").addEventListener("click", () => stopSession(false));
   $("stopping-hide").addEventListener("click", () => {
-    stoppingHidden = true;
+    closeStopping();
     $("stopping-modal").close();
   });
   // Esc on a native dialog closes it without our say; count that as hiding, or
   // the next render would open it straight back up.
-  $("stopping-modal").addEventListener("cancel", () => (stoppingHidden = true));
+  $("stopping-modal").addEventListener("cancel", closeStopping);
 }
 
 // The three stop-related controls, drawn again when the agent comes or goes.

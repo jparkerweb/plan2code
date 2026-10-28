@@ -80,7 +80,9 @@ terminal — that path loses nothing, and they can switch either way at any time
    first so the page says what you are doing.
 4. Tell the person, in one line, the link and how many questions are waiting.
    While the session is open, end every terminal message with the latest
-   `terminalLine`, verbatim.
+   `terminalLine`, verbatim. When `open` printed `"inApp":true` the page is
+   already in the desktop app's window: never print the link (here, after a
+   resume or anywhere else), only the count; `terminalLine` leaves it out too.
 
 Keep `sid`: every later command takes `--session <sid>`.
 
@@ -318,6 +320,11 @@ An option is `{ "k": "A", "text": "short label", "detail": "the trade-off", "rec
   it, with a one-line summary in `placeholder`. A resumed map, PLAN-DRAFT or
   checkpoint gets no idea card. Only the box's text comes back; never mention
   templates in the terminal.
+- **Fill from a Notebook tab:** on a `text` item, `"fill": "note"` (its only
+  value; any other kind or value is exit 3) has the page fill the first open one
+  once, with the tab's text and ticked pictures, when the person started from a
+  Notebook tab. You read it only when they send that box (Send, or Stop or
+  Back to the dashboard, which carry ready answers).
 - **Recommend only when you genuinely know better and can say why.** "Which
   format survives Excel?" is yours; "Who is this for?" is not — there a
   recommendation is an anchor people rubber-stamp. At most one per question.
@@ -382,6 +389,10 @@ A patch that breaks one is refused, exit `3`, with the reason:
 7. **`run`, `folderIssue` and `helpers` are well formed** (their topic files).
 8. **A doc's `version` never goes back.**
 9. **A finish `command` has no placeholders** (`<` or `>`).
+10. **Every note gets a reply.** A card whose thread ends with the person's own
+    words stays that way until a patch adds an agent reply to it; settling or
+    reopening it does not count. Exempt once the item is deleted, or the whole
+    session is ending.
 
 ---
 

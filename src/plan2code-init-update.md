@@ -71,7 +71,7 @@ The `Failure log` section below is a recording of mistakes made by previous AI A
 
 When you make a mistake, get corrected, or discover something about this codebase that wasn't written down:
 
-1. Add one line to the `Failure log` below, in the imperative, describing the correct behaviour.
+1. Add one line to the `Failure log` below, in the imperative, describing the correct behavior.
 2. Keep it specific to this repo. General advice belongs nowhere.
 3. If this fix is a workflow rather than a rule, put it in `.claude/skills/` and link it from here.
 4. Include the change in the same commit and mention it in your summary.
@@ -156,7 +156,7 @@ Present the user with update options:
 | Testing | Commands? Fixtures? Mocking? |
 | Environment | Local/CI/deploy? Env vars/files? |
 | Rules | Project-wide or specific? Why? |
-| Failure Log | What went wrong? Correct behaviour (imperative, one line)? Merge into an entry on the same topic if one exists; over 17 entries, propose what to prune (rule 7). |
+| Failure Log | What went wrong? Correct behavior (imperative, one line)? Merge into an entry on the same topic if one exists; over 17 entries, propose what to prune (rule 7). |
 | Other | "Tell me what to add." |
 | Sync & Maintain | Scope: all surfaces or specific? Then follow the Sync & Maintain section. |
 | Review | Per section: "Still accurate?" |

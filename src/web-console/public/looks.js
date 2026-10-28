@@ -4,10 +4,12 @@
 // `looks` is a live binding: every file reads the current object, and only
 // this file replaces it.
 
-import { DEFAULT_ACCENT, soundPrefs, DEFAULT_CARD_WIDTH, ACCENTS, cardWidth, soundKey } from "./palette.js";
+import { DEFAULT_ACCENT, soundPrefs, DEFAULT_CARD_WIDTH, ACCENTS, accentId, cardWidth, soundKey } from "./palette.js";
 import { normalizeRole, ROLE_NOT_SET } from "./starters.js";
 import { bootData, hooks } from "./state.js";
 import { el } from "./render.js";
+import { tellApp } from "./app-bridge.js";
+import { ACTIVITIES, bestKey, memoKey } from "./activities.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -29,6 +31,13 @@ export const DEFAULT_LOOKS = {
   ...soundPrefs(null),
   width: DEFAULT_CARD_WIDTH,
   hideUnavailable: true,
+  // Activities: the top bar's die, the game last picked, and one best score
+  // per listed game (activityBestSnake), each a flat key for cleanLooks().
+  hideActivities: false,
+  lastActivity: "",
+  ...Object.fromEntries(ACTIVITIES.map((a) => [bestKey(a.id), 0])),
+  // And one memo per game (activityMemoSnake): Snake's surprises found.
+  ...Object.fromEntries(ACTIVITIES.map((a) => [memoKey(a.id), 0])),
 };
 
 export let looks = { ...DEFAULT_LOOKS };
@@ -39,12 +48,22 @@ export let looksReady = false;
 
 export function adoptLooks(saved) {
   looks = { ...DEFAULT_LOOKS, ...saved };
-  if (!ACCENTS[looks.accent]) looks.accent = DEFAULT_LOOKS.accent;
+  looks.accent = accentId(looks.accent);
   if (!["system", "light", "dark"].includes(looks.theme)) looks.theme = DEFAULT_LOOKS.theme;
   if (typeof looks.sound !== "boolean") looks.sound = DEFAULT_LOOKS.sound;
   Object.assign(looks, soundPrefs(looks));
   if (typeof looks.hideUnavailable !== "boolean") looks.hideUnavailable = DEFAULT_LOOKS.hideUnavailable;
   looks.width = cardWidth(looks.width);
+  if (typeof looks.hideActivities !== "boolean") looks.hideActivities = DEFAULT_LOOKS.hideActivities;
+  if (typeof looks.lastActivity !== "string") looks.lastActivity = DEFAULT_LOOKS.lastActivity;
+  // A best score is a whole number of points, never below none.
+  for (const a of ACTIVITIES) {
+    const key = bestKey(a.id);
+    const n = Number(looks[key]);
+    looks[key] = Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
+    const memo = Number(looks[memoKey(a.id)]);
+    looks[memoKey(a.id)] = Number.isFinite(memo) && memo > 0 ? Math.floor(memo) : 0;
+  }
   if (saved && typeof saved === "object" && Object.hasOwn(saved, "role")) looks.role = normalizeRole(saved.role);
   else delete looks.role;
 }
@@ -129,6 +148,9 @@ const effectiveTheme = () => (looks.theme === "system" ? (systemDark() ? "dark" 
 
 export function applyLooks() {
   const root = document.documentElement;
+  // The desktop app's bar lights its buttons in the same highlight. That bar
+  // is always dark, so it gets the dark shades whatever this page's theme is.
+  tellApp("looks", { accent: ACCENTS[looks.accent].dark });
   // The server's stand-in for the saved accent, which only has to last until
   // this runs. From here on the colors are set below, and a stale rule left
   // switched on would win over "Back to default".
@@ -208,10 +230,17 @@ export function renderSwatches() {
     box.disabled = !looks.sound;
   }
   $("looks-role").value = looks.role ?? ROLE_NOT_SET;
+  $("looks-activities").checked = !looks.hideActivities;
 }
 
 // "Back to default": every look returns to its default, but the role is
-// marked as asked and the welcome stays seen.
+// marked as asked, the welcome stays seen, and the Activities' best scores
+// and last pick stay (only Reset best scores clears those).
 export function resetLooks() {
-  looks = { ...DEFAULT_LOOKS, role: ROLE_NOT_SET, welcomeSeen: looks.welcomeSeen };
+  const kept = { lastActivity: looks.lastActivity };
+  for (const a of ACTIVITIES) {
+    kept[bestKey(a.id)] = looks[bestKey(a.id)];
+    kept[memoKey(a.id)] = looks[memoKey(a.id)];
+  }
+  looks = { ...DEFAULT_LOOKS, ...kept, role: ROLE_NOT_SET, welcomeSeen: looks.welcomeSeen };
 }

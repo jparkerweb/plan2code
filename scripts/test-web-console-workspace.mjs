@@ -251,7 +251,7 @@ test("workspace: the original can be renamed and described but never removed; ot
   }
 });
 
-test("workspace: browse returns the picked folder, or cancelled, and is hidden when the session looks remote", async () => {
+test("workspace: browse returns the picked folder, or canceled, and is hidden when the session looks remote", async () => {
   const picked = tempFolder();
   const echo = consoleSession(["--workflow", "plan"], { env: { PLAN2CODE_PICKER_ECHO: picked } });
   const cancel = consoleSession(["--workflow", "plan"], { env: { PLAN2CODE_PICKER_ECHO: "-" } });

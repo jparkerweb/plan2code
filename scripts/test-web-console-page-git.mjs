@@ -14,7 +14,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
-import { pageSuite, openSession, tempProject, textOf, itemCard } from "./page-test-helpers.mjs";
+import { pageSuite, openSession, tempProject, textOf, itemCard, scrollCard } from "./page-test-helpers.mjs";
 import { until } from "./web-console-test-helpers.mjs";
 
 const suite = pageSuite(test);
@@ -74,7 +74,7 @@ test("each git tab keeps its own scroll place, across a tab switch and an agent 
   const column = () => page.locator("#main").evaluate((el) => el.scrollTop);
   await tab("Changes").click();
   await page.getByRole("tabpanel").getByText("src/app.js", { exact: true }).waitFor();
-  await page.locator("#main").evaluate((el) => (el.scrollTop = 120));
+  await scrollCard(page.locator("#main"), 120);
   const changesAt = await column();
   assert.ok(changesAt > 0, "the board's column scrolls");
   // Another tab opens at its own place, not where Changes was left.

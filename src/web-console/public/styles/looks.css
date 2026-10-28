@@ -40,12 +40,13 @@ a.icon-btn { box-sizing: border-box; text-decoration: none; }
 
 /* ------------------------------------------------------------ swatches */
 
-/* Thirty-two of them: a fixed sixteen-column grid so they sit in two even
-   rows in the wide dialog, and four even rows of eight on a narrow window,
-   rather than leaving a straggler alone on the last line. */
-.swatches { display: grid; grid-template-columns: repeat(16, minmax(0, 34px)); gap: 8px; }
+/* Thirty-eight of them: a fixed nineteen-column grid so they sit in two even
+   rows in the wide dialog (19 x 34px plus gaps fits its 828px body), and rows
+   of ten on a narrow window. Thirty-eight is the cap: one more would leave a
+   straggler on a third row in the wide dialog. */
+.swatches { display: grid; grid-template-columns: repeat(19, minmax(0, 34px)); gap: 8px; }
 @media (max-width: 720px) {
-  .swatches { grid-template-columns: repeat(8, minmax(0, 34px)); }
+  .swatches { grid-template-columns: repeat(10, minmax(0, 34px)); }
 }
 
 .swatch {

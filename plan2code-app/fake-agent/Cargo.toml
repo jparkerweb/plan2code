@@ -1,0 +1,9 @@
+[package]
+name = "fake-agent"
+version = "3.0.0"
+description = "A stand-in agent program for the Plan2Code app's tests"
+edition = "2021"
+publish = false
+
+[dependencies]
+terminal_size = "0.4"

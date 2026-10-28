@@ -2,7 +2,7 @@
 
 /* ------------------------------------------------------------- banner */
 
-/* A pill floated over the footer, centred on the bar. It used to be the top
+/* A pill floated over the footer, centered on the bar. It used to be the top
    grid row, and every time it appeared it pushed the whole page down a track;
    overlaying it means the message lands without the layout moving under the
    reader's cursor. It covers the footer's middle while it is up, which is
@@ -100,8 +100,8 @@
 .ident { display: flex; align-items: baseline; gap: 12px; min-width: 0; }
 
 /* The session meter: a ring that fills with the points and a few words, in
-   the level's colour. Green, amber and red are the page's own done / staged /
-   careful colours, so both themes are covered by the variables. */
+   the level's color. Green, amber and red are the page's own done / staged /
+   careful colors, so both themes are covered by the variables. */
 .meter-slot { position: relative; flex: none; align-self: center; }
 .meter-pill {
   --m: var(--ok);
@@ -146,6 +146,8 @@
 .meter-fresh { margin: 0 0 8px; padding-top: 6px; border-top: 1px solid var(--rule); }
 .meter-fresh[hidden] { display: none; }
 .meter-fresh-text { margin: 0 0 6px; font-size: 12px; color: var(--ink-2); }
+/* Under the app the whole note is one button: a press is the bar's New Session. */
+.meter-fresh-btn { display: block; width: 100%; margin: 2px 0 6px; }
 .meter-fresh-row .handoff-code { flex-basis: 180px; font-size: 12px; padding: 6px 10px; }
 .meter-item-points { flex: none; font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; }
 
@@ -476,8 +478,8 @@ h1 {
 /* ------------------------------------------------------------- footer */
 
 /* Three columns: summary, where, actions. Equal side tracks keep the middle
-   centred on the bar, and because they are tracks rather than an overlay, a
-   long summary wraps and a wide actions block nudges the centre over instead
+   centered on the bar, and because they are tracks rather than an overlay, a
+   long summary wraps and a wide actions block nudges the center over instead
    of either running underneath it. The middle track gives way first: it can
    shrink to an ellipsis, the summary and Send never do. */
 .footer {
@@ -488,7 +490,7 @@ h1 {
 }
 .footer-summary { min-width: 200px; font-size: 13.5px; color: var(--ink-2); }
 .footer-summary strong { color: var(--ink); }
-/* Where this session is running: the workspace label, centred on the bar. A
+/* Where this session is running: the workspace label, centered on the bar. A
    click opens the Workspace dialog. The notification pill sits over the same
    spot and covers it while it shows. */
 .footer-where {

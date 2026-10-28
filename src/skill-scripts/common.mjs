@@ -177,7 +177,7 @@ export function writeIfChanged(file, content) {
   return true;
 }
 
-/** Normalise line endings for parsing; keep the original for writing back. */
+/** Normalize line endings for parsing; keep the original for writing back. */
 export function eol(text) {
   return text.includes("\r\n") ? "\r\n" : "\n";
 }

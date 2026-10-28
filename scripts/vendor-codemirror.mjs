@@ -35,7 +35,7 @@ export const VERSIONS = Object.freeze({
 });
 
 export const HEADER =
-  "/* CodeMirror 6 (state, view, language, commands, lang-markdown), MIT licence, (c) Marijn Haverbeke and others.\n" +
+  "/* CodeMirror 6 (state, view, language, commands, lang-markdown), MIT license, (c) Marijn Haverbeke and others.\n" +
   " * https://codemirror.net/ . Bundled by scripts/vendor-codemirror.mjs; do not edit by hand.\n" +
   " * Versions: " +
   Object.entries(VERSIONS)

@@ -26,7 +26,7 @@ The FIRST thing you do, before anything else in this file — before reading a s
 - Run tests ONLY if a phase task or a task's `Test:` line lists them
 - Do NOT run git commands - provide commit instructions for user
 - Flag blockers clearly - never skip silently
-- Read `references/building-habits.md` when a bug or unexpected failing test turns up, before any task in a Test first phase (its tasks carry `Test:` lines), and before any task that changes no behaviour; follow it.
+- Read `references/building-habits.md` when a bug or unexpected failing test turns up, before any task in a Test first phase (its tasks carry `Test:` lines), and before any task that changes no behavior; follow it.
 - No file tools: output contents in code blocks with a file path header; no filesystem: ask the user to paste file contents
 
 ## Required Context

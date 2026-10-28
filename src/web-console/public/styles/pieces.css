@@ -57,7 +57,7 @@
 }
 
 /* Folded-in sections. A page holds one card; what used to be cards of their
-   own (the "all caught up" lull, the session notes) is a labelled section
+   own (the "all caught up" lull, the session notes) is a labeled section
    inside it instead. */
 .card-lead { margin: 0 0 16px; }
 .card-extra { margin: 18px 0 0; }
@@ -161,12 +161,57 @@
   margin: 4px 0 0; color: var(--ink-2); font-size: 13.5px;
   display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden;
 }
+.sa-strength { margin: 8px 0 0; display: flex; flex-wrap: wrap; gap: 6px; }
+/* A helper's strength and effort, colored by rank: calm teal, amber, violet. */
+.sa-badge {
+  --b: var(--ink-2);
+  --b-soft: var(--panel);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1;
+  padding: 4px 8px;
+  border-radius: 99px;
+  border: 1px solid color-mix(in srgb, var(--b) 35%, transparent);
+  background: var(--b-soft);
+  color: var(--b);
+  white-space: nowrap;
+}
+.sa-badge.lvl-1 { --b: var(--lvl-1); --b-soft: var(--lvl-1-soft); }
+.sa-badge.lvl-2 { --b: var(--lvl-2); --b-soft: var(--lvl-2-soft); }
+.sa-badge.lvl-3 { --b: var(--lvl-3); --b-soft: var(--lvl-3-soft); }
+.sa-bars { display: inline-flex; align-items: flex-end; gap: 1.5px; height: 9px; }
+.sa-bars i { width: 2.5px; border-radius: 1px; background: currentColor; opacity: 0.25; }
+.sa-bars i:nth-child(1) { height: 4px; }
+.sa-bars i:nth-child(2) { height: 6.5px; }
+.sa-bars i:nth-child(3) { height: 9px; }
+.sa-bars i.on { opacity: 1; }
 .sa-result { margin: 8px 0 0; padding-top: 8px; border-top: 1px solid var(--rule); font-size: 13.5px; }
 .sa-pill { display: inline-flex; align-items: center; gap: 6px; flex: none; }
 .sa-pill.is-running { background: var(--accent-soft); color: var(--accent); border-color: var(--accent-line); }
 .sa-pill.is-done { background: var(--ok-soft); color: var(--ok); }
 .sa-pill.is-failed { background: var(--warn-soft); color: var(--warn); }
 .sa-pill .spinner.tiny { width: 10px; height: 10px; }
+/* The Subagents dialog: wide like the Notebook, so it lays its choices out
+   in rows instead of a tall stack. Back to a stack on a narrow window. */
+.modal.looks.subagents { width: min(1000px, 90vw); max-width: none; }
+.subagents-top { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 18px; align-items: start; }
+.modal.looks .subagents-top .modal-ranges + .modal-ranges { margin-top: 0; }
+.subagents-top .looks-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.subagents-top + .modal-ranges { margin-top: 18px; }
+.subagents #subagents-strength-row { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+/* Each strength radio carries the tab's badge; the session's own model has no
+   rank, so it keeps the badge's plain ink. A locked row dims with its radios. */
+.subagents #subagents-strength-row .sa-badge { font-size: 13px; padding: 5px 10px; }
+.subagents #subagents-strength-row label:has(input:checked) { border-color: var(--accent-line); }
+.subagents #subagents-strength-row label:has(input:disabled) .sa-badge { opacity: 0.5; }
+@media (max-width: 720px) {
+  .subagents-top,
+  .subagents-top .looks-row,
+  .subagents #subagents-strength-row { grid-template-columns: 1fr; }
+}
 /* The dialog's number box, themed like the page's other inputs. */
 .subagents input[type="number"] {
   width: 5em; font: inherit; color: var(--ink); background: var(--panel-2);
@@ -441,6 +486,7 @@ input[type="text"].invalid { border-color: var(--warn); }
   margin-bottom: 6px;
 }
 .btn.tiny:hover:not(:disabled) { background: var(--accent-soft); filter: brightness(1.04); }
+.quick-answer + .quick-answer { margin-left: 6px; }
 
 .btn-row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 18px; align-items: center; }
 
@@ -727,7 +773,10 @@ h4.md-h, h5.md-h, h6.md-h { font-size: 15px; }
 .modal.looks .modal-ranges + .modal-ranges { margin-top: 18px; }
 .looks-row { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .looks-row .help { grid-column: 1 / -1; }
-/* The per-cue boxes sit under the master switch, greyed and locked while it
+/* The Desktop app group exists only inside the app; elsewhere it stays hidden
+   in spite of the grid above. */
+.looks-desktop[hidden] { display: none; }
+/* The per-cue boxes sit under the master switch, grayed and locked while it
    is off rather than hidden, so the picks stay visible. */
 .looks-sound-events { display: grid; gap: 8px; }
 .looks-sound-events.is-off { opacity: 0.45; }

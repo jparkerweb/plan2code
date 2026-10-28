@@ -15,16 +15,19 @@ import {
   LOOKS_FILE,
   PUBLIC_DIR,
   SHIPPED_MODELS_FILE,
+  USER_AGENTS_FILE,
   USER_MODELS_FILE,
   appendEvent,
   ensureDir,
   fileStamp,
   nowIso,
   readJson,
+  readText,
   withStateLock,
   writeJsonAtomic,
 } from "./files.mjs";
-import { checkDocument, cleanupFindings, readOverview, removeCleanup } from "./sessions.mjs";
+import { AGENTS_SCHEMA, normalizeAgents, resolveCommand, validateForSave } from "./agents.mjs";
+import { checkDocument, cleanupFindings, readSpecFile, removeCleanup } from "./sessions.mjs";
 import { SHOTS_DIR_NAME, SHOT_NAME, shotType } from "./patches.mjs";
 import { appendChat, currentConversation, pendingChatCount, typedCount } from "./inbox.mjs";
 import { specKey } from "./workspace.mjs";
@@ -39,9 +42,10 @@ import {
 import { DOC_TYPES, MAX_ATTACHMENTS, MAX_DOC_BYTES, docExt, workflowLabel, workflowTitle } from "./public/answers.js";
 import { CHAT_LIMIT, CHAT_MAX_CHARS } from "./public/chat.js";
 import { cleanSetting, offered } from "./public/subagents.js";
-import { ACCENTS, DEFAULT_ACCENT, DEFAULT_CARD_WIDTH, cardWidth } from "./public/palette.js";
+import { DEFAULT_ACCENT, DEFAULT_CARD_WIDTH, accentId, cardWidth } from "./public/palette.js";
 import { SERVABLE, TYPES, asset } from "./static.mjs";
 import { handoffsDir, isHandoffId } from "./handoffs.mjs";
+import { linkToOpen, openLink } from "./open-link.mjs";
 import {
   NotepadError,
   addImage,
@@ -50,6 +54,7 @@ import {
   defaultTabId,
   deleteTab,
   imagePath,
+  markTabSent,
   readNotepad,
   removeImage,
   renameTab,
@@ -82,6 +87,9 @@ const ROUTES = [
   { path: "/pr-host", method: "POST", origin: true, run: prHost },
   { path: "/models", method: "GET", run: modelsGet },
   { path: "/models", method: "POST", origin: true, run: modelsPost },
+  { path: "/agents", method: "GET", run: agentsGet },
+  { path: "/agents", method: "POST", origin: true, run: agentsPost },
+  { path: "/agents/test", method: "POST", origin: true, run: agentsTest },
   { path: "/cleanup", method: "POST", origin: true, run: cleanup },
   { path: "/upload", method: "POST", origin: true, run: upload },
   { path: "/notepad", method: "GET", run: notepadGet },
@@ -94,11 +102,13 @@ const ROUTES = [
   { path: "/notepad/tab/delete", method: "POST", origin: true, run: notepadTabDelete },
   { path: "/notepad/tab/order", method: "POST", origin: true, run: notepadTabOrder },
   { path: "/notepad/tab/last", method: "POST", origin: true, run: notepadTabLast },
+  { path: "/notepad/tab/sent", method: "POST", origin: true, run: notepadTabSent },
   { match: (p, req) => p.startsWith("/notepad/images/") || req.url.startsWith("/notepad/images/"), method: "GET", run: notepadImageGet },
   { match: (p, req) => p.startsWith("/attachments/") || req.url.startsWith("/attachments/"), run: attachment },
   { match: (p, req) => p.startsWith("/shots/") || req.url.startsWith("/shots/"), run: shot },
   { match: (p, req) => p.startsWith("/uploads/") || req.url.startsWith("/uploads/"), run: uploads },
   { path: "/submit", method: "POST", origin: true, run: submit },
+  { path: "/open-link", method: "POST", origin: true, run: openLinkRoute },
   { path: "/chat", method: "POST", origin: true, run: chat },
   { path: "/chat/decision", method: "POST", origin: true, run: chatDecision },
   { path: "/workspace", method: "GET", run: workspaceGet },
@@ -151,17 +161,36 @@ function signIn(req, res, ctx, url) {
   const given = url.pathname.slice(3).replace(/\/$/, "");
   if (!ctx.token || !timingSafeEq(given, ctx.token)) return send(res, 403, "Not found", "text/plain");
   ctx.touch();
+  // Inside the app's frame the page is cross-site, and SameSite=Strict would
+  // never be sent back, so embed mode loosens the cookie to None; Secure, which
+  // loopback counts as a trustworthy origin for. Anywhere else it stays Strict.
   res.writeHead(
     302,
     baseHeaders({
       location: "/",
-      "set-cookie": `${cookieName(ctx)}=${ctx.token}; HttpOnly; SameSite=Strict; Path=/`,
+      "set-cookie": `${cookieName(ctx)}=${ctx.token}; HttpOnly; ${embedAncestor() === "'none'" ? "SameSite=Strict" : "SameSite=None; Secure"}; Path=/`,
     })
   );
   return res.end();
 }
 
 /* -------------------------------------------------------- the page itself */
+
+// PLAN2CODE_EMBED_ORIGIN is an opt-in widening of frame-ancestors for a shell
+// that embeds the page. The whole value must be exactly one allowed origin:
+// a loopback http origin with a real port, or one of the three tauri origins,
+// which name the embedding app page itself (that page is not on 127.0.0.1).
+// Anything else (a list, a wildcard, a bare host, another scheme) is ignored
+// and the directive keeps 'none'.
+function embedAncestor() {
+  const value = process.env.PLAN2CODE_EMBED_ORIGIN;
+  if (!value) return "'none'";
+  if (value === "http://tauri.localhost" || value === "https://tauri.localhost" || value === "tauri://localhost") return value;
+  const m = /^http:\/\/(127\.0\.0\.1|localhost):(\d{1,5})$/.exec(value);
+  if (!m) return "'none'";
+  const port = Number(m[2]);
+  return port >= 1 && port <= 65535 ? value : "'none'";
+}
 
 function page(req, res, ctx) {
   let html;
@@ -176,7 +205,7 @@ function page(req, res, ctx) {
   const csp =
     "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; " +
     "font-src 'self'; connect-src 'self'; media-src 'self'; " +
-    "base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
+    "base-uri 'none'; form-action 'none'; frame-ancestors " + embedAncestor();
   return send(res, 200, html, TYPES[".html"], { "content-security-policy": csp });
 }
 
@@ -238,8 +267,8 @@ function renderIndex(ctx) {
   };
   let htmlAttrs = "";
   if (looks && (looks.theme === "light" || looks.theme === "dark")) htmlAttrs += ` data-theme="${looks.theme}"`;
-  if (looks && looks.accent !== DEFAULT_ACCENT && Object.hasOwn(ACCENTS, String(looks.accent))) {
-    htmlAttrs += ` data-looks-accent="${looks.accent}"`;
+  if (looks && accentId(looks.accent) !== DEFAULT_ACCENT) {
+    htmlAttrs += ` data-looks-accent="${accentId(looks.accent)}"`;
   }
   // The same first-paint reasoning as the accent: a Wide user never sees the
   // column jump from the default width. The value is one of the fixed preset
@@ -275,12 +304,15 @@ function renderIndex(ctx) {
 
 /* ------------------------------------------------------ read-only routes */
 
-// The spec's overview.md, read-only. A dashboard honours ?spec= only for a
-// spec its own scan found; every other workflow reads its own specDir.
-// readOverview() keeps the read inside the project root.
+// One of the spec's files, read-only: overview.md by default, or with
+// ?file=draft or ?file=map the live PLAN-DRAFT or the Pathfinder map. A
+// dashboard honors ?spec= only for a spec its own scan found; every other
+// workflow reads its own specDir. readSpecFile() keeps the read inside the
+// project root, and names the file it read in X-Spec-File.
 function overview(req, res, ctx, url) {
   const state = ctx.readState() || {};
   const asked = url.searchParams.get("spec");
+  const kind = url.searchParams.get("file") || "overview";
   const spec =
     state.workflow === "dashboard"
       ? (state.scan?.specs || []).some((s) => s && s.dir === asked)
@@ -293,10 +325,14 @@ function overview(req, res, ctx, url) {
     res.writeHead(204, baseHeaders({ "cache-control": "no-store" }));
     res.end();
   };
-  readOverview(state.worktree || state.project, spec)
-    .then((text) =>
-      typeof text === "string"
-        ? send(res, 200, text, "text/markdown; charset=utf-8", { "cache-control": "no-store" })
+  readSpecFile(state.worktree || state.project, spec, kind)
+    .then((found) =>
+      found
+        ? send(res, 200, found.text, "text/markdown; charset=utf-8", {
+            "cache-control": "no-store",
+            // Encoded: a header value is bytes, and a file name need not be ASCII.
+            "x-spec-file": encodeURIComponent(found.file),
+          })
         : noOverview()
     )
     .catch(noOverview);
@@ -436,15 +472,15 @@ function subagentsPost(req, res, ctx) {
     if (!state || !offered(state.workflow)) return json(res, 400, { error: "not-offered" });
     const clean = cleanSetting(body);
     if (clean.error) return json(res, 400, { error: clean.error });
-    const { on, instruction, max } = clean;
+    const { on, instruction, max, strength } = clean;
     const current = readSubagentSetting(ctx.dir);
-    const next = { workflow: state.workflow, on, instruction, max };
+    const next = { workflow: state.workflow, on, instruction, max, strength };
     // The store is per project, so another session may have moved it since
     // this one synced: it always takes the person's latest pick. Only a
     // real change to this session's setting bumps what the agent hears.
     const unchanged = Boolean(current && sameSetting(current, next));
     try {
-      saveSubagentStoreEntry(ctx.worktree(), state.workflow, { on, instruction, max });
+      saveSubagentStoreEntry(ctx.worktree(), state.workflow, { on, instruction, max, strength });
       if (!unchanged) writeSubagentSetting(ctx.dir, { ...next, revision: (current ? current.revision : 0) + 1 });
     } catch (e) {
       return json(res, 500, { error: String(e.message) });
@@ -547,6 +583,55 @@ function modelsPost(req, res) {
   });
 }
 
+// The person's custom agents (agents.mjs has the rules). Read as text, not
+// with readJson: a half-written or broken file has to come back as a warning,
+// which readJson would turn into the same nothing as a missing file.
+function agentsGet(req, res) {
+  const raw = fs.existsSync(USER_AGENTS_FILE) ? readText(USER_AGENTS_FILE) : undefined;
+  return json(res, 200, normalizeAgents(raw));
+}
+
+// The whole list from User Preferences, checked, then written atomically. The
+// first failure names the entry and field so the page can mark them, and
+// nothing is written. Top-level keys the file already had are kept. A file
+// holding anything GET /agents could not read (another schema, a skipped
+// entry) is refused with 409 unless the page says `replace: true`, so a save
+// never silently drops what the person wrote there by hand.
+function agentsPost(req, res) {
+  return readBody(req, (err, body) => {
+    if (err) return json(res, err.tooBig ? 413 : 400, { error: err.tooBig ? "too large" : "body must be JSON" });
+    const { agents, error, index, field } = validateForSave(body && body.agents);
+    if (error) return json(res, 400, { error, index, field });
+    if (body.replace !== true && fs.existsSync(USER_AGENTS_FILE)) {
+      const { warnings } = normalizeAgents(readText(USER_AGENTS_FILE));
+      if (warnings.length) {
+        return json(res, 409, { error: "agents.json holds entries this page could not read. Saving replaces them.", warnings });
+      }
+    }
+    const saved = readJson(USER_AGENTS_FILE, null);
+    const kept = saved && typeof saved === "object" && !Array.isArray(saved) ? saved : {};
+    try {
+      ensureDir(path.dirname(USER_AGENTS_FILE));
+      writeJsonAtomic(USER_AGENTS_FILE, { ...kept, schema: AGENTS_SCHEMA, agents });
+    } catch (e) {
+      return json(res, 500, { error: String(e.message) });
+    }
+    return json(res, 200, { ok: true, agents });
+  });
+}
+
+// Where a command would run from, for the form's Test button. Only looks: it
+// never runs the command.
+function agentsTest(req, res) {
+  return readBody(req, (err, body) => {
+    if (err) return json(res, err.tooBig ? 413 : 400, { error: err.tooBig ? "too large" : "body must be JSON" });
+    const command = typeof body?.command === "string" ? body.command.trim() : "";
+    if (!command || command.length > 1024) return json(res, 400, { error: "command must be 1 to 1024 characters" });
+    const found = resolveCommand(command);
+    return json(res, 200, found ? { found: true, path: found } : { found: false });
+  });
+}
+
 // User Preferences -> Cleanup. `{ scan: true }` lists what is not needed in
 // ~/.plan2code and the project's old completed specs; `{ delete: [id] }`
 // removes those of the ids a fresh scan still finds. Never this session,
@@ -569,7 +654,8 @@ function cleanup(req, res, ctx) {
 
 // The person's private notepad for the folder this session runs in, kept by
 // notepads.mjs outside the session. Nothing here writes to ctx.dir or the
-// event log: the agent reads both, and the notepad is never the agent's.
+// event log: the agent reads both, and the agent CLI never imports the store.
+// A tab leaves it only through a send the person starts on the dashboard.
 const notepadRoot = (ctx) => ctx.worktree() || ctx.project;
 
 function notepadFail(res, e) {
@@ -682,6 +768,9 @@ function notepadTabOrder(req, res, ctx) {
 }
 function notepadTabLast(req, res, ctx) {
   return notepadTabRoute((root, body) => setLastTab(root, body.id))(req, res, ctx);
+}
+function notepadTabSent(req, res, ctx) {
+  return notepadTabRoute((root, body) => markTabSent(root, body.id, { workflow: body.workflow, spec: body.spec }))(req, res, ctx);
 }
 
 // Matched on the raw request line too, as /uploads/ is: URL parsing folds
@@ -1004,6 +1093,18 @@ function recordSubmitted(state, actions) {
     // A skip says so on the record, so settling it can record a skip.
     item.submitted = { at, ...rest, ...(type === "skip" ? { skipped: true } : {}) };
   }
+}
+
+// A link the page inside the desktop app cannot open itself (open-link.mjs).
+// http and https only; the page shows the link to paste when this says no.
+function openLinkRoute(req, res) {
+  return readBody(req, (err, body) => {
+    if (err) return json(res, err.tooBig ? 413 : 400, { error: err.tooBig ? "too large" : "body must be JSON" });
+    const href = linkToOpen(body && body.url);
+    if (!href) return json(res, 400, { error: "only http and https links open" });
+    if (!openLink(href)) return json(res, 500, { error: "no browser could be started" });
+    return json(res, 200, { ok: true, url: href });
+  });
 }
 
 function submit(req, res, ctx) {
@@ -1365,7 +1466,7 @@ function authed(req, ctx) {
 }
 
 /**
- * The DNS-rebinding defence, and the highest-value check in this file.
+ * The DNS-rebinding defense, and the highest-value check in this file.
  *
  * Without it, any page the user visits can resolve its own hostname to
  * 127.0.0.1 and then talk to this server as same-origin. That is not

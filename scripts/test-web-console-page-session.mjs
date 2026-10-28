@@ -148,6 +148,30 @@ test("Update CHANGELOG first shows beside Commit it now only when the finish ask
   assert.equal(await main.getByRole("button", { name: "Commit it now" }).isDisabled(), true, "one press locks the other buttons");
 });
 
+// Pressed, then left: the agent's turn had ended, so nothing collects the
+// press. The line stops promising it is opening and offers continue instead.
+test("a finished screen's press that nothing collects says Plan2Code is not running, with continue as a button under the app", async (t) => {
+  const s = await openSession(await suite.browser(), {
+    t,
+    workflow: "quick-task",
+    clock: true,
+    payload: { agent: { status: "working", activity: "Task 1 of 1" } },
+    env: { PLAN2CODE_IN_APP: "1" },
+    init: FAKE_APP_FRAME,
+  });
+  s.post({ finish: { headline: "Quick task done", command: "git add -A && git commit -m x -m y", commit: true, changelog: true, dashboard: true } });
+  const main = s.page.locator("#main");
+  await main.getByRole("button", { name: "Update CHANGELOG first" }).click();
+  await lineSays(s, /^Opening Changelog…/);
+  await s.page.clock.fastForward(200_000);
+  await lineSays(s, /^Plan2Code is not running\. Your choice is saved/);
+  assert.match(await s.page.locator("#planny").getAttribute("class"), /\bis-adrift\b/);
+  const press = s.page.locator("#agent-text .agent-key-btn");
+  assert.equal(await press.textContent(), "continue");
+  await press.click();
+  await until(async () => (await toApp(s, "agent-continue")).length === 1, 5000);
+});
+
 test("Continue here is hidden once the session meter is red, and the command and fresh-session advice stay", async (t) => {
   const s = await openSession(await suite.browser(), { t, workflow: "implement", payload: { agent: { status: "working", activity: "Task 1 of 1" } } });
   // Ten points: a thirty-task phase scores ten, the red level.
@@ -159,6 +183,205 @@ test("Continue here is hidden once the session meter is red, and the command and
   assert.equal(await main.getByRole("button", { name: "Continue here" }).count(), 0, "Continue here at red");
   assert.ok(await main.locator("code").filter({ hasText: /^\/plan2code-3-implement specs\/audit-export\/overview\.md --web$/ }).count(), "the command stays");
   assert.equal(await closeGuide(s).count(), 1, "the fresh-session advice stays");
+});
+
+// Under the desktop app (PLAN2CODE_IN_APP=1) the fresh-session advice in the
+// meter's popover and the dashboard's red banner must point at the app's own
+// New Session, never a command to copy into a terminal that is not there:
+// the popover's is a button filled with the user's highlight color.
+test("under the app, the meter popover and the dashboard's red banner point at New Session, not a command", async (t) => {
+  const s = await openSession(await suite.browser(), {
+    t,
+    workflow: "implement",
+    payload: { agent: { status: "working", activity: "Task 1 of 1" } },
+    env: { PLAN2CODE_IN_APP: "1" },
+  });
+  s.post({ run: { event: "implement-phase", id: "phase-1", tasks: 30 } });
+  const pill = s.page.locator("#meter-pill[data-level='red']");
+  await pill.waitFor();
+  await pill.click();
+  const fresh = s.page.locator("#meter-fresh");
+  const press = fresh.getByRole("button", { name: "Start a New Session" });
+  await press.waitFor();
+  assert.equal(await fresh.locator(".meter-fresh-text").count(), 0, "the button is the whole note, no sentence around it");
+  // The page's highlight, resolved the same way the button's fill is.
+  const [fill, highlight] = await press.evaluate((n) => {
+    const probe = document.createElement("i");
+    probe.style.color = "var(--accent)";
+    n.append(probe);
+    const color = getComputedStyle(probe).color;
+    probe.remove();
+    return [getComputedStyle(n).backgroundColor, color];
+  });
+  assert.equal(fill, highlight, "filled with the user's highlight color");
+  assert.equal(await fresh.locator("code").count(), 0, "no command to copy under the app");
+});
+
+// The desktop app's frame, as the page sees it: a parent that keeps every
+// message posted to it, for the test to read back.
+const FAKE_APP_FRAME = () => {
+  window.__toApp = [];
+  Object.defineProperty(window, "parent", { configurable: true, get: () => ({ postMessage: (m) => window.__toApp.push(m) }) });
+};
+const toApp = (s, kind) => s.page.evaluate((k) => window.__toApp.filter((m) => m.plan2code === k), kind);
+
+test("under the app, the meter popover's Start a New Session button asks the app for its New Session", async (t) => {
+  const s = await openSession(await suite.browser(), {
+    t,
+    workflow: "implement",
+    payload: { agent: { status: "working", activity: "Task 1 of 1" } },
+    env: { PLAN2CODE_IN_APP: "1" },
+    init: FAKE_APP_FRAME,
+  });
+  s.post({ run: { event: "implement-phase", id: "phase-1", tasks: 30 } });
+  const pill = s.page.locator("#meter-pill[data-level='red']");
+  await pill.waitFor();
+  await pill.click();
+  await s.page.locator("#meter-fresh").getByRole("button", { name: "Start a New Session" }).click();
+  await until(async () => (await toApp(s, "new-session")).length === 1, 5000);
+  assert.deepEqual(await toApp(s, "new-session"), [{ plan2code: "new-session" }], "a named request, nothing else in it");
+});
+
+// A menu option the agent marks `fresh` (Pathfinder's "Start fresh") is a clean
+// start: under the app it reads Start New Session and sending it asks the app
+// for its New Session; any other option, and the classic console, do not.
+const FRESH_MENU = {
+  items: [
+    {
+      id: "q1",
+      kind: "menu",
+      title: "Next step",
+      body: "Continue here, or start fresh?",
+      command: "/plan2code-0-pathfinder specs/x/pathfinder",
+      options: [
+        { k: "1", text: "Row-count ceiling" },
+        { k: "2", text: "Start fresh", fresh: true },
+      ],
+    },
+  ],
+  agent: { status: "waiting" },
+};
+
+test("under the app, a fresh menu option reads Start New Session, and picking another option starts nothing", async (t) => {
+  const s = await openSession(await suite.browser(), { t, workflow: "pathfinder", payload: FRESH_MENU, env: { PLAN2CODE_IN_APP: "1" }, init: FAKE_APP_FRAME });
+  assert.equal(await s.page.getByRole("radio", { name: /Start New Session/ }).count(), 1, "the app's wording");
+  assert.equal(await s.page.getByText("Start fresh", { exact: true }).count(), 0, "replaces the classic one");
+  await s.page.getByRole("radio", { name: /Row-count ceiling/ }).check();
+  await s.page.click("#btn-send");
+  await s.page.locator("#btn-send:has-text('Send to Plan2Code')").waitFor();
+  assert.equal((await toApp(s, "new-session")).length, 0, "another option starts nothing");
+});
+
+test("under the app, picking the fresh menu option and sending it posts new-session", async (t) => {
+  const s = await openSession(await suite.browser(), { t, workflow: "pathfinder", payload: FRESH_MENU, env: { PLAN2CODE_IN_APP: "1" }, init: FAKE_APP_FRAME });
+  await s.page.getByRole("radio", { name: /Start New Session/ }).check();
+  await s.page.click("#btn-send");
+  await until(async () => (await toApp(s, "new-session")).length === 1, 5000);
+  assert.deepEqual(await toApp(s, "new-session"), [{ plan2code: "new-session" }], "a named request, nothing else in it");
+});
+
+test("outside the app, a fresh menu option keeps its own wording and starts no session", async (t) => {
+  const s = await openSession(await suite.browser(), { t, workflow: "pathfinder", payload: FRESH_MENU });
+  assert.equal(await s.page.getByRole("radio", { name: /Start New Session/ }).count(), 0);
+  await s.page.getByRole("radio", { name: /Start fresh/ }).check();
+  await s.page.click("#btn-send");
+  await s.page.locator("#btn-send:has-text('Send to Plan2Code')").waitFor();
+});
+
+test("under the app, a finish with a skill command offers Start a New Session; outside it does not", async (t) => {
+  const inApp = await openSession(await suite.browser(), {
+    t,
+    workflow: "implement",
+    payload: { agent: { status: "working", activity: "Task 1 of 1" } },
+    env: { PLAN2CODE_IN_APP: "1" },
+    init: FAKE_APP_FRAME,
+  });
+  inApp.post({ finish: { headline: "A skill next", command: "/plan2code-4-finalize" } });
+  await inApp.page.getByRole("heading", { name: "A skill next" }).waitFor();
+  await inApp.page.getByRole("button", { name: "Start a New Session" }).click();
+  await until(async () => (await toApp(inApp, "new-session")).length === 1, 5000);
+
+  const plain = await openSession(await suite.browser(), { t, workflow: "implement", payload: { agent: { status: "working", activity: "Task 1 of 1" } } });
+  plain.post({ finish: { headline: "A skill next", command: "/plan2code-4-finalize" } });
+  await plain.page.getByRole("heading", { name: "A skill next" }).waitFor();
+  assert.equal(await plain.page.getByRole("button", { name: "Start a New Session" }).count(), 0);
+});
+
+test("under the app, the not running line's continue is a button that asks the app to type it, and the page hands the app its highlight", async (t) => {
+  const s = await openSession(await suite.browser(), {
+    t,
+    workflow: "implement",
+    clock: true,
+    payload: { items: [{ id: "q1", kind: "text", title: "What to call it", body: "A short name." }], agent: { status: "waiting" } },
+    env: { PLAN2CODE_IN_APP: "1" },
+    init: FAKE_APP_FRAME,
+  });
+  const looks = await toApp(s, "looks");
+  assert.ok(looks.length >= 1, "the page told the app its highlight");
+  assert.deepEqual(looks.at(-1).accent, ["#619fe5", "#1a2533", "#0c1117", "#3d5978"], "the default highlight, in its dark shades");
+
+  await s.page.clock.fastForward(200_000);
+  await lineSays(s, /^Plan2Code is not running right now\./);
+  const press = s.page.locator("#agent-text .agent-key-btn");
+  assert.equal(await press.textContent(), "continue");
+  await press.click();
+  await until(async () => (await toApp(s, "agent-continue")).length === 1, 5000);
+  assert.ok(await press.isDisabled(), "held off, so a double press does not type it twice");
+});
+
+// The app's webview opens no new windows, so a link off the page asks the
+// console to open it in the default browser instead, and says where to paste
+// it when that fails.
+const FEEDBACK_URL = "https://github.com/jparkerweb/plan2code/issues/new/choose";
+
+test("under the app, a link off the page goes to the default browser through the console, not a new window", async (t) => {
+  const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_QUESTION, env: { PLAN2CODE_IN_APP: "1" }, init: FAKE_APP_FRAME });
+  const asked = [];
+  await s.page.route("**/open-link", async (route) => {
+    asked.push(route.request().postDataJSON());
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true, url: FEEDBACK_URL }) });
+  });
+  let popups = 0;
+  s.page.context().on("page", () => popups++);
+  await s.page.locator("#btn-feedback").click();
+  await until(async () => asked.length === 1, 5000);
+  assert.deepEqual(asked, [{ url: FEEDBACK_URL }]);
+  await new Promise((r) => setTimeout(r, 300));
+  assert.equal(popups, 0, "no window opened inside the app");
+});
+
+test("under the app, a link the console cannot open is shown to paste into a browser", async (t) => {
+  const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_QUESTION, env: { PLAN2CODE_IN_APP: "1" }, init: FAKE_APP_FRAME });
+  await s.page.route("**/open-link", (route) => route.fulfill({ status: 500, contentType: "application/json", body: "{}" }));
+  await s.page.locator("#btn-feedback").click();
+  await s.page.waitForFunction((u) => document.getElementById("banner").textContent.includes(u), FEEDBACK_URL, { timeout: 5000 });
+  assert.match(await s.page.locator("#banner").innerText(), /paste it into your browser/i);
+});
+
+test("outside the app, a link off the page opens as a plain link, with no detour through the console", async (t) => {
+  const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_QUESTION });
+  let asked = 0;
+  await s.page.route("**/open-link", (route) => {
+    asked++;
+    return route.fulfill({ status: 200, contentType: "application/json", body: "{}" });
+  });
+  const popup = s.page.context().waitForEvent("page", { timeout: 5000 });
+  await s.page.locator("#btn-feedback").click();
+  await (await popup).close();
+  assert.equal(asked, 0);
+});
+
+test("outside the app, the not running line's continue stays a word to type", async (t) => {
+  const s = await openSession(await suite.browser(), {
+    t,
+    workflow: "implement",
+    clock: true,
+    payload: { items: [{ id: "q1", kind: "text", title: "What to call it", body: "A short name." }], agent: { status: "waiting" } },
+  });
+  await s.page.clock.fastForward(200_000);
+  await lineSays(s, /^Plan2Code is not running right now\./);
+  assert.equal(await s.page.locator("#agent-text .agent-key-btn").count(), 0);
+  assert.equal(await s.page.locator("#agent-text strong.agent-key").textContent(), "continue");
 });
 
 test("Stop session, confirmed, sends __stop with no handoff", async (t) => {
@@ -205,6 +428,28 @@ test("Stop with a handoff sends __stop with handoff, and the paused finish and s
   assert.match(await main.innerText(), /Session paused/i);
   assert.match(await textOf(s.page.locator("#agent-text")), /^Paused\./);
   assert.ok(await main.locator("code").filter({ hasText: /^\/plan2code-1-plan --web$/ }).count(), "the resume command is gone");
+});
+
+// Someone who presses Stop and steps away comes back to an answer: the
+// wrapping-up dialog turns into Done once the stop lands and stays up until
+// it is closed, rather than quietly going away.
+test("the wrapping-up dialog says Done when the stop lands, and stays until closed", async (t) => {
+  const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_QUESTION });
+  await s.page.click("#btn-stop");
+  await s.page.locator("#stop-go").click();
+  const dlg = s.page.locator("#stopping-modal");
+  await dlg.waitFor();
+  assert.equal(await s.page.locator("#stopping-title").textContent(), "Wrapping up");
+  assert.doesNotMatch(await dlg.innerText(), /close the (window|tab)/i, "no advice to close the page mid-stop");
+
+  collect(s);
+  s.post({ settle: true, finish: { headline: "Paused at the naming question", body: "Your place is saved.", command: "/plan2code-1-plan" } });
+  await s.page.locator("#main").getByRole("heading", { name: "Paused at the naming question" }).waitFor();
+  await s.page.locator("#stopping-title").getByText("Done", { exact: true }).waitFor();
+  assert.equal(await s.page.locator("#stop-steps li.is-done").count(), 3, "every step ticked");
+  assert.ok(await holds(async () => dlg.isVisible(), 2000), "Done stays up on its own");
+  await s.page.locator("#stopping-hide").getByText("Close", { exact: true }).click();
+  await dlg.waitFor({ state: "hidden" });
 });
 
 test("a page that loses its server goes offline, and after a resume it shows the session again with the unsent answer still typed", async (t) => {
@@ -300,6 +545,83 @@ test("the quiet, not running and not connected lines offer What to check, openin
   assert.equal(await whatToCheck(s).count(), 1, "the not connected line carries What to check");
 });
 
+// An agent sitting in `wait` pings every five seconds and collects a send at
+// once, so answers still uncollected after a minute of its silence mean
+// nothing is listening: the wake-up help shows then, not after three minutes.
+test("answers a waiting agent never collects bring up the saved-and-waiting line after a minute of silence, not before", async (t) => {
+  const s = await openSession(await suite.browser(), { t, workflow: "plan", clock: true, payload: PLAN_QUESTION });
+  await itemCard(s.page, "q1").locator("textarea, input[type=text]").first().fill("audit-export");
+  await s.page.click("#btn-send");
+  await lineSays(s, /^Sent\. Waiting for Plan2Code\./);
+  await s.page.clock.fastForward(30_000);
+  await lineSays(s, /^Sent\. Waiting for Plan2Code\./);
+  await s.page.clock.fastForward(40_000);
+  await lineSays(s, /^Plan2Code is not running\. Your answers are saved and waiting for it\./);
+  assert.equal(await whatToCheck(s).count(), 1, "the line carries What to check");
+});
+
+// An agent that asked and carried on working collects at its next `wait`, so
+// a minute is no proof against it; three minutes of silence is, whatever
+// longer quiet allowance it gave itself before it went.
+test("answers a working agent has not collected bring up the saved-and-waiting line after three minutes, not its long quiet allowance", async (t) => {
+  const s = await openSession(await suite.browser(), { t, workflow: "implement", clock: true, payload: PLAN_QUESTION });
+  await itemCard(s.page, "q1").locator("textarea, input[type=text]").first().fill("audit-export");
+  await s.page.click("#btn-send");
+  await lineSays(s, /^Sent\. Waiting for Plan2Code\./);
+  // Its last word before it went quiet: working, with half an hour to spare.
+  s.post({ agent: { status: "working", activity: "Task 1 of 3: the reader", quietMinutes: 30 } });
+  await lineSays(s, /Task 1 of 3: the reader/);
+  await s.page.clock.fastForward(70_000);
+  await lineSays(s, /Task 1 of 3: the reader/);
+  await s.page.clock.fastForward(130_000);
+  await lineSays(s, /^Plan2Code is not running\. Your answers are saved and waiting for it\./);
+  assert.equal(await whatToCheck(s).count(), 1, "the line carries What to check");
+});
+
+// A failed Send says why at once, rather than one line for every cause and
+// the real state only showing once the page's own timers catch up.
+test("a Send that finds the server gone says so at once, with the reconnect help", async (t) => {
+  const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_QUESTION });
+  await itemCard(s.page, "q1").locator("textarea, input[type=text]").first().fill("audit-export");
+  await stopServer(s);
+  await s.page.click("#btn-send");
+  await s.page.waitForFunction(() => document.getElementById("planny").classList.contains("is-gone"), null, { timeout: 3000 });
+  assert.match(await s.page.locator("#banner").innerText(), LOST_CONTACT);
+  assert.match(await textOf(statusLine(s)), /^Not connected\. Your answers are saved\./);
+  assert.equal(await whatToCheck(s).count(), 1, "the not connected line carries What to check");
+});
+
+test("a Send the server refuses shows the server's reason", async (t) => {
+  const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_QUESTION });
+  await s.page.route("**/submit", (route) =>
+    route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ error: "the disk is full" }) })
+  );
+  await itemCard(s.page, "q1").locator("textarea, input[type=text]").first().fill("audit-export");
+  await s.page.click("#btn-send");
+  await s.page.waitForFunction(() => /the disk is full/.test(document.getElementById("banner").textContent), null, { timeout: 3000 });
+  assert.match(await s.page.locator("#banner").innerText(), /Nothing was lost/);
+});
+
+test("a Send the server refuses as too large says to remove an attachment, not to try the same send again", async (t) => {
+  const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_QUESTION });
+  await s.page.route("**/submit", (route) =>
+    route.fulfill({ status: 413, contentType: "application/json", body: JSON.stringify({ error: "too large" }) })
+  );
+  await itemCard(s.page, "q1").locator("textarea, input[type=text]").first().fill("audit-export");
+  await s.page.click("#btn-send");
+  await s.page.waitForFunction(() => /remove an attachment/.test(document.getElementById("banner").textContent), null, { timeout: 3000 });
+  assert.doesNotMatch(await s.page.locator("#banner").innerText(), /try Send again/);
+});
+
+test("a Send lost on the way, with the server still up, says the console is there and to send again", async (t) => {
+  const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_QUESTION });
+  await s.page.route("**/submit", (route) => route.abort());
+  await itemCard(s.page, "q1").locator("textarea, input[type=text]").first().fill("audit-export");
+  await s.page.click("#btn-send");
+  await s.page.waitForFunction(() => /console is still up/.test(document.getElementById("banner").textContent), null, { timeout: 3000 });
+  assert.equal(await s.page.locator("#planny").evaluate((n) => n.classList.contains("is-gone")), false, "not called gone");
+});
+
 test("an answered finish offer comes back unanswered on a later finish, once the first finish has gone", async (t) => {
   const s = await openSession(await suite.browser(), { t, workflow: "implement", payload: { agent: { status: "working", activity: "Task 1 of 1" } } });
   const finishWith = (headline) => s.post({ finish: { headline, command: "/plan2code-3-implement specs/audit-export/overview.md", dashboard: true } });
@@ -382,6 +704,9 @@ test("a workflow page uses its modules: the full footer, the session meter, @ su
   await s.page.locator("#meter-pill").waitFor();
   assert.ok((await textOf(s.page.locator("#meter-words"))).length, "the meter pill has no words");
   // mentions.js: an @ in a text box offers the workspace's folders.
+  // The @ list is the workspace frame, which can land after the page draws;
+  // the footer has one label per width tier once it has.
+  await s.page.waitForFunction(() => (document.getElementById("footer-where").dataset.key || "").includes("\n"));
   const box = itemCard(s.page, "q1").locator("textarea");
   await box.click();
   await box.pressSequentially("See @");
@@ -531,6 +856,71 @@ test("every finished shape shows Before you close this with its three rows, and 
   assert.equal(await s.page.locator("#btn-home").isVisible(), false, "a finished screen carries its own way back");
 });
 
+// Under the app the same three rows point at the app's own controls instead:
+// New Session for "Start fresh", the top bar's dashboard button for "Carry
+// on", and no stray command to copy into a shell that is not there.
+test("under the app, Before you close this points at New Session, and never at a \"new conversation\" that does not exist there", async (t) => {
+  const s = await openSession(await suite.browser(), {
+    t,
+    workflow: "implement",
+    payload: { agent: { status: "working", activity: "Task 1 of 1" } },
+    env: { PLAN2CODE_IN_APP: "1" },
+  });
+  const main = s.page.locator("#main");
+  s.post({ finish: { headline: "A skill next", command: "/plan2code-4-finalize" } });
+  await main.getByRole("heading", { name: "A skill next" }).waitFor();
+  const guide = closeGuide(s);
+  const text = await textOf(guide);
+  assert.ok(text.includes("Press New Session at the top of the window to start the agent fresh."), "Start fresh points at New Session");
+  assert.ok(text.includes("Paste the command above into the terminal panel, or start from the dashboard with /plan2code."), "Carry on names the terminal panel");
+  assert.ok(!text.includes("new session") && !text.includes("new conversation"), "no classic-mode wording under the app");
+  // The extra "To start something else..." paragraph a classic finish also
+  // shows is left out here: the row above already says it once.
+  assert.equal(await main.getByText("To start something else, run").count(), 0, "no second mention of the same command");
+
+  // Nothing left to run: the all-done shape still offers the command (the
+  // app's terminal panel is a real terminal the agent runs in, so pasting it
+  // there works), worded for the one panel rather than a new conversation.
+  s.post({ finish: { headline: "AGENTS.md is updated" } });
+  await main.getByText(/paste .* into the terminal panel below/).waitFor();
+  assert.ok(await main.locator("code").filter({ hasText: /^\/plan2code --web$/ }).count(), "the command is still offered");
+
+  // The live dashboard button's own note, under it, also points at New
+  // Session instead of typing `/clear` by hand.
+  s.post({ finish: { headline: "A skill next, with a live dashboard offer", command: "/plan2code-4-finalize", dashboard: true } });
+  await main.getByRole("button", { name: "Back to the dashboard" }).waitFor();
+  assert.ok(await main.getByText("press New Session at the top of the window for a clean start instead").count(), "the dashboard note points at New Session");
+  assert.equal(await main.getByText("type `/clear`", { exact: false }).count(), 0, "no hand-typed /clear under the app");
+});
+
+// Once the console server itself is gone (not just finished), the review and
+// dashboard offers' own "new conversation" fallback text must say the same:
+// paste into the terminal panel, under the app, and never claim a command is
+// needed to reconnect, since the app's own bar already does that on its own.
+test("under the app, a gone session's review and dashboard fallbacks name the terminal panel, and reconnect needs no command", async (t) => {
+  const s = await openSession(await suite.browser(), {
+    t,
+    workflow: "quick-task",
+    payload: { agent: { status: "working", activity: "Task 1 of 1" } },
+    env: { PLAN2CODE_IN_APP: "1" },
+    clock: true,
+  });
+  s.post({ finish: OFFERS });
+  await s.page.locator("#main").getByRole("heading", { name: "Quick task done" }).waitFor();
+  await s.page.locator("#main").getByRole("button", { name: "Review it now" }).click();
+  collect(s);
+  await stopServer(s);
+  for (let i = 0; i < 20 && !(await s.page.locator("#planny.is-gone").count()); i++) {
+    await s.page.clock.fastForward(GONE_AFTER_MS);
+    await new Promise((r) => setTimeout(r, 250));
+  }
+  const main = s.page.locator("#main");
+  await main.getByText(/paste this into the terminal panel/i).first().waitFor();
+  assert.equal(await main.getByText(/new conversation/i).count(), 0, "no classic-mode wording under the app");
+  await main.getByText("Plan2Code will try to reconnect the console on its own; if it cannot, the app's bar offers Reconnect the console.").waitFor();
+  assert.equal(await main.getByText(/run this in a new conversation/i).count(), 0, "no stray reconnect command under the app");
+});
+
 // What a person sees break: the triangle leaving answers behind, or sending a
 // finish-style stop instead of the way home.
 test("the top bar's back triangle asks first, then sends __dashboard with the typed answers and the home reply", async (t) => {
@@ -606,4 +996,19 @@ test("Back to default in Preferences returns the theme to follow the system and 
   await s.page.click("#looks-reset");
   await s.page.waitForFunction(() => !document.documentElement.hasAttribute("data-theme"));
   assert.equal(await s.page.locator('input[name="looks-theme"][value="system"]').isChecked(), true, "the system choice is ticked again");
+});
+
+// Planny's own spoken line said "close this tab": under the app there is no
+// tab, only the one window.
+test("under the app, Planny's finished line says to close the window, not the tab", async (t) => {
+  const s = await openSession(await suite.browser(), {
+    t,
+    workflow: "implement",
+    payload: { agent: { status: "working", activity: "Task 1 of 1" } },
+    env: { PLAN2CODE_IN_APP: "1" },
+  });
+  s.post({ finish: { headline: "All done", dashboard: true } });
+  await s.page.locator("#main").getByRole("heading", { name: "All done" }).waitFor();
+  const line = await lineSays(s, /close this window/);
+  assert.doesNotMatch(line, /close this tab/, "no classic-mode wording under the app");
 });

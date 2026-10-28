@@ -147,7 +147,7 @@ const ABOUT_HISTORY = 3;
  *
  * The tracker is `{ history, about }`; each entry and `about` are
  * `{ kind, id, label }` (`about` may be null), in the exact shape POST /chat
- * takes. An old `{ about, frozen, dropped }` tracker normalises to an empty
+ * takes. An old `{ about, frozen, dropped }` tracker normalizes to an empty
  * history.
  */
 export function nextAbout(prev, event) {

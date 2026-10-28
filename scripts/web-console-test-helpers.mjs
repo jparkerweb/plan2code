@@ -11,7 +11,7 @@
 //
 // PLAN2CODE_PICKER_ECHO (tests only, beside PLAN2CODE_NO_BROWSER): when set
 // in the server's environment, /workspace/browse returns it as the picked
-// folder instead of opening a picker, and "-" as a cancelled one.
+// folder instead of opening a picker, and "-" as a canceled one.
 
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -26,7 +26,26 @@ import { readChat } from "../src/web-console/inbox.mjs";
 export const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 export const CONSOLE_CLI = path.join(ROOT, "src", "web-console", "console.mjs");
 
-export const HOME = fs.mkdtempSync(path.join(os.tmpdir(), "p2c-console-test-"));
+// Canonicalized the same way server.mjs canonicalizes a session dir (DIR,
+// server.mjs): on a machine whose %TEMP% itself resolves through an 8.3
+// short name (seen in the wild on Windows), a server started later writes
+// `state.worktree` in its realpath'd form, while anything in a test that
+// builds a path under HOME without this would use the short one. Two
+// spellings of the same folder hash to two different keys wherever a test
+// writes through a path-keyed store (notepads.mjs, workspace.mjs,
+// settings.mjs) ahead of the server itself touching that path, so the
+// server's own later read finds nothing there. Resolving it once, here,
+// keeps every path this file hands out consistent with what the server
+// will compute.
+const rawHome = fs.mkdtempSync(path.join(os.tmpdir(), "p2c-console-test-"));
+export const HOME = (() => {
+  for (const real of [fs.realpathSync.native, fs.realpathSync]) {
+    try {
+      return real(rawHome);
+    } catch {}
+  }
+  return rawHome;
+})();
 export const MODELS_DIR = path.join(HOME, "plan2code");
 // Handoffs are written outside every repo, under ~/.plan2code/handoffs, so
 // each test file gets its own throwaway folder for them too.

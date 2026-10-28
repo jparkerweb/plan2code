@@ -40,7 +40,7 @@ One idea per session, so there is only ever one trail.
   Confidence: solid, but Risk is borderline.
 
 WAITING ON YOU · answer here, in this conversation:
-Q2 Ceiling behaviour past the cap (re-ask) · Q3 Who sees the truncation warning
+Q2 Ceiling behavior past the cap (re-ask) · Q3 Who sees the truncation warning
 ```
 
 - The heading counts resolved questions over every question except out-of-scope ones.

@@ -11,7 +11,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { gitInit } from "./skill-script-helpers.mjs";
-import { pageSuite, openSession, tempProject, sendAndCollect, itemCard, scrollTopOf } from "./page-test-helpers.mjs";
+import { pageSuite, openSession, tempProject, sendAndCollect, itemCard, scrollTopOf, scrollCard, stylesOf, styleOf } from "./page-test-helpers.mjs";
 
 const suite = pageSuite(test);
 
@@ -171,7 +171,7 @@ test("a sign-off card opens its document, and each verdict reaches the agent", a
   await card.getByRole("button", { name: /Read .*Completion report.* in full/ }).click();
   await s.page.getByText("Phase 3 adds the /tasks endpoints.").waitFor();
   assert.ok(await s.page.getByText("Phase 3 adds the /tasks endpoints.").isVisible(), "the report is on screen");
-  // The danger verdict is marked as such: here the class is the behaviour.
+  // The danger verdict is marked as such: here the class is the behavior.
   await s.page.locator("#views").getByRole("button", { name: /^Questions/ }).click();
   card = itemCard(s.page, "so1");
   assert.match(await card.getByRole("button", { name: "Throw it away" }).getAttribute("class"), /danger/);
@@ -209,8 +209,7 @@ test("a redraw keeps your place: the scroll and the focused field survive an age
 
   // Reading a question part-way down: the card scrolls itself.
   const card = itemCard(s.page, "q1");
-  await card.evaluate((el) => (el.scrollTop = 400));
-  assert.equal(await card.evaluate((el) => el.scrollTop), 400, "the question card scrolls");
+  assert.equal(await scrollCard(card, 400), 400, "the question card scrolls");
   await unrelatedPost(s, "Audit export, take two");
   assert.equal(await itemCard(s.page, "q1").evaluate((el) => el.scrollTop), 400);
 
@@ -229,7 +228,7 @@ test("a redraw keeps your place: the scroll and the focused field survive an age
   // On a doc: the column scrolls.
   await s.page.locator("#views").getByRole("button", { name: /What we've agreed/ }).click();
   await s.page.getByText("Paragraph 80.").waitFor();
-  await s.page.locator("#main").evaluate((el) => (el.scrollTop = 900));
+  await scrollCard(s.page.locator("#main"), 900);
   const docBefore = await scrollTopOf(s.page, "#main");
   assert.ok(docBefore > 0, "the doc column scrolls");
   await unrelatedPost(s, "Audit export, take four");
@@ -296,7 +295,7 @@ test("a redraw keeps the place of the dashboard, the waiting screen and the fini
   const welcomeDone = s.page.getByRole("button", { name: "Start building" });
   if (await welcomeDone.isVisible()) await welcomeDone.click();
   await welcomeDone.waitFor({ state: "hidden" });
-  await s.page.locator("#main > .dash").evaluate((el) => (el.scrollTop = 150));
+  await scrollCard(s.page.locator("#main > .dash"), 150);
   assert.equal(await scrollTopOf(s.page, "#main > .dash"), 150, "the dashboard scrolls");
   await unrelatedPost(s, "Dashboard, take two");
   assert.equal(await scrollTopOf(s.page, "#main > .dash"), 150, "the dashboard lost its place");
@@ -311,7 +310,7 @@ test("a redraw keeps the place of the dashboard, the waiting screen and the fini
   await s.page.setViewportSize({ width: 1280, height: 300 });
   const pane = "#main > .waiting-pane";
   await s.page.locator(pane).waitFor();
-  await s.page.locator(pane).evaluate((el) => (el.scrollTop = 60));
+  await scrollCard(s.page.locator(pane), 60);
   const waitingAt = await scrollTopOf(s.page, pane);
   assert.ok(waitingAt > 0, "the waiting screen scrolls");
   await unrelatedPost(s, "Phase 1, take two");
@@ -320,7 +319,7 @@ test("a redraw keeps the place of the dashboard, the waiting screen and the fini
   s.post({ finish: { headline: "Phase 1 is done", body: longText(30), command: "/plan2code-3-implement specs/audit-export/overview.md" } });
   await s.page.locator("#main").getByRole("heading", { name: "Phase 1 is done" }).waitFor();
   const end = "#main > .card";
-  await s.page.locator(end).evaluate((el) => (el.scrollTop = 300));
+  await scrollCard(s.page.locator(end), 300);
   assert.equal(await scrollTopOf(s.page, end), 300, "the finished screen scrolls");
   await unrelatedPost(s, "Phase 1, take three");
   assert.equal(await scrollTopOf(s.page, end), 300, "the finished screen lost its place");
@@ -332,32 +331,32 @@ test("a redraw keeps the place of the dashboard, the waiting screen and the fini
     workflow: "plan",
     payload: { items: [{ id: "q1", kind: "text", title: "What to call it", body: longText(40) }] },
   });
-  await itemCard(s.page, "q1").evaluate((el) => (el.scrollTop = 400));
+  await scrollCard(itemCard(s.page, "q1"), 400);
   s.post({ items: [{ id: "q2", kind: "text", title: "Who uses it", body: longText(40) }] });
   await itemCard(s.page, "q2").waitFor();
   assert.equal(await itemCard(s.page, "q2").evaluate((el) => el.scrollTop), 0, "the new question opened part-way down");
 });
 
-// The accent colour as the browser resolves it, and a button's outline colour,
+// The accent color as the browser resolves it, and a button's outline color,
 // so "wears the accent" is read off the screen, not off a class name.
 const accentOf = (page) =>
   page.evaluate(() => {
     const probe = document.createElement("i");
     probe.style.color = "var(--accent)";
     document.body.appendChild(probe);
-    const colour = getComputedStyle(probe).color;
+    const color = getComputedStyle(probe).color;
     probe.remove();
-    return colour;
+    return color;
   });
-const outlineOf = (button) => button.evaluate((b) => getComputedStyle(b).borderTopColor);
+const outlineOf = (button) => styleOf(button, "borderTopColor");
 const warnOf = (page) =>
   page.evaluate(() => {
     const probe = document.createElement("i");
     probe.style.color = "var(--warn)";
     document.body.appendChild(probe);
-    const colour = getComputedStyle(probe).color;
+    const color = getComputedStyle(probe).color;
     probe.remove();
-    return colour;
+    return color;
   });
 
 // What a person sees break: the way forward on a sign-off card looks like any
@@ -373,7 +372,7 @@ test("on a sign-off card, approve and yes are outlined in the accent until picke
   assert.notEqual(await outlineOf(card.getByRole("button", { name: "I want changes" })), accent, "the other verdict is not");
   await approve.click();
   await s.page.waitForFunction(() => document.querySelector("#btn-send:not(:disabled)"));
-  assert.equal(await approve.evaluate((b) => getComputedStyle(b).backgroundColor), accent, "picked, approve fills with the accent");
+  assert.equal(await styleOf(approve, "backgroundColor"), accent, "picked, approve fills with the accent");
 
   card = await ask(s, review("so2", [{ id: "yes", label: "Build it" }, { id: "no", label: "Not yet" }]));
   assert.equal(await outlineOf(card.getByRole("button", { name: "Build it" })), accent, "an unpicked yes is outlined too");
@@ -388,11 +387,28 @@ test("Skip this one and a comment box's quick answer are the same small accent b
   const card = await ask(s, { id: "l1", kind: "list", title: "The steps", body: "Rename.", required: false, rows });
   const skip = card.getByRole("button", { name: "Skip this one" });
   const quick = card.getByRole("button", { name: "No changes" });
-  const look = (b) => b.evaluate((x) => { const c = getComputedStyle(x); return [c.fontSize, c.paddingTop, c.paddingLeft, c.color]; });
+  const look = async (b) => Object.values(await stylesOf(b, ["fontSize", "paddingTop", "paddingLeft", "color"]));
   assert.deepEqual(await look(skip), await look(quick), "the two chips look alike");
-  const [size, , , colour] = await look(skip);
+  const [size, , , color] = await look(skip);
   assert.equal(size, "12px", "small, not a full-size button");
-  assert.equal(colour, await accentOf(s.page), "in the accent");
+  assert.equal(color, await accentOf(s.page), "in the accent");
+});
+
+// What a person sees break: Combine phases is missing from a plan's breakdown,
+// fills nothing, or shows on a list that is not phases.
+test("a plan's breakdown offers Combine phases beside No changes, and other workflows do not", async (t) => {
+  const rows = [{ id: "a", title: "Read the data", body: "x" }];
+  let s = await openSession(await suite.browser(), { t, workflow: "plan" });
+  let card = await ask(s, { id: "l1", kind: "list", title: "Build order", body: "Reorder.", rows });
+  const quicks = card.locator(".quick-answer");
+  assert.deepEqual(await quicks.allTextContents(), ["No changes", "Combine phases"]);
+  await card.getByRole("button", { name: "Combine phases" }).click();
+  const got = await sendAndCollect(s);
+  assert.match(answerTo(got, "l1").text, /^Combine phases where possible/);
+
+  s = await openSession(await suite.browser(), { t, workflow: "quick-task" });
+  card = await ask(s, { id: "l2", kind: "list", title: "Steps", body: "Reorder.", rows });
+  assert.deepEqual(await card.locator(".quick-answer").allTextContents(), ["No changes"]);
 });
 
 // What a person sees break: a safe yes looks like any button, or a risky yes
@@ -408,7 +424,7 @@ test("a confirm's safe yes and a recap's yes are outlined in the accent, and a d
   assert.notEqual(await outlineOf(card.getByRole("button", { name: "No" })), accent, "the no does not");
   await yes.click();
   await s.page.waitForFunction(() => document.querySelector("#btn-send:not(:disabled)"));
-  assert.equal(await yes.evaluate((b) => getComputedStyle(b).backgroundColor), accent, "picked, it fills");
+  assert.equal(await styleOf(yes, "backgroundColor"), accent, "picked, it fills");
 
   card = await ask(s, { id: "y2", kind: "confirm", title: "Delete it", body: "Really?", danger: true });
   assert.equal(await outlineOf(card.getByRole("button", { name: "Yes" })), warn, "a dangerous yes stays red");
@@ -423,11 +439,11 @@ test("a card cut by the window fades at its bottom edge while there is more belo
   const s = await openSession(await suite.browser(), { t, workflow: "plan" });
   await s.page.setViewportSize({ width: 1280, height: 420 });
   const card = await ask(s, { id: "q1", kind: "text", title: "What to call it", body: longText(40) });
-  const fades = () => card.evaluate((el) => { const c = getComputedStyle(el); return (c.maskImage || c.webkitMaskImage || "none") !== "none"; });
+  const fades = async () => { const c = await stylesOf(card, ["maskImage", "webkitMaskImage"]); return (c.maskImage || c.webkitMaskImage || "none") !== "none"; };
   await s.page.waitForFunction(() => { const c = document.querySelector("#main > .card"); return c && c.scrollHeight > c.clientHeight + 4; });
   await s.page.waitForFunction(() => { const c = document.querySelector("#main > .card"); const m = getComputedStyle(c); return (m.maskImage || m.webkitMaskImage || "none") !== "none"; });
   assert.equal(await fades(), true, "a cut card fades at the bottom");
-  await card.evaluate((el) => (el.scrollTop = el.scrollHeight));
+  await scrollCard(card, "end");
   await s.page.waitForFunction(() => { const c = document.querySelector("#main > .card"); const m = getComputedStyle(c); return (m.maskImage || m.webkitMaskImage || "none") === "none"; });
   assert.equal(await fades(), false, "at the end, the fade is gone");
 });

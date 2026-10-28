@@ -2,7 +2,7 @@
 
 import path from "node:path";
 
-import { cleanSetting, defaultSetting, offered } from "./public/subagents.js";
+import { cleanSetting, defaultSetting, DEFAULT_STRENGTH, offered } from "./public/subagents.js";
 import { ensureDir, fileStamp, HOME_DIR, readJson, readJsonLines, withStateLock, writeJsonAtomic } from "./files.mjs";
 import { foldKey } from "./workspace.mjs";
 
@@ -10,10 +10,11 @@ import { foldKey } from "./workspace.mjs";
 
 // The person's Subagents switch, remembered per project folder and workflow:
 //
-//   { "<folded project path>": { "<workflow>": { on, instruction, max } } }
+//   { "<folded project path>": { "<workflow>": { on, instruction, max, strength } } }
 //
 // Keyed with foldKey(), as workspaces.json is. `instruction: null` is the
-// workflow's shipped default.
+// workflow's shipped default; an entry saved before `strength` existed reads
+// as balanced.
 export const SUBAGENTS_FILE = path.join(HOME_DIR, "subagents.json");
 const SUBAGENTS_LOCK = "subagents.json.lock";
 
@@ -22,13 +23,13 @@ function readSubagentStore() {
   return saved && typeof saved === "object" && !Array.isArray(saved) ? saved : {};
 }
 
-// The saved `{ on, instruction, max }` for this folder and workflow, or the
-// default's when nothing (or something malformed) is saved.
+// The saved `{ on, instruction, max, strength }` for this folder and workflow,
+// or the default's when nothing (or something malformed) is saved.
 export function subagentStoreEntry(worktree, workflow) {
-  const { on, instruction, max } = defaultSetting(workflow);
+  const { on, instruction, max, strength } = defaultSetting(workflow);
   const project = offered(workflow) ? readSubagentStore()[foldKey(worktree)] : null;
   const saved = project && typeof project === "object" ? cleanSetting(project[workflow]) : null;
-  return saved && !saved.error ? saved : { on, instruction, max };
+  return saved && !saved.error ? saved : { on, instruction, max, strength };
 }
 
 // Single-writer rule: only the server may call this (its routes).
@@ -40,7 +41,7 @@ export function saveSubagentStoreEntry(worktree, workflow, value) {
       const store = readSubagentStore();
       const key = foldKey(worktree);
       const project = store[key] && typeof store[key] === "object" ? store[key] : {};
-      store[key] = { ...project, [workflow]: { on: value.on, instruction: value.instruction, max: value.max } };
+      store[key] = { ...project, [workflow]: { on: value.on, instruction: value.instruction, max: value.max, strength: value.strength } };
       writeJsonAtomic(SUBAGENTS_FILE, store);
     },
     SUBAGENTS_LOCK
@@ -127,7 +128,14 @@ export function latestOpenCaps(dir) {
 
 /* ------------------------------------------------- the server's Subagents */
 
-export const sameSetting = (a, b) => a.workflow === b.workflow && a.on === b.on && a.instruction === b.instruction && a.max === b.max;
+// A side without `strength` (a session file written before it existed) is
+// balanced, so an upgrade alone never bumps the revision.
+export const sameSetting = (a, b) =>
+  a.workflow === b.workflow &&
+  a.on === b.on &&
+  a.instruction === b.instruction &&
+  a.max === b.max &&
+  (a.strength || DEFAULT_STRENGTH) === (b.strength || DEFAULT_STRENGTH);
 
 /**
  * The Subagents switch as the server keeps it. subagents-setting.json has one
@@ -166,8 +174,8 @@ export function serverSubagents(ctx) {
   function sync(state) {
     if (!state || typeof state.workflow !== "string") return;
     const { workflow } = state;
-    const { on, instruction, max } = offered(workflow) ? subagentStoreEntry(ctx.worktree(), workflow) : defaultSetting(workflow);
-    const target = { workflow, on, instruction, max };
+    const { on, instruction, max, strength } = offered(workflow) ? subagentStoreEntry(ctx.worktree(), workflow) : defaultSetting(workflow);
+    const target = { workflow, on, instruction, max, strength };
     const current = readSubagentSetting(dir);
     if (current && sameSetting(current, target)) return;
     writeSubagentSetting(dir, { ...target, revision: (current ? current.revision : 0) + 1 });
@@ -178,8 +186,8 @@ export function serverSubagents(ctx) {
   // is the shipped default, which the page reads from subagents.js itself.
   function view(state) {
     const workflow = state && state.workflow;
-    const { on, instruction, max, revision } = settingNow() || { ...defaultSetting(workflow), revision: 0 };
-    return { offered: offered(workflow), supported: capsNow().includes("subagents"), on, instruction, max, revision };
+    const { on, instruction, max, strength, revision } = settingNow() || { ...defaultSetting(workflow), revision: 0 };
+    return { offered: offered(workflow), supported: capsNow().includes("subagents"), on, instruction, max, strength: strength || DEFAULT_STRENGTH, revision };
   }
 
   return {

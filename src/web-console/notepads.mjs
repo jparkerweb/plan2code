@@ -5,8 +5,8 @@
 //
 //   ~/.plan2code/notepads/<folder-name>-<12 hex>/
 //     meta.json          { v: 2, folder, created }
-//     tabs.json          { v: 1, order: [id], last: id|null, tabs: { id: { name, created } } }
-//     tabs/<id>/note.md              the tab's text, UTF-8, written atomically
+//     tabs.json          { v: 1, order: [id], last: id|null, tabs: { id: { name, created, sent? } } }
+//     tabs/<id>/note.md             the tab's text, UTF-8, written atomically
 //     tabs/<id>/images/<uuid>.jpg          a picture, JPEG from the page
 //     tabs/<id>/images/<uuid>.thumb.jpg    its thumbnail, when the page sent one
 //
@@ -17,7 +17,8 @@
 //
 // This module is the only code that names, reads, writes, lists and removes
 // them. The page reaches it through the /notepad routes; the agent CLI never
-// imports it, so nothing in a notepad can reach the agent. Reading never
+// imports it, so a tab leaves it only through a send the person starts on the
+// dashboard (a test checks the imports). Reading never
 // creates or touches a file, so only a person's own edits age a notepad.
 // PLAN2CODE_NOTEPADS_DIR moves the folder, for tests.
 //
@@ -48,7 +49,7 @@ export const LEGACY_TAB_ID = "0000000000a1";
 
 // A refusal the routes turn into `{ error: code }` with this status. Codes:
 // bad, too-long, too-many, not-jpeg, not-found, and for tabs bad-name (400),
-// duplicate-name (409), too-many-tabs (409), no-such-tab (404).
+// bad-sent (400), duplicate-name (409), too-many-tabs (409), no-such-tab (404).
 export class NotepadError extends Error {
   constructor(code, status) {
     super(code);
@@ -59,7 +60,7 @@ export class NotepadError extends Error {
 
 /* ------------------------------------------------------------------ names */
 
-// `<folder-name>-<first 12 hex of sha256(foldKey(folder))>`: recognisable in a
+// `<folder-name>-<first 12 hex of sha256(foldKey(folder))>`: recognizable in a
 // file browser, safe on every OS, and one notepad per folder however its case
 // is typed where the file system ignores case.
 export function notepadKey(folder) {
@@ -111,8 +112,21 @@ const isFile = (p) => {
   }
 };
 
-// `{ order, last, tabs: { id: { name, created } } }` from tabs.json with every
-// part of its shape checked, or null when it is missing or does not hold up.
+// The workflows a tab can be sent to from the dashboard, and the spec a Revise
+// plan send names.
+export const SENT_WORKFLOWS = ["pathfinder", "plan", "quick-task", "revise-plan"];
+const SENT_SPEC_RE = /^specs\/[A-Za-z0-9._-]+$/;
+
+// A tab's `sent` record as stored, or null when it does not hold up.
+function readSent(sent) {
+  if (!sent || typeof sent !== "object" || !SENT_WORKFLOWS.includes(sent.workflow) || typeof sent.at !== "string") return null;
+  if (sent.spec !== undefined && !(typeof sent.spec === "string" && SENT_SPEC_RE.test(sent.spec))) return null;
+  return { workflow: sent.workflow, ...(sent.spec ? { spec: sent.spec } : {}), at: sent.at };
+}
+
+// `{ order, last, tabs: { id: { name, created, sent? } } }` from tabs.json with
+// every part of its shape checked, or null when it is missing or does not hold
+// up. A `sent` record that does not hold up is dropped, never the whole index.
 function readIndex(dir) {
   const raw = readJson(path.join(dir, INDEX_FILE));
   if (!raw || typeof raw !== "object" || !Array.isArray(raw.order)) return null;
@@ -125,6 +139,8 @@ function readIndex(dir) {
     if (!t || typeof t !== "object") return null;
     try {
       tabs[id] = { name: normalizeTabName(t.name), created: typeof t.created === "string" ? t.created : null };
+      const sent = readSent(t.sent);
+      if (sent) tabs[id].sent = sent;
     } catch {
       return null;
     }
@@ -333,14 +349,18 @@ function imageEntries(dirs) {
 const imageUrl = (tab, id, thumb) => "/notepad/images/" + tab + "/" + id + (thumb ? ".thumb" : "") + ".jpg";
 
 /**
- * The tabs, as `[{ id, name }]` in order, and the one last used. Read only; a
- * notepad still in the first shape answers one virtual tab, Notes.
+ * The tabs, as `[{ id, name, sent? }]` in order (`sent` only on a tab sent
+ * from the dashboard), and the one last used. Read only; a notepad still in
+ * the first shape answers one virtual tab, Notes, never sent.
  */
 export function listTabs(folder) {
   const dir = notepadFolder(folder);
   if (!fs.existsSync(dir)) return { tabs: [], last: null };
   const index = readIndex(dir);
-  if (index) return { tabs: index.order.map((id) => ({ id, name: index.tabs[id].name })), last: index.last };
+  if (index) {
+    const tabs = index.order.map((id) => ({ id, name: index.tabs[id].name, ...(index.tabs[id].sent ? { sent: index.tabs[id].sent } : {}) }));
+    return { tabs, last: index.last };
+  }
   if (legacyShape(dir)) return { tabs: [{ id: LEGACY_TAB_ID, name: "Notes" }], last: LEGACY_TAB_ID };
   return { tabs: [], last: null };
 }
@@ -353,7 +373,8 @@ export function defaultTabId(folder) {
 
 /**
  * What the page shows:
- * `{ tabs: [{ id, name }], last, tab: { id, text, savedAt, images } | null }`
+ * `{ tabs: [{ id, name, sent? }], last, tab: { id, text, savedAt, images } | null }`
+ * (`sent` is `{ workflow, spec?, at }`, the tab's last send from the dashboard)
  * for the tab asked for (else the default one), plus that tab's `text`,
  * `savedAt` and `images` at the top, where the first page read them. A named
  * tab that does not exist is a `no-such-tab` refusal. Never creates or writes
@@ -423,6 +444,26 @@ export function renameTab(folder, id, name) {
     index.tabs[id].name = clean;
     commit(dir, index);
     return { id, name: clean };
+  });
+}
+
+/**
+ * Record that a tab was sent to a workflow from the dashboard, replacing any
+ * earlier record. `workflow` is one of SENT_WORKFLOWS and `spec`, when given,
+ * a `specs/<name>` path. Resolves to `{ id, sent }`.
+ */
+export function markTabSent(folder, tab, { workflow, spec } = {}) {
+  requireTab(folder, tab);
+  return withNotepad(folder, (dir, index) => {
+    if (!Object.hasOwn(index.tabs, tab)) throw new NotepadError("no-such-tab", 404);
+    if (!SENT_WORKFLOWS.includes(workflow)) throw new NotepadError("bad-sent", 400);
+    if (spec !== undefined && spec !== null && !(typeof spec === "string" && SENT_SPEC_RE.test(spec))) {
+      throw new NotepadError("bad-sent", 400);
+    }
+    const sent = { workflow, ...(spec ? { spec } : {}), at: nowIso() };
+    index.tabs[tab].sent = sent;
+    commit(dir, index);
+    return { id: tab, sent };
   });
 }
 

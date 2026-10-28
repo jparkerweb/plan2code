@@ -106,7 +106,7 @@ export class Controller {
       clearInterval(elapsedInterval);
       spinner.stop();
 
-      // Cancelled or interrupted — return immediately, don't retry
+      // Canceled or interrupted — return immediately, don't retry
       if (result.cancelled || this.interrupted) {
         return result;
       }
@@ -268,9 +268,9 @@ export class Controller {
 
         const result = retryResult;
 
-        // Check if cancelled
+        // Check if canceled
         if (result.cancelled || this.interrupted) {
-          logger.info('Agent process cancelled');
+          logger.info('Agent process canceled');
 
           const entry: IterationLogEntry = {
             iteration: iterNum,

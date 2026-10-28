@@ -12,9 +12,17 @@ import path from "node:path";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { pageSuite, openSession, tempProject, textOf, drawn } from "./page-test-helpers.mjs";
-import { HOME } from "./web-console-test-helpers.mjs";
+import { HOME, cli, until } from "./web-console-test-helpers.mjs";
 import { HELP_TABS } from "../src/web-console/public/help.js";
 import { CATALOG_GROUPS, SKILL_CATALOG } from "../src/web-console/public/answers.js";
+import { GONE_AFTER_MS } from "../src/web-console/public/screens/core.js";
+
+// The agent's side of `stop`, leaving the browser context open (s.stop()
+// closes it, which would hide what the page does next).
+async function stopServer(s) {
+  cli(["stop", "--session", s.sid], { cwd: s.project });
+  assert.ok(await until(async () => !(await s.answers()), 5000), "the server still answers after stop");
+}
 
 const suite = pageSuite(test);
 
@@ -290,3 +298,252 @@ test("the update banner opens a modal with the exact update commands, and its di
   await toTheDashboard(s);
   assert.equal(await main.getByRole("button", { name: /UPDATE AVAILABLE/ }).count(), 0, "the banner came back after a reload");
 });
+
+// Under the app the dashboard's own UPDATE AVAILABLE banner never shows (a
+// separate test already covers that), so Help's own line about it must not
+// send an in-app reader to a terminal command for a banner they can never see.
+test("under the app, Help's update line points at Update skills, not the dashboard banner's terminal command", async (t) => {
+  savedLooks(t, { welcomeSeen: true });
+  const s = await openSession(await suite.browser(), {
+    t,
+    workflow: "dashboard",
+    payload: { agent: { status: "waiting" } },
+    project: tempProject(),
+    env: { PLAN2CODE_IN_APP: "1" },
+  });
+  await toTheDashboard(s);
+  await openHelp(s);
+  await tabButton(s, "dashboard").click();
+  const text = s.page.locator("#help-update-text");
+  await text.getByText("Update skills", { exact: false }).waitFor();
+  assert.equal(await text.locator("code").count(), 0, "no terminal command under the app");
+  assert.equal(await text.getByText("UPDATE AVAILABLE", { exact: false }).count(), 0, "no mention of a banner that never shows there");
+});
+
+// Under the app, when the console server itself is gone, the live "About"
+// line must not send the reader hunting for a link in a terminal: the app's
+// own bar already notices and offers to reconnect it.
+test("under the app, Help's live line about a gone console names the app's bar, not a terminal link", async (t) => {
+  savedLooks(t, { welcomeSeen: true });
+  const s = await openSession(await suite.browser(), {
+    t,
+    workflow: "plan",
+    payload: { items: [{ id: "q1", kind: "text", title: "What to call it", body: "A short name." }], agent: { status: "waiting" } },
+    env: { PLAN2CODE_IN_APP: "1" },
+    clock: true,
+  });
+  await stopServer(s);
+  for (let i = 0; i < 20 && !(await s.page.locator("#planny.is-gone").count()); i++) {
+    await s.page.clock.fastForward(GONE_AFTER_MS);
+    await new Promise((r) => setTimeout(r, 250));
+  }
+  await openHelp(s);
+  // Help opens on "stuck" while gone (helpTabFor); the live line itself lives
+  // on "about", built the same regardless of which tab is first shown.
+  await tabButton(s, "about").click();
+  const live = s.page.locator("#about-live");
+  await live.getByText("The app's own bar notices and offers to reconnect it", { exact: false }).waitFor();
+  assert.equal(await live.getByText("link from the terminal", { exact: false }).count(), 0, "no terminal-link wording under the app");
+});
+
+// Help's own "Running the next command" explainer (the Finishing topic) said
+// "paste into the terminal... in a new conversation": wrong under the app,
+// where it's the one terminal panel, not a separate conversation.
+test("under the app, Help's Finishing topic says to paste into the terminal panel, not a new conversation", async (t) => {
+  savedLooks(t, { welcomeSeen: true });
+  const s = await openSession(await suite.browser(), {
+    t,
+    workflow: "plan",
+    payload: { items: [{ id: "q1", kind: "text", title: "What to call it", body: "A short name." }], agent: { status: "waiting" } },
+    project: tempProject(),
+    env: { PLAN2CODE_IN_APP: "1" },
+  });
+  await openHelp(s);
+  await tabButton(s, "finishing").click();
+  const text = s.page.locator("#help-finishing-command-text");
+  await text.getByText("terminal panel below", { exact: false }).waitFor();
+  assert.equal(await text.getByText("new conversation", { exact: false }).count(), 0, "no classic-mode wording under the app");
+});
+
+// The same topic's "Back to the dashboard" and "Continue here" explainers
+// also described classic-only behavior the screens themselves no longer show
+// under the app: a command to copy, and a new conversation to start fresh in.
+test("under the app, Help's dashboard and Continue here explainers point at the app's own controls", async (t) => {
+  savedLooks(t, { welcomeSeen: true });
+  const s = await openSession(await suite.browser(), {
+    t,
+    workflow: "plan",
+    payload: { items: [{ id: "q1", kind: "text", title: "What to call it", body: "A short name." }], agent: { status: "waiting" } },
+    project: tempProject(),
+    env: { PLAN2CODE_IN_APP: "1" },
+  });
+  await openHelp(s);
+  await tabButton(s, "finishing").click();
+  const dash = s.page.locator("#help-finishing-dashboard-text");
+  await dash.getByText("the app's own bar notices and offers to reconnect it", { exact: false }).waitFor();
+  assert.equal(await dash.locator("code").count(), 0, "no /plan2code command under the app");
+  const cont = s.page.locator("#help-finishing-continue-text");
+  await cont.getByText("press New Session at the top of the window", { exact: false }).waitFor();
+  assert.equal(await cont.getByText("new conversation", { exact: false }).count(), 0, "no classic-mode wording under the app");
+});
+
+// The Welcome dialog's own onboarding tip gave the same classic-only advice.
+test("under the app, the Welcome dialog's refresh tip names New Session, not a new conversation", async (t) => {
+  savedLooks(t, null);
+  const s = await openSession(await suite.browser(), {
+    t,
+    workflow: "dashboard",
+    payload: { agent: { status: "waiting" } },
+    project: tempProject(),
+    env: { PLAN2CODE_IN_APP: "1" },
+  });
+  await toTheDashboard(s);
+  const welcome = s.page.locator("#welcome-modal");
+  await welcome.waitFor();
+  const text = s.page.locator("#welcome-refresh-text");
+  await text.getByText("press New Session at the top of the window", { exact: false }).waitFor();
+  assert.equal(await text.getByText("new conversation", { exact: false }).count(), 0, "no classic-mode wording under the app");
+});
+
+// The Troubleshooting tab's own "getting a new link" recovery flow is
+// classic-only (it ends in a command that prints a fresh browser link);
+// under the app, Reconnect the console in the bar already does this.
+test("under the app, Help's Troubleshooting topic names Reconnect the console, not a new link to print", async (t) => {
+  savedLooks(t, { welcomeSeen: true });
+  const s = await openSession(await suite.browser(), {
+    t,
+    workflow: "plan",
+    payload: { items: [{ id: "q1", kind: "text", title: "What to call it", body: "A short name." }], agent: { status: "waiting" } },
+    project: tempProject(),
+    env: { PLAN2CODE_IN_APP: "1" },
+  });
+  await openHelp(s);
+  await tabButton(s, "stuck").click();
+  const ref = s.page.locator("#help-stuck-not-connected-ref");
+  await ref.getByText("the app's own bar notices and offers to reconnect it", { exact: false }).waitFor();
+  await s.page.locator("#help-stuck-reconnect-title").getByText("Reconnecting").waitFor();
+  const text = s.page.locator("#help-stuck-reconnect-text");
+  await text.getByText("Reconnect the console", { exact: false }).waitFor();
+  assert.equal(await text.getByText("in the terminal", { exact: false }).count(), 0, "no classic-mode wording under the app");
+  assert.equal(await s.page.locator("#help-stuck-reconnect-command").isVisible(), false, "no command to copy under the app");
+  // The "What you might see" symptom table has its own, separate "Not
+  // connected" row making the same classic-only claim.
+  const tableRow = s.page.locator("#help-stuck-table-reconnect-text");
+  await tableRow.getByText("Reconnect the console", { exact: false }).waitFor();
+  assert.equal(await tableRow.getByText("new link", { exact: false }).count(), 0, "no classic-mode wording under the app");
+});
+
+// The Ask tab's "carry away" prompt is meant to start a genuinely fresh task:
+// under the app that means New Session first, then the terminal panel, not
+// "a new conversation" that does not exist there.
+test("under the app, Help's Ask topic says to press New Session and paste into the terminal panel, not a new conversation", async (t) => {
+  savedLooks(t, { welcomeSeen: true });
+  const s = await openSession(await suite.browser(), {
+    t,
+    workflow: "plan",
+    payload: { items: [{ id: "q1", kind: "text", title: "What to call it", body: "A short name." }], agent: { status: "waiting" } },
+    project: tempProject(),
+    env: { PLAN2CODE_IN_APP: "1" },
+  });
+  await openHelp(s);
+  await tabButton(s, "ask").click();
+  const text = s.page.locator("#help-ask-prompt-text");
+  await text.getByText("Press New Session for a clean context, then paste it into the terminal panel", { exact: false }).waitFor();
+  assert.equal(await text.getByText("new conversation", { exact: false }).count(), 0, "no classic-mode wording under the app");
+});
+
+// "Stopping early" also pointed to a terminal command "in a new conversation":
+// matches ending.js's own renderStopping, which already says the terminal panel.
+test("under the app, Help's Stopping early topic says to paste into the terminal panel, not a new conversation", async (t) => {
+  savedLooks(t, { welcomeSeen: true });
+  const s = await openSession(await suite.browser(), {
+    t,
+    workflow: "plan",
+    payload: { items: [{ id: "q1", kind: "text", title: "What to call it", body: "A short name." }], agent: { status: "waiting" } },
+    project: tempProject(),
+    env: { PLAN2CODE_IN_APP: "1" },
+  });
+  await openHelp(s);
+  await tabButton(s, "finishing").click();
+  const text = s.page.locator("#help-finishing-stop-text");
+  await text.getByText("to paste into the terminal panel", { exact: false }).waitFor();
+  assert.equal(await text.getByText("new conversation", { exact: false }).count(), 0, "no classic-mode wording under the app");
+});
+
+// The Planny-poses catalog's own "Done" entry also said "close the tab":
+// there is no tab under the app, only the one window.
+test("under the app, Planny's Done pose says to close the window, not the tab", async (t) => {
+  savedLooks(t, { welcomeSeen: true });
+  const s = await openSession(await suite.browser(), {
+    t,
+    workflow: "plan",
+    payload: { items: [{ id: "q1", kind: "text", title: "What to call it", body: "A short name." }], agent: { status: "waiting" } },
+    project: tempProject(),
+    env: { PLAN2CODE_IN_APP: "1" },
+  });
+  await openHelp(s);
+  await tabButton(s, "planny").click();
+  const text = s.page.locator("#help-planny-done-text");
+  await text.getByText("close the window", { exact: false }).waitFor();
+  assert.equal(await text.getByText("close the tab", { exact: false }).count(), 0, "no classic-mode wording under the app");
+});
+
+// Help's own description of the handoff Copy button named "a new conversation",
+// the console's own wording for what New Session does under the app.
+test("under the app, Help's dashboard topic calls the handoff copy button Copy for another session", async (t) => {
+  savedLooks(t, { welcomeSeen: true });
+  const s = await openSession(await suite.browser(), {
+    t,
+    workflow: "dashboard",
+    payload: { agent: { status: "waiting" } },
+    project: tempProject(),
+    env: { PLAN2CODE_IN_APP: "1" },
+  });
+  await toTheDashboard(s);
+  await openHelp(s);
+  await tabButton(s, "dashboard").click();
+  const text = s.page.locator("#help-handoff-copy-text");
+  await text.getByText("Copy for another session", { exact: false }).waitFor();
+  assert.equal(await text.getByText("Copy for a new conversation", { exact: false }).count(), 0, "no classic-mode wording under the app");
+});
+
+// Every Help topic, as the reader sees it in each mode: the visible text of
+// each panel in turn. A browser tab's wording never shows under the app, and
+// the app's never shows in a browser, wherever in Help it sits.
+async function visibleHelpText(s) {
+  await openHelp(s);
+  const texts = {};
+  for (const t of HELP_TABS) {
+    await tabButton(s, t.id).click();
+    texts[t.id] = await s.page.locator("#help-panel-" + t.id).innerText();
+  }
+  return texts;
+}
+
+const BROWSER_ONLY = [/browser tab/i, /this tab\b/i, /close the tab/i, /closed tab/i, /in your browser/i, /your terminal/i, /in a new conversation/i, /new link/i, /same link/i, /address bar/i, /terminal you started/i];
+const APP_ONLY = [/terminal panel/i, /app's window/i, /app's own bar/i, /New Session/];
+
+for (const inApp of [true, false]) {
+  test(`every Help topic reads right ${inApp ? "under the app" : "in a browser"}`, async (t) => {
+    savedLooks(t, { welcomeSeen: true });
+    const s = await openSession(await suite.browser(), {
+      t,
+      workflow: "plan",
+      payload: { items: [{ id: "q1", kind: "text", title: "What to call it", body: "A short name." }], agent: { status: "waiting" } },
+      project: tempProject(),
+      ...(inApp ? { env: { PLAN2CODE_IN_APP: "1" } } : {}),
+    });
+    const texts = await visibleHelpText(s);
+    const hits = [];
+    for (const [tab, text] of Object.entries(texts)) {
+      for (const re of inApp ? BROWSER_ONLY : APP_ONLY) {
+        const hit = text.match(re);
+        if (hit) hits.push(`${tab}: ...${text.slice(Math.max(0, hit.index - 50), hit.index + 50).replace(/\s+/g, " ")}...`);
+      }
+    }
+    assert.deepEqual(hits, [], "wording from the other mode");
+    // And each mode's own wording is really there, so the sweep is reading the panels.
+    const all = Object.values(texts).join(" ");
+    assert.match(all, inApp ? /terminal panel/ : /your terminal/);
+  });
+}

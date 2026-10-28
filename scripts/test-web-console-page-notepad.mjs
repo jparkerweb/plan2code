@@ -20,7 +20,7 @@ import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { pageSuite, openSession, drawn } from "./page-test-helpers.mjs";
+import { pageSuite, openSession, drawn, styleOf } from "./page-test-helpers.mjs";
 import { JPEG, backdate, cli, until } from "./web-console-test-helpers.mjs";
 import {
   LEGACY_TAB_ID,
@@ -31,6 +31,7 @@ import {
   defaultTabId,
   deleteTab,
   listTabs,
+  markTabSent,
   notepadFolder,
   notepadKey,
   readNotepad,
@@ -249,7 +250,7 @@ test("the editor breaks no content-security rule, and hostile Markdown runs noth
   assert.equal(result.styleTags, 0, "the editor added no <style> element");
   assert.deepEqual(consoleErrors.filter((e) => /Content.Security.Policy|Refused to/i.test(e)), []);
   // The heading is styled from the stylesheet the page ships.
-  const h1 = await s.page.locator("#notepad-editor .cm-h1").evaluate((el) => getComputedStyle(el).fontWeight);
+  const h1 = await styleOf(s.page.locator("#notepad-editor .cm-h1"), "fontWeight");
   assert.ok(Number(h1) >= 600 || h1 === "bold", `the heading is bold (${h1})`);
 });
 
@@ -301,7 +302,7 @@ test("the editor follows the console's light and dark themes", async (t) => {
   await openNotepad(s);
   await setDoc(s, "# Heading\n\nText");
   await s.page.locator("#notepad-editor .cm-h1").waitFor();
-  const colours = (theme) =>
+  const colors = (theme) =>
     s.page.evaluate((th) => {
       document.documentElement.setAttribute("data-theme", th);
       const root = getComputedStyle(document.documentElement);
@@ -325,13 +326,13 @@ test("the editor follows the console's light and dark themes", async (t) => {
         background: getComputedStyle(shadow.querySelector(".cm-editor")).backgroundColor,
       };
     }, theme);
-  const light = await colours("light");
-  const dark = await colours("dark");
+  const light = await colors("light");
+  const dark = await colors("dark");
   for (const [name, c] of Object.entries({ light, dark })) {
     assert.equal(c.text, c.ink, `${name}: text in the console's ink`);
-    assert.equal(c.heading, c.accent, `${name}: headings in the highlight colour`);
-    assert.equal(c.caret, c.accent, `${name}: the caret in the highlight colour`);
-    assert.equal(c.background, c.panel, `${name}: the editor on the panel colour`);
+    assert.equal(c.heading, c.accent, `${name}: headings in the highlight color`);
+    assert.equal(c.caret, c.accent, `${name}: the caret in the highlight color`);
+    assert.equal(c.background, c.panel, `${name}: the editor on the panel color`);
   }
   assert.notEqual(light.text, dark.text, "the two themes differ");
   assert.notEqual(light.background, dark.background);
@@ -348,15 +349,23 @@ test("headings grow, bullets draw, and marks come back on the line the cursor is
       return [...root.querySelectorAll(".cm-line")].map((l) => ({ text: l.textContent, size: parseFloat(getComputedStyle(l).fontSize) }));
     });
   // The cursor starts on line 1 (the "# Big" heading): its mark shows, the
-  // second heading's does not.
-  let seen = await lines();
+  // second heading's does not. The editor hides marks and draws bullets a
+  // little after the text lands, so wait for that before looking.
+  let seen;
+  await until(async () => {
+    seen = await lines();
+    return seen[2]?.text === "Smaller" && seen[4] && !seen[4].text.startsWith("-");
+  }, 5000);
   assert.equal(seen[0].text, "# Big");
   assert.equal(seen[2].text, "Smaller", "off the cursor line the mark is hidden");
   assert.ok(seen[0].size > seen[2].size && seen[2].size > seen[7].size, `heading sizes step down: ${seen.map((l) => l.size).join(", ")}`);
   assert.ok(seen[4].text.startsWith("•") || !seen[4].text.startsWith("-"), `a bullet is drawn, not a hyphen: "${seen[4].text}"`);
   // Click the second heading: its mark comes back.
   await s.page.locator("#notepad-editor .cm-h2").click();
-  seen = await lines();
+  await until(async () => {
+    seen = await lines();
+    return seen[2].text === "## Smaller";
+  }, 5000);
   assert.equal(seen[2].text, "## Smaller");
   assert.equal(seen[0].text, "Big");
 });
@@ -706,15 +715,17 @@ test("Delete asks twice, Escape backs out of either, and only the second confirm
   await panel.waitFor({ state: "hidden" });
   assert.equal(fs.existsSync(folder), true);
 
-  // Both confirms: gone, with its folder, and the neighbour is shown.
+  // Both confirms: gone, with its folder, and the neighbor is shown.
   await s.page.click(X_SELECTED);
   await s.page.click("#notepad-delete-go");
   await s.page.click("#notepad-delete-go");
   await until(() => !fs.existsSync(folder), 4000);
   await s.page.waitForFunction(() => document.querySelectorAll("#notepad-tabs .notepad-tab").length === 1);
+  // The strip redraws before the neighbor is marked selected.
+  await until(async () => (await selectedName(s)).length === 1, 4000);
   assert.deepEqual(await selectedName(s), ["Notes"]);
   assert.equal(await shows(s, "keep me"), "keep me");
-  assert.equal(listTabs(s.project).last, idOf(s, "Notes"), "the neighbour became the last tab");
+  assert.equal(listTabs(s.project).last, idOf(s, "Notes"), "the neighbor became the last tab");
 
   // Delete the last tab: the empty state, with the focus on its button.
   await s.page.click(X_SELECTED);
@@ -760,6 +771,9 @@ test("text typed into a tab that is then deleted is never saved, and a tab delet
   deleteTab(s.project, elsewhere);
   await tabNamed(s, "Elsewhere").click();
   await s.page.waitForFunction((want) => document.getElementById("notepad-status").textContent.includes(want), errorSentence("no-such-tab"));
+  // The status line updates first; the bar itself waits on a second, separate
+  // fetch (readNote(null), after the first one 404s) that lands after it.
+  await s.page.waitForFunction(() => document.querySelectorAll("#notepad-tabs .notepad-tab").length === 1);
   assert.deepEqual(await tabNames(s), ["Notes"]);
 });
 
@@ -805,7 +819,7 @@ test("when the tab after a delete cannot be loaded, the deleted text is not left
   await typeInto(s, "doomed text");
   const ideas = idOf(s, "Ideas");
   await until(() => readNotepad(s.project, ideas).text === "doomed text", 4000);
-  // The neighbour's read fails, as if the connection dropped right after the delete.
+  // The neighbor's read fails, as if the connection dropped right after the delete.
   await s.page.route("**/notepad?tab=*", (route) => route.abort());
   await s.page.click(X_SELECTED);
   await s.page.click("#notepad-delete-go");
@@ -833,8 +847,8 @@ const readyCount = (s, n) =>
   s.page.waitForFunction((want) => document.querySelectorAll("#notepad-strip > li.is-ready").length === want, n, { timeout: 5000 });
 
 // A small PNG drawn in the page, as base64: a real picture for reencode() to
-// decode, one colour per call so the pictures differ.
-const pngBase64 = (s, colour) =>
+// decode, one color per call so the pictures differ.
+const pngBase64 = (s, color) =>
   s.page.evaluate(async (fill) => {
     const c = document.createElement("canvas");
     c.width = 320;
@@ -846,13 +860,13 @@ const pngBase64 = (s, colour) =>
     let bin = "";
     for (const b of new Uint8Array(await blob.arrayBuffer())) bin += String.fromCharCode(b);
     return btoa(bin);
-  }, colour);
+  }, color);
 
-const pngFile = async (s, colour, name = "shot.png") => ({ name, mimeType: "image/png", buffer: Buffer.from(await pngBase64(s, colour), "base64") });
+const pngFile = async (s, color, name = "shot.png") => ({ name, mimeType: "image/png", buffer: Buffer.from(await pngBase64(s, color), "base64") });
 
-async function addViaButton(s, colour) {
+async function addViaButton(s, color) {
   const before = stored(s).length;
-  await s.page.setInputFiles("#notepad-file", await pngFile(s, colour));
+  await s.page.setInputFiles("#notepad-file", await pngFile(s, color));
   await until(() => stored(s).length === before + 1 && filesOf(s, stored(s).at(-1).id).every(Boolean), 5000);
   await readyCount(s, before + 1);
 }
@@ -860,7 +874,7 @@ async function addViaButton(s, colour) {
 // A synthetic paste or drop of one PNG, sent to the editor, where a person's
 // would land. A paste answers whether the page took it from the editor, a
 // drop whether the dialog lit up while it was dragged over.
-const sendPicture = (s, kind, colour) =>
+const sendPicture = (s, kind, color) =>
   s.page.evaluate(
     async ({ kind, fill }) => {
       const c = document.createElement("canvas");
@@ -879,7 +893,7 @@ const sendPicture = (s, kind, colour) =>
       ta.dispatchEvent(new DragEvent("drop", { dataTransfer: dt, bubbles: true, cancelable: true, composed: true }));
       return lit;
     },
-    { kind, fill: colour },
+    { kind, fill: color },
   );
 
 test("Add image, paste and drop each add a thumbnail whose files are on disk and which survives closing", async (t) => {
@@ -960,7 +974,7 @@ test("the X asks first: Keep keeps the picture, Delete removes both its files", 
 test("the preview opens at the clicked picture, steps and wraps, and Esc closes it before the Notebook", async (t) => {
   const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_QUESTION });
   await openNotepad(s);
-  for (const colour of ["#c33", "#3c3", "#33c"]) await addViaButton(s, colour);
+  for (const color of ["#c33", "#3c3", "#33c"]) await addViaButton(s, color);
   const urls = stored(s).map((img) => img.url);
   const shown = () =>
     s.page.evaluate(() => ({
@@ -1159,4 +1173,40 @@ test("Help's Getting around panel describes the notepad", async (t) => {
   for (const words of ["Notebook", "never sent to Plan2Code", "last save wins", "Cleanup"]) {
     assert.ok(text.includes(words), `the panel mentions ${words}`);
   }
+});
+
+test("a sent tab wears a badge after its name, and the open tab shows Sent to <Skill> · <Date>", async (t) => {
+  const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_QUESTION });
+  const sent = createTab(s.project, "Sent one").id;
+  createTab(s.project, "Plain");
+  saveNoteTo(s.project, sent, "an idea");
+  const { sent: record } = markTabSent(s.project, sent, { workflow: "revise-plan", spec: "specs/lunch-vote" });
+  // The page draws its own short date; the line must carry the same one.
+  const day = await s.page.evaluate((at) => new Date(at).toLocaleDateString(undefined, { month: "short", day: "numeric" }), record.at);
+  const line = s.page.locator("#notepad-sent");
+
+  await openNotepad(s);
+  // Plain was made last, so it opens first: no badge, no line.
+  assert.equal(await selectedName(s).then((n) => n.join()), "Plain");
+  assert.equal(await line.isHidden(), true, "no Sent to line on a tab never sent");
+  const badges = s.page.locator("#notepad-tabs .notepad-sent-badge");
+  assert.equal(await badges.count(), 1, "one badge, on the sent tab only");
+  assert.equal(await badges.first().textContent(), "sent");
+  const wrapOf = (name) => s.page.locator("#notepad-tabs .notepad-tabwrap").filter({ has: s.page.locator(".notepad-tab", { hasText: new RegExp(`^${name}$`) }) });
+  assert.equal(await wrapOf("Sent one").locator(".notepad-sent-badge").count(), 1);
+  assert.equal(await wrapOf("Plain").locator(".notepad-sent-badge").count(), 0);
+  assert.equal(await tabNamed(s, "Sent one").getAttribute("aria-label"), "Sent one, sent");
+  assert.equal(await tabNamed(s, "Plain").getAttribute("aria-label"), null);
+  assert.ok(parseFloat(await styleOf(badges.first(), "font-size")) < 13, "the badge is small");
+
+  await tabNamed(s, "Sent one").click();
+  assert.equal(await shows(s, "an idea"), "an idea");
+  await line.waitFor({ state: "visible" });
+  assert.equal(await line.textContent(), `Sent to Revise plan (lunch-vote) · ${day}`);
+  // Under the editor and above the pictures.
+  const order = await s.page.evaluate(() => [...document.getElementById("notepad-body").children].map((c) => c.id));
+  assert.ok(order.indexOf("notepad-sent") === order.indexOf("notepad-editor") + 1 && order.indexOf("notepad-sent") < order.indexOf("notepad-images"), order.join(", "));
+
+  await tabNamed(s, "Plain").click();
+  await line.waitFor({ state: "hidden" });
 });

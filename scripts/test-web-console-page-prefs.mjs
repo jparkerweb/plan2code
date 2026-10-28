@@ -117,6 +117,117 @@ test("the launcher's model menus have Claude, Devin and Codex tabs, and a model 
   assert.equal(await s.page.locator("#models-user").getByRole("textbox", { name: "Model id" }).inputValue(), "gpt-test-codex-1");
 });
 
+test("Agents: a person adds an agent, tests its command, sees it saved after a reload, and deletes it", async (t) => {
+  noSavedLooks(t);
+  const file = path.join(MODELS_DIR, "agents.json");
+  fs.rmSync(file, { force: true });
+  t.after(() => fs.rmSync(file, { force: true }));
+  const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_QUESTION });
+  await s.page.click("#btn-looks");
+  const list = s.page.locator("#agents-list");
+  assert.equal(await list.locator(".agent-card").count(), 0, "no agents before one is added");
+
+  await s.page.click("#agents-add");
+  const card = list.locator(".agent-card").last();
+  await card.getByRole("textbox", { name: "Name", exact: true }).fill("Test Agent");
+  await card.getByRole("textbox", { name: "Command", exact: true }).fill("node");
+  await card.getByRole("textbox", { name: "Command", exact: true }).press("Tab");
+  await s.page.locator("#agents-status").filter({ hasText: /^Saved./ }).waitFor();
+
+  await card.getByRole("button", { name: "Test", exact: true }).click();
+  await card.locator(".agent-test-result").filter({ hasText: /^Found at / }).waitFor();
+
+  const saved = JSON.parse(fs.readFileSync(file, "utf8"));
+  assert.equal(saved.schema, 1);
+  assert.deepEqual(saved.agents.map((a) => [a.id, a.name, a.command, a.prompt]), [["test-agent", "Test Agent", "node", "/plan2code"]]);
+
+  // A second agent with the same name is refused on its own card and field.
+  await s.page.click("#agents-add");
+  const second = list.locator(".agent-card").nth(1);
+  await second.getByRole("textbox", { name: "Command", exact: true }).fill("x");
+  await second.getByRole("textbox", { name: "Name", exact: true }).fill("TEST AGENT");
+  await second.getByRole("textbox", { name: "Name", exact: true }).press("Tab");
+  await list.locator(".agent-card").nth(1).locator(".agent-error").filter({ hasText: /already used/ }).waitFor();
+  assert.equal(await list.locator(".agent-card").nth(1).locator('input.invalid[data-field="name"]').count(), 1, "the name field is marked");
+  assert.equal(JSON.parse(fs.readFileSync(file, "utf8")).agents.length, 1, "a refused save writes nothing");
+
+  await s.page.reload({ waitUntil: "domcontentloaded" });
+  await drawn(s.page);
+  await s.page.click("#btn-looks");
+  await list.locator(".agent-card").first().waitFor();
+  assert.equal(await list.locator(".agent-card").count(), 1);
+  assert.equal(await list.locator(".agent-card").first().getByRole("textbox", { name: "Name", exact: true }).inputValue(), "Test Agent");
+
+  await list.locator(".agent-card").first().getByRole("button", { name: "Delete", exact: true }).click();
+  await list.locator(".agent-card").first().getByRole("button", { name: "Yes, delete" }).click();
+  await s.page.waitForFunction(() => document.querySelectorAll("#agents-list .agent-card").length === 0);
+  await s.page.locator("#agents-status").filter({ hasText: /^Saved./ }).waitFor();
+  assert.deepEqual(JSON.parse(fs.readFileSync(file, "utf8")).agents, []);
+});
+
+test("Agents: a new card's first field is not saved alone, and a redraw keeps focus and what was typed", async (t) => {
+  noSavedLooks(t);
+  const file = path.join(MODELS_DIR, "agents.json");
+  fs.rmSync(file, { force: true });
+  t.after(() => fs.rmSync(file, { force: true }));
+  const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_QUESTION });
+  await s.page.click("#btn-looks");
+  const list = s.page.locator("#agents-list");
+  await s.page.click("#agents-add");
+  const card = list.locator(".agent-card").last();
+  const name = card.getByRole("textbox", { name: "Name", exact: true });
+  const command = card.getByRole("textbox", { name: "Command", exact: true });
+
+  await name.fill("Focus Agent");
+  await name.press("Tab");
+  await s.page.waitForTimeout(300);
+  assert.equal(await list.locator(".agent-error").count(), 0, "a name alone is not sent, so nothing is refused");
+  assert.equal(fs.existsSync(file), false, "and nothing is written");
+  assert.equal(await command.evaluate((el) => el === document.activeElement), true, "Tab lands on Command");
+
+  // The first good save assigns an id and redraws every card: focus stays where Tab put it.
+  await command.fill("node");
+  await command.press("Tab");
+  await s.page.locator("#agents-status").filter({ hasText: /^Saved./ }).waitFor();
+  assert.equal(JSON.parse(fs.readFileSync(file, "utf8")).agents[0].id, "focus-agent");
+  assert.equal(await s.page.evaluate(() => document.activeElement?.textContent), "Add an argument", "focus survives the redraw");
+
+  // A refused save redraws too: the field being typed in keeps its text, and leaving it saves it.
+  const prompt = list.locator(".agent-card").last().getByRole("textbox", { name: "Start prompt", exact: true });
+  await name.fill("");
+  await prompt.click();
+  await prompt.fill("/plan2code hi");
+  await list.locator(".agent-error").filter({ hasText: /name is missing/ }).waitFor();
+  assert.equal(await s.page.evaluate(() => document.activeElement?.getAttribute("aria-label")), "Start prompt");
+  assert.equal(await s.page.evaluate(() => document.activeElement?.value), "/plan2code hi");
+});
+
+test("Agents: a file holding entries the page could not read is only replaced after Save anyway", async (t) => {
+  noSavedLooks(t);
+  const file = path.join(MODELS_DIR, "agents.json");
+  fs.mkdirSync(MODELS_DIR, { recursive: true });
+  const text = JSON.stringify({ schema: 2, agents: [{ id: "future", name: "Future", command: "future" }] });
+  fs.writeFileSync(file, text);
+  t.after(() => fs.rmSync(file, { force: true }));
+  const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_QUESTION });
+  await s.page.click("#btn-looks");
+  await s.page.locator("#agents-status").filter({ hasText: /schema 2/ }).waitFor();
+  assert.equal(await s.page.locator("#agents-replace").isVisible(), false, "no Save anyway before a save is tried");
+
+  await s.page.click("#agents-add");
+  const card = s.page.locator("#agents-list .agent-card").last();
+  await card.getByRole("textbox", { name: "Name", exact: true }).fill("Mine");
+  await card.getByRole("textbox", { name: "Command", exact: true }).fill("node");
+  await card.getByRole("textbox", { name: "Command", exact: true }).press("Tab");
+  await s.page.locator("#agents-status").filter({ hasText: /could not read/ }).waitFor();
+  assert.equal(fs.readFileSync(file, "utf8"), text, "the refused save writes nothing");
+
+  await s.page.locator("#agents-replace").click();
+  await s.page.locator("#agents-status").filter({ hasText: /^Saved./ }).waitFor();
+  assert.equal(await s.page.locator("#agents-replace").isVisible(), false);
+  assert.deepEqual(JSON.parse(fs.readFileSync(file, "utf8")).agents.map((a) => a.id), ["mine"]);
+});
+
 test("Cleanup scans the console home and lists an old session folder with its size", async (t) => {
   noSavedLooks(t);
   const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_QUESTION });

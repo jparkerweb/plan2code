@@ -281,7 +281,7 @@ test("git: commits on a run go only with git-commits, as a whole number", () => 
   }
 });
 
-test("git: the Git card is never greyed, and its resume command is /plan2code-git", () => {
+test("git: the Git card is never grayed, and its resume command is /plan2code-git", () => {
   const entry = SKILL_CATALOG.find((e) => e.skill === "plan2code-git");
   assert.equal(entry.workflow, "git");
   assert.deepEqual(cardAvailability(entry, { hasAgents: true, isGit: false }, null), { on: true, note: GIT_INIT_NOTE });

@@ -112,13 +112,13 @@ The primary channel. One question object per probe, up to three in a single call
 
 - **Header** — the decision in two or three plain words (`Export format`, `Size cap`). Not a type, not a marker, not a number.
 - **Question** — the probe, with its why-it-matters. This is prose and it is not rationed; the same sentences you would have written in a Q block go here.
-- **Options** — the genuine alternatives, each described by its trade-off, with the recommended one named as such in its description. Two to four; the free-text escape hatch covers the rest. Label plainly, then let the description carry the precise term: `One file per message` labelling the `.eml`-in-a-ZIP option, with `.eml` named in the description.
+- **Options** — the genuine alternatives, each described by its trade-off, with the recommended one named as such in its description. Two to four; the free-text escape hatch covers the rest. Label plainly, then let the description carry the precise term: `One file per message` labeling the `.eml`-in-a-ZIP option, with `.eml` named in the description.
 
 A short *label* is not a short *decision*. The label is a handle — `Fixed tick count` — and the description carries the trade-off that makes it choosable. A label bundling several independent answers is a probe that wants splitting.
 
 **A click is a decision, not a sentence.** The HITL rule wants an `## Answer` traceable to something the human actually said, and a selected option label is thin evidence on its own. What makes tool-delivered answers legitimate is the recap turn in *Landing the grill* — you play the choices back in the tool's question text and they confirm or correct in their own words. Never skip the recap on the grounds that the tool already captured the answer; the tool captured the *pick*, and the recap captures the *agreement*.
 
-**If a reply comes back thinner than the decision** — a bare click on something you now realise carries weight — do not paper over it. Fold the why into the recap turn as one more probe before writing the `## Answer`.
+**If a reply comes back thinner than the decision** — a bare click on something you now realize carries weight — do not paper over it. Fold the why into the recap turn as one more probe before writing the `## Answer`.
 
 #### Numbered Q blocks
 

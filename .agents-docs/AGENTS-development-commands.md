@@ -47,12 +47,20 @@ cd plan2code-metrics && npm install   # First time setup
 cd plan2code-metrics && npm run build # Build the CLI
 cd plan2code-metrics && npm test      # vitest (aggregator, community, improver)
 
+# Desktop app (plan2code-app/, Rust + Tauri). CI's `app` workflow runs all three on
+# Windows, macOS and Linux and fails on any rustfmt difference or clippy warning, so run
+# them before pushing, not only cargo test (see plan2code-app/README.md "Tests").
+# First time: rustup component add rustfmt clippy (for the toolchain in rust-toolchain.toml)
+cd plan2code-app && node scripts/vendor.mjs && cargo fmt --check
+cd plan2code-app && cargo clippy --workspace --all-targets -- -D warnings
+cd plan2code-app && cargo test --workspace
+
 # Plan2Code Bot (end-to-end workflow runner, Claude Agent SDK)
 cd plan2code-bot && npm install && npm run build
 cd plan2code-bot && npm test          # vitest
 ```
 
-The root `npm test` does not run the metrics or bot vitest suites; run them in their package. `npm run dev` in loop, metrics and bot is `tsup --watch`. The web console and launcher suites isolate themselves with `PLAN2CODE_CONSOLE_HOME`, `PLAN2CODE_MODELS_DIR` and `PLAN2CODE_NO_BROWSER=1` (`scripts/web-console-test-helpers.mjs`), so they never open a browser or touch your real console home. The web console suites are split by area so `node --test` runs them in parallel.
+The root `npm test` does not run the metrics or bot vitest suites; run them in their package. `npm run dev` in loop, metrics and bot is `tsup --watch`. The web console and launcher suites isolate themselves with `PLAN2CODE_CONSOLE_HOME`, `PLAN2CODE_MODELS_DIR` and `PLAN2CODE_NO_BROWSER=1` (`scripts/web-console-test-helpers.mjs`), so they never open a browser or touch your real console home. The web console suites are split by area so `node --test` runs them in parallel. `npm test` runs them through `scripts/node-test.mjs`, which caps the files run at once at one per spare core (8 at most): each page test file drives a browser, and more at once than the cores can carry fails page tests at random (a flat 8 did on 3 and 4 core CI runners). Page tests (`test-web-console-page-*.mjs`) read styles and set scrolls only through `styleOf()`, `stylesOf()` and `scrollCard()` from `page-test-helpers.mjs`, which retry until the element is still on the page; `test-web-console-shape.mjs` fails a raw `locator.evaluate` that does either.
 
 ## Test/Dev Env Vars
 
@@ -62,7 +70,7 @@ The root `npm test` does not run the metrics or bot vitest suites; run them in t
 | `PLAN2CODE_NO_BROWSER` | `open` does not launch a browser (`NO_BROWSER` also works). |
 | `PLAN2CODE_BROWSER` | Browser command line to run with the link appended, instead of the system default. |
 | `PLAN2CODE_MODELS_DIR` | Moves the launcher model menus (`bin/models.json`, `models.json`) away from `~/.plan2code`, for tests. |
-| `PLAN2CODE_PICKER_ECHO` | Tests only: `/workspace/browse` returns this as the picked folder instead of opening a picker (`-` means cancelled). |
+| `PLAN2CODE_PICKER_ECHO` | Tests only: `/workspace/browse` returns this as the picked folder instead of opening a picker (`-` means canceled). |
 | `PLAN2CODE_CONSOLE_TRACE` | Set to `1` on `open` to print a start-up step timeline to stderr. |
 
 ## Installer Menu Options
@@ -144,7 +152,7 @@ See the `skills/` build-artifact gotcha in [Code Style & Gotchas](./AGENTS-code-
 1. Create `src/plan2code-<name>.md` with body content only and keep it under 20,000 characters.
 2. Register it in `SOURCE_PROMPTS` in `install.js` (with the web-console `additionalReferences` entry every skill carries); add a `generateStepLabel()` case when needed. List any shared scripts it runs in `scripts: [...]`, and put its own scripts in `src/plan2code-<name>-scripts/` (with a `scripts/test-script-<name>.mjs` added to `package.json`'s `test` list).
 3. Register it with the web console. The meter's points and labels, the resume command, Help's card list and `console.mjs help`'s workflow list are all derived from `skills.js`, so the edits are `skills.js`, `install.js` (step 2), the skill's prompt (step 1), its pose and its notes; `npm test` names anything else left out:
-   - `src/web-console/public/skills.js`: one entry (workflow, label, start pose, flags, subagents line, the meter's `weight`, `started` and `ran`, and `resume`) with its card (plus `help` when Help's line should differ from the blurb), and the card's `states` and `greyed`. Utilities go in group `"extra"` before Changelog.
+   - `src/web-console/public/skills.js`: one entry (workflow, label, start pose, flags, subagents line, the meter's `weight`, `started` and `ran`, and `resume`) with its card (plus `help` when Help's line should differ from the blurb), and the card's `states` and `grayed`. Utilities go in group `"extra"` before Changelog.
    - `src/web-console/public/index.html`: its start pose, an `<svg class="pose pose-<workflow>" data-pose="<workflow>">` in `<template id="start-poses">` (pose CSS in `public/styles/poses.css`), unless its `pose` borrows an existing one (as Implement + Review borrows Implement's).
    - Its help topic: a `src/web-console/notes/<workflow>.md` (named in the skill's Interface line) or a `HELP_TOPICS` alias in `src/web-console/cmd-help.mjs`.
    - `src/plan2code.md`: the skill/workflow table and "What each skill reads and writes" (`scripts/check-skill-table.mjs`: every backticked token must appear in the skill's prompt).

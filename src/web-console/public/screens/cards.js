@@ -245,7 +245,7 @@ export function buildPager(item) {
   // Once this question is answered, the step is the next unanswered one, not
   // Send. Send lighting up the moment a single answer is staged pulls people
   // into sending one question at a time, which is three round trips where the
-  // workflow wanted one. So the emphasis moves to whichever neighbour still
+  // workflow wanted one. So the emphasis moves to whichever neighbor still
   // needs them, and Send goes quiet until nothing does.
   const here = Boolean(page.local.staged[item.id]);
   const nextT = open[at + 1];
@@ -257,7 +257,7 @@ export function buildPager(item) {
   const leadNext = here && needs(nextT);
   const leadPrev = here && !leadNext && needs(prevT);
 
-  // An end of the queue is an empty slot, not a disabled button. A greyed
+  // An end of the queue is an empty slot, not a disabled button. A grayed
   // "Previous" pointing at nothing is a control that exists only to say no.
   const mk = (target, back, lead) => {
     if (!target) return el("span", "pager-slot");
@@ -1000,8 +1000,10 @@ function buildText(card, item, staged) {
     wrap.appendChild(templateRow(item, input, templatesFor(page.S.workflow, looks.role), check));
   }
   wrap.appendChild(input);
-  // Fresh-idea boxes take files as context, the same ones the note pane holds.
-  if (!single && TEMPLATE_WORKFLOWS.includes(page.S.workflow)) {
+  // Fresh-idea boxes take files as context, the same ones the note pane holds,
+  // and so does any box the page fills from a Notebook tab (Revise plan's
+  // "What should change"), whose ticked pictures land here.
+  if (!single && (TEMPLATE_WORKFLOWS.includes(page.S.workflow) || item.fill === "note")) {
     input.addEventListener("paste", (e) => {
       const files = incomingFiles(e.clipboardData && e.clipboardData.files);
       if (!files.length) return;
@@ -1317,11 +1319,13 @@ function buildMenu(card, item, staged) {
     radio.id = optionId(item, o, i);
     radio.value = o.k;
     radio.checked = Boolean(picked);
-    radio.setAttribute("aria-label", o.k ? `${o.k}: ${o.text}` : o.text);
+    // Under the app a fresh start is the bar's New Session, so say that.
+    const text = page.inApp && o.fresh === true ? "Start New Session" : o.text;
+    radio.setAttribute("aria-label", o.k ? `${o.k}: ${text}` : text);
     radio.addEventListener("change", () => stage(item.id, { type: "answer", kind: "menu", k: o.k }));
     const body = el("div", "option-body");
     const head = el("div", "option-label");
-    head.appendChild(el("span", null, o.text));
+    head.appendChild(el("span", null, text));
     if (o.recommended) head.appendChild(el("span", "pill suggested", "Suggested"));
     body.appendChild(head);
     if (o.detail) body.appendChild(el("p", "option-detail", o.detail));
@@ -1348,7 +1352,7 @@ function buildList(card, item, staged) {
   // over the array from render time. A reorder replaces that array, so a stale
   // closure would quietly undo the reorder the next time a rename committed.
   // A name still being typed counts too: the tool buttons below keep the
-  // field's focus (their mousedown is cancelled), so its `change` has not
+  // field's focus (their mousedown is canceled), so its `change` has not
   // fired yet when they act, and the re-render would otherwise drop it.
   const ul = el("ul", "rows");
   const baseRows = () => {
@@ -1495,22 +1499,29 @@ function buildList(card, item, staged) {
   }
   card.appendChild(row);
   card.appendChild(el("p", "help", "Drag to reorder, click a name to rename it."));
-  commentField(card, item, "Anything else about this breakdown?", false, "no changes");
+  const quick = [{ label: "No changes", text: "no changes" }];
+  // Only a plan's breakdown is phases; a list card elsewhere is something else.
+  if (PHASE_WORKFLOWS.includes(page.S.workflow)) quick.push({ label: "Combine phases", text: COMBINE_PHASES });
+  commentField(card, item, "Anything else about this breakdown?", false, quick);
 }
 
-function commentField(card, item, labelText, required, quickText) {
+const PHASE_WORKFLOWS = ["plan", "revise-plan"];
+const COMBINE_PHASES =
+  "Combine phases where possible to simplify and reduce the total number of phases, while still keeping a clear separation of concerns.";
+
+function commentField(card, item, labelText, required, quickAnswers = []) {
   const wrap = el("div", "field");
   const id = "note-" + item.id;
   const label = el("label", null, labelText);
   label.htmlFor = id;
   wrap.appendChild(label);
-  let quick = null;
-  if (quickText) {
-    quick = el("button", "btn tiny", quickText.charAt(0).toUpperCase() + quickText.slice(1));
-    quick.type = "button";
-    quick.title = "Fill in \"" + quickText + "\"";
-    wrap.appendChild(quick);
-  }
+  const quicks = quickAnswers.map(({ label, text }) => {
+    const b = el("button", "btn tiny quick-answer", label);
+    b.type = "button";
+    b.title = "Fill in \"" + text + "\"";
+    wrap.appendChild(b);
+    return [b, text];
+  });
   const ta = el("textarea");
   ta.id = id;
   ta.placeholder = required ? "Tell Plan2Code what to change." : "Optional.";
@@ -1531,9 +1542,9 @@ function commentField(card, item, labelText, required, quickText) {
     stagedChanged();
   });
   wrap.appendChild(ta);
-  if (quick)
-    quick.addEventListener("click", () => {
-      ta.value = quickText;
+  for (const [b, text] of quicks)
+    b.addEventListener("click", () => {
+      ta.value = text;
       ta.dispatchEvent(new Event("input", { bubbles: true }));
       ta.focus();
     });

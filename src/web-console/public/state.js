@@ -46,6 +46,12 @@ export function fresh() {
     launching: null,
     // A picker Delete sent and not yet answered by a rescan: { dir, scanAt }.
     deleting: null,
+    // A Notebook tab picked at Start, riding the hop until the launched
+    // skill's `fill: "note"` box takes it: { tab, text, pictures, workflow, spec? }.
+    noteSend: null,
+    // The box it filled, until a send carrying that box marks the tab sent:
+    // { item, tab, workflow, spec? }.
+    noteSent: null,
     retract: {},
     chat: freshChat(),
   };
@@ -101,12 +107,17 @@ export const page = {
   // The frame's update ({ installed, latest }), present only when a newer
   // release is out; null otherwise.
   updateFrame: null,
+  // Whether the desktop app is driving this session (the frame's `inApp`):
+  // false until the first frame lands, same as every other flag here, and
+  // from an older server that sends none.
+  inApp: false,
   // The frame's Subagents switch ({ offered, supported, on, instruction, max,
   // revision }), or null before a server that sends it.
   subagentsFrame: null,
-  // The spec's overview.md as last fetched: `key` is the spec dir it was read
-  // for, `text` the file, or null when there is none. See loadOverview().
-  overview: { key: null, text: null },
+  // The spec's files as last fetched: `key` is the spec dir they were read
+  // for, `files` maps each SPEC_FILES kind (overview, map, draft) that exists
+  // to `{ file, text }`. See loadOverview().
+  overview: { key: null, files: {} },
   // The dashboard's first-open wake-up (boot.js), while it runs. `cards` turns
   // true at the glide, which lets the menu in; `entered` once its entrance has
   // played; `typed` is how many characters of the note show, or null once all

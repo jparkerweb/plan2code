@@ -43,7 +43,7 @@ const CWD = path.resolve(args.cwd || ROOT);
 const HOME = fs.mkdtempSync(path.join(os.tmpdir(), "p2c-bench-"));
 const ENV = { ...process.env, PLAN2CODE_CONSOLE_HOME: HOME, PLAN2CODE_NO_BROWSER: "1" };
 // A fresh cached failure: the boot-time release check stays off the network,
-// so a slow GitHub never colours the timings.
+// so a slow GitHub never colors the timings.
 fs.writeFileSync(path.join(HOME, "update-check.json"), JSON.stringify({ checkedAt: Date.now(), latest: null }));
 
 // Resolves at the first stdout line carrying a url, and again at exit.

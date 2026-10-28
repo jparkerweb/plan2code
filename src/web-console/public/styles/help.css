@@ -144,7 +144,7 @@
 .help-mood-bot { width: 40px; height: 56px; }
 .help-mood span { font-size: 12.5px; color: var(--ink-2); text-align: center; }
 
-/* The travelling highlight on the flow diagrams: only on the visible panel,
+/* The traveling highlight on the flow diagrams: only on the visible panel,
    only while the dialog is open, and only when the system allows motion.
    Otherwise the dashes simply sit still. */
 @media (prefers-reduced-motion: no-preference) {
@@ -175,3 +175,10 @@
 .about-live.is-good { background: var(--ok-soft); border-color: var(--ok); color: var(--ok); }
 .about-live.is-bad { background: var(--stage-soft); border-color: var(--stage); color: var(--stage); }
 
+
+/* Help says some things two ways, once for a browser tab and once for the
+   desktop app's window: `.for-browser` and `.for-app` siblings, with the root
+   marked `in-app` under the app (core.js). Important, because a block's own
+   display (a flex row, say) would otherwise outrank this. */
+:root:not(.in-app) .for-app,
+:root.in-app .for-browser { display: none !important; }

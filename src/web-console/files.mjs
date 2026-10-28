@@ -40,6 +40,9 @@ export const SESSIONS_DIR = path.join(HOME_DIR, "sessions");
 export const PLAN2CODE_DIR = process.env.PLAN2CODE_MODELS_DIR || path.join(os.homedir(), ".plan2code");
 export const SHIPPED_MODELS_FILE = path.join(PLAN2CODE_DIR, "bin", "models.json");
 export const USER_MODELS_FILE = path.join(PLAN2CODE_DIR, "models.json");
+// The person's custom agent CLIs (agents.mjs has the rules). The console is its only
+// writer, from User Preferences; the launcher and the desktop app read it.
+export const USER_AGENTS_FILE = path.join(PLAN2CODE_DIR, "agents.json");
 
 export const LOOKS_FILE = path.join(HOME_DIR, "looks.json");
 
@@ -192,7 +195,11 @@ export function appendEvent(dir, event) {
 // past the stale age, so a writer always gets in eventually.
 export const STATE_LOCK_FILE = "state.json.lock";
 const LOCK_STALE_MS = 5000;
-const LOCK_WAIT_MS = 7000;
+// A pile-up of many writers (a burst of concurrent `post`s) queues behind
+// each other's hold, milliseconds long apiece; 7s left too little headroom
+// for that queue to drain under real machine load, throwing "busy" on a
+// writer that was never going to be denied, just slow to get its turn.
+const LOCK_WAIT_MS = 20000;
 
 function lockStale(lock) {
   try {

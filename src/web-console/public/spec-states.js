@@ -2,7 +2,7 @@
 //
 // Each spec state the dashboard scan can report; data only, imported by the
 // page and by Node. In the order the scan's SPEC_STATES lists them. Which
-// cards a state lights or greys lives on the skill list (skills.js), and how
+// cards a state lights or grays lives on the skill list (skills.js), and how
 // a folder's files map to a state stays with the scan (classifySpec in
 // scan.mjs). No imports and no DOM access: nothing runs at load but building
 // the frozen data.
@@ -14,7 +14,7 @@
 //             null when it has none
 //   finished  the work is done: the spec is hidden while unavailable
 //             workflows are, never the picker's default, deleted after one
-//             confirm, and greyed with the card's `finished` reason
+//             confirm, and grayed with the card's `finished` reason
 //             (skills.js) on the cards that would otherwise take it
 
 function state(label, next, finished = false) {

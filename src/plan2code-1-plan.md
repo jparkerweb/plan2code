@@ -43,6 +43,16 @@ Check if `./AGENTS.md` exists:
 - NEVER write implementation code; keep responses conceptual, detailed specs belong in the final PLAN-DRAFT only
 - If no file access, output content in code blocks with file path headers
 
+## Helpers
+
+When your tool can start helpers (subagents) and they are not switched off for this run (on the web console a `Subagents:` block says which, console-subagents.md), hand them the work whose answer does not hang on the conversation still to come:
+- **Phase 1:** reading each file, folder or reference the person names, and the domain research; one source per helper.
+- **Phase 2:** mapping separate areas of the codebase, one area per helper (structure, one component's real behavior, one integration point). Each returns facts with `file:line`, never a design.
+- **Phase 4:** evidence on each open tech choice (current version, upkeep, fit with the stack); the recommendation stays yours.
+- **Phase 7, step 3:** one fresh helper, briefed only with the PLAN-CONVERSATION and the PLAN-DRAFT, lists the gaps between them; confirm each yourself before you add it.
+
+Keep with you: every question, confidence score, decision and sign-off, Phases 3, 5 and 6, and the writing of the PLAN-DRAFT (its sections cross-reference each other and rest on decisions only this session holds). Pick each helper's strength and effort from references/helper-strength.md. Every helper reports back before that phase's sign-off. No helpers? Do the same work yourself.
+
 ---
 
 ### Check for Existing Progress

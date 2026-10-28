@@ -19,7 +19,7 @@ If `open` fails outright, fall back without drama: list the skills in the termin
 
 ## The menu
 
-The page draws the cards itself — you never send the list. It also knows the repo already: `open` scans `AGENTS.md` and `specs/` into `state.scan` (`{ hasAgents, isGit, specs: [{ dir, name, state, detail, touched }] }`), and the picker at the top enables or greys every card from it — the spec the person picks there is the target their launch carries. What you post is your judgment on top of that:
+The page draws the cards itself — you never send the list. It also knows the repo already: `open` scans `AGENTS.md` and `specs/` into `state.scan` (`{ hasAgents, isGit, specs: [{ dir, name, state, detail, touched }] }`), and the picker at the top enables or grays every card from it — the spec the person picks there is the target their launch carries. What you post is your judgment on top of that:
 
 ```jsonc
 {
@@ -39,7 +39,7 @@ The page draws the cards itself — you never send the list. It also knows the r
   - `documented` ("Ready to build"): Implement is next.
   - `building` ("Building"): Implement is next.
   - `built` ("Ready to finalize"): Finalize is next.
-  - A `documented` or `building` spec whose `[/]` phase file holds a waiting `**Plan change:**` line in its Notes (Implement paused for a revision; `(applied <date>):` or `(dropped <date>):` means done): recommend Revise the plan instead, `details` "Plan change waiting from Phase N". On a `built` spec the Revise card is greyed, so name the waiting brief in `note`.
+  - A `documented` or `building` spec whose `[/]` phase file holds a waiting `**Plan change:**` line in its Notes (Implement paused for a revision; `(applied <date>):` or `(dropped <date>):` means done): recommend Revise the plan instead, `details` "Plan change waiting from Phase N". The Revise card is lit on a `built` spec too (a change found in the last manual checks): recommend it there only for a waiting brief, and say so in `note`; otherwise Finalize stays the next step.
 - A spec that scans `unrecognized` ("files on disk") is input, not progress: its folder rides along on a Pathfinder or Plan launch as reference, and those are the only pipeline cards it lights. Read the files and recommend the fit — a settled design doc the person wrote is Plan's brief, loose notes are Pathfinder's. No skill generates such a doc; see the table below for what each one does write. Never flag Document or anything downstream of it for such a spec.
 - A `diagnosed` spec ("Bug diagnosed") is a bug Diagnose wrote up: recommend Quick Task, or Plan when its `DIAGNOSIS-<date>.md` sizes the fix as big; its folder rides along on either launch.
 - A `fixed` spec ("Bug fixed") is a diagnosed bug Quick Task fixed but did not archive: finished, so never recommend for it or name it in the note; the picker never pre-selects one and hides it while unavailable workflows are hidden. The person archives it (Quick Task offers that once the bug is fixed) or deletes it with the picker's ✕.
@@ -137,6 +137,6 @@ You arrive here mid-conversation after a `__dashboard` press — from a finished
 
 ## While it waits
 
-- Bounded slices per console.md, using the longest safe slice: exit 10 → relay one line and immediately wait again — never end the turn after an arbitrary number of slices; exit 20 → `open --resume <sid>` (no `--workflow` — it stays `dashboard` until a launch overwrites it); exit 30 → they cancelled, ask in the terminal what they want.
+- Bounded slices per console.md, using the longest safe slice: exit 10 → relay one line and immediately wait again — never end the turn after an arbitrary number of slices; exit 20 → `open --resume <sid>` (no `--workflow` — it stays `dashboard` until a launch overwrites it); exit 30 → they canceled, ask in the terminal what they want.
 - A `__stop` action is the person ending the session before picking: post `finish` (a headline that says paused, `"command": "/plan2code"`) then `stop`, per console-stop.md.
 - The console keeps `agent.status` honest: collecting a pick sets `working`, and waiting on the menu sets `waiting`. Post an `activity` while a launch becomes a skill.

@@ -185,10 +185,10 @@ test("shape: no page module sets a style attribute from script", () => {
 // no routes of its own: its buttons are sends (`__git`), through /submit.
 const ROUTE_ORDER = [
   "/health", "/s/", "/", "SERVABLE", "/overview", "/handoff", "/version", "/state", "/events", "/draft",
-  "/looks", "/looks", "/subagents", "/pr-host", "/models", "/models", "/cleanup", "/upload",
+  "/looks", "/looks", "/subagents", "/pr-host", "/models", "/models", "/agents", "/agents", "/agents/test", "/cleanup", "/upload",
   "/notepad", "/notepad/text", "/notepad/image", "/notepad/thumb", "/notepad/image/delete", "/notepad/tab",
-  "/notepad/tab/rename", "/notepad/tab/delete", "/notepad/tab/order", "/notepad/tab/last", "/notepad/images/",
-  "/attachments/", "/shots/", "/uploads/", "/submit", "/chat", "/chat/decision", "/workspace",
+  "/notepad/tab/rename", "/notepad/tab/delete", "/notepad/tab/order", "/notepad/tab/last", "/notepad/tab/sent", "/notepad/images/",
+  "/attachments/", "/shots/", "/uploads/", "/submit", "/open-link", "/chat", "/chat/decision", "/workspace",
   "WORKSPACE_EDITS", "/workspace/scope", "/workspace/browse", "/cancel", "/ping", "/bye",
 ];
 
@@ -236,14 +236,24 @@ function appJsReaders(dir) {
     .filter((f) => f.endsWith(".mjs") && f !== "test-web-console-shape.mjs" && !MAY_NAME_APP_JS.has(f))
     .filter((f) => {
       const text = fs.readFileSync(path.join(dir, f), "utf8");
+      // A bare readFileSync/readFile only counts against the web console's
+      // own public/app.js, named somewhere in the same statement: otherwise
+      // this would also catch a test reading some other app.js entirely,
+      // such as plan2code-app/ui/app.js (the desktop app's, a different file
+      // with its own shape rules in its own test). publicSource() implies
+      // the public dir by its own name, so any app.js it is handed counts.
       const oneStatement = text
         .split(";")
-        .some((statement) => /\b(readFileSync|readFile|publicSource)\s*\(/.test(statement) && /["'/]app\.js["']/.test(statement));
+        .some(
+          (statement) =>
+            /["'/]app\.js["']/.test(statement) &&
+            (/\bpublicSource\s*\(/.test(statement) || (/\b(readFileSync|readFile)\s*\(/.test(statement) && /\bpublic\b/.test(statement)))
+        );
       const handedToAHelper = /\w\(\s*["'](?:(?:src\/web-console\/)?public\/)?app\.js["']\s*\)/.test(text);
       const publicPath = /["']public["']\s*,\s*["']app\.js["']|\bpublic\/app\.js/.test(text) && /\breadFile(Sync)?\b/.test(text);
       return oneStatement || handedToAHelper || publicPath;
     })
-    .map((f) => `${f} reads public/app.js as text: test the behaviour in a page test, or read the screen file that holds it`);
+    .map((f) => `${f} reads public/app.js as text: test the behavior in a page test, or read the screen file that holds it`);
 }
 
 test("shape: no test in scripts/ reads public/app.js as text", () => {
@@ -256,10 +266,10 @@ test("shape: the app.js check names the test file that reads it", () => {
     fs.writeFileSync(path.join(dir, "test-fine.mjs"), 'const r = await fetch(base + "/app.js");\nfs.appendFileSync(path.join(d, "src", "app.js"), "x");\n');
     assert.deepEqual(appJsReaders(dir), []);
     fs.writeFileSync(path.join(dir, "test-reads-it.mjs"), 'const app = fs.readFileSync(path.join(ROOT, "public", "app.js"), "utf8");\n');
-    assert.deepEqual(appJsReaders(dir), ["test-reads-it.mjs reads public/app.js as text: test the behaviour in a page test, or read the screen file that holds it"]);
+    assert.deepEqual(appJsReaders(dir), ["test-reads-it.mjs reads public/app.js as text: test the behavior in a page test, or read the screen file that holds it"]);
     fs.rmSync(path.join(dir, "test-reads-it.mjs"));
     fs.writeFileSync(path.join(dir, "test-alias.mjs"), 'const web = (f) => fs.readFileSync(path.join(ROOT, "public", f), "utf8");\nconst app = web("app.js");\n');
-    assert.deepEqual(appJsReaders(dir), ["test-alias.mjs reads public/app.js as text: test the behaviour in a page test, or read the screen file that holds it"]);
+    assert.deepEqual(appJsReaders(dir), ["test-alias.mjs reads public/app.js as text: test the behavior in a page test, or read the screen file that holds it"]);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
@@ -324,4 +334,50 @@ test("shape: the docs-table check names a file with no row, and passes one that 
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
+});
+
+// A page test that reads a style or sets a scroll through locator.evaluate
+// acts on whatever element the locator found, and a redraw can replace that
+// element before the call runs: one off the page reads "" for every style and
+// scrolls nothing anyone sees. On 3 and 4 core CI runners that failed a
+// different page test at random on each run until the reads went through
+// page-test-helpers.mjs's styleOf(), stylesOf() and scrollCard(), which retry
+// until the element is still on the page. page.evaluate and waitForFunction
+// look the element up afresh, so they are not flagged.
+const RACY_STYLE = /(?<!\bpage)\.evaluate\(\s*\((\w+)\)\s*=>[^\n]*getComputedStyle\(\1\)/;
+const RACY_SCROLL = /(?<!\bpage)\.evaluate\(\s*\((\w+)\)\s*=>\s*\(?\s*\1\.scrollTop\s*=[^=]/;
+
+function racyPageReads(name, text) {
+  const problems = [];
+  text.split("\n").forEach((line, i) => {
+    if (RACY_STYLE.test(line)) problems.push(`${name}:${i + 1}: read the style with styleOf() or stylesOf() from page-test-helpers.mjs`);
+    if (RACY_SCROLL.test(line)) problems.push(`${name}:${i + 1}: scroll with scrollCard() from page-test-helpers.mjs`);
+  });
+  return problems;
+}
+
+test("shape: page tests read styles and set scrolls through the redraw-safe helpers", () => {
+  const dir = path.join(ROOT, "scripts");
+  const pageTests = fs.readdirSync(dir).filter((f) => /^test-web-console-page-.*\.mjs$/.test(f));
+  assert.ok(pageTests.length > 0, "the page tests were found");
+  const problems = pageTests.flatMap((f) => racyPageReads(f, fs.readFileSync(path.join(dir, f), "utf8")));
+  assert.deepEqual(problems, []);
+});
+
+test("shape: the redraw-safe check names a locator's style read and scroll, and passes page-wide ones", () => {
+  const racy = [
+    'await card.evaluate((el) => (el.scrollTop = 400));',
+    'const c = await chip.evaluate((b) => getComputedStyle(b).borderTopStyle);',
+  ].join("\n");
+  assert.deepEqual(racyPageReads("x.mjs", racy), [
+    "x.mjs:1: scroll with scrollCard() from page-test-helpers.mjs",
+    "x.mjs:2: read the style with styleOf() or stylesOf() from page-test-helpers.mjs",
+  ]);
+  const fine = [
+    'await s.page.evaluate(() => { document.getElementById("main").scrollTop = 4000; });',
+    'const top = await card.evaluate((el) => el.scrollTop === 0);',
+    'await s.page.waitForFunction(() => getComputedStyle(document.body).color);',
+    'const color = await s.page.evaluate((el) => getComputedStyle(el).color);',
+  ].join("\n");
+  assert.deepEqual(racyPageReads("x.mjs", fine), []);
 });

@@ -24,7 +24,7 @@ test("another console's cookie beside ours does not lock this one out", async ()
     const theirsOnly = await fetch(s.base + "/state", { headers: { cookie: other } });
     assert.equal(theirsOnly.status, 403);
     await theirsOnly.arrayBuffer();
-    // The old shared name is no longer honoured.
+    // The old shared name is no longer honored.
     const legacy = await fetch(s.base + "/state", { headers: { cookie: `p2c_console=${token}` } });
     assert.equal(legacy.status, 403);
     await legacy.arrayBuffer();

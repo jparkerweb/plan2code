@@ -291,6 +291,12 @@ export function tooltipFor(points) {
 export const RED_BANNER =
   "This console session has done a lot. Starting a new console session will keep the agent sharp.";
 
+// The same advice, worded for the desktop app: there the app's own New
+// Session button already replaces the agent on a fresh context in one click,
+// so this never tells anyone to copy a command into a new conversation.
+export const RED_BANNER_IN_APP =
+  "This console session has done a lot. Press New Session at the top of the window to start the agent fresh.";
+
 // Everything the pill draws, from the ledger alone.
 export function meterView(entries) {
   const points = pointsFrom(entries);

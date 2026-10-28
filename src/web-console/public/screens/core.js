@@ -19,6 +19,7 @@ import {
   STALE_MS,
   agentRepliedAfterSend,
   approvalHint,
+  APPROVAL_HINT_IN_APP,
   cardAvailability,
   cardPresentation,
   finishPaused,
@@ -50,15 +51,15 @@ import { helperRows, showTab } from "../subagents.js";
 import { FOOTER_TIERS, footerLabel } from "../workspace.js";
 import {
   activity, agentAdrift, agentWorking, asked, awaitingReply, byId, dashboardLive, docs, doingNow,
-  finish, gitAwaiting, isDashboard, isGitBoard, isOpen, items, loadOverview, myTurn, openItems,
-  overviewSpec, patience, reviewPending, scan, selSpec, sendCollected, stagedCount, stranded,
+  finish, gitAwaiting, isDashboard, isGitBoard, isOpen, isSpecFileView, items, loadOverview, myTurn, openItems,
+  patience, pressStranded, reviewPending, scan, selSpec, sendCollected, specFileTabs, stagedCount, stranded,
   topics, workingMs, WORKING_GRACE_MS,
   workspaceFolders,
 } from "../selectors.js";
 import { sound } from "../sound.js";
 import { renderConfirm, renderDashboard } from "./dashboard.js";
 import { renderLaunching, renderWaiting } from "./starting.js";
-import { heldNotes, noteImages, pendingNotes, removeImage } from "../uploads.js";
+import { attachFiles, heldNotes, noteImages, pendingNotes, removeImage } from "../uploads.js";
 import { closeMentions } from "../mention-box.js";
 import { buildPager, fitGrowBox, markFor, markMore, renderCard, renderEndItem, renderNotice } from "./cards.js";
 import { sendState } from "../send-state.js";
@@ -66,9 +67,11 @@ import { renderBriefButton, renderDoc, renderOverview } from "./docs.js";
 import { board, renderGitBoard, resetBoard } from "./git-host.js";
 import { renderWorkspace, tellFolderIssues } from "./workspace.js";
 import { openHelpOn } from "./help-dialog.js";
+import { linkLeavesPage, startNewSession, tellApp } from "../app-bridge.js";
 import { askOfflineFlipped, askState, declineOpen, renderAside, renderAsk, renderSubagents, renderSubagentsButton } from "./ask.js";
 import { renderHandoff, renderHomeButton, renderStopButton, renderStopControls, renderStopping, stopInProgress, stopWarning } from "./ending.js";
 import { renderNotepadButton } from "./notepad.js";
+import { renderActivities } from "./activities.js";
 
 // What the entry needs from the screens at start-up, handed on from here: only
 // the core imports a screen.
@@ -83,6 +86,7 @@ export { wireCleanup } from "./cleanup.js";
 export { startLooks, wireLooks } from "./looks.js";
 export { wireEnding } from "./ending.js";
 export { wireNotepad } from "./notepad.js";
+export { wireActivities } from "./activities.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -174,6 +178,53 @@ function settleStaleUploads() {
   }
 }
 
+// A Notebook tab picked at Start (dashboard.js) fills the launched skill's
+// first open `fill: "note"` box, once. It is claimed before anything is
+// fetched, so a redraw or a reload never fills the box a second time.
+function fillNoteBox() {
+  const ns = page.local.noteSend;
+  if (!ns || isDashboard() || finish() || page.S.workflow !== ns.workflow) return;
+  const item = items().find((i) => i.kind === "text" && i.fill === "note" && i.status === "open");
+  if (!item) return;
+  page.local.noteSend = null;
+  save();
+  seedNoteBox(item, ns);
+}
+
+// The tab's text as the box's draft and staged answer, then its ticked
+// pictures through the same path a pasted picture takes. A tab deleted since
+// Start leaves the box empty; a picture deleted since is skipped.
+async function seedNoteBox(item, ns) {
+  const tab = encodeURIComponent(ns.tab);
+  try {
+    const res = await fetch("/notepad?tab=" + tab, { cache: "no-store" });
+    if (res.status === 404) {
+      banner("That Notebook tab is gone; the box starts empty.", "warn");
+      return;
+    }
+  } catch {}
+  const text = typeof ns.text === "string" ? ns.text : "";
+  if (text.trim()) {
+    page.local.drafts["text-" + item.id] = text;
+    page.local.staged[item.id] = { type: "answer", kind: "text", text: text.trim() };
+  }
+  page.local.noteSent = { item: item.id, tab: ns.tab, workflow: ns.workflow, ...(ns.spec ? { spec: ns.spec } : {}) };
+  save();
+  redraw();
+  const files = await Promise.all(
+    (ns.pictures || []).map(async (id) => {
+      try {
+        const r = await fetch("/notepad/images/" + tab + "/" + encodeURIComponent(id) + ".jpg", { cache: "no-store" });
+        return r.ok ? new File([await r.blob()], id + ".jpg", { type: "image/jpeg" }) : null;
+      } catch {
+        return null;
+      }
+    }),
+  );
+  const found = files.filter(Boolean);
+  if (found.length) attachFiles(item.id, found);
+}
+
 async function pushDraft() {
   try {
     await fetch("/draft", {
@@ -238,6 +289,10 @@ export function adopt(body) {
   page.chatFrame = body.chat || null;
   if (body.workspace) page.wsFrame = body.workspace;
   if (body.meter) page.meterFrame = body.meter;
+  // Fixed for the session's whole life, but cheap enough to just copy.
+  page.inApp = Boolean(body.inApp);
+  // Help's `.for-app` / `.for-browser` wording switches on this (help.css).
+  document.documentElement.classList.toggle("in-app", page.inApp);
   // Always replaced: an absent key means no update.
   page.updateFrame = body.update || null;
   // Always replaced too: an older server sends none, and then there is no switch.
@@ -270,7 +325,16 @@ export function adopt(body) {
     // the dashboard, the picker starts on the most recently touched spec still
     // in play, the one the agent's fresh menu recommends for.
     const keepPick = page.S.workflow !== "dashboard" && "specSel" in page.local;
-    page.local = { ...fresh(), launching: page.local.launching, ...(keepPick ? { specSel: page.local.specSel } : {}) };
+    // A Notebook tab picked at Start rides into the skill it was picked for,
+    // and nowhere else: back home, or a hop to another skill, drops it.
+    const ns = page.local.noteSend;
+    const keepNote = Boolean(ns) && page.S.workflow !== "dashboard" && page.S.workflow === ns.workflow;
+    page.local = {
+      ...fresh(),
+      launching: page.local.launching,
+      ...(keepPick ? { specSel: page.local.specSel } : {}),
+      ...(keepNote ? { noteSend: ns } : {}),
+    };
     save();
     page.selected = null;
     page.view = "questions";
@@ -389,6 +453,7 @@ export function adopt(body) {
       (r === "any" || (item.submitted && item.submitted.at === r));
     if (!live) delete page.local.retract[id];
   }
+  fillNoteBox();
 
   // New work: a question that is theirs to answer now and was not a moment ago.
   // That covers a brand new question and one the agent reopened or answered
@@ -427,9 +492,9 @@ export function adopt(body) {
   render();
   if ($("workspace-modal").open) renderWorkspace();
   tellFolderIssues();
-  // The Overview tab's file changes under a build, so a tab you are watching
+  // A spec file tab's file changes under a build, so a tab you are watching
   // refetches on every new frame too, not only on the click that opened it.
-  if (firstLoad || page.S.specDir !== prevSpecDir || page.S.workflow !== prevWorkflow || page.view === "overview") loadOverview();
+  if (firstLoad || page.S.specDir !== prevSpecDir || page.S.workflow !== prevWorkflow || isSpecFileView(page.view)) loadOverview();
   if (announce) showArrival(announce);
   // New entries land at the bottom of the rail. Gliding down to them beats
   // leaving the list parked where it was while it grew underneath.
@@ -701,6 +766,7 @@ export function render() {
     renderSubagentsButton();
     renderStopButton();
     renderNotepadButton();
+    renderActivities();
     renderHomeButton();
     tabAdded = renderViews();
     renderSidebar();
@@ -854,7 +920,7 @@ function withFocus(fn) {
 // (the dashboard menu, the end page).
 function currentScroller() {
   if (!drawnView) return null;
-  if (drawnView.startsWith("doc:") || drawnView === "overview") return $("main");
+  if (drawnView.startsWith("doc:") || isSpecFileView(drawnView)) return $("main");
   if (drawnView === "questions") return $("main").querySelector(":scope > .card.question");
   if (drawnView === "ask") return $("main").querySelector(".ask-list");
   return null;
@@ -925,11 +991,21 @@ function renderMeter() {
       return li;
     })
   );
-  // Once the session is past fresh, say how to start a new one.
+  // Once the session is past fresh, say how to start a new one. Under the app
+  // that is one button doing what the app bar's New Session does, instead of
+  // a command to copy into a new conversation.
   const fresh = $("meter-fresh");
   fresh.hidden = page.meterFrame.level === "green";
   if (fresh.hidden || fresh.dataset.built) return;
   fresh.dataset.built = "1";
+  if (page.inApp) {
+    // The same press as the app bar's New Session, confirm and all.
+    const press = el("button", "btn small primary meter-fresh-btn", "Start a New Session");
+    press.type = "button";
+    press.addEventListener("click", () => tellApp("new-session"));
+    fresh.append(press);
+    return;
+  }
   const text = handoffText({ command: DASHBOARD_COMMAND });
   const code = el("code", "handoff-code", text);
   const row = el("div", "handoff-command meter-fresh-row");
@@ -1007,6 +1083,41 @@ let moodNow = null;
 
 let moodVar = 0;
 
+// Sent answers that nothing is collecting (stranded() in selectors.js).
+const STRANDED_LINE =
+  "Plan2Code is not running. Your answers are saved and waiting for it. If the terminal is idle, type **continue** there and it will pick them up; it may also be waiting for your permission approval.";
+
+// A finished screen's press that nothing is collecting (pressStranded()).
+const PRESS_STRANDED_LINE =
+  "Plan2Code is not running. Your choice is saved and waiting for it. If the terminal is idle, type **continue** there and it will pick it up; it may also be waiting for your permission approval.";
+
+// The status line's **continue**, under the app: a press asks the app to type
+// it into the agent's terminal. Held off for a few seconds after, so a double
+// press does not send it twice.
+const CONTINUE_HOLD_MS = 4000;
+
+function continueButton() {
+  const btn = el("button", "agent-key agent-key-btn", "continue");
+  btn.type = "button";
+  btn.title = "Type continue in the agent's terminal";
+  btn.addEventListener("click", () => {
+    btn.disabled = true;
+    tellApp("agent-continue");
+    setTimeout(() => (btn.disabled = false), CONTINUE_HOLD_MS);
+  });
+  return btn;
+}
+
+// The favicon state last told to the app (attention.rs turns it into the
+// taskbar's dot). Told only when it changes, never on every status redraw.
+let lastAttention = null;
+
+function tellAttention(state) {
+  if (state === lastAttention) return;
+  lastAttention = state;
+  tellApp("attention", { state });
+}
+
 export function renderStatus() {
   if (!page.S) return;
   const bot = $("planny");
@@ -1031,6 +1142,9 @@ export function renderStatus() {
       text.dataset.line = shown;
       const parts = line.split(/\*\*(.+?)\*\*/).map((part, i) => {
         if (i % 2 === 0) return document.createTextNode(part);
+        // Under the app the terminal is in the same window, so the word to
+        // type is a button that types it there instead.
+        if (page.inApp && part === "continue") return continueButton();
         const key = document.createElement("strong");
         key.className = "agent-key";
         key.textContent = part;
@@ -1049,13 +1163,20 @@ export function renderStatus() {
     tick.textContent = count || "";
     $("agent-spin").hidden = !spin;
     $("dock").classList.toggle("is-flying", Boolean(spin));
-    // The tab icon's bar says the same thing from another tab (favicon.js).
-    setFavicon(faviconState({ mood, spin, finished: Boolean(finish()) }));
+    // The tab icon's bar says the same thing from another tab (favicon.js),
+    // and the app's taskbar entry from another window.
+    const icon = faviconState({ mood, spin });
+    setFavicon(icon);
+    tellAttention(icon);
   };
 
   // Before `gone`, deliberately. Once a session has finished, no server is the
   // expected state, and Planny shutting his eye over it reads as a breakage.
   if (finish()) {
+    // A press the agent never came back for: its turn ended while the screen
+    // waited. The press is saved, and **continue** in the terminal collects
+    // it (a button that types it there, under the app).
+    if (pressStranded()) return say("adrift", PRESS_STRANDED_LINE, "", false, true);
     // A finish with the review or the way back to the dashboard still on
     // offer has something left to press here, and only while the server is
     // there to take the press.
@@ -1064,15 +1185,17 @@ export function renderStatus() {
     if (page.local.afterBuild === "changelog" && !page.gone) return say("work", "Opening Changelog…", "", true);
     if (page.local.afterBuild === "launch" && !page.gone) return say("work", "Starting the next step…", "", true);
     const offer = reviewPending();
+    // There is no tab to close under the app, only the one window.
+    const closeWord = page.inApp ? "window" : "tab";
     if (dashboardLive(finish()) && !page.gone && !offer) {
-      return say("point", "Done. Head back to the dashboard, or close this tab.");
+      return say("point", `Done. Head back to the dashboard, or close this ${closeWord}.`);
     }
     if (offer === "asked") return say("work", "Review requested. Plan2Code is starting it.", "", true);
-    if (offer === "open") return say("point", "Done. Review it here first, or close this tab.");
+    if (offer === "open") return say("point", `Done. Review it here first, or close this ${closeWord}.`);
     // A stop past a warning kept nothing, so it promises no saved place.
     if (finishPaused(finish()))
       return say("done", stopWarning() ? "Paused. The command above starts it again." : "Paused. Your place is saved: the command above picks it up.");
-    return say("done", "All done. You can close this tab.");
+    return say("done", `All done. You can close this ${closeWord}.`);
   }
   if (page.gone) return say("gone", "Not connected. Your answers are saved.", "", false, true);
   // On the way home: the request is sent, and the page stays this skill's
@@ -1107,6 +1230,10 @@ export function renderStatus() {
     return say("work", `Starting ${workflowTitle(page.S.workflow)}…`, "", true);
   }
 
+  // Answers nobody collected outrank a working line: the agent's last word
+  // was "working", but it is not in `wait` to take them (agentAdrift).
+  if (stranded()) return say("adrift", STRANDED_LINE, "", false, true);
+
   // Show the AGENT's liveness, not the server's: if the agent's turn crashed
   // the server is still happily up, and a plain spinner would lie forever.
   if (agentWorking()) {
@@ -1121,7 +1248,8 @@ export function renderStatus() {
     }
     // Same clock as agentStale(), so the soft line at 30 s hands over to the
     // stale message at two minutes on one timeline.
-    const hint = page.agentLastSeen ? approvalHint(page.S.agent, Date.now() - Date.parse(page.agentLastSeen)) : "";
+    const quiet = page.agentLastSeen ? approvalHint(page.S.agent, Date.now() - Date.parse(page.agentLastSeen)) : "";
+    const hint = quiet && page.inApp ? APPROVAL_HINT_IN_APP : quiet;
     return say("work", hint || activity() || "Plan2Code is thinking…", fmtMs(workingMs()), true, Boolean(hint));
   }
   // Between pressing Send and the agent picking it up, the agent's own status
@@ -1133,9 +1261,7 @@ export function renderStatus() {
   if (agentAdrift()) {
     return say(
       "adrift",
-      stranded()
-        ? "Plan2Code is not running. Your answers are saved and waiting for it. If the terminal is idle, type **continue** there and it will pick them up; it may also be waiting for your permission approval."
-        : "Plan2Code is not running right now. Anything you answer here is saved. If the terminal is idle, type **continue** there to wake it; it may also be waiting for your permission approval.",
+      "Plan2Code is not running right now. Anything you answer here is saved. If the terminal is idle, type **continue** there to wake it; it may also be waiting for your permission approval.",
       "",
       false,
       true
@@ -1183,10 +1309,11 @@ function renderViews() {
     },
   ];
   // Built in rather than posted: present exactly while the spec in view has
-  // an overview.md. A tab that vanishes under the person sends them home.
-  const hasOverview = typeof page.overview.text === "string" && page.overview.key === overviewSpec();
-  if (hasOverview) tabs.push({ id: "overview", label: "Overview", count: 0 });
-  else if (page.view === "overview") page.view = "questions";
+  // the file (an overview.md, or before one a map or a plan draft). A tab
+  // that vanishes under the person sends them home.
+  const fileTabs = specFileTabs();
+  for (const f of fileTabs) tabs.push({ id: f.id, label: f.label, count: 0 });
+  if (isSpecFileView(page.view) && !fileTabs.some((f) => f.id === page.view)) page.view = "questions";
   for (const d of docs()) tabs.push({ id: "doc:" + d.id, label: d.title || "Document", count: 0 });
   // The helpers the agent reported, from the first one on; cleared by a
   // dashboard hop, which sends the person home like the Overview tab does.
@@ -1235,7 +1362,7 @@ function renderViews() {
       // The cached text paints at once; the fresh read repaints if the file
       // changed on disk since.
       render();
-      if (t.id === "overview") loadOverview();
+      if (isSpecFileView(t.id)) loadOverview();
     });
     nav.appendChild(b);
   }
@@ -1266,7 +1393,7 @@ export function renderSidebar() {
       box.appendChild(head);
       for (const e of SKILL_CATALOG.filter((x) => x.group === g.id)) {
         const av = cardPresentation(e, scan(), selSpec(), menu);
-        // Unavailable for the selected spec fades hard; the brief greying
+        // Unavailable for the selected spec fades hard; the brief graying
         // while a launch is in flight or the server is away does not.
         const b = el(
           "button",
@@ -1370,11 +1497,11 @@ function renderMain() {
 }
 
 function paintMain(main) {
-  main.classList.toggle("is-doc", page.view.startsWith("doc:") || page.view === "overview");
+  main.classList.toggle("is-doc", page.view.startsWith("doc:") || isSpecFileView(page.view));
   main.classList.toggle("is-ask", page.view === "ask");
 
   if (page.view.startsWith("doc:")) return renderDoc(main, page.view.slice(4));
-  if (page.view === "overview") return renderOverview(main);
+  if (isSpecFileView(page.view)) return renderOverview(main, page.view);
   if (page.view === "ask") return renderAsk(main);
   if (page.view === "subagents") return renderSubagents(main);
 
@@ -1394,7 +1521,7 @@ function paintMain(main) {
   if (isDashboard() && !finish()) {
     if (page.local.launching) renderLaunching(main);
     else if (page.dashPick) {
-      // A spec-switch under an open confirm can grey the pick out. Rather
+      // A spec-switch under an open confirm can gray the pick out. Rather
       // than offer START on a card that cannot launch, drop back to the
       // menu — the picker's new selection speaks for itself there.
       if (cardAvailability(page.dashPick, scan(), selSpec()).on) renderConfirm(main, page.dashPick);
@@ -1575,7 +1702,7 @@ export function renderFooter() {
   const hint = $("send-hint");
   hint.replaceChildren();
   hint.title = state.why;
-  // Something is turning while the turn is not theirs. A line of grey text
+  // Something is turning while the turn is not theirs. A line of gray text
   // saying "one moment" reads the same whether the agent is working on it or
   // has quietly died; a spinner is the difference between the two at a glance.
   // A spinner says "something is happening". Nothing is, once the other end
@@ -1727,7 +1854,27 @@ export function markSent({ sentIds, sentNotes = {}, summaries, values }) {
     page.local.sent[id] = { at: Date.now(), summary: summaries[id] || "", value: values[id] || null };
   }
   page.local.staged = {};
+  // The box a Notebook tab filled went with this send: only now does the
+  // Notebook say the tab was sent. A failed mark is not worth a banner.
+  const ns = page.local.noteSent;
+  if (ns && sentIds.has(ns.item)) {
+    page.local.noteSent = null;
+    fetch("/notepad/tab/sent", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ id: ns.tab, workflow: ns.workflow, ...(ns.spec ? { spec: ns.spec } : {}) }),
+    }).catch(() => {});
+  }
   save();
+}
+
+// The menu card whose staged pick is an option marked `fresh`, if any.
+function freshMenuPick(actions) {
+  for (const a of actions) {
+    const item = a.kind === "menu" ? byId(a.i) : null;
+    if (item && (item.options || []).some((o) => o.k === a.k && o.fresh === true)) return item;
+  }
+  return null;
 }
 
 export async function send() {
@@ -1750,10 +1897,21 @@ export async function send() {
       e.pending = true;
       throw e;
     }
-    if (!res.ok) throw new Error(String(res.status));
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      const e = new Error(String(res.status));
+      e.reason = (body && (body.message || body.error)) || `error ${res.status}`;
+      e.status = res.status;
+      throw e;
+    }
     markSent(payload);
     banner("Sent. Plan2Code is picking it up now.", "good");
     setTimeout(() => banner(null), 4000);
+    // A menu option the agent marked `fresh` is a clean start, which under the
+    // app is the bar's New Session; the agent still gets the pick, so a
+    // declined confirm carries on with its usual finish.
+    const freshMenu = page.inApp ? freshMenuPick(actions) : null;
+    if (freshMenu) startNewSession(freshMenu.command ? handoffText({ command: freshMenu.command }) : "");
   } catch (err) {
     if (err && err.pending) {
       banner(
@@ -1762,13 +1920,45 @@ export async function send() {
       );
       page.pendingBannerUp = true;
       page.pendingResult = true;
+    } else if (err && err.reason) {
+      banner(refusedLine(err), "warn");
     } else {
-      banner("That did not go through. Nothing was lost, try Send again.", "warn");
+      await sendLost();
     }
   } finally {
     btn.textContent = "Send to Plan2Code";
     render();
   }
+}
+
+// A send that never reached an answer: ask the server at once, rather than
+// leaving one line for every cause until the page's own timers catch up. No
+// server is the lost-contact state now, with its reconnect help; a server
+// still there was a blip, and Send is the whole fix.
+async function sendLost() {
+  const up = await fetch("/state", { cache: "no-store" })
+    .then((res) => res.ok)
+    .catch(() => false);
+  if (up) {
+    banner("That did not go through, but the console is still up. Nothing was lost, press Send again.", "warn");
+    return;
+  }
+  lastContact = 0;
+  markGone();
+  // A stream left half open (after the machine slept) still reads as
+  // connected, so markGone() can leave the page up: the send still needs
+  // saying it did not go.
+  if (!page.gone) {
+    banner("That did not go through. Nothing was lost, try Send again.", "warn");
+  }
+}
+
+// The server said no. A 5xx can pass on a retry; a 4xx is the same refusal
+// every time, so it gets no "try again", and the one a person can fix says how.
+function refusedLine(err) {
+  if (err.status === 413) return "That is too big to send in one go. Nothing was lost: remove an attachment, then press Send.";
+  if (err.status >= 400 && err.status < 500) return `The console turned that send down: ${err.reason}. Nothing was lost.`;
+  return `The console turned that send down: ${err.reason}. Nothing was lost, try Send again.`;
 }
 
 const STATE_WORDS = { done: "all done", blocked: "blocked", help: "need help", defer: "later" };
@@ -1829,12 +2019,44 @@ let whereResizeTimer = null;
 
 // The listeners that belong to no screen: leaving the page, the session meter's
 // pop-over, the footer's label on a resize, Send, Clear, and the page-wide keys.
+// A link the console could not hand to a browser is shown, with a Copy
+// button, for the person to paste into one.
+async function openOutside(href) {
+  const ok = await fetch("/open-link", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ url: href }),
+  })
+    .then((res) => res.ok)
+    .catch(() => false);
+  if (ok) return;
+  const link = el("code", "banner-link", href);
+  banner("That link could not open from here. Copy it and paste it into your browser: ", "warn", [link, document.createTextNode(" "), copyButton(href, "btn small", link)]);
+}
+
 export function wireChrome() {
   addEventListener("pagehide", () => {
     try {
       navigator.sendBeacon("/bye");
     } catch {}
+    // A page that goes away leaves no dot on the app's taskbar behind it.
+    tellAttention("plain");
   });
+
+  // Under the app, a link off the page goes to the default browser through
+  // the console: the app's window opens no new ones, so the click alone would
+  // do nothing. Capture phase, ahead of any handler on the link itself.
+  document.addEventListener(
+    "click",
+    (e) => {
+      if (!page.inApp || e.defaultPrevented || !(e.target instanceof Element)) return;
+      const a = e.target.closest("a[href]");
+      if (!a || !linkLeavesPage(a.href, location.origin)) return;
+      e.preventDefault();
+      openOutside(a.href);
+    },
+    true
+  );
 
   $("meter-pill").addEventListener("click", () => toggleMeterPop());
   $("meter-help").addEventListener("click", () => {

@@ -164,7 +164,7 @@ Use kebab-case for feature name (e.g., `user-authentication`).
 - "Run after each phase": Add testing task block at end of EVERY phase
 - "Dedicated phase only": Create final Phase N: Testing
 - "None" or empty: Omit testing tasks
-- `| Approach | Test first |` in 2.4: in every phase, order each task's test before its code and put a plain sub-bullet `  - Test: <where the test drives the behaviour>` directly under the task line (no checkbox, so the loop's task count is unchanged), for example ``  - Test: through `POST /votes` ``
+- `| Approach | Test first |` in 2.4: in every phase, order each task's test before its code and put a plain sub-bullet `  - Test: <where the test drives the behavior>` directly under the task line (no checkbox, so the loop's task count is unchanged), for example ``  - Test: through `POST /votes` ``
 
 **Small Projects (1-2 phases):** Combine sections, still create separate overview.md and phase-1.md. Note: "Small project - phases combined"
 

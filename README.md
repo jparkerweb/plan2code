@@ -13,7 +13,7 @@ the next engineer all start from the same specs.
 
 One command opens it, every step is a card, and the terminal is always there if you prefer it.
 
-Version 2.11.0 · MIT · 📖 [plan2code.jparkerweb.com](https://plan2code.jparkerweb.com)
+Version 3.0.0 · MIT · 📖 [plan2code.jparkerweb.com](https://plan2code.jparkerweb.com)
 
 ---
 
@@ -82,10 +82,50 @@ Install (`I`) adds `plan2code` as a global command (Advanced `A` → `D` adds ju
 dashboard opens right there, in **Claude Code**, **Devin** or **Codex**. With more than one installed it asks which and
 remembers your pick; `plan2code --cli claude`, `--cli devin` or `--cli codex` skips the question, and `--model <name>`
 chooses the model. It works in cmd, PowerShell, Git Bash, macOS and Linux shells, and needs the
-Claude Code, Devin or Codex CLI on your `PATH`. It starts the agent with permission prompts off
-(`--permission-mode bypassPermissions` in Claude Code, `--permission-mode bypass` in Devin, `--dangerously-bypass-approvals-and-sandbox` in Codex); run
-`claude /plan2code` yourself if you want prompts. The installer then offers a desktop shortcut (answer `y`),
+Claude Code, Devin or Codex CLI on your `PATH`. After you pick the agent it asks whether to turn its
+permission prompts off (Yes by default; `--permission-mode bypassPermissions` in Claude Code, `--permission-mode bypass`
+in Devin, `--dangerously-bypass-approvals-and-sandbox` in Codex, a custom agent's bypass arguments, and no question for a
+custom agent that has none). `plan2code --keep-permissions` keeps the prompts without asking. The installer then offers a desktop shortcut (answer `y`),
 which opens a folder picker first. Uninstalling (`U`) removes both.
+</details>
+
+<details>
+<summary>Using another agent CLI, or none yet</summary>
+
+Plan2Code runs inside an AI coding agent CLI. If `plan2code` finds none of Claude Code, Devin or Codex on
+your `PATH`, it says so and prints each one's install command and official page, then exits; the desktop app
+shows the same help in a panel with an **Install page** link per agent and a **Check again** button, so you
+can install one and carry on without restarting.
+
+To use a different agent CLI, open the web console's **User Preferences → Agents** and add it: a name, the
+command, and (optionally) its arguments, the start prompt, arguments for skipping permission prompts, and
+how it takes a model. Custom agents are saved in `~/.plan2code/agents.json` and used by both the
+`plan2code` command (listed after the built-ins; `--cli <id>` picks one) and the desktop app's picker. The
+`/plan2code` start prompt only does something in an agent that loads the installed Plan2Code skills; for
+any other, leave the start prompt blank and start a skill yourself. Details in
+[.readme/web-console.md](.readme/web-console.md#agents-and-the-desktop-app-in-user-preferences).
+</details>
+
+<details>
+<summary>About the desktop app</summary>
+
+The installer also offers the **Plan2Code desktop app**: one window with the dashboard and your agent's
+terminal side by side, docked right (or bottom) and collapsible. Every console page, not only the
+dashboard, opens inside it. A launch card asks which agent, model and effort to start on, with
+permission checks off as its own tick (on by default, matching the terminal flow; untick it to keep
+the agent's approval prompts). A **New Session** button in the top bar replaces the agent with a fresh
+one on a brief built from the session, and the console's own Session meter points at it when a
+session is getting long. Once it is installed, `plan2code` opens the app instead of running the agent
+in your terminal. `plan2code --classic` keeps the terminal flow, and so does a Linux machine with no
+display (over SSH, say) or any machine over an SSH session. `plan2code update` updates the skills, the
+command and the app together, and the bar offers the same **Update skills** when the app and the
+installed skills disagree.
+
+The first release is unsigned, so macOS (**Open Anyway** in System Settings, Privacy & Security) or
+Windows (**More info**, then **Run anyway**) may ask you to allow it once. The app starts the agent
+with its normal approval prompts unless you tick the launch card's permission-checks-off option (the
+plain `plan2code` command above, without the app, asks instead, with prompts off by default too). Details:
+[docs/desktop-app.md](docs/desktop-app.md).
 </details>
 
 **Supported tools:** every agent supported by the skills CLI, including Claude Code · Cursor ·
@@ -151,7 +191,9 @@ next check-in, and it never holds up your answers.
 There is more on the page when you need it. Notes on any question can carry screenshots and
 documents. The folder label in the bottom bar opens your workspace, where you add other folders
 as read-only context and point at them by `@name`. The **Notebook** in the top bar is a private pad of your own for the
-folder, in Markdown with pictures, that the agent never sees. The session meter in the top bar turns from green
+folder, in Markdown with pictures, that the agent reads only when you start a workflow from one of its tabs on
+the dashboard and send the box it fills. The **die** beside it opens **Activities**,
+two small games (Snake and Mini golf) to play through a long wait, which pause the moment it is your turn. The session meter in the top bar turns from green
 to red as a session grows long and suggests a fresh one. **Stop session** saves your place and gives
 you the command to carry on later, and **Back to the dashboard** takes you home to pick the next
 step in the same session.
@@ -186,7 +228,7 @@ The dashboard's cards, and when each one lights up for the spec you pick:
 | Refresh AGENTS.md | Brings AGENTS.md and its notes up to date with what the project has learned lately. | The project has an AGENTS.md |
 | Pathfinder | A foggy idea becomes a clear list of decisions, settled one question at a time. | You start fresh, or the spec is still being explored |
 | Plan | Requirements, technical design and your approval: the shape of what gets built. | You start fresh, or the spec has a finished Pathfinder map, a drafted plan or a bug diagnosis |
-| Revise the plan | Requirements changed mid-build? Adjust the plan without starting over. | The spec is written up into phases and not fully built |
+| Revise the plan | Requirements changed mid-build? Adjust the plan without starting over. | The spec is written up into phases, built or not |
 | Document | The plan becomes a checklist of small tasks, grouped into phases, that a developer can just do. | The spec has a drafted plan |
 | Implement | Builds the next phase, task by task, with a report and your sign-off at the end. | The spec has phases with tasks still to build |
 | Implement + review | One phase built, then a careful review of the changes, then your sign-off. All in one run. | The spec has phases with tasks still to build |
@@ -373,7 +415,7 @@ console or the terminal; add `--web` to skip the question and go straight to the
 
 ## Troubleshooting
 
-**The skills aren't recognised.** Re-run the installer and restart your AI tool. Confirm the global
+**The skills aren't recognized.** Re-run the installer and restart your AI tool. Confirm the global
 install with `npx skills list -g`. For a project install, check the generated directories aren't
 gitignored.
 
@@ -418,7 +460,7 @@ edits out through the skills CLI.
 
 Core reference:
 
-- **[.readme/web-console.md](.readme/web-console.md)**: the full guide to the web console, from the dashboard to the last sign-off, including the private Notebook in the top bar
+- **[.readme/web-console.md](.readme/web-console.md)**: the full guide to the web console, from the dashboard to the last sign-off, including the private Notebook and Activities in the top bar
 - **[QUICK-REFERENCE.md](QUICK-REFERENCE.md)** — the one-page card: commands, inputs, outputs, decision tree
 - **[.readme/walkthrough.md](.readme/walkthrough.md)** — one feature from a sentence to archived specs, session by session
 - **[AGENTS.md](AGENTS.md)** — architecture and contributor guide for this repo

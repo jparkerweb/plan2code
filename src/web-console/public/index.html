@@ -35,6 +35,9 @@
     <link rel="modulepreload" href="/screens/workspace.js" />
     <link rel="modulepreload" href="/screens/ask.js" />
     <link rel="modulepreload" href="/screens/notepad.js" />
+    <link rel="modulepreload" href="/screens/activities.js" />
+    <link rel="modulepreload" href="/activities.js" />
+    <link rel="modulepreload" href="/tones.js" />
     <link rel="modulepreload" href="/net.js" />
     <link rel="modulepreload" href="/render.js" />
     <link rel="modulepreload" href="/palette.js" />
@@ -48,6 +51,7 @@
     <link rel="modulepreload" href="/subagents.js" />
     <link rel="modulepreload" href="/mentions.js" />
     <link rel="modulepreload" href="/favicon.js" />
+    <link rel="modulepreload" href="/app-bridge.js" />
     <link rel="modulepreload" href="/git-board.js" />
     <link rel="modulepreload" href="/git-board-view.js" />
     <link rel="modulepreload" href="/pr-url.js" />
@@ -63,7 +67,7 @@
     <div id="banner" class="banner" role="status" hidden></div>
 
     <!-- Planny's wake-up on a freshly opened dashboard: a large copy of the
-         rail drawing that powers on centre stage, then glides into the rail.
+         rail drawing that powers on center stage, then glides into the rail.
          Hidden unless boot.js is playing it; placed entirely by app.css,
          because the CSP refuses style attributes. -->
     <div class="wake" id="wake" hidden>
@@ -96,7 +100,7 @@
           <span class="badge" id="badge">Pathfinder</span>
           <h1 id="title">Plan2Code Console</h1>
           <!-- The session meter: how much this console session has done. The
-               ring fills with the points (full at 15); the colour is the
+               ring fills with the points (full at 15); the color is the
                level. Hidden until a frame carries `meter`. -->
           <span class="meter-slot">
             <button
@@ -183,6 +187,19 @@
             <path class="mg-line" d="M4.6 9.8l.9 3.4h1.6l-.6-2.7M12.4 6.1a2.6 2.6 0 0 1 0 3.8M13.8 4.5a5 5 0 0 1 0 7" />
           </svg>
         </a>
+        <!-- Activities: small games for a long wait. Opens a dialog that pauses
+             the moment Plan2Code needs the person; nothing in it reaches the agent. -->
+        <button type="button" class="icon-btn" id="btn-activities" title="Activities" aria-label="Activities">
+          <!-- A die: a rounded square and five pips. -->
+          <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+            <rect class="dc-body" x="2" y="2" width="12" height="12" rx="2.6" />
+            <circle class="dc-pip" cx="5.4" cy="5.4" r="1" />
+            <circle class="dc-pip" cx="10.6" cy="5.4" r="1" />
+            <circle class="dc-pip" cx="8" cy="8" r="1" />
+            <circle class="dc-pip" cx="5.4" cy="10.6" r="1" />
+            <circle class="dc-pip" cx="10.6" cy="10.6" r="1" />
+          </svg>
+        </button>
       </div>
       <div class="topbar-row second">
         <div class="row-left">
@@ -215,7 +232,8 @@
             </svg>
           </button>
           <!-- Notebook: every screen, never hidden. The person's private notes for this
-               folder; nothing in it reaches the agent. -->
+               folder; a tab reaches the agent only through a send the person
+               starts on the dashboard. -->
           <button type="button" class="btn ghost small notepad-btn" id="btn-notepad" title="Notebook" aria-label="Notebook">
             <!-- A pocket notebook: a closed cover with a spine line and an elastic band. -->
             <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
@@ -777,6 +795,10 @@
           <path d="M4 5h16v11H10l-4 4v-4H4z" />
           <path d="M8 9.5h8M8 12.5h5" />
         </symbol>
+        <symbol id="hi-activities" viewBox="0 0 24 24" fill="none">
+          <rect x="4" y="4" width="16" height="16" rx="3.5" />
+          <path d="M8.5 8.5h.01M15.5 8.5h.01M12 12h.01M8.5 15.5h.01M15.5 15.5h.01" />
+        </symbol>
         <symbol id="hi-finishing" viewBox="0 0 24 24" fill="none">
           <path d="M6 21V4" />
           <path d="M6 4h11l-2 4 2 4H6" />
@@ -811,7 +833,7 @@
               Four boxes in a row, each talking both ways with the next: you in
               your browser, this page, a small program on 127.0.0.1, and
               Plan2Code in your terminal. A dashed outline around all four is
-              labelled "Your machine only".
+              labeled "Your machine only".
             </desc>
             <defs>
               <marker id="hd-about-arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
@@ -825,12 +847,12 @@
             <rect class="hd-box" x="304" y="42" width="100" height="64" rx="8" />
             <rect class="hd-box" x="448" y="42" width="100" height="64" rx="8" />
             <text class="hd-label" x="66" y="70" text-anchor="middle">You</text>
-            <text class="hd-label small" x="66" y="88" text-anchor="middle">in your browser</text>
+            <text class="hd-label small" x="66" y="88" text-anchor="middle" data-app="in the app">in your browser</text>
             <text class="hd-label" x="210" y="79" text-anchor="middle">This page</text>
             <text class="hd-label" x="354" y="70" text-anchor="middle">Small program</text>
             <text class="hd-label small" x="354" y="88" text-anchor="middle">on 127.0.0.1</text>
             <text class="hd-label" x="498" y="70" text-anchor="middle">Plan2Code</text>
-            <text class="hd-label small" x="498" y="88" text-anchor="middle">in your terminal</text>
+            <text class="hd-label small" x="498" y="88" text-anchor="middle" data-app="in its terminal panel">in your terminal</text>
             <path class="hd-line" d="M120 74 H156" marker-start="url(#hd-about-arrow)" marker-end="url(#hd-about-arrow)" />
             <path class="hd-line" d="M264 74 H300" marker-start="url(#hd-about-arrow)" marker-end="url(#hd-about-arrow)" />
             <path class="hd-line" d="M408 74 H444" marker-start="url(#hd-about-arrow)" marker-end="url(#hd-about-arrow)" />
@@ -840,18 +862,24 @@
         </figure>
         <p>
           A small program running on your own machine, started for you by
-          Plan2Code in your terminal. Nothing here goes over the internet, and
+          <span data-app="Plan2Code in the terminal panel">Plan2Code in your terminal</span>. Nothing here goes over the internet, and
           there is no account and nothing to install.
         </p>
         <h4>On this machine only</h4>
-        <p>
+        <p class="for-browser">
           The address starts with <strong>127.0.0.1</strong>, which always means
           "this computer". Nothing you type leaves your machine, and a colleague
           cannot open your link from theirs. To work through a session together,
           share your screen.
         </p>
+        <p class="for-app">
+          The app loads this page from <strong>127.0.0.1</strong>, which always
+          means "this computer". Nothing you type leaves your machine, and the
+          page's address stays inside the app, so there is no link to pass
+          around. To work through a session together, share your screen.
+        </p>
         <h4>How long it runs</h4>
-        <p>
+        <p class="for-browser">
           <strong>It stays up while this tab is open.</strong> Close the tab and
           it shuts itself down <span data-fact="closedTabMinutes">2</span> minutes
           later. It also stops after <span data-fact="idleMinutes">30</span>
@@ -859,19 +887,35 @@
           <span data-fact="maxLifeHours">4</span> hours regardless. Reopening the same link brings everything back: nothing you
           typed is kept in the browser alone.
         </p>
+        <p class="for-app">
+          <strong>It stays up while the app's window shows it.</strong> Close the
+          window and it shuts itself down <span data-fact="closedTabMinutes">2</span>
+          minutes later. It also stops after <span data-fact="idleMinutes">30</span>
+          minutes without hearing from anyone, and after
+          <span data-fact="maxLifeHours">4</span> hours regardless. When it
+          stops, the app's own bar notices and brings it back on the same
+          session, or offers <strong>Reconnect the console</strong>: nothing you
+          typed is kept in the window alone.
+        </p>
         <h4>Two halves, both running</h4>
-        <p>
+        <p class="for-browser">
           <strong>The terminal is the other half.</strong> This page collects your
           answers; Plan2Code, in the terminal you started it from, is what reads
           them and writes the files. Both have to be running for a question to
           reach you or an answer to reach it.
+        </p>
+        <p class="for-app">
+          <strong>The terminal panel is the other half.</strong> This page collects
+          your answers; Plan2Code, the agent running in the app's terminal panel,
+          is what reads them and writes the files. Both have to be running for a
+          question to reach you or an answer to reach it.
         </p>
         <p id="about-live" class="about-live"></p>
         <p>
           <strong>If it stops.</strong> Press Send anyway. Answers are written to
           disk the moment they leave this page and are held until something
           collects them, so starting Plan2Code again picks them up where you
-          left off. Nothing is lost by closing this tab either.
+          left off. <span data-app="Nothing is lost by closing the window either.">Nothing is lost by closing this tab either.</span>
         </p>
       </section>
 
@@ -879,7 +923,7 @@
       <section class="help-panel" data-tab="stuck">
         <h3>When something looks stuck</h3>
         <p class="help-lead">
-          This page and Plan2Code in your terminal are two programs, and either
+          This page and <span data-app="Plan2Code in the terminal panel">Plan2Code in your terminal</span> are two programs, and either
           can stop without the other. Nothing you have typed is lost either way.
         </p>
         <div class="help-callout" role="note">
@@ -891,7 +935,7 @@
           <div>
             <strong class="help-callout-label">Check this first</strong>
             <p>
-              If nothing seems to be happening, look at your terminal. Plan2Code
+              If nothing seems to be happening, <span data-app="look at the terminal panel (collapsed, it shows a dot once the agent has gone quiet)">look at your terminal</span>. Plan2Code
               often stops there to ask your permission, and this page cannot see it.
             </p>
           </div>
@@ -901,22 +945,22 @@
             <li class="help-row">
               <dl>
                 <dt>You see</dt><dd>The line beside Planny stays quiet for half a minute or more while it is working.</dd>
-                <dt>Likely cause</dt><dd>A permission prompt is waiting in your terminal.</dd>
+                <dt>Likely cause</dt><dd data-app="A permission prompt is waiting in the terminal panel.">A permission prompt is waiting in your terminal.</dd>
                 <dt>Do this</dt><dd>Switch to the terminal and answer it.</dd>
               </dl>
             </li>
             <li class="help-row">
               <dl>
-                <dt>You see</dt><dd><strong>Not running</strong> (Planny grey and still).</dd>
+                <dt>You see</dt><dd><strong>Not running</strong> (Planny gray and still).</dd>
                 <dt>Likely cause</dt><dd>Plan2Code has not checked in for a few minutes.</dd>
-                <dt>Do this</dt><dd>Look at the terminal. If it is idle, type <code>continue</code> there.</dd>
+                <dt>Do this</dt><dd class="for-browser">Look at the terminal. If it is idle, type <code>continue</code> there.</dd><dd class="for-app">Look at the terminal panel. If it is idle, press <strong>continue</strong> in the line beside Planny, which types it there for you.</dd>
               </dl>
             </li>
             <li class="help-row">
               <dl>
                 <dt>You see</dt><dd><strong>Not connected</strong> (Planny faded, his star shut).</dd>
                 <dt>Likely cause</dt><dd>The program behind this page shut itself down.</dd>
-                <dt>Do this</dt><dd>Ask Plan2Code to resume the session (or run the command again), and use the new link.</dd>
+                <dt>Do this</dt><dd id="help-stuck-table-reconnect-text">Ask Plan2Code to resume the session (or run the command again), and use the new link.</dd>
               </dl>
             </li>
             <li class="help-row">
@@ -947,8 +991,8 @@
             <text class="hd-label" x="110" y="46" text-anchor="middle">Says Not</text>
             <text class="hd-label" x="110" y="63" text-anchor="middle">connected?</text>
             <rect class="hd-box" x="260" y="26" width="284" height="48" rx="8" />
-            <text class="hd-label" x="402" y="46" text-anchor="middle">Run the command again,</text>
-            <text class="hd-label" x="402" y="63" text-anchor="middle">use the new link</text>
+            <text class="hd-label" x="402" y="46" text-anchor="middle" data-app="Press Reconnect the console">Run the command again,</text>
+            <text class="hd-label" x="402" y="63" text-anchor="middle" data-app="in the app's own bar">use the new link</text>
             <path class="hd-line" d="M202 50 H256" marker-end="url(#hd-stuck-arrow)" />
             <text class="hd-label small" x="228" y="43" text-anchor="middle">yes</text>
             <path class="hd-line" d="M110 86 V112" marker-end="url(#hd-stuck-arrow)" />
@@ -975,7 +1019,7 @@
         <h4>Not running, or not connected?</h4>
         <ul>
           <li>
-            <strong>Not running</strong> (Planny grey and still): this page is
+            <strong>Not running</strong> (Planny gray and still): this page is
             fine, but Plan2Code in the terminal has not checked in for
             <span data-fact="adriftMinutes">3</span> minutes. It may have finished
             its turn, hit an error, or be waiting on you there.
@@ -984,7 +1028,7 @@
             <strong>Not connected</strong> (Planny faded, arms hanging, his star shut in red):
             this page cannot reach its own program, after
             <span data-fact="goneSeconds">8</span> seconds without contact.
-            Usually it has shut itself down; see "Getting a new link" below.
+            Usually it has shut itself down; <span id="help-stuck-not-connected-ref">see "Getting a new link" below</span>.
           </li>
         </ul>
         <p>"Reading Planny" shows every mood side by side.</p>
@@ -993,8 +1037,8 @@
           Plan2Code sometimes stops in the terminal to ask your permission
           before it runs a command or changes a file, and this page cannot see
           that. After about 30 seconds of silence while it is working, the line
-          beside Planny asks "Still working, or waiting on an approval in your
-          terminal?" Have a look at the terminal: answering there sets it going
+          beside Planny asks <span data-app="&quot;Still working, or waiting on an approval in the terminal panel?&quot;">"Still working, or waiting on an approval in your
+          terminal?"</span> Have a look at the terminal: answering there sets it going
           again.
         </p>
         <p>
@@ -1016,12 +1060,16 @@
           What you send is written to disk and held until something collects it,
           so starting Plan2Code again picks it up where you left off.
         </p>
-        <h4>Getting a new link</h4>
+        <h4 id="help-stuck-reconnect-title">Getting a new link</h4>
         <p>The program behind this page shuts itself down:</p>
         <ul>
-          <li>
+          <li class="for-browser">
             <span data-fact="closedTabMinutes">2</span> minutes after the last tab
             showing it closes,
+          </li>
+          <li class="for-app">
+            <span data-fact="closedTabMinutes">2</span> minutes after the app's
+            window closes,
           </li>
           <li>
             after <span data-fact="idleMinutes">30</span> minutes without hearing
@@ -1032,12 +1080,12 @@
             happening.
           </li>
         </ul>
-        <p>
+        <p id="help-stuck-reconnect-text">
           To get it back, ask Plan2Code in the terminal to resume the session,
           or run the step's command again, and use the new link it gives you.
           Everything you typed, sent or not, is still there.
         </p>
-        <div class="handoff-command" data-copy>
+        <div class="handoff-command" data-copy id="help-stuck-reconnect-command">
           <code class="handoff-code">resume the session and print the web console address here</code>
         </div>
       </section>
@@ -1117,11 +1165,19 @@
           <li>
             The <strong>?</strong> button opens this Help, and the gear button
             beside it opens <strong>User Preferences</strong>: your role first,
-            then your colors, theme, card width and sounds.
+            then your colors, theme, card width, sounds and whether Activities shows.
+          </li>
+          <li class="for-browser">
+            The <strong>megaphone</strong> button opens GitHub in a
+            new tab, where you can report a bug or suggest an idea.
+          </li>
+          <li class="for-app">
+            The <strong>megaphone</strong> button opens Plan2Code's
+            GitHub issues, where you can report a bug or suggest an idea.
           </li>
           <li>
-            The <strong>megaphone</strong> button at the far right opens GitHub in a
-            new tab, where you can report a bug or suggest an idea.
+            The <strong>die</strong> beside it opens <strong>Activities</strong>,
+            small games to play while you wait. See "Activities".
           </li>
           <li>
             <strong>Stop session</strong> ends the session and saves your place.
@@ -1146,8 +1202,8 @@
           <strong>Overview</strong> when the session is working on a spec, then
           one tab per document Plan2Code has written, and <strong>Ask</strong>,
           always last.
-          Each tab remembers where you scrolled for as long as this browser tab
-          stays open.
+          <span data-app="Each tab remembers where you scrolled for as long as the app's window stays open.">Each tab remembers where you scrolled for as long as this browser tab
+          stays open.</span>
         </p>
         <h4>Moving between questions</h4>
         <p>
@@ -1217,8 +1273,16 @@
             folder per tab on disk. There is no Save button.
           </li>
           <li>
-            It is private to this machine and never sent to Plan2Code. Nothing
-            in it is shown to the agent.
+            It is private to this machine and never sent to Plan2Code.
+            Private: the agent never reads your Notebook. A tab reaches it only
+            when you start a workflow with it.
+          </li>
+          <li>
+            A lit card's confirm pane can offer <strong>Start with a note from
+            your Notebook</strong>. On the dashboard, Pathfinder, Plan and Quick
+            Task offer it on Start fresh, and Revise plan on a picked spec with
+            no plan change waiting. A tab you started a workflow with wears a
+            small <strong>sent</strong> badge.
           </li>
           <li>
             Two open pages on the same folder share one notebook. If both change
@@ -1342,8 +1406,8 @@
         <p>
           Star turning, arms pumping, feet walking on the spot. Plan2Code has your answers and is thinking, or is
           busy building. The line beside him says what it is doing. After about
-          30 seconds of silence it asks "Still working, or waiting on an approval
-          in your terminal?", because the terminal may have stopped to ask your
+          30 seconds of silence it asks <span data-app="&quot;Still working, or waiting on an approval in the terminal panel?&quot;">"Still working, or waiting on an approval
+          in your terminal?"</span>, because the terminal may have stopped to ask your
           permission for something, and this page cannot see that.
         </p>
         <h4>All caught up</h4>
@@ -1352,10 +1416,10 @@
           answered and Plan2Code has nothing new yet.
         </p>
         <h4>Done</h4>
-        <p>A green star and both arms up. The session is finished. You can close the tab.</p>
+        <p id="help-planny-done-text">A green star and both arms up. The session is finished. You can close the tab.</p>
         <h4>Not running</h4>
         <p>
-          Grey, still, arms down out of sight. This page is fine, but Plan2Code has not checked in
+          Gray, still, arms down out of sight. This page is fine, but Plan2Code has not checked in
           for <span data-fact="adriftMinutes">3</span> minutes. Anything you answer
           is still saved.
         </p>
@@ -1488,9 +1552,13 @@
             Everything you pick or type is a draft that Plan2Code cannot see
             yet, and every bit of it can be undone.
           </li>
-          <li>
+          <li class="for-browser">
             Drafts survive a closed tab and a reload: open the same link again and
             your half-typed answers are still there.
+          </li>
+          <li class="for-app">
+            Drafts survive a closed window and a reload: when the app shows this
+            session again, your half-typed answers are still there.
           </li>
           <li>
             The footer says what is ready to go, and the Send button pulses gently
@@ -1560,7 +1628,7 @@
             images and documents counted together.
           </li>
           <li>
-            <strong>Images</strong> are shrunk in your browser to a JPEG at most
+            <strong>Images</strong> are shrunk <span data-app="on this machine">in your browser</span> to a JPEG at most
             <span data-fact="imageEdge">2000</span> px on the long edge, and must
             be under <span data-fact="maxUploadMb">4</span> MB after shrinking.
           </li>
@@ -1619,12 +1687,18 @@
           <strong>Out of date</strong> by the title means answers have landed that
           the document does not reflect yet.
         </p>
-        <h4>The Overview tab</h4>
+        <h4>The Overview, Map and Plan draft tabs</h4>
         <p>
           When the session is working on a spec that has an
           <code>overview.md</code>, the <strong>Overview</strong> tab shows it. It
           is read-only, and read fresh from disk each time you open the tab, so an
           edit shows up straight away. No file, no tab.
+        </p>
+        <p>
+          On the dashboard, a picked spec that is not documented yet shows its
+          main files the same way instead: <strong>Map</strong> for its
+          Pathfinder map and <strong>Plan draft</strong> for its plan draft, each
+          when it exists.
         </p>
         <h4>Printing and saving</h4>
         <ul>
@@ -1709,7 +1783,7 @@
           button.
         </p>
         <h4>When an update is out</h4>
-        <p>
+        <p id="help-update-text">
           When a newer Plan2Code release is out, the dashboard shows
           <strong>UPDATE AVAILABLE</strong> at the top. Click it for the command
           to run in your terminal, <code>plan2code update</code>; × hides it until the next
@@ -1727,7 +1801,7 @@
           <strong>Start from scratch</strong> for a new idea. The one you pick is
           what a step works on, and it decides which cards make sense: a spec
           that is half built has no use for Pathfinder, and a new idea cannot be
-          implemented yet. Cards that do not fit are greyed out with the reason
+          implemented yet. Cards that do not fit are grayed out with the reason
           why.
         </p>
         <p>
@@ -1740,7 +1814,7 @@
           bug has its own <strong>Delete</strong> button at the bottom of its
           chip instead, and needs just one confirm, since the work is done.
         </p>
-        <p>
+        <p id="help-handoff-copy-text">
           A <strong>Handoff</strong> is a note a step left when you stopped it
           with a handoff. It shows as a dashed chip after the specs. Pick one
           and the cards give way to a preview with its Next task and four
@@ -1812,11 +1886,18 @@
           miss things, and the ring is there to remind you.
         </p>
         <h4>What red means</h4>
-        <p>
+        <p class="for-browser">
           Starting a <strong>new console session</strong> will keep Plan2Code
           sharp: stop this one, then start Plan2Code again in a new
           conversation. Resuming this session carries its count along, so it
           does not help. Your work is all on disk, so nothing is lost.
+        </p>
+        <p class="for-app">
+          A fresh start will keep Plan2Code sharp: finish the step, then press
+          <strong>New Session</strong> at the top of the window. The agent starts
+          again on a clean context, in a new console session whose meter starts
+          over, and the dashboard offers a brief of where you were. Your work is
+          all on disk, so nothing is lost.
         </p>
         <p>
           The meter never blocks anything. Red is advice; you can keep going.
@@ -1984,7 +2065,7 @@
         <h4>While something is running</h4>
         <ul>
           <li>
-            Everything greys out except switching tabs, searching and opening
+            Everything grays out except switching tabs, searching and opening
             folds, so nothing queues up behind the running command.
           </li>
           <li>What is running shows where the next step usually sits.</li>
@@ -2007,7 +2088,7 @@
           <strong>Done with git</strong> ends the board. If anything happened, the
           last screen lists the commits, pushes and branches created or deleted,
           with <strong>Back to the dashboard</strong>; if nothing did, the page
-          goes straight back to the dashboard. It greys while a command runs and
+          goes straight back to the dashboard. It grays while a command runs and
           comes back when it is done; if Plan2Code stops checking in,
           <strong>Stop session</strong> in the top bar ends the session instead.
           While a question of Plan2Code's waits, it cancels that question and
@@ -2019,9 +2100,9 @@
       <section class="help-panel" data-tab="subagents">
         <h3>Helpers (subagents)</h3>
         <p>
-          On a build, a review and Pathfinder, Plan2Code can hand independent
-          pieces of work to helpers (subagents) while it keeps the conversation
-          with you. The <strong>Subagents</strong> button in the top bar, after
+          On a build, a review, Pathfinder, Plan and Revise plan, Plan2Code
+          can hand independent pieces of work to helpers (subagents) while it
+          keeps the conversation with you. The <strong>Subagents</strong> button in the top bar, after
           Stop session, is lit while helpers are on.
         </p>
         <h4>The switch</h4>
@@ -2044,6 +2125,31 @@
           </li>
           <li>The button only appears on skills that use helpers, and only when Plan2Code can pass the setting on.</li>
         </ul>
+        <h4>Helper strength</h4>
+        <p>
+          Under Helpers, the dialog also asks how strong the helpers should be.
+          Like the rest of the dialog it is saved for this project and this
+          skill, and it does nothing under <strong>Work alone</strong>.
+        </p>
+        <ul>
+          <li>
+            <strong>Balanced</strong> (the default): each helper gets the
+            strength its job needs: light for lookups, stronger for reviews and
+            design work.
+          </li>
+          <li>
+            <strong>Thrifty</strong>: one step lighter everywhere to save cost;
+            reviews stay at standard or above.
+          </li>
+          <li>
+            <strong>Best</strong>: the strongest model and high effort for
+            everything except lookups.
+          </li>
+          <li>
+            <strong>Match my session</strong>: helpers run on whatever your
+            session uses; nothing is set for them.
+          </li>
+        </ul>
         <h4>The Subagents tab</h4>
         <ul>
           <li>
@@ -2056,6 +2162,12 @@
             Helpers report through Plan2Code, so the rows change at its
             check-ins, not live. The page cannot stop a helper; ask Plan2Code
             on the Ask tab if one should stop.
+          </li>
+          <li>
+            Under each helper, a line such as "Standard, medium effort" shows
+            what that helper actually ran with. "Session model" means the agent
+            could not set a strength for it, so it ran on the session's own
+            model. A helper that reported neither shows no line.
           </li>
           <li>
             <strong>Working alone</strong> means your agent reported it has no
@@ -2085,7 +2197,7 @@
           your answers to the cards, and sending those never holds up a question.
         </p>
         <h4>Prompts to carry away</h4>
-        <p>
+        <p id="help-ask-prompt-text">
           When what you ask is really a new task, or you ask for a prompt,
           the answer ends with a ready-to-paste prompt in a box with a
           <strong>Copy</strong> button. Copy it into a new conversation: it
@@ -2155,10 +2267,15 @@
             "That's 10 questions in this conversation" means press
             <strong>New conversation</strong> to keep going.
           </li>
-          <li>
+          <li class="for-browser">
             "No agent is available right now" means the session has finished or
             Plan2Code has gone quiet. Check the terminal, or resume the session,
             to ask.
+          </li>
+          <li class="for-app">
+            "No agent is available right now" means the session has finished or
+            Plan2Code has gone quiet. Check the terminal panel, or press
+            <strong>New Session</strong> if the agent has ended, to ask.
           </li>
         </ul>
         <p>Either way, the conversation above stays readable.</p>
@@ -2169,7 +2286,120 @@
         </p>
       </section>
 
-      <!-- Tab 16: Stopping and finishing -->
+      <!-- Tab 16: Activities -->
+      <section class="help-panel" data-tab="activities">
+        <h3>Activities</h3>
+        <p class="help-lead">
+          The <strong>die</strong> in the top bar opens
+          <strong>Activities</strong>: small games to play while you wait, say
+          through a long build. Two games ship: <strong>Snake</strong> and
+          <strong>Mini golf</strong>. Pick one with the buttons above the board;
+          the window opens on your last pick next time. Nothing you do in it
+          reaches Plan2Code.
+        </p>
+        <h4>The games</h4>
+        <ul>
+          <li>
+            <strong>Snake</strong>: steer to the food and grow. The snake speeds
+            up as it grows, and a wall, a rock, a comet or your own tail ends
+            the round. Food eaten quickly builds a combo of up to x5. Every 5
+            foods is a new level, and each of the first few brings something
+            new: rocks (a flashing cell turns to stone), mystery boxes, portals,
+            comets that cut your tail, then chaos. Power-ups turn up on their
+            own: Shield, Turbo, Slow-mo, Magnet, Ghost and Scissors, and a
+            mystery box can hold any of ten surprises, good or bad. The start
+            and end screens count how many of them you have found so far.
+          </li>
+          <li>
+            <strong>Mini golf</strong>: eighteen silly holes seen from above.
+            The front nine is <strong>Pirate Cove</strong>, greens afloat in a
+            shark sea with cannonballs, barrels, a kraken and a ghost ship. The
+            back nine is the <strong>Caves of Doom</strong>, lit only around
+            your ball, with lava, a bottomless pit, mine carts and stone
+            crushers. The aim follows your mouse. Click (or press
+            <kbd>Space</kbd>) to start the power meter, then click again to
+            set the power: the gold <strong>MAX</strong> band near the top
+            gives a boosted putt, but go past it into the red and you shank it.
+            Dawdle for 6 seconds and the meter starts by itself. Hold the mouse
+            button or <kbd>Space</kbd> while the ball rolls to speed it up.
+            Each hole has a par, and after 8
+            strokes the ball is picked up. The scorecard between holes shows how
+            the round stands against par.
+          </li>
+          <li>
+            <strong>Power-ups</strong>: roll over a glowing pad to hold it for
+            your next putt. A <strong>Lucky Doubloon</strong> makes it free, a
+            <strong>Cannonball</strong> fires it 1.6 times as hard, a
+            <strong>Ghost Ball</strong> floats over water, sand and bumpers, a
+            <strong>Parrot Magnet</strong> bends it toward the cup, a
+            <strong>Rubber Duck</strong> bounces off walls at full speed, a
+            <strong>Treasure Map</strong> makes the cup huge, and a
+            <strong>Spyglass</strong> shows where it will roll while the meter runs.
+            You hold one at a time, and it carries over to the next hole.
+          </li>
+        </ul>
+        <h4>It never hides your turn</h4>
+        <ul>
+          <li>
+            A new question, a sign-off or a finish pauses the game at once, and
+            a banner above the board says Plan2Code needs you.
+            <strong>Go to it</strong> closes the window on that question.
+          </li>
+          <li class="for-browser">
+            Switching to another tab, or clicking outside the page, also pauses it.
+          </li>
+          <li class="for-app">
+            Hiding the window, or clicking outside the page (the app's own bar
+            too), also pauses it.
+          </li>
+          <li>
+            Nothing resumes by itself. Any game key plays on, and so does a
+            click on the Mini golf board. Playing on puts the banner away until
+            the next new question.
+          </li>
+          <li>
+            Starting a round, and playing on after a pause, counts down 3, 2, 1
+            first, so the game never moves before you are ready.
+          </li>
+        </ul>
+        <h4>Keys</h4>
+        <ul>
+          <li>
+            Snake: the arrow keys, or <kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd>
+            <kbd>D</kbd>, steer.
+          </li>
+          <li>
+            Mini golf: hold left or right to turn the aim (faster the longer
+            you hold), press <kbd>Space</kbd> once to start the power meter and
+            again to set the power, and hold <kbd>Space</kbd> while the ball
+            rolls to speed it up.
+          </li>
+          <li><kbd>Space</kbd> starts a round, and plays again after a pause.</li>
+          <li><kbd>P</kbd> pauses and plays.</li>
+          <li><kbd>Esc</kbd> closes the window, with the game paused where it was.</li>
+        </ul>
+        <p>Activities need a keyboard: on a touch-only screen the window says so instead of showing the board.</p>
+        <h4>Best scores</h4>
+        <p>
+          The window's title shows the best for the game on screen, and the
+          line under the board shows it beside your score. For Snake the best
+          is your highest score; for Mini golf it is your lowest full round of
+          eighteen holes, and a round left halfway never counts.
+          <strong>Reset best scores</strong>, at the bottom of the window,
+          clears both after a second click to confirm.
+        </p>
+        <h4>Hiding it</h4>
+        <p>
+          Don't want the die? Untick <strong>Show Activities</strong> in User
+          Preferences (the gear) and it is gone from every screen.
+        </p>
+        <p>
+          Best scores, Snake's surprises found, your last pick and that switch are saved privately on
+          this machine, with your other preferences, and never sent anywhere.
+        </p>
+      </section>
+
+      <!-- Tab 17: Stopping and finishing -->
       <section class="help-panel" data-tab="finishing">
         <h3>Stopping and finishing</h3>
         <p class="help-lead">
@@ -2177,7 +2407,7 @@
           run next, whether it finished on its own or you stopped it.
         </p>
         <h4>Stopping early</h4>
-        <p>
+        <p id="help-finishing-stop-text">
           <strong>Stop session</strong>, at the top, ends the session and saves
           your place. Any answers you have ready go with it, and Plan2Code
           gives you a command to pick up where you left off, in a new
@@ -2239,7 +2469,7 @@
           this step is over.
         </p>
         <h4>Running the next command</h4>
-        <p>
+        <p id="help-finishing-command-text">
           Press <strong>Copy</strong>, then paste the command into the terminal
           where you started Plan2Code, in a new conversation. When the next
           step is another Plan2Code step, the command already ends with
@@ -2247,7 +2477,7 @@
           you carry on here rather than in the terminal.
         </p>
         <h4>Back to the dashboard</h4>
-        <p>
+        <p id="help-finishing-dashboard-text">
           A finished screen (never a paused one) has a <strong>Back to the
           dashboard</strong> button. It turns this page back into the cards, in
           the same conversation, so the next step starts right here.
@@ -2266,7 +2496,7 @@
           "Commit this now?" and you say yes, it carries on to Git.
         </p>
         <h4>Continue here</h4>
-        <p>
+        <p id="help-finishing-continue-text">
           When the next step is another Plan2Code step, the Next step block also
           has a <strong>Continue here</strong> button. It starts that step in
           this same conversation, the way a dashboard card would, with this page
@@ -2276,7 +2506,7 @@
         </p>
       </section>
 
-      <!-- Tab 17: Keyboard and preferences -->
+      <!-- Tab 18: Keyboard and preferences -->
       <section class="help-panel" data-tab="prefs">
         <h3>Keyboard and preferences</h3>
         <p class="help-lead">
@@ -2345,7 +2575,7 @@
           </li>
           <li>
             <strong>Highlight color</strong>: one of
-            <span data-fact="accentCount">32</span>, ocean blue to begin with. It marks
+            <span data-fact="accentCount">38</span>, ocean blue to begin with. It marks
             what is yours to do, and Planny's star uses it while he works.
           </li>
           <li>
@@ -2356,6 +2586,11 @@
             ending, new questions for you, a reply on the Ask tab and a new tab
             joining the strip. Keep only the ones you want; ticking a box plays
             its sound.
+          </li>
+          <li>
+            <strong>Activities</strong>: <strong>Show Activities</strong> puts
+            the die in the top bar, which opens small games to play while you
+            wait. Untick it to hide the die on every screen.
           </li>
           <li>
             <strong>Cleanup</strong>: <strong>Find files to clean up</strong>
@@ -2373,7 +2608,9 @@
           </li>
           <li>
             <strong>Back to default</strong> puts everything back as it was, and
-            sets Role back to Not set.
+            sets Role back to Not set. Your Activities best scores stay: only
+            <strong>Reset best scores</strong>, in the Activities window, clears
+            them.
           </li>
         </ul>
         <p>
@@ -2397,7 +2634,7 @@
         </ul>
       </section>
 
-      <!-- Tab 18: Privacy and where things are saved -->
+      <!-- Tab 19: Privacy and where things are saved -->
       <section class="help-panel" data-tab="privacy">
         <h3>Privacy and where things are saved</h3>
         <p class="help-lead">
@@ -2405,19 +2642,32 @@
           your project.
         </p>
         <h4>On this machine only</h4>
-        <p>
+        <p class="for-browser">
           The page is served on <strong>127.0.0.1</strong>, which only this
           computer can reach. It is not visible on your network, so sharing the
           link with someone on another machine will not work, by design. To work
           through a session together, share your screen.
         </p>
+        <p class="for-app">
+          The page is served on <strong>127.0.0.1</strong>, which only this
+          computer can reach. It is not visible on your network, and the app
+          shows it in its own window, so there is no link to share. To work
+          through a session together, share your screen.
+        </p>
         <h4>The link is a key</h4>
-        <p>
+        <p class="for-browser">
           The link carries a long private code. The first time it is opened, the
           page swaps that code for a cookie in this browser and takes it out of
           the address bar, so it does not linger in your history or show in a
           screenshot. Treat the link like a password all the same: anyone on
           this machine who has it can open the session.
+        </p>
+        <p class="for-app">
+          The page's address carries a long private code. The app opens it for
+          you, and the page swaps that code for a cookie in the app's own web
+          view, so it never shows in the window, and the agent leaves it out of
+          the terminal panel. Anyone on this machine who has the address can
+          still open the session, so treat it like a password if you ever see it.
         </p>
         <h4>What is kept, and where</h4>
         <p>
@@ -2436,8 +2686,9 @@
             and attachments");
           </li>
           <li>
-            your role, theme, colors, card width and sounds, in
-            <code>looks.json</code>;
+            your role, theme, colors, card width and sounds, the Show
+            Activities switch, the last activity you picked and your best
+            scores, in <code>looks.json</code>;
           </li>
           <li>
             your Subagents switch for each project and skill, in
@@ -2523,6 +2774,11 @@
           </div>
           <p class="help">Ticking one plays it. Play sounds switches them all off at once and keeps your picks for when you switch back on.</p>
         </fieldset>
+        <fieldset class="modal-ranges looks-activities">
+          <legend>Activities</legend>
+          <label><input type="checkbox" id="looks-activities" checked /> <span>Show Activities</span></label>
+          <p class="help">The die in the top bar opens small games to play while you wait.</p>
+        </fieldset>
         <fieldset class="modal-ranges looks-cleanup">
           <legend>Cleanup</legend>
           <p class="help">Finds what Plan2Code doesn't need in your <code>~/.plan2code</code> folder: sessions nobody has opened for 30 days, and files or folders that ended up there by mistake. It also lists this project's <code>specs--completed/</code> folders nobody has touched for 30 days; deleting one is permanent, since that folder is usually gitignored and git can't restore it. You see the list before anything is deleted. Your preferences, saved folders, models, the launcher and this session always stay.</p>
@@ -2557,6 +2813,32 @@
             <span class="help" id="models-status" role="status"></span>
           </div>
         </fieldset>
+        <fieldset class="modal-ranges looks-models looks-agents">
+          <legend>Agents</legend>
+          <div class="models-note">
+            <p>Agent CLIs Plan2Code did not find on its own. The <code>plan2code</code> command and the desktop app list the ones that are installed.</p>
+            <ul>
+              <li><code>/plan2code</code> works only in agents that load the installed Plan2Code skills. A blank start prompt starts the agent with nothing typed.</li>
+              <li>The list is saved as plain text in <code>~/.plan2code/agents.json</code>.</li>
+            </ul>
+          </div>
+          <div class="agents-list" id="agents-list" aria-label="Agents you added"></div>
+          <div class="models-actions">
+            <button type="button" class="btn small" id="agents-add">Add agent</button>
+            <button type="button" class="btn small danger" id="agents-replace" hidden>Save anyway</button>
+            <span class="help" id="agents-status" role="status"></span>
+          </div>
+        </fieldset>
+        <!-- Only inside the desktop app (framed()): the app saves the switch in its own app.json. -->
+        <fieldset class="modal-ranges looks-desktop" id="looks-desktop" hidden>
+          <legend>Desktop app</legend>
+          <label><input type="checkbox" id="looks-taskbar" checked /> <span>Show on the taskbar when Plan2Code needs me</span></label>
+          <p class="help">
+            Windows: a colored dot on the taskbar button (green on your move, red when it
+            needs you) and a short burst of flashes. macOS: a red badge on the dock icon when it needs
+            you, and a bounce. Linux: depends on your desktop.
+          </p>
+        </fieldset>
       </div>
       <div class="modal-actions">
         <button type="button" class="btn ghost" id="looks-reset">Back to default</button>
@@ -2574,10 +2856,33 @@
         Let Plan2Code hand independent work to helpers in this skill. Saved for this
         project and this skill.
       </p>
-      <fieldset class="modal-ranges looks-row">
-        <legend>Helpers</legend>
-        <label><input type="radio" name="subagents-on" value="on" /> <span>Use helpers</span></label>
-        <label><input type="radio" name="subagents-on" value="off" checked /> <span>Work alone</span></label>
+      <!-- On a wide dialog the switch and the cap share a row, and the four
+           strengths sit side by side, so the dialog stays short. -->
+      <div class="subagents-top">
+        <fieldset class="modal-ranges looks-row">
+          <legend>Helpers</legend>
+          <label><input type="radio" name="subagents-on" value="on" /> <span>Use helpers</span></label>
+          <label><input type="radio" name="subagents-on" value="off" checked /> <span>Work alone</span></label>
+        </fieldset>
+        <fieldset class="modal-ranges">
+          <legend>At most</legend>
+          <label>
+            <input type="number" id="subagents-max" min="1" max="20" step="1" aria-label="At most this many helpers at once" />
+            <span>helpers at once</span>
+          </label>
+          <p class="help">Advisory: your agent's own limit still applies.</p>
+        </fieldset>
+      </div>
+      <!-- Each strength wears the Subagents tab's badge for the rank it leans
+           to: Thrifty light, Balanced standard, Best strongest, and the
+           session's own model with no rank. -->
+      <fieldset class="modal-ranges looks-row" id="subagents-strength-row">
+        <legend>Helper strength</legend>
+        <label><input type="radio" name="subagents-strength" value="thrifty" /> <span class="sa-badge lvl-1"><span class="sa-bars" aria-hidden="true"><i class="on"></i><i></i><i></i></span>Thrifty</span></label>
+        <label><input type="radio" name="subagents-strength" value="balanced" checked /> <span class="sa-badge lvl-2"><span class="sa-bars" aria-hidden="true"><i class="on"></i><i class="on"></i><i></i></span>Balanced</span></label>
+        <label><input type="radio" name="subagents-strength" value="best" /> <span class="sa-badge lvl-3"><span class="sa-bars" aria-hidden="true"><i class="on"></i><i class="on"></i><i class="on"></i></span>Best</span></label>
+        <label><input type="radio" name="subagents-strength" value="session" /> <span class="sa-badge lvl-0">Match my session</span></label>
+        <p class="help" id="subagents-strength-help"></p>
       </fieldset>
       <fieldset class="modal-ranges">
         <legend>Instruction</legend>
@@ -2586,14 +2891,6 @@
           <button type="button" class="btn small ghost" id="subagents-default">Reset to default</button>
           <span class="help">Passed to the agent as written, at its next check-in.</span>
         </div>
-      </fieldset>
-      <fieldset class="modal-ranges">
-        <legend>At most</legend>
-        <label>
-          <input type="number" id="subagents-max" min="1" max="20" step="1" aria-label="At most this many helpers at once" />
-          <span>helpers at once</span>
-        </label>
-        <p class="help">Advisory: your agent's own limit still applies.</p>
       </fieldset>
       <p class="help" id="subagents-checkin"></p>
       <p class="help" id="subagents-research" hidden></p>
@@ -2606,11 +2903,12 @@
 
     <!-- The Notebook: the person's own notes for this folder, autosaved under
          ~/.plan2code/notepads/ by the /notepad routes. Never part of the
-         session, so nothing in it reaches the agent. screens/notepad.js fills
-         the editor on open. -->
+         session, and the agent CLI never imports the store: a tab leaves it
+         only through a send the person starts on the dashboard. screens/notepad.js
+         fills the editor on open. -->
     <dialog class="modal notepad" id="notepad-modal" aria-labelledby="notepad-title">
       <h2 id="notepad-title">Notebook</h2>
-      <p class="modal-blurb">A private space to keep track of notes, uploaded images related to your in-progress work on this project. Saved on this machine and <strong class="private-note">never shared to the AI Agent</strong>.</p>
+      <p class="modal-blurb">A private space to keep track of notes and uploaded images related to your in-progress work on this project. Saved on this machine. <strong class="private-note">Private</strong>: the agent never reads your Notebook. A tab reaches it only when you start a workflow with it.</p>
       <div class="notepad-tabbar">
         <div class="notepad-tabs" id="notepad-tabs" role="tablist" aria-label="Notebook tabs"></div>
         <button type="button" class="btn small ghost notepad-tab-new" id="notepad-tab-new">+ New tab</button>
@@ -2621,6 +2919,7 @@
       </div>
       <div class="notepad-body" id="notepad-body">
         <div class="notepad-editor" id="notepad-editor"></div>
+        <p class="help notepad-sent" id="notepad-sent" hidden></p>
         <div class="notepad-images" id="notepad-images">
           <button type="button" class="btn small ghost notepad-add" id="notepad-add">Add image</button>
           <input type="file" accept="image/*" multiple id="notepad-file" hidden />
@@ -2666,6 +2965,29 @@
       <div class="notepad-preview-bar">
         <p class="notepad-preview-count" id="notepad-preview-count" aria-live="polite"></p>
         <button type="button" class="btn small notepad-preview-close" id="notepad-preview-close">Close</button>
+      </div>
+    </dialog>
+
+    <!-- Activities: small built-in games for a long wait. Play is private to
+         this page and never reaches the agent; screens/activities.js runs the
+         game, and pauses it whenever Plan2Code needs the person. -->
+    <dialog class="modal activities" id="activities-modal" aria-labelledby="activities-title">
+      <h2 id="activities-title">Activities<span id="activities-title-best" class="activities-title-best"></span></h2>
+      <p class="modal-blurb">Something to play while you wait. Private to this page, and it pauses whenever Plan2Code needs you.</p>
+      <div class="activities-banner" id="activities-banner" role="status" hidden>
+        <span class="activities-banner-text" id="activities-banner-text"></span>
+        <button type="button" class="btn small primary" id="activities-goto">Go to it</button>
+      </div>
+      <div class="activities-picker" id="activities-picker" role="group" aria-label="Pick an activity" hidden></div>
+      <div class="activities-board" id="activities-board" tabindex="-1">
+        <canvas id="activities-canvas"></canvas>
+        <div class="activities-overlay" id="activities-overlay"></div>
+      </div>
+      <p class="activities-score" id="activities-score"></p>
+      <p class="help activities-note" id="activities-note" aria-live="polite" hidden></p>
+      <div class="modal-actions">
+        <button type="button" class="btn ghost" id="activities-reset">Reset best scores</button>
+        <button type="button" class="btn ghost" id="activities-close">Close</button>
       </div>
     </dialog>
 
@@ -2755,7 +3077,7 @@
             <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false"><circle cx="10" cy="10" r="7" opacity="0.35" /><circle cx="10" cy="10" r="7" pathLength="100" stroke-dasharray="50 100" stroke-dashoffset="25" transform="rotate(-90 10 10)" /></svg>
           </span>
           <h3>Refresh at half way</h3>
-          <p>Once the session meter passes half, finish the step and start a new conversation.</p>
+          <p id="welcome-refresh-text">Once the session meter passes half, finish the step and start a new conversation.</p>
         </div>
         <div class="welcome-col">
           <span class="welcome-dot is-bare">

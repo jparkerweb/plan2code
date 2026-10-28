@@ -25,6 +25,7 @@ export const HELP_TABS = Object.freeze([
   tab("git", "The git board", false),
   tab("subagents", "Helpers (subagents)", false),
   tab("ask", "Ask a quick question", false),
+  tab("activities", "Activities", false),
   tab("finishing", "Stopping and finishing", false),
   tab("prefs", "Keyboard and preferences", false),
   tab("privacy", "Privacy and where things are saved", false),
@@ -46,7 +47,7 @@ export function helpTabFor({ view, dashboard, gone, adrift, finished, workflow, 
   if (v === "subagents") return "subagents";
   if (dashboard && meterRed) return "meter";
   if (dashboard) return "dashboard";
-  if (v === "overview" || v.startsWith("doc:")) return "docs";
+  if (v === "overview" || v === "map" || v === "draft" || v.startsWith("doc:")) return "docs";
   if (workflow === "git") return "git";
   if (HELP_BUILD_WORKFLOWS.has(workflow)) return "build";
   return "about";

@@ -33,7 +33,7 @@
   padding: 18px 22px;
   display: flex; flex-direction: column; gap: 10px;
 }
-/* An empty conversation's starter questions, centred where the list is empty. */
+/* An empty conversation's starter questions, centered where the list is empty. */
 .ask-starters { display: flex; flex-direction: column; gap: 6px; margin: auto 0; width: 100%; max-width: 520px; align-self: center; }
 .ask-starters-lead { color: var(--ink-3); font-size: 13.5px; margin: 0 0 4px; text-align: center; }
 .ask-starter {

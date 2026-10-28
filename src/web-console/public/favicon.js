@@ -2,8 +2,8 @@
 //
 // The favicon follows the status line with a bar along its bottom edge: dashed
 // amber while Plan2Code is busy, solid green when it is the person's move,
-// solid red when it needs attention, and none (the plain Planny) once the
-// session is finished. It reads from the same calls
+// solid red when it needs attention, and none (the plain Planny) once nothing
+// is left for anyone to do. It reads from the same calls
 // renderStatus() already makes for Planny's mood, so the icon and the line
 // beside him can never disagree. No DOM access at module scope: `node --test`
 // imports this file.
@@ -26,12 +26,13 @@ export const FAVICON_COLORS = Object.freeze({
  * handed to say(): `spin` marks something really happening at the other end
  * right now, so that is busy. A working mood without the spin is the stale
  * line ("has not checked in for a few minutes"), which, like adrift and gone,
- * needs attention. `point` is the person's move. A finished session is plain
- * unless it is visibly busy again (opening the dashboard, starting a review).
+ * needs attention. `point` is the person's move. A finished screen follows the
+ * same moods: it points while a press is still on offer (back to the
+ * dashboard, a review), is adrift when a press was never collected, and is
+ * `done` (plain) once nothing is left.
  */
-export function faviconState({ mood, spin = false, finished = false } = {}) {
+export function faviconState({ mood, spin = false } = {}) {
   if (spin) return "busy";
-  if (finished) return "plain";
   if (mood === "adrift" || mood === "gone" || mood === "work") return "attention";
   if (mood === "point") return "ready";
   return "plain";

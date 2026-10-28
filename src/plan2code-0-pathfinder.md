@@ -23,7 +23,7 @@ The map lives in ONE of two places — the human's pick at Chart Step 1, never y
 
 Read references/github-issues.md — REQUIRED on `github`, skip on `local`.
 
-> Fallback: map = a `pathfinder:map` issue titled `Map: <idea>`; questions = its sub-issues, labelled `pathfinder:<type>-<mode>`; blocking = native dependencies; claim = assign `@me`; resolve = `## Answer` comment, then close.
+> Fallback: map = a `pathfinder:map` issue titled `Map: <idea>`; questions = its sub-issues, labeled `pathfinder:<type>-<mode>`; blocking = native dependencies; claim = assign `@me`; resolve = `## Answer` comment, then close.
 
 Recorded as the first `## Ground rules` bullet (`**Backend:** local|github`), never re-asked or switched. Either way the PLAN-DRAFT lands in local `specs/<idea>/` — downstream steps read files, not issues.
 

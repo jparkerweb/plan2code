@@ -644,16 +644,22 @@ test("the favicon is served as an SVG with a PNG fallback and the page points at
 /* ---------------------------------------------------------------- help */
 
 
-test("help: 18 tabs with unique ids", () => {
-  assert.equal(HELP_TABS.length, 18);
-  assert.equal(new Set(HELP_TABS.map((t) => t.id)).size, 18);
+test("help: 19 tabs with unique ids", () => {
+  assert.equal(HELP_TABS.length, 19);
+  assert.equal(new Set(HELP_TABS.map((t) => t.id)).size, 19);
   assert.ok(Object.isFrozen(HELP_TABS) && HELP_TABS.every((t) => Object.isFrozen(t)), "the tab list is frozen");
   const ids = HELP_TABS.map((t) => t.id);
   assert.equal(ids.indexOf("git"), ids.indexOf("build") + 1, "The git board comes right after Watching a build");
   assert.equal(HELP_TABS[ids.indexOf("git")].label, "The git board");
   assert.equal(helpTabFor({ workflow: "git" }), "git");
+  assert.equal(ids.indexOf("activities"), ids.indexOf("ask") + 1, "Activities comes right after Ask a quick question");
+  assert.equal(HELP_TABS[ids.indexOf("activities")].label, "Activities");
   const tpl = helpTemplate();
   for (const id of ids) assert.match(tpl, new RegExp(`<section class="help-panel" data-tab="${id}">`), `${id} has a section`);
+  // The die sits right of the megaphone, so the megaphone is no longer the far-right button.
+  assert.doesNotMatch(tpl, /far right/, "no line calls a top-bar button the far-right one");
+  const around = tpl.match(/<section class="help-panel" data-tab="around">([\s\S]*?)<\/section>/)[1];
+  assert.match(around, /<strong>die<\/strong>[\s\S]*?"Activities"/, "Finding your way around points the die at the Activities topic");
 });
 
 test("help: the template's icons and panels match HELP_TABS in order, headed by their labels", () => {
@@ -671,7 +677,7 @@ test("help: the template's icons and panels match HELP_TABS in order, headed by 
   }
 });
 
-test("help: every diagram tab has one labelled picture, the rest none; no inline styles or scripts", () => {
+test("help: every diagram tab has one labeled picture, the rest none; no inline styles or scripts", () => {
   const tpl = helpTemplate();
   assert.doesNotMatch(tpl, /\sstyle=/);
   assert.doesNotMatch(tpl, /<script/i);
@@ -691,7 +697,7 @@ test("help: every diagram tab has one labelled picture, the rest none; no inline
     assert.doesNotMatch(body, /<div class="help-figure"[^>]*><\/div>/, `${t.id}'s insertion point is filled`);
     if (t.id === "planny") {
       const fig = body.match(/<figure class="help-figure help-moods"[^>]*role="img"[^>]*aria-labelledby="hd-planny-title"/);
-      assert.ok(fig, "the Planny moods are one labelled role=img figure");
+      assert.ok(fig, "the Planny moods are one labeled role=img figure");
       const label = body.match(/id="hd-planny-title"[^>]*>([^<]*)</);
       assert.ok(label && label[1].trim(), "the moods figure's label exists and says something");
       continue;
@@ -700,9 +706,9 @@ test("help: every diagram tab has one labelled picture, the rest none; no inline
     assert.ok(svg, `${t.id} draws an svg diagram`);
     const open = svg[0].slice(0, svg[0].indexOf(">"));
     assert.match(open, /role="img"/, `${t.id}'s diagram is an image`);
-    const labelled = open.match(/aria-labelledby="([^"]+)"/);
-    assert.ok(labelled, `${t.id}'s diagram is labelled`);
-    for (const id of labelled[1].split(/\s+/)) {
+    const labeled = open.match(/aria-labelledby="([^"]+)"/);
+    assert.ok(labeled, `${t.id}'s diagram is labeled`);
+    for (const id of labeled[1].split(/\s+/)) {
       const ref = svg[1].match(new RegExp(`<(title|desc) id="${id}">([\\s\\S]*?)</\\1>`));
       assert.ok(ref && ref[2].trim(), `${t.id}'s diagram has a non-empty #${id}`);
     }
@@ -734,6 +740,8 @@ test("help: helpTabFor opens on the tab for where the person is", () => {
     [{ dashboard: true, meterRed: true, view: "ask" }, "ask"],
     [{ meterRed: true }, "about"],
     [{ view: "overview" }, "docs"],
+    [{ view: "map" }, "docs"],
+    [{ view: "draft" }, "docs"],
     [{ view: "doc:plan" }, "docs"],
     [{ view: "doc:plan", workflow: "implement" }, "docs"],
     [{ workflow: "implement" }, "build"],

@@ -129,7 +129,10 @@ Scroll down for the utilities. Outside a git repository the **Git** card says so
   spec that has an `overview.md`, an **Overview** tab shows it — read-only,
   and read fresh from disk each time you open the tab, so an edit shows up
   straight away. No file, no tab. On the dashboard it follows the spec picked
-  at the top, and disappears for *start from scratch*.
+  at the top, and disappears for *start from scratch*. A picked spec that is
+  not documented yet shows its **Map** (`pathfinder/map.md`) and its
+  **Plan draft** (the live `PLAN-DRAFT-*.md`) as tabs instead, each when it
+  exists.
 - **Where you are, at the bottom.** The footer names the folder the session
   was launched from and its git branch (`plan2code · feature/…`), muted in
   the middle. Click it to open the Workspace dialog (see *Your workspace*).
@@ -161,10 +164,12 @@ Scroll down for the utilities. Outside a git repository the **Git** card says so
   favicon follows the line beside him: dashed amber while Plan2Code is
   working or picking up your answers, solid green when it is your move, solid
   red when it has gone quiet or the connection is lost (busy is dashed so the
-  states differ by pattern, not only color). A finished session goes back to
-  the plain icon, so a console left in a background tab can be checked at a
-  glance.
-- **Help.** The **?** at the top right opens a Help dialog with 18 topics,
+  states differ by pattern, not only color). A finished session stays green
+  while it still offers a button to press (back to the dashboard, a review),
+  turns red if that press was never collected, and goes back to the plain
+  icon once nothing is left, so a console left in a background tab can be
+  checked at a glance.
+- **Help.** The **?** at the top right opens a Help dialog with 19 topics,
   one per tab down the left (across the top on a narrow window), opening on
   the one for where you are. It is part of the page itself, so it still reads
   fully when the page has lost its program.
@@ -211,7 +216,7 @@ explains how and why an area works, or ranks its rough spots into
 available: it finds a bug's cause and writes it up as
 `specs/<bug-name>/DIAGNOSIS-<date>.md` without fixing it. Pick such a spec in
 the picker and it reads *Bug diagnosed*: Quick Task (suggested) and Plan light
-up, while Document, Implement, Implement + Review and Finalize stay greyed. Once
+up, while Document, Implement, Implement + Review and Finalize stay grayed. Once
 Quick Task has fixed it, the folder reads *Bug fixed*: Quick Task offers to
 archive it to `specs--completed/`, and until then the picker never opens on it
 and hides it while *Hide unavailable workflows* is on. Its chip has a visible
@@ -219,7 +224,9 @@ and hides it while *Hide unavailable workflows* is on. Its chip has a visible
 removes the folder (any other spec also asks you to type its name). Click a card and Planny
 flies while it gets ready;
 a few seconds later the same page is that skill's console, already running. No
-command names to remember.
+command names to remember. Pathfinder, Plan, Quick Task and Revise plan can also
+start from one of your [Notebook](#your-notebook) tabs: see *Sent from the
+dashboard* there.
 
 Handoffs this checkout has not picked up yet follow the specs in the picker as
 dashed **Handoff** chips, each with its title and age. Select one and the skill
@@ -386,8 +393,8 @@ it is remembered for next time:
 
 ### Subagents
 
-On a build (Implement, Implement + review, Quick task), a review and
-Pathfinder, the agent can hand independent pieces of work to helpers
+On a build (Implement, Implement + review, Quick task), a review,
+Pathfinder, Plan and Revise plan, the agent can hand independent pieces of work to helpers
 (subagents) while it keeps the conversation with you.
 
 - **The button.** An icon in the top bar, after Stop session (and Write a
@@ -397,7 +404,11 @@ Pathfinder, the agent can hand independent pieces of work to helpers
 - **The dialog.** A click opens it; the button never switches anything by
   itself. **Use helpers** or **Work alone**, the instruction the agent follows
   (**Reset to default** puts the shipped one back), and how many helpers may
-  run at once (1 to 20; your agent's own limit still applies). **Save** sends
+  run at once (1 to 20; your agent's own limit still applies). Under Helpers,
+  **Helper strength** sets how strong a model and how much effort helpers get:
+  **Balanced** (the default), **Thrifty** (one step lighter; reviews never
+  below standard), **Best** (strongest and high effort, except lookups) or
+  **Match my session** (nothing set on helpers). **Save** sends
   it; the agent hears of it at its next check-in, as a setting, not as
   something you typed.
 - **Saved per project and per skill**, on until switched off, in
@@ -407,7 +418,10 @@ Pathfinder, the agent can hand independent pieces of work to helpers
   appears before Ask: one row per helper with what it was asked and whether it
   is running, done or failed, plus a one-line result at the end. Rows change at
   the agent's check-ins, not live. *Working alone* means your agent has no way
-  to start helpers here. The tab clears when you go back to the dashboard.
+  to start helpers here. Each row may carry one quiet line such as "Standard,
+  medium effort" ("Session model" when the helper runs on yours). The rules
+  live in `helper-strength.md` and apply in terminal sessions too. The tab
+  clears when you go back to the dashboard.
 - **Pathfinder's research** always uses helpers, whatever the switch says, and
   they show in the tab too.
 
@@ -446,12 +460,138 @@ working in.
   folder per tab, `tabs/<id>/`, holding its `note.md` and `images/`. Two pages
   open on one folder share it, and the last save wins.
 - **Private.** It never goes into your project, your session or anything the
-  agent reads, so the agent never sees it. It stays on this machine.
+  agent reads, so the agent never sees it, unless you send a tab (next
+  bullet). It stays on this machine. A box filled from a tab is an ordinary
+  draft from then on: like anything you type, its text is kept with the
+  session's draft and its pictures with its uploads, unread until you send it.
+- **Sent from the dashboard.** On a lit Pathfinder, Plan or Quick Task card
+  with *Start fresh*, and on a lit Revise plan card with a spec picked that has
+  no plan change waiting, the confirm pane offers **Start with a note from your
+  Notebook**. Turn it on and pick a tab: empty tabs are grayed, a tab you have
+  sent shows a small **sent** badge, and a preview shows the whole tab, its text
+  and its pictures. The first five pictures are ticked; at most five can be, so
+  untick one to tick another. A tab over 50 KB gets a *Long tab* note so you can
+  trim it first, and the pane's command line reads `+ note: <tab>`. Pressing
+  **Start** is the consent, and nothing is put on the launch itself. The skill's
+  first open text box marked `"fill": "note"` (the idea box, or Revise plan's
+  *What should change* box) then arrives filled, once, with the tab's text and
+  the ticked pictures attached, and you can edit it before you press **Send**. A
+  tab or picture deleted in between leaves the box empty (with a note) or skips
+  the picture. Only sending that box hands the agent the text: **Send**, or
+  **Stop** or **Back to the dashboard**, which take the answers you have ready
+  with them (their dialog says so). Start alone, then going back before the box
+  is sent, sends nothing and marks nothing. After it, the tab shows the **sent**
+  badge and a muted *Sent to <Skill> · <Date>* line under its text.
 - **Removed only when you say.** No automatic cleanup touches it. Once the
   newest file in a notebook is 30 days old or more, *User Preferences →
   Cleanup* offers it as one item named after its folder's full path
   (*Notebook for /home/sam/code/shop*),
   and deleting it removes the whole notebook, every tab's text and pictures.
+
+### Activities
+
+The **die** in the top bar, right of the megaphone, opens **Activities**: small
+games to play while you wait, say through a long build. Two ship today,
+**Snake** and **Mini golf**. With two games the window shows a picker, one
+button per game, and remembers your last pick. The header shows the current
+game's best, such as **Activities · Snake best: 12**, or **Snake: no best yet**.
+
+- **Snake** speeds up as it grows: 120 ms a step at its starting three cells,
+  4 ms quicker for each cell beyond, never under 60 ms, and 3% quicker again
+  for each level. Every 5 foods is a new level, and the first few each bring
+  something new: **Rocks** at level 2 (a cell flashes before it turns to
+  stone, and never right ahead of the head), **Mystery boxes** at 3,
+  **Portals** at 4, **Comets** at 5 (into the head is a crash, through the
+  body cuts the tail there), **Chaos** at 6, where surprises also happen on
+  their own, and **Ice** at 7, where a turn slides on for two steps before it
+  takes (a frosty arrow off the head shows the turn coming; the ice melts at
+  level 8). Each level serves its own fruit (an apple, then cherries, an
+  orange, grapes, a banana, a strawberry, watermelon, a peach and, at level 9,
+  a glinting golden apple) on its own scenery: a plain garden, then a meadow,
+  a desert, a lagoon, a starry night, a carnival, ice, a volcano and gold,
+  each a faint tint and a scatter of small marks over the usual board. The
+  last food of every odd level from 3 on is a **boss fruit**: four cells big
+  and crowned, it takes three bites (a point a level each, and the head must
+  leave it between bites), and the last bite scores the food plus 5 points a
+  level. From level 2 a **runaway fruit** on two little feet sometimes turns
+  up in place of a power-up: once you are within three cells it hops up to two
+  cells away, rests two steps between hops and tires after seven, so corner it
+  or wear it out for 6 points a level before it runs off after 12 seconds. Food eaten within 2.6 seconds of the last builds a
+  combo (x2 up to x5). Power-ups turn up every few seconds and fade if left: **Shield**
+  (takes one crash: wraps through a wall, smashes a rock), **Turbo** (faster,
+  double points), **Slow-mo**, **Magnet** (food slides toward you),
+  **Ghost** (walls wrap) and **Scissors** (half the tail, a point per cell
+  cut). A mystery box holds one of ten surprises: Jackpot, Gold rush, Earthquake,
+  Meteor shower, Mirror world (flipped keys), Lights out, Disco fever (triple
+  points), Big snack, Incoming! (a comet) and Treasure. Passing your best
+  mid-round plays a fanfare. A power-up, surprise or level banner opens on
+  the half of the board away from the snake's head, and fades almost clear
+  while the head is under it or heading into it, so it never hides what you
+  are about to hit. The start and end screens show how many of the 24
+  power-ups, surprises, levels and specials you have ever found, and what to look for
+  next.
+- **Mini golf** is eighteen hand-made, thoroughly silly holes seen from above.
+  The front nine, **Pirate Cove**, floats in a shark sea: Walk the Plank,
+  Shipwreck Cove, Cannon Alley, Treasure Beach, Kraken's Lagoon, Ghost Ship,
+  The Ship's Wheel, Skull Island and Captain's Plunder, with barrels,
+  cannonballs, a rolling powder keg, a scuttling crab, a kraken's tentacle and a
+  skull you putt through. The back nine, the **Caves of Doom**, is dark but for
+  the ball's own light and whatever glows: Into the Dark, Stalagmite Forest,
+  Lava Lake, Mine Cart Madness, Crystal Pinball, The Bottomless Pit, Glowworm
+  Grotto, Crusher Corridor and The Dragon's Hoard, with glowing pools, lava, a
+  bottomless pit, a bobbing fireball, runaway mine carts, stone crushers that
+  slam shut in turn, portals and a sleeping dragon. Each hole opens with a quip,
+  and splashes, bonks and tunnels pop up a word or two. Play is quick and
+  arcade style: the aim follows the mouse (or hold left or right to turn it,
+  slowly at first, then faster), and it points back at the cup each time the
+  ball stops. A click or space starts the power meter beside the ball; a second
+  sets the power. The needle crawls near the bottom, so soft putts are easy,
+  and races near the top: the gold **MAX** band just under full putts 1.15
+  times as hard, and the red band past it is an overswing that shanks the ball
+  off line at reduced power. A ring round the waiting ball is the shot clock:
+  after 6 seconds the meter starts by itself, and a meter left for three trips
+  dribbles the ball a few inches. Hold space or the mouse button while the ball
+  rolls to play it three times as fast. Par is set per hole (59 for the
+  round), the ball is picked up after 8 strokes, and the round shows its +/-
+  par. A scorecard (front nine and back nine) shows between holes; space, a
+  click or 1.5 seconds moves on.
+- **Power-ups.** A glowing pad the ball rolls over is held for your next putt
+  only (the pill at the bottom right says which): a **Lucky Doubloon** makes the
+  putt free (a hole still scores at least 1), a **Cannonball** fires it 1.6
+  times as hard, a **Ghost Ball** floats over water, sand, bumpers and movers
+  (but sinks if it stops on water), a **Parrot Magnet** bends it toward the cup,
+  a **Rubber Duck** keeps its full speed off walls, a **Treasure Map** makes the
+  cup huge, and a **Spyglass** draws where the putt will roll while the meter
+  runs, following the needle. One
+  is held at a time, a new pad replaces it, and a held one carries over to the
+  next hole.
+- **It never hides your turn.** A new question, a sign-off or a finish pauses
+  the game at once and shows a banner with **Go to it**, which closes the window
+  on that question. Hiding the page or clicking away from it pauses it too, and
+  nothing resumes by itself. Any game key (arrows, W/A/S/D, space, P) or, in
+  Mini golf, a click on the board plays on, and the banner stays down until the
+  next new question or finish.
+- **A countdown first.** Every game counts down 3, 2, 1 before a round starts
+  and before it plays on after a pause, so nothing moves before you are ready.
+  P or Esc during the count pauses again.
+- **Keys.** Arrows or W/A/S/D steer, space starts and plays, P pauses, Esc
+  closes the window with the game paused. A page with no mouse or trackpad
+  (touch only) shows "Activities need a keyboard." in place of the board.
+- **Best scores** show beside the score while you play and after each round.
+  Snake keeps its highest score. Mini golf keeps its lowest full round, and a
+  half-played round never counts. **Reset best scores** clears them after a
+  second click to confirm.
+  The line under the board is a pair of colored chips, Score and Best, with a
+  meter between them filling toward the best (for a game where the highest
+  wins). Reaching the best makes its chip glow; passing it turns the line into
+  a rainbow with a NEW BEST tag and a burst of sparks, once a round. A round
+  that beats a saved best ends with **New best!** on the end screen, and Mini
+  golf, which only knows at the end, fires its sparks then. Reduced motion keeps
+  the colors and drops the movement.
+- **Private.** Best scores, Snake's surprises found, the last pick and the **Show Activities** switch
+  (User Preferences, which hides the die everywhere) are saved in
+  `~/.plan2code/console/looks.json`. Nothing about Activities reaches the agent
+  or the session.
 
 ### Session meter
 
@@ -694,6 +834,19 @@ keyboard-only navigation work.
 
 The `plan2code` launcher's model menu comes from `models.json`, which every install overwrites with the authors' curated list. **User Preferences → Models** (Claude, Devin and Codex tabs) lets you add a model that came out before Plan2Code was updated; additions are kept in `~/.plan2code/models.json`, and **Reset to default** removes them. Restart `plan2code` to see a change. You can always run `plan2code --model <id>`, or switch model inside your agent before running a skill. Devin ids ending `-xhigh` or `-max` are refused. Maintainers refresh the curated list with the repo-local `/plan2code-model-update` skill, which shows a diff and changes only what they approve.
 
+## Agents and the desktop app in User Preferences
+
+**User Preferences → Agents** adds agent CLIs Plan2Code did not find on its own. Each one has a name, the command to run (a bare name looked up on `PATH`, or a full path), and optional fields:
+
+- **Arguments**: one per row. `{prompt}` is replaced by the start prompt (for example `--message={prompt}`); with no `{prompt}` anywhere, the prompt is added last.
+- **Start prompt**: `/plan2code` by default. Leave it blank to start the agent with nothing typed.
+- **Bypass arguments**: added when permission checks are off.
+- **Model arguments**: added when a model is chosen, with `{model}` replaced (`--model` and `{model}` by default), and a list of **models** to offer, each an id and an optional label.
+
+**Test** on a card shows where the command is found, or "Not found on PATH", and never runs it. Saving a duplicate name, a blank command or a built-in id marks the card and field and writes nothing. The list is plain text in `~/.plan2code/agents.json`, shared by the `plan2code` command and the desktop app; this page is the only thing that writes it, and a broken file or entry is skipped with a warning shown under the list, never a crash. If the file holds something the page could not read, saving asks first (**Save anyway**). `/plan2code` works only in agents that load the installed Plan2Code skills.
+
+**Desktop app** appears only when the page is open inside the desktop app. Its switch, **Show on the taskbar when Plan2Code needs me** (on by default), controls the app's taskbar signal: on Windows a green dot on your move and a red one when it needs attention, plus one short burst of flashes when the window is not focused (the button stays lit until you look); on macOS a red `!` dock badge when it needs attention and one bounce; on Linux a badge where your desktop supports it. Turning it off clears the dot and stops flashes. The choice is kept by the app in its own `~/.plan2code/app.json`.
+
 ---
 
 ## Troubleshooting
@@ -762,10 +915,11 @@ exception being the note attachments the agent keeps for a spec, above):
 | `~/.plan2code/console/sessions/<id>/workspace.json`, `ledger.ndjson`, `workspace-cursor.json` | the workspace's folders (paths, names, descriptions — never their contents), the session meter's events, and how far the agent has been told of workspace changes. Kept beside the session, so they outlive every dashboard hop | with the session |
 | `~/.plan2code/console/sessions/<id>/uploads/` | images and documents attached to notes and quick questions | 30 days after the session was last touched |
 | `~/.plan2code/handoffs/<id>.md`, `<id>.json` | each handoff's document, and which checkout, spec and skill it belongs to and whether it was picked up (`handoffs.mjs` is their one owner) | 30 days after it was last touched, picked up or not |
-| `~/.plan2code/notepads/<folder-name>-<12 hex>/` | your notebook for one folder: `meta.json`, `tabs.json` and, per tab, `tabs/<id>/note.md` and `tabs/<id>/images/` (`notepads.mjs` is their one owner; the agent never reads them) | until you delete it through Cleanup, which offers it once its newest file is 30 days old |
-| `~/.plan2code/console/looks.json` | your role, theme, colors, sounds and card width | always |
+| `~/.plan2code/notepads/<folder-name>-<12 hex>/` | your notebook for one folder: `meta.json`, `tabs.json` and, per tab, `tabs/<id>/note.md` and `tabs/<id>/images/` (`notepads.mjs` is their one owner; the agent never reads them, except a tab you send) | until you delete it through Cleanup, which offers it once its newest file is 30 days old |
+| `~/.plan2code/console/looks.json` | your role, theme, colors, sounds and card width, the Show Activities switch, the last activity picked (`lastActivity`), best scores (flat `activityBest<Id>` keys: `activityBestSnake`, `activityBestGolf`) and each game's memo (`activityMemo<Id>`: Snake's surprises found) | always |
 | `~/.plan2code/console/subagents.json` | your Subagents switch, instruction and limit, per project folder and skill | always |
 | `~/.plan2code/console/sessions/<id>/subagents-setting.json`, `subagents-cursor.json` | this session's copy of the switch, and how far the agent has been told of it | with the session |
+| `~/.plan2code/agents.json` | your custom agent CLIs (User Preferences → Agents), read by the `plan2code` command and the desktop app | always |
 | your system temp directory | the port, process id and session token | until reboot |
 
 Each of the workspace and meter files has exactly one writer: the server owns
@@ -848,14 +1002,14 @@ origin.
 | `POST /submit` | The Send. A note may carry `images` and `files`, each `[{ path, name }]`: at most 5 together, images in `images` and documents in `files`, every path inside this session's `uploads/`, otherwise 400. |
 | `POST /chat` | A Quick question `{ text, about?, images?, files?, conversation }`, or `{ reset: true, conversation }` for New conversation. Appended to the session's `chat.ndjson`. 400 `too-long` (over 4,000 characters), `image`, `file` or `bad`; 409 `offline`, `stale` or `limit` (10 per conversation). Never refused because a card send is still uncollected. |
 | `POST /chat/decision` | Approve or Decline on an edit the agent proposed: `{ re, decision, text?, conversation }`. Once per proposal; does not count toward the 10. |
-| `GET /overview?spec=specs/<name>` | The Overview tab's read of `<spec>/overview.md`, as `text/markdown` with `cache-control: no-store`. On the dashboard `spec` must be one of the scanned specs; elsewhere the session's own spec is used. The file's real path must stay inside the project, so `../`, absolute paths and symlinks pointing out all get 404. |
+| `GET /overview?spec=specs/<name>[&file=map\|draft]` | The Overview tab's read of `<spec>/overview.md` (or, with `file=`, the Map tab's `pathfinder/map.md` or the Plan draft tab's live `PLAN-DRAFT-*.md`), as `text/markdown` with `cache-control: no-store` and the file's spec-relative name, URL-encoded, in `x-spec-file`. A missing file is a 204. On the dashboard `spec` must be one of the scanned specs; elsewhere the session's own spec is used. The file's real path must stay inside the project, so `../`, absolute paths and symlinks pointing out all get the same 204 as a missing file, as does an unscanned `spec` or an unknown `file`. |
 | `GET /handoff?id=<id>` | *Read it all*: the handoff's `.md` from `~/.plan2code/handoffs/`, as `text/markdown` with `cache-control: no-store`. A dashboard only, and only an id its own scan listed: a used, unknown or malformed id is 404. |
 | `GET /workspace` | The Workspace dialog's list: folders, `missing`, `remote` and the agent's folder `issues`. `?check=1` re-checks every folder on disk first. |
 | `POST /workspace/add` | `{ path, name?, description? }`. The path is resolved against the folder the session started in (`~` expanded) and must be a folder: 400 `not-a-folder`, `duplicate` (with its `name`; compared case-insensitively on Windows and macOS), `bad-name`, or `name-taken` with a `suggest`. Answers the new entry, `nested: true` when it sits inside another folder in the list. |
 | `POST /workspace/edit` | `{ id, name?, description? }`. Renames or re-describes one folder: 400 `bad-name` / `name-taken`, 404 `unknown`. |
 | `POST /workspace/remove` | `{ id }`. 400 `original` for the folder the session started in, 404 `unknown`. |
 | `POST /workspace/browse` | Opens the system folder picker and answers `{ path }` or `{ cancelled: true }`; never adds anything itself. 409 `busy` while one is open, 404 `no-picker` when the session looks remote or no picker exists. |
-| `GET /notepad[?tab=<id>]` | The notepad for the folder this session runs in: `{ tabs: [{ id, name }], last, tab: { id, text, savedAt, images: [{ id, url, thumb }] } | null }`, with the tab's `text`, `savedAt` and `images` repeated at the top. Without `tab` it answers the last one used; 404 `no-such-tab` for an id it does not have. A notepad in the first shape answers one virtual tab, Notes. Reading never creates or moves a file. |
+| `GET /notepad[?tab=<id>]` | The notepad for the folder this session runs in: `{ tabs: [{ id, name, sent? }], last, tab: { id, text, savedAt, images: [{ id, url, thumb }] } | null }`, with the tab's `text`, `savedAt` and `images` repeated at the top. Without `tab` it answers the last one used; 404 `no-such-tab` for an id it does not have. A notepad in the first shape answers one virtual tab, Notes. Reading never creates or moves a file. |
 | `POST /notepad/text?tab=<id>` | `{ text }`. Saves that tab's `note.md` and answers `{ ok, savedAt }`; 400 `bad`, 404 `no-such-tab`, 413 `too-long` (over 1 MB). |
 | `POST /notepad/image?tab=<id>` | Raw `image/jpeg` (the page re-encodes every picture first). Writes the tab's `images/<uuid>.jpg` and answers `{ ok, id, url }`; 415 `not-jpeg`, 413 `too-large` (over 4 MB), 409 `too-many` (200 pictures in the tab). |
 | `POST /notepad/thumb?id=<uuid>&tab=<id>` | Raw `image/jpeg`: that picture's thumbnail. 404 `not-found` or `no-such-tab`, 415 `not-jpeg`, 413 `too-large`. |
@@ -865,6 +1019,7 @@ origin.
 | `POST /notepad/tab/delete` | `{ id }`. Removes the tab from the index, then its folder (text and pictures); 404 `no-such-tab`. |
 | `POST /notepad/tab/order` | `{ order: [id] }`, every current id exactly once; 400 `bad` otherwise. |
 | `POST /notepad/tab/last` | `{ id }`. Remembers the open tab; 404 `no-such-tab`. |
+| `POST /notepad/tab/sent` | `{ id, workflow, spec? }`. Records that the tab was sent (`workflow` one of `pathfinder`, `plan`, `quick-task`, `revise-plan`; `spec` like `specs/<name>`) as `sent: { workflow, spec?, at }` on its `tabs.json` entry, shown back in `GET /notepad`'s `tabs`. The page posts it only after the Send that carried the filled box; 400 `bad-sent`, 404 `no-such-tab`. |
 | `GET /notepad/images/<tab>/<uuid>.jpg`, `<uuid>.thumb.jpg` | Serves a picture or its thumbnail as `image/jpeg`, only by a tab id and a UUID name, a regular file (never a link) whose real path stays inside `~/.plan2code/notepads/`; anything else is 404. |
 | `POST /subagents` | `{ on, instruction, max }` (`instruction: null` for the shipped default). Saves the switch for this project and skill and answers `{ ok, setting }`; 400 `not-offered` on a skill without the switch, `bad`, `too-long` (over 2,000 characters) or `max` (outside 1 to 20). |
 
@@ -941,14 +1096,14 @@ session without searching the skill install dirs.
 The vendored file is `src/web-console/public/vendor/marked.esm.js`,
 sha256 `7a7d9a521ac9384e0c3a075120a7c486cbd0c3c32cc5601bbb79a23e97403690`.
 Only `marked.lexer()` is used; the rendering is ours, in `public/render.js`, and
-builds DOM nodes rather than HTML so nothing needs sanitising.
+builds DOM nodes rather than HTML so nothing needs sanitizing.
 
 ### Refreshing the screenshots
 
 The docs and the landing page show the console through the images in
 `docs/screenshots/`, one light and one dark WebP per screen. Rerun the capture
 after any change a person would see on the page: a new layout, a renamed
-button, a different colour.
+button, a different color.
 
 ```bash
 node scripts/capture-screenshots.mjs                     # every screen

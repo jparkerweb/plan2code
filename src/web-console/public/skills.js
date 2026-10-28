@@ -33,7 +33,7 @@
 //              always on whatever is picked; null for no card
 //   marksNext  the card can be a state's natural next step, so its answer
 //              always says whether it is (`next`)
-//   greyed     its greyed reasons: `default`, plus one per state whose
+//   greyed     (the field keeps its old spelling) its grayed reasons: `default`, plus one per state whose
 //              wording differs, and `finished` for any finished state
 //              (spec-states.js); Init and Init update use `default` for the
 //              AGENTS.md check, which is a rule on the scan, not on the spec
@@ -46,7 +46,7 @@
 
 // Shared by Implement and Implement + Review.
 const BUILD_HELPERS =
-  "Hand independent tasks in a phase to helpers: tasks that touch different files and do not depend on each other. Keep tasks that share files, the phase's tests and the sign-off with you.";
+  "Hand independent tasks in a phase to helpers: tasks that touch different files and do not depend on each other. Keep tasks that share files, the phase's tests and the sign-off with you. Pick each helper's strength and effort from helper-strength.md's table: light for a 1-2 file task the task file spells out, standard for multi-file or debugging work.";
 
 // Pathfinder's and Plan's reason on a finished spec (a fixed bug).
 export const FIXED_REASON = "This bug is fixed. Delete it with the Delete button on its chip, or move it to specs--completed/.";
@@ -110,7 +110,7 @@ export const SKILLS = Object.freeze([
     pose: "pathfinder",
     builds: false, phased: false, metered: false, templates: true,
     weight: null, started: null, ran: null, resume: "folder",
-    subagents: "Use helpers for codebase recon, sketches and lookups beside the conversation. Keep every question for the person with you.",
+    subagents: "Use helpers for codebase recon, sketches and lookups beside the conversation. Keep every question for the person with you. Recon and lookups at light strength, research questions at standard.",
     states: ["none", "unrecognized", "exploring"], marksNext: true,
     greyed: {
       default: "This spec is already past the questions",
@@ -135,7 +135,7 @@ export const SKILLS = Object.freeze([
     pose: "plan",
     builds: false, phased: false, metered: true, templates: true,
     weight: 2, started: "Plan started", ran: "Plan drafted", resume: null,
-    subagents: null,
+    subagents: "Use helpers for research and recon beside the conversation: reading the files and references the person points you to, mapping separate areas of the codebase in Phase 2, and gathering evidence on each open tech choice in Phase 4. In Phase 7, one fresh helper may cross-check the PLAN-DRAFT against the PLAN-CONVERSATION; confirm each gap it finds yourself. Keep every question, decision and sign-off, and the writing of the PLAN-DRAFT, with you. Recon and lookups at light strength, the cross-check at standard.",
     states: ["none", "unrecognized", "diagnosed", "mapped", "planned"], marksNext: true,
     greyed: {
       default: "The plan is written. Revise it instead if it moved.",
@@ -160,9 +160,9 @@ export const SKILLS = Object.freeze([
     pose: "plan",
     builds: false, phased: false, metered: true, templates: false,
     weight: 1, started: "Revise plan started", ran: "Plan revised", resume: "overview",
-    subagents: null,
-    states: ["documented", "building"],
-    greyed: { default: "Needs a spec that is already written up", built: "The spec is fully built" },
+    subagents: "Use helpers for lookups at Steps 1 and 2: reading the code behind the affected tasks, and behind the completed tasks the change could undo. After the Step 2 approval, when the revision touches 3 or more phase files, one helper per phase file may apply the edits the approved plan spells out for it, editing under specs/ only. Keep the questions, the approval, overview.md, task numbering across phases and the consistency check with you, and re-read every file a helper edited. Lookups at light strength, low effort; phase-file edits at light, medium.",
+    states: ["documented", "building", "built"],
+    greyed: { default: "Needs a spec that is already written up" },
     card: {
       group: "pipeline",
       chip: "Step 1b",
@@ -264,7 +264,7 @@ export const SKILLS = Object.freeze([
     pose: "quick-task",
     builds: true, phased: false, metered: true, templates: true,
     weight: 1, started: "Quick task started", ran: "Quick task built", resume: null,
-    subagents: "Use helpers for side lookups, such as reading unfamiliar code or checking documentation, while you make the change yourself.",
+    subagents: "Use helpers for side lookups, such as reading unfamiliar code or checking documentation, while you make the change yourself. Side lookups at light strength, low effort.",
     states: "any",
     greyed: null,
     card: {
@@ -284,7 +284,7 @@ export const SKILLS = Object.freeze([
     pose: "review",
     builds: false, phased: false, metered: true, templates: false,
     weight: 2, started: "Review started", ran: "Code review run", resume: null,
-    subagents: "Run the review's analysis in one fresh helper briefed only with the spec and the change set (references/reviewer-brief.md); verify every finding yourself before you report.",
+    subagents: "Run the review's analysis in one fresh helper briefed only with the spec and the change set (references/reviewer-brief.md); verify every finding yourself before you report. At standard strength or above (strongest for branch or full scope), high effort.",
     states: "any",
     greyed: null,
     card: {

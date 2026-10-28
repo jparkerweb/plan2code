@@ -108,6 +108,23 @@
 .models-row input { min-width: 0; }
 .models-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .models-actions .help.error { color: var(--danger, #d64545); }
+.agents-list { display: grid; gap: 10px; }
+.agents-list:empty { display: none; }
+.agent-card { display: grid; gap: 8px; padding: 10px; border: 1px solid var(--rule-2); border-radius: 8px; }
+.agent-card.invalid { border-color: var(--danger, #d64545); }
+.agent-card input { min-width: 0; }
+.agent-card input.invalid { border-color: var(--danger, #d64545); }
+.agent-top { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 6px; }
+.agent-field { display: grid; gap: 4px; min-width: 0; }
+.agent-field > span, .agent-field > label { font-size: 0.85em; opacity: 0.85; }
+.agent-rows { display: grid; gap: 4px; }
+.agent-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; align-items: center; }
+.agent-row.model { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; }
+.agent-foot { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.agent-foot .help { margin: 0; }
+.agent-foot .agent-test-result { flex: 1 1 auto; }
+.agent-error { margin: 0; color: var(--danger, #d64545); font-size: 0.9em; }
+#agents-replace[hidden] { display: none; }
 
 /* User Preferences: Cleanup's list of what would go, shown before anything
    is deleted. */
@@ -127,6 +144,15 @@
   color: var(--accent);
   font-weight: 700;
 }
+/* Under the app, the word is a button that types it into the agent's terminal. */
+.agent-key-btn {
+  font: inherit; font-weight: 700; color: var(--accent);
+  background: var(--accent-soft); border: 1px solid var(--accent-line); border-radius: 6px;
+  padding: 0 6px; cursor: pointer;
+}
+.agent-key-btn:hover:not(:disabled) { border-color: var(--accent); }
+.agent-key-btn:disabled { opacity: 0.55; cursor: default; }
+.agent-key-btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 
 /* "What to check", beside the quiet and Not running lines. A link in a button's clothes. */
 .status-help {

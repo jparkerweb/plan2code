@@ -190,7 +190,7 @@ test("two sessions keep their own cookies: each server reads only the one named 
 // state.json has two writers, `post` and the server's /submit. Both are held
 // at the lock here until each has read nothing yet, then let go together:
 // whichever writes second must be building on the first one's write.
-test("a post and a submit that overlap both survive: the state lock serialises them", async () => {
+test("a post and a submit that overlap both survive: the state lock serializes them", async () => {
   const s = openSession();
   try {
     const lock = path.join(s.session, STATE_LOCK_FILE);
@@ -291,8 +291,9 @@ test("open from a linked worktree seeds the workspace with the worktree, not the
   } finally {
     if (sidOpened) cliIn(wt, ["stop", "--session", sidOpened]);
     // A stopped server can take a while to let go of its working directory on
-    // Windows, and longer while other test files load the machine.
-    fs.rmSync(base, { recursive: true, force: true, maxRetries: 20, retryDelay: 250 });
+    // Windows, and longer while other test files load the machine: under a
+    // full-suite run this needed more than the 5s a 20x250ms retry gave it.
+    fs.rmSync(base, { recursive: true, force: true, maxRetries: 40, retryDelay: 250 });
   }
 });
 
@@ -391,6 +392,8 @@ test("every state-changing route refuses a foreign Origin, and nothing changes",
     ["POST", "/draft", { staged: { q1: { k: "B" } } }],
     ["POST", "/looks", { looks: { theme: "light" } }],
     ["POST", "/models", { models: { devin: [{ id: "x" }] } }],
+    ["POST", "/agents", { agents: [{ name: "X", command: "x" }] }],
+    ["POST", "/agents/test", { command: "node" }],
     ["POST", "/workspace/add", { path: picked }],
     ["POST", "/workspace/edit", { id: "f0", name: "renamed" }],
     ["POST", "/workspace/remove", { id: "f0" }],

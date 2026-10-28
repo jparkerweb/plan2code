@@ -1,0 +1,1756 @@
+{
+  "$comment": "The rules of ~/.plan2code/agents.json (PLAN-DRAFT 4.4) as cases every reader's tests load: the console (src/web-console/agents.mjs), the launcher and the desktop app. files: `raw` is the file's text (null: no file); `warnings` lists substrings, each found in some warning, and an empty list means no warnings at all; entries are named agents[i], 0-based. buildArgs: `options` as passed (a missing prompt means the entry's own). ids: makeId(input, taken).",
+  "files": [
+    {
+      "name": "no file",
+      "raw": null,
+      "agents": [],
+      "warnings": []
+    },
+    {
+      "name": "not JSON",
+      "raw": "{ \"schema\": 1, \"agents\": [",
+      "agents": [],
+      "warnings": [
+        "not valid JSON"
+      ]
+    },
+    {
+      "name": "empty file",
+      "raw": "",
+      "agents": [],
+      "warnings": [
+        "not valid JSON"
+      ]
+    },
+    {
+      "name": "not an object",
+      "raw": "[]",
+      "agents": [],
+      "warnings": [
+        "not an object"
+      ]
+    },
+    {
+      "name": "missing schema",
+      "raw": "{\"agents\":[{\"id\":\"x\",\"name\":\"X\",\"command\":\"x\"}]}",
+      "agents": [],
+      "warnings": [
+        "schema"
+      ]
+    },
+    {
+      "name": "schema 2",
+      "raw": "{\"schema\":2,\"agents\":[{\"id\":\"x\",\"name\":\"X\",\"command\":\"x\"}]}",
+      "agents": [],
+      "warnings": [
+        "schema"
+      ]
+    },
+    {
+      "name": "agents not an array",
+      "raw": "{\"schema\":1,\"agents\":{}}",
+      "agents": [],
+      "warnings": [
+        "agents"
+      ]
+    },
+    {
+      "name": "agents missing",
+      "raw": "{\"schema\":1}",
+      "agents": [],
+      "warnings": []
+    },
+    {
+      "name": "empty list",
+      "raw": "{\"schema\":1,\"agents\":[]}",
+      "agents": [],
+      "warnings": []
+    },
+    {
+      "name": "good full entry",
+      "raw": "{\"schema\":1,\"agents\":[{\"id\":\"aider\",\"name\":\"Aider\",\"command\":\"aider\",\"args\":[\"--no-auto-commits\",\"{prompt}\"],\"prompt\":\"/plan2code\",\"bypassArgs\":[\"--yes-always\"],\"modelArgs\":[\"--model\",\"{model}\"],\"models\":[{\"id\":\"sonnet\",\"label\":\"Sonnet\"}]}]}",
+      "agents": [
+        {
+          "id": "aider",
+          "name": "Aider",
+          "command": "aider",
+          "args": [
+            "--no-auto-commits",
+            "{prompt}"
+          ],
+          "prompt": "/plan2code",
+          "bypassArgs": [
+            "--yes-always"
+          ],
+          "modelArgs": [
+            "--model",
+            "{model}"
+          ],
+          "models": [
+            {
+              "id": "sonnet",
+              "label": "Sonnet"
+            }
+          ]
+        }
+      ],
+      "warnings": []
+    },
+    {
+      "name": "minimal entry gets every default",
+      "raw": "{\"schema\":1,\"agents\":[{\"id\":\"goose\",\"name\":\"Goose\",\"command\":\"goose\"}]}",
+      "agents": [
+        {
+          "id": "goose",
+          "name": "Goose",
+          "command": "goose",
+          "args": [],
+          "prompt": "/plan2code",
+          "bypassArgs": [],
+          "modelArgs": [
+            "--model",
+            "{model}"
+          ],
+          "models": []
+        }
+      ],
+      "warnings": []
+    },
+    {
+      "name": "name and command are trimmed",
+      "raw": "{\"schema\":1,\"agents\":[{\"id\":\"goose\",\"name\":\"  Goose  \",\"command\":\"  goose \"}]}",
+      "agents": [
+        {
+          "id": "goose",
+          "name": "Goose",
+          "command": "goose",
+          "args": [],
+          "prompt": "/plan2code",
+          "bypassArgs": [],
+          "modelArgs": [
+            "--model",
+            "{model}"
+          ],
+          "models": []
+        }
+      ],
+      "warnings": []
+    },
+    {
+      "name": "blank prompt is kept",
+      "raw": "{\"schema\":1,\"agents\":[{\"id\":\"goose\",\"name\":\"Goose\",\"command\":\"goose\",\"prompt\":\"\"}]}",
+      "agents": [
+        {
+          "id": "goose",
+          "name": "Goose",
+          "command": "goose",
+          "args": [],
+          "prompt": "",
+          "bypassArgs": [],
+          "modelArgs": [
+            "--model",
+            "{model}"
+          ],
+          "models": []
+        }
+      ],
+      "warnings": []
+    },
+    {
+      "name": "entry not an object",
+      "raw": "{\"schema\":1,\"agents\":[\"aider\",{\"id\":\"goose\",\"name\":\"Goose\",\"command\":\"goose\"}]}",
+      "agents": [
+        {
+          "id": "goose",
+          "name": "Goose",
+          "command": "goose",
+          "args": [],
+          "prompt": "/plan2code",
+          "bypassArgs": [],
+          "modelArgs": [
+            "--model",
+            "{model}"
+          ],
+          "models": []
+        }
+      ],
+      "warnings": [
+        "agents[0]"
+      ]
+    },
+    {
+      "name": "uppercase id",
+      "raw": "{\"schema\":1,\"agents\":[{\"id\":\"Aider\",\"name\":\"Aider\",\"command\":\"aider\"},{\"id\":\"goose\",\"name\":\"Goose\",\"command\":\"goose\"}]}",
+      "agents": [
+        {
+          "id": "goose",
+          "name": "Goose",
+          "command": "goose",
+          "args": [],
+          "prompt": "/plan2code",
+          "bypassArgs": [],
+          "modelArgs": [
+            "--model",
+            "{model}"
+          ],
+          "models": []
+        }
+      ],
+      "warnings": [
+        "agents[0]",
+        "id"
+      ]
+    },
+    {
+      "name": "id too long",
+      "raw": "{\"schema\":1,\"agents\":[{\"id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"name\":\"Long\",\"command\":\"long\"}]}",
+      "agents": [],
+      "warnings": [
+        "agents[0]",
+        "id"
+      ]
+    },
+    {
+      "name": "id of 32 characters is fine",
+      "raw": "{\"schema\":1,\"agents\":[{\"id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"name\":\"Long\",\"command\":\"long\"}]}",
+      "agents": [
+        {
+          "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "name": "Long",
+          "command": "long",
+          "args": [],
+          "prompt": "/plan2code",
+          "bypassArgs": [],
+          "modelArgs": [
+            "--model",
+            "{model}"
+          ],
+          "models": []
+        }
+      ],
+      "warnings": []
+    },
+    {
+      "name": "missing id",
+      "raw": "{\"schema\":1,\"agents\":[{\"name\":\"Goose\",\"command\":\"goose\"}]}",
+      "agents": [],
+      "warnings": [
+        "agents[0]",
+        "id"
+      ]
+    },
+    {
+      "name": "built-in ids",
+      "raw": "{\"schema\":1,\"agents\":[{\"id\":\"claude\",\"name\":\"My Claude\",\"command\":\"claude\"},{\"id\":\"devin\",\"name\":\"D\",\"command\":\"devin\"},{\"id\":\"codex\",\"name\":\"C\",\"command\":\"codex\"}]}",
+      "agents": [],
+      "warnings": [
+        "agents[0]",
+        "agents[1]",
+        "agents[2]",
+        "built-in"
+      ]
+    },
+    {
+      "name": "duplicate id",
+      "raw": "{\"schema\":1,\"agents\":[{\"id\":\"goose\",\"name\":\"Goose\",\"command\":\"goose\"},{\"id\":\"goose\",\"name\":\"Goose Two\",\"command\":\"goose\"}]}",
+      "agents": [
+        {
+          "id": "goose",
+          "name": "Goose",
+          "command": "goose",
+          "args": [],
+          "prompt": "/plan2code",
+          "bypassArgs": [],
+          "modelArgs": [
+            "--model",
+            "{model}"
+          ],
+          "models": []
+        }
+      ],
+      "warnings": [
+        "agents[1]",
+        "id"
+      ]
+    },
+    {
+      "name": "duplicate name ignoring case",
+      "raw": "{\"schema\":1,\"agents\":[{\"id\":\"goose\",\"name\":\"Goose\",\"command\":\"goose\"},{\"id\":\"goose-2\",\"name\":\"GOOSE\",\"command\":\"goose\"}]}",
+      "agents": [
+        {
+          "id": "goose",
+          "name": "Goose",
+          "command": "goose",
+          "args": [],
+          "prompt": "/plan2code",
+          "bypassArgs": [],
+          "modelArgs": [
+            "--model",
+            "{model}"
+          ],
+          "models": []
+        }
+      ],
+      "warnings": [
+        "agents[1]",
+        "name"
+      ]
+    },
+    {
+      "name": "blank name",
+      "raw": "{\"schema\":1,\"agents\":[{\"id\":\"goose\",\"name\":\"   \",\"command\":\"goose\"}]}",
+      "agents": [],
+      "warnings": [
+        "agents[0]",
+        "name"
+      ]
+    },
+    {
+      "name": "name too long",
+      "raw": "{\"schema\":1,\"agents\":[{\"id\":\"goose\",\"name\":\"ggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg\",\"command\":\"goose\"}]}",
+      "agents": [],
+      "warnings": [
+        "agents[0]",
+        "name"
+      ]
+    },
+    {
+      "name": "blank command",
+      "raw": "{\"schema\":1,\"agents\":[{\"id\":\"goose\",\"name\":\"Goose\",\"command\":\"  \"}]}",
+      "agents": [],
+      "warnings": [
+        "agents[0]",
+        "command"
+      ]
+    },
+    {
+      "name": "non-string args member",
+      "raw": "{\"schema\":1,\"agents\":[{\"id\":\"goose\",\"name\":\"Goose\",\"command\":\"goose\",\"args\":[\"--x\",3]}]}",
+      "agents": [],
+      "warnings": [
+        "agents[0]",
+        "args"
+      ]
+    },
+    {
+      "name": "bypassArgs not a list",
+      "raw": "{\"schema\":1,\"agents\":[{\"id\":\"goose\",\"name\":\"Goose\",\"command\":\"goose\",\"bypassArgs\":\"--yes\"}]}",
+      "agents": [],
+      "warnings": [
+        "agents[0]",
+        "bypassArgs"
+      ]
+    },
+    {
+      "name": "non-string modelArgs member",
+      "raw": "{\"schema\":1,\"agents\":[{\"id\":\"goose\",\"name\":\"Goose\",\"command\":\"goose\",\"modelArgs\":[\"--model\",null]}]}",
+      "agents": [],
+      "warnings": [
+        "agents[0]",
+        "modelArgs"
+      ]
+    },
+    {
+      "name": "null fields take their defaults",
+      "raw": "{\"schema\":1,\"agents\":[{\"id\":\"goose\",\"name\":\"Goose\",\"command\":\"goose\",\"args\":null,\"prompt\":null,\"models\":null}]}",
+      "agents": [
+        {
+          "id": "goose",
+          "name": "Goose",
+          "command": "goose",
+          "args": [],
+          "prompt": "/plan2code",
+          "bypassArgs": [],
+          "modelArgs": [
+            "--model",
+            "{model}"
+          ],
+          "models": []
+        }
+      ],
+      "warnings": []
+    },
+    {
+      "name": "prompt not a string",
+      "raw": "{\"schema\":1,\"agents\":[{\"id\":\"goose\",\"name\":\"Goose\",\"command\":\"goose\",\"prompt\":5}]}",
+      "agents": [],
+      "warnings": [
+        "agents[0]",
+        "prompt"
+      ]
+    },
+    {
+      "name": "models not a list",
+      "raw": "{\"schema\":1,\"agents\":[{\"id\":\"goose\",\"name\":\"Goose\",\"command\":\"goose\",\"models\":{\"id\":\"x\"}}]}",
+      "agents": [],
+      "warnings": [
+        "agents[0]",
+        "models"
+      ]
+    },
+    {
+      "name": "model without a string id",
+      "raw": "{\"schema\":1,\"agents\":[{\"id\":\"goose\",\"name\":\"Goose\",\"command\":\"goose\",\"models\":[{\"label\":\"X\"}]}]}",
+      "agents": [],
+      "warnings": [
+        "agents[0]",
+        "models"
+      ]
+    },
+    {
+      "name": "model ids trimmed, blanks and repeats dropped",
+      "raw": "{\"schema\":1,\"agents\":[{\"id\":\"goose\",\"name\":\"Goose\",\"command\":\"goose\",\"models\":[{\"id\":\" gpt-5 \",\"label\":\" GPT 5 \"},{\"id\":\"\"},{\"id\":\"gpt-5\",\"label\":\"Again\"},{\"id\":\"o3\",\"label\":\"  \"}]}]}",
+      "agents": [
+        {
+          "id": "goose",
+          "name": "Goose",
+          "command": "goose",
+          "args": [],
+          "prompt": "/plan2code",
+          "bypassArgs": [],
+          "modelArgs": [
+            "--model",
+            "{model}"
+          ],
+          "models": [
+            {
+              "id": "gpt-5",
+              "label": "GPT 5"
+            },
+            {
+              "id": "o3"
+            }
+          ]
+        }
+      ],
+      "warnings": []
+    },
+    {
+      "name": "51 entries, the 51st dropped",
+      "raw": "{\"schema\":1,\"agents\":[{\"id\":\"agent-1\",\"name\":\"Agent 1\",\"command\":\"agent-1\"},{\"id\":\"agent-2\",\"name\":\"Agent 2\",\"command\":\"agent-2\"},{\"id\":\"agent-3\",\"name\":\"Agent 3\",\"command\":\"agent-3\"},{\"id\":\"agent-4\",\"name\":\"Agent 4\",\"command\":\"agent-4\"},{\"id\":\"agent-5\",\"name\":\"Agent 5\",\"command\":\"agent-5\"},{\"id\":\"agent-6\",\"name\":\"Agent 6\",\"command\":\"agent-6\"},{\"id\":\"agent-7\",\"name\":\"Agent 7\",\"command\":\"agent-7\"},{\"id\":\"agent-8\",\"name\":\"Agent 8\",\"command\":\"agent-8\"},{\"id\":\"agent-9\",\"name\":\"Agent 9\",\"command\":\"agent-9\"},{\"id\":\"agent-10\",\"name\":\"Agent 10\",\"command\":\"agent-10\"},{\"id\":\"agent-11\",\"name\":\"Agent 11\",\"command\":\"agent-11\"},{\"id\":\"agent-12\",\"name\":\"Agent 12\",\"command\":\"agent-12\"},{\"id\":\"agent-13\",\"name\":\"Agent 13\",\"command\":\"agent-13\"},{\"id\":\"agent-14\",\"name\":\"Agent 14\",\"command\":\"agent-14\"},{\"id\":\"agent-15\",\"name\":\"Agent 15\",\"command\":\"agent-15\"},{\"id\":\"agent-16\",\"name\":\"Agent 16\",\"command\":\"agent-16\"},{\"id\":\"agent-17\",\"name\":\"Agent 17\",\"command\":\"agent-17\"},{\"id\":\"agent-18\",\"name\":\"Agent 18\",\"command\":\"agent-18\"},{\"id\":\"agent-19\",\"name\":\"Agent 19\",\"command\":\"agent-19\"},{\"id\":\"agent-20\",\"name\":\"Agent 20\",\"command\":\"agent-20\"},{\"id\":\"agent-21\",\"name\":\"Agent 21\",\"command\":\"agent-21\"},{\"id\":\"agent-22\",\"name\":\"Agent 22\",\"command\":\"agent-22\"},{\"id\":\"agent-23\",\"name\":\"Agent 23\",\"command\":\"agent-23\"},{\"id\":\"agent-24\",\"name\":\"Agent 24\",\"command\":\"agent-24\"},{\"id\":\"agent-25\",\"name\":\"Agent 25\",\"command\":\"agent-25\"},{\"id\":\"agent-26\",\"name\":\"Agent 26\",\"command\":\"agent-26\"},{\"id\":\"agent-27\",\"name\":\"Agent 27\",\"command\":\"agent-27\"},{\"id\":\"agent-28\",\"name\":\"Agent 28\",\"command\":\"agent-28\"},{\"id\":\"agent-29\",\"name\":\"Agent 29\",\"command\":\"agent-29\"},{\"id\":\"agent-30\",\"name\":\"Agent 30\",\"command\":\"agent-30\"},{\"id\":\"agent-31\",\"name\":\"Agent 31\",\"command\":\"agent-31\"},{\"id\":\"agent-32\",\"name\":\"Agent 32\",\"command\":\"agent-32\"},{\"id\":\"agent-33\",\"name\":\"Agent 33\",\"command\":\"agent-33\"},{\"id\":\"agent-34\",\"name\":\"Agent 34\",\"command\":\"agent-34\"},{\"id\":\"agent-35\",\"name\":\"Agent 35\",\"command\":\"agent-35\"},{\"id\":\"agent-36\",\"name\":\"Agent 36\",\"command\":\"agent-36\"},{\"id\":\"agent-37\",\"name\":\"Agent 37\",\"command\":\"agent-37\"},{\"id\":\"agent-38\",\"name\":\"Agent 38\",\"command\":\"agent-38\"},{\"id\":\"agent-39\",\"name\":\"Agent 39\",\"command\":\"agent-39\"},{\"id\":\"agent-40\",\"name\":\"Agent 40\",\"command\":\"agent-40\"},{\"id\":\"agent-41\",\"name\":\"Agent 41\",\"command\":\"agent-41\"},{\"id\":\"agent-42\",\"name\":\"Agent 42\",\"command\":\"agent-42\"},{\"id\":\"agent-43\",\"name\":\"Agent 43\",\"command\":\"agent-43\"},{\"id\":\"agent-44\",\"name\":\"Agent 44\",\"command\":\"agent-44\"},{\"id\":\"agent-45\",\"name\":\"Agent 45\",\"command\":\"agent-45\"},{\"id\":\"agent-46\",\"name\":\"Agent 46\",\"command\":\"agent-46\"},{\"id\":\"agent-47\",\"name\":\"Agent 47\",\"command\":\"agent-47\"},{\"id\":\"agent-48\",\"name\":\"Agent 48\",\"command\":\"agent-48\"},{\"id\":\"agent-49\",\"name\":\"Agent 49\",\"command\":\"agent-49\"},{\"id\":\"agent-50\",\"name\":\"Agent 50\",\"command\":\"agent-50\"},{\"id\":\"agent-51\",\"name\":\"Agent 51\",\"command\":\"agent-51\"}]}",
+      "agents": [
+        {
+          "id": "agent-1",
+          "name": "Agent 1",
+          "command": "agent-1",
+          "args": [],
+          "prompt": "/plan2code",
+          "bypassArgs": [],
+          "modelArgs": [
+            "--model",
+            "{model}"
+          ],
+          "models": []
+        },
+        {
+          "id": "agent-2",
+          "name": "Agent 2",
+          "command": "agent-2",
+          "args": [],
+          "prompt": "/plan2code",
+          "bypassArgs": [],
+          "modelArgs": [
+            "--model",
+            "{model}"
+          ],
+          "models": []
+        },
+        {
+          "id": "agent-3",
+          "name": "Agent 3",
+          "command": "agent-3",
+          "args": [],
+          "prompt": "/plan2code",
+          "bypassArgs": [],
+          "modelArgs": [
+            "--model",
+            "{model}"
+          ],
+          "models": []
+        },
+        {
+          "id": "agent-4",
+          "name": "Agent 4",
+          "command": "agent-4",
+          "args": [],
+          "prompt": "/plan2code",
+          "bypassArgs": [],
+          "modelArgs": [
+            "--model",
+            "{model}"
+          ],
+          "models": []
+        },
+        {
+          "id": "agent-5",
+          "name": "Agent 5",
+          "command": "agent-5",
+          "args": [],
+          "prompt": "/plan2code",
+          "bypassArgs": [],
+          "modelArgs": [
+            "--model",
+            "{model}"
+          ],
+          "models": []
+        },
+        {
+          "id": "agent-6",
+          "name": "Agent 6",
+          "command": "agent-6",
+          "args": [],
+          "prompt": "/plan2code",
+          "bypassArgs": [],
+          "modelArgs": [
+            "--model",
+            "{model}"
+          ],
+          "models": []
+        },
+        {
+          "id": "agent-7",
+          "name": "Agent 7",
+          "command": "agent-7",
+          "args": [],
+          "prompt": "/plan2code",
+          "bypassArgs": [],
+          "modelArgs": [
+            "--model",
+            "{model}"
+          ],
+          "models": []
+        },
+        {
+          "id": "agent-8",
+          "name": "Agent 8",
+          "command": "agent-8",
+          "args": [],
+          "prompt": "/plan2code",
+          "bypassArgs": [],
+          "modelArgs": [
+            "--model",
+            "{model}"
+          ],
+          "models": []
+        },
+        {
+          "id": "agent-9",
+          "name": "Agent 9",
+          "command": "agent-9",
+          "args": [],
+          "prompt": "/plan2code",
+          "bypassArgs": [],
+          "modelArgs": [
+            "--model",
+            "{model}"
+          ],
+          "models": []
+        },
+        {
+          "id": "agent-10",
+          "name": "Agent 10",
+          "command": "agent-10",
+          "args": [],
+          "prompt": "/plan2code",
+          "bypassArgs": [],
+          "modelArgs": [
+            "--model",
+            "{model}"
+          ],
+          "models": []
+        },
+        {
+          "id": "agent-11",
+          "name": "Agent 11",
+          "command": "agent-11",
+          "args": [],
+          "prompt": "/plan2code",
+          "bypassArgs": [],
+          "modelArgs": [
+            "--model",
+            "{model}"
+          ],
+          "models": []
+        },
+        {
+          "id": "agent-12",
+          "name": "Agent 12",
+          "command": "agent-12",
+          "args": [],
+          "prompt": "/plan2code",
+          "bypassArgs": [],
+          "modelArgs": [
+            "--model",
+            "{model}"
+          ],
+          "models": []
+        },
+        {
+          "id": "agent-13",
+          "name": "Agent 13",
+          "command": "agent-13",
+          "args": [],
+          "prompt": "/plan2code",
+          "bypassArgs": [],
+          "modelArgs": [
+            "--model",
+            "{model}"
+          ],
+          "models": []
+        },
+        {
+          "id": "agent-14",
+          "name": "Agent 14",
+          "command": "agent-14",
+          "args": [],
+          "prompt": "/plan2code",
+          "bypassArgs": [],
+          "modelArgs": [
+            "--model",
+            "{model}"
+          ],
+          "models": []
+        },
+        {
+          "id": "agent-15",
+          "name": "Agent 15",
+          "command": "agent-15",
+          "args": [],
+          "prompt": "/plan2code",
+          "bypassArgs": [],
+          "modelArgs": [
+            "--model",
+            "{model}"
+          ],
+          "models": []
+        },
+        {
+          "id": "agent-16",
+          "name": "Agent 16",
+          "command": "agent-16",
+          "args": [],
+          "prompt": "/plan2code",
+          "bypassArgs": [],
+          "modelArgs": [
+            "--model",
+            "{model}"
+          ],
+          "models": []
+        },
+        {
+          "id": "agent-17",
+          "name": "Agent 17",
+          "command": "agent-17",
+          "args": [],
+          "prompt": "/plan2code",
+          "bypassArgs": [],
+          "modelArgs": [
+            "--model",
+            "{model}"
+          ],
+          "models": []
+        },
+        {
+          "id": "agent-18",
+          "name": "Agent 18",
+          "command": "agent-18",
+          "args": [],
+          "prompt": "/plan2code",
+          "bypassArgs": [],
+          "modelArgs": [
+            "--model",
+            "{model}"
+          ],
+          "models": []
+        },
+        {
+          "id": "agent-19",
+          "name": "Agent 19",
+          "command": "agent-19",
+          "args": [],
+          "prompt": "/plan2code",
+          "bypassArgs": [],
+          "modelArgs": [
+            "--model",
+            "{model}"
+          ],
+          "models": []
+        },
+        {
+          "id": "agent-20",
+          "name": "Agent 20",
+          "command": "agent-20",
+          "args": [],
+          "prompt": "/plan2code",
+          "bypassArgs": [],
+          "modelArgs": [
+            "--model",
+            "{model}"
+          ],
+          "models": []
+        },
+        {
+          "id": "agent-21",
+          "name": "Agent 21",
+          "command": "agent-21",
+          "args": [],
+          "prompt": "/plan2code",
+          "bypassArgs": [],
+          "modelArgs": [
+            "--model",
+            "{model}"
+          ],
+          "models": []
+        },
+        {
+          "id": "agent-22",
+          "name": "Agent 22",
+          "command": "agent-22",
+          "args": [],
+          "prompt": "/plan2code",
+          "bypassArgs": [],
+          "modelArgs": [
+            "--model",
+            "{model}"
+          ],
+          "models": []
+        },
+        {
+          "id": "agent-23",
+          "name": "Agent 23",
+          "command": "agent-23",
+          "args": [],
+          "prompt": "/plan2code",
+          "bypassArgs": [],
+          "modelArgs": [
+            "--model",
+            "{model}"
+          ],
+          "models": []
+        },
+        {
+          "id": "agent-24",
+          "name": "Agent 24",
+          "command": "agent-24",
+          "args": [],
+          "prompt": "/plan2code",
+          "bypassArgs": [],
+          "modelArgs": [
+            "--model",
+            "{model}"
+          ],
+          "models": []
+        },
+        {
+          "id": "agent-25",
+          "name": "Agent 25",
+          "command": "agent-25",
+          "args": [],
+          "prompt": "/plan2code",
+          "bypassArgs": [],
+          "modelArgs": [
+            "--model",
+            "{model}"
+          ],
+          "models": []
+        },
+        {
+          "id": "agent-26",
+          "name": "Agent 26",
+          "command": "agent-26",
+          "args": [],
+          "prompt": "/plan2code",
+          "bypassArgs": [],
+          "modelArgs": [
+            "--model",
+            "{model}"
+          ],
+          "models": []
+        },
+        {
+          "id": "agent-27",
+          "name": "Agent 27",
+          "command": "agent-27",
+          "args": [],
+          "prompt": "/plan2code",
+          "bypassArgs": [],
+          "modelArgs": [
+            "--model",
+            "{model}"
+          ],
+          "models": []
+        },
+        {
+          "id": "agent-28",
+          "name": "Agent 28",
+          "command": "agent-28",
+          "args": [],
+          "prompt": "/plan2code",
+          "bypassArgs": [],
+          "modelArgs": [
+            "--model",
+            "{model}"
+          ],
+          "models": []
+        },
+        {
+          "id": "agent-29",
+          "name": "Agent 29",
+          "command": "agent-29",
+          "args": [],
+          "prompt": "/plan2code",
+          "bypassArgs": [],
+          "modelArgs": [
+            "--model",
+            "{model}"
+          ],
+          "models": []
+        },
+        {
+          "id": "agent-30",
+          "name": "Agent 30",
+          "command": "agent-30",
+          "args": [],
+          "prompt": "/plan2code",
+          "bypassArgs": [],
+          "modelArgs": [
+            "--model",
+            "{model}"
+          ],
+          "models": []
+        },
+        {
+          "id": "agent-31",
+          "name": "Agent 31",
+          "command": "agent-31",
+          "args": [],
+          "prompt": "/plan2code",
+          "bypassArgs": [],
+          "modelArgs": [
+            "--model",
+            "{model}"
+          ],
+          "models": []
+        },
+        {
+          "id": "agent-32",
+          "name": "Agent 32",
+          "command": "agent-32",
+          "args": [],
+          "prompt": "/plan2code",
+          "bypassArgs": [],
+          "modelArgs": [
+            "--model",
+            "{model}"
+          ],
+          "models": []
+        },
+        {
+          "id": "agent-33",
+          "name": "Agent 33",
+          "command": "agent-33",
+          "args": [],
+          "prompt": "/plan2code",
+          "bypassArgs": [],
+          "modelArgs": [
+            "--model",
+            "{model}"
+          ],
+          "models": []
+        },
+        {
+          "id": "agent-34",
+          "name": "Agent 34",
+          "command": "agent-34",
+          "args": [],
+          "prompt": "/plan2code",
+          "bypassArgs": [],
+          "modelArgs": [
+            "--model",
+            "{model}"
+          ],
+          "models": []
+        },
+        {
+          "id": "agent-35",
+          "name": "Agent 35",
+          "command": "agent-35",
+          "args": [],
+          "prompt": "/plan2code",
+          "bypassArgs": [],
+          "modelArgs": [
+            "--model",
+            "{model}"
+          ],
+          "models": []
+        },
+        {
+          "id": "agent-36",
+          "name": "Agent 36",
+          "command": "agent-36",
+          "args": [],
+          "prompt": "/plan2code",
+          "bypassArgs": [],
+          "modelArgs": [
+            "--model",
+            "{model}"
+          ],
+          "models": []
+        },
+        {
+          "id": "agent-37",
+          "name": "Agent 37",
+          "command": "agent-37",
+          "args": [],
+          "prompt": "/plan2code",
+          "bypassArgs": [],
+          "modelArgs": [
+            "--model",
+            "{model}"
+          ],
+          "models": []
+        },
+        {
+          "id": "agent-38",
+          "name": "Agent 38",
+          "command": "agent-38",
+          "args": [],
+          "prompt": "/plan2code",
+          "bypassArgs": [],
+          "modelArgs": [
+            "--model",
+            "{model}"
+          ],
+          "models": []
+        },
+        {
+          "id": "agent-39",
+          "name": "Agent 39",
+          "command": "agent-39",
+          "args": [],
+          "prompt": "/plan2code",
+          "bypassArgs": [],
+          "modelArgs": [
+            "--model",
+            "{model}"
+          ],
+          "models": []
+        },
+        {
+          "id": "agent-40",
+          "name": "Agent 40",
+          "command": "agent-40",
+          "args": [],
+          "prompt": "/plan2code",
+          "bypassArgs": [],
+          "modelArgs": [
+            "--model",
+            "{model}"
+          ],
+          "models": []
+        },
+        {
+          "id": "agent-41",
+          "name": "Agent 41",
+          "command": "agent-41",
+          "args": [],
+          "prompt": "/plan2code",
+          "bypassArgs": [],
+          "modelArgs": [
+            "--model",
+            "{model}"
+          ],
+          "models": []
+        },
+        {
+          "id": "agent-42",
+          "name": "Agent 42",
+          "command": "agent-42",
+          "args": [],
+          "prompt": "/plan2code",
+          "bypassArgs": [],
+          "modelArgs": [
+            "--model",
+            "{model}"
+          ],
+          "models": []
+        },
+        {
+          "id": "agent-43",
+          "name": "Agent 43",
+          "command": "agent-43",
+          "args": [],
+          "prompt": "/plan2code",
+          "bypassArgs": [],
+          "modelArgs": [
+            "--model",
+            "{model}"
+          ],
+          "models": []
+        },
+        {
+          "id": "agent-44",
+          "name": "Agent 44",
+          "command": "agent-44",
+          "args": [],
+          "prompt": "/plan2code",
+          "bypassArgs": [],
+          "modelArgs": [
+            "--model",
+            "{model}"
+          ],
+          "models": []
+        },
+        {
+          "id": "agent-45",
+          "name": "Agent 45",
+          "command": "agent-45",
+          "args": [],
+          "prompt": "/plan2code",
+          "bypassArgs": [],
+          "modelArgs": [
+            "--model",
+            "{model}"
+          ],
+          "models": []
+        },
+        {
+          "id": "agent-46",
+          "name": "Agent 46",
+          "command": "agent-46",
+          "args": [],
+          "prompt": "/plan2code",
+          "bypassArgs": [],
+          "modelArgs": [
+            "--model",
+            "{model}"
+          ],
+          "models": []
+        },
+        {
+          "id": "agent-47",
+          "name": "Agent 47",
+          "command": "agent-47",
+          "args": [],
+          "prompt": "/plan2code",
+          "bypassArgs": [],
+          "modelArgs": [
+            "--model",
+            "{model}"
+          ],
+          "models": []
+        },
+        {
+          "id": "agent-48",
+          "name": "Agent 48",
+          "command": "agent-48",
+          "args": [],
+          "prompt": "/plan2code",
+          "bypassArgs": [],
+          "modelArgs": [
+            "--model",
+            "{model}"
+          ],
+          "models": []
+        },
+        {
+          "id": "agent-49",
+          "name": "Agent 49",
+          "command": "agent-49",
+          "args": [],
+          "prompt": "/plan2code",
+          "bypassArgs": [],
+          "modelArgs": [
+            "--model",
+            "{model}"
+          ],
+          "models": []
+        },
+        {
+          "id": "agent-50",
+          "name": "Agent 50",
+          "command": "agent-50",
+          "args": [],
+          "prompt": "/plan2code",
+          "bypassArgs": [],
+          "modelArgs": [
+            "--model",
+            "{model}"
+          ],
+          "models": []
+        }
+      ],
+      "warnings": [
+        "50"
+      ]
+    },
+    {
+      "name": "unknown keys kept",
+      "raw": "{\"schema\":1,\"theme\":\"dark\",\"agents\":[{\"id\":\"goose\",\"name\":\"Goose\",\"command\":\"goose\",\"env\":{\"A\":\"1\"},\"note\":\"mine\"}]}",
+      "agents": [
+        {
+          "id": "goose",
+          "name": "Goose",
+          "command": "goose",
+          "args": [],
+          "prompt": "/plan2code",
+          "bypassArgs": [],
+          "modelArgs": [
+            "--model",
+            "{model}"
+          ],
+          "models": [],
+          "env": {
+            "A": "1"
+          },
+          "note": "mine"
+        }
+      ],
+      "warnings": []
+    }
+  ],
+  "buildArgs": [
+    {
+      "name": "{prompt} alone in args",
+      "entry": {
+        "id": "aider",
+        "name": "Aider",
+        "command": "aider",
+        "args": [
+          "--no-auto-commits",
+          "{prompt}"
+        ],
+        "prompt": "/plan2code",
+        "bypassArgs": [
+          "--yes-always"
+        ],
+        "modelArgs": [
+          "--model",
+          "{model}"
+        ],
+        "models": [
+          {
+            "id": "sonnet",
+            "label": "Sonnet"
+          }
+        ]
+      },
+      "options": {
+        "bypass": false
+      },
+      "args": [
+        "--no-auto-commits",
+        "/plan2code"
+      ]
+    },
+    {
+      "name": "{prompt} inside a larger argument",
+      "entry": {
+        "id": "aider",
+        "name": "Aider",
+        "command": "aider",
+        "args": [
+          "--message={prompt}"
+        ],
+        "prompt": "/plan2code",
+        "bypassArgs": [
+          "--yes-always"
+        ],
+        "modelArgs": [
+          "--model",
+          "{model}"
+        ],
+        "models": [
+          {
+            "id": "sonnet",
+            "label": "Sonnet"
+          }
+        ]
+      },
+      "options": {
+        "bypass": false
+      },
+      "args": [
+        "--message=/plan2code"
+      ]
+    },
+    {
+      "name": "no {prompt}: the prompt goes last",
+      "entry": {
+        "id": "aider",
+        "name": "Aider",
+        "command": "aider",
+        "args": [
+          "--chat"
+        ],
+        "prompt": "/plan2code",
+        "bypassArgs": [
+          "--yes-always"
+        ],
+        "modelArgs": [
+          "--model",
+          "{model}"
+        ],
+        "models": [
+          {
+            "id": "sonnet",
+            "label": "Sonnet"
+          }
+        ]
+      },
+      "options": {
+        "bypass": false
+      },
+      "args": [
+        "--chat",
+        "/plan2code"
+      ]
+    },
+    {
+      "name": "no args at all",
+      "entry": {
+        "id": "aider",
+        "name": "Aider",
+        "command": "aider",
+        "args": [],
+        "prompt": "/plan2code",
+        "bypassArgs": [
+          "--yes-always"
+        ],
+        "modelArgs": [
+          "--model",
+          "{model}"
+        ],
+        "models": [
+          {
+            "id": "sonnet",
+            "label": "Sonnet"
+          }
+        ]
+      },
+      "options": {
+        "bypass": false
+      },
+      "args": [
+        "/plan2code"
+      ]
+    },
+    {
+      "name": "the prompt option wins over the entry's",
+      "entry": {
+        "id": "aider",
+        "name": "Aider",
+        "command": "aider",
+        "args": [
+          "--no-auto-commits",
+          "{prompt}"
+        ],
+        "prompt": "/plan2code",
+        "bypassArgs": [
+          "--yes-always"
+        ],
+        "modelArgs": [
+          "--model",
+          "{model}"
+        ],
+        "models": [
+          {
+            "id": "sonnet",
+            "label": "Sonnet"
+          }
+        ]
+      },
+      "options": {
+        "prompt": "/plan2code-git",
+        "bypass": false
+      },
+      "args": [
+        "--no-auto-commits",
+        "/plan2code-git"
+      ]
+    },
+    {
+      "name": "blank prompt drops an exact {prompt}",
+      "entry": {
+        "id": "aider",
+        "name": "Aider",
+        "command": "aider",
+        "args": [
+          "--no-auto-commits",
+          "{prompt}"
+        ],
+        "prompt": "",
+        "bypassArgs": [
+          "--yes-always"
+        ],
+        "modelArgs": [
+          "--model",
+          "{model}"
+        ],
+        "models": [
+          {
+            "id": "sonnet",
+            "label": "Sonnet"
+          }
+        ]
+      },
+      "options": {
+        "bypass": false
+      },
+      "args": [
+        "--no-auto-commits"
+      ]
+    },
+    {
+      "name": "blank prompt with no {prompt} appends nothing",
+      "entry": {
+        "id": "aider",
+        "name": "Aider",
+        "command": "aider",
+        "args": [
+          "--chat"
+        ],
+        "prompt": "",
+        "bypassArgs": [
+          "--yes-always"
+        ],
+        "modelArgs": [
+          "--model",
+          "{model}"
+        ],
+        "models": [
+          {
+            "id": "sonnet",
+            "label": "Sonnet"
+          }
+        ]
+      },
+      "options": {
+        "bypass": false
+      },
+      "args": [
+        "--chat"
+      ]
+    },
+    {
+      "name": "blank prompt inside a larger argument is replaced, not dropped",
+      "entry": {
+        "id": "aider",
+        "name": "Aider",
+        "command": "aider",
+        "args": [
+          "--message={prompt}"
+        ],
+        "prompt": "",
+        "bypassArgs": [
+          "--yes-always"
+        ],
+        "modelArgs": [
+          "--model",
+          "{model}"
+        ],
+        "models": [
+          {
+            "id": "sonnet",
+            "label": "Sonnet"
+          }
+        ]
+      },
+      "options": {
+        "bypass": false
+      },
+      "args": [
+        "--message="
+      ]
+    },
+    {
+      "name": "a blank prompt option wins over the entry's",
+      "entry": {
+        "id": "aider",
+        "name": "Aider",
+        "command": "aider",
+        "args": [
+          "--no-auto-commits",
+          "{prompt}"
+        ],
+        "prompt": "/plan2code",
+        "bypassArgs": [
+          "--yes-always"
+        ],
+        "modelArgs": [
+          "--model",
+          "{model}"
+        ],
+        "models": [
+          {
+            "id": "sonnet",
+            "label": "Sonnet"
+          }
+        ]
+      },
+      "options": {
+        "prompt": "",
+        "bypass": false
+      },
+      "args": [
+        "--no-auto-commits"
+      ]
+    },
+    {
+      "name": "model set fills modelArgs",
+      "entry": {
+        "id": "aider",
+        "name": "Aider",
+        "command": "aider",
+        "args": [
+          "--no-auto-commits",
+          "{prompt}"
+        ],
+        "prompt": "/plan2code",
+        "bypassArgs": [
+          "--yes-always"
+        ],
+        "modelArgs": [
+          "--model",
+          "{model}"
+        ],
+        "models": [
+          {
+            "id": "sonnet",
+            "label": "Sonnet"
+          }
+        ]
+      },
+      "options": {
+        "model": "sonnet",
+        "bypass": false
+      },
+      "args": [
+        "--no-auto-commits",
+        "/plan2code",
+        "--model",
+        "sonnet"
+      ]
+    },
+    {
+      "name": "model inside a larger argument",
+      "entry": {
+        "id": "aider",
+        "name": "Aider",
+        "command": "aider",
+        "args": [
+          "--no-auto-commits",
+          "{prompt}"
+        ],
+        "prompt": "/plan2code",
+        "bypassArgs": [
+          "--yes-always"
+        ],
+        "modelArgs": [
+          "--model={model}"
+        ],
+        "models": [
+          {
+            "id": "sonnet",
+            "label": "Sonnet"
+          }
+        ]
+      },
+      "options": {
+        "model": "o3",
+        "bypass": false
+      },
+      "args": [
+        "--no-auto-commits",
+        "/plan2code",
+        "--model=o3"
+      ]
+    },
+    {
+      "name": "model unset adds no modelArgs",
+      "entry": {
+        "id": "aider",
+        "name": "Aider",
+        "command": "aider",
+        "args": [
+          "--no-auto-commits",
+          "{prompt}"
+        ],
+        "prompt": "/plan2code",
+        "bypassArgs": [
+          "--yes-always"
+        ],
+        "modelArgs": [
+          "--model",
+          "{model}"
+        ],
+        "models": [
+          {
+            "id": "sonnet",
+            "label": "Sonnet"
+          }
+        ]
+      },
+      "options": {
+        "bypass": false
+      },
+      "args": [
+        "--no-auto-commits",
+        "/plan2code"
+      ]
+    },
+    {
+      "name": "blank model adds no modelArgs",
+      "entry": {
+        "id": "aider",
+        "name": "Aider",
+        "command": "aider",
+        "args": [
+          "--no-auto-commits",
+          "{prompt}"
+        ],
+        "prompt": "/plan2code",
+        "bypassArgs": [
+          "--yes-always"
+        ],
+        "modelArgs": [
+          "--model",
+          "{model}"
+        ],
+        "models": [
+          {
+            "id": "sonnet",
+            "label": "Sonnet"
+          }
+        ]
+      },
+      "options": {
+        "model": "",
+        "bypass": false
+      },
+      "args": [
+        "--no-auto-commits",
+        "/plan2code"
+      ]
+    },
+    {
+      "name": "bypass on",
+      "entry": {
+        "id": "aider",
+        "name": "Aider",
+        "command": "aider",
+        "args": [
+          "--no-auto-commits",
+          "{prompt}"
+        ],
+        "prompt": "/plan2code",
+        "bypassArgs": [
+          "--yes-always"
+        ],
+        "modelArgs": [
+          "--model",
+          "{model}"
+        ],
+        "models": [
+          {
+            "id": "sonnet",
+            "label": "Sonnet"
+          }
+        ]
+      },
+      "options": {
+        "bypass": true
+      },
+      "args": [
+        "--no-auto-commits",
+        "/plan2code",
+        "--yes-always"
+      ]
+    },
+    {
+      "name": "bypass off",
+      "entry": {
+        "id": "aider",
+        "name": "Aider",
+        "command": "aider",
+        "args": [
+          "--no-auto-commits",
+          "{prompt}"
+        ],
+        "prompt": "/plan2code",
+        "bypassArgs": [
+          "--yes-always"
+        ],
+        "modelArgs": [
+          "--model",
+          "{model}"
+        ],
+        "models": [
+          {
+            "id": "sonnet",
+            "label": "Sonnet"
+          }
+        ]
+      },
+      "options": {
+        "bypass": false
+      },
+      "args": [
+        "--no-auto-commits",
+        "/plan2code"
+      ]
+    },
+    {
+      "name": "all three in order: args, modelArgs, bypassArgs",
+      "entry": {
+        "id": "aider",
+        "name": "Aider",
+        "command": "aider",
+        "args": [
+          "--chat"
+        ],
+        "prompt": "/plan2code",
+        "bypassArgs": [
+          "--yes-always"
+        ],
+        "modelArgs": [
+          "--model",
+          "{model}"
+        ],
+        "models": [
+          {
+            "id": "sonnet",
+            "label": "Sonnet"
+          }
+        ]
+      },
+      "options": {
+        "model": "sonnet",
+        "bypass": true
+      },
+      "args": [
+        "--chat",
+        "/plan2code",
+        "--model",
+        "sonnet",
+        "--yes-always"
+      ]
+    },
+    {
+      "name": "placeholders are replaced as plain text",
+      "entry": {
+        "id": "aider",
+        "name": "Aider",
+        "command": "aider",
+        "args": [
+          "{prompt}"
+        ],
+        "prompt": "/plan2code",
+        "bypassArgs": [
+          "--yes-always"
+        ],
+        "modelArgs": [
+          "--model",
+          "{model}"
+        ],
+        "models": [
+          {
+            "id": "sonnet",
+            "label": "Sonnet"
+          }
+        ]
+      },
+      "options": {
+        "prompt": "a $HOME & \"b\"",
+        "bypass": false
+      },
+      "args": [
+        "a $HOME & \"b\""
+      ]
+    }
+  ],
+  "ids": [
+    {
+      "name": "kebab case",
+      "input": "My Agent",
+      "taken": [],
+      "id": "my-agent"
+    },
+    {
+      "name": "punctuation and spaces collapse",
+      "input": "  Open--Code!! (beta) ",
+      "taken": [],
+      "id": "open-code-beta"
+    },
+    {
+      "name": "digits kept",
+      "input": "Agent 007",
+      "taken": [],
+      "id": "agent-007"
+    },
+    {
+      "name": "only symbols falls back",
+      "input": "!!! ***",
+      "taken": [],
+      "id": "agent"
+    },
+    {
+      "name": "empty falls back",
+      "input": "",
+      "taken": [],
+      "id": "agent"
+    },
+    {
+      "name": "clash with taken",
+      "input": "Goose",
+      "taken": [
+        "goose"
+      ],
+      "id": "goose-2"
+    },
+    {
+      "name": "clash twice",
+      "input": "Goose",
+      "taken": [
+        "goose",
+        "goose-2"
+      ],
+      "id": "goose-3"
+    },
+    {
+      "name": "clash with a built-in",
+      "input": "Claude",
+      "taken": [],
+      "id": "claude-2"
+    },
+    {
+      "name": "the fallback clashes too",
+      "input": "???",
+      "taken": [
+        "agent"
+      ],
+      "id": "agent-2"
+    },
+    {
+      "name": "trimmed to 32 characters",
+      "input": "A very long agent name that goes on and on",
+      "taken": [],
+      "id": "a-very-long-agent-name-that-goes"
+    },
+    {
+      "name": "no trailing dash after the trim",
+      "input": "abcdefghijklmnopqrstuvwxyz abcde fgh",
+      "taken": [],
+      "id": "abcdefghijklmnopqrstuvwxyz-abcde"
+    },
+    {
+      "name": "a suffix keeps it within 32",
+      "input": "abcdefghijklmnopqrstuvwxyzabcdefgh",
+      "taken": [
+        "abcdefghijklmnopqrstuvwxyzabcdef"
+      ],
+      "id": "abcdefghijklmnopqrstuvwxyzabcd-2"
+    }
+  ]
+}

@@ -46,10 +46,10 @@ export function tempProject(files = {}) {
 // test still cleans up, and a page error fails the test. `clock: true` gives
 // the page Playwright's fake clock before it loads (s.page.clock), so a test
 // can jump past the page's silence limits instead of sitting through them.
-export async function openSession(browser, { t, workflow, payload: first, project, open = [], clock = false }) {
+export async function openSession(browser, { t, workflow, payload: first, project, open = [], clock = false, env, init } = {}) {
   fs.rmSync(REMEMBERED, { force: true });
   const cwd = project || tempProject();
-  const opened = cli(["open", "--workflow", workflow, "--no-open", ...open], { cwd }).json;
+  const opened = cli(["open", "--workflow", workflow, "--no-open", ...open], { cwd, env }).json;
   const s = {
     sid: opened.sid,
     session: opened.session,
@@ -95,7 +95,16 @@ export async function openSession(browser, { t, workflow, payload: first, projec
   if (first) s.post(first);
   s.context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
   if (clock) await s.context.clock.install();
+  // A script run before the page's own, such as a stand-in for the app's frame.
+  if (init) await s.context.addInitScript(init);
   s.page = await s.context.newPage();
+  // Playwright's own default (30s) assumes a dedicated machine: the whole
+  // suite runs dozens of these pages at once, and a host under that load can
+  // leave one of them waiting past 30s for its turn at the CPU to paint a
+  // dropdown or settle a click, with nothing wrong in the page itself. Twice
+  // the default still catches a genuinely broken page, just gives a busy host
+  // room to breathe.
+  s.page.setDefaultTimeout(60000);
   s.page.on("pageerror", (e) => s.errors.push(e.message));
   await s.page.goto(s.url, { waitUntil: "domcontentloaded" });
   await drawn(s.page);
@@ -105,7 +114,7 @@ export async function openSession(browser, { t, workflow, payload: first, projec
 // The page has adopted a state frame: app.js has replaced the boot pane the
 // markup ships with.
 export async function drawn(page) {
-  await page.waitForFunction(() => !document.querySelector("#main .boot-pane"), null, { timeout: 15000 });
+  await page.waitForFunction(() => !document.querySelector("#main .boot-pane"), null, { timeout: 30000 });
 }
 
 // Presses Send on the page and collects the send the way an agent's `wait`
@@ -125,3 +134,38 @@ export const textOf = async (locator) => (await locator.innerText()).trim();
 
 // The scroll offset of the first element matching `selector`.
 export const scrollTopOf = (page, selector) => page.$eval(selector, (el) => el.scrollTop);
+
+// Scrolls what `locator` names to `top` ("end" for its bottom), or as far as
+// it goes when that is less, and returns where it landed. A redraw can replace
+// the element between Playwright finding it and the scroll, and one not laid
+// out yet cannot scroll, so it scrolls again until the element on the page
+// holds a place past its top.
+export async function scrollCard(locator, top) {
+  const deadline = Date.now() + 5000;
+  for (;;) {
+    const at = await locator.evaluate((el, want) => {
+      if (!el.isConnected) return null;
+      const max = el.scrollHeight - el.clientHeight;
+      const target = want === "end" ? max : Math.min(want, max);
+      el.scrollTop = target;
+      return max > 0 && Math.abs(el.scrollTop - target) < 1 ? el.scrollTop : null;
+    }, top);
+    if (at !== null) return at;
+    if (Date.now() > deadline) throw new Error(`the element never held a scroll to ${top}`);
+    await new Promise((r) => setTimeout(r, 50));
+  }
+}
+
+// The computed `props` of the element `locator` names. A redraw can replace the
+// element between Playwright finding it and the read, and an element off the
+// page reads "" for every style, so a read of one is taken again.
+export async function stylesOf(locator, props) {
+  const deadline = Date.now() + 5000;
+  for (;;) {
+    const got = await locator.evaluate((x, ps) => (x.isConnected ? Object.fromEntries(ps.map((p) => [p, getComputedStyle(x)[p]])) : null), props);
+    if (got) return got;
+    if (Date.now() > deadline) throw new Error(`${props.join(", ")}: the element never stayed on the page long enough to read`);
+    await new Promise((r) => setTimeout(r, 50));
+  }
+}
+export const styleOf = async (locator, prop) => (await stylesOf(locator, [prop]))[prop];

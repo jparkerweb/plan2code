@@ -93,7 +93,7 @@ Three levels -- auto-detected, always respect explicit user override:
 
 ### Step 3: Analyze
 
-**Who reviews:** when your tool can start a helper (subagent) and helpers are not switched off for this skill run, fill references/reviewer-brief.md and hand the analysis to ONE fresh helper; do not analyze in parallel. The brief carries the review-depth references, the dimensions and the finding format: send only the filled brief. With no helper, or one that fails or returns nothing usable, run this step in this session.
+**Who reviews:** when your tool can start a helper (subagent) and helpers are not switched off for this skill run, fill references/reviewer-brief.md and hand the analysis to ONE fresh helper; do not analyze in parallel. The brief carries the review-depth references, the dimensions and the finding format: send only the filled brief. Start the helper at the strength and effort references/helper-strength.md gives for review analysis (standard and high for a focused scope; strongest and high for branch or full scope, or changes touching security, auth or data), following its fallback order. With no helper, or one that fails or returns nothing usable, run this step in this session.
 
 **Load review depth (conditional on scope):**
 

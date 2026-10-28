@@ -6,7 +6,8 @@ Workflow notes for `pathfinder`, part of the web console contract (`console.md`)
 - Post `"stopWarning"` while no map exists (Steps 0 to 4) and `"stopWarning": ""`
   once it does, and `"specDir": "specs/<idea>"` when the folder is created
   (`console-stop.md` → Saying what stopping would cost).
-- The fresh-idea card carries `"templates": "idea"` (`console.md` → The kinds).
+- The menu after a decision is a `menu` card: its `options` are `trail --form C`'s, and the `Start fresh` one keeps its `"fresh": true` (the page words it "Start New Session" under the desktop app and asks the app for one on Send). Set the card's `command` to the resume command printed under `OR START FRESH`: the page copies it first. A declined confirm leaves you the pick: carry on as for any `Start fresh`.
+- The fresh-idea card carries `"templates": "idea"` and `"fill": "note"` (`console.md` → The kinds): the page fills that box from a Notebook tab when the person started with one.
 - A doc that is a file exactly as written (the map once it is on disk, a
   brief) goes up as a `file` block (`{ "id": "body", "file":
   "specs/<idea>/pathfinder/map.md" }`) rather than pasted. Keep `md` blocks

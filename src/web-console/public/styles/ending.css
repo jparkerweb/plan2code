@@ -50,6 +50,7 @@
    hover it may never get. This one IS the screen's reason to exist. */
 .handoff-copy { flex: none; }
 .handoff-note { margin: 8px 0 0; font-size: 12.5px; color: var(--ink-3); }
+.handoff-newsession { margin-top: 10px; }
 /* Continue here sits under the command row: keep a gap so the two do not touch. */
 .continue-offer { margin-top: 14px; }
 
@@ -91,8 +92,8 @@
 .presets-label { font-size: 12.5px; color: var(--ink-3); }
 
 /* "Before you close this": three rows on every finished screen. The icon sits
-   in a coloured circle and the label says the same thing, so no meaning rests
-   on colour alone. */
+   in a colored circle and the label says the same thing, so no meaning rests
+   on color alone. */
 .handoff-guide {
   margin: 20px 0 0; padding: 14px 16px;
   background: var(--panel-2); border: 1px solid var(--rule-2); border-radius: var(--radius);

@@ -45,6 +45,7 @@ import {
 } from "./inbox.mjs";
 import { serverWorkspace } from "./workspace.mjs";
 import { serverSubagents } from "./settings.mjs";
+import { inAppSignal } from "./in-app.mjs";
 import { chatOffline } from "./public/chat.js";
 import { meterView } from "./public/meter.js";
 import { startsClean } from "./public/hops.js";
@@ -53,7 +54,7 @@ import { handle } from "./routes.mjs";
 import { checkForUpdate } from "./update-check.mjs";
 
 const args = parseArgs(process.argv.slice(2));
-// Canonicalise before anything derives a path from it: a session dir reached
+// Canonicalize before anything derives a path from it: a session dir reached
 // through a junction or a subst'd drive is watched under the wrong spelling,
 // which is the libuv assert described below. The native realpath resolves
 // those AND expands 8.3 short names, which lets the watcher run in a TEMP
@@ -246,6 +247,13 @@ function ensureConversation(state) {
 // writer, this server.
 const subagents = serverSubagents({ dir: DIR, worktree: sessionWorktree });
 
+// Whether the agent driving this session is the desktop app: fixed for the
+// process's whole life (the env var that says so is set once, at spawn), so
+// read once rather than on every frame. The page uses it to drop advice that
+// only makes sense in a plain terminal (a command to copy into a new
+// conversation) in favor of the app's own Restart and Update skills buttons.
+const IN_APP = Boolean(inAppSignal());
+
 // What the page needs to draw itself, in the shape of the SSE state frame.
 // `have` names that exact view, for the page to hand back when it opens its
 // stream (see /events).
@@ -261,6 +269,7 @@ function stateFrame(state) {
     workspace: workspace.workspaceView(),
     meter: meterView(ledgerEntries()),
     subagents: subagents.view(state),
+    inApp: IN_APP,
     ...(updateInfo ? { update: updateInfo } : {}),
     have: haveKey(),
   };
@@ -516,12 +525,12 @@ setInterval(() => {
 
 // This is the mechanism, not a nicety.
 //
-// Windows has no real SIGTERM, Node only synthesises SIGINT for Ctrl+C on an
+// Windows has no real SIGTERM, Node only synthesizes SIGINT for Ctrl+C on an
 // attached console, and this process is detached with no console at all.
 // taskkill /F and Task Manager give zero cleanup opportunity. A Job Object with
 // KILL_ON_JOB_CLOSE would be the proper fix and needs native code, which is out
 // under zero-dependencies. So the only thing that reliably stops an orphan is
-// the server deciding to stop. Do not "optimise" this away.
+// the server deciding to stop. Do not "optimize" this away.
 setInterval(() => {
   const idle = Date.now() - lastContact;
   // Answers nobody has collected yet keep the server up (bounded by MAX_LIFE_MS):

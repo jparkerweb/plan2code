@@ -1,9 +1,9 @@
 # Chart Playbook
 > Part of plan2code-0-pathfinder — loaded at the top of MODE A (Chart). Expands the numbered Chart steps.
 >
-> **Backend note.** Steps 0, 2, and 4 — the gates and the grills — are identical either way, and so is every judgement call below (fog vs question, in scope vs out, the destination test). What differs is where Steps 3 and 5-7 put the bytes: on `**Backend:** github`, `github-issues.md` overrides the `map.md` and question-file templates here, the single-pass rule under *Step 6: Numbering and dependency order*, and the timing of the recon. Read it alongside this file, not instead of it.
+> **Backend note.** Steps 0, 2, and 4 — the gates and the grills — are identical either way, and so is every judgment call below (fog vs question, in scope vs out, the destination test). What differs is where Steps 3 and 5-7 put the bytes: on `**Backend:** github`, `github-issues.md` overrides the `map.md` and question-file templates here, the single-pass rule under *Step 6: Numbering and dependency order*, and the timing of the recon. Read it alongside this file, not instead of it.
 
-Charting produces a map and a set of question files. It resolves nothing by hand. Every judgement below serves one goal: put a sharp question on the map for everything you can phrase now, and leave everything else honestly in the fog.
+Charting produces a map and a set of question files. It resolves nothing by hand. Every judgment below serves one goal: put a sharp question on the map for everything you can phrase now, and leave everything else honestly in the fog.
 
 ---
 
@@ -33,7 +33,7 @@ This gate and the Step 4 no-fog off-ramp are the same instinct at two moments: t
 
 ## Step 2: The destination grill
 
-The destination is settled **first** because it fixes scope. Every later judgement — is this a question or fog, is this in scope or past the edge, is this map cleared — is measured against it. A vague destination makes all three unanswerable, and you will spend the rest of the map arguing about boundaries instead of decisions.
+The destination is settled **first** because it fixes scope. Every later judgment — is this a question or fog, is this in scope or past the edge, is this map cleared — is measured against it. A vague destination makes all three unanswerable, and you will spend the rest of the map arguing about boundaries instead of decisions.
 
 A destination is **one or two lines** describing what exists when the map clears. It is not a feature description. It is not a value proposition. It names the artifact and draws the edge.
 
@@ -50,7 +50,7 @@ Recommend an answer with each probe — the human corrects faster than they comp
 
 Two round trips, not six. Three probes each — exactly the cap, so neither batch needs splitting.
 
-Batch 2 bends the independence test on purpose. The arrival signal (5) can shift under the smallest arrival (4), so strictly it should be held back — but holding it costs a third round trip to catch a conflict that is rare and cheap to spot. The trade is to send them together and reconcile at the recap: if the smallest arrival comes back materially smaller than the artifact you were told about, re-check the arrival signal against it before writing the destination. A knowing trade here, not a licence to batch dependent probes elsewhere.
+Batch 2 bends the independence test on purpose. The arrival signal (5) can shift under the smallest arrival (4), so strictly it should be held back — but holding it costs a third round trip to catch a conflict that is rare and cheap to spot. The trade is to send them together and reconcile at the recap: if the smallest arrival comes back materially smaller than the artifact you were told about, re-check the arrival signal against it before writing the destination. A knowing trade here, not a license to batch dependent probes elsewhere.
 
 **Both batches go through the structured question tool.** Give each probe genuine candidate options with trade-offs and a recommendation; the built-in `Other` path is where the human composes the actor, a further feature to leave out, the arrival signal, or forcing-function detail in their own words. A clicked option is not written verbatim as the destination — the recap-confirmation tool call turns all six answers into the agreed one-or-two-line destination before disk write.
 
@@ -141,7 +141,7 @@ Recon is `legwork · AFK` — you do it alone, and you write it down **already r
 
 Two disciplines keep this file useful:
 
-- **Verify behaviour against actual code, never against a filename.** A file called `auditLogger.ts` may log nothing.
+- **Verify behavior against actual code, never against a filename.** A file called `auditLogger.ts` may log nothing.
 - **Scope the recon to the destination.** A recon of the whole repo is unreadable and stale in a week. If a subtree cannot plausibly be touched by the destination, say so in one line and move on.
 
 Record what you could **not** determine as an explicit gap. Gaps at recon time are often the first real fog bullets.
@@ -257,7 +257,7 @@ The destination grill went **deep on one thing**. This grill goes **wide on ever
 
 **You are not resolving anything here.** You are taking inventory. The instant an answer feels satisfying, you are probably going deep.
 
-### Recognising that you have gone deep
+### Recognizing that you have gone deep
 
 Watch for these. Any one of them means stop and pull back:
 
@@ -312,7 +312,7 @@ Record each answer as one line in your working notes with an area label. At the 
 
 ## The fog-vs-question test
 
-This is the single most important judgement in the skill. Get it wrong toward questions and the map fills with unanswerable stubs that block the frontier. Get it wrong toward fog and the map has nothing takeable on it.
+This is the single most important judgment in the skill. Get it wrong toward questions and the map fills with unanswerable stubs that block the frontier. Get it wrong toward fog and the map has nothing takeable on it.
 
 > **The test is whether you can STATE the question precisely now — not whether you can ANSWER it now.**
 
@@ -446,7 +446,7 @@ plan, not at shipped code. Continuous streaming to external systems is not on th
 - Questions are put to the human in plain English. Technical terms only where the term is the decision.
 - HITL questions are answered by the human in their own words. Never self-answered.
 - No new runtime dependency is assumed without a `research` question backing it.
-- Compliance language is reviewed by Dana before anything user-facing is finalised.
+- Compliance language is reviewed by Dana before anything user-facing is finalized.
 - Sketches are throwaway and live only under `pathfinder/sketch-NN/`.
 
 ## Glossary

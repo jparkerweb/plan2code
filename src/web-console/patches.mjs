@@ -648,6 +648,10 @@ export function validate(state) {
     if (item.templates != null && (item.kind !== "text" || item.templates !== "idea")) {
       problems.push(`item "${item.id}" has "templates": only a text item can carry it, and its only value is "idea".`);
     }
+    // The box the page fills from a Notebook tab picked at Start.
+    if (item.fill != null && (item.kind !== "text" || item.fill !== "note")) {
+      problems.push(`item "${item.id}" has "fill": only a text item can carry it, and its only value is "note".`);
+    }
     // The page compiles it as the person types, and a pattern that does not
     // compile throws there, on every keystroke, with nothing on screen to say why.
     if (item.pattern != null) {
@@ -663,6 +667,21 @@ export function validate(state) {
     }
     const recs = (item.options || []).filter((o) => o.recommended);
     if (recs.length > 1) problems.push(`item "${item.id}" marks ${recs.length} options recommended; at most one`);
+  }
+
+  // A note on a card is unanswered the moment no agent words follow it in its
+  // thread. Once that is true, no patch may move past it except one that
+  // finally replies: deleting the item drops it from state.items before this
+  // check ever sees it, and the session's own ending is exempt because
+  // nothing further is coming to answer into.
+  if (state.finish == null) {
+    for (const item of state.items) {
+      const thread = Array.isArray(item.thread) ? item.thread : [];
+      const last = thread[thread.length - 1];
+      if (isPlainObject(last) && last.who === "user") {
+        problems.push(`item "${item.id}" has an unanswered note from the person; reply in its thread before this patch`);
+      }
+    }
   }
 
   // The dashboard's page is the menu: a card posted there is drawn nowhere,

@@ -1,0 +1,19 @@
+//! The parts of the app that tests reach directly.
+
+pub mod agent_manager;
+pub mod agents;
+pub mod announce;
+pub mod attention;
+pub mod brief;
+pub mod console_supervisor;
+pub mod handoff;
+pub mod node_check;
+pub mod project;
+pub mod pty_host;
+pub mod quit_prompt;
+pub mod restart_brief;
+pub mod session_reader;
+pub mod settings;
+#[cfg(windows)]
+pub mod task_dialog;
+pub mod versions;

@@ -102,7 +102,7 @@ Pathfinder writes `specs/<idea>/PLAN-DRAFT-<YYYYMMDD>.md` with the header line:
 
 `**Status:** Phase 3 Complete - Resume at Phase 4`
 
-`/plan2code-1-plan` **already recognises that exact string.** Its "Check for Existing Progress" block, which runs before Phase 1, reads:
+`/plan2code-1-plan` **already recognizes that exact string.** Its "Check for Existing Progress" block, which runs before Phase 1, reads:
 
 `- Status "Phase 3 Complete - Resume at Phase 4": Resume at Phase 4`
 
@@ -128,7 +128,7 @@ Everything in the draft traces to something on the map. Nothing is invented at h
 | `## Destination` | Section 1 Executive Summary (2-3 sentences, present tense) and Section 7 Success Criteria (the destination restated as checkable outcomes) |
 | Resolved `grill` answers describing behavior | Section 2.1 Functional Requirements, one `FR-N` per decided behavior |
 | Resolved `grill` answers describing performance, security, scale, operability | Section 2.2 Non-Functional Requirements, one `NFR-N` each |
-| `## Out of scope` | Section 2.3 Out of Scope — copied line for line, wording and order intact. The ONLY permitted change is the link prefix: `./questions/` becomes `./pathfinder/questions/`, because the draft sits one level above the map. Do not re-word, re-order, or summarise; a re-worded scope boundary is a re-litigated one. |
+| `## Out of scope` | Section 2.3 Out of Scope — copied line for line, wording and order intact. The ONLY permitted change is the link prefix: `./questions/` becomes `./pathfinder/questions/`, because the draft sits one level above the map. Do not re-word, re-order, or summarize; a re-worded scope boundary is a re-litigated one. |
 | The testing-posture question's answer | Section 2.4 Testing Strategy table (Types / Phase Testing / Coverage) |
 | Resolved `research` answers and their `## Evidence` | Section 3 Tech Stack — the cited source becomes the Justification cell |
 | `questions/00-codebase-context.md` | The `## System Context` section, and the components table in 4.3 |
@@ -211,7 +211,7 @@ next run rather than truncating.
 | Entry points to change | `AuditExportJob`, registered in `HangfireStartup.ConfigureRecurringJobs()` | [Codebase context](./pathfinder/questions/00-codebase-context.md) |
 | Existing patterns to follow | Jobs resolve tenant scope via `ITenantScopeFactory`; no job reads config directly | [Codebase context](./pathfinder/questions/00-codebase-context.md) |
 | Integration surfaces | S3 (customer-owned), Hangfire scheduler, `TenantConfigStore` | [Destination auth](./pathfinder/questions/03-destination-auth.md), [Scheduling model](./pathfinder/questions/02-scheduling-model.md) |
-| Technical debt in the path | `AuditQuery` materialises full result sets; streaming reader needed before FR-1 | [Codebase context](./pathfinder/questions/00-codebase-context.md) |
+| Technical debt in the path | `AuditQuery` materializes full result sets; streaming reader needed before FR-1 | [Codebase context](./pathfinder/questions/00-codebase-context.md) |
 | System boundaries | Read-only against the audit store; writes only to customer buckets and the run-log table | [Retention and replay](./pathfinder/questions/04-retention-and-replay.md) |
 | Conventions in force | `AGENTS.md` present and read; its logging and DI conventions govern | `pathfinder/map.md` ## Ground rules |
 
@@ -280,7 +280,7 @@ Manifest sequence numbers are per tenant, monotonic, and reused on replay.
 | Cross-account role assumption is unexercised in this codebase | Medium | High | Spike `S3RoleAssumer` against a second AWS account before any other component |
 | A tenant exceeds the daily ceiling indefinitely | Medium | Medium | Spill oldest-first plus a three-run alarm — [Overflow behavior](./pathfinder/questions/08-overflow-behavior.md) |
 | Partial objects visible after a failed run | Low | High | Upload to a run-scoped prefix, publish the manifest last — the manifest is the commit point |
-| `AuditQuery` materialises full result sets | High | High | Streaming reader is a prerequisite, not an optimisation |
+| `AuditQuery` materializes full result sets | High | High | Streaming reader is a prerequisite, not an optimization |
 | Customer revokes the role mid-run | Low | Medium | Fail the run whole; replay window covers recovery |
 
 ## 7. Success Criteria
@@ -335,7 +335,7 @@ Ruled out of scope: [Failure notification](./pathfinder/questions/07-failure-not
 
 **No scrapable confidence numbers anywhere in the file.** Write the confidence as `Requirements-clarity 22/25 · Feasibility-technical 21/25 · Integration-points 23/25 · Risk-assessment 20/25` — hyphenated dimension labels, sub-scores over 25, no total, no percent sign.
 
-The reason is exact. When a PLAN-DRAFT carries no `METRICS_JSON` comment, the metrics collector falls back to scraping it by regex: an overall-confidence pattern that requires a literal `%`, and four breakdown patterns that match a bare `Requirements` / `Feasibility` / `Integration` / `Risk` followed directly by whitespace, a colon, or a pipe and then digits. **The breakdown patterns do not require a percent sign.** A pathfinder-written draft always lacks that comment until `/plan2code-1-plan` Phase 7 appends one, so both the percent sign *and* the bare dimension words have to be kept off the page — otherwise the pipeline records a planning-step confidence that no planning step ever produced. The hyphen in `Requirements-clarity` breaks the match; a table row reading `| Requirements | 11 |` does not, which is why the Scope Assessment row is labelled `Requirements decided`.
+The reason is exact. When a PLAN-DRAFT carries no `METRICS_JSON` comment, the metrics collector falls back to scraping it by regex: an overall-confidence pattern that requires a literal `%`, and four breakdown patterns that match a bare `Requirements` / `Feasibility` / `Integration` / `Risk` followed directly by whitespace, a colon, or a pipe and then digits. **The breakdown patterns do not require a percent sign.** A pathfinder-written draft always lacks that comment until `/plan2code-1-plan` Phase 7 appends one, so both the percent sign *and* the bare dimension words have to be kept off the page — otherwise the pipeline records a planning-step confidence that no planning step ever produced. The hyphen in `Requirements-clarity` breaks the match; a table row reading `| Requirements | 11 |` does not, which is why the Scope Assessment row is labeled `Requirements decided`.
 
 **The `**Next:**` footer must ship with both bullets.** Pathfinder cannot edit the planning skill, so those two instructions travel inside the artifact:
 

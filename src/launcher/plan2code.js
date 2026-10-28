@@ -5,25 +5,36 @@
  * `plan2code`: open the Plan2Code dashboard skill in Claude Code, Devin or Codex, in the
  * current directory.
  *
- * Runs one of:
- *   claude /plan2code --permission-mode bypassPermissions [extra args]
- *   devin --permission-mode bypass [extra args] -- /plan2code
- *   codex --dangerously-bypass-approvals-and-sandbox [extra args] $plan2code
+ * Runs one of (the bracketed flags only when permission prompts are turned off):
+ *   claude /plan2code [--permission-mode bypassPermissions] [extra args]
+ *   devin [--permission-mode bypass] [extra args] -- /plan2code
+ *   codex [--dangerously-bypass-approvals-and-sandbox] [extra args] $plan2code
  *
  * Codex starts a skill with `$name` rather than `/name`. When more than one CLI is installed
  * it asks which one, with the last pick as the default; with only one installed it uses that.
  * `--cli claude` / `--cli devin` / `--cli codex` skips the question. Before starting it asks
  * which model to run, from the curated list in models.json (shipped with every install) plus
  * any models the user added in User Preferences; Enter keeps the model the CLI last used, and
- * `--model` (or Codex's `-m`) skips the question. Any other arguments are forwarded to the CLI.
+ * `--model` (or Codex's `-m`) skips the question. Right after the agent is chosen, when it has a
+ * flag for skipping permission prompts (every built-in does; a custom agent only with bypassArgs),
+ * it asks whether to turn them off, Yes by default; `--keep-permissions` answers no, and with no
+ * terminal to ask on they are off. Any other arguments are forwarded to the CLI.
  * Self-contained, Node built-ins only: install.js copies this file to ~/.plan2code/bin/ and
  * points the global shims at it.
+ *
+ * Custom agents: the person's own agent CLIs in ~/.plan2code/agents.json (written by User
+ * Preferences in the web console) are listed after the built-ins and started the same way, with
+ * `--cli <id>` or from the menu. Their rules are copied from src/web-console/agents.mjs below.
  *
  * `--pick-folder` (passed by the desktop shortcut, never forwarded to the CLI) asks for the
  * project folder with a native folder picker first, starting on the folder picked last time.
  *
+ * When the desktop app is installed (~/.plan2code/app/) and a display exists, `plan2code` opens
+ * the app on the chosen folder, agent and model instead of running the agent in this terminal.
+ * `--classic` (never forwarded to the CLI), no app, and no display on Linux keep the flow above.
+ *
  * `plan2code update` starts no agent: it re-runs the npx install with `--update`, which
- * reinstalls whatever ~/.plan2code/install.json lists. Before an agent starts, one line says
+ * reinstalls whatever ~/.plan2code/install.json lists (the desktop app included). Before an agent starts, one line says
  * when a newer release is out (releaseNotice), read from the web console's cached release check
  * and never waiting on the network.
  *
@@ -42,7 +53,16 @@ const IS_WINDOWS = process.platform === 'win32';
 const IS_MAC = process.platform === 'darwin';
 const PICK_FOLDER_FLAG = '--pick-folder';
 const CLI_FLAG = '--cli';
+const CLASSIC_FLAG = '--classic';
+const KEEP_PERMISSIONS_FLAG = '--keep-permissions';
+// Where install.js puts the desktop app, and the one file in it the launcher starts.
+// PLAN2CODE_APP names a different executable (the tests start a stand-in this way).
+const APP_DIR = path.join(os.homedir(), '.plan2code', 'app');
+const APP_FILE = IS_WINDOWS ? 'plan2code-app.exe' : 'plan2code-app';
+// How long a freshly started app may take to fall over before the launcher calls it started.
+const APP_START_GRACE_MS = 1200;
 const STATE_FILE = path.join(os.homedir(), '.plan2code', 'launcher.json');
+const USER_AGENTS_FILE = path.join(os.homedir(), '.plan2code', 'agents.json');
 // Menus longer than this print compactly (id-only, two columns).
 const MODELS_MENU_COMPACT_AT = 30;
 const PICKER_PROMPT = 'Choose the project folder to open Plan2Code in';
@@ -111,44 +131,276 @@ function printIntro() {
   console.log('');
 }
 
-/** The CLIs that can open the dashboard, in menu order. `args` builds the full argument list. */
+/**
+ * The CLIs that can open the dashboard, in menu order. `args(extra, { bypass })` builds the full
+ * argument list, with `bypassArgs` in it only when permission prompts are off.
+ */
 const CLIS = [
   {
     id: 'claude',
     label: 'Claude Code',
     install: 'npm i -g @anthropic-ai/claude-code',
+    installUrl: 'https://code.claude.com/docs/en/setup',
     prompt: '/plan2code',
-    args: (extra) => ['/plan2code', '--permission-mode', 'bypassPermissions', ...extra],
+    bypassArgs: ['--permission-mode', 'bypassPermissions'],
+    args(extra, { bypass } = {}) {
+      return ['/plan2code', ...(bypass ? this.bypassArgs : []), ...extra];
+    },
   },
   {
     id: 'devin',
     label: 'Devin',
     install: 'https://devin.ai',
+    installUrl: 'https://docs.devin.ai/work-with-devin/devin-cli',
     prompt: '/plan2code',
-    args: (extra) => ['--permission-mode', 'bypass', ...extra, '--', '/plan2code'],
+    bypassArgs: ['--permission-mode', 'bypass'],
+    args(extra, { bypass } = {}) {
+      return [...(bypass ? this.bypassArgs : []), ...extra, '--', '/plan2code'];
+    },
   },
   {
     id: 'codex',
     label: 'Codex',
     install: 'npm i -g @openai/codex',
+    installUrl: 'https://github.com/openai/codex',
     prompt: '$plan2code',
+    bypassArgs: ['--dangerously-bypass-approvals-and-sandbox'],
     // Codex mentions a skill with `$name`; the prompt is its one positional argument.
-    args: (extra) => ['--dangerously-bypass-approvals-and-sandbox', ...extra, '$plan2code'],
+    args(extra, { bypass } = {}) {
+      return [...(bypass ? this.bypassArgs : []), ...extra, '$plan2code'];
+    },
   },
 ];
 
-/** What to do when no agent is installed: how to get one and how to run the skill from it. */
-const SKILL_STEPS = [
-  'Plan2Code runs inside an AI coding agent. To use it:',
-  '  1. Install one: Claude Code (npm i -g @anthropic-ai/claude-code), Codex (npm i -g @openai/codex) or Devin (https://devin.ai).',
-  '  2. Open a new terminal and cd into the project you want to work on.',
-  '  3. Start your agent there, then type /plan2code (Claude Code, Devin) or $plan2code (Codex).',
-];
-
 /** The CLI ids as prose: "`claude`, `devin` or `codex`", or without the backticks for `quote` ''. */
-function cliIdList(quote = '`') {
-  const ids = CLIS.map((cli) => quote + cli.id + quote);
+function cliIdList(quote = '`', clis = CLIS) {
+  const ids = clis.map((cli) => quote + cli.id + quote);
   return `${ids.slice(0, -1).join(', ')} or ${ids[ids.length - 1]}`;
+}
+
+/** An install command with its official page after it, unless the command is the page. */
+function installLine(cli) {
+  return cli.installUrl && cli.installUrl !== cli.install ? `${cli.install} (${cli.installUrl})` : cli.install;
+}
+
+/**
+ * What to do when no agent can run: what an agent CLI is, how to get each built-in, where to add
+ * another, and how to run the skill from an agent. `missing` names custom agents whose command
+ * was not found. Printed to stderr; the caller exits 127.
+ */
+function printNoAgentGuidance(missing = []) {
+  console.error(`${ce.red('plan2code:')} Plan2Code runs inside an AI coding agent CLI, and none was found on your PATH.`);
+  console.error('');
+  console.error(ce.bright('Install one:'));
+  for (const cli of CLIS) console.error(`  ${ce.cyan(cli.label)}: ${installLine(cli)}`);
+  console.error('');
+  console.error('Already use another agent CLI? Add it in User Preferences (web console) under Agents, then run `plan2code` again.');
+  for (const cli of missing) console.error(ce.yellow(`Custom agent ${cli.label}: ${cli.entry.command} not found`));
+  console.error('');
+  console.error('After installing, open a new terminal, cd into the project you want to work on and run `plan2code`.');
+  console.error('Or open your agent in your project and type /plan2code ($plan2code in Codex).');
+}
+
+// ---------------------------------------------------------------------------------------------
+// Custom agents. normalizeAgents and buildArgs are copies of the rules in
+// src/web-console/agents.mjs (this file is installed alone and cannot import it). The shared
+// cases in scripts/fixtures/agents-cases.json are the contract: change a rule there first.
+
+const AGENTS_SCHEMA = 1;
+const MAX_AGENTS = 50;
+const BUILTIN_AGENT_IDS = ['claude', 'devin', 'codex'];
+const AGENT_ID = /^[a-z0-9][a-z0-9-]{0,31}$/;
+const MAX_NAME = 60;
+const DEFAULT_PROMPT = '/plan2code';
+const DEFAULT_MODEL_ARGS = ['--model', '{model}'];
+const LIST_FIELDS = ['args', 'bypassArgs', 'modelArgs'];
+
+/**
+ * The file as the launcher uses it: `raw` is its text (or the parsed value; undefined or null
+ * when there is no file). Bad entries are skipped and named in `warnings`, and a bad file means
+ * no agents. Never throws.
+ */
+function normalizeAgents(raw) {
+  const warnings = [];
+  if (raw === undefined || raw === null) return { agents: [], warnings };
+  let file = raw;
+  if (typeof raw === 'string') {
+    try {
+      file = JSON.parse(raw);
+    } catch {
+      return { agents: [], warnings: ['agents.json is not valid JSON, so no custom agents are used'] };
+    }
+  }
+  if (!file || typeof file !== 'object' || Array.isArray(file)) {
+    return { agents: [], warnings: ['agents.json is not an object, so no custom agents are used'] };
+  }
+  if (file.schema !== AGENTS_SCHEMA) {
+    return { agents: [], warnings: [`agents.json has schema ${JSON.stringify(file.schema)}, not ${AGENTS_SCHEMA}, so no custom agents are used`] };
+  }
+  if (file.agents === undefined || file.agents === null) return { agents: [], warnings };
+  if (!Array.isArray(file.agents)) return { agents: [], warnings: ['agents.json: agents is not a list, so no custom agents are used'] };
+
+  let list = file.agents;
+  if (list.length > MAX_AGENTS) {
+    warnings.push(`agents.json lists ${list.length} agents; only the first ${MAX_AGENTS} are used`);
+    list = list.slice(0, MAX_AGENTS);
+  }
+  const agents = [];
+  const ids = new Set();
+  const names = new Set();
+  list.forEach((entry, index) => {
+    const out = checkAgentEntry(entry, ids, names);
+    if (out.error) return warnings.push(`agents[${index}] skipped: ${out.error}`);
+    ids.add(out.agent.id);
+    names.add(out.agent.name.toLowerCase());
+    agents.push(out.agent);
+  });
+  return { agents, warnings };
+}
+
+// One entry against the rules: { agent } with the defaults filled and any unknown keys kept,
+// or { error } naming the first thing wrong.
+function checkAgentEntry(entry, ids, names) {
+  if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return { error: 'not an object' };
+  const { id } = entry;
+  if (typeof id !== 'string' || !id) return { error: 'id is missing' };
+  if (BUILTIN_AGENT_IDS.includes(id)) return { error: `id "${id}" belongs to a built-in agent` };
+  if (!AGENT_ID.test(id)) return { error: `id "${id}" must be 1 to 32 lowercase letters, digits or dashes, starting with a letter or digit` };
+  if (ids.has(id)) return { error: `id "${id}" is already used` };
+
+  const name = typeof entry.name === 'string' ? entry.name.trim() : '';
+  if (!name) return { error: 'name is missing' };
+  if (name.length > MAX_NAME) return { error: `name is longer than ${MAX_NAME} characters` };
+  if (names.has(name.toLowerCase())) return { error: `name "${name}" is already used` };
+
+  const command = typeof entry.command === 'string' ? entry.command.trim() : '';
+  if (!command) return { error: 'command is missing' };
+
+  const agent = { ...entry, id, name, command };
+  for (const field of LIST_FIELDS) {
+    const value = entry[field];
+    if (value === undefined || value === null) {
+      agent[field] = field === 'modelArgs' ? [...DEFAULT_MODEL_ARGS] : [];
+    } else if (!Array.isArray(value) || value.some((v) => typeof v !== 'string')) {
+      return { error: `${field} must be a list of text` };
+    } else agent[field] = [...value];
+  }
+
+  if (entry.prompt === undefined || entry.prompt === null) agent.prompt = DEFAULT_PROMPT;
+  else if (typeof entry.prompt !== 'string') return { error: 'prompt must be text' };
+
+  if (entry.models === undefined || entry.models === null) agent.models = [];
+  else if (!Array.isArray(entry.models)) return { error: 'models must be a list' };
+  else {
+    agent.models = [];
+    const seen = new Set();
+    for (const model of entry.models) {
+      if (!model || typeof model !== 'object' || typeof model.id !== 'string') return { error: 'every model in models needs an id' };
+      const modelId = model.id.trim();
+      if (!modelId || seen.has(modelId)) continue;
+      seen.add(modelId);
+      const label = typeof model.label === 'string' ? model.label.trim() : '';
+      agent.models.push(label ? { id: modelId, label } : { id: modelId });
+    }
+  }
+  return { agent };
+}
+
+/**
+ * The arguments that start an entry, in order: `args` with {prompt} filled (the prompt appended
+ * when no argument holds it), then `modelArgs` when a model is chosen, then `bypassArgs` when
+ * checks are off. `prompt` defaults to the entry's own; a blank one drops an argument that is
+ * exactly {prompt}. Plain text in, plain text out: no quoting for any shell.
+ */
+function buildArgs(entry, { prompt, model, bypass } = {}) {
+  const text = prompt === undefined ? (typeof entry.prompt === 'string' ? entry.prompt : DEFAULT_PROMPT) : String(prompt ?? '');
+  const blank = !text.trim();
+  const out = [];
+  let placed = false;
+  for (const arg of entry.args || []) {
+    if (!arg.includes('{prompt}')) {
+      out.push(arg);
+      continue;
+    }
+    placed = true;
+    if (arg === '{prompt}' && blank) continue;
+    out.push(arg.split('{prompt}').join(text));
+  }
+  if (!placed && !blank) out.push(text);
+  if (model) {
+    for (const arg of entry.modelArgs || DEFAULT_MODEL_ARGS) out.push(arg.split('{model}').join(model));
+  }
+  if (bypass) out.push(...(entry.bypassArgs || []));
+  return out;
+}
+
+/** `args` without `--model <x>` / `--model=<x>`: a custom agent gets its model through modelArgs. */
+function withoutModelFlag(args) {
+  const out = [];
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === '--model') i++;
+    else if (!args[i].startsWith('--model=')) out.push(args[i]);
+  }
+  return out;
+}
+
+/**
+ * The custom agents in agents.json as CLIS-shaped entries, none resolved yet. A missing or
+ * malformed file gives an empty list (and, with `print` on, which is a terminal only, one stderr
+ * line per warning), never an error. chooseCli() asks once, so each warning shows once per run.
+ */
+function customClis(file = USER_AGENTS_FILE, print = Boolean(process.stderr.isTTY)) {
+  let raw = null;
+  try {
+    raw = fs.readFileSync(file, 'utf8');
+  } catch {}
+  const { agents, warnings } = normalizeAgents(raw);
+  if (print) for (const warning of warnings) console.error(`${ce.yellow('plan2code:')} agents.json: ${warning}`);
+  return agents.map((entry) => ({
+    id: entry.id,
+    label: entry.name,
+    install: null,
+    prompt: entry.prompt,
+    custom: true,
+    entry,
+    bypassArgs: entry.bypassArgs,
+    args: (extra, { bypass } = {}) => [...buildArgs(entry, { bypass, model: modelFrom(extra, entry.id) }), ...withoutModelFlag(extra)],
+  }));
+}
+
+/**
+ * Where a custom agent's command runs from, as { path, fullPath }, or null. A command with a
+ * path separator is checked as a file (PATHEXT tried on Windows when it has no extension); a
+ * bare name is looked for on PATH. Never runs anything.
+ */
+function resolveCustomCommand(command) {
+  const name = String(command ?? '').trim().replace(/^"(.*)"$/, '$1');
+  if (!name) return null;
+  const isFile = (file) => {
+    try {
+      return fs.statSync(file).isFile();
+    } catch {
+      return false;
+    }
+  };
+  const extensions = IS_WINDOWS ? (process.env.PATHEXT || '.EXE;.CMD;.BAT;.COM').split(';').filter(Boolean) : [];
+  if (name.includes('/') || (IS_WINDOWS && name.includes('\\'))) {
+    const full = path.resolve(name);
+    const found = (IS_WINDOWS && !path.extname(full) ? extensions.map((ext) => full + ext) : [full]).find(isFile);
+    return found ? { path: found, fullPath: true } : null;
+  }
+  let found = findOnPath(name);
+  // A bare name that already has an extension (goose.cmd) is not found by findOnPath, which adds one.
+  if (!found && IS_WINDOWS && path.extname(name)) {
+    for (const dir of (process.env.PATH || '').split(path.delimiter).filter(Boolean)) {
+      const candidate = path.join(dir.replace(/^"|"$/g, ''), name);
+      if (isFile(candidate)) {
+        found = candidate;
+        break;
+      }
+    }
+  }
+  return found ? { path: found, fullPath: false } : null;
 }
 
 // The curated menu ships beside this file (models.json, overwritten by every install); models
@@ -296,6 +548,60 @@ public static class Plan2CodeFolderPicker {
 `;
 
 /**
+ * The value from `reg query <key> /v <name>` output: the text after the REG_SZ or
+ * REG_EXPAND_SZ column on its line, or null.
+ */
+function parseRegQueryValue(output) {
+  for (const line of String(output || '').split(/\r?\n/)) {
+    const match = /\sREG_(?:EXPAND_)?SZ\s+(.*)$/.exec(line);
+    if (match && match[1].trim()) return match[1].trim();
+  }
+  return null;
+}
+
+/** `%NAME%` replaced from `env` (case-insensitive, as Windows reads it); an unknown name stays as written. */
+function expandPercentVars(text, env = process.env) {
+  const lookup = (name) => {
+    const key = Object.keys(env).find((k) => k.toUpperCase() === name.toUpperCase());
+    return key === undefined ? undefined : env[key];
+  };
+  return text.replace(/%([^%]+)%/g, (whole, name) => lookup(name) ?? whole);
+}
+
+/**
+ * Windows only: add to this process's PATH the folders of the system then the user PATH as saved
+ * in the registry (what a newly opened terminal gets) that it does not have yet. A terminal opened
+ * before an agent's installer added its folder keeps the old PATH, so the agent was offered in
+ * some terminals and not others. Changing process.env also hands the folders to the agent.
+ */
+function addSavedWindowsPath() {
+  // The launcher tests run with a PATH of stand-ins only, which the saved PATH must not widen.
+  if (!IS_WINDOWS || process.env.PLAN2CODE_NO_SAVED_PATH) return;
+  const reg = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'reg.exe');
+  const pathKey = Object.keys(process.env).find((key) => key.toUpperCase() === 'PATH') || 'PATH';
+  const dirs = (process.env[pathKey] || '').split(path.delimiter).filter(Boolean);
+  const known = new Set(dirs.map((dir) => path.resolve(dir.replace(/^"|"$/g, '')).toLowerCase()));
+  const added = [];
+  for (const key of ['HKLM\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment', 'HKCU\\Environment']) {
+    let out;
+    try {
+      out = spawnSync(reg, ['query', key, '/v', 'Path'], { encoding: 'utf8', windowsHide: true, timeout: 5000 });
+    } catch {
+      continue;
+    }
+    const value = parseRegQueryValue(out && out.stdout);
+    if (!value) continue;
+    for (const dir of expandPercentVars(value).split(path.delimiter).filter(Boolean)) {
+      const id = path.resolve(dir.replace(/^"|"$/g, '')).toLowerCase();
+      if (known.has(id)) continue;
+      known.add(id);
+      added.push(dir);
+    }
+  }
+  if (added.length) process.env[pathKey] = [...dirs, ...added].join(path.delimiter);
+}
+
+/**
  * Resolve a command on PATH the way the shell would, including PATHEXT on Windows.
  * Returns the full path, or null when it is not installed.
  */
@@ -397,25 +703,46 @@ function announceCli(cli) {
 }
 
 /**
+ * The CLIs that can run, in menu order (the built-ins found on PATH, then the custom agents whose
+ * command resolves), and the custom agents left out because theirs does not.
+ */
+function runnableClis(customs) {
+  const installed = CLIS.map((cli) => ({ ...cli, path: findOnPath(cli.id) })).filter((cli) => cli.path);
+  // A custom agent whose command does not resolve is left out of the menu and named when nothing can run.
+  const missing = [];
+  for (const cli of customs) {
+    const found = resolveCustomCommand(cli.entry.command);
+    if (found) installed.push({ ...cli, ...found });
+    else missing.push(cli);
+  }
+  return { installed, missing };
+}
+
+/**
  * Choose the CLI from those installed: the `--cli` pick, the only one installed, or a numbered
  * menu defaulting to the last pick. Returns `{ cli }` with its resolved `path`, or `{ code }` (the
  * exit code) after printing why none can be used.
  */
 async function chooseCli(requested) {
-  const installed = CLIS.map((cli) => ({ ...cli, path: findOnPath(cli.id) })).filter((cli) => cli.path);
+  addSavedWindowsPath();
+  const customs = customClis();
+  const all = [...CLIS, ...customs];
+  const { installed, missing } = runnableClis(customs);
 
   if (requested !== undefined) {
-    const known = CLIS.find((cli) => cli.id === requested);
+    const known = all.find((cli) => cli.id === requested);
     if (!known) {
-      console.error(`${ce.red('plan2code:')} --cli takes ${cliIdList('')}${requested ? `, not "${requested}"` : ''}.`);
+      console.error(`${ce.red('plan2code:')} --cli takes ${cliIdList('', all)}${requested ? `, not "${requested}"` : ''}.`);
       return { code: 2 };
     }
     const found = installed.find((cli) => cli.id === requested);
-    if (!found) {
+    if (!found && known.custom) {
+      console.error(`${ce.red('plan2code:')} Custom agent ${known.label}: ${known.entry.command} not found`);
+    } else if (!found) {
       console.error(`${ce.red('plan2code:')} the \`${known.id}\` CLI was not found on your PATH.`);
       console.error('');
       console.error(`To use ${known.label}:`);
-      console.error(`  1. Install it: ${known.install}`);
+      console.error(`  1. Install it: ${installLine(known)}`);
       console.error('  2. Open a new terminal and cd into the project you want to work on.');
       console.error(`  3. Run \`plan2code --cli ${known.id}\` there, or start ${known.label} and type ${known.prompt}.`);
     }
@@ -424,11 +751,7 @@ async function chooseCli(requested) {
   }
 
   if (installed.length === 0) {
-    console.error(`${ce.red('plan2code:')} none of ${cliIdList()} was found on your PATH.`);
-    console.error('');
-    for (const step of SKILL_STEPS) console.error(step);
-    console.error('');
-    console.error('Already have an agent? Open it in your project and type /plan2code ($plan2code in Codex), or install it and run `plan2code` again.');
+    printNoAgentGuidance(missing);
     return { code: 127 };
   }
   if (installed.length === 1 || !process.stdin.isTTY) {
@@ -454,6 +777,25 @@ async function chooseCli(requested) {
     if (/^\d+$/.test(answer) && byNumber) return { cli: byNumber };
     if (byName) return { cli: byName };
     console.log(c.yellow(`Type a number from 1 to ${installed.length}, or press Enter for ${installed[defaultIndex].label}.`));
+  }
+}
+
+/**
+ * Whether to start the agent with permission prompts off. Asked only for an agent that has a flag
+ * for it (a custom agent may have none), with Yes as the default; `--keep-permissions` answers no
+ * without asking, and with no terminal to ask on the prompts are off.
+ */
+async function chooseBypass(cli, keep) {
+  if (!cli.bypassArgs || !cli.bypassArgs.length || keep) return false;
+  if (!process.stdin.isTTY) return true;
+  console.log('');
+  console.log(c.bright(`Turn ${cli.label}'s permission prompts off?`));
+  console.log(c.dim(`It would read, edit and run commands in this project without asking (${cli.bypassArgs.join(' ')}).`));
+  for (;;) {
+    const answer = (await ask(`Prompts off? ${c.green('[Y/n]')}: `)).trim().toLowerCase();
+    if (!answer || answer === 'y' || answer === 'yes') return true;
+    if (answer === 'n' || answer === 'no') return false;
+    console.log(c.yellow('Type n to keep the prompts, or press Enter to turn them off.'));
   }
 }
 
@@ -492,6 +834,8 @@ function readJsonFile(file) {
 
 /** The model menu for one CLI: the curated list plus the user's additions from User Preferences. */
 function listModels(cli) {
+  // A custom agent's menu is its own models: no shipped list and no User Preferences additions.
+  if (cli.custom) return cli.entry.models.map((m) => ({ id: m.id, label: m.label || '' }));
   return mergeModels(
     modelEntries(readJsonFile(SHIPPED_MODELS_FILE), cli.id),
     modelEntries(readJsonFile(USER_MODELS_FILE), cli.id)
@@ -499,12 +843,20 @@ function listModels(cli) {
 }
 
 /**
- * Ask which model to run: a numbered list with Enter keeping the model the CLI last used.
+ * Ask which model to run: a numbered list with Enter keeping the model the CLI last used (a
+ * custom agent: its own default).
  * A pick appends `--model <id>` to `extraArgs`. Without an interactive terminal there is
  * nobody to ask, so it just says which model will be used, as it always has.
  */
 async function chooseModel(cli, extraArgs) {
+  if (cli.custom && !listModels(cli).length) return;
+  // A custom agent has no last-used model to keep: left alone it starts on its own default.
+  const keep = cli.custom ? 'its own default model' : 'the last-used model';
   if (!process.stdin.isTTY) {
+    if (cli.custom) {
+      console.log(`${cli.label} will start with its own default model. To pick one, run \`plan2code --model <id>\`.`);
+      return;
+    }
     console.log(`${cli.label} will use the model you last used in it. To use a different model, open`);
     console.log(`\`${cli.id}\` on its own and switch model there, or run \`plan2code --model <name>\`.`);
     return;
@@ -525,10 +877,10 @@ async function chooseModel(cli, extraArgs) {
       console.log(left.replace(`${i + 1})`, c.cyan(`${i + 1})`)) + right);
     }
   } else {
-    models.forEach((model, i) => console.log(`  ${c.cyan(`${i + 1})`)} ${model.id} — ${model.label}`));
+    models.forEach((model, i) => console.log(!model.label ? `  ${c.cyan(`${i + 1})`)} ${model.id}` : `  ${c.cyan(`${i + 1})`)} ${model.id} — ${model.label}`));
   }
   for (;;) {
-    const answer = (await ask(`Choice ${c.green('[keep last used]')}: `)).trim().toLowerCase();
+    const answer = (await ask(`Choice ${c.green(cli.custom ? '[default]' : '[keep last used]')}: `)).trim().toLowerCase();
     if (!answer) return;
     const byNumber = models[Number(answer) - 1];
     const byName = models.find((model) => model.id === answer || model.label.toLowerCase() === answer);
@@ -537,8 +889,76 @@ async function chooseModel(cli, extraArgs) {
       extraArgs.push('--model', model.id);
       return;
     }
-    console.log(c.yellow(`Type a number from 1 to ${models.length}, a model name, or press Enter to keep the last-used model.`));
+    console.log(c.yellow(`Type a number from 1 to ${models.length}, a model name, or press Enter to keep ${keep}.`));
   }
+}
+
+/** A window can open: assumed on Windows and macOS, and on Linux only with an X11 or Wayland display. */
+function hasDisplay() {
+  // sshd sets one of these for an SSH login on both platforms, and there is no window to open
+  // there. A plain background/service context (no SSH, no desktop) cannot be told apart from an
+  // ordinary desktop login on Windows or macOS without a new dependency, so SSH is as far as this goes.
+  if ((IS_WINDOWS || IS_MAC) && (process.env.SSH_CONNECTION || process.env.SSH_TTY)) return false;
+  return IS_WINDOWS || IS_MAC || Boolean(process.env.DISPLAY || process.env.WAYLAND_DISPLAY);
+}
+
+/** The installed desktop app's executable, or null when it is not installed. */
+function findApp() {
+  const file = process.env.PLAN2CODE_APP || path.join(APP_DIR, APP_FILE);
+  try {
+    return fs.statSync(file).isFile() ? file : null;
+  } catch {
+    return null;
+  }
+}
+
+/** The model the forwarded arguments pick (`--model x`, `--model=x`, Codex's `-m x`), or null. */
+function modelFrom(args, cliId) {
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg === '--model' || (cliId === 'codex' && arg === '-m')) return args[i + 1] || null;
+    if (arg.startsWith('--model=')) return arg.slice('--model='.length) || null;
+    if (cliId === 'codex' && arg.startsWith('-m=')) return arg.slice(3) || null;
+  }
+  return null;
+}
+
+/**
+ * Start the desktop app on the folder, agent and model and let it run on its own. Resolves true
+ * once it has started, false (after one line saying why) when it could not, so the caller can
+ * carry on with today's terminal flow.
+ */
+function startApp(app, { cwd, cliId, model }) {
+  const args = ['--project', cwd, '--agent', cliId, ...(model ? ['--model', model] : [])];
+  return new Promise((resolve) => {
+    let child;
+    try {
+      child = spawnCommand(app, args, { cwd, detached: true, stdio: 'ignore' });
+    } catch (error) {
+      console.error(`${ce.yellow('plan2code:')} could not start the app (${error.message}); opening in this terminal instead.`);
+      return resolve(false);
+    }
+    child.once('error', (error) => {
+      console.error(`${ce.yellow('plan2code:')} could not start the app (${error.message}); opening in this terminal instead.`);
+      resolve(false);
+    });
+    child.once('spawn', () => {
+      // A program that starts and then dies (a missing system library is reported after the
+      // exec, not as a spawn error) must not strand the person with a closed terminal: an exit
+      // with a failure inside the grace period falls back to the terminal flow.
+      const timer = setTimeout(() => {
+        child.removeAllListeners('exit');
+        child.unref();
+        resolve(true);
+      }, APP_START_GRACE_MS);
+      child.once('exit', (code, signal) => {
+        clearTimeout(timer);
+        if (code === 0) return resolve(true);
+        console.error(`${ce.yellow('plan2code:')} the app exited at once (${signal ? `signal ${signal}` : `code ${code}`}); opening in this terminal instead.`);
+        resolve(false);
+      });
+    });
+  });
 }
 
 /**
@@ -588,7 +1008,7 @@ function getPickerCommand(start) {
     };
   }
 
-  if (!process.env.DISPLAY && !process.env.WAYLAND_DISPLAY) return null;
+  if (!hasDisplay()) return null;
   if (findOnPath('zenity')) {
     return { command: 'zenity', args: ['--file-selection', '--directory', `--title=${PICKER_PROMPT}`, `--filename=${start}${path.sep}`] };
   }
@@ -599,8 +1019,41 @@ function getPickerCommand(start) {
 }
 
 /**
+ * A git repo (a `.git` entry, file or directory since worktrees use a file), or has `AGENTS.md`
+ * or a `specs/` folder: enough to call `dir` a project without asking first.
+ */
+function looksLikeProject(dir) {
+  return (
+    fs.existsSync(path.join(dir, '.git')) ||
+    fs.existsSync(path.join(dir, 'AGENTS.md')) ||
+    isDirectory(path.join(dir, 'specs'))
+  );
+}
+
+/**
+ * True to proceed with `cwd`: it already looks like a project, or the person confirmed it when
+ * asked. Without a terminal to ask there is nobody to confirm, so it refuses rather than risk
+ * opening the app (or the terminal flow) on the wrong folder.
+ */
+async function confirmProject(cwd) {
+  if (looksLikeProject(cwd)) return true;
+  if (!process.stdin.isTTY) {
+    console.error(
+      `${ce.yellow('plan2code:')} ${cwd} doesn't look like a project (no git repo, AGENTS.md or specs folder); run \`plan2code\` there from a terminal to confirm, or cd into a project first.`
+    );
+    return false;
+  }
+  const answer = (
+    await ask(`${c.yellow(cwd)} doesn't look like a project (no git repo, AGENTS.md or specs folder). Open Plan2Code there anyway? [y/N]: `)
+  )
+    .trim()
+    .toLowerCase();
+  return answer === 'y' || answer === 'yes';
+}
+
+/**
  * Ask for the project folder: the native picker when there is one, a typed path otherwise.
- * Returns the folder, or null when the person cancelled.
+ * Returns the folder, or null when the person canceled.
  */
 async function pickFolder() {
   const start = readLastFolder();
@@ -616,7 +1069,7 @@ async function pickFolder() {
       windowsHide: true,
     });
     const folder = (result.stdout || '').trim();
-    // Pickers exit 0 or 1 with nothing printed when cancelled; anything else means the picker
+    // Pickers exit 0 or 1 with nothing printed when canceled; anything else means the picker
     // itself failed, so fall through to the typed prompt rather than giving up.
     if (!result.error && folder && result.status === 0) return path.resolve(folder);
     if (!result.error && !folder && (result.status === 0 || result.status === 1)) return null;
@@ -648,27 +1101,53 @@ async function exitWith(code, fromShortcut) {
 
 /**
  * Spawn a resolved command with `args`. A .cmd/.bat wrapper on Windows goes through cmd.exe,
- * since Node refuses to spawn one without a shell.
+ * since Node refuses to spawn one without a shell. `options.fromFullPath` (never passed on to
+ * spawn) marks a custom agent whose command was given as a full path: that wrapper runs as
+ * `cmd /c <file name> ...args` with its folder first on the child's PATH, so a space in the
+ * folder is never in the cmd line itself.
  */
 function spawnCommand(file, args, options) {
-  return IS_WINDOWS && /\.(cmd|bat)$/i.test(file)
-    ? spawn(
-        process.env.ComSpec || 'cmd.exe',
-        ['/d', '/s', '/c', `"${[file, ...args].map(quoteForCmd).join(' ')}"`],
-        { ...options, windowsVerbatimArguments: true }
-      )
-    : spawn(file, args, options);
+  const { fromFullPath, ...spawnOptions } = options || {};
+  if (!(IS_WINDOWS && /\.(cmd|bat)$/i.test(file))) return spawn(file, args, spawnOptions);
+  const shell = process.env.ComSpec || 'cmd.exe';
+  if (!fromFullPath) {
+    return spawn(shell, ['/d', '/s', '/c', `"${[file, ...args].map(quoteForCmd).join(' ')}"`], {
+      ...spawnOptions,
+      windowsVerbatimArguments: true,
+    });
+  }
+  const env = { ...(spawnOptions.env || process.env) };
+  // Windows env names are case-insensitive and the copy keeps the original spelling (Path).
+  const pathKey = Object.keys(env).find((key) => key.toUpperCase() === 'PATH') || 'PATH';
+  env[pathKey] = path.dirname(file) + path.delimiter + (env[pathKey] || '');
+  // cmd looks in the current folder (the project) before PATH: a same-named
+  // file there must not run in the agent's place.
+  env.NoDefaultCurrentDirectoryInExePath = '1';
+  return spawn(shell, ['/d', '/s', '/c', `"${[path.basename(file), ...args].map(quoteForCmd).join(' ')}"`], {
+    ...spawnOptions,
+    env,
+    windowsVerbatimArguments: true,
+  });
 }
 
-/** `plan2code update`: the npx install with --update, passing npx's exit code through. No agent starts. */
-function runUpdate() {
+/**
+ * `plan2code update`: the npx install with --update, passing npx's exit code through. No agent
+ * starts. That one install updates the skills, this launcher and the desktop app (when it is
+ * installed) together, so the three never drift apart.
+ */
+/** `tag` pins the install to that release (the desktop app's own Update skills button, so it
+ * never pulls in work a published release does not have yet); omitted, `plan2code update` keeps
+ * pulling the latest off `main` as it always has. */
+function runUpdate(tag) {
   console.log('Updating Plan2Code...');
+  console.log(c.dim('One update covers the skills, the plan2code command and the desktop app (when installed).'));
   const npx = findOnPath('npx');
   if (!npx) {
     console.error(`${ce.red('plan2code:')} npx was not found on your PATH. It comes with Node.js 18+ (https://nodejs.org).`);
     return process.exit(127);
   }
-  const child = spawnCommand(npx, ['--yes', '--allow-git=all', `git+${REPO_URL}`, '--update'], { stdio: 'inherit' });
+  const spec = tag ? `git+${REPO_URL}#${tag}` : `git+${REPO_URL}`;
+  const child = spawnCommand(npx, ['--yes', '--allow-git=all', spec, '--update'], { stdio: 'inherit' });
   for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) {
     process.on(signal, () => {});
   }
@@ -723,15 +1202,27 @@ async function releaseNotice() {
 
 async function launch() {
   const argv = process.argv.slice(2);
-  if (argv[0] === UPDATE_COMMAND) return runUpdate();
+  if (argv[0] === UPDATE_COMMAND) {
+    const tagAt = argv.indexOf('--tag');
+    return runUpdate(tagAt >= 0 ? argv[tagAt + 1] : undefined);
+  }
   const fromShortcut = argv.includes(PICK_FOLDER_FLAG);
-  const { cli: requestedCli, rest: extraArgs } = takeCliFlag(argv.filter((arg) => arg !== PICK_FOLDER_FLAG));
+  const classic = argv.includes(CLASSIC_FLAG);
+  const keepPermissions = argv.includes(KEEP_PERMISSIONS_FLAG);
+  const { cli: requestedCli, rest: extraArgs } = takeCliFlag(
+    argv.filter((arg) => arg !== PICK_FOLDER_FLAG && arg !== CLASSIC_FLAG && arg !== KEEP_PERMISSIONS_FLAG)
+  );
 
   printIntro();
   await releaseNotice();
   const { cli, code } = await chooseCli(requestedCli);
   if (!cli) return exitWith(code, fromShortcut);
   saveState({ lastCli: cli.id });
+
+  // The app has its own permission tick on its launch card, so the question is only for the
+  // terminal flow (asked late if the app fails to start).
+  const app = !classic && hasDisplay() ? findApp() : null;
+  let bypass = app ? null : await chooseBypass(cli, keepPermissions);
 
   let cwd = process.cwd();
   if (fromShortcut) {
@@ -746,10 +1237,19 @@ async function launch() {
     console.log(`Opening Plan2Code in ${c.cyan(folder)}`);
   }
 
+  if (!(await confirmProject(cwd))) return process.exit(0);
+
   if (!hasModelFlag(extraArgs, cli.id)) await chooseModel(cli, extraArgs);
 
-  const args = cli.args(extraArgs);
-  const options = { cwd, stdio: 'inherit' };
+  // The app takes over from here when it is installed, a window can open and --classic is absent.
+  if (app && (await startApp(app, { cwd, cliId: cli.id, model: modelFrom(extraArgs, cli.id) }))) {
+    console.log(`Opened the Plan2Code app in ${c.cyan(cwd)} ${c.dim('(run `plan2code --classic` to stay in this terminal)')}`);
+    return process.exit(0);
+  }
+  if (bypass === null) bypass = await chooseBypass(cli, keepPermissions);
+
+  const args = cli.args(extraArgs, { bypass });
+  const options = { cwd, stdio: 'inherit', ...(cli.fullPath ? { fromFullPath: true } : {}) };
 
   const child = spawnCommand(cli.path, args, options);
 
@@ -777,4 +1277,4 @@ async function launch() {
 // Run only when invoked directly; requiring the file (the tests do) is load-only.
 if (require.main === module) launch();
 
-module.exports = { mergeModels, modelEntries, renderBanner, paint, hasModelFlag, compareVersions };
+module.exports = { normalizeAgents, buildArgs, parseRegQueryValue, expandPercentVars, addSavedWindowsPath, customClis, resolveCustomCommand, runnableClis, listModels, mergeModels, modelEntries, renderBanner, paint, hasModelFlag, compareVersions, modelFrom, hasDisplay, looksLikeProject };

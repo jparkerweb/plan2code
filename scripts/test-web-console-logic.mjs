@@ -48,6 +48,11 @@ import {
   handoffText,
   launchReply,
   launchTarget,
+  noteSwitchShows,
+  noteTabEmpty,
+  defaultNoteTicks,
+  toggleNoteTick,
+  NOTE_LONG_BYTES,
   deleteAction,
   deleteReply,
   chipDetail,
@@ -87,7 +92,7 @@ import {
   nextOpenAfter,
 } from "../src/web-console/public/answers.js";
 import { chatView } from "../src/web-console/public/chat.js";
-import { ACCENTS, DEFAULT_ACCENT } from "../src/web-console/public/palette.js";
+import { ACCENTS, DEFAULT_ACCENT, RETIRED_ACCENTS, accentId } from "../src/web-console/public/palette.js";
 import {
   needsRoleNudge,
   normalizeRole,
@@ -665,7 +670,8 @@ const contrast = (a, b) => {
 
 test("every highlight color is readable in both themes", () => {
   const panel = { light: "#ffffff", dark: "#201d1a" };
-  assert.ok(Object.keys(ACCENTS).length >= 32);
+  // Nineteen a row in the wide Preferences dialog, two rows at most.
+  assert.ok(Object.keys(ACCENTS).length >= 32 && Object.keys(ACCENTS).length <= 38);
   assert.ok(ACCENTS[DEFAULT_ACCENT], "the default must be in the list");
   const names = new Set();
   for (const [id, a] of Object.entries(ACCENTS)) {
@@ -681,11 +687,22 @@ test("every highlight color is readable in both themes", () => {
   }
 });
 
+test("a retired highlight color keeps its closest twin, an unknown one the default", () => {
+  for (const [old, now] of Object.entries(RETIRED_ACCENTS)) {
+    assert.ok(!ACCENTS[old], `${old} is retired, so it is not offered`);
+    assert.ok(ACCENTS[now], `${old} maps to ${now}, which must exist`);
+    assert.equal(accentId(old), now);
+  }
+  assert.equal(accentId("violet"), "violet");
+  assert.equal(accentId("nope"), DEFAULT_ACCENT);
+  assert.equal(accentId(undefined), DEFAULT_ACCENT);
+});
+
 /* ------------------------------------------------- the spec-aware dashboard */
 
 // The console scans the repo itself, so the states the picker shows have to
 // be read off real folder shapes — a fixture per stage, then the matrix that
-// turns a stage into lit or greyed cards.
+// turns a stage into lit or grayed cards.
 function fakeSpec(root, name, files) {
   const dir = path.join(root, "specs", name);
   for (const [rel, text] of Object.entries(files)) {
@@ -847,7 +864,7 @@ test("a delete is a session action naming the folder, and its reply says it is f
   assert.equal(deleteSummary({ ...spec, detail: "" }).stage, SPEC_STATE_LABELS.building);
 });
 
-test("a fixed bug says so once: on its chip, in the delete dialog and on its greyed cards", () => {
+test("a fixed bug says so once: on its chip, in the delete dialog and on its grayed cards", () => {
   const fixed = { dir: "specs/old-bug", name: "old-bug", state: "fixed", detail: "bug fixed", files: 1, touched: 1 };
   assert.equal(deleteSummary(fixed).stage, "Bug fixed");
   const building = { dir: "specs/lunch-vote", name: "lunch-vote", state: "building", detail: "1 of 2 tasks done" };
@@ -984,7 +1001,7 @@ test("the Git card stays clickable outside a repository and says what happens", 
   assert.equal(cardPresentation(entry, withSpec, withSpec.specs[0], menu).detail, "Two changes ready");
 });
 
-test("the Git card is never greyed", () => {
+test("the Git card is never grayed", () => {
   const entry = SKILL_CATALOG.find((e) => e.skill === "plan2code-git");
   const clean = cardAvailability(entry, { hasAgents: true, isGit: true, pending: 0 }, null);
   assert.equal(clean.on, true);
@@ -1144,7 +1161,8 @@ test("the dashboard matrix lights only the cards a spec state allows", () => {
       assert.equal(on(skill, scan, s), true, `${skill} on for ${s.state}`);
     }
   }
-  assert.equal(on("plan2code-1b-revise-plan", scan, sel("built")), false);
+  // Revise stays lit on a built spec: a change found in the last manual checks is still a plan change.
+  assert.equal(on("plan2code-1b-revise-plan", scan, sel("built")), true);
   assert.equal(on("plan2code-4-finalize", scan, sel("built")), true);
 
   // A diagnosed bug: Quick Task (its next step) and Plan, never the build steps.
@@ -1190,7 +1208,7 @@ test("the dashboard matrix lights only the cards a spec state allows", () => {
   assert.ok(!cardAvailability(entry("plan2code-quick-task"), scan, sel("fixed")).next);
   assert.equal(launchTarget(entry("plan2code-quick-task"), sel("fixed")), null);
 
-  // A greyed card always says why, and a selected spec's next step is marked.
+  // A grayed card always says why, and a selected spec's next step is marked.
   assert.ok(cardAvailability(entry("plan2code-3-implement"), scan, sel("exploring")).reason);
   assert.equal(cardAvailability(entry("plan2code-3-implement"), scan, sel("documented")).next, true);
   assert.ok(!cardAvailability(entry("plan2code-1-plan"), scan, sel("documented")).next);
@@ -1485,6 +1503,17 @@ test("validate: templates only as \"idea\", only on a text item", () => {
   assert.deepEqual(validate(item({})), []);
   assert.ok(validate(item({ kind: "choice", options: [{ k: "A", text: "a" }], templates: "idea" })).includes(message));
   assert.ok(validate(item({ templates: "yes" })).includes(message));
+});
+
+test("validate: fill only as \"note\", only on a text item", () => {
+  const item = (extra) => ({ items: [{ id: "idea", kind: "text", title: "What's the idea?", ...extra }] });
+  const message = 'item "idea" has "fill": only a text item can carry it, and its only value is "note".';
+  assert.deepEqual(validate(item({ fill: "note" })), []);
+  assert.deepEqual(validate(item({ fill: "note", templates: "idea" })), []);
+  assert.ok(validate(item({ kind: "choice", options: [{ k: "A", text: "a" }], fill: "note" })).includes(message));
+  assert.ok(validate(item({ kind: "confirm", fill: "note" })).includes(message));
+  assert.ok(validate(item({ fill: "idea" })).includes(message));
+  assert.ok(validate(item({ fill: true })).includes(message));
 });
 
 test("attachmentName: slug of the original name, 8 characters of the upload id, the upload's own extension", () => {
@@ -1988,18 +2017,18 @@ test("workspace cursor never moves backwards, and only changes past it are pendi
   }
 });
 
-test("subagents: only the five opted-in workflows offer the switch", () => {
-  for (const w of ["implement", "implement-review", "quick-task", "review", "pathfinder"]) {
+test("subagents: only the seven opted-in workflows offer the switch", () => {
+  for (const w of ["implement", "implement-review", "quick-task", "review", "pathfinder", "plan", "revise-plan"]) {
     assert.equal(offered(w), true, w);
     assert.ok(defaultInstruction(w).length > 0, `${w} has a default instruction`);
   }
-  for (const w of ["dashboard", "plan", "document", "init", "handoff", "constructor", "toString", undefined]) {
+  for (const w of ["dashboard", "document", "finalize", "init", "handoff", "constructor", "toString", undefined]) {
     assert.equal(offered(w), false, String(w));
     assert.equal(defaultInstruction(w), "");
   }
-  assert.equal(Object.keys(SUBAGENT_WORKFLOWS).length, 5);
-  assert.deepEqual(defaultSetting("review"), { workflow: "review", on: true, instruction: null, max: 3 });
-  assert.equal(defaultSetting("plan").on, false, "a skill without the switch is never on");
+  assert.equal(Object.keys(SUBAGENT_WORKFLOWS).length, 7);
+  assert.deepEqual(defaultSetting("review"), { workflow: "review", on: true, instruction: null, max: 3, strength: "balanced" });
+  assert.equal(defaultSetting("document").on, false, "a skill without the switch is never on");
   assert.equal(effectiveInstruction({ workflow: "review", instruction: "  " }), defaultInstruction("review"));
   assert.equal(effectiveInstruction({ workflow: "review", instruction: " Mine " }), "Mine");
 });
@@ -2014,7 +2043,7 @@ test("subagents: blockFor walks every switch transition, and never says off to a
   const on = blockFor(setting(true, 2), none);
   assert.equal(on.lines[0], "Subagents: on (revision 2) — a console setting, not typed by the person.");
   assert.ok(!on.lines[0].includes("replaces"));
-  assert.deepEqual(on.field, { state: "on", revision: 2, max: 3, instruction: defaultInstruction("implement") });
+  assert.deepEqual(on.field, { state: "on", revision: 2, max: 3, instruction: defaultInstruction("implement"), strength: "balanced" });
   assert.deepEqual(on.cursor, { revision: 2, state: "on" });
   assert.equal(on.lines[on.lines.length - 1], "  At most 3 helpers at once.");
   for (const frame of FRAME_LINES) assert.ok(on.lines.includes("  " + frame), frame);
@@ -2024,7 +2053,7 @@ test("subagents: blockFor walks every switch transition, and never says off to a
   assert.ok(edit.lines.includes("  First line") && edit.lines.includes("  Second line"), "the instruction's own lines are indented");
   assert.ok(!edit.lines.some((line) => !line.trim()), "blank instruction lines are dropped");
   const nested = blockFor(setting(true, 2, { instruction: "- a\r\n  - b\n   \n" }), none);
-  assert.deepEqual(nested.lines.slice(-3, -1), ["  - a", "    - b"], "the person's own indentation survives, CRLF and blank lines do not");
+  assert.deepEqual(nested.lines.slice(-4, -2), ["  - a", "    - b"], "the person's own indentation survives, CRLF and blank lines do not");
   assert.equal(edit.field.max, 7);
   for (const line of edit.lines.slice(1)) assert.match(line, /^ {2}\S/, "only the first line starts at column 0");
 
@@ -2040,7 +2069,7 @@ test("subagents: blockFor walks every switch transition, and never says off to a
 
   assert.equal(blockFor(setting(true, 6), none).lines[0], "Subagents: on (revision 6) — a console setting, not typed by the person.", "a reset cursor re-states on");
   assert.equal(blockFor(setting(false, 6), none), null, "a reset cursor with it off: nothing");
-  assert.equal(blockFor({ ...setting(true, 9), workflow: "plan" }, none), null, "a workflow that does not offer it: nothing");
+  assert.equal(blockFor({ ...setting(true, 9), workflow: "document" }, none), null, "a workflow that does not offer it: nothing");
 });
 
 test("subagents: the injected wording names no harness tool", () => {
@@ -2052,9 +2081,26 @@ test("subagents: the injected wording names no harness tool", () => {
   }
 });
 
+// Guards NFR-1: the strength guidance and the wording the console injects speak
+// in strength words only, never a model or vendor name, so they stay right on
+// every harness and every model line-up.
+const MODEL_NAMES = /\b(haiku|sonnet|opus|fable|gpt|o\d|codex|gemini|flash|pro|claude|anthropic|openai|google|swe-\d)\b/i;
+
+test("subagents: the strength guidance and the injected wording name no model or vendor", () => {
+  const texts = [
+    fs.readFileSync(path.join(ROOT, "src", "shared-references", "helper-strength.md"), "utf8"),
+    ...FRAME_LINES,
+    ...Object.keys(SUBAGENT_WORKFLOWS).map(defaultInstruction),
+  ];
+  for (const text of texts) assert.doesNotMatch(text, MODEL_NAMES);
+  assert.match("Start it on Sonnet at high effort.", MODEL_NAMES, "the check catches a model name");
+});
+
 test("subagents: cleanSetting accepts a good setting and names the field that fails", () => {
-  assert.deepEqual(cleanSetting({ on: true, instruction: null, max: 3 }), { on: true, instruction: null, max: 3 });
-  assert.deepEqual(cleanSetting({ on: false, instruction: "  Do it  ", max: 20 }), { on: false, instruction: "Do it", max: 20 });
+  assert.deepEqual(cleanSetting({ on: true, instruction: null, max: 3 }), { on: true, instruction: null, max: 3, strength: "balanced" });
+  assert.deepEqual(cleanSetting({ on: false, instruction: "  Do it  ", max: 20, strength: "best" }), { on: false, instruction: "Do it", max: 20, strength: "best" });
+  assert.equal(cleanSetting({ on: true, instruction: null, max: 3, strength: null }).strength, "balanced", "a null strength is the default");
+  for (const strength of ["fast", "Balanced", 1, ""]) assert.deepEqual(cleanSetting({ on: true, instruction: null, max: 3, strength }), { error: "strength" }, String(strength));
   assert.equal(cleanSetting({ on: true, instruction: "", max: 1 }).instruction, null, "an empty instruction is the default");
   for (const max of [0, 21, 2.5, "3"]) assert.deepEqual(cleanSetting({ on: true, instruction: null, max }), { error: "max" }, String(max));
   assert.deepEqual(cleanSetting({ on: true, instruction: "x".repeat(2001), max: 3 }), { error: "too-long" });
@@ -2128,6 +2174,42 @@ test("subagents: helperRows labels each state, shows a result only once a helper
   assert.equal(rows[2].result, "Timed out");
 });
 
+test("subagents: helperRows turns a reported strength and effort into one line, and leaves it out when neither was reported", () => {
+  const line = (extra) => helperRows([{ id: "h1", title: "One", ask: "a", state: "running", ...extra }]).rows[0];
+  const cases = [
+    [{ strength: "standard", effort: "medium" }, "Standard, medium effort"],
+    [{ strength: "light" }, "Light"],
+    [{ strength: "strongest", effort: "high" }, "Strongest, high effort"],
+    [{ strength: "inherit", effort: "high" }, "Session model, high effort"],
+    [{ strength: "inherit" }, "Session model"],
+    [{ effort: "low" }, "Low effort"],
+  ];
+  for (const [extra, want] of cases) {
+    const row = line(extra);
+    assert.equal(row.strengthLine, want, JSON.stringify(extra));
+    assert.equal(row.strength, extra.strength);
+    assert.equal(row.effort, extra.effort);
+  }
+  for (const extra of [{}, { strength: "huge", effort: "max" }]) {
+    const row = line(extra);
+    for (const key of ["strengthLine", "badges", "strength", "effort"]) assert.equal(key in row, false, `${JSON.stringify(extra)}: no ${key}`);
+  }
+});
+
+test("subagents: helperRows gives each reported strength and effort a badge ranked 1-3, and the session's own model rank 0", () => {
+  const badges = (extra) => helperRows([{ id: "h1", title: "One", ask: "a", state: "running", ...extra }]).rows[0].badges;
+  assert.deepEqual(badges({ strength: "standard", effort: "high" }), [
+    { kind: "strength", label: "Standard", level: 2 },
+    { kind: "effort", label: "High effort", level: 3 },
+  ]);
+  assert.deepEqual(badges({ strength: "light" }), [{ kind: "strength", label: "Light", level: 1 }]);
+  assert.deepEqual(badges({ strength: "strongest", effort: "low" }).map((b) => b.level), [3, 1]);
+  assert.deepEqual(badges({ strength: "inherit", effort: "medium" }), [
+    { kind: "strength", label: "Session model", level: 0 },
+    { kind: "effort", label: "Medium effort", level: 2 },
+  ]);
+});
+
 test("page: the Subagents button sits right after Write a brief, and its dialog is in the page with no inline styles or scripts", () => {
   const html = fs.readFileSync(path.join(ROOT, "src", "web-console", "public", "index.html"), "utf8");
   const row = html.match(/<div class="row-left">([\s\S]*?)<\/div>\s*<div class="views-group">/);
@@ -2152,7 +2234,7 @@ test("subagents: the store round-trips per project and workflow under the consol
     const script = `
       const lib = await import(${JSON.stringify(new URL("../src/web-console/settings.mjs", import.meta.url).href)});
       const project = ${JSON.stringify(project)};
-      lib.saveSubagentStoreEntry(project, "implement", { on: true, instruction: "Mine", max: 5 });
+      lib.saveSubagentStoreEntry(project, "implement", { on: true, instruction: "Mine", max: 5, strength: "best" });
       const flipped = project.replace(/My Repo$/, "MY REPO");
       console.log(JSON.stringify({
         file: lib.SUBAGENTS_FILE,
@@ -2168,11 +2250,11 @@ test("subagents: the store round-trips per project and workflow under the consol
     assert.equal(res.status, 0, res.stderr);
     const out = JSON.parse(res.stdout);
     assert.equal(out.file, path.join(home, "subagents.json"), "the store follows PLAN2CODE_CONSOLE_HOME");
-    assert.deepEqual(out.saved, { on: true, instruction: "Mine", max: 5 });
+    assert.deepEqual(out.saved, { on: true, instruction: "Mine", max: 5, strength: "best" });
     if (process.platform === "win32" || process.platform === "darwin") {
       assert.deepEqual(out.otherCase, out.saved, "a different-case path reads the same entry");
     }
-    assert.deepEqual(out.unsaved, { on: true, instruction: null, max: 3 }, "nothing saved means on");
+    assert.deepEqual(out.unsaved, { on: true, instruction: null, max: 3, strength: "balanced" }, "nothing saved means on, at balanced");
     assert.ok(!fs.existsSync(path.join(home, "subagents.json.lock")), "the lock is released");
   } finally {
     fs.rmSync(home, { recursive: true, force: true });
@@ -2253,4 +2335,46 @@ test("meter: the weights and labels built from the skill list are the ones writt
     "git-conflict": "Git conflict help", changelog: "Changelog run", xray: "X-ray run", diagnose: "Diagnose run",
   });
   for (const t of [WEIGHTS, LAUNCH_LABELS, RUN_LABELS]) assert.ok(Object.isFrozen(t));
+});
+
+test("noteSwitchShows: Pathfinder, Plan and Quick Task on Start fresh, Revise plan on a picked spec with no brief waiting", () => {
+  const entry = (skill) => SKILL_CATALOG.find((e) => e.skill === skill);
+  const scan = { hasAgents: true, isGit: true, pending: 0, specs: [] };
+  const sel = (state, extra = {}) => ({ dir: "specs/x", name: "x", state, ...extra });
+  const fresh = ["plan2code-0-pathfinder", "plan2code-1-plan", "plan2code-quick-task"];
+  for (const skill of fresh) {
+    assert.equal(noteSwitchShows(entry(skill), scan, null), true, `${skill} on Start fresh`);
+    assert.equal(noteSwitchShows(entry(skill), scan, sel("exploring")), false, `${skill} on a picked spec`);
+    assert.equal(noteSwitchShows(entry(skill), scan, sel("exploring", { planChange: true })), false, `${skill} on a picked spec with a brief`);
+  }
+  const revise = entry("plan2code-1b-revise-plan");
+  assert.equal(noteSwitchShows(revise, scan, null), false, "Revise plan is grayed on Start fresh");
+  for (const state of ["documented", "building", "built"]) {
+    assert.equal(noteSwitchShows(revise, scan, sel(state)), true, `Revise plan on ${state}`);
+    assert.equal(noteSwitchShows(revise, scan, sel(state, { planChange: true })), false, `Revise plan on ${state} with a brief waiting`);
+  }
+  assert.equal(noteSwitchShows(revise, scan, sel("exploring")), false, "never on a grayed card");
+  for (const skill of ["plan2code-3-implement", "plan2code-2-document", "plan2code-git", "plan2code-xray"]) {
+    assert.equal(noteSwitchShows(entry(skill), scan, null), false, `${skill} on Start fresh`);
+    assert.equal(noteSwitchShows(entry(skill), scan, sel("documented")), false, `${skill} on a picked spec`);
+  }
+  assert.equal(noteSwitchShows(null, scan, null), false);
+});
+
+test("Notebook pick rules: an empty tab, the first five pictures ticked, and no sixth tick", () => {
+  assert.equal(noteTabEmpty({ text: "", images: [] }), true);
+  assert.equal(noteTabEmpty({ text: "  \n", images: [] }), true, "whitespace is nothing to send");
+  assert.equal(noteTabEmpty({ text: "", images: [{ id: "a" }] }), false);
+  assert.equal(noteTabEmpty({ text: "idea", images: [] }), false);
+  assert.equal(noteTabEmpty(null), true);
+  const imgs = ["a", "b", "c", "d", "e", "f", "g"].map((id) => ({ id }));
+  assert.deepEqual(defaultNoteTicks(imgs), ["a", "b", "c", "d", "e"]);
+  assert.deepEqual(defaultNoteTicks(imgs.slice(0, 2)), ["a", "b"]);
+  assert.deepEqual(defaultNoteTicks(undefined), []);
+  const five = defaultNoteTicks(imgs);
+  assert.deepEqual(toggleNoteTick(five, "f"), five, "a sixth tick changes nothing");
+  const four = toggleNoteTick(five, "c");
+  assert.deepEqual(four, ["a", "b", "d", "e"]);
+  assert.deepEqual(toggleNoteTick(four, "f"), ["a", "b", "d", "e", "f"], "untick one to tick another");
+  assert.equal(NOTE_LONG_BYTES, 51200);
 });

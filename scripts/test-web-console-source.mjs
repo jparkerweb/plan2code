@@ -32,15 +32,16 @@ import { joinedCss } from "./css-helpers.mjs";
 test("favicon: the dot follows the status line -- busy, ready, attention, plain", () => {
   // Anything with the spinning ring is busy, even a finished screen opening the dashboard.
   assert.equal(faviconState({ mood: "work", spin: true }), "busy");
-  assert.equal(faviconState({ mood: "work", spin: true, finished: true }), "busy");
+  // Pointing is the person's move, a finished screen with a press on offer too.
   assert.equal(faviconState({ mood: "point" }), "ready");
-  // A working mood without the ring is the stale line; adrift and gone need a look too.
+  // A working mood without the ring is the stale line; adrift (a finished
+  // screen's stranded press among them) and gone need a look too.
   assert.equal(faviconState({ mood: "work" }), "attention");
   assert.equal(faviconState({ mood: "adrift" }), "attention");
   assert.equal(faviconState({ mood: "gone" }), "attention");
   assert.equal(faviconState({ mood: "happy" }), "plain");
-  assert.equal(faviconState({ mood: "done", finished: true }), "plain");
-  assert.equal(faviconState({ mood: "point", finished: true }), "plain");
+  // All done or paused, nothing left to press.
+  assert.equal(faviconState({ mood: "done" }), "plain");
   assert.equal(faviconState(), "plain");
 });
 
@@ -419,4 +420,50 @@ test("getting started: the new help, status and finished-screen strings carry no
   const stuck = tpl.match(/<section class="help-panel" data-tab="stuck">([\s\S]*?)<\/section>/)[1];
   const fresh = stuck.slice(0, stuck.indexOf("<h4>Not running, or not connected?</h4>"));
   assert.ok(!fresh.includes(EM), "the callout and rows have no em dash");
+});
+
+// Every relative module a file pulls in, as `{ file, dynamic, names }`: static
+// `import`/`export ... from` lines, and `import("./x")` calls with the names
+// destructured from them when the call reads `const { a, b } = await import(...)`.
+function relativeImports(file) {
+  const text = fs.readFileSync(file, "utf8");
+  const found = [];
+  for (const m of text.matchAll(/(?:^|[\s;])(?:import|export)\s+(?:[^"';]*?\sfrom\s+)?["'](\.{1,2}\/[^"']+)["']/g)) {
+    found.push({ file: path.resolve(path.dirname(file), m[1]), dynamic: false, names: null });
+  }
+  for (const m of text.matchAll(/(?:const\s*\{([^}]*)\}\s*=\s*await\s+)?import\(\s*["'](\.{1,2}\/[^"']+)["']\s*\)/g)) {
+    const names = m[1] ? m[1].split(",").map((n) => n.trim().split(/\s*:\s*/)[0]).filter(Boolean) : null;
+    found.push({ file: path.resolve(path.dirname(file), m[2]), dynamic: true, names, from: file });
+  }
+  return found;
+}
+
+test("no agent CLI module imports notepads.mjs, directly or through a module it imports", () => {
+  const dir = path.join(ROOT, "src", "web-console");
+  const store = path.join(dir, "notepads.mjs");
+  const starts = ["console.mjs", ...fs.readdirSync(dir).filter((n) => /^cmd-.*\.mjs$/.test(n))].map((n) => path.join(dir, n));
+  assert.ok(starts.length > 1, "found the agent CLI's modules");
+  const seen = new Set();
+  const lazy = [];
+  const queue = [...starts];
+  while (queue.length) {
+    const file = queue.shift();
+    if (seen.has(file) || !fs.existsSync(file)) continue;
+    seen.add(file);
+    for (const dep of relativeImports(file)) {
+      if (dep.file === store) {
+        assert.ok(dep.dynamic, `${path.relative(ROOT, file)} imports notepads.mjs at the top`);
+        lazy.push(dep);
+      } else queue.push(dep.file);
+    }
+  }
+  assert.ok(seen.size > 5, "walked the import graph");
+  assert.equal(seen.has(store), false, "the store is never loaded at the top of an agent-side module");
+  // The one way in is Cleanup (User Preferences, reached only through the
+  // page's /cleanup route), which lists stale notepads and removes one whole,
+  // never reading a note's text.
+  for (const dep of lazy) {
+    assert.equal(path.basename(dep.from), "sessions.mjs", "only Cleanup loads the store, lazily");
+    assert.ok(dep.names && dep.names.every((n) => n === "staleNotepads" || n === "removeNotepad"), `Cleanup takes only staleNotepads and removeNotepad, not ${dep.names}`);
+  }
 });
