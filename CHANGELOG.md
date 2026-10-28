@@ -50,6 +50,7 @@ All notable changes to Plan2Code will be documented in this file.
 
 ### 🐛 Fixed
 
+- **custom agents**: on Windows, a custom agent whose installer added its folder to the user PATH is now offered by `plan2code` and the desktop app every time, not only from a terminal opened after the install. Both read the saved PATH as well as the one they inherited, and the agent starts with it too.
 - **web console**: on the dashboard, canceling one spec's Delete and quickly opening another's no longer leaves **Delete it** doing nothing; the first dialog's late close cleared the second dialog's spec.
 - **web console**: a handoff's **Copy** button keeps showing **Copied** (or **Copy was refused**) when the dashboard redraws while the clipboard answers, instead of the word landing on a button that was already replaced.
 - **web console**: a finished screen's press (**Commit it now**, **Update CHANGELOG first**, **Back to the dashboard**, **Continue here**, a review) that nothing picks up, because the agent's turn ended while the screen waited, no longer says "Opening Changelog…" forever. After a minute of silence the line beside Planny says Plan2Code is not running and the choice is saved, with **continue** to type in the terminal (a button that types it there, under the app).

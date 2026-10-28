@@ -92,7 +92,7 @@ function sandbox(clis, { installed, project = true } = {}) {
         cwd: dir,
         input: "",
         encoding: "utf8",
-        env: { ...process.env, PATH: bin, HOME: home, USERPROFILE: home, PLAN2CODE_CONSOLE_HOME: consoleHome, ...env },
+        env: { ...process.env, PATH: bin, PLAN2CODE_NO_SAVED_PATH: "1", HOME: home, USERPROFILE: home, PLAN2CODE_CONSOLE_HOME: consoleHome, ...env },
       }),
     argsOf: (cli) => {
       const file = path.join(bin, `${cli}.json`);
@@ -417,6 +417,41 @@ test("launcher: compareVersions orders X.Y.Z numerically and refuses anything el
   assert.equal(compareVersions("3.0.0", "2.9.9"), 1);
   assert.equal(compareVersions("1.0.0", null), null);
   assert.equal(compareVersions("v1.0.0", "1.0.0"), null);
+});
+
+test("launcher: parseRegQueryValue reads REG_SZ and REG_EXPAND_SZ, and expandPercentVars fills in names", () => {
+  const { parseRegQueryValue, expandPercentVars } = require(LAUNCHER);
+  const out = "\r\nHKEY_CURRENT_USER\\Environment\r\n    Path    REG_EXPAND_SZ    %USERPROFILE%\\.pi\\agent\\bin;C:\\Tools\r\n\r\n";
+  assert.equal(parseRegQueryValue(out), "%USERPROFILE%\\.pi\\agent\\bin;C:\\Tools");
+  assert.equal(parseRegQueryValue("    Path    REG_SZ    C:\\A\r\n"), "C:\\A");
+  assert.equal(parseRegQueryValue("ERROR: The system was unable to find the specified registry key or value.\r\n"), null);
+  assert.equal(expandPercentVars("%userprofile%\\x;%NOPE%\\y", { USERPROFILE: "C:\\Users\\me" }), "C:\\Users\\me\\x;%NOPE%\\y");
+});
+
+// A terminal opened before an agent's installer added its folder keeps the old PATH: the
+// launcher reads the saved one too, so a custom agent is offered in every terminal.
+test("launcher: on Windows the saved user PATH fills in folders the inherited PATH lacks", { skip: !IS_WINDOWS }, (t) => {
+  const { addSavedWindowsPath, parseRegQueryValue, expandPercentVars } = require(LAUNCHER);
+  const reg = spawnSync(path.join(process.env.SystemRoot, "System32", "reg.exe"), ["query", "HKCU\\Environment", "/v", "Path"], { encoding: "utf8" });
+  const saved = parseRegQueryValue(reg.stdout);
+  if (!saved) return t.skip("no user PATH saved in the registry");
+  const first = expandPercentVars(saved).split(";").find(Boolean);
+  const pathKey = Object.keys(process.env).find((key) => key.toUpperCase() === "PATH");
+  const before = { PATH: process.env[pathKey], NO: process.env.PLAN2CODE_NO_SAVED_PATH };
+  t.after(() => {
+    process.env[pathKey] = before.PATH;
+    if (before.NO === undefined) delete process.env.PLAN2CODE_NO_SAVED_PATH;
+    else process.env.PLAN2CODE_NO_SAVED_PATH = before.NO;
+  });
+  delete process.env.PLAN2CODE_NO_SAVED_PATH;
+  process.env[pathKey] = "C:\\stale-terminal-path";
+  addSavedWindowsPath();
+  const dirs = process.env[pathKey].split(";");
+  assert.equal(dirs[0], "C:\\stale-terminal-path", "the inherited PATH keeps its place in front");
+  assert.ok(dirs.includes(first), `${first} is added from the saved PATH`);
+  const length = dirs.length;
+  addSavedWindowsPath();
+  assert.equal(process.env[pathKey].split(";").length, length, "a second call adds nothing twice");
 });
 
 test("launcher: renderBanner draws Planny and the name, colored only through paint", () => {

@@ -113,16 +113,25 @@ fn build_path(fresh: bool) -> String {
     if let Some(login) = login_shell_path() {
         parts.push(login);
     }
-    // At start this process's PATH already is the saved one; only a refresh
-    // needs to read it again.
+    // This process's PATH is whatever its parent had, which is stale when
+    // that parent (a terminal, the launcher) started before an installer
+    // added a folder: a custom agent was then offered only some of the time.
+    // A refresh puts the saved PATH first; at start it only fills in after
+    // the inherited one, so that keeps its order.
+    #[cfg(windows)]
+    let saved = saved_windows_path();
     #[cfg(windows)]
     if fresh {
-        parts.extend(saved_windows_path());
+        parts.extend(saved.clone());
     }
     #[cfg(not(windows))]
     let _ = fresh;
     if !inherited.is_empty() {
         parts.push(inherited);
+    }
+    #[cfg(windows)]
+    if !fresh {
+        parts.extend(saved);
     }
     parts.join(if cfg!(windows) { ";" } else { ":" })
 }

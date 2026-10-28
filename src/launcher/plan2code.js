@@ -548,6 +548,60 @@ public static class Plan2CodeFolderPicker {
 `;
 
 /**
+ * The value from `reg query <key> /v <name>` output: the text after the REG_SZ or
+ * REG_EXPAND_SZ column on its line, or null.
+ */
+function parseRegQueryValue(output) {
+  for (const line of String(output || '').split(/\r?\n/)) {
+    const match = /\sREG_(?:EXPAND_)?SZ\s+(.*)$/.exec(line);
+    if (match && match[1].trim()) return match[1].trim();
+  }
+  return null;
+}
+
+/** `%NAME%` replaced from `env` (case-insensitive, as Windows reads it); an unknown name stays as written. */
+function expandPercentVars(text, env = process.env) {
+  const lookup = (name) => {
+    const key = Object.keys(env).find((k) => k.toUpperCase() === name.toUpperCase());
+    return key === undefined ? undefined : env[key];
+  };
+  return text.replace(/%([^%]+)%/g, (whole, name) => lookup(name) ?? whole);
+}
+
+/**
+ * Windows only: add to this process's PATH the folders of the system then the user PATH as saved
+ * in the registry (what a newly opened terminal gets) that it does not have yet. A terminal opened
+ * before an agent's installer added its folder keeps the old PATH, so the agent was offered in
+ * some terminals and not others. Changing process.env also hands the folders to the agent.
+ */
+function addSavedWindowsPath() {
+  // The launcher tests run with a PATH of stand-ins only, which the saved PATH must not widen.
+  if (!IS_WINDOWS || process.env.PLAN2CODE_NO_SAVED_PATH) return;
+  const reg = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'reg.exe');
+  const pathKey = Object.keys(process.env).find((key) => key.toUpperCase() === 'PATH') || 'PATH';
+  const dirs = (process.env[pathKey] || '').split(path.delimiter).filter(Boolean);
+  const known = new Set(dirs.map((dir) => path.resolve(dir.replace(/^"|"$/g, '')).toLowerCase()));
+  const added = [];
+  for (const key of ['HKLM\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment', 'HKCU\\Environment']) {
+    let out;
+    try {
+      out = spawnSync(reg, ['query', key, '/v', 'Path'], { encoding: 'utf8', windowsHide: true, timeout: 5000 });
+    } catch {
+      continue;
+    }
+    const value = parseRegQueryValue(out && out.stdout);
+    if (!value) continue;
+    for (const dir of expandPercentVars(value).split(path.delimiter).filter(Boolean)) {
+      const id = path.resolve(dir.replace(/^"|"$/g, '')).toLowerCase();
+      if (known.has(id)) continue;
+      known.add(id);
+      added.push(dir);
+    }
+  }
+  if (added.length) process.env[pathKey] = [...dirs, ...added].join(path.delimiter);
+}
+
+/**
  * Resolve a command on PATH the way the shell would, including PATHEXT on Windows.
  * Returns the full path, or null when it is not installed.
  */
@@ -670,6 +724,7 @@ function runnableClis(customs) {
  * exit code) after printing why none can be used.
  */
 async function chooseCli(requested) {
+  addSavedWindowsPath();
   const customs = customClis();
   const all = [...CLIS, ...customs];
   const { installed, missing } = runnableClis(customs);
@@ -1222,4 +1277,4 @@ async function launch() {
 // Run only when invoked directly; requiring the file (the tests do) is load-only.
 if (require.main === module) launch();
 
-module.exports = { normalizeAgents, buildArgs, customClis, resolveCustomCommand, runnableClis, listModels, mergeModels, modelEntries, renderBanner, paint, hasModelFlag, compareVersions, modelFrom, hasDisplay, looksLikeProject };
+module.exports = { normalizeAgents, buildArgs, parseRegQueryValue, expandPercentVars, addSavedWindowsPath, customClis, resolveCustomCommand, runnableClis, listModels, mergeModels, modelEntries, renderBanner, paint, hasModelFlag, compareVersions, modelFrom, hasDisplay, looksLikeProject };
