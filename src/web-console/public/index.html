@@ -35,6 +35,9 @@
     <link rel="modulepreload" href="/screens/workspace.js" />
     <link rel="modulepreload" href="/screens/ask.js" />
     <link rel="modulepreload" href="/screens/notepad.js" />
+    <link rel="modulepreload" href="/screens/activities.js" />
+    <link rel="modulepreload" href="/activities.js" />
+    <link rel="modulepreload" href="/tones.js" />
     <link rel="modulepreload" href="/net.js" />
     <link rel="modulepreload" href="/render.js" />
     <link rel="modulepreload" href="/palette.js" />
@@ -184,6 +187,19 @@
             <path class="mg-line" d="M4.6 9.8l.9 3.4h1.6l-.6-2.7M12.4 6.1a2.6 2.6 0 0 1 0 3.8M13.8 4.5a5 5 0 0 1 0 7" />
           </svg>
         </a>
+        <!-- Activities: small games for a long wait. Opens a dialog that pauses
+             the moment Plan2Code needs the person; nothing in it reaches the agent. -->
+        <button type="button" class="icon-btn" id="btn-activities" title="Activities" aria-label="Activities">
+          <!-- A die: a rounded square and five pips. -->
+          <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+            <rect class="dc-body" x="2" y="2" width="12" height="12" rx="2.6" />
+            <circle class="dc-pip" cx="5.4" cy="5.4" r="1" />
+            <circle class="dc-pip" cx="10.6" cy="5.4" r="1" />
+            <circle class="dc-pip" cx="8" cy="8" r="1" />
+            <circle class="dc-pip" cx="5.4" cy="10.6" r="1" />
+            <circle class="dc-pip" cx="10.6" cy="10.6" r="1" />
+          </svg>
+        </button>
       </div>
       <div class="topbar-row second">
         <div class="row-left">
@@ -216,7 +232,8 @@
             </svg>
           </button>
           <!-- Notebook: every screen, never hidden. The person's private notes for this
-               folder; nothing in it reaches the agent. -->
+               folder; a tab reaches the agent only through a send the person
+               starts on the dashboard. -->
           <button type="button" class="btn ghost small notepad-btn" id="btn-notepad" title="Notebook" aria-label="Notebook">
             <!-- A pocket notebook: a closed cover with a spine line and an elastic band. -->
             <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
@@ -778,6 +795,10 @@
           <path d="M4 5h16v11H10l-4 4v-4H4z" />
           <path d="M8 9.5h8M8 12.5h5" />
         </symbol>
+        <symbol id="hi-activities" viewBox="0 0 24 24" fill="none">
+          <rect x="4" y="4" width="16" height="16" rx="3.5" />
+          <path d="M8.5 8.5h.01M15.5 8.5h.01M12 12h.01M8.5 15.5h.01M15.5 15.5h.01" />
+        </symbol>
         <symbol id="hi-finishing" viewBox="0 0 24 24" fill="none">
           <path d="M6 21V4" />
           <path d="M6 4h11l-2 4 2 4H6" />
@@ -1144,15 +1165,19 @@
           <li>
             The <strong>?</strong> button opens this Help, and the gear button
             beside it opens <strong>User Preferences</strong>: your role first,
-            then your colors, theme, card width and sounds.
+            then your colors, theme, card width, sounds and whether Activities shows.
           </li>
           <li class="for-browser">
-            The <strong>megaphone</strong> button at the far right opens GitHub in a
+            The <strong>megaphone</strong> button opens GitHub in a
             new tab, where you can report a bug or suggest an idea.
           </li>
           <li class="for-app">
-            The <strong>megaphone</strong> button at the far right opens Plan2Code's
+            The <strong>megaphone</strong> button opens Plan2Code's
             GitHub issues, where you can report a bug or suggest an idea.
+          </li>
+          <li>
+            The <strong>die</strong> beside it opens <strong>Activities</strong>,
+            small games to play while you wait. See "Activities".
           </li>
           <li>
             <strong>Stop session</strong> ends the session and saves your place.
@@ -1248,8 +1273,16 @@
             folder per tab on disk. There is no Save button.
           </li>
           <li>
-            It is private to this machine and never sent to Plan2Code. Nothing
-            in it is shown to the agent.
+            It is private to this machine and never sent to Plan2Code.
+            Private: the agent never reads your Notebook. A tab reaches it only
+            when you start a workflow with it.
+          </li>
+          <li>
+            A lit card's confirm pane can offer <strong>Start with a note from
+            your Notebook</strong>. On the dashboard, Pathfinder, Plan and Quick
+            Task offer it on Start fresh, and Revise plan on a picked spec with
+            no plan change waiting. A tab you started a workflow with wears a
+            small <strong>sent</strong> badge.
           </li>
           <li>
             Two open pages on the same folder share one notebook. If both change
@@ -2253,7 +2286,120 @@
         </p>
       </section>
 
-      <!-- Tab 16: Stopping and finishing -->
+      <!-- Tab 16: Activities -->
+      <section class="help-panel" data-tab="activities">
+        <h3>Activities</h3>
+        <p class="help-lead">
+          The <strong>die</strong> in the top bar opens
+          <strong>Activities</strong>: small games to play while you wait, say
+          through a long build. Two games ship: <strong>Snake</strong> and
+          <strong>Mini golf</strong>. Pick one with the buttons above the board;
+          the window opens on your last pick next time. Nothing you do in it
+          reaches Plan2Code.
+        </p>
+        <h4>The games</h4>
+        <ul>
+          <li>
+            <strong>Snake</strong>: steer to the food and grow. The snake speeds
+            up as it grows, and a wall, a rock, a comet or your own tail ends
+            the round. Food eaten quickly builds a combo of up to x5. Every 5
+            foods is a new level, and each of the first few brings something
+            new: rocks (a flashing cell turns to stone), mystery boxes, portals,
+            comets that cut your tail, then chaos. Power-ups turn up on their
+            own: Shield, Turbo, Slow-mo, Magnet, Ghost and Scissors, and a
+            mystery box can hold any of ten surprises, good or bad. The start
+            and end screens count how many of them you have found so far.
+          </li>
+          <li>
+            <strong>Mini golf</strong>: eighteen silly holes seen from above.
+            The front nine is <strong>Pirate Cove</strong>, greens afloat in a
+            shark sea with cannonballs, barrels, a kraken and a ghost ship. The
+            back nine is the <strong>Caves of Doom</strong>, lit only around
+            your ball, with lava, a bottomless pit, mine carts and stone
+            crushers. The aim follows your mouse. Click (or press
+            <kbd>Space</kbd>) to start the power meter, then click again to
+            set the power: the gold <strong>MAX</strong> band near the top
+            gives a boosted putt, but go past it into the red and you shank it.
+            Dawdle for 6 seconds and the meter starts by itself. Hold the mouse
+            button or <kbd>Space</kbd> while the ball rolls to speed it up.
+            Each hole has a par, and after 8
+            strokes the ball is picked up. The scorecard between holes shows how
+            the round stands against par.
+          </li>
+          <li>
+            <strong>Power-ups</strong>: roll over a glowing pad to hold it for
+            your next putt. A <strong>Lucky Doubloon</strong> makes it free, a
+            <strong>Cannonball</strong> fires it 1.6 times as hard, a
+            <strong>Ghost Ball</strong> floats over water, sand and bumpers, a
+            <strong>Parrot Magnet</strong> bends it toward the cup, a
+            <strong>Rubber Duck</strong> bounces off walls at full speed, a
+            <strong>Treasure Map</strong> makes the cup huge, and a
+            <strong>Spyglass</strong> shows where it will roll while the meter runs.
+            You hold one at a time, and it carries over to the next hole.
+          </li>
+        </ul>
+        <h4>It never hides your turn</h4>
+        <ul>
+          <li>
+            A new question, a sign-off or a finish pauses the game at once, and
+            a banner above the board says Plan2Code needs you.
+            <strong>Go to it</strong> closes the window on that question.
+          </li>
+          <li class="for-browser">
+            Switching to another tab, or clicking outside the page, also pauses it.
+          </li>
+          <li class="for-app">
+            Hiding the window, or clicking outside the page (the app's own bar
+            too), also pauses it.
+          </li>
+          <li>
+            Nothing resumes by itself. Any game key plays on, and so does a
+            click on the Mini golf board. Playing on puts the banner away until
+            the next new question.
+          </li>
+          <li>
+            Starting a round, and playing on after a pause, counts down 3, 2, 1
+            first, so the game never moves before you are ready.
+          </li>
+        </ul>
+        <h4>Keys</h4>
+        <ul>
+          <li>
+            Snake: the arrow keys, or <kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd>
+            <kbd>D</kbd>, steer.
+          </li>
+          <li>
+            Mini golf: hold left or right to turn the aim (faster the longer
+            you hold), press <kbd>Space</kbd> once to start the power meter and
+            again to set the power, and hold <kbd>Space</kbd> while the ball
+            rolls to speed it up.
+          </li>
+          <li><kbd>Space</kbd> starts a round, and plays again after a pause.</li>
+          <li><kbd>P</kbd> pauses and plays.</li>
+          <li><kbd>Esc</kbd> closes the window, with the game paused where it was.</li>
+        </ul>
+        <p>Activities need a keyboard: on a touch-only screen the window says so instead of showing the board.</p>
+        <h4>Best scores</h4>
+        <p>
+          The window's title shows the best for the game on screen, and the
+          line under the board shows it beside your score. For Snake the best
+          is your highest score; for Mini golf it is your lowest full round of
+          eighteen holes, and a round left halfway never counts.
+          <strong>Reset best scores</strong>, at the bottom of the window,
+          clears both after a second click to confirm.
+        </p>
+        <h4>Hiding it</h4>
+        <p>
+          Don't want the die? Untick <strong>Show Activities</strong> in User
+          Preferences (the gear) and it is gone from every screen.
+        </p>
+        <p>
+          Best scores, Snake's surprises found, your last pick and that switch are saved privately on
+          this machine, with your other preferences, and never sent anywhere.
+        </p>
+      </section>
+
+      <!-- Tab 17: Stopping and finishing -->
       <section class="help-panel" data-tab="finishing">
         <h3>Stopping and finishing</h3>
         <p class="help-lead">
@@ -2360,7 +2506,7 @@
         </p>
       </section>
 
-      <!-- Tab 17: Keyboard and preferences -->
+      <!-- Tab 18: Keyboard and preferences -->
       <section class="help-panel" data-tab="prefs">
         <h3>Keyboard and preferences</h3>
         <p class="help-lead">
@@ -2442,6 +2588,11 @@
             its sound.
           </li>
           <li>
+            <strong>Activities</strong>: <strong>Show Activities</strong> puts
+            the die in the top bar, which opens small games to play while you
+            wait. Untick it to hide the die on every screen.
+          </li>
+          <li>
             <strong>Cleanup</strong>: <strong>Find files to clean up</strong>
             lists what Plan2Code doesn't need in your
             <code>~/.plan2code</code> folder: sessions nobody has opened for
@@ -2457,7 +2608,9 @@
           </li>
           <li>
             <strong>Back to default</strong> puts everything back as it was, and
-            sets Role back to Not set.
+            sets Role back to Not set. Your Activities best scores stay: only
+            <strong>Reset best scores</strong>, in the Activities window, clears
+            them.
           </li>
         </ul>
         <p>
@@ -2481,7 +2634,7 @@
         </ul>
       </section>
 
-      <!-- Tab 18: Privacy and where things are saved -->
+      <!-- Tab 19: Privacy and where things are saved -->
       <section class="help-panel" data-tab="privacy">
         <h3>Privacy and where things are saved</h3>
         <p class="help-lead">
@@ -2533,8 +2686,9 @@
             and attachments");
           </li>
           <li>
-            your role, theme, colors, card width and sounds, in
-            <code>looks.json</code>;
+            your role, theme, colors, card width and sounds, the Show
+            Activities switch, the last activity you picked and your best
+            scores, in <code>looks.json</code>;
           </li>
           <li>
             your Subagents switch for each project and skill, in
@@ -2619,6 +2773,11 @@
             <label><input type="checkbox" data-sound="newTab" checked /> <span>New tab added</span></label>
           </div>
           <p class="help">Ticking one plays it. Play sounds switches them all off at once and keeps your picks for when you switch back on.</p>
+        </fieldset>
+        <fieldset class="modal-ranges looks-activities">
+          <legend>Activities</legend>
+          <label><input type="checkbox" id="looks-activities" checked /> <span>Show Activities</span></label>
+          <p class="help">The die in the top bar opens small games to play while you wait.</p>
         </fieldset>
         <fieldset class="modal-ranges looks-cleanup">
           <legend>Cleanup</legend>
@@ -2744,11 +2903,12 @@
 
     <!-- The Notebook: the person's own notes for this folder, autosaved under
          ~/.plan2code/notepads/ by the /notepad routes. Never part of the
-         session, so nothing in it reaches the agent. screens/notepad.js fills
-         the editor on open. -->
+         session, and the agent CLI never imports the store: a tab leaves it
+         only through a send the person starts on the dashboard. screens/notepad.js
+         fills the editor on open. -->
     <dialog class="modal notepad" id="notepad-modal" aria-labelledby="notepad-title">
       <h2 id="notepad-title">Notebook</h2>
-      <p class="modal-blurb">A private space to keep track of notes and uploaded images related to your in-progress work on this project. Saved on this machine and <strong class="private-note">never shared to the AI Agent</strong>.</p>
+      <p class="modal-blurb">A private space to keep track of notes and uploaded images related to your in-progress work on this project. Saved on this machine. <strong class="private-note">Private</strong>: the agent never reads your Notebook. A tab reaches it only when you start a workflow with it.</p>
       <div class="notepad-tabbar">
         <div class="notepad-tabs" id="notepad-tabs" role="tablist" aria-label="Notebook tabs"></div>
         <button type="button" class="btn small ghost notepad-tab-new" id="notepad-tab-new">+ New tab</button>
@@ -2759,6 +2919,7 @@
       </div>
       <div class="notepad-body" id="notepad-body">
         <div class="notepad-editor" id="notepad-editor"></div>
+        <p class="help notepad-sent" id="notepad-sent" hidden></p>
         <div class="notepad-images" id="notepad-images">
           <button type="button" class="btn small ghost notepad-add" id="notepad-add">Add image</button>
           <input type="file" accept="image/*" multiple id="notepad-file" hidden />
@@ -2804,6 +2965,29 @@
       <div class="notepad-preview-bar">
         <p class="notepad-preview-count" id="notepad-preview-count" aria-live="polite"></p>
         <button type="button" class="btn small notepad-preview-close" id="notepad-preview-close">Close</button>
+      </div>
+    </dialog>
+
+    <!-- Activities: small built-in games for a long wait. Play is private to
+         this page and never reaches the agent; screens/activities.js runs the
+         game, and pauses it whenever Plan2Code needs the person. -->
+    <dialog class="modal activities" id="activities-modal" aria-labelledby="activities-title">
+      <h2 id="activities-title">Activities<span id="activities-title-best" class="activities-title-best"></span></h2>
+      <p class="modal-blurb">Something to play while you wait. Private to this page, and it pauses whenever Plan2Code needs you.</p>
+      <div class="activities-banner" id="activities-banner" role="status" hidden>
+        <span class="activities-banner-text" id="activities-banner-text"></span>
+        <button type="button" class="btn small primary" id="activities-goto">Go to it</button>
+      </div>
+      <div class="activities-picker" id="activities-picker" role="group" aria-label="Pick an activity" hidden></div>
+      <div class="activities-board" id="activities-board" tabindex="-1">
+        <canvas id="activities-canvas"></canvas>
+        <div class="activities-overlay" id="activities-overlay"></div>
+      </div>
+      <p class="activities-score" id="activities-score"></p>
+      <p class="help activities-note" id="activities-note" aria-live="polite" hidden></p>
+      <div class="modal-actions">
+        <button type="button" class="btn ghost" id="activities-reset">Reset best scores</button>
+        <button type="button" class="btn ghost" id="activities-close">Close</button>
       </div>
     </dialog>
 

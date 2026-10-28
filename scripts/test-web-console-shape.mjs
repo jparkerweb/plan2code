@@ -187,7 +187,7 @@ const ROUTE_ORDER = [
   "/health", "/s/", "/", "SERVABLE", "/overview", "/handoff", "/version", "/state", "/events", "/draft",
   "/looks", "/looks", "/subagents", "/pr-host", "/models", "/models", "/agents", "/agents", "/agents/test", "/cleanup", "/upload",
   "/notepad", "/notepad/text", "/notepad/image", "/notepad/thumb", "/notepad/image/delete", "/notepad/tab",
-  "/notepad/tab/rename", "/notepad/tab/delete", "/notepad/tab/order", "/notepad/tab/last", "/notepad/images/",
+  "/notepad/tab/rename", "/notepad/tab/delete", "/notepad/tab/order", "/notepad/tab/last", "/notepad/tab/sent", "/notepad/images/",
   "/attachments/", "/shots/", "/uploads/", "/submit", "/open-link", "/chat", "/chat/decision", "/workspace",
   "WORKSPACE_EDITS", "/workspace/scope", "/workspace/browse", "/cancel", "/ping", "/bye",
 ];

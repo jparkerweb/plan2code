@@ -320,6 +320,11 @@ An option is `{ "k": "A", "text": "short label", "detail": "the trade-off", "rec
   it, with a one-line summary in `placeholder`. A resumed map, PLAN-DRAFT or
   checkpoint gets no idea card. Only the box's text comes back; never mention
   templates in the terminal.
+- **Fill from a Notebook tab:** on a `text` item, `"fill": "note"` (its only
+  value; any other kind or value is exit 3) has the page fill the first open one
+  once, with the tab's text and ticked pictures, when the person started from a
+  Notebook tab. You read it only when they send that box (Send, or Stop or
+  Back to the dashboard, which carry ready answers).
 - **Recommend only when you genuinely know better and can say why.** "Which
   format survives Excel?" is yours; "Who is this for?" is not — there a
   recommendation is an anchor people rubber-stamp. At most one per question.

@@ -648,6 +648,10 @@ export function validate(state) {
     if (item.templates != null && (item.kind !== "text" || item.templates !== "idea")) {
       problems.push(`item "${item.id}" has "templates": only a text item can carry it, and its only value is "idea".`);
     }
+    // The box the page fills from a Notebook tab picked at Start.
+    if (item.fill != null && (item.kind !== "text" || item.fill !== "note")) {
+      problems.push(`item "${item.id}" has "fill": only a text item can carry it, and its only value is "note".`);
+    }
     // The page compiles it as the person types, and a pattern that does not
     // compile throws there, on every keystroke, with nothing on screen to say why.
     if (item.pattern != null) {

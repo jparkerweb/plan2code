@@ -58,6 +58,29 @@ function maxMtime(dir, depth = 4, budget = { n: 400 }, tally = null) {
   return best;
 }
 
+// A waiting Revise plan brief: a `**Plan change:**` line in a phase file's
+// Notes. Applied or dropped, it reads `**Plan change (applied <date>):**` or
+// `(dropped <date>)`, which this never matches.
+const PLAN_CHANGE_RE = /^\s*\*\*Plan change:\*\*/m;
+
+// The Notes section of a phase file: from its `## Notes` heading to the next
+// `## ` heading, or "" when it has none.
+function notesOf(text) {
+  const at = text.search(/^## Notes\b/m);
+  if (at < 0) return "";
+  const rest = text.slice(at).replace(/^## Notes[^\n]*\n?/, "");
+  const end = rest.search(/^## /m);
+  return end < 0 ? rest : rest.slice(0, end);
+}
+
+// Whether a phased spec has a brief waiting for Revise plan: in the phase file
+// overview.md marks `[/]`, or in each phase file when none is marked.
+function planChangeWaiting(dir, phases) {
+  const marked = [...readText(path.join(dir, "overview.md")).matchAll(/^\s*-\s*\[\/\]\s*Phase\s+(\d+)\b/gim)].map((m) => Number(m[1]));
+  const files = marked.length ? phases.filter((f) => marked.includes(Number((f.match(/^phase-0*(\d+)\.md$/i) || [])[1]))) : phases;
+  return files.some((f) => PLAN_CHANGE_RE.test(notesOf(readText(path.join(dir, f)))));
+}
+
 // A spec folder's pipeline position, from its files alone. Furthest artifact
 // wins: an overview beats a draft beats a map, so a spec mid-way through two
 // stages reports the later one.
@@ -89,11 +112,15 @@ function classifySpec(dir, names) {
     const finished = done + assumed;
     const total = finished + open;
     const suffix = assumed > 0 ? `, ${assumed} assumed` : "";
-    if (open === 0 && finished > 0) return { state: "built", detail: `all tasks done${suffix}` };
-    if (finished > 0) return { state: "building", detail: `${finished} of ${total} tasks done${suffix}` };
+    // Documented, building and built specs all land here: each says whether a
+    // Revise plan brief is waiting, and only when one is.
+    const brief = planChangeWaiting(dir, phases) ? { planChange: true } : {};
+    if (open === 0 && finished > 0) return { state: "built", detail: `all tasks done${suffix}`, ...brief };
+    if (finished > 0) return { state: "building", detail: `${finished} of ${total} tasks done${suffix}`, ...brief };
     return {
       state: "documented",
       detail: `${phases.length} phase${phases.length === 1 ? "" : "s"}, ${total || "?"} tasks ready`,
+      ...brief,
     };
   }
   // An overview with no phase files means Document was interrupted mid-write;

@@ -423,7 +423,59 @@
   border-radius: 6px;
   padding: 4px 10px;
 }
+.confirm-cmd-note { margin-left: 8px; font-family: var(--mono); font-size: 12.5px; color: var(--accent); }
 .confirm-actions { display: flex; gap: 10px; margin-top: 10px; }
+
+/* "Start with a note from your Notebook": the switch, then the tabs beside a
+   preview of the picked one, its pictures each with a tick. */
+.confirm-note-box { display: grid; gap: 8px; }
+.confirm-note-switch { display: flex; gap: 8px; align-items: center; color: var(--ink-2); cursor: pointer; }
+.confirm-note-switch input { accent-color: var(--accent, currentColor); }
+.confirm-note { display: grid; grid-template-columns: minmax(130px, 200px) minmax(0, 1fr); gap: 10px; }
+.confirm-note > .confirm-note-msg { grid-column: 1 / -1; }
+.confirm-note-msg { margin: 0; font-size: 13px; color: var(--ink-3); }
+.confirm-note-tabs { display: flex; flex-direction: column; gap: 4px; max-height: 320px; overflow-y: auto; }
+.confirm-note-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border: 1px solid var(--rule-2);
+  border-radius: 8px;
+  background: var(--panel-2);
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+.confirm-note-tab:hover:not(:disabled) { border-color: var(--accent-line); color: var(--accent); }
+.confirm-note-tab.is-picked { border-color: var(--accent); background: var(--accent-soft); color: var(--ink); font-weight: 600; }
+.confirm-note-tab:disabled { opacity: 0.5; cursor: not-allowed; }
+.confirm-note-tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.confirm-note-tab-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.confirm-note-preview {
+  display: grid;
+  gap: 8px;
+  align-content: start;
+  min-width: 0;
+  max-height: 320px;
+  overflow-y: auto;
+  padding: 8px 10px;
+  border: 1px solid var(--rule-2);
+  border-radius: 8px;
+  background: var(--panel);
+}
+.confirm-note-text { font-size: 13.5px; }
+.confirm-note-long { margin: 0; font-size: 12.5px; font-weight: 600; color: var(--warn); }
+.confirm-note-pics { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.confirm-note-pic label { position: relative; display: block; cursor: pointer; }
+.confirm-note-pic img { display: block; width: 72px; height: 72px; object-fit: cover; border: 1px solid var(--rule-2); border-radius: 6px; }
+.confirm-note-pic input { position: absolute; top: 4px; left: 4px; margin: 0; accent-color: var(--accent, currentColor); }
+.confirm-note-pic input:disabled + img { opacity: 0.45; }
+@media (max-width: 560px) {
+  .confirm-note { grid-template-columns: minmax(0, 1fr); }
+}
 
 /* ------------------------------------------------------- launching pane */
 

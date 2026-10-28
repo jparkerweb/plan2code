@@ -2,7 +2,8 @@
 //
 // The person's own notes for the folder this session runs in, kept by the
 // server under ~/.plan2code/notepads/ through the /notepad routes, never in
-// the session, so nothing typed here reaches the agent. A notepad is a row of
+// the session. The agent CLI never imports the store: a tab leaves it only
+// through a send the person starts on the dashboard. A notepad is a row of
 // tabs, each its own note with its own pictures; one tab is on screen. The
 // editor is CodeMirror (notepad-editor.js), loaded the first time the Notebook
 // opens. When to save, what the status line says, the tab name rules and the
@@ -34,6 +35,7 @@ import { el, lightDismiss } from "../render.js";
 import { postJson } from "../net.js";
 import { reencode } from "../uploads.js";
 import { createTabs } from "../notepad-tabs.js";
+import { skillFor } from "../skills.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -245,8 +247,32 @@ async function readNote(tab) {
 
 const nameOf = (id) => (tabs.find((t) => t.id === id) || {}).name || "";
 
+// A tab as the bar and the sent line keep it: `sent` only on a tab sent from
+// the dashboard.
+const tabEntry = (t) => ({ id: t.id, name: t.name, ...(t.sent ? { sent: t.sent } : {}) });
+
+// "Sent to Plan · Oct 27", or "Sent to Revise plan (lunch-vote) · Oct 27",
+// for a tab's last send; "" when it has none.
+export function sentLine(sent) {
+  if (!sent || typeof sent.workflow !== "string") return "";
+  const skill = skillFor(sent.workflow);
+  const at = new Date(sent.at);
+  if (!skill || Number.isNaN(at.getTime())) return "";
+  const spec = typeof sent.spec === "string" && sent.spec ? " (" + sent.spec.replace(/^specs\//, "") + ")" : "";
+  return "Sent to " + skill.name + spec + " · " + at.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+// The muted line under the editor for the tab on screen.
+function drawSent() {
+  const line = $("notepad-sent");
+  const text = sentLine((tabs.find((t) => t.id === activeId) || {}).sent);
+  line.textContent = text;
+  line.hidden = !text;
+}
+
 function drawTabs() {
   tabBar.draw(tabs, activeId);
+  drawSent();
   $("notepad-tab-new").disabled = busy;
   $("notepad-empty-new").disabled = busy;
   $("notepad-name-save").disabled = busy;
@@ -256,7 +282,7 @@ function drawTabs() {
 // the text and the tab alone (the notepad was only reopened while text was
 // still unsaved), taking the bar and the pictures from the server.
 function show(body, keep = false) {
-  tabs = body.tabs.map((t) => ({ id: t.id, name: t.name }));
+  tabs = body.tabs.map(tabEntry);
   const tab = body.tab;
   if (keep) {
     takeStored(tab && tab.id === activeId ? tab.images : [], activeId);
@@ -328,7 +354,7 @@ async function reorder(order, focus) {
   inform("");
   tell(errorSentence(res.status === 0 ? null : res.body && res.body.error));
   const again = await readNote(activeId);
-  if (again.ok) tabs = again.body.tabs.map((t) => ({ id: t.id, name: t.name }));
+  if (again.ok) tabs = again.body.tabs.map(tabEntry);
   drawTabs();
 }
 

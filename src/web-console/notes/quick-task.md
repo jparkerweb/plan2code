@@ -7,7 +7,7 @@ Workflow notes for `quick-task`, part of the web console contract
 
 - Open with the first clarifying question. Clarifying questions go out as
   `text` or `choice`, at most three at a time. The first, asking what to build,
-  carries `"templates": "idea"` (`console.md` → The kinds).
+  carries `"templates": "idea"` and `"fill": "note"` (`console.md` → The kinds): the page fills that box from a Notebook tab when the person started with one.
 - Post `"stopWarning": "A quick task saves nothing until it is built, so stopping now loses what we have worked out."`
   at the start, and `"stopWarning": ""` once the build is under way.
 - **Scope check:** a `choice`, "Too big for a quick task?", options

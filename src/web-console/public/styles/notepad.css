@@ -43,6 +43,9 @@
   background: var(--panel);
 }
 .notepad-editor:focus-within { border-color: var(--accent-line); }
+/* The open tab's last send from the dashboard, muted under the editor. */
+.notepad-sent { flex: none; margin: 6px 0 0; font-size: 12.5px; color: var(--ink-3); }
+.notepad-sent[hidden] { display: none; }
 /* The pictures under the editor: the Add image button, then the thumbnails,
    wrapping. Capped at two rows, so 200 pictures never squeeze the editor
    away; the strip scrolls instead. The whole region lights while pictures are
@@ -203,6 +206,17 @@
   white-space: nowrap;
 }
 .notepad-tab[aria-selected="true"] { font-weight: 600; }
+.notepad-sent-badge {
+  flex: none;
+  margin: 0 2px 0 2px;
+  padding: 1px 5px;
+  border: 1px solid var(--rule-2);
+  border-radius: 999px;
+  color: var(--ink-3);
+  font-size: 10.5px;
+  line-height: 1.3;
+  white-space: nowrap;
+}
 .notepad-tab-x {
   flex: none;
   width: 20px;

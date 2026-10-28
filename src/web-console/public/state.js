@@ -46,6 +46,12 @@ export function fresh() {
     launching: null,
     // A picker Delete sent and not yet answered by a rescan: { dir, scanAt }.
     deleting: null,
+    // A Notebook tab picked at Start, riding the hop until the launched
+    // skill's `fill: "note"` box takes it: { tab, text, pictures, workflow, spec? }.
+    noteSend: null,
+    // The box it filled, until a send carrying that box marks the tab sent:
+    // { item, tab, workflow, spec? }.
+    noteSent: null,
     retract: {},
     chat: freshChat(),
   };

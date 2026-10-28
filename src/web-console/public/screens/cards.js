@@ -1000,8 +1000,10 @@ function buildText(card, item, staged) {
     wrap.appendChild(templateRow(item, input, templatesFor(page.S.workflow, looks.role), check));
   }
   wrap.appendChild(input);
-  // Fresh-idea boxes take files as context, the same ones the note pane holds.
-  if (!single && TEMPLATE_WORKFLOWS.includes(page.S.workflow)) {
+  // Fresh-idea boxes take files as context, the same ones the note pane holds,
+  // and so does any box the page fills from a Notebook tab (Revise plan's
+  // "What should change"), whose ticked pictures land here.
+  if (!single && (TEMPLATE_WORKFLOWS.includes(page.S.workflow) || item.fill === "note")) {
     input.addEventListener("paste", (e) => {
       const files = incomingFiles(e.clipboardData && e.clipboardData.files);
       if (!files.length) return;

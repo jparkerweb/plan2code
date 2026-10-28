@@ -59,7 +59,7 @@ import {
 import { sound } from "../sound.js";
 import { renderConfirm, renderDashboard } from "./dashboard.js";
 import { renderLaunching, renderWaiting } from "./starting.js";
-import { heldNotes, noteImages, pendingNotes, removeImage } from "../uploads.js";
+import { attachFiles, heldNotes, noteImages, pendingNotes, removeImage } from "../uploads.js";
 import { closeMentions } from "../mention-box.js";
 import { buildPager, fitGrowBox, markFor, markMore, renderCard, renderEndItem, renderNotice } from "./cards.js";
 import { sendState } from "../send-state.js";
@@ -71,6 +71,7 @@ import { linkLeavesPage, startNewSession, tellApp } from "../app-bridge.js";
 import { askOfflineFlipped, askState, declineOpen, renderAside, renderAsk, renderSubagents, renderSubagentsButton } from "./ask.js";
 import { renderHandoff, renderHomeButton, renderStopButton, renderStopControls, renderStopping, stopInProgress, stopWarning } from "./ending.js";
 import { renderNotepadButton } from "./notepad.js";
+import { renderActivities } from "./activities.js";
 
 // What the entry needs from the screens at start-up, handed on from here: only
 // the core imports a screen.
@@ -85,6 +86,7 @@ export { wireCleanup } from "./cleanup.js";
 export { startLooks, wireLooks } from "./looks.js";
 export { wireEnding } from "./ending.js";
 export { wireNotepad } from "./notepad.js";
+export { wireActivities } from "./activities.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -174,6 +176,53 @@ function settleStaleUploads() {
   for (const list of [...Object.values(page.local.images || {}), page.local.chat.images]) {
     for (const img of list) if (img.status === "uploading") img.status = "failed";
   }
+}
+
+// A Notebook tab picked at Start (dashboard.js) fills the launched skill's
+// first open `fill: "note"` box, once. It is claimed before anything is
+// fetched, so a redraw or a reload never fills the box a second time.
+function fillNoteBox() {
+  const ns = page.local.noteSend;
+  if (!ns || isDashboard() || finish() || page.S.workflow !== ns.workflow) return;
+  const item = items().find((i) => i.kind === "text" && i.fill === "note" && i.status === "open");
+  if (!item) return;
+  page.local.noteSend = null;
+  save();
+  seedNoteBox(item, ns);
+}
+
+// The tab's text as the box's draft and staged answer, then its ticked
+// pictures through the same path a pasted picture takes. A tab deleted since
+// Start leaves the box empty; a picture deleted since is skipped.
+async function seedNoteBox(item, ns) {
+  const tab = encodeURIComponent(ns.tab);
+  try {
+    const res = await fetch("/notepad?tab=" + tab, { cache: "no-store" });
+    if (res.status === 404) {
+      banner("That Notebook tab is gone; the box starts empty.", "warn");
+      return;
+    }
+  } catch {}
+  const text = typeof ns.text === "string" ? ns.text : "";
+  if (text.trim()) {
+    page.local.drafts["text-" + item.id] = text;
+    page.local.staged[item.id] = { type: "answer", kind: "text", text: text.trim() };
+  }
+  page.local.noteSent = { item: item.id, tab: ns.tab, workflow: ns.workflow, ...(ns.spec ? { spec: ns.spec } : {}) };
+  save();
+  redraw();
+  const files = await Promise.all(
+    (ns.pictures || []).map(async (id) => {
+      try {
+        const r = await fetch("/notepad/images/" + tab + "/" + encodeURIComponent(id) + ".jpg", { cache: "no-store" });
+        return r.ok ? new File([await r.blob()], id + ".jpg", { type: "image/jpeg" }) : null;
+      } catch {
+        return null;
+      }
+    }),
+  );
+  const found = files.filter(Boolean);
+  if (found.length) attachFiles(item.id, found);
 }
 
 async function pushDraft() {
@@ -276,7 +325,16 @@ export function adopt(body) {
     // the dashboard, the picker starts on the most recently touched spec still
     // in play, the one the agent's fresh menu recommends for.
     const keepPick = page.S.workflow !== "dashboard" && "specSel" in page.local;
-    page.local = { ...fresh(), launching: page.local.launching, ...(keepPick ? { specSel: page.local.specSel } : {}) };
+    // A Notebook tab picked at Start rides into the skill it was picked for,
+    // and nowhere else: back home, or a hop to another skill, drops it.
+    const ns = page.local.noteSend;
+    const keepNote = Boolean(ns) && page.S.workflow !== "dashboard" && page.S.workflow === ns.workflow;
+    page.local = {
+      ...fresh(),
+      launching: page.local.launching,
+      ...(keepPick ? { specSel: page.local.specSel } : {}),
+      ...(keepNote ? { noteSend: ns } : {}),
+    };
     save();
     page.selected = null;
     page.view = "questions";
@@ -395,6 +453,7 @@ export function adopt(body) {
       (r === "any" || (item.submitted && item.submitted.at === r));
     if (!live) delete page.local.retract[id];
   }
+  fillNoteBox();
 
   // New work: a question that is theirs to answer now and was not a moment ago.
   // That covers a brand new question and one the agent reopened or answered
@@ -707,6 +766,7 @@ export function render() {
     renderSubagentsButton();
     renderStopButton();
     renderNotepadButton();
+    renderActivities();
     renderHomeButton();
     tabAdded = renderViews();
     renderSidebar();
@@ -1105,7 +1165,7 @@ export function renderStatus() {
     $("dock").classList.toggle("is-flying", Boolean(spin));
     // The tab icon's bar says the same thing from another tab (favicon.js),
     // and the app's taskbar entry from another window.
-    const icon = faviconState({ mood, spin, finished: Boolean(finish()) });
+    const icon = faviconState({ mood, spin });
     setFavicon(icon);
     tellAttention(icon);
   };
@@ -1794,6 +1854,17 @@ export function markSent({ sentIds, sentNotes = {}, summaries, values }) {
     page.local.sent[id] = { at: Date.now(), summary: summaries[id] || "", value: values[id] || null };
   }
   page.local.staged = {};
+  // The box a Notebook tab filled went with this send: only now does the
+  // Notebook say the tab was sent. A failed mark is not worth a banner.
+  const ns = page.local.noteSent;
+  if (ns && sentIds.has(ns.item)) {
+    page.local.noteSent = null;
+    fetch("/notepad/tab/sent", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ id: ns.tab, workflow: ns.workflow, ...(ns.spec ? { spec: ns.spec } : {}) }),
+    }).catch(() => {});
+  }
   save();
 }
 

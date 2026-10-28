@@ -54,6 +54,7 @@ import {
   defaultTabId,
   deleteTab,
   imagePath,
+  markTabSent,
   readNotepad,
   removeImage,
   renameTab,
@@ -101,6 +102,7 @@ const ROUTES = [
   { path: "/notepad/tab/delete", method: "POST", origin: true, run: notepadTabDelete },
   { path: "/notepad/tab/order", method: "POST", origin: true, run: notepadTabOrder },
   { path: "/notepad/tab/last", method: "POST", origin: true, run: notepadTabLast },
+  { path: "/notepad/tab/sent", method: "POST", origin: true, run: notepadTabSent },
   { match: (p, req) => p.startsWith("/notepad/images/") || req.url.startsWith("/notepad/images/"), method: "GET", run: notepadImageGet },
   { match: (p, req) => p.startsWith("/attachments/") || req.url.startsWith("/attachments/"), run: attachment },
   { match: (p, req) => p.startsWith("/shots/") || req.url.startsWith("/shots/"), run: shot },
@@ -652,7 +654,8 @@ function cleanup(req, res, ctx) {
 
 // The person's private notepad for the folder this session runs in, kept by
 // notepads.mjs outside the session. Nothing here writes to ctx.dir or the
-// event log: the agent reads both, and the notepad is never the agent's.
+// event log: the agent reads both, and the agent CLI never imports the store.
+// A tab leaves it only through a send the person starts on the dashboard.
 const notepadRoot = (ctx) => ctx.worktree() || ctx.project;
 
 function notepadFail(res, e) {
@@ -765,6 +768,9 @@ function notepadTabOrder(req, res, ctx) {
 }
 function notepadTabLast(req, res, ctx) {
   return notepadTabRoute((root, body) => setLastTab(root, body.id))(req, res, ctx);
+}
+function notepadTabSent(req, res, ctx) {
+  return notepadTabRoute((root, body) => markTabSent(root, body.id, { workflow: body.workflow, spec: body.spec }))(req, res, ctx);
 }
 
 // Matched on the raw request line too, as /uploads/ is: URL parsing folds

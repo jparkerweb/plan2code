@@ -695,6 +695,49 @@ export function cardAvailability(entry, scan, sel, lookup = stateFor) {
   return off(rule.greyed[taken] || (lookup(taken)?.finished && rule.greyed.finished) || rule.greyed.default);
 }
 
+// The cards whose confirm pane offers "Start with a note from your Notebook"
+// on Start fresh: the three that open on an idea box.
+const NOTE_FRESH_CARDS = new Set(["plan2code-0-pathfinder", "plan2code-1-plan", "plan2code-quick-task"]);
+
+/**
+ * Whether a lit card's confirm pane offers the Notebook switch: Pathfinder,
+ * Plan and Quick Task on Start fresh (no spec picked), and Revise plan on a
+ * picked spec with no plan change brief waiting (a waiting brief is what that
+ * revision is about). Never on a grayed card, never on any other card.
+ */
+export function noteSwitchShows(entry, scan, sel) {
+  if (!entry || !cardAvailability(entry, scan, sel).on) return false;
+  if (NOTE_FRESH_CARDS.has(entry.skill)) return !sel;
+  if (entry.skill === "plan2code-1b-revise-plan") return Boolean(sel) && sel.planChange !== true;
+  return false;
+}
+
+// A Notebook tab's text over this many UTF-8 bytes gets a "Long tab" note in
+// the confirm pane's preview, so the person can trim it before it is sent.
+export const NOTE_LONG_BYTES = 51200;
+
+/** Whether a Notebook tab, as GET /notepad?tab= reads it, holds nothing to send. */
+export function noteTabEmpty(tab) {
+  const text = tab && typeof tab.text === "string" ? tab.text : "";
+  const images = tab && Array.isArray(tab.images) ? tab.images : [];
+  return text.trim() === "" && images.length === 0;
+}
+
+/** The pictures ticked when a tab is first picked: its first MAX_ATTACHMENTS, in its own order. */
+export function defaultNoteTicks(images) {
+  return (Array.isArray(images) ? images : []).slice(0, MAX_ATTACHMENTS).map((img) => img.id);
+}
+
+/**
+ * The ticked ids after a click on `id`: unticked if it was ticked, else ticked
+ * while fewer than MAX_ATTACHMENTS are; past that the click changes nothing.
+ */
+export function toggleNoteTick(ticked, id) {
+  const list = Array.isArray(ticked) ? ticked : [];
+  if (list.includes(id)) return list.filter((t) => t !== id);
+  return list.length < MAX_ATTACHMENTS ? [...list, id] : list;
+}
+
 /**
  * The spec a card's launch carries: the picker's selection for the cards that
  * take a spec, and for Quick Task only a diagnosed bug, whose write-up it reads

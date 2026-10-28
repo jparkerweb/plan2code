@@ -48,6 +48,11 @@ import {
   handoffText,
   launchReply,
   launchTarget,
+  noteSwitchShows,
+  noteTabEmpty,
+  defaultNoteTicks,
+  toggleNoteTick,
+  NOTE_LONG_BYTES,
   deleteAction,
   deleteReply,
   chipDetail,
@@ -1500,6 +1505,17 @@ test("validate: templates only as \"idea\", only on a text item", () => {
   assert.ok(validate(item({ templates: "yes" })).includes(message));
 });
 
+test("validate: fill only as \"note\", only on a text item", () => {
+  const item = (extra) => ({ items: [{ id: "idea", kind: "text", title: "What's the idea?", ...extra }] });
+  const message = 'item "idea" has "fill": only a text item can carry it, and its only value is "note".';
+  assert.deepEqual(validate(item({ fill: "note" })), []);
+  assert.deepEqual(validate(item({ fill: "note", templates: "idea" })), []);
+  assert.ok(validate(item({ kind: "choice", options: [{ k: "A", text: "a" }], fill: "note" })).includes(message));
+  assert.ok(validate(item({ kind: "confirm", fill: "note" })).includes(message));
+  assert.ok(validate(item({ fill: "idea" })).includes(message));
+  assert.ok(validate(item({ fill: true })).includes(message));
+});
+
 test("attachmentName: slug of the original name, 8 characters of the upload id, the upload's own extension", () => {
   const up = (uuid, ext) => path.join(HOME, "sessions", "x", "uploads", `${uuid}${ext}`);
   const a = up("3f2b9c1e-8a4d-4f6e-9b7a-2c5d1e0f4a6b", ".jpg");
@@ -2319,4 +2335,46 @@ test("meter: the weights and labels built from the skill list are the ones writt
     "git-conflict": "Git conflict help", changelog: "Changelog run", xray: "X-ray run", diagnose: "Diagnose run",
   });
   for (const t of [WEIGHTS, LAUNCH_LABELS, RUN_LABELS]) assert.ok(Object.isFrozen(t));
+});
+
+test("noteSwitchShows: Pathfinder, Plan and Quick Task on Start fresh, Revise plan on a picked spec with no brief waiting", () => {
+  const entry = (skill) => SKILL_CATALOG.find((e) => e.skill === skill);
+  const scan = { hasAgents: true, isGit: true, pending: 0, specs: [] };
+  const sel = (state, extra = {}) => ({ dir: "specs/x", name: "x", state, ...extra });
+  const fresh = ["plan2code-0-pathfinder", "plan2code-1-plan", "plan2code-quick-task"];
+  for (const skill of fresh) {
+    assert.equal(noteSwitchShows(entry(skill), scan, null), true, `${skill} on Start fresh`);
+    assert.equal(noteSwitchShows(entry(skill), scan, sel("exploring")), false, `${skill} on a picked spec`);
+    assert.equal(noteSwitchShows(entry(skill), scan, sel("exploring", { planChange: true })), false, `${skill} on a picked spec with a brief`);
+  }
+  const revise = entry("plan2code-1b-revise-plan");
+  assert.equal(noteSwitchShows(revise, scan, null), false, "Revise plan is grayed on Start fresh");
+  for (const state of ["documented", "building", "built"]) {
+    assert.equal(noteSwitchShows(revise, scan, sel(state)), true, `Revise plan on ${state}`);
+    assert.equal(noteSwitchShows(revise, scan, sel(state, { planChange: true })), false, `Revise plan on ${state} with a brief waiting`);
+  }
+  assert.equal(noteSwitchShows(revise, scan, sel("exploring")), false, "never on a grayed card");
+  for (const skill of ["plan2code-3-implement", "plan2code-2-document", "plan2code-git", "plan2code-xray"]) {
+    assert.equal(noteSwitchShows(entry(skill), scan, null), false, `${skill} on Start fresh`);
+    assert.equal(noteSwitchShows(entry(skill), scan, sel("documented")), false, `${skill} on a picked spec`);
+  }
+  assert.equal(noteSwitchShows(null, scan, null), false);
+});
+
+test("Notebook pick rules: an empty tab, the first five pictures ticked, and no sixth tick", () => {
+  assert.equal(noteTabEmpty({ text: "", images: [] }), true);
+  assert.equal(noteTabEmpty({ text: "  \n", images: [] }), true, "whitespace is nothing to send");
+  assert.equal(noteTabEmpty({ text: "", images: [{ id: "a" }] }), false);
+  assert.equal(noteTabEmpty({ text: "idea", images: [] }), false);
+  assert.equal(noteTabEmpty(null), true);
+  const imgs = ["a", "b", "c", "d", "e", "f", "g"].map((id) => ({ id }));
+  assert.deepEqual(defaultNoteTicks(imgs), ["a", "b", "c", "d", "e"]);
+  assert.deepEqual(defaultNoteTicks(imgs.slice(0, 2)), ["a", "b"]);
+  assert.deepEqual(defaultNoteTicks(undefined), []);
+  const five = defaultNoteTicks(imgs);
+  assert.deepEqual(toggleNoteTick(five, "f"), five, "a sixth tick changes nothing");
+  const four = toggleNoteTick(five, "c");
+  assert.deepEqual(four, ["a", "b", "d", "e"]);
+  assert.deepEqual(toggleNoteTick(four, "f"), ["a", "b", "d", "e", "f"], "untick one to tick another");
+  assert.equal(NOTE_LONG_BYTES, 51200);
 });

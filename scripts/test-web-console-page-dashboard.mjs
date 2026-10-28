@@ -12,7 +12,8 @@ import path from "node:path";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { pageSuite, openSession, tempProject, textOf, styleOf } from "./page-test-helpers.mjs";
-import { cli, until, CONSOLE_CLI, HOME } from "./web-console-test-helpers.mjs";
+import { cli, until, CONSOLE_CLI, HOME, JPEG } from "./web-console-test-helpers.mjs";
+import { addImage, createTab, deleteTab, markTabSent, saveNote } from "../src/web-console/notepads.mjs";
 
 const suite = pageSuite(test);
 
@@ -536,4 +537,141 @@ test("a quick-task build's waiting pane points at its Plan tab, and a plan sessi
   const otherPane = other.page.locator("#main > .waiting-pane");
   await otherPane.waitFor();
   assert.equal(await otherPane.getByRole("button", { name: "Plan", exact: true }).count(), 0, "a plan session has no live task list to point at");
+});
+
+// A project with a drafted plan (demo), a documented spec (ready) and one
+// paused mid-build with a Plan change brief waiting (paused).
+const NOTE_PROJECT = {
+  ...DRAFT_PROJECT,
+  "specs/ready/overview.md": "# Overview\n\n## Phase Checklist\n\n- [ ] Phase 1: One\n",
+  "specs/ready/phase-1.md": "# Phase 1\n\n- [ ] **Task 1.1:** One\n",
+  "specs/paused/overview.md": "# Overview\n\n## Phase Checklist\n\n- [/] Phase 1: One\n",
+  "specs/paused/phase-1.md":
+    "# Phase 1\n\n- [x] **Task 1.1:** One\n- [ ] **Task 1.2:** Two\n\n## Notes\n\n### Paused 2026-10-27\n**Plan change:** add a phase first\n",
+};
+
+const noteSwitch = (main) => main.getByRole("checkbox", { name: "Start with a note from your Notebook" });
+
+// Picks `chip` in the picker, opens `command`'s card and says whether its
+// confirm pane offers the switch; Back returns to the menu.
+async function offersNote(main, chip, command) {
+  await chipFor(main, chip).click();
+  await pickedChip(main, chip).waitFor();
+  const card = lightOf(main, command);
+  if (!(await card.isVisible()) || (await card.isDisabled())) return null;
+  await card.click();
+  await main.getByRole("button", { name: "Back" }).waitFor();
+  const shows = (await noteSwitch(main).count()) === 1;
+  await main.getByRole("button", { name: "Back" }).click();
+  await main.getByRole("heading", { name: "What are we doing today?" }).waitFor();
+  return shows;
+}
+
+test("the Notebook switch shows on Start fresh for Pathfinder, Plan and Quick Task, and on Revise plan only with no brief waiting", async (t) => {
+  const s = await openSession(await suite.browser(), { t, workflow: "dashboard", payload: MENU, project: tempProject(NOTE_PROJECT) });
+  const main = await toTheMenu(s);
+  await hideUnavailable(main, false);
+  for (const command of ["/plan2code-0-pathfinder", "/plan2code-1-plan", "/plan2code-quick-task"]) {
+    assert.equal(await offersNote(main, "Start from scratch", command), true, `${command} on Start fresh`);
+  }
+  assert.equal(await offersNote(main, "demo", "/plan2code-1-plan"), false, "Plan on a picked spec");
+  assert.equal(await offersNote(main, "ready", "/plan2code-1b-revise-plan"), true, "Revise plan with no brief waiting");
+  assert.equal(await offersNote(main, "paused", "/plan2code-1b-revise-plan"), false, "Revise plan with a brief waiting");
+  assert.equal(await offersNote(main, "ready", "/plan2code-3-implement"), false, "Implement never");
+  assert.equal(await offersNote(main, "Start from scratch", "/plan2code-xray"), false, "a utility never");
+});
+
+test("the switch lists the Notebook's tabs beside a preview: an empty tab grayed, five ticks at most, a Long tab note, and + note: on the command", async (t) => {
+  const project = tempProject(DRAFT_PROJECT);
+  const s = await openSession(await suite.browser(), { t, workflow: "dashboard", payload: MENU, project });
+  createTab(s.project, "Empty");
+  const big = createTab(s.project, "Big").id;
+  const small = createTab(s.project, "Small").id;
+  saveNote(s.project, big, "# Big idea\n\n" + "x".repeat(52 * 1024));
+  for (let i = 0; i < 7; i++) addImage(s.project, big, JPEG);
+  saveNote(s.project, small, "A small **idea**.");
+  markTabSent(s.project, small, { workflow: "plan" });
+
+  const main = await toTheMenu(s);
+  await chipFor(main, "Start from scratch").click();
+  await pickedChip(main, "Start from scratch").waitFor();
+  await lightOf(main, "/plan2code-0-pathfinder").click();
+  const toggle = noteSwitch(main);
+  assert.equal(await toggle.isChecked(), false, "off by default");
+  const cmd = main.locator(".confirm-cmd");
+  assert.equal(await cmd.locator(".confirm-cmd-note").isHidden(), true);
+  await toggle.check();
+
+  const tabs = main.locator(".confirm-note-tabs");
+  await tabs.locator(".confirm-note-tab").nth(2).waitFor();
+  const tab = (name) => tabs.locator(".confirm-note-tab", { has: s.page.locator(".confirm-note-tab-name", { hasText: new RegExp(`^${name}$`) }) });
+  assert.equal(await tab("Empty").isDisabled(), true, "an empty tab cannot be picked");
+  assert.ok(parseFloat(await styleOf(tab("Empty"), "opacity")) < 1, "and is grayed");
+  assert.equal(await tab("Big").isEnabled(), true);
+  assert.equal(await tab("Small").locator(".notepad-sent-badge").count(), 1, "a sent tab shows its badge");
+  assert.equal(await tab("Big").locator(".notepad-sent-badge").count(), 0);
+
+  // Small: its text, rendered, and no Long tab note.
+  await tab("Small").click();
+  const preview = main.locator(".confirm-note-preview");
+  await preview.locator("strong", { hasText: "idea" }).waitFor();
+  assert.equal(await preview.locator(".confirm-note-long").count(), 0);
+  assert.equal(await textOf(cmd.locator(".confirm-cmd-note")), "+ note: Small");
+
+  // Big: over 50 KB, seven pictures, the first five ticked.
+  await tab("Big").click();
+  await preview.locator(".md-h", { hasText: "Big idea" }).waitFor();
+  assert.match(await textOf(preview.locator(".confirm-note-long")), /^Long tab: /);
+  assert.equal(await textOf(cmd.locator(".confirm-cmd-note")), "+ note: Big");
+  const ticks = preview.locator(".confirm-note-pic input[type=checkbox]");
+  assert.equal(await ticks.count(), 7);
+  const states = async () => ticks.evaluateAll((bs) => bs.map((b) => (b.checked ? "x" : b.disabled ? "-" : "o")).join(""));
+  assert.equal(await states(), "xxxxx--", "the first five ticked, no more can be");
+  await ticks.nth(1).uncheck();
+  await until(async () => (await states()) === "xoxxxoo", 3000);
+  await ticks.nth(6).check();
+  await until(async () => (await states()) === "x-xxx-x", 3000);
+
+  // Off again: no note on the command line.
+  await noteSwitch(main).uncheck();
+  await until(async () => await cmd.locator(".confirm-cmd-note").isHidden(), 3000);
+  assert.equal(await tabs.count(), 0);
+});
+
+test("the switch reads the Notebook again when it closes, and starts off again after Back", async (t) => {
+  const s = await openSession(await suite.browser(), { t, workflow: "dashboard", payload: MENU, project: tempProject(DRAFT_PROJECT) });
+  const keep = createTab(s.project, "Keep").id;
+  const gone = createTab(s.project, "Gone").id;
+  saveNote(s.project, keep, "first words");
+  saveNote(s.project, gone, "soon deleted");
+
+  const main = await toTheMenu(s);
+  await chipFor(main, "Start from scratch").click();
+  await pickedChip(main, "Start from scratch").waitFor();
+  await lightOf(main, "/plan2code-1-plan").click();
+  await noteSwitch(main).check();
+  const tabs = main.locator(".confirm-note-tabs");
+  const tab = (name) => tabs.locator(".confirm-note-tab", { has: s.page.locator(".confirm-note-tab-name", { hasText: new RegExp(`^${name}$`) }) });
+  await tab("Keep").click();
+  const preview = main.locator(".confirm-note-preview");
+  await preview.getByText("first words").waitFor();
+  assert.equal(await preview.getAttribute("role"), "region");
+
+  // Changed in the Notebook while the pane is open: closing it reads again.
+  saveNote(s.project, keep, "second words");
+  deleteTab(s.project, gone);
+  await s.page.click("#btn-notepad");
+  await s.page.locator("#notepad-modal[open]").waitFor();
+  await s.page.click("#notepad-close");
+  await preview.getByText("second words").waitFor();
+  await until(async () => (await tab("Gone").count()) === 0, 5000);
+  assert.equal(await textOf(main.locator(".confirm-cmd-note")), "+ note: Keep", "the pick survives a read that still has its tab");
+
+  // Back, then the same card again: the switch is off and nothing is picked.
+  await main.getByRole("button", { name: "Back" }).click();
+  await main.getByRole("heading", { name: "What are we doing today?" }).waitFor();
+  await lightOf(main, "/plan2code-1-plan").click();
+  assert.equal(await noteSwitch(main).isChecked(), false);
+  assert.equal(await main.locator(".confirm-cmd-note").isHidden(), true);
+  assert.equal(await tabs.count(), 0);
 });

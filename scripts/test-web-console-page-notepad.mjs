@@ -31,6 +31,7 @@ import {
   defaultTabId,
   deleteTab,
   listTabs,
+  markTabSent,
   notepadFolder,
   notepadKey,
   readNotepad,
@@ -1172,4 +1173,40 @@ test("Help's Getting around panel describes the notepad", async (t) => {
   for (const words of ["Notebook", "never sent to Plan2Code", "last save wins", "Cleanup"]) {
     assert.ok(text.includes(words), `the panel mentions ${words}`);
   }
+});
+
+test("a sent tab wears a badge after its name, and the open tab shows Sent to <Skill> · <Date>", async (t) => {
+  const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_QUESTION });
+  const sent = createTab(s.project, "Sent one").id;
+  createTab(s.project, "Plain");
+  saveNoteTo(s.project, sent, "an idea");
+  const { sent: record } = markTabSent(s.project, sent, { workflow: "revise-plan", spec: "specs/lunch-vote" });
+  // The page draws its own short date; the line must carry the same one.
+  const day = await s.page.evaluate((at) => new Date(at).toLocaleDateString(undefined, { month: "short", day: "numeric" }), record.at);
+  const line = s.page.locator("#notepad-sent");
+
+  await openNotepad(s);
+  // Plain was made last, so it opens first: no badge, no line.
+  assert.equal(await selectedName(s).then((n) => n.join()), "Plain");
+  assert.equal(await line.isHidden(), true, "no Sent to line on a tab never sent");
+  const badges = s.page.locator("#notepad-tabs .notepad-sent-badge");
+  assert.equal(await badges.count(), 1, "one badge, on the sent tab only");
+  assert.equal(await badges.first().textContent(), "sent");
+  const wrapOf = (name) => s.page.locator("#notepad-tabs .notepad-tabwrap").filter({ has: s.page.locator(".notepad-tab", { hasText: new RegExp(`^${name}$`) }) });
+  assert.equal(await wrapOf("Sent one").locator(".notepad-sent-badge").count(), 1);
+  assert.equal(await wrapOf("Plain").locator(".notepad-sent-badge").count(), 0);
+  assert.equal(await tabNamed(s, "Sent one").getAttribute("aria-label"), "Sent one, sent");
+  assert.equal(await tabNamed(s, "Plain").getAttribute("aria-label"), null);
+  assert.ok(parseFloat(await styleOf(badges.first(), "font-size")) < 13, "the badge is small");
+
+  await tabNamed(s, "Sent one").click();
+  assert.equal(await shows(s, "an idea"), "an idea");
+  await line.waitFor({ state: "visible" });
+  assert.equal(await line.textContent(), `Sent to Revise plan (lunch-vote) · ${day}`);
+  // Under the editor and above the pictures.
+  const order = await s.page.evaluate(() => [...document.getElementById("notepad-body").children].map((c) => c.id));
+  assert.ok(order.indexOf("notepad-sent") === order.indexOf("notepad-editor") + 1 && order.indexOf("notepad-sent") < order.indexOf("notepad-images"), order.join(", "));
+
+  await tabNamed(s, "Plain").click();
+  await line.waitFor({ state: "hidden" });
 });
