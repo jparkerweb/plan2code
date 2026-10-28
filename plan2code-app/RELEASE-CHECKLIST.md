@@ -117,7 +117,7 @@ Do each of Claude Code, Devin and Codex for a few minutes:
 - [ ] Each **Install page** link opens the right page in the default browser (Claude Code, Devin, Codex)
 - [ ] Install an agent (or add a custom one), press **Check again**: it appears and Start turns on without restarting the app
 - [ ] With only one agent installed and nothing remembered, the launch card starts on that agent, not Claude Code
-- [ ] Windows: the taskbar button shows a green dot when it is your move and a red dot when Plan2Code needs attention, and no dot while the agent is busy or after it ends
+- [ ] Windows: the taskbar button shows a green dot when it is your move and a red dot when Plan2Code needs attention, a green dot on a finished screen that still offers a button (back to the dashboard, a review), and no dot while the agent is busy, once a finished step has nothing left to press, or after the agent ends
 - [ ] Windows: with the window unfocused, the button gives one short burst of flashes when it becomes your move or needs attention (not again on a repeat) and stays lit until the window gets focus
 - [ ] macOS: the dock shows a red `!` badge when Plan2Code needs attention (no badge on your move), and bounces once when it becomes your move or needs attention while the app is in the background
 - [ ] Linux: where the desktop shows badges, a count of 1 appears on needs attention, and the window is marked as wanting attention while unfocused

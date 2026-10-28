@@ -18,7 +18,7 @@ The app is optional. The Node web console and the skills never depend on it, so 
 | macOS | no badge (the system badge cannot be green), one bounce when not focused | red `!` dock badge, and one bounce when not focused |
 | Linux | the urgency hint when not focused | a count badge of 1 where the desktop supports it, and the urgency hint |
 
-There is no dot while busy or finished. The dot clears when the agent ends, the page reloads or the page stops answering, and a lit taskbar button goes back to normal when the window gets focus. **User Preferences → Desktop app** (shown only inside the app) has the switch **Show on the taskbar when Plan2Code needs me**, on by default; off clears the dot and stops flashes. It is saved as `taskbarSignal` in the app's own `~/.plan2code/app.json`.
+There is no dot while busy or once a finished step has nothing left to press; a finished screen that still offers a button (back to the dashboard, a review) keeps the green dot. The dot clears when the agent ends, the page reloads or the page stops answering, and a lit taskbar button goes back to normal when the window gets focus. **User Preferences → Desktop app** (shown only inside the app) has the switch **Show on the taskbar when Plan2Code needs me**, on by default; off clears the dot and stops flashes. It is saved as `taskbarSignal` in the app's own `~/.plan2code/app.json`.
 
 ## Layout
 

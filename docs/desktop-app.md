@@ -86,9 +86,10 @@ The taskbar entry also shows when Plan2Code needs you, the same states as the co
 a browser. On Windows a green dot means it is your move and a red dot means it needs attention, with
 one short burst of flashes when the window is not focused; on macOS the dock shows a red `!` badge on
 needs attention and bounces once; on Linux a count badge appears where the desktop supports it. There
-is no dot while the agent is busy or the step is finished, and it clears when the agent ends or the
-page reloads. Turn it off with **Show on the taskbar when Plan2Code needs me** under **User
-Preferences → Desktop app** (shown only inside the app). The per-system details are in
+is no dot while the agent is busy or once a finished step has nothing left to press (a finished screen
+that still offers a button, such as back to the dashboard, keeps the green dot), and it clears when
+the agent ends or the page reloads. Turn it off with **Show on the taskbar when Plan2Code needs
+me** under **User Preferences → Desktop app** (shown only inside the app). The per-system details are in
 [plan2code-app/README.md](../plan2code-app/README.md#agents-and-the-taskbar).
 
 A slim top bar reads, left to right: the project folder's name, a menu holding its full path and
@@ -144,7 +145,7 @@ anyway**.
 ## Permission checks are off by default, same as the terminal
 
 The launch card's permission-mode tick is **on by default** (checks off), matching `plan2code` run the
-plain way: the agent starts with checks off (`--permission-mode bypassPermissions` in Claude Code,
+plain way, where the same question defaults to prompts off: the agent starts with checks off (`--permission-mode bypassPermissions` in Claude Code,
 `--permission-mode bypass` in Devin, `--dangerously-bypass-approvals-and-sandbox` in Codex), reading,
 writing and running commands in your project folder without asking; the agent's amber **checks off** badge in
 the top bar says so while that agent runs. Untick it before pressing Start agent to keep the agent's normal approval prompts instead.

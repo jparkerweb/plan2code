@@ -299,6 +299,27 @@ test("framed, the page tells the app its state once per change, never on a redra
   assert.deepEqual((await toApp(s, "attention")).at(-1), { plan2code: "attention", state: "plain" });
 });
 
+test("framed, a finished screen with a button still to press is the person's move; one with nothing left is plain", async (t) => {
+  const browser = await pages.browser();
+  const last = async (s) => (await toApp(s, "attention")).at(-1)?.state;
+  // The finished screen that waits on a press once told the app plain, so the
+  // taskbar showed no dot while the person was needed.
+  // Both start busy, so the state read after the finish's line shows is the
+  // finish's own (the line and the message come from the same redraw).
+  const WORKING = { agent: { status: "working", activity: "Task 1 of 2" } };
+  const offered = await openSession(browser, { t, workflow: "quick-task", payload: WORKING, env: { PLAN2CODE_IN_APP: "1" }, init: FAKE_APP_FRAME });
+  await until(async () => (await last(offered)) === "busy", 5000);
+  offered.post({ finish: { headline: "Quick task done", command: "git add -A && git commit -m x -m y", dashboard: true } });
+  await until(async () => (await offered.page.locator("#agent-text").textContent()).includes("Head back to the dashboard"), 5000);
+  assert.equal(await last(offered), "ready", "a finish offering the dashboard is the person's move");
+
+  const paused = await openSession(browser, { t, workflow: "implement", payload: WORKING, env: { PLAN2CODE_IN_APP: "1" }, init: FAKE_APP_FRAME });
+  await until(async () => (await last(paused)) === "busy", 5000);
+  paused.post({ finish: { headline: "Paused at Phase 2", command: "/plan2code-3-implement specs/audit-export/overview.md" } });
+  await until(async () => (await paused.page.locator("#agent-text").textContent()).startsWith("Paused"), 5000);
+  assert.equal(await last(paused), "plain", "a paused finish has nothing left to press");
+});
+
 test("the Desktop app group shows only in the app's frame, reflects the app's saved switch and tells the app when it changes", async (t) => {
   const browser = await pages.browser();
   const plain = await openSession(browser, { t, workflow: "implement", payload: ASKING });
