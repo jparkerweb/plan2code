@@ -8,7 +8,7 @@ Careful git operator. Read where the repository stands, do what the person asks 
 
 ## Interface
 
-An instruction in the argument (`/plan2code-git switch to main`, `/plan2code-git commit and push`, a commit subject) runs in the terminal at once: do not ask about the console. With no argument, the FIRST thing you do, before anything else in this file, before reading the repository: ask **web console** (browser page, suggested) or **terminal**? Console → run `node "<D>/console.mjs" open --workflow git` before reading (<D>: references/web-console/ beside this SKILL.md, ~/.agents/skills/plan2code-git/references/web-console/ globally, or the dir in ~/.plan2code/console/console-dir), then read <D>/console.md and <D>/notes/git.md. Switchable anytime. If the argument already says which (`--web` or `Use the web console for this session.`) take it and do not ask; drop the flag. Launched by the dashboard, or by a **Commit it now** or Changelog hand-off? Its session is already open: resume it with `--workflow git` (console-launches.md). Handed off to commit (Commit it now, Changelog's yes): post `reread`, then run the Commit flow from step 1 over every changed file (risky ones left out and named), its cards on the board; afterwards the board is theirs with Push lit. On the console, a `__stop` action is the person ending the session (console-stop.md); at every session end post `finish` BEFORE `stop`.
+An instruction in the argument (`/plan2code-git switch to main`, `/plan2code-git commit and push`, a commit subject) runs in the terminal at once: do not ask about the console. With no argument, the FIRST thing you do, before anything else in this file, before reading the repository: ask **web console** (browser page, suggested) or **terminal**? Console → run `node "<D>/console.mjs" open --workflow git` before reading (<D>: references/web-console/ beside this SKILL.md, ~/.agents/skills/plan2code-git/references/web-console/ globally, or the dir in ~/.plan2code/console/console-dir), then read <D>/console.md and <D>/notes/git.md. Switchable anytime. If the argument already says which (`--web` or `Use the web console for this session.`) take it and do not ask; drop the flag. Launched by the dashboard, or by a **Commit it now** or Changelog hand-off? Its session is already open: resume it with `--workflow git` (console-launches.md). Handed off to commit (Commit it now, Changelog's yes): post `reread`, then run the Commit flow from step 1 over every changed file (risky ones left out and named), its cards on the board; afterwards the board is theirs with Push lit.
 
 ## Project context
 
@@ -55,7 +55,7 @@ Optional: a plain instruction (`switch to main`, `pull`, `commit and push`, `del
 
 ## The board
 
-On the console the page draws the board itself from `state.git`; you never post it. Each click arrives through the wait loop as one `__git` action (`{ "i": "__git", "type": "git", "op": "switch", "branch": "main" }`, field shapes in notes/git.md), with `reply` the plain instruction the terminal would get. One action per turn:
+On the console the page draws the board itself from `state.git`; you never post it. Each click arrives through the wait loop as one `__git` action (its `op` and fields in notes/git.md), with `reply` the plain instruction the terminal would get. One action per turn:
 
 1. Post an `activity` line ("Pulling from origin…"); collecting the click already set the page to working.
 2. Run `git.mjs plan <op>` with the action's fields as flags.
@@ -112,7 +112,7 @@ In the terminal the same stops are asked in prose, with the diff printed.
 
 - **Done on the board, with something done this session:** post `finish` with a headline, a `body` listing the commits with hashes, pushes, and branches created or deleted, no `command`, and `"dashboard": true`. Then keep waiting for the dashboard press (console-finish.md).
 - **Done with nothing done:** resume as the dashboard at once (`open --resume <sid> --no-open --workflow dashboard`, then read the dashboard skill, post its menu and follow its "Coming back from another skill"), with no finish screen.
-- **A `__stop`:** a finish whose headline starts "Paused", with `"command": "/plan2code-git"`, then `stop`.
+- **A `__stop`:** a Paused finish with the command `/plan2code-git`.
 - **Terminal:** the last state line is enough.
 
 Returning context: run `/plan2code-git` again for the next action.

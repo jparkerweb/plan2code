@@ -106,6 +106,7 @@ const C = {
 
 const SEP = (config) => config.color ? `${C.gray} │ ${C.reset}` : ' │ ';
 const DOT = (config) => config.color ? `${C.gray} · ${C.reset}` : ' · ';
+const PIPE = (config) => config.color ? `${C.gray} | ${C.reset}` : ' | ';
 
 // ============================================================================
 // Git helpers
@@ -291,15 +292,15 @@ function formatContextBar(percent, tokens, config, suppressTokens) {
   const emptyStr = '▱'.repeat(CONTEXT_BAR_LEN - filled);
 
   const showTokens = config.items.contextTokens && !suppressTokens && tokens != null;
-  const tokenStr = showTokens ? ` (${formatTokenCount(tokens)})` : '';
+  const tokenStr = showTokens ? formatTokenCount(tokens) : '';
 
-  if (!config.color) return `${filledStr}${emptyStr} ${clamped}%${tokenStr}`;
+  if (!config.color) return `${tokenStr ? `${tokenStr} ⋅ ` : ''}${filledStr}${emptyStr} ${clamped}%`;
 
   const barColor = clamped >= CONTEXT_THRESHOLDS.yellow ? C.barRed
     : clamped >= CONTEXT_THRESHOLDS.green ? C.barYellow
     : C.barGreen;
-  const tokenPart = tokenStr ? `${C.label}${tokenStr}${C.reset}` : '';
-  return `${barColor}${filledStr}${C.gray}${emptyStr}${C.reset} ${barColor}${clamped}%${C.reset}${tokenPart}`;
+  const tokenPart = tokenStr ? `${C.label}${tokenStr}${C.reset}${C.gray} ⋅ ${C.reset}` : '';
+  return `${tokenPart}${barColor}${filledStr}${C.gray}${emptyStr}${C.reset} ${barColor}${clamped}%${C.reset}`;
 }
 
 function formatLinesChanged(stdinData, config) {
@@ -441,11 +442,6 @@ function formatLine1(stdinData, config) {
 function formatLine2(stdinData, config) {
   const segments = [];
 
-  if (config.items.duration) {
-    const dur = formatDuration(stdinData, config);
-    if (dur) segments.push(dur);
-  }
-
   // Token usage ("X in / Y out") already surfaces total_input_tokens — suppress the
   // context bar's duplicate (XXk) in that case. Rate-limit accounts show no absolute
   // tokens elsewhere, so the bar's (XXk) stays as the only source there.
@@ -464,7 +460,11 @@ function formatLine2(stdinData, config) {
     if (usage) segments.push(usage);
   }
 
-  return segments.join(SEP(config));
+  // Duration + cost closes the line, set off with a plain pipe
+  const main = segments.join(SEP(config));
+  const dur = config.items.duration ? formatDuration(stdinData, config) : null;
+  if (!dur) return main;
+  return main ? main + PIPE(config) + dur : dur;
 }
 
 // ============================================================================

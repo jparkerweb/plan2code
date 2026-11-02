@@ -963,19 +963,6 @@ async function cmdTrail(loc, args) {
 
 /* ---------------------------------------------------------------- gate */
 
-// The testing-posture answer must name types, cadence and coverage. Matched as
-// keywords, case-insensitive ("run after each phase, moderate coverage" counts),
-// and never inside the answer's Rejected block, where a losing option is named.
-const TYPES_RE = /\b(unit|integration|end-to-end|e2e|none)\b/i;
-const CADENCE_RE = /after each phase|dedicated (testing )?phase/i;
-const COVERAGE_RE = /critical paths?|moderate|comprehensive/i;
-const CADENCE = ["Run after each phase", "Dedicated phase only"];
-const COVERAGE = ["Critical paths", "Moderate (~60-80%)", "Comprehensive (>80%)"];
-
-function withoutRejected(body) {
-  return body.replace(/^\s*\*\*Rejected\b[\s\S]*?(?=^\s*\*\*(?!Rejected)[A-Z]|^#{1,6}\s|(?![\s\S]))/m, "");
-}
-
 async function cmdGate(loc) {
   const map = parseMap(requireMap(loc));
   const questions = loadQuestions(loc);
@@ -995,16 +982,6 @@ async function cmdGate(loc) {
 
   // Hard caps: while one holds, that dimension cannot exceed 17.
   const caps = [];
-  const testing = questions.find((q) => /testing posture/i.test(q.name));
-  if (!testing || testing.state !== "resolved") caps.push({ dimension: "Requirements", why: testing ? `${testing.name} is not resolved` : "no testing-posture question exists" });
-  else {
-    const a = withoutRejected(testing.answerBody);
-    const missing = [];
-    if (!TYPES_RE.test(a)) missing.push("types");
-    if (!CADENCE_RE.test(a)) missing.push(`cadence (${CADENCE.join(" / ")})`);
-    if (!COVERAGE_RE.test(a)) missing.push(`coverage (${COVERAGE.join(" / ")})`);
-    if (missing.length) caps.push({ dimension: "Requirements", why: `the testing-posture answer omits ${missing.join(", ")}` });
-  }
   for (const q of questions.filter((x) => x.kind === "research" && x.state === "resolved" && !x.hasEvidence)) caps.push({ dimension: "Feasibility", why: `research ${q.nn} ${q.name} is resolved with an empty ## Evidence` });
   for (const q of questions.filter((x) => x.locked && x.state === "resolved" && !x.hasConsequences)) caps.push({ dimension: "Risk", why: `Locked: yes ${q.nn} ${q.name} records no consequences` });
   add("hard-caps", caps.length === 0, caps.length ? caps.map((c) => `${c.dimension} <= 17: ${c.why}`).join("; ") : null);

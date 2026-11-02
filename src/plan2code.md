@@ -21,15 +21,11 @@ If `open` fails outright, fall back without drama: list the skills in the termin
 
 The page draws the cards itself — you never send the list. It also knows the repo already: `open` scans `AGENTS.md` and `specs/` into `state.scan` (`{ hasAgents, isGit, specs: [{ dir, name, state, detail, touched }] }`), and the picker at the top enables or grays every card from it — the spec the person picks there is the target their launch carries. What you post is your judgment on top of that:
 
-```jsonc
-{
-  "menu": {
-    "note": "one line under the title — what you made of the project",
-    "recommend": "plan2code-init",          // a skill name, or omit
-    "details": { "plan2code-3-implement": "Phase 2 of 4 is next" }
-  }
-}
 ```
+{ "menu": { "note": "one line under the title", "recommend": "plan2code-init", "details": { "plan2code-3-implement": "Phase 2 of 4 is next" } } }
+```
+
+`recommend` is a skill name, or omit it; `note` says what you made of the project.
 
 - No AGENTS.md → `recommend: "plan2code-init"`; the note says why.
 - A spec mid-pipeline → recommend its next step; that card's `details` names where it stands ("Plan drafted", "Phase 2 of 4 is next"). The picker pre-selects the most recently touched spec that is not `fixed` — recommend for THAT one.
@@ -74,15 +70,7 @@ Ground truth for menu notes and Ask-tab answers. For anything beyond this table,
 
 ## A pick arrives
 
-A card click is a send whose action carries the skill:
-
-```jsonc
-{ "type": "submit",
-  "actions": [{ "i": "__launch", "type": "launch",
-                "skill": "plan2code-3-implement", "workflow": "implement",
-                "spec": "specs/lunch-vote" }],
-  "reply": "Start Implement (/plan2code-3-implement) for specs/lunch-vote, right here in this session." }
-```
+A card click is a send whose action is `__launch`, carrying `skill`, `workflow` and, when a spec was picked, `spec`; the send also names `resume` (the command to run) and `skillFile`.
 
 `__launch` names no question; like `__stop` it is about the session. `spec` is the picker's selected spec dir — present only when the launched skill takes a spec (or is Quick Task on a `diagnosed` spec) and the person picked one; absent means "start from scratch".
 
@@ -121,7 +109,7 @@ A handoff chip's **Pick it up here** sends `__pickup` with `resume`, `skillFile`
 
 ## A delete arrives
 
-The ✕ on a picker chip asks for that spec to go, after a two-step confirm on the page: `{ "i": "__delete", "type": "delete", "spec": "specs/<name>" }`. The page never deletes; you do, through the console's checked command, never your own `rm`:
+The ✕ on a picker chip asks for that spec to go, after a two-step confirm on the page: a `__delete` action with `spec`. The page never deletes; you do, through the console's checked command, never your own `rm`:
 
 1. `node "<D>/console.mjs" delete-spec --spec <action.spec>` from the project root. Exit 0 → `{ ok, removed }`. Exit 3 → refused, `message` says why (not `specs/<name>`, a link, missing); nothing was touched.
 2. `node "<D>/console.mjs" open --resume <sid> --no-open --workflow dashboard`, which rescans `specs/`.
@@ -138,5 +126,5 @@ You arrive here mid-conversation after a `__dashboard` press — from a finished
 ## While it waits
 
 - Bounded slices per console.md, using the longest safe slice: exit 10 → relay one line and immediately wait again — never end the turn after an arbitrary number of slices; exit 20 → `open --resume <sid>` (no `--workflow` — it stays `dashboard` until a launch overwrites it); exit 30 → they canceled, ask in the terminal what they want.
-- A `__stop` action is the person ending the session before picking: post `finish` (a headline that says paused, `"command": "/plan2code"`) then `stop`, per console-stop.md.
+- A `__stop` action is the person ending the session before picking: its finish says paused, with the command `/plan2code`.
 - The console keeps `agent.status` honest: collecting a pick sets `working`, and waiting on the menu sets `waiting`. Post an `activity` while a launch becomes a skill.

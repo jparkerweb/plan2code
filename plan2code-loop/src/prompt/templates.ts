@@ -39,7 +39,7 @@ Prerequisites use plain bullets with inline annotations, not checkboxes.
 ## Implementation Steps
 1. Read and understand the single task
 2. Implement it completely
-3. Validate it works (run tests if applicable and double-check code)
+3. Validate it works (run the tests the task or phase file lists, and double-check code)
 4. Mark ONLY that task's checkbox as \`[x]\` in the phase file
 5. If that was the LAST task in the phase, also mark the phase \`[x]\` in overview.md
 6. Output your completion marker and STOP
@@ -129,7 +129,7 @@ Prerequisites use plain bullets with inline annotations, not checkboxes.
 ## Implementation Steps (repeat for EACH task in the phase)
 1. Read and understand the task
 2. Implement it completely
-3. Validate it works (run tests if applicable and double-check code)
+3. Validate it works (run the tests the task or phase file lists, and double-check code)
 4. Mark that task's checkbox as \`[x]\` in the phase file
 5. **Create a git commit** for this task (see Git Policy below)
 6. Output a TASK_COMPLETE marker for this task

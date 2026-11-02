@@ -8,7 +8,7 @@ Senior software engineer building exactly what the spec says, keeping progress c
 
 ## Interface
 
-The FIRST thing you do, before anything else in this file — before reading a spec, before Phase 1: ask **web console** (browser page, suggested) or **terminal**? Console → run `node "<D>/console.mjs" open --workflow implement` before reading (<D>: references/web-console/ beside this SKILL.md — ~/.agents/skills/plan2code-3-implement/references/web-console/ globally — or the dir in ~/.plan2code/console/console-dir), then read <D>/console.md, <D>/building.md and <D>/notes/implement.md in one batch; progress, every question and the sign-off go through it. Switchable anytime. If the argument already says which — `--web` or `Use the web console for this session.` — take it and do not ask; drop the flag. Launched by the dashboard? Its session is already open — resume it (console-launches.md), then the spec.
+The FIRST thing you do, before anything else in this file — before reading a spec, before Phase 1: ask **web console** (browser page, suggested) or **terminal**? Console → run `node "<D>/console.mjs" open --workflow implement` before reading (<D>: references/web-console/ beside this SKILL.md — ~/.agents/skills/plan2code-3-implement/references/web-console/ globally — or the dir in ~/.plan2code/console/console-dir), then read <D>/console.md, <D>/building.md and <D>/notes/implement.md in one batch; progress, every question and the sign-off go through it. Switchable anytime. If the argument already says which — `--web` or `Use the web console for this session.` — take it and do not ask; drop the flag. `--loop` (only inside the desktop app): read <D>/notes/loop.md after console.md; it replaces the sign-off, marking and git steps below. Launched by the dashboard? Its session is already open — resume it (console-launches.md), then the spec.
 
 ## Scripts
 
@@ -23,7 +23,8 @@ The FIRST thing you do, before anything else in this file — before reading a s
 - Follow `./AGENTS.md` if it exists
 - Implement specs EXACTLY - no creative additions
 - ONE phase per conversation (default)
-- Run tests ONLY if a phase task or a task's `Test:` line lists them
+- Tests: after each task run the tests covering what it touched; at phase end run the phase file's `## Phase Testing` lines plus tests for any other file the phase changed; never the full suite unless the phase file lists a `Full suite:` line
+- Read `references/test-runs.md` before the first test run of a phase
 - Do NOT run git commands - provide commit instructions for user
 - Flag blockers clearly - never skip silently
 - Read `references/building-habits.md` when a bug or unexpected failing test turns up, before any task in a Test first phase (its tasks carry `Test:` lines), and before any task that changes no behavior; follow it.
@@ -142,11 +143,12 @@ After all tasks:
    > 1. Fix now
    > 2. Document and proceed
    > 3. Investigate first"
-3. Use Completion Report Format
-4. Do NOT mark phase `[x]` until user says "approved"
-5. Address issues before re-requesting sign-off
-6. On "review": run the code review BEFORE sign-off — Review Mode (references/review.md in the installed skill, src/plan2code-review.md in this repo), scope fixed to exactly this phase's change set, no commit instructions; its helper rule and Reviewed by line still apply. Apply the fixes the user picks, update the report, then request sign-off again. The phase stays `[/]` throughout.
-7. **Show me it working** (on "show me"; offered, never required): read how to start and view the app from `AGENTS.md` (Commands). Missing: work it out from the project (`package.json` scripts, `Makefile`, `README`), and once it worked offer the line for `AGENTS.md`; cannot work it out: ask the person. Start it, look at the change (a browser tool's screenshot when available, otherwise the command's output), stop what you started, and add one line to the Phase Completion Summary: what was run and what was seen. Screenshots go on the web console page only, never under `specs/`. Then request sign-off again.
+3. If the phase changed shared ground the plan did not foresee (a test helper, build or test config, a widely imported module), say what was touched and why it is wide, and offer the full suite or a wider set as a choice beside approval. Unsure whether it is shared ground? Ask.
+4. Use Completion Report Format
+5. Do NOT mark phase `[x]` until user says "approved"
+6. Address issues before re-requesting sign-off
+7. On "review": run the code review BEFORE sign-off — Review Mode (references/review.md in the installed skill, src/plan2code-review.md in this repo), scope fixed to exactly this phase's change set, no commit instructions; its helper rule and Reviewed by line still apply. Apply the fixes the user picks, update the report, then request sign-off again. The phase stays `[/]` throughout.
+8. **Show me it working** (on "show me"; offered, never required): read how to start and view the app from `AGENTS.md` (Commands). Missing: work it out from the project (`package.json` scripts, `Makefile`, `README`), and once it worked offer the line for `AGENTS.md`; cannot work it out: ask the person. Start it, look at the change (a browser tool's screenshot when available, otherwise the command's output), stop what you started, and add one line to the Phase Completion Summary: what was run and what was seen. Screenshots go on the web console page only, never under `specs/`. Then request sign-off again.
 
 ## Issue Handling
 
@@ -171,7 +173,7 @@ Before sign-off, verify:
 - [ ] No unaddressed TODO/FIXME in new code
 - [ ] Code compiles without syntax errors
 - [ ] Implementation matches spec exactly
-- [ ] Tests run and results documented (if testing tasks present)
+- [ ] Tests run per the rule above; which ran or were skipped documented
 - [ ] Blocked tasks documented
 - [ ] "Phase Completion Summary" filled
 - [ ] READY FOR SIGN-OFF (do NOT update overview.md yet)
@@ -209,7 +211,7 @@ On user "approved":
 6. **If more phases:** "NEXT STEP: Start NEW conversation and run: `/plan2code-3-implement specs/<feature>/overview.md --web`"
 7. **If final phase:** "NEXT STEP: Start NEW conversation and run: `/plan2code-4-finalize --web`"
 8. Mention `/plan2code-1b-revise-plan --web` option
-9. **On the web console:** post `finish` with the next step — never a review offer; it was on the sign-off card — then wait and `stop` per notes/implement.md.
+9. **On the web console:** the finish carries the next step, never a review offer (it was on the sign-off card).
 
 Planny (continuing):
 ```
@@ -238,7 +240,7 @@ If user says "abort", "cancel", or similar:
    - Note created/modified files
    - Do NOT change phase checkbox (stays `[/]`)
    - Explain: "Run `/plan2code-3-implement --web` again to resume."
-3. Stop implementation. On the web console, post `finish` with that command, then `stop`.
+3. Stop implementation. On the web console, the finish carries that command.
 
 ## Recovery
 

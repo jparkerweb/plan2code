@@ -61,8 +61,9 @@ Before Phase 1, run `node "<S>/specs.mjs" list` from the project root (`<S>`: `s
 - Status "Phase 3 Complete - Resume at Phase 4": Resume at Phase 4
 - Status "Escalated from Quick Task - Resume at Phase 2": Acknowledge, verify requirements, skip to Phase 2
 - Status "Draft" or "Complete": Ask user how to proceed
+- Before going on with any existing draft (a Pathfinder handoff, a Quick Task escalation, a Draft or Complete one), read its 2.4: `| Status | Deferred to Plan |`, empty or `Not discussed` means ask the Phase 1 testing question now and write the answer into 2.4; a cadence with no `Full Suite` row means ask only the full-suite part.
 - A spec folder holding a `DIAGNOSIS-*.md` (Diagnose's write-up of a bug): read it first, as the Phase 1 brief (the bug, its cause, the suggested fix); that folder's name is the feature name (do not ask for one), so the PLAN-DRAFT lands beside the diagnosis
-- No PLAN-DRAFT: Begin at Phase 1. Console: its idea card carries `"templates": "idea"` (console.md → The kinds)
+- No PLAN-DRAFT: Begin at Phase 1. Console: its idea card carries `"templates": "idea"` (console.md → A patch)
 
 `node "<S>/specs.mjs" check-draft specs/<feature-name>` checks a written PLAN-DRAFT (Phase 7).
 
@@ -111,13 +112,14 @@ After confirmation, proceed with analysis:
 6. **Testing Preferences (Optional):**
    > "Include testing?
    > 1. **Types**: Unit, Integration, E2E, or None
-   > 2. **Phase testing**: Run after each phase?
-   > 3. **Coverage**: Critical paths / Moderate (~60-80%) / Comprehensive (>80%)
-   > 4. **Approach**: Code first (default) or Test first (each task's test is written and seen failing before its code)
+   > 2. **Phase testing**: Targeted per phase (default: each phase runs the tests covering what it changes) / Dedicated phase only / None
+   > 3. **Full suite**: Offered at Finalize (default) / At Phase N / Never
+   > 4. **Coverage**: Critical paths / Moderate (~60-80%) / Comprehensive (>80%)
+   > 5. **Approach**: Code first (default) or Test first (each task's test is written and seen failing before its code)
    >
    > Say 'skip testing' to omit."
 
-   Default: No testing.
+   Default if skipped: Phase Testing `None`, Full Suite `Never`.
 
 7. Report confidence score
 8. **Requirements Sign-Off:**
@@ -129,7 +131,7 @@ After confirmation, proceed with analysis:
    > **Non-Functional:**
    > NFR-1: [req]
    > ...
-   > **Testing:** [approach or None]
+   > **Testing:** [types, phase testing, full suite, approach, or None]
    >
    > **Confirm:** Complete and accurate? (approved / needs changes)
 
@@ -173,7 +175,7 @@ State assessment and ask user to confirm.
 3. Create `specs/<feature-name>/PLAN-DRAFT-<YYYYMMDD>.md` with Phases 1-3
 4. Set status: `Phase 3 Complete - Resume at Phase 4`
 5. Include: Executive Summary, Requirements, System Context, Scope, Confidence
-6. Instruct: "Large project. Progress saved. Start NEW conversation with `/plan2code-1-plan --web` to resume at Phase 4." On the web console, post `finish` with that command first, then `stop`.
+6. Instruct: "Large project. Progress saved. Start NEW conversation with `/plan2code-1-plan --web` to resume at Phase 4." On the web console, the finish carries that command.
 7. STOP
 
 ### PHASE 4: Tech Stack
@@ -258,7 +260,7 @@ Header: Title, Created date, Status (Draft | Phase 3 Complete - Resume at Phase 
 
 Sections:
 1. **Executive Summary** — 2-3 sentences
-2. **Requirements** — 2.1 Functional (FR-N checklist), 2.2 Non-Functional (NFR-N checklist), 2.3 Out of Scope, 2.4 Testing Strategy table (Types, Phase Testing, Coverage, plus a `| Approach | Test first |` row only when picked; absent means code first)
+2. **Requirements** — 2.1 Functional (FR-N checklist), 2.2 Non-Functional (NFR-N checklist), 2.3 Out of Scope, 2.4 Testing Strategy table (Types, Phase Testing, Full Suite, Coverage, plus a `| Approach | Test first |` row only when picked; absent means code first). Phase Testing is `Targeted per phase`, `Dedicated phase only` or `None` (an old `Run after each phase` reads as `Targeted per phase`; 'skip testing' writes `None` and `Never`); Full Suite is `Offered at Finalize`, `At Phase N` or `Never`
 3. **Tech Stack** — table: Category / Technology / Version / Justification
 4. **Architecture** — 4.1 Pattern (name + rationale), 4.2 System Context Diagram, 4.3 Components table, 4.4 Data Model, 4.5 API Design
 5. **Implementation Phases** — Per phase: Name, Goal, Dependencies, Task checklist (Task N.N)
@@ -284,7 +286,6 @@ When complete (PLAN-DRAFT created), tell user:
 2. **Next: `/plan2code-2-document`** (NOT implementation)
 3. Documentation auto-discovers planning files
 
-**On the web console:** at every session end, and on a `__stop`, post `finish` BEFORE `stop`, per notes/plan.md.
 
 **Closing example:**
 > "Planning complete. Created in `specs/<feature-name>/`:

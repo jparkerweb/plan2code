@@ -86,7 +86,7 @@ Read references/chart.md
 3. `[Chart - Step 3: Recon]` Explore the codebase; record codebase context, resolved on the spot, `legwork · AFK`. On `github` hold it until Step 6 so a Step 4 off-ramp leaves no litter. Unfamiliar code? `/plan2code-xray` explains an area first.
 4. `[Chart - Step 4: Map the frontier]` Grill again **breadth-first**: fan out, never deep on one thread. Surface the open decisions and what is takeable now.
 5. `[Chart - Step 5: Create the map]` `**Status:** Charting`, Destination, Ground rules (backend first), an empty index, the fog in `## Not yet specified`. Say once where it lives and who sees it.
-6. `[Chart - Step 6: Write the questions]` One per decision you can phrase sharply NOW, dependency order, `Blocked by:` filled the same pass — on `github`, create all first, wire edges second. The rest stays fog. Include a `grill · HITL` testing-posture question; `/plan2code-1-plan` Phase 1 needs it.
+6. `[Chart - Step 6: Write the questions]` One per decision you can phrase sharply NOW, dependency order, `Blocked by:` filled the same pass — on `github`, create all first, wire edges second. The rest stays fog. Testing is not charted here: `/plan2code-1-plan` Phase 1 asks it.
 7. `[Chart - Step 7: Index]` `local`: `reconcile` fills `## Question Checklist` from the files (every missing row, with its marker). Either backend: set `**Status:** Working`. `local`: then `lint`.
 8. `[Chart - Step 8: Fire research]` One subagent per `research` question, in parallel. Each writes only its `## Evidence`, never decides. **Wait for all** (they die with the terminal), then Session End.
 
@@ -139,8 +139,6 @@ Close EVERY response with the trail once the map exists; the turn picks the form
 ## Session End
 
 Report each question resolved (name + gist), what graduated, what's still open; offer a brief for today. Nothing to commit (`local` is gitignored). Then the mascot, then the Trail Footer.
-
-**Web console:** at session end or on a `__stop`, post `finish` (Form A's command) BEFORE `stop` (notes/pathfinder.md).
 
 ```
 ⋅

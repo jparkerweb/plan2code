@@ -54,7 +54,7 @@ Substitute real content; keep the section order. `<in range>` reads naturally pe
 ## Open - ready to decide next
 
 - **Delivery channel** - can now be decided; the row-count ceiling it was waiting on landed today.
-- **Testing posture** - needs Product and Engineering together.
+- **Retention window** - needs Product and Engineering together.
 
 ## Open - waiting on something first
 

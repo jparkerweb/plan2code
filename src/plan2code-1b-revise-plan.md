@@ -250,4 +250,4 @@ Work summary — tell user: change type, tasks added/modified/removed, phases re
 
 Returning context: Revised specs in `specs/<feature-name>/`. Run `/plan2code-3-implement --web` in a new conversation to continue implementation.
 
-**On the web console:** a `__stop` action in a send is the person ending the session: see console-stop.md. Specs change only at Step 3, so a stop before then saves nothing and needs none. At every session end post `finish` BEFORE `stop`: `"command": "/plan2code-3-implement specs/<feature-name>/overview.md"` when revised, or the revise-plan command on an abort. The closing box above is printed to a terminal the browser user is not watching.
+**On the web console:** specs change only at Step 3, so stopping before then saves nothing. The finish command is `/plan2code-3-implement specs/<feature-name>/overview.md` when revised, or the revise-plan command on an abort. The closing box above is printed to a terminal the browser user is not watching.

@@ -112,12 +112,14 @@ INCOMPLETE TASKS DETECTED
 - [ ] Required environment variables documented
 - [ ] No hardcoded secrets or credentials
 - [ ] Code follows existing codebase patterns
-
-### Test Validation (if defined)
-| Test Type | Passed | Failed | Coverage |
-|-----------|--------|--------|----------|
-| Unit | X | X | X% |
 ```
+
+**Full suite:** read `references/test-runs.md`, then the PLAN-DRAFT's 2.4 `Full Suite` row.
+- `Never`: skip the offer; record `not planned`.
+- `At Phase N`: it ran in that phase; record that run's outcome without asking, and offer a rerun only if shared ground changed after it.
+- Otherwise ask "Run the full suite now?" with a one-line reason (for example, which shared areas the build touched). Recommend yes; the person may skip. Never forced.
+- A failing run gets the choice: 1 Fix now, 2 Document and proceed, 3 Investigate first.
+- Record one outcome for Step 3: `passed`, `failed (N)`, `skipped (your choice)` or `not planned`.
 
 #### Report:
 
@@ -165,6 +167,8 @@ INCOMPLETE TASKS DETECTED
 
 ### Known Limitations / Blocked Items
 [List or "None"]
+
+Full suite: [passed / failed (N) / skipped (your choice) / not planned]
 ```
 
 Add this summary to `overview.md` under `## Completion Summary`.
@@ -348,4 +352,4 @@ Suggested commit (only if README, CHANGELOG, or other tracked docs were updated)
 
 Returning context: Feature complete. Specs archived to `specs--completed/<feature-name>/`.
 
-**On the web console:** a `__stop` action in a send ends the session: see console-stop.md. At every session end post `finish` BEFORE `stop`, per notes/finalize.md — the completion summary is printed to a terminal the browser user is not watching.
+**On the web console:** the completion summary is printed to a terminal the browser user is not watching.

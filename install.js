@@ -180,6 +180,7 @@ const SOURCE_PROMPTS = [
       { source: 'web-console', target: 'web-console' },
       { source: 'shared-references/building-habits.md', target: 'building-habits.md' },
       { source: 'shared-references/helper-strength.md', target: 'helper-strength.md' },
+      { source: 'shared-references/test-runs.md', target: 'test-runs.md' },
       { source: 'plan2code-review.md', target: 'review.md' },
       { source: 'plan2code-review-references' }
     ]
@@ -215,7 +216,10 @@ const SOURCE_PROMPTS = [
     displayName: 'Documentation Mode',
     description: 'Transform planning output into structured implementation docs',
     scripts: ['specs.mjs'],
-    additionalReferences: [{ source: 'web-console', target: 'web-console' }]
+    additionalReferences: [
+      { source: 'web-console', target: 'web-console' },
+      { source: 'shared-references/test-runs.md', target: 'test-runs.md' }
+    ]
   },
   {
     source: 'plan2code-3-implement.md',
@@ -230,6 +234,7 @@ const SOURCE_PROMPTS = [
       { source: 'web-console', target: 'web-console' },
       { source: 'shared-references/building-habits.md', target: 'building-habits.md' },
       { source: 'shared-references/helper-strength.md', target: 'helper-strength.md' },
+      { source: 'shared-references/test-runs.md', target: 'test-runs.md' },
       { source: 'plan2code-review.md', target: 'review.md' },
       { source: 'plan2code-review-references' }
     ]
@@ -246,6 +251,7 @@ const SOURCE_PROMPTS = [
       { source: 'plan2code-3-implement.md', target: 'implement.md' },
       { source: 'shared-references/building-habits.md', target: 'building-habits.md' },
       { source: 'shared-references/helper-strength.md', target: 'helper-strength.md' },
+      { source: 'shared-references/test-runs.md', target: 'test-runs.md' },
       { source: 'plan2code-review.md', target: 'review.md' },
       { source: 'plan2code-review-references' }
     ]
@@ -260,7 +266,8 @@ const SOURCE_PROMPTS = [
     scripts: ['specs.mjs', 'commit-msg.mjs', 'review-scope.mjs'],
     additionalReferences: [
       { source: 'web-console', target: 'web-console' },
-      { source: 'shared-references/helper-strength.md', target: 'helper-strength.md' }
+      { source: 'shared-references/helper-strength.md', target: 'helper-strength.md' },
+      { source: 'shared-references/test-runs.md', target: 'test-runs.md' }
     ]
   },
   {
@@ -270,7 +277,10 @@ const SOURCE_PROMPTS = [
     displayName: 'Finalization Mode',
     description: 'Validate, summarize, and archive completed work',
     scripts: ['specs.mjs', 'commit-msg.mjs'],
-    additionalReferences: [{ source: 'web-console', target: 'web-console' }]
+    additionalReferences: [
+      { source: 'web-console', target: 'web-console' },
+      { source: 'shared-references/test-runs.md', target: 'test-runs.md' }
+    ]
   },
   {
     source: 'plan2code-handoff.md',

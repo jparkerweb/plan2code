@@ -208,7 +208,7 @@ test("pathfinder gate: mechanical checks and hard caps", () => {
   assert.equal(g.mechanicalPass, false);
   const failed = g.checks.filter((c) => !c.pass).map((c) => c.id);
   assert.deepEqual(failed, ["no-open-claimed-blocked", "fog-empty", "hard-caps", "scores-at-least-18"]);
-  assert.ok(g.caps.some((c) => c.dimension === "Requirements" && /not resolved/.test(c.why)));
+  assert.ok(!g.caps.some((c) => c.dimension === "Requirements"), "testing is Plan's question, so no testing cap");
   assert.ok(g.caps.some((c) => c.dimension === "Risk" && /Export format records no consequences/.test(c.why)));
   assert.equal(g.planDraftPath, "specs/audit-export/PLAN-DRAFT-20260803.md");
   // Settle everything.
@@ -312,19 +312,15 @@ test("pathfinder reconcile: rows stay in place among grouping lines, a re-opened
   assert.match(map, /### Group two\n\n- \[ \] \[Export format\]\(\.\/questions\/01-export-format\.md\)\n/, "the group heading keeps its place and the row its old tail is gone");
 });
 
-test("pathfinder gate: testing posture by keyword (never from Rejected), research-style consequences count", () => {
+test("pathfinder gate: research-style consequences count", () => {
   const { root, pf } = mapFixture();
   const qd = path.join(root, pf, "questions");
   const P = (...a) => runScript("plan2code-0-pathfinder", "pathfinder.mjs", [...a, "--root", root]);
-  fs.writeFileSync(path.join(qd, "03-testing-posture.md"), q("Testing posture", { state: "resolved", resolved: "2026-08-02", answer: "Unit + integration, run after each phase, moderate coverage.\n\n**Gist:** Unit." }));
   fs.writeFileSync(path.join(qd, "01-export-format.md"), q("Export format", { state: "resolved", resolved: "2026-08-02", locked: "yes", answer: "### What this implies\n\n- Excel only.\n\n**Gist:** CSV." }));
   P("reconcile", "audit-export");
-  let caps = P("gate", "audit-export").json.caps;
+  const caps = P("gate", "audit-export").json.caps;
   assert.ok(!caps.some((c) => c.dimension === "Requirements"), JSON.stringify(caps));
   assert.ok(!caps.some((c) => c.dimension === "Risk"), JSON.stringify(caps));
-  fs.writeFileSync(path.join(qd, "03-testing-posture.md"), q("Testing posture", { state: "resolved", resolved: "2026-08-02", answer: "Unit tests.\n\n**Rejected**\n\n- Run after each phase with Moderate coverage: too slow.\n\n**Gist:** Unit." }));
-  caps = P("gate", "audit-export").json.caps;
-  assert.ok(caps.some((c) => c.dimension === "Requirements" && /cadence/.test(c.why)), "a cadence named only as rejected does not count");
 });
 
 test("pathfinder: Form C needs a frontier; names come from the rows; NN is never handed out twice", () => {

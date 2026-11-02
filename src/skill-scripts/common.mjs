@@ -40,7 +40,7 @@ export function fail(exit, error, message, next, extra) {
 }
 
 export function out(obj) {
-  process.stdout.write(JSON.stringify(obj, null, 2) + "\n");
+  process.stdout.write(JSON.stringify(obj) + "\n");
 }
 
 /**

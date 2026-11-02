@@ -14,7 +14,7 @@ Analyze this codebase and create `AGENTS.md` to guide future AI coding agents (C
 
 ## Interface
 
-The FIRST thing you do, before anything else in this file — before exploring the codebase: ask **web console** (browser page, suggested) or **terminal**? Console → run `node "<D>/console.mjs" open --workflow init` before reading (<D>: references/web-console/ beside this SKILL.md — ~/.agents/skills/plan2code-init/references/web-console/ globally — or the dir in ~/.plan2code/console/console-dir), then read <D>/console.md and <D>/notes/init.md. Every confirmation — the restructure offer, the AI-agent file-sync prompt — goes through it, and the finished AGENTS.md lands on the page as a doc marked `saved` (the file is already on disk — no download offered). Switchable anytime. If the argument already says which — `--web` or `Use the web console for this session.` — take it and do not ask; drop the flag. Launched by the dashboard? Its session is already open — resume it (console-launches.md), then Content. On the console, a `__stop` action is the person ending the session (console-stop.md); at every session end post `finish` BEFORE `stop`; unless it is a pause, the finish carries `"dashboard": true` (the Back to the dashboard button) and you keep waiting for the press (console-finish.md).
+The FIRST thing you do, before anything else in this file — before exploring the codebase: ask **web console** (browser page, suggested) or **terminal**? Console → run `node "<D>/console.mjs" open --workflow init` before reading (<D>: references/web-console/ beside this SKILL.md — ~/.agents/skills/plan2code-init/references/web-console/ globally — or the dir in ~/.plan2code/console/console-dir), then read <D>/console.md and <D>/notes/init.md. Every confirmation — the restructure offer, the AI-agent file-sync prompt — goes through it, and the finished AGENTS.md lands on the page as a doc marked `saved` (the file is already on disk — no download offered). Switchable anytime. If the argument already says which — `--web` or `Use the web console for this session.` — take it and do not ask; drop the flag. Launched by the dashboard? Its session is already open — resume it (console-launches.md), then Content.
 
 ## Scripts
 
@@ -26,7 +26,7 @@ The FIRST thing you do, before anything else in this file — before exploring t
 
 ## Content
 
-1. **Commands**: Build, lint, test, run single test, other common development tasks, and how to start the app and where to view it (URL or command), when it has one
+1. **Commands**: Build, lint, test, run single test (and beside it a short **Test map**: `area -> tests or command` lines saying which tests cover which areas, plus a note of which checks are quick; omit it when the project has no tests), other common development tasks, and how to start the app and where to view it (URL or command), when it has one
 2. **Architecture**: High-level "big picture" structure requiring multi-file context to understand
 3. **How to Use This File**: A short paragraph explaining that sections below contain brief summaries and agents should follow the markdown links to `.agents-docs/` for full details — only read what's relevant to the current task.
 4. **Failure Log**: running list of mistakes and/or corrections that went wrong via the AI Agent at least once. 

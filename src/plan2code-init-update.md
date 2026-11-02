@@ -14,7 +14,7 @@ Interactive Q&A flow to update an existing `AGENTS.md` with new learnings and pr
 
 ## Interface
 
-The FIRST thing you do, before anything else in this file — before the Awareness Context: ask **web console** (browser page, suggested) or **terminal**? Console → run `node "<D>/console.mjs" open --workflow init-update` before reading (<D>: references/web-console/ beside this SKILL.md — ~/.agents/skills/plan2code-init-update/references/web-console/ globally — or the dir in ~/.plan2code/console/console-dir), then read <D>/console.md and <D>/notes/init.md. Every question in the Q&A flow and the restructure offer go through it. Switchable anytime. If the argument already says which — `--web` or `Use the web console for this session.` — take it and do not ask; drop the flag. Launched by the dashboard? Its session is already open — resume it (console-launches.md), then Awareness Context. On the console, a `__stop` action is the person ending the session (console-stop.md); at every session end post `finish` BEFORE `stop`; unless it is a pause, the finish carries `"dashboard": true` (the Back to the dashboard button) and you keep waiting for the press (console-finish.md).
+The FIRST thing you do, before anything else in this file — before the Awareness Context: ask **web console** (browser page, suggested) or **terminal**? Console → run `node "<D>/console.mjs" open --workflow init-update` before reading (<D>: references/web-console/ beside this SKILL.md — ~/.agents/skills/plan2code-init-update/references/web-console/ globally — or the dir in ~/.plan2code/console/console-dir), then read <D>/console.md and <D>/notes/init.md. Every question in the Q&A flow and the restructure offer go through it. Switchable anytime. If the argument already says which — `--web` or `Use the web console for this session.` — take it and do not ask; drop the flag. Launched by the dashboard? Its session is already open — resume it (console-launches.md), then Awareness Context.
 
 ## Scripts
 
@@ -131,7 +131,7 @@ Present the user with update options:
 > - **1. Commands** - Build, test, run, lint, how to run and view the app, or other CLI commands
 > - **2. Architecture** - How components interact, data flow, key patterns
 > - **3. Gotchas/Pitfalls** - Traps to avoid, non-obvious behaviors
-> - **4. Testing** - Test patterns, how to run specific tests, fixtures
+> - **4. Testing** - Test patterns, how to run specific tests, the test map and quick checks, fixtures
 > - **5. Environment/Config** - Setup quirks, env variables, configuration
 > - **6. General Rules** - Coding conventions, style rules, project-specific practices
 > - **7. Failure Log** - Record a mistake or correction in the Failure log
@@ -153,7 +153,7 @@ Present the user with update options:
 | Commands | Purpose? Flags? Prerequisites? How to run and view the app? |
 | Architecture | Components? Interactions? Pattern? |
 | Gotchas | What was unexpected? Workaround? |
-| Testing | Commands? Fixtures? Mocking? |
+| Testing | Commands? Test map and quick checks stale? Fixtures? Mocking? |
 | Environment | Local/CI/deploy? Env vars/files? |
 | Rules | Project-wide or specific? Why? |
 | Failure Log | What went wrong? Correct behavior (imperative, one line)? Merge into an entry on the same topic if one exists; over 17 entries, propose what to prune (rule 7). |
