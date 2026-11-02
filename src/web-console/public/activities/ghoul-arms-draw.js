@@ -254,13 +254,20 @@ export function armsArt(d) {
     ctx.translate(s.x, y);
     const heading = Math.atan2(-s.vy, s.vx);
     if (s.arm === "stake") {
-      // A streak behind it, then the iron, its point leading.
+      // A glow and a streak behind it, then a big iron stake, its point leading,
+      // so it never reads as an ordinary bolt.
       ctx.rotate(heading);
-      ctx.strokeStyle = "rgba(190, 210, 230, 0.4)";
-      ctx.lineWidth = 0.6;
-      line(ctx, -5, 0, -1.2, 0);
-      ctx.scale(1.25, 1.25);
-      stakeShape(ctx, "#d4e0ec");
+      ctx.fillStyle = "rgba(190, 220, 255, 0.22)";
+      circle(ctx, 0, 0, 3.6);
+      ctx.fill();
+      ctx.strokeStyle = "rgba(190, 210, 230, 0.5)";
+      ctx.lineWidth = 1.5;
+      line(ctx, -11, 0, -3.6, 0);
+      ctx.scale(3.2, 3.2);
+      stakeShape(ctx, "#e4eef8");
+      ctx.strokeStyle = "#3a4654";
+      ctx.lineWidth = 0.07;
+      ctx.stroke();
     } else if (s.arm === "sickle") {
       ctx.rotate(s.spin);
       ctx.scale(1.45, 1.45);

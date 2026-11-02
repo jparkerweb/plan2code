@@ -9,8 +9,8 @@
 //   session state   ~/.plan2code/console/sessions/<sid>/
 //                   the request, the human's draft, the result, the event log.
 //                   Deliberately NOT under specs/: that keeps the console clear of
-//                   the metrics confidence scraper and the loop's completion-marker
-//                   parser, and it survives a `git clean`.
+//                   the metrics confidence scraper and completion-marker parsers,
+//                   and it survives a `git clean`.
 //
 // Node built-ins only. No build step.
 

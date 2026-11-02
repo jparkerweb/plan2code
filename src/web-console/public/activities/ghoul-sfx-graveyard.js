@@ -10,7 +10,7 @@ export const GRAVEYARD_SFX = {
   tones: {
     // The Graveyard's monsters and Mother Mourning, picked the same way
     // (prototypes/sounds/ghoul-rush/graveyard.html).
-    // Grasping Hands: Grey arms that burst up out of the dirt and grab.
+    // Grasping Hands: Gray arms that burst up out of the dirt and grab.
     // Stirs under the dirt: Low earth rumble.
     ghoulHandsAppear: {
       layers: [

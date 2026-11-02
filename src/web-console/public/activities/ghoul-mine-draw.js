@@ -192,7 +192,7 @@ export function mineArt(d) {
     ctx.fill();
   }
 
-  // A knocker imp: a wiry, hunched mine goblin, green-grey, with great ears swept
+  // A knocker imp: a wiry, hunched mine goblin, green-gray, with great ears swept
   // back, a hooked nose, a grin and big amber eyes, a tiny pick in his fist. Running
   // (skitter, flee) his legs blur and he leans into it; with the stolen spark he
   // cups it in both hands, giggling; the decoy paces with the Tommyknocker's lantern

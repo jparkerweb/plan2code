@@ -292,7 +292,7 @@ export function graveyardArt(d) {
     }
   }
 
-  // Grasping hands: under the dirt a trembling mound; then two grey arms
+  // Grasping hands: under the dirt a trembling mound; then two gray arms
   // burst up and claw at the air, and sink again.
   function hands(ctx, v, m, x, y, t, flash) {
     if (m.act === "lurk" || m.act === "creep") return mound(ctx, x, y, t, m.act === "creep");
@@ -429,7 +429,7 @@ export function graveyardArt(d) {
       ctx.closePath();
       ctx.fill();
     }
-    // A long grey face under the hat, a grin of teeth.
+    // A long gray face under the hat, a grin of teeth.
     ctx.fillStyle = flash ? FLASH : "#8a8e80";
     ellipse(ctx, d * 0.35, -4.4, 0.8, 0.85);
     ctx.fill();

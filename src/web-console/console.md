@@ -80,7 +80,7 @@ Every note in an item's `thread` gets a reply: `{"id":"p4","thread":[{"who":"age
 - more than three open required questions at once (optional cards and notices do not count)
 - internal vocabulary in a title (grill, frontier, fog, HITL, AFK, durable, `Locked:`, `Blocked by:`, `State:`)
 - more than one recommended option on a question
-- loop completion markers (`TASK_COMPLETE`, `PHASE_COMPLETE` and the rest)
+- loop completion markers, reserved so agent text can never fake a done signal (`TASK_COMPLETE`, `PHASE_COMPLETE` and the rest)
 - a bare Requirements, Feasibility, Integration or Risk followed by a number (hyphenate or reword)
 - a doc `version` that goes back (leave `version` out)
 - a finish `command` with `<` or `>` in it

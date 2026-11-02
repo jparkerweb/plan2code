@@ -130,11 +130,14 @@ function dropStaleSubmissions(currentItems, before, patchList) {
     // A whole new question under an answered card's id is not a typo fix: the
     // card would stay answered and nothing would be left for the person, who
     // sees a dead page. Refuse it so the agent picks a new id on the spot.
+    // A change of kind is not this case: the merge below reopens it as a new
+    // question on its own, so nothing stays answered.
     if (
       prev &&
       (prev.status === "answered" || prev.status === "skipped") &&
       !("status" in entry) &&
       !("answer" in entry) &&
+      (!("kind" in entry) || entry.kind === prev.kind) &&
       "title" in entry &&
       entry.title !== prev.title &&
       (("body" in entry && entry.body !== prev.body) ||
@@ -583,7 +586,7 @@ export function applyPatch(state, patch) {
   }
   if (settle !== undefined) next.items = settleItems(next.items || [], settle, patch.items, state.collected);
   // A question put to the person over a standing ending means the work went
-  // on past it: the finish card would grey the form out, and the person has
+  // on past it: the finish card would gray the form out, and the person has
   // no way to answer. The ending comes down unless this patch posts its own.
   if (next.finish && !Object.hasOwn(patch, "finish") && asksSomething(patch.items, state.items)) {
     delete next.finish;
@@ -660,9 +663,10 @@ const JARGON = [
   /\bState:\s/,
 ];
 
-// The loop parses these out of agent output; pathfinder forbids them under specs/.
-// The other copy is LOOP_TOKENS in src/skill-scripts/common.mjs: the console is
-// not a skill script and cannot import it, so keep the two in step.
+// Completion markers refused outright, so agent text can never fake a done
+// signal; pathfinder forbids them under specs/. The other copy is LOOP_TOKENS
+// in src/skill-scripts/common.mjs: the console is not a skill script and
+// cannot import it, so keep the two in step.
 const FORBIDDEN_TOKENS =
   /\b(TASK_COMPLETE|PHASE_COMPLETE|ALL_TASKS_COMPLETE|IMPLEMENTATION_COMPLETE|SPEC_COMPLETE|WORK_COMPLETE)\b/;
 
@@ -679,7 +683,7 @@ export function proseProblems(prose, subject = "text") {
   const marker = prose.match(FORBIDDEN_TOKENS);
   if (marker) {
     problems.push(
-      rule("", subject, `contains a loop completion marker (${marker[0]}); the loop scans for these. Reword it`, marker[0].toLowerCase().replaceAll("_", " ")),
+      rule("", subject, `contains a loop completion marker (${marker[0]}); these are reserved. Reword it`, marker[0].toLowerCase().replaceAll("_", " ")),
     );
   }
   const bait = prose.match(METRICS_BAIT);

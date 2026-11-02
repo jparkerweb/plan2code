@@ -45,7 +45,7 @@ Load `./AGENTS.md` if it exists — its conventions govern; never re-ask what it
 - **Questions are ground truth; the map is a rebuildable index.** A filled `## Answer` beats any state marker; detail lives in one place.
 - **Never write implementation code** into the project. Sketches are throwaway, living only under `pathfinder/sketch-NN/`.
 - **Reserved names — never create inside `pathfinder/`:** `overview.md`, `phase-<N>.md`, `PLAN-DRAFT-*.md`, `PLAN-CONVERSATION-*.md`.
-- **Never emit the loop's completion tokens under `specs/`** — `TASK_COMPLETE`, `PHASE_COMPLETE`, `ALL_TASKS_COMPLETE`, `IMPLEMENTATION_COMPLETE`, `SPEC_COMPLETE`, `WORK_COMPLETE`. It scans for them.
+- **Never emit completion tokens under `specs/`** — `TASK_COMPLETE`, `PHASE_COMPLETE`, `ALL_TASKS_COMPLETE`, `IMPLEMENTATION_COMPLETE`, `SPEC_COMPLETE`, `WORK_COMPLETE`. They are reserved; a stray one would read as a finished run.
 - **No `- [ ]` checkboxes inside question files**, and no `METRICS_JSON` anywhere.
 - **Lint before every Session End** (on `github`, once a brief or PLAN-DRAFT is on local disk; it checks those): `lint` checks the rules above, the schema lines, `Blocked by:` targets and cycles, and metrics-scraper bait. Fix every error it lists (exit 4) before you stop.
 

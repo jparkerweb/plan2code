@@ -10,11 +10,12 @@
    attribute's own display. */
 #btn-activities[hidden] { display: none; }
 
-/* The dialog: Notebook-sized, with the board taking whatever height the
-   title, the banner, the picker, the note and the actions leave. */
+/* The dialog: as large as the viewport allows, a slim edge all round so it
+   still reads as a window, with the board taking whatever height the title,
+   the banner, the picker, the note and the actions leave. */
 .modal.activities {
-  width: min(1200px, 90vw);
-  height: min(900px, 85vh);
+  width: calc(100vw - 32px);
+  height: calc(100vh - 32px);
   max-width: none;
   max-height: none;
   flex-direction: column;
@@ -184,11 +185,20 @@
   padding: 4px 2px 8px;
 }
 .activities-picker[hidden] { display: none; }
+/* Cards keep one width and wrap, and each row (a short last one too) sits in
+   the middle, so a wide window is filled evenly and no corner is left bare. */
 .activities-cards {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: 16px;
+  --card-w: 250px;
+  --gap: 16px;
+  /* At most six across: the width of six cards and the gaps between them. */
+  max-width: calc(6 * var(--card-w) + 5 * var(--gap));
+  margin-inline: auto;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--gap);
 }
+.activities-cards > .activities-card { flex: 0 0 var(--card-w); max-width: 100%; }
 .activities-card {
   position: relative;
   display: flex;
@@ -215,7 +225,7 @@
 /* A course dashboard: three across where it fits, so all six courses show
    at once. A course card's art is a hole drawn on a 4:3 canvas, cropped to a
    wide strip through its middle, where the play is. */
-.activities-courses { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+.activities-courses { --card-w: 290px; }
 .activities-cover canvas { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; object-fit: cover; }
 /* The covers' token colors (screens/activities.js names them), so a cover
    follows the theme and the highlight like the boards do. */

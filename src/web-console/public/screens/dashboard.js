@@ -12,7 +12,7 @@ import {
   loopDriving,
 } from "../selectors.js";
 import { hooks, page, redraw, saveNow } from "../state.js";
-import { el, approvalTip, mdInto, releasesLink, copyButton, lightDismiss } from "../render.js";
+import { el, approvalTip, mdInto, releasesLink, copyButton, lightDismiss, SVG_NS } from "../render.js";
 import { needsRoleNudge, ROLE_NOT_SET } from "../starters.js";
 import { looks, saveLooks } from "../looks.js";
 import { RED_BANNER, RED_BANNER_IN_APP } from "../meter.js";
@@ -688,7 +688,18 @@ function dashCard(entry, menu) {
   head.appendChild(el("span", "dash-chip", entry.chip));
   if (presentation.recommended) head.appendChild(el("span", "pill suggested", "Suggested"));
   b.appendChild(head);
-  b.appendChild(el("span", "dash-card-title", entry.title));
+  const title = el("span", "dash-card-title");
+  if (entry.icon) {
+    const svg = document.createElementNS(SVG_NS, "svg");
+    svg.setAttribute("class", "dash-card-icon");
+    svg.setAttribute("aria-hidden", "true");
+    const use = document.createElementNS(SVG_NS, "use");
+    use.setAttribute("href", "#ci-" + entry.icon);
+    svg.appendChild(use);
+    title.appendChild(svg);
+  }
+  title.appendChild(document.createTextNode(entry.title));
+  b.appendChild(title);
   b.appendChild(el("span", "dash-card-blurb", entry.blurb));
   if (presentation.detail) b.appendChild(el("span", "dash-card-detail", presentation.detail));
   if (!presentation.on && presentation.reason) b.appendChild(el("span", "dash-card-off", presentation.reason));

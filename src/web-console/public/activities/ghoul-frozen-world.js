@@ -686,7 +686,7 @@ export function frozenWorld(d) {
     ctx.fillRect(x0, fy, w, 0.62);
     ctx.fillStyle = "rgba(255, 255, 255, 0.85)";
     ctx.fillRect(x0 + 0.2, fy + 0.06, w - 0.4, 0.14);
-    // A green-grey tint as it weakens, and hairlines that lengthen with the weight on it.
+    // A green-gray tint as it weakens, and hairlines that lengthen with the weight on it.
     ctx.fillStyle = rgba("#2a5a70", 0.2 + 0.4 * prog);
     ctx.fillRect(x0, fy + 0.62, w, 0.5);
     const lines = Math.ceil(prog * 7);

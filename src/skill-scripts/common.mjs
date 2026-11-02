@@ -212,8 +212,8 @@ export function rel(root, p) {
 
 /* ------------------------------------------------- planning-file patterns */
 
-// The loop completion markers. The loop scans specs/ for them, so no planning
-// file may contain one. The one copy every skill script checks against.
+// The loop completion markers, reserved outright so nothing under specs/ can
+// fake a finished run. The one copy every skill script checks against.
 export const LOOP_TOKENS = /\b(TASK_COMPLETE|PHASE_COMPLETE|ALL_TASKS_COMPLETE|IMPLEMENTATION_COMPLETE|SPEC_COMPLETE|WORK_COMPLETE)\b/;
 
 // The metrics collector's own scrape patterns (plan2code-metrics/src/collector.ts).

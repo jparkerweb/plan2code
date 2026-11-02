@@ -42,10 +42,6 @@ node scripts/capture-screenshots.mjs --only dashboard  # one screen (dashboard-u
 node scripts/css-snapshot.mjs --out before.json
 node scripts/css-snapshot.mjs --compare before.json
 
-# Plan2Code Loop
-cd plan2code-loop && npm install   # First time setup
-cd plan2code-loop && npm run build # Build the CLI
-
 # Plan2Code Metrics
 cd plan2code-metrics && npm install   # First time setup
 cd plan2code-metrics && npm run build # Build the CLI
@@ -80,7 +76,7 @@ The full `npm test` takes minutes and drives a browser per page suite. When a ch
 
 Run the full `npm test` when the change touches something many suites lean on: `web-console-test-helpers.mjs` or `page-test-helpers.mjs`, `looks.js` / `prefs.js` / `static.mjs` (the `SERVABLE` list), `skills.js`, `install.js`, the server's shared modules (`console.mjs`, `routes.mjs`); after a sync merge or a version bump; before opening a PR or cutting a release; and whenever you cannot say which suites a change reaches.
 
-The root `npm test` does not run the metrics or bot vitest suites; run them in their package. `npm run dev` in loop, metrics and bot is `tsup --watch`. The web console and launcher suites isolate themselves with `PLAN2CODE_CONSOLE_HOME`, `PLAN2CODE_MODELS_DIR` and `PLAN2CODE_NO_BROWSER=1` (`scripts/web-console-test-helpers.mjs`), so they never open a browser or touch your real console home. The web console suites are split by area so `node --test` runs them in parallel. `npm test` runs them through `scripts/node-test.mjs`, which caps the files run at once at one per spare core (8 at most): each page test file drives a browser, and more at once than the cores can carry fails page tests at random (a flat 8 did on 3 and 4 core CI runners). Page tests (`test-web-console-page-*.mjs`) read styles and set scrolls only through `styleOf()`, `stylesOf()` and `scrollCard()` from `page-test-helpers.mjs`, which retry until the element is still on the page; `test-web-console-shape.mjs` fails a raw `locator.evaluate` that does either.
+The root `npm test` does not run the metrics or bot vitest suites; run them in their package. `npm run dev` in metrics and bot is `tsup --watch`. The web console and launcher suites isolate themselves with `PLAN2CODE_CONSOLE_HOME`, `PLAN2CODE_MODELS_DIR` and `PLAN2CODE_NO_BROWSER=1` (`scripts/web-console-test-helpers.mjs`), so they never open a browser or touch your real console home. The web console suites are split by area so `node --test` runs them in parallel. `npm test` runs them through `scripts/node-test.mjs`, which caps the files run at once at one per spare core (8 at most): each page test file drives a browser, and more at once than the cores can carry fails page tests at random (a flat 8 did on 3 and 4 core CI runners). Page tests (`test-web-console-page-*.mjs`) read styles and set scrolls only through `styleOf()`, `stylesOf()` and `scrollCard()` from `page-test-helpers.mjs`, which retry until the element is still on the page; `test-web-console-shape.mjs` fails a raw `locator.evaluate` that does either.
 
 ## Test/Dev Env Vars
 
@@ -101,7 +97,7 @@ The root `npm test` does not run the metrics or bot vitest suites; run them in t
 | Option | Action |
 |--------|--------|
 | `I` | Install the Plan2Code skills globally via the `skills` CLI, plus the global `plan2code` command (opens the dashboard in Claude Code, Devin or Codex), then print the getting-started steps. No dev tools |
-| `U` | Uninstall Plan2Code: skills + `plan2code` command + `plan2code-loop` + `plan2code-metrics` + `plan2code-bot` + Claude Code status line (confirmation required) |
+| `U` | Uninstall Plan2Code: skills + `plan2code` command + `plan2code-metrics` + `plan2code-bot` + Claude Code status line (confirmation required) |
 | `A` | Open the ADVANCED sub-menu |
 | `Q` | Quit |
 
@@ -110,12 +106,11 @@ The root `npm test` does not run the metrics or bot vitest suites; run them in t
 | Option | Action |
 |--------|--------|
 | `L` | Install the skills into the current project instead of globally |
-| `O` | Install plan2code-loop CLI only |
 | `M` | Install plan2code-metrics CLI only |
 | `S` | Install Claude Code status line only |
 | `B` | Install plan2code-bot CLI only |
 | `D` | Install the global `plan2code` command only |
-| `E` | Everything: the skills, the `plan2code` command and every dev tool (`plan2code-loop`, `plan2code-bot`, `plan2code-metrics`, the Claude Code status line) |
+| `E` | Everything: the skills, the `plan2code` command and every dev tool (`plan2code-bot`, `plan2code-metrics`, the Claude Code status line) |
 | `Q` | Return to main menu |
 
 ## Non-Interactive Flags
@@ -126,7 +121,7 @@ The root `npm test` does not run the metrics or bot vitest suites; run them in t
 |------|--------|
 | `--build-skills` | Regenerate `skills/` from `src/`, pruning stale skills and reference files |
 | `--verify-skills` | Diff local `skills/` against `src/`; exits 1 on drift. Diagnostic only, the installer rebuilds anyway |
-| `--update` | No menu: reinstall what `~/.plan2code/install.json` lists (skills, launcher, statusline, loop, metrics, bot), never uninstalling; with no record, the skills and the `plan2code` command. `plan2code update` runs it through npx |
+| `--update` | No menu: reinstall what `~/.plan2code/install.json` lists (skills, launcher, statusline, metrics, bot), never uninstalling; with no record, the skills and the `plan2code` command. `plan2code update` runs it through npx |
 
 ## How the Installer Works
 

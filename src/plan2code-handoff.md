@@ -70,7 +70,7 @@ No `specs/` activity this session? Skip this section entirely.
 ## What to include
 
 Keep it tight and high-signal. Prefer pointers over prose: this repo already
-records a lot (plan specs, the loop's NDJSON logs, git history, diffs), so
+records a lot (plan specs, the loop's reports, git history, diffs), so
 **reference those by path or URL instead of copying them in**. The reader can
 open a file; they can't open your memory.
 
@@ -96,7 +96,7 @@ them. Note anything half-applied or left uncommitted.>
 
 ## Key files & pointers
 <Bulleted paths the reader will need, each with a one-line "why". Include plan
-specs, the files you were editing, relevant logs (e.g. .plan2code-loop NDJSON),
+specs, the files you were editing, relevant logs (e.g. `specs/<feature>/LOOP-SUMMARY-<date>.md`, `~/.plan2code/console/loop-reports.json`),
 and any PR/issue URLs.>
 
 ## Gotchas & decisions

@@ -278,7 +278,7 @@ function record(round, tw, ms) {
   tw.seq++;
 }
 
-// Mirror You's bolts in flight: cancelling yours, or striking you.
+// Mirror You's bolts in flight: canceling yours, or striking you.
 function stepBolts(round, tw, ms, k) {
   const you = round.you;
   const dt = ms / 1000;

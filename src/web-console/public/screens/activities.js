@@ -580,8 +580,24 @@ function startLoop() {
     if (g.state !== "running") {
       hushTones();
       looping = false;
-      return paintOverlay();
+      paintOverlay();
+      return overLoop(g, mine);
     }
+    tickSource(frame);
+  };
+  tickSource(frame);
+}
+
+// A game whose end screen moves (`animating`: Ghoul Rush's "G A M E - O V E R")
+// keeps being ticked and painted, with no countdown, until the screen is left.
+function overLoop(g, mine) {
+  if (!g.animating) return;
+  let last = null;
+  const frame = (now) => {
+    if (mine !== gen || looping || !$("activities-modal").open || g !== game() || g.state === "running" || !g.animating) return;
+    const t = typeof now === "number" ? now : performance.now();
+    if (last !== null) g.tick(Math.min(Math.max(0, t - last), MAX_FRAME_MS));
+    last = t;
     tickSource(frame);
   };
   tickSource(frame);

@@ -26,7 +26,7 @@ const PIPS = Object.freeze([
 
 // The panel the big die rolls on, and the die in it.
 const PANEL_W = 44;
-const PANEL_H = 34;
+const PANEL_H = 40;
 const DIE_SIZE = 15;
 // Candidate spots for the panel's middle, tried in order: the field's middle
 // first, then to either side; a row high on the field and one low.
@@ -108,7 +108,7 @@ export function diceArt(d) {
     ctx.strokeStyle = lucky ? GOLD : "rgba(255, 255, 255, 0.35)";
     ctx.lineWidth = lucky ? 0.6 : 0.3;
     ctx.stroke();
-    const at = y - 3;
+    const at = y - 6;
     let face;
     let size = DIE_SIZE;
     let angle = 0;
@@ -141,7 +141,12 @@ export function diceArt(d) {
       text = r.heart ? `A ${r.face} on your last heart: +1 heart!` : wasted ? `A ${r.face}, and no lives left` : DICE_FACES[r.face].line;
       color = lucky ? GOLD : DICE_FACES[r.face].gift && !wasted ? "#ffffff" : DANGER;
     }
-    label(ctx, text, x, y + 12, 2.7, color, "center", PANEL_W - 3);
+    label(ctx, text, x, y + 9.5, 2.7, color, "center", PANEL_W - 3);
+    // After the roll, what is left in hand (the roll has already taken its die).
+    if (r.landed) {
+      const n = v.round.dice;
+      label(ctx, `You have ${n} Lucky ${n === 1 ? "Die" : "Dice"} left!`, x, y + 15, 2.3, "#8fd8ff", "center", PANEL_W - 3);
+    }
   }
 
   // What each step of the roll looks and sounds like (house tones for now);

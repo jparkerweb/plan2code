@@ -100,12 +100,6 @@ test("Quick Task and Review name the tests covering the changed files", () => {
   assert.match(src("plan2code-review.md"), /\*\*Verify\*\* -- build and run the tests covering the fixed files \(per `references\/test-runs\.md`/);
 });
 
-test("the loop prompt points at the tests the task or phase file lists", () => {
-  const tpl = fs.readFileSync(path.join(ROOT, "plan2code-loop", "src", "prompt", "templates.ts"), "utf8");
-  assert.equal(tpl.split("run the tests the task or phase file lists").length - 1, 2);
-  assert.ok(!tpl.includes("if applicable"));
-});
-
 test("Finalize offers the full suite, skips it for Never and records the four outcomes", () => {
   const fin = src("plan2code-4-finalize.md");
   assert.ok(fin.includes("Run the full suite now?"), "Finalize asks the question");

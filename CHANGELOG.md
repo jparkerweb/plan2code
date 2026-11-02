@@ -2,6 +2,14 @@
 
 All notable changes to Plan2Code will be documented in this file.
 
+## v4.0.0
+
+### 💥 Breaking
+
+- **the `plan2code-loop` CLI is no longer an install target, and the package is removed.** The `plan2code-loop/` directory is deleted, and with it the installer's `O. LOOP CLI` advanced option and the loop's install, update and uninstall wiring. Its docs (`.readme/autonomous-loop.md`, `.agents-docs/AGENTS-plan2code-loop.md`) are gone too, and every remaining mention across the docs, templates, metadata and comments is removed or reworded. The desktop app's **Implementation Loop**, which superseded the CLI, is a separate feature built into the app and is unchanged.
+
+  **Stale installs are still cleaned up.** `install.js` keeps a small `removeLegacyLoopShims()` step that removes the old global artifacts (`plan2code-loop`, `plan2code-loop.cmd`, `plan2code-loop.ps1` and `node_modules/plan2code-loop` under the npm prefix) when they are present. `update()` runs it once before reinstalling and quietly skips a stale `"loop"` entry in `~/.plan2code/install.json`; uninstall runs it too.
+
 ## v3.0.0
 
 ### ✨ Added

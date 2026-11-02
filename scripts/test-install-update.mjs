@@ -65,7 +65,7 @@ async function runUpdate(steps) {
   const log = console.log;
   console.log = (...args) => lines.push(args.join(" "));
   try {
-    const code = await installer.update({ steps });
+    const code = await installer.update({ steps, cleanShims: () => {} });
     return { code, out: lines.join("\n").replace(/\x1b\[[0-9;]*m/g, "") };
   } finally {
     console.log = log;
@@ -76,12 +76,12 @@ test("install record: recordInstalled and forgetInstalled round trip a sorted se
   clearRecord();
   assert.equal(installer.INSTALL_RECORD, RECORD);
   assert.equal(installer.readInstallRecord(), null);
-  installer.recordInstalled("loop");
+  installer.recordInstalled("metrics");
   installer.recordInstalled("skills");
   installer.recordInstalled("skills");
   installer.recordInstalled("not-a-piece");
-  assert.deepEqual(installer.readInstallRecord(), { version: VERSION, scope: "global", pieces: ["loop", "skills"] });
-  installer.forgetInstalled("loop");
+  assert.deepEqual(installer.readInstallRecord(), { version: VERSION, scope: "global", pieces: ["metrics", "skills"] });
+  installer.forgetInstalled("metrics");
   assert.deepEqual(installer.readInstallRecord().pieces, ["skills"]);
   installer.forgetInstalled("skills");
   assert.deepEqual(installer.readInstallRecord().pieces, []);
@@ -112,26 +112,26 @@ test("update: with no record it says so and updates the skills and the plan2code
 });
 
 test("update: a partial record runs only the listed pieces, in order, unattended", async () => {
-  writeRecord(["loop", "statusline"]);
+  writeRecord(["bot", "statusline"]);
   const fake = fakeSteps();
   const { code, out } = await runUpdate(fake.steps);
   assert.equal(code, 0, out);
-  assert.deepEqual(fake.ran(), ["statusline", "loop"]);
+  assert.deepEqual(fake.ran(), ["statusline", "bot"]);
   for (const call of fake.calls) assert.equal(call.options.unattended, true, call.piece);
   assert.doesNotMatch(out, /No install record/);
   assert.doesNotMatch(out, /skills:/);
 });
 
 test("update: a failing piece exits 1 naming it, and the others still run", async () => {
-  writeRecord(["skills", "launcher", "loop", "metrics", "bot"]);
-  const fake = fakeSteps({ codes: { loop: 1 }, throws: { metrics: "npm exploded" } });
+  writeRecord(["skills", "launcher", "statusline", "metrics", "bot"]);
+  const fake = fakeSteps({ codes: { statusline: 1 }, throws: { metrics: "npm exploded" } });
   const { code, out } = await runUpdate(fake.steps);
   assert.equal(code, 1, out);
-  assert.deepEqual(fake.ran(), ["skills", "loop", "metrics", "bot"]);
-  assert.match(out, /loop: failed: /);
+  assert.deepEqual(fake.ran(), ["skills", "statusline", "metrics", "bot"]);
+  assert.match(out, /statusline: failed: /);
   assert.match(out, /metrics: failed: npm exploded/);
   assert.match(out, /bot: updated/);
-  assert.match(out, /Update failed for: loop, metrics/);
+  assert.match(out, /Update failed for: statusline, metrics/);
 });
 
 test("update: when the skills install leaves the command out, the launcher step runs on its own", async () => {
@@ -351,7 +351,7 @@ test("app update: plan2code update replaces an older app and reports it", { skip
   const server = await releaseServer(goodRelease(bytes));
   try {
     // The real app step, in the real update loop; the record lists only the app.
-    const { result, out } = await captured(() => installer.update({ steps: installer.UPDATE_STEPS }));
+    const { result, out } = await captured(() => installer.update({ steps: installer.UPDATE_STEPS, cleanShims: () => {} }));
     assert.equal(result, 0, out);
     assert.match(out, /app: updated/);
     assert.deepEqual(fs.readFileSync(installer.APP_DEST), bytes);
@@ -366,7 +366,7 @@ test("app update: a checksum mismatch fails the update naming the app, nothing e
   writeRecord(["app"]);
   const server = await releaseServer(goodRelease(Buffer.from("tampered bytes"), "1".repeat(64)));
   try {
-    const { result, out } = await captured(() => installer.update({ steps: installer.UPDATE_STEPS }));
+    const { result, out } = await captured(() => installer.update({ steps: installer.UPDATE_STEPS, cleanShims: () => {} }));
     assert.equal(result, 1);
     assert.match(out, /Update failed for: app/);
   } finally {
@@ -382,7 +382,7 @@ test("app update: a release with no app file yet keeps the installed app and doe
   // main moves to a new version before the release's files are attached: every file is a 404.
   const server = await releaseServer({});
   try {
-    const { result, out } = await captured(() => installer.update({ steps: installer.UPDATE_STEPS }));
+    const { result, out } = await captured(() => installer.update({ steps: installer.UPDATE_STEPS, cleanShims: () => {} }));
     assert.equal(result, 0, out);
     assert.match(out, /app: kept/);
     assert.doesNotMatch(out, /Update failed/);

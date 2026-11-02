@@ -35,7 +35,7 @@ export const DICE_FACES = Object.freeze({
   5: Object.freeze({ revive: true, give: Object.freeze(["life"]), line: "Back to life, +1 heart!", word: "+1 heart!" }),
   6: Object.freeze({ revive: true, give: Object.freeze(["life", "garlic"]), line: "Back to life, +1 heart + Garlic!", word: "+1 heart + Garlic!" }),
 });
-export const ROLL_MS = 1900;
+export const ROLL_MS = 3200;
 export const TUMBLE_MS = 600;
 // The clock a saved time-up gets back.
 export const SAVED_TIME_MS = 15000;

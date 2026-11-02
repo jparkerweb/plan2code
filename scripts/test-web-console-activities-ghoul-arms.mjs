@@ -1603,3 +1603,35 @@ test("Ghoul Rush's weapons all draw and every sound they name exists", () => {
   }
   assert.ok(round.score >= 0);
 });
+
+test("Ghoul Rush's Dynamite, Road Flare, Salt and Flash Powder are aimed: they land on the first monster ahead, or the middle of the group around it, and fly the old fixed throw with nothing ahead", () => {
+  const landsAt = (kind, setup, tail) => {
+    const round = roomOf("village", "inn");
+    standAt(round, 40);
+    give(round, kind, 3);
+    setup(round);
+    tapTap(round);
+    const hz = round.hazards.find((h) => ["stick", "armRoadFlare", "armPod"].includes(h.kind));
+    assert.ok(hz, `${kind} thrown`);
+    for (let i = 0; i < 400 && round.hazards.includes(hz) && !hz.rest; i++) run(round, 16);
+    return hz.x;
+  };
+  const still = (round, x) => put(round, "zombie", x, { stunMs: 1e9 });
+  for (const kind of ["dyn", "flare", "salt", "flash"]) {
+    const lone = landsAt(kind, (r) => still(r, 70));
+    assert.ok(Math.abs(lone - 70) < (kind === "salt" || kind === "flash" ? 8 : 2), `${kind} lands on a lone monster (${lone})`);
+    const group = landsAt(kind, (r) => { still(r, 62); still(r, 66); still(r, 70); still(r, 130); });
+    assert.ok(Math.abs(group - 66) < (kind === "salt" || kind === "flash" ? 8 : 2), `${kind} lands in the middle of the group (${group})`);
+    const behind = landsAt(kind, (r) => still(r, 10));
+    const none = landsAt(kind, () => {});
+    assert.ok(Math.abs(behind - none) < 0.5, `${kind} ignores what is behind`);
+  }
+  // The Creampie keeps its fixed lob.
+  const pie = roomOf("village", "inn");
+  standAt(pie, 40);
+  give(pie, "pie", 3);
+  put(pie, "zombie", 62, { stunMs: 1e9 });
+  tapTap(pie);
+  const lob = pie.hazards.find((h) => h.kind === "armPie");
+  assert.ok(lob && Math.abs(lob.vx - arm.PIE_VX) < 1e-9, "the pie is not aimed");
+});

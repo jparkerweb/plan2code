@@ -50,7 +50,7 @@
 
 import { ARM_POP_MS, POWERS, STAGE_ARMS, addArm } from "./ghoul-powers.js";
 import { stepPans, usePans } from "./ghoul-pans.js";
-import { stepFlareFly, stepRoadFire, useFlare } from "./ghoul-flare.js";
+import { FLARE_VX, FLARE_VY, stepFlareFly, stepRoadFire, useFlare } from "./ghoul-flare.js";
 import { stepBoom, stepMuzzle, stepRocket, useRockets } from "./ghoul-rockets.js";
 
 const freeze = Object.freeze;
@@ -77,8 +77,8 @@ export const BLAST_DAMAGE = 20;
 export const DYN_BOSS_DMG = 8;
 // The Iron Stake: pierces a whole line, chest high.
 export const STAKE_SPEED = 96;
-export const STAKE_DMG = 4;
-export const STAKE_BOSS = 4;
+export const STAKE_DMG = 12;
+export const STAKE_BOSS = 8;
 // The Bottle Rocket: three at once, ahead, up and behind (ghoul-rockets.js).
 export * from "./ghoul-rockets.js";
 // The Hedge Sickle: SICKLE_OUT out and back, SICKLE_DMG a pass.
@@ -271,18 +271,51 @@ function armShot(round, k, arm, speed, over) {
   round.shots.push({ arm, x: at.x, y: at.y, vx: Math.cos(aim) * speed * you.face, vy: Math.sin(aim) * speed, gone: 0, t: 0, spin: 0, ...over });
 }
 
+// Aimed lobs (Dynamite, the Road Flare): the first monster ahead in view, or, when others
+// stand within LOB_GROUP of it, the middle of that group, so one blast or fire
+// catches as many as it can. The sideways speed is solved so the throw lands there
+// (clamped to LOB_MIN_VX..LOB_MAX_VX); with nothing ahead it is the old fixed throw.
+export const LOB_GROUP = 9;
+const LOB_MIN_VX = 6;
+const LOB_MAX_VX = 70;
+
+// `also` names kinds that count though they cannot be shot (the buried hands the salt is for).
+export function lobTarget(round, k, also = []) {
+  const you = round.you;
+  const lo = round.camX;
+  const hi = round.camX + k.FIELD_W;
+  const ahead = round.monsters
+    .filter((m) => !m.dead && (k.solid(m) || k.stone(m) || also.includes(m.kind)) && (m.x - you.x) * you.face > 1 && m.x >= lo && m.x <= hi)
+    .sort((a, b) => Math.abs(a.x - you.x) - Math.abs(b.x - you.x));
+  if (!ahead.length) return null;
+  const first = ahead[0];
+  const group = ahead.filter((m) => Math.abs(m.x - first.x) <= LOB_GROUP);
+  return group.reduce((sum, m) => sum + m.x, 0) / group.length;
+}
+
+export function lobVx(round, k, vy, fixed, also) {
+  const tx = lobTarget(round, k, also);
+  if (tx === null) return round.you.face * fixed;
+  const at = hand(round, k);
+  const dy = k.groundAt(round.spec, tx) - at.y;
+  const disc = vy * vy + 2 * k.BONE_G * dy;
+  const t = disc > 0 ? (vy + Math.sqrt(disc)) / k.BONE_G : (2 * vy) / k.BONE_G;
+  const vx = Math.min(LOB_MAX_VX, Math.max(LOB_MIN_VX, Math.abs(tx - at.x) / t));
+  return round.you.face * vx;
+}
+
 function lobStick(round, k) {
   const you = round.you;
   const at = hand(round, k);
-  round.hazards.push({ kind: "stick", x: at.x, y: at.y, vx: you.face * DYN_VX, vy: DYN_VY, fuse: DYN_FUSE_MS, max: DYN_FUSE_MS, spin: 0, rest: false, w: 0.8, h: 0.8, live: 0, cause: "dynamite" });
+  round.hazards.push({ kind: "stick", x: at.x, y: at.y, vx: lobVx(round, k, DYN_VY, DYN_VX), vy: DYN_VY, fuse: DYN_FUSE_MS, max: DYN_FUSE_MS, spin: 0, rest: false, w: 0.8, h: 0.8, live: 0, cause: "dynamite" });
   // The Mine's art plays Dynamite's own sound from this one.
   round.events.push({ type: "dynThrow", x: at.x, y: at.y, face: you.face });
 }
 
-function lobPod(round, k, pay) {
+function lobPod(round, k, pay, aimed = false) {
   const you = round.you;
   const at = hand(round, k);
-  round.hazards.push({ kind: "armPod", pay, x: at.x, y: at.y, vx: you.face * POD_VX, vy: POD_VY, spin: 0, w: 0.8, h: 0.8, live: 0, cause: "" });
+  round.hazards.push({ kind: "armPod", pay, x: at.x, y: at.y, vx: aimed ? lobVx(round, k, POD_VY, POD_VX, ["hands"]) : you.face * POD_VX, vy: POD_VY, spin: 0, w: 0.8, h: 0.8, live: 0, cause: "" });
 }
 
 function lobPie(round, k) {
@@ -305,10 +338,10 @@ const USES = freeze({
     const you = round.you;
     round.hazards.push({ kind: "armRing", x: you.x, y: you.y + k.HIT_H / 2, r: 0, life: RING_MS, max: RING_MS, hit: [], hitPipe: [], hitBoss: false, w: 1, h: 1, live: 0, cause: "" });
   },
-  salt: (round, k) => lobPod(round, k, "salt"),
-  flash: (round, k) => lobPod(round, k, "flash"),
+  salt: (round, k) => lobPod(round, k, "salt", true),
+  flash: (round, k) => lobPod(round, k, "flash", true),
   pie: lobPie,
-  flare: useFlare,
+  flare: (round, k) => useFlare(round, k, lobVx(round, k, FLARE_VY, FLARE_VX)),
   trap: (round) => {
     const you = round.you;
     // Five at once, TRAP_GAP apart: two behind, one at his feet, two ahead.

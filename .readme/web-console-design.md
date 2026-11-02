@@ -77,7 +77,7 @@ The console carries all of these as opaque strings and never reformats them.
 ### 2.5 Two regex landmines
 
 - `plan2code-metrics` scrapes confidence with patterns like `/[Rr]equirements?[:\s|]+(\d{1,2})/` that **do not require a percent sign**. Nothing the console writes under `specs/` may contain bare `Requirements` / `Feasibility` / `Integration` / `Risk` followed by a number.
-- The loop parses `TASK_COMPLETE`, `PHASE_COMPLETE` and friends. Pathfinder already forbids these tokens under `specs/`.
+- `TASK_COMPLETE`, `PHASE_COMPLETE` and friends are reserved completion markers, refused outright. Pathfinder already forbids these tokens under `specs/`.
 
 Both are cheap to enforce mechanically in the server's write path.
 
@@ -188,7 +188,7 @@ The filesystem is the database and the result transport.
   events.ndjson       append-only, doubles as SSE Last-Event-ID replay
 ```
 
-Deliberately **not** under `specs/`: that keeps the console clear of the metrics scraper and the loop's marker parser, and survives a `git clean`.
+Deliberately **not** under `specs/`: that keeps the console clear of the metrics scraper and completion-marker parsers, and survives a `git clean`.
 
 Draft persistence is the highest-value feature in the tool and among the cheapest. Twenty minutes of a product manager's structured answers must never be lost to a closed tab. Server-side debounced write plus a `localStorage` mirror keyed by `sid + rev`.
 

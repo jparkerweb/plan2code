@@ -509,6 +509,7 @@ export const CLEAR_MS = 1200;
 // press takes one.
 export const OFFER_N = 2;
 export const PICK_HOLD_MS = 700;
+export const BANNER_STRETCH = 2;
 export const DOOR_REACH = 2.5;
 
 // A banner fades to BANNER_SEE_THROUGH over BANNER_FADE_MS while something
@@ -2441,7 +2442,9 @@ function create({ canvas, tone = () => {}, hum = () => {}, music = () => {}, onS
   // once that phase has passed; a full queue makes room for a more
   // important one (`rank`: "New best!") by dropping the least important one
   // waiting, and otherwise drops the newcomer.
+  // Every banner is up BANNER_STRETCH times as long as its caller asks, so the words can be read.
   const banner = (title, sub, color, ms = 1800, { phase = "", rank = 0 } = {}) => {
+    ms *= BANNER_STRETCH;
     if (fx.banners.some((b) => b.title === title)) return null;
     if (fx.banners.length >= 3) {
       let low = -1;
@@ -2759,6 +2762,10 @@ function create({ canvas, tone = () => {}, hum = () => {}, music = () => {}, onS
     },
     get state() {
       return state;
+    },
+    // The lost end screen animates, so the window keeps ticking it.
+    get animating() {
+      return state === "over" && !round.won;
     },
     // For the tests only: the window never reads it.
     get round() {

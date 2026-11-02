@@ -334,6 +334,109 @@
       <aside class="aside" id="aside" aria-label="Notes and discussion"></aside>
     </div>
 
+    <!-- One small glyph per dashboard card, drawn before the card's title
+         (dashboard.js) and beside it in Help's card list (help-dialog.js).
+         A hidden sheet of <symbol>s in the same stroke style as help-icons:
+         .dash-card-icon and .help-card-icon supply size and ink. -->
+    <svg class="card-icons" aria-hidden="true" focusable="false">
+      <!-- Set up this project: a map pin, "put this project on the map". -->
+      <symbol id="ci-init" viewBox="0 0 24 24" fill="none">
+        <path d="M20 10c0 5-5.5 10.2-7.4 11.8a1 1 0 0 1-1.2 0C9.5 20.2 4 15 4 10a8 8 0 0 1 16 0z" />
+        <circle cx="12" cy="10" r="2.8" />
+      </symbol>
+      <!-- Refresh AGENTS.md: circular refresh arrow. -->
+      <symbol id="ci-init-update" viewBox="0 0 24 24" fill="none">
+        <path d="M21 12a9 9 0 1 1-9-9c2.5 0 4.9 1 6.7 2.7L21 8" />
+        <path d="M21 3v5h-5" />
+      </symbol>
+      <!-- Pathfinder: a compass. -->
+      <symbol id="ci-pathfinder" viewBox="0 0 24 24" fill="none">
+        <circle cx="12" cy="12" r="9.2" />
+        <path d="M16.2 7.8l-2.1 6.3-6.3 2.1 2.1-6.3z" />
+      </symbol>
+      <!-- Plan: a folded map. -->
+      <symbol id="ci-plan" viewBox="0 0 24 24" fill="none">
+        <path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2z" />
+        <path d="M9 4v14" />
+        <path d="M15 6v14" />
+      </symbol>
+      <!-- Revise the plan: a pencil. -->
+      <symbol id="ci-revise-plan" viewBox="0 0 24 24" fill="none">
+        <path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z" />
+        <path d="m15 5 4 4" />
+      </symbol>
+      <!-- Document: a document with a check. -->
+      <symbol id="ci-document" viewBox="0 0 24 24" fill="none">
+        <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z" />
+        <path d="M14 2v4a2 2 0 0 0 2 2h4" />
+        <path d="m9 15 2 2 4-4" />
+      </symbol>
+      <!-- Implement: code brackets. -->
+      <symbol id="ci-implement" viewBox="0 0 24 24" fill="none">
+        <path d="m16 18 6-6-6-6" />
+        <path d="m8 6-6 6 6 6" />
+      </symbol>
+      <!-- Implementation Loop: repeat arrows. -->
+      <symbol id="ci-loop" viewBox="0 0 24 24" fill="none">
+        <path d="m17 2.5 4 4-4 4" />
+        <path d="M3 11V9a4 4 0 0 1 4-4h14" />
+        <path d="m7 21.5-4-4 4-4" />
+        <path d="M21 13v2a4 4 0 0 1-4 4H3" />
+      </symbol>
+      <!-- Finalize: a finish flag. -->
+      <symbol id="ci-finalize" viewBox="0 0 24 24" fill="none">
+        <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V4s-1 1-4 1-5-2-8-2-4 1-4 1z" />
+        <path d="M4 21v-6" />
+      </symbol>
+      <!-- Quick task: a bolt. -->
+      <symbol id="ci-quick-task" viewBox="0 0 24 24" fill="none">
+        <path d="M13 3 4.5 14h7.5l-1.5 7L19 10h-7.5z" />
+      </symbol>
+      <!-- Review: a magnifier. -->
+      <symbol id="ci-review" viewBox="0 0 24 24" fill="none">
+        <circle cx="11" cy="11" r="7.5" />
+        <path d="m20.5 20.5-4.6-4.6" />
+      </symbol>
+      <!-- Codebase X-ray: a scan frame with its scan line. -->
+      <symbol id="ci-xray" viewBox="0 0 24 24" fill="none">
+        <path d="M3 7V5a2 2 0 0 1 2-2h2" />
+        <path d="M17 3h2a2 2 0 0 1 2 2v2" />
+        <path d="M21 17v2a2 2 0 0 1-2 2h-2" />
+        <path d="M7 21H5a2 2 0 0 1-2-2v-2" />
+        <path d="M7 12h10" />
+      </symbol>
+      <!-- Diagnose a bug: a bug. -->
+      <symbol id="ci-diagnose" viewBox="0 0 24 24" fill="none">
+        <path d="M12 20a6 6 0 0 0 6-6v-2.5a6 6 0 0 0-12 0V14a6 6 0 0 0 6 6z" />
+        <path d="m9.5 6.5-2-3" />
+        <path d="m14.5 6.5 2-3" />
+        <path d="M12 11v6" />
+        <path d="M6.5 13h-3" />
+        <path d="M20.5 13h-3" />
+        <path d="m6 17.5-2.5 1.5" />
+        <path d="m18 17.5 2.5 1.5" />
+      </symbol>
+      <!-- Changelog: a version tag. -->
+      <symbol id="ci-changelog" viewBox="0 0 24 24" fill="none">
+        <path d="M3 4a1 1 0 0 1 1-1h7.6a2 2 0 0 1 1.4.6l7.4 7.4a2 2 0 0 1 0 2.8l-5.6 5.6a2 2 0 0 1-2.8 0L4.6 12a2 2 0 0 1-.6-1.4z" />
+        <path d="M7.5 7.5h.01" />
+      </symbol>
+      <!-- Git: a branch. -->
+      <symbol id="ci-git" viewBox="0 0 24 24" fill="none">
+        <circle cx="6" cy="6" r="2.5" />
+        <circle cx="6" cy="18" r="2.5" />
+        <circle cx="18" cy="6" r="2.5" />
+        <path d="M6 8.5v7" />
+        <path d="M18 8.5a9 9 0 0 1-9 7" />
+      </symbol>
+      <!-- Handoff: a package. -->
+      <symbol id="ci-handoff" viewBox="0 0 24 24" fill="none">
+        <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+        <path d="m3.3 7 8.7 5 8.7-5" />
+        <path d="M12 21.5V12" />
+      </symbol>
+    </svg>
+
     <!-- Planny acting out each skill while it starts up and while it works.
          Inert until app.js clones one onto the starting or waiting screen
          (startStage), so it costs nothing on any other screen. Classes only,

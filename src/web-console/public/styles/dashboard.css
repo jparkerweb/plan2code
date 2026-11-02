@@ -215,7 +215,21 @@
 }
 .dash-card.is-suggested .dash-chip { color: var(--accent); border-color: var(--accent-line); }
 
-.dash-card-title { font-size: 15px; font-weight: 650; }
+/* The card icon sheet: present for <use href>, never drawn itself. */
+.card-icons { position: absolute; width: 0; height: 0; overflow: hidden; }
+
+.dash-card-title { display: flex; align-items: center; gap: 7px; font-size: 15px; font-weight: 650; }
+.dash-card-icon {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.dash-card.is-suggested .dash-card-icon { stroke: var(--accent); }
 .dash-card-blurb { font-size: 13px; color: var(--ink-2); flex: 1; }
 .dash-card-detail { font-size: 12px; color: var(--accent); }
 

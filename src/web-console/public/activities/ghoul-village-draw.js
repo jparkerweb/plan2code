@@ -402,7 +402,7 @@ export function villageArt(d) {
   /* --------------------------------------------------------- hanged man */
 
   // A hanged man: a rope from the beam to a noose, the neck bent, the head
-  // lolling, grey shirt and trousers, bare feet turning, arms limp; he swings on
+  // lolling, gray shirt and trousers, bare feet turning, arms limp; he swings on
   // his rope, creaks before he drops, flings his arms up as he falls, bounces at the
   // rope's end and kicks as he is hauled up.
   function hanged(ctx, v, m, x, y, t, flash) {
@@ -533,7 +533,7 @@ export function villageArt(d) {
     }
   }
 
-  // A ghoul in a window: gaunt grey, nightshirt, long black hair, a mouth full of
+  // A ghoul in a window: gaunt gray, nightshirt, long black hair, a mouth full of
   // needles, eyes burning; when it lunges its neck and arms stretch out from the
   // window to where it reaches, hands clawed and grasping.
   function shutter(ctx, v, m, x, y, t, flash) {
@@ -657,7 +657,7 @@ export function villageArt(d) {
 
   /* ----------------------------------------------------------- moonhound */
 
-  // A moonhound: a gaunt wolfhound, ribs and spine showing, long legs, silver-grey
+  // A moonhound: a gaunt wolfhound, ribs and spine showing, long legs, silver-gray
   // coat; trotting, coiled with its hackles up, stretched in its leap, panting after
   // it, or cowering from Wolfsbane (ears flat, tail between its legs, low). Grown,
   // it is half again as big with a mane that glows.

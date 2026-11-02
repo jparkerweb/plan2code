@@ -10,7 +10,7 @@
 export const FROZEN_SFX = {
   tones: {
     // Frozen Lake picks, by ear (prototypes/sounds/ghoul-rush/frozen.html).
-    // Under-Ice Hand: A grey hand that trails you under the ice, cracks thin ice open beneath you, or bursts up through the floor to grab.
+    // Under-Ice Hand: A gray hand that trails you under the ice, cracks thin ice open beneath you, or bursts up through the floor to grab.
     // Slides in: Scrabbling fingernails.
     ghoulIceHandAppear: {
       layers: [

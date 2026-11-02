@@ -21,6 +21,7 @@ const path = require('path');
 const os = require('os');
 const readline = require('readline');
 const crypto = require('crypto');
+const { execSync, execFileSync } = require('child_process');
 
 // Load project version metadata
 let projectVersion = { name: 'Plan2Code', version: 'unknown' };
@@ -1247,13 +1248,13 @@ function runInteractive() {
       if (confirmInput === 'Y') {
         rl.close();
         const uninstallResult = uninstallSkills();
-        const loopResult = uninstallPlan2CodeLoop();
+        removeLegacyLoopShims();
         const metricsResult = uninstallPlan2CodeMetrics();
         const botResult = uninstallPlan2CodeBot();
         const statusLineResult = uninstallStatusLine();
         const launcherResult = uninstallLauncher();
         uninstallDesktopApp();
-        const exitCode = uninstallResult !== 0 ? uninstallResult : loopResult !== 0 ? loopResult : metricsResult !== 0 ? metricsResult : botResult !== 0 ? botResult : statusLineResult !== 0 ? statusLineResult : launcherResult;
+        const exitCode = uninstallResult !== 0 ? uninstallResult : metricsResult !== 0 ? metricsResult : botResult !== 0 ? botResult : statusLineResult !== 0 ? statusLineResult : launcherResult;
         process.exit(exitCode);
       } else {
         console.log(`\n${COLORS.YELLOW}${SYMBOLS.WARNING} CANCELED${COLORS.RESET}\n`);
@@ -1269,7 +1270,6 @@ function runInteractive() {
       console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET} ${COLORS.BRIGHT}ADVANCED OPTIONS${COLORS.RESET}`, 65) + `${COLORS.CYAN}║${COLORS.RESET}`);
       console.log(`${COLORS.CYAN}╠════════════════════════════════════════════════════════════════╣${COLORS.RESET}`);
       console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET}  ${COLORS.BRIGHT}L.${COLORS.RESET}  ${COLORS.BLUE}LOCAL${COLORS.RESET}      Install skills into the current project only`, 65) + `${COLORS.CYAN}║${COLORS.RESET}`);
-      console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET}  ${COLORS.BRIGHT}O.${COLORS.RESET}  ${COLORS.GREEN}LOOP CLI${COLORS.RESET}   Install plan2code-loop CLI only`, 65) + `${COLORS.CYAN}║${COLORS.RESET}`);
       console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET}  ${COLORS.BRIGHT}M.${COLORS.RESET}  ${COLORS.GREEN}METRICS${COLORS.RESET}    Install plan2code-metrics CLI only`, 65) + `${COLORS.CYAN}║${COLORS.RESET}`);
       console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET}  ${COLORS.BRIGHT}S.${COLORS.RESET}  ${COLORS.GREEN}STATUS${COLORS.RESET}     Install Claude Code status line`, 65) + `${COLORS.CYAN}║${COLORS.RESET}`);
       console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET}  ${COLORS.BRIGHT}B.${COLORS.RESET}  ${COLORS.GREEN}BOT${COLORS.RESET}        Install plan2code-bot CLI only`, 65) + `${COLORS.CYAN}║${COLORS.RESET}`);
@@ -1278,14 +1278,12 @@ function runInteractive() {
       console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET}  ${COLORS.BRIGHT}Q.${COLORS.RESET}  ${COLORS.DIM}BACK${COLORS.RESET}       Return to main menu`, 65) + `${COLORS.CYAN}║${COLORS.RESET}`);
       console.log(`${COLORS.CYAN}╚════════════════════════════════════════════════════════════════╝${COLORS.RESET}`);
       console.log('');
-      const customAnswer = await question(`${COLORS.CYAN}${SYMBOLS.SELECT} SELECT OPTION${COLORS.RESET} (L, O, M, S, B, D, E, Q) [Q]: `);
+      const customAnswer = await question(`${COLORS.CYAN}${SYMBOLS.SELECT} SELECT OPTION${COLORS.RESET} (L, M, S, B, D, E, Q) [Q]: `);
       const customInput = customAnswer.trim().toUpperCase() || 'Q';
 
-      // A > E: install everything (skills + loop + bot + metrics + Claude status line)
+      // A > E: install everything (skills + bot + metrics + Claude status line)
       if (customInput === 'E') {
         rl.close();
-        const loopResult = installPlan2CodeLoop();
-        console.log('');
         const botResult = installPlan2CodeBot();
         console.log('');
         const metricsResult = installPlan2CodeMetrics();
@@ -1293,7 +1291,7 @@ function runInteractive() {
         const statusLineResult = await installStatusLine();
         console.log('');
         const installResult = await install();
-        const exitCode = loopResult !== 0 ? loopResult : botResult !== 0 ? botResult : metricsResult !== 0 ? metricsResult : statusLineResult !== 0 ? statusLineResult : installResult;
+        const exitCode = botResult !== 0 ? botResult : metricsResult !== 0 ? metricsResult : statusLineResult !== 0 ? statusLineResult : installResult;
         process.exit(exitCode);
       }
 
@@ -1301,13 +1299,6 @@ function runInteractive() {
       if (customInput === 'L') {
         rl.close();
         process.exit(installProjectSkills());
-      }
-
-      // A > O: install loop CLI only
-      if (customInput === 'O') {
-        rl.close();
-        const result = installPlan2CodeLoop();
-        process.exit(result);
       }
 
       // A > M: install metrics CLI only
@@ -1361,266 +1352,44 @@ function runInteractive() {
 }
 
 // ============================================================================
-// PLAN2CODE-LOOP INSTALLATION
+// LEGACY PLAN2CODE-LOOP SHIMS
 // ============================================================================
 
-const { execSync, execFileSync } = require('child_process');
-
 /**
- * Build plan2code-loop package
+ * Remove stale plan2code-loop artifacts left behind by the retired CLI package:
+ * the shims under the npm bin/prefix dir and the link under the npm root.
+ * Silently does nothing when none are present.
  */
-function buildPlan2CodeLoop() {
-  const loopDir = path.join(__dirname, 'plan2code-loop');
-
-  // Check if directory exists
-  if (!fs.existsSync(loopDir)) {
-    console.log(`${COLORS.YELLOW}${SYMBOLS.WARNING}${COLORS.RESET} plan2code-loop directory not found`);
-    return false;
-  }
-
-  console.log(`${COLORS.CYAN}${SYMBOLS.ACTIVE} Building plan2code-loop...${COLORS.RESET}`);
-
+function removeLegacyLoopShims() {
+  let npmPrefix;
   try {
-    // Install dependencies
-    console.log(`  ${COLORS.DIM}Installing dependencies...${COLORS.RESET}`);
-    execSync('npm install', { cwd: loopDir, stdio: 'pipe' });
-
-    // Build
-    console.log(`  ${COLORS.DIM}Running build...${COLORS.RESET}`);
-    execSync('npm run build', { cwd: loopDir, stdio: 'pipe' });
-
-    console.log(`  ${COLORS.GREEN}${SYMBOLS.SUCCESS}${COLORS.RESET} Build complete`);
-    return true;
+    npmPrefix = execSync('npm config get prefix', { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
   } catch (error) {
-    console.log(`  ${COLORS.RED}${SYMBOLS.ERROR}${COLORS.RESET} Build failed: ${error.message}`);
-    return false;
+    return;
   }
-}
-/**
- * Clean up existing plan2code-loop symlinks/files before creating new ones
- * This prevents the Windows lstat error with stale symlinks
- */
-function cleanupExistingSymlinks() {
-  console.log(`  ${COLORS.DIM}Cleaning up existing symlinks...${COLORS.RESET}`);
 
-  try {
-    // Get npm global prefix - more reliable than npm bin -g on Windows
-    const npmPrefix = execSync('npm config get prefix', { encoding: 'utf8' }).trim();
+  // On Windows, bin files are directly in prefix; on Unix they are in prefix/bin
+  const npmBinGlobal = process.platform === 'win32' ? npmPrefix : path.join(npmPrefix, 'bin');
+  const npmRootGlobal = path.join(npmPrefix, 'node_modules');
 
-    // On Windows, bin files are directly in prefix; on Unix they're in prefix/bin
-    const npmBinGlobal = process.platform === 'win32' ? npmPrefix : path.join(npmPrefix, 'bin');
-    const npmRootGlobal = path.join(npmPrefix, 'node_modules');
+  const artifacts = [
+    { path: path.join(npmBinGlobal, 'plan2code-loop'), name: 'plan2code-loop' },
+    { path: path.join(npmBinGlobal, 'plan2code-loop.cmd'), name: 'plan2code-loop.cmd' },
+    { path: path.join(npmBinGlobal, 'plan2code-loop.ps1'), name: 'plan2code-loop.ps1' },
+    { path: path.join(npmRootGlobal, 'plan2code-loop'), name: 'node_modules/plan2code-loop' }
+  ];
 
-    // Files/symlinks to clean up in npm bin directory
-    const binFiles = [
-      path.join(npmBinGlobal, 'plan2code-loop'),
-      path.join(npmBinGlobal, 'plan2code-loop.cmd'),
-      path.join(npmBinGlobal, 'plan2code-loop.ps1')
-    ];
-
-    // Symlink in node_modules - this is the main culprit for the lstat error
-    const nodeModulesLink = path.join(npmRootGlobal, 'plan2code-loop');
-
-    // Remove bin files first
-    for (const file of binFiles) {
-      try {
-        const stats = fs.lstatSync(file);
-        if (stats) {
-          fs.unlinkSync(file);
-          console.log(`    ${COLORS.DIM}Removed: ${path.basename(file)}${COLORS.RESET}`);
-        }
-      } catch (err) {
-        if (err.code !== 'ENOENT') {
-          // File exists but can't be removed normally, try rmSync
-          try {
-            fs.rmSync(file, { force: true, recursive: true });
-            console.log(`    ${COLORS.DIM}Removed: ${path.basename(file)}${COLORS.RESET}`);
-          } catch (rmErr) {
-            console.log(`    ${COLORS.DIM}Could not remove: ${path.basename(file)}${COLORS.RESET}`);
-          }
-        }
-      }
-    }
-
-    // Remove node_modules symlink - this is critical for fixing the lstat error
+  for (const artifact of artifacts) {
     try {
-      const stats = fs.lstatSync(nodeModulesLink);
-      if (stats) {
-        // On Windows, junction points need special handling
-        if (process.platform === 'win32') {
-          // Try using rmdir for junction points
-          try {
-            fs.rmdirSync(nodeModulesLink);
-            console.log(`    ${COLORS.DIM}Removed: node_modules/plan2code-loop (junction)${COLORS.RESET}`);
-          } catch (rmdirErr) {
-            // Fall back to rmSync
-            fs.rmSync(nodeModulesLink, { force: true, recursive: true });
-            console.log(`    ${COLORS.DIM}Removed: node_modules/plan2code-loop${COLORS.RESET}`);
-          }
-        } else {
-          fs.rmSync(nodeModulesLink, { force: true, recursive: true });
-          console.log(`    ${COLORS.DIM}Removed: node_modules/plan2code-loop${COLORS.RESET}`);
-        }
-      }
+      fs.lstatSync(artifact.path);
+      fs.rmSync(artifact.path, { force: true, recursive: true });
+      console.log(`  ${COLORS.GREEN}${SYMBOLS.SUCCESS}${COLORS.RESET} Removed: ${artifact.name}`);
     } catch (err) {
       if (err.code !== 'ENOENT') {
-        console.log(`    ${COLORS.DIM}Could not remove node_modules symlink: ${err.message}${COLORS.RESET}`);
+        console.log(`  ${COLORS.RED}${SYMBOLS.ERROR}${COLORS.RESET} Failed to remove ${artifact.name}: ${err.message}`);
       }
     }
-
-    return true;
-  } catch (error) {
-    // Non-fatal - npm link might still work
-    console.log(`    ${COLORS.DIM}Cleanup skipped: ${error.message}${COLORS.RESET}`);
-    return true;
   }
-}
-
-/**
- * Create global symlink for plan2code-loop
- */
-function createGlobalSymlink() {
-  const loopDir = path.join(__dirname, 'plan2code-loop');
-  const distBin = path.join(loopDir, 'dist', 'bin', 'plan2code-loop.js');
-  // Check if built binary exists
-  if (!fs.existsSync(distBin)) {
-    console.log(`${COLORS.YELLOW}${SYMBOLS.WARNING}${COLORS.RESET} plan2code-loop binary not found. Run build first.`);
-    return false;
-  }
-  console.log(`${COLORS.CYAN}${SYMBOLS.ACTIVE} Creating global symlink...${COLORS.RESET}`);
-
-  // Clean up existing symlinks first to prevent Windows lstat errors
-  cleanupExistingSymlinks();
-
-  // On Windows, skip npm link entirely and create batch file directly
-  // npm link has persistent issues with junctions and lstat errors on Windows
-  if (process.platform === 'win32') {
-    try {
-      const npmPrefix = execSync('npm config get prefix', { encoding: 'utf8' }).trim();
-      const symlinkCmd = path.join(npmPrefix, 'plan2code-loop.cmd');
-      const symlinkPs1 = path.join(npmPrefix, 'plan2code-loop.ps1');
-
-      // Create batch file wrapper for cmd.exe
-      const batchContent = `@echo off\r\nnode "${distBin}" %*\r\n`;
-      fs.writeFileSync(symlinkCmd, batchContent);
-      console.log(`  ${COLORS.GREEN}${SYMBOLS.SUCCESS}${COLORS.RESET} Created: plan2code-loop.cmd`);
-
-      // Create PowerShell wrapper for better shell support
-      const ps1Content = `#!/usr/bin/env pwsh\r\nnode "${distBin}" $args\r\n`;
-      fs.writeFileSync(symlinkPs1, ps1Content);
-      console.log(`  ${COLORS.GREEN}${SYMBOLS.SUCCESS}${COLORS.RESET} Created: plan2code-loop.ps1`);
-
-      console.log(`  ${COLORS.DIM}Run 'plan2code-loop --help' from any directory${COLORS.RESET}`);
-      return true;
-    } catch (error) {
-      console.log(`  ${COLORS.RED}${SYMBOLS.ERROR}${COLORS.RESET} Failed to create wrappers: ${error.message}`);
-      return false;
-    }
-  }
-
-  // On Unix systems, use npm link as it works reliably
-  try {
-    execSync('npm link', { cwd: loopDir, stdio: 'pipe' });
-    console.log(`  ${COLORS.GREEN}${SYMBOLS.SUCCESS}${COLORS.RESET} Global symlink created`);
-    console.log(`  ${COLORS.DIM}Run 'plan2code-loop --help' from any directory${COLORS.RESET}`);
-    return true;
-  } catch (error) {
-    console.log(`  ${COLORS.RED}${SYMBOLS.ERROR}${COLORS.RESET} Symlink failed: ${error.message}`);
-    return false;
-  }
-}
-/**
- * Remove global symlink for plan2code-loop
- */
-function removeGlobalSymlink() {
-  console.log(`${COLORS.CYAN}${SYMBOLS.ACTIVE} Removing global symlink...${COLORS.RESET}`);
-
-  let removedCount = 0;
-
-  try {
-    // Get npm global prefix
-    const npmPrefix = execSync('npm config get prefix', { encoding: 'utf8' }).trim();
-
-    // On Windows, bin files are directly in prefix; on Unix they're in prefix/bin
-    const npmBinGlobal = process.platform === 'win32' ? npmPrefix : path.join(npmPrefix, 'bin');
-    const npmRootGlobal = path.join(npmPrefix, 'node_modules');
-
-    // Files to remove
-    const filesToRemove = [
-      { path: path.join(npmBinGlobal, 'plan2code-loop'), name: 'plan2code-loop' },
-      { path: path.join(npmBinGlobal, 'plan2code-loop.cmd'), name: 'plan2code-loop.cmd' },
-      { path: path.join(npmBinGlobal, 'plan2code-loop.ps1'), name: 'plan2code-loop.ps1' },
-      { path: path.join(npmRootGlobal, 'plan2code-loop'), name: 'node_modules/plan2code-loop' }
-    ];
-
-    for (const file of filesToRemove) {
-      try {
-        fs.lstatSync(file.path);
-        fs.rmSync(file.path, { force: true, recursive: true });
-        console.log(`  ${COLORS.GREEN}${SYMBOLS.SUCCESS}${COLORS.RESET} Removed: ${file.name}`);
-        removedCount++;
-      } catch (err) {
-        if (err.code !== 'ENOENT') {
-          console.log(`  ${COLORS.RED}${SYMBOLS.ERROR}${COLORS.RESET} Failed to remove ${file.name}: ${err.message}`);
-        }
-      }
-    }
-
-    if (removedCount === 0) {
-      console.log(`  ${COLORS.DIM}${SYMBOLS.INFO} No files found to remove${COLORS.RESET}`);
-    }
-
-    return true;
-  } catch (error) {
-    console.log(`  ${COLORS.RED}${SYMBOLS.ERROR}${COLORS.RESET} Uninstall failed: ${error.message}`);
-    return false;
-  }
-}
-
-/**
- * Install plan2code-loop (build + symlink)
- */
-function installPlan2CodeLoop() {
-  displaySectionHeader('PLAN2CODE-LOOP', '[ BUILD & INSTALL ]');
-
-  const buildSuccess = buildPlan2CodeLoop();
-  if (!buildSuccess) {
-    return 1;
-  }
-
-  const symlinkSuccess = createGlobalSymlink();
-  if (!symlinkSuccess) {
-    return 1;
-  }
-
-  console.log('');
-  recordInstalled('loop');
-  console.log(`${COLORS.GREEN}${SYMBOLS.SUCCESS} plan2code-loop installed successfully!${COLORS.RESET}`);
-  console.log('');
-  console.log(`${COLORS.CYAN}Usage:${COLORS.RESET}`);
-  console.log(`  ${COLORS.BRIGHT}plan2code-loop${COLORS.RESET}          Start the autonomous loop`);
-  console.log(`  ${COLORS.BRIGHT}plan2code-loop -c${COLORS.RESET}       Resume previous session`);
-  console.log(`  ${COLORS.BRIGHT}plan2code-loop -v${COLORS.RESET}       Verbose mode`);
-  console.log(`  ${COLORS.BRIGHT}plan2code-loop --help${COLORS.RESET}   Show all options`);
-  console.log('');
-
-  return 0;
-}
-
-/**
- * Uninstall plan2code-loop
- */
-function uninstallPlan2CodeLoop() {
-  displaySectionHeader('PLAN2CODE-LOOP', '[ UNINSTALL ]');
-
-  removeGlobalSymlink();
-  forgetInstalled('loop');
-
-  console.log('');
-  console.log(`${COLORS.GREEN}${SYMBOLS.SUCCESS} plan2code-loop uninstalled${COLORS.RESET}`);
-  console.log('');
-
-  return 0;
 }
 
 // ============================================================================
@@ -2358,7 +2127,7 @@ const UPDATE_CHECK_DEST = path.join(path.dirname(LAUNCHER_DEST), 'update-check.m
 const LAUNCHER_VERSION_DEST = path.join(path.dirname(LAUNCHER_DEST), 'version.json');
 // What a global install put on this machine, so `plan2code update` reinstalls exactly that.
 const INSTALL_RECORD = path.join(os.homedir(), '.plan2code', 'install.json');
-const INSTALL_PIECES = ['skills', 'launcher', 'app', 'statusline', 'loop', 'metrics', 'bot'];
+const INSTALL_PIECES = ['skills', 'launcher', 'app', 'statusline', 'metrics', 'bot'];
 const LAUNCHER_PICK_FOLDER_FLAG = '--pick-folder';
 
 /**
@@ -3017,7 +2786,6 @@ const UPDATE_STEPS = {
   launcher: installLauncher,
   app: installDesktopApp,
   statusline: installStatusLine,
-  loop: installPlan2CodeLoop,
   metrics: installPlan2CodeMetrics,
   bot: installPlan2CodeBot,
 };
@@ -3026,7 +2794,7 @@ const UPDATE_STEPS = {
  * Reinstall whatever ~/.plan2code/install.json lists, without the menu or any prompt. Returns
  * the exit code: 0 when every piece updated, 1 naming the pieces that failed.
  */
-async function update({ steps = UPDATE_STEPS } = {}) {
+async function update({ steps = UPDATE_STEPS, cleanShims = removeLegacyLoopShims } = {}) {
   displaySectionHeader('  UPDATING PLAN2CODE  ');
   console.log(`${COLORS.BLUE}${COLORS.BRIGHT}Installing:${COLORS.RESET} ${projectVersion.name} ${projectVersion.version}`);
   console.log('');
@@ -3037,6 +2805,8 @@ async function update({ steps = UPDATE_STEPS } = {}) {
     console.log(`${COLORS.YELLOW}${SYMBOLS.INFO}${COLORS.RESET} No install record found (installed before v${projectVersion.version}); updating the skills and the plan2code command.`);
     console.log('');
   }
+
+  cleanShims();
 
   const results = {};
   for (const piece of INSTALL_PIECES) {

@@ -130,14 +130,9 @@ Is it a quick, small task?
 └── No → /plan2code-1-plan (full workflow)
          ├── /plan2code-2-document
          ├── /plan2code-3-implement (repeat per phase)
-         │   ├── OR: /plan2code-3-implement-review (review gate before approval)
-         │   └── OR: plan2code-loop (autonomous alternative)
+         │   └── OR: /plan2code-3-implement-review (review gate before approval)
          └── /plan2code-4-finalize
 
 Need to revise mid-implementation?
 └── /plan2code-1b-revise-plan
 ```
-
-## Autonomous Loop (Alternative)
-
-`plan2code-loop` is a hands-off alternative to Step 3. See [.readme/autonomous-loop.md](.readme/autonomous-loop.md).

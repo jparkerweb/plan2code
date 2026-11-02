@@ -773,7 +773,7 @@ const CONFIDENCE_HITS = ["overall confidence with %", "confidence table cell"];
 
 function proseChecks(text, file, add, { allowConfidence = false } = {}) {
   const m = text.match(LOOP_TOKENS);
-  if (m) add("error", file, "loop-token", `contains the loop completion token ${m[0]} (the loop scans specs/ for these)`);
+  if (m) add("error", file, "loop-token", `contains the loop completion token ${m[0]} (reserved; these never belong under specs/)`);
   for (const h of scrapeHits(text.replace(METRICS_COMMENT_RE, ""))) {
     if (allowConfidence && CONFIDENCE_HITS.some((name) => h.startsWith(`${name}:`))) continue;
     add("error", file, "metric-word", `metrics-scraper bait (${h}); hyphenate the label or reword`);

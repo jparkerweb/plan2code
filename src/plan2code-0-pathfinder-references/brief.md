@@ -96,7 +96,7 @@ Nothing decided in the range? Keep the file honest: "No decisions were recorded 
 
 - **Zero pathfinder machinery in the file.** No `NN` numbers, no markers, no `Type:`/`State:` tokens, no fog/frontier/grill vocabulary, no `Locked:`. Questions are referred to by name only, no links. The audience may never open a terminal.
 - **Scraper safety, same as the PLAN-DRAFT:** no `%`, no raw `NN/25` scores, and no bare `Requirements` / `Feasibility` / `Integration` / `Risk` followed by a number anywhere in the file. The plain-English confidence line is the only rendering permitted.
-- **Standing `specs/` rules apply:** no loop tokens, no `- [ ]` checkboxes, no `METRICS_JSON`.
+- **Standing `specs/` rules apply:** no completion-marker tokens, no `- [ ]` checkboxes, no `METRICS_JSON`.
 - **Rejections are one line each.** The brief summarizes; the question file argues. The closing pointer line covers readers who want the full reasoning.
 - **BRIEF mode does not count as question work.** It does not count toward the session's decision cadence; no claim is ever taken.
 - **Do not edit an old brief to "update" it.** Yesterday's brief reflects yesterday's map — write today's instead. Same-day overwrite only.

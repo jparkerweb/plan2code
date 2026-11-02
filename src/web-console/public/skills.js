@@ -42,7 +42,8 @@
 //   card       the dashboard card (group, chip, title, blurb, about, and
 //              `spec: true` when it takes the picked spec), or null; an
 //              optional `help` is Help's line for the card when it differs
-//              from `blurb`
+//              from `blurb`, and `icon` names the `ci-*` symbol in
+//              index.html's card-icons sheet drawn before the title
 //   appOnly    the entry is a card the desktop app alone offers (the
 //              Implementation Loop): no workflow, no installed skill, and no
 //              list derived from the workflows (WORKFLOWS, the meter, the
@@ -82,6 +83,7 @@ export const SKILLS = Object.freeze([
       group: "setup",
       chip: "Set up",
       title: "Set up this project",
+      icon: "init",
       blurb: "Reads your project and writes AGENTS.md, the guide every later step works from.",
       about:
         "Plan2Code reads the whole project: how it is organized, how it runs, and where the sharp edges are. Then it writes AGENTS.md, the guide every later step steers by. It asks a few questions as it goes, so nothing important gets guessed. Run this once per project, or again when the project has moved on.",
@@ -102,6 +104,7 @@ export const SKILLS = Object.freeze([
       group: "setup",
       chip: "Set up",
       title: "Refresh AGENTS.md",
+      icon: "init-update",
       blurb: "Brings AGENTS.md and its notes up to date with what the project has learned lately.",
       about:
         "The project moved on since AGENTS.md was written: new commands, new habits, new gotchas. This re-reads the project, asks what changed, and folds it into AGENTS.md and the notes beside it. Cheaper than a fresh setup, and whatever is still right is kept.",
@@ -127,6 +130,7 @@ export const SKILLS = Object.freeze([
       chip: "Step 0",
       spec: true,
       title: "Pathfinder",
+      icon: "pathfinder",
       blurb: "A foggy idea becomes a clear list of decisions, settled one question at a time.",
       about:
         "You have a rough idea and a lot of unknowns. Pathfinder asks one question at a time: who it is for, what it must do, what could go wrong. Each answer is written down in a spec folder. It ends with a list of decisions clear enough to plan from, and nothing gets built yet.",
@@ -152,6 +156,7 @@ export const SKILLS = Object.freeze([
       chip: "Step 1",
       spec: true,
       title: "Plan",
+      icon: "plan",
       blurb: "Requirements, technical design and your approval: the shape of what gets built.",
       about:
         "Turns what you bring into a real plan: a finished Pathfinder map, a folder of design notes, or just the idea in your head. You get requirements, a technical design, a phase-by-phase breakdown, and a final version to approve before anything is built. This is where 'what are we building' becomes 'how it gets built'.",
@@ -173,6 +178,7 @@ export const SKILLS = Object.freeze([
       chip: "Step 1b",
       spec: true,
       title: "Revise the plan",
+      icon: "revise-plan",
       blurb: "Requirements changed mid-build? Adjust the plan without starting over.",
       about:
         "Requirements moved mid-build: a feature added, a rule dropped, a deadline pulled in. This adjusts the existing spec for the change, shows you what it affects, and only rewrites what actually has to move. The approved plan stays the plan.",
@@ -199,6 +205,7 @@ export const SKILLS = Object.freeze([
       chip: "Step 2",
       spec: true,
       title: "Document",
+      icon: "document",
       blurb: "The plan becomes a checklist of small tasks, grouped into phases, that a developer can just do.",
       about:
         "Writes the plan as numbered phase files. Each phase is a checklist of tasks small enough to just do, with the details a builder needs right there. This is the file the build step works from, and the thing a later session can pick up cold.",
@@ -221,6 +228,7 @@ export const SKILLS = Object.freeze([
       chip: "Step 3",
       spec: true,
       title: "Implement",
+      icon: "implement",
       blurb: "Builds the next phase, task by task, then reviews it, with your sign-off at the end.",
       about:
         "Builds the next phase of the spec. Tasks get checked off one by one, with progress and the occasional decision landing on this page as it goes. With Review ticked, a fresh pass then hunts for problems in exactly what changed and you pick what gets fixed. It ends with a report of what was built and a sign-off card you approve before the phase counts as done.",
@@ -261,6 +269,7 @@ export const SKILLS = Object.freeze([
       chip: "Step 3",
       spec: true,
       title: "Implementation Loop",
+      icon: "loop",
       blurb: "Build every remaining phase unattended, one fresh agent per phase.",
       about:
         "Builds every remaining phase of the spec without you at the keyboard. Each phase gets a fresh agent that builds it and reviews it. The app checks the result against the spec, runs your quick check, commits, and moves on. It stops at the first phase that goes wrong and tells you why. Desktop app only.",
@@ -282,6 +291,7 @@ export const SKILLS = Object.freeze([
       chip: "Step 4",
       spec: true,
       title: "Finalize",
+      icon: "finalize",
       blurb: "Checks the work, writes the summary, files the specs away and suggests the commit message.",
       about:
         "The closer. Checks every task against the spec, makes sure the build actually works, writes the summary into overview.md, updates the project docs, and suggests the commit message. Run it when the feature is done. It leaves the project tidy behind it.",
@@ -302,6 +312,7 @@ export const SKILLS = Object.freeze([
       group: "extra",
       chip: "Utility",
       title: "Quick task",
+      icon: "quick-task",
       blurb: "Too small for the full process? A quick plan, then it just builds it.",
       about:
         "A fix, a tweak, a small feature. Not worth a spec folder. Describe it, confirm the one-line plan, and it builds it right there, with a report at the end. The fast lane for work the full process would over-plan.",
@@ -322,6 +333,7 @@ export const SKILLS = Object.freeze([
       group: "extra",
       chip: "Utility",
       title: "Review",
+      icon: "review",
       blurb: "A second opinion on the changes. Problems ranked, and you pick what gets fixed.",
       about:
         "A fresh-eyes pass over what changed: bugs, gaps, and the things the builder was too close to see. Problems come back ranked with a suggestion each, you pick which ones get fixed, and it fixes them.",
@@ -335,13 +347,14 @@ export const SKILLS = Object.freeze([
     pose: "xray",
     builds: false, phased: false, metered: true, templates: false,
     weight: 1, started: "X-ray started", ran: "X-ray run", resume: null,
-    subagents: null,
+    subagents: "Use helpers for the reading both modes lean on: explain mode's area files and history leads, and rough-spots mode's top candidates, one helper per area or candidate. Keep the judgment, the citations, the ranking, the pick and every question with you. Lookups at light strength, low effort.",
     states: "any",
     greyed: null,
     card: {
       group: "extra",
       chip: "Utility",
       title: "Codebase X-ray",
+      icon: "xray",
       blurb: "Explain how and why an area works, or find the rough spots worth fixing.",
       about:
         "Two ways into code you did not write. Explain an area: how it works, step by step, and why it is that way, citing the files and the commits and pull requests behind it. Or find the rough spots: files that always change together, thin layers, tangled boundaries and busy code with no tests, ranked with a concrete example each. You tick the ones worth fixing and they become a brief for Pathfinder or Plan. It never changes code.",
@@ -355,13 +368,14 @@ export const SKILLS = Object.freeze([
     pose: "diagnose",
     builds: false, phased: false, metered: true, templates: false,
     weight: 1, started: "Diagnose started", ran: "Diagnose run", resume: null,
-    subagents: "Use helpers for the reading both modes lean on: explain mode's area files and history leads, and rough-spots mode's top candidates, one helper per area or candidate. Keep the judgment, the citations, the ranking, the pick and every question with you. Lookups at light strength, low effort.",
+    subagents: "Use helpers for side lookups while you narrow: the code path a suspect change touches, a suspect function's callers, and the docs behind the failing behavior. Keep the reproduction, any bisect, the cause judgment and every question with you. Lookups at light strength, low effort.",
     states: "any",
     greyed: null,
     card: {
       group: "extra",
       chip: "Utility",
       title: "Diagnose a bug",
+      icon: "diagnose",
       blurb: "Find a bug's cause and write it up, without fixing it.",
       help: "Finds a bug's cause and writes it up without fixing it, ready to hand to Quick Task or Plan.",
       about:
@@ -376,13 +390,14 @@ export const SKILLS = Object.freeze([
     pose: "changelog",
     builds: false, phased: false, metered: true, templates: false,
     weight: 1, started: "Changelog started", ran: "Changelog run", resume: null,
-    subagents: "Use helpers for side lookups while you narrow: the code path a suspect change touches, a suspect function's callers, and the docs behind the failing behavior. Keep the reproduction, any bisect, the cause judgment and every question with you. Lookups at light strength, low effort.",
+    subagents: null,
     states: "any",
     greyed: null,
     card: {
       group: "extra",
       chip: "Utility",
       title: "Changelog",
+      icon: "changelog",
       blurb: "Checks the CHANGELOG version against the main branch and suggests entries for what is new.",
       about:
         "Works out the right version from the default branch, then compares your branch with the latest CHANGELOG entry and suggests the entries it is missing. You edit them before anything is written, it keeps package.json in step, and it offers to commit the result in Git. If the newest version is not released or on another branch yet, it adds to that entry instead of starting a new one.",
@@ -403,6 +418,7 @@ export const SKILLS = Object.freeze([
       group: "extra",
       chip: "Utility",
       title: "Git",
+      icon: "git",
       blurb: "Branches, pull, push and commits on one board that stays open while you work.",
       help: "Branches, pull, push and commits on one board, asking before anything leaves your machine. See \"The git board\".",
       about:
@@ -424,6 +440,7 @@ export const SKILLS = Object.freeze([
       group: "extra",
       chip: "Utility",
       title: "Handoff",
+      icon: "handoff",
       blurb: "Pack the current session into a document a fresh session can pick up cold.",
       about:
         "Writes down everything a new session would need, as a single document: what was decided, what is done, what is left. Use it when a conversation got long, a machine changed, or tomorrow-you deserves the context today-you has.",

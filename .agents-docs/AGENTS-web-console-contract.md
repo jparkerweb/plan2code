@@ -19,7 +19,7 @@ A rule stated in six files is read six times and still skipped. The console sees
 - **Recommend sparingly.** "Which format survives Excel?" is the agent's to recommend; "Who is this for?" is not, because a recommendation there is an anchor people rubber-stamp.
 - **A placeholder is an offer.** The Autofill button drops it into the box as a real answer, so it must be a whole answer in the person's voice and satisfy any `pattern`.
 - **Titles in plain words.** Internal vocabulary (grill, frontier, fog) means nothing to a newcomer and the server refuses it. The metric words rule exists because the metrics collector scrapes `Requirements`, `Feasibility`, `Integration` and `Risk` followed by a number.
-- **Loop markers refused.** `TASK_COMPLETE`, `PHASE_COMPLETE` and the rest are read by the loop CLI as completion; one in page text would end a run.
+- **Completion markers refused.** `TASK_COMPLETE`, `PHASE_COMPLETE` and the rest are reserved signals; one in page text could read as a finished run.
 - **The page owns its stream.** The agent never writes timestamps, versions or `agent.status` for a turn: the server stamps them, and collecting a send already sets the page to working. A second source of truth for them would drift.
 - **Quoted heredoc.** Unquoted `<<EOF` lets the shell eat JSON backslashes. PowerShell has no heredoc and its pipe can mangle non-ASCII, so the patch goes through a file in the session folder, never in the project.
 - **No link in the app.** Inside the desktop app the page is already in the window; printing the link sends the person to a browser tab they do not need.

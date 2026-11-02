@@ -254,7 +254,17 @@ function buildHelp() {
     const list = el("ul");
     for (const e of SKILL_CATALOG.filter((x) => x.group === g.id)) {
       const li = el("li");
-      li.appendChild(el("strong", null, e.title + "."));
+      const strong = el("strong", null, e.title + ".");
+      if (e.icon) {
+        const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+        svg.setAttribute("class", "help-card-icon");
+        svg.setAttribute("aria-hidden", "true");
+        const use = document.createElementNS("http://www.w3.org/2000/svg", "use");
+        use.setAttribute("href", "#ci-" + e.icon);
+        svg.appendChild(use);
+        strong.prepend(svg);
+      }
+      li.appendChild(strong);
       li.appendChild(document.createTextNode(" " + (e.help || e.blurb)));
       list.appendChild(li);
     }

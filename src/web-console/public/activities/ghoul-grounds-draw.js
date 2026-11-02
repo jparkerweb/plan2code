@@ -428,7 +428,7 @@ export function groundsArt(d) {
     }
   }
 
-  // A long party table under a cloth gone grey, set for guests who never
+  // A long party table under a cloth gone gray, set for guests who never
   // left: plates, a tipped glass, candle stubs and a cake gone to mold.
   function partyTable(ctx, x, fy, n) {
     const w = 11;
@@ -840,7 +840,7 @@ export function groundsArt(d) {
 
   // A shelf in the room's own terms, its top surface at screen y `y`: a
   // hanging block of hedge in the maze, an ivy-grown stone ledge in the
-  // topiary garden, a table under a grey cloth or a shingled roof in the
+  // topiary garden, a table under a gray cloth or a shingled roof in the
   // gazebo, a weathered plank on posts in the yard.
   function shelf(ctx, v, look, a, b, y) {
     const { spec, g } = v;
@@ -916,7 +916,7 @@ export function groundsArt(d) {
       ellipse(ctx, lx, y + 5.4, 0.9, 1.1);
       ctx.fill();
     } else if (look.scene === "gazebo") {
-      // A table: a grey cloth with a scalloped hem over dark legs.
+      // A table: a gray cloth with a scalloped hem over dark legs.
       ctx.fillStyle = "#12100c";
       for (const s of [a + 1.2, b - 1.8]) ctx.fillRect(s, y + 1, 0.6, Math.max(1, fy - y - 1));
       ctx.fillStyle = "#c8c3ae";

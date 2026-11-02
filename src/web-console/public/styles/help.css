@@ -119,6 +119,20 @@
 /* The icon sheet: present for <use href>, never drawn itself. */
 .help-icons { position: absolute; width: 0; height: 0; overflow: hidden; }
 
+/* The card icons in the dashboard topic's card list: the same glyphs the
+   cards wear, a touch quieter. */
+.help-card-icon {
+  width: 14px;
+  height: 14px;
+  margin-right: 5px;
+  vertical-align: -2px;
+  fill: none;
+  stroke: var(--ink-2);
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 /* The diagrams. Colors only from variables, so each drawing follows the
    theme and the chosen highlight without a line of script. */
 .help-figure { margin: 4px 0 16px; }

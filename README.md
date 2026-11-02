@@ -13,7 +13,7 @@ the next engineer all start from the same specs.
 
 One command opens it, every step is a card, and the terminal is always there if you prefer it.
 
-Version 3.0.0 · MIT · 📖 [plan2code.jparkerweb.com](https://plan2code.jparkerweb.com)
+Version 4.0.0 · MIT · 📖 [plan2code.jparkerweb.com](https://plan2code.jparkerweb.com)
 
 ---
 
@@ -269,7 +269,7 @@ Each feature gets a folder under `specs/` (the plan, the overview and one file p
 moves it to `specs--completed/`. The layout and progress marks are on the
 [quick reference](QUICK-REFERENCE.md#file-structure).
 
-Add `specs/` to your project's `.gitignore` (`plan2code-loop` adds it for you): it's your working
+Add `specs/` to your project's `.gitignore`: it's your working
 drawing, not a deliverable. Share a folder deliberately with `git add -f` when you want to.
 
 Step 2 marks which phases don't share files. Open a second agent on one of those, and the `[/]` marks
@@ -470,7 +470,6 @@ Core reference:
 
 Optional tooling — none of it is required to use the workflow:
 
-- **[.readme/autonomous-loop.md](.readme/autonomous-loop.md)** — `plan2code-loop`, a hands-off alternative to Step 3
 - **[.readme/status-line.md](.readme/status-line.md)** — three-line Claude Code status bar: model, context, quota, diff
 - **[.readme/metrics.md](.readme/metrics.md)** — `plan2code-metrics`, measuring and improving the prompts themselves
 - **[.readme/test-bot.md](.readme/test-bot.md)** — `plan2code-bot`, maintainer harness that runs the whole workflow unattended

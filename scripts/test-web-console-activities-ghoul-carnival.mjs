@@ -614,7 +614,7 @@ test("Ghoul Rush's Mirror You fires a bolt for each bolt you fire, 500 ms late, 
   };
   assert.equal(hit(false), "mirrorbolt", "a bolt on a standing you");
   assert.equal(hit(true), undefined, "a bolt over a ducked you");
-  // Cancelling: your bolt and its bolt meet in the air.
+  // Canceling: your bolt and its bolt meet in the air.
   const meet = carnivalRound("mirrors");
   standAt(meet, 50);
   meet.you.safeMs = 1e9;

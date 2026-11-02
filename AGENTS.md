@@ -22,12 +22,6 @@ High-level directory structure, key files, workflow prompt inventory, and file n
 
 Details: [Architecture](./.agents-docs/AGENTS-architecture.md)
 
-## Plan2Code Loop
-
-Autonomous CLI tool (`plan2code-loop/`) that implements specs by looping through tasks. Covers loop architecture, modes (one-task vs one-phase), completion markers, and key source files.
-
-Details: [Plan2Code Loop](./.agents-docs/AGENTS-plan2code-loop.md)
-
 ## Plan2Code Metrics
 
 Recursive self-improvement toolchain (`plan2code-metrics/`) for collecting run metrics, aggregating by prompt generation, diagnosing weak steps, and proposing prompt edits.
@@ -69,7 +63,7 @@ Details: [Code Style & Gotchas](./.agents-docs/AGENTS-code-style.md)
 
 ## Mascot
 
-The project has a mascot called "Planny": a box with a star for an eye, stick arms and two small feet. He appears in installer output, workflow prompts, the loop, the Claude Code status line (box, star and feet, no arms) and the web console. ASCII variants are defined in the `MASCOT` constant in `install.js` (and `plan2code-loop/src/utils/logger.ts`) and appear in workflow markdown files: arms down at rest, one arm waving when he is asking something, both arms up when he is celebrating. The eye is always the star.
+The project has a mascot called "Planny": a box with a star for an eye, stick arms and two small feet. He appears in installer output, workflow prompts, the loop, the Claude Code status line (box, star and feet, no arms) and the web console. ASCII variants are defined in the `MASCOT` constant in `install.js` and appear in workflow markdown files: arms down at rest, one arm waving when he is asking something, both arms up when he is celebrating. The eye is always the star.
 
 The web console draws him as inline SVG in `src/web-console/public/index.html`, where he doubles as the page's state indicator: his star lights in the highlight color and he waves when something is yours to do, the star turns and his feet walk while the agent works, it goes green when all is done, he shows no arms at all when the agent is not answering, and he fades with his star shut when the connection drops. The parts are classed (`shell`, `eye`, `smile`, `foot`, and one `arms a-<mood>` set per mood) and `screens/core.js` switches mood with a single class, so the drawing stays in the markup and the styling in `styles/planny.css`. The nine skill start poses, the dashboard wake-up, `favicon.svg` / `favicon.js` and `src/launcher/plan2code.ico` all use the same design.
 

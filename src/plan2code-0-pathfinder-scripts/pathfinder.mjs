@@ -1033,7 +1033,7 @@ async function cmdLint(loc) {
     if (!/\.(md|txt|json|ya?ml|csv)$/i.test(f)) continue;
     const t = readText(f) || "";
     const m = t.match(LOOP_TOKENS);
-    if (m) add("error", f, `contains the loop completion token ${m[0]} (the loop scans specs/ for these)`);
+    if (m) add("error", f, `contains the loop completion token ${m[0]} (reserved; these never belong under specs/)`);
   }
   // Reserved names inside pathfinder/.
   for (const f of walk(loc.pf)) {

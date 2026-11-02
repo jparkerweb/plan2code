@@ -37,10 +37,11 @@ export const FLARE_SHOW_MS = 300;
 const inBox = (m, x0, x1, y0, y1) => m.x + m.w / 2 >= x0 && m.x - m.w / 2 <= x1 && m.y + m.h >= y0 && m.y <= y1;
 
 // The throw: from his hand, ahead.
-export function useFlare(round, k) {
+// `vx` is the signed sideways speed (ghoul-arms.js aims it at the monsters ahead).
+export function useFlare(round, k, vx = round.you.face * FLARE_VX) {
   const you = round.you;
   const at = { x: you.x + you.face * 1.8, y: you.y + k.shotY(you) };
-  round.hazards.push({ kind: "armRoadFlare", x: at.x, y: at.y, vx: you.face * FLARE_VX, vy: FLARE_VY, spin: 0, rest: false, t: 0, w: 0.8, h: 0.8, live: 0, cause: "" });
+  round.hazards.push({ kind: "armRoadFlare", x: at.x, y: at.y, vx, vy: FLARE_VY, spin: 0, rest: false, t: 0, w: 0.8, h: 0.8, live: 0, cause: "" });
   round.events.push({ type: "flareThrow", x: at.x, y: at.y, face: you.face });
 }
 

@@ -116,7 +116,7 @@ Consequences of that being a literal string match:
 
 **Discovery is shell-only.** `specs/` is gitignored, so Glob silently returns nothing and every downstream skill would report "no PLAN-DRAFT found". Use `ls specs/` and `ls specs/<idea>/` (Bash) or `Get-ChildItem specs/` (PowerShell) — the same rule 1-plan and `/plan2code-2-document` follow when they look for the file you are about to write.
 
-**Do not append `## Planning Metrics` or any metrics comment.** Pathfinder is not a metered step. 1-plan's Phase 7 owns that block and will add it when it finishes the plan. Do not emit any of the loop's completion tokens listed in the skill's Rules anywhere under `specs/`.
+**Do not append `## Planning Metrics` or any metrics comment.** Pathfinder is not a metered step. 1-plan's Phase 7 owns that block and will add it when it finishes the plan. Do not emit any of the completion tokens listed in the skill's Rules anywhere under `specs/`.
 
 ## Map to PLAN-DRAFT mapping
 
