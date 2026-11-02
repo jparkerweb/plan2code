@@ -6,81 +6,22 @@
 // clock, never Math.random(), so a paused frame stays still. The palette `p`
 // is the hole's theme from golf-draw.js.
 
-/* --------------------------------------------------------------- helpers */
+import { circle, ellipse, fill, label, line, polygon, radial, stroke, t, turned } from "./golf-paint.js";
+import { LOOKS } from "./golf-looks.js";
 
-export function polygon(ctx, points) {
-  ctx.beginPath();
-  points.forEach((q, i) => (i ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y)));
-  ctx.closePath();
-}
+export { circle, ellipse, polygon, radial };
 
-export function circle(ctx, x, y, r) {
-  ctx.beginPath();
-  ctx.arc(x, y, Math.max(0.01, r), 0, Math.PI * 2);
-}
-
-export function ellipse(ctx, x, y, rx, ry, rot = 0) {
-  ctx.beginPath();
-  if (typeof ctx.ellipse === "function") ctx.ellipse(x, y, Math.max(0.01, rx), Math.max(0.01, ry), rot, 0, Math.PI * 2);
-  else ctx.arc(x, y, Math.max(0.01, rx), 0, Math.PI * 2);
-}
-
-// A radial gradient, or null where the context makes none (a stub in Node):
-// the caller then fills flat or skips the glow.
-export function radial(ctx, x, y, r0, r1, stops) {
-  if (typeof ctx.createRadialGradient !== "function") return null;
-  let g = null;
-  try {
-    g = ctx.createRadialGradient(x, y, r0, x, y, r1);
-  } catch {
-    return null;
-  }
-  if (!g || typeof g.addColorStop !== "function") return null;
-  for (const [at, color] of stops) g.addColorStop(at, color);
-  return g;
-}
-
-const fill = (ctx, color) => {
-  ctx.fillStyle = color;
-  ctx.fill();
-};
-
-const stroke = (ctx, color, width) => {
-  ctx.strokeStyle = color;
-  ctx.lineWidth = width;
-  ctx.stroke();
-};
-
-function line(ctx, x1, y1, x2, y2, color, width) {
-  ctx.beginPath();
-  ctx.moveTo(x1, y1);
-  ctx.lineTo(x2, y2);
-  stroke(ctx, color, width);
-}
-
-function label(ctx, str, x, y, size, color, font) {
-  ctx.font = `700 ${size}px ${font || "sans-serif"}`;
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillStyle = color;
-  ctx.fillText(str, x, y);
-}
-
-// Turns the context to draw along an angle around a point, for the callback.
-function turned(ctx, x, y, angle, draw) {
-  ctx.save();
-  ctx.translate(x, y);
-  ctx.rotate(angle);
-  draw();
-  ctx.restore();
-}
-
-const t = (clock) => clock / 1000;
+// What every course look adds, merged by kind: its props' looks by name and
+// its scenery. A look's name wins over a built-in one of the same name only
+// on its own theme.
+const ownOf = (p, part) => ((LOOKS[p.theme] || {})[part] || {});
 
 /* ---------------------------------------------------------------- props */
 
 // The looks of a bumper, by `look` or the theme's own.
 export function drawBumperLook(ctx, p, b, clock) {
+  const own = ownOf(p, "bumpers");
+  if (own[b.look || "default"]) return own[b.look || "default"](ctx, p, b, clock);
   const look = b.look || (p.theme === "cave" ? "mushroom" : "barrel");
   const { x, y, r } = b;
   circle(ctx, x + 1.5, y + 2, r);
@@ -145,6 +86,37 @@ export function drawBumperLook(ctx, p, b, clock) {
     fill(ctx, "#b59cff");
     circle(ctx, x - r * 0.25, y - r * 0.3, r * 0.2);
     fill(ctx, "#f1ebff");
+  } else if (look === "buoy") {
+    // Red and white bands, bobbing a touch, with a little light on top.
+    const bob = Math.sin(t(clock) * 2.4 + x) * 0.6;
+    circle(ctx, x, y + bob, r);
+    fill(ctx, "#f4f1ea");
+    ctx.save();
+    circle(ctx, x, y + bob, r);
+    ctx.clip();
+    ctx.fillStyle = "#d8352a";
+    for (const k of [-1, 1]) ctx.fillRect(x - r, y + bob + k * r * 0.5 - r * 0.22, r * 2, r * 0.44);
+    ctx.restore();
+    circle(ctx, x, y + bob, r);
+    stroke(ctx, "#7a1f18", 1.3);
+    const blink = Math.floor(t(clock) * 2 + x) % 2 === 0;
+    circle(ctx, x, y + bob, r * 0.28);
+    fill(ctx, blink ? "#ffe066" : "#b38f2a");
+  } else if (look === "skull") {
+    circle(ctx, x, y - r * 0.08, r);
+    fill(ctx, "#e9e1cf");
+    ctx.fillStyle = "#e9e1cf";
+    ctx.fillRect(x - r * 0.5, y + r * 0.45, r, r * 0.45);
+    for (const dx of [-0.38, 0.38]) {
+      circle(ctx, x + dx * r, y - r * 0.12, r * 0.27);
+      fill(ctx, "#2a2230");
+    }
+    const glow = 0.5 + 0.5 * Math.sin(t(clock) * 2.5 + x);
+    circle(ctx, x - 0.38 * r, y - r * 0.12, r * 0.1 + glow * 0.5);
+    fill(ctx, "#7dffb0");
+    circle(ctx, x + 0.38 * r, y - r * 0.12, r * 0.1 + glow * 0.5);
+    fill(ctx, "#7dffb0");
+    for (const dx of [-0.25, 0, 0.25]) line(ctx, x + dx * r, y + r * 0.5, x + dx * r, y + r * 0.88, "#8a8070", 0.8);
   } else {
     circle(ctx, x, y, r);
     fill(ctx, "#9c3327");
@@ -153,6 +125,8 @@ export function drawBumperLook(ctx, p, b, clock) {
 
 // A mover at its place this moment.
 export function drawMoverLook(ctx, p, m, clock) {
+  const own = ownOf(p, "movers");
+  if (own[m.look || "default"]) return own[m.look || "default"](ctx, p, m, clock);
   const { x, y, r } = m;
   const look = m.look || "barrel";
   ellipse(ctx, x + 1.5, y + 2.5, r, r * 0.9);
@@ -213,12 +187,89 @@ export function drawMoverLook(ctx, p, m, clock) {
     fill(ctx, "#3a1200");
     circle(ctx, x + 2.5, y - 1, 1);
     fill(ctx, "#3a1200");
+  } else if (look === "shark") {
+    // A shark seen from above, nose first the way it swims, tail sweeping.
+    const a = Math.atan2(m.vy || 0, m.vx || 1);
+    const sweep = Math.sin(t(clock) * 9) * 0.35;
+    turned(ctx, x, y, a, () => {
+      polygon(ctx, [{ x: -r * 1.1, y: 0 }, { x: -r * 1.9, y: -r * 0.7 + sweep * r }, { x: -r * 1.7, y: sweep * r }, { x: -r * 1.9, y: r * 0.7 + sweep * r }]);
+      fill(ctx, "#56636f");
+      ellipse(ctx, 0, 0, r * 1.35, r * 0.62);
+      fill(ctx, "#6f7f8d");
+      polygon(ctx, [{ x: -r * 0.1, y: -r * 0.5 }, { x: -r * 0.7, y: -r * 1.2 }, { x: -r * 0.55, y: -r * 0.45 }]);
+      fill(ctx, "#56636f");
+      polygon(ctx, [{ x: -r * 0.1, y: r * 0.5 }, { x: -r * 0.7, y: r * 1.2 }, { x: -r * 0.55, y: r * 0.45 }]);
+      fill(ctx, "#56636f");
+      polygon(ctx, [{ x: r * 0.2, y: 0 }, { x: -r * 0.5, y: -r * 0.18 }, { x: -r * 0.5, y: r * 0.18 }]);
+      fill(ctx, "#3f4a55");
+      for (const side of [-1, 1]) {
+        circle(ctx, r * 0.85, side * r * 0.3, r * 0.12);
+        fill(ctx, "#111111");
+      }
+      ctx.beginPath();
+      ctx.arc(r * 0.95, 0, r * 0.3, Math.PI * 0.6, Math.PI * 1.4);
+      stroke(ctx, "#ffffff", 0.9);
+    });
+  } else if (look === "cannonball") {
+    // A smoking cannonball, its trail behind it.
+    const speed = Math.hypot(m.vx || 0, m.vy || 0) || 1;
+    const ux = (m.vx || 0) / speed;
+    const uy = (m.vy || 0) / speed;
+    for (let k = 1; k <= 3; k++) {
+      circle(ctx, x - ux * r * (1 + k * 0.9), y - uy * r * (1 + k * 0.9), r * (0.7 - k * 0.15));
+      fill(ctx, `rgba(220,220,220,${0.45 - k * 0.12})`);
+    }
+    circle(ctx, x, y, r);
+    fill(ctx, "#25252c");
+    circle(ctx, x - r * 0.35, y - r * 0.35, r * 0.3);
+    fill(ctx, "#6d6d7a");
+  } else if (look === "bat") {
+    // A big bat flapping on its beat, red eyes and all.
+    const flap = Math.sin(t(clock) * 16 + x * 0.1) * r * 0.5;
+    for (const dir of [-1, 1]) {
+      polygon(ctx, [{ x, y }, { x: x + dir * r * 0.8, y: y - r * 0.7 - flap }, { x: x + dir * r * 1.9, y: y - r * 0.2 - flap * 0.6 }, { x: x + dir * r * 1.5, y: y + r * 0.35 }, { x: x + dir * r * 1.05, y: y + r * 0.1 }, { x: x + dir * r * 0.7, y: y + r * 0.45 }]);
+      fill(ctx, "#4a3866");
+    }
+    circle(ctx, x, y, r * 0.55);
+    fill(ctx, "#5c4880");
+    for (const dir of [-1, 1]) {
+      polygon(ctx, [{ x: x + dir * r * 0.15, y: y - r * 0.4 }, { x: x + dir * r * 0.45, y: y - r * 0.85 }, { x: x + dir * r * 0.5, y: y - r * 0.3 }]);
+      fill(ctx, "#5c4880");
+      circle(ctx, x + dir * r * 0.2, y - r * 0.1, r * 0.12);
+      fill(ctx, "#ff4d4d");
+    }
+  } else if (look === "spider") {
+    // A spider on its thread, legs wiggling as it climbs and drops.
+    line(ctx, x, y - r, x, y - r - 30, "rgba(230,230,240,0.55)", 0.8);
+    const wig = Math.sin(t(clock) * 12) * r * 0.15;
+    for (const side of [-1, 1]) {
+      for (let k = 0; k < 4; k++) {
+        const ky = y - r * 0.45 + k * r * 0.3;
+        ctx.beginPath();
+        ctx.moveTo(x + side * r * 0.4, ky);
+        ctx.lineTo(x + side * r * 1.1, ky - r * 0.45 + (k % 2 ? wig : -wig));
+        ctx.lineTo(x + side * r * 1.45, ky + r * 0.35 + (k - 1.5) * r * 0.2);
+        stroke(ctx, "#1a1420", 1.4);
+      }
+    }
+    ellipse(ctx, x, y + r * 0.2, r * 0.6, r * 0.75);
+    fill(ctx, "#2a2133");
+    circle(ctx, x, y - r * 0.55, r * 0.38);
+    fill(ctx, "#2a2133");
+    polygon(ctx, [{ x, y: y - r * 0.1 }, { x: x - r * 0.25, y: y + r * 0.25 }, { x, y: y + r * 0.6 }, { x: x + r * 0.25, y: y + r * 0.25 }]);
+    fill(ctx, "#d8352a");
+    for (const dx of [-0.15, 0.15]) {
+      circle(ctx, x + dx * r, y - r * 0.62, r * 0.09);
+      fill(ctx, "#ff4d4d");
+    }
   }
 }
 
 // A spinner's bar, with its look: a ship's wheel spoke, a kraken tentacle, a
 // dragon's tail, or a plain plank.
 export function drawSpinnerLook(ctx, p, s, clock) {
+  const own = ownOf(p, "spinners");
+  if (own[s.look || "default"]) return own[s.look || "default"](ctx, p, s, clock);
   const look = s.look || "plank";
   const angle = Math.atan2(s.y2 - s.y1, s.x2 - s.x1);
   const arm = Math.hypot(s.x2 - s.x1, s.y2 - s.y1) / 2;
@@ -256,6 +307,53 @@ export function drawSpinnerLook(ctx, p, s, clock) {
     });
     circle(ctx, s.x, s.y, 6);
     fill(ctx, tentacle ? "#6c2a82" : "#7d1418");
+  } else if (look === "serpent") {
+    // A sea serpent's body through a coiled middle, a head at one end and a
+    // finned tail at the other, rippling as it turns.
+    turned(ctx, s.x, s.y, angle, () => {
+      const wave = (u) => Math.sin(u * 7 + t(clock) * 6) * 2.4 * Math.abs(u);
+      for (const [color, width, dy] of [["#1f7a5a", 6.5, 0], ["#4fd19a", 1.6, -1.3]]) {
+        ctx.beginPath();
+        for (let i = 0; i <= 20; i++) {
+          const u = -1 + (i / 20) * 2;
+          if (i === 0) ctx.moveTo(u * arm, wave(u) + dy);
+          else ctx.lineTo(u * arm, wave(u) + dy);
+        }
+        stroke(ctx, color, width);
+      }
+      for (let i = 1; i < 10; i += 2) {
+        const u = -1 + (i / 10) * 2;
+        circle(ctx, u * arm, wave(u) + 1.8, 1.1);
+        fill(ctx, "#f2e27a");
+      }
+      // The head, eyes and a flicking tongue.
+      ellipse(ctx, arm, wave(1), 6, 4.5);
+      fill(ctx, "#1f7a5a");
+      for (const side of [-1, 1]) {
+        circle(ctx, arm + 1, wave(1) + side * 2.2, 1.4);
+        fill(ctx, "#ffe14d");
+      }
+      if (Math.sin(t(clock) * 7) > 0) line(ctx, arm + 5, wave(1), arm + 10, wave(1) + 1.5, "#e0302a", 1);
+      polygon(ctx, [{ x: -arm, y: wave(-1) }, { x: -arm - 7, y: wave(-1) - 5 }, { x: -arm - 5, y: wave(-1) }, { x: -arm - 7, y: wave(-1) + 5 }]);
+      fill(ctx, "#4fd19a");
+    });
+    circle(ctx, s.x, s.y, 6.5);
+    fill(ctx, "#155a42");
+    circle(ctx, s.x, s.y, 3);
+    fill(ctx, "#4fd19a");
+  } else if (look === "bone") {
+    // A giant's thigh bone, knobbly at both ends.
+    ctx.lineCap = "butt";
+    line(ctx, s.x1, s.y1, s.x2, s.y2, "#e2d8bf", 5);
+    line(ctx, s.x1, s.y1, s.x2, s.y2, "#f6f0de", 1.5);
+    for (const [ex, ey] of [[s.x1, s.y1], [s.x2, s.y2]]) {
+      for (const side of [-1, 1]) {
+        circle(ctx, ex + Math.cos(angle + Math.PI / 2) * side * 2.6, ey + Math.sin(angle + Math.PI / 2) * side * 2.6, 3.4);
+        fill(ctx, "#e2d8bf");
+      }
+    }
+    circle(ctx, s.x, s.y, 4.5);
+    fill(ctx, "#6b5f50");
   } else {
     line(ctx, s.x1, s.y1, s.x2, s.y2, p.spinner, 4);
     circle(ctx, s.x, s.y, 5);
@@ -579,6 +677,89 @@ const DECOR = {
       fill(ctx, "#ffffff");
     },
   },
+  mermaid: {
+    layer: "low",
+    draw(ctx, p, d, clock) {
+      const s = d.s;
+      const flick = Math.sin(t(clock) * 2.2 + d.x) * 0.25;
+      // Her rock, then her: a teal tail curling off it, red hair, a wave.
+      ellipse(ctx, d.x, d.y + 6 * s, 18 * s, 8 * s);
+      fill(ctx, "#7c7468");
+      ellipse(ctx, d.x - 3 * s, d.y + 4 * s, 12 * s, 5 * s);
+      fill(ctx, "#958d80");
+      turned(ctx, d.x + 4 * s, d.y + 2 * s, flick, () => {
+        ctx.beginPath();
+        ctx.moveTo(-4 * s, -2 * s);
+        ctx.quadraticCurveTo(8 * s, 2 * s, 14 * s, -4 * s);
+        stroke(ctx, "#1fa38f", 5 * s);
+        polygon(ctx, [{ x: 13 * s, y: -4 * s }, { x: 20 * s, y: -10 * s }, { x: 17 * s, y: -3 * s }, { x: 21 * s, y: 1 * s }]);
+        fill(ctx, "#36d1b5");
+      });
+      ellipse(ctx, d.x - 5 * s, d.y - 5 * s, 3.5 * s, 6 * s);
+      fill(ctx, "#f2c7a5");
+      for (const dx of [-2.5, 2.5]) {
+        circle(ctx, d.x - 5 * s + dx * s * 0.6, d.y - 3 * s, 1.4 * s);
+        fill(ctx, "#b44bd1");
+      }
+      ellipse(ctx, d.x - 7 * s, d.y - 11 * s, 3.5 * s, 7 * s, 0.25);
+      fill(ctx, "#e0452c");
+      circle(ctx, d.x - 5 * s, d.y - 13 * s, 3.4 * s);
+      fill(ctx, "#f2c7a5");
+      const wave = Math.sin(t(clock) * 5) * 3 * s;
+      ctx.lineCap = "round";
+      line(ctx, d.x - 2 * s, d.y - 6 * s, d.x + 3 * s, d.y - 15 * s + wave, "#f2c7a5", 1.8 * s);
+      if (Math.floor(t(clock) / 3) % 3 === 1) label(ctx, "Ahoy!", d.x + 8 * s, d.y - 22 * s, 6, "#fff6c9");
+    },
+  },
+  gull: {
+    layer: "high",
+    draw(ctx, p, d, clock) {
+      // A seagull gliding a lazy loop.
+      const s = d.s;
+      const a = t(clock) * 0.7 + d.x;
+      const x = d.x + Math.cos(a) * 30 * s;
+      const y = d.y + Math.sin(a) * 10 * s;
+      const flap = Math.sin(t(clock) * 7 + d.y) * 3 * s;
+      ctx.lineCap = "round";
+      for (const [color, width] of [["#f7f7f2", 2.4 * s], ["rgba(60,70,80,0.5)", 0.7 * s]]) {
+        ctx.beginPath();
+        ctx.moveTo(x - 10 * s, y - 2 * s + flap);
+        ctx.quadraticCurveTo(x - 5 * s, y - 6 * s - flap * 0.5, x, y);
+        ctx.quadraticCurveTo(x + 5 * s, y - 6 * s - flap * 0.5, x + 10 * s, y - 2 * s + flap);
+        stroke(ctx, color, width);
+      }
+      circle(ctx, x, y, 1.6 * s);
+      fill(ctx, "#f2b33c");
+    },
+  },
+  lighthouse: {
+    layer: "low",
+    draw(ctx, p, d, clock) {
+      const s = d.s;
+      ellipse(ctx, d.x, d.y + 2 * s, 16 * s, 6 * s);
+      fill(ctx, "#7c7468");
+      polygon(ctx, [{ x: d.x - 7 * s, y: d.y }, { x: d.x + 7 * s, y: d.y }, { x: d.x + 4.5 * s, y: d.y - 34 * s }, { x: d.x - 4.5 * s, y: d.y - 34 * s }]);
+      fill(ctx, "#f4f1ea");
+      for (const k of [0, 1]) {
+        const up = 6 + k * 14;
+        const w0 = 7 - up * 0.074;
+        polygon(ctx, [{ x: d.x - w0 * s, y: d.y - up * s }, { x: d.x + w0 * s, y: d.y - up * s }, { x: d.x + (w0 - 0.5) * s, y: d.y - (up + 6) * s }, { x: d.x - (w0 - 0.5) * s, y: d.y - (up + 6) * s }]);
+        fill(ctx, "#d8352a");
+      }
+      ctx.fillStyle = "#30343b";
+      ctx.fillRect(d.x - 5.5 * s, d.y - 41 * s, 11 * s, 7 * s);
+      polygon(ctx, [{ x: d.x - 6.5 * s, y: d.y - 41 * s }, { x: d.x + 6.5 * s, y: d.y - 41 * s }, { x: d.x, y: d.y - 47 * s }]);
+      fill(ctx, "#d8352a");
+      // The lamp's beam sweeps round.
+      const a = t(clock) * 1.6;
+      const len = 30 * s;
+      const ly = d.y - 37.5 * s;
+      polygon(ctx, [{ x: d.x, y: ly }, { x: d.x + Math.cos(a - 0.18) * len, y: ly + Math.sin(a - 0.18) * len * 0.45 }, { x: d.x + Math.cos(a + 0.18) * len, y: ly + Math.sin(a + 0.18) * len * 0.45 }]);
+      fill(ctx, "rgba(255,236,140,0.45)");
+      circle(ctx, d.x, ly, 2.4 * s);
+      fill(ctx, "#ffe066");
+    },
+  },
 
   /* cave */
   bat: {
@@ -775,6 +956,60 @@ const DECOR = {
       }
     },
   },
+  icicles: {
+    layer: "glow",
+    light: { r: 36, color: "rgba(140,220,255,0.35)" },
+    draw(ctx, p, d, clock) {
+      // A frosty clump of ice spikes, twinkling.
+      const s = d.s;
+      for (const [dx, h, a] of [[-8, 14, -0.35], [-2, 22, -0.08], [5, 18, 0.2], [10, 10, 0.5]]) {
+        turned(ctx, d.x + dx * s, d.y, a, () => {
+          polygon(ctx, [{ x: -3 * s, y: 0 }, { x: 3 * s, y: 0 }, { x: 0, y: -h * s }]);
+          fill(ctx, "#bfeaff");
+          polygon(ctx, [{ x: -0.6 * s, y: 0 }, { x: 1.6 * s, y: 0 }, { x: 0, y: -h * s * 0.9 }]);
+          fill(ctx, "#f2fbff");
+        });
+      }
+      const k = Math.floor(t(clock) * 3 + d.x) % 4;
+      circle(ctx, d.x + (k - 1.5) * 5 * s, d.y - 12 * s + k * 2 * s, 1.2 * s);
+      fill(ctx, "#ffffff");
+    },
+  },
+  goblin: {
+    layer: "glow",
+    light: { r: 44, color: "rgba(255,190,90,0.4)" },
+    draw(ctx, p, d, clock) {
+      // A goblin at a market stall under a striped awning, gems and coins to
+      // sell, hawking its wares.
+      const s = d.s;
+      ctx.fillStyle = "#6b4a2a";
+      ctx.fillRect(d.x - 16 * s, d.y - 2 * s, 32 * s, 9 * s);
+      for (const dx of [-15, 13]) ctx.fillRect(d.x + dx * s, d.y - 22 * s, 2 * s, 20 * s);
+      for (let i = 0; i < 4; i++) {
+        const x0 = d.x + (-18 + i * 9) * s;
+        polygon(ctx, [{ x: x0, y: d.y - 24 * s }, { x: x0 + 9 * s, y: d.y - 24 * s }, { x: x0 + 9 * s, y: d.y - 18 * s }, { x: x0 + 4.5 * s, y: d.y - 15 * s }, { x: x0, y: d.y - 18 * s }]);
+        fill(ctx, i % 2 ? "#f2c84b" : "#7b3fa8");
+      }
+      for (let i = 0; i < 4; i++) {
+        circle(ctx, d.x + (4 + i * 3) * s, d.y - 4 * s, 1.8 * s);
+        fill(ctx, i % 2 ? "#5fd3ff" : "#f0c22c");
+      }
+      const bob = Math.sin(t(clock) * 3 + d.x) * s;
+      const gx = d.x - 6 * s;
+      circle(ctx, gx, d.y - 8 * s + bob, 5 * s);
+      fill(ctx, "#5aa83a");
+      for (const side of [-1, 1]) {
+        polygon(ctx, [{ x: gx + side * 3.5 * s, y: d.y - 10 * s + bob }, { x: gx + side * 10 * s, y: d.y - 13 * s + bob }, { x: gx + side * 4 * s, y: d.y - 6.5 * s + bob }]);
+        fill(ctx, "#5aa83a");
+        circle(ctx, gx + side * 1.8 * s, d.y - 9 * s + bob, s);
+        fill(ctx, "#ffe14d");
+      }
+      ctx.beginPath();
+      ctx.arc(gx, d.y - 7 * s + bob, 2 * s, 0.3, Math.PI - 0.3);
+      stroke(ctx, "#1d2a12", 0.8);
+      if (Math.floor(t(clock) / 2.5 + d.x) % 3 === 0) label(ctx, "Bargains!", d.x, d.y - 32 * s, 6, "#ffe9b0");
+    },
+  },
   dragon: {
     layer: "glow",
     light: { r: 70, color: "rgba(255,90,40,0.3)" },
@@ -803,21 +1038,26 @@ const DECOR = {
   },
 };
 
+// Every kind of scenery a hole on `theme` may use: the built-in ones and its
+// look's own.
+export const decorKinds = (theme) => [...Object.keys(DECOR), ...Object.keys((LOOKS[theme] || {}).decor || {})];
 export const DECOR_KINDS = Object.freeze(Object.keys(DECOR));
+
+const decorKind = (theme, kind) => ((LOOKS[theme] || {}).decor || {})[kind] || DECOR[kind];
 
 // Draws the hole's scenery that belongs on `layer`.
 export function drawDecor(ctx, p, decor, clock, layer) {
   for (const d of decor) {
-    const kind = DECOR[d.kind];
+    const kind = decorKind(p.theme, d.kind);
     if (kind && kind.layer === layer) kind.draw(ctx, p, d, clock);
   }
 }
 
 // The glows the scenery casts, for a cave's darkness: { x, y, r, color }.
-export function decorLights(decor) {
+export function decorLights(decor, theme) {
   const lights = [];
   for (const d of decor) {
-    const kind = DECOR[d.kind];
+    const kind = decorKind(theme, d.kind);
     if (kind && kind.light) lights.push({ x: d.x, y: d.y - 4, r: kind.light.r * (d.s || 1), color: kind.light.color });
     if (d.kind === "eyes") lights.push({ x: d.x, y: d.y, r: 12, color: "rgba(255,225,80,0.25)" });
   }

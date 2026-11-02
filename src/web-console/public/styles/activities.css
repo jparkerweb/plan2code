@@ -24,6 +24,134 @@
 .modal.activities .modal-blurb,
 .modal.activities .modal-actions { flex: none; }
 .modal.activities .modal-blurb { margin-bottom: 12px; }
+#activities-full[hidden] { display: none; }
+
+/* The stage: no box of its own in the window, so the board and the score
+   line lay out as they always have. */
+.activities-stage { display: contents; }
+
+/* Full screen: the stage takes the whole screen (the browser's own full
+   screen, or the page where it refuses one) and the board takes all of the
+   stage, black bars where the game's shape leaves room, so the canvas is as
+   big as the screen allows. Nothing sits beside the board: the panel (the
+   game's name, the score line, Music and a way out) is laid over it.
+   screens/activities.js docks the panel in a black bar when one is wide or
+   tall enough to hold it (`data-dock="side"` or `"below"`, with the bar's
+   size in --bar), and floats it in the top right corner otherwise. */
+.activities-stage.full {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: block;
+  width: 100vw;
+  height: 100vh;
+  background: #000;
+  color: #f2f2f2;
+}
+.activities-stage.full .activities-board {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: none;
+  background: #000;
+}
+/* The pointer hides after a still moment and comes back on any move. */
+.activities-stage.full.idle,
+.activities-stage.full.idle * { cursor: none !important; }
+
+/* The panel: a dark glass card in the same colors in either theme, since it
+   sits on black bars or on the game itself, never on the page. */
+.activities-rail {
+  position: absolute;
+  z-index: 2;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 340px;
+  padding: 16px 18px;
+  border: 1px solid rgb(255 255 255 / 0.14);
+  border-radius: 12px;
+  background: rgb(14 14 18 / 0.74);
+  backdrop-filter: blur(8px);
+  box-shadow: 0 8px 28px rgb(0 0 0 / 0.45);
+  color: #f2f2f2;
+  overflow: hidden;
+  transition: opacity 0.25s ease, padding 0.25s ease;
+}
+.activities-rail[hidden] { display: none; }
+.activities-stage[data-dock="float"] .activities-rail { top: 16px; right: 16px; }
+/* Docked: centered in its bar, so it never covers the play. */
+.activities-stage[data-dock="side"] .activities-rail {
+  top: 50%;
+  right: calc(var(--bar) / 2);
+  transform: translate(50%, -50%);
+  max-height: calc(100% - 32px);
+}
+.activities-stage[data-dock="below"] .activities-rail {
+  left: 50%;
+  bottom: calc(var(--bar) / 2);
+  transform: translate(-50%, 50%);
+  max-width: calc(100% - 32px);
+  max-height: calc(var(--bar) - 16px);
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px 20px;
+  padding: 10px 18px;
+}
+/* Floating over a round in play, once the pointer is still: only the score
+   line stays, small and see-through, in the bottom corner (games keep their
+   own top bar of pills at the top), so the game shows through it. Any move
+   of the pointer, a pause or a round's end brings the whole panel back. */
+.activities-stage[data-dock="float"].live.idle .activities-rail {
+  top: auto;
+  bottom: 16px;
+  padding: 6px 12px;
+  opacity: 0.72;
+  pointer-events: none;
+}
+.activities-stage[data-dock="float"].live.idle .activities-rail > :not(.activities-rail-score) { display: none; }
+.activities-rail p { margin: 0; }
+.activities-rail-title { font: 800 clamp(18px, 1.6vw, 30px) / 1.15 var(--serif); }
+.activities-rail-best { color: #c8c8c8; font-weight: 600; font-variant-numeric: tabular-nums; }
+/* Once a round has a score line, its best chip says it instead. */
+.activities-rail:has(.activities-score:not(:empty)) .activities-rail-best { display: none; }
+.activities-rail-keys { color: #a8a8a8; font-size: 0.9em; line-height: 1.6; }
+.activities-rail kbd { background: rgb(255 255 255 / 0.08); border-color: rgb(255 255 255 / 0.22); color: #f2f2f2; }
+.activities-rail .btn { background: rgb(255 255 255 / 0.08); border-color: rgb(255 255 255 / 0.25); color: #f2f2f2; }
+.activities-rail .btn:hover { background: rgb(255 255 255 / 0.16); }
+.activities-rail .btn,
+.activities-rail .activities-music { align-self: flex-start; color: #f2f2f2; }
+.activities-stage[data-dock="below"] .activities-rail .btn,
+.activities-stage[data-dock="below"] .activities-rail .activities-music { align-self: center; }
+/* The score line in the panel: one chip a row, the score big, the meter as
+   wide as the panel. */
+.activities-rail .activities-score {
+  height: auto;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  line-height: normal;
+  white-space: normal;
+  color: #f2f2f2;
+}
+.activities-rail .activities-score:empty { display: none; }
+.activities-rail .activities-chip.score { font-size: clamp(16px, 1.4vw, 26px); line-height: 1.6; }
+.activities-rail .activities-chip.best { margin-left: 0; }
+.activities-rail .activities-meter { width: 100%; min-width: 140px; margin: 0; }
+.activities-stage[data-dock="below"] .activities-rail .activities-score { flex-direction: row; align-items: center; }
+.activities-stage[data-dock="below"] .activities-rail .activities-meter { width: 160px; }
+.activities-rail .activities-music span { color: #c8c8c8; }
+/* The still, floating score: the chips stacked and right-aligned, narrow
+   enough to sit mostly in a thin black bar, the meter left out. */
+.activities-stage[data-dock="float"].live.idle .activities-rail .activities-score { align-items: flex-end; gap: 6px; }
+.activities-stage[data-dock="float"].live.idle .activities-rail .activities-chip.score { font-size: 15px; }
+.activities-stage[data-dock="float"].live.idle .activities-rail .activities-meter { display: none; }
 
 /* Plan2Code needs the person: an attention strip in the highlight color,
    above the board, that never covers it. */
@@ -42,17 +170,92 @@
 .activities-banner[hidden] { display: none; }
 .activities-banner-text { flex: 1 1 auto; font-weight: 600; }
 .activities-banner .btn.primary { flex: none; background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+/* Shown only while a turn or finish holds the round: the one way to play on. */
+.activities-banner .btn { flex: none; }
+.activities-banner .btn[hidden] { display: none; }
 
-/* The picker: one button per game, shown only once two are listed. */
+/* The picker: a page of game cards in place of the board, shown once two or
+   more games are listed. Each card is one button: a cover scene, the title,
+   a line about the game, its best, and a tag for the last one played. */
 .activities-picker {
-  flex: none;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 12px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: 4px 2px 8px;
 }
 .activities-picker[hidden] { display: none; }
-.activities-picker .btn[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent-line); color: var(--ink); }
+.activities-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px;
+}
+.activities-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--rule-2);
+  border-radius: 12px;
+  background: var(--panel);
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 120ms ease-out, box-shadow 120ms ease-out, transform 120ms ease-out;
+}
+.activities-card:hover,
+.activities-card:focus-visible {
+  border-color: var(--accent-line);
+  box-shadow: 0 0 0 3px var(--accent-soft), var(--shadow);
+  outline: none;
+}
+.activities-cover { display: block; border-bottom: 1px solid var(--rule-2); background: var(--panel-2); }
+.activities-cover svg { display: block; width: 100%; height: auto; aspect-ratio: 5 / 3; }
+/* A course dashboard: three across where it fits, so all six courses show
+   at once. A course card's art is a hole drawn on a 4:3 canvas, cropped to a
+   wide strip through its middle, where the play is. */
+.activities-courses { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+.activities-cover canvas { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; object-fit: cover; }
+/* The covers' token colors (screens/activities.js names them), so a cover
+   follows the theme and the highlight like the boards do. */
+.activities-cover .cv-panel { fill: var(--panel); }
+.activities-cover .cv-rule { fill: var(--rule); opacity: 0.45; }
+.activities-cover .cv-ink { fill: var(--ink); }
+.activities-cover .cv-ink2 { fill: var(--ink-2); }
+.activities-cover .cv-accent { fill: var(--accent); }
+.activities-cover .cv-accent-line { stroke: var(--accent); }
+.activities-cover .cv-ink3-line { stroke: var(--ink-3); }
+.activities-card-body { display: flex; flex-direction: column; gap: 4px; padding: 12px 14px 14px; }
+.activities-card-title { font-size: 1.12em; font-weight: 800; }
+.activities-card-blurb { color: var(--ink-2); line-height: 1.35; }
+.activities-card-meta { color: var(--ink-3); font-size: 0.9em; font-weight: 600; font-variant-numeric: tabular-nums; }
+.activities-card-best { margin-top: 4px; color: var(--ink-2); font-weight: 600; font-variant-numeric: tabular-nums; }
+.activities-card-tag {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--panel) 88%, transparent);
+  border: 1px solid var(--rule-2);
+  color: var(--ink-2);
+  font-size: 0.82em;
+  font-weight: 700;
+}
+.activities-card-tag.waiting { border-color: var(--accent-line); background: var(--accent-soft); color: var(--ink); }
+.activities-picker-note { margin: 12px 0 0; }
+/* All games sits at the far left of the actions, away from Close. */
+.modal.activities .activities-back { margin-right: auto; }
+.modal.activities .activities-back[hidden] { display: none; }
+/* The game's own music volume, beside Full screen (only for a game with music). */
+.modal.activities .activities-music { display: inline-flex; align-items: center; gap: 8px; color: var(--ink-2); font-size: 0.9em; }
+.modal.activities .activities-music[hidden] { display: none; }
+.modal.activities .activities-music input { width: 110px; accent-color: var(--accent); }
+.modal.activities .activities-music:has(input:disabled) { opacity: 0.55; }
+@media (prefers-reduced-motion: no-preference) {
+  .activities-card:hover { transform: translateY(-2px); }
+}
 
 /* The board: fills the free space and centers the canvas, with the state
    text laid over its middle. */
@@ -134,6 +337,8 @@
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
+/* Hidden on the picker, where there is no round. */
+.activities-score[hidden] { display: none; }
 .activities-chip {
   display: inline-block;
   padding: 0 12px;
@@ -224,10 +429,11 @@
   color: transparent;
 }
 @media (prefers-reduced-motion: no-preference) {
-  .activities-score.tied .activities-chip.best { animation: activities-glow 900ms ease-in-out infinite alternate; }
-  .activities-score.passed .activities-chip,
-  .activities-score.passed .activities-meter { animation: activities-rainbow 2.4s linear infinite; }
-  .activities-score.burst .activities-chip { animation: activities-rainbow 2.4s linear infinite, activities-pop 600ms cubic-bezier(0.3, 1.6, 0.5, 1); }
+  /* Each plays once, as the best is reached or passed, then the line holds
+     still for the rest of the round. */
+  .activities-score.tied .activities-chip.best { animation: activities-glow 900ms ease-in-out 2 alternate; }
+  .activities-score.burst .activities-meter { animation: activities-rainbow 1.2s ease-out; }
+  .activities-score.burst .activities-chip { animation: activities-rainbow 1.2s ease-out, activities-pop 600ms cubic-bezier(0.3, 1.6, 0.5, 1); }
   .activities-spark { animation: activities-spark 1s cubic-bezier(0.2, 0.7, 0.4, 1) forwards; }
   .activities-overlay.record::before { animation: activities-pop 600ms cubic-bezier(0.3, 1.6, 0.5, 1); }
 }

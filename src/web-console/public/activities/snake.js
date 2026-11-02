@@ -13,10 +13,12 @@
 // then ice), and each level serves its own fruit (FRUITS) on its own scenery
 // (THEMES). Odd levels end on a boss fruit, and a runaway fruit sometimes
 // turns up to be chased down. Power-ups turn up on their own, a mystery box
-// can hold any of ten surprises, and eating quickly builds a combo. Every
+// can hold any of nine surprises, and eating quickly builds a combo. Every
 // power-up, surprise, level and special a player has ever seen is kept as one
 // bit of a saved tally (the host's memo), so the start and end screens can
 // say how much is still out there to find.
+
+import { drawPill } from "./pills.js";
 
 // The step at the starting length of three cells, in ms. The snake speeds up as
 // it grows (see stepMs), so this is the slowest step a round begins at.
@@ -45,10 +47,15 @@ export const COMBO_MS = 2600;
 export const MAX_COMBO = 5;
 
 // Each level past the first takes this share off the step, on top of the
-// speed-up from length. Turbo and Slow-mo scale the step again, but it never
-// goes under FASTEST_MS.
+// speed-up from length. Slow-mo scales the step again, but it never goes
+// under FASTEST_MS.
 const LEVEL_SPEEDUP = 0.03;
 const FASTEST_MS = 40;
+
+// Slow-mo stretches the step by SLOW_FACTOR, and over its last SLOW_EASE_MS
+// eases back to the usual pace, so its end is never a jolt.
+const SLOW_FACTOR = 1.7;
+const SLOW_EASE_MS = 2500;
 
 // A new rock flashes for ROCK_WARN_MS before it turns solid, so it never lands
 // on a player without warning. A rock never lands next to the head or in the
@@ -106,7 +113,6 @@ const deepFreeze = (o) => Object.freeze(Object.fromEntries(Object.entries(o).map
 // The power-ups. A timed one lasts `ms`; Shield and Scissors act at once.
 export const POWERS = deepFreeze({
   shield: { name: "Shield", blurb: "Shrug off one crash", color: "#1fb6d9" },
-  turbo: { name: "Turbo", blurb: "Faster, and double points", color: "#ff8a1f", ms: 7000 },
   slow: { name: "Slow-mo", blurb: "Time crawls", color: "#4f7cff", ms: 7000 },
   magnet: { name: "Magnet", blurb: "Food comes to you", color: "#ff3d6e", ms: 9000 },
   ghost: { name: "Ghost", blurb: "Walls wrap around", color: "#a466ff", ms: 9000 },
@@ -120,7 +126,6 @@ export const SURPRISES = deepFreeze({
   goldRush: { title: "Gold rush!", sub: "Grab the coins before they fade", color: "#f5b301" },
   quake: { title: "Earthquake!", sub: "Every rock crumbles", color: "#c98b4a" },
   meteors: { title: "Meteor shower!", sub: "Rocks incoming", color: "#e2553f" },
-  mirror: { title: "Mirror world!", sub: "Your controls are flipped", color: "#e04dd0", ms: 6000 },
   lightsOut: { title: "Lights out!", sub: "Who turned off the lights?", color: "#7a7f99", ms: 7000 },
   disco: { title: "Disco fever!", sub: "Triple points", color: "#ff4fa3", ms: 8000 },
   bigSnack: { title: "Big snack!", sub: "You grow five at once", color: "#57b54a" },
@@ -168,17 +173,23 @@ export const SPECIALS = deepFreeze({
   boss: { title: "Boss fruit!", sub: "Three bites, and back off between them", color: "#f5b301" },
 });
 
-// Everything a player can find, in tally-bit order. The order is saved, so
-// new entries only ever go on the end: the first 21 are the ones the tally
-// began with, written out so a new level cannot shift them.
-export const DISCOVERIES = Object.freeze([
-  ...Object.keys(POWERS).map((k) => `power:${k}`),
-  ...Object.keys(SURPRISES).map((k) => `surprise:${k}`),
-  ...["2", "3", "4", "5", "6"].map((k) => `level:${k}`),
-  "level:7",
+// Every find a saved tally has ever had a bit for, in bit order. The order is
+// saved, so new entries only ever go on the end, and a find taken out of the
+// game (RETIRED) keeps its place so the bits after it never move.
+const TALLY = Object.freeze([
+  ...["shield", "turbo", "slow", "magnet", "ghost", "scissors"].map((k) => `power:${k}`),
+  ...["jackpot", "goldRush", "quake", "meteors", "mirror", "lightsOut", "disco", "bigSnack", "cometCall", "treasure"].map((k) => `surprise:${k}`),
+  ...["2", "3", "4", "5", "6", "7"].map((k) => `level:${k}`),
   "special:runaway",
   "special:boss",
 ]);
+const RETIRED = Object.freeze(["power:turbo", "surprise:mirror"]);
+
+// Everything a player can still find, in tally order.
+export const DISCOVERIES = Object.freeze(TALLY.filter((id) => !RETIRED.includes(id)));
+
+// The saved tally's bit for a find.
+export const tallyBit = (id) => 1 << TALLY.indexOf(id);
 
 const DIRS = Object.freeze({
   up: Object.freeze({ x: 0, y: -1 }),
@@ -186,9 +197,6 @@ const DIRS = Object.freeze({
   left: Object.freeze({ x: -1, y: 0 }),
   right: Object.freeze({ x: 1, y: 0 }),
 });
-
-// Mirror world swaps every direction for its opposite.
-const MIRROR = Object.freeze({ up: "down", down: "up", left: "right", right: "left" });
 
 // More than two turns queued in one step is mashing, not steering.
 const MAX_QUEUED = 2;
@@ -213,16 +221,15 @@ export function stepMs(length) {
 export const active = (round, kind) => Boolean(round.effects && round.effects[kind] > 0);
 
 // The step the round moves at right now: stepMs for its length, quicker each
-// level, and scaled by Turbo or Slow-mo. With none of those it is stepMs.
+// level, and stretched by Slow-mo, less so as it runs out.
 export function pace(round) {
   let ms = stepMs(round.snake.length) * (1 - LEVEL_SPEEDUP * ((round.level || 1) - 1));
-  if (active(round, "turbo")) ms *= 0.6;
-  if (active(round, "slow")) ms *= 1.7;
+  if (active(round, "slow")) ms *= 1 + (SLOW_FACTOR - 1) * Math.min(1, round.effects.slow / SLOW_EASE_MS);
   return Math.max(FASTEST_MS, Math.round(ms));
 }
 
-// Turbo doubles every point and Disco fever triples it.
-export const multiplier = (round) => (active(round, "turbo") ? 2 : 1) * (active(round, "disco") ? 3 : 1);
+// Disco fever triples every point.
+export const multiplier = (round) => (active(round, "disco") ? 3 : 1);
 
 // Whether the board is iced over.
 export const icy = (round) => round.level === ICE_LEVEL;
@@ -331,10 +338,9 @@ export function newRound(size = GRID, random = Math.random) {
 }
 
 // Queues a turn. A turn straight back into the snake's own neck, or the way it
-// is already going, is ignored. In Mirror world every key means its opposite.
-// Returns whether the turn was queued.
+// is already going, is ignored. Returns whether the turn was queued.
 export function turn(round, name) {
-  const next = DIRS[active(round, "mirror") ? MIRROR[name] : name];
+  const next = DIRS[name];
   if (!next) return false;
   const last = round.queue.length ? round.queue[round.queue.length - 1] : round.dir;
   if (same(next, last) || opposite(next, last) || round.queue.length >= MAX_QUEUED) return false;
@@ -441,9 +447,6 @@ export function applyPower(round, kind) {
     return points;
   }
   if (!POWERS[kind]) return 0;
-  // Turbo and Slow-mo undo each other.
-  if (kind === "turbo") delete round.effects.slow;
-  if (kind === "slow") delete round.effects.turbo;
   round.effects[kind] = POWERS[kind].ms;
   return 0;
 }
@@ -464,7 +467,6 @@ export function applySurprise(round, kind, random = Math.random) {
     points = Math.max(3, round.rocks.length) * multiplier(round);
     round.rocks = [];
   } else if (kind === "meteors") dropRocks(round, 6, random);
-  else if (kind === "mirror") round.queue = [];
   else if (kind === "bigSnack") {
     round.grow += 5;
     points = 5 * multiplier(round);
@@ -479,6 +481,8 @@ function levelUp(round, random) {
   round.slide = 0;
   const level = round.level;
   round.events.push({ type: "level", level });
+  // Every new level opens in Slow-mo, a moment to take in what it brings.
+  applyPower(round, "slow");
   if (level === 2) dropRocks(round, 3, random);
   if (level === 3) spawnItem(round, "mystery", random);
   if (level === 4) openPortals(round, random);
@@ -916,15 +920,6 @@ function glyph(ctx, kind, x, y, s) {
     ctx.lineTo(x - s * 0.7, y - s * 0.5);
     ctx.closePath();
     ctx.fill();
-  } else if (kind === "turbo") {
-    ctx.moveTo(x + s * 0.2, y - s * 0.9);
-    ctx.lineTo(x - s * 0.5, y + s * 0.1);
-    ctx.lineTo(x - s * 0.05, y + s * 0.1);
-    ctx.lineTo(x - s * 0.2, y + s * 0.9);
-    ctx.lineTo(x + s * 0.5, y - s * 0.15);
-    ctx.lineTo(x + s * 0.05, y - s * 0.15);
-    ctx.closePath();
-    ctx.fill();
   } else if (kind === "slow") {
     ctx.arc(x, y, s * 0.7, 0, Math.PI * 2);
     ctx.moveTo(x, y);
@@ -1296,10 +1291,6 @@ function drawSnake(ctx, round, cell, colors, clock, t, dead) {
   ctx.globalAlpha = active(round, "ghost") ? 0.55 : 1;
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
-  if (active(round, "turbo")) {
-    ctx.shadowColor = POWERS.turbo.color;
-    ctx.shadowBlur = cell * 0.7;
-  }
   for (let i = pts.length - 1; i > 0; i--) {
     const a = pts[i];
     const b = pts[i - 1];
@@ -1396,24 +1387,11 @@ function drawDark(ctx, round, cell, head, clock) {
 function pill(ctx, x, y, h, text, color, fill = 1) {
   ctx.font = `800 ${Math.round(h * 0.62)}px system-ui, -apple-system, "Segoe UI", sans-serif`;
   const w = h * 0.7 + text.length * h * 0.42;
-  ctx.fillStyle = SHADE;
-  roundRect(ctx, x, y, w, h, h / 2);
-  ctx.fill();
-  if (fill < 1) {
-    ctx.fillStyle = color;
-    ctx.globalAlpha = 0.35;
-    roundRect(ctx, x, y, w * Math.max(0, fill), h, h / 2);
-    ctx.fill();
-    ctx.globalAlpha = 1;
-  }
-  ctx.fillStyle = color;
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillText(text, x + w / 2, y + h / 2 + 1);
+  drawPill(ctx, x, y, w, h, text, color, fill, y + h / 2 + 1);
   return w;
 }
 
-const EFFECT_LABELS = Object.freeze({ turbo: "TURBO", slow: "SLOW", magnet: "MAGNET", ghost: "GHOST", mirror: "MIRROR", lightsOut: "DARK", disco: "DISCO x3" });
+const EFFECT_LABELS = Object.freeze({ slow: "SLOW", magnet: "MAGNET", ghost: "GHOST", lightsOut: "DARK", disco: "DISCO x3" });
 
 // The level, the combo and each running effect, small along the top.
 function drawHud(ctx, round, cell) {
@@ -1483,7 +1461,7 @@ function drawTally(ctx, side, cell, lines, found) {
   DISCOVERIES.forEach((id, i) => {
     ctx.beginPath();
     ctx.arc(x + i * gap, y, r, 0, Math.PI * 2);
-    if (found & (1 << i)) {
+    if (found & tallyBit(id)) {
       ctx.fillStyle = discoveryColor(id);
       ctx.fill();
     } else {
@@ -1494,12 +1472,12 @@ function drawTally(ctx, side, cell, lines, found) {
   });
 }
 
-const countBits = (n) => DISCOVERIES.reduce((sum, _, i) => sum + (n & (1 << i) ? 1 : 0), 0);
+const countBits = (n) => DISCOVERIES.reduce((sum, id) => sum + (n & tallyBit(id) ? 1 : 0), 0);
 
 // The over screen's nudge to play again: the next level not yet seen, else how
 // much is still hidden.
 function teaser(found) {
-  const level = Object.keys(LEVELS).find((l) => !(found & (1 << DISCOVERIES.indexOf(`level:${l}`))));
+  const level = Object.keys(LEVELS).find((l) => !(found & tallyBit(`level:${l}`)));
   if (level) return `Something new waits at level ${level}...`;
   const left = DISCOVERIES.length - countBits(found);
   if (left) return `${left} ${left === 1 ? "surprise is" : "surprises are"} still hidden. One more go?`;
@@ -1510,7 +1488,25 @@ function teaser(found) {
 
 const MAX_PARTS = 400;
 
-function create({ canvas, tone = () => {}, onScore = () => {}, best = () => 0, memo = null }) {
+// How long a timed effect's hum fades over at its end, and the countdown
+// ticks across the same stretch (one per EFFECT_TICK_MS).
+const EFFECT_FADE_MS = 1500;
+const EFFECT_TICK_MS = 300;
+
+// The hums' reach in cells: a comet is heard from COMET_EARSHOT away, the
+// portals' shimmer swells from PORTAL_EARSHOT.
+const COMET_EARSHOT = 12;
+const PORTAL_EARSHOT = 8;
+
+// The pitch of a run of things in a row: a step up the scale each.
+const SCALE = Object.freeze([1, 1.122, 1.26, 1.335, 1.498, 1.682, 1.888, 2]);
+const scaleStep = (n) => SCALE[Math.max(0, Math.min(SCALE.length - 1, n))];
+
+// A little pitch wobble so a sound heard often never repeats exactly; only
+// the sound's pitch, never the game.
+const wobble = (spread = 0.06) => 1 - spread / 2 + Math.random() * spread;
+
+function create({ canvas, tone = () => {}, hum = () => {}, onScore = () => {}, best = () => 0, memo = null }) {
   const ctx = canvas.getContext("2d");
   let colors = null;
   let round = newRound();
@@ -1551,11 +1547,27 @@ function create({ canvas, tone = () => {}, onScore = () => {}, best = () => 0, m
   };
   const flash = (color, ms = 260) => (fx.flash = { color, life: ms, max: ms });
 
+  // What the sounds remember between ticks: things already heard arriving
+  // (rocks, comets, items, kept weakly so a new round forgets them), quiet
+  // spells for cues that must not repeat too often, and tones queued to play
+  // a moment later. Only ever read for sound, never for the rules.
+  let sfx = null;
+  const resetSfx = () =>
+    (sfx = { coins: 0, coinMs: 0, cool: {}, later: [], heartMs: 0, ticks: {}, length: 0, rocks: new WeakSet(), landed: new WeakSet(), comets: new WeakSet(), launched: new WeakSet(), items: new WeakSet(), passed: new WeakSet() });
+  resetSfx();
+  // Whether a cue that sounded within the last `ms` should stay quiet; if
+  // not, it starts a fresh quiet spell and may play.
+  const hush = (key, ms) => {
+    if (sfx.cool[key] > 0) return true;
+    sfx.cool[key] = ms;
+    return false;
+  };
+
   // A first sighting lights its dot for good and tags its banner.
   const discover = (id, b) => {
-    const bit = DISCOVERIES.indexOf(id);
-    if (bit < 0 || found & (1 << bit)) return;
-    found |= 1 << bit;
+    if (!DISCOVERIES.includes(id) || found & tallyBit(id)) return;
+    found |= tallyBit(id);
+    tone("sparkle", 0.45);
     try {
       if (memo) memo.set(found);
     } catch {}
@@ -1565,28 +1577,57 @@ function create({ canvas, tone = () => {}, onScore = () => {}, best = () => 0, m
   const handle = (e) => {
     const at = { x: e.x, y: e.y };
     if (e.type === "eat") {
-      tone("eat");
+      // The bite climbs a step per combo; a combo adds a crunch over it.
+      const climb = scaleStep(e.combo - 1);
+      tone("eat", 1, climb * wobble(0.04));
       burst(at, (FRUITS[e.fruit] && FRUITS[e.fruit].color) || colors.food, e.boss ? 50 : 12, e.boss ? 11 : 6);
       if (e.boss) {
         tone("levelup");
+        tone("snakeBossDown", 0.9);
         shake(350, 0.25);
         flash(GOLD, 300);
       }
       float(at, `+${e.points}`, e.combo > 1 ? GOLD : "#ffffff");
-      if (e.combo > 1) tone("combo");
+      if (e.combo > 1) {
+        tone("combo", 1, climb);
+        tone("snakeChomp", 0.7, climb);
+      }
     } else if (e.type === "coin") {
-      tone("coin");
+      // Coins grabbed in quick succession climb the scale.
+      sfx.coins = sfx.coinMs > 0 ? sfx.coins + 1 : 0;
+      sfx.coinMs = 1200;
+      tone("coin", 1, scaleStep(sfx.coins));
       burst(at, GOLD, 8, 4);
       float(at, `+${e.points}`, GOLD);
     } else if (e.type === "power") {
       const spec = POWERS[e.kind];
       tone("power");
+      if (e.kind === "shield") tone("shieldUp", 0.8);
+      else if (e.kind === "slow") tone("snakeSlowOn", 0.8);
+      else if (e.kind === "magnet") tone("snakeMagnetOn", 0.8);
+      else if (e.kind === "ghost") tone("snakeGhostOn", 0.8);
+      else if (e.kind === "scissors") tone("snakeSnip", 0.9);
       burst(at, spec.color, 24, 8);
       if (e.points) float(at, `+${e.points}`, spec.color);
       discover(`power:${e.kind}`, banner(spec.name, spec.blurb, spec.color, 1400));
     } else if (e.type === "surprise") {
       const spec = SURPRISES[e.kind];
-      tone("mystery");
+      // A box opens with its jingle; chaos needs no box, so it rises in.
+      if (e.chaos) tone("riser", 0.6);
+      else tone("mystery");
+      if (e.kind === "jackpot") tone("snakeJackpot", 0.9);
+      else if (e.kind === "goldRush") {
+        tone("coinUp", 0.8);
+        tone("sparkle", 0.6);
+      } else if (e.kind === "quake") {
+        tone("rumbleLong", 1);
+        tone("crumble", 0.8);
+      } else if (e.kind === "meteors") tone("warn", 0.5);
+      else if (e.kind === "lightsOut") tone("snakeLightsOut", 0.9);
+      else if (e.kind === "disco") tone("snakeDisco", 0.9);
+      else if (e.kind === "bigSnack") tone("snakeGulp", 0.9);
+      else if (e.kind === "treasure") tone("powerUp", 0.8);
+      // Comet call's comet sounds its own alert as it appears.
       burst(at, spec.color, 30, 9);
       flash(spec.color);
       shake(200, 0.15);
@@ -1595,53 +1636,80 @@ function create({ canvas, tone = () => {}, onScore = () => {}, best = () => 0, m
     } else if (e.type === "level") {
       const spec = LEVELS[e.level];
       tone("levelup");
+      tone("snakeLevel", 0.9, 1 + 0.04 * (e.level - 2));
+      if (LEVELS[e.level]) tone("cheer", 0.35);
       flash(levelColor(e.level), 400);
       discover(`level:${e.level}`, banner(`Level ${e.level}`, spec ? `${spec.title}: ${spec.sub}` : "Faster and wilder", levelColor(e.level), 2200));
       // The new level's fruit names itself, once, where it sits.
       const fruit = FRUITS[fruitFor(e.level)];
       if (round.food && fruit !== FRUITS[fruitFor(e.level - 1)]) float(round.food, fruit.name, fruit.color || colors.food);
+      if (round.snake[0]) float(round.snake[0], POWERS.slow.name, POWERS.slow.color);
     } else if (e.type === "shield") {
       tone("shield");
+      tone("snakeShieldHit", 0.9);
       burst(at, POWERS.shield.color, 20, 7);
       float(at, "Saved!", POWERS.shield.color);
       shake(150, 0.12);
     } else if (e.type === "smash") {
       tone("boom");
+      tone("smash", 0.8, wobble());
       burst(at, ROCK_LIGHT, 20, 8);
       float(at, `+${e.points}`, "#ffffff");
       shake(220, 0.2);
     } else if (e.type === "portal") {
       tone("tunnel");
+      tone("warp", 0.6, wobble());
       burst(e.from, POWERS.ghost.color, 12, 5);
       burst(e.to, POWERS.shield.color, 12, 5);
     } else if (e.type === "zap") {
       tone("zap");
+      tone("zapBig", 0.7);
       burst(at, COMET, 22, 8);
       float(at, `-${e.lost}`, COMET);
       shake(250, 0.22);
     } else if (e.type === "boss") {
       tone("mystery");
+      tone("bossIntro", 0.7);
       shake(220, 0.15);
       burst(at, GOLD, 24, 7);
       discover("special:boss", banner(SPECIALS.boss.title, SPECIALS.boss.sub, SPECIALS.boss.color, 1600));
     } else if (e.type === "bite") {
       tone("boom");
+      tone("snakeBite", 0.9, scaleStep(BOSS_BITES - e.left));
       burst(at, FRUITS[fruitFor(round.level)].color || colors.food, 16, 7);
       float(at, `+${e.points}  ${e.left} left`, GOLD);
       shake(160, 0.12);
     } else if (e.type === "runner") {
       tone("tunnel");
+      tone("snakeRunner", 0.7);
       discover("special:runaway", banner(SPECIALS.runaway.title, SPECIALS.runaway.sub, SPECIALS.runaway.color, 1400));
     } else if (e.type === "hop") {
+      tone("snakeHop", 0.45, wobble(0.2));
       burst(e.from, "#ffffff", 6, 3);
     } else if (e.type === "caught") {
       tone("coin");
       tone("combo");
+      tone("snakeChomp", 0.8);
       burst(at, FRUITS[e.fruit].color || colors.food, 26, 9);
       float(at, `Caught! +${e.points}`, GOLD);
     } else if (e.type === "escape") {
+      tone("snakeEscape", 0.6);
       float(at, "Got away!", "#ffffff");
+    } else if (e.type === "portalMove") {
+      tone("snakePortalShift", 0.5);
+    } else if (e.type === "effectEnd") {
+      // Slow-mo ends every level's opening, so it eases out with a soft rise
+      // rather than the power-down the others get.
+      if (e.kind === "slow") tone("snakeTimeResume", 0.45);
+      else tone("powerDown", 0.5);
     } else if (e.type === "crash") {
+      // What it ran into, under the crash end() plays.
+      if (e.by === "wall") {
+        tone("thud", 1);
+        tone("hit", 0.8);
+      } else if (e.by === "rock") tone("smash", 1);
+      else if (e.by === "comet") tone("blast", 1);
+      else tone("squish", 1);
       burst(at, colors.snake, 40, 10);
       burst(at, colors.head, 16, 6);
       shake(450, 0.35);
@@ -1654,6 +1722,8 @@ function create({ canvas, tone = () => {}, onScore = () => {}, best = () => 0, m
     if (beaten || !(bestAtStart > 0) || round.score <= bestAtStart) return;
     beaten = true;
     tone("best");
+    // The crowd joins in a beat after the fanfare.
+    sfx.later.push({ ms: 380, play: () => tone("sparkle", 0.6) }, { ms: 420, play: () => tone("cheer", 0.45) });
     banner("New best!", "Every point from here is a record", GOLD, 1800);
     for (let i = 0; i < 4; i++) burst({ x: Math.random() * (round.size - 1), y: Math.random() * (round.size - 1) }, ["#ff4fa3", GOLD, "#1fb6d9", "#57b54a"][i], 16, 7);
   };
@@ -1696,9 +1766,125 @@ function create({ canvas, tone = () => {}, onScore = () => {}, best = () => 0, m
     }
   };
 
+  // The sounds read off the board rather than off events: rocks and comets
+  // arriving and landing, items popping up, a comet whizzing past the head,
+  // an effect's last seconds counting down, the dark's heartbeat, the snake
+  // passing a length milestone, and the tones queued for later.
+  const cues = (ms) => {
+    for (const k of Object.keys(sfx.cool)) sfx.cool[k] -= ms;
+    sfx.coinMs -= ms;
+    sfx.later = sfx.later.filter((l) => {
+      l.ms -= ms;
+      if (l.ms > 0) return true;
+      l.play();
+      return false;
+    });
+    let falling = 0;
+    let landing = 0;
+    for (const r of round.rocks) {
+      if (!sfx.rocks.has(r)) {
+        sfx.rocks.add(r);
+        if (r.warn > 0) falling += 1;
+      }
+      if (!(r.warn > 0) && !sfx.landed.has(r)) {
+        sfx.landed.add(r);
+        landing += 1;
+      }
+    }
+    if (falling && !hush("meteor", 400)) tone("snakeMeteor", Math.min(1, 0.35 + 0.1 * falling), wobble(0.2));
+    if (landing && !hush("rockLand", 150)) tone("snakeRockLand", Math.min(1, 0.5 + 0.1 * landing), wobble(0.15));
+    const head = round.snake[0];
+    for (const c of round.comets) {
+      if (!sfx.comets.has(c)) {
+        sfx.comets.add(c);
+        if (c.warn > 0) tone("snakeCometWarn", 0.6);
+      }
+      if (!(c.warn > 0) && !sfx.launched.has(c)) {
+        sfx.launched.add(c);
+        tone("snakeCometLaunch", 0.7);
+      }
+      // A comet flying right past the head without hitting it, once a pass.
+      const close = Boolean(head) && !(c.warn > 0) && Math.max(Math.abs(c.x - head.x), Math.abs(c.y - head.y)) <= 1;
+      if (close && !sfx.passed.has(c)) {
+        sfx.passed.add(c);
+        if (!hush("nearMiss", 600)) tone("snakeNearMiss", 0.6, wobble(0.1));
+      } else if (!close) sfx.passed.delete(c);
+    }
+    for (const it of round.items) {
+      if (sfx.items.has(it)) continue;
+      sfx.items.add(it);
+      tone("snakeItemPop", 0.6, it.kind === "mystery" ? 0.8 : 1.1);
+    }
+    // An effect's last seconds tick down, climbing (Slow-mo eases out instead).
+    for (const [kind, left] of Object.entries(round.effects)) {
+      const n = Math.ceil(left / EFFECT_TICK_MS);
+      if (kind !== "slow" && left <= EFFECT_FADE_MS && n < (sfx.ticks[kind] ?? Infinity)) tone("tickSoft", 0.55, scaleStep(EFFECT_FADE_MS / EFFECT_TICK_MS - n));
+      sfx.ticks[kind] = n;
+    }
+    for (const kind of Object.keys(sfx.ticks)) if (!(kind in round.effects)) delete sfx.ticks[kind];
+    // In the dark, a heartbeat.
+    if (active(round, "lightsOut")) {
+      sfx.heartMs -= ms;
+      if (sfx.heartMs <= 0) {
+        sfx.heartMs = 950;
+        tone("heartbeat", 0.6);
+      }
+    } else sfx.heartMs = 0;
+    // Every ten cells of snake, a little sparkle.
+    const tens = Math.floor(round.snake.length / 10);
+    if (tens > sfx.length) tone("sparkle", 0.4, 0.8 + 0.05 * tens);
+    sfx.length = tens;
+  };
+
+  // The held sounds, asked for every tick of a running round: the slither
+  // (its rustle quickening with the pace), each running effect's own hum
+  // (fading over its last seconds), the nearest flying comet (louder the
+  // closer it is), the portals' shimmer (swelling as the head nears one) and
+  // the wind over the ice.
+  const hums = () => {
+    const head = round.snake[0];
+    if (!head) return;
+    const speed = STEP_MS / pace(round);
+    hum("snake:slither", "snakeSlither", Math.min(1, 0.45 + round.snake.length / 60), speed);
+    let comet = null;
+    for (const c of round.comets) if (!(c.warn > 0) && (!comet || near(c, head) < near(comet, head))) comet = c;
+    if (comet) {
+      const close = Math.max(0, 1 - near(comet, head) / COMET_EARSHOT);
+      hum("snake:comet", "snakeComet", 0.15 + 0.85 * close, 1 + 0.3 * close);
+    }
+    const fade = (kind) => Math.min(1, (round.effects[kind] || 0) / EFFECT_FADE_MS);
+    if (active(round, "slow")) hum("snake:slow", "snakeSlowmo", 0.8 * fade("slow"), 1);
+    if (active(round, "magnet")) {
+      const pull = round.food ? Math.max(0, 1 - near(round.food, head) / MAGNET_REACH) : 0;
+      hum("snake:magnet", "snakeMagnet", 0.8 * fade("magnet"), 1 + 0.4 * pull);
+    }
+    if (active(round, "ghost")) hum("snake:ghost", "snakeGhost", fade("ghost"), 1);
+    if (active(round, "lightsOut")) hum("snake:dark", "haunt", 0.8 * fade("lightsOut"), 1);
+    if (active(round, "disco")) hum("snake:disco", "snakeDiscoBeat", 0.9 * fade("disco"), 1);
+    if (round.portals) {
+      const d = Math.min(...round.portals.map((p) => near(p, head)));
+      hum("snake:portal", "snakePortal", 0.15 + 0.85 * Math.max(0, 1 - d / PORTAL_EARSHOT), 1);
+    }
+    if (icy(round)) hum("snake:ice", "wind", 0.5, 0.6 + 0.3 * speed);
+  };
+
+  // Whether the cell straight ahead is a landed rock or the body (not the
+  // tail tip, which moves on): a turn away from one is a close shave. A wall
+  // is left out, since turning at the edge is everyday steering.
+  const deadlyAhead = () => {
+    const head = round.snake[0];
+    const c = { x: head.x + round.dir.x, y: head.y + round.dir.y };
+    if (round.rocks.some((r) => !(r.warn > 0) && same(r, c))) return true;
+    return round.snake.slice(0, -1).some((b) => same(b, c));
+  };
+
   const paint = () => {
     if (!ctx) return;
     colors ||= readColors(canvas);
+    // A banner takes its place on its first frame: a frame painted before the
+    // next tick (one whose step queued it) would draw it at the top.
+    const shown = fx.banners[0];
+    if (shown && shown.row == null) shown.row = bannerRow(round);
     const side = round.size * cell;
     const clock = fx.clock;
     ctx.save();
@@ -1745,11 +1931,18 @@ function create({ canvas, tone = () => {}, onScore = () => {}, best = () => 0, m
       bestAtStart = 0;
     }
     beaten = false;
+    resetSfx();
     paint();
   };
 
+  // A crash ends on the game over sting and the rattle; a board filled to
+  // the last cell ends on a victory. The crash blip always plays last.
   const end = () => {
     state = "over";
+    if (round.crashed) {
+      tone("gameOver", 0.8);
+      tone("snakeRattle", 0.6);
+    } else tone("victory", 1);
     tone("crash");
     onScore(round.score);
   };
@@ -1776,7 +1969,7 @@ function create({ canvas, tone = () => {}, onScore = () => {}, best = () => 0, m
         return true;
       }
       if (!DIRS[name]) return false;
-      if (state === "running") turn(round, name);
+      if (state === "running" && turn(round, name)) tone("snakeTurn", 0.3, wobble(0.2));
       return true;
     },
     tick(ms) {
@@ -1792,10 +1985,20 @@ function create({ canvas, tone = () => {}, onScore = () => {}, best = () => 0, m
       // The step is read on each pass, so the step after food is eaten is quicker.
       while (state === "running" && elapsed >= pace(round)) {
         elapsed -= pace(round);
+        const danger = deadlyAhead();
+        const dir = round.dir;
+        const slide = round.slide;
         const what = step(round);
         drain();
         // A full board has nowhere left for food: the round ends there.
         if (what === "crash" || !round.food) end();
+        else if (danger && round.dir !== dir && !hush("nearMiss", 600)) tone("snakeNearMiss", 0.5, wobble(0.1));
+        // On ice, a turn starting to slide skids.
+        if (state === "running" && icy(round) && slide === 0 && round.slide === 1 && !hush("skid", 300)) tone("skid", 0.35, wobble(0.15));
+      }
+      if (state === "running") {
+        cues(ms);
+        hums();
       }
       paint();
     },

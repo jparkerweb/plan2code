@@ -1,4 +1,4 @@
-// Plan2Code Web Console - Mini golf, the second activity: eighteen holes seen from above, rules, physics and the game contract.
+// Plan2Code Web Console - Mini golf, the second activity: six eighteen-hole courses seen from above, rules, physics and the game contract.
 //
 // The Activities window (screens/activities.js) drives everything, as it does
 // for Snake: it ticks the game, hands it keys, key releases and pointer
@@ -9,13 +9,15 @@
 // setPower, strike, advance and helpers), exported so the unit suite can play
 // exact shots without a canvas. Physics runs on a fixed sub-step and never reads the
 // clock or Math.random(), so the same shot always rolls the same way. The
-// course is data (golf-holes.js); the drawing lives in golf-draw.js and its
-// scenery in golf-decor.js.
+// courses are data (golf-holes.js lists them); the drawing lives in
+// golf-draw.js, its scenery in golf-decor.js and each newer course's look in
+// golf-looks.js. A round is played on one course, picked on the window's
+// course dashboard (the module's `courses`), and its best is kept per course.
 
-import { COURSE_W, COURSE_H, FRONT_NINE, HOLES } from "./golf-holes.js";
+import { COURSE_W, COURSE_H, COURSES, FRONT_NINE, HOLE_COUNT, courseById } from "./golf-holes.js";
 import { drawCourse, readColors } from "./golf-draw.js";
 
-export { COURSE_W, COURSE_H, FRONT_NINE, HOLES };
+export { COURSE_W, COURSE_H, COURSES, FRONT_NINE, HOLE_COUNT, courseById };
 
 // One physics step, in ms. tick() runs as many as the elapsed time holds and
 // carries the rest to the next tick.
@@ -43,6 +45,8 @@ export const STRIKE_SPEED = 520;
 const FRICTION = 40;
 const DRAG = 1.2;
 export const SAND_FACTOR = 4;
+// On ice the ball slows only this share as much.
+export const ICE_FACTOR = 0.15;
 
 // Under this speed, off any slope, the ball has stopped. High enough to cut
 // the slow creep at the end of a roll.
@@ -119,6 +123,9 @@ export const FAST_FORWARD = 3;
 // Keyboard aiming: a press nudges the aim by AIM_NUDGE, and held, it turns
 // from TURN_SLOW up to TURN_FAST radians a second over TURN_RAMP_MS.
 const AIM_NUDGE = Math.PI / 180;
+// How far, in CSS pixels, the pointer must move before the aim the cup set
+// follows it again, so a hand that shakes on a click does not swing it.
+const AIM_WAKE_PX = 6;
 const TURN_SLOW = (35 * Math.PI) / 180;
 const TURN_FAST = (220 * Math.PI) / 180;
 const TURN_RAMP_MS = 700;
@@ -181,25 +188,43 @@ export const gatePhase = (g, clockMs) => (((clockMs / g.period + (g.offset || 0)
 export const gateShut = (g, clockMs) => gatePhase(g, clockMs) >= g.open;
 
 export const onSlope = (hole, x, y) => hole.slopes.some((s) => inPolygon(s.points, x, y));
+// Where a well moves a resting ball: inside its reach, off its very center
+// (where it pulls no way at all), and where its pull, fading toward the edge,
+// still beats the rolling friction. Out in the faint rim a ball may stop.
+export const inWell = (hole, x, y) => hole.wells.some((w) => {
+  const d = dist(x, y, w.x, w.y);
+  return d < w.r && d > 0.5 && Math.abs(w.pull) * (1 - d / w.r) > FRICTION;
+});
+// Somewhere a ball cannot rest: a slope or a well moves it.
+export const onPush = (hole, x, y) => onSlope(hole, x, y) || inWell(hole, x, y);
 export const inSand = (hole, x, y) => hole.sand.some((p) => inPolygon(p, x, y));
+export const onIce = (hole, x, y) => hole.ice.some((p) => inPolygon(p, x, y));
 export const onBridge = (hole, x, y) => hole.bridges.some((r) => inRect(r, x, y));
 export const inWater = (hole, x, y) => hole.water.some((p) => inPolygon(p, x, y)) && !onBridge(hole, x, y);
 
 /* ------------------------------------------------------------------ rules */
 
-const parTotal = (upTo) => HOLES.slice(0, upTo).reduce((n, h) => n + h.par, 0);
+// The holes of the course the round is played on.
+export const holesOf = (round) => courseById(round.course).holes;
+
+const parTotal = (round, upTo) => holesOf(round).slice(0, upTo).reduce((n, h) => n + h.par, 0);
+
+// A course's par for all eighteen.
+export const coursePar = (c) => c.holes.reduce((n, h) => n + h.par, 0);
 
 // The ball at rest, waiting for a putt: the shot clock starts again and the
 // aim turns back toward the cup, so a straight putt needs no aiming at all.
+// It stays on the cup until the pointer really moves (`aimHeld`).
 function atRest(round) {
-  const hole = HOLES[round.hole];
+  const hole = holesOf(round)[round.hole];
   round.phase = "aim";
   round.restMs = 0;
   round.aimAngle = Math.atan2(hole.cup.y - round.ball.y, hole.cup.x - round.ball.x);
+  round.aimHeld = true;
 }
 
 function placeOnTee(round) {
-  const hole = HOLES[round.hole];
+  const hole = holesOf(round)[round.hole];
   round.ball = { x: hole.tee.x, y: hole.tee.y, vx: 0, vy: 0, moving: false };
   round.from = { x: hole.tee.x, y: hole.tee.y };
   round.strokes = 0;
@@ -212,7 +237,8 @@ function placeOnTee(round) {
   atRest(round);
 }
 
-// Hole 1, the ball on its tee, nothing scored. `phase` is "aim" (the ball at
+// Hole 1 of the course `courseId` (the first course when none is given),
+// the ball on its tee, nothing scored. `phase` is "aim" (the ball at
 // rest, waiting for a putt), "swing" (the power meter running), "rolling",
 // "card" (the scorecard between holes) or "done" (the round is over).
 // `restMs` is how long the ball has waited (the shot clock), `swingMs` how
@@ -220,8 +246,9 @@ function placeOnTee(round) {
 // where the needle stopped last time. `held` is the power-up waiting for the
 // next putt, `active` the one helping the putt in play, and `taken` the pads
 // this hole has used up.
-export function newRound() {
+export function newRound(courseId = COURSES[0].id) {
   const round = {
+    course: courseById(courseId).id,
     hole: 0,
     card: [],
     clock: 0,
@@ -241,7 +268,7 @@ export const total = (round) => round.card.reduce((n, s) => n + s, 0) + (round.p
 
 // Against par for the holes played so far, the one in play counted once it is
 // finished: negative is under par.
-export const toPar = (round) => round.card.reduce((n, s) => n + s, 0) - parTotal(round.card.length);
+export const toPar = (round) => round.card.reduce((n, s) => n + s, 0) - parTotal(round, round.card.length);
 
 // Putts from where the ball rests: power 0 to MAX_BOOST of STRIKE_SPEED, at
 // an angle in radians (0 is along +x). A held power-up goes into this putt.
@@ -320,7 +347,7 @@ function finishHole(round, strokes, events) {
   round.ball.moving = false;
   round.active = null;
   round.cardMs = 0;
-  round.phase = round.hole === HOLES.length - 1 ? "done" : "card";
+  round.phase = round.hole === holesOf(round).length - 1 ? "done" : "card";
   if (round.phase === "done") events.push("done");
 }
 
@@ -480,6 +507,20 @@ function pickUpAtCap(round, events) {
 export const cupReach = (round) => CUP_R * (round.active === "bigcup" ? BIG_CUP : 1);
 const captureSpeed = (round) => CAPTURE_SPEED * (round.active === "bigcup" || round.active === "magnet" ? HELPED_CAPTURE : 1);
 
+// What wells do to the ball this step: each pulls it toward its center (or
+// pushes it away), harder the nearer it is.
+function wells(hole, ball, dt) {
+  for (const w of hole.wells) {
+    const dx = w.x - ball.x;
+    const dy = w.y - ball.y;
+    const d = Math.hypot(dx, dy);
+    if (d >= w.r || d <= 0.5) continue;
+    const a = w.pull * (1 - d / w.r) * dt;
+    ball.vx += (dx / d) * a;
+    ball.vy += (dy / d) * a;
+  }
+}
+
 // One physics step of `dtMs` (SUB_STEP_MS from tick()). Returns what happened,
 // as event names: "clock" (the shot clock started the meter), "dribble" (the
 // meter ran out), "wall", "bump", "tunnel", "powerup", "splash", "cup",
@@ -493,7 +534,7 @@ export function advance(round, dtMs) {
     if (round.cardMs >= CARD_MS && nextHole(round)) events.push("hole");
     return events;
   }
-  const hole = HOLES[round.hole];
+  const hole = holesOf(round)[round.hole];
   const ball = round.ball;
   const dt = dtMs / 1000;
   const ghost = round.active === "ghost";
@@ -511,8 +552,8 @@ export function advance(round, dtMs) {
         return events;
       }
     }
-    // A ball left on a slope rolls off it by itself.
-    if (!onSlope(hole, ball.x, ball.y)) return events;
+    // A ball left on a slope or in a well rolls off by itself.
+    if (!onPush(hole, ball.x, ball.y)) return events;
     ball.moving = true;
     round.phase = "rolling";
   }
@@ -523,10 +564,12 @@ export function advance(round, dtMs) {
       ball.vy += s.push.y * dt;
     }
   }
+  wells(hole, ball, dt);
   let speed = Math.hypot(ball.vx, ball.vy);
   const top = round.active === "cannon" ? CANNON_MAX : MAX_SPEED;
   if (speed > 0) {
-    const slow = (FRICTION + DRAG * speed) * (!ghost && inSand(hole, ball.x, ball.y) ? SAND_FACTOR : 1) * dt;
+    const ground = !ghost && inSand(hole, ball.x, ball.y) ? SAND_FACTOR : onIce(hole, ball.x, ball.y) ? ICE_FACTOR : 1;
+    const slow = (FRICTION + DRAG * speed) * ground * dt;
     const next = Math.min(top, Math.max(0, speed - slow));
     ball.vx *= next / speed;
     ball.vy *= next / speed;
@@ -560,7 +603,7 @@ export function advance(round, dtMs) {
     return events;
   }
 
-  const stopping = speed < STOP_SPEED && !onSlope(hole, ball.x, ball.y);
+  const stopping = speed < STOP_SPEED && !onPush(hole, ball.x, ball.y);
   // A ghost ball floats over water, but not once it runs out of puff there.
   if (inWater(hole, ball.x, ball.y) && (!ghost || stopping)) {
     events.push("splash");
@@ -611,17 +654,9 @@ export function predictPath(round, angle, power) {
 /* ------------------------------------------------------------------ gags */
 
 // The words that pop up on the board, picked by a count so the same round
-// always says the same things.
-const SPLASH_WORDS = Object.freeze({
-  sea: ["SPLOOSH! Davy Jones says thanks", "Shark snack! Yum", "Man overboard!"],
-  pool: ["Bloop!", "Glub glub glub", "Something down there liked that"],
-  lava: ["SIZZLE! Extra crispy", "Toasty!", "Marshmallow, anyone?"],
-  chasm: ["Aaaaaaaaa...", "Bye bye, ball!", "Still falling..."],
-});
-const BUMP_WORDS = Object.freeze({
-  pirate: ["Bonk!", "Arr!", "Clunk!", "Yo ho!"],
-  cave: ["Boing!", "Clang!", "Ping!", "Bwomp!"],
-});
+// always says the same things. A course's own words are its `voice`
+// (golf-kit.js): { label, splash: { <liquid>: [...] }, splashTone?, bump,
+// ace, turn, done, quips }; these are the ones every course shares.
 const TUNNEL_WORDS = ["Whoosh!", "Wheee!", "Where'd it go?!"];
 const MAX_WORDS = ["MAX POWER!", "CRUSHED IT!", "KA-BLAM!"];
 const SHANK_WORDS = ["Overswing! Shanked it", "Whoa, too hard!", "Wild swing!"];
@@ -632,12 +667,72 @@ const pick = (list, n) => list[n % list.length];
 /* --------------------------------------------------------------- contract */
 
 const TONE_FOR = Object.freeze({ wall: "wall", bump: "bump", cup: "cup", ace: "ace", tunnel: "tunnel", powerup: "power" });
+// The tone a splash makes, by liquid, unless the course's voice names one.
 const SPLASH_TONE = Object.freeze({ sea: "splash", pool: "splash", lava: "sizzle", chasm: "fall" });
 
-function create({ canvas, tone = () => {}, onScore = () => {} }) {
+// The first splash line of any list, for a liquid a voice forgot.
+const firstSplash = (voice) => Object.values(voice.splash)[0] || ["Splash!"];
+
+/* ----------------------------------------------------------------- sounds
+
+   Sound only follows the round; nothing here changes it. Every event keeps
+   its old blip (the suites listen for them) and gets a richer layer beside
+   it from golf-sfx.js or the shared kit, picked by what the ball met. */
+
+// What lands with a splash, by liquid, played over SPLASH_TONE's blip.
+const SPLASH_LAYER = Object.freeze({ sea: "splashBig", pool: "splashBig", swamp: "splashBig", icewater: "splashBig", soda: "golfFizz", chocolate: "golfGloop", tar: "golfGloop", lava: "hiss", plasma: "hiss", chasm: "golfFallFar", void: "golfFallFar", crevasse: "golfFallFar" });
+
+// What a bumper sounds like, by its look: wood, rubber, metal or stone.
+const BUMPER_SOUND = Object.freeze({
+  barrel: "golfBarrel", chest: "golfBarrel", nest: "golfBarrel",
+  coin: "golfChime", crystal: "golfChime", ornament: "golfChime", star: "golfChime", amber: "golfChime", pole: "golfChime", lollipop: "golfChime",
+  cannonball: "golfClack", rock: "golfClack", skull: "golfClack", boulder: "golfClack", asteroid: "golfClack", iceblock: "golfClack",
+});
+
+// What a mover says when it hits the ball, by its look.
+const MOVER_SOUND = Object.freeze({
+  shark: "golfChomp", crab: "golfPinch", trex: "golfRoar", raptor: "golfRoar", yeti: "golfRoar", penguin: "golfQuack",
+  bat: "squeak", spider: "squish", cart: "clank", ufo: "laser", fireball: "hiss", meteor: "hiss",
+  barrel: "golfBarrel", cannonball: "thud", boulder: "thud", sled: "thud", trike: "thud",
+});
+
+// The movers that hum as they go (pitch, so a cart's clatter runs fast).
+const MOVER_HUM = Object.freeze({
+  cart: { name: "train", pitch: 1.6 }, ufo: { name: "golfUfo", pitch: 1 }, fireball: { name: "golfFireball", pitch: 1 }, meteor: { name: "golfFireball", pitch: 0.8 },
+  barrel: { name: "golfRoll", pitch: 0.6 }, boulder: { name: "golfRoll", pitch: 0.5 }, cannonball: { name: "golfRoll", pitch: 0.7 }, sled: { name: "golfIceGlide", pitch: 0.8 },
+});
+
+// A gate slamming shut, by its look.
+const GATE_SOUND = Object.freeze({ crusher: "golfGateSlam", neck: "golfGateSlam", fire: "golfFlame", airlock: "golfAirlock", shield: "golfShieldGate", icicles: "golfIcicle", waffle: "knock" });
+
+// A rail, by the ground it runs around.
+const RAIL_SOUND = Object.freeze({ deck: "knock", waffle: "knock", stone: "golfClack", rock: "golfClack", crater: "golfClack", moss: "golfClack" });
+
+// A power-up taken, over the old `power` blip.
+const POWERUP_SOUND = Object.freeze({ doubloon: "coinUp", cannon: "clank", ghost: "wail", magnet: "shieldUp", bouncy: "golfQuack", bigcup: "sparkle", spyglass: "golfSpyglass" });
+
+// Each course's air (a hum), and what passes through it now and then.
+const AMBIENCE = Object.freeze({
+  pirate: { hum: "golfAmbPirate", calls: ["golfGull"] },
+  cave: { hum: "golfAmbCave", calls: ["golfDrip", "golfDrip", "gust"] },
+  dino: { hum: "golfAmbDino", calls: ["golfJungleBird", "golfDinoCall"] },
+  candy: { hum: "golfAmbCandy", calls: ["golfMusicBox"] },
+  space: { hum: "golfAmbSpace", calls: ["golfRadio"] },
+  frost: { hum: "golfAmbFrost", calls: ["gust", "golfIceCrack"] },
+});
+
+// A course's passing calls come about this often, in ms of the round.
+const CALL_EVERY_MS = 7000;
+// How near (in course units) a spinner, mover or well must be to be heard.
+const HEAR_R = 160;
+
+// A little pitch wobble, so a repeated hit never sounds stamped out.
+const vary = () => 0.94 + Math.random() * 0.12;
+
+function create({ canvas, tone = () => {}, hum = () => {}, onScore = () => {}, course: startCourse }) {
   const ctx = canvas.getContext("2d");
   let colors = null;
-  let round = newRound();
+  let round = newRound(startCourse);
   let state = "ready";
   let scale = 1;
   let carry = 0;
@@ -649,6 +744,19 @@ function create({ canvas, tone = () => {}, onScore = () => {} }) {
   let toasts = [];
   let said = 0;
   let lastBump = -Infinity;
+  // Where the pointer was last seen on the board, in CSS pixels (null before
+  // it has been), so a held aim can tell a real move from a shake.
+  let lastPointer = null;
+  // A board drawn as a course card's art: the hole alone, no pills or aim.
+  let bare = false;
+  // What the sounds remember between steps (never read by the rules): when
+  // the last rail and bump sounded, whether the ball is over the cup's rim,
+  // in sand or on ice, the meter's zone and trips, the shot clock's last
+  // count, each gate's last state, when the course's next call comes, and
+  // how far the held arrows have turned since their last tick.
+  const sfx = {};
+  const resetSfx = () => Object.assign(sfx, { wallAt: -Infinity, bumpAt: -Infinity, lip: false, sand: false, ice: false, zone: null, trips: METER_TRIPS, count: null, gates: null, gateHole: -1, callAt: CALL_EVERY_MS, calls: 0, turned: 0, turnCard: false });
+  resetSfx();
 
   // The ball is at rest on a hole and waiting for a putt.
   const aiming = () => state === "running" && round.phase === "aim";
@@ -675,7 +783,8 @@ function create({ canvas, tone = () => {}, onScore = () => {} }) {
   // What the drawing needs of this moment, worked out here so golf-draw.js
   // decides nothing.
   const view = () => {
-    const hole = HOLES[round.hole];
+    const holes = holesOf(round);
+    const hole = holes[round.hole];
     const ball = round.ball;
     const aimView = currentAim();
     const card = round.phase === "card";
@@ -722,17 +831,19 @@ function create({ canvas, tone = () => {}, onScore = () => {} }) {
       sinking: card ? (round.sunk ? Math.min(1, round.cardMs / 350) : 1) : null,
       phase: round.phase,
       cardMs: round.cardMs,
-      card: HOLES.map((h, i) => ({ par: h.par, strokes: i < round.card.length ? round.card[i] : null })),
+      card: holes.map((h, i) => ({ par: h.par, strokes: i < round.card.length ? round.card[i] : null })),
       frontNine: FRONT_NINE,
-      // The card after the front nine heads into the caves.
+      // The card after the front nine: the turn.
       turn: card && round.hole === FRONT_NINE - 1,
       total: total(round),
-      parTotal: parTotal(HOLES.length),
+      parTotal: parTotal(round, holes.length),
+      voice: courseById(round.course).voice,
       toPar: toPar(round),
       strokes: round.strokes,
       pickedUp: card && !round.sunk,
       ace: card && round.sunk !== null && round.card.at(-1) === 1,
       state,
+      bare,
       colors,
     };
   };
@@ -745,7 +856,7 @@ function create({ canvas, tone = () => {}, onScore = () => {} }) {
 
   const start = () => {
     colors = null;
-    round = newRound();
+    round = newRound(round.course);
     carry = 0;
     held.left = 0;
     held.right = 0;
@@ -753,40 +864,130 @@ function create({ canvas, tone = () => {}, onScore = () => {} }) {
     toasts = [];
     said = 0;
     lastBump = -Infinity;
+    resetSfx();
     state = "running";
+    tone("golfTeeUp");
     paint();
   };
 
+  // The ball's speed now, in units a second.
+  const ballSpeed = () => Math.hypot(round.ball.vx, round.ball.vy);
+
+  // A rail, a spinner's sail or a shut gate just turned the ball: the old
+  // blip, as loud as the hit was hard, and what it hit beneath it.
+  const wallSound = (hole) => {
+    const hard = Math.min(1, ballSpeed() / 350);
+    tone("wall", 0.45 + 0.55 * hard, vary());
+    if (round.clock - sfx.wallAt < 80) return;
+    sfx.wallAt = round.clock;
+    const { x, y } = round.ball;
+    const touching = (seg) => {
+      const p = closest(seg.x1, seg.y1, seg.x2, seg.y2, x, y);
+      return dist(p.x, p.y, x, y) <= BALL_R + 0.5;
+    };
+    const sail = hole.spinners.some((s) => touching(spinnerEnds(s, round.clock)));
+    tone(sail ? "golfWhack" : RAIL_SOUND[hole.ground] || "golfRail", 0.4 + 0.6 * hard, vary());
+  };
+
+  // A bumper or a mover just kicked the ball: the old blip, and the voice of
+  // whichever is nearest (a shark bites, a duck quacks, a coin rings).
+  const bumpSound = (hole) => {
+    tone("bump", 0.8, vary());
+    if (round.clock - sfx.bumpAt < 120) return;
+    sfx.bumpAt = round.clock;
+    const { x, y } = round.ball;
+    let near = null;
+    let gap = Infinity;
+    for (const b of hole.bumpers) {
+      const d = dist(b.x, b.y, x, y) - b.r;
+      if (d < gap) [gap, near] = [d, BUMPER_SOUND[b.look] || "golfBoing"];
+    }
+    for (const m of hole.movers) {
+      const at = moverAt(m, round.clock);
+      const d = dist(at.x, at.y, x, y) - at.r;
+      if (d < gap) [gap, near] = [d, MOVER_SOUND[m.look] || "golfBoing"];
+    }
+    if (near) tone(near, 0.7, vary());
+  };
+
+  // The hole just finished: a cheer for an ace, then a stinger for the
+  // score against par, or the sad trombone for a ball picked up.
+  const resultSound = (hole, events) => {
+    if (events.includes("done")) return;
+    if (events.includes("pickup")) {
+      tone("golfWomp");
+      tone("aww", 0.5);
+      return;
+    }
+    const sunk = events.includes("ace") || events.includes("cup");
+    if (!sunk) return;
+    tone("golfCupRattle", 0.8);
+    if (events.includes("ace")) {
+      tone("cheer", 0.7);
+      tone("applause", 0.8);
+      return;
+    }
+    const diff = round.card.at(-1) - hole.par;
+    if (diff <= -2) {
+      tone("golfEagle");
+      tone("applause", 0.7);
+    } else if (diff === -1) {
+      tone("golfBirdie");
+      tone("applause", 0.5);
+    } else if (diff === 0) tone("golfPar", 0.8);
+    else if (diff === 1) tone("golfBogey", 0.7);
+    else tone("golfWomp", 0.8);
+  };
+
   const play = (events) => {
-    const hole = HOLES[round.hole];
+    const hole = holesOf(round)[round.hole];
+    const { voice } = courseById(round.course);
     const { x, y } = round.ball;
     for (const e of events) {
       if (e === "splash") {
-        tone(SPLASH_TONE[hole.liquid] || "splash");
-        say(`${pick(SPLASH_WORDS[hole.liquid] || SPLASH_WORDS.sea, said)} (+1)`, x, y);
+        tone((voice.splashTone && voice.splashTone[hole.liquid]) || SPLASH_TONE[hole.liquid] || "splash");
+        tone(SPLASH_LAYER[hole.liquid] || "splashBig", 0.8, vary());
+        tone("aww", 0.4);
+        say(`${pick(voice.splash[hole.liquid] || firstSplash(voice), said)} (+1)`, x, y);
         continue;
       }
       if (e === "clock") {
         tone("swing");
+        tone("warn", 0.4);
         say("Shot clock! Swing!", x, y - 14, true);
       }
       if (e === "dribble") {
         tone("shank");
+        tone("golfPlop", 0.7);
         say(pick(DRIBBLE_WORDS, said), x, y - 12);
       }
-      if (TONE_FOR[e]) tone(TONE_FOR[e]);
+      if (e === "wall") {
+        wallSound(hole);
+        continue;
+      }
+      if (e === "bump") bumpSound(hole);
+      else if (TONE_FOR[e]) tone(TONE_FOR[e]);
+      if (e === "tunnel") tone(hole.theme === "space" ? "warp" : "whoosh", 0.6, vary());
+      if (e === "powerup" && round.held) tone(POWERUP_SOUND[round.held] || "sparkle", 0.6);
+      if (e === "hole") tone("golfTeeUp", 0.8);
+      // Stopped a whisker short of the cup: the crowd groans.
+      if (e === "stop" && dist(round.ball.x, round.ball.y, hole.cup.x, hole.cup.y) < 22 && round.phase === "aim") tone("aww", 0.35);
       if (e === "bump" && round.clock - lastBump > 450) {
         lastBump = round.clock;
-        say(pick(BUMP_WORDS[hole.theme] || BUMP_WORDS.pirate, said), x, y - 8);
+        say(pick(voice.bump, said), x, y - 8);
       }
       if (e === "tunnel") say(pick(TUNNEL_WORDS, said), x, y - 8);
       if (e === "powerup" && round.held) say(`${POWERUPS[round.held].name}!`, x, y - 10, true);
       // High, over the scorecard that is about to show.
-      if (e === "ace") say(hole.theme === "cave" ? "HOLE IN ONE! The cave echoes: one... one... one..." : "SHIVER ME TIMBERS! HOLE IN ONE!", COURSE_W / 2, 54, true);
+      if (e === "ace") say(voice.ace, COURSE_W / 2, 54, true);
     }
+    resultSound(hole, events);
     // A fast-forward ends with the roll.
     if (round.phase !== "rolling") fast = false;
     if (events.includes("done") && state === "running") {
+      tone("golfCourseDone");
+      tone("applause");
+      tone("cheer", 0.8);
       state = "over";
       onScore(total(round));
     }
@@ -803,13 +1004,18 @@ function create({ canvas, tone = () => {}, onScore = () => {} }) {
     const shot = setPower(round);
     if (!shot) return false;
     const { x, y } = round.ball;
-    tone(round.active === "cannon" ? "boom" : "putt", 0.4 + 0.6 * Math.min(1, shot.power));
+    const firm = 0.4 + 0.6 * Math.min(1, shot.power);
+    tone(round.active === "cannon" ? "boom" : "putt", firm);
+    tone(round.active === "cannon" ? "blast" : "golfThock", firm, 0.9 + 0.2 * Math.min(1, shot.power));
+    if (round.active === "ghost") tone("wail", 0.4, 1.3);
     if (shot.zone === "max") {
       tone("max");
+      tone("boost", 0.5);
       say(pick(MAX_WORDS, said), x, y - 12, true);
     }
     if (shot.zone === "over") {
       tone("shank");
+      tone("golfWobble", 0.7);
       say(pick(SHANK_WORDS, said), x, y - 12);
     }
     if (round.active && POWERUPS[round.active]) say(round.active === "doubloon" ? "Free putt!" : `${POWERUPS[round.active].name} away!`, x, y - (shot.zone === "normal" ? 12 : 26));
@@ -817,9 +1023,127 @@ function create({ canvas, tone = () => {}, onScore = () => {} }) {
     return true;
   };
 
+  // The roll played fast: a swoosh as it speeds up.
+  const fastOn = () => {
+    if (!fast) tone("swoosh", 0.35);
+    fast = true;
+  };
+
+  // Everything that sounds for as long as it lasts, kept going each tick:
+  // the course's air, the rolling ball, the power meter, a spinner, a mover
+  // or a well near the ball, and a power-up at work; plus the cues that
+  // follow the round's state rather than its events (the meter's MAX band,
+  // its last trip, the shot clock's countdown, the rim of the cup, sand and
+  // ice underfoot, gates slamming, the turn, the course's passing calls).
+  const soundscape = () => {
+    const hole = holesOf(round)[round.hole];
+    const ball = round.ball;
+    const amb = AMBIENCE[hole.theme] || AMBIENCE.pirate;
+    const molten = (hole.liquid === "lava" || hole.liquid === "plasma") && hole.water.length > 0;
+    hum("golf:air", molten ? "golfAmbLava" : amb.hum, 0.8);
+    if (round.clock >= sfx.callAt) {
+      sfx.calls += 1;
+      // A spread that never repeats too evenly, without touching the rules.
+      sfx.callAt = round.clock + CALL_EVERY_MS + ((sfx.calls * 2711) % 5000);
+      tone(pick(amb.calls, sfx.calls), 0.3 + Math.random() * 0.15, vary());
+    }
+
+    // The ball rolling: its hum follows its speed, and the ground under it.
+    const speed = ballSpeed();
+    const rolling = round.phase === "rolling";
+    const sand = rolling && round.active !== "ghost" && inSand(hole, ball.x, ball.y);
+    const ice = rolling && onIce(hole, ball.x, ball.y);
+    if (rolling) {
+      const pace = Math.min(1, speed / 450);
+      hum("golf:roll", sand ? "golfSandRoll" : ice ? "golfIceGlide" : "golfRoll", 0.15 + 0.85 * Math.sqrt(pace), (0.6 + 1.2 * pace) * (fast ? 1.25 : 1));
+      if (round.active === "magnet") hum("golf:power", "golfMagnet", 0.8, 0.8 + pace);
+      if (round.active === "ghost") hum("golf:power", "haunt", 0.7, 2);
+    }
+    if (sand && !sfx.sand && speed > 60) tone("golfSandPuff", Math.min(1, speed / 300), vary());
+    if (ice && !sfx.ice && speed > 40) tone("golfIceSkate", 0.6, vary());
+    sfx.sand = sand;
+    sfx.ice = ice;
+
+    // Over the cup too fast to drop: the rim rings once each pass.
+    const overCup = rolling && dist(ball.x, ball.y, hole.cup.x, hole.cup.y) < cupReach(round);
+    if (overCup && !sfx.lip) tone("golfLipOut", 0.7, vary());
+    if (overCup) sfx.lip = true;
+    else if (dist(ball.x, ball.y, hole.cup.x, hole.cup.y) > cupReach(round) + 4) sfx.lip = false;
+
+    // The power meter: a tone that climbs with the needle, a ping into the
+    // MAX band, and a warning as its last trip begins.
+    if (round.phase === "swing") {
+      const needle = meterAt(round.swingMs);
+      const zone = meterZone(needle);
+      hum("golf:meter", "meter", zone === "over" ? 1 : 0.75, 0.7 + 1.5 * needle);
+      if (zone === "max" && sfx.zone === "normal") tone("golfNeedlePing", 0.6);
+      sfx.zone = zone;
+      const trips = METER_TRIPS - Math.floor(round.swingMs / METER_MS);
+      if (trips < sfx.trips && trips === 1) tone("warn", 0.3);
+      sfx.trips = trips;
+    } else {
+      sfx.zone = null;
+      sfx.trips = METER_TRIPS;
+    }
+
+    // The shot clock's last three seconds tick, quicker in pitch as it runs out.
+    if (round.phase === "aim" && round.restMs > SHOT_CLOCK_MS - 3000) {
+      const left = Math.ceil((SHOT_CLOCK_MS - round.restMs) / 1000);
+      if (left !== sfx.count) tone("tick", 0.4, 1 + (3 - left) * 0.15);
+      sfx.count = left;
+    } else sfx.count = null;
+
+    // The nearest spinner whirs, the nearest humming mover hums, the
+    // nearest well swirls, each louder as the ball comes near.
+    const near = (list, at) => {
+      let best = null;
+      let gap = HEAR_R;
+      for (const it of list) {
+        const p = at(it);
+        const d = dist(p.x, p.y, ball.x, ball.y);
+        if (d < gap) [best, gap] = [it, d];
+      }
+      return best && { it: best, close: 1 - gap / HEAR_R };
+    };
+    const spin = near(hole.spinners, (s) => s);
+    if (spin) hum("golf:spin", "golfSpin", 0.2 + 0.8 * spin.close, 0.5 + 0.3 * Math.abs(spin.it.speed));
+    const mover = near(hole.movers.filter((m) => MOVER_HUM[m.look]), (m) => moverAt(m, round.clock));
+    if (mover) {
+      const how = MOVER_HUM[mover.it.look];
+      const at = moverAt(mover.it, round.clock);
+      const pace = Math.min(1, Math.hypot(at.vx, at.vy) / 150);
+      hum("golf:mover", how.name, mover.close * (0.4 + 0.6 * pace), how.pitch * (0.8 + 0.4 * pace));
+    }
+    const well = near(hole.wells, (w) => w);
+    if (well) hum("golf:well", "golfVortex", 0.3 + 0.7 * well.close, well.it.pull < 0 ? 1.6 : well.it.look === "blackhole" ? 0.5 : 0.9);
+
+    // Gates: a slam as each shuts, as loud as it is near.
+    if (sfx.gateHole !== round.hole || !sfx.gates) {
+      sfx.gateHole = round.hole;
+      sfx.gates = hole.gates.map((g) => gateShut(g, round.clock));
+    }
+    hole.gates.forEach((g, i) => {
+      const shut = gateShut(g, round.clock);
+      if (shut && !sfx.gates[i] && round.phase !== "card") {
+        const loud = 1 - dist((g.x1 + g.x2) / 2, (g.y1 + g.y2) / 2, ball.x, ball.y) / 260;
+        if (loud > 0.12) tone(GATE_SOUND[g.look] || "clank", 0.6 * loud, vary());
+      }
+      sfx.gates[i] = shut;
+    });
+
+    // The turn, once the front nine's card has been up a moment.
+    const turnCard = round.phase === "card" && round.hole === FRONT_NINE - 1;
+    if (turnCard && !sfx.turnCard && round.cardMs > 500) {
+      tone("victory", 0.6);
+      sfx.turnCard = true;
+    }
+    if (!turnCard) sfx.turnCard = false;
+  };
+
   const skipCard = () => {
     if (state !== "running" || round.phase !== "card") return false;
     nextHole(round);
+    tone("golfTeeUp", 0.8);
     paint();
     return true;
   };
@@ -832,7 +1156,14 @@ function create({ canvas, tone = () => {}, onScore = () => {} }) {
     if (held.left) held.left += ms;
     if (held.right) held.right += ms;
     if (!dir || round.phase !== "aim") return;
-    round.aimAngle += dir * (TURN_SLOW + (TURN_FAST - TURN_SLOW) * ramp * ramp) * (ms / 1000);
+    const step = (TURN_SLOW + (TURN_FAST - TURN_SLOW) * ramp * ramp) * (ms / 1000);
+    round.aimAngle += dir * step;
+    // A soft ratchet click every few degrees, quicker as the turn speeds up.
+    sfx.turned += step;
+    if (sfx.turned >= 0.12) {
+      sfx.turned = 0;
+      tone("tickSoft", 0.25, 1 + ramp * 0.4);
+    }
   };
 
   return {
@@ -865,7 +1196,7 @@ function create({ canvas, tone = () => {}, onScore = () => {} }) {
         if (state === "ready" || state === "over") start();
         else if (state === "paused") state = "running";
         else if (skipCard()) return true;
-        else if (round.phase === "rolling") fast = true;
+        else if (round.phase === "rolling") fastOn();
         else swing();
         return true;
       }
@@ -876,6 +1207,7 @@ function create({ canvas, tone = () => {}, onScore = () => {} }) {
       if (!held[name]) {
         held[name] = 1;
         round.aimAngle += (name === "left" ? -1 : 1) * AIM_NUDGE;
+        tone("tickSoft", 0.25);
         paint();
       }
       return true;
@@ -901,11 +1233,17 @@ function create({ canvas, tone = () => {}, onScore = () => {} }) {
         return true;
       }
       if (type === "move") {
+        // While the aim the cup set is held, a small move from where the
+        // pointer sat is ignored and does not count as where it sits now.
+        if (aiming() && round.aimHeld && lastPointer && Math.hypot(x - lastPointer.x, y - lastPointer.y) < AIM_WAKE_PX) return false;
+        lastPointer = { x, y };
         if (!aimAt()) return false;
+        round.aimHeld = false;
         paint();
         return true;
       }
       if (type !== "down") return false;
+      lastPointer = { x, y };
       if (state === "ready" || state === "over") {
         start();
         return true;
@@ -913,10 +1251,11 @@ function create({ canvas, tone = () => {}, onScore = () => {} }) {
       if (state !== "running") return false;
       if (skipCard()) return true;
       if (round.phase === "rolling") {
-        fast = true;
+        fastOn();
         return true;
       }
-      aimAt();
+      // A press putts where the arrow points: the aim already followed every
+      // move, and a press that did not move must not swing it.
       return swing();
     },
     tick(ms) {
@@ -928,27 +1267,72 @@ function create({ canvas, tone = () => {}, onScore = () => {} }) {
         carry -= SUB_STEP_MS;
         play(advance(round, SUB_STEP_MS));
       }
+      if (state === "running") soundscape();
       paint();
     },
-    resize(w, h) {
-      if (!(w >= MIN_W && h >= MIN_H)) return false;
-      scale = Math.min(w / COURSE_W, h / COURSE_H);
-      colors = null;
-      const ratio = (typeof devicePixelRatio === "number" && devicePixelRatio > 0) ? devicePixelRatio : 1;
-      const cssW = COURSE_W * scale;
-      const cssH = COURSE_H * scale;
-      canvas.width = Math.round(cssW * ratio);
-      canvas.height = Math.round(cssH * ratio);
-      if (canvas.style) {
-        canvas.style.width = `${cssW}px`;
-        canvas.style.height = `${cssH}px`;
-      }
-      // Everything is drawn in course units.
-      if (ctx && typeof ctx.setTransform === "function") ctx.setTransform(ratio * scale, 0, 0, ratio * scale, 0, 0);
+    // The course on screen, and a switch to another: a fresh round of it,
+    // ready to start. The same course keeps its round, paused or not.
+    get course() {
+      return round.course;
+    },
+    setCourse(id) {
+      const next = courseById(id).id;
+      if (next === round.course && state !== "over") return true;
+      round = newRound(next);
+      state = "ready";
+      carry = 0;
+      held.left = 0;
+      held.right = 0;
+      fast = false;
+      toasts = [];
+      resetSfx();
       paint();
       return true;
     },
+    // Not part of the contract: draws hole `index` of the course alone, with
+    // the ball on its tee and its movers part way through their swing, at
+    // `w` by `h` CSS pixels, as a course card's art on the dashboard.
+    showcase(index, w, h) {
+      bare = true;
+      round.hole = Math.max(0, Math.min(holesOf(round).length - 1, index));
+      placeOnTee(round);
+      round.clock = 1700;
+      round.holeStart = -10_000;
+      fit(w, h);
+    },
+    resize(w, h) {
+      if (!(w >= MIN_W && h >= MIN_H)) return false;
+      fit(w, h);
+      return true;
+    },
   };
+
+  // Sizes the board to w by h CSS pixels; everything is drawn in course units.
+  function fit(w, h) {
+    scale = Math.min(w / COURSE_W, h / COURSE_H);
+    colors = null;
+    const ratio = (typeof devicePixelRatio === "number" && devicePixelRatio > 0) ? devicePixelRatio : 1;
+    const cssW = COURSE_W * scale;
+    const cssH = COURSE_H * scale;
+    canvas.width = Math.round(cssW * ratio);
+    canvas.height = Math.round(cssH * ratio);
+    if (canvas.style) {
+      canvas.style.width = `${cssW}px`;
+      canvas.style.height = `${cssH}px`;
+    }
+    if (ctx && typeof ctx.setTransform === "function") ctx.setTransform(ratio * scale, 0, 0, ratio * scale, 0, 0);
+    paint();
+  }
 }
 
-export default Object.freeze({ id: "golf", title: "Mini golf", lowerIsBetter: true, create });
+// The course dashboard's cards: each course's id, name, line and par, in
+// the order golf-holes.js lists them. The window keeps a best per course.
+const courses = Object.freeze(COURSES.map((c) => Object.freeze({ id: c.id, name: c.name, blurb: c.blurb, holes: c.holes.length, par: coursePar(c) })));
+
+// Draws course `id`'s cover hole on `canvas` at `w` by `h` CSS pixels.
+function preview(canvas, id, w, h) {
+  const c = courseById(id);
+  create({ canvas, course: c.id }).showcase(c.cover, w, h);
+}
+
+export default Object.freeze({ id: "golf", title: "Mini golf", lowerIsBetter: true, courses, preview, create });

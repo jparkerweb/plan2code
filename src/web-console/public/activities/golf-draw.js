@@ -10,9 +10,13 @@
 //
 // The course itself is painted in its theme's own fixed colors (a pirate sea,
 // a dark cave), the same in light and dark; the scorecard, the pills and the
-// words on them follow the page through readColors().
+// words on them follow the page through readColors(). Pirate Cove and the
+// Caves of Doom are drawn here and in golf-decor.js; every newer course
+// brings its own look (golf-looks.js), which this file asks first.
 
-import { circle, decorLights, drawBumperLook, drawDecor, drawMoverLook, drawPowerIcon, drawSpinnerLook, ellipse, polygon, radial } from "./golf-decor.js";
+import { decorLights, drawBumperLook, drawDecor, drawMoverLook, drawPowerIcon, drawSpinnerLook } from "./golf-decor.js";
+import { bounds, circle, ellipse, polygon, radial, scatter } from "./golf-paint.js";
+import { LOOKS } from "./golf-looks.js";
 
 const FALLBACK_COLORS = Object.freeze({
   shadow: "rgba(0, 0, 0, 0.22)",
@@ -62,6 +66,12 @@ const THEMES = Object.freeze({
     flagMark: "#f4f1ea",
     pad: "#ffe27a",
     spy: "#ffe27a",
+    ice: "#d8f1fb",
+    iceLine: "#ffffff",
+    banner: "#f1e2b8",
+    bannerLine: "#8a5a2b",
+    bannerInk: "#4a2c12",
+    bannerRound: 8,
     dark: 0,
   }),
   cave: Object.freeze({
@@ -94,11 +104,21 @@ const THEMES = Object.freeze({
     flagMark: "#e9fbff",
     pad: "#7dfff0",
     spy: "#7dfff0",
+    ice: "#5d7f96",
+    iceLine: "#b9e8ff",
+    banner: "#2c2736",
+    bannerLine: "#7dfff0",
+    bannerInk: "#d9fffb",
+    bannerRound: 3,
+    thickWalls: true,
+    portals: true,
     dark: 0.74,
   }),
 });
 
 // What each kind of water looks like; the rule for all of them is the same.
+// A look's liquid may add `still` (sinking rings, no waves, as a chasm) or
+// `bubbles` (a color for bubbles that swell and pop, as lava).
 const LIQUIDS = Object.freeze({
   sea: Object.freeze({ fill: "#1f80b6", ripple: "#a6def2", glow: null }),
   pool: Object.freeze({ fill: "#11898c", ripple: "#7ff5e6", glow: "rgba(80, 255, 230, 0.3)" }),
@@ -125,7 +145,21 @@ export function readColors(canvas) {
   return colors;
 }
 
-// The palette for a hole: its theme's colors with the page's shadow.
+// The look a theme brings, or an empty one for the two drawn here.
+const NO_LOOK = Object.freeze({});
+export const lookOf = (theme) => LOOKS[theme] || NO_LOOK;
+
+// What a liquid looks like, from the built-in ones or the hole's look.
+const liquidOf = (hole) => LIQUIDS[hole.liquid] || (lookOf(hole.theme).liquids || {})[hole.liquid] || LIQUIDS.sea;
+
+// Whether a ground or a liquid can be drawn on a theme, for the unit suite.
+const BUILT_IN_GROUNDS = Object.freeze(["grass", "deck", "moss", "stone"]);
+export const knownGround = (theme, ground) => BUILT_IN_GROUNDS.includes(ground) || Object.hasOwn(lookOf(theme).grounds || {}, ground);
+export const knownLiquid = (theme, liquid) => Object.hasOwn(LIQUIDS, liquid) || Object.hasOwn(lookOf(theme).liquids || {}, liquid);
+
+// The palette for a hole: its theme's colors with the page's shadow. A
+// look's palette is laid over the pirate one, so a key it leaves out still
+// has a color.
 const palettes = new WeakMap();
 function paletteFor(v) {
   let byTheme = palettes.get(v.colors);
@@ -133,32 +167,10 @@ function paletteFor(v) {
     byTheme = {};
     palettes.set(v.colors, byTheme);
   }
-  return (byTheme[v.hole.theme] ||= { ...(THEMES[v.hole.theme] || THEMES.pirate), shadow: v.colors.shadow });
+  return (byTheme[v.hole.theme] ||= { ...THEMES.pirate, ...(THEMES[v.hole.theme] || lookOf(v.hole.theme).palette), theme: v.hole.theme, shadow: v.colors.shadow });
 }
 
 /* --------------------------------------------------------------- helpers */
-
-// A fixed scatter of points in a box: the same every frame, with no random.
-function* scatter(box, step, seed) {
-  let n = seed;
-  for (let y = box.y + step / 2; y < box.y + box.h; y += step) {
-    for (let x = box.x + step / 2; x < box.x + box.w; x += step) {
-      n = (n * 9301 + 49297) % 233280;
-      const jx = (n / 233280 - 0.5) * step;
-      n = (n * 9301 + 49297) % 233280;
-      const jy = (n / 233280 - 0.5) * step;
-      yield { x: x + jx, y: y + jy };
-    }
-  }
-}
-
-const bounds = (points) => {
-  const xs = points.map((p) => p.x);
-  const ys = points.map((p) => p.y);
-  const x = Math.min(...xs);
-  const y = Math.min(...ys);
-  return { x, y, w: Math.max(...xs) - x, h: Math.max(...ys) - y };
-};
 
 function text(ctx, colors, str, x, y, { size = 10, weight = 600, align = "left", color = colors.ink, outline = null } = {}) {
   ctx.font = `${weight} ${size}px ${colors.font}`;
@@ -203,17 +215,18 @@ export function holeWord(strokes, par, pickedUp) {
   return { "-1": "Birdie", 0: "Par", 1: "Bogey", 2: "Double bogey" }[d] || `${d} over par`;
 }
 
-// A silly line to go with the hole's word, in the hole's own voice.
-export function holeQuip(strokes, par, pickedUp, theme) {
-  const cave = theme === "cave";
-  if (pickedUp) return cave ? "The cave keeps that one. Forever." : "Fed to the fishes. Next!";
-  if (strokes === 1) return cave ? "The bats are applauding. Eerily." : "The whole crew does a jig!";
+// A silly line to go with the hole's word, in the course's own voice (its
+// `quips`, golf-kit.js).
+export function holeQuip(strokes, par, pickedUp, voice) {
+  const q = voice.quips;
+  if (pickedUp) return q.pickedUp;
+  if (strokes === 1) return q.ace;
   const d = strokes - par;
-  if (d <= -2) return cave ? "Legendary! The dragon stirs..." : "Captain material, that is!";
-  if (d === -1) return cave ? "A birdie! Well, a bat. Close enough." : "The parrot approves. SQUAWK!";
-  if (d === 0) return cave ? "Steady as stone." : "Shipshape and proper.";
-  if (d === 1) return cave ? "The skeletons chuckle softly." : "Arr, nearly had it.";
-  return cave ? "Did something in the dark just laugh?" : "Swab the deck and try again.";
+  if (d <= -2) return q.eagle;
+  if (d === -1) return q.birdie;
+  if (d === 0) return q.par;
+  if (d === 1) return q.bogey;
+  return q.worse;
 }
 
 /* ---------------------------------------------------------------- course */
@@ -226,7 +239,9 @@ function drawStill(ctx, v) {
   const p = paletteFor(v);
   ctx.fillStyle = p.rough;
   ctx.fillRect(0, 0, course.w, course.h);
-  if (p.theme === "pirate") {
+  const look = lookOf(p.theme);
+  if (look.rough) look.rough(ctx, p, course);
+  else if (p.theme === "pirate") {
     // Little wave marks across the sea.
     ctx.strokeStyle = p.roughMark;
     ctx.lineWidth = 1;
@@ -255,10 +270,13 @@ function drawStill(ctx, v) {
   ctx.clip();
   drawGroundCover(ctx, p, hole.ground, course);
   for (const s of hole.sand) drawSand(ctx, p, s);
+  for (const s of hole.ice) drawIce(ctx, p, s);
   ctx.restore();
 }
 
 function drawGroundCover(ctx, p, ground, course) {
+  const own = (lookOf(p.theme).grounds || {})[ground];
+  if (own) return own(ctx, p, course);
   if (ground === "deck") {
     ctx.fillStyle = p.deck;
     ctx.fillRect(0, 0, course.w, course.h);
@@ -305,7 +323,7 @@ function stillLayer(ctx, v) {
   const target = ctx.canvas;
   if (typeof OffscreenCanvas !== "function" || !target || typeof ctx.getTransform !== "function") return null;
   const transform = ctx.getTransform();
-  const key = `${v.holeNo}:${target.width}x${target.height}:${transform.a}`;
+  const key = `${v.hole.theme}:${v.holeNo}:${target.width}x${target.height}:${transform.a}`;
   if (still && still.key === key && still.colors === v.colors) return still.layer;
   try {
     const layer = new OffscreenCanvas(target.width, target.height);
@@ -335,8 +353,28 @@ function drawGround(ctx, v, p) {
   };
   for (const s of hole.slopes) if (!overBridge(s)) drawSlope(ctx, v, p, s);
   for (const w of hole.water) drawWater(ctx, v, w);
-  for (const b of hole.bridges) drawBridge(ctx, p, b, hole.liquid);
+  for (const b of hole.bridges) drawBridge(ctx, p, b, hole.liquid === "chasm" || Boolean(liquidOf(hole).still));
   for (const s of hole.slopes) if (overBridge(s)) drawArrows(ctx, v, p, s);
+  // Wells too, so a glow never spills past the green's edge.
+  for (const w of hole.wells) drawWell(ctx, v, p, w);
+  ctx.restore();
+}
+
+// A well: its look's own, or rings that slide in toward the center (out
+// from it for a well that pushes away), fading to nothing at its reach.
+function drawWell(ctx, v, p, w) {
+  const own = (lookOf(p.theme).wells || {})[w.look];
+  if (own) return own(ctx, p, w, v.clock);
+  const t = v.clock / 1000;
+  ctx.save();
+  ctx.strokeStyle = p.arrow;
+  ctx.lineWidth = 1.2;
+  for (let i = 0; i < 4; i++) {
+    const k = (((i / 4 + (w.pull > 0 ? -t : t) * 0.35) % 1) + 1) % 1;
+    ctx.globalAlpha = 0.6 * (1 - k);
+    circle(ctx, w.x, w.y, 4 + k * (w.r - 4));
+    ctx.stroke();
+  }
   ctx.restore();
 }
 
@@ -388,8 +426,34 @@ function drawSand(ctx, p, points) {
   ctx.restore();
 }
 
+// Ice: a pale glaze with glints across it, so it reads as slippery at a glance.
+function drawIce(ctx, p, points) {
+  polygon(ctx, points);
+  ctx.fillStyle = p.ice;
+  ctx.fill();
+  ctx.save();
+  polygon(ctx, points);
+  ctx.clip();
+  ctx.strokeStyle = p.iceLine;
+  ctx.lineWidth = 1;
+  ctx.globalAlpha = 0.7;
+  const box = bounds(points);
+  for (let k = box.x - box.h; k < box.x + box.w; k += 26) {
+    ctx.beginPath();
+    ctx.moveTo(k, box.y + box.h);
+    ctx.lineTo(k + box.h, box.y);
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+  ctx.restore();
+  polygon(ctx, points);
+  ctx.strokeStyle = p.iceLine;
+  ctx.lineWidth = 1.2;
+  ctx.stroke();
+}
+
 function drawWater(ctx, v, points) {
-  const liquid = LIQUIDS[v.hole.liquid] || LIQUIDS.sea;
+  const liquid = liquidOf(v.hole);
   polygon(ctx, points);
   ctx.fillStyle = liquid.fill;
   ctx.fill();
@@ -398,7 +462,7 @@ function drawWater(ctx, v, points) {
   ctx.clip();
   const box = bounds(points);
   const t = v.clock / 1000;
-  if (v.hole.liquid === "chasm") {
+  if (v.hole.liquid === "chasm" || liquid.still) {
     // Rings sinking into the dark, forever.
     const cx = box.x + box.w / 2;
     const cy = box.y + box.h / 2;
@@ -416,20 +480,22 @@ function drawWater(ctx, v, points) {
     for (let y = box.y + 6; y < box.y + box.h; y += 12) {
       ctx.beginPath();
       for (let x = box.x; x <= box.x + box.w; x += 4) {
-        const wy = y + Math.sin(x / 9 + t * (v.hole.liquid === "lava" ? 0.8 : 1.6) + y) * 1.5;
+        const wy = y + Math.sin(x / 9 + t * (v.hole.liquid === "lava" || liquid.bubbles ? 0.8 : 1.6) + y) * 1.5;
         if (x === box.x) ctx.moveTo(x, wy);
         else ctx.lineTo(x, wy);
       }
       ctx.stroke();
     }
-    if (v.hole.liquid === "lava") {
+    if (v.hole.liquid === "lava" || liquid.bubbles) {
       // Bubbles that swell and pop.
       let i = 0;
       for (const q of scatter(box, 26, 17)) {
         const k = (t * 0.7 + i * 0.37) % 1;
         circle(ctx, q.x, q.y, 1 + k * 4);
-        ctx.fillStyle = `rgba(255, 210, 90, ${0.9 - k * 0.9})`;
+        ctx.globalAlpha = 0.9 - k * 0.9;
+        ctx.fillStyle = liquid.bubbles || "rgb(255, 210, 90)";
         ctx.fill();
+        ctx.globalAlpha = 1;
         i++;
       }
     }
@@ -437,7 +503,7 @@ function drawWater(ctx, v, points) {
   ctx.restore();
 }
 
-function drawBridge(ctx, p, b, liquid) {
+function drawBridge(ctx, p, b, roped) {
   ctx.fillStyle = p.shadow;
   ctx.fillRect(b.x, b.y + 2, b.w, b.h);
   ctx.fillStyle = p.bridge;
@@ -446,7 +512,7 @@ function drawBridge(ctx, p, b, liquid) {
   for (let x = b.x + 7; x < b.x + b.w; x += 7) ctx.fillRect(x, b.y, 0.8, b.h);
   ctx.fillRect(b.x, b.y, b.w, 1.5);
   ctx.fillRect(b.x, b.y + b.h - 1.5, b.w, 1.5);
-  if (liquid === "chasm") {
+  if (roped) {
     // Rope rails that sag between posts.
     ctx.strokeStyle = "#c9a26a";
     ctx.lineWidth = 1;
@@ -461,7 +527,7 @@ function drawBridge(ctx, p, b, liquid) {
 
 function drawWalls(ctx, p, walls) {
   ctx.lineCap = "round";
-  const cave = p.theme === "cave";
+  const cave = Boolean(p.thickWalls);
   const stroke = (color, width, dx, dy) => {
     ctx.strokeStyle = color;
     ctx.lineWidth = width;
@@ -480,7 +546,12 @@ function drawWalls(ctx, p, walls) {
 // A stone crusher: a heavy block with an angry face while shut, a slot with
 // a warning glow while open, shaking just before it slams.
 function drawGates(ctx, v, p) {
+  const own = lookOf(p.theme).gates || {};
   for (const g of v.gates) {
+    if (own[g.look]) {
+      own[g.look](ctx, p, g, v.clock);
+      continue;
+    }
     const len = Math.hypot(g.x2 - g.x1, g.y2 - g.y1);
     const angle = Math.atan2(g.y2 - g.y1, g.x2 - g.x1);
     const soon = !g.shut && g.phase > g.open - 0.15;
@@ -488,7 +559,24 @@ function drawGates(ctx, v, p) {
     ctx.save();
     ctx.translate((g.x1 + g.x2) / 2 + shake, (g.y1 + g.y2) / 2);
     ctx.rotate(angle);
-    if (g.shut) {
+    if (p.theme === "pirate" && !g.look) {
+      // In the cove, a barred wooden vault door: planks and iron bands while
+      // shut, a pair of open hinges while up.
+      if (g.shut) {
+        ctx.fillStyle = p.shadow;
+        ctx.fillRect(-len / 2 + 2, -4, len, 10);
+        ctx.fillStyle = "#8a5a2b";
+        ctx.fillRect(-len / 2, -5, len, 10);
+        ctx.fillStyle = "#3a2a1c";
+        for (let x = -len / 2 + 9; x < len / 2; x += 12) ctx.fillRect(x, -5, 2.5, 10);
+        ctx.fillStyle = "#e0b030";
+        ctx.fillRect(-2.5, -2.5, 5, 5);
+      } else {
+        ctx.fillStyle = soon ? "rgba(255, 200, 60, 0.8)" : "#3a2a1c";
+        ctx.fillRect(-len / 2, -3, 4, 6);
+        ctx.fillRect(len / 2 - 4, -3, 4, 6);
+      }
+    } else if (g.shut) {
       ctx.fillStyle = p.shadow;
       ctx.fillRect(-len / 2 + 2, -5, len, 12);
       ctx.fillStyle = "#6b6577";
@@ -508,15 +596,20 @@ function drawGates(ctx, v, p) {
   }
 }
 
-// Skull mouths on the front nine, swirling portals in the caves.
+// Skull mouths in the cove, swirling portals in the caves, or the look's own.
 function drawTunnels(ctx, v, p) {
+  const own = lookOf(p.theme).tunnel;
   v.hole.tunnels.forEach((t, i) => {
     const ring = i % 2 ? p.portalB : p.portalA;
     for (const [k, m] of [t.a, t.b].entries()) {
+      if (own) {
+        own(ctx, p, m, k, i, v.clock, v.tunnelR);
+        continue;
+      }
       circle(ctx, m.x, m.y, v.tunnelR);
       ctx.fillStyle = p.cup;
       ctx.fill();
-      if (p.theme === "cave") {
+      if (p.portals) {
         const spin = v.clock / 300 + k;
         ctx.strokeStyle = k ? p.portalB : p.portalA;
         ctx.lineWidth = 2;
@@ -806,15 +899,17 @@ function drawDarkness(ctx, v, p) {
   if (!g) return;
   // The lights, added on top of the dark.
   const lights = [
-    ...decorLights(v.hole.decor),
+    ...decorLights(v.hole.decor, v.hole.theme),
     { x: v.hole.cup.x, y: v.hole.cup.y, r: 40, color: "rgba(80, 230, 255, 0.4)" },
     ...v.pads.filter((q) => !q.taken).map((q) => ({ x: q.x, y: q.y, r: 22, color: "rgba(125, 255, 240, 0.35)" })),
     ...v.hole.bumpers.filter((b) => b.look === "crystal" || b.look === "mushroom" || !b.look).map((b) => ({ x: b.x, y: b.y, r: b.r * 3, color: b.look === "crystal" ? "rgba(150, 110, 255, 0.4)" : "rgba(255, 90, 180, 0.35)" })),
     ...v.movers.filter((m) => m.look === "fireball").map((m) => ({ x: m.x, y: m.y, r: 50, color: "rgba(255, 130, 40, 0.5)" })),
     ...v.hole.tunnels.flatMap((t) => [t.a, t.b]).map((m) => ({ x: m.x, y: m.y, r: 26, color: "rgba(120, 220, 255, 0.35)" })),
+    // A look's own glows: { x, y, r, color } for what it lights up.
+    ...(lookOf(p.theme).lights ? lookOf(p.theme).lights(v) : []),
   ];
-  const liquid = LIQUIDS[v.hole.liquid];
-  if (liquid && liquid.glow) {
+  const liquid = liquidOf(v.hole);
+  if (liquid.glow) {
     for (const w of v.hole.water) {
       const b = bounds(w);
       lights.push({ x: b.x + b.w / 2, y: b.y + b.h / 2, r: Math.max(b.w, b.h) * 0.75, color: liquid.glow });
@@ -856,7 +951,7 @@ function drawHeader(ctx, v) {
     ctx.globalAlpha = 1;
     text(ctx, colors, str, right ? course.w - 12 : 12, 15, { size: 8.5, align: right ? "right" : "left" });
   };
-  pill(`${hole.theme === "cave" ? "Cave" : "Cove"} ${v.holeNo} · ${hole.name} · Par ${hole.par}`, false);
+  pill(`${v.voice.label} ${v.holeNo} · ${hole.name} · Par ${hole.par}`, false);
   pill(`Strokes ${v.strokes} · Round ${signed(v.toPar)}`, true);
   if (v.fast) {
     // The roll fast-forwarding, bottom left.
@@ -893,9 +988,9 @@ function drawHeader(ctx, v) {
   }
 }
 
-// The hole's quip on a banner as it starts: a scroll in the cove, a stone
-// tablet in the caves.
-function drawIntro(ctx, v) {
+// The hole's quip on a banner as it starts, in the theme's banner colors: a
+// scroll in the cove, a stone tablet in the caves.
+function drawIntro(ctx, v, p) {
   if (v.phase === "card" || v.phase === "done" || v.holeMs > 3800 || !v.hole.quip) return;
   const { colors, course, hole } = v;
   const fade = Math.min(1, v.holeMs / 300, (3800 - v.holeMs) / 500);
@@ -903,15 +998,14 @@ function drawIntro(ctx, v) {
   const w = Math.min(course.w - 40, measure(ctx, colors, hole.quip, size, 700) + 26);
   const x = (course.w - w) / 2;
   const y = 30;
-  const cave = hole.theme === "cave";
   ctx.globalAlpha = fade * 0.95;
-  roundRect(ctx, x, y, w, 20, cave ? 3 : 8);
-  ctx.fillStyle = cave ? "#2c2736" : "#f1e2b8";
+  roundRect(ctx, x, y, w, 20, p.bannerRound);
+  ctx.fillStyle = p.banner;
   ctx.fill();
-  ctx.strokeStyle = cave ? "#7dfff0" : "#8a5a2b";
+  ctx.strokeStyle = p.bannerLine;
   ctx.lineWidth = 1.2;
   ctx.stroke();
-  text(ctx, colors, hole.quip, course.w / 2, y + 10.5, { size, weight: 700, align: "center", color: cave ? "#d9fffb" : "#4a2c12" });
+  text(ctx, colors, hole.quip, course.w / 2, y + 10.5, { size, weight: 700, align: "center", color: p.bannerInk });
   ctx.globalAlpha = 1;
 }
 
@@ -958,18 +1052,18 @@ function drawCard(ctx, v) {
   const last = v.card.filter((c) => c.strokes !== null).at(-1);
   let top = y + 16;
   if (done) {
-    text(ctx, colors, `Round over: ${v.total} strokes, ${signed(v.toPar)} for par ${v.parTotal}. You survived!`, course.w / 2, top, { size: 9.5, align: "center" });
+    text(ctx, colors, `Round over: ${v.total} strokes, ${signed(v.toPar)} for par ${v.parTotal}. ${v.voice.done}`, course.w / 2, top, { size: 9.5, align: "center" });
     top += 14;
   } else if (last) {
-    text(ctx, colors, `${v.hole.theme === "cave" ? "Cave" : "Cove"} ${v.holeNo}: ${v.hole.name}`, course.w / 2, top, { size: 9, weight: 500, align: "center", color: colors.ink2 });
+    text(ctx, colors, `${v.voice.label} ${v.holeNo}: ${v.hole.name}`, course.w / 2, top, { size: 9, weight: 500, align: "center", color: colors.ink2 });
     const word = holeWord(last.strokes, last.par, v.pickedUp);
     const color = last.strokes < last.par ? colors.under : last.strokes > last.par ? colors.over : colors.ink;
     text(ctx, colors, `${word} · ${last.strokes} ${last.strokes === 1 ? "stroke" : "strokes"}`, course.w / 2, top + 17, { size: 12, weight: 700, align: "center", color });
-    text(ctx, colors, holeQuip(last.strokes, last.par, v.pickedUp, v.hole.theme), course.w / 2, top + 32, { size: 8, weight: 500, align: "center", color: colors.ink2 });
+    text(ctx, colors, holeQuip(last.strokes, last.par, v.pickedUp, v.voice), course.w / 2, top + 32, { size: 8, weight: 500, align: "center", color: colors.ink2 });
     text(ctx, colors, `Round ${signed(v.toPar)}`, course.w / 2, top + 45, { size: 8.5, align: "center" });
     top += 54;
     if (v.turn) {
-      text(ctx, colors, "Front nine plundered! Grab a torch: the Caves of Doom await...", course.w / 2, top, { size: 8.5, weight: 700, align: "center", color: colors.over });
+      text(ctx, colors, v.voice.turn, course.w / 2, top, { size: 8.5, weight: 700, align: "center", color: colors.over });
       top += 14;
     }
   }
@@ -1015,7 +1109,8 @@ function drawBurst(ctx, v) {
 // holeMs, spinners, movers, gates, pads, ball, ballR, cupR, cupDraw, magnetR,
 // tunnelR, padR, trail, aim, meter, shotClock, fast, spy, held, active,
 // toasts, sinking, phase, cardMs, card, frontNine, turn, total, parTotal,
-// toPar, strokes, pickedUp, ace, state, colors }.
+// toPar, strokes, pickedUp, ace, state, voice, bare, colors }. A bare view
+// is a course card's art: the hole, its props and the ball, nothing else.
 export function drawCourse(ctx, v) {
   const p = paletteFor(v);
   const layer = stillLayer(ctx, v);
@@ -1042,6 +1137,7 @@ export function drawCourse(ctx, v) {
   drawDecor(ctx, p, v.hole.decor, v.clock, "high");
   drawDarkness(ctx, v, p);
   drawDecor(ctx, p, v.hole.decor, v.clock, "glow");
+  if (v.bare) return;
   if (v.aim) {
     drawSpy(ctx, v, p);
     drawAim(ctx, v);
@@ -1049,7 +1145,7 @@ export function drawCourse(ctx, v) {
   drawShotClock(ctx, v);
   drawMeter(ctx, v);
   drawHeader(ctx, v);
-  drawIntro(ctx, v);
+  drawIntro(ctx, v, p);
   if (v.ace && v.phase === "card") drawBurst(ctx, v);
   if (v.phase === "card" || v.state === "over") drawCard(ctx, v);
   // Over everything, the card too, so a shout is never hidden or in the way.
