@@ -112,7 +112,7 @@ Do each of Claude Code, Devin and Codex for a few minutes:
 
 ## Agents and the taskbar (each system)
 
-- [ ] A custom agent added in the console's User Preferences → Agents (the fake agent in `fake-agent/` works) shows in the launch card's picker after the built-ins, starts, and **New Session** starts the same agent again; the bypass box adds its bypass arguments
+- [ ] A custom agent added in the console's User Preferences → Agents & models (the fake agent in `fake-agent/` works) shows in the launch card's picker after the built-ins, starts, and **New Session** starts the same agent again; the bypass box adds its bypass arguments
 - [ ] With no agent CLI on `PATH` and no custom agent, the first-run checklist and the launch card show the explainer with each install command and an **Install page** link, and Start is off
 - [ ] Each **Install page** link opens the right page in the default browser (Claude Code, Devin, Codex)
 - [ ] Install an agent (or add a custom one), press **Check again**: it appears and Start turns on without restarting the app
@@ -122,7 +122,7 @@ Do each of Claude Code, Devin and Codex for a few minutes:
 - [ ] macOS: the dock shows a red `!` badge when Plan2Code needs attention (no badge on your move), and bounces once when it becomes your move or needs attention while the app is in the background
 - [ ] Linux: where the desktop shows badges, a count of 1 appears on needs attention, and the window is marked as wanting attention while unfocused
 - [ ] Reloading the window, or ending the agent, clears the dot
-- [ ] User Preferences → Desktop app (shown only inside the app, not in a browser tab) has **Show on the taskbar when Plan2Code needs me**, on by default; switching it off clears the dot at once and stops flashes, and the choice is still off after quitting and reopening the app
+- [ ] User Preferences → System → Desktop app (shown only inside the app, not in a browser tab) has **Show on the taskbar when Plan2Code needs me**, on by default; switching it off clears the dot at once and stops flashes, and the choice is still off after quitting and reopening the app
 
 ## Standalone path
 

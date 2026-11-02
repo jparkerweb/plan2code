@@ -19,6 +19,9 @@ portable-pty = "0.9.0"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 chrono = "0.4"
+# The loop's call to a web address. The operating system's TLS, so a company's
+# own root certificates work and no second TLS stack is built.
+reqwest = { version = "0.13", default-features = false, features = ["blocking", "native-tls"] }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

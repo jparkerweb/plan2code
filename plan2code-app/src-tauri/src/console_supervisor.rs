@@ -243,7 +243,7 @@ impl ConsoleSupervisor {
         if !session.embed {
             // Do not leave an old console running that the frame cannot show.
             let _ = node_command(console_dir)
-                .args(["stop", "--session", &session.sid])
+                .args(stop_args(&session.sid))
                 .current_dir(project_dir)
                 .output();
             return Err(OLD_CONSOLE.to_string());
@@ -327,13 +327,15 @@ impl ConsoleSupervisor {
         Ok(true)
     }
 
-    /// `console.mjs stop --session <sid>`: the console's own orderly shutdown.
+    /// `console.mjs stop --session <sid> --force`: the console's own orderly
+    /// shutdown. `--force` because the app's shutdown is not the agent's ending:
+    /// the session may be unfinished, and `stop` refuses a session with no finish.
     pub fn stop(&mut self) -> Result<(), String> {
         if self.stopped {
             return Ok(());
         }
         let output = node_command(&self.console_dir)
-            .args(["stop", "--session", &self.session.sid])
+            .args(stop_args(&self.session.sid))
             .current_dir(&self.project_dir)
             .output()
             .map_err(err)?;
@@ -382,9 +384,24 @@ impl Drop for ConsoleSupervisor {
     }
 }
 
+/// The arguments of the app's own `stop`: always `--force`, since the app's
+/// shutdown is not the agent's ending and `stop` refuses a session with no finish.
+fn stop_args(sid: &str) -> [&str; 4] {
+    ["stop", "--session", sid, "--force"]
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_apps_stop_calls_pass_force() {
+        let args = stop_args("20261101-120000-abcdef");
+        assert_eq!(
+            args,
+            ["stop", "--session", "20261101-120000-abcdef", "--force"]
+        );
+    }
 
     #[test]
     fn splits_the_session_url() {

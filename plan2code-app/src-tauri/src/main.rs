@@ -11,9 +11,10 @@ use plan2code_app_lib::attention::{self, Badge, Signal};
 use plan2code_app_lib::console_supervisor::{
     app_origin, origin_of, session_on_disk, ConsoleSupervisor,
 };
+use plan2code_app_lib::loop_driver::{self, Hooks, LastLoop, LoopFacts, LoopSlot};
 use plan2code_app_lib::node_check;
 use plan2code_app_lib::project::{self, ProjectDir};
-use plan2code_app_lib::quit_prompt::{quit_prompt, QuitCase};
+use plan2code_app_lib::quit_prompt::{loop_quit_prompt, quit_prompt, QuitCase};
 use plan2code_app_lib::restart_brief;
 use plan2code_app_lib::settings;
 #[cfg(windows)]
@@ -49,6 +50,13 @@ struct AppState {
     // The app itself, once it is set up: the agent's sink clears the taskbar
     // through it when the agent ends.
     app: Arc<OnceLock<tauri::AppHandle>>,
+    // The Implementation Loop running now, if any: in memory only, so an app
+    // restart ends it (NFR-5).
+    loop_run: LoopSlot,
+    // The last loop's project, spec, launch choice and confirmed quick check,
+    // kept after the running record is gone so Resume, Fix it by hand and
+    // Finalize still work. Memory only.
+    last_loop: Mutex<Option<LastLoop>>,
 }
 
 // The console page's last state as the taskbar shows it (attention.rs), and
@@ -225,6 +233,7 @@ fn agent_for_project(state: &AppState) -> Result<Arc<AgentManager>, String> {
     let sink = page_sink(Arc::clone(&state.page), Arc::clone(&state.app));
     let agent = Arc::new(AgentManager::new(dir, sink));
     agent.set_before_fresh(before_fresh_hook(state));
+    agent.set_forget_session(forget_session_hook(state));
     *guard = Some(Arc::clone(&agent));
     Ok(agent)
 }
@@ -250,6 +259,19 @@ fn before_fresh_hook(state: &AppState) -> BeforeFresh {
             }
         }
         note
+    })
+}
+
+// What the loop does before a phase's fresh agent starts: forget the console
+// session the window follows, so the new agent's `open` starts its own.
+fn forget_session_hook(state: &AppState) -> plan2code_app_lib::agent_manager::ForgetSession {
+    let announce = Arc::clone(&state.announce);
+    Arc::new(move || {
+        if let Ok(guard) = announce.lock() {
+            if let Some(server) = guard.as_ref() {
+                server.forget_current();
+            }
+        }
     })
 }
 
@@ -332,6 +354,20 @@ fn sync_agent_env(app: &tauri::AppHandle) {
 // the same frontend id; dropping one (as happened here when it replaced the
 // reattach registration) sends the frontend an "end" message that
 // unregisters that id for good, breaking all future sends through it.
+// The window's own commands that would end or replace the loop's agent refuse
+// while a loop runs, between phases too (the slot holds a record then). The
+// loop's own agent starts go through `loop_driver::start_with`, not these
+// commands, and `agent_input` stays open so a trust or login prompt can be
+// answered.
+fn refuse_while_looping(state: &AppState, what: &str) -> Result<(), String> {
+    if loop_driver::is_running(&state.loop_run) {
+        return Err(format!(
+            "A loop is running. Stop it before you change the {what}."
+        ));
+    }
+    Ok(())
+}
+
 #[tauri::command]
 #[allow(clippy::too_many_arguments)] // one argument per key the frontend passes to invoke
 fn agent_start(
@@ -344,6 +380,7 @@ fn agent_start(
     cols: u16,
     rows: u16,
 ) -> Result<(), String> {
+    refuse_while_looping(&state, "agent")?;
     let kind = agents::find_agent(&kind).ok_or_else(|| format!("unknown agent: {kind}"))?;
     let mode =
         PermissionMode::from_id(&mode).ok_or_else(|| format!("unknown permission mode: {mode}"))?;
@@ -376,6 +413,7 @@ fn agent_resize(state: State<'_, AppState>, cols: u16, rows: u16) -> Result<(), 
 
 #[tauri::command]
 fn agent_restart(state: State<'_, AppState>) -> Result<(), String> {
+    refuse_while_looping(&state, "agent")?;
     current_agent(&state)
         .ok_or("no agent has been started")?
         .restart()
@@ -434,7 +472,11 @@ fn confirm_quit(app: &tauri::AppHandle) {
         .lock()
         .ok()
         .and_then(|guard| guard.last);
-    let prompt = quit_prompt(last);
+    // A running loop has its own words, naming what is committed.
+    let prompt = match loop_driver::quit_facts(&app.state::<AppState>().loop_run) {
+        Some((phase, phases, committed)) => loop_quit_prompt(phase, phases, &committed),
+        None => quit_prompt(last),
+    };
     #[cfg(windows)]
     {
         if let Some(parent) = app
@@ -462,12 +504,12 @@ fn confirm_quit(app: &tauri::AppHandle) {
     // reads Esc as "not the first button".
     let app = app.clone();
     app.dialog()
-        .message(prompt.message)
-        .title(prompt.heading)
+        .message(prompt.message.clone())
+        .title(prompt.heading.clone())
         .kind(kind)
         .buttons(MessageDialogButtons::OkCancelCustom(
-            prompt.quit.to_string(),
-            prompt.stay.to_string(),
+            prompt.quit.clone(),
+            prompt.stay.clone(),
         ))
         .show({
             let app = app.clone();
@@ -480,13 +522,19 @@ fn confirm_quit(app: &tauri::AppHandle) {
         });
 }
 
+// A running loop counts even between two phases, when no agent runs for a moment.
 fn agent_is_active(app: &tauri::AppHandle) -> bool {
-    current_agent(&app.state::<AppState>()).is_some_and(|agent| agent.is_active())
+    let state = app.state::<AppState>();
+    loop_driver::is_running(&state.loop_run)
+        || current_agent(&state).is_some_and(|agent| agent.is_active())
 }
 
-// Stops the agent, then the console, then exits.
+// Stops the loop, the agent, then the console, then exits. The loop goes first:
+// its record is dropped without a word to the page, so its watch thread never
+// takes the ended agent for a crash.
 fn quit_app(app: &tauri::AppHandle) {
     let state = app.state::<AppState>();
+    loop_driver::abandon(&state.loop_run);
     if let Some(agent) = current_agent(&state) {
         agent.stop();
     }
@@ -503,10 +551,17 @@ fn quit_app(app: &tauri::AppHandle) {
 // person's move or needs attention while the window is not focused. An
 // unknown word does nothing.
 #[tauri::command]
-fn set_attention(app: tauri::AppHandle, state: State<'_, AppState>, signal: String) {
-    let Some(next) = Signal::from_id(&signal) else {
-        return;
-    };
+fn set_attention(app: tauri::AppHandle, signal: String) {
+    if let Some(next) = Signal::from_id(&signal) {
+        apply_signal(&app, next);
+    }
+}
+
+// The dot and the flash for a state. The page's `attention` message comes here,
+// and so does the loop when a question starts holding it: the dot and flash
+// then do not depend on the page, which is locked while the loop drives.
+fn apply_signal(app: &tauri::AppHandle, next: Signal) {
+    let state = app.state::<AppState>();
     let Some(window) = app.get_webview_window("main") else {
         return;
     };
@@ -733,6 +788,7 @@ fn pick_project_folder(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
 ) -> Result<Option<String>, String> {
+    refuse_while_looping(&state, "project")?;
     let picked = app
         .dialog()
         .file()
@@ -781,6 +837,7 @@ fn change_project(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
 ) -> Result<Option<String>, String> {
+    refuse_while_looping(&state, "project")?;
     let picked = app
         .dialog()
         .file()
@@ -844,6 +901,290 @@ fn console_stop(state: State<'_, AppState>) -> Result<(), String> {
     Ok(())
 }
 
+// What the setup screen shows about the agent a loop would use: the running
+// agent's launch choice, else what the launcher chose.
+#[tauri::command]
+fn loop_facts(state: State<'_, AppState>) -> LoopFacts {
+    let running = state
+        .loop_run
+        .lock()
+        .map(|guard| guard.is_some())
+        .unwrap_or(false);
+    if let Some((agent, model, effort, mode)) =
+        current_agent(&state).and_then(|a| a.launch_choice())
+    {
+        return LoopFacts {
+            agent: Some(agent.id().to_string()),
+            agent_label: Some(agent.label().to_string()),
+            model,
+            effort,
+            permission_mode: Some(mode.id().to_string()),
+            prompt_support: loop_driver::prompt_support(&agent),
+            running,
+        };
+    }
+    let agent = state.launch.agent.as_deref().and_then(agents::find_agent);
+    LoopFacts {
+        agent: agent.as_ref().map(|a| a.id().to_string()),
+        agent_label: agent.as_ref().map(|a| a.label().to_string()),
+        model: state.launch.model.clone(),
+        effort: None,
+        permission_mode: None,
+        prompt_support: agent.as_ref().is_none_or(loop_driver::prompt_support),
+        running,
+    }
+}
+
+// What the loop tells the window and the taskbar: the strip's state on every
+// change, and the app's own attention when a question holds it.
+fn loop_hooks(app: &tauri::AppHandle) -> Hooks {
+    let for_strip = app.clone();
+    let for_attention = app.clone();
+    Hooks {
+        emit: Box::new(move |event| {
+            let _ = for_strip.emit("loop-state", &event);
+        }),
+        attention: Box::new(move || apply_signal(&for_attention, Signal::Attention)),
+    }
+}
+
+// Starts a loop on `spec`: checks, the app's own confirm, then the first phase.
+// Async so the confirm's blocking dialog never waits on the main thread. The
+// setup comes from `loop-setup.json`, never from the page's message. With
+// `skip_confirm_if_same`, the confirm is skipped when the quick check and the
+// web address are the ones the person last confirmed (Resume): a changed one is
+// asked again.
+async fn start_loop(
+    app: &tauri::AppHandle,
+    state: &AppState,
+    spec: String,
+    skip_confirm_if_same: bool,
+) -> Result<bool, String> {
+    if loop_driver::is_running(&state.loop_run) {
+        return Err("A loop is already running".to_string());
+    }
+    let project = state
+        .project
+        .lock()
+        .map_err(|e| e.to_string())?
+        .as_ref()
+        .map(|p| p.dir.clone())
+        .ok_or("no project folder chosen")?;
+    let agent = current_agent(state)
+        .filter(|a| a.folder() == &project)
+        .ok_or("Start an agent first, with permission checks off.")?;
+    // A stopped agent has forgotten its launch choice; the last loop kept it.
+    let launch = agent
+        .launch_choice()
+        .or_else(|| {
+            state
+                .last_loop
+                .lock()
+                .ok()
+                .and_then(|last| last.as_ref().map(|l| l.launch.clone()))
+        })
+        .ok_or("Start an agent first, with permission checks off.")?;
+    // Resume (the only caller that skips the confirm) on a spec this app
+    // stopped: the stopped phase's uncommitted work is expected in the tree.
+    let resuming = skip_confirm_if_same
+        && state.last_loop.lock().ok().is_some_and(|last| {
+            last.as_ref()
+                .is_some_and(|l| l.project == project && l.spec == spec)
+        });
+    let record = loop_driver::prepare(
+        &project,
+        &spec,
+        launch.3,
+        loop_driver::prompt_support(&launch.0),
+        resuming,
+    )?;
+    let check = record.setup.quick_check.clone();
+    let notify = loop_driver::confirmed_notify(&record.setup);
+    // A Resume that rebuilds a phase or takes uncommitted files into its commit
+    // is asked again: the confirm is where the person is told.
+    let unchanged = skip_confirm_if_same
+        && record.rebuilt.is_empty()
+        && record.resumed_files.is_none()
+        && !loop_driver::commits_to_trunk(&record)
+        && state
+            .last_loop
+            .lock()
+            .map_err(|e| e.to_string())?
+            .as_ref()
+            .is_some_and(|last| {
+                last.project == project
+                    && last.spec == spec
+                    && last.confirmed_check == check
+                    && last.confirmed_notify == notify
+            });
+    if !unchanged {
+        let go = app
+            .dialog()
+            .message(loop_driver::confirm_text(&record))
+            .title("Implementation Loop")
+            .kind(MessageDialogKind::Info)
+            .buttons(MessageDialogButtons::OkCancelCustom(
+                "Start".to_string(),
+                "Cancel".to_string(),
+            ))
+            .blocking_show();
+        if !go {
+            return Ok(false);
+        }
+    }
+    loop_driver::reopen_rebuilt(&record)?;
+    loop_driver::begin(
+        &state.loop_run,
+        agent,
+        record,
+        launch.clone(),
+        loop_hooks(app),
+    )?;
+    if let Ok(mut last) = state.last_loop.lock() {
+        *last = Some(LastLoop {
+            project,
+            spec,
+            launch,
+            confirmed_check: check,
+            confirmed_notify: notify,
+        });
+    }
+    Ok(true)
+}
+
+#[tauri::command]
+async fn loop_start(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    spec: String,
+) -> Result<bool, String> {
+    start_loop(&app, &state, spec, false).await
+}
+
+// Send a test: the setup screen saved first, and the address comes from
+// `loop-setup.json`, never from the page's message. The app names it in its own
+// confirm. Answers whether a test was sent: false when the person said no.
+#[tauri::command]
+async fn loop_notify_test(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+) -> Result<bool, String> {
+    let project = state
+        .project
+        .lock()
+        .map_err(|e| e.to_string())?
+        .as_ref()
+        .map(|p| p.dir.clone())
+        .ok_or("no project folder chosen")?;
+    let setup = loop_driver::read_setup(&project)?;
+    let text = loop_driver::notify_test_confirm(&setup)?;
+    let go = app
+        .dialog()
+        .message(text)
+        .title("Implementation Loop")
+        .kind(MessageDialogKind::Info)
+        .buttons(MessageDialogButtons::OkCancelCustom(
+            "Send".to_string(),
+            "Cancel".to_string(),
+        ))
+        .blocking_show();
+    if !go {
+        return Ok(false);
+    }
+    // The HTTP client blocks, and panics on an async runtime's own thread.
+    tauri::async_runtime::spawn_blocking(move || loop_driver::send_notify_test(&setup))
+        .await
+        .map_err(|e| e.to_string())??;
+    Ok(true)
+}
+
+// Stop after this phase: it finishes its review, mark and commit, then the
+// loop stops instead of starting the next.
+#[tauri::command]
+fn loop_stop_after_phase(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    on: bool,
+) -> Result<(), String> {
+    let event = loop_driver::request_stop_after(&state.loop_run, on)?;
+    let _ = app.emit("loop-state", &event);
+    Ok(())
+}
+
+// Stop now: the flag is set first, then the agent (if one is running) ends at
+// once. The page asked the person first ("End the agent now? This phase's
+// changes stay uncommitted."); the strip says Stopping, and the driver tells
+// the stop screen on its next look.
+#[tauri::command]
+fn loop_stop_now(app: tauri::AppHandle, state: State<'_, AppState>) -> Result<(), String> {
+    let agent = current_agent(&state);
+    // The event goes out before the agent is ended (which can take a while), so
+    // the strip's "ended" can never be followed by an older "Stopping".
+    loop_driver::request_stop_now(&state.loop_run, agent.as_deref(), |event| {
+        let _ = app.emit("loop-state", event);
+    })?;
+    Ok(())
+}
+
+// What the loop is doing, for a window that just loaded or just started
+// listening: the strip event, or nothing when no loop runs.
+#[tauri::command]
+fn loop_state(state: State<'_, AppState>) -> Option<loop_driver::LoopStateEvent> {
+    loop_driver::current_event(&state.loop_run)
+}
+
+// The last loop, for the stop and finish screens' buttons.
+fn last_loop(state: &AppState) -> Result<LastLoop, String> {
+    if loop_driver::is_running(&state.loop_run) {
+        return Err("A loop is running".to_string());
+    }
+    let last = state
+        .last_loop
+        .lock()
+        .map_err(|e| e.to_string())?
+        .clone()
+        .ok_or("No loop has run in this session")?;
+    let here = state
+        .project
+        .lock()
+        .map_err(|e| e.to_string())?
+        .as_ref()
+        .map(|p| p.dir.clone());
+    if here.as_ref() != Some(&last.project) {
+        return Err("The project changed since that loop".to_string());
+    }
+    Ok(last)
+}
+
+// Resume: start again on the same spec. The app reads the setup and the
+// spec's marks afresh; the Start dialog is skipped only while the quick check
+// is the one the person last confirmed.
+#[tauri::command]
+async fn loop_resume(app: tauri::AppHandle, state: State<'_, AppState>) -> Result<(), String> {
+    let last = last_loop(&state)?;
+    start_loop(&app, &state, last.spec, true).await.map(|_| ())
+}
+
+// Fix it by hand: an ordinary Implement session on the stopped phase, with no
+// `--loop`, so the person talks to the agent as usual.
+#[tauri::command]
+fn loop_fix(state: State<'_, AppState>) -> Result<(), String> {
+    let last = last_loop(&state)?;
+    let agent = current_agent(&state).ok_or("No agent is available")?;
+    loop_driver::start_with(&agent, &last.launch, loop_driver::fix_prompt(&last.spec))
+}
+
+#[tauri::command]
+fn loop_finalize(state: State<'_, AppState>) -> Result<(), String> {
+    let last = last_loop(&state)?;
+    let agent = current_agent(&state).ok_or("No agent is available")?;
+    loop_driver::start_with(
+        &agent,
+        &last.launch,
+        loop_driver::finalize_prompt(&last.spec),
+    )
+}
+
 fn main() {
     // Without Node 18+ the console and skills cannot run: say so and stop (FR-13).
     let status = node_check::check_node();
@@ -890,6 +1231,15 @@ fn main() {
             console_start,
             console_status,
             console_stop,
+            loop_start,
+            loop_notify_test,
+            loop_facts,
+            loop_stop_after_phase,
+            loop_stop_now,
+            loop_state,
+            loop_resume,
+            loop_fix,
+            loop_finalize,
             set_attention,
             clear_attention_cmd,
             set_taskbar_signal
@@ -918,6 +1268,8 @@ fn main() {
                 let taken =
                     take_announced(&state, &notice, window_origin(&handle), session_on_disk);
                 if taken {
+                    // A running loop follows its phase's session from here.
+                    loop_driver::note_page(&state.loop_run, &notice.workflow, &notice.sid);
                     let _ = handle.emit("console-page", &notice);
                 } else {
                     eprintln!(
@@ -1202,6 +1554,46 @@ mod tests {
             )
             .expect("start a real console for the test"),
         )
+    }
+
+    fn state_with_loop(running: bool) -> AppState {
+        let state = state_for("project-a");
+        if running {
+            *state.loop_run.lock().unwrap() = Some(loop_driver::RunningRecord::new(
+                PathBuf::from("project-a"),
+                "specs/x".into(),
+                loop_driver::LoopSetup::default(),
+                vec![],
+            ));
+        }
+        state
+    }
+
+    #[test]
+    fn the_window_refuses_to_change_project_or_agent_while_a_loop_runs() {
+        let state = state_with_loop(true);
+        let project = refuse_while_looping(&state, "project").expect_err("a loop is running");
+        assert!(project.contains("A loop is running"), "{project:?}");
+        assert!(project.contains("project"), "{project:?}");
+        let agent = refuse_while_looping(&state, "agent").expect_err("a loop is running");
+        assert!(agent.contains("change the agent."), "{agent:?}");
+    }
+
+    #[test]
+    fn the_window_changes_project_and_agent_freely_with_no_loop() {
+        let state = state_with_loop(false);
+        assert!(refuse_while_looping(&state, "project").is_ok());
+        assert!(refuse_while_looping(&state, "agent").is_ok());
+    }
+
+    #[test]
+    fn loop_state_data_is_none_with_no_loop_and_the_strip_event_with_one() {
+        let idle = state_with_loop(false);
+        assert!(loop_driver::current_event(&idle.loop_run).is_none());
+        let busy = state_with_loop(true);
+        let event = loop_driver::current_event(&busy.loop_run).expect("a loop runs");
+        assert!(event.running);
+        assert_eq!(event.spec_name, "x");
     }
 
     #[test]

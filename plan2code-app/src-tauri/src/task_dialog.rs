@@ -53,11 +53,11 @@ unsafe extern "system" fn on_event(
 /// Quit was pressed; anything else (Stay, Esc, the close button, a failure to
 /// show the box) keeps the app open.
 pub fn ask(parent: HWND, prompt: &QuitPrompt) -> bool {
-    let title = wide(prompt.title);
-    let heading = wide(prompt.heading);
-    let message = wide(prompt.message);
-    let quit = wide(prompt.quit);
-    let stay = wide(prompt.stay);
+    let title = wide(&prompt.title);
+    let heading = wide(&prompt.heading);
+    let message = wide(&prompt.message);
+    let quit = wide(&prompt.quit);
+    let stay = wide(&prompt.stay);
     let buttons = [
         TASKDIALOG_BUTTON {
             nButtonID: ID_QUIT,

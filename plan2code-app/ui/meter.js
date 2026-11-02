@@ -129,6 +129,83 @@ export function windowTitleFor(dir) {
 }
 
 /**
+ * The window title while a loop runs, so its state shows in the taskbar too.
+ */
+export function loopWindowTitle(dir, state) {
+  const name = lastSegment(dir);
+  const what = state.step === "Waiting on you" ? `Loop needs you: Phase ${state.phase}` : `Loop: Phase ${state.phase} of ${state.phases}`;
+  return name ? `${what} - ${name}` : what;
+}
+
+/**
+ * What the loop banner says, from the app's `loop-state`: the one clear word on
+ * what the loop is doing right now. `tone` is "running" or "waiting", `hint` the
+ * line beside the phase pips and `pips` one "done", "current" or "todo" per phase
+ * of the spec up to the last this run builds.
+ */
+export function loopBanner(state) {
+  const { phase, phases, phaseName, step } = state;
+  const named = phaseName ? `Phase ${phase} of ${phases}: ${phaseName}` : `Phase ${phase} of ${phases}`;
+  const pips = Array.from({ length: Math.max(phases, 0) }, (_, i) => (i + 1 < phase ? "done" : i + 1 === phase ? "current" : "todo"));
+  const base = { tone: "running", pips, hint: "Working on its own. You can walk away." };
+  if (state.stopping) {
+    return { ...base, title: "Stopping", detail: "The agent is ending. Nothing more will be committed.", hint: "The stop screen follows in a moment." };
+  }
+  if (step === "Waiting on you") {
+    return { ...base, tone: "waiting", title: "The loop needs your answer", detail: `${named} is waiting on the question below.`, hint: "Nothing is lost while it waits." };
+  }
+  if (state.stopAfterPhase) {
+    return { ...base, title: "Stopping after this phase", detail: `${named} finishes its checks and commit, then the loop stops.`, hint: "Stop now ends the agent at once." };
+  }
+  if (step === "Starting") {
+    if (state.phaseRetried) return { ...base, title: `Retrying Phase ${phase}`, detail: `The agent crashed or went quiet, so a fresh one is picking up ${named}.` };
+    if (state.previousPhase) {
+      const how = state.previousCommitted ? "done and committed" : "done";
+      return { ...base, title: `Phase ${state.previousPhase} ${how}`, detail: `Opening a fresh agent for ${named}.` };
+    }
+    return { ...base, title: "Starting the loop", detail: `Opening a fresh agent for ${named}.` };
+  }
+  return { ...base, title: "Implementation loop running", detail: step ? `${named} \u00b7 ${step}` : named };
+}
+
+/**
+ * The two stop buttons from the app's `loop-state`: "Stop after this phase" is
+ * a toggle (its label says what a press does), off on the last phase, and both
+ * buttons are off once Stop now was pressed.
+ */
+export function loopStopLabels(state) {
+  const stopping = Boolean(state.stopping);
+  const on = Boolean(state.stopAfterPhase);
+  return {
+    afterText: on ? "Cancel stop after this phase" : "Stop after this phase",
+    afterDisabled: stopping || (!on && state.canStopAfter === false),
+    nowDisabled: stopping,
+  };
+}
+
+/**
+ * The bar's Change project and Change agent controls while a loop runs: off,
+ * with one short reason on them. The app refuses both commands too.
+ */
+export function loopLocks(state) {
+  const locked = Boolean(state && state.running);
+  return { locked, reason: locked ? "A loop is running. Stop it before you change the project or agent." : "" };
+}
+
+/**
+ * What the window does about a console that stopped answering. On Windows the
+ * agent's console dies with the agent (the app ends the agent's whole Job
+ * Object), so between a loop's phases a dead console is expected: the next
+ * phase opens its own, and the loop itself stops if it never does. The budget
+ * guards against a console that keeps dying, not against a long session.
+ */
+export function deadConsoleAction({ loopRunning, loopStep, frameReady, reconnects, limit }) {
+  if (loopRunning && loopStep === "Starting") return "wait-for-phase";
+  if (!frameReady) return "no-hello";
+  return reconnects < limit ? "reconnect" : "offer-button";
+}
+
+/**
  * A project folder's own name, for the bar's project menu: the same last
  * segment the window title uses, or the whole path when there is none (a
  * root such as `/`), so the menu never shows an empty name.
@@ -150,7 +227,9 @@ function lastSegment(dir) {
  * The console page's taskbar messages, checked here before anything reaches
  * the app (attention.rs decides what they mean). `attention` carries one of
  * the four states the page's favicon has; `taskbar` carries the Desktop app
- * switch as a boolean. Anything else is null, and nothing is forwarded.
+ * switch as a boolean, and `activities-full` an Activities game going in or
+ * out of full screen the same way (taskbarSwitch checks both). Anything else
+ * is null, and nothing is forwarded.
  */
 export const ATTENTION_STATES = Object.freeze(['busy', 'ready', 'attention', 'plain']);
 

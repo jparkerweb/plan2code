@@ -2,7 +2,7 @@
 // agent's terminal panel docked at the bottom with a drag handle.
 
 import { mountTerminal } from './terminal.js';
-import { attentionSignal, barNextSteps, continueKeys, defaultRightFraction, folderName, pickDefaultAgent, taskbarSwitch, windowTitleFor } from './meter.js';
+import { attentionSignal, barNextSteps, continueKeys, defaultRightFraction, folderName, pickDefaultAgent, taskbarSwitch, windowTitleFor, deadConsoleAction, loopBanner, loopLocks, loopStopLabels, loopWindowTitle } from './meter.js';
 
 const { invoke, Channel } = window.__TAURI__.core;
 
@@ -20,6 +20,27 @@ const agentBypassEl = document.getElementById('agent-bypass');
 const agentNoneEl = document.getElementById('agent-none');
 const agentStatusEl = document.getElementById('agent-status');
 const restartBtn = document.getElementById('agent-restart');
+const loopBannerEl = document.getElementById('loop-banner');
+const loopTitleEl = document.getElementById('loop-title');
+const loopDetailEl = document.getElementById('loop-detail');
+const loopPipsEl = document.getElementById('loop-pips');
+const loopHintEl = document.getElementById('loop-hint');
+const loopSpecEl = document.getElementById('loop-spec');
+const loopElapsedEl = document.getElementById('loop-elapsed');
+const loopRetriesEl = document.getElementById('loop-retries');
+const loopStopAfterBtn = document.getElementById('loop-stop-after');
+const loopStopNowBtn = document.getElementById('loop-stop-now');
+const loopErrorEl = document.getElementById('loop-error');
+const loopRetryBtn = document.getElementById('loop-retry');
+// Whether Stop after this phase is on, as the last state said; a press asks for the opposite.
+let loopStopAfterOn = false;
+// True while an Implementation Loop runs: New Session stays hidden meanwhile.
+let loopRunning = false;
+let loopStep = '';
+// Whether this loop's one-time typing note was shown; a new loop resets it.
+let loopTypingNoted = false;
+const LOOP_TYPING_NOTE = 'A loop is running. Typing here can derail the phase it is working on.';
+const LOOP_TYPING_NOTE_MS = 8000;
 const changeAgentBtn = document.getElementById('change-agent');
 const changeProjectBtn = document.getElementById('change-project');
 const barRowEl = document.getElementById('bar-row');
@@ -82,7 +103,10 @@ const agentActive = () => agent.state === 'running';
 
 const terminal = await mountTerminal(document.getElementById('term'), {
   onInput: (data) => {
-    if (agentActive()) invoke('agent_input', { data });
+    if (agentActive()) {
+      noteTypingDuringLoop();
+      invoke('agent_input', { data });
+    }
   },
   onResize: (cols, rows) => {
     if (agentActive()) invoke('agent_resize', { cols, rows });
@@ -129,7 +153,7 @@ function applyAgentState(next, { skipReset } = {}) {
   // ended (New Session keeps the previous agent, model, effort and mode);
   // Change agent, in that menu, only once ended, when there is a real choice
   // to make again.
-  restartBtn.hidden = !(active || ended);
+  restartBtn.hidden = loopRunning || !(active || ended);
   changeAgentBtn.hidden = !ended;
   // Checked mode needs no marker; bypass always gets the "checks off" badge
   // on the agent, for exactly as long as that agent runs.
@@ -169,6 +193,17 @@ function setAgentStatus(text, { error = false } = {}) {
   agentStatusEl.textContent = text;
   agentStatusEl.title = text;
   agentStatusEl.classList.toggle('is-error', error && Boolean(text));
+}
+
+// The first key typed in the terminal while a loop runs: a note beside the agent,
+// once per loop, gone after a few seconds. The key itself is always delivered.
+function noteTypingDuringLoop() {
+  if (!loopRunning || loopTypingNoted) return;
+  loopTypingNoted = true;
+  setAgentStatus(LOOP_TYPING_NOTE);
+  setTimeout(() => {
+    if (agentStatusEl.textContent === LOOP_TYPING_NOTE) setAgentStatus('');
+  }, LOOP_TYPING_NOTE_MS);
 }
 
 // The agent menu's first lines: what the agent is doing and, while it runs,
@@ -638,6 +673,8 @@ function loadFrame(url) {
   frameReady = false;
   // The page going away takes its taskbar dot with it; the new one tells its own.
   clearAttention();
+  // And a game it had in full screen.
+  setGameFull(false);
   clearTimeout(helloTimer);
   helloTimer = setTimeout(onNoHello, HELLO_WAIT_MS);
   frame.src = url;
@@ -668,6 +705,9 @@ window.addEventListener('message', (event) => {
     if (on === null) return;
     if (appState) appState.taskbarSignal = on;
     invoke('set_taskbar_signal', { on }).catch(() => {});
+  } else if (kind === 'activities-full') {
+    const on = taskbarSwitch(event.data);
+    if (on !== null) setGameFull(on);
   } else if (kind === 'agent-continue') {
     typeContinue();
   } else if (kind === 'new-session') {
@@ -675,8 +715,65 @@ window.addEventListener('message', (event) => {
     if (!restartBtn.hidden) restartBtn.click();
   } else if (kind === 'looks') {
     applyAccent(event.data.accent, { save: true });
+  } else if (kind === 'loop-facts') {
+    // The setup screen asks what agent a loop would use. The answer is facts
+    // only; the page never sends the app any setup value.
+    const source = event.source;
+    invoke('loop_facts')
+      .then((facts) => source.postMessage({ plan2code: 'loop-facts', facts }, '*'))
+      .catch(() => {});
+  } else if (kind === 'loop-resume' || kind === 'loop-fix' || kind === 'loop-finalize') {
+    // Fixed requests, no free text: the page answers with ok or the error.
+    const source = event.source;
+    const command = { 'loop-resume': 'loop_resume', 'loop-fix': 'loop_fix', 'loop-finalize': 'loop_finalize' }[kind];
+    invoke(command)
+      .then(() => source.postMessage({ plan2code: `${kind}-result`, ok: true, error: null }, '*'))
+      .catch((error) => source.postMessage({ plan2code: `${kind}-result`, ok: false, error: String(error) }, '*'));
+  } else if (kind === 'loop-notify-test') {
+    // Send a test: no values at all. The app reads the saved setup itself and
+    // asks the person to confirm in its own dialog.
+    const source = event.source;
+    invoke('loop_notify_test')
+      .then((sent) => source.postMessage({ plan2code: 'loop-notify-test-result', ok: true, sent, error: null }, '*'))
+      .catch((error) =>
+        source.postMessage({ plan2code: 'loop-notify-test-result', ok: false, sent: false, error: String(error) }, '*')
+      );
+  } else if (kind === 'loop-start') {
+    // Start: a spec folder name only. The app validates it, reads the saved
+    // setup itself and asks the person to confirm in its own dialog.
+    const source = event.source;
+    const spec = typeof event.data.spec === 'string' ? event.data.spec : '';
+    invoke('loop_start', { spec })
+      .then((started) => source.postMessage({ plan2code: 'loop-start-result', ok: true, started, error: null }, '*'))
+      .catch((error) =>
+        source.postMessage({ plan2code: 'loop-start-result', ok: false, error: String(error) }, '*')
+      );
   }
 });
+
+// An Activities game in full screen: the console's frame is laid over the
+// bar and the terminal (over, not instead of, so the terminal keeps its size
+// and the agent sees no resize), and the window goes full screen. Off, both
+// go back; the window leaves full screen only if this put it there.
+let fullByGame = false;
+
+function setGameFull(on) {
+  document.body.classList.toggle('console-full', on);
+  const win = window.__TAURI__.window.getCurrentWindow();
+  if (on) {
+    win
+      .isFullscreen()
+      .then((already) => {
+        if (already) return;
+        fullByGame = true;
+        return win.setFullscreen(true);
+      })
+      .catch(() => {});
+  } else if (fullByGame) {
+    fullByGame = false;
+    win.setFullscreen(false).catch(() => {});
+  }
+}
 
 // Its "Not running... type continue" line, pressed: the keystrokes
 // continueKeys names, each on its own a moment after the last, so an agent
@@ -727,6 +824,8 @@ async function onNoHello() {
   if (frameReady || !consoleKnown || restarting) return;
   // A page that does not answer cannot say it is done needing the person.
   clearAttention();
+  // The next phase's console is on its way; the poll says so instead.
+  if (loopRunning && loopStep === 'Starting') return;
   let status = null;
   try {
     status = await invoke('console_status');
@@ -794,12 +893,19 @@ async function pollConsole() {
       markConsoleAlive();
       return;
     }
+    const action = deadConsoleAction({ loopRunning, loopStep, frameReady, reconnects, limit: RECONNECT_LIMIT });
+    if (action === 'wait-for-phase') {
+      // Covers the old phase's page and its "Lost contact" until the new one
+      // says hello. Never over a question the box is already asking.
+      if (stateCancelEl.hidden) showState(loopDetailEl.textContent);
+      return;
+    }
     markConsoleDead();
-    if (frameReady && reconnects < RECONNECT_LIMIT) {
+    if (action === 'reconnect') {
       reconnects += 1;
       showState('The console stopped. Reconnecting');
       await reconnectConsole();
-    } else if (!frameReady) {
+    } else if (action === 'no-hello') {
       onNoHello();
     }
   } catch {
@@ -856,6 +962,8 @@ async function restartConsole() {
 // not repeated here.
 function showAnnounced(notice) {
   restarting = false;
+  // A new page is a new start: the budget is per run of trouble, not per launch.
+  reconnects = 0;
   if (!consoleKnown) {
     consoleKnown = true;
     if (!pollTimer) pollTimer = setInterval(pollConsole, STATUS_POLL_MS);
@@ -868,6 +976,164 @@ function showAnnounced(notice) {
 }
 
 window.__TAURI__.event.listen('console-page', (event) => showAnnounced(event.payload));
+
+// "45s", "12m", "1h 12m": whole units, the largest two at most.
+function formatElapsed(ms) {
+  const total = Math.max(0, Math.floor((Number(ms) || 0) / 1000));
+  if (total < 60) return `${total}s`;
+  const minutes = Math.floor(total / 60);
+  if (minutes < 60) return `${minutes}m`;
+  return `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
+}
+
+// The Implementation Loop's banner across the window, drawn from the app's
+// loop-state. It lives here and not in the console page because a loop runs
+// across many sessions: the page changes under it, and this does not.
+let loopTimer = null;
+let loopStartedAt = 0;
+
+function tickLoopElapsed() {
+  loopElapsedEl.textContent = formatElapsed(Date.now() - loopStartedAt);
+}
+
+function setLoopTitle(title) {
+  window.__TAURI__.window.getCurrentWindow().setTitle(title).catch(() => {});
+}
+
+// The app ending the loop's last agent ended that agent's console too, so the
+// page holding the stop or finish card has to be brought back, at once and
+// whatever the budget says: it is the one thing the person came back to read.
+async function showLoopEnd() {
+  reconnects = 0;
+  try {
+    const status = await invoke('console_status');
+    if (status.state === 'dead') await reconnectConsole();
+  } catch {
+    // The poll looks again on its next tick.
+  }
+}
+
+// Change project and Change agent are off while a loop runs, with the reason on
+// them; the app refuses them too.
+function applyLoopLocks(state) {
+  const { locked, reason } = loopLocks(state);
+  for (const button of [changeProjectBtn, changeAgentBtn]) {
+    button.disabled = locked;
+    button.title = locked ? reason : '';
+  }
+}
+
+// Asks the app what the loop is doing: a reloaded window has missed every
+// loop-state event so far, and one sent between the first ask and the listener
+// is caught by asking again once it listens.
+async function syncLoopState() {
+  // The reply and the loop-state event travel apart: an event that landed while
+  // the question was out is newer than the answer, which then is dropped.
+  const seen = loopEventSeq;
+  try {
+    const state = await invoke('loop_state');
+    if (seen !== loopEventSeq) return;
+    // No loop and none drawn: nothing to redraw. One drawn that is gone: it ended.
+    if (state) applyLoopState(state);
+    else if (loopRunning) applyLoopState({ running: false });
+  } catch {
+    // The next loop-state event tells it.
+  }
+}
+
+function applyLoopState(state) {
+  if (!state || !state.running) {
+    const wasRunning = loopRunning;
+    loopRunning = false;
+    loopStep = '';
+    if (wasRunning) showLoopEnd();
+    clearInterval(loopTimer);
+    loopTimer = null;
+    loopBannerEl.hidden = true;
+    applyLoopLocks({ running: false });
+    setLoopTitle(windowTitleFor(projectPathEl.textContent));
+    // New Session's visibility is applyAgentState's rule alone.
+    applyAgentState(agent, { skipReset: true });
+    return;
+  }
+  if (!loopRunning) loopTypingNoted = false;
+  loopRunning = true;
+  loopStep = state.step || '';
+  restartBtn.hidden = true;
+  applyLoopLocks(state);
+  const banner = loopBanner(state);
+  loopBannerEl.hidden = false;
+  loopBannerEl.dataset.tone = banner.tone;
+  // Only a change of words: this is a live region, and screen readers read it out.
+  if (loopTitleEl.textContent !== banner.title) loopTitleEl.textContent = banner.title;
+  if (loopDetailEl.textContent !== banner.detail) loopDetailEl.textContent = banner.detail;
+  loopHintEl.textContent = banner.hint;
+  loopSpecEl.textContent = state.specName || '';
+  loopPipsEl.replaceChildren(
+    ...banner.pips.map((kind, i) => {
+      const pip = document.createElement('span');
+      pip.className = `loop-pip ${kind}`;
+      pip.title = `Phase ${i + 1}`;
+      return pip;
+    })
+  );
+  setLoopTitle(loopWindowTitle(projectPathEl.textContent, state));
+  const stopLabels = loopStopLabels(state);
+  loopStopAfterOn = !!state.stopAfterPhase;
+  loopStopAfterBtn.disabled = stopLabels.afterDisabled;
+  loopStopAfterBtn.textContent = stopLabels.afterText;
+  loopStopNowBtn.disabled = stopLabels.nowDisabled;
+  // A good state means the last press went through.
+  hideLoopError();
+  const retries = Number(state.retriesUsed) || 0;
+  loopRetriesEl.hidden = retries <= 0;
+  loopRetriesEl.textContent = retries === 1 ? '1 retry' : `${retries} retries`;
+  loopStartedAt = Number(state.startedAtMs) || Date.now();
+  tickLoopElapsed();
+  if (!loopTimer) loopTimer = setInterval(tickLoopElapsed, 1000);
+}
+
+let loopEventSeq = 0;
+window.__TAURI__.event
+  .listen('loop-state', (event) => {
+    loopEventSeq += 1;
+    applyLoopState(event.payload);
+  })
+  .then(syncLoopState, () => {});
+
+// A press that fails shows why next to the buttons, with a Retry for the same press.
+let loopRetryAction = null;
+function hideLoopError() {
+  loopErrorEl.hidden = true;
+  loopErrorEl.textContent = '';
+  loopRetryBtn.hidden = true;
+  loopRetryAction = null;
+}
+function pressLoop(command, args) {
+  const press = () =>
+    invoke(command, args).then(hideLoopError, (e) => {
+      loopErrorEl.textContent = `Could not do that: ${String(e && e.message ? e.message : e)}`;
+      loopErrorEl.hidden = false;
+      loopRetryBtn.hidden = false;
+      loopRetryAction = press;
+    });
+  return press();
+}
+loopRetryBtn.onclick = () => {
+  if (loopRetryAction) loopRetryAction();
+};
+loopStopAfterBtn.onclick = () => pressLoop('loop_stop_after_phase', { on: !loopStopAfterOn });
+loopStopNowBtn.onclick = () =>
+  showState(
+    "End the agent now? This phase's changes stay uncommitted.",
+    'Stop now',
+    () => {
+      frameReady ? hideState() : showState('No dashboard has loaded yet.');
+      pressLoop('loop_stop_now');
+    },
+    () => (frameReady ? hideState() : showState('No dashboard has loaded yet.')),
+    { tired: true }
+  );
 
 // The right end of the bar: whether the console stopped answering and where
 // the skills stand against this app, drawn as one next step (meter.js
@@ -1081,6 +1347,8 @@ async function main() {
   } catch {
     // Nothing to reattach to is not fatal: carry on as a plain first paint.
   }
+  // A reloaded window learns of a running loop before it draws the agent.
+  await syncLoopState();
   if (reattach && reattach.state !== 'idle') {
     if (state.projectDir) setProjectDir(state.projectDir);
     await recoverAfterReload(reattach);

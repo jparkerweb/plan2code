@@ -11,7 +11,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { attentionSignal, barNextSteps, continueKeys, defaultRightFraction, folderName, pickDefaultAgent, taskbarSwitch, windowTitleFor, CONSOLE_ASIDE_BREAKPOINT_PX, NEXT_STEP_LABELS } from "../plan2code-app/ui/meter.js";
+import { attentionSignal, barNextSteps, continueKeys, defaultRightFraction, folderName, pickDefaultAgent, taskbarSwitch, windowTitleFor, deadConsoleAction, loopBanner, loopLocks, loopStopLabels, loopWindowTitle, CONSOLE_ASIDE_BREAKPOINT_PX, NEXT_STEP_LABELS } from "../plan2code-app/ui/meter.js";
 import { findBrowser, launchBrowser } from "./browser.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -297,4 +297,160 @@ test("app.js forwards attention and taskbar through those checks, and clears the
   assert.match(APP_JS, /function loadFrame\(url\) \{[^}]*clearAttention\(\);[^}]*frame\.src = url;/);
   assert.match(APP_JS, /async function onNoHello\(\) \{\s+if \(frameReady \|\| !consoleKnown \|\| restarting\) return;[\s\S]{0,120}clearAttention\(\);/);
   assert.match(APP_JS, /plan2code: 'taskbar-state', on/, "the page hears the saved switch on its hello");
+});
+
+test("the loop banner says what the loop is doing at every moment", () => {
+  const base = { phase: 2, phases: 4, phaseName: "API", step: "Build", stopAfterPhase: false, phaseRetried: false, previousPhase: null, previousCommitted: false };
+  const said = (extra) => loopBanner({ ...base, ...extra });
+
+  const running = said({});
+  assert.equal(running.tone, "running");
+  assert.equal(running.title, "Implementation loop running");
+  assert.equal(running.detail, "Phase 2 of 4: API \u00b7 Build");
+  assert.deepEqual(running.pips, ["done", "current", "todo", "todo"]);
+
+  assert.equal(said({ phase: 1, step: "Starting" }).title, "Starting the loop");
+  assert.equal(said({ phase: 1, step: "Starting" }).detail, "Opening a fresh agent for Phase 1 of 4: API.");
+  assert.equal(said({ step: "Starting", previousPhase: 1, previousCommitted: true }).title, "Phase 1 done and committed");
+  assert.equal(said({ step: "Starting", previousPhase: 1 }).title, "Phase 1 done", "commits off: claims none");
+  assert.equal(said({ step: "Starting", previousPhase: 1, phaseRetried: true }).title, "Retrying Phase 2", "a retry is not a new phase");
+
+  const waiting = said({ step: "Waiting on you" });
+  assert.equal(waiting.tone, "waiting");
+  assert.equal(waiting.title, "The loop needs your answer");
+  assert.equal(said({ step: "Waiting on you", stopAfterPhase: true }).tone, "waiting", "a waiting question outranks a stop on its way");
+
+  const stopping = said({ stopAfterPhase: true });
+  assert.equal(stopping.title, "Stopping after this phase");
+  assert.equal(stopping.tone, "running");
+
+  assert.equal(said({ phaseName: "" }).detail, "Phase 2 of 4 \u00b7 Build");
+  assert.deepEqual(said({ phase: 0, phases: 0 }).pips, []);
+});
+
+test("Stop now turns the banner to Stopping, ahead of a question or a stop on its way", () => {
+  const base = { phase: 2, phases: 4, phaseName: "API", step: "Build", stopAfterPhase: false, stopping: true };
+  for (const extra of [{}, { step: "Waiting on you" }, { stopAfterPhase: true }, { step: "Starting" }]) {
+    const banner = loopBanner({ ...base, ...extra });
+    assert.equal(banner.title, "Stopping");
+    assert.equal(banner.detail, "The agent is ending. Nothing more will be committed.");
+    assert.equal(banner.tone, "running");
+    assert.ok(banner.hint, "it has a hint");
+  }
+  assert.equal(loopBanner({ ...base, stopping: false }).title, "Implementation loop running");
+});
+
+test("the stop buttons: Stop after is a toggle, off on the last phase, and both are off while stopping", () => {
+  const base = { stopAfterPhase: false, stopping: false, canStopAfter: true };
+  assert.deepEqual(loopStopLabels(base), { afterText: "Stop after this phase", afterDisabled: false, nowDisabled: false });
+  assert.deepEqual(loopStopLabels({ ...base, stopAfterPhase: true }), { afterText: "Cancel stop after this phase", afterDisabled: false, nowDisabled: false }, "it can be turned off again");
+  assert.equal(loopStopLabels({ ...base, canStopAfter: false }).afterDisabled, true, "the last phase has nothing to stop after");
+  assert.equal(loopStopLabels({ ...base, canStopAfter: false }).nowDisabled, false, "Stop now stays on the last phase");
+  assert.equal(loopStopLabels({ stopAfterPhase: false }).afterDisabled, false, "a state without the field leaves it on");
+  assert.deepEqual(loopStopLabels({ ...base, stopping: true }), { afterText: "Stop after this phase", afterDisabled: true, nowDisabled: true });
+  assert.equal(loopStopLabels({ ...base, stopAfterPhase: true, stopping: true }).afterDisabled, true);
+});
+
+test("app.js sends the toggle's wish and shows a failed press with a Retry", () => {
+  const app = fs.readFileSync(path.join(HERE, "..", "plan2code-app", "ui", "app.js"), "utf8");
+  assert.match(app, /invoke\(command, args\)\.then\(hideLoopError/, "a good press clears the error");
+  assert.match(app, /pressLoop\('loop_stop_after_phase', \{ on: !loopStopAfterOn \}\)/);
+  assert.match(app, /pressLoop\('loop_stop_now'\)/);
+  assert.match(app, /loopRetryBtn\.hidden = false/, "a failed press offers Retry");
+  const html = fs.readFileSync(path.join(HERE, "..", "plan2code-app", "ui", "index.html"), "utf8");
+  assert.match(html, /id="loop-error"[^>]*hidden/);
+  assert.match(html, /id="loop-retry"[^>]*hidden/);
+});
+
+test("a console dead between a loop's phases waits for the next phase; any other gets the budget", () => {
+  const base = { loopRunning: false, loopStep: "", frameReady: true, reconnects: 0, limit: 3 };
+  assert.equal(deadConsoleAction({ ...base, loopRunning: true, loopStep: "Starting" }), "wait-for-phase");
+  assert.equal(deadConsoleAction({ ...base, loopRunning: true, loopStep: "Starting", reconnects: 3 }), "wait-for-phase", "never counts against the budget");
+  assert.equal(deadConsoleAction({ ...base, loopRunning: true, loopStep: "Build" }), "reconnect", "mid-phase the agent still needs its page");
+  assert.equal(deadConsoleAction(base), "reconnect");
+  assert.equal(deadConsoleAction({ ...base, reconnects: 3 }), "offer-button");
+  assert.equal(deadConsoleAction({ ...base, frameReady: false }), "no-hello");
+});
+
+test("app.js refills the reconnect budget on a new page and brings the page back when a loop ends", () => {
+  const app = fs.readFileSync(path.join(HERE, "..", "plan2code-app", "ui", "app.js"), "utf8");
+  const announced = app.slice(app.indexOf("function showAnnounced"), app.indexOf("window.__TAURI__.event.listen('console-page'"));
+  assert.match(announced, /reconnects = 0/, "a budget never refilled ran out by a loop's Phase 3 and the stop card was never seen");
+  const applied = app.slice(app.indexOf("function applyLoopState"), app.indexOf("loopRunning = true;"));
+  assert.match(applied, /if \(wasRunning\) showLoopEnd\(\)/);
+  assert.match(app.slice(app.indexOf("async function showLoopEnd"), app.indexOf("function applyLoopState")), /reconnectConsole\(\)/);
+});
+
+test("the window title says a loop is running, and when it needs the person", () => {
+  assert.equal(loopWindowTitle("C:/git/lunch", { phase: 2, phases: 7, step: "Build" }), "Loop: Phase 2 of 7 - lunch");
+  assert.equal(loopWindowTitle("C:/git/lunch", { phase: 2, phases: 7, step: "Waiting on you" }), "Loop needs you: Phase 2 - lunch");
+  assert.equal(loopWindowTitle("", { phase: 1, phases: 2, step: "Build" }), "Loop: Phase 1 of 2");
+});
+
+test("the loop banner and its stop buttons sit outside the bar, so nothing else competes with them", () => {
+  const banner = INDEX_HTML.indexOf('id="loop-banner"');
+  const barEnd = INDEX_HTML.indexOf("</header>");
+  const workspace = INDEX_HTML.indexOf('<div id="workspace">');
+  assert.ok(barEnd < banner && banner < workspace, "between the bar and the workspace");
+  assert.ok(INDEX_HTML.indexOf('id="loop-stop-now"') > banner, "the stop buttons moved with it");
+  assert.ok(!INDEX_HTML.includes('id="loop-strip"'));
+  assert.match(INDEX_HTML, /id="loop-banner"[^>]*\bhidden\b/, "hidden until a loop runs");
+  assert.match(INDEX_HTML, /role="status" aria-live="polite"/);
+  assert.match(INDEX_HTML, /prefers-reduced-motion: reduce\) \{ #loop-dot/);
+  assert.match(APP_JS, /listen\('loop-state'/);
+});
+
+test("loopLocks turns Change project and Change agent off, with one reason, only while a loop runs", () => {
+  const on = loopLocks({ running: true, phase: 2, phases: 4 });
+  assert.equal(on.locked, true);
+  assert.equal(on.reason, "A loop is running. Stop it before you change the project or agent.");
+  for (const state of [{ running: false }, {}, null, undefined]) {
+    assert.deepEqual(loopLocks(state), { locked: false, reason: "" });
+  }
+});
+
+test("the banner and stop buttons agree for a state carrying stopping, stopAfterPhase or the last phase", () => {
+  const base = { running: true, phase: 2, phases: 4, phaseName: "API", step: "Build", stopAfterPhase: false, stopping: false, canStopAfter: true };
+  const stopping = { ...base, stopping: true };
+  assert.equal(loopBanner(stopping).title, "Stopping");
+  assert.deepEqual(loopStopLabels(stopping), { afterText: "Stop after this phase", afterDisabled: true, nowDisabled: true });
+  const after = { ...base, stopAfterPhase: true };
+  assert.equal(loopBanner(after).title, "Stopping after this phase");
+  assert.deepEqual(loopStopLabels(after), { afterText: "Cancel stop after this phase", afterDisabled: false, nowDisabled: false });
+  const last = { ...base, canStopAfter: false };
+  assert.equal(loopBanner(last).title, "Implementation loop running");
+  assert.equal(loopStopLabels(last).afterDisabled, true);
+});
+
+test("app.js asks loop_state after attach and again once it listens, without calling a reload a loop's end", () => {
+  assert.match(APP_JS, /async function syncLoopState\(\)[\s\S]*?invoke\('loop_state'\)/);
+  assert.match(APP_JS, /\.listen\('loop-state'[\s\S]*?\.then\(syncLoopState/, "asked again once the listener is up");
+  const attach = APP_JS.indexOf("invoke('agent_reattach'");
+  const sync = APP_JS.indexOf("await syncLoopState()", attach);
+  assert.ok(attach > 0 && sync > attach, "asked right after the reattach");
+  assert.match(APP_JS, /const seen = loopEventSeq;[\s\S]*?if \(seen !== loopEventSeq\) return;/, "an event that landed while loop_state was out wins over its answer");
+  assert.match(APP_JS, /else if \(loopRunning\) applyLoopState\(\{ running: false \}\)/, "no loop and none drawn redraws nothing");
+  assert.match(APP_JS, /const wasRunning = loopRunning;[\s\S]*?if \(wasRunning\) showLoopEnd\(\)/, "only a drawn loop ends with the finish redraw");
+});
+
+test("app.js locks the change buttons through loopLocks and shows the typing note once per loop", () => {
+  assert.match(APP_JS, /const \{ locked, reason \} = loopLocks\(state\);[\s\S]*?button\.disabled = locked/);
+  assert.match(APP_JS, /applyLoopLocks\(\{ running: false \}\)/, "the ended branch gives them back");
+  assert.match(APP_JS, /if \(!loopRunning\) loopTypingNoted = false/, "a new loop shows the note again");
+  assert.ok(APP_JS.includes("noteTypingDuringLoop();\n      invoke('agent_input'"), "the note comes before, and never replaces, the delivery of the key");
+  assert.ok(APP_JS.includes("A loop is running. Typing here can derail the phase it is working on."));
+});
+
+test("main.rs guards the window's agent and project commands, and registers loop_state", () => {
+  const rust = fs.readFileSync(path.join(HERE, "..", "plan2code-app", "src-tauri", "src", "main.rs"), "utf8");
+  const body = (name) => {
+    const at = rust.indexOf(`fn ${name}(`);
+    assert.ok(at > 0, `${name} exists`);
+    return rust.slice(at, rust.indexOf("\n}\n", at));
+  };
+  for (const [name, what] of [["agent_start", "agent"], ["agent_restart", "agent"], ["change_project", "project"], ["pick_project_folder", "project"]]) {
+    assert.ok(body(name).includes(`refuse_while_looping(&state, "${what}")?;`), `${name} refuses while a loop runs`);
+  }
+  assert.ok(!body("agent_input").includes("refuse_while_looping"), "typing stays open for a trust or login prompt");
+  assert.match(rust, /generate_handler!\[[\s\S]*?loop_stop_now,\s*loop_state,/);
 });

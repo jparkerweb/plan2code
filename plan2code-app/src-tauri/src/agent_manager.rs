@@ -29,6 +29,12 @@ pub enum AgentState {
 /// manager: it runs with the manager's state locked.
 pub type BeforeFresh = Arc<dyn Fn() -> Option<String> + Send + Sync>;
 
+/// Runs when the Implementation Loop starts a phase's fresh agent: the app
+/// forgets the console session it was showing, so the new agent's `open`
+/// makes a session of its own. Like `BeforeFresh`, it must not call back into
+/// the manager.
+pub type ForgetSession = Arc<dyn Fn() + Send + Sync>;
+
 /// What the page needs to draw the bar. `generation` counts the agents started
 /// so far: a new number means a fresh agent, so the terminal clears.
 #[derive(Clone, Debug, Serialize)]
@@ -101,6 +107,7 @@ struct Shared {
     folder: PathBuf,
     sink: Sink,
     before_fresh: Mutex<Option<BeforeFresh>>,
+    forget_session: Mutex<Option<ForgetSession>>,
     /// Environment every agent this manager starts gets, on top of its own:
     /// the in-app signal that sends the agent's console pages to this window.
     extra_env: Mutex<Vec<(String, String)>>,
@@ -128,6 +135,7 @@ impl AgentManager {
                 folder,
                 sink,
                 before_fresh: Mutex::new(None),
+                forget_session: Mutex::new(None),
                 extra_env: Mutex::new(Vec::new()),
                 generation: AtomicU64::new(0),
                 inner: Mutex::new(Inner {
@@ -151,6 +159,20 @@ impl AgentManager {
         if let Ok(mut slot) = self.shared.before_fresh.lock() {
             *slot = Some(hook);
         }
+    }
+
+    /// Run `hook` whenever the loop starts a phase's fresh agent (`start_fresh`
+    /// and `forget_session`).
+    pub fn set_forget_session(&self, hook: ForgetSession) {
+        if let Ok(mut slot) = self.shared.forget_session.lock() {
+            *slot = Some(hook);
+        }
+    }
+
+    /// Make the app forget the console session it follows, so the next agent's
+    /// `open` starts a new one.
+    pub fn forget_session(&self) {
+        self.shared.forget();
     }
 
     /// Give every agent started from now on these variables (replacing any set before).
@@ -195,6 +217,54 @@ impl AgentManager {
                 Err(e)
             }
         }
+    }
+
+    /// Start a fresh agent on the stored launch choice with `prompt` as its
+    /// only first prompt: the Implementation Loop's way to begin a phase. A
+    /// running agent is killed first (the same path as Restart), but without
+    /// Restart's brief note; the app still forgets the console session, so
+    /// the new agent's `open` makes a new one. An agent that ended, or never
+    /// ran, starts directly. Needs a launch choice from an earlier start.
+    pub fn start_fresh(&self, prompt: String) -> Result<(), String> {
+        let mut inner = lock(&self.shared.inner);
+        let (choice, _) = inner
+            .last_start
+            .clone()
+            .ok_or("no agent has been started")?;
+        inner.brief_note = None;
+        inner.last_start = Some((choice, Some(prompt)));
+        self.shared.forget();
+        if inner.state == AgentState::Running {
+            self.shared.generation.fetch_add(1, Ordering::SeqCst);
+            if let Some(old) = inner.running.take() {
+                let _ = old.host.kill();
+            }
+        }
+        match self.shared.spawn(&mut inner) {
+            Ok(()) => Ok(()),
+            Err(e) => {
+                inner.state = AgentState::Ended {
+                    reason: format!("could not start the agent: {e}"),
+                };
+                self.shared.emit(&inner);
+                Err(e)
+            }
+        }
+    }
+
+    /// The stored launch choice: agent, model, effort and permission mode.
+    pub fn launch_choice(&self) -> Option<(Agent, Option<String>, Option<String>, PermissionMode)> {
+        lock(&self.shared.inner)
+            .last_start
+            .as_ref()
+            .map(|(choice, _)| {
+                (
+                    choice.kind.clone(),
+                    choice.model.clone(),
+                    choice.effort.clone(),
+                    choice.mode,
+                )
+            })
     }
 
     pub fn snapshot(&self) -> AgentSnapshot {
@@ -293,6 +363,17 @@ impl Shared {
             mode: inner.last_start.as_ref().map(|(choice, _)| choice.mode),
             generation: self.generation.load(Ordering::SeqCst),
             brief_note: inner.brief_note.clone(),
+        }
+    }
+
+    fn forget(&self) {
+        let hook = self
+            .forget_session
+            .lock()
+            .ok()
+            .and_then(|slot| slot.clone());
+        if let Some(run) = hook {
+            run();
         }
     }
 

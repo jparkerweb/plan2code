@@ -67,7 +67,7 @@ folder and the skills version before anything else shows; a later launch skips s
 
 A **launch card** then asks which agent, model and effort (Claude and Codex only) to start on. The
 picker lists Claude Code, Devin and Codex, then any custom agents you added in the web console's
-**User Preferences → Agents** (saved in `~/.plan2code/agents.json`, shared with the `plan2code`
+**User Preferences → Agents & models** (saved in `~/.plan2code/agents.json`, shared with the `plan2code`
 command), and starts on one that is actually installed, so a machine with only Devin or Codex is ready
 to go. Permission checks off is its own tick, on by default (see below; New Session keeps whatever
 you picked, and reuses the same agent); a CLI the app cannot find is named, with how to install it,
@@ -89,7 +89,7 @@ needs attention and bounces once; on Linux a count badge appears where the deskt
 is no dot while the agent is busy or once a finished step has nothing left to press (a finished screen
 that still offers a button, such as back to the dashboard, keeps the green dot), and it clears when
 the agent ends or the page reloads. Turn it off with **Show on the taskbar when Plan2Code needs
-me** under **User Preferences → Desktop app** (shown only inside the app). The per-system details are in
+me** under **User Preferences → System → Desktop app** (shown only inside the app). The per-system details are in
 [plan2code-app/README.md](../plan2code-app/README.md#agents-and-the-taskbar).
 
 A slim top bar reads, left to right: the project folder's name, a menu holding its full path and
@@ -120,6 +120,113 @@ banner never shows, since the app's **Update skills** button (below) already cov
 involved. A slash command still offered to continue a step (such as `/plan2code-4-finalize`) stays
 exactly as it would in a terminal: paste it into the app's own terminal panel, which runs the real
 agent CLI.
+
+## Implementation Loop
+
+The Implementation Loop builds every remaining phase of a documented spec for you, one after another,
+while you do something else. It is in the app only: the dashboard shows an **Implementation Loop**
+card there, and nowhere else. Pick a spec, answer a short setup, press **Start the loop**, and the app
+confirms it once in its own window before anything runs.
+
+**How it runs.** Each phase gets a fresh agent session, so a long spec never grows one tired
+conversation. The app, not the agent, decides when a phase counts: it reads the spec's marks, runs the
+quick check, marks the phase done and commits it. With commits on, it commits to the branch you are on and never
+pushes. With commits on, Start needs a clean working tree (the setup offers the Git board when it is
+not), so your own edits never end up inside a phase's commit.
+
+**The setup.** The fields and their defaults:
+
+- **Review each phase** (on): a fresh agent reviews the phase before it counts.
+- **Fix findings**: **Smart pick** (the default) has a fresh agent read the findings and fix only the
+  ones worth fixing, recording every skip. A skipped Critical stops the phase. **By level** fixes the
+  Critical, Warning and Suggestion findings you tick (all three start ticked).
+- **When a phase asks something**: **Take the agent's best guess** (the default), which records the
+  assumption as a `[?]` task, **Pause and wait for me**, or **Stop the loop**.
+- **After the last phase**: **Stop and offer Finalize** (the default) or **Run Finalize automatically**.
+- **Quick check**: a command run after each phase, pre-filled from the project (for example
+  `npm run build`). Clearing it still lets you start; the setup warns that nothing is checked.
+- **If a phase crashes or goes quiet**: **Retry it once** (on), and how many minutes with no file changes, in the project or the agent's
+  session, count the agent as stuck (20). Waiting on your answer does not count.
+- **Send a notification** (no address, so off): a message from the loop when it waits on your answer or
+  ends. Send it to a Discord, Slack, Microsoft Teams or Google Chat webhook, or to any `http` or `https`
+  address with the message in its query string or a JSON body.
+- **Commit each phase** (on): one local commit per phase, with the subject and `AI Assisted`.
+
+The last setup is remembered per project in `~/.plan2code/console/loop-setup.json`, so the next loop
+starts from it. The quick check is typed text the page never runs: the app reads it from that file
+itself and names it in its own window before the loop begins. The notification gets the same treatment,
+and Resume asks again if either one changed.
+
+**The notification.** The loop says a question is waiting, that it is complete, or why it stopped. Nothing
+is sent when you stopped it yourself, and with **Take the agent's best guess** no question ever waits on
+you. What the app sends depends on the **Send to** choice:
+
+| Send to | Request | Where the message goes |
+| --- | --- | --- |
+| A web address, query string | GET | A parameter you name (`message` by default), added to the address's own |
+| Discord webhook | POST JSON | `content`, with mentions turned off |
+| Slack webhook | POST JSON | `text` |
+| Microsoft Teams webhook | POST JSON | An Adaptive Card, for a Workflows "when a webhook request is received" trigger |
+| Google Chat webhook | POST JSON | `text` |
+| A web address, JSON body | POST JSON | A field you name (`message` by default) |
+
+**Send a test** saves the setup and sends a test message right away, after the app names the address in its
+own window, so a wrong address shows up before a long run. A name can use letters, digits and `- _ . ~`. Pasting a Discord, Slack, Teams or Google Chat address picks
+its choice for you, since a plain GET to a Discord webhook answers 200 and posts nothing. The call has 10
+seconds and any 2xx answer counts. One that fails never changes what the loop does: the finish line or the
+stop screen's evidence says so, without repeating the address, which is stored in `loop-setup.json` and
+usually holds a token.
+
+**It uses the app's agent.** The loop starts every phase on the agent and model you launched the app
+with, and it needs permission checks off. With them on, an agent would wait on a prompt that nobody
+sees, so **Start the loop** stays grayed out until you turn them off (see
+[Permission checks are off by default](#permission-checks-are-off-by-default-same-as-the-terminal)).
+
+**What is locked while it drives.** Answers, sign-offs, launches, Workspace, Helpers, **Back** and
+**New Session** are read-only, and Ask is off, except for a question the loop is waiting on. Activities, Notebook, Help, Preferences, the documents
+and the code review stay usable, so you can watch, play, or read along.
+
+**You can always see it's running.** From the moment you confirm Start until the loop ends, a banner runs
+across the top of the window, outside the console page, so it stays put as each phase's session comes and
+goes. It says what the loop is doing right now (starting, building, between phases, stopping), with the
+phase, its name and step, a pip per phase, the time so far and any retries. It turns amber when a question
+needs your answer. The window title says the same, for the taskbar. While the loop works, the page's Send
+button and "Nothing to send" line go away, and they come back when a question waits.
+
+**Stopping it.** Two buttons on the banner: **Stop after this phase** lets the phase finish its
+review, mark and commit, then ends the loop; **Stop now** ends the agent at once, after you confirm, and never commits, retries or finishes the build (a commit already begun finishes first). Stop after can be canceled by pressing it again. After a window reload the banner and both buttons come back, and Change project and Change agent are blocked while the loop runs.
+Quitting the app ends the loop too, and the quit check says which phases are already committed.
+
+**A question holds the loop.** When a phase needs an answer (with **Pause and wait for me**), the loop
+waits with no time limit and nothing is lost. The app calls you back with the taskbar dot, a flash
+of the window and the question sound, and carries on once you answer.
+
+**When it stops by itself.** The loop ends on a stop screen, saying what failed and showing the
+evidence, when:
+
+- the phase's named tests or the quick check fail;
+- Critical or Warning findings are left after the re-check, at a level the setup said to fix (a leftover Suggestion does not stop it);
+- a task is blocked or the spec conflicts with itself;
+- a commit is refused, for example by a pre-commit hook (the app puts the phase file back as it was, so the spec and git agree, and stops with the hook's first line; if the undo fails too, it says so and remembers it across a restart);
+- a staged file looks like a secret (`.env` and the like; `.example`, `.sample` and `.template` are fine) or is oversized (nothing stays staged, and the stop line names the file);
+- the project is on a detached HEAD (the loop will not start);
+- the agent's report is missing task data or says its tests failed (the phase is refused);
+- the watcher cannot read the session or hits an internal error (it ends on a stop screen, never a hang);
+- the Smart pick skipped a Critical finding.
+
+A crashed or silent agent gets exactly one retry per phase when the retry tick is on, and none when it is off.
+It never retries a real failure. On a stop screen, **Resume the loop** carries on from the stopped
+phase and **Fix it by hand** opens an ordinary Implement session on it.
+
+**The report.** One report follows the whole build, across stops and Resume. For every phase it says what
+was built and committed, the tests, the findings fixed, the findings it chose not to fix and why, the
+findings left open, each assumption with its note, and any other decisions the agent reported, plus every
+retry and stop, in order. The agent writes most of this, so it holds what the agent noticed; the task marks,
+the quick check and the commits are the app's own. The finish screen counts each kind per phase, and **Read
+the full report** opens it, saved as `specs/<feature>/LOOP-SUMMARY-<date>.md` (`-2` and so on for another
+the same day). After a stop, **Read why, and the report so far** shows it on the stop screen. While a build
+is unfinished it lives in `~/.plan2code/console/loop-reports.json`, not the project, because Resume needs a
+clean tree. The in-app **Help** has a matching topic, **Implementation Loop**, which the loop card links to as "How the loop works".
 
 ## Keep it up to date
 

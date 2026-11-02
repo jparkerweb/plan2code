@@ -50,6 +50,46 @@
     #agent-none { color: var(--ink-3); }
     #agent-status { color: var(--ink-3); overflow: hidden; text-overflow: ellipsis; min-width: 0; max-width: 320px; }
     #agent-status.is-error { color: #f48771; }
+    /* The Implementation Loop, for as long as one runs: the loudest thing in the
+       window on purpose. The accent says it is working; amber says it needs you. */
+    #loop-banner {
+      --banner-color: var(--accent); --banner-bg: var(--accent-soft); --banner-line: var(--accent-line);
+      flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 20px;
+      padding: 10px 14px 10px 16px; font-size: 13px; color: var(--ink);
+      background: var(--banner-bg); border-bottom: 1px solid var(--banner-line); box-shadow: inset 4px 0 0 var(--banner-color);
+    }
+    #loop-banner[hidden] { display: none; }
+    #loop-banner[data-tone="waiting"] { --banner-color: #e5a93c; --banner-bg: #3a2b10; --banner-line: #7a5a1e; }
+    #loop-now { flex: 1 1 320px; min-width: 0; display: grid; gap: 3px; }
+    #loop-headline { display: flex; align-items: center; gap: 9px; }
+    #loop-dot { flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--banner-color); animation: loop-pulse 1.8s ease-in-out infinite; }
+    #loop-banner[data-tone="waiting"] #loop-dot { animation-duration: 0.9s; }
+    @keyframes loop-pulse { 0%, 100% { box-shadow: 0 0 0 0 transparent; opacity: 1; } 50% { box-shadow: 0 0 0 5px color-mix(in srgb, var(--banner-color) 30%, transparent); opacity: 0.75; } }
+    #loop-title { margin: 0; font-size: 15px; font-weight: 700; line-height: 1.25; }
+    #loop-detail { margin: 0; color: var(--ink-2); overflow-wrap: anywhere; }
+    #loop-progress { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin-top: 3px; color: var(--ink-3); font-size: 12px; }
+    #loop-pips { display: flex; flex-wrap: wrap; gap: 3px; }
+    .loop-pip { width: 16px; height: 5px; border-radius: 3px; background: var(--rule-2); }
+    .loop-pip.done { background: var(--banner-color); }
+    .loop-pip.current { background: var(--banner-color); animation: loop-pip 1.8s ease-in-out infinite; }
+    @keyframes loop-pip { 50% { opacity: 0.4; } }
+    #loop-spec { color: var(--ink-2); font-weight: 600; }
+    #loop-elapsed { font-variant-numeric: tabular-nums; }
+    #loop-retries { color: #f48771; }
+    #loop-actions { flex: none; display: flex; flex-wrap: wrap; gap: 8px; }
+    #loop-actions button {
+      appearance: none; font: inherit; font-size: 12.5px; font-weight: 600; line-height: 1.2;
+      padding: 6px 12px; border-radius: 8px; cursor: pointer;
+      border: 1px solid var(--banner-line); background: var(--panel); color: var(--ink);
+    }
+    #loop-actions button:hover:not(:disabled) { border-color: var(--banner-color); background: var(--panel-2); }
+    #loop-actions button:disabled { cursor: default; opacity: 0.65; }
+    #loop-actions button:focus-visible { outline: 2px solid var(--banner-color); outline-offset: 2px; }
+    #loop-actions #loop-error { align-self: center; max-width: 320px; color: #f48771; font-size: 12.5px; overflow-wrap: anywhere; }
+    #loop-actions [hidden] { display: none; }
+    #loop-actions #loop-stop-now { color: #f48771; }
+    #loop-actions #loop-stop-now:hover:not(:disabled) { border-color: #f48771; }
+    @media (prefers-reduced-motion: reduce) { #loop-dot, .loop-pip.current { animation: none; } }
     #bar-grow { flex: 1; min-width: 0; }
     /* The one next step for the console or the skills, at the right end. */
     #next-step { display: flex; align-items: center; gap: 8px; flex: none; }
@@ -84,6 +124,9 @@
     #workspace.dock-right { flex-direction: row; }
 
     #dashboard { flex: 1; min-height: 0; min-width: 0; position: relative; }
+    /* An Activities game in full screen: the console's frame over the whole
+       window, the bar and the terminal left as they are underneath. */
+    body.console-full #console-frame { position: fixed; inset: 0; width: 100vw; height: 100vh; z-index: 1000; }
     #console-frame { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: #1e1e1e; }
     #dashboard-state { position: absolute; inset: 0; z-index: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; background: #1e1e1e; text-align: center; padding: 16px; box-sizing: border-box; }
     #dashboard-state[hidden] { display: none; }
@@ -253,6 +296,28 @@
       <button id="change-agent" role="menuitem" hidden>Change agent...</button>
     </div>
   </header>
+  <!-- The Implementation Loop, while one runs (app.js loop-state, meter.js loopBanner). -->
+  <section id="loop-banner" aria-label="Implementation Loop" hidden>
+    <div id="loop-now">
+      <div role="status" aria-live="polite">
+        <div id="loop-headline"><span id="loop-dot" aria-hidden="true"></span><p id="loop-title"></p></div>
+        <p id="loop-detail"></p>
+      </div>
+      <div id="loop-progress">
+        <span id="loop-pips" aria-hidden="true"></span>
+        <span id="loop-spec"></span>
+        <span id="loop-elapsed"></span>
+        <span id="loop-retries" hidden></span>
+        <span id="loop-hint"></span>
+      </div>
+    </div>
+    <div id="loop-actions">
+      <button id="loop-stop-after" type="button">Stop after this phase</button>
+      <button id="loop-stop-now" type="button">Stop now</button>
+      <span id="loop-error" role="alert" hidden></span>
+      <button id="loop-retry" type="button" hidden>Retry</button>
+    </div>
+  </section>
   <div id="workspace">
     <main id="dashboard">
       <iframe id="console-frame" title="Plan2Code console dashboard" allow="clipboard-write"></iframe>
