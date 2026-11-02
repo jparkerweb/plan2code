@@ -2540,7 +2540,7 @@ fn stop_loop(ctx: &Ctx, cause: StopCause, line: String, can: &[&str]) {
             "evidence": "evidence",
             "phases": phase_rows(&rec),
             "uncommitted": uncommitted,
-            "can": can,
+            "can": can.iter().copied().chain(["dashboard"]).collect::<Vec<_>>(),
         },
     });
     post_end(ctx, &rec, &patch);
@@ -2609,7 +2609,7 @@ fn finish(ctx: &Ctx) {
         "line": one_line(&said),
         "phases": phase_rows(&rec),
         "uncommitted": [],
-        "can": ["finalize"],
+        "can": ["finalize", "dashboard"],
     });
     if let Some(id) = evidence {
         end["evidence"] = json!(id);

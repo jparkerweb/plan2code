@@ -291,7 +291,7 @@ const goodEnd = (extra = {}) => ({
   line: "Stopped at phase 2: a Critical finding was skipped",
   phases: [{ n: 1, name: "Setup", commit: "abc1234", unfixed: 0, retries: 0 }],
   uncommitted: ["src/x.js"],
-  can: ["resume", "fix"],
+  can: ["resume", "fix", "dashboard"],
   ...extra,
 });
 const EVIDENCE = { id: "evidence", title: "What happened", blocks: [{ id: "b1", md: "The phase stopped on a skipped Critical." }] };
@@ -313,7 +313,7 @@ test("loopEnd: a valid stopped with an evidence doc in the same patch is stored"
 test("loopEnd: an unknown evidence id, a push in can, and the other bad fields are refused, each named", () => {
   const cases = [
     ["an unknown evidence id", goodEnd({ evidence: "nope" }), /loopEnd\.evidence must be the id of a doc on the page/],
-    ["a push in can", goodEnd({ can: ["resume", "push"] }), /loopEnd\.can must be an array with entries from resume, fix, finalize/],
+    ["a push in can", goodEnd({ can: ["resume", "push"] }), /loopEnd\.can must be an array with entries from resume, fix, finalize, dashboard/],
     ["a bad kind", goodEnd({ kind: "paused" }), /loopEnd\.kind must be "stopped" or "finished"/],
     ["a two-line line", goodEnd({ line: "one\ntwo" }), /loopEnd\.line must be one line/],
     ["an absolute uncommitted path", goodEnd({ uncommitted: ["/etc/passwd"] }), /loopEnd\.uncommitted must be an array of relative paths/],

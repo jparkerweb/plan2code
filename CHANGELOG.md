@@ -10,6 +10,10 @@ All notable changes to Plan2Code will be documented in this file.
 
   **Stale installs are still cleaned up.** `install.js` keeps a small `removeLegacyLoopShims()` step that removes the old global artifacts (`plan2code-loop`, `plan2code-loop.cmd`, `plan2code-loop.ps1` and `node_modules/plan2code-loop` under the npm prefix) when they are present. `update()` runs it once before reinstalling and quietly skips a stale `"loop"` entry in `~/.plan2code/install.json`; uninstall runs it too.
 
+### 🐛 Fixed
+
+- **desktop app**: the Implementation Loop's end screen offers **Back to the dashboard** next to its other actions, on a finished loop and a stopped one, and it works with no agent running (it opens a fresh dashboard console session in the frame). The screen's status line also tells the truth now: it reads "Loop finished. Pick what happens next." (or "The loop stopped.") as your move instead of spinning "Starting Building + review…", so the taskbar dot goes green there instead of staying dark while the loop's finished page waits.
+
 ## v3.0.0
 
 ### ✨ Added

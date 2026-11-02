@@ -165,6 +165,7 @@ const LOOP_BUTTONS = [
   ["resume", "loop-resume", "Resume the loop", "primary"],
   ["fix", "loop-fix", "Fix it by hand", ""],
   ["finalize", "loop-finalize", "Finalize", "primary"],
+  ["dashboard", "loop-dashboard", "Back to the dashboard", ""],
 ];
 
 function shortHash(h) {

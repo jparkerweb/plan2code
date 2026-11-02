@@ -1054,7 +1054,7 @@ export function isOpen(item) {
 
 const LOOP_LEVELS = ["critical", "warning", "suggestion"];
 const LOOP_REASONS = ["tests", "findings", "blocked", "conflict", "other"];
-const LOOP_CAN = ["resume", "fix", "finalize"];
+const LOOP_CAN = ["resume", "fix", "finalize", "dashboard"];
 const TASK_ID = /^\d+\.\d+$/;
 
 // A one-line path that stays inside the project: not absolute, no `..` step.

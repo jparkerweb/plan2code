@@ -1185,6 +1185,30 @@ fn loop_finalize(state: State<'_, AppState>) -> Result<(), String> {
     )
 }
 
+/// The loop end screen's way home: stop the session it ended on and open a
+/// fresh dashboard console in its place. Needs no agent: a dashboard session
+/// is only `console.mjs open --workflow dashboard`, which the supervisor runs
+/// itself.
+#[tauri::command]
+fn loop_dashboard(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
+    let app = state.app.get().cloned().ok_or("no window yet")?;
+    let origin = window_origin(&app);
+    let dir = state
+        .project
+        .lock()
+        .ok()
+        .and_then(|p| p.as_ref().map(|p| p.dir.clone()))
+        .ok_or("no project yet")?;
+    let mut guard = state.console.lock().map_err(|e| e.to_string())?;
+    if let Some(mut sup) = guard.take() {
+        let _ = sup.stop();
+    }
+    let sup = ConsoleSupervisor::start(dir, origin)?;
+    let session = serde_json::to_value(sup.session()).map_err(|e| e.to_string())?;
+    *guard = Some(sup);
+    Ok(session)
+}
+
 fn main() {
     // Without Node 18+ the console and skills cannot run: say so and stop (FR-13).
     let status = node_check::check_node();
@@ -1240,6 +1264,7 @@ fn main() {
             loop_resume,
             loop_fix,
             loop_finalize,
+            loop_dashboard,
             set_attention,
             clear_attention_cmd,
             set_taskbar_signal

@@ -1225,6 +1225,17 @@ export function renderStatus() {
     return say("done", `All done. You can close this ${closeWord}.`);
   }
   if (page.gone) return say("gone", "Not connected. Your answers are saved.", "", false, true);
+  // The loop's own end screen (the app's `loopEnd`) is no `finish()`: while it
+  // still has presses on offer the move is theirs; with none, it is done.
+  if (page.S.loopEnd) {
+    const end = page.S.loopEnd;
+    const moves = Array.isArray(end.can) ? end.can.length : 0;
+    if (!moves) return say("done", "The loop is done.");
+    return say(
+      "point",
+      end.kind === "finished" ? "Loop finished. Pick what happens next." : "The loop stopped. Pick what happens next."
+    );
+  }
   // On the way home: the request is sent, and the page stays this skill's
   // until the agent resumes the session as the dashboard.
   if (page.local.homeward && !isDashboard()) {

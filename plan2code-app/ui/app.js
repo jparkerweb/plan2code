@@ -729,6 +729,18 @@ window.addEventListener('message', (event) => {
     invoke(command)
       .then(() => source.postMessage({ plan2code: `${kind}-result`, ok: true, error: null }, '*'))
       .catch((error) => source.postMessage({ plan2code: `${kind}-result`, ok: false, error: String(error) }, '*'));
+  } else if (kind === 'loop-dashboard') {
+    // The loop end screen's way home: a fresh dashboard session in the frame.
+    const source = event.source;
+    invoke('loop_dashboard')
+      .then((info) => {
+        source.postMessage({ plan2code: 'loop-dashboard-result', ok: true, error: null }, '*');
+        if (info && info.url) {
+          showState('Opening the dashboard');
+          loadFrame(info.url);
+        }
+      })
+      .catch((error) => source.postMessage({ plan2code: 'loop-dashboard-result', ok: false, error: String(error) }, '*'));
   } else if (kind === 'loop-notify-test') {
     // Send a test: no values at all. The app reads the saved setup itself and
     // asks the person to confirm in its own dialog.

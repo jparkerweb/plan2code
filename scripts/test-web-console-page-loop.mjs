@@ -242,16 +242,18 @@ test("the finish card counts each kind of decision per phase and opens on the fu
       line: "All 1 phases built",
       phases: [{ n: 2, name: "API", commit: "abc1234", unfixed: 3, retries: 1, fixed: 4, skipped: 2, left: 1, assumed: 5, decisions: 6 }],
       uncommitted: [],
-      can: ["finalize"],
+      can: ["finalize", "dashboard"],
     });
     return {
       head: [...card.querySelectorAll("th")].map((c) => c.textContent),
       row: [...card.querySelectorAll("td")].map((c) => c.textContent),
+      actions: [...card.querySelectorAll(".loop-end-actions button")].map((b) => b.textContent),
     };
   });
   assert.deepEqual(seen.head, ["Phase", "Commit", "Fixed", "Not fixed", "Left open", "Assumed", "Other decisions", "Retries"]);
   assert.deepEqual(seen.row.slice(0, 1), ["Phase 2: API"]);
   assert.deepEqual(seen.row.slice(2), ["4", "2", "1", "5", "6", "1"]);
+  assert.deepEqual(seen.actions, ["Finalize", "Back to the dashboard"], "the way home is offered next to Finalize");
 });
 
 // A real loop session: `open --loop` under the app's signal stamps the lock.
