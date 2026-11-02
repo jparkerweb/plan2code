@@ -779,7 +779,7 @@ test("two folders get two notepads through their own sessions", async (t) => {
   // live process sits in: stop both, and wait until neither answers, before
   // cleaning up (stop returns before the process has gone).
   t.after(async () => {
-    for (const [cwd, sid] of sids) cliIn(cwd, ["stop", "--session", sid]);
+    for (const [cwd, sid] of sids) cliIn(cwd, ["stop", "--session", sid, "--force"]);
     const gone = async ({ base }) => {
       try {
         await fetch(`${base}/health`, { signal: AbortSignal.timeout(1000) });
@@ -1204,7 +1204,7 @@ test("the sweeps at open leave a 60-day-old notepad untouched", async () => {
   assert.equal(readNotepad(folder).text, "kept for months");
   assert.equal(readNotepad(folder).images.length, 1);
   assert.equal(fs.statSync(noteFile).mtimeMs, before, "not even touched");
-  cli(["stop", "--session", s.sid]);
+  cli(["stop", "--session", s.sid, "--force"]);
   removeNotepad(notepadKey(folder));
 });
 

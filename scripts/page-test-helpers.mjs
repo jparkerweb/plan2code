@@ -68,7 +68,15 @@ export async function openSession(browser, { t, workflow, payload: first, projec
   };
   s.wait = (seconds = 10) => {
     const r = cli(["wait", "--session", s.sid, "--seconds", String(seconds)], { cwd });
-    return { code: r.status, ...(r.json || {}) };
+    // The wire carries only what an agent reads (reply, hop fields); what the
+    // person sent whole stays in result.json, which a page test reads from there.
+    let sent = {};
+    if (r.status === 0) {
+      try {
+        sent = JSON.parse(fs.readFileSync(path.join(s.session, "result.json"), "utf8"));
+      } catch {}
+    }
+    return { code: r.status, ...sent, ...(r.json || {}) };
   };
   // Whether the session's server still answers on its port.
   s.answers = async () => {
@@ -83,7 +91,7 @@ export async function openSession(browser, { t, workflow, payload: first, projec
   s.stop = async () => {
     if (stopped) return;
     stopped = true;
-    cli(["stop", "--session", s.sid], { cwd });
+    cli(["stop", "--session", s.sid, "--force"], { cwd });
     if (s.context) await s.context.close().catch(() => {});
     await until(async () => !(await s.answers()), 5000);
   };

@@ -48,6 +48,7 @@ import {
   writeWorkspaceCursor,
 } from "./workspace.mjs";
 import { readPrHosts, resetSubagentCursor } from "./settings.mjs";
+import { resetPointers } from "./pointers.mjs";
 import { WORKFLOWS, isWorkflow } from "./public/skills.js";
 import { startsClean } from "./public/hops.js";
 import { snapshot } from "./git-repo.mjs";
@@ -62,6 +63,7 @@ import {
   awaitSubagentSync,
   withSubagents,
   advanceSubagents,
+  printOut,
 } from "./cmd-post-wait.mjs";
 
 // The CLI's own pieces, handed over by console.mjs through useCli() before
@@ -100,6 +102,9 @@ function leavePointer() {
 // embed mode, and the in-app signal). The app refuses a console without it.
 const EMBED_API = 1;
 
+// The only workflows a loop drives (open --loop).
+const LOOP_WORKFLOWS = ["implement", "implement-review"];
+
 export async function cmdOpen() {
   trace("open: start");
   // A workflow the console does not know is refused first, before the pointer,
@@ -108,6 +113,16 @@ export async function cmdOpen() {
   // that name over a good one. No --workflow at all is still fine (FR-5).
   if (args.workflow !== undefined && !isWorkflow(args.workflow)) {
     die(`unknown workflow "${args.workflow}"; one of: ${WORKFLOWS.join(", ")}`, 2);
+  }
+  // Loop mode (the desktop app's Implementation Loop) is asked for with
+  // --loop and refused everywhere else, again before the pointer or any
+  // session folder exists.
+  const loopMode = args.loop !== undefined && args.loop !== false;
+  if (loopMode) {
+    if (!inAppSignal()) die("Loop mode runs only inside the Plan2Code desktop app.", 3);
+    if (!LOOP_WORKFLOWS.includes(args.workflow)) {
+      die(`--loop goes only with --workflow ${LOOP_WORKFLOWS.join(" or --workflow ")}`, 2);
+    }
   }
   leavePointer();
   // Under the desktop app the page belongs in the app's window: never the
@@ -145,6 +160,9 @@ export async function cmdOpen() {
     if (!fs.existsSync(dir)) die(`no session "${sid}" to resume`, 1);
     state = readJson(path.join(dir, "state.json"));
     if (!state) die(`session "${sid}" has no state`, 1);
+    // A resume starts the reading over: each topic file is named again when
+    // its moment recurs (FR-11), whether or not this is a hop.
+    resetPointers(dir);
     // A resume can also be a hand-off: the dashboard launches another skill
     // into its own session, and the first thing that skill needs is for the
     // page to stop being a dashboard. Letting the flags restate these fields
@@ -189,15 +207,44 @@ export async function cmdOpen() {
         const liveTopics = new Set(s.items.map((i) => i.topic));
         s.topics = (s.topics || []).filter((t) => liveTopics.has(t.id));
       }
+      // A launch is a resume that names a workflow and keeps the page put
+      // (`--no-open`: Continue here, a dashboard pick, a pick-up). It starts a
+      // new run, so a real ending from the last one comes down with it. A hop
+      // to another skill already starts clean; this is the same skill again
+      // (Pathfinder into Pathfinder), where the old finish card would freeze
+      // every question the new run asks. A plain `open --resume` (no workflow)
+      // still keeps a real ending, so a re-shared link shows its card.
+      if (s.finish && args.workflow && args["no-open"]) {
+        delete s.finish;
+        delete s.stopWarning;
+        s.agent = { status: "working", since: nowIso() };
+      }
       if (hop) {
         s = switchWorkflow(s, {
           workflow: args.workflow,
           title: typeof args.title === "string" ? args.title : path.basename(worktree),
           specDir: args.spec,
         });
-      } else if (switching) s.workflow = args.workflow;
+      } else if (switching) {
+        s.workflow = args.workflow;
+        // An inline switch (into Review) is not a loop phase.
+        if (!LOOP_WORKFLOWS.includes(args.workflow)) {
+          delete s.loopOutcome;
+          delete s.loopEnd;
+        }
+      }
       if (args.title) s.title = args.title;
       if (args.spec) s.specDir = args.spec;
+      // The loop lock follows the flag: --loop locks the page, and a resume
+      // without it (Fix it by hand, from a stop screen) is an ordinary,
+      // unlocked session.
+      if (loopMode) s.loop = { driving: true };
+      else {
+        delete s.loop;
+        // The loop's cards mean nothing without it, and validate() refuses
+        // handledBy outside a loop session, which would wedge every post.
+        s.items = (s.items || []).map(({ handledBy, ...item }) => item);
+      }
       // Every resume clears the wake-up flag: a server restart, a launch from
       // the dashboard, a Back-to-dashboard return. Cleared here rather than by
       // the page because the page cannot write state, and a replay on a return
@@ -221,6 +268,8 @@ export async function cmdOpen() {
     });
     // Only a freshly opened dashboard plays Planny's wake-up.
     if (args.workflow === "dashboard") state.wake = true;
+    // Locked from the first frame, before the state is first written.
+    if (loopMode) state.loop = { driving: true };
   }
 
   // A first payload's meter and folder reports, as `post` takes them: checked
@@ -230,8 +279,9 @@ export async function cmdOpen() {
   let openReread;
   let patch = null;
   if (args.file) {
-    patch = readPatch(args.file);
-    if (!patch) die(`could not read --file ${args.file} as one JSON object`, 2);
+    const read = readPatch(args.file);
+    if (read.error) die(read.error, 2);
+    patch = read.patch;
     ({ run: openRun, folderIssue: openIssue } = patch);
     delete patch.run;
     delete patch.folderIssue;
@@ -366,10 +416,6 @@ export async function cmdOpen() {
   const sweptSessions = staleSessions(SESSIONS_DIR, Date.now(), SESSION_MAX_AGE_MS, sid);
   const sweptScratch = staleScratch(HOME_DIR, Date.now(), SESSION_MAX_AGE_MS);
   const sweptHandoffs = staleHandoffs(Date.now(), SESSION_MAX_AGE_MS);
-  const swept =
-    sweptSessions.length || sweptScratch.length || sweptHandoffs.length
-      ? { swept: { sessions: sweptSessions, scratch: sweptScratch, handoffs: sweptHandoffs } }
-      : {};
   const sweep = () => {
     sweepUploads(SESSIONS_DIR, Date.now(), UPLOAD_MAX_AGE_MS, sid).catch(() => {});
     removeSessions(SESSIONS_DIR, sweptSessions).catch(() => {});
@@ -377,32 +423,34 @@ export async function cmdOpen() {
     removeHandoffs(sweptHandoffs).catch(() => {});
   };
 
-  // A standing instruction the new agent is owed, as `subagents` and a
-  // `reply` holding only its lines; neither key when nothing is owed.
+  // A standing instruction the new agent is owed, as a `reply` holding only
+  // its lines; no key when nothing is owed.
   const subagentsOwed = () => {
     awaitSubagentSync(dir, state.workflow);
     const [out, cursor] = withSubagents(dir, { reply: "" });
-    return [out.subagents ? out : {}, cursor];
+    return [cursor ? out : {}, cursor];
   };
+
+  // What open tells the agent about the folders: only when there is more than
+  // the folder it started in.
+  const folders = workspace.folders && workspace.folders.length > 1 ? { workspace } : {};
 
   // Reuse a live server if one is already serving this session.
   if (existing && (await reusable)) {
     if (!args["no-open"]) openBrowser(existing.url);
     const inAppReport = await tellApp(inApp, { url: existing.url, sid, workflow: state.workflow });
     const [owed, subCursor] = subagentsOwed();
-    print({
+    printOut(dir, {
       ok: true,
       sid,
       session: dir,
       url: existing.url,
       embed: EMBED_API,
-      reused: true,
       ...inAppReport,
-      pendingResult: carried,
+      ...(carried ? { pendingResult: true } : {}),
       terminalLine: terminalLine(existing.url),
-      workspace,
+      ...folders,
       ...owed,
-      ...swept,
       ...remoteWarning(),
     });
     advanceSubagents(dir, subCursor);
@@ -443,7 +491,7 @@ export async function cmdOpen() {
     notes.push(`The app did not take the page. Open ${handle.url} in a browser, or press Reload in the app.`);
   }
   const [owed, subCursor] = subagentsOwed();
-  print({
+  printOut(dir, {
     ok: true,
     sid,
     session: dir,
@@ -452,11 +500,10 @@ export async function cmdOpen() {
     ...inAppReport,
     port: handle.port,
     pid: handle.pid,
-    pendingResult: carried,
+    ...(carried ? { pendingResult: true } : {}),
     terminalLine: terminalLine(handle.url),
-    workspace,
+    ...folders,
     ...owed,
-    ...swept,
     ...(remote.remote ? { remote: remote.remote } : {}),
     ...(notes.length ? { note: notes.join(" ") } : {}),
   });
@@ -542,7 +589,9 @@ async function startServer(project, worktree, sid, dir, { handoff = true } = {})
     {
       // Detached, because harness-managed background tasks get killed at
       // assorted timeouts and on compaction, which would take the human's
-      // half-finished answers with them. Detached processes are immune.
+      // half-finished answers with them. Detached processes are immune to
+      // that, but not to the desktop app's Job Object on Windows: ending an
+      // agent there ends a server the agent opened (the app's window reconnects).
       detached: true,
       // Redirecting stdio to a file is what lets the child outlive us. The
       // IPC channel is only for the handover, and is closed straight after.

@@ -10,7 +10,7 @@
 // No DOM, no `local`, no fetch. If a function in here needs any of those, it
 // belongs in app.js instead.
 
-import { FIXED_REASON, SKILLS, labelFor, skillByName, skillFor } from "./skills.js";
+import { FIXED_REASON, FLOW_SKILLS, SKILLS, labelFor, skillByName, skillFor } from "./skills.js";
 import { SPEC_STATES, stateFor } from "./spec-states.js";
 
 /* ----------------------------------------------------- the sent answer */
@@ -257,7 +257,7 @@ export function suggestionFrom(item) {
 // The badge each workflow wears. Shared with the server, which writes it into
 // the page it serves so the first paint already names the session instead of
 // flashing a placeholder until the script arrives. Derived from skills.js.
-export const WORKFLOW_LABEL = Object.fromEntries(SKILLS.map((s) => [s.workflow, s.label]));
+export const WORKFLOW_LABEL = Object.fromEntries(FLOW_SKILLS.map((s) => [s.workflow, s.label]));
 
 export function workflowLabel(workflow) {
   return labelFor(workflow) || workflow || "Session";
@@ -267,7 +267,7 @@ export function workflowLabel(workflow) {
 // skill as `additionalReferences`). Any other next step has no browser page
 // to open, and asking for one would send the next session looking for
 // something that is not there. Derived from skills.js: every entry is one.
-export const CONSOLE_WORKFLOWS = SKILLS.map((s) => s.command);
+export const CONSOLE_WORKFLOWS = FLOW_SKILLS.map((s) => s.command);
 
 // Rides on the end of the command as part of the skill's argument. Every
 // console skill takes it as the answer to "web console or terminal?" instead
@@ -550,13 +550,22 @@ export const CATALOG_GROUPS = [
 // action so the launched skill knows which spec it was picked for. Derived from
 // skills.js: the entries with a card, in their order, each card's fields
 // beside the skill's name, command and workflow.
-export const SKILL_CATALOG = SKILLS.filter((s) => s.card).map((s) => ({
+export const SKILL_CATALOG = FLOW_SKILLS.filter((s) => s.card).map((s) => ({
   skill: s.skill,
   command: s.command,
   workflow: s.workflow,
   ...(s.review ? { review: s.review } : {}),
   ...s.card,
 }));
+
+// The desktop app's Implementation Loop card: not a skill, so not in
+// SKILL_CATALOG. The dashboard draws it after its group's other cards, and its
+// click opens the setup screen instead of launching anything.
+const LOOP_SKILL = SKILLS.find((s) => s.appOnly && s.card);
+export const LOOP_ENTRY = LOOP_SKILL
+  ? { skill: LOOP_SKILL.skill, command: "Desktop app only", workflow: null, appOnly: true, ...LOOP_SKILL.card }
+  : null;
+export const OUTSIDE_APP_LINE = "Runs only in the Plan2Code desktop app.";
 
 // A workflow by the name its dashboard card gives it ("Implement"), for the
 // screens that speak of it as a thing being started rather than as a badge.
@@ -674,7 +683,7 @@ export function cardAvailability(entry, scan, sel, lookup = stateFor) {
   const hasAgents = Boolean(scan && scan.hasAgents);
   const state = sel && sel.state && sel.state !== "unrecognized" ? sel.state : null;
   const next = sel ? Boolean(state) && NEXT_FOR_STATE[state] === entry.skill : entry.skill === "plan2code-0-pathfinder";
-  const rule = skillByName(entry.skill);
+  const rule = skillByName(entry.skill) || (entry.appOnly ? LOOP_SKILL : null);
   if (!rule || !rule.states) return ON;
 
   // The three cards whose rules read the scan rather than the spec.

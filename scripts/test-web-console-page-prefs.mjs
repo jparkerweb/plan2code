@@ -1,5 +1,6 @@
-// Page tests for User Preferences: the saved looks (highlight and theme), the
-// launcher's model menus and the Cleanup tab. Run with:
+// Page tests for User Preferences: its four tabs, the saved looks (highlight
+// and theme), the Agents & models tab (the launcher's model menus and the
+// person's agents) and Cleanup. Run with:
 // node --test scripts/test-web-console-page-prefs.mjs
 //
 // Each test drives the real console in a real Chrome or Edge through
@@ -10,7 +11,7 @@ import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { pageSuite, openSession, textOf, drawn } from "./page-test-helpers.mjs";
+import { pageSuite, openSession, textOf, drawn, styleOf, stylesOf } from "./page-test-helpers.mjs";
 import { HOME, MODELS_DIR, backdate } from "./web-console-test-helpers.mjs";
 import { formatBytes } from "../src/web-console/public/answers.js";
 
@@ -84,148 +85,315 @@ test("the violet highlight and dark theme chosen in preferences stick across a r
   assert.deepEqual(await firstPaintAttrs(s), { theme: null, accent: null }, "the first paint still carries the old looks");
 });
 
-test("the launcher's model menus have Claude, Devin and Codex tabs, and a model id typed on the Codex tab is saved", async (t) => {
+// The Agents & models tab: the summary table, its rows and the form Edit opens.
+const AGENTS_FILE = path.join(MODELS_DIR, "agents.json");
+const agentsTable = (s) => s.page.locator("#agents-table");
+const agentRow = (s, key) => s.page.locator(`#agents-table tr[data-key="${key}"]`);
+const agentForm = (s) => s.page.locator("#agents-form");
+const formField = (s, name) => agentForm(s).getByRole("textbox", { name, exact: true });
+const formButton = (s, name) => agentForm(s).getByRole("button", { name, exact: true });
+const unsavedPrompt = (s) => s.page.locator("#prefs-unsaved");
+
+async function openAgentsTab(s) {
+  await s.page.click("#btn-looks");
+  await s.page.click("#prefs-tab-agents");
+  await agentRow(s, "cli:claude").waitFor();
+}
+
+// agents.json as the test starts it: none, or the entries given. Removed after.
+function seedAgents(t, agents) {
+  fs.rmSync(AGENTS_FILE, { force: true });
+  if (agents) {
+    fs.mkdirSync(MODELS_DIR, { recursive: true });
+    fs.writeFileSync(AGENTS_FILE, JSON.stringify({ schema: 1, agents }, null, 2));
+  }
+  t.after(() => fs.rmSync(AGENTS_FILE, { force: true }));
+}
+
+test("Agents & models: the table lists Claude, Devin and Codex, and a model id typed in Codex's form is saved only on Save", async (t) => {
   noSavedLooks(t);
+  seedAgents(t);
   // The file the launcher reads: put back as the suite had it (no file).
   t.after(() => fs.rmSync(path.join(MODELS_DIR, "models.json"), { force: true }));
   const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_QUESTION });
-  await s.page.click("#btn-looks");
-  const tabs = s.page.getByRole("group", { name: "Which agent" });
-  for (const name of ["Claude", "Devin", "Codex"]) assert.equal(await tabs.getByRole("button", { name, exact: true }).count(), 1, `a ${name} tab`);
-  const pressed = async () => (await tabs.locator('button[aria-pressed="true"]').allInnerTexts()).map((x) => x.trim());
-  assert.deepEqual(await pressed(), ["Claude"], "the menus open on Claude");
+  await openAgentsTab(s);
+  const keys = await agentsTable(s).locator("tbody tr[data-key]").evaluateAll((rows) => rows.map((r) => r.dataset.key));
+  assert.deepEqual(keys, ["cli:claude", "cli:devin", "cli:codex"]);
+  assert.equal(await textOf(agentRow(s, "cli:codex").locator(".prefs-agents-name > span").first()), "Codex");
 
-  await tabs.getByRole("button", { name: "Codex", exact: true }).click();
-  assert.deepEqual(await pressed(), ["Codex"]);
-  await s.page.click("#models-add");
-  const id = s.page.locator("#models-user").getByRole("textbox", { name: "Model id" });
+  await s.page.getByRole("button", { name: "Edit Codex" }).click();
+  await agentForm(s).waitFor();
+  assert.equal(await agentsTable(s).isVisible(), false, "the form takes the table's place");
+  await agentForm(s).locator(".prefs-agents-none").filter({ hasText: /^No models ship for Codex yet/ }).waitFor();
+  assert.equal(await agentForm(s).locator(".models-row.locked").count(), 0, "nothing comes with Plan2Code for Codex");
+
+  await formButton(s, "Add a model").click();
+  const id = formField(s, "Model id");
   await id.fill("gpt-test-codex-1");
   await id.press("Tab");
-  await s.page.locator("#models-status").filter({ hasText: /^Saved\./ }).waitFor();
+  await s.page.waitForTimeout(300);
+  const before = await s.page.evaluate(async () => (await (await fetch("/models")).json()).user);
+  assert.deepEqual(before.codex, [], "nothing is saved before Save");
+  assert.equal(await agentForm(s).locator(".prefs-unsaved-badge").isVisible(), true);
+
+  await formButton(s, "Save").click();
+  await agentForm(s).locator(".prefs-saved").filter({ hasText: /^Saved\. Restart plan2code/ }).waitFor();
   const saved = await s.page.evaluate(async () => (await (await fetch("/models")).json()).user);
   assert.deepEqual(saved.codex.map((m) => m.id), ["gpt-test-codex-1"], "the id was not saved under Codex");
   assert.deepEqual([saved.claude, saved.devin], [[], []], "the id leaked into another agent's menu");
+  assert.equal(await agentForm(s).locator(".prefs-unsaved-badge").isVisible(), false, "saved, nothing is unsaved");
 
-  // Back on Claude the typed id is not listed; on Codex it is, after a reload.
-  await tabs.getByRole("button", { name: "Claude", exact: true }).click();
-  assert.equal(await s.page.locator("#models-user .models-row").count(), 0);
+  // The summary counts it on Codex's row, and so does a fresh page.
+  await formButton(s, "Back to summary").click();
+  assert.equal(await s.page.evaluate(() => document.activeElement?.getAttribute("aria-label") || document.activeElement?.id), "Edit Codex", "focus comes back to the row just left");
+  assert.match(await textOf(agentRow(s, "cli:codex").locator(".prefs-agents-models")), /^1: gpt-test-codex-1$/);
   await s.page.reload({ waitUntil: "domcontentloaded" });
   await drawn(s.page);
-  await s.page.click("#btn-looks");
-  await s.page.locator("#models-tab-codex").click();
-  await s.page.locator("#models-user").getByRole("textbox", { name: "Model id" }).waitFor();
-  assert.equal(await s.page.locator("#models-user").getByRole("textbox", { name: "Model id" }).inputValue(), "gpt-test-codex-1");
+  await openAgentsTab(s);
+  await s.page.getByRole("button", { name: "Edit Codex" }).click();
+  assert.equal(await formField(s, "Model id").inputValue(), "gpt-test-codex-1");
 });
 
-test("Agents: a person adds an agent, tests its command, sees it saved after a reload, and deletes it", async (t) => {
+test("Agents & models: a person adds an agent, tests its command, sees it after a reload, and deletes it", async (t) => {
   noSavedLooks(t);
-  const file = path.join(MODELS_DIR, "agents.json");
-  fs.rmSync(file, { force: true });
-  t.after(() => fs.rmSync(file, { force: true }));
+  seedAgents(t);
   const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_QUESTION });
-  await s.page.click("#btn-looks");
-  const list = s.page.locator("#agents-list");
-  assert.equal(await list.locator(".agent-card").count(), 0, "no agents before one is added");
+  await openAgentsTab(s);
+  assert.equal(await agentsTable(s).locator('tr[data-key^="agent:"]').count(), 0, "no agents before one is added");
 
   await s.page.click("#agents-add");
-  const card = list.locator(".agent-card").last();
-  await card.getByRole("textbox", { name: "Name", exact: true }).fill("Test Agent");
-  await card.getByRole("textbox", { name: "Command", exact: true }).fill("node");
-  await card.getByRole("textbox", { name: "Command", exact: true }).press("Tab");
-  await s.page.locator("#agents-status").filter({ hasText: /^Saved./ }).waitFor();
+  await agentForm(s).waitFor();
+  assert.equal(await agentForm(s).locator("details.prefs-agents-args").evaluate((d) => d.open), true, "the arguments are open on a new agent");
+  await formField(s, "Name").fill("Test Agent");
+  await formField(s, "Command").fill("node");
+  await formButton(s, "Test").click();
+  await agentForm(s).locator(".agent-test-result").filter({ hasText: /^Found at / }).waitFor();
+  assert.equal(fs.existsSync(AGENTS_FILE), false, "Test never saves");
 
-  await card.getByRole("button", { name: "Test", exact: true }).click();
-  await card.locator(".agent-test-result").filter({ hasText: /^Found at / }).waitFor();
-
-  const saved = JSON.parse(fs.readFileSync(file, "utf8"));
+  await formButton(s, "Save").click();
+  await agentForm(s).locator(".prefs-saved").filter({ hasText: /^Saved$/ }).waitFor();
+  const saved = JSON.parse(fs.readFileSync(AGENTS_FILE, "utf8"));
   assert.equal(saved.schema, 1);
   assert.deepEqual(saved.agents.map((a) => [a.id, a.name, a.command, a.prompt]), [["test-agent", "Test Agent", "node", "/plan2code"]]);
-
-  // A second agent with the same name is refused on its own card and field.
-  await s.page.click("#agents-add");
-  const second = list.locator(".agent-card").nth(1);
-  await second.getByRole("textbox", { name: "Command", exact: true }).fill("x");
-  await second.getByRole("textbox", { name: "Name", exact: true }).fill("TEST AGENT");
-  await second.getByRole("textbox", { name: "Name", exact: true }).press("Tab");
-  await list.locator(".agent-card").nth(1).locator(".agent-error").filter({ hasText: /already used/ }).waitFor();
-  assert.equal(await list.locator(".agent-card").nth(1).locator('input.invalid[data-field="name"]').count(), 1, "the name field is marked");
-  assert.equal(JSON.parse(fs.readFileSync(file, "utf8")).agents.length, 1, "a refused save writes nothing");
+  assert.equal(await agentForm(s).locator(".prefs-agents-delete").count(), 1, "once saved it has Delete agent");
 
   await s.page.reload({ waitUntil: "domcontentloaded" });
   await drawn(s.page);
-  await s.page.click("#btn-looks");
-  await list.locator(".agent-card").first().waitFor();
-  assert.equal(await list.locator(".agent-card").count(), 1);
-  assert.equal(await list.locator(".agent-card").first().getByRole("textbox", { name: "Name", exact: true }).inputValue(), "Test Agent");
+  await openAgentsTab(s);
+  const row = agentRow(s, "agent:test-agent");
+  await row.locator(".prefs-badge.ok").waitFor();
+  assert.equal(await textOf(row.locator(".prefs-badge")), "Found");
+  await s.page.getByRole("button", { name: "Edit Test Agent" }).click();
+  assert.equal(await formField(s, "Name").inputValue(), "Test Agent");
+  assert.equal(await agentForm(s).locator("details.prefs-agents-args").evaluate((d) => d.open), false, "the arguments are folded on a saved agent");
 
-  await list.locator(".agent-card").first().getByRole("button", { name: "Delete", exact: true }).click();
-  await list.locator(".agent-card").first().getByRole("button", { name: "Yes, delete" }).click();
-  await s.page.waitForFunction(() => document.querySelectorAll("#agents-list .agent-card").length === 0);
-  await s.page.locator("#agents-status").filter({ hasText: /^Saved./ }).waitFor();
-  assert.deepEqual(JSON.parse(fs.readFileSync(file, "utf8")).agents, []);
-});
-
-test("Agents: a new card's first field is not saved alone, and a redraw keeps focus and what was typed", async (t) => {
-  noSavedLooks(t);
-  const file = path.join(MODELS_DIR, "agents.json");
-  fs.rmSync(file, { force: true });
-  t.after(() => fs.rmSync(file, { force: true }));
-  const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_QUESTION });
-  await s.page.click("#btn-looks");
-  const list = s.page.locator("#agents-list");
+  await formButton(s, "Delete agent").click();
+  await formButton(s, "Yes, delete").click();
+  await agentsTable(s).waitFor();
+  assert.equal(await agentsTable(s).locator('tr[data-key^="agent:"]').count(), 0);
+  assert.deepEqual(JSON.parse(fs.readFileSync(AGENTS_FILE, "utf8")).agents, []);
+  assert.equal(await s.page.evaluate(() => document.activeElement?.getAttribute("aria-label") || document.activeElement?.id), "agents-add", "with its row gone, focus goes to Add agent");
+  assert.equal(await textOf(s.page.locator("#agents-status")), "Deleted.");
   await s.page.click("#agents-add");
-  const card = list.locator(".agent-card").last();
-  const name = card.getByRole("textbox", { name: "Name", exact: true });
-  const command = card.getByRole("textbox", { name: "Command", exact: true });
-
-  await name.fill("Focus Agent");
-  await name.press("Tab");
-  await s.page.waitForTimeout(300);
-  assert.equal(await list.locator(".agent-error").count(), 0, "a name alone is not sent, so nothing is refused");
-  assert.equal(fs.existsSync(file), false, "and nothing is written");
-  assert.equal(await command.evaluate((el) => el === document.activeElement), true, "Tab lands on Command");
-
-  // The first good save assigns an id and redraws every card: focus stays where Tab put it.
-  await command.fill("node");
-  await command.press("Tab");
-  await s.page.locator("#agents-status").filter({ hasText: /^Saved./ }).waitFor();
-  assert.equal(JSON.parse(fs.readFileSync(file, "utf8")).agents[0].id, "focus-agent");
-  assert.equal(await s.page.evaluate(() => document.activeElement?.textContent), "Add an argument", "focus survives the redraw");
-
-  // A refused save redraws too: the field being typed in keeps its text, and leaving it saves it.
-  const prompt = list.locator(".agent-card").last().getByRole("textbox", { name: "Start prompt", exact: true });
-  await name.fill("");
-  await prompt.click();
-  await prompt.fill("/plan2code hi");
-  await list.locator(".agent-error").filter({ hasText: /name is missing/ }).waitFor();
-  assert.equal(await s.page.evaluate(() => document.activeElement?.getAttribute("aria-label")), "Start prompt");
-  assert.equal(await s.page.evaluate(() => document.activeElement?.value), "/plan2code hi");
+  assert.equal(await s.page.locator("#agents-status").innerText(), "", "opening a form clears Deleted.");
 });
 
-test("Agents: a file holding entries the page could not read is only replaced after Save anyway", async (t) => {
+test("Agents & models: a new agent with only a name is not sent, its command is marked, and focus and text survive", async (t) => {
   noSavedLooks(t);
-  const file = path.join(MODELS_DIR, "agents.json");
-  fs.mkdirSync(MODELS_DIR, { recursive: true });
+  seedAgents(t);
+  const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_QUESTION });
+  await openAgentsTab(s);
+  await s.page.click("#agents-add");
+  await formField(s, "Name").fill("Focus Agent");
+  await formButton(s, "Save").click();
+  await agentForm(s).locator(".agent-error").filter({ hasText: "Give it a name and a command first." }).waitFor();
+  assert.equal(fs.existsSync(AGENTS_FILE), false, "nothing is written");
+  assert.equal(await agentForm(s).locator('input.invalid[data-field="command"]').count(), 1, "the command field is marked");
+  assert.equal(await formField(s, "Name").inputValue(), "Focus Agent", "the typed name survives the redraw");
+  assert.equal(await s.page.evaluate(() => document.activeElement?.textContent), "Save", "focus stays on Save");
+
+  // The first good save assigns an id; the form stays open on it.
+  await formField(s, "Command").fill("node");
+  await formButton(s, "Save").click();
+  await agentForm(s).locator(".prefs-saved").filter({ hasText: /^Saved$/ }).waitFor();
+  assert.equal(JSON.parse(fs.readFileSync(AGENTS_FILE, "utf8")).agents[0].id, "focus-agent");
+  assert.equal(await textOf(agentForm(s).locator(".prefs-agents-title")), "Focus Agent");
+
+  // A refused save marks the field the server names, and keeps what was typed.
+  await formField(s, "Name").fill("");
+  await formField(s, "Start prompt").fill("/plan2code hi");
+  await formButton(s, "Save").click();
+  await agentForm(s).locator(".agent-error").filter({ hasText: /name is missing/ }).waitFor();
+  assert.equal(await agentForm(s).locator('input.invalid[data-field="name"]').count(), 1);
+  assert.equal(await formField(s, "Start prompt").inputValue(), "/plan2code hi");
+  assert.equal(JSON.parse(fs.readFileSync(AGENTS_FILE, "utf8")).agents[0].name, "Focus Agent", "a refused save writes nothing");
+});
+
+test("Agents & models: a file holding entries the page could not read is only replaced after Save anyway", async (t) => {
+  noSavedLooks(t);
   const text = JSON.stringify({ schema: 2, agents: [{ id: "future", name: "Future", command: "future" }] });
-  fs.writeFileSync(file, text);
-  t.after(() => fs.rmSync(file, { force: true }));
+  fs.mkdirSync(MODELS_DIR, { recursive: true });
+  fs.writeFileSync(AGENTS_FILE, text);
+  t.after(() => fs.rmSync(AGENTS_FILE, { force: true }));
   const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_QUESTION });
-  await s.page.click("#btn-looks");
+  await openAgentsTab(s);
   await s.page.locator("#agents-status").filter({ hasText: /schema 2/ }).waitFor();
-  assert.equal(await s.page.locator("#agents-replace").isVisible(), false, "no Save anyway before a save is tried");
 
   await s.page.click("#agents-add");
-  const card = s.page.locator("#agents-list .agent-card").last();
-  await card.getByRole("textbox", { name: "Name", exact: true }).fill("Mine");
-  await card.getByRole("textbox", { name: "Command", exact: true }).fill("node");
-  await card.getByRole("textbox", { name: "Command", exact: true }).press("Tab");
-  await s.page.locator("#agents-status").filter({ hasText: /could not read/ }).waitFor();
-  assert.equal(fs.readFileSync(file, "utf8"), text, "the refused save writes nothing");
+  assert.equal(await formButton(s, "Save anyway").count(), 0, "no Save anyway before a save is tried");
+  await formField(s, "Name").fill("Mine");
+  await formField(s, "Command").fill("node");
+  await formButton(s, "Save").click();
+  await agentForm(s).locator(".agent-error").filter({ hasText: /could not read/ }).first().waitFor();
+  assert.equal(fs.readFileSync(AGENTS_FILE, "utf8"), text, "the refused save writes nothing");
 
-  await s.page.locator("#agents-replace").click();
-  await s.page.locator("#agents-status").filter({ hasText: /^Saved./ }).waitFor();
-  assert.equal(await s.page.locator("#agents-replace").isVisible(), false);
-  assert.deepEqual(JSON.parse(fs.readFileSync(file, "utf8")).agents.map((a) => a.id), ["mine"]);
+  await formButton(s, "Save anyway").click();
+  await agentForm(s).locator(".prefs-saved").filter({ hasText: /^Saved$/ }).waitFor();
+  assert.equal(await formButton(s, "Save anyway").count(), 0);
+  assert.deepEqual(JSON.parse(fs.readFileSync(AGENTS_FILE, "utf8")).agents.map((a) => a.id), ["mine"]);
+});
+
+const TWO_AGENTS = [
+  { id: "alpha", name: "Alpha", command: "alpha-cli" },
+  { id: "beta", name: "Beta", command: "beta-cli" },
+];
+
+test("Agents & models: nothing reaches agents.json before Save", async (t) => {
+  noSavedLooks(t);
+  seedAgents(t, TWO_AGENTS);
+  const before = fs.readFileSync(AGENTS_FILE, "utf8");
+  const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_QUESTION });
+  await openAgentsTab(s);
+  await s.page.getByRole("button", { name: "Edit Alpha" }).click();
+  await formField(s, "Command").fill("alpha-cli --edited");
+  await formField(s, "Command").press("Tab");
+  await s.page.waitForTimeout(500);
+  assert.equal(fs.readFileSync(AGENTS_FILE, "utf8"), before, "agents.json is byte for byte unchanged");
+  await formButton(s, "Save").click();
+  await agentForm(s).locator(".prefs-saved").filter({ hasText: /^Saved$/ }).waitFor();
+  assert.equal(JSON.parse(fs.readFileSync(AGENTS_FILE, "utf8")).agents[0].command, "alpha-cli --edited");
+});
+
+test("Agents & models: a discarded edit never rides along with another agent's Save", async (t) => {
+  noSavedLooks(t);
+  seedAgents(t, TWO_AGENTS);
+  const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_QUESTION });
+  await openAgentsTab(s);
+  await s.page.getByRole("button", { name: "Edit Alpha" }).click();
+  await formField(s, "Command").fill("alpha-cli --dropped");
+  await formButton(s, "Back to summary").click();
+  await unsavedPrompt(s).waitFor();
+  assert.equal(await textOf(s.page.locator("#prefs-unsaved-name")), "Alpha");
+  assert.equal(await s.page.locator("#looks-modal .prefs-body").evaluate((b) => b.inert), true, "the dialog behind the prompt is out of reach");
+  await unsavedPrompt(s).getByRole("button", { name: "Discard", exact: true }).click();
+  await agentsTable(s).waitFor();
+  assert.equal(await s.page.locator("#looks-modal .prefs-body").evaluate((b) => b.inert), false);
+  assert.equal(await s.page.evaluate(() => document.activeElement?.getAttribute("aria-label") || document.activeElement?.id), "Edit Alpha", "focus comes back to the row just left");
+
+  await s.page.getByRole("button", { name: "Edit Beta" }).click();
+  await formField(s, "Command").fill("beta-cli --kept");
+  await formButton(s, "Save").click();
+  await agentForm(s).locator(".prefs-saved").filter({ hasText: /^Saved$/ }).waitFor();
+  const agents = JSON.parse(fs.readFileSync(AGENTS_FILE, "utf8")).agents;
+  assert.deepEqual(agents.map((a) => [a.id, a.command]), [["alpha", "alpha-cli"], ["beta", "beta-cli --kept"]]);
+});
+
+test("Agents & models: an unsaved edit asks first on Back, Close, Esc, a backdrop click and a tab switch", async (t) => {
+  noSavedLooks(t);
+  seedAgents(t, TWO_AGENTS);
+  const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_QUESTION });
+  await openAgentsTab(s);
+  const modal = s.page.locator("#looks-modal");
+  const edit = async (command) => {
+    if (!(await agentForm(s).isVisible())) await s.page.getByRole("button", { name: "Edit Alpha" }).click();
+    await formField(s, "Command").fill(command);
+  };
+  const triggers = {
+    back: () => formButton(s, "Back to summary").click(),
+    close: () => s.page.click("#looks-done"),
+    esc: () => formField(s, "Command").press("Escape"),
+    backdrop: () => s.page.mouse.click(4, 4),
+    tab: () => s.page.click("#prefs-tab-appearance"),
+  };
+  for (const [name, leave] of Object.entries(triggers)) {
+    // Keep editing: the form and the draft stay.
+    await edit(`alpha-${name}-kept`);
+    await leave();
+    await unsavedPrompt(s).waitFor();
+    assert.equal(await s.page.evaluate(() => document.activeElement?.id), "prefs-unsaved-save", `${name}: Save has focus`);
+    await unsavedPrompt(s).getByRole("button", { name: "Keep editing" }).click();
+    await unsavedPrompt(s).waitFor({ state: "hidden" });
+    assert.equal(await modal.evaluate((d) => d.open), true, `${name}: the dialog stays open`);
+    assert.equal(await formField(s, "Command").inputValue(), `alpha-${name}-kept`, `${name}: the draft stays`);
+    assert.equal(await s.page.locator("#prefs-tab-agents").getAttribute("aria-selected"), "true");
+  }
+  const before = fs.readFileSync(AGENTS_FILE, "utf8");
+
+  // Discard drops the edit and goes on (here, Close).
+  await triggers.close();
+  await unsavedPrompt(s).getByRole("button", { name: "Discard", exact: true }).click();
+  await modal.waitFor({ state: "hidden" });
+  assert.equal(fs.readFileSync(AGENTS_FILE, "utf8"), before, "Discard writes nothing");
+
+  // Save writes and goes on (here, a tab switch).
+  await openAgentsTab(s);
+  await edit("alpha-saved");
+  await triggers.tab();
+  await unsavedPrompt(s).getByRole("button", { name: "Save", exact: true }).click();
+  await s.page.locator('#prefs-tab-appearance[aria-selected="true"]').waitFor();
+  assert.equal(JSON.parse(fs.readFileSync(AGENTS_FILE, "utf8")).agents[0].command, "alpha-saved");
+});
+
+test("Agents & models: Esc in the unsaved prompt keeps editing, and a Save that fails there stays and marks the field", async (t) => {
+  noSavedLooks(t);
+  seedAgents(t);
+  const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_QUESTION });
+  await openAgentsTab(s);
+  await s.page.click("#agents-add");
+  await formField(s, "Name").fill("Half Agent");
+
+  await s.page.click("#looks-done");
+  await unsavedPrompt(s).waitFor();
+  await s.page.keyboard.press("Escape");
+  await unsavedPrompt(s).waitFor({ state: "hidden" });
+  assert.equal(await s.page.locator("#looks-modal").evaluate((d) => d.open), true, "Esc in the prompt does not close the dialog");
+  assert.equal(await formField(s, "Name").inputValue(), "Half Agent", "the draft stays");
+
+  // Save from the prompt with no command: nothing is sent, the dialog stays, focus is on the marked field.
+  await s.page.click("#looks-done");
+  await unsavedPrompt(s).getByRole("button", { name: "Save", exact: true }).click();
+  await unsavedPrompt(s).waitFor({ state: "hidden" });
+  assert.equal(await s.page.locator("#looks-modal").evaluate((d) => d.open), true, "a failed Save keeps the dialog open");
+  assert.equal(fs.existsSync(AGENTS_FILE), false, "nothing is written");
+  assert.equal(await s.page.evaluate(() => document.activeElement?.matches('input.invalid[data-field="command"]')), true, "focus is on the marked field");
+});
+
+test("Agents & models: a command not on PATH is marked, and the orchestrator row has no Edit", async (t) => {
+  noSavedLooks(t);
+  seedAgents(t, [{ id: "ghost", name: "Ghost", command: "plan2code-no-such-command-xyz" }]);
+  const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_QUESTION });
+  await openAgentsTab(s);
+  const badge = agentRow(s, "agent:ghost").locator(".prefs-badge");
+  await badge.filter({ hasText: "Not found on PATH" }).waitFor();
+  assert.equal(await badge.evaluate((b) => b.classList.contains("missing")), true);
+  const soon = agentsTable(s).locator("tr.prefs-agents-soon");
+  assert.match(await textOf(soon), /v3 orchestrator\s+Nothing to set yet\./);
+  assert.equal(await soon.getByRole("button").count(), 0);
+});
+
+test("Agents & models: below 720 px the Models column is hidden and the form is one column", async (t) => {
+  noSavedLooks(t);
+  seedAgents(t, TWO_AGENTS);
+  const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_QUESTION });
+  await s.page.setViewportSize({ width: 600, height: 800 });
+  await openAgentsTab(s);
+  const cells = agentsTable(s).locator(".prefs-agents-models");
+  const shown = [];
+  for (let i = 0; i < (await cells.count()); i++) shown.push(await styleOf(cells.nth(i), "display"));
+  assert.ok(shown.length > 0 && shown.every((d) => d === "none"), `the Models cells are hidden: ${shown}`);
+  await s.page.getByRole("button", { name: "Edit Alpha" }).click();
+  const cols = await styleOf(agentForm(s).locator(".prefs-agents-fields"), "grid-template-columns");
+  assert.equal(cols.trim().split(/\s+/).length, 1, `one column: ${cols}`);
 });
 
 test("Cleanup scans the console home and lists an old session folder with its size", async (t) => {
@@ -243,6 +411,7 @@ test("Cleanup scans the console home and lists an old session folder with its si
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
 
   await s.page.click("#btn-looks");
+  await s.page.click("#prefs-tab-system");
   const list = s.page.locator("#cleanup-list");
   assert.equal(await list.locator(".cleanup-row").count(), 0, "Cleanup lists things before a scan");
   assert.equal(await s.page.locator("#cleanup-delete").isHidden(), true, "Delete is offered before a scan");
@@ -262,6 +431,201 @@ test("Cleanup scans the console home and lists an old session folder with its si
   // Closing preferences forgets the scan: a reopened dialog starts clean.
   await s.page.click("#looks-done");
   await s.page.click("#btn-looks");
+  await s.page.click("#prefs-tab-system");
   assert.equal(await list.locator(".cleanup-row").count(), 0, "the old scan is still listed");
   assert.equal(await s.page.locator("#cleanup-delete").isHidden(), true);
+});
+
+/* ------------------------------------------------------------- the tabs */
+
+const tabNames = async (s) => (await s.page.locator("#prefs-tabs [role=tab] .prefs-tab-label").allInnerTexts()).map((x) => x.trim());
+const selectedTab = (s) => s.page.evaluate(() => document.querySelector('#prefs-tabs [aria-selected="true"]')?.id);
+const focusedId = (s) => s.page.evaluate(() => document.activeElement?.id);
+const visiblePanels = (s) => s.page.evaluate(() => [...document.querySelectorAll("#prefs-panels [role=tabpanel]")].filter((p) => !p.hidden).map((p) => p.id));
+
+test("the gear opens User Preferences on Appearance, with four tabs in order and one panel shown", async (t) => {
+  noSavedLooks(t);
+  const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_QUESTION });
+  await s.page.setViewportSize({ width: 1000, height: 800 });
+  await s.page.click("#btn-looks");
+  await s.page.locator("#looks-modal[open]").waitFor();
+  assert.deepEqual(await tabNames(s), ["Appearance", "Agents & models", "System", "Sounds & activities"]);
+  assert.equal(await selectedTab(s), "prefs-tab-appearance");
+  assert.equal(await focusedId(s), "prefs-tab-appearance", "focus is on the selected tab");
+  assert.equal(await s.page.locator('#prefs-tabs [tabindex="0"]').count(), 1, "one tab in the tab order");
+  assert.deepEqual(await visiblePanels(s), ["prefs-panel-appearance"]);
+  assert.equal(await s.page.locator("#prefs-tab-appearance").getAttribute("aria-controls"), "prefs-panel-appearance");
+  assert.equal(await s.page.locator("#prefs-panel-appearance").getAttribute("aria-labelledby"), "prefs-tab-appearance");
+  assert.equal(await textOf(s.page.locator("#looks-done")), "Close", "the footer button no longer says Done");
+});
+
+test("Preferences' tabs move with the arrow, Home and End keys, wrapping at the ends", async (t) => {
+  noSavedLooks(t);
+  const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_QUESTION });
+  await s.page.click("#btn-looks");
+  await s.page.locator("#looks-modal[open]").waitFor();
+  const press = async (key, want) => {
+    await s.page.keyboard.press(key);
+    assert.equal(await selectedTab(s), want, `${key} selects ${want}`);
+    assert.equal(await focusedId(s), want, `${key} focuses ${want}`);
+    assert.deepEqual(await visiblePanels(s), [want.replace("-tab-", "-panel-")]);
+  };
+  await press("ArrowDown", "prefs-tab-agents");
+  await press("ArrowRight", "prefs-tab-system");
+  await press("End", "prefs-tab-sounds");
+  await press("ArrowDown", "prefs-tab-appearance");
+  await press("ArrowUp", "prefs-tab-sounds");
+  await press("Home", "prefs-tab-appearance");
+  await press("ArrowLeft", "prefs-tab-sounds");
+});
+
+test("below 720 px the side list is a horizontal strip with no hints", async (t) => {
+  noSavedLooks(t);
+  const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_QUESTION });
+  await s.page.setViewportSize({ width: 1000, height: 800 });
+  await s.page.click("#btn-looks");
+  const list = s.page.locator("#prefs-tabs");
+  const hint = s.page.locator("#prefs-tab-appearance .prefs-tab-hint");
+  assert.equal(await list.getAttribute("aria-orientation"), "vertical");
+  assert.equal(await styleOf(hint, "display"), "block", "hints show in the side list");
+  assert.equal(await styleOf(list, "flex-direction"), "column");
+  await s.page.setViewportSize({ width: 600, height: 800 });
+  await s.page.waitForFunction(() => document.getElementById("prefs-tabs").getAttribute("aria-orientation") === "horizontal");
+  assert.equal(await styleOf(hint, "display"), "none", "no hints in the strip");
+  assert.deepEqual(await stylesOf(list, ["flex-direction", "overflow-x"]), { "flex-direction": "row", "overflow-x": "auto" });
+  await s.page.setViewportSize({ width: 1000, height: 800 });
+  await s.page.waitForFunction(() => document.getElementById("prefs-tabs").getAttribute("aria-orientation") === "vertical");
+});
+
+test("Set up preferences on the dashboard opens on Appearance with agents and models loaded", async (t) => {
+  fs.mkdirSync(HOME, { recursive: true });
+  fs.writeFileSync(LOOKS_FILE, JSON.stringify({ looks: { welcomeSeen: true } }));
+  t.after(() => fs.rmSync(LOOKS_FILE, { force: true }));
+  const file = path.join(MODELS_DIR, "agents.json");
+  fs.mkdirSync(MODELS_DIR, { recursive: true });
+  fs.writeFileSync(file, JSON.stringify({ schema: 1, agents: [{ id: "goose", name: "Goose", command: "goose" }] }));
+  t.after(() => fs.rmSync(file, { force: true }));
+  const s = await openSession(await suite.browser(), {
+    t,
+    workflow: "dashboard",
+    payload: { menu: { note: "Nothing yet." }, agent: { status: "waiting" } },
+  });
+  const skip = s.page.getByRole("button", { name: "Skip the intro" });
+  await skip.click();
+  await skip.waitFor({ state: "hidden" });
+  await s.page.getByRole("button", { name: "Set up preferences" }).click();
+  await s.page.locator("#looks-modal[open]").waitFor();
+  assert.equal(await selectedTab(s), "prefs-tab-appearance");
+  await s.page.click("#prefs-tab-agents");
+  const goose = s.page.locator('#agents-table tr[data-key="agent:goose"]');
+  await goose.waitFor();
+  assert.match(await textOf(goose.locator(".prefs-agents-name")), /^Goose/);
+  assert.equal(await s.page.locator('#agents-table tr[data-key="cli:claude"]').count(), 1, "the built-ins are listed");
+  assert.doesNotMatch(await s.page.locator("#agents-status").innerText(), /could not be loaded/);
+});
+
+test("Back to default resets only the tab on screen, and is hidden on Agents & models and System", async (t) => {
+  noSavedLooks(t);
+  const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_QUESTION });
+  await s.page.click("#btn-looks");
+  await s.page.locator('input[name="looks-theme"][value="dark"]').check();
+  await swatch(s, "violet").click();
+  await s.page.click("#prefs-tab-sounds");
+  await s.page.locator("#looks-sound").uncheck();
+  await s.page.locator("#looks-activities").uncheck();
+
+  await s.page.click("#prefs-tab-agents");
+  assert.equal(await s.page.locator("#looks-reset").isHidden(), true, "hidden on Agents & models");
+  await s.page.click("#prefs-tab-system");
+  assert.equal(await s.page.locator("#looks-reset").isHidden(), true, "hidden on System");
+
+  await s.page.click("#prefs-tab-appearance");
+  await s.page.click("#looks-reset");
+  await s.page.waitForFunction(() => !document.documentElement.hasAttribute("data-theme"));
+  assert.equal(await swatch(s, "violet").getAttribute("aria-pressed"), "false");
+  await s.page.click("#prefs-tab-sounds");
+  assert.equal(await s.page.locator("#looks-sound").isChecked(), false, "Appearance's reset left sounds off");
+  assert.equal(await s.page.locator("#looks-activities").isChecked(), false);
+
+  await s.page.click("#prefs-tab-appearance");
+  await s.page.locator('input[name="looks-theme"][value="dark"]').check();
+  await s.page.click("#prefs-tab-sounds");
+  await s.page.click("#looks-reset");
+  await s.page.locator("#looks-sound:checked").waitFor();
+  assert.equal(await s.page.locator("#looks-activities").isChecked(), true);
+  assert.equal(await root(s, "data-theme"), "dark", "the sounds reset left the dark theme");
+  await s.page.waitForFunction(async () => {
+    const saved = (await (await fetch("/looks")).json()).looks || {};
+    return saved.sound === true && saved.hideActivities === false && saved.theme === "dark";
+  });
+});
+
+test("a theme change shows Saved level with the Theme legend, outside the fieldset's grid", async (t) => {
+  noSavedLooks(t);
+  const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_QUESTION });
+  await s.page.click("#btn-looks");
+  await s.page.locator('input[name="looks-theme"][value="light"]').check();
+  const mark = s.page.locator('fieldset[data-section="theme"] .prefs-saved');
+  await mark.filter({ hasText: "Saved" }).waitFor();
+  assert.equal(await mark.getAttribute("role"), "status");
+  // Out of the fieldset's grid: the three choices still share one row.
+  assert.equal(await styleOf(mark, "position"), "absolute");
+  const tops = await s.page.locator('fieldset[data-section="theme"] label').evaluateAll((ls) => ls.map((l) => l.offsetTop));
+  assert.equal(new Set(tops).size, 1, `the theme choices sit on one row: ${tops}`);
+});
+
+test("a save the server refuses shows its error in the Saved mark's place, until a save lands", async (t) => {
+  noSavedLooks(t);
+  const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_QUESTION });
+  let refuse = true;
+  await s.page.route("**/looks", (route) =>
+    refuse && route.request().method() === "POST"
+      ? route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ error: "Disk is full." }) })
+      : route.continue()
+  );
+  await s.page.click("#btn-looks");
+  await s.page.locator('input[name="looks-theme"][value="dark"]').check();
+  const mark = s.page.locator('fieldset[data-section="theme"] .prefs-saved');
+  await mark.filter({ hasText: "Disk is full." }).waitFor();
+  assert.equal(await mark.evaluate((m) => m.classList.contains("error")), true);
+  refuse = false;
+  await s.page.locator('input[name="looks-theme"][value="light"]').check();
+  await mark.filter({ hasText: "Saved" }).waitFor();
+  assert.equal(await mark.evaluate((m) => m.classList.contains("error")), false, "the error clears once a save lands");
+});
+
+test("a Preferences tab is named by its label alone, with the hint as its description", async (t) => {
+  noSavedLooks(t);
+  const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_QUESTION });
+  await s.page.click("#btn-looks");
+  for (const name of ["Appearance", "Agents & models", "System", "Sounds & activities"]) {
+    assert.equal(await s.page.getByRole("tab", { name, exact: true }).count(), 1, `a tab named ${name}`);
+  }
+  const tab = s.page.locator("#prefs-tab-system");
+  assert.equal(await textOf(s.page.locator("#" + (await tab.getAttribute("aria-describedby")))), "Cleanup, desktop app");
+});
+
+// Read from the Subagents dialog at 1000 px before Preferences moved to tabs:
+// it borrows Preferences' .looks classes, and must not change with them.
+const SUBAGENTS_BEFORE = {
+  modal: { "max-width": "none", width: "900px" },
+  row: { display: "grid", "grid-template-columns": "repeat(2, minmax(0px, 1fr))", "margin-top": "0px" },
+  second: { "margin-top": "0px" },
+  actions: { display: "flex", "justify-content": "flex-end" },
+};
+
+test("the Subagents dialog looks as it did before Preferences moved to tabs", async (t) => {
+  const s = await openSession(await suite.browser(), { t, workflow: "implement", payload: { agent: { status: "working", activity: "Task 1 of 2" } } });
+  await s.page.setViewportSize({ width: 1000, height: 800 });
+  const modal = s.page.locator("#subagents-modal");
+  await s.page.locator("#btn-subagents").click();
+  await modal.waitFor();
+  const got = {
+    modal: await stylesOf(modal, ["max-width", "width"]),
+    row: await stylesOf(modal.locator("fieldset.looks-row").first(), ["display", "grid-template-columns", "margin-top"]),
+    second: await stylesOf(modal.locator("fieldset.modal-ranges").nth(1), ["margin-top"]),
+    actions: await stylesOf(modal.locator(".modal-actions"), ["display", "justify-content"]),
+  };
+  if (process.env.P2C_PRINT_SUBAGENTS) console.log("SUBAGENTS " + JSON.stringify(got));
+  assert.deepEqual(got, SUBAGENTS_BEFORE);
 });

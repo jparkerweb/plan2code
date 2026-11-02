@@ -4,7 +4,7 @@ import path from "node:path";
 
 import { CHAT_LIMIT } from "./public/chat.js";
 import { appendJsonLine, nowIso, readJson, readJsonLines, writeJsonAtomic } from "./files.mjs";
-import { isPlainObject, proseProblems } from "./patches.mjs";
+import { isPlainObject, proseProblems, rule } from "./patches.mjs";
 
 /* ------------------------------------------------------- the chat inbox */
 
@@ -143,12 +143,12 @@ export function chatReplyLines(entries) {
   const lines = [];
   for (const e of entries) {
     if (e.kind === "message") {
-      lines.push(`Quick question: ${indent(e.text, "  ")}`);
+      lines.push(`Quick question (${e.seq}): ${indent(e.text, "  ")}`);
       if (e.about && e.about.label) lines.push(`  About: ${indent(e.about.label, "    ")}`);
       for (const img of e.images || []) lines.push(`  Image: ${img.path} (${img.name})`);
       for (const f of e.files || []) lines.push(`  File: ${f.path} (${f.name})`);
     } else if (e.kind === "decision") {
-      lines.push(`${e.decision === "approve" ? "Approved" : "Declined"}: edit ${e.re}`);
+      lines.push(`${e.decision === "approve" ? "Approved" : "Declined"} (${e.seq}): edit ${e.re}`);
       if (e.text) lines.push(`  Note: ${indent(e.text, "    ")}`);
     } else if (e.kind === "reset") {
       lines.push("New conversation started. Treat earlier chat as closed.");
@@ -181,7 +181,8 @@ function underSpec(file, specDir) {
 export function validateChat(state, entries) {
   const replies = state?.chat?.replies;
   if (replies == null) return [];
-  if (!Array.isArray(replies)) return ['"chat.replies" must be an array'];
+  const right = { chat: { replies: [{ re: 12, md: "..." }] } };
+  if (!Array.isArray(replies)) return [rule("", "chat.replies", "must be an array", right)];
   const problems = [];
   const targets = new Set(
     entries.filter((e) => e.kind === "message" || e.kind === "decision").map((e) => e.seq)
@@ -189,34 +190,36 @@ export function validateChat(state, entries) {
   const ids = new Set();
   for (const r of replies) {
     if (!isPlainObject(r)) {
-      problems.push("every chat reply must be an object");
+      problems.push(rule("", "chat.replies", "every reply must be an object", right));
       continue;
     }
     const name = typeof r.id === "string" && r.id.trim() ? r.id : "(no id)";
-    if (name === "(no id)") problems.push('every chat reply needs a non-empty string "id"');
-    else if (ids.has(r.id)) problems.push(`duplicate chat reply id "${r.id}"`);
+    const at = `chat reply "${name}"`;
+    if (name === "(no id)") problems.push(rule(at, "id", 'needs a non-empty string "id" (or "re", which names it)', right));
+    else if (ids.has(r.id)) problems.push(rule(at, "id", "is used twice", right));
     ids.add(r.id);
     if (!Number.isInteger(r.re) || !targets.has(r.re)) {
-      problems.push(`chat reply "${name}" needs "re": the seq of the message or decision it answers`);
+      problems.push(rule(at, "re", "needs the seq of the message or decision it answers", right));
     }
-    if (!Number.isInteger(r.conversation)) problems.push(`chat reply "${name}" needs an integer "conversation"`);
-    if (typeof r.md !== "string" || !r.md.trim()) problems.push(`chat reply "${name}" needs its answer in "md"`);
+    if (!Number.isInteger(r.conversation)) problems.push(rule(at, "conversation", "needs an integer", right));
+    if (typeof r.md !== "string" || !r.md.trim()) problems.push(rule(at, "md", "needs the answer", right));
 
     const p = r.proposal;
     if (p != null) {
-      if (!isPlainObject(p)) problems.push(`chat reply "${name}" "proposal" must be an object`);
+      const proposalRight = { chat: { replies: [{ re: 12, md: "...", proposal: { summary: "Rename the helper", files: ["src/util.mjs"] } }] } };
+      if (!isPlainObject(p)) problems.push(rule(at, "proposal", "must be an object", proposalRight));
       else {
         if (typeof p.summary !== "string" || !p.summary.trim()) {
-          problems.push(`chat reply "${name}" proposal needs a plain-English "summary"`);
+          problems.push(rule(at, "proposal.summary", "needs a plain-English summary", proposalRight));
         }
         if (!Array.isArray(p.files) || !p.files.length) {
-          problems.push(`chat reply "${name}" proposal needs "files": the project files it would change`);
+          problems.push(rule(at, "proposal.files", "needs the project files it would change", proposalRight));
         } else {
           for (const f of p.files) {
             if (!projectRelative(f)) {
-              problems.push(`chat reply "${name}" proposal file "${f}" must be a project-relative path`);
+              problems.push(rule(at, "proposal.files", `"${f}" must be a project-relative path`, proposalRight));
             } else if (state.specDir && underSpec(f, state.specDir)) {
-              problems.push(`a chat edit cannot touch the running skill's own files under ${state.specDir}/`);
+              problems.push(rule(at, "proposal.files", `a chat edit cannot touch the running skill's own files under ${state.specDir}/`, proposalRight));
             }
           }
         }
@@ -226,12 +229,13 @@ export function validateChat(state, entries) {
     if (r.changed != null) {
       const count = (n) => Number.isInteger(n) && n >= 0;
       if (!Array.isArray(r.changed) || !r.changed.every((c) => isPlainObject(c) && typeof c.file === "string" && count(c.added) && count(c.removed))) {
-        problems.push(`chat reply "${name}" "changed" must be a list of { file, added, removed }`);
+        problems.push(rule(at, "changed", "must be a list of { file, added, removed }", { changed: [{ file: "src/util.mjs", added: 3, removed: 1 }] }));
       }
     }
+
+    problems.push(...proseProblems(String(r.md ?? ""), `${at} md`));
+    if (isPlainObject(p) && typeof p.summary === "string") problems.push(...proseProblems(p.summary, `${at} proposal.summary`));
   }
 
-  const prose = JSON.stringify(replies.map((r) => [r && r.md, r && r.proposal && r.proposal.summary]));
-  problems.push(...proseProblems(prose, "a chat reply"));
   return problems;
 }

@@ -9,7 +9,7 @@ import { normalizeRole, ROLE_NOT_SET } from "./starters.js";
 import { bootData, hooks } from "./state.js";
 import { el } from "./render.js";
 import { tellApp } from "./app-bridge.js";
-import { ACTIVITIES, bestKey, memoKey } from "./activities.js";
+import { ACTIVITIES, bestKeys, memoKey, musicKey, musicLevel } from "./activities.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -31,13 +31,20 @@ export const DEFAULT_LOOKS = {
   ...soundPrefs(null),
   width: DEFAULT_CARD_WIDTH,
   hideUnavailable: true,
-  // Activities: the top bar's die, the game last picked, and one best score
-  // per listed game (activityBestSnake), each a flat key for cleanLooks().
+  // Activities: the top bar's die, whether its games play sounds (under Play
+  // sounds, which silences them too), the game last picked, and one best score
+  // per listed game (activityBestSnake) or, for a game with courses, per
+  // course (activityBestGolfPirate), each a flat key for cleanLooks().
   hideActivities: false,
+  activitySounds: true,
+  // Whether a game plays its chiptune music too: off until asked for.
+  gameMusic: false,
   lastActivity: "",
-  ...Object.fromEntries(ACTIVITIES.map((a) => [bestKey(a.id), 0])),
+  ...Object.fromEntries(ACTIVITIES.flatMap((a) => bestKeys(a).map((key) => [key, 0]))),
   // And one memo per game (activityMemoSnake): Snake's surprises found.
   ...Object.fromEntries(ACTIVITIES.map((a) => [memoKey(a.id), 0])),
+  // And, for a game with music, its music volume (activityMusicDrive), 0 to 100.
+  ...Object.fromEntries(ACTIVITIES.filter((a) => a.music !== undefined).map((a) => [musicKey(a.id), a.music])),
 };
 
 export let looks = { ...DEFAULT_LOOKS };
@@ -55,14 +62,18 @@ export function adoptLooks(saved) {
   if (typeof looks.hideUnavailable !== "boolean") looks.hideUnavailable = DEFAULT_LOOKS.hideUnavailable;
   looks.width = cardWidth(looks.width);
   if (typeof looks.hideActivities !== "boolean") looks.hideActivities = DEFAULT_LOOKS.hideActivities;
+  if (typeof looks.activitySounds !== "boolean") looks.activitySounds = DEFAULT_LOOKS.activitySounds;
+  if (typeof looks.gameMusic !== "boolean") looks.gameMusic = DEFAULT_LOOKS.gameMusic;
   if (typeof looks.lastActivity !== "string") looks.lastActivity = DEFAULT_LOOKS.lastActivity;
   // A best score is a whole number of points, never below none.
   for (const a of ACTIVITIES) {
-    const key = bestKey(a.id);
-    const n = Number(looks[key]);
-    looks[key] = Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
+    for (const key of bestKeys(a)) {
+      const n = Number(looks[key]);
+      looks[key] = Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
+    }
     const memo = Number(looks[memoKey(a.id)]);
     looks[memoKey(a.id)] = Number.isFinite(memo) && memo > 0 ? Math.floor(memo) : 0;
+    if (a.music !== undefined) looks[musicKey(a.id)] = Math.round(musicLevel(a, looks[musicKey(a.id)]) * 100);
   }
   if (saved && typeof saved === "object" && Object.hasOwn(saved, "role")) looks.role = normalizeRole(saved.role);
   else delete looks.role;
@@ -117,8 +128,9 @@ export async function syncLooks() {
   setTimeout(hooks.maybeWelcome, 0);
 }
 
-// Fire-and-forget mirror. A failed POST costs nothing the next session would
-// notice on this port; the localStorage copy still covers the reload case.
+// The mirror on the server. A failed POST costs nothing the next session would
+// notice on this port; the localStorage copy still covers the reload case. It
+// resolves with whether the write landed, for Preferences' Saved mark.
 function pushLooks() {
   try {
     // Only what this tab changed since it last synced, so a tab with stale
@@ -127,19 +139,29 @@ function pushLooks() {
     for (const [k, v] of Object.entries(looks)) if (!syncedLooks || syncedLooks[k] !== v) set[k] = v;
     const before = syncedLooks;
     const partial = Boolean(before);
-    if (partial && !Object.keys(set).length) return;
+    if (partial && !Object.keys(set).length) return Promise.resolve({ ok: true });
     syncedLooks = { ...looks };
     const body = partial ? { set } : { looks };
     // A write that did not land must be sent again with the next change.
     const undo = () => (syncedLooks = before);
-    fetch("/looks", {
+    const failed = (error) => {
+      undo();
+      return { ok: false, error: error || "Could not save." };
+    };
+    return fetch("/looks", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
     })
-      .then((res) => res.ok || undo())
-      .catch(undo);
-  } catch {}
+      .then(async (res) => {
+        if (res.ok) return { ok: true };
+        const reply = await res.json().catch(() => ({}));
+        return failed(reply.error);
+      })
+      .catch(() => failed());
+  } catch {
+    return Promise.resolve({ ok: false, error: "Could not save." });
+  }
 }
 
 const systemDark = () => matchMedia("(prefers-color-scheme: dark)").matches;
@@ -174,16 +196,26 @@ export function applyLooks() {
   ACCENT_VARS.forEach((name, i) => root.style.setProperty(name, shades[i]));
 }
 
+// Resolves { ok: true } once the server has it (or there was nothing new to
+// send), or { ok: false, error } when the write did not land.
 export function saveLooks() {
   try {
     localStorage.setItem(LOOKS_KEY, JSON.stringify(looks));
   } catch {}
-  pushLooks();
+  const pushed = pushLooks();
   applyLooks();
   // A width change reflows the card without resizing the column, so the
   // column's observer never hears of it: refit the growing box here.
   hooks.fitGrowBox();
   renderSwatches();
+  return pushed;
+}
+
+// Told of each swatch's save, for Preferences' Saved mark: set by the dialog's
+// screen, since this module never imports one.
+let swatchSaved = null;
+export function onSwatchSaved(fn) {
+  swatchSaved = fn;
 }
 
 // Built once, repainted in place. Rebuilding the row on every choice destroyed
@@ -200,7 +232,8 @@ export function renderSwatches() {
       b.setAttribute("aria-label", a.name);
       b.addEventListener("click", () => {
         looks.accent = id;
-        saveLooks();
+        const saved = saveLooks();
+        if (swatchSaved) swatchSaved(saved);
       });
       box.appendChild(b);
     }
@@ -231,15 +264,27 @@ export function renderSwatches() {
   }
   $("looks-role").value = looks.role ?? ROLE_NOT_SET;
   $("looks-activities").checked = !looks.hideActivities;
+  // Like a cue, the game sounds keep their tick while Play sounds is off.
+  $("looks-activity-sounds").checked = looks.activitySounds;
+  $("looks-activity-sounds").disabled = !looks.sound;
+  $("looks-game-music").checked = looks.gameMusic;
+  $("looks-game-music").disabled = !looks.sound;
 }
 
 // "Back to default": every look returns to its default, but the role is
 // marked as asked, the welcome stays seen, and the Activities' best scores
-// and last pick stay (only Reset best scores clears those).
-export function resetLooks() {
+// and last pick stay (only Reset best scores clears those). Given `keys` (one
+// Preferences tab's, prefsResetScope() in prefs.js), only those change: the
+// role is cleared but marked as asked, the rest take their defaults, and
+// every other key stays as it is.
+export function resetLooks(keys) {
+  if (keys) {
+    for (const key of keys) looks[key] = key === "role" ? ROLE_NOT_SET : DEFAULT_LOOKS[key];
+    return;
+  }
   const kept = { lastActivity: looks.lastActivity };
   for (const a of ACTIVITIES) {
-    kept[bestKey(a.id)] = looks[bestKey(a.id)];
+    for (const key of bestKeys(a)) kept[key] = looks[key];
     kept[memoKey(a.id)] = looks[memoKey(a.id)];
   }
   looks = { ...DEFAULT_LOOKS, ...kept, role: ROLE_NOT_SET, welcomeSeen: looks.welcomeSeen };

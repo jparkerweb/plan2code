@@ -16,6 +16,8 @@ import {
   byId,
   docs,
   isGitBoard,
+  loopDriving,
+  loopWaiting,
 } from "../selectors.js";
 import {
   lastOpenCard,
@@ -316,14 +318,38 @@ function inFlightFor(item) {
   return sub ? { value: sub, summary: "" } : null;
 }
 
+// While the Implementation Loop drives, an open card is a record, not a form
+// (FR-15): "handled" when the loop answers it itself, "locked" otherwise. The
+// one exception (FR-14) is a required question the loop does not handle, which
+// stays a live form while it waits for the person.
+function loopLockFor(item) {
+  if (!loopDriving() || !isOpen(item) || finish()) return null;
+  if (item.handledBy === "loop") return "handled";
+  return loopWaiting() && item.required !== false ? null : "locked";
+}
+
+function renderLoopLocked(card, item, why) {
+  const box = el("div", "answered is-loop " + (why === "handled" ? "is-handled" : "is-locked"));
+  if (why === "handled") {
+    box.appendChild(el("p", "answered-head loop-tag", "The loop handles this"));
+    box.appendChild(el("p", "answered-lock", "The Implementation Loop answers this one itself, so there is nothing to do here."));
+  } else {
+    box.appendChild(el("p", "answered-lock", "The Implementation Loop is building. This unlocks by itself if it needs you."));
+  }
+  card.appendChild(box);
+  lockedOptions(card, item, []);
+}
+
 export function renderCard(item) {
   const staged = page.local.staged[item.id];
   const flight = inFlightFor(item);
+  const loopLock = loopLockFor(item);
   const card = el(
     "article",
     "card question" +
       (!isOpen(item) || finish() ? " is-answered" : staged ? " is-staged" : "") +
-      (flight ? " is-inflight" : "")
+      (flight ? " is-inflight" : "") +
+      (loopLock ? " is-loop-" + loopLock : "")
   );
 
   // Which question this card is for, so a render can tell whether the card it
@@ -348,6 +374,8 @@ export function renderCard(item) {
   // send can no longer go anywhere and the form would be a trap.
   if (!isOpen(item) || finish()) {
     renderSettled(card, item);
+  } else if (loopLock) {
+    renderLoopLocked(card, item, loopLock);
   } else if (flight) {
     renderInFlight(card, item, flight);
   } else {
@@ -355,7 +383,7 @@ export function renderCard(item) {
     if (build) build(card, item, staged);
   }
 
-  if (item.required === false && isOpen(item) && !flight && !finish()) {
+  if (item.required === false && isOpen(item) && !flight && !finish() && !loopLock) {
     const skipped = Boolean(staged && staged.skipped);
     // A small accent chip, like a comment box's quick answer ("No changes"),
     // rather than an underlined link that reads as fine print.
@@ -372,7 +400,7 @@ export function renderCard(item) {
     }
   }
 
-  if (isOpen(item) && !flight && !finish()) markGrowBox(card);
+  if (isOpen(item) && !flight && !finish() && !loopLock) markGrowBox(card);
   return card;
 }
 
@@ -835,6 +863,28 @@ function buildChoice(card, item, staged) {
   }
   otherOption(list, item, staged, name);
   card.appendChild(list);
+  clearRow(card, item);
+}
+
+// Takes a one-answer question back to how it arrived: no pick, and nothing in
+// "Something else" (its draft too, or the render would put the words straight
+// back). A radio group cannot be unticked by clicking it again, so without
+// this a stray pick could only be swapped for another one. Only the builders
+// call it, and they only run for a form that has not been sent.
+function clearRow(card, item) {
+  const row = el("div", "btn-row options-clear");
+  const b = el("button", "btn small ghost", "Clear");
+  b.type = "button";
+  // An id so focus survives the render the click sets off (see withFocus).
+  b.id = "clear-" + item.id;
+  b.setAttribute("aria-label", "Clear your answer to this question");
+  b.addEventListener("click", () => {
+    const other = "other-" + item.id;
+    if (page.local.drafts[other]) setDraft(other, "");
+    stage(item.id, null);
+  });
+  row.appendChild(b);
+  card.appendChild(row);
 }
 
 function buildMulti(card, item, staged) {
@@ -1335,6 +1385,7 @@ function buildMenu(card, item, staged) {
     list.appendChild(li);
   }
   card.appendChild(list);
+  clearRow(card, item);
 
   if (item.command) {
     const note = el("div", "card-note");

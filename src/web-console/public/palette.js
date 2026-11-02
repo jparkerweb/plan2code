@@ -240,6 +240,7 @@ export const CARD_WIDTHS = {
   narrow: { label: "Narrow", px: 720 },
   comfortable: { label: "Comfortable", px: 880 },
   wide: { label: "Wide", px: 1080 },
+  ultrawide: { label: "Ultra wide", px: 1440 },
 };
 
 export const DEFAULT_CARD_WIDTH = "comfortable";

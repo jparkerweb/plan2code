@@ -37,6 +37,40 @@ export function onAppMessage(kind, handler) {
 }
 
 /**
+ * Hear the app's answers to the Implementation Loop's named requests:
+ * `loop-facts` (what agent a loop would use), `loop-start-result`,
+ * `loop-notify-test-result` and the three stop-screen results. `store` is the page object and `redraw` its
+ * render; they are handed in so this file keeps importing nothing.
+ */
+export function wireLoopMessages(store, redraw) {
+  onAppMessage("loop-facts", (data) => {
+    store.loopFacts = data.facts && typeof data.facts === "object" ? data.facts : null;
+    redraw();
+  });
+  onAppMessage("loop-start-result", (data) => {
+    // Cancel in the app's confirm: nothing started, so the setup is as it was.
+    if (data.ok === true && data.started === false) {
+      store.loopStart = null;
+      if (store.loopSetup) store.loopSetup.starting = false;
+      redraw();
+      return;
+    }
+    store.loopStart = { ok: data.ok === true, error: data.ok === true ? null : String(data.error || "The app did not start the loop.") };
+    redraw();
+  });
+  onAppMessage("loop-notify-test-result", (data) => {
+    store.loopNotifyTest = { waiting: false, ok: data.ok === true, sent: data.sent === true, error: data.ok === true ? null : String(data.error || "The app could not send the test.") };
+    redraw();
+  });
+  for (const kind of ["loop-resume-result", "loop-fix-result", "loop-finalize-result"]) {
+    onAppMessage(kind, (data) => {
+      store.loopAction = { kind, ok: data.ok === true, error: data.ok === true ? null : String(data.error || "The app could not do that.") };
+      redraw();
+    });
+  }
+}
+
+/**
  * Ask the app for what its bar's New Session button does, confirm and all.
  * `command`, when there is one, goes on the clipboard first so it can be
  * pasted into the new terminal; a refused copy loses nothing, the page still

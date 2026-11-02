@@ -14,6 +14,7 @@ import path from "node:path";
 import { pageSuite, openSession, itemCard, drawn, textOf, tempProject } from "./page-test-helpers.mjs";
 import { cli, until } from "./web-console-test-helpers.mjs";
 import { STOP_HANDOFF_REPLY, HOME_REPLY } from "../src/web-console/public/answers.js";
+import { CHAT_OFFLINE_TEXT } from "../src/web-console/public/chat.js";
 // How long the page waits without contact before it calls itself offline:
 // the page's own constant, so this file never drifts from it.
 import { GONE_AFTER_MS } from "../src/web-console/public/screens/core.js";
@@ -34,7 +35,7 @@ const PLAN_QUESTION = {
 // The agent's side of `stop`, leaving the browser context open (s.stop()
 // closes it, which would hide what the page does next).
 async function stopServer(s) {
-  cli(["stop", "--session", s.sid], { cwd: s.project });
+  cli(["stop", "--session", s.sid, "--force"], { cwd: s.project });
   assert.ok(await until(async () => !(await s.answers()), 5000), "the server still answers after stop");
 }
 
@@ -578,6 +579,33 @@ test("answers a working agent has not collected bring up the saved-and-waiting l
   assert.equal(await whatToCheck(s).count(), 1, "the line carries What to check");
 });
 
+// The agent picked up an Ask message and is answering it, so it is not in
+// `wait` to collect a card sent meanwhile. That is busy, not gone: the line
+// says so for ten minutes of silence before the not running help shows.
+test("a card sent while the agent answers an Ask message says it is answering, and not running only after ten minutes", async (t) => {
+  const s = await openSession(await suite.browser(), { t, workflow: "plan", clock: true, payload: PLAN_QUESTION });
+  await s.page.locator("nav").getByRole("button", { name: "Ask", exact: true }).click();
+  await s.page.locator("#ask-input").fill("What does the export include?");
+  await s.page.locator(".ask-composer").getByRole("button", { name: "Send", exact: true }).click();
+  const got = s.wait(10);
+  assert.equal(got.code, 0, `the Ask message was not handed over (wait exit ${got.code})`);
+  await s.page.locator("#views").getByRole("button", { name: /^Questions/ }).click();
+  await itemCard(s.page, "q1").locator("textarea, input[type=text]").first().fill("audit-export");
+  await s.page.click("#btn-send");
+  await lineSays(s, /^Plan2Code is answering your Ask message\./);
+  await s.page.clock.fastForward(70_000);
+  await lineSays(s, /^Plan2Code is answering your Ask message\./);
+  await s.page.clock.fastForward(8 * 60_000);
+  await lineSays(s, /^Plan2Code is answering your Ask message\./);
+  // The Ask tab agrees: still answering, not "No agent available".
+  await s.page.locator("nav").getByRole("button", { name: "Ask", exact: true }).click();
+  await s.page.locator("#ask-input").waitFor();
+  assert.ok(!(await s.page.locator("body").innerText()).includes(CHAT_OFFLINE_TEXT), "the Ask tab went offline while the agent was answering");
+  await s.page.clock.fastForward(2 * 60_000);
+  await lineSays(s, /^Plan2Code is not running\. Your answers are saved and waiting for it\./);
+  await s.page.waitForFunction((t) => document.body.innerText.includes(t), CHAT_OFFLINE_TEXT, { timeout: 10000 });
+});
+
 // A failed Send says why at once, rather than one line for every cause and
 // the real state only showing once the page's own timers catch up.
 test("a Send that finds the server gone says so at once, with the reconnect help", async (t) => {
@@ -851,7 +879,13 @@ test("every finished shape shows Before you close this with its three rows, and 
     assert.ok(!text.includes("—"), `${headline}: the guide carries an em dash`);
   }
   // With a stop warning up, a pause's command starts the work again.
-  s.post({ stopWarning: "Answers since the last save will not be kept." });
+  // The console now refuses a post that leaves both a finish and a stop warning up,
+  // so the state the page can still be handed is written straight into the
+  // session's state file.
+  const statePath = path.join(s.session, "state.json");
+  const withWarning = JSON.parse(fs.readFileSync(statePath, "utf8"));
+  withWarning.stopWarning = "Answers since the last save will not be kept.";
+  fs.writeFileSync(statePath, JSON.stringify(withWarning));
   await closeGuide(s).getByText(/The command above starts it again\./).waitFor();
   assert.equal(await s.page.locator("#btn-home").isVisible(), false, "a finished screen carries its own way back");
 });

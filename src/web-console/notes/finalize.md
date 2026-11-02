@@ -1,34 +1,14 @@
-# Finalize on the Web Console
+# Finalize
 
-Workflow notes for `finalize`, part of the web console contract (`console.md`).
-
-Finalize is a run of reports and gates, and each maps onto a kind you already
-know:
-
-| Step | On the page |
+| Step | Card |
 | --- | --- |
-| 1, Task Completion Audit | The audit table as a doc (`id: "audit"`). If incomplete or blocked tasks exist (`totals.incomplete + totals.blocked > 0`), a `choice` with the three options — return to implementation, mark partially complete, abandon — with the counts against the thresholds in `body`. |
-| 2, Implementation Verification | The verification results as a doc. Nothing to ask unless an issue needs their decision. |
-| 3, Implementation Summary | Written to `overview.md` as usual; mirror it as a doc (marked `saved`, as a `file` block on `overview.md`) so the page reader sees it land. |
-| 4, Documentation Review | The proposed-updates table as a doc, and a `multi` naming the documents to update — every option ticked is "approve", unticked ones are skipped. A `review` works instead when the set is all-or-nothing. |
-| 5, User Feedback | Optional items, `required: false`: the rating as a `choice` of 1 to 10 or a `text`, the three reasons as `text`. The submit-to-maintainer consent is a `confirm`. |
-| 6, Spec Cleanup | A `review` item before moving anything (`doc`: Step 3's summary), verdicts `yes` ("Archive it"), `show` ("Show me it working", token `show me`) and `no`, the archive paths in `body`, and a line that the spec's remembered workspace folders are forgotten too (`console.mjs forget --spec specs/<feature>` after the move). On `show`, run it as `notes/implement.md` → Show me it working says (the summary line goes into `overview.md`'s Completion Summary), then reopen the card without `show`. |
+| 1, Audit | Table as doc `audit`. If `totals.incomplete + totals.blocked > 0`, a `choice` (return, mark partial, abandon) with counts against thresholds in `body`. |
+| 2, Verification | Results as a doc; ask only on an issue. Unless Full Suite is `Never` or `At Phase N`: `confirm` "Run the full suite" (`yesLabel` "Run it", `noLabel` "Skip it", reason in `body`); a failure is the building notes' `choice`. |
+| 3, Summary | Written to `overview.md`; mirror it as a doc (`saved`, `file` block). |
+| 4, Docs review | Proposed-updates table as a doc, plus a `multi` of documents (ticked = approved); a `review` if all-or-nothing. |
+| 5, Feedback | `required:false`: rating as `choice` 1 to 10 or `text`, three reasons as `text`, maintainer consent as `confirm`. |
+| 6, Cleanup | `review` (`doc` Step 3's summary), verdicts `yes` ("Archive it"), `show` (token `show me`), `no`; archive paths in `body`, and a line that remembered workspace folders are forgotten too (`console.mjs forget --spec specs/<feature>` after the move). On `show`, see `notes/implement.md`, then reopen without `show`. |
 
-Post `activity` as each step starts, before its doc or question lands — reading
-the spec, running `specs.mjs status` or `archive --dry-run`, checking the
-implementation — the same way Review does. A step with no card of its own
-(2, 3) is otherwise a stretch of silence the page can only show as "Starting
-Finalize".
+Post `activity` as each step starts. Pass `--spec specs/<feature>` or post `specDir`.
 
-Pass `--spec specs/<feature>` to `open`, or post `specDir` once you know it.
-Stopping mid-finalize loses nothing — the specs are untouched until Step 3's
-summary write — so a stop's finish just says where it paused and uses
-`"command": "/plan2code-4-finalize specs/<feature>/overview.md"`. On success
-the finish's `command` is the suggested commit when Step 4 doc updates landed
-(with `"where": "When you are happy with it, commit it from your terminal:"`), otherwise leave `command` out.
-When the finish prints that suggested commit, it also carries `"commit": true`,
-so the finished screen offers **Commit it now** (`console-finish.md`), and
-`"changelog": true` beside it, for **Update CHANGELOG first** (it hops into
-Changelog and on to Git). Both only when the finish prints a commit. The
-completion summary is printed to a terminal the browser user is not watching,
-so put it in `finish.body`.
+Finish: the completion summary goes in `body`. `command` is the suggested commit when Step 4 updates landed (`"where":"When you are happy with it, commit it from your terminal:"`, `"commit":true`, `"changelog":true`), else none. A stop loses nothing before Step 3's write: `command` `/plan2code-4-finalize specs/<feature>/overview.md`.

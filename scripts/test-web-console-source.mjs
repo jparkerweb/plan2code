@@ -15,6 +15,8 @@ import path from "node:path";
 import { cardAvailability, SKILL_CATALOG } from "../src/web-console/public/answers.js";
 import { SKILLS } from "../src/web-console/public/skills.js";
 import { HELP_TABS } from "../src/web-console/public/help.js";
+import { PREFS_TABS } from "../src/web-console/public/prefs.js";
+import { SERVABLE } from "../src/web-console/static.mjs";
 import { FAVICON_BODY, FAVICON_COLORS, faviconState, faviconSvg } from "../src/web-console/public/favicon.js";
 import {
   CACHE_MS,
@@ -245,7 +247,7 @@ test("update check: the frame carries update only when a newer release is cached
       }
       assert.deepEqual(await get("/version"), { version: REPO_VERSION, latest });
     } finally {
-      cli(["stop", "--session", res.json.sid], { env });
+      cli(["stop", "--session", res.json.sid, "--force"], { env });
       fs.rmSync(home, { recursive: true, force: true });
     }
   }
@@ -294,8 +296,8 @@ test("sign-off: approve leads show, and the approve button wears the accent", ()
   const doc = (f) => fs.readFileSync(path.join(ROOT, "src", "web-console", f), "utf8");
   for (const f of ["notes/implement.md", "building-review.md"]) {
     const text = doc(f);
-    const approve = text.indexOf('{ "id": "approve", "label": "Approve this phase" }');
-    const show = text.indexOf('{ "id": "show", "label": "Show me it working" }');
+    const approve = text.indexOf('{"id":"approve","label":"Approve this phase"}');
+    const show = text.indexOf('{"id":"show","label":"Show me it working"}');
     assert.ok(approve > 0 && show > approve, `${f} lists Approve this phase before Show me it working`);
   }
   assert.match(joinedCss(), /\.btn\.is-approve\s*\{[^}]*border-color:\s*var\(--accent\)/, "is-approve borders in the accent");
@@ -399,18 +401,17 @@ test("help: the stuck tab is second, and openHelpOn only opens a tab that exists
   assert.match(opener[1], /HELP_TABS\.some\(/, "openHelpOn only opens a tab that exists");
 });
 
-test("models: Codex is a model CLI on the server and the page, with its own tab", () => {
+test("models: Codex is a model CLI on the server and the page, with its own row in the agents table", () => {
   const server = fs.readFileSync(path.join(ROOT, "src", "web-console", "routes.mjs"), "utf8");
-  const app = publicSource("screens/looks.js");
-  const html = publicSource("index.html");
+  const app = publicSource("screens/agents-view.js");
   const list = (src) => JSON.parse(src.match(/const MODEL_CLIS = (\[[^\]]*\]);/)[1]);
   assert.deepEqual(list(server), ["claude", "devin", "codex"]);
-  assert.deepEqual(list(app), list(server), "the page's tabs match the server's lists");
+  assert.deepEqual(list(app), list(server), "the page's rows match the server's lists");
   assert.ok(!/for \(const cli of \["claude", "devin"\]\)/.test(app), "no loop over a hard-coded pair");
-  const labels = { claude: "Claude", devin: "Devin", codex: "Codex" };
-  for (const cli of list(app)) {
-    assert.match(html, new RegExp(`id="models-tab-${cli}"[^>]*>${labels[cli]}</button>`), `${cli} has a tab`);
-  }
+  assert.match(app, /\.\.\.MODEL_CLIS\.map\(\(cli\) => \(\{\s*key: "cli:" \+ cli,/, "the table draws a built-in row per MODEL_CLIS entry");
+  const names = app.match(/const BUILT_IN = \{([^}]*)\};/)[1];
+  for (const cli of list(app)) assert.match(names, new RegExp(`\\b${cli}: "`), `${cli} has a name in the table`);
+  assert.ok(!publicSource("index.html").includes("models-tab-"), "the separate Models toggles are gone");
   const shipped = JSON.parse(fs.readFileSync(path.join(ROOT, "src", "launcher", "models.json"), "utf8"));
   for (const cli of list(server)) assert.ok(Array.isArray(shipped[cli]), `the launcher's models.json has ${cli}`);
 });
@@ -465,5 +466,60 @@ test("no agent CLI module imports notepads.mjs, directly or through a module it 
   for (const dep of lazy) {
     assert.equal(path.basename(dep.from), "sessions.mjs", "only Cleanup loads the store, lazily");
     assert.ok(dep.names && dep.names.every((n) => n === "staleNotepads" || n === "removeNotepad"), `Cleanup takes only staleNotepads and removeNotepad, not ${dep.names}`);
+  }
+});
+
+test("prefs: the dialog is four tab panels in PREFS_TABS order, each section in the one panel that lists it", () => {
+  const html = publicSource("index.html");
+  const dialog = html.match(/<dialog class="modal looks prefs" id="looks-modal"[^>]*>([\s\S]*?)<\/dialog>/)[1];
+  assert.match(dialog, /<div id="prefs-tabs" class="prefs-tabs" role="tablist"/, "a tablist for the tabs");
+  const panels = [...dialog.matchAll(/<section class="prefs-panel" data-tab="([^"]+)">([\s\S]*?)<\/section>/g)];
+  assert.deepEqual(panels.map((m) => m[1]), PREFS_TABS.map((t) => t.id), "one panel per tab, in order");
+  const everywhere = [...dialog.matchAll(/data-section="([^"]+)"/g)].map((m) => m[1]);
+  assert.equal(new Set(everywhere).size, everywhere.length, "no section appears twice");
+  for (const [, id, body] of panels) {
+    const inPanel = [...body.matchAll(/data-section="([^"]+)"/g)].map((m) => m[1]);
+    const listed = PREFS_TABS.find((t) => t.id === id).sections;
+    assert.deepEqual(inPanel, [...listed], `${id} holds ${listed.join(", ")} in that order`);
+  }
+});
+
+test("prefs: the new modules are served and preloaded, and Preferences' styles leave the shared classes alone", () => {
+  const html = publicSource("index.html");
+  for (const m of ["tabs.js", "prefs.js", "screens/prefs-dialog.js", "screens/agents-view.js"]) {
+    assert.ok(SERVABLE.has(m), `${m} is servable`);
+    assert.ok(html.includes(`rel="modulepreload" href="/${m}"`), `the page preloads ${m}`);
+  }
+  const css = publicSource("styles/prefs.css");
+  for (const cls of ["looks", "looks-row", "modal-ranges"]) {
+    assert.ok(!new RegExp(`\\.${cls}(?![\\w-])`).test(css), `prefs.css does not style .${cls} (the Subagents dialog shares it)`);
+  }
+});
+
+test("prefs: Help and the readme name every tab and section, and the dialog's unused fieldset classes stay gone", () => {
+  const prefs = helpTemplate().match(/<section class="help-panel" data-tab="prefs">([\s\S]*?)<\/section>/)[1];
+  // The help topic writes "&" as "&amp;". Each section is named in bold, so a
+  // tab label such as "Sounds & activities" does not count for "Sounds".
+  const helpText = prefs.replace(/&amp;/g, "&");
+  const sections = ["Theme", "Card width", "Highlight color", "Role", "Models", "Agents", "Cleanup", "Desktop app", "Sounds", "Activities"];
+  for (const name of [...PREFS_TABS.map((t) => t.label), ...sections]) {
+    assert.ok(helpText.includes(`<strong>${name}</strong>`), `the prefs help topic names ${name}`);
+  }
+  // Only the readme's own User Preferences section counts, up to the next "## " heading.
+  const readme = fs.readFileSync(path.join(ROOT, ".readme", "web-console.md"), "utf8");
+  const start = readme.indexOf("\n## User Preferences\n");
+  assert.ok(start >= 0, ".readme/web-console.md has a User Preferences section");
+  const end = readme.indexOf("\n## ", start + 1);
+  const section = readme.slice(start, end < 0 ? undefined : end);
+  for (const heading of ["### Agents & models", "### System"]) {
+    assert.ok(section.includes(`\n${heading}\n`), `the readme's User Preferences section has ${heading}`);
+  }
+  for (const name of [...PREFS_TABS.map((t) => t.label), "Models", "Agents", "Desktop app"]) {
+    // In bold, as a table cell or a paragraph's lead-in ("**Models.**").
+    assert.ok(section.includes(`**${name}**`) || section.includes(`**${name}.**`), `the readme's User Preferences section names ${name}`);
+  }
+  const html = publicSource("index.html");
+  for (const cls of ["looks-models", "looks-agents", "looks-role", "looks-accents", "looks-cleanup"]) {
+    assert.ok(!new RegExp(`class="[^"]*\\b${cls}\\b[^"]*"`).test(html), `index.html has no .${cls} left`);
   }
 });

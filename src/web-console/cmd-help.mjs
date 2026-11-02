@@ -42,21 +42,26 @@ port, and the filesystem as transport; this CLI is the whole agent surface.
 
   open    [--file <payload.json>] [--workflow <w>] [--title "<t>"] [--spec <dir>]
           [--session|--resume <sid>] [--no-open] [--idle-ms <ms>]
+          [--loop]  (desktop app only; implement or implement-review)
           Start or resume a session and its server. Prints { ok, sid, session,
-          url, terminalLine }, plus swept { sessions, scratch, handoffs } when
-          old sessions, scratch files or handoffs were removed. Run it FIRST, before
+          url, embed, port, pid, terminalLine }. Run it FIRST, before
           reading anything: the page shows a starting screen until your
           first post. --file is optional, and --title defaults to the
           project's folder name. Also prints workspace: { folders: [{ name,
           path, description?, original? }], missing? }, the folders this
           console session reads as context, addressed as @name. The list is
           remembered per folder and spec in workspaces.json beside looks.json.
-          May also print subagents: { state, revision, max, instruction, strength } and
-          a reply holding only its "Subagents: ..." lines, when a standing
-          instruction (the page's Subagents switch) is owed to you.
+          May also print a reply holding only its "Subagents: ..." lines,
+          when a standing instruction (the page's Subagents switch) is owed
+          to you. workspace only when more than one folder is listed.
   post    --session <sid> --file <patch.json | -> [--wait <N>]
-          Merge a patch into the session. Prints terminalLine while the
-          server is live. Exit 3 = rejected; stderr says why. --wait <N>
+          Merge a patch into the session. Prints { ok, open } (open = the
+          required questions still open), plus terminalLine only when the
+          link changed, read ([path], a topic file to open now) when a
+          pointer is due, and a warning when Quick questions are unanswered.
+          Exit 3 = rejected; stderr names the item id, the field and the
+          field done right. Exit 2 = unreadable patch; stderr gives the
+          line, column and a short excerpt. --wait <N>
           then waits up to N seconds in the same command (two JSON lines;
           the exit code is the wait's). The patch may carry settle: true
           (or a list of item ids) to mark the latest send's cards answered
@@ -71,17 +76,20 @@ port, and the filesystem as transport; this CLI is the whole agent surface.
           the Subagents tab (help subagents).
   wait    --session <sid> [--seconds <N>]
           A bounded wait slice, sized below your shell timeout. Exit 0 = the
-          result is on stdout, 10 = still waiting ("Waiting on your answer
-          in the web console"; call again), 20 = server gone (open --resume
-          <sid>), 30 = canceled. Exits 0 and 10 carry terminalLine.
-          Exit 0 may carry "chat" (Quick questions); with no card send it
-          is type: "chat" and actions is empty. Exit 0 may also carry
-          "workspace" (changes since you last heard, each once, with a
-          "Workspace: ..." line in reply); exit 10 counts them as
-          pendingWorkspace, and a change alone never ends a slice.
-          Exit 0 may also carry "subagents" (a console setting, not typed
-          by the person, with its "Subagents: ..." lines last in reply); a
-          setting change alone never ends a slice either. A hop
+          result is on stdout as { reply, session?, read?, ... }, 10 = still
+          waiting ({"waiting":true,"open":N}; call again), 20 = server gone
+          ({"gone":true,"fix":"open --resume <sid> --workflow <yours>"}),
+          30 = canceled. terminalLine is printed only when the link changed.
+          reply holds the answers; session lists the "__" session actions
+          whole; read ([path]) names a topic file to open now, once per
+          session per topic and again after a resume. Exit 0 may carry "chat" (the seq of each Quick question
+          handed over, the ids a reply's re needs; the questions are in
+          reply, as "Quick question (<seq>): ..."); with no card send it
+          holds only reply and chat. Workspace changes arrive as
+          "Workspace: ..." lines in reply, each once, and a Subagents
+          setting change as its "Subagents: ..." lines last in reply (a
+          console setting, not typed by the person); a change alone never
+          ends a slice. A hop
           (__launch, __dashboard, __commit, __changelog) carries resume, the exact
           open --resume command, and skillFile when installed. Collecting
           a send sets the page to working; a wait with a question open
@@ -89,10 +97,10 @@ port, and the filesystem as transport; this CLI is the whole agent surface.
   chat    --session <sid>
           Collect Quick questions, workspace changes and a Subagents
           setting change now, never waiting, never touching card sends.
-          Exit 0 = { chat, workspace, subagents?, reply, terminalLine },
-          10 = none, 20 = server gone.
-  terminalLine is "→ Look at the web console: <url>": end your terminal
-  messages with it during a console session.
+          Exit 0 = { reply, chat? }, 10 = {} (none), 20 = server gone.
+  terminalLine is "→ Look at the web console: <url>": printed by open and
+  again only when the link changes. End your terminal messages with the
+  latest one during a console session.
   keep    --session <sid> --upload <path> --name <name> --spec specs/<idea> [--from <file>]
           Copy a cited note attachment into specs/<idea>/attachments/. Prints
           { ok, path, link, image, reused }; exit 2 = bad usage, 3 = refused or
@@ -120,8 +128,12 @@ port, and the filesystem as transport; this CLI is the whole agent surface.
           on a refusal.
   status  [--session <sid>] [--all]
           One session, or (--all) every session on this machine, every project.
-  stop    --session <sid> | --all
-          Shut a session's server down. Always post finish first.
+  stop    --session <sid> [--force] | --all
+          Shut a session's server down. Always post finish first: a named
+          session with no finish is refused (exit 3, stderr shows the
+          finish to post). --force stops a dead page or an abandoned session
+          anyway (the desktop app passes it on its own shutdowns); --all
+          never asks.
 
 ${workflowLines()}
 
@@ -141,6 +153,7 @@ ${workflowLines()}
 export const HELP_TOPICS = {
   console: "console.md",
   building: "building.md",
+  docs: "console-docs.md",
   "building-review": "building-review.md",
   finish: "console-finish.md",
   stop: "console-stop.md",

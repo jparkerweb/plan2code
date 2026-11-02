@@ -190,7 +190,7 @@ test("typing Markdown styles it in place, saves within two seconds, and survives
   assert.equal(await shows(s, expected), expected, "a reload shows the saved note");
 
   // A server restart (the agent's open --resume) keeps it too.
-  cli(["stop", "--session", s.sid], { cwd: s.project });
+  cli(["stop", "--session", s.sid, "--force"], { cwd: s.project });
   await until(async () => !(await s.answers()), 5000);
   const resumed = cli(["open", "--resume", s.sid, "--no-open", "--workflow", "plan"], { cwd: s.project }).json;
   s.url = resumed.url;
@@ -1113,6 +1113,7 @@ test("User Preferences, Cleanup offers a month-old notepad by its folder and rem
   t.after(() => fs.rmSync(notepadFolder(other), { recursive: true, force: true }));
 
   await s.page.click("#btn-looks");
+  await s.page.click("#prefs-tab-system");
   await s.page.click("#cleanup-scan");
   const list = s.page.locator("#cleanup-list");
   const row = list.locator(".cleanup-row").filter({ hasText: "Notebook for" });

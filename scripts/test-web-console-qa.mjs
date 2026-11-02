@@ -50,7 +50,7 @@ test("settle: true records the send wait handed over, never a later one still un
     assert.equal(items.find((i) => i.id === "q1").status, "answered");
     assert.equal(items.find((i) => i.id === "q2").status, "open", "q2's send is not the agent's yet");
   } finally {
-    cli(["stop", "--session", s.sid]);
+    cli(["stop", "--session", s.sid, "--force"]);
   }
 });
 
@@ -90,7 +90,7 @@ test("a notice never takes one of the three question slots", () => {
 
 test("agent.status is working or waiting, nothing else", () => {
   const state = { ...blankState({ sid: "x", project: "p", workflow: "plan" }), agent: { status: "sleeping" } };
-  assert.ok(validate(state).some((p) => p.includes('"agent.status"')));
+  assert.ok(validate(state).some((p) => p.startsWith("agent.status:")));
 });
 
 test("an approved sign-off does not stop the next phase asking for its own", () => {
@@ -114,7 +114,7 @@ test("an unanswered note blocks a settle that ignores it", () => {
   };
   const state = { ...blankState({ sid: "x", project: "p", workflow: "plan" }), items: [withNote] };
   const next = applyPatch(state, { settle: ["q1"] });
-  assert.ok(validate(next).some((p) => p.includes('item "q1" has an unanswered note')));
+  assert.ok(validate(next).some((p) => p.includes('item "q1" thread: has an unanswered note')));
 });
 
 test("adding a thread reply in the same patch clears the note and allows the settle", () => {
@@ -170,7 +170,7 @@ test("post --file reads a patch PowerShell wrote: a UTF-8 BOM, or UTF-16", () =>
     assert.equal(runCli(["post", "--session", s.sid, "--file", u16]).status, 0);
     assert.equal(readState(s.session).agent.activity, "From UTF-16");
   } finally {
-    cli(["stop", "--session", s.sid]);
+    cli(["stop", "--session", s.sid, "--force"]);
   }
 });
 
@@ -180,10 +180,10 @@ test("wait and stop find a session's server from any folder, not only its projec
   try {
     const waited = runCli(["wait", "--session", s.sid, "--seconds", "1"], { cwd: elsewhere });
     assert.notEqual(waited.status, 20, "the server is alive: " + waited.stdout);
-    const stopped = runCli(["stop", "--session", s.sid], { cwd: elsewhere });
+    const stopped = runCli(["stop", "--session", s.sid, "--force"], { cwd: elsewhere });
     assert.equal(JSON.parse(stopped.stdout).stopped, 1, stopped.stdout);
   } finally {
-    cli(["stop", "--session", s.sid]);
+    cli(["stop", "--session", s.sid, "--force"]);
     fs.rmSync(elsewhere, { recursive: true, force: true });
   }
 });
@@ -208,7 +208,7 @@ test("keep refuses a --from file outside the project, and keeps one copy per upl
       fs.rmSync(path.join(ROOT, spec), { recursive: true, force: true });
     }
   } finally {
-    cli(["stop", "--session", s.sid]);
+    cli(["stop", "--session", s.sid, "--force"]);
   }
 });
 
@@ -293,7 +293,7 @@ test("a patch that is valid JSON but not one object is refused (exit 2), never m
     }
     assert.ok(!("0" in readState(s.session)), "no junk keys in the state");
   } finally {
-    cli(["stop", "--session", s.sid]);
+    cli(["stop", "--session", s.sid, "--force"]);
   }
 });
 

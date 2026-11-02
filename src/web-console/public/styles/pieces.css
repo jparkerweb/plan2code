@@ -74,6 +74,7 @@
 /* ------------------------------------------------------------ options */
 
 .options { list-style: none; margin: 20px 0 0; padding: 0; display: grid; gap: 9px; }
+.options-clear { margin-top: 10px; }
 
 .option {
   display: flex;
@@ -772,6 +773,7 @@ h4.md-h, h5.md-h, h6.md-h { font-size: 15px; }
 .modal.looks { max-width: 720px; }
 .modal.looks .modal-ranges + .modal-ranges { margin-top: 18px; }
 .looks-row { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.looks-row.four { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .looks-row .help { grid-column: 1 / -1; }
 /* The Desktop app group exists only inside the app; elsewhere it stays hidden
    in spite of the grid above. */
@@ -783,7 +785,7 @@ h4.md-h, h5.md-h, h6.md-h { font-size: 15px; }
 .looks-sound-events.is-off label { cursor: default; }
 .looks-sound-events.is-off label:hover { border-color: var(--rule-2); }
 @media (max-width: 720px) {
-  .looks-row { grid-template-columns: 1fr; }
+  .looks-row, .looks-row.four { grid-template-columns: 1fr; }
 }
 /* User Preferences itself (not the dialogs borrowing .looks): wider, and only
    the body scrolls, so Back to default and Done never leave the screen. */

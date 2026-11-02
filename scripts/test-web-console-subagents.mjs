@@ -70,15 +70,19 @@ test("subagents: a change reaches the next pickup once, last in reply, edits nam
     assert.equal((await addFolder(s, { path: extra })).status, 200);
     const first = await submitAndWait(s);
     assert.equal(first.status, 0);
-    assert.deepEqual(first.json.subagents, { state: "on", revision: rev, max: 3, instruction: defaultInstruction("implement"), strength: "balanced" });
+    assert.equal("subagents" in first.json, false, "no structured subagents object on the wire");
+    assert.equal("workspace" in first.json, false, "no structured workspace object on the wire");
     const reply = first.json.reply;
     const at = (re) => reply.search(re);
     assert.ok(at(/^Export format: a$/m) === 0, reply);
-    assert.ok(at(/^Quick question:/m) > 0, reply);
-    assert.ok(at(/^Workspace:/m) > at(/^Quick question:/m), reply);
+    assert.ok(at(/^Quick question \(/m) > 0, reply);
+    assert.ok(at(/^Workspace:/m) > at(/^Quick question \(/m), reply);
     assert.ok(at(/^Subagents:/m) > at(/^Workspace:/m), reply);
-    assert.match(reply, new RegExp(`^Subagents: on \\(revision ${rev}\\) — a console setting, not typed by the person\\.$`, "m"));
-    assert.ok(reply.endsWith("\n  At most 3 helpers at once."), "the block goes last");
+    assert.equal(subagentLines(reply)[0], "Subagents: on, balanced strength, at most 3 helpers at once (a console setting, not typed by the person).");
+    assert.ok(reply.endsWith("\n  " + defaultInstruction("implement").split("\n").pop().trim()), "the block goes last, ending on the instruction");
+    for (const old of ["revision", "Helper strength:", "At most 3 helpers", "Report each helper", "Match each helper"]) {
+      assert.ok(!reply.includes(old), "the old frame sentence is gone: " + old);
+    }
     assert.deepEqual(subagentLines(reply).length, 1, "one block");
     assert.deepEqual(readSubagentCursor(s.session), { revision: rev, state: "on" });
 
@@ -89,10 +93,9 @@ test("subagents: a change reaches the next pickup once, last in reply, edits nam
     const edited = await setSubagents(s, { ...ON3, max: 5 });
     assert.equal(edited.body.setting.revision, rev + 1);
     const third = await submitAndWait(s);
-    assert.equal(third.json.subagents.revision, rev + 1);
-    assert.equal(third.json.subagents.max, 5);
+    assert.equal("subagents" in third.json, false);
     assert.deepEqual(subagentLines(third.json.reply), [
-      `Subagents: on (revision ${rev + 1}, replaces revision ${rev}) — a console setting, not typed by the person.`,
+      "Subagents: on, balanced strength, at most 5 helpers at once (a console setting, not typed by the person).",
     ]);
 
     const same = await setSubagents(s, { ...ON3, max: 5 });
@@ -103,13 +106,10 @@ test("subagents: a change reaches the next pickup once, last in reply, edits nam
     const off = await setSubagents(s, { ...ON3, on: false, max: 5 });
     assert.equal(off.body.setting.revision, rev + 2, "off is a revision of its own");
     const fourth = await submitAndWait(s);
-    assert.equal(fourth.json.subagents.state, "off");
-    assert.deepEqual(subagentLines(fourth.json.reply), [
-      `Subagents: off (revision ${rev + 2}) — don't start new helpers for the rest of this session.`,
-    ]);
+    assert.deepEqual(subagentLines(fourth.json.reply), ["Subagents: off. Start no new helpers for the rest of this session."]);
     assert.equal("subagents" in (await submitAndWait(s)).json, false, "off is said once");
   } finally {
-    cli(["stop", "--session", s.sid]);
+    cli(["stop", "--session", s.sid, "--force"]);
     fs.rmSync(extra, { recursive: true, force: true });
   }
 });
@@ -118,28 +118,26 @@ test("subagents: never on means never a line, and chat hands a pending block ove
   // A project that saved "off" starts its next session off and untold.
   const first = subagentsSession();
   assert.equal((await setSubagents(first, { on: false, instruction: null, max: 4 })).status, 200);
-  cli(["stop", "--session", first.sid]);
+  cli(["stop", "--session", first.sid, "--force"]);
   const s = subagentsSession({}, { keepStore: true });
   try {
     const off = await setSubagents(s, { on: false, instruction: null, max: 4 });
     assert.equal(off.status, 200);
     const got = await submitAndWait(s);
     assert.equal("subagents" in got.json, false);
-    assert.deepEqual(subagentLines(got.json.reply), [], "off is never said to an agent not told on");
+    assert.deepEqual(subagentLines(got.json.reply ?? ""), [], "off is never said to an agent not told on");
     assert.equal(cli(["chat", "--session", s.sid]).status, 10);
 
     assert.equal((await setSubagents(s, { on: true, instruction: "Split by file.", max: 4 })).status, 200);
     const chat = cli(["chat", "--session", s.sid]);
     assert.equal(chat.status, 0);
-    assert.deepEqual(chat.json.chat, []);
-    assert.equal(chat.json.subagents.state, "on");
-    assert.equal(chat.json.subagents.instruction, "Split by file.");
-    assert.match(chat.json.reply, /^Subagents: on \(revision \d+\)/);
+    assert.equal(chat.json.chat, undefined, "no question, no chat key");
+    assert.equal("subagents" in chat.json, false);
+    assert.match(chat.json.reply, /^Subagents: on, balanced strength, at most 4 helpers at once/);
     assert.match(chat.json.reply, /^ {2}Split by file\.$/m);
-    assert.ok(chat.json.terminalLine);
     assert.equal(cli(["chat", "--session", s.sid]).status, 10, "then nothing");
   } finally {
-    cli(["stop", "--session", s.sid]);
+    cli(["stop", "--session", s.sid, "--force"]);
   }
 });
 
@@ -149,16 +147,16 @@ test("subagents: a resume re-states an on setting once, says nothing when off, a
     const rev = (await setSubagents(s, ON3)).body.setting.revision;
     const resumed = cli(["open", "--resume", s.sid, "--no-open"]);
     assert.equal(resumed.json.ok, true);
-    assert.deepEqual(resumed.json.subagents, { state: "on", revision: rev, max: 3, instruction: defaultInstruction("implement"), strength: "balanced" });
-    assert.equal(subagentLines(resumed.json.reply)[0], `Subagents: on (revision ${rev}) — a console setting, not typed by the person.`);
+    assert.equal("subagents" in resumed.json, false, "no structured object on the wire");
+    assert.equal(subagentLines(resumed.json.reply)[0], "Subagents: on, balanced strength, at most 3 helpers at once (a console setting, not typed by the person).");
+    assert.equal(readSubagentCursor(s.session).revision, rev, "open stamped the cursor");
     assert.ok(resumed.json.reply.split("\n").every((l, i) => i === 0 || l.startsWith("  ")), "only the block's lines");
     assert.equal("subagents" in (await submitAndWait(s)).json, false, "the next pickup carries nothing");
 
     // The print happened but the cursor write did not: the block comes again.
     fs.writeFileSync(path.join(s.session, "subagents-cursor.json"), JSON.stringify({ revision: 0, state: "none" }));
     const again = await submitAndWait(s);
-    assert.equal(again.json.subagents.state, "on");
-    assert.deepEqual(subagentLines(again.json.reply), [`Subagents: on (revision ${rev}) — a console setting, not typed by the person.`]);
+    assert.deepEqual(subagentLines(again.json.reply), ["Subagents: on, balanced strength, at most 3 helpers at once (a console setting, not typed by the person)."]);
     assert.deepEqual(readSubagentCursor(s.session), { revision: rev, state: "on" });
 
     assert.equal((await setSubagents(s, { ...ON3, on: false })).status, 200);
@@ -167,7 +165,7 @@ test("subagents: a resume re-states an on setting once, says nothing when off, a
     assert.equal("reply" in quiet.json, false);
     assert.equal("subagents" in (await submitAndWait(s)).json, false, "nor does the next pickup");
   } finally {
-    cli(["stop", "--session", s.sid]);
+    cli(["stop", "--session", s.sid, "--force"]);
   }
 });
 
@@ -176,7 +174,7 @@ test("subagents: a dashboard launch into implement hears implement's saved setti
   try {
     assert.equal((await setSubagents(seed, ON3)).status, 200);
   } finally {
-    cli(["stop", "--session", seed.sid]);
+    cli(["stop", "--session", seed.sid, "--force"]);
   }
   const s = consoleSession(["--workflow", "dashboard"]);
   try {
@@ -184,15 +182,15 @@ test("subagents: a dashboard launch into implement hears implement's saved setti
     const launched = cli(["open", "--resume", s.sid, "--no-open", "--workflow", "implement"]);
     // On the launch itself, not at a later pickup: a skill may do its main
     // work before it ever collects anything.
-    assert.equal(launched.json.subagents?.state, "on", "the launch's own open output carries the block");
-    assert.match(launched.json.reply, /^Subagents: on \(revision \d+\)/);
+    assert.match(launched.json.reply, /^Subagents: on, balanced strength/m, "the launch's own open output carries the block");
+    assert.equal("subagents" in launched.json, false);
     // open consumed the subagents block and advanced the cursor before it
     // printed, so chat has nothing left to hand over.
     assert.equal(cli(["chat", "--session", s.sid]).status, 10, "never both");
     const view = await s.get("/state");
     assert.deepEqual([view.subagents.offered, view.subagents.supported, view.subagents.on], [true, true, true]);
   } finally {
-    cli(["stop", "--session", s.sid]);
+    cli(["stop", "--session", s.sid, "--force"]);
   }
 });
 
@@ -203,7 +201,7 @@ test("subagents: the setting survives a restart at the same revision and starts 
     const saved = await setSubagents(s, { on: true, instruction: "Split by file.", max: 7 });
     assert.equal(saved.status, 200);
     const rev = saved.body.setting.revision;
-    cli(["stop", "--session", s.sid]);
+    cli(["stop", "--session", s.sid, "--force"]);
     const resumed = cli(["open", "--resume", s.sid, "--no-open"]);
     const frame = await (
       await fetch(`${sessionUrl(resumed.json.url).base}/state`, { headers: { cookie: sessionUrl(resumed.json.url).cookie, connection: "close" } })
@@ -218,8 +216,8 @@ test("subagents: the setting survives a restart at the same revision and starts 
     const fresh = await frameSubagents(next);
     assert.deepEqual([fresh.on, fresh.instruction, fresh.max], [true, "Split by file.", 7], "a new session in the same project starts there");
   } finally {
-    cli(["stop", "--session", s.sid]);
-    if (next) cli(["stop", "--session", next.sid]);
+    cli(["stop", "--session", s.sid, "--force"]);
+    if (next) cli(["stop", "--session", next.sid, "--force"]);
   }
 });
 
@@ -238,7 +236,7 @@ test("subagents: a save that matches this session still becomes the project's se
     c = subagentsSession({}, { keepStore: true });
     assert.equal((await frameSubagents(c)).on, true, "the next session starts from the person's latest pick");
   } finally {
-    for (const s of [a, b, c]) if (s) cli(["stop", "--session", s.sid]);
+    for (const s of [a, b, c]) if (s) cli(["stop", "--session", s.sid, "--force"]);
   }
 });
 
@@ -268,8 +266,8 @@ test("subagents: a workflow without the switch refuses it, bad bodies name the f
     fs.rmSync(path.join(s.session, "subagents-setting.json"), { force: true });
     assert.equal("subagents" in (await submitAndWait(s)).json, false);
   } finally {
-    cli(["stop", "--session", doc.sid]);
-    cli(["stop", "--session", s.sid]);
+    cli(["stop", "--session", doc.sid, "--force"]);
+    cli(["stop", "--session", s.sid, "--force"]);
   }
 });
 
@@ -282,15 +280,15 @@ test("subagents: a strength-only change reaches the agent once, with its profile
     assert.equal(thrifty.body.setting.revision, before + 1, "a strength alone is a change");
     assert.equal(thrifty.body.setting.strength, "thrifty");
     const picked = await submitAndWait(s);
-    assert.equal(picked.json.subagents.strength, "thrifty");
-    assert.ok(picked.json.reply.endsWith(["", STRENGTH_LINES.thrifty, "At most 3 helpers at once."].join("\n  ")), picked.json.reply);
+    assert.equal("subagents" in picked.json, false);
+    assert.deepEqual(subagentLines(picked.json.reply), ["Subagents: on, thrifty strength, at most 3 helpers at once (a console setting, not typed by the person)."]);
     assert.equal((await frameSubagents(s)).strength, "thrifty");
 
     const again = await setSubagents(s, { ...ON3, strength: "thrifty" });
     assert.equal(again.body.setting.revision, before + 1, "the same strength again bumps nothing");
     assert.equal("subagents" in (await submitAndWait(s)).json, false);
   } finally {
-    cli(["stop", "--session", s.sid]);
+    cli(["stop", "--session", s.sid, "--force"]);
   }
 });
 
@@ -307,12 +305,12 @@ test("subagents: a setting saved before strength existed reads as balanced and b
     strip(path.join(s.session, "subagents-setting.json"), (setting) => [setting]);
     const rev = JSON.parse(fs.readFileSync(path.join(s.session, "subagents-setting.json"), "utf8")).revision;
 
-    cli(["stop", "--session", s.sid]);
+    cli(["stop", "--session", s.sid, "--force"]);
     const resumed = sessionUrl(cli(["open", "--resume", s.sid, "--no-open"]).json.url);
     const frame = (await (await fetch(`${resumed.base}/state`, { headers: { cookie: resumed.cookie, connection: "close" } })).json()).subagents;
     assert.deepEqual([frame.max, frame.strength, frame.revision], [4, "balanced", rev], "an upgrade alone bumps nothing");
   } finally {
-    cli(["stop", "--session", s.sid]);
+    cli(["stop", "--session", s.sid, "--force"]);
   }
 });
 
@@ -320,11 +318,12 @@ test("subagents: every strength renders its own profile line, and a missing one 
   const base = { revision: 1, max: 3, instruction: "Split by file." };
   for (const strength of STRENGTHS) {
     const lines = onLines({ ...base, strength });
-    assert.equal(lines[lines.length - 2], "  " + STRENGTH_LINES[strength], strength);
-    assert.equal(lines.filter((l) => l.includes("Helper strength:")).length, 1, strength);
+    const word = strength;
+    assert.equal(lines[0], `Subagents: on, ${word} strength, at most 3 helpers at once (a console setting, not typed by the person).`, strength);
+    assert.equal(lines.filter((l) => l.includes("Helper strength:")).length, 0, "the old profile sentence is gone: " + strength);
   }
-  assert.equal(new Set(STRENGTHS.map((k) => STRENGTH_LINES[k])).size, STRENGTHS.length, "four different lines");
-  assert.equal(onLines(base).at(-2), "  " + STRENGTH_LINES.balanced);
+  assert.equal(new Set(STRENGTHS.map((k) => onLines({ ...base, strength: k })[0])).size, STRENGTHS.length, "four different lines");
+  assert.equal(onLines(base)[0], onLines({ ...base, strength: "balanced" })[0], "a missing strength is balanced");
 });
 
 /* ------------------------------------------ subagents: helper reports */
@@ -356,7 +355,7 @@ test("helpers: post merges them by id, a real helper supersedes working alone, a
     assert.equal(postPatch(s, { helpers: [reportedHelper("h1")] }).status, 0);
     assert.deepEqual(readState(s.session).helpers.map((h) => h.id), ["h1"], "a real helper removes the working-alone marker");
   } finally {
-    cli(["stop", "--session", s.sid]);
+    cli(["stop", "--session", s.sid, "--force"]);
   }
 });
 
@@ -372,11 +371,11 @@ test("helpers: every malformed report exits 3 naming the helper, and nothing is 
       ["81-char title", [reportedHelper("h3", { title: "t".repeat(81) })], /helper "h3": title must be at most 80 characters/],
       ["401-char ask", [reportedHelper("h3", { ask: "a".repeat(401) })], /helper "h3": ask must be at most 400 characters/],
       ["201-char result", [reportedHelper("h3", { state: "done", result: "r".repeat(201) })], /helper "h3": result must be at most 200 characters/],
-      ["completion marker", [reportedHelper("h3", { state: "done", result: "PHASE_COMPLETE" })], /helper "h3" result contains a loop completion marker/],
-      ["metrics bait", [reportedHelper("h3", { title: "Risk 3" })], /helper "h3" title contains "Risk 3"/],
-      ["not an array", { id: "h3" }, /"helpers" must be an array/],
-      ["null entry", [null], /"helpers" entries must be objects/],
-      ["string entry", ["h3"], /"helpers" entries must be objects/],
+      ["completion marker", [reportedHelper("h3", { state: "done", result: "PHASE_COMPLETE" })], /helper "h3" result: contains a loop completion marker/],
+      ["metrics bait", [reportedHelper("h3", { title: "Risk 3" })], /helper "h3" title: contains "Risk 3"/],
+      ["not an array", { id: "h3" }, /helpers: must be an array/],
+      ["null entry", [null], /helpers: entries must be objects/],
+      ["string entry", ["h3"], /helpers: entries must be objects/],
     ];
     for (const [name, helpers, re] of cases) {
       const res = postPatch(s, { helpers }, { expectFail: true });
@@ -385,7 +384,7 @@ test("helpers: every malformed report exits 3 naming the helper, and nothing is 
       assert.equal(fs.readFileSync(statePath, "utf8"), before, `${name}: nothing written`);
     }
   } finally {
-    cli(["stop", "--session", s.sid]);
+    cli(["stop", "--session", s.sid, "--force"]);
   }
 });
 
@@ -409,7 +408,7 @@ test("helpers: a reported strength and effort are kept, other values exit 3 nami
     assert.equal(postPatch(s, { helpers: [reportedHelper("h3")] }).status, 0, "a helper without the fields still posts");
     assert.deepEqual(readState(s.session).helpers.map((h) => h.id), ["h1", "h3"]);
   } finally {
-    cli(["stop", "--session", s.sid]);
+    cli(["stop", "--session", s.sid, "--force"]);
   }
 });
 
@@ -423,7 +422,7 @@ test("docs: a doc's version never goes back; the same version again is fine, and
     const before = fs.readFileSync(statePath, "utf8");
     const stale = postPatch(s, doc(1, "- [ ] Task 4.1"), { expectFail: true });
     assert.equal(stale.status, 3);
-    assert.match(stale.stderr, /doc "phase" is at version 7 on the page; this patch sends version 1/);
+    assert.match(stale.stderr, /doc "phase" version: the page is at version 7; this patch sends 1/);
     assert.equal(fs.readFileSync(statePath, "utf8"), before, "nothing written");
     assert.equal(postPatch(s, doc(8, "- [ ] Task 5.1")).status, 0, "a higher version goes through");
     assert.equal(postPatch(s, { docs: [{ id: "phase", blocks: [{ id: "tasks", state: "settled", md: "- [x] Task 5.1" }] }] }).status, 0, "a patch with no version is not checked");
@@ -432,15 +431,14 @@ test("docs: a doc's version never goes back; the same version again is fine, and
     cli(["open", "--resume", s.sid, "--no-open", "--workflow", "implement"]);
     assert.equal(postPatch(s, doc(1, "- [ ] Task 1.1")).status, 0, "after a hop the doc starts fresh");
   } finally {
-    cli(["stop", "--session", s.sid]);
+    cli(["stop", "--session", s.sid, "--force"]);
   }
 });
 
 test("docs: a second phase in one build session goes through as notes/implement.md teaches it", () => {
   const md = fs.readFileSync(path.join(ROOT, "src", "web-console", "notes", "implement.md"), "utf8");
-  assert.match(md, /A later phase in the same session posts the same two docs/);
-  assert.match(md, /versions move up by themselves/);
-  assert.match(md, /Leave\s+`version` out/);
+  assert.match(md, /A later phase posts the same two docs/);
+  assert.match(fs.readFileSync(path.join(ROOT, "src", "web-console", "console-docs.md"), "utf8"), /`version`: moves by itself when content changes and never goes back; leave it out/);
   const taught = consoleSession(["--workflow", "implement"]);
   try {
     // As taught: no version anywhere, and the second phase simply goes through.
@@ -459,7 +457,7 @@ test("docs: a second phase in one build session goes through as notes/implement.
       [["phase", "Phase 2 tasks", 3], ["phasefile", "phase-2.md", 3]]
     );
   } finally {
-    cli(["stop", "--session", taught.sid]);
+    cli(["stop", "--session", taught.sid, "--force"]);
   }
   // An explicit version still never goes back.
   const s = consoleSession(["--workflow", "implement"]);
@@ -482,6 +480,24 @@ test("docs: a second phase in one build session goes through as notes/implement.
       [["phase", "Phase 2 tasks", 3], ["phasefile", "phase-2.md", 3]]
     );
   } finally {
-    cli(["stop", "--session", s.sid]);
+    cli(["stop", "--session", s.sid, "--force"]);
+  }
+});
+
+test("subagents: a change arrives as reply lines only, carrying state, strength and limit and none of the old frame sentences", async () => {
+  const s = subagentsSession();
+  try {
+    assert.equal((await setSubagents(s, { on: true, instruction: "Split by file.", max: 6, strength: "thrifty" })).status, 200);
+    const got = await submitAndWait(s);
+    assert.equal(got.status, 0);
+    assert.equal("subagents" in got.json, false, "no subagents object");
+    assert.equal("workspace" in got.json, false, "no workspace object");
+    assert.deepEqual(subagentLines(got.json.reply), ["Subagents: on, thrifty strength, at most 6 helpers at once (a console setting, not typed by the person)."]);
+    assert.ok(got.json.reply.endsWith("\n  Split by file."), "the person's instruction follows, indented");
+    for (const old of ["revision", "Helper strength:", "Hand independent", "Report each helper", "If your tools cannot"]) {
+      assert.ok(!got.json.reply.includes(old), "no old frame sentence: " + old);
+    }
+  } finally {
+    cli(["stop", "--session", s.sid, "--force"]);
   }
 });

@@ -5,7 +5,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  SKILLS,
+  SKILLS as EVERY_ENTRY,
+  FLOW_SKILLS as SKILLS,
   skillFor,
   skillByName,
   isBuild,
@@ -298,7 +299,7 @@ function sectionOf(text, heading) {
 
 test("docs: console.md's open step names every workflow", () => {
   const text = readSrc("web-console", "console.md");
-  const m = text.match(/where `<w>` is one of ([\s\S]*?)\. Get it right/);
+  const m = text.match(/`<w>` is one of ([\s\S]*?)\. Launched from the dashboard/);
   assert.ok(m, "console.md: the open step's `<w>` sentence is not where the test looks");
   const said = [...m[1].matchAll(/`([^`]+)`/g)].map((x) => x[1]);
   assert.deepEqual(listProblems("src/web-console/console.md", said, WORKFLOWS), []);
@@ -398,4 +399,21 @@ test("helper-strength.md ships in the seven skills that start helpers, and in no
     "plan2code-quick-task",
     "plan2code-review",
   ]);
+});
+
+// The Implementation Loop is a card the desktop app offers, not a skill: it
+// has no workflow, so no list built from the workflows may hold it.
+test("the app-only Implementation Loop entry stays out of every workflow list", () => {
+  const loop = EVERY_ENTRY.find((s) => s.appOnly);
+  assert.ok(loop, "skills.js has an appOnly entry");
+  assert.equal(loop.skill, "plan2code-loop");
+  assert.equal(loop.workflow, null);
+  assert.deepEqual(EVERY_ENTRY.filter((s) => s.appOnly).length, 1);
+  assert.ok(!SKILLS.includes(loop), "FLOW_SKILLS leaves it out");
+  assert.ok(!WORKFLOWS.includes(null) && !isWorkflow("plan2code-loop") && !isWorkflow(null));
+  assert.equal(skillByName("plan2code-loop"), null);
+  assert.ok(!CONSOLE_WORKFLOWS.includes(loop.command), "no console page is offered for it");
+  assert.ok(!SKILL_CATALOG.some((e) => e.skill === loop.skill), "the dashboard does not draw it yet");
+  assert.ok(!("null" in WORKFLOW_LABEL));
+  assert.deepEqual([...loop.states], ["documented", "building"]);
 });

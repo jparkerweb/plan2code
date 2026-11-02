@@ -30,7 +30,7 @@ script refuses `--compare` with an `--out` inside `docs/screenshots/`.
 | `delete.json` | The dashboard, behind the first step of a spec chip's Delete |
 | `help.json` | A Plan question, behind Help on its first tab |
 | `prefs.json` | A Plan question, behind User Preferences |
-| `cleanup.json` | A Plan question, behind User Preferences scrolled to Cleanup after a scan |
+| `cleanup.json` | A Plan question, behind User Preferences on the System tab after a Cleanup scan |
 | `workspace.json` | A Plan question, behind the Workspace panel with a second folder added (shot last: the console remembers the folder) |
 
 `node scripts/capture-screenshots.mjs --compare --out <folder outside the repo>`

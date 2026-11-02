@@ -4,7 +4,8 @@ import { looksReady, looks, saveLooks } from "../looks.js";
 import { page } from "../state.js";
 import { isDashboard, finish, agentAdrift } from "../selectors.js";
 import { releasesLink, el, copyButton, lightDismiss } from "../render.js";
-import { HELP_TABS, helpTabFor, helpKeyTarget } from "../help.js";
+import { HELP_TABS, helpTabFor } from "../help.js";
+import { wireTabs } from "../tabs.js";
 import { CATALOG_GROUPS, SKILL_CATALOG } from "../answers.js";
 
 const $ = (id) => document.getElementById(id);
@@ -196,6 +197,8 @@ function renderAppWording(root) {
 }
 
 let helpBuilt = false;
+// The tabs, wired by tabs.js once the content is built.
+let helpTabs = null;
 
 async function renderHelpVersion() {
   const slot = $("help-version");
@@ -261,43 +264,31 @@ function buildHelp() {
     const code = row.querySelector("code");
     row.appendChild(copyButton(code.textContent, "btn small handoff-copy", code));
   }
-  for (const t of HELP_TABS) {
-    const btn = el("button", "help-tab");
-    btn.type = "button";
-    btn.id = "help-tab-" + t.id;
-    btn.setAttribute("role", "tab");
-    btn.setAttribute("aria-controls", "help-panel-" + t.id);
-    btn.setAttribute("aria-selected", "false");
-    btn.tabIndex = -1;
-    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-    svg.setAttribute("class", "help-tab-icon");
-    svg.setAttribute("aria-hidden", "true");
-    const use = document.createElementNS("http://www.w3.org/2000/svg", "use");
-    use.setAttribute("href", "#hi-" + t.id);
-    svg.appendChild(use);
-    btn.appendChild(svg);
-    btn.appendChild(el("span", null, t.label));
-    btn.addEventListener("click", () => selectHelpTab(t.id));
-    tabs.appendChild(btn);
-    const panel = panels.querySelector(`section.help-panel[data-tab="${t.id}"]`);
-    panel.id = "help-panel-" + t.id;
-    panel.setAttribute("role", "tabpanel");
-    panel.setAttribute("aria-labelledby", "help-tab-" + t.id);
-    panel.tabIndex = 0;
-    panel.hidden = true;
-  }
+  helpTabs = wireTabs({
+    tabs: HELP_TABS,
+    list: tabs,
+    panels,
+    prefix: "help",
+    tabClass: "help-tab",
+    renderTab: (t, btn) => {
+      const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      svg.setAttribute("class", "help-tab-icon");
+      svg.setAttribute("aria-hidden", "true");
+      const use = document.createElementNS("http://www.w3.org/2000/svg", "use");
+      use.setAttribute("href", "#hi-" + t.id);
+      svg.appendChild(use);
+      btn.appendChild(svg);
+      btn.appendChild(el("span", null, t.label));
+    },
+    onSelect: () => {
+      $("help-panels").scrollTop = 0;
+    },
+  });
   helpBuilt = true;
 }
 
 export function selectHelpTab(id) {
-  for (const t of HELP_TABS) {
-    const on = t.id === id;
-    const btn = $("help-tab-" + t.id);
-    btn.setAttribute("aria-selected", String(on));
-    btn.tabIndex = on ? 0 : -1;
-    $("help-panel-" + t.id).hidden = !on;
-  }
-  $("help-panels").scrollTop = 0;
+  helpTabs.select(id);
 }
 
 export function openHelp() {
@@ -372,14 +363,6 @@ export function wireHelp() {
     if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
       e.preventDefault();
       e.stopPropagation();
-      return;
     }
-    if (!e.target.classList || !e.target.classList.contains("help-tab")) return;
-    const current = HELP_TABS.findIndex((t) => "help-tab-" + t.id === e.target.id);
-    const n = helpKeyTarget(e.key, current, HELP_TABS.length);
-    if (n < 0) return;
-    e.preventDefault();
-    selectHelpTab(HELP_TABS[n].id);
-    $("help-tab-" + HELP_TABS[n].id).focus();
   });
 }

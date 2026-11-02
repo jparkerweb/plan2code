@@ -11,6 +11,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { pageSuite, openSession, itemCard, textOf } from "./page-test-helpers.mjs";
 import { reportedHelper } from "./web-console-test-helpers.mjs";
+import { readChat } from "../src/web-console/inbox.mjs";
 
 const suite = pageSuite(test);
 
@@ -31,6 +32,13 @@ const PNG = Buffer.from(
 function collect(s) {
   const got = s.wait(10);
   assert.equal(got.code, 0, `nothing was sent (wait exit ${got.code}): ${got.message || ""}`);
+  // The wire hands over the Quick questions' seq numbers; the entries stay in the
+  // session's chat log, so the tests read them from there.
+  if (Array.isArray(got.chat)) {
+    const seqs = new Set(got.chat);
+    got.chat = readChat(s.session).filter((e) => seqs.has(e.seq));
+    got.type ||= "chat";
+  }
   return got;
 }
 
@@ -65,7 +73,7 @@ test("a Quick question typed in Ask reaches the agent under chat, and the agent'
   const [asked, ...more] = messages(got);
   assert.equal(more.length, 0, "one question, one message");
   assert.equal(asked.text, "Where does the export live?");
-  assert.match(got.reply, /^Quick question: Where does the export live\?$/m);
+  assert.match(got.reply, /^Quick question \(\d+\): Where does the export live\?$/m);
   // The question is in the pane, and the box is empty for the next one.
   await s.page.locator(".ask-row.person").getByText("Where does the export live?").waitFor();
   assert.equal(await s.page.locator("#ask-input").inputValue(), "");

@@ -9,11 +9,12 @@ import {
   handoffList,
   loadOverview,
   finish,
+  loopDriving,
 } from "../selectors.js";
 import { hooks, page, redraw, saveNow } from "../state.js";
 import { el, approvalTip, mdInto, releasesLink, copyButton, lightDismiss } from "../render.js";
 import { needsRoleNudge, ROLE_NOT_SET } from "../starters.js";
-import { looks, renderSwatches, saveLooks } from "../looks.js";
+import { looks, saveLooks } from "../looks.js";
 import { RED_BANNER, RED_BANNER_IN_APP } from "../meter.js";
 import {
   dashNoteKind,
@@ -23,6 +24,8 @@ import {
   CATALOG_GROUPS,
   SKILL_CATALOG,
   catalogEntry,
+  LOOP_ENTRY,
+  OUTSIDE_APP_LINE,
   launchVariant,
   SPEC_STATE_LABELS,
   chipDetail,
@@ -74,7 +77,6 @@ function roleNudge() {
   const setUp = el("button", "btn small primary", "Set up preferences");
   setUp.type = "button";
   setUp.addEventListener("click", () => {
-    renderSwatches();
     // Closed without a role is a "Not now" too: having been to the dialog,
     // they were asked, and the banner does not come back (Help says so).
     $("looks-modal").addEventListener(
@@ -88,7 +90,7 @@ function roleNudge() {
       },
       { once: true }
     );
-    $("looks-modal").showModal();
+    hooks.openPrefs("appearance");
   });
   const notNow = el("button", "btn tiny ghost", "Not now");
   notNow.type = "button";
@@ -243,12 +245,16 @@ export function renderDashboard(main) {
   let shown = 0;
   for (const g of CATALOG_GROUPS) {
     const entries = SKILL_CATALOG.filter((e) => e.group === g.id && (!hide || available(e)));
-    if (!entries.length) continue;
-    shown += entries.length;
+    // The desktop app's Implementation Loop card closes its group. Outside the
+    // app it is always drawn, grayed, so the feature can be found.
+    const loopCard = LOOP_ENTRY && LOOP_ENTRY.group === g.id && (!page.inApp || !hide || available(LOOP_ENTRY));
+    if (!entries.length && !loopCard) continue;
+    shown += entries.length + (loopCard ? 1 : 0);
     const section = el("section", "dash-group");
     section.appendChild(el("h3", "dash-group-title", g.title));
     const grid = el("div", "dash-grid");
     for (const e of entries) grid.appendChild(dashCard(e, menu));
+    if (loopCard) grid.appendChild(dashCard(LOOP_ENTRY, menu));
     section.appendChild(grid);
     wrap.appendChild(section);
   }
@@ -664,7 +670,7 @@ async function readHandoff(h) {
 }
 
 function dashCard(entry, menu) {
-  const presentation = cardPresentation(entry, scan(), selSpec(), menu);
+  const presentation = entry.appOnly ? loopPresentation(entry, menu) : cardPresentation(entry, scan(), selSpec(), menu);
   // The agent's `recommend` and detail describe the initially selected spec.
   // Other picker choices derive both from the scan, so stale context never
   // follows a person to a different spec or to "start from scratch". A grayed
@@ -675,7 +681,7 @@ function dashCard(entry, menu) {
     "dash-card" + (presentation.recommended ? " is-suggested" : "") + (going ? " is-going" : "")
   );
   b.type = "button";
-  b.disabled = Boolean(page.local.launching) || page.gone || page.pendingResult || !presentation.on;
+  b.disabled = Boolean(page.local.launching) || page.gone || page.pendingResult || loopDriving() || !presentation.on;
   if (!presentation.on && presentation.reason) b.title = presentation.reason;
 
   const head = el("span", "dash-card-head");
@@ -693,10 +699,37 @@ function dashCard(entry, menu) {
   b.appendChild(foot);
 
   b.addEventListener("click", () => {
+    // The loop card opens its own setup screen instead of a confirm pane.
+    if (entry.appOnly) return hooks.openLoopSetup(selSpec());
     page.dashPick = entry;
     redraw();
   });
+  if (entry.appOnly) b.appendChild(loopHelpLink());
   return b;
+}
+
+// The loop card is lit only inside the desktop app and, there, by the same
+// rule as Implement (a documented or building spec). Never recommended or
+// pre-selected: a person opts into running unattended.
+function loopPresentation(entry, menu) {
+  if (!page.inApp) return { on: false, reason: OUTSIDE_APP_LINE, recommended: false, detail: "" };
+  return { ...cardPresentation(entry, scan(), selSpec(), menu), recommended: false };
+}
+
+// "How the loop works" on the card: a link inside a button is not allowed, so
+// it is a span that acts like one and keeps the click from opening the setup.
+function loopHelpLink() {
+  const a = el("span", "dash-card-link", "How the loop works");
+  a.setAttribute("role", "link");
+  a.tabIndex = 0;
+  const open = (e) => {
+    e.stopPropagation();
+    e.preventDefault();
+    hooks.openHelpOn("loop");
+  };
+  a.addEventListener("click", open);
+  a.addEventListener("keydown", (e) => (e.key === "Enter" || e.key === " ") && open(e));
+  return a;
 }
 
 // "Start with a note from your Notebook": the switch a lit card's confirm
@@ -806,8 +839,18 @@ function drawNoteBox(entry, box, cmdNote) {
     again();
     if (state.on && (state.tabs === null || state.failed)) refreshNoteTabs(state, true);
   });
-  label.append(toggle, el("span", null, "Start with a note from your Notebook"));
-  box.appendChild(label);
+  label.append(toggle, el("span", "confirm-note-switch-text", "Start with a note from your Notebook"));
+  // A callout row, so the switch stands out under the card's long text; the
+  // hint sits outside the label to keep the checkbox's name short.
+  const head = el("div", "confirm-note-head" + (state.on ? " is-on" : ""));
+  head.appendChild(label);
+  if (!state.on) {
+    const hint = el("span", "confirm-note-hint", "Hand it a tab you wrote earlier, with its pictures.");
+    hint.id = "confirm-note-hint";
+    toggle.setAttribute("aria-describedby", hint.id);
+    head.appendChild(hint);
+  }
+  box.appendChild(head);
 
   const picked = state.on && state.tabs ? state.tabs.find((t) => t.id === state.picked && t.read) : null;
   cmdNote.textContent = picked ? " + note: " + picked.name : "";
@@ -834,11 +877,11 @@ function drawNoteBox(entry, box, cmdNote) {
       b.setAttribute("aria-pressed", String(t.id === state.picked));
       b.appendChild(el("span", "confirm-note-tab-name", t.name));
       if (t.sent) {
-        const badge = el("span", "notepad-sent-badge", "sent");
+        const badge = el("span", "notepad-sent-badge", "previously sent");
         badge.setAttribute("aria-hidden", "true");
         b.appendChild(badge);
       }
-      b.setAttribute("aria-label", t.name + (t.sent ? ", sent" : "") + (empty ? ", empty" : ""));
+      b.setAttribute("aria-label", t.name + (t.sent ? ", previously sent" : "") + (empty ? ", empty" : ""));
       if (empty) b.title = t.read ? "This tab has no text or pictures." : "This tab could not be read.";
       b.addEventListener("click", () => {
         if (state.picked === t.id) return;
@@ -985,7 +1028,6 @@ export function renderConfirm(main, entry) {
   const cmdNote = el("span", "confirm-cmd-note");
   cmdNote.hidden = true;
   if (noteSwitchShows(entry, scan(), selSpec())) {
-    pane.appendChild(el("hr", "confirm-rule"));
     const box = el("div", "confirm-note-box");
     // Which control in the box has the focus, so a rebuild of the whole pane
     // can hand it back (see the end of this function).
@@ -1032,7 +1074,7 @@ export function renderConfirm(main, entry) {
 // A pick is a send like a brief or a stop: it names no question, so `__launch`
 // marks the action as being about the session, and it reaches the agent
 // through the same wait loop. The dashboard reads `skill` off it.
-async function launchSkill(entry) {
+export async function launchSkill(entry) {
   if (page.gone || page.pendingResult || page.local.launching || finish()) return;
   const target = launchTarget(entry, selSpec());
   // The card was clickable, so this should never fire — but a spec picked in

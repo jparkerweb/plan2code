@@ -11,6 +11,8 @@ import {
   WORKING_GRACE_MS,
   openItems,
   agentAdrift,
+  loopDriving,
+  loopWaiting,
 } from "./selectors.js";
 import { finishPaused } from "./answers.js";
 import { page } from "./state.js";
@@ -24,6 +26,11 @@ export function sendState() {
       ? { disabled: true, why: "This session is paused.", short: "Session paused" }
       : { disabled: true, why: "This session is finished.", short: "Session finished" };
   if (page.gone) return { disabled: true, why: "Not connected right now.", short: "Not connected" };
+  // The Implementation Loop answers for the agent: nothing to send until it
+  // stops to ask the person something (FR-15, FR-14).
+  if (loopDriving() && !loopWaiting()) {
+    return { disabled: true, why: "The loop is building. Cards unlock when it needs you.", short: "The loop is building" };
+  }
   // A send is still being collected. Blocking here is what keeps someone from
   // writing over answers nobody has read yet.
   if (page.pendingResult) {

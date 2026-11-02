@@ -6,8 +6,8 @@
   appearance: none;
   flex: none;
   margin-left: 14px;
-  width: 30px;
-  height: 30px;
+  width: 36px;
+  height: 36px;
   padding: 0;
   display: grid;
   place-items: center;
@@ -17,7 +17,7 @@
   cursor: pointer;
 }
 .icon-btn:hover { background: var(--panel-2); border-color: var(--rule); }
-.icon-btn svg { width: 17px; height: 17px; }
+.icon-btn svg { width: 22px; height: 22px; }
 .icon-btn .ab-ring { fill: none; stroke: var(--ink-3); stroke-width: 1.4; }
 .icon-btn .ab-mark { fill: none; stroke: var(--ink-2); stroke-width: 1.5; stroke-linecap: round; }
 .icon-btn .ab-dot { fill: var(--ink-2); }

@@ -46,9 +46,8 @@ import {
 import { serverWorkspace } from "./workspace.mjs";
 import { serverSubagents } from "./settings.mjs";
 import { inAppSignal } from "./in-app.mjs";
-import { chatOffline } from "./public/chat.js";
+import { chatAnswering, chatOffline } from "./public/chat.js";
 import { meterView } from "./public/meter.js";
-import { startsClean } from "./public/hops.js";
 import { SERVABLE, asset } from "./static.mjs";
 import { handle } from "./routes.mjs";
 import { checkForUpdate } from "./update-check.mjs";
@@ -175,12 +174,17 @@ function chatPickedUp() {
   return cursorSeen.seq;
 }
 
-function chatOfflineNow(state) {
+// The frame's chat block without `offline`. A caller that already built it
+// (stateFrame) passes it in rather than building it twice.
+const chatNow = (state) => ({ ...chatForFrame(chatEntries(), state), pickedUp: chatPickedUp() });
+
+function chatOfflineNow(state, chat = chatNow(state)) {
   return chatOffline({
     finish: state && state.finish,
     agent: state && state.agent,
     agentLastSeenMs: agentSeenAt,
     now: Date.now(),
+    answering: chatAnswering(chat),
   });
 }
 
@@ -214,31 +218,15 @@ const workspace = serverWorkspace({
 });
 
 /**
- * Open a conversation when there is none, and a new one whenever the page
- * passes through the dashboard. The reset line carries the workflow it was
- * opened under, so a server that restarts across a hop still sees the switch.
- * A resume that keeps its workflow keeps its conversation.
+ * Open a conversation when there is none. A hop to another skill keeps it:
+ * the person is still talking to the same agent, and switchWorkflow() carries
+ * the agent's replies across, so only New conversation starts a new one.
  */
 function ensureConversation(state) {
   if (!state) return;
-  const last = currentConversation(readChat(DIR));
-  let entry = null;
-  if (!last.conversation) {
-    entry = appendChat(DIR, { kind: "reset", conversation: 1, workflow: state.workflow, reason: "start" });
-  } else if (
-    // The same hops `open --resume` treats as a fresh start, by the rule in
-    // public/hops.js (a blank page, the agent's replies included). Without a
-    // new conversation, the old questions would show as unanswered again.
-    startsClean(last.workflow, state.workflow)
-  ) {
-    entry = appendChat(DIR, {
-      kind: "reset",
-      conversation: last.conversation + 1,
-      workflow: state.workflow,
-      reason: "switch",
-    });
-  }
-  if (entry) appendEvent(DIR, { type: "chat-reset", reason: entry.reason });
+  if (currentConversation(readChat(DIR)).conversation) return;
+  const entry = appendChat(DIR, { kind: "reset", conversation: 1, workflow: state.workflow, reason: "start" });
+  appendEvent(DIR, { type: "chat-reset", reason: entry.reason });
 }
 
 /* ------------------------------------------------------------ subagents */
@@ -259,13 +247,14 @@ const IN_APP = Boolean(inAppSignal());
 // stream (see /events).
 function stateFrame(state) {
   const { pending, stop } = resultFlags();
+  const chat = chatNow(state);
   return {
     rev,
     state,
     agentLastSeen: agentLastSeen(),
     pendingResult: pending,
     pendingStop: stop,
-    chat: { ...chatForFrame(chatEntries(), state), pickedUp: chatPickedUp(), offline: chatOfflineNow(state) },
+    chat: { ...chat, offline: chatOfflineNow(state, chat) },
     workspace: workspace.workspaceView(),
     meter: meterView(ledgerEntries()),
     subagents: subagents.view(state),

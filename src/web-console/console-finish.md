@@ -1,132 +1,47 @@
-# Finishing a Web Console Session
+# Finishing a Session
 
-Part of the web console contract (`console.md`). Read before your first `finish`
-post, and when a send carries `__commit` or a finished screen's `__dashboard`.
-A stop request or the mid-workflow way home is `console-stop.md`.
+The console points here on `__commit`, or on `__dashboard` from a finished screen. Read it before your first `finish` post too. A stop request or the way home mid-workflow is `console-stop.md`.
 
-Three steps, in this order. **Post the finish, keep waiting for a press —
-there is no timeout — and stop the server when the session ends.** A pause
-(below) still stops straight away.
-Stopping first leaves the person staring at a page that says "leave this tab
-open, the next question will appear here on its own" about a session that is
-over, and the one thing they need is a command in a terminal they are not
-looking at. Post it on every session end, not only the last one: an off-ramp
-that routes elsewhere, a checkpoint that saves and stops, a stop request.
+Three steps, in order: post the finish, keep waiting for a button (no timeout), `stop` the server. Every session end posts one, not only the last. A pause (below) stops at once.
 
-**Nothing of yours may still be running.** Before the finish, every
-subagent or background job you started this session must have reported
-back. They run inside your terminal's process, not the console's: the page
-cannot see them, and the moment it says the session ended, the person is
-free to close that terminal and kill them mid-write. While you wait, post
-`{"agent":{"status":"working","activity":"Researching 3 questions (1 of 3 back)"}}`
-and update the count as each returns. Never write a `finish.body` that says
-work "is running in the background" or "will finish on its own". Mark every
-reported helper `done` or `failed` before the finish, so the Subagents tab
-never ends on a row still running: post each one's `done` in the same turn its
-notice arrives, and a `finish` is refused (exit `3`, naming the helper) while
-any row is still `running`.
+Every helper or background job you started must have reported back first. While you wait, post `{"agent":{"status":"working","activity":"Researching 3 questions (1 of 3 back)"}}`. Mark each reported helper `done` or `failed` in the turn its notice arrives: a `finish` is refused while any row is `running`. Never write a `finish.body` saying work "is running in the background".
 
 ## 1. Post the finish
 
-The same closer you are about to print in the terminal, as data:
+`{"settle":true,"finish":{"headline":"The map is written","body":"Everything is on disk under `specs/lunch-vote/pathfinder/`.","command":"/plan2code-0-pathfinder specs/lunch-vote/pathfinder","doc":"map","dashboard":true}}`
 
-```jsonc
-{
-  "settle": true,
-  "finish": {
-    "headline": "The map is written",
-    "body": "Everything you decided is on disk under `specs/lunch-vote/pathfinder/`, one file per decision. The **The map** tab has the whole picture.",
-    "command": "/plan2code-0-pathfinder specs/lunch-vote/pathfinder",
-    "doc": "map",
-    "dashboard": true
-  }
-}
-```
-
-| Field | | |
-| --- | --- | --- |
-| `headline` | required | What just happened, in plain words. Becomes the card's title. |
-| `command` | optional | The exact thing they run next, when there is one — the same string as your Trail Footer's Form A. Rendered with a Copy button that is always on show. Leave it out when nothing is left to run: the page shows an "All done" line with `/plan2code` instead. **No placeholders**: a rendered command is copied and run verbatim, and a patch carrying `<` or `>` in it is rejected. |
-| `dashboard` | optional | `true` puts a **Back to the dashboard** button on the finished screen. Set it on every ending except a pause, and keep waiting for the press (below). |
-| `body` | optional | Markdown. Where the files landed, what to read first. |
-| `where` | optional | Overrides "Run this in the terminal where you started Plan2Code, in a new conversation:". |
-| `doc` | optional | Id of the document to offer as a Markdown download on the way out. Defaults to the first one. |
-| `console` | optional | Whether the copied text asks the next session to use the web console. Leave it out: it follows from the command. |
-| `commit` | optional | `true` on a finished `quick-task`, `implement`, `implement-review`, `review` or `finalize` whose finish prints a git command puts a **Commit it now** button on the finished screen. The press arrives as `__commit` (below). |
-| `changelog` | optional | `true` on a finished `quick-task` or `finalize` that also carries `commit: true` puts an **Update CHANGELOG first** button beside **Commit it now**. Refused (exit 3) on any other workflow, `implement` included. The press arrives as `__changelog` (below). |
-| `review` | optional | A finished `quick-task` only: `true` or `{ "label": "..." }` puts a **Review it now** button on the finished screen (`notes/quick-task.md`, `building-review.md`). `implement` offers the review on its sign-off card instead — before approval, where it can still change the outcome. |
-
-**Continue here.** Nothing to set: when `command` starts with a Plan2Code skill
-(`/plan2code-2-document specs/lunch-vote/PLAN-DRAFT-20261019.md`, with or
-without `--web`) and the finish is not a pause, the page puts a **Continue
-here** button beside the Next step block, unless the session meter is red
-(then the fresh-session advice stands alone). A finish whose command is a git
-commit, or that has none, gets no button. You write nothing new; you only
-handle the `__launch` it sends (below). The `spec` it carries is the
-`specs/<name>` folder the command mentions.
-
-**Write the bare command.** Every Plan2Code skill has a console — the
-dashboard and every skill behind it — so for any of them the page
-appends ` --web` to what it shows and copies, so someone who worked here
-lands back here instead of being asked the interface question as though
-they were new. Every one of those skills takes that flag in its argument as
-the answer. Do not write `Use the web console for this session.` into the
-command; if it is there, the page swaps it for `--web`. A command that is not
-a Plan2Code skill gets nothing appended. Set `"console": false` if they have
-asked to go back to the terminal.
-
-The page then says the session is finished rather than paused, offers the
-command, tells them they can close the tab, and stops treating the server going
-away as a fault. Send is disabled, and anything they staged and never sent is
-named rather than quietly lost.
-
-Settle whatever the session ends on. An item still `open` when the finish
-lands freezes exactly as it stands: a send it carries shows as the final word
-on it, and one that was never answered shows as a question that ran out of
-time. If their last send was a verdict you are closing on — the review's
-`approve`, the plan's `yes`, the fixes pick — the finish post is the same post
-that settles it (`"settle": true`).
-
-Post it even when you are also printing the footer in the terminal. Someone who
-has spent the whole session in the browser has no reason to look anywhere else.
-
-The chat stays open after a finish for as long as you are still listening (the
-review and dashboard buttons live as long as you do); the page only turns Send
-off once you have gone quiet. So while you wait for a button press, answer any
-chat `wait` delivers (`console-chat.md`).
-
-## 2. After the finish: the buttons
-
-A **pause** is an ending that keeps a place to come back to: a stop request,
-an abort that keeps its place to resume, or a checkpoint that saves and ends
-(Plan's Large checkpoint). A pause's headline starts with "Paused", it never
-carries `dashboard`, and you post it without `--wait` and `stop` at once.
-
-Every other finish carries `"dashboard": true` and goes up with `post --wait`;
-keep waiting in the usual slices. There is no timeout after a finish: the
-buttons live exactly as long as you are listening, so a press an hour later
-works like a press a minute later.
-
-| What arrives | What you do |
+| Field | Use |
 | --- | --- |
-| An action `{ "i": "__dashboard", "type": "dashboard" }` | Run the `resume` it carries (`open --resume <sid> --no-open --workflow dashboard`; it re-runs the project scan and clears the page, the finish included), read the dashboard skill (`skillFile`, or `~/.agents/skills/plan2code/SKILL.md`), then post its `menu` with `--wait` and carry on as the dashboard from its "Coming back from another skill", in this same conversation. |
-| An action `{ "i": "__changelog", "type": "changelog" }` | Update CHANGELOG first: run the `resume` it carries (`open --resume <sid> --no-open --workflow changelog`; no `finish`, no `stop`; the hop gives Changelog a clean page, the finish included), then open the Changelog skill (`skillFile`, or `~/.agents/skills/plan2code-changelog/SKILL.md`) with your file-read tool and follow it from the top (`notes/changelog.md`). Its "Commit this now?" yes carries on to Git. Leave the commit command you printed in the finish where it is for the terminal. |
-| An action `{ "i": "__launch", "type": "launch", "skill": ..., "workflow": ..., "spec": ... }` | Continue here: the same hop as a dashboard pick (`console-launches.md` → A pick). Run the `resume` it carries (the hop gives the next skill a clean page, the finish included), read its `skillFile` with your file-read tool (never a skill-invocation tool), and follow it from the top in this same conversation. No `stop`. A hop into a different skill gives it a clean page, the finish included; when the `resume` keeps your own workflow (a phase finish whose next step is the same Implement), nothing clears the page, so your first post of the new run carries `"finish": null`. |
-| An action `__review` or `__done` | As `building-review.md` says (quick task only). |
-| An action `{ "i": "__commit", "type": "commit" }` | Commit it now: run the `resume` it carries (`open --resume <sid> --no-open --workflow git`; no `finish`, no `stop`; the resume gives Git a clean page, the finish included, as a dashboard launch does), then open the Git skill (`skillFile`, or `~/.agents/skills/plan2code-git/SKILL.md`) with your file-read tool and follow it, starting with the commit flow over the board (the person pressed Commit it now), then the board with Push lit. Leave the commit command you printed in the finish where it is for the terminal. |
-| `wait` exit `20` | The server is gone. `open --resume <sid> --workflow <yours>` (it gets a new link: give it to them; the browser opens it), then keep waiting: their Ask messages and the dashboard button still need you. Give up only when the resume itself fails. |
-| The session ends without a press (the terminal closes, the conversation ends) | The server sweeps itself once its idle window passes, and the page swaps the buttons for the matching commands — nothing pressable dies silently. A press that lands in the meantime is kept on disk (`pendingResult`) for a resumed session. |
+| `headline` | required: what happened, in plain words |
+| `command` | the exact next thing to run (your Trail Footer's Form A), copied verbatim: no `<` or `>` (refused). Leave it out when nothing is left to run. Write it bare: the page appends `--web` itself, and swaps a written `Use the web console for this session.` for it. `"console":false` if they asked to go back to the terminal |
+| `dashboard` | `true` on every ending except a pause: the **Back to the dashboard** button |
+| `body` | markdown: where files landed, what to read first |
+| `where` | overrides "Run this in the terminal where you started Plan2Code, in a new conversation:" |
+| `doc` | id of the doc to offer as a download (default: the first) |
+| `commit` | `true` when the finish prints a git command (`quick-task`, `implement`, `implement-review`, `review`, `finalize`): **Commit it now** |
+| `changelog` | `true` with `commit:true` on `quick-task` or `finalize`: **Update CHANGELOG first** (exit 3 on any other workflow) |
+| `review` | `quick-task` only: `true` or `{"label":"..."}` puts **Review it now** on the screen (`building-review.md`) |
+
+A finish whose `command` starts with a Plan2Code skill and is not a pause gets a **Continue here** button (unless the meter is red). You only handle the `__launch` it sends.
+
+Settle whatever the session ends on in the same post (`"settle":true`): an item still `open` freezes as it stands. Post the finish even when you also print the footer in the terminal. Answer any chat `wait` delivers while you wait for a button (`console-chat.md`).
+
+## 2. The buttons
+
+A **pause** (a stop request, an abort that keeps its place, a checkpoint that saves and ends) has a headline starting "Paused", no `dashboard`, and is posted without `--wait`: `stop` at once. Every other finish goes up with `post --wait`; keep waiting in the usual slices.
+
+| Arrives | Do |
+| --- | --- |
+| `__dashboard` | Run its `resume` (it re-scans and clears the page, the finish included), read the dashboard skill (`skillFile`, or `~/.agents/skills/plan2code/SKILL.md`), post its `menu` with `--wait`, and carry on as the dashboard in this conversation |
+| `__changelog` | Run its `resume` (no `finish`, no `stop`), read the Changelog skill (`skillFile`, or `~/.agents/skills/plan2code-changelog/SKILL.md`) and follow it (`notes/changelog.md`). Leave the commit command where it is |
+| `__launch` | Continue here: run its `resume`, read `skillFile` with your file-read tool (never a skill-invocation tool), follow it from the top. No `stop`. Into a different skill the page is cleared; when the `resume` keeps your own workflow (a phase finish into the same Implement), your first post of the new run carries `"finish":null` |
+| `__review` or `__done` | `building-review.md` (quick task only) |
+| `__commit` | Run its `resume` (`--workflow git`; no `finish`, no `stop`), read the Git skill (`skillFile`, or `~/.agents/skills/plan2code-git/SKILL.md`), start with its commit flow over the board (they pressed Commit it now), then the board with Push lit. Leave the printed commit command where it is |
+| `wait` exit 20 | `open --resume <sid> --workflow <yours>`, give the new link, keep waiting; give up only if the resume fails |
+| Session ends without a press | Nothing for you: an unfetched press stays on disk (`pendingResult`) for a resumed session |
 
 ## 3. Stop the server
 
-```
-node "<CONSOLE>" stop --session <sid>
-```
+`node "<CONSOLE>" stop --session <sid>`
 
-If you forget, it shuts itself down after 30 minutes of silence. Stop it anyway.
-The page keeps the hand-off on screen after the server has gone: everything it
-needs is already in `state.json`, and the Copy button is the one action that
-still works on a page whose server has died.
-
-`node "<CONSOLE>" status` lists sessions for this project, including any whose
-answers were submitted but never picked up.
+A session with no finish is refused (exit 3); `--force` stops it anyway (`console-trouble.md`). `node "<CONSOLE>" status` lists this project's sessions, including any whose answers were never picked up.

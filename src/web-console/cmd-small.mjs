@@ -6,7 +6,7 @@ import path from "node:path";
 import { SESSIONS_DIR, appendEvent, readJson } from "./files.mjs";
 import { attachmentName, healthOk, listHandles, pidAlive, projectRoot, repoRoots, sessionDir } from "./sessions.mjs";
 import { removeSpec } from "./scan.mjs";
-import { isOpen } from "./patches.mjs";
+import { isOpen, rule } from "./patches.mjs";
 import { pendingChatCount } from "./inbox.mjs";
 import { forgetWorkspace, specKey } from "./workspace.mjs";
 import { newHandoff, removeHandoff } from "./handoffs.mjs";
@@ -249,6 +249,24 @@ export async function cmdStop() {
   // the command runs from.
   const named = !args.all && (args.session || args.sid) ? sessionDir(path.basename(args.session || args.sid)) : null;
   const project = named && fs.existsSync(named) ? sessionProject(named) : projectRoot();
+  // A stop with no finish posted leaves the page without an ending (FR-12).
+  // Refused for one named session unless --force; --all keeps its behavior.
+  if (named && !args.force) {
+    const state = readJson(path.join(named, "state.json"));
+    if (state && !state.finish) {
+      process.stderr.write(
+        rule(
+          "",
+          "finish",
+          "this session has no finish posted, so the page would be left without an ending. Post one first, then stop",
+          { finish: { headline: "Paused: <what is saved>", command: "/<the skill to resume>" } },
+        ) + `. To stop a dead page or an abandoned session anyway: stop --session ${path.basename(named)} --force
+`,
+      );
+      process.exitCode = 3;
+      return;
+    }
+  }
   const handles = listHandles(project);
   const targets = args.all
     ? handles

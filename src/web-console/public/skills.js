@@ -43,6 +43,11 @@
 //              `spec: true` when it takes the picked spec), or null; an
 //              optional `help` is Help's line for the card when it differs
 //              from `blurb`
+//   appOnly    the entry is a card the desktop app alone offers (the
+//              Implementation Loop): no workflow, no installed skill, and no
+//              list derived from the workflows (WORKFLOWS, the meter, the
+//              resume command, Help's card list) holds it. `skill` is an id
+//              only; `workflow` is null. Use FLOW_SKILLS for those lists.
 
 // Shared by Implement and Implement + Review.
 const BUILD_HELPERS =
@@ -235,6 +240,32 @@ export const SKILLS = Object.freeze([
     // No card of its own: Implement's card launches it when Review is ticked.
     card: null,
   }),
+  // The desktop app's Implementation Loop: a card, not a skill. It has no
+  // SKILL.md and no console workflow; it drives Implement (or Implement +
+  // Review) once per phase, each in a fresh agent. Drawn by the dashboard in
+  // the app only.
+  skill({
+    skill: "plan2code-loop",
+    workflow: null,
+    appOnly: true,
+    label: "Implementation Loop",
+    name: "Implementation Loop",
+    pose: null,
+    builds: false, phased: false, metered: false, templates: false,
+    weight: null, started: null, ran: null, resume: null,
+    subagents: null,
+    states: ["documented", "building"],
+    greyed: BUILD_GREYED,
+    card: {
+      group: "pipeline",
+      chip: "Step 3",
+      spec: true,
+      title: "Implementation Loop",
+      blurb: "Build every remaining phase unattended, one fresh agent per phase.",
+      about:
+        "Builds every remaining phase of the spec without you at the keyboard. Each phase gets a fresh agent that builds it and reviews it. The app checks the result against the spec, runs your quick check, commits, and moves on. It stops at the first phase that goes wrong and tells you why. Desktop app only.",
+    },
+  }),
   skill({
     skill: "plan2code-4-finalize",
     workflow: "finalize",
@@ -413,11 +444,15 @@ export const SKILLS = Object.freeze([
   }),
 ]);
 
-const BY_WORKFLOW = new Map(SKILLS.map((s) => [s.workflow, s]));
-const BY_SKILL = new Map(SKILLS.map((s) => [s.skill, s]));
+// The entries that are skills with a workflow, in SKILLS order: what every
+// list derived from the workflows is built from (an `appOnly` card is not one).
+export const FLOW_SKILLS = Object.freeze(SKILLS.filter((s) => !s.appOnly));
+
+const BY_WORKFLOW = new Map(FLOW_SKILLS.map((s) => [s.workflow, s]));
+const BY_SKILL = new Map(FLOW_SKILLS.map((s) => [s.skill, s]));
 
 // Every workflow name the console knows, in SKILLS order.
-export const WORKFLOWS = Object.freeze(SKILLS.map((s) => s.workflow));
+export const WORKFLOWS = Object.freeze(FLOW_SKILLS.map((s) => s.workflow));
 
 /** Whether a name is one of WORKFLOWS (`open --workflow`, `handoff new --workflow`). */
 export function isWorkflow(name) {

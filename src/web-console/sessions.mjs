@@ -279,12 +279,15 @@ export async function removeSessions(sessionsDir, sids) {
 }
 
 // The console folder's own files that no sweep may ever remove: the person's
-// looks, the folders remembered per project and spec, the Subagents switch
+// looks, the folders remembered per project and spec, the Implementation
+// Loop's setup per project and its report while a build is under way, the Subagents switch
 // saved per project and workflow, what each unknown git host is, the pointer
 // to this console's directory, and the cached release check.
 export const PROTECTED_CONSOLE_FILES = new Set([
   "looks.json",
   "workspaces.json",
+  "loop-setup.json",
+  "loop-reports.json",
   "subagents.json",
   "pr-hosts.json",
   "console-dir",

@@ -164,16 +164,17 @@ const COMPARE_SHOTS = {
     open: async (page) => {
       await page.click("#btn-looks");
       await page.waitForSelector("#looks-modal[open]", { timeout: 10000 });
+      await page.waitForSelector('#prefs-tab-appearance[aria-selected="true"]', { timeout: 10000 });
     },
   },
-  // Preferences scrolled to Cleanup once its scan has answered.
+  // Preferences on the System tab, once the Cleanup scan has answered.
   cleanup: {
     workflow: "plan",
     posts: ["cleanup"],
     open: async (page) => {
       await page.click("#btn-looks");
       await page.waitForSelector("#looks-modal[open]", { timeout: 10000 });
-      await page.locator(".looks-cleanup").scrollIntoViewIfNeeded();
+      await page.click("#prefs-tab-system");
       await page.click("#cleanup-scan");
       await page.waitForFunction(() => document.getElementById("cleanup-status").textContent.trim() !== "", null, { timeout: 15000 }).catch(() => {});
     },

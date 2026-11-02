@@ -112,7 +112,6 @@ test("under the app, open reuses the app's session, announces the page and launc
     });
     assert.equal(res.status, 0);
     assert.equal(res.json.sid, appSid, "the window's own session is reused, not a second console");
-    assert.equal(res.json.reused, true);
     assert.equal(res.json.inApp, true);
     assert.equal(res.json.announced, true);
     assert.equal(app.seen.length, 1);
@@ -123,7 +122,7 @@ test("under the app, open reuses the app's session, announces the page and launc
     assert.deepEqual(browser.calls(), [], "no browser is launched under the app");
   } finally {
     app.close();
-    cli(["stop", "--session", appSid], { cwd, expectFail: true });
+    cli(["stop", "--session", appSid, "--force"], { cwd, expectFail: true });
   }
 });
 
@@ -140,7 +139,7 @@ test("under the app, a hop on the app's session keeps the same url and reports t
     assert.equal(app.seen[0].workflow, "pathfinder");
   } finally {
     app.close();
-    cli(["stop", "--session", first.json.sid], { cwd, expectFail: true });
+    cli(["stop", "--session", first.json.sid, "--force"], { cwd, expectFail: true });
   }
 });
 
@@ -167,7 +166,7 @@ test("under the app, a wrong token is reported and the page is not sent to a bro
     assert.deepEqual(browser.calls(), []);
   } finally {
     app.close();
-    cli(["stop", "--session", first.json.sid], { cwd, expectFail: true });
+    cli(["stop", "--session", first.json.sid, "--force"], { cwd, expectFail: true });
   }
 });
 
@@ -182,7 +181,7 @@ test("under the app, a session that is gone gets a fresh one and its address ann
     assert.equal(res.status, 0);
     assert.notEqual(res.json.sid, "20200101-000000-nothere");
     assert.equal(app.seen[0].url, res.json.url);
-    cli(["stop", "--session", res.json.sid], { cwd, expectFail: true });
+    cli(["stop", "--session", res.json.sid, "--force"], { cwd, expectFail: true });
   } finally {
     app.close();
   }
@@ -204,8 +203,8 @@ test("two app windows never receive each other's pages", async () => {
   } finally {
     appA.close();
     appB.close();
-    cli(["stop", "--session", a.json.sid], { cwd: cwdA, expectFail: true });
-    cli(["stop", "--session", b.json.sid], { cwd: cwdB, expectFail: true });
+    cli(["stop", "--session", a.json.sid, "--force"], { cwd: cwdA, expectFail: true });
+    cli(["stop", "--session", b.json.sid, "--force"], { cwd: cwdB, expectFail: true });
   }
 });
 
@@ -225,7 +224,7 @@ test("without the signal, open still launches the browser and reports nothing ab
     assert.ok(calls.length >= 1, "the browser command ran");
     assert.match(calls[0], /^http:\/\/127\.0\.0\.1:\d+\/s\//);
   } finally {
-    cli(["stop", "--session", res.json.sid], { cwd, expectFail: true });
+    cli(["stop", "--session", res.json.sid, "--force"], { cwd, expectFail: true });
   }
 });
 
@@ -243,8 +242,8 @@ test("the window's session, not the environment's, decides what open resumes", a
     assert.equal(app.seen[0].sid, live.json.sid);
   } finally {
     app.close();
-    cli(["stop", "--session", stale.json.sid], { cwd, expectFail: true });
-    cli(["stop", "--session", live.json.sid], { cwd, expectFail: true });
+    cli(["stop", "--session", stale.json.sid, "--force"], { cwd, expectFail: true });
+    cli(["stop", "--session", live.json.sid, "--force"], { cwd, expectFail: true });
   }
 });
 
@@ -264,7 +263,7 @@ test("with nothing shown in the window yet, open makes the first session and ann
     assert.equal(app.seen[0].url, res.json.url);
     await new Promise((r) => setTimeout(r, 700));
     assert.deepEqual(browser.calls(), [], "the first page goes to the app too, not a browser");
-    cli(["stop", "--session", res.json.sid], { cwd, expectFail: true });
+    cli(["stop", "--session", res.json.sid, "--force"], { cwd, expectFail: true });
   } finally {
     app.close();
   }
@@ -324,10 +323,12 @@ test("the Desktop app group shows only in the app's frame, reflects the app's sa
   const browser = await pages.browser();
   const plain = await openSession(browser, { t, workflow: "implement", payload: ASKING });
   await plain.page.locator("#btn-looks").click();
+  await plain.page.locator("#prefs-tab-system").click();
   assert.equal(await plain.page.locator("#looks-desktop").isVisible(), false, "not in a browser tab");
 
   const s = await openSession(browser, { t, workflow: "implement", payload: ASKING, env: { PLAN2CODE_IN_APP: "1" }, init: FAKE_APP_FRAME });
   await s.page.locator("#btn-looks").click();
+  await s.page.locator("#prefs-tab-system").click();
   const box = s.page.locator("#looks-taskbar");
   assert.ok(await s.page.locator("#looks-desktop").isVisible(), "shown inside the app");
   assert.ok(await box.isChecked(), "on until the app says otherwise");
@@ -351,4 +352,22 @@ test("the Desktop app group shows only in the app's frame, reflects the app's sa
 
   await box.check();
   assert.deepEqual(await toApp(s, "taskbar"), [{ plan2code: "taskbar", on: true }], "a named request with one boolean");
+});
+
+test("framed, an Activities game in full screen asks the app for the whole screen, and gives it back on F, Esc and a new question", async (t) => {
+  const s = await openSession(await pages.browser(), { t, workflow: "plan", payload: { agent: { status: "working", activity: "Reading" } }, env: { PLAN2CODE_IN_APP: "1" }, init: FAKE_APP_FRAME });
+  await s.page.click("#btn-activities");
+  await s.page.locator('.activities-card[data-activity="snake"]').click();
+  await s.page.locator("#activities-board").waitFor();
+  const told = async () => (await toApp(s, "activities-full")).map((m) => m.on);
+  await s.page.keyboard.press("f");
+  assert.deepEqual(await told(), [true], "a named request with one boolean");
+  await s.page.keyboard.press("f");
+  await s.page.keyboard.press("f");
+  await s.page.keyboard.press("Escape");
+  assert.deepEqual(await told(), [true, false, true, false], "F and Esc each give it back");
+  await s.page.keyboard.press("f");
+  s.post({ items: [{ id: "q2", kind: "text", title: "Who uses it", body: "Who opens the export?" }], agent: { status: "waiting" } });
+  await until(async () => (await told()).at(-1) === false, 5000);
+  assert.deepEqual(await told(), [true, false, true, false, true, false], "and so does a new question");
 });

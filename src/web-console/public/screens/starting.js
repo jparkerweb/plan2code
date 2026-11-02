@@ -4,7 +4,7 @@ import { page, redraw } from "../state.js";
 import { el, approvalTip } from "../render.js";
 import { startPose, startingHint, staleLaunchFeedback, workflowTitle } from "../answers.js";
 import { skillByName } from "../skills.js";
-import { agentAdrift, doingNow, docs } from "../selectors.js";
+import { agentAdrift, doingNow, docs, loopDriving } from "../selectors.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -132,10 +132,12 @@ function renderStarting(main) {
   const elapsed = startingElapsed();
   const pane = posePane(main, "launching starting", page.S.workflow);
   pane.appendChild(el("p", "card-kicker", "Starting up"));
-  pane.appendChild(el("h2", "launch-title", `Starting ${workflowTitle(page.S.workflow)}`));
+  const looping = loopDriving();
+  pane.appendChild(el("h2", "launch-title", looping ? "The loop is starting this phase" : `Starting ${workflowTitle(page.S.workflow)}`));
   pane.appendChild(el("p", "launch-quip", START_QUIPS[Math.floor(elapsed / 2600) % START_QUIPS.length]));
   pane.appendChild(el("p", "launch-hint", startingHint(elapsed)));
-  pane.appendChild(approvalTip());
+  // A loop runs with permission checks off, so no approval will come.
+  if (!looping) pane.appendChild(approvalTip());
   startLaunchTicker();
 }
 
@@ -180,8 +182,17 @@ function startLaunchTicker() {
   }
 }
 
+// A phase that has reported is not starting: the app is checking the report,
+// running the quick check and committing, which can take minutes.
+function renderLoopChecking(main) {
+  const pane = posePane(main, "waiting-pane", page.S.workflow);
+  pane.appendChild(el("h2", null, "The loop is checking this phase"));
+  pane.appendChild(el("p", null, "The agent has reported. The app is checking that against the spec before it moves on, so you don't need to do anything."));
+}
+
 export function renderWaiting(main) {
   const doing = doingNow();
+  if (!doing && loopDriving() && page.S.loopOutcome) return renderLoopChecking(main);
   // Nothing asked and nothing said yet: the session is still starting.
   if (!doing) return renderStarting(main);
   // The same Planny the session started with, still at it: the spinner that
@@ -199,7 +210,9 @@ export function renderWaiting(main) {
   }
   pane.appendChild(title);
   pane.appendChild(el("p", null, doing));
-  const ask = "If Plan2Code needs you, the question appears here on its own.";
+  const ask = loopDriving()
+    ? "The loop is running this phase by itself, so you don't need to do anything. If it needs you, the question appears here."
+    : "If Plan2Code needs you, the question appears here on its own.";
   if (!docs().length) {
     pane.appendChild(el("p", null, ask));
     return;

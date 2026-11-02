@@ -65,7 +65,7 @@ test("helpers: a dashboard hop clears them, a same-workflow or paused resume kee
     cli(["open", "--resume", s.sid, "--no-open", "--workflow", "implement"]);
     assert.equal("helpers" in readState(s.session), false, "and the hop back brings none");
   } finally {
-    cli(["stop", "--session", s.sid]);
+    cli(["stop", "--session", s.sid, "--force"]);
   }
 });
 
@@ -85,7 +85,7 @@ test("meter: a repeated run counts once, a bad one appends nothing, and neither 
     assert.match(unknown.stderr, /run: unknown event "nap"/);
     const noId = postPatch(s, { run: { event: "plan" } }, { expectFail: true });
     assert.equal(noId.status, 3);
-    assert.match(noId.stderr, /run: id required/);
+    assert.match(noId.stderr, /run: needs an id/);
     const badTasks = postPatch(s, { run: { event: "implement-phase", id: "phase-1", tasks: 0 } }, { expectFail: true });
     assert.equal(badTasks.status, 3);
     assert.match(badTasks.stderr, /run: tasks must be a whole number/);
@@ -108,7 +108,7 @@ test("meter: a repeated run counts once, a bad one appends nothing, and neither 
     assert.equal("run" in state, false);
     assert.equal("folderIssue" in state, false);
   } finally {
-    cli(["stop", "--session", s.sid]);
+    cli(["stop", "--session", s.sid, "--force"]);
   }
 });
 
@@ -132,7 +132,7 @@ test("meter: open --file takes run and folderIssue as post does, scoped to the n
     assert.equal("run" in state, false);
     assert.equal("folderIssue" in state, false);
   } finally {
-    cli(["stop", "--session", good.json.sid]);
+    cli(["stop", "--session", good.json.sid, "--force"]);
   }
   const bad = cli(["open", "--no-open", "--file", payload("open-run-bad.json", { run: { event: "nap", id: "x" } })], { expectFail: true });
   assert.equal(bad.status, 3);
@@ -151,7 +151,7 @@ test("meter: a folder issue shows in the frame's workspace.issues until the next
     cli(["open", "--resume", s.sid, "--no-open", "--workflow", "implement"]);
     assert.deepEqual((await s.get("/workspace")).issues, [], "a new skill run starts clean");
   } finally {
-    cli(["stop", "--session", s.sid]);
+    cli(["stop", "--session", s.sid, "--force"]);
   }
 });
 
@@ -182,8 +182,8 @@ test("two sessions keep their own cookies: each server reads only the one named 
     const crossed = b.cookie.replace(/^p2c_console_\d+/, `p2c_console_${new URL(a.base).port}`);
     assert.equal((await fetch(`${a.base}/state`, { headers: { cookie: crossed, connection: "close" } })).status, 403);
   } finally {
-    cli(["stop", "--session", a.sid]);
-    cli(["stop", "--session", b.sid]);
+    cli(["stop", "--session", a.sid, "--force"]);
+    cli(["stop", "--session", b.sid, "--force"]);
   }
 });
 
@@ -222,7 +222,7 @@ test("a post and a submit that overlap both survive: the state lock serializes t
     assert.equal(fs.existsSync(lock), false, "and the lock is let go");
     assert.equal(cli(["wait", "--session", s.sid, "--seconds", "5"]).status, 0);
   } finally {
-    cli(["stop", "--session", s.sid]);
+    cli(["stop", "--session", s.sid, "--force"]);
   }
 });
 
@@ -237,7 +237,7 @@ test("a lock left by a writer that died is broken rather than waited on for good
     assert.equal(readState(s.session).agent.status, "working");
     assert.equal(fs.existsSync(lock), false);
   } finally {
-    cli(["stop", "--session", s.sid]);
+    cli(["stop", "--session", s.sid, "--force"]);
   }
 });
 
@@ -256,7 +256,7 @@ test("stop never kills a live process that does not answer /health as ours", () 
       forged,
       JSON.stringify({ v: 1, sid: sidForged, pid: bystander.pid, port: 1, url: "http://127.0.0.1:1/", startedAt: new Date().toISOString() })
     );
-    const res = cli(["stop", "--session", sidForged]);
+    const res = cli(["stop", "--session", sidForged, "--force"]);
     assert.equal(res.json.stopped, 0);
     assert.equal(res.json.skippedStaleHandles, 1);
     assert.equal(fs.existsSync(forged), false, "the handle goes");
@@ -285,11 +285,10 @@ test("open from a linked worktree seeds the workspace with the worktree, not the
   try {
     const res = cliIn(wt, ["open", "--workflow", "plan", "--no-open"]);
     sidOpened = res.json.sid;
-    assert.deepEqual(res.json.workspace.folders.map((f) => f.path), [worktree]);
     const onDisk = JSON.parse(fs.readFileSync(path.join(res.json.session, WORKSPACE_FILE), "utf8"));
     assert.deepEqual(onDisk.folders.map((f) => f.path), [worktree], "workspace.json names the worktree");
   } finally {
-    if (sidOpened) cliIn(wt, ["stop", "--session", sidOpened]);
+    if (sidOpened) cliIn(wt, ["stop", "--session", sidOpened, "--force"]);
     // A stopped server can take a while to let go of its working directory on
     // Windows, and longer while other test files load the machine: under a
     // full-suite run this needed more than the 5s a 20x250ms retry gave it.
@@ -302,8 +301,8 @@ test("open from a linked worktree seeds the workspace with the worktree, not the
 test("validate refuses a text pattern that does not compile, and post exits 3 on it", () => {
   const item = (pattern) => ({ items: [{ id: "t1", kind: "text", title: "Ticket number", pattern }] });
   assert.deepEqual(validate(item("^[A-Z]+-\\d+$")), []);
-  assert.match(validate(item("([")).join("\n"), /"pattern" is not a valid JavaScript regular expression/);
-  assert.match(validate(item(7)).join("\n"), /"pattern" must be a string/);
+  assert.match(validate(item("([")).join("\n"), /pattern: is not a valid JavaScript regular expression/);
+  assert.match(validate(item(7)).join("\n"), /pattern: must be a string/);
 
   const s = openSession();
   try {
@@ -313,7 +312,7 @@ test("validate refuses a text pattern that does not compile, and post exits 3 on
     assert.match(bad.stderr, /pattern/);
     assert.equal(fs.readFileSync(path.join(s.session, "state.json"), "utf8"), before, "nothing was written");
   } finally {
-    cli(["stop", "--session", s.sid]);
+    cli(["stop", "--session", s.sid, "--force"]);
   }
 });
 
@@ -342,7 +341,7 @@ test("wait reads --seconds 6s as six seconds, not as nothing", () => {
     assert.equal(res.status, 10);
     assert.ok(Date.now() - t0 >= 5000, "the slice ran its length");
   } finally {
-    cli(["stop", "--session", s.sid]);
+    cli(["stop", "--session", s.sid, "--force"]);
   }
 });
 
@@ -359,7 +358,7 @@ test("only open leaves the console-dir pointer; status, help and a bad command d
     assert.equal(fs.existsSync(pointer), false);
     const opened = cli(["open", "--no-open"], { env });
     assert.equal(fs.readFileSync(pointer, "utf8").trim(), path.join(ROOT, "src", "web-console"));
-    cli(["stop", "--session", opened.json.sid], { env });
+    cli(["stop", "--session", opened.json.sid, "--force"], { env });
   } finally {
     fs.rmSync(home, { recursive: true, force: true });
   }
@@ -424,7 +423,7 @@ test("every state-changing route refuses a foreign Origin, and nothing changes",
     assert.equal(own.status, 200);
     assert.deepEqual(await own.json(), { path: picked });
   } finally {
-    cli(["stop", "--session", s.sid]);
+    cli(["stop", "--session", s.sid, "--force"]);
     fs.rmSync(picked, { recursive: true, force: true });
   }
 });

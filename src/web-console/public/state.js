@@ -111,6 +111,21 @@ export const page = {
   // false until the first frame lands, same as every other flag here, and
   // from an older server that sends none.
   inApp: false,
+  // The Implementation Loop, as the desktop app drives it: `loop` is the
+  // state's `{ driving: true }` or null (it locks the page, selectors.js
+  // loopDriving); `loopFacts` is what the app answered to `loop-facts`
+  // (agent, model, effort, permission mode, prompt support); `loopStart` is
+  // `{ ok, error }` once the app answered a `loop-start`; `loopAction` is the
+  // same for the stop screen's Resume, Fix and Finalize; `loopNotifyTest` is
+  // Send a test's `{ waiting }`, then `{ ok, sent, error }` once the app answered.
+  loop: null,
+  // The setup screen the dashboard's Implementation Loop card opened, or null
+  // (screens/loop-setup.js owns the shape).
+  loopSetup: null,
+  loopFacts: null,
+  loopStart: null,
+  loopNotifyTest: null,
+  loopAction: null,
   // The frame's Subagents switch ({ offered, supported, on, instruction, max,
   // revision }), or null before a server that sends it.
   subagentsFrame: null,

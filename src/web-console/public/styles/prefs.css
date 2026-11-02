@@ -1,0 +1,188 @@
+/* prefs.css: User Preferences' tabs (the side list, the narrow strip), the Saved
+   mark, the Agents & models table and form, and the unsaved prompt. */
+
+/* --------------------------------------------------------- tabs and panels */
+
+.prefs-layout {
+  display: grid;
+  grid-template-columns: 200px minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+.prefs-tabs {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.prefs-tab {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-left: 3px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 13.5px;
+  text-align: left;
+  cursor: pointer;
+}
+.prefs-tab:hover { background: var(--panel-2); color: var(--ink); }
+.prefs-tab[aria-selected="true"] { background: var(--accent-soft); color: var(--accent); border-left-color: var(--accent); font-weight: 600; }
+.prefs-tab:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.prefs-tab-label { display: block; line-height: 1.3; }
+.prefs-tab-hint { display: block; font-size: 12px; line-height: 1.35; color: var(--ink-3); }
+
+.prefs-panels { min-width: 0; }
+.prefs-panel[hidden] { display: none; }
+
+/* --------------------------------------------------------- Saved mark */
+
+/* At the fieldset's top right, level with its legend. Out of the flow: the
+   fieldsets are grids (the shared range and row classes), where an in-flow mark
+   would take a cell and push the choices about. It fades out after about
+   2 s when the JS adds `is-saved`; an `error` stays put and never fades. */
+.prefs-panel fieldset { position: relative; }
+.prefs-saved {
+  position: absolute;
+  top: 0;
+  right: 0;
+  max-width: 60%;
+  font-size: 12px;
+  line-height: 1.3;
+  text-align: right;
+  color: var(--ok);
+  opacity: 0;
+}
+.prefs-saved.is-saved { opacity: 1; }
+.prefs-saved.error { color: var(--danger, #d64545); opacity: 1; }
+
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes prefs-saved-fade {
+    0%, 70% { opacity: 1; }
+    100% { opacity: 0; }
+  }
+  .prefs-saved.is-saved { animation: prefs-saved-fade 2s ease-out forwards; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .prefs-saved.is-saved { opacity: 1; }
+}
+
+/* --------------------------------------------------------- Agents & models */
+
+.prefs-agents { display: grid; gap: 10px; }
+.prefs-agents > .help { margin: 0; }
+.prefs-agents [hidden] { display: none; }
+#agents-status:empty { display: none; }
+#agents-status.error { color: var(--danger, #d64545); }
+#agents-add { justify-self: start; }
+
+.prefs-agents-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.prefs-agents-table th {
+  text-align: left;
+  font-weight: 600;
+  font-size: 12px;
+  color: var(--ink-3);
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--rule-2);
+}
+.prefs-agents-table td { padding: 8px; border-bottom: 1px solid var(--rule-2); vertical-align: top; }
+.prefs-agents-name span, .prefs-agents-name code { display: block; }
+.prefs-agents-name code { font-size: 12px; color: var(--ink-3); }
+.prefs-agents-name .help { margin-top: 2px; font-size: 12px; }
+.prefs-agents-models { color: var(--ink-2); overflow-wrap: anywhere; }
+.prefs-agents-edit { text-align: right; }
+.prefs-agents-soon td { color: var(--ink-3); font-style: italic; }
+
+.prefs-badge, .prefs-unsaved-badge {
+  display: inline-block;
+  font-size: 11.5px;
+  line-height: 1.5;
+  padding: 0 7px;
+  border-radius: 10px;
+  background: var(--panel-2);
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+.prefs-badge.ok { color: var(--ok); }
+.prefs-badge.missing { color: var(--warn); }
+.prefs-unsaved-badge { background: none; border: 1px solid var(--warn); color: var(--warn); }
+
+.prefs-agents-form { display: grid; gap: 10px; }
+.prefs-agents-back { justify-self: start; }
+.prefs-agents-title { display: flex; align-items: baseline; gap: 8px; margin: 0; font-size: 15px; }
+.prefs-agents-title code { font-size: 12px; color: var(--ink-3); }
+.prefs-agents-title:focus { outline: none; }
+.prefs-agents-fields { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px 14px; }
+.prefs-agents-fields > .models-note,
+.prefs-agents-fields > [data-field="models"],
+.prefs-agents-fields > .prefs-agents-args,
+.prefs-agents-fields > .agent-field:has(> .models-list),
+.prefs-agents-fields > .agent-field:has(> .prefs-agents-none) { grid-column: 1 / -1; }
+.prefs-agents-form input { min-width: 0; }
+.prefs-agents-form input.invalid { border-color: var(--danger, #d64545); }
+.prefs-agents-test { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.prefs-agents-test .help { margin: 0; }
+.prefs-agents-none { margin: 0; }
+.prefs-agents-args { display: grid; gap: 8px; }
+.prefs-agents-args > summary { cursor: pointer; color: var(--accent); font-size: 13px; }
+.prefs-agents-args[open] > summary { margin-bottom: 4px; }
+.prefs-agents-args > .agent-field + .agent-field { margin-top: 8px; }
+/* The Saved mark sits in the form's foot, in the flow, after the buttons. */
+.prefs-agents-foot > .prefs-saved { position: static; max-width: none; text-align: left; }
+
+/* --------------------------------------------------------- unsaved prompt */
+
+/* Over the dialog, inside it: never the browser's confirm(). */
+.prefs-unsaved {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: color-mix(in srgb, var(--bg, #000) 55%, transparent);
+}
+.prefs-unsaved[hidden] { display: none; }
+.prefs-unsaved-box {
+  max-width: 380px;
+  padding: 16px 18px;
+  border: 1px solid var(--rule-2);
+  border-radius: 10px;
+  background: var(--panel);
+  box-shadow: 0 8px 30px rgb(0 0 0 / 0.25);
+}
+.prefs-unsaved-box h3 { margin: 0 0 6px; font-size: 15px; }
+.prefs-unsaved-box p { margin: 0 0 12px; }
+.prefs-unsaved-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* --------------------------------------------------------- narrow screens */
+
+@media (max-width: 720px) {
+  .prefs-layout { grid-template-columns: 1fr; gap: 12px; }
+  .prefs-tabs {
+    flex-direction: row;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 0 0 4px;
+    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 32px), transparent);
+    mask-image: linear-gradient(to right, #000 calc(100% - 32px), transparent);
+  }
+  .prefs-tab {
+    width: auto;
+    flex: none;
+    white-space: nowrap;
+    border-left: 0;
+    border-bottom: 3px solid transparent;
+    border-radius: 6px 6px 0 0;
+  }
+  .prefs-tab[aria-selected="true"] { border-bottom-color: var(--accent); }
+  .prefs-tab-hint { display: none; }
+  .prefs-agents-models { display: none; }
+  .prefs-agents-fields { grid-template-columns: 1fr; }
+}

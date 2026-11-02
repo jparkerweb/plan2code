@@ -517,7 +517,7 @@ test("git board host: the host draws the board only through drawGitBoard, and th
 test("git board docs: the agent prose, Help topic and readme describe the tabbed board", () => {
   const read = (p) => fs.readFileSync(new URL(p, import.meta.url), "utf8");
   const notes = read("../src/web-console/notes/git.md");
-  const finishing = notes.slice(notes.indexOf("**Finishing**"));
+  const finishing = notes.slice(notes.indexOf("**Finishing"));
   assert.ok(finishing.includes("Done with git"), "notes/git.md Finishing names Done with git");
   assert.ok(finishing.includes("cancel"), "notes/git.md Finishing cancels an open card");
   assert.ok(!finishing.includes('"settle": ["<id>"]'), "the cancel rule never settles a card nothing was sent to");

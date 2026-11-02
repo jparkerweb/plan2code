@@ -89,7 +89,9 @@ export function cleanSetting(input) {
 
 /* ------------------------------------------------------------ the lines */
 
-// The non-editable part of every "on" block (FR-8).
+// The non-editable part an "on" block used to carry (FR-8). The block now says
+// state, strength and limit in one line; these sentences move to
+// console-subagents.md (Phase 5). Still exported for the suites that read them.
 export const FRAME_LINES = Object.freeze([
   "Hand independent work to helpers if your tools allow it; otherwise carry on alone.",
   "Report each helper on the page (console-subagents.md); questions for the person stay with you.",
@@ -99,7 +101,7 @@ export const FRAME_LINES = Object.freeze([
 
 export const PATHFINDER_RESEARCH_LINE = "Research questions always use helpers, whatever this switch says.";
 
-// The profile line each strength adds to an "on" block.
+// The profile sentence each strength used to add to an "on" block; see FRAME_LINES.
 export const STRENGTH_LINES = Object.freeze({
   balanced: "Helper strength: balanced (the table in helper-strength.md as written).",
   thrifty: "Helper strength: thrifty (one step lighter in strength and effort than the table; reviews never below standard).",
@@ -109,20 +111,20 @@ export const STRENGTH_LINES = Object.freeze({
 
 // Only the first line of a block starts at column 0, so no line inside it can
 // be read as an entry of its own (NFR-5).
-export function onLines({ revision, replaces, max, instruction, strength }) {
-  const label = replaces ? `revision ${revision}, replaces revision ${replaces}` : `revision ${revision}`;
+export function onLines({ max, instruction, strength }) {
   const own = String(instruction || "")
     .split("\n")
     .map((line) => line.trimEnd())
     .filter((line) => line.trim());
+  const word = STRENGTHS.includes(strength) ? strength : DEFAULT_STRENGTH;
   return [
-    `Subagents: on (${label}) — a console setting, not typed by the person.`,
-    ...[...FRAME_LINES, ...own, STRENGTH_LINES[strength] || STRENGTH_LINES[DEFAULT_STRENGTH], `At most ${max} helpers at once.`].map((line) => "  " + line),
+    `Subagents: on, ${word} strength, at most ${max} helpers at once (a console setting, not typed by the person).`,
+    ...own.map((line) => "  " + line),
   ];
 }
 
-export function offLine(revision) {
-  return `Subagents: off (revision ${revision}) — don't start new helpers for the rest of this session.`;
+export function offLine() {
+  return "Subagents: off. Start no new helpers for the rest of this session.";
 }
 
 /**

@@ -178,7 +178,7 @@ h1 {
    grows to fill the row, so the icon buttons would sit beside the title. The
    first takes the slack instead; with the block shown its flex already eats
    the space, so this costs nothing. */
-#btn-about { margin-left: auto; }
+#btn-looks { margin-left: auto; }
 
 .progress-label {
   display: flex;
@@ -516,6 +516,8 @@ h1 {
 .footer.is-dash .footer-actions { display: none; }
 .footer.is-dash .footer-where { grid-column: 2; }
 .footer.is-dash-done .footer-actions { display: none; }
+.footer.is-loop-idle .footer-summary,
+.footer.is-loop-idle .footer-actions { visibility: hidden; }
 .hint { font-size: 12.5px; color: var(--ink-3); display: flex; align-items: center; gap: 7px; }
 /* A label, not a sentence: the full reason rides in the hint's tooltip, and
    the dock already carries the ticking clock this would otherwise repeat. */
@@ -544,7 +546,7 @@ kbd {
   justify-items: center;
 }
 .waiting-pane h2 { font: 600 23px/1.3 var(--serif); color: var(--ink); margin: 0; }
-.waiting-pane p { margin: 0; }
+.waiting-pane p { max-width: 70ch; margin: 0; }
 /* The words that open the tasks tab: bold in the highlight color, a button
    that reads as part of the sentence. */
 .waiting-jump {

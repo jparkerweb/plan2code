@@ -109,6 +109,28 @@ export function safeJson(s) {
   }
 }
 
+// One wait slice of a session, parsed: { code, out } where out is the last
+// stdout line as JSON (null when it is not). Exit 10 and 20 are results here,
+// not failures.
+export function waitOnce(sid, seconds = 5, opts) {
+  const res = cli(["wait", "--session", sid, "--seconds", String(seconds)], opts);
+  return { code: res.status, out: res.json, stdout: res.stdout, stderr: res.stderr };
+}
+
+// The last non-empty line of a command's stdout: `post --wait` prints the
+// post's line, then the wait's.
+export const lastLine = (stdout) => String(stdout).trim().split("\n").filter(Boolean).pop() ?? "";
+
+// End one session the way an agent must: a finish first, then stop. A test
+// that only wants a session gone for cleanup may pass --force to stop instead.
+export function stopSession(sid, opts) {
+  postFinish(sid, opts);
+  return cli(["stop", "--session", sid], opts);
+}
+function postFinish(sid, opts) {
+  cli(["post", "--session", sid, "--file", payload(`finish-${sid}.json`, { finish: { headline: "Test done" } })], opts);
+}
+
 export function payload(file, obj) {
   const p = path.join(HOME, file);
   fs.writeFileSync(p, JSON.stringify(obj));

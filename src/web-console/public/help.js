@@ -22,6 +22,7 @@ export const HELP_TABS = Object.freeze([
   tab("dashboard", "The dashboard", true),
   tab("meter", "Session meter", false),
   tab("build", "Watching a build", false),
+  tab("loop", "Implementation Loop", true),
   tab("git", "The git board", false),
   tab("subagents", "Helpers (subagents)", false),
   tab("ask", "Ask a quick question", false),
@@ -53,20 +54,6 @@ export function helpTabFor({ view, dashboard, gone, adrift, finished, workflow, 
   return "about";
 }
 
-// The tab index a key moves to, or -1 when the key is not a tab key.
-export function helpKeyTarget(key, index, count) {
-  switch (key) {
-    case "ArrowDown":
-    case "ArrowRight":
-      return (index + 1) % count;
-    case "ArrowUp":
-    case "ArrowLeft":
-      return (index - 1 + count) % count;
-    case "Home":
-      return 0;
-    case "End":
-      return count - 1;
-    default:
-      return -1;
-  }
-}
+// The tab index a key moves to, or -1 when the key is not a tab key: the
+// shared tab helper's, under the name Help and the git board import.
+export { tabKeyTarget as helpKeyTarget } from "./tabs.js";

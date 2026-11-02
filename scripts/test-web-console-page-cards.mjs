@@ -616,6 +616,27 @@ test("Something else in your own words replaces the pick, and picking an option 
   assert.deepEqual(answerTo(got, "c1"), { text: "A shared drive" });
 });
 
+// What a person sees break: a stray pick on a one-answer question can only be
+// swapped for another, never taken back, or Clear shows on a card already sent.
+test("Clear on a one-answer question takes back the pick and the words, and a sent card has no Clear", async (t) => {
+  const s = await openSession(await suite.browser(), { t, workflow: "plan" });
+  const card = await ask(s, { id: "c1", kind: "choice", title: "Where", body: "Where?", options: [opt("A", "Email"), opt("B", "Slack")] });
+  const clear = card.getByRole("button", { name: "Clear your answer to this question" });
+  await card.getByRole("radio", { name: "Something else, in your own words" }).check();
+  await card.locator("textarea.other-text").fill("A shared drive");
+  await clear.click();
+  await s.page.waitForFunction(() => !document.querySelector("#main .card.is-staged"));
+  assert.equal(await card.locator("textarea.other-text").inputValue(), "", "the words go too");
+  await card.getByLabel("Slack").check();
+  await clear.click();
+  await s.page.waitForFunction(() => !document.querySelector("#main .card.is-staged"));
+  assert.equal(await card.locator("input[type=radio]:checked").count(), 0, "no pick is left");
+  await card.getByLabel("Email").check();
+  await s.page.click("#btn-send");
+  await card.getByText(/Plan2Code is working on it|Waiting for Plan2Code to pick this up/).waitFor();
+  assert.equal(await clear.count(), 0, "a sent card cannot be cleared");
+});
+
 // What a person sees break: a note typed on a card is dropped by the verdict,
 // or is lost when the verdict comes first.
 test("a note's comment field rides along with the answer, typed before or after the pick", async (t) => {

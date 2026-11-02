@@ -30,6 +30,8 @@
     <link rel="modulepreload" href="/screens/dashboard.js" />
     <link rel="modulepreload" href="/screens/git-host.js" />
     <link rel="modulepreload" href="/screens/looks.js" />
+    <link rel="modulepreload" href="/screens/prefs-dialog.js" />
+    <link rel="modulepreload" href="/screens/agents-view.js" />
     <link rel="modulepreload" href="/screens/cleanup.js" />
     <link rel="modulepreload" href="/screens/help-dialog.js" />
     <link rel="modulepreload" href="/screens/workspace.js" />
@@ -45,6 +47,8 @@
     <link rel="modulepreload" href="/boot.js" />
     <link rel="modulepreload" href="/chat.js" />
     <link rel="modulepreload" href="/help.js" />
+    <link rel="modulepreload" href="/tabs.js" />
+    <link rel="modulepreload" href="/prefs.js" />
     <link rel="modulepreload" href="/starters.js" />
     <link rel="modulepreload" href="/workspace.js" />
     <link rel="modulepreload" href="/meter.js" />
@@ -147,20 +151,6 @@
         <button
           type="button"
           class="icon-btn"
-          id="btn-about"
-          title="Help"
-          aria-label="Help"
-        >
-          <!-- Drawn, not a "?" glyph, so it does not depend on a font. -->
-          <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-            <circle cx="8" cy="8" r="7" class="ab-ring" />
-            <path class="ab-mark" d="M6.1 6.05a1.95 1.95 0 1 1 2.4 1.9v1.25" />
-            <circle cx="8" cy="11.7" r="0.85" class="ab-dot" />
-          </svg>
-        </button>
-        <button
-          type="button"
-          class="icon-btn"
           id="btn-looks"
           title="Colors, theme and sound"
           aria-label="Colors, theme and sound"
@@ -170,6 +160,20 @@
             <path class="gr-teeth" d="M12 8h2.6M8 12v2.6M4 8H1.4M8 4V1.4M10.83 10.83l1.84 1.84M5.17 10.83l-1.84 1.84M5.17 5.17L3.33 3.33M10.83 5.17l1.84-1.84" />
             <circle cx="8" cy="8" r="4.2" class="gr-ring" />
             <circle cx="8" cy="8" r="1.6" class="gr-hub" />
+          </svg>
+        </button>
+        <button
+          type="button"
+          class="icon-btn"
+          id="btn-about"
+          title="Help"
+          aria-label="Help"
+        >
+          <!-- Drawn, not a "?" glyph, so it does not depend on a font. -->
+          <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+            <circle cx="8" cy="8" r="7" class="ab-ring" />
+            <path class="ab-mark" d="M6.1 6.05a1.95 1.95 0 1 1 2.4 1.9v1.25" />
+            <circle cx="8" cy="11.7" r="0.85" class="ab-dot" />
           </svg>
         </button>
         <a
@@ -778,6 +782,10 @@
           <rect x="3" y="9" width="18" height="6" rx="3" />
           <path d="M6 12h7" />
         </symbol>
+        <symbol id="hi-loop" viewBox="0 0 24 24" fill="none">
+          <path d="M5 12a7 7 0 0 1 12-5l2 2M19 12a7 7 0 0 1-12 5l-2-2" />
+          <path d="M19 4v5h-5M5 20v-5h5" />
+        </symbol>
         <symbol id="hi-git" viewBox="0 0 24 24" fill="none">
           <circle cx="6" cy="5" r="2" />
           <circle cx="6" cy="19" r="2" />
@@ -1104,8 +1112,8 @@
             <desc id="hd-around-desc">
               A simplified outline of this page with six numbered areas, in the
               same order as the sections below: 1, the top bar, with the title on
-              the left, the progress bar in the middle, the question mark and
-              gear buttons on the right, and Stop session under the title;
+              the left, the progress bar in the middle, the gear and question
+              mark buttons on the right, and Stop session under the title;
               2, Planny and the outline down the left; 3, the view tabs, on the
               top bar's second row at the right; 4, the question card in the
               middle with Previous and Next under it; 5, the notes panel on the
@@ -1117,9 +1125,9 @@
             <rect class="hd-line" x="215" y="18" width="130" height="6" rx="3" />
             <rect class="hd-accent" x="215" y="18" width="58" height="6" rx="3" />
             <rect class="hd-box" x="482" y="10" width="22" height="22" rx="5" />
-            <text class="hd-label" x="493" y="26" text-anchor="middle">?</text>
+            <circle class="hd-accent" cx="493" cy="21" r="5" />
             <rect class="hd-box" x="510" y="10" width="22" height="22" rx="5" />
-            <circle class="hd-accent" cx="521" cy="21" r="5" />
+            <text class="hd-label" x="521" y="26" text-anchor="middle">?</text>
             <rect class="hd-box" x="20" y="38" width="96" height="20" rx="5" />
             <text class="hd-label small" x="68" y="52" text-anchor="middle">Stop session</text>
             <text class="hd-label small" x="340" y="53">Questions</text>
@@ -1163,9 +1171,10 @@
             "4 of 9 done" while something is being built.
           </li>
           <li>
-            The <strong>?</strong> button opens this Help, and the gear button
-            beside it opens <strong>User Preferences</strong>: your role first,
-            then your colors, theme, card width, sounds and whether Activities shows.
+            The gear button opens <strong>User Preferences</strong>, and the
+            <strong>?</strong> button beside it opens this Help. Preferences has four tabs:
+            your theme, card width, colors and role, then agents and models,
+            cleanup, and sounds and whether Activities shows.
           </li>
           <li class="for-browser">
             The <strong>megaphone</strong> button opens GitHub in a
@@ -1972,6 +1981,139 @@
         </p>
       </section>
 
+      <section class="help-panel" data-tab="loop">
+        <h3>Implementation Loop</h3>
+        <p class="help-lead">
+          In the desktop app, the Implementation Loop builds every remaining
+          phase of a documented spec for you, one after another, while you do
+          something else. The dashboard's Implementation Loop card starts it.
+        </p>
+        <figure class="help-figure" data-figure="loop">
+          <svg class="help-diagram" viewBox="0 0 560 110" role="img" aria-labelledby="hd-loop-title hd-loop-desc">
+            <title id="hd-loop-title">One pass of the loop</title>
+            <desc id="hd-loop-desc">
+              You answer the setup once. Then, for each phase, the loop builds it,
+              reviews it, fixes the findings, re-checks, runs the quick check and
+              commits it. When the last phase is done, a summary is written.
+            </desc>
+            <defs>
+              <marker id="hd-loop-arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+                <path class="hd-arrow" d="M0 0 L8 4 L0 8 z" />
+              </marker>
+            </defs>
+            <rect class="hd-box" x="1" y="22" width="62" height="40" rx="8" />
+            <rect class="hd-accent" x="72" y="22" width="62" height="40" rx="8" />
+            <rect class="hd-box" x="143" y="22" width="62" height="40" rx="8" />
+            <rect class="hd-box" x="214" y="22" width="62" height="40" rx="8" />
+            <rect class="hd-box" x="285" y="22" width="62" height="40" rx="8" />
+            <rect class="hd-box" x="356" y="22" width="62" height="40" rx="8" />
+            <rect class="hd-box" x="427" y="22" width="62" height="40" rx="8" />
+            <rect class="hd-box" x="498" y="22" width="62" height="40" rx="8" />
+            <text class="hd-label" x="32" y="47" text-anchor="middle">Setup</text>
+            <text class="hd-label hd-accent" x="103" y="47" text-anchor="middle">Build</text>
+            <text class="hd-label" x="174" y="47" text-anchor="middle">Review</text>
+            <text class="hd-label" x="245" y="47" text-anchor="middle">Fixes</text>
+            <text class="hd-label" x="316" y="47" text-anchor="middle">Re-check</text>
+            <text class="hd-label" x="387" y="47" text-anchor="middle">Check</text>
+            <text class="hd-label" x="458" y="47" text-anchor="middle">Commit</text>
+            <text class="hd-label" x="529" y="47" text-anchor="middle">Summary</text>
+            <path class="hd-line" d="M64 42 H70" marker-end="url(#hd-loop-arrow)" />
+            <path class="hd-line" d="M135 42 H141" marker-end="url(#hd-loop-arrow)" />
+            <path class="hd-line" d="M206 42 H212" marker-end="url(#hd-loop-arrow)" />
+            <path class="hd-line" d="M277 42 H283" marker-end="url(#hd-loop-arrow)" />
+            <path class="hd-line" d="M348 42 H354" marker-end="url(#hd-loop-arrow)" />
+            <path class="hd-line" d="M419 42 H425" marker-end="url(#hd-loop-arrow)" />
+            <path class="hd-line" d="M490 42 H496" marker-end="url(#hd-loop-arrow)" />
+            <path class="hd-flow" d="M103 16 V8 H458 V16" />
+            <text class="hd-label small" x="280" y="90" text-anchor="middle">once for every phase</text>
+          </svg>
+          <figcaption>Review, fixes and re-check are on only when you choose them in the setup.</figcaption>
+        </figure>
+        <h4>What it does</h4>
+        <ul>
+          <li>
+            It runs on its own, one <strong>fresh agent session per phase</strong>,
+            and, when you leave commits on, <strong>commits each phase locally</strong> to the
+            branch you are on. It never pushes.
+          </li>
+          <li>
+            Review fixes are chosen with <strong>Smart pick</strong> by a fresh agent
+            that skips what is not worth fixing and records each skip, or
+            <strong>by level</strong> (Critical, Warning, Suggestion).
+          </li>
+          <li>
+            It uses the launch agent and model the app is running, and it needs
+            <strong>permission checks off</strong>: with them on, an agent would
+            wait on a prompt nobody sees, so Start stays grayed out.
+          </li>
+        </ul>
+        <h4>What is locked while it runs</h4>
+        <p>
+          Answers, sign-offs, launches, Workspace, Helpers and
+          <strong>Back</strong> are read-only, starting a new session is held
+          back, and Ask is off, except for a question the loop is waiting on. Still
+          open: Activities, Notebook, Help, Preferences, the docs and the code
+          review.
+        </p>
+        <h4>Stopping it</h4>
+        <ul>
+          <li>
+            <strong>Stop after this phase</strong>, on the banner at the top of the window, lets the
+            phase finish its review, mark and commit, then ends the loop.
+          </li>
+          <li>
+            <strong>Stop now</strong> ends the agent at once, after you confirm.
+          </li>
+          <li>Quitting the app ends the loop too.</li>
+        </ul>
+        <h4>When a phase asks a question</h4>
+        <p>
+          By default the agent takes its <strong>best guess</strong> and records the
+          assumption. If you chose to pause instead, the loop holds, with
+          <strong>no time limit</strong>, and nothing is lost. The app calls you back
+          with the taskbar dot, a flash of the window and the question sound. Answer,
+          and it carries on.
+        </p>
+        <h4>Being told when it needs you</h4>
+        <p>
+          Fill in <strong>Send a notification</strong> in the setup and the app sends a message
+          when the loop waits on your answer or ends, unless you stopped it yourself. Send it to a
+          Discord, Slack, Microsoft Teams or Google Chat webhook, or to any <code>http</code> or
+          <code>https</code> address, with the message in its query string or a JSON body.
+          <strong>Send a test</strong> tries it right away. One that fails during a loop does not
+          change what the loop does; the finish line or the stop screen says so.
+        </p>
+        <h4>When it stops by itself</h4>
+        <ul>
+          <li>
+            Failing tests or a failing quick check, Critical or Warning findings
+            left over at a level you chose to fix, a blocked task, a conflict in the spec, a commit that was
+            refused, or a Critical finding the Smart pick skipped.
+          </li>
+          <li>
+            A crashed or silent agent gets <strong>one retry</strong> per phase, if you left that on. After that
+            the loop stops.
+          </li>
+          <li>
+            A stop screen says what failed and shows the evidence.
+            <strong>Resume the loop</strong> carries on from that phase;
+            <strong>Fix it by hand</strong> opens an ordinary Implement session
+            on it.
+          </li>
+        </ul>
+        <h4>The report</h4>
+        <p>
+          One report follows the whole build, across stops and Resume: what each
+          phase built and committed, the findings it fixed, the findings it chose
+          not to fix and why, the findings left open, each assumption, any other
+          decisions the agent reported, and every retry and stop. The agent writes
+          most of it, so it holds what the agent noticed. The finish screen counts
+          each kind, and <strong>Read the full report</strong> opens it, saved as
+          <code>specs/&lt;feature&gt;/LOOP-SUMMARY-&lt;date&gt;.md</code>. After a
+          stop, the stop screen shows the report so far.
+        </p>
+      </section>
+
       <!-- Tab 13: The git board -->
       <section class="help-panel" data-tab="git">
         <h3>The git board</h3>
@@ -2292,10 +2434,18 @@
         <p class="help-lead">
           The <strong>die</strong> in the top bar opens
           <strong>Activities</strong>: small games to play while you wait, say
-          through a long build. Two games ship: <strong>Snake</strong> and
-          <strong>Mini golf</strong>. Pick one with the buttons above the board;
-          the window opens on your last pick next time. Nothing you do in it
-          reaches Plan2Code.
+          through a long build. Twelve games ship: <strong>Snake</strong>,
+          <strong>Mini golf</strong>, <strong>Light Trails</strong>,
+          <strong>Bug Hunt</strong>, <strong>Sunset Drive</strong>,
+          <strong>Stack Deploy</strong>, <strong>Bumper Ring</strong>,
+          <strong>Rapids Run</strong>, <strong>Hot Potato</strong>,
+          <strong>Crossing Rush</strong>, <strong>Bounce Road</strong> and
+          <strong>Ghoul Rush</strong>. The window opens on a card for each game, with its best score; click one
+          (or walk them with the arrows and press <kbd>Space</kbd>) to play it,
+          and <strong>All games</strong> takes you back. One game plays at a
+          time: a round left for the cards waits, paused, on its card, and
+          picking a different game ends it. Nothing you do in it reaches
+          Plan2Code.
         </p>
         <h4>The games</h4>
         <ul>
@@ -2303,7 +2453,7 @@
             <strong>Snake</strong>: steer to the food and grow. The snake speeds
             up as it grows, and a wall, a rock, a comet or your own tail ends
             the round. Food eaten quickly builds a combo of up to x5. Every 5
-            foods is a new level, and each of the first few brings something
+            foods is a new level, which starts in Slow-mo, and each of the first few brings something
             new: rocks (a flashing cell turns to stone), mystery boxes, portals,
             comets that cut your tail, then chaos. Power-ups turn up on their
             own: Shield, Turbo, Slow-mo, Magnet, Ghost and Scissors, and a
@@ -2311,12 +2461,18 @@
             and end screens count how many of them you have found so far.
           </li>
           <li>
-            <strong>Mini golf</strong>: eighteen silly holes seen from above.
-            The front nine is <strong>Pirate Cove</strong>, greens afloat in a
-            shark sea with cannonballs, barrels, a kraken and a ghost ship. The
-            back nine is the <strong>Caves of Doom</strong>, lit only around
-            your ball, with lava, a bottomless pit, mine carts and stone
-            crushers. The aim follows your mouse. Click (or press
+            <strong>Mini golf</strong>: six themed courses of eighteen silly
+            holes, seen from above. Its card opens a dashboard of the courses,
+            each with a picture of one of its holes, its par and your best on
+            it: <strong>Pirate Cove</strong> (a shark sea, cannonballs, a
+            kraken and a ghost ship), the <strong>Caves of Doom</strong> (lit
+            only around your ball, with lava, a bottomless pit, mine carts and
+            stone crushers), <strong>Dino Valley</strong>, <strong>Candy
+            Carnival</strong>, <strong>Cosmic Glow</strong> (where black holes
+            bend your putt) and <strong>Frosty Peaks</strong> (where the ball
+            glides on ice). Pick one to play its eighteen holes, and
+            <strong>All courses</strong> takes you back. The aim starts on the cup and follows your mouse once you
+            move it, and a click putts where the arrow points. Click (or press
             <kbd>Space</kbd>) to start the power meter, then click again to
             set the power: the gold <strong>MAX</strong> band near the top
             gives a boosted putt, but go past it into the red and you shank it.
@@ -2337,6 +2493,252 @@
             <strong>Spyglass</strong> shows where it will roll while the meter runs.
             You hold one at a time, and it carries over to the next hole.
           </li>
+          <li>
+            <strong>Light Trails</strong>: you and your rivals each leave a
+            glowing wall behind, and the last rider still moving wins the heat.
+            A wall, any trail (yours too), a crystal or another rider is out,
+            though you hold in place for a split second first, so a quick
+            turn still gets you clear.
+            Win a heat to move on through nine arenas; a crash costs one of
+            three lives and runs the heat again. The arenas bring more rivals,
+            power-up pads (Boost, Phase through trails, an Eraser, Slow-mo for
+            the rivals, coins and a 1UP), crystals, portals, and walls that
+            close in a ring at a time, flashing red first. A rival out scores,
+            and more if it hit your trail.
+          </li>
+          <li>
+            <strong>Bug Hunt</strong>: fly Planny's ship along the bottom and
+            squash waves of bugs before they dive at you. New bugs join as you
+            go: Beetles that split in two, zigzagging Race conditions,
+            Exceptions that throw things, Null pointers your shots pass
+            through while they fade, and Firewalls that take five shots. Every
+            fifth wave is a boss: the Memory Leak, the Spaghetti Monster (shoot
+            its tentacles off first) and the Heisenbug. Squashed bugs drop
+            coins and power-ups (Spread shot, Rapid fire, Shield, Slow-mo,
+            Magnet, Refactor and a 1UP), and quick kills build a combo.
+          </li>
+          <li>
+            <strong>Sunset Drive</strong>: race Planny's convertible down an
+            endless road against the clock. Each stage ends at a checkpoint
+            that adds time, and just before it the road splits: the side you
+            keep to picks the next road, and the harder one scores more.
+            Six roads to find: Sunset Coast, Canyon Road, Maple Valley,
+            Snowcap Pass, Neon City and Starlight Highway. Traffic, roadside
+            props and the median slow you down; coins, clocks (+5 seconds)
+            and nitro cans line the road, and passing a car close at speed
+            scores a close call. The round ends when the time runs out.
+          </li>
+          <li>
+            <strong>Stack Deploy</strong>: one button. A block slides back and
+            forth above the tower; drop it, and whatever hangs over the edge
+            is sliced off, so the next block is narrower. Miss the tower and
+            the round is over. Land one dead on for a
+            <strong>Perfect</strong>: nothing is sliced, a run of them scores
+            more (up to x5), and every third in a row grows the block back.
+            Gold blocks turn up from floor 15, worth more and growing it
+            twice as much. The floors speed up from 10 and bring twists:
+            blocks from either side that may turn back at 20, lag spikes that
+            freeze a block for a beat at 30, wind at 40, a rush through the
+            middle at 70 and everything faster at 90. The tower goes
+            from server racks to office floors, glass towers and rockets, and
+            a dashed line marks the highest floor you have ever reached.
+          </li>
+          <li>
+            <strong>Bumper Ring</strong>: sumo in bumper cars, on a ring over
+            the void. Push into your rivals and the harder hit wins; a car
+            whose middle goes past the edge falls, and the last car on the
+            ring wins the heat. A rival lets go and revs before it dashes:
+            that is your moment to step aside, and a rival that misses near
+            the edge may fly off on its own. Win a heat to move on through
+            nine arenas, from the <strong>Training Mat</strong> to the
+            <strong>Grand Final</strong>, then Finals that keep getting
+            sharper; a fall costs one of three lives and runs the heat again.
+            After a while the ring shrinks a band at a time (the band flashes
+            red first), and a heat that drags on past the smallest ring goes
+            to sudden death, shrinking on until two cars no longer fit. The arenas bring rivals (the Bully, the heavy Turtle,
+            the Sniper, the Scrapper and the Mirror, who copies your moves),
+            power pads (Heavy, Spring, Charge, Shield, Grow, Ghost and
+            Slick), bumpers, ice, a turntable, holes, a magnet and a ring
+            that turns square. A knockout scores for the last car to touch
+            the one that fell, and quick knockouts build a combo of up to x5.
+          </li>
+          <li>
+            <strong>Rapids Run</strong>: pilot Planny's jet-skimmer up a
+            winding river that scrolls down the board, its banks narrowing and
+            splitting around islands. Hold <kbd>Space</kbd> to fire. The
+            battery drains all the while, a little faster at full speed: run
+            over a green charge buoy to top it up, or shoot it for a few
+            points if you can spare it. A bank, an island, a foe, a bolt or a
+            flat battery costs one of three lives, and you start the stretch
+            again from the last dam (or, once you have reached a mini-boss,
+            from the mouth of its basin); a dam you blasted stays open. Each
+            stretch ends at a dam across the river: shoot it open to pass
+            (slow down to give yourself time).
+            Eight named stretches, from <strong>Willow Run</strong> to
+            <strong>Old Lock</strong>, then Night Water again and again,
+            quicker. Patrol skiffs drift from bank to bank and bob mines sit
+            still from the start; gull drones swoop across from stretch 2,
+            bank sentries shoot back from stretch 3, whirlpools tug you from
+            stretch 5 and darters swerve into your lane from stretch 6. Every
+            fourth dam a mini-boss holds the basin before it (the river stops
+            and your battery holds while you fight): the Dredger, Ironclad and
+            Old Leviathan. Crates hold Spread shot, a Shield (one crash of any
+            kind but a flat battery), a Magnet for charge buoys and a Surge
+            (a full battery). Points: 1 for every 5 units of river, 2 at full
+            speed; 5 for every quarter second you skim a bank at speed (10 at
+            full speed); 20 to 60 for each foe, times your combo (sinks within
+            1.6 seconds of each other, up to x5); 10 for a buoy shot; 100
+            times the dam's number for each dam, 50 times it more for a
+            stretch with no life lost; and 400 for each of the first three
+            mini-bosses (800 each the next time around, and so on), each of
+            which also gives a life back.
+          </li>
+          <li>
+            <strong>Hot Potato</strong>: one fizzing bomb (a merge conflict,
+            its <code>&lt;&lt;&lt;&lt;&lt;&lt;&lt;</code> markers showing) and a
+            fuse that keeps getting shorter. Whoever holds it passes it on by
+            touching someone, and whoever holds it when the fuse runs out is
+            blown out of the match. Someone just handed the bomb cannot pass
+            it on for a moment (it flashes white), and while three or more are
+            left nobody can hand it straight back to the one who just passed
+            it (a white ring at their feet shows who is safe). Handed the bomb
+            at its last moment, you still get time to pass it: a pass tops the
+            fuse up to 1.4 seconds, once a fuse for each runner. The holder runs a little faster, so a chase can end, and a
+            rival crouches before it lunges: that is your moment to dodge. The
+            last one standing wins the match and moves on through nine venues,
+            from the <strong>Break Room</strong> to the
+            <strong>Finale</strong>, then Finales that keep getting sharper;
+            being blown up costs one of three lives and runs the match again.
+            The venues bring rivals (the Sprinter, the Hider, the Trickster,
+            who feints before it dashes, the Pal and the Clingy), pickups
+            (Freeze, which stops every fuse for 2 seconds, Sneakers, Extra
+            Fuse, which adds 2 seconds to every fuse, and Swap, which trades
+            places with a random runner), long rows of server racks, a roof
+            with no wall at the bottom (off it is out), ice, conveyor belts, a
+            blackout and two bombs at once. Points: 10 times the venue for
+            every fuse that ends on someone else, 2 for each pass you make, 15
+            more for a hot pass (under a second left) times your streak of hot
+            passes in a row (up to x5; a pass that is not hot ends it, and so
+            does a life lost), and 50 times the venue for a match won.
+          </li>
+          <li>
+            <strong>Crossing Rush</strong>: hop Planny up a strip of lanes,
+            racing two rival hoppers to the top: roads of cars and trucks,
+            rivers where you ride the logs and turtles (the water, or riding
+            off the edge, sends you back), train tracks that flash red and
+            ring before a train, and grass with bushes and rocks in the way. A
+            car, a train or the water sends you back down to the last grass
+            row, never out. Space shoves the hopper in front of you a cell, so
+            a well-timed shove puts a rival in the traffic (they will do the
+            same to you). First to the top wins the heat and moves on through
+            nine zones, from <strong>Side Street</strong> to
+            <strong>Rush Hour</strong>, then Rush Hours that keep getting
+            quicker; second or third costs one of three lives and runs the
+            heat again, though in the first two zones second place still gets
+            you through. The zones bring logs, trains, diving turtles, trucks
+            and lanes that speed up, a night lit only by headlights, rivers
+            that turn round and icy lanes that slide you a cell on, and rivals
+            (the Hopper, who waits for a clear gap, the Daredevil, who takes
+            the tight ones, the Bruiser, who shoves, and the Tagalong, who
+            follows you up and shoves near the top). Pickups sit on the
+            grass: Spring (your next hop goes two cells), Shield (the next hit
+            does not send you back), Coin and Horn (the nearest road stops for
+            a moment). Points: 1 for each row higher than you had got in the
+            heat, 50 times the zone for a heat won, times your streak of clean
+            wins (a win where you were never sent back adds one to it, up to
+            x3; any other win, a second place or a lost heat ends it), plus 3
+            for each row the runner-up still had to go, 15 for a rival you
+            shoved that is sent back, 5 for a close call (a car or a train
+            through the cell you just left within a tenth of a second), and 10
+            for a coin.
+          </li>
+          <li>
+            <strong>Bounce Road</strong>: race Planny's springy toy car up a
+            road laid across a giant's house and yard, with rival toy cars on
+            it that mean to stop you. Bump one sideways off the road, and press
+            <kbd>Space</kbd> to jump (you need a little speed, and a faster jump
+            goes further). Land on a rival to flatten it and bounce up again,
+            and land on another before your wheels touch the road to build the
+            bounce chain, up to x8. Every stunt in quick succession (a crush, a
+            rival bumped off, a hole, train, ball or barrier jumped, a ramp's
+            big air, a close shave, a boost strip) steps the combo: every
+            third in a row multiplies your points once more, up to x4, until
+            you go 2.6 seconds without one. In the air, a ring in your
+            highlight shows where you will come down, and a red one where a
+            rival will. Water or a hole under your wheels, a crash (a
+            flowerbed or a toy block nose first, a train, a truck's back), or
+            anything landing on you costs one of three lives. Ten stages, each
+            bringing something new:
+            <strong>Chalk Lane</strong> (cracks, boost strips and cones),
+            <strong>Hose Creek</strong> (broken bridges, a sprinkler, the Frog,
+            who hops), <strong>Kitchen Floor</strong> (oil slicks, a rolling
+            orange, the Sneak, who drops cones), <strong>Flowerbed Fork</strong>
+            (the road splits, ramps, falling flowerpots, the Nudge, who swipes
+            at you), <strong>Sandbox Run</strong> (road that crumbles behind
+            you, the Hauler too heavy to bump, the Bruiser, who shoves),
+            <strong>Toy Room</strong> (a toy train crossing, toy-block
+            chicanes, the Racer to catch), <strong>Garden Pond</strong>
+            (swaying bridges, drawbridges, the Cop, who chases you and pushes
+            you toward the edge), <strong>Rooftop Gutter</strong> (gusts of
+            wind), <strong>Night Lights</strong> (everything, in the dark) and
+            <strong>Monster Mash</strong>, where the Monster truck hops at
+            you: land on its roof five times to beat it. Then the road goes
+            round again from Kitchen Floor, quicker and meaner. Every hole has
+            a warning sign and a straight run-up, and can be cleared at 80% of
+            the top speed. Power-ups lie on the road from Hose Creek: Spring
+            (your next jump goes further), Bubble (one free save), Nitro (a
+            burst of speed) and Mega wheels (bigger and heavier: flatten
+            whatever you touch). Points: 1 for every 10 units of new road (a car
+            is 7 long); each rival's own points when you land on it (100 to
+            300, the Racer most), times the chain; 60 for a rival that leaves
+            the road within a second and a half of your bump; 25 a hole and 40
+            a train, ball or barrier jumped; 60 for a ramp's big air; 30 for a
+            close shave; 10 a star and a boost strip, all times the combo;
+            250 a stomp on the Monster and 2,000 for beating it, with a life
+            back. At each stage line: 100 times the stage, 15 for every second
+            under the stage's par, and, with no life lost, 250 more and a life
+            back, up to five.
+          </li>
+          <li>
+            <strong>Ghoul Rush</strong>: blast Planny through a haunted
+            mansion, a room at a time, seen side on with the view scrolling
+            along with him. His flashlight blaster fires the way he faces, and
+            a bolt tilts a little toward a monster ahead near his height. It
+            heats up as it fires: after about three seconds of shooting it
+            slows, down to one bolt a second, a <strong>HEAT</strong> pill shows
+            how hot it is, and letting go of fire cools it. Rapid fire never
+            heats it. Grab
+            each room's key, then reach its door; a boss guards every fourth
+            room, and beating it opens the door. <strong>Zombies</strong>
+            shamble out of doors in the wall and lurch when you are close (two
+            bolts), <strong>crawlers</strong> come up through loose boards,
+            <strong>bats</strong> swoop down to your height in passes,
+            <strong>ghosts</strong> drift through walls and can only be hit,
+            and only hurt, while they are solid, and
+            <strong>skeletons</strong> throw bones you can shoot down. A bolt
+            to the head or a stomp from above doubles a kill, and kills in
+            quick succession build a chain that multiplies them, up to x8, but
+            it runs out in a second and a half. The rooms bring pits, shelves to jump up
+            through (down drops through one), boards that crumble and
+            chandeliers that come down on whatever is under them. Eight rooms,
+            the <strong>Foyer</strong>, <strong>Portrait Gallery</strong>,
+            <strong>Library</strong>, <strong>Ballroom</strong> (the
+            <strong>Great Gourd</strong>, which hops to where you stood:
+            watch its shadow), <strong>Kitchen</strong>,
+            <strong>Conservatory</strong>, <strong>Attic</strong> and
+            <strong>Crypt</strong> (<strong>Old Rattlebones</strong>, whose
+            shockwaves you jump), then round again, quicker and tougher.
+            Power-ups: Spread shot, Rapid fire, a Garlic shield (shrugs off one
+            hit) and a 1UP. A hit or a fall costs one of seven lives and puts
+            you back at the room's start (in a boss fight, the arena's), safe
+            for a moment. Points: 100 a zombie, 75 a crawler, 50 a bat, 150 a
+            ghost, 200 a skeleton, 40 a gourdling, all times the chain, 25 a bone shot down, 10
+            a candy, 50 a power-up; through a door, 300 times the room number
+            plus the time bonus left (1500, dropping 30 a second; once it runs
+            out, zombies shamble in from the edges) and 500 more with no life
+            lost; and 2000 for the Gourd and 2500 for Rattlebones, times the
+            lap, with a life back.
+          </li>
         </ul>
         <h4>It never hides your turn</h4>
         <ul>
@@ -2354,7 +2756,7 @@
           </li>
           <li>
             Nothing resumes by itself. Any game key plays on, and so does a
-            click on the Mini golf board. Playing on puts the banner away until
+            click on the Mini golf or Stack Deploy board. Playing on puts the banner away until
             the next new question.
           </li>
           <li>
@@ -2374,27 +2776,102 @@
             again to set the power, and hold <kbd>Space</kbd> while the ball
             rolls to speed it up.
           </li>
+          <li>
+            Light Trails: the arrow keys, or <kbd>W</kbd> <kbd>A</kbd>
+            <kbd>S</kbd> <kbd>D</kbd>, steer, and <kbd>Space</kbd> spends a
+            boost charge for a burst of speed (two a heat, up to three).
+          </li>
+          <li>
+            Bug Hunt: the arrow keys, or <kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd>
+            <kbd>D</kbd>, fly the ship, and hold <kbd>Space</kbd> to fire.
+          </li>
+          <li>
+            Sunset Drive: hold up (or <kbd>W</kbd>) to drive and down (or
+            <kbd>S</kbd>) to brake, left and right steer, and <kbd>Space</kbd>
+            burns a nitro can for a burst of speed (two to start, up to three).
+          </li>
+          <li>
+            Stack Deploy: <kbd>Space</kbd>, up (or <kbd>W</kbd>) or a click
+            on the board drops the block.
+          </li>
+          <li>
+            Bumper Ring: hold the arrow keys, or <kbd>W</kbd> <kbd>A</kbd>
+            <kbd>S</kbd> <kbd>D</kbd>, to push your car that way (two at once
+            push on the diagonal), and <kbd>Space</kbd> dashes (two charges a
+            heat, one back every few seconds, up to three).
+          </li>
+          <li>
+            Rapids Run: left and right (or <kbd>A</kbd> and <kbd>D</kbd>)
+            steer, hold up (or <kbd>W</kbd>) to speed up and down (or
+            <kbd>S</kbd>) to slow down, and hold <kbd>Space</kbd> to fire.
+          </li>
+          <li>
+            Hot Potato: hold the arrow keys, or <kbd>W</kbd> <kbd>A</kbd>
+            <kbd>S</kbd> <kbd>D</kbd>, to run that way (two at once run on the
+            diagonal), and <kbd>Space</kbd> dashes: a lunge for a tag while you
+            hold the bomb, a dodge while you do not (two charges, one back
+            every 4 seconds).
+          </li>
+          <li>
+            Crossing Rush: the arrow keys, or <kbd>W</kbd> <kbd>A</kbd>
+            <kbd>S</kbd> <kbd>D</kbd>, hop one cell, one hop a press (a press
+            during a hop waits its turn), and <kbd>Space</kbd> shoves the
+            hopper in front of you a cell the way you face (once every 3
+            seconds).
+          </li>
+          <li>
+            Bounce Road: hold up (or <kbd>W</kbd>) to drive and down (or
+            <kbd>S</kbd>) to brake, left and right steer (only a little in the
+            air), and <kbd>Space</kbd> jumps, once a press. A ramp launches you
+            on its own.
+          </li>
+          <li>
+            Ghoul Rush: hold left and right (or <kbd>A</kbd> <kbd>D</kbd>) to
+            run, up (or <kbd>W</kbd>) jumps, once a press (let go early for a
+            short hop), down (or <kbd>S</kbd>) drops through a shelf, and hold
+            <kbd>Space</kbd> to fire (in bursts: the blaster slows as it heats
+            and cools once you let go).
+          </li>
           <li><kbd>Space</kbd> starts a round, and plays again after a pause.</li>
           <li><kbd>P</kbd> pauses and plays.</li>
-          <li><kbd>Esc</kbd> closes the window, with the game paused where it was.</li>
+          <li><kbd>R</kbd> starts the round over, from the countdown.</li>
+          <li>
+            <kbd>F</kbd>, or <strong>Full screen</strong> under the board, gives
+            the game the whole screen: the board as big as the screen allows,
+            black bars where its shape leaves room, and a panel over it for the
+            game's name, your score and best, the game's <strong>Music</strong> slider, and <strong>Exit full screen</strong>.
+            The panel sits in a black bar when one is wide enough; otherwise it
+            floats in the top corner and, while you play and the pointer is
+            still, shrinks to your score in the bottom corner. The pointer hides while you are not
+            moving it. <kbd>F</kbd> or <kbd>Esc</kbd>
+            puts it back. A question, a sign-off or a finish puts it back too,
+            as it pauses the game.
+            <span data-app="The app's window goes full screen with it.">It uses the browser's own full screen where the browser allows one.</span>
+          </li>
+          <li><kbd>Enter</kbd> does both: it starts a round, pauses it and plays on.</li>
+          <li><kbd>Esc</kbd> closes the window, with the game paused where it was (in full screen, the first <kbd>Esc</kbd> leaves full screen).</li>
         </ul>
         <p>Activities need a keyboard: on a touch-only screen the window says so instead of showing the board.</p>
         <h4>Best scores</h4>
         <p>
           The window's title shows the best for the game on screen, and the
-          line under the board shows it beside your score. For Snake the best
-          is your highest score; for Mini golf it is your lowest full round of
-          eighteen holes, and a round left halfway never counts.
-          <strong>Reset best scores</strong>, at the bottom of the window,
-          clears both after a second click to confirm.
+          line under the board shows it beside your score, and each card shows
+          its game's. For Snake, Light Trails, Bug Hunt, Sunset Drive, Stack Deploy, Bumper Ring, Rapids Run, Hot Potato, Crossing Rush, Bounce Road and Ghoul Rush the best is
+          your highest score; for Mini golf it is your lowest full round of eighteen holes,
+          kept for each course on its own, and a round left halfway never counts. <strong>Reset best
+          scores</strong>, at the bottom of the window, clears them all after a
+          second click to confirm.
         </p>
         <h4>Hiding it</h4>
         <p>
           Don't want the die? Untick <strong>Show Activities</strong> in User
-          Preferences (the gear) and it is gone from every screen.
+          Preferences (the gear) and it is gone from every screen. To play
+          without sound, untick <strong>Play game sounds</strong> beside it.
+          A game with music (turn on <strong>Play game music</strong> there) has
+          its own <strong>Music</strong> slider under the board for how loud it plays.
         </p>
         <p>
-          Best scores, Snake's surprises found, your last pick and that switch are saved privately on
+          Best scores, Snake's surprises found, Light Trails' furthest arena, Bug Hunt's finds, Sunset Drive's roads found, Stack Deploy's highest floor, Bumper Ring's furthest arena, Rapids Run's furthest dam, Hot Potato's furthest venue, Crossing Rush's furthest zone, Bounce Road's furthest stage, Ghoul Rush's furthest room, each game's music volume, your last pick and that switch are saved privately on
           this machine, with your other preferences, and never sent anywhere.
         </p>
       </section>
@@ -2542,6 +3019,10 @@
               <td>Arrow keys, <kbd>Home</kbd>, <kbd>End</kbd> in Help</td>
               <td>Move between topics.</td>
             </tr>
+            <tr>
+              <td>Arrow keys, <kbd>Home</kbd>, <kbd>End</kbd> in User Preferences</td>
+              <td>Move between its tabs: up and down in the side list, left and right in the strip on a narrow window.</td>
+            </tr>
           </tbody>
         </table>
         <p>
@@ -2551,26 +3032,46 @@
         <h4>Your preferences</h4>
         <p>
           The gear button at the top, beside <strong>?</strong>, opens
-          <strong>User Preferences</strong>:
+          <strong>User Preferences</strong>, always on its first tab. Its four
+          tabs sit in a side list, or in a strip along the top on a narrow
+          window:
         </p>
         <ul>
           <li>
-            <strong>Role</strong>: Engineer, Product lead / PM, Architect / tech
-            lead, Designer (UX), QA / test engineer or Engineering manager, or
-            <strong>Not set / none of these</strong> (the default). It puts the
-            starter templates and Ask starter questions most useful to you first,
-            and never changes the questions a skill asks.
+            <strong>Appearance</strong>: Theme, Card width, Highlight color and
+            Role.
           </li>
+          <li>
+            <strong>Agents &amp; models</strong>: the agents you can start and
+            the models each one offers.
+          </li>
+          <li>
+            <strong>System</strong>: Cleanup<span class="for-app">, and Desktop
+            app</span>.
+          </li>
+          <li>
+            <strong>Sounds &amp; activities</strong>: Sounds and Activities.
+          </li>
+        </ul>
+        <p>
+          On Appearance and Sounds &amp; activities, each change is saved the
+          moment you make it, and a small <strong>Saved</strong> mark shows
+          beside it. <strong>Close</strong> (or <kbd>Esc</kbd>) shuts the dialog.
+        </p>
+        <h4>Appearance</h4>
+        <ul>
           <li>
             <strong>Theme</strong>: <strong>Follow my system</strong> (the
             default), <strong>Light</strong> or <strong>Dark</strong>.
           </li>
           <li>
-            <strong>Card width</strong>: how wide the question and documents are.
+            <strong>Card width</strong>: how wide the questions, documents and dashboard are.
             <strong>Narrow</strong> (<span data-fact="cardWidths">720</span> px),
             <strong>Comfortable</strong>
-            (<span data-fact="cardWidths">880</span> px, the default) or
-            <strong>Wide</strong> (<span data-fact="cardWidths">1,080</span> px).
+            (<span data-fact="cardWidths">880</span> px, the default),
+            <strong>Wide</strong> (<span data-fact="cardWidths">1,080</span> px) or
+            <strong>Ultra wide</strong> (<span data-fact="cardWidths">1,440</span> px),
+            for an ultrawide monitor.
             On a smaller window they fit the space there is.
           </li>
           <li>
@@ -2579,19 +3080,52 @@
             what is yours to do, and Planny's star uses it while he works.
           </li>
           <li>
-            <strong>Sounds</strong>: <strong>Play sounds</strong> switches every
-            sound on or off at once. Below it, each moment has its own box:
-            Planny snoring and waking up, starting a skill from the dashboard,
-            the session opening, a started skill being ready, the session
-            ending, new questions for you, a reply on the Ask tab and a new tab
-            joining the strip. Keep only the ones you want; ticking a box plays
-            its sound.
+            <strong>Role</strong>: Engineer, Product lead / PM, Architect / tech
+            lead, Designer (UX), QA / test engineer or Engineering manager, or
+            <strong>Not set / none of these</strong> (the default). It puts the
+            starter templates and Ask starter questions most useful to you first,
+            and never changes the questions a skill asks.
+          </li>
+        </ul>
+        <h4>Agents &amp; models</h4>
+        <p>
+          Most people never need to change this: Plan2Code finds the agents
+          installed on this machine and ships an up-to-date model list with
+          every release. The tab opens on a table of every agent, with its
+          models and whether it was found on this machine. <strong>Edit</strong>
+          opens one agent's form, and <strong>Add agent</strong> a blank one.
+        </p>
+        <ul>
+          <li>
+            <strong>Models</strong>: each built-in agent (Claude, Devin, Codex)
+            shows the models that come with Plan2Code, which every update
+            refreshes, and below them <strong>Models you added</strong>: a model
+            id and the name shown in the menu. Models you added stay through
+            updates. Restart <code>plan2code</code> to see a change in its model
+            menu.
           </li>
           <li>
-            <strong>Activities</strong>: <strong>Show Activities</strong> puts
-            the die in the top bar, which opens small games to play while you
-            wait. Untick it to hide the die on every screen.
+            <strong>Agents</strong>: an agent you add is another command-line
+            tool the <code>plan2code</code> launcher can start, beside the
+            built-in ones. Give it a name, the command to run and, if you like,
+            a start prompt and models. <strong>Test</strong> checks the command
+            is on your PATH. The <strong>Command-line arguments</strong> fold
+            holds the arguments it is started with, the ones that skip its
+            permission prompts, and the ones that pick a model, where
+            <code>{prompt}</code> and <code>{model}</code> are filled in for you.
+            Added agents are saved in <code>~/.plan2code/agents.json</code>;
+            <strong>Delete agent</strong> removes one.
           </li>
+        </ul>
+        <p>
+          Nothing here is saved as you type. Each form has its own
+          <strong>Save</strong> and <strong>Discard</strong>, and an
+          <strong>Unsaved</strong> badge while it holds a change. Leaving a form
+          with an unsaved change (another tab, Back to summary, Close) asks
+          first: save it, discard it, or keep editing.
+        </p>
+        <h4>System</h4>
+        <ul>
           <li>
             <strong>Cleanup</strong>: <strong>Find files to clean up</strong>
             lists what Plan2Code doesn't need in your
@@ -2606,13 +3140,47 @@
             <code>handoffs/</code> folder is Plan2Code's own, so it is never
             offered for removal.
           </li>
-          <li>
-            <strong>Back to default</strong> puts everything back as it was, and
-            sets Role back to Not set. Your Activities best scores stay: only
-            <strong>Reset best scores</strong>, in the Activities window, clears
-            them.
+          <li class="for-app">
+            <strong>Desktop app</strong>: shown only in the desktop app.
+            <strong>Show on the taskbar when Plan2Code needs me</strong> puts a
+            green dot on the taskbar button on Windows when it is your move and
+            a red one when it needs you, or a red badge on the dock icon on
+            macOS when it needs you.
+          </li>
+          <li class="for-browser">
+            <strong>Desktop app</strong>: shown only inside the desktop app,
+            where a switch puts a dot on the taskbar button when Plan2Code
+            needs you.
           </li>
         </ul>
+        <h4>Sounds &amp; activities</h4>
+        <ul>
+          <li>
+            <strong>Sounds</strong>: <strong>Play sounds</strong> switches every
+            sound on or off at once. Below it, each moment has its own box:
+            Planny snoring and waking up, starting a skill from the dashboard,
+            the session opening, a started skill being ready, the session
+            ending, new questions for you, a reply on the Ask tab and a new tab
+            joining the strip. Keep only the ones you want; ticking a box plays
+            its sound.
+          </li>
+          <li>
+            <strong>Activities</strong>: <strong>Show Activities</strong> puts
+            the die in the top bar, which opens small games to play while you
+            wait. Untick it to hide the die on every screen.
+            <strong>Play game sounds</strong> turns the games' sounds on or
+            off, leaving every other sound as it is; with Play sounds off, the
+            games are silent too.
+          </li>
+        </ul>
+        <p>
+          <strong>Back to default</strong> resets only the tab on screen:
+          Appearance's four settings (Role goes back to Not set), or every sound
+          and the two Activities switches. Agents &amp; models and System have
+          nothing to reset, so it is not shown there. Your Activities best
+          scores stay: only <strong>Reset best scores</strong>, in the
+          Activities window, clears them.
+        </p>
         <p>
           Your choices are remembered on this machine and carry over to every
           session you open here.
@@ -2725,124 +3293,112 @@
     <dialog class="modal looks prefs" id="looks-modal" aria-labelledby="looks-title">
       <h2 id="looks-title">User Preferences</h2>
       <div class="prefs-body">
-        <p class="modal-blurb">
-          Kept on this machine, for every session you open here. Role only puts the
-          starter templates most useful to you first; it never changes the questions
-          you're asked.
-        </p>
-        <fieldset class="modal-ranges looks-row looks-role">
-          <legend>Role</legend>
-          <select id="looks-role" aria-label="Role"></select>
-          <p class="help">Only puts the starter templates most useful to you first.</p>
-        </fieldset>
-        <fieldset class="modal-ranges looks-row">
-          <legend>Theme</legend>
-          <label><input type="radio" name="looks-theme" value="system" checked /> <span>Follow my system</span></label>
-          <label><input type="radio" name="looks-theme" value="light" /> <span>Light</span></label>
-          <label><input type="radio" name="looks-theme" value="dark" /> <span>Dark</span></label>
-        </fieldset>
-        <fieldset class="modal-ranges looks-row">
-          <legend>Card width</legend>
-          <label><input type="radio" name="looks-width" value="narrow" /> <span>Narrow</span></label>
-          <label><input type="radio" name="looks-width" value="comfortable" checked /> <span>Comfortable</span></label>
-          <label><input type="radio" name="looks-width" value="wide" /> <span>Wide</span></label>
-          <p class="help">How wide the question and documents are. On a smaller window they fit the space there is.</p>
-        </fieldset>
-        <fieldset class="modal-ranges looks-accents">
-          <legend>Highlight color</legend>
-          <div class="swatches" id="looks-swatches"></div>
-          <p class="help">
-            Your highlight color marks what is yours to do, and Planny's
-            star uses it while he works. Green, amber and red also mean done,
-            staged and careful, so a highlight close to one of those can blur
-            which is which.
-          </p>
-        </fieldset>
-        <fieldset class="modal-ranges looks-sounds">
-          <legend>Sounds</legend>
-          <label><input type="checkbox" id="looks-sound" checked /> <span>Play sounds</span></label>
-          <div class="looks-row looks-sound-events" id="looks-sound-events">
-            <label><input type="checkbox" data-sound="snore" checked /> <span>Planny snoring</span></label>
-            <label><input type="checkbox" data-sound="bootup" checked /> <span>Planny waking up</span></label>
-            <label><input type="checkbox" data-sound="startSkill" checked /> <span>Starting a skill</span></label>
-            <label><input type="checkbox" data-sound="sessionStart" checked /> <span>Session opens</span></label>
-            <label><input type="checkbox" data-sound="skillReady" checked /> <span>Skill is ready</span></label>
-            <label><input type="checkbox" data-sound="sessionEnd" checked /> <span>Session ends</span></label>
-            <label><input type="checkbox" data-sound="question" checked /> <span>New questions for you</span></label>
-            <label><input type="checkbox" data-sound="chatReply" checked /> <span>Reply on the Ask tab</span></label>
-            <label><input type="checkbox" data-sound="newTab" checked /> <span>New tab added</span></label>
+        <div class="prefs-layout">
+          <div id="prefs-tabs" class="prefs-tabs" role="tablist" aria-orientation="vertical" aria-label="Preference groups"></div>
+          <div id="prefs-panels" class="prefs-panels">
+            <section class="prefs-panel" data-tab="appearance">
+              <p class="modal-blurb">
+                Kept on this machine, for every session you open here. Role only puts the
+                starter templates most useful to you first; it never changes the questions
+                you're asked.
+              </p>
+              <fieldset data-section="theme" class="modal-ranges looks-row">
+                <legend>Theme</legend>
+                <label><input type="radio" name="looks-theme" value="system" checked /> <span>Follow my system</span></label>
+                <label><input type="radio" name="looks-theme" value="light" /> <span>Light</span></label>
+                <label><input type="radio" name="looks-theme" value="dark" /> <span>Dark</span></label>
+              </fieldset>
+              <fieldset data-section="width" class="modal-ranges looks-row four">
+                <legend>Card width</legend>
+                <label><input type="radio" name="looks-width" value="narrow" /> <span>Narrow</span></label>
+                <label><input type="radio" name="looks-width" value="comfortable" checked /> <span>Comfortable</span></label>
+                <label><input type="radio" name="looks-width" value="wide" /> <span>Wide</span></label>
+                <label><input type="radio" name="looks-width" value="ultrawide" /> <span>Ultra wide</span></label>
+                <p class="help">How wide the questions, documents and dashboard are. On a smaller window they fit the space there is.</p>
+              </fieldset>
+              <fieldset data-section="accent" class="modal-ranges">
+                <legend>Highlight color</legend>
+                <div class="swatches" id="looks-swatches"></div>
+                <p class="help">
+                  Your highlight color marks what is yours to do, and Planny's
+                  star uses it while he works. Green, amber and red also mean done,
+                  staged and careful, so a highlight close to one of those can blur
+                  which is which.
+                </p>
+              </fieldset>
+              <fieldset data-section="role" class="modal-ranges looks-row">
+                <legend>Role</legend>
+                <select id="looks-role" aria-label="Role"></select>
+                <p class="help">Only puts the starter templates most useful to you first.</p>
+              </fieldset>
+            </section>
+            <section class="prefs-panel" data-tab="agents">
+              <div class="prefs-agents" data-section="agents">
+                <p class="help" id="agents-intro">Most people never need to change this. Plan2Code finds the agents installed on this machine and ships an up-to-date model list with every release.</p>
+                <table class="prefs-agents-table" id="agents-table">
+                  <thead>
+                    <tr><th scope="col">Agent</th><th scope="col" class="prefs-agents-models">Models</th><th scope="col">On this machine</th><th scope="col"></th></tr>
+                  </thead>
+                  <tbody></tbody>
+                </table>
+                <button type="button" class="btn small" id="agents-add">Add agent</button>
+                <span class="help" id="agents-status" role="status"></span>
+                <div id="agents-form" class="prefs-agents-form" hidden></div>
+              </div>
+            </section>
+            <section class="prefs-panel" data-tab="system">
+              <fieldset data-section="cleanup" class="modal-ranges">
+                <legend>Cleanup</legend>
+                <p class="help">Finds what Plan2Code doesn't need in your <code>~/.plan2code</code> folder: sessions nobody has opened for 30 days, and files or folders that ended up there by mistake. It also lists this project's <code>specs--completed/</code> folders nobody has touched for 30 days; deleting one is permanent, since that folder is usually gitignored and git can't restore it. You see the list before anything is deleted. Your preferences, saved folders, models, the launcher and this session always stay.</p>
+                <div class="cleanup-list" id="cleanup-list" aria-label="What would be deleted"></div>
+                <div class="models-actions">
+                  <button type="button" class="btn small" id="cleanup-scan">Find files to clean up</button>
+                  <button type="button" class="btn small danger" id="cleanup-delete" hidden>Delete these</button>
+                  <span class="help" id="cleanup-status" role="status"></span>
+                </div>
+              </fieldset>
+              <!-- Only inside the desktop app (framed()): the app saves the switch in its own app.json. -->
+              <fieldset data-section="desktop" class="modal-ranges looks-desktop" id="looks-desktop" hidden>
+                <legend>Desktop app</legend>
+                <label><input type="checkbox" id="looks-taskbar" checked /> <span>Show on the taskbar when Plan2Code needs me</span></label>
+                <p class="help">
+                  Windows: a colored dot on the taskbar button (green on your move, red when it
+                  needs you) and a short burst of flashes. macOS: a red badge on the dock icon when it needs
+                  you, and a bounce. Linux: depends on your desktop.
+                </p>
+              </fieldset>
+            </section>
+            <section class="prefs-panel" data-tab="sounds">
+              <fieldset data-section="sounds" class="modal-ranges looks-sounds">
+                <legend>Sounds</legend>
+                <label><input type="checkbox" id="looks-sound" checked /> <span>Play sounds</span></label>
+                <div class="looks-row looks-sound-events" id="looks-sound-events">
+                  <label><input type="checkbox" data-sound="snore" checked /> <span>Planny snoring</span></label>
+                  <label><input type="checkbox" data-sound="bootup" checked /> <span>Planny waking up</span></label>
+                  <label><input type="checkbox" data-sound="startSkill" checked /> <span>Starting a skill</span></label>
+                  <label><input type="checkbox" data-sound="sessionStart" checked /> <span>Session opens</span></label>
+                  <label><input type="checkbox" data-sound="skillReady" checked /> <span>Skill is ready</span></label>
+                  <label><input type="checkbox" data-sound="sessionEnd" checked /> <span>Session ends</span></label>
+                  <label><input type="checkbox" data-sound="question" checked /> <span>New questions for you</span></label>
+                  <label><input type="checkbox" data-sound="chatReply" checked /> <span>Reply on the Ask tab</span></label>
+                  <label><input type="checkbox" data-sound="newTab" checked /> <span>New tab added</span></label>
+                </div>
+                <p class="help">Ticking one plays it. Play sounds switches them all off at once and keeps your picks for when you switch back on.</p>
+              </fieldset>
+              <fieldset data-section="activities" class="modal-ranges looks-activities">
+                <legend>Activities</legend>
+                <label><input type="checkbox" id="looks-activities" checked /> <span>Show Activities</span></label>
+                <label><input type="checkbox" id="looks-activity-sounds" checked /> <span>Play game sounds</span></label>
+                <label><input type="checkbox" id="looks-game-music" /> <span>Play game music</span></label>
+                <p class="help">The die in the top bar opens small games to play while you wait. Play game sounds turns the games' sounds on or off, and Play game music their chiptune music; Play sounds, above, silences them too.</p>
+              </fieldset>
+            </section>
           </div>
-          <p class="help">Ticking one plays it. Play sounds switches them all off at once and keeps your picks for when you switch back on.</p>
-        </fieldset>
-        <fieldset class="modal-ranges looks-activities">
-          <legend>Activities</legend>
-          <label><input type="checkbox" id="looks-activities" checked /> <span>Show Activities</span></label>
-          <p class="help">The die in the top bar opens small games to play while you wait.</p>
-        </fieldset>
-        <fieldset class="modal-ranges looks-cleanup">
-          <legend>Cleanup</legend>
-          <p class="help">Finds what Plan2Code doesn't need in your <code>~/.plan2code</code> folder: sessions nobody has opened for 30 days, and files or folders that ended up there by mistake. It also lists this project's <code>specs--completed/</code> folders nobody has touched for 30 days; deleting one is permanent, since that folder is usually gitignored and git can't restore it. You see the list before anything is deleted. Your preferences, saved folders, models, the launcher and this session always stay.</p>
-          <div class="cleanup-list" id="cleanup-list" aria-label="What would be deleted"></div>
-          <div class="models-actions">
-            <button type="button" class="btn small" id="cleanup-scan">Find files to clean up</button>
-            <button type="button" class="btn small danger" id="cleanup-delete" hidden>Delete these</button>
-            <span class="help" id="cleanup-status" role="status"></span>
-          </div>
-        </fieldset>
-        <fieldset class="modal-ranges looks-models">
-          <legend>Models</legend>
-          <div class="models-tabs" role="group" aria-label="Which agent">
-            <button type="button" class="btn small ghost" id="models-tab-claude" aria-pressed="true">Claude</button>
-            <button type="button" class="btn small ghost" id="models-tab-devin" aria-pressed="false">Devin</button>
-            <button type="button" class="btn small ghost" id="models-tab-codex" aria-pressed="false">Codex</button>
-          </div>
-          <div class="models-note">
-            <p><strong>You usually don't need to change this.</strong> Plan2Code ships an up-to-date model list with every release. Add a model here only when a new one comes out before Plan2Code has been updated.</p>
-            <ul>
-              <li>Restart <code>plan2code</code> to see a change in its model menu.</li>
-              <li>At any time, run <code>plan2code --model &lt;id&gt;</code>, or pick your model inside your agent before running a skill.</li>
-              <li>Updating Plan2Code refreshes the built-in list. Models you added stay, unless the built-in list now includes them.</li>
-              <li>Devin models are limited to Low, Medium and High effort.</li>
-            </ul>
-          </div>
-          <div class="models-list" id="models-shipped" aria-label="Built-in models"></div>
-          <div class="models-list" id="models-user" aria-label="Models you added"></div>
-          <div class="models-actions">
-            <button type="button" class="btn small" id="models-add">Add a model</button>
-            <button type="button" class="btn small ghost" id="models-reset">Reset to default</button>
-            <span class="help" id="models-status" role="status"></span>
-          </div>
-        </fieldset>
-        <fieldset class="modal-ranges looks-models looks-agents">
-          <legend>Agents</legend>
-          <div class="models-note">
-            <p>Agent CLIs Plan2Code did not find on its own. The <code>plan2code</code> command and the desktop app list the ones that are installed.</p>
-            <ul>
-              <li><code>/plan2code</code> works only in agents that load the installed Plan2Code skills. A blank start prompt starts the agent with nothing typed.</li>
-              <li>The list is saved as plain text in <code>~/.plan2code/agents.json</code>.</li>
-            </ul>
-          </div>
-          <div class="agents-list" id="agents-list" aria-label="Agents you added"></div>
-          <div class="models-actions">
-            <button type="button" class="btn small" id="agents-add">Add agent</button>
-            <button type="button" class="btn small danger" id="agents-replace" hidden>Save anyway</button>
-            <span class="help" id="agents-status" role="status"></span>
-          </div>
-        </fieldset>
-        <!-- Only inside the desktop app (framed()): the app saves the switch in its own app.json. -->
-        <fieldset class="modal-ranges looks-desktop" id="looks-desktop" hidden>
-          <legend>Desktop app</legend>
-          <label><input type="checkbox" id="looks-taskbar" checked /> <span>Show on the taskbar when Plan2Code needs me</span></label>
-          <p class="help">
-            Windows: a colored dot on the taskbar button (green on your move, red when it
-            needs you) and a short burst of flashes. macOS: a red badge on the dock icon when it needs
-            you, and a bounce. Linux: depends on your desktop.
-          </p>
-        </fieldset>
+        </div>
       </div>
       <div class="modal-actions">
         <button type="button" class="btn ghost" id="looks-reset">Back to default</button>
-        <button type="button" class="btn primary" id="looks-done">Done</button>
+        <button type="button" class="btn primary" id="looks-done">Close</button>
       </div>
     </dialog>
 
@@ -2976,16 +3532,32 @@
       <p class="modal-blurb">Something to play while you wait. Private to this page, and it pauses whenever Plan2Code needs you.</p>
       <div class="activities-banner" id="activities-banner" role="status" hidden>
         <span class="activities-banner-text" id="activities-banner-text"></span>
+        <button type="button" class="btn small" id="activities-unpause" hidden>Unpause game</button>
         <button type="button" class="btn small primary" id="activities-goto">Go to it</button>
       </div>
-      <div class="activities-picker" id="activities-picker" role="group" aria-label="Pick an activity" hidden></div>
-      <div class="activities-board" id="activities-board" tabindex="-1">
-        <canvas id="activities-canvas"></canvas>
-        <div class="activities-overlay" id="activities-overlay"></div>
+      <div class="activities-picker" id="activities-picker" hidden></div>
+      <!-- The stage: the board, and in full screen the side panel beside it,
+           which the score line moves into. Out of full screen it takes no box
+           of its own, so the board and the score line sit in the window. -->
+      <div class="activities-stage" id="activities-stage">
+        <div class="activities-board" id="activities-board" tabindex="-1">
+          <canvas id="activities-canvas"></canvas>
+          <div class="activities-overlay" id="activities-overlay"></div>
+        </div>
+        <aside class="activities-rail" id="activities-rail" aria-label="Game" hidden>
+          <p class="activities-rail-title" id="activities-rail-title"></p>
+          <p class="activities-rail-best" id="activities-rail-best"></p>
+          <div class="activities-rail-score" id="activities-rail-score"></div>
+          <p class="activities-rail-keys"><kbd>P</kbd> pauses · <kbd>R</kbd> restarts · <kbd>F</kbd> or <kbd>Esc</kbd> leaves full screen</p>
+          <button type="button" class="btn small" id="activities-rail-exit">Exit full screen</button>
+        </aside>
       </div>
       <p class="activities-score" id="activities-score"></p>
       <p class="help activities-note" id="activities-note" aria-live="polite" hidden></p>
       <div class="modal-actions">
+        <button type="button" class="btn ghost activities-back" id="activities-back" hidden>All games</button>
+        <label class="activities-music" id="activities-music" title="This game's music volume" hidden><span>Music</span><input type="range" id="activities-music-level" min="0" max="100" step="5" aria-label="Music volume" /></label>
+        <button type="button" class="btn ghost" id="activities-full" aria-pressed="false" title="Full screen (F)" hidden>Full screen</button>
         <button type="button" class="btn ghost" id="activities-reset">Reset best scores</button>
         <button type="button" class="btn ghost" id="activities-close">Close</button>
       </div>

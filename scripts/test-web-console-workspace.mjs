@@ -47,7 +47,8 @@ test("workspace: a folder added on the dashboard survives dashboard → plan →
   const s = consoleSession(["--workflow", "dashboard"]);
   const extra = tempFolder();
   try {
-    assert.deepEqual(s.opened.workspace.folders, [{ name: defaultName(ROOT), path: ROOT, original: true }]);
+    assert.equal("workspace" in s.opened, false, "open prints the folder list only with more than one folder");
+    assert.deepEqual(wsFile(s).folders.map((f) => [f.name, f.path, f.original]), [[defaultName(ROOT), ROOT, true]]);
     const added = await addFolder(s, { path: extra, description: "  the design notes  " });
     assert.equal(added.status, 200);
     assert.equal(added.body.name, defaultName(extra));
@@ -85,10 +86,10 @@ test("workspace: a folder added on the dashboard survives dashboard → plan →
       );
       assert.equal(meterView(readLedger(fresh.session)).points, 0);
     } finally {
-      cli(["stop", "--session", fresh.sid]);
+      cli(["stop", "--session", fresh.sid, "--force"]);
     }
   } finally {
-    cli(["stop", "--session", s.sid]);
+    cli(["stop", "--session", s.sid, "--force"]);
     fs.rmSync(extra, { recursive: true, force: true });
   }
 });
@@ -122,7 +123,7 @@ test("workspace: a spec starts from the project's list, then stands alone, and t
     assert.deepEqual(again.folders.map((f) => f.path), [ROOT, shared, specOnly], "the spec's own list comes back");
     assert.equal((await s.send("/workspace/scope", { spec: "../elsewhere" })).status, 400);
   } finally {
-    cli(["stop", "--session", s.sid]);
+    cli(["stop", "--session", s.sid, "--force"]);
     fs.rmSync(shared, { recursive: true, force: true });
     fs.rmSync(specOnly, { recursive: true, force: true });
   }
@@ -138,7 +139,7 @@ test("workspace: open --spec starts on that spec's list, a posted specDir takes 
     await addFolder(s, { path: shared });
     await s.send("/workspace/scope", { spec: "specs/demo" });
     await addFolder(s, { path: specOnly });
-    cli(["stop", "--session", s.sid]);
+    cli(["stop", "--session", s.sid, "--force"]);
 
     other = consoleSession(["--workflow", "implement", "--spec", "specs/demo"], { keepRemembered: true });
     assert.deepEqual(other.opened.workspace.folders.map((f) => f.path), [ROOT, shared, specOnly]);
@@ -159,7 +160,7 @@ test("workspace: open --spec starts on that spec's list, a posted specDir takes 
     assert.ok(rememberedFor(""), "the project's list is kept");
     assert.equal(cli(["forget"], { expectFail: true }).status, 2);
   } finally {
-    for (const x of [s, other, planned]) if (x) cli(["stop", "--session", x.sid]);
+    for (const x of [s, other, planned]) if (x) cli(["stop", "--session", x.sid, "--force"]);
     fs.rmSync(shared, { recursive: true, force: true });
     fs.rmSync(specOnly, { recursive: true, force: true });
   }
@@ -202,7 +203,7 @@ test("workspace: add resolves from the session's folder and refuses a file, a mi
     assert.deepEqual(wsFile(s).folders.map((f) => f.id), ["f0", "f1", "f2"], "refusals changed nothing");
     assert.deepEqual(wsFile(s).changes.map((c) => [c.kind, c.version]), [["added", 1], ["added", 2]]);
   } finally {
-    cli(["stop", "--session", s.sid]);
+    cli(["stop", "--session", s.sid, "--force"]);
     fs.rmSync(quoted, { recursive: true, force: true });
   }
 });
@@ -246,7 +247,7 @@ test("workspace: the original can be renamed and described but never removed; ot
     assert.deepEqual(wsFile(s).folders.map((f) => f.id), ["f0"]);
     assert.equal(wsFile(s).changes.at(-1).kind, "removed");
   } finally {
-    cli(["stop", "--session", s.sid]);
+    cli(["stop", "--session", s.sid, "--force"]);
     fs.rmSync(extra, { recursive: true, force: true });
   }
 });
@@ -271,7 +272,7 @@ test("workspace: browse returns the picked folder, or canceled, and is hidden wh
     assert.equal(hidden.status, 404);
     assert.deepEqual(await hidden.json(), { reason: "no-picker" });
   } finally {
-    for (const s of [echo, cancel, remote]) cli(["stop", "--session", s.sid]);
+    for (const s of [echo, cancel, remote]) cli(["stop", "--session", s.sid, "--force"]);
     fs.rmSync(picked, { recursive: true, force: true });
   }
 });
@@ -300,7 +301,7 @@ test("workspace: a folder deleted on disk is marked missing once, and found agai
       "the launch alone marked the folder missing"
     );
   } finally {
-    cli(["stop", "--session", s.sid]);
+    cli(["stop", "--session", s.sid, "--force"]);
     fs.rmSync(gone, { recursive: true, force: true });
   }
 });
@@ -316,13 +317,15 @@ test("workspace: a change never ends a wait slice, rides on the next send exactl
     await sleep(1500);
     assert.equal((await addFolder(s, { path: extra })).status, 200);
     assert.equal(await exited, 10, "the change alone did not end the slice");
-    assert.equal(safeJson(out).pendingWorkspace, 1);
+    const slice = safeJson(out);
+    assert.equal(slice.waiting, true);
+    assert.equal("pendingWorkspace" in slice, false, "the slice line no longer reports the pending change");
 
     const name = defaultName(extra);
     assert.equal((await s.send("/submit", EXPORT_A)).status, 200);
     const first = cli(["wait", "--session", s.sid, "--seconds", "10"]);
     assert.equal(first.status, 0);
-    assert.deepEqual(first.json.workspace.map((c) => [c.kind, c.name]), [["added", name]]);
+    assert.equal("workspace" in first.json, false, "a change arrives as a reply line only");
     assert.match(first.json.reply, /^Export format: a\n/);
     assert.match(first.json.reply, new RegExp(`^Workspace: added @${name} — `, "m"));
     assert.equal(readWorkspaceCursor(s.session), 1);
@@ -337,9 +340,11 @@ test("workspace: a change never ends a wait slice, rides on the next send exactl
     fs.writeFileSync(path.join(s.session, "workspace-cursor.json"), JSON.stringify({ version: 0 }));
     assert.equal((await s.send("/submit", EXPORT_A)).status, 200);
     const again = cli(["wait", "--session", s.sid, "--seconds", "10"]);
-    assert.deepEqual(again.json.workspace.map((c) => c.name), [name]);
+    assert.equal("workspace" in again.json, false);
+    assert.equal(again.json.reply.split("\n").filter((l) => l.startsWith("Workspace:")).length, 1, "the change comes again as one line");
+    assert.ok(again.json.reply.includes("@" + name));
   } finally {
-    cli(["stop", "--session", s.sid]);
+    cli(["stop", "--session", s.sid, "--force"]);
     fs.rmSync(extra, { recursive: true, force: true });
   }
 });
@@ -351,13 +356,30 @@ test("workspace: chat hands over a workspace change on its own, then has nothing
     assert.equal((await addFolder(s, { path: extra })).status, 200);
     const got = cli(["chat", "--session", s.sid]);
     assert.equal(got.status, 0);
-    assert.deepEqual(got.json.chat, []);
-    assert.deepEqual(got.json.workspace.map((c) => c.kind), ["added"]);
+    assert.equal(got.json.chat, undefined, "no question, no chat key");
+    assert.equal("workspace" in got.json, false, "reply lines only");
     assert.match(got.json.reply, /^Workspace: added @/);
-    assert.ok(got.json.terminalLine);
+    assert.equal(got.json.reply.split("\n").length, 1);
     assert.equal(cli(["chat", "--session", s.sid]).status, 10);
   } finally {
-    cli(["stop", "--session", s.sid]);
+    cli(["stop", "--session", s.sid, "--force"]);
+    fs.rmSync(extra, { recursive: true, force: true });
+  }
+});
+
+test("workspace: a change arrives as a Workspace line in reply only, never as a workspace object", async () => {
+  const s = openSession();
+  const extra = tempFolder();
+  try {
+    assert.equal((await addFolder(s, { path: extra })).status, 200);
+    assert.equal((await s.send("/submit", EXPORT_A)).status, 200);
+    const got = cli(["wait", "--session", s.sid, "--seconds", "10"]);
+    assert.equal(got.status, 0);
+    assert.equal("workspace" in got.json, false);
+    assert.equal("pendingWorkspace" in got.json, false);
+    assert.match(got.json.reply, new RegExp(`^Workspace: added @${defaultName(extra)}`, "m"));
+  } finally {
+    cli(["stop", "--session", s.sid, "--force"]);
     fs.rmSync(extra, { recursive: true, force: true });
   }
 });

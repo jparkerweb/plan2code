@@ -406,7 +406,7 @@ export function isMac() {
 // backdrop is the <dialog> itself to the event, and so is its own padding, so
 // the point has to fall outside its box -- for the press as well as the
 // release, or selecting text inside and letting go outside would close it.
-export function lightDismiss(dlg) {
+export function lightDismiss(dlg, beforeClose) {
   const outside = (e) => {
     const r = dlg.getBoundingClientRect();
     return e.target === dlg && (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom);
@@ -414,7 +414,11 @@ export function lightDismiss(dlg) {
   let pressedOutside = false;
   dlg.addEventListener("pointerdown", (e) => (pressedOutside = outside(e)));
   dlg.addEventListener("click", (e) => {
-    if (pressedOutside && outside(e)) dlg.close();
+    if (pressedOutside && outside(e)) {
+      // `beforeClose` may hold the close: false, or a Promise of false.
+      if (!beforeClose) dlg.close();
+      else Promise.resolve(beforeClose()).then((go) => go !== false && dlg.close());
+    }
     pressedOutside = false;
   });
 }

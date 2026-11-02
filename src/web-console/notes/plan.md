@@ -1,22 +1,6 @@
-# Planning on the Web Console
+# Planning
 
-Workflow notes for `plan`, part of the web console contract (`console.md`).
-
-- Open with `--workflow plan`, first thing. Every question and sign-off gate
-  goes through the page, phase breakdowns as an editable `list`.
-- The fresh-idea card carries `"templates": "idea"` and `"fill": "note"` (`console.md` → The kinds): the page fills that box from a Notebook tab when the person started with one.
-- Planning has no mid-session save before the Large checkpoint or Phase 7, so for
-  a stop before then say plainly in `finish.body` that nothing was kept, and use
-  `"command": "/plan2code-1-plan"`. After the checkpoint, post
-  `"stopWarning": ""` (`console-stop.md`).
-- At every session end, post `finish` BEFORE `stop`; on completion that is
-  `"command": "/plan2code-2-document"`, and at the Large checkpoint it is
-  `/plan2code-1-plan`. The closing message is printed to a terminal the
-  browser user is not watching.
-- The Large checkpoint finish is a pause: a headline starting "Paused", no
-  `dashboard`, and `stop` at once.
-- Plan offers the Subagents switch. A `Subagents:` block may arrive on `open`
-  output or a `wait` / `chat` pickup: follow `console-subagents.md` and the
-  skill's Helpers section, and report each helper as `helpers`. Post a helper
-  as `done` or `failed` before the sign-off it feeds, and every one before a
-  `finish`. Questions, sign-offs and the PLAN-DRAFT stay with you.
+- Phase breakdowns are an editable `list`. The fresh-idea card carries `"templates":"idea"`, `"fill":"note"`.
+- Nothing is saved before the Large checkpoint or Phase 7: a stop before then has `finish.body` say nothing was kept, `"command":"/plan2code-1-plan"`. After the checkpoint post `"stopWarning":""`.
+- Completion finish `command`: `/plan2code-2-document`. The Large checkpoint finish is a pause: headline starts "Paused", `command` `/plan2code-1-plan`, no `dashboard`.
+- Helpers are reported as `helpers`, each `done` or `failed` before the sign-off it feeds. Questions, sign-offs and the PLAN-DRAFT stay with you.

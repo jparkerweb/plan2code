@@ -15,10 +15,24 @@ export function isPlainObject(v) {
   return v !== null && typeof v === "object" && !Array.isArray(v);
 }
 
+/**
+ * One form for every refusal, so a retry can be written from the message alone:
+ * `item "q2" options: <what is wrong>. Like this: <the field done right>` for a
+ * card, `finish: <what is wrong>. Like this: ...` for the rest. `where` is the
+ * thing named (`item "q2"`, `doc "report"`), or "" for a top-level field;
+ * `right` is a value, written as minified JSON, and left out when there is no
+ * sensible example.
+ */
+export function rule(where, field, wrong, right) {
+  const head = [where, field].filter(Boolean).join(" ");
+  const text = String(wrong).replace(/\.\s*$/, "");
+  return `${head}: ${text}.${right === undefined ? "" : ` Like this: ${JSON.stringify(right)}`}`;
+}
+
 // Reject prototype-pollution attempts before they reach the merge.
 function guard(obj, where) {
   if (isPlainObject(obj) && Object.prototype.hasOwnProperty.call(obj, "__proto__")) {
-    throw new Error(`"__proto__" is not a valid key (in ${where})`);
+    throw new Error(rule("", where, '"__proto__" is not a valid key'));
   }
   return obj;
 }
@@ -40,7 +54,7 @@ function mergeKeyed(current, patchList, idKey, defaults, where) {
   for (const entry of patchList) {
     guard(entry, where);
     const id = entry[idKey];
-    if (!id) throw new Error(`every ${where} entry needs "${idKey}"`);
+    if (!id) throw new Error(rule("", where, `every entry needs "${idKey}"`, { [idKey]: where === "items" ? "q7" : "a1" }));
     const i = out.findIndex((x) => x[idKey] === id);
     if (entry._delete) {
       if (i !== -1) out.splice(i, 1);
@@ -50,6 +64,16 @@ function mergeKeyed(current, patchList, idKey, defaults, where) {
   return out;
 }
 
+// Every default the console fills, so a patch leaves these out (overview.md,
+// Data Model; the card in console.md lists the same ones, keep the two in step):
+//   new item   status "open", required true, allowOther true, options [], thread []
+//   new doc    version 1, stale false, blocks []            (DOC_DEFAULTS, below)
+//   a block's  state: the page reads a missing one as "settled"
+//   a review item's verdicts: the page offers approve / changes when it has none
+//   option     k: "A", "B", "C"... by position, when no option of the item has
+//              one (letterOptions(), below)
+// Not defaulted, by choice: a topic's status, and `settle: true` on every post
+// (it would close a pick that still owes its recap).
 const ITEM_DEFAULTS = {
   status: "open",
   required: true,
@@ -57,6 +81,36 @@ const ITEM_DEFAULTS = {
   options: [],
   thread: [],
 };
+
+// A, B, C... Z, then AA, AB... by position.
+function optionKey(i) {
+  return i < 26 ? String.fromCharCode(65 + i) : String.fromCharCode(64 + Math.floor(i / 26)) + String.fromCharCode(65 + (i % 26));
+}
+
+/**
+ * Give the options a patch sends their keys by position when none has one.
+ * Every option keyed is left alone; some keyed and some not is refused, naming
+ * the item. Only the options in this patch: stored ones are never re-lettered.
+ */
+function letterOptions(patchList) {
+  return patchList.map((entry) => {
+    if (!isPlainObject(entry) || !entry.id || !Array.isArray(entry.options) || !entry.options.length) return entry;
+    if (!entry.options.every(isPlainObject)) return entry;
+    const keyed = entry.options.filter((o) => o.k != null && o.k !== "").length;
+    if (keyed === entry.options.length) return entry;
+    if (keyed > 0) {
+      throw new Error(
+        rule(
+          `item "${entry.id}"`,
+          "options",
+          'some options have "k" and some do not. Give every option a "k", or none to have them lettered A, B, C',
+          { options: [{ text: "CSV" }, { text: "Excel" }] },
+        ),
+      );
+    }
+    return { ...entry, options: entry.options.map((o, i) => ({ ...o, k: optionKey(i) })) };
+  });
+}
 
 // The question a card asks. If a patch rewrites any of these on a known id, it
 // is a new question wearing an old id.
@@ -73,6 +127,28 @@ function dropStaleSubmissions(currentItems, before, patchList) {
   const merged = mergeKeyed(currentItems, patchList, "id", ITEM_DEFAULTS, "items");
   for (const entry of patchList) {
     const prev = (before || []).find((x) => x.id === entry.id);
+    // A whole new question under an answered card's id is not a typo fix: the
+    // card would stay answered and nothing would be left for the person, who
+    // sees a dead page. Refuse it so the agent picks a new id on the spot.
+    if (
+      prev &&
+      (prev.status === "answered" || prev.status === "skipped") &&
+      !("status" in entry) &&
+      !("answer" in entry) &&
+      "title" in entry &&
+      entry.title !== prev.title &&
+      (("body" in entry && entry.body !== prev.body) ||
+        ("options" in entry && JSON.stringify(entry.options) !== JSON.stringify(prev.options)))
+    ) {
+      throw new Error(
+        rule(
+          `item "${entry.id}"`,
+          "id",
+          `was already used for the answered question "${prev.title}", so this new question ("${entry.title}") would stay answered and the person would see nothing to answer. Give it a new id, or set status to "reopened" to ask the old one again`,
+          { id: "q12", kind: entry.kind || prev.kind, title: entry.title },
+        ),
+      );
+    }
     if (!prev || (prev.submitted === undefined && prev.answer === undefined)) continue;
     const rewritten = QUESTION_FIELDS.some(
       (f) => f in entry && JSON.stringify(entry[f]) !== JSON.stringify(prev[f]),
@@ -111,24 +187,23 @@ function dropStaleSubmissions(currentItems, before, patchList) {
 // at all is refused. The person's own notes are recorded by the server when
 // they send, so an agent that echoes one back is not shown it twice.
 const THREAD_TEXT_KEYS = ["text", "md", "body", "content"];
+const THREAD_RIGHT = { thread: [{ who: "agent", text: "..." }] };
 
 function normalizeThreads(patchList, currentItems) {
   return patchList.map((entry) => {
     if (!isPlainObject(entry) || entry.thread == null) return entry;
-    if (!Array.isArray(entry.thread)) throw new Error(`item "${entry.id}" "thread" must be an array`);
+    if (!Array.isArray(entry.thread)) throw new Error(rule(`item "${entry.id}"`, "thread", "must be an array", THREAD_RIGHT));
     const prev = (currentItems || []).find((x) => x && x.id === entry.id);
     const said = new Set(
       ((prev && prev.thread) || []).filter((m) => m && m.who === "user").map((m) => String(m.text || "").trim()),
     );
     const thread = [];
     for (const m of entry.thread) {
-      if (!isPlainObject(m)) throw new Error(`item "${entry.id}" thread entries must be objects`);
+      if (!isPlainObject(m)) throw new Error(rule(`item "${entry.id}"`, "thread", "entries must be objects", THREAD_RIGHT));
       guard(m, "thread");
       const key = THREAD_TEXT_KEYS.find((k) => typeof m[k] === "string" && m[k].trim());
       if (!key) {
-        throw new Error(
-          `item "${entry.id}" thread entry has no "text". Write { "who": "agent", "text": "<markdown>" }; the page shows nothing else.`,
-        );
+        throw new Error(rule(`item "${entry.id}"`, "thread", 'an entry has no "text"; the page shows nothing else', THREAD_RIGHT));
       }
       const { from, role, md, body, content, ...rest } = m;
       const who = (m.who || from || role) === "user" ? "user" : "agent";
@@ -153,8 +228,12 @@ function mergeDocs(current, patchList) {
     const prev = (current || []).find((d) => d && d.id === entry.id);
     if (prev && typeof prev.version === "number" && entry.version < prev.version) {
       throw new Error(
-        `doc "${entry.id}" is at version ${prev.version} on the page; this patch sends version ${entry.version}. ` +
-          "Versions only go up: bump it, and check the payload is the current one."
+        rule(
+          `doc "${entry.id}"`,
+          "version",
+          `the page is at version ${prev.version}; this patch sends ${entry.version}. Versions only go up: leave it out, or bump it, and check the payload is the current one`,
+          { version: prev.version + 1 },
+        ),
       );
     }
   }
@@ -186,7 +265,7 @@ function mergeDocs(current, patchList) {
 function settleItems(items, settle, patchItems, collected) {
   if (settle === undefined || settle === false) return items;
   if (settle !== true && !(Array.isArray(settle) && settle.every((id) => typeof id === "string"))) {
-    throw new Error('"settle" must be true or a list of item ids');
+    throw new Error(rule("", "settle", "must be true or a list of item ids", { settle: ["q2"] }));
   }
   const sent = (items || []).filter((i) => i && i.submitted && typeof i.submitted === "object");
   let ids;
@@ -202,7 +281,7 @@ function settleItems(items, settle, patchItems, collected) {
       // The same patch reopening it has already let go of what was sent; the
       // reopen wins below, so naming it is not an error.
       const reopening = (patchItems || []).some((e) => e && e.id === id && (e.status === "open" || e.status === "reopened"));
-      if (!reopening && !sent.some((i) => i.id === id)) throw new Error(`settle: "${id}" has nothing sent to settle`);
+      if (!reopening && !sent.some((i) => i.id === id)) throw new Error(rule("", "settle", `"${id}" has nothing sent to settle`, { settle: true }));
     }
     ids = settle;
   }
@@ -267,14 +346,16 @@ export function resolveDocFiles(patch, state, worktree) {
   if (!isPlainObject(patch) || !Array.isArray(patch.docs)) return patch;
   const root = path.resolve(worktree || state.worktree || process.cwd());
   const fold = (p) => (process.platform === "win32" || process.platform === "darwin" ? p.toLowerCase() : p);
-  const read = (file, select, docId) => {
-    if (typeof file !== "string" || !file.trim()) throw new Error(`doc "${docId}": a block's "file" must be a path`);
+  const FILE_RIGHT = { id: "b4", file: "specs/<idea>/overview.md" };
+  const read = (file, select, docId, blockId) => {
+    const bad = (wrong) => new Error(rule(`doc "${docId}" block "${blockId}"`, "file", wrong, FILE_RIGHT));
+    if (typeof file !== "string" || !file.trim()) throw bad("must be a path");
     const abs = path.resolve(root, file);
     let real;
     try {
       real = fs.realpathSync.native(abs);
     } catch {
-      throw new Error(`doc "${docId}": no file at ${file}`);
+      throw bad(`no file at ${file}`);
     }
     const rootReal = (() => {
       try {
@@ -286,15 +367,15 @@ export function resolveDocFiles(patch, state, worktree) {
     // path.relative, not a prefix test: a worktree at a drive root ends in a
     // separator already, and win32's relative() folds case itself.
     const rel = path.relative(fold(rootReal), fold(real));
-    if (rel.startsWith("..") || path.isAbsolute(rel)) throw new Error(`doc "${docId}": ${file} is outside the project`);
+    if (rel.startsWith("..") || path.isAbsolute(rel)) throw bad(`${file} is outside the project`);
     const stat = fs.statSync(real);
-    if (!stat.isFile()) throw new Error(`doc "${docId}": ${file} is not a file`);
-    if (stat.size > DOC_FILE_MAX) throw new Error(`doc "${docId}": ${file} is larger than ${DOC_FILE_MAX / 1024} KB`);
+    if (!stat.isFile()) throw bad(`${file} is not a file`);
+    if (stat.size > DOC_FILE_MAX) throw bad(`${file} is larger than ${DOC_FILE_MAX / 1024} KB`);
     const text = fs.readFileSync(real, "utf8").replace(/\r\n/g, "\n");
     if (select === undefined) return text;
-    if (select !== "tasks") throw new Error(`doc "${docId}": "select" only takes "tasks"`);
+    if (select !== "tasks") throw new Error(rule(`doc "${docId}" block "${blockId}"`, "select", 'only takes "tasks"', { id: blockId, file, select: "tasks" }));
     const tasks = text.split("\n").filter((l) => TASK_LINE_RE.test(l)).map((l) => l.trim());
-    if (!tasks.length) throw new Error(`doc "${docId}": ${file} has no task lines to select`);
+    if (!tasks.length) throw new Error(rule(`doc "${docId}" block "${blockId}"`, "select", `${file} has no task lines to select`, { id: blockId, file }));
     return tasks.join("\n");
   };
   const docs = patch.docs.map((entry) => {
@@ -307,9 +388,9 @@ export function resolveDocFiles(patch, state, worktree) {
       const again = ((prev && prev.blocks) || [])
         .filter((b) => b && typeof b.file === "string" && !named.has(b.id))
         .map((b) => ({ id: b.id, file: b.file, ...(b.select ? { select: b.select } : {}) }));
-      if (!again.length && !blocks) throw new Error(`doc "${entry.id}": "refresh" found no file blocks to re-read`);
+      if (!again.length && !blocks) throw new Error(rule(`doc "${entry.id}"`, "refresh", "found no file blocks to re-read", { id: entry.id, blocks: [FILE_RIGHT] }));
       blocks = [...(blocks || []), ...again];
-    } else if (refresh !== undefined) throw new Error(`doc "${entry.id}": "refresh" must be true`);
+    } else if (refresh !== undefined) throw new Error(rule(`doc "${entry.id}"`, "refresh", "must be true", { id: entry.id, refresh: true }));
     if (!blocks) return rest;
     const prevBlocks = (state.docs || []).find((d) => d && d.id === entry.id)?.blocks || [];
     return {
@@ -325,7 +406,7 @@ export function resolveDocFiles(patch, state, worktree) {
         // A file named again without `select` is the whole file, now and on
         // every refresh: an older select must not linger in the merge.
         const select = "select" in b ? b.select : null;
-        return { state: prevBlock?.state || "settled", ...b, select, md: read(b.file, select ?? undefined, entry.id) };
+        return { state: prevBlock?.state || "settled", ...b, select, md: read(b.file, select ?? undefined, entry.id, b.id) };
       }),
     };
   });
@@ -358,14 +439,16 @@ export function resolveDocImages(patch, state, dir) {
   if (!isPlainObject(patch) || !Array.isArray(patch.docs)) return patch;
   const fold = (p) => (process.platform === "win32" || process.platform === "darwin" ? p.toLowerCase() : p);
   const shotsDir = path.join(path.resolve(dir), SHOTS_DIR_NAME);
-  const check = (image, docId) => {
-    if (typeof image !== "string" || !image.trim()) throw new Error(`doc "${docId}": an image block's "image" must be a path`);
-    const where = `doc "${docId}": image ${image}`;
+  const IMAGE_RIGHT = { id: "b5", image: "shots/run.png", alt: "..." };
+  const check = (image, docId, blockId) => {
+    const at = `doc "${docId}" block "${blockId}"`;
+    if (typeof image !== "string" || !image.trim()) throw new Error(rule(at, "image", "must be a path", IMAGE_RIGHT));
+    const bad = (wrong) => new Error(rule(at, "image", `${image} ${wrong}`, IMAGE_RIGHT));
     let real;
     try {
       real = fs.realpathSync.native(path.resolve(dir, image));
     } catch {
-      throw new Error(`${where} does not exist. Save it under the session's ${SHOTS_DIR_NAME}/ folder first.`);
+      throw bad(`does not exist. Save it under the session's ${SHOTS_DIR_NAME}/ folder first`);
     }
     let realShots;
     try {
@@ -375,15 +458,15 @@ export function resolveDocImages(patch, state, dir) {
     }
     const name = path.basename(real);
     if (fold(path.dirname(real)) !== fold(realShots)) {
-      throw new Error(`${where} is outside the session's ${SHOTS_DIR_NAME}/ folder (${shotsDir}); only pictures saved there can be shown.`);
+      throw bad(`is outside the session's ${SHOTS_DIR_NAME}/ folder (${shotsDir}); only pictures saved there can be shown`);
     }
-    if (!SHOT_NAME.test(name)) throw new Error(`${where}: name it with letters, digits, dots, dashes or underscores, ending .png, .jpg, .jpeg or .webp`);
+    if (!SHOT_NAME.test(name)) throw bad("needs a plain name: letters, digits, dots, dashes or underscores, ending .png, .jpg, .jpeg or .webp");
     const stat = fs.statSync(real);
-    if (!stat.isFile()) throw new Error(`${where} is not a file`);
-    if (stat.size > SHOT_MAX) throw new Error(`${where} is larger than ${SHOT_MAX / 1024 / 1024} MB`);
+    if (!stat.isFile()) throw bad("is not a file");
+    if (stat.size > SHOT_MAX) throw bad(`is larger than ${SHOT_MAX / 1024 / 1024} MB`);
     const ext = path.extname(name).slice(1).toLowerCase();
     const want = ext === "jpg" ? "jpeg" : ext;
-    if (shotType(fs.readFileSync(real)) !== want) throw new Error(`${where} is not a ${want.toUpperCase()} image (its bytes say otherwise)`);
+    if (shotType(fs.readFileSync(real)) !== want) throw bad(`is not a ${want.toUpperCase()} image (its bytes say otherwise)`);
     return `${SHOTS_DIR_NAME}/${name}`;
   };
   const docs = patch.docs.map((entry) => {
@@ -399,10 +482,10 @@ export function resolveDocImages(patch, state, dir) {
           return ("md" in b || "file" in b) && prevBlock && typeof prevBlock.image === "string" ? { ...b, image: null, alt: null } : b;
         }
         if (("md" in b && b.md != null) || ("file" in b && b.file != null)) {
-          throw new Error(`doc "${entry.id}": block "${b.id}" is an image; it cannot also carry "md" or "file"`);
+          throw new Error(rule(`doc "${entry.id}" block "${b.id}"`, "image", 'an image block cannot also carry "md" or "file"', IMAGE_RIGHT));
         }
-        if (b.alt != null && typeof b.alt !== "string") throw new Error(`doc "${entry.id}": block "${b.id}" "alt" must be text`);
-        return { state: prevBlock?.state || "settled", ...b, image: check(b.image, entry.id), md: null, file: null };
+        if (b.alt != null && typeof b.alt !== "string") throw new Error(rule(`doc "${entry.id}" block "${b.id}"`, "alt", "must be text", IMAGE_RIGHT));
+        return { state: prevBlock?.state || "settled", ...b, image: check(b.image, entry.id, b.id), md: null, file: null };
       }),
     };
   });
@@ -418,12 +501,18 @@ export function resolveDocImages(patch, state, dir) {
  * back into the agent's context on every turn, and the state grows with the
  * session.
  */
+const HELPERS_RIGHT = { helpers: [{ id: "h1", title: "Read the plan", ask: "Summarize the plan", state: "running" }] };
+const CHAT_RIGHT = { chat: { replies: [{ re: 12, md: "..." }] } };
+
 export function applyPatch(state, patch) {
   guard(patch, "patch");
   patch = liftActivity(patch);
   const { settle, ...rest } = patch;
   patch = rest;
   const next = { ...state };
+  // `loop` is the page lock and the in-app gate: only `open` (--loop) sets or
+  // clears it, never a patch.
+  if (Object.hasOwn(patch, "loop")) throw new Error(rule("", "loop", "is set by open --loop, not by a patch"));
   for (const [k, v] of Object.entries(patch)) {
     if (v === null) {
       delete next[k];
@@ -435,18 +524,18 @@ export function applyPatch(state, patch) {
         next[k] = mergeOne(next[k], v, k);
         break;
       case "items":
-        if (!Array.isArray(v)) throw new Error('"items" must be an array');
-        next.items = dropStaleSubmissions(next.items, state.items, normalizeThreads(v, state.items));
+        if (!Array.isArray(v)) throw new Error(rule("", "items", "must be an array", { items: [{ id: "q7", kind: "text", title: "Name" }] }));
+        next.items = dropStaleSubmissions(next.items, state.items, normalizeThreads(letterOptions(v), state.items));
         break;
       case "topics":
-        if (!Array.isArray(v)) throw new Error('"topics" must be an array');
+        if (!Array.isArray(v)) throw new Error(rule("", "topics", "must be an array", { topics: [{ id: "t2", title: "How it behaves", status: "current" }] }));
         next.topics = mergeKeyed(next.topics, v, "id", {}, "topics");
         break;
       case "helpers":
         // The agent's report of its helpers, for the page's Subagents tab.
         // Only `post` writes it; the server's /submit never touches it.
-        if (!Array.isArray(v)) throw new Error('"helpers" must be an array');
-        if (!v.every(isPlainObject)) throw new Error('"helpers" entries must be objects, each { id, title, ask, state }');
+        if (!Array.isArray(v)) throw new Error(rule("", "helpers", "must be an array", HELPERS_RIGHT));
+        if (!v.every(isPlainObject)) throw new Error(rule("", "helpers", "entries must be objects, each { id, title, ask, state }", HELPERS_RIGHT));
         next.helpers = mergeKeyed(next.helpers, v, "id", {}, "helpers");
         // A real helper report supersedes the working-alone marker, whether it
         // arrives after one or beside one.
@@ -454,19 +543,19 @@ export function applyPatch(state, patch) {
           next.helpers = next.helpers.filter((h) => !(isPlainObject(h) && h.alone === true));
         break;
       case "docs":
-        if (!Array.isArray(v)) throw new Error('"docs" must be an array');
+        if (!Array.isArray(v)) throw new Error(rule("", "docs", "must be an array", { docs: [{ id: "report", title: "Report", blocks: [{ id: "b1", md: "..." }] }] }));
         next.docs = mergeDocs(next.docs, v);
         break;
       case "chat": {
         // The agent's side of the Quick question chat. The person's side is
         // the inbox, which only the server writes; nothing else lives here.
-        if (!isPlainObject(v)) throw new Error('"chat" must be an object');
+        if (!isPlainObject(v)) throw new Error(rule("", "chat", "must be an object", CHAT_RIGHT));
         guard(v, "chat");
         const extra = Object.keys(v).filter((key) => key !== "replies");
-        if (extra.length) throw new Error(`"chat" only takes "replies" (not ${extra.map((key) => `"${key}"`).join(", ")})`);
+        if (extra.length) throw new Error(rule("", "chat", `only takes "replies" (not ${extra.map((key) => `"${key}"`).join(", ")})`, CHAT_RIGHT));
         const chat = { ...(next.chat || {}) };
         if (v.replies != null) {
-          if (!Array.isArray(v.replies)) throw new Error('"chat.replies" must be an array');
+          if (!Array.isArray(v.replies)) throw new Error(rule("", "chat.replies", "must be an array", CHAT_RIGHT));
           // A reply with no id is named for the message it answers (`r<seq>`),
           // so a repeat delivery re-posted the same way replaces, never doubles.
           const named = v.replies.map((r) =>
@@ -477,11 +566,28 @@ export function applyPatch(state, patch) {
         next.chat = chat;
         break;
       }
+      case "loopOutcome":
+        // The skill's one report of a phase built under the loop. The shape is
+        // checked by validate(); here only who may send it, and how often.
+        if (!state.loop?.driving) throw new Error(rule("", "loopOutcome", "is only accepted in a loop session"));
+        if (state.loopOutcome !== undefined) throw new Error(rule("", "loopOutcome", "was already posted for this session"));
+        next.loopOutcome = v;
+        break;
+      case "loopEnd":
+        // The app's word on how the loop ended; a later one replaces the earlier.
+        next.loopEnd = v;
+        break;
       default:
         next[k] = v;
     }
   }
   if (settle !== undefined) next.items = settleItems(next.items || [], settle, patch.items, state.collected);
+  // A question put to the person over a standing ending means the work went
+  // on past it: the finish card would grey the form out, and the person has
+  // no way to answer. The ending comes down unless this patch posts its own.
+  if (next.finish && !Object.hasOwn(patch, "finish") && asksSomething(patch.items, state.items)) {
+    delete next.finish;
+  }
   return stampTimes(state, settleAgent(next, patch, state));
 }
 
@@ -570,104 +676,153 @@ const METRICS_BAIT = /\b(Requirements?|Feasibility|Integration|Risk)[:\s|]+\d{1,
 // reaches state.json (a post's `run` / `folderIssue`). Problems as sentences.
 export function proseProblems(prose, subject = "text") {
   const problems = [];
-  if (FORBIDDEN_TOKENS.test(prose)) {
-    problems.push(`${subject} contains a loop completion marker (${prose.match(FORBIDDEN_TOKENS)[0]}); the loop scans for these`);
-  }
-  if (METRICS_BAIT.test(prose)) {
+  const marker = prose.match(FORBIDDEN_TOKENS);
+  if (marker) {
     problems.push(
-      `${subject} contains "${prose.match(METRICS_BAIT)[0]}" — the metrics collector scrapes that pattern. ` +
-        `Hyphenate it (Requirements-clarity 22/25) or reword.`
+      rule("", subject, `contains a loop completion marker (${marker[0]}); the loop scans for these. Reword it`, marker[0].toLowerCase().replaceAll("_", " ")),
+    );
+  }
+  const bait = prose.match(METRICS_BAIT);
+  if (bait) {
+    problems.push(
+      rule("", subject, `contains ${JSON.stringify(bait[0])}; the metrics collector scrapes that pattern. Hyphenate it or reword`, `${bait[1]}-score ${bait[0].match(/\d+$/)[0]}`),
     );
   }
   return problems;
 }
 
+// Every string under a value, with where it sits: `${base}` then .key and [i]
+// steps, so a scan can say which field an offending word is in.
+function walkStrings(value, base, visit) {
+  if (typeof value === "string") visit(value, base);
+  else if (Array.isArray(value)) value.forEach((v, i) => walkStrings(v, `${base}[${i}]`, visit));
+  else if (isPlainObject(value)) for (const [k, v] of Object.entries(value)) walkStrings(v, base ? `${base}.${k}` : k, visit);
+}
+
 export const MAX_OPEN_REQUIRED = 3;
+
+const OPTIONS_RIGHT = { options: [{ text: "CSV" }, { text: "Excel" }] };
+const OPTION_RIGHT = { text: "CSV", detail: "Opens in any spreadsheet" };
+const VERDICTS_RIGHT = {
+  verdicts: [
+    { id: "approve", label: "Approve" },
+    { id: "changes", label: "Request changes" },
+  ],
+};
+const TITLE_RIGHT = { title: "Export format" };
+const FINISH_RIGHT = { finish: { headline: "Paused: waiting on you", command: "/plan2code-1-plan" } };
+const HELPER_RIGHT = { helpers: [{ id: "h1", title: "Read the plan", ask: "Summarize the plan", state: "running" }] };
+
+// `problem` with the field done right appended, for a message that came from
+// shared code (public/subagents.js) and has no example of its own.
+const likeThis = (problem, right) => rule("", "", problem, right).replace(/^: /, "");
 
 /**
  * Validate a merged state before it is written.
  *
- * Returns an array of human-readable problems. An empty array means the patch
- * is good. These checks turn four prose rules into mechanical ones.
+ * Returns an array of human-readable problems, each in rule()'s form: the item
+ * or field it is about, what is wrong, and the field done right. An empty array
+ * means the patch is good. These checks turn four prose rules into mechanical
+ * ones.
  */
 export function validate(state) {
   const problems = [];
 
-  if (!Array.isArray(state.items)) return ['"items" must be an array'];
+  if (!Array.isArray(state.items)) {
+    return [rule("", "items", "must be an array", { items: [{ id: "q7", kind: "text", title: "Name" }] })];
+  }
 
   const ids = new Set();
   for (const item of state.items) {
-    if (!item.id) problems.push("every item needs an id");
-    if (ids.has(item.id)) problems.push(`duplicate item id "${item.id}"`);
+    const at = `item "${item.id}"`;
+    if (!item.id) problems.push(rule("", "items", 'an entry has no "id". Every new question gets a new id', { id: "q7" }));
+    if (ids.has(item.id)) problems.push(rule(at, "id", "is used twice. Every new question gets a new id", { id: "q8" }));
     ids.add(item.id);
 
     if (!ITEM_KINDS.has(item.kind)) {
-      problems.push(`item "${item.id}" has unknown kind "${item.kind}" (one of: ${[...ITEM_KINDS].join(", ")})`);
+      problems.push(rule(at, "kind", `unknown kind "${item.kind}" (one of: ${[...ITEM_KINDS].join(", ")})`, { kind: "choice" }));
     }
     if (typeof item.title !== "string" || !item.title.trim()) {
-      problems.push(`item "${item.id}" needs a plain-English title`);
+      problems.push(rule(at, "title", "needs a plain-English title", TITLE_RIGHT));
     } else {
       for (const re of JARGON) {
         if (re.test(item.title)) {
           problems.push(
-            `item "${item.id}" title contains internal vocabulary (${re.source}). Titles are read by people who have never seen this workflow.`
+            rule(
+              at,
+              "title",
+              `contains internal vocabulary (${re.source}). Titles are read by people who have never seen this workflow`,
+              TITLE_RIGHT,
+            ),
           );
           break;
         }
       }
     }
     if ((item.kind === "choice" || item.kind === "multi") && !Array.isArray(item.options)) {
-      problems.push(`item "${item.id}" is a ${item.kind} and needs "options"`);
+      problems.push(rule(at, "options", `is a ${item.kind} and needs "options"`, OPTIONS_RIGHT));
     }
     if ((item.kind === "choice" || item.kind === "multi") && Array.isArray(item.options)) {
-      for (const o of item.options) {
-        if (!o || typeof o.k !== "string" || !o.k.trim()) {
-          problems.push(`item "${item.id}" has an option with no "k" (its key, like "A")`);
+      item.options.forEach((o, i) => {
+        if (!isPlainObject(o) || typeof o.k !== "string" || !o.k.trim()) {
+          problems.push(
+            rule(at, "options", `option ${i + 1} has no usable "k" (its key, a string like "A"). Give every option a "k", or none to have them lettered A, B, C`, OPTIONS_RIGHT),
+          );
         } else if (typeof o.text !== "string" || !o.text.trim()) {
           problems.push(
-            `item "${item.id}" option "${o.k}" needs "text" (the label) and optionally "detail". Options use "text"/"detail", not "label"/"desc".`
+            rule(at, "options", `option "${o.k}" needs "text" (the label) and optionally "detail". Options use "text"/"detail", not "label"/"desc"`, OPTION_RIGHT),
           );
         }
-      }
+      });
     }
     if (item.verdicts != null) {
       if (!Array.isArray(item.verdicts) || !item.verdicts.length) {
-        problems.push(`item "${item.id}" "verdicts" must be a non-empty array of { id, label }`);
+        problems.push(rule(at, "verdicts", "must be a non-empty array of { id, label }", VERDICTS_RIGHT));
       } else {
         for (const v of item.verdicts) {
           if (!v || typeof v.id !== "string" || !v.id.trim()) {
-            problems.push(`item "${item.id}" has a verdict with no "id"`);
+            problems.push(rule(at, "verdicts", 'a verdict has no "id"', VERDICTS_RIGHT));
           } else if (typeof v.label !== "string" || !v.label.trim()) {
-            problems.push(
-              `item "${item.id}" verdict "${v.id}" needs a "label" (the button text). Verdicts use "label", not "text".`
-            );
+            problems.push(rule(at, "verdicts", `verdict "${v.id}" needs a "label" (the button text). Verdicts use "label", not "text"`, VERDICTS_RIGHT));
           }
         }
       }
     }
     if (item.templates != null && (item.kind !== "text" || item.templates !== "idea")) {
-      problems.push(`item "${item.id}" has "templates": only a text item can carry it, and its only value is "idea".`);
+      problems.push(rule(at, "templates", 'only a text item can carry it, and its only value is "idea"', { kind: "text", templates: "idea" }));
     }
     // The box the page fills from a Notebook tab picked at Start.
     if (item.fill != null && (item.kind !== "text" || item.fill !== "note")) {
-      problems.push(`item "${item.id}" has "fill": only a text item can carry it, and its only value is "note".`);
+      problems.push(rule(at, "fill", 'only a text item can carry it, and its only value is "note"', { kind: "text", fill: "note" }));
     }
     // The page compiles it as the person types, and a pattern that does not
     // compile throws there, on every keystroke, with nothing on screen to say why.
     if (item.pattern != null) {
+      const patternRight = { pattern: "^[a-z0-9-]+$", patternHint: "kebab-case" };
       if (typeof item.pattern !== "string") {
-        problems.push(`item "${item.id}" "pattern" must be a string holding a JavaScript regular expression`);
+        problems.push(rule(at, "pattern", "must be a string holding a JavaScript regular expression", patternRight));
       } else {
         try {
           new RegExp(item.pattern);
         } catch (e) {
-          problems.push(`item "${item.id}" "pattern" is not a valid JavaScript regular expression: ${e.message}`);
+          problems.push(rule(at, "pattern", `is not a valid JavaScript regular expression: ${e.message}`, patternRight));
         }
       }
     }
-    const recs = (item.options || []).filter((o) => o.recommended);
-    if (recs.length > 1) problems.push(`item "${item.id}" marks ${recs.length} options recommended; at most one`);
+    const recs = (item.options || []).filter((o) => o && o.recommended);
+    if (recs.length > 1) {
+      problems.push(rule(at, "options", `${recs.length} options are marked recommended; at most one`, [{ text: "A", recommended: true }, { text: "B" }]));
+    }
+    // Which cards the Implementation Loop answers itself; the page draws them.
+    if (item.handledBy != null) {
+      if (item.handledBy !== "loop") problems.push(rule(at, "handledBy", 'can only be "loop"', { handledBy: "loop" }));
+      else if (!state.loop?.driving) problems.push(rule(at, "handledBy", "is only valid in a loop session", { handledBy: null }));
+    }
   }
+
+  // The loop's two reports: the skill's outcome and the app's ending.
+  if (state.loopOutcome !== undefined) problems.push(...loopOutcomeProblems(state.loopOutcome));
+  if (state.loopEnd !== undefined) problems.push(...loopEndProblems(state.loopEnd, state));
 
   // A note on a card is unanswered the moment no agent words follow it in its
   // thread. Once that is true, no patch may move past it except one that
@@ -679,7 +834,12 @@ export function validate(state) {
       const thread = Array.isArray(item.thread) ? item.thread : [];
       const last = thread[thread.length - 1];
       if (isPlainObject(last) && last.who === "user") {
-        problems.push(`item "${item.id}" has an unanswered note from the person; reply in its thread before this patch`);
+        problems.push(
+          rule(`item "${item.id}"`, "thread", "has an unanswered note from the person; reply in its thread in this patch", {
+            id: item.id,
+            thread: [{ who: "agent", text: "..." }],
+          }),
+        );
       }
     }
   }
@@ -688,7 +848,9 @@ export function validate(state) {
   // yet counts as open (and keeps Stop live for a question nobody can see).
   if (state.workflow === "dashboard" && state.items.some((i) => isOpen(i))) {
     problems.push(
-      'The dashboard draws no question cards: post its "menu" (and "agent"), and launch the skill a question belongs to.'
+      rule("", "items", "the dashboard draws no question cards. Post its menu (and agent), and launch the skill a question belongs to", {
+        menu: { note: "...", recommend: "plan2code-init" },
+      }),
     );
   }
 
@@ -697,9 +859,13 @@ export function validate(state) {
   const openRequired = state.items.filter((i) => i.required !== false && i.kind !== "notice" && isOpen(i));
   if (openRequired.length > MAX_OPEN_REQUIRED) {
     problems.push(
-      `${openRequired.length} questions are open at once. The cap is ${MAX_OPEN_REQUIRED} ` +
-        `(the ceiling is the person's attention, not the screen's). ` +
-        `Send the rest after these are answered, or mark some "required": false.`
+      rule(
+        "",
+        "items",
+        `${openRequired.length} questions are open at once (${openRequired.map((i) => i.id).join(", ")}). The cap is ${MAX_OPEN_REQUIRED} ` +
+          `(the ceiling is the person's attention, not the screen's). Send the rest after these are answered, or mark some "required": false`,
+        { id: openRequired[openRequired.length - 1].id, required: false },
+      ),
     );
   }
 
@@ -709,55 +875,68 @@ export function validate(state) {
   // and the page points at the dashboard instead of a next step.
   const fin = state.finish;
   if (fin != null) {
+    // The page would warn about losing work after the session ended (FR-13).
+    if (typeof state.stopWarning === "string" && state.stopWarning.trim()) {
+      problems.push(
+        rule("", "finish", `"stopWarning" is still set ("${state.stopWarning}"), so the page would warn about losing work after the session ended. Clear it in the same patch`, {
+          stopWarning: "",
+          finish: { headline: "Paused: <what is saved>", command: "/<the skill to resume>" },
+        }),
+      );
+    }
     if (typeof fin !== "object" || Array.isArray(fin)) {
-      problems.push('"finish" must be an object');
+      problems.push(rule("", "finish", "must be an object", FINISH_RIGHT));
     } else {
       if (typeof fin.headline !== "string" || !fin.headline.trim()) {
-        problems.push('"finish" needs a plain-English "headline" saying what just happened');
+        problems.push(rule("", "finish.headline", "needs a plain-English headline saying what just happened", { finish: { headline: "Phase 3 is done" } }));
       }
       if (fin.command != null && (typeof fin.command !== "string" || !fin.command.trim())) {
-        problems.push('"finish.command" must be a non-empty string, or left out when there is nothing to run');
+        problems.push(rule("", "finish.command", "must be a non-empty string, or left out when there is nothing to run", { finish: { command: "/plan2code-1-plan" } }));
       } else if (fin.command != null && (fin.command.includes("<") || fin.command.includes(">"))) {
         // A rendered command is copied and run verbatim. A leftover
         // placeholder reaches someone who has no way to know what fills it.
-        problems.push(`"finish.command" still has a placeholder in it ("${fin.command}"). Fill it in.`);
+        problems.push(
+          rule("", "finish.command", `still has a placeholder in it ("${fin.command}"). Fill it in`, {
+            finish: { command: "/plan2code-3-implement specs/lunch-vote/overview.md" },
+          }),
+        );
       }
       if (fin.console != null && typeof fin.console !== "boolean") {
-        problems.push('"finish.console" must be true or false (or left out, to follow the command)');
+        problems.push(rule("", "finish.console", "must be true or false (or left out, to follow the command)", { finish: { console: true } }));
       }
       if (fin.dashboard != null && typeof fin.dashboard !== "boolean") {
-        problems.push('"finish.dashboard" must be true or false (or left out: no dashboard button)');
+        problems.push(rule("", "finish.dashboard", "must be true or false (or left out: no dashboard button)", { finish: { dashboard: true } }));
       }
       if (fin.commit != null && typeof fin.commit !== "boolean") {
-        problems.push('"finish.commit" must be true or false (or left out: no commit button)');
+        problems.push(rule("", "finish.commit", "must be true or false (or left out: no commit button)", { finish: { commit: true } }));
       }
       // (The pause test is the page's finishPaused() in public/answers.js: keep them in step.)
       // Update CHANGELOG first: only the builds that end on a commit and have
       // no sign-off to put it on. An implementation phase never offers it. A
       // pause ignores it.
       if (fin.changelog != null && typeof fin.changelog !== "boolean") {
-        problems.push('"finish.changelog" must be true or false (or left out: no changelog button)');
+        problems.push(rule("", "finish.changelog", "must be true or false (or left out: no changelog button)", { finish: { changelog: true } }));
       } else if (fin.changelog === true && !/^\s*paused\b/i.test(String(fin.headline || "")) && !["quick-task", "finalize"].includes(state.workflow)) {
-        problems.push('"finish.changelog" is only for a finished quick-task or finalize');
+        problems.push(rule("", "finish.changelog", "is only for a finished quick-task or finalize", { finish: { changelog: null } }));
       }
       // The review offer on a finished build: true, or an object carrying the
       // button's heading. The heading is read by the person, so it faces the
       // same vocabulary check as a title.
       if (fin.review != null && typeof fin.review !== "boolean") {
         if (typeof fin.review !== "object" || Array.isArray(fin.review)) {
-          problems.push('"finish.review" must be true, false, or { "label": "..." }');
+          problems.push(rule("", "finish.review", 'must be true, false, or { "label": "..." }', { finish: { review: { label: "Review the code" } } }));
         } else if (fin.review.label != null) {
           if (typeof fin.review.label !== "string") {
-            problems.push('"finish.review.label" must be a string');
+            problems.push(rule("", "finish.review.label", "must be a string", { finish: { review: { label: "Review the code" } } }));
           } else {
             const hit = JARGON.find((re) => re.test(fin.review.label));
-            if (hit) problems.push(`"finish.review.label" contains internal vocabulary (${hit.source})`);
+            if (hit) problems.push(rule("", "finish.review.label", `contains internal vocabulary (${hit.source})`, { finish: { review: { label: "Review the code" } } }));
           }
         }
       }
       for (const re of JARGON) {
         if (typeof fin.headline === "string" && re.test(fin.headline)) {
-          problems.push(`"finish.headline" contains internal vocabulary (${re.source})`);
+          problems.push(rule("", "finish.headline", `contains internal vocabulary (${re.source})`, { finish: { headline: "Phase 3 is done" } }));
           break;
         }
       }
@@ -769,15 +948,15 @@ export function validate(state) {
   // huge number would hide a session that really has died.
   const quiet = state.agent && state.agent.quietMinutes;
   if (quiet != null && (typeof quiet !== "number" || !(quiet > 0) || quiet > 60)) {
-    problems.push('"agent.quietMinutes" must be a number of minutes between 1 and 60 (or null to clear it)');
+    problems.push(rule("", "agent.quietMinutes", "must be a number of minutes between 1 and 60 (or null to clear it)", { agent: { quietMinutes: 15 } }));
   }
   // The page reads exactly two: anything else would leave it guessing whose
   // turn it is.
   if (state.agent && state.agent.status != null && !["working", "waiting"].includes(state.agent.status)) {
-    problems.push(`"agent.status" must be "working" or "waiting" (not "${state.agent.status}")`);
+    problems.push(rule("", "agent.status", `must be "working" or "waiting" (not "${state.agent.status}")`, { agent: { status: "working" } }));
   }
   if (state.agent && state.agent.activity != null && typeof state.agent.activity !== "string") {
-    problems.push('"agent.activity" must be a short sentence saying what you are doing');
+    problems.push(rule("", "agent.activity", "must be a short sentence saying what you are doing", { agent: { activity: "Reading the plan" } }));
   }
 
   // Open gates only: an approval already given (last phase's sign-off) is a
@@ -785,9 +964,12 @@ export function validate(state) {
   const gates = state.items.filter((i) => i.gate && i.gate.authoritative && isOpen(i));
   if (gates.length > 1) {
     problems.push(
-      `${gates.length} authoritative approval gates are open (${gates
-        .map((g) => g.id)
-        .join(", ")}). Only one workflow may own sign-off at a time.`
+      rule(
+        "",
+        "items",
+        `${gates.length} authoritative approval gates are open (${gates.map((g) => g.id).join(", ")}). Only one workflow may own sign-off at a time`,
+        { id: gates[gates.length - 1].id, gate: null },
+      ),
     );
   }
 
@@ -797,35 +979,43 @@ export function validate(state) {
     for (const b of (isPlainObject(d) && Array.isArray(d.blocks) ? d.blocks : [])) {
       if (!isPlainObject(b) || typeof b.image !== "string" || typeof b.alt !== "string") continue;
       const hit = JARGON.find((re) => re.test(b.alt));
-      if (hit) problems.push(`doc "${d.id}" image "${b.id}" alt text contains internal vocabulary (${hit.source})`);
+      if (hit) {
+        problems.push(
+          rule(`doc "${d.id}" block "${b.id}"`, "alt", `contains internal vocabulary (${hit.source})`, { id: b.id, image: b.image, alt: "The finished screen" }),
+        );
+      }
     }
   }
 
   // Scan what the AGENT wrote, never what the person typed. `submitted` is the
   // server's record of an answer someone pressed Send on; if their own words
   // happened to contain "TASK_COMPLETE" or "Risk 3", every later agent patch
-  // would be rejected and the session would wedge with no way out.
-  const authored = state.items.map(({ submitted, sentNote, thread, ...rest }) => ({
-    ...rest,
-    thread: Array.isArray(thread) ? thread.filter((m) => !m || m.who !== "user") : thread,
-  }));
+  // would be rejected and the session would wedge with no way out. Scanned one
+  // string at a time so a refusal names the item and field it found the word in.
+  const scan = (value, prefix) =>
+    walkStrings(value, "", (str, where) => problems.push(...proseProblems(str, [prefix, where].filter(Boolean).join(" "))));
+  for (const { submitted, sentNote, thread, ...rest } of state.items) {
+    const item = {
+      ...rest,
+      thread: Array.isArray(thread) ? thread.filter((m) => !m || m.who !== "user") : thread,
+    };
+    scan(item, `item "${item.id}"`);
+  }
   // A doc block read from a file (`file`) is the file's own words, already on
   // disk: the agent cannot reword it, and refusing it would wedge every post
   // that refreshes it. Only what the agent typed is scanned.
-  const typedDocs = (state.docs || []).map((d) =>
-    isPlainObject(d) && Array.isArray(d.blocks) ? { ...d, blocks: d.blocks.filter((b) => !(isPlainObject(b) && typeof b.file === "string")) } : d
-  );
-  const prose =
-    JSON.stringify(authored) +
-    JSON.stringify(typedDocs) +
-    JSON.stringify(state.finish || {}) +
-    JSON.stringify(state.menu || {});
-  problems.push(...proseProblems(prose));
+  for (const d of state.docs || []) {
+    if (!isPlainObject(d)) continue;
+    const typed = Array.isArray(d.blocks) ? { ...d, blocks: d.blocks.filter((b) => !(isPlainObject(b) && typeof b.file === "string")) } : d;
+    scan(typed, `doc "${d.id}"`);
+  }
+  scan(state.finish || {}, "finish");
+  scan(state.menu || {}, "menu");
 
   // The agent's report of its helpers: the shape the page draws from
   // (subagents.js), then the same prose scan as everything else it writes.
   if (state.helpers != null) {
-    problems.push(...checkHelpers(state.helpers));
+    problems.push(...checkHelpers(state.helpers).map((p) => likeThis(p, HELPER_RIGHT)));
     for (const helper of Array.isArray(state.helpers) ? state.helpers : []) {
       if (!isPlainObject(helper)) continue;
       for (const field of ["title", "ask", "result"]) {
@@ -839,9 +1029,13 @@ export function validate(state) {
   // A finish ends the session, and a helper still shown as running would sit
   // on the Subagents tab, spinning, after everything is over.
   if (state.finish != null && Array.isArray(state.helpers)) {
-    const running = state.helpers.filter((h) => isPlainObject(h) && h.state === "running").map((h) => `"${h.id}"`);
+    const running = state.helpers.filter((h) => isPlainObject(h) && h.state === "running").map((h) => h.id);
     if (running.length) {
-      problems.push(`"finish" while helper ${running.join(", ")} still shows as running: post each one as done or failed first, or in the same patch`);
+      problems.push(
+        rule("", "finish", `helper ${running.map((id) => `"${id}"`).join(", ")} still shows as running: post each one as done or failed first, or in the same patch`, {
+          helpers: [{ id: running[0], state: "done" }],
+        }),
+      );
     }
   }
 
@@ -852,6 +1046,182 @@ export function isOpen(item) {
   return item.status === "open" || item.status === "reopened";
 }
 
+/* ------------------------------------------------------ the loop's reports */
+
+const LOOP_LEVELS = ["critical", "warning", "suggestion"];
+const LOOP_REASONS = ["tests", "findings", "blocked", "conflict", "other"];
+const LOOP_CAN = ["resume", "fix", "finalize"];
+const TASK_ID = /^\d+\.\d+$/;
+
+// A one-line path that stays inside the project: not absolute, no `..` step.
+const relativePath = (f) =>
+  typeof f === "string" && f.length > 0 && !/[\r\n]/.test(f) && !path.isAbsolute(f) && !/^[A-Za-z]:/.test(f) && !f.replaceAll("\\", "/").split("/").includes("..");
+const isNonNegInt = (n) => Number.isInteger(n) && n >= 0;
+const isPosInt = (n) => Number.isInteger(n) && n > 0;
+// One line of 1..max characters.
+const oneLine = (s, max) => typeof s === "string" && s.length >= 1 && s.length <= max && !/[\r\n]/.test(s);
+
+/**
+ * Problems with a `loopOutcome` (what the skill reports after building a phase
+ * under the loop), as sentences naming the field; an empty array when it is
+ * good. Rules are the overview's API section; house rules 4 and 5 apply to
+ * every string.
+ */
+export function loopOutcomeProblems(o) {
+  const p = [];
+  const bad = (field, rule) => p.push(`loopOutcome.${field} ${rule}`);
+  if (!isPlainObject(o)) return ["loopOutcome must be an object"];
+  const prose = (field, s) => {
+    if (typeof s === "string") p.push(...proseProblems(s, `loopOutcome.${field}`));
+  };
+  if (!isPosInt(o.phase)) bad("phase", "must be a positive integer");
+  if (o.result !== "passed" && o.result !== "failed") bad("result", 'must be "passed" or "failed"');
+  if (o.result === "passed") {
+    if (o.reason !== null) bad("reason", "must be null when the phase passed");
+  } else if (o.result === "failed" && !LOOP_REASONS.includes(o.reason)) {
+    bad("reason", `must be one of ${LOOP_REASONS.join(", ")} when the phase failed`);
+  }
+  if (!oneLine(o.summary, 200)) bad("summary", "must be one line of 1 to 200 characters");
+  else prose("summary", o.summary);
+
+  if (!isPlainObject(o.tests)) bad("tests", "must be an object { ran, passed, summary }");
+  else {
+    if (typeof o.tests.ran !== "boolean") bad("tests.ran", "must be true or false");
+    if (typeof o.tests.passed !== "boolean") bad("tests.passed", "must be true or false");
+    if (typeof o.tests.summary !== "string" || /[\r\n]/.test(o.tests.summary)) bad("tests.summary", "must be a one-line string");
+    else prose("tests.summary", o.tests.summary);
+  }
+
+  if (!isPlainObject(o.review)) bad("review", "must be an object { ran, recheck, left, unfixed }");
+  else {
+    const r = o.review;
+    if (typeof r.ran !== "boolean") bad("review.ran", "must be true or false");
+    if (typeof r.recheck !== "boolean") bad("review.recheck", "must be true or false");
+    if (!isPlainObject(r.left)) bad("review.left", "must be an object { critical, warning, suggestion }");
+    else for (const level of LOOP_LEVELS) if (!isNonNegInt(r.left[level])) bad(`review.left.${level}`, "must be a non-negative integer");
+    if (r.triage !== undefined) {
+      const t = r.triage;
+      if (!isPlainObject(t)) bad("review.triage", "must be an object { ran, skipped } when present");
+      else {
+        if (typeof t.ran !== "boolean") bad("review.triage.ran", "must be true or false");
+        if (!Array.isArray(t.skipped)) bad("review.triage.skipped", "must be an array");
+        else {
+          if (t.skipped.length > 50) bad("review.triage.skipped", "can hold at most 50 entries");
+          t.skipped.forEach((u, i) => {
+            const at = `review.triage.skipped[${i}]`;
+            if (!isPlainObject(u)) return bad(at, "must be an object { level, title, file, reason }");
+            if (!LOOP_LEVELS.includes(u.level)) bad(`${at}.level`, `must be one of ${LOOP_LEVELS.join(", ")}`);
+            if (typeof u.title !== "string" || !u.title.trim() || /[\r\n]/.test(u.title)) bad(`${at}.title`, "must be a non-empty one-line string");
+            else prose(`${at}.title`, u.title);
+            if (typeof u.file !== "string" || /[\r\n]/.test(u.file)) bad(`${at}.file`, "must be a one-line string");
+            else prose(`${at}.file`, u.file);
+            if (!oneLine(u.reason, 200)) bad(`${at}.reason`, "must be one line of 1 to 200 characters");
+            else prose(`${at}.reason`, u.reason);
+          });
+        }
+      }
+    }
+    if (!Array.isArray(r.fixed)) bad("review.fixed", "must be an array (empty when nothing was fixed)");
+    else {
+      if (r.fixed.length > 50) bad("review.fixed", "can hold at most 50 entries");
+      r.fixed.forEach((u, i) => {
+        if (!isPlainObject(u)) return bad(`review.fixed[${i}]`, "must be an object { level, title, file? }");
+        if (!LOOP_LEVELS.includes(u.level)) bad(`review.fixed[${i}].level`, `must be one of ${LOOP_LEVELS.join(", ")}`);
+        if (typeof u.title !== "string" || !u.title.trim() || /[\r\n]/.test(u.title)) bad(`review.fixed[${i}].title`, "must be a non-empty one-line string");
+        else prose(`review.fixed[${i}].title`, u.title);
+        if (u.file !== undefined && (typeof u.file !== "string" || /[\r\n]/.test(u.file))) bad(`review.fixed[${i}].file`, "must be a one-line string when present");
+        else prose(`review.fixed[${i}].file`, u.file);
+      });
+    }
+    if (!Array.isArray(r.unfixed)) bad("review.unfixed", "must be an array");
+    else {
+      if (r.unfixed.length > 50) bad("review.unfixed", "can hold at most 50 entries");
+      r.unfixed.forEach((u, i) => {
+        if (!isPlainObject(u)) return bad(`review.unfixed[${i}]`, "must be an object { level, title, file? }");
+        if (!LOOP_LEVELS.includes(u.level)) bad(`review.unfixed[${i}].level`, `must be one of ${LOOP_LEVELS.join(", ")}`);
+        if (typeof u.title !== "string" || !u.title.trim()) bad(`review.unfixed[${i}].title`, "must be a non-empty string");
+        else prose(`review.unfixed[${i}].title`, u.title);
+        if (u.file !== undefined && typeof u.file !== "string") bad(`review.unfixed[${i}].file`, "must be a string when present");
+        else prose(`review.unfixed[${i}].file`, u.file);
+      });
+    }
+  }
+
+  if (!isPlainObject(o.tasks)) bad("tasks", "must be an object { blocked, assumed }");
+  else {
+    for (const key of ["blocked", "assumed"]) {
+      const list = o.tasks[key];
+      if (!Array.isArray(list) || !list.every((t) => typeof t === "string" && TASK_ID.test(t))) {
+        bad(`tasks.${key}`, 'must be an array of task ids like "2.4"');
+      }
+    }
+  }
+
+  if (!Array.isArray(o.conflicts) || !o.conflicts.every((c) => typeof c === "string" && !/[\r\n]/.test(c))) {
+    bad("conflicts", "must be an array of one-line strings");
+  } else o.conflicts.forEach((c, i) => prose(`conflicts[${i}]`, c));
+
+  if (!Array.isArray(o.decisions)) bad("decisions", "must be an array of one-line strings (empty when there were none)");
+  else {
+    if (o.decisions.length > 50) bad("decisions", "can hold at most 50 entries");
+    o.decisions.forEach((d, i) => {
+      if (!oneLine(d, 200)) bad(`decisions[${i}]`, "must be one line of 1 to 200 characters");
+      else prose(`decisions[${i}]`, d);
+    });
+  }
+
+  if (!oneLine(o.subject, 100)) bad("subject", "must be one line of 1 to 100 characters");
+  else prose("subject", o.subject);
+  return p;
+}
+
+/**
+ * Problems with a `loopEnd` (the app's word on how the loop ended), given the
+ * merged state so `evidence` can be checked against the docs on the page.
+ */
+export function loopEndProblems(e, state) {
+  const p = [];
+  const bad = (field, rule) => p.push(`loopEnd.${field} ${rule}`);
+  if (!isPlainObject(e)) return ["loopEnd must be an object"];
+  const prose = (field, s) => {
+    if (typeof s === "string") p.push(...proseProblems(s, `loopEnd.${field}`));
+  };
+  if (e.kind !== "stopped" && e.kind !== "finished") bad("kind", 'must be "stopped" or "finished"');
+  if (!oneLine(e.line, 200)) bad("line", "must be one line of 1 to 200 characters");
+  else prose("line", e.line);
+  if (e.evidence !== undefined) {
+    if (typeof e.evidence !== "string" || !(state?.docs || []).some((d) => d && d.id === e.evidence)) {
+      bad("evidence", "must be the id of a doc on the page");
+    }
+  }
+  if (!Array.isArray(e.phases)) bad("phases", "must be an array");
+  else {
+    e.phases.forEach((ph, i) => {
+      if (!isPlainObject(ph)) return bad(`phases[${i}]`, "must be an object { n, name, commit, unfixed, retries }");
+      if (!isPosInt(ph.n)) bad(`phases[${i}].n`, "must be a positive integer");
+      if (typeof ph.name !== "string" || /[\r\n]/.test(ph.name)) bad(`phases[${i}].name`, "must be a one-line string");
+      else prose(`phases[${i}].name`, ph.name);
+      if (ph.commit !== null && !(typeof ph.commit === "string" && /^[0-9a-f]{4,40}$/i.test(ph.commit))) bad(`phases[${i}].commit`, "must be a short hex hash or null");
+      if (!isNonNegInt(ph.unfixed)) bad(`phases[${i}].unfixed`, "must be a non-negative integer");
+      if (!isNonNegInt(ph.retries)) bad(`phases[${i}].retries`, "must be a non-negative integer");
+      for (const key of ["fixed", "skipped", "left", "assumed", "decisions"]) {
+        if (ph[key] !== undefined && !isNonNegInt(ph[key])) bad(`phases[${i}].${key}`, "must be a non-negative integer when present");
+      }
+    });
+  }
+  if (!Array.isArray(e.uncommitted) || !e.uncommitted.every(relativePath)) {
+    bad("uncommitted", "must be an array of relative paths (no leading slash or drive, no .. step, one line each)");
+  } else if (e.uncommitted.length > 200) bad("uncommitted", "can hold at most 200 paths");
+  else e.uncommitted.forEach((f, i) => prose(`uncommitted[${i}]`, f));
+  if (!Array.isArray(e.can) || !e.can.every((c) => LOOP_CAN.includes(c))) {
+    bad("can", `must be an array with entries from ${LOOP_CAN.join(", ")}`);
+  }
+  return p;
+}
+
+// Loop mode adds three optional keys that a blank state does not hold (absent,
+// not null): `loop: { driving: true }` (set by `open --loop`), `loopOutcome`
+// (the skill's report) and `loopEnd` (the app's).
 export function blankState({ sid, workflow, title, project, specDir }) {
   return {
     schema: SCHEMA,
@@ -877,10 +1247,17 @@ export function blankState({ sid, workflow, title, project, specDir }) {
  * starts from a blank page: the last skill's questions, sections, docs,
  * helpers, headline and ending are its record on disk, not the next skill's
  * opening.
- * Only the session's identity carries across. `workspace.json`,
- * `ledger.ndjson` and the cursors live beside `state.json`, so the workspace
- * and the meter outlive every hop.
+ * Only the session's identity and the Ask tab's conversation carry across:
+ * the agent's chat replies stay beside the messages in `chat.ndjson`, which
+ * a hop never touches, or every question asked before it would read as
+ * unanswered. `workspace.json`, `ledger.ndjson` and the cursors live beside
+ * `state.json`, so the workspace and the meter outlive every hop.
  */
 export function switchWorkflow(state, { workflow, title, specDir }) {
-  return { ...blankState({ sid: state.sid, project: state.project, workflow, title, specDir }), created: state.created };
+  const next = { ...blankState({ sid: state.sid, project: state.project, workflow, title, specDir }), created: state.created };
+  // A blank state holds no `loop`, `loopOutcome` or `loopEnd`, so a hop never
+  // carries them over; `open --loop` stamps `loop` again after the switch.
+  for (const key of ["loop", "loopOutcome", "loopEnd"]) delete next[key];
+  if (state.chat) next.chat = state.chat;
+  return next;
 }

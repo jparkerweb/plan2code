@@ -22,7 +22,8 @@ import {
   adopt, banner, connect, fillSky, fitGrowBox, loadState, markSent, maybeWelcome, render, renderFooter,
   renderSidebar, renderWhere, save, startClock, startLooks, stagedPayload, syncWorkspaceScope,
   wakeHoldsChime, wireAsk, wireCards, wireChrome, wireCleanup, wireDashboard, wireDocs, wireEnding,
-  wireActivities, wireHelp, wireLooks, wireNotepad, wireWorkspace,
+  wireActivities, wireLoopSetup, wireHelp, launchSkill, openHelpOn, openLoopSetup, wireLooks, wireNotepad, wirePrefs, wireWorkspace,
+  openPrefs, markSaved, confirmUnsaved, loadAgentsView, wireAgentsView, hasUnsaved, unsavedName, saveOpen, discardOpen, focusOpen,
 } from "./screens/core.js";
 import { sound } from "./sound.js";
 
@@ -34,7 +35,10 @@ import { sound } from "./sound.js";
 // last the session itself (its first state and the stream). The draft's save
 // and the few calls a screen makes into another are handed to state.js first.
 onSave(save);
-useHooks({ banner, fitGrowBox, markSent, maybeWelcome, renderFooter, renderSidebar, renderWhere, stagedPayload, syncWorkspaceScope });
+useHooks({
+  launchSkill, openHelpOn, openLoopSetup, banner, fitGrowBox, markSent, maybeWelcome, renderFooter, renderSidebar, renderWhere, stagedPayload, syncWorkspaceScope,
+  openPrefs, markSaved, confirmUnsaved, loadAgentsView, wireAgentsView, hasUnsaved, unsavedName, saveOpen, discardOpen, focusOpen,
+});
 
 const boot = bootData();
 startLooks(boot);
@@ -46,11 +50,13 @@ wireHelp();
 wireDashboard();
 wireEnding();
 wireLooks();
+wirePrefs();
 wireCleanup();
 wireDocs();
 wireAsk();
 wireNotepad();
 wireActivities();
+wireLoopSetup();
 wireChrome();
 startClock();
 

@@ -80,14 +80,14 @@ test("the page carries its first state, title and badge, so the first paint need
   assert.ok(html.includes('<span class="badge" id="badge">Building</span>'));
   assert.ok(html.includes("Starting Implement"), "the static starting screen names the skill");
   assert.ok(html.includes('rel="modulepreload" href="/app.js"'));
-  cli(["stop", "--session", res.json.sid]);
+  cli(["stop", "--session", res.json.sid, "--force"]);
 });
 
 test("open without --title names the session after the project folder", () => {
   const res = cli(["open", "--workflow", "pathfinder", "--no-open"]);
   const state = JSON.parse(fs.readFileSync(path.join(res.json.session, "state.json"), "utf8"));
   assert.equal(state.title, path.basename(ROOT));
-  cli(["stop", "--session", res.json.sid]);
+  cli(["stop", "--session", res.json.sid, "--force"]);
 });
 
 // A saved dark theme and accent used to flash the default light accent for as
@@ -110,7 +110,7 @@ test("saved looks are painted by the server before any script runs", async () =>
     assert.ok(!css.includes(`data-looks-accent="${DEFAULT_ACCENT}"`), "the default needs no rule");
     const boot = JSON.parse(html.match(/id="boot">([\s\S]*?)<\/script>/)[1]);
     assert.equal(boot.looks.accent, "violet");
-    cli(["stop", "--session", res.json.sid]);
+    cli(["stop", "--session", res.json.sid, "--force"]);
   } finally {
     if (before) fs.writeFileSync(looksFile, before);
     else fs.rmSync(looksFile, { force: true });
@@ -129,7 +129,7 @@ test("static assets revalidate with an ETag instead of downloading again", async
   await first.arrayBuffer();
   const again = await fetch(m[1] + "/app.js", { headers: { cookie, "if-none-match": etag } });
   assert.equal(again.status, 304);
-  cli(["stop", "--session", res.json.sid]);
+  cli(["stop", "--session", res.json.sid, "--force"]);
 });
 
 // The page drew from the inline state; the stream's opening frame would only
@@ -173,7 +173,7 @@ test("the stream skips its opening frame only when the page already has that exa
   await sleep(1200);
   const still = await (await fetch(m[1] + "/state", { headers: { cookie } })).json();
   assert.doesNotMatch(await firstChunk(still.have), /event: state/, "the page's own key: skipped");
-  cli(["stop", "--session", res.json.sid]);
+  cli(["stop", "--session", res.json.sid, "--force"]);
 });
 
 // `open` binds the port and sends the browser before the server has booted.
@@ -227,7 +227,7 @@ test("the card-width presets validate a saved width and fall back to comfortable
   assert.equal(DEFAULT_CARD_WIDTH, "comfortable");
   assert.deepEqual(
     Object.values(CARD_WIDTHS).map((w) => w.px),
-    [720, 880, 1080]
+    [720, 880, 1080, 1440]
   );
 });
 
@@ -360,6 +360,8 @@ test("the scratch sweep removes old patches and helpers, never looks, the pointe
     const kept = [
       file("looks.json"),
       file("workspaces.json"),
+      file("loop-setup.json"),
+      file("loop-reports.json"),
       file("subagents.json"),
       file("pr-hosts.json"),
       file("console-dir"),
@@ -375,7 +377,7 @@ test("the scratch sweep removes old patches and helpers, never looks, the pointe
     const stale = staleScratch(dir, Date.now(), SESSION_MAX_AGE_MS).sort();
     assert.deepEqual(stale, ["helper.mjs", "p2.json"]);
     assert.deepEqual(
-      (await removeScratch(dir, [...stale, "looks.json", "workspaces.json", "subagents.json", "pr-hosts.json", "../p.json", "console-dir", "update-check.json"])).sort(),
+      (await removeScratch(dir, [...stale, "looks.json", "workspaces.json", "loop-setup.json", "loop-reports.json", "subagents.json", "pr-hosts.json", "../p.json", "console-dir", "update-check.json"])).sort(),
       ["helper.mjs", "p2.json"]
     );
     for (const p of removable) assert.equal(fs.existsSync(p), false, p);
@@ -383,6 +385,8 @@ test("the scratch sweep removes old patches and helpers, never looks, the pointe
     assert.deepEqual([...PROTECTED_CONSOLE_FILES].sort(), [
       "console-dir",
       "looks.json",
+      "loop-reports.json",
+      "loop-setup.json",
       "pr-hosts.json",
       "subagents.json",
       "update-check.json",
@@ -662,7 +666,7 @@ test("GET /overview serves the session's spec, and on the dashboard only a scann
     assert.equal((await get(d, "?spec=specs/c")).status, 204, "no overview.md yet");
     assert.equal((await get(d, "?spec=specs/c&file=nope")).status, 204);
   } finally {
-    for (const s of sids) cliIn(root, ["stop", "--session", s]);
+    for (const s of sids) cliIn(root, ["stop", "--session", s, "--force"]);
     fs.rmSync(base, { recursive: true, force: true });
   }
 });
@@ -683,32 +687,28 @@ test("open records worktree and branch, and wakes only a freshly opened dashboar
     cli(["open", "--resume", dash.json.sid, "--no-open"]);
     assert.equal("wake" in readState(dash.json.session), false);
   } finally {
-    cli(["stop", "--session", dash.json.sid]);
+    cli(["stop", "--session", dash.json.sid, "--force"]);
   }
 
   const plan = cli(["open", "--workflow", "plan", "--no-open"]);
   assert.equal("wake" in readState(plan.json.session), false);
-  cli(["stop", "--session", plan.json.sid]);
+  cli(["stop", "--session", plan.json.sid, "--force"]);
 });
 
-test("open reports a month-old session under swept and removes it after printing", async () => {
-  const quiet = cli(["open", "--workflow", "plan", "--no-open"]);
-  assert.equal("swept" in quiet.json, false, "nothing old, nothing reported");
-  cli(["stop", "--session", quiet.json.sid]);
-
+test("open removes a month-old session without printing it", async () => {
   const oldSid = "20250101-101010-abcdef";
   const oldDir = path.join(HOME, "sessions", oldSid);
   fs.mkdirSync(oldDir, { recursive: true });
   fs.writeFileSync(path.join(oldDir, "state.json"), "{}");
   backdate(path.join(oldDir, "state.json"));
   const res = cli(["open", "--workflow", "plan", "--no-open"]);
-  cli(["stop", "--session", res.json.sid]);
-  assert.deepEqual(res.json.swept.sessions, [oldSid]);
+  cli(["stop", "--session", res.json.sid, "--force"]);
+  assert.equal("swept" in res.json, false, "the sweep is housekeeping, not output");
   for (let i = 0; i < 20 && fs.existsSync(oldDir); i++) await new Promise((r) => setTimeout(r, 100));
   assert.equal(fs.existsSync(oldDir), false);
 });
 
-test("open reports a month-old handoff under swept.handoffs and removes both its files", async () => {
+test("open removes a month-old handoff and both its files without printing them", async () => {
   const id = "2025-01-01-0900-handoff";
   fs.mkdirSync(HANDOFFS_DIR, { recursive: true });
   const files = [path.join(HANDOFFS_DIR, id + ".md"), path.join(HANDOFFS_DIR, id + ".json")];
@@ -716,24 +716,23 @@ test("open reports a month-old handoff under swept.handoffs and removes both its
   fs.writeFileSync(files[1], "{}");
   for (const f of files) backdate(f);
   const res = cli(["open", "--workflow", "plan", "--no-open"]);
-  cli(["stop", "--session", res.json.sid]);
-  assert.deepEqual(res.json.swept.handoffs, [id]);
+  cli(["stop", "--session", res.json.sid, "--force"]);
+  assert.equal("swept" in res.json, false, "the sweep is housekeeping, not output");
   for (let i = 0; i < 20 && files.some((f) => fs.existsSync(f)); i++) await new Promise((r) => setTimeout(r, 100));
   assert.deepEqual(files.filter((f) => fs.existsSync(f)), []);
 });
 
-test("post and wait hand back the terminal line; the collected result on disk does not carry it", async () => {
+test("open prints the terminal line; post and wait leave it out until it changes; the collected result on disk does not carry it", async () => {
   const res = cli(["open", "--file", payload("tl.json", BASE), "--no-open"]);
   const s = sessionUrl(res.json.url);
   try {
     const posted = cli(["post", "--session", res.json.sid, "--file", payload("tl2.json", { agent: { status: "waiting" } })]);
-    assert.equal(posted.json.terminalLine, terminalLine(res.json.url));
+    assert.equal(res.json.terminalLine, terminalLine(res.json.url));
+    assert.equal("terminalLine" in posted.json, false, "unchanged, so not repeated");
 
     const waiting = cli(["wait", "--session", res.json.sid, "--seconds", "5"]);
     assert.equal(waiting.status, 10);
-    assert.equal(waiting.json.message, "Waiting on your answer in the web console");
-    assert.match(waiting.json.next, /run this same wait command again/);
-    assert.equal(waiting.json.terminalLine, terminalLine(res.json.url));
+    assert.deepEqual(waiting.json, { waiting: true, open: 1 });
 
     const sent = await fetch(`${s.base}/submit`, {
       method: "POST",
@@ -743,7 +742,8 @@ test("post and wait hand back the terminal line; the collected result on disk do
     assert.equal(sent.status, 200);
     const done = cli(["wait", "--session", res.json.sid, "--seconds", "10"]);
     assert.equal(done.status, 0);
-    assert.equal(done.json.terminalLine, terminalLine(res.json.url));
+    assert.equal("terminalLine" in done.json, false);
+    assert.equal(done.json.reply, "Export format: a");
     const onDisk = JSON.parse(fs.readFileSync(path.join(res.json.session, "result.json"), "utf8"));
     assert.equal("terminalLine" in onDisk, false);
     assert.ok(onDisk.consumedAt);
@@ -752,25 +752,24 @@ test("post and wait hand back the terminal line; the collected result on disk do
     assert.equal(js.status, 200);
     assert.match(js.headers.get("content-type"), /javascript/);
   } finally {
-    cli(["stop", "--session", res.json.sid]);
+    cli(["stop", "--session", res.json.sid, "--force"]);
   }
 });
 
 test("notes/quick-task.md has a quick-task build tick the Plan tab's steps live", () => {
   const md = fs.readFileSync(path.join(ROOT, "src", "web-console", "notes", "quick-task.md"), "utf8");
-  const section = md.slice(md.indexOf("## Quick task (`quick-task`)"), md.indexOf("## Stop requests during a build"));
-  assert.ok(!section.includes('"title": "Build progress"'), "no separate progress tab");
-  assert.match(section, /post after every step/i);
-  assert.ok(section.includes('{ "id": "steps", "state": "settled", "md": "## Steps\\n\\n- [ ] **1.**'), "the plan's Steps start as a checklist");
-  assert.ok(section.includes('"docs": [{ "id": "plan", "blocks": [\n      { "id": "steps"'), "a step post reposts the plan's steps block, its version moving by itself");
+  const section = md;
+  assert.ok(!section.includes('"title":"Build progress"'), "no separate progress tab");
+  assert.match(section, /After each step/);
+  assert.ok(section.includes('{"id":"steps","state":"settled","md":"## Steps\\n\\n- [ ] **1.**'), "the plan's Steps start as a checklist");
+  assert.ok(section.includes('"docs":[{"id":"plan","blocks":[{"id":"steps"'), "a step post reposts the plan's steps block, its version moving by itself");
   assert.ok(section.includes("- [x] **1.** Step one"));
 });
 
 test("notes/quick-task.md has the finished quick task offer Back to the dashboard as well as the review", () => {
   const md = fs.readFileSync(path.join(ROOT, "src", "web-console", "notes", "quick-task.md"), "utf8");
-  const section = md.slice(md.indexOf("## Quick task (`quick-task`)"));
-  const bullet = section.slice(section.indexOf("**The finish after the build:**"), section.indexOf("**Escalated / aborted:**"));
-  assert.ok(bullet.includes('"dashboard": true'));
+  const bullet = md.slice(md.indexOf("**Finish after the build:**"), md.indexOf("**Escalated / aborted:**"));
+  assert.ok(bullet.includes('"dashboard":true'));
   assert.ok(bullet.includes("Review it now"));
 });
 
@@ -795,7 +794,7 @@ test("an image block under the session's shots folder round-trips, and /shots/ s
     const jargon = { docs: [{ id: "shown", blocks: [{ id: "s1", image: "shots/home-page.png", alt: "Grilling the home page" }] }] };
     const refused = cli(["post", "--session", res.json.sid, "--file", payload("shots-jargon.json", jargon)], { expectFail: true });
     assert.equal(refused.status, 3);
-    assert.match(refused.stderr, /alt text contains internal vocabulary/);
+    assert.match(refused.stderr, /alt: contains internal vocabulary/);
     // A changed picture or caption is a new version of the doc.
     const before = readState(res.json.session).docs.find((d) => d.id === "shown").version;
     const recaption = { docs: [{ id: "shown", blocks: [{ id: "s1", image: "shots/home-page.png", alt: "The home page, after the fix" }] }] };
@@ -826,7 +825,7 @@ test("an image block under the session's shots folder round-trips, and /shots/ s
       assert.equal(await raw(p), 404, p);
     }
   } finally {
-    cli(["stop", "--session", res.json.sid]);
+    cli(["stop", "--session", res.json.sid, "--force"]);
   }
 });
 
@@ -864,7 +863,7 @@ test("/app.css is the style files joined in CSS_ORDER with the accent rules last
       await own.arrayBuffer();
     }
   } finally {
-    cli(["stop", "--session", res.json.sid]);
+    cli(["stop", "--session", res.json.sid, "--force"]);
   }
 });
 
@@ -884,7 +883,7 @@ test("the built skills tree serves the same /app.css as the source console", asy
     assert.equal(res.status, 200);
     assert.equal(await res.text(), asset("app.css").body.toString("utf8"));
   } finally {
-    execFileSync(process.execPath, [path.join(built, "console.mjs"), "stop", "--session", json.sid], { env: ENV, cwd: ROOT });
+    execFileSync(process.execPath, [path.join(built, "console.mjs"), "stop", "--session", json.sid, "--force"], { env: ENV, cwd: ROOT });
   }
 });
 
@@ -917,6 +916,6 @@ test("/open-link takes an http or https link and refuses every other kind", asyn
     });
     assert.notEqual(foreign.status, 200, "another site's page cannot open links through the console");
   } finally {
-    cli(["stop", "--session", res.json.sid]);
+    cli(["stop", "--session", res.json.sid, "--force"]);
   }
 });

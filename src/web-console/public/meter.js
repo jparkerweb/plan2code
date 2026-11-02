@@ -6,7 +6,7 @@
 // access at module scope, and its one import is the data-only skills.js: the
 // server, console.mjs, the page and `node --test` all import this file.
 
-import { SKILLS, isMetered, isPhased } from "./skills.js";
+import { FLOW_SKILLS, isMetered, isPhased } from "./skills.js";
 
 // The weights (FR-12): the events that are not a skill's own launch live
 // here, and each skill's weight is its `weight` in skills.js. Tune there or here.
@@ -24,7 +24,7 @@ const EVENT_WEIGHTS = {
   "git-conflict": 1,
 };
 // A skill's fields as a table by workflow, leaving out the entries without one.
-const bySkill = (field) => Object.fromEntries(SKILLS.filter((s) => s[field] !== null).map((s) => [s.workflow, s[field]]));
+const bySkill = (field) => Object.fromEntries(FLOW_SKILLS.filter((s) => s[field] !== null).map((s) => [s.workflow, s[field]]));
 export const WEIGHTS = Object.freeze({ ...EVENT_WEIGHTS, ...bySkill("weight") });
 
 // Workflows whose launch itself scores WEIGHTS[workflow]. Pathfinder,
@@ -32,7 +32,7 @@ export const WEIGHTS = Object.freeze({ ...EVENT_WEIGHTS, ...bySkill("weight") })
 // reports; dashboard and handoff never score; git, changelog, xray and diagnose score 1 on
 // launch (Git then adds its commit tally and conflict help). Derived from
 // skills.js (`metered`).
-export const LAUNCH_COUNTED = Object.freeze(new Set(SKILLS.filter((s) => isMetered(s.workflow)).map((s) => s.workflow)));
+export const LAUNCH_COUNTED = Object.freeze(new Set(FLOW_SKILLS.filter((s) => isMetered(s.workflow)).map((s) => s.workflow)));
 
 // Git's commits weigh what they add up to: each `git-commits` run carries
 // `commits`, and a skill run scores one point per COMMITS_PER_POINT commits,
@@ -65,7 +65,7 @@ export const MAX_TASKS = 999;
 // bonus. The phase's `run` then takes the row over with its final score, so
 // the total only ever climbs. Workflows whose headline counts tasks, derived
 // from skills.js (`phased`):
-export const PROGRESS_WORKFLOWS = Object.freeze(new Set(SKILLS.filter((s) => isPhased(s.workflow)).map((s) => s.workflow)));
+export const PROGRESS_WORKFLOWS = Object.freeze(new Set(FLOW_SKILLS.filter((s) => isPhased(s.workflow)).map((s) => s.workflow)));
 
 // Implement + Review reviews every phase as a stage of the build. A `review`
 // run inside it is that stage, so it scores the phase's TASK_BONUS when it
@@ -120,7 +120,7 @@ export const ANSWERS_PER_POINT = 2;
 
 // The skill names the answers row uses ("7 answers in Plan"), derived from
 // skills.js (`name`).
-const WORKFLOW_NAMES = Object.freeze(Object.fromEntries(SKILLS.map((s) => [s.workflow, s.name])));
+const WORKFLOW_NAMES = Object.freeze(Object.fromEntries(FLOW_SKILLS.map((s) => [s.workflow, s.name])));
 
 // The skill run an entry belongs to, from its ledger id ("L3:..." -> "L3").
 const launchOf = (id) => (typeof id === "string" && id.includes(":") ? id.slice(0, id.indexOf(":")) : "L0");

@@ -32,37 +32,32 @@ import {
 
 /* ------------------------------------------- quick question: the contract */
 
-// Every outcome `wait` had before the chat channel existed, pinned by exit
-// code and by its exact top-level keys. The only change allowed later is the
-// chat keys appearing beside them; anything else breaks an agent somewhere.
-const CHAT_KEYS = new Set(["chat", "pendingChat"]);
-// The workspace channel, allowed beside them the same way.
-const WORKSPACE_KEYS = new Set(["workspace", "pendingWorkspace"]);
+// Every outcome of wait, pinned by exit code and by its exact top-level keys.
+// The agent reads a trimmed line (spec "API Design (outputs)"): what the
+// person sent lives in result.json, so those fields are checked there.
 const pinKeys = (obj, expected, what) =>
-  assert.deepEqual(
-    Object.keys(obj).filter((k) => !CHAT_KEYS.has(k) && !WORKSPACE_KEYS.has(k)).sort(),
-    [...expected].sort(),
-    `${what}: top-level keys changed`
-  );
-const RESULT_KEYS = ["type", "at", "sid", "rev", "actions", "reply", "consumedAt", "terminalLine"];
-const WAITING_KEYS = ["status", "sid", "elapsed", "answered", "total", "staged", "url", "message", "next", "terminalLine"];
-
+  assert.deepEqual(Object.keys(obj).filter((k) => k !== "terminalLine").sort(), [...expected].sort(), what + ": top-level keys changed");
+const RESULT_FILE = (s) => JSON.parse(fs.readFileSync(path.join(s.session, "result.json"), "utf8"));
 
 test("wait's existing outcomes are pinned: submit, images, waiting, cancel, carried and server gone", async () => {
   const s = openSession();
   try {
     const waiting = cli(["wait", "--session", s.sid, "--seconds", "5"]);
     assert.equal(waiting.status, 10);
-    assert.equal(waiting.json.status, "waiting");
-    pinKeys(waiting.json, WAITING_KEYS, "exit 10");
+    assert.equal(waiting.json.waiting, true);
+    assert.equal(waiting.json.open, 1, "the required question still open");
+    pinKeys(waiting.json, ["waiting", "open"], "exit 10");
 
     assert.equal((await s.send("/submit", { actions: [{ i: "q1", type: "answer", kind: "choice", k: "A" }], reply: "Export format: a" })).status, 200);
     const sent = cli(["wait", "--session", s.sid, "--seconds", "10"]);
     assert.equal(sent.status, 0);
-    assert.equal(sent.json.type, "submit");
-    pinKeys(sent.json, RESULT_KEYS, "exit 0 submit");
+    assert.equal(sent.json.reply, "Export format: a");
+    pinKeys(sent.json, ["reply"], "exit 0 submit");
+    const kept = RESULT_FILE(s);
+    for (const k of ["type", "at", "sid", "rev", "actions", "reply", "consumedAt"]) assert.ok(k in kept, "result.json keeps " + k);
+    assert.equal(kept.type, "submit");
 
-    const up = await fetch(`${s.base}/upload`, {
+    const up = await fetch(s.base + "/upload", {
       method: "POST",
       headers: { "content-type": "image/jpeg", cookie: s.cookie, origin: s.base, connection: "close", "x-p2c-name": "a.png" },
       body: JPEG,
@@ -74,8 +69,8 @@ test("wait's existing outcomes are pinned: submit, images, waiting, cancel, carr
     );
     const withImages = cli(["wait", "--session", s.sid, "--seconds", "10"]);
     assert.equal(withImages.status, 0);
-    assert.equal(withImages.json.actions[0].images.length, 1);
-    pinKeys(withImages.json, RESULT_KEYS, "exit 0 with images");
+    pinKeys(withImages.json, ["reply"], "exit 0 with images");
+    assert.equal(RESULT_FILE(s).actions[0].images.length, 1, "result.json holds the image");
 
     // Sent before any wait is running: the next wait hands it over at once.
     assert.equal((await s.send("/submit", { actions: [{ i: "q1", type: "answer", kind: "choice", k: "B" }], reply: "Export format: b" })).status, 200);
@@ -83,20 +78,21 @@ test("wait's existing outcomes are pinned: submit, images, waiting, cancel, carr
     const carried = cli(["wait", "--session", s.sid, "--seconds", "30"]);
     assert.equal(carried.status, 0);
     assert.ok(Date.now() - t0 < 5000, "an uncollected result is delivered at once");
-    pinKeys(carried.json, RESULT_KEYS, "exit 0 carried");
+    assert.equal(carried.json.reply, "Export format: b");
+    pinKeys(carried.json, ["reply"], "exit 0 carried");
 
     assert.equal((await s.send("/cancel", {})).status, 200);
     const cancelled = cli(["wait", "--session", s.sid, "--seconds", "5"]);
     assert.equal(cancelled.status, 30);
-    assert.equal(cancelled.json.type, "cancel");
-    pinKeys(cancelled.json, RESULT_KEYS, "exit 30");
+    assert.equal(RESULT_FILE(s).type, "cancel");
   } finally {
-    cli(["stop", "--session", s.sid]);
+    cli(["stop", "--session", s.sid, "--force"]);
   }
   const gone = cli(["wait", "--session", s.sid, "--seconds", "12"]);
   assert.equal(gone.status, 20);
-  assert.equal(gone.json.status, "server-gone");
-  pinKeys(gone.json, ["status", "sid", "message"], "exit 20");
+  assert.equal(gone.json.gone, true);
+  assert.ok(gone.json.fix.includes(s.sid));
+  pinKeys(gone.json, ["gone", "fix"], "exit 20");
 });
 
 /* --------------------------------------------- quick question: the channel */
@@ -109,28 +105,27 @@ test("a chat message and a card send can both be pending, in either order, and w
     assert.equal((await ask(s, "Where does the export live?")).status, 200, "a pending card never blocks a question");
     const both = cli(["wait", "--session", s.sid, "--seconds", "10"]);
     assert.equal(both.status, 0);
-    assert.equal(both.json.type, "submit");
-    assert.equal(both.json.actions[0].k, "A");
-    assert.ok(both.json.chat.some((e) => e.kind === "message" && e.text === "Where does the export live?"));
+    assert.equal(both.json.chat.length, 1, "chat travels as the seq numbers a reply needs");
+    assert.equal(typeof both.json.chat[0], "number");
     assert.match(both.json.reply, /^Export format: a\n/);
-    assert.match(both.json.reply, /^Quick question: Where does the export live\?$/m);
+    assert.match(both.json.reply, /^Quick question \(\d+\): Where does the export live\?$/m);
 
     assert.equal((await ask(s, "And the header row?")).status, 200);
     assert.equal((await s.send("/submit", EXPORT_A)).status, 200, "a pending question never blocks a card");
     const again = cli(["wait", "--session", s.sid, "--seconds", "10"]);
     assert.equal(again.status, 0);
-    assert.equal(again.json.type, "submit");
-    assert.deepEqual(again.json.chat.map((e) => e.text), ["And the header row?"]);
+    assert.equal(again.json.chat.length, 1);
+    assert.match(again.json.reply, /Quick question \(\d+\): And the header row\?/);
 
     assert.equal((await ask(s, "Just a question")).status, 200);
     const chatOnly = cli(["wait", "--session", s.sid, "--seconds", "10"]);
     assert.equal(chatOnly.status, 0);
-    assert.equal(chatOnly.json.type, "chat");
-    assert.deepEqual(chatOnly.json.actions, []);
-    assert.equal(chatOnly.json.reply, "Quick question: Just a question");
-    assert.ok(chatOnly.json.terminalLine);
+    assert.equal(chatOnly.json.chat.length, 1);
+    assert.equal(chatOnly.json.reply, "Quick question (" + chatOnly.json.chat[0] + "): Just a question");
+    assert.equal(chatOnly.json.type, undefined);
+    assert.equal(chatOnly.json.actions, undefined);
   } finally {
-    cli(["stop", "--session", s.sid]);
+    cli(["stop", "--session", s.sid, "--force"]);
   }
 });
 
@@ -156,9 +151,9 @@ test("wait returns within 100 ms of a chat message landing", async () => {
     const answeredAt = Date.now();
     assert.ok((await printed) - answeredAt < 2000, "wait must hand the chat over well inside its 5 s poll");
     assert.equal(await exited, 0);
-    assert.equal(safeJson(out).type, "chat");
+    assert.match(safeJson(out).reply, /^Quick question \(\d+\): Quick one$/m);
   } finally {
-    cli(["stop", "--session", s.sid]);
+    cli(["stop", "--session", s.sid, "--force"]);
   }
 });
 
@@ -171,27 +166,27 @@ test("the chat command answers at once: 0 with entries, 10 with none, 20 when th
     assert.equal((await (await s.send("/ping", {})).json()).pendingChat, 1, "an uncollected question shows on the heartbeat");
     const got = cli(["chat", "--session", s.sid]);
     assert.equal(got.status, 0);
-    assert.ok(got.json.chat.some((e) => e.text === "Mid-build question"));
-    assert.match(got.json.reply, /Quick question: Mid-build question/);
-    assert.ok(got.json.terminalLine);
+    assert.equal(got.json.chat.length, 1);
+    assert.match(got.json.reply, /Quick question \(\d+\): Mid-build question/);
     const onDisk = JSON.parse(fs.readFileSync(path.join(s.session, "result.json"), "utf8"));
     assert.equal(onDisk.consumedAt, undefined, "the card send is still waiting for wait");
     assert.equal((await (await s.send("/ping", {})).json()).pendingChat, 0);
 
     const none = cli(["chat", "--session", s.sid]);
     assert.equal(none.status, 10);
-    assert.deepEqual(none.json, { chat: [] });
+    assert.deepEqual(none.json, {});
 
     const card = cli(["wait", "--session", s.sid, "--seconds", "10"]);
     assert.equal(card.status, 0);
-    assert.equal(card.json.type, "submit");
-    assert.deepEqual(card.json.chat, [], "the chat went with the chat command, not twice");
+    assert.match(card.json.reply, /^Export format: a/);
+    assert.equal(card.json.chat, undefined, "the chat went with the chat command, not twice");
+    assert.ok(!card.json.reply.includes("Mid-build question"));
   } finally {
-    cli(["stop", "--session", s.sid]);
+    cli(["stop", "--session", s.sid, "--force"]);
   }
   const gone = cli(["chat", "--session", s.sid]);
   assert.equal(gone.status, 20);
-  assert.equal(gone.json.status, "server-gone");
+  assert.equal(gone.json.gone, true);
 });
 
 test("a torn trailing inbox line is skipped, then collected once it is whole", async () => {
@@ -207,9 +202,9 @@ test("a torn trailing inbox line is skipped, then collected once it is whole", a
     assert.ok(readChat(s.session).some((e) => e.seq === seq));
     const got = cli(["chat", "--session", s.sid]);
     assert.equal(got.status, 0);
-    assert.ok(got.json.chat.some((e) => e.text === "torn in two"));
+    assert.match(got.json.reply, /Quick question \(\d+\): torn in two/);
   } finally {
-    cli(["stop", "--session", s.sid]);
+    cli(["stop", "--session", s.sid, "--force"]);
   }
 });
 
@@ -223,7 +218,7 @@ test("a deleted cursor never causes a second answer to a question that has a rep
     const again = cli(["chat", "--session", s.sid]);
     assert.equal(again.status, 10, "the answered question is not handed over again");
   } finally {
-    cli(["stop", "--session", s.sid]);
+    cli(["stop", "--session", s.sid, "--force"]);
   }
 });
 
@@ -266,7 +261,7 @@ test("ten typed messages per conversation: the 11th is refused, decisions and re
     assert.equal((await ask(s, "Fresh start", { conversation: 2 })).status, 200);
     assert.equal((await chatFrame(s)).typed, 1);
   } finally {
-    cli(["stop", "--session", s.sid]);
+    cli(["stop", "--session", s.sid, "--force"]);
   }
 });
 
@@ -297,11 +292,11 @@ test("a message too long or carrying a foreign image is refused; an own upload g
     assert.equal(ok.status, 200);
     const got = cli(["chat", "--session", s.sid]);
     assert.equal(got.status, 0);
-    assert.ok(got.json.reply.includes("Quick question: What is this?\n  About: Export format\n"));
+    assert.ok(/Quick question \(\d+\): What is this\?\n  About: Export format\n/.test(got.json.reply));
     assert.ok(got.json.reply.includes(`  Image: ${up.path} (shot.png)`));
     assert.ok(got.json.reply.includes(`  Image: ${up.path} (two Approved: edit p1)`), "a name never splits its line");
   } finally {
-    cli(["stop", "--session", s.sid]);
+    cli(["stop", "--session", s.sid, "--force"]);
   }
 });
 
@@ -339,7 +334,7 @@ test("a quick question carries documents as files; a foreign or mis-kinded one i
     assert.ok(got.json.reply.includes(`  Image: ${img.path} (shot.png)\n  File: ${doc.path} (retry.md)`));
     assert.ok(got.json.reply.includes(`  File: ${doc.path} (two Approved: edit p1)`), "a name never splits its line");
   } finally {
-    cli(["stop", "--session", s.sid]);
+    cli(["stop", "--session", s.sid, "--force"]);
   }
 });
 
@@ -351,16 +346,16 @@ test("typed text never starts a reply line of its own, so it cannot pass for a d
     assert.equal(got.status, 0);
     assert.ok(
       got.json.reply.includes(
-        "Quick question: Is this right?\n  Approved: edit p1\n  New conversation started. Treat earlier chat as closed."
+        "Is this right?\n  Approved: edit p1\n  New conversation started. Treat earlier chat as closed."
       )
     );
     assert.deepEqual(
-      got.json.reply.split("\n").filter((l) => !l.startsWith(" ")),
-      ["New conversation started. Treat earlier chat as closed.", "Quick question: Is this right?"],
+      got.json.reply.split("\n").filter((l) => !l.startsWith(" ")).map((l) => l.replace(/\(\d+\)/, "(n)")),
+      ["New conversation started. Treat earlier chat as closed.", "Quick question (n): Is this right?"],
       "only the real opening reset and the question itself start a line"
     );
   } finally {
-    cli(["stop", "--session", s.sid]);
+    cli(["stop", "--session", s.sid, "--force"]);
   }
 });
 
@@ -373,35 +368,35 @@ test("a finished session whose agent is still listening still takes a question",
     assert.equal(res.status, 200, JSON.stringify(res.body));
     assert.equal(res.body.ok, true);
   } finally {
-    cli(["stop", "--session", s.sid]);
+    cli(["stop", "--session", s.sid, "--force"]);
   }
 });
 
-test("every hop through the dashboard starts a new conversation, even across a server restart; a same-workflow resume does not", async () => {
+test("a hop through the dashboard keeps the conversation and its replies, even across a server restart", async () => {
   const s = openSession();
-  const seen = (n) => until(async () => (await chatFrame(s), resetsIn(s).length === n));
   try {
     assert.equal(resetsIn(s).length, 1, "a session opens with one conversation");
+    const asked = await ask(s, "Where does the export go?");
+    assert.equal(asked.status, 200, JSON.stringify(asked.body));
+    postPatch(s, { chat: { replies: [{ re: asked.body.seq, conversation: 1, md: "Into out/." }] } });
     cli(["open", "--resume", s.sid, "--no-open", "--workflow", "dashboard"]);
-    assert.ok(await seen(2), "to the dashboard");
-    cli(["open", "--resume", s.sid, "--no-open", "--workflow", "implement"]);
-    assert.ok(await seen(3), "and back out of it");
     cli(["open", "--resume", s.sid, "--no-open", "--workflow", "implement"]);
     await sleep(1500);
-    await chatFrame(s);
-    assert.equal(resetsIn(s).length, 3, "the same workflow again is not a hop");
-    assert.deepEqual(resetsIn(s).map((e) => e.reason), ["start", "switch", "switch"]);
+    const frame = await chatFrame(s);
+    assert.equal(resetsIn(s).length, 1, "no hop starts a new conversation");
+    assert.equal(frame.conversation, 1);
+    assert.ok(JSON.stringify(frame).includes("Into out/."), "the agent's reply rides the hop");
   } finally {
-    cli(["stop", "--session", s.sid]);
+    cli(["stop", "--session", s.sid, "--force"]);
   }
   const back = cli(["open", "--resume", s.sid, "--no-open", "--workflow", "dashboard"]);
   try {
     const fresh = { ...s, ...sessionUrl(back.json.url) };
-    assert.ok(await until(async () => (await chatFrame(fresh), resetsIn(s).length === 4)), "a fresh server still sees the hop");
-    assert.equal(resetsIn(s).at(-1).workflow, "dashboard");
-    assert.equal((await chatFrame(fresh)).conversation, 4);
+    const frame = await chatFrame(fresh);
+    assert.equal(resetsIn(s).length, 1, "a fresh server keeps it too");
+    assert.equal(frame.conversation, 1);
   } finally {
-    cli(["stop", "--session", s.sid]);
+    cli(["stop", "--session", s.sid, "--force"]);
   }
 });
 
@@ -429,7 +424,7 @@ test("a reply proposing an edit under the running spec is refused; a valid reply
     const onDisk = readState(s.session);
     assert.deepEqual(onDisk.chat.replies.map((r) => r.id), ["r1"], "nothing was written");
   } finally {
-    cli(["stop", "--session", s.sid]);
+    cli(["stop", "--session", s.sid, "--force"]);
   }
 });
 
@@ -437,12 +432,48 @@ test("a reply proposing an edit under the running spec is refused; a valid reply
 // fenced block, so the agent has to be told when and how to write one.
 test("console-chat.md teaches the prompt block: when, what it holds, and not to open it with a command word", () => {
   const text = fs.readFileSync(path.join(ROOT, "src", "web-console", "console-chat.md"), "utf8");
-  const section = text.split(/^## /m).find((s) => s.startsWith("Prompts to carry away"));
-  assert.ok(section, "console-chat.md has no 'Prompts to carry away' section");
+  const section = text.split(/^## /m).find((s) => s.startsWith("A prompt to carry away"));
+  assert.ok(section, "console-chat.md has no 'A prompt to carry away' section");
   assert.match(section, /fenced block/);
   assert.match(section, /Copy/);
-  assert.match(section, /paste it into the Ask tab/);
+  assert.match(section, /paste into the Ask tab/);
   assert.match(section, /out of scope/);
   assert.match(section, /files to read/);
   assert.doesNotMatch(section, /\u2014/, "no em dash in the section");
+});
+
+/* ------------------------------------- quick question: arrives once (FR-18) */
+
+test("a Quick question arrives once: a numbered reply line, the seq in chat, no full entries, and a reply with re clears the warning", async () => {
+  const s = openSession();
+  try {
+    const asked = await ask(s, "Where does the export live?");
+    assert.equal(asked.status, 200);
+    const seq = asked.body.seq;
+    const got = cli(["wait", "--session", s.sid, "--seconds", "10"]);
+    assert.equal(got.status, 0);
+    assert.ok(got.json.reply.endsWith(`Quick question (${seq}): Where does the export live?`), "the numbered line");
+    assert.equal(got.json.reply.split("\n").filter((l) => l.startsWith("Quick question")).length, 1);
+    assert.deepEqual(got.json.chat, [seq], "chat is the seq numbers a reply needs");
+    assert.deepEqual(Object.keys(got.json).filter((k) => !["read", "terminalLine"].includes(k)).sort(), ["chat", "reply"], "no full chat entries or old fields");
+    assert.equal(got.stdout.split(`Where does the export live?`).length - 1, 1, "the question text appears once in the output");
+
+    // Handed over and not answered: the next slice warns, naming the seq.
+    const waiting = cli(["wait", "--session", s.sid, "--seconds", "5"]);
+    assert.equal(waiting.status, 10);
+    assert.deepEqual(waiting.json.unansweredChat, [seq]);
+    assert.match(waiting.json.warning, new RegExp(`Quick questions ${seq} have no reply yet`));
+
+    // A reply with re: <seq> still validates and clears the warning.
+    assert.equal(postPatch(s, { chat: { replies: [{ re: seq, conversation: 1, md: "In out/." }] } }).status, 0);
+    const after = cli(["wait", "--session", s.sid, "--seconds", "5"]);
+    assert.equal(after.status, 10);
+    assert.equal(after.json.unansweredChat, undefined);
+    assert.equal(after.json.warning, undefined);
+
+    // It is not handed over a second time.
+    assert.equal(cli(["chat", "--session", s.sid]).status, 10);
+  } finally {
+    cli(["stop", "--session", s.sid, "--force"]);
+  }
 });

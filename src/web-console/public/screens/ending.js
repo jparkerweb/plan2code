@@ -42,9 +42,14 @@ import {
   agentWorking,
   awaitingReply,
   isDashboard,
+  loopDriving,
 } from "../selectors.js";
+
+// What the session buttons say while the Implementation Loop drives: its own
+// strip in the app's top bar stops it, not this page.
+const LOOP_LOCK_TITLE = "The loop is building. Stop it from the banner at the top of the window.";
 import { docSavedNote, downloadDoc } from "../doc-files.js";
-import { startNewSession } from "../app-bridge.js";
+import { startNewSession, tellApp } from "../app-bridge.js";
 import { pendingNotes } from "../uploads.js";
 
 // The end of the session, and the only screen in this page whose job is to
@@ -152,7 +157,110 @@ function closeGuideHeld() {
   return ["review", "commit", "changelog", "dashboard", "launch"].includes(page.local.afterBuild) || reviewPending() === "asked";
 }
 
+// Which stop-screen button was pressed and is waiting on the app's answer, so a
+// second press cannot send the same request twice.
+let loopPressed = null;
+
+const LOOP_BUTTONS = [
+  ["resume", "loop-resume", "Resume the loop", "primary"],
+  ["fix", "loop-fix", "Fix it by hand", ""],
+  ["finalize", "loop-finalize", "Finalize", "primary"],
+];
+
+function shortHash(h) {
+  return typeof h === "string" ? h.slice(0, 7) : "";
+}
+
+/**
+ * How the Implementation Loop ended, drawn from the app's `loopEnd`: a stop
+ * (why, what was committed, what is left uncommitted, what can be done next) or
+ * a finish (every phase built, its commit, and a count of each kind of decision
+ * its agent made; the report behind the button holds them all).
+ */
+export function renderLoopEnd(end) {
+  const card = el("article", "card handoff loop-end");
+  const finished = end.kind === "finished";
+  card.appendChild(el("p", "card-kicker", finished ? "Loop finished" : "Loop stopped"));
+  card.appendChild(el("h2", null, finished ? "Every phase is built" : end.line));
+  if (finished && end.line) card.appendChild(el("p", "loop-line", end.line));
+
+  const evidence = end.evidence && docs().find((d) => d.id === end.evidence);
+  if (evidence) {
+    const read = el("button", "btn small", finished ? "Read the full report" : "Read why, and the report so far");
+    read.type = "button";
+    read.addEventListener("click", () => {
+      page.view = "doc:" + evidence.id;
+      redraw();
+    });
+    card.appendChild(read);
+  }
+
+  const phases = Array.isArray(end.phases) ? end.phases : [];
+  if (phases.length) {
+    const table = el("table", "loop-end-phases");
+    const head = el("tr");
+    const cols = finished ? ["Phase", "Commit", "Fixed", "Not fixed", "Left open", "Assumed", "Other decisions", "Retries"] : ["Phase", "Commit"];
+    for (const c of cols) head.appendChild(el("th", null, c));
+    table.appendChild(head);
+    for (const ph of phases) {
+      const row = el("tr");
+      row.appendChild(el("td", null, `Phase ${ph.n}: ${ph.name}`));
+      const commit = el("td");
+      if (ph.commit) commit.appendChild(el("code", null, shortHash(ph.commit)));
+      else commit.textContent = "not committed";
+      row.appendChild(commit);
+      if (finished) {
+        for (const count of [ph.fixed, ph.skipped, ph.left, ph.assumed, ph.decisions, ph.retries]) {
+          row.appendChild(el("td", null, String(count ?? 0)));
+        }
+      }
+      table.appendChild(row);
+    }
+    card.appendChild(table);
+  }
+
+  const files = Array.isArray(end.uncommitted) ? end.uncommitted : [];
+  if (files.length) {
+    card.appendChild(el("h3", null, "Uncommitted in this phase"));
+    const list = el("ul", "loop-end-files");
+    const fill = (items, into) => items.forEach((f) => into.appendChild(el("li", null, f)));
+    fill(files.slice(0, 10), list);
+    if (files.length > 10) {
+      const more = el("details");
+      more.appendChild(el("summary", null, `${files.length - 10} more files`));
+      const rest = el("ul", "loop-end-files");
+      fill(files.slice(10), rest);
+      more.appendChild(rest);
+      card.append(list, more);
+    } else {
+      card.appendChild(list);
+    }
+  }
+
+  const can = Array.isArray(end.can) ? end.can : [];
+  const actions = el("div", "loop-end-actions");
+  for (const [key, message, label, kind] of LOOP_BUTTONS) {
+    if (!can.includes(key)) continue;
+    const b = el("button", "btn" + (kind ? " " + kind : ""), label);
+    b.type = "button";
+    b.disabled = page.gone || (loopPressed === message && !page.loopAction);
+    b.addEventListener("click", () => {
+      loopPressed = message;
+      page.loopAction = null;
+      tellApp(message);
+      redraw();
+    });
+    actions.appendChild(b);
+  }
+  if (actions.childElementCount) card.appendChild(actions);
+  if (page.loopAction && !page.loopAction.ok) {
+    card.appendChild(el("p", "loop-error", page.loopAction.error));
+  }
+  return card;
+}
+
 export function renderHandoff(fin) {
+  if (page.S && page.S.loopEnd) return renderLoopEnd(page.S.loopEnd);
   const card = el("article", "card handoff");
   card.appendChild(el("p", "card-kicker", finishPaused(fin) ? "Session paused" : "Session ended"));
   card.appendChild(el("h2", null, fin.headline));
@@ -586,8 +694,8 @@ export function renderStopButton() {
   const gate = turnGate({ gone: page.gone, pendingResult: page.pendingResult, waiting: agentHasTheBall() });
   // A way home in flight holds Stop back too, unless the agent went quiet
   // after collecting it: Stop's resume screen is then the only way out.
-  b.disabled = Boolean(gate) || (Boolean(page.local.homeward) && !agentAdrift());
-  b.title = {
+  b.disabled = Boolean(gate) || (Boolean(page.local.homeward) && !agentAdrift()) || loopDriving();
+  b.title = loopDriving() ? LOOP_LOCK_TITLE : {
     gone: "Not connected right now.",
     pending: "Your last answers are still being picked up. You can stop once they have been.",
     waiting: "Plan2Code is working on your answers. You can stop once it replies.",
@@ -617,8 +725,8 @@ export function renderHomeButton() {
     warned: Boolean(page.S) && Boolean(stopWarning()),
   });
   b.hidden = st.hidden;
-  b.disabled = st.disabled;
-  b.title = st.title;
+  b.disabled = st.disabled || loopDriving();
+  b.title = loopDriving() ? LOOP_LOCK_TITLE : st.title;
 }
 
 function openHomeConfirm() {

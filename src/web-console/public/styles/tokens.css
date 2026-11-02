@@ -46,6 +46,7 @@
    which validates the saved choice and paints data-width on first load. */
 :root[data-width="narrow"] { --card-width: 720px; }
 :root[data-width="wide"] { --card-width: 1080px; }
+:root[data-width="ultrawide"] { --card-width: 1440px; }
 
 /* Dark is written twice on purpose, and the duplication is the whole mechanism.
    The first copy follows the system unless the person has explicitly asked for

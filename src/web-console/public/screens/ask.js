@@ -1,8 +1,8 @@
 // Plan2Code Web Console - the Ask chat, the Subagents tab, and attaching files to notes.
 
 import { page, saveNow, redraw, freshChat, hooks, scrollMemory, setDraft } from "../state.js";
-import { chatOffline, chatView, sendState as chatSendState, newestReplyId, CHAT_MAX_CHARS, nextAbout, CHAT_MAX_ATTACHMENTS, contextOptions } from "../chat.js";
-import { finish, activity, agentAdrift, isDashboard, selSpec, byId, isOpen } from "../selectors.js";
+import { chatAnswering, chatOffline, chatView, sendState as chatSendState, newestReplyId, CHAT_MAX_CHARS, nextAbout, CHAT_MAX_ATTACHMENTS, contextOptions } from "../chat.js";
+import { finish, activity, agentAdrift, isDashboard, selSpec, byId, isOpen, loopAskLocked, loopDriving } from "../selectors.js";
 import { el, md, isMac, lightDismiss, shortTime } from "../render.js";
 import { startersFor } from "../starters.js";
 import { looks } from "../looks.js";
@@ -37,6 +37,7 @@ function askFrame() {
     agent: page.S.agent,
     agentLastSeenMs: Date.parse(page.agentLastSeen),
     now: Date.now(),
+    answering: chatAnswering(base),
   });
   return { ...base, offline };
 }
@@ -45,7 +46,13 @@ export function askState() {
   const frame = askFrame();
   const shown = chatView(frame, { pendingSends: page.local.chat.pending, agentActivity: activity() });
   const pendingSendCount = shown.rows.filter((r) => r.pending && !r.failed).length;
-  return { frame, view: shown, send: chatSendState({ frameChat: frame, gone: page.gone, pendingSendCount }) };
+  const send = chatSendState({ frameChat: frame, gone: page.gone, pendingSendCount });
+  // The Implementation Loop locks Ask like everything else it drives (FR-15),
+  // unless a question waits for the person (FR-14).
+  if (send.canType && loopAskLocked()) {
+    return { frame, view: shown, send: { state: "ok", text: "Ask is off while the loop builds.", canType: false } };
+  }
+  return { frame, view: shown, send };
 }
 
 // The conversation a send belongs to. The page's own record wins over the
@@ -760,7 +767,8 @@ export function renderSubagentsButton() {
   btn.setAttribute("aria-pressed", String(Boolean(page.subagentsFrame.on)));
   btn.title = label;
   btn.setAttribute("aria-label", label);
-  btn.disabled = page.gone;
+  // The Subagents switch is the person's setting for the next agent; the loop's phases are already started.
+  btn.disabled = page.gone || loopDriving();
 }
 
 // The Subagents dialog, filled from the frame each time it opens. A null

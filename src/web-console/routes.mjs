@@ -31,6 +31,8 @@ import { checkDocument, cleanupFindings, readSpecFile, removeCleanup } from "./s
 import { SHOTS_DIR_NAME, SHOT_NAME, shotType } from "./patches.mjs";
 import { appendChat, currentConversation, pendingChatCount, typedCount } from "./inbox.mjs";
 import { specKey } from "./workspace.mjs";
+import { readLoopSetup, saveLoopSetup } from "./loop-setup.mjs";
+import { phaseChecklist } from "./spec-files.mjs";
 import {
   PR_HOST_KINDS,
   readSubagentSetting,
@@ -115,6 +117,8 @@ const ROUTES = [
   { match: (p) => Object.hasOwn(WORKSPACE_EDITS, p), method: "POST", origin: true, run: workspaceEdit },
   { path: "/workspace/scope", method: "POST", origin: true, run: workspaceScope },
   { path: "/workspace/browse", method: "POST", origin: true, run: workspaceBrowse },
+  { path: "/loop-setup", method: "GET", run: loopSetupGet },
+  { path: "/loop-setup", method: "POST", origin: true, run: loopSetupPost },
   { path: "/cancel", method: "POST", origin: true, run: cancel },
   { path: "/ping", method: "POST", run: ping },
   { path: "/bye", origin: true, run: bye },
@@ -418,7 +422,7 @@ function draft(req, res, ctx) {
  * Whittle a POSTed settings object down to what a settings file may hold.
  * The page only sends { theme, accent } today, but the file is shared and
  * forward-compatible: any flat string/number/boolean may live in it. Nested
- * objects, arrays and a hundred-key dump may not — this is a preference file,
+ * objects, arrays and a two-hundred-key dump may not: this is a preference file,
  * not free storage, and it is read back into the page unfiltered.
  */
 function cleanLooks(input) {
@@ -428,7 +432,9 @@ function cleanLooks(input) {
     if (k === "__proto__" || k.length > 64) continue;
     const t = typeof v;
     if (t === "number" || t === "boolean" || (t === "string" && v.length <= 256)) out[k] = v;
-    if (Object.keys(out).length > 40) return null;
+    // The Activities' best scores alone take a key per game and per golf
+    // course, so the cap leaves room for them all.
+    if (Object.keys(out).length > 120) return null;
   }
   return Object.keys(out).length ? out : null;
 }
@@ -632,7 +638,7 @@ function agentsTest(req, res) {
   });
 }
 
-// User Preferences -> Cleanup. `{ scan: true }` lists what is not needed in
+// User Preferences -> System -> Cleanup. `{ scan: true }` lists what is not needed in
 // ~/.plan2code and the project's old completed specs; `{ delete: [id] }`
 // removes those of the ids a fresh scan still finds. Never this session,
 // never a path the page sent.
@@ -1307,6 +1313,57 @@ function chatDecision(req, res, ctx) {
     ctx.rev++;
     ctx.pushState();
     return json(res, 200, { ok: true, seq: entry.seq });
+  });
+}
+
+/* ---------------------------------------------- the Implementation Loop */
+
+// The Implementation Loop's setup for this project (loop-setup.mjs): what was
+// saved over the defaults. The quick check is text the console only stores.
+const loopProject = (ctx) => (ctx.readState() || {}).project || ctx.project || ctx.worktree() || "";
+
+// `?spec=specs/<name>` adds the setup screen's read-only facts (FR-3): the
+// phases not yet marked done, the branch and the count of uncommitted files.
+// The server reads the project here and never writes it.
+function loopSetupGet(req, res, ctx, url) {
+  const answer = readLoopSetup(loopProject(ctx));
+  const spec = url && url.searchParams.get("spec");
+  if (spec === null || spec === undefined) return json(res, 200, answer);
+  if (!/^specs\/[^/\\]+$/.test(spec) || /^specs\/\./.test(spec)) return json(res, 400, { error: "spec must be a folder directly under specs/" });
+  const state = ctx.readState() || {};
+  let phasesLeft = [];
+  try {
+    const overview = fs.readFileSync(path.join(loopProject(ctx), spec, "overview.md"), "utf8");
+    phasesLeft = phaseChecklist(overview)
+      .filter((p) => p.marker !== "x" && p.marker !== "X")
+      .map((p) => ({ n: p.number, name: p.name }));
+  } catch {
+    /* no overview.md: nothing to build */
+  }
+  const pending = state.scan && Number.isInteger(state.scan.pending) ? state.scan.pending : null;
+  // What to prefill an empty quick check with: the project's own build, then
+  // lint, script. Text only; nothing here runs it.
+  let suggestedQuickCheck = "";
+  try {
+    const scripts = JSON.parse(fs.readFileSync(path.join(loopProject(ctx), "package.json"), "utf8")).scripts || {};
+    const name = ["build", "lint"].find((n) => typeof scripts[n] === "string");
+    if (name) suggestedQuickCheck = "npm run " + name;
+  } catch {
+    /* no package.json, or not JSON: no suggestion */
+  }
+  return json(res, 200, { ...answer, phasesLeft, branch: state.branch || "", pending, suggestedQuickCheck });
+}
+
+function loopSetupPost(req, res, ctx) {
+  return readBody(req, (err, body) => {
+    if (err && err.tooBig) return json(res, 413, { error: "too large" });
+    if (err || !body || typeof body !== "object" || Array.isArray(body)) return json(res, 400, { ok: false, problems: ["the setup must be a JSON object"] });
+    try {
+      return json(res, 200, { ok: true, setup: saveLoopSetup(loopProject(ctx), body) });
+    } catch (e) {
+      if (Array.isArray(e.problems)) return json(res, 400, { ok: false, problems: e.problems });
+      return json(res, 500, { error: String(e.message) });
+    }
   });
 }
 

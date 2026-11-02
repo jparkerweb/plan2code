@@ -20,7 +20,7 @@ import { GONE_AFTER_MS } from "../src/web-console/public/screens/core.js";
 // The agent's side of `stop`, leaving the browser context open (s.stop()
 // closes it, which would hide what the page does next).
 async function stopServer(s) {
-  cli(["stop", "--session", s.sid], { cwd: s.project });
+  cli(["stop", "--session", s.sid, "--force"], { cwd: s.project });
   assert.ok(await until(async () => !(await s.answers()), 5000), "the server still answers after stop");
 }
 

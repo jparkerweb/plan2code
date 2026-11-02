@@ -210,6 +210,24 @@ export function shouldChime(prevDot, nextDot) {
 // The page's own "has drifted away" threshold for an agent that is waiting.
 const ADRIFT_MS = 3 * 60 * 1000;
 
+// How long an agent answering an Ask message may go without checking in. It
+// is out of `wait` while it answers, and an approved edit can run for minutes.
+export const ASK_BUSY_MS = 10 * 60 * 1000;
+
+/**
+ * Whether the agent has picked up an Ask message (or an edit decision) and
+ * not replied to it yet: busy with it, not gone.
+ */
+export function chatAnswering(frameChat) {
+  const chat = chatOf(frameChat);
+  const messages = Array.isArray(chat.messages) ? chat.messages : [];
+  const pickedUp = Number.isInteger(chat.pickedUp) ? chat.pickedUp : 0;
+  for (const [seq, answered] of answeredFlags(messages)) {
+    if (!answered && seq <= pickedUp) return true;
+  }
+  return false;
+}
+
 /**
  * Whether nobody is there to answer a chat message. A finished session's agent
  * is often still listening through its last wait (the review and dashboard
@@ -217,10 +235,10 @@ const ADRIFT_MS = 3 * 60 * 1000;
  * not end the chat — going quiet does. Offline once the agent has been silent
  * longer than the page would tolerate before calling it stuck (working) or
  * adrift (anything else), which is also the only signal left once the server
- * is gone.
+ * is gone. An Ask message in hand (`answering`) stretches either to ASK_BUSY_MS.
  */
-export function chatOffline({ finish, agent, agentLastSeenMs, now }) {
+export function chatOffline({ finish, agent, agentLastSeenMs, now, answering = false }) {
   const silent = now - agentLastSeenMs;
-  if (agent && agent.status === "working") return silent > quietLimitMs(agent, STALE_MS);
-  return silent > quietLimitMs(agent, ADRIFT_MS);
+  const limit = quietLimitMs(agent, agent && agent.status === "working" ? STALE_MS : ADRIFT_MS);
+  return silent > (answering ? Math.max(limit, ASK_BUSY_MS) : limit);
 }

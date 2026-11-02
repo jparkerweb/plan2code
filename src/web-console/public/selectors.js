@@ -7,6 +7,7 @@ import { page, redraw } from "./state.js";
 import { boardAwaiting } from "./git-board.js";
 import { defaultSpec, reviewOffer, dashboardOffer, submittedAwaiting, quietLimitMs } from "./answers.js";
 import { activityLabel, workingLine } from "./labels.js";
+import { ASK_BUSY_MS, chatAnswering } from "./chat.js";
 
 export const WORKING_GRACE_MS = 5 * 60 * 1000;
 
@@ -17,6 +18,33 @@ export const WORKING_GRACE_MS = 5 * 60 * 1000;
 // failure. `wait` pokes /health every five seconds, so either threshold is
 // many missed pokes, not a slow one.
 const ADRIFT_MS = 3 * 60 * 1000;
+
+// The Implementation Loop is driving this page: the app started the session
+// with `open --loop`, and no `loopEnd` has been posted yet. Locks the page
+// (FR-15); the stop and finish screens end it.
+export const loopDriving = () => Boolean(page.S && page.S.loop && page.S.loop.driving === true && !page.S.loopEnd);
+
+// Driving, and a required question the loop does not handle itself is open:
+// the one case where its card (and Ask) unlock (FR-14).
+export const loopWaiting = () =>
+  loopDriving() &&
+  openItems().some((i) => i.required !== false && i.handledBy !== "loop");
+
+// The ids of the cards the loop is waiting on the person for, as one string:
+// what `local.askLockedAfterSend` remembers, so Ask locks again after a Send
+// and stays locked until a different question waits (FR-14).
+export const loopWaitingKey = () =>
+  loopWaiting()
+    ? openItems()
+        .filter((i) => i.required !== false && i.handledBy !== "loop")
+        .map((i) => i.id)
+        .sort()
+        .join("|")
+    : "";
+
+// Ask is off while the loop drives, except while a question waits and no Send
+// has answered that same question yet.
+export const loopAskLocked = () => loopDriving() && !(loopWaiting() && page.local.askLockedAfterSend !== loopWaitingKey());
 
 export const items = () => (page.S && Array.isArray(page.S.items) ? page.S.items : []);
 
@@ -200,11 +228,18 @@ export const doingNow = () => workingLine(page.S && page.S.agent, page.S && page
 // well clear of its idle deadline, so the server happily outlives the agent
 // for hours. Until now nothing said so unless the agent had also declared
 // itself "working", and the normal state while someone answers is "waiting".
+//
+// An agent answering an Ask message is out of `wait` too, and busy rather than
+// gone, so it gets ASK_BUSY_MS before anything calls it adrift.
 export function agentAdrift() {
   if (!page.agentLastSeen || page.gone || finish()) return false;
   const silent = Date.now() - Date.parse(page.agentLastSeen);
-  return silent > (page.pendingResult ? uncollectedLimit() : patience(ADRIFT_MS));
+  const limit = page.pendingResult ? uncollectedLimit() : patience(ADRIFT_MS);
+  return silent > (chatAnswering(page.chatFrame) ? Math.max(limit, ASK_BUSY_MS) : limit);
 }
+
+// Answering an Ask message, and not yet quiet for long enough to doubt it.
+export const askBusy = () => chatAnswering(page.chatFrame) && !agentAdrift();
 
 // With answers sent and nothing collecting them, the agent's quiet allowance
 // stops counting: those answers are what it is meant to come back for. An

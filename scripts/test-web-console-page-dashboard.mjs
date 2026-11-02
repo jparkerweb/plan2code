@@ -207,6 +207,8 @@ const pickedChip = (main, name) => main.locator('button[aria-current="true"]', {
 test("picking Start from scratch instead of a spec grays Document, and a launch then carries no spec", async (t) => {
   const s = await openSession(await suite.browser(), { t, workflow: "dashboard", payload: MENU, project: tempProject(DRAFT_PROJECT) });
   const main = await toTheMenu(s);
+  // A grayed card has to show to be checked, whatever an earlier test left.
+  await hideUnavailable(main, false);
   const document = lightOf(main, "/plan2code-2-document");
   await pickedChip(main, "demo").waitFor();
   assert.equal(await document.isEnabled(), true, "Document is lit for the drafted spec");

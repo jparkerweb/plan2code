@@ -29,7 +29,7 @@ test("another console's cookie beside ours does not lock this one out", async ()
     assert.equal(legacy.status, 403);
     await legacy.arrayBuffer();
   } finally {
-    cli(["stop", "--session", s.sid]);
+    cli(["stop", "--session", s.sid, "--force"]);
   }
 });
 
@@ -145,7 +145,7 @@ test("a cancel that could not be written answers 500 and tells nobody", async ()
     fs.rmSync(blocker, { recursive: true, force: true });
     assert.equal((await s.send("/cancel", {})).status, 200, "and once it can land, it does");
   } finally {
-    cli(["stop", "--session", s.sid]);
+    cli(["stop", "--session", s.sid, "--force"]);
   }
 });
 
@@ -158,7 +158,7 @@ test("wait refuses a --seconds that is not a number instead of spinning", () => 
       assert.match(res.stderr, /--seconds must be a number/);
     }
   } finally {
-    cli(["stop", "--session", s.sid]);
+    cli(["stop", "--session", s.sid, "--force"]);
   }
 });
 
@@ -223,6 +223,6 @@ test("an image block outside the session's shots folder, or not an image, is ref
     assert.equal(res.status, 3);
     assert.match(res.stderr, /cannot also carry "md" or "file"/);
   } finally {
-    cli(["stop", "--session", s.sid]);
+    cli(["stop", "--session", s.sid, "--force"]);
   }
 });

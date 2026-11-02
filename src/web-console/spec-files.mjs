@@ -39,6 +39,40 @@ export function statusOf(text) {
 }
 
 /**
+ * The Phase Checklist rows of an overview.md as `[{ number, marker, name }]`
+ * (the first "Phase N" on each checkbox line names the phase), in file order;
+ * empty when there is no checklist. Read-only facts for the loop's setup
+ * screen: the scripts that write the marks stay src/skill-scripts/specs.mjs.
+ */
+export function phaseChecklist(overview) {
+  const lines = (overview || "").split(/\r?\n/);
+  const at = lines.findIndex((l) => /^#{1,6}\s+.*Phase Checklist/i.test(l));
+  if (at < 0) return [];
+  // The section runs to the next heading of the same or a higher level, so a
+  // sub-heading inside the checklist does not cut it short.
+  const level = lines[at].match(/^#+/)[0].length;
+  const rows = [];
+  for (let i = at + 1; i < lines.length; i++) {
+    const heading = lines[i].match(/^(#+)\s/);
+    if (heading && heading[1].length <= level) break;
+    const box = lines[i].match(CHECKBOX_RE);
+    if (!box) continue;
+    const text = lines[i]
+      .replace(CHECKBOX_RE, "")
+      .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
+      .replace(/[*_`]/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+    const num = text.match(/\bPhase\s+(\d+)\b/i);
+    if (!num) continue;
+    const after = text.slice(num.index + num[0].length).replace(/^\s*[:\-–—]\s*/, "");
+    const name = after.split(/\s+[-–—]\s+|\s+\(|\s+_\(|:\s|\s+see\s+phase-/i)[0].replace(/\s*phase-\d+\.md\s*$/i, "").trim();
+    rows.push({ number: Number(num[1]), marker: box[1], name: name.replace(/\s*\[Milestone[^\]]*\]\s*$/i, "") || `Phase ${num[1]}` });
+  }
+  return rows;
+}
+
+/**
  * A phase file's tasks by where they stand. The task lines when the file has
  * them, so an Acceptance Criteria checkbox is not counted as a task; every
  * checkbox in a file written before that format. `[?]` (assumed done) is

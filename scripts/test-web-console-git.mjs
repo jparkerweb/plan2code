@@ -18,7 +18,7 @@ import {
   resumeCommand,
   SKILL_CATALOG,
 } from "../src/web-console/public/answers.js";
-import { SKILLS } from "../src/web-console/public/skills.js";
+import { FLOW_SKILLS as SKILLS } from "../src/web-console/public/skills.js";
 import { breakdownFrom, pointsFrom } from "../src/web-console/public/meter.js";
 import {
   BRANCH_TYPES,
@@ -107,10 +107,10 @@ test("git: open --workflow git writes state.git, and a dashboard open writes non
     assert.equal(git.repo, true);
     assert.equal(git.head.branch, "main");
     assert.equal(git.refreshFailed, false);
-    r.cli(["stop", "--session", opened.json.sid]);
+    r.cli(["stop", "--session", opened.json.sid, "--force"]);
     const dash = r.open("--workflow", "dashboard");
     assert.equal("git" in readState(dash.json.session), false, "the dashboard gets a scan, not a board");
-    r.cli(["stop", "--session", dash.json.sid]);
+    r.cli(["stop", "--session", dash.json.sid, "--force"]);
   } finally {
     r.cleanup();
   }
@@ -131,7 +131,7 @@ test("git: a reread post lands the card and a fresh state.git in one write", () 
     assert.equal(after.git.head.ahead, 1, "and the board moved with it");
     assert.ok(Date.parse(after.git.at) >= Date.parse(first.at));
     assert.equal("reread" in after, false, "reread never reaches the state");
-    r.cli(["stop", "--session", sid]);
+    r.cli(["stop", "--session", sid, "--force"]);
   } finally {
     r.cleanup();
   }
@@ -155,7 +155,7 @@ test("git: refreshFailed is set by the agent and cleared by a newer FETCH_HEAD",
     assert.equal(readState(session).git.refreshFailed, false, "a newer FETCH_HEAD clears it");
     r.cli(["open", "--resume", sid, "--no-open", "--file", payload("git-open-fail.json", { reread: { refreshFailed: true } })]);
     assert.equal(readState(session).git.refreshFailed, true, "open --file carries the agent's flag too");
-    r.cli(["stop", "--session", sid]);
+    r.cli(["stop", "--session", sid, "--force"]);
   } finally {
     r.cleanup();
   }
@@ -168,20 +168,20 @@ test("git: reread is refused off the git workflow or malformed, and a patch neve
     const before = fs.readFileSync(path.join(plan.session, "state.json"), "utf8");
     const off = r.cli(["post", "--session", plan.sid, "--file", payload("git-off.json", { reread: true, items: [gitCard] })]);
     assert.equal(off.status, 3);
-    assert.match(off.stderr, /reread only goes with the git workflow/);
+    assert.match(off.stderr, /reread: only goes with the git workflow/);
     assert.equal(fs.readFileSync(path.join(plan.session, "state.json"), "utf8"), before, "the state is unchanged");
-    r.cli(["stop", "--session", plan.sid]);
+    r.cli(["stop", "--session", plan.sid, "--force"]);
 
     const { sid } = r.open("--workflow", "git").json;
     for (const bad of ["yes", { refreshFailed: "no" }, { refreshFailed: true, extra: 1 }, [], false]) {
       const res = r.cli(["post", "--session", sid, "--file", payload("git-bad.json", { reread: bad })]);
       assert.equal(res.status, 3, JSON.stringify(bad));
-      assert.match(res.stderr, /reread must be true or \{ refreshFailed: true\|false \}/);
+      assert.match(res.stderr, /reread: must be true or \{ refreshFailed: true\|false \}/);
     }
     const own = r.cli(["post", "--session", sid, "--file", payload("git-own.json", { git: { repo: true } })]);
     assert.equal(own.status, 3);
-    assert.match(own.stderr, /state\.git is the console's own: post reread instead/);
-    r.cli(["stop", "--session", sid]);
+    assert.match(own.stderr, /git: is the console's own state; post reread instead/);
+    r.cli(["stop", "--session", sid, "--force"]);
   } finally {
     r.cleanup();
   }
@@ -206,7 +206,7 @@ test("git: resuming into Git hops like a dashboard launch, and leaving for the d
     assert.equal(board.git.head.branch, "main", "and the board has its data");
     r.cli(["open", "--resume", qt.sid, "--no-open", "--workflow", "dashboard"]);
     assert.equal("git" in readState(qt.session), false, "the dashboard does not keep the old board");
-    r.cli(["stop", "--session", qt.sid]);
+    r.cli(["stop", "--session", qt.sid, "--force"]);
   } finally {
     r.cleanup();
   }
@@ -227,7 +227,7 @@ test("git: POST /pr-host saves to pr-hosts.json and refuses a bad kind or a non-
     const notGit = await sendTo(sessionUrl(plan.url), { host: "git.example.com", kind: "gitlab" });
     assert.equal(notGit.status, 400);
     assert.equal((await notGit.json()).error, "not-git");
-    r.cli(["stop", "--session", plan.sid]);
+    r.cli(["stop", "--session", plan.sid, "--force"]);
 
     const g = r.open("--workflow", "git").json;
     const gs = sessionUrl(g.url);
@@ -237,7 +237,7 @@ test("git: POST /pr-host saves to pr-hosts.json and refuses a bad kind or a non-
     assert.deepEqual(JSON.parse(fs.readFileSync(store, "utf8")), { "git.example.com": "gitlab" }, "saved lowercased, as it is looked up");
     assert.equal(fs.existsSync(path.join(r.repo, "pr-hosts.json")), false, "nothing under the project");
     assert.ok(PROTECTED_CONSOLE_FILES.has("pr-hosts.json"), "Cleanup never removes it");
-    r.cli(["stop", "--session", g.sid]);
+    r.cli(["stop", "--session", g.sid, "--force"]);
   } finally {
     fs.rmSync(store, { force: true });
     r.cleanup();
@@ -275,7 +275,7 @@ test("git: commits on a run go only with git-commits, as a whole number", () => 
     const ok = r.cli(["post", "--session", sid, "--file", payload("git-c3.json", { run: { event: "git-commits", id: "z", commits: 2 } })]);
     assert.equal(ok.status, 0, ok.stderr);
     assert.ok(readLedger(session).some((e) => e.event === "git-commits" && e.commits === 2), "the count rides on the ledger line");
-    r.cli(["stop", "--session", sid]);
+    r.cli(["stop", "--session", sid, "--force"]);
   } finally {
     r.cleanup();
   }
@@ -590,11 +590,11 @@ test("git: a board action round-trips as one __git action with its fields intact
     );
     const res = r.cli(["wait", "--session", opened.sid, "--seconds", "10"]);
     assert.equal(res.status, 0);
-    assert.deepEqual(res.json.actions, [{ i: "__git", type: "git", op: "switch", branch: "main" }]);
+    assert.deepEqual(res.json.session, [{ i: "__git", op: "switch", branch: "main" }]);
     assert.equal(res.json.reply, "Switch to main.");
     const state = readState(opened.session);
     assert.ok(state.items.every((i) => i.id !== "__git"), "a board action must not become a question");
-    r.cli(["stop", "--session", opened.sid]);
+    r.cli(["stop", "--session", opened.sid, "--force"]);
   } finally {
     r.cleanup();
   }
@@ -608,7 +608,7 @@ test("git: a board.describe post lands in state for the Create panel to read", a
     const opened = r.open("--workflow", "git").json;
     r.cli(["post", "--session", opened.sid, "--file", payload("board-describe.json", { board: { describe: "retry the push" } })]);
     assert.equal(readState(opened.session).board.describe, "retry the push");
-    r.cli(["stop", "--session", opened.sid]);
+    r.cli(["stop", "--session", opened.sid, "--force"]);
   } finally {
     r.cleanup();
   }

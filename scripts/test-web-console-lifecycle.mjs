@@ -29,6 +29,7 @@ import {
   cookieFor,
   cli,
   payload,
+  stopSession,
   BASE,
   backdate,
   readState,
@@ -147,7 +148,7 @@ test("open --resume never discards an uncollected result", async () => {
 
 test("open clears a result that was already collected", () => {
   const before = cli(["open", "--resume", sid, "--no-open"]);
-  assert.equal(before.json.pendingResult, false);
+  assert.ok(!before.json.pendingResult, "open prints pendingResult only when true");
   const res = cli(["wait", "--session", sid, "--seconds", "3"]);
   assert.equal(res.status, 10, "a consumed result must not be handed over again");
 });
@@ -186,6 +187,68 @@ test("open --resume takes a pause down, and only a pause", () => {
   cli(["post", "--session", sid, "--file", payload("fin-clear.json", { finish: null })]);
 });
 
+// Continue here on a finished screen resumes into the SAME skill (Pathfinder
+// into Pathfinder), which is no hop. The old ending must still come down, or
+// its card freezes every question the new run asks. A question posted over a
+// standing ending clears it too, for an agent that forgot `finish: null`.
+test("a launch resume and a new question both take a real ending down", () => {
+  const stateFile = path.join(session, "state.json");
+  const readState = () => JSON.parse(fs.readFileSync(stateFile, "utf8"));
+  const wf = readState().workflow;
+
+  cli(["post", "--session", sid, "--file", payload("fin-launch.json", {
+    finish: { headline: "The map is charted", command: "/plan2code-0-pathfinder", dashboard: true },
+  })]);
+  cli(["open", "--resume", sid, "--no-open", "--workflow", wf]);
+  assert.equal(readState().finish, undefined, "a launch resume into the same skill clears the ending");
+
+  cli(["post", "--session", sid, "--file", payload("fin-ask.json", {
+    finish: { headline: "The map is charted", command: "/plan2code-0-pathfinder" },
+  })]);
+  cli(["post", "--session", sid, "--file", payload("ask-over-fin.json", {
+    items: [{ id: "q-over-fin", kind: "text", title: "Next thing", body: "Asked after the ending." }],
+  })]);
+  assert.equal(readState().finish, undefined, "a new open question clears a standing ending");
+
+  // A patch that posts its own finish, even with items, keeps it.
+  cli(["post", "--session", sid, "--file", payload("fin-with-item.json", {
+    items: [{ id: "q-with-fin", kind: "notice", title: "Heads up", body: "Read only." }],
+    finish: { headline: "All done", command: "/plan2code-0-pathfinder" },
+  })]);
+  assert.equal(readState().finish.headline, "All done", "a patch's own finish stays");
+
+  // Leave the session the way later tests expect to find it.
+  cli(["post", "--session", sid, "--file", payload("fin-clear2.json", { finish: null })]);
+});
+
+// A new question posted under an answered card's id used to merge into the
+// old card and stay answered, leaving the person a dead page. It is refused
+// with the fix named; a typo fix on the same title still goes through.
+test("a new question under an answered id is refused, a typo fix is not", () => {
+  const stateFile = path.join(session, "state.json");
+  const readState = () => JSON.parse(fs.readFileSync(stateFile, "utf8"));
+  cli(["post", "--session", sid, "--file", payload("reuse-a.json", {
+    items: [{ id: "q-reuse", kind: "choice", title: "Pick one", body: "Which?", options: [{ text: "A" }, { text: "B" }] }],
+  })]);
+  cli(["post", "--session", sid, "--file", payload("reuse-b.json", { items: [{ id: "q-reuse", status: "answered", answer: { k: "A" } }] })]);
+
+  const typo = cli(["post", "--session", sid, "--file", payload("reuse-typo.json", { items: [{ id: "q-reuse", title: "Pick one", body: "Which one?" }] })]);
+  assert.equal(typo.status, 0, "a body fix under the same title is allowed");
+  assert.equal(readState().items.find((i) => i.id === "q-reuse").status, "answered");
+
+  const reuse = cli(["post", "--session", sid, "--file", payload("reuse-new.json", {
+    items: [{ id: "q-reuse", kind: "choice", title: "Something else", body: "A different question", options: [{ text: "X" }, { text: "Y" }] }],
+  })], { expectFail: true });
+  assert.equal(reuse.status, 3, "a new question under an old id is refused");
+  assert.match(reuse.stderr, /already used for the answered question "Pick one"/);
+  assert.match(reuse.stderr, /new id/);
+
+  const reopened = cli(["post", "--session", sid, "--file", payload("reuse-reopen.json", {
+    items: [{ id: "q-reuse", status: "reopened", title: "Something else", body: "A different question" }],
+  })]);
+  assert.equal(reopened.status, 0, "an explicit reopen is allowed");
+});
+
 // The dashboard hands its live session to the skill it launched: one
 // `open --resume` turns the page (workflow, title, spec) while reusing the
 // server. If the flags did not apply on resume, the launched skill would
@@ -199,7 +262,7 @@ test("open --resume restates workflow, title and spec on the live session", () =
   const res = cli(["open", "--resume", sid, "--no-open", "--workflow", "implement", "--title", "Lunch vote: Phase 2", "--spec", "specs/lunch-vote"]);
   assert.equal(res.json.ok, true);
   assert.equal(res.json.sid, sid);
-  assert.equal(res.json.reused, true, "the live server must be reused, not replaced");
+  assert.ok(res.json.url.startsWith(baseUrl + "/"), "the live server must be reused, not replaced");
 
   const state = JSON.parse(fs.readFileSync(path.join(session, "state.json"), "utf8"));
   assert.equal(state.workflow, "implement");
@@ -243,7 +306,7 @@ test("open with no --workflow still opens a Pathfinder session", () => {
     assert.equal(res.json.ok, true);
     assert.equal(readState(res.json.session).workflow, "pathfinder");
   } finally {
-    cli(["stop", "--session", res.json.sid]);
+    cli(["stop", "--session", res.json.sid, "--force"]);
   }
 });
 
@@ -625,10 +688,10 @@ test("stop leaves a process it cannot identify as ours alone", () => {
 /* ----------------------------------------------------------- lifecycle */
 
 test("stop shuts the server down and wait then reports exit 20", () => {
-  cli(["stop", "--session", sid]);
+  cli(["stop", "--session", sid, "--force"]);
   const res = cli(["wait", "--session", sid, "--seconds", "12"]);
   assert.equal(res.status, 20);
-  assert.equal(res.json.status, "server-gone");
+  assert.deepEqual(res.json, { gone: true, fix: `open --resume ${sid} --workflow <yours>` });
 });
 
 // A 127.0.0.1 link is only the person's machine if the agent is on it too.
@@ -641,7 +704,7 @@ test("open flags an environment where the link may not reach the person", () => 
   assert.equal(res.json.ok, true, "it still starts");
   assert.equal(res.json.remote, "SSH_CONNECTION");
   assert.match(res.json.note, /not necessarily theirs/);
-  cli(["stop", "--session", res.json.sid]);
+  cli(["stop", "--session", res.json.sid, "--force"]);
 });
 
 test("the runtime dir is isolated by PLAN2CODE_CONSOLE_HOME", () => {
@@ -665,7 +728,7 @@ test("resume brings the session back on a new port with state intact", async () 
   const looksRes = await fetch(m[1] + "/looks", { headers: { cookie: cookieFor(m[1], m[2]) } });
   assert.deepEqual((await looksRes.json()).looks, { theme: "dark", accent: "cobalt" });
 
-  cli(["stop", "--session", sid]);
+  cli(["stop", "--session", sid, "--force"]);
 });
 
 /* ------------------------------------------------- the page's own logic */
@@ -858,7 +921,7 @@ test("a present finish command must be a non-empty string without a placeholder"
       expectFail: true,
     });
     assert.equal(res.status, 3);
-    assert.match(res.stderr, /"finish\.command" must be a non-empty string, or left out when there is nothing to run/);
+    assert.match(res.stderr, /finish\.command: must be a non-empty string, or left out when there is nothing to run/);
   }
   const tmpl = cli(
     [
@@ -967,7 +1030,7 @@ test("a finish can carry the dashboard flag, and only as a boolean", () => {
     expectFail: true,
   });
   assert.equal(bad.status, 3);
-  assert.match(bad.stderr, /"finish\.dashboard" must be true or false \(or left out: no dashboard button\)/);
+  assert.match(bad.stderr, /finish\.dashboard: must be true or false \(or left out: no dashboard button\)/);
 });
 
 // The Commit it now button is the same kind of opt-in.
@@ -981,7 +1044,7 @@ test("a finish can carry the commit flag, and only as a boolean", () => {
     expectFail: true,
   });
   assert.equal(bad.status, 3);
-  assert.match(bad.stderr, /"finish.commit" must be true or false/);
+  assert.match(bad.stderr, /finish.commit: must be true or false/);
 });
 
 // Taking the review up is the agent posting `"finish": null`: the session goes
@@ -1043,4 +1106,66 @@ test("post refuses a misplaced templates flag with exit 3", () => {
   const res = cli(["post", "--session", sid, "--file", payload("templates.json", p)], { expectFail: true });
   assert.equal(res.status, 3);
   assert.match(res.stderr, /only a text item can carry it/);
+});
+
+/* ------------------------------------------- stop needs a finish (FR-12, FR-13) */
+
+const healthOf = async (url) => {
+  const m = url.match(/^(http:\/\/127\.0\.0\.1:\d+)\//);
+  try {
+    return (await fetch(m[1] + "/health")).status;
+  } catch {
+    return 0;
+  }
+};
+
+test("stop with no finish posted exits 3 naming finish and --force, and leaves the server up", async () => {
+  const opened = cli(["open", "--file", payload("stop-nofinish.json", BASE), "--no-open"]);
+  try {
+    const res = cli(["stop", "--session", opened.json.sid], { expectFail: true });
+    assert.equal(res.status, 3);
+    assert.match(res.stderr, /finish/);
+    assert.match(res.stderr, /--force/);
+    assert.equal(await healthOf(opened.json.url), 200, "the server still answers /health");
+  } finally {
+    cli(["stop", "--session", opened.json.sid, "--force"]);
+  }
+});
+
+test("stop stops a session once a finish is posted", async () => {
+  const opened = cli(["open", "--file", payload("stop-finish.json", BASE), "--no-open"]);
+  const res = stopSession(opened.json.sid);
+  assert.equal(res.status, 0);
+  assert.equal(res.json.stopped, 1);
+  assert.equal(await healthOf(opened.json.url), 0, "the server is gone");
+});
+
+test("stop --force stops a session with no finish, and stop --all does so unchanged", async () => {
+  const one = cli(["open", "--file", payload("stop-force.json", BASE), "--no-open"]);
+  const forced = cli(["stop", "--session", one.json.sid, "--force"]);
+  assert.equal(forced.status, 0);
+  assert.equal(forced.json.stopped, 1);
+  assert.equal(await healthOf(one.json.url), 0);
+
+  const two = cli(["open", "--file", payload("stop-all.json", BASE), "--no-open"]);
+  const all = cli(["stop", "--all"]);
+  assert.equal(all.status, 0);
+  assert.ok(all.json.stopped >= 1, "--all needs no finish");
+  assert.equal(await healthOf(two.json.url), 0);
+});
+
+test("a finish posted while stopWarning is set is refused naming stopWarning, and passes once it is cleared", () => {
+  const opened = cli(["open", "--file", payload("stopwarn.json", BASE), "--no-open"]);
+  try {
+    cli(["post", "--session", opened.json.sid, "--file", payload("stopwarn-set.json", { stopWarning: "Unsaved answers are lost." })]);
+    const finish = { headline: "Paused: your answers are saved", command: "/plan2code-1-plan" };
+    const refused = cli(["post", "--session", opened.json.sid, "--file", payload("stopwarn-finish.json", { finish })], { expectFail: true });
+    assert.equal(refused.status, 3);
+    assert.match(refused.stderr, /stopWarning/);
+    const ok = cli(["post", "--session", opened.json.sid, "--file", payload("stopwarn-clear.json", { stopWarning: "", finish })]);
+    assert.equal(ok.status, 0);
+    assert.equal(ok.json.ok, true);
+  } finally {
+    cli(["stop", "--session", opened.json.sid, "--force"]);
+  }
 });
