@@ -97,13 +97,13 @@ your `PATH`, it says so and prints each one's install command and official page,
 shows the same help in a panel with an **Install page** link per agent and a **Check again** button, so you
 can install one and carry on without restarting.
 
-To use a different agent CLI, open the web console's **User Preferences → Agents** and add it: a name, the
+To use a different agent CLI, open the web console's **User Preferences → Agents & models** and add it: a name, the
 command, and (optionally) its arguments, the start prompt, arguments for skipping permission prompts, and
 how it takes a model. Custom agents are saved in `~/.plan2code/agents.json` and used by both the
 `plan2code` command (listed after the built-ins; `--cli <id>` picks one) and the desktop app's picker. The
 `/plan2code` start prompt only does something in an agent that loads the installed Plan2Code skills; for
 any other, leave the start prompt blank and start a skill yourself. Details in
-[.readme/web-console.md](.readme/web-console.md#agents-and-the-desktop-app-in-user-preferences).
+[.readme/web-console.md](.readme/web-console.md#agents--models).
 </details>
 
 <details>
@@ -120,6 +120,8 @@ in your terminal. `plan2code --classic` keeps the terminal flow, and so does a L
 display (over SSH, say) or any machine over an SSH session. `plan2code update` updates the skills, the
 command and the app together, and the bar offers the same **Update skills** when the app and the
 installed skills disagree.
+
+The app can also build a whole spec unattended with the Implementation Loop; see [docs/desktop-app.md](docs/desktop-app.md#implementation-loop).
 
 The first release is unsigned, so macOS (**Open Anyway** in System Settings, Privacy & Security) or
 Windows (**More info**, then **Run anyway**) may ask you to allow it once. The app starts the agent

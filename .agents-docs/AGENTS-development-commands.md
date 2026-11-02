@@ -15,6 +15,10 @@ node install.js
 # Regenerate skills/ from src/ (non-interactive)
 npm run build:skills
 
+# Try the Activities games from src/: opens the console in the browser, served
+# fresh from disk, so a saved game file shows on the next page reload
+npm run play
+
 # Full check (about 70s): char limits, skills/ build, browser-module parse check,
 # dashboard skill-table check, web console + launcher + getting-started node:test suites
 npm test
@@ -60,6 +64,22 @@ cd plan2code-bot && npm install && npm run build
 cd plan2code-bot && npm test          # vitest
 ```
 
+## Targeted tests first
+
+The full `npm test` takes minutes and drives a browser per page suite. When a change stays inside one part of the project, run that part's suites instead (with the `PLAN2CODE_*` app variables unset, as for `npm test`), and leave the full run for when a change reaches shared code.
+
+| What changed | Run |
+|---|---|
+| An Activities game (`public/activities/*`), `public/tones.js` or `public/music.js` | `node --test scripts/test-web-console-tones.mjs scripts/test-web-console-activities.mjs`, plus the game's own `scripts/test-web-console-activities-<game>*.mjs` when it has one; add `test-web-console-page-activities.mjs` when the Activities window or its switches changed |
+| A music prototype (`prototypes/music/<game>/`) | `node prototypes/music/check.cjs <game>` (nothing in `npm test` reads `prototypes/`) |
+| One web console area (server routes, chat, git board, workspace, notepad, Implementation Loop...) | that area's `scripts/test-web-console-<area>.mjs` (the loop's is `test-web-console-loop.mjs`), and its `test-web-console-page-<area>.mjs` when the page changed; `node scripts/parse-check.mjs` after editing any browser module under `public/` |
+| The launcher (`src/launcher/`) | `node --test scripts/test-launcher.mjs` |
+| A skill's script | `npm run build:skills`, then `node --test scripts/test-script-<skill>.mjs` (and `test-skill-scripts.mjs` for the shared plumbing) |
+| A workflow prompt (`src/plan2code-*.md`) | `node scripts/validate-char-count.js` and `node scripts/check-skill-table.mjs` |
+| Docs or comments only | `node --test scripts/test-us-english.mjs scripts/test-line-endings.mjs` |
+
+Run the full `npm test` when the change touches something many suites lean on: `web-console-test-helpers.mjs` or `page-test-helpers.mjs`, `looks.js` / `prefs.js` / `static.mjs` (the `SERVABLE` list), `skills.js`, `install.js`, the server's shared modules (`console.mjs`, `routes.mjs`); after a sync merge or a version bump; before opening a PR or cutting a release; and whenever you cannot say which suites a change reaches.
+
 The root `npm test` does not run the metrics or bot vitest suites; run them in their package. `npm run dev` in loop, metrics and bot is `tsup --watch`. The web console and launcher suites isolate themselves with `PLAN2CODE_CONSOLE_HOME`, `PLAN2CODE_MODELS_DIR` and `PLAN2CODE_NO_BROWSER=1` (`scripts/web-console-test-helpers.mjs`), so they never open a browser or touch your real console home. The web console suites are split by area so `node --test` runs them in parallel. `npm test` runs them through `scripts/node-test.mjs`, which caps the files run at once at one per spare core (8 at most): each page test file drives a browser, and more at once than the cores can carry fails page tests at random (a flat 8 did on 3 and 4 core CI runners). Page tests (`test-web-console-page-*.mjs`) read styles and set scrolls only through `styleOf()`, `stylesOf()` and `scrollCard()` from `page-test-helpers.mjs`, which retry until the element is still on the page; `test-web-console-shape.mjs` fails a raw `locator.evaluate` that does either.
 
 ## Test/Dev Env Vars
@@ -71,6 +91,7 @@ The root `npm test` does not run the metrics or bot vitest suites; run them in t
 | `PLAN2CODE_BROWSER` | Browser command line to run with the link appended, instead of the system default. |
 | `PLAN2CODE_MODELS_DIR` | Moves the launcher model menus (`bin/models.json`, `models.json`) away from `~/.plan2code`, for tests. |
 | `PLAN2CODE_PICKER_ECHO` | Tests only: `/workspace/browse` returns this as the picked folder instead of opening a picker (`-` means canceled). |
+| `PLAN2CODE_CONSOLE_DEV` | Set to `1` (by `npm run play`) and the server reads every page file from disk on each request instead of once, so a reload shows edits (`src/web-console/static.mjs`). |
 | `PLAN2CODE_CONSOLE_TRACE` | Set to `1` on `open` to print a start-up step timeline to stderr. |
 
 ## Installer Menu Options
