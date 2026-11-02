@@ -46,6 +46,13 @@ Check if `./AGENTS.md` exists:
 - **No git writes.** Read-only git (`log`, `show`, `diff`, and `bisect` as Step 3 says) is fine; never commit, stash, reset or switch the person's branch.
 - Plain words. Name the files and functions; skip jargon the person did not use.
 
+## Helpers
+
+When your tool can start helpers (subagents) and they are not switched off for this run (on the web console a `Subagents:` block says which, console-subagents.md):
+- **Step 3, read-only lookups:** the code path a suspect change touches, a suspect function's callers and the docs behind the failing behavior; one suspect per helper, each returning facts with `file:line`, never a verdict.
+
+Keep with you: the reproduction, any bisect, the cause judgment and every question. Strength and effort per references/helper-strength.md. No helpers? Do the same work yourself.
+
 ## Process
 
 ### Step 1: The Bug

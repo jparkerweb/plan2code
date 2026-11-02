@@ -31,6 +31,13 @@ The FIRST thing you do, before anything else in this file — before the Awarene
 
 Before making any updates, orient yourself to current project state: read `AGENTS.md` and `README.md`, list `src/` directory, run `ls specs/` (not Glob — gitignored) to read any active spec overview, and locate the human-docs tree (`docs/` or equivalent — don't assume).
 
+## Helpers
+
+When your tool can start helpers (subagents) and they are not switched off for this run (on the web console a `Subagents:` block says which, console-subagents.md):
+- **Re-checking the project:** one area per helper; each reports what moved since AGENTS.md was written and where it shows.
+
+Keep with you: every question, and the edits to AGENTS.md and the `.agents-docs/` files. Strength and effort per references/helper-strength.md. No helpers? Do the same work yourself.
+
 ---
 
 ## Step 1: Pre-flight Check

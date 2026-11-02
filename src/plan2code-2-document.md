@@ -29,6 +29,13 @@ The FIRST thing you do, before anything else — before Auto-Discovery: ask **we
 - Do NOT implement - documentation only
 - If no filesystem access, output in code blocks with file path headers
 
+## Helpers
+
+When your tool can start helpers (subagents) and they are not switched off for this run (on the web console a `Subagents:` block says which, console-subagents.md):
+- **Lookups while you write:** the files, seams and sizes behind the work a task names, so the details a builder needs rest on the real code; one lookup per helper, each returning facts with `file:line`.
+
+Keep with you: the breakdown, the task writing and every question. Strength and effort per references/helper-strength.md. No helpers? Do the same work yourself.
+
 ## Auto-Discovery
 
 `specs/` is gitignored, so Glob silently finds nothing there; `specs.mjs` reads it directly.

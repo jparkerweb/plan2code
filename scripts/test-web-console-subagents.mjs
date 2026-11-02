@@ -241,12 +241,12 @@ test("subagents: a save that matches this session still becomes the project's se
 });
 
 test("subagents: a workflow without the switch refuses it, bad bodies name the field, and an older copy's open hides it", async () => {
-  const doc = subagentsSession({ workflow: "document" });
+  const plain = subagentsSession({ workflow: "changelog" });
   const s = subagentsSession();
   try {
-    assert.deepEqual(await setSubagents(doc, ON3), { status: 400, body: { error: "not-offered" } });
-    assert.equal((await frameSubagents(doc)).offered, false);
-    assert.equal("subagents" in (await submitAndWait(doc)).json, false);
+    assert.deepEqual(await setSubagents(plain, ON3), { status: 400, body: { error: "not-offered" } });
+    assert.equal((await frameSubagents(plain)).offered, false);
+    assert.equal("subagents" in (await submitAndWait(plain)).json, false);
 
     assert.deepEqual(await setSubagents(s, { ...ON3, max: 0 }), { status: 400, body: { error: "max" } });
     assert.deepEqual(await setSubagents(s, { ...ON3, max: 21 }), { status: 400, body: { error: "max" } });
@@ -266,7 +266,22 @@ test("subagents: a workflow without the switch refuses it, bad bodies name the f
     fs.rmSync(path.join(s.session, "subagents-setting.json"), { force: true });
     assert.equal("subagents" in (await submitAndWait(s)).json, false);
   } finally {
-    cli(["stop", "--session", doc.sid, "--force"]);
+    cli(["stop", "--session", plain.sid, "--force"]);
+    cli(["stop", "--session", s.sid, "--force"]);
+  }
+});
+
+test("subagents: a newly opted-in workflow offers the switch end to end", async () => {
+  const s = subagentsSession({ workflow: "xray" });
+  try {
+    assert.equal(offered("xray"), true, "skills.js opts xray in");
+    assert.ok(defaultInstruction("xray").length > 0, "and ships its instruction");
+    const frame = await frameSubagents(s);
+    assert.equal(frame.offered, true, "the session's frame offers the switch");
+    const on = await setSubagents(s, ON3);
+    assert.equal(on.status, 200, "the route accepts the save");
+    assert.equal(on.body.setting.workflow, "xray");
+  } finally {
     cli(["stop", "--session", s.sid, "--force"]);
   }
 });

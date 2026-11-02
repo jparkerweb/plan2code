@@ -47,6 +47,13 @@ Prefix the file with:
 This file provides guidance to AI coding agents working with code in this repository.
 ```
 
+## Helpers
+
+When your tool can start helpers (subagents) and they are not switched off for this run (on the web console a `Subagents:` block says which, console-subagents.md):
+- **Mapping the project:** one area per helper; each reports what the area holds, how it builds and runs, and the conventions it follows, with `file:line` where it matters.
+
+Keep with you: every question, the judgment on what matters and the writing of AGENTS.md and its notes. Strength and effort per references/helper-strength.md. No helpers? Do the same work yourself.
+
 ---
 
 ## Progressive Discovery

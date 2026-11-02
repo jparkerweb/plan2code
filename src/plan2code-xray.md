@@ -49,6 +49,14 @@ Check if `./AGENTS.md` exists:
 - **The counts are leads, not verdicts.** A script ranks; you read the code and judge.
 - Plain words. Name the files and functions; skip jargon the person did not use.
 
+## Helpers
+
+When your tool can start helpers (subagents) and they are not switched off for this run (on the web console a `Subagents:` block says which, console-subagents.md):
+- **Step 2a:** the area's files and the leads its history names, one per helper; each returns facts with `file:line` or a commit hash, never a judgment.
+- **Step 2b:** reading the top candidates the counts name, one per helper, reporting what it found.
+
+Keep with you: the judgment, the citations, the ranking, the pick and every question. Strength and effort per references/helper-strength.md. No helpers? Do the same work yourself.
+
 ## Process
 
 ### Step 1: Mode and Area

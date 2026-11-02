@@ -394,8 +394,9 @@ it is remembered for next time:
 
 ### Subagents
 
-On a build (Implement, Implement + review, Quick task), a review,
-Pathfinder, Plan and Revise plan, the agent can hand independent pieces of work to helpers
+On most skills (all but the dashboard, Finalize, Changelog, Git and Handoff),
+the agent can
+hand independent pieces of work to helpers
 (subagents) while it keeps the conversation with you.
 
 - **The button.** An icon in the top bar, after Stop session (and Write a

@@ -1,6 +1,6 @@
 # Helpers (Subagents)
 
-The console points here when a `Subagents:` block reaches you. On the skills that offer it (`implement`, `implement-review`, `quick-task`, `review`, `pathfinder`, `plan`, `revise-plan`) the person turns helpers on or off from the top bar's Subagents button, per project and skill. It reaches you as a standing instruction, only when it changes.
+The console points here when a `Subagents:` block reaches you. On the skills that offer it (`init`, `init-update`, `pathfinder`, `plan`, `revise-plan`, `document`, `implement`, `implement-review`, `quick-task`, `review`, `xray`, `diagnose`) the person turns helpers on or off from the top bar's Subagents button, per project and skill. It reaches you as a standing instruction, only when it changes.
 
 ## What arrives
 

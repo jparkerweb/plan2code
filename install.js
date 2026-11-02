@@ -143,7 +143,10 @@ const SOURCE_PROMPTS = [
     description: 'Generate AGENTS.md file for project-specific guidance',
     isUtility: true,
     scripts: ['agents-md.mjs', 'agent-files.mjs'],
-    additionalReferences: [{ source: 'web-console', target: 'web-console' }]
+    additionalReferences: [
+      { source: 'web-console', target: 'web-console' },
+      { source: 'shared-references/helper-strength.md', target: 'helper-strength.md' }
+    ]
   },
   {
     source: 'plan2code-init-update.md',
@@ -153,7 +156,10 @@ const SOURCE_PROMPTS = [
     description: 'Update existing AGENTS.md with new learnings',
     isUtility: true,
     scripts: ['agents-md.mjs', 'agent-files.mjs', 'commit-msg.mjs'],
-    additionalReferences: [{ source: 'web-console', target: 'web-console' }]
+    additionalReferences: [
+      { source: 'web-console', target: 'web-console' },
+      { source: 'shared-references/helper-strength.md', target: 'helper-strength.md' }
+    ]
   },
   {
     source: 'plan2code-0-pathfinder.md',
@@ -218,6 +224,7 @@ const SOURCE_PROMPTS = [
     scripts: ['specs.mjs'],
     additionalReferences: [
       { source: 'web-console', target: 'web-console' },
+      { source: 'shared-references/helper-strength.md', target: 'helper-strength.md' },
       { source: 'shared-references/test-runs.md', target: 'test-runs.md' }
     ]
   },
@@ -300,7 +307,10 @@ const SOURCE_PROMPTS = [
     description: 'Explain how and why an area of the code works, or find the rough spots worth fixing',
     isUtility: true,
     scripts: [],
-    additionalReferences: [{ source: 'web-console', target: 'web-console' }]
+    additionalReferences: [
+      { source: 'web-console', target: 'web-console' },
+      { source: 'shared-references/helper-strength.md', target: 'helper-strength.md' }
+    ]
   },
   {
     source: 'plan2code-diagnose.md',
@@ -312,7 +322,8 @@ const SOURCE_PROMPTS = [
     scripts: ['specs.mjs'],
     additionalReferences: [
       { source: 'web-console', target: 'web-console' },
-      { source: 'shared-references/building-habits.md', target: 'building-habits.md' }
+      { source: 'shared-references/building-habits.md', target: 'building-habits.md' },
+      { source: 'shared-references/helper-strength.md', target: 'helper-strength.md' }
     ]
   },
   {

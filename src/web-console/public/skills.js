@@ -75,7 +75,7 @@ export const SKILLS = Object.freeze([
     pose: "init",
     builds: false, phased: false, metered: true, templates: false,
     weight: 2, started: "Init started", ran: "Init run", resume: null,
-    subagents: null,
+    subagents: "Use helpers to map the project in parallel, one per area: what it holds, how it builds and runs, and the conventions it follows. Keep every question, the judgment on what matters and the writing of AGENTS.md with you. Recon at light strength, low effort.",
     states: "any",
     greyed: { default: "AGENTS.md is already written. Refresh it instead." },
     card: {
@@ -95,7 +95,7 @@ export const SKILLS = Object.freeze([
     pose: "init",
     builds: false, phased: false, metered: true, templates: false,
     weight: 2, started: "Init update started", ran: "Init update run", resume: null,
-    subagents: null,
+    subagents: "Use helpers to re-check areas in parallel: what has moved since AGENTS.md was written, and where it shows. Keep every question and the edits to AGENTS.md and its notes with you. Recon at light strength, low effort.",
     states: "any",
     greyed: { default: "Needs an AGENTS.md. Set the project up first." },
     card: {
@@ -186,7 +186,7 @@ export const SKILLS = Object.freeze([
     pose: "document",
     builds: false, phased: false, metered: true, templates: false,
     weight: 2, started: "Document started", ran: "Spec documented", resume: "overview",
-    subagents: null,
+    subagents: "Use helpers for lookups while you write the phases: the files, seams and sizes behind the work a task names. Keep the breakdown, the writing and every question with you. Lookups at light strength, low effort.",
     states: ["planned"], marksNext: true,
     greyed: {
       default: "Needs a drafted plan first",
@@ -355,7 +355,7 @@ export const SKILLS = Object.freeze([
     pose: "diagnose",
     builds: false, phased: false, metered: true, templates: false,
     weight: 1, started: "Diagnose started", ran: "Diagnose run", resume: null,
-    subagents: null,
+    subagents: "Use helpers for the reading both modes lean on: explain mode's area files and history leads, and rough-spots mode's top candidates, one helper per area or candidate. Keep the judgment, the citations, the ranking, the pick and every question with you. Lookups at light strength, low effort.",
     states: "any",
     greyed: null,
     card: {
@@ -376,7 +376,7 @@ export const SKILLS = Object.freeze([
     pose: "changelog",
     builds: false, phased: false, metered: true, templates: false,
     weight: 1, started: "Changelog started", ran: "Changelog run", resume: null,
-    subagents: null,
+    subagents: "Use helpers for side lookups while you narrow: the code path a suspect change touches, a suspect function's callers, and the docs behind the failing behavior. Keep the reproduction, any bisect, the cause judgment and every question with you. Lookups at light strength, low effort.",
     states: "any",
     greyed: null,
     card: {
