@@ -1430,6 +1430,11 @@ the `/plan2code` command instead. That command is on both of these screens
 anyway, for starting the dashboard in a fresh conversation — the better choice
 after a long skill, since a fresh conversation starts with a clean context.
 
+The Implementation Loop's own end screen works the same way: finished or
+stopped, its actions sit beside a **Back to the dashboard** button that opens
+a fresh dashboard in the frame, no agent needed, and its status line marks it
+as your move rather than leaving a stale "starting" line behind.
+
 You don't have to finish first. On every skill but the dashboard itself, a
 small **triangle** pointing left, in your highlight color, sits beside *Stop
 session*. Press it, confirm, and the agent saves your place exactly as a stop
