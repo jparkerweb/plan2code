@@ -1050,11 +1050,15 @@ export function renderConfirm(main, entry) {
     pane.appendChild(box);
   }
 
+  // The command line and the buttons ride in one bar (.confirm-tail) pinned
+  // to the pane's bottom edge: however tall the Notebook box makes this pane,
+  // START stays in view.
+  const tail = el("div", "confirm-tail");
   const cmd = el("p", "confirm-cmd");
   const cmdCode = el("code", null, launchVariant(entry, !review || review.checked).command);
   cmd.appendChild(cmdCode);
   cmd.appendChild(cmdNote);
-  pane.appendChild(cmd);
+  tail.appendChild(cmd);
 
   const actions = el("div", "confirm-actions");
   const start = el("button", "btn primary", "Start " + entry.title);
@@ -1069,7 +1073,8 @@ export function renderConfirm(main, entry) {
   });
   actions.appendChild(back);
   actions.appendChild(start);
-  pane.appendChild(actions);
+  tail.appendChild(actions);
+  pane.appendChild(tail);
 
   main.appendChild(pane);
   // Focus lands on START after a pick (the clicked control was rebuilt away,

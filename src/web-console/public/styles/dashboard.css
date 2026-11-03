@@ -399,10 +399,17 @@
 .dash-confirm {
   max-width: min(var(--card-width), 100%);
   margin: 3vh auto 0;
-  display: grid;
+  /* Column flex, not grid: a grid item's sticky range is its own row, so the
+     tail bar below could never travel. align-items does the centering
+     justify-items did; loop-setup opts back into grid. */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   gap: 10px;
-  justify-items: center;
   text-align: center;
+  /* Focused controls must land above the pinned bar, never under it:
+     roughly .confirm-tail's height — keep them in step if the bar grows. */
+  scroll-padding-bottom: 96px;
 }
 
 /* A smaller stage than the launching hero: the same sky, a moment shorter. */
@@ -444,12 +451,34 @@
 .confirm-cmd-note { margin-left: 8px; font-family: var(--mono); font-size: 12.5px; color: var(--accent); }
 .confirm-actions { display: flex; gap: 10px; margin-top: 10px; }
 
+/* The command line and the buttons as one bar pinned to the pane's bottom
+   edge: .dash-confirm is the scroller, so a last-child sticky tail stays in
+   view whatever the Notebook box pushes past the fold. Opaque like .doc-head
+   (the pane sits on var(--bg)), with the footer's border and shadow for
+   separation; .confirm-actions keeps its own class so "Start" stays findable. */
+.confirm-tail {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  align-self: stretch;
+  display: grid;
+  gap: 10px;
+  justify-items: center;
+  padding: 10px 0 6px;
+  background: var(--bg);
+  border-top: 1px solid var(--rule);
+  box-shadow: 0 -4px 14px rgba(0, 0, 0, 0.07);
+}
+/* The bar's gap sets the rhythm; the row's own margin is for loop-setup,
+   which has no tail. */
+.confirm-tail .confirm-actions { margin-top: 0; }
+
 /* "Start with a note from your Notebook": the switch, then the tabs beside a
    preview of the picked one, its pictures each with a tick. */
-/* Stretched past the confirm's centering, and left aligned: a note reads as
-   a document, not a caption. */
+/* Capped rather than stretched past the confirm's centering, and left
+   aligned: a note reads as a document, and documents have a measure. */
 /* Its own frame sets it apart from the text above, so no rule: just room. */
-.confirm-note-box { display: grid; gap: 8px; justify-self: stretch; text-align: left; margin-top: 12px; }
+.confirm-note-box { display: grid; gap: 8px; width: min(720px, 100%); text-align: left; margin-top: 12px; }
 .confirm-note-head {
   display: grid;
   gap: 2px;
@@ -498,7 +527,7 @@
   border-radius: 8px;
   background: var(--panel);
 }
-.confirm-note-text { font-size: 13.5px; }
+.confirm-note-text { font-size: 13.5px; max-width: 65ch; }
 .confirm-note-long { margin: 0; font-size: 12.5px; font-weight: 600; color: var(--warn); }
 .confirm-note-pics { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
 .confirm-note-pic label { position: relative; display: block; cursor: pointer; }
@@ -580,7 +609,7 @@
 .dash-card-link { font-size: 12px; color: var(--accent); text-decoration: underline; cursor: pointer; justify-self: start; }
 
 /* The setup screen: the confirm pane's width, with a left-aligned form. */
-.loop-setup { justify-items: stretch; text-align: left; gap: 14px; }
+.loop-setup { display: grid; justify-items: stretch; text-align: left; gap: 14px; }
 .loop-setup .card-kicker, .loop-setup .dash-title, .loop-setup .confirm-spec { justify-self: start; }
 .loop-lines { display: grid; gap: 4px; }
 .loop-line { margin: 0; font-size: 14px; line-height: 1.5; color: var(--ink-2); max-width: 75ch; }
