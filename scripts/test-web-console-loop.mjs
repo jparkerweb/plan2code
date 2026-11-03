@@ -17,7 +17,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
-import { applyPatch, blankState, validate } from "../src/web-console/patches.mjs";
+import { applyPatch, blankState, validate, switchWorkflow } from "../src/web-console/patches.mjs";
 import { ROOT, CONSOLE_CLI, ENV, HOME, cli, readState, sessionUrl, payload } from "./web-console-test-helpers.mjs";
 
 const APP_VARS = ["PLAN2CODE_IN_APP", "PLAN2CODE_EMBED_ORIGIN", "PLAN2CODE_APP_ANNOUNCE", "PLAN2CODE_APP_TOKEN", "PLAN2CODE_CONSOLE_SID"];
@@ -109,10 +109,14 @@ test("a later open --resume without --loop clears the lock and the loop's cards;
     assert.equal(posted.status, 0, posted.stderr);
     assert.equal(readState(s.session).items[0].handledBy, "loop");
 
+    const stamped = post(s, { loopExpect: { review: true, fix: "smart", guess: true } });
+    assert.equal(stamped.status, 0, stamped.stderr);
+
     const plain = run(["open", "--resume", s.sid, "--no-open"], { cwd: s.cwd });
     assert.equal(plain.status, 0, plain.stderr);
     const unlocked = readState(s.session);
     assert.equal("loop" in unlocked, false, "the lock is gone");
+    assert.equal("loopExpect" in unlocked, false, "the criteria go with the lock");
     assert.equal(unlocked.items.length, 1, "the card stays as a record");
     assert.equal("handledBy" in unlocked.items[0], false, "but it is no longer the loop's");
     assert.equal(post(s, { agent: { status: "waiting" } }).status, 0, "the unlocked session takes an ordinary post");
@@ -120,6 +124,10 @@ test("a later open --resume without --loop clears the lock and the loop's cards;
     const again = run(["open", "--resume", s.sid, "--workflow", "implement", "--loop", "--no-open"], { cwd: s.cwd, extra: IN_APP });
     assert.equal(again.status, 0, again.stderr);
     assert.deepEqual(readState(s.session).loop, { driving: true });
+
+    const restamped = post(s, { loopExpect: { review: false, fix: [], guess: true } });
+    assert.equal(restamped.status, 0, restamped.stderr);
+    assert.deepEqual(readState(s.session).loopExpect, { review: false, fix: [], guess: true }, "a re-locked session takes a fresh stamp");
   } finally {
     s.stop();
   }
@@ -292,6 +300,151 @@ test("a loopOutcome through post is refused outside a loop session", () => {
     assert.match(res.stderr, /loopOutcome: is only accepted in a loop session/);
   } finally {
     cli(["stop", "--session", opened.json.sid, "--force"], { cwd, expectFail: true });
+  }
+});
+
+/* --------------------------------------------------------- loopExpect */
+
+const expectSmart = (extra = {}) => ({ review: true, fix: "smart", guess: true, ...extra });
+const withExpect = (stamp, extra = {}) => loopState({ loopExpect: stamp, ...extra });
+
+test("loopExpect: the app stamps its criteria into a loop session, refused elsewhere and after the report", () => {
+  const stored = tryPatch(loopState(), { loopExpect: expectSmart() });
+  assert.deepEqual(stored.problems, []);
+  assert.deepEqual(stored.next.loopExpect, expectSmart());
+
+  const unlocked = loopState();
+  delete unlocked.loop;
+  assert.match(tryPatch(unlocked, { loopExpect: expectSmart() }).problems.join("\n"), /loopExpect: is only accepted in a loop session/);
+
+  const reported = tryPatch(loopState(), { loopOutcome: withTriage([skip()]) });
+  assert.match(tryPatch(reported.next, { loopExpect: expectSmart() }).problems.join("\n"), /loopExpect: came after the run's report/);
+
+  const second = tryPatch(stored.next, { loopExpect: expectSmart({ guess: false }) });
+  assert.match(second.problems.join("\n"), /loopExpect: was already stamped for this session/, "one stamp per session, from anyone");
+
+  // A corrupt stored stamp is replaceable, not a wedge; and a hop drops it.
+  const corrupt = loopState({ loopExpect: 5 });
+  assert.deepEqual(tryPatch(corrupt, { loopExpect: expectSmart() }).problems, [], "a non-object stamp is overwritten");
+  const corruptObj = loopState({ loopExpect: { review: "yes" } });
+  assert.deepEqual(tryPatch(corruptObj, { loopExpect: expectSmart() }).problems, [], "a malformed object stamp is overwritten too");
+  const hopped = switchWorkflow(stored.next, { workflow: "implement" });
+  assert.equal("loopExpect" in hopped, false, "a hop drops the stamp");
+});
+
+test("a null patch cannot delete the loop's report fields", () => {
+  for (const key of ["loopExpect", "loopOutcome", "loopEnd"]) {
+    const { problems } = tryPatch(loopState(), { [key]: null });
+    assert.ok(problems.some((p) => p.includes(`${key}: cannot be deleted by a patch`)), `${key}: got ${JSON.stringify(problems)}`);
+  }
+  assert.deepEqual(tryPatch(loopState(), { agent: null }).problems, [], "ordinary fields still delete");
+});
+
+test("a failed outcome is never held to the loopExpect: the driver judges criteria on passed only", () => {
+  const smart = withExpect(expectSmart({ guess: false }));
+  const failed = goodOutcome();
+  Object.assign(failed, { result: "failed", reason: "blocked" });
+  failed.review.ran = false;
+  failed.review.recheck = false;
+  failed.tests.passed = false;
+  assert.deepEqual(tryPatch(smart, { loopOutcome: failed }).problems, [], "a failed report lands with its reason");
+});
+
+test("a passed report is held to the loopExpect on leftovers and failed tests, like the driver", () => {
+  const levels = withExpect({ review: true, fix: ["critical", "warning"], guess: true });
+  const leftCritical = goodOutcome();
+  leftCritical.review.left.critical = 2;
+  assert.match(tryPatch(levels, { loopOutcome: leftCritical }).problems.join("\n"), /loopOutcome\.review\.left\.critical must be 0/);
+  // The unfixed list counts too, not only the counter.
+  const unfixedWarning = goodOutcome();
+  unfixedWarning.review.unfixed = [{ level: "warning", title: "Still open", file: "src/x.js" }];
+  assert.match(tryPatch(levels, { loopOutcome: unfixedWarning }).problems.join("\n"), /loopOutcome\.review\.left\.warning must be 0/);
+  // A leftover at a level the loop did not choose is fine.
+  const leftSuggestion = goodOutcome();
+  leftSuggestion.review.left.suggestion = 3;
+  assert.deepEqual(tryPatch(levels, { loopOutcome: leftSuggestion }).problems, [], "suggestions never fail a phase");
+  const warningOnly = withExpect({ review: true, fix: ["warning"], guess: true });
+  assert.deepEqual(tryPatch(warningOnly, { loopOutcome: leftCritical }).problems, [], "critical left is only refused when chosen");
+  // Failed tests on a passed report.
+  const failedTests = goodOutcome();
+  failedTests.tests.passed = false;
+  assert.match(tryPatch(levels, { loopOutcome: failedTests }).problems.join("\n"), /loopOutcome\.tests\.passed must be true on a passed report/);
+  const noTests = goodOutcome();
+  noTests.tests.ran = false;
+  assert.deepEqual(tryPatch(levels, { loopOutcome: noTests }).problems, [], "tests that never ran are not failed tests");
+});
+
+test("loopExpect: each bad field is refused with a message naming it", () => {
+  const cases = [
+    ["not an object", "yes", /loopExpect must be an object/],
+    ["review not a boolean", expectSmart({ review: "yes" }), /loopExpect\.review must be true or false/],
+    ["fix an unknown word", expectSmart({ fix: "everything" }), /loopExpect\.fix must be "smart" or an array of/],
+    ["fix an unknown level", expectSmart({ fix: ["critical", "major"] }), /loopExpect\.fix must be "smart" or an array of/],
+    ["guess not a boolean", expectSmart({ guess: 1 }), /loopExpect\.guess must be true or false/],
+  ];
+  for (const [what, stamp, wanted] of cases) {
+    const { problems } = tryPatch(loopState(), { loopExpect: stamp });
+    assert.ok(problems.some((p) => wanted.test(p)), `${what}: expected ${wanted}, got ${JSON.stringify(problems)}`);
+  }
+});
+
+test("a loopOutcome is held to the loopExpect the app stamped", () => {
+  const smart = withExpect(expectSmart());
+  // The shape that stopped a real phase: a review run with no triage block.
+  assert.match(tryPatch(smart, { loopOutcome: goodOutcome() }).problems.join("\n"), /loopOutcome\.review\.triage\.ran must be true: Smart pick/);
+  const noTriage = withTriage([]);
+  noTriage.review.triage.ran = false;
+  assert.match(tryPatch(smart, { loopOutcome: noTriage }).problems.join("\n"), /loopOutcome\.review\.triage\.ran must be true: Smart pick/);
+  assert.match(tryPatch(smart, { loopOutcome: withTriage([skip({ level: "critical" })]) }).problems.join("\n"), /loopOutcome\.review\.triage\.skipped must not hold a skipped Critical/);
+  const noRecheck = withTriage([skip()]);
+  noRecheck.review.recheck = false;
+  assert.match(tryPatch(smart, { loopOutcome: noRecheck }).problems.join("\n"), /loopOutcome\.review\.recheck must be true/);
+  const noReview = withTriage([skip()]);
+  noReview.review.ran = false;
+  assert.match(tryPatch(smart, { loopOutcome: noReview }).problems.join("\n"), /loopOutcome\.review\.ran must be true: this loop asked for a review/);
+  assert.deepEqual(tryPatch(smart, { loopOutcome: withTriage([skip()]) }).problems, [], "triage ran, a warning skipped, the re-check done");
+});
+
+test("the loopExpect checks follow the stamped setup: levels, no review, no guess", () => {
+  // Levels: a level list needs the re-check but never a triage block.
+  const levels = withExpect({ review: true, fix: ["warning"], guess: true });
+  assert.deepEqual(tryPatch(levels, { loopOutcome: goodOutcome() }).problems, [], "a triage block is only a Smart pick need");
+  const noRecheck = goodOutcome();
+  noRecheck.review.recheck = false;
+  assert.match(tryPatch(levels, { loopOutcome: noRecheck }).problems.join("\n"), /loopOutcome\.review\.recheck must be true/);
+  // An empty level list means findings are reported, not fixed: no re-check.
+  const reportOnly = withExpect({ review: true, fix: [], guess: true });
+  assert.deepEqual(tryPatch(reportOnly, { loopOutcome: noRecheck }).problems, []);
+  // No review at all: review.ran may be false (a plain Implement).
+  const noReview = goodOutcome();
+  noReview.review.ran = false;
+  const build = withExpect({ review: false, fix: [], guess: true });
+  assert.deepEqual(tryPatch(build, { loopOutcome: noReview }).problems, []);
+  // Guesses not allowed: an assumed task refuses the report.
+  const noGuess = withExpect(expectSmart({ guess: false }));
+  assert.match(tryPatch(noGuess, { loopOutcome: withTriage([skip()]) }).problems.join("\n"), /loopOutcome\.tasks\.assumed must be empty: this loop does not allow best guesses/);
+  const noneAssumed = withTriage([skip()]);
+  noneAssumed.tasks.assumed = [];
+  assert.deepEqual(tryPatch(noGuess, { loopOutcome: noneAssumed }).problems, [], "no assumptions, nothing refused");
+});
+
+test("a loopExpect through post is stored, and a report that misses it is refused with the field named", () => {
+  const s = openLoop("implement-review", "expect-post");
+  try {
+    const stamped = post(s, { loopExpect: expectSmart() });
+    assert.equal(stamped.status, 0, stamped.stderr);
+    assert.deepEqual(readState(s.session).loopExpect, expectSmart());
+
+    const refused = post(s, { loopOutcome: goodOutcome() });
+    assert.equal(refused.status, 3);
+    assert.match(refused.stderr, /loopOutcome\.review\.triage\.ran must be true: Smart pick/);
+    assert.equal("loopOutcome" in readState(s.session), false, "the bad report was not written");
+
+    const stored = post(s, { loopOutcome: withTriage([skip()]) });
+    assert.equal(stored.status, 0, stored.stderr);
+    assert.equal("loopOutcome" in readState(s.session), true, "the corrected report lands");
+  } finally {
+    s.stop();
   }
 });
 

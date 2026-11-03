@@ -116,6 +116,10 @@ pub fn parse(line: &str) -> Command {
 
 fn main() {
     say("FAKE-AGENT ready");
+    // What the app launched it with: the launch prompt is one of these, so a
+    // test can read back which prompt a generation was started on.
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    say(&format!("ARGS {}", args.join(" ")));
     if let Some(size) = size_text() {
         say(&size);
     }

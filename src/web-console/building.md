@@ -42,7 +42,7 @@ Publish it with `post --wait`. A question stops the build: never post `"status":
 | A spec gap only they can close | `text` | |
 | Something learned for AGENTS.md | `confirm` | proposed lines in `consequences` |
 
-Titles stay plain: "Which phase next", "Tests are failing", "Keep going?". In loop mode (`notes/loop.md`) a question is held or stopped by the app, never answered by it; the findings pick and fixes are `handledBy:"loop"` cards.
+Titles stay plain: "Which phase next", "Tests are failing", "Keep going?". In loop mode (`notes/loop.md`) a question is held or stopped by the app, never answered by it; the findings pick and fixes are `handledBy:"loop"` cards. A `loopOutcome` refused at post time names the missing piece against the app's `loopExpect`: do that step and post again.
 
 ## Stop during a build
 

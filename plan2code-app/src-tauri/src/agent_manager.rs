@@ -95,7 +95,8 @@ fn append_replay(replay: &mut Vec<u8>, bytes: &[u8], limit: usize) {
 struct Inner {
     state: AgentState,
     running: Option<Running>,
-    /// What a Restart starts again: the choice and the brief.
+    /// What a Restart starts again: the choice and its brief (the prompt a
+    /// restart runs again, never a transient first prompt).
     last_start: Option<(StartChoice, Option<String>)>,
     size: (u16, u16),
     brief_note: Option<String>,
@@ -194,12 +195,10 @@ impl AgentManager {
         mode: PermissionMode,
         brief: Option<String>,
     ) -> Result<(), String> {
-        let mut inner = lock(&self.shared.inner);
-        if inner.state == AgentState::Running {
-            return Err("an agent is already running for this project".to_string());
-        }
-        inner.brief_note = None;
-        let previous = inner.last_start.replace((
+        let prompt = brief
+            .clone()
+            .unwrap_or_else(|| kind.default_prompt().to_string());
+        self.begin(
             StartChoice {
                 kind,
                 model,
@@ -207,8 +206,50 @@ impl AgentManager {
                 mode,
             },
             brief,
-        ));
-        match self.shared.spawn(&mut inner) {
+            prompt,
+        )
+    }
+
+    /// Like `start`, but `prompt` is this launch's first prompt alone: a later
+    /// Restart still opens the placeholder brief (the dashboard), it does not
+    /// run `prompt` again. The loop's own agent starts take this path, so a
+    /// phase prompt never becomes the brief a New Session repeats.
+    pub fn start_transient(
+        &self,
+        kind: Agent,
+        model: Option<String>,
+        effort: Option<String>,
+        mode: PermissionMode,
+        prompt: String,
+    ) -> Result<(), String> {
+        self.begin(
+            StartChoice {
+                kind,
+                model,
+                effort,
+                mode,
+            },
+            None,
+            prompt,
+        )
+    }
+
+    /// `start` and `start_transient` behind one door: remember `choice` with
+    /// `restart_brief` (what a later Restart runs again), then spawn the agent
+    /// on `first_prompt`, which is not always the same string.
+    fn begin(
+        &self,
+        choice: StartChoice,
+        restart_brief: Option<String>,
+        first_prompt: String,
+    ) -> Result<(), String> {
+        let mut inner = lock(&self.shared.inner);
+        if inner.state == AgentState::Running {
+            return Err("an agent is already running for this project".to_string());
+        }
+        inner.brief_note = None;
+        let previous = inner.last_start.replace((choice, restart_brief));
+        match self.shared.spawn(&mut inner, first_prompt) {
             Ok(()) => Ok(()),
             Err(e) => {
                 // A start that never ran must not take away what Restart would
@@ -225,14 +266,15 @@ impl AgentManager {
     /// Restart's brief note; the app still forgets the console session, so
     /// the new agent's `open` makes a new one. An agent that ended, or never
     /// ran, starts directly. Needs a launch choice from an earlier start.
+    /// `prompt` belongs to this launch alone: the stored brief stays what it
+    /// was, so a later New Session still opens the dashboard, not this
+    /// prompt again.
     pub fn start_fresh(&self, prompt: String) -> Result<(), String> {
         let mut inner = lock(&self.shared.inner);
-        let (choice, _) = inner
-            .last_start
-            .clone()
-            .ok_or("no agent has been started")?;
+        if inner.last_start.is_none() {
+            return Err("no agent has been started".to_string());
+        }
         inner.brief_note = None;
-        inner.last_start = Some((choice, Some(prompt)));
         self.shared.forget();
         if inner.state == AgentState::Running {
             self.shared.generation.fetch_add(1, Ordering::SeqCst);
@@ -240,7 +282,7 @@ impl AgentManager {
                 let _ = old.host.kill();
             }
         }
-        match self.shared.spawn(&mut inner) {
+        match self.shared.spawn(&mut inner, prompt) {
             Ok(()) => Ok(()),
             Err(e) => {
                 inner.state = AgentState::Ended {
@@ -381,13 +423,15 @@ impl Shared {
         (self.sink)(AgentEvent::State(self.snapshot(inner)));
     }
 
-    /// Start the agent in `inner.last_start` and watch for it to end.
-    fn spawn(self: &Arc<Self>, inner: &mut Inner) -> Result<(), String> {
-        let (choice, brief) = inner
+    /// Start the agent in `inner.last_start` on `prompt` and watch for it to
+    /// end. `prompt` is this launch's first prompt: the stored brief for a
+    /// start or a Restart, or a transient one (`start_fresh`,
+    /// `start_transient`) that a Restart must not repeat.
+    fn spawn(self: &Arc<Self>, inner: &mut Inner, prompt: String) -> Result<(), String> {
+        let (choice, _) = inner
             .last_start
             .clone()
             .ok_or("no agent has been started")?;
-        let prompt = brief.unwrap_or_else(|| choice.kind.default_prompt().to_string());
         let mut spec = agent_launch_spec(
             &choice.kind,
             &self.folder,
@@ -467,7 +511,16 @@ impl Shared {
         }
         let hook = self.before_fresh.lock().ok().and_then(|slot| slot.clone());
         inner.brief_note = hook.and_then(|run| run());
-        match self.spawn(inner) {
+        let prompt = inner
+            .last_start
+            .as_ref()
+            .map(|(choice, brief)| {
+                brief
+                    .clone()
+                    .unwrap_or_else(|| choice.kind.default_prompt().to_string())
+            })
+            .ok_or("no agent has been started")?;
+        match self.spawn(inner, prompt) {
             Ok(()) => Ok(()),
             Err(e) => {
                 inner.state = AgentState::Ended {

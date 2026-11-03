@@ -573,6 +573,23 @@ fn suggestion_warning(review: &ReviewPart) -> Option<String> {
     })
 }
 
+/// The `loopExpect` patch: the setup's judging criteria, stamped into the
+/// phase's session so the console refuses a report that misses one at post
+/// time, while the agent can still fix it. `fix` is "smart" or the level
+/// list; an empty list means findings are reported, not fixed.
+fn expect_patch(setup: &LoopSetup) -> Value {
+    json!({
+        "loopExpect": {
+            "review": setup.review,
+            "fix": match setup.fix_mode {
+                FixMode::Smart => json!("smart"),
+                FixMode::Levels => json!(setup.fix.iter().map(|l| l.word()).collect::<Vec<_>>()),
+            },
+            "guess": setup.on_question == OnQuestion::Guess,
+        }
+    })
+}
+
 /// Whether to take the skill's report at its word, cross-checked against the
 /// spec's own marks (`phase_status` is the phase's entry from `specs.mjs
 /// status`). The quick check runs after an Approve, not here.
@@ -1310,14 +1327,16 @@ pub fn note_page(slot: &LoopSlot, workflow: &str, sid: &str) {
 }
 
 /// Start a fresh agent on `prompt`: on the agent's stored launch choice when it
-/// has one, else on `launch` (an agent the loop stopped has forgotten it).
+/// has one, else on `launch` (an agent the loop stopped has forgotten it). The
+/// prompt is transient either way: a later New Session opens the dashboard, it
+/// does not run the phase's (or Fix it's or Finalize's) prompt again.
 pub fn start_with(agent: &AgentManager, launch: &Launch, prompt: String) -> Result<(), String> {
     if agent.launch_choice().is_some() {
         agent.start_fresh(prompt)
     } else {
         agent.forget_session();
         let (kind, model, effort, mode) = launch.clone();
-        agent.start(kind, model, effort, mode, Some(prompt))
+        agent.start_transient(kind, model, effort, mode, prompt)
     }
 }
 
@@ -1504,6 +1523,7 @@ fn tick(ctx: &Ctx) -> bool {
     if state["loopOutcome"].is_object() {
         return handle_outcome(ctx, &snap, &state["loopOutcome"]);
     }
+    ensure_expect(ctx, &snap, &sid, state);
     if let Some(go) = crash_or_outcome(ctx, &snap, &sid) {
         return go;
     }
@@ -1542,6 +1562,32 @@ fn crash_or_outcome(ctx: &Ctx, snap: &Snapshot, sid: &str) -> Option<bool> {
         }
     }
     Some(fail(ctx, snap, StopCause::Crash, reason))
+}
+
+/// Whether `e` is a whole `loopExpect` stamp: the three fields the console
+/// enforces, each the right kind. Anything less counts as no stamp, so a
+/// corrupt or partial one is replaced rather than left to fail every post.
+fn valid_expect(e: &Value) -> bool {
+    let fix_ok = e["fix"].as_str() == Some("smart")
+        || e["fix"].as_array().is_some_and(|a| {
+            a.iter()
+                .all(|l| ["critical", "warning", "suggestion"].contains(&l.as_str().unwrap_or("")))
+        });
+    e.is_object() && e["review"].is_boolean() && e["guess"].is_boolean() && fix_ok
+}
+
+/// The judging criteria (`loopExpect`), posted into the session so the
+/// console refuses a report that misses one at post time, while the agent can
+/// still fix and repost, instead of the phase stopping on the verdict later.
+/// It lands only once the agent has locked the session with `open --loop`,
+/// and is reposted on every look while the stored stamp is missing or not the
+/// full shape (a fresh session, an unlock that dropped it, a corrupt stamp).
+/// A post that does not land only weakens this early check and is retried.
+fn ensure_expect(ctx: &Ctx, snap: &Snapshot, sid: &str, state: &Value) {
+    if !state["loop"]["driving"].as_bool().unwrap_or(false) || valid_expect(&state["loopExpect"]) {
+        return;
+    }
+    let _ = loop_tools::console_post(&ctx.console_dir, sid, &expect_patch(&snap.setup));
 }
 
 /// Count (or clear) the looks that could not read the session.
@@ -2955,6 +3001,45 @@ mod tests {
         assert_eq!(LoopSetup::default().on_question, OnQuestion::Guess);
     }
 
+    #[test]
+    fn the_expect_patch_carries_the_setup() {
+        assert_eq!(
+            expect_patch(&setup()),
+            json!({ "loopExpect": { "review": true, "fix": ["critical", "warning", "suggestion"], "guess": false } })
+        );
+        let mut smart = setup();
+        smart.fix_mode = FixMode::Smart;
+        smart.on_question = OnQuestion::Guess;
+        assert_eq!(expect_patch(&smart)["loopExpect"]["fix"], json!("smart"));
+        assert_eq!(expect_patch(&smart)["loopExpect"]["guess"], json!(true));
+        let mut no_review = setup();
+        no_review.review = false;
+        no_review.fix = vec![FixLevel::Critical];
+        assert_eq!(
+            expect_patch(&no_review)["loopExpect"],
+            json!({ "review": false, "fix": ["critical"], "guess": false })
+        );
+    }
+
+    #[test]
+    fn a_stamp_counts_only_when_whole() {
+        assert!(valid_expect(
+            &json!({ "review": true, "fix": "smart", "guess": false })
+        ));
+        assert!(valid_expect(
+            &json!({ "review": true, "fix": ["critical"], "guess": true })
+        ));
+        for bad in [
+            json!(5),
+            json!({ "review": "yes", "fix": "smart", "guess": false }),
+            json!({ "review": true, "guess": false }),
+            json!({ "review": true, "fix": ["major"], "guess": false }),
+            json!({ "review": true, "fix": "everything", "guess": false }),
+        ] {
+            assert!(!valid_expect(&bad), "{bad}");
+        }
+    }
+
     fn phase(n: u32) -> PhaseRecord {
         PhaseRecord {
             n,
@@ -3933,7 +4018,7 @@ second line"
             console_dir: PathBuf::from("."),
             home: report_home,
             launch: (
-                Agent::Builtin(crate::agents::AgentKind::Claude),
+                Agent::Builtin(crate::agents::builtin_entry("claude").unwrap()),
                 None,
                 None,
                 PermissionMode::Bypass,
@@ -5873,5 +5958,89 @@ second line"
             finalize_prompt("specs/x"),
             "/plan2code-4-finalize specs/x/overview.md --web"
         );
+    }
+
+    /// The `ARGS` lines the fake agent has printed, one per generation, in the
+    /// order they started: the prompts each launch ran with.
+    fn launched_prompts(seen: &Arc<Mutex<String>>) -> Vec<String> {
+        lock(seen)
+            .lines()
+            .filter_map(|line| {
+                line.trim()
+                    .strip_prefix("ARGS")
+                    .map(|rest| rest.trim().to_string())
+            })
+            .collect()
+    }
+
+    /// A plain folder to run the fake agent in: no git or specs needed, the
+    /// manager only spawns the program there.
+    fn agent_folder(name: &str) -> PathBuf {
+        let dir =
+            std::env::temp_dir().join(format!("plan2code-agent-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    fn wait_for_generations(seen: &Arc<Mutex<String>>, count: usize) {
+        wait_until("the agent generations", || {
+            launched_prompts(seen).len() >= count
+        });
+    }
+
+    #[test]
+    fn new_session_opens_the_dashboard_not_the_phase_prompt_again() {
+        let folder = agent_folder("restart");
+        let (agent, seen) = fake_agent_manager(&folder);
+        // The loop's cold start, then the usual fresh start: both transient.
+        start_with(&agent, &fake_agent_launch(), "phase one prompt".into()).unwrap();
+        wait_for_generations(&seen, 1);
+        start_with(&agent, &fake_agent_launch(), "phase two prompt".into()).unwrap();
+        wait_for_generations(&seen, 2);
+        // New Session starts on the placeholder brief, not the last prompt.
+        agent.restart().unwrap();
+        wait_for_generations(&seen, 3);
+        assert_eq!(
+            launched_prompts(&seen),
+            vec![
+                "phase one prompt".to_string(),
+                "phase two prompt".to_string(),
+                String::new()
+            ],
+            "a transient prompt must never become what Restart starts again"
+        );
+        agent.stop();
+    }
+
+    #[test]
+    fn a_real_brief_survives_a_transient_prompt() {
+        let folder = agent_folder("brief");
+        let (agent, seen) = fake_agent_manager(&folder);
+        let (kind, model, effort, mode) = fake_agent_launch();
+        agent
+            .start(
+                kind,
+                model,
+                effort,
+                mode,
+                Some("the original brief".to_string()),
+            )
+            .unwrap();
+        wait_for_generations(&seen, 1);
+        agent.start_fresh("a phase prompt".into()).unwrap();
+        wait_for_generations(&seen, 2);
+        agent.restart().unwrap();
+        wait_for_generations(&seen, 3);
+        assert_eq!(
+            launched_prompts(&seen),
+            vec![
+                "the original brief".to_string(),
+                "a phase prompt".to_string(),
+                "the original brief".to_string()
+            ],
+            "Restart starts the stored brief again"
+        );
+        agent.stop();
     }
 }

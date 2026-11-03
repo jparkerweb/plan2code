@@ -177,6 +177,15 @@ At the end of the run, post once a top-level `loopOutcome`:
 - `subject` is one imperative line under 100 characters saying what changed (it
   becomes the commit subject). `summary` is one line under 200 characters.
 
+The app stamps `loopExpect` into the session as the phase starts: the criteria
+it will judge the report by (`review`, `fix` as `"smart"` or the level list,
+`guess`). It is the app's field, never yours to post. The console holds every
+`loopOutcome` to it, so a report missing a required piece (`review.ran: false`
+on a review run, no `review.triage.ran` under Smart pick, a skipped Critical in
+the triage, no re-check with fixes chosen, assumed tasks without `--guess`) is
+refused at post time with the field named, while the run can still do that
+step and repost.
+
 Then post `{"agent":{"status":"waiting"}}` and keep waiting with the usual
 bounded `wait` slices until the app ends the session. Never end the turn on text.
 If the post is refused (exit 3), fix the field it names and post again.

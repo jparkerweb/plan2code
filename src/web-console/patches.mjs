@@ -518,6 +518,9 @@ export function applyPatch(state, patch) {
   if (Object.hasOwn(patch, "loop")) throw new Error(rule("", "loop", "is set by open --loop, not by a patch"));
   for (const [k, v] of Object.entries(patch)) {
     if (v === null) {
+      // The loop's report fields are set, never deleted: a null here would
+      // strip the app's criteria or an already-posted report.
+      if (["loopExpect", "loopOutcome", "loopEnd"].includes(k)) throw new Error(rule("", k, "cannot be deleted by a patch"));
       delete next[k];
       continue;
     }
@@ -577,6 +580,20 @@ export function applyPatch(state, patch) {
         }
         if (state.loopOutcome !== undefined) throw new Error(rule("", "loopOutcome", "was already posted for this session"));
         next.loopOutcome = v;
+        break;
+      case "loopExpect":
+        // The app's judging criteria for the run's report: a `loopOutcome` is
+        // held to them in validate(), so a report missing a required piece is
+        // refused here while the agent can still fix it. The app owns the
+        // field and stamps once per session (an unlock or a hop clears it
+        // first); a second stamp, from anyone, is refused while the first is
+        // valid, but a corrupt stored stamp can be overwritten. An early
+        // self-stamp only weakens this early check: the driver's verdict is
+        // unchanged.
+        if (!state.loop?.driving) throw new Error(rule("", "loopExpect", "is only accepted in a loop session"));
+        if (isPlainObject(state.loopExpect) && loopExpectProblems(state.loopExpect).length === 0) throw new Error(rule("", "loopExpect", "was already stamped for this session"));
+        if (state.loopOutcome !== undefined) throw new Error(rule("", "loopExpect", "came after the run's report; post it while the phase builds"));
+        next.loopExpect = v;
         break;
       case "loopEnd":
         // The app's word on how the loop ended; a later one replaces the earlier.
@@ -826,8 +843,10 @@ export function validate(state) {
     }
   }
 
-  // The loop's two reports: the skill's outcome and the app's ending.
-  if (state.loopOutcome !== undefined) problems.push(...loopOutcomeProblems(state.loopOutcome));
+  // The loop's reports: the app's criteria, the skill's outcome and the
+  // app's ending.
+  if (state.loopExpect !== undefined) problems.push(...loopExpectProblems(state.loopExpect));
+  if (state.loopOutcome !== undefined) problems.push(...loopOutcomeProblems(state.loopOutcome, state.loopExpect));
   if (state.loopEnd !== undefined) problems.push(...loopEndProblems(state.loopEnd, state));
 
   // A note on a card is unanswered the moment no agent words follow it in its
@@ -1068,12 +1087,28 @@ const isPosInt = (n) => Number.isInteger(n) && n > 0;
 const oneLine = (s, max) => typeof s === "string" && s.length >= 1 && s.length <= max && !/[\r\n]/.test(s);
 
 /**
+ * Problems with a `loopExpect` (the app's judging criteria for the run's
+ * report), as sentences naming the field; an empty array when it is good.
+ */
+export function loopExpectProblems(e) {
+  const p = [];
+  if (!isPlainObject(e)) return ["loopExpect must be an object"];
+  if (typeof e.review !== "boolean") p.push("loopExpect.review must be true or false");
+  if (e.fix !== "smart" && !(Array.isArray(e.fix) && e.fix.every((l) => LOOP_LEVELS.includes(l)))) {
+    p.push(`loopExpect.fix must be "smart" or an array of ${LOOP_LEVELS.join(", ")}`);
+  }
+  if (typeof e.guess !== "boolean") p.push("loopExpect.guess must be true or false");
+  return p;
+}
+
+/**
  * Problems with a `loopOutcome` (what the skill reports after building a phase
  * under the loop), as sentences naming the field; an empty array when it is
  * good. Rules are the overview's API section; house rules 4 and 5 apply to
- * every string.
+ * every string. `expect` is the app's `loopExpect`, when the session holds
+ * one: the report is then also held to what this loop asked for.
  */
-export function loopOutcomeProblems(o) {
+export function loopOutcomeProblems(o, expect) {
   const p = [];
   const bad = (field, rule) => p.push(`loopOutcome.${field} ${rule}`);
   if (!isPlainObject(o)) return ["loopOutcome must be an object"];
@@ -1178,6 +1213,43 @@ export function loopOutcomeProblems(o) {
 
   if (!oneLine(o.subject, 100)) bad("subject", "must be one line of 1 to 100 characters");
   else prose("subject", o.subject);
+
+  // A report that misses what the app said it would judge by is refused here,
+  // while the run can still do the step and repost, rather than stopping the
+  // phase on the driver's verdict later. The driver checks the criteria only
+  // on a "passed" report, so a "failed" one always lands (its reason is the
+  // phase's own word).
+  if (isPlainObject(expect) && o.result === "passed") {
+    if (isPlainObject(o.tests) && o.tests.ran === true && o.tests.passed === false) {
+      bad("tests.passed", "must be true on a passed report: the app refuses failed tests");
+    }
+    if (expect.review === true && isPlainObject(o.review)) {
+      if (o.review.ran === false) bad("review.ran", "must be true: this loop asked for a review");
+      if (expect.fix === "smart") {
+        if (!isPlainObject(o.review.triage) || o.review.triage.ran !== true) {
+          bad("review.triage.ran", "must be true: Smart pick requires the triage and its skipped list in the report");
+        } else if (Array.isArray(o.review.triage.skipped) && o.review.triage.skipped.some((u) => isPlainObject(u) && u.level === "critical")) {
+          bad("review.triage.skipped", "must not hold a skipped Critical: the app stops the phase on one");
+        }
+      }
+      const chosen = expect.fix === "smart" ? LOOP_LEVELS : Array.isArray(expect.fix) ? expect.fix : [];
+      if (chosen.length > 0 && o.review.recheck === false) {
+        bad("review.recheck", "must be true: findings at the loop's chosen levels need the re-check");
+      }
+      // The driver's `leftover()`: the counter and the unfixed list, whichever
+      // is larger; a leftover at a chosen Critical or Warning fails the phase.
+      const left = (level) =>
+        Math.max(o.review.left?.[level] || 0, (Array.isArray(o.review.unfixed) ? o.review.unfixed : []).filter((u) => isPlainObject(u) && u.level === level).length);
+      for (const level of ["critical", "warning"]) {
+        if (chosen.includes(level) && left(level) > 0) bad(`review.left.${level}`, "must be 0: a leftover at a chosen level fails the phase");
+      }
+    }
+    // The report's own claim only: the `[?]` marks in the spec stay the
+    // driver's call (`specs.mjs status`), which this post-time check cannot see.
+    if (expect.guess === false && isPlainObject(o.tasks) && Array.isArray(o.tasks.assumed) && o.tasks.assumed.length > 0) {
+      bad("tasks.assumed", "must be empty: this loop does not allow best guesses");
+    }
+  }
   return p;
 }
 
@@ -1225,9 +1297,10 @@ export function loopEndProblems(e, state) {
   return p;
 }
 
-// Loop mode adds three optional keys that a blank state does not hold (absent,
-// not null): `loop: { driving: true }` (set by `open --loop`), `loopOutcome`
-// (the skill's report) and `loopEnd` (the app's).
+// Loop mode adds four optional keys that a blank state does not hold (absent,
+// not null): `loop: { driving: true }` (set by `open --loop`), `loopExpect`
+// (the app's judging criteria), `loopOutcome` (the skill's report) and
+// `loopEnd` (the app's ending).
 export function blankState({ sid, workflow, title, project, specDir }) {
   return {
     schema: SCHEMA,
@@ -1261,9 +1334,10 @@ export function blankState({ sid, workflow, title, project, specDir }) {
  */
 export function switchWorkflow(state, { workflow, title, specDir }) {
   const next = { ...blankState({ sid: state.sid, project: state.project, workflow, title, specDir }), created: state.created };
-  // A blank state holds no `loop`, `loopOutcome` or `loopEnd`, so a hop never
-  // carries them over; `open --loop` stamps `loop` again after the switch.
-  for (const key of ["loop", "loopOutcome", "loopEnd"]) delete next[key];
+  // A blank state holds no `loop`, `loopExpect`, `loopOutcome` or `loopEnd`,
+  // so a hop never carries them over; `open --loop` stamps `loop` again after
+  // the switch, and the app restamps `loopExpect` on its next look.
+  for (const key of ["loop", "loopExpect", "loopOutcome", "loopEnd"]) delete next[key];
   if (state.chat) next.chat = state.chat;
   return next;
 }
