@@ -6,7 +6,7 @@ The app is optional. The Node web console and the skills never depend on it, so 
 
 ## Agents and the taskbar
 
-**Agent picker.** The launch card lists Claude Code, Devin and Codex, then any custom agents from `~/.plan2code/agents.json` (added in the console's User Preferences → Agents & models, the same list the `plan2code` command uses). The app starts on an agent that is installed (your last pick when it still is), never assumes Claude Code, and a custom agent has no effort row; New Session reuses whichever agent you started. Custom agents offer their own models, and `/plan2code` only does something in an agent that loads the installed Plan2Code skills.
+**Agent picker.** The launch card lists Claude Code, Devin and Codex, then any custom agents from `~/.plan2code/agents.json` (added in the console's User Preferences → Agents & models, the same list the `plan2code` command uses). The app starts on an agent that is installed (your last pick when it still is), never assumes Claude Code, and a custom agent has no effort row; New Session reuses whichever agent you started. The Model dropdown offers the same list the `plan2code` launcher's model question does (the shipped `models.json` plus anything you added in User Preferences), a custom agent its own `models`, and it hides for an agent with none; `/plan2code` only does something in an agent that loads the installed Plan2Code skills.
 
 **No agent installed.** The first-run checklist and the launch card show what an agent CLI is, each built-in's install command and an **Install page** link, and a note that other agents are added under Agents. Install one, press **Check again** (the app looks at `PATH` and `agents.json` again), and Start works without restarting the app.
 

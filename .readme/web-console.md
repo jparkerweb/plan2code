@@ -294,6 +294,34 @@ on your own machine. An agent working in a cloud VM, a container or over SSH
 stays in the terminal: a `127.0.0.1` link from somewhere else is a link you
 cannot open.
 
+### When no agent is found
+
+The console does not always have an agent behind it. When `plan2code` finds no agent it can start
+(no built-in and no working custom agent), it opens the console anyway on its **setup**
+page: the one session with no agent attached, whose only job is getting you one. The desktop app
+opens the same page in its window from a **Set up an agent** button.
+
+Each built-in is listed with what Plan2Code found when it looked (the same lookup the `plan2code`
+command and the app use, so all three agree):
+
+- **Found**: installed and ready. **Start with this agent** picks it.
+- **Found outside PATH**: installed, but not where `PATH` looks (it turned up on the saved
+  Windows PATH, in npm's global folder or in its documented install folder). **Use it from here**
+  saves that location, no `PATH` editing needed; the steps for doing it by hand are there too.
+- **Not found**: not installed, or not anywhere Plan2Code looks. Its install commands for your
+  system are listed, each with a Copy button, beside an **Install page** link.
+
+**Check again** re-runs the lookup without restarting anything, so an agent you just installed
+turns up. Under the list are four starter templates (GitHub Copilot CLI, OpenCode, Gemini CLI,
+Pi): starting setups for agent CLIs Plan2Code does not ship, which fill in the same form as adding
+an agent by hand and save as custom agents. The page's Help has a *Setting up an agent* topic, and
+signing in to the agent itself is always your own step.
+
+Pressing Start shows a "Starting <agent>..." pane while the new agent's session opens, then the
+tab moves to it by itself. If the move never comes, a line after about two minutes points you at
+the terminal and offers a way back to the list. Inside the app there is no Start: the app hears
+that the page found an agent, closes the page and picks it on the launch card.
+
 ### Your role
 
 The last control on *User Preferences*' Appearance tab (the gear button) is **Role**:
@@ -946,7 +974,8 @@ Ghoul Rush at 65).
   bag is empty. Each room's door opens
   once you grab its key, often up on a shelf. A run starts in **the Long
   Hall**, an easy walk with only zombies, then goes **stage** by stage:
-  three rooms, then a boss, and beating it opens the door. Out of the hall
+  three rooms, a bonus ride, then a boss (a big **BOSS FIGHT** card shows the
+  boss, its name and a menacing line first, and the fight waits for a key press), and beating it opens the door. Out of the hall
   and out of each boss's room you **choose the next stage** from two
   (one, once a single stage is left) never played that run, each card
   showing the stage with its boss standing in it: left and right pick one
@@ -970,7 +999,13 @@ Ghoul Rush at 65).
   the last steps the chain, which multiplies kills up to x10. The rooms bring
   pits, one-way shelves, crumbling boards and falling chandeliers that crush
   whatever is below (a monster crushed counts double). Five stages so
-  far: **the Manor**, the **Foyer**, the **Portrait Gallery**, the **Library**, the **Ballroom**
+  far: **the Manor**, the **Foyer**, the **Portrait Gallery**, the **Library**, the **Grand Banister**
+  (a **bonus round**: you slide down the grand staircase's banister for about a minute,
+  jumping vases, candlesticks and the breaks in the rail, ducking hanging portrait
+  frames and chandeliers on a pendulum (brake or lean to time them), shooting ghostly
+  butlers and cobwebs, and jumping with DOWN held to dive onto the brass under-rail
+  where the track splits; five hearts of your own, as in the other bonus rounds),
+  the **Ballroom**
   (the **Rotting Gourd**, a giant rotten pumpkin that picks one of three
   moves at random, never one three times running: a hop to where you stood,
   its shadow showing where, that shakes loose gourdlings; a spit of two
@@ -990,7 +1025,14 @@ Ghoul Rush at 65).
   around you on shadows, and he raises up to two skeletons out of the floor),
   and **the Graveyard**, out
   under the night sky: the **Lychgate**, **Open Graves**, **Mausoleum Row**
-  and **Angel's Rest**. Its monsters are its own: **grasping hands** that lie
+  and **Angel's Rest**; between the Row and Angel's Rest is a **bonus round**,
+  **the Midnight Hearse**: you hijack a runaway hearse and tear down the
+  cemetery road for about a minute, switching between the road and the grass
+  verge at the lane gates to get round fallen oaks and hedge walls, jumping
+  open graves and headstones, ducking branches and the lychgate arch and
+  shooting grasping hands and crows, with the lamp kept lit by lanterns on the
+  road (a hit throws a coffin out ahead, and the ghoul that sits up in it is
+  worth shooting). Its monsters are its own: **grasping hands** that lie
   unseen under the dirt, burst up as you pass and creep along under the
   ground after you; **mourners** whose wail slows you to half speed for a
   moment if you are close; **grave robbers** who dig in and come up behind
@@ -1049,12 +1091,32 @@ Ghoul Rush at 65).
   Choirmaster**, at his organ. Silence the four pipes to open him: each pipe
   takes a handful of bolts, a sounding pipe spews a ghost now and then, and
   while any pipe sounds he cannot be hurt. Once all four are silent, shoot
-  him. Between those he raises his baton and a column of notes flies at you
-  along the lines of a staff with one gap in it: mind the gap in each column
-  and be at its height (the floor or one of the boards) as it passes. At
-  half his health the hymn quickens: the notes fly faster, now and then a
-  second column follows close behind, and the pipes come back one by one,
-  each sounding again in turn.
+  him, but not for long: after four more columns of notes, fresh pipes drop
+  in from the roof and you must silence them again. Between those he raises
+  his baton and a column of notes flies at you along the lines of a staff
+  with one gap in it: mind the gap in each column and be at its height (the
+  floor or one of the boards) as it passes. Each column has its own speed,
+  some far faster than others (a hot edge and a long tail) and some slower (a
+  cold edge and a short tail). At half his health the hymn quickens: the
+  notes fly faster and now and then a second column follows close behind.
+  Between the Organ Loft and the Choir is a
+  **bonus round**, **Holy Roller**: an endless-runner seen from behind. You
+  surf a runaway church pew down the nave's aisle toward the altar, in three
+  lanes, faster and faster for about a minute, with stone pillars, stained
+  glass and pews rushing past in candlelight. LEFT and RIGHT change lane (a
+  press at the edge bumps the wall), UP jumps, DOWN slides (in the air it
+  fast-falls), and holding space shoots straight down your lane. Switch lane
+  around the pillars, confessionals and crosswise pews; jump the kneelers,
+  candle stands, flagstone cracks and open crypt hatches; slide under the
+  swinging censers, hanging banners and fallen beams; shoot the gargoyles
+  that drop from the arches (two bolts) or shoot a bell rope to ring its bell
+  and stun the gargoyles ahead. Rows of golden wax souls run along the lanes
+  (arcs over jumps, lines through slides) and build a combo, and a halo
+  pulls the souls beside you in for a few seconds. Taking most of the souls
+  is worth a Lucky Die. It plays for five hearts of its own, so a hit costs a
+  heart, never a life, and shoves you into a safe lane; lose all five and the
+  round ends with nothing and the run goes on to the Choir; reach the end and
+  you earn three to nine Lucky Dice.
   A sixth stage, **Blackmoor Sanatorium**, is a derelict asylum of cracked
   green tile: **Admissions**, the **Hydrotherapy Baths**, the **Surgical
   Theater** and **the Night Ward**. Its monsters: **orderlies**, huge and
@@ -1096,7 +1158,19 @@ Ghoul Rush at 65).
   moment, the time to shoot it for double damage, then pounces where you
   stand (watch the shadow on the grass); up close it swipes, and its howl
   calls moonhounds. At half its health the moon comes full: it waits less,
-  pounces twice in a row, and its howl calls grown hounds.
+  pounces twice in a row, and its howl calls grown hounds. Between the
+  Square and the Green is a **bonus round**, **Torch Mob**: you steal a hay
+  wagon and race out of Hollow End down the cobbled road and over the old
+  stone bridge, about a minute and ten seconds, with the village chasing you.
+  Jump the barrels, crates, ditches and spooked horses, duck the washing
+  lines and inn signs (down also brakes the wagon), and shoot or dodge the
+  pitchforks and torches the villagers hurl from windows and roofs (a torch
+  that lands sets the hay alight). The **mob** behind you closes in when you
+  brake, get hit or burn, and falls back on clean stretches and when you
+  shoot their torches; if it catches the wagon it costs a heart, and the
+  collapsed bridge must be jumped off its ramp. Keeping the mob far behind
+  is worth a Lucky Die. It plays for five hearts of its own and pays three
+  to nine Lucky Dice.
   An eighth stage, **the Deep Seam Mine**, goes underground, where every room
   is always dark: **the Mine Shaft** (ride the cage lifts up and down),
   **the Flooded Tunnels** (knee-deep water slows you and your steps splash),
@@ -1224,9 +1298,40 @@ Ghoul Rush at 65).
   all five and the round ends with nothing and the run goes on to the Widow;
   reach the snowbank and you earn three to nine Lucky Dice (hearts left,
   obstacles passed untouched, things shot and souls and Cocoa taken).
+  **Gallows Bog** is a stage of three walked rooms (the Sunken Boardwalk,
+  Cypress Hollow and the Stilt House), a fan-boat ride and the Drowning Pool.
+  Its own rule is **mud**: on a span of it Planny sinks the longer he stands,
+  the run sags to a crawl and a jump to a low hop over about two and a half
+  seconds. Dry floor, the air, a board over the mud or **Stilt Boots** (ten
+  seconds, found only here) let go of it, and the sink drains away. Its monsters: the **lurker**,
+  two eyes at the waterline that nothing touches or shoots until you come
+  within nine units, then it snaps out at you and sinks back; the **leech
+  swarm**, which drifts at you through the wet and latches for one heart, drops
+  off and cannot latch again for a moment (a hit breaks it up); the
+  **will-o'-wisp**, whose light draws every monster within ten units of it
+  toward you at a fifth more speed until a shot puts it out (it stays dim for
+  six seconds, glows where it will return and then burns again); and the **bog
+  body**, which climbs out of the mud harmless and then shambles. The **Harpoon**
+  is the stage's own weapon (a double tap): it pierces everything in its line
+  and is the one shot that reaches a lurker's eyes under the water. **The Bog
+  Runner** is a fan-boat skim down a black channel with a swarm of leeches
+  boiling up in your wake: switch between the open channel and the mud flats at
+  the banks, jump snags and cypress knees, duck moss veils and low limbs, and
+  shoot the hag's charms and the gas pockets (a pocket's burst pushes the swarm
+  back). Easing off, the mud flats and a fan clogged with mud let the swarm
+  gain, and at your heels it takes a heart. Like the other rides it plays for five
+  hearts of its own and ends with three to nine Lucky Dice. The boss is **Old
+  Mother Bog**, who keeps her distance along the planks: she sends a low wave
+  of mud to jump, or spits from her cauldron to leave a muck patch that burns
+  for three seconds (it shows where it will land first). Late in each rest her
+  cauldron opens, and a shot into it counts triple. At half her health she goes
+  under, bubbles show where she will come up near you, and she fights on with
+  shorter waits and a second patch aimed ahead of your feet.
   Not every room is dark: each time you enter one it is dark three times in
   five and otherwise lit, dim but seen whole (the same for the same run's
-  seed). In a dark room only half as many monsters come in from the edge
+  seed). The Long Hall, where every run starts, is always lit until you take
+  its key, and then the lights go out for the rest of the room. In a dark
+  room only half as many monsters come in from the edge
   behind you. Power-ups lie in the rooms and now and then drop from
   a kill: **Spread shot** and **Rapid fire** (eight seconds each), a **Garlic
   shield** (shrugs off one hit and sees off what touched you; lose a life
@@ -1365,9 +1470,9 @@ building rather than asking, so the page shows the build instead:
   within the phase, to match the bar — the phase is already named in the
   headline — so you never see "Task 4.2 of 6"; the page rewrites that form if
   an agent still sends it.
-- **The phase's task list** in its own tab, ticking as each task lands on
-  disk, and **the phase file itself** (`phase-3.md`) rendered in the next —
-  the prerequisites and task specs, not just the checklist.
+- **The phase file itself** (`phase-3.md`) in its own tab: the
+  prerequisites and every task in full, each one ticking as it lands on
+  disk.
 - **Any question the build needs answered** (which phase, a spec conflict,
   failing tests) appears as an ordinary question, and the sign-off is a
   **Completion report** tab with an *Approve this phase* card.
@@ -1587,9 +1692,9 @@ On Appearance and Sounds & activities each change saves the moment you make it, 
 
 ### Agents & models
 
-Most people never need this tab: Plan2Code finds the agents installed on the machine and ships an up-to-date model list with every release. It opens on a summary table, one row per agent with its models and whether its command was found on this machine. **Edit** opens that agent's form and **Add agent** a blank one. Nothing on this tab saves as you type: each form has its own **Save** and **Discard**, and shows an **Unsaved** badge while it holds a change. Leaving a form with an unsaved change (another tab, **Back to summary**, **Close**, `Esc`) asks first: save it, discard it, or keep editing. Saving one agent never sends another's half-typed edit.
+Most people never need this tab: Plan2Code finds the agents installed on the machine and ships an up-to-date model list with every release. It opens on a list of agents on the left, one row per agent with its models and whether its command was found on this machine. Picking a row opens that agent's form in the pane beside it, and **Add agent** a blank one. Under the list, **Or start from a template** offers the same starter templates the setup page has (GitHub Copilot CLI, OpenCode, Gemini CLI, Pi): picking one shows its note and **Use this template**, which opens the new-agent form prefilled rather than saving anything behind your back. Nothing on this tab saves as you type: each form has its own **Save** and **Discard**, and shows an **Unsaved** badge while it holds a change. Leaving a form with an unsaved change (another tab, picking another agent, **Close**, `Esc`) asks first: save it, discard it, or keep editing. Saving one agent never sends another's half-typed edit.
 
-**Models.** The `plan2code` launcher's model menu comes from `models.json`, which every install overwrites with the authors' curated list. Each built-in agent's form (Claude, Devin, Codex) shows that list under *Comes with Plan2Code*, and below it **Models you added**, each a model id and the name shown in the menu, for a model that came out before Plan2Code was updated. Additions are kept in `~/.plan2code/models.json` and survive updates, unless the curated list now includes them; **Remove** takes one out. Restart `plan2code` to see a change. You can always run `plan2code --model <id>`, or switch model inside your agent before running a skill. Devin ids ending `-xhigh` or `-max` are refused. Maintainers refresh the curated list with the repo-local `/plan2code-model-update` skill, which shows a diff and changes only what they approve.
+**Models.** The `plan2code` launcher's model menu comes from `models.json`, which every install overwrites with the authors' curated list. Each built-in agent's form (Claude, Devin, Codex) shows that list under *Comes with Plan2Code*, and below it **Models you added**, each a model id and the name shown in the menu, for a model that came out before Plan2Code was updated. Additions are kept in `~/.plan2code/models.json` and survive updates, unless the curated list now includes them; **Remove** takes one out. Restart `plan2code` to see a change. You can always run `plan2code --model <id>`, or switch model inside your agent before running a skill. Devin ids ending `-xhigh` or `-max` are refused. Maintainers refresh the curated list, and the shipped agent list's install data, with the repo-local `/plan2code-launcher-update` skill, which shows a diff and changes only what they approve.
 
 **Agents.** An agent you add is an agent CLI Plan2Code did not find on its own, which the `plan2code` command and the desktop app can then start. Each one has a name, the command to run (a bare name looked up on `PATH`, or a full path), and optional fields:
 
@@ -1659,6 +1764,21 @@ roughly the time the browser itself takes to open.
 the idle clock never runs down while you are there. Close the tab and it shuts
 itself down about two minutes later; it stops after four hours regardless, and
 the agent stops it outright when the session ends.
+
+**The setup session hands its tab to the agent it finds.** A `setup` session is
+agent-less: nothing reads its sends, so the page's agent-silence and question
+rules are switched off and only the idle deadline ends it. The `plan2code`
+launcher started the session and polls it for a pick; **Start with this agent**
+posts an `__start` action the launcher collects, and it spawns that agent with
+two environment variables, `PLAN2CODE_SETUP_ANNOUNCE` (the setup server's
+address) and `PLAN2CODE_SETUP_TOKEN` (a per-session token). The new agent's own
+`open` then POSTs its sign-in URL to `POST /handover` on the setup server
+instead of opening a browser; the token guards the route, the setup page gets a
+`move` event on its `/events` stream carrying the URL, and the tab follows it
+onto the new session. Inside the desktop app none of this runs: `open` finds no
+setup variables (the launcher scrubs the app ones from the setup console it
+starts), the page tells the app `agent-found` instead, and the app closes the
+setup page and picks the agent itself.
 
 That also means **the server routinely outlives the agent**. It is the agent, not
 the server, that reads your answers, and the two fail separately. The page tells
@@ -1783,6 +1903,11 @@ origin.
 | `POST /notepad/tab/sent` | `{ id, workflow, spec? }`. Records that the tab was sent (`workflow` one of `pathfinder`, `plan`, `quick-task`, `revise-plan`; `spec` like `specs/<name>`) as `sent: { workflow, spec?, at }` on its `tabs.json` entry, shown back in `GET /notepad`'s `tabs`. The page posts it only after the Send that carried the filled box; 400 `bad-sent`, 404 `no-such-tab`. |
 | `GET /notepad/images/<tab>/<uuid>.jpg`, `<uuid>.thumb.jpg` | Serves a picture or its thumbnail as `image/jpeg`, only by a tab id and a UUID name, a regular file (never a link) whose real path stays inside `~/.plan2code/notepads/`; anything else is 404. |
 | `POST /subagents` | `{ on, instruction, max }` (`instruction: null` for the shipped default). Saves the switch for this project and skill and answers `{ ok, setting }`; 400 `not-offered` on a skill without the switch, `bad`, `too-long` (over 2,000 characters) or `max` (outside 1 to 20). |
+| `GET /agents` | The agents view's data: your custom agents and the shipped built-ins and templates, each entry merged with its lookup result `{ state, path, where, folder }`: `state` is `found` (on PATH), `outside` (saved Windows PATH, npm's global folder or an install folder) or `missing`, and `where` says which search found it. Built-ins carry their `install` lines for the server's OS only. |
+| `POST /agents` | `{ agents, replace? }`. Saves the custom-agent list to `~/.plan2code/agents.json`, validated first (400 `{ error, index, field }`); 409 while the file holds entries `GET /agents` could not read, unless `replace: true`. |
+| `POST /agents/test` | `{ command }`. Where a command would run from (`{ found, path }`), for the form's Test button; never runs it. |
+| `POST /agents/use-path` | `{ id }`. "Use it from here": saves the location the lookup found off PATH as the agent's `command` (a built-in becomes a new custom entry; 404 unknown, 409 `not-found`). |
+| `POST /handover` | Setup sessions only, and only with the session's setup token in `x-plan2code-token`: the new agent's `open` posts `{ url }` here, the server broadcasts a `move` event with it and the setup tab follows. 409 `moved` once it has happened. |
 
 ## For maintainers
 

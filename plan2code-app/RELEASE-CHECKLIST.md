@@ -59,10 +59,11 @@ file directly after checking it against the release's checksum list.
 - [ ] The first run (no `firstRunDone` saved yet) shows the checklist (Node, an agent CLI, the
       project folder, the skills version) before the launch card; a later launch goes straight to
       the launch card
-- [ ] The launch card offers agent, model, effort (Claude and Codex only) and permission mode
-      (checks off is ticked by default, matching the plain `plan2code` launcher; untick it for
-      an agent that keeps its normal approval prompts); a CLI it could not find is named, not
-      just disabled
+- [ ] The launch card offers agent, a model dropdown (the same models.json list the `plan2code`
+      launcher asks with, hidden for an agent with no listed models), effort (Claude and Codex
+      only) and permission mode (checks off is ticked by default, matching the plain `plan2code`
+      launcher; untick it for an agent that keeps its normal approval prompts); a CLI it could
+      not find is named, not just disabled
 - [ ] **Dock the terminal to the right**: the splitter becomes vertical, the toolbar stacks, and the
       dashboard keeps the rest of the width; dock it back to the bottom
 - [ ] **Collapse** the terminal to a thin strip (either dock) and **View Agent Terminal** brings it

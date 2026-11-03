@@ -35,7 +35,7 @@ The dashboard, in a project halfway through a build. It suggests the next step f
 - **Node.js 18 or newer.** Check with `node --version`. No Node? Get it from [nodejs.org](https://nodejs.org/) (the LTS download), or run `winget install OpenJS.NodeJS.LTS` on Windows, `brew install node` on macOS, or use `nvm` on Linux. Then open a new terminal.
 - **Start from your project.** Open your terminal in the project you want to work on (`cd` into it) before you run anything. Plan2Code works on the folder you start it in.
 - **Ways in.** `plan2code` (Claude Code, Devin or Codex), or type `/plan2code` in your agent (`$plan2code` in Codex).
-- **No agent yet?** Install Claude Code, Codex or Devin first.
+- **No agent yet?** Install Claude Code, Codex or Devin first, or let the `plan2code` command's setup page walk you through it.
 
 Installation needs network access and runs through the [skills CLI](https://skills.sh). To update, run `plan2code update` (or re-run the install command).
 
@@ -92,12 +92,22 @@ which opens a folder picker first. Uninstalling (`U`) removes both.
 <details>
 <summary>Using another agent CLI, or none yet</summary>
 
-Plan2Code runs inside an AI coding agent CLI. If `plan2code` finds none of Claude Code, Devin or Codex on
-your `PATH`, it says so and prints each one's install command and official page, then exits; the desktop app
-shows the same help in a panel with an **Install page** link per agent and a **Check again** button, so you
-can install one and carry on without restarting.
+Plan2Code runs inside an AI coding agent CLI. With no agent it can run (none of Claude Code,
+Devin or Codex, and no working custom agent),
+`plan2code` opens a setup page in your browser (the web console runs it, so no agent is needed).
+The page lists each agent as **Found**, **Found outside PATH** or **Not found**, with its install
+commands for your system, a Copy button per command and an **Install page** link. Install one and
+press **Check again**: no restart needed. An agent found outside `PATH` gets **Use it from here**,
+which saves where it was found so you never touch `PATH` yourself. Below the list sit four starter
+templates (GitHub Copilot CLI, OpenCode, Gemini CLI and Pi) for agents Plan2Code does not ship.
+**Start with this agent** carries the run straight on in the same tab, onto the new agent's
+dashboard. Naming a built-in that is missing with `--cli <name>` opens the same page on that agent
+(a missing custom agent prints its own steps and exits 127). In the
+desktop app a **Set up an agent** button opens the same page in the window and returns to the
+launch card with the found agent picked. Where no page can open, such as over SSH or with no
+display, `plan2code` prints the install commands and install pages and exits with code 127.
 
-To use a different agent CLI, open the web console's **User Preferences → Agents & models** and add it: a name, the
+Once an agent is running, to use a different agent CLI, open the web console's **User Preferences → Agents & models** and add it: a name, the
 command, and (optionally) its arguments, the start prompt, arguments for skipping permission prompts, and
 how it takes a model. Custom agents are saved in `~/.plan2code/agents.json` and used by both the
 `plan2code` command (listed after the built-ins; `--cli <id>` picks one) and the desktop app's picker. The

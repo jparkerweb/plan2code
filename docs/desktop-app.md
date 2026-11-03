@@ -74,9 +74,15 @@ you picked, and reuses the same agent); a CLI the app cannot find is named, with
 instead of just being grayed out. The card is skipped when the launcher already passed an agent to
 start.
 
-With no agent installed at all, the checklist and the launch card explain what an agent CLI is and
-show each built-in's install command with an **Install page** link. Install one (or add a custom
-agent) and press **Check again**: the app finds it without a restart.
+With no agent installed at all, the checklist and the launch card each show a **Set up an agent**
+button. It opens the same setup page the `plan2code` command uses, inside the app's window: every
+built-in listed as found, found outside PATH or not found, with its install commands for your
+system, an **Install page** link, **Check again**, **Use it from here** for one found outside
+PATH, and the starter templates for other agent CLIs. When the page reports an agent found, the
+app returns to where it was (the checklist or the launch card), re-checks, and picks that agent on
+the launch card ready for Start. A **Back** button leaves the page at any time. When the saved
+(last used) agent is gone but another works, a one-line notice on the launch card says so and the
+card carries on with the working one.
 
 The window's own title (and so its taskbar entry) reads **Plan2Code - &lt;folder name&gt;** once a
 project is open, so two or more windows on different projects read apart without opening each one

@@ -2,18 +2,6 @@
 
 All notable changes to Plan2Code will be documented in this file.
 
-## v4.0.0
-
-### 💥 Breaking
-
-- **the `plan2code-loop` CLI is no longer an install target, and the package is removed.** The `plan2code-loop/` directory is deleted, and with it the installer's `O. LOOP CLI` advanced option and the loop's install, update and uninstall wiring. Its docs (`.readme/autonomous-loop.md`, `.agents-docs/AGENTS-plan2code-loop.md`) are gone too, and every remaining mention across the docs, templates, metadata and comments is removed or reworded. The desktop app's **Implementation Loop**, which superseded the CLI, is a separate feature built into the app and is unchanged.
-
-  **Stale installs are still cleaned up.** `install.js` keeps a small `removeLegacyLoopShims()` step that removes the old global artifacts (`plan2code-loop`, `plan2code-loop.cmd`, `plan2code-loop.ps1` and `node_modules/plan2code-loop` under the npm prefix) when they are present. `update()` runs it once before reinstalling and quietly skips a stale `"loop"` entry in `~/.plan2code/install.json`; uninstall runs it too.
-
-### 🐛 Fixed
-
-- **desktop app**: the Implementation Loop's end screen offers **Back to the dashboard** next to its other actions, on a finished loop and a stopped one, and it works with no agent running (it opens a fresh dashboard console session in the frame). The screen's status line also tells the truth now: it reads "Loop finished. Pick what happens next." (or "The loop stopped.") as your move instead of spinning "Starting Building + review…", so the taskbar dot goes green there instead of staying dark while the loop's finished page waits.
-
 ## v3.0.0
 
 ### ✨ Added
@@ -67,6 +55,13 @@ All notable changes to Plan2Code will be documented in this file.
 - **web console**: a one-answer question (a pick-one list, or a menu) now has a **Clear** button under its options that takes the card back to how it arrived: no pick, and nothing in **Something else**. A radio pick cannot be unticked by clicking it again, so before this a stray pick could only be swapped for another. The button shows only while the answer has not been sent.
 
 - **contributors**: `npm run play` opens the web console straight from `src/` with the server reading each page file fresh, so a change to an Activities game shows on the next page reload, without `npm run build:skills` or a reinstall.
+- **first run**: when no agent CLI can be used (a fresh install, an agent installed but off PATH, the only agent gone after an uninstall, or `--cli` naming a missing agent), the `plan2code` command and the desktop app show one **setup page**: the web console running an agent-less `setup` workflow. It lists each built-in agent (Claude Code, Devin, Codex) as **found**, **found outside PATH** or **not found**, with install commands for your OS, an install page link and **Check again**, plus four starter templates (Pi, Gemini CLI, OpenCode, GitHub Copilot CLI). **Use it from here** makes an off-PATH agent usable without a restart; once an agent is found the run carries straight on, the same browser tab (or the app's launch card) picking up where it left off. With no window or no person, the command prints the install steps and exits 127. One shared agent list (`src/launcher/agents.json`, installed to `~/.plan2code/bin/`) and one lookup rule (`agent-lookup.mjs`, with a Rust twin in the app held to the same fixture cases) serve the launcher, the console and the app; the maintainer skill `plan2code-model-update` is now `plan2code-launcher-update` and re-checks the list's install data too.
+
+### 💥 Breaking
+
+- **the `plan2code-loop` CLI is no longer an install target, and the package is removed.** The `plan2code-loop/` directory is deleted, and with it the installer's `O. LOOP CLI` advanced option and the loop's install, update and uninstall wiring. Its docs (`.readme/autonomous-loop.md`, `.agents-docs/AGENTS-plan2code-loop.md`) are gone too, and every remaining mention across the docs, templates, metadata and comments is removed or reworded. The desktop app's **Implementation Loop**, which superseded the CLI, is a separate feature built into the app and is unchanged.
+
+  **Stale installs are still cleaned up.** `install.js` keeps a small `removeLegacyLoopShims()` step that removes the old global artifacts (`plan2code-loop`, `plan2code-loop.cmd`, `plan2code-loop.ps1` and `node_modules/plan2code-loop` under the npm prefix) when they are present. `update()` runs it once before reinstalling and quietly skips a stale `"loop"` entry in `~/.plan2code/install.json`; uninstall runs it too.
 
 ### 🔧 Changed
 
@@ -96,6 +91,7 @@ All notable changes to Plan2Code will be documented in this file.
 - **desktop app**: the top bar's buttons now look like the console's own: rounded, quiet until hovered, then in your highlight color from User Preferences (the app keeps it for the next launch), with **New Session** outlined in it as the likely next step.
 - **desktop app**: the New Session confirmation shows Planny, drawn like the console's own (outlined shell, star eye, smile), holding a steaming cup of coffee, and its buttons use the console's style: **New Session** in your highlight color, **Cancel** a plain button. The same highlight applies to the panel's other one-button prompts, such as **Retry** and **Reconnect the console**.
 - **desktop app**: the top bar is rebuilt around two menus and one next step. The project shows as its folder name, with the full path and **Change project** in its menu; **New Session** always sits just left of the agent's menu, which carries a state dot, an amber **checks off** badge in place of the "Permission checks are off for ..." sentence, and **Change agent** once the agent has ended. The console's and the skills' messages share one slot at the right end that shows the most pressing step with its button (**Reconnect the console**, **Update skills**) and "+N more" for the rest, so the bar no longer overflows when several things go wrong at once. The repeated "Plan2Code" label, the full path, the "agent:" prefix and the long "Nothing starts until you press New Session" line are gone.
+- **web console**: **User Preferences → Agents & models** is rebuilt as a master-detail split: the agent list stays pinned on the left and picking a row opens that agent's form in the pane beside it, so moving between agents no longer goes through a summary-to-form round trip. The same split carries the agent-less setup page (pick list left, state and way forward right). Behind it `agents-view.js` is split into a `screens/agents/` component set (data, list editor, summary, form) behind the unchanged `mountAgentsView` API, and the agent styles live in their own `styles/agents.css`. The setup page's starter templates are offered on the tab too, under **Or start from a template**: **Use this template** opens the new-agent form prefilled. Every capability is kept: per-form Save and Discard, the Unsaved prompt, Test, Delete, the 409 Save anyway path, and the setup states and templates. The Preferences dialog itself now follows the Card width pick, never wider than the wide preset (1080px), instead of a fixed 880px.
 
 ### 🐛 Fixed
 
@@ -109,6 +105,7 @@ All notable changes to Plan2Code will be documented in this file.
 - **web console**: a failed Send says why: the lost-contact state and its reconnect help at once when the console is gone, the console's reason when it refuses the send, or that the console is still up and Send can be pressed again.
 - **desktop app**: a test console started inside the app (for example by `cargo test` during a build) can no longer take over the window. Before, the window followed it, then fell back to an empty dashboard once the test shut it down, and the build's question sat on a page no one could see. The app now ignores any page whose session is not in its own console store.
 - **desktop app**: a console too busy to answer a health check in time (a machine running a test suite) is given a second, longer look and then resumed on the same session. It is no longer swapped for a fresh, empty dashboard mid-build.
+- **desktop app**: the Implementation Loop's end screen offers **Back to the dashboard** next to its other actions, on a finished loop and a stopped one, and it works with no agent running (it opens a fresh dashboard console session in the frame). The screen's status line also tells the truth now: it reads "Loop finished. Pick what happens next." (or "The loop stopped.") as your move instead of spinning "Starting Building + review…", so the taskbar dot goes green there instead of staying dark while the loop's finished page waits.
 
 ## v2.11.1
 

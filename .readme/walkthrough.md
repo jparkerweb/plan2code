@@ -12,9 +12,16 @@ Each session stays short, and the specs on disk carry everything from one sessio
 - **Node.js 18 or newer.** Check with `node --version`. No Node? Get it from [nodejs.org](https://nodejs.org/) (the LTS download), or run `winget install OpenJS.NodeJS.LTS` on Windows, `brew install node` on macOS, or use `nvm` on Linux. Then open a new terminal.
 - **Start from your project.** Open your terminal in the project you want to work on (`cd` into it) before you run anything. Plan2Code works on the folder you start it in.
 - **Ways in.** `plan2code` (Claude Code, Devin or Codex), or type `/plan2code` in your agent (`$plan2code` in Codex).
-- **No agent yet?** Install Claude Code, Codex or Devin first.
+- **No agent yet?** Install Claude Code, Codex or Devin first, or let the `plan2code` command's setup page walk you through it.
 
 Not installed yet? The install steps are in the [README](../README.md#install-and-start).
+
+> **Running `plan2code` with no agent installed** opens a setup page instead of a dashboard: it
+> lists each built-in as found, found outside PATH or not found, with its install commands for
+> your system and an Install page link. Install one, press **Check again**, then **Start with
+> this agent** and the run carries on in the same tab. On a machine with no browser (over SSH, a
+> server) it prints the install steps instead and exits with code 127. The rest of this
+> walkthrough assumes an agent is already in place.
 
 ---
 
