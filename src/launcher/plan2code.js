@@ -14,12 +14,16 @@
  * it asks which one, with the last pick as the default; with only one installed it uses that.
  * `--cli claude` / `--cli devin` / `--cli codex` skips the question. Before starting it asks
  * which model to run, from the curated list in models.json (shipped with every install) plus
- * any models the user added in User Preferences; Enter keeps the model the CLI last used, and
- * `--model` (or Codex's `-m`) skips the question. Right after the agent is chosen, when it has a
+ * any models the user added in User Preferences; Enter runs the model the launcher last passed
+ * that agent (marked `(last used)`), or keeps the agent's own last-used model when none is
+ * recorded, and `--model` (or Codex's `-m`) skips the question. Right after the agent is chosen, when it has a
  * flag for skipping permission prompts (every built-in does; a custom agent only with bypassArgs),
  * it asks whether to turn them off, Yes by default; `--keep-permissions` answers no, and with no
  * terminal to ask on they are off. Any other arguments are forwarded to the CLI.
- * Self-contained, Node built-ins only: install.js copies this file to ~/.plan2code/bin/ and
+ * Self-contained, Node built-ins only, with one exception: the shared agent list and lookup
+ * rule (agents.json and agent-lookup.mjs, installed beside this file in ~/.plan2code/bin/) are
+ * loaded by dynamic import inside chooseCli() so the command, the web console and the desktop
+ * app follow one list and one PATH rule. install.js copies this file to ~/.plan2code/bin/ and
  * points the global shims at it.
  *
  * Custom agents: the person's own agent CLIs in ~/.plan2code/agents.json (written by User
@@ -32,6 +36,11 @@
  * When the desktop app is installed (~/.plan2code/app/) and a display exists, `plan2code` opens
  * the app on the chosen folder, agent and model instead of running the agent in this terminal.
  * `--classic` (never forwarded to the CLI), no app, and no display on Linux keep the flow above.
+ *
+ * When no agent can run at all, a person with a window gets the console's agent-less setup
+ * page instead of only the printed install steps: the app on its Set up an agent card when it
+ * is installed, the browser page otherwise. A Start there names the agent, the lookup runs
+ * again, and the run carries on as if that agent had been found all along.
  *
  * `plan2code update` starts no agent: it re-runs the npx install with `--update`, which
  * reinstalls whatever ~/.plan2code/install.json lists (the desktop app included). Before an agent starts, one line says
@@ -67,14 +76,29 @@ const USER_AGENTS_FILE = path.join(os.homedir(), '.plan2code', 'agents.json');
 const MODELS_MENU_COMPACT_AT = 30;
 const PICKER_PROMPT = 'Choose the project folder to open Plan2Code in';
 const UPDATE_COMMAND = 'update';
-// The same URL src/web-console/update-check.mjs exports as REPO_URL. This file may require
-// nothing but Node built-ins (and update-check.mjs is ESM), so it keeps its own copy.
+// The same URL src/web-console/update-check.mjs exports as REPO_URL. Apart from the
+// agent-lookup.mjs import noted in the header, this file may require nothing but Node
+// built-ins (and update-check.mjs is ESM), so it keeps its own copy.
 const REPO_URL = 'https://github.com/jparkerweb/plan2code.git';
 // The web console's cached release check, and how long it counts as fresh (update-check.mjs
 // CACHE_MS). PLAN2CODE_CONSOLE_HOME moves the console's files, as in files.mjs.
 const CONSOLE_HOME = process.env.PLAN2CODE_CONSOLE_HOME || path.join(os.homedir(), '.plan2code', 'console');
 const UPDATE_CACHE_FILE = path.join(CONSOLE_HOME, 'update-check.json');
 const UPDATE_CACHE_MS = 60 * 60 * 1000;
+
+// The variables the setup console must never carry: with any of them set its `open` would
+// announce its page into a live app window the run is not part of (NFR-2).
+const APP_ENV_VARS = [
+  'PLAN2CODE_IN_APP',
+  'PLAN2CODE_APP_TOKEN',
+  'PLAN2CODE_APP_ANNOUNCE',
+  'PLAN2CODE_EMBED_ORIGIN',
+  'PLAN2CODE_CONSOLE_SID',
+  'PLAN2CODE_APP_VERSION',
+];
+// An agent install is minutes, not seconds: the setup page's `wait` is re-run in 240-second
+// slices (the way an agent waits), capped around four hours all told.
+const SETUP_WAIT_CAP_MS = 4 * 60 * 60 * 1000;
 
 // The escape values install.js's COLORS uses, copied: this file is installed alone and may
 // require nothing but Node built-ins.
@@ -178,23 +202,38 @@ function cliIdList(quote = '`', clis = CLIS) {
   return `${ids.slice(0, -1).join(', ')} or ${ids[ids.length - 1]}`;
 }
 
+const OS_KEY = IS_WINDOWS ? 'win' : IS_MAC ? 'mac' : 'linux';
+
+/** This OS's lead install command from an agent-list entry (or a fallback CLIS hint). */
+function leadInstall(cli) {
+  const lines = cli && cli.install;
+  if (lines && typeof lines === 'object' && !Array.isArray(lines)) {
+    const first = Array.isArray(lines[OS_KEY]) ? lines[OS_KEY][0] : null;
+    return first && first.run;
+  }
+  return typeof lines === 'string' ? lines : null;
+}
+
 /** An install command with its official page after it, unless the command is the page. */
 function installLine(cli) {
-  return cli.installUrl && cli.installUrl !== cli.install ? `${cli.install} (${cli.installUrl})` : cli.install;
+  const run = leadInstall(cli);
+  if (!run) return cli.installUrl || '';
+  return cli.installUrl && cli.installUrl !== run ? `${run} (${cli.installUrl})` : run;
 }
 
 /**
  * What to do when no agent can run: what an agent CLI is, how to get each built-in, where to add
  * another, and how to run the skill from an agent. `missing` names custom agents whose command
- * was not found. Printed to stderr; the caller exits 127.
+ * was not found; `builtins` is the list the menu used (the agent list, or the CLIS fallback).
+ * Printed to stderr; the caller exits 127.
  */
-function printNoAgentGuidance(missing = []) {
+function printNoAgentGuidance(missing = [], builtins = CLIS) {
   console.error(`${ce.red('plan2code:')} Plan2Code runs inside an AI coding agent CLI, and none was found on your PATH.`);
   console.error('');
   console.error(ce.bright('Install one:'));
-  for (const cli of CLIS) console.error(`  ${ce.cyan(cli.label)}: ${installLine(cli)}`);
+  for (const cli of builtins) console.error(`  ${ce.cyan(cli.label)}: ${installLine(cli)}`);
   console.error('');
-  console.error('Already use another agent CLI? Add it in User Preferences (web console) under Agents, then run `plan2code` again.');
+  console.error('Already use another agent CLI? Add it by editing `~/.plan2code/agents.json`, then run `plan2code` again.');
   for (const cli of missing) console.error(ce.yellow(`Custom agent ${cli.label}: ${cli.entry.command} not found`));
   console.error('');
   console.error('After installing, open a new terminal, cd into the project you want to work on and run `plan2code`.');
@@ -309,28 +348,53 @@ function checkAgentEntry(entry, ids, names) {
 /**
  * The arguments that start an entry, in order: `args` with {prompt} filled (the prompt appended
  * when no argument holds it), then `modelArgs` when a model is chosen, then `bypassArgs` when
- * checks are off. `prompt` defaults to the entry's own; a blank one drops an argument that is
- * exactly {prompt}. Plain text in, plain text out: no quoting for any shell.
+ * checks are off. An argument that is exactly `{bypass}` or `{model}` expands to the entry's
+ * `bypassArgs` / `modelArgs` in place (nothing when off / unset) and that flag is no longer
+ * appended at the end. `prompt` defaults to the entry's own; a blank one drops an argument that
+ * is exactly {prompt}. Plain text in, plain text out: no quoting for any shell.
  */
 function buildArgs(entry, { prompt, model, bypass } = {}) {
   const text = prompt === undefined ? (typeof entry.prompt === 'string' ? entry.prompt : DEFAULT_PROMPT) : String(prompt ?? '');
   const blank = !text.trim();
+  const modelArgs = entry.modelArgs || DEFAULT_MODEL_ARGS;
   const out = [];
   let placed = false;
+  let hasBypass = false;
+  let hasModel = false;
   for (const arg of entry.args || []) {
-    if (!arg.includes('{prompt}')) {
+    if (arg === '{bypass}') {
+      hasBypass = true;
+      if (bypass) out.push(...(entry.bypassArgs || []));
+      continue;
+    }
+    if (arg === '{model}') {
+      hasModel = true;
+      if (model) for (const m of modelArgs) out.push(m.split('{model}').join(model));
+      continue;
+    }
+    if (arg.includes('{bypass}')) hasBypass = true;
+    if (arg.includes('{model}')) hasModel = true;
+    if (!arg.includes('{prompt}') && !arg.includes('{model}')) {
       out.push(arg);
       continue;
     }
-    placed = true;
-    if (arg === '{prompt}' && blank) continue;
-    out.push(arg.split('{prompt}').join(text));
+    if (arg === '{prompt}' && blank) {
+      placed = true;
+      continue;
+    }
+    let next = arg;
+    if (next.includes('{prompt}')) {
+      placed = true;
+      next = next.split('{prompt}').join(text);
+    }
+    if (next.includes('{model}')) next = next.split('{model}').join(model || '');
+    out.push(next);
   }
   if (!placed && !blank) out.push(text);
-  if (model) {
-    for (const arg of entry.modelArgs || DEFAULT_MODEL_ARGS) out.push(arg.split('{model}').join(model));
+  if (model && !hasModel) {
+    for (const arg of modelArgs) out.push(arg.split('{model}').join(model));
   }
-  if (bypass) out.push(...(entry.bypassArgs || []));
+  if (bypass && !hasBypass) out.push(...(entry.bypassArgs || []));
   return out;
 }
 
@@ -639,7 +703,7 @@ function isDirectory(dir) {
   }
 }
 
-/** `~/.plan2code/launcher.json`: `{ lastFolder, lastCli }`, either key possibly missing. */
+/** `~/.plan2code/launcher.json`: `{ lastFolder, lastCli, lastModels }`, any key possibly missing. */
 function readState() {
   try {
     const state = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
@@ -703,11 +767,80 @@ function announceCli(cli) {
 }
 
 /**
- * The CLIs that can run, in menu order (the built-ins found on PATH, then the custom agents whose
- * command resolves), and the custom agents left out because theirs does not.
+ * The full argv for a built-in entry of the agent list: buildArgs fills {prompt}, {bypass} and
+ * {model} from the entry, and the forwarded arguments are inserted ahead of the tail of
+ * positional arguments ("--" and the prompt), where the hard-coded CLIS placed them. A model is
+ * read from the `--model` forms only: Codex's `-m` forwards untouched, as it does today.
  */
-function runnableClis(customs) {
-  const installed = CLIS.map((cli) => ({ ...cli, path: findOnPath(cli.id) })).filter((cli) => cli.path);
+function builtinArgs(entry, extra, { bypass } = {}) {
+  const model = modelFrom(extra, '');
+  const forwarded = withoutModelFlag(extra);
+  // Each slice expands on its own: a slice without {prompt} gets a blank one so buildArgs
+  // appends nothing, and the tail slice takes no flags so nothing is appended there either.
+  const expand = (list, withFlags) =>
+    buildArgs(
+      { ...entry, args: list, ...(withFlags ? {} : { bypassArgs: [], modelArgs: [] }) },
+      {
+        prompt: list.some((arg) => arg.includes('{prompt}')) ? undefined : '',
+        model: withFlags ? model : undefined,
+        bypass: withFlags ? bypass : false,
+      }
+    );
+  const raw = entry.args || [];
+  let tail = raw.length;
+  while (tail > 0 && (raw[tail - 1] === '--' || raw[tail - 1].includes('{prompt}'))) tail--;
+  // No {prompt} anywhere: the entry's own prompt is appended, as buildArgs does.
+  const promptArg = raw.some((arg) => arg.includes('{prompt}')) ? [] : [entry.prompt || DEFAULT_PROMPT].filter((text) => text && text.trim());
+  return [...expand(raw.slice(0, tail), true), ...forwarded, ...expand(raw.slice(tail), false), ...promptArg];
+}
+
+/** An agent-list built-in entry as a CLIS-shaped entry for the menu and the launch. */
+function builtinCli(entry) {
+  return {
+    id: entry.id,
+    label: entry.name,
+    install: entry.install,
+    installUrl: entry.installUrl,
+    prompt: entry.prompt,
+    bypassArgs: entry.bypassArgs || [],
+    entry,
+    args: (extra, { bypass } = {}) => builtinArgs(entry, extra, { bypass }),
+  };
+}
+
+let agentLookup; // undefined: not tried yet; null: could not be loaded; the module otherwise.
+
+/**
+ * The shared lookup module, dynamically imported from beside this file (~/.plan2code/bin/) so
+ * the command, the console and the app follow one agent list and one PATH rule. Null when the
+ * file cannot be loaded; the caller falls back to the hard-coded CLIS.
+ */
+async function loadAgentLookup() {
+  if (agentLookup !== undefined) return agentLookup;
+  try {
+    agentLookup = await import(require('url').pathToFileURL(path.join(__dirname, 'agent-lookup.mjs')).href);
+  } catch {
+    agentLookup = null;
+  }
+  return agentLookup;
+}
+
+/**
+ * The CLIs that can run, in menu order (the built-ins found on PATH, then the custom agents whose
+ * command resolves), and the custom agents left out because theirs does not. `find` is the
+ * shared lookup's findAgent() when the module loaded, else a plain PATH check.
+ */
+function runnableClis(customs, builtins = CLIS, find = null) {
+  const findBuiltin =
+    find ||
+    ((entry) => {
+      const found = findOnPath(entry.command || entry.id);
+      return { state: found ? 'found' : 'missing', path: found };
+    });
+  const installed = builtins
+    .map((cli) => ({ ...cli, hit: findBuiltin(cli.entry || { command: cli.id }) }))
+    .filter((cli) => cli.hit.state === 'found' && cli.hit.path)
+    .map(({ hit, ...cli }) => ({ ...cli, path: hit.path }));
   // A custom agent whose command does not resolve is left out of the menu and named when nothing can run.
   const missing = [];
   for (const cli of customs) {
@@ -719,15 +852,159 @@ function runnableClis(customs) {
 }
 
 /**
+ * The one-line notice for when the last-used agent is no longer runnable but another is
+ * (FR-13): "<Label> (last used) was not found, using <Label>". Null when the pick stands or
+ * nothing can run.
+ */
+function lastUsedNotice(installed, all, lastCli) {
+  if (!lastCli || !installed.length || installed.some((cli) => cli.id === lastCli)) return null;
+  const gone = all.find((cli) => cli.id === lastCli);
+  return `${gone ? gone.label : lastCli} (last used) was not found, using ${installed[0].label}`;
+}
+
+// ---------------------------------------------------------------------------------------------
+// First-run agent setup. When no agent can run, the console's agent-less `setup` workflow takes
+// the place of the install steps: the command opens its page, waits on the session the way an
+// agent would, and a Start there names the agent to look up again and run.
+
+/** process.env without the app-window variables (see APP_ENV_VARS). */
+function scrubbedEnv() {
+  const env = { ...process.env };
+  for (const name of APP_ENV_VARS) delete env[name];
+  return env;
+}
+
+/** The one JSON object a console command prints on its last line, or null. */
+function parseJsonLine(text) {
+  const trimmed = String(text || '').trim();
+  if (!trimmed) return null;
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    try {
+      return JSON.parse(trimmed.split('\n').pop());
+    } catch {
+      return null;
+    }
+  }
+}
+
+/**
+ * The web console's console.mjs, in the order the desktop app's find_console_dir uses:
+ * PLAN2CODE_CONSOLE_DIR, the console-dir pointer under the console home (it holds the
+ * console's folder), then the global skill install. Null when none of them exists.
+ */
+function findConsoleMjs() {
+  const candidates = [];
+  if (process.env.PLAN2CODE_CONSOLE_DIR) candidates.push(path.join(process.env.PLAN2CODE_CONSOLE_DIR, 'console.mjs'));
+  try {
+    const dir = fs.readFileSync(path.join(CONSOLE_HOME, 'console-dir'), 'utf8').trim();
+    if (dir) candidates.push(path.join(dir, 'console.mjs'));
+  } catch {}
+  candidates.push(path.join(os.homedir(), '.agents', 'skills', 'plan2code', 'references', 'web-console', 'console.mjs'));
+  return candidates.find((file) => fs.existsSync(file)) || null;
+}
+
+/**
+ * The installed entry for the agent id a Start sent, or null: the lookup runs again because the
+ * point of the page was to change what can run (an install, a saved template). One retry, since
+ * a just-finished install can take a moment to be visible; then the caller gives up.
+ */
+function findStartedCli(agentId, clis, find) {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    // Warnings were already printed once by chooseCli: the re-read stays quiet.
+    const { installed } = runnableClis(customClis(USER_AGENTS_FILE, false), clis, find);
+    const cli = installed.find((entry) => entry.id === agentId);
+    if (cli) return cli;
+    // A just-finished install can take a moment to be visible: the pause is
+    // the point of the second look.
+    if (attempt === 0) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 1500);
+  }
+  return null;
+}
+
+/**
+ * The browser setup page: opens `console.mjs` on the agent-less setup workflow (`--for-cli`
+ * when one agent was asked for, so it is listed first), then waits on the session until a send
+ * carries `__start`, the wait ends, or the cap passes.
+ *
+ * Returns `{ cli, setup }` on a Start, where `setup` is the hand-over the caller puts in the
+ * agent's environment (its first `open` then moves the setup tab onto its own page rather than
+ * opening a browser). Null when the flow cannot run at all (no console, a failed open); the
+ * caller prints its usual guidance. `{ code: 127 }` when the page ran but ended without a
+ * Start (canceled, closed or gone, or the named agent never appeared).
+ */
+function runSetupFlow(forCli, clis, find) {
+  const consoleMjs = findConsoleMjs();
+  if (!consoleMjs) return null;
+  const env = scrubbedEnv();
+  const opened = spawnSync(
+    process.execPath,
+    [consoleMjs, 'open', '--workflow', 'setup', ...(forCli ? ['--for-cli', forCli] : [])],
+    { encoding: 'utf8', env }
+  );
+  const out = parseJsonLine(opened && opened.stdout);
+  const sid = out && typeof out.sid === 'string' ? out.sid : null;
+  // The address the agent's first `open` hands its page to: the setup server's base URL with
+  // the hand-over token. Newer consoles print them as setup.url / setup.token; an older one
+  // leaves both derivable from the session URL's /s/<token>/ shape.
+  const url = out && typeof out.url === 'string' ? out.url : '';
+  const fromUrl = /^(https?:\/\/[^/]+)\/s\/([^/]+)\/?/.exec(url);
+  const announce = (out && out.setup && typeof out.setup.url === 'string' && out.setup.url) || (fromUrl && fromUrl[1]);
+  const token = (out && out.setup && typeof out.setup.token === 'string' && out.setup.token) || (fromUrl && fromUrl[2]);
+  if (!sid || !announce || !token) return null;
+
+  console.log(`Waiting for the setup page… ${c.dim(`(if no page opened, go to ${url})`)}`);
+
+  const deadline = Date.now() + SETUP_WAIT_CAP_MS;
+  for (;;) {
+    const waited = spawnSync(process.execPath, [consoleMjs, 'wait', '--session', sid, '--seconds', '240'], {
+      encoding: 'utf8',
+      env,
+    });
+    const status = waited && waited.status;
+    if (status === 10) {
+      // Still waiting: wait is meant to be re-run for the next slice.
+    } else if (status === 0) {
+      const send = parseJsonLine(waited.stdout);
+      // The wait prints the send's `__` actions whole; a Start is the only one this page leads to.
+      const start =
+        send &&
+        Array.isArray(send.session) &&
+        send.session.find((action) => action && action.i === '__start' && typeof action.agent === 'string');
+      if (start) {
+        const cli = findStartedCli(start.agent, clis, find);
+        return cli ? { cli, setup: { announce, token } } : { code: 127 };
+      }
+      // Any other send (a Quick question, say) is not an ending: keep waiting.
+    } else {
+      // 30 is the person's Cancel, 20 the page or server gone, and anything else a failure.
+      return { code: 127 };
+    }
+    if (Date.now() >= deadline) return { code: 127 };
+  }
+}
+
+/**
  * Choose the CLI from those installed: the `--cli` pick, the only one installed, or a numbered
  * menu defaulting to the last pick. Returns `{ cli }` with its resolved `path`, or `{ code }` (the
  * exit code) after printing why none can be used.
  */
-async function chooseCli(requested) {
+async function chooseCli(requested, { fromShortcut } = {}) {
   addSavedWindowsPath();
   const customs = customClis();
-  const all = [...CLIS, ...customs];
-  const { installed, missing } = runnableClis(customs);
+  const lookup = await loadAgentLookup();
+  const list = lookup ? lookup.loadAgentList({ dir: __dirname }) : { builtins: [], templates: [], warnings: ['agent-lookup.mjs is missing or could not be loaded'] };
+  const listed = list.builtins.map(builtinCli);
+  // The agent list drives the menu; the hard-coded CLIS are the fallback when it cannot be read.
+  const clis = listed.length ? listed : CLIS;
+  if (process.stderr.isTTY) {
+    const suffix = listed.length ? '' : '; the built-in list is used';
+    for (const warning of list.warnings) console.error(`${ce.yellow('plan2code:')} ${warning}${suffix}`);
+  }
+  const all = [...clis, ...customs];
+  const find = lookup && listed.length ? lookup.findAgent : null;
+  const { installed, missing } = runnableClis(customs, clis, find);
 
   if (requested !== undefined) {
     const known = all.find((cli) => cli.id === requested);
@@ -736,6 +1013,13 @@ async function chooseCli(requested) {
       return { code: 2 };
     }
     const found = installed.find((cli) => cli.id === requested);
+    // A missing built-in goes to the browser setup page when a person can see it: it lists that
+    // agent first and offers Start for it alone (no app redirect here, the page was asked for
+    // this agent). A refusal falls through to the printed steps below, never a second message.
+    if (!found && !known.custom && hasDisplay() && (process.stdin.isTTY || fromShortcut)) {
+      const settled = runSetupFlow(requested, clis, find);
+      if (settled && settled.cli) return settled;
+    }
     if (!found && known.custom) {
       console.error(`${ce.red('plan2code:')} Custom agent ${known.label}: ${known.entry.command} not found`);
     } else if (!found) {
@@ -751,17 +1035,20 @@ async function chooseCli(requested) {
   }
 
   if (installed.length === 0) {
-    printNoAgentGuidance(missing);
-    return { code: 127 };
+    // Nothing printed here: launch() decides between the app's own setup, the browser setup
+    // page and the install steps, and prints them itself only when it declines the first two.
+    return { code: 127, noAgent: true, missing, clis, find };
   }
+  const { lastCli } = readState();
+  // The last-used agent is gone but another works: one line, then carry on (FR-13).
+  const notice = lastUsedNotice(installed, all, lastCli);
+  if (notice && process.stdout.isTTY) console.log(c.dim(notice));
   if (installed.length === 1 || !process.stdin.isTTY) {
-    const { lastCli } = readState();
     const cli = installed.find((cli) => cli.id === lastCli) || installed[0];
     if (installed.length === 1) announceCli(cli);
     return { cli };
   }
 
-  const { lastCli } = readState();
   const defaultIndex = Math.max(0, installed.findIndex((cli) => cli.id === lastCli));
   console.log(c.bright('Plan2Code opens inside an AI coding agent. Pick which one to use:'));
   console.log('');
@@ -769,6 +1056,7 @@ async function chooseCli(requested) {
     console.log(`  ${c.cyan(`${i + 1})`)} ${cli.label}${cli.id === lastCli ? ` ${c.dim('(last used)')}` : ''}`)
   );
   console.log(c.dim('You can also skip this launcher and run `/plan2code` (`$plan2code` in Codex) straight from your agent.'));
+  console.log(c.dim('That runs outside the desktop app, without its session management or Implementation Loops.'));
   for (;;) {
     const answer = (await ask(`Choice ${c.green(`[${defaultIndex + 1}]`)}: `)).trim().toLowerCase();
     if (!answer) return { cli: installed[defaultIndex] };
@@ -843,8 +1131,9 @@ function listModels(cli) {
 }
 
 /**
- * Ask which model to run: a numbered list with Enter keeping the model the CLI last used (a
- * custom agent: its own default).
+ * Ask which model to run: a numbered list with Enter running the model the launcher last
+ * passed this agent (marked and numbered like the agent menu's `(last used)`), or keeping
+ * the agent's own last-used model when none is recorded (a custom agent: its own default).
  * A pick appends `--model <id>` to `extraArgs`. Without an interactive terminal there is
  * nobody to ask, so it just says which model will be used, as it always has.
  */
@@ -864,6 +1153,13 @@ async function chooseModel(cli, extraArgs) {
   const models = listModels(cli);
   if (!models.length) return;
 
+  // The model the launcher last passed this agent, marked and numbered like the agent
+  // menu's own (last used); Enter then runs it for real. A custom agent's Enter is its
+  // own default model, not its last pick, so nothing is marked there.
+  const lastModel = cli.custom ? null : (readState().lastModels || {})[cli.id];
+  const lastIndex = models.findIndex((model) => model.id === lastModel);
+  const tag = (model) => (model.id === lastModel ? ' (last used)' : '');
+
   console.log('');
   console.log(c.bright(`Which model should ${cli.label} use?`));
   if (models.length > MODELS_MENU_COMPACT_AT) {
@@ -872,16 +1168,29 @@ async function chooseModel(cli, extraArgs) {
     const half = Math.ceil(models.length / 2);
     for (let i = 0; i < half; i++) {
       // Padded before coloring, so the escape codes never count toward the column width.
-      const left = `  ${i + 1}) ${models[i].id}`.padEnd(48);
-      const right = models[i + half] ? `  ${c.cyan(`${i + half + 1})`)} ${models[i + half].id}` : '';
-      console.log(left.replace(`${i + 1})`, c.cyan(`${i + 1})`)) + right);
+      const left = `  ${i + 1}) ${models[i].id}${tag(models[i])}`.padEnd(48);
+      const right = models[i + half]
+        ? `  ${c.cyan(`${i + half + 1})`)} ${models[i + half].id}${c.dim(tag(models[i + half]))}`
+        : '';
+      console.log(left.replace(`${i + 1})`, c.cyan(`${i + 1})`)).replace(' (last used)', c.dim(' (last used)')) + right);
     }
   } else {
-    models.forEach((model, i) => console.log(!model.label ? `  ${c.cyan(`${i + 1})`)} ${model.id}` : `  ${c.cyan(`${i + 1})`)} ${model.id} — ${model.label}`));
+    models.forEach((model, i) =>
+      console.log(
+        (!model.label ? `  ${c.cyan(`${i + 1})`)} ${model.id}` : `  ${c.cyan(`${i + 1})`)} ${model.id} — ${model.label}`) +
+          c.dim(tag(model))
+      )
+    );
   }
+  const prompt = cli.custom ? '[default]' : lastIndex >= 0 ? `[${lastIndex + 1}]` : '[keep last used]';
   for (;;) {
-    const answer = (await ask(`Choice ${c.green(cli.custom ? '[default]' : '[keep last used]')}: `)).trim().toLowerCase();
-    if (!answer) return;
+    const answer = (await ask(`Choice ${c.green(prompt)}: `)).trim().toLowerCase();
+    if (!answer) {
+      // The marked number is the one that runs: pass it rather than trusting the
+      // agent's own memory of its last model.
+      if (lastIndex >= 0) extraArgs.push('--model', models[lastIndex].id);
+      return;
+    }
     const byNumber = models[Number(answer) - 1];
     const byName = models.find((model) => model.id === answer || model.label.toLowerCase() === answer);
     const model = (/^\d+$/.test(answer) && byNumber) || byName;
@@ -889,7 +1198,11 @@ async function chooseModel(cli, extraArgs) {
       extraArgs.push('--model', model.id);
       return;
     }
-    console.log(c.yellow(`Type a number from 1 to ${models.length}, a model name, or press Enter to keep ${keep}.`));
+    console.log(
+      c.yellow(
+        `Type a number from 1 to ${models.length}, a model name, or press Enter ${lastIndex >= 0 ? `for ${models[lastIndex].id}` : `to keep ${keep}`}.`
+      )
+    );
   }
 }
 
@@ -919,17 +1232,20 @@ function modelFrom(args, cliId) {
     if (arg === '--model' || (cliId === 'codex' && arg === '-m')) return args[i + 1] || null;
     if (arg.startsWith('--model=')) return arg.slice('--model='.length) || null;
     if (cliId === 'codex' && arg.startsWith('-m=')) return arg.slice(3) || null;
+    if (cliId === 'codex' && arg.startsWith('-m') && arg.length > 2) return arg.slice(2);
   }
   return null;
 }
 
 /**
- * Start the desktop app on the folder, agent and model and let it run on its own. Resolves true
- * once it has started, false (after one line saying why) when it could not, so the caller can
- * carry on with today's terminal flow.
+ * Start the desktop app on the folder, agent (when there is one) and model, and let it run on
+ * its own. Resolves true once it has started, false (after one line saying why) when it could
+ * not, so the caller can carry on with today's terminal flow.
  */
 function startApp(app, { cwd, cliId, model }) {
-  const args = ['--project', cwd, '--agent', cliId, ...(model ? ['--model', model] : [])];
+  // No cliId (a run with no agent at all) opens the app on its launch card, where its own
+  // Set up an agent button takes over from there.
+  const args = ['--project', cwd, ...(cliId ? ['--agent', cliId] : []), ...(model ? ['--model', model] : [])];
   return new Promise((resolve) => {
     let child;
     try {
@@ -1080,6 +1396,28 @@ async function pickFolder() {
   return path.resolve(answer.replace(/^~(?=$|[\\/])/, os.homedir()));
 }
 
+/**
+ * The folder to open in, confirmed as a project: process.cwd(), or the shortcut's folder pick
+ * plus the same check. `{ cwd }` to carry on; `{ exit }` with the code to leave on when the
+ * person canceled, picked a non-folder, or declined the project check.
+ */
+async function projectCwd(fromShortcut) {
+  let cwd = process.cwd();
+  if (fromShortcut) {
+    const folder = await pickFolder();
+    if (!folder) return { exit: 0 };
+    if (!isDirectory(folder)) {
+      console.error(`${ce.red('plan2code:')} ${folder} is not a folder.`);
+      return { exit: 1 };
+    }
+    saveState({ lastFolder: folder });
+    cwd = folder;
+    console.log(`Opening Plan2Code in ${c.cyan(folder)}`);
+  }
+  if (!(await confirmProject(cwd))) return { exit: 0 };
+  return { cwd };
+}
+
 // Exit codes from Ctrl+C (130 on POSIX, STATUS_CONTROL_C_EXIT on Windows) are the person
 // leaving on purpose, not a failure worth holding the window open for.
 const INTERRUPT_EXIT_CODES = new Set([130, 0xc000013a]);
@@ -1215,31 +1553,69 @@ async function launch() {
 
   printIntro();
   await releaseNotice();
-  const { cli, code } = await chooseCli(requestedCli);
-  if (!cli) return exitWith(code, fromShortcut);
+  const chosen = await chooseCli(requestedCli, { fromShortcut });
+  let cli = chosen.cli;
+  // Set only for an agent the setup page produced: the hand-over its first `open` uses to move
+  // the waiting setup tab onto its own page (carried into the spawn's environment below).
+  let setup = chosen.setup;
+  let cwd = process.cwd();
+  // Whether the folder pick and project check already ran (the no-agent path runs them early:
+  // the app and the setup page both need the folder settled first).
+  let cwdSettled = false;
+
+  if (!cli) {
+    if (!chosen.noAgent) return exitWith(chosen.code, fromShortcut);
+    // No agent can run. With a window to open something in, the folder and project checks come
+    // first, then the app on its Set up an agent card when it is installed (preferred over the
+    // browser setup page), then the setup page for a person who can see it. With neither, this
+    // is exactly the old path: the install steps and 127.
+    const app = !classic && hasDisplay() ? findApp() : null;
+    const person = process.stdin.isTTY || fromShortcut;
+    if (hasDisplay() && (app || person)) {
+      const picked = await projectCwd(fromShortcut);
+      if (picked.exit !== undefined) return exitWith(picked.exit, fromShortcut);
+      cwd = picked.cwd;
+      cwdSettled = true;
+      if (app && (await startApp(app, { cwd }))) {
+        console.log(`Opened the Plan2Code app in ${c.cyan(cwd)} ${c.dim('(run `plan2code --classic` to stay in this terminal)')}`);
+        return process.exit(0);
+      }
+      if (person) {
+        const settled = runSetupFlow(undefined, chosen.clis, chosen.find);
+        if (settled && settled.cli) {
+          cli = settled.cli;
+          setup = settled.setup;
+        }
+      }
+    }
+    if (!cli) {
+      printNoAgentGuidance(chosen.missing, chosen.clis);
+      return exitWith(127, fromShortcut);
+    }
+  }
   saveState({ lastCli: cli.id });
 
   // The app has its own permission tick on its launch card, so the question is only for the
-  // terminal flow (asked late if the app fails to start).
-  const app = !classic && hasDisplay() ? findApp() : null;
+  // terminal flow (asked late if the app fails to start). An agent the setup page started runs
+  // in this terminal even with the app installed: the waiting setup tab is owed the hand-over.
+  const app = !setup && !classic && hasDisplay() ? findApp() : null;
   let bypass = app ? null : await chooseBypass(cli, keepPermissions);
 
-  let cwd = process.cwd();
-  if (fromShortcut) {
-    const folder = await pickFolder();
-    if (!folder) return process.exit(0);
-    if (!isDirectory(folder)) {
-      console.error(`${ce.red('plan2code:')} ${folder} is not a folder.`);
-      return exitWith(1, fromShortcut);
-    }
-    saveState({ lastFolder: folder });
-    cwd = folder;
-    console.log(`Opening Plan2Code in ${c.cyan(folder)}`);
+  if (!cwdSettled) {
+    const picked = await projectCwd(fromShortcut);
+    if (picked.exit !== undefined) return exitWith(picked.exit, fromShortcut);
+    cwd = picked.cwd;
   }
 
-  if (!(await confirmProject(cwd))) return process.exit(0);
-
   if (!hasModelFlag(extraArgs, cli.id)) await chooseModel(cli, extraArgs);
+
+  // Remember the model this run passes, per agent, so the next menu can mark
+  // and number it like the agent menu marks its last used.
+  const launchedModel = modelFrom(extraArgs, cli.id);
+  if (launchedModel) {
+    const { lastModels } = readState();
+    saveState({ lastModels: { ...(lastModels || {}), [cli.id]: launchedModel } });
+  }
 
   // The app takes over from here when it is installed, a window can open and --classic is absent.
   if (app && (await startApp(app, { cwd, cliId: cli.id, model: modelFrom(extraArgs, cli.id) }))) {
@@ -1250,6 +1626,12 @@ async function launch() {
 
   const args = cli.args(extraArgs, { bypass });
   const options = { cwd, stdio: 'inherit', ...(cli.fullPath ? { fromFullPath: true } : {}) };
+  // An agent the setup page started tells the waiting setup session where its own page is
+  // instead of opening a browser: its `open` posts the URL to the announce address under the
+  // hand-over token, and the tab moves there (FR-20).
+  if (setup) {
+    options.env = { ...process.env, PLAN2CODE_SETUP_ANNOUNCE: setup.announce, PLAN2CODE_SETUP_TOKEN: setup.token };
+  }
 
   const child = spawnCommand(cli.path, args, options);
 
@@ -1277,4 +1659,4 @@ async function launch() {
 // Run only when invoked directly; requiring the file (the tests do) is load-only.
 if (require.main === module) launch();
 
-module.exports = { normalizeAgents, buildArgs, parseRegQueryValue, expandPercentVars, addSavedWindowsPath, customClis, resolveCustomCommand, runnableClis, listModels, mergeModels, modelEntries, renderBanner, paint, hasModelFlag, compareVersions, modelFrom, hasDisplay, looksLikeProject };
+module.exports = { normalizeAgents, buildArgs, parseRegQueryValue, expandPercentVars, addSavedWindowsPath, customClis, resolveCustomCommand, runnableClis, listModels, mergeModels, modelEntries, renderBanner, paint, hasModelFlag, compareVersions, modelFrom, hasDisplay, looksLikeProject, lastUsedNotice, leadInstall, installLine, findConsoleMjs, runSetupFlow, projectCwd };

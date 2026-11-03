@@ -17,6 +17,30 @@ const LAUNCH_QUIPS = [
   "Consulting the map…",
   "Putting the kettle on…",
   "Rolling out the checklist…",
+  "Tying Planny's laces…",
+  "Winding up the star…",
+  "Sharpening the pencils…",
+  "Untangling the fairy lights…",
+  "Bribing the progress bar…",
+  "Warming up the ink…",
+  "Aligning the stars…",
+  "Blowing the dust off the plans…",
+  "Locating the missing semicolon…",
+  "Feeding the hamster…",
+  "Buttering the toast…",
+  "Spinning up the idea mill…",
+  "Plumping the cushions…",
+  "Turning the whimsy dial…",
+  "Oiling the gears…",
+  "Counting the paperclips…",
+  "Practicing the victory wave…",
+  "Rolling a fresh D20…",
+  "Peeling the shrink-wrap…",
+  "Summoning the right incantation…",
+  "Rounding up the ideas…",
+  "Stretching before the sprint…",
+  "Packing a tiny lunch…",
+  "Fluffing the checklist…",
 ];
 
 let launchTicker = null;
@@ -121,6 +145,26 @@ const START_QUIPS = [
   "Polishing the star…",
   "Laying out the good pens…",
   "Consulting the map…",
+  "Skimming the table of contents…",
+  "Following the paper trail…",
+  "Reading the footnotes first…",
+  "Taking attendance of the files…",
+  "Decoding the ancient scrolls…",
+  "Listening for plot holes…",
+  "Sharpening the highlighters…",
+  "Counting the moving parts…",
+  "Making friends with the codebase…",
+  "Checking under the hood…",
+  "Peeking behind the curtain…",
+  "Dusting the shelves…",
+  "Cross-referencing the references…",
+  "Interviewing the git history…",
+  "Warming up the magnifying glass…",
+  "Lacing up the walking boots…",
+  "Consulting the elder scrolls…",
+  "Unrolling the blueprints…",
+  "Sniffing out the good bits…",
+  "Asking the comments what they meant…",
 ];
 
 function startingElapsed() {
@@ -217,12 +261,14 @@ export function renderWaiting(main) {
     pane.appendChild(el("p", null, ask));
     return;
   }
-  // "Task" and the tasks tab's own name both open that tab, so the pointer is
-  // one click from what it points at. A build posts it as `phase` ("Phase N
-  // tasks"); a quick task ticks the steps of its `plan` in place (an older
-  // agent may still post a separate `tasks` tab). A skill with no task list
-  // (Document, Plan) has nothing live to follow, so it gets no pointer at all.
+  // "Task" and the tab's own name both open that tab, so the pointer is one
+  // click from what it points at. A build posts `phasefile` ("phase-N.md"):
+  // the whole phase file, task list included. An older agent may still post
+  // a separate `phase` or `tasks` list, and a quick task ticks the steps of
+  // its `plan` in place. A skill with no task list (Document, Plan) has
+  // nothing live to follow, so it gets no pointer at all.
   const list =
+    docs().find((d) => d.id === "phasefile") ||
     docs().find((d) => d.id === "phase") ||
     docs().find((d) => d.id === "tasks") ||
     (page.S.workflow === "quick-task" && docs().find((d) => d.id === "plan")) ||
