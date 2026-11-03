@@ -42,9 +42,18 @@ import { VILLAGE } from "./ghoul-village.js";
 import { MINE } from "./ghoul-mine.js";
 import { CART } from "./ghoul-cart.js";
 import { SLED } from "./ghoul-sled.js";
+import { GURNEY } from "./ghoul-gurney.js";
+import { PEW } from "./ghoul-pew.js";
+import { BANISTER } from "./ghoul-banister.js";
+import { MOWER } from "./ghoul-mower.js";
+import { WAGON } from "./ghoul-wagon.js";
+import { HEARSE } from "./ghoul-hearse.js";
+import { TRAY } from "./ghoul-tray.js";
 import { RIDE, isWaiting, startRide } from "./ghoul-ride.js";
 import { CARNIVAL } from "./ghoul-carnival.js";
 import { FROZEN as FROZEN_LAKE, iceRun } from "./ghoul-frozen.js";
+import { BOG } from "./ghoul-bog.js";
+import { BOGBOAT } from "./ghoul-bogboat.js";
 import { ARM_DROP, ARM_POP_MS, FLAP_CLEAR, PILL_WORDS, POWERS, TIMED, applyPower as applyPowerWith, armDrop, pickPower, pickups, powerHere, retryMercy } from "./ghoul-powers.js";
 import { ARMS, armBossDamage, armOnTop, fillBag, pressFire as pressFireWith, releaseFire, resetTap } from "./ghoul-arms.js";
 import { MAX_DICE, START_DICE, beginRoll, giveDiceGift, markRest, reviveSpot, rollDice } from "./ghoul-dice.js";
@@ -64,11 +73,18 @@ import {
   stagesLeft as stagesLeftWith,
   steerPick,
   steerSelect as steerSelectWith,
+  onCard,
+  stepIntro as stepIntroWith,
+  takeIntro as takeIntroWith,
   takeSelect as takeSelectWith,
 } from "./ghoul-run.js";
+import { introFor } from "./ghoul-intros.js";
+import { bossIntroFor } from "./ghoul-boss-intros.js";
+import { beginStory, pressStory, releaseStory, stepStory, takeStory } from "./ghoul-story.js";
 
 export { FIELD_H, FIELD_W, FLOOR_Y, ROOMS, STAGES, roomById, stageById };
 export { FLAP_CLEAR, POWERS, TIMED, powerHere };
+export { INTRO_MIN_MS } from "./ghoul-run.js";
 // The double tap, for the tests (the game calls it from key()).
 export const pressFire = (round) => pressFireWith(round, KIT);
 export { releaseFire };
@@ -76,7 +92,7 @@ export { releaseFire };
 export { steerPick };
 export { CANDY_POINTS, CRYSTAL_POINTS, HOURGLASS_MS, POWER_POINTS } from "./ghoul-powers.js";
 // The Lucky die's numbers, which the tests read from here.
-export { DICE_FACES, MAX_DICE, START_DICE, ROLL_MS, SAVED_TIME_MS, TUMBLE_MS } from "./ghoul-dice.js";
+export { DICE_FACES, LEAD_MS, MAX_DICE, START_DICE, ROLL_MS, SAVED_TIME_MS, TUMBLE_MS } from "./ghoul-dice.js";
 // The bonus rounds' numbers (the Runaway Cart is the first), which the tests read from here.
 export { BONUS_FLOOR, BONUS_HEARTS, BONUS_SAFE_MS, CARD_LOST_MS, CARD_MS, diceFor } from "./ghoul-bonus.js";
 // Old Rattlebones' numbers, which the tests read from here.
@@ -134,6 +150,15 @@ export const FALL_MAX = 120;
 // WATER_JUMP of its speed; `you.wet` says so (ghoul-mine.js reads it).
 export const WATER_SPEED = 0.65;
 export const WATER_JUMP = 0.93;
+// Sinking mud (a room's `mud` spans, Gallows Bog): on the floor in one,
+// `you.mudMs` climbs toward MUD_MS and the run sags from WATER_SPEED down to
+// MUD_SPEED_MIN, a jump from WATER_JUMP down to MUD_JUMP_MIN; dry floor or
+// the air lets it go again (`you.mud`, `you.mudMs`).
+export const MUD_MS = 2400;
+export const MUD_SPEED_MIN = 0.25;
+export const MUD_JUMP_MIN = 0.7;
+const mudSpeed = (ms) => WATER_SPEED + (MUD_SPEED_MIN - WATER_SPEED) * Math.min(1, ms / MUD_MS);
+const mudJump = (ms) => WATER_JUMP + (MUD_JUMP_MIN - WATER_JUMP) * Math.min(1, ms / MUD_MS);
 // A step of STEP_UP or less between two surfaces is walked, not jumped.
 export const STEP_UP = 3;
 // Forgiving edges: a jump pressed up to COYOTE_MS after running off an edge
@@ -206,7 +231,7 @@ export const AIM_MAX = 0.5;
 // The stage packs: each stage past the house's own two brings its monsters,
 // its boss and their rules (see ghoul-graveyard.js for what a pack holds).
 // Their tables join this file's own, and their rules run where its own do.
-const PACKS = Object.freeze([BONES, GRAVEYARD, GROUNDS, CHAPEL, SANATORIUM, VILLAGE, MINE, ARMS, CART, SLED, CARNIVAL, FROZEN_LAKE, RIDE]);
+const PACKS = Object.freeze([BONES, GRAVEYARD, GROUNDS, CHAPEL, SANATORIUM, VILLAGE, MINE, ARMS, CART, SLED, GURNEY, PEW, MOWER, WAGON, HEARSE, TRAY, CARNIVAL, FROZEN_LAKE, BOG, BOGBOAT, RIDE, BANISTER]);
 const fromPacks = (key) => Object.assign({}, ...PACKS.map((pk) => pk[key] || {}));
 const listPacks = (key) => PACKS.flatMap((pk) => pk[key] || []);
 
@@ -663,7 +688,7 @@ const rightEdge = (round) => round.spec.length - 1.5;
 /* -------------------------------------------------------------- Planny */
 
 function makeYou(x, y) {
-  return { x, y, vx: 0, vy: 0, state: "run", shelf: -1, face: 1, coyote: 0, drop: -1, cuttable: false, airMs: 0, out: 0, outKind: "", safeMs: 0, garlic: false, hat: false, aliveMs: 0, runMs: 0, fireFx: 0, flapped: false, flingMs: 0, flingVx: 0, heldMs: 0, wet: false, belt: 0, dimMs: 0, dimBy: 0, slide: 0, glide: false, onIce: false };
+  return { x, y, vx: 0, vy: 0, state: "run", shelf: -1, face: 1, coyote: 0, drop: -1, cuttable: false, airMs: 0, out: 0, outKind: "", safeMs: 0, garlic: false, hat: false, aliveMs: 0, runMs: 0, fireFx: 0, flapped: false, flingMs: 0, flingVx: 0, heldMs: 0, wet: false, mud: false, mudMs: 0, belt: 0, dimMs: 0, dimBy: 0, slide: 0, glide: false, onIce: false };
 }
 
 // The conveyor belts (a room's `belts`, the Funhouse's) push him along the floor: the speed of the one he stands on, or 0.
@@ -676,11 +701,14 @@ const beltAt = (spec, you) => {
 // Whether Planny stands on the floor in one of the room's water spans.
 const wetAt = (spec, you) => Boolean(spec.water && spec.water.length) && you.state === "run" && you.shelf < 0 && you.y <= groundAt(spec, you.x) + 0.01 && spec.water.some(([x0, x1]) => you.x >= x0 && you.x <= x1);
 
+// Whether Planny stands on the floor in one of the room's mud spans.
+const mudAt = (spec, you) => Boolean(spec.mud && spec.mud.length) && you.state === "run" && you.shelf < 0 && you.y <= groundAt(spec, you.x) + 0.01 && spec.mud.some(([x0, x1]) => you.x >= x0 && you.x <= x1);
+
 // Leaves the ground at JUMP_V, or bounces off a stomp at STOMP_V.
 export function jump(round, v = JUMP_V) {
   const you = round.you;
   if (you.out > 0) return false;
-  you.vy = v === JUMP_V && you.wet ? JUMP_V * WATER_JUMP : v;
+  you.vy = v === JUMP_V ? JUMP_V * (you.wet ? WATER_JUMP : 1) * (you.mud ? mudJump(you.mudMs) : 1) : v;
   you.state = "air";
   you.ducking = false;
   you.shelf = -1;
@@ -711,7 +739,11 @@ export function moveYou(round, ms) {
   // A mourner's wail leaves you running at SLOW_SHARE of your speed a while.
   // Knee-deep water (a room's `water` spans): slower on the floor in it.
   you.wet = wetAt(spec, you);
-  const speed = RUN_SPEED * (you.slowMs > 0 ? SLOW_SHARE : 1) * (you.wet ? WATER_SPEED : 1);
+  // Sinking mud: it grabs harder the longer he stands in it, and lets go on
+  // dry floor or in the air. Stilt Boots wade free of it (ghoul-powers.js).
+  you.mud = mudAt(spec, you) && !(round.effects.boots > 0);
+  you.mudMs = you.mud ? you.mudMs + ms : Math.max(0, you.mudMs - ms);
+  const speed = RUN_SPEED * (you.slowMs > 0 ? SLOW_SHARE : 1) * (you.wet ? WATER_SPEED : 1) * (you.mud ? mudSpeed(you.mudMs) : 1);
   you.belt = beltAt(spec, you);
   // Slippery ice (a room's `ice`, the Frozen Lake's): his run eases and slides (ghoul-frozen.js).
   const run = spec.ice && spec.ice.length ? iceRun(round, dir, speed, dt, you.state === "run" && you.shelf < 0 && you.y <= groundAt(spec, you.x) + 0.01) : dir * speed;
@@ -1713,7 +1745,7 @@ function takeLife(round, cause) {
   // The dark ride and the Runaway Cart play on after a hit that is not the last heart
   // (ghoul-ride.js; the cart blinks safe a moment, and a derail is re-seated by ghoul-cart.js).
   const b = round.bonusRound;
-  const rolling = round.gallery || (round.cart && !round.cart.done) || (round.sled && !round.sled.done);
+  const rolling = round.gallery || (round.cart && !round.cart.done) || (round.sled && !round.sled.done) || (round.runner && !round.runner.done);
   if (rolling && b && (round.infinite || b.hearts > 0)) {
     if (!round.gallery) you.safeMs = Math.max(you.safeMs, BONUS_SAFE_MS);
     round.events.push({ type: "lose", cause, x: you.x, y: you.y, lives: round.lives, hearts: b.hearts });
@@ -1766,7 +1798,7 @@ const RUN_KIT = Object.freeze({
   ROOMS, STAGES, stageById, FIELD_W, CHANDELIER_Y, START_LIVES, START_DICE, TIMED, DARK_CHANCE, BONUS_START, HURRY_MS, OFFER_N, PICK_HOLD_MS,
   READY_MS, BONUS_READY_MS, makeBonus, endBonus: (round, won) => endBonusWith(round, won, { award, ROOM_POINTS }), SAFE_MS, CLEAR_MS, BOSS_LOCK, ROOM_POINTS, FLAWLESS_POINTS, CAM_AT, CAM_LEAD, CAM_EASE,
   SPAWN_AHEAD, DOOR_CLEAR, EMERGE_MS, CRAWL_NEAR, SPIDER_Y, GHOST_SHOW_MS, GHOST_HIDE_MS, DARK_BEHIND, MAX_MONSTERS, HORDE_ROOM, HORDE_WITH, MONSTERS,
-  roomFor, seeded, powerHere, pickPower, makeYou, makeBoss, groundAt, timeFor, award, clamp, variant, spawnMonster,
+  roomFor, seeded, powerHere, pickPower, makeYou, makeBoss, groundAt, timeFor, award, clamp, variant, spawnMonster, introFor, bossIntroFor,
   mercy: (round) => retryMercy(round, POWER_KIT),
   diceGift: (round) => giveDiceGift(round, DICE_KIT.give),
   place: (round) => PLACES.forEach((f) => f(round, KIT)),
@@ -1782,6 +1814,8 @@ export const takeSelect = (round) => {
   return true;
 };
 const nextRoom = (round, random) => nextRoomWith(round, random, RUN_KIT);
+// A stage's intro card moves on (ghoul-run.js): a move key, fire or a click.
+export const takeIntro = (round) => takeIntroWith(round, RUN_KIT);
 const camera = (round, ms) => cameraWith(round, ms, RUN_KIT);
 const respawn = (round) => respawnWith(round, RUN_KIT);
 const clearRoom = (round) => clearRoomWith(round, RUN_KIT);
@@ -2285,6 +2319,15 @@ export function advance(round, ms, random = Math.random) {
       return "pick";
     }
     if (round.phase === "select") return "select";
+    if (onCard(round)) {
+      stepIntroWith(round, slice);
+      continue;
+    }
+    // The intro story, before the first room: only its pages move.
+    if (round.phase === "story") {
+      stepStory(round, slice);
+      continue;
+    }
     round.clock += slice;
     // Rolling the Lucky dice for a life: nothing else moves.
     if (round.phase === "roll") {
@@ -2376,7 +2419,7 @@ const HEART_NEAR = 16;
 // layers (its melody and drums included), the clock's last seconds add
 // DREAD_CLOCK, and a boss fight plays all of it. The level eases toward its
 // target over about DREAD_EASE_MS, so a change never lands as a jolt.
-export const ROOM_MUSIC = Object.freeze({ hall: "ghoulHall", darkride: "ghoulRideTheme", lychgate: "ghoulLychgate", graves: "ghoulGraves", mausoleums: "ghoulMausoleums", angel: "ghoulAngel", maze: "ghoulMaze", topiary: "ghoulTopiary", gazebo: "ghoulGazebo", yard: "ghoulYard", nave: "ghoulNave", tower: "ghoulTower", loft: "ghoulLoft", choir: "ghoulChoir", shaft: "ghoulShaft", tunnels: "ghoulTunnels", collapse: "ghoulCollapse", seam: "ghoulSeam", cart: "ghoulCart", midway: "ghoulMidway", mirrors: "ghoulMirrors", funhouse: "ghoulFunhouse", bigtop: "ghoulBigTop", admissions: "ghoulAdmissions", baths: "ghoulBaths", theater: "ghoulTheater", ward: "ghoulWard", street: "ghoulStreet", inn: "ghoulInn", square: "ghoulSquare", green: "ghoulGreen", foyer: "ghoulFoyer", gallery: "ghoulGallery", library: "ghoulLibrary", ballroom: "ghoulBallroom", kitchen: "ghoulKitchen", conservatory: "ghoulConservatory", attic: "ghoulAttic", crypt: "ghoulCrypt", huts: "ghoulHuts", lodge: "ghoulLodge", blackice: "ghoulBlackIce", sled: "ghoulSledRide", widow: "ghoulWidow" });
+export const ROOM_MUSIC = Object.freeze({ banister: "ghoulBanister", hall: "ghoulHall", darkride: "ghoulRideTheme", lychgate: "ghoulLychgate", graves: "ghoulGraves", mausoleums: "ghoulMausoleums", angel: "ghoulAngel", maze: "ghoulMaze", topiary: "ghoulTopiary", gazebo: "ghoulGazebo", yard: "ghoulYard", nave: "ghoulNave", tower: "ghoulTower", loft: "ghoulLoft", choir: "ghoulChoir", shaft: "ghoulShaft", tunnels: "ghoulTunnels", collapse: "ghoulCollapse", seam: "ghoulSeam", cart: "ghoulCart", midway: "ghoulMidway", mirrors: "ghoulMirrors", funhouse: "ghoulFunhouse", bigtop: "ghoulBigTop", admissions: "ghoulAdmissions", baths: "ghoulBaths", theater: "ghoulTheater", ward: "ghoulWard", street: "ghoulStreet", inn: "ghoulInn", square: "ghoulSquare", green: "ghoulGreen", foyer: "ghoulFoyer", gallery: "ghoulGallery", library: "ghoulLibrary", ballroom: "ghoulBallroom", kitchen: "ghoulKitchen", conservatory: "ghoulConservatory", attic: "ghoulAttic", crypt: "ghoulCrypt", huts: "ghoulHuts", lodge: "ghoulLodge", blackice: "ghoulBlackIce", sled: "ghoulSledRide", codeblue: "ghoulBlueRide", pew: "ghoulPewDirge", mower: "ghoulMowerRide", wagon: "ghoulWagonRide", hearse: "ghoulHearseRide", tray: "ghoulTrayRide", widow: "ghoulWidow", boardwalk: "ghoulGraves", hollow: "ghoulMaze", stilts: "ghoulMausoleums", bogboat: "ghoulBoatRide", drowning: "ghoulYard" });
 const DREAD_ROOM = 0.7;
 const DREAD_CLOCK = 0.2;
 const DREAD_EASE_MS = 900;
@@ -2562,7 +2605,7 @@ function create({ canvas, tone = () => {}, hum = () => {}, music = () => {}, onS
   // the key once held, and the power-ups held (a timed one emptying as it runs).
   const effects = [];
   const gauge = { fill: 0, free: HEAT_FREE / HEAT_MAX, rapid: null };
-  const hud = { room: "", stage: "", time: 0, timeLow: false, bonus: 0, chain: 0, chainFill: 1, key: false, effects, gauge, arm: null };
+  const hud = { room: "", stage: "", time: 0, timeLow: false, bonus: 0, chain: 0, chainFill: 1, key: "", effects, gauge, arm: null };
   const hudOf = () => {
     const you = round.you;
     effects.length = 0;
@@ -2584,7 +2627,8 @@ function create({ canvas, tone = () => {}, hum = () => {}, music = () => {}, onS
     hud.timeLow = round.timeMs > 0 && round.timeMs <= TIME_WARN_MS;
     hud.chain = round.chain > 1 ? chainMult(round.chain) : 0;
     hud.chainFill = round.chainMs / CHAIN_MS;
-    hud.key = round.hasKey && Boolean(round.spec.key);
+    // "have" once found, "need" until then; a room with no key (a boss, a bonus ride) shows nothing.
+    hud.key = round.spec.key && !round.spec.boss && !round.spec.bonus ? (round.hasKey ? "have" : "need") : "";
     // The weapon that comes out next, its count, and how many other kinds wait under it.
     const top = armOnTop(round);
     hud.arm = top ? { kind: top.kind, n: top.n, more: round.arms.length - 1, text: `x${top.n}${round.arms.length > 1 ? ` +${round.arms.length - 1}` : ""}${round.armUsed ? "" : " TAP TAP"}`, color: POWERS[top.kind].color, fresh: !round.armUsed, pop: (round.armPopMs || 0) / ARM_POP_MS } : null;
@@ -2652,11 +2696,14 @@ function create({ canvas, tone = () => {}, hum = () => {}, music = () => {}, onS
     resetTap(round);
     inp.jump = 0;
     upHeld = false;
+    releaseStory(round);
   };
 
-  const start = () => {
+  // A new round. A real run opens on the intro story (ghoul-story.js) and the hall is announced when it ends; the stage select skips it.
+  const begin = (story) => {
     colors = readColors(canvas);
     round = newRound();
+    if (story) beginStory(round);
     state = "running";
     further = false;
     armed = false;
@@ -2668,9 +2715,10 @@ function create({ canvas, tone = () => {}, hum = () => {}, music = () => {}, onS
       bestAtStart = 0;
     }
     beaten = false;
-    roomBanner(1);
+    if (!story) roomBanner(1);
     paint();
   };
+  const start = () => begin(true);
 
   // The held sounds and the ones kept to a beat, each tick of a round still
   // running: a hum not asked for again fades by itself, so a pause or the
@@ -2679,6 +2727,11 @@ function create({ canvas, tone = () => {}, hum = () => {}, music = () => {}, onS
     const you = round.you;
     const spec = round.spec;
     const playing = round.phase === "play";
+    // The story has its own drone under its own sounds, and the hall's music waits for the hall.
+    if (round.phase === "story") {
+      hum("ghoul:story", "ghoulStoryDrone", 0.6, 1);
+      return;
+    }
     const b = round.boss;
     const fight = Boolean(b && round.lockX >= 0 && (b.state === "fight" || b.state === "intro"));
     // The room's music, its dread eased toward where play is now.
@@ -2780,7 +2833,7 @@ function create({ canvas, tone = () => {}, hum = () => {}, music = () => {}, onS
     // (no best score, no record). Endless lives already on carry over.
     stageSelect() {
       const endless = Boolean(round.infinite);
-      start();
+      begin(false);
       round.infinite = endless;
       fx.banners.length = 0;
       openSelect(round);
@@ -2816,6 +2869,8 @@ function create({ canvas, tone = () => {}, hum = () => {}, music = () => {}, onS
       if (state !== "running") return false;
       const fx = x / u - PAD;
       const fy = y / u - HUD_H - PAD;
+      if (onCard(round)) return type === "down" ? takeIntro(round) || true : true;
+      if (round.phase === "story") return type === "down" ? takeStory(round) || true : true;
       return POINTERS.some((f) => f(round, type, fx, fy));
     },
     // Held arrows run until let go (their key repeats, held through the
@@ -2835,6 +2890,10 @@ function create({ canvas, tone = () => {}, hum = () => {}, music = () => {}, onS
           if (!repeat) takeSelect(round);
         } else if (state === "running" && round.phase === "pick") {
           if (!repeat) pickStage(round);
+        } else if (state === "running" && onCard(round)) {
+          if (!repeat) takeIntro(round);
+        } else if (state === "running" && round.phase === "story") {
+          pressStory(round, repeat);
         } else if (state === "running") {
           round.input.fire = true;
           // The dark ride's trigger: a tap shorter than a step still fires; no weapon.
@@ -2858,6 +2917,16 @@ function create({ canvas, tone = () => {}, hum = () => {}, music = () => {}, onS
         else if (name === "up" && !repeat) pickStage(round);
         return true;
       }
+      // The intro story: any fresh move key turns the page.
+      if (round.phase === "story") {
+        if (!repeat) takeStory(round);
+        return true;
+      }
+      // A stage's intro card: any fresh move key walks in (a repeat never does).
+      if (onCard(round)) {
+        if (!repeat) takeIntro(round);
+        return true;
+      }
       round.input[name] = true;
       if (name === "up") {
         if (!repeat && armed && !upHeld && round.phase === "play") round.input.jump = JUMP_BUFFER_MS;
@@ -2871,6 +2940,7 @@ function create({ canvas, tone = () => {}, hum = () => {}, music = () => {}, onS
       if (name === "action") {
         round.input.fire = false;
         releaseFire(round);
+        releaseStory(round);
       }
       else if (MOVES[name]) round.input[name] = false;
       if (name === "up") upHeld = false;
