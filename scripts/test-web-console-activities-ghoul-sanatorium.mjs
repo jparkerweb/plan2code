@@ -10,6 +10,7 @@ import { VOICES, react } from "../src/web-console/public/activities/ghoul-draw.j
 
 const steady = () => 0.5;
 const events = (round, type) => round.events.filter((e) => e.type === type);
+// The four rooms that are walked, and the stage's five with the bonus gurney ride between the Theater and the Ward (its own suite: ghoul-gurney).
 const ROOM_IDS = ["admissions", "baths", "theater", "ward"];
 
 function through(round) {
@@ -84,7 +85,7 @@ const heard = (e, extra = {}) => {
 
 test("Ghoul Rush's Blackmoor Sanatorium is a stage of three rooms and the Night Ward, its monsters and boss joined to the game's, with two power-ups of its own and a place for each kind", () => {
   const st = ghoul.stageById("sanatorium");
-  assert.deepEqual(st.rooms, ROOM_IDS);
+  assert.deepEqual(st.rooms, ["admissions", "baths", "theater", "codeblue", "ward"]);
   assert.equal(st.boss, "matron");
   assert.equal(st.title, "Blackmoor Sanatorium");
   assert.equal(st.sub, "Visiting hours ended in 1912");
@@ -92,7 +93,7 @@ test("Ghoul Rush's Blackmoor Sanatorium is a stage of three rooms and the Night 
   assert.equal(ghoul.BOSSES.matron, sn.BOSSES.matron);
   assert.equal(sn.BOSSES.matron.sub, "Stay out of her lantern light");
   for (const id of st.rooms) assert.ok(ghoul.ROOM_MUSIC[id], `${id} has music`);
-  const [admissions, baths, theater, ward] = st.rooms.map((id) => ghoul.roomById(id));
+  const [admissions, baths, theater, ward] = ROOM_IDS.map((id) => ghoul.roomById(id));
   const returning = ["zombie", "crawl", "ghost", "spitter"];
   for (const room of [admissions, baths, theater]) {
     assert.ok(room.key, `${room.id}: a key`);

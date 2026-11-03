@@ -147,7 +147,7 @@ export const BOSSES = freeze({
 export const EVENTS = freeze([
   "iceCrack", "iceBreak", "iceBack", "handWarn", "handUp", "shadeShow", "shadeWind", "shadeLunge", "shatter", "frozenMelt",
   "iceWraithWake", "iceWraithWind", "iceWraithDive", "freezeHit",
-  "widowDrop", "widowRise", "widowRage", "veilMelt", "veilDown", "veilUp", "barrelPlace", "barrelKick", "barrelBurst",
+  "widowDrop", "widowRise", "widowRage", "veilMelt", "veilDown", "veilUp", "barrelPlace", "barrelKick", "barrelKnock", "barrelBurst",
   "blizzard", "blizzardBlow", "blizzardEnd", "spikeWarn", "spikeUp", "webWind", "webShot", "webLand", "wraithCall",
 ]);
 
@@ -226,18 +226,20 @@ export const FREEZE_MS = 700;
 
 // The Frost Widow.
 export const HANG_OVER = 20;
-export const HANG_V = 12;
+export const HANG_V = 10;
 export const FIRST_HANG_MS = 4200;
 export const HANG_MS = 5200;
 export const DROP_MS = 700;
 export const RISE_MS = 800;
 export const LOW_MS = 9000;
-export const LOW_V = 5;
+export const LOW_V = 4;
 export const LOW_KEEP = 14;
-export const LAND_AWAY = 24;
+export const LAND_AWAY = 32;
 export const WIDOW_RAGE = 0.5;
 export const RAGE_QUICK = 0.75;
-export const WRAITH_CAP = 2;
+export const WRAITH_CAP = 1;
+// After a call, no wraith is called again for this long (ms): the rage's first one, then one every so often.
+export const WRAITH_GAP_MS = 20000;
 // A called wraith hovers this long (ms) before its first shriek, so it can be shot first.
 export const WRAITH_CALL_MS = 1600;
 // The veil, the heart and the mouth.
@@ -255,6 +257,8 @@ export const BARREL_V = 34;
 export const BARREL_LIFE_MS = 5000;
 export const BARREL_DMG = 3;
 export const BARREL_BOSS = 3;
+// A still barrel shrugs off a stray bolt: it takes this many bolts to topple it (a thrown weapon kicks it at once).
+export const BARREL_HITS = 4;
 // The blizzard.
 export const BLIZZARD_FIRST_MS = 7000;
 export const BLIZZARD_EVERY_MS = 12000;
@@ -265,8 +269,8 @@ export const BLIZZARD_COVER = 0.5;
 export const COVER_NEAR = 5;
 // The spikes.
 export const SPIKE_FIRST_MS = 2200;
-export const SPIKE_EVERY_MS = 2800;
-export const SPIKE_LOW_MS = 3400;
+export const SPIKE_EVERY_MS = 3600;
+export const SPIKE_LOW_MS = 4400;
 export const SPIKE_WARN_MS = 800;
 export const SPIKE_UP_MS = 1000;
 export const SPIKE_W = 4;
@@ -779,6 +783,8 @@ function target(round, s) {
     if (h.kind === "webGlob") {
       h.life = 0;
       round.events.push({ type: "webLand", x: h.x, y: h.y, shot: true });
+    } else if (!s.arm && (h.knocks = (h.knocks || 0) + 1) < BARREL_HITS) {
+      round.events.push({ type: "barrelKnock", x: h.x, y: h.y, n: h.knocks });
     } else {
       h.state = "roll";
       h.vx = (Math.sign(s.vx) || 1) * BARREL_V;
@@ -793,12 +799,14 @@ function target(round, s) {
 // Up to WRAITH_CAP ice wraiths come in from the arena's edges.
 function callWraiths(round, b, k) {
   const spec = round.spec;
+  if (round.clock < (b.wraithAt || 0)) return;
   let alive = round.monsters.filter((m) => m.kind === "icewraith" && !m.dead).length;
   for (const [x, side] of [[spec.arena + 6, 1], [spec.length - 6, -1]]) {
     if (alive >= WRAITH_CAP) break;
     const y = b.floor + 22;
     if (k.spawnMonster(round, "icewraith", x, y, { act: "hover", wait: WRAITH_CALL_MS, home: y, dir: -side, force: true })) {
       alive++;
+      b.wraithAt = round.clock + WRAITH_GAP_MS;
       round.events.push({ type: "wraithCall", kind: b.kind, x, y });
     }
   }

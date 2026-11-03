@@ -175,6 +175,64 @@ export function nextRoom(round, random, kit) {
   round.events.push({ type: "offer", offer: offer.slice() });
 }
 
+// A stage's intro card (ghoul-intros.js, drawn by ghoul-intro-draw.js) holds
+// the first room's "Ready?" back until YOU press a key: any move (left, right,
+// up, down), fire, or a click moves it on, and not before INTRO_MIN_MS (so a
+// key still held never skips it; a key repeat never counts). It never moves on
+// by itself: it waits as long as YOU like (a pause holds it). Only entering a
+// stage's first room.
+export const INTRO_MIN_MS = 1200;
+
+function startIntro(round, kit) {
+  if (!kit.introFor(round.stage)) return;
+  // The room's own announcement waits for the end of the card.
+  const at = round.events.findIndex((e) => e.type === "room");
+  if (at >= 0) round.events.splice(at, 1);
+  round.phase = "intro";
+  round.phaseMs = 0;
+  round.introMs = 0;
+  round.input.jump = 0;
+  round.events.push({ type: "intro", stage: round.stage });
+}
+
+// Whether a full-field card (a stage's intro or a boss's) is up.
+export const onCard = (round) => round.phase === "intro" || round.phase === "bossintro";
+
+// A boss room's intro card (ghoul-boss-intros.js, drawn by ghoul-bossintro-draw.js):
+// the same rules as the stage's card, shown once when the boss room is entered
+// (after the last room or the bonus ride, or from the stage select), never on
+// a respawn. The boss room is already set up behind it.
+function startBossIntro(round, kit) {
+  const id = round.spec && round.spec.boss;
+  if (!id || !kit.bossIntroFor(id)) return;
+  const at = round.events.findIndex((e) => e.type === "room");
+  if (at >= 0) round.events.splice(at, 1);
+  round.phase = "bossintro";
+  round.phaseMs = 0;
+  round.introMs = 0;
+  round.input.jump = 0;
+  round.events.push({ type: "bossIntro", boss: id, stage: round.stage });
+}
+
+function endIntro(round, kit) {
+  round.phase = "ready";
+  round.phaseMs = round.bonusRound ? (round.spec.ride && round.spec.ride.ready) || kit.BONUS_READY_MS : kit.READY_MS;
+  round.input.jump = 0;
+  round.events.push({ type: "room", room: round.room });
+}
+
+// One slice of the card: it only counts the time (the lockout and the animation).
+export function stepIntro(round, ms) {
+  round.introMs = (round.introMs || 0) + ms;
+}
+
+// A move key, fire or a click: on into the room, once the card has been up a moment.
+export function takeIntro(round, kit) {
+  if (!onCard(round) || (round.introMs || 0) < INTRO_MIN_MS) return false;
+  endIntro(round, kit);
+  return true;
+}
+
 function enter(round, id, kit) {
   round.room++;
   setupRoom(round, id, kit);
@@ -183,6 +241,7 @@ function enter(round, id, kit) {
   // A bonus room announces itself before its name.
   if (round.bonusRound) round.events.push({ type: "bonusStart", hearts: round.bonusRound.hearts, max: round.bonusRound.max, how: round.spec.ride ? round.spec.ride.how : undefined });
   round.events.push({ type: "room", room: round.room });
+  startBossIntro(round, kit);
 }
 
 // While choosing: `dir` -1 or 1 moves the pick between what is offered.
@@ -209,6 +268,7 @@ export function pickStage(round, i = round.pick, kit) {
   round.stageAt = 0;
   round.events.push({ type: "stage", stage: st.id, n: round.cleared.length + 1, of: STAGES.length });
   enter(round, st.rooms[0], kit);
+  startIntro(round, kit);
   return true;
 }
 
@@ -248,6 +308,7 @@ export function takeSelect(round, kit) {
   round.stageAt = sel.room;
   round.events.push({ type: "stage", stage: st.id, n: 1, of: kit.STAGES.length });
   enter(round, st.rooms[sel.room], kit);
+  if (!sel.room) startIntro(round, kit);
   return true;
 }
 

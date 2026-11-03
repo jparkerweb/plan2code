@@ -35,8 +35,10 @@ export const DICE_FACES = Object.freeze({
   5: Object.freeze({ revive: true, give: Object.freeze(["life"]), line: "Back to life, +1 heart!", word: "+1 heart!" }),
   6: Object.freeze({ revive: true, give: Object.freeze(["life", "garlic"]), line: "Back to life, +1 heart + Garlic!", word: "+1 heart + Garlic!" }),
 });
-export const ROLL_MS = 3200;
-export const TUMBLE_MS = 600;
+// The lead-in: the screen holds under a drone while a die flies from the HUD to the middle and grows into the panel.
+export const LEAD_MS = 800;
+export const TUMBLE_MS = LEAD_MS + 600;
+export const ROLL_MS = LEAD_MS + 3200;
 // The clock a saved time-up gets back.
 export const SAVED_TIME_MS = 15000;
 // The most a pit's revive spot may move along the ground to stand clear of
@@ -93,7 +95,6 @@ export function beginRoll(round, cause, kit) {
   round.phaseMs = 0;
   round.input.jump = 0;
   round.events.push({ type: "diceStart", cause, n: round.dice, x: at.x, y: at.y });
-  round.events.push({ type: "diceRoll", n: round.dice, x: at.x, y: at.y });
   return true;
 }
 
@@ -105,7 +106,10 @@ export const heartFace = (round, face) => !round.bonusRound && round.lives <= 1 
 // (`kit.takeLife`), leaving its gift, if any, for the respawn.
 export function rollDice(round, ms, random, kit) {
   const r = round.roll;
+  const was = r.t;
   r.t += ms;
+  // The die leaves the HUD: the drone plays through the lead-in, and the rattle starts when it arrives.
+  if (was < LEAD_MS && r.t >= LEAD_MS) round.events.push({ type: "diceRoll", n: round.dice, x: r.x, y: r.y });
   if (!r.landed && r.t >= TUMBLE_MS) {
     r.landed = true;
     r.face = 1 + Math.min(5, Math.floor(random() * 6));

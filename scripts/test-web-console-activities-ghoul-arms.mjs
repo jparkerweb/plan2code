@@ -521,7 +521,8 @@ test("Ghoul Rush's Silver Bear Trap sets at his feet, snaps on the first thing t
 });
 
 test("Ghoul Rush's ride rooms keep what needs a floor in the bag, use the next kind down, and a stick or a flash goes off in the air rather than being lost", () => {
-  const room = ghoul.ROOMS.find((r) => r.ride);
+  // The Mine's Runaway Cart, whichever rides other stages have in the room list before it.
+  const room = ghoul.ROOMS.find((r) => r.ride && r.id === "cart");
   if (!room) return;
   const round = ghoul.newRound(5);
   round.dice = 0;
@@ -1634,4 +1635,32 @@ test("Ghoul Rush's Dynamite, Road Flare, Salt and Flash Powder are aimed: they l
   tapTap(pie);
   const lob = pie.hazards.find((h) => h.kind === "armPie");
   assert.ok(lob && Math.abs(lob.vx - arm.PIE_VX) < 1e-9, "the pie is not aimed");
+});
+
+test("Ghoul Rush's Dynamite keeps its fuse but also goes off at once when a monster stands within a unit of it after it lands", () => {
+  const blasts = (round) => events(round, "dynBlast").length;
+  // A monster that walks up to a landed stick sets it off before the fuse.
+  const near = roomOf("village", "inn");
+  standAt(near, 40);
+  give(near, "dyn", 2);
+  tapTap(near);
+  const stick = near.hazards.find((h) => h.kind === "stick");
+  for (let i = 0; i < 200 && !stick.rest; i++) run(near, 16);
+  assert.ok(stick.rest && stick.fuse > 200, "landed with fuse left");
+  assert.equal(blasts(near), 0);
+  put(near, "zombie", stick.x + 0.5, { stunMs: 1e9 });
+  run(near, 40);
+  assert.equal(blasts(near), 1, "went off at once on the neighbor");
+  // A monster further off than a unit does not set it off; the fuse still does.
+  const far = roomOf("village", "inn");
+  standAt(far, 40);
+  give(far, "dyn", 2);
+  tapTap(far);
+  const s2 = far.hazards.find((h) => h.kind === "stick");
+  for (let i = 0; i < 200 && !s2.rest; i++) run(far, 16);
+  put(far, "zombie", s2.x + 6, { stunMs: 1e9 });
+  run(far, 40);
+  assert.equal(blasts(far), 0, "too far");
+  run(far, arm.DYN_FUSE_MS + 40);
+  assert.equal(blasts(far), 1, "the fuse still blows it");
 });

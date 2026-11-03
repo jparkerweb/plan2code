@@ -49,9 +49,13 @@
 // columns of notes (`note` hazards) that fly along the room at the heights of
 // the lines of a staff, each column missing one note: be at the gap's height
 // when it passes (the floor for the lowest gap, a board for each higher one).
-// He raises his baton first (`cue`). At half his hp (`rage`) silenced pipes
-// sound again one at a time, the notes come faster and now and then two
-// columns come close together.
+// He raises his baton first (`cue`). Each column flies at a speed of its own,
+// some far faster than others, and never so fast that it catches the column
+// ahead (you always get time between two gaps). Once all four pipes are silent
+// he is open for PIPES_BACK columns, then fresh pipes drop in from the roof at
+// full hp and he is guarded until you silence them again. At half his hp
+// (`rage`) the notes come faster and now and then two columns come close
+// together.
 
 const freeze = (o) => Object.freeze(o);
 
@@ -118,10 +122,15 @@ export const HOLY_GHOSTS = freeze(["ghost", "chorister", "wraith"]);
 // tall, each PIPE_HP of hp; a sounding one spews a ghost every PIPE_SPEW_MS or
 // so. His columns are made of notes NOTE across at the heights ROWS over the
 // floor (a staff's five lines, ROW_GAP apart), one of the first GAPS rows
-// missing; one flies NOTE_V a second (NOTE_V_RAGE at half hp), a column every
-// COLUMN_MS (COLUMN_RAGE_MS), his baton up CUE_MS first. At half his hp
-// (RAGE) a silenced pipe sounds again every RESOUND_MS, and PAIR_CHANCE of the
-// columns have a second PAIR_MS behind, its gap next to the first's.
+// missing; a column flies at NOTE_V a second (NOTE_V_RAGE at half hp) times one
+// of NOTE_PACE, drawn afresh for each column, but slowed if it would reach the
+// arena's far end less than NOTE_SEP_MS behind the column ahead. A column comes
+// every COLUMN_MS (COLUMN_RAGE_MS), his baton up CUE_MS first. At half his hp
+// (RAGE) PAIR_CHANCE of the columns have a second PAIR_MS behind, as fast as
+// the first, its gap next to the first's. With every pipe silent, the
+// PIPES_BACK'th column (a pair is one) brings them all back: each falls for
+// PIPE_DROP_MS, PIPE_DROP_STAGGER_MS after the one before, and cannot be shot
+// until it lands.
 export const BOSSES = freeze({
   choirmaster: freeze({ name: "The Choirmaster", sub: "Silence the pipes one by one", w: 8, h: 17, hp: 100, points: 3500, color: "#d8b0b8" }),
 });
@@ -140,6 +149,8 @@ export const ROWS = freeze([0, 1, 2, 3, 4].map((i) => ROW_0 + i * ROW_GAP));
 export const GAPS = 4;
 export const NOTE_V = 22;
 export const NOTE_V_RAGE = 28;
+export const NOTE_PACE = freeze([0.55, 0.8, 1, 1.35, 1.75]);
+export const NOTE_SEP_MS = 1500;
 export const IDLE_MS = 1400;
 export const CUE_MS = 700;
 export const COLUMN_MS = 3200;
@@ -147,7 +158,9 @@ export const COLUMN_RAGE_MS = 2300;
 export const PAIR_MS = 1100;
 export const PAIR_CHANCE = 0.4;
 export const RAGE = 0.5;
-export const RESOUND_MS = 6000;
+export const PIPES_BACK = 4;
+export const PIPE_DROP_MS = 600;
+export const PIPE_DROP_STAGGER_MS = 150;
 
 const SHOT_R = 0.5;
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
@@ -398,7 +411,7 @@ function pipeShot(round, s, k) {
   const b = round.boss;
   if (!b || b.kind !== "choirmaster" || b.state !== "fight" || !b.pipes) return false;
   for (const p of b.pipes) {
-    if (!p.on || Math.abs(s.x - p.x) > p.w / 2 + SHOT_R || s.y < p.y - SHOT_R || s.y > p.y + p.h) continue;
+    if (!p.on || p.dropMs > 0 || Math.abs(s.x - p.x) > p.w / 2 + SHOT_R || s.y < p.y - SHOT_R || s.y > p.y + p.h) continue;
     // A thrown weapon strikes harder than a bolt (ghoul-arms.js).
     p.hp = Math.max(0, p.hp - (s.pipeDmg || 1));
     p.hurt = 120;
@@ -413,15 +426,46 @@ function pipeShot(round, s, k) {
   return false;
 }
 
+// Where a note leaves the field, past the arena's far end.
+const noteEnd = (round) => round.spec.arena - 6;
+
+// The speed of a new column from `x`: drawn from NOTE_PACE, then held down so
+// it reaches the arena's far end NOTE_SEP_MS or more behind the last column
+// still flying. It starts behind that column, so it is that far behind or
+// further at every spot on the way.
+function columnSpeed(round, base, x, random) {
+  const v = base * NOTE_PACE[Math.floor(random() * NOTE_PACE.length) % NOTE_PACE.length];
+  const end = noteEnd(round);
+  let ahead = 0;
+  for (const h of round.hazards) if (h.kind === "note" && h.v > 0) ahead = Math.max(ahead, (h.x - end) / h.v);
+  return Math.min(v, (x - end) / (ahead + NOTE_SEP_MS / 1000));
+}
+
 // A column of notes at the staff over the floor under him, row `gap` left out.
-function launch(round, b, gap, k, pair) {
+// A pair's second column keeps the first's speed, and with it the gap between.
+function launch(round, b, gap, k, pair, random) {
   const base = k.groundAt(round.spec, b.x);
   const x = b.x - b.w / 2 - 1;
-  const v = (rage(b) ? NOTE_V_RAGE : NOTE_V) * round.spec.pace;
+  const usual = (rage(b) ? NOTE_V_RAGE : NOTE_V) * round.spec.pace;
+  const v = pair ? b.noteV : columnSpeed(round, usual, x, random);
+  b.noteV = v;
   ROWS.forEach((row, i) => {
-    if (i !== gap) round.hazards.push({ kind: "note", x, y: base + row - NOTE / 2, w: NOTE, h: NOTE, row: i, v, live: 1, life: 7000, cause: "note" });
+    if (i !== gap) round.hazards.push({ kind: "note", x, y: base + row - NOTE / 2, w: NOTE, h: NOTE, row: i, v, pace: v / usual, live: 1, life: 12000, cause: "note" });
   });
-  round.events.push({ type: "notes", kind: b.kind, x, y: base, gap, pair, rows: ROWS.length });
+  round.events.push({ type: "notes", kind: b.kind, x, y: base, gap, pair, v, rows: ROWS.length });
+}
+
+// A column (or a pair) is away. While every pipe is silent it counts toward
+// their return: the last but one warns you, the last drops them in.
+function columnDone(round, b) {
+  b.act = "idle";
+  b.wait = (rage(b) ? COLUMN_RAGE_MS : COLUMN_MS) / round.spec.pace;
+  if (b.quiet === null) return;
+  b.quiet -= 1;
+  if (b.quiet === 1) round.events.push({ type: "pipesStir", kind: b.kind, x: b.x, y: b.y + b.h * 0.6 });
+  if (b.quiet > 0) return;
+  b.pipes.forEach((p, i) => Object.assign(p, { on: true, hp: p.max, hurt: 0, dropMs: PIPE_DROP_MS + i * PIPE_DROP_STAGGER_MS, spewIn: PIPE_SPEW_MS * 0.5 }));
+  b.quiet = null;
 }
 
 // The gap next to `gap`, one step up or down, whichever is on the staff.
@@ -446,20 +490,27 @@ function moveChoirmaster(round, b, ms, random, k) {
     b.pipes = makePipes(round, k);
     b.act = "glide";
     b.wait = 0;
-    b.resoundIn = RESOUND_MS;
+    b.quiet = null;
   }
   b.dir = -1;
   if (!b.raged && rage(b)) {
     b.raged = true;
-    b.resoundIn = RESOUND_MS;
     round.events.push({ type: "choirRage", kind: b.kind, x: b.x, y: b.y + b.h / 2 });
   }
-  // The pipes: a sounding one spews a ghost now and then; in a rage the
-  // silent ones sound again, one every RESOUND_MS.
+  // Columns left before the pipes come back, counted only while all are silent.
+  if (b.pipes.some((p) => p.on)) b.quiet = null;
+  else b.quiet ??= PIPES_BACK;
+  // The pipes: one on its way down lands, one sounding spews a ghost now and
+  // then.
   const ghosts = () => round.monsters.filter((m) => !m.dead && m.kind === "ghost").length;
   for (const p of b.pipes) {
     p.hurt = Math.max(0, p.hurt - ms);
     if (!p.on) continue;
+    if (p.dropMs > 0) {
+      p.dropMs = Math.max(0, p.dropMs - ms);
+      if (!p.dropMs) round.events.push({ type: "pipeSound", kind: b.kind, x: p.x, y: p.y + p.h / 2, pipe: p.i });
+      continue;
+    }
     p.spewIn -= ms * pace;
     if (p.spewIn > 0) continue;
     if (ghosts() >= GHOST_CAP) {
@@ -469,16 +520,6 @@ function moveChoirmaster(round, b, ms, random, k) {
     p.spewIn = PIPE_SPEW_MS * (0.85 + random() * 0.3);
     k.spawnMonster(round, "ghost", p.x, p.y + p.h * 0.75, { force: true, phase: (p.x * 97) % 3100 });
     round.events.push({ type: "pipeSpew", kind: b.kind, x: p.x, y: p.y + p.h * 0.75, pipe: p.i });
-  }
-  if (b.raged) {
-    const silent = b.pipes.filter((p) => !p.on);
-    if (!silent.length) b.resoundIn = RESOUND_MS;
-    else if ((b.resoundIn -= ms) <= 0) {
-      b.resoundIn = RESOUND_MS;
-      const p = silent[Math.floor(random() * silent.length) % silent.length];
-      Object.assign(p, { on: true, hp: p.max, spewIn: PIPE_SPEW_MS * 0.5 });
-      round.events.push({ type: "pipeSound", kind: b.kind, x: p.x, y: p.y + p.h / 2, pipe: p.i });
-    }
   }
   if (b.act === "glide") {
     const home = spec.length - HOME_FROM_END;
@@ -500,20 +541,16 @@ function moveChoirmaster(round, b, ms, random, k) {
     b.wait = CUE_MS / pace;
     round.events.push({ type: "notesCue", kind: b.kind, x: b.x - b.w / 2, y: b.y + b.h * 0.75, gap, second: b.second });
   } else if (b.act === "cue") {
-    launch(round, b, b.gap, k, false);
+    launch(round, b, b.gap, k, false, random);
     if (b.second !== null) {
       b.act = "pair";
       b.wait = PAIR_MS / pace;
-    } else {
-      b.act = "idle";
-      b.wait = (rage(b) ? COLUMN_RAGE_MS : COLUMN_MS) / pace;
-    }
+    } else columnDone(round, b);
   } else if (b.act === "pair") {
     b.gap = b.second;
-    launch(round, b, b.second, k, true);
+    launch(round, b, b.second, k, true, random);
     b.second = null;
-    b.act = "idle";
-    b.wait = (rage(b) ? COLUMN_RAGE_MS : COLUMN_MS) / pace;
+    columnDone(round, b);
   }
 }
 
@@ -521,7 +558,7 @@ function moveChoirmaster(round, b, ms, random, k) {
 function stepNote(round, h, ms) {
   h.x -= h.v * (ms / 1000);
   h.life -= ms;
-  return h.life > 0 && h.x > round.spec.arena - 6;
+  return h.life > 0 && h.x > noteEnd(round);
 }
 
 export const CHAPEL = freeze({

@@ -135,7 +135,7 @@ test("Ghoul Rush's Deep Seam Mine is a stage of three rooms and the Seam, always
   assert.equal(st.boss, "tommy");
   assert.equal(st.title, "The Deep Seam Mine");
   assert.equal(st.sub, "They are still knocking");
-  assert.equal(ghoul.STAGES.at(-3), st, "the last stage in the list but the Carnival and the Frozen Lake");
+  assert.equal(ghoul.STAGES.at(-4), st, "the last stage in the list but the Carnival, the Frozen Lake and Gallows Bog");
   for (const kind of Object.keys(mn.MONSTERS)) assert.equal(ghoul.MONSTERS[kind], mn.MONSTERS[kind], `${kind} is a monster`);
   assert.equal(ghoul.BOSSES.tommy, mn.BOSSES.tommy);
   assert.equal(mn.BOSSES.tommy.sub, "Follow the knocking, not the light");
@@ -1556,7 +1556,7 @@ test("Ghoul Rush's stage select lists the Mine and takes you straight into each 
   const r = g.round;
   assert.equal(r.phase, "select");
   const at = ghoul.STAGES.findIndex((s) => s.id === "mine");
-  assert.equal(at, ghoul.STAGES.length - 3);
+  assert.equal(at, ghoul.STAGES.length - 4);
   for (let i = 0; i < at; i++) ghoul.steerSelect(r, 1, 0);
   for (let i = 0; i < 4; i++) ghoul.steerSelect(r, 0, 1);
   assert.equal(r.select.at, at);

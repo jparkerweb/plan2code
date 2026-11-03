@@ -6,7 +6,7 @@
 // file never reaches back into it. Everything is drawn in field units, y
 // counted down from the field's top.
 
-import { DICE_FACES, TUMBLE_MS } from "./ghoul-dice.js";
+import { DICE_FACES, LEAD_MS, TUMBLE_MS } from "./ghoul-dice.js";
 
 const BODY = "#f4f1e8";
 const EDGE = "#8f8a7d";
@@ -27,6 +27,8 @@ const PIPS = Object.freeze([
 // The panel the big die rolls on, and the die in it.
 const PANEL_W = 44;
 const PANEL_H = 40;
+// The least gap between the panel and the field's edge.
+const MARGIN = 1.5;
 const DIE_SIZE = 15;
 // Candidate spots for the panel's middle, tried in order: the field's middle
 // first, then to either side; a row high on the field and one low.
@@ -37,7 +39,7 @@ const WORD = "LUCKY-SAVE";
 const LUCKY_MS = 2800;
 
 export function diceArt(d) {
-  const { circle, roundRect, rotate, label, GOLD, DANGER } = d;
+  const { circle, roundRect, rotate, label, GOLD, DANGER, hudLayout } = d;
 
   // A die of side `s` at (x, y), turned `angle`, showing `face`; `ink` is its
   // pips' color (a saving face is gold).
@@ -75,7 +77,20 @@ export function diceArt(d) {
 
   // Where the panel's middle goes, as far from Planny's spot as the field
   // lets it: the first candidate that does not touch him.
+  // How much the panel is scaled to fit inside the field with a margin.
+  function panelFit(g) {
+    return Math.min(1, (g.FIELD_H - 2 * MARGIN) / PANEL_H, (g.FIELD_W - 2 * MARGIN) / PANEL_W);
+  }
+
   function panelAt(v, roll) {
+    const at = panelSpot(v, roll);
+    const { g } = v;
+    const hw = (PANEL_W * panelFit(g)) / 2;
+    const hh = (PANEL_H * panelFit(g)) / 2;
+    return { x: Math.min(g.FIELD_W - hw - MARGIN, Math.max(hw + MARGIN, at.x)), y: Math.min(g.FIELD_H - hh - MARGIN, Math.max(hh + MARGIN, at.y)) };
+  }
+
+  function panelSpot(v, roll) {
     const { g, round } = v;
     const cam = Math.round(round.camX * 8) / 8;
     const sx = roll.x - cam;
@@ -95,12 +110,60 @@ export function diceArt(d) {
     return first;
   }
 
+  // Where the die's pill sits in the HUD strip, in field units (the strip is
+  // above the field, so y is negative); the strip's right end when it is not shown.
+  function hudDiceSpot(v) {
+    const { g, round } = v;
+    for (const p of hudLayout(v.pillH, g.W, round.infinite ? Infinity : round.lives, v.hud, g.HUD_H)) {
+      if (typeof p.text === "string" && p.text.startsWith("DICE")) return { x: p.x + p.w / 2 - g.PAD, y: p.y + p.h / 2 - g.HUD_H };
+    }
+    return { x: g.W - g.PAD * 2 - 8, y: -g.HUD_H / 2 };
+  }
+
   // The die in hand while the round holds to roll: tumbling in from above,
   // landing on its face with a pop, and a line saying where it stands.
   function roll(ctx, v) {
     const r = v.round.roll;
     if (!r) return;
     const { x, y } = panelAt(v, r);
+    // The whole panel shrinks to fit a small field, and sits inside it, so no edge is cut off.
+    const fit = panelFit(v.g);
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(fit, fit);
+    ctx.translate(-x, -y);
+    rollIn(ctx, v, r, x, y, fit);
+    ctx.restore();
+  }
+
+  function rollIn(ctx, v, r, x, y, fit) {
+    // The lead-in: the panel grows out of the die, which flies up from its pill in the HUD.
+    if (r.t < LEAD_MS) {
+      const e = 1 - (1 - r.t / LEAD_MS) ** 3;
+      const spot = hudDiceSpot(v);
+      // The HUD spot, in the shrunk panel's own space.
+      const from = { x: x + (spot.x - x) / fit, y: y + (spot.y - y) / fit };
+      const s = 0.12 + 0.88 * e;
+      ctx.save();
+      ctx.globalAlpha = e;
+      ctx.translate(x, y);
+      ctx.scale(s, s);
+      ctx.translate(-x, -y);
+      ctx.fillStyle = "rgba(0, 0, 0, 0.62)";
+      roundRect(ctx, x - PANEL_W / 2, y - PANEL_H / 2, PANEL_W, PANEL_H, 2.5);
+      ctx.fill();
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.35)";
+      ctx.lineWidth = 0.3;
+      ctx.stroke();
+      ctx.restore();
+      const gx = from.x + (x - from.x) * e;
+      const gy = from.y + (y - 6 - from.y) * e;
+      ctx.fillStyle = "rgba(244, 241, 232, 0.25)";
+      circle(ctx, gx, gy, (3 + DIE_SIZE * 0.6 * e));
+      ctx.fill();
+      die(ctx, gx, gy, 3 + (DIE_SIZE - 3) * e, 1 + (Math.floor(r.t / 60) * 5) % 6, (1 - e) * 9);
+      return;
+    }
     const lucky = r.landed && (!!DICE_FACES[r.face].revive || !!r.heart);
     ctx.fillStyle = "rgba(0, 0, 0, 0.62)";
     roundRect(ctx, x - PANEL_W / 2, y - PANEL_H / 2, PANEL_W, PANEL_H, 2.5);
@@ -127,10 +190,10 @@ export function diceArt(d) {
         ctx.globalAlpha = 1;
       }
     } else {
-      const p = r.t / TUMBLE_MS;
+      const p = (r.t - LEAD_MS) / (TUMBLE_MS - LEAD_MS);
       face = 1 + (Math.floor(r.t / 70) * 5) % 6;
       angle = (1 - p) ** 1.5 * 12;
-      dy = Math.abs(Math.sin(r.t / 105)) * -2.5 * (1 - p) - 3.5 * (1 - Math.min(1, r.t / 220)) ** 2;
+      dy = Math.abs(Math.sin(r.t / 105)) * -2.5 * (1 - p) - 3.5 * (1 - Math.min(1, (r.t - LEAD_MS) / 220)) ** 2;
     }
     die(ctx, x, at + dy, size, face, angle, lucky ? "#b8860b" : INK);
     let text = "A 4 or better saves you";
@@ -154,7 +217,7 @@ export function diceArt(d) {
   function react(e, k) {
     const { tone, burst, float, ring, flash, glow, shake, banner, fx, powers: POWERS } = k;
     if (e.type === "diceStart") {
-      tone("whoosh", 0.3, 0.6);
+      tone("ghoulDiceDrone", 0.6);
       tone("heartbeat", 0.45);
       ring(e.x, e.y + 2.5, BODY, 2, 8, 500);
     } else if (e.type === "diceRoll") {

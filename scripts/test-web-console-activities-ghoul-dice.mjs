@@ -164,18 +164,22 @@ test("Ghoul Rush: a death with dice holds and rolls just one; a six saves Planny
   assert.equal(round.lives, 3, "no life lost yet");
   assert.equal(round.dice, 2, "the die is in hand");
   assert.equal(events(round, "diceStart").length, 1);
-  assert.equal(events(round, "diceRoll").length, 1);
+  assert.equal(events(round, "diceRoll").length, 0, "the die is still flying in from the HUD");
   assert.equal(events(round, "lose").length, 0, "not lost");
   const random = rolls(SIX);
+  // The lead-in: the die flies in, then the rattle starts.
+  ghoul.advance(round, ghoul.LEAD_MS + 8, random);
+  assert.equal(events(round, "diceRoll").length, 1);
+  assert.equal(events(round, "diceFace").length, 0);
   // Half way through: tumbling, no face yet.
-  ghoul.advance(round, ghoul.TUMBLE_MS / 2, random);
+  ghoul.advance(round, (ghoul.TUMBLE_MS - ghoul.LEAD_MS) / 2, random);
   assert.equal(round.phase, "roll");
   assert.equal(events(round, "diceFace").length, 0);
   // It lands, and holds its beat.
-  ghoul.advance(round, ghoul.TUMBLE_MS / 2 + 8, random);
+  ghoul.advance(round, (ghoul.TUMBLE_MS - ghoul.LEAD_MS) / 2, random);
   assert.deepEqual(events(round, "diceFace").map((e) => e.face), [6]);
   assert.equal(round.phase, "roll");
-  ghoul.advance(round, ghoul.ROLL_MS - ghoul.TUMBLE_MS, random);
+  ghoul.advance(round, ghoul.ROLL_MS - ghoul.TUMBLE_MS + 8, random);
   assert.equal(events(round, "diceRoll").length, 1, "no second die");
   assert.equal(events(round, "diceSaved").length, 1);
   assert.equal(events(round, "diceFail").length, 0);

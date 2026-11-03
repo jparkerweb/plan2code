@@ -63,12 +63,14 @@ export const ARM_GAP_MS = 220;
 export const ARM_BOSS_SHARE = 0.35;
 
 // Dynamite: a throw leaves at DYN_VX across and DYN_VY up, blows up DYN_FUSE_MS
-// after it leaves; the blast is BLAST_W wide, BLAST_UP over the stick and
+// after it leaves, or at once when a monster stands within DYN_PROX of it once it has
+// landed; the blast is BLAST_W wide, BLAST_UP over the stick and
 // BLAST_DOWN under it, shows BLAST_MS, does BLAST_DAMAGE to a monster (and breaks
 // stone) and DYN_BOSS_DMG to a boss.
 export const DYN_VX = 30;
 export const DYN_VY = 38;
 export const DYN_FUSE_MS = 1000;
+export const DYN_PROX = 1;
 export const BLAST_W = 22;
 export const BLAST_UP = 9;
 export const BLAST_DOWN = 3;
@@ -79,6 +81,12 @@ export const DYN_BOSS_DMG = 8;
 export const STAKE_SPEED = 96;
 export const STAKE_DMG = 12;
 export const STAKE_BOSS = 8;
+// The Harpoon: the same straight pierce, heavier and slower, and the only
+// bolt that reaches a lurker's eyes under the water (Gallows Bog, see
+// `target` in ghoul-bog.js).
+export const HARPOON_SPEED = 84;
+export const HARPOON_DMG = 14;
+export const HARPOON_BOSS = 8;
 // The Bottle Rocket: three at once, ahead, up and behind (ghoul-rockets.js).
 export * from "./ghoul-rockets.js";
 // The Hedge Sickle: SICKLE_OUT out and back, SICKLE_DMG a pass.
@@ -342,6 +350,7 @@ const USES = freeze({
   flash: (round, k) => lobPod(round, k, "flash", true),
   pie: lobPie,
   flare: (round, k) => useFlare(round, k, lobVx(round, k, FLARE_VY, FLARE_VX)),
+  harpoon: (round, k) => armShot(round, k, "harpoon", HARPOON_SPEED, { dmg: HARPOON_DMG, bossDmg: HARPOON_BOSS, pierce: true }),
   trap: (round) => {
     const you = round.you;
     // Five at once, TRAP_GAP apart: two behind, one at his feet, two ahead.
@@ -434,7 +443,9 @@ function stepStick(round, h, ms, k) {
   h.fuse -= ms;
   h.spin += (ms / 1000) * 14;
   if (!h.rest && !flyDown(round, h, ms, k)) return false;
-  if (h.fuse > 0) return true;
+  // Landed: it also goes off at once when a monster comes within DYN_PROX of it.
+  const near = h.rest && round.monsters.some((m) => !m.dead && (k.solid(m) || k.stone(m)) && Math.max(0, Math.abs(m.x - h.x) - m.w / 2) <= DYN_PROX && h.y >= m.y - DYN_PROX && h.y <= m.y + m.h + DYN_PROX);
+  if (h.fuse > 0 && !near) return true;
   blast(round, h, k);
   return false;
 }

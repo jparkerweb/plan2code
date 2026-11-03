@@ -20,12 +20,22 @@ import { MINE_SFX } from "./ghoul-sfx-mine.js";
 import { CARNIVAL_SFX } from "./ghoul-sfx-carnival.js";
 import { FROZEN_SFX } from "./ghoul-sfx-frozen.js";
 import { SLED_SFX } from "./ghoul-sfx-sled.js";
+import { BANISTER_SFX } from "./ghoul-sfx-banister.js";
+import { HEARSE_SFX } from "./ghoul-sfx-hearse.js";
+import { BOG_SFX } from "./ghoul-sfx-bog.js";
+import { BOGBOAT_SFX } from "./ghoul-sfx-bogboat.js";
+import { GURNEY_SFX } from "./ghoul-sfx-gurney.js";
+import { PEW_SFX } from "./ghoul-sfx-pew.js";
+import { MOWER_SFX } from "./ghoul-sfx-mower.js";
+import { WAGON_SFX } from "./ghoul-sfx-wagon.js";
+import { TRAY_SFX } from "./ghoul-sfx-tray.js";
 import { ARMS_SFX } from "./ghoul-sfx-arms.js";
 import { RIDE_SFX } from "./ghoul-sfx-ride.js";
+import { STORY_SFX } from "./ghoul-sfx-story.js";
 
 // Each stage's sounds and tracks, by stage: `tones`, `hums` and `music` as
 // below, any of them left out.
-const STAGE_SFX = Object.freeze([GRAVEYARD_SFX, GROUNDS_SFX, CHAPEL_SFX, SANATORIUM_SFX, VILLAGE_SFX, MINE_SFX, CARNIVAL_SFX, FROZEN_SFX,SLED_SFX, ARMS_SFX, RIDE_SFX]);
+const STAGE_SFX = Object.freeze([GRAVEYARD_SFX, GROUNDS_SFX, CHAPEL_SFX, SANATORIUM_SFX, VILLAGE_SFX, MINE_SFX, CARNIVAL_SFX, FROZEN_SFX,SLED_SFX, HEARSE_SFX, BOG_SFX, BOGBOAT_SFX, GURNEY_SFX, PEW_SFX, MOWER_SFX, WAGON_SFX, TRAY_SFX, ARMS_SFX, RIDE_SFX, BANISTER_SFX, STORY_SFX]);
 const fromStages = (key) => Object.assign({}, ...STAGE_SFX.map((st) => st[key] || {}));
 
 // One second of the laugh track (part 0, 1 or 2): every event is placed on the
@@ -121,6 +131,14 @@ const HOUSE = {
         { type: "noise", seconds: 0.25, delay: 0.5, gain: 0.15, filter: { type: "highpass", from: 5000, to: 8000 } },
       ],
     },
+    // The Lucky die leaving the HUD: the screen holds under a low drone that swells and closes in.
+    ghoulDiceDrone: {
+      layers: [
+        { type: "sawtooth", from: 52, to: 78, seconds: 0.85, attack: 0.3, gain: 0.35, filter: { type: "lowpass", from: 200, to: 700 } },
+        { type: "sine", from: 104, to: 156, seconds: 0.85, attack: 0.3, gain: 0.3, vibrato: { rate: 6, depth: 0.03 } },
+        { type: "noise", seconds: 0.8, gain: 0.12, filter: { type: "bandpass", from: 300, to: 2400, q: 1 } },
+      ],
+    },
     // A Lucky die's 1: a wind-up toy laughing at you, a ratchet clicking before
     // each buzzy "ha", running down as its spring does.
     ghoulDiceLaugh: {
@@ -138,6 +156,27 @@ const HOUSE = {
     // pseudo-voices at staggered pitches, a hiss of applause beneath, the lot
     // slowing and sagging as its spring runs down (about 3.2 s in all).
     ...Object.fromEntries([0, 1, 2].map((part) => [part ? `ghoulLaughTrack${part + 1}` : "ghoulLaughTrack", { layers: laughPart(part) }])),
+    // A stage's intro card opening: a low swell and a minor arpeggio climbing to a held, shimmering top note (about 1 s).
+    ghoulStageIntro: {
+      layers: [
+        { type: "sawtooth", from: 55, to: 82, seconds: 1.0, attack: 0.2, gain: 0.3, filter: { type: "lowpass", from: 300, to: 1200 } },
+        ...[[0, 220], [0.14, 262], [0.28, 330], [0.42, 440]].map(([delay, hz]) => ({ type: "triangle", from: hz, to: hz * 1.01, seconds: 0.55, delay, attack: 0.01, gain: 0.32 })),
+        { type: "sine", from: 880, to: 884, seconds: 0.5, delay: 0.56, attack: 0.02, gain: 0.22, vibrato: { rate: 6, depth: 0.01 } },
+        { type: "noise", seconds: 0.5, delay: 0.5, gain: 0.08, filter: { type: "highpass", from: 3000, to: 6000 } },
+      ],
+    },
+    // A boss fight's card: four slamming drum hits (the letters of BOSS), a heartbeat, then low brass-like saws swelling in a dark minor chord (about 1.2 s).
+    ghoulBossIntro: {
+      layers: [
+        ...[0.2, 0.3, 0.4, 0.5].map((delay) => ({ type: "sine", from: 120, to: 38, seconds: 0.22, delay, attack: 0.002, gain: 0.8 })),
+        ...[0.2, 0.3, 0.4, 0.5].map((delay) => ({ type: "brown", seconds: 0.12, delay, attack: 0, gain: 0.55, filter: { type: "lowpass", from: 900, to: 150 } })),
+        ...[0.7, 0.86].map((delay) => ({ type: "sine", from: 70, to: 40, seconds: 0.22, delay, attack: 0.004, gain: 0.7 })),
+        { type: "sawtooth", from: 55, to: 58, seconds: 1.15, delay: 0.05, attack: 0.5, gain: 0.34, filter: { type: "lowpass", from: 320, to: 900 } },
+        { type: "sawtooth", from: 65.4, to: 69, seconds: 1.1, delay: 0.1, attack: 0.5, gain: 0.3, filter: { type: "lowpass", from: 320, to: 900 } },
+        { type: "sawtooth", from: 82.4, to: 87, seconds: 1.05, delay: 0.15, attack: 0.5, gain: 0.26, filter: { type: "lowpass", from: 320, to: 1000 } },
+        { type: "noise", seconds: 0.3, delay: 0.85, attack: 0.2, gain: 0.08, filter: { type: "highpass", from: 2500, to: 5500 } },
+      ],
+    },
     // A horror stinger: a minor chord stabbed on low saws, the fight on.
     ghoulStinger: {
       layers: [

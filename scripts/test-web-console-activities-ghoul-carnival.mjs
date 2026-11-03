@@ -157,7 +157,7 @@ test("Ghoul Rush's Midnight Carnival is a stage of three rooms, the dark ride (a
   assert.equal(st.boss, "ringmaster");
   assert.equal(st.title, "The Midnight Carnival");
   assert.equal(st.sub, "Every game is rigged in its favor");
-  assert.equal(ghoul.STAGES.at(-2), st, "the last stage in the list but the Frozen Lake");
+  assert.equal(ghoul.STAGES.at(-3), st, "the last stage in the list but the Frozen Lake and Gallows Bog");
   for (const kind of Object.keys(cv.MONSTERS)) assert.equal(ghoul.MONSTERS[kind], cv.MONSTERS[kind], `${kind} is a monster`);
   assert.deepEqual(Object.keys(cv.MONSTERS).sort(), ["balloon", "circushound", "grinner", "marionette", "mirror", "strongman"]);
   assert.equal(ghoul.BOSSES.ringmaster, cv.BOSSES.ringmaster);
@@ -2002,7 +2002,7 @@ test("Ghoul Rush's stage select lists the Carnival and takes you straight into e
   const r = g.round;
   assert.equal(r.phase, "select");
   const at = ghoul.STAGES.findIndex((s) => s.id === "carnival");
-  assert.equal(at, ghoul.STAGES.length - 2);
+  assert.equal(at, ghoul.STAGES.length - 3);
   for (let i = 0; i < at; i++) ghoul.steerSelect(r, 1, 0);
   for (let i = 0; i < 4; i++) ghoul.steerSelect(r, 0, 1);
   assert.equal(r.select.at, at);

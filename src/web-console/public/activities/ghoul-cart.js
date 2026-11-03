@@ -228,7 +228,7 @@ const boxHit = (k, you, x, y0, w, h) => Math.abs(you.x - x) < (k.HIT_W + w) / 2 
 function place(round, k) {
   const R = round.spec.ride;
   round.camLead = 0;
-  if (!R || R.gallery || R.sled) {
+  if (!R || R.gallery || R.sled || R.runner) {
     round.cart = null;
     return;
   }

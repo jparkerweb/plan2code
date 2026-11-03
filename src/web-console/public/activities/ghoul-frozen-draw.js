@@ -80,6 +80,7 @@ export const EVENT_VOICE = freeze({
   veilMelt: ["frostwidow", "melt"],
   veilUp: ["frostwidow", "up"],
   barrelKick: ["frostwidow", "kick"],
+  barrelKnock: ["frostwidow", "kick"],
   barrelBurst: ["frostwidow", "burst"],
   blizzard: ["frostwidow", "gust"],
   blizzardBlow: ["frostwidow", "blow"],
@@ -1386,6 +1387,10 @@ export function frozenArt(d) {
       case "barrelPlace":
         burst(e.x, e.y + 1.7, "#ff8a1a", 6, 6, 260);
         ring(e.x, e.y + 1.7, "#ff8a1a", 1, 4, 300);
+        break;
+      case "barrelKnock":
+        shake(60, 0.15);
+        burst(e.x, e.y + 1.7, "#ffb050", 3 + e.n, 8, 220);
         break;
       case "barrelKick":
         shake(80, 0.25);

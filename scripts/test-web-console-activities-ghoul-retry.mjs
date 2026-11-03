@@ -4,6 +4,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import * as ghoul from "../src/web-console/public/activities/ghoul.js";
+import { skipStory as storySkip } from "../src/web-console/public/activities/ghoul-story.js";
 import { MERCY_FAR, MERCY_NEAR, mercyKind, mercySpot, mix3 } from "../src/web-console/public/activities/ghoul-powers.js";
 
 const steady = () => 0.5;
@@ -56,6 +57,13 @@ function die(round, cause = "zombie") {
 
 const everyRoom = () => ghoul.STAGES.flatMap((st, si) => st.rooms.map((id, ri) => ({ st, si, ri, id })));
 const special = (round) => Boolean(round.spec.ride || round.spec.bonus || round.bonusRound);
+
+// Past the intro story at once (it has its own tests): a run opens on it, and the tests that play from the hall skip it.
+function skipStory(g) {
+  if (g.round.phase !== "story") return;
+  storySkip(g.round);
+  g.tick(0);
+}
 
 test("Ghoul Rush retry mercy: the first attempt of a room spawns nothing, the second exactly one power-up a few steps ahead of Planny on the floor", () => {
   const round = inRoom(-1, 0);
@@ -298,6 +306,7 @@ test("Ghoul Rush retry mercy: the game draws the pickup, its shimmer and its wor
     const g = ghoul.default.create({ canvas });
     g.resize(900, 900);
     g.key("action");
+    skipStory(g);
     g.round.dice = 0;
     for (let ms = 0; ms < 4000; ms += 16) g.tick(16);
     const r = g.round;

@@ -45,9 +45,9 @@ function run(round, ms, keys = {}) {
   for (const k of Object.keys(keys)) round.input[k] = false;
 }
 
-test("Ghoul Rush's Graveyard is a stage of three rooms and Mother Mourning's, its monsters and boss joined to the game's", () => {
+test("Ghoul Rush's Graveyard is a stage of three rooms, the Midnight Hearse bonus ride (its own suite: ghoul-hearse) and Mother Mourning's, its monsters and boss joined to the game's", () => {
   const st = ghoul.stageById("graveyard");
-  assert.deepEqual(st.rooms, ["lychgate", "graves", "mausoleums", "angel"]);
+  assert.deepEqual(st.rooms, ["lychgate", "graves", "mausoleums", "hearse", "angel"]);
   assert.equal(st.boss, "angel");
   for (const kind of Object.keys(gy.MONSTERS)) assert.equal(ghoul.MONSTERS[kind], gy.MONSTERS[kind], `${kind} is a monster`);
   assert.equal(ghoul.BOSSES.angel, gy.BOSSES.angel);

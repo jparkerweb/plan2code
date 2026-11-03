@@ -3,6 +3,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import * as ghoul from "../src/web-console/public/activities/ghoul.js";
+import { skipBossIntro } from "./ghoul-test-helpers.mjs";
 import * as ct from "../src/web-console/public/activities/ghoul-cart.js";
 import { EVENT_VOICE, LOSE_SOUNDS, LOSE_WORDS, LOOKS as CART_LOOKS, VOICES as CART_VOICES } from "../src/web-console/public/activities/ghoul-cart-draw.js";
 import * as ghoulSfx from "../src/web-console/public/activities/ghoul-sfx.js";
@@ -1118,6 +1119,8 @@ test("Ghoul Rush's bonus round: the fifth lost heart ends it with no dice and no
   assert.equal(round.cart, null);
   assert.equal(round.lives, 3);
   assert.equal(round.dice, 2);
+  assert.equal(round.phase, "bossintro", "the boss room opens on its card");
+  skipBossIntro(ghoul, round);
   assert.equal(round.phase, "ready");
   // A life lost there is a run life as always, and the dice roll for it.
   round.phase = "play";

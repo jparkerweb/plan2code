@@ -3,6 +3,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import * as ghoul from "../src/web-console/public/activities/ghoul.js";
+import { skipBossIntro } from "./ghoul-test-helpers.mjs";
 import * as sl from "../src/web-console/public/activities/ghoul-sled.js";
 import * as ct from "../src/web-console/public/activities/ghoul-cart.js";
 import { EVENT_VOICE, LOSE_SOUNDS, LOSE_WORDS, LOOKS as SLED_LOOKS, VOICES as SLED_VOICES, telegraphMarks, telegraphs } from "../src/web-console/public/activities/ghoul-sled-draw.js";
@@ -102,7 +103,7 @@ test("Ghoul Rush's Coffin Sled is the Frozen Lake's fourth room, between the Bla
   const st = ghoul.stageById("frozen");
   assert.deepEqual(st.rooms, ["huts", "lodge", "blackice", "sled", "widow"]);
   assert.equal(st.boss, "frostwidow");
-  assert.equal(ghoul.STAGES.at(-1), st, "still the last stage in the list");
+  assert.equal(ghoul.STAGES.at(-2), st, "the last stage in the list but Gallows Bog");
   assert.deepEqual([ROOM.title, ROOM.sub], ["Coffin Sled", "Hold on. The hill is longer than it looks"]);
   assert.equal(ROOM.dark, false, "a moonlit night, always lit");
   assert.equal(ROOM.key, null);
@@ -540,6 +541,8 @@ test("Ghoul Rush's Coffin Sled: the last heart gone ends the round with nothing 
   assert.equal(round.sled, null);
   assert.equal(round.lives, 3);
   assert.equal(round.dice, 2);
+  assert.equal(round.phase, "bossintro", "the boss room opens on its card");
+  skipBossIntro(ghoul, round);
   assert.equal(round.phase, "ready");
 });
 

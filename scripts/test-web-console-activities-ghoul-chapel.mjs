@@ -82,7 +82,7 @@ const heard = (e, extra = {}) => {
 
 test("Ghoul Rush's Chapel is a stage of three rooms and the Choir's, its monsters and boss joined to the game's, with Holy Water and a place for each kind", () => {
   const st = ghoul.stageById("chapel");
-  assert.deepEqual(st.rooms, ["nave", "tower", "loft", "choir"]);
+  assert.deepEqual(st.rooms, ["nave", "tower", "loft", "pew", "choir"], "the bonus ride (Holy Roller) sits before the Choir");
   assert.equal(st.boss, "choirmaster");
   assert.equal(st.title, "The Chapel");
   assert.equal(st.sub, "Service is still in session");
@@ -90,7 +90,7 @@ test("Ghoul Rush's Chapel is a stage of three rooms and the Choir's, its monster
   assert.equal(ghoul.BOSSES.choirmaster, ch.BOSSES.choirmaster);
   assert.equal(ch.BOSSES.choirmaster.sub, "Silence the pipes one by one");
   for (const id of st.rooms) assert.ok(ghoul.ROOM_MUSIC[id], `${id} has music`);
-  const [nave, tower, loft, choir] = st.rooms.map((id) => ghoul.roomById(id));
+  const [nave, tower, loft, choir] = st.rooms.filter((id) => id !== "pew").map((id) => ghoul.roomById(id));
   for (const room of [nave, tower, loft]) {
     assert.ok(room.key, `${room.id}: a key`);
     assert.ok(room.sky.length && room.candy.length && room.items.length && room.horde.length, `${room.id}: sky treasures, candy, items and a horde`);
@@ -785,7 +785,7 @@ test("Every column of notes can be passed: for each gap a surface in the arena (
 test("Every column can be reached from the one before: the next gap is the same height or one step either side, over a long fight", () => {
   const round = choirFight();
   const gaps = [];
-  const rand = ghoul.seeded(11);
+  const rand = ghoul.seeded(2);
   round.boss.act = "idle";
   round.boss.wait = 0;
   for (let t = 0; t < 70000; t += 4) {
@@ -832,7 +832,7 @@ test("A jump from the floor clears the third gap too, with a window of about a f
 
 /* ----------------------------------------------------------- the rage */
 
-test("The Choirmaster at half his hp: a rage that is told, silenced pipes sounding again one at a time every 6 s (guarding him again), faster notes, and now and then two columns close together", () => {
+test("The Choirmaster at half his hp: a rage that is told, and no pipe comes back for it alone", () => {
   const round = choirFight();
   const b = round.boss;
   b.pipes.forEach((p) => {
@@ -846,17 +846,202 @@ test("The Choirmaster at half his hp: a rage that is told, silenced pipes soundi
   assert.equal(events(round, "choirRage").length, 1, "the rage is told");
   assert.equal(b.raged, true);
   assert.deepEqual(b.pipes.map((p) => p.on), [false, false, false, false], "none yet");
-  // One every 6 s, one at a time.
-  const sounds = log(round, ch.RESOUND_MS * 4 + 200, "pipeSound");
-  assert.equal(sounds.length, 4, "all four, one by one");
-  for (let i = 1; i < sounds.length; i++) assert.ok(Math.abs(sounds[i][0] - sounds[i - 1][0] - ch.RESOUND_MS) < 60, `${sounds[i][0] - sounds[i - 1][0]} apart`);
-  assert.equal(new Set(sounds.map((s) => s[1].pipe)).size, 4, "a different pipe each time");
-  assert.ok(b.pipes.every((p) => p.on && p.hp === p.max), "each at full hp");
-  // While any sounds, he is guarded again.
+  // He is held to no columns, so the pipes stay down however long it takes.
+  run(round, 30000);
+  assert.equal(events(round, "pipeSound").length, 0);
+  assert.ok(b.pipes.every((p) => !p.on));
+});
+
+/* ------------------------------------------- the pipes drop back in */
+
+// A fight with all four pipes shot silent, his next cue due now.
+function openFight() {
+  const round = choirFight();
+  const b = round.boss;
+  until(round, () => b.x === round.spec.length - ch.HOME_FROM_END, 4000);
+  hold(round);
+  for (const p of b.pipes) {
+    p.hp = 1;
+    round.shots.push({ x: p.x - 3, y: p.y + 4, vx: 80, vy: 0, gone: 0 });
+    run(round, 60);
+  }
+  assert.ok(b.pipes.every((p) => !p.on));
+  Object.assign(b, { act: "idle", wait: 0 });
+  round.events.length = 0;
+  return round;
+}
+
+// Runs a fight until `n` columns are away, you kept safe and the bell off.
+function columns(round, n, random = steady) {
+  const flownSoFar = () => events(round, "notes").filter((e) => !e.pair).length;
+  const want = flownSoFar() + n;
+  for (let t = 0; t < 60000 && (flownSoFar() < want || round.boss.act !== "idle"); t += 4) {
+    ghoul.advance(round, 4, random);
+    round.you.safeMs = 1e9;
+    round.twist.next = 1e9;
+    round.monsters.length = 0;
+  }
+}
+
+test("The Choirmaster's pipes drop back in: with all four silent he stays open for four columns, warns on the third, and the fourth brings all of them back at full hp", () => {
+  const round = openFight();
+  const b = round.boss;
+  assert.equal(ch.PIPES_BACK, 4);
+  columns(round, 2);
+  assert.ok(b.pipes.every((p) => !p.on), "still open after two");
+  assert.equal(events(round, "pipesStir").length, 0);
+  columns(round, 1);
+  assert.ok(b.pipes.every((p) => !p.on), "still open after three");
+  assert.equal(b.quiet, 1, "one column left");
+  assert.equal(events(round, "pipesStir").length, 1, "and it warns you");
   const hp = b.hp;
   round.shots.push({ x: b.x - b.w / 2 - 0.2, y: b.y + 5, vx: 80, vy: 0, gone: 0 });
-  run(round, 20);
-  assert.equal(b.hp, hp);
+  ghoul.advance(round, 4, steady);
+  assert.equal(b.hp, hp - 1, "and still to be hurt");
+  columns(round, 1);
+  assert.ok(b.pipes.every((p) => p.on && p.hp === p.max), "all four, at full hp");
+  assert.ok(b.pipes.every((p) => p.dropMs > 0), "falling");
+  // Guarded from the moment they start to fall.
+  const now = b.hp;
+  round.shots.push({ x: b.x - b.w / 2 - 0.2, y: b.y + 5, vx: 80, vy: 0, gone: 0 });
+  ghoul.advance(round, 4, steady);
+  assert.equal(b.hp, now, "guarded again");
+});
+
+test("A falling pipe cannot be shot and spews nothing; each lands in turn with its sound, and then has to be silenced all over again, which starts the count anew", () => {
+  const round = openFight();
+  const b = round.boss;
+  columns(round, ch.PIPES_BACK);
+  const [first, , , last] = b.pipes;
+  assert.equal(last.dropMs - first.dropMs, 3 * ch.PIPE_DROP_STAGGER_MS, "one after another");
+  hold(round);
+  // A bolt passes through a pipe still in the air.
+  round.events.length = 0;
+  round.shots.push({ x: first.x - 3, y: first.y + 4, vx: 80, vy: 0, gone: 0 });
+  run(round, 60);
+  assert.equal(first.hp, first.max);
+  assert.equal(events(round, "pipeHit").length, 0);
+  assert.equal(events(round, "pipeSpew").length, 0);
+  // They land one at a time.
+  const lands = log(round, ch.PIPE_DROP_MS + 4 * ch.PIPE_DROP_STAGGER_MS, "pipeSound");
+  assert.deepEqual(lands.map(([, e]) => e.pipe), [0, 1, 2, 3]);
+  assert.ok(b.pipes.every((p) => !(p.dropMs > 0)));
+  // Landed: shots count again, and silencing all four opens him and starts over.
+  for (const p of b.pipes) {
+    p.hp = 1;
+    p.spewIn = 1e9;
+    round.shots.push({ x: p.x - 3, y: p.y + 4, vx: 80, vy: 0, gone: 0 });
+    run(round, 60);
+  }
+  assert.ok(b.pipes.every((p) => !p.on), "silenced again");
+  assert.ok(events(round, "choirOpen").length >= 1);
+  run(round, 8);
+  assert.equal(b.quiet, ch.PIPES_BACK, "the count starts over");
+});
+
+test("The pipes only come back once all four are silent: columns flown with one still sounding count for nothing, and the rage changes none of it", () => {
+  const round = choirFight();
+  const b = round.boss;
+  b.pipes.forEach((p, i) => (p.on = i === 0));
+  Object.assign(b, { act: "idle", wait: 0 });
+  columns(round, ch.PIPES_BACK + 2);
+  assert.deepEqual(b.pipes.map((p) => p.on), [true, false, false, false]);
+  assert.equal(b.quiet, null);
+  const mad = openFight();
+  mad.boss.hp = mad.boss.max * 0.4;
+  columns(mad, ch.PIPES_BACK - 1, ghoul.seeded(3));
+  assert.ok(mad.boss.pipes.every((p) => !p.on), "not yet");
+  columns(mad, 1, ghoul.seeded(4));
+  assert.ok(mad.boss.pipes.every((p) => p.on), "back in the rage too");
+});
+
+/* --------------------------------------- each column at its own speed */
+
+// A long fight from a seed, every column as { at, v, pair, end }: `end` when it
+// reaches the arena's far end. Bolts, ghosts and the bell kept out of it.
+function flown(seed, raged) {
+  const round = choirFight();
+  const b = round.boss;
+  until(round, () => b.x === round.spec.length - ch.HOME_FROM_END, 4000);
+  hold(round);
+  if (raged) {
+    b.hp = b.max * 0.4;
+    b.raged = true;
+  }
+  Object.assign(b, { act: "idle", wait: 0, gap: 1 });
+  const random = ghoul.seeded(seed);
+  const end = round.spec.arena - 6;
+  const got = [];
+  for (let t = 0; t < 120000; t += 4) {
+    ghoul.advance(round, 4, random);
+    round.you.safeMs = 1e9;
+    round.twist.next = 1e9;
+    b.pipes.forEach((p) => (p.spewIn = 1e9));
+    round.monsters.length = 0;
+    for (const e of round.events) if (e.type === "notes") got.push({ at: round.clock, v: e.v, pair: e.pair, gap: e.gap, end: round.clock + ((e.x - end) / e.v) * 1000 });
+    round.events.length = 0;
+  }
+  return { round, got };
+}
+
+test("Every column of notes flies at its own speed: the whole column together, some far faster than usual and some far slower, in no fixed order", () => {
+  const { got } = flown(7, false);
+  assert.ok(got.length >= 25, `${got.length} columns`);
+  const vs = got.map((c) => c.v);
+  assert.ok(Math.min(...vs) <= ch.NOTE_V * 0.6, `some slow (${Math.min(...vs).toFixed(1)})`);
+  assert.ok(Math.max(...vs) >= ch.NOTE_V * 1.3, `some fast (${Math.max(...vs).toFixed(1)})`);
+  assert.ok(new Set(vs.map((v) => v.toFixed(1))).size >= 5, "many speeds");
+  // One launch: every note in it alike, with the edge the art draws from.
+  const round = choirFight();
+  Object.assign(round.boss, { act: "idle", wait: 0 });
+  run(round, ch.CUE_MS + 20);
+  const notes = round.hazards.filter((h) => h.kind === "note");
+  assert.equal(notes.length, 4);
+  assert.equal(new Set(notes.map((n) => n.v)).size, 1, "a column flies together");
+  assert.ok(notes.every((n) => n.pace === 1), "the middle draw is the usual speed");
+  // Different draws, different speeds: the table's ends are real.
+  for (const [draw, pace] of [[0, ch.NOTE_PACE[0]], [0.999, ch.NOTE_PACE.at(-1)]]) {
+    const r = choirFight();
+    Object.assign(r.boss, { act: "cue", wait: 0, gap: 1, second: null });
+    ghoul.advance(r, 4, () => draw);
+    const n = r.hazards.find((h) => h.kind === "note");
+    assert.ok(Math.abs(n.v - ch.NOTE_V * pace) < 1e-9, `draw ${draw}`);
+  }
+});
+
+test("No column ever catches the one ahead: wherever you stand you get time between two gaps, a pair keeps its spacing, and even the slowest crosses the arena", () => {
+  for (const raged of [false, true]) {
+    for (const seed of [1, 2, 3, 4]) {
+      const { got } = flown(seed, raged);
+      assert.ok(got.length >= 20);
+      for (let i = 1; i < got.length; i++) {
+        const gap = got[i].end - got[i - 1].end;
+        const least = got[i].pair ? ch.PAIR_MS : ch.NOTE_SEP_MS;
+        assert.ok(gap >= least - 20, `seed ${seed}, column ${i}: ${gap.toFixed(0)} ms behind at the far end`);
+        // Launched later and arriving later, so it is behind at every spot between.
+        assert.ok(got[i].at > got[i - 1].at);
+      }
+      if (raged) assert.ok(got.some((c) => c.pair), "pairs in the rage");
+      for (let i = 1; i < got.length; i++) if (got[i].pair) assert.equal(got[i].v, got[i - 1].v, "a pair flies as one");
+    }
+  }
+  // The slowest note lives long enough to leave by the far end.
+  const round = choirFight();
+  const b = round.boss;
+  until(round, () => b.x === round.spec.length - ch.HOME_FROM_END, 4000);
+  hold(round);
+  Object.assign(b, { act: "cue", wait: 0, gap: 1, second: null });
+  ghoul.advance(round, 4, () => 0);
+  hold(round);
+  const note = round.hazards.find((h) => h.kind === "note");
+  let lowest = note.x;
+  for (let t = 0; t < 12000 && round.hazards.includes(note); t += 4) {
+    ghoul.advance(round, 4, steady);
+    round.you.safeMs = 1e9;
+    round.twist.next = 1e9;
+    lowest = Math.min(lowest, note.x);
+  }
+  assert.ok(lowest <= round.spec.arena - 5.5, `reached ${lowest.toFixed(1)}`);
 });
 
 test("The Choirmaster in his rage conducts faster: notes at NOTE_V_RAGE, a column every 2.3 s, and sometimes a second column 1.1 s behind the first, its gap next to the first's", () => {
@@ -865,7 +1050,6 @@ test("The Choirmaster in his rage conducts faster: notes at NOTE_V_RAGE, a colum
   b.pipes.forEach((p) => (p.on = false));
   b.hp = b.max * 0.5 - 1;
   b.raged = true;
-  b.resoundIn = 1e9;
   const random = ghoul.seeded(5);
   Object.assign(b, { act: "idle", wait: 0, gap: 1 });
   const pairs = [];
@@ -894,9 +1078,13 @@ test("The Choirmaster in his rage conducts faster: notes at NOTE_V_RAGE, a colum
     spaced++;
   }
   assert.ok(spaced >= 5);
-  // Faster notes.
-  assert.equal(speed, ch.NOTE_V_RAGE * round.spec.pace);
+  // Faster notes: the same draw flies faster in the rage.
+  assert.ok(speed > 0);
   assert.ok(ch.NOTE_V_RAGE > ch.NOTE_V && ch.COLUMN_RAGE_MS < ch.COLUMN_MS);
+  const mad = choirFight();
+  Object.assign(mad.boss, { hp: mad.boss.max * 0.4, raged: true, act: "cue", wait: 0, gap: 1, second: null });
+  ghoul.advance(mad, 4, steady);
+  assert.equal(mad.hazards.find((h) => h.kind === "note").v, ch.NOTE_V_RAGE * mad.spec.pace);
   // Without the rage, the same draws give no pairs.
   const calm = choirFight();
   Object.assign(calm.boss, { act: "idle", wait: 0, gap: 1 });
@@ -1039,6 +1227,7 @@ test("Ghoul Rush's Chapel: every new kind has a voice for every act and every ne
   // Every new event says something (a float, a banner or a sound).
   assert.deepEqual(heard({ type: "toll", ms: 1000 }).floats, ["Frozen!"]);
   assert.deepEqual(heard({ type: "pipeSilence", kind: "choirmaster", left: 0 }).floats, ["Silent!"]);
+  assert.deepEqual(heard({ type: "pipesStir", kind: "choirmaster" }).floats, ["The pipes stir!"]);
 });
 
 test("Ghoul Rush's Chapel: every new way to die has its words and its own sound", () => {
@@ -1088,6 +1277,14 @@ test("Ghoul Rush's Chapel draws: every room, every monster in every act, the Cho
         r.stunMs = 500;
         g.tick(16);
         r.stunMs = 0;
+        // The pipes rattling, then falling back in; notes of every speed.
+        if (r.boss.pipes) {
+          Object.assign(r.boss, { act: "idle", wait: 1e9, quiet: 1 });
+          g.tick(16);
+          r.boss.pipes.forEach((p, i) => Object.assign(p, { on: true, dropMs: 300 + i * 100 }));
+          r.hazards.push({ kind: "note", x: r.you.x + 24, y: 10, w: 1.6, h: 1.6, v: 0, pace: 1.75, live: 1, life: 5000, row: 1, cause: "note" }, { kind: "note", x: r.you.x + 28, y: 10, w: 1.6, h: 1.6, v: 0, pace: 0.55, live: 1, life: 5000, row: 1, cause: "note" });
+          g.tick(16);
+        }
       }
       for (let k = 0; k < 20; k++) g.tick(16);
       r.you.safeMs = 1e9;

@@ -38,16 +38,28 @@ import { LOOKS as SANATORIUM_LOOKS, LOSE_SOUNDS as SANATORIUM_LOSE_SOUNDS, LOSE_
 import { LOOKS as VILLAGE_LOOKS, LOSE_SOUNDS as VILLAGE_LOSE_SOUNDS, LOSE_WORDS as VILLAGE_LOSE_WORDS, VOICES as VILLAGE_VOICES, villageArt } from "./ghoul-village-draw.js";
 import { LOOKS as MINE_LOOKS, LOSE_SOUNDS as MINE_LOSE_SOUNDS, LOSE_WORDS as MINE_LOSE_WORDS, VOICES as MINE_VOICES, mineArt } from "./ghoul-mine-draw.js";
 import { LOOKS as CART_LOOKS, LOSE_SOUNDS as CART_LOSE_SOUNDS, LOSE_WORDS as CART_LOSE_WORDS, VOICES as CART_VOICES, cartArt } from "./ghoul-cart-draw.js";
+import { LOOKS as WAGON_LOOKS, LOSE_SOUNDS as WAGON_LOSE_SOUNDS, LOSE_WORDS as WAGON_LOSE_WORDS, VOICES as WAGON_VOICES, wagonArt } from "./ghoul-wagon-draw.js";
 import { LOOKS as SLED_LOOKS, LOSE_SOUNDS as SLED_LOSE_SOUNDS, LOSE_WORDS as SLED_LOSE_WORDS, VOICES as SLED_VOICES, sledArt } from "./ghoul-sled-draw.js";
+import { LOOKS as BANISTER_LOOKS, LOSE_SOUNDS as BANISTER_LOSE_SOUNDS, LOSE_WORDS as BANISTER_LOSE_WORDS, VOICES as BANISTER_VOICES, banisterArt } from "./ghoul-banister-draw.js";
+import { LOOKS as HEARSE_LOOKS, LOSE_SOUNDS as HEARSE_LOSE_SOUNDS, LOSE_WORDS as HEARSE_LOSE_WORDS, VOICES as HEARSE_VOICES, hearseArt } from "./ghoul-hearse-draw.js";
+import { LOOKS as GURNEY_LOOKS, LOSE_SOUNDS as GURNEY_LOSE_SOUNDS, LOSE_WORDS as GURNEY_LOSE_WORDS, VOICES as GURNEY_VOICES, gurneyArt } from "./ghoul-gurney-draw.js";
+import { LOOKS as PEW_LOOKS, LOSE_SOUNDS as PEW_LOSE_SOUNDS, LOSE_WORDS as PEW_LOSE_WORDS, VOICES as PEW_VOICES, pewArt } from "./ghoul-pew-draw.js";
+import { LOOKS as MOWER_LOOKS, LOSE_SOUNDS as MOWER_LOSE_SOUNDS, LOSE_WORDS as MOWER_LOSE_WORDS, VOICES as MOWER_VOICES, mowerArt } from "./ghoul-mower-draw.js";
+import { LOOKS as TRAY_LOOKS, LOSE_SOUNDS as TRAY_LOSE_SOUNDS, LOSE_WORDS as TRAY_LOSE_WORDS, VOICES as TRAY_VOICES, trayArt } from "./ghoul-tray-draw.js";
 import { LOOKS as CARNIVAL_LOOKS, LOSE_SOUNDS as CARNIVAL_LOSE_SOUNDS, LOSE_WORDS as CARNIVAL_LOSE_WORDS, VOICES as CARNIVAL_VOICES, carnivalArt } from "./ghoul-carnival-draw.js";
 import { LOOKS as FROZEN_LOOKS, LOSE_SOUNDS as FROZEN_LOSE_SOUNDS, LOSE_WORDS as FROZEN_LOSE_WORDS, VOICES as FROZEN_VOICES, frozenArt } from "./ghoul-frozen-draw.js";
+import { LOOKS as BOG_LOOKS, LOSE_SOUNDS as BOG_LOSE_SOUNDS, LOSE_WORDS as BOG_LOSE_WORDS, VOICES as BOG_VOICES, bogArt } from "./ghoul-bog-draw.js";
+import { LOOKS as BOGBOAT_LOOKS, LOSE_SOUNDS as BOGBOAT_LOSE_SOUNDS, LOSE_WORDS as BOGBOAT_LOSE_WORDS, VOICES as BOGBOAT_VOICES, bogboatArt } from "./ghoul-bogboat-draw.js";
 import { diceArt } from "./ghoul-dice-draw.js";
 import { gameOverBanner } from "./ghoul-gameover-draw.js";
+import { introArt } from "./ghoul-intro-draw.js";
+import { storyArt } from "./ghoul-story-draw.js";
 import { bonusArt } from "./ghoul-bonus-draw.js";
 import { LOOKS as RIDE_LOOKS, LOSE_SOUNDS as RIDE_LOSE_SOUNDS, LOSE_WORDS as RIDE_LOSE_WORDS, VOICES as RIDE_VOICES, react as rideReact } from "./ghoul-ride-voices.js";
 import { rideArt } from "./ghoul-ride-draw.js";
 import { armsArt } from "./ghoul-arms-draw.js";
 import { pickerArt } from "./ghoul-picker-draw.js";
+import { bossIntroArt } from "./ghoul-bossintro-draw.js";
 import { monsterArt } from "./ghoul-monsters-draw.js";
 
 const FALLBACK_COLORS = Object.freeze({ board: "#ffffff", line: "#e4ddd1", you: "#206cc3", ink: "#1d1a17" });
@@ -116,9 +128,18 @@ export const LOOKS = Object.freeze({
   ...MINE_LOOKS,
   ...CART_LOOKS,
   ...SLED_LOOKS,
+  ...BANISTER_LOOKS,
+  ...HEARSE_LOOKS,
+  ...GURNEY_LOOKS,
+  ...PEW_LOOKS,
+  ...MOWER_LOOKS,
+  ...TRAY_LOOKS,
+  ...WAGON_LOOKS,
   ...CARNIVAL_LOOKS,
   ...FROZEN_LOOKS,
   ...RIDE_LOOKS,
+  ...BOG_LOOKS,
+  ...BOGBOAT_LOOKS,
   crypt: Object.freeze({ wallTop: "#0a0b0e", wallLow: "#1b1e25", paper: "#262a33", wainscot: "#14161b", floorTop: "#43474f", floor: "#22252b", floorEdge: "#0a0b0d", shelf: "#30343c", shelfTop: "#4a4f58", pit: "#010102", window: "#b4bfd1", decor: "tombs", color: "#b4bfd1", dark: 0.9 }),
 });
 export const lookOf = (id) => LOOKS[id] || LOOKS.foyer;
@@ -242,12 +263,14 @@ const { drawZombie, drawZombieKin, drawHuntsman, drawCrawler, drawBat, drawGhost
 // backdrops (a look's `pack` names whose, the Graveyard's by default), graves,
 // monsters, bosses, missiles, hazards, waves, power-up badges and lights by
 // kind, and what their events look and sound like.
-const HELP = { drawPower, ellipse, circle, roundRect, line, rotate, eye, hash, say, gate, label, drawBoneShape, BONE, DANGER, GOLD, FLASH, EYE_RED, EYE_PALE, EYE_AMBER };
+const HELP = { hudLayout, drawPower, ellipse, circle, roundRect, line, rotate, eye, hash, say, gate, label, drawBoneShape, BONE, DANGER, GOLD, FLASH, EYE_RED, EYE_PALE, EYE_AMBER };
 const ARMS_ART = armsArt(HELP);
-const PACK_ART = { arms: ARMS_ART, bones: boneArt(HELP), graveyard: graveyardArt(HELP), grounds: groundsArt(HELP), chapel: chapelArt(HELP), sanatorium: sanatoriumArt(HELP), village: villageArt(HELP), mine: mineArt(HELP), cart: cartArt(HELP), sled: sledArt(HELP), carnival: carnivalArt(HELP), frozen: frozenArt(HELP), ride: { backdrop() {}, lights() {}, react: rideReact } };
+const PACK_ART = { arms: ARMS_ART, bones: boneArt(HELP), graveyard: graveyardArt(HELP), grounds: groundsArt(HELP), chapel: chapelArt(HELP), sanatorium: sanatoriumArt(HELP), village: villageArt(HELP), mine: mineArt(HELP), cart: cartArt(HELP), sled: sledArt(HELP), banister: banisterArt(HELP), hearse: hearseArt(HELP), codeblue: gurneyArt(HELP), pew: pewArt(HELP), mower: mowerArt(HELP), tray: trayArt(HELP), wagon: wagonArt(HELP), carnival: carnivalArt(HELP), frozen: frozenArt(HELP), bog: bogArt(HELP), bogboat: bogboatArt(HELP), ride: { backdrop() {}, lights() {}, react: rideReact } };
 const packs = Object.values(PACK_ART);
 const DICE = diceArt(HELP);
 const OVER_BANNER = gameOverBanner(HELP);
+const INTRO_CARD = introArt(HELP);
+const STORY_CARD = storyArt({ ...HELP, LOOKS });
 const BONUS = bonusArt(HELP, DICE.die);
 // The Carnival's dark ride draws the whole field itself (ghoul-ride-draw.js).
 const RIDE = rideArt(HELP, DICE.die);
@@ -1723,7 +1746,7 @@ function drawGlowing(ctx, v) {
 /* ------------------------------------------------------------ feedback */
 
 const KILL_WORDS = Object.freeze({ head: "Headshot!", stomp: "Crunch!", crush: "Flattened!", garlic: "Garlic!" });
-const LOSE_WORDS = Object.freeze({ time: "Out of time", pit: "Into the dark", bone: "Skull cracked", chandelier: "Crushed", acid: "Burned alive", wave: "Thrown down", ...BONES_LOSE_WORDS, ...GROUNDS_LOSE_WORDS, ...CHAPEL_LOSE_WORDS, ...SANATORIUM_LOSE_WORDS, ...VILLAGE_LOSE_WORDS, ...MINE_LOSE_WORDS, ...CART_LOSE_WORDS, ...SLED_LOSE_WORDS, ...CARNIVAL_LOSE_WORDS, ...FROZEN_LOSE_WORDS,...RIDE_LOSE_WORDS, hound: "Mauled", spider: "Bitten", wraith: "Taken", hands: "Dragged under", mourner: "Mourned", robber: "Buried alive", crow: "Pecked", legs: "Kicked down", stone: "Struck by a headstone", fist: "Crushed by stone", angel: "Turned to stone" });
+const LOSE_WORDS = Object.freeze({ time: "Out of time", pit: "Into the dark", bone: "Skull cracked", chandelier: "Crushed", acid: "Burned alive", wave: "Thrown down", ...BONES_LOSE_WORDS, ...BANISTER_LOSE_WORDS, ...GROUNDS_LOSE_WORDS, ...CHAPEL_LOSE_WORDS, ...SANATORIUM_LOSE_WORDS, ...VILLAGE_LOSE_WORDS, ...MINE_LOSE_WORDS, ...CART_LOSE_WORDS, ...SLED_LOSE_WORDS, ...HEARSE_LOSE_WORDS, ...GURNEY_LOSE_WORDS, ...PEW_LOSE_WORDS, ...MOWER_LOSE_WORDS, ...TRAY_LOSE_WORDS, ...WAGON_LOSE_WORDS, ...CARNIVAL_LOSE_WORDS, ...FROZEN_LOSE_WORDS,...RIDE_LOSE_WORDS, ...BOG_LOSE_WORDS, ...BOGBOAT_LOSE_WORDS, hound: "Mauled", spider: "Bitten", wraith: "Taken", hands: "Dragged under", mourner: "Mourned", robber: "Buried alive", crow: "Pecked", legs: "Kicked down", stone: "Struck by a headstone", fist: "Crushed by stone", angel: "Turned to stone" });
 // What spills from each kind when it dies, and whether it leaves a stain.
 const STAINS = Object.freeze({ ghost: false, wraith: false, skeleton: false, bat: true });
 
@@ -1857,6 +1880,11 @@ export function react(e, k) {
     burst(e.x, e.y, GOLD, 16, 14);
     ring(e.x, e.y, GOLD, 1, 7, 500);
     banner("The key", "Now find the door. Fast", GOLD, 1100);
+  } else if (e.type === "keyDark") {
+    tone("ghoulLightsOut", 0.6);
+    flash("#000000", 200);
+    shake(160, 0.3);
+    float(e.x, e.y + 5, "The lights go out!", DANGER, 2.4);
   } else if (e.type === "garlic") {
     tone("shield");
     tone("ghoulGarlicPop", 0.55);
@@ -1961,7 +1989,7 @@ export function react(e, k) {
     }
     burst(e.x, e.y, e.how === "head" ? BONE : BLOOD, 4, 10, 260);
     if (e.how === "head") float(e.x, e.y + 6, "Skull!", GOLD, 2);
-    else if (e.weak) float(e.x, e.y + 4, e.kind === "keeper" ? "Lantern!" : "Double!", GOLD, 2);
+    else if (e.weak) float(e.x, e.y + 4, e.kind === "keeper" ? "Lantern!" : e.kind === "motherbog" ? "Triple!" : "Double!", GOLD, 2);
   } else if (e.type === "bossDown") {
     tone("explode", 0.9, 0.8);
     say(tone, e.kind, "die", 0.8);
@@ -1998,6 +2026,12 @@ export function react(e, k) {
     tone("ghoulToll", 0.35, 1.2);
     tone("doorCreak", 0.3, 0.7);
   } else if (e.type === "pickMove") tone("tickSoft", 0.3, 1.2);
+  else if (e.type === "intro") tone("ghoulStageIntro", 0.6);
+  else if (e.type === "bossIntro") tone("ghoulBossIntro", 0.75);
+  // The intro story (ghoul-story.js): a page turns, a timed sound, the last page opens the hall.
+  else if (e.type === "storyPage") e.page && tone("ghoulStoryPage", 0.3);
+  else if (e.type === "storyTone") tone(e.name, e.vol, e.rate);
+  else if (e.type === "storyEnd") flash("#fff3c4", 320);
   else if (e.type === "stage") {
     tone("doorUnlock", 0.5);
     tone("ghoulThunder", 0.4, 0.9);
@@ -2062,10 +2096,19 @@ export const VOICES = Object.freeze({
   ...MINE_VOICES,
   ...CART_VOICES,
   ...SLED_VOICES,
+  ...BANISTER_VOICES,
+  ...HEARSE_VOICES,
+  ...GURNEY_VOICES,
+  ...PEW_VOICES,
+  ...MOWER_VOICES,
+  ...TRAY_VOICES,
+  ...WAGON_VOICES,
   ...CARNIVAL_VOICES,
   ...FROZEN_VOICES,
   ...RIDE_VOICES,
   angel: Object.freeze({ wake: "ghoulAngelWake", weep: "ghoulAngelWeep", watch: "ghoulAngelWatch", see: "ghoulAngelSee", slam: "ghoulAngelSlam", wings: "ghoulAngelWings", hurt: "ghoulAngelHurt", die: "ghoulAngelDie" }),
+  ...BOG_VOICES,
+  ...BOGBOAT_VOICES,
 });
 // Plays a kind's voice for an act, if it has one, its pitch a touch varied.
 function say(tone, kind, act, level) {
@@ -2103,7 +2146,16 @@ const LOSE_SOUNDS = Object.freeze({
   ...FROZEN_LOSE_SOUNDS,
   ...CART_LOSE_SOUNDS,
   ...SLED_LOSE_SOUNDS,
+  ...BANISTER_LOSE_SOUNDS,
+  ...HEARSE_LOSE_SOUNDS,
+  ...GURNEY_LOSE_SOUNDS,
+  ...PEW_LOSE_SOUNDS,
+  ...MOWER_LOSE_SOUNDS,
+  ...TRAY_LOSE_SOUNDS,
+  ...WAGON_LOSE_SOUNDS,
   ...RIDE_LOSE_SOUNDS,
+  ...BOG_LOSE_SOUNDS,
+  ...BOGBOAT_LOSE_SOUNDS,
 });
 // The door's boom in each of the eight rooms, the Crypt deepest.
 const ROOM_PITCH = Object.freeze([1, 1.1, 0.95, 1.2, 1.05, 1.15, 0.9, 0.75]);
@@ -2188,7 +2240,10 @@ function layPills(h, W, lives, hud, stripH) {
   if (hud.hearts) put(hud.hearts, GOLD);
   else put(`BONUS ${hud.bonus}`, hud.bonus > 0 ? GOLD : DANGER);
   if (hud.chain > 1) put(`CHAIN x${hud.chain}`, GOLD, hud.chainFill);
-  if (hud.key) put("KEY", GOLD);
+  if (hud.key) {
+    out.push({ x, y, w: h * 1.5, h, key: hud.key, color: GOLD });
+    x += h * 1.5 + gap;
+  }
   for (const e of hud.effects) put(e.text, e.color, e.fill);
   if (gw) out.push({ x: W - edge - gw, y: y0, w: gw, h, gauge: true });
   if (aw) out.push({ x: W - edge - (gw ? gw + gap : 0) - aw, y: y0, w: aw, h, arm: true, text: hud.arm.text });
@@ -2213,8 +2268,45 @@ function drawPills(ctx, v) {
   for (const p of hudLayout(v.pillH, g.W, v.round.infinite ? Infinity : v.round.lives, v.hud, g.HUD_H)) {
     if (p.gauge) drawGauge(ctx, p.x, p.y, p.w, p.h, v.hud.gauge, v.clock);
     else if (p.arm) ART.armPill(ctx, p, v, SANS);
+    else if (p.key) drawKeyPill(ctx, p, v.clock);
     else pill(ctx, p.x, p.y, p.h, p.text, p.color, p.fill);
   }
+}
+
+// The room's key in the strip: a gold key on a pill once it is found, a dotted
+// outline of one (dim, waiting) until then.
+function drawKeyPill(ctx, p, clock) {
+  const { x, y, w, h } = p;
+  const have = p.key === "have";
+  ctx.fillStyle = PILL;
+  roundRect(ctx, x, y, w, h, h / 2);
+  ctx.fill();
+  ctx.save();
+  ctx.translate(x + w / 2, y + h * 0.52);
+  const u = h * 0.34;
+  ctx.rotate(-0.6);
+  ctx.beginPath();
+  ctx.arc(-u * 1.05, 0, u * 0.7, 0, Math.PI * 2);
+  ctx.moveTo(-u * 0.35, 0);
+  ctx.lineTo(u * 1.35, 0);
+  ctx.moveTo(u * 0.85, 0);
+  ctx.lineTo(u * 0.85, u * 0.7);
+  ctx.moveTo(u * 1.35, 0);
+  ctx.lineTo(u * 1.35, u * 0.7);
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  if (have) {
+    ctx.strokeStyle = GOLD;
+    ctx.lineWidth = u * 0.5;
+    ctx.stroke();
+  } else {
+    ctx.globalAlpha = 0.5 + 0.12 * Math.sin(clock / 400);
+    ctx.strokeStyle = "#ffffff";
+    ctx.lineWidth = u * 0.34;
+    ctx.setLineDash([u * 0.45, u * 0.55]);
+    ctx.stroke();
+  }
+  ctx.restore();
 }
 
 // The blaster's gauge: LIGHT on the pill's dark backing, then a bar that
@@ -2313,6 +2405,7 @@ function drawTally(ctx, v, lines) {
 
 // The choice of stage, the stage select and each stage's color (ghoul-picker-draw.js).
 const { drawPicker, drawSelect, stageColor } = pickerArt({ lookOf, label, roundRect, circle, BOSS_ART, drawGourdFire, GOLD });
+const BOSS_CARD = bossIntroArt({ label, circle, BOSS_ART, drawGourdFire, GOLD, BONE });
 
 /* --------------------------------------------------------------- scene */
 
@@ -2374,6 +2467,32 @@ export function drawScene(ctx, v) {
     }
     ctx.globalAlpha = 1;
     if (v.state === "running" && round.phase === "clear" && !(round.bonusRound && round.bonusRound.won)) BONUS.card(ctx, v);
+    ctx.restore();
+    ctx.translate(-g.PAD, -g.HUD_H);
+    drawPills(ctx, v);
+    ctx.restore();
+    return;
+  }
+  // Holy Roller is an endless-runner drawn whole by its own art (ghoul-pew-draw.js): the nave in pseudo-3D from behind the
+  // pew. The hearts, the flash, the banner, the cards and the HUD pills go over it as they do over the dark ride.
+  if (round.runner && round.runner.id === "pew") {
+    PACK_ART.pew.field(ctx, v);
+    for (const f of v.fx.floats) {
+      ctx.globalAlpha = Math.min(1, (f.life / f.max) * 1.6);
+      const at = labelSpot(f.text, f.x, Y(f.y) - f.rise, f.size, g.FIELD_W, g.FIELD_H);
+      label(ctx, f.text, at.x, at.y, f.size, f.color, "center", at.max);
+    }
+    ctx.globalAlpha = 1;
+    if (round.bonusRound && (v.state === "running" || v.state === "paused")) drawBonusHearts(ctx, v);
+    if (v.flash) {
+      ctx.globalAlpha = 0.24 * (v.flash.life / v.flash.max);
+      ctx.fillStyle = v.flash.color;
+      ctx.fillRect(0, 0, g.FIELD_W, g.FIELD_H);
+      ctx.globalAlpha = 1;
+    }
+    if (v.state === "running" && round.phase === "clear") BONUS.card(ctx, v);
+    if (v.state === "running" && v.banner && round.phase !== "pick" && round.phase !== "select" && round.phase !== "roll") drawBanner(ctx, v, v.banner);
+    if (v.state === "running" && v.fx.lucky) DICE.lucky(ctx, v);
     ctx.restore();
     ctx.translate(-g.PAD, -g.HUD_H);
     drawPills(ctx, v);
@@ -2478,6 +2597,9 @@ export function drawScene(ctx, v) {
   if (v.state === "running" && v.fx.lucky) DICE.lucky(ctx, v);
   if ((v.state === "running" || v.state === "paused") && round.phase === "pick" && round.offer) drawPicker(ctx, v);
   if ((v.state === "running" || v.state === "paused") && round.phase === "select" && round.select) drawSelect(ctx, v);
+  if ((v.state === "running" || v.state === "paused") && round.phase === "intro") INTRO_CARD(ctx, v);
+  if ((v.state === "running" || v.state === "paused") && round.phase === "bossintro") BOSS_CARD(ctx, v);
+  if ((v.state === "running" || v.state === "paused") && round.phase === "story") STORY_CARD(ctx, v);
   if (v.state === "over" && v.lost && !v.won) OVER_BANNER(ctx, v);
   if (v.tally) drawTally(ctx, v, v.tally);
   ctx.restore();

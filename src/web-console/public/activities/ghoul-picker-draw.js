@@ -7,7 +7,7 @@
 
 // How much taller than its box a boss is drawn (the Groundskeeper's hat and
 // scythe rise past his head), so the picture leaves room for it.
-const REACH = Object.freeze({ keeper: 1.15, choirmaster: 1.1, matron: 1.05, beast: 1.38, frostwidow: 1.0 });
+export const REACH = Object.freeze({ keeper: 1.15, choirmaster: 1.1, matron: 1.05, beast: 1.38, frostwidow: 1.0 });
 
 export function pickerArt(d) {
   const { lookOf, label, roundRect, circle, BOSS_ART, drawGourdFire, GOLD } = d;

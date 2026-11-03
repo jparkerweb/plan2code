@@ -89,7 +89,7 @@ const heard = (e, extra = {}) => {
 
 test("Ghoul Rush's Hollow End Village is a stage of three rooms and the Green, its monsters and boss joined to the game's, with a power-up of its own, a moon that rises and a place for each kind", () => {
   const st = ghoul.stageById("village");
-  assert.deepEqual(st.rooms, ROOM_IDS);
+  assert.deepEqual(st.rooms, ["street", "inn", "square", "wagon", "green"], "the Torch Mob bonus ride sits before the Green");
   assert.equal(st.boss, "beast");
   assert.equal(st.title, "Hollow End Village");
   assert.equal(st.sub, "Every curtain twitches as you pass");
@@ -98,7 +98,7 @@ test("Ghoul Rush's Hollow End Village is a stage of three rooms and the Green, i
   assert.equal(vl.BOSSES.beast.sub, "Shoot it while it clings to the wall");
   assert.ok(ghoul.MONSTERS.villager.hp === 3 && ghoul.MONSTERS.hanged.hp === 3 && ghoul.MONSTERS.shutter.hp === 2 && ghoul.BOSSES.beast.hp === 110);
   for (const id of st.rooms) assert.ok(ghoul.ROOM_MUSIC[id], `${id} has music`);
-  const [street, inn, square, green] = st.rooms.map((id) => ghoul.roomById(id));
+  const [street, inn, square, , green] = st.rooms.map((id) => ghoul.roomById(id));
   const returning = ["zombie", "bat", "crow", "hound", "ghost"];
   for (const room of [street, inn, square]) {
     assert.ok(room.key, `${room.id}: a key`);

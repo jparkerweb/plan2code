@@ -2,6 +2,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import * as ghoul from "../src/web-console/public/activities/ghoul.js";
+import { skipStory } from "../src/web-console/public/activities/ghoul-story.js";
 import { dropAt, gameOverBanner, OVER_WORD } from "../src/web-console/public/activities/ghoul-gameover-draw.js";
 import { toneNames } from "../src/web-console/public/tones.js";
 
@@ -35,6 +36,7 @@ function playTo(end) {
   const h = ghoul.default.create({ canvas: { width: 0, height: 0, getContext: () => ctx }, tone: (name) => sounds.push(name) });
   h.resize(900, 900);
   h.key("action");
+  skipStory(h.round);
   for (let k = 0; k < 40; k++) h.tick(16);
   end(h);
   for (let k = 0; k < 300 && h.state === "running"; k++) h.tick(16);

@@ -125,7 +125,7 @@ test("Ghoul Rush's Frozen Lake is a stage of three rooms and the Widow's Web, it
   assert.equal(st.boss, "frostwidow");
   assert.equal(st.title, "The Frozen Lake");
   assert.equal(st.sub, "The ice remembers who fell through");
-  assert.equal(ghoul.STAGES.at(-1), st, "the last stage in the list");
+  assert.equal(ghoul.STAGES.at(-2), st, "the last stage in the list but Gallows Bog");
   for (const kind of Object.keys(fz.MONSTERS)) assert.equal(ghoul.MONSTERS[kind], fz.MONSTERS[kind], `${kind} is a monster`);
   assert.deepEqual(Object.keys(fz.MONSTERS).sort(), ["frozen", "hand", "icewraith", "shade"]);
   assert.equal(ghoul.BOSSES.frostwidow, fz.BOSSES.frostwidow);
@@ -848,6 +848,13 @@ test("Ghoul Rush's barrels: a bolt kicks a standing one the way it flew, it roll
   const round = widowFight({ x: 120 });
   const barrel = round.hazards.find((h) => h.kind === "barrel" && h.x === round.spec.arena + 30);
   // From the left: it rolls right.
+  // A stray bolt does not topple it: it takes BARREL_HITS of them.
+  for (let i = 0; i < fz.BARREL_HITS - 1; i++) {
+    round.shots.push({ x: barrel.x - 4, y: 7.5, vx: 130, vy: 0, gone: 0 });
+    run(round, 60);
+    assert.equal(barrel.state, "still", `bolt ${i + 1} only knocks it`);
+  }
+  assert.equal(events(round, "barrelKnock").length, fz.BARREL_HITS - 1);
   round.shots.push({ x: barrel.x - 4, y: 7.5, vx: 130, vy: 0, gone: 0 });
   run(round, 60);
   assert.equal(barrel.state, "roll");
@@ -860,14 +867,14 @@ test("Ghoul Rush's barrels: a bolt kicks a standing one the way it flew, it roll
   // From the right: it rolls left.
   const left = widowFight({ x: 190 });
   const b2 = left.hazards.find((h) => h.kind === "barrel" && h.x === left.spec.arena + 66);
-  left.shots.push({ x: b2.x + 4, y: 7.5, vx: -130, vy: 0, gone: 0 });
+  left.shots.push({ x: b2.x + 4, y: 7.5, vx: -130, vy: 0, gone: 0, arm: "stake", t: 0, spin: 0, dmg: 4, bossDmg: 4, pierce: true });
   run(left, 40);
   assert.equal(b2.vx, -fz.BARREL_V);
   // It hurts what it rolls through, once each.
   const hit = widowFight({ x: 120 });
   const b3 = hit.hazards.find((h) => h.kind === "barrel" && h.x === hit.spec.arena + 30);
   const z = put(hit, "zombie", b3.x + 8);
-  hit.shots.push({ x: b3.x - 4, y: 7.5, vx: 130, vy: 0, gone: 0 });
+  Object.assign(b3, { state: "roll", vx: fz.BARREL_V, life: fz.BARREL_LIFE_MS });
   run(hit, 600);
   assert.equal(z.hp, z.max - fz.BARREL_DMG >= 0 ? z.max - fz.BARREL_DMG : z.hp);
   assert.ok(z.dead || z.hp < z.max, "burned by the barrel");
@@ -875,7 +882,7 @@ test("Ghoul Rush's barrels: a bolt kicks a standing one the way it flew, it roll
   const wall = widowFight({ x: 120 });
   const b4 = wall.hazards.find((h) => h.kind === "barrel" && h.x === wall.spec.arena + 66);
   wall.boss.x = 120;
-  wall.shots.push({ x: b4.x - 4, y: 7.5, vx: 130, vy: 0, gone: 0 });
+  wall.shots.push({ x: b4.x - 4, y: 7.5, vx: 130, vy: 0, gone: 0, arm: "stake", t: 0, spin: 0, dmg: 4, bossDmg: 4, pierce: true });
   run(wall, 1500);
   assert.ok(!wall.hazards.includes(b4));
   assert.ok(events(wall, "barrelBurst").length >= 1);
@@ -901,7 +908,7 @@ test("Ghoul Rush's veil melts to a rolling barrel (or a flare's fire) when she i
   const barrel = round.hazards.find((h) => h.kind === "barrel" && h.x === round.spec.arena + 48);
   // Shot from the left, 4 away from her: it rolls into her.
   barrel.x = 150;
-  round.shots.push({ x: 146, y: 7.5, vx: 130, vy: 0, gone: 0 });
+  round.shots.push({ x: 146, y: 7.5, vx: 130, vy: 0, gone: 0, arm: "stake", t: 0, spin: 0, dmg: 4, bossDmg: 4, pierce: true });
   until(round, () => !b.veil, 1500);
   assert.equal(b.veil, false, "melted");
   const melt = events(round, "veilMelt")[0];
@@ -1209,7 +1216,7 @@ test("Ghoul Rush's web spit: a slow glob that lands as a patch 5 wide for 6 s, s
   assert.ok(!shot.hazards.some((h) => h.kind === "webGlob" || h.kind === "webPatch"), "shot down");
 });
 
-test("Ghoul Rush's Frost Widow's rage at half her hp: the veil grows back sooner, the barrels are set out new, two ice wraiths come (never more than two alive) and she is quicker; endless lives spare her touch", () => {
+test("Ghoul Rush's Frost Widow's rage at half her hp: the veil grows back sooner, the barrels are set out new, an ice wraith comes (never more than WRAITH_CAP alive, and not again for a while) and she is quicker; endless lives spare her touch", () => {
   const round = widowFight({ x: 125 });
   const b = round.boss;
   round.hazards = round.hazards.filter((h) => h.kind !== "barrel").concat([{ kind: "barrel", x: 140, y: 6, spot: 99, state: "roll", vx: 5, roll: 0, life: 9999, hit: [], w: 3, h: 3.4, live: 0, cause: "" }]);
@@ -1222,19 +1229,19 @@ test("Ghoul Rush's Frost Widow's rage at half her hp: the veil grows back sooner
   assert.equal(barrels.length, 3, "a new set of three");
   assert.ok(barrels.every((h) => h.state === "still"));
   const wraiths = round.monsters.filter((m) => m.kind === "icewraith");
-  assert.equal(wraiths.length, 2);
-  assert.equal(events(round, "wraithCall").length, 2);
-  // Never more than two alive, a drop or not.
+  assert.equal(wraiths.length, fz.WRAITH_CAP);
+  assert.equal(events(round, "wraithCall").length, fz.WRAITH_CAP);
+  // Never more than the cap alive, a drop or not.
   b.act = "hang";
   b.wait = 1;
   b.spikeIn = 1e9;
   b.spitIn = 1e9;
   run(round, 16);
-  assert.equal(round.monsters.filter((m) => m.kind === "icewraith").length, 2);
+  assert.equal(round.monsters.filter((m) => m.kind === "icewraith").length, fz.WRAITH_CAP);
   // The veil grows back in VEIL_DOWN_RAGE_MS.
   Object.assign(b, { act: "low", y: 6, x: 160, lowMs: 1e9, wait: 0 });
   round.hazards.find((h) => h.kind === "barrel").x = 150;
-  round.shots.push({ x: 146, y: 7.5, vx: 130, vy: 0, gone: 0 });
+  round.shots.push({ x: 146, y: 7.5, vx: 130, vy: 0, gone: 0, arm: "stake", t: 0, spin: 0, dmg: 4, bossDmg: 4, pierce: true });
   until(round, () => !b.veil, 1500);
   assert.equal(events(round, "veilDown").at(-1).ms, fz.VEIL_DOWN_RAGE_MS);
   // Quicker waits: a fight at half hp has shorter hangs.
@@ -1472,7 +1479,7 @@ test("Ghoul Rush's stage select lists the Frozen Lake and takes you straight int
   const r = g.round;
   assert.equal(r.phase, "select");
   const at = ghoul.STAGES.findIndex((s) => s.id === "frozen");
-  assert.equal(at, ghoul.STAGES.length - 1);
+  assert.equal(at, ghoul.STAGES.length - 2);
   for (let i = 0; i < at; i++) ghoul.steerSelect(r, 1, 0);
   for (let i = 0; i < 4; i++) ghoul.steerSelect(r, 0, 1);
   assert.equal(r.select.at, at);

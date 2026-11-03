@@ -58,6 +58,8 @@ export const POWERS = Object.freeze({
   floss: Object.freeze({ name: "Cotton Candy", blurb: "Sticky bolts slow what they hit", color: "#ff9ad5", ms: 10000, weight: 3, stage: "carnival" }),
   // Found only in The Frozen Lake: no sliding on the ice, no freezing, and thin ice you stand on cracks at half speed.
   cocoa: Object.freeze({ name: "Hot Cocoa", blurb: "No sliding, no freezing", color: "#c8793a", ms: 10000, weight: 3, stage: "frozen" }),
+  // Found only in Gallows Bog: the sinking mud never slows or holds you.
+  boots: Object.freeze({ name: "Stilt Boots", blurb: "The mud lets you go", color: "#b08d4f", ms: 10000, weight: 3, stage: "bog" }),
   // The secondary weapons, used by tapping fire twice (ghoul-arms.js has what each one does and ghoul-arms-draw.js how it looks).
   // Each is a bundle of `sticks` going into the bag up to `max`. Weight 0: pickPower never picks one, so they come
   // from a room's `items` and from their own band of a kill's drop roll (armDrop). No `stage`: common, anywhere.
@@ -74,10 +76,11 @@ export const POWERS = Object.freeze({
   pie: Object.freeze({ name: "Custard Pie", blurb: "Splat and stun a crowd", color: "#f5e6a8", weight: 0, arm: true, sticks: 2, max: 4, stage: "carnival" }),
   trap: Object.freeze({ name: "Silver Bear Trap", blurb: "Set at your feet, it snaps", color: "#d0dcea", weight: 0, arm: true, sticks: 2, max: 3, stage: "village" }),
   flare: Object.freeze({ name: "Road Flare", blurb: "Burns a patch, melts the veil", color: "#ff4a2e", weight: 0, arm: true, sticks: 2, max: 4, stage: "frozen" }),
+  harpoon: Object.freeze({ name: "Harpoon", blurb: "Pierces, reaches under water", color: "#7fa8b0", weight: 0, arm: true, sticks: 2, max: 4, stage: "bog" }),
 });
 const POWER_ORDER = Object.freeze(Object.keys(POWERS));
 // The word on a timed power-up's pill.
-export const PILL_WORDS = Object.freeze({ spread: "SPREAD", rapid: "RAPID", lantern: "LANTERN", wings: "WINGS", bell: "BELL", silver: "SILVER", shears: "SHEARS", holy: "HOLY", salts: "SALTS", saw: "SAW", bane: "BANE", hat: "HARD HAT", floss: "FLOSS", cocoa: "COCOA" });
+export const PILL_WORDS = Object.freeze({ spread: "SPREAD", rapid: "RAPID", lantern: "LANTERN", wings: "WINGS", bell: "BELL", silver: "SILVER", shears: "SHEARS", holy: "HOLY", salts: "SALTS", saw: "SAW", bane: "BANE", hat: "HARD HAT", floss: "FLOSS", cocoa: "COCOA", boots: "BOOTS" });
 // The power-ups that run on a timer, in the order their pills show.
 export const TIMED = Object.freeze(POWER_ORDER.filter((k) => POWERS[k].ms));
 // Bat wings never flap with a surface this close under a fall.
@@ -85,7 +88,7 @@ export const FLAP_CLEAR = 4;
 export const HOURGLASS_MS = 20000;
 
 // Each stage's own weapon (the Mine's own is Dynamite).
-export const STAGE_ARMS = Object.freeze({ manor: "ball", wing: "skillet", graveyard: "salt", grounds: "sickle", chapel: "fork", sanatorium: "flash", village: "trap", mine: "dyn", carnival: "pie", frozen: "flare" });
+export const STAGE_ARMS = Object.freeze({ manor: "ball", wing: "skillet", graveyard: "salt", grounds: "sickle", chapel: "fork", sanatorium: "flash", village: "trap", mine: "dyn", carnival: "pie", frozen: "flare", bog: "harpoon" });
 // A kill's drop roll (ghoul.js) goes to a weapon in a band of ARM_DROP past the
 // power-ups and candy, no extra draw, so it shifts no other roll: about one every
 // two rooms. Where in the band it fell picks which: the stage's own first
@@ -210,6 +213,10 @@ export function pickups(round, ms, kit) {
   if (spec.key && !round.hasKey && near(spec.key[0], spec.key[1] + 1.6, 1.2)) {
     round.hasKey = true;
     round.events.push({ type: "key", x: spec.key[0], y: spec.key[1] + 1.6 });
+    if (spec.darkOnKey) {
+      round.dark = true;
+      round.events.push({ type: "keyDark", x: spec.key[0], y: spec.key[1] + 1.6 });
+    }
   }
 }
 
@@ -275,7 +282,7 @@ export function mercyKind(round, n, kit) {
 export function mercySpot(round, kit) {
   const { spec, you } = round;
   const dir = you.face >= 0 ? 1 : -1;
-  const bad = (x) => [...(spec.belts || []), ...(spec.water || [])].some((s) => x >= s[0] - 1 && x <= s[1] + 1);
+  const bad = (x) => [...(spec.belts || []), ...(spec.water || []), ...(spec.mud || [])].some((s) => x >= s[0] - 1 && x <= s[1] + 1);
   const firm = (x) => {
     const s = kit.footing(round, x, you.y);
     return s && (s.shelf < 0 || spec.shelves[s.shelf][3] !== "crumble") ? s : null;

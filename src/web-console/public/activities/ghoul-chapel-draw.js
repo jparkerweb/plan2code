@@ -11,7 +11,7 @@
 // face the way they look, y counted up from the feet. Each function says
 // what it draws and what in the rules (ghoul-chapel.js) it follows.
 
-import { CENSER_WIND_MS, CUE_MS, GAPS, HASTE_RANGE, PIPE_AT, PIPE_H, PIPE_W, ROW_GAP, SMOKE_MS } from "./ghoul-chapel.js";
+import { CENSER_WIND_MS, CUE_MS, GAPS, HASTE_RANGE, PIPE_AT, PIPE_DROP_MS, PIPE_H, PIPE_W, ROW_GAP, SMOKE_MS } from "./ghoul-chapel.js";
 
 const freeze = (o) => Object.freeze(o);
 const TAU = Math.PI * 2;
@@ -76,6 +76,8 @@ const PIPE_DULL_LIT = "#a39d8c";
 const PIPE_DARK = "#2e2b24";
 const PIPE_LIT = "#f2d878";
 const NOTE_COLOR = "#f4ead0";
+const NOTE_FAST = "#ff9a6a";
+const NOTE_SLOW = "#9fd0ff";
 const INK = "#0e0a14";
 const HOLY = "#9fd8ff";
 const GHOSTLY = "#c9d6f2";
@@ -1927,14 +1929,17 @@ export function chapelArt(d) {
   }
 
   // A note of the Choirmaster's, a big black eighth note edged in light so it
-  // reads on any wall, a short tail of staff behind it; and, once per column,
-  // a gold bracket on the staff where the column has its gap.
+  // reads on any wall, a tail of staff behind it; and, once per column, a gold
+  // bracket on the staff where the column has its gap. A fast column has a hot
+  // edge and a long tail, a slow one a cold edge and a short tail.
   function note(ctx, v, h) {
     const cx = h.x;
     const cy = v.g.FIELD_H - h.y - h.h / 2;
-    ctx.strokeStyle = rgba("#f0c860", 0.28);
+    const pace = h.pace ?? 1;
+    const edge = pace > 1.2 ? NOTE_FAST : pace < 0.9 ? NOTE_SLOW : NOTE_COLOR;
+    ctx.strokeStyle = rgba(pace > 1.2 ? NOTE_FAST : "#f0c860", 0.28);
     ctx.lineWidth = 0.16;
-    line(ctx, cx + 0.4, cy, cx + 9, cy);
+    line(ctx, cx + 0.4, cy, cx + 0.4 + 8.6 * pace, cy);
     const mates = v.round.hazards.filter((o) => o.kind === "note" && Math.abs(o.x - h.x) < 0.2);
     const first = mates.reduce((lo, o) => (o.row < lo.row ? o : lo), mates[0]);
     if (first === h) {
@@ -1958,11 +1963,22 @@ export function chapelArt(d) {
       }
     }
     // The note: a pale edge, then the black.
-    for (const [c, s] of [[NOTE_COLOR, 1.38], [INK, 1.2]]) noteGlyph(ctx, cx, cy + 0.5, s, c);
+    for (const [c, s] of [[edge, 1.38], [INK, 1.2]]) noteGlyph(ctx, cx, cy + 0.5, s, c);
     ctx.fillStyle = "rgba(255, 255, 255, 0.35)";
     ellipse(ctx, cx - 0.2, cy + 0.3, 0.3, 0.14, -0.45);
     ctx.fill();
     eye(v, cx + 0.4, cy - 0.6, 0.16, "#ffe9a0");
+  }
+
+  // A fresh pipe falling from over the field onto the dead one it replaces,
+  // gathering speed as it comes.
+  function fallingPipe(ctx, v, p) {
+    pipe(ctx, v, p, false, false);
+    const fallen = 1 - Math.min(1, p.dropMs / PIPE_DROP_MS);
+    ctx.save();
+    ctx.translate(0, -v.g.FIELD_H * (1 - fallen * fallen));
+    pipe(ctx, v, p, true, false);
+    ctx.restore();
   }
 
   /* -------------------------------------------------------- Choirmaster */
@@ -1970,12 +1986,13 @@ export function chapelArt(d) {
   // One organ pipe standing on the floor at `p.x`, tall and brass. Sounding
   // it shakes, glows, breathes puffs and sound from its mouth and sends notes
   // up, with an hp sign hung over it once it has been hit; silenced it is
-  // dark, dented and cracked, its top bent, its mouth sooty and cold.
-  function pipe(ctx, v, p, on, hurt) {
+  // dark, dented and cracked, its top bent, its mouth sooty and cold, and it
+  // rattles (`stir`) when the next column will bring the pipes back.
+  function pipe(ctx, v, p, on, hurt, stir) {
     const w = p.w;
     const t = v.clock;
     const fy = v.g.FIELD_H - p.y;
-    const x = p.x + (on ? Math.sin(t / 15 + p.i * 2) * 0.09 : 0);
+    const x = p.x + (on ? Math.sin(t / 15 + p.i * 2) * 0.09 : stir ? Math.sin(t / 22 + p.i * 2) * 0.22 : 0);
     const top = fy - p.h;
     const mouth = fy - 1.9 - (p.h - 1.9) * 0.2;
     const was = ctx.globalAlpha;
@@ -2117,7 +2134,10 @@ export function chapelArt(d) {
     const was = ctx.globalAlpha;
     if (v.spec) {
       const pipes = b.pipes || PIPE_AT.map((dx, i) => ({ i, x: v.spec.arena + dx, y: b.y, w: PIPE_W, h: PIPE_H[i], hp: 1, max: 1, on: true, hurt: 0 }));
-      for (const p of pipes) pipe(ctx, v, p, p.on, p.hurt > 0);
+      for (const p of pipes) {
+        if (p.dropMs > 0) fallingPipe(ctx, v, p);
+        else pipe(ctx, v, p, p.on, p.hurt > 0, b.quiet === 1);
+      }
     }
     const sounding = Boolean(v.spec) && (!b.pipes || b.pipes.some((p) => p.on));
     const open = Boolean(v.spec) && Boolean(b.pipes) && !sounding;
@@ -2396,7 +2416,7 @@ export function chapelArt(d) {
     if (b && b.kind === "choirmaster" && b.state !== "down") {
       add(b.x, b.y + b.h * 0.55, 8, 0.45);
       if (b.act === "cue") add(b.x - 2, b.y + b.h + 1, 7, 0.7);
-      if (b.pipes) for (const p of b.pipes) if (p.on) add(p.x, p.y + p.h * 0.6, 6.5, 0.5);
+      if (b.pipes) for (const p of b.pipes) if (p.on && !(p.dropMs > 0)) add(p.x, p.y + p.h * 0.6, 6.5, 0.5);
     }
   }
 
@@ -2461,7 +2481,11 @@ export function chapelArt(d) {
     } else if (e.type === "pipeSound") {
       say(tone, e.kind, "pipeSound", 0.5);
       glow(e.x, e.y, 8, 0.6, 400);
+      burst(e.x, 6, PIPE_DULL, 10, 12, 350);
+      shake(160, 0.5);
       float(e.x, e.y + 6, "It sounds again!", DANGER, 2.2);
+    } else if (e.type === "pipesStir") {
+      float(e.x, e.y + 6, "The pipes stir!", DANGER, 2.4);
     } else if (e.type === "choirOpen") {
       say(tone, e.kind, "open", 0.6);
       flash("#bfe8ff", 300);
@@ -2470,7 +2494,7 @@ export function chapelArt(d) {
       say(tone, e.kind, "rage", 0.8);
       flash("#c0303a", 400);
       shake(400, 0.8);
-      k.banner("The hymn quickens", "The pipes will sound again", "#e86a78", 1600);
+      k.banner("The hymn quickens", "Faster notes, closer together", "#e86a78", 1600);
     } else if (e.type === "notesCue") {
       say(tone, e.kind, "cue", 0.45);
       glow(e.x, e.y, 5, 0.6, CUE_MS);

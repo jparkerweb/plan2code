@@ -61,14 +61,17 @@ function until(round, done, ms = 4000) {
 // A bolt arriving from the left at height `y` on the monster `m`.
 const bolt = (round, m, y) => round.shots.push({ x: m.x - m.w / 2 - 0.3, y, vx: 80, vy: 0, gone: 0 });
 
-test("Ghoul Rush's Grounds is a stage of three rooms and the Groundskeeper's, its monsters and boss joined to the game's, with shears and a place for each kind", () => {
+test("Ghoul Rush's Grounds is a stage of three rooms, a bonus ride and the Groundskeeper's, its monsters and boss joined to the game's, with shears and a place for each kind", () => {
   const st = ghoul.stageById("grounds");
-  assert.deepEqual(st.rooms, ["maze", "topiary", "gazebo", "yard"]);
+  assert.deepEqual(st.rooms, ["maze", "topiary", "gazebo", "mower", "yard"]);
   assert.equal(st.boss, "keeper");
   for (const kind of Object.keys(gr.MONSTERS)) assert.equal(ghoul.MONSTERS[kind], gr.MONSTERS[kind], `${kind} is a monster`);
   assert.equal(ghoul.BOSSES.keeper, gr.BOSSES.keeper);
   for (const id of st.rooms) assert.ok(ghoul.ROOM_MUSIC[id], `${id} has music`);
-  const [maze, garden, gazebo, yard] = st.rooms.map((id) => ghoul.roomById(id));
+  const [maze, garden, gazebo, mower, yard] = st.rooms.map((id) => ghoul.roomById(id));
+  // The Gardener's Revenge, the bonus ride before the boss, has its own suite (ghoul-mower).
+  assert.equal(mower.bonus, true);
+  assert.equal(mower.id, "mower");
   for (const room of [maze, garden, gazebo]) {
     assert.ok(room.key, `${room.id}: a key`);
     assert.ok(room.sky.length && room.candy.length && room.items.length && room.horde.length, `${room.id}: sky treasures, candy, items and a horde`);
