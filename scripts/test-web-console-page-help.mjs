@@ -11,7 +11,7 @@ import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { pageSuite, openSession, tempProject, textOf, drawn } from "./page-test-helpers.mjs";
+import { pageSuite, openSession, tempProject, textOf, drawn , fillBox} from "./page-test-helpers.mjs";
 import { HOME, cli, until } from "./web-console-test-helpers.mjs";
 import { HELP_TABS } from "../src/web-console/public/help.js";
 import { CATALOG_GROUPS, SKILL_CATALOG } from "../src/web-console/public/answers.js";
@@ -151,7 +151,7 @@ test("a click on Help's backdrop closes it, and a click inside it does not", asy
 test("Ctrl+Enter does not send while Help is open, and sends once it is closed", async (t) => {
   savedLooks(t, { welcomeSeen: true });
   const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_QUESTION });
-  await s.page.locator('[data-item="q1"]').first().locator("textarea, input[type=text]").first().fill("audit-export");
+  await fillBox(s.page.locator('[data-item="q1"]').first().locator(".md-host, input[type=text]").first(), "audit-export");
   await openHelp(s);
   await s.page.keyboard.press("Control+Enter");
   await s.page.keyboard.press("Meta+Enter");

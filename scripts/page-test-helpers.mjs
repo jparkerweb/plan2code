@@ -177,3 +177,21 @@ export async function stylesOf(locator, props) {
   }
 }
 export const styleOf = async (locator, prop) => (await stylesOf(locator, [prop]))[prop];
+
+// Fills an answer box on the page, whether it is a plain input or a Markdown
+// field (.md-host). fill() cannot reach the editor inside the field's shadow
+// root, so the field is driven through its facade: the same "input" path a
+// keystroke takes (drafts, staging, counters) runs off the assignment.
+export async function fillBox(locator, text) {
+  const box = locator.first();
+  const isField = await box.evaluate((n) => Boolean(n.field)).catch(() => false);
+  if (!isField) return box.fill(text);
+  await box.evaluate((n, t) => {
+    n.field.value = t;
+    n.field.emitInput();
+  }, text);
+}
+
+// The text a box holds: a Markdown field through its facade, a real input
+// through its value.
+export const boxValue = (locator) => locator.first().evaluate((n) => (n.field ? n.field.value : n.value));

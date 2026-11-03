@@ -367,25 +367,30 @@
   flex-wrap: wrap;
 }
 
-textarea, input[type="text"] {
+textarea, input[type="text"], .md-host {
   width: 100%;
   font: inherit;
   color: var(--ink);
   background: var(--panel-2);
   border: 1px solid var(--rule-2);
   border-radius: 8px;
-  padding: 11px 13px;
-  resize: vertical;
 }
-textarea { min-height: 96px; }
+textarea, input[type="text"] { padding: 11px 13px; resize: vertical; }
+/* A Markdown field's size lives on the host (the editor inside fills it), so
+   the shared rules name .md-host wherever a textarea used to sit; its
+   overflow is clipped both so resize: vertical has a box to drag and so the
+   editor's own scroller is the only scroller. */
+textarea, .md-host { min-height: 96px; }
+.md-host { resize: vertical; overflow: hidden; }
 /* No max-height: the handle can pull the box past the fill, and the card then
    scrolls. Its min-height is the fill, written by app.js. */
-textarea.grow { resize: vertical; }
+textarea.grow, .md-host.grow { resize: vertical; }
 /* The border going accent IS the focus signal here, so the page-wide blue
    :focus-visible outline comes off: on a bordered field it reads as a second,
    clashing ring. */
-textarea:focus, input[type="text"]:focus { border-color: var(--accent); outline: none; }
-input[type="text"].invalid { border-color: var(--warn); }
+textarea:focus, input[type="text"]:focus, .md-host:focus-within { border-color: var(--accent); outline: none; }
+input[type="text"].invalid, .md-host.invalid { border-color: var(--warn); }
+.md-host.is-disabled { opacity: 0.6; cursor: not-allowed; }
 
 .field-error { color: var(--warn); font-size: 13px; margin-top: 6px; }
 .field-ok { color: var(--ok); font-size: 13px; margin-top: 6px; }
@@ -787,9 +792,10 @@ h4.md-h, h5.md-h, h6.md-h { font-size: 15px; }
 @media (max-width: 720px) {
   .looks-row, .looks-row.four { grid-template-columns: 1fr; }
 }
-/* User Preferences itself (not the dialogs borrowing .looks): wider, and only
-   the body scrolls, so Back to default and Done never leave the screen. */
-.modal.prefs { max-width: 880px; }
+/* User Preferences itself (not the dialogs borrowing .looks): takes the card
+   width the person picked, never wider than the wide preset (1080px), and
+   only the body scrolls, so Back to default and Done never leave the screen. */
+.modal.prefs { width: min(1080px, var(--card-width), calc(100vw - 32px)); max-width: none; }
 .modal.prefs[open] { display: flex; flex-direction: column; max-height: calc(100vh - 48px); }
 .prefs-body { overflow-y: auto; min-height: 0; flex: 1 1 auto; margin-right: -12px; padding-right: 12px; padding-top: 10px; }
 /* A line scrolled up under the title fades out rather than being sliced. */

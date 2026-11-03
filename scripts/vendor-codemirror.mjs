@@ -44,11 +44,12 @@ export const HEADER =
     .join(", ") +
   " */\n";
 
-// What the page may import: exactly what notepad-editor.js uses, since an
-// entry export is never tree-shaken. indentWithTab is left out on purpose: it
-// would trap the Tab key and keyboard users could not leave the editor.
+// What the page may import: exactly what notepad-editor.js and md-field.js
+// use, since an entry export is never tree-shaken. indentWithTab is left out
+// on purpose: it would trap the Tab key and keyboard users could not leave
+// the editor.
 export const ENTRY = `export { Compartment, EditorState } from "@codemirror/state";
-export { Decoration, EditorView, ViewPlugin, WidgetType, keymap } from "@codemirror/view";
+export { Decoration, EditorView, ViewPlugin, WidgetType, keymap, placeholder } from "@codemirror/view";
 export { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 export { syntaxTree } from "@codemirror/language";
 export { defaultKeymap, history, historyKeymap, redo } from "@codemirror/commands";

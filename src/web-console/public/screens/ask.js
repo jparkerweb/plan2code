@@ -118,9 +118,9 @@ function askStarters(ss) {
       saveNow();
       redraw();
       const ta = $("ask-input");
-      if (!ta) return;
-      ta.focus();
-      ta.setSelectionRange(ta.value.length, ta.value.length);
+      if (!ta || !ta.field) return;
+      ta.field.focus();
+      ta.field.setSelectionRange(ta.field.value.length, ta.field.value.length);
     });
     box.appendChild(b);
   }

@@ -9,7 +9,7 @@
 
 import test from "node:test";
 import assert from "node:assert/strict";
-import { pageSuite, openSession, itemCard, textOf } from "./page-test-helpers.mjs";
+import { pageSuite, openSession, itemCard, textOf , fillBox, boxValue} from "./page-test-helpers.mjs";
 import { reportedHelper } from "./web-console-test-helpers.mjs";
 import { readChat } from "../src/web-console/inbox.mjs";
 
@@ -57,7 +57,7 @@ async function openAsk(s) {
 // Types a question and presses Send in the Ask pane.
 async function askQuestion(s, text) {
   const box = s.page.locator("#ask-input");
-  await box.fill(text);
+  await fillBox(box, text);
   await s.page.locator(".ask-composer").getByRole("button", { name: "Send", exact: true }).click();
 }
 
@@ -76,7 +76,7 @@ test("a Quick question typed in Ask reaches the agent under chat, and the agent'
   assert.match(got.reply, /^Quick question \(\d+\): Where does the export live\?$/m);
   // The question is in the pane, and the box is empty for the next one.
   await s.page.locator(".ask-row.person").getByText("Where does the export live?").waitFor();
-  assert.equal(await s.page.locator("#ask-input").inputValue(), "");
+  assert.equal(await boxValue(s.page.locator("#ask-input")), "");
 
   s.post({ chat: { replies: [{ id: "r1", re: asked.seq, conversation: 1, md: "It lives in `exports/`." }] } });
   const reply = s.page.locator(".ask-row.agent");
@@ -120,7 +120,7 @@ test("an empty Ask offers starters, a click only fills the box, and nothing is s
   assert.ok((await starters.count()) >= 1, "no starter questions are offered");
   const first = (await textOf(starters.first())).trim();
   await starters.first().click();
-  assert.equal(await box.inputValue(), first, "the starter fills the box");
+  assert.equal(await boxValue(box), first, "the starter fills the box");
   assert.equal(s.wait(1).code === 0, false, "a starter click sent something");
 
   await s.page.locator(".ask-composer").getByRole("button", { name: "Send", exact: true }).click();
@@ -177,7 +177,7 @@ test("a picture attached to a note uploads, and the send carries it in the note'
   const aside = s.page.locator("#aside");
   await aside.locator('input[type="file"]').setInputFiles({ name: "shot.png", mimeType: "image/png", buffer: PNG });
   await aside.locator(".attach-thumb.is-ready").waitFor();
-  await aside.locator("#thread-q1").fill("See the screenshot.");
+  await fillBox(aside.locator("#thread-q1"), "See the screenshot.");
 
   await s.page.click("#btn-send");
   const got = collect(s);
@@ -216,7 +216,7 @@ test("a picture thumbnail opens the picview from the note tray and a sent Ask me
   const comp = s.page.locator(".ask-composer");
   await comp.locator('input[type="file"]').setInputFiles({ name: "shot2.png", mimeType: "image/png", buffer: PNG });
   await comp.locator(".attach-thumb.is-ready").waitFor();
-  await box.fill("See the screenshot.");
+  await fillBox(box, "See the screenshot.");
   await s.page.locator(".ask-composer").getByRole("button", { name: "Send", exact: true }).click();
   const sent = s.page.locator(".ask-row.person .attach-thumb").last();
   await sent.waitFor();

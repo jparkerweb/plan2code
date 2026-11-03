@@ -14,7 +14,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
-import { pageSuite, openSession, tempProject, textOf, itemCard, scrollCard } from "./page-test-helpers.mjs";
+import { pageSuite, openSession, tempProject, textOf, itemCard, scrollCard , fillBox} from "./page-test-helpers.mjs";
 import { until } from "./web-console-test-helpers.mjs";
 
 const suite = pageSuite(test);
@@ -296,10 +296,10 @@ test("Publish names a remote only when there is exactly one", async (t) => {
 test("over the git board a note box grows with its text, and the no-repo note only points above when a card is there", async (t) => {
   const s = await openSession(await suite.browser(), { t, workflow: "git", project: gitProject(), payload: READY });
   s.post({ items: [confirmCard], agent: { status: "waiting" } });
-  const note = itemCard(s.page, "y1").locator("textarea").first();
+  const note = itemCard(s.page, "y1").locator(".md-host").first();
   await note.waitFor();
   const before = await note.evaluate((el) => el.offsetHeight);
-  await note.fill(Array.from({ length: 8 }, (_, n) => `Line ${n + 1} of a longer note.`).join("\n"));
+  await fillBox(note, Array.from({ length: 8 }, (_, n) => `Line ${n + 1} of a longer note.`).join("\n"));
   const after = await note.evaluate((el) => el.offsetHeight);
   assert.ok(after > before + 40, `the note box grew with its text: ${before} to ${after}`);
 

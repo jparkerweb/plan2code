@@ -12,7 +12,7 @@ import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { pageSuite, openSession, tempProject, drawn, sendAndCollect, itemCard } from "./page-test-helpers.mjs";
+import { pageSuite, openSession, tempProject, drawn, sendAndCollect, itemCard , fillBox, boxValue} from "./page-test-helpers.mjs";
 import { cli, until, CONSOLE_CLI } from "./web-console-test-helpers.mjs";
 import { addImage, createTab, deleteTab, listTabs, readNotepad, removeImage, saveNote } from "../src/web-console/notepads.mjs";
 
@@ -139,9 +139,9 @@ for (const c of CASES) {
     assert.equal(sentOf(s.project, tab), null, "Start alone marks nothing");
 
     s.post(BOX);
-    await until(async () => (await boxOf(s).inputValue()) === TEXT, 10000);
+    await until(async () => (await boxValue(boxOf(s))) === TEXT, 10000);
     await until(async () => (await readyPictures(s).count()) === 5, 15000);
-    assert.equal(await boxOf(s).isEditable(), true, "the filled box stays editable");
+    assert.equal(await boxOf(s).locator(".cm-content").isEditable(), true, "the filled box stays editable");
 
     // Still nothing for the agent before Send.
     const result = path.join(s.session, "result.json");
@@ -167,7 +167,7 @@ test("a pictures-only tab arrives as an empty box with its pictures, and its Sen
   await startWith(s, main, { chip: "Start from scratch", command: "/plan2code-1-plan", tabName: "Shots" });
   s.post(BOX);
   await until(async () => (await readyPictures(s).count()) === 2, 15000);
-  assert.equal(await boxOf(s).inputValue(), "");
+  assert.equal(await boxValue(boxOf(s)), "");
   const got = await sendAndCollect(s);
   const note = got.actions.find((a) => a.i === "idea" && a.type === "comment");
   assert.equal(note && note.images.length, 2, "the pictures go on their own");
@@ -183,7 +183,7 @@ test("a picture deleted between Start and the box is skipped, and the rest still
   const first = readNotepad(s.project, tab).images[0].id;
   removeImage(s.project, tab, first);
   s.post(BOX);
-  await until(async () => (await boxOf(s).inputValue()) === TEXT, 10000);
+  await until(async () => (await boxValue(boxOf(s))) === TEXT, 10000);
   await until(async () => (await readyPictures(s).count()) === 2, 15000);
   assert.equal(await itemCard(s.page, "idea").locator(".attach-thumb").count(), 2, "no failed or empty slot for the missing one");
 });
@@ -194,7 +194,7 @@ test("Back to the dashboard after the box fills takes the box with it, as its di
   const main = await toTheMenu(s);
   await startWith(s, main, { chip: "Start from scratch", command: "/plan2code-0-pathfinder", tabName: "Idea" });
   s.post(BOX);
-  await until(async () => (await boxOf(s).inputValue()) === TEXT, 10000);
+  await until(async () => (await boxValue(boxOf(s))) === TEXT, 10000);
   await s.page.click("#btn-home");
   await s.page.locator("#home-modal[open]").waitFor();
   await s.page.click("#home-go");
@@ -212,18 +212,18 @@ test("the box is filled once: a redraw or a reload keeps what the person typed, 
   await startWith(s, main, { chip: "Start from scratch", command: "/plan2code-0-pathfinder", tabName: "Idea" });
   s.post(BOX);
   await until(async () => (await readyPictures(s).count()) === 3, 15000);
-  await boxOf(s).fill("My own words now.");
+  await fillBox(boxOf(s), "My own words now.");
 
   s.post({ agent: { status: "waiting", activity: "Still here" } });
   await s.page.reload({ waitUntil: "domcontentloaded" });
   await drawn(s.page);
   await boxOf(s).waitFor();
-  assert.equal(await boxOf(s).inputValue(), "My own words now.");
+  assert.equal(await boxValue(boxOf(s)), "My own words now.");
   await until(async () => (await readyPictures(s).count()) === 3, 5000);
   // A second marked box later in the session is left alone.
   s.post({ items: [{ id: "idea2", kind: "text", title: "Anything else", fill: "note" }] });
   await s.page.locator("#text-idea2").waitFor();
-  assert.equal(await s.page.locator("#text-idea2").inputValue(), "");
+  assert.equal(await boxValue(s.page.locator("#text-idea2")), "");
 });
 
 test("a launch that goes back to the dashboard before Send marks nothing", async (t) => {
@@ -232,7 +232,7 @@ test("a launch that goes back to the dashboard before Send marks nothing", async
   const main = await toTheMenu(s);
   await startWith(s, main, { chip: "Start from scratch", command: "/plan2code-quick-task", tabName: "Idea" });
   s.post(BOX);
-  await until(async () => (await boxOf(s).inputValue()) === TEXT, 10000);
+  await until(async () => (await boxValue(boxOf(s))) === TEXT, 10000);
   const r = cli(["open", "--resume", s.sid, "--no-open", "--workflow", "dashboard"], { cwd: s.project });
   assert.equal(r.status, 0, `resume failed: ${r.stderr}`);
   s.post(MENU);
@@ -248,6 +248,6 @@ test("a tab deleted between Start and the box leaves the box empty, with a banne
   deleteTab(s.project, tab);
   s.post(BOX);
   await s.page.locator("#banner", { hasText: "That Notebook tab is gone; the box starts empty." }).waitFor();
-  assert.equal(await boxOf(s).inputValue(), "");
+  assert.equal(await boxValue(boxOf(s)), "");
   assert.equal(await readyPictures(s).count(), 0);
 });

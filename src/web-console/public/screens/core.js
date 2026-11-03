@@ -44,7 +44,7 @@ import {
   unreadDot,
 } from "../chat.js";
 import { copyButton, el, isMac, textWithCode } from "../render.js";
-import { isBuild } from "../skills.js";
+import { isBuild, isAgentless } from "../skills.js";
 import { startsClean } from "../hops.js";
 import { faviconState, setFavicon } from "../favicon.js";
 import { helperRows, showTab } from "../subagents.js";
@@ -73,6 +73,8 @@ import { askOfflineFlipped, askState, declineOpen, renderAside, renderAsk, rende
 import { renderHandoff, renderLoopEnd, renderHomeButton, renderStopButton, renderStopControls, renderStopping, stopInProgress, stopWarning } from "./ending.js";
 import { renderNotepadButton } from "./notepad.js";
 import { renderActivities } from "./activities.js";
+import { renderSetup, setupMoved } from "./setup.js";
+import { mountAgentsView } from "./agents-view.js";
 
 // What the entry needs from the screens at start-up, handed on from here: only
 // the core imports a screen.
@@ -187,6 +189,11 @@ function settleStaleUploads() {
 // fetched, so a redraw or a reload never fills the box a second time.
 function fillNoteBox() {
   const ns = page.local.noteSend;
+  // An agent-less session has nobody to fill a box for; a leftover pick is dropped.
+  if (ns && isAgentless(page.S.workflow)) {
+    page.local.noteSend = null;
+    save();
+  }
   if (!ns || isDashboard() || finish() || page.S.workflow !== ns.workflow) return;
   const item = items().find((i) => i.kind === "text" && i.fill === "note" && i.status === "open");
   if (!item) return;
@@ -564,11 +571,13 @@ function scrollRail(where) {
 
 let arrivalBannerTimer = null;
 
-// Typing in any text field, the question's own or the notes beside it.
+// Typing in any text field, the question's own or the notes beside it. A
+// focused Markdown field surfaces as its .md-host (the editor inside its
+// shadow root is what document.activeElement cannot see).
 function typingHere() {
   const a = document.activeElement;
   if (!a) return false;
-  return a.tagName === "TEXTAREA" || (a.tagName === "INPUT" && (a.type === "text" || a.type === "date"));
+  return Boolean(a.field) || a.tagName === "TEXTAREA" || (a.tagName === "INPUT" && (a.type === "text" || a.type === "date"));
 }
 
 // The moment the ball comes back.
@@ -669,6 +678,18 @@ export function connect() {
     esErrors = 0;
     try {
       adopt(JSON.parse(e.data));
+    } catch {}
+  });
+  // The agent-less setup session's hand-over: the console its pick launched
+  // POSTed /handover, and this page moves itself to that session's url.
+  es.addEventListener("move", (e) => {
+    if (!isAgentless(page.S && page.S.workflow)) return;
+    try {
+      const u = JSON.parse(e.data).url;
+      if (typeof u === "string" && /^http:\/\/(127\.0\.0\.1|localhost):\d+\/s\//.test(u)) {
+        setupMoved(u);
+        location.assign(u);
+      }
     } catch {}
   });
   es.addEventListener("submitted", (e) => {
@@ -788,18 +809,32 @@ export function render() {
     restoreScroll();
     renderAside();
     renderFooter();
+    agentlessChrome();
   });
   // The box an `@` list belonged to was just redrawn away.
   if (page.mentionPop && !page.mentionPop.box.isConnected) closeMentions();
   if (enteringAsk) {
     const box = $("ask-input");
-    if (box && !box.disabled) box.focus({ preventScroll: true });
+    if (box && box.field && !box.field.disabled) box.field.focus();
   }
   if (switchingTab || tabAdded) replayViewsArrow();
   if (tabAdded) sound("newTab");
   renderStopping();
   } finally {
     rendering = false;
+  }
+}
+
+// An agent-less session's top bar is down to Help: every button listed here
+// either sends to the agent or reports on it, and there is no agent to reach.
+// Runs after the other renders, which may re-show their button each pass.
+const AGENTLESS_CHROME = ["meter-pill", "btn-activities", "btn-subagents", "btn-notepad", "btn-home", "btn-stop", "btn-brief"];
+
+function agentlessChrome() {
+  if (!isAgentless(page.S && page.S.workflow)) return;
+  for (const id of AGENTLESS_CHROME) {
+    const n = $(id);
+    if (n) n.hidden = true;
   }
 }
 
@@ -901,9 +936,12 @@ function restoreMainPlace(place) {
 
 function withFocus(fn) {
   const a = document.activeElement;
+  // A Markdown field surfaces as its host: its facade (.field) is what keeps
+  // the caret, and what the restore below focuses.
+  const box = a && a.field ? a.field : a;
   const keep =
-    a && (a.tagName === "TEXTAREA" || a.tagName === "INPUT" || a.tagName === "SELECT") && a.id
-      ? { id: a.id, start: a.selectionStart, end: a.selectionEnd }
+    a && (a.field || a.tagName === "TEXTAREA" || a.tagName === "INPUT" || a.tagName === "SELECT") && a.id
+      ? { id: a.id, start: box.selectionStart, end: box.selectionEnd }
       : null;
   const place = mainPlace();
 
@@ -914,10 +952,11 @@ function withFocus(fn) {
   restoreMainPlace(place);
   if (keep) {
     const n = $(keep.id);
-    if (n) {
-      n.focus();
+    const f = n && (n.field || n);
+    if (f) {
+      f.focus();
       try {
-        n.setSelectionRange(keep.start, keep.end);
+        f.setSelectionRange(keep.start, keep.end);
       } catch {}
     }
   }
@@ -1094,13 +1133,14 @@ function renderChrome() {
 //   done    the session is over, and there is one thing left to do elsewhere
 //   adrift  the server is up but nothing is listening at the other end
 //   gone    no server, eye shut
+//   setup   the agent-less setup page, waving while it waits on a pick
 //
 // Each mood is a family: v0 is the plain drawing and the rest are alternates
 // (a hop, star-scanning, sparkles, Z's -- see the "mood variants"
 // section of app.css). A new variant is rolled only when the mood CHANGES, so
 // the once-a-second status tick does not restart his animation every time it
 // runs, and the same state keeps the same face until the state itself moves.
-const MOOD_VARIANTS = { point: 3, work: 3, happy: 3, done: 2, adrift: 2, gone: 2 };
+const MOOD_VARIANTS = { point: 3, work: 3, happy: 3, done: 2, adrift: 2, gone: 2, setup: 1 };
 
 let moodNow = null;
 
@@ -1196,6 +1236,12 @@ export function renderStatus() {
     setFavicon(icon);
     tellAttention(icon);
   };
+
+  // An agent-less session has no agent to report on: the setup page IS the
+  // state, so the dock's line says where it stands and nothing more.
+  if (isAgentless(page.S.workflow)) {
+    return say("setup", page.local.setupStart ? "Starting " + page.local.setupStart.label + "…" : "No agent yet. Pick one below to get started.");
+  }
 
   // Before `gone`, deliberately. Once a session has finished, no server is the
   // expected state, and Planny shutting his eye over it reads as a breakage.
@@ -1358,7 +1404,7 @@ function renderViews() {
   for (const d of docs()) tabs.push({ id: "doc:" + d.id, label: d.title || "Document", count: 0 });
   // The helpers the agent reported, from the first one on; cleared by a
   // dashboard hop, which sends the person home like the Overview tab does.
-  if (showTab(page.subagentsFrame, page.S.helpers)) {
+  if (showTab(page.subagentsFrame, page.S.helpers) && !isAgentless(page.S.workflow)) {
     // From the rows the tab draws, so the badge never counts helpers the
     // working-alone note hides.
     const running = helperRows(page.S.helpers).rows.filter((r) => r.state === "running").length;
@@ -1366,10 +1412,13 @@ function renderViews() {
   } else if (page.view === "subagents") page.view = "questions";
   // Always last, on every workflow and after a finish: the Quick question chat.
   // The ring left of "Ask" shows exactly when the conversation's own ring does:
-  // a question the agent picked up and has not answered yet.
-  const ask = askState();
-  const askBusy = ask.view.rows.some((r) => r.working) && ask.send.state !== "offline" && !agentAdrift();
-  tabs.push({ id: "ask", label: "Ask", count: 0, dot: page.chatDot, busy: askBusy });
+  // a question the agent picked up and has not answered yet. An agent-less
+  // session has nobody to ask, so the tab stays off.
+  if (!isAgentless(page.S.workflow)) {
+    const ask = askState();
+    const askBusy = ask.view.rows.some((r) => r.working) && ask.send.state !== "offline" && !agentAdrift();
+    tabs.push({ id: "ask", label: "Ask", count: 0, dot: page.chatDot, busy: askBusy });
+  } else if (page.view === "ask") page.view = "questions";
 
   for (const t of tabs) {
     const b = el("button", "view-tab", t.label);
@@ -1540,6 +1589,10 @@ function renderMain() {
 function paintMain(main) {
   main.classList.toggle("is-doc", page.view.startsWith("doc:") || isSpecFileView(page.view));
   main.classList.toggle("is-ask", page.view === "ask");
+
+  // An agent-less session has no questions, docs or board to draw: its whole
+  // pane is the setup screen.
+  if (isAgentless(page.S.workflow)) return renderSetup(main, mountAgentsView);
 
   if (page.view.startsWith("doc:")) return renderDoc(main, page.view.slice(4));
   if (isSpecFileView(page.view)) return renderOverview(main, page.view);

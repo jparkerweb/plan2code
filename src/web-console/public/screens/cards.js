@@ -46,6 +46,7 @@ import {
   attachTray,
 } from "../uploads.js";
 import { attachMentions } from "../mention-box.js";
+import { makeMdField } from "../md-field.js";
 import { TEMPLATE_WORKFLOWS, templatesFor, templateSwap } from "../starters.js";
 import { looks } from "../looks.js";
 
@@ -109,13 +110,13 @@ export function markMore() {
 function markGrowBox(card) {
   if (!card) return;
   const id = card.dataset.item;
-  const areas = [...card.querySelectorAll("textarea")];
+  const areas = [...card.querySelectorAll(".md-host")];
   // Not over the git board: the column there flows card and board at natural
   // height, so there is no free height for a box to grow into.
   const box = isGitBoard()
     ? null
     : areas.find((t) => t.id === "text-" + id) ||
-      card.querySelector(".option.is-other.is-picked textarea.other-text") ||
+      card.querySelector(".option.is-other.is-picked .md-host.other-text") ||
       areas.find((t) => t.id === "note-" + id);
   // Only a box that stops being the one gives its fill back, so a keystroke
   // that re-marks the same box leaves its height alone.
@@ -148,7 +149,7 @@ function naturalHeight(card) {
 // handle only ever make it taller: resize: vertical alone cannot hold a floor
 // that moves with the window. Below a 160px fill the card scrolls instead.
 export function fitGrowBox() {
-  const box = $("main").querySelector(":scope > .card.has-grow textarea.grow");
+  const box = $("main").querySelector(":scope > .card.has-grow .md-host.grow");
   if (!box) return;
   const card = box.closest(".card");
   const other = naturalHeight(card) - box.offsetHeight;
@@ -664,15 +665,18 @@ function otherOption(list, item, staged, name) {
   head.appendChild(label);
   body.appendChild(head);
 
-  const ta = el("textarea", "other-text");
-  ta.id = id;
-  ta.placeholder = "If none of the above fit, say what does.";
-  // A draft survives picking a listed option, so switching back and forth
-  // never costs someone the sentence they already wrote.
-  ta.value = (on && staged.text) || page.local.drafts[id] || "";
+  const ta = makeMdField({
+    id,
+    className: "other-text",
+    placeholder: "If none of the above fit, say what does.",
+    label: "Something else, in your own words",
+    // A draft survives picking a listed option, so switching back and forth
+    // never costs someone the sentence they already wrote.
+    value: (on && staged.text) || page.local.drafts[id] || "",
+  });
 
   // Repaint the row highlights without a full render, which would rebuild this
-  // textarea mid-keystroke. Setting the radio marks the rest of the group off
+  // box mid-keystroke. Setting the radio marks the rest of the group off
   // by itself; only the `is-picked` classes need saying out loud.
   const pick = (chosen) => {
     for (const node of list.children) node.classList.toggle("is-picked", node === chosen);
@@ -707,7 +711,10 @@ function otherOption(list, item, staged, name) {
     ta.focus();
   });
 
-  body.appendChild(ta);
+  // htmlFor cannot reach a div the way it reached the textarea: the label's
+  // click hands the field its focus here instead.
+  label.addEventListener("click", () => ta.focus());
+  body.appendChild(ta.el);
   li.appendChild(radio);
   li.appendChild(body);
   list.appendChild(li);
@@ -725,10 +732,12 @@ function otherField(card, item, staged) {
   const label = el("label", null, "Anything else, in your own words");
   label.htmlFor = id;
   wrap.appendChild(label);
-  const ta = el("textarea");
-  ta.id = id;
-  ta.placeholder = "Optional. This adds to the ones you picked above; it does not replace them.";
-  ta.value = (staged && staged.text) || page.local.drafts[id] || "";
+  const ta = makeMdField({
+    id,
+    placeholder: "Optional. This adds to the ones you picked above; it does not replace them.",
+    label: "Anything else, in your own words",
+    value: (staged && staged.text) || page.local.drafts[id] || "",
+  });
   ta.addEventListener("input", () => {
     setDraft(id, ta.value);
     const cur = page.local.staged[item.id];
@@ -741,7 +750,7 @@ function otherField(card, item, staged) {
     }
     stagedChanged();
   });
-  wrap.appendChild(ta);
+  wrap.appendChild(ta.el);
   card.appendChild(wrap);
 }
 
@@ -990,11 +999,20 @@ function buildText(card, item, staged) {
     } catch {}
   }
   const single = Boolean(pattern);
-  const input = el(single ? "input" : "textarea");
-  if (single) input.type = "text";
-  input.id = id;
-  input.placeholder = item.placeholder || "Type here. Plain language is fine.";
-  input.value = (staged && staged.text) || page.local.drafts[id] || "";
+  const input = single
+    ? el("input")
+    : makeMdField({
+        id,
+        placeholder: item.placeholder || "Type here. Plain language is fine.",
+        label: item.inputLabel || "Your answer",
+        value: (staged && staged.text) || page.local.drafts[id] || "",
+      });
+  if (single) {
+    input.type = "text";
+    input.id = id;
+    input.placeholder = item.placeholder || "Type here. Plain language is fine.";
+    input.value = (staged && staged.text) || page.local.drafts[id] || "";
+  }
   attachMentions(input);
 
   const err = el("p", "field-error");
@@ -1049,7 +1067,9 @@ function buildText(card, item, staged) {
   if (item.templates === "idea" && TEMPLATE_WORKFLOWS.includes(page.S.workflow)) {
     wrap.appendChild(templateRow(item, input, templatesFor(page.S.workflow, looks.role), check));
   }
-  wrap.appendChild(input);
+  // A Markdown field's host is .el; the single-line input appends as itself.
+  wrap.appendChild(input.el || input);
+  if (!single) label.addEventListener("click", () => input.focus());
   // Fresh-idea boxes take files as context, the same ones the note pane holds,
   // and so does any box the page fills from a Notebook tab (Revise plan's
   // "What should change"), whose ticked pictures land here.
@@ -1573,10 +1593,12 @@ function commentField(card, item, labelText, required, quickAnswers = []) {
     wrap.appendChild(b);
     return [b, text];
   });
-  const ta = el("textarea");
-  ta.id = id;
-  ta.placeholder = required ? "Tell Plan2Code what to change." : "Optional.";
-  ta.value = (page.local.staged[item.id] && page.local.staged[item.id].text) || page.local.drafts[id] || "";
+  const ta = makeMdField({
+    id,
+    placeholder: required ? "Tell Plan2Code what to change." : "Optional.",
+    label: labelText,
+    value: (page.local.staged[item.id] && page.local.staged[item.id].text) || page.local.drafts[id] || "",
+  });
   attachMentions(ta);
   ta.addEventListener("input", () => {
     setDraft(id, ta.value);
@@ -1592,11 +1614,12 @@ function commentField(card, item, labelText, required, quickAnswers = []) {
       stageQuiet(item.id, { type: "answer", kind: item.kind, text: ta.value.trim() });
     stagedChanged();
   });
-  wrap.appendChild(ta);
+  label.addEventListener("click", () => ta.focus());
+  wrap.appendChild(ta.el);
   for (const [b, text] of quicks)
     b.addEventListener("click", () => {
       ta.value = text;
-      ta.dispatchEvent(new Event("input", { bubbles: true }));
+      ta.emitInput();
       ta.focus();
     });
   card.appendChild(wrap);

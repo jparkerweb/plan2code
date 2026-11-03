@@ -22,9 +22,10 @@
   min-height: 0;
 }
 /* In the board's card slot a card's boxes cannot fill the column (it flows,
-   it does not stretch), so a note box grows with what is typed instead, where
-   the browser can, rather than scrolling inside a 96px box. */
-.git-cards > .card textarea { field-sizing: content; max-height: 50vh; }
+   it does not stretch), so a note box grows with what is typed instead,
+   rather than scrolling inside a 96px box: an auto-height host does for the
+   Markdown field what field-sizing did for the textarea. */
+.git-cards > .card .md-host { min-height: 0; max-height: 50vh; }
 /* The card and the pager center themselves with auto inline margins, and a
    grid item with auto margins shrinks to its content, so a short confirm sat
    narrow in the middle of the board. In the slot both fill the board's width

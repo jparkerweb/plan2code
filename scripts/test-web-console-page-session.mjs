@@ -11,7 +11,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
-import { pageSuite, openSession, itemCard, drawn, textOf, tempProject } from "./page-test-helpers.mjs";
+import { pageSuite, openSession, itemCard, drawn, textOf, tempProject , fillBox, boxValue} from "./page-test-helpers.mjs";
 import { cli, until } from "./web-console-test-helpers.mjs";
 import { STOP_HANDOFF_REPLY, HOME_REPLY } from "../src/web-console/public/answers.js";
 import { CHAT_OFFLINE_TEXT } from "../src/web-console/public/chat.js";
@@ -455,8 +455,8 @@ test("the wrapping-up dialog says Done when the stop lands, and stays until clos
 
 test("a page that loses its server goes offline, and after a resume it shows the session again with the unsent answer still typed", async (t) => {
   const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_QUESTION });
-  const field = () => itemCard(s.page, "q1").locator("textarea, input[type=text]").first();
-  await field().fill("audit-export");
+  const field = () => itemCard(s.page, "q1").locator(".md-host, input[type=text]").first();
+  await fillBox(field(), "audit-export");
   // Typed, not sent: the page mirrors it to the server's draft.json, which
   // is what a page on a new port reads back (localStorage is per origin).
   const draftFile = path.join(s.session, "draft.json");
@@ -478,7 +478,7 @@ test("a page that loses its server goes offline, and after a resume it shows the
   await s.page.goto(resumed.url, { waitUntil: "domcontentloaded" });
   await drawn(s.page);
   await itemCard(s.page, "q1").getByText("What to call it").first().waitFor();
-  assert.equal(await field().inputValue(), "audit-export", "the unsent answer was lost across the resume");
+  assert.equal(await boxValue(field()), "audit-export", "the unsent answer was lost across the resume");
   assert.equal(await s.page.locator("#planny").evaluate((n) => n.classList.contains("is-gone")), false);
 });
 
@@ -528,7 +528,7 @@ test("the quiet, not running and not connected lines offer What to check, openin
   // Answered and sent, never collected, and nobody listening: the saved line.
   await s.page.clock.setSystemTime(Date.now());
   s.post({ agent: { status: "waiting" } });
-  await itemCard(s.page, "q1").locator("textarea, input[type=text]").first().fill("audit-export");
+  await fillBox(itemCard(s.page, "q1").locator(".md-host, input[type=text]").first(), "audit-export");
   await s.page.click("#btn-send");
   await lineSays(s, /^Sent\. Waiting for Plan2Code\./);
   assert.equal(await whatToCheck(s).count(), 0, "the sent line is plain");
@@ -551,7 +551,7 @@ test("the quiet, not running and not connected lines offer What to check, openin
 // nothing is listening: the wake-up help shows then, not after three minutes.
 test("answers a waiting agent never collects bring up the saved-and-waiting line after a minute of silence, not before", async (t) => {
   const s = await openSession(await suite.browser(), { t, workflow: "plan", clock: true, payload: PLAN_QUESTION });
-  await itemCard(s.page, "q1").locator("textarea, input[type=text]").first().fill("audit-export");
+  await fillBox(itemCard(s.page, "q1").locator(".md-host, input[type=text]").first(), "audit-export");
   await s.page.click("#btn-send");
   await lineSays(s, /^Sent\. Waiting for Plan2Code\./);
   await s.page.clock.fastForward(30_000);
@@ -566,7 +566,7 @@ test("answers a waiting agent never collects bring up the saved-and-waiting line
 // longer quiet allowance it gave itself before it went.
 test("answers a working agent has not collected bring up the saved-and-waiting line after three minutes, not its long quiet allowance", async (t) => {
   const s = await openSession(await suite.browser(), { t, workflow: "implement", clock: true, payload: PLAN_QUESTION });
-  await itemCard(s.page, "q1").locator("textarea, input[type=text]").first().fill("audit-export");
+  await fillBox(itemCard(s.page, "q1").locator(".md-host, input[type=text]").first(), "audit-export");
   await s.page.click("#btn-send");
   await lineSays(s, /^Sent\. Waiting for Plan2Code\./);
   // Its last word before it went quiet: working, with half an hour to spare.
@@ -585,12 +585,12 @@ test("answers a working agent has not collected bring up the saved-and-waiting l
 test("a card sent while the agent answers an Ask message says it is answering, and not running only after ten minutes", async (t) => {
   const s = await openSession(await suite.browser(), { t, workflow: "plan", clock: true, payload: PLAN_QUESTION });
   await s.page.locator("nav").getByRole("button", { name: "Ask", exact: true }).click();
-  await s.page.locator("#ask-input").fill("What does the export include?");
+  await fillBox(s.page.locator("#ask-input"), "What does the export include?");
   await s.page.locator(".ask-composer").getByRole("button", { name: "Send", exact: true }).click();
   const got = s.wait(10);
   assert.equal(got.code, 0, `the Ask message was not handed over (wait exit ${got.code})`);
   await s.page.locator("#views").getByRole("button", { name: /^Questions/ }).click();
-  await itemCard(s.page, "q1").locator("textarea, input[type=text]").first().fill("audit-export");
+  await fillBox(itemCard(s.page, "q1").locator(".md-host, input[type=text]").first(), "audit-export");
   await s.page.click("#btn-send");
   await lineSays(s, /^Plan2Code is answering your Ask message\./);
   await s.page.clock.fastForward(70_000);
@@ -610,7 +610,7 @@ test("a card sent while the agent answers an Ask message says it is answering, a
 // the real state only showing once the page's own timers catch up.
 test("a Send that finds the server gone says so at once, with the reconnect help", async (t) => {
   const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_QUESTION });
-  await itemCard(s.page, "q1").locator("textarea, input[type=text]").first().fill("audit-export");
+  await fillBox(itemCard(s.page, "q1").locator(".md-host, input[type=text]").first(), "audit-export");
   await stopServer(s);
   await s.page.click("#btn-send");
   await s.page.waitForFunction(() => document.getElementById("planny").classList.contains("is-gone"), null, { timeout: 3000 });
@@ -624,7 +624,7 @@ test("a Send the server refuses shows the server's reason", async (t) => {
   await s.page.route("**/submit", (route) =>
     route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ error: "the disk is full" }) })
   );
-  await itemCard(s.page, "q1").locator("textarea, input[type=text]").first().fill("audit-export");
+  await fillBox(itemCard(s.page, "q1").locator(".md-host, input[type=text]").first(), "audit-export");
   await s.page.click("#btn-send");
   await s.page.waitForFunction(() => /the disk is full/.test(document.getElementById("banner").textContent), null, { timeout: 3000 });
   assert.match(await s.page.locator("#banner").innerText(), /Nothing was lost/);
@@ -635,7 +635,7 @@ test("a Send the server refuses as too large says to remove an attachment, not t
   await s.page.route("**/submit", (route) =>
     route.fulfill({ status: 413, contentType: "application/json", body: JSON.stringify({ error: "too large" }) })
   );
-  await itemCard(s.page, "q1").locator("textarea, input[type=text]").first().fill("audit-export");
+  await fillBox(itemCard(s.page, "q1").locator(".md-host, input[type=text]").first(), "audit-export");
   await s.page.click("#btn-send");
   await s.page.waitForFunction(() => /remove an attachment/.test(document.getElementById("banner").textContent), null, { timeout: 3000 });
   assert.doesNotMatch(await s.page.locator("#banner").innerText(), /try Send again/);
@@ -644,7 +644,7 @@ test("a Send the server refuses as too large says to remove an attachment, not t
 test("a Send lost on the way, with the server still up, says the console is there and to send again", async (t) => {
   const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_QUESTION });
   await s.page.route("**/submit", (route) => route.abort());
-  await itemCard(s.page, "q1").locator("textarea, input[type=text]").first().fill("audit-export");
+  await fillBox(itemCard(s.page, "q1").locator(".md-host, input[type=text]").first(), "audit-export");
   await s.page.click("#btn-send");
   await s.page.waitForFunction(() => /console is still up/.test(document.getElementById("banner").textContent), null, { timeout: 3000 });
   assert.equal(await s.page.locator("#planny").evaluate((n) => n.classList.contains("is-gone")), false, "not called gone");
@@ -671,7 +671,7 @@ test("an answered finish offer comes back unanswered on a later finish, once the
 
 test("a finished session never puts a sent answer back on its form", async (t) => {
   const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_QUESTION });
-  await itemCard(s.page, "q1").locator("textarea").fill("audit-export");
+  await fillBox(itemCard(s.page, "q1").locator(".md-host"), "audit-export");
   await s.page.click("#btn-send");
   collect(s);
   // Collected and left open, then the session ends: nothing more can be sent,
@@ -686,8 +686,8 @@ test("a finished session never puts a sent answer back on its form", async (t) =
   await itemCard(s.page, "q1").waitFor();
   const mark = q1.locator(".rail-mark");
   assert.notEqual(await mark.getAttribute("title"), "ready to send", "the sent answer came back on the form");
-  const box = itemCard(s.page, "q1").locator("textarea");
-  assert.notEqual((await box.count()) ? await box.inputValue() : "", "audit-export", "the sent answer is back in its box");
+  const box = itemCard(s.page, "q1").locator(".md-host");
+  assert.notEqual((await box.count()) ? await boxValue(box) : "", "audit-export", "the sent answer is back in its box");
 });
 
 test("the footer keeps its workspace label on the dashboard, and the label opens the Workspace dialog", async (t) => {
@@ -735,9 +735,10 @@ test("a workflow page uses its modules: the full footer, the session meter, @ su
   // The @ list is the workspace frame, which can land after the page draws;
   // the footer has one label per width tier once it has.
   await s.page.waitForFunction(() => (document.getElementById("footer-where").dataset.key || "").includes("\n"));
-  const box = itemCard(s.page, "q1").locator("textarea");
-  await box.click();
-  await box.pressSequentially("See @");
+  const box = itemCard(s.page, "q1").locator(".md-host");
+  const ed = box.locator(".cm-content");
+  await ed.click();
+  await ed.pressSequentially("See @");
   await s.page.locator("#mention-pop").waitFor();
   assert.match(await textOf(s.page.locator("#mention-pop")), new RegExp(name));
   // favicon.js: the person's move puts a bar on the tab icon.
@@ -959,7 +960,7 @@ test("under the app, a gone session's review and dashboard fallbacks name the te
 // finish-style stop instead of the way home.
 test("the top bar's back triangle asks first, then sends __dashboard with the typed answers and the home reply", async (t) => {
   const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_QUESTION });
-  await itemCard(s.page, "q1").locator("textarea, input[type=text]").first().fill("audit-export");
+  await fillBox(itemCard(s.page, "q1").locator(".md-host, input[type=text]").first(), "audit-export");
   await s.page.click("#btn-home");
   const modal = s.page.locator("#home-modal");
   await modal.waitFor();
@@ -1030,6 +1031,48 @@ test("Back to default in Preferences returns the theme to follow the system and 
   await s.page.click("#looks-reset");
   await s.page.waitForFunction(() => !document.documentElement.hasAttribute("data-theme"));
   assert.equal(await s.page.locator('input[name="looks-theme"][value="system"]').isChecked(), true, "the system choice is ticked again");
+});
+
+// What a person sees break: during a build the waiting pane's "follow along"
+// link must open the phase file tab (phase-N.md), which carries the same task
+// list plus the rest of the file. An older install's tasks doc arriving
+// beside it does not take the link back.
+test("the build's waiting link opens the phase file tab and prefers it over an old tasks list", async (t) => {
+  const s = await openSession(await suite.browser(), {
+    t,
+    workflow: "implement",
+    payload: {
+      headline: { stage: "Phase 3: API endpoints", cleared: 5, total: 11 },
+      docs: [{ id: "phasefile", title: "phase-3.md", blocks: [{ id: "body", state: "settled", md: "# Phase 3: API endpoints\n\n- [x] **Task 3.1:** Register the routes\n- [ ] **Task 3.2:** Add paging" }] }],
+      agent: { status: "working", activity: "Task 6 of 11: deleting a task" },
+    },
+  });
+  const main = s.page.locator("#main");
+  const jump = main.locator("button.waiting-jump", { hasText: "phase-3.md" });
+  await jump.waitFor();
+  s.post({ docs: [{ id: "phase", title: "Phase 3 tasks", blocks: [{ id: "tasks", state: "settled", md: "- [x] **Task 3.1:** Register the routes" }] }] });
+  await jump.waitFor();
+  await jump.click();
+  await s.page.locator(".view-tab[aria-current='true']", { hasText: "phase-3.md" }).waitFor();
+  await main.getByRole("heading", { name: "Phase 3: API endpoints" }).waitFor();
+});
+
+// What a person sees break: a build still on the old contract keeps its link;
+// the posted tasks list opens its own tab.
+test("a build still on the old contract keeps its waiting link on the tasks list", async (t) => {
+  const s = await openSession(await suite.browser(), {
+    t,
+    workflow: "implement",
+    payload: {
+      headline: { stage: "Phase 3: API endpoints", cleared: 5, total: 11 },
+      docs: [{ id: "phase", title: "Phase 3 tasks", blocks: [{ id: "tasks", state: "settled", md: "- [x] **Task 3.1:** Register the routes" }] }],
+      agent: { status: "working", activity: "Task 6 of 11: deleting a task" },
+    },
+  });
+  const jump = s.page.locator("#main").locator("button.waiting-jump", { hasText: "Phase 3 tasks" });
+  await jump.waitFor();
+  await jump.click();
+  await s.page.locator(".view-tab[aria-current='true']", { hasText: "Phase 3 tasks" }).waitFor();
 });
 
 // Planny's own spoken line said "close this tab": under the app there is no
