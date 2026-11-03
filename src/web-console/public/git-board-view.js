@@ -130,7 +130,8 @@ export function drawGitBoard(ctx) {
   }
   const tab = activeTab(ctx);
   node.appendChild(header(ctx));
-  if (ctx.notice) node.appendChild(resultLine(ctx, ctx.notice));
+  // A landed result (`op` set) lives in the step strip's two zones instead.
+  if (ctx.notice && !ctx.notice.op) node.appendChild(resultLine(ctx, ctx.notice));
   node.appendChild(tabStrip(ctx, tab));
   node.appendChild(cardSlot);
   node.appendChild(tabPanel(ctx, tab));
@@ -280,6 +281,51 @@ function stepStrip(ctx, id) {
   }
   // Mid-operation, Sync's own block is the step (syncBody).
   if (id === "sync" && git.inProgress) return null;
+  // A landed result: the notice (it carries `op`) becomes the left zone and
+  // the leftover step the right, muted, so the board reads "done, and this
+  // much is not yours" rather than one loud suggestion to commit it all.
+  if (ctx.notice && ctx.notice.op) {
+    const duo = h.el("div", "git-duo");
+    const landed = h.el("div", "git-landed");
+    landed.setAttribute("role", "status");
+    landed.appendChild(h.el("div", "git-step-kicker", "Just landed"));
+    landed.appendChild(h.el("h3", "git-step-title", ctx.notice.title || ""));
+    if (ctx.notice.body) landed.appendChild(h.md(ctx.notice.body, "md git-result-body"));
+    if (ctx.mode === "running") landed.appendChild(activityLine(ctx, "p", ctx.activity || "Plan2Code is working on it."));
+    // The landed zone's one action is the follow-through on their work, which
+    // only exists beside a leftover-commit primary (Push 5 there). Every other
+    // shape leaves the exit to the right zone, which always names the board's
+    // real next step, muted.
+    const theirs = p && p.op === "commit" ? p : null;
+    if (theirs && step.secondary[0]) {
+      const acts = h.el("div", "git-step-actions");
+      acts.appendChild(stepButton(ctx, step.secondary[0], "btn primary"));
+      landed.appendChild(acts);
+    }
+    duo.appendChild(landed);
+    const left = h.el("div", "git-left");
+    left.appendChild(h.el("div", "git-step-kicker", theirs ? "Still on the tree" : p ? "Still to do" : "All caught up"));
+    if (theirs) left.appendChild(h.el("h3", "git-step-title", theirs.label));
+    else left.appendChild(h.el("h3", "git-step-title", p ? p.label : step.line));
+    if (p && p.why) left.appendChild(h.el("p", "git-step-why", p.why));
+    if (step.stale) left.appendChild(staleLine(ctx, step.stale));
+    if (step.held) {
+      const held = h.el("div", "git-held");
+      held.appendChild(h.md(step.held, "md git-held-body"));
+      left.appendChild(held);
+    }
+    const acts = h.el("div", "git-step-actions");
+    if (theirs) {
+      acts.appendChild(stepButton(ctx, { ...theirs, label: "Commit other changes" }, "btn primary"));
+      for (const s of step.secondary.slice(1)) acts.appendChild(stepButton(ctx, s, "btn small"));
+    } else {
+      if (p) acts.appendChild(stepButton(ctx, p, "btn primary"));
+      for (const s of step.secondary) acts.appendChild(stepButton(ctx, s, "btn small"));
+    }
+    if (acts.children.length) left.appendChild(acts);
+    duo.appendChild(left);
+    return duo;
+  }
   const box = h.el("div", "git-step" + (git.inProgress ? " is-warn" : "") + (p ? "" : " is-calm"));
   box.appendChild(h.el("div", "git-step-kicker", p ? "Next step" : "Nothing to do"));
   box.appendChild(h.el("h3", "git-step-title", p ? p.label : step.line));

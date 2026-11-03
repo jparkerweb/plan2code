@@ -472,6 +472,9 @@
 /* The bar's gap sets the rhythm; the row's own margin is for loop-setup,
    which has no tail. */
 .confirm-tail .confirm-actions { margin-top: 0; }
+/* The Notebook box frames itself, so the rule line is one separation too
+   many when it is on the pane; the shadow still marks the bar in a scroll. */
+.dash-confirm:has(.confirm-note-box) .confirm-tail { border-top: 0; }
 
 /* "Start with a note from your Notebook": the switch, then the tabs beside a
    preview of the picked one, its pictures each with a tick. */

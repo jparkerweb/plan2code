@@ -21,11 +21,11 @@ A click arrives as one session action per send, and the board locks until your n
 **After an action**, ONE post with `--wait`:
 
 ```jsonc
-{"reread":true,"items":[{"id":"git-result","kind":"notice","title":"Pushed 2 commits to origin/feature/x","body":"a1b2c3d, e4f5a6b. [Open pull request](https://github.com/...)"}],"board":{"describe":"export-csv-button"}}
+{"reread":true,"items":[{"id":"git-result","kind":"notice","op":"push","title":"Pushed 2 commits to origin/feature/x","body":"a1b2c3d, e4f5a6b. [Open pull request](https://github.com/...)"}],"board":{"describe":"export-csv-button"}}
 ```
 
 - `reread` is `true`, or `{"refreshFailed":true}` after a failed Refresh. Only with the `git` workflow, else exit 3.
-- `git-result` is one `notice` replaced every action: what happened, short hashes, the `pr-url` link after a push or publish. A failure quotes git's stderr verbatim with `classify-error`'s `next`.
+- `git-result` is one `notice` replaced every action: what happened, short hashes, the `pr-url` link after a push or publish, and `op` naming the action that succeeded (`"commit"`, `"push"`, `"pull"`, `"switch"`, `"create"`, `"cleanup"`, `"refresh"`, `"init"`, `"publish"`): the board shows it as the landed zone beside the leftover work. A failure quotes git's stderr verbatim with `classify-error`'s `next` and carries no `op`.
 - `board.describe`: short kebab-case description of the changes still on the tree (prefills Create); leave out when none remain.
 
 **Cards per `plan`** (`git.mjs plan <op>`):

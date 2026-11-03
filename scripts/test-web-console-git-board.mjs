@@ -549,3 +549,40 @@ test("git board docs: the agent prose, Help topic and readme describe the tabbed
   for (const old of ["one board", "one page"]) assert.ok(!help.includes(old), `Help's git topic no longer says "${old}"`);
   assert.ok(!read("../.readme/web-console.md").includes("commits on one page"), "the readme no longer says commits on one page");
 });
+
+test("git board view: a landed result splits the step strip into Just landed and Still on the tree", () => {
+  const landed = (id, notice) => {
+    const s = STATES[id];
+    const git = s.git;
+    const step = nextStep(git, { now: NOW });
+    const badges = tabBadges(git, { now: NOW, stepTab: step.tab });
+    const board = { tab: null, panel: null, create: null, ticks: null, ignore: new Set(), sweep: null, query: "", showAll: false, remoteOpen: null, base: null };
+    const h = fakeH();
+    const on = fakeOn();
+    const { node } = drawGitBoard({ git, board, now: NOW, mode: "idle", step, badges, notice, activity: null, hasCard: false, h, on });
+    return { node, on, step };
+  };
+  const notice = { id: "git-result", kind: "notice", op: "commit", title: "Committed 1eef797", body: "Mark the last-used model in the launcher menu (3 files, +845/-71)." };
+
+  const r = landed("cp-dirty", notice);
+  const duo = walk(r.node).find((n) => n.classes.has("git-duo"));
+  assert.ok(duo, "a landed notice draws the two zones");
+  const left = walk(duo).find((n) => n.classes.has("git-landed"));
+  const rest = walk(duo).find((n) => n.classes.has("git-left"));
+  assert.ok(left, "the landed zone is there");
+  assert.ok(rest, "the still-on-the-tree zone is there");
+  assert.ok(left.textContent.includes("Committed 1eef797"), "the landed zone carries the notice");
+  assert.ok(rest.textContent.includes("Commit other changes"), "the leftover commit is relabeled");
+  assert.ok(!walk(r.node).some((n) => n.classes.has("git-result")), "no thin result line beside the zones");
+  const commit = controls(rest).find((c) => c.textContent === "Commit other changes");
+  click(commit);
+  assert.deepEqual(r.on.calls[0], ["openPanel", "commit"], "the leftover offer runs the same op the primary would");
+
+  const plain = landed("cp-dirty", { id: "git-result", kind: "notice", title: "Committed 1eef797", body: "no op marker" });
+  assert.ok(walk(plain.node).some((n) => n.classes.has("git-result")), "a notice with no op keeps the thin line");
+  assert.ok(!walk(plain.node).some((n) => n.classes.has("git-duo")), "and no zones");
+
+  const clean = landed("nb-unpublished", notice);
+  const duoClean = walk(clean.node).find((n) => n.classes.has("git-duo"));
+  assert.ok(duoClean, "zones still draw when nothing is left to commit");
+});
