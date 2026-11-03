@@ -179,6 +179,9 @@ Scroll down for the utilities. Outside a git repository the **Git** card says so
 An Implement phase ends on a sign-off card: read the completion report, then
 review the code first, approve the phase, or ask for changes. Implement +
 review has already reviewed the code, so its card has no review button.
+Finalize always offers one last review of the whole feature after its checks,
+before the summary is written and the spec is archived: pick the findings to
+fix, or skip it, and anything left open lands in the summary.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="../docs/screenshots/signoff-dark.webp">

@@ -272,11 +272,12 @@ test("every dashboard card is filled in and launches a real skill", () => {
 // The review button runs review.md inside the build's own session, so the
 // skills that offer it have to carry review.md and its references.
 test("the skills that run a review on the page carry the review", () => {
-  for (const skill of ["plan2code-3-implement", "plan2code-quick-task", "plan2code-3-implement-review"]) {
+  for (const skill of ["plan2code-3-implement", "plan2code-quick-task", "plan2code-3-implement-review", "plan2code-4-finalize"]) {
     const refs = path.join(ROOT, "skills", skill, "references");
-    for (const f of ["review.md", "dimensions.md", "false-positives.md", "session-end.md", "verification-protocol.md"]) {
+    for (const f of ["review.md", "dimensions.md", "false-positives.md", "session-end.md", "verification-protocol.md", "reviewer-brief.md", "helper-strength.md"]) {
       assert.ok(fs.existsSync(path.join(refs, f)), `${skill} must carry references/${f}`);
     }
+    assert.ok(fs.existsSync(path.join(ROOT, "skills", skill, "scripts", "review-scope.mjs")), `${skill} must carry scripts/review-scope.mjs`);
   }
 });
 
@@ -2018,16 +2019,16 @@ test("workspace cursor never moves backwards, and only changes past it are pendi
   }
 });
 
-test("subagents: only the twelve opted-in workflows offer the switch", () => {
-  for (const w of ["init", "init-update", "pathfinder", "plan", "revise-plan", "document", "implement", "implement-review", "quick-task", "review", "xray", "diagnose"]) {
+test("subagents: only the thirteen opted-in workflows offer the switch", () => {
+  for (const w of ["init", "init-update", "pathfinder", "plan", "revise-plan", "document", "implement", "implement-review", "quick-task", "review", "finalize", "xray", "diagnose"]) {
     assert.equal(offered(w), true, w);
     assert.ok(defaultInstruction(w).length > 0, `${w} has a default instruction`);
   }
-  for (const w of ["dashboard", "finalize", "changelog", "git", "handoff", "constructor", "toString", undefined]) {
+  for (const w of ["dashboard", "changelog", "git", "handoff", "constructor", "toString", undefined]) {
     assert.equal(offered(w), false, String(w));
     assert.equal(defaultInstruction(w), "");
   }
-  assert.equal(Object.keys(SUBAGENT_WORKFLOWS).length, 12);
+  assert.equal(Object.keys(SUBAGENT_WORKFLOWS).length, 13);
   assert.deepEqual(defaultSetting("review"), { workflow: "review", on: true, instruction: null, max: 3, strength: "balanced" });
   assert.equal(defaultSetting("changelog").on, false, "a skill without the switch is never on");
   assert.equal(effectiveInstruction({ workflow: "review", instruction: "  " }), defaultInstruction("review"));

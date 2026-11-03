@@ -4,6 +4,7 @@
 | --- | --- |
 | 1, Audit | Table as doc `audit`. If `totals.incomplete + totals.blocked > 0`, a `choice` (return, mark partial, abandon) with counts against thresholds in `body`. |
 | 2, Verification | Results as a doc; ask only on an issue. Unless Full Suite is `Never` or `At Phase N`: `confirm` "Run the full suite" (`yesLabel` "Run it", `noLabel` "Skip it", reason in `body`); a failure is the building notes' `choice`. |
+| 2.5, Final review | Always: `confirm` "Run a final review" (`yesLabel` "Review it", `noLabel` "Skip it", files and ~lines in `body`). Yes: `building-review.md`, the `finalize` door. |
 | 3, Summary | Written to `overview.md`; mirror it as a doc (`saved`, `file` block). |
 | 4, Docs review | Proposed-updates table as a doc, plus a `multi` of documents (ticked = approved, `required:false` so Skip means no doc changes); a `review` if all-or-nothing. |
 | 5, Feedback | `required:false`: rating as `choice` 1 to 10 or `text`, three reasons as `text`, maintainer consent as `confirm`. |
@@ -11,4 +12,4 @@
 
 Post `activity` as each step starts. Pass `--spec specs/<feature>` or post `specDir`.
 
-Finish: the completion summary goes in `body`. `command` is the suggested commit when Step 4 updates landed (`"where":"When you are happy with it, commit it from your terminal:"`, `"commit":true`, `"changelog":true`), else none. A stop loses nothing before Step 3's write: `command` `/plan2code-4-finalize specs/<feature>/overview.md`.
+Finish: the completion summary goes in `body`. `command` is the suggested commit when review fixes or Step 4 updates landed (`"where":"When you are happy with it, commit it from your terminal:"`, `"commit":true`, `"changelog":true`), else none. A stop loses nothing before Step 3's write: `command` `/plan2code-4-finalize specs/<feature>/overview.md`.

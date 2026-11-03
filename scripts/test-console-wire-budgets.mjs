@@ -31,7 +31,7 @@ export const BUDGETS = {
     "changelog.md": 1400,
     "diagnose.md": 2700,
     "document.md": 400,
-    "finalize.md": 1600,
+    "finalize.md": 2000,
     "git.md": 6500,
     "handoff.md": 300,
     "implement.md": 5700,

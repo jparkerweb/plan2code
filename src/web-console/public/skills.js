@@ -283,7 +283,7 @@ export const SKILLS = Object.freeze([
     pose: "finalize",
     builds: false, phased: false, metered: true, templates: false,
     weight: 1, started: "Finalize started", ran: "Finalize run", resume: "overview",
-    subagents: null,
+    subagents: "Run Step 2.5's final review analysis in one fresh helper briefed only with the spec and the feature's change set (references/reviewer-brief.md); verify every finding yourself before you report. Keep the audit, every question, the fixes and the archive with you. At standard strength or above (strongest when the feature touches security, auth or data), high effort.",
     states: ["built"], marksNext: true,
     greyed: { default: "Needs a spec that is fully built" },
     card: {

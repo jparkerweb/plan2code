@@ -284,10 +284,15 @@ const SOURCE_PROMPTS = [
     name: 'finalize',
     displayName: 'Finalization Mode',
     description: 'Validate, summarize, and archive completed work',
-    scripts: ['specs.mjs', 'commit-msg.mjs'],
+    // review.md rides along for Step 2.5's final review, which runs in the
+    // same session before the summary is written and the spec is archived.
+    scripts: ['specs.mjs', 'commit-msg.mjs', 'review-scope.mjs'],
     additionalReferences: [
       { source: 'web-console', target: 'web-console' },
-      { source: 'shared-references/test-runs.md', target: 'test-runs.md' }
+      { source: 'shared-references/helper-strength.md', target: 'helper-strength.md' },
+      { source: 'shared-references/test-runs.md', target: 'test-runs.md' },
+      { source: 'plan2code-review.md', target: 'review.md' },
+      { source: 'plan2code-review-references' }
     ]
   },
   {
