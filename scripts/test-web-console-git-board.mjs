@@ -435,6 +435,25 @@ test("git board view: pins on its source and on a few states", () => {
   assert.ok(hint.textContent.startsWith("Next step is on Changes:"));
 });
 
+test("git board view: a working line carries the spinner, and only while running", () => {
+  const lines = (r) => walk(r.node).filter((n) => n.classes.has("git-activity"));
+  const spun = (n) => n.children.some((c) => c.classes.has("spinner") && c.classes.has("tiny"));
+
+  const busy = lines(draw("cp-committing", { mode: "running", tab: "changes" }));
+  assert.equal(busy.length, 2, "the header and the step strip both say what is under way");
+  for (const n of busy) {
+    assert.ok(spun(n), `"${n.textContent}" has a spinner`);
+    assert.equal(n.textContent, "Committing 3 files on feature/ABC-12001-export-csv");
+  }
+
+  const quiet = lines(draw("cp-dirty", { mode: "running", tab: "changes" }));
+  assert.equal(quiet.length, 1, "with no activity, only the step strip speaks");
+  assert.ok(spun(quiet[0]));
+  assert.equal(quiet[0].textContent, "Plan2Code is working on it.");
+
+  assert.equal(lines(draw("cp-committing", { mode: "idle", tab: "changes" })).length, 0, "idle shows no working line");
+});
+
 const click = (n) => n.listeners.click.forEach((fn) => fn());
 const stepButtons = (r) => controls(walk(r.node).find((n) => n.classes.has("git-step")));
 

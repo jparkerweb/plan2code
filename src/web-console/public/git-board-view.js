@@ -165,9 +165,18 @@ function header(ctx) {
     meta.appendChild(code);
     meta.appendChild(copy(ctx, cmd, "btn small", code));
   } else meta.appendChild(h.el("span", "git-refreshed", refreshedLine(git, ctx.now)));
-  if (ctx.mode === "running" && ctx.activity) meta.appendChild(h.el("span", "git-activity", ctx.activity));
+  if (ctx.mode === "running" && ctx.activity) meta.appendChild(activityLine(ctx, "span", ctx.activity));
   box.appendChild(meta);
   return box;
+}
+
+// A line saying what the agent is doing, with the console's small ring in
+// front so a wait reads as work under way.
+function activityLine(ctx, tag, text) {
+  const line = ctx.h.el(tag, "git-activity");
+  line.appendChild(ctx.h.el("span", "spinner tiny"));
+  line.appendChild(ctx.h.el("span", null, text));
+  return line;
 }
 
 function resultLine(ctx, notice) {
@@ -282,7 +291,7 @@ function stepStrip(ctx, id) {
     box.appendChild(held);
   }
   if (ctx.mode === "running") {
-    box.appendChild(h.el("p", "git-activity", ctx.activity || "Plan2Code is working on it."));
+    box.appendChild(activityLine(ctx, "p", ctx.activity || "Plan2Code is working on it."));
     return box;
   }
   const actions = h.el("div", "git-step-actions");

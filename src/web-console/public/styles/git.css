@@ -145,7 +145,9 @@
 .git-track { font-family: var(--mono); font-size: 14px; color: var(--ink-2); }
 .git-head-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; font-size: 13.5px; color: var(--ink-2); }
 .git-noremote { font-weight: 600; color: var(--stage); }
-.git-activity { color: var(--accent); }
+/* The ring sits on the first line of a wrapped activity, as the dock's does. */
+.git-activity { display: flex; align-items: flex-start; gap: 8px; color: var(--accent); }
+.git-activity .spinner.tiny { margin-top: 0.25em; }
 .git-pr { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding-top: 6px; border-top: 1px solid var(--rule); }
 .git-pr-open { text-decoration: none; }
 .git-pr-ask { font-size: 14px; color: var(--ink); }
