@@ -84,7 +84,8 @@ test("every tone is well formed: a known wave or noise, a sane length, a filter 
     assert.ok(Object.isFrozen(spec), `${name} is frozen`);
     for (const p of partsOf(spec)) {
       assert.ok(WAVES.has(p.type) || (spec.layers && NOISES.has(p.type)), `${name}: ${p.type} is a wave, or a noise in a layered tone`);
-      assert.ok(p.seconds > 0 && p.seconds + (p.delay || 0) <= 1.2, `${name} is over within 1.2 s`);
+      // (a tiny tolerance: 0.1 + 1.1 is 1.2000000000000002 in floating point)
+      assert.ok(p.seconds > 0 && p.seconds + (p.delay || 0) <= 1.2 + 1e-9, `${name} is over within 1.2 s`);
       if (WAVES.has(p.type)) assert.ok(p.notes ? p.notes.every((f) => f > 0) : p.from > 0 && p.to > 0, `${name} has its pitches`);
       if (p.filter) assert.ok(FILTERS.has(p.filter.type) && p.filter.from > 0, `${name}'s filter is known`);
       if (p.gain !== undefined) assert.ok(p.gain > 0 && p.gain <= 1, `${name}'s part gain is a share`);

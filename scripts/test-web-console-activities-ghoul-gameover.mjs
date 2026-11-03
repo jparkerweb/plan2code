@@ -1,9 +1,9 @@
 // Web console tests, Ghoul Rush's game over: a lost end plays the mechanical laugh track (and a win does not), and the "G A M E - O V E R" banner drops in letter by letter and draws on a fake canvas.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import * as ghoul from "../src/web-console/public/activities/ghoul.js";
-import { skipStory } from "../src/web-console/public/activities/ghoul-story.js";
-import { dropAt, gameOverBanner, OVER_WORD } from "../src/web-console/public/activities/ghoul-gameover-draw.js";
+import * as ghoul from "../src/web-console/public/activities/ghoul-rush/ghoul.js";
+import { skipStory } from "../src/web-console/public/activities/ghoul-rush/story/ghoul-story.js";
+import { dropAt, gameOverBanner, OVER_WORD } from "../src/web-console/public/activities/ghoul-rush/story/ghoul-gameover-draw.js";
 import { toneNames } from "../src/web-console/public/tones.js";
 
 function fakeCtx(texts) {

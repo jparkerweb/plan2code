@@ -170,7 +170,7 @@ Scroll down for the utilities. Outside a git repository the **Git** card says so
   turns red if that press was never collected, and goes back to the plain
   icon once nothing is left, so a console left in a background tab can be
   checked at a glance.
-- **Help.** The **?** at the top right opens a Help dialog with 20 topics,
+- **Help.** The **?** at the top right opens a Help dialog with 21 topics,
   one per tab down the left (across the top on a narrow window), opening on
   the one for where you are. It is part of the page itself, so it still reads
   fully when the page has lost its program.
@@ -1302,7 +1302,7 @@ Ghoul Rush at 65).
   reach the snowbank and you earn three to nine Lucky Dice (hearts left,
   obstacles passed untouched, things shot and souls and Cocoa taken).
   **Gallows Bog** is a stage of three walked rooms (the Sunken Boardwalk,
-  Cypress Hollow and the Stilt House), a fan-boat ride and the Drowning Pool.
+  Cypress Hollow and the Stilt House), a bonus round and the Drowning Pool.
   Its own rule is **mud**: on a span of it Planny sinks the longer he stands,
   the run sags to a crawl and a jump to a low hop over about two and a half
   seconds. Dry floor, the air, a board over the mud or **Stilt Boots** (ten
@@ -1316,14 +1316,29 @@ Ghoul Rush at 65).
   six seconds, glows where it will return and then burns again); and the **bog
   body**, which climbs out of the mud harmless and then shambles. The **Harpoon**
   is the stage's own weapon (a double tap): it pierces everything in its line
-  and is the one shot that reaches a lurker's eyes under the water. **The Bog
-  Runner** is a fan-boat skim down a black channel with a swarm of leeches
-  boiling up in your wake: switch between the open channel and the mud flats at
-  the banks, jump snags and cypress knees, duck moss veils and low limbs, and
-  shoot the hag's charms and the gas pockets (a pocket's burst pushes the swarm
-  back). Easing off, the mud flats and a fan clogged with mud let the swarm
-  gain, and at your heels it takes a heart. Like the other rides it plays for five
-  hearts of its own and ends with three to nine Lucky Dice. The boss is **Old
+  and is the one shot that reaches a lurker's eyes under the water. **The
+  Drowned Lantern** is the first bonus round that is not a ride: a top-down game
+  on one screen, an island of mossy hummocks and plank walks round Old Mother
+  Bog's pool, which you cross with a lantern to light five wisp shrines (stand
+  on a shrine's stone for two seconds) and then run back to the boat you came
+  in. The arrows walk; Space flares the lantern, a ring of light that bursts
+  every wisp in it and scatters the leeches, at the price of some oil and a bang
+  the Lurker hears from anywhere. The oil burns down and the light shrinks with
+  it; each shrine lit fills it again. Each hunter plays by one rule, shown over
+  it the first time it comes near: the **Bog Lurker** hears steps on the planks
+  (the moss is silent), swims to where it last heard you, then lines up a red
+  lane through that spot and dashes down it (it strikes where it heard you, so
+  step off the lane); a **wisp** circles each unlit shrine and rushes a lantern
+  that comes near it (a flare pops it); the **leeches** follow you at the edge of
+  your light and never come in, until the oil runs out; the **bog bodies** bubble
+  beside the planks and grab only someone who stands still next to them. Old
+  Mother Bog's eyes open a little with every shrine; from the third her hand's
+  shadow finds you now and then (it follows, stops, reddens and slams: keep
+  moving), and the fifth raises her out of the pool for the run to the boat,
+  her slams coming one after another while the Lurker cowers. Like the other
+  bonus rounds it plays for five hearts of its own (with a 90 second clock) and
+  ends with three to nine Lucky Dice (hearts left, hunters that never caught
+  you, wisps popped and close calls, and never letting the flame gutter). The boss is **Old
   Mother Bog**, who keeps her distance along the planks: she sends a low wave
   of mud to jump, or spits from her cauldron to leave a muck patch that burns
   for three seconds (it shows where it will land first). Late in each rest her
@@ -1342,8 +1357,11 @@ Ghoul Rush at 65).
   **1UP**, a **Lucky die** (a white die, dropped by a kill as often as a
   1UP and never lying in a room; every run starts with three, up to nine are kept for the whole run, shown
   as a **DICE** pill, and a ninth more is points; when you would lose a life,
-  by any cause but the endless-lives code, one die rolls on the field (the rest
-  are kept). A 4, 5 or 6 brings you back where you fell, or after a pit on the
+  by any cause but the endless-lives code, the game asks **Use a Lucky Die?**
+  (arrows choose Yes or No, Space answers, a click works too; a press in the
+  first moment is ignored so the key you were holding cannot answer). Yes rolls
+  one die on the field (the rest are kept); No keeps every die and loses the
+  life as usual. A 4, 5 or 6 brings you back where you fell, or after a pit on the
   last ground you stood on, with no life lost and the room as it was: a 5 adds
   a heart, a 6 a heart and a Garlic shield, and in an ordinary room every
   monster in view blows apart for its points (in a boss's room nothing does).
@@ -1829,11 +1847,14 @@ never the record, `specs/` in your project is.
 **Or clean up on demand.** *User Preferences → System → Cleanup* → **Find files to
 clean up** lists, with sizes, everything in `~/.plan2code/` that is not
 needed: sessions untouched for 30 days (never the one you are in), anything at
-the top of `~/.plan2code/console/` other than `sessions/`, `looks.json`,
-`workspaces.json`, `subagents.json`, `console-dir` and `update-check.json`, and anything at the top of `~/.plan2code/` other than
-`console/`, `bin/`, `launcher.json`, `install.json` (what you installed, which
-`plan2code update` reads), `models.json`, `handoffs/` (old handoffs go by
-age, above) and `notepads/`. Each notebook whose newest file is 30 days old or
+the top of `~/.plan2code/console/` other than `sessions/`, `runtime/`,
+`looks.json`, `workspaces.json`, `loop-setup.json`, `loop-reports.json`,
+`subagents.json`, `pr-hosts.json`, `console-dir` and `update-check.json`, and
+anything at the top of `~/.plan2code/` other than `console/`, `bin/`,
+`launcher.json`, `install.json` (what you installed, which `plan2code update`
+reads), `models.json`, `handoffs/` (old handoffs go by age, above),
+`notepads/`, `app/` and `app.json` (the desktop app and its settings) and
+`agents.json` (your custom agents). Each notebook whose newest file is 30 days old or
 more is listed as one item, *Notebook for* its folder, and goes whole; no
 automatic sweep ever removes one. It also lists each
 folder in the project's `specs--completed/` whose newest file is more than 30

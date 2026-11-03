@@ -1,10 +1,10 @@
 // Web console tests, Ghoul Rush's boss intro cards: every boss room has an entry (the boss's exact name, an epithet, no em dash, never the hero's name), the card shows when a boss room is entered (after the bonus ride too) and in no other room, not again on a retry, any fresh move key, fire or click moves it on after the lockout (repeats and early presses never do), it never moves on by itself, a pause holds it, and it draws for every boss on a fake canvas (through the boss's own art, with a fallback when the art throws or is missing).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import * as ghoul from "../src/web-console/public/activities/ghoul.js";
-import { BOSS_INTROS, MAX_EPITHET, bossIntroFor } from "../src/web-console/public/activities/ghoul-boss-intros.js";
-import { BOSS_HINT, BOSS_TITLE, beatAt, landAt, shakeAt, bossIntroArt } from "../src/web-console/public/activities/ghoul-bossintro-draw.js";
-import { INTROS } from "../src/web-console/public/activities/ghoul-intros.js";
+import * as ghoul from "../src/web-console/public/activities/ghoul-rush/ghoul.js";
+import { BOSS_INTROS, MAX_EPITHET, bossIntroFor } from "../src/web-console/public/activities/ghoul-rush/story/ghoul-boss-intros.js";
+import { BOSS_HINT, BOSS_TITLE, beatAt, landAt, shakeAt, bossIntroArt } from "../src/web-console/public/activities/ghoul-rush/story/ghoul-bossintro-draw.js";
+import { INTROS } from "../src/web-console/public/activities/ghoul-rush/story/ghoul-intros.js";
 import { toneNames } from "../src/web-console/public/tones.js";
 import { skipBossIntro } from "./ghoul-test-helpers.mjs";
 

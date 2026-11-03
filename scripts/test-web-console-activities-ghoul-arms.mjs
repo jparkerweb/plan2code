@@ -1,14 +1,14 @@
 // Web console tests, Ghoul Rush's secondary weapons: the double tap that uses one (hammering spends one at most, a hold carries on as bolts), the bag and its HUD pill, what each weapon does, what they may do to a boss, where they are placed and how they drop, and that all of it draws and sounds.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import * as ghoul from "../src/web-console/public/activities/ghoul.js";
-import * as arm from "../src/web-console/public/activities/ghoul-arms.js";
-import { rocketArt } from "../src/web-console/public/activities/ghoul-rockets-draw.js";
-import * as pans from "../src/web-console/public/activities/ghoul-pans.js";
-import { ARM_DROP, ARM_DROP_OWN, STAGE_ARMS, armDrop, pickPower } from "../src/web-console/public/activities/ghoul-powers.js";
-import { ARMS_SFX } from "../src/web-console/public/activities/ghoul-sfx-arms.js";
-import * as ghoulSfx from "../src/web-console/public/activities/ghoul-sfx.js";
-import { hudLayout, react } from "../src/web-console/public/activities/ghoul-draw.js";
+import * as ghoul from "../src/web-console/public/activities/ghoul-rush/ghoul.js";
+import * as arm from "../src/web-console/public/activities/ghoul-rush/arms/ghoul-arms.js";
+import { rocketArt } from "../src/web-console/public/activities/ghoul-rush/arms/ghoul-rockets-draw.js";
+import * as pans from "../src/web-console/public/activities/ghoul-rush/arms/ghoul-pans.js";
+import { ARM_DROP, ARM_DROP_OWN, STAGE_ARMS, armDrop, pickPower } from "../src/web-console/public/activities/ghoul-rush/core/ghoul-powers.js";
+import { ARMS_SFX } from "../src/web-console/public/activities/ghoul-rush/arms/ghoul-sfx-arms.js";
+import * as ghoulSfx from "../src/web-console/public/activities/ghoul-rush/sfx/ghoul-sfx.js";
+import { hudLayout, react } from "../src/web-console/public/activities/ghoul-rush/draw/ghoul-draw.js";
 
 const steady = () => 0.5;
 const events = (round, type) => round.events.filter((e) => e.type === type);

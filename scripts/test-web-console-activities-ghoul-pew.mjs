@@ -2,13 +2,13 @@
 // Run with: node --test scripts/test-web-console-activities-ghoul-pew.mjs
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import * as ghoul from "../src/web-console/public/activities/ghoul.js";
-import * as pew from "../src/web-console/public/activities/ghoul-pew.js";
-import { EVENT_VOICE, LOSE_SOUNDS, LOSE_WORDS, LOOKS as PEW_LOOKS, VOICES as PEW_VOICES } from "../src/web-console/public/activities/ghoul-pew-draw.js";
-import * as ghoulSfx from "../src/web-console/public/activities/ghoul-sfx.js";
-import { LOOKS, VOICES, bonusTick, react } from "../src/web-console/public/activities/ghoul-draw.js";
-import { BONUS_FLOOR, diceFor, endBonus, makeBonus } from "../src/web-console/public/activities/ghoul-bonus.js";
-import { BPM, pulse } from "../src/web-console/public/activities/ghoul-pew-world.js";
+import * as ghoul from "../src/web-console/public/activities/ghoul-rush/ghoul.js";
+import * as pew from "../src/web-console/public/activities/ghoul-rush/rides/pew/ghoul-pew.js";
+import { EVENT_VOICE, LOSE_SOUNDS, LOSE_WORDS, LOOKS as PEW_LOOKS, VOICES as PEW_VOICES } from "../src/web-console/public/activities/ghoul-rush/rides/pew/ghoul-pew-draw.js";
+import * as ghoulSfx from "../src/web-console/public/activities/ghoul-rush/sfx/ghoul-sfx.js";
+import { LOOKS, VOICES, bonusTick, react } from "../src/web-console/public/activities/ghoul-rush/draw/ghoul-draw.js";
+import { BONUS_FLOOR, diceFor, endBonus, makeBonus } from "../src/web-console/public/activities/ghoul-rush/core/ghoul-bonus.js";
+import { BPM, pulse } from "../src/web-console/public/activities/ghoul-rush/rides/pew/ghoul-pew-world.js";
 
 const steady = () => 0.5;
 // The pack draws no random number: a run on this fails on the first draw.

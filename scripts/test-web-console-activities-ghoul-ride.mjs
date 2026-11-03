@@ -2,16 +2,16 @@
 // Run with: node --test scripts/test-web-console-activities-ghoul-ride.mjs
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import * as ghoul from "../src/web-console/public/activities/ghoul.js";
-import * as rt from "../src/web-console/public/activities/ghoul-ride.js";
-import { SCENES, END_P } from "../src/web-console/public/activities/ghoul-ride-scenes.js";
-import { CAR_X, DUCK_OFF, DUCK_ON, bindG } from "../src/web-console/public/activities/ghoul-ride-core.js";
-import { EVENT_VOICE, LOSE_SOUNDS, LOSE_WORDS, LOOKS as RIDE_LOOKS, VOICES as RIDE_VOICES } from "../src/web-console/public/activities/ghoul-ride-voices.js";
-import { CARNIVAL_ROOMS } from "../src/web-console/public/activities/ghoul-carnival.js";
-import * as ghoulSfx from "../src/web-console/public/activities/ghoul-sfx.js";
-import { LOOKS, VOICES } from "../src/web-console/public/activities/ghoul-draw.js";
-import { endBonus } from "../src/web-console/public/activities/ghoul-bonus.js";
-import { rideArt } from "../src/web-console/public/activities/ghoul-ride-draw.js";
+import * as ghoul from "../src/web-console/public/activities/ghoul-rush/ghoul.js";
+import * as rt from "../src/web-console/public/activities/ghoul-rush/rides/dark-ride/ghoul-ride.js";
+import { SCENES, END_P } from "../src/web-console/public/activities/ghoul-rush/rides/dark-ride/ghoul-ride-scenes.js";
+import { CAR_X, DUCK_OFF, DUCK_ON, bindG } from "../src/web-console/public/activities/ghoul-rush/rides/dark-ride/ghoul-ride-core.js";
+import { EVENT_VOICE, LOSE_SOUNDS, LOSE_WORDS, LOOKS as RIDE_LOOKS, VOICES as RIDE_VOICES } from "../src/web-console/public/activities/ghoul-rush/rides/dark-ride/ghoul-ride-voices.js";
+import { CARNIVAL_ROOMS } from "../src/web-console/public/activities/ghoul-rush/stages/carnival/ghoul-carnival.js";
+import * as ghoulSfx from "../src/web-console/public/activities/ghoul-rush/sfx/ghoul-sfx.js";
+import { LOOKS, VOICES } from "../src/web-console/public/activities/ghoul-rush/draw/ghoul-draw.js";
+import { endBonus } from "../src/web-console/public/activities/ghoul-rush/core/ghoul-bonus.js";
+import { rideArt } from "../src/web-console/public/activities/ghoul-rush/rides/dark-ride/ghoul-ride-draw.js";
 
 const steady = () => 0.5;
 const events = (round, type) => round.events.filter((e) => e.type === type);
@@ -249,7 +249,7 @@ test("Ghoul Rush ride: under the endless-lives code a hit costs nothing", () => 
 
 /* ---------------------------------------------------------------- dice */
 
-test("Ghoul Rush ride: the dice rule is 5 to 9 by performance, a perfect ride is 9, and the bonus adds them under the cap of 9", () => {
+test("Ghoul Rush ride: the dice rule is 5 to 9 by performance, a perfect ride is 9, and the bonus adds them with no cap on the dice in hand", () => {
   const base = { shots: 100, hits: 100, kills: 50, missed: 0, hp: 5, ducksOK: 4, best: 20, innoHits: 0 };
   assert.equal(rt.gradeOf(base).dice, 9);
   assert.equal(rt.gradeOf(base).grade, "S");
@@ -264,15 +264,15 @@ test("Ghoul Rush ride: the dice rule is 5 to 9 by performance, a perfect ride is
   assert.ok(rt.gradeOf({ ...base, hp: 1 }).dice <= rt.gradeOf({ ...base, hp: 5 }).dice);
   // A guest shot costs.
   assert.ok(rt.gradeOf({ ...base, innoHits: 10 }).perf < rt.gradeOf(base).perf);
-  // The bonus uses the ride's own number and caps the dice in hand at 9.
+  // The bonus uses the ride's own number and adds them all to the dice in hand.
   const round = playing();
   round.dice = 6;
   round.bonusRound.perf.dice = 8;
   round.bonusRound.perf.cardMs = 7000;
   endBonus(round, true, { award: (r, p) => (r.score += p), ROOM_POINTS: 100 });
   assert.equal(round.bonusRound.dice, 8);
-  assert.equal(round.bonusRound.gained, 3, "6 + 8 caps at 9");
-  assert.equal(round.dice, 9);
+  assert.equal(round.bonusRound.gained, 8, "6 + 8 is 14");
+  assert.equal(round.dice, 14);
   assert.equal(round.bonusRound.cardMs, 7000);
 });
 

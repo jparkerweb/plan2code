@@ -12,7 +12,7 @@ import rapidsSfx from "./activities/rapids-sfx.js";
 import fuseSfx from "./activities/fuse-sfx.js";
 import hopSfx from "./activities/hop-sfx.js";
 import bounceSfx from "./activities/bounce-sfx.js";
-import ghoulSfx from "./activities/ghoul-sfx.js";
+import ghoulSfx from "./activities/ghoul-rush/sfx/ghoul-sfx.js";
 
 /* ------------------------------------------------------------- tones
 

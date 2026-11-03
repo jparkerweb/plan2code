@@ -1,25 +1,25 @@
 // Web console tests, Ghoul Rush's Frozen Lake stage: its rooms (Ice Fishing Huts, Snowbound Lodge, The Black Ice, the Widow's Web), slippery ice and thin ice that cracks and breaks, under-ice hands, snow shades you only see by their footprints, frozen ghouls that slide and shatter, ice wraiths whose dive leaves you frozen, Hot Cocoa and the Road Flare (found only here), and the Frost Widow, whose veil melts only to a burning barrel or a flare.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import * as ghoul from "../src/web-console/public/activities/ghoul.js";
-import * as fz from "../src/web-console/public/activities/ghoul-frozen.js";
-import * as fl from "../src/web-console/public/activities/ghoul-flare.js";
-import * as arm from "../src/web-console/public/activities/ghoul-arms.js";
-import { PILL_WORDS, STAGE_ARMS, armDrop, pickPower } from "../src/web-console/public/activities/ghoul-powers.js";
-import { BONES } from "../src/web-console/public/activities/ghoul-bones.js";
-import { GRAVEYARD } from "../src/web-console/public/activities/ghoul-graveyard.js";
-import { GROUNDS } from "../src/web-console/public/activities/ghoul-grounds.js";
-import { CHAPEL } from "../src/web-console/public/activities/ghoul-chapel.js";
-import { SANATORIUM } from "../src/web-console/public/activities/ghoul-sanatorium.js";
-import { VILLAGE } from "../src/web-console/public/activities/ghoul-village.js";
-import { MINE } from "../src/web-console/public/activities/ghoul-mine.js";
-import { CART } from "../src/web-console/public/activities/ghoul-cart.js";
-import { CARNIVAL } from "../src/web-console/public/activities/ghoul-carnival.js";
-import { LOOKS, VOICES, react } from "../src/web-console/public/activities/ghoul-draw.js";
-import { EVENT_VOICE, LOSE_SOUNDS, LOSE_WORDS, SILENT } from "../src/web-console/public/activities/ghoul-frozen-draw.js";
-import { FROZEN_SFX } from "../src/web-console/public/activities/ghoul-sfx-frozen.js";
-import { SLED_SFX } from "../src/web-console/public/activities/ghoul-sfx-sled.js";
-import * as ghoulSfx from "../src/web-console/public/activities/ghoul-sfx.js";
+import * as ghoul from "../src/web-console/public/activities/ghoul-rush/ghoul.js";
+import * as fz from "../src/web-console/public/activities/ghoul-rush/stages/frozen/ghoul-frozen.js";
+import * as fl from "../src/web-console/public/activities/ghoul-rush/arms/ghoul-flare.js";
+import * as arm from "../src/web-console/public/activities/ghoul-rush/arms/ghoul-arms.js";
+import { PILL_WORDS, STAGE_ARMS, armDrop, pickPower } from "../src/web-console/public/activities/ghoul-rush/core/ghoul-powers.js";
+import { BONES } from "../src/web-console/public/activities/ghoul-rush/stages/wing/ghoul-bones.js";
+import { GRAVEYARD } from "../src/web-console/public/activities/ghoul-rush/stages/graveyard/ghoul-graveyard.js";
+import { GROUNDS } from "../src/web-console/public/activities/ghoul-rush/stages/grounds/ghoul-grounds.js";
+import { CHAPEL } from "../src/web-console/public/activities/ghoul-rush/stages/chapel/ghoul-chapel.js";
+import { SANATORIUM } from "../src/web-console/public/activities/ghoul-rush/stages/sanatorium/ghoul-sanatorium.js";
+import { VILLAGE } from "../src/web-console/public/activities/ghoul-rush/stages/village/ghoul-village.js";
+import { MINE } from "../src/web-console/public/activities/ghoul-rush/stages/mine/ghoul-mine.js";
+import { CART } from "../src/web-console/public/activities/ghoul-rush/rides/cart/ghoul-cart.js";
+import { CARNIVAL } from "../src/web-console/public/activities/ghoul-rush/stages/carnival/ghoul-carnival.js";
+import { LOOKS, VOICES, react } from "../src/web-console/public/activities/ghoul-rush/draw/ghoul-draw.js";
+import { EVENT_VOICE, LOSE_SOUNDS, LOSE_WORDS, SILENT } from "../src/web-console/public/activities/ghoul-rush/stages/frozen/ghoul-frozen-draw.js";
+import { FROZEN_SFX } from "../src/web-console/public/activities/ghoul-rush/stages/frozen/ghoul-sfx-frozen.js";
+import { SLED_SFX } from "../src/web-console/public/activities/ghoul-rush/rides/sled/ghoul-sfx-sled.js";
+import * as ghoulSfx from "../src/web-console/public/activities/ghoul-rush/sfx/ghoul-sfx.js";
 
 const steady = () => 0.5;
 // The pack draws no random number: a run on this fails on the first draw.

@@ -1,8 +1,9 @@
 # Web Console Contract: the Why
+> Part of [AGENTS.md](../AGENTS.md): project guidance for AI coding agents.
 
 Maintainer notes for the agent-facing console docs in `src/web-console/`. Installed skills never ship or load this file (nothing under `.agents-docs/` is in `install.js` `additionalReferences`), and the shipped files carry only what an agent must do. Put an explanation here, not there. If a shipped file starts to explain, move the sentence into this file and keep the instruction.
 
-The shape: a short card (`console.md`) read once per session, topic files the console names in its own `read` output at the moment each is due, and refusals for the silent slips the console can see. Size budgets in `npm test` stop the docs growing back (Phase 7 of `specs/console-wire-format`).
+The shape: a short card (`console.md`) read once per session, topic files the console names in its own `read` output at the moment each is due, and refusals for the silent slips the console can see. Size budgets in `npm test` stop the docs growing back (Phase 7 of `specs--completed/console-wire-format`).
 
 ## Why pointers and refusals instead of repeated rules
 
@@ -69,6 +70,10 @@ A session handed over by the dashboard is resumed, never re-opened, because a fr
 
 The meter is advice, not a gate: it tells the person when a fresh session would be sharper. Per-unit work is reported by the agent with `run`; the same `id` is ignored in the same run so a repeat never double counts.
 
+## console-attachments.md
+
+Attachments live in the session folder and are swept with it, so a spec file that cites one keeps it first through `keep`: the file is copied under `specs/<idea>/` and the link the console returns is the durable one. Uncited attachments stay with the session on purpose: a picture sent to answer a question was context for it, not a deliverable. A refused `keep` links nothing, because a spec must never point at a path the sweep removes.
+
 ## Wire format (outputs)
 
-Outputs carry what the agent acts on and nothing else. Anything kept in the session files (`type`, `at`, `rev`, answer actions, full chat entries, structured workspace and subagents objects) is dropped from stdout. The desktop app reads `sid`, `url`, `pid`, `port` and `embed` from `open` in every context, so those stay. See `specs/console-wire-format/overview.md` (API Design) for the table.
+Outputs carry what the agent acts on and nothing else. Anything kept in the session files (`type`, `at`, `rev`, answer actions, full chat entries, structured workspace and subagents objects) is dropped from stdout. The desktop app reads `sid`, `url`, `pid`, `port` and `embed` from `open` in every context, so those stay. See `specs--completed/console-wire-format/overview.md` (API Design) for the table.

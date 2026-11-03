@@ -1,14 +1,14 @@
 // Web console tests, Ghoul Rush's Grounds stage: its four rooms, topiary beasts that creep only when your back is turned, rootlings under the lawn, lantern moths, mulch crawlers, the Hedge shears (found only here), and the Groundskeeper, whose lantern takes triple damage, whose scythe is jumped, whose fire burns the floor and who mounts a mower at half his hp.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import * as ghoul from "../src/web-console/public/activities/ghoul.js";
-import * as gr from "../src/web-console/public/activities/ghoul-grounds.js";
-import { LOSE_SOUNDS, LOSE_WORDS } from "../src/web-console/public/activities/ghoul-grounds-draw.js";
-import { PILL_WORDS } from "../src/web-console/public/activities/ghoul-powers.js";
-import { pickPower } from "../src/web-console/public/activities/ghoul-powers.js";
-import * as sfxGrounds from "../src/web-console/public/activities/ghoul-sfx-grounds.js";
-import * as ghoulSfx from "../src/web-console/public/activities/ghoul-sfx.js";
-import { VOICES, react } from "../src/web-console/public/activities/ghoul-draw.js";
+import * as ghoul from "../src/web-console/public/activities/ghoul-rush/ghoul.js";
+import * as gr from "../src/web-console/public/activities/ghoul-rush/stages/grounds/ghoul-grounds.js";
+import { LOSE_SOUNDS, LOSE_WORDS } from "../src/web-console/public/activities/ghoul-rush/stages/grounds/ghoul-grounds-draw.js";
+import { PILL_WORDS } from "../src/web-console/public/activities/ghoul-rush/core/ghoul-powers.js";
+import { pickPower } from "../src/web-console/public/activities/ghoul-rush/core/ghoul-powers.js";
+import * as sfxGrounds from "../src/web-console/public/activities/ghoul-rush/stages/grounds/ghoul-sfx-grounds.js";
+import * as ghoulSfx from "../src/web-console/public/activities/ghoul-rush/sfx/ghoul-sfx.js";
+import { VOICES, react } from "../src/web-console/public/activities/ghoul-rush/draw/ghoul-draw.js";
 
 const steady = () => 0.5;
 const events = (round, type) => round.events.filter((e) => e.type === type);

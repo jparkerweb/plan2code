@@ -1,12 +1,12 @@
 // Web console tests, Ghoul Rush's Hollow End Village stage: its four rooms, the moonrise (a moon that climbs over each room and, at full, turns the villagers into wolf-men and makes the moonhounds grow), torch mob villagers that lob fire, hanged men that drop on their ropes, shutter ghouls that can be hit only while out, moonhounds, Wolfsbane (found only here), and the Beast of Hollow End, which clings to the wall for double damage, pounces under a shadow, swipes, howls for hounds and rages at half its hp.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import * as ghoul from "../src/web-console/public/activities/ghoul.js";
-import * as vl from "../src/web-console/public/activities/ghoul-village.js";
-import { EVENT_VOICE, LOSE_SOUNDS, LOSE_WORDS } from "../src/web-console/public/activities/ghoul-village-draw.js";
-import { PILL_WORDS, pickPower } from "../src/web-console/public/activities/ghoul-powers.js";
-import * as ghoulSfx from "../src/web-console/public/activities/ghoul-sfx.js";
-import { LOOKS, VOICES, react } from "../src/web-console/public/activities/ghoul-draw.js";
+import * as ghoul from "../src/web-console/public/activities/ghoul-rush/ghoul.js";
+import * as vl from "../src/web-console/public/activities/ghoul-rush/stages/village/ghoul-village.js";
+import { EVENT_VOICE, LOSE_SOUNDS, LOSE_WORDS } from "../src/web-console/public/activities/ghoul-rush/stages/village/ghoul-village-draw.js";
+import { PILL_WORDS, pickPower } from "../src/web-console/public/activities/ghoul-rush/core/ghoul-powers.js";
+import * as ghoulSfx from "../src/web-console/public/activities/ghoul-rush/sfx/ghoul-sfx.js";
+import { LOOKS, VOICES, react } from "../src/web-console/public/activities/ghoul-rush/draw/ghoul-draw.js";
 
 const steady = () => 0.5;
 // The pack draws no random number: a run on this fails on the first draw.

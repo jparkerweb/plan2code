@@ -5,19 +5,20 @@
 // Pool's boss spec. The monsters' rules, the fight and the ride land in
 // later phases.
 import { test } from "node:test";
+import { readFileSync } from "node:fs";
 import assert from "node:assert/strict";
-import * as ghoul from "../src/web-console/public/activities/ghoul.js";
-import * as bog from "../src/web-console/public/activities/ghoul-bog.js";
-import * as ghoulSfx from "../src/web-console/public/activities/ghoul-sfx.js";
-import { LOSE_SOUNDS, LOSE_WORDS, VOICES } from "../src/web-console/public/activities/ghoul-bog-draw.js";
-import { BOG_SFX } from "../src/web-console/public/activities/ghoul-sfx-bog.js";
-import { BOSS_INTROS, bossIntroFor } from "../src/web-console/public/activities/ghoul-boss-intros.js";
-import { INTROS, introFor } from "../src/web-console/public/activities/ghoul-intros.js";
-import { react } from "../src/web-console/public/activities/ghoul-draw.js";
+import * as ghoul from "../src/web-console/public/activities/ghoul-rush/ghoul.js";
+import * as bog from "../src/web-console/public/activities/ghoul-rush/stages/bog/ghoul-bog.js";
+import * as ghoulSfx from "../src/web-console/public/activities/ghoul-rush/sfx/ghoul-sfx.js";
+import { LOSE_SOUNDS, LOSE_WORDS, VOICES } from "../src/web-console/public/activities/ghoul-rush/stages/bog/ghoul-bog-draw.js";
+import { BOG_SFX } from "../src/web-console/public/activities/ghoul-rush/stages/bog/ghoul-sfx-bog.js";
+import { BOSS_INTROS, bossIntroFor } from "../src/web-console/public/activities/ghoul-rush/story/ghoul-boss-intros.js";
+import { INTROS, introFor } from "../src/web-console/public/activities/ghoul-rush/story/ghoul-intros.js";
+import { react } from "../src/web-console/public/activities/ghoul-rush/draw/ghoul-draw.js";
 
 const steady = () => 0.5;
 const events = (round, type) => round.events.filter((e) => e.type === type);
-const ROOM_IDS = ["boardwalk", "hollow", "stilts", "bogboat", "drowning"];
+const ROOM_IDS = ["boardwalk", "hollow", "stilts", "lantern", "drowning"];
 
 function through(round) {
   round.phase = "clear";
@@ -85,8 +86,8 @@ test("Ghoul Rush's Gallows Bog is a stage of five rooms ending on the Drowning P
 });
 
 test("Ghoul Rush's bog rooms carry the usual pieces: a key, sky treasures, candy, items and a horde in each walked room, mud spans frozen, the ride its own course, the arena the hag's", () => {
-  const [boardwalk, hollow, stilts, bogboat, drowning] = ROOM_IDS.map((id) => ghoul.roomById(id));
-  assert.deepEqual([boardwalk.title, hollow.title, stilts.title, bogboat.title, drowning.title], ["Sunken Boardwalk", "Cypress Hollow", "Stilt House", "The Bog Runner", "The Drowning Pool"]);
+  const [boardwalk, hollow, stilts, lantern, drowning] = ROOM_IDS.map((id) => ghoul.roomById(id));
+  assert.deepEqual([boardwalk.title, hollow.title, stilts.title, lantern.title, drowning.title], ["Sunken Boardwalk", "Cypress Hollow", "Stilt House", "The Drowned Lantern", "The Drowning Pool"]);
   assert.deepEqual([boardwalk.sub, hollow.sub, stilts.sub, drowning.sub], ["Mind the gaps. Something lives in them", "The moss is breathing", "She has been expecting you", "Keep to the planks, she owns the water"]);
   for (const room of [boardwalk, hollow, stilts]) {
     assert.ok(room.key, `${room.id}: a key`);
@@ -104,17 +105,18 @@ test("Ghoul Rush's bog rooms carry the usual pieces: a key, sky treasures, candy
   assert.ok(boardwalk.shelves.some((s) => s[3] === "crumble") && hollow.shelves.some((s) => s[3] === "crumble") && stilts.shelves.some((s) => s[3] === "crumble"), "rotting boards that give way");
   // The Bog Runner is a stub: a bonus ride with empty obstacle arrays that
   // Phase 4's deterministic generator fills in.
-  assert.equal(bogboat.bonus, true);
-  assert.equal(bogboat.dark, false);
-  assert.equal(bogboat.key, null);
-  assert.equal(bogboat.boss, null);
-  assert.equal(bogboat.horde.length, 0);
-  assert.equal(bogboat.ride.runner, "bogboat");
-  assert.equal(bogboat.ride.how, "LEFT or RIGHT at a bank: switch lane. UP jump, DOWN duck, SPACE shoot");
-  assert.ok(bogboat.ride.time >= 70000 && bogboat.ride.time <= 120000);
-  assert.ok(bogboat.ride.finish > 0 && bogboat.ride.finish < bogboat.length);
-  assert.ok(bogboat.ride.checks.length >= 1 && bogboat.ride.checks.every((x) => x > 0 && x < bogboat.ride.finish), "checkpoints inside the run");
-  assert.ok(Object.isFrozen(bogboat.ride), "the ride is frozen");
+  assert.equal(lantern.bonus, true);
+  assert.equal(lantern.dark, false);
+  assert.equal(lantern.key, null);
+  assert.equal(lantern.boss, null);
+  assert.equal(lantern.horde.length, 0);
+  assert.equal(lantern.ride.runner, "lantern");
+  assert.equal(lantern.ride.how, "ARROWS walk, SPACE flares. Light 5 shrines, then run to the boat");
+  assert.ok(lantern.ride.time >= 70000 && lantern.ride.time <= 120000);
+  assert.ok(lantern.ride.shrines.length === 5 && lantern.ride.hummocks.length > 5, "an island with five shrines");
+  assert.ok(Object.isFrozen(lantern.ride), "the room is frozen");
+  // The Bog Runner (the fan-boat ride this room replaced) is still defined but no stage lists it.
+  assert.equal(ghoul.roomById("bogboat"), null, "the retired boat is gone");
   assert.equal(drowning.boss, "motherbog");
   assert.equal(drowning.key, null);
   assert.equal(drowning.horde.length, 0);
@@ -585,7 +587,7 @@ test("Old Mother Bog's cauldron spit lands a muck patch where you stand after a 
   standAt(round, 150);
   round.you.safeMs = 1e9;
   b.act = "idle";
-  b.attacks = 1;
+  b.plan = "spit";
   hurry(b);
   run(round, 8);
   assert.equal(b.act, "throwWind");
@@ -627,7 +629,7 @@ test("Old Mother Bog goes meaner at half her hp: waits shrink to MOTHER_QUICK of
   const b = round.boss;
   standAt(round, 150);
   round.you.safeMs = 1e9;
-  Object.assign(b, { raged: true, sank: true, act: "idle", attacks: 1, y: 6, x: 176 });
+  Object.assign(b, { raged: true, sank: true, act: "idle", plan: "spit", y: 6, x: 176 });
   b.wait = 0;
   round.you.vx = 20;
   run(round, 8);
@@ -698,9 +700,116 @@ test("Old Mother Bog sinks at half her hp, bubbles where she will rise, rises ne
   assert.ok(h.wait <= bog.MOTHER_REST_MS * bog.MOTHER_QUICK + 1, "and her next wait is the quick one");
 });
 
-test("Old Mother Bog: her guard and weak spot are what the pack says, her touch is the motherbog cause, and her fall clears the field", () => {
+test("Old Mother Bog is not a pattern: the wave opens, then a weighted pick by phase that never makes one move three times running, keeps the slow moves on a cooldown and summons only under the cap", () => {
+  // A long run of picks, as she would make them.
+  const rolls = (b, n, random, round = null) => Array.from({ length: n }, () => bog.pickAttack(b, random, round));
+  const three = (list) => list.some((m, i) => i > 1 && m === list[i - 1] && m === list[i - 2]);
+  const lcg = (seed) => () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
+  assert.equal(bog.pickAttack({ hp: 100, max: 100 }, () => 0.99), "wave", "the first move is always the wave");
+  const P1 = ["dive", "hands", "shell", "spit", "surge", "wave"];
+  const MORE = [...P1, "brood", "double", "volley"];
+  const P2 = [...MORE, "drowned", "pull", "stomp", "tide"];
+  const P3 = [...P2, "wisps"];
+  const phases = [
+    [{ hp: 100, max: 100 }, P1, "full health: six moves"],
+    [{ hp: 70, max: 100 }, MORE, "under three quarters: the double wave, the volley and the brood join"],
+    [{ hp: 45, max: 100, raged: true, sank: true }, P2, "under half: the stomp, the tide, the pull and the drowned join"],
+    [{ hp: 20, max: 100, raged: true, sank: true, fury: true, sank2: true }, P3, "under a quarter: the wisp lantern joins"],
+  ];
+  for (const [b, want, what] of phases) {
+    const seen = rolls(b, 600, lcg(17));
+    assert.deepEqual([...new Set(seen)].sort(), [...want].sort(), what);
+    assert.ok(!three(seen), `never three in a row (${what})`);
+    // A slow move sits out its cooldown.
+    for (const [move, n] of Object.entries(bog.COOLDOWN)) {
+      const at = seen.flatMap((m, i) => (m === move ? [i] : []));
+      assert.ok(at.every((i, j) => j === 0 || i - at[j - 1] > n), `${move} waits ${n} picks (${what})`);
+    }
+  }
+  assert.equal(bog.phaseOf({}), 0);
+  assert.equal(bog.phaseOf({ raged: true }), 1);
+  assert.equal(bog.phaseOf({ raged: true, fury: true }), 2);
+  // At the cap a summon is never picked.
+  const crowd = { monsters: [] };
+  for (let i = 0; i < bog.BROOD_CAP; i++) crowd.monsters.push({ kind: "leech", hag: true });
+  for (let i = 0; i < bog.BODIES_CAP; i++) crowd.monsters.push({ kind: "bogbody", hag: true });
+  for (let i = 0; i < bog.WISPS_CAP; i++) crowd.monsters.push({ kind: "wisp", hag: true });
+  const capped = rolls({ hp: 20, max: 100, raged: true, fury: true, picks: 1 }, 400, lcg(5), crowd);
+  for (const move of ["brood", "drowned", "wisps"]) assert.equal(capped.includes(move), false, `no ${move} at the cap`);
+  const forced = { hp: 100, max: 100, picks: 3, plan: "volley" };
+  assert.equal(bog.pickAttack(forced, () => 0), "volley", "a plan is taken");
+  assert.equal(forced.plan, null, "once");
+});
+
+test("Old Mother Bog's double wave sends a second wave DOUBLE_GAP_MS behind the first, and her volley lands three staggered patches", () => {
+  const round = motherFight();
+  const b = round.boss;
+  standAt(round, 150);
+  round.you.safeMs = 1e9;
+  Object.assign(b, { act: "idle", plan: "double", attacks: 2 });
+  hurry(b);
+  run(round, 8);
+  assert.equal(b.act, "wind");
+  run(round, bog.MOTHER_WIND_MS + 20);
+  assert.equal(events(round, "mudWave").length, 1, "one wave to start");
+  run(round, bog.DOUBLE_GAP_MS + 30);
+  const waves = events(round, "mudWave");
+  assert.equal(waves.length, 2, "and a second behind it");
+  assert.equal(waves[1].echo, true);
+  const volley = motherFight();
+  standAt(volley, 150);
+  volley.you.safeMs = 1e9;
+  Object.assign(volley.boss, { act: "idle", plan: "volley", attacks: 2 });
+  hurry(volley.boss);
+  run(volley, 8);
+  assert.equal(volley.boss.act, "throwWind");
+  run(volley, bog.SPIT_WIND_MS + 20);
+  assert.ok(volley.hazards.length >= 2 && volley.hazards.length <= 3, `a spread of patches (${volley.hazards.length})`);
+  const warns = volley.hazards.map((h) => h.warn).sort((a, c) => a - c);
+  assert.ok(warns.at(-1) - warns[0] >= bog.VOLLEY_STAGGER_MS - 30, "landing a beat apart");
+});
+
+test("Old Mother Bog never stands half out over the water (only a dive, a charge or a leap takes her off the boards), and goes under a second time at a quarter of her hp and comes back furious", () => {
+  const round = motherFight();
+  const b = round.boss;
+  const half = (x) => [-0.45, 0, 0.45].every((f) => ghoul.groundAt(round.spec, x + f * b.w) === b.y);
+  // Put down over the gap between the planks, she walks onto one that holds her.
+  standAt(round, 160);
+  round.you.safeMs = 1e9;
+  Object.assign(b, { act: "idle", x: 131, wait: 1e9 });
+  until(round, () => half(b.x), 4000);
+  assert.ok(half(b.x), `she settled on the planks (x=${b.x})`);
+  // However she wanders in a long fight, her body is on the boards.
+  Object.assign(b, { act: "idle", wait: 0, plan: "spit" });
+  for (let i = 0; i < 400; i++) {
+    standAt(round, 112 + ((i * 7) % 80));
+    round.you.safeMs = 1e9;
+    if (b.act === "idle") b.wait = Math.min(b.wait, 400);
+    run(round, 50);
+    if (b.hidden || bog.UNSTOOD.includes(b.act)) continue;
+    assert.ok(half(b.x), `on the planks at step ${i} (x=${b.x}, act ${b.act})`);
+  }
+  // A second dive at a quarter.
+  const fight = motherFight();
+  const h = fight.boss;
+  standAt(fight, 150);
+  fight.you.safeMs = 1e9;
+  Object.assign(h, { raged: true, sank: true, act: "idle", wait: 1e9, hp: h.max * bog.MOTHER_FURY_AT - 1 });
+  run(fight, 8);
+  assert.equal(h.sank2, true);
+  assert.equal(h.fury, true);
+  assert.equal(h.act, "sink");
+  assert.equal(h.hidden, true);
+  until(fight, () => h.act === "rest", 4000);
+  assert.ok(h.wait <= bog.MOTHER_REST_MS * bog.MOTHER_FURY + 1, "her waits are the furious ones");
+  assert.equal(events(fight, "motherSink").length, 1);
+});
+
+test("Old Mother Bog: her guard and weak spot are what the pack says, her touch is the motherbog cause, and her fall clears the field of every hazard and add she made", () => {
   assert.equal(bog.BOG.guard.motherbog({ hidden: true }), true);
   assert.equal(bog.BOG.guard.motherbog({ hidden: false }), false);
+  assert.equal(bog.BOG.guard.motherbog({ hidden: false, act: "shell" }), true, "shelled");
+  assert.equal(bog.BOG.guard.motherbog({ hidden: false, act: "stagger" }), false, "reeling, she is open");
   assert.equal(bog.BOG.weak.motherbog({ lit: true }), 3);
   assert.equal(bog.BOG.weak.motherbog({ lit: false }), 1);
   assert.equal(bog.BOG.cause.motherbog(), "motherbog");
@@ -714,8 +823,14 @@ test("Old Mother Bog: her guard and weak spot are what the pack says, her touch 
   const b = round.boss;
   b.hp = 1;
   b.sank = true;
+  b.sank2 = true;
   round.hazards.push({ kind: "muck", x: 150, y: 6, w: bog.MUCK_W, h: bog.MUCK_H, warn: 0, live: 2000, cause: "muck" });
   round.waves.push({ x: 140, y: 6, dir: -1, life: 6000, kind: "mudwave", cause: "mudwave" });
+  round.hazards.push({ kind: "boghand", x: 160, y: 6, w: bog.HAND_W, h: bog.HAND_H, warn: 0, live: 400, cause: "boghand" });
+  round.hazards.push({ kind: "tide", x: 152, y: 5, w: 104, h: 1.6, x0: 104, x1: 200, warn: 0, live: 2000, cause: "tide" });
+  put(round, "leech", 150, { hag: true });
+  put(round, "bogbody", 160, { hag: true });
+  put(round, "wisp", 150, { hag: true, y: 14 });
   Object.assign(b, { act: "rest", wait: bog.MOTHER_OPEN_MS - 100 });
   standAt(round, 120);
   round.you.safeMs = 1e9;
@@ -723,8 +838,594 @@ test("Old Mother Bog: her guard and weak spot are what the pack says, her touch 
   ghoul.advance(round, 4, steady);
   assert.equal(b.state, "down");
   assert.equal(round.hasKey, true);
-  assert.equal(round.hazards.length, 0);
+  assert.equal(round.hazards.length, 0, "the muck, the hands and the tide are gone");
   assert.equal(round.waves.length, 0);
+  assert.equal(round.monsters.length, 0, "and so are her adds");
+});
+
+// Her next move forced, from idle, as if her wait had run out; `over` sets
+// her phase or her place first.
+function force(round, move, over = {}) {
+  const b = round.boss;
+  Object.assign(b, { act: "idle", plan: move, picks: Math.max(3, b.picks || 0) }, over);
+  b.wait = 0;
+  run(round, 8);
+}
+const RAGED = { raged: true, sank: true };
+const FURY = { raged: true, sank: true, fury: true, sank2: true };
+// A bolt from the left into her middle, one slice later.
+function shoot(round) {
+  const b = round.boss;
+  round.shots.push({ x: b.x - b.w / 2 - 0.2, y: b.y + b.h * 0.35, vx: 80, vy: 0, gone: 0 });
+  ghoul.advance(round, 4, steady);
+}
+// Runs `ms`, jumping whenever `near()` says the threat is about to arrive.
+function hop(round, ms, near) {
+  for (let t = 0; t < ms; t += 4) {
+    const you = round.you;
+    if (you.state === "run" && near(round) && round.input.jump <= 0) round.input.jump = ghoul.JUMP_BUFFER_MS;
+    ghoul.advance(round, 4, steady);
+  }
+}
+// A mud wave rolling at you, within `d`.
+const waveAt = (round, d = 7.5) => round.waves.some((w) => (round.you.x - w.x) * w.dir > 0 && (round.you.x - w.x) * w.dir < d);
+const losses = (round) => events(round, "lose");
+
+test("Old Mother Bog's bog hands: her arms go into the water, ripples warn where you stand and a step either side, a hand bursts up from each (a heart, grabbed), and a step between them costs nothing", () => {
+  const round = motherFight();
+  const b = round.boss;
+  standAt(round, 150);
+  const lives = round.lives;
+  force(round, "hands");
+  assert.equal(b.act, "hands", "her arms in the water");
+  const wind = events(round, "handsWind")[0];
+  assert.ok(wind, "a wind-up to read");
+  const hands = round.hazards.filter((h) => h.kind === "boghand");
+  assert.equal(hands.length, bog.HANDS_N[0], "two at full health");
+  assert.deepEqual(wind.xs, hands.map((h) => h.x), "the event names every ripple");
+  assert.ok(hands.some((h) => Math.abs(h.x - 150) <= 2), "one where you stand");
+  assert.ok(hands.every((h) => h.live === 0 && h.warn >= bog.HANDS_WIND_MS + bog.HAND_WARN_MS - 10 && h.cause === "boghand"), "each warns first");
+  assert.ok(hands.every((h) => Number.isFinite(ghoul.groundAt(round.spec, h.x))), "out of the planks");
+  run(round, bog.HANDS_WIND_MS + bog.HAND_WARN_MS - 40);
+  assert.equal(losses(round).length, 0, "a ripple does not hurt");
+  run(round, 80);
+  assert.ok(events(round, "handsUp").length >= 1, "up it comes");
+  assert.equal(losses(round)[0]?.cause, "boghand", "standing in it, you are grabbed");
+  assert.equal(round.lives, lives - 1, "a heart");
+  // A step between the ripples, and every hand goes by.
+  const dodge = motherFight();
+  standAt(dodge, 150);
+  force(dodge, "hands");
+  const spots = dodge.hazards.map((h) => h.x).sort((a, c) => a - c);
+  standAt(dodge, spots[0] - 4.5);
+  run(dodge, bog.HANDS_WIND_MS + bog.HAND_WARN_MS + bog.HAND_STAGGER_MS * 3 + bog.HAND_UP_MS + 50);
+  assert.equal(losses(dodge).length, 0, "a clean dodge costs nothing");
+  assert.equal(dodge.hazards.filter((h) => h.kind === "boghand").length, 0, "the hands are gone again");
+  assert.equal(dodge.boss.act, "idle");
+  // More of them as she weakens.
+  for (const [phase, over] of [[1, RAGED], [2, FURY]]) {
+    const more = motherFight();
+    standAt(more, 145);
+    force(more, "hands", over);
+    assert.equal(more.hazards.filter((h) => h.kind === "boghand").length, bog.HANDS_N[phase], `phase ${phase}`);
+  }
+});
+
+test("Old Mother Bog's surge: a crouch behind a bow wave, then a waist-deep charge along and past you; standing costs a heart, a jump over her or a shelf costs nothing, and she stops on the planks", () => {
+  const round = motherFight();
+  const b = round.boss;
+  standAt(round, 150);
+  const lives = round.lives;
+  force(round, "surge");
+  const from = b.x;
+  assert.equal(b.act, "surgeWind");
+  assert.equal(events(round, "surgeWind").length, 1, "a wind-up to read");
+  run(round, bog.SURGE_WIND_MS - 40);
+  assert.equal(b.x, from, "she holds still while she crouches");
+  run(round, 60);
+  assert.equal(b.act, "surge");
+  assert.equal(events(round, "motherSurge").length, 1);
+  assert.equal(b.y, b.floor - bog.SURGE_SINK, "waist deep");
+  assert.ok((150 - b.surgeTo) >= 6, `past you (${b.surgeTo})`);
+  until(round, () => losses(round).length > 0, 2000);
+  assert.equal(losses(round)[0]?.cause, "motherbog", "run down");
+  assert.equal(round.lives, lives - 1);
+  // A jump as she comes clears her.
+  const jumper = motherFight();
+  standAt(jumper, 150);
+  force(jumper, "surge");
+  run(jumper, bog.SURGE_WIND_MS + 20);
+  const jb = jumper.boss;
+  hop(jumper, 1500, () => jb.act === "surge" && jb.x - jb.w / 2 - jumper.you.x - ghoul.HIT_W / 2 < 7.5);
+  assert.equal(losses(jumper).length, 0, "jumped clean");
+  assert.equal(jb.act === "rest" || jb.act === "idle", true, "the charge is over");
+  assert.ok([-0.45, 0, 0.45].every((f) => ghoul.groundAt(jumper.spec, jb.x + f * jb.w) === jb.y), "she stopped on the planks");
+  assert.ok(jb.x < 150, "on your other side: she moved");
+  // Up on a shelf she charges underneath.
+  const shelf = motherFight();
+  standAt(shelf, 118, 0);
+  force(shelf, "surge");
+  run(shelf, bog.SURGE_WIND_MS + 1500);
+  assert.equal(losses(shelf).length, 0, "the shelf is out of her reach");
+});
+
+test("Old Mother Bog's mud shell: bolts chip it and not her, SHELL_HP of them break it and leave her reeling with the cauldron open (triple), and left alone she feeds and heals", () => {
+  const round = motherFight();
+  const b = round.boss;
+  standAt(round, 150);
+  round.you.safeMs = 1e9;
+  force(round, "shell");
+  assert.equal(b.act, "shellWind");
+  assert.equal(events(round, "shellWind").length, 1, "a wind-up to read");
+  run(round, bog.SHELL_WIND_MS + 10);
+  assert.equal(b.act, "shell");
+  assert.equal(bog.BOG.guard.motherbog(b), true, "guarded");
+  assert.equal(b.shell, bog.SHELL_HP[0]);
+  const hp = b.hp;
+  for (let i = 0; i < bog.SHELL_HP[0] - 1; i++) shoot(round);
+  assert.equal(b.hp, hp, "the shell takes the bolts");
+  assert.equal(events(round, "shellChip").length, bog.SHELL_HP[0] - 1, "each a chip");
+  assert.equal(b.act, "shell", "still up");
+  shoot(round);
+  assert.equal(events(round, "shellBreak").length, 1, "broken");
+  assert.equal(b.act, "stagger");
+  shoot(round);
+  assert.equal(b.lit, true, "the cauldron is open while she reels");
+  assert.equal(hp - b.hp, 3, "and a bolt counts triple");
+  assert.ok(events(round, "cauldronOpen").length >= 1);
+  run(round, bog.STAGGER_MS + 20);
+  assert.equal(b.act, "idle");
+  // Ignored, she ladles herself a feed.
+  const feed = motherFight();
+  standAt(feed, 150);
+  feed.you.safeMs = 1e9;
+  feed.boss.hp = feed.boss.max - 40;
+  force(feed, "shell");
+  run(feed, bog.SHELL_WIND_MS + bog.SHELL_MS + 20);
+  const fed = events(feed, "motherFeed")[0];
+  assert.ok(fed, "she feeds");
+  assert.equal(fed.heal, bog.SHELL_HEAL);
+  assert.equal(feed.boss.hp, feed.boss.max - 40 + bog.SHELL_HEAL, "and heals");
+  const full = motherFight();
+  full.you.safeMs = 1e9;
+  full.boss.hp = full.boss.max - 3;
+  force(full, "shell");
+  run(full, bog.SHELL_WIND_MS + bog.SHELL_MS + 20);
+  assert.equal(full.boss.hp, full.boss.max, "never past her max");
+  // A stomp on the shell glances off.
+  const stomp = motherFight();
+  stomp.you.safeMs = 1e9;
+  force(stomp, "shell");
+  run(stomp, bog.SHELL_WIND_MS + 10);
+  const sb = stomp.boss;
+  const before = sb.hp;
+  Object.assign(stomp.you, { x: sb.x, y: sb.y + sb.h + 0.3, vy: -20, state: "air", shelf: -1 });
+  run(stomp, 20);
+  assert.equal(sb.hp, before, "a stomp does nothing to the shell");
+  assert.ok(events(stomp, "bossBlock").length >= 1);
+});
+
+test("Old Mother Bog's dive: she goes under (shots meet water), bubbles show a new spot on the planks away from you, she rises there hittable, and meaner the rise sends a mud wave each way", () => {
+  const round = motherFight();
+  const b = round.boss;
+  standAt(round, 150);
+  round.you.safeMs = 1e9;
+  force(round, "dive");
+  assert.equal(b.act, "sink");
+  assert.equal(b.hidden, true);
+  assert.equal(b.raged || false, false, "a dive of her own is not the rage");
+  assert.equal(events(round, "motherSink")[0]?.relocate, true);
+  const hp = b.hp;
+  round.shots.push({ x: b.x - 2, y: 7, vx: 80, vy: 0, gone: 0 });
+  run(round, 40);
+  assert.equal(b.hp, hp, "no damage under the water");
+  until(round, () => b.act === "under", 2000);
+  const bubble = events(round, "motherBubble")[0];
+  assert.ok(bubble);
+  assert.ok(Math.abs(b.sinkX - round.you.x) >= 6, "never on top of you");
+  assert.ok([-0.45, 0, 0.45].every((f) => ghoul.groundAt(round.spec, b.sinkX + f * b.w) === b.floor), "on a plank that holds her");
+  until(round, () => b.act === "resurface", 2000);
+  assert.equal(b.x, bubble.x);
+  shoot(round);
+  assert.ok(hp - b.hp >= 1, "hittable once she is up");
+  until(round, () => b.act === "rest", 2000);
+  assert.equal(events(round, "mudWave").length, 0, "calm, no waves");
+  // Meaner, two waves come off her as she stands.
+  const mean = motherFight();
+  standAt(mean, 150);
+  mean.you.safeMs = 1e9;
+  force(mean, "dive", RAGED);
+  until(mean, () => mean.boss.act === "rest", 4000);
+  const waves = events(mean, "mudWave").filter((e) => e.rise);
+  assert.deepEqual(waves.map((w) => w.dir).sort(), [-1, 1], "a wave each way");
+});
+
+test("Old Mother Bog's leech brood: she tips the cauldron, a swarm or two pours onto the planks and creeps at you, never more than BROOD_CAP of hers alive; a latch is a heart and two bolts see one off", () => {
+  const round = motherFight();
+  const b = round.boss;
+  standAt(round, 140 + 10);
+  round.you.safeMs = 1e9;
+  force(round, "brood");
+  assert.equal(b.act, "broodWind");
+  assert.equal(events(round, "broodWind").length, 1, "a wind-up to read");
+  assert.equal(bog.hagAdds(round, "leech"), 0, "nothing out during the tip");
+  run(round, bog.BROOD_WIND_MS + 10);
+  assert.equal(events(round, "broodPour")[0]?.n, bog.BROOD_N);
+  assert.equal(bog.hagAdds(round, "leech"), bog.BROOD_N);
+  const brood = round.monsters.filter((m) => m.hag);
+  assert.ok(brood.every((m) => m.kind === "leech" && Number.isFinite(ghoul.groundAt(round.spec, m.x))), "on the planks");
+  const x0 = brood[0].x;
+  run(round, 300);
+  assert.ok(brood[0].x < x0, "creeping at you");
+  force(round, "brood");
+  run(round, bog.BROOD_WIND_MS + 10);
+  force(round, "brood");
+  run(round, bog.BROOD_WIND_MS + 10);
+  assert.equal(bog.hagAdds(round, "leech"), bog.BROOD_CAP, "capped");
+  // A latch costs a heart.
+  const latch = motherFight();
+  const lives = latch.lives;
+  standAt(latch, 150);
+  put(latch, "leech", 150.5, { hag: true });
+  run(latch, 40);
+  assert.equal(losses(latch)[0]?.cause, "leeches");
+  assert.equal(latch.lives, lives - 1);
+  // Two bolts see one off.
+  const shot = motherFight();
+  standAt(shot, 150);
+  shot.you.safeMs = 1e9;
+  shot.boss.wait = 1e9;
+  const m = put(shot, "leech", 160, { hag: true });
+  bolt(shot, m, m.y + 0.9);
+  bolt(shot, m, m.y + 0.9);
+  shot.shots[1].x -= 3;
+  run(shot, 200);
+  assert.equal(bog.hagAdds(shot, "leech"), 0, "dispersed");
+});
+
+test("Old Mother Bog's stomp: a shadow where you stand, a leap and a slam there (a heart if you stayed), then a mud wave each way; out of the shadow and over the wave costs nothing", () => {
+  const round = motherFight();
+  const b = round.boss;
+  standAt(round, 150);
+  const lives = round.lives;
+  force(round, "stomp", RAGED);
+  assert.equal(b.act, "stompWind");
+  const wind = events(round, "stompWind")[0];
+  assert.ok(wind, "a wind-up to read");
+  assert.ok(Math.abs(wind.landX - 150) <= 1, "the shadow is on you");
+  run(round, bog.STOMP_WIND_MS * bog.MOTHER_QUICK + 10);
+  assert.equal(b.act, "stompAir");
+  assert.equal(events(round, "motherLeap").length, 1);
+  until(round, () => losses(round).length > 0, 2000);
+  assert.equal(losses(round)[0]?.cause, "motherbog", "landed on");
+  assert.equal(round.lives, lives - 1);
+  // Out of the shadow, then over the wave.
+  const dodge = motherFight();
+  standAt(dodge, 150);
+  force(dodge, "stomp", RAGED);
+  standAt(dodge, 185);
+  const db = dodge.boss;
+  until(dodge, () => events(dodge, "motherSlam").length > 0, 3000);
+  assert.equal(db.x, db.landX, "down where the shadow was");
+  assert.ok([-0.45, 0, 0.45].every((f) => ghoul.groundAt(dodge.spec, db.x + f * db.w) === db.y), "on the planks");
+  assert.equal(dodge.waves.length, 0, "the waves wait a beat");
+  hop(dodge, 1300, (r) => waveAt(r));
+  const slams = events(dodge, "mudWave").filter((e) => e.slam);
+  assert.deepEqual(slams.map((w) => w.dir).sort(), [-1, 1], "a wave each way");
+  assert.equal(losses(dodge).length, 0, "a clean dodge costs nothing");
+});
+
+test("Old Mother Bog's tide: a long warning, then the water over every plank for TIDE_MS (a heart, drowned); a shelf keeps you dry and it drains away after", () => {
+  const round = motherFight();
+  const b = round.boss;
+  standAt(round, 150);
+  const lives = round.lives;
+  force(round, "tide", RAGED);
+  assert.equal(b.act, "tideWind");
+  assert.equal(events(round, "tideWarn").length, 1, "a warning to read");
+  const tide = round.hazards.find((h) => h.kind === "tide");
+  assert.ok(tide && tide.warn > bog.TIDE_WARN_MS - 10 && tide.live === 0, "it warns first");
+  run(round, bog.TIDE_WARN_MS - 40);
+  assert.equal(losses(round).length, 0, "the warning does not hurt");
+  run(round, 80);
+  assert.equal(events(round, "tideRise").length, 1);
+  assert.equal(losses(round)[0]?.cause, "tide", "drowned on the planks");
+  assert.equal(round.lives, lives - 1);
+  // On a shelf you stay dry the whole time, and it drains.
+  for (const shelf of [0, 2]) {
+    const dry = motherFight();
+    const [x0, x1] = dry.spec.shelves[shelf];
+    standAt(dry, (x0 + x1) / 2, shelf);
+    force(dry, "tide", RAGED);
+    run(dry, bog.TIDE_WARN_MS + bog.TIDE_MS + 60);
+    assert.equal(losses(dry).length, 0, `shelf ${shelf} is dry`);
+    assert.equal(dry.hazards.filter((h) => h.kind === "tide").length, 0, "the water is gone");
+    assert.notEqual(dry.boss.act, "tideHold");
+  }
+  // Every spot on the arena's planks is near enough a shelf to reach in the warning.
+  const spec = round.spec;
+  const tops = spec.shelves.filter((s) => s[2] === 12);
+  for (let x = spec.arena + ghoul.BOSS_LOCK + 2; x < spec.length - 2; x += 2) {
+    if (!Number.isFinite(ghoul.groundAt(spec, x))) continue;
+    const far = Math.min(...tops.map(([a, c]) => (x < a ? a + 1 - x : x > c ? x - c + 1 : 0)));
+    assert.ok(far / ghoul.RUN_SPEED + 0.35 < bog.TIDE_WARN_MS / 1000, `a shelf within reach of ${x}`);
+  }
+});
+
+test("Old Mother Bog's drowning pull: she stirs, then the water drags you along the planks toward her (a heart at her touch); running away, a shelf or the air beats it, and it never drags you off a plank's end", () => {
+  const round = motherFight();
+  const b = round.boss;
+  standAt(round, 150);
+  const lives = round.lives;
+  force(round, "pull", RAGED);
+  assert.equal(b.act, "pullWind");
+  assert.equal(events(round, "pullWind").length, 1, "a wind-up to read");
+  run(round, bog.PULL_WIND_MS * bog.MOTHER_QUICK - 30);
+  assert.equal(round.you.x, 150, "nothing pulls during the stir");
+  run(round, 40);
+  assert.equal(b.act, "pull");
+  assert.equal(events(round, "motherPull").length, 1);
+  run(round, 400);
+  assert.ok(round.you.x > 150 + 4, `dragged toward her (${round.you.x.toFixed(1)})`);
+  until(round, () => losses(round).length > 0, 3000);
+  assert.equal(losses(round)[0]?.cause, "motherbog");
+  assert.equal(round.lives, lives - 1);
+  // Running away from her beats it.
+  const runner = motherFight();
+  Object.assign(runner.boss, { x: 150 });
+  standAt(runner, 172);
+  force(runner, "pull", RAGED);
+  run(runner, bog.PULL_WIND_MS + bog.PULL_MS + 40, { right: true });
+  assert.equal(losses(runner).length, 0, "outrun");
+  // A shelf is out of its reach.
+  const shelf = motherFight();
+  standAt(shelf, 166, 2);
+  force(shelf, "pull", RAGED);
+  run(shelf, bog.PULL_WIND_MS + 600);
+  assert.equal(shelf.you.x, 166, "not moved on a shelf");
+  // The boards hold you at a plank's end.
+  const edge = motherFight();
+  Object.assign(edge.boss, { x: 120 });
+  standAt(edge, 142);
+  edge.you.safeMs = 1e9;
+  force(edge, "pull", RAGED);
+  run(edge, bog.PULL_WIND_MS + bog.PULL_MS);
+  assert.ok(edge.you.x >= 140 && edge.you.y === 6, `held on the plank (${edge.you.x.toFixed(1)})`);
+});
+
+test("Old Mother Bog calls the drowned: mud boils away from you and her, bog bodies climb out (harmless till up), never more than BODIES_CAP of hers alive", () => {
+  const round = motherFight();
+  const b = round.boss;
+  standAt(round, 150);
+  round.you.safeMs = 1e9;
+  force(round, "drowned", RAGED);
+  assert.equal(b.act, "callWind");
+  const wind = events(round, "callWind")[0];
+  assert.ok(wind && wind.xs.length === bog.BODIES_CAP, "a wind-up naming where they come");
+  for (const x of wind.xs) {
+    assert.ok(Math.abs(x - 150) >= 6 && Math.abs(x - b.x) >= b.w, `away from you and her (${x})`);
+    assert.ok(Number.isFinite(ghoul.groundAt(round.spec, x)), "on a plank");
+  }
+  assert.equal(bog.hagAdds(round, "bogbody"), 0, "nothing yet");
+  run(round, bog.CALL_WIND_MS * bog.MOTHER_QUICK + 10);
+  assert.equal(events(round, "motherCall").length, 1);
+  assert.equal(bog.hagAdds(round, "bogbody"), bog.BODIES_CAP);
+  run(round, 20);
+  assert.equal(events(round, "bogRise").length, bog.BODIES_CAP, "they climb out");
+  assert.ok(round.monsters.every((m) => !ghoul.solid(m)), "harmless while they rise");
+  force(round, "drowned", RAGED);
+  assert.deepEqual(events(round, "callWind").at(-1).xs, [], "at the cap nothing boils");
+  run(round, bog.CALL_WIND_MS + 10);
+  assert.equal(bog.hagAdds(round, "bogbody"), bog.BODIES_CAP, "capped");
+});
+
+test("Old Mother Bog's wisp lantern, furious only: she raises it and two wisps of hers drift at you; a bolt puts one out for good, never more than WISPS_CAP", () => {
+  const round = motherFight();
+  const b = round.boss;
+  standAt(round, 150);
+  round.you.safeMs = 1e9;
+  force(round, "wisps", FURY);
+  assert.equal(b.act, "lanternWind");
+  assert.equal(events(round, "lanternWind").length, 1, "a wind-up to read");
+  run(round, bog.LANTERN_WIND_MS * bog.MOTHER_FURY + 10);
+  assert.equal(events(round, "motherLantern").length, 1);
+  assert.equal(bog.hagAdds(round, "wisp"), bog.WISPS_N);
+  const w = round.monsters.find((m) => m.hag && m.kind === "wisp");
+  bolt(round, w, w.y + w.h / 2);
+  round.shots.at(-1).x = w.x - 0.5;
+  run(round, 20);
+  assert.equal(bog.hagAdds(round, "wisp"), bog.WISPS_N - 1, "one put out for good");
+  force(round, "wisps", FURY);
+  run(round, bog.LANTERN_WIND_MS + 10);
+  force(round, "wisps", FURY);
+  run(round, bog.LANTERN_WIND_MS + 10);
+  assert.equal(bog.hagAdds(round, "wisp"), bog.WISPS_CAP, "capped");
+});
+
+test("Old Mother Bog's combo, furious only: a move that ends in an idle may go straight into the next after her eye flares, never twice running; calm she never does", () => {
+  const low = () => 0.1;
+  const MOVE = /Wind$|^tideWarn$|^motherSink$/;
+  // Runs `ms`, noting when each combo and each move's telegraph came.
+  const log = (round, ms) => {
+    const out = [];
+    for (let t = 0; t < ms; t += 4) {
+      ghoul.advance(round, 4, low);
+      for (const e of round.events) if (e.type === "motherCombo" || MOVE.test(e.type)) out.push([e.type, t]);
+      round.events.length = 0;
+    }
+    return out;
+  };
+  const round = motherFight();
+  standAt(round, 120);
+  round.you.safeMs = 1e9;
+  force(round, "hands", FURY);
+  const seen = log(round, 6000);
+  const i = seen.findIndex(([type]) => type === "motherCombo");
+  assert.ok(i >= 0, "a combo");
+  assert.ok(seen[i + 1] && MOVE.test(seen[i + 1][0]), "and straight into a move");
+  assert.ok(seen[i + 1][1] - seen[i][1] <= bog.COMBO_GAP_MS + 8, `with only the short gap between (${seen[i + 1][1] - seen[i][1]} ms)`);
+  const types = seen.map(([type]) => type);
+  assert.ok(!types.some((t, j) => t === "motherCombo" && types[j + 2] === "motherCombo"), "never two combos running");
+  const calm = motherFight();
+  standAt(calm, 120);
+  calm.you.safeMs = 1e9;
+  force(calm, "hands");
+  assert.equal(log(calm, 6000).filter(([type]) => type === "motherCombo").length, 0, "calm, never");
+});
+
+test("Old Mother Bog's phases: the moves she uses change at half and a quarter of her hp, and a long fight goes through them all", () => {
+  const round = motherFight();
+  const b = round.boss;
+  round.infinite = true;
+  let seed = 3;
+  const random = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
+  const seen = [new Set(), new Set(), new Set()];
+  for (let t = 0; t < 150000 && b.state === "fight"; t += 4) {
+    round.you.safeMs = 1e9;
+    // Her hp falls steadily, so every phase gets its turn.
+    if (t % 400 === 0 && b.hp > 1 && !b.hidden && b.act !== "shell") b.hp -= 1;
+    const before = b.picks || 0;
+    ghoul.advance(round, 4, random);
+    if ((b.picks || 0) > before) seen[bog.phaseOf(b)].add(b.last);
+    round.events.length = 0;
+  }
+  for (const m of ["stomp", "tide", "pull", "drowned", "wisps"]) assert.equal(seen[0].has(m), false, `no ${m} at full health`);
+  assert.equal(seen[1].has("wisps"), false, "no wisps before she is furious");
+  assert.ok(["stomp", "tide", "pull", "drowned"].filter((m) => seen[1].has(m) || seen[2].has(m)).length >= 3, `the second phase's moves (${[...seen[1]]})`);
+  assert.ok(seen[0].size >= 5 && seen[1].size >= 6, `a varied fight (${[...seen[0]]} / ${[...seen[1]]} / ${[...seen[2]]})`);
+});
+
+/* ------------------------------------------------------ the whole fight */
+
+// A player who plays the fight sensibly: keeps a fair distance facing her,
+// fires in bursts that keep the blaster cool, steps off ripples, shadows and
+// muck, jumps waves and her charge, climbs a shelf for the tide and the pull,
+// and hops a leech rather than walking into it.
+function skilledKeys(round, mem) {
+  const you = round.you;
+  const b = round.boss;
+  const spec = round.spec;
+  const k = { left: false, right: false, fire: false, down: false, jump: false };
+  const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+  const onGround = you.state === "run" && you.shelf < 0;
+  const lo = spec.arena + ghoul.BOSS_LOCK + 2;
+  const hi = spec.length - 3;
+  let goal = null;
+  const climb = () => {
+    if (you.shelf >= 0) {
+      const s = spec.shelves[you.shelf];
+      goal = clamp(you.x, s[0] + 1.5, s[1] - 1.5);
+      return;
+    }
+    const tops = spec.shelves.filter((s) => s[2] === 12);
+    const s = tops.reduce((a, c) => (Math.abs((c[0] + c[1]) / 2 - you.x) < Math.abs((a[0] + a[1]) / 2 - you.x) ? c : a));
+    goal = (s[0] + s[1]) / 2;
+    if (onGround && you.x > s[0] + 1 && you.x < s[1] - 1) k.jump = true;
+  };
+  const danger = (x) => {
+    for (const h of round.hazards) {
+      if (h.kind === "muck" && (h.live > 0 || h.warn < 500) && Math.abs(x - h.x) < (h.w + ghoul.HIT_W) / 2 + 0.6) return true;
+      if (h.kind === "boghand" && Math.abs(x - h.x) < (h.w + ghoul.HIT_W) / 2 + 0.6) return true;
+    }
+    if ((b.act === "stompWind" || b.act === "stompAir") && Math.abs(x - b.landX) < (b.w + ghoul.HIT_W) / 2 + 2) return true;
+    if (!b.hidden && b.act !== "stompAir" && Math.abs(x - b.x) < (b.w + ghoul.HIT_W) / 2 + 1.5) return true;
+    return !Number.isFinite(ghoul.groundAt(spec, x));
+  };
+  if (b && b.state === "fight") {
+    const side = Math.sign(you.x - b.x) || 1;
+    goal = clamp(b.x + side * 15, lo, hi);
+    if (Math.abs(goal - b.x) < 10) goal = clamp(b.x - side * 15, lo, hi);
+    if (round.hazards.some((h) => h.kind === "tide") || b.act === "pull" || b.act === "pullWind") climb();
+    else if (danger(you.x) && onGround) {
+      for (let d = 0.5; d < 16; d += 0.5) {
+        const c = [you.x + d, you.x - d].find((x) => x > lo && x < hi && !danger(x));
+        if (c !== undefined) {
+          goal = c;
+          break;
+        }
+      }
+    } else if (danger(goal)) goal = you.x;
+    for (const w of round.waves) {
+      const d = (you.x - w.x) * w.dir;
+      if (onGround && d > 0 && d < 7.5 && Math.abs(w.y - you.y) < 1) k.jump = true;
+    }
+    if (b.act === "surge" || b.act === "surgeWind") goal = you.x;
+    if (b.act === "surge") {
+      const d = (you.x - b.x) * Math.sign(b.surgeTo - b.x) - b.w / 2 - ghoul.HIT_W / 2;
+      if (onGround && d > -1 && d < 7.5) k.jump = true;
+    }
+    for (const m of round.monsters) if (m.kind === "leech" && onGround && Math.abs(m.x - you.x) < 4.5 && Math.abs(m.y - you.y) < 2) k.jump = true;
+  }
+  if (goal !== null && Math.abs(goal - you.x) > 0.6) {
+    const dir = goal > you.x ? 1 : -1;
+    dir > 0 ? (k.right = true) : (k.left = true);
+    if (onGround && !Number.isFinite(ghoul.groundAt(spec, you.x + dir * 2.2))) k.jump = true;
+  } else if (b && b.state === "fight") {
+    const want = Math.sign(b.x - you.x) || 1;
+    if (you.face !== want) want > 0 ? (k.right = true) : (k.left = true);
+  }
+  // Up where bolts fly over her head (and no tide to wait out): drop down.
+  const tide = round.hazards.some((h) => h.kind === "tide");
+  if (b && b.state === "fight" && you.state === "run" && you.shelf >= 0 && !tide && b.act !== "pull" && you.y + ghoul.SHOT_Y > b.y + b.h - 0.5) {
+    k.left = false;
+    k.right = false;
+    k.down = true;
+  }
+  if (mem.cool && round.heat < 4) mem.cool = false;
+  if (!mem.cool && round.heat >= 28) mem.cool = true;
+  k.fire = !mem.cool;
+  return k;
+}
+
+// The whole fight from the arena door, real hearts and a seeded draw: how long
+// it took (seconds from the fight's start) and how it went.
+function wholeFight(keys, seed) {
+  const round = bogRound("drowning");
+  standAt(round, round.spec.arena + ghoul.BOSS_LOCK + 2);
+  const random = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
+  const mem = {};
+  let start = -1;
+  const causes = [];
+  let t = 0;
+  for (; t < 240000 && !round.over; t += 4) {
+    // No Lucky dice: a die picked up off an add would stop the round to ask.
+    round.dice = 0;
+    const k = keys(round, mem);
+    Object.assign(round.input, { left: k.left, right: k.right, fire: k.fire, down: k.down });
+    if (k.jump && round.input.jump <= 0) round.input.jump = ghoul.JUMP_BUFFER_MS;
+    ghoul.advance(round, 4, random);
+    for (const e of round.events) {
+      if (e.type === "bossGo" && start < 0) start = t;
+      if (e.type === "lose") causes.push(e.cause);
+    }
+    const down = round.events.some((e) => e.type === "bossDown");
+    round.events.length = 0;
+    if (down) return { won: true, secs: (t - start) / 1000, causes, round };
+  }
+  return { won: false, secs: (t - start) / 1000, causes, round };
+}
+
+test("Old Mother Bog takes a skilled player a real fight: a bot that plays sensibly kills her in 60 to 120 seconds on every seed, losing a heart or a few, never all", () => {
+  const times = [];
+  for (const seed of [7, 11, 23, 71]) {
+    const fight = wholeFight(skilledKeys, seed);
+    assert.ok(fight.won, `seed ${seed}: she fell (${fight.causes}; ${fight.secs.toFixed(1)} s, ${fight.round.lives} lives, phase ${fight.round.phase}, hp ${fight.round.boss?.hp})`);
+    assert.ok(fight.secs >= 60 && fight.secs <= 120, `seed ${seed}: ${fight.secs.toFixed(1)} s of fight`);
+    assert.ok(fight.round.lives > 0, "with hearts to spare");
+    const known = new Set([...Object.keys(LOSE_WORDS), "pit", "zombie", "crawler"]);
+    for (const c of fight.causes) assert.ok(known.has(c), `${c} has words`);
+    times.push(fight.secs);
+  }
+  assert.ok(Math.max(...times) - Math.min(...times) > 3, `not the same fight every time (${times.map((t) => t.toFixed(1))})`);
+});
+
+test("Old Mother Bog kills a player who stands still: an idle bot loses every heart while she is barely scratched", () => {
+  const fight = wholeFight(() => ({}), 7);
+  assert.equal(fight.won, false);
+  assert.ok(fight.round.over, "game over");
+  assert.ok(fight.round.boss.hp > fight.round.boss.max * 0.9, "she is barely scratched");
+  assert.ok(fight.secs < 120, `down in ${fight.secs.toFixed(1)} s`);
+  assert.ok(new Set(fight.causes).size >= 2, `by more than one move (${fight.causes})`);
 });
 
 /* ------------------------------------------------------ voices, words, cards */
@@ -738,7 +1439,7 @@ const heard = (e, extra = {}) => {
 };
 
 test("Ghoul Rush's bog: every new kind has a voice for every act, every new event plays exactly one picked sound, and the tones are the stage's own", () => {
-  const own = { lurker: ["appear", "snap", "sink", "hurt", "die"], leech: ["appear", "latch", "hurt", "die"], wisp: ["appear", "out", "relight", "on", "hurt", "die"], bogbody: ["appear", "rise", "hurt", "die"], motherbog: ["wake", "wind", "wave", "spitWind", "spit", "open", "sink", "bubble", "rise", "muck", "hurt", "weak", "die"] };
+  const own = { lurker: ["appear", "snap", "sink", "hurt", "die"], leech: ["appear", "latch", "hurt", "die"], wisp: ["appear", "out", "relight", "on", "hurt", "die"], bogbody: ["appear", "rise", "hurt", "die"], motherbog: ["wake", "wind", "wave", "spitWind", "spit", "open", "sink", "bubble", "rise", "muck", "hurt", "weak", "die", "handsWind", "handsUp", "surgeWind", "surge", "shellWind", "chip", "shellBreak", "feed", "broodWind", "pour", "stompWind", "leap", "slam", "tideWarn", "tide", "pullWind", "pull", "callWind", "call", "lanternWind", "lantern", "combo"] };
   assert.deepEqual(Object.keys(VOICES).sort(), Object.keys(own).sort(), "a voice table for each new kind and the boss");
   for (const [kind, acts] of Object.entries(own)) assert.deepEqual(Object.keys(VOICES[kind]).sort(), [...acts].sort(), `${kind}: every act`);
   const names = Object.values(VOICES).flatMap((v) => Object.values(v));
@@ -760,6 +1461,28 @@ test("Ghoul Rush's bog: every new kind has a voice for every act, every new even
     [{ type: "motherSink", kind: "motherbog" }, "motherbog", "sink"],
     [{ type: "motherBubble", kind: "motherbog" }, "motherbog", "bubble"],
     [{ type: "motherRise", kind: "motherbog" }, "motherbog", "rise"],
+    [{ type: "handsWind", kind: "motherbog", xs: [12, 19] }, "motherbog", "handsWind"],
+    [{ type: "handsUp", kind: "motherbog" }, "motherbog", "handsUp"],
+    [{ type: "surgeWind", kind: "motherbog" }, "motherbog", "surgeWind"],
+    [{ type: "motherSurge", kind: "motherbog" }, "motherbog", "surge"],
+    [{ type: "shellWind", kind: "motherbog" }, "motherbog", "shellWind"],
+    [{ type: "shellChip", kind: "motherbog" }, "motherbog", "chip"],
+    [{ type: "shellBreak", kind: "motherbog" }, "motherbog", "shellBreak"],
+    [{ type: "motherFeed", kind: "motherbog", heal: 14 }, "motherbog", "feed"],
+    [{ type: "broodWind", kind: "motherbog" }, "motherbog", "broodWind"],
+    [{ type: "broodPour", kind: "motherbog", n: 2 }, "motherbog", "pour"],
+    [{ type: "stompWind", kind: "motherbog", landX: 14 }, "motherbog", "stompWind"],
+    [{ type: "motherLeap", kind: "motherbog" }, "motherbog", "leap"],
+    [{ type: "motherSlam", kind: "motherbog" }, "motherbog", "slam"],
+    [{ type: "tideWarn", kind: "motherbog" }, "motherbog", "tideWarn"],
+    [{ type: "tideRise", kind: "motherbog" }, "motherbog", "tide"],
+    [{ type: "pullWind", kind: "motherbog" }, "motherbog", "pullWind"],
+    [{ type: "motherPull", kind: "motherbog" }, "motherbog", "pull"],
+    [{ type: "callWind", kind: "motherbog", xs: [12, 30] }, "motherbog", "callWind"],
+    [{ type: "motherCall", kind: "motherbog", xs: [12, 30] }, "motherbog", "call"],
+    [{ type: "lanternWind", kind: "motherbog" }, "motherbog", "lanternWind"],
+    [{ type: "motherLantern", kind: "motherbog", n: 2 }, "motherbog", "lantern"],
+    [{ type: "motherCombo", kind: "motherbog" }, "motherbog", "combo"],
     [{ type: "bossWake", kind: "motherbog" }, "motherbog", "wake"],
     [{ type: "bossHit", kind: "motherbog", how: "shot" }, "motherbog", "hurt"],
     [{ type: "bossHit", kind: "motherbog", how: "weak", weak: true }, "motherbog", "weak"],
@@ -789,19 +1512,27 @@ test("Ghoul Rush's bog: every new kind has a voice for every act, every new even
   assert.equal(heard({ ...at, type: "bossHit", kind: "motherbog", how: "shot" }).includes(VOICES.motherbog.weak), false, "a plain shot is not weak");
   // Events that are only looks (the pull of the lure, a swarm coming apart) say nothing the voices own.
   for (const type of ["wispLure", "leechDie"]) assert.equal(heard({ ...at, type, kind: "leech" }).filter((n) => names.includes(n)).length, 0, `${type} is visual`);
-  // Every picked tone exists in the merged tones, lives in the stage's file and is named by kind and act.
+  // Every event the hag's rules raise is one of the cases above (so none is left without a voice).
+  const raised = new Set();
+  const src = readFileSync(new URL("../src/web-console/public/activities/ghoul-rush/stages/bog/ghoul-bog.js", import.meta.url), "utf8");
+  for (const [, type] of src.matchAll(/type: "([a-zA-Z]+)"/g)) raised.add(type);
+  for (const [, type] of src.matchAll(/ev\("([a-zA-Z]+)"/g)) raised.add(type);
+  const covered = new Set([...cases.map(([e]) => e.type), "wispLure", "leechDie", "harpoonHit"]);
+  for (const type of raised) assert.ok(covered.has(type), `${type} has a reaction checked here`);
+  // Every picked tone exists in the merged tones, lives in the stage's file, is short and is named by kind and act.
   const merged = ghoulSfx.default.tones;
   for (const [kind, acts] of Object.entries(VOICES)) {
     for (const [act, name] of Object.entries(acts)) {
       assert.ok(merged[name]?.layers?.length, `${kind}.${act}: ${name} is in the merged tones`);
       assert.ok(BOG_SFX.tones[name], `${name} lives in ghoul-sfx-bog.js`);
+      for (const l of BOG_SFX.tones[name].layers) assert.ok(l.seconds > 0 && l.seconds + (l.delay || 0) <= 1.2 + 1e-9, `${name} is over within 1.2 s`);
       assert.equal(name, `ghoul${kind === "motherbog" ? "Mother" : kind[0].toUpperCase() + kind.slice(1)}${act[0].toUpperCase()}${act.slice(1)}`, "named by kind and act");
     }
   }
 });
 
 test("Ghoul Rush's bog: every new way to die has its words and its own sound, and endless lives spare the heart for each", () => {
-  const causes = ["lurker", "leeches", "wisp", "bogbody", "mudwave", "muck", "motherbog"];
+  const causes = ["lurker", "leeches", "wisp", "bogbody", "mudwave", "muck", "boghand", "tide", "motherbog"];
   assert.deepEqual(Object.keys(LOSE_WORDS).sort(), [...causes].sort(), "words for exactly these");
   assert.deepEqual(Object.keys(LOSE_SOUNDS).sort(), [...causes].sort(), "a sound for exactly these");
   for (const cause of causes) {
@@ -818,7 +1549,7 @@ test("Ghoul Rush's bog: every new way to die has its words and its own sound, an
     assert.equal(normal.lives, had - 1, `${cause} costs a heart otherwise`);
   }
   // The real causes the stage raises are all among them.
-  for (const cause of ["leeches", "mudwave", "muck", "motherbog"]) assert.ok(LOSE_WORDS[cause]);
+  for (const cause of ["leeches", "mudwave", "muck", "boghand", "tide", "motherbog"]) assert.ok(LOSE_WORDS[cause]);
   assert.equal(bog.BOG.cause.motherbog(), "motherbog");
 });
 
@@ -857,14 +1588,14 @@ test("Ghoul Rush's bog round flow: the stage card opens before the Sunken Boardw
   assert.equal(r.phase, "ready");
   ghoul.advance(r, ghoul.READY_MS + 20, steady);
   assert.equal(r.phase, "play");
-  for (const id of ["hollow", "stilts", "bogboat"]) {
+  for (const id of ["hollow", "stilts", "lantern"]) {
     r.events.length = 0;
     through(r);
     assert.equal(r.spec.id, id);
     assert.notEqual(r.phase, "bossintro", `${id}: no boss card`);
     assert.equal(r.events.some((e) => e.type === "bossIntro"), false);
   }
-  assert.ok(ghoul.roomById("bogboat").bonus, "the ride comes right before the boss");
+  assert.ok(ghoul.roomById("lantern").bonus, "the bonus round comes right before the boss");
   r.events.length = 0;
   through(r);
   assert.equal(r.spec.id, "drowning");
@@ -918,22 +1649,25 @@ test("Ghoul Rush's bog draws: every walked room and the arena, every monster in 
       if (r.boss) {
         ghoul.advance(r, ghoul.BOSS_INTRO_MS + 16, steady);
         for (const hidden of [false, true]) {
-          for (const act of ["idle", "wind", "rest", "throwWind", "sink", "under", "resurface"]) {
-            Object.assign(r.boss, { act, wait: 400, dir: -1, lit: act === "rest", hidden: hidden && (act === "sink" || act === "under"), sinkX: r.boss.x - 10, home: 6 });
+          for (const act of ["idle", "wind", "rest", "throwWind", "sink", "under", "resurface", "hands", "surgeWind", "surge", "shellWind", "shell", "stagger", "broodWind", "stompWind", "stompAir", "tideWind", "tideHold", "pullWind", "pull", "callWind", "lanternWind"]) {
+            Object.assign(r.boss, { act, wait: 400, dir: -1, lit: act === "rest" || act === "stagger", hidden: hidden && (act === "sink" || act === "under"), sinkX: r.boss.x - 10, home: 6, floor: 6, y: act === "surge" ? 6 - bog.SURGE_SINK : act === "stompAir" ? 14 : 6, landX: r.boss.x - 12, airMs: 300, callXs: [r.boss.x - 12, r.boss.x - 24], shell: 5, shellMax: bog.SHELL_HP[0], comboMs: hidden ? 200 : 0 });
             g.tick(16);
             drew++;
           }
+          Object.assign(r.boss, { y: 6, comboMs: 0 });
         }
         Object.assign(r.boss, { hidden: false, act: "rest", wait: 1e9 });
         r.hazards.push({ kind: "muck", x: r.you.x + 10, y: 6, w: bog.MUCK_W, h: bog.MUCK_H, warn: 400, live: 0, cause: "muck", sx: r.boss.x, sy: 9 }, { kind: "muck", x: r.you.x + 20, y: 6, w: bog.MUCK_W, h: bog.MUCK_H, warn: 0, live: 1500, cause: "muck" });
         r.waves.push({ x: r.you.x + 8, y: 6, dir: -1, life: 6000, kind: "mudwave", cause: "mudwave" });
+        r.hazards.push({ kind: "boghand", x: r.you.x + 14, y: 6, w: bog.HAND_W, h: bog.HAND_H, warn: 500, full: 1200, live: 0, cause: "boghand" }, { kind: "boghand", x: r.you.x + 18, y: 6, w: bog.HAND_W, h: bog.HAND_H, warn: 0, live: 300, cause: "boghand" });
+        r.hazards.push({ kind: "tide", x: 152, y: 5, w: 104, h: 1.6, x0: 104, x1: 200, warn: 600, live: 0, cause: "tide" }, { kind: "tide", x: 152, y: 5, w: 104, h: 1.6, x0: 104, x1: 200, warn: 0, live: 2000, cause: "tide" });
       }
       for (let k = 0; k < 20; k++) g.tick(16);
       r.you.safeMs = 1e9;
       drew++;
     }
   }
-  assert.ok(drew >= 8 + 14, "drew a lot");
+  assert.ok(drew >= 8 + 44, "drew a lot");
   assert.equal(r.spec.id, "drowning", "got to the pool and drew it");
 });
 

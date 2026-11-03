@@ -1,12 +1,24 @@
 // Web console tests, Ghoul Rush's Lucky die: it comes only from a kill, stacks to nine and lasts the run; when a life would be lost one rolls: a 4 to 6 brings Planny back (the monsters in view blown apart in an ordinary room, a boss's room untouched; a 5 adds a heart, a 6 a heart and a Garlic shield), a 3 or 2 costs the life and leaves a gift for the respawn, a 1 only laughs.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import * as ghoul from "../src/web-console/public/activities/ghoul.js";
-import { pickPower } from "../src/web-console/public/activities/ghoul-powers.js";
-import { react } from "../src/web-console/public/activities/ghoul-draw.js";
+import * as ghoul from "../src/web-console/public/activities/ghoul-rush/ghoul.js";
+import { pickPower } from "../src/web-console/public/activities/ghoul-rush/core/ghoul-powers.js";
+import { react } from "../src/web-console/public/activities/ghoul-rush/draw/ghoul-draw.js";
 import { toneNames } from "../src/web-console/public/tones.js";
 
 const steady = () => 0.5;
+// Answer "Use a Lucky Die?" once the guard is past (nothing happens when no question is up).
+const accept = (round, yes = true) => {
+  if (round.phase !== "ask") return false;
+  round.ask.t = ghoul.ASK_GUARD_MS;
+  return ghoul.answerDie(round, yes);
+};
+// A life lost, the question answered Yes: the old automatic roll.
+const lose = (round, cause) => {
+  const r = ghoul.lose(round, cause);
+  accept(round);
+  return r;
+};
 const events = (round, type) => round.events.filter((e) => e.type === type);
 // A random that plays `values` in order, then 0.5.
 const rolls = (...values) => {
@@ -99,12 +111,11 @@ test("Ghoul Rush: picking up Lucky dice stacks them to nine, then pays points li
   assert.equal(round.drops.length, 0);
   assert.equal(events(round, "power")[0].kind, "die");
   for (let k = 0; k < 8; k++) ghoul.applyPower(round, "die");
-  assert.equal(round.dice, ghoul.MAX_DICE);
-  assert.equal(ghoul.MAX_DICE, 9);
+  assert.equal(round.dice, 9);
   const score = round.score;
   ghoul.applyPower(round, "die");
-  assert.equal(round.dice, 9, "capped");
-  assert.equal(round.score - score, ghoul.POWER_POINTS * 10, "points instead");
+  assert.equal(round.dice, 10, "no cap");
+  assert.equal(round.score, score, "no points instead");
   const canvas = { getContext: () => null };
   const game = ghoul.default.create({ canvas });
   game.start();
@@ -140,7 +151,7 @@ test("Ghoul Rush: a fresh run holds 3 Lucky dice, a lost life with one in hand s
   round.monsters.length = 0;
   round.hordeMs = Infinity;
   stand(round, 100);
-  ghoul.lose(round, "zombie");
+  lose(round, "zombie");
   assert.equal(round.phase, "roll", "a lost life with a die in hand rolls");
   assert.equal(round.dice, 2, "the roll spends one");
   const next = ghoul.newRound(5);
@@ -159,7 +170,7 @@ test("Ghoul Rush: a death with dice holds and rolls just one; a six saves Planny
   const far = zombie(round, round.camX + ghoul.FIELD_W + 40);
   far.hp = 3;
   const x = round.you.x;
-  assert.equal(ghoul.lose(round, "zombie"), true);
+  assert.equal(lose(round, "zombie"), true);
   assert.equal(round.phase, "roll");
   assert.equal(round.lives, 3, "no life lost yet");
   assert.equal(round.dice, 2, "the die is in hand");
@@ -201,7 +212,7 @@ test("Ghoul Rush: a death with dice holds and rolls just one; a six saves Planny
 test("Ghoul Rush: the same random rolls the same face, and each slice of the die lands on its face", () => {
   const face = (value) => {
     const round = hall(5);
-    ghoul.lose(round, "bone");
+    lose(round, "bone");
     ghoul.advance(round, ghoul.ROLL_MS, rolls(value));
     return events(round, "diceFace").map((e) => e.face);
   };
@@ -209,15 +220,15 @@ test("Ghoul Rush: the same random rolls the same face, and each slice of the die
   assert.deepEqual([ONE, 0.2, 0.4, 0.6, 0.8, SIX].flatMap(face), [1, 2, 3, 4, 5, 6]);
 });
 
-test("Ghoul Rush: a 5 saves him with a heart and no shield, a 4 just saves him, and a heart past the cap is points", () => {
+test("Ghoul Rush: a 5 saves him with a heart and no shield, a 4 just saves him, and a heart has no cap", () => {
   const five = hall(1);
-  ghoul.lose(five, "zombie");
+  lose(five, "zombie");
   ghoul.advance(five, ghoul.ROLL_MS + 8, rolls(FIVE));
   assert.equal(five.phase, "play");
   assert.equal(five.lives, 4);
   assert.equal(five.you.garlic, false);
   const four = hall(1);
-  ghoul.lose(four, "zombie");
+  lose(four, "zombie");
   ghoul.advance(four, ghoul.ROLL_MS + 8, rolls(FOUR));
   assert.equal(four.phase, "play");
   assert.equal(four.lives, 3);
@@ -225,16 +236,16 @@ test("Ghoul Rush: a 5 saves him with a heart and no shield, a 4 just saves him, 
   assert.ok(four.you.safeMs > 0, "still safe a moment");
   const held = hall(1);
   held.you.garlic = true;
-  ghoul.lose(held, "pit");
+  lose(held, "pit");
   ghoul.advance(held, ghoul.ROLL_MS + 8, rolls(FOUR));
   assert.equal(held.you.garlic, true, "a shield he already held stays");
   const full = hall(1);
   full.lives = 9;
   const score = full.score;
-  ghoul.lose(full, "zombie");
+  lose(full, "zombie");
   ghoul.advance(full, ghoul.ROLL_MS + 8, rolls(FIVE));
-  assert.equal(full.lives, 9, "capped");
-  assert.ok(full.score > score, "points instead");
+  assert.equal(full.lives, 10, "no cap");
+  assert.equal(full.score, score, "no points instead");
 });
 
 test("Ghoul Rush: a 3 costs the life and he comes back with Rapid fire and a Garlic shield, a 2 with Bottle Rockets and a Garlic shield", () => {
@@ -243,7 +254,7 @@ test("Ghoul Rush: a 3 costs the life and he comes back with Rapid fire and a Gar
     [TWO, (round) => assert.deepEqual(round.arms.map((a) => [a.kind, a.n]), [["rocket", ghoul.POWERS.rocket.sticks]])],
   ]) {
     const round = hall(2);
-    ghoul.lose(round, "zombie");
+    lose(round, "zombie");
     ghoul.advance(round, ghoul.ROLL_MS + 8, rolls(value));
     assert.equal(round.phase, "crash", "the life is lost");
     assert.equal(round.lives, 2);
@@ -262,7 +273,7 @@ test("Ghoul Rush: a 3 costs the life and he comes back with Rapid fire and a Gar
     round.phase = "play";
     round.you.garlic = false;
     round.you.safeMs = 0;
-    ghoul.lose(round, "zombie");
+    lose(round, "zombie");
     ghoul.advance(round, ghoul.CRASH_MS + 8, steady);
     assert.equal(round.you.garlic, false, "the gift comes once");
     assert.equal(events(round, "diceGift").length, 1);
@@ -272,7 +283,7 @@ test("Ghoul Rush: a 3 costs the life and he comes back with Rapid fire and a Gar
 
 test("Ghoul Rush: a 1 costs the life and leaves nothing, with its laugh and its words", () => {
   const round = hall(2);
-  ghoul.lose(round, "zombie");
+  lose(round, "zombie");
   ghoul.advance(round, ghoul.ROLL_MS - 8, rolls(ONE));
   assert.equal(round.phase, "roll", "the beat has not finished");
   ghoul.advance(round, 16, steady);
@@ -294,7 +305,7 @@ test("Ghoul Rush: a 1 costs the life and leaves nothing, with its laugh and its 
 test("Ghoul Rush: on the last heart a 5 or 6 saves him in place, a 2, 3 or 4 pays one heart and he respawns as usual, a 1 loses the run", () => {
   const saved = hall(1);
   saved.lives = 1;
-  ghoul.lose(saved, "zombie");
+  lose(saved, "zombie");
   ghoul.advance(saved, ghoul.ROLL_MS + 8, rolls(FIVE));
   assert.equal(saved.lives, 2, "saved in place, with the 5's heart");
   assert.equal(saved.over, false);
@@ -302,7 +313,7 @@ test("Ghoul Rush: on the last heart a 5 or 6 saves him in place, a 2, 3 or 4 pay
   for (const face of [TWO, THREE, FOUR]) {
     const mercy = hall(1);
     mercy.lives = 1;
-    ghoul.lose(mercy, "zombie");
+    lose(mercy, "zombie");
     ghoul.advance(mercy, ghoul.ROLL_MS + 8, rolls(face));
     assert.equal(events(mercy, "diceHeart").length, 1, "a heart is paid");
     assert.equal(mercy.phase, "crash", "the loss goes ahead");
@@ -316,13 +327,13 @@ test("Ghoul Rush: on the last heart a 5 or 6 saves him in place, a 2, 3 or 4 pay
   // Not on the last heart: a 3 is a gift, a 4 a save, as ever.
   const plenty = hall(1);
   plenty.lives = 2;
-  ghoul.lose(plenty, "zombie");
+  lose(plenty, "zombie");
   ghoul.advance(plenty, ghoul.ROLL_MS + 8, rolls(FOUR));
   assert.equal(plenty.lives, 2);
   assert.equal(events(plenty, "diceHeart").length, 0);
   const lost = hall(1);
   lost.lives = 1;
-  ghoul.lose(lost, "zombie");
+  lose(lost, "zombie");
   ghoul.advance(lost, ghoul.ROLL_MS + ghoul.CRASH_MS + 40, rolls(ONE));
   assert.equal(lost.lives, 0);
   assert.equal(lost.over, true);
@@ -331,7 +342,7 @@ test("Ghoul Rush: on the last heart a 5 or 6 saves him in place, a 2, 3 or 4 pay
 test("Ghoul Rush: endless lives never roll the dice", () => {
   const round = hall(3);
   round.infinite = true;
-  ghoul.lose(round, "zombie");
+  lose(round, "zombie");
   assert.equal(round.phase, "crash");
   assert.equal(round.dice, 3, "kept");
   assert.equal(round.lives, 3);
@@ -342,6 +353,8 @@ test("Ghoul Rush: the clock running out can be saved too, with some time back", 
   const round = hall(1);
   round.timeMs = 5;
   ghoul.advance(round, 8, steady);
+  assert.equal(round.phase, "ask", "the clock running out asks too");
+  accept(round);
   assert.equal(round.phase, "roll");
   ghoul.advance(round, ghoul.ROLL_MS + 8, rolls(SIX));
   assert.equal(round.phase, "play");
@@ -369,6 +382,8 @@ test("Ghoul Rush: a pit fall rolls too, and a save puts Planny back on the last 
   round.input.right = false;
   round.you.safeMs = 1e9;
   ghoul.advance(round, 4, steady);
+  assert.equal(round.phase, "ask", "a pit asks too");
+  accept(round);
   assert.equal(round.phase, "roll");
   assert.equal(events(round, "diceStart")[0].cause, "pit");
   assert.equal(round.lives, 3);
@@ -388,6 +403,7 @@ test("Ghoul Rush: a pit fall rolls too, and a save puts Planny back on the last 
   lost.lives = 3;
   lost.you.safeMs = 1e9;
   ghoul.advance(lost, 4, steady);
+  accept(lost);
   ghoul.advance(lost, ghoul.ROLL_MS + 8, rolls(0.2));
   assert.equal(lost.lives, 2);
   assert.equal(lost.phase, "crash");
@@ -399,7 +415,7 @@ test("Ghoul Rush: in an ordinary room a saved life blows apart every monster in 
   const near = [zombie(round, 110), zombie(round, 130), zombie(round, round.camX + 5)];
   const far = zombie(round, round.camX + ghoul.FIELD_W + 40);
   const score = round.score;
-  ghoul.lose(round, "zombie");
+  lose(round, "zombie");
   ghoul.advance(round, ghoul.ROLL_MS + 8, rolls(SIX));
   assert.equal(round.phase, "play");
   assert.ok(near.every((m) => m.dead), "all in view are dead");
@@ -414,7 +430,7 @@ test("Ghoul Rush: in an ordinary room a saved life blows apart every monster in 
   // Any saving face blows them apart, not only a six.
   const four = hall(1);
   const by = zombie(four, 110);
-  ghoul.lose(four, "zombie");
+  lose(four, "zombie");
   ghoul.advance(four, ghoul.ROLL_MS + 8, rolls(FOUR));
   assert.ok(by.dead);
 });
@@ -428,7 +444,7 @@ test("Ghoul Rush: in a boss's room a saved life blows nothing apart, and the bos
   const m = ghoul.spawnMonster(round, "zombie", round.you.x + 6, ghoul.groundAt(round.spec, round.you.x + 6), { rise: 0, awake: true });
   round.dice = 1;
   round.events.length = 0;
-  ghoul.lose(round, "bones");
+  lose(round, "bones");
   ghoul.advance(round, ghoul.ROLL_MS + 8, rolls(SIX));
   assert.equal(round.phase, "play");
   assert.ok(!m.dead && round.monsters.includes(m), "the monster stands");
@@ -443,7 +459,7 @@ test("Ghoul Rush: in a boss's room a saved life blows nothing apart, and the bos
 test("Ghoul Rush: every step of the roll has a look and a sound, and the revive's jingle plays once", () => {
   const round = hall(3);
   zombie(round, 110);
-  ghoul.lose(round, "zombie");
+  lose(round, "zombie");
   ghoul.advance(round, ghoul.ROLL_MS + 8, rolls(SIX));
   const played = [];
   const fx = {};

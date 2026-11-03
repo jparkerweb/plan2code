@@ -1,12 +1,12 @@
 // Web console tests, Ghoul Rush's Blackmoor Sanatorium stage: its four rooms, orderlies that grab and throw you (and cost no life), gurneys that park, rattle and roll, flickers you can only hit and be hurt by when the lamps go out, specimen bloaters and their formaldehyde, the lamps' flicker, Smelling Salts and the Bone Saw (found only here), and the Night Matron, whose lantern cone builds heat, is stopped by the medicine cabinets and cannot reach the boards, with her syringes, arms and rage.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import * as ghoul from "../src/web-console/public/activities/ghoul.js";
-import * as sn from "../src/web-console/public/activities/ghoul-sanatorium.js";
-import { LOSE_SOUNDS, LOSE_WORDS } from "../src/web-console/public/activities/ghoul-sanatorium-draw.js";
-import { PILL_WORDS, pickPower } from "../src/web-console/public/activities/ghoul-powers.js";
-import * as ghoulSfx from "../src/web-console/public/activities/ghoul-sfx.js";
-import { VOICES, react } from "../src/web-console/public/activities/ghoul-draw.js";
+import * as ghoul from "../src/web-console/public/activities/ghoul-rush/ghoul.js";
+import * as sn from "../src/web-console/public/activities/ghoul-rush/stages/sanatorium/ghoul-sanatorium.js";
+import { LOSE_SOUNDS, LOSE_WORDS } from "../src/web-console/public/activities/ghoul-rush/stages/sanatorium/ghoul-sanatorium-draw.js";
+import { PILL_WORDS, pickPower } from "../src/web-console/public/activities/ghoul-rush/core/ghoul-powers.js";
+import * as ghoulSfx from "../src/web-console/public/activities/ghoul-rush/sfx/ghoul-sfx.js";
+import { VOICES, react } from "../src/web-console/public/activities/ghoul-rush/draw/ghoul-draw.js";
 
 const steady = () => 0.5;
 const events = (round, type) => round.events.filter((e) => e.type === type);

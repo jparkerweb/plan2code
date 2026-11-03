@@ -2,13 +2,13 @@
 // Run with: node --test scripts/test-web-console-activities-ghoul-cart.mjs
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import * as ghoul from "../src/web-console/public/activities/ghoul.js";
+import * as ghoul from "../src/web-console/public/activities/ghoul-rush/ghoul.js";
 import { skipBossIntro } from "./ghoul-test-helpers.mjs";
-import * as ct from "../src/web-console/public/activities/ghoul-cart.js";
-import { EVENT_VOICE, LOSE_SOUNDS, LOSE_WORDS, LOOKS as CART_LOOKS, VOICES as CART_VOICES } from "../src/web-console/public/activities/ghoul-cart-draw.js";
-import * as ghoulSfx from "../src/web-console/public/activities/ghoul-sfx.js";
-import { LOOKS, VOICES, bonusTick, hudLayout, react } from "../src/web-console/public/activities/ghoul-draw.js";
-import { BONUS_FLOOR, BONUS_HEARTS, diceFor, endBonus, heartsText, makeBonus } from "../src/web-console/public/activities/ghoul-bonus.js";
+import * as ct from "../src/web-console/public/activities/ghoul-rush/rides/cart/ghoul-cart.js";
+import { EVENT_VOICE, LOSE_SOUNDS, LOSE_WORDS, LOOKS as CART_LOOKS, VOICES as CART_VOICES } from "../src/web-console/public/activities/ghoul-rush/rides/cart/ghoul-cart-draw.js";
+import * as ghoulSfx from "../src/web-console/public/activities/ghoul-rush/sfx/ghoul-sfx.js";
+import { LOOKS, VOICES, bonusTick, hudLayout, react } from "../src/web-console/public/activities/ghoul-rush/draw/ghoul-draw.js";
+import { BONUS_FLOOR, BONUS_HEARTS, diceFor, endBonus, heartsText, makeBonus } from "../src/web-console/public/activities/ghoul-rush/core/ghoul-bonus.js";
 
 const steady = () => 0.5;
 // The pack draws no random number: a run on this fails on the first draw.
@@ -1125,6 +1125,9 @@ test("Ghoul Rush's bonus round: the fifth lost heart ends it with no dice and no
   // A life lost there is a run life as always, and the dice roll for it.
   round.phase = "play";
   ghoul.lose(round, "zombie");
+  assert.equal(round.phase, "ask", "the carried dice are offered");
+  round.ask.t = ghoul.ASK_GUARD_MS;
+  ghoul.answerDie(round, true);
   assert.equal(round.phase, "roll", "the carried dice are rolled");
 });
 
@@ -1198,14 +1201,14 @@ test("Ghoul Rush's bonus round: the dice formula (floor 3, up to six more by hea
   assert.equal(diceFor(mk(5, { hits: [], acts: 0, total: 0 })), 3 + 2 + 0 + 0 + 1, "no obstacles counted");
   // Kills count with the acts.
   assert.equal(diceFor(mk(5, { hits: [], acts: 4, goal: 8 }), 4), 9);
-  // The cap on the run's dice: eight in hand and a nine-die ride leaves nine.
+  // No cap on the run's dice: eight in hand and a nine-die ride leaves seventeen.
   const round = bonusCart();
   round.dice = 8;
   Object.assign(round.bonusRound.perf, { hits: [], acts: 8 });
   assert.equal(endBonus(round, true, awardKit), true);
-  assert.equal(round.dice, ghoul.MAX_DICE);
+  assert.equal(round.dice, 17);
   assert.equal(round.bonusRound.dice, 9, "earned nine");
-  assert.equal(round.bonusRound.gained, 1, "one more fits");
+  assert.equal(round.bonusRound.gained, 9, "all nine kept");
   assert.equal(endBonus(round, true, awardKit), false, "ends once");
   // Braking: a short brake is fine, too long is no steady hand.
   const brake = bonusCart();

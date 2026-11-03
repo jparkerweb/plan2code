@@ -23,6 +23,10 @@ npm run play
 # dashboard skill-table check, web console + launcher + getting-started node:test suites
 npm test
 
+# Put every text file git sees back to LF (also runs by itself as pretest and in
+# the pre-commit hook); --check only lists
+npm run fix:eol
+
 # One web console or launcher test
 node --test --test-name-pattern "<regex>" scripts/test-web-console-<area>.mjs
 

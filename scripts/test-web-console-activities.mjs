@@ -28,7 +28,7 @@ import * as hop from "../src/web-console/public/activities/hop.js";
 import { hudLayout as hopHudLayout, labelSpot as hopLabelSpot, LANES as HOP_LANES, limbInk as hopLimbInk, contrast as hopContrast } from "../src/web-console/public/activities/hop-draw.js";
 import * as bounce from "../src/web-console/public/activities/bounce.js";
 import * as rapids from "../src/web-console/public/activities/rapids.js";
-import * as ghoul from "../src/web-console/public/activities/ghoul.js";
+import * as ghoul from "../src/web-console/public/activities/ghoul-rush/ghoul.js";
 import { ACCENTS } from "../src/web-console/public/palette.js";
 import { LIVES, LIVES_BACK, LIVES_INK, livesText, pillContrast } from "../src/web-console/public/activities/pills.js";
 
@@ -277,7 +277,7 @@ test("the list names Snake, Mini golf, Light Trails, Bug Hunt, Sunset Drive, Sta
   assert.equal(ACTIVITIES[11].title, "Ghoul Rush");
   for (const a of ACTIVITIES) {
     assert.ok(Object.isFrozen(a), `${a.id} is frozen`);
-    assert.equal(a.module, `/activities/${a.id}.js`);
+    assert.equal(a.module, a.id === "ghoul" ? "/activities/ghoul-rush/ghoul.js" : `/activities/${a.id}.js`);
     assert.equal(typeof a.title, "string");
     assert.ok(typeof a.blurb === "string" && a.blurb.length > 10, `${a.id} has a line for its picker card`);
   }

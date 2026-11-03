@@ -1,21 +1,21 @@
 // Web console tests, Ghoul Rush's Midnight Carnival stage: its four rooms (the Midway, the Hall of Mirrors, the Funhouse with its conveyor floors, the Big Top), grinners that honk out acid balloons, marionettes that drop on their strings, Mirror You that copies your moves and shots half a second late, strongmen that lob barbells, circus hounds that leap through hoops of fire, Cotton Candy and the Custard Pie (found only here), and the Ringmaster, whose puppet hangs on three strings: cut them all and he is open for four seconds.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import * as ghoul from "../src/web-console/public/activities/ghoul.js";
-import * as cv from "../src/web-console/public/activities/ghoul-carnival.js";
-import * as arm from "../src/web-console/public/activities/ghoul-arms.js";
-import { EVENT_VOICE, LOSE_SOUNDS, LOSE_WORDS } from "../src/web-console/public/activities/ghoul-carnival-draw.js";
-import { PILL_WORDS, pickPower } from "../src/web-console/public/activities/ghoul-powers.js";
-import { BONES } from "../src/web-console/public/activities/ghoul-bones.js";
-import { GRAVEYARD } from "../src/web-console/public/activities/ghoul-graveyard.js";
-import { GROUNDS } from "../src/web-console/public/activities/ghoul-grounds.js";
-import { CHAPEL } from "../src/web-console/public/activities/ghoul-chapel.js";
-import { SANATORIUM } from "../src/web-console/public/activities/ghoul-sanatorium.js";
-import { VILLAGE } from "../src/web-console/public/activities/ghoul-village.js";
-import { MINE } from "../src/web-console/public/activities/ghoul-mine.js";
-import { CART } from "../src/web-console/public/activities/ghoul-cart.js";
-import * as ghoulSfx from "../src/web-console/public/activities/ghoul-sfx.js";
-import { LOOKS, VOICES, react } from "../src/web-console/public/activities/ghoul-draw.js";
+import * as ghoul from "../src/web-console/public/activities/ghoul-rush/ghoul.js";
+import * as cv from "../src/web-console/public/activities/ghoul-rush/stages/carnival/ghoul-carnival.js";
+import * as arm from "../src/web-console/public/activities/ghoul-rush/arms/ghoul-arms.js";
+import { EVENT_VOICE, LOSE_SOUNDS, LOSE_WORDS } from "../src/web-console/public/activities/ghoul-rush/stages/carnival/ghoul-carnival-draw.js";
+import { PILL_WORDS, pickPower } from "../src/web-console/public/activities/ghoul-rush/core/ghoul-powers.js";
+import { BONES } from "../src/web-console/public/activities/ghoul-rush/stages/wing/ghoul-bones.js";
+import { GRAVEYARD } from "../src/web-console/public/activities/ghoul-rush/stages/graveyard/ghoul-graveyard.js";
+import { GROUNDS } from "../src/web-console/public/activities/ghoul-rush/stages/grounds/ghoul-grounds.js";
+import { CHAPEL } from "../src/web-console/public/activities/ghoul-rush/stages/chapel/ghoul-chapel.js";
+import { SANATORIUM } from "../src/web-console/public/activities/ghoul-rush/stages/sanatorium/ghoul-sanatorium.js";
+import { VILLAGE } from "../src/web-console/public/activities/ghoul-rush/stages/village/ghoul-village.js";
+import { MINE } from "../src/web-console/public/activities/ghoul-rush/stages/mine/ghoul-mine.js";
+import { CART } from "../src/web-console/public/activities/ghoul-rush/rides/cart/ghoul-cart.js";
+import * as ghoulSfx from "../src/web-console/public/activities/ghoul-rush/sfx/ghoul-sfx.js";
+import { LOOKS, VOICES, react } from "../src/web-console/public/activities/ghoul-rush/draw/ghoul-draw.js";
 
 const steady = () => 0.5;
 // The pack draws no random number: a run on this fails on the first draw.

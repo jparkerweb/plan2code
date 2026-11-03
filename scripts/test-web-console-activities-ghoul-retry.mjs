@@ -3,9 +3,9 @@
 
 import test from "node:test";
 import assert from "node:assert/strict";
-import * as ghoul from "../src/web-console/public/activities/ghoul.js";
-import { skipStory as storySkip } from "../src/web-console/public/activities/ghoul-story.js";
-import { MERCY_FAR, MERCY_NEAR, mercyKind, mercySpot, mix3 } from "../src/web-console/public/activities/ghoul-powers.js";
+import * as ghoul from "../src/web-console/public/activities/ghoul-rush/ghoul.js";
+import { skipStory as storySkip } from "../src/web-console/public/activities/ghoul-rush/story/ghoul-story.js";
+import { MERCY_FAR, MERCY_NEAR, mercyKind, mercySpot, mix3 } from "../src/web-console/public/activities/ghoul-rush/core/ghoul-powers.js";
 
 const steady = () => 0.5;
 const mercies = (round) => round.drops.filter((d) => d.mercy);

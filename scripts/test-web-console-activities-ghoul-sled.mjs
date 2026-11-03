@@ -2,14 +2,14 @@
 // Run with: node --test scripts/test-web-console-activities-ghoul-sled.mjs
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import * as ghoul from "../src/web-console/public/activities/ghoul.js";
+import * as ghoul from "../src/web-console/public/activities/ghoul-rush/ghoul.js";
 import { skipBossIntro } from "./ghoul-test-helpers.mjs";
-import * as sl from "../src/web-console/public/activities/ghoul-sled.js";
-import * as ct from "../src/web-console/public/activities/ghoul-cart.js";
-import { EVENT_VOICE, LOSE_SOUNDS, LOSE_WORDS, LOOKS as SLED_LOOKS, VOICES as SLED_VOICES, telegraphMarks, telegraphs } from "../src/web-console/public/activities/ghoul-sled-draw.js";
-import * as ghoulSfx from "../src/web-console/public/activities/ghoul-sfx.js";
-import { LOOKS, VOICES, bonusTick, react } from "../src/web-console/public/activities/ghoul-draw.js";
-import { BONUS_FLOOR, diceFor, endBonus, makeBonus } from "../src/web-console/public/activities/ghoul-bonus.js";
+import * as sl from "../src/web-console/public/activities/ghoul-rush/rides/sled/ghoul-sled.js";
+import * as ct from "../src/web-console/public/activities/ghoul-rush/rides/cart/ghoul-cart.js";
+import { EVENT_VOICE, LOSE_SOUNDS, LOSE_WORDS, LOOKS as SLED_LOOKS, VOICES as SLED_VOICES, telegraphMarks, telegraphs } from "../src/web-console/public/activities/ghoul-rush/rides/sled/ghoul-sled-draw.js";
+import * as ghoulSfx from "../src/web-console/public/activities/ghoul-rush/sfx/ghoul-sfx.js";
+import { LOOKS, VOICES, bonusTick, react } from "../src/web-console/public/activities/ghoul-rush/draw/ghoul-draw.js";
+import { BONUS_FLOOR, diceFor, endBonus, makeBonus } from "../src/web-console/public/activities/ghoul-rush/core/ghoul-bonus.js";
 
 const steady = () => 0.5;
 // The pack draws no random number: a run on this fails on the first draw.
@@ -594,7 +594,7 @@ test("Ghoul Rush's Coffin Sled: off the lip the sled launches, lands on the snow
   assert.equal(end.length, 1);
   assert.equal(end[0].won, true);
   assert.ok(end[0].dice >= BONUS_FLOOR && end[0].dice <= ghoul.MAX_DICE, `${end[0].dice} dice`);
-  assert.equal(round.dice, Math.min(ghoul.MAX_DICE, 1 + end[0].dice));
+  assert.equal(round.dice, 1 + end[0].dice);
   assert.equal(round.lives, 3);
   run(round, ghoul.CARD_MS + 100);
   assert.equal(round.spec.id, "widow");

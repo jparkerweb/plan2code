@@ -1,19 +1,19 @@
 // Web console tests, Ghoul Rush's Deep Seam Mine stage: its four rooms (always dark, the cage lifts, the water, the rockfall), rocks that fall after a dust warning and crush monsters and cost a life, the knocker imp that steals your light but never a life, the canary ghost whose scream brings three rocks down, the dead miner that digs out of the wall, the blind crawler that hunts by sound, the cage you can ride, the Hard Hat and Dynamite (found only here), and the Tommyknocker, who knocks, sweeps his hammer, puts the lights out, sinks into the seam and bursts out dazed, and rages at half his hp.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import * as ghoul from "../src/web-console/public/activities/ghoul.js";
-import * as mn from "../src/web-console/public/activities/ghoul-mine.js";
-import * as arm from "../src/web-console/public/activities/ghoul-arms.js";
-import { EVENT_VOICE, LOSE_SOUNDS, LOSE_WORDS } from "../src/web-console/public/activities/ghoul-mine-draw.js";
-import { PILL_WORDS, pickPower } from "../src/web-console/public/activities/ghoul-powers.js";
-import { BONES } from "../src/web-console/public/activities/ghoul-bones.js";
-import { GRAVEYARD } from "../src/web-console/public/activities/ghoul-graveyard.js";
-import { GROUNDS } from "../src/web-console/public/activities/ghoul-grounds.js";
-import { CHAPEL } from "../src/web-console/public/activities/ghoul-chapel.js";
-import { SANATORIUM } from "../src/web-console/public/activities/ghoul-sanatorium.js";
-import { VILLAGE } from "../src/web-console/public/activities/ghoul-village.js";
-import * as ghoulSfx from "../src/web-console/public/activities/ghoul-sfx.js";
-import { LOOKS, VOICES, react } from "../src/web-console/public/activities/ghoul-draw.js";
+import * as ghoul from "../src/web-console/public/activities/ghoul-rush/ghoul.js";
+import * as mn from "../src/web-console/public/activities/ghoul-rush/stages/mine/ghoul-mine.js";
+import * as arm from "../src/web-console/public/activities/ghoul-rush/arms/ghoul-arms.js";
+import { EVENT_VOICE, LOSE_SOUNDS, LOSE_WORDS } from "../src/web-console/public/activities/ghoul-rush/stages/mine/ghoul-mine-draw.js";
+import { PILL_WORDS, pickPower } from "../src/web-console/public/activities/ghoul-rush/core/ghoul-powers.js";
+import { BONES } from "../src/web-console/public/activities/ghoul-rush/stages/wing/ghoul-bones.js";
+import { GRAVEYARD } from "../src/web-console/public/activities/ghoul-rush/stages/graveyard/ghoul-graveyard.js";
+import { GROUNDS } from "../src/web-console/public/activities/ghoul-rush/stages/grounds/ghoul-grounds.js";
+import { CHAPEL } from "../src/web-console/public/activities/ghoul-rush/stages/chapel/ghoul-chapel.js";
+import { SANATORIUM } from "../src/web-console/public/activities/ghoul-rush/stages/sanatorium/ghoul-sanatorium.js";
+import { VILLAGE } from "../src/web-console/public/activities/ghoul-rush/stages/village/ghoul-village.js";
+import * as ghoulSfx from "../src/web-console/public/activities/ghoul-rush/sfx/ghoul-sfx.js";
+import { LOOKS, VOICES, react } from "../src/web-console/public/activities/ghoul-rush/draw/ghoul-draw.js";
 
 const steady = () => 0.5;
 // The pack draws no random number: a run on this fails on the first draw.
