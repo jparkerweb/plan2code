@@ -2,7 +2,7 @@
 // agent's terminal panel docked at the bottom with a drag handle.
 
 import { mountTerminal } from './terminal.js';
-import { attentionSignal, barNextSteps, continueKeys, defaultRightFraction, folderName, pickDefaultAgent, taskbarSwitch, windowTitleFor, deadConsoleAction, loopBanner, loopLocks, loopStopLabels, loopWindowTitle } from './meter.js';
+import { attentionSignal, barNextSteps, continueKeys, defaultRightFraction, folderName, lastAgentNotice, pickDefaultAgent, taskbarSwitch, windowTitleFor, deadConsoleAction, loopBanner, loopLocks, loopStopLabels, loopWindowTitle } from './meter.js';
 
 const { invoke, Channel } = window.__TAURI__.core;
 
@@ -49,7 +49,7 @@ const launchAgentEl = document.getElementById('launch-agent');
 const launchMissingEl = document.getElementById('launch-missing');
 const launchWarningEl = document.getElementById('launch-agents-warning');
 const launchModelEl = document.getElementById('launch-model');
-const launchModelListEl = document.getElementById('launch-model-list');
+const launchModelRowEl = document.getElementById('launch-model-row');
 const launchEffortRow = document.getElementById('launch-effort-row');
 const launchEffortEl = document.getElementById('launch-effort');
 const launchBypassEl = document.getElementById('launch-bypass');
@@ -58,6 +58,8 @@ const launchStartBtn = document.getElementById('launch-start');
 const firstRunEl = document.getElementById('first-run');
 const firstRunListEl = document.getElementById('first-run-list');
 const firstRunStartBtn = document.getElementById('first-run-start');
+const launchNoticeEl = document.getElementById('launch-notice');
+const setupCloseBtn = document.getElementById('setup-close');
 const nextStepEl = document.getElementById('next-step');
 const nextStepTextEl = document.getElementById('next-step-text');
 const nextStepBtn = document.getElementById('next-step-button');
@@ -339,6 +341,11 @@ function populateAgentSelect(selected) {
 
 // Pick the agent to start on and show the card's state for it.
 function applyDefaultAgent(remembered) {
+  // The saved (last used) agent is gone but another works: one line, then
+  // carry on (FR-13). lastAgentNotice gives the pick it names.
+  const using = lastAgentNotice(agentList, remembered);
+  launchNoticeEl.hidden = !using;
+  if (using) launchNoticeEl.textContent = `${agentLabel(remembered)} (last used) was not found, using ${agentLabel(using)}`;
   populateAgentSelect(pickDefaultAgent(agentList, remembered));
   refreshLaunchCard();
 }
@@ -357,33 +364,63 @@ function installPageButton(id) {
   return button;
 }
 
-// Shown when no agent CLI is installed, in the first-run checklist and on the
-// launch card: what an agent CLI is, each built-in's install command and page,
-// and a way to look again once one is installed.
-function noAgentExplainer() {
-  const box = document.createElement('div');
-  box.className = 'agent-explainer';
-  const intro = document.createElement('p');
-  intro.className = 'agent-explainer';
-  intro.textContent = 'An agent CLI is the AI coding assistant Plan2Code runs for you in its terminal. None was found on PATH. Install one of these:';
-  const list = document.createElement('ul');
-  for (const entry of agentList.filter((a) => !a.custom)) {
-    const item = document.createElement('li');
-    item.append(`${entry.label}: `);
-    const code = document.createElement('code');
-    code.textContent = entry.installHint || '';
-    item.append(code, installPageButton(entry.id));
-    list.append(item);
+// Where the setup page was opened from, while it is up: the screen to return
+// to when it closes or reports agent-found. Null: no setup page up.
+let setupReturn = null;
+
+// The Set up an agent button, shown wherever the app says "no agent" (FR-17).
+function setupButton(returnTo) {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'setup-agent-btn';
+  btn.textContent = 'Set up an agent';
+  btn.onclick = () => openAgentSetup(returnTo);
+  return btn;
+}
+
+// Open the console's agent-less setup page in this window (FR-15, FR-17). No
+// poll timer: a dead setup page needs no reconnect, and the Back button still
+// returns.
+async function openAgentSetup(returnTo) {
+  try {
+    const session = await invoke('console_setup_start');
+    setupReturn = returnTo;
+    hideState();
+    hideFirstRun();
+    hideLaunchCard();
+    markConsoleAlive();
+    consoleKnown = true;
+    setupCloseBtn.hidden = false;
+    loadFrame(session.url);
+  } catch (error) {
+    const text = String(error);
+    // A missing console.mjs means the skills install itself is gone (FR-16).
+    setAgentStatus(
+      text.includes('not installed') || text.includes('console.mjs')
+        ? "Plan2Code's skills are missing: run `plan2code update`."
+        : `Could not open the setup page: ${text}`,
+      { error: true }
+    );
   }
-  const other = document.createElement('p');
-  other.className = 'agent-explainer';
-  other.textContent = 'Already use another agent CLI? Add it in User Preferences under Agents.';
-  const check = document.createElement('button');
-  check.type = 'button';
-  check.textContent = 'Check again';
-  check.onclick = checkAgentsAgain;
-  box.append(intro, list, other, check);
-  return box;
+}
+
+// The setup page is done: it found an agent (agent-found carries its id) or
+// the person pressed Back. Return to where the app was, recheck the agents,
+// and pick the found one on the launch card for the person to press Start
+// (FR-14, FR-17).
+async function finishSetup(foundId) {
+  if (setupReturn === null) return;
+  const returnTo = setupReturn;
+  setupReturn = null;
+  setupCloseBtn.hidden = true;
+  currentUrl = null;
+  frameReady = false;
+  frame.src = 'about:blank';
+  invoke('console_stop').catch(() => {});
+  await loadAgentAvailability(true);
+  applyDefaultAgent(foundId || (appState && appState.lastAgent) || launchAgentEl.value);
+  if (returnTo === 'first-run' && appState) showFirstRun(appState);
+  else showLaunchCard();
 }
 
 // Re-read the agents from disk (a CLI installed or a custom agent added since),
@@ -403,7 +440,11 @@ function refreshLaunchCard() {
   launchMissingEl.replaceChildren();
   if (!installed) {
     if (!agentList.some((a) => a.installed)) {
-      launchMissingEl.append(noAgentExplainer());
+      launchMissingEl.append('No agent found. ', setupButton('launch-card'));
+    } else if (info && info.state === 'outside') {
+      // Found on the saved PATH, in npm's folder or an install folder, but
+      // not on PATH itself: setup, not a fresh install.
+      launchMissingEl.append(`${agentLabel(kind)} was found${info.folder ? ` in ${info.folder}` : ''}, but it is not on PATH. `, setupButton('launch-card'));
     } else {
       launchMissingEl.append(`${agentLabel(kind)} was not found on PATH.`);
       if (info && !info.custom) {
@@ -416,15 +457,26 @@ function refreshLaunchCard() {
   }
   launchWarningEl.hidden = agentWarnings.length === 0;
   launchWarningEl.textContent = agentWarnings.map((warning) => `agents.json: ${warning}`).join('\n');
-  // A custom agent has no separate effort, and offers its models as
-  // suggestions in the (still free-text) model field.
-  launchModelListEl.replaceChildren();
-  for (const model of (info && info.custom && info.models) || []) {
+  // The model dropdown lists what the `plan2code` launcher would ask with:
+  // built-ins get the shipped + user models.json merge from Rust, customs
+  // their own agents.json models. An empty list hides the row, like the
+  // launcher's skipped model question; the first option passes no flag, so
+  // the agent runs on its own (last-used) model.
+  const models = (info && info.models) || [];
+  launchModelEl.replaceChildren();
+  const noModel = document.createElement('option');
+  noModel.value = '';
+  noModel.textContent = "Default (the agent's own model)";
+  launchModelEl.append(noModel);
+  for (const model of models) {
     const option = document.createElement('option');
     option.value = model.id;
-    if (model.label) option.label = model.label;
-    launchModelListEl.append(option);
+    option.textContent = model.label ? `${model.id}: ${model.label}` : model.id;
+    launchModelEl.append(option);
   }
+  launchModelRowEl.hidden = models.length === 0;
+  // A model the launcher picked (--model) sticks only while it is listed.
+  if (appState && models.some((model) => model.id === appState.launchModel)) launchModelEl.value = appState.launchModel;
   const levels = info && info.custom ? [] : EFFORT_OPTIONS[kind] || [];
   launchEffortRow.hidden = levels.length === 0;
   launchEffortEl.replaceChildren();
@@ -495,7 +547,7 @@ function renderFirstRun(state) {
   if (agentsKnown.length === 0) {
     agentsDetail.textContent = 'Could not check.';
   } else if (!anyAgentInstalled) {
-    agentsDetail.append(noAgentExplainer());
+    agentsDetail.append('No agent found. ', setupButton('first-run'));
   } else {
     agentsKnown.forEach((a, i) => {
       if (i > 0) agentsDetail.append(', ');
@@ -537,7 +589,7 @@ firstRunStartBtn.onclick = async () => {
 async function startAgent(event) {
   if (event) event.preventDefault();
   const kind = launchAgentEl.value;
-  const model = launchModelEl.value.trim() || null;
+  const model = launchModelEl.value || null;
   const info = agentAvailability[kind];
   const effort = !(info && info.custom) && (EFFORT_OPTIONS[kind] || []).length > 0 ? launchEffortEl.value || null : null;
   const mode = launchBypassEl.checked ? 'bypass' : 'checked';
@@ -563,6 +615,7 @@ async function agentAction(command) {
 }
 
 launchCard.addEventListener('submit', startAgent);
+setupCloseBtn.onclick = () => finishSetup();
 restartBtn.onclick = () => confirmRestart(() => agentAction('agent_restart'));
 // Only ever enabled once the agent has ended: nothing active to lose, so no confirm.
 changeAgentBtn.onclick = () => {
@@ -700,6 +753,9 @@ window.addEventListener('message', (event) => {
   } else if (kind === 'attention') {
     const signal = attentionSignal(event.data);
     if (signal) invoke('set_attention', { signal }).catch(() => {});
+  } else if (kind === 'agent-found') {
+    const id = typeof event.data.id === 'string' ? event.data.id : '';
+    void finishSetup(id || null);
   } else if (kind === 'taskbar') {
     const on = taskbarSwitch(event.data);
     if (on === null) return;

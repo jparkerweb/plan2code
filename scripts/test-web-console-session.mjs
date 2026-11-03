@@ -555,9 +555,11 @@ test("console-launches.md and the dashboard prompt teach the handoff pick-up and
 test("every module the page imports is actually served", async () => {
   const dir = path.join(ROOT, "src", "web-console", "public");
   const wanted = new Set(["app.js"]);
-  // The modules beside app.js and the screens under screens/, each import
-  // resolved from the file that makes it (a screen's "../state.js" is state.js).
-  const files = [...fs.readdirSync(dir).filter((f) => f.endsWith(".js")), ...fs.readdirSync(path.join(dir, "screens")).map((f) => `screens/${f}`)];
+  // The modules beside app.js and the screens under screens/ (subfolders too:
+  // screens/agents/ is a directory), each import resolved from the file that
+  // makes it (a screen's "../state.js" is state.js).
+  const screens = (abs, rel) => fs.readdirSync(abs, { withFileTypes: true }).flatMap((e) => e.isDirectory() ? screens(path.join(abs, e.name), `${rel}${e.name}/`) : e.name.endsWith(".js") ? [`${rel}${e.name}`] : []);
+  const files = [...fs.readdirSync(dir).filter((f) => f.endsWith(".js")), ...screens(path.join(dir, "screens"), "screens/")];
   for (const f of files) {
     const src = fs.readFileSync(path.join(dir, f), "utf8");
     for (const m of src.matchAll(/^\s*import\b[^"']*["'](\.\.?\/[^"']+)["']/gm)) wanted.add(path.posix.join(path.posix.dirname(f), m[1]));
@@ -651,9 +653,9 @@ test("the favicon is served as an SVG with a PNG fallback and the page points at
 /* ---------------------------------------------------------------- help */
 
 
-test("help: 20 tabs with unique ids", () => {
-  assert.equal(HELP_TABS.length, 20);
-  assert.equal(new Set(HELP_TABS.map((t) => t.id)).size, 20);
+test("help: 21 tabs with unique ids", () => {
+  assert.equal(HELP_TABS.length, 21);
+  assert.equal(new Set(HELP_TABS.map((t) => t.id)).size, 21);
   assert.ok(Object.isFrozen(HELP_TABS) && HELP_TABS.every((t) => Object.isFrozen(t)), "the tab list is frozen");
   const ids = HELP_TABS.map((t) => t.id);
   assert.equal(ids.indexOf("loop"), ids.indexOf("build") + 1, "Implementation Loop comes right after Watching a build");

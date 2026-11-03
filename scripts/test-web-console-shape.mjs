@@ -121,7 +121,10 @@ test("shape: the define-only check names a page file that touches the page at lo
 // A screen reaches the rest of the page through ../state.js and the pure
 // modules beside it, never through another screen: only core.js (the render
 // loop, which draws every screen) imports screens, and only app.js (the
-// entry) imports core.js. Each import that breaks that is named.
+// entry) imports core.js. A screen's own components are not screens: files
+// under a subdirectory of screens/ (screens/agents/) may be imported by the
+// screen they serve and by each other, but never the other way, and never a
+// top-level screen file. Each import that breaks that is named.
 function pageImportProblems(pub) {
   const problems = [];
   for (const p of sourceFiles(pub).filter((f) => f.endsWith(".js") && (!f.includes("/") || f.startsWith("screens/")))) {
@@ -131,7 +134,7 @@ function pageImportProblems(pub) {
       if (!spec.startsWith(".")) continue;
       const target = path.posix.join(path.posix.dirname(p), spec);
       if (target === "screens/core.js" && p !== "app.js") problems.push(`${p} imports ${spec}: only app.js imports core.js`);
-      else if (p.startsWith("screens/") && p !== "screens/core.js" && target.startsWith("screens/"))
+      else if (p.startsWith("screens/") && p !== "screens/core.js" && /^screens\/[^/]+\.js$/.test(target))
         problems.push(`${p} imports ${spec}: a screen imports ../state.js and the modules beside it, never another screen`);
     }
   }
@@ -184,8 +187,8 @@ test("shape: no page module sets a style attribute from script", () => {
 // and WORKSPACE_EDITS for /workspace/add, /edit and /remove. The git board has
 // no routes of its own: its buttons are sends (`__git`), through /submit.
 const ROUTE_ORDER = [
-  "/health", "/s/", "/", "SERVABLE", "/overview", "/handoff", "/version", "/state", "/events", "/draft",
-  "/looks", "/looks", "/subagents", "/pr-host", "/models", "/models", "/agents", "/agents", "/agents/test", "/cleanup", "/upload",
+  "/health", "/s/", "/handover", "/", "SERVABLE", "/overview", "/handoff", "/version", "/state", "/events", "/draft",
+  "/looks", "/looks", "/subagents", "/pr-host", "/models", "/models", "/agents", "/agents", "/agents/test", "/agents/use-path", "/cleanup", "/upload",
   "/notepad", "/notepad/text", "/notepad/image", "/notepad/thumb", "/notepad/image/delete", "/notepad/tab",
   "/notepad/tab/rename", "/notepad/tab/delete", "/notepad/tab/order", "/notepad/tab/last", "/notepad/tab/sent", "/notepad/images/",
   "/attachments/", "/shots/", "/uploads/", "/submit", "/open-link", "/chat", "/chat/decision", "/workspace",

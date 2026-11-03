@@ -10,7 +10,23 @@
 import fs from "node:fs";
 import path from "node:path";
 
-export const BUILTIN_AGENT_IDS = ["claude", "devin", "codex"];
+import { loadAgentList } from "./agent-lookup.mjs";
+import { SHIPPED_AGENTS_FILE } from "./files.mjs";
+
+// The built-in ids come from the shipped list (bin/agents.json), so adding a
+// built-in agent needs no code change here. The hard-coded trio is only the
+// fallback for a missing or unreadable file. Worked out once at load, never
+// throws: a broken shipped file must not take the whole module down.
+function shippedBuiltinIds() {
+  try {
+    const { builtins } = loadAgentList({ dir: path.dirname(SHIPPED_AGENTS_FILE) });
+    const ids = builtins.map((a) => a && a.id).filter((id) => typeof id === "string" && id);
+    if (ids.length) return ids;
+  } catch {}
+  return ["claude", "devin", "codex"];
+}
+
+export const BUILTIN_AGENT_IDS = shippedBuiltinIds();
 export const AGENTS_SCHEMA = 1;
 export const MAX_AGENTS = 50;
 
@@ -169,29 +185,55 @@ function trimDashes(text) {
 /**
  * The arguments that start an entry, in order: `args` with {prompt} filled
  * (the prompt appended when no argument holds it), then `modelArgs` when a
- * model is chosen, then `bypassArgs` when checks are off. `prompt` defaults
- * to the entry's own; a blank one drops an argument that is exactly
- * {prompt}. Plain text in, plain text out: no quoting for any shell.
+ * model is chosen, then `bypassArgs` when checks are off. An argument that is
+ * exactly `{bypass}` or `{model}` expands to the entry's `bypassArgs` /
+ * `modelArgs` in place (nothing when off / unset) and that flag is no longer
+ * appended at the end. `prompt` defaults to the entry's own; a blank one
+ * drops an argument that is exactly {prompt}. Plain text in, plain text out:
+ * no quoting for any shell.
  */
 export function buildArgs(entry, { prompt, model, bypass } = {}) {
   const text = prompt === undefined ? (typeof entry.prompt === "string" ? entry.prompt : DEFAULT_PROMPT) : String(prompt ?? "");
   const blank = !text.trim();
+  const modelArgs = entry.modelArgs || DEFAULT_MODEL_ARGS;
   const out = [];
   let placed = false;
+  let hasBypass = false;
+  let hasModel = false;
   for (const arg of entry.args || []) {
-    if (!arg.includes("{prompt}")) {
+    if (arg === "{bypass}") {
+      hasBypass = true;
+      if (bypass) out.push(...(entry.bypassArgs || []));
+      continue;
+    }
+    if (arg === "{model}") {
+      hasModel = true;
+      if (model) for (const m of modelArgs) out.push(m.split("{model}").join(model));
+      continue;
+    }
+    if (arg.includes("{bypass}")) hasBypass = true;
+    if (arg.includes("{model}")) hasModel = true;
+    if (!arg.includes("{prompt}") && !arg.includes("{model}")) {
       out.push(arg);
       continue;
     }
-    placed = true;
-    if (arg === "{prompt}" && blank) continue;
-    out.push(arg.split("{prompt}").join(text));
+    if (arg === "{prompt}" && blank) {
+      placed = true;
+      continue;
+    }
+    let next = arg;
+    if (next.includes("{prompt}")) {
+      placed = true;
+      next = next.split("{prompt}").join(text);
+    }
+    if (next.includes("{model}")) next = next.split("{model}").join(model || "");
+    out.push(next);
   }
   if (!placed && !blank) out.push(text);
-  if (model) {
-    for (const arg of entry.modelArgs || DEFAULT_MODEL_ARGS) out.push(arg.split("{model}").join(model));
+  if (model && !hasModel) {
+    for (const arg of modelArgs) out.push(arg.split("{model}").join(model));
   }
-  if (bypass) out.push(...(entry.bypassArgs || []));
+  if (bypass && !hasBypass) out.push(...(entry.bypassArgs || []));
   return out;
 }
 

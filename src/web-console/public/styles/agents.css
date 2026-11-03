@@ -1,0 +1,157 @@
+/* agents.css: the Agents & models view - a master-detail split shared by User
+   Preferences' tab and the agent-less setup page. The list is pinned left;
+   the right pane holds the picked agent's form (prefs), the picked entry's
+   state and way forward (setup), or the empty text. Every rule that used to
+   be spread over prefs.css and responsive.css lives here. */
+
+/* ------------------------------------------------------------- the mount */
+
+.prefs-agents { display: grid; gap: 10px; }
+.prefs-agents > .help { margin: 0; }
+.prefs-agents [hidden], .setup-agents [hidden] { display: none; }
+[data-av="status"]:empty { display: none; }
+[data-av="status"].error { color: var(--danger, #d64545); }
+
+/* ----------------------------------------------------------- the split */
+
+.split {
+  display: grid;
+  grid-template-columns: 250px minmax(0, 1fr);
+  border: 1px solid var(--rule-2);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--panel);
+}
+.split-list {
+  border-right: 1px solid var(--rule);
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: var(--panel-2);
+}
+.split-list-head { padding: 8px 12px 2px; color: var(--ink-3); font-size: 13px; }
+.split-row {
+  appearance: none;
+  font: inherit;
+  text-align: left;
+  border: 0;
+  border-bottom: 1px solid var(--rule);
+  background: transparent;
+  color: var(--ink);
+  padding: 10px 12px;
+  cursor: pointer;
+  display: grid;
+  gap: 2px;
+}
+.split-row:hover { background: var(--accent-soft); }
+.split-row[aria-current="true"] { background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); }
+.split-row .row-name { font-weight: 600; font-size: 13.5px; }
+.split-row .row-sub { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ink-3); flex-wrap: wrap; }
+.split-row .row-sub code { color: var(--ink-3); }
+.split-row .row-models { color: var(--ink-2); overflow-wrap: anywhere; }
+.split-row .row-note { display: block; margin-top: 2px; font-size: 12px; }
+.split-row.soon { color: var(--ink-3); font-style: italic; cursor: default; }
+.split-add { margin: 8px; align-self: flex-start; }
+
+.split-pane {
+  padding: 16px 18px 30px;
+  display: grid;
+  gap: 12px;
+  align-content: start;
+  min-width: 0;
+}
+.split-empty { color: var(--ink-3); display: grid; place-items: center; min-height: 240px; text-align: center; }
+
+/* ------------------------------------------------------------- badges */
+
+.prefs-badge, .prefs-unsaved-badge {
+  display: inline-block;
+  font-size: 11.5px;
+  line-height: 1.5;
+  padding: 0 7px;
+  border-radius: 10px;
+  background: var(--panel-2);
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+.split-row .prefs-badge { background: var(--panel); }
+.prefs-badge.ok { color: var(--ok); }
+.prefs-badge.missing { color: var(--warn); }
+.prefs-unsaved-badge { background: none; border: 1px solid var(--warn); color: var(--warn); }
+
+/* -------------------------------------------------------------- the form */
+
+.form-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.prefs-agents-title { display: flex; align-items: baseline; gap: 8px; margin: 0; font-size: 15px; }
+.prefs-agents-title code { font-size: 12px; color: var(--ink-3); }
+.prefs-agents-title:focus { outline: none; }
+
+.prefs-agents-fields { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
+.prefs-agents-fields input { min-width: 0; }
+.prefs-agents-fields input.invalid, .split-pane input.invalid { border-color: var(--danger, #d64545); }
+
+.agent-field { display: grid; gap: 4px; min-width: 0; }
+.agent-field > span, .agent-field > label { font-size: 0.85em; opacity: 0.85; }
+.agent-rows { display: grid; gap: 4px; }
+.agent-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; align-items: center; }
+.agent-row.model { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; }
+.agent-foot { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.agent-foot .help { margin: 0; }
+.prefs-agents-test .agent-test-result { flex: 1 1 auto; }
+.agent-error { margin: 0; color: var(--danger, #d64545); font-size: 0.9em; }
+
+.prefs-agents-test { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.prefs-agents-test .help { margin: 0; }
+.prefs-agents-none { margin: 0; }
+
+/* A folded section (Models, Command-line arguments): the picked design keeps
+   both behind a summary line until opened. */
+.agent-fold { display: grid; gap: 8px; }
+.agent-fold > summary { cursor: pointer; color: var(--accent); font-size: 13px; }
+.agent-fold[open] > summary { margin-bottom: 4px; }
+.agent-fold > .agent-field + .agent-field, .agent-fold > .models-note + .agent-field { margin-top: 8px; }
+.prefs-agents-args > .agent-field + .agent-field { margin-top: 8px; }
+
+/* The Saved mark sits in the form's foot, in the flow, after the buttons. */
+.prefs-agents-foot > .prefs-saved { position: static; max-width: none; text-align: left; }
+
+/* ------------------------------------------------------------- models lists */
+
+.models-note { font-size: 0.9em; opacity: 0.85; }
+.models-note p, .models-note ul { margin: 0 0 6px; }
+.models-note ul { padding-left: 18px; }
+.models-list { display: grid; gap: 4px; max-height: 160px; overflow: auto; }
+.models-list:empty { display: none; }
+.models-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; gap: 6px; align-items: center; }
+.models-row.locked { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); font-size: 0.88em; opacity: 0.75; }
+.models-row input { min-width: 0; }
+
+/* --------------------------------------------------------- the setup pane */
+
+.setup-detail { display: grid; gap: 12px; align-content: start; }
+.setup-agent-state { display: grid; gap: 6px; }
+.setup-agent-line {
+  margin: 0;
+  color: var(--ink-2);
+  font-size: 13px;
+}
+.setup-install {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0 0;
+  flex-wrap: wrap;
+}
+.setup-install code {
+  background: var(--panel-2);
+  border-radius: 6px;
+  padding: 2px 7px;
+  font-size: 12px;
+}
+
+/* --------------------------------------------------------- narrow screens */
+
+@media (max-width: 720px) {
+  .split { grid-template-columns: 1fr; }
+  .split-list { border-right: 0; border-bottom: 1px solid var(--rule); max-height: 260px; overflow: auto; }
+}

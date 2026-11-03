@@ -5,13 +5,14 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 
 use plan2code_app_lib::agent_manager::{AgentEvent, AgentManager, AgentState, BeforeFresh, Sink};
-use plan2code_app_lib::agents::{self, Agent, AgentKind, PermissionMode};
+use plan2code_app_lib::agents::{self, Agent, PermissionMode};
 use plan2code_app_lib::announce::{AnnounceServer, PageNotice};
 use plan2code_app_lib::attention::{self, Badge, Signal};
 use plan2code_app_lib::console_supervisor::{
     app_origin, origin_of, session_on_disk, ConsoleSupervisor,
 };
 use plan2code_app_lib::loop_driver::{self, Hooks, LastLoop, LoopFacts, LoopSlot};
+use plan2code_app_lib::models;
 use plan2code_app_lib::node_check;
 use plan2code_app_lib::project::{self, ProjectDir};
 use plan2code_app_lib::quit_prompt::{loop_quit_prompt, quit_prompt, QuitCase};
@@ -87,28 +88,34 @@ fn platform_info() -> serde_json::Value {
 // warnings about agents.json.
 #[tauri::command]
 fn agent_availability(refresh: Option<bool>) -> serde_json::Value {
-    // "Check again" also works the PATH out again, so a CLI whose installer
-    // added a new folder to it is found without restarting the app.
+    // "Check again" also works the PATH out again and re-reads the shipped
+    // agent list, so a CLI whose installer added a new folder to PATH, or a
+    // list an update rewrote, is seen without restarting the app.
     if refresh == Some(true) {
         node_check::refresh_path();
+        agents::refresh_agent_list();
     }
-    // Built-ins first, then the custom agents, read afresh on every call so
-    // "Check again" sees a change to agents.json.
-    let mut entries: Vec<_> = AgentKind::ALL
+    // Built-ins from the shipped list first, then the custom agents, read
+    // afresh on every call so "Check again" sees a change to agents.json.
+    // `state` is the shared lookup's answer: found (on PATH), outside (on
+    // the saved PATH, in npm's folder or an install folder: needs setup,
+    // not missing) or missing. `folder` names where an outside hit lives.
+    let mut entries: Vec<_> = agents::builtin_entries()
         .iter()
-        .map(|&kind| {
-            let at = agents::installed_at(kind);
+        .map(|entry| {
+            let hit = agents::lookup_agent(entry);
             serde_json::json!({
-                "id": kind.id(),
-                "label": kind.label(),
-                "installed": at.is_some(),
-                // Which binary was used (Task 9.9), when one was found.
-                "path": at.map(|p| p.to_string_lossy().into_owned()),
-                "installHint": kind.install_hint(),
-                "installUrl": kind.install_url(),
-                "hasEffort": kind.has_effort(),
+                "id": entry.id,
+                "label": entry.name,
+                "installed": hit.state == "found",
+                "state": hit.state,
+                "path": hit.path.map(|p| p.to_string_lossy().into_owned()),
+                "folder": hit.folder.map(|p| p.to_string_lossy().into_owned()),
+                "installHint": agents::install_hint(entry),
+                "installUrl": entry.install_url,
+                "hasEffort": agents::has_effort(&entry.id),
                 "custom": false,
-                "models": null,
+                "models": models::models_for_builtin(&entry.id),
             })
         })
         .collect();
@@ -119,6 +126,7 @@ fn agent_availability(refresh: Option<bool>) -> serde_json::Value {
             "id": custom.id,
             "label": custom.name,
             "installed": at.is_some(),
+            "state": if at.is_some() { "found" } else { "missing" },
             "path": at.map(|p| p.to_string_lossy().into_owned()),
             "installHint": null,
             "installUrl": null,
@@ -145,11 +153,11 @@ fn open_install_page(id: String) -> Result<(), String> {
     }
     let mut command = if cfg!(windows) {
         let mut c = std::process::Command::new("rundll32.exe");
-        c.args(["url.dll,FileProtocolHandler", url]);
+        c.args(["url.dll,FileProtocolHandler", &url]);
         c
     } else if cfg!(target_os = "macos") {
         let mut c = std::process::Command::new("open");
-        c.arg(url);
+        c.arg(&url);
         c
     } else {
         let browser = std::env::var("BROWSER")
@@ -157,7 +165,7 @@ fn open_install_page(id: String) -> Result<(), String> {
             .filter(|b| !b.is_empty())
             .unwrap_or_else(|| "xdg-open".to_string());
         let mut c = std::process::Command::new(browser);
-        c.arg(url);
+        c.arg(&url);
         c
     };
     command
@@ -296,6 +304,13 @@ fn take_announced(
     on_disk: impl Fn(&str) -> bool,
 ) -> bool {
     if !on_disk(&notice.sid) {
+        return false;
+    }
+    // An agent-less setup session never takes the window by announcing
+    // itself (NFR-2): the only setup console allowed here is the one the app
+    // itself started for Set up an agent, which carries no announce
+    // variables and drives the frame through console_setup_start instead.
+    if notice.workflow == "setup" {
         return false;
     }
     if let Ok(mut guard) = state.console.lock() {
@@ -857,8 +872,10 @@ fn change_project(
 
 /// The console the agent opened, alive and as it is now, or restarted on the
 /// same session when it died. The app never starts a dashboard of its own:
-/// the agent does, by running the skill, and announces it. Nothing to show yet
-/// is an error the page words for the person.
+/// the agent does, by running the skill, and announces it. The one exception
+/// is `console_setup_start` below: the agent-less `setup` page, which is no
+/// dashboard and has no agent to announce it, so the app opens it itself.
+/// Nothing to show yet is an error the page words for the person.
 #[tauri::command]
 fn console_start(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
     console_start_impl(&state)
@@ -899,6 +916,44 @@ fn console_stop(state: State<'_, AppState>) -> Result<(), String> {
         sup.stop()?;
     }
     Ok(())
+}
+
+/// Set up an agent: the agent-less `setup` page shown in this window. This
+/// is the one exception to the app never starting a console of its own (see
+/// `console_start` above): the setup page is not a dashboard and has no
+/// agent behind it, and nothing else can open it here. The console is
+/// started the way the `plan2code` command starts it (`console.mjs open
+/// --workflow setup`, no announce variables, so it never claims the window
+/// on its own), and the URL comes back for the page to frame. When
+/// `console.mjs` cannot be found the error names it, and the page shows its
+/// plain "skills are missing" checklist row.
+#[tauri::command]
+fn console_setup_start(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+) -> Result<serde_json::Value, String> {
+    let origin = window_origin(&app);
+    console_setup_start_impl(&state, &origin)
+}
+
+fn console_setup_start_impl(state: &AppState, origin: &str) -> Result<serde_json::Value, String> {
+    refuse_while_looping(state, "console")?;
+    let dir = state
+        .project
+        .lock()
+        .ok()
+        .and_then(|p| p.as_ref().map(|p| p.dir.clone()))
+        .ok_or("no project folder chosen")?;
+    // The setup console starts before the old one is stopped: a failed open
+    // (a missing console.mjs, a dead session store) leaves what was showing.
+    let sup = ConsoleSupervisor::start_with_workflow(dir, origin.to_string(), "setup")?;
+    let mut guard = state.console.lock().map_err(|e| e.to_string())?;
+    if let Some(mut old) = guard.take() {
+        let _ = old.stop();
+    }
+    let session = serde_json::to_value(sup.session()).map_err(|e| e.to_string())?;
+    *guard = Some(sup);
+    Ok(session)
 }
 
 // What the setup screen shows about the agent a loop would use: the running
@@ -1255,6 +1310,7 @@ fn main() {
             console_start,
             console_status,
             console_stop,
+            console_setup_start,
             loop_start,
             loop_notify_test,
             loop_facts,
@@ -1535,6 +1591,105 @@ mod tests {
             .output()
             .map(|o| o.status.success())
             .unwrap_or(false)
+    }
+
+    #[test]
+    fn a_setup_session_is_never_taken_from_an_announce() {
+        // NFR-2: the only setup page in the window is the one the app itself
+        // opened for Set up an agent. Whatever announces "setup" is refused,
+        // even a session the console store really holds.
+        let state = state_for("project-a");
+        let mut setup = notice("setup-console");
+        setup.workflow = "setup".into();
+        assert!(!take_announced(
+            &state,
+            &setup,
+            app_origin().to_string(),
+            |_| true
+        ));
+        assert!(state.console.lock().unwrap().is_none(), "nothing adopted");
+    }
+
+    #[test]
+    fn the_setup_console_needs_a_project_to_open_in() {
+        let state = AppState::default();
+        let error = console_setup_start_impl(&state, "http://127.0.0.1:1430")
+            .expect_err("no project, no setup page");
+        assert!(error.contains("project"), "{error}");
+    }
+
+    #[test]
+    fn the_setup_console_starts_on_the_setup_workflow() {
+        // Same setup as `real_console` below: the repo's own console source,
+        // a throwaway session home, no browser, no in-app variables.
+        let console_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../src/web-console");
+        if !have_node() || !console_dir.join("console.mjs").is_file() {
+            eprintln!("skipping: node or the console source is not here");
+            return;
+        }
+        let pid = std::process::id();
+        let project = std::env::temp_dir().join(format!("p2c-setup-test-project-{pid}"));
+        std::fs::create_dir_all(&project).unwrap();
+        std::env::set_var("PLAN2CODE_CONSOLE_DIR", &console_dir);
+        std::env::set_var(
+            "PLAN2CODE_CONSOLE_HOME",
+            std::env::temp_dir().join(format!("p2c-setup-test-home-{pid}")),
+        );
+        std::env::set_var("PLAN2CODE_NO_BROWSER", "1");
+        for name in [
+            "PLAN2CODE_IN_APP",
+            "PLAN2CODE_APP_ANNOUNCE",
+            "PLAN2CODE_APP_TOKEN",
+            "PLAN2CODE_CONSOLE_SID",
+        ] {
+            std::env::remove_var(name);
+        }
+
+        let state = state_for("project-a");
+        state.project.lock().unwrap().as_mut().unwrap().dir = project.clone();
+        let session = console_setup_start_impl(&state, "http://127.0.0.1:1430")
+            .expect("the setup page opens");
+        let url = session["url"].as_str().unwrap();
+        assert!(url.starts_with("http://127.0.0.1:"), "{url}");
+        let sid = session["sid"].as_str().unwrap();
+        // It is an agent-less setup session on disk, not a dashboard.
+        let home = std::env::var("PLAN2CODE_CONSOLE_HOME").unwrap();
+        let on_disk: serde_json::Value = serde_json::from_str(
+            &std::fs::read_to_string(
+                PathBuf::from(home)
+                    .join("sessions")
+                    .join(sid)
+                    .join("state.json"),
+            )
+            .expect("the session's own state"),
+        )
+        .unwrap();
+        assert_eq!(on_disk["workflow"].as_str(), Some("setup"), "{on_disk}");
+        let _ = state.console.lock().unwrap().take().unwrap().stop();
+    }
+
+    #[test]
+    fn availability_reports_each_builtins_lookup_state() {
+        // Every entry carries the shared lookup's state: found (on PATH),
+        // outside (needing setup, not missing) or missing, with `folder` for
+        // where an outside hit lives.
+        let json = agent_availability(None);
+        let entries = json["agents"].as_array().unwrap();
+        assert!(!entries.is_empty());
+        let mut builtins = 0;
+        for entry in entries {
+            let state = entry["state"].as_str().unwrap();
+            assert!(["found", "outside", "missing"].contains(&state), "{entry}");
+            if entry["custom"] == false {
+                builtins += 1;
+                assert!(entry["installUrl"].is_string() || entry["installUrl"].is_null());
+            }
+            if state == "found" {
+                assert_eq!(entry["installed"], true, "{entry}");
+                assert!(entry["path"].is_string(), "{entry}");
+            }
+        }
+        assert!(builtins >= 3, "claude, devin and codex are listed");
     }
 
     /// A real console, the same way `tests/console_supervisor.rs` sets one

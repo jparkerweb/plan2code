@@ -64,7 +64,7 @@ function skill(entry) {
   const card = entry.card ? Object.freeze({ ...entry.card }) : null;
   const states = Array.isArray(entry.states) ? Object.freeze([...entry.states]) : entry.states;
   const greyed = entry.greyed ? Object.freeze({ ...entry.greyed }) : null;
-  return Object.freeze({ marksNext: false, ...entry, command: "/" + entry.skill, states, greyed, card });
+  return Object.freeze({ marksNext: false, ...entry, command: entry.skill ? "/" + entry.skill : null, states, greyed, card });
 }
 
 export const SKILLS = Object.freeze([
@@ -446,6 +446,26 @@ export const SKILLS = Object.freeze([
         "Writes down everything a new session would need, as a single document: what was decided, what is done, what is left. Use it when a conversation got long, a machine changed, or tomorrow-you deserves the context today-you has.",
     },
   }),
+  // The agent-less setup page: opened by the `plan2code` command (or the app)
+  // when no agent can run. It is a workflow, not a skill: no command, no card,
+  // and every list derived from FLOW_SKILLS leaves it out (no card, no command,
+  // no resume, metered false). `agentless` switches off the agent-silence
+  // states, the Ask and Subagents tabs, the Notebook send and most of the top
+  // bar, all checked through isAgentless().
+  skill({
+    skill: null,
+    workflow: "setup",
+    agentless: true,
+    label: "Agent setup",
+    name: "Setup",
+    pose: "setup",
+    builds: false, phased: false, metered: false, templates: false,
+    weight: null, started: null, ran: null, resume: null,
+    subagents: null,
+    states: null,
+    greyed: null,
+    card: null,
+  }),
   skill({
     skill: "plan2code",
     workflow: "dashboard",
@@ -466,7 +486,8 @@ export const SKILLS = Object.freeze([
 export const FLOW_SKILLS = Object.freeze(SKILLS.filter((s) => !s.appOnly));
 
 const BY_WORKFLOW = new Map(FLOW_SKILLS.map((s) => [s.workflow, s]));
-const BY_SKILL = new Map(FLOW_SKILLS.map((s) => [s.skill, s]));
+// Entries with no skill (the agent-less setup page) are not looked up by one.
+const BY_SKILL = new Map(FLOW_SKILLS.filter((s) => s.skill).map((s) => [s.skill, s]));
 
 // Every workflow name the console knows, in SKILLS order.
 export const WORKFLOWS = Object.freeze(FLOW_SKILLS.map((s) => s.workflow));
@@ -490,6 +511,8 @@ export const isBuild = (workflow) => Boolean(skillFor(workflow)?.builds);
 export const isPhased = (workflow) => Boolean(skillFor(workflow)?.phased);
 export const isMetered = (workflow) => Boolean(skillFor(workflow)?.metered);
 export const takesTemplates = (workflow) => Boolean(skillFor(workflow)?.templates);
+/** A session with no agent behind it: silence states, Ask and helpers stay off. */
+export const isAgentless = (workflow) => Boolean(skillFor(workflow)?.agentless);
 
 /** The Subagents switch's instruction for a workflow, or null when it is not offered. */
 export function subagentsFor(workflow) {

@@ -39,6 +39,9 @@ export const SESSIONS_DIR = path.join(HOME_DIR, "sessions");
 // theirs. The launcher reads both. PLAN2CODE_MODELS_DIR moves them, for tests.
 export const PLAN2CODE_DIR = process.env.PLAN2CODE_MODELS_DIR || path.join(os.homedir(), ".plan2code");
 export const SHIPPED_MODELS_FILE = path.join(PLAN2CODE_DIR, "bin", "models.json");
+// The shipped agent list (builtins + starter templates), same override
+// mechanism: install.js drops it in bin/ beside models.json.
+export const SHIPPED_AGENTS_FILE = path.join(PLAN2CODE_DIR, "bin", "agents.json");
 export const USER_MODELS_FILE = path.join(PLAN2CODE_DIR, "models.json");
 // The person's custom agent CLIs (agents.mjs has the rules). The console is its only
 // writer, from User Preferences; the launcher and the desktop app read it.

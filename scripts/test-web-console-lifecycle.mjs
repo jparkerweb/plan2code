@@ -553,7 +553,7 @@ test("agents: no file is an empty list, a save is written whole and keeps unknow
   fs.rmSync(file, { force: true });
   const get = async () => (await fetch(baseUrl + "/agents", { headers: { cookie: cookieFor(baseUrl, token) } })).json();
 
-  assert.deepEqual(await get(), { agents: [], warnings: [] }, "no file");
+  assert.deepEqual(await get(), { agents: [], warnings: [], builtins: [], templates: [] }, "no file");
   fs.mkdirSync(MODELS_DIR, { recursive: true });
   fs.writeFileSync(file, "{ \"schema\": 1, \"agents\": [");
   const broken = await get();

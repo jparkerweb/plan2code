@@ -17,6 +17,7 @@ import {
   labelFor,
   WORKFLOWS,
   isWorkflow,
+  isAgentless,
 } from "../src/web-console/public/skills.js";
 import { CONSOLE_WORKFLOWS, SKILL_CATALOG, catalogEntry, launchVariant, START_POSES, WORKFLOW_LABEL, dashNoteKind, onInitialPick, startPose, startingHint } from "../src/web-console/public/answers.js";
 import { LAUNCH_COUNTED, PROGRESS_WORKFLOWS } from "../src/web-console/public/meter.js";
@@ -60,7 +61,7 @@ test("every skill the console knows has one entry, the dashboard included", () =
   const workflows = SKILLS.map((s) => s.workflow);
   assert.deepEqual([...workflows].sort(), Object.keys(WORKFLOW_LABEL).sort());
   assert.equal(new Set(workflows).size, workflows.length, "one entry per workflow");
-  assert.deepEqual(SKILLS.map((s) => s.command).sort(), [...CONSOLE_WORKFLOWS].sort());
+  assert.deepEqual(SKILLS.map((s) => s.command).filter(Boolean).sort(), [...CONSOLE_WORKFLOWS].sort());
   // The cards come first, in the dashboard's order.
   const carded = SKILLS.filter((s) => s.card);
   assert.deepEqual(carded.map((s) => s.skill), SKILL_CATALOG.map((e) => e.skill));
@@ -76,6 +77,17 @@ test("every skill the console knows has one entry, the dashboard included", () =
 test("the derived exports agree with each entry", () => {
   for (const s of SKILLS) {
     const w = s.workflow;
+    // The setup page is a workflow the launcher opens, not a skill an agent
+    // picks: it has no skill name, command or card for the exports to mirror.
+    if (s.agentless) {
+      for (const f of ["workflow", "label", "name"]) assert.ok(typeof s[f] === "string" && s[f].trim(), `${w}: ${f} must be filled in`);
+      assert.equal(s.skill, null, `${w}: agent-less has no skill`);
+      assert.equal(s.command, null, `${w}: agent-less has no command`);
+      assert.equal(s.card, null, `${w}: agent-less has no card`);
+      assert.equal(s.pose, startPose(w), `${w}: pose`);
+      assert.equal(s.metered, LAUNCH_COUNTED.has(w), `${w}: metered`);
+      continue;
+    }
     for (const f of ["skill", "workflow", "label", "name"]) assert.ok(typeof s[f] === "string" && s[f].trim(), `${w}: ${f} must be filled in`);
     assert.equal(s.command, "/" + s.skill, `${w}: command`);
     assert.equal(s.label, WORKFLOW_LABEL[w], `${w}: label`);
@@ -177,9 +189,10 @@ function poseProblems(skills, drawn) {
   return problems;
 }
 
-// Every workflow the console can open has its notes behind `console.mjs help`.
+// Every skill workflow the console can open has its notes behind
+// `console.mjs help`; agent-less pages are opened by the launcher, not picked.
 function helpProblems(skills, topics) {
-  return skills.filter((s) => !Object.hasOwn(topics, s.workflow)).map((s) => `${s.skill} (${s.workflow}) has no help topic in console.mjs`);
+  return skills.filter((s) => !s.agentless && !Object.hasOwn(topics, s.workflow)).map((s) => `${s.skill} (${s.workflow}) has no help topic in console.mjs`);
 }
 
 // The skills with a card, plus the dashboard, are exactly what install.js builds.
@@ -302,7 +315,7 @@ test("docs: console.md's open step names every workflow", () => {
   const m = text.match(/`<w>` is one of ([\s\S]*?)\. Launched from the dashboard/);
   assert.ok(m, "console.md: the open step's `<w>` sentence is not where the test looks");
   const said = [...m[1].matchAll(/`([^`]+)`/g)].map((x) => x[1]);
-  assert.deepEqual(listProblems("src/web-console/console.md", said, WORKFLOWS), []);
+  assert.deepEqual(listProblems("src/web-console/console.md", said, WORKFLOWS.filter((w) => !isAgentless(w))), []);
 });
 
 test("docs: the dashboard skill's launch table maps every skill to its workflow", () => {
@@ -313,7 +326,7 @@ test("docs: the dashboard skill's launch table maps every skill to its workflow"
     const cells = line.split("|").map((c) => c.trim()).filter(Boolean);
     for (let i = 0; i + 1 < cells.length; i += 2) pairs.push(`${cells[i]} -> ${cells[i + 1]}`);
   }
-  const want = SKILLS.filter((s) => s.workflow !== "dashboard").map((s) => `${s.skill} -> ${s.workflow}`);
+  const want = SKILLS.filter((s) => s.skill && s.workflow !== "dashboard").map((s) => `${s.skill} -> ${s.workflow}`);
   assert.deepEqual(listProblems("src/plan2code.md (A pick arrives)", pairs, want), []);
 });
 
@@ -327,7 +340,7 @@ test("docs: the dashboard skill's reads-and-writes table has a row for every ski
     if (m[1] === "3-implement(-review)") said.push("3-implement", "3-implement-review");
     else said.push(m[1]);
   }
-  const want = SKILLS.filter((s) => s.workflow !== "dashboard").map((s) => s.skill.replace(/^plan2code-/, ""));
+  const want = SKILLS.filter((s) => s.skill && s.workflow !== "dashboard").map((s) => s.skill.replace(/^plan2code-/, ""));
   assert.deepEqual(listProblems("src/plan2code.md (What each skill reads and writes)", said, want), []);
 });
 
@@ -336,8 +349,11 @@ test("docs: `console.mjs help` lists every workflow, in order", () => {
   const m = out.match(/workflows: ([\s\S]*?)\n\s*\n/);
   assert.ok(m, "console.mjs help prints no workflows: list");
   const said = m[1].split(/[·\s]+/).filter(Boolean);
-  assert.deepEqual(listProblems("console.mjs help", said, WORKFLOWS), []);
-  assert.deepEqual(said, [...WORKFLOWS], "console.mjs help: the workflows are in skills.js order");
+  // The CLI's usage lists only the workflows an agent can pick: the agent-less
+  // setup page is opened by the launcher, never typed here (phase-2 note).
+  const listed = WORKFLOWS.filter((w) => !isAgentless(w));
+  assert.deepEqual(listProblems("console.mjs help", said, listed), []);
+  assert.deepEqual(said, [...listed], "console.mjs help: the workflows are in skills.js order");
 });
 
 // A count goes stale the day a skill is added; the docs say "every skill".

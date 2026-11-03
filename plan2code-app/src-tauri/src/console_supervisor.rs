@@ -42,6 +42,7 @@ pub struct ConsoleSupervisor {
     console_dir: PathBuf,
     project_dir: PathBuf,
     embed_origin: String,
+    workflow: String,
     session: ConsoleSession,
     stopped: bool,
 }
@@ -177,12 +178,25 @@ impl ConsoleSupervisor {
     /// the project folder with `PLAN2CODE_EMBED_ORIGIN` set, and keep the
     /// session it prints.
     pub fn start(project_dir: PathBuf, embed_origin: String) -> Result<ConsoleSupervisor, String> {
+        Self::start_with_workflow(project_dir, embed_origin, "dashboard")
+    }
+
+    /// `start` for another workflow: today only `setup`, the agent-less page
+    /// the app itself opens for Set up an agent (the one exception to the
+    /// app never starting a console of its own).
+    pub fn start_with_workflow(
+        project_dir: PathBuf,
+        embed_origin: String,
+        workflow: &str,
+    ) -> Result<ConsoleSupervisor, String> {
         let console_dir = find_console_dir()?;
-        let session = Self::open_session(&console_dir, &project_dir, &embed_origin, None)?;
+        let session =
+            Self::open_session(&console_dir, &project_dir, &embed_origin, None, workflow)?;
         Ok(ConsoleSupervisor {
             console_dir,
             project_dir,
             embed_origin,
+            workflow: workflow.to_string(),
             session,
             stopped: false,
         })
@@ -211,6 +225,7 @@ impl ConsoleSupervisor {
             console_dir,
             project_dir,
             embed_origin,
+            workflow: "dashboard".to_string(),
             session,
             stopped: false,
         })
@@ -221,12 +236,13 @@ impl ConsoleSupervisor {
         project_dir: &Path,
         embed_origin: &str,
         resume: Option<&str>,
+        workflow: &str,
     ) -> Result<ConsoleSession, String> {
         let mut command = node_command(console_dir);
         command.arg("open");
         match resume {
             Some(sid) => command.args(["--resume", sid, "--no-open"]),
-            None => command.args(["--workflow", "dashboard", "--no-open"]),
+            None => command.args(["--workflow", workflow, "--no-open"]),
         };
         let output = command
             .current_dir(project_dir)
@@ -318,10 +334,14 @@ impl ConsoleSupervisor {
         }
         let sid = self.session.sid.clone();
         let on_disk = session_on_disk(&sid);
-        let (console_dir, project_dir, embed_origin) =
-            (&self.console_dir, &self.project_dir, &self.embed_origin);
+        let (console_dir, project_dir, embed_origin, workflow) = (
+            &self.console_dir,
+            &self.project_dir,
+            &self.embed_origin,
+            &self.workflow,
+        );
         self.session = resume_or_fresh(&sid, on_disk, |resume| {
-            Self::open_session(console_dir, project_dir, embed_origin, resume)
+            Self::open_session(console_dir, project_dir, embed_origin, resume, workflow)
         })?;
         self.stopped = false;
         Ok(true)

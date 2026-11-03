@@ -1,0 +1,129 @@
+{
+  "schema": 1,
+  "agents": [
+    {
+      "id": "claude",
+      "name": "Claude Code",
+      "kind": "builtin",
+      "command": "claude",
+      "prompt": "/plan2code",
+      "args": ["{prompt}", "{bypass}", "{model}"],
+      "bypassArgs": ["--permission-mode", "bypassPermissions"],
+      "modelArgs": ["--model", "{model}"],
+      "installUrl": "https://code.claude.com/docs/en/setup",
+      "install": {
+        "win": [
+          { "label": "PowerShell", "run": "irm https://claude.ai/install.ps1 | iex" },
+          { "label": "npm", "run": "npm install -g @anthropic-ai/claude-code", "note": "Needs Node.js 22 or later" }
+        ],
+        "mac": [
+          { "label": "Terminal", "run": "curl -fsSL https://claude.ai/install.sh | bash" },
+          { "label": "npm", "run": "npm install -g @anthropic-ai/claude-code", "note": "Needs Node.js 22 or later" }
+        ],
+        "linux": [
+          { "label": "Terminal", "run": "curl -fsSL https://claude.ai/install.sh | bash" },
+          { "label": "npm", "run": "npm install -g @anthropic-ai/claude-code", "note": "Needs Node.js 22 or later" }
+        ]
+      },
+      "installDirs": {
+        "win": ["%USERPROFILE%\\.local\\bin"],
+        "mac": ["~/.local/bin"],
+        "linux": ["~/.local/bin"]
+      }
+    },
+    {
+      "id": "devin",
+      "name": "Devin",
+      "kind": "builtin",
+      "command": "devin",
+      "prompt": "/plan2code",
+      "args": ["{bypass}", "{model}", "--", "{prompt}"],
+      "bypassArgs": ["--permission-mode", "bypass"],
+      "modelArgs": ["--model", "{model}"],
+      "installUrl": "https://docs.devin.ai/cli",
+      "install": {
+        "win": [
+          { "label": "PowerShell", "run": "irm https://static.devin.ai/cli/setup.ps1 | iex" }
+        ],
+        "mac": [
+          { "label": "Terminal", "run": "curl -fsSL https://cli.devin.ai/install.sh | bash" }
+        ],
+        "linux": [
+          { "label": "Terminal", "run": "curl -fsSL https://cli.devin.ai/install.sh | bash" }
+        ]
+      },
+      "installDirs": {
+        "win": ["%LOCALAPPDATA%\\devin\\cli\\bin", "%LOCALAPPDATA%\\devin\\bin"],
+        "mac": ["~/.local/bin"],
+        "linux": ["~/.local/bin"]
+      }
+    },
+    {
+      "id": "codex",
+      "name": "Codex",
+      "kind": "builtin",
+      "command": "codex",
+      "prompt": "$plan2code",
+      "args": ["{bypass}", "{model}", "{prompt}"],
+      "bypassArgs": ["--dangerously-bypass-approvals-and-sandbox"],
+      "modelArgs": ["--model", "{model}"],
+      "installUrl": "https://github.com/openai/codex",
+      "install": {
+        "win": [
+          { "label": "PowerShell", "run": "powershell -ExecutionPolicy ByPass -c \"irm https://chatgpt.com/codex/install.ps1 | iex\"" },
+          { "label": "npm", "run": "npm install -g @openai/codex" }
+        ],
+        "mac": [
+          { "label": "Terminal", "run": "curl -fsSL https://chatgpt.com/codex/install.sh | sh" },
+          { "label": "npm", "run": "npm install -g @openai/codex" }
+        ],
+        "linux": [
+          { "label": "Terminal", "run": "curl -fsSL https://chatgpt.com/codex/install.sh | sh" },
+          { "label": "npm", "run": "npm install -g @openai/codex" }
+        ]
+      },
+      "installDirs": {
+        "win": ["%USERPROFILE%\\.local\\bin"],
+        "mac": ["~/.local/bin"],
+        "linux": ["~/.local/bin"]
+      }
+    },
+    {
+      "id": "copilot",
+      "name": "GitHub Copilot CLI",
+      "kind": "template",
+      "command": "copilot",
+      "prompt": "Use the /plan2code skill",
+      "args": ["-i", "{prompt}"],
+      "bypassArgs": ["--allow-all-tools"],
+      "modelArgs": ["--model", "{model}"]
+    },
+    {
+      "id": "opencode",
+      "name": "OpenCode",
+      "kind": "template",
+      "command": "opencode",
+      "prompt": "Use the plan2code skill",
+      "args": ["--prompt", "{prompt}"],
+      "bypassArgs": ["--auto"]
+    },
+    {
+      "id": "gemini",
+      "name": "Gemini CLI",
+      "kind": "template",
+      "command": "gemini",
+      "prompt": "Use the plan2code skill",
+      "args": ["{prompt}"],
+      "bypassArgs": ["--approval-mode=yolo"],
+      "note": "For unpaid tier and Google One accounts Gemini CLI was replaced by Antigravity CLI on June 18, 2026; whether gemini still runs depends on the account."
+    },
+    {
+      "id": "pi",
+      "name": "Pi",
+      "kind": "template",
+      "command": "pi",
+      "prompt": "/skill:plan2code",
+      "args": ["{prompt}"]
+    }
+  ]
+}

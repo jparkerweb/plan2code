@@ -1,5 +1,5 @@
 {
-  "$comment": "The rules of ~/.plan2code/agents.json (PLAN-DRAFT 4.4) as cases every reader's tests load: the console (src/web-console/agents.mjs), the launcher and the desktop app. files: `raw` is the file's text (null: no file); `warnings` lists substrings, each found in some warning, and an empty list means no warnings at all; entries are named agents[i], 0-based. buildArgs: `options` as passed (a missing prompt means the entry's own). ids: makeId(input, taken).",
+  "$comment": "The rules of ~/.plan2code/agents.json (PLAN-DRAFT 4.4) as cases every reader's tests load: the console (src/web-console/agents.mjs), the launcher and the desktop app. files: `raw` is the file's text (null: no file); `warnings` lists substrings, each found in some warning, and an empty list means no warnings at all; entries are named agents[i], 0-based. buildArgs: `options` as passed (a missing prompt means the entry's own); an argument exactly `{bypass}` or `{model}` expands to bypassArgs / modelArgs in place and suppresses the end-append for that flag. ids: makeId(input, taken).",
   "files": [
     {
       "name": "no file",
@@ -1631,6 +1631,229 @@
       },
       "args": [
         "--chat",
+        "/plan2code",
+        "--model",
+        "sonnet",
+        "--yes-always"
+      ]
+    },
+    {
+      "name": "{bypass} expands to bypassArgs in place when on",
+      "entry": {
+        "id": "devin",
+        "name": "Devin",
+        "command": "devin",
+        "args": [
+          "{bypass}",
+          "--",
+          "{prompt}"
+        ],
+        "prompt": "/plan2code",
+        "bypassArgs": [
+          "--permission-mode",
+          "bypass"
+        ],
+        "modelArgs": [
+          "--model",
+          "{model}"
+        ],
+        "models": []
+      },
+      "options": {
+        "bypass": true
+      },
+      "args": [
+        "--permission-mode",
+        "bypass",
+        "--",
+        "/plan2code"
+      ]
+    },
+    {
+      "name": "{bypass} drops out when off",
+      "entry": {
+        "id": "devin",
+        "name": "Devin",
+        "command": "devin",
+        "args": [
+          "{bypass}",
+          "--",
+          "{prompt}"
+        ],
+        "prompt": "/plan2code",
+        "bypassArgs": [
+          "--permission-mode",
+          "bypass"
+        ],
+        "modelArgs": [
+          "--model",
+          "{model}"
+        ],
+        "models": []
+      },
+      "options": {
+        "bypass": false
+      },
+      "args": [
+        "--",
+        "/plan2code"
+      ]
+    },
+    {
+      "name": "{model} expands to modelArgs in place when chosen",
+      "entry": {
+        "id": "devin",
+        "name": "Devin",
+        "command": "devin",
+        "args": [
+          "{model}",
+          "--",
+          "{prompt}"
+        ],
+        "prompt": "/plan2code",
+        "bypassArgs": [
+          "--permission-mode",
+          "bypass"
+        ],
+        "modelArgs": [
+          "--model",
+          "{model}"
+        ],
+        "models": []
+      },
+      "options": {
+        "model": "opus",
+        "bypass": false
+      },
+      "args": [
+        "--model",
+        "opus",
+        "--",
+        "/plan2code"
+      ]
+    },
+    {
+      "name": "{model} drops out with no model chosen",
+      "entry": {
+        "id": "devin",
+        "name": "Devin",
+        "command": "devin",
+        "args": [
+          "{model}",
+          "--",
+          "{prompt}"
+        ],
+        "prompt": "/plan2code",
+        "bypassArgs": [
+          "--permission-mode",
+          "bypass"
+        ],
+        "modelArgs": [
+          "--model",
+          "{model}"
+        ],
+        "models": []
+      },
+      "options": {
+        "bypass": false
+      },
+      "args": [
+        "--",
+        "/plan2code"
+      ]
+    },
+    {
+      "name": "Devin's shape: bypass and model ahead of the -- and the prompt",
+      "entry": {
+        "id": "devin",
+        "name": "Devin",
+        "command": "devin",
+        "args": [
+          "{bypass}",
+          "{model}",
+          "--",
+          "{prompt}"
+        ],
+        "prompt": "/plan2code",
+        "bypassArgs": [
+          "--permission-mode",
+          "bypass"
+        ],
+        "modelArgs": [
+          "--model",
+          "{model}"
+        ],
+        "models": []
+      },
+      "options": {
+        "model": "swe-2-high",
+        "bypass": true
+      },
+      "args": [
+        "--permission-mode",
+        "bypass",
+        "--model",
+        "swe-2-high",
+        "--",
+        "/plan2code"
+      ]
+    },
+    {
+      "name": "Codex's shape: bypass then model then the $-prompt",
+      "entry": {
+        "id": "codex",
+        "name": "Codex",
+        "command": "codex",
+        "args": [
+          "{bypass}",
+          "{model}",
+          "{prompt}"
+        ],
+        "prompt": "$plan2code",
+        "bypassArgs": [
+          "--dangerously-bypass-approvals-and-sandbox"
+        ],
+        "modelArgs": [
+          "--model",
+          "{model}"
+        ],
+        "models": []
+      },
+      "options": {
+        "model": "gpt-5",
+        "bypass": true
+      },
+      "args": [
+        "--dangerously-bypass-approvals-and-sandbox",
+        "--model",
+        "gpt-5",
+        "$plan2code"
+      ]
+    },
+    {
+      "name": "an entry holding neither placeholder keeps the appended order",
+      "entry": {
+        "id": "aider",
+        "name": "Aider",
+        "command": "aider",
+        "args": [
+          "{prompt}"
+        ],
+        "prompt": "/plan2code",
+        "bypassArgs": [
+          "--yes-always"
+        ],
+        "modelArgs": [
+          "--model",
+          "{model}"
+        ],
+        "models": []
+      },
+      "options": {
+        "model": "sonnet",
+        "bypass": true
+      },
+      "args": [
         "/plan2code",
         "--model",
         "sonnet",

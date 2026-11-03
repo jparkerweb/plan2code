@@ -188,6 +188,17 @@
       background: #2a2a2a; color: #ddd; border: 1px solid #555; border-radius: 4px; font: inherit;
     }
     #launch-missing { margin: 0; font-size: 12px; color: #d7ba7d; }
+    #launch-notice { margin: 0; font-size: 12px; color: #9ab; }
+    #launch-notice[hidden] { display: none; }
+    /* Set up an agent, shown wherever the app says "no agent". */
+    .setup-agent-btn { font: inherit; font-size: 12px; margin-top: 4px; padding: 3px 10px; cursor: pointer;
+      background: var(--accent); color: var(--accent-ink); border: 1px solid var(--accent); border-radius: 4px; }
+    /* The way out of the setup page, over its frame. */
+    #setup-close { position: absolute; top: 10px; right: 10px; z-index: 2; font: inherit; font-size: 12px;
+      padding: 4px 10px; border-radius: 6px; cursor: pointer; border: 1px solid var(--rule-2);
+      background: var(--panel); color: var(--ink); }
+    #setup-close:hover { background: var(--panel-2); }
+    #setup-close[hidden] { display: none; }
     #launch-missing code { color: #ddd; }
     #launch-agents-warning { margin: 0; font-size: 12px; color: #d7ba7d; white-space: pre-line; }
     #launch-agents-warning[hidden] { display: none; }
@@ -196,7 +207,7 @@
     .agent-explainer code { color: #ddd; }
     .agent-explainer button, #launch-missing button { font: inherit; font-size: 12px; margin-left: 6px; padding: 1px 8px; cursor: pointer; }
     .agent-explainer .agent-link, #launch-missing .agent-link { background: none; border: 0; padding: 0; color: #75beff; text-decoration: underline; }
-    #launch-effort-row[hidden] { display: none; }
+    #launch-effort-row[hidden], #launch-model-row[hidden] { display: none; }
     #launch-bypass-row { display: flex; align-items: center; gap: 8px; color: #ccc; font-size: 13px; cursor: pointer; }
     #launch-bypass-row input { margin: 0; }
     #launch-bypass-warning { margin: 0; font-size: 12px; color: #d7ba7d; }
@@ -321,6 +332,7 @@
   <div id="workspace">
     <main id="dashboard">
       <iframe id="console-frame" title="Plan2Code console dashboard" allow="clipboard-write"></iframe>
+      <button id="setup-close" type="button" hidden>Back</button>
       <div id="dashboard-state" hidden>
         <!-- Planny on a coffee break: shown only before a New Session press,
              the one state here that is a question rather than a status. The
@@ -362,11 +374,13 @@
           <option value="devin">Devin</option>
           <option value="codex">Codex</option>
         </select>
+        <p id="launch-notice" hidden></p>
         <p id="launch-missing" hidden></p>
         <p id="launch-agents-warning" hidden></p>
-        <label for="launch-model">Model</label>
-        <input id="launch-model" type="text" placeholder="Default (your account setting)" autocomplete="off" list="launch-model-list">
-        <datalist id="launch-model-list"></datalist>
+        <div id="launch-model-row">
+          <label for="launch-model">Model</label>
+          <select id="launch-model"></select>
+        </div>
         <div id="launch-effort-row">
           <label for="launch-effort">Effort</label>
           <select id="launch-effort"></select>

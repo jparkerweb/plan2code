@@ -30,7 +30,7 @@ pub struct VersionStatus {
 
 /// `~/.plan2code/bin`, or `PLAN2CODE_LAUNCHER_DIR` when it is set (tests only, the same
 /// convention `PLAN2CODE_CONSOLE_HOME` and `PLAN2CODE_APP_AGENT_BIN` already use).
-fn launcher_dir() -> Option<PathBuf> {
+pub(crate) fn launcher_dir() -> Option<PathBuf> {
     if let Ok(dir) = std::env::var("PLAN2CODE_LAUNCHER_DIR") {
         return Some(PathBuf::from(dir));
     }

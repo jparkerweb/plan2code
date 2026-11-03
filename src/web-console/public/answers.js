@@ -267,7 +267,7 @@ export function workflowLabel(workflow) {
 // skill as `additionalReferences`). Any other next step has no browser page
 // to open, and asking for one would send the next session looking for
 // something that is not there. Derived from skills.js: every entry is one.
-export const CONSOLE_WORKFLOWS = FLOW_SKILLS.map((s) => s.command);
+export const CONSOLE_WORKFLOWS = FLOW_SKILLS.map((s) => s.command).filter(Boolean);
 
 // Rides on the end of the command as part of the skill's argument. Every
 // console skill takes it as the answer to "web console or terminal?" instead
@@ -420,8 +420,10 @@ export function resumeCommand({ workflow, specDir } = {}) {
   // someone with no way to tell it was wrong.
   const dir = /^specs\/[a-z0-9][a-z0-9._-]*$/i.test(raw) ? raw : "";
   // What follows the command is the entry's `resume` (skills.js). A workflow
-  // the console does not know (an old session's) resumes as Pathfinder.
-  const entry = skillFor(workflow) || skillFor("pathfinder");
+  // the console does not know (an old session's, or an agent-less one like
+  // setup, which has no command) resumes as Pathfinder.
+  let entry = skillFor(workflow);
+  if (!entry || !entry.command) entry = skillFor("pathfinder");
   if (dir && entry.resume === "overview") return `${entry.command} ${dir}/overview.md`;
   if (dir && entry.resume === "folder") return `${entry.command} ${dir}/pathfinder`;
   return entry.command;
@@ -1036,7 +1038,9 @@ export function noteReplyLines(title, text, attachments) {
  * below the page's own threshold, and capped at an hour so a typo cannot hide
  * a dead session.
  */
-export function quietLimitMs(agent, baseMs) {
+export function quietLimitMs(agent, baseMs, agentless = false) {
+  // An agent-less session has nobody to go quiet: the limit is infinite.
+  if (agentless) return Number.POSITIVE_INFINITY;
   if (!agent || agent.status !== "working") return baseMs;
   const m = Number(agent.quietMinutes);
   if (!Number.isFinite(m) || m <= 0) return baseMs;

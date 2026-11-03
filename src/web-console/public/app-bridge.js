@@ -87,6 +87,14 @@ export async function startNewSession(command = "") {
   tellApp("new-session");
 }
 
+/**
+ * Tell the app an agent was just found on the setup page: it returns to the
+ * screen it came from, rechecks, and picks that agent on the launch card.
+ */
+export function agentFound(id) {
+  tellApp("agent-found", { id });
+}
+
 /** Post `message` to the frame's parent, as `{ plan2code: kind, ...extra }`; nothing outside a frame. */
 export function tellApp(kind, extra = {}) {
   if (!framed()) return;

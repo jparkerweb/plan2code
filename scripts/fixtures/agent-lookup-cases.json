@@ -1,0 +1,170 @@
+{
+  "$comment": "The one agent lookup rule (src/web-console/agent-lookup.mjs findAgent) as cases both the Node suite (scripts/test-agent-lookup.mjs) and cargo test load. Each case makes temp folders named under `dirs` (a list of file names per folder), then calls findAgent(entry, env): `{name}` in env values, installDirs and `folder` expands to that folder's path. env: path, savedPath, npmBin, pathext, platform, home, vars (for %NAME% expansion). state is found | outside | missing; where is path | saved-path | npm | install-dir | null; file names the hit the found path must end with (null when missing).",
+  "cases": [
+    {
+      "name": "found on PATH",
+      "platform": "linux",
+      "entry": { "command": "goose", "installDirs": { "linux": ["{install}"] } },
+      "dirs": { "bin": ["goose"], "install": [] },
+      "env": { "path": "{bin}", "savedPath": "", "npmBin": "", "pathext": "", "home": "{home}" },
+      "state": "found",
+      "where": "path",
+      "folder": "{bin}",
+      "file": "goose"
+    },
+    {
+      "name": "found on Windows PATH through PATHEXT (.cmd)",
+      "platform": "win",
+      "entry": { "command": "goose" },
+      "dirs": { "bin": ["goose.cmd"] },
+      "env": { "path": "{bin}", "savedPath": "", "npmBin": "", "pathext": ".EXE;.CMD;.BAT" },
+      "state": "found",
+      "where": "path",
+      "folder": "{bin}",
+      "file": "goose.cmd"
+    },
+    {
+      "name": "found on Windows PATH through PATHEXT (.exe)",
+      "platform": "win",
+      "entry": { "command": "goose" },
+      "dirs": { "bin": ["goose.exe"] },
+      "env": { "path": "{bin}", "savedPath": "", "npmBin": "", "pathext": ".EXE;.CMD;.BAT" },
+      "state": "found",
+      "where": "path",
+      "folder": "{bin}",
+      "file": "goose.exe"
+    },
+    {
+      "name": "found only on the saved Windows PATH is outside",
+      "platform": "win",
+      "entry": { "command": "goose" },
+      "dirs": { "saved": ["goose.cmd"] },
+      "env": { "path": "{bin}", "savedPath": "{saved}", "npmBin": "", "pathext": ".EXE;.CMD;.BAT" },
+      "state": "outside",
+      "where": "saved-path",
+      "folder": "{saved}",
+      "file": "goose.cmd"
+    },
+    {
+      "name": "found only in npm's global folder is outside",
+      "platform": "linux",
+      "entry": { "command": "goose" },
+      "dirs": { "npm": ["goose"] },
+      "env": { "path": "{bin}", "savedPath": "", "npmBin": "{npm}", "pathext": "" },
+      "state": "outside",
+      "where": "npm",
+      "folder": "{npm}",
+      "file": "goose"
+    },
+    {
+      "name": "found only in an install folder is outside",
+      "platform": "linux",
+      "entry": { "command": "goose", "installDirs": { "linux": ["{install}"] } },
+      "dirs": { "install": ["goose"] },
+      "env": { "path": "{bin}", "savedPath": "", "npmBin": "{npm}", "pathext": "" },
+      "state": "outside",
+      "where": "install-dir",
+      "folder": "{install}",
+      "file": "goose"
+    },
+    {
+      "name": "an install folder with ~ expands against home",
+      "platform": "linux",
+      "entry": { "command": "goose", "installDirs": { "linux": ["~/toolbin"] } },
+      "dirs": { "home": ["toolbin/goose"] },
+      "env": { "path": "", "savedPath": "", "npmBin": "", "pathext": "", "home": "{home}" },
+      "state": "outside",
+      "where": "install-dir",
+      "folder": "{home}/toolbin",
+      "file": "goose"
+    },
+    {
+      "name": "an install folder with %NAME% expands against vars",
+      "platform": "win",
+      "entry": { "command": "goose", "installDirs": { "win": ["%TOOLS%\\bin"] } },
+      "dirs": { "tools": ["bin/goose.exe"] },
+      "env": { "path": "", "savedPath": "", "npmBin": "", "pathext": ".EXE;.CMD", "vars": { "TOOLS": "{tools}" } },
+      "state": "outside",
+      "where": "install-dir",
+      "folder": "{tools}/bin",
+      "file": "goose.exe"
+    },
+    {
+      "name": "a command carrying its own extension is tried as written",
+      "platform": "win",
+      "entry": { "command": "goose.cmd" },
+      "dirs": { "bin": ["goose.cmd"] },
+      "env": { "path": "{bin}", "savedPath": "", "npmBin": "", "pathext": ".EXE;.CMD;.BAT" },
+      "state": "found",
+      "where": "path",
+      "folder": "{bin}",
+      "file": "goose.cmd"
+    },
+    {
+      "name": "not found anywhere is missing",
+      "platform": "linux",
+      "entry": { "command": "goose", "installDirs": { "linux": ["{install}"] } },
+      "dirs": { "bin": [], "install": [] },
+      "env": { "path": "{bin}", "savedPath": "", "npmBin": "", "pathext": "" },
+      "state": "missing",
+      "where": null,
+      "folder": null,
+      "file": null
+    },
+    {
+      "name": "a command written as a full path is checked as a file",
+      "platform": "linux",
+      "entry": { "command": "{bin}/goose" },
+      "dirs": { "bin": ["goose"] },
+      "env": { "path": "", "savedPath": "", "npmBin": "", "pathext": "" },
+      "state": "found",
+      "where": "path",
+      "folder": "{bin}",
+      "file": "goose"
+    },
+    {
+      "name": "a PATH entry with a space still finds the command",
+      "platform": "linux",
+      "entry": { "command": "goose" },
+      "dirs": { "with space": ["goose"] },
+      "env": { "path": "{with space}", "savedPath": "", "npmBin": "", "pathext": "" },
+      "state": "found",
+      "where": "path",
+      "folder": "{with space}",
+      "file": "goose"
+    },
+    {
+      "name": "PATH wins over the saved PATH and npm",
+      "platform": "win",
+      "entry": { "command": "goose" },
+      "dirs": { "bin": ["goose.exe"], "saved": ["goose.exe"], "npm": ["goose.exe"] },
+      "env": { "path": "{bin}", "savedPath": "{saved}", "npmBin": "{npm}", "pathext": ".EXE;.CMD;.BAT" },
+      "state": "found",
+      "where": "path",
+      "folder": "{bin}",
+      "file": "goose.exe"
+    },
+    {
+      "name": "the saved PATH wins over npm and install folders",
+      "platform": "win",
+      "entry": { "command": "goose", "installDirs": { "win": ["{install}"] } },
+      "dirs": { "saved": ["goose.exe"], "npm": ["goose.exe"], "install": ["goose.exe"] },
+      "env": { "path": "", "savedPath": "{saved}", "npmBin": "{npm}", "pathext": ".EXE;.CMD;.BAT" },
+      "state": "outside",
+      "where": "saved-path",
+      "folder": "{saved}",
+      "file": "goose.exe"
+    },
+    {
+      "name": "npm wins over install folders",
+      "platform": "linux",
+      "entry": { "command": "goose", "installDirs": { "linux": ["{install}"] } },
+      "dirs": { "npm": ["goose"], "install": ["goose"] },
+      "env": { "path": "", "savedPath": "", "npmBin": "{npm}", "pathext": "" },
+      "state": "outside",
+      "where": "npm",
+      "folder": "{npm}",
+      "file": "goose"
+    }
+  ]
+}

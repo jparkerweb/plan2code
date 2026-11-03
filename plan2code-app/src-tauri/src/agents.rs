@@ -1,94 +1,237 @@
 //! The agents the app can run and the command line each one starts with. The
-//! flags are the ones `src/launcher/plan2code.js` uses today, so the app and
-//! `plan2code` start an agent the same way. Knows nothing about Tauri.
+//! built-ins come from the one shipped agent list (`src/launcher/agents.json`,
+//! installed to `~/.plan2code/bin/`), and where an agent's command is found
+//! follows the one lookup rule `src/web-console/agent-lookup.mjs` states, so
+//! the app, `plan2code` and the console agree on every agent's state. Knows
+//! nothing about Tauri.
 
 use std::path::{Path, PathBuf};
 
 use std::collections::HashSet;
+use std::sync::{Arc, Mutex};
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-/// Tests only: run this program instead of the real agent, for any `AgentKind`,
+/// Tests only: run this program instead of the real agent, for any built-in,
 /// so the fake agent stands in for Claude, Devin and Codex.
 pub const AGENT_BIN_ENV: &str = "PLAN2CODE_APP_AGENT_BIN";
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "lowercase")]
-pub enum AgentKind {
-    Claude,
-    Devin,
-    Codex,
+/* ------------------------------------------------------------ the agent list */
+
+/// The agents.json schema this reader knows.
+const AGENT_LIST_SCHEMA: f64 = 1.0;
+
+/// One install line for one OS ("PowerShell", "Terminal", "npm").
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct InstallLine {
+    pub label: String,
+    pub run: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
 }
 
-impl AgentKind {
-    pub const ALL: [AgentKind; 3] = [AgentKind::Claude, AgentKind::Devin, AgentKind::Codex];
+/// A value per OS key (`win`, `mac`, `linux`), as `install` and `installDirs`
+/// are shaped in agents.json.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PerOs<T> {
+    #[serde(default)]
+    pub win: Vec<T>,
+    #[serde(default)]
+    pub mac: Vec<T>,
+    #[serde(default)]
+    pub linux: Vec<T>,
+}
 
-    /// The id the page and the settings file use.
-    pub fn id(self) -> &'static str {
-        match self {
-            AgentKind::Claude => "claude",
-            AgentKind::Devin => "devin",
-            AgentKind::Codex => "codex",
+impl<T> PerOs<T> {
+    /// The entries for `platform` ("win" | "mac" | "linux").
+    pub fn for_platform(&self, platform: &str) -> &[T] {
+        match platform {
+            "win" => &self.win,
+            "mac" => &self.mac,
+            _ => &self.linux,
         }
     }
+}
 
-    pub fn from_id(id: &str) -> Option<AgentKind> {
-        AgentKind::ALL.into_iter().find(|kind| kind.id() == id)
+/// One entry of the shipped agent list (agents.json schema 1): a built-in the
+/// app can run (`kind: "builtin"`) or a starter template for the setup page's
+/// custom-agent form. The console is the list's only writer; a `modelArgs` of
+/// `["--model", "{model}"]` is the file's own default when the key is absent.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentEntry {
+    // The fields are lenient on purpose: the JS reader lists any object whose
+    // `kind` names a slot, and a builtin missing `command` then looks up as
+    // `missing`, the same broken row the console would show.
+    #[serde(default)]
+    pub id: String,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub kind: String,
+    #[serde(default)]
+    pub command: String,
+    #[serde(default = "default_custom_prompt")]
+    pub prompt: String,
+    #[serde(default)]
+    pub args: Vec<String>,
+    #[serde(default)]
+    pub bypass_args: Vec<String>,
+    #[serde(default)]
+    pub model_args: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub install_url: Option<String>,
+    #[serde(default)]
+    pub install: PerOs<InstallLine>,
+    #[serde(default)]
+    pub install_dirs: PerOs<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
+}
+
+/// The shipped agent list, split the way `loadAgentList()` splits it.
+#[derive(Clone, Debug, Default)]
+pub struct AgentList {
+    pub builtins: Vec<AgentEntry>,
+    pub templates: Vec<AgentEntry>,
+    pub warnings: Vec<String>,
+}
+
+/// The copy baked into the app: the fallback when the installed file is
+/// missing, unreadable or the wrong schema.
+const BAKED_AGENTS: &str = include_str!("../../../src/launcher/agents.json");
+
+/// `~/.plan2code/bin/agents.json`, beside the launcher (`versions.rs` builds
+/// the same `bin` path for `plan2code.js` and `version.json`).
+fn agent_list_file() -> Option<PathBuf> {
+    crate::versions::launcher_dir().map(|dir| dir.join("agents.json"))
+}
+
+/// The entries and warnings in one agents.json text. A text that is not a
+/// schema-1 object is an error (the caller then falls back to the baked copy).
+pub fn parse_agent_list(text: &str) -> Result<AgentList, String> {
+    let Ok(file) = serde_json::from_str::<Value>(text) else {
+        return Err("agents.json is not valid JSON".to_string());
+    };
+    if !file.is_object() {
+        return Err("agents.json is not an object".to_string());
     }
-
-    pub fn label(self) -> &'static str {
-        match self {
-            AgentKind::Claude => "Claude Code",
-            AgentKind::Devin => "Devin",
-            AgentKind::Codex => "Codex",
+    if file.get("schema").and_then(Value::as_f64) != Some(AGENT_LIST_SCHEMA) {
+        let shown = file
+            .get("schema")
+            .map_or("undefined".to_string(), |v| v.to_string());
+        return Err(format!(
+            "agents.json has schema {shown}, not {}",
+            AGENT_LIST_SCHEMA as u64
+        ));
+    }
+    let mut out = AgentList::default();
+    let empty = Vec::new();
+    let list = file
+        .get("agents")
+        .and_then(Value::as_array)
+        .unwrap_or(&empty);
+    for (index, entry) in list.iter().enumerate() {
+        if !entry.is_object() {
+            out.warnings
+                .push(format!("agents[{index}] skipped: not an object"));
+            continue;
+        }
+        let Ok(agent) = serde_json::from_value::<AgentEntry>(entry.clone()) else {
+            out.warnings.push(format!(
+                "agents[{index}] skipped: missing or mistyped fields"
+            ));
+            continue;
+        };
+        match agent.kind.as_str() {
+            "builtin" => out.builtins.push(agent),
+            "template" => out.templates.push(agent),
+            other => out
+                .warnings
+                .push(format!("agents[{index}] skipped: unknown kind {other:?}")),
         }
     }
+    Ok(out)
+}
 
-    /// What a first start types: the skill that opens the dashboard. Codex
-    /// mentions a skill with `$name`.
-    pub fn default_prompt(self) -> &'static str {
-        match self {
-            AgentKind::Codex => "$plan2code",
-            _ => "/plan2code",
+/// Read the installed list, or the baked copy with one warning when the file
+/// is missing, unreadable or the wrong schema. Never panics; the baked copy
+/// always parses (a test pins it to `src/launcher/agents.json`).
+fn load_agent_list_uncached() -> AgentList {
+    let text = agent_list_file().and_then(|file| std::fs::read_to_string(file).ok());
+    match text.as_deref().map(|text| (text, parse_agent_list(text))) {
+        Some((_, Ok(list))) => list,
+        why => {
+            let mut list = parse_agent_list(BAKED_AGENTS).unwrap_or_default();
+            let reason = match why {
+                Some((_, Err(error))) => error,
+                _ => "agents.json is missing".to_string(),
+            };
+            list.warnings
+                .push(format!("{reason}; the copy built into the app is used"));
+            list
         }
     }
+}
 
-    /// The program this agent runs as, before any PATH resolution.
-    pub fn program_name(self) -> &'static str {
-        match self {
-            AgentKind::Claude => "claude",
-            AgentKind::Devin => "devin",
-            AgentKind::Codex => "codex",
-        }
-    }
+static AGENT_LIST: Mutex<Option<Arc<AgentList>>> = Mutex::new(None);
 
-    /// Whether this agent takes a separate reasoning effort. Devin's model
-    /// ids already carry effort (`swe-2-high`), so it has none of its own.
-    pub fn has_effort(self) -> bool {
-        matches!(self, AgentKind::Claude | AgentKind::Codex)
-    }
+/// The shipped agent list, loaded once and kept: the file changes on a skills
+/// update, which restarts the app anyway; `refresh_agent_list` re-reads it
+/// early for "Check again".
+pub fn agent_list() -> Arc<AgentList> {
+    let mut cached = AGENT_LIST.lock().unwrap_or_else(|e| e.into_inner());
+    cached
+        .get_or_insert_with(|| Arc::new(load_agent_list_uncached()))
+        .clone()
+}
 
-    /// Where to install this agent: an npm command or, with no package of its
-    /// own, the site to install from. The same text `src/launcher/plan2code.js`
-    /// shows for a missing CLI.
-    pub fn install_hint(self) -> &'static str {
-        match self {
-            AgentKind::Claude => "npm i -g @anthropic-ai/claude-code",
-            AgentKind::Devin => "https://devin.ai",
-            AgentKind::Codex => "npm i -g @openai/codex",
-        }
-    }
+/// Drop the cached list so the next `agent_list()` reads the file again.
+pub fn refresh_agent_list() {
+    *AGENT_LIST.lock().unwrap_or_else(|e| e.into_inner()) = None;
+}
 
-    /// The official page to install this agent from. The same links as the
-    /// launcher's `CLIS` and the overview's Quick Reference: change all together.
-    pub fn install_url(self) -> &'static str {
-        match self {
-            AgentKind::Claude => "https://code.claude.com/docs/en/setup",
-            AgentKind::Devin => "https://docs.devin.ai/work-with-devin/devin-cli",
-            AgentKind::Codex => "https://github.com/openai/codex",
-        }
+/// The built-in entries, in file order.
+pub fn builtin_entries() -> Vec<AgentEntry> {
+    agent_list().builtins.clone()
+}
+
+/// The built-in entry `id` names, or none (a custom agent, a typo).
+pub fn builtin_entry(id: &str) -> Option<AgentEntry> {
+    agent_list()
+        .builtins
+        .iter()
+        .find(|entry| entry.id == id)
+        .cloned()
+}
+
+/// Whether this agent takes a separate reasoning effort. Devin's model ids
+/// already carry effort (`swe-2-high`), so it has none of its own; agents.json
+/// has no effort field, so the two that take one are named here.
+pub fn has_effort(id: &str) -> bool {
+    matches!(id, "claude" | "codex")
+}
+
+/// The extra arguments `effort` becomes for this agent, or none: Claude's own
+/// flag, Codex's config override.
+fn effort_args(id: &str, effort: &str) -> Vec<String> {
+    match id {
+        "claude" => vec!["--effort".to_string(), effort.to_string()],
+        "codex" => vec!["-c".to_string(), format!("model_reasoning_effort={effort}")],
+        _ => Vec::new(),
     }
+}
+
+/// How a person installs `entry`: this OS's lead install line, else its
+/// install page, for the launch card's one-line hint.
+pub fn install_hint(entry: &AgentEntry) -> Option<String> {
+    entry
+        .install
+        .for_platform(lookup_platform())
+        .first()
+        .map(|line| line.run.clone())
+        .or_else(|| entry.install_url.clone())
 }
 
 /// Whether permission checks run while the agent works. Bypass is always an
@@ -120,42 +263,342 @@ impl PermissionMode {
     }
 }
 
-/// Whether `program` exists on `path_var`: an exact file on macOS and Linux,
-/// or with `.exe`, `.cmd` or `.bat` on Windows (as `windows_command` resolves
-/// a program to run).
-pub fn find_on_path(program: &str, path_var: &str) -> Option<PathBuf> {
-    let exts: &[&str] = if cfg!(windows) {
-        &["exe", "cmd", "bat"]
+/* ---------------------------------------------------------- the lookup rule */
+// `findAgent` in src/web-console/agent-lookup.mjs, kept to the same answers by
+// the shared cases in scripts/fixtures/agent-lookup-cases.json (the test at
+// the bottom of this file runs them all).
+
+/// Where `entry`'s command can run from, mirroring the JS `findAgent`'s
+/// `{ state, path, where, folder }`: "found" on the searched PATH, "outside"
+/// on the saved Windows PATH, in npm's global folder or in one of the entry's
+/// installDirs, "missing" nowhere. `folder` is the directory it was found in.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct LookupResult {
+    pub state: &'static str,
+    pub path: Option<PathBuf>,
+    pub where_: Option<&'static str>,
+    pub folder: Option<PathBuf>,
+}
+
+fn missing() -> LookupResult {
+    LookupResult {
+        state: "missing",
+        path: None,
+        where_: None,
+        folder: None,
+    }
+}
+
+fn hit(state: &'static str, where_: &'static str, path: PathBuf) -> LookupResult {
+    LookupResult {
+        state,
+        path: Some(path.clone()),
+        where_: Some(where_),
+        folder: path.parent().map(Path::to_path_buf),
+    }
+}
+
+/// The OS the lookup answers for: "win" | "mac" | "linux", as agents.json
+/// keys its per-OS fields.
+pub fn lookup_platform() -> &'static str {
+    if cfg!(windows) {
+        "win"
+    } else if cfg!(target_os = "macos") {
+        "mac"
     } else {
-        &[""]
-    };
+        "linux"
+    }
+}
+
+/// Everything the lookup reads from the environment, as named inputs so a
+/// test can drive it on any platform's rules. `None` fields read the real
+/// process values.
+#[derive(Clone, Debug, Default)]
+pub struct LookupEnv {
+    pub path: Option<String>,
+    pub saved_path: Option<String>,
+    pub npm_bin: Option<String>,
+    pub pathext: Option<String>,
+    pub platform: Option<String>,
+    pub home: Option<String>,
+    /// `%NAME%` expansions for installDirs, checked case-insensitively like
+    /// Windows; the process environment answers a name not listed here.
+    pub vars: Vec<(String, String)>,
+}
+
+/// The folders a PATH-like string names, quotes stripped. The delimiter is
+/// the host's, as `path.delimiter` is on the Node side: a PATH a case drives
+/// is written for the machine it runs on, not for the platform it names.
+fn path_dirs(path_var: &str) -> Vec<PathBuf> {
     path_var
         .split(if cfg!(windows) { ';' } else { ':' })
         .filter(|dir| !dir.is_empty())
-        .find_map(|dir| {
-            exts.iter().find_map(|ext| {
-                let name = if ext.is_empty() {
-                    program.to_string()
-                } else {
-                    format!("{program}.{ext}")
-                };
-                let candidate = Path::new(dir).join(name);
-                candidate.is_file().then_some(candidate)
-            })
-        })
+        .map(|dir| Path::new(dir.trim_matches('"')).to_path_buf())
+        .collect()
 }
 
-/// Where `kind`'s CLI runs from: the test override when it is set, else its
-/// program name on PATH. `None` means it cannot be run.
-pub fn installed_at(kind: AgentKind) -> Option<PathBuf> {
+/// `command` (a bare name) in `dir`, each extension tried. A name that
+/// already carries an extension (goose.cmd) is tried as written first, then
+/// with each extension; extensions come in uppercase from PATHEXT while
+/// files are usually lowercase, so both cases are tried and the path names
+/// the file as written.
+fn find_in_dir(command: &str, dir: &Path, extensions: &[String]) -> Option<PathBuf> {
+    let has_ext = Path::new(command).extension().is_some();
+    let exts: Vec<&str> = if has_ext {
+        std::iter::once("")
+            .chain(extensions.iter().map(String::as_str))
+            .collect()
+    } else {
+        extensions.iter().map(String::as_str).collect()
+    };
+    for ext in exts {
+        let mut names = vec![format!("{command}{}", ext.to_lowercase())];
+        let original = format!("{command}{ext}");
+        if original != names[0] {
+            names.push(original);
+        }
+        for name in names {
+            let candidate = dir.join(name);
+            if candidate.is_file() {
+                return Some(candidate);
+            }
+        }
+    }
+    None
+}
+
+fn find_in_dirs(command: &str, dirs: &[PathBuf], extensions: &[String]) -> Option<PathBuf> {
+    dirs.iter()
+        .find_map(|dir| find_in_dir(command, dir, extensions))
+}
+
+/// `~` at the start (alone or before a separator) replaced with `home`.
+fn expand_home(text: &str, home: &str) -> String {
+    if text == "~" {
+        return home.to_string();
+    }
+    text.strip_prefix("~/")
+        .or_else(|| text.strip_prefix("~\\"))
+        .map_or_else(|| text.to_string(), |rest| format!("{home}/{rest}"))
+}
+
+/// npm's global bin folder, worked out once per process: derived without
+/// spawning where possible (npm_config_prefix, %APPDATA%\npm on Windows),
+/// `npm config get prefix` with a short timeout only as the fallback, and a
+/// failure means "no npm folder", never an error.
+fn npm_global_bin(windows: bool) -> Option<String> {
+    static CACHED: Mutex<Option<Option<String>>> = Mutex::new(None);
+    let mut cached = CACHED.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some(value) = cached.as_ref() {
+        return value.clone();
+    }
+    let found = npm_global_bin_uncached(windows);
+    *cached = Some(found.clone());
+    found
+}
+
+fn npm_global_bin_uncached(windows: bool) -> Option<String> {
+    if let Ok(prefix) = std::env::var("npm_config_prefix") {
+        if !prefix.is_empty() {
+            return Some(if windows {
+                prefix
+            } else {
+                format!("{prefix}/bin")
+            });
+        }
+    }
+    if windows {
+        if let Ok(appdata) = std::env::var("APPDATA") {
+            if !appdata.is_empty() {
+                return Some(format!("{appdata}\\npm"));
+            }
+        }
+    }
+    let child = std::process::Command::new("npm")
+        .args(["config", "get", "prefix"])
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null())
+        .env("PATH", crate::node_check::resolved_path())
+        .spawn();
+    let child = match child {
+        Ok(child) => child,
+        Err(_) => return None,
+    };
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let _ = tx.send(child.wait_with_output());
+    });
+    match rx.recv_timeout(std::time::Duration::from_secs(3)) {
+        Ok(Ok(out)) => {
+            let got = String::from_utf8_lossy(&out.stdout).trim().to_string();
+            (!got.is_empty()).then(|| if windows { got } else { format!("{got}/bin") })
+        }
+        _ => None,
+    }
+}
+
+/// `entry`'s command under the real environment: the process PATH on Windows
+/// (the saved PATH is then checked separately so the answer can say
+/// `saved-path`), the app's resolved PATH elsewhere (its login-shell merge is
+/// the honest "on PATH" there).
+pub fn lookup_agent(entry: &AgentEntry) -> LookupResult {
+    let env = LookupEnv::default();
+    lookup_agent_in(entry, &env)
+}
+
+/// `findAgent(entry, env)`, on `entry`'s `command` and `installDirs`.
+pub fn lookup_agent_in(entry: &AgentEntry, env: &LookupEnv) -> LookupResult {
+    let command = clean_command(entry.command.trim());
+    if command.is_empty() {
+        return missing();
+    }
+    let platform = env
+        .platform
+        .clone()
+        .unwrap_or_else(|| lookup_platform().to_string());
+    let windows = platform == "win";
+    let pathext = env
+        .pathext
+        .clone()
+        .or_else(|| std::env::var("PATHEXT").ok())
+        .filter(|p| !p.is_empty())
+        .unwrap_or_else(|| ".EXE;.CMD;.BAT;.COM".to_string());
+    let extensions: Vec<String> = if windows {
+        pathext
+            .split(';')
+            .filter(|e| !e.is_empty())
+            .map(String::from)
+            .collect()
+    } else {
+        vec![String::new()]
+    };
+
+    // A command written as a path is checked as a file, never looked up.
+    if has_separator(command, windows) {
+        let full = if Path::new(command).is_absolute() {
+            PathBuf::from(command)
+        } else {
+            std::env::current_dir()
+                .unwrap_or_else(|_| PathBuf::from("."))
+                .join(command)
+        };
+        let tries: Vec<PathBuf> = if windows && full.extension().is_none() {
+            extensions
+                .iter()
+                .map(|ext| PathBuf::from(format!("{}{ext}", full.to_string_lossy())))
+                .collect()
+        } else {
+            vec![full]
+        };
+        return match tries.iter().find(|t| t.is_file()) {
+            Some(found) => hit("found", "path", found.clone()),
+            None => missing(),
+        };
+    }
+
+    let search_path = env.path.clone().unwrap_or_else(real_lookup_path);
+    if let Some(found) = find_in_dirs(command, &path_dirs(&search_path), &extensions) {
+        return hit("found", "path", found);
+    }
+
+    let saved = env
+        .saved_path
+        .clone()
+        .unwrap_or_else(crate::node_check::saved_path_value);
+    if let Some(found) = find_in_dirs(command, &path_dirs(&saved), &extensions) {
+        return hit("outside", "saved-path", found);
+    }
+
+    let npm_bin = env.npm_bin.clone().or_else(|| npm_global_bin(windows));
+    if let Some(bin) = npm_bin {
+        if !bin.is_empty() {
+            if let Some(found) = find_in_dir(command, Path::new(&bin), &extensions) {
+                return hit("outside", "npm", found);
+            }
+        }
+    }
+
+    let home = env
+        .home
+        .clone()
+        .or_else(|| std::env::home_dir().map(|h| h.to_string_lossy().into_owned()))
+        .unwrap_or_default();
+    // A `vars` map that is given stands alone, as `env.vars || process.env`
+    // says on the JS side: the process environment is consulted only when no
+    // map was supplied at all.
+    let vars = |name: &str| {
+        if env.vars.is_empty() {
+            return std::env::var(name).ok();
+        }
+        env.vars
+            .iter()
+            .find(|(key, _)| key.eq_ignore_ascii_case(name))
+            .map(|(_, value)| value.clone())
+    };
+    for dir in entry.install_dirs.for_platform(&platform) {
+        let expanded = crate::node_check::expand_percent_vars(&expand_home(dir, &home), vars);
+        if let Some(found) = find_in_dir(command, Path::new(&expanded), &extensions) {
+            return hit("outside", "install-dir", found);
+        }
+    }
+
+    missing()
+}
+
+/// What the lookup's PATH input is with no override: the inherited process
+/// PATH on Windows (the saved PATH is its own input so `saved-path` can be
+/// told apart), the app's resolved PATH elsewhere.
+fn real_lookup_path() -> String {
+    if cfg!(windows) {
+        std::env::var("PATH").unwrap_or_default()
+    } else {
+        crate::node_check::resolved_path()
+    }
+}
+
+/// The extension list `find_on_path` tries on Windows: the real PATHEXT, or
+/// the usual default when it is unset.
+fn pathext_list(windows: bool, pathext: Option<&str>) -> Vec<String> {
+    if !windows {
+        return vec![String::new()];
+    }
+    pathext
+        .map(String::from)
+        .or_else(|| std::env::var("PATHEXT").ok())
+        .filter(|p| !p.is_empty())
+        .unwrap_or_else(|| ".EXE;.CMD;.BAT;.COM".to_string())
+        .split(';')
+        .filter(|e| !e.is_empty())
+        .map(String::from)
+        .collect()
+}
+
+/// Whether `program` exists on `path_var`: an exact file on macOS and Linux,
+/// or with any PATHEXT extension on Windows (the lookup rule's search order).
+pub fn find_on_path(program: &str, path_var: &str) -> Option<PathBuf> {
+    find_in_dirs(
+        program,
+        &path_dirs(path_var),
+        &pathext_list(cfg!(windows), None),
+    )
+}
+
+/// Where `entry`'s CLI runs from: the test override when it is set, else the
+/// lookup's `found` answer (on the searched PATH). `None` means it cannot be
+/// run without setup, whatever the other states found.
+pub fn installed_at(entry: &AgentEntry) -> Option<PathBuf> {
     let bin = std::env::var(AGENT_BIN_ENV).ok().filter(|b| !b.is_empty());
-    let program = bin.unwrap_or_else(|| kind.program_name().to_string());
-    find_on_path(&program, &crate::node_check::resolved_path())
+    if let Some(program) = bin {
+        return find_on_path(&program, &crate::node_check::resolved_path());
+    }
+    let found = lookup_agent(entry);
+    (found.state == "found").then_some(found.path).flatten()
 }
 
-/// Whether `kind`'s CLI can be run at all.
-pub fn is_installed(kind: AgentKind) -> bool {
-    installed_at(kind).is_some()
+/// Whether `entry`'s CLI can be run at all.
+pub fn is_installed(entry: &AgentEntry) -> bool {
+    installed_at(entry).is_some()
 }
 
 /// A command to run in the pseudo-terminal.
@@ -167,10 +610,10 @@ pub struct LaunchSpec {
     pub cwd: PathBuf,
 }
 
-/// How to start `kind` in `folder`. An empty `prompt` starts the agent with
+/// How to start `entry` in `folder`. An empty `prompt` starts the agent with
 /// nothing typed. `PLAN2CODE_APP_AGENT_BIN` replaces the program (tests only).
 pub fn launch_spec(
-    kind: AgentKind,
+    entry: &AgentEntry,
     folder: &Path,
     model: Option<&str>,
     effort: Option<&str>,
@@ -180,7 +623,7 @@ pub fn launch_spec(
     let bin = std::env::var(AGENT_BIN_ENV)
         .ok()
         .filter(|bin| !bin.is_empty());
-    let mut spec = launch_spec_with(kind, folder, model, effort, mode, prompt, bin.as_deref());
+    let mut spec = launch_spec_with(entry, folder, model, effort, mode, prompt, bin.as_deref());
     // The override names a program to run as it is; a real agent is looked up on PATH.
     if cfg!(windows) && bin.is_none() {
         let (program, args) = windows_command(
@@ -195,7 +638,7 @@ pub fn launch_spec(
 }
 
 fn launch_spec_with(
-    kind: AgentKind,
+    entry: &AgentEntry,
     folder: &Path,
     model: Option<&str>,
     effort: Option<&str>,
@@ -213,62 +656,27 @@ fn launch_spec_with(
         };
     }
 
-    let strings = |list: &[&str]| list.iter().map(|s| s.to_string()).collect::<Vec<_>>();
-    let model_args = |args: &mut Vec<String>| {
-        if let Some(model) = model {
-            args.push("--model".to_string());
-            args.push(model.to_string());
-        }
-    };
     let bypass = mode == PermissionMode::Bypass;
-    let mut args = Vec::new();
-    let program = match kind {
-        AgentKind::Claude => {
-            if !prompt.is_empty() {
-                args.push(prompt.to_string());
-            }
-            if bypass {
-                args.extend(strings(&["--permission-mode", "bypassPermissions"]));
-            }
-            model_args(&mut args);
-            if let Some(effort) = effort {
-                args.push("--effort".to_string());
-                args.push(effort.to_string());
-            }
-            "claude"
-        }
-        AgentKind::Devin => {
-            if bypass {
-                args.extend(strings(&["--permission-mode", "bypass"]));
-            }
-            model_args(&mut args);
-            if !prompt.is_empty() {
-                args.push("--".to_string());
-                args.push(prompt.to_string());
-            }
-            "devin"
-        }
-        AgentKind::Codex => {
-            if bypass {
-                args.extend(strings(&["--dangerously-bypass-approvals-and-sandbox"]));
-            }
-            model_args(&mut args);
-            if let Some(effort) = effort {
-                args.push("-c".to_string());
-                args.push(format!("model_reasoning_effort={effort}"));
-            }
-            if !prompt.is_empty() {
-                args.push(prompt.to_string());
-            }
-            "codex"
-        }
-    };
+    let effort_args = effort
+        .filter(|e| !e.is_empty())
+        .map(|e| effort_args(&entry.id, e))
+        .unwrap_or_default();
+    let args = build_args(
+        &entry.args,
+        &entry.prompt,
+        Some(prompt),
+        model,
+        bypass,
+        &entry.bypass_args,
+        &entry.model_args,
+        &effort_args,
+    );
     // A Dock or Start-menu launch often lacks nvm, Homebrew or Volta's
     // directories (Task 9.9): the agent CLI itself, and anything it shells
     // out to, needs a PATH that finds them anyway.
     let env = vec![("PATH".to_string(), crate::node_check::resolved_path())];
     LaunchSpec {
-        program: program.to_string(),
+        program: clean_command(&entry.command).to_string(),
         args,
         env,
         cwd,
@@ -303,7 +711,6 @@ pub fn windows_command(program: &str, args: Vec<String>, path_var: &str) -> (Str
 /* ------------------------------------------------------------ custom agents */
 
 pub const MAX_CUSTOM_AGENTS: usize = 50;
-const BUILTIN_IDS: [&str; 3] = ["claude", "devin", "codex"];
 const MAX_NAME: usize = 60;
 const DEFAULT_CUSTOM_PROMPT: &str = "/plan2code";
 
@@ -453,7 +860,7 @@ fn check_entry(
         Some(id) if !id.is_empty() => id,
         _ => return Err("id is missing".to_string()),
     };
-    if BUILTIN_IDS.contains(&id) {
+    if builtin_entry(id).is_some() {
         return Err(format!("id \"{id}\" belongs to a built-in agent"));
     }
     if !valid_agent_id(id) {
@@ -536,67 +943,125 @@ fn check_entry(
     })
 }
 
-/// The arguments that start a custom agent, in order (`buildArgs` in
-/// agents.mjs): `args` with `{prompt}` filled (the prompt appended when no
-/// argument holds it), then `model_args` when a model is chosen, then
-/// `bypass_args` when checks are off. `prompt` defaults to the entry's own; a
-/// blank one drops an argument that is exactly `{prompt}`. Plain text only.
+/// The arguments that start an agent, in order (`buildArgs` in agents.mjs):
+/// `args` with `{prompt}` filled (the prompt appended when no argument holds
+/// it), then `model_args` when a model is chosen, then `bypass_args` when
+/// checks are off. An argument that is exactly `{bypass}` or `{model}`
+/// expands to `bypass_args` / `model_args` in place (nothing when off /
+/// unset) and that flag is no longer appended at the end; `extra_after_model`
+/// (a built-in's effort flags) follows each `{model}` expansion.
+/// `prompt` defaults to `own_prompt`; a blank one drops an argument that is
+/// exactly `{prompt}`. Plain text only.
+#[allow(clippy::too_many_arguments)]
+fn build_args(
+    args: &[String],
+    own_prompt: &str,
+    prompt: Option<&str>,
+    model: Option<&str>,
+    bypass: bool,
+    bypass_args: &[String],
+    model_args: &[String],
+    extra_after_model: &[String],
+) -> Vec<String> {
+    let text = prompt.unwrap_or(own_prompt);
+    let blank = text.trim().is_empty();
+    let model = model.filter(|m| !m.is_empty());
+    let mut out = Vec::new();
+    let mut placed = false;
+    let mut has_bypass = false;
+    let mut has_model = false;
+    for arg in args {
+        if arg == "{bypass}" {
+            has_bypass = true;
+            if bypass {
+                out.extend(bypass_args.iter().cloned());
+            }
+            continue;
+        }
+        if arg == "{model}" {
+            has_model = true;
+            if let Some(m) = model {
+                out.extend(model_args.iter().map(|a| a.replace("{model}", m)));
+            }
+            out.extend(extra_after_model.iter().cloned());
+            continue;
+        }
+        if arg.contains("{bypass}") {
+            has_bypass = true;
+        }
+        if arg.contains("{model}") {
+            has_model = true;
+        }
+        if !arg.contains("{prompt}") && !arg.contains("{model}") {
+            out.push(arg.clone());
+            continue;
+        }
+        if arg == "{prompt}" && blank {
+            placed = true;
+            continue;
+        }
+        let mut next = arg.clone();
+        if next.contains("{prompt}") {
+            placed = true;
+            next = next.replace("{prompt}", text);
+        }
+        if next.contains("{model}") {
+            next = next.replace("{model}", model.unwrap_or(""));
+        }
+        out.push(next);
+    }
+    if !placed && !blank {
+        out.push(text.to_string());
+    }
+    if !has_model {
+        if let Some(m) = model {
+            out.extend(model_args.iter().map(|arg| arg.replace("{model}", m)));
+        }
+        out.extend(extra_after_model.iter().cloned());
+    }
+    if bypass && !has_bypass {
+        out.extend(bypass_args.iter().cloned());
+    }
+    out
+}
+
+/// `build_args` for a custom agent (`build_custom_args`).
 pub fn build_custom_args(
     agent: &CustomAgent,
     prompt: Option<&str>,
     model: Option<&str>,
     bypass: bool,
 ) -> Vec<String> {
-    let text = prompt.unwrap_or(&agent.prompt);
-    let blank = text.trim().is_empty();
-    let mut out = Vec::new();
-    let mut placed = false;
-    for arg in &agent.args {
-        if !arg.contains("{prompt}") {
-            out.push(arg.clone());
-            continue;
-        }
-        placed = true;
-        if arg == "{prompt}" && blank {
-            continue;
-        }
-        out.push(arg.replace("{prompt}", text));
-    }
-    if !placed && !blank {
-        out.push(text.to_string());
-    }
-    if let Some(model) = model.filter(|m| !m.is_empty()) {
-        out.extend(
-            agent
-                .model_args
-                .iter()
-                .map(|arg| arg.replace("{model}", model)),
-        );
-    }
-    if bypass {
-        out.extend(agent.bypass_args.iter().cloned());
-    }
-    out
+    build_args(
+        &agent.args,
+        &agent.prompt,
+        prompt,
+        model,
+        bypass,
+        &agent.bypass_args,
+        &agent.model_args,
+        &[],
+    )
 }
 
-/// An agent the app can run: one of the three built-ins or a custom entry.
+/// An agent the app can run: one of the shipped built-ins or a custom entry.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Agent {
-    Builtin(AgentKind),
+    Builtin(AgentEntry),
     Custom(CustomAgent),
 }
 
 impl Agent {
     pub fn id(&self) -> &str {
         match self {
-            Agent::Builtin(kind) => kind.id(),
+            Agent::Builtin(entry) => &entry.id,
             Agent::Custom(agent) => &agent.id,
         }
     }
 
     pub fn label(&self) -> &str {
         match self {
-            Agent::Builtin(kind) => kind.label(),
+            Agent::Builtin(entry) => &entry.name,
             Agent::Custom(agent) => &agent.name,
         }
     }
@@ -604,21 +1069,21 @@ impl Agent {
     /// What a first start types.
     pub fn default_prompt(&self) -> &str {
         match self {
-            Agent::Builtin(kind) => kind.default_prompt(),
+            Agent::Builtin(entry) => &entry.prompt,
             Agent::Custom(agent) => &agent.prompt,
         }
     }
 
     /// A custom agent has no effort of its own.
     pub fn has_effort(&self) -> bool {
-        matches!(self, Agent::Builtin(kind) if kind.has_effort())
+        matches!(self, Agent::Builtin(entry) if has_effort(&entry.id))
     }
 
     /// Where this agent's program runs from, or `None` when it cannot be run.
     /// `PLAN2CODE_APP_AGENT_BIN` still overrides the program (tests only).
     pub fn installed_at(&self) -> Option<PathBuf> {
         match self {
-            Agent::Builtin(kind) => installed_at(*kind),
+            Agent::Builtin(entry) => installed_at(entry),
             Agent::Custom(agent) => {
                 let bin = std::env::var(AGENT_BIN_ENV).ok().filter(|b| !b.is_empty());
                 let command = bin.as_deref().unwrap_or(&agent.command);
@@ -635,8 +1100,8 @@ pub fn find_agent(id: &str) -> Option<Agent> {
 
 /// `find_agent` against a given agents file (`None`: built-ins only).
 pub fn find_agent_in(id: &str, file: Option<&Path>) -> Option<Agent> {
-    if let Some(kind) = AgentKind::from_id(id) {
-        return Some(Agent::Builtin(kind));
+    if let Some(entry) = builtin_entry(id) {
+        return Some(Agent::Builtin(entry));
     }
     let (agents, _) = load_custom_agents(file?);
     agents
@@ -716,7 +1181,7 @@ pub fn agent_launch_spec(
     prompt: &str,
 ) -> LaunchSpec {
     match agent {
-        Agent::Builtin(kind) => launch_spec(*kind, folder, model, effort, mode, prompt),
+        Agent::Builtin(entry) => launch_spec(entry, folder, model, effort, mode, prompt),
         Agent::Custom(custom) => {
             if let Some(bin) = std::env::var(AGENT_BIN_ENV)
                 .ok()
@@ -830,9 +1295,9 @@ fn quote_for_cmd(arg: &str) -> String {
 }
 
 /// The page a built-in agent installs from; any other id is an error.
-pub fn install_page_url(id: &str) -> Result<&'static str, String> {
-    AgentKind::from_id(id)
-        .map(AgentKind::install_url)
+pub fn install_page_url(id: &str) -> Result<String, String> {
+    builtin_entry(id)
+        .and_then(|entry| entry.install_url)
         .ok_or_else(|| format!("no install page for agent: {id}"))
 }
 
@@ -840,23 +1305,28 @@ pub fn install_page_url(id: &str) -> Result<&'static str, String> {
 mod tests {
     use super::*;
 
+    /// A shipped built-in's entry from the baked list: deterministic in tests.
+    fn entry(id: &str) -> AgentEntry {
+        parse_agent_list(BAKED_AGENTS)
+            .unwrap()
+            .builtins
+            .into_iter()
+            .find(|e| e.id == id)
+            .unwrap_or_else(|| panic!("no baked entry {id}"))
+    }
+
     fn folder() -> PathBuf {
         PathBuf::from("project")
     }
 
-    fn args(
-        kind: AgentKind,
-        model: Option<&str>,
-        mode: PermissionMode,
-        prompt: &str,
-    ) -> Vec<String> {
-        launch_spec_with(kind, &folder(), model, None, mode, prompt, None).args
+    fn args(id: &str, model: Option<&str>, mode: PermissionMode, prompt: &str) -> Vec<String> {
+        launch_spec_with(&entry(id), &folder(), model, None, mode, prompt, None).args
     }
 
     #[test]
     fn claude_puts_the_prompt_first() {
         let spec = launch_spec_with(
-            AgentKind::Claude,
+            &entry("claude"),
             &folder(),
             None,
             None,
@@ -878,7 +1348,7 @@ mod tests {
     fn claude_with_a_model() {
         assert_eq!(
             args(
-                AgentKind::Claude,
+                "claude",
                 Some("sonnet"),
                 PermissionMode::Bypass,
                 "/plan2code"
@@ -896,12 +1366,7 @@ mod tests {
     #[test]
     fn claude_checked_mode_skips_the_bypass_flag() {
         assert_eq!(
-            args(
-                AgentKind::Claude,
-                None,
-                PermissionMode::Checked,
-                "/plan2code"
-            ),
+            args("claude", None, PermissionMode::Checked, "/plan2code"),
             ["/plan2code"]
         );
     }
@@ -909,7 +1374,7 @@ mod tests {
     #[test]
     fn claude_with_an_effort() {
         let spec = launch_spec_with(
-            AgentKind::Claude,
+            &entry("claude"),
             &folder(),
             None,
             Some("high"),
@@ -932,7 +1397,7 @@ mod tests {
     #[test]
     fn a_full_launch_card_choice_carries_model_effort_and_mode_together() {
         let spec = launch_spec_with(
-            AgentKind::Claude,
+            &entry("claude"),
             &folder(),
             Some("opus"),
             Some("xhigh"),
@@ -953,7 +1418,7 @@ mod tests {
             ]
         );
         let checked = launch_spec_with(
-            AgentKind::Codex,
+            &entry("codex"),
             &folder(),
             Some("gpt-5"),
             Some("medium"),
@@ -976,7 +1441,7 @@ mod tests {
     #[test]
     fn devin_puts_the_prompt_after_a_double_dash() {
         let spec = launch_spec_with(
-            AgentKind::Devin,
+            &entry("devin"),
             &folder(),
             None,
             None,
@@ -994,12 +1459,7 @@ mod tests {
     #[test]
     fn devin_with_a_model_keeps_the_prompt_last() {
         assert_eq!(
-            args(
-                AgentKind::Devin,
-                Some("opus"),
-                PermissionMode::Bypass,
-                "/plan2code"
-            ),
+            args("devin", Some("opus"), PermissionMode::Bypass, "/plan2code"),
             [
                 "--permission-mode",
                 "bypass",
@@ -1014,26 +1474,21 @@ mod tests {
     #[test]
     fn devin_checked_mode_skips_the_bypass_flag() {
         assert_eq!(
-            args(
-                AgentKind::Devin,
-                None,
-                PermissionMode::Checked,
-                "/plan2code"
-            ),
+            args("devin", None, PermissionMode::Checked, "/plan2code"),
             ["--", "/plan2code"]
         );
     }
 
     #[test]
     fn codex_uses_its_own_flag_and_dollar_prompt() {
-        let prompt = AgentKind::Codex.default_prompt();
+        let prompt = entry("codex").prompt;
         let spec = launch_spec_with(
-            AgentKind::Codex,
+            &entry("codex"),
             &folder(),
             None,
             None,
             PermissionMode::Bypass,
-            prompt,
+            &prompt,
             None,
         );
         assert_eq!(spec.program, "codex");
@@ -1046,12 +1501,7 @@ mod tests {
     #[test]
     fn codex_with_a_model() {
         assert_eq!(
-            args(
-                AgentKind::Codex,
-                Some("gpt-5"),
-                PermissionMode::Bypass,
-                "$plan2code"
-            ),
+            args("codex", Some("gpt-5"), PermissionMode::Bypass, "$plan2code"),
             [
                 "--dangerously-bypass-approvals-and-sandbox",
                 "--model",
@@ -1064,7 +1514,7 @@ mod tests {
     #[test]
     fn codex_with_an_effort_uses_a_config_override() {
         let spec = launch_spec_with(
-            AgentKind::Codex,
+            &entry("codex"),
             &folder(),
             None,
             Some("low"),
@@ -1086,12 +1536,7 @@ mod tests {
     #[test]
     fn codex_checked_mode_skips_the_bypass_flag() {
         assert_eq!(
-            args(
-                AgentKind::Codex,
-                None,
-                PermissionMode::Checked,
-                "$plan2code"
-            ),
+            args("codex", None, PermissionMode::Checked, "$plan2code"),
             ["$plan2code"]
         );
     }
@@ -1099,15 +1544,15 @@ mod tests {
     #[test]
     fn no_prompt_means_nothing_typed() {
         assert_eq!(
-            args(AgentKind::Claude, None, PermissionMode::Bypass, ""),
+            args("claude", None, PermissionMode::Bypass, ""),
             ["--permission-mode", "bypassPermissions"]
         );
         assert_eq!(
-            args(AgentKind::Devin, None, PermissionMode::Bypass, ""),
-            ["--permission-mode", "bypass"]
+            args("devin", None, PermissionMode::Bypass, ""),
+            ["--permission-mode", "bypass", "--"]
         );
         assert_eq!(
-            args(AgentKind::Codex, None, PermissionMode::Bypass, ""),
+            args("codex", None, PermissionMode::Bypass, ""),
             ["--dangerously-bypass-approvals-and-sandbox"]
         );
     }
@@ -1116,7 +1561,7 @@ mod tests {
     fn a_custom_prompt_is_passed_through() {
         assert_eq!(
             args(
-                AgentKind::Claude,
+                "claude",
                 None,
                 PermissionMode::Bypass,
                 "/plan2code pick up the brief"
@@ -1131,9 +1576,9 @@ mod tests {
 
     #[test]
     fn devin_has_no_effort_of_its_own() {
-        assert!(!AgentKind::Devin.has_effort());
-        assert!(AgentKind::Claude.has_effort());
-        assert!(AgentKind::Codex.has_effort());
+        assert!(!has_effort("devin"));
+        assert!(has_effort("claude"));
+        assert!(has_effort("codex"));
     }
 
     #[test]
@@ -1146,9 +1591,9 @@ mod tests {
 
     #[test]
     fn the_override_replaces_the_program_for_every_kind() {
-        for kind in AgentKind::ALL {
+        for entry in [entry("claude"), entry("devin"), entry("codex")] {
             let spec = launch_spec_with(
-                kind,
+                &entry,
                 &folder(),
                 Some("m"),
                 Some("high"),
@@ -1168,10 +1613,222 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         let name = if cfg!(windows) { "tool.exe" } else { "tool" };
         std::fs::write(dir.join(name), "").unwrap();
+        // A name whose extension PATHEXT never lists is not found, either.
+        #[cfg(windows)]
+        std::fs::write(dir.join("other.xyz"), "").unwrap();
         let path = dir.to_string_lossy().into_owned();
         assert_eq!(find_on_path("tool", &path), Some(dir.join(name)));
+        #[cfg(windows)]
+        assert_eq!(find_on_path("other", &path), None);
         assert_eq!(find_on_path("missing-tool", &path), None);
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn the_baked_list_matches_the_shipped_agents_json() {
+        // include_str! means the baked copy IS src/launcher/agents.json; this
+        // pins its schema so a drift between the app's structs and the file
+        // shows up here, not at runtime.
+        let list = parse_agent_list(BAKED_AGENTS).expect("the baked list parses");
+        assert_eq!(
+            list.builtins
+                .iter()
+                .map(|e| e.id.as_str())
+                .collect::<Vec<_>>(),
+            ["claude", "devin", "codex"]
+        );
+        assert_eq!(
+            list.templates
+                .iter()
+                .map(|e| e.id.as_str())
+                .collect::<Vec<_>>(),
+            ["copilot", "opencode", "gemini", "pi"]
+        );
+        assert!(list
+            .builtins
+            .iter()
+            .all(|e| !e.command.is_empty() && !e.args.is_empty()));
+    }
+
+    #[test]
+    fn the_list_loader_rejects_a_bad_file_and_reads_the_installed_path() {
+        // Not JSON, not an object, or the wrong schema is an error: the
+        // caller then falls back to the baked copy with a warning.
+        assert!(parse_agent_list("not json").is_err());
+        assert!(parse_agent_list("[]").is_err());
+        assert!(parse_agent_list(r#"{"schema":2,"agents":[]}"#).is_err());
+        // The file the loader reads is the launcher's own bin dir, beside
+        // plan2code.js and version.json.
+        let file = agent_list_file().expect("a home");
+        assert!(file.ends_with(std::path::Path::new("bin").join("agents.json")));
+        // Whatever is installed, a shipped built-in resolves to its entry.
+        assert!(builtin_entry("claude").is_some());
+        // Unknown kinds are skipped with a warning, not an error.
+        let list = parse_agent_list(
+            r#"{"schema":1,"agents":[{"id":"x","name":"X","kind":"future","command":"x"},{"id":"y","name":"Y","kind":"builtin","command":"y"}]}"#,
+        )
+        .unwrap();
+        assert_eq!(list.builtins.len(), 1);
+        assert_eq!(list.warnings.len(), 1);
+    }
+
+    /// Every case in the shared lookup fixture, under its own platform's
+    /// rules (Task 3.4): the same file drives scripts/test-agent-lookup.mjs,
+    /// so the Node and Rust lookups stay the one rule.
+    #[test]
+    fn the_shared_lookup_cases_all_answer_the_same() {
+        // The .cmd cases check a shim's lookup; cmd's own current-folder rule
+        // must not color a temp-folder stat, so the switch is cleared.
+        std::env::remove_var("NoDefaultCurrentDirectoryInExePath");
+        let cases: Value = serde_json::from_str(include_str!(
+            "../../../scripts/fixtures/agent-lookup-cases.json"
+        ))
+        .unwrap();
+        for (index, case) in cases["cases"].as_array().unwrap().iter().enumerate() {
+            let name = case["name"].as_str().unwrap();
+            let root =
+                std::env::temp_dir().join(format!("p2c-lookup-{}-{index}", std::process::id()));
+            let _ = std::fs::remove_dir_all(&root);
+            let mut dirs: std::collections::HashMap<String, String> = Default::default();
+            if let Some(map) = case["dirs"].as_object() {
+                for (dir_name, files) in map {
+                    let dir = root.join(dir_name).to_string_lossy().into_owned();
+                    for file in files.as_array().into_iter().flatten() {
+                        let target = std::path::Path::new(&dir).join(file.as_str().unwrap());
+                        std::fs::create_dir_all(target.parent().unwrap()).unwrap();
+                        std::fs::write(target, b"").unwrap();
+                    }
+                    let _ = std::fs::create_dir_all(&dir);
+                    dirs.insert(dir_name.clone(), dir);
+                }
+            }
+            // `{name}` in a value expands to that folder's path, making the
+            // dir on demand as the Node side's fill() does; collecting them
+            // first keeps `fill` a read.
+            let mut collect = |text: &str| {
+                let mut rest = text;
+                while let Some(at) = rest.find('{') {
+                    let Some(end) = rest[at..].find('}') else {
+                        break;
+                    };
+                    let key = &rest[at + 1..at + end];
+                    dirs.entry(key.to_string())
+                        .or_insert_with(|| root.join(key).to_string_lossy().into_owned());
+                    rest = &rest[at + end + 1..];
+                }
+            };
+            let env_obj = case["env"].as_object().cloned().unwrap_or_default();
+            for value in env_obj.values().flat_map(|v| {
+                let mut all: Vec<&str> = v.as_str().into_iter().collect();
+                if let Some(map) = v.as_object() {
+                    all.extend(map.values().filter_map(Value::as_str));
+                }
+                all
+            }) {
+                collect(value);
+            }
+            for s in [case["entry"]["command"].as_str(), case["folder"].as_str()]
+                .into_iter()
+                .flatten()
+            {
+                collect(s);
+            }
+            if let Some(map) = case["entry"]["installDirs"].as_object() {
+                for list in map.values() {
+                    for d in list.as_array().into_iter().flatten() {
+                        if let Some(s) = d.as_str() {
+                            collect(s);
+                        }
+                    }
+                }
+            }
+            // `{name}` in a value expands to that folder's path.
+            let fill = |value: &str| -> String {
+                let mut out = value.to_string();
+                while let Some(at) = out.find('{') {
+                    let Some(end) = out[at..].find('}') else {
+                        break;
+                    };
+                    let key = &out[at + 1..at + end];
+                    let dir = dirs.get(key).cloned().unwrap_or_default();
+                    out = format!("{}{}{}", &out[..at], dir, &out[at + end + 1..]);
+                }
+                out
+            };
+            let val = |key: &str| env_obj.get(key).and_then(Value::as_str).map(&fill);
+            let env = LookupEnv {
+                path: val("path"),
+                saved_path: val("savedPath"),
+                npm_bin: val("npmBin"),
+                pathext: val("pathext"),
+                platform: case["platform"].as_str().map(String::from),
+                home: val("home"),
+                vars: env_obj
+                    .get("vars")
+                    .and_then(Value::as_object)
+                    .map(|vars| {
+                        vars.iter()
+                            .map(|(k, v)| (k.clone(), fill(v.as_str().unwrap())))
+                            .collect()
+                    })
+                    .unwrap_or_default(),
+            };
+            let mut entry = AgentEntry {
+                id: "case".into(),
+                name: "case".into(),
+                kind: "builtin".into(),
+                command: String::new(),
+                prompt: String::new(),
+                args: vec![],
+                bypass_args: vec![],
+                model_args: vec![],
+                install_url: None,
+                install: PerOs::default(),
+                install_dirs: PerOs::default(),
+                note: None,
+            };
+            entry.command = fill(case["entry"]["command"].as_str().unwrap_or_default());
+            // The fixture's `\` in installDirs names a Windows folder; the
+            // temp file was made the host's way, so spell the dir the same
+            // (Windows itself takes either separator).
+            if let Some(map) = case["entry"]["installDirs"].as_object() {
+                for (os, list) in map {
+                    let dirs_list: Vec<String> = list
+                        .as_array()
+                        .into_iter()
+                        .flatten()
+                        .map(|d| fill(&d.as_str().unwrap_or_default().replace('\\', "/")))
+                        .collect();
+                    match os.as_str() {
+                        "win" => entry.install_dirs.win = dirs_list,
+                        "mac" => entry.install_dirs.mac = dirs_list,
+                        _ => entry.install_dirs.linux = dirs_list,
+                    }
+                }
+            }
+            let got = lookup_agent_in(&entry, &env);
+            let want_state = case["state"].as_str().unwrap();
+            assert_eq!(got.state, want_state, "{name}: state");
+            assert_eq!(got.where_, case["where"].as_str(), "{name}: where");
+            if want_state == "missing" {
+                assert_eq!(got.path, None, "{name}: path");
+                assert_eq!(got.folder, None, "{name}: folder");
+            } else {
+                let hit = got.path.clone().expect("a path for a found entry");
+                assert!(hit.is_file(), "{name}: path is a real file");
+                if let Some(file) = case["file"].as_str() {
+                    assert_eq!(hit.file_name().unwrap().to_str(), Some(file), "{name}");
+                }
+                if let Some(folder) = case["folder"].as_str() {
+                    assert_eq!(
+                        got.folder.as_deref(),
+                        Some(std::path::Path::new(&fill(folder))),
+                        "{name}: folder"
+                    );
+                }
+            }
+            let _ = std::fs::remove_dir_all(&root);
+        }
     }
 
     #[test]
@@ -1209,10 +1866,10 @@ mod tests {
 
     #[test]
     fn ids_round_trip() {
-        for kind in AgentKind::ALL {
-            assert_eq!(AgentKind::from_id(kind.id()), Some(kind));
+        for entry in [entry("claude"), entry("devin"), entry("codex")] {
+            assert_eq!(builtin_entry(&entry.id), Some(entry));
         }
-        assert_eq!(AgentKind::from_id("nope"), None);
+        assert!(builtin_entry("nope").is_none());
     }
 
     /* ------------------------------------------------------ custom agents */
@@ -1300,7 +1957,7 @@ mod tests {
         std::fs::write(&file, GOOSE).unwrap();
         assert_eq!(
             find_agent_in("claude", Some(&file)),
-            Some(Agent::Builtin(AgentKind::Claude))
+            Some(Agent::Builtin(entry("claude")))
         );
         let goose = find_agent_in("goose", Some(&file)).unwrap();
         assert_eq!(
@@ -1489,8 +2146,8 @@ mod tests {
             "https://github.com/openai/codex"
         );
         assert!(install_page_url("goose").is_err());
-        for kind in AgentKind::ALL {
-            assert!(kind.install_url().starts_with("https://"));
+        for entry in [entry("claude"), entry("devin"), entry("codex")] {
+            assert!(entry.install_url.unwrap().starts_with("https://"));
         }
     }
 }

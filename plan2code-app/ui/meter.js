@@ -48,6 +48,22 @@ export function pickDefaultAgent(availability, remembered) {
 }
 
 /**
+ * The one-line notice for the launch card when the remembered agent is gone
+ * but another works (FR-13): the id the card picks instead, or null when the
+ * remembered one still runs or nothing else does.
+ */
+export function lastAgentNotice(list, remembered) {
+  const entries = Array.isArray(list) ? list : [];
+  if (!remembered) return null;
+  const hit = entries.find((a) => a.id === remembered);
+  if (hit && hit.installed) return null;
+  const using = pickDefaultAgent(entries, remembered);
+  if (!using || using === remembered) return null;
+  const usingEntry = entries.find((a) => a.id === using);
+  return usingEntry && usingEntry.installed ? using : null;
+}
+
+/**
  * What the right end of the bar offers, most pressing first: the bar shows
  * the first step (short text plus its one button) and counts the rest as
  * "+N more". `consoleDead` is whether the console stopped answering;

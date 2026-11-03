@@ -371,3 +371,16 @@ test("framed, an Activities game in full screen asks the app for the whole scree
   await until(async () => (await told()).at(-1) === false, 5000);
   assert.deepEqual(await told(), [true, false, true, false, true, false], "and so does a new question");
 });
+
+test("framed, the setup page's agent-found names the agent; unframed it says nothing", async (t) => {
+  const browser = await pages.browser();
+  const s = await openSession(browser, { t, workflow: "setup", env: { PLAN2CODE_IN_APP: "1" }, init: FAKE_APP_FRAME });
+  await s.page.evaluate(() => import("/app-bridge.js").then((m) => m.agentFound("claude")));
+  assert.deepEqual(await toApp(s, "agent-found"), [{ plan2code: "agent-found", id: "claude" }], "a named request with the found id");
+
+  const plain = await openSession(browser, { t, workflow: "setup" });
+  const unframed = await plain.page.evaluate(() =>
+    import("/app-bridge.js").then((m) => { m.agentFound("devin"); return m.framed(); })
+  );
+  assert.equal(unframed, false, "outside the app the message goes nowhere and does not throw");
+});

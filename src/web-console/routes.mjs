@@ -14,6 +14,7 @@ import crypto from "node:crypto";
 import {
   LOOKS_FILE,
   PUBLIC_DIR,
+  SHIPPED_AGENTS_FILE,
   SHIPPED_MODELS_FILE,
   USER_AGENTS_FILE,
   USER_MODELS_FILE,
@@ -23,10 +24,12 @@ import {
   nowIso,
   readJson,
   readText,
+  updateState,
   withStateLock,
   writeJsonAtomic,
 } from "./files.mjs";
-import { AGENTS_SCHEMA, normalizeAgents, resolveCommand, validateForSave } from "./agents.mjs";
+import { AGENTS_SCHEMA, makeId, normalizeAgents, resolveCommand, validateForSave } from "./agents.mjs";
+import { findAgent, loadAgentList } from "./agent-lookup.mjs";
 import { checkDocument, cleanupFindings, readSpecFile, removeCleanup } from "./sessions.mjs";
 import { SHOTS_DIR_NAME, SHOT_NAME, shotType } from "./patches.mjs";
 import { appendChat, currentConversation, pendingChatCount, typedCount } from "./inbox.mjs";
@@ -75,6 +78,9 @@ const WORKSPACE_EDITS = { "/workspace/add": "addFolder", "/workspace/edit": "edi
 const ROUTES = [
   { path: "/health", open: true, run: health },
   { match: (p) => p.startsWith("/s/"), open: true, run: signIn },
+  // Open on purpose: the caller is another Plan2Code process handing the
+  // setup tab over, not a cookied browser. It has its own token (state.setup).
+  { path: "/handover", method: "POST", open: true, run: handover },
   { path: "/", method: "GET", run: page },
   { match: (p, req) => req.method === "GET" && SERVABLE.has(p.slice(1)), run: publicFile },
   { path: "/overview", method: "GET", run: overview },
@@ -92,6 +98,7 @@ const ROUTES = [
   { path: "/agents", method: "GET", run: agentsGet },
   { path: "/agents", method: "POST", origin: true, run: agentsPost },
   { path: "/agents/test", method: "POST", origin: true, run: agentsTest },
+  { path: "/agents/use-path", method: "POST", origin: true, run: agentsUsePath },
   { path: "/cleanup", method: "POST", origin: true, run: cleanup },
   { path: "/upload", method: "POST", origin: true, run: upload },
   { path: "/notepad", method: "GET", run: notepadGet },
@@ -176,6 +183,45 @@ function signIn(req, res, ctx, url) {
     })
   );
   return res.end();
+}
+
+// The setup session's hand-over: a launcher process opened this session's
+// /s/ link in its own web view, then POSTs here so the launcher's setup page
+// (the caller's own console) can move that tab to the new session. Only a
+// setup session answers, and only for the per-session setup token that
+// `open` printed for the launcher, never the browser cookie. On success the
+// page gets a `move` SSE event carrying the url to hand itself to.
+function handover(req, res, ctx) {
+  const state = ctx.readState();
+  if (!state || state.workflow !== "setup" || !state.setup || !state.setup.token) {
+    return json(res, 404, { error: "not-found" });
+  }
+  if (!timingSafeEq(req.headers["x-plan2code-token"] || "", state.setup.token)) {
+    return json(res, 403, { error: "forbidden" });
+  }
+  ctx.touch();
+  // The tab moved once; a second open in the same conversation is not a
+  // hand-over, so the caller can open a browser without a failure note.
+  if (state.setup.moved) return json(res, 409, { error: "moved" });
+  return readBody(req, (err, body) => {
+    if (err) return json(res, err.tooBig ? 413 : 400, { error: err.tooBig ? "too large" : "bad-url" });
+    const target = typeof body?.url === "string" ? body.url : "";
+    // Only another console's sign-in link is a legal destination.
+    if (!/^http:\/\/(127\.0\.0\.1|localhost):\d+\/s\/[A-Za-z0-9_-]+\/?$/.test(target)) {
+      return json(res, 400, { error: "bad-url" });
+    }
+    try {
+      updateState(ctx.dir, (fresh) => {
+        if (!fresh) return null;
+        fresh.setup = { ...(fresh.setup || {}), moved: { url: target, at: nowIso() } };
+        return fresh;
+      });
+    } catch (e) {
+      return json(res, 500, { error: String(e.message) });
+    }
+    ctx.broadcast("move", { url: target });
+    return send(res, 204, "");
+  });
 }
 
 /* -------------------------------------------------------- the page itself */
@@ -525,8 +571,16 @@ function prHost(req, res, ctx) {
   });
 }
 
-// The CLIs the launcher reads a model list for (src/launcher/plan2code.js listModels).
-const MODEL_CLIS = ["claude", "devin", "codex"];
+// The CLIs the launcher reads a model list for (src/launcher/plan2code.js
+// listModels): the shipped agent list's built-ins. Worked out per call so a
+// bin/agents.json written after server boot is picked up; the hard-coded
+// trio is only the fallback for a missing or bad file.
+const MODEL_CLI_FALLBACK = ["claude", "devin", "codex"];
+function modelClis() {
+  const { builtins } = loadAgentList({ dir: path.dirname(SHIPPED_AGENTS_FILE) });
+  const ids = builtins.map((a) => a && a.id).filter((id) => typeof id === "string" && id);
+  return ids.length ? ids : MODEL_CLI_FALLBACK;
+}
 const MODEL_ID = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,99}$/;
 // Devin's XHigh and Max efforts are never offered, curated or added.
 const MODEL_EFFORT_BLOCKED = /-(xhigh|max)$/i;
@@ -539,7 +593,7 @@ const MODEL_EFFORT_BLOCKED = /-(xhigh|max)$/i;
 function cleanModels(input) {
   if (!input || typeof input !== "object" || Array.isArray(input)) return { error: "models must be an object" };
   const models = {};
-  for (const cli of MODEL_CLIS) {
+  for (const cli of modelClis()) {
     const list = input[cli] == null ? [] : input[cli];
     if (!Array.isArray(list) || list.length > 50) return { error: `${cli} must be a list of at most 50 models` };
     const seen = new Set();
@@ -561,7 +615,7 @@ function cleanModels(input) {
 function shippedModels() {
   const file = readJson(SHIPPED_MODELS_FILE, null) || {};
   const out = {};
-  for (const cli of MODEL_CLIS) {
+  for (const cli of modelClis()) {
     out[cli] = (Array.isArray(file[cli]) ? file[cli] : []).filter((m) => m && typeof m.id === "string");
   }
   return out;
@@ -571,7 +625,7 @@ function shippedModels() {
 function modelsGet(req, res) {
   const saved = readJson(USER_MODELS_FILE, null) || {};
   const { models } = cleanModels(saved);
-  return json(res, 200, { shipped: shippedModels(), user: models || Object.fromEntries(MODEL_CLIS.map((cli) => [cli, []])) });
+  return json(res, 200, { shipped: shippedModels(), user: models || Object.fromEntries(modelClis().map((cli) => [cli, []])) });
 }
 
 function modelsPost(req, res) {
@@ -589,12 +643,41 @@ function modelsPost(req, res) {
   });
 }
 
-// The person's custom agents (agents.mjs has the rules). Read as text, not
-// with readJson: a half-written or broken file has to come back as a warning,
-// which readJson would turn into the same nothing as a missing file.
+// This OS's key in the shipped install instructions / installDirs.
+const OS_KEY = process.platform === "win32" ? "win" : process.platform === "darwin" ? "mac" : "linux";
+
+// The person's custom agents (agents.mjs has the rules) plus the shipped
+// list: built-ins with only this OS's install lines and their found state,
+// and the starter templates as-is. The custom file is read as text, not with
+// readJson: a half-written or broken file has to come back as a warning,
+// which readJson would turn into the same nothing as a missing file. Each
+// entry's {state,path,where,folder} is the "found badge" data, from
+// findAgent (a bare name searches PATH + saved PATH + npm + installDirs; a
+// path is a file check).
 function agentsGet(req, res) {
   const raw = fs.existsSync(USER_AGENTS_FILE) ? readText(USER_AGENTS_FILE) : undefined;
-  return json(res, 200, normalizeAgents(raw));
+  const { agents, warnings } = normalizeAgents(raw);
+  const agentsWithState = agents.map((a) => ({ ...a, ...findAgent({ command: a.command }) }));
+
+  const { builtins, templates, warnings: shippedWarnings } = loadAgentList({ dir: path.dirname(SHIPPED_AGENTS_FILE), optional: true });
+  warnings.push(...shippedWarnings);
+  const builtinsForOs = builtins.map((entry) => ({
+    id: entry.id,
+    name: entry.name,
+    command: entry.command,
+    prompt: entry.prompt,
+    args: entry.args,
+    bypassArgs: entry.bypassArgs,
+    modelArgs: entry.modelArgs,
+    installUrl: entry.installUrl,
+    install: (entry.install && entry.install[OS_KEY]) || [],
+    ...findAgent(entry),
+  }));
+  const TEMPLATE_FIELDS = ["id", "name", "command", "prompt", "args", "bypassArgs", "modelArgs", "note"];
+  const templatesAsIs = templates.map((entry) =>
+    Object.fromEntries(TEMPLATE_FIELDS.filter((f) => entry[f] !== undefined).map((f) => [f, entry[f]]))
+  );
+  return json(res, 200, { agents: agentsWithState, warnings, builtins: builtinsForOs, templates: templatesAsIs });
 }
 
 // The whole list from User Preferences, checked, then written atomically. The
@@ -635,6 +718,82 @@ function agentsTest(req, res) {
     if (!command || command.length > 1024) return json(res, 400, { error: "command must be 1 to 1024 characters" });
     const found = resolveCommand(command);
     return json(res, 200, found ? { found: true, path: found } : { found: false });
+  });
+}
+
+// "Use this path instead": findAgent found the command off this process's
+// PATH (saved Windows PATH, npm's global folder, an install dir), so the
+// found location becomes the agent's command. Only findAgent's result is
+// ever saved, never a path the request carried. A built-in is materialized
+// as a new custom entry; a custom agent gets its command rewritten.
+function agentsUsePath(req, res, ctx) {
+  return readBody(req, (err, body) => {
+    if (err) return json(res, err.tooBig ? 413 : 400, { error: err.tooBig ? "too large" : "body must be JSON" });
+    const id = typeof body?.id === "string" ? body.id.trim() : "";
+    if (!id) return json(res, 400, { error: "id is required" });
+
+    const { builtins } = loadAgentList({ dir: path.dirname(SHIPPED_AGENTS_FILE) });
+    const builtin = builtins.find((a) => a && a.id === id);
+    const raw = fs.existsSync(USER_AGENTS_FILE) ? readText(USER_AGENTS_FILE) : undefined;
+    const { agents: customAgents, warnings } = normalizeAgents(raw);
+    // Same guard as agentsPost: a rewrite would drop the entries it skipped.
+    if (warnings.length) {
+      return json(res, 409, { error: "agents.json holds entries this page could not read. Saving replaces them.", warnings });
+    }
+    const custom = builtin ? null : customAgents.find((a) => a.id === id);
+    const entry = builtin || custom;
+    if (!entry) return json(res, 404, { error: "not-found" });
+
+    const found = findAgent(entry);
+    if (found.state === "missing") return json(res, 409, { error: "not-found" });
+    // Already on PATH: nothing to write, the badge can just say so.
+    if (found.state === "found") return json(res, 200, { ok: true, id, command: found.path || entry.command });
+
+    const list = customAgents.map((a) => ({ ...a }));
+    let savedId;
+    if (builtin) {
+      savedId = makeId(entry.name || id, list.map((a) => a.id));
+      list.push({
+        id: savedId,
+        name: entry.name,
+        command: found.path,
+        prompt: entry.prompt,
+        args: entry.args,
+        bypassArgs: entry.bypassArgs,
+        modelArgs: entry.modelArgs,
+        models: [],
+      });
+    } else {
+      savedId = id;
+      list.find((a) => a.id === id).command = found.path;
+    }
+    const { agents, error, index, field } = validateForSave(list);
+    if (error) return json(res, 400, { error, index, field });
+    // Same write as agentsPost: top-level keys the file already had are kept.
+    const saved = readJson(USER_AGENTS_FILE, null);
+    const kept = saved && typeof saved === "object" && !Array.isArray(saved) ? saved : {};
+    try {
+      ensureDir(path.dirname(USER_AGENTS_FILE));
+      writeJsonAtomic(USER_AGENTS_FILE, { ...kept, schema: AGENTS_SCHEMA, agents });
+    } catch (e) {
+      return json(res, 500, { error: String(e.message) });
+    }
+    // A --for-cli setup asked for this built-in: the materialized entry carries
+    // its id over, or the page's Start gate would never match it again. Done
+    // after the write so a failed save never leaves a dangling forCli.
+    const setup = ctx && ctx.readState && ctx.readState()?.setup;
+    if (builtin && setup && setup.forCli === id) {
+      try {
+        updateState(ctx.dir, (fresh) => {
+          if (!fresh) return null;
+          fresh.setup = { ...(fresh.setup || {}), forCli: savedId };
+          return fresh;
+        });
+      } catch {
+        return json(res, 500, { error: "could not update the session" });
+      }
+    }
+    return json(res, 200, { ok: true, id: savedId, command: found.path });
   });
 }
 

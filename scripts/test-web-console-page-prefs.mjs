@@ -85,19 +85,27 @@ test("the violet highlight and dark theme chosen in preferences stick across a r
   assert.deepEqual(await firstPaintAttrs(s), { theme: null, accent: null }, "the first paint still carries the old looks");
 });
 
-// The Agents & models tab: the summary table, its rows and the form Edit opens.
+// The Agents & models tab: the split's row list, its rows and the pane the
+// pick opens the form in (the list stays on screen; there is no back page).
 const AGENTS_FILE = path.join(MODELS_DIR, "agents.json");
 const agentsTable = (s) => s.page.locator("#agents-table");
-const agentRow = (s, key) => s.page.locator(`#agents-table tr[data-key="${key}"]`);
+const agentRow = (s, key) => agentsTable(s).locator(`.split-row[data-key="${key}"]`);
 const agentForm = (s) => s.page.locator("#agents-form");
 const formField = (s, name) => agentForm(s).getByRole("textbox", { name, exact: true });
 const formButton = (s, name) => agentForm(s).getByRole("button", { name, exact: true });
+const formPane = (s) => agentForm(s).locator(".prefs-agents-fields");
 const unsavedPrompt = (s) => s.page.locator("#prefs-unsaved");
 
 async function openAgentsTab(s) {
+  // The dialog's DOM survives a close, so the row, a stale form and even a
+  // stale empty pane can match before load() resolves. Wait on the fetch
+  // itself first; the empty pane only draws once it has.
+  const loaded = s.page.waitForResponse((r) => r.url().endsWith("/agents"));
   await s.page.click("#btn-looks");
   await s.page.click("#prefs-tab-agents");
+  await loaded;
   await agentRow(s, "cli:claude").waitFor();
+  await agentForm(s).locator(".split-empty").waitFor();
 }
 
 // agents.json as the test starts it: none, or the entries given. Removed after.
@@ -117,41 +125,41 @@ test("Agents & models: the table lists Claude, Devin and Codex, and a model id t
   t.after(() => fs.rmSync(path.join(MODELS_DIR, "models.json"), { force: true }));
   const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_QUESTION });
   await openAgentsTab(s);
-  const keys = await agentsTable(s).locator("tbody tr[data-key]").evaluateAll((rows) => rows.map((r) => r.dataset.key));
+  const keys = await agentsTable(s).locator(".split-row[data-key]").evaluateAll((rows) => rows.map((r) => r.dataset.key));
   assert.deepEqual(keys, ["cli:claude", "cli:devin", "cli:codex"]);
-  assert.equal(await textOf(agentRow(s, "cli:codex").locator(".prefs-agents-name > span").first()), "Codex");
+  assert.equal(await textOf(agentRow(s, "cli:codex").locator(".row-name")), "Codex");
 
   await s.page.getByRole("button", { name: "Edit Codex" }).click();
-  await agentForm(s).waitFor();
-  assert.equal(await agentsTable(s).isVisible(), false, "the form takes the table's place");
+  await formPane(s).waitFor();
+  assert.equal(await agentRow(s, "cli:codex").getAttribute("aria-current"), "true", "the picked row is marked; the list stays beside the form");
   await agentForm(s).locator(".prefs-agents-none").filter({ hasText: /^No models ship for Codex yet/ }).waitFor();
   assert.equal(await agentForm(s).locator(".models-row.locked").count(), 0, "nothing comes with Plan2Code for Codex");
 
   await formButton(s, "Add a model").click();
-  const id = formField(s, "Model id");
-  await id.fill("gpt-test-codex-1");
-  await id.press("Tab");
-  await s.page.waitForTimeout(300);
+  await formField(s, "Model id").fill("gpt-test-codex-1");
+  await formButton(s, "Add a model").click();
+  await formField(s, "Model id").nth(1).fill("gpt-test-codex-2");
+  // Remove drops the row from the draft; it still reaches the file only on Save.
+  await agentForm(s).locator(".agent-row.model").first().getByRole("button", { name: "Remove" }).click();
+  assert.equal(await agentForm(s).locator(".agent-row.model").count(), 1, "the removed row is gone");
+  await agentForm(s).locator(".prefs-unsaved-badge").waitFor();
   const before = await s.page.evaluate(async () => (await (await fetch("/models")).json()).user);
   assert.deepEqual(before.codex, [], "nothing is saved before Save");
-  assert.equal(await agentForm(s).locator(".prefs-unsaved-badge").isVisible(), true);
 
   await formButton(s, "Save").click();
   await agentForm(s).locator(".prefs-saved").filter({ hasText: /^Saved\. Restart plan2code/ }).waitFor();
   const saved = await s.page.evaluate(async () => (await (await fetch("/models")).json()).user);
-  assert.deepEqual(saved.codex.map((m) => m.id), ["gpt-test-codex-1"], "the id was not saved under Codex");
+  assert.deepEqual(saved.codex.map((m) => m.id), ["gpt-test-codex-2"], "only the kept model was saved under Codex");
   assert.deepEqual([saved.claude, saved.devin], [[], []], "the id leaked into another agent's menu");
   assert.equal(await agentForm(s).locator(".prefs-unsaved-badge").isVisible(), false, "saved, nothing is unsaved");
 
   // The summary counts it on Codex's row, and so does a fresh page.
-  await formButton(s, "Back to summary").click();
-  assert.equal(await s.page.evaluate(() => document.activeElement?.getAttribute("aria-label") || document.activeElement?.id), "Edit Codex", "focus comes back to the row just left");
-  assert.match(await textOf(agentRow(s, "cli:codex").locator(".prefs-agents-models")), /^1: gpt-test-codex-1$/);
+  assert.match(await textOf(agentRow(s, "cli:codex").locator(".row-models")), /^1: gpt-test-codex-2$/);
   await s.page.reload({ waitUntil: "domcontentloaded" });
   await drawn(s.page);
   await openAgentsTab(s);
   await s.page.getByRole("button", { name: "Edit Codex" }).click();
-  assert.equal(await formField(s, "Model id").inputValue(), "gpt-test-codex-1");
+  assert.equal(await formField(s, "Model id").inputValue(), "gpt-test-codex-2");
 });
 
 test("Agents & models: a person adds an agent, tests its command, sees it after a reload, and deletes it", async (t) => {
@@ -159,10 +167,10 @@ test("Agents & models: a person adds an agent, tests its command, sees it after 
   seedAgents(t);
   const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_QUESTION });
   await openAgentsTab(s);
-  assert.equal(await agentsTable(s).locator('tr[data-key^="agent:"]').count(), 0, "no agents before one is added");
+  assert.equal(await agentsTable(s).locator('.split-row[data-key^="agent:"]').count(), 0, "no agents before one is added");
 
   await s.page.click("#agents-add");
-  await agentForm(s).waitFor();
+  await formPane(s).waitFor();
   assert.equal(await agentForm(s).locator("details.prefs-agents-args").evaluate((d) => d.open), true, "the arguments are open on a new agent");
   await formField(s, "Name").fill("Test Agent");
   await formField(s, "Command").fill("node");
@@ -189,12 +197,13 @@ test("Agents & models: a person adds an agent, tests its command, sees it after 
 
   await formButton(s, "Delete agent").click();
   await formButton(s, "Yes, delete").click();
-  await agentsTable(s).waitFor();
-  assert.equal(await agentsTable(s).locator('tr[data-key^="agent:"]').count(), 0);
+  await row.waitFor({ state: "detached" });
+  assert.equal(await agentsTable(s).locator('.split-row[data-key^="agent:"]').count(), 0);
   assert.deepEqual(JSON.parse(fs.readFileSync(AGENTS_FILE, "utf8")).agents, []);
   assert.equal(await s.page.evaluate(() => document.activeElement?.getAttribute("aria-label") || document.activeElement?.id), "agents-add", "with its row gone, focus goes to Add agent");
   assert.equal(await textOf(s.page.locator("#agents-status")), "Deleted.");
   await s.page.click("#agents-add");
+  await formPane(s).waitFor();
   assert.equal(await s.page.locator("#agents-status").innerText(), "", "opening a form clears Deleted.");
 });
 
@@ -240,6 +249,7 @@ test("Agents & models: a file holding entries the page could not read is only re
   await s.page.locator("#agents-status").filter({ hasText: /schema 2/ }).waitFor();
 
   await s.page.click("#agents-add");
+  await formPane(s).waitFor();
   assert.equal(await formButton(s, "Save anyway").count(), 0, "no Save anyway before a save is tried");
   await formField(s, "Name").fill("Mine");
   await formField(s, "Command").fill("node");
@@ -281,16 +291,17 @@ test("Agents & models: a discarded edit never rides along with another agent's S
   await openAgentsTab(s);
   await s.page.getByRole("button", { name: "Edit Alpha" }).click();
   await formField(s, "Command").fill("alpha-cli --dropped");
-  await formButton(s, "Back to summary").click();
+  // Picking another row is the way out of a form; a dirty draft asks first.
+  await s.page.getByRole("button", { name: "Edit Beta" }).click();
   await unsavedPrompt(s).waitFor();
   assert.equal(await textOf(s.page.locator("#prefs-unsaved-name")), "Alpha");
   assert.equal(await s.page.locator("#looks-modal .prefs-body").evaluate((b) => b.inert), true, "the dialog behind the prompt is out of reach");
   await unsavedPrompt(s).getByRole("button", { name: "Discard", exact: true }).click();
-  await agentsTable(s).waitFor();
+  await unsavedPrompt(s).waitFor({ state: "hidden" });
+  await formPane(s).waitFor();
   assert.equal(await s.page.locator("#looks-modal .prefs-body").evaluate((b) => b.inert), false);
-  assert.equal(await s.page.evaluate(() => document.activeElement?.getAttribute("aria-label") || document.activeElement?.id), "Edit Alpha", "focus comes back to the row just left");
+  assert.equal(await textOf(agentForm(s).locator(".prefs-agents-title")), "Beta", "the pick the prompt asked about carries on");
 
-  await s.page.getByRole("button", { name: "Edit Beta" }).click();
   await formField(s, "Command").fill("beta-cli --kept");
   await formButton(s, "Save").click();
   await agentForm(s).locator(".prefs-saved").filter({ hasText: /^Saved$/ }).waitFor();
@@ -298,18 +309,20 @@ test("Agents & models: a discarded edit never rides along with another agent's S
   assert.deepEqual(agents.map((a) => [a.id, a.command]), [["alpha", "alpha-cli"], ["beta", "beta-cli --kept"]]);
 });
 
-test("Agents & models: an unsaved edit asks first on Back, Close, Esc, a backdrop click and a tab switch", async (t) => {
+test("Agents & models: an unsaved edit asks first on a row pick, Close, Esc, a backdrop click and a tab switch", async (t) => {
   noSavedLooks(t);
   seedAgents(t, TWO_AGENTS);
   const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_QUESTION });
   await openAgentsTab(s);
   const modal = s.page.locator("#looks-modal");
   const edit = async (command) => {
-    if (!(await agentForm(s).isVisible())) await s.page.getByRole("button", { name: "Edit Alpha" }).click();
+    if (!(await agentForm(s).locator(".prefs-agents-title").filter({ hasText: "Alpha" }).count())) {
+      await s.page.getByRole("button", { name: "Edit Alpha" }).click();
+    }
     await formField(s, "Command").fill(command);
   };
   const triggers = {
-    back: () => formButton(s, "Back to summary").click(),
+    row: () => s.page.getByRole("button", { name: "Edit Beta" }).click(),
     close: () => s.page.click("#looks-done"),
     esc: () => formField(s, "Command").press("Escape"),
     backdrop: () => s.page.mouse.click(4, 4),
@@ -376,24 +389,53 @@ test("Agents & models: a command not on PATH is marked, and the orchestrator row
   const badge = agentRow(s, "agent:ghost").locator(".prefs-badge");
   await badge.filter({ hasText: "Not found on PATH" }).waitFor();
   assert.equal(await badge.evaluate((b) => b.classList.contains("missing")), true);
-  const soon = agentsTable(s).locator("tr.prefs-agents-soon");
+  const soon = agentsTable(s).locator(".split-row.soon");
   assert.match(await textOf(soon), /v3 orchestrator\s+Nothing to set yet\./);
   assert.equal(await soon.getByRole("button").count(), 0);
 });
 
-test("Agents & models: below 720 px the Models column is hidden and the form is one column", async (t) => {
+test("Agents & models: below 720 px the split stacks and the form is one column", async (t) => {
   noSavedLooks(t);
   seedAgents(t, TWO_AGENTS);
   const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_QUESTION });
   await s.page.setViewportSize({ width: 600, height: 800 });
   await openAgentsTab(s);
-  const cells = agentsTable(s).locator(".prefs-agents-models");
-  const shown = [];
-  for (let i = 0; i < (await cells.count()); i++) shown.push(await styleOf(cells.nth(i), "display"));
-  assert.ok(shown.length > 0 && shown.every((d) => d === "none"), `the Models cells are hidden: ${shown}`);
+  const cols = await styleOf(s.page.locator("#agents-split"), "grid-template-columns");
+  assert.equal(cols.trim().split(/\s+/).length, 1, `the split stacks: ${cols}`);
+  assert.equal(await styleOf(s.page.locator("#agents-table"), "overflow-y"), "auto", "the row list scrolls");
   await s.page.getByRole("button", { name: "Edit Alpha" }).click();
-  const cols = await styleOf(agentForm(s).locator(".prefs-agents-fields"), "grid-template-columns");
-  assert.equal(cols.trim().split(/\s+/).length, 1, `one column: ${cols}`);
+  const fields = await styleOf(agentForm(s).locator(".prefs-agents-fields"), "grid-template-columns");
+  assert.equal(fields.trim().split(/\s+/).length, 1, `one column: ${fields}`);
+});
+
+// The shipped bin/agents.json beside the user file: where starter templates
+// come from. Removed after so the next test's list has none.
+const SHIPPED_AGENTS_FILE = path.join(MODELS_DIR, "bin", "agents.json");
+function seedShipped(t, agents) {
+  fs.mkdirSync(path.dirname(SHIPPED_AGENTS_FILE), { recursive: true });
+  fs.writeFileSync(SHIPPED_AGENTS_FILE, JSON.stringify({ schema: 1, agents }));
+  t.after(() => fs.rmSync(SHIPPED_AGENTS_FILE, { force: true }));
+}
+
+test("Agents & models: shipped templates offer a prefilled new-agent form", async (t) => {
+  noSavedLooks(t);
+  seedAgents(t);
+  seedShipped(t, [
+    { id: "templar", name: "Templar", kind: "template", command: "templar", prompt: "/plan2code", args: ["{prompt}"], note: "A starter agent." },
+  ]);
+  const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_QUESTION });
+  await openAgentsTab(s);
+  await agentsTable(s).locator(".split-list-head", { hasText: "Or start from a template" }).waitFor();
+  const row = agentRow(s, "setup:Templar");
+  assert.match(await textOf(row), /Templar\s+templar/);
+  await row.click();
+  const use = agentForm(s).getByRole("button", { name: "Use this template", exact: true });
+  await use.waitFor();
+  assert.match(await textOf(agentForm(s)), /A starter agent\./);
+  await use.click();
+  await formPane(s).waitFor();
+  assert.equal(await formField(s, "Name").inputValue(), "Templar");
+  assert.equal(await formField(s, "Command").inputValue(), "templar");
 });
 
 test("Cleanup scans the console home and lists an old session folder with its size", async (t) => {
@@ -517,10 +559,10 @@ test("Set up preferences on the dashboard opens on Appearance with agents and mo
   await s.page.locator("#looks-modal[open]").waitFor();
   assert.equal(await selectedTab(s), "prefs-tab-appearance");
   await s.page.click("#prefs-tab-agents");
-  const goose = s.page.locator('#agents-table tr[data-key="agent:goose"]');
+  const goose = s.page.locator('#agents-table .split-row[data-key="agent:goose"]');
   await goose.waitFor();
-  assert.match(await textOf(goose.locator(".prefs-agents-name")), /^Goose/);
-  assert.equal(await s.page.locator('#agents-table tr[data-key="cli:claude"]').count(), 1, "the built-ins are listed");
+  assert.match(await textOf(goose.locator(".row-name")), /^Goose/);
+  assert.equal(await s.page.locator('#agents-table .split-row[data-key="cli:claude"]').count(), 1, "the built-ins are listed");
   assert.doesNotMatch(await s.page.locator("#agents-status").innerText(), /could not be loaded/);
 });
 

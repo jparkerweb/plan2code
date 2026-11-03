@@ -12,9 +12,10 @@
 //
 // Node built-ins only.
 
-import fs from "node:fs";
 import path from "node:path";
 import { spawn } from "node:child_process";
+
+import { findAgent } from "./agent-lookup.mjs";
 
 const IS_WINDOWS = process.platform === "win32";
 const IS_MAC = process.platform === "darwin";
@@ -154,21 +155,6 @@ public static class Plan2CodeFolderPicker {
 }
 `;
 
-// Resolve a command on PATH the way the shell would, including PATHEXT on Windows.
-function findOnPath(command) {
-  const dirs = (process.env.PATH || "").split(path.delimiter).filter(Boolean);
-  const extensions = IS_WINDOWS ? (process.env.PATHEXT || ".EXE;.CMD;.BAT;.COM").split(";").filter(Boolean) : [""];
-  for (const dir of dirs) {
-    for (const ext of extensions) {
-      const candidate = path.join(dir.replace(/^"|"$/g, ""), command + ext);
-      try {
-        if (fs.statSync(candidate).isFile()) return candidate;
-      } catch {}
-    }
-  }
-  return null;
-}
-
 /**
  * The native folder picker for this OS, as a command to run: it prints the
  * chosen folder, or nothing when the person cancels. Null when this OS has no
@@ -233,13 +219,14 @@ export function pickerCommand(start, prompt) {
   }
 
   if (!process.env.DISPLAY && !process.env.WAYLAND_DISPLAY) return null;
-  if (findOnPath("zenity")) {
+  // findAgent is the shared "is this command on PATH" check (agent-lookup.mjs).
+  if (findAgent({ command: "zenity" }).state === "found") {
     return {
       command: "zenity",
       args: ["--file-selection", "--directory", `--title=${prompt}`, `--filename=${start}${path.sep}`],
     };
   }
-  if (findOnPath("kdialog")) {
+  if (findAgent({ command: "kdialog" }).state === "found") {
     return { command: "kdialog", args: ["--title", prompt, "--getexistingdirectory", start] };
   }
   return null;

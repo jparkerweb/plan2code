@@ -9,7 +9,7 @@ use std::time::{Duration, Instant};
 
 use plan2code_app_lib::agent_manager::{AgentEvent, AgentManager, AgentSnapshot, AgentState};
 use plan2code_app_lib::agents::{
-    agent_launch_spec, parse_agents_file, Agent, AgentKind, PermissionMode, AGENT_BIN_ENV,
+    agent_launch_spec, builtin_entry, parse_agents_file, Agent, PermissionMode, AGENT_BIN_ENV,
 };
 
 mod common;
@@ -113,7 +113,7 @@ impl Harness {
     fn start_and_wait_ready(&mut self) {
         self.manager
             .start(
-                Agent::Builtin(AgentKind::Claude),
+                Agent::Builtin(builtin_entry("claude").unwrap()),
                 None,
                 None,
                 PermissionMode::Bypass,
@@ -139,7 +139,7 @@ fn a_second_start_while_running_is_refused() {
     let generation = h.manager.snapshot().generation;
 
     let refused = h.manager.start(
-        Agent::Builtin(AgentKind::Devin),
+        Agent::Builtin(builtin_entry("devin").unwrap()),
         None,
         None,
         PermissionMode::Bypass,
@@ -160,7 +160,7 @@ fn restart_keeps_the_previous_agent_kind_mode_model_and_effort() {
     let mut h = Harness::new();
     h.manager
         .start(
-            Agent::Builtin(AgentKind::Codex),
+            Agent::Builtin(builtin_entry("codex").unwrap()),
             Some("gpt-5".to_string()),
             Some("high".to_string()),
             PermissionMode::Checked,

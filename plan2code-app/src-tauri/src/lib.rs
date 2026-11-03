@@ -12,6 +12,7 @@ pub mod loop_driver;
 pub mod loop_notify;
 pub mod loop_report;
 pub mod loop_tools;
+pub mod models;
 pub mod node_check;
 pub mod project;
 pub mod pty_host;

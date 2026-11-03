@@ -171,9 +171,27 @@ fn parse_reg_query_value(output: &str) -> Option<String> {
     })
 }
 
+/// The saved system and user PATH as one PATH string (Windows only): what a
+/// newly opened terminal gets, kept apart from the process PATH so the agent
+/// lookup can answer `saved-path`. "" elsewhere / when tests ask it off
+/// (PLAN2CODE_NO_SAVED_PATH, as the launcher's addSavedWindowsPath() honors).
+pub fn saved_path_value() -> String {
+    #[cfg(windows)]
+    {
+        if std::env::var_os("PLAN2CODE_NO_SAVED_PATH").is_some_and(|v| !v.is_empty()) {
+            return String::new();
+        }
+        saved_windows_path().join(";")
+    }
+    #[cfg(not(windows))]
+    {
+        String::new()
+    }
+}
+
 /// `%NAME%` replaced with `lookup(NAME)`; an unknown name stays as written.
 #[cfg_attr(not(windows), allow(dead_code))]
-fn expand_percent_vars(text: &str, lookup: impl Fn(&str) -> Option<String>) -> String {
+pub(crate) fn expand_percent_vars(text: &str, lookup: impl Fn(&str) -> Option<String>) -> String {
     let mut out = String::new();
     let mut rest = text;
     while let Some(start) = rest.find('%') {

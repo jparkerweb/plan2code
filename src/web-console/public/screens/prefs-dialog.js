@@ -66,7 +66,7 @@ export function openPrefs(tab) {
 }
 
 // The unsaved prompt on screen: { resolve, promise, from }, or null. `from`
-// is what had focus when it asked (the tab, Close, Back to summary, a field).
+// is what had focus when it asked (the tab, Close, another agent's row, a field).
 let asking = null;
 
 // Everything in the dialog but the prompt, kept out of reach while it asks.
@@ -85,7 +85,7 @@ function endAsking(go) {
 }
 
 // Before anything leaves an agent form with an unsaved edit (Close, Esc, a
-// backdrop click, another tab, Back to summary): Save, Discard or Keep
+// backdrop click, another tab, another agent's row): Save, Discard or Keep
 // editing, asked inside the dialog. Resolves true when it may go on.
 export function confirmUnsaved() {
   if (!hooks.hasUnsaved()) return Promise.resolve(true);

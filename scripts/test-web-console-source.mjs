@@ -401,19 +401,21 @@ test("help: the stuck tab is second, and openHelpOn only opens a tab that exists
   assert.match(opener[1], /HELP_TABS\.some\(/, "openHelpOn only opens a tab that exists");
 });
 
-test("models: Codex is a model CLI on the server and the page, with its own row in the agents table", () => {
-  const server = fs.readFileSync(path.join(ROOT, "src", "web-console", "routes.mjs"), "utf8");
-  const app = publicSource("screens/agents-view.js");
+test("models: the page's built-in rows match the shipped agent list's builtins", () => {
+  const app = publicSource("screens/agents/agents-data.js");
   const list = (src) => JSON.parse(src.match(/const MODEL_CLIS = (\[[^\]]*\]);/)[1]);
-  assert.deepEqual(list(server), ["claude", "devin", "codex"]);
-  assert.deepEqual(list(app), list(server), "the page's rows match the server's lists");
+  // routes.mjs no longer carries a literal MODEL_CLIS: both sides read the
+  // builtin ids from the shipped agent list (agent-lookup.mjs).
+  const shipped = JSON.parse(fs.readFileSync(path.join(ROOT, "src", "launcher", "agents.json"), "utf8"));
+  const builtinIds = shipped.agents.filter((a) => a.kind === "builtin").map((a) => a.id);
+  assert.deepEqual(list(app), builtinIds, "the page's rows match the shipped builtins");
   assert.ok(!/for \(const cli of \["claude", "devin"\]\)/.test(app), "no loop over a hard-coded pair");
   assert.match(app, /\.\.\.MODEL_CLIS\.map\(\(cli\) => \(\{\s*key: "cli:" \+ cli,/, "the table draws a built-in row per MODEL_CLIS entry");
   const names = app.match(/const BUILT_IN = \{([^}]*)\};/)[1];
   for (const cli of list(app)) assert.match(names, new RegExp(`\\b${cli}: "`), `${cli} has a name in the table`);
   assert.ok(!publicSource("index.html").includes("models-tab-"), "the separate Models toggles are gone");
-  const shipped = JSON.parse(fs.readFileSync(path.join(ROOT, "src", "launcher", "models.json"), "utf8"));
-  for (const cli of list(server)) assert.ok(Array.isArray(shipped[cli]), `the launcher's models.json has ${cli}`);
+  const models = JSON.parse(fs.readFileSync(path.join(ROOT, "src", "launcher", "models.json"), "utf8"));
+  for (const cli of list(app)) assert.ok(Array.isArray(models[cli]), `the launcher's models.json has ${cli}`);
 });
 
 test("getting started: the new help, status and finished-screen strings carry no em dash", () => {
@@ -486,13 +488,24 @@ test("prefs: the dialog is four tab panels in PREFS_TABS order, each section in 
 
 test("prefs: the new modules are served and preloaded, and Preferences' styles leave the shared classes alone", () => {
   const html = publicSource("index.html");
-  for (const m of ["tabs.js", "prefs.js", "screens/prefs-dialog.js", "screens/agents-view.js"]) {
+  for (const m of [
+    "tabs.js",
+    "prefs.js",
+    "screens/prefs-dialog.js",
+    "screens/agents-view.js",
+    "screens/agents/agents-data.js",
+    "screens/agents/agents-list-editor.js",
+    "screens/agents/agents-summary.js",
+    "screens/agents/agents-form.js",
+  ]) {
     assert.ok(SERVABLE.has(m), `${m} is servable`);
     assert.ok(html.includes(`rel="modulepreload" href="/${m}"`), `the page preloads ${m}`);
   }
-  const css = publicSource("styles/prefs.css");
-  for (const cls of ["looks", "looks-row", "modal-ranges"]) {
-    assert.ok(!new RegExp(`\\.${cls}(?![\\w-])`).test(css), `prefs.css does not style .${cls} (the Subagents dialog shares it)`);
+  for (const sheet of ["styles/prefs.css", "styles/agents.css"]) {
+    const css = publicSource(sheet);
+    for (const cls of ["looks", "looks-row", "modal-ranges"]) {
+      assert.ok(!new RegExp(`\\.${cls}(?![\\w-])`).test(css), `${sheet} does not style .${cls} (the Subagents dialog shares it)`);
+    }
   }
 });
 

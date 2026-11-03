@@ -2124,6 +2124,12 @@ const LAUNCHER_STATE = path.join(os.homedir(), '.plan2code', 'launcher.json');
 // compares it with the version.json written beside it.
 const UPDATE_CHECK_SRC = path.join(__dirname, 'src', 'web-console', 'update-check.mjs');
 const UPDATE_CHECK_DEST = path.join(path.dirname(LAUNCHER_DEST), 'update-check.mjs');
+// The shared agent list and lookup rule live beside the launcher so the command, the console
+// and the app all read one copy; both are overwritten on every install.
+const AGENTS_SRC = path.join(__dirname, 'src', 'launcher', 'agents.json');
+const AGENTS_DEST = path.join(path.dirname(LAUNCHER_DEST), 'agents.json');
+const AGENT_LOOKUP_SRC = path.join(__dirname, 'src', 'web-console', 'agent-lookup.mjs');
+const AGENT_LOOKUP_DEST = path.join(path.dirname(LAUNCHER_DEST), 'agent-lookup.mjs');
 const LAUNCHER_VERSION_DEST = path.join(path.dirname(LAUNCHER_DEST), 'version.json');
 // What a global install put on this machine, so `plan2code update` reinstalls exactly that.
 const INSTALL_RECORD = path.join(os.homedir(), '.plan2code', 'install.json');
@@ -2483,6 +2489,8 @@ async function installLauncher({ quiet = false, unattended = false } = {}) {
     // Models the user added in User Preferences live in ~/.plan2code/models.json and are untouched.
     fs.copyFileSync(MODELS_SRC, MODELS_DEST);
     fs.copyFileSync(UPDATE_CHECK_SRC, UPDATE_CHECK_DEST);
+    fs.copyFileSync(AGENTS_SRC, AGENTS_DEST);
+    fs.copyFileSync(AGENT_LOOKUP_SRC, AGENT_LOOKUP_DEST);
     fs.writeFileSync(LAUNCHER_VERSION_DEST, JSON.stringify(projectVersion, null, 2) + '\n');
     if (process.platform !== 'win32') fs.chmodSync(LAUNCHER_DEST, 0o755);
     console.log(`  ${COLORS.GREEN}${SYMBOLS.SUCCESS}${COLORS.RESET} Installed: ${LAUNCHER_DEST}`);

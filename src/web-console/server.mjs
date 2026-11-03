@@ -47,6 +47,7 @@ import { serverWorkspace } from "./workspace.mjs";
 import { serverSubagents } from "./settings.mjs";
 import { inAppSignal } from "./in-app.mjs";
 import { chatAnswering, chatOffline } from "./public/chat.js";
+import { isAgentless } from "./public/skills.js";
 import { meterView } from "./public/meter.js";
 import { SERVABLE, asset } from "./static.mjs";
 import { handle } from "./routes.mjs";
@@ -185,6 +186,7 @@ function chatOfflineNow(state, chat = chatNow(state)) {
     agentLastSeenMs: agentSeenAt,
     now: Date.now(),
     answering: chatAnswering(chat),
+    agentless: isAgentless(state && state.workflow),
   });
 }
 
@@ -250,7 +252,9 @@ function stateFrame(state) {
   const chat = chatNow(state);
   return {
     rev,
-    state,
+    // The setup hand-over token is for the launcher only: the page gets
+    // forCli, which is all the setup screen reads.
+    state: state.setup ? { ...state, setup: { forCli: state.setup.forCli || null } } : state,
     agentLastSeen: agentLastSeen(),
     pendingResult: pending,
     pendingStop: stop,

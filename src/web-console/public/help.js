@@ -29,6 +29,7 @@ export const HELP_TABS = Object.freeze([
   tab("activities", "Activities", false),
   tab("finishing", "Stopping and finishing", false),
   tab("prefs", "Keyboard and preferences", false),
+  tab("setup", "Setting up an agent", false),
   tab("privacy", "Privacy and where things are saved", false),
 ]);
 
@@ -46,6 +47,7 @@ export function helpTabFor({ view, dashboard, gone, adrift, finished, workflow, 
   if (workspace) return "workspace";
   if (v === "ask") return "ask";
   if (v === "subagents") return "subagents";
+  if (workflow === "setup") return "setup";
   if (dashboard && meterRed) return "meter";
   if (dashboard) return "dashboard";
   if (v === "overview" || v === "map" || v === "draft" || v.startsWith("doc:")) return "docs";

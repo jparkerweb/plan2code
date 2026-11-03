@@ -126,11 +126,12 @@
    they carry view-box origins rather than their own boxes. */
 .planny .arms { display: none; }
 .planny .a-rest { display: inline; }
-.planny:is(.is-point, .is-work, .is-done, .is-gone, .is-adrift) .a-rest { display: none; }
+.planny:is(.is-point, .is-work, .is-done, .is-gone, .is-adrift, .is-setup) .a-rest { display: none; }
 .planny.is-point .a-point,
 .planny.is-work .a-work,
 .planny.is-done .a-done,
-.planny.is-gone .a-gone { display: inline; }
+.planny.is-gone .a-gone,
+.planny.is-setup .a-setup { display: inline; }
 .planny .arm.wave,
 .planny .arm.pump-l,
 .planny .arm.pump-r { transform-box: view-box; }
@@ -181,6 +182,11 @@
 /* No server: faded, eye shut in the warning color, arms hanging. */
 .planny.is-gone { opacity: 0.5; }
 .planny.is-gone .eye { fill: var(--warn); animation: none; transform: scaleY(0.12); }
+
+/* The setup page, waiting on a pick: the point look without the work
+   spinner -- a friendly lean and wave, star lit, while nothing runs yet. */
+.planny.is-setup { animation: planny-lean 2.6s ease-in-out infinite; }
+.planny.is-setup .eye { fill: var(--accent); }
 
 /* ------------------------------------------------------ mood variants
 

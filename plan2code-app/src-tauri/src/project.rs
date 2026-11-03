@@ -165,7 +165,6 @@ pub fn remember_folder(dir: &Path) -> Result<ProjectDir, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::agents::AgentKind;
 
     fn launch_choice(args: &[String]) -> LaunchChoice {
         launch_choice_in(args, None)
@@ -181,7 +180,7 @@ mod tests {
     #[test]
     fn the_launcher_choice_reads_agent_and_model_in_both_forms() {
         let want = LaunchChoice {
-            agent: Some(AgentKind::Codex.id().to_string()),
+            agent: Some("codex".to_string()),
             model: Some("gpt-5".into()),
         };
         assert_eq!(
@@ -210,7 +209,7 @@ mod tests {
         assert_eq!(
             launch_choice(&args(&["--agent", "claude"])),
             LaunchChoice {
-                agent: Some(AgentKind::Claude.id().to_string()),
+                agent: Some("claude".to_string()),
                 model: None
             }
         );
@@ -239,7 +238,7 @@ mod tests {
         assert_eq!(
             launch_choice(&args(&["--agent", "devin", "--model"])),
             LaunchChoice {
-                agent: Some(AgentKind::Devin.id().to_string()),
+                agent: Some("devin".to_string()),
                 model: None
             }
         );

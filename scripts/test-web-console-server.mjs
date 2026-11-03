@@ -43,6 +43,7 @@ import {
   HANDOFFS_DIR,
   HOME,
   ENV,
+  MODELS_DIR,
   cookieFor,
   cli,
   payload,
@@ -52,6 +53,7 @@ import {
   sessionUrl,
   readState,
   sleep,
+  until,
 } from "./web-console-test-helpers.mjs";
 
 // Every page load used to fetch /state, then /looks, then open the stream,
@@ -551,7 +553,7 @@ test("User Preferences: wider, its body scrolls and the button bar stays put, wi
   const actions = dialog[1].indexOf('<div class="modal-actions">');
   assert.ok(body >= 0 && actions > body, "the fieldsets sit in .prefs-body, before the actions");
   assert.ok(dialog[1].lastIndexOf("</fieldset>") < actions, "every fieldset is inside the scrolling body");
-  assert.match(css, /\.modal\.prefs \{ max-width: 880px; \}/);
+  assert.match(css, /\.modal\.prefs \{ width: min\(1080px, var\(--card-width\), calc\(100vw - 32px\)\); max-width: none; \}/);
   assert.match(css, /\.prefs-body \{[^}]*overflow-y: auto/);
   assert.match(css, /\.modal\.prefs \.modal-actions \{[^}]*flex: none/);
   assert.match(html, /<dialog class="modal looks subagents" id="subagents-modal"/, "Subagents keeps its own classes");
@@ -917,5 +919,406 @@ test("/open-link takes an http or https link and refuses every other kind", asyn
     assert.notEqual(foreign.status, 200, "another site's page cannot open links through the console");
   } finally {
     cli(["stop", "--session", res.json.sid, "--force"]);
+  }
+});
+
+/* ------------------------- first-run agent setup (the setup workflow) ------------------------- */
+
+// `open --workflow setup` is the agent-less page the launcher opens when no agent
+// can run: the session state carries the hand-over the launcher's agent posts
+// back to /handover, and `open` prints it for the launcher to read.
+test("open --workflow setup records the hand-over data and prints it, and a plain resume keeps its token", () => {
+  const res = cli(["open", "--workflow", "setup", "--for-cli", "devin", "--no-open"], { env: NO_APP });
+  try {
+    const state = readState(res.json.session);
+    assert.equal(state.workflow, "setup");
+    assert.equal(state.setup.forCli, "devin");
+    assert.match(state.setup.token, /^[A-Za-z0-9_-]{10,}$/);
+    assert.ok(state.setup.created);
+    assert.deepEqual(res.json.setup, { url: res.json.url, token: state.setup.token });
+    assert.match(res.json.setup.url, /\/s\/[A-Za-z0-9_-]+\/$/, "the page's own sign-in link");
+
+    cli(["open", "--resume", res.json.sid, "--workflow", "setup", "--no-open"], { env: NO_APP });
+    assert.equal(readState(res.json.session).setup.token, state.setup.token, "a plain resume keeps the token the launcher's agent holds");
+
+    // A resume naming --for-cli is a new hand-over: a fresh token and target.
+    const retarget = cli(["open", "--resume", res.json.sid, "--workflow", "setup", "--for-cli", "codex", "--no-open"], { env: NO_APP });
+    const now = readState(res.json.session).setup;
+    assert.equal(now.forCli, "codex");
+    assert.notEqual(now.token, state.setup.token);
+    assert.equal(retarget.json.setup.token, now.token);
+  } finally {
+    cli(["stop", "--session", res.json.sid, "--force"]);
+  }
+});
+
+// The shipped and custom agent lists the setup page shows. Commands carry .cmd
+// so one file name is found on every OS. The env points npm's global folder at
+// a fixture dir and kills the saved PATH: a builtin goes "outside" through its
+// installDirs, a custom agent through the npm folder (agentsGet looks custom
+// commands up by name only, so installDirs never applies to them).
+const NO_APP = {
+  PLAN2CODE_IN_APP: undefined,
+  PLAN2CODE_APP_TOKEN: undefined,
+  PLAN2CODE_APP_ANNOUNCE: undefined,
+  PLAN2CODE_EMBED_ORIGIN: undefined,
+  PLAN2CODE_CONSOLE_SID: undefined,
+  PLAN2CODE_APP_VERSION: undefined,
+};
+
+function agentFixtures(base) {
+  const outside = path.join(base, "outside");
+  fs.mkdirSync(outside);
+  fs.writeFileSync(path.join(outside, "testagent.cmd"), "@rem stand-in\r\n");
+  const onPath = path.join(base, "onpath.cmd");
+  fs.writeFileSync(onPath, "@rem stand-in\r\n");
+  // npm's global bin: the prefix itself on Windows, <prefix>/bin elsewhere.
+  const npmBin = process.platform === "win32" ? path.join(base, "npm-prefix") : path.join(base, "npm-prefix", "bin");
+  fs.mkdirSync(npmBin, { recursive: true });
+  const inNpm = path.join(npmBin, "agenttwo.cmd");
+  fs.writeFileSync(inNpm, "@rem stand-in\r\n");
+
+  const shipped = {
+    schema: 1,
+    agents: [
+      {
+        id: "testagent",
+        name: "Test Agent",
+        kind: "builtin",
+        command: "testagent.cmd",
+        prompt: "/plan2code",
+        args: ["{prompt}"],
+        bypassArgs: ["--yes"],
+        modelArgs: ["--model", "{model}"],
+        installUrl: "https://example.com/get",
+        install: {
+          win: [{ label: "PowerShell", run: "irm x | iex", note: "n" }],
+          mac: [{ label: "Terminal", run: "curl x" }],
+          linux: [],
+        },
+        installDirs: { win: [outside], mac: [outside], linux: [outside] },
+      },
+      { id: "gone", name: "Gone Agent", kind: "builtin", command: "gone-agent-xyz.cmd" },
+      { id: "templ", name: "Templ", kind: "template", command: "templ", prompt: "Use plan2code", args: ["{prompt}"], note: "a starter" },
+    ],
+  };
+  const user = {
+    schema: 1,
+    agents: [
+      { id: "myagent", name: "My Agent", command: onPath },
+      { id: "agenttwo", name: "Agent Two", command: "agenttwo.cmd" },
+    ],
+  };
+  const shippedFile = path.join(MODELS_DIR, "bin", "agents.json");
+  const userFile = path.join(MODELS_DIR, "agents.json");
+  fs.mkdirSync(path.dirname(shippedFile), { recursive: true });
+  fs.writeFileSync(shippedFile, JSON.stringify(shipped));
+  fs.writeFileSync(userFile, JSON.stringify(user));
+  return { outside, onPath, inNpm, shipped, shippedFile, userFile };
+}
+
+const AGENT_ENV = (base) => ({ PLAN2CODE_NO_SAVED_PATH: "1", npm_config_prefix: path.join(base, "npm-prefix"), ...NO_APP });
+
+test("GET /agents reports found, outside and missing for the custom and shipped lists", async () => {
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), "p2c-agents-"));
+  const res = cli(["open", "--workflow", "setup", "--no-open"], { env: AGENT_ENV(base) });
+  try {
+    const f = agentFixtures(base);
+    const { base: url, cookie } = sessionUrl(res.json.url);
+    const got = await (await fetch(`${url}/agents`, { headers: { cookie, connection: "close" } })).json();
+
+    const mine = got.agents.find((a) => a.id === "myagent");
+    assert.deepEqual(
+      { state: mine.state, path: mine.path, where: mine.where, folder: mine.folder },
+      { state: "found", path: f.onPath, where: "path", folder: path.dirname(f.onPath) }
+    );
+    const two = got.agents.find((a) => a.id === "agenttwo");
+    assert.deepEqual({ state: two.state, path: two.path, where: two.where }, { state: "outside", path: f.inNpm, where: "npm" });
+
+    const testagent = got.builtins.find((b) => b.id === "testagent");
+    assert.deepEqual({ state: testagent.state, where: testagent.where }, { state: "outside", where: "install-dir" });
+    assert.equal(testagent.name, "Test Agent");
+    assert.equal(testagent.command, "testagent.cmd");
+    assert.equal(testagent.prompt, "/plan2code");
+    assert.deepEqual(testagent.args, ["{prompt}"]);
+    assert.deepEqual(testagent.bypassArgs, ["--yes"]);
+    assert.deepEqual(testagent.modelArgs, ["--model", "{model}"]);
+    assert.equal(testagent.installUrl, "https://example.com/get");
+    const OS_KEY = process.platform === "win32" ? "win" : process.platform === "darwin" ? "mac" : "linux";
+    assert.deepEqual(testagent.install, f.shipped.agents[0].install[OS_KEY], "only this OS's install steps");
+
+    const gone = got.builtins.find((b) => b.id === "gone");
+    assert.deepEqual(
+      { state: gone.state, path: gone.path, where: gone.where, folder: gone.folder },
+      { state: "missing", path: null, where: null, folder: null }
+    );
+    // Templates come back as the form fields only: no `kind`, no found state.
+    assert.deepEqual(got.templates, [{ id: "templ", name: "Templ", command: "templ", prompt: "Use plan2code", args: ["{prompt}"], note: "a starter" }]);
+    assert.deepEqual(got.warnings, []);
+  } finally {
+    cli(["stop", "--session", res.json.sid, "--force"]);
+    fs.rmSync(path.join(MODELS_DIR, "agents.json"), { force: true });
+    fs.rmSync(path.join(MODELS_DIR, "bin", "agents.json"), { force: true });
+    fs.rmSync(base, { recursive: true, force: true });
+  }
+});
+
+test("POST /agents/use-path writes findAgent's hit into agents.json, and only that", async () => {
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), "p2c-agents-"));
+  const res = cli(["open", "--workflow", "setup", "--no-open"], { env: AGENT_ENV(base) });
+  try {
+    const f = agentFixtures(base);
+    const { base: url, cookie } = sessionUrl(res.json.url);
+    const usePath = (body) =>
+      fetch(`${url}/agents/use-path`, {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie, origin: url, connection: "close" },
+        body: JSON.stringify(body),
+      });
+    const readUser = () => JSON.parse(fs.readFileSync(f.userFile, "utf8"));
+
+    const missing = await usePath({ id: "gone" });
+    assert.equal(missing.status, 409, "not on PATH and nowhere else either");
+    assert.deepEqual(await missing.json(), { error: "not-found" });
+    const unknown = await usePath({ id: "nope" });
+    assert.equal(unknown.status, 404, "no such agent at all");
+    assert.deepEqual(await unknown.json(), { error: "not-found" });
+
+    // Already on PATH: a 200 and no write.
+    const before = fs.readFileSync(f.userFile, "utf8");
+    const found = await usePath({ id: "myagent" });
+    assert.equal(found.status, 200);
+    assert.deepEqual(await found.json(), { ok: true, id: "myagent", command: f.onPath });
+    assert.equal(fs.readFileSync(f.userFile, "utf8"), before);
+
+    // Off PATH ("outside"): the command becomes where it was found. A path in
+    // the body is never taken.
+    const outside = await usePath({ id: "agenttwo", command: "should-not-be-taken", path: "should-not-be-taken" });
+    assert.equal(outside.status, 200);
+    const wanted = f.inNpm;
+    assert.deepEqual(await outside.json(), { ok: true, id: "agenttwo", command: wanted });
+    assert.equal(readUser().agents.find((a) => a.id === "agenttwo").command, wanted);
+
+    // A built-in is materialized as a new custom entry under a generated id;
+    // the file's other entries stand.
+    const builtin = await usePath({ id: "testagent" });
+    assert.equal(builtin.status, 200);
+    const saved = await builtin.json();
+    assert.equal(saved.id, "test-agent", "makeId kebab-cases the name");
+    const created = readUser().agents.find((a) => a.id === "test-agent");
+    assert.equal(created.command, path.join(f.outside, "testagent.cmd"));
+    assert.equal(created.name, "Test Agent");
+    assert.equal(created.prompt, "/plan2code");
+    assert.equal(readUser().schema, 1);
+    assert.deepEqual(readUser().agents.map((a) => a.id), ["myagent", "agenttwo", "test-agent"]);
+  } finally {
+    cli(["stop", "--session", res.json.sid, "--force"]);
+    fs.rmSync(path.join(MODELS_DIR, "agents.json"), { force: true });
+    fs.rmSync(path.join(MODELS_DIR, "bin", "agents.json"), { force: true });
+    fs.rmSync(base, { recursive: true, force: true });
+  }
+});
+
+// The setup tab's move: another Plan2Code process POSTs the session's sign-in
+// link here, the page's stream gets a `move` event and state.setup.moved is
+// set. Only a setup session answers, only for the token `open` printed, and
+// only a loopback console /s/ link is a legal destination.
+test("POST /handover takes only the setup token and a console sign-in link, and moves the page", async () => {
+  const res = cli(["open", "--workflow", "setup", "--no-open"], { env: NO_APP });
+  const m = res.json.url.match(/^(http:\/\/127\.0\.0\.1:(\d+))\/s\/([^/]+)\//);
+  const cookie = cookieFor(m[1], m[3]);
+  const port = Number(m[2]);
+  const token = res.json.setup.token;
+  const handover = (body, headers = {}) =>
+    new Promise((resolve, reject) => {
+      const req = http.request(
+        {
+          host: "127.0.0.1",
+          port,
+          path: "/handover",
+          method: "POST",
+          headers: { "content-type": "application/json", "x-plan2code-token": token, connection: "close", ...headers },
+        },
+        (r) => {
+          const chunks = [];
+          r.on("data", (c) => chunks.push(c));
+          r.on("end", () => resolve({ status: r.statusCode, body: Buffer.concat(chunks).toString("utf8") }));
+        }
+      );
+      req.on("error", reject);
+      req.end(JSON.stringify(body));
+    });
+  const other = cli(["open", "--workflow", "plan", "--no-open"], { env: NO_APP });
+  try {
+    // No cookie at all: the hand-over has its own token, which is the point.
+    for (const headers of [{ "x-plan2code-token": "wrong-token" }, { "x-plan2code-token": "" }]) {
+      const no = await handover({ url: "http://127.0.0.1:9/s/abc/" }, headers);
+      assert.equal(no.status, 403, JSON.stringify(headers));
+      assert.deepEqual(JSON.parse(no.body), { error: "forbidden" });
+    }
+    for (const url of [
+      "https://127.0.0.1:9/s/abc/",
+      "http://example.com/s/abc/",
+      "http://127.0.0.1/s/abc/",
+      "http://127.0.0.1:9/x/abc/",
+      "http://127.0.0.1:9/s/a b/",
+      "javascript:alert(1)",
+      "",
+      42,
+      null,
+    ]) {
+      const no = await handover({ url });
+      assert.equal(no.status, 400, JSON.stringify(url));
+      assert.deepEqual(JSON.parse(no.body), { error: "bad-url" });
+    }
+
+    // The stream sees the move the POST causes.
+    const events = new Promise((resolve, reject) => {
+      const req = http.request({ host: "127.0.0.1", port, path: "/events", headers: { cookie } }, (r) => {
+        let buf = "";
+        r.setEncoding("utf8");
+        r.on("data", (c) => (buf += c));
+        setTimeout(() => {
+          req.destroy();
+          resolve(buf);
+        }, 1500);
+      });
+      req.on("error", reject);
+      req.end();
+    });
+    await sleep(150); // the GET must land before the POST
+    const target = "http://localhost:9/s/NewAgent_1-2/";
+    const ok = await handover({ url: target });
+    assert.equal(ok.status, 204);
+    const stream = await events;
+    assert.ok(stream.includes(`event: move\ndata: ${JSON.stringify({ url: target })}`), stream);
+    const setup = readState(res.json.session).setup;
+    assert.equal(setup.moved.url, target);
+    assert.ok(setup.moved.at);
+
+    // A session that is not the setup page never answers, whatever the header.
+    const otherPort = Number(other.json.url.match(/^http:\/\/127\.0\.0\.1:(\d+)\//)[1]);
+    const notSetup = await new Promise((resolve, reject) => {
+      const req = http.request(
+        {
+          host: "127.0.0.1",
+          port: otherPort,
+          path: "/handover",
+          method: "POST",
+          headers: { "content-type": "application/json", "x-plan2code-token": token },
+        },
+        (r) => {
+          const chunks = [];
+          r.on("data", (c) => chunks.push(c));
+          r.on("end", () => resolve({ status: r.statusCode, body: Buffer.concat(chunks).toString("utf8") }));
+        }
+      );
+      req.on("error", reject);
+      req.end(JSON.stringify({ url: "http://127.0.0.1:9/s/abc/" }));
+    });
+    assert.equal(notSetup.status, 404);
+    assert.deepEqual(JSON.parse(notSetup.body), { error: "not-found" });
+  } finally {
+    cli(["stop", "--session", res.json.sid, "--force"]);
+    cli(["stop", "--session", other.json.sid, "--force"]);
+  }
+});
+
+// The other half of the hand-over: an agent opened under PLAN2CODE_SETUP_* posts
+// its link to the setup console's /handover instead of opening a browser, and a
+// refused post falls back to the browser with a note saying so.
+test("an agent opened with the setup hand-over posts its link, and a refused post says so", async () => {
+  const setup = cli(["open", "--workflow", "setup", "--no-open"], { env: NO_APP });
+  const token = readState(setup.json.session).setup.token;
+  let agent;
+  try {
+    // setup.url is the setup session's own link; /handover resolves off it, so
+    // the running server answers. No --no-open: that flag is what skips this.
+    agent = cli(["open", "--workflow", "plan"], {
+      env: { ...NO_APP, PLAN2CODE_SETUP_ANNOUNCE: setup.json.setup.url, PLAN2CODE_SETUP_TOKEN: token },
+    });
+    assert.equal(agent.json.handover, true);
+    const moved = readState(setup.json.session).setup.moved;
+    assert.equal(moved.url, agent.json.url, "the setup session learned where its tab went");
+
+    const bad = cli(["open", "--workflow", "plan"], {
+      env: { ...NO_APP, PLAN2CODE_SETUP_ANNOUNCE: setup.json.setup.url, PLAN2CODE_SETUP_TOKEN: "wrong-token" },
+    });
+    try {
+      assert.equal("handover" in bad.json, false);
+      assert.match(bad.json.note, /Could not move the setup tab/);
+    } finally {
+      cli(["stop", "--session", bad.json.sid, "--force"]);
+    }
+  } finally {
+    if (agent) cli(["stop", "--session", agent.json.sid, "--force"]);
+    cli(["stop", "--session", setup.json.sid, "--force"]);
+  }
+});
+
+// The idle deadline is the only thing that stops an orphan server (server.mjs's
+// comment says why it must not be optimized away); a setup session honors it too.
+test("a setup session still stops on --idle-ms", async () => {
+  const res = cli(["open", "--workflow", "setup", "--idle-ms", "300", "--no-open"], { env: NO_APP });
+  try {
+    const events = path.join(res.json.session, "events.ndjson");
+    // The deadline is checked on a 20s tick, so the exit lands within a tick of the cap.
+    const gone = await until(() => fs.existsSync(events) && fs.readFileSync(events, "utf8").includes('"reason":"idle"'), 40000);
+    assert.ok(gone, "the server never recorded its idle exit");
+  } finally {
+    cli(["stop", "--session", res.json.sid, "--force"]);
+  }
+});
+
+// NFR-2: the launcher scrubs the app-window variables before spawning the setup
+// console (test-launcher.mjs has the spawn half), so nothing can leak the page
+// into an app window. Even with an announce URL left in the environment a
+// console without the full signal never calls it; with the signal it does.
+test("a setup console without the app signal never calls a leftover announce URL", async () => {
+  const calls = [];
+  const stub = http.createServer((req, res) => {
+    req.resume();
+    req.on("end", () => {
+      calls.push(`${req.method} ${req.url}`);
+      res.writeHead(req.url === "/session" ? 404 : 204).end();
+    });
+  });
+  await new Promise((r) => stub.listen(0, "127.0.0.1", r));
+  const announce = `http://127.0.0.1:${stub.address().port}`;
+  try {
+    const res = cli(["open", "--workflow", "setup", "--no-open"], { env: { ...NO_APP, PLAN2CODE_APP_ANNOUNCE: announce } });
+    try {
+      assert.equal(res.json.inApp, undefined);
+      assert.equal(res.json.announced, undefined);
+      assert.deepEqual(calls, [], "a stray announce URL alone is not the signal");
+    } finally {
+      cli(["stop", "--session", res.json.sid, "--force"]);
+    }
+
+    // With the full signal the same open announces, as the in-app tests cover.
+    // Spawned asynchronously: the announce endpoint lives in this process, so a
+    // blocking spawn would deadlock (the same reason test-in-app uses openAsync).
+    const inApp = await new Promise((resolve) => {
+      const child = spawn(
+        process.execPath,
+        [path.join(ROOT, "src", "web-console", "console.mjs"), "open", "--workflow", "setup", "--no-open"],
+        {
+          cwd: ROOT,
+          env: { ...ENV, ...NO_APP, PLAN2CODE_IN_APP: "1", PLAN2CODE_APP_ANNOUNCE: announce, PLAN2CODE_APP_TOKEN: "tok" },
+          windowsHide: true,
+        }
+      );
+      let out = "";
+      child.stdout.on("data", (c) => (out += c));
+      child.on("close", (status) => resolve({ status, json: JSON.parse(out.trim().split("\n").filter(Boolean).pop()) }));
+    });
+    try {
+      assert.equal(inApp.json.announced, true);
+      assert.ok(calls.some((c) => c.startsWith("POST /page")), JSON.stringify(calls));
+    } finally {
+      cli(["stop", "--session", inApp.json.sid, "--force"]);
+    }
+  } finally {
+    stub.close();
   }
 });

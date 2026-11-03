@@ -6,6 +6,7 @@
 import { page, redraw } from "./state.js";
 import { boardAwaiting } from "./git-board.js";
 import { defaultSpec, reviewOffer, dashboardOffer, submittedAwaiting, quietLimitMs } from "./answers.js";
+import { isAgentless } from "./skills.js";
 import { activityLabel, workingLine } from "./labels.js";
 import { ASK_BUSY_MS, chatAnswering } from "./chat.js";
 
@@ -203,7 +204,7 @@ export function workingMs() {
 
 // The three silence thresholds below, stretched while the agent has said a
 // long quiet stretch is normal (a build task). See quietLimitMs.
-export const patience = (baseMs) => quietLimitMs(page.S && page.S.agent, baseMs);
+export const patience = (baseMs) => quietLimitMs(page.S && page.S.agent, baseMs, isAgentless(page.S && page.S.workflow));
 
 // What the agent says it is doing right now, when it has said: "Task 3 of 9:
 // the user service". Only meaningful while it is working. A build's line is
@@ -232,6 +233,8 @@ export const doingNow = () => workingLine(page.S && page.S.agent, page.S && page
 // An agent answering an Ask message is out of `wait` too, and busy rather than
 // gone, so it gets ASK_BUSY_MS before anything calls it adrift.
 export function agentAdrift() {
+  // An agent-less session has nobody to be adrift: silence means nothing there.
+  if (isAgentless(page.S && page.S.workflow)) return false;
   if (!page.agentLastSeen || page.gone || finish()) return false;
   const silent = Date.now() - Date.parse(page.agentLastSeen);
   const limit = page.pendingResult ? uncollectedLimit() : patience(ADRIFT_MS);
@@ -266,6 +269,7 @@ export const stranded = () => page.pendingResult && agentAdrift();
 // turn ended while the person was away) and the press sits saved until it
 // is woken.
 export function pressStranded() {
+  if (isAgentless(page.S && page.S.workflow)) return false;
   if (!finish() || page.gone || !page.pendingResult || !page.agentLastSeen) return false;
   if (!page.local.afterBuild || page.local.afterBuild === "done") return false;
   return Date.now() - Date.parse(page.agentLastSeen) > UNCOLLECTED_MS;

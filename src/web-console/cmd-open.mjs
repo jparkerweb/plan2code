@@ -1,6 +1,7 @@
 // Plan2Code Web Console - the `open` command: start or resume a session, its server and the browser.
 
 import fs from "node:fs";
+import http from "node:http";
 import path from "node:path";
 import { spawn } from "node:child_process";
 
@@ -53,6 +54,7 @@ import { WORKFLOWS, isWorkflow } from "./public/skills.js";
 import { startsClean } from "./public/hops.js";
 import { snapshot } from "./git-repo.mjs";
 import { announcePage, currentSession, inAppSignal } from "./in-app.mjs";
+import { findAgent } from "./agent-lookup.mjs";
 import { handoffsDir, listHandoffs, removeHandoffs, staleHandoffs } from "./handoffs.mjs";
 import {
   readPatch,
@@ -139,6 +141,14 @@ export async function cmdOpen() {
       if (sid && fs.existsSync(sessionDir(sid))) args.resume = sid;
     }
   }
+  // The launcher's setup flow hands this open's page back to the console that
+  // asked for it: instead of a browser, the session's link is POSTed to that
+  // console's /handover, which moves the launcher's own tab here. Fresh opens
+  // outside the app only; a resume or an in-app session keeps its own flow.
+  const setupAnnounce =
+    !inApp && !args.resume && !args.session && process.env.PLAN2CODE_SETUP_ANNOUNCE && process.env.PLAN2CODE_SETUP_TOKEN
+      ? { announce: process.env.PLAN2CODE_SETUP_ANNOUNCE, token: process.env.PLAN2CODE_SETUP_TOKEN }
+      : null;
   const { project, worktree, branch } = repoRoots();
   reapHandles(project);
   trace("open: project found");
@@ -235,12 +245,21 @@ export async function cmdOpen() {
       }
       if (args.title) s.title = args.title;
       if (args.spec) s.specDir = args.spec;
+      // A setup session carries the hand-over data the launcher needs: which
+      // CLI it is setting up and the per-session token /handover checks. On
+      // resume it is rewritten only when --for-cli is passed or the session
+      // has none yet; a plain resume keeps the existing token valid.
+      if (args.workflow === "setup" && (args["for-cli"] !== undefined || !s.setup)) {
+        s.setup = { forCli: args["for-cli"] || null, token: newToken(), created: nowIso() };
+      }
       // The loop lock follows the flag: --loop locks the page, and a resume
       // without it (Fix it by hand, from a stop screen) is an ordinary,
-      // unlocked session.
+      // unlocked session. `loopExpect` goes with the lock: the app restamps it
+      // on its next look, so a stale setup never judges a new run.
       if (loopMode) s.loop = { driving: true };
       else {
         delete s.loop;
+        delete s.loopExpect;
         // The loop's cards mean nothing without it, and validate() refuses
         // handledBy outside a loop session, which would wedge every post.
         s.items = (s.items || []).map(({ handledBy, ...item }) => item);
@@ -270,6 +289,11 @@ export async function cmdOpen() {
     if (args.workflow === "dashboard") state.wake = true;
     // Locked from the first frame, before the state is first written.
     if (loopMode) state.loop = { driving: true };
+    // The setup session's hand-over data (forCli + the token /handover
+    // checks), created with the state so the first write already has it.
+    if (args.workflow === "setup") {
+      state.setup = { forCli: args["for-cli"] || null, token: newToken(), created: nowIso() };
+    }
   }
 
   // A first payload's meter and folder reports, as `post` takes them: checked
@@ -336,7 +360,7 @@ export async function cmdOpen() {
       ? healthOk(existing).then((ok) => ok || healthOk(existing, 5000))
       : Promise.resolve(false);
   let boot = null;
-  if (!existing) boot = await startServer(project, worktree, sid, dir);
+  if (!existing) boot = await startServer(project, worktree, sid, dir, { noBrowser: Boolean(setupAnnounce) });
 
   // The dashboard's spec picker reads its inventory straight off the session
   // state, so the scan belongs to `open` rather than to the agent: filesystem
@@ -437,6 +461,11 @@ export async function cmdOpen() {
 
   // Reuse a live server if one is already serving this session.
   if (existing && (await reusable)) {
+    const remote = remoteWarning();
+    const reuseNotes = [];
+    if (remote.note) reuseNotes.push(remote.note);
+    // Reuse only happens under --resume/--session, where a setup hand-over is
+    // never armed, so this path just reopens the page.
     if (!args["no-open"]) openBrowser(existing.url);
     const inAppReport = await tellApp(inApp, { url: existing.url, sid, workflow: state.workflow });
     const [owed, subCursor] = subagentsOwed();
@@ -446,12 +475,14 @@ export async function cmdOpen() {
       session: dir,
       url: existing.url,
       embed: EMBED_API,
+      ...(state.setup && state.setup.token ? { setup: { url: existing.url, token: state.setup.token } } : {}),
       ...inAppReport,
       ...(carried ? { pendingResult: true } : {}),
       terminalLine: terminalLine(existing.url),
       ...folders,
       ...owed,
-      ...remoteWarning(),
+      ...(remote.remote ? { remote: remote.remote } : {}),
+      ...(reuseNotes.length ? { note: reuseNotes.join(" ") } : {}),
     });
     advanceSubagents(dir, subCursor);
     sweep();
@@ -467,7 +498,7 @@ export async function cmdOpen() {
     // socket, a server that died taking it). Once more the old way, where
     // the server binds its own port: slower, and certain.
     started.kill();
-    started = await startServer(project, worktree, sid, dir, { handoff: false });
+    started = await startServer(project, worktree, sid, dir, { handoff: false, noBrowser: Boolean(setupAnnounce) });
     handle = await awaitHandle(started);
   }
   if (!handle) {
@@ -481,9 +512,24 @@ export async function cmdOpen() {
 
   // The early tab went to the port `open` bound. If the server ended up
   // anywhere else, that tab is a dead end, so send the browser to the real one.
-  if (!args["no-open"] && handle.url !== started.opened) openBrowser(handle.url);
-  const remote = remoteWarning();
+  // With a setup hand-over the early tab was never sent at all: only the
+  // FINAL url is POSTed to the launcher console's /handover, which moves its
+  // own tab here. A failed hand-over falls back to the browser and a note.
+  let handoverDone = false;
   const notes = [];
+  if (!args["no-open"]) {
+    if (setupAnnounce) {
+      const moved = await postHandover(setupAnnounce, handle.url);
+      handoverDone = moved === "ok";
+      // "moved" or "gone" means the first open already spent the hand-over, so
+      // the browser fallback is quiet; anything else earns the note.
+      if (moved !== "ok") openBrowser(handle.url);
+      if (moved === false) notes.push("Could not move the setup tab; opened a new browser tab.");
+    } else if (handle.url !== started.opened) {
+      openBrowser(handle.url);
+    }
+  }
+  const remote = remoteWarning();
   if (remote.note) notes.push(remote.note);
   if (carried) notes.push("Answers are already waiting. Run `wait` to collect them.");
   const inAppReport = await tellApp(inApp, { url: handle.url, sid, workflow: state.workflow });
@@ -497,7 +543,9 @@ export async function cmdOpen() {
     session: dir,
     url: handle.url,
     embed: EMBED_API,
+    ...(state.setup && state.setup.token ? { setup: { url: handle.url, token: state.setup.token } } : {}),
     ...inAppReport,
+    ...(handoverDone ? { handover: true } : {}),
     port: handle.port,
     pid: handle.pid,
     ...(carried ? { pendingResult: true } : {}),
@@ -520,6 +568,58 @@ async function tellApp(signal, page) {
   if (!signal) return {};
   const announced = signal.announce ? await announcePage(signal, page) : false;
   return { inApp: true, announced };
+}
+
+/**
+ * POST this session's sign-in link to the setup console that asked for it
+ * (PLAN2CODE_SETUP_ANNOUNCE / _TOKEN): its /handover then moves the
+ * launcher's own tab here instead of a second browser opening. Loopback http
+ * only, like in-app.mjs's request(): a foreign or https target is no
+ * hand-over at all. Resolves "ok" on a 2xx, "moved" on the route's already-
+ * moved 409, "gone" when nothing answers (the setup console already went
+ * away, so the fallback is a quiet browser open) and false on any other
+ * answer, which earns the caller's fallback note. Never throws.
+ */
+function postHandover(setup, url) {
+  return new Promise((resolve) => {
+    let target;
+    try {
+      target = new URL("/handover", setup.announce);
+    } catch {
+      return resolve(false);
+    }
+    if (target.protocol !== "http:" || !["127.0.0.1", "localhost"].includes(target.hostname)) {
+      return resolve(false);
+    }
+    const body = JSON.stringify({ url });
+    const req = http.request(
+      target,
+      {
+        method: "POST",
+        timeout: 1500,
+        headers: {
+          "x-plan2code-token": setup.token,
+          "content-type": "application/json",
+          "content-length": Buffer.byteLength(body),
+        },
+      },
+      (res) => {
+        res.resume();
+        res.on("end", () =>
+          resolve(
+            res.statusCode === 409
+              ? "moved"
+              : res.statusCode && res.statusCode >= 200 && res.statusCode < 300
+                ? "ok"
+                : false
+          )
+        );
+      }
+    );
+    req.on("timeout", () => req.destroy());
+    req.on("error", () => resolve("gone"));
+    req.end(body);
+  });
 }
 
 /**
@@ -563,7 +663,7 @@ function isFolder(p) {
  * boot: a process's first listen() blocks for ~50ms on Windows while the
  * socket stack loads, which is time the server spends booting anyway.
  */
-async function startServer(project, worktree, sid, dir, { handoff = true } = {}) {
+async function startServer(project, worktree, sid, dir, { handoff = true, noBrowser = false } = {}) {
   const token = newToken();
   const handlePath = handleFile(project, sid);
   ensureDir(path.dirname(handlePath));
@@ -616,7 +716,9 @@ async function startServer(project, worktree, sid, dir, { handoff = true } = {})
     // No socket to give (the bind failed): the server binds its own, and the
     // channel is let go once it has.
     released = handOff(child, pre);
-    if (pre && !args["no-open"]) opened = `http://127.0.0.1:${pre.address().port}/s/${token}/`;
+    // noBrowser: a setup hand-over replaces the early tab; the caller POSTs
+    // only the final url to the launcher console's /handover instead.
+    if (pre && !args["no-open"] && !noBrowser) opened = `http://127.0.0.1:${pre.address().port}/s/${token}/`;
   } else child.unref();
   // Each spawn blocks for a moment (tens of ms for cmd.exe on Windows), so
   // the browser's comes after the server's: the server's boot is what the
@@ -701,7 +803,7 @@ function openBrowser(url) {
     // Linux and friends. WSL first: xdg-open there either is absent or opens a
     // Linux browser that cannot reach the Windows host.
     if (isWsl()) {
-      const exe = which("wslview") ? "wslview" : "powershell.exe";
+      const exe = findAgent({ command: "wslview" }).state === "found" ? "wslview" : "powershell.exe";
       const argsFor = exe === "wslview" ? [url] : ["-NoProfile", "-Command", "Start-Process", `"${url}"`];
       spawn(exe, argsFor, { detached: true, stdio: "ignore" }).unref();
       return;
@@ -720,16 +822,4 @@ function isWsl() {
   } catch {
     return false;
   }
-}
-
-function which(bin) {
-  const dirs = (process.env.PATH || "").split(path.delimiter);
-  return dirs.some((d) => {
-    try {
-      fs.accessSync(path.join(d, bin), fs.constants.X_OK);
-      return true;
-    } catch {
-      return false;
-    }
-  });
 }

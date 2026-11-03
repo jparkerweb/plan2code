@@ -237,8 +237,10 @@ export function chatAnswering(frameChat) {
  * adrift (anything else), which is also the only signal left once the server
  * is gone. An Ask message in hand (`answering`) stretches either to ASK_BUSY_MS.
  */
-export function chatOffline({ finish, agent, agentLastSeenMs, now, answering = false }) {
+export function chatOffline({ finish, agent, agentLastSeenMs, now, answering = false, agentless = false }) {
+  // An agent-less session never goes "offline": there is nobody to hear silence.
+  if (agentless) return false;
   const silent = now - agentLastSeenMs;
-  const limit = quietLimitMs(agent, agent && agent.status === "working" ? STALE_MS : ADRIFT_MS);
+  const limit = quietLimitMs(agent, agent && agent.status === "working" ? STALE_MS : ADRIFT_MS, agentless);
   return silent > (answering ? Math.max(limit, ASK_BUSY_MS) : limit);
 }

@@ -4,7 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { HERE } from "./files.mjs";
-import { WORKFLOWS, isBuild } from "./public/skills.js";
+import { WORKFLOWS, isBuild, isAgentless } from "./public/skills.js";
 
 // The CLI's own pieces, handed over by console.mjs through useCli() before
 // any command runs: console.mjs runs on import, so it cannot be imported back.
@@ -22,8 +22,11 @@ function workflowLines(width = 78) {
   const pad = " ".repeat(lead.length);
   const lines = [];
   let line = "";
-  WORKFLOWS.forEach((w, i) => {
-    const piece = i < WORKFLOWS.length - 1 ? `${w} ·` : w;
+  // Agent-less modes are opened by the launcher or the app, never by an agent
+  // typing --workflow, so they stay off the usage list (spec phase-2 note).
+  const listed = WORKFLOWS.filter((w) => !isAgentless(w));
+  listed.forEach((w, i) => {
+    const piece = i < listed.length - 1 ? `${w} ·` : w;
     const start = lines.length ? pad : lead;
     if (line && (start + line + " " + piece).length > width) {
       lines.push(start + line);
