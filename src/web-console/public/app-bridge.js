@@ -26,7 +26,8 @@ export function linkLeavesPage(href, origin) {
 /**
  * Call `handler(data)` for each `{ plan2code: kind, ... }` message the frame's
  * parent sends, and for nothing from anywhere else (another frame, the page
- * itself). The app's only answer today is `taskbar-state`.
+ * itself). The app sends `taskbar-state`, `terminal-state` and the loop's
+ * answers (wireLoopMessages).
  */
 export function onAppMessage(kind, handler) {
   window.addEventListener("message", (event) => {

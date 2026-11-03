@@ -85,6 +85,17 @@ test("app.js types the continue button's keystrokes through continueKeys, for th
   assert.doesNotMatch(typeContinue, /data: 'continue'/, "no hand-typed word left beside it");
 });
 
+// The console page's What to check lines make "terminal" a button while the
+// pane is collapsed (core.js renderStatus), so it must hear the pane's state.
+test("app.js tells the console page whether the terminal pane is collapsed, and expands only a collapsed pane on terminal-open", () => {
+  const layout = APP_JS.slice(APP_JS.indexOf("function applyPaneLayout"), APP_JS.indexOf("function savePaneSettings"));
+  assert.match(layout, /updateBadge\(\);\s+tellTerminalState\(\);\s+\}/, "every layout change is told");
+  assert.match(layout, /plan2code: 'terminal-state', collapsed: paneCollapsed/, "a named message with one boolean");
+  assert.match(layout, /if \(!force && toldCollapsed === paneCollapsed\) return;/, "only a change is told, not every drag");
+  assert.match(APP_JS, /plan2code: 'taskbar-state', on \}, '\*'\);\s+tellTerminalState\(true\);/, "the page hears it on its hello");
+  assert.match(APP_JS, /kind === 'terminal-open'\) \{[^}]*if \(paneCollapsed\) termCollapseBtn\.click\(\);/, "the pane's own button expands it");
+});
+
 test("the bar reads project menu, New Session, agent menu, with both menus outside the scrolling row", () => {
   const row = INDEX_HTML.slice(INDEX_HTML.indexOf('<div id="bar-row">'), INDEX_HTML.indexOf('<div id="project-menu"'));
   const at = (id) => row.indexOf(`id="${id}"`);

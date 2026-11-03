@@ -111,6 +111,9 @@ export const page = {
   // false until the first frame lands, same as every other flag here, and
   // from an older server that sends none.
   inApp: false,
+  // The app's terminal panel is collapsed (its `terminal-state`): the status
+  // line's What to check lines then make "terminal" a button that expands it.
+  terminalCollapsed: false,
   // The Implementation Loop, as the desktop app drives it: `loop` is the
   // state's `{ driving: true }` or null (it locks the page, selectors.js
   // loopDriving); `loopFacts` is what the app answered to `loop-facts`

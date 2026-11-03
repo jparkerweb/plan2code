@@ -330,6 +330,64 @@ test("under the app, the not running line's continue is a button that asks the a
   assert.ok(await press.isDisabled(), "held off, so a double press does not type it twice");
 });
 
+// The app's word on its terminal panel, from a real window standing in as the
+// parent (onAppMessage hears the parent only). Keeps FAKE_APP_FRAME's record.
+async function tellTerminal(s, collapsed) {
+  await s.page.evaluate((c) => {
+    if (!window.__app) {
+      const frame = document.createElement("iframe");
+      document.body.append(frame);
+      const app = frame.contentWindow;
+      app.postMessage = (m) => window.__toApp.push(m);
+      Object.defineProperty(window, "parent", { configurable: true, get: () => app });
+      window.__app = app;
+    }
+    dispatchEvent(new MessageEvent("message", { data: { plan2code: "terminal-state", collapsed: c }, source: window.__app }));
+  }, collapsed);
+}
+
+test("under the app with the terminal panel collapsed, terminal in every What to check line is a button that asks the app to expand it", async (t) => {
+  const s = await openSession(await suite.browser(), {
+    t,
+    workflow: "implement",
+    clock: true,
+    payload: { headline: { stage: "Phase 1", cleared: 0, total: 3 }, agent: { status: "working", activity: "Task 1 of 3: the reader" } },
+    env: { PLAN2CODE_IN_APP: "1" },
+    init: FAKE_APP_FRAME,
+  });
+  const press = s.page.locator("#agent-text .agent-terminal-btn");
+  await lineSays(s, /Task 1 of 3: the reader/);
+  await tellTerminal(s, true);
+  assert.equal(await press.count(), 0, "the plain working line has no button");
+
+  // Quiet for 30 s: the approval hint.
+  await s.page.clock.fastForward(40_000);
+  await lineSays(s, /waiting on an approval in the terminal panel/);
+  assert.equal(await press.textContent(), "terminal");
+  await press.click();
+  await until(async () => (await toApp(s, "terminal-open")).length === 1, 5000);
+  assert.deepEqual(await toApp(s, "terminal-open"), [{ plan2code: "terminal-open" }], "a named request, nothing else in it");
+
+  // Quiet for two minutes: the stale line, then the panel opens.
+  await s.page.clock.fastForward(100_000);
+  await lineSays(s, /^Still working on it\./);
+  assert.equal(await press.count(), 1, "the stale line carries the button");
+  await tellTerminal(s, false);
+  await until(async () => (await press.count()) === 0, 5000);
+  assert.match(await textOf(statusLine(s)), /check your terminal/, "expanded, the word is plain again");
+
+  // Nobody listening, panel collapsed again: the not running line.
+  await tellTerminal(s, true);
+  await s.page.clock.setSystemTime(Date.now());
+  s.post({ items: [{ id: "q1", kind: "text", title: "What to call it", body: "A short name." }], agent: { status: "waiting" } });
+  await lineSays(s, /^Your turn: 1 question waiting\./);
+  assert.equal(await press.count(), 0, "the your-turn line has no button");
+  await s.page.clock.fastForward(200_000);
+  await lineSays(s, /^Plan2Code is not running right now\./);
+  assert.equal(await press.count(), 1, "the not running line carries the button");
+  assert.equal(await s.page.locator("#agent-text .agent-key-btn").textContent(), "continue", "continue keeps its own button");
+});
+
 // The app's webview opens no new windows, so a link off the page asks the
 // console to open it in the default browser instead, and says where to paste
 // it when that fails.

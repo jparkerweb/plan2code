@@ -68,7 +68,7 @@ import { renderBriefButton, renderDoc, renderOverview } from "./docs.js";
 import { board, renderGitBoard, resetBoard } from "./git-host.js";
 import { renderWorkspace, tellFolderIssues } from "./workspace.js";
 import { openHelpOn } from "./help-dialog.js";
-import { linkLeavesPage, startNewSession, tellApp } from "../app-bridge.js";
+import { linkLeavesPage, onAppMessage, startNewSession, tellApp } from "../app-bridge.js";
 import { askOfflineFlipped, askState, declineOpen, renderAside, renderAsk, renderSubagents, renderSubagentsButton } from "./ask.js";
 import { renderHandoff, renderLoopEnd, renderHomeButton, renderStopButton, renderStopControls, renderStopping, stopInProgress, stopWarning } from "./ending.js";
 import { renderNotepadButton } from "./notepad.js";
@@ -1175,6 +1175,22 @@ function continueButton() {
   return btn;
 }
 
+// Under the app with its terminal panel collapsed (the app's `terminal-state`),
+// "terminal" in a What to check line is a button asking the app to expand it.
+function terminalButton(word) {
+  const btn = el("button", "agent-terminal-btn", word);
+  btn.type = "button";
+  btn.title = "Expand the agent terminal panel";
+  btn.addEventListener("click", () => tellApp("terminal-open"));
+  return btn;
+}
+
+// A line's plain text with its first "terminal" turned into terminalButton().
+function withTerminalButton(part) {
+  const word = /\bterminal\b/.exec(part);
+  return [document.createTextNode(part.slice(0, word.index)), terminalButton(word[0]), document.createTextNode(part.slice(word.index + word[0].length))];
+}
+
 // The favicon state last told to the app (attention.rs turns it into the
 // taskbar's dot). Told only when it changes, never on every status redraw.
 let lastAttention = null;
@@ -1204,11 +1220,17 @@ export function renderStatus() {
       moodVar = Math.floor(Math.random() * MOOD_VARIANTS[mood]);
     }
     bot.setAttribute("class", `planny is-${mood} v${moodVar}`);
-    const shown = check ? `${line}|check` : line;
+    const terminalLink = Boolean(check && page.inApp && page.terminalCollapsed);
+    const shown = check ? `${line}|check${terminalLink ? "|terminal" : ""}` : line;
     if (text.dataset.line !== shown) {
       text.dataset.line = shown;
-      const parts = line.split(/\*\*(.+?)\*\*/).map((part, i) => {
-        if (i % 2 === 0) return document.createTextNode(part);
+      let linked = !terminalLink;
+      const parts = line.split(/\*\*(.+?)\*\*/).flatMap((part, i) => {
+        if (i % 2 === 0) {
+          if (linked || !/\bterminal\b/.test(part)) return document.createTextNode(part);
+          linked = true;
+          return withTerminalButton(part);
+        }
         // Under the app the terminal is in the same window, so the word to
         // type is a button that types it there instead.
         if (page.inApp && part === "continue") return continueButton();
@@ -2151,6 +2173,13 @@ export function wireChrome() {
     } catch {}
     // A page that goes away leaves no dot on the app's taskbar behind it.
     tellAttention("plain");
+  });
+
+  // The app says whether its terminal panel is collapsed, on the page's hello
+  // and on every change; the status line's terminal button follows it.
+  onAppMessage("terminal-state", (data) => {
+    page.terminalCollapsed = data.collapsed === true;
+    renderStatus();
   });
 
   // Under the app, a link off the page goes to the default browser through

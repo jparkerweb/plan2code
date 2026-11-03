@@ -654,6 +654,18 @@ function applyPaneLayout() {
   termCollapseBtn.textContent = paneCollapsed ? 'View Agent Terminal' : 'Collapse';
   termCollapseBtn.setAttribute('aria-pressed', String(paneCollapsed));
   updateBadge();
+  tellTerminalState();
+}
+
+// The console page's What to check lines make "terminal" a button while the
+// pane is collapsed, so the page hears the state on its hello (`force`) and
+// whenever it changes, never on every drag of the handle.
+let toldCollapsed = null;
+
+function tellTerminalState(force = false) {
+  if (!force && toldCollapsed === paneCollapsed) return;
+  toldCollapsed = paneCollapsed;
+  if (frame.contentWindow) frame.contentWindow.postMessage({ plan2code: 'terminal-state', collapsed: paneCollapsed }, '*');
 }
 
 function savePaneSettings() {
@@ -750,6 +762,7 @@ window.addEventListener('message', (event) => {
     // The Desktop app switch in its User Preferences shows what app.json holds.
     const on = !appState || appState.taskbarSignal !== false;
     event.source.postMessage({ plan2code: 'taskbar-state', on }, '*');
+    tellTerminalState(true);
   } else if (kind === 'attention') {
     const signal = attentionSignal(event.data);
     if (signal) invoke('set_attention', { signal }).catch(() => {});
@@ -766,6 +779,10 @@ window.addEventListener('message', (event) => {
     if (on !== null) setGameFull(on);
   } else if (kind === 'agent-continue') {
     typeContinue();
+  } else if (kind === 'terminal-open') {
+    // The status line's terminal button: expands a collapsed pane, the same
+    // way its own button does (focus and the saved setting included).
+    if (paneCollapsed) termCollapseBtn.click();
   } else if (kind === 'new-session') {
     // The bar's own button, so the press is confirmed exactly the same way.
     if (!restartBtn.hidden) restartBtn.click();
