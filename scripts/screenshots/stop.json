@@ -9,13 +9,13 @@
   },
   "docs": [
     {
-      "id": "phase",
-      "title": "Phase 3 tasks",
+      "id": "phasefile",
+      "title": "phase-3.md",
       "blocks": [
         {
-          "id": "tasks",
+          "id": "body",
           "state": "settled",
-          "md": "- [x] **Task 3.1:** Add GET /tasks with cursor paging\n- [x] **Task 3.2:** Add POST /tasks\n- [ ] **Task 3.3:** Add PATCH /tasks/:id\n- [ ] **Task 3.4:** Add DELETE /tasks/:id"
+          "md": "# Phase 3: API endpoints\n\n**Status:** In Progress\n\n## Tasks\n\n- [x] **Task 3.1:** Add GET /tasks with cursor paging\n- [x] **Task 3.2:** Add POST /tasks\n- [ ] **Task 3.3:** Add PATCH /tasks/:id\n- [ ] **Task 3.4:** Add DELETE /tasks/:id"
         }
       ]
     }

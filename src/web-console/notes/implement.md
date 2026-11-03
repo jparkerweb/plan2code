@@ -5,17 +5,17 @@
 ## First post of a phase
 
 ```jsonc
-{"headline":{"stage":"Phase 3: API layer","cleared":0,"total":9},"docs":[{"id":"phase","title":"Phase 3 tasks","blocks":[{"id":"tasks","file":"specs/<feature>/phase-3.md","select":"tasks"}]},{"id":"phasefile","title":"phase-3.md","blocks":[{"id":"body","file":"specs/<feature>/phase-3.md"}]}],"agent":{"status":"working","activity":"Checking the prerequisites","quietMinutes":15}}
+{"headline":{"stage":"Phase 3: API layer","cleared":0,"total":9},"docs":[{"id":"phasefile","title":"phase-3.md","blocks":[{"id":"body","file":"specs/<feature>/phase-3.md"}]}],"agent":{"status":"working","activity":"Checking the prerequisites","quietMinutes":15}}
 ```
 
-`phase` is the task list, `phasefile` the whole file. A later phase posts the same two docs with the new title and file.
+`phasefile` is the whole file, so its task list is already on the page; no separate tasks doc is posted. A later phase posts the same doc with the new title and file.
 
 ## After every task
 
 With the checkbox write:
 
 ```jsonc
-{"headline":{"cleared":4},"docs":[{"id":"phase","refresh":true},{"id":"phasefile","refresh":true}],"agent":{"activity":"Task 5 of 9: the rate limiter"}}
+{"headline":{"cleared":4},"docs":[{"id":"phasefile","refresh":true}],"agent":{"activity":"Task 5 of 9: the rate limiter"}}
 ```
 
 The Phase Completion Summary lands in `phasefile` the same way. Then the `chat` check.

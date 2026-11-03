@@ -8,14 +8,14 @@
   },
   "docs": [
     {
-      "id": "phase",
-      "title": "Phase 3 tasks",
+      "id": "phasefile",
+      "title": "phase-3.md",
       "version": 12,
       "blocks": [
         {
-          "id": "tasks",
+          "id": "body",
           "state": "settled",
-          "md": "- [x] **Task 3.1:** Register the /tasks routes plugin\n- [x] **Task 3.2:** Add GET /tasks with cursor paging\n- [x] **Task 3.3:** Add GET /tasks/:id\n- [x] **Task 3.4:** Add POST /tasks with a Zod schema\n- [x] **Task 3.5:** Add PATCH /tasks/:id for status and fields\n- [x] **Task 3.6:** Add DELETE /tasks/:id as a soft delete\n- [x] **Task 3.7:** Filter GET /tasks by status and assignee\n- [x] **Task 3.8:** Return one error shape for 400, 404 and 409\n- [x] **Task 3.9:** Document the endpoints in openapi.yaml\n- [x] **Task 3.10:** Write tests for paging, filters and validation\n- [x] **Task 3.11:** Run the test suite and record the results"
+          "md": "# Phase 3: API endpoints\n\n**Status:** Complete\n**Estimated Tasks:** 11\n\n## Tasks\n\n- [x] **Task 3.1:** Register the /tasks routes plugin\n- [x] **Task 3.2:** Add GET /tasks with cursor paging\n- [x] **Task 3.3:** Add GET /tasks/:id\n- [x] **Task 3.4:** Add POST /tasks with a Zod schema\n- [x] **Task 3.5:** Add PATCH /tasks/:id for status and fields\n- [x] **Task 3.6:** Add DELETE /tasks/:id as a soft delete\n- [x] **Task 3.7:** Filter GET /tasks by status and assignee\n- [x] **Task 3.8:** Return one error shape for 400, 404 and 409\n- [x] **Task 3.9:** Document the endpoints in openapi.yaml\n- [x] **Task 3.10:** Write tests for paging, filters and validation\n- [x] **Task 3.11:** Run the test suite and record the results"
         }
       ]
     },

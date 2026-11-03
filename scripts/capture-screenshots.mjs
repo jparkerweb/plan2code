@@ -74,7 +74,7 @@ const SHOTS = {
   },
   question: { workflow: "plan", posts: ["question"] },
   doc: { workflow: "plan", posts: ["doc"], tab: "What we've agreed" },
-  build: { workflow: "implement", posts: ["build"], tab: "Phase 3 tasks" },
+  build: { workflow: "implement", posts: ["build"], tab: "phase-3.md" },
   signoff: { workflow: "implement", posts: ["signoff"] },
   finish: { workflow: "implement", posts: ["signoff", "finish"] },
   ask: { workflow: "plan", posts: ["question"], ask: "Where are tasks paged?" },

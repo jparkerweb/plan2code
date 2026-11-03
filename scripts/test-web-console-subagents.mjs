@@ -452,24 +452,21 @@ test("docs: a doc's version never goes back; the same version again is fine, and
 
 test("docs: a second phase in one build session goes through as notes/implement.md teaches it", () => {
   const md = fs.readFileSync(path.join(ROOT, "src", "web-console", "notes", "implement.md"), "utf8");
-  assert.match(md, /A later phase posts the same two docs/);
+  assert.match(md, /A later phase posts the same doc with the new title and file/);
   assert.match(fs.readFileSync(path.join(ROOT, "src", "web-console", "console-docs.md"), "utf8"), /`version`: moves by itself when content changes and never goes back; leave it out/);
   const taught = consoleSession(["--workflow", "implement"]);
   try {
     // As taught: no version anywhere, and the second phase simply goes through.
     const phase = (n, md) => ({
       headline: { stage: `Phase ${n}`, cleared: 0 },
-      docs: [
-        { id: "phase", title: `Phase ${n} tasks`, blocks: [{ id: "tasks", state: "settled", md }] },
-        { id: "phasefile", title: `phase-${n}.md`, blocks: [{ id: "body", state: "settled", md }] },
-      ],
+      docs: [{ id: "phasefile", title: `phase-${n}.md`, blocks: [{ id: "body", state: "settled", md }] }],
     });
     assert.equal(postPatch(taught, phase(1, "- [ ] Task 1.1")).status, 0);
     assert.equal(postPatch(taught, phase(1, "- [x] Task 1.1")).status, 0);
     assert.equal(postPatch(taught, phase(2, "- [ ] Task 2.1")).status, 0);
     assert.deepEqual(
       readState(taught.session).docs.map((d) => [d.id, d.title, d.version]),
-      [["phase", "Phase 2 tasks", 3], ["phasefile", "phase-2.md", 3]]
+      [["phasefile", "phase-2.md", 3]]
     );
   } finally {
     cli(["stop", "--session", taught.sid, "--force"]);
@@ -479,10 +476,7 @@ test("docs: a second phase in one build session goes through as notes/implement.
   try {
     const phase = (n, version, md) => ({
       headline: { stage: `Phase ${n}`, cleared: 0 },
-      docs: [
-        { id: "phase", title: `Phase ${n} tasks`, version, blocks: [{ id: "tasks", state: "settled", md }] },
-        { id: "phasefile", title: `phase-${n}.md`, version, blocks: [{ id: "body", state: "settled", md }] },
-      ],
+      docs: [{ id: "phasefile", title: `phase-${n}.md`, version, blocks: [{ id: "body", state: "settled", md }] }],
     });
     assert.equal(postPatch(s, phase(1, 1, "- [ ] Task 1.1")).status, 0);
     assert.equal(postPatch(s, phase(1, 2, "- [x] Task 1.1")).status, 0);
@@ -492,7 +486,7 @@ test("docs: a second phase in one build session goes through as notes/implement.
     const docs = readState(s.session).docs;
     assert.deepEqual(
       docs.map((d) => [d.id, d.title, d.version]),
-      [["phase", "Phase 2 tasks", 3], ["phasefile", "phase-2.md", 3]]
+      [["phasefile", "phase-2.md", 3]]
     );
   } finally {
     cli(["stop", "--session", s.sid, "--force"]);
