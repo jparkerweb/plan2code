@@ -32,12 +32,17 @@
     <link rel="modulepreload" href="/screens/looks.js" />
     <link rel="modulepreload" href="/screens/prefs-dialog.js" />
     <link rel="modulepreload" href="/screens/agents-view.js" />
+    <link rel="modulepreload" href="/screens/agents/agents-data.js" />
+    <link rel="modulepreload" href="/screens/agents/agents-list-editor.js" />
+    <link rel="modulepreload" href="/screens/agents/agents-summary.js" />
+    <link rel="modulepreload" href="/screens/agents/agents-form.js" />
     <link rel="modulepreload" href="/screens/cleanup.js" />
     <link rel="modulepreload" href="/screens/help-dialog.js" />
     <link rel="modulepreload" href="/screens/workspace.js" />
     <link rel="modulepreload" href="/screens/ask.js" />
     <link rel="modulepreload" href="/screens/notepad.js" />
     <link rel="modulepreload" href="/screens/activities.js" />
+    <link rel="modulepreload" href="/screens/setup.js" />
     <link rel="modulepreload" href="/activities.js" />
     <link rel="modulepreload" href="/tones.js" />
     <link rel="modulepreload" href="/net.js" />
@@ -288,6 +293,7 @@
                  resting arms; adrift shows none at all. -->
             <g class="arms a-rest"><g class="arm"><path d="M3 18 L1.3 21" /><circle cx="1.3" cy="21" r="0.85" /></g><g class="arm"><path d="M19 18 L20.7 21" /><circle cx="20.7" cy="21" r="0.85" /></g></g>
             <g class="arms a-point"><g class="arm"><path d="M3 18 L1.3 21" /><circle cx="1.3" cy="21" r="0.85" /></g><g class="arm wave"><path d="M19 17.5 L21.4 14.9" /><circle cx="21.4" cy="14.9" r="0.85" /></g></g>
+            <g class="arms a-setup"><g class="arm"><path d="M3 18 L1.3 21" /><circle cx="1.3" cy="21" r="0.85" /></g><g class="arm wave"><path d="M19 17.5 L21.4 14.9" /><circle cx="21.4" cy="14.9" r="0.85" /></g></g>
             <g class="arms a-work"><g class="arm pump-l"><path d="M3 18 L1.1 20.6" /><circle cx="1.1" cy="20.6" r="0.85" /></g><g class="arm pump-r"><path d="M19 18 L20.9 20.6" /><circle cx="20.9" cy="20.6" r="0.85" /></g></g>
             <g class="arms a-done"><g class="arm"><path d="M3 16.5 L1.1 13.7" /><circle cx="1.1" cy="13.7" r="0.85" /></g><g class="arm"><path d="M19 16.5 L20.9 13.7" /><circle cx="20.9" cy="13.7" r="0.85" /></g></g>
             <g class="arms a-gone"><g class="arm"><path d="M3 18.6 L2.5 22.2" /><circle cx="2.5" cy="22.2" r="0.85" /></g><g class="arm"><path d="M19 18.6 L19.5 22.2" /><circle cx="19.5" cy="22.2" r="0.85" /></g></g>
@@ -826,6 +832,28 @@
           </g>
         </g>
       </svg>
+      <!-- Agent setup: waving hello at a terminal window, its prompt waiting
+           for the command line that brings an agent. -->
+      <svg class="pose pose-setup" data-pose="setup" viewBox="0 4 240 216" aria-hidden="true" focusable="false">
+        <ellipse class="shadow" cx="106" cy="198" rx="34" ry="5" />
+        <ellipse class="shadow" cx="198" cy="198" rx="24" ry="4" />
+        <g class="bob">
+          <g transform="translate(-14 0)">
+            <rect class="fl foot f1" x="94" y="179" width="20" height="10" rx="5" />
+            <rect class="fl foot f2" x="126" y="179" width="20" height="10" rx="5" />
+            <rect class="sh" x="80" y="72" width="80" height="108" rx="16" />
+            <path class="ln" d="M80 126 L66 150" /><circle class="fl" cx="66" cy="150" r="5.5" />
+            <path class="ln" d="M160 118 L176 92" /><circle class="fl" cx="176" cy="92" r="5.5" />
+            <g class="in-look"><path class="ey blink" d="M124 86 L127.64 94.98 L137.31 95.67 L129.9 101.92 L132.23 111.33 L124 106.2 L115.77 111.33 L118.1 101.92 L110.69 95.67 L120.36 94.98 Z" /></g>
+            <path class="es" d="M112 122 Q120 128 128 122" />
+          </g>
+        </g>
+        <g class="prop">
+          <rect class="lt" x="172" y="146" width="52" height="38" rx="5" />
+          <path class="lt" d="M182 158 L188 164 L182 170" />
+          <path class="lt" d="M194 170 L206 170" />
+        </g>
+      </svg>
     </template>
 
     <!-- The Help dialog's content, cloned into #help-modal the first time ? is
@@ -919,6 +947,9 @@
           <circle cx="9" cy="7" r="1.8" />
           <circle cx="15" cy="12" r="1.8" />
           <circle cx="7" cy="17" r="1.8" />
+        </symbol>
+        <symbol id="hi-setup" viewBox="0 0 24 24" fill="none">
+          <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.8-3.8a6 6 0 0 1-8 8l-6.9 6.9a2.12 2.12 0 0 1-3-3l6.9-6.9a6 6 0 0 1 8-8l-3.8 3.8z" />
         </symbol>
         <symbol id="hi-privacy" viewBox="0 0 24 24" fill="none">
           <rect x="5" y="10.5" width="14" height="10" rx="2" />
@@ -2030,16 +2061,12 @@
           example "Task 5 of 9: the rate limiter". Tasks are counted within the
           phase, and the progress bar counts the same way: "5 of 9 done".
         </p>
-        <h4>The task list and the phase file</h4>
+        <h4>The phase file</h4>
         <ul>
           <li>
-            The phase's task list has its own tab, and each task ticks as soon as
-            it is finished and saved.
-          </li>
-          <li>
-            The phase file itself, such as <code>phase-3.md</code>, is in the tab
-            beside it: what has to be true before the phase starts, and every
-            task in full, not just the checklist.
+            The phase file, such as <code>phase-3.md</code>, has its own tab:
+            what has to be true before the phase starts, and every task in
+            full, each one ticking as soon as it is finished and saved.
           </li>
         </ul>
         <h4>Questions along the way</h4>
@@ -3225,7 +3252,7 @@
           Nothing here is saved as you type. Each form has its own
           <strong>Save</strong> and <strong>Discard</strong>, and an
           <strong>Unsaved</strong> badge while it holds a change. Leaving a form
-          with an unsaved change (another tab, Back to summary, Close) asks
+          with an unsaved change (another tab, another agent, Close) asks
           first: save it, discard it, or keep editing.
         </p>
         <h4>System</h4>
@@ -3306,7 +3333,59 @@
         </ul>
       </section>
 
-      <!-- Tab 19: Privacy and where things are saved -->
+      <!-- Tab 19: Setting up an agent -->
+      <section class="help-panel" data-tab="setup">
+        <h3>Setting up an agent</h3>
+        <p class="help-lead">
+          Plan2Code runs an AI agent for you. When this page shows, it could
+          not find one on this computer, so its whole job is getting you one.
+        </p>
+        <h4>What the states mean</h4>
+        <p>
+          Each agent on the page says what Plan2Code found when it looked:
+        </p>
+        <ul>
+          <li>
+            <strong>Found</strong>: the agent is installed and ready. Pick it
+            and Plan2Code starts it.
+          </li>
+          <li>
+            <strong>Found outside PATH</strong>: the agent is installed, but
+            your computer's PATH does not know it, so Plan2Code cannot start
+            it by name yet.
+          </li>
+          <li>
+            <strong>Not found</strong>: the agent is not installed, or not
+            anywhere Plan2Code looks. Its install lines are right there, each
+            with a Copy button.
+          </li>
+        </ul>
+        <p>
+          After you install one, press <strong>Check again</strong>: the page
+          re-checks without you restarting anything.
+        </p>
+        <h4>Found outside PATH</h4>
+        <p>
+          <strong>Use it from here</strong> saves the location Plan2Code found,
+          so the agent works without you touching PATH at all. If you would
+          rather fix PATH yourself, the page shows the steps for your computer.
+        </p>
+        <h4>Templates</h4>
+        <p>
+          Under the agents are <strong>templates</strong>: starting setups for
+          agents Plan2Code does not ship. Using one opens the same form as
+          adding an agent by hand, already filled in; nothing is saved until
+          you press Save.
+        </p>
+        <h4>Signing in is yours</h4>
+        <p>
+          Some agents ask you to sign in or enter an API key the first time
+          they run. Only you can do that, in the agent's own window:
+          Plan2Code never signs in, types a key or accepts terms for you.
+        </p>
+      </section>
+
+      <!-- Tab 20: Privacy and where things are saved -->
       <section class="help-panel" data-tab="privacy">
         <h3>Privacy and where things are saved</h3>
         <p class="help-lead">
@@ -3438,16 +3517,14 @@
             </section>
             <section class="prefs-panel" data-tab="agents">
               <div class="prefs-agents" data-section="agents">
-                <p class="help" id="agents-intro">Most people never need to change this. Plan2Code finds the agents installed on this machine and ships an up-to-date model list with every release.</p>
-                <table class="prefs-agents-table" id="agents-table">
-                  <thead>
-                    <tr><th scope="col">Agent</th><th scope="col" class="prefs-agents-models">Models</th><th scope="col">On this machine</th><th scope="col"></th></tr>
-                  </thead>
-                  <tbody></tbody>
-                </table>
-                <button type="button" class="btn small" id="agents-add">Add agent</button>
-                <span class="help" id="agents-status" role="status"></span>
-                <div id="agents-form" class="prefs-agents-form" hidden></div>
+                <p class="help" id="agents-intro" data-av="intro">Most people never need to change this. Plan2Code finds the agents installed on this machine and ships an up-to-date model list with every release.</p>
+                <div class="split" id="agents-split">
+                  <div class="split-list" id="agents-table" data-av="table">
+                    <button type="button" class="btn small ghost split-add" id="agents-add" data-av="add">Add agent</button>
+                  </div>
+                  <div class="split-pane" id="agents-form" data-av="form"></div>
+                </div>
+                <span class="help" id="agents-status" data-av="status" role="status"></span>
               </div>
             </section>
             <section class="prefs-panel" data-tab="system">
@@ -3546,7 +3623,7 @@
       </fieldset>
       <fieldset class="modal-ranges">
         <legend>Instruction</legend>
-        <textarea id="subagents-instruction" rows="4" maxlength="2000" aria-label="Instruction"></textarea>
+        <div id="subagents-instruction"></div>
         <div class="models-actions">
           <button type="button" class="btn small ghost" id="subagents-default">Reset to default</button>
           <span class="help">Passed to the agent as written, at its next check-in.</span>
@@ -3616,15 +3693,15 @@
       </div>
     </dialog>
 
-    <!-- The Notebook's full-screen picture preview, opened over the Notebook
-         from a thumbnail by screens/notepad.js. -->
-    <dialog class="modal notepad-preview" id="notepad-preview" aria-label="Image preview">
-      <img class="notepad-preview-img" id="notepad-preview-img" alt="" />
-      <button type="button" class="notepad-preview-step is-prev" id="notepad-preview-prev" aria-label="Previous image">‹</button>
-      <button type="button" class="notepad-preview-step is-next" id="notepad-preview-next" aria-label="Next image">›</button>
-      <div class="notepad-preview-bar">
-        <p class="notepad-preview-count" id="notepad-preview-count" aria-live="polite"></p>
-        <button type="button" class="btn small notepad-preview-close" id="notepad-preview-close">Close</button>
+    <!-- The page's full-screen picture preview, opened over whatever is on
+         screen from any thumbnail by openPicview() in uploads.js. -->
+    <dialog class="modal picview" id="picview" aria-label="Image preview">
+      <img class="picview-img" id="picview-img" alt="" />
+      <button type="button" class="picview-step is-prev" id="picview-prev" aria-label="Previous image">‹</button>
+      <button type="button" class="picview-step is-next" id="picview-next" aria-label="Next image">›</button>
+      <div class="picview-bar">
+        <p class="picview-count" id="picview-count" aria-live="polite"></p>
+        <button type="button" class="btn small picview-close" id="picview-close">Close</button>
       </div>
     </dialog>
 

@@ -26,14 +26,13 @@ import {
   nextSave,
   noteBytes,
   saveStatus,
-  step,
   tabNameProblem,
   tabSwitch,
   unsaved,
 } from "../notepad.js";
 import { el, lightDismiss } from "../render.js";
 import { postJson } from "../net.js";
-import { reencode } from "../uploads.js";
+import { reencode, openPicview } from "../uploads.js";
 import { createTabs } from "../notepad-tabs.js";
 import { skillFor } from "../skills.js";
 
@@ -629,7 +628,7 @@ export async function addNotepadImages(files) {
 function thumbItem(entry, n) {
   const item = el("li", `attach-thumb notepad-thumb is-${entry.status}`);
   item.dataset.key = entry.key;
-  const open = el("button", "notepad-thumb-open");
+  const open = el("button", "attach-open");
   open.type = "button";
   const src = entry.thumb || entry.url;
   if (src) {
@@ -690,7 +689,7 @@ function thumbItem(entry, n) {
 }
 
 // The controls a thumbnail can hold the focus on, by class.
-const THUMB_CONTROLS = ["notepad-thumb-open", "notepad-thumb-delete", "notepad-ask-keep", "notepad-ask-delete", "notepad-retry"];
+const THUMB_CONTROLS = ["attach-open", "notepad-thumb-delete", "notepad-ask-keep", "notepad-ask-delete", "notepad-retry"];
 
 // Every redraw rebuilds the thumbnails, which would drop a focused button
 // out of the page: the focus goes back to the same control, or to that
@@ -703,7 +702,7 @@ function drawStrip() {
   const control = was && THUMB_CONTROLS.find((cls) => active.classList.contains(cls));
   strip.replaceChildren(...images.map((entry, i) => thumbItem(entry, i + 1)));
   if (!was) return;
-  if (!(control && focusIn(was.dataset.key, "." + control)) && !focusIn(was.dataset.key, ".notepad-thumb-open")) {
+  if (!(control && focusIn(was.dataset.key, "." + control)) && !focusIn(was.dataset.key, ".attach-open")) {
     $("notepad-add").focus();
   }
 }
@@ -748,7 +747,7 @@ async function remove(entry) {
   drop(entry.key);
   drawStrip();
   const next = images[at] || images[at - 1];
-  if (next) focusIn(next.key, ".notepad-thumb-open");
+  if (next) focusIn(next.key, ".attach-open");
   else $("notepad-add").focus();
 }
 
@@ -768,58 +767,15 @@ function takeStored(list, tabId) {
 
 /* ------------------------------------------------------------ preview */
 
-// What the preview steps through (the pictures with a stored copy, as they
-// stood when it opened), which one shows, and the thumbnail it opened from.
-let viewing = { list: [], index: -1, from: null };
-
-function showAt(index) {
-  const { list } = viewing;
-  const entry = list[index];
-  viewing.index = index;
-  const pic = $("notepad-preview-img");
-  pic.src = entry.url;
-  pic.alt = `Notebook image ${images.indexOf(entry) + 1}`;
-  $("notepad-preview-count").textContent = `${index + 1} of ${list.length}`;
-  $("notepad-preview-prev").hidden = $("notepad-preview-next").hidden = list.length < 2;
-}
-
+// The shared picview over the strip's pictures (those with a stored copy, as
+// they stand now); closing it puts the focus back on the opening thumbnail.
 function openPreview(entry) {
   const list = images.filter((img) => img.url);
-  const index = list.indexOf(entry);
-  if (index < 0) return;
-  viewing = { list, index, from: entry.key };
-  showAt(index);
-  const dlg = $("notepad-preview");
-  if (!dlg.open) dlg.showModal();
-  $("notepad-preview-close").focus();
-}
-
-function move(delta) {
-  const index = step(viewing.index, delta, viewing.list.length);
-  if (index >= 0) showAt(index);
-}
-
-// Esc is taken here and closes the preview alone: left to the browser, it
-// could reach the Notebook underneath too.
-function wirePreview() {
-  const dlg = $("notepad-preview");
-  $("notepad-preview-prev").addEventListener("click", () => move(-1));
-  $("notepad-preview-next").addEventListener("click", () => move(1));
-  $("notepad-preview-close").addEventListener("click", () => dlg.close());
-  dlg.addEventListener("keydown", (e) => {
-    if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
-      e.preventDefault();
-      move(e.key === "ArrowLeft" ? -1 : 1);
-    } else if (e.key === "Escape") {
-      e.preventDefault();
-      e.stopPropagation();
-      dlg.close();
-    }
-  });
-  dlg.addEventListener("close", () => {
-    $("notepad-preview-img").removeAttribute("src");
-    focusIn(viewing.from, ".notepad-thumb-open");
-  });
+  openPicview(
+    list.map((img) => ({ url: img.url, alt: `Notebook image ${images.indexOf(img) + 1}` })),
+    list.indexOf(entry),
+    () => focusIn(entry.key, ".attach-open"),
+  );
 }
 
 // A paste is a picture paste when it carries image files and no plain text:
@@ -948,7 +904,6 @@ export function wireNotepad() {
   });
   lightDismiss(dlg);
   wireImages(dlg);
-  wirePreview();
   $("btn-notepad").addEventListener("click", openNotepad);
   $("notepad-close").addEventListener("click", () => dlg.close());
   $("notepad-tab-new").addEventListener("click", () => openNameForm("new"));

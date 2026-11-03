@@ -978,15 +978,15 @@ test("the preview opens at the clicked picture, steps and wraps, and Esc closes 
   const urls = stored(s).map((img) => img.url);
   const shown = () =>
     s.page.evaluate(() => ({
-      src: new URL(document.getElementById("notepad-preview-img").src).pathname,
-      count: document.getElementById("notepad-preview-count").textContent,
+      src: new URL(document.getElementById("picview-img").src).pathname,
+      count: document.getElementById("picview-count").textContent,
     }));
 
-  await s.page.click("#notepad-strip li:nth-child(2) .notepad-thumb-open");
-  await s.page.locator("#notepad-preview[open]").waitFor();
+  await s.page.click("#notepad-strip li:nth-child(2) .attach-open");
+  await s.page.locator("#picview[open]").waitFor();
   assert.deepEqual(await shown(), { src: urls[1], count: "2 of 3" });
   await s.page.waitForFunction(() => {
-    const i = document.getElementById("notepad-preview-img");
+    const i = document.getElementById("picview-img");
     return i.complete && i.naturalWidth > 0;
   });
   await s.page.keyboard.press("ArrowRight");
@@ -995,13 +995,13 @@ test("the preview opens at the clicked picture, steps and wraps, and Esc closes 
   assert.deepEqual(await shown(), { src: urls[0], count: "1 of 3" }, "Next wraps to the first");
   await s.page.keyboard.press("ArrowLeft");
   assert.deepEqual(await shown(), { src: urls[2], count: "3 of 3" }, "Previous wraps to the last");
-  await s.page.click("#notepad-preview-prev");
+  await s.page.click("#picview-prev");
   assert.deepEqual(await shown(), { src: urls[1], count: "2 of 3" });
-  await s.page.click("#notepad-preview-next");
+  await s.page.click("#picview-next");
   assert.deepEqual(await shown(), { src: urls[2], count: "3 of 3" });
 
   await s.page.keyboard.press("Escape");
-  await s.page.waitForFunction(() => !document.getElementById("notepad-preview").open);
+  await s.page.waitForFunction(() => !document.getElementById("picview").open);
   assert.equal(await s.page.evaluate(() => document.getElementById("notepad-modal").open), true, "the Notebook stays open");
   assert.equal(
     await s.page.evaluate(() => document.activeElement.closest("li") === document.querySelector("#notepad-strip li:nth-child(2)")),
@@ -1015,11 +1015,11 @@ test("the preview opens at the clicked picture, steps and wraps, and Esc closes 
   for (const id of stored(s).slice(1).map((img) => img.id)) removeImage(s.project, id);
   await openNotepad(s);
   await s.page.waitForFunction(() => document.querySelectorAll("#notepad-strip > li").length === 1);
-  await s.page.click("#notepad-strip .notepad-thumb-open");
-  await s.page.locator("#notepad-preview[open]").waitFor();
-  assert.equal(await s.page.locator("#notepad-preview-prev").isVisible(), false);
-  assert.equal(await s.page.locator("#notepad-preview-next").isVisible(), false);
-  assert.equal(await s.page.locator("#notepad-preview-count").innerText(), "1 of 1");
+  await s.page.click("#notepad-strip .attach-open");
+  await s.page.locator("#picview[open]").waitFor();
+  assert.equal(await s.page.locator("#picview-prev").isVisible(), false);
+  assert.equal(await s.page.locator("#picview-next").isVisible(), false);
+  assert.equal(await s.page.locator("#picview-count").innerText(), "1 of 1");
 });
 
 test("past the cap, what fits is added and the cap sentence stays up; the 201st alone is refused", async (t) => {
@@ -1155,12 +1155,12 @@ test("the notepad works at phone width: full screen, nothing wider than the wind
   const strip = await box("#notepad-strip");
   assert.ok(strip.width > 300, "the pictures get the full width under Add image");
 
-  await s.page.click(".notepad-thumb-open");
-  await s.page.locator("#notepad-preview[open]").waitFor();
+  await s.page.click(".attach-open");
+  await s.page.locator("#picview[open]").waitFor();
   await noSideScroll("the preview");
-  const img = await box("#notepad-preview-img");
+  const img = await box("#picview-img");
   assert.ok(img.x >= 0 && img.x + img.width <= 390, "the picture fits the window");
-  assert.ok((await box("#notepad-preview-close")).height >= 44);
+  assert.ok((await box("#picview-close")).height >= 44);
 });
 
 test("Help's Getting around panel describes the notepad", async (t) => {

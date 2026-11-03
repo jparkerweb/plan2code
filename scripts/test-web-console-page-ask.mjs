@@ -189,6 +189,44 @@ test("a picture attached to a note uploads, and the send carries it in the note'
   assert.ok(note.images[0].path, "the image names the file the console saved");
 });
 
+// What a person sees break: a thumbnail that does nothing on a click, or a
+// picview that opens on the wrong picture and steals the focus when it goes.
+test("a picture thumbnail opens the picview from the note tray and a sent Ask message, and Esc returns the focus", async (t) => {
+  const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_QUESTION });
+  await itemCard(s.page, "q1").waitFor();
+  const aside = s.page.locator("#aside");
+  await aside.locator('input[type="file"]').setInputFiles({ name: "shot.png", mimeType: "image/png", buffer: PNG });
+  await aside.locator(".attach-thumb.is-ready").waitFor();
+
+  await aside.locator(".attach-open").click();
+  await s.page.locator("#picview[open]").waitFor();
+  const shown = () =>
+    s.page.evaluate(() => ({
+      src: new URL(document.getElementById("picview-img").src).pathname,
+      count: document.getElementById("picview-count").textContent,
+    }));
+  const first = await shown();
+  assert.match(first.src, /^\/uploads\//, "the picview shows the upload, not the thumbnail's data: URL");
+  assert.equal(first.count, "1 of 1");
+  await s.page.keyboard.press("Escape");
+  await s.page.waitForFunction(() => !document.getElementById("picview").open);
+  await s.page.waitForFunction(() => document.activeElement && document.activeElement.classList.contains("attach-open"));
+
+  const box = await openAsk(s);
+  const comp = s.page.locator(".ask-composer");
+  await comp.locator('input[type="file"]').setInputFiles({ name: "shot2.png", mimeType: "image/png", buffer: PNG });
+  await comp.locator(".attach-thumb.is-ready").waitFor();
+  await box.fill("See the screenshot.");
+  await s.page.locator(".ask-composer").getByRole("button", { name: "Send", exact: true }).click();
+  const sent = s.page.locator(".ask-row.person .attach-thumb").last();
+  await sent.waitFor();
+  await sent.locator(".attach-open").click();
+  await s.page.locator("#picview[open]").waitFor();
+  assert.equal((await shown()).count, "1 of 1");
+  await s.page.keyboard.press("Escape");
+  await s.page.waitForFunction(() => !document.getElementById("picview").open);
+});
+
 // What a person sees break: the Subagents tab missing once helpers are
 // reported, or showing the wrong state.
 test("posting helpers adds a Subagents tab that lists each with its state and result", async (t) => {

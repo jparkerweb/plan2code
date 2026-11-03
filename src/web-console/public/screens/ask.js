@@ -6,8 +6,9 @@ import { finish, activity, agentAdrift, isDashboard, selSpec, byId, isOpen, loop
 import { el, md, isMac, lightDismiss, shortTime } from "../render.js";
 import { startersFor } from "../starters.js";
 import { looks } from "../looks.js";
-import { thumbs, uploadUrl, docChip, attachTray, CHAT_IMAGES, attachFiles, incomingFiles, deleteUrl, sentAttachments, noteImages, attachRow } from "../uploads.js";
+import { thumbs, uploadUrl, docChip, attachTray, CHAT_IMAGES, attachFiles, incomingFiles, deleteUrl, sentAttachments, noteImages, attachRow, openPicview, refocusThumb } from "../uploads.js";
 import { attachMentions } from "../mention-box.js";
+import { makeMdField } from "../md-field.js";
 import { pickerAccept, attachmentKind, noteAwaiting, threadWho, threadText } from "../answers.js";
 import { postJson } from "../net.js";
 import { CHECKIN_LINE, helperRows, showSwitch, switchLabel, defaultInstruction, PATHFINDER_RESEARCH_LINE, STRENGTHS, DEFAULT_STRENGTH, STRENGTH_HELP } from "../subagents.js";
@@ -25,6 +26,10 @@ let askPaintedOffline = false;
 export const declineOpen = new Map();
 
 const deciding = new Set();
+
+// The Subagents dialog's instruction box, a Markdown field made once in
+// wireAsk into its #subagents-instruction mount.
+let instrField = null;
 
 // The frame's chat block, with `offline` worked out now rather than when the
 // frame was sent: the agent comes and goes between frames, and /ping keeps
@@ -125,7 +130,11 @@ function askStarters(ss) {
 function askRow(r, ss, notes) {
   if (r.kind === "decision") {
     const row = el("div", "ask-row decision");
-    row.appendChild(el("p", "ask-decision", r.decision !== "approve" ? "You declined the edit." : r.done ? "You approved the edit." : "You approved the edit, please wait..."));
+    const working = r.decision === "approve" && !r.done;
+    const line = el("p", working ? "ask-decision working" : "ask-decision");
+    if (working) line.appendChild(el("span", "spinner tiny"));
+    line.appendChild(document.createTextNode(r.decision !== "approve" ? "You declined the edit." : r.done ? "You approved the edit." : "You approved the edit, please wait..."));
+    row.appendChild(line);
     if (r.text) row.appendChild(el("p", "ask-text", r.text));
     return row;
   }
@@ -153,14 +162,26 @@ function askRow(r, ss, notes) {
   const hasFiles = r.files && r.files.length;
   if (hasImages || hasFiles) {
     const tray = el("div", "attach-tray");
-    for (const img of r.images || []) {
+    // A message echoed by the server has no key (it keeps path and name), so
+    // the thumbnail's refocus token is the picture's own URL, which is unique
+    // and the same for a pending send and its echo: the token survives a
+    // redraw while the picview is open.
+    (r.images || []).forEach((img, i) => {
       const fig = el("figure", "attach-thumb is-ready");
+      fig.dataset.key = uploadUrl(img);
       const pic = el("img");
       pic.src = thumbs.get(img.key) || uploadUrl(img);
       pic.alt = img.name || "image";
-      fig.appendChild(pic);
+      const open = el("button", "attach-open");
+      open.type = "button";
+      open.appendChild(pic);
+      open.addEventListener("click", () => {
+        const slides = (r.images || []).map((x) => ({ url: uploadUrl(x), alt: x.name || "image" }));
+        openPicview(slides, i, () => refocusThumb(fig.dataset.key));
+      });
+      fig.appendChild(open);
       tray.appendChild(fig);
-    }
+    });
     for (const file of r.files || []) tray.appendChild(docChip(file, "ready"));
     row.appendChild(tray);
   }
@@ -271,14 +292,15 @@ function askComposer(ss) {
   }
   if (page.local.chat.images.length) comp.appendChild(attachTray(CHAT_IMAGES, page.local.chat.images));
 
-  const ta = el("textarea");
-  ta.id = "ask-input";
-  ta.placeholder = "Ask anything about this project";
-  ta.value = page.local.chat.draft || "";
-  ta.disabled = !ss.canType;
-  ta.setAttribute("aria-label", "Your question");
+  const ta = makeMdField({
+    id: "ask-input",
+    placeholder: "Ask anything about this project",
+    label: "Your question",
+    value: page.local.chat.draft || "",
+    disabled: !ss.canType,
+  });
   attachMentions(ta);
-  comp.appendChild(ta);
+  comp.appendChild(ta.el);
 
   const row = el("div", "ask-actions");
   const add = el("button", "btn small ghost", "+ Attach file");
@@ -680,10 +702,12 @@ export function renderAside() {
 
   if (attached.length) wrap.appendChild(attachTray(item.id, attached));
 
-  const ta = el("textarea");
-  ta.id = id;
-  ta.placeholder = "Goes with your next send. It does not answer the question.";
-  ta.value = page.local.drafts[id] || "";
+  const ta = makeMdField({
+    id,
+    placeholder: "Goes with your next send. It does not answer the question.",
+    label: "Add a note, attach a file, or ask something",
+    value: page.local.drafts[id] || "",
+  });
   attachMentions(ta);
   ta.addEventListener("input", () => {
     setDraft(id, ta.value);
@@ -697,7 +721,8 @@ export function renderAside() {
     if (!e.clipboardData.getData("text/plain")) e.preventDefault();
     attachFiles(item.id, files);
   });
-  wrap.appendChild(ta);
+  label.addEventListener("click", () => ta.focus());
+  wrap.appendChild(ta.el);
   aside.appendChild(wrap);
   aside.scrollTop = place;
 }
@@ -779,7 +804,7 @@ export function openSubagents() {
   for (const radio of document.querySelectorAll('input[name="subagents-on"]')) {
     radio.checked = radio.value === (on ? "on" : "off");
   }
-  $("subagents-instruction").value = page.subagentsFrame.instruction ?? defaultInstruction(page.S.workflow);
+  instrField.value = page.subagentsFrame.instruction ?? defaultInstruction(page.S.workflow);
   $("subagents-max").value = String(page.subagentsFrame.max);
   const strength = STRENGTHS.includes(page.subagentsFrame.strength) ? page.subagentsFrame.strength : DEFAULT_STRENGTH;
   for (const radio of document.querySelectorAll('input[name="subagents-strength"]')) radio.checked = radio.value === strength;
@@ -801,7 +826,8 @@ export function openSubagents() {
 export function syncSubagentsFields() {
   const picked = document.querySelector('input[name="subagents-on"]:checked');
   const off = !picked || picked.value !== "on";
-  for (const id of ["subagents-instruction", "subagents-max", "subagents-default"]) $(id).disabled = off;
+  instrField.disabled = off;
+  for (const id of ["subagents-max", "subagents-default"]) $(id).disabled = off;
   for (const radio of document.querySelectorAll('input[name="subagents-strength"]')) radio.disabled = off;
 }
 
@@ -825,7 +851,7 @@ export async function saveSubagents() {
   const save = $("subagents-save");
   const status = $("subagents-status");
   const picked = document.querySelector('input[name="subagents-on"]:checked');
-  const text = $("subagents-instruction").value.trim();
+  const text = instrField.value.trim();
   // The shipped default is stored as null, so a later release's wording
   // reaches everyone who never changed it.
   const instruction = text === defaultInstruction(page.S.workflow) ? null : text;
@@ -853,12 +879,14 @@ export const askOfflineFlipped = () => (askState().send.state === "offline") !==
 
 // The Subagents dialog's buttons, and dropping files onto the notes panel.
 export function wireAsk() {
+  instrField = makeMdField({ className: "subagents-instruction", label: "Instruction", maxLength: 2000 });
+  $("subagents-instruction").appendChild(instrField.el);
   for (const radio of document.querySelectorAll('input[name="subagents-on"]')) radio.addEventListener("change", syncSubagentsFields);
   for (const radio of document.querySelectorAll('input[name="subagents-strength"]')) radio.addEventListener("change", syncStrengthHelp);
   lightDismiss($("subagents-modal"));
   $("btn-subagents").addEventListener("click", openSubagents);
   $("subagents-default").addEventListener("click", () => {
-    $("subagents-instruction").value = defaultInstruction(page.S.workflow);
+    instrField.value = defaultInstruction(page.S.workflow);
   });
   $("subagents-save").addEventListener("click", saveSubagents);
   $("subagents-cancel").addEventListener("click", () => $("subagents-modal").close());
