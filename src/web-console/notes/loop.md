@@ -15,7 +15,12 @@ approve.
   `loopOutcome` and `handledBy` are refused. If it exits 3, the run is not inside
   the app: say "Loop mode runs only inside the Plan2Code desktop app." in the
   terminal and continue as an ordinary run with the person's sign-off. Skip
-  nothing below unless that `open` succeeded.
+  nothing below unless that `open` succeeded. Every later `open --resume` in
+  this run (the server went away: `chat` or `wait` exit 20) carries `--loop`
+  too, as `open --resume <sid> --workflow <yours> --loop`: a resume without it
+  unlocks the session, and the `loopOutcome` post is then refused.
+- `--phase <N>`: the phase the app is building. Build exactly that one (see
+  Choosing the phase); the app refuses a report that names another.
 - `--fix <levels>`: a comma list from `critical`, `warning`, `suggestion`, the
   levels to fix in the one fix round. Absent means findings are reported, not
   fixed.
@@ -30,7 +35,7 @@ approve.
 
 ## What changes in loop mode
 
-- Pick the phase without asking (Choosing the phase).
+- Build the phase `--phase` names, without asking (Choosing the phase).
 - No sign-off card, no "Approve this phase", no Show me it working, no Continue
   offer.
 - Never run `specs.mjs mark --to done`, and never set `[x]` on the phase in
@@ -61,14 +66,23 @@ shows as Build, so do not invent new ones in loop mode. Keep `cleared` and
 
 ## Choosing the phase
 
-Run `node "<S>/specs.mjs" status specs/<feature>`. A phase whose checklist marker
-is `[/]` goes first; otherwise take `next.phase.number` (the first of
-`next.options` when `next.action` is `choose`). Never post the "Resume?" question
-or the parallel-phase pick. Set the phase in progress with
-`specs.mjs mark <spec> --phase N --to in-progress`, exactly as an ordinary run
-does: that mark is allowed, and only `--to done` is the app's. When `next.action`
-is `none` or `checkoff` (no open phase), post a `loopOutcome` with
-`result: "failed"`, `reason: "other"` and
+The phase is N from `--phase N`, whatever `next` in `specs.mjs status` would
+pick. Never post the "Resume?" question or the parallel-phase pick. Run
+`node "<S>/specs.mjs" status specs/<feature>` and find phase N in `phases`:
+
+- Its `checklist` is `pending` or `in-progress`: build it. Set it in progress with
+  `specs.mjs mark <spec> --phase N --to in-progress`, exactly as an ordinary run
+  does: that mark is allowed, and only `--to done` is the app's.
+- It is `blocked` (`[!]`): build nothing; post a `loopOutcome` with
+  `result: "failed"`, `reason: "blocked"`, its `blockedTasks` ids (like `2.4`)
+  in `tasks.blocked` and `summary: "Phase N is marked blocked in overview.md"`.
+- It is `complete` or `assumed`, or not in the checklist: build nothing; post
+  `result: "failed"`, `reason: "other"` and
+  `summary: "Phase N is not an open phase in this spec"`.
+
+No `--phase` (an older app): take `next.phase.number` (the first of
+`next.options` when `next.action` is `choose`), and when `next.action` is `none`
+or `checkoff` post `result: "failed"`, `reason: "other"` and
 `summary: "No open phase left in this spec"`.
 
 ## Questions and cards the loop handles

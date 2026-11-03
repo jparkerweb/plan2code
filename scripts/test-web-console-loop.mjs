@@ -237,10 +237,19 @@ test("each bad loopOutcome field is refused with a message naming it", () => {
   assert.deepEqual(tryPatch(loopState(), { loopOutcome: edge }).problems, [], "100 characters, 50 entries and 200 characters are the limits, not over them");
 });
 
+test("an unfixed finding's title and file are one line, as in the fixed and skipped lists", () => {
+  const o = goodOutcome();
+  o.review.unfixed = [{ level: "suggestion", title: "Name\nthe timer", file: "src/x.js\nsrc/y.js" }];
+  const problems = tryPatch(loopState(), { loopOutcome: o }).problems.join("\n");
+  assert.match(problems, /review\.unfixed\[0\]\.title must be a non-empty one-line string/);
+  assert.match(problems, /review\.unfixed\[0\]\.file must be a one-line string when present/);
+});
+
 test("loopOutcome is refused outside a loop session and a second time", () => {
   const unlocked = loopState();
   delete unlocked.loop;
   assert.match(tryPatch(unlocked, { loopOutcome: goodOutcome() }).problems.join("\n"), /loopOutcome: is only accepted in a loop session/);
+  assert.match(tryPatch(unlocked, { loopOutcome: goodOutcome() }).problems.join("\n"), /--workflow <yours> --loop, then post this again/, "the refusal says how to lock the session again");
 
   const first = tryPatch(loopState(), { loopOutcome: goodOutcome() });
   assert.deepEqual(first.problems, []);
@@ -560,6 +569,9 @@ test("loop-setup: GET /loop-setup lists the phases left for a spec and refuses a
       "- [x] **Phase 1:** Setup - [phase-1.md](phase-1.md)",
       "- [ ] **Phase 2:** Build the screen - [phase-2.md](phase-2.md)",
       "- [/] **Phase 3:** Ship it - [phase-3.md](phase-3.md)",
+      "- [X] **Phase 4:** Done in capitals - [phase-4.md](phase-4.md)",
+      "- [?] **Phase 5:** Assumed done - [phase-5.md](phase-5.md)",
+      "- [!] **Phase 6:** Blocked - [phase-6.md](phase-6.md)",
       "",
       "## Notes",
       "",
@@ -592,7 +604,8 @@ test("loop-setup: GET /loop-setup lists the phases left for a spec and refuses a
 
     const demo = await get("?spec=specs/demo");
     assert.equal(demo.status, 200);
-    assert.deepEqual(demo.body.phasesLeft, [{ n: 2, name: "Build the screen" }, { n: 3, name: "Ship it" }]);
+    // Done as specs.mjs reads it: [x], [X] and [?]. A blocked phase is still left, as the app's Start counts it.
+    assert.deepEqual(demo.body.phasesLeft, [{ n: 2, name: "Build the screen" }, { n: 3, name: "Ship it" }, { n: 6, name: "Blocked" }]);
     assert.equal(demo.body.suggestedQuickCheck, "npm run build");
     assert.equal(demo.body.remembered, false);
 

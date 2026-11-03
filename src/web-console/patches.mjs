@@ -572,7 +572,9 @@ export function applyPatch(state, patch) {
       case "loopOutcome":
         // The skill's one report of a phase built under the loop. The shape is
         // checked by validate(); here only who may send it, and how often.
-        if (!state.loop?.driving) throw new Error(rule("", "loopOutcome", "is only accepted in a loop session"));
+        if (!state.loop?.driving) {
+          throw new Error(rule("", "loopOutcome", "is only accepted in a loop session; a resume without --loop unlocked it, so run open --resume <sid> --workflow <yours> --loop, then post this again"));
+        }
         if (state.loopOutcome !== undefined) throw new Error(rule("", "loopOutcome", "was already posted for this session"));
         next.loopOutcome = v;
         break;
@@ -1143,9 +1145,9 @@ export function loopOutcomeProblems(o) {
       r.unfixed.forEach((u, i) => {
         if (!isPlainObject(u)) return bad(`review.unfixed[${i}]`, "must be an object { level, title, file? }");
         if (!LOOP_LEVELS.includes(u.level)) bad(`review.unfixed[${i}].level`, `must be one of ${LOOP_LEVELS.join(", ")}`);
-        if (typeof u.title !== "string" || !u.title.trim()) bad(`review.unfixed[${i}].title`, "must be a non-empty string");
+        if (typeof u.title !== "string" || !u.title.trim() || /[\r\n]/.test(u.title)) bad(`review.unfixed[${i}].title`, "must be a non-empty one-line string");
         else prose(`review.unfixed[${i}].title`, u.title);
-        if (u.file !== undefined && typeof u.file !== "string") bad(`review.unfixed[${i}].file`, "must be a string when present");
+        if (u.file !== undefined && (typeof u.file !== "string" || /[\r\n]/.test(u.file))) bad(`review.unfixed[${i}].file`, "must be a one-line string when present");
         else prose(`review.unfixed[${i}].file`, u.file);
       });
     }

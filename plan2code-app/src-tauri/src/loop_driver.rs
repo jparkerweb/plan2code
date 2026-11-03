@@ -494,14 +494,15 @@ fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
 
 // ---------------------------------------------------------- pure judgment
 
-/// The first prompt of a phase's fresh agent.
-pub fn phase_prompt(spec: &str, setup: &LoopSetup) -> String {
+/// The first prompt of a phase's fresh agent. `phase` names the phase to build,
+/// so the agent never picks one by its own rules and reports another.
+pub fn phase_prompt(spec: &str, phase: u32, setup: &LoopSetup) -> String {
     let skill = if setup.review {
         "plan2code-3-implement-review"
     } else {
         "plan2code-3-implement"
     };
-    let mut prompt = format!("/{skill} {spec}/overview.md --web --loop");
+    let mut prompt = format!("/{skill} {spec}/overview.md --web --loop --phase {phase}");
     if setup.review {
         if setup.fix_mode == FixMode::Smart {
             prompt.push_str(" --fix smart");
@@ -882,6 +883,12 @@ pub fn validate_spec(project: &Path, spec: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// Whether a phase row from `specs.mjs status` is done in its Phase Checklist:
+/// the script's own `checklist` state, so `[X]` and `[?]` count as `[x]` does.
+pub fn checklist_done(phase: &Value) -> bool {
+    matches!(phase["checklist"].as_str(), Some("complete" | "assumed"))
+}
+
 static NEXT_RUN: AtomicU64 = AtomicU64::new(1);
 
 /// Everything Start checks before the confirm: the spec, the saved setup, the
@@ -927,7 +934,10 @@ pub fn prepare_with(
             all.iter()
                 .filter_map(|p| {
                     let n = u32::try_from(p["number"].as_u64()?).ok()?;
-                    if p["marker"].as_str() == Some("x") && !rebuilt.contains(&n) {
+                    // Done is what `specs.mjs` calls done: `[x]`, `[X]` and `[?]`.
+                    // A blocked `[!]` phase stays in, so the loop stops on it
+                    // with its reason rather than building past it.
+                    if checklist_done(p) && !rebuilt.contains(&n) {
                         return None;
                     }
                     Some(PhaseRecord {
@@ -1347,7 +1357,7 @@ fn start_phase(ctx: &Ctx, index: usize) -> Result<(), String> {
         rec.phase_started_at = Instant::now();
         rec.activity_checked = Instant::now();
         rec.last_activity = SystemTime::now();
-        phase_prompt(&rec.spec, &rec.setup)
+        phase_prompt(&rec.spec, rec.phases[index].n, &rec.setup)
     };
     // Said before the agent starts: the banner is up from the moment of Start,
     // and says what is happening between phases.
@@ -2564,8 +2574,14 @@ fn finish(ctx: &Ctx) {
     } else {
         format!("All {built} phases built")
     };
-    let markdown = summary_markdown(&rec, &date);
-    let written = write_atomic(&spec_dir.join(&file), &markdown);
+    // Written before Finalize starts, saying what is planned; rewritten below
+    // when what happened differs, so the file never claims a Finalize that
+    // did not start.
+    let planned = finalize_note(&rec.setup, stop_requested(ctx), None);
+    let written = write_atomic(
+        &spec_dir.join(&file),
+        &summary_markdown(&rec, &date, &planned),
+    );
     if written.is_ok() {
         // The project holds the report now. A failure here only means the next
         // loop on this spec starts from this report, so it is not worth a stop.
@@ -2578,6 +2594,13 @@ fn finish(ctx: &Ctx) {
     } else {
         None
     };
+    let happened = finalize_note(&rec.setup, skip_finalize, finalize_error.as_deref());
+    if written.is_ok() && happened != planned {
+        let _ = write_atomic(
+            &spec_dir.join(&file),
+            &summary_markdown(&rec, &date, &happened),
+        );
+    }
     // The page always hears the end; a summary that could not be written or a
     // Finalize that could not start is said in the line.
     let mut said = line.clone();
@@ -2726,9 +2749,32 @@ pub(crate) fn write_atomic(file: &Path, text: &str) -> Result<(), String> {
     })
 }
 
-/// `LOOP-SUMMARY-<date>.md`: the setup used, each phase, the end state and the
-/// Finalize offer.
-pub fn summary_markdown(rec: &RunningRecord, date: &str) -> String {
+/// What the summary says about Finalize.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum FinalizeNote {
+    /// After last: Stop and offer Finalize.
+    Offer,
+    /// After last: Run Finalize, and it is starting.
+    Starting,
+    /// After last: Run Finalize, but Stop now came first.
+    Skipped,
+    /// After last: Run Finalize, and it could not start (why, on one line).
+    Failed(String),
+}
+
+/// The Finalize note for the setup, a Stop now and a start's error.
+pub fn finalize_note(setup: &LoopSetup, stopped: bool, error: Option<&str>) -> FinalizeNote {
+    match (setup.after_last, stopped, error) {
+        (AfterLast::OfferFinalize, _, _) => FinalizeNote::Offer,
+        (AfterLast::RunFinalize, true, _) => FinalizeNote::Skipped,
+        (AfterLast::RunFinalize, false, Some(e)) => FinalizeNote::Failed(one_line(e)),
+        (AfterLast::RunFinalize, false, None) => FinalizeNote::Starting,
+    }
+}
+
+/// `LOOP-SUMMARY-<date>.md`: the setup used, each phase, the end state and
+/// what became of Finalize.
+pub fn summary_markdown(rec: &RunningRecord, date: &str, finalize: &FinalizeNote) -> String {
     let setup = &rec.setup;
     let name = rec.spec.strip_prefix("specs/").unwrap_or(&rec.spec);
     let yes = |on: bool| if on { "on" } else { "off" };
@@ -2771,17 +2817,17 @@ pub fn summary_markdown(rec: &RunningRecord, date: &str) -> String {
         "\n## End state\n\nPhases built by this loop: {}.\n\n",
         phase_rows(rec).as_array().map_or(0, Vec::len)
     ));
-    if setup.after_last == AfterLast::RunFinalize {
-        md.push_str(&format!(
-            "Finalize was started in a fresh session: `/plan2code-4-finalize {}/overview.md`.\n",
-            rec.spec
-        ));
-    } else {
-        md.push_str(&format!(
-            "Next: run Finalize with `/plan2code-4-finalize {}/overview.md`.\n",
-            rec.spec
-        ));
-    }
+    let command = format!("`/plan2code-4-finalize {}/overview.md`", rec.spec);
+    md.push_str(&match finalize {
+        FinalizeNote::Starting => format!("Finalize was started in a fresh session: {command}.\n"),
+        FinalizeNote::Offer => format!("Next: run Finalize with {command}.\n"),
+        FinalizeNote::Skipped => format!(
+            "Finalize was not started, as you asked the loop to stop. Next: run Finalize with {command}.\n"
+        ),
+        FinalizeNote::Failed(why) => format!(
+            "Finalize could not start ({why}). Next: run Finalize with {command}.\n"
+        ),
+    });
     md
 }
 
@@ -2868,9 +2914,39 @@ mod tests {
     fn the_summary_never_holds_the_web_address() {
         let mut rec = record("specs/x", vec![phase(1)]);
         rec.setup.notify_url = "https://e.com/hook?token=secret".into();
-        let md = summary_markdown(&rec, "2026-11-01");
+        let md = summary_markdown(&rec, "2026-11-01", &FinalizeNote::Offer);
         assert!(md.contains("Send a notification when it stops: on"));
         assert!(!md.contains("secret"));
+    }
+
+    #[test]
+    fn the_summary_says_what_became_of_finalize() {
+        let mut rec = record("specs/x", vec![phase(1)]);
+        assert_eq!(
+            finalize_note(&rec.setup, true, Some("x")),
+            FinalizeNote::Offer
+        );
+        rec.setup.after_last = AfterLast::RunFinalize;
+        let note = |stopped, error| finalize_note(&rec.setup, stopped, error);
+        assert_eq!(note(false, None), FinalizeNote::Starting);
+        assert_eq!(note(true, None), FinalizeNote::Skipped);
+        assert_eq!(
+            note(false, Some("no\nagent")),
+            FinalizeNote::Failed("no agent".into())
+        );
+        let md = |n: FinalizeNote| summary_markdown(&rec, "2026-11-01", &n);
+        assert!(md(FinalizeNote::Starting).contains("Finalize was started in a fresh session"));
+        for n in [
+            FinalizeNote::Skipped,
+            FinalizeNote::Failed("no agent".into()),
+        ] {
+            let text = md(n);
+            assert!(!text.contains("was started"), "{text}");
+            assert!(text
+                .contains("Next: run Finalize with `/plan2code-4-finalize specs/x/overview.md`."));
+        }
+        assert!(md(FinalizeNote::Failed("no agent".into()))
+            .contains("Finalize could not start (no agent)."));
     }
 
     #[test]
@@ -2937,26 +3013,26 @@ mod tests {
     fn the_prompt_follows_review_fix_and_guess() {
         let mut s = setup();
         assert_eq!(
-            phase_prompt("specs/x", &s),
-            "/plan2code-3-implement-review specs/x/overview.md --web --loop --fix critical,warning,suggestion"
+            phase_prompt("specs/x", 1, &s),
+            "/plan2code-3-implement-review specs/x/overview.md --web --loop --phase 1 --fix critical,warning,suggestion"
         );
         s.fix = vec![FixLevel::Warning];
         s.on_question = OnQuestion::Guess;
         assert_eq!(
-            phase_prompt("specs/x", &s),
-            "/plan2code-3-implement-review specs/x/overview.md --web --loop --fix warning --guess"
+            phase_prompt("specs/x", 3, &s),
+            "/plan2code-3-implement-review specs/x/overview.md --web --loop --phase 3 --fix warning --guess"
         );
         s.fix_mode = FixMode::Smart;
-        assert!(phase_prompt("specs/x", &s).contains(" --fix smart --guess"));
+        assert!(phase_prompt("specs/x", 1, &s).contains(" --fix smart --guess"));
         s.fix.clear();
         s.fix_mode = FixMode::Levels;
         s.on_question = OnQuestion::Pause;
-        assert!(!phase_prompt("specs/x", &s).contains("--fix"));
+        assert!(!phase_prompt("specs/x", 1, &s).contains("--fix"));
         s.review = false;
         s.fix = vec![FixLevel::Critical];
         assert_eq!(
-            phase_prompt("specs/x", &s),
-            "/plan2code-3-implement specs/x/overview.md --web --loop"
+            phase_prompt("specs/x", 2, &s),
+            "/plan2code-3-implement specs/x/overview.md --web --loop --phase 2"
         );
     }
 
@@ -3305,21 +3381,36 @@ second line"
     fn the_prompt_orders_levels_fixed_and_drops_fix_without_review() {
         let mut s = setup();
         s.fix = vec![FixLevel::Suggestion, FixLevel::Critical];
-        assert!(phase_prompt("specs/x", &s).ends_with(" --fix critical,suggestion"));
+        assert!(phase_prompt("specs/x", 1, &s).ends_with(" --fix critical,suggestion"));
         s.fix_mode = FixMode::Smart;
-        assert!(phase_prompt("specs/x", &s).ends_with("--web --loop --fix smart"));
-        assert!(!phase_prompt("specs/x", &s).contains("critical"));
+        assert!(phase_prompt("specs/x", 1, &s).ends_with("--web --loop --phase 1 --fix smart"));
+        assert!(!phase_prompt("specs/x", 1, &s).contains("critical"));
         s.review = false;
         assert_eq!(
-            phase_prompt("specs/x", &s),
-            "/plan2code-3-implement specs/x/overview.md --web --loop"
+            phase_prompt("specs/x", 1, &s),
+            "/plan2code-3-implement specs/x/overview.md --web --loop --phase 1"
         );
         s.fix_mode = FixMode::Levels;
         s.on_question = OnQuestion::Guess;
         assert_eq!(
-            phase_prompt("specs/x", &s),
-            "/plan2code-3-implement specs/x/overview.md --web --loop --guess"
+            phase_prompt("specs/x", 1, &s),
+            "/plan2code-3-implement specs/x/overview.md --web --loop --phase 1 --guess"
         );
+    }
+
+    #[test]
+    fn done_is_the_checklist_state_so_capital_x_and_assumed_phases_count() {
+        for state in ["complete", "assumed"] {
+            assert!(checklist_done(
+                &json!({ "marker": "X", "checklist": state })
+            ));
+        }
+        for state in ["pending", "in-progress", "blocked", "unknown"] {
+            assert!(!checklist_done(
+                &json!({ "marker": "x", "checklist": state })
+            ));
+        }
+        assert!(!checklist_done(&json!({ "marker": "x" })));
     }
 
     #[test]
@@ -3503,7 +3594,7 @@ second line"
             ..ReportEntry::default()
         });
         rec.step = Step::Commit;
-        let md = summary_markdown(&rec, "2026-11-01");
+        let md = summary_markdown(&rec, "2026-11-01", &FinalizeNote::Offer);
         assert!(md.contains(
             "| Phase 3: Driver \\| core | a1b2c3d | Add the driver | 0 | 1 | 0 | 0 | 0 | 0 |"
         ));
@@ -4674,6 +4765,42 @@ second line"
         let rec = go();
         assert!(!commits_to_trunk(&rec));
         assert!(!confirm_text(&rec).contains("You are on"));
+    }
+
+    #[test]
+    fn start_skips_phases_specs_mjs_calls_done_and_keeps_a_blocked_one() {
+        if !harness_ready("checklist states") {
+            return;
+        }
+        let repo = throwaway_repo("checklist-states");
+        let spec = repo.join("specs/lunch");
+        std::fs::write(
+            spec.join("overview.md"),
+            "# Lunch - Overview\n\n## Phase Checklist\n\n- [X] [Phase 1: P1](./phase-1.md)\n- [!] [Phase 2: P2](./phase-2.md)\n- [?] [Phase 3: P3](./phase-3.md)\n- [ ] [Phase 4: P4](./phase-4.md)\n",
+        )
+        .unwrap();
+        for n in [1, 4] {
+            std::fs::write(
+                spec.join(format!("phase-{n}.md")),
+                format!("# Phase {n}: P{n}\n\n## Tasks\n\n- [ ] **Task {n}.1:** First\n"),
+            )
+            .unwrap();
+        }
+        git_in(&repo, &["add", "-A"]);
+        git_in(&repo, &["commit", "-q", "-m", "checklist states"]);
+        let rec = prepare_with(
+            &repo,
+            "specs/lunch",
+            prepare_setup(),
+            &LoopReport::new("specs/lunch", "now"),
+            PermissionMode::Bypass,
+            true,
+            false,
+        )
+        .expect("prepare");
+        let numbers: Vec<u32> = rec.phases.iter().map(|p| p.n).collect();
+        assert_eq!(numbers, vec![2, 4]);
+        assert!(phase_prompt(&rec.spec, rec.phases[0].n, &rec.setup).contains(" --phase 2"));
     }
 
     #[test]

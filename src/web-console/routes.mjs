@@ -32,7 +32,7 @@ import { SHOTS_DIR_NAME, SHOT_NAME, shotType } from "./patches.mjs";
 import { appendChat, currentConversation, pendingChatCount, typedCount } from "./inbox.mjs";
 import { specKey } from "./workspace.mjs";
 import { readLoopSetup, saveLoopSetup } from "./loop-setup.mjs";
-import { phaseChecklist } from "./spec-files.mjs";
+import { MARKERS, phaseChecklist } from "./spec-files.mjs";
 import {
   PR_HOST_KINDS,
   readSubagentSetting,
@@ -1334,8 +1334,9 @@ function loopSetupGet(req, res, ctx, url) {
   let phasesLeft = [];
   try {
     const overview = fs.readFileSync(path.join(loopProject(ctx), spec, "overview.md"), "utf8");
+    // Done as specs.mjs reads it ([x], [X], [?]), the same rule the app's Start uses.
     phasesLeft = phaseChecklist(overview)
-      .filter((p) => p.marker !== "x" && p.marker !== "X")
+      .filter((p) => !["complete", "assumed"].includes(MARKERS[p.marker]))
       .map((p) => ({ n: p.number, name: p.name }));
   } catch {
     /* no overview.md: nothing to build */

@@ -418,7 +418,7 @@ pub fn unbacked_marks(
         .as_array()
         .map(|all| {
             all.iter()
-                .filter(|p| p["marker"].as_str() == Some("x"))
+                .filter(|p| crate::loop_driver::checklist_done(p))
                 .filter_map(|p| u32::try_from(p["number"].as_u64()?).ok())
                 .collect()
         })
