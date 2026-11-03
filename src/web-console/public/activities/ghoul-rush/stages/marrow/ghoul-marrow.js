@@ -52,14 +52,16 @@ export const WALL_GAP = 1.5;
 export const houseLeft = (spec) => spec.length - HOUSE_BACK;
 export const houseCenter = (spec) => houseLeft(spec) + HOUSE_W / 2;
 
-// The windows, [row, dx from the house's center, height over the floor]. The
-// rows line up with what YOU can shoot from: the floor; the shelf at 18; the
-// shelf at 30; the shelf at 38 (the gable's two are its eyes). The door is its mouth.
+// The windows, [row, dx from the house's center, height of the window's bottom over
+// the floor]. A bolt flies SHOT_Y (2.4) over YOUR feet and the floor is at 6, so each
+// row's middle sits where a bolt flies from the surface that serves it: the floor
+// (8.4, a window's box reaches it), the shelf at 18 (20.4), the shelf at 30 (32.4) and
+// the shelf at 41 (43.4; the gable's two are its eyes). The door is its mouth.
 export const WINDOWS = freeze([
-  freeze([0, -12.5, 3.6]), freeze([0, 12.5, 3.6]),
-  freeze([1, -13.5, 14.5]), freeze([1, -4.5, 14.5]), freeze([1, 4.5, 14.5]), freeze([1, 13.5, 14.5]),
-  freeze([2, -13.5, 26.5]), freeze([2, -4.5, 26.5]), freeze([2, 4.5, 26.5]), freeze([2, 13.5, 26.5]),
-  freeze([3, -5.5, 36.8]), freeze([3, 5.5, 36.8]),
+  freeze([0, -12.5, 0.3]), freeze([0, 12.5, 0.3]),
+  freeze([1, -13.5, 11.2]), freeze([1, -4.5, 11.2]), freeze([1, 4.5, 11.2]), freeze([1, 13.5, 11.2]),
+  freeze([2, -13.5, 23.2]), freeze([2, -4.5, 23.2]), freeze([2, 4.5, 23.2]), freeze([2, 13.5, 23.2]),
+  freeze([3, -5.5, 34.2]), freeze([3, 5.5, 34.2]),
 ]);
 export const WINDOW_W = 5;
 export const WINDOW_H = 6.4;
