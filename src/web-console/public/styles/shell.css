@@ -417,6 +417,11 @@ h1 {
 
 .attach-row { display: flex; align-items: center; margin: -4px 0 6px -13px; }
 .attach-row.is-under { margin: 6px 0 4px -13px; }
+.attach-row .suggest-chip { margin: 0 0 0 auto; }
+.msg .suggest-tag {
+  display: inline-block; margin-bottom: 4px;
+  background: var(--accent-soft); color: var(--accent); border-color: var(--accent-line);
+}
 .attach-tray { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
 .attach-thumb {
   position: relative;

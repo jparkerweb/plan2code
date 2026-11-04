@@ -28,6 +28,7 @@ import {
   noteAction,
   noteReplyLines,
   progressTotal,
+  pruneStaged,
   recordedAnswer,
   sentAnswer,
   staleLaunchFeedback,
@@ -463,6 +464,18 @@ export function adopt(body) {
       }
       delete page.local.sent[id];
     }
+  }
+  // A re-posted card can drop or rekey an option a pick was staged on: that
+  // pick goes, and the person is told which question lost it.
+  const pruned = pruneStaged(page.S.items || [], page.local.staged);
+  if (pruned.dropped.length) {
+    page.local.staged = pruned.staged;
+    save();
+    const titles = pruned.dropped.map((id) => (byId(id) && byId(id).title) || id).join(", ");
+    const line = `A pick on ${titles} no longer matches the reworded question, so it was cleared.`;
+    banner(line, "info");
+    clearTimeout(arrivalBannerTimer);
+    arrivalBannerTimer = setTimeout(() => !page.gone && $("banner").textContent === line && banner(null), 8000);
   }
   // A retracted send suppresses exactly that send. Once the item moves --
   // settled, sent again (a new `at`), or answered by an agent reply -- the

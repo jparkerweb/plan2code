@@ -1369,10 +1369,11 @@ function submit(req, res, ctx) {
     }
     // Name the items that went. A page with OTHER answers staged should drop
     // only what was sent, and a brief request is a submit carrying no answers
-    // at all, so a blanket "everything is gone" is wrong for both.
+    // at all, so a blanket "everything is gone" is wrong for both. A request
+    // for suggestions sends no answer, so the pick staged on its card stays.
     ctx.broadcast("submitted", {
       rev: ctx.rev,
-      ids: body.actions.map((a) => a && a.i).filter(Boolean),
+      ids: body.actions.filter((a) => a && !(a.type === "comment" && a.suggest === true)).map((a) => a.i).filter(Boolean),
     });
     ctx.pushState();
     return json(res, 200, { ok: true });

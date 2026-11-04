@@ -1,6 +1,6 @@
 // Page tests for the Ask tab: a Quick question and the agent's reply, the
 // starters, a retry after a failed send, a new conversation, a picture attached
-// to a note, and the Subagents tab. Run with:
+// to a note, the Subagents tab, and the Ask for suggestions chip. Run with:
 // node --test scripts/test-web-console-page-ask.mjs
 //
 // Each test drives the real console in a real Chrome or Edge through
@@ -322,4 +322,168 @@ test("the Subagents tab shows a reported helper's strength line and none for a h
   assert.deepEqual(await badges.evaluateAll((els) => els.map((e) => e.className)), ["sa-badge is-strength lvl-2", "sa-badge is-effort lvl-2"]);
   assert.equal(await badges.first().locator(".sa-bars i.on").count(), 2);
   assert.equal(await rows.filter({ hasText: "Check the tests" }).locator(".sa-strength").count(), 0);
+});
+
+// Ask for suggestions: the chip in the Notes on this panel.
+
+const opt = (k, text) => ({ k, text, detail: `The ${text.toLowerCase()} option.` });
+
+// The page's own staged answers, from the module app.js loaded.
+const stagedOn = (s) =>
+  s.page.evaluate(async () => {
+    const { page } = await import("/state.js");
+    return page.local.staged;
+  });
+
+// Opens a question from the sidebar and waits for its card.
+async function goTo(s, id, title) {
+  await s.page.locator("#sidebar").getByRole("button", { name: new RegExp(title) }).click();
+  await itemCard(s.page, id).waitFor();
+  await s.page.waitForFunction((want) => document.getElementById("aside").dataset.item === want, id);
+}
+
+const chipOf = (s) => s.page.locator("#aside").getByRole("button", { name: "Ask Plan2Code for suggestions on this question" });
+
+// What a person sees break: the chip on a card where there is nothing to pick,
+// on a settled record, or missing where they are unsure what to pick.
+test("the Ask for suggestions chip shows on open choice, multi and confirm cards only", async (t) => {
+  const s = await openSession(await suite.browser(), {
+    t,
+    workflow: "plan",
+    payload: {
+      items: [
+        { id: "c1", kind: "choice", title: "Export format", body: "Which format?", options: [opt("A", "CSV"), opt("B", "JSON")] },
+        { id: "m1", kind: "multi", title: "Columns", body: "Which?", options: [opt("1", "Date"), opt("2", "User")] },
+        { id: "y1", kind: "confirm", title: "Keep going", body: "Carry on?" },
+        { id: "t1", kind: "text", title: "What to call it", body: "A name.", required: false },
+        { id: "d1", kind: "choice", title: "Old pick", body: "Which?", options: [opt("A", "CSV"), opt("B", "JSON")], status: "answered", answer: { k: "B" } },
+      ],
+      agent: { status: "waiting" },
+    },
+  });
+  for (const [id, title, shown] of [["c1", "Export format", 1], ["m1", "Columns", 1], ["y1", "Keep going", 1], ["t1", "What to call it", 0], ["d1", "Old pick", 0]]) {
+    await goTo(s, id, title);
+    assert.equal(await chipOf(s).count(), shown, `chip on ${id}`);
+    if (shown) assert.equal(await textOf(chipOf(s)), "Ask for suggestions");
+  }
+});
+
+// What a person sees break: asking for suggestions sends or clears picks they
+// staged, locks the card, or keeps the note they typed in the box.
+test("Ask for suggestions sends one flagged note and leaves every staged pick staged", async (t) => {
+  const s = await openSession(await suite.browser(), {
+    t,
+    workflow: "plan",
+    payload: {
+      items: [
+        { id: "c1", kind: "choice", title: "Export format", body: "Which format?", options: [opt("A", "CSV"), opt("B", "JSON")] },
+        { id: "c2", kind: "choice", title: "Where it goes", body: "Where?", options: [opt("A", "Email"), opt("B", "Slack")] },
+      ],
+      agent: { status: "waiting" },
+    },
+  });
+  await goTo(s, "c2", "Where it goes");
+  await itemCard(s.page, "c2").getByLabel("Slack").check();
+  await goTo(s, "c1", "Export format");
+  await itemCard(s.page, "c1").getByLabel("JSON").check();
+  await s.page.waitForFunction(async () => {
+    const { page } = await import("/state.js");
+    return page.local.staged.c1 && page.local.staged.c2;
+  });
+  await fillBox(s.page.locator("#thread-c1"), "I lean B");
+  await chipOf(s).click();
+
+  const got = collect(s);
+  assert.equal(got.actions.length, 1, `one action: ${JSON.stringify(got.actions)}`);
+  const [action] = got.actions;
+  assert.equal(action.i, "c1");
+  assert.equal(action.type, "comment");
+  assert.equal(action.suggest, true);
+  assert.equal(action.text, "I lean B");
+  assert.ok(got.reply.startsWith("Suggestions wanted on Export format: I lean B"), got.reply);
+
+  await s.page.waitForFunction(() => document.getElementById("suggest-c1")?.disabled);
+  const staged = await stagedOn(s);
+  assert.equal(staged.c1 && staged.c1.k, "B", "the pick on this card is still staged");
+  assert.equal(staged.c2 && staged.c2.k, "B", "the pick on the other card is still staged");
+  const card = itemCard(s.page, "c1");
+  assert.match(await textOf(card), /Ready to send/i);
+  assert.equal(await card.getByLabel("CSV").isEnabled(), true, "the card is still a live form");
+  assert.equal(await boxValue(s.page.locator("#thread-c1")), "");
+  await goTo(s, "c2", "Where it goes");
+  assert.match(await textOf(itemCard(s.page, "c2")), /Ready to send/i);
+});
+
+// What a person sees break: a request for suggestions that vanishes with no
+// sign it went, or a chip that never comes back once the agent has answered.
+test("a request for suggestions shows tagged and waiting, and the chip comes back once the agent replies", async (t) => {
+  const s = await openSession(await suite.browser(), {
+    t,
+    workflow: "plan",
+    payload: {
+      items: [{ id: "c1", kind: "choice", title: "Export format", body: "Which format?", options: [opt("A", "CSV"), opt("B", "JSON")] }],
+      agent: { status: "waiting" },
+    },
+  });
+  await itemCard(s.page, "c1").waitFor();
+  await chipOf(s).click();
+  const got = collect(s);
+  assert.ok(got.reply.startsWith("Suggestions wanted on Export format: (no note)"), got.reply);
+
+  const mine = s.page.locator("#aside .msg.you.pending");
+  await mine.locator(".suggest-tag", { hasText: "Asked for suggestions" }).waitFor();
+  assert.match(await textOf(mine), /Sent, waiting for Plan2Code/i);
+  await s.page.waitForFunction(() => document.getElementById("suggest-c1")?.disabled);
+
+  s.post({ items: [{ id: "c1", thread: [{ who: "agent", text: "I would pick JSON: your scripts read it directly." }] }], agent: { status: "waiting" } });
+  await s.page.locator("#aside .msg", { hasText: "I would pick JSON" }).waitFor();
+  await s.page.waitForFunction(() => document.getElementById("suggest-c1") && !document.getElementById("suggest-c1").disabled);
+  assert.equal(await s.page.locator("#aside .msg.you .suggest-tag").count(), 1, "the request keeps its tag once answered");
+});
+
+// What a person sees break: a pick on an option the agent took away still
+// staged and sent, or the other picks on the card cleared with it.
+test("a re-post that removes a staged multi option clears only that pick and says so", async (t) => {
+  const s = await openSession(await suite.browser(), {
+    t,
+    workflow: "plan",
+    payload: {
+      items: [{ id: "m1", kind: "multi", title: "Columns", body: "Which?", options: [opt("1", "Date"), opt("2", "User"), opt("3", "Action")] }],
+      agent: { status: "waiting" },
+    },
+  });
+  const card = itemCard(s.page, "m1");
+  await card.getByLabel("Date").check();
+  await card.getByLabel("Action").check();
+  await s.page.waitForFunction(async () => {
+    const { page } = await import("/state.js");
+    return (page.local.staged.m1?.ks || []).length === 2;
+  });
+
+  s.post({ items: [{ id: "m1", body: "Which, now that Action is gone?", options: [opt("1", "Date"), opt("2", "User")] }] });
+  await s.page.locator("#banner", { hasText: "no longer matches the reworded question" }).waitFor();
+  assert.match(await textOf(s.page.locator("#banner")), /A pick on Columns no longer matches/);
+  assert.deepEqual((await stagedOn(s)).m1.ks, ["1"]);
+  await itemCard(s.page, "m1").getByText("Which, now that Action is gone?").waitFor();
+  assert.equal(await itemCard(s.page, "m1").getByLabel("Date").isChecked(), true);
+  // A notice, not a fault: it clears by itself.
+  await s.page.locator("#banner").waitFor({ state: "hidden", timeout: 20000 });
+});
+
+// What a person sees break: a chip that sends past the Implementation Loop,
+// which answers for the agent while it drives.
+test("the Ask for suggestions chip stays away while the loop drives, even on a card waiting for the person", async (t) => {
+  const s = await openSession(await suite.browser(), {
+    t,
+    workflow: "implement",
+    open: ["--loop"],
+    env: { PLAN2CODE_IN_APP: "1" },
+    payload: {
+      items: [{ id: "c1", kind: "choice", title: "Export format", body: "Which format?", options: [opt("A", "CSV"), opt("B", "JSON")] }],
+      agent: { status: "waiting" },
+    },
+  });
+  await itemCard(s.page, "c1").getByLabel("JSON").waitFor();
+  await s.page.locator("#thread-c1").waitFor();
+  assert.equal(await chipOf(s).count(), 0, "no chip while the loop drives");
 });

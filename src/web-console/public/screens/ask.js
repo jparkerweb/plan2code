@@ -11,6 +11,7 @@ import { attachMentions } from "../mention-box.js";
 import { makeMdField } from "../md-field.js";
 import { pickerAccept, attachmentKind, noteAwaiting, threadWho, threadText } from "../answers.js";
 import { postJson } from "../net.js";
+import { suggestState } from "../send-state.js";
 import { CHECKIN_LINE, helperRows, showSwitch, switchLabel, defaultInstruction, PATHFINDER_RESEARCH_LINE, STRENGTHS, DEFAULT_STRENGTH, STRENGTH_HELP } from "../subagents.js";
 
 const $ = (id) => document.getElementById(id);
@@ -665,6 +666,7 @@ export function renderAside() {
     if (pending) who.appendChild(el("span", null, "Sent, waiting for Plan2Code"));
     else if (m.at) who.appendChild(el("span", null, shortTime(m.at)));
     box.appendChild(who);
+    if (m.suggest === true) box.appendChild(suggestTag());
     const text = threadText(m);
     if (text) box.appendChild(md(text, "md"));
     const tray = mine ? sentAttachments(m) : null;
@@ -678,6 +680,7 @@ export function renderAside() {
     who.appendChild(el("span", null, "You"));
     who.appendChild(el("span", null, "Sent, waiting for Plan2Code"));
     box.appendChild(who);
+    if (waiting.suggest === true) box.appendChild(suggestTag());
     if (waiting.text) box.appendChild(md(waiting.text, "md"));
     const tray = sentAttachments(waiting);
     if (tray) box.appendChild(tray);
@@ -698,7 +701,9 @@ export function renderAside() {
   wrap.appendChild(label);
 
   const attached = noteImages(item.id);
-  wrap.appendChild(attachRow(item.id, "Add files to this note"));
+  const row = attachRow(item.id, "Add files to this note");
+  if (!loopDriving() && !isDashboard() && SUGGEST_KINDS.includes(item.kind)) row.appendChild(suggestChip(item));
+  wrap.appendChild(row);
 
   if (attached.length) wrap.appendChild(attachTray(item.id, attached));
 
@@ -725,6 +730,33 @@ export function renderAside() {
   wrap.appendChild(ta.el);
   aside.appendChild(wrap);
   aside.scrollTop = place;
+}
+
+// The cards with options to pick from, where asking what Plan2Code would pick
+// makes sense.
+const SUGGEST_KINDS = ["choice", "multi", "confirm"];
+
+// Ask for suggestions: its own send, beside the main one (core.js). Focus
+// stays in the panel: on the chip when it is live again, else the note box.
+function suggestChip(item) {
+  const st = suggestState(item);
+  const chip = el("button", "btn tiny suggest-chip", "Ask for suggestions");
+  chip.type = "button";
+  chip.id = "suggest-" + item.id;
+  chip.setAttribute("aria-label", "Ask Plan2Code for suggestions on this question");
+  chip.title = st.why;
+  chip.disabled = st.disabled;
+  chip.addEventListener("click", async () => {
+    await hooks.askSuggestions(item.id);
+    const again = $("suggest-" + item.id);
+    if (again && !again.disabled) again.focus();
+    else $("thread-" + item.id)?.field?.focus();
+  });
+  return chip;
+}
+
+function suggestTag() {
+  return el("span", "pill suggest-tag", "Asked for suggestions");
 }
 
 // The helpers the agent reported, as it last posted them. Everything here is

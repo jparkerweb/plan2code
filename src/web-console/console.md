@@ -39,6 +39,8 @@ With nothing to post, `node "<CONSOLE>" wait --session <sid> --seconds 240` wait
 
 `reply` is what they would have typed: one line per question, parts joined with `; `. Act on it as their typed answer, in that turn, with no summary back. Open every `Image:` and `File:` path in it with your file-read tool before you answer.
 
+A `Suggestions wanted on <title>:` line asks your recommendation for that item: reply in its `thread`, list each suggestion and why, and re-post the item (reworded, `recommended`) only when that helps.
+
 Other fields, when present: `session` (actions about the session, dispatch on `i`: `__launch` and `__pickup` run `resume`, then read `skillFile` and follow it in this conversation; `__stop`, `__dashboard`, `__commit`, `__changelog`, `__delete`, `__brief`, `__review`, `__done`, `__git` are covered by the topic file `read` names, or by your notes), `chat` (the seq numbers of Quick questions that need a reply), `read` (open each path now, before acting), `resume`, `skillFile`, `handoffFile`, `fallback` (hop fields: run `resume` as given).
 
 ## A patch
