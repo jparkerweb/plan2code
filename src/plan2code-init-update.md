@@ -24,6 +24,7 @@ The FIRST thing you do, before anything else in this file — before the Awarene
 - `node "<S>/agents-md.mjs" filename "<Section Name>"`: a new section file's name, link line and header.
 - `node "<S>/agent-files.mjs" detect` / `apply <id> ...`: Step 7.
 - `node "<S>/commit-msg.mjs" --subject "<subject>"`: the Session End commit.
+- `node "<S>/test-map.mjs" read` / `write --rows <file>` and `node "<S>/test-commands.mjs" discover`: the `## Test map` (Testing, Step 4); the rows file goes in the session folder or the OS temp folder, never the project.
 
 ---
 
@@ -138,7 +139,7 @@ Present the user with update options:
 > - **1. Commands** - Build, test, run, lint, how to run and view the app, or other CLI commands
 > - **2. Architecture** - How components interact, data flow, key patterns
 > - **3. Gotchas/Pitfalls** - Traps to avoid, non-obvious behaviors
-> - **4. Testing** - Test patterns, how to run specific tests, the test map and quick checks, fixtures
+> - **4. Testing** - Test patterns, how to run specific tests, the `## Test map` table and quick checks, fixtures
 > - **5. Environment/Config** - Setup quirks, env variables, configuration
 > - **6. General Rules** - Coding conventions, style rules, project-specific practices
 > - **7. Failure Log** - Record a mistake or correction in the Failure log
@@ -160,7 +161,7 @@ Present the user with update options:
 | Commands | Purpose? Flags? Prerequisites? How to run and view the app? |
 | Architecture | Components? Interactions? Pattern? |
 | Gotchas | What was unexpected? Workaround? |
-| Testing | Commands? Test map and quick checks stale? Fixtures? Mocking? |
+| Testing | Commands? Test map `Paths` still match real files and `Run` commands still exist (`test-map.mjs read` problems, `test-commands.mjs discover`)? Quick checks stale? Fixtures? Mocking? No map but tests exist: offer to create one, written only on a yes through `test-map.mjs write`. |
 | Environment | Local/CI/deploy? Env vars/files? |
 | Rules | Project-wide or specific? Why? |
 | Failure Log | What went wrong? Correct behavior (imperative, one line)? Merge into an entry on the same topic if one exists; over 17 entries, propose what to prune (rule 7). |

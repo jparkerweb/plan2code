@@ -143,7 +143,7 @@ const SOURCE_PROMPTS = [
     displayName: 'Init Mode',
     description: 'Generate AGENTS.md file for project-specific guidance',
     isUtility: true,
-    scripts: ['agents-md.mjs', 'agent-files.mjs', 'test-map.mjs', 'glob.mjs'],
+    scripts: ['agents-md.mjs', 'agent-files.mjs', 'test-map.mjs', 'glob.mjs', 'test-commands.mjs'],
     additionalReferences: [
       { source: 'web-console', target: 'web-console' },
       { source: 'shared-references/helper-strength.md', target: 'helper-strength.md' }
@@ -156,7 +156,7 @@ const SOURCE_PROMPTS = [
     displayName: 'Init Update Mode',
     description: 'Update existing AGENTS.md with new learnings',
     isUtility: true,
-    scripts: ['agents-md.mjs', 'agent-files.mjs', 'commit-msg.mjs', 'test-map.mjs', 'glob.mjs'],
+    scripts: ['agents-md.mjs', 'agent-files.mjs', 'commit-msg.mjs', 'test-map.mjs', 'glob.mjs', 'test-commands.mjs'],
     additionalReferences: [
       { source: 'web-console', target: 'web-console' },
       { source: 'shared-references/helper-strength.md', target: 'helper-strength.md' }

@@ -123,9 +123,19 @@ test("test-runs.md says to ask when a check or its tests are unclear", () => {
 
 test("Init and Init-update keep a test map beside the single-test command", () => {
   const init = src("plan2code-init.md");
-  assert.match(init, /run single test \(and beside it a short \*\*Test map\*\*: `area -> tests or command`/);
-  assert.match(init, /which checks are quick/);
+  assert.match(init, /run single test \(and beside it a note of which checks are quick\)/);
+  assert.ok(init.includes("## Test map"), "Init names the ## Test map section");
+  assert.match(init, /test-commands\.mjs" discover/);
+  assert.match(init, /write it only on a yes with `test-map\.mjs write --rows <file>`/);
+  assert.doesNotMatch(init, /area -> tests or command/, "the old line format is gone");
   const upd = src("plan2code-init-update.md");
-  assert.match(upd, /\*\*4\. Testing\*\* - .*the test map and quick checks/);
-  assert.match(upd, /\| Testing \| Commands\? Test map and quick checks stale\?/);
+  assert.match(upd, /\*\*4\. Testing\*\* - .*the `## Test map` table and quick checks/);
+  assert.match(upd, /\| Testing \| Commands\? Test map `Paths` still match real files and `Run` commands still exist \(`test-map\.mjs read` problems, `test-commands\.mjs discover`\)\?/);
+  assert.match(upd, /written only on a yes through `test-map\.mjs write`/);
+});
+
+test("test-runs.md reads the ## Test map table and treats Shared rows as shared ground", () => {
+  const rule = src("shared-references", "test-runs.md");
+  assert.ok(rule.includes("`## Test map`"), "names the ## Test map table");
+  assert.ok(rule.includes("`Shared: yes`"), "a Shared: yes row is shared ground");
 });

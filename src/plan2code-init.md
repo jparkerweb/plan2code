@@ -26,7 +26,7 @@ The FIRST thing you do, before anything else in this file — before exploring t
 
 ## Content
 
-1. **Commands**: Build, lint, test, run single test (and beside it a short **Test map**: `area -> tests or command` lines saying which tests cover which areas, plus a note of which checks are quick; omit it when the project has no tests), other common development tasks, and how to start the app and where to view it (URL or command), when it has one
+1. **Commands**: Build, lint, test, run single test (and beside it a note of which checks are quick), other common development tasks, and how to start the app and where to view it (URL or command), when it has one. Then the **`## Test map`** section: run `node "<S>/test-commands.mjs" discover` and `node "<S>/test-map.mjs" read`. When test commands are found and no map exists, propose a `## Test map` table (`| Area | Paths | Run | Shared |`, one row per area with its own run command, `Shared: yes` for helper, fixture and config areas) for the person to approve, and write it only on a yes with `test-map.mjs write --rows <file>` (the rows file in the session folder or the OS temp folder, never the project). In a progressive `AGENTS.md`, the heading holds one link to `.agents-docs/AGENTS-test-map.md` and the table goes there. Omit the map when the project has no tests.
 2. **Architecture**: High-level "big picture" structure requiring multi-file context to understand
 3. **How to Use This File**: A short paragraph explaining that sections below contain brief summaries and agents should follow the markdown links to `.agents-docs/` for full details — only read what's relevant to the current task.
 4. **Failure Log**: running list of mistakes and/or corrections that went wrong via the AI Agent at least once. 
