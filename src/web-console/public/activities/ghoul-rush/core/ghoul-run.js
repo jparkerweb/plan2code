@@ -74,6 +74,8 @@ export function setupRoom(round, id, kit) {
   // Retry mercy counts the restarts of this room (ghoul-powers.js).
   round.retries = { room: round.room, n: 0 };
   round.clock = 0;
+  // The Heart's HOLD FIRE is off until its pack says (ghoul-marrow-heart.js).
+  round.flood = false;
   // A bonus room plays for hearts of its own (ghoul-bonus.js).
   round.bonusRound = spec.bonus ? kit.makeBonus(round) : null;
   kit.place(round);
@@ -143,9 +145,10 @@ export function newRound(seed, kit) {
 export const stagesLeft = (round, kit) => kit.STAGES.filter((st) => !round.cleared.includes(st.id) && st.id !== round.stage);
 
 // Out of a room: the stage's next room, or, out of the hall or a boss's,
-// the choice of what comes next (or the win, with every stage cleared).
+// the choice of what comes next; RUN_STAGES cleared (or none left to offer),
+// the finale; out of the finale's last room, the win.
 export function nextRoom(round, random, kit) {
-  const { STAGES, OFFER_N, PICK_HOLD_MS, stageById } = kit;
+  const { OFFER_N, PICK_HOLD_MS, RUN_STAGES, FINALE, stageById } = kit;
   const st = round.stage ? stageById(round.stage) : null;
   if (st && round.stageAt < st.rooms.length - 1) {
     round.stageAt++;
@@ -153,18 +156,18 @@ export function nextRoom(round, random, kit) {
     return;
   }
   if (st) {
+    // The finale's end is the run's end, not one more stage cleared.
+    if (st.id === FINALE.id) {
+      round.stage = null;
+      return finish(round, kit);
+    }
     round.cleared.push(st.id);
     round.stats.stages++;
     round.stage = null;
-    round.events.push({ type: "stageClear", stage: st.id, n: round.cleared.length, of: STAGES.length });
+    round.events.push({ type: "stageClear", stage: st.id, n: round.cleared.length, of: RUN_STAGES });
   }
   const left = stagesLeft(round, kit);
-  if (!left.length) {
-    round.won = true;
-    round.over = true;
-    round.events.push({ type: "won", stages: round.cleared.length });
-    return;
-  }
+  if (round.cleared.length >= RUN_STAGES || !left.length) return enterFinale(round, kit);
   const pool = left.slice();
   const offer = [];
   while (offer.length < OFFER_N && pool.length) offer.push(pool.splice(Math.floor(random() * pool.length) % pool.length, 1)[0].id);
@@ -174,6 +177,29 @@ export function nextRoom(round, random, kit) {
   round.phaseMs = PICK_HOLD_MS;
   round.input.jump = 0;
   round.events.push({ type: "offer", offer: offer.slice() });
+}
+
+// Into the House itself, the way a picked stage is entered but never offered:
+// its card, then its first room.
+function enterFinale(round, kit) {
+  const { FINALE, RUN_STAGES } = kit;
+  round.offer = null;
+  round.stage = FINALE.id;
+  round.stageAt = 0;
+  round.events.push({ type: "stage", stage: FINALE.id, n: RUN_STAGES, of: RUN_STAGES });
+  enter(round, FINALE.rooms[0], kit);
+  startIntro(round, kit);
+}
+
+// The House killed for good: the run is won. `n` is the record it sets: one
+// past every stage, which the memo reads as the House beaten.
+function finish(round, kit) {
+  round.winN = kit.RUN_STAGES + 1;
+  // The ending's pages first, when there are any (story/ghoul-ending.js); they win the run at their end.
+  if (kit.beginEnding(round)) return;
+  round.won = true;
+  round.over = true;
+  round.events.push({ type: "won", stages: round.cleared.length, n: round.winN });
 }
 
 // A stage's intro card (ghoul-intros.js, drawn by ghoul-intro-draw.js) holds
@@ -230,6 +256,11 @@ export function stepIntro(round, ms) {
 // A move key, fire or a click: on into the room, once the card has been up a moment.
 export function takeIntro(round, kit) {
   if (!onCard(round) || (round.introMs || 0) < INTRO_MIN_MS) return false;
+  // A stage that opens on its boss's room (the finale) shows the boss's card after its own.
+  if (round.phase === "intro" && round.spec && round.spec.boss) {
+    startBossIntro(round, kit);
+    if (round.phase === "bossintro") return true;
+  }
   endIntro(round, kit);
   return true;
 }
@@ -259,7 +290,7 @@ export function steerPick(round, dir) {
 // its first room. Not while the offer is still settling (PICK_HOLD_MS), so a
 // fire key still held from the fight never chooses blind.
 export function pickStage(round, i = round.pick, kit) {
-  const { STAGES, stageById } = kit;
+  const { RUN_STAGES, stageById } = kit;
   if (round.phase !== "pick" || !round.offer || round.phaseMs > 0) return false;
   const id = round.offer[i];
   const st = id && stageById(id);
@@ -267,7 +298,7 @@ export function pickStage(round, i = round.pick, kit) {
   round.offer = null;
   round.stage = st.id;
   round.stageAt = 0;
-  round.events.push({ type: "stage", stage: st.id, n: round.cleared.length + 1, of: STAGES.length });
+  round.events.push({ type: "stage", stage: st.id, n: round.cleared.length + 1, of: RUN_STAGES });
   enter(round, st.rooms[0], kit);
   startIntro(round, kit);
   return true;
@@ -288,8 +319,8 @@ export function openSelect(round) {
 export function steerSelect(round, dStage, dRoom, kit) {
   const sel = round.select;
   if (round.phase !== "select" || !sel) return false;
-  const at = Math.max(0, Math.min(kit.STAGES.length - 1, sel.at + Math.sign(dStage)));
-  const rooms = kit.STAGES[at].rooms.length;
+  const at = Math.max(0, Math.min(kit.SELECTABLE.length - 1, sel.at + Math.sign(dStage)));
+  const rooms = kit.SELECTABLE[at].rooms.length;
   const room = Math.max(0, Math.min(rooms - 1, (at === sel.at ? sel.room : Math.min(sel.room, rooms - 1)) + Math.sign(dRoom)));
   if (at === sel.at && room === sel.room) return false;
   sel.at = at;
@@ -303,11 +334,11 @@ export function steerSelect(round, dStage, dRoom, kit) {
 export function takeSelect(round, kit) {
   const sel = round.select;
   if (round.phase !== "select" || !sel) return false;
-  const st = kit.STAGES[sel.at];
+  const st = kit.SELECTABLE[sel.at];
   round.select = null;
   round.stage = st.id;
   round.stageAt = sel.room;
-  round.events.push({ type: "stage", stage: st.id, n: 1, of: kit.STAGES.length });
+  round.events.push({ type: "stage", stage: st.id, n: 1, of: kit.RUN_STAGES });
   enter(round, st.rooms[sel.room], kit);
   if (!sel.room) startIntro(round, kit);
   return true;

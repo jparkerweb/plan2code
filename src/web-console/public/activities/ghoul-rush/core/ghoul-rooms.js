@@ -1,9 +1,19 @@
 // Plan2Code Web Console - Ghoul Rush's rooms as data: the long hall every run starts in, then each stage's rooms (three, then a boss's), side on, left to right, with their floors, pits, shelves, candy, power-ups, monsters, key and door, and the stages themselves.
 //
-// Data only, no imports: ghoul.js builds each room's numbers from these, and
+// Data only, no imports but the finale's room files (data too, one per piece,
+// each in only once `ready`): ghoul.js builds each room's numbers from these, and
 // the unit suite walks every layout to prove it can be finished (a route from
 // the start to the key and on to the door, no jump wider than a jump clears).
 //
+
+import { MAT_ROOM } from "../rides/mat/ghoul-mat-room.js";
+import { DOLLHOUSE_ROOM } from "../stages/marrow/ghoul-dollhouse-room.js";
+import { BONESTAIR_ROOM } from "../rides/bonestair/ghoul-bonestair-room.js";
+import { PIT_ROOM } from "../stages/marrow/ghoul-pit-room.js";
+
+// The finale's rooms after the lawn, in the order they are played: each one in once its builder marks it ready.
+const FINALE_PARTS = [MAT_ROOM, DOLLHOUSE_ROOM, BONESTAIR_ROOM, PIT_ROOM].filter((r) => r.ready);
+
 // Units: the field is FIELD_W across and FIELD_H tall on screen, y counted up
 // from the bottom. A room is `length` units long and the camera scrolls along
 // it. Every room is laid out on the same plan:
@@ -1547,6 +1557,24 @@ export const ROOMS = freeze([
     spawns: [["zombie", 44], ["crawl", 96]],
     boss: "motherbog",
   }),
+  // The Front Lawn, the finale's first kill: a storm on the hill, the manor
+  // on the right of the arena as a face (ghoul-marrow.js), a dead oak whose
+  // branches step up to each row of its windows. Always lit by the storm.
+  room("lawn", "The Front Lawn", "It has been waiting to see YOU out", {
+    length: 210,
+    ground: [[0, 210, 6]],
+    // The oak's branches, stepping up to each row of windows.
+    shelves: [[122, 136, 12], [150, 164, 12], [134, 150, 18], [120, 134, 24], [152, 166, 24], [136, 150, 30], [154, 168, 41]],
+    key: null,
+    door: 192,
+    dark: false,
+    candy: [[20, 8.5, 5], [60, 8.5, 5]],
+    items: [["garlic", 40, 6], ["stake", 80, 6]],
+    spawns: [["zombie", 34], ["crawl", 56], ["ghost", 74, 12], ["zombie", 92]],
+    boss: "marrow",
+  }),
+  // The rest of the finale, each piece's room in its own file, in once it is `ready`.
+  ...FINALE_PARTS.map((r) => room(r.id, r.title, r.sub, r.spec)),
 ]);
 
 const ROOM_IDS = new Set(ROOMS.map((r) => r.id));
@@ -1554,8 +1582,9 @@ export const roomById = (id) => ROOMS.find((r) => r.id === id) || null;
 
 // The stages: three rooms and a boss's, in order. Every run starts in the
 // hall, then you pick each next stage from two (one, once a single stage is
-// left) not yet played that run; clearing every stage wins. `rooms` are ids
-// in ROOMS, the last one the boss's.
+// left) not yet played that run; RUN_STAGES of them cleared, the run goes on
+// to the FINALE, and clearing that wins. `rooms` are ids in ROOMS, the last
+// one the boss's.
 function stage(id, title, sub, rooms) {
   for (const r of rooms) if (!ROOM_IDS.has(r)) throw new Error(`stage ${id}: no room ${r}`);
   return freeze({ id, title, sub, rooms: freeze(rooms), boss: roomById(rooms[rooms.length - 1]).boss });
@@ -1574,4 +1603,10 @@ export const STAGES = freeze([
   stage("frozen", "The Frozen Lake", "The ice remembers who fell through", ["huts", "lodge", "blackice", "sled", "widow"]),
   stage("bog", "Gallows Bog", "The mud does not like to let go", ["boardwalk", "hollow", "stilts", "lantern", "drowning"]),
 ]);
-export const stageById = (id) => STAGES.find((s) => s.id === id) || null;
+// A run is the hall, this many stages, then the finale, however many stages exist.
+export const RUN_STAGES = 6;
+// The House itself, never offered by the pick: its rooms grow as each kill lands.
+export const FINALE = stage("marrow", "Marrow Manor", "It knows you are home", ["lawn", ...FINALE_PARTS.map((r) => r.id)]);
+// Everything the stage select offers: the stages and the finale.
+export const SELECTABLE = freeze([...STAGES, FINALE]);
+export const stageById = (id) => SELECTABLE.find((s) => s.id === id) || null;

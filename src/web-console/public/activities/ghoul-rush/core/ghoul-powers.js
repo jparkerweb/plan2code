@@ -6,6 +6,10 @@
 // re-exports what it always exported from here (POWERS, TIMED, powerHere,
 // applyPower and the numbers), so its importers need not know.
 
+// The most lives and Lucky dice YOU can hold: past them a 1UP or a die pays points instead.
+export const MAX_LIVES = 13;
+export const MAX_HELD_DICE = 13;
+
 // Power-ups: Spread shot, Rapid fire, the Lantern (the dark pulled back far
 // around you, so only ever found in a dark room), Bat wings (one more jump in the air, a flap, each time you
 // leave the ground, and a fall down a pit carries you back and spends them: wingSave in ghoul.js) and the Church bell (every monster but a boss stands
@@ -154,10 +158,13 @@ export function applyPower(round, kind, kit) {
     if (round.timeMs > 0) round.timeMs += HOURGLASS_MS;
     else award(round, POWER_POINTS);
   }
+  // A 1UP or a Lucky die at its cap (MAX_LIVES, MAX_HELD_DICE) pays points instead.
   else if (kind === "life") {
-    round.lives++;
+    if (round.lives >= MAX_LIVES) award(round, POWER_POINTS);
+    else round.lives++;
   } else if (kind === "die") {
-    round.dice++;
+    if (round.dice >= MAX_HELD_DICE) award(round, POWER_POINTS);
+    else round.dice++;
   } else if (POWERS[kind].arm && !addArm(round, kind)) award(round, POWER_POINTS);
 }
 

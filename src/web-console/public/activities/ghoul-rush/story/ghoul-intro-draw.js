@@ -240,6 +240,25 @@ const FLOURISH = {
       });
     }
   },
+  // The finale: rain slanting down over a row of lit windows along the bottom, winking out one by one and coming back.
+  marrow(ctx, t, pal, W, H) {
+    for (let i = 0; i < 40; i++) {
+      const x = ((rnd(i) * (W + 12) + t / 18) % (W + 12)) - 6;
+      const y = ((t / 7 + rnd(i, 1) * H * 2) % (H + 6)) - 3;
+      faint(ctx, 0.35, () => stroke(ctx, x, y, x - 0.9, y + 2.6, pal.a, 0.12));
+    }
+    const n = 9;
+    const out = Math.floor((t / 650) % (n + 4));
+    for (let i = 0; i < n; i++) {
+      const x = 6 + i * ((W - 12) / (n - 1));
+      ctx.fillStyle = "rgba(10, 6, 12, 0.92)";
+      ctx.fillRect(x - 2.6, H - 7, 5.2, 7);
+      const lit = i >= out;
+      ctx.fillStyle = lit ? pal.glow : "rgba(16, 12, 20, 0.95)";
+      ctx.fillRect(x - 1.5, H - 5.8, 3, 3.4);
+      if (lit) faint(ctx, 0.25 + 0.1 * Math.sin(t / 160 + i), () => dot(ctx, x, H - 4.1, 3.2, pal.glow));
+    }
+  },
   // The hall: dust and a flickering torch at each end.
   hall(ctx, t, pal, W, H) {
     for (let i = 0; i < 18; i++) dot(ctx, rnd(i) * W, H - ((t / 45 + rnd(i, 1) * H) % H), 0.25, pal.glow);

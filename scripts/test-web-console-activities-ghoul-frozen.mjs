@@ -818,7 +818,7 @@ test("Ghoul Rush's Frost Widow hangs from the roof with her veil up, three fire 
   const barrels = round.hazards.filter((h) => h.kind === "barrel");
   assert.deepEqual(barrels.map((h) => h.x), fz.BARREL_SPOTS.map((o) => round.spec.arena + o));
   assert.ok(barrels.every((h) => h.state === "still" && h.y === 6));
-  assert.equal(ghoul.roomFor("widow", 7).bossHp, Math.round(90 * (1 + ghoul.BOSS_DEPTH_HP * 7)));
+  assert.equal(ghoul.roomFor("widow", 7).bossHp, Math.round(90 * (1 + ghoul.BOSS_DEPTH_HP * Math.min(14, ghoul.BOSS_DEPTH_MAX))), "seven stages in counts as fourteen steps, capped");
   // A shot at her glances off: the veil, and she is off the floor besides.
   for (const [act, y] of [["hang", 26], ["low", 6]]) {
     Object.assign(b, { act, y, x: 170, wait: 1e9, lowMs: 1e9 });

@@ -19,7 +19,7 @@
 // firing), and down ducks on the ground or drops through a shelf. Each room's door opens once he grabs its key. A run starts in a
 // long hall, then goes stage by stage (three rooms, then a boss whose fall
 // opens the door), each next stage picked from two not yet played that run;
-// clearing every stage wins. Every other room keeps a horde pouring in from
+// six stages cleared, the House itself is the finale, and killing it wins. Every other room keeps a horde pouring in from
 // the edges of the view, so standing still is never safe. Kills in quick succession build a chain that multiplies their points
 // and runs out fast; a shot to the head or a stomp from above doubles a
 // kill. Souls (the `candy` in the rules), power-ups (spread shot, rapid

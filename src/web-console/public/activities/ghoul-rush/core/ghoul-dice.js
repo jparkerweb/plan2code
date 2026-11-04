@@ -158,7 +158,7 @@ export function rollDice(round, ms, random, kit) {
   // On the last heart a 2, 3 or 4 does not save him: it pays one heart, and the
   // loss then goes ahead, so he comes back with that heart the usual way.
   if (r.heart) {
-    round.lives++;
+    round.lives = Math.min(kit.MAX_LIVES, round.lives + 1);
     round.events.push({ type: "diceHeart", face: r.face, x: r.x, y: r.y });
     round.roll = null;
     kit.takeLife(round, r.cause);

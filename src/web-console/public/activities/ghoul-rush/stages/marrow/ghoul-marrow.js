@@ -29,6 +29,15 @@
 // - STOMP (`stomp`, furious only): it rears and comes down: a shockwave to jump
 //   and slates after it.
 //
+// Two more come only while YOU are up in the oak (`high`), where the floor's moves
+// cannot reach, so the branches are never a safe seat:
+//
+// - LIGHTNING (`lightning`): the storm gathers over YOUR branch (a glow where YOU
+//   stand, one more a step ahead from the second phase) and charges up, loud and
+//   bright, a step at each CHARGE_AT, then a bolt strikes down to it. Step along, or drop.
+// - CROWS (`crows`): the door opens and crows burst out of its mouth, climb, and dive
+//   at YOUR chest (the Graveyard's carrion crows), at most CROWS_CAP of its own.
+//
 // Its phase is 0 at first, 1 with PHASE_OUT[0] windows out, 2 with PHASE_OUT[1].
 //
 // THE RETREAT. The last window out is a real boss kill (a life, the points,
@@ -41,7 +50,7 @@ const freeze = (o) => Object.freeze(o);
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 
 export const BOSSES = freeze({
-  marrow: freeze({ name: "Marrow", sub: "The house itself", w: 36, h: 44, hp: 90, points: 6000, color: "#c8a04a" }),
+  marrow: freeze({ name: "Marrow", sub: "The house itself", w: 36, h: 44, hp: 110, points: 6000, color: "#c8a04a" }),
 });
 
 // The house's place: its left edge HOUSE_BACK short of the room's end, YOU kept
@@ -118,9 +127,24 @@ export const DOORMEN_CAP = 2;
 export const STOMP_WIND_MS = 950;
 export const STOMP_LIFT = 2.4;
 export const STOMP_REST_MS = 1300;
+// Lightning: the storm gathers LIGHTNING_WIND_MS, each glow warns LIGHTNING_WARN_MS (the
+// second LIGHTNING_STAGGER_MS after), and the bolt is live LIGHTNING_LIVE_MS, LIGHTNING_W
+// wide, from the branch up to the sky; the second LIGHTNING_GAP ahead of YOU.
+// While a glow warns it charges up out loud, a step at each of CHARGE_AT (shares of its warning).
+export const LIGHTNING_WIND_MS = 300;
+export const LIGHTNING_WARN_MS = 1500;
+export const CHARGE_AT = freeze([0.35, 0.7]);
+export const LIGHTNING_STAGGER_MS = 220;
+export const LIGHTNING_LIVE_MS = 240;
+export const LIGHTNING_W = 3;
+export const LIGHTNING_GAP = 6;
+// Crows: the door opens CROWS_WIND_MS, then CROWS_N by phase fly out, at most CROWS_CAP of its own alive.
+export const CROWS_WIND_MS = 650;
+export const CROWS_N = freeze([2, 2, 3]);
+export const CROWS_CAP = 3;
 // How many picks a move sits out after it is used.
-export const COOLDOWN = freeze({ doormen: 4, stomp: 2, bricks: 1 });
-// Each move's weight by phase.
+export const COOLDOWN = freeze({ doormen: 4, stomp: 2, bricks: 1, crows: 2 });
+// Each move's weight by phase. HIGH_WEIGHTS are added only while YOU are up in the oak.
 export const WEIGHTS = freeze({
   shingles: freeze([3, 2.5, 2.5]),
   carpet: freeze([3, 2.5, 2.5]),
@@ -129,6 +153,15 @@ export const WEIGHTS = freeze({
   doormen: freeze([0, 1.6, 1.6]),
   stomp: freeze([0, 0, 3]),
 });
+export const HIGH_WEIGHTS = freeze({
+  lightning: freeze([3, 3.5, 4]),
+  crows: freeze([2, 2.5, 3]),
+});
+// Whether YOU are up in the oak: standing on a branch, or in the air well over the lawn.
+export const isHigh = (round) => {
+  const you = round.you;
+  return you.state === "run" ? you.shelf >= 0 : you.y > round.spec.ground[0][2] + 8;
+};
 
 // The retreat's clock, in ms of `b.t` after the kill.
 export const FALSE_AT = 1400;
@@ -176,23 +209,25 @@ function changeLights(round, b, random) {
 
 // A bolt across the front of the house: it strikes the first lit window at its
 // height (the one nearest where it is), or flies on over the shutters. Returns
-// true when it has hit one.
+// true when it has hit one, or has gone past the house without.
 function windowShot(round, s, k) {
   const b = round.boss;
   if (!b || b.kind !== "marrow" || b.state !== "fight" || !round.marrow) return false;
   const cx = houseCenter(round.spec);
+  // Past the house's far wall a bolt that found no window is spent, quietly.
+  if (s.x >= cx + HOUSE_W / 2) return true;
   for (const w of round.marrow.windows) {
     if (w.state !== "lit" || Math.abs(s.x - (cx + w.dx)) > WINDOW_W / 2 + 0.3) continue;
     if (Math.abs(s.y - (b.y + w.up + WINDOW_H / 2)) > WINDOW_H / 2 + 0.3) continue;
     const dmg = Math.min(w.hp, Math.max(1, s.arm ? k.armBossDamage(round, s.bossDmg || 1) : 1));
     w.hp -= dmg;
-    const out = w.hp <= 0;
-    if (out) {
+    const at = { x: cx + w.dx, y: b.y + w.up + WINDOW_H / 2 };
+    if (w.hp <= 0) {
       w.state = "out";
       b.relight = RELIGHT_MS;
-      round.events.push({ type: "marrowWindowOut", kind: "marrow", x: cx + w.dx, y: b.y + w.up + WINDOW_H / 2, left: round.marrow.windows.filter((q) => q.state !== "out").length });
+      round.events.push({ type: "marrowWindowOut", kind: "marrow", x: at.x, y: at.y, left: round.marrow.windows.filter((q) => q.state !== "out").length });
     }
-    k.hurtBoss(round, dmg, "weak");
+    k.hurtBoss(round, dmg, "window", at);
     return true;
   }
   return false;
@@ -202,8 +237,9 @@ function windowShot(round, s, k) {
 
 // Its next move: the carpet to open, then a weighted pick by phase that favors
 // a change (a third time running is out), the slow moves sitting out COOLDOWN
-// picks, the doormen only under their cap. `b.plan` forces one (tests).
-export function pickMove(b, phase, random, adds = 0) {
+// picks, the doormen and crows only under their caps, the lightning and the crows
+// only while YOU are `high` in the oak. `b.plan` forces one (tests).
+export function pickMove(b, phase, random, adds = 0, high = false, crows = 0) {
   let pick = null;
   if (b.plan) {
     pick = b.plan;
@@ -211,10 +247,12 @@ export function pickMove(b, phase, random, adds = 0) {
   } else if (!b.picks) pick = "carpet";
   else {
     const w = {};
-    for (const [n, by] of Object.entries(WEIGHTS)) {
+    for (const [n, by] of Object.entries({ ...WEIGHTS, ...HIGH_WEIGHTS })) {
       let v = by[phase];
+      if (HIGH_WEIGHTS[n] && !high) v = 0;
       if (b.cool && b.cool[n] > b.picks) v = 0;
       if (n === "doormen" && adds >= DOORMEN_CAP) v = 0;
+      if (n === "crows" && crows >= CROWS_CAP) v = 0;
       if (n === b.last) v *= b.streak >= 2 ? 0 : 0.35;
       if (v > 0) w[n] = v;
     }
@@ -297,8 +335,36 @@ function startMove(round, b, move, k, wait) {
     b.wait = STOMP_WIND_MS;
     b.windFull = STOMP_WIND_MS;
     ev("marrowRear", { y: b.y + 20 });
+  } else if (move === "lightning") {
+    // A glow where YOU stand, and from the second phase one a step ahead: each bolt comes down to that height.
+    const y = standing(round, k);
+    const ahead = Math.sign(you.vx) || you.face || 1;
+    const xs = [you.x];
+    if (phase >= 1) xs.push(lawnRange(spec, you.x + ahead * LIGHTNING_GAP));
+    xs.forEach((x, i) => {
+      const warn = LIGHTNING_WIND_MS + LIGHTNING_WARN_MS + i * LIGHTNING_STAGGER_MS;
+      round.hazards.push({ kind: "marrowBolt", x, y, w: LIGHTNING_W, h: 60, warn, full: warn, live: 0, cause: "marrowBolt", id: i });
+    });
+    b.act = "storm";
+    b.wait = LIGHTNING_WIND_MS + LIGHTNING_WARN_MS + LIGHTNING_STAGGER_MS * (xs.length - 1) + LIGHTNING_LIVE_MS;
+    ev("marrowStorm", { xs, y });
+  } else if (move === "crows") {
+    b.act = "crowsWind";
+    b.wait = wait(CROWS_WIND_MS);
+    ev("marrowDoor");
   }
 }
+
+// The height of what YOU stand on (or are over, in the air): a branch, or the lawn.
+function standing(round, k) {
+  const you = round.you;
+  if (you.state === "run") return you.y;
+  let top = k.groundAt(round.spec, you.x);
+  for (const [x0, x1, y] of round.spec.shelves) if (you.x >= x0 && you.x <= x1 && y <= you.y && y > top) top = y;
+  return top;
+}
+
+const crowsAlive = (round) => round.monsters.filter((m) => !m.dead && m.houseCrow).length;
 
 // Where a brick lands: on the surface under `x` at YOUR height when one is there, else the ground.
 function brickSpot(round, x, k) {
@@ -330,11 +396,11 @@ function moveMarrow(round, b, ms, random, k) {
   }
   if (b.litMs <= 0) changeLights(round, b, random);
   // The door stays open through a wind-up and its rest.
-  b.mouth = b.act === "carpetWind" || b.act === "doormenWind" || b.act === "carpetRest";
+  b.mouth = b.act === "carpetWind" || b.act === "doormenWind" || b.act === "carpetRest" || b.act === "crowsWind";
   b.lift = b.act === "stompWind" ? STOMP_LIFT * (1 - Math.max(0, b.wait) / b.windFull) : 0;
   if (b.act === "idle") {
     if (b.wait > 0) return;
-    const move = pickMove(b, phase, random, doormenAlive(round));
+    const move = pickMove(b, phase, random, doormenAlive(round), isHigh(round), crowsAlive(round));
     b.attacks++;
     startMove(round, b, move, k, wait);
     return;
@@ -389,6 +455,15 @@ function moveMarrow(round, b, ms, random, k) {
     b.wait = idle();
     return;
   }
+  if (b.act === "crowsWind") {
+    // Out of its mouth, climbing a moment before each dives at YOU.
+    const n = Math.min(CROWS_N[phase], CROWS_CAP - crowsAlive(round));
+    for (let i = 0; i < n; i++) k.spawnMonster(round, "crow", houseLeft(spec) - 1 - i * 1.5, b.y + 4 + i, { houseCrow: true, force: true, act: "climb", wait: 350 + i * 300, vy: 14, vx: -10 - i * 4, awake: true });
+    round.events.push({ type: "marrowCrows", kind: "marrow", x: houseLeft(spec), y: b.y + 5, n });
+    b.act = "idle";
+    b.wait = idle();
+    return;
+  }
   if (b.act === "stompWind") {
     const x = houseLeft(spec) - 0.5;
     round.waves.push({ x, y: b.y, dir: -1, life: 6000, kind: "marrowQuake", cause: "marrowQuake" });
@@ -398,7 +473,7 @@ function moveMarrow(round, b, ms, random, k) {
     b.wait = wait(STOMP_REST_MS);
     return;
   }
-  if (b.act === "roof" || b.act === "pickets" || b.act === "stompRest") {
+  if (b.act === "roof" || b.act === "pickets" || b.act === "stompRest" || b.act === "storm") {
     b.act = "idle";
     b.wait = idle();
   }
@@ -443,6 +518,26 @@ function stepBrick(round, h, ms) {
     if (h.warn > 0) return true;
     h.live = BRICK_LIVE_MS;
     round.events.push({ type: "marrowBrickLand", kind: "marrow", x: h.x, y: h.y });
+    return true;
+  }
+  h.live -= ms;
+  return h.live > 0;
+}
+
+// A bolt of lightning: a glow on the branch for `warn`, then the strike, live LIGHTNING_LIVE_MS.
+function stepBolt(round, h, ms) {
+  if (h.warn > 0) {
+    h.warn = Math.max(0, h.warn - ms);
+    // The charge building, out loud, a step at each mark (the first bolt's only, so a pair is one sound).
+    const p = 1 - h.warn / (h.full || 1);
+    h.charged = h.charged || 0;
+    while (h.charged < CHARGE_AT.length && p >= CHARGE_AT[h.charged]) {
+      h.charged++;
+      if (!h.id) round.events.push({ type: "marrowCharge", kind: "marrow", x: h.x, y: h.y, n: h.charged });
+    }
+    if (h.warn > 0) return true;
+    h.live = LIGHTNING_LIVE_MS;
+    round.events.push({ type: "marrowStrike", kind: "marrow", x: h.x, y: h.y });
     return true;
   }
   h.live -= ms;
@@ -515,5 +610,5 @@ export const MARROW = freeze({
   // Only its windows can be hurt (windowShot): anything else glances off.
   guard: freeze({ marrow: () => true }),
   cause: freeze({ marrow: () => "marrow" }),
-  hazards: freeze({ marrowShingle: stepShingle, marrowPicket: stepPicket, marrowBrick: stepBrick }),
+  hazards: freeze({ marrowShingle: stepShingle, marrowPicket: stepPicket, marrowBrick: stepBrick, marrowBolt: stepBolt }),
 });

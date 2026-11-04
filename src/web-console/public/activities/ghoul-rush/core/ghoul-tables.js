@@ -23,13 +23,19 @@ import { GROUNDS } from "../stages/grounds/ghoul-grounds.js";
 import { MINE } from "../stages/mine/ghoul-mine.js";
 import { SANATORIUM } from "../stages/sanatorium/ghoul-sanatorium.js";
 import { VILLAGE } from "../stages/village/ghoul-village.js";
+import { MARROW } from "../stages/marrow/ghoul-marrow.js";
+import { EYE } from "../stages/marrow/ghoul-marrow-eye.js";
+import { HEART } from "../stages/marrow/ghoul-marrow-heart.js";
+import { MAT } from "../rides/mat/ghoul-mat.js";
+import { BONESTAIR } from "../rides/bonestair/ghoul-bonestair.js";
 import { BONES } from "../stages/wing/ghoul-bones.js";
 import { FLAP_CLEAR, POWERS, TIMED, powerHere } from "./ghoul-powers.js";
-import { CEILING_Y, FIELD_H, FIELD_W, FLOOR_Y, ROOMS, STAGES, roomById, stageById } from "./ghoul-rooms.js";
+import { CEILING_Y, FIELD_H, FIELD_W, FINALE, FLOOR_Y, ROOMS, RUN_STAGES, SELECTABLE, STAGES, roomById, stageById } from "./ghoul-rooms.js";
 import { steerPick } from "./ghoul-run.js";
 
-export { FIELD_H, FIELD_W, FLOOR_Y, ROOMS, STAGES, roomById, stageById };
+export { FIELD_H, FIELD_W, FINALE, FLOOR_Y, ROOMS, RUN_STAGES, SELECTABLE, STAGES, roomById, stageById };
 export { FLAP_CLEAR, POWERS, TIMED, powerHere };
+export { MAX_HELD_DICE, MAX_LIVES } from "./ghoul-powers.js";
 export { INTRO_MIN_MS } from "./ghoul-run.js";
 export { releaseFire };
 // The stage pick, which moved to ghoul-run.js.
@@ -127,8 +133,10 @@ export const SLICE_MS = 4;
 // with Rapid fire), flying SHOT_SPEED level with Planny's chest (SHOT_Y over
 // his feet) until it hits something, a wall, or has gone SHOT_RANGE. Spread
 // shot adds two more, SPREAD_ANGLE up and down.
-export const FIRE_MS = 100;
-export const RAPID_MS = 60;
+// The blaster at its quickest: a bolt every FIRE_MS (about 80% of the old 100 ms rate; a whole number of
+// 4 ms slices, so the rate is exact); Rapid fire keeps about 1.65 times that.
+export const FIRE_MS = 124;
+export const RAPID_MS = 76;
 export const SHOT_SPEED = 130;
 export const SHOT_RANGE = 80;
 export const SHOT_Y = 2.4;
@@ -175,7 +183,7 @@ export const AIM_MAX = 0.5;
 // The stage packs: each stage past the house's own two brings its monsters,
 // its boss and their rules (see ghoul-graveyard.js for what a pack holds).
 // Their tables join this file's own, and their rules run where its own do.
-const PACKS = Object.freeze([BONES, GRAVEYARD, GROUNDS, CHAPEL, SANATORIUM, VILLAGE, MINE, ARMS, CART, SLED, GURNEY, PEW, MOWER, WAGON, HEARSE, TRAY, CARNIVAL, FROZEN_LAKE, BOG, LANTERN, RIDE, BANISTER]);
+const PACKS = Object.freeze([BONES, GRAVEYARD, GROUNDS, CHAPEL, SANATORIUM, VILLAGE, MINE, ARMS, CART, SLED, GURNEY, PEW, MOWER, WAGON, HEARSE, TRAY, CARNIVAL, FROZEN_LAKE, BOG, LANTERN, RIDE, MARROW, EYE, HEART, MAT, BONESTAIR, BANISTER]);
 export const fromPacks = (key) => Object.assign({}, ...PACKS.map((pk) => pk[key] || {}));
 export const listPacks = (key) => PACKS.flatMap((pk) => pk[key] || []);
 
@@ -304,8 +312,8 @@ export const HORDE_ROOM = 4;
 
 // The bosses, in a room's last FIELD_W. The arena locks once you are
 // BOSS_LOCK into it, and the boss wakes after BOSS_INTRO_MS. Its hp grows
-// BOSS_DEPTH_HP for each stage already cleared that run (up to
-// BOSS_DEPTH_MAX of them); a stomp deals STOMP_DAMAGE, a shot one (two to
+// BOSS_DEPTH_HP for each step of depth (two a stage already cleared that run,
+// up to BOSS_DEPTH_MAX steps); a stomp deals STOMP_DAMAGE, a shot one (two to
 // Rattlebones' skull).
 export const BOSSES = Object.freeze({
   gourd: Object.freeze({ name: "The Rotting Gourd", sub: "Watch its shadow, then run", w: 14, h: 12, hp: 65, points: 2000, color: "#d0631c" }),
@@ -315,7 +323,7 @@ export const BOSS_LOCK = 10;
 export const BOSS_INTRO_MS = 1000;
 export const BOSS_DEPTH_HP = 0.12;
 export const BOSS_DEPTH_MAX = 12;
-// Each stage cleared makes the monsters a little quicker and lets them out a
+// Each step of depth makes the monsters a little quicker and lets them out a
 // little sooner (see roomFor).
 export const DEPTH_PACE = 0.03;
 export const DEPTH_EVERY = 0.95;
@@ -528,6 +536,8 @@ export function roomFor(id, depth = 0) {
   const d = Math.max(0, Math.floor(depth) || 0);
   const k = `${base.id}:${d}`;
   if (BUILT.has(k)) return BUILT.get(k);
+  // A run is RUN_STAGES stages now: each counts for two of the old ones.
+  const steps = d * 2;
   const candy = [];
   for (const [x0, y, count] of base.candy) for (let i = 0; i < count; i++) candy.push(Object.freeze({ x: x0 + i * 3, y }));
   const spec = Object.freeze({
@@ -535,13 +545,13 @@ export function roomFor(id, depth = 0) {
     depth: d,
     base,
     name: base.title,
-    pace: Math.min(1.4, 1 + DEPTH_PACE * d),
-    every: Math.max(0.55, DEPTH_EVERY ** d),
-    tough: Math.min(2, Math.floor(d / 3)),
+    pace: Math.min(1.4, 1 + DEPTH_PACE * steps),
+    every: Math.max(0.55, DEPTH_EVERY ** steps),
+    tough: Math.min(2, Math.floor(steps / 3)),
     // Doors in the wall let this many more out.
-    extra: Math.min(2, Math.floor(d / 2)),
-    bossHp: base.boss ? Math.round(BOSSES[base.boss].hp * (1 + BOSS_DEPTH_HP * Math.min(d, BOSS_DEPTH_MAX))) : 0,
-    bossPoints: base.boss ? Math.round(BOSSES[base.boss].points * (1 + d / 4)) : 0,
+    extra: Math.min(2, Math.floor(steps / 2)),
+    bossHp: base.boss ? Math.round(BOSSES[base.boss].hp * (1 + BOSS_DEPTH_HP * Math.min(steps, BOSS_DEPTH_MAX))) : 0,
+    bossPoints: base.boss ? Math.round(BOSSES[base.boss].points * (1 + steps / 4)) : 0,
     candyAt: Object.freeze(candy),
     arena: base.boss ? base.length - FIELD_W : -1,
   });

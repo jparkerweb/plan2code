@@ -49,6 +49,12 @@ import { LOOKS as TRAY_LOOKS, LOSE_SOUNDS as TRAY_LOSE_SOUNDS, LOSE_WORDS as TRA
 import { LOOKS as CARNIVAL_LOOKS, LOSE_SOUNDS as CARNIVAL_LOSE_SOUNDS, LOSE_WORDS as CARNIVAL_LOSE_WORDS, VOICES as CARNIVAL_VOICES, carnivalArt } from "../stages/carnival/ghoul-carnival-draw.js";
 import { LOOKS as FROZEN_LOOKS, LOSE_SOUNDS as FROZEN_LOSE_SOUNDS, LOSE_WORDS as FROZEN_LOSE_WORDS, VOICES as FROZEN_VOICES, frozenArt } from "../stages/frozen/ghoul-frozen-draw.js";
 import { LOOKS as BOG_LOOKS, LOSE_SOUNDS as BOG_LOSE_SOUNDS, LOSE_WORDS as BOG_LOSE_WORDS, VOICES as BOG_VOICES, bogArt } from "../stages/bog/ghoul-bog-draw.js";
+import { LOOKS as EYE_LOOKS, LOSE_SOUNDS as EYE_LOSE_SOUNDS, LOSE_WORDS as EYE_LOSE_WORDS, VOICES as EYE_VOICES, eyeArt } from "../stages/marrow/ghoul-marrow-eye-draw.js";
+import { LOOKS as HEART_LOOKS, LOSE_SOUNDS as HEART_LOSE_SOUNDS, LOSE_WORDS as HEART_LOSE_WORDS, VOICES as HEART_VOICES, heartArt } from "../stages/marrow/ghoul-marrow-heart-draw.js";
+import { LOOKS as MAT_LOOKS, LOSE_SOUNDS as MAT_LOSE_SOUNDS, LOSE_WORDS as MAT_LOSE_WORDS, VOICES as MAT_VOICES, matArt } from "../rides/mat/ghoul-mat-draw.js";
+import { LOOKS as BONESTAIR_LOOKS, LOSE_SOUNDS as BONESTAIR_LOSE_SOUNDS, LOSE_WORDS as BONESTAIR_LOSE_WORDS, VOICES as BONESTAIR_VOICES, bonestairArt } from "../rides/bonestair/ghoul-bonestair-draw.js";
+import { endingArt } from "../story/ghoul-ending-draw.js";
+import { LOOKS as MARROW_LOOKS, LOSE_SOUNDS as MARROW_LOSE_SOUNDS, LOSE_WORDS as MARROW_LOSE_WORDS, VOICES as MARROW_VOICES, marrowArt } from "../stages/marrow/ghoul-marrow-draw.js";
 import { LOOKS as LANTERN_LOOKS, LOSE_SOUNDS as LANTERN_LOSE_SOUNDS, LOSE_WORDS as LANTERN_LOSE_WORDS, VOICES as LANTERN_VOICES, lanternArt } from "../rides/lantern/ghoul-lantern-draw.js";
 import { diceArt } from "../core/ghoul-dice-draw.js";
 import { gameOverBanner } from "../story/ghoul-gameover-draw.js";
@@ -140,6 +146,11 @@ export const LOOKS = Object.freeze({
   ...RIDE_LOOKS,
   ...BOG_LOOKS,
   ...LANTERN_LOOKS,
+  ...MARROW_LOOKS,
+  ...EYE_LOOKS,
+  ...HEART_LOOKS,
+  ...MAT_LOOKS,
+  ...BONESTAIR_LOOKS,
   crypt: Object.freeze({ wallTop: "#0a0b0e", wallLow: "#1b1e25", paper: "#262a33", wainscot: "#14161b", floorTop: "#43474f", floor: "#22252b", floorEdge: "#0a0b0d", shelf: "#30343c", shelfTop: "#4a4f58", pit: "#010102", window: "#b4bfd1", decor: "tombs", color: "#b4bfd1", dark: 0.9 }),
 });
 export const lookOf = (id) => LOOKS[id] || LOOKS.foyer;
@@ -263,14 +274,17 @@ const { drawZombie, drawZombieKin, drawHuntsman, drawCrawler, drawBat, drawGhost
 // backdrops (a look's `pack` names whose, the Graveyard's by default), graves,
 // monsters, bosses, missiles, hazards, waves, power-up badges and lights by
 // kind, and what their events look and sound like.
-const HELP = { paintDark, hudLayout, drawPower, ellipse, circle, roundRect, line, rotate, eye, hash, say, gate, label, drawBoneShape, BONE, DANGER, GOLD, FLASH, EYE_RED, EYE_PALE, EYE_AMBER };
+// `bossArt(kind)` hands a pack another boss's figure (the finale's shades of the keepers YOU beat).
+const HELP = { bossArt: (kind) => BOSS_ART[kind] || null, paintDark, hudLayout, drawPower, ellipse, circle, roundRect, line, rotate, eye, hash, say, gate, label, drawBoneShape, BONE, DANGER, GOLD, FLASH, EYE_RED, EYE_PALE, EYE_AMBER };
 const ARMS_ART = armsArt(HELP);
-const PACK_ART = { arms: ARMS_ART, bones: boneArt(HELP), graveyard: graveyardArt(HELP), grounds: groundsArt(HELP), chapel: chapelArt(HELP), sanatorium: sanatoriumArt(HELP), village: villageArt(HELP), mine: mineArt(HELP), cart: cartArt(HELP), sled: sledArt(HELP), banister: banisterArt(HELP), hearse: hearseArt(HELP), codeblue: gurneyArt(HELP), pew: pewArt(HELP), lantern: lanternArt(HELP), mower: mowerArt(HELP), tray: trayArt(HELP), wagon: wagonArt(HELP), carnival: carnivalArt(HELP), frozen: frozenArt(HELP), bog: bogArt(HELP), ride: { backdrop() {}, lights() {}, react: rideReact } };
+const PACK_ART = { arms: ARMS_ART, bones: boneArt(HELP), graveyard: graveyardArt(HELP), grounds: groundsArt(HELP), chapel: chapelArt(HELP), sanatorium: sanatoriumArt(HELP), village: villageArt(HELP), mine: mineArt(HELP), cart: cartArt(HELP), sled: sledArt(HELP), banister: banisterArt(HELP), hearse: hearseArt(HELP), codeblue: gurneyArt(HELP), pew: pewArt(HELP), lantern: lanternArt(HELP), mower: mowerArt(HELP), tray: trayArt(HELP), wagon: wagonArt(HELP), carnival: carnivalArt(HELP), frozen: frozenArt(HELP), bog: bogArt(HELP), marrow: marrowArt(HELP), dollhouse: eyeArt(HELP), pit: heartArt(HELP), mat: matArt(HELP), bonestair: bonestairArt(HELP), ride: { backdrop() {}, lights() {}, react: rideReact } };
 const packs = Object.values(PACK_ART);
 const DICE = diceArt(HELP);
 const OVER_BANNER = gameOverBanner(HELP);
 const INTRO_CARD = introArt(HELP);
 const STORY_CARD = storyArt({ ...HELP, LOOKS });
+// The ending's pages once the House is dead (story/ghoul-ending-draw.js).
+const ENDING = endingArt({ ...HELP, LOOKS });
 const BONUS = bonusArt(HELP, DICE.die);
 // The Carnival's dark ride draws the whole field itself (ghoul-ride-draw.js).
 const RIDE = rideArt(HELP, DICE.die);
@@ -1374,11 +1388,15 @@ function drawGourdFire(ctx, v, b) {
   ctx.globalAlpha = 1;
 }
 
+// Bosses whose fall is a scene of their own (the House's retreat): no fade,
+// their art decides what shows after it falls.
+const LINGERS = new Set(["marrow", "marroweye", "marrowheart"]);
+
 function drawBoss(ctx, v) {
   const b = v.round.boss;
   if (!b) return;
   const was = ctx.globalAlpha;
-  if (b.state === "down") {
+  if (b.state === "down" && !LINGERS.has(b.kind)) {
     if (b.t > 900) return;
     ctx.globalAlpha = was * (1 - b.t / 900);
   }
@@ -1404,6 +1422,24 @@ function drawBossBar(ctx, v) {
   roundRect(ctx, x + 0.2, 4.2, (w - 0.4) * Math.max(0, b.hp / b.max), 1.2, 0.6);
   ctx.fillStyle = "#a01010";
   ctx.fill();
+  // The House's three kills as skull pips past the bar's end: done in bone, this one beating red, the rest dim.
+  if (v.houseKill) {
+    for (let i = 0; i < 3; i++) {
+      const px = x + w + 1.6 + i * 1.9;
+      const on = i + 1 === v.houseKill;
+      ctx.globalAlpha = i + 1 > v.houseKill ? 0.35 : 1;
+      ctx.fillStyle = i + 1 < v.houseKill ? BONE : on ? "#e2553f" : "#cfc4a6";
+      circle(ctx, px, 4.6, on ? 0.75 + 0.08 * Math.sin(v.clock / 180) : 0.7);
+      ctx.fill();
+      ctx.fillRect(px - 0.4, 4.9, 0.8, 0.55);
+      ctx.fillStyle = "#1a1014";
+      circle(ctx, px - 0.28, 4.55, 0.17);
+      ctx.fill();
+      circle(ctx, px + 0.28, 4.55, 0.17);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
 }
 
 /* -------------------------------------------------------------- Planny */
@@ -1767,7 +1803,7 @@ function drawGlowing(ctx, v) {
 /* ------------------------------------------------------------ feedback */
 
 const KILL_WORDS = Object.freeze({ head: "Headshot!", stomp: "Crunch!", crush: "Flattened!", garlic: "Garlic!" });
-const LOSE_WORDS = Object.freeze({ time: "Out of time", pit: "Into the dark", bone: "Skull cracked", chandelier: "Crushed", acid: "Burned alive", wave: "Thrown down", ...BONES_LOSE_WORDS, ...BANISTER_LOSE_WORDS, ...GROUNDS_LOSE_WORDS, ...CHAPEL_LOSE_WORDS, ...SANATORIUM_LOSE_WORDS, ...VILLAGE_LOSE_WORDS, ...MINE_LOSE_WORDS, ...CART_LOSE_WORDS, ...SLED_LOSE_WORDS, ...HEARSE_LOSE_WORDS, ...GURNEY_LOSE_WORDS, ...PEW_LOSE_WORDS, ...MOWER_LOSE_WORDS, ...TRAY_LOSE_WORDS, ...WAGON_LOSE_WORDS, ...CARNIVAL_LOSE_WORDS, ...FROZEN_LOSE_WORDS,...RIDE_LOSE_WORDS, ...BOG_LOSE_WORDS, ...LANTERN_LOSE_WORDS, hound: "Mauled", spider: "Bitten", wraith: "Taken", hands: "Dragged under", mourner: "Mourned", robber: "Buried alive", crow: "Pecked", legs: "Kicked down", stone: "Struck by a headstone", fist: "Crushed by stone", angel: "Turned to stone" });
+const LOSE_WORDS = Object.freeze({ time: "Out of time", pit: "Into the dark", bone: "Skull cracked", chandelier: "Crushed", acid: "Burned alive", wave: "Thrown down", ...BONES_LOSE_WORDS, ...BANISTER_LOSE_WORDS, ...GROUNDS_LOSE_WORDS, ...CHAPEL_LOSE_WORDS, ...SANATORIUM_LOSE_WORDS, ...VILLAGE_LOSE_WORDS, ...MINE_LOSE_WORDS, ...CART_LOSE_WORDS, ...SLED_LOSE_WORDS, ...HEARSE_LOSE_WORDS, ...GURNEY_LOSE_WORDS, ...PEW_LOSE_WORDS, ...MOWER_LOSE_WORDS, ...TRAY_LOSE_WORDS, ...WAGON_LOSE_WORDS, ...CARNIVAL_LOSE_WORDS, ...FROZEN_LOSE_WORDS,...RIDE_LOSE_WORDS, ...BOG_LOSE_WORDS, ...LANTERN_LOSE_WORDS, ...MARROW_LOSE_WORDS, ...EYE_LOSE_WORDS, ...HEART_LOSE_WORDS, ...MAT_LOSE_WORDS, ...BONESTAIR_LOSE_WORDS, hound: "Mauled", spider: "Bitten", wraith: "Taken", hands: "Dragged under", mourner: "Mourned", robber: "Buried alive", crow: "Pecked", legs: "Kicked down", stone: "Struck by a headstone", fist: "Crushed by stone", angel: "Turned to stone" });
 // What spills from each kind when it dies, and whether it leaves a stain.
 const STAINS = Object.freeze({ ghost: false, wraith: false, skeleton: false, bat: true });
 
@@ -2022,7 +2058,9 @@ export function react(e, k) {
     ring(e.x, e.y, GOLD, 2, 12, 700);
     glow(e.x, e.y, 22, 0.9, 900);
     fx.cheer = 1600;
-    banner(`${BOSSES[e.kind].name} is dead`, e.life ? `+${e.points}, a life back, and the door is open` : `+${e.points}, and the door is open`, GOLD, 1800);
+    // A boss whose fall plays out as a scene of its own gets a short banner, out of its way.
+    if (LINGERS.has(e.kind)) banner(`${BOSSES[e.kind].name} is dead`, `+${e.points}, and a life back`, GOLD, 650);
+    else banner(`${BOSSES[e.kind].name} is dead`, e.life ? `+${e.points}, a life back, and the door is open` : `+${e.points}, and the door is open`, GOLD, 1800);
   } else if (e.type === "poof") {
     if (gate(fx, "poofMs", 80)) tone("ghoulPoof", 0.3, vary(0.3));
     burst(e.x, e.y, MONSTERS[e.kind] ? MONSTERS[e.kind].color : "#ffffff", 8, 12);
@@ -2042,6 +2080,9 @@ export function react(e, k) {
   } else if (e.type === "stageClear") {
     tone("fanfare", 0.4);
     k.markFurthest(e.n, banner("Stage cleared", `${e.n} of ${e.of}`, GOLD, 1400));
+  } else if (e.type === "won") {
+    // The House beaten: the record goes one past every stage, with no banner (never "7 OF 6").
+    k.markFurthest(e.n);
   } else if (e.type === "offer") {
     // The next doors on offer: a toll, a groan of hinges.
     tone("ghoulToll", 0.35, 1.2);
@@ -2067,7 +2108,7 @@ export function react(e, k) {
     else if (e.by === "villager") say(tone, "villager", "throw", 0.4);
     else if (e.kind === "barbell") { /* the strongman's own throw sound (ghoul-carnival-draw.js) */ }
     else if (e.by !== "bones") tone("swoosh", 0.15, e.kind === "acid" ? 0.7 : 1.2);
-  } else if (!DICE.react(e, k) && !BONUS.react(e, k)) ART.react(e, k);
+  } else if (!DICE.react(e, k) && !BONUS.react(e, k) && !ENDING.react(e, k)) ART.react(e, k);
   if (e.type === "lose" || e.type === "respawn") fx.combo = null;
 }
 
@@ -2130,6 +2171,11 @@ export const VOICES = Object.freeze({
   angel: Object.freeze({ wake: "ghoulAngelWake", weep: "ghoulAngelWeep", watch: "ghoulAngelWatch", see: "ghoulAngelSee", slam: "ghoulAngelSlam", wings: "ghoulAngelWings", hurt: "ghoulAngelHurt", die: "ghoulAngelDie" }),
   ...BOG_VOICES,
   ...LANTERN_VOICES,
+  ...MARROW_VOICES,
+  ...EYE_VOICES,
+  ...HEART_VOICES,
+  ...MAT_VOICES,
+  ...BONESTAIR_VOICES,
 });
 // Plays a kind's voice for an act, if it has one, its pitch a touch varied.
 function say(tone, kind, act, level) {
@@ -2177,6 +2223,11 @@ const LOSE_SOUNDS = Object.freeze({
   ...RIDE_LOSE_SOUNDS,
   ...BOG_LOSE_SOUNDS,
   ...LANTERN_LOSE_SOUNDS,
+  ...MARROW_LOSE_SOUNDS,
+  ...EYE_LOSE_SOUNDS,
+  ...HEART_LOSE_SOUNDS,
+  ...MAT_LOSE_SOUNDS,
+  ...BONESTAIR_LOSE_SOUNDS,
 });
 // The door's boom in each of the eight rooms, the Crypt deepest.
 const ROOM_PITCH = Object.freeze([1, 1.1, 0.95, 1.2, 1.05, 1.15, 0.9, 0.75]);
@@ -2622,6 +2673,7 @@ export function drawScene(ctx, v) {
   if ((v.state === "running" || v.state === "paused") && round.phase === "intro") INTRO_CARD(ctx, v);
   if ((v.state === "running" || v.state === "paused") && round.phase === "bossintro") BOSS_CARD(ctx, v);
   if ((v.state === "running" || v.state === "paused") && round.phase === "story") STORY_CARD(ctx, v);
+  if ((v.state === "running" || v.state === "paused") && round.phase === "ending") ENDING.card(ctx, v);
   if (v.state === "over" && v.lost && !v.won) OVER_BANNER(ctx, v);
   if (v.tally) drawTally(ctx, v, v.tally);
   ctx.restore();

@@ -86,7 +86,7 @@ export const PAGES = freeze([
   ], [[0, "ghoulStoryLock", 0.5, 1], [1200, "ghoulStoryCreak", 0.3, 0.8], [3200, "ghoulStoryLock", 0.5, 0.85], [5200, "ghoulStoryLock", 0.5, 0.75]]),
   page("begin", "begin", "VIII. THE LONG HALL", { sky: "#100c12", ground: "#281a14", a: "#e9ddf3", glow: "#c4a8dc" }, [
     "Ahead lies The Long Hall, candles lit, nobody home.",
-    "Far below it all, something enormous is still beating.",
+    "Far below, its heart is still beating. Go and stop it.",
     "Switch on YOUR light. Let it flinch again.",
   ], [[0, "ghoulStoryCreak", 0.4, 1], [2300, "ghoulStoryBeat", 0.5, 1], [3900, "ghoulStoryBegin", 0.8, 1]]),
 ]);

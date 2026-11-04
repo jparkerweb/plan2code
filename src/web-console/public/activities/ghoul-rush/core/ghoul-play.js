@@ -6,10 +6,11 @@ import { armBossDamage, fillBag } from "../arms/ghoul-arms.js";
 import { bossIntroFor } from "../story/ghoul-boss-intros.js";
 import { introFor } from "../story/ghoul-intros.js";
 import { stepStory } from "../story/ghoul-story.js";
+import { beginEnding, stepEnding } from "../story/ghoul-ending.js";
 import { BONUS_READY_MS, endBonus as endBonusWith, makeBonus } from "./ghoul-bonus.js";
 import { START_DICE, askStep, giveDiceGift, markRest, reviveSpot, rollDice } from "./ghoul-dice.js";
-import { FLAP_CLEAR, TIMED, pickPower, pickups, powerHere, retryMercy } from "./ghoul-powers.js";
-import { CHANDELIER_Y, FIELD_H, FIELD_W, ROOMS, STAGES, stageById } from "./ghoul-rooms.js";
+import { FLAP_CLEAR, MAX_HELD_DICE, TIMED, pickPower, pickups, powerHere, retryMercy } from "./ghoul-powers.js";
+import { CHANDELIER_Y, FIELD_H, FIELD_W, FINALE, ROOMS, RUN_STAGES, SELECTABLE, STAGES, stageById } from "./ghoul-rooms.js";
 import { camera as cameraWith, clearRoom as clearRoomWith, horde as hordeWith, hurry as hurryWith, lockArena, newRound as newRoundWith, nextRoom as nextRoomWith, onCard, pickStage as pickStageWith, respawn as respawnWith, setupRoom as setupRoomWith, spawners as spawnersWith, stagesLeft as stagesLeftWith, steerSelect as steerSelectWith, stepIntro as stepIntroWith, takeIntro as takeIntroWith, takeSelect as takeSelectWith } from "./ghoul-run.js";
 import { pressFire as pressFireWith } from "../arms/ghoul-arms.js";
 import { KIT } from "./ghoul-kit.js";
@@ -27,10 +28,10 @@ export const pressFire = (round) => pressFireWith(round, KIT);
 // and the helpers that set a room up, handed to its rules the way KIT is
 // handed to a stage pack.
 const RUN_KIT = Object.freeze({
-  ROOMS, STAGES, stageById, FIELD_W, CHANDELIER_Y, START_LIVES, START_DICE, TIMED, DARK_CHANCE, BONUS_START, HURRY_MS, OFFER_N, PICK_HOLD_MS,
-  READY_MS, BONUS_READY_MS, makeBonus, endBonus: (round, won) => endBonusWith(round, won, { award, ROOM_POINTS }), SAFE_MS, CLEAR_MS, BOSS_LOCK, ROOM_POINTS, FLAWLESS_POINTS, CAM_AT, CAM_LEAD, CAM_EASE,
+  ROOMS, STAGES, SELECTABLE, FINALE, RUN_STAGES, stageById, FIELD_W, CHANDELIER_Y, START_LIVES, START_DICE, TIMED, DARK_CHANCE, BONUS_START, HURRY_MS, OFFER_N, PICK_HOLD_MS,
+  READY_MS, BONUS_READY_MS, makeBonus, endBonus: (round, won) => endBonusWith(round, won, { award, ROOM_POINTS, MAX_HELD_DICE }), SAFE_MS, CLEAR_MS, BOSS_LOCK, ROOM_POINTS, FLAWLESS_POINTS, CAM_AT, CAM_LEAD, CAM_EASE,
   SPAWN_AHEAD, DOOR_CLEAR, EMERGE_MS, CRAWL_NEAR, SPIDER_Y, GHOST_SHOW_MS, GHOST_HIDE_MS, DARK_BEHIND, MAX_MONSTERS, HORDE_ROOM, HORDE_WITH, MONSTERS,
-  roomFor, seeded, powerHere, pickPower, makeYou, makeBoss, groundAt, timeFor, award, clamp, variant, spawnMonster, introFor, bossIntroFor,
+  roomFor, seeded, powerHere, pickPower, makeYou, makeBoss, groundAt, timeFor, award, clamp, variant, spawnMonster, introFor, bossIntroFor, beginEnding,
   mercy: (round) => retryMercy(round, POWER_KIT),
   diceGift: (round) => giveDiceGift(round, DICE_KIT.give),
   place: (round) => PLACES.forEach((f) => f(round, KIT)),
@@ -88,7 +89,8 @@ export function aimAt(round) {
 export function fire(round, ms) {
   round.fireMs = Math.max(0, round.fireMs - ms);
   const you = round.you;
-  if (!round.input.fire || you.out > 0 || round.gallery || (round.runner && round.runner.id === "lantern")) {
+  // The Heart's HOLD FIRE (`round.flood`): fire held floods YOUR light instead of firing (its pack reads the key).
+  if (!round.input.fire || you.out > 0 || round.gallery || (round.runner && round.runner.id === "lantern") || round.flood) {
     round.coolMs += ms;
     const cooling = Math.min(ms, round.coolMs - COOL_DELAY_MS);
     if (cooling > 0) round.heat = Math.max(0, round.heat - (COOL_RATE * cooling) / 1000);
@@ -477,7 +479,7 @@ function play(round, ms, random) {
 }
 
 // What a stage pack's rules may use of this file's.
-Object.assign(KIT, { BOSSES, shotY, aimAt, dropItem, guarded, weakOf: (b, s, round) => (WEAK[b.kind] ? WEAK[b.kind](b, s, round, KIT) : 1), stone: (m) => Boolean(STONE[m.kind]?.(m)), strike: (round, s) => TARGETS.some((f) => f(round, s, KIT)), harmlessNow: (m) => Boolean(HARMLESS[m.kind]?.(m)), walk, towardYou, throwBone, spawnMonster, groundAt, footing, struck, hurt, hurtBoss, fling, arenaMin, arenaMax, solid, FIELD_W, CHANDELIER_Y, SHOT_Y, YOU_H, HIT_W, HIT_H, GRAVITY, FALL_MAX, PIT_Y, BONE_G, DUCK_H, lose });
+Object.assign(KIT, { BOSSES, shotY, aimAt, dropItem, guarded, weakOf: (b, s, round) => (WEAK[b.kind] ? WEAK[b.kind](b, s, round, KIT) : 1), stone: (m) => Boolean(STONE[m.kind]?.(m)), strike: (round, s) => TARGETS.some((f) => f(round, s, KIT)), harmlessNow: (m) => Boolean(HARMLESS[m.kind]?.(m)), walk, towardYou, throwBone, spawnMonster, groundAt, footing, struck, hurt, hurtBoss, STAGES, stageById, armBossDamage: (round, d) => armBossDamage(round, d, KIT), fling, arenaMin, arenaMax, solid, FIELD_W, CHANDELIER_Y, SHOT_Y, YOU_H, HIT_W, HIT_H, GRAVITY, FALL_MAX, PIT_Y, BONE_G, DUCK_H, lose });
 Object.freeze(KIT);
 
 // Throws Planny: up at `v` and `dx` units across (signed) by the time he is
@@ -561,6 +563,11 @@ export function advance(round, ms, random = Math.random) {
     // The intro story, before the first room: only its pages move.
     if (round.phase === "story") {
       stepStory(round, slice);
+      continue;
+    }
+    // The ending, once the House is dead: only its pages move (story/ghoul-ending.js).
+    if (round.phase === "ending") {
+      stepEnding(round, slice);
       continue;
     }
     round.clock += slice;

@@ -51,8 +51,8 @@ test("Ghoul Rush intros: every stage has a card of 3 or 4 short lines, no em das
     assert.ok(size > 0 && size <= TITLE_SIZE, `${st.id}'s title has a size`);
     assert.ok(Math.abs(xs[0]) < field / 2 && Math.abs(xs[xs.length - 1]) < field / 2, `${st.id}'s title fits the field`);
   }
-  assert.deepEqual(Object.keys(INTROS).sort(), ghoul.STAGES.map((st) => st.id).sort(), "no intro for a stage that does not exist");
-  assert.equal(new Set(ghoul.STAGES.flatMap((st) => introFor(st.id).lines)).size, ghoul.STAGES.reduce((n, st) => n + introFor(st.id).lines.length, 0), "no line used twice");
+  assert.deepEqual(Object.keys(INTROS).sort(), ghoul.SELECTABLE.map((st) => st.id).sort(), "no intro for a stage that does not exist");
+  assert.equal(new Set(ghoul.SELECTABLE.flatMap((st) => introFor(st.id).lines)).size, ghoul.SELECTABLE.reduce((n, st) => n + introFor(st.id).lines.length, 0), "no line used twice");
   assert.ok(toneNames().includes("ghoulStageIntro"));
 });
 

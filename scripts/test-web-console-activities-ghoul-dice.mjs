@@ -102,7 +102,7 @@ test("Ghoul Rush: a Lucky die is as common as a 1UP, comes only as a drop, and i
   assert.equal(dark.drops.length, 1, "a kill drops a power-up on a low roll");
 });
 
-test("Ghoul Rush: picking up Lucky dice stacks them to nine, then pays points like a 1UP at its cap, and the dice show in a pill", () => {
+test("Ghoul Rush: picking up Lucky dice stacks them to MAX_HELD_DICE (13), then pays points like a 1UP at its cap, and the dice show in a pill", () => {
   const round = hall();
   const drop = { id: 1, kind: "die", x: round.you.x, y: round.you.y + 1, vx: 0, vy: 0, life: 9000, rest: true };
   round.drops.push(drop);
@@ -110,12 +110,13 @@ test("Ghoul Rush: picking up Lucky dice stacks them to nine, then pays points li
   assert.equal(round.dice, 1);
   assert.equal(round.drops.length, 0);
   assert.equal(events(round, "power")[0].kind, "die");
-  for (let k = 0; k < 8; k++) ghoul.applyPower(round, "die");
-  assert.equal(round.dice, 9);
+  assert.equal(ghoul.MAX_HELD_DICE, 13);
+  for (let k = 0; k < 20; k++) ghoul.applyPower(round, "die");
+  assert.equal(round.dice, ghoul.MAX_HELD_DICE, "stacks to the cap");
   const score = round.score;
   ghoul.applyPower(round, "die");
-  assert.equal(round.dice, 10, "no cap");
-  assert.equal(round.score, score, "no points instead");
+  assert.equal(round.dice, ghoul.MAX_HELD_DICE, "no more past it");
+  assert.equal(round.score, score + ghoul.POWER_POINTS, "points instead");
   const canvas = { getContext: () => null };
   const game = ghoul.default.create({ canvas });
   game.start();
@@ -239,13 +240,18 @@ test("Ghoul Rush: a 5 saves him with a heart and no shield, a 4 just saves him, 
   lose(held, "pit");
   ghoul.advance(held, ghoul.ROLL_MS + 8, rolls(FOUR));
   assert.equal(held.you.garlic, true, "a shield he already held stays");
+  const some = hall(1);
+  some.lives = 9;
+  lose(some, "zombie");
+  ghoul.advance(some, ghoul.ROLL_MS + 8, rolls(FIVE));
+  assert.equal(some.lives, 10, "a heart under the cap");
   const full = hall(1);
-  full.lives = 9;
+  full.lives = ghoul.MAX_LIVES;
   const score = full.score;
   lose(full, "zombie");
   ghoul.advance(full, ghoul.ROLL_MS + 8, rolls(FIVE));
-  assert.equal(full.lives, 10, "no cap");
-  assert.equal(full.score, score, "no points instead");
+  assert.equal(full.lives, ghoul.MAX_LIVES, "never past MAX_LIVES (13)");
+  assert.equal(full.score, score + ghoul.POWER_POINTS, "points instead");
 });
 
 test("Ghoul Rush: a 3 costs the life and he comes back with Rapid fire and a Garlic shield, a 2 with Bottle Rockets and a Garlic shield", () => {

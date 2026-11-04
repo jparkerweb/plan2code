@@ -1,4 +1,4 @@
-// Plan2Code Web Console - Ghoul Rush's stage intro cards, the words and colors: per stage id, the title, a palette, a kicker line, 3 or 4 lines of flavor text and the boss's name. ghoul-intro-draw.js draws them; scripts/test-web-console-activities-ghoul-intro.mjs makes sure every stage in STAGES has one.
+// Plan2Code Web Console - Ghoul Rush's stage intro cards, the words and colors: per stage id, the title, a palette, a kicker line, 3 or 4 lines of flavor text and the boss's name. ghoul-intro-draw.js draws them; scripts/test-web-console-activities-ghoul-intro.mjs makes sure every stage in SELECTABLE (the stages and the finale) has one.
 //
 // Rules for the text (see "Stage intro screens" in prototypes/Ghoul-Rush-TODO.md):
 // 3 or 4 lines, each at most MAX_LINE characters (the card is 96 units wide),
@@ -78,6 +78,12 @@ export const INTROS = freeze({
     "Old Mother Bog stirs her pot under the black water.",
     "Chase the pretty lights and they will lead YOU under.",
     "The mud holds what it catches. Do not let it hold YOU.",
+  ]),
+  marrow: intro("Marrow Manor", "#f3d27a", "#7a2e12", "#c8a04a", "It knows you are home", "Marrow", [
+    "Every door YOU picked led here. YOU are back on the lawn.",
+    "No more keepers. No more copies. Just the house itself.",
+    "It has been eating fright for longer than the valley stood.",
+    "Tonight it is hungry, and YOU are the only guest left.",
   ]),
 });
 

@@ -982,8 +982,12 @@ Ghoul Rush at 65).
   and out of each boss's room you **choose the next stage** from two
   (one, once a single stage is left) never played that run, each card
   showing the stage with its boss standing in it: left and right pick one
-  out, space or up goes in. Clear every stage and you **escape**, a win.
-  Each stage cleared makes the next quicker and tougher. Every other room keeps a **horde**
+  out, space or up goes in. Clear six stages and the run takes you back to
+  **Marrow Manor** for the finale, a fight against **the house itself**: on its
+  front lawn, shoot out every lit window, the only part of it that can be hurt,
+  while it throws its roof, its carpet and its fence at you, and calls down
+  lightning and sends crows out of its door the moment you climb the oak. Kill it and you
+  **escape**, a win. Each stage cleared makes the next quicker and tougher. Every other room keeps a **horde**
   pouring in from the edges of the view, mostly ahead, so standing still is
   never safe. **Zombies** shamble out of doors in the wall and sprint once
   you are close, **crawlers** drag themselves up through loose boards,

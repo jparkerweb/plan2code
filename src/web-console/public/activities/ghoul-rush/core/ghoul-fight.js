@@ -4,7 +4,7 @@
 
 import { BONUS_SAFE_MS } from "./ghoul-bonus.js";
 import { answerAsk, beginRoll } from "./ghoul-dice.js";
-import { ARM_DROP, POWERS, applyPower as applyPowerWith, armDrop, pickPower } from "./ghoul-powers.js";
+import { ARM_DROP, MAX_HELD_DICE, MAX_LIVES, POWERS, applyPower as applyPowerWith, armDrop, pickPower } from "./ghoul-powers.js";
 import { FIELD_W } from "./ghoul-rooms.js";
 import { BOSS_MOVERS, HAZARDS, ON_KILL, nextSerial, spawnMonster, throwBone } from "./ghoul-monsters.js";
 import { footing, groundAt, landing, leftEdge, rightEdge } from "./ghoul-planny.js";
@@ -136,13 +136,17 @@ export function moveBoss(round, ms, random) {
   }
 }
 
-// Damage to the boss; at none it falls and the door opens.
-export function hurtBoss(round, dmg, how) {
+// Damage to the boss; at none it falls and the door opens. `at` ({ x, y }),
+// when given, is where the hit and the fall show (a boss hurt only through
+// a part of its art, as the House is through its windows).
+export function hurtBoss(round, dmg, how, at = null) {
   const b = round.boss;
   if (!b || b.state !== "fight") return false;
   b.hp = Math.max(0, b.hp - dmg);
   b.hurt = 120;
-  round.events.push({ type: "bossHit", kind: b.kind, x: b.x, y: b.y + b.h / 2, how, weak: how === "weak" });
+  const x = at ? at.x : b.x;
+  const y = at ? at.y : b.y + b.h / 2;
+  round.events.push({ type: "bossHit", kind: b.kind, x, y, how, weak: how === "weak" });
   if (b.hp > 0) return true;
   b.state = "down";
   b.t = 0;
@@ -150,15 +154,16 @@ export function hurtBoss(round, dmg, how) {
   award(round, points);
   round.stats.bosses++;
   round.hasKey = true;
-  const life = true;
-  round.lives++;
+  // A boss always gives a life, up to MAX_LIVES.
+  const life = round.lives < MAX_LIVES;
+  if (life) round.lives++;
   for (const m of round.monsters) round.events.push({ type: "poof", kind: m.kind, x: m.x, y: m.y + m.h / 2 });
   round.monsters.length = 0;
   round.bones.length = 0;
   round.waves.length = 0;
   round.puddles.length = 0;
   round.hazards.length = 0;
-  round.events.push({ type: "bossDown", kind: b.kind, x: b.x, y: b.y + b.h / 2, points, life });
+  round.events.push({ type: "bossDown", kind: b.kind, x, y, points, life });
   return true;
 }
 
@@ -274,7 +279,7 @@ export function struck(round, cause, m = null) {
 // handed to a stage pack.
 export const POWER_KIT = Object.freeze({ footing, leftEdge, rightEdge, seeded, landing, GRAVITY, FALL_MAX, PIT_Y, HIT_W, HIT_H });
 // And what ghoul-dice.js needs.
-export const DICE_KIT = Object.freeze({ SAFE_MS, PIT_Y, FIELD_W, footing, groundAt, leftEdge, rightEdge, takeLife, kill, give: (round, kind) => applyPowerWith(round, kind, POWER_KIT) });
+export const DICE_KIT = Object.freeze({ MAX_LIVES, SAFE_MS, PIT_Y, FIELD_W, footing, groundAt, leftEdge, rightEdge, takeLife, kill, give: (round, kind) => applyPowerWith(round, kind, POWER_KIT) });
 
 export const applyPower = (round, kind) => applyPowerWith(round, kind, POWER_KIT);
 

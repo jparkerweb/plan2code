@@ -8,10 +8,11 @@ import { isWaiting, startRide } from "../rides/dark-ride/ghoul-ride.js";
 import { lanternHums } from "../rides/lantern/ghoul-lantern.js";
 import { BONES_WINDUP_MS } from "../stages/wing/ghoul-bones.js";
 import { beginStory, pressStory, releaseStory, takeStory } from "../story/ghoul-story.js";
+import { ENDING_TRACK, pressEnding, releaseEnding, takeEnding } from "../story/ghoul-ending.js";
 import { heartsText } from "./ghoul-bonus.js";
 import { answerAsk, steerAsk } from "./ghoul-dice.js";
 import { ARM_POP_MS, PILL_WORDS, POWERS, TIMED } from "./ghoul-powers.js";
-import { CEILING_Y, FIELD_H, FIELD_W, STAGES, roomById, stageById } from "./ghoul-rooms.js";
+import { CEILING_Y, FIELD_H, FIELD_W, FINALE, RUN_STAGES, SELECTABLE, roomById, stageById } from "./ghoul-rooms.js";
 import { onCard, openSelect, steerPick } from "./ghoul-run.js";
 import { DICE_KIT } from "./ghoul-fight.js";
 import { POINTERS, ghostSight, solid } from "./ghoul-monsters.js";
@@ -46,8 +47,9 @@ export function lightning(left) {
 
 // The end screen's nudge to play again, by the most stages ever cleared.
 function teaser(most) {
-  if (most < STAGES.length) return `Best: ${most} of ${STAGES.length} stages. Clear them all to escape.`;
-  return "You have escaped the house before. Can you do it again?";
+  if (most < RUN_STAGES) return `Best: ${most} of ${RUN_STAGES} stages. Then the House.`;
+  if (most === RUN_STAGES) return "Best: every stage. The House still stands.";
+  return "You have killed the House before. Can you do it again?";
 }
 
 // The held sounds under play (no drone under the house: every room has its
@@ -66,13 +68,17 @@ const HEART_NEAR = 16;
 // layers (its melody and drums included), the clock's last seconds add
 // DREAD_CLOCK, and a boss fight plays all of it. The level eases toward its
 // target over about DREAD_EASE_MS, so a change never lands as a jolt.
-export const ROOM_MUSIC = Object.freeze({ banister: "ghoulBanister", hall: "ghoulHall", darkride: "ghoulRideTheme", lychgate: "ghoulLychgate", graves: "ghoulGraves", mausoleums: "ghoulMausoleums", angel: "ghoulAngel", maze: "ghoulMaze", topiary: "ghoulTopiary", gazebo: "ghoulGazebo", yard: "ghoulYard", nave: "ghoulNave", tower: "ghoulTower", loft: "ghoulLoft", choir: "ghoulChoir", shaft: "ghoulShaft", tunnels: "ghoulTunnels", collapse: "ghoulCollapse", seam: "ghoulSeam", cart: "ghoulCart", midway: "ghoulMidway", mirrors: "ghoulMirrors", funhouse: "ghoulFunhouse", bigtop: "ghoulBigTop", admissions: "ghoulAdmissions", baths: "ghoulBaths", theater: "ghoulTheater", ward: "ghoulWard", street: "ghoulStreet", inn: "ghoulInn", square: "ghoulSquare", green: "ghoulGreen", foyer: "ghoulFoyer", gallery: "ghoulGallery", library: "ghoulLibrary", ballroom: "ghoulBallroom", kitchen: "ghoulKitchen", conservatory: "ghoulConservatory", attic: "ghoulAttic", crypt: "ghoulCrypt", huts: "ghoulHuts", lodge: "ghoulLodge", blackice: "ghoulBlackIce", sled: "ghoulSledRide", codeblue: "ghoulBlueRide", pew: "ghoulPewDirge", mower: "ghoulMowerRide", wagon: "ghoulWagonRide", hearse: "ghoulHearseRide", tray: "ghoulTrayRide", widow: "ghoulWidow", boardwalk: "ghoulBoardwalk", hollow: "ghoulHollow", stilts: "ghoulStilts", lantern: "ghoulLanternTheme", drowning: "ghoulDrowning" });
+export const ROOM_MUSIC = Object.freeze({ banister: "ghoulBanister", hall: "ghoulHall", darkride: "ghoulRideTheme", lychgate: "ghoulLychgate", graves: "ghoulGraves", mausoleums: "ghoulMausoleums", angel: "ghoulAngel", maze: "ghoulMaze", topiary: "ghoulTopiary", gazebo: "ghoulGazebo", yard: "ghoulYard", nave: "ghoulNave", tower: "ghoulTower", loft: "ghoulLoft", choir: "ghoulChoir", shaft: "ghoulShaft", tunnels: "ghoulTunnels", collapse: "ghoulCollapse", seam: "ghoulSeam", cart: "ghoulCart", midway: "ghoulMidway", mirrors: "ghoulMirrors", funhouse: "ghoulFunhouse", bigtop: "ghoulBigTop", admissions: "ghoulAdmissions", baths: "ghoulBaths", theater: "ghoulTheater", ward: "ghoulWard", street: "ghoulStreet", inn: "ghoulInn", square: "ghoulSquare", green: "ghoulGreen", foyer: "ghoulFoyer", gallery: "ghoulGallery", library: "ghoulLibrary", ballroom: "ghoulBallroom", kitchen: "ghoulKitchen", conservatory: "ghoulConservatory", attic: "ghoulAttic", crypt: "ghoulCrypt", huts: "ghoulHuts", lodge: "ghoulLodge", blackice: "ghoulBlackIce", sled: "ghoulSledRide", codeblue: "ghoulBlueRide", pew: "ghoulPewDirge", mower: "ghoulMowerRide", wagon: "ghoulWagonRide", hearse: "ghoulHearseRide", tray: "ghoulTrayRide", widow: "ghoulWidow", boardwalk: "ghoulBoardwalk", hollow: "ghoulHollow", stilts: "ghoulStilts", lantern: "ghoulLanternTheme", drowning: "ghoulDrowning", lawn: "ghoulMarrowLawn", mat: "ghoulMarrowMat", dollhouse: "ghoulMarrowRooms", bonestair: "ghoulMarrowStair", pit: "ghoulMarrowPit" });
+// The House is killed three times over (Kill I on the lawn, II through every room, III in the Pit).
+export const HOUSE_KILLS = 3;
 const DREAD_ROOM = 0.7;
 const DREAD_CLOCK = 0.2;
 const DREAD_EASE_MS = 900;
 
 // How full the music is right now, 0 to 1: the target the music eases toward.
 export function dread(round) {
+  // The Heart's HOLD FIRE opens the music all the way (the Pit's track turns major only at full dread).
+  if (round.flood) return 1;
   const b = round.boss;
   if (b && round.lockX >= 0 && (b.state === "fight" || b.state === "intro")) return 0.9 + 0.1 * (1 - b.hp / Math.max(1, b.max));
   if (round.gallery && round.gallery.track) return 0.9;
@@ -101,7 +107,8 @@ function create({ canvas, tone = () => {}, hum = () => {}, music = () => {}, onS
   let most = 0;
   let further = false;
   try {
-    most = Math.max(0, memo ? Number(memo.get()) | 0 : 0);
+    // RUN_STAGES + 1 means the House has been beaten.
+    most = Math.min(RUN_STAGES + 1, Math.max(0, memo ? Number(memo.get()) | 0 : 0));
   } catch {}
   // Particles, floating words, rings, banners, the chain's big number, the
   // shake and the flash, the flares of light and the stains on the floor,
@@ -163,7 +170,7 @@ function create({ canvas, tone = () => {}, hum = () => {}, music = () => {}, onS
     try {
       if (memo) memo.set(most);
     } catch {}
-    if (b) b.tag = `NEW RECORD: ${n} OF ${STAGES.length} STAGES`;
+    if (b) b.tag = `NEW RECORD: ${n} OF ${RUN_STAGES} STAGES`;
   };
 
   // A room's banner, named for its stage and how far into it.
@@ -222,6 +229,8 @@ function create({ canvas, tone = () => {}, hum = () => {}, music = () => {}, onS
     // Lightning now and then, the thunder with it.
     fx.bolt = Math.max(0, fx.bolt - ms);
     fx.nextBolt -= ms;
+    // A room under the ground (its look's `noLightning`, the Pit) never flashes.
+    if (fx.nextBolt <= 0 && lookOf(round.spec.id).noLightning) fx.nextBolt = BOLT_EVERY_MS;
     if (fx.nextBolt <= 0) {
       fx.bolt = BOLT_MS;
       fx.nextBolt = BOLT_EVERY_MS * (0.6 + Math.random() * 0.8);
@@ -267,7 +276,7 @@ function create({ canvas, tone = () => {}, hum = () => {}, music = () => {}, onS
     // all there are.
     const st = round.stage && stageById(round.stage);
     hud.room = (st ? st.title : round.spec.name).toUpperCase();
-    hud.stage = `STAGE ${round.cleared.length} OF ${STAGES.length}`;
+    hud.stage = round.stage === FINALE.id ? `THE HOUSE: KILL ${houseKill()} OF ${HOUSE_KILLS}` : `STAGE ${round.cleared.length} OF ${RUN_STAGES}`;
     hud.bonus = round.bonus;
     hud.hearts = round.bonusRound ? heartsText(round.bonusRound) : "";
     hud.time = round.timeMs > 0 ? Math.ceil(round.timeMs / 1000) : 0;
@@ -284,8 +293,11 @@ function create({ canvas, tone = () => {}, hum = () => {}, music = () => {}, onS
     return hud;
   };
 
+  // In the finale, which of the House's three kills is under way: the boss rooms up to this one (at least the first).
+  const houseKill = () => Math.max(1, FINALE.rooms.slice(0, round.stageAt + 1).filter((id) => roomById(id)?.boss).length);
+
   // The view ghoul-draw.js draws from: one object, refilled each frame.
-  const view = { g: Object.freeze({ W, H, HUD_H, PAD, FIELD_W, FIELD_H, YOU_W, YOU_H, CRASH_MS, CRUMBLE_BACK_MS, RISE_MS, SKEL_WINDUP_MS, BONES_WINDUP_MS, WAVE_H, CHANDELIER_W, CHANDELIER_SHAKE_MS, SHOT_Y, DUCK_SHOT_Y, GOURD_WAIT_MS, EMERGE_MS, PUDDLE_W, PUDDLE_MS, HOUND_CROUCH_MS, WRAITH_WIND_MS, SPIT_WINDUP_MS, CEILING_Y, ZOMBIES }), powers: POWERS, monsters: MONSTERS, bosses: BOSSES, groundAt, shelfThere, solid, ghostSight, roomFor, roomById, stages: STAGES, stageById, OFFER_N };
+  const view = { g: Object.freeze({ W, H, HUD_H, PAD, FIELD_W, FIELD_H, YOU_W, YOU_H, CRASH_MS, CRUMBLE_BACK_MS, RISE_MS, SKEL_WINDUP_MS, BONES_WINDUP_MS, WAVE_H, CHANDELIER_W, CHANDELIER_SHAKE_MS, SHOT_Y, DUCK_SHOT_Y, GOURD_WAIT_MS, EMERGE_MS, PUDDLE_W, PUDDLE_MS, HOUND_CROUCH_MS, WRAITH_WIND_MS, SPIT_WINDUP_MS, CEILING_Y, ZOMBIES }), powers: POWERS, monsters: MONSTERS, bosses: BOSSES, groundAt, shelfThere, solid, ghostSight, roomFor, roomById, stages: SELECTABLE, runStages: RUN_STAGES, stageById, OFFER_N };
   const shakeAt = { x: 0, y: 0 };
 
   const paint = () => {
@@ -312,9 +324,11 @@ function create({ canvas, tone = () => {}, hum = () => {}, music = () => {}, onS
     view.lightning = lightning(fx.bolt);
     view.furthest = most;
     view.won = round.won;
+    // The kill under way in the finale (the boss bar's skull pips), null elsewhere.
+    view.houseKill = round.stage === FINALE.id ? houseKill() : null;
     // A dot per stage along the start and end screens: those cleared this
     // run in their colors (or, before one, as many as the record, in gold).
-    view.dots = STAGES.map((_, i) => (state === "ready" ? (i < most ? GOLD : null) : round.cleared[i] || null));
+    view.dots = Array.from({ length: RUN_STAGES }, (_, i) => (state === "ready" ? (i < most ? GOLD : null) : round.cleared[i] || null));
     view.lost = state === "over";
     view.overMs = fx.clock - (fx.overAt || 0);
     view.shake = null;
@@ -325,14 +339,14 @@ function create({ canvas, tone = () => {}, hum = () => {}, music = () => {}, onS
     }
     view.tally = null;
     view.big = null;
-    const record = most >= STAGES.length ? "You have escaped before" : `Best: ${most} of ${STAGES.length} stages`;
-    if (state === "ready") view.tally = ["Run. Shoot. Clear every stage and escape before the house gets you", `Arrows run, up jumps, hold space to fire, tap it twice to throw what you find. ${record}`];
+    const record = most > RUN_STAGES ? "You have killed the House" : `Best: ${most} of ${RUN_STAGES} stages`;
+    if (state === "ready") view.tally = [`Run. Shoot. Clear ${RUN_STAGES} stages, then kill the house`, `Arrows run, up jumps, hold space to fire, tap it twice to throw what you find. ${record}`];
     else if (state === "over") {
       const st = round.stats;
       view.big = String(round.score);
       const how = `${st.kills} ghouls (${st.headshots} headshots, ${st.stomps} stomps), best chain x${chainMult(st.bestChain)}, ${st.candy} souls.`;
-      if (round.won) view.tally = [`You escaped! Every stage cleared${beaten ? ". A new best!" : ""}`, how];
-      else view.tally = [`Cleared ${round.cleared.length} of ${STAGES.length} stages, out in ${roomName(round.spec, round.room)}${further ? ". A new record!" : ""}${beaten ? " A new best!" : ""}`, `${how} ${round.practice ? "A practice run: nothing kept." : teaser(most)}`];
+      if (round.won) view.tally = [`You escaped! Marrow starves${beaten ? ". A new best!" : ""}`, how];
+      else view.tally = [`Cleared ${round.cleared.length} of ${RUN_STAGES} stages, out in ${roomName(round.spec, round.room)}${further ? ". A new record!" : ""}${beaten ? " A new best!" : ""}`, `${how} ${round.practice ? "A practice run: nothing kept." : teaser(most)}`];
     }
     drawScene(ctx, view);
   };
@@ -346,6 +360,7 @@ function create({ canvas, tone = () => {}, hum = () => {}, music = () => {}, onS
     inp.jump = 0;
     upHeld = false;
     releaseStory(round);
+    releaseEnding(round);
   };
 
   // A new round. A real run opens on the intro story (ghoul-story.js) and the hall is announced when it ends; the stage select skips it.
@@ -379,6 +394,11 @@ function create({ canvas, tone = () => {}, hum = () => {}, music = () => {}, onS
     // The story has its own drone under its own sounds, and the hall's music waits for the hall.
     if (round.phase === "story") {
       hum("ghoul:story", "ghoulStoryDrone", 0.6, 1);
+      return;
+    }
+    // The ending plays its own track, if it has one.
+    if (round.phase === "ending") {
+      if (ENDING_TRACK) music(ENDING_TRACK, 0.7);
       return;
     }
     const b = round.boss;
@@ -522,6 +542,7 @@ function create({ canvas, tone = () => {}, hum = () => {}, music = () => {}, onS
       const fy = y / u - HUD_H - PAD;
       if (onCard(round)) return type === "down" ? takeIntro(round) || true : true;
       if (round.phase === "story") return type === "down" ? takeStory(round) || true : true;
+      if (round.phase === "ending") return type === "down" ? takeEnding(round) || true : true;
       // Use a Lucky die? A click lights its half (Yes on the left, No on the right); a click on the lit half answers.
       if (round.phase === "ask") {
         if (type === "down") {
@@ -556,6 +577,8 @@ function create({ canvas, tone = () => {}, hum = () => {}, music = () => {}, onS
           if (!repeat) takeIntro(round);
         } else if (state === "running" && round.phase === "story") {
           pressStory(round, repeat);
+        } else if (state === "running" && round.phase === "ending") {
+          pressEnding(round, repeat);
         } else if (state === "running") {
           round.input.fire = true;
           // The dark ride's trigger: a tap shorter than a step still fires; no weapon.
@@ -589,6 +612,11 @@ function create({ canvas, tone = () => {}, hum = () => {}, music = () => {}, onS
         if (!repeat) takeStory(round);
         return true;
       }
+      // The ending: the same, a fresh move key turns its page.
+      if (round.phase === "ending") {
+        if (!repeat) takeEnding(round);
+        return true;
+      }
       // A stage's intro card: any fresh move key walks in (a repeat never does).
       if (onCard(round)) {
         if (!repeat) takeIntro(round);
@@ -608,6 +636,7 @@ function create({ canvas, tone = () => {}, hum = () => {}, music = () => {}, onS
         round.input.fire = false;
         releaseFire(round);
         releaseStory(round);
+        releaseEnding(round);
       }
       else if (MOVES[name]) round.input[name] = false;
       if (name === "up") upHeld = false;

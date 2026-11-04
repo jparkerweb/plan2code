@@ -3,6 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import * as ghoul from "../src/web-console/public/activities/ghoul-rush/ghoul.js";
 import { skipStory } from "../src/web-console/public/activities/ghoul-rush/story/ghoul-story.js";
+import { skipEnding } from "../src/web-console/public/activities/ghoul-rush/story/ghoul-ending.js";
 import { dropAt, gameOverBanner, OVER_WORD } from "../src/web-console/public/activities/ghoul-rush/story/ghoul-gameover-draw.js";
 import { toneNames } from "../src/web-console/public/tones.js";
 
@@ -23,9 +24,14 @@ function winRun(h) {
   const r = h.round;
   through(r);
   while (!r.over) {
+    // The ending's pages once the House is dead.
+    if (r.phase === "ending") {
+      skipEnding(r);
+      continue;
+    }
     r.phaseMs = 0;
     ghoul.pickStage(r);
-    for (let k = 0; k < 4; k++) through(r);
+    for (let k = 0; k < 4 && r.phase !== "ending" && !r.over; k++) through(r);
   }
 }
 

@@ -758,7 +758,7 @@ export function pickerArt(d) {
     ctx.fillStyle = "rgba(4, 2, 6, 0.86)";
     ctx.fillRect(0, 0, W, g.FIELD_H);
     const done = round.cleared.length;
-    const total = v.stages.length;
+    const total = v.runStages;
     const last = round.offer.length === 1;
     if (done) label(ctx, `STAGE ${done} OF ${total} CLEARED`, W / 2, 3.2, 2, GOLD, "center", W - 4);
     label(ctx, last ? "One way left" : done ? "Choose your way on" : "Choose your way in", W / 2, 7.4, 4, "#ffffff", "center", W - 4, true);

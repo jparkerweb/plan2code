@@ -25,6 +25,9 @@ export const BOSS_INTROS = freeze({
   ringmaster: entry("The Ringmaster", "The show must go on"),
   frostwidow: entry("The Frost Widow", "Cold hands, colder heart"),
   motherbog: entry("Old Mother Bog", "Dinner climbed in on its own"),
+  marrow: entry("Marrow", "It has been expecting YOU"),
+  marroweye: entry("Marrow, Every Room at Once", "Make yourself at home"),
+  marrowheart: entry("The Heart of Marrow", "It has never once skipped a beat"),
 });
 
 // The card for a boss id, or null for a boss with none.

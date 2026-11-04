@@ -34,6 +34,11 @@ function selectInto(at, room, texts = [], opts = {}) {
   g.round.select = { at, room };
   g.round.practice = true;
   g.key("action");
+  // A stage that opens on its boss's room (the finale) shows its own card first.
+  if (g.round.phase === "intro") {
+    g.round.introMs = ghoul.INTRO_MIN_MS;
+    g.key("action");
+  }
   return g;
 }
 
@@ -244,7 +249,8 @@ test("Ghoul Rush boss intros: the card draws for every boss at many moments, thr
   const sizes = { W: 96, H: 54 };
   for (const room of bossRooms) {
     const id = room.boss;
-    const st = ghoul.STAGES.find((s) => s.boss === id);
+    // The stage that holds this boss's room (the finale holds three).
+    const st = ghoul.SELECTABLE.find((s) => s.rooms.includes(room.id));
     const calls = [];
     const BOSS_ART = new Proxy({}, { get: (t, k) => (k === id ? (ctx, pic, b) => calls.push([pic, b]) : undefined) });
     const texts = [];
@@ -261,7 +267,7 @@ test("Ghoul Rush boss intros: the card draws for every boss at many moments, thr
     assert.ok(texts.includes(bossIntroFor(id).epithet), `${id}: the epithet`);
     // The same through the game's own drawing, with the real art.
     const g2texts = [];
-    const g = selectInto(ghoul.STAGES.findIndex((s) => s.boss === id), ghoul.STAGES.find((s) => s.boss === id).rooms.length - 1, g2texts);
+    const g = selectInto(ghoul.SELECTABLE.indexOf(st), st.rooms.indexOf(room.id), g2texts);
     assert.equal(g.round.phase, "bossintro", id);
     for (let ms = 0; ms < 5000; ms += 80) {
       g.round.introMs = ms;

@@ -55,9 +55,11 @@ export const BONUS_READY_MS = 2400;
 // A ride room that plays on after a heart (the Runaway Cart) blinks Planny safe this long.
 export const BONUS_SAFE_MS = 1800;
 
-// A fresh bonus round, for a room just entered.
+// A fresh bonus round, for a room just entered: BONUS_HEARTS, or the ride's own
+// `hearts` (the finale's short rides have three).
 export function makeBonus(round) {
-  return { hearts: BONUS_HEARTS, max: BONUS_HEARTS, dice: 0, over: false, won: false, cardMs: 0, perf: { total: 0, hits: [], acts: 0, goal: 8, steady: true, kills0: round.stats.kills } };
+  const n = round.spec?.ride?.hearts ?? BONUS_HEARTS;
+  return { hearts: n, max: n, dice: 0, over: false, won: false, cardMs: 0, perf: { total: 0, hits: [], acts: 0, goal: 8, steady: true, kills0: round.stats.kills } };
 }
 
 // The dice a finish is worth: BONUS_FLOOR, plus a share of the six more by
@@ -86,7 +88,7 @@ export function endBonus(round, won, kit) {
     // A room that grades itself (the dark ride) sets `perf.dice` and `perf.cardMs`.
     b.dice = b.perf.dice !== undefined ? b.perf.dice : diceFor(b, round.stats.kills);
     const had = round.dice;
-    round.dice += b.dice;
+    round.dice = Math.min(kit.MAX_HELD_DICE ?? Infinity, round.dice + b.dice);
     points = kit.ROOM_POINTS * round.room;
     kit.award(round, points);
     round.stats.rooms++;

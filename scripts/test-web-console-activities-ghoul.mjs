@@ -12,6 +12,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import * as ghoul from "../src/web-console/public/activities/ghoul-rush/ghoul.js";
 import { skipStory as storySkip } from "../src/web-console/public/activities/ghoul-rush/story/ghoul-story.js";
+import { skipEnding } from "../src/web-console/public/activities/ghoul-rush/story/ghoul-ending.js";
 import { BANNER_SHADE, CHUNK, GAUGE_COOL, GAUGE_HOT, GAUGE_WARM, LOOKS, SEAM, VOICES, contrast, gaugeColor, hudLayout, labelSpot, limbInk } from "../src/web-console/public/activities/ghoul-rush/draw/ghoul-draw.js";
 import { ACCENTS } from "../src/web-console/public/palette.js";
 import { humNames, toneNames } from "../src/web-console/public/tones.js";
@@ -379,7 +380,7 @@ test("Ghoul Rush: shelves are one way (jumped up through from below, landed on f
       const tops = r.spec.shelves.filter(([a, b]) => x >= a && x <= b).map(([, , y]) => y);
       const want = Math.max(ground, ...tops);
       if (want === -Infinity) continue;
-      Object.assign(r.you, { x, y: 40, vy: -ghoul.FALL_MAX, state: "air", shelf: -1, drop: -1, out: 0 });
+      Object.assign(r.you, { x, y: 48, vy: -ghoul.FALL_MAX, state: "air", shelf: -1, drop: -1, out: 0 });
       for (let k = 0; k < 500 && r.you.state === "air"; k++) ghoul.moveYou(r, 4);
       assert.equal(r.you.y, want, `${r.spec.id} at ${x.toFixed(1)}`);
     }
@@ -1709,7 +1710,7 @@ test("Ghoul Rush: with the time bonus run out, a zombie shambles in from the edg
 test("Ghoul Rush: each stage is three rooms and a boss's, every room in one stage but the hall, and roomFor builds a room deeper into a run quicker and tougher, its boss with more hp and points, each capped", () => {
   assert.equal(ghoul.ROOMS[0].id, "hall", "every run starts in the hall");
   assert.equal(ghoul.ROOMS[0].boss, null);
-  const placed = ghoul.STAGES.flatMap((st) => st.rooms);
+  const placed = ghoul.SELECTABLE.flatMap((st) => st.rooms);
   assert.equal(new Set(placed).size, placed.length, "no room in two stages");
   // Every room but the hall is in a stage; one in none is a room forgotten.
   assert.deepEqual([...placed].sort(), ghoul.ROOMS.slice(1).map((r) => r.id).sort(), "every room but the hall in a stage");
@@ -1734,9 +1735,9 @@ test("Ghoul Rush: each stage is three rooms and a boss's, every room in one stag
   const far = ghoul.roomFor("ballroom", 400);
   assert.ok(far.pace <= 1.4 && far.every >= 0.55 && far.tough <= 2 && far.extra <= 2);
   assert.equal(far.bossHp, ghoul.roomFor("ballroom", ghoul.BOSS_DEPTH_MAX).bossHp, "boss hp stops growing");
-  const r = ghoulRound("foyer", 3);
+  const r = ghoulRound("foyer", 2);
   const z = put(r, "zombie", 80);
-  assert.equal(z.hp, ghoul.MONSTERS.zombie.hp + 1, "three stages in, zombies take a bolt more");
+  assert.equal(z.hp, ghoul.MONSTERS.zombie.hp + 1, "two stages in (four steps), zombies take a bolt more");
 });
 
 test("Ghoul Rush: out of the hall, and out of each boss's room, you pick the next stage from two not yet played; left and right move the pick, a press only takes one once the offer settles, and a stage never comes again", () => {
@@ -1774,7 +1775,7 @@ test("Ghoul Rush: out of the hall, and out of each boss's room, you pick the nex
   through(r2);
   assert.deepEqual(r2.cleared, [want]);
   assert.equal(r2.stats.stages, 1);
-  assert.deepEqual(events(r2, "stageClear").map((e) => [e.stage, e.n, e.of]), [[want, 1, ghoul.STAGES.length]]);
+  assert.deepEqual(events(r2, "stageClear").map((e) => [e.stage, e.n, e.of]), [[want, 1, ghoul.RUN_STAGES]]);
   assert.equal(r2.phase, "pick");
   assert.ok(!r2.offer.includes(want), "a stage cleared is never offered again");
   assert.deepEqual(ghoul.stagesLeft(r2).map((st) => st.id), ghoul.STAGES.filter((st) => st.id !== want).map((st) => st.id));
@@ -1791,19 +1792,28 @@ test("Ghoul Rush: out of the hall, and out of each boss's room, you pick the nex
   assert.equal(seen.size, ghoul.STAGES.length, "the offer is shuffled: any stage can come first");
 });
 
-test("Ghoul Rush: clearing every stage wins the run, and its end says so", () => {
+test("Ghoul Rush: clearing RUN_STAGES stages and then the finale's rooms wins the run, and its end says so", () => {
   const round = ghoul.newRound(5);
   round.dice = 0;
   through(round);
-  while (!round.over) {
+  while (round.cleared.length < ghoul.RUN_STAGES) {
     assert.equal(round.phase, "pick");
     round.phaseMs = 0;
     ghoul.pickStage(round);
     for (let k = 0, n = ghoul.stageById(round.stage).rooms.length; k < n; k++) through(round);
   }
+  assert.equal(round.stage, ghoul.FINALE.id, "on to the House, with no offer");
+  for (const id of ghoul.FINALE.rooms) {
+    assert.equal(round.over, false);
+    assert.equal(round.spec.id, id);
+    through(round);
+  }
+  assert.equal(round.phase, "ending", "the ending's pages first");
+  skipEnding(round);
   assert.equal(round.won, true);
-  assert.equal(round.cleared.length, ghoul.STAGES.length);
-  assert.deepEqual(new Set(round.cleared), new Set(ghoul.STAGES.map((st) => st.id)), "each stage once");
+  assert.equal(round.cleared.length, ghoul.RUN_STAGES);
+  assert.equal(new Set(round.cleared).size, ghoul.RUN_STAGES, "each stage once");
+  assert.ok(!round.cleared.includes(ghoul.FINALE.id), "the finale is no stage cleared");
   assert.equal(events(round, "won").length, 1);
   assert.equal(ghoul.advance(round, 16, steady), "over");
 });
@@ -2104,7 +2114,8 @@ test("Ghoul Rush: every room can be finished: a route from the start to the key 
     const start = surfaceAt(list, base.start, ghoul.groundAt(base, base.start));
     const door = surfaceAt(list, base.door, ghoul.groundAt(base, base.door));
     assert.ok(start && door, `${base.id}: start and door on the ground`);
-    assert.ok(base.door > base.length - 14, `${base.id}: the door at the room's end`);
+    // The House stands over its front door until it sinks; that door is the way on.
+    if (base.boss !== "marrow") assert.ok(base.door > base.length - 14, `${base.id}: the door at the room's end`);
     let from = start;
     if (base.key) {
       const key = surfaceAt(list, base.key[0], base.key[1]);
@@ -2422,7 +2433,8 @@ test("Ghoul Rush: of ten runs a sharp bot gets nearly all through the hall and t
     // added: Hollow End's Main Street takes the bot up to a minute). The
     // Gourd's bound has room for the slow end of the bot's spread, about a
     // minute, which is one seed or two in thirty.
-    per.forEach((p, i) => assert.ok(p.secs >= 10 && p.secs <= (i === 4 ? 65 : i === 5 ? 70 : 40), `seed ${seed}: room ${i + 1} took ${p.secs.toFixed(1)} s`));
+    // The blaster went to 80% of its old rate (FIRE_MS 124), so the Gourd's fight runs about a quarter longer: 80 s.
+    per.forEach((p, i) => assert.ok(p.secs >= 10 && p.secs <= (i === 4 ? 80 : i === 5 ? 70 : 40), `seed ${seed}: room ${i + 1} took ${p.secs.toFixed(1)} s`));
   }
   assert.ok(outOfFoyer >= 9, `${outOfFoyer} of 10 through the hall and out of the Foyer`);
   assert.ok(pastGourd >= 5, `${pastGourd} of 10 past the Gourd`);
@@ -2466,10 +2478,12 @@ function takeManor(g) {
 }
 
 // Past a stage's intro card the way a player does: the minimum wait, then fire.
+// Past every card up (the finale's stage card leads straight into its boss's).
 function leaveIntro(g) {
-  if (g.round.phase !== "intro" && g.round.phase !== "bossintro") return;
-  for (let ms = 0; ms < ghoul.INTRO_MIN_MS + 50; ms += 16) g.tick(16);
-  g.key("action");
+  for (let n = 0; n < 3 && (g.round.phase === "intro" || g.round.phase === "bossintro"); n++) {
+    for (let ms = 0; ms < ghoul.INTRO_MIN_MS + 50; ms += 16) g.tick(16);
+    g.key("action");
+  }
 }
 
 // Starts a game with nothing waking.
@@ -2570,7 +2584,7 @@ test("Ghoul Rush game: the start screen names the record, the pick screen shows 
   const scores = [];
   const g = ghoul.default.create({ canvas, memo, onScore: (n) => scores.push(n) });
   g.resize(900, 900);
-  assert.ok(texts.some(([t]) => t.includes(`Best: 0 of ${ghoul.STAGES.length} stages`)), "the start screen names the record");
+  assert.ok(texts.some(([t]) => t.includes(`Best: 0 of ${ghoul.RUN_STAGES} stages`)), "the start screen names the record");
   g.key("action");
   skipStory(g);
   g.round.dice = 0;
@@ -2613,7 +2627,7 @@ test("Ghoul Rush game: the start screen names the record, the pick screen shows 
   assert.equal(g.round.phase, "pick");
   texts.length = 0;
   g.tick(16);
-  assert.ok(texts.some(([t]) => t === `STAGE 1 OF ${ghoul.STAGES.length} CLEARED`));
+  assert.ok(texts.some(([t]) => t === `STAGE 1 OF ${ghoul.RUN_STAGES} CLEARED`));
   for (let ms = 0; ms < ghoul.PICK_HOLD_MS + 50; ms += 16) g.tick(16);
   g.key("up");
   assert.ok(g.round.stage && g.round.stage !== want, "up takes one too, never the stage just cleared");
@@ -2628,7 +2642,7 @@ test("Ghoul Rush game: the start screen names the record, the pick screen shows 
   texts.length = 0;
   g.resize(900, 900);
   assert.ok(texts.some(([t, font]) => t === String(g.score) && /\b7px/.test(font)), "the score, big");
-  assert.ok(texts.some(([t]) => t.startsWith(`Cleared 1 of ${ghoul.STAGES.length} stages, out in `) && t.includes("A new record!")), "how far, and the record");
+  assert.ok(texts.some(([t]) => t.startsWith(`Cleared 1 of ${ghoul.RUN_STAGES} stages, out in `) && t.includes("A new record!")), "how far, and the record");
   const again = ghoul.default.create({ canvas, memo: { get: () => 9, set: () => assert.fail("never lowered") } });
   again.resize(900, 900);
   again.key("action");
@@ -2654,7 +2668,7 @@ test("Ghoul Rush game: stageSelect() (the window's stage code) opens a practice 
   for (let i = 0; i < 30; i++) g.tick(16);
   assert.equal(r.phase, "select", "it waits on a choice");
   assert.equal(r.clock, 0, "nothing moves");
-  const last = ghoul.STAGES.length - 1;
+  const last = ghoul.SELECTABLE.length - 1;
   for (let i = 0; i < last + 3; i++) g.key("down");
   assert.equal(r.select.at, last, "down stops at the last stage");
   // Two up clamps inside the list; then steer on to the Manor, whose second
@@ -2664,7 +2678,7 @@ test("Ghoul Rush game: stageSelect() (the window's stage code) opens a practice 
   g.key("up");
   assert.equal(r.select.at, last - 2);
   const st = ghoul.STAGES[0];
-  for (let i = 0; i < ghoul.STAGES.length; i++) g.key("up");
+  for (let i = 0; i < ghoul.SELECTABLE.length; i++) g.key("up");
   assert.equal(r.select.at, 0, "the Manor");
   for (let i = 0; i < st.rooms.length + 3; i++) g.key("right");
   assert.equal(r.select.room, st.rooms.length - 1, "right stops at the boss room");
@@ -2675,7 +2689,7 @@ test("Ghoul Rush game: stageSelect() (the window's stage code) opens a practice 
   assert.equal(r.stage, st.id);
   assert.equal(r.stageAt, st.rooms.length - 2);
   assert.equal(r.spec.id, st.rooms[st.rooms.length - 2], "straight into the room picked");
-  r.events.push({ type: "stageClear", stage: st.id, n: 3, of: ghoul.STAGES.length });
+  r.events.push({ type: "stageClear", stage: st.id, n: 3, of: ghoul.RUN_STAGES });
   g.tick(16);
   assert.equal(saved, 0, "a practice run never sets the record");
   r.score = 5000;
@@ -2700,9 +2714,14 @@ test("Ghoul Rush game: a run that clears every stage ends in a win, with a fanfa
   const r = g.round;
   through(r);
   while (!r.over) {
+    // The ending's pages once the House is dead.
+    if (r.phase === "ending") {
+      skipEnding(r);
+      continue;
+    }
     r.phaseMs = 0;
     ghoul.pickStage(r);
-    for (let k = 0; k < 4; k++) through(r);
+    for (let k = 0; k < 4 && r.phase !== "ending" && !r.over; k++) through(r);
   }
   g.tick(16);
   assert.equal(g.state, "over");
@@ -3028,7 +3047,7 @@ test("Ghoul Rush: every pill's text reads at 4.5:1 on its backing and its timer'
             assert.ok(k >= 4.5, `${theme}/${id}: "${p.text}" in ${p.ink} on ${under} reads ${k.toFixed(2)}:1`);
           }
         }
-        for (const want of ["THE LONG HALL", `STAGE 0 OF ${ghoul.STAGES.length}`, "♥", "BONUS 0", "~CHAIN x4", "~SPREAD", "~RAPID", "GARLIC"]) {
+        for (const want of ["THE LONG HALL", `STAGE 0 OF ${ghoul.RUN_STAGES}`, "♥", "BONUS 0", "~CHAIN x4", "~SPREAD", "~RAPID", "GARLIC"]) {
           const tinted = want.startsWith("~");
           const text = tinted ? want.slice(1) : want;
           assert.ok(seen.some((p) => p.text.includes(text) && (!tinted || p.tints.length)), `${theme}/${id}: "${text}" drawn (${seen.map((p) => p.text)})`);
@@ -3048,7 +3067,7 @@ test("Ghoul Rush: the top bar names the stage (or the hall) and counts the stage
   g.tick(16);
   const seen = pills();
   const at = seen.findIndex((p) => p.text.startsWith("♥"));
-  assert.deepEqual(seen.slice(0, 2).map((p) => p.text), ["THE LONG HALL", `STAGE 0 OF ${ghoul.STAGES.length}`], "the hall, nothing cleared yet");
+  assert.deepEqual(seen.slice(0, 2).map((p) => p.text), ["THE LONG HALL", `STAGE 0 OF ${ghoul.RUN_STAGES}`], "the hall, nothing cleared yet");
   assert.equal(at, 2, `right after the stage pills (${seen.map((p) => p.text)})`);
   assert.equal(seen[at].text, livesText(g.round.lives));
   assert.equal(seen[at].backing, LIVES_BACK);
@@ -3251,9 +3270,9 @@ test("Ghoul Rush game: every room and boss draws, and each pick of stage, throug
   g.resize(900, 900);
   g.key("action");
   skipStory(g);
-  // Every room a run can reach: the hall and each stage's, not the retired Bog Runner.
-  const LIVE = 1 + ghoul.STAGES.flatMap((st) => st.rooms).length;
-  for (let n = 1; n <= LIVE; n++) {
+  // Every room the run reaches: the hall, each of its RUN_STAGES stages' and the finale's.
+  for (let n = 1; g.state === "running"; n++) {
+    assert.ok(n < 80, "the run ends");
     const r = g.round;
     r.lives = 99;
     const bot = makeBot(ghoul, 1, ghoul.seeded(n));
@@ -3266,7 +3285,8 @@ test("Ghoul Rush game: every room and boss draws, and each pick of stage, throug
     }
     assert.ok(calls.count > drawn, `room ${n} draws`);
     leaveIntro(g);
-    if (r.boss) r.boss.state = "down";
+    // A fallen boss, and the House gone from in front of its door.
+    if (r.boss) Object.assign(r.boss, { state: "down", gone: true });
     r.hasKey = true;
     // Through the door, once any life lost in the run is over with.
     for (let ms = 0; ms < 8000 && g.round.room === n && g.state === "running"; ms += 16) {
@@ -3278,6 +3298,7 @@ test("Ghoul Rush game: every room and boss draws, and each pick of stage, throug
         r.ask.t = ghoul.ASK_GUARD_MS;
         ghoul.answerDie(r, true);
       }
+      if (r.phase === "ending") skipEnding(r);
       if (r.phase === "pick") {
         const before = calls.count;
         g.tick(16);
@@ -3287,7 +3308,7 @@ test("Ghoul Rush game: every room and boss draws, and each pick of stage, throug
       }
       g.tick(16);
     }
-    if (n === LIVE) break;
+    if (g.state !== "running") break;
     leaveIntro(g);
     for (let ms = 0; ms < ghoul.READY_MS + 100; ms += 16) g.tick(16);
     assert.equal(g.round.room, n + 1);

@@ -23,6 +23,12 @@ import { SLED_SFX } from "../rides/sled/ghoul-sfx-sled.js";
 import { BANISTER_SFX } from "../rides/banister/ghoul-sfx-banister.js";
 import { HEARSE_SFX } from "../rides/hearse/ghoul-sfx-hearse.js";
 import { BOG_SFX } from "../stages/bog/ghoul-sfx-bog.js";
+import { MARROW_SFX } from "../stages/marrow/ghoul-sfx-marrow.js";
+import { EYE_SFX } from "../stages/marrow/ghoul-sfx-marrow-eye.js";
+import { HEART_SFX } from "../stages/marrow/ghoul-sfx-marrow-heart.js";
+import { MAT_SFX } from "../rides/mat/ghoul-sfx-mat.js";
+import { BONESTAIR_SFX } from "../rides/bonestair/ghoul-sfx-bonestair.js";
+import { ENDING_SFX } from "../story/ghoul-sfx-ending.js";
 import { LANTERN_SFX } from "../rides/lantern/ghoul-sfx-lantern.js";
 import { GURNEY_SFX } from "../rides/gurney/ghoul-sfx-gurney.js";
 import { PEW_SFX } from "../rides/pew/ghoul-sfx-pew.js";
@@ -35,7 +41,7 @@ import { STORY_SFX } from "../story/ghoul-sfx-story.js";
 
 // Each stage's sounds and tracks, by stage: `tones`, `hums` and `music` as
 // below, any of them left out.
-const STAGE_SFX = Object.freeze([GRAVEYARD_SFX, GROUNDS_SFX, CHAPEL_SFX, SANATORIUM_SFX, VILLAGE_SFX, MINE_SFX, CARNIVAL_SFX, FROZEN_SFX,SLED_SFX, HEARSE_SFX, BOG_SFX, LANTERN_SFX, GURNEY_SFX, PEW_SFX, MOWER_SFX, WAGON_SFX, TRAY_SFX, ARMS_SFX, RIDE_SFX, BANISTER_SFX, STORY_SFX]);
+const STAGE_SFX = Object.freeze([GRAVEYARD_SFX, GROUNDS_SFX, CHAPEL_SFX, SANATORIUM_SFX, VILLAGE_SFX, MINE_SFX, CARNIVAL_SFX, FROZEN_SFX,SLED_SFX, HEARSE_SFX, BOG_SFX, MARROW_SFX, EYE_SFX, HEART_SFX, MAT_SFX, BONESTAIR_SFX, ENDING_SFX, LANTERN_SFX, GURNEY_SFX, PEW_SFX, MOWER_SFX, WAGON_SFX, TRAY_SFX, ARMS_SFX, RIDE_SFX, BANISTER_SFX, STORY_SFX]);
 const fromStages = (key) => Object.assign({}, ...STAGE_SFX.map((st) => st[key] || {}));
 
 // One second of the laugh track (part 0, 1 or 2): every event is placed on the
