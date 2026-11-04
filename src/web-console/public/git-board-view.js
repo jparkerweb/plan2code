@@ -238,8 +238,13 @@ function tabPanel(ctx, id) {
 function runStep(ctx, s) {
   const { git, on } = ctx;
   switch (s.op) {
-    case "commit":
-      return on.openPanel("commit");
+    // The commit table is always on show below, so the step commits what it
+    // has ticked, as its own button does; on a detached HEAD a branch comes first.
+    case "commit": {
+      const picks = tablePicks(ctx);
+      if (git.hasCommits !== false && !(git.head || {}).branch) return on.openPanel("create", { commit: true, ...picks });
+      return on.send("commit", picks);
+    }
     case "create-commit":
       return on.openPanel("create", { commit: true });
     case "create":
@@ -265,7 +270,25 @@ function runStep(ctx, s) {
 
 function stepButton(ctx, s, cls) {
   if (s.op === "pr") return prLink(ctx, s.url, cls);
-  return control(ctx, "button", cls, s.label, { onClick: () => runStep(ctx, s) });
+  const disabled = s.op === "commit" && !tablePicks(ctx).files.length;
+  return control(ctx, "button", cls, stepLabel(ctx, s), { disabled, onClick: () => runStep(ctx, s) });
+}
+
+// A step's name. A "Commit N files" count follows the table's ticks, so the
+// card and its button say what the click will send.
+function stepLabel(ctx, s) {
+  if (!s || s.op !== "commit" || !/^Commit \d+ files?$/.test(s.label)) return s ? s.label : "";
+  return `Commit ${plural(tablePicks(ctx).files.length, "file", "files")}`;
+}
+
+// The commit table's ticked files and .gitignore picks, checked against the snapshot.
+function tablePicks(ctx) {
+  const ch = ctx.git.changes || {};
+  const board = ctx.board;
+  const ticks = board.ticks || (board.ticks = commitTicks(ch));
+  const ignored = board.ignore || (board.ignore = new Set());
+  const known = new Set([...list(ch.files), ...list(ch.untrackedDirs)].map((f) => f.path));
+  return { files: [...ticks].filter((path) => known.has(path)), ignore: [...ignored].filter((path) => known.has(path)) };
 }
 
 function stepStrip(ctx, id) {
@@ -274,7 +297,7 @@ function stepStrip(ctx, id) {
   if (id !== step.tab) {
     if (!p) return null;
     const where = GIT_TABS.find((t) => t.id === step.tab);
-    return control(ctx, "button", "git-hint", `Next step is on ${where ? where.label : step.tab}: ${p.label} →`, {
+    return control(ctx, "button", "git-hint", `Next step is on ${where ? where.label : step.tab}: ${stepLabel(ctx, p)} →`, {
       role: "nav",
       onClick: () => ctx.on.pickTab(step.tab),
     });
@@ -305,8 +328,7 @@ function stepStrip(ctx, id) {
     duo.appendChild(landed);
     const left = h.el("div", "git-left");
     left.appendChild(h.el("div", "git-step-kicker", theirs ? "Still on the tree" : p ? "Still to do" : "All caught up"));
-    if (theirs) left.appendChild(h.el("h3", "git-step-title", theirs.label));
-    else left.appendChild(h.el("h3", "git-step-title", p ? p.label : step.line));
+    left.appendChild(h.el("h3", "git-step-title", p ? stepLabel(ctx, p) : step.line));
     if (p && p.why) left.appendChild(h.el("p", "git-step-why", p.why));
     if (step.stale) left.appendChild(staleLine(ctx, step.stale));
     if (step.held) {
@@ -328,7 +350,7 @@ function stepStrip(ctx, id) {
   }
   const box = h.el("div", "git-step" + (git.inProgress ? " is-warn" : "") + (p ? "" : " is-calm"));
   box.appendChild(h.el("div", "git-step-kicker", p ? "Next step" : "Nothing to do"));
-  box.appendChild(h.el("h3", "git-step-title", p ? p.label : step.line));
+  box.appendChild(h.el("h3", "git-step-title", p ? stepLabel(ctx, p) : step.line));
   if (p && p.why) box.appendChild(h.el("p", "git-step-why", p.why));
   if (step.stale) box.appendChild(staleLine(ctx, step.stale));
   if (step.held) {
@@ -477,9 +499,7 @@ function commitPanel(ctx, frozen) {
   table.appendChild(tbody);
   p.appendChild(table);
 
-  const known = new Set([...list(ch.files), ...list(ch.untrackedDirs)].map((f) => f.path));
-  const files = [...ticks].filter((path) => known.has(path));
-  const ignore = [...ignored].filter((path) => known.has(path));
+  const { files, ignore } = tablePicks(ctx);
   const send = () => on.send("commit", { files, ignore });
   const actions = h.el("div", "git-panel-actions");
   const head = git.head || {};

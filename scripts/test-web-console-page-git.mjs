@@ -137,15 +137,14 @@ const settles = (control, enabled) => until(async () => (await control.isEnabled
 const settlesUsable = (page, want) => until(async () => (await usable(page)) === want, 8000);
 const titled = (page, text) => page.waitForFunction((x) => document.getElementById("title").textContent.includes(x), text);
 
-test("the commit dialog sends the ticked files as one __git action, with its reply sentence", async (t) => {
+test("the next step's Commit sends the files ticked in the table as one __git action, with its reply sentence", async (t) => {
   const s = await openSession(await suite.browser(), { t, workflow: "git", project: changesProject({ branch: "feature/x" }), payload: READY });
   const { page } = s;
   await page.getByRole("tablist").waitFor();
-  await stepButton(page, "Commit 2 files").click();
-  const panel = page.locator(".git-panel");
-  await panel.getByRole("button", { name: "Close" }).waitFor();
+  await stepButton(page, "Commit 2 files").waitFor();
   await tickBox(page, "notes.md").uncheck();
-  await panel.getByRole("button", { name: "Commit 1 file" }).click();
+  // The table is already on show below, so the step's button commits rather than opening it.
+  await stepButton(page, "Commit 1 file").click();
   const got = s.wait(10);
   assert.equal(got.code, 0, "the agent collected the click");
   assert.deepEqual(got.actions, [{ i: "__git", type: "git", op: "commit", files: ["src/app.js"], ignore: [] }]);
@@ -261,7 +260,7 @@ test("a commit with no branch to land on carries the ticked files into the new b
   await tickBox(page, "notes.md").uncheck();
   // The step is on the Branches tab, and its Commit button finds no branch to commit on.
   await tabButton(page, "Branches").click();
-  await stepButton(page, "Commit 2 files").click();
+  await stepButton(page, "Commit 1 file").click();
   const panel = page.locator(".git-panel");
   await panel.getByRole("heading", { name: "New branch for this commit" }).waitFor();
   const create = panel.getByRole("button", { name: "Create", exact: true });

@@ -470,7 +470,35 @@ test("git board view: each step's click goes out as the board offers it", () => 
   const [branch, onMain] = stepButtons(main);
   click(branch);
   click(onMain);
-  assert.deepEqual(main.on.calls, [["openPanel", "create", { commit: true }], ["openPanel", "commit"]]);
+  const mainFiles = [...commitTicks(STATES["nb-main-dirty"].git.changes)];
+  assert.deepEqual(main.on.calls, [["openPanel", "create", { commit: true }], ["send", "commit", { files: mainFiles, ignore: [] }]]);
+
+  // The commit table is always on show below the step, so the step's Commit
+  // sends what the table has ticked rather than "opening" a panel already open.
+  const dirty = draw("cp-dirty", { tab: "changes" });
+  const ticked = [...commitTicks(STATES["cp-dirty"].git.changes)];
+  const top = stepButtons(dirty).find((c) => c.textContent.startsWith("Commit "));
+  assert.equal(top.textContent, `Commit ${ticked.length} file${ticked.length === 1 ? "" : "s"}`);
+  click(top);
+  assert.deepEqual(dirty.on.calls, [["send", "commit", { files: ticked, ignore: [] }]]);
+
+  const unticked = draw("cp-dirty", { tab: "changes" });
+  unticked.board.ticks.clear();
+  const redrawn = drawGitBoard({
+    git: STATES["cp-dirty"].git, board: unticked.board, now: NOW, mode: "idle", step: unticked.step,
+    badges: tabBadges(STATES["cp-dirty"].git, { now: NOW, stepTab: unticked.step.tab }), notice: null, activity: null, hasCard: false, h: fakeH(), on: fakeOn(),
+  });
+  const none = controls(walk(redrawn.node).find((n) => n.classes.has("git-step"))).find((c) => c.textContent.startsWith("Commit "));
+  assert.ok(none.disabled, "nothing ticked: the step's Commit is grayed, like the table's");
+
+  const one = draw("cp-dirty", { tab: "changes" });
+  one.board.ticks = new Set([ticked[0]]);
+  const again = drawGitBoard({
+    git: STATES["cp-dirty"].git, board: one.board, now: NOW, mode: "idle", step: one.step,
+    badges: tabBadges(STATES["cp-dirty"].git, { now: NOW, stepTab: one.step.tab }), notice: null, activity: null, hasCard: false, h: fakeH(), on: fakeOn(),
+  });
+  const card = walk(again.node).find((n) => n.classes.has("git-step"));
+  assert.equal(walk(card).find((n) => n.classes.has("git-step-title")).textContent, "Commit 1 file", "the card's title follows the ticks too");
 
   const away = draw("pc-conflict", { tab: "changes" });
   click(walk(away.node).find((n) => n.classes.has("git-hint")));
@@ -576,7 +604,7 @@ test("git board view: a landed result splits the step strip into Just landed and
   assert.ok(!walk(r.node).some((n) => n.classes.has("git-result")), "no thin result line beside the zones");
   const commit = controls(rest).find((c) => c.textContent === "Commit other changes");
   click(commit);
-  assert.deepEqual(r.on.calls[0], ["openPanel", "commit"], "the leftover offer runs the same op the primary would");
+  assert.deepEqual(r.on.calls[0], ["send", "commit", { files: [...commitTicks(STATES["cp-dirty"].git.changes)], ignore: [] }], "the leftover offer runs the same op the primary would");
 
   const plain = landed("cp-dirty", { id: "git-result", kind: "notice", title: "Committed 1eef797", body: "no op marker" });
   assert.ok(walk(plain.node).some((n) => n.classes.has("git-result")), "a notice with no op keeps the thin line");
