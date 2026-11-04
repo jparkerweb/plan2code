@@ -62,6 +62,9 @@ import {
   MAX_NOTE_IMAGES,
   noteAction,
   noteReplyLines,
+  pruneStaged,
+  suggestAction,
+  suggestReplyLines,
   progressTotal,
   quietLimitMs,
   resumeCommand,
@@ -513,6 +516,69 @@ test("a note with documents splits them into files, keeps attach order in its li
     "  File: C:\\x\\b.pdf (spec.pdf)",
     "  Image: C:\\x\\c.jpg (c.png)",
   ]);
+});
+
+test("a request for suggestions reads apart from a note, with its note and attachments", () => {
+  assert.deepEqual(suggestReplyLines("Export format", "Which suits Excel?", []), ["Suggestions wanted on Export format: Which suits Excel?"]);
+  assert.deepEqual(suggestReplyLines("Export format", "", []), ["Suggestions wanted on Export format: (no note)"]);
+  assert.deepEqual(suggestReplyLines("Export format", "", undefined), ["Suggestions wanted on Export format: (no note)"]);
+  assert.deepEqual(suggestReplyLines("Export format", "Line one\nLine two", []), [
+    "Suggestions wanted on Export format: Line one\n  Line two",
+  ]);
+  const atts = [
+    { key: "k1", path: "C:\\x\\a.jpg", name: "shot.png", status: "ready" },
+    { key: "k2", kind: "file", path: "C:\\x\\b.pdf", name: "spec.pdf", status: "ready" },
+  ];
+  assert.deepEqual(suggestReplyLines("Export format", "See these", atts), [
+    "Suggestions wanted on Export format: See these",
+    "  Image: C:\\x\\a.jpg (shot.png)",
+    "  File: C:\\x\\b.pdf (spec.pdf)",
+  ]);
+  assert.deepEqual(suggestAction("q1", "See these", atts), {
+    i: "q1",
+    type: "comment",
+    text: "See these",
+    images: [{ path: "C:\\x\\a.jpg", name: "shot.png" }],
+    files: [{ path: "C:\\x\\b.pdf", name: "spec.pdf" }],
+    suggest: true,
+  });
+  assert.deepEqual(suggestAction("q1", "", []), { i: "q1", type: "comment", text: "", suggest: true });
+});
+
+test("pruneStaged drops only the picks a re-posted card no longer offers, without touching its inputs", () => {
+  const opts = (...ks) => ks.map((k) => ({ k, text: k }));
+  const items = [
+    { id: "c1", kind: "choice", options: opts("A", "B") },
+    { id: "c2", kind: "choice", options: opts("A") },
+    { id: "m1", kind: "multi", options: opts("1", "3") },
+    { id: "m2", kind: "multi", options: opts("1") },
+    { id: "f1", kind: "confirm" },
+    { id: "u1", kind: "choice", options: opts("A", "B") },
+  ];
+  const staged = {
+    c1: { type: "answer", kind: "choice", k: "C" },
+    c2: { type: "answer", kind: "choice", k: "B", text: "or something else" },
+    m1: { type: "answer", kind: "multi", ks: ["1", "2", "3"] },
+    m2: { type: "answer", kind: "multi", ks: ["2"] },
+    f1: { type: "answer", kind: "confirm", yes: true },
+    u1: { type: "answer", kind: "choice", k: "B" },
+    gone: { type: "answer", kind: "choice", k: "Z" },
+  };
+  const before = structuredClone(staged);
+  const itemsBefore = structuredClone(items);
+  const out = pruneStaged(items, staged);
+  assert.deepEqual(out.dropped.sort(), ["c1", "c2", "m1", "m2"]);
+  assert.equal("c1" in out.staged, false, "a choice left with nothing goes");
+  assert.deepEqual(out.staged.c2, { type: "answer", kind: "choice", text: "or something else" }, "typed text keeps the entry");
+  assert.deepEqual(out.staged.m1.ks, ["1", "3"], "a multi keeps the keys still offered");
+  assert.equal("m2" in out.staged, false, "a multi left empty goes");
+  assert.equal(out.staged.f1, staged.f1, "a confirm is left alone");
+  assert.equal(out.staged.u1, staged.u1, "an unchanged card is left alone");
+  assert.equal(out.staged.gone, staged.gone, "an id not among the items is left alone");
+  assert.notEqual(out.staged, staged, "a new object comes back");
+  assert.deepEqual(staged, before, "staged is not changed");
+  assert.deepEqual(items, itemsBefore, "items are not changed");
+  assert.deepEqual(pruneStaged(items, { u1: staged.u1 }), { staged: { u1: staged.u1 }, dropped: [] });
 });
 
 test("document helpers: the extension allow-list, the picker's accept, sizes, and the kind of an old entry", () => {

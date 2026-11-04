@@ -8,7 +8,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { page, fresh } from "../src/web-console/public/state.js";
 import { WORKING_GRACE_MS } from "../src/web-console/public/selectors.js";
-import { sendState } from "../src/web-console/public/send-state.js";
+import { sendState, suggestState } from "../src/web-console/public/send-state.js";
 
 const MIN = 60 * 1000;
 const ago = (ms) => new Date(Date.now() - ms).toISOString();
@@ -150,4 +150,37 @@ test("send state: a note waits while its picture uploads, and goes once it is re
 
   page.local.images.q1 = [{ key: "a", status: "ready", url: "/uploads/a.jpg" }];
   assert.deepEqual(sendState(), { disabled: false, why: "" });
+});
+
+test("send state: told there is something to send, an idle page enables it with nothing staged", () => {
+  setup();
+  assert.deepEqual(sendState(), { disabled: true, why: "" }, "left out, it reads what is staged");
+  assert.deepEqual(sendState(true), { disabled: false, why: "" });
+  assert.deepEqual(sendState(false), { disabled: true, why: "" });
+});
+
+test("suggest state: the chip follows Send, and waits while its own request does", () => {
+  const ready = { disabled: false, why: "Ask Plan2Code what it would pick here, and why." };
+  setup();
+  assert.deepEqual(suggestState(question()), ready, "nothing staged is needed: the request is the payload");
+
+  setup({ finish: { headline: "Phase 3 is done" } });
+  assert.deepEqual(suggestState(question()), { disabled: true, why: "This session is finished." });
+
+  setup();
+  page.pendingResult = true;
+  assert.deepEqual(suggestState(question()), { disabled: true, why: "Your last answers are on their way. One moment." });
+
+  const at = ago(MIN);
+  const asked = question("q1", { sentNote: { at, text: "", suggest: true }, thread: [{ who: "user", at, text: "", suggest: true }] });
+  setup({ items: [asked] });
+  assert.deepEqual(suggestState(asked), { disabled: true, why: "Plan2Code has your request for suggestions on this one." });
+
+  const plain = question("q1", { sentNote: { at, text: "Hm" }, thread: [{ who: "user", at, text: "Hm" }] });
+  setup({ items: [plain] });
+  assert.deepEqual(suggestState(plain), ready, "a plain note waiting does not hold the chip");
+
+  const replied = { ...asked, thread: [...asked.thread, { who: "agent", at: ago(0), text: "I would pick CSV." }] };
+  setup({ items: [replied] });
+  assert.deepEqual(suggestState(replied), ready, "the agent's reply frees it");
 });

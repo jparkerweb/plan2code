@@ -1022,6 +1022,61 @@ export function noteReplyLines(title, text, attachments) {
   ];
 }
 
+// A request for suggestions on a card: a note's action flagged `suggest`, so
+// the server records it as one and the page can tell it from a plain note.
+export function suggestAction(id, text, attachments) {
+  return { ...noteAction(id, text, attachments), suggest: true };
+}
+
+// The same request as `reply` lines. Its lead differs from `Note on` on
+// purpose: that is how the agent tells a request for suggestions from a note.
+export function suggestReplyLines(title, text, attachments) {
+  const list = attachments || [];
+  return [
+    `Suggestions wanted on ${title}: ${indentReply(text || "(no note)")}`,
+    ...list.map((a) => `  ${attachmentKind(a) === "file" ? "File" : "Image"}: ${a.path} (${a.name})`),
+  ];
+}
+
+/* --------------------------------------------------------- stale picks */
+
+/**
+ * Staged picks that a re-posted card no longer offers, dropped. A `choice`
+ * loses a `k` its options no longer carry; a `multi` keeps only the `ks`
+ * still there. An entry left with nothing meaningful goes. Every other kind,
+ * and any id not among `items`, stays as it was. `dropped` lists the ids that
+ * lost a pick. The inputs are never changed.
+ */
+export function pruneStaged(items, staged) {
+  const out = { ...(staged || {}) };
+  const dropped = [];
+  const byId = new Map((items || []).filter((it) => it && it.id).map((it) => [it.id, it]));
+  for (const [id, v] of Object.entries(out)) {
+    const item = byId.get(id);
+    if (!item || !v || typeof v !== "object" || (item.kind !== "choice" && item.kind !== "multi")) continue;
+    const keys = new Set((item.options || []).map((o) => o && o.k));
+    const next = { ...v };
+    let lost = false;
+    if (item.kind === "choice" && next.k && !keys.has(next.k)) {
+      delete next.k;
+      lost = true;
+    }
+    if (item.kind === "multi" && Array.isArray(next.ks)) {
+      const kept = next.ks.filter((k) => keys.has(k));
+      if (kept.length !== next.ks.length) {
+        next.ks = kept;
+        lost = true;
+      }
+    }
+    if (!lost) continue;
+    dropped.push(id);
+    const left = next.k || (Array.isArray(next.ks) && next.ks.length) || next.text || next.verdict || next.skipped;
+    if (left) out[id] = next;
+    else delete out[id];
+  }
+  return { staged: out, dropped };
+}
+
 /* ------------------------------------------------------------ patience */
 
 /**

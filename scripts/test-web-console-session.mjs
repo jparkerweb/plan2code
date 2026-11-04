@@ -1281,6 +1281,30 @@ test("a send records its note and attachments on the item, so the page can show 
   assert.equal(cli(["wait", "--session", sid, "--seconds", "10"]).status, 0);
 });
 
+test("a request for suggestions is recorded with its flag and threaded even with no note; a non-boolean flag is dropped", async () => {
+  const readState = () => JSON.parse(fs.readFileSync(path.join(HOME, "sessions", sid, "state.json"), "utf8"));
+  const userCount = () => readState().items.find((i) => i.id === "q1").thread.filter((m) => m.who === "user").length;
+
+  let before = userCount();
+  const ok = await post("/submit", { actions: [{ i: "q1", type: "comment", text: "", suggest: true }], reply: "Suggestions wanted on q1: (no note)" });
+  assert.equal(ok.status, 200);
+  let q1 = readState().items.find((i) => i.id === "q1");
+  assert.equal(q1.sentNote.suggest, true);
+  const mine = q1.thread.filter((m) => m.who === "user").at(-1);
+  assert.equal(userCount(), before + 1, "an empty request still goes into the thread");
+  assert.equal(mine.who, "user");
+  assert.equal(mine.suggest, true);
+  assert.equal(mine.at, q1.sentNote.at);
+  assert.equal(cli(["wait", "--session", sid, "--seconds", "10"]).status, 0);
+
+  before = userCount();
+  assert.equal((await post("/submit", { actions: [{ i: "q1", type: "comment", text: "", suggest: "yes" }], reply: "z" })).status, 200);
+  q1 = readState().items.find((i) => i.id === "q1");
+  assert.equal("suggest" in q1.sentNote, false, "only true is kept");
+  assert.equal(userCount(), before, "a plain empty comment still adds no thread entry");
+  assert.equal(cli(["wait", "--session", sid, "--seconds", "10"]).status, 0);
+});
+
 test("what the person attached is not scanned for markers either", () => {
   const statePath = path.join(HOME, "sessions", sid, "state.json");
   const state = JSON.parse(fs.readFileSync(statePath, "utf8"));

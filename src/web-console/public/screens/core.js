@@ -32,6 +32,8 @@ import {
   sentAnswer,
   staleLaunchFeedback,
   submittedAwaiting,
+  suggestAction,
+  suggestReplyLines,
   verdictText,
   workflowLabel,
   workflowTitle,
@@ -63,7 +65,7 @@ import { renderLaunching, renderWaiting } from "./starting.js";
 import { attachFiles, heldNotes, noteImages, pendingNotes, removeImage } from "../uploads.js";
 import { closeMentions } from "../mention-box.js";
 import { buildPager, fitGrowBox, markFor, markMore, renderCard, renderEndItem, renderNotice } from "./cards.js";
-import { sendState } from "../send-state.js";
+import { sendState, suggestState } from "../send-state.js";
 import { renderBriefButton, renderDoc, renderOverview } from "./docs.js";
 import { board, renderGitBoard, resetBoard } from "./git-host.js";
 import { renderWorkspace, tellFolderIssues } from "./workspace.js";
@@ -1973,10 +1975,7 @@ export function markSent({ sentIds, sentNotes = {}, summaries, values }) {
   for (const id of sentIds) {
     for (const prefix of ["other-", "text-", "note-"]) delete page.local.drafts[prefix + id];
     if (sentNotes[id]) {
-      delete page.local.drafts["thread-" + id];
-      const rest = noteImages(id).filter((img) => !sentNotes[id].has(img.key));
-      if (rest.length) page.local.images[id] = rest;
-      else delete page.local.images[id];
+      clearSentNote(id, sentNotes[id]);
     } else if (!page.local.images[id]) {
       delete page.local.drafts["thread-" + id];
     }
@@ -1995,6 +1994,58 @@ export function markSent({ sentIds, sentNotes = {}, summaries, values }) {
     }).catch(() => {});
   }
   save();
+}
+
+// A card's note went: its draft goes, and of its attachments only those whose
+// `key` is not in `keys` (the ones that did not go with it) stay. Shared by
+// Send and the suggestion send.
+export function clearSentNote(id, keys) {
+  delete page.local.drafts["thread-" + id];
+  const rest = noteImages(id).filter((img) => !keys.has(img.key));
+  if (rest.length) page.local.images[id] = rest;
+  else delete page.local.images[id];
+}
+
+// The Ask for suggestions chip: one request for suggestions on one card, with
+// the card's ready note riding along. Its own send, beside Send: nothing
+// staged goes or is cleared, and the card stays open to answer.
+export async function askSuggestions(itemId) {
+  const item = byId(itemId);
+  if (!item || suggestState(item).disabled) return;
+  const note = pendingNotes().find((n) => n.id === itemId);
+  const text = note ? note.text : "";
+  const images = note ? note.images : [];
+  try {
+    const res = await fetch("/submit", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        actions: [suggestAction(itemId, text, images)],
+        reply: suggestReplyLines(item.title, text, images).join("\n"),
+      }),
+    });
+    if (res.status === 409) {
+      banner(
+        "Your last answers are still being picked up. Nothing is lost, and nothing was sent twice. Try again in a moment.",
+        "info"
+      );
+      page.pendingBannerUp = true;
+      page.pendingResult = true;
+    } else if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      banner(refusedLine({ status: res.status, reason: (body && (body.message || body.error)) || `error ${res.status}` }), "warn");
+    } else {
+      // A note held back on an upload did not go, so it stays drafted.
+      if (note) clearSentNote(itemId, new Set(images.map((i) => i.key)));
+      save();
+      banner("Asked for suggestions. Plan2Code is picking it up now.", "good");
+      setTimeout(() => banner(null), 4000);
+    }
+  } catch {
+    await sendLost();
+  } finally {
+    render();
+  }
 }
 
 // The menu card whose staged pick is an option marked `fresh`, if any.

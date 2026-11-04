@@ -1242,11 +1242,18 @@ function recordSubmitted(state, actions) {
     if (!item) continue;
     if (action.type === "comment") {
       const pick = (list) => (Array.isArray(list) ? list.map(({ path, name }) => ({ path, name })) : []);
-      item.sentNote = { at, text: String(action.text || ""), images: pick(action.images), files: pick(action.files) };
+      item.sentNote = {
+        at,
+        text: String(action.text || ""),
+        images: pick(action.images),
+        files: pick(action.files),
+        ...(action.suggest === true ? { suggest: true } : {}),
+      };
       // The person's side of the Notes thread. Left to the agent it was never
       // written, so a question asked in a note vanished once it was picked up
-      // and the reply under it answered nothing on the page.
-      if (item.sentNote.text.trim() || item.sentNote.images.length || item.sentNote.files.length) {
+      // and the reply under it answered nothing on the page. A request for
+      // suggestions is always written, note or not.
+      if (item.sentNote.text.trim() || item.sentNote.images.length || item.sentNote.files.length || item.sentNote.suggest) {
         item.thread = [...(Array.isArray(item.thread) ? item.thread : []), { who: "user", ...item.sentNote }];
       }
       continue;
