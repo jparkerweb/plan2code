@@ -5,7 +5,7 @@
 
 ```
 plan2code/
-├── src/                        # Source workflow prompts (17 markdown files)
+├── src/                        # Source workflow prompts (19 markdown files)
 │   ├── plan2code-0-pathfinder-references/ # Reference files for pathfinder skill
 │   │   ├── brief.md                        # Dated plain-English decision briefs
 │   │   ├── chart.md                        # MODE A: destination + frontier grills, templates
@@ -16,9 +16,9 @@ plan2code/
 │   │   ├── handoff.md                      # Clearing gate + PLAN-DRAFT handoff
 │   │   └── trail.md                        # Every-response map visual + pathed resume command
 │   ├── shared-references/              # Reference files shared across skills
-│   │   ├── building-habits.md              # Find the cause, test first, pin behavior (quick-task, implement, implement-review)
-│   │   ├── helper-strength.md              # How strong a model and how much effort each helper gets (init, init-update, pathfinder, plan, revise-plan, document, quick-task, implement, implement-review, review, finalize, xray, diagnose)
-│   │   └── test-runs.md                    # Choosing what tests to run: targeted per task and phase, full suite only where the plan puts it (document, implement, implement-review, quick-task, review, finalize)
+│   │   ├── building-habits.md              # Find the cause, test first, pin behavior (quick-task, implement, implement-review, test)
+│   │   ├── helper-strength.md              # How strong a model and how much effort each helper gets (init, init-update, pathfinder, plan, revise-plan, document, quick-task, implement, implement-review, review, finalize, xray, diagnose, pr-prep, test)
+│   │   └── test-runs.md                    # Choosing what tests to run: targeted per task and phase, full suite only where the plan puts it (document, implement, implement-review, quick-task, review, finalize, pr-prep, test)
 │   ├── plan2code-review-references/     # Reference files for review skill
 │   │   ├── verification-protocol.md        # Deep verification + confidence calibration
 │   │   ├── dimensions.md                   # 11 dimensions with detailed checklists
@@ -29,8 +29,8 @@ plan2code/
 │   │   └── ai-agent-file-sync.md           # Step 7: replace AI configs with AGENTS.md refs
 │   ├── plan2code-4-finalize-references/ # Reference files for finalize skill
 │   │   └── community-feedback-submission.md # STEP 6.5 payload schema + submission tiers
-│   ├── skill-scripts/                # Scripts shared across skills: install.js copies the ones a skill lists into skills/<skill>/scripts/ (specs, commit-msg, review-scope, agents-md, agent-files, common)
-│   └── plan2code-<skill>-scripts/    # A skill's own scripts, same copy rule (pathfinder, finalize, changelog, git and xray each have one)
+│   ├── skill-scripts/                # Scripts shared across skills: install.js copies the ones a skill lists into skills/<skill>/scripts/ (specs, commit-msg, review-scope, agents-md, agent-files, glob, test-map, test-match, test-commands, run-check, common)
+│   └── plan2code-<skill>-scripts/    # A skill's own scripts, same copy rule (pathfinder, finalize, changelog, git, xray, pr-prep and test each have one)
 ├── plan2code-bot/            # Autonomous end-to-end workflow test runner (TypeScript, tsup, Claude Agent SDK, vitest); user docs in .readme/test-bot.md
 ├── plan2code-metrics/        # Recursive self-improvement toolchain
 │   ├── src/                    # TypeScript source
@@ -142,6 +142,8 @@ plan2code/
 | `plan2code-handoff.md` | handoff | Compact the conversation into a self-contained handoff document for a fresh session |
 | `plan2code-xray.md` | xray | Explain how and why an area works (files, commits, PRs via `gh` when present), or rank the rough spots worth fixing into `ARCHITECTURE-BRIEF-<date>.md` for Pathfinder or Plan; never edits code |
 | `plan2code-diagnose.md` | diagnose | Find a bug's cause under the find-the-cause-first habit (`references/building-habits.md`) and write it up as `specs/<bug-name>/DIAGNOSIS-<YYYYMMDD>.md` without fixing it, then offer Quick Task to fix it, or Plan when the fix is big. The dashboard scan reports such a folder as spec state `diagnosed` ("Bug diagnosed"), which lights Quick Task (suggested) and Plan. Once Quick Task marks the diagnosis `Fixed` (nothing past it in the folder) the state is `fixed` ("Bug fixed"): no pipeline card lights, the picker never pre-selects it, and Quick Task offers to archive it with `specs.mjs archive` |
+| `plan2code-pr-prep.md` | pr-prep | Get a branch ready for review: pick the checks its changes need from the project's `## Test map` (or its config files), let the person trim the plan, run it, give Ready, Ready with notes or Not ready, and write a PR description to copy (following the repo's template) with the create-a-PR link; offers to save `PR-READINESS-<date>.md` into the branch's spec folder; never commits, pushes or opens the PR |
+| `plan2code-test.md` | test | Write missing tests: ask where to look, find source files no test covers (matching, plus real coverage when the project already has a coverage tool, offered first), show a plan opening with how this project writes tests, then write and run unit and integration tests; escalates past 8 source files, 8 new test files or 2 runners to a PLAN-DRAFT for Plan, hands a real bug to Diagnose, never changes source code |
 | `plan2code-changelog.md` | changelog | Check the CHANGELOG version against the default branch, suggest editable entries for new work, keep `package.json` aligned, offer to commit the result through Git |
 | `plan2code-git.md` | git | Branches, pull (with conflict help), push, publish and commits (clear message, suggested splits) on the web console's git board, or plain instructions in the terminal (`switch to main`, `commit and push`); asks before every push, publish and delete |
 
@@ -182,7 +184,14 @@ Anything a workflow step decides with one correct answer (parsing a spec's check
 |---|---|---|
 | `specs.mjs` | plan, revise-plan, document, implement, implement-review, review, quick-task, finalize, handoff, diagnose | `list` / `status` (Phase Checklist, groups, task markers, numbering, the implement selection verdict, consistency checks) / `metrics` / `mark` / `archive`. Imports `scanProject()` from the bundled `web-console/scan.mjs`, so the dashboard and the skills share one spec classifier |
 | `commit-msg.mjs` | implement(-review), review, quick-task, finalize, init-update, git | The `<subject>` / `AI Assisted` commit command (two `-m` flags), with optional `git add` |
-| `review-scope.mjs` | review, implement(-review), quick-task, finalize | Review Mode's git fallback: files, lines, doc share, base branch |
+| `review-scope.mjs` | review, implement(-review), quick-task, finalize, pr-prep, test | Review Mode's git fallback: files, lines, doc share, base branch |
+| `glob.mjs` | init, init-update, pr-prep, test | The glob subset (`**`, `*`, `?`, `{a,b}`) as a RegExp, and forward-slash path normalizing; imported by `test-map.mjs` and `test-match.mjs` |
+| `test-map.mjs` | init, init-update, pr-prep, test | `read` / `write` the project test map (one `\| Area \| Paths \| Run \| Shared \|` table under `## Test map` in `AGENTS.md`, or behind one link to `.agents-docs/`); every line outside the table stays byte-identical |
+| `test-match.mjs` | pr-prep, test | `covers` (changed files to the map rows and tests that cover them, plus shared-ground hints), `gaps` (source files no test covers, ranked by recent change) and `nearest` (existing tests to read for style) |
+| `test-commands.mjs` | init, init-update, pr-prep, test | `discover`: the whole-suite command, per-folder runners, lint/types/build checks, coverage commands already present and the language's built-in runner, from config files only |
+| `run-check.mjs` | pr-prep, test | Run one command with a timeout, kill its process tree on timeout, and classify it `passed`, `failed`, `timeout` or `not-started` with the output's tail |
+| `pr-prep.mjs` (own) | pr-prep | `template` (the PR template and its headings), `pr-url` (the create-a-PR link through `git-repo.mjs`) and `spec` (the branch's spec folder for the save offer). Read-only |
+| `coverage.mjs` (own) | test | `read --lcov` / `--go-func`: coverage output as per-file lines, hits and percent, plus the total. Read-only, runs no tool |
 | `agents-md.mjs` | init, init-update | AGENTS.md structure, budget, orphans, broken links, always-inline sections |
 | `agent-files.mjs` | init, init-update | Detect and replace other agents' config files with AGENTS.md pointers |
 | `pathfinder.mjs` (own) | 0-pathfinder | `reconcile`, `frontier`, `claim`, `resolve`, `rule-out`, `trail`, `gate`, `lint`, `brief-data` |
@@ -193,7 +202,7 @@ Anything a workflow step decides with one correct answer (parsing a spec's check
 
 **Conventions** (`common.mjs`): Node 18+ built-ins only; one JSON object on stdout (`ok: false` plus `error`, `message`, `next` on a handled failure, the same line on stderr); exit 0 ok, 1 crash, 2 bad arguments, 3 not found, 4 invalid or check failed, 5 refused; `--help` documents commands and exit codes; writes take `--dry-run`; `PLAN2CODE_NOW` pins the clock for tests. A SKILL.md names a script as `node "<S>/<name>.mjs"`, where `<S>` is `scripts/` beside it.
 
-**Tests:** `scripts/test-skill-scripts.mjs` (installer plumbing and the shared scripts), `scripts/test-script-<skill>.mjs` (a skill's own), with fixtures from `scripts/skill-script-helpers.mjs`. Importing that module rebuilds `skills/` unless `npm_lifecycle_event` is `test` (`npm test` has just built it). Git fixtures go through `copyFixture()` (`scripts/fixture-helpers.mjs`): built once per test file, copied per test, since every `git` process costs a few hundred milliseconds on Windows; a remote inside the fixture is added with `slashed()` so the copy's `.git/config` can be pointed at its own origin. They run the built `skills/` tree, and one test fails if any SKILL.md or shipped reference names a `<S>/<name>.mjs` that skill does not ship. The per-skill scripts import `./common.mjs`, which only sits beside them in the built tree, so run them from `skills/`, not `src/`.
+**Tests:** `scripts/test-skill-scripts.mjs` (installer plumbing and the shared scripts), `scripts/test-script-<skill>.mjs` (a skill's own, and the newer shared scripts: `test-script-test-map.mjs`, `test-script-test-match.mjs`, `test-script-test-commands.mjs`, `test-script-run-check.mjs`, `test-script-pr-prep.mjs`, `test-script-coverage.mjs`), with fixtures from `scripts/skill-script-helpers.mjs`. Importing that module rebuilds `skills/` unless `npm_lifecycle_event` is `test` (`npm test` has just built it). Git fixtures go through `copyFixture()` (`scripts/fixture-helpers.mjs`): built once per test file, copied per test, since every `git` process costs a few hundred milliseconds on Windows; a remote inside the fixture is added with `slashed()` so the copy's `.git/config` can be pointed at its own origin. They run the built `skills/` tree, and one test fails if any SKILL.md or shipped reference names a `<S>/<name>.mjs` that skill does not ship. The per-skill scripts import `./common.mjs`, which only sits beside them in the built tree, so run them from `skills/`, not `src/`.
 
 ## Repo-Local Skills (`.claude/skills/`)
 
@@ -511,7 +520,7 @@ Optional local browser UI shipped with **every** skill. Source lives in `src/web
 | `public/boot.js` | `playWake()`: the dashboard's first-open wake-up. Self-contained (it owns its timers, the listeners that swallow input mid-run and the one measured glide transform; the page's `stir()` callback times the nudge between the click and the boot, which `screens/dashboard.js` fills with one snore; `skipEl` — the muted Skip button, and Escape — ends the run early with `onSkip` as the cue to silence queued sounds) and free of module-scope DOM access, so it can be imported by the tests and kept out of the screens' render paths; `GLIDE_AT_MS` / `DONE_AT_MS` are its timings |
 | `console.md` | the core of the agent-facing contract, read once per conversation (every skill ships the same copy, so a dashboard hop never re-reads it): starting, the turn (`post --wait`, the exit codes, handling a send, `settle`), posting, the payload and its kinds, documents (including `file` blocks), the house rules, and an index of the topic files below with the moment each is read. A test caps it at 24,000 characters |
 | `console-finish.md` · `console-stop.md` · `console-chat.md` · `console-workspace.md` · `console-subagents.md` · `console-launches.md` · `console-meter.md` · `console-attachments.md` · `console-trouble.md` | topic files, each read only when its moment first comes: finishing (the finish and its buttons), stop requests (the way home mid-workflow, `stopWarning`, resuming a pause), Quick questions, the Workspace, standing instructions and helper reports, dashboard launches and the menu payload, the session meter's `run` events (read only when a `run` is refused: the notes inline every `run`), keeping a cited note attachment, and recovery |
-| `notes/<workflow>.md` | per-workflow notes (`init` for both inits, `pathfinder` with Briefs, `plan`, `revise-plan`, `document`, `implement` for both builds, `loop` for a build the desktop app's Implementation Loop runs with `--loop` (where it reports a `loopOutcome` instead of asking for sign-off), `quick-task`, `review`, `finalize`, `handoff`, `changelog`, `git`, `xray`, `diagnose`). Each skill's Interface line reads `<D>/console.md` and its own notes file right after `open`; a test checks every skill names one that exists |
+| `notes/<workflow>.md` | per-workflow notes (`init` for both inits, `pathfinder` with Briefs, `plan`, `revise-plan`, `document`, `implement` for both builds, `loop` for a build the desktop app's Implementation Loop runs with `--loop` (where it reports a `loopOutcome` instead of asking for sign-off), `quick-task`, `review`, `finalize`, `handoff`, `changelog`, `git`, `xray`, `diagnose`, `pr-prep`, `test`). Each skill's Interface line reads `<D>/console.md` and its own notes file right after `open`; a test checks every skill names one that exists |
 | `building.md` · `building-review.md` | the build half of the contract, for `implement`, `implement-review` and `quick-task`: progress posts (`agent.activity`, `agent.quietMinutes`, `file` blocks re-read with `refresh`), the chat check between tasks, questions mid-build and stop requests; `building-review.md` is the review run on the page (the sign-off's `review` verdict, **Review it now**, Implement + Review's Stage 2, Finalize's Step 2.5), read only when asked for |
 
 Key design points:

@@ -59,7 +59,7 @@ Keep with you: every question, confidence score, decision and sign-off, Phases 3
 
 Before Phase 1, run `node "<S>/specs.mjs" list` from the project root (`<S>`: `scripts/` beside this SKILL.md, `~/.agents/skills/plan2code-1-plan/scripts/` globally). It reads gitignored `specs/` (Glob silently finds nothing there) and gives each spec's `planDrafts` with its **Status:** line (`-prev` copies are `archived`; ignore them). Route on that status:
 - Status "Phase 3 Complete - Resume at Phase 4": Resume at Phase 4
-- Status "Escalated from Quick Task - Resume at Phase 2": Acknowledge, verify requirements, skip to Phase 2
+- Status "Escalated from Quick Task - Resume at Phase 2" or "Escalated from Test - Resume at Phase 2": Acknowledge, verify requirements, skip to Phase 2
 - Status "Draft" or "Complete": Ask user how to proceed
 - Before going on with any existing draft (a Pathfinder handoff, a Quick Task escalation, a Draft or Complete one), read its 2.4: `| Status | Deferred to Plan |`, empty or `Not discussed` means ask the Phase 1 testing question now and write the answer into 2.4; a cadence with no `Full Suite` row means ask only the full-suite part.
 - A spec folder holding a `DIAGNOSIS-*.md` (Diagnose's write-up of a bug): read it first, as the Phase 1 brief (the bug, its cause, the suggested fix); that folder's name is the feature name (do not ask for one), so the PLAN-DRAFT lands beside the diagnosis

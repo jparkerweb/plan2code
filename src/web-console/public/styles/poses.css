@@ -449,6 +449,30 @@
   50%, 88% { transform: translate(4px, 2px); }
 }
 
+/* Test -- bubbles rise through the tube's liquid, then a star bubble floats
+   out of the top and fades; his star looks up after it. */
+.pose .ts-bub { fill: var(--panel-2); }
+.pose .ts-b1 { animation: ts-rise 2.4s ease-in infinite; }
+.pose .ts-b2 { animation: ts-rise 2.4s ease-in 0.8s infinite; }
+.pose .ts-b3 { animation: ts-rise 2.4s ease-in 1.6s infinite; }
+@keyframes ts-rise {
+  0% { transform: translateY(0); opacity: 0; }
+  15%, 80% { opacity: 1; }
+  100% { transform: translateY(-26px); opacity: 0; }
+}
+.pose .ts-star { animation: ts-float 4.8s ease-out infinite; }
+@keyframes ts-float {
+  0%, 30% { transform: translateY(14px) scale(0.4); opacity: 0; }
+  40% { opacity: 1; }
+  85% { transform: translateY(-26px) scale(1); opacity: 1; }
+  100% { transform: translateY(-34px) scale(1); opacity: 0; }
+}
+.pose .ts-look { animation: ts-look 4.8s ease-in-out infinite; }
+@keyframes ts-look {
+  0%, 30%, 100% { transform: translate(4px, 0); }
+  60%, 85% { transform: translate(4px, -4px); }
+}
+
 @media (max-width: 720px) {
   .dash { padding-top: 0; }
   .launch-stage { height: 140px; }

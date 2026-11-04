@@ -405,6 +405,28 @@ export const SKILLS = Object.freeze([
     },
   }),
   skill({
+    skill: "plan2code-test",
+    workflow: "test",
+    label: "Testing",
+    name: "Test",
+    pose: "test",
+    builds: false, phased: false, metered: true, templates: false,
+    weight: 1, started: "Test started", ran: "Test run", resume: null,
+    subagents: "Use helpers to read the nearest tests and runner configs for each runner group. Keep the gaps, the plan, the style block, every question and the writing of tests with you. Light strength, low effort.",
+    states: "any",
+    greyed: null,
+    card: {
+      group: "extra",
+      chip: "Utility",
+      title: "Write missing tests",
+      icon: "test",
+      blurb: "Finds code with no tests and writes them in your project's own style.",
+      help: "Finds untested files, shows a test plan in the project's style, then writes and runs unit and integration tests.",
+      about:
+        "When parts of the code have no tests. Test asks where to look (the branch's changes, one folder or the whole project) and finds the files no test covers, and offers a real coverage run when the project already has a coverage tool. It shows a plan that opens with how this project writes tests, so the new tests match the old ones, then writes and runs unit and integration tests. It never changes source code: a test that finds a real bug is handed to Diagnose.",
+    },
+  }),
+  skill({
     skill: "plan2code-changelog",
     workflow: "changelog",
     label: "Changelog",

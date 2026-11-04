@@ -719,6 +719,23 @@ test("specs check-draft: a pathfinder draft at Resume at Phase 4 is checked ligh
   assert.deepEqual(bad.json.problems.map((p) => p.code).sort(), ["loop-token", "metric-word"]);
 });
 
+test("specs check-draft: a Test escalation draft passes like a Quick Task one", () => {
+  const root = specFixture();
+  for (const from of ["Quick Task", "Test"]) {
+    write(root, "specs/idea-only/PLAN-DRAFT-20260801.md", `# PLAN-DRAFT: Tests\n\n**Status:** Escalated from ${from} - Resume at Phase 2\n**Source:** ${from} escalation\n\n## 1. Executive Summary\n\nWrite the tests.\n`);
+    const r = runScript("plan2code-1-plan", "specs.mjs", ["check-draft", "idea-only", "--root", root]);
+    assert.equal(r.code, 0, r.stdout);
+    assert.equal(r.json.status, `Escalated from ${from} - Resume at Phase 2`);
+  }
+});
+
+test("the skills that run test-match.mjs ship glob.mjs and test-map.mjs beside it", () => {
+  for (const s of ["plan2code-pr-prep", "plan2code-test"]) {
+    for (const f of ["test-match.mjs", "glob.mjs", "test-map.mjs"]) assert.ok(fs.existsSync(path.join(SKILLS, s, "scripts", f)), `${s}/scripts/${f}`);
+  }
+  assert.ok(fs.existsSync(path.join(SKILLS, "plan2code-test", "scripts", "coverage.mjs")), "plan2code-test ships its own coverage.mjs");
+});
+
 test("common.mjs exports the shared loop-token and scrape patterns", async () => {
   const common = await import(new URL(`file:///${path.join(SKILLS, "plan2code-2-document", "scripts", "common.mjs").replace(/\\/g, "/")}`).href);
   assert.ok(common.LOOP_TOKENS instanceof RegExp);

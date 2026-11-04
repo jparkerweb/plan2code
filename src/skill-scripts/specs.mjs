@@ -828,7 +828,7 @@ async function cmdCheck(args) {
   checkReport("check", { spec: spec.rel, checked: names.map(at) }, problems);
 }
 
-const DRAFT_STATUSES = ["Draft", "Phase 3 Complete - Resume at Phase 4", "Escalated from Quick Task - Resume at Phase 2", "Complete"];
+const DRAFT_STATUSES = ["Draft", "Phase 3 Complete - Resume at Phase 4", "Escalated from Quick Task - Resume at Phase 2", "Escalated from Test - Resume at Phase 2", "Complete"];
 // The headings Document reads out of a Complete draft.
 const DRAFT_SECTIONS = [
   { name: "## 1. Executive Summary", re: /^##\s+1\.\s+Executive Summary\b/im },

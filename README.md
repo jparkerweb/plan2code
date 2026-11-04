@@ -250,6 +250,8 @@ The dashboard's cards, and when each one lights up for the spec you pick:
 | Handoff | Pack this conversation into a document a fresh session can pick up cold. Any skill's **Stop with a handoff** writes one too, and the dashboard lists them to pick up. | Always |
 | Codebase X-ray | Explain how and why an area works, or find the rough spots worth fixing. | Always |
 | Diagnose a bug | Find a bug's cause and write it up, without fixing it. | Always |
+| Get a PR ready | Runs the checks your branch needs, says if it is ready, and writes the PR description to copy. Never commits, pushes or opens the PR. | Always |
+| Write missing tests | Finds code with no tests and writes unit and integration tests in your project's own style. Never changes source code. | Always |
 | Changelog | Checks the CHANGELOG version against the main branch and suggests entries for what is new. | Always |
 | Git | Branches, pull, push and commits on one board, asking before anything leaves your machine. | Always (offers to start a repository outside one) |
 
@@ -420,6 +422,8 @@ console or the terminal; add `--web` to skip the question and go straight to the
 | `/plan2code-handoff` | Compact this conversation into a doc the next one resumes from, saved in `~/.plan2code/handoffs/` and listed on the dashboard to pick up |
 | `/plan2code-xray` | Explain how and why an area of the code works (citing files, commits and PRs), or rank the rough spots worth fixing into a brief for Pathfinder or Plan; never edits code |
 | `/plan2code-diagnose` | Find a bug's cause and write it up as `specs/<bug-name>/DIAGNOSIS-<date>.md` without fixing it, then offer `/plan2code-quick-task` to fix it, or `/plan2code-1-plan` when the fix is big |
+| `/plan2code-pr-prep` | Before you open a pull request. Picks the checks the branch's changes need from the project's `## Test map` (or its config files), runs the ones you keep, says Ready, Ready with notes or Not ready, and writes a PR description to copy with the create-a-PR link; never commits, pushes or opens the PR |
+| `/plan2code-test` | Parts of the code have no tests. Asks where to look, finds the untested files (plus real coverage when the project already has a coverage tool), shows a plan in the project's own style, then writes and runs unit and integration tests; never changes source code, hands a real bug to `/plan2code-diagnose` |
 | `/plan2code-changelog` | Check the CHANGELOG version against the default branch, suggest entries for new work you can edit, keep `package.json` aligned, then hand off to Git to commit |
 | `/plan2code-git` | Branches, pull, push and commits on one board (or plain instructions in the terminal); asks before every push, publish and delete |
 

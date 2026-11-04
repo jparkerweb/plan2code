@@ -347,6 +347,21 @@ const SOURCE_PROMPTS = [
     ]
   },
   {
+    source: 'plan2code-test.md',
+    stepNumber: 'test',
+    name: 'test',
+    displayName: 'Test Mode',
+    description: 'Find untested code and write unit and integration tests in the project\'s own style',
+    isUtility: true,
+    scripts: ['review-scope.mjs', 'glob.mjs', 'test-map.mjs', 'test-match.mjs', 'test-commands.mjs', 'run-check.mjs'],
+    additionalReferences: [
+      { source: 'web-console', target: 'web-console' },
+      { source: 'shared-references/test-runs.md', target: 'test-runs.md' },
+      { source: 'shared-references/building-habits.md', target: 'building-habits.md' },
+      { source: 'shared-references/helper-strength.md', target: 'helper-strength.md' }
+    ]
+  },
+  {
     source: 'plan2code-changelog.md',
     stepNumber: 'changelog',
     name: 'changelog',
@@ -395,6 +410,7 @@ function generateStepLabel(prompt) {
   if (prompt.stepNumber === 'xray') return 'X-ray';
   if (prompt.stepNumber === 'diagnose') return 'Diagnose';
   if (prompt.stepNumber === 'pr-prep') return 'PR Prep';
+  if (prompt.stepNumber === 'test') return 'Test';
   if (prompt.stepNumber === 'changelog') return 'Changelog';
   if (prompt.stepNumber === 'quick') return 'Quick Task';
   return `Step ${prompt.stepNumber}`;

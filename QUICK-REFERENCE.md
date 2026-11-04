@@ -46,6 +46,8 @@ Every command below is what a dashboard card runs. Typed on its own, each one as
 | handoff    | /plan2code-handoff            | Conversation    | Self-contained handoff doc (OS temp dir by default, or a folder you pick such as `handoffs/`)                 |
 | xray       | /plan2code-xray               | An area, or none | An explanation citing files and commits, or `ARCHITECTURE-BRIEF-<date>.md` with the rough spots you picked |
 | diagnose   | /plan2code-diagnose           | A bug, or none  | `DIAGNOSIS-<date>.md` with the cause and its evidence, then Quick Task (or Plan for a big fix) to fix it |
+| pr-prep    | /plan2code-pr-prep            | Your branch     | A readiness verdict (Ready, Ready with notes, Not ready) and a PR description to copy; no commits, no push |
+| test       | /plan2code-test               | An area, or none | New unit and integration tests in the project's style, run; a bug handed to Diagnose; no source changes |
 | changelog  | /plan2code-changelog          | Your branch     | `CHANGELOG.md` entries and the `package.json` version, from the default branch's latest version |
 | git        | /plan2code-git                | Your repo       | Commits (`<subject>` / `AI Assisted`), branches, pull with conflict help, push, publish                       |
 

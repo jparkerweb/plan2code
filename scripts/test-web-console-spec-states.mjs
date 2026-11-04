@@ -287,6 +287,18 @@ const CARDS = {
     built: { on: true },
     unrecognized: { on: true },
   },
+  "plan2code-test": {
+    "none": { on: true },
+    diagnosed: { on: true },
+    fixed: { on: true },
+    exploring: { on: true },
+    mapped: { on: true },
+    planned: { on: true },
+    documented: { on: true },
+    building: { on: true },
+    built: { on: true },
+    unrecognized: { on: true },
+  },
   "plan2code-changelog": {
     "none": { on: true },
     diagnosed: { on: true },

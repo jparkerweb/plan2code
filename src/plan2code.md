@@ -68,6 +68,7 @@ Ground truth for menu notes and Ask-tab answers. For anything beyond this table,
 | xray | the codebase, `git` history, `gh` when present | an answer; `ARCHITECTURE-BRIEF-<date>.md` or `XRAY-<area>-<date>.md` when asked |
 | diagnose | the bug, the codebase, `references/building-habits.md` | `DIAGNOSIS-<date>.md`; no code changes |
 | pr-prep | git diff and status, the `AGENTS.md` test map, the project's config files, the PR template | the page report and description; `PR-READINESS-<date>.md` on a yes; the `AGENTS.md` test map on a yes; no commits, no push |
+| test | the codebase, the `AGENTS.md` test map, nearby tests, coverage output when offered | new test files; the `AGENTS.md` test map on a yes; `PLAN-DRAFT-<date>.md` when escalated; no source changes |
 
 ## A pick arrives
 
@@ -103,7 +104,7 @@ If `skill` is not in the table below, say so on the page and stay the dashboard.
 | plan2code-quick-task | quick-task | | plan2code-handoff | handoff |
 | plan2code-git | git | | plan2code-changelog | changelog |
 | plan2code-xray | xray | | plan2code-diagnose | diagnose |
-| plan2code-pr-prep | pr-prep | | | |
+| plan2code-pr-prep | pr-prep | | plan2code-test | test |
 
 ## A pick-up arrives
 

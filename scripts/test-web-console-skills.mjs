@@ -399,7 +399,7 @@ test("Implement's card launches Implement + Review when Review is ticked", () =>
   assert.equal(launchVariant(quick, true), quick, "a card with no Review box is unchanged");
 });
 
-test("helper-strength.md ships in the fourteen skills that start helpers, and in no other", () => {
+test("helper-strength.md ships in the fifteen skills that start helpers, and in no other", () => {
   // npm test has just built skills/; a direct run builds it so the check never reads a stale tree.
   if (process.env.npm_lifecycle_event !== "test") {
     execFileSync(process.execPath, [path.join(ROOT, "install.js"), "--build-skills"], { stdio: "ignore" });
@@ -420,6 +420,7 @@ test("helper-strength.md ships in the fourteen skills that start helpers, and in
     "plan2code-pr-prep",
     "plan2code-quick-task",
     "plan2code-review",
+    "plan2code-test",
     "plan2code-xray",
   ]);
 });
