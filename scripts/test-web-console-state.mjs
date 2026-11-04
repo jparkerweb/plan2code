@@ -46,6 +46,7 @@ test("state: the rest of the shared state starts as app.js always started it", (
     meterFrame: null,
     updateFrame: null,
     inApp: false,
+    terminalCollapsed: false,
     loop: null,
     loopSetup: null,
     loopFacts: null,
