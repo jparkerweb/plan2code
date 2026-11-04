@@ -8,10 +8,11 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { HUM_TABLES, TONE_TABLES, hum, humNames, hushTones, tone, toneNames } from "../src/web-console/public/tones.js";
+import { HUM_TABLES, LOUDER_MAX, TONE_TABLES, hum, humNames, hushTones, tone, toneNames } from "../src/web-console/public/tones.js";
 import { looks } from "../src/web-console/public/looks.js";
-import { compileTrack, hushMusic, music, musicNames, noteFreq } from "../src/web-console/public/music.js";
-import { MUSIC_TABLES } from "../src/web-console/public/tones.js";
+import { SONG_PEAK, compileTrack, hushMusic, music, musicNames, noteFreq, songNames } from "../src/web-console/public/music.js";
+import { MUSIC_TABLES, SONG_TABLES } from "../src/web-console/public/tones.js";
+import { SERVABLE } from "../src/web-console/static.mjs";
 import { REGIONS, ROAD_MUSIC } from "../src/web-console/public/activities/drive.js";
 import { MUSIC_TRACKS } from "../src/web-console/public/activities/snake.js";
 import snakeSfx from "../src/web-console/public/activities/snake-sfx.js";
@@ -161,6 +162,35 @@ test("a hum starts once, follows each call without starting more, and goes quiet
     const st = made.stopped;
     await new Promise((r) => setTimeout(r, 320));
     assert.ok(made.stopped > st, "a hum not asked for again fades by itself");
+  } finally {
+    hushTones();
+    looks.sound = saved.sound;
+    globalThis.AudioContext = saved.ctor;
+  }
+});
+
+test("a game's `louder` lifts a tone and a hum past their usual loudness, never past LOUDER_MAX", () => {
+  const saved = { sound: looks.sound, ctor: globalThis.AudioContext };
+  const { Ctx, made } = AUDIO;
+  globalThis.AudioContext = Ctx;
+  try {
+    looks.sound = true;
+    hushTones();
+    const tonePeak = (louder) => {
+      const mark = made.gains.length;
+      tone("coin", 1, 1, louder);
+      return Math.max(...made.gains.slice(mark).flatMap((g) => g.gain.ramps.map((r) => r.v)));
+    };
+    const base = tonePeak(undefined);
+    assert.ok(Math.abs(tonePeak(1.4) - base * 1.4) < 1e-9, "a tone 1.4 times as loud");
+    assert.ok(Math.abs(tonePeak(9) - base * LOUDER_MAX) < 1e-9, "capped at LOUDER_MAX");
+    const humLevel = (id, louder) => {
+      const mark = made.gains.length;
+      hum(id, "wind", 1, 1, louder);
+      return made.gains.slice(mark).flatMap((g) => g.gain.ramps).filter((r) => r.kind === "target").at(-1).v;
+    };
+    const plain = humLevel("plain", undefined);
+    assert.ok(Math.abs(humLevel("lifted", 1.4) - plain * 1.4) < 1e-9, "a hum 1.4 times as loud");
   } finally {
     hushTones();
     looks.sound = saved.sound;
@@ -358,15 +388,109 @@ test("music: Snake lists exactly the tracks it has, each a real track that no ot
   }
 });
 
-test("music: Light Trails lists exactly the tracks it has, each a real track that no other game defines, enough for every arena", () => {
-  const tracks = new Set(musicNames());
-  assert.deepEqual([...TRAILS_TRACKS].sort(), Object.keys(trailsSfx.music).sort(), "the game lists the tracks its sound file has");
-  assert.ok(TRAILS_TRACKS.length >= 9, "nine arenas, none hearing a track twice");
+test("music: Light Trails lists exactly the songs it has, each an mp3 on disk the server serves, and no chiptune tracks", () => {
+  const songs = new Set(songNames());
+  assert.equal(trailsSfx.music, undefined, "its music is the songs, not note data");
+  assert.deepEqual([...TRAILS_TRACKS].sort(), Object.keys(trailsSfx.songs).sort(), "the game lists the songs its sound file has");
   for (const name of TRAILS_TRACKS) {
-    assert.ok(tracks.has(name), `track "${name}" exists`);
-    assert.equal(MUSIC_TABLES.filter((t) => Object.hasOwn(t, name)).length, 1, `${name} is defined once`);
+    assert.ok(songs.has(name), `song "${name}" exists`);
+    assert.equal(SONG_TABLES.filter((t) => Object.hasOwn(t, name)).length, 1, `${name} is defined once`);
+    assert.ok(!musicNames().includes(name), `${name} is not also a chiptune track`);
+    const file = trailsSfx.songs[name];
+    assert.ok(SERVABLE.has(file), `${file} is servable`);
+    assert.ok(fs.statSync(path.join(ROOT, "src/web-console/public", file)).size > 0, `${file} is on disk`);
   }
 });
+
+// A stand-in <audio>: records what music.js asks of it.
+class FakeAudio {
+  static made = [];
+  constructor(src) {
+    Object.assign(this, { src, volume: 1, paused: true, ended: false, currentTime: 0, plays: 0, loads: 0 });
+    FakeAudio.made.push(this);
+  }
+  play() {
+    this.paused = false;
+    this.plays += 1;
+    return Promise.resolve();
+  }
+  pause() {
+    this.paused = true;
+  }
+  load() {
+    Object.assign(this, { paused: true, ended: false, currentTime: 0, loads: this.loads + 1 });
+  }
+}
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+async function withSongs(fn) {
+  const saved = { sound: looks.sound, Audio: globalThis.Audio };
+  globalThis.Audio = FakeAudio;
+  looks.sound = true;
+  hushMusic();
+  try {
+    await fn();
+  } finally {
+    hushMusic();
+    looks.sound = saved.sound;
+    globalThis.Audio = saved.Audio;
+  }
+}
+
+test("music: a song plays from its file, fades in toward its level, says when it has ended, and starts from the top again when asked", () =>
+  withSongs(async () => {
+    const [name] = TRAILS_TRACKS;
+    assert.equal(music(name, 1, 1, { restart: true }), "playing");
+    const el = FakeAudio.made.find((a) => a.src === `/${trailsSfx.songs[name]}`);
+    assert.ok(el, "an element for the song's file");
+    assert.ok(!el.paused && el.plays === 1, "it plays");
+    for (let i = 0; i < 20; i++) {
+      music(name, 1, 1);
+      await sleep(30);
+    }
+    assert.ok(Math.abs(el.volume - SONG_PEAK) < 1e-9, "glided up to its level");
+    assert.equal(el.plays, 1, "asked for again, it is not started again");
+    el.currentTime = 100;
+    el.ended = true;
+    el.paused = true;
+    assert.equal(music(name, 1, 1), "ended", "a song played through says so");
+    assert.equal(el.plays, 1, "and is not looped");
+    assert.equal(music(name, 1, 1, { restart: true }), "playing", "a restart plays it again");
+    assert.equal(el.loads, 1, "from the top");
+    assert.equal(el.currentTime, 0);
+  }));
+
+test("music: a song no longer asked for fades out and pauses where it was, and another song replaces it at once", () =>
+  withSongs(async () => {
+    const [first, second] = TRAILS_TRACKS;
+    music(first, 1, 0.5);
+    const el = FakeAudio.made.findLast((a) => a.src === `/${trailsSfx.songs[first]}`);
+    const loads = el.loads;
+    await sleep(800);
+    assert.ok(el.paused, "paused once it stops being asked for");
+    assert.equal(el.volume, 0, "faded to silence");
+    assert.equal(el.loads, loads, "kept where it was, so it picks up again mid-song");
+    music(first, 1, 0.5);
+    assert.ok(!el.paused, "asked for again, it plays on");
+    music(second, 1, 0.5);
+    assert.ok(el.paused, "another song stops it");
+    assert.ok(!FakeAudio.made.at(-1).paused, "and plays");
+    hushMusic();
+    assert.ok(FakeAudio.made.every((a) => a.paused), "a hush pauses every song");
+  }));
+
+test("music: a song plays nothing while Play sounds is off, at a volume of 0, or with no audio", () =>
+  withSongs(async () => {
+    const [name] = TRAILS_TRACKS;
+    looks.sound = false;
+    assert.equal(music(name, 1, 1), undefined);
+    looks.sound = true;
+    assert.equal(music(name, 1, 0), undefined);
+    globalThis.Audio = undefined;
+    assert.equal(music(name, 1, 1), undefined);
+    assert.ok(FakeAudio.made.filter((a) => a.src === `/${trailsSfx.songs[name]}`).every((a) => a.paused), "nothing plays");
+  }));
 
 test("music: every Sunset Drive road has a song, and every song is a real track", () => {
   const tracks = new Set(musicNames());

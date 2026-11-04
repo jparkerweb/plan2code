@@ -9,9 +9,10 @@
 //
 // Every rider leaves a glowing wall behind it, and running into any wall is
 // out. A round is a string of heats in arenas: the last rider still moving
-// wins the heat and moves on to the next arena, and a crash costs one of three
-// lives and runs the heat again. Each arena brings a rival more or something
-// new (power-ups, crystals, portals, then walls that close in), and the
+// wins the heat and moves on to the next arena, and a crash costs one of five
+// lives and runs the heat again (a life back every LIFE_SCORE points, and from
+// a Heart pad). Each arena brings a rival more or something new (power-ups,
+// crystals, portals, then walls that close in, and more kinds of pad), and the
 // rivals get sharper as the levels go. Space spends a boost charge. The memo
 // keeps the furthest arena ever reached, so the start and end screens can say
 // what is still ahead.
@@ -34,8 +35,11 @@ export const BOOST_PACE = 0.55;
 const SLOW_PACE = 1.7;
 
 export const MAX_LEVEL = 9;
-export const START_LIVES = 3;
-const MAX_LIVES = 5;
+export const START_LIVES = 5;
+export const MAX_LIVES = 9;
+
+// A life back for every LIFE_SCORE points scored, up to MAX_LIVES.
+export const LIFE_SCORE = 750;
 
 // A heat holds still for READY_MS so everyone can see where they are headed
 // (the first one only briefly: the window has just counted 3, 2, 1), and
@@ -77,6 +81,19 @@ const ITEM_TTL_MS = 9000;
 const MAX_ITEMS = 2;
 export const ERASE_REACH = 6;
 
+// A Shield pops when your grace runs out, wiping the trails this close and
+// riding on the first way clear (straight, then either side).
+export const SHIELD_REACH = 3;
+
+// A Laser fires at a rival head in your line, up to LASER_REACH cells ahead,
+// through trails (which it cuts) but not crystals, walls or portals; it holds
+// LASER_SHOTS shots for as long as it runs.
+export const LASER_REACH = 16;
+export const LASER_SHOTS = 3;
+
+// Coin Rain drops this many coins round the board, over and above the pads.
+export const RAIN_COINS = 7;
+
 // The closing walls: the first ring SHRINK_FIRST_MS into a heat, then one
 // every SHRINK_MS, each flashing for SHRINK_WARN_MS first. MAX_RING leaves
 // room to play.
@@ -96,7 +113,6 @@ export const WALL = -2;
 const ITEMS_LEVEL = 2;
 const BLOCKS_LEVEL = 3;
 const PORTALS_LEVEL = 4;
-const LIFE_LEVEL = 4;
 const SHRINK_LEVEL = 5;
 const TWO_PORTALS_LEVEL = 6;
 
@@ -105,14 +121,22 @@ const deepFreeze = (o) => Object.freeze(Object.fromEntries(Object.entries(o).map
 const GOLD = "#f5b301";
 
 // The pads. A timed one lasts `ms`; the rest act at once. `weight` is how
-// often each turns up against the others.
+// often each turns up against the others, and `from` the first arena it can.
+// A Heart turns up only while you have room for another life.
 export const POWERS = deepFreeze({
-  boost: { name: "Boost", blurb: "One more boost charge", color: "#ff8a1f", weight: 3 },
-  phase: { name: "Phase", blurb: "Ride straight through trails", color: "#a466ff", ms: 3000, weight: 2 },
-  eraser: { name: "Eraser", blurb: "Wipes the trails around you", color: "#1fb6d9", weight: 2 },
-  slow: { name: "Slow-mo", blurb: "Your rivals crawl", color: "#57b54a", ms: 4000, weight: 2 },
-  coin: { name: "Coin", blurb: "", color: GOLD, weight: 3 },
-  life: { name: "1UP", blurb: "An extra life", color: "#ff4fa3", weight: 1 },
+  boost: { name: "Boost", blurb: "One more boost charge", color: "#ff8a1f", weight: 3, from: 2 },
+  phase: { name: "Phase", blurb: "Ride straight through trails", color: "#a466ff", ms: 3000, weight: 2, from: 2 },
+  eraser: { name: "Eraser", blurb: "Wipes the trails around you", color: "#1fb6d9", weight: 2, from: 2 },
+  slow: { name: "Slow-mo", blurb: "Your rivals crawl", color: "#57b54a", ms: 4000, weight: 2, from: 2 },
+  coin: { name: "Coin", blurb: "", color: GOLD, weight: 3, from: 2 },
+  life: { name: "Heart", blurb: "One more life", color: "#ff4fa3", weight: 2, from: 2 },
+  shield: { name: "Shield", blurb: "Shrugs off your next crash", color: "#3d7bff", weight: 2, from: 2 },
+  laser: { name: "Laser", blurb: "Zaps rivals in your line", color: "#ff2e4d", ms: 6000, weight: 2, from: 3 },
+  double: { name: "Score x2", blurb: "Every point counts twice", color: "#ffd23f", ms: 8000, weight: 2, from: 3 },
+  wide: { name: "Wide Trail", blurb: "Your wall rides three cells wide", color: "#18c7b0", ms: 4000, weight: 2, from: 4 },
+  rain: { name: "Coin Rain", blurb: "Coins all over the grid", color: "#e6a800", weight: 1, from: 4 },
+  jump: { name: "Hyperjump", blurb: "Warps you into open space", color: "#d06bff", weight: 1, from: 5 },
+  mystery: { name: "Mystery", blurb: "Could be anything", color: "#9b7bff", weight: 1, from: 6 },
 });
 
 // Each arena: its rivals, how sharp they ride (0 to 1), and what it adds.
@@ -131,13 +155,23 @@ export const ARENAS = deepFreeze({
 
 export const arenaFor = (level) => ARENAS[Math.min(Math.max(1, level || 1), MAX_LEVEL)];
 
-// The music: fourteen tracks (trails-music.js), one for each arena of a round.
-// A round deals them in a fresh order, so a run hears a different track in
-// every arena and none twice (nine arenas, fourteen tracks), and a round never
-// opens on the track the last one opened on.
-export const MUSIC_TRACKS = Object.freeze(["trailsGridElectro", "trailsRecognizer", "trailsMainframe", "trailsBlackIce", "trailsSentinel", "trailsThrone", "trailsSiege", "trailsIronGate", "trailsSkyCitadel", "trailsDeepCore", "trailsMonolith", "trailsNetrunner", "trailsOverdrive", "trailsLaserHighway"]);
+// The music: five recorded songs (trails-sfx.js), background music for the
+// whole run rather than one a level. A run deals them in a fresh order and
+// plays each in full, one after another, starting from the top of the first;
+// once the last has played they are dealt again, never opening on the song
+// that just ended, and a new run never opens on the song the last was playing.
+export const MUSIC_TRACKS = Object.freeze(["trailsSong1", "trailsSong2", "trailsSong3", "trailsSong4", "trailsSong5"]);
 
-// Every track in a new order, shuffled with the given random, the first never `last`.
+// How loud the nearest rival's engine drone is at its closest, a share of the
+// shared `cycle` hum's level: low, so the songs carry the run.
+const RIVAL_HUM = 0.35;
+
+// How much louder than made the game's sounds play (tones.js's `louder`),
+// all but the engine drones, the hums in DRONES.
+export const SFX_LOUDER = 1.4;
+const DRONES = new Set(["trails:you", "trails:rival"]);
+
+// Every song in a new order, shuffled with the given random, the first never `last`.
 export function dealMusic(random = Math.random, last = null) {
   const deck = [...MUSIC_TRACKS];
   for (let i = deck.length - 1; i > 0; i--) {
@@ -146,23 +180,6 @@ export function dealMusic(random = Math.random, last = null) {
   }
   if (deck[0] === last) [deck[0], deck[1]] = [deck[1], deck[0]];
   return deck;
-}
-
-// The deal's track for an arena: the first for level 1, the second for level 2.
-export const trackFor = (deck, level) => deck[(Math.max(1, level) - 1) % deck.length];
-
-// How hot play is for the music, 0 to 1. While a heat lines up or shows how
-// it went, HEAT_WAIT: the bass, drums and sequence. Once the riders go,
-// HEAT_RACE brings in the brass and lead; down to the last rival it is
-// HEAT_DUEL, and a boost pushes it all the way, the tempo with it.
-const HEAT_WAIT = 0.3;
-const HEAT_RACE = 0.7;
-const HEAT_DUEL = 0.85;
-export function heat(round) {
-  if (round.phase !== "race") return HEAT_WAIT;
-  if (active(round, "boost")) return 1;
-  const rivals = round.riders.filter((r) => r.id !== 0 && r.alive).length;
-  return rivals <= 1 ? HEAT_DUEL : HEAT_RACE;
 }
 
 const LEVEL_COLORS = Object.freeze(["#1fb6d9", "#1fb6d9", "#ff8a1f", "#a466ff", "#4f7cff", "#7a7f99", "#ff4fa3", "#8fd3ff", "#e2553f", "#f5b301"]);
@@ -240,7 +257,7 @@ export function pace(round, rider) {
 }
 
 function makeRider(id, spawn) {
-  return { id, x: spawn.x, y: spawn.y, dir: spawn.dir, queue: [], alive: true, acc: 0, stall: null, prev: { x: spawn.x, y: spawn.y }, path: [{ x: spawn.x, y: spawn.y }], fade: 0, by: null };
+  return { id, x: spawn.x, y: spawn.y, dir: spawn.dir, queue: [], alive: true, acc: 0, stall: null, prev: { x: spawn.x, y: spawn.y }, path: [{ x: spawn.x, y: spawn.y }], wide: [], fade: 0, by: null };
 }
 
 const portalAt = (round, x, y) => round.portals.find((p) => p.x === x && p.y === y) || null;
@@ -297,6 +314,7 @@ export function newHeat(round, random = Math.random, readyMs = READY_MS) {
   if (round.level >= BLOCKS_LEVEL) placeBlocks(round, random);
   round.items = [];
   round.effects = {};
+  round.shots = 0;
   round.charges = START_CHARGES;
   round.ring = 0;
   round.nextRing = SHRINK_FIRST_MS;
@@ -310,7 +328,8 @@ export function newHeat(round, random = Math.random, readyMs = READY_MS) {
 }
 
 export function newRound(random = Math.random) {
-  const round = { level: 1, lives: START_LIVES, score: 0, heatsWon: 0, outs: 0, over: false, events: [] };
+  // A Shield, once taken, is held until it saves you, from heat to heat.
+  const round = { level: 1, lives: START_LIVES, score: 0, nextLifeAt: LIFE_SCORE, shield: false, heatsWon: 0, outs: 0, over: false, events: [] };
   return newHeat(round, random, FIRST_READY_MS);
 }
 
@@ -419,6 +438,24 @@ export function choose(round, r, random = Math.random) {
 
 /* --------------------------------------------------------------- moving */
 
+// Points scored, doubled while Score x2 runs; returns what was scored.
+function gain(round, points) {
+  const scored = active(round, "double") ? points * 2 : points;
+  round.score += scored;
+  return scored;
+}
+
+// A life back for every LIFE_SCORE points, up to MAX_LIVES: past the cap the
+// mark still moves on, so a life is never saved up for later.
+export function awardLives(round) {
+  while (round.score >= round.nextLifeAt) {
+    round.nextLifeAt += LIFE_SCORE;
+    if (round.lives >= MAX_LIVES) continue;
+    round.lives += 1;
+    round.events.push({ type: "bonusLife", lives: round.lives, at: round.nextLifeAt - LIFE_SCORE });
+  }
+}
+
 function crash(round, r, by) {
   r.alive = false;
   r.fade = FADE_MS;
@@ -432,27 +469,32 @@ function crash(round, r, by) {
   }
   let points = 0;
   if (you.alive) {
-    points = OUT_POINTS * round.level + (by === 0 ? CUT_POINTS * round.level : 0);
-    round.score += points;
+    // Your trail or your laser: either way it was you, and pays the cut.
+    points = gain(round, OUT_POINTS * round.level + (by === 0 || by === "laser" ? CUT_POINTS * round.level : 0));
     round.outs += 1;
   }
   round.events.push({ type: "out", id: r.id, x: r.x, y: r.y, by, points });
 }
 
 // Drops every trail cell that is no longer its rider's from that rider's
-// path, after an eraser, a closing wall or a faded crash.
+// path (and a Wide Trail's side cells), after an eraser, a closing wall, a
+// laser or a faded crash.
 function trimPaths(round) {
-  for (const r of round.riders) r.path = r.path.filter((c) => round.grid[at(c.x, c.y)] === r.id + 1);
+  for (const r of round.riders) {
+    const mine = (c) => round.grid[at(c.x, c.y)] === r.id + 1;
+    r.path = r.path.filter(mine);
+    r.wide = r.wide.filter(mine);
+  }
 }
 
-function erase(round) {
+function erase(round, reach = ERASE_REACH) {
   const you = round.riders[0];
   let count = 0;
   for (let y = 0; y < ROWS; y++) {
     for (let x = 0; x < COLS; x++) {
       const i = at(x, y);
       if (round.grid[i] <= 0) continue;
-      if ((x - you.x) ** 2 + (y - you.y) ** 2 > ERASE_REACH ** 2) continue;
+      if ((x - you.x) ** 2 + (y - you.y) ** 2 > reach ** 2) continue;
       if (round.riders.some((r) => r.alive && r.x === x && r.y === y)) continue;
       round.grid[i] = 0;
       count += 1;
@@ -462,17 +504,110 @@ function erase(round) {
   return count;
 }
 
-export function applyPower(round, kind) {
+// A pad taken. A Mystery turns into another pad first, and says which.
+export function applyPower(round, kind, random = Math.random) {
   const you = round.riders[0];
   const spec = POWERS[kind];
+  if (kind === "mystery") {
+    const pick = pickPower(round, random, true);
+    round.events.push({ type: "mystery", kind: pick, x: you.x, y: you.y });
+    return applyPower(round, pick, random);
+  }
   let points = 0;
+  if (spec.ms) round.effects[kind] = spec.ms;
   if (kind === "boost") round.charges = Math.min(MAX_CHARGES, round.charges + 1);
   else if (kind === "eraser") erase(round);
-  else if (kind === "coin") points = COIN_POINTS * round.level;
+  else if (kind === "coin") points = gain(round, COIN_POINTS * round.level);
   else if (kind === "life") round.lives = Math.min(MAX_LIVES, round.lives + 1);
-  else if (spec.ms) round.effects[kind] = spec.ms;
-  round.score += points;
+  else if (kind === "shield") round.shield = true;
+  else if (kind === "laser") round.shots = LASER_SHOTS;
+  else if (kind === "rain") {
+    for (let n = 0; n < RAIN_COINS; n++) {
+      const coin = spawnItem(round, "coin", random);
+      if (coin) coin.rain = true;
+    }
+  }
   round.events.push({ type: "power", kind, x: you.x, y: you.y, points });
+  if (kind === "jump") hyperjump(round, random);
+  if (kind === "laser") fireLaser(round);
+}
+
+// The Laser's shot: a rival head straight ahead within LASER_REACH, with only
+// open cells and trails between, is out, and the trails the beam crossed are
+// cut. A crystal, a wall, a portal or the edge in the way and it holds fire.
+export function fireLaser(round) {
+  const you = round.riders[0];
+  if (!you.alive || !active(round, "laser") || !(round.shots > 0)) return false;
+  const d = DIRS[you.dir];
+  const beam = [];
+  for (let k = 1; k <= LASER_REACH; k++) {
+    const x = you.x + d.x * k;
+    const y = you.y + d.y * k;
+    if (!inside(x, y)) return false;
+    const target = round.riders.find((o) => o.id !== 0 && o.alive && o.x === x && o.y === y);
+    if (target) {
+      for (const c of beam) round.grid[at(c.x, c.y)] = 0;
+      trimPaths(round);
+      round.shots -= 1;
+      if (round.shots <= 0) delete round.effects.laser;
+      round.events.push({ type: "laser", id: target.id, from: { x: you.x, y: you.y }, to: { x, y } });
+      crash(round, target, "laser");
+      return true;
+    }
+    const cell = round.grid[at(x, y)];
+    if (cell < 0 || portalAt(round, x, y)) return false;
+    beam.push({ x, y });
+  }
+  return false;
+}
+
+// Hyperjump: you, gone from where you were and out in the open cell (of a
+// good many tried) with the most room round it, facing the way with most room.
+export function hyperjump(round, random = Math.random) {
+  const you = round.riders[0];
+  let best = null;
+  for (let tries = 0; tries < 160; tries++) {
+    const x = round.ring + 1 + Math.floor(random() * (COLS - 2 * round.ring - 2));
+    const y = round.ring + 1 + Math.floor(random() * (ROWS - 2 * round.ring - 2));
+    if (!inside(x, y) || round.grid[at(x, y)] !== 0 || portalAt(round, x, y)) continue;
+    if (round.items.some((it) => it.x === x && it.y === y)) continue;
+    if (round.riders.some((r) => r.alive && near(r, { x, y }) < 4)) continue;
+    const space = room(round, at(x, y), 400);
+    if (!best || space > best.space) best = { x, y, space };
+  }
+  if (!best) return false;
+  let dir = you.dir;
+  let most = -1;
+  for (const [name, d] of Object.entries(DIRS)) {
+    const nx = best.x + d.x;
+    const ny = best.y + d.y;
+    if (!inside(nx, ny) || round.grid[at(nx, ny)] !== 0) continue;
+    const space = room(round, at(nx, ny), 200);
+    if (space > most) [most, dir] = [space, name];
+  }
+  const from = { x: you.x, y: you.y };
+  Object.assign(you, { x: best.x, y: best.y, prev: { x: best.x, y: best.y }, dir, queue: [], stall: null, acc: 0 });
+  if (!active(round, "phase")) {
+    round.grid[at(best.x, best.y)] = 1;
+    you.path.push({ x: best.x, y: best.y });
+  }
+  round.events.push({ type: "jump", from, to: { x: best.x, y: best.y } });
+  return true;
+}
+
+// Wide Trail: the cells either side of your head turn to your trail too,
+// where they are open.
+function widen(round, r) {
+  const d = DIRS[r.dir];
+  for (const side of [-1, 1]) {
+    const x = r.x - d.y * side;
+    const y = r.y + d.x * side;
+    if (!inside(x, y) || round.grid[at(x, y)] !== 0 || portalAt(round, x, y)) continue;
+    if (round.items.some((it) => it.x === x && it.y === y)) continue;
+    if (round.riders.some((o) => o.alive && o.x === x && o.y === y)) continue;
+    round.grid[at(x, y)] = r.id + 1;
+    r.wide.push({ x, y });
+  }
 }
 
 // Where `dir` takes rider r next, through a portal if one is there, and what
@@ -498,7 +633,7 @@ function stepRider(round, r, random) {
     if (r.queue.length) r.dir = r.queue.shift();
   } else r.dir = choose(round, r, random);
   const to = landing(round, r, r.dir);
-  if (to.by === null) return move(round, r, to);
+  if (to.by === null) return move(round, r, to, random);
   if (r.id !== 0) return crash(round, r, to.by);
   // You hold where you are, still heading the way you came, so a turn either
   // way is open; holdOn() rides out or crashes. The grace counts from the
@@ -510,24 +645,45 @@ function stepRider(round, r, random) {
 
 // Your grace, a slice at a time: the queued turn (or the way you were held
 // up on) is tried again, so a turn or a trail fading clear rides out at once,
-// and when GRACE_MS runs out it is a crash.
-function holdOn(round, r, ms) {
+// and when GRACE_MS runs out it is a crash, unless a Shield pops first.
+function holdOn(round, r, ms, random) {
   const dir = r.queue.length ? r.queue.shift() : r.stall.dir;
   const to = landing(round, r, dir);
   if (to.by === null) {
     r.stall = null;
     r.dir = dir;
     r.acc = 0;
-    return move(round, r, to);
+    return move(round, r, to, random);
   }
   r.stall.dir = dir;
   r.stall.ms -= ms;
   if (r.stall.ms > 0) return;
+  if (round.shield && shieldSave(round, r, dir, random)) return;
   r.dir = dir;
   crash(round, r, to.by);
 }
 
-function move(round, r, to) {
+// The Shield's save: it pops, the trails within SHIELD_REACH go, and you ride
+// on the first way now clear (the way you were going, then either side). A
+// wall or the edge all round still holds, and that is a crash after all.
+function shieldSave(round, r, dir, random) {
+  round.shield = false;
+  erase(round, SHIELD_REACH);
+  round.events.push({ type: "shield", x: r.x, y: r.y });
+  for (const name of [dir, LEFT_OF[dir], RIGHT_OF[dir]]) {
+    if (name === BACK_OF[r.dir]) continue;
+    const to = landing(round, r, name);
+    if (to.by !== null) continue;
+    r.stall = null;
+    r.dir = name;
+    r.acc = 0;
+    move(round, r, to, random);
+    return true;
+  }
+  return false;
+}
+
+function move(round, r, to, random = Math.random) {
   const { x, y, portal } = to;
   r.prev = { x: r.x, y: r.y };
   if (portal) {
@@ -541,16 +697,18 @@ function move(round, r, to) {
   if (!(r.id === 0 && active(round, "phase"))) {
     round.grid[i] = r.id + 1;
     r.path.push({ x, y });
+    if (r.id === 0 && active(round, "wide")) widen(round, r);
   }
   const item = round.items.findIndex((it) => it.x === x && it.y === y);
   if (item >= 0) {
     const [it] = round.items.splice(item, 1);
-    if (r.id === 0) applyPower(round, it.kind);
+    if (r.id === 0) applyPower(round, it.kind, random);
     else round.events.push({ type: "snatch", id: r.id, x, y });
   }
   if (r.id === 0) {
     round.steps += 1;
-    if (round.steps % SURVIVE_STEPS === 0) round.score += round.level;
+    if (round.steps % SURVIVE_STEPS === 0) gain(round, round.level);
+    fireLaser(round);
   }
 }
 
@@ -570,8 +728,10 @@ export function spawnItem(round, kind, random = Math.random) {
   return null;
 }
 
-function pickPower(round, random) {
-  const kinds = Object.keys(POWERS).filter((k) => k !== "life" || (round.level >= LIFE_LEVEL && round.lives < MAX_LIVES));
+// A pad for the arena: any whose `from` it has reached, a Heart only while
+// there is room for a life, and for a Mystery to become, anything but another.
+export function pickPower(round, random = Math.random, mystery = false) {
+  const kinds = Object.keys(POWERS).filter((k) => round.level >= POWERS[k].from && (k !== "life" || round.lives < MAX_LIVES) && !(mystery && k === "mystery"));
   const total = kinds.reduce((sum, k) => sum + POWERS[k].weight, 0);
   let roll = random() * total;
   for (const k of kinds) {
@@ -608,6 +768,7 @@ function fadeRiders(round, ms) {
     r.fade = 0;
     for (let i = 0; i < round.grid.length; i++) if (round.grid[i] === r.id + 1) round.grid[i] = 0;
     r.path = [];
+    r.wide = [];
   }
 }
 
@@ -616,8 +777,7 @@ function endHeat(round, result) {
   round.phaseMs = DONE_MS;
   round.result = result;
   if (result === "win") {
-    const points = WIN_POINTS * round.level;
-    round.score += points;
+    const points = gain(round, WIN_POINTS * round.level);
     round.heatsWon += 1;
     round.events.push({ type: "win", points, level: round.level });
   } else if (result === "lose") {
@@ -655,7 +815,8 @@ function race(round, ms, random) {
     round.nextItem -= ms;
     if (round.nextItem <= 0) {
       round.nextItem = ITEM_MS + random() * ITEM_SPREAD_MS;
-      if (round.items.length < MAX_ITEMS) spawnItem(round, pickPower(round, random), random);
+      // Coin Rain's coins come on top: they never hold back a pad.
+      if (round.items.filter((it) => !it.rain).length < MAX_ITEMS) spawnItem(round, pickPower(round, random), random);
     }
   }
   if (round.level >= SHRINK_LEVEL && round.ring < MAX_RING) {
@@ -670,7 +831,7 @@ function race(round, ms, random) {
   for (const r of round.riders) {
     if (!r.alive) continue;
     if (r.stall) {
-      holdOn(round, r, ms);
+      holdOn(round, r, ms, random);
       continue;
     }
     r.acc += ms;
@@ -706,6 +867,7 @@ export function advance(round, ms, random = Math.random) {
       fadeRiders(round, slice);
       if (round.phaseMs <= 0) nextHeat(round, random);
     } else race(round, slice, random);
+    awardLives(round);
   }
   return round.over ? "over" : round.phase;
 }
@@ -898,12 +1060,71 @@ function glyph(ctx, kind, x, y, s) {
     ctx.lineTo(x + s * 0.35, y);
     ctx.stroke();
   } else if (kind === "life") {
-    ctx.moveTo(x, y + s * 0.8);
-    ctx.bezierCurveTo(x - s * 1.1, y, x - s * 0.6, y - s * 0.9, x, y - s * 0.35);
-    ctx.bezierCurveTo(x + s * 0.6, y - s * 0.9, x + s * 1.1, y, x, y + s * 0.8);
+    heartPath(ctx, x, y, s);
     ctx.fill();
+  } else if (kind === "shield") {
+    ctx.moveTo(x, y - s * 0.85);
+    ctx.lineTo(x + s * 0.7, y - s * 0.55);
+    ctx.quadraticCurveTo(x + s * 0.65, y + s * 0.45, x, y + s * 0.9);
+    ctx.quadraticCurveTo(x - s * 0.65, y + s * 0.45, x - s * 0.7, y - s * 0.55);
+    ctx.closePath();
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(x, y - s * 0.45);
+    ctx.lineTo(x, y + s * 0.5);
+    ctx.stroke();
+  } else if (kind === "laser") {
+    ctx.arc(x, y, s * 0.55, 0, Math.PI * 2);
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      ctx.moveTo(x + dx * s * 0.3, y + dy * s * 0.3);
+      ctx.lineTo(x + dx * s * 0.95, y + dy * s * 0.95);
+    }
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(x, y, s * 0.14, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (kind === "double" || kind === "mystery") {
+    // Dark on the bright yellow pad, white on the rest.
+    ctx.fillStyle = kind === "double" ? "#1d1a17" : "#ffffff";
+    ctx.font = `900 ${Math.round(s * (kind === "double" ? 1.25 : 1.7))}px system-ui, -apple-system, "Segoe UI", sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(kind === "double" ? "x2" : "?", x, y + s * 0.08);
+  } else if (kind === "wide") {
+    for (const dx of [-0.55, 0, 0.55]) {
+      ctx.moveTo(x + dx * s, y - s * 0.75);
+      ctx.lineTo(x + dx * s, y + s * 0.75);
+    }
+    ctx.stroke();
+  } else if (kind === "rain") {
+    for (const [dx, dy] of [[-0.45, -0.35], [0.45, -0.35], [0, 0.4]]) {
+      ctx.moveTo(x + dx * s + s * 0.32, y + dy * s);
+      ctx.arc(x + dx * s, y + dy * s, s * 0.32, 0, Math.PI * 2);
+    }
+    ctx.fill();
+  } else if (kind === "jump") {
+    // A spiral into an arrow: in here, out somewhere else.
+    ctx.arc(x - s * 0.1, y + s * 0.1, s * 0.55, Math.PI * 0.2, Math.PI * 1.6);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(x + s * 0.25, y - s * 0.35);
+    ctx.lineTo(x + s * 0.9, y - s * 0.9);
+    ctx.moveTo(x + s * 0.4, y - s * 0.9);
+    ctx.lineTo(x + s * 0.9, y - s * 0.9);
+    ctx.lineTo(x + s * 0.9, y - s * 0.4);
+    ctx.stroke();
   }
 }
+
+function heartPath(ctx, x, y, s) {
+  ctx.beginPath();
+  ctx.moveTo(x, y + s * 0.8);
+  ctx.bezierCurveTo(x - s * 1.1, y, x - s * 0.6, y - s * 0.9, x, y - s * 0.35);
+  ctx.bezierCurveTo(x + s * 0.6, y - s * 0.9, x + s * 1.1, y, x, y + s * 0.8);
+}
+
+// A Mystery pad's color, cycling through the rainbow.
+const mysteryColor = (clock) => `hsl(${Math.round(clock / 6) % 360}, 85%, 58%)`;
 
 function drawBoard(ctx, round, cell, colors, clock) {
   const w = COLS * cell;
@@ -992,7 +1213,24 @@ function drawItems(ctx, round, cell, clock) {
       ctx.fillRect(x - cell * 0.05 * w, y - cell * 0.22, cell * 0.1 * w, cell * 0.44);
       continue;
     }
-    const color = POWERS[item.kind].color;
+    if (item.kind === "life") {
+      // A Heart is just a heart, beating: lub-dub, then a rest.
+      const t = (clock % 900) / 900;
+      const beat = 1 + 0.16 * Math.max(0, Math.sin(t * Math.PI * 4)) * (t < 0.5 ? 1 : 0);
+      const s = cell * 0.62 * beat;
+      ctx.shadowColor = POWERS.life.color;
+      ctx.shadowBlur = cell * 1.1;
+      ctx.fillStyle = POWERS.life.color;
+      heartPath(ctx, x, y + cell * 0.05, s);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = "#ffd1e6";
+      ctx.beginPath();
+      ctx.arc(x - s * 0.38, y - s * 0.18, s * 0.16, 0, Math.PI * 2);
+      ctx.fill();
+      continue;
+    }
+    const color = item.kind === "mystery" ? mysteryColor(clock + item.x * 40) : POWERS[item.kind].color;
     const s = cell * 0.62 * (1 + 0.1 * Math.sin(clock / 120 + item.x));
     ctx.shadowColor = color;
     ctx.shadowBlur = cell * 0.8;
@@ -1036,7 +1274,7 @@ function tracePath(ctx, r, cell, head) {
 }
 
 function drawTrail(ctx, round, r, cell, colors, clock, head) {
-  if (!r.path.length && !head) return;
+  if (!r.path.length && !head && !r.wide.length) return;
   const color = riderColor(r, colors);
   let alpha = 1;
   if (!r.alive) {
@@ -1044,6 +1282,17 @@ function drawTrail(ctx, round, r, cell, colors, clock, head) {
     if (Math.floor(clock / 60) % 2) alpha *= 0.5;
   }
   ctx.globalAlpha = alpha;
+  // A Wide Trail's side cells: glowing blocks either side of the line.
+  if (r.wide.length) {
+    ctx.shadowColor = color;
+    ctx.shadowBlur = cell * 0.5;
+    ctx.fillStyle = color;
+    for (const c of r.wide) {
+      roundRect(ctx, c.x * cell + cell * 0.16, c.y * cell + cell * 0.16, cell * 0.68, cell * 0.68, cell * 0.2);
+      ctx.fill();
+    }
+    ctx.shadowBlur = 0;
+  }
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
   ctx.shadowColor = color;
@@ -1117,6 +1366,44 @@ function drawHead(ctx, round, r, cell, colors, clock, h, state) {
       }
     }
   }
+  // A held Shield: a hexagon of light turning round your head.
+  if (r.id === 0 && r.alive && round.shield) {
+    ctx.strokeStyle = POWERS.shield.color;
+    ctx.globalAlpha = 0.6 + 0.3 * Math.sin(clock / 160);
+    ctx.lineWidth = Math.max(2, cell * 0.12);
+    ctx.beginPath();
+    for (let k = 0; k <= 6; k++) {
+      const a = clock / 700 + (k * Math.PI) / 3;
+      const px = h.x + Math.cos(a) * cell * 1.05;
+      const py = h.y + Math.sin(a) * cell * 1.05;
+      if (k) ctx.lineTo(px, py);
+      else ctx.moveTo(px, py);
+    }
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+  // A running Laser: a dotted sight line out ahead of you.
+  if (r.id === 0 && r.alive && active(round, "laser") && round.phase === "race") {
+    ctx.strokeStyle = POWERS.laser.color;
+    ctx.globalAlpha = 0.35 + 0.2 * Math.sin(clock / 80);
+    ctx.lineWidth = Math.max(1, cell * 0.08);
+    if (typeof ctx.setLineDash === "function") ctx.setLineDash([cell * 0.2, cell * 0.35]);
+    ctx.beginPath();
+    ctx.moveTo(h.x + d.x * cell * 0.7, h.y + d.y * cell * 0.7);
+    ctx.lineTo(h.x + d.x * cell * LASER_REACH, h.y + d.y * cell * LASER_REACH);
+    ctx.stroke();
+    if (typeof ctx.setLineDash === "function") ctx.setLineDash([]);
+    ctx.globalAlpha = 1;
+  }
+  // Score x2: gold sparks wheeling round you.
+  if (r.id === 0 && r.alive && active(round, "double")) {
+    ctx.fillStyle = POWERS.double.color;
+    for (let k = 0; k < 3; k++) {
+      const a = clock / 260 + (k * Math.PI * 2) / 3;
+      star(ctx, h.x + Math.cos(a) * cell * 0.95, h.y + Math.sin(a) * cell * 0.95, cell * 0.2, cell * 0.08, a);
+      ctx.fill();
+    }
+  }
   if (r.id === 0 && r.alive && active(round, "phase")) {
     ctx.strokeStyle = POWERS.phase.color;
     ctx.globalAlpha = 0.55 + 0.35 * Math.sin(clock / 90);
@@ -1148,6 +1435,35 @@ function drawHead(ctx, round, r, cell, colors, clock, h, state) {
   }
 }
 
+// The Laser's shots: a hot white core in a red glow, fading fast.
+function drawBeams(ctx, beams, cell) {
+  for (const b of beams) {
+    const t = b.life / b.max;
+    const ax = (b.from.x + 0.5) * cell;
+    const ay = (b.from.y + 0.5) * cell;
+    const bx = (b.to.x + 0.5) * cell;
+    const by = (b.to.y + 0.5) * cell;
+    ctx.lineCap = "round";
+    ctx.globalAlpha = t;
+    ctx.shadowColor = POWERS.laser.color;
+    ctx.shadowBlur = cell * 1.2;
+    ctx.strokeStyle = POWERS.laser.color;
+    ctx.lineWidth = cell * 0.55 * t + 2;
+    ctx.beginPath();
+    ctx.moveTo(ax, ay);
+    ctx.lineTo(bx, by);
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = "#ffffff";
+    ctx.lineWidth = Math.max(1, cell * 0.16 * t);
+    ctx.beginPath();
+    ctx.moveTo(ax, ay);
+    ctx.lineTo(bx, by);
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+}
+
 function pill(ctx, x, y, h, text, color, fill = 1) {
   ctx.font = `800 ${Math.round(h * 0.62)}px system-ui, -apple-system, "Segoe UI", sans-serif`;
   const w = h * 0.7 + text.length * h * 0.42;
@@ -1155,10 +1471,10 @@ function pill(ctx, x, y, h, text, color, fill = 1) {
   return w;
 }
 
-const EFFECT_LABELS = Object.freeze({ phase: "PHASE", slow: "SLOW-MO" });
+const EFFECT_LABELS = Object.freeze({ phase: "PHASE", slow: "SLOW-MO", laser: "LASER", double: "x2 SCORE", wide: "WIDE" });
 
-// The level, lives, boost charges, rivals left and each running effect,
-// small along the top.
+// The level, lives, boost charges, rivals left, a held Shield and each
+// running effect (a Laser with its shots left), small along the top.
 function drawHud(ctx, round, cell) {
   const h = Math.max(14, cell * 0.78);
   let x = cell * 0.35;
@@ -1169,9 +1485,11 @@ function drawHud(ctx, round, cell) {
   x += pill(ctx, x, y, h, `BOOST ${charges}`, POWERS.boost.color, active(round, "boost") ? round.effects.boost / BOOST_MS : 1) + 6;
   const left = round.riders.slice(1).filter((r) => r.alive).length;
   x += pill(ctx, x, y, h, left === 1 ? "1 RIVAL" : `${left} RIVALS`, "#ffffff") + 6;
+  if (round.shield) x += pill(ctx, x, y, h, "SHIELD", POWERS.shield.color) + 6;
   for (const [kind, ms] of Object.entries(round.effects)) {
     if (!EFFECT_LABELS[kind]) continue;
-    x += pill(ctx, x, y, h, EFFECT_LABELS[kind], POWERS[kind].color, ms / POWERS[kind].ms) + 6;
+    const text = kind === "laser" ? `LASER ${"●".repeat(Math.max(0, round.shots))}` : EFFECT_LABELS[kind];
+    x += pill(ctx, x, y, h, text, POWERS[kind].color, ms / POWERS[kind].ms) + 6;
   }
 }
 
@@ -1242,13 +1560,19 @@ function teaser(furthest) {
 
 const MAX_PARTS = 400;
 
-function create({ canvas, tone = () => {}, hum = () => {}, music = () => {}, onScore = () => {}, best = () => 0, memo = null }) {
+function create({ canvas, tone: playTone = () => {}, hum: playHum = () => {}, music = () => {}, onScore = () => {}, best = () => 0, memo = null }) {
+  // Every sound a little louder than made, so it carries over the songs; the
+  // engine drones are left as they are, low under them.
+  const tone = (name, level = 1, pitch = 1) => playTone(name, level, pitch, SFX_LOUDER);
+  const hum = (id, name, level = 1, pitch = 1) => playHum(id, name, level, pitch, DRONES.has(id) ? 1 : SFX_LOUDER);
   const ctx = canvas.getContext("2d");
   let colors = null;
   let round = newRound();
-  // The round's deal of tracks, and the one it opened on (so the next round opens on another).
+  // The run's deal of songs, the one playing in it, and whether that one
+  // still has to be started from the top (cleared once the music takes it).
   let deck = [];
-  let opener = null;
+  let songAt = 0;
+  let fresh = false;
   let state = "ready";
   let cell = MIN_CELL;
   let bestAtStart = 0;
@@ -1262,7 +1586,7 @@ function create({ canvas, tone = () => {}, hum = () => {}, music = () => {}, onS
   // Sparks, floating points, the big banners, the shake and the flash, all
   // in cell units and ms, so a resize mid-round keeps them in place.
   let fx = null;
-  const resetFx = () => (fx = { parts: [], floats: [], banners: [], shake: 0, shakeMag: 0, flash: null, clock: 0 });
+  const resetFx = () => (fx = { parts: [], floats: [], banners: [], beams: [], shake: 0, shakeMag: 0, flash: null, clock: 0 });
   resetFx();
 
   const burst = (p, color, n, speed = 6) => {
@@ -1291,7 +1615,9 @@ function create({ canvas, tone = () => {}, hum = () => {}, music = () => {}, onS
   // and whether you were held up, grazing a wall or passing a rival. It only
   // reads the round; nothing here changes a rule or a score.
   let sfx = null;
-  const resetSfx = () => (sfx = { later: [], effects: {}, items: new Set(), stalled: false, grazing: false, close: false, swooshAt: 0, whooshAt: 0 });
+  // The kinds of pad taken this run, so the first of each says it is new.
+  let seenPowers = new Set();
+  const resetSfx = () => (sfx = { later: [], effects: {}, items: new Set(), stalled: false, grazing: false, close: false, swooshAt: 0, whooshAt: 0, mystery: false });
   resetSfx();
   const later = (ms, name, level = 1, pitch = 1) => sfx.later.push({ at: fx.clock + ms, name, level, pitch });
   const vary = (spread = 0.08) => 1 - spread / 2 + Math.random() * spread;
@@ -1321,7 +1647,8 @@ function create({ canvas, tone = () => {}, hum = () => {}, music = () => {}, onS
       if (e.by === 0 && e.points) later(120, "trailsCutOff", 0.7);
       burst(p, color, 34, 9);
       shake(200, 0.15);
-      if (e.points) float(p, e.by === 0 ? `Cut off! +${e.points}` : `+${e.points}`, e.by === 0 ? GOLD : color);
+      if (e.points && e.by === "laser") float(p, `Zapped! +${e.points}`, POWERS.laser.color);
+      else if (e.points) float(p, e.by === 0 ? `Cut off! +${e.points}` : `+${e.points}`, e.by === 0 ? GOLD : color);
       else float(p, "Out!", color);
     } else if (e.type === "crash") {
       tone("crash");
@@ -1332,7 +1659,9 @@ function create({ canvas, tone = () => {}, hum = () => {}, music = () => {}, onS
       flash(DANGER, 320);
     } else if (e.type === "power") {
       const spec = POWERS[e.kind];
-      if (e.kind === "coin") {
+      const fromMystery = sfx.mystery;
+      sfx.mystery = false;
+      if (e.kind === "coin" && !fromMystery) {
         tone("coin");
         tone("sparkle", 0.5, vary());
         burst(p, GOLD, 10, 4);
@@ -1343,7 +1672,24 @@ function create({ canvas, tone = () => {}, hum = () => {}, music = () => {}, onS
       if (e.kind === "boost") tone("trailsCharge", 0.8);
       else if (e.kind === "phase") tone("trailsPhaseIn", 0.8);
       else if (e.kind === "slow") tone("trailsSlowmo", 0.8);
-      else if (e.kind === "life") later(150, "extraLife", 0.8);
+      else if (e.kind === "life") {
+        tone("trailsHeart", 0.9);
+        later(300, "extraLife", 0.7);
+        float(p, "+1 ♥", POWERS.life.color);
+      } else if (e.kind === "shield") tone("shieldUp", 0.8);
+      else if (e.kind === "laser") tone("laser", 0.7);
+      else if (e.kind === "double") {
+        tone("coinUp", 0.8);
+        later(160, "sparkle", 0.6);
+      } else if (e.kind === "wide") tone("riser", 0.7);
+      else if (e.kind === "rain") {
+        tone("coinUp", 0.8);
+        for (let k = 1; k <= 4; k++) later(k * 110, "coin", 0.4, 1 + k * 0.08);
+        for (const it of round.items) if (it.rain) burst(it, GOLD, 8, 3);
+      } else if (e.kind === "coin") {
+        tone("coin");
+        float(p, `+${e.points}`, GOLD);
+      }
       burst(p, spec.color, 26, 8);
       if (e.kind === "eraser") {
         tone("sizzle");
@@ -1351,7 +1697,40 @@ function create({ canvas, tone = () => {}, hum = () => {}, music = () => {}, onS
         burst(p, spec.color, 60, 14);
         shake(180, 0.12);
       }
-      banner(spec.name, spec.blurb, spec.color, 1400);
+      // The first of a kind in a run says it is new; a Mystery says what it was.
+      const b = banner(fromMystery ? `Mystery: ${spec.name}!` : spec.name, spec.blurb, spec.color, 1400);
+      if (b && !seenPowers.has(e.kind)) b.tag = "NEW POWER-UP";
+      seenPowers.add(e.kind);
+    } else if (e.type === "mystery") {
+      tone("mystery");
+      sfx.mystery = true;
+      burst(p, POWERS.mystery.color, 20, 7);
+      burst(p, GOLD, 12, 5);
+    } else if (e.type === "laser") {
+      tone("trailsLaser", 0.9, vary());
+      fx.beams.push({ from: e.from, to: e.to, life: 260, max: 260 });
+      burst(e.to, POWERS.laser.color, 30, 9);
+      shake(180, 0.15);
+    } else if (e.type === "shield") {
+      tone("trailsShieldPop");
+      later(200, "trailsSave", 0.8);
+      burst(p, POWERS.shield.color, 50, 11);
+      burst(p, "#ffffff", 16, 6);
+      shake(260, 0.2);
+      flash(POWERS.shield.color, 300);
+      banner("Shield!", "It took the crash for you", POWERS.shield.color, 1400);
+    } else if (e.type === "jump") {
+      tone("trailsJump");
+      burst(e.from, POWERS.jump.color, 24, 7);
+      burst(e.to, POWERS.jump.color, 34, 9);
+      flash(POWERS.jump.color, 220);
+    } else if (e.type === "bonusLife") {
+      tone("trailsHeart");
+      later(320, "extraLife", 0.8);
+      const you = round.riders[0];
+      burst(you, POWERS.life.color, 30, 8);
+      float(you, "+1 ♥", POWERS.life.color);
+      banner("Extra life!", `${e.at} points scored`, POWERS.life.color, 1600);
     } else if (e.type === "snatch") {
       tone("trailsSnatch", 0.6);
       burst(p, RIVALS[e.id].color, 10, 4);
@@ -1437,11 +1816,12 @@ function create({ canvas, tone = () => {}, hum = () => {}, music = () => {}, onS
     }
     const racing = round.phase === "race";
     const you = round.riders[0];
-    const on = { boost: active(round, "boost"), phase: active(round, "phase"), slow: active(round, "slow") };
+    const on = Object.fromEntries(["boost", "phase", "slow", "laser", "double", "wide"].map((k) => [k, active(round, k)]));
     if (racing && you.alive) {
       if (sfx.effects.boost && !on.boost) tone("trailsBoostOut", 0.7);
       if (sfx.effects.phase && !on.phase) tone("trailsPhaseOut", 0.7);
       if (sfx.effects.slow && !on.slow) tone("trailsSlowEnd", 0.7);
+      for (const k of ["laser", "double", "wide"]) if (sfx.effects[k] && !on[k]) tone("powerDown", 0.5);
     }
     sfx.effects = on;
     if (round.phase === "ready") {
@@ -1467,7 +1847,8 @@ function create({ canvas, tone = () => {}, hum = () => {}, music = () => {}, onS
       const d = Math.hypot(r.x - you.x, r.y - you.y);
       if (d < gap) [rival, gap] = [r, d];
     }
-    if (rival) hum("trails:rival", "cycle", Math.max(0, 1 - gap / 18), (0.8 + 0.25 * (STEP_MS / pace(round, rival))) * (1 + rival.id * 0.04));
+    // The nearest rival's drone, kept low under the songs (the shared hum is louder).
+    if (rival) hum("trails:rival", "cycle", RIVAL_HUM * Math.max(0, 1 - gap / 18), (0.8 + 0.25 * (STEP_MS / pace(round, rival))) * (1 + rival.id * 0.04));
     const close = gap <= 2.5;
     if (close && !sfx.close && fx.clock >= sfx.whooshAt) {
       tone("whoosh", 0.6, vary(0.2));
@@ -1521,6 +1902,7 @@ function create({ canvas, tone = () => {}, hum = () => {}, music = () => {}, onS
       b.life -= ms;
       if (b.life <= 0) fx.banners.shift();
     }
+    fx.beams = fx.beams.filter((b) => (b.life -= ms) > 0);
     fx.shake = Math.max(0, fx.shake - ms);
     if (fx.flash) {
       fx.flash.life -= ms;
@@ -1550,6 +1932,7 @@ function create({ canvas, tone = () => {}, hum = () => {}, music = () => {}, onS
     const heads = new Map(order.map((r) => [r, r.alive || r.fade > 0 ? headPoint(round, r, cell, state) : null]));
     for (const r of order) drawTrail(ctx, round, r, cell, colors, clock, r.alive ? heads.get(r) : null);
     for (const r of order) if (heads.get(r)) drawHead(ctx, round, r, cell, colors, clock, heads.get(r), state);
+    drawBeams(ctx, fx.beams, cell);
     for (const p of fx.parts) {
       ctx.globalAlpha = Math.max(0, p.life / p.max);
       ctx.fillStyle = p.color;
@@ -1578,11 +1961,13 @@ function create({ canvas, tone = () => {}, hum = () => {}, music = () => {}, onS
   const start = () => {
     colors = null;
     round = newRound();
-    deck = dealMusic(Math.random, opener);
-    opener = deck[0];
+    deck = dealMusic(Math.random, deck[songAt] ?? null);
+    songAt = 0;
+    fresh = true;
     state = "running";
     resetFx();
     resetSfx();
+    seenPowers = new Set();
     try {
       bestAtStart = Number(best()) || 0;
     } catch {
@@ -1591,6 +1976,20 @@ function create({ canvas, tone = () => {}, hum = () => {}, music = () => {}, onS
     beaten = false;
     banner(ARENAS[1].title, ARENAS[1].sub, levelColor(1), 1600);
     paint();
+  };
+
+  // Keeps the song going; once it has played through, the next in the deal,
+  // and after the last a fresh deal.
+  const playMusic = () => {
+    const heard = music(deck[songAt], 1, fresh ? { restart: true } : undefined);
+    if (heard) fresh = false;
+    if (heard !== "ended") return;
+    songAt += 1;
+    if (songAt >= deck.length) {
+      deck = dealMusic(Math.random, deck.at(-1));
+      songAt = 0;
+    }
+    fresh = true;
   };
 
   const end = () => {
@@ -1642,7 +2041,7 @@ function create({ canvas, tone = () => {}, hum = () => {}, music = () => {}, onS
       if (round.over) end();
       else {
         listen();
-        if (deck.length) music(trackFor(deck, round.level), heat(round));
+        if (deck.length) playMusic();
       }
       paint();
     },

@@ -37,7 +37,7 @@ export const DEFAULT_LOOKS = {
   // course (activityBestGolfPirate), each a flat key for cleanLooks().
   hideActivities: false,
   activitySounds: true,
-  // Whether a game plays its chiptune music too: off until asked for.
+  // Whether a game plays its music too (chiptune or recorded songs): off until asked for.
   gameMusic: false,
   lastActivity: "",
   ...Object.fromEntries(ACTIVITIES.flatMap((a) => bestKeys(a).map((key) => [key, 0]))),

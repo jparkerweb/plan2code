@@ -31,9 +31,11 @@ const hum = (...args) => {
   if (looks.activitySounds) playHum(...args);
 };
 // And the music, which also needs Play game music, at the game's own
-// music volume (the window's Music slider).
-const musicFor = (entry) => (name, intensity) => {
-  if (looks.activitySounds && looks.gameMusic) playMusic(name, intensity, musicLevel(entry, looks[musicKey(entry.id)]));
+// music volume (the window's Music slider). A song's "playing" or "ended"
+// goes back to the game, which moves on to its next song on "ended".
+const musicFor = (entry) => (name, intensity, options) => {
+  if (looks.activitySounds && looks.gameMusic) return playMusic(name, intensity, musicLevel(entry, looks[musicKey(entry.id)]), options);
+  return undefined;
 };
 const MUSIC_TITLE = "This game's music volume";
 const MUSIC_OFF_TITLE = "Turn on Play game music in User Preferences to hear it";

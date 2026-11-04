@@ -2090,7 +2090,7 @@ function racing(round) {
 
 const trailsEvents = (round, type) => round.events.filter((e) => e.type === type);
 
-test("Light Trails: a round starts at level 1 with three lives, two boosts and one rival, everyone on the grid", () => {
+test("Light Trails: a round starts at level 1 with five lives, two boosts and one rival, everyone on the grid", () => {
   const round = trails.newRound(still);
   assert.equal(round.level, 1);
   assert.equal(round.lives, trails.START_LIVES);
@@ -2323,6 +2323,190 @@ test("Light Trails: pads turn up from level 2, never at level 1", () => {
   assert.ok(Object.hasOwn(trails.POWERS, two.items[0].kind));
 });
 
+test("Light Trails: five lives to start, a life back every LIFE_SCORE points, never past MAX_LIVES", () => {
+  const round = racing(trails.newRound(still));
+  assert.equal(trails.START_LIVES, 5);
+  assert.equal(round.lives, 5);
+  round.score = trails.LIFE_SCORE - 1;
+  trails.awardLives(round);
+  assert.equal(round.lives, 5, "not yet");
+  round.score = trails.LIFE_SCORE;
+  trails.awardLives(round);
+  assert.equal(round.lives, 6, "one life at the mark");
+  assert.deepEqual(trailsEvents(round, "bonusLife").map((e) => e.lives), [6]);
+  round.score = trails.LIFE_SCORE * 3 + 10;
+  trails.awardLives(round);
+  assert.equal(round.lives, 8, "one for each mark passed");
+  round.lives = trails.MAX_LIVES;
+  round.score = trails.LIFE_SCORE * 10;
+  trails.awardLives(round);
+  assert.equal(round.lives, trails.MAX_LIVES, "capped");
+  assert.equal(round.nextLifeAt, trails.LIFE_SCORE * 11, "and the mark moves on, so none is saved up");
+});
+
+test("Light Trails: every pad turns up only from its own arena, a Heart only while there is room for a life, and a Mystery never becomes another", () => {
+  const round = trails.newRound(still);
+  let n = 1;
+  const random = () => (n = (n * 1664525 + 1013904223) % 4294967296) / 4294967296;
+  for (let level = 2; level <= trails.MAX_LEVEL; level++) {
+    round.level = level;
+    const seen = new Set(Array.from({ length: 3000 }, () => trails.pickPower(round, random)));
+    const due = Object.keys(trails.POWERS).filter((k) => trails.POWERS[k].from <= level);
+    assert.deepEqual([...seen].sort(), due.sort(), `level ${level} offers exactly the pads due by then`);
+  }
+  assert.equal(trails.POWERS.life.from, 2, "a Heart from the first arena with pads");
+  round.lives = trails.MAX_LIVES;
+  assert.ok(Array.from({ length: 2000 }, () => trails.pickPower(round, random)).every((k) => k !== "life"), "no Heart at full lives");
+  round.lives = 3;
+  assert.ok(Array.from({ length: 2000 }, () => trails.pickPower(round, random, true)).every((k) => k !== "mystery"));
+});
+
+test("Light Trails: a Heart pad gives a life", () => {
+  const round = racing(trails.newRound(still));
+  trails.applyPower(round, "life");
+  assert.equal(round.lives, trails.START_LIVES + 1);
+});
+
+test("Light Trails: a Shield takes your next crash, wiping the trails round you and riding on, and is held from heat to heat until then", () => {
+  const round = racing(trails.newRound(still));
+  const you = round.riders[0];
+  trails.applyPower(round, "shield");
+  assert.equal(round.shield, true);
+  park(round, you, 10, 15, "right");
+  round.grid[15 * trails.COLS + 11] = 2;
+  round.grid[14 * trails.COLS + 10] = 2;
+  round.grid[16 * trails.COLS + 10] = 2;
+  trails.advance(round, trails.STEP_MS + trails.GRACE_MS + 8, still);
+  assert.equal(you.alive, true, "boxed in on three sides, and the Shield saved you");
+  assert.equal(round.shield, false, "it is used up");
+  assert.equal(trailsEvents(round, "shield").length, 1);
+  assert.equal(round.grid[15 * trails.COLS + 11] === 2, false, "the trail ahead was wiped");
+  assert.equal(round.lives, trails.START_LIVES);
+  // Held through a heat won.
+  const two = racing(trails.newRound(still));
+  trails.applyPower(two, "shield");
+  trails.newHeat(two, still);
+  assert.equal(two.shield, true, "a new heat keeps it");
+  // A wall all round is still a crash.
+  const three = racing(trails.newRound(still));
+  trails.applyPower(three, "shield");
+  park(three, three.riders[0], 0, 0, "left");
+  three.grid[1] = trails.WALL;
+  three.grid[trails.COLS] = trails.WALL;
+  trails.advance(three, trails.STEP_MS + trails.GRACE_MS + 8, still);
+  assert.equal(three.riders[0].alive, false, "nowhere to go");
+});
+
+test("Light Trails: a Laser zaps a rival head in your line through trails, scoring the cut, but holds fire behind a crystal", () => {
+  const round = racing(trails.newRound(still));
+  const [you, rival] = round.riders;
+  park(round, you, 5, 15, "right");
+  park(round, rival, 15, 15, "up");
+  round.grid[15 * trails.COLS + 9] = 2;
+  trails.applyPower(round, "laser");
+  assert.equal(rival.alive, false, "zapped at once");
+  assert.equal(rival.by, "laser");
+  assert.equal(round.grid[15 * trails.COLS + 9], 0, "the trail in the beam is cut");
+  assert.equal(round.shots, trails.LASER_SHOTS - 1);
+  const [out] = trailsEvents(round, "out");
+  assert.equal(out.points, trails.OUT_POINTS + trails.CUT_POINTS, "a laser out pays the cut");
+  assert.equal(trailsEvents(round, "laser").length, 1);
+
+  const two = trails.newRound(still);
+  two.level = 3;
+  racing(trails.newHeat(two, still));
+  const [me, foe] = two.riders;
+  park(two, me, 5, 15, "right");
+  park(two, foe, 15, 15, "up");
+  two.grid[15 * trails.COLS + 10] = trails.BLOCK;
+  trails.applyPower(two, "laser");
+  assert.equal(foe.alive, true, "a crystal in the way holds the shot");
+  assert.equal(two.shots, trails.LASER_SHOTS);
+  park(two, foe, 3, 15, "up");
+  assert.equal(trails.fireLaser(two), false, "and it only fires ahead");
+});
+
+test("Light Trails: Score x2 doubles every point while it runs", () => {
+  const round = racing(trails.newRound(still));
+  round.level = 2;
+  trails.applyPower(round, "coin");
+  const single = round.score;
+  trails.applyPower(round, "double");
+  trails.applyPower(round, "coin");
+  assert.equal(round.score - single, single * 2);
+});
+
+test("Light Trails: a Wide Trail lays your wall three cells wide, and the cells go with the trail", () => {
+  const round = racing(trails.newRound(still));
+  const you = round.riders[0];
+  park(round, you, 10, 15, "right");
+  trails.applyPower(round, "wide");
+  trails.advance(round, trails.STEP_MS, still);
+  assert.equal(you.x, 11);
+  assert.equal(round.grid[14 * trails.COLS + 11], 1, "above");
+  assert.equal(round.grid[16 * trails.COLS + 11], 1, "and below");
+  assert.equal(you.wide.length, 2);
+  trails.applyPower(round, "eraser");
+  assert.equal(you.wide.length, 0, "wiped cells leave the list");
+});
+
+test("Light Trails: Hyperjump moves you to an open cell clear of everyone, facing open space", () => {
+  const round = racing(trails.newRound(still));
+  const you = round.riders[0];
+  let n = 9;
+  const random = () => (n = (n * 1664525 + 1013904223) % 4294967296) / 4294967296;
+  // Fill the left half with trail, so the jump has to take you right.
+  for (let y = 0; y < trails.ROWS; y++) for (let x = 0; x < 18; x++) if (!(x === you.x && y === you.y)) round.grid[y * trails.COLS + x] = 2;
+  assert.equal(trails.hyperjump(round, random), true);
+  assert.ok(you.x >= 18, "out in the open half");
+  assert.equal(round.grid[you.y * trails.COLS + you.x], 1, "on a cell of your own");
+  for (const r of round.riders.slice(1)) assert.ok(Math.abs(r.x - you.x) + Math.abs(r.y - you.y) >= 4, "clear of the rivals");
+  const d = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] }[you.dir];
+  assert.equal(round.grid[(you.y + d[1]) * trails.COLS + you.x + d[0]], 0, "facing an open cell");
+  assert.equal(trailsEvents(round, "jump").length, 1);
+});
+
+test("Light Trails: Coin Rain drops coins all over that never hold back the pads", () => {
+  const round = trails.newRound(still);
+  round.level = 4;
+  racing(trails.newHeat(round, still));
+  let n = 4;
+  const random = () => (n = (n * 1664525 + 1013904223) % 4294967296) / 4294967296;
+  trails.applyPower(round, "rain", random);
+  const coins = round.items.filter((it) => it.kind === "coin" && it.rain);
+  assert.equal(coins.length, trails.RAIN_COINS);
+  round.nextItem = 1;
+  trails.advance(round, 8, random);
+  assert.equal(round.items.filter((it) => !it.rain).length, 1, "a pad still turns up");
+});
+
+test("Light Trails: a Mystery pad turns into another pad and says which", () => {
+  const round = trails.newRound(still);
+  round.level = 9;
+  racing(trails.newHeat(round, still));
+  trails.applyPower(round, "mystery", () => 0.1);
+  const [m] = trailsEvents(round, "mystery");
+  assert.ok(m && m.kind !== "mystery" && Object.hasOwn(trails.POWERS, m.kind));
+  assert.deepEqual(trailsEvents(round, "power").map((e) => e.kind), [m.kind], "the pad it became is applied");
+});
+
+test("Light Trails game: every new pad, its effects and its events draw and sound without throwing", () => {
+  const { canvas } = stubCanvas();
+  const tones = [];
+  const g = trails.default.create({ canvas, tone: (n) => tones.push(n) });
+  g.resize(800, 600);
+  g.start();
+  g.cheat(true);
+  const round = g.round;
+  round.level = 9;
+  trails.newHeat(round, still);
+  g.tick(2000);
+  for (const kind of Object.keys(trails.POWERS)) trails.spawnItem(round, kind);
+  for (const kind of ["shield", "laser", "double", "wide", "jump", "rain", "mystery", "life"]) trails.applyPower(round, kind);
+  for (let i = 0; i < 60; i++) g.tick(50);
+  for (const name of ["trailsHeart", "shieldUp", "trailsJump", "mystery"]) assert.ok(tones.includes(name), `${name} played`);
+});
+
 test("Light Trails: from level 5 the walls close in a ring at a time, warning first, and catch anyone on the ring", () => {
   const round = trails.newRound(still);
   round.level = 5;
@@ -2354,45 +2538,85 @@ test("Light Trails: the start screen reads the furthest arena from the memo and 
 
 test("Light Trails: every pill's text reads at 4.5:1 on its backing and its timer's tint, lives and running effects included, in light and dark under every highlight", () => {
   checkPills(trails.default, {
-    setup: (r) => Object.assign(r.effects, { boost: trails.BOOST_MS / 2, phase: 1500, slow: 2000 }),
-    expect: ["LV 1", "♥", "~BOOST", "~PHASE", "~SLOW-MO", "1 RIVAL"],
+    setup: (r) => {
+      Object.assign(r.effects, { boost: trails.BOOST_MS / 2, phase: 1500, slow: 2000, laser: 3000, double: 4000, wide: 2000 });
+      Object.assign(r, { shield: true, shots: 2 });
+    },
+    expect: ["LV 1", "♥", "~BOOST", "~PHASE", "~SLOW-MO", "1 RIVAL", "SHIELD", "~LASER", "x2 SCORE", "WIDE"],
   });
 });
 
-test("Light Trails: a round deals every track once, never opens on the last opener, and gives each arena its own", () => {
+test("Light Trails: its sounds play SFX_LOUDER times as loud, but for the engine drones, left low under the songs", () => {
+  const { canvas } = stubCanvas();
+  const tones = [];
+  const hums = [];
+  const g = trails.default.create({ canvas, tone: (...a) => tones.push(a), hum: (...a) => hums.push(a) });
+  g.resize(800, 600);
+  g.start();
+  g.cheat(true);
+  for (let i = 0; i < 200; i++) g.tick(50);
+  assert.ok(trails.SFX_LOUDER > 1, "louder than made");
+  assert.ok(tones.length && tones.every((a) => a[3] === trails.SFX_LOUDER), "every tone lifted");
+  const drones = hums.filter((a) => a[0] === "trails:you" || a[0] === "trails:rival");
+  assert.ok(drones.length && drones.every((a) => a[4] === 1), "the drones are not");
+  assert.ok(hums.filter((a) => !drones.includes(a)).every((a) => a[4] === trails.SFX_LOUDER), "every other hum is");
+});
+
+test("Light Trails: a deal holds every song once and never opens on the last song", () => {
   let n = 11;
   const random = () => (n = (n * 1664525 + 1013904223) % 4294967296) / 4294967296;
   for (let i = 0; i < 20; i++) {
     const last = trails.MUSIC_TRACKS[i % trails.MUSIC_TRACKS.length];
     const deck = trails.dealMusic(random, last);
-    assert.deepEqual([...deck].sort(), [...trails.MUSIC_TRACKS].sort(), "every track once");
-    assert.notEqual(deck[0], last, "never opens on the last opener");
+    assert.deepEqual([...deck].sort(), [...trails.MUSIC_TRACKS].sort(), "every song once");
+    assert.notEqual(deck[0], last, "never opens on the last song");
   }
-  const deck = trails.dealMusic(random, null);
-  const heard = Array.from({ length: trails.MAX_LEVEL }, (_, i) => trails.trackFor(deck, i + 1));
-  assert.equal(new Set(heard).size, trails.MAX_LEVEL, "nine arenas hear nine different tracks");
-  assert.equal(trails.trackFor(deck, 0), deck[0], "a level below one hears the first");
   assert.notDeepEqual(trails.dealMusic(random, null), trails.dealMusic(random, null), "a new deal is a new order");
 });
 
-test("Light Trails: the music's heat is low while a heat lines up, rises once the riders go, more so down to the last rival, and is full on a boost", () => {
-  const round = trails.newRound(() => 0.5);
-  assert.equal(round.phase, "ready");
-  const waiting = trails.heat(round);
-  assert.ok(waiting < 0.5, "lining up: no lead yet");
-  round.level = 2;
-  trails.newHeat(round, () => 0.5);
-  round.phase = "race";
-  assert.ok(round.riders.filter((r) => r.id !== 0).length >= 2, "two rivals at level 2");
-  const racing = trails.heat(round);
-  assert.ok(racing >= 0.5 && racing < 1, "racing with rivals left: the lead is in");
-  for (const r of round.riders.filter((r) => r.id !== 0).slice(1)) r.alive = false;
-  assert.ok(trails.heat(round) > racing && trails.heat(round) < 1, "down to the last rival it climbs");
-  round.effects = { ...round.effects, boost: trails.BOOST_MS };
-  assert.equal(trails.heat(round), 1, "a boost pushes it all the way");
+test("Light Trails: a run plays each song in full from the top, moves on only when one ends, and deals again after the last", () => {
+  const { canvas } = stubCanvas();
+  const asked = [];
+  let reply = "playing";
+  const g = trails.default.create({ canvas, music: (name, intensity, options) => (asked.push({ name, restart: Boolean(options && options.restart) }), reply) });
+  g.resize(800, 600);
+  g.start();
+  g.cheat(true);
+  g.tick(16);
+  g.tick(16);
+  assert.deepEqual(asked.map((a) => a.restart), [true, false], "the first song starts from the top, then plays on");
+  assert.equal(asked[1].name, asked[0].name, "the same song until it ends");
+  const heard = [asked[0].name];
+  for (let i = 0; i < trails.MUSIC_TRACKS.length; i++) {
+    reply = "ended";
+    g.tick(16);
+    reply = "playing";
+    g.tick(16);
+    const next = asked.at(-1);
+    assert.ok(next.restart, "the next song starts from the top");
+    assert.notEqual(next.name, heard.at(-1), "and is another song");
+    heard.push(next.name);
+  }
+  assert.deepEqual(heard.slice(0, trails.MUSIC_TRACKS.length).sort(), [...trails.MUSIC_TRACKS].sort(), "every song once before any plays again");
 });
 
-test("Light Trails: it asks for the deal's track while a round runs, silent before and after, and the next round opens on another", () => {
+test("Light Trails: a song the music could not play yet still starts from the top once it can", () => {
+  const { canvas } = stubCanvas();
+  const asked = [];
+  let reply;
+  const g = trails.default.create({ canvas, music: (name, intensity, options) => (asked.push(Boolean(options && options.restart)), reply) });
+  g.resize(800, 600);
+  g.start();
+  g.cheat(true);
+  g.tick(16);
+  g.tick(16);
+  reply = "playing";
+  g.tick(16);
+  g.tick(16);
+  assert.deepEqual(asked, [true, true, true, false], "the restart is asked for until the music takes it");
+});
+
+test("Light Trails: it asks for the deal's song while a round runs, silent before and after, and the next round opens on another", () => {
   const { canvas } = stubCanvas();
   const asked = [];
   const g = trails.default.create({ canvas, music: (name, level) => asked.push([name, level]) });
@@ -2403,7 +2627,7 @@ test("Light Trails: it asks for the deal's track while a round runs, silent befo
   g.tick(16);
   assert.equal(asked.length, 1, "asked once a tick");
   const [first] = asked[0];
-  assert.ok(trails.MUSIC_TRACKS.includes(first), "a track the game has");
+  assert.ok(trails.MUSIC_TRACKS.includes(first), "a song the game has");
   g.round.lives = 1;
   for (let i = 0; i < 2000 && g.state === "running"; i++) g.tick(50);
   assert.equal(g.state, "over", "riding straight ends the round");

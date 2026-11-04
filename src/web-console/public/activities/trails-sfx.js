@@ -1,15 +1,21 @@
-// Plan2Code Web Console - trails: its own sound effects and music, merged into tones.js beside the shared kit; defines only.
+// Plan2Code Web Console - trails: its own sound effects and songs, merged into tones.js beside the shared kit; defines only.
 //
 // `tones` are one-shot sounds played with tone(name, level, pitch); `hums` are
 // held sounds kept going with hum(id, name, level, pitch). Both take the shapes
 // tones.js documents, as plain objects (tones.js freezes them). A name may be
-// defined only once across tones.js and every game's file. The music is in
-// trails-music.js, merged in below as `music`: that file is the only import.
-
-import { TRAILS_MUSIC } from "./trails-music.js";
+// defined only once across tones.js and every game's file. No imports.
 
 export default {
-  music: TRAILS_MUSIC,
+  // The music: recorded songs, each a name to an mp3 the server serves
+  // (listed in SERVABLE), played by music.js one after another in the order
+  // trails.js deals them.
+  songs: {
+    trailsSong1: "activities/light-trails/1.mp3",
+    trailsSong2: "activities/light-trails/2.mp3",
+    trailsSong3: "activities/light-trails/3.mp3",
+    trailsSong4: "activities/light-trails/4.mp3",
+    trailsSong5: "activities/light-trails/5.mp3",
+  },
   tones: {
     // A turn taken: a short, bright synth chirp (the game nudges its pitch a
     // little each time, so steering never sounds like one repeated beep).
@@ -133,6 +139,42 @@ export default {
         { type: "triangle", from: 440, to: 440, seconds: 0.7, delay: 0.4, gain: 0.4 },
       ],
     },
+    // The Laser firing: a bright beam tearing down the grid, a crackle along
+    // it and a low thump where it lands.
+    trailsLaser: {
+      layers: [
+        { type: "sawtooth", from: 3200, to: 420, seconds: 0.22, gain: 0.45, filter: { type: "lowpass", from: 6000, to: 1200, q: 3 } },
+        { type: "square", from: 1600, to: 200, seconds: 0.18, gain: 0.25, filter: { type: "bandpass", from: 2400, to: 600, q: 2 } },
+        { type: "noise", seconds: 0.2, gain: 0.3, filter: { type: "highpass", from: 5000, to: 2000 } },
+        { type: "sine", from: 140, to: 50, seconds: 0.25, delay: 0.12, gain: 0.6 },
+      ],
+    },
+    // A Shield taking the crash: a glassy dome shattering into a ring of bells.
+    trailsShieldPop: {
+      layers: [
+        { type: "noise", seconds: 0.35, gain: 0.45, filter: { type: "bandpass", from: 7000, to: 1500, q: 1 } },
+        { type: "triangle", notes: [2093, 1568, 2637, 1976], seconds: 0.4, gain: 0.4 },
+        { type: "sine", from: 600, to: 1800, seconds: 0.3, delay: 0.05, gain: 0.35 },
+        { type: "brown", seconds: 0.4, gain: 0.5, filter: { type: "lowpass", from: 800, to: 120 } },
+      ],
+    },
+    // Hyperjump: sucked down a tunnel of light and flung out the far end.
+    trailsJump: {
+      layers: [
+        { type: "sawtooth", from: 900, to: 90, seconds: 0.25, gain: 0.4, filter: { type: "lowpass", from: 4000, to: 400, q: 6 } },
+        { type: "sawtooth", from: 120, to: 1800, seconds: 0.3, delay: 0.22, gain: 0.4, filter: { type: "lowpass", from: 500, to: 6000, q: 6 } },
+        { type: "pink", seconds: 0.5, attack: 0.2, gain: 0.3, filter: { type: "bandpass", from: 300, to: 5000, q: 2 } },
+      ],
+    },
+    // A Heart, or a life won with points: a warm lub-dub and a rising chime.
+    trailsHeart: {
+      layers: [
+        { type: "sine", from: 110, to: 70, seconds: 0.12, gain: 0.8 },
+        { type: "sine", from: 120, to: 75, seconds: 0.14, delay: 0.16, gain: 0.9 },
+        { type: "triangle", notes: [784, 988, 1175, 1568], seconds: 0.45, delay: 0.22, gain: 0.4 },
+        { type: "sine", from: 3136, to: 3136, seconds: 0.3, delay: 0.55, gain: 0.15 },
+      ],
+    },
     // Ridden out of your grace in time: a quick rush of air and a lift.
     trailsSave: {
       layers: [
@@ -144,6 +186,7 @@ export default {
   hums: {
     // Your light cycle: detuned saws over a sub, a sine body and a thin whine,
     // through a resonant lowpass, with a faint flutter; pitch follows speed.
+    // Kept low (a third of its old 0.045) so it sits under the songs.
     trailsCycle: {
       parts: [
         { type: "sawtooth", freq: 82 },
@@ -155,7 +198,7 @@ export default {
       noise: { color: "brown", gain: 0.08 },
       filter: { type: "lowpass", freq: 900, q: 5, follow: 0.9 },
       pulse: { rate: 30, depth: 0.15 },
-      peak: 0.045,
+      peak: 0.015,
     },
     // Riding alongside a rival's wall (or held up against one): an electric
     // crackle, louder the more walls are at your side.

@@ -388,6 +388,8 @@ export const TONE_TABLES = Object.freeze([BLIPS, RICH, ...GAME_SFX.map((s) => de
 export const HUM_TABLES = Object.freeze([HUMS, ...GAME_SFX.map((s) => deepFreeze(s.hums || {}))]);
 // And each game's chiptune tracks, which music.js plays.
 export const MUSIC_TABLES = Object.freeze(GAME_SFX.map((s) => deepFreeze(s.music || {})));
+// And their recorded songs (a name to an mp3 the server serves), which music.js plays too.
+export const SONG_TABLES = Object.freeze(GAME_SFX.map((s) => deepFreeze(s.songs || {})));
 
 const TONES = Object.freeze(Object.assign({}, ...TONE_TABLES));
 const ALL_HUMS = Object.freeze(Object.assign({}, ...HUM_TABLES));
@@ -575,18 +577,24 @@ function voice(c, p, t0, peak, k) {
   src.stop(end);
 }
 
+// The most a game may lift its own sounds by with `louder`.
+export const LOUDER_MAX = 2;
+const loudness = (louder) => Math.min(LOUDER_MAX, Math.max(0, Number(louder ?? 1) || 0));
+
 // Plays one named blip, at `level` (0 to 1) of the usual loudness: a soft
 // putt sounds soft. `pitch` scales every frequency (2 is an octave up, kept
 // between two octaves down and two up), so a game can climb a scale on one
 // blip. An unknown name, Play sounds off, or a context that is missing,
-// suspended or closed all mean silence, not an error.
-export function tone(name, level = 1, pitch = 1) {
+// suspended or closed all mean silence, not an error. `louder` scales a
+// game's sounds as a whole past the usual loudness (1 is as made, kept
+// between 0 and LOUDER_MAX), for a game whose sounds sit under its music.
+export function tone(name, level = 1, pitch = 1, louder = 1) {
   try {
     const spec = Object.hasOwn(TONES, name) ? TONES[name] : null;
     if (!spec || !looks.sound) return;
     const c = audioContext();
     if (!c || c.state !== "running") return;
-    const peak = Math.max(FLOOR * 10, PEAK * Math.min(1, Number(level) || 0));
+    const peak = Math.max(FLOOR * 10, PEAK * Math.min(1, Number(level) || 0) * loudness(louder));
     const t0 = c.currentTime;
     const k = Math.min(4, Math.max(0.25, Number(pitch) || 1));
     if (spec.layers) {
@@ -696,8 +704,8 @@ function watch() {
 // 1) of its loudness and `pitch` (1 is its own, kept between 0.25 and 4).
 // Asking under a different name restarts it as that one. Like tone(), it is
 // silence, never an error, while Play sounds is off or the audio is not
-// running.
-export function hum(id, name, level = 1, pitch = 1) {
+// running. `louder` is tone()'s.
+export function hum(id, name, level = 1, pitch = 1, louder = 1) {
   try {
     const spec = Object.hasOwn(ALL_HUMS, name) ? ALL_HUMS[name] : null;
     const c = audioContext();
@@ -716,7 +724,7 @@ export function hum(id, name, level = 1, pitch = 1) {
     v.seen = performance.now();
     const t = c.currentTime;
     const k = Math.min(4, Math.max(0.25, Number(pitch) || 1));
-    const loud = spec.peak * Math.min(1, Math.max(0, Number(level) || 0));
+    const loud = spec.peak * Math.min(1, Math.max(0, Number(level) || 0)) * loudness(louder);
     v.level.gain.setTargetAtTime(loud, t, GLIDE);
     v.oscs.forEach((o, i) => o.frequency.setTargetAtTime(spec.parts[i].freq * k, t, GLIDE));
     if (v.filter) v.filter.frequency.setTargetAtTime(Math.min(18000, spec.filter.freq * k ** (spec.filter.follow ?? 1)), t, GLIDE);

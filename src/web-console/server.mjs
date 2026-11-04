@@ -623,9 +623,11 @@ function onListening(port) {
   try {
     process.send?.({ type: "listening", port });
   } catch {}
-  // Warm the asset cache while the browser is still on its way.
+  // Warm the asset cache while the browser is still on its way. Not with a
+  // game's songs: megabytes read for a game that may never be played.
   setImmediate(() => {
     for (const rel of SERVABLE) {
+      if (rel.startsWith("activities/") && rel.endsWith(".mp3")) continue;
       try {
         asset(rel);
       } catch {}

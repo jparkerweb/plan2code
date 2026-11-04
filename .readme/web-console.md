@@ -76,6 +76,10 @@ Scroll down for the utilities. Outside a git repository the **Git** card says so
 - **An example you can accept.** Where a question comes with one, an *Autofill
   suggestion* button puts it in the box as a real answer for you to edit. It
   disappears as soon as you have typed anything of your own.
+- **Ask for suggestions.** Unsure on a question with options to pick? The
+  *Ask for suggestions* button in the notes panel asks Plan2Code what it would
+  pick and why, and the answer comes back in the same panel. Anything you have
+  already ticked stays as it is.
 - **Answers you have settled read as answers**, not as a form you might still be
   able to change: what you chose, stated in words, with everything else locked.
 - **A question you have sent is held** until Plan2Code answers it, showing
@@ -543,10 +547,11 @@ the moment lasts, and crashes, splashes, explosions, pickups, combos, bosses,
 new bests and game over each get a sound of their own. A game can play
 chiptune music too, made the same way, which builds as play heats up (Sunset
 Drive has a song for each road, Snake a different one at every level, dealt from ten at
-the start of a round so none repeats, Light Trails a different dark grid-electro track in
-every arena, dealt from fourteen the same way and fuller once the riders go, and Ghoul Rush a track for each room, played at
-one steady level and fuller in a boss fight): turn on **Play game music** in **User Preferences → Sounds &
-activities** (it starts off). **Play game sounds** there turns the games'
+the start of a round so none repeats, and Ghoul Rush a track for each room, played at
+one steady level and fuller in a boss fight), and Light Trails plays five
+recorded songs as background music, each in full, one after another in an
+order shuffled for every run: turn on **Play game music** in **User
+Preferences → Sounds & activities** (it starts off). **Play game sounds** there turns the games'
 sounds (the 3, 2, 1 and the new-best burst included) and their music on or
 off and leaves the page's own cues alone; the **Play sounds** switch above it
 silences all of it, and a paused or closed game goes quiet at once. A game
@@ -648,19 +653,29 @@ Ghoul Rush at 65).
   is a run of heats through nine arenas, each with its own scenery: Neon Grid,
   Sunset Strip, Crystal Field, Warp Zone, Storm Front, Carnival, Glacier,
   Volcano and the Golden Arena. Winning a heat moves you to the next arena; a
-  crash costs one of your three lives and runs the heat again, and you and the
-  last rival out at once is a draw that costs nothing. Each arena brings
-  something: a second rival and **power-up pads** at 2 (**Boost**, a charge;
-  **Phase**, ride through trails for 3 seconds; **Eraser**, wipes the trails
-  around you; **Slow-mo**, the rivals crawl; coins; and from arena 4 a
-  **1UP**), **crystals** at 3, a third rival and a pair of **portals** at 4,
-  **closing walls** at 5 (from 10 seconds in, the outer ring turns to stone
-  every 3.5 seconds, flashing red first), and a second pair of portals at 6.
-  The rivals ride sharper each arena, and grab a pad if they get there first.
-  Points come for riding (a point a level every 6 cells), for each rival out
-  while you still ride (10 a level, 5 more when it hit your trail), coins and
-  each heat won (25 a level). The start and end screens show the furthest
-  arena you have reached and the next one waiting.
+  crash costs one of your five lives and runs the heat again, and you and the
+  last rival out at once is a draw that costs nothing. Every 750 points gives
+  a life back (up to nine). Each arena brings something: a second rival and
+  **power-up pads** at 2 (**Boost**, a charge; **Phase**, ride through trails
+  for 3 seconds; **Eraser**, wipes the trails around you; **Slow-mo**, the
+  rivals crawl; coins; a beating **Heart**, a life; and a **Shield**, held
+  from heat to heat until it takes a crash for you, wiping the trails around
+  you and riding on), **crystals** at 3 with a **Laser** (for 6 seconds it
+  fires at any rival head in your line up to 16 cells ahead, cutting through
+  trails but not crystals, three shots, each a rival out with the cut bonus)
+  and **Score x2** (8 seconds of double points), a third rival and a pair of
+  **portals** at 4 with a **Wide Trail** (4 seconds of a wall three cells
+  across) and **Coin Rain** (seven coins over the board), **closing walls**
+  at 5 (from 10 seconds in, the outer ring turns to stone every 3.5 seconds,
+  flashing red first) with a **Hyperjump** (straight out to the most open
+  space on the board), and at 6 a second pair of portals and a rainbow
+  **Mystery** pad that turns into any of the others. The first pad of each
+  kind in a run says it is new. The rivals ride sharper each arena, and grab
+  a pad if they get there first. Points come for riding (a point a level
+  every 6 cells), for each rival out while you still ride (10 a level, 5 more
+  when your trail or laser got it), coins and each heat won (25 a level). The
+  start and end screens show the furthest arena you have reached and the
+  next one waiting.
 - **Bug Hunt** is an arcade shooter. Planny's ship slides along the bottom
   (left and right move it, up and down a little too) and fires while space is
   held. Each wave of bugs swoops in from the sides into a formation that sways

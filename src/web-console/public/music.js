@@ -1,7 +1,7 @@
-// Plan2Code Web Console - the games' music: a small chiptune sequencer over tones.js's audio, silent unless Play sounds and the game's own switches allow it; defines only.
+// Plan2Code Web Console - the games' music: a small chiptune sequencer over tones.js's audio, and recorded songs, silent unless Play sounds and the game's own switches allow it; defines only.
 
 import { looks } from "./looks.js";
-import { MUSIC_TABLES, audioOut } from "./tones.js";
+import { MUSIC_TABLES, SONG_TABLES, audioOut } from "./tones.js";
 
 /* -------------------------------------------------------------- music
 
@@ -374,16 +374,107 @@ function tick() {
   }
 }
 
+/* ---------------------------------------------------------- the songs
+
+   A game may play recorded songs instead: mp3 files named under `songs` in
+   its `activities/<id>-sfx.js`, a name to a path the server serves. It asks
+   for one the same way, music(name, intensity, volume, options), every frame
+   it wants it (the intensity does nothing here), and the song fades out
+   within MUSIC_HOLD_MS once it stops being asked for, paused where it was, so
+   a paused game picks it up again mid-song. A song plays once through, never
+   looped: music() returns "playing" while it does and "ended" once it is
+   over, which is the game's cue to ask for the next, and { restart: true }
+   plays it from the top. It returns nothing while it plays nothing. */
+const SONGS = Object.freeze(Object.assign({}, ...SONG_TABLES));
+
+export const songNames = () => Object.keys(SONGS);
+
+// A recording is mastered far louder than the chip voices: this keeps one
+// under the game's own sounds at full volume.
+export const SONG_PEAK = 0.45;
+
+// A song's fade in or out, from silence to SONG_PEAK.
+const SONG_FADE_MS = 400;
+
+// One element a song, made the first time it is asked for, so nothing is
+// downloaded for a game nobody plays.
+const songAudio = new Map();
+
+// The song playing now: its name, its element, the volume it is headed for
+// and when the game last asked for it.
+let song = null;
+
+let songTicker = null;
+
+function songElement(name) {
+  if (!songAudio.has(name)) {
+    const el = new Audio(`/${SONGS[name]}`);
+    el.preload = "auto";
+    el.volume = 0;
+    songAudio.set(name, el);
+  }
+  return songAudio.get(name);
+}
+
+function hushSong() {
+  if (songTicker) clearInterval(songTicker);
+  songTicker = null;
+  if (!song) return;
+  try {
+    song.el.pause();
+    song.el.volume = 0;
+  } catch {}
+  song = null;
+}
+
+// Glides the volume toward where it is headed; a song no longer asked for
+// glides to silence and pauses there.
+function songTick() {
+  const p = song;
+  if (!p) return hushSong();
+  const held = looks.sound && performance.now() - p.seen <= MUSIC_HOLD_MS;
+  const target = held ? p.target : 0;
+  const step = (SONG_PEAK * TICK_MS) / SONG_FADE_MS;
+  const v = p.el.volume;
+  p.el.volume = target > v ? Math.min(target, v + step) : Math.max(target, v - step);
+  if (!held && p.el.volume <= 0) hushSong();
+}
+
+function playSong(name, level, options) {
+  if (typeof Audio !== "function") return undefined;
+  if (song && song.name !== name) hushSong();
+  const el = songElement(name);
+  // load() is the way back to the top: it needs no seeking, which a file
+  // served without byte ranges cannot always do.
+  if (options && options.restart && (el.ended || el.currentTime > 0)) el.load();
+  if (!song) song = { name, el, target: 0, seen: 0, starting: false };
+  const p = song;
+  p.seen = performance.now();
+  p.target = SONG_PEAK * level;
+  if (el.ended) return "ended";
+  if (el.paused && !p.starting) {
+    p.starting = true;
+    Promise.resolve(el.play())
+      .catch(() => {})
+      .finally(() => (p.starting = false));
+  }
+  if (!songTicker) songTicker = setInterval(songTick, TICK_MS);
+  return "playing";
+}
+
 // Keeps the track `name` playing for another moment at `intensity` (0 to 1,
 // how hot play is: it brings voices in and pushes the tempo). Asking for a
 // different track crossfades from the last one to this one over
 // CROSSFADE_S. `volume` (0 to 1) scales the whole track; at 0 it is not
 // asked for, so it fades out. Silence, never an error, while Play sounds is
-// off or audio cannot play.
-export function music(name, intensity = 0.5, volume = 1) {
+// off or audio cannot play. A song (above) plays instead when `name` is one,
+// and what it returns is the song's "playing" or "ended".
+export function music(name, intensity = 0.5, volume = 1, options = undefined) {
   try {
     const level = Math.min(1, Math.max(0, Number(volume) || 0));
-    if (!Object.hasOwn(TRACKS, name) || !looks.sound || level <= 0) return;
+    if (!looks.sound || level <= 0) return undefined;
+    if (Object.hasOwn(SONGS, name)) return playSong(name, level, options);
+    if (!Object.hasOwn(TRACKS, name)) return;
     const a = audioOut();
     if (!a) return;
     let ramp = 0.25;
@@ -414,4 +505,5 @@ export function music(name, intensity = 0.5, volume = 1) {
 // Quiets the music at once: the window stopped ticking a game.
 export function hushMusic() {
   hushAll(audioOut());
+  hushSong();
 }
