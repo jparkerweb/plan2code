@@ -1066,9 +1066,10 @@ export function wagonArt(d) {
     ctx.restore();
   }
 
-  // The mob's meter along the top left: how far back they are, red as they close, with a word when it matters.
-  function meter(ctx, v, c) {
-    const x = 4;
+  // The mob's meter along the top left of the screen (`cam` is the view's left edge: `front` draws in
+  // room units, so it follows the camera): how far back they are, red as they close, with a word when it matters.
+  function meter(ctx, v, c, cam) {
+    const x = cam + 4;
     const y = 9.2;
     const w = 34;
     const near = clamp(1 - c.gap / GAP_MAX, 0, 1);
@@ -1147,7 +1148,7 @@ export function wagonArt(d) {
         ctx.fillRect(cam, 0, 40, FH);
         ctx.globalAlpha = 1;
       }
-      meter(ctx, v, c);
+      meter(ctx, v, c, cam);
     }
   }
 

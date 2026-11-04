@@ -508,6 +508,9 @@ function blip(c, type, from, to, t0, seconds, peak) {
   osc.type = type;
   osc.frequency.setValueAtTime(from, t0);
   osc.frequency.exponentialRampToValueAtTime(to, end);
+  // Silent from the start: a gain node is 1 until its first scheduled value,
+  // which made a part that starts later click.
+  gain.gain.value = FLOOR;
   gain.gain.setValueAtTime(FLOOR, t0);
   gain.gain.exponentialRampToValueAtTime(peak, t0 + ATTACK);
   gain.gain.exponentialRampToValueAtTime(FLOOR, end);
@@ -524,6 +527,8 @@ function voice(c, p, t0, peak, k) {
   const end = t0 + p.seconds;
   const gain = c.createGain();
   const top = Math.max(FLOOR * 10, peak * (p.gain ?? 1));
+  // Silent from the start (see blip): no click before a delayed part begins.
+  gain.gain.value = FLOOR;
   gain.gain.setValueAtTime(FLOOR, t0);
   gain.gain.exponentialRampToValueAtTime(top, t0 + Math.min(p.attack ?? ATTACK, p.seconds * 0.8));
   gain.gain.exponentialRampToValueAtTime(FLOOR, end);

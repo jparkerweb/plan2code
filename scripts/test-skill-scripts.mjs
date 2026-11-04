@@ -70,9 +70,21 @@ test("scripts are self-contained: built-ins and siblings only", () => {
     for (const f of fs.readdirSync(dir).filter((n) => n.endsWith(".mjs"))) {
       const t = fs.readFileSync(path.join(dir, f), "utf8");
       for (const m of t.matchAll(/^import .* from "([^"]+)";$/gm)) {
-        assert.ok(m[1].startsWith("node:") || m[1] === "./common.mjs", `${f} imports ${m[1]}`);
+        const sibling = /^\.\/[\w-]+\.mjs$/.test(m[1]) && fs.existsSync(path.join(dir, m[1]));
+        assert.ok(m[1].startsWith("node:") || m[1] === "./common.mjs" || sibling, `${f} imports ${m[1]}`);
       }
       assert.ok(!/[\u0000-\u0008]/.test(t), `${f} contains a control character (an escape lost in an edit?)`);
+    }
+  }
+  // A sibling import ships with its importer: every skill that carries a
+  // script also carries each ./x.mjs it imports.
+  for (const skill of fs.readdirSync(SKILLS)) {
+    const dir = path.join(SKILLS, skill, "scripts");
+    if (!fs.existsSync(dir)) continue;
+    for (const f of fs.readdirSync(dir).filter((n) => n.endsWith(".mjs"))) {
+      for (const m of fs.readFileSync(path.join(dir, f), "utf8").matchAll(/^import .* from "(\.\/[^"]+)";$/gm)) {
+        assert.ok(fs.existsSync(path.join(dir, m[1])), `${skill}/scripts/${f} imports ${m[1]}, which the skill does not ship`);
+      }
     }
   }
 });
