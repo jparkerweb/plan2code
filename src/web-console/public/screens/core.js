@@ -468,14 +468,15 @@ export function adopt(body) {
   // A re-posted card can drop or rekey an option a pick was staged on: that
   // pick goes, and the person is told which question lost it.
   const pruned = pruneStaged(page.S.items || [], page.local.staged);
+  let staleLine = "";
   if (pruned.dropped.length) {
     page.local.staged = pruned.staged;
     save();
     const titles = pruned.dropped.map((id) => (byId(id) && byId(id).title) || id).join(", ");
-    const line = `A pick on ${titles} no longer matches the reworded question, so it was cleared.`;
-    banner(line, "info");
+    staleLine = `A pick on ${titles} no longer matches the reworded question, so it was cleared.`;
+    banner(staleLine, "info");
     clearTimeout(arrivalBannerTimer);
-    arrivalBannerTimer = setTimeout(() => !page.gone && $("banner").textContent === line && banner(null), 8000);
+    arrivalBannerTimer = setTimeout(() => !page.gone && $("banner").textContent === staleLine && banner(null), 8000);
   }
   // A retracted send suppresses exactly that send. Once the item moves --
   // settled, sent again (a new `at`), or answered by an agent reply -- the
@@ -505,12 +506,13 @@ export function adopt(body) {
     if (typingHere()) {
       // Mid-sentence somewhere. Moving the page under their cursor would lose
       // their place for the sake of telling them something that can wait.
-      banner(
+      // A cleared pick from this same update is said in the same line, so
+      // neither notice hides the other.
+      const arrivedLine =
         arrived.length === 1
           ? "A new question from Plan2Code. It is in the list on the left."
-          : `${arrived.length} new questions from Plan2Code. They are in the list on the left.`,
-        "info"
-      );
+          : `${arrived.length} new questions from Plan2Code. They are in the list on the left.`;
+      banner(staleLine ? `${staleLine} ${arrivedLine}` : arrivedLine, "info");
       clearTimeout(arrivalBannerTimer);
       arrivalBannerTimer = setTimeout(() => !page.gone && banner(null), 8000);
     } else {
