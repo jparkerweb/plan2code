@@ -5984,9 +5984,17 @@ second line"
     }
 
     fn wait_for_generations(seen: &Arc<Mutex<String>>, count: usize) {
-        wait_until("the agent generations", || {
-            launched_prompts(seen).len() >= count
-        });
+        let deadline = Instant::now() + Duration::from_secs(30);
+        while Instant::now() < deadline {
+            if launched_prompts(seen).len() >= count {
+                return;
+            }
+            thread::sleep(Duration::from_millis(20));
+        }
+        panic!(
+            "never saw {count} agent generations; the fake agent printed {:?}. No ARGS line means target/debug/fake-agent is older than its source: touch fake-agent/src/main.rs",
+            lock(seen).as_str()
+        );
     }
 
     #[test]
