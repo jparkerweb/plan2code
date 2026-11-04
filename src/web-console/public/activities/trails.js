@@ -131,6 +131,40 @@ export const ARENAS = deepFreeze({
 
 export const arenaFor = (level) => ARENAS[Math.min(Math.max(1, level || 1), MAX_LEVEL)];
 
+// The music: fourteen tracks (trails-music.js), one for each arena of a round.
+// A round deals them in a fresh order, so a run hears a different track in
+// every arena and none twice (nine arenas, fourteen tracks), and a round never
+// opens on the track the last one opened on.
+export const MUSIC_TRACKS = Object.freeze(["trailsGridElectro", "trailsRecognizer", "trailsMainframe", "trailsBlackIce", "trailsSentinel", "trailsThrone", "trailsSiege", "trailsIronGate", "trailsSkyCitadel", "trailsDeepCore", "trailsMonolith", "trailsNetrunner", "trailsOverdrive", "trailsLaserHighway"]);
+
+// Every track in a new order, shuffled with the given random, the first never `last`.
+export function dealMusic(random = Math.random, last = null) {
+  const deck = [...MUSIC_TRACKS];
+  for (let i = deck.length - 1; i > 0; i--) {
+    const j = Math.floor(random() * (i + 1));
+    [deck[i], deck[j]] = [deck[j], deck[i]];
+  }
+  if (deck[0] === last) [deck[0], deck[1]] = [deck[1], deck[0]];
+  return deck;
+}
+
+// The deal's track for an arena: the first for level 1, the second for level 2.
+export const trackFor = (deck, level) => deck[(Math.max(1, level) - 1) % deck.length];
+
+// How hot play is for the music, 0 to 1. While a heat lines up or shows how
+// it went, HEAT_WAIT: the bass, drums and sequence. Once the riders go,
+// HEAT_RACE brings in the brass and lead; down to the last rival it is
+// HEAT_DUEL, and a boost pushes it all the way, the tempo with it.
+const HEAT_WAIT = 0.3;
+const HEAT_RACE = 0.7;
+const HEAT_DUEL = 0.85;
+export function heat(round) {
+  if (round.phase !== "race") return HEAT_WAIT;
+  if (active(round, "boost")) return 1;
+  const rivals = round.riders.filter((r) => r.id !== 0 && r.alive).length;
+  return rivals <= 1 ? HEAT_DUEL : HEAT_RACE;
+}
+
 const LEVEL_COLORS = Object.freeze(["#1fb6d9", "#1fb6d9", "#ff8a1f", "#a466ff", "#4f7cff", "#7a7f99", "#ff4fa3", "#8fd3ff", "#e2553f", "#f5b301"]);
 const levelColor = (level) => LEVEL_COLORS[Math.min(level, LEVEL_COLORS.length - 1)];
 
@@ -1208,10 +1242,13 @@ function teaser(furthest) {
 
 const MAX_PARTS = 400;
 
-function create({ canvas, tone = () => {}, hum = () => {}, onScore = () => {}, best = () => 0, memo = null }) {
+function create({ canvas, tone = () => {}, hum = () => {}, music = () => {}, onScore = () => {}, best = () => 0, memo = null }) {
   const ctx = canvas.getContext("2d");
   let colors = null;
   let round = newRound();
+  // The round's deal of tracks, and the one it opened on (so the next round opens on another).
+  let deck = [];
+  let opener = null;
   let state = "ready";
   let cell = MIN_CELL;
   let bestAtStart = 0;
@@ -1541,6 +1578,8 @@ function create({ canvas, tone = () => {}, hum = () => {}, onScore = () => {}, b
   const start = () => {
     colors = null;
     round = newRound();
+    deck = dealMusic(Math.random, opener);
+    opener = deck[0];
     state = "running";
     resetFx();
     resetSfx();
@@ -1601,7 +1640,10 @@ function create({ canvas, tone = () => {}, hum = () => {}, onScore = () => {}, b
       advance(round, ms);
       drain();
       if (round.over) end();
-      else listen();
+      else {
+        listen();
+        if (deck.length) music(trackFor(deck, round.level), heat(round));
+      }
       paint();
     },
     resize(w, h) {

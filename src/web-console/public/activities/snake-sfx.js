@@ -1,11 +1,15 @@
-// Plan2Code Web Console - snake: its own sound effects, merged into tones.js beside the shared kit; defines only.
+// Plan2Code Web Console - snake: its own sound effects and music, merged into tones.js beside the shared kit; defines only.
 //
 // `tones` are one-shot sounds played with tone(name, level, pitch); `hums` are
 // held sounds kept going with hum(id, name, level, pitch). Both take the shapes
 // tones.js documents, as plain objects (tones.js freezes them). A name may be
-// defined only once across tones.js and every game's file. No imports.
+// defined only once across tones.js and every game's file. The music is in
+// snake-music.js, merged in below as `music`: that file is the only import.
+
+import { SNAKE_MUSIC } from "./snake-music.js";
 
 export default {
+  music: SNAKE_MUSIC,
   tones: {
     // A crunchy bite laid over `eat` while a combo runs (pitched up a step
     // per combo), and on a caught runaway.

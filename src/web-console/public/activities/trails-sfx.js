@@ -1,11 +1,15 @@
-// Plan2Code Web Console - trails: its own sound effects, merged into tones.js beside the shared kit; defines only.
+// Plan2Code Web Console - trails: its own sound effects and music, merged into tones.js beside the shared kit; defines only.
 //
 // `tones` are one-shot sounds played with tone(name, level, pitch); `hums` are
 // held sounds kept going with hum(id, name, level, pitch). Both take the shapes
 // tones.js documents, as plain objects (tones.js freezes them). A name may be
-// defined only once across tones.js and every game's file. No imports.
+// defined only once across tones.js and every game's file. The music is in
+// trails-music.js, merged in below as `music`: that file is the only import.
+
+import { TRAILS_MUSIC } from "./trails-music.js";
 
 export default {
+  music: TRAILS_MUSIC,
   tones: {
     // A turn taken: a short, bright synth chirp (the game nudges its pitch a
     // little each time, so steering never sounds like one repeated beep).

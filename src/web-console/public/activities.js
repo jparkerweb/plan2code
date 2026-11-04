@@ -32,9 +32,9 @@
 const entry = (id, title, blurb, more = {}) => Object.freeze({ id, title, blurb, module: `/activities/${id}.js`, ...more });
 
 export const ACTIVITIES = Object.freeze([
-  entry("snake", "Snake", "Eat, grow and dodge. Every level brings something new."),
+  entry("snake", "Snake", "Eat, grow and dodge. Every level brings something new.", { music: 70 }),
   entry("golf", "Mini golf", "Six themed 18-hole courses, from Pirate Cove to Cosmic Glow.", { courses: Object.freeze(["pirate", "cave", "dino", "candy", "space", "frost"]) }),
-  entry("trails", "Light Trails", "Box your rivals in with your trail. Last rider moving wins."),
+  entry("trails", "Light Trails", "Box your rivals in with your trail. Last rider moving wins.", { music: 70 }),
   entry("bugs", "Bug Hunt", "Squash waves of bugs before they dive at you, then beat the boss."),
   entry("drive", "Sunset Drive", "Race the clock down the open road, and pick your road at every fork.", { music: 70 }),
   entry("stack", "Stack Deploy", "Drop each block right on top. One button, how high can you go?"),

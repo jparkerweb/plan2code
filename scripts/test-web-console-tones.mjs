@@ -13,6 +13,10 @@ import { looks } from "../src/web-console/public/looks.js";
 import { compileTrack, hushMusic, music, musicNames, noteFreq } from "../src/web-console/public/music.js";
 import { MUSIC_TABLES } from "../src/web-console/public/tones.js";
 import { REGIONS, ROAD_MUSIC } from "../src/web-console/public/activities/drive.js";
+import { MUSIC_TRACKS } from "../src/web-console/public/activities/snake.js";
+import snakeSfx from "../src/web-console/public/activities/snake-sfx.js";
+import { MUSIC_TRACKS as TRAILS_TRACKS } from "../src/web-console/public/activities/trails.js";
+import trailsSfx from "../src/web-console/public/activities/trails-sfx.js";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const GAMES = path.join(ROOT, "src/web-console/public/activities");
@@ -213,6 +217,16 @@ test("music: a track that does not read is turned away", () => {
   assert.equal(arp.patterns.A.lines.a[0].len, 3, "held for three steps");
 });
 
+test("music: a track in another meter sets its bar, and a pattern that is not whole bars is turned away", () => {
+  const steps = (n) => Array(n).fill(".").join(" ");
+  const ok = { bpm: 120, bar: 12, voices: { a: { wave: "pulse" } }, patterns: { A: { a: steps(24) } }, order: ["A"] };
+  assert.equal(compileTrack(ok).length, 24, "two bars of 6/8");
+  assert.throws(() => compileTrack({ ...ok, patterns: { A: { a: steps(16) } } }), /whole bars/);
+  assert.throws(() => compileTrack({ ...ok, bar: 2 }), /bar/);
+  assert.throws(() => compileTrack({ ...ok, bar: 100 }), /bar/);
+  assert.equal(compileTrack({ ...ok, bar: undefined, patterns: { A: { a: steps(16) } } }).length, 16, "no bar: sixteen steps, as before");
+});
+
 test("music: a track plays notes while asked for, quiets when hushed, and stays silent while Play sounds is off", () => {
   const saved = { sound: looks.sound, ctor: globalThis.AudioContext };
   const { Ctx, made } = AUDIO;
@@ -332,6 +346,25 @@ test("music: the volume scales the track's level, a change glides there, and a v
     hushMusic();
     looks.sound = saved.sound;
     globalThis.AudioContext = saved.ctor;
+  }
+});
+
+test("music: Snake lists exactly the tracks it has, each a real track that no other game defines", () => {
+  const tracks = new Set(musicNames());
+  assert.deepEqual([...MUSIC_TRACKS].sort(), Object.keys(snakeSfx.music).sort(), "the game lists the tracks its sound file has");
+  for (const name of MUSIC_TRACKS) {
+    assert.ok(tracks.has(name), `track "${name}" exists`);
+    assert.equal(MUSIC_TABLES.filter((t) => Object.hasOwn(t, name)).length, 1, `${name} is defined once`);
+  }
+});
+
+test("music: Light Trails lists exactly the tracks it has, each a real track that no other game defines, enough for every arena", () => {
+  const tracks = new Set(musicNames());
+  assert.deepEqual([...TRAILS_TRACKS].sort(), Object.keys(trailsSfx.music).sort(), "the game lists the tracks its sound file has");
+  assert.ok(TRAILS_TRACKS.length >= 9, "nine arenas, none hearing a track twice");
+  for (const name of TRAILS_TRACKS) {
+    assert.ok(tracks.has(name), `track "${name}" exists`);
+    assert.equal(MUSIC_TABLES.filter((t) => Object.hasOwn(t, name)).length, 1, `${name} is defined once`);
   }
 });
 

@@ -15,10 +15,13 @@ import { MUSIC_TABLES, audioOut } from "./tones.js";
 
    A track is:
 
-     { bpm, rush, voices: { name: voice }, patterns: { id: { voice: "..." } }, order: [id, ...] }
+     { bpm, rush, bar, voices: { name: voice }, patterns: { id: { voice: "..." } }, order: [id, ...] }
 
    `bpm` is the tempo at intensity 0 and `rush` the beats a minute added at
-   intensity 1. Each step is a sixteenth note. A voice is a chip channel:
+   intensity 1. Each step is a sixteenth note. `bar` is the steps in a bar
+   (16 when left out); only a track in another meter sets it (12 for 6/8, 14
+   for 7/8, 20 for ten beats), so a track picks up again on the start of a
+   bar, and a track that sets it must give every pattern a whole number of bars. A voice is a chip channel:
    { wave, duty, gain, from, decay, sustain, vibrato, kit }. `wave` is
    "pulse" (with `duty`, 0.125, 0.25 or 0.5, the classic chip squares),
    "triangle", "sine", "square" or "sawtooth"; `kit` makes it the drums
@@ -93,6 +96,8 @@ const tokens = (line) => line.split(/\s+/).filter((t) => t && t !== "|");
 // does not read throws, which the suite catches for every listed track.
 export function compileTrack(track) {
   if (!(track.bpm >= 40 && track.bpm <= 240)) throw new Error("bpm out of range");
+  const bar = track.bar ?? 16;
+  if (!(Number.isInteger(bar) && bar >= 4 && bar <= 64)) throw new Error("bar out of range");
   const voices = Object.keys(track.voices || {});
   if (!voices.length) throw new Error("no voices");
   const patterns = {};
@@ -123,6 +128,7 @@ export function compileTrack(track) {
       lines[voice] = notes;
     }
     if (!length) throw new Error(`${id}: empty`);
+    if (track.bar !== undefined && length % bar) throw new Error(`${id}: ${length} steps is not whole bars of ${bar}`);
     patterns[id] = { length, lines };
   }
   const order = track.order || [];
@@ -276,7 +282,7 @@ function startTrack(a, name, rampS, volume) {
   bus.connect(musicOut(a));
   const song = compiledTrack(name);
   const was = positions.get(name) || 0;
-  return { name, song, bus, step: was - (was % 16), next: a.c.currentTime + 0.05, intensity: 0, seen: 0, volume };
+  return { name, song, bus, step: was - (was % (song.track.bar ?? 16)), next: a.c.currentTime + 0.05, intensity: 0, seen: 0, volume };
 }
 
 function letGo(playing, ms) {

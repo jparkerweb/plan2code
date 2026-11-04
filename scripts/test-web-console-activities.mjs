@@ -11,7 +11,7 @@ import assert from "node:assert/strict";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { ACTIVITIES, bestKey, bestKeys, memoKey, musicKey, musicLevel } from "../src/web-console/public/activities.js";
-import { BOSS_BITES, COMBO_MS, DISCOVERIES, FOOD_PER_LEVEL, FRUITS, GRID, ICE_STEPS, LEVELS, MAX_COMBO, MIN_CELL, MIN_STEP_MS, POWERS, STEP_MS, SURPRISES, age, applyPower, applySurprise, fruitFor, tallyBit, newRound, onFood, SPECIALS, pace, placeFood, step, stepMs, turn } from "../src/web-console/public/activities/snake.js";
+import { BOSS_BITES, COMBO_MS, MAX_LEVEL, MUSIC_TRACKS, dealMusic, heat, trackFor, DISCOVERIES, FOOD_PER_LEVEL, FRUITS, GRID, ICE_STEPS, LEVELS, MAX_COMBO, MIN_CELL, MIN_STEP_MS, POWERS, STEP_MS, SURPRISES, age, applyPower, applySurprise, fruitFor, tallyBit, newRound, onFood, SPECIALS, pace, placeFood, step, stepMs, turn } from "../src/web-console/public/activities/snake.js";
 import golf, * as golfRules from "../src/web-console/public/activities/golf.js";
 import { COURSE_W, COURSE_H, COURSES, FRONT_NINE, HOLE_COUNT, courseById } from "../src/web-console/public/activities/golf-holes.js";
 import { holeQuip, holeWord, knownGround, knownLiquid } from "../src/web-console/public/activities/golf-draw.js";
@@ -308,13 +308,13 @@ test("memoKey builds a flat looks.json key from a list id", () => {
 
 test("musicKey builds a flat looks.json key, and a game with music has a default volume a saved one replaces", () => {
   assert.equal(musicKey("ghoul"), "activityMusicGhoul");
-  assert.deepEqual(ACTIVITIES.filter((a) => a.music !== undefined).map((a) => [a.id, a.music]), [["drive", 70], ["ghoul", 65]], "the games with music, at about the level they were picked at on the prototype pages");
+  assert.deepEqual(ACTIVITIES.filter((a) => a.music !== undefined).map((a) => [a.id, a.music]), [["snake", 70], ["trails", 70], ["drive", 70], ["ghoul", 65]], "the games with music, at about the level they were picked at on the prototype pages");
   const ghoulEntry = ACTIVITIES.find((a) => a.id === "ghoul");
   assert.equal(musicLevel(ghoulEntry, undefined), 0.65, "nothing saved: the default");
   assert.equal(musicLevel(ghoulEntry, "loud"), 0.65, "not a number: the default");
   assert.equal(musicLevel(ghoulEntry, 0), 0, "turned all the way down");
   assert.equal(musicLevel(ghoulEntry, 140), 1, "never past full");
-  assert.equal(musicLevel(ACTIVITIES[0], 80), 0, "a game with no music has none");
+  assert.equal(musicLevel(ACTIVITIES.find((a) => a.id === "golf"), 80), 0, "a game with no music has none");
 });
 
 test("every listed game, and a stub second game, answers the game contract", async () => {
@@ -455,6 +455,58 @@ test("Snake: a wall hit ends the round and onScore fires once", async () => {
   assert.equal(tones.at(-1), "crash");
   g.tick(stepMs(3) * 10);
   assert.equal(scores.length, 1, "no second onScore after the round is over");
+});
+
+test("Snake: a round deals every track once, never opens on the last opener, and gives each level its own", () => {
+  let n = 7;
+  const random = () => (n = (n * 1664525 + 1013904223) % 4294967296) / 4294967296;
+  for (let i = 0; i < 20; i++) {
+    const last = MUSIC_TRACKS[i % MUSIC_TRACKS.length];
+    const deck = dealMusic(random, last);
+    assert.deepEqual([...deck].sort(), [...MUSIC_TRACKS].sort(), "every track once");
+    assert.notEqual(deck[0], last, "never opens on the last opener");
+  }
+  const deck = dealMusic(random, null);
+  const heard = Array.from({ length: MAX_LEVEL }, (_, i) => trackFor(deck, i + 1));
+  assert.equal(new Set(heard).size, MAX_LEVEL, "nine levels hear nine different tracks");
+  assert.equal(trackFor(deck, 0), deck[0], "a level below one hears the first");
+  assert.equal(trackFor(deck, MUSIC_TRACKS.length + 1), deck[0], "past the deck it comes round again");
+  assert.notDeepEqual(dealMusic(random, null), dealMusic(random, null), "a new deal is a new order");
+});
+
+test("Snake: the music's heat starts at 0.3, climbs with the snake's speed to 1 and thins out in Slow-mo", () => {
+  const round = newRound(GRID, () => 0);
+  assert.ok(Math.abs(heat(round) - 0.3) < 1e-9, "the opening pace is 0.3, so the lead and drums are in from the first step");
+  round.snake = Array.from({ length: 30 }, (_, i) => ({ x: i % GRID, y: 0 }));
+  assert.equal(heat(round), 1, "a long snake at its fastest pace is 1");
+  round.effects = { slow: 7000 };
+  assert.ok(heat(round) < 1 && heat(round) >= 0.3, "Slow-mo thins it out");
+  round.snake = round.snake.slice(0, 3);
+  assert.equal(heat(round), 0.3, "and never under 0.3");
+});
+
+test("Snake: it asks for the deal's track while a round runs, and the next round opens on another", async () => {
+  const { canvas } = stubCanvas();
+  const asked = [];
+  const game = (await import("../src/web-console/public/activities/snake.js")).default;
+  const g = game.create({ canvas, music: (name, level) => asked.push([name, level]) });
+  g.resize(GRID * MIN_CELL, GRID * MIN_CELL);
+  g.tick(STEP_MS);
+  assert.equal(asked.length, 0, "silent before a round");
+  g.start();
+  g.tick(16);
+  assert.equal(asked.length, 1, "asked once a tick");
+  const [first, opening] = asked[0];
+  assert.ok(MUSIC_TRACKS.includes(first), "a track the game has");
+  assert.ok(Math.abs(opening - 0.3) < 1e-9, "at the opening heat");
+  for (let i = 0; i < GRID + 2 && g.state === "running"; i++) g.tick(STEP_MS);
+  assert.equal(g.state, "over");
+  const before = asked.length;
+  g.tick(STEP_MS * 10);
+  assert.equal(asked.length, before, "nothing asked for once the round is over");
+  g.start();
+  g.tick(16);
+  assert.notEqual(asked.at(-1)[0], first, "the next round opens on another track");
 });
 
 test("Snake: running into its own body ends the round", () => {
@@ -2305,6 +2357,62 @@ test("Light Trails: every pill's text reads at 4.5:1 on its backing and its time
     setup: (r) => Object.assign(r.effects, { boost: trails.BOOST_MS / 2, phase: 1500, slow: 2000 }),
     expect: ["LV 1", "♥", "~BOOST", "~PHASE", "~SLOW-MO", "1 RIVAL"],
   });
+});
+
+test("Light Trails: a round deals every track once, never opens on the last opener, and gives each arena its own", () => {
+  let n = 11;
+  const random = () => (n = (n * 1664525 + 1013904223) % 4294967296) / 4294967296;
+  for (let i = 0; i < 20; i++) {
+    const last = trails.MUSIC_TRACKS[i % trails.MUSIC_TRACKS.length];
+    const deck = trails.dealMusic(random, last);
+    assert.deepEqual([...deck].sort(), [...trails.MUSIC_TRACKS].sort(), "every track once");
+    assert.notEqual(deck[0], last, "never opens on the last opener");
+  }
+  const deck = trails.dealMusic(random, null);
+  const heard = Array.from({ length: trails.MAX_LEVEL }, (_, i) => trails.trackFor(deck, i + 1));
+  assert.equal(new Set(heard).size, trails.MAX_LEVEL, "nine arenas hear nine different tracks");
+  assert.equal(trails.trackFor(deck, 0), deck[0], "a level below one hears the first");
+  assert.notDeepEqual(trails.dealMusic(random, null), trails.dealMusic(random, null), "a new deal is a new order");
+});
+
+test("Light Trails: the music's heat is low while a heat lines up, rises once the riders go, more so down to the last rival, and is full on a boost", () => {
+  const round = trails.newRound(() => 0.5);
+  assert.equal(round.phase, "ready");
+  const waiting = trails.heat(round);
+  assert.ok(waiting < 0.5, "lining up: no lead yet");
+  round.level = 2;
+  trails.newHeat(round, () => 0.5);
+  round.phase = "race";
+  assert.ok(round.riders.filter((r) => r.id !== 0).length >= 2, "two rivals at level 2");
+  const racing = trails.heat(round);
+  assert.ok(racing >= 0.5 && racing < 1, "racing with rivals left: the lead is in");
+  for (const r of round.riders.filter((r) => r.id !== 0).slice(1)) r.alive = false;
+  assert.ok(trails.heat(round) > racing && trails.heat(round) < 1, "down to the last rival it climbs");
+  round.effects = { ...round.effects, boost: trails.BOOST_MS };
+  assert.equal(trails.heat(round), 1, "a boost pushes it all the way");
+});
+
+test("Light Trails: it asks for the deal's track while a round runs, silent before and after, and the next round opens on another", () => {
+  const { canvas } = stubCanvas();
+  const asked = [];
+  const g = trails.default.create({ canvas, music: (name, level) => asked.push([name, level]) });
+  g.resize(800, 600);
+  g.tick(16);
+  assert.equal(asked.length, 0, "silent before a round");
+  g.start();
+  g.tick(16);
+  assert.equal(asked.length, 1, "asked once a tick");
+  const [first] = asked[0];
+  assert.ok(trails.MUSIC_TRACKS.includes(first), "a track the game has");
+  g.round.lives = 1;
+  for (let i = 0; i < 2000 && g.state === "running"; i++) g.tick(50);
+  assert.equal(g.state, "over", "riding straight ends the round");
+  const before = asked.length;
+  g.tick(500);
+  assert.equal(asked.length, before, "nothing asked for once the round is over");
+  g.start();
+  g.tick(16);
+  assert.notEqual(asked.at(-1)[0], first, "the next round opens on another track");
 });
 
 test("Light Trails game: the opening banner sits in the board from the start's first frame, held through the 3, 2, 1, and does not jump on the first tick", () => {

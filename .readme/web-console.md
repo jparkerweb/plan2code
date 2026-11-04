@@ -542,14 +542,16 @@ rivers, wind, light-cycle drones and the moans of nearby monsters run for as lon
 the moment lasts, and crashes, splashes, explosions, pickups, combos, bosses,
 new bests and game over each get a sound of their own. A game can play
 chiptune music too, made the same way, which builds as play heats up (Sunset
-Drive has a song for each road, Ghoul Rush a track for each room, played at
+Drive has a song for each road, Snake a different one at every level, dealt from ten at
+the start of a round so none repeats, Light Trails a different dark grid-electro track in
+every arena, dealt from fourteen the same way and fuller once the riders go, and Ghoul Rush a track for each room, played at
 one steady level and fuller in a boss fight): turn on **Play game music** in **User Preferences → Sounds &
 activities** (it starts off). **Play game sounds** there turns the games'
 sounds (the 3, 2, 1 and the new-best burst included) and their music on or
 off and leaves the page's own cues alone; the **Play sounds** switch above it
 silences all of it, and a paused or closed game goes quiet at once. A game
 with music has its own **Music** slider beside **Full screen**, which sets that
-game's music volume and is remembered per game (Sunset Drive starts at 70,
+game's music volume and is remembered per game (Snake, Light Trails and Sunset Drive start at 70,
 Ghoul Rush at 65).
 
 - **Snake** speeds up as it grows: 120 ms a step at its starting three cells,

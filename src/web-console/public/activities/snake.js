@@ -234,6 +234,31 @@ export const multiplier = (round) => (active(round, "disco") ? 3 : 1);
 // Whether the board is iced over.
 export const icy = (round) => round.level === ICE_LEVEL;
 
+// The music: ten tracks (snake-music.js), one for each level of a round. A
+// round deals them in a fresh order, so a run hears a different track at every
+// level and none twice (nine levels, ten tracks), and a round never opens on
+// the track the last one opened on.
+export const MUSIC_TRACKS = Object.freeze(["snakeBazaar", "snakeJungle", "snakePirate", "snakeClockwork", "snakeTango", "snakeRaga", "snakeSamai", "snakeBouzouki", "snakeSolea", "snakeLantern"]);
+
+// Every track in a new order, shuffled with the given random, the first never `last`.
+export function dealMusic(random = Math.random, last = null) {
+  const deck = [...MUSIC_TRACKS];
+  for (let i = deck.length - 1; i > 0; i--) {
+    const j = Math.floor(random() * (i + 1));
+    [deck[i], deck[j]] = [deck[j], deck[i]];
+  }
+  if (deck[0] === last) [deck[0], deck[1]] = [deck[1], deck[0]];
+  return deck;
+}
+
+// The deal's track for a level: the first for level 1, the second for level 2.
+export const trackFor = (deck, level) => deck[(Math.max(1, level) - 1) % deck.length];
+
+// How hot play is for the music, 0 to 1: the snake's speed against the
+// opening pace (one to two times) as 0.3 to 1, so the lead and the drums are
+// in from the first step and Slow-mo, which opens every level, thins it out.
+export const heat = (round) => Math.min(1, Math.max(0.3, 0.3 + 0.7 * (STEP_MS / pace(round) - 1)));
+
 // The cells a food covers: one, or four for a boss.
 const foodCells = (f) => (!f ? [] : f.boss ? [f, { x: f.x + 1, y: f.y }, { x: f.x, y: f.y + 1 }, { x: f.x + 1, y: f.y + 1 }] : [f]);
 
@@ -1506,10 +1531,13 @@ const scaleStep = (n) => SCALE[Math.max(0, Math.min(SCALE.length - 1, n))];
 // the sound's pitch, never the game.
 const wobble = (spread = 0.06) => 1 - spread / 2 + Math.random() * spread;
 
-function create({ canvas, tone = () => {}, hum = () => {}, onScore = () => {}, best = () => 0, memo = null }) {
+function create({ canvas, tone = () => {}, hum = () => {}, music = () => {}, onScore = () => {}, best = () => 0, memo = null }) {
   const ctx = canvas.getContext("2d");
   let colors = null;
   let round = newRound();
+  // The round's deal of tracks, and the one it opened on (so the next round opens on another).
+  let deck = [];
+  let opener = null;
   let state = "ready";
   let cell = MIN_CELL;
   let elapsed = 0;
@@ -1922,6 +1950,8 @@ function create({ canvas, tone = () => {}, hum = () => {}, onScore = () => {}, b
   const start = () => {
     colors = null;
     round = newRound();
+    deck = dealMusic(Math.random, opener);
+    opener = deck[0];
     elapsed = 0;
     state = "running";
     resetFx();
@@ -1999,6 +2029,7 @@ function create({ canvas, tone = () => {}, hum = () => {}, onScore = () => {}, b
       if (state === "running") {
         cues(ms);
         hums();
+        if (deck.length) music(trackFor(deck, round.level), heat(round));
       }
       paint();
     },
