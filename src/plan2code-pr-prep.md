@@ -18,9 +18,9 @@ Read `./AGENTS.md` when it exists: its commands, its `## Test map` and anything 
 
 `<S>` is `scripts/` beside this SKILL.md (`~/.agents/skills/plan2code-pr-prep/scripts/` globally). Run from the project root. Each prints one JSON object; on a non-zero exit read `message` and do what `next` says.
 
-- `node "<S>/review-scope.mjs" [--base <branch>]`: the branch's changes against main (or master): `files` (each with `status`: `committed`, `staged`, `unstaged`, `untracked`), `counts`, `mix` (`docs`, `code`, `mixed`), `empty`, `commits`.
+- `node "<S>/review-scope.mjs" [--base <branch>]`: the branch's changes against main (or master): `files` (each with `status`: a list of one or more of `committed`, `staged`, `unstaged`, `untracked`), `counts`, `mix` (`docs`, `code`, `mixed`), `empty`, `commits`.
 - `node "<S>/test-map.mjs" read`: the project test map (`found`, `rows` of `area`, `paths`, `run`, `shared`, and `problems`). `write --rows <file.json>` saves one, only on a yes.
-- `node "<S>/test-commands.mjs" discover`: the project's commands from its config files: `suite` (the whole-suite command or null), `runners` (`cmd`, `cwd`, `covers`), `checks` (`kind` lint, types or build, with `cmd`), `builtin` (the language's own runner, only when nothing else was found).
+- `node "<S>/test-commands.mjs" discover`: the project's commands from its config files: `suite` (the whole-suite command or null), `runners` (`cmd`, `cwd`, `covers`), `checks` (`kind` lint, types or build, with `cmd`), `builtin` (the language's own runner, only when there is no suite and no runner).
 - `node "<S>/test-match.mjs" covers --stdin`: pipe review-scope's JSON in. `matched` (test map rows with their `run` and `files`), `unmatched` (`file`, `tests`, `method`), `sharedHits` (`file`, `why`).
 - `node "<S>/run-check.mjs" --cmd <c> --cwd <d> --timeout <s> --log <file>`: runs one check and prints `outcome` (`passed`, `failed`, `timeout`, `not-started` with a `reason`), `exit`, `seconds` and `tail`.
 - `node "<S>/pr-prep.mjs" template`: the repo's pull-request template: `found`, `path`, `headings`, `hasTesting`, `others`.
@@ -52,22 +52,22 @@ When your tool can start helpers (subagents) and they are not switched off for t
 
 Run `review-scope.mjs`. `empty: true` → say there is nothing on this branch to prepare, and end. A `no-base` exit → ask which branch is the trunk and rerun with `--base`.
 
-Files with a `staged`, `unstaged` or `untracked` status are uncommitted. When there are any, list them up front on one card and ask: **Include them in this run** or **Commit first**. Commit first → say the git skill commits them (`/plan2code-git`, or its dashboard card), then come back to PR Prep; end the run. Remember which was picked: the report says whether uncommitted work was included.
+Files whose `status` includes `staged`, `unstaged` or `untracked` are uncommitted. When there are any, list them up front on one card and ask: **Include them in this run** or **Commit first**. Commit first → say the git skill commits them (`/plan2code-git`, or its dashboard card), then come back to PR Prep; end the run. Remember which was picked: the report says whether uncommitted work was included.
 
 ### Step 2: Commands
 
 Run `test-map.mjs read`. With a map (`found: true`), its rows are the project's checks; mention any `problems` in one line.
 
-With no map, run `test-commands.mjs discover`. List every command it found with the folders each covers (`suite`, each of `runners` with its `cwd` and `covers`, each of `checks`), and confirm them on one card before anything runs. A correction from the person replaces what the script found. Only `builtin` found → offer it on that card as the one candidate (`cmd`, for its `language`), run only on a yes; it runs whatever tests already exist and installs nothing. Nothing found at all → ask how the project runs its tests, or go on with the checks you can see and say so.
+With no map, run `test-commands.mjs discover`. List every command it found with the folders each covers (`suite`, each of `runners` with its `cwd` and `covers`, each of `checks`), and confirm them on one card before anything runs. A correction from the person replaces what the script found. No suite or runner but a `builtin` → offer it on that card as the test candidate, beside any `checks` (`cmd`, for its `language`), run only on a yes; it runs whatever tests already exist and installs nothing. Nothing found at all → ask how the project runs its tests, or go on with the checks you can see and say so.
 
 ### Step 3: Check plan
 
-Pipe review-scope's JSON to `test-match.mjs covers --stdin`. Build the plan:
+Pipe review-scope's JSON to `test-match.mjs covers --stdin`. With a map, run `discover` once now too, for its `suite` and `checks`. Build the plan:
 
 1. **Matched rows:** every `matched` row is its own check, running its own `run`, with the files it covers as its reason.
 2. **Unmatched files:** pick checks for each `unmatched` file following `references/test-runs.md`, using its `tests` and `method` when present; mark these "picked by the agent" so the person knows they were judged. A file with no test anywhere stays a note for Step 6.
 3. **Shared ground:** any `sharedHits` entry with `why: "row"`, or a `config`, `test-helper` or `fixture` hint you judge to be real shared ground (or a widely imported module you spot), plans the full suite: the `suite` command when `discover` found one, else every map row's `run` as separate checks. Name the file and why it reaches wide.
-4. **Project checks:** add every `checks` entry from `discover` (lint, types, build) unless review-scope's `mix` is `docs`. With a map and no discover run yet, run `discover` once for them.
+4. **Project checks:** add every `checks` entry from `discover` (lint, types, build) unless review-scope's `mix` is `docs`.
 5. Every check carries a one-line reason. Drop exact duplicates (the same command in the same folder), keeping both reasons.
 6. **More than one runner** (several `runners`, or map rows run by different tools): group the plan by runner, and keep the grouping in the report.
 
@@ -110,7 +110,7 @@ Post it as its own doc holding one fenced block (` ```markdown `), so the page's
 
 Run `pr-prep.mjs pr-url`.
 
-- `pushed: true`: put the create-a-PR `url` under the description. `needsKind: true` (an unknown host, so `url` is null): say the link cannot be built for this host here, and that the git skill (`/plan2code-git`) asks what kind of host it is once and remembers it for next time.
+- `pushed: true`: put the create-a-PR `url` under the description. `url` null (`needsKind: true` for an unknown host, or a remote no link can be built for): say the link cannot be built for this host here; with `needsKind`, add that the git skill (`/plan2code-git`) asks what kind of host it is once and remembers it for next time.
 - `pushed: false`: say the branch is not pushed yet and offer to hand over to the git skill (`/plan2code-git`), which asks before it pushes. PR Prep never pushes.
 - Any other failure: say why in one line (detached HEAD, the branch is the default branch) and leave the link out.
 
@@ -124,7 +124,7 @@ Use Step 8's `spec` answer.
 
 ### Step 11: Test map offer
 
-When the run had no map, or found commands or areas the map lacks, offer to write or update it (one table under `## Test map` in `AGENTS.md`, columns `Area`, `Paths`, `Run`, `Shared`). On a yes, write the rows to a JSON file in the session folder (or the OS temp folder) and run `test-map.mjs write --rows <file>`. Never without a yes.
+When the run had no map, or found commands or areas the map lacks, offer to write or update it (one table under `## Test map` in `AGENTS.md`, columns `Area`, `Paths`, `Run`, `Shared`). On a yes, write the rows to a JSON file in the session folder (or the OS temp folder) and run `test-map.mjs write --rows <file>`. Never without a yes. No `AGENTS.md` (`write` refuses with `no-agents-md`) → offer Init (`/plan2code-init`) instead.
 
 ## Session End
 

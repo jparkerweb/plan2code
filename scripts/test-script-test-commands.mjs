@@ -23,7 +23,7 @@ test("npm project: suite, lint, types and build checks", () => {
     { kind: "types", cmd: "npm run typecheck" },
     { kind: "build", cmd: "npm run build" },
   ]);
-  assert.deepEqual(r.coverage, [{ runner: "node", cmd: "node --test --experimental-test-coverage --test-reporter=lcov --test-reporter-destination=<out>", cwd: ".", reads: "lcov" }]);
+  assert.deepEqual(r.coverage, [{ runner: "node", cmd: "node --test --experimental-test-coverage --test-reporter=lcov --test-reporter-destination=\"<out>\"", cwd: ".", reads: "lcov" }]);
   assert.equal(r.builtin, null);
 });
 
@@ -75,6 +75,14 @@ test("pnpm workspace: packages lines and the { packages } form", () => {
     { cmd: "pnpm test", cwd: "libs/core", covers: ["libs/core/**"] },
   ], "a ! line excludes its folders");
   assert.deepEqual(r.coverage, [{ runner: "jest", cmd: "npx jest --coverage --coverageReporters=lcov", cwd: "libs/core", reads: "lcov" }]);
+  const inline = discover({
+    "package.json": { name: "root" },
+    "pnpm-lock.yaml": "",
+    "pnpm-workspace.yaml": "packages: ['apps/*', \"!apps/skip\"]\n",
+    "apps/web/package.json": { scripts: { test: "vitest" } },
+    "apps/skip/package.json": { scripts: { test: "vitest" } },
+  });
+  assert.deepEqual(inline.runners, [{ cmd: "pnpm test", cwd: "apps/web", covers: ["apps/web/**"] }], "an inline packages list works too");
   const obj = discover({ "package.json": { workspaces: { packages: ["pkgs/*"] } }, "pkgs/x/package.json": { scripts: { test: "t" } } });
   assert.deepEqual(obj.runners, [{ cmd: "npm test", cwd: "pkgs/x", covers: ["pkgs/x/**"] }]);
 });
@@ -85,7 +93,7 @@ test("Go module with a nested second module", () => {
     { cmd: "go test ./...", cwd: ".", covers: ["**"] },
     { cmd: "go test ./...", cwd: "tools", covers: ["tools/**"] },
   ]);
-  assert.deepEqual(r.coverage[0], { runner: "go", cmd: "go test -coverprofile=<out> ./... && go tool cover -func=<out>", cwd: ".", reads: "go-func" });
+  assert.deepEqual(r.coverage[0], { runner: "go", cmd: "go test -coverprofile=\"<out>\" ./... && go tool cover -func=\"<out>\"", cwd: ".", reads: "go-func" });
   assert.equal(r.builtin, null);
 });
 
@@ -127,10 +135,10 @@ test("coverage is listed only with its add-on present", () => {
   assert.deepEqual(vitest({}).coverage, []);
 
   const pytest = (deps) => discover({ "pyproject.toml": `[project]\ndependencies = [${deps}]\n` });
-  assert.deepEqual(pytest('"pytest", "pytest-cov"').coverage, [{ runner: "pytest", cmd: "python -m pytest --cov --cov-report=lcov:<out>", cwd: ".", reads: "lcov" }]);
+  assert.deepEqual(pytest('"pytest", "pytest-cov"').coverage, [{ runner: "pytest", cmd: "python -m pytest --cov --cov-report=lcov:\"<out>\"", cwd: ".", reads: "lcov" }]);
   assert.deepEqual(pytest('"pytest"').coverage, []);
   const nested = discover({ "requirements-dev.txt": "pytest-cov\n", "svc/setup.cfg": "[tool:pytest]\n" });
-  assert.deepEqual(nested.coverage, [{ runner: "pytest", cmd: "python -m pytest --cov --cov-report=lcov:<out>", cwd: "svc", reads: "lcov" }], "pytest-cov listed in a folder above the runner");
+  assert.deepEqual(nested.coverage, [{ runner: "pytest", cmd: "python -m pytest --cov --cov-report=lcov:\"<out>\"", cwd: "svc", reads: "lcov" }], "pytest-cov listed in a folder above the runner");
 
   const dotnet = (ref) => discover({ "App.Tests/App.Tests.csproj": `<Project><ItemGroup>${ref}</ItemGroup></Project>` });
   assert.deepEqual(dotnet('<PackageReference Include="coverlet.collector" Version="6" />').coverage, [{ runner: "dotnet", cmd: 'dotnet test --collect:"XPlat Code Coverage"', cwd: "App.Tests", reads: "lcov" }]);

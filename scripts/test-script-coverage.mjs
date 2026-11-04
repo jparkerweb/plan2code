@@ -135,6 +135,16 @@ test("coverage read --go-func: functions grouped by file, the module path droppe
   });
 });
 
+test("coverage read --go-func: a nested module's files read from its own folder", () => {
+  const dir = tmp("cov-go-nested");
+  write(dir, "go.mod", "module example.com/shop\n\ngo 1.22\n");
+  write(dir, "tools/go.mod", "module example.com/shop/tools\n\ngo 1.22\n");
+  write(dir, "cover.txt", "example.com/shop/tools/gen/gen.go:5:\t\tRun\t\t50.0%\nexample.com/shop/cart/cart.go:3:\t\tAdd\t\t100.0%\n");
+  const r = C(dir, "read", "--go-func", "cover.txt");
+  assert.equal(r.code, 0, r.stderr);
+  assert.deepEqual(r.json.files.map((f) => f.file), ["cart/cart.go", "tools/gen/gen.go"]);
+});
+
 test("coverage read: a missing file is exit 3", () => {
   const dir = tmp("cov-missing");
   const r = C(dir, "read", "--lcov", "nope.info");

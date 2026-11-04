@@ -26,10 +26,12 @@ test-commands.mjs: a project's test and check commands. JSON on stdout.
                 the root folder's is cwd "." and covers "**"
       checks    [{ kind, cmd }] kind is lint, types or build
       coverage  [{ runner, cmd, cwd, reads }] only for tools already present;
-                <out> in cmd is a placeholder for the output file; reads is
+                <out> in cmd (already in quotes, so a path with spaces
+                works) is a placeholder for the output file; reads is
                 lcov or go-func
-      builtin   { language, cmd, others? } the language's own runner, only when
-                there is no suite and no runner; otherwise null
+      builtin   { language, cmd, others? } the language's own runner (node or
+                python; Go and Rust always show as runners), only when there
+                is no suite and no runner; otherwise null
 
 Only reads files. Exit: 0 ok · 2 bad arguments · 3 no such folder.
 `;
@@ -43,7 +45,8 @@ const LANG_EXT = {
   go: [".go"],
   rust: [".rs"],
 };
-const BUILTIN = { node: "node --test", python: "python -m unittest", go: "go test ./...", rust: "cargo test" };
+// Node and Python only: a go.mod or a Cargo.toml always gives a runner above.
+const BUILTIN = { node: "node --test", python: "python -m unittest" };
 
 function readJson(file) {
   const text = readText(file);
@@ -115,7 +118,11 @@ function workspaceFolders(root, pkg, dirs) {
   if (pnpm !== null) {
     let inPackages = false;
     for (const line of pnpm.split(/\r?\n/)) {
-      if (/^packages\s*:/.test(line)) inPackages = true;
+      const inline = line.match(/^packages\s*:\s*\[([^\]]*)\]/);
+      if (inline) {
+        globs.push(...inline[1].split(",").map((g) => g.trim().replace(/^['"]|['"]$/g, "")));
+        inPackages = false;
+      } else if (/^packages\s*:/.test(line)) inPackages = true;
       else if (/^\S/.test(line)) inPackages = false;
       else if (inPackages) {
         const m = line.match(/^\s*-\s*['"]?([^'"#]+?)['"]?\s*(?:#.*)?$/);
@@ -183,7 +190,7 @@ export function discover(root) {
     add(runners, { cmd: `${pm} test`, cwd, covers: covers(cwd) });
     const d = deps(p);
     if (/\bnode\s+--test\b/.test(test)) {
-      add(coverage, { runner: "node", cmd: "node --test --experimental-test-coverage --test-reporter=lcov --test-reporter-destination=<out>", cwd, reads: "lcov" });
+      add(coverage, { runner: "node", cmd: "node --test --experimental-test-coverage --test-reporter=lcov --test-reporter-destination=\"<out>\"", cwd, reads: "lcov" });
     }
     if (d.jest || /\bjest\b/.test(test)) add(coverage, { runner: "jest", cmd: "npx jest --coverage --coverageReporters=lcov", cwd, reads: "lcov" });
     if (Object.keys(d).some((k) => k.startsWith("@vitest/coverage-"))) add(coverage, { runner: "vitest", cmd: "npx vitest run --coverage --coverage.reporter=lcov", cwd, reads: "lcov" });
@@ -197,7 +204,7 @@ export function discover(root) {
     const before = runners.length;
     if (files.includes("go.mod")) {
       add(runners, { cmd: "go test ./...", cwd, covers: covers(cwd) });
-      add(coverage, { runner: "go", cmd: "go test -coverprofile=<out> ./... && go tool cover -func=<out>", cwd, reads: "go-func" });
+      add(coverage, { runner: "go", cmd: "go test -coverprofile=\"<out>\" ./... && go tool cover -func=\"<out>\"", cwd, reads: "go-func" });
     }
     if (files.includes("Cargo.toml")) {
       const cargo = readText(path.join(abs, "Cargo.toml")) || "";
@@ -210,7 +217,7 @@ export function discover(root) {
     if (["pyproject.toml", "setup.cfg", "pytest.ini", "tox.ini"].some((f) => files.includes(f))) {
       if (usesPytest(abs, files)) {
         add(runners, { cmd: "python -m pytest", cwd, covers: covers(cwd) });
-        if (usesPytestCov(root, cwd, dirs)) add(coverage, { runner: "pytest", cmd: "python -m pytest --cov --cov-report=lcov:<out>", cwd, reads: "lcov" });
+        if (usesPytestCov(root, cwd, dirs)) add(coverage, { runner: "pytest", cmd: "python -m pytest --cov --cov-report=lcov:\"<out>\"", cwd, reads: "lcov" });
       } else add(runners, { cmd: "python -m unittest", cwd, covers: covers(cwd) });
     }
     const dotnet = files.some((f) => /\.(csproj|sln)$/i.test(f));
@@ -234,8 +241,6 @@ export function discover(root) {
     const present = [];
     if (pkg || rootFiles.includes("package.json")) present.push("node");
     if (counts.python) present.push("python");
-    if ([...dirs.values()].some((f) => f.includes("go.mod"))) present.push("go");
-    if ([...dirs.values()].some((f) => f.includes("Cargo.toml"))) present.push("rust");
     if (present.length) {
       present.sort((a, b) => counts[b] - counts[a]);
       const [first, ...rest] = present;

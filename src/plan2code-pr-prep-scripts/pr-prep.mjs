@@ -9,7 +9,8 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { EXIT, consoleModule, fail, gitRepo, out, parseArgs, run } from "./common.mjs";
+import { fileURLToPath } from "node:url";
+import { EXIT, consoleModule, fail, gitRepo, out, parseArgs, readText, run } from "./common.mjs";
 
 const USAGE = `
 pr-prep.mjs: read-only facts for PR Prep. JSON on stdout.
@@ -32,7 +33,9 @@ pr-prep.mjs: read-only facts for PR Prep. JSON on stdout.
       The create-a-pull-request link for --branch (the current branch) into
       --base (the default branch). Prints { ok, pushed: true, url, host, kind,
       needsKind, branch, base, ahead }; needsKind: the host is unknown and has
-      no saved answer, so url is null. A branch not on a remote yet prints
+      no saved answer, so url is null. url is also null for a remote no link
+      can be built for (a path or ssh alias, or a host saved as none). A
+      branch not on a remote yet prints
       { ok, pushed: false, branch, next } with exit 0.
 
   node pr-prep.mjs spec [--branch <b>] [--base <b>] [--root <dir>]
@@ -46,8 +49,9 @@ pr-prep.mjs: read-only facts for PR Prep. JSON on stdout.
              none:   nothing fits; match is null
 
 Exit: 0 ok · 1 crash · 2 bad arguments · 3 not a git repository (pr-url,
-spec) · 4 no such branch, no base, or the branch is the base (pr-url) ·
-5 detached HEAD or git too old (pr-url).
+spec) or an unreadable template (template) · 4 no such branch, no base,
+or the branch is the base (pr-url) · 5 detached HEAD (pr-url) or git
+missing or too old (pr-url, spec).
 `;
 
 /* ------------------------------------------------------------- template */
@@ -117,7 +121,9 @@ function template({ root }) {
     for (const m of mds) if (!found.includes(m)) found.push(m);
   }
   if (!found.length) return out({ ok: true, found: false, path: null, headings: [], hasTesting: false, others: [] });
-  const headings = headingsOf(fs.readFileSync(path.join(root, found[0]), "utf8"));
+  const text = readText(path.join(root, found[0]));
+  if (text === null) fail(EXIT.NOT_FOUND, "unreadable-template", `Cannot read ${found[0]}.`, "Check the file's permissions, or write the description without the template.");
+  const headings = headingsOf(text);
   out({ ok: true, found: true, path: found[0], headings, hasTesting: headings.some((h) => TESTING.test(h)), others: found.slice(1) });
 }
 
@@ -126,14 +132,14 @@ function template({ root }) {
 let R;
 
 function repoRoot(root) {
+  const floor = R.gitFloor();
+  if (!floor.ok) fail(EXIT.REFUSED, "git-too-old", floor.message, "Install or update git (2.23 or newer), then try again.");
   const top = R.git(["rev-parse", "--show-toplevel"], root);
   if (!top.ok || !top.out) fail(EXIT.NOT_FOUND, "not-a-repo", `${root} is not inside a git repository.`, "Run PR Prep from inside the project's git repository.");
   return path.resolve(top.out);
 }
 
 async function prUrlCmd({ root, branch, base }) {
-  const floor = R.gitFloor();
-  if (!floor.ok) fail(EXIT.REFUSED, "git-too-old", floor.message, "Install or update git (2.23 or newer), then try again.");
   const repo = repoRoot(root);
   let link;
   try {
@@ -228,7 +234,7 @@ function spec({ root, branch, base }) {
 
 const COMMANDS = { template, "pr-url": prUrlCmd, spec };
 
-run(USAGE, async (argv) => {
+async function main(argv) {
   const args = parseArgs(argv, { values: ["root", "branch", "base"] });
   const [cmd, ...extra] = args._;
   const names = Object.keys(COMMANDS).join(", ");
@@ -238,4 +244,14 @@ run(USAGE, async (argv) => {
   args.root = path.resolve(args.root || ".");
   if (cmd !== "template") R = await gitRepo();
   return COMMANDS[cmd](args);
-});
+}
+
+// Run as a script; imported, do nothing.
+const isMain = (() => {
+  try {
+    return fs.realpathSync(process.argv[1]) === fs.realpathSync(fileURLToPath(import.meta.url));
+  } catch {
+    return false;
+  }
+})();
+if (isMain) run(USAGE, main);

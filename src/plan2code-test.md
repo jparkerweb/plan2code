@@ -19,7 +19,7 @@ Read `./AGENTS.md` when it exists: its commands, its `## Test map` and anything 
 `<S>` is `scripts/` beside this SKILL.md (`~/.agents/skills/plan2code-test/scripts/` globally). Run from the project root. Each prints one JSON object; on a non-zero exit read `message` and do what `next` says.
 
 - `node "<S>/test-map.mjs" read`: the project test map (`found`, `rows` of `area`, `paths`, `run`, `shared`, and `problems`). `write --rows <file.json>` saves one, only on a yes.
-- `node "<S>/test-commands.mjs" discover`: the project's commands from its config files: `suite`, `runners` (`cmd`, `cwd`, `covers`), `checks`, `coverage` (`runner`, `cmd`, some with an `<out>` placeholder, `cwd`, `reads`: `lcov` or `go-func`), `builtin` (the language's own runner, only when nothing else was found).
+- `node "<S>/test-commands.mjs" discover`: the project's commands from its config files: `suite`, `runners` (`cmd`, `cwd`, `covers`), `checks`, `coverage` (`runner`, `cmd`, some with an `<out>` placeholder, `cwd`, `reads`: `lcov` or `go-func`), `builtin` (the language's own runner, only when there is no suite and no runner).
 - `node "<S>/test-match.mjs" gaps --scope branch|path|all [--path <p>]`: source files no test covers (`file`, `area`, `runner`, `commits90d`, `lastTouched`), ranked newest first, then by recent commits; `capped` when it stopped at 2,000 files.
 - `node "<S>/test-match.mjs" nearest --file <f>`: up to three existing test files to read for the project's style.
 - `node "<S>/run-check.mjs" --cmd <c> --cwd <d> --timeout <s> --log <file>`: runs one command and prints `outcome` (`passed`, `failed`, `timeout`, `not-started` with a `reason`), `exit`, `seconds` and `tail`.
@@ -64,7 +64,7 @@ Every run, ask where to look, on one card:
 Run `test-map.mjs read` and `test-commands.mjs discover`. With a map (`found: true`), its rows are the project's runners; mention any `problems` in one line.
 
 - **No map:** list every command `discover` found with the folders each covers (`suite`, each of `runners` with its `cwd` and `covers`), and confirm them on one card before anything runs. A correction from the person replaces what the script found.
-- **No runner at all, `builtin` set:** offer that runner, naming it and the command it would add (for Node, a `"test": "node --test"` script in `package.json`; for Python `python -m unittest`, Go `go test ./...`, Rust `cargo test`). Go ahead only on a yes; on a yes add that one command and nothing else.
+- **No runner at all, `builtin` set:** offer that runner, naming it and the command it would add (for Node, a `"test": "node --test"` script in `package.json`; for Python `python -m unittest`). Go ahead only on a yes; on a yes add that one command and nothing else.
 - **No runner and no `builtin`:** stop. Say the project has no test runner and none built into its language, so there is nothing to write tests for here; end the run.
 
 ### Step 3: Gaps
@@ -73,7 +73,7 @@ Run `test-match.mjs gaps --scope <branch|path|all>` (with `--path <p>` for a nam
 
 **Coverage, only when the project already has it.** When `discover` lists a `coverage` entry for a runner in scope, offer it on one card naming the command and what it covers. Never run it without a yes.
 
-- **Yes:** when `cmd` has an `<out>` placeholder, fill it with a file in the session folder (`open` printed it; in the terminal, the OS temp folder). Run it with `run-check.mjs` in its `cwd`, with a `--log` file. Then read the output with `coverage.mjs read`, per `reads`: `--lcov <out>` when the command wrote to `<out>`, else `--lcov <cwd>/coverage/lcov.info` (Jest's and Vitest's default); `--go-func <log>` for Go, whose `go tool cover -func` table is printed into the run's log. Files at 0% or under 50% that matching called covered become extra gaps, method `coverage`. A coverage run that fails or times out, or a `coverage.mjs read` that fails (exit 3 or 4, as for .NET's Cobertura output): say so in one line, and matching alone continues.
+- **Yes:** when `cmd` has an `<out>` placeholder (already quoted), replace just `<out>` with a file in the session folder (`open` printed it; in the terminal, the OS temp folder). Run it with `run-check.mjs` in its `cwd`, with a `--log` file. Then read the output with `coverage.mjs read`, per `reads`: `--lcov <out>` when the command wrote to `<out>`, else `--lcov <cwd>/coverage/lcov.info` (Jest's and Vitest's default); `--go-func <log>` for Go, whose `go tool cover -func` table is printed into the run's log. Files at 0% or under 50% that matching called covered become extra gaps, method `coverage`. A coverage run that fails or times out, or a `coverage.mjs read` that fails (exit 3 or 4, as for .NET's Cobertura output): say so in one line, and matching alone continues.
 - **No:** matching alone continues, and the plan says coverage was skipped.
 
 Every gap carries the method that found it (`matching` or `coverage`), ranked as `gaps` ranks them; coverage gaps follow the matching ones, lowest percent first. No gaps at all → say every source file in scope has a test, offer the test map (Step 8) when the run had none, and end.
@@ -179,7 +179,7 @@ A new test that fails because the source is wrong is never "fixed" by changing t
 
 ### Step 8: Test map offer
 
-When the run had no map, or found runners or areas the map lacks, offer to write or update it (one table under `## Test map` in `AGENTS.md`, columns `Area`, `Paths`, `Run`, `Shared`). On a yes, write the rows to a JSON file in the session folder (or the OS temp folder) and run `test-map.mjs write --rows <file>`. Never without a yes.
+When the run had no map, or found runners or areas the map lacks, offer to write or update it (one table under `## Test map` in `AGENTS.md`, columns `Area`, `Paths`, `Run`, `Shared`). On a yes, write the rows to a JSON file in the session folder (or the OS temp folder) and run `test-map.mjs write --rows <file>`. Never without a yes. No `AGENTS.md` (`write` refuses with `no-agents-md`) → offer Init (`/plan2code-init`) instead.
 
 ## Session End
 

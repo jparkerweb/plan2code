@@ -23,7 +23,7 @@ run-check.mjs: run one command and classify its outcome. JSON on stdout.
       { ok, cmd, cwd, outcome, exit, signal, seconds, tail, log }.
       outcome   passed (exit 0) · failed (any other exit) · timeout ·
                 not-started (with reason: spawn-error, command-not-found,
-                cwd-missing)
+                cwd-missing, log-unwritable)
       tail      the output's last 60 lines, stdout and stderr interleaved,
                 each cut at 400 characters
       log       the file holding the full output, when --log was given
@@ -71,9 +71,22 @@ export function runCheck({ cmd, cwd, timeout, log }) {
     let timedOut = false;
     let done = false;
     let logStream = null;
+    let logFailed = false;
     if (logFile) {
-      fs.mkdirSync(path.dirname(logFile), { recursive: true });
-      logStream = fs.createWriteStream(logFile);
+      // Opened before the run, so a log that cannot be written stops the
+      // check up front instead of crashing it halfway with no JSON.
+      let fd;
+      try {
+        fs.mkdirSync(path.dirname(logFile), { recursive: true });
+        fd = fs.openSync(logFile, "w");
+      } catch {
+        resolve({ ...base, outcome: "not-started", reason: "log-unwritable", exit: null, signal: null, seconds: 0, tail: [], log: null });
+        return;
+      }
+      logStream = fs.createWriteStream(null, { fd });
+      logStream.on("error", () => {
+        logFailed = true;
+      });
     }
     const child = spawn(cmd, { cwd: abs, shell: true, windowsHide: true, detached: process.platform !== "win32", stdio: ["ignore", "pipe", "pipe"] });
     const take = (chunk, isErr) => {
@@ -83,7 +96,7 @@ export function runCheck({ cmd, cwd, timeout, log }) {
       // the Windows "not recognized" check.
       if (output.length > 1_000_000) output = output.slice(-TAIL_LINES * LINE_CAP * 4);
       if (isErr && stderrHead.length < 65536) stderrHead += s;
-      if (logStream) logStream.write(chunk);
+      if (logStream && !logFailed) logStream.write(chunk);
     };
     child.stdout.on("data", (c) => take(c, false));
     child.stderr.on("data", (c) => take(c, true));
@@ -105,8 +118,9 @@ export function runCheck({ cmd, cwd, timeout, log }) {
       else if (code === 0) outcome = "passed";
       else if (code === 127 || code === 9009 || NOT_RECOGNIZED.test(stderrHead)) [outcome, reason] = ["not-started", "command-not-found"];
       else outcome = "failed";
-      const result = { ...base, outcome, ...(reason ? { reason } : {}), exit: typeof code === "number" ? code : null, signal: signal || null, seconds, tail: tailOf(output), log: logFile };
-      if (logStream) logStream.end(() => resolve(result));
+      const result = { ...base, outcome, ...(reason ? { reason } : {}), exit: typeof code === "number" ? code : null, signal: signal || null, seconds, tail: tailOf(output), log: logFailed ? null : logFile };
+      // An errored stream never finishes, so it is not waited on.
+      if (logStream && !logFailed) logStream.end(() => resolve(result));
       else resolve(result);
     };
 

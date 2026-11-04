@@ -481,7 +481,7 @@ test("every console workflow has its notes, and its skill's Interface reads them
     init: "init", "init-update": "init", pathfinder: "pathfinder", plan: "plan", "revise-plan": "revise-plan",
     document: "document", implement: "implement", "implement-review": "implement", "quick-task": "quick-task",
     review: "review", finalize: "finalize", handoff: "handoff", changelog: "changelog", git: "git", xray: "xray",
-    diagnose: "diagnose",
+    diagnose: "diagnose", "pr-prep": "pr-prep", test: "test",
   };
   const skills = fs.readdirSync(path.join(ROOT, "src")).filter((f) => /^plan2code(-.*)?\.md$/.test(f));
   for (const f of skills) {
@@ -750,7 +750,7 @@ test("long task lines, long words, a narrow board and a narrow Ask pane never wi
 
 test("over the git board a note box grows with its text, and the no-repo note only points above when a card is there", () => {
   const css = joinedCss();
-  assert.match(css, /\.git-cards > \.card textarea \{ field-sizing: content; max-height: 50vh; \}/);
+  assert.match(css, /\.git-cards > \.card \.md-host \{ min-height: 0; max-height: 50vh; \}/);
   const view = fs.readFileSync(path.join(ROOT, "src", "web-console", "public", "git-board-view.js"), "utf8");
   const fn = view.slice(view.indexOf("export function drawGitBoard("), view.indexOf("function header("));
   assert.ok(fn.includes("ctx.hasCard"), "the note checks for a card first");

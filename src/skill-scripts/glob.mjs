@@ -102,8 +102,13 @@ export function globToRegExp(glob) {
   return new RegExp(`^${out}$`);
 }
 
+// Compiled globs, by glob text (null for an unsupported one): a map's few
+// globs are tested against every file in a run.
+const compiled = new Map();
+
 /** Does the path match the glob? Unsupported globs match nothing. */
 export function matchGlob(glob, p) {
-  if (unsupported(glob)) return false;
-  return globToRegExp(glob).test(fold(toPosix(p)));
+  if (!compiled.has(glob)) compiled.set(glob, unsupported(glob) ? null : globToRegExp(glob));
+  const re = compiled.get(glob);
+  return re !== null && re.test(fold(toPosix(p)));
 }

@@ -8,6 +8,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { EXIT, fail, out, parseArgs, run } from "./common.mjs";
 
 const USAGE = `
@@ -25,8 +26,10 @@ coverage.mjs: per-file coverage from a coverage tool's output. JSON on stdout.
                  sums every file.
         go-func  "<import path>/<file>.go:<line>:  <func>  <pct>%" lines,
                  grouped by file: pct is the mean of the file's functions,
-                 lines and hit are null. The module path from --root's go.mod
-                 is dropped so files read as project paths. The "total:" line
+                 lines and hit are null. The module path of the go.mod that
+                 owns each file (any under --root, four folders deep) is
+                 swapped for that go.mod's folder, so files read as project
+                 paths, a nested module's included. The "total:" line
                  is not a file: it is reported as total.
       A file with no lines has pct null.
 
@@ -90,19 +93,38 @@ function readLcov(text, root) {
 const GO_LINE = /^(.+\.go):\d+:\s+\S+\s+([\d.]+)%\s*$/;
 const GO_TOTAL = /^total:\s+(?:\(statements\)\s+)?([\d.]+)%\s*$/;
 
-function goModule(root) {
-  try {
-    const m = fs.readFileSync(path.join(root, "go.mod"), "utf8").match(/^\s*module\s+(\S+)/m);
-    return m ? m[1].replace(/^"|"$/g, "") : null;
-  } catch {
-    return null;
-  }
+const GO_SKIP = new Set([".git", "node_modules", "vendor", "testdata"]);
+
+// Every Go module under root (four folders deep, as discover walks), longest
+// module path first, so a nested module (tools/go.mod) owns its own files.
+function goModules(root) {
+  const found = [];
+  const walk = (dir, depth) => {
+    let entries;
+    try {
+      entries = fs.readdirSync(path.join(root, dir), { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const e of entries) {
+      if (e.isFile() && e.name === "go.mod") {
+        try {
+          const m = fs.readFileSync(path.join(root, dir, e.name), "utf8").match(/^\s*module\s+(\S+)/m);
+          if (m) found.push({ dir, mod: m[1].replace(/^"|"$/g, "") });
+        } catch {}
+      } else if (e.isDirectory() && depth < 4 && !GO_SKIP.has(e.name) && !e.name.startsWith(".")) {
+        walk(dir ? `${dir}/${e.name}` : e.name, depth + 1);
+      }
+    }
+  };
+  walk("", 0);
+  return found.sort((a, b) => b.mod.length - a.mod.length);
 }
 
 function readGoFunc(text, root) {
   const lines = text.split(/\r?\n/).map((l) => l.trim());
   if (!lines.some((l) => GO_LINE.test(l))) return null;
-  const mod = goModule(root);
+  const mods = goModules(root);
   const groups = new Map();
   let total = null;
   for (const line of lines) {
@@ -114,7 +136,8 @@ function readGoFunc(text, root) {
     const m = line.match(GO_LINE);
     if (!m) continue;
     let file = slash(m[1]);
-    if (mod && file.startsWith(`${mod}/`)) file = file.slice(mod.length + 1);
+    const own = mods.find((g) => file.startsWith(`${g.mod}/`));
+    if (own) file = `${own.dir ? `${own.dir}/` : ""}${file.slice(own.mod.length + 1)}`;
     else file = relTo(root, m[1]);
     (groups.get(file) || groups.set(file, []).get(file)).push(Number(m[2]));
   }
@@ -125,7 +148,7 @@ function readGoFunc(text, root) {
 
 /* ------------------------------------------------------------------ main */
 
-run(USAGE, async (argv) => {
+async function main(argv) {
   const args = parseArgs(argv, { values: ["lcov", "go-func", "root"] });
   const [cmd, ...extra] = args._;
   if (!cmd) fail(EXIT.USAGE, "missing-command", "A subcommand is required: read.", "Run with --help for usage.");
@@ -152,4 +175,14 @@ run(USAGE, async (argv) => {
     );
   }
   out({ ok: true, format, ...read });
-});
+}
+
+// Run as a script; imported, do nothing.
+const isMain = (() => {
+  try {
+    return fs.realpathSync(process.argv[1]) === fs.realpathSync(fileURLToPath(import.meta.url));
+  } catch {
+    return false;
+  }
+})();
+if (isMain) run(USAGE, main);

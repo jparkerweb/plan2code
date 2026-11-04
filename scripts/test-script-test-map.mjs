@@ -59,6 +59,24 @@ test("test-map read: a section linking to .agents-docs/AGENTS-test-map.md reads 
   assert.equal(r.json.rows[0].area, "Launcher", "follows exactly one link, never a link from the linked file");
   const bare = project("## Test map\n\nSee [map](.agents-docs/AGENTS-test-map.md).\n", { ".agents-docs/AGENTS-test-map.md": TABLE });
   assert.equal(T(bare, ["read"]).json.source, ".agents-docs/AGENTS-test-map.md", "the ](.agents-docs/...) form works too");
+  const nested = project("## Test map\n\nSee [map](./.agents-docs/testing/map.md).\n", { ".agents-docs/testing/map.md": TABLE });
+  const n = T(nested, ["read"]);
+  assert.equal(n.json.source, ".agents-docs/testing/map.md", "a link into a subfolder of .agents-docs/ is inside it");
+  assert.deepEqual(n.json.problems, []);
+  const escape = project("## Test map\n\nSee [map](./.agents-docs/../docs/map.md).\n", { "docs/map.md": TABLE });
+  assert.match(T(escape, ["read"]).json.problems[0], /outside \.agents-docs\//, "a link that climbs out is still outside");
+  const prose = project("## Test map\n\nSee [contributing](./CONTRIBUTING.md), then [map](./.agents-docs/AGENTS-test-map.md).\n", { ".agents-docs/AGENTS-test-map.md": TABLE });
+  const p = T(prose, ["read"]);
+  assert.equal(p.json.source, ".agents-docs/AGENTS-test-map.md", "a prose link before the docs link does not hide it");
+  assert.deepEqual(p.json.problems, []);
+});
+
+test("test-map write: a new nested linked file links back to AGENTS.md from its own depth", () => {
+  const dir = project("## Test map\n\nSee [map](./.agents-docs/testing/map.md).\n");
+  rowsFile(dir, ROWS);
+  const w = T(dir, ["write", "--rows", "rows.json"]);
+  assert.equal(w.code, 0, w.stderr);
+  assert.match(read(dir, ".agents-docs/testing/map.md"), /\[AGENTS\.md\]\(\.\.\/\.\.\/AGENTS\.md\)/);
 });
 
 test("test-map read and write: a link outside .agents-docs/ is a problem, and write refuses", () => {
@@ -176,6 +194,10 @@ test("test-map write: a heading with no table gets one after its first paragraph
   rowsFile(bare, ROWS);
   assert.equal(T(bare, ["write", "--rows", "rows.json"]).code, 0);
   assert.match(read(bare, "AGENTS.md"), /^## Test map\n\n\| Area [\s\S]*\| yes \|\n\n## Next\n$/, "directly under a heading with no paragraph");
+  const tag = project("## Test map\n\n#123 tracks this.\n\n## Next\n");
+  rowsFile(tag, ROWS);
+  assert.equal(T(tag, ["write", "--rows", "rows.json"]).code, 0);
+  assert.match(read(tag, "AGENTS.md"), /^## Test map\n\n#123 tracks this\.\n\n\| Area /, "a line like #123 is a paragraph, not a heading");
 });
 
 test("test-map write: an existing table is replaced in place, every other line byte-identical", () => {
@@ -236,6 +258,16 @@ test("test-map write: invalid rows are exit 4 with the row index; no AGENTS.md i
   assert.equal(T(none, ["write", "--rows", "rows.json"]).code, 3);
   assert.ok(!fs.existsSync(path.join(none, "AGENTS.md")));
   assert.equal(T(dir, ["write"]).code, 2, "--rows is required");
+  for (const [row, why] of [
+    [{ area: "A", paths: ["src/[ab]/**"], run: "x", shared: false }, /unsupported glob/],
+    [{ area: "A", paths: ["src/**"], run: "npm `t`", shared: false }, /backtick or line break/],
+    [{ area: "A\nB", paths: ["src/**"], run: "x", shared: false }, /backtick or line break/],
+  ]) {
+    rowsFile(dir, [row]);
+    const w = T(dir, ["write", "--rows", "rows.json"]);
+    assert.equal(w.code, 4);
+    assert.match(w.json.message, why);
+  }
 });
 
 /* ------------------------------------------------------------------ glob */

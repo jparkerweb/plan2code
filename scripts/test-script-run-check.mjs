@@ -50,6 +50,11 @@ test("run-check: not-started for a made-up command and for a missing --cwd", () 
   assert.equal(c.code, 0, c.stderr);
   assert.equal(c.json.outcome, "not-started");
   assert.equal(c.json.reason, "cwd-missing");
+  const folder = tmp("check-log-dir");
+  const l = runScript("plan2code-pr-prep", "run-check.mjs", ["--cmd", `${NODE} -e "process.exit(0)"`, "--log", folder]);
+  assert.equal(l.code, 0, l.stderr);
+  assert.equal(l.json.outcome, "not-started", "a --log that is a folder stops the check with JSON, not a crash");
+  assert.equal(l.json.reason, "log-unwritable");
 });
 
 test("run-check: timeout kills the whole process tree", async () => {

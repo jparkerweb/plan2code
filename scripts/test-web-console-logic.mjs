@@ -2019,8 +2019,8 @@ test("workspace cursor never moves backwards, and only changes past it are pendi
   }
 });
 
-test("subagents: only the thirteen opted-in workflows offer the switch", () => {
-  for (const w of ["init", "init-update", "pathfinder", "plan", "revise-plan", "document", "implement", "implement-review", "quick-task", "review", "finalize", "xray", "diagnose"]) {
+test("subagents: only the fifteen opted-in workflows offer the switch", () => {
+  for (const w of ["init", "init-update", "pathfinder", "plan", "revise-plan", "document", "implement", "implement-review", "quick-task", "review", "finalize", "xray", "diagnose", "pr-prep", "test"]) {
     assert.equal(offered(w), true, w);
     assert.ok(defaultInstruction(w).length > 0, `${w} has a default instruction`);
   }
@@ -2028,7 +2028,7 @@ test("subagents: only the thirteen opted-in workflows offer the switch", () => {
     assert.equal(offered(w), false, String(w));
     assert.equal(defaultInstruction(w), "");
   }
-  assert.equal(Object.keys(SUBAGENT_WORKFLOWS).length, 13);
+  assert.equal(Object.keys(SUBAGENT_WORKFLOWS).length, 15);
   assert.deepEqual(defaultSetting("review"), { workflow: "review", on: true, instruction: null, max: 3, strength: "balanced" });
   assert.equal(defaultSetting("changelog").on, false, "a skill without the switch is never on");
   assert.equal(effectiveInstruction({ workflow: "review", instruction: "  " }), defaultInstruction("review"));
@@ -2318,13 +2318,14 @@ test("meter: the weights and labels built from the skill list are the ones writt
     "pathfinder-chart": 2, "pathfinder-question": 0, "pathfinder-research": 1,
     plan: 2, "revise-plan": 1, document: 2, "implement-phase": 2, "implement-review-phase": 3,
     review: 2, "quick-task": 1, init: 2, "init-update": 2, finalize: 1, handoff: 0, git: 1,
-    "git-commits": 0, "git-conflict": 1, changelog: 1, xray: 1, diagnose: 1,
+    "git-commits": 0, "git-conflict": 1, changelog: 1, xray: 1, diagnose: 1, "pr-prep": 1, test: 1,
   });
   assert.deepEqual({ ...LAUNCH_LABELS }, {
     plan: "Plan started", "revise-plan": "Revise plan started", document: "Document started",
     review: "Review started", "quick-task": "Quick task started", init: "Init started",
     "init-update": "Init update started", finalize: "Finalize started", git: "Git started",
     changelog: "Changelog started", xray: "X-ray started", diagnose: "Diagnose started",
+    "pr-prep": "PR Prep started", test: "Test started",
   });
   assert.deepEqual({ ...RUN_LABELS }, {
     "pathfinder-chart": "Pathfinder map written", "pathfinder-question": "Pathfinder question settled",
@@ -2334,6 +2335,7 @@ test("meter: the weights and labels built from the skill list are the ones writt
     "quick-task": "Quick task built", init: "Init run", "init-update": "Init update run",
     finalize: "Finalize run", handoff: "Handoff written", git: "Git run", "git-commits": "Commits in Git",
     "git-conflict": "Git conflict help", changelog: "Changelog run", xray: "X-ray run", diagnose: "Diagnose run",
+    "pr-prep": "PR Prep run", test: "Test run",
   });
   for (const t of [WEIGHTS, LAUNCH_LABELS, RUN_LABELS]) assert.ok(Object.isFrozen(t));
 });

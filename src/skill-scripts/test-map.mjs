@@ -156,21 +156,22 @@ function parseTable(lines, table) {
 }
 
 /**
- * The first relative .md link in the section body. `docs` is the path under
- * .agents-docs/ when it points there, else `outside` holds the target.
+ * The section body's link into .agents-docs/ (`docs`, the path under it);
+ * with none, `outside` holds the first other relative .md link.
  */
 function linkIn(lines, fenced, start, end) {
+  let outside = null;
   for (let i = start; i < end; i++) {
     if (fenced[i]) continue;
     for (const m of lines[i].matchAll(/\]\(([^)\s]+)\)/g)) {
       const target = m[1].replace(/#.*$/, "");
       if (/^[a-z][a-z0-9+.-]*:/i.test(target) || !/\.md$/i.test(target)) continue;
       const norm = path.posix.normalize(toPosix(target));
-      if (/^\.agents-docs\/[^/]+\.md$/i.test(norm)) return { docs: norm };
-      return { outside: target };
+      if (/^\.agents-docs\/.+\.md$/i.test(norm)) return { docs: norm };
+      outside ??= target;
     }
   }
-  return null;
+  return outside === null ? null : { outside };
 }
 
 /**
@@ -222,6 +223,13 @@ function validRows(data) {
     if (typeof r.area !== "string" || !r.area.trim()) bad("has no area");
     if (typeof r.run !== "string" || !r.run.trim()) bad("has no run command");
     if (!Array.isArray(r.paths) || !r.paths.length || r.paths.some((p) => typeof p !== "string" || !p.trim())) bad("has no paths");
+    // A backtick or line break would break the table; an unsupported glob
+    // would be written, then dropped by the next read.
+    if ([r.area, r.run, ...r.paths].some((s) => /[`\r\n]/.test(s))) bad("has a backtick or line break in a cell");
+    for (const p of r.paths) {
+      const why = unsupported(p.trim());
+      if (why) bad(`has an unsupported glob "${p.trim()}": ${why}`);
+    }
     return { area: r.area.trim(), paths: r.paths.map((p) => toPosix(p.trim())), run: r.run.trim(), shared: r.shared === true };
   });
 }
@@ -254,7 +262,7 @@ function placeIn(text, table, { linked }) {
   let i = section.start;
   while (i < section.end && lines[i].trim() === "") i++;
   let at = section.start;
-  if (i < section.end && !fenced[i] && !/^#/.test(lines[i])) {
+  if (i < section.end && !fenced[i] && !/^#{1,6}(\s|$)/.test(lines[i])) {
     while (i < section.end && lines[i].trim() !== "") i++;
     at = i;
   }
@@ -283,7 +291,7 @@ function write(root, rowsFile, dryRun) {
     const current = readText(file);
     next =
       current === null
-        ? ["# Test map", "", "> Part of [AGENTS.md](../AGENTS.md): which checks cover which files.", "", ...table, ""].join(eol(readText(path.join(root, "AGENTS.md")) || "\n"))
+        ? ["# Test map", "", `> Part of [AGENTS.md](${"../".repeat(map.source.split("/").length - 1)}AGENTS.md): which checks cover which files.`, "", ...table, ""].join(eol(readText(path.join(root, "AGENTS.md")) || "\n"))
         : placeIn(current, table, { linked: true });
   } else {
     file = path.join(root, "AGENTS.md");

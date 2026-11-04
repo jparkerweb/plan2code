@@ -113,6 +113,10 @@ test("test-match covers --stdin: real review-scope.mjs output", () => {
   assert.deepEqual(r.json.matched.map((m) => m.area), ["Launcher"]);
   assert.deepEqual(r.json.unmatched, [{ file: "src/app/util.js", tests: ["src/app/util.test.js"], method: "name" }]);
   assert.equal(runScript("plan2code-pr-prep", "test-match.mjs", ["covers", "--stdin"], { cwd: dir, input: "not json" }).code, 2);
+  const odd = runScript("plan2code-pr-prep", "test-match.mjs", ["covers", "--stdin"], { cwd: dir, input: JSON.stringify({ files: [{}, null, { path: "src/launcher/a.js" }] }) });
+  assert.equal(odd.code, 0, odd.stderr);
+  assert.deepEqual(odd.json.unmatched, [], "an entry with no path is dropped, never read as a file named undefined");
+  assert.deepEqual(odd.json.matched[0].files, ["src/launcher/a.js"]);
   assert.equal(runScript("plan2code-pr-prep", "test-match.mjs", ["covers"], { cwd: dir }).code, 2);
 });
 
@@ -165,6 +169,10 @@ test("test-match gaps --scope path and --scope branch", () => {
   const p = runScript("plan2code-pr-prep", "test-match.mjs", ["gaps", "--scope", "path", "--path", "src/sub"], { cwd: dir });
   assert.equal(p.code, 0, p.stderr);
   assert.deepEqual(p.json.gaps.map((x) => x.file), ["src/sub/c.js"]);
+  const all = runScript("plan2code-pr-prep", "test-match.mjs", ["gaps", "--scope", "all"], { cwd: dir });
+  const dot = runScript("plan2code-pr-prep", "test-match.mjs", ["gaps", "--scope", "path", "--path", "."], { cwd: dir });
+  assert.equal(dot.code, 0, dot.stderr);
+  assert.deepEqual(dot.json.gaps, all.json.gaps, "--path . is the whole project");
   assert.equal(runScript("plan2code-pr-prep", "test-match.mjs", ["gaps", "--scope", "path"], { cwd: dir }).code, 2, "--scope path needs --path");
 
   gitIn(dir)("checkout", "-q", "-b", "feature");
@@ -203,6 +211,17 @@ test("test-match gaps: any matching row with a run covers a file; a row without 
   assert.equal(r.code, 0, r.stderr);
   assert.deepEqual(r.json.gaps, [{ file: "src/y.js", area: "Source", runner: null, commits90d: null, lastTouched: null }]);
   assert.equal(r.json.covered, 2, "x.js by the second row, m.ts by its .mts test");
+});
+
+test("test-match gaps: a test in another language never covers a file by name", () => {
+  const dir = tmp("match-lang");
+  write(dir, "src/foo.js", "f\n");
+  write(dir, "src/foo.test.py", "t\n");
+  write(dir, "src/bar.ts", "b\n");
+  write(dir, "src/bar.test.js", "t\n");
+  const r = runScript("plan2code-pr-prep", "test-match.mjs", ["gaps", "--scope", "all"], { cwd: dir });
+  assert.equal(r.code, 0, r.stderr);
+  assert.deepEqual(r.json.gaps.map((g) => g.file), ["src/foo.js"], "foo.test.py does not cover foo.js; a JS test still covers a TS file");
 });
 
 test("test-match gaps: capped at 2,000 source files", () => {

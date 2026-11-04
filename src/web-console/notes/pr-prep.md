@@ -2,7 +2,7 @@
 
 ## Uncommitted changes
 
-Only when review-scope lists `staged`, `unstaged` or `untracked` files. One `choice`, `--wait`, the files in `body`:
+Only when a review-scope file's `status` includes `staged`, `unstaged` or `untracked`. One `choice`, `--wait`, the files in `body`:
 
 ```jsonc
 {"title":"Get a PR ready","headline":{"stage":"Changes","cleared":0,"total":4},"items":[{"id":"uncommitted","kind":"choice","title":"Uncommitted work","allowOther":false,"body":"These files are not committed yet:\n\n- `src/a.js` (unstaged)\n- `notes.txt` (untracked)\n\nRun the checks with them, or commit first?","options":[{"text":"Include them in this run","recommended":true},{"text":"Commit first","detail":"The git skill commits them; then run PR Prep again."}]}]}
@@ -38,7 +38,7 @@ Logs go in `<session>/checks/<n>.log`. Run the `chat` check between checks, as a
 
 ## The report and the description
 
-Doc `report`: one `md` block with the verdict first (Ready, Ready with notes or Not ready), then the checks grouped by runner (outcome, seconds, reason), then the notes. Doc `description`: one `md` block holding a single ` ```markdown ` fence, so its copy button copies the raw Markdown; the create-a-PR link (or the not-pushed line) goes in a second block under it, outside the fence. With `needsKind` (an unknown host) that block says the link cannot be built here and names `/plan2code-git`, whose board asks the host's kind once and remembers it; this page cannot save it.
+Doc `report`: one `md` block with the verdict first (Ready, Ready with notes or Not ready), then the checks grouped by runner (outcome, seconds, reason), then the notes. Doc `description`: one `md` block holding a single ` ```markdown ` fence, so its copy button copies the raw Markdown; the create-a-PR link (or the not-pushed or no-link line) goes in a second block under it, outside the fence. With `needsKind` or a null `url`, that block says the link cannot be built here and names `/plan2code-git`, whose board asks an unknown host's kind once and remembers it; this page cannot save it.
 
 ```jsonc
 {"headline":{"stage":"Ready","cleared":4},"docs":[{"id":"report","title":"Readiness","blocks":[{"id":"verdict","md":"## Ready with notes\n\n..."}]},{"id":"description","title":"PR description","blocks":[{"id":"text","md":"```markdown\n## Summary\n\n...\n```"},{"id":"link","md":"[Open the pull request](https://...)"}]}]}

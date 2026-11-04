@@ -37,7 +37,8 @@ test-match.mjs: match files to tests, both ways. JSON on stdout.
   node test-match.mjs nearest --file <f> [--root <dir>]
       Up to 3 existing test files to read for the project's test style.
 
-Exit: 0 ok · 2 bad arguments · 3 not a git repository (gaps --scope branch).
+Exit: 0 ok · 2 bad arguments · 3 not a git repository, or review-scope.mjs
+not beside this script (gaps --scope branch).
 `;
 
 /* ------------------------------------------------------------- files */
@@ -143,6 +144,8 @@ function nameMatch(source, test) {
   if (ext === "py") return extOf(test) === "py" && (same(tname, `test_${stem}`) || same(tname, `${stem}_test`));
   if (ext === "go") return same(test, `${dirOf(source) ? `${dirOf(source)}/` : ""}${stem}_test.go`);
   if (ext === "cs" || ext === "java" || ext === "kt") return extOf(test) === ext && (same(tname, `${stem}Tests`) || same(tname, `${stem}Test`));
+  const text = extOf(test);
+  if (JS_EXT.has(ext) ? !JS_EXT.has(text) : text !== ext) return false;
   return same(tname, `${stem}.test`) || same(tname, `${stem}.spec`);
 }
 
@@ -373,42 +376,30 @@ function readStdin() {
 /* ------------------------------------------------------------------ gaps */
 
 /**
- * The branch's changed files, relative to root: review-scope.mjs's list when
- * it ships beside this script, else the same git commands it runs.
+ * The branch's changed files, relative to root, from review-scope.mjs, which
+ * every skill that ships this script ships beside it. One list, never a copy
+ * of its git commands that could drift from it.
  */
 export function branchFiles(root, base) {
   const top = git(root, ["rev-parse", "--show-toplevel"]);
   if (top === null) fail(EXIT.NOT_FOUND, "not-a-repo", `${root} is not inside a git repository.`, "Use --scope all or --scope path, or ask which files to look at.");
   const prefix = (git(root, ["rev-parse", "--show-prefix"]) || "").trim();
-  let list;
   const scope = path.join(HERE, "review-scope.mjs");
-  if (fs.existsSync(scope)) {
-    let stdout;
-    try {
-      stdout = execFileSync(process.execPath, [scope, "--root", root, ...(base ? ["--base", base] : [])], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], maxBuffer: 64 * 1024 * 1024 });
-    } catch (err) {
-      stdout = err.stdout;
-    }
-    let json;
-    try {
-      json = JSON.parse(stdout);
-    } catch {
-      fail(EXIT.CRASH, "review-scope-failed", "review-scope.mjs printed no JSON.", "Run review-scope.mjs on its own to see why.");
-    }
-    if (!json.ok) fail(EXIT.NOT_FOUND, json.error, json.message, json.next);
-    list = json.files.map((f) => f.path);
-  } else {
-    const pick = base ? [base, `origin/${base}`] : ["main", "origin/main", "master", "origin/master"];
-    const ref = pick.find((r) => git(root, ["rev-parse", "--verify", "--quiet", `${r}^{commit}`]) !== null);
-    if (base && !ref) fail(EXIT.NOT_FOUND, "no-base", `No branch named ${base} (or origin/${base}).`, "Pass an existing --base, or omit it to use main / master.");
-    const lines = (args) => (git(top.trim(), args) || "").split("\n").filter(Boolean);
-    list = [
-      ...(ref ? lines(["diff", "--name-only", `${ref}...HEAD`]) : []),
-      ...lines(["diff", "--name-only", "--cached"]),
-      ...lines(["diff", "--name-only"]),
-      ...lines(["ls-files", "--others", "--exclude-standard"]),
-    ];
+  if (!fs.existsSync(scope)) fail(EXIT.NOT_FOUND, "review-scope-missing", "review-scope.mjs is not beside test-match.mjs.", "Reinstall the skill, or use --scope all or --scope path.");
+  let stdout;
+  try {
+    stdout = execFileSync(process.execPath, [scope, "--root", root, ...(base ? ["--base", base] : [])], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], maxBuffer: 64 * 1024 * 1024 });
+  } catch (err) {
+    stdout = err.stdout;
   }
+  let json;
+  try {
+    json = JSON.parse(stdout);
+  } catch {
+    fail(EXIT.CRASH, "review-scope-failed", "review-scope.mjs printed no JSON.", "Run review-scope.mjs on its own to see why.");
+  }
+  if (!json.ok) fail(EXIT.NOT_FOUND, json.error, json.message, json.next);
+  const list = json.files.map((f) => f.path);
   return [...new Set(list.map(toPosix))]
     .filter((f) => f.startsWith(prefix))
     .map((f) => f.slice(prefix.length))
@@ -451,8 +442,9 @@ function gaps(root, { scope, sub, base }) {
   else {
     files = allFiles(root);
     if (scope === "path") {
-      const p = toPosix(sub).replace(/\/+$/, "");
-      files = files.filter((f) => fold(f) === fold(p) || fold(f).startsWith(`${fold(p)}/`));
+      const p = path.posix.normalize(toPosix(sub)).replace(/\/+$/, "");
+      // The project root (".") is every file.
+      if (p !== "." && p !== "") files = files.filter((f) => fold(f) === fold(p) || fold(f).startsWith(`${fold(p)}/`));
     }
   }
   let sources = [...new Set(files)].filter(isSource).sort();
@@ -560,7 +552,7 @@ async function main(argv) {
         fail(EXIT.USAGE, "bad-stdin", "--stdin needs review-scope.mjs JSON.", "Pipe review-scope.mjs output in, or pass --files.");
       }
       if (!json || !Array.isArray(json.files)) fail(EXIT.USAGE, "bad-stdin", "The JSON on stdin has no files list.", "Pipe review-scope.mjs output in, or pass --files.");
-      files = json.files.map((f) => toPosix(f.path)).filter(Boolean);
+      files = json.files.filter((f) => f && typeof f.path === "string" && f.path).map((f) => toPosix(f.path)).filter(Boolean);
     } else fail(EXIT.USAGE, "missing-files", "covers needs --files <a,b,...> or --stdin.", "Run with --help for usage.");
     out(covers(root, [...new Set(files)]));
     return;
