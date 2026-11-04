@@ -422,6 +422,33 @@
   44%, 88% { transform: translate(4px, 1px); }
 }
 
+/* PR prep -- the clipboard's three checks tick off one by one, all three hold,
+   then they clear for the next pass; his star follows the ticks down. */
+.pose .pp-t1 { animation: pp-t1 4.8s ease-out infinite; }
+@keyframes pp-t1 {
+  0%, 8% { opacity: 0; }
+  14%, 88% { opacity: 1; }
+  96%, 100% { opacity: 0; }
+}
+.pose .pp-t2 { animation: pp-t2 4.8s ease-out infinite; }
+@keyframes pp-t2 {
+  0%, 26% { opacity: 0; }
+  32%, 88% { opacity: 1; }
+  96%, 100% { opacity: 0; }
+}
+.pose .pp-t3 { animation: pp-t3 4.8s ease-out infinite; }
+@keyframes pp-t3 {
+  0%, 44% { opacity: 0; }
+  50%, 88% { opacity: 1; }
+  96%, 100% { opacity: 0; }
+}
+.pose .pp-look { animation: pp-look 4.8s ease-in-out infinite; }
+@keyframes pp-look {
+  0%, 100% { transform: translate(4px, -2px); }
+  32% { transform: translate(4px, 0); }
+  50%, 88% { transform: translate(4px, 2px); }
+}
+
 @media (max-width: 720px) {
   .dash { padding-top: 0; }
   .launch-stage { height: 140px; }

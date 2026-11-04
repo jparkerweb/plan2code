@@ -828,18 +828,14 @@ function classifyError({ file }) {
 }
 
 async function prUrlCmd({ root, branch, base }) {
-  const s = repoState(root);
-  const b = (branch || "").trim() || s.branch;
-  if (!b) fail(EXIT.REFUSED, "detached", "HEAD is detached, so there is no branch to open a pull request for.", "Switch to a branch, or pass --branch.");
-  const row = localBranch(s, b);
-  if (!row) fail(EXIT.INVALID, "unknown-branch", `There is no local branch named "${b}".`, "Pick a branch from the list.");
-  const into = (base || "").trim() || s.def.name;
-  if (!into) fail(EXIT.INVALID, "no-base", "There is no default branch to open the pull request against.", "Pass --base <branch>.");
-  // A pull request from a branch into itself is no pull request (a push to main).
-  if (into === b) fail(EXIT.INVALID, "is-base", `${b} is the branch pull requests go into, so there is nothing to open.`, "Post no link for this push.");
-  const remote = row.upstream && !row.gone ? R.readRemotes(root, await prHosts()).find((r) => r.name === row.upstreamRemote) : null;
-  if (!remote) fail(EXIT.INVALID, "not-pushed", `${b} is not on a remote yet.`, "Publish it first (plan publish).");
-  out({ ok: true, url: R.prUrl(remote, { base: into, head: b }), host: remote.host, kind: remote.kind, needsKind: !!remote.host && !remote.kind });
+  let link;
+  try {
+    link = R.prLink(root, { branch, base, prHosts: await prHosts() });
+  } catch (e) {
+    if (!R.PR_LINK_CODES.has(e?.code)) throw e;
+    fail(e.code === "detached" ? EXIT.REFUSED : EXIT.INVALID, e.code, e.message, e.next);
+  }
+  out({ ok: true, url: link.url, host: link.host, kind: link.kind, needsKind: link.needsKind });
 }
 
 /* ------------------------------------------------------------------ main */

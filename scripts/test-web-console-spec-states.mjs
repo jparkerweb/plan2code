@@ -275,6 +275,18 @@ const CARDS = {
     built: { on: true },
     unrecognized: { on: true },
   },
+  "plan2code-pr-prep": {
+    "none": { on: true },
+    diagnosed: { on: true },
+    fixed: { on: true },
+    exploring: { on: true },
+    mapped: { on: true },
+    planned: { on: true },
+    documented: { on: true },
+    building: { on: true },
+    built: { on: true },
+    unrecognized: { on: true },
+  },
   "plan2code-changelog": {
     "none": { on: true },
     diagnosed: { on: true },
@@ -416,6 +428,27 @@ test("the scan: every state it can return is in the table, and a fixture reaches
   assert.deepEqual(scanProblems(short, TABLE), ["no fixture reaches built: add one, or drop it from spec-states.js"]);
   const { unrecognized, ...known } = TABLE;
   assert.deepEqual(scanProblems(FIXTURES, known), ["the scan returns unrecognized, which spec-states.js lacks"]);
+});
+
+test("the scan: a PR-READINESS report changes no spec's state, and alone it stays unrecognized", () => {
+  const scanOf = (fixtures) => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "p2c-spec-readiness-"));
+    try {
+      for (const [name, files] of Object.entries(fixtures))
+        for (const [rel, text] of Object.entries(files)) {
+          const file = path.join(root, "specs", name, rel);
+          fs.mkdirSync(path.dirname(file), { recursive: true });
+          fs.writeFileSync(file, text);
+        }
+      return Object.fromEntries(scanProject(root).specs.map((sp) => [sp.name, [sp.state, sp.detail]]));
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  };
+  const REPORT = { "PR-READINESS-20261103.md": "# PR readiness\n\n**Verdict:** Ready\n\n- [x] Unit tests\n- [ ] Lint (trimmed)\n" };
+  const withReport = Object.fromEntries(Object.entries(FIXTURES).map(([name, files]) => [name, { ...files, ...REPORT }]));
+  assert.deepEqual(scanOf(withReport), scanOf(FIXTURES));
+  assert.equal(scanOf({ only: REPORT }).only[0], "unrecognized");
 });
 
 test("the scan: an assumed task counts as done and is named, and numbered task lines count", () => {

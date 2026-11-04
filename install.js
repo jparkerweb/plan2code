@@ -333,6 +333,20 @@ const SOURCE_PROMPTS = [
     ]
   },
   {
+    source: 'plan2code-pr-prep.md',
+    stepNumber: 'pr-prep',
+    name: 'pr-prep',
+    displayName: 'PR Prep Mode',
+    description: 'Pick and run the checks a branch needs, give a readiness verdict and write the PR description',
+    isUtility: true,
+    scripts: ['review-scope.mjs', 'glob.mjs', 'test-map.mjs', 'test-match.mjs', 'test-commands.mjs', 'run-check.mjs'],
+    additionalReferences: [
+      { source: 'web-console', target: 'web-console' },
+      { source: 'shared-references/test-runs.md', target: 'test-runs.md' },
+      { source: 'shared-references/helper-strength.md', target: 'helper-strength.md' }
+    ]
+  },
+  {
     source: 'plan2code-changelog.md',
     stepNumber: 'changelog',
     name: 'changelog',
@@ -380,6 +394,7 @@ function generateStepLabel(prompt) {
   if (prompt.stepNumber === 'git') return 'Git';
   if (prompt.stepNumber === 'xray') return 'X-ray';
   if (prompt.stepNumber === 'diagnose') return 'Diagnose';
+  if (prompt.stepNumber === 'pr-prep') return 'PR Prep';
   if (prompt.stepNumber === 'changelog') return 'Changelog';
   if (prompt.stepNumber === 'quick') return 'Quick Task';
   return `Step ${prompt.stepNumber}`;

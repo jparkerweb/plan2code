@@ -1,28 +1,14 @@
-// Tests for the shared test-match.mjs.
-//
-// No skill ships test-match.mjs yet, so these run it from src/skill-scripts/,
-// where common.mjs, glob.mjs, test-map.mjs and review-scope.mjs sit beside it.
-// See skill-script-helpers.mjs for the fixtures and the scrubbed git config.
+// Tests for the shared test-match.mjs, run from the built plan2code-pr-prep
+// skill, which ships it beside common.mjs, glob.mjs, test-map.mjs and
+// review-scope.mjs. See skill-script-helpers.mjs for the fixtures and the
+// scrubbed git config.
 
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
-import path from "node:path";
-import { spawnSync, execFileSync } from "node:child_process";
-import { ROOT, NOW, scrubbedEnv, tmp, write, gitInit, gitIn, copyFixture, fixtureCleanup } from "./skill-script-helpers.mjs";
+import { execFileSync } from "node:child_process";
+import { runScript, tmp, write, gitInit, gitIn, copyFixture, fixtureCleanup } from "./skill-script-helpers.mjs";
 
 after(fixtureCleanup);
-
-const SCRIPT = path.join(ROOT, "src", "skill-scripts", "test-match.mjs");
-const SCOPE = path.join(ROOT, "src", "skill-scripts", "review-scope.mjs");
-
-function runShared(args, { cwd, input } = {}) {
-  const r = spawnSync(process.execPath, [SCRIPT, ...args], { cwd: cwd || ROOT, encoding: "utf8", input, env: scrubbedEnv({ PLAN2CODE_NOW: NOW }) });
-  let json = null;
-  try {
-    json = JSON.parse(r.stdout);
-  } catch {}
-  return { code: r.status, json, stdout: r.stdout, stderr: r.stderr };
-}
 
 // A commit with pinned author and committer dates.
 function commitAt(dir, date, msg, files = {}) {
@@ -83,7 +69,7 @@ function matchRepo() {
 test("test-match covers: map rows, shared hits, hints and the fallback rules", () => {
   const dir = matchRepo();
   const files = ["src/launcher/a.js", "src/launcher/shared.js", "src/web-console/x.js", "src/app/util.js", "src/widget/button.js", "src/lib/math.js", "src/pkgdir/index.js", "src/lib/alias.js", "pkg/mod.py", "gosrc/util/u.go", "package.json", "fixtures/sample.json", "test/helpers/setup.js"];
-  const r = runShared(["covers", "--files", files.join(",")], { cwd: dir });
+  const r = runScript("plan2code-pr-prep", "test-match.mjs", ["covers", "--files", files.join(",")], { cwd: dir });
   assert.equal(r.code, 0, r.stderr);
   assert.equal(r.json.mapFound, true);
   assert.deepEqual(r.json.matched, [
@@ -110,7 +96,7 @@ test("test-match covers: map rows, shared hits, hints and the fallback rules", (
 
 test("test-match covers: Windows-style --files input", () => {
   const dir = matchRepo();
-  const r = runShared(["covers", "--files", "src\\launcher\\a.js"], { cwd: dir });
+  const r = runScript("plan2code-pr-prep", "test-match.mjs", ["covers", "--files", "src\\launcher\\a.js"], { cwd: dir });
   assert.equal(r.code, 0, r.stderr);
   assert.deepEqual(r.json.matched[0].files, ["src/launcher/a.js"]);
 });
@@ -120,21 +106,21 @@ test("test-match covers --stdin: real review-scope.mjs output", () => {
   gitIn(dir)("checkout", "-q", "-b", "feature");
   commitAt(dir, "2026-07-02T12:00:00Z", "Change", { "src/launcher/a.js": "a2\n" });
   write(dir, "src/app/util.js", "u2\n");
-  const scope = spawnSync(process.execPath, [SCOPE], { cwd: dir, encoding: "utf8", env: scrubbedEnv() });
-  assert.equal(scope.status, 0, scope.stderr);
-  const r = runShared(["covers", "--stdin"], { cwd: dir, input: scope.stdout });
+  const scope = runScript("plan2code-pr-prep", "review-scope.mjs", [], { cwd: dir });
+  assert.equal(scope.code, 0, scope.stderr);
+  const r = runScript("plan2code-pr-prep", "test-match.mjs", ["covers", "--stdin"], { cwd: dir, input: scope.stdout });
   assert.equal(r.code, 0, r.stderr);
   assert.deepEqual(r.json.matched.map((m) => m.area), ["Launcher"]);
   assert.deepEqual(r.json.unmatched, [{ file: "src/app/util.js", tests: ["src/app/util.test.js"], method: "name" }]);
-  assert.equal(runShared(["covers", "--stdin"], { cwd: dir, input: "not json" }).code, 2);
-  assert.equal(runShared(["covers"], { cwd: dir }).code, 2);
+  assert.equal(runScript("plan2code-pr-prep", "test-match.mjs", ["covers", "--stdin"], { cwd: dir, input: "not json" }).code, 2);
+  assert.equal(runScript("plan2code-pr-prep", "test-match.mjs", ["covers"], { cwd: dir }).code, 2);
 });
 
 test("test-match covers: no test map leaves every file unmatched, still exit 0", () => {
   const dir = tmp("match-nomap");
   write(dir, "a.js", "a\n");
   write(dir, "a.test.js", "t\n");
-  const r = runShared(["covers", "--files", "a.js,b.js"], { cwd: dir });
+  const r = runScript("plan2code-pr-prep", "test-match.mjs", ["covers", "--files", "a.js,b.js"], { cwd: dir });
   assert.equal(r.code, 0, r.stderr);
   assert.equal(r.json.mapFound, false);
   assert.deepEqual(r.json.matched, []);
@@ -160,7 +146,7 @@ function gapsRepo() {
 
 test("test-match gaps --scope all: untested source files ranked by last change, then churn", () => {
   const dir = gapsRepo();
-  const r = runShared(["gaps", "--scope", "all"], { cwd: dir });
+  const r = runScript("plan2code-pr-prep", "test-match.mjs", ["gaps", "--scope", "all"], { cwd: dir });
   assert.equal(r.code, 0, r.stderr);
   assert.deepEqual(r.json.gaps, [
     { file: "src/sub/c.js", area: null, runner: null, commits90d: 1, lastTouched: "2026-07-25" },
@@ -176,15 +162,15 @@ test("test-match gaps --scope all: untested source files ranked by last change, 
 
 test("test-match gaps --scope path and --scope branch", () => {
   const dir = gapsRepo();
-  const p = runShared(["gaps", "--scope", "path", "--path", "src/sub"], { cwd: dir });
+  const p = runScript("plan2code-pr-prep", "test-match.mjs", ["gaps", "--scope", "path", "--path", "src/sub"], { cwd: dir });
   assert.equal(p.code, 0, p.stderr);
   assert.deepEqual(p.json.gaps.map((x) => x.file), ["src/sub/c.js"]);
-  assert.equal(runShared(["gaps", "--scope", "path"], { cwd: dir }).code, 2, "--scope path needs --path");
+  assert.equal(runScript("plan2code-pr-prep", "test-match.mjs", ["gaps", "--scope", "path"], { cwd: dir }).code, 2, "--scope path needs --path");
 
   gitIn(dir)("checkout", "-q", "-b", "feature");
   commitAt(dir, "2026-07-30T12:00:00Z", "Feature", { "src/feat.js": "f\n", "src/feat2.js": "g\n" });
   write(dir, "src/new.js", "n\n");
-  const b = runShared(["gaps", "--scope", "branch"], { cwd: dir });
+  const b = runScript("plan2code-pr-prep", "test-match.mjs", ["gaps", "--scope", "branch"], { cwd: dir });
   assert.equal(b.code, 0, b.stderr);
   assert.deepEqual(b.json.gaps, [
     { file: "src/feat.js", area: null, runner: null, commits90d: 1, lastTouched: "2026-07-30" },
@@ -197,13 +183,13 @@ test("test-match gaps: a non-git folder walks the tree; --scope branch is exit 3
   const dir = tmp("match-nogit");
   write(dir, "src/a.js", "a\n");
   write(dir, "node_modules/x/i.js", "x\n");
-  const r = runShared(["gaps", "--scope", "all"], { cwd: dir });
+  const r = runScript("plan2code-pr-prep", "test-match.mjs", ["gaps", "--scope", "all"], { cwd: dir });
   assert.equal(r.code, 0, r.stderr);
   assert.deepEqual(r.json.gaps, [{ file: "src/a.js", area: null, runner: null, commits90d: null, lastTouched: null }]);
-  const b = runShared(["gaps", "--scope", "branch"], { cwd: dir });
+  const b = runScript("plan2code-pr-prep", "test-match.mjs", ["gaps", "--scope", "branch"], { cwd: dir });
   assert.equal(b.code, 3);
   assert.equal(b.json.error, "not-a-repo");
-  assert.equal(runShared(["gaps"], { cwd: dir }).code, 2);
+  assert.equal(runScript("plan2code-pr-prep", "test-match.mjs", ["gaps"], { cwd: dir }).code, 2);
 });
 
 test("test-match gaps: any matching row with a run covers a file; a row without one only names its area", () => {
@@ -213,7 +199,7 @@ test("test-match gaps: any matching row with a run covers a file; a row without 
   write(dir, "src/y.js", "y\n");
   write(dir, "src/m.ts", "m\n");
   write(dir, "src/m.test.mts", "t\n");
-  const r = runShared(["gaps", "--scope", "all"], { cwd: dir });
+  const r = runScript("plan2code-pr-prep", "test-match.mjs", ["gaps", "--scope", "all"], { cwd: dir });
   assert.equal(r.code, 0, r.stderr);
   assert.deepEqual(r.json.gaps, [{ file: "src/y.js", area: "Source", runner: null, commits90d: null, lastTouched: null }]);
   assert.equal(r.json.covered, 2, "x.js by the second row, m.ts by its .mts test");
@@ -222,7 +208,7 @@ test("test-match gaps: any matching row with a run covers a file; a row without 
 test("test-match gaps: capped at 2,000 source files", () => {
   const dir = tmp("match-cap");
   for (let i = 0; i < 2005; i++) write(dir, `src/f${String(i).padStart(4, "0")}.js`, "x\n");
-  const r = runShared(["gaps", "--scope", "all"], { cwd: dir });
+  const r = runScript("plan2code-pr-prep", "test-match.mjs", ["gaps", "--scope", "all"], { cwd: dir });
   assert.equal(r.code, 0, r.stderr);
   assert.equal(r.json.capped, true);
   assert.equal(r.json.scanned, 2000);
@@ -234,21 +220,21 @@ test("test-match gaps: capped at 2,000 source files", () => {
 
 test("test-match nearest: own tests, then the same folder, then the mirrored folder, at most 3", () => {
   const dir = matchRepo();
-  const r = runShared(["nearest", "--file", "src/app/util.js"], { cwd: dir });
+  const r = runScript("plan2code-pr-prep", "test-match.mjs", ["nearest", "--file", "src/app/util.js"], { cwd: dir });
   assert.equal(r.code, 0, r.stderr);
   assert.deepEqual(r.json, { ok: true, file: "src/app/util.js", tests: ["src/app/util.test.js", "src/app/other.test.js", "tests/app/mirror.test.js"] });
-  const m = runShared(["nearest", "--file", "src/app/new.js"], { cwd: dir });
+  const m = runScript("plan2code-pr-prep", "test-match.mjs", ["nearest", "--file", "src/app/new.js"], { cwd: dir });
   assert.deepEqual(m.json.tests, ["src/app/other.test.js", "src/app/util.test.js", "tests/app/mirror.test.js"]);
-  assert.equal(runShared(["nearest"], { cwd: dir }).code, 2);
+  assert.equal(runScript("plan2code-pr-prep", "test-match.mjs", ["nearest"], { cwd: dir }).code, 2);
 });
 
 test("test-match nearest: the area's run path, then the nearest by shared folders", () => {
   const dir = matchRepo();
-  const r = runShared(["nearest", "--file", "src/web-console/x.js"], { cwd: dir });
+  const r = runScript("plan2code-pr-prep", "test-match.mjs", ["nearest", "--file", "src/web-console/x.js"], { cwd: dir });
   assert.equal(r.code, 0, r.stderr);
   assert.deepEqual(r.json.tests.slice(0, 2), ["tests/console/page.test.js", "tests/console/server.test.js"], "the Console row's run names tests/console");
   assert.equal(r.json.tests.length, 3);
-  const deep = runShared(["nearest", "--file", "src/widget/deep/z.js"], { cwd: dir });
+  const deep = runScript("plan2code-pr-prep", "test-match.mjs", ["nearest", "--file", "src/widget/deep/z.js"], { cwd: dir });
   assert.equal(deep.json.tests[0], "src/widget/__tests__/button.js", "the test file sharing the most folders");
 });
 
@@ -281,7 +267,7 @@ test("test-match covers: AGENTS.md's Targeted tests first table, saved as a test
     "Workflow prompt": "src/plan2code-3-implement.md",
     Docs: ".readme/web-console.md",
   };
-  const r = runShared(["covers", "--files", Object.values(samples).join(",")], { cwd: dir });
+  const r = runScript("plan2code-pr-prep", "test-match.mjs", ["covers", "--files", Object.values(samples).join(",")], { cwd: dir });
   assert.equal(r.code, 0, r.stderr);
   assert.deepEqual(r.json.unmatched, []);
   for (const [area, file] of Object.entries(samples)) {

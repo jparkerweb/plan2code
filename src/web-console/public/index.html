@@ -422,6 +422,12 @@
         <path d="m6 17.5-2.5 1.5" />
         <path d="m18 17.5 2.5 1.5" />
       </symbol>
+      <!-- Get a PR ready: a clipboard with a tick. -->
+      <symbol id="ci-pr-prep" viewBox="0 0 24 24" fill="none">
+        <rect x="5" y="4" width="14" height="17" rx="2" />
+        <path d="M9 2.5h6a1 1 0 0 1 1 1V5a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1z" />
+        <path d="m9 13.5 2 2 4-4.5" />
+      </symbol>
       <!-- Changelog: a version tag. -->
       <symbol id="ci-changelog" viewBox="0 0 24 24" fill="none">
         <path d="M3 4a1 1 0 0 1 1-1h7.6a2 2 0 0 1 1.4.6l7.4 7.4a2 2 0 0 1 0 2.8l-5.6 5.6a2 2 0 0 1-2.8 0L4.6 12a2 2 0 0 1-.6-1.4z" />
@@ -829,6 +835,34 @@
               <circle class="lt" cx="186" cy="114" r="14" />
             </g>
             <circle class="fl" cx="174" cy="140" r="5.5" />
+          </g>
+        </g>
+      </svg>
+      <!-- PR prep: getting a branch ready for review. He holds up a clipboard
+           and its three checks tick off one by one, his star following them
+           down the list, then all three hold before the list starts again. -->
+      <svg class="pose pose-pr-prep" data-pose="pr-prep" viewBox="0 4 240 216" aria-hidden="true" focusable="false">
+        <ellipse class="shadow" cx="126" cy="198" rx="44" ry="5" />
+        <g class="bob">
+          <g class="pp-board">
+            <rect class="sh" x="176" y="64" width="48" height="108" rx="6" />
+            <rect class="fl" x="188" y="56" width="24" height="12" rx="4" />
+            <path class="as pp-t1" d="M184 92 L188 96 L195 87" />
+            <line class="lt" x1="201" y1="92" x2="216" y2="92" />
+            <path class="as pp-t2" d="M184 118 L188 122 L195 113" />
+            <line class="lt" x1="201" y1="118" x2="216" y2="118" />
+            <path class="as pp-t3" d="M184 144 L188 148 L195 139" />
+            <line class="lt" x1="201" y1="144" x2="212" y2="144" />
+          </g>
+          <g transform="translate(-14 0)">
+            <rect class="fl foot f1" x="94" y="179" width="20" height="10" rx="5" />
+            <rect class="fl foot f2" x="126" y="179" width="20" height="10" rx="5" />
+            <rect class="sh" x="80" y="72" width="80" height="108" rx="16" />
+            <path class="ln" d="M80 126 L66 150" /><circle class="fl" cx="66" cy="150" r="5.5" />
+            <g class="pp-look"><path class="ey blink" d="M126 86 L129.64 94.98 L139.31 95.67 L131.9 101.92 L134.23 111.33 L126 106.2 L117.77 111.33 L120.1 101.92 L112.69 95.67 L122.36 94.98 Z" /></g>
+            <path class="es" d="M110 120 Q122 129 134 120" />
+            <line class="ln" x1="160" y1="126" x2="190" y2="134" />
+            <circle class="fl" cx="190" cy="134" r="5.5" />
           </g>
         </g>
       </svg>

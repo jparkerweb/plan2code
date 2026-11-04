@@ -1,25 +1,15 @@
 // run-check.mjs: the four outcomes, the process-tree kill on timeout, the log
-// and the tail cap. Runs src/skill-scripts/run-check.mjs directly until a
-// skill ships it. See skill-script-helpers.mjs for the fixtures.
+// and the tail cap, run from the built plan2code-pr-prep skill, which ships
+// it. See skill-script-helpers.mjs for the fixtures.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
-import { ROOT, NOW, scrubbedEnv, tmp, write } from "./skill-script-helpers.mjs";
+import { ROOT, runScript, scrubbedEnv, tmp, write } from "./skill-script-helpers.mjs";
 
-const SCRIPT = path.join(ROOT, "src", "skill-scripts", "run-check.mjs");
 const NODE = `"${process.execPath}"`;
-
-function runShared(args, { cwd } = {}) {
-  const r = spawnSync(process.execPath, [SCRIPT, ...args], { cwd: cwd || ROOT, encoding: "utf8", env: scrubbedEnv({ PLAN2CODE_NOW: NOW }) });
-  let json = null;
-  try {
-    json = JSON.parse(r.stdout);
-  } catch {}
-  return { code: r.status, json, stdout: r.stdout, stderr: r.stderr };
-}
 
 const alive = (pid) => {
   try {
@@ -31,7 +21,7 @@ const alive = (pid) => {
 };
 
 test("run-check: passed on exit 0", () => {
-  const r = runShared(["--cmd", `${NODE} -e "process.exit(0)"`]);
+  const r = runScript("plan2code-pr-prep", "run-check.mjs", ["--cmd", `${NODE} -e "process.exit(0)"`]);
   assert.equal(r.code, 0, r.stderr);
   assert.equal(r.json.outcome, "passed");
   assert.equal(r.json.exit, 0);
@@ -43,7 +33,7 @@ test("run-check: passed on exit 0", () => {
 test("run-check: failed on exit 1, with the printed lines in the tail", () => {
   const dir = tmp("check-fail");
   write(dir, "fail.js", "console.log('first line');\nconsole.error('second line');\nprocess.exit(1);\n");
-  const r = runShared(["--cmd", `${NODE} fail.js`, "--cwd", dir]);
+  const r = runScript("plan2code-pr-prep", "run-check.mjs", ["--cmd", `${NODE} fail.js`, "--cwd", dir]);
   assert.equal(r.code, 0, r.stderr);
   assert.equal(r.json.outcome, "failed");
   assert.equal(r.json.exit, 1);
@@ -52,11 +42,11 @@ test("run-check: failed on exit 1, with the printed lines in the tail", () => {
 });
 
 test("run-check: not-started for a made-up command and for a missing --cwd", () => {
-  const r = runShared(["--cmd", "p2c-no-such-command-xyz --flag"]);
+  const r = runScript("plan2code-pr-prep", "run-check.mjs", ["--cmd", "p2c-no-such-command-xyz --flag"]);
   assert.equal(r.code, 0, r.stderr);
   assert.equal(r.json.outcome, "not-started");
   assert.equal(r.json.reason, "command-not-found");
-  const c = runShared(["--cmd", `${NODE} -e "process.exit(0)"`, "--cwd", path.join(tmp("check-cwd"), "missing")]);
+  const c = runScript("plan2code-pr-prep", "run-check.mjs", ["--cmd", `${NODE} -e "process.exit(0)"`, "--cwd", path.join(tmp("check-cwd"), "missing")]);
   assert.equal(c.code, 0, c.stderr);
   assert.equal(c.json.outcome, "not-started");
   assert.equal(c.json.reason, "cwd-missing");
@@ -66,7 +56,7 @@ test("run-check: timeout kills the whole process tree", async () => {
   const dir = tmp("check-timeout");
   write(dir, "grandchild.js", "require('fs').writeFileSync(require('path').join(__dirname, 'pid.txt'), String(process.pid));\nsetInterval(() => {}, 1000);\n");
   write(dir, "parent.js", "require('child_process').spawn(process.execPath, [require('path').join(__dirname, 'grandchild.js')], { stdio: 'inherit' });\nsetInterval(() => {}, 1000);\n");
-  const r = runShared(["--cmd", `${NODE} parent.js`, "--cwd", dir, "--timeout", "2"]);
+  const r = runScript("plan2code-pr-prep", "run-check.mjs", ["--cmd", `${NODE} parent.js`, "--cwd", dir, "--timeout", "2"]);
   assert.equal(r.code, 0, r.stderr);
   assert.equal(r.json.outcome, "timeout");
   const pidFile = path.join(dir, "pid.txt");
@@ -81,7 +71,7 @@ test("run-check: --log holds the full output and the tail keeps 60 lines of at m
   const dir = tmp("check-log");
   write(dir, "many.js", "for (let i = 1; i <= 100; i++) console.log('line ' + i);\nconsole.log('x'.repeat(500));\n");
   const log = path.join(dir, "logs", "deep", "run.log");
-  const r = runShared(["--cmd", `${NODE} many.js`, "--cwd", dir, "--log", log]);
+  const r = runScript("plan2code-pr-prep", "run-check.mjs", ["--cmd", `${NODE} many.js`, "--cwd", dir, "--log", log]);
   assert.equal(r.code, 0, r.stderr);
   assert.equal(r.json.outcome, "passed");
   assert.equal(r.json.log, log);
@@ -95,11 +85,11 @@ test("run-check: --log holds the full output and the tail keeps 60 lines of at m
 });
 
 test("run-check: bad arguments exit 2", () => {
-  assert.equal(runShared([]).code, 2);
-  assert.equal(runShared(["--cmd", "x", "--timeout", "soon"]).code, 2);
-  assert.equal(runShared(["--cmd", "x", "--timeout", "0"]).code, 2);
-  assert.equal(runShared(["--cmd", "x", "--timeout", "86401"]).code, 2, "past one day the timer would overflow");
-  assert.equal(runShared(["--cmd", "x", "extra"]).code, 2);
+  assert.equal(runScript("plan2code-pr-prep", "run-check.mjs", []).code, 2);
+  assert.equal(runScript("plan2code-pr-prep", "run-check.mjs", ["--cmd", "x", "--timeout", "soon"]).code, 2);
+  assert.equal(runScript("plan2code-pr-prep", "run-check.mjs", ["--cmd", "x", "--timeout", "0"]).code, 2);
+  assert.equal(runScript("plan2code-pr-prep", "run-check.mjs", ["--cmd", "x", "--timeout", "86401"]).code, 2, "past one day the timer would overflow");
+  assert.equal(runScript("plan2code-pr-prep", "run-check.mjs", ["--cmd", "x", "extra"]).code, 2);
 });
 
 test("run-check and test-commands do nothing when imported", () => {

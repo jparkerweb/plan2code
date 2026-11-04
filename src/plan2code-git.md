@@ -103,7 +103,7 @@ In the terminal the same stops are asked in prose, with the diff printed.
 ## Terminal
 
 - **No instruction:** print the status from `state` (branch, ahead/behind, changed files) and ask what to do, `next` first.
-- **After an action:** show the new state and one line naming the likely next step, then stop. A follow-up reply runs it; there is no "what next?" loop.
+- **After an action:** show the new state and one line naming the likely next step, then stop. A follow-up reply runs it; there is no "what next?" loop. After a push or publish (or when the branch is pushed with nothing left to commit), that next step may be `/plan2code-pr-prep`: run the checks and write the PR description.
 - **Several actions in one instruction** (`commit and push`): state the plan in one line, run each step in order, ask each ask-first confirm at its own step with the same `confirm` text the board shows, and stop at the first failure with git's error and `classify-error`'s `next`.
 - **An unclear instruction:** offer the two or three likely readings through the question tool, the state-based guess first. Never run on a guess.
 - Print the pull-request link from `pr-url` after a push or publish (`needsKind` → ask the host's kind once and say it is remembered).

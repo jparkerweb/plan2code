@@ -383,6 +383,28 @@ export const SKILLS = Object.freeze([
     },
   }),
   skill({
+    skill: "plan2code-pr-prep",
+    workflow: "pr-prep",
+    label: "PR prep",
+    name: "PR Prep",
+    pose: "pr-prep",
+    builds: false, phased: false, metered: true, templates: false,
+    weight: 1, started: "PR Prep started", ran: "PR Prep run", resume: null,
+    subagents: "Use helpers to read the files behind changes no test map row covers, and to draft the Changes by area section of the description. Keep the check plan, the runs, the verdict and every question with you. Light strength, low effort.",
+    states: "any",
+    greyed: null,
+    card: {
+      group: "extra",
+      chip: "Utility",
+      title: "Get a PR ready",
+      icon: "pr-prep",
+      blurb: "Runs the checks your branch needs, says if it is ready, and writes the PR description.",
+      help: "Picks and runs the checks a branch needs, gives a readiness verdict and writes a PR description to copy.",
+      about:
+        "Before you open a pull request. PR Prep reads what changed on the branch and picks the checks that cover it from the project's test map (or from its config files when there is no map), each with a reason. You untick what to skip, then it runs the rest and says Ready, Ready with notes or Not ready. It writes a PR description to copy, following the repo's template when there is one, and gives the link to open the PR. It never commits, pushes or opens the PR for you.",
+    },
+  }),
+  skill({
     skill: "plan2code-changelog",
     workflow: "changelog",
     label: "Changelog",
