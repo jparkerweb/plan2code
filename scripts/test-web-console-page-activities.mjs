@@ -1127,6 +1127,7 @@ test("Full screen gives the board the whole screen with a panel holding the scor
   const back = await fullParts(s);
   assert.ok(!back.full && !back.rail && !back.scoreInRail, "F puts it back, the score under the board again");
   await s.page.keyboard.press("f");
+  await until(async () => (await fullParts(s)).full, 5000);
   assert.ok((await fullParts(s)).full, "and F fills it again");
   await s.page.click("#activities-rail-exit");
   assert.ok(!(await fullParts(s)).full, "the panel's Exit full screen puts it back");

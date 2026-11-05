@@ -86,7 +86,10 @@ test("an @ in a note offers the workspace's folders, and picking one writes its 
   await pop.waitFor();
   const options = pop.locator(".mention-opt");
   assert.deepEqual(await options.allTextContents(), ["@datasets"], "only the folder that matches what was typed");
-  await options.first().click();
+  // The list repaints on every key release, so Playwright's click can lose
+  // its option to a repaint on a slow machine and retry for a minute: click
+  // the option in one step from the page instead.
+  await s.page.evaluate(() => document.querySelector("#mention-pop .mention-opt").click());
   await pop.waitFor({ state: "detached" });
   assert.equal(await boxValue(note), "Look in @datasets ");
 
