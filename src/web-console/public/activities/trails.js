@@ -55,7 +55,7 @@ export const FADE_MS = 700;
 // When your next step would crash, you hold in place for GRACE_MS first: a
 // turn pressed in that time rides out of it, and only then is it a crash.
 // Rivals get no grace.
-export const GRACE_MS = 150;
+export const GRACE_MS = 190;
 
 // Space spends a charge on BOOST_MS of speed. Every heat starts with
 // START_CHARGES, and a Boost pad adds one, up to MAX_CHARGES.
@@ -257,7 +257,7 @@ export function pace(round, rider) {
 }
 
 function makeRider(id, spawn) {
-  return { id, x: spawn.x, y: spawn.y, dir: spawn.dir, queue: [], alive: true, acc: 0, stall: null, prev: { x: spawn.x, y: spawn.y }, path: [{ x: spawn.x, y: spawn.y }], wide: [], fade: 0, by: null };
+  return { id, x: spawn.x, y: spawn.y, dir: spawn.dir, queue: [], alive: true, acc: 0, stall: null, prev: { x: spawn.x, y: spawn.y }, path: [{ x: spawn.x, y: spawn.y }], wide: [], fresh: [], fade: 0, by: null };
 }
 
 const portalAt = (round, x, y) => round.portals.find((p) => p.x === x && p.y === y) || null;
@@ -586,7 +586,7 @@ export function hyperjump(round, random = Math.random) {
     if (space > most) [most, dir] = [space, name];
   }
   const from = { x: you.x, y: you.y };
-  Object.assign(you, { x: best.x, y: best.y, prev: { x: best.x, y: best.y }, dir, queue: [], stall: null, acc: 0 });
+  Object.assign(you, { x: best.x, y: best.y, prev: { x: best.x, y: best.y }, dir, queue: [], stall: null, acc: 0, fresh: [] });
   if (!active(round, "phase")) {
     round.grid[at(best.x, best.y)] = 1;
     you.path.push({ x: best.x, y: best.y });
@@ -596,7 +596,9 @@ export function hyperjump(round, random = Math.random) {
 }
 
 // Wide Trail: the cells either side of your head turn to your trail too,
-// where they are open.
+// where they are open. The pair just laid stays `fresh` until your next step,
+// and you may ride onto it, so a turn at a corner never crashes into your own
+// side cells.
 function widen(round, r) {
   const d = DIRS[r.dir];
   for (const side of [-1, 1]) {
@@ -607,6 +609,7 @@ function widen(round, r) {
     if (round.riders.some((o) => o.alive && o.x === x && o.y === y)) continue;
     round.grid[at(x, y)] = r.id + 1;
     r.wide.push({ x, y });
+    r.fresh.push({ x, y });
   }
 }
 
@@ -621,7 +624,8 @@ function landing(round, r, dir) {
   if (portal) ({ x, y } = portal.to);
   const cell = round.grid[at(x, y)];
   const phased = r.id === 0 && active(round, "phase");
-  if (cell !== 0 && !(phased && cell > 0)) return { x, y, portal, by: cell > 0 ? cell - 1 : cell === BLOCK ? "block" : "wall" };
+  const fresh = r.fresh.some((c) => c.x === x && c.y === y);
+  if (cell !== 0 && !(phased && cell > 0) && !fresh) return { x, y, portal, by: cell > 0 ? cell - 1 : cell === BLOCK ? "block" : "wall" };
   // Only a phased rider or a portal can bring one head onto another.
   const other = round.riders.find((o) => o !== r && o.alive && o.x === x && o.y === y);
   return { x, y, portal, by: other ? other.id : null };
@@ -694,6 +698,9 @@ function move(round, r, to, random = Math.random) {
   const i = at(x, y);
   r.x = x;
   r.y = y;
+  // Onto a side cell just laid: it is your head's now, part of the line.
+  if (r.fresh.length) r.wide = r.wide.filter((c) => c.x !== x || c.y !== y);
+  r.fresh = [];
   if (!(r.id === 0 && active(round, "phase"))) {
     round.grid[i] = r.id + 1;
     r.path.push({ x, y });
