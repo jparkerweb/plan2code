@@ -52,7 +52,7 @@ The dashboard lists the handoff for this checkout until it is picked up, and old
 
 `specs/` is gitignored — Glob/Grep and file search silently skip it. If the
 conversation worked inside `specs/<feature>/`, confirm the exact state before
-writing with `node "<S>/specs.mjs" status specs/<feature>`, which reads the disk:
+writing with `node "<S>/specs.mjs" status specs/<feature>` (`<S>` is `scripts/` beside this SKILL.md: `~/.agents/skills/plan2code-handoff/scripts/` globally), which reads the disk:
 
 - Which `phase-X.md` is in progress, and which of its tasks are still open
   (each phase's `tasks` and `openTasks`: checkboxes are ground truth, not the

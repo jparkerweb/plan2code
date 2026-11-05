@@ -14,7 +14,7 @@ import { EXIT, fail, out, parseArgs, run } from "./common.mjs";
 const USAGE = `
 coverage.mjs: per-file coverage from a coverage tool's output. JSON on stdout.
 
-  node coverage.mjs read --lcov <file> [--root <dir>]
+  node coverage.mjs read --lcov <file> [--root <dir>] [--cwd <dir>]
   node coverage.mjs read --go-func <file> [--root <dir>]
       Prints { ok, format, files: [{ file, lines, hit, pct }], total },
       files sorted by path, pct with one decimal.
@@ -22,7 +22,9 @@ coverage.mjs: per-file coverage from a coverage tool's output. JSON on stdout.
                  lines is LF (or the DA count when LF is missing), hit is LH
                  (or the DA lines with hits above 0). Paths are made relative
                  to --root (default: the current folder) with forward slashes;
-                 an absolute path outside the root is kept as given. total
+                 an absolute path outside the root is kept as given. A relative
+                 SF: path is relative to the runner's folder: pass it as --cwd
+                 (relative to the root) to get project-relative paths. total
                  sums every file.
         go-func  "<import path>/<file>.go:<line>:  <func>  <pct>%" lines,
                  grouped by file: pct is the mean of the file's functions,
@@ -149,7 +151,7 @@ function readGoFunc(text, root) {
 /* ------------------------------------------------------------------ main */
 
 async function main(argv) {
-  const args = parseArgs(argv, { values: ["lcov", "go-func", "root"] });
+  const args = parseArgs(argv, { values: ["lcov", "go-func", "root", "cwd"] });
   const [cmd, ...extra] = args._;
   if (!cmd) fail(EXIT.USAGE, "missing-command", "A subcommand is required: read.", "Run with --help for usage.");
   if (cmd !== "read") fail(EXIT.USAGE, "unknown-command", `Unknown subcommand "${cmd}".`, "Use: read.");
@@ -166,6 +168,11 @@ async function main(argv) {
     fail(EXIT.NOT_FOUND, "no-file", `Cannot read ${file}.`, "Run the coverage command first, then pass the file it wrote.");
   }
   const read = format === "lcov" ? readLcov(text, root) : readGoFunc(text, root);
+  const prefix = path.posix.normalize(slash(args.cwd || ".")).replace(/\/+$/, "").replace(/^\.$/, "");
+  if (read && format === "lcov" && prefix) {
+    for (const f of read.files) if (!isAbs(f.file)) f.file = path.posix.join(prefix, f.file);
+    read.files.sort(byPath);
+  }
   if (!read) {
     fail(
       EXIT.INVALID,

@@ -168,3 +168,14 @@ test("coverage read: exactly one format flag is required", () => {
   assert.equal(C(dir, "read", "--lcov", "a", "--go-func", "b").code, 2);
   assert.equal(C(dir).code, 2);
 });
+
+test("coverage read --lcov --cwd: a runner's relative paths get its folder in front", () => {
+  const dir = tmp("cov-cwd");
+  write(dir, "lcov.info", "SF:src/x.ts\nDA:1,1\nLF:1\nLH:1\nend_of_record\nSF:D:/elsewhere/y.ts\nDA:1,0\nLF:1\nLH:0\nend_of_record\n");
+  const r = C(dir, "read", "--lcov", "lcov.info", "--cwd", "./packages/api/");
+  assert.equal(r.code, 0, r.stderr);
+  assert.deepEqual(
+    r.json.files.map((f) => f.file),
+    ["D:/elsewhere/y.ts", "packages/api/src/x.ts"]
+  );
+});
