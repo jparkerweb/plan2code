@@ -5,10 +5,10 @@
 An argument that already describes the bug skips the cards it answers. Otherwise one `--wait` batch, no `templates`:
 
 ```jsonc
-{"title":"Diagnose a bug","headline":{"stage":"The bug","cleared":0,"total":3},"items":[{"id":"bug","kind":"text","title":"What is wrong","body":"The bug, in a sentence or two."},{"id":"expected","kind":"text","title":"Expected and actual","body":"What should happen, and what happens instead."},{"id":"see-it","kind":"text","title":"How to see it","body":"The steps, command, page or input that shows it, and since when if known."}]}
+{"title":"Diagnose a bug","headline":{"stage":"The bug","cleared":0,"total":3},"items":[{"id":"bug","kind":"text","title":"What is wrong","body":"The bug, in a sentence or two."},{"id":"expected","kind":"text","title":"Expected and actual","required":false,"body":"What should happen, and what happens instead."},{"id":"see-it","kind":"text","title":"How to see it","required":false,"body":"The steps, command, page or input that shows it, and since when if known."}]}
 ```
 
-A follow-up the answers leave open is a new card with a new id.
+A follow-up the answers leave open is a new card with a new id. A skipped card is no answer: work from the rest, never guess the missing steps, and ask again when you cannot show someone else the bug without it.
 
 ## The cause
 

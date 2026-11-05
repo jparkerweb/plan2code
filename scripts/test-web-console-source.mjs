@@ -536,3 +536,12 @@ test("prefs: Help and the readme name every tab and section, and the dialog's un
     assert.ok(!new RegExp(`class="[^"]*\\b${cls}\\b[^"]*"`).test(html), `index.html has no .${cls} left`);
   }
 });
+
+test("Diagnose's opening cards: only What is wrong is required", () => {
+  const notes = fs.readFileSync(path.join(ROOT, "src", "web-console", "notes", "diagnose.md"), "utf8");
+  const batch = JSON.parse(notes.match(/```jsonc\n(.*)\n```/)[1]);
+  const required = Object.fromEntries(batch.items.map((item) => [item.id, item.required !== false]));
+  assert.deepEqual(required, { bug: true, expected: false, "see-it": false });
+  const prompt = fs.readFileSync(path.join(ROOT, "src", "plan2code-diagnose.md"), "utf8");
+  assert.match(prompt, /the last two `"required":false`/, "the prompt says the last two cards are optional");
+});

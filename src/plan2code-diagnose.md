@@ -57,7 +57,7 @@ Keep with you: the reproduction, any bisect, the cause judgment and every questi
 
 ### Step 1: The Bug
 
-A typed argument is the report; ask only for what it leaves out. Otherwise ask in one batch (console: three `text` cards, the first with a placeholder example of a real report, no `"templates"`):
+A typed argument is the report; ask only for what it leaves out. Otherwise ask in one batch (console: three `text` cards, the first with a placeholder example of a real report, the last two `"required":false`, no `"templates"`):
 
 > "1. **What is wrong?** The bug, in a sentence or two.
 > 2. **Expected vs actual:** what should happen, and what happens instead.
