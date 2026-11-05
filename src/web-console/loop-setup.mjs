@@ -1,5 +1,6 @@
 // Plan2Code Web Console - the Implementation Loop's setup, remembered per project.
 
+import fs from "node:fs";
 import path from "node:path";
 
 import { ensureDir, HOME_DIR, readJson, withStateLock, writeJsonAtomic } from "./files.mjs";
@@ -22,6 +23,9 @@ const AFTER_LAST = ["offer-finalize", "run-finalize"];
 const NOTIFY_KINDS = ["query", "discord", "slack", "teams", "google-chat", "json"];
 // The kinds where the person names the parameter or field that holds the message.
 const NAMED_KINDS = ["query", "json"];
+const STRENGTH_WORDS = ["thrifty", "balanced", "best"];
+// A spec folder directly under specs/, no leading dot (the route's own rule).
+const SPEC_KEY = /^specs\/[^/\\.][^/\\]*$/;
 
 export const LOOP_DEFAULTS = Object.freeze({
   review: true,
@@ -36,6 +40,8 @@ export const LOOP_DEFAULTS = Object.freeze({
   notifyKind: "query",
   notifyUrl: "",
   notifyParam: "message",
+  phaseStrength: false,
+  strengths: Object.freeze({}),
 });
 
 /** An http or https address in printable ASCII, with a host and no user name or password (the app's `valid_url`). */
@@ -78,7 +84,70 @@ export function loopSetupProblems(entry) {
   if (typeof entry.notifyParam !== "string" || (entry.notifyUrl && NAMED_KINDS.includes(entry.notifyKind) && !/^[A-Za-z0-9._~-]{1,64}$/.test(entry.notifyParam))) {
     problems.push('"notifyParam" must be 1 to 64 letters, digits, or - _ . ~');
   }
+  if (typeof entry.phaseStrength !== "boolean") problems.push('"phaseStrength" must be true or false');
+  problems.push(...strengthsProblems(entry.strengths));
   return problems;
+}
+
+/** Problems with the per-spec phase picks; empty when they are good. */
+function strengthsProblems(strengths) {
+  if (strengths === null || typeof strengths !== "object" || Array.isArray(strengths)) return ['"strengths" must be an object'];
+  const problems = [];
+  for (const [key, picks] of Object.entries(strengths)) {
+    if (!SPEC_KEY.test(key)) {
+      problems.push(`"strengths" key "${key}" must be a folder directly under specs/`);
+      continue;
+    }
+    if (!Array.isArray(picks) || picks.length > 100) {
+      problems.push(`"strengths.${key}" must list at most 100 phase picks`);
+      continue;
+    }
+    const seen = new Set();
+    for (const pick of picks) {
+      const ok = pick && typeof pick === "object" && !Array.isArray(pick);
+      if (!ok || !Number.isInteger(pick.n) || pick.n < 1) {
+        problems.push(`"strengths.${key}" picks need a phase number "n" (a positive whole number)`);
+      } else if (seen.has(pick.n)) {
+        problems.push(`"strengths.${key}" has Phase ${pick.n} twice`);
+      } else {
+        seen.add(pick.n);
+      }
+      if (!ok) continue;
+      if (typeof pick.name !== "string" || pick.name.length > 200) problems.push(`"strengths.${key}" pick names must be text of at most 200 characters`);
+      if (!STRENGTH_WORDS.includes(pick.strength)) problems.push(`"strengths.${key}" picks need a strength of ${STRENGTH_WORDS.join(", ")}`);
+    }
+  }
+  return problems;
+}
+
+/**
+ * Drop picks that no longer mean anything (FR-12, FR-13): a spec key whose folder
+ * is gone from the project, and, for a spec whose phases can be read, picks whose
+ * number and name match no phase left. `phasesFor(spec)` returns the phases left
+ * as [{ n, name }], or null when the overview cannot be read (its picks stay).
+ * Returns a fresh object; the input is never changed.
+ */
+export function pruneStrengths(project, strengths, phasesFor) {
+  const out = {};
+  for (const [spec, picks] of Object.entries(strengths && typeof strengths === "object" ? strengths : {})) {
+    if (!SPEC_KEY.test(spec) || !Array.isArray(picks)) continue;
+    let isDir = false;
+    try {
+      isDir = fs.statSync(path.join(project, spec)).isDirectory();
+    } catch {
+      /* gone */
+    }
+    if (!isDir) continue;
+    let left = null;
+    try {
+      left = typeof phasesFor === "function" ? phasesFor(spec) : null;
+    } catch {
+      left = null;
+    }
+    const kept = Array.isArray(left) ? picks.filter((p) => left.some((l) => l.n === p.n && l.name === p.name)) : picks;
+    if (kept.length) out[spec] = kept.map((p) => ({ ...p }));
+  }
+  return out;
 }
 
 function readStore() {
@@ -94,14 +163,22 @@ function readStore() {
  * file reads as empty. An entry saved before `fixMode` existed fixed by level,
  * so it keeps doing that rather than taking the newer default.
  */
-export function readLoopSetup(project) {
+export function readLoopSetup(project, phasesFor) {
   const saved = readStore().projects[foldKey(project)];
-  if (saved && typeof saved === "object") return { ...LOOP_DEFAULTS, fix: [...LOOP_DEFAULTS.fix], fixMode: "levels", ...saved, remembered: true };
-  return { ...LOOP_DEFAULTS, fix: [...LOOP_DEFAULTS.fix], remembered: false };
+  const base = { ...LOOP_DEFAULTS, fix: [...LOOP_DEFAULTS.fix], strengths: {} };
+  if (saved && typeof saved === "object") {
+    const setup = { ...base, fixMode: "levels", ...saved, remembered: true };
+    // Deep-copied and pruned like `fix`: the caller may change it freely.
+    const strengths = saved.strengths && typeof saved.strengths === "object" && !Array.isArray(saved.strengths) ? saved.strengths : {};
+    setup.strengths = pruneStrengths(project, strengths, phasesFor);
+    if (typeof setup.phaseStrength !== "boolean") setup.phaseStrength = false;
+    return setup;
+  }
+  return { ...base, remembered: false };
 }
 
 /** Validate and save this project's setup; throws an Error listing the problems. */
-export function saveLoopSetup(project, entry) {
+export function saveLoopSetup(project, entry, phasesFor) {
   const problems = loopSetupProblems(entry);
   if (problems.length) {
     const err = new Error(`the loop setup is not valid: ${problems.join("; ")}`);
@@ -115,9 +192,10 @@ export function saveLoopSetup(project, entry) {
       const store = readStore();
       // Only the known fields are kept, in the defaults' order.
       const known = Object.fromEntries(Object.keys(LOOP_DEFAULTS).map((key) => [key, entry[key]]));
+      known.strengths = pruneStrengths(project, known.strengths, phasesFor);
       store.projects[foldKey(project)] = { ...known, saved: new Date().toISOString() };
       writeJsonAtomic(LOOP_SETUP_FILE, { schema: 1, projects: store.projects });
-      return readLoopSetup(project);
+      return readLoopSetup(project, phasesFor);
     },
     LOOP_SETUP_LOCK,
   );

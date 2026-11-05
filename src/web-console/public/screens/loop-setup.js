@@ -29,6 +29,13 @@ const AFTER_LAST = [
   ["run-finalize", "Run Finalize automatically", "Finalize starts by itself once every phase is built."],
 ];
 
+const STRENGTH_WORDS = [
+  ["thrifty", "Thrifty"],
+  ["balanced", "Balanced"],
+  ["best", "Best"],
+];
+const MATCH_SESSION = "Match my session";
+
 const DEFAULT_NOTIFY_PARAM = "message";
 // What the setup can send a notification to. `name` is the label for the field
 // the person names, on the kinds that have one.
@@ -57,7 +64,7 @@ export async function openLoopSetup(spec) {
   const dir = spec.dir;
   page.loopStart = null;
   page.loopNotifyTest = null;
-  page.loopSetup = { spec: dir, loaded: false, failed: false, form: null, facts: null, problems: [], starting: false };
+  page.loopSetup = { spec: dir, loaded: false, failed: false, form: null, facts: null, problems: [], starting: false, resolvedFor: undefined };
   tellApp("loop-facts");
   redraw();
   const mine = page.loopSetup;
@@ -80,7 +87,7 @@ export async function openLoopSetup(spec) {
     redraw();
     return;
   }
-  const { phasesLeft, branch, pending, suggestedQuickCheck, remembered, saved, ...setup } = answer;
+  const { phasesLeft, branch, pending, suggestedQuickCheck, remembered, saved, picks, resolved, ...setup } = answer;
   mine.form = {
     review: setup.review !== false,
     fixMode: setup.fixMode === "levels" ? "levels" : "smart",
@@ -94,16 +101,84 @@ export async function openLoopSetup(spec) {
     notifyKind: NOTIFY_KINDS.some((k) => k.id === setup.notifyKind) ? setup.notifyKind : "query",
     notifyUrl: typeof setup.notifyUrl === "string" ? setup.notifyUrl : "",
     notifyParam: setup.notifyParam || DEFAULT_NOTIFY_PARAM,
+    phaseStrength: setup.phaseStrength === true,
+    // Every spec's picks, as saved; only this spec's key is changed here.
+    strengths: setup.strengths && typeof setup.strengths === "object" && !Array.isArray(setup.strengths) ? structuredClone(setup.strengths) : {},
   };
+  if (Array.isArray(picks)) mine.form.strengths[dir] = structuredClone(picks);
   // A first visit with nothing typed starts from the project's own check.
   if (!remembered && !mine.form.quickCheck && suggestedQuickCheck) mine.form.quickCheck = suggestedQuickCheck;
   mine.facts = {
+    spec: dir,
     phasesLeft: Array.isArray(phasesLeft) ? phasesLeft : [],
     branch: typeof branch === "string" ? branch : "",
     pending: Number.isInteger(pending) ? pending : null,
+    // The loop agent's strengths: undefined until the app has named the agent
+    // and the console has answered, then null (no such agent) or { word: { model, effort? } }.
+    resolved: undefined,
   };
   mine.loaded = true;
   redraw();
+}
+
+const loopAgent = () => (page.loopFacts && typeof page.loopFacts.agent === "string" ? page.loopFacts.agent : "");
+
+/**
+ * Read the loop agent's strengths once the app has said which agent it is. The
+ * setup and the app answer in either order, so every draw asks (cheaply) whether
+ * the agent changed since the last read.
+ */
+function ensureResolved(s) {
+  if (!page.loopFacts || s.resolvedFor === loopAgent()) return;
+  const agent = loopAgent();
+  s.resolvedFor = agent;
+  if (!agent) {
+    s.facts.resolved = null;
+    return;
+  }
+  fetch("/loop-setup?spec=" + encodeURIComponent(s.spec) + "&agent=" + encodeURIComponent(agent), { cache: "no-store" })
+    .then((res) => (res.ok ? res.json() : null))
+    .catch(() => null)
+    .then((answer) => {
+      if (page.loopSetup !== s || s.resolvedFor !== agent) return;
+      s.facts.resolved = answer && answer.resolved && typeof answer.resolved === "object" ? answer.resolved : null;
+      redraw();
+    });
+}
+
+const hasMapping = (resolved) => Boolean(resolved) && Object.keys(resolved).length > 0;
+
+/** This spec's saved word for a phase, or "" for Match my session. */
+function pickOf(form, spec, phase) {
+  const list = form.strengths && form.strengths[spec];
+  const hit = Array.isArray(list) ? list.find((p) => p.n === phase.n && p.name === phase.name) : null;
+  return hit ? hit.strength : "";
+}
+
+function setPick(form, spec, phase, word) {
+  const rest = (form.strengths[spec] || []).filter((p) => p.n !== phase.n);
+  if (word) rest.push({ n: phase.n, name: phase.name, strength: word });
+  rest.sort((a, b) => a.n - b.n);
+  form.strengths[spec] = rest;
+}
+
+/** The phases left whose saved pick is not mapped for the loop's agent. */
+function unmappedPicks(form, facts, spec) {
+  const resolved = facts.resolved;
+  return facts.phasesLeft.filter((p) => {
+    const word = pickOf(form, spec, p);
+    return word && !(resolved && resolved[word]);
+  });
+}
+
+/** "sonnet, low": what a pick becomes. Match my session shows the launch choice. */
+export function pickModelText(resolved, word, appFacts) {
+  if (!word) {
+    if (!appFacts) return "";
+    return [appFacts.model || "default model", appFacts.effort].filter(Boolean).join(", ");
+  }
+  const row = resolved && resolved[word];
+  return row ? [row.model, row.effort].filter(Boolean).join(", ") : "";
 }
 
 function close() {
@@ -125,6 +200,13 @@ export function startBlock(form, facts, appFacts) {
   if (appFacts.permissionMode === "checked") return "The loop needs permission checks off. Start a New Session with checks off first.";
   if (appFacts.promptSupport === false) return "This agent cannot be started with a first prompt.";
   if (!facts.phasesLeft.length) return "Nothing left to build in this spec.";
+  // A saved pick the agent no longer maps holds Start until it is changed (FR-14).
+  // An agent with nothing mapped grays the section instead, and its picks do not count.
+  if (form.phaseStrength && facts.resolved === undefined) return "Asking the app...";
+  if (form.phaseStrength && hasMapping(facts.resolved)) {
+    const bad = unmappedPicks(form, facts, facts.spec);
+    if (bad.length) return `Pick a new strength for ${bad.map((p) => `Phase ${p.n}`).join(", ")}: not mapped for this agent.`;
+  }
   return "";
 }
 
@@ -256,8 +338,91 @@ export function renderLoopSetup(main) {
   main.appendChild(pane);
 }
 
+/** A plain select: [value, text, disabled?] options, the chosen value, a change handler. */
+function select(id, label, options, value, onChange) {
+  const box = el("select", "loop-select");
+  box.id = id;
+  box.setAttribute("aria-label", label);
+  for (const [v, text, disabled] of options) {
+    const o = el("option", null, text);
+    o.value = v;
+    o.disabled = Boolean(disabled);
+    box.appendChild(o);
+  }
+  box.value = value;
+  box.addEventListener("change", () => onChange(box.value));
+  return box;
+}
+
+/** The "Strength per phase" field: the toggle, Set all to, and one row per phase left. */
+function strengthField(s, redo) {
+  const f = s.form;
+  const resolved = s.facts.resolved;
+  const box = field("Strength per phase");
+  const mapped = hasMapping(resolved);
+  const loading = resolved === undefined;
+  const off = !loading && !mapped;
+  const sw = toggle("loop-phase-strength", "Set strength per phase", f.phaseStrength && !off, (v) => ((f.phaseStrength = v), redo()));
+  if (off) {
+    sw.classList.add("is-gray");
+    sw.querySelector("input").disabled = true;
+  }
+  box.appendChild(sw);
+  if (off) {
+    const line = el("p", "loop-hint loop-strength-none");
+    line.append("This agent has no strengths mapped yet. ");
+    const link = el("button", "linky", "Map them in Agents & models");
+    link.type = "button";
+    link.addEventListener("click", () => hooks.openPrefs("agents"));
+    line.appendChild(link);
+    box.appendChild(line);
+    return box;
+  }
+  if (loading) {
+    box.appendChild(el("p", "loop-hint", "Asking the app which agent this loop uses..."));
+    return box;
+  }
+  if (!f.phaseStrength) return box;
+
+  // An unmapped word stays in the list, grayed, so a saved one is seen and changed.
+  const options = [
+    ["", MATCH_SESSION],
+    ...STRENGTH_WORDS.map(([word, label]) => [word, resolved[word] ? label : label + " (not mapped)", !resolved[word]]),
+  ];
+  const all = el("div", "loop-strength-all");
+  all.appendChild(el("label", "loop-strength-label", "Set all to"));
+  all.firstChild.htmlFor = "loop-strength-all";
+  const everyone = select("loop-strength-all", "Set all phases to", [["-", "Choose..."], ...options.map(([v, t, d]) => [v === "" ? "match" : v, t, d])], "-", (v) => {
+    if (v === "-") return;
+    for (const p of s.facts.phasesLeft) setPick(f, s.spec, p, v === "match" ? "" : v);
+    redraw();
+  });
+  all.appendChild(everyone);
+  box.appendChild(all);
+
+  const rows = el("div", "loop-strength-rows");
+  for (const p of s.facts.phasesLeft) {
+    const word = pickOf(f, s.spec, p);
+    const row = el("div", "loop-strength-row");
+    row.dataset.phase = String(p.n);
+    row.appendChild(el("span", "loop-strength-phase", `Phase ${p.n}: ${p.name}`));
+    row.appendChild(
+      select(`loop-strength-${p.n}`, `Phase ${p.n} strength`, options, word, (v) => {
+        setPick(f, s.spec, p, v);
+        s.problems = [];
+        redraw();
+      })
+    );
+    row.appendChild(el("span", "loop-strength-model", pickModelText(resolved, word, page.loopFacts)));
+    rows.appendChild(row);
+  }
+  box.appendChild(rows);
+  return box;
+}
+
 function drawBody(pane, s) {
   const f = s.form;
+  ensureResolved(s);
   const redo = () => {
     s.problems = [];
     redraw();
@@ -286,6 +451,8 @@ function drawBody(pane, s) {
 
   // The fields (FR-2, FR-4).
   const form = el("div", "loop-form");
+
+  form.appendChild(strengthField(s, redo));
 
   const review = field("Review");
   review.appendChild(toggle("loop-review", "Review each phase with a fresh agent before it counts", f.review, (v) => ((f.review = v), redo())));
@@ -503,9 +670,19 @@ function gitButton() {
   return b;
 }
 
-/** The form as the console saves it. */
-function setupBody(f) {
-  return { ...f, quickCheck: f.quickCheck.trim(), notifyUrl: f.notifyUrl.trim(), notifyParam: f.notifyParam.trim() || DEFAULT_NOTIFY_PARAM };
+/** The form as the console saves it (exported for the page tests). */
+export function setupBody(f, s) {
+  const body = { ...f, quickCheck: f.quickCheck.trim(), notifyUrl: f.notifyUrl.trim(), notifyParam: f.notifyParam.trim() || DEFAULT_NOTIFY_PARAM };
+  // Only this spec's key changes: its rows that are not Match my session. With the
+  // toggle off, or an agent with nothing mapped, the saved picks stay as they are
+  // but the loop is told nothing about strengths (NFR-3).
+  const strengths = structuredClone(f.strengths || {});
+  const mine = (strengths[s.spec] || []).filter((p) => p.strength);
+  if (mine.length) strengths[s.spec] = mine;
+  else delete strengths[s.spec];
+  body.strengths = strengths;
+  body.phaseStrength = f.phaseStrength && hasMapping(s.facts.resolved);
+  return body;
 }
 
 /**
@@ -519,7 +696,7 @@ async function sendTest(s) {
   s.problems = [];
   page.loopNotifyTest = { waiting: true };
   redraw();
-  const { status, body: answer } = await postJson("/loop-setup", setupBody(f));
+  const { status, body: answer } = await postJson("/loop-setup", setupBody(f, s));
   if (page.loopSetup !== s) return;
   if (status !== 200 || !answer || answer.ok !== true) {
     page.loopNotifyTest = null;
@@ -537,7 +714,7 @@ async function startLoop(s) {
   page.loopStart = null;
   s.starting = true;
   redraw();
-  const { status, body: answer } = await postJson("/loop-setup", setupBody(f));
+  const { status, body: answer } = await postJson("/loop-setup", setupBody(f, s));
   if (page.loopSetup !== s) return;
   if (status !== 200 || !answer || answer.ok !== true) {
     s.starting = false;

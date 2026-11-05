@@ -10,7 +10,8 @@
 
 import { el } from "../../render.js";
 import { listEditor } from "./agents-list-editor.js";
-import { BUILT_IN, cliOf, savedEntry, isDirty } from "./agents-data.js";
+import { BUILT_IN, HAS_EFFORT, cliOf, savedEntry, isDirty } from "./agents-data.js";
+import { strengthsFold } from "./agents-strengths.js";
 
 function agentField(label, field, child) {
   const wrap = el("div", "agent-field");
@@ -89,7 +90,11 @@ function builtInFields(ctx, cli, draft) {
     "models",
     listEditor({ list: draft, kind: "models", field: "models", optionalName: false, addLabel: "Add a model", onChange: ctx.edited })
   );
-  return [fold(ctx, "modelsOpen", "Models", "agent-fold", [note, comes, yours])];
+  const models = () => [...ctx.saved.shipped[cli], ...draft];
+  return [
+    fold(ctx, "modelsOpen", "Models", "agent-fold", [note, comes, yours]),
+    ...(ctx.modelsLoaded ? [strengthsFold(ctx, cli, draft, { models, hasEffort: HAS_EFFORT.includes(cli) })] : []),
+  ];
 }
 
 function addedFields(ctx, draft) {
@@ -112,6 +117,9 @@ function addedFields(ctx, draft) {
     command,
     agentField("Start prompt", "prompt", agentInput(ctx, draft, "prompt", "Start prompt", "/plan2code (blank starts with nothing typed)", false)),
     models,
+    ...(ctx.modelsLoaded
+      ? [strengthsFold(ctx, ctx.openKey === "agent:new" ? "" : savedEntry(ctx.saved, ctx.openKey).id, draft, { models: () => draft.models, hasEffort: false })]
+      : []),
     args,
   ];
 }
@@ -165,7 +173,7 @@ function formFoot(ctx, key) {
 export function renderDirty(ctx, key) {
   const foot = ctx.$("form").querySelector(".prefs-agents-foot");
   if (!foot || key !== ctx.openKey) return;
-  const dirty = isDirty(ctx.saved, ctx.drafts, key);
+  const dirty = isDirty(ctx.saved, ctx.drafts, key, ctx.strengthDrafts);
   for (const sel of [".prefs-agents-save", ".prefs-agents-discard", ".prefs-unsaved-badge"]) foot.querySelector(sel).hidden = !dirty;
 }
 

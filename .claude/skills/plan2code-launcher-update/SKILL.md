@@ -21,7 +21,7 @@ Run from the repo root (the folder holding `install.js` and `src/launcher/`). Ru
 
 ### Step 2 — Read the current files
 
-Read `src/launcher/models.json`. It has four keys: `_note` (a string), `claude`, `devin` and `codex` (each an array of `{ "id", "label" }`; `codex` is empty today, because Codex's docs name no models to verify and the launcher skips the model question for it). Keep the `_note` text exactly as read — Step 9 writes it back verbatim and the Validation rules check it.
+Read `src/launcher/models.json`. It has five keys: `_note` (a string), `claude`, `devin` and `codex` (each an array of `{ "id", "label" }`) and `strengths` (an object, see Step 4c). Keep the `_note` text exactly as read — Step 9 writes it back verbatim and the Validation rules check it.
 
 Read `src/launcher/agents.json`. It has `schema` (currently `1`) and `agents`, a list of entries. Each entry carries `id`, `name`, `kind` (`builtin` or `template`), `command`, `prompt`, `args`, `bypassArgs`, `modelArgs`, and optional `note`. A `builtin` entry also carries `installUrl`, `install` (lists under `win`, `mac` and `linux`, each `{ label, run, note? }`) and `installDirs` (the same OS keys). Keep the file's shape and order exactly as read.
 
@@ -48,6 +48,10 @@ If the lookup fails or the page does not list aliases, say so, and switch to **g
 ### Step 4b: Check Codex's models
 
 Look up Codex's current model documentation (locate it on each run). Propose `codex` entries only for model ids the docs name explicitly. If they name none, say so and leave `codex` empty. If entries are added, the `_note` sentence about Codex goes stale; keep `_note` verbatim as everywhere else, but tell the maintainer so they can reword it by hand. If the lookup fails, use guided manual edits as in Step 3.
+
+### Step 4c: Check the strengths mapping
+
+`models.json` also has a top-level `strengths` object: for an agent id, the loop's `thrifty`, `balanced` and `best` words, each `{ "model", "effort"? }`. After Steps 3 to 4b settled the refreshed lists, check that every `strengths` row still names a `model` that is in that agent's refreshed list (an `effort` is kept only for an agent that takes one, and is `low`, `medium` or `high`). For a row whose model is **gone**, propose a replacement from the same family, one step lighter or stronger as the word implies (Thrifty lighter, Best stronger), and show it in Step 7's table as a `strengths.<agent>.<word>` change. Never add a mapping for an agent that has none: only agents already under `strengths` are checked.
 
 ### Step 5: Re-check the agent list against vendor docs
 
@@ -136,6 +140,7 @@ Check every rule before `npm test` (Step 10). They mirror the shipped-file tests
 - Every entry in `claude`, `devin` and `codex` has a non-empty string `id` and a non-empty string `label`.
 - Ids are unique within each list, and labels are unique within each list.
 - No Devin id ends in `xhigh`, `max`, `fast` or `priority`.
+- Every `strengths` row names a `model` that is in that agent's list in the same file, uses only the words `thrifty`, `balanced` and `best`, and no agent other than the ones already under `strengths` gains a mapping.
 
 **`agents.json`:**
 

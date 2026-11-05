@@ -207,6 +207,8 @@ impl AgentManager {
             },
             brief,
             prompt,
+            None,
+            Vec::new(),
         )
     }
 
@@ -231,6 +233,42 @@ impl AgentManager {
             },
             None,
             prompt,
+            None,
+            Vec::new(),
+        )
+    }
+
+    /// `start_transient` for a loop phase that runs on its own strength after
+    /// the agent was stopped: the stored launch choice is `kind`, `model`,
+    /// `effort` and `mode` (so a later New Session or phase runs on it), while
+    /// this one launch runs on `phase_model` and `phase_effort` with
+    /// `extra_env` added.
+    pub fn start_transient_on(
+        &self,
+        launch: (Agent, Option<String>, Option<String>, PermissionMode),
+        prompt: String,
+        phase_model: String,
+        phase_effort: Option<String>,
+        extra_env: Vec<(String, String)>,
+    ) -> Result<(), String> {
+        let (kind, model, effort, mode) = launch;
+        let on = StartChoice {
+            kind: kind.clone(),
+            model: Some(phase_model),
+            effort: phase_effort,
+            mode,
+        };
+        self.begin(
+            StartChoice {
+                kind,
+                model,
+                effort,
+                mode,
+            },
+            None,
+            prompt,
+            Some(on),
+            extra_env,
         )
     }
 
@@ -242,6 +280,8 @@ impl AgentManager {
         choice: StartChoice,
         restart_brief: Option<String>,
         first_prompt: String,
+        launch_choice: Option<StartChoice>,
+        launch_env: Vec<(String, String)>,
     ) -> Result<(), String> {
         let mut inner = lock(&self.shared.inner);
         if inner.state == AgentState::Running {
@@ -249,7 +289,10 @@ impl AgentManager {
         }
         inner.brief_note = None;
         let previous = inner.last_start.replace((choice, restart_brief));
-        match self.shared.spawn(&mut inner, first_prompt) {
+        match self
+            .shared
+            .spawn(&mut inner, first_prompt, launch_choice, launch_env)
+        {
             Ok(()) => Ok(()),
             Err(e) => {
                 // A start that never ran must not take away what Restart would
@@ -270,6 +313,42 @@ impl AgentManager {
     /// was, so a later New Session still opens the dashboard, not this
     /// prompt again.
     pub fn start_fresh(&self, prompt: String) -> Result<(), String> {
+        self.fresh(prompt, None, Vec::new())
+    }
+
+    /// Like `start_fresh`, but the agent runs on `model` and `effort` for this
+    /// launch alone, with `extra_env` added to its environment: the loop's way
+    /// to start a phase on its strength. The agent kind and permission mode
+    /// stay the stored launch choice's, and the stored choice itself is never
+    /// written, so a later `start_fresh`, New Session or Restart runs on the
+    /// original model and effort without `extra_env`.
+    pub fn start_phase_on(
+        &self,
+        prompt: String,
+        model: String,
+        effort: Option<String>,
+        extra_env: Vec<(String, String)>,
+    ) -> Result<(), String> {
+        let stored = lock(&self.shared.inner)
+            .last_start
+            .as_ref()
+            .map(|(choice, _)| choice.clone())
+            .ok_or("no agent has been started")?;
+        let choice = StartChoice {
+            model: Some(model),
+            effort,
+            ..stored
+        };
+        self.fresh(prompt, Some(choice), extra_env)
+    }
+
+    /// The kill-then-spawn body `start_fresh` and `start_phase_on` share.
+    fn fresh(
+        &self,
+        prompt: String,
+        choice: Option<StartChoice>,
+        extra_env: Vec<(String, String)>,
+    ) -> Result<(), String> {
         let mut inner = lock(&self.shared.inner);
         if inner.last_start.is_none() {
             return Err("no agent has been started".to_string());
@@ -282,7 +361,7 @@ impl AgentManager {
                 let _ = old.host.kill();
             }
         }
-        match self.shared.spawn(&mut inner, prompt) {
+        match self.shared.spawn(&mut inner, prompt, choice, extra_env) {
             Ok(()) => Ok(()),
             Err(e) => {
                 inner.state = AgentState::Ended {
@@ -427,11 +506,28 @@ impl Shared {
     /// end. `prompt` is this launch's first prompt: the stored brief for a
     /// start or a Restart, or a transient one (`start_fresh`,
     /// `start_transient`) that a Restart must not repeat.
-    fn spawn(self: &Arc<Self>, inner: &mut Inner, prompt: String) -> Result<(), String> {
-        let (choice, _) = inner
-            .last_start
-            .clone()
-            .ok_or("no agent has been started")?;
+    ///
+    /// `choice_override` runs this launch on another choice than the stored
+    /// one (which it never replaces), and `launch_env` is added to the
+    /// process env after the manager's own; both are empty for every caller
+    /// but the loop's phase start.
+    fn spawn(
+        self: &Arc<Self>,
+        inner: &mut Inner,
+        prompt: String,
+        choice_override: Option<StartChoice>,
+        launch_env: Vec<(String, String)>,
+    ) -> Result<(), String> {
+        let choice = match choice_override {
+            Some(choice) => choice,
+            None => {
+                inner
+                    .last_start
+                    .clone()
+                    .ok_or("no agent has been started")?
+                    .0
+            }
+        };
         let mut spec = agent_launch_spec(
             &choice.kind,
             &self.folder,
@@ -443,6 +539,7 @@ impl Shared {
         if let Ok(extra) = self.extra_env.lock() {
             spec.env.extend(extra.iter().cloned());
         }
+        spec.env.extend(launch_env);
         let generation = self.generation.fetch_add(1, Ordering::SeqCst) + 1;
 
         let on_output = {
@@ -520,7 +617,7 @@ impl Shared {
                     .unwrap_or_else(|| choice.kind.default_prompt().to_string())
             })
             .ok_or("no agent has been started")?;
-        match self.spawn(inner, prompt) {
+        match self.spawn(inner, prompt, None, Vec::new()) {
             Ok(()) => Ok(()),
             Err(e) => {
                 inner.state = AgentState::Ended {

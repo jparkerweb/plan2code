@@ -35,6 +35,7 @@ import { SHOTS_DIR_NAME, SHOT_NAME, shotType } from "./patches.mjs";
 import { appendChat, currentConversation, pendingChatCount, typedCount } from "./inbox.mjs";
 import { specKey } from "./workspace.mjs";
 import { readLoopSetup, saveLoopSetup } from "./loop-setup.mjs";
+import { resolveStrengths } from "./strengths.mjs";
 import { MARKERS, phaseChecklist } from "./spec-files.mjs";
 import {
   PR_HOST_KINDS,
@@ -612,6 +613,79 @@ function cleanModels(input) {
   return { models };
 }
 
+// The loop's strength words and the efforts a mapping may carry (strengths.mjs).
+const STRENGTH_WORDS = ["thrifty", "balanced", "best"];
+const STRENGTH_EFFORTS = ["low", "medium", "high"];
+
+// Agent ids a strengths mapping may name: the shipped built-ins plus the ids of
+// the person's own added agents.
+function strengthAgentIds() {
+  const ids = new Set(modelClis());
+  try {
+    const raw = fs.existsSync(USER_AGENTS_FILE) ? readText(USER_AGENTS_FILE) : undefined;
+    for (const a of normalizeAgents(raw).agents) if (a && typeof a.id === "string" && a.id) ids.add(a.id);
+  } catch {
+    // A broken agents file adds no ids; the built-ins still map.
+  }
+  return ids;
+}
+
+/**
+ * The user's strengths mapping: { <agent id>: { thrifty|balanced|best: { model, effort? } } }.
+ * Returns { strengths } or { error } naming the field. Only known agent ids, the three
+ * words, a model matching MODEL_ID and an effort of low, medium or high survive; an
+ * agent left with no row is dropped.
+ */
+function cleanStrengths(input) {
+  if (input == null) return { strengths: {} };
+  if (typeof input !== "object" || Array.isArray(input)) return { error: "strengths must be an object" };
+  const known = strengthAgentIds();
+  const strengths = {};
+  for (const [agent, rows] of Object.entries(input)) {
+    if (!known.has(agent)) return { error: `strengths.${agent}: not a known agent` };
+    if (!rows || typeof rows !== "object" || Array.isArray(rows)) return { error: `strengths.${agent} must be an object` };
+    const out = {};
+    for (const [word, row] of Object.entries(rows)) {
+      if (!STRENGTH_WORDS.includes(word)) return { error: `strengths.${agent}.${word}: not a strength (thrifty, balanced or best)` };
+      if (!row || typeof row !== "object" || Array.isArray(row)) return { error: `strengths.${agent}.${word} must be an object` };
+      const model = typeof row.model === "string" ? row.model.trim() : "";
+      if (!MODEL_ID.test(model)) return { error: `strengths.${agent}.${word}.model: "${model}" is not a valid model id` };
+      const entry = { model };
+      if (row.effort != null && row.effort !== "") {
+        if (!STRENGTH_EFFORTS.includes(row.effort)) return { error: `strengths.${agent}.${word}.effort: must be low, medium or high` };
+        entry.effort = row.effort;
+      }
+      out[word] = entry;
+    }
+    if (Object.keys(out).length) strengths[agent] = out;
+  }
+  return { strengths };
+}
+
+// Strengths from a models file that was read from disk. Tolerant, unlike a POST body:
+// an agent that is no longer known (a deleted custom agent) or whose rows are bad is
+// skipped on its own, so it never hides or wipes the other agents' mapping.
+function savedStrengths(file) {
+  const saved = file && file.strengths;
+  if (!saved || typeof saved !== "object" || Array.isArray(saved)) return {};
+  const out = {};
+  for (const [agent, rows] of Object.entries(saved)) {
+    if (!rows || typeof rows !== "object" || Array.isArray(rows)) continue;
+    // Row by row, like the app: a bad row is dropped, a bad effort is dropped and
+    // its row stays, and the agent keeps every other row.
+    const kept = {};
+    for (const [word, row] of Object.entries(rows)) {
+      let one = cleanStrengths({ [agent]: { [word]: row } });
+      if (!one.strengths && row && typeof row === "object" && !Array.isArray(row) && row.effort != null) {
+        one = cleanStrengths({ [agent]: { [word]: { model: row.model } } });
+      }
+      if (one.strengths && one.strengths[agent]) Object.assign(kept, one.strengths[agent]);
+    }
+    if (Object.keys(kept).length) out[agent] = kept;
+  }
+  return out;
+}
+
 function shippedModels() {
   const file = readJson(SHIPPED_MODELS_FILE, null) || {};
   const out = {};
@@ -625,7 +699,12 @@ function shippedModels() {
 function modelsGet(req, res) {
   const saved = readJson(USER_MODELS_FILE, null) || {};
   const { models } = cleanModels(saved);
-  return json(res, 200, { shipped: shippedModels(), user: models || Object.fromEntries(modelClis().map((cli) => [cli, []])) });
+  const shippedFile = readJson(SHIPPED_MODELS_FILE, null) || {};
+  return json(res, 200, {
+    shipped: shippedModels(),
+    user: models || Object.fromEntries(modelClis().map((cli) => [cli, []])),
+    strengths: { shipped: savedStrengths(shippedFile), user: savedStrengths(saved) },
+  });
 }
 
 function modelsPost(req, res) {
@@ -633,13 +712,22 @@ function modelsPost(req, res) {
     if (err) return json(res, err.tooBig ? 413 : 400, { error: err.tooBig ? "too large" : "body must be JSON" });
     const { models, error } = cleanModels(body && body.models);
     if (error) return json(res, 400, { error });
+    // A body without strengths keeps the mapping already saved, so saving a Models list never wipes it.
+    let strengths;
+    if (body && body.strengths !== undefined) {
+      const cleaned = cleanStrengths(body.strengths);
+      if (cleaned.error) return json(res, 400, { error: cleaned.error });
+      strengths = cleaned.strengths;
+    } else {
+      strengths = savedStrengths(readJson(USER_MODELS_FILE, null));
+    }
     try {
       ensureDir(path.dirname(USER_MODELS_FILE));
-      writeJsonAtomic(USER_MODELS_FILE, models);
+      writeJsonAtomic(USER_MODELS_FILE, Object.keys(strengths).length ? { ...models, strengths } : models);
     } catch (e) {
       return json(res, 500, { error: String(e.message) });
     }
-    return json(res, 200, { ok: true, user: models });
+    return json(res, 200, { ok: true, user: models, strengths });
   });
 }
 
@@ -1492,22 +1580,60 @@ const loopProject = (ctx) => (ctx.readState() || {}).project || ctx.project || c
 // `?spec=specs/<name>` adds the setup screen's read-only facts (FR-3): the
 // phases not yet marked done, the branch and the count of uncommitted files.
 // The server reads the project here and never writes it.
+// The phases of `spec` not yet done, as [{ n, name }]; null when its overview.md
+// cannot be read (the store then keeps that spec's picks as they are).
+function phasesLeftOf(project, spec) {
+  try {
+    const overview = fs.readFileSync(path.join(project, spec, "overview.md"), "utf8");
+    // Done as specs.mjs reads it ([x], [X], [?]), the same rule the app's Start uses.
+    return phaseChecklist(overview)
+      .filter((p) => !["complete", "assumed"].includes(MARKERS[p.marker]))
+      .map((p) => ({ n: p.number, name: p.name }));
+  } catch {
+    return null;
+  }
+}
+
+// Agents that take an effort beside the model (the Preferences page's HAS_EFFORT).
+const EFFORT_AGENTS = ["claude", "codex"];
+
+/**
+ * The loop agent's resolved strengths ({ thrifty?, balanced?, best? }, each { model, effort? })
+ * for `?agent=<id>`: a built-in's Models list is what ships plus what the person added; an
+ * added agent's is its own. null when the id is neither.
+ */
+function resolvedStrengthsFor(agentId) {
+  if (typeof agentId !== "string" || !agentId) return null;
+  const shippedFile = readJson(SHIPPED_MODELS_FILE, null) || {};
+  const savedFile = readJson(USER_MODELS_FILE, null) || {};
+  let models;
+  let hasEffort = false;
+  if (modelClis().includes(agentId)) {
+    const user = cleanModels(savedFile).models || {};
+    models = [...(shippedModels()[agentId] || []), ...(user[agentId] || [])].map((m) => m.id);
+    hasEffort = EFFORT_AGENTS.includes(agentId);
+  } else {
+    const raw = fs.existsSync(USER_AGENTS_FILE) ? readText(USER_AGENTS_FILE) : undefined;
+    let found = null;
+    try {
+      found = normalizeAgents(raw).agents.find((a) => a && a.id === agentId) || null;
+    } catch {
+      found = null;
+    }
+    if (!found) return null;
+    models = (Array.isArray(found.models) ? found.models : []).map((m) => m.id);
+  }
+  const owned = (file) => savedStrengths(file)[agentId] || {};
+  return resolveStrengths({ shipped: owned(shippedFile), user: owned(savedFile), models, hasEffort });
+}
+
 function loopSetupGet(req, res, ctx, url) {
-  const answer = readLoopSetup(loopProject(ctx));
+  const answer = readLoopSetup(loopProject(ctx), (s) => phasesLeftOf(loopProject(ctx), s));
   const spec = url && url.searchParams.get("spec");
   if (spec === null || spec === undefined) return json(res, 200, answer);
   if (!/^specs\/[^/\\]+$/.test(spec) || /^specs\/\./.test(spec)) return json(res, 400, { error: "spec must be a folder directly under specs/" });
   const state = ctx.readState() || {};
-  let phasesLeft = [];
-  try {
-    const overview = fs.readFileSync(path.join(loopProject(ctx), spec, "overview.md"), "utf8");
-    // Done as specs.mjs reads it ([x], [X], [?]), the same rule the app's Start uses.
-    phasesLeft = phaseChecklist(overview)
-      .filter((p) => !["complete", "assumed"].includes(MARKERS[p.marker]))
-      .map((p) => ({ n: p.number, name: p.name }));
-  } catch {
-    /* no overview.md: nothing to build */
-  }
+  const phasesLeft = phasesLeftOf(loopProject(ctx), spec) || [];
   const pending = state.scan && Number.isInteger(state.scan.pending) ? state.scan.pending : null;
   // What to prefill an empty quick check with: the project's own build, then
   // lint, script. Text only; nothing here runs it.
@@ -1519,7 +1645,9 @@ function loopSetupGet(req, res, ctx, url) {
   } catch {
     /* no package.json, or not JSON: no suggestion */
   }
-  return json(res, 200, { ...answer, phasesLeft, branch: state.branch || "", pending, suggestedQuickCheck });
+  const agent = url.searchParams.get("agent");
+  const picks = Array.isArray(answer.strengths[spec]) ? answer.strengths[spec] : [];
+  return json(res, 200, { ...answer, phasesLeft, branch: state.branch || "", pending, suggestedQuickCheck, picks, resolved: resolvedStrengthsFor(agent) });
 }
 
 function loopSetupPost(req, res, ctx) {
@@ -1527,7 +1655,7 @@ function loopSetupPost(req, res, ctx) {
     if (err && err.tooBig) return json(res, 413, { error: "too large" });
     if (err || !body || typeof body !== "object" || Array.isArray(body)) return json(res, 400, { ok: false, problems: ["the setup must be a JSON object"] });
     try {
-      return json(res, 200, { ok: true, setup: saveLoopSetup(loopProject(ctx), body) });
+      return json(res, 200, { ok: true, setup: saveLoopSetup(loopProject(ctx), body, (s) => phasesLeftOf(loopProject(ctx), s)) });
     } catch (e) {
       if (Array.isArray(e.problems)) return json(res, 400, { ok: false, problems: e.problems });
       return json(res, 500, { error: String(e.message) });

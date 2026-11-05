@@ -647,7 +647,7 @@ Ghoul Rush at 65).
   star eye, and one to three rivals each leave a glowing wall behind; a wall, a
   trail (yours too), a crystal or another rider's head is out, and a rival's
   trail goes once it has faded. You get a split second of grace: about to
-  ride into something, you hold in place for 150 ms first, and a turn pressed
+  ride into something, you hold in place for 190 ms first, and a turn pressed
   then rides out of it (the rivals get none). Arrows steer and space spends a **boost**
   charge for 1.4 seconds of speed (two charges a heat, up to three). A round
   is a run of heats through nine arenas, each with its own scenery: Neon Grid,
@@ -665,7 +665,8 @@ Ghoul Rush at 65).
   trails but not crystals, three shots, each a rival out with the cut bonus)
   and **Score x2** (8 seconds of double points), a third rival and a pair of
   **portals** at 4 with a **Wide Trail** (4 seconds of a wall three cells
-  across) and **Coin Rain** (seven coins over the board), **closing walls**
+  across; you can turn onto the side cells you have just laid, so a corner
+  never crashes you) and **Coin Rain** (seven coins over the board), **closing walls**
   at 5 (from 10 seconds in, the outer ring turns to stone every 3.5 seconds,
   flashing red first) with a **Hyperjump** (straight out to the most open
   space on the board), and at 6 a second pair of portals and a rainbow
@@ -1737,6 +1738,8 @@ On Appearance and Sounds & activities each change saves the moment you make it, 
 Most people never need this tab: Plan2Code finds the agents installed on the machine and ships an up-to-date model list with every release. It opens on a list of agents on the left, one row per agent with its models and whether its command was found on this machine. Picking a row opens that agent's form in the pane beside it, and **Add agent** a blank one. Under the list, **Or start from a template** offers the same starter templates the setup page has (GitHub Copilot CLI, OpenCode, Gemini CLI, Pi): picking one shows its note and **Use this template**, which opens the new-agent form prefilled rather than saving anything behind your back. Nothing on this tab saves as you type: each form has its own **Save** and **Discard**, and shows an **Unsaved** badge while it holds a change. Leaving a form with an unsaved change (another tab, picking another agent, **Close**, `Esc`) asks first: save it, discard it, or keep editing. Saving one agent never sends another's half-typed edit.
 
 **Models.** The `plan2code` launcher's model menu comes from `models.json`, which every install overwrites with the authors' curated list. Each built-in agent's form (Claude, Devin, Codex) shows that list under *Comes with Plan2Code*, and below it **Models you added**, each a model id and the name shown in the menu, for a model that came out before Plan2Code was updated. Additions are kept in `~/.plan2code/models.json` and survive updates, unless the curated list now includes them; **Remove** takes one out. Restart `plan2code` to see a change. You can always run `plan2code --model <id>`, or switch model inside your agent before running a skill. Devin ids ending `-xhigh` or `-max` are refused. Maintainers refresh the curated list, and the shipped agent list's install data, with the repo-local `/plan2code-launcher-update` skill, which shows a diff and changes only what they approve.
+
+**Strengths in the loop.** Under *Models*, a fold of the same name maps **Thrifty**, **Balanced** and **Best** to one of that agent's own models (and an effort, for agents that take one). Rows you have not changed show as shipped, tagged *default*; a changed row has **Reset**. The Implementation Loop's **Strength per phase** setting reads these three words to start each phase, its retry and its helpers on the model you chose (see the Implementation Loop in the desktop app's guide). Saved with the agent's form in `~/.plan2code/models.json`.
 
 **Agents.** An agent you add is an agent CLI Plan2Code did not find on its own, which the `plan2code` command and the desktop app can then start. Each one has a name, the command to run (a bare name looked up on `PATH`, or a full path), and optional fields:
 

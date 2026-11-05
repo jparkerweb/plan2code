@@ -1891,6 +1891,169 @@
       "args": [
         "a $HOME & \"b\""
       ]
+    },
+    {
+      "name": "OpenCode's shape: a chosen model goes ahead of the prompt",
+      "entry": {
+        "id": "opencode",
+        "name": "OpenCode",
+        "command": "opencode",
+        "args": [
+          "{model}",
+          "--prompt",
+          "{prompt}"
+        ],
+        "prompt": "Use the plan2code skill",
+        "bypassArgs": [
+          "--auto"
+        ],
+        "modelArgs": [
+          "--model",
+          "{model}"
+        ]
+      },
+      "options": {
+        "model": "anthropic/sonnet",
+        "bypass": false
+      },
+      "args": [
+        "--model",
+        "anthropic/sonnet",
+        "--prompt",
+        "Use the plan2code skill"
+      ]
+    },
+    {
+      "name": "OpenCode's shape: no model, no model argument",
+      "entry": {
+        "id": "opencode",
+        "name": "OpenCode",
+        "command": "opencode",
+        "args": [
+          "{model}",
+          "--prompt",
+          "{prompt}"
+        ],
+        "prompt": "Use the plan2code skill",
+        "bypassArgs": [
+          "--auto"
+        ],
+        "modelArgs": [
+          "--model",
+          "{model}"
+        ]
+      },
+      "options": {
+        "bypass": false
+      },
+      "args": [
+        "--prompt",
+        "Use the plan2code skill"
+      ]
+    },
+    {
+      "name": "Gemini CLI's shape: a chosen model goes ahead of the prompt",
+      "entry": {
+        "id": "gemini",
+        "name": "Gemini CLI",
+        "command": "gemini",
+        "args": [
+          "{model}",
+          "{prompt}"
+        ],
+        "prompt": "Use the plan2code skill",
+        "bypassArgs": [
+          "--approval-mode=yolo"
+        ],
+        "modelArgs": [
+          "--model",
+          "{model}"
+        ]
+      },
+      "options": {
+        "model": "flash",
+        "bypass": false
+      },
+      "args": [
+        "--model",
+        "flash",
+        "Use the plan2code skill"
+      ]
+    },
+    {
+      "name": "Gemini CLI's shape: no model, no model argument",
+      "entry": {
+        "id": "gemini",
+        "name": "Gemini CLI",
+        "command": "gemini",
+        "args": [
+          "{model}",
+          "{prompt}"
+        ],
+        "prompt": "Use the plan2code skill",
+        "bypassArgs": [
+          "--approval-mode=yolo"
+        ],
+        "modelArgs": [
+          "--model",
+          "{model}"
+        ]
+      },
+      "options": {
+        "bypass": false
+      },
+      "args": [
+        "Use the plan2code skill"
+      ]
+    },
+    {
+      "name": "Pi's shape: a chosen model goes ahead of the prompt",
+      "entry": {
+        "id": "pi",
+        "name": "Pi",
+        "command": "pi",
+        "args": [
+          "{model}",
+          "{prompt}"
+        ],
+        "prompt": "/skill:plan2code",
+        "modelArgs": [
+          "--model",
+          "{model}"
+        ]
+      },
+      "options": {
+        "model": "sonnet:high",
+        "bypass": false
+      },
+      "args": [
+        "--model",
+        "sonnet:high",
+        "/skill:plan2code"
+      ]
+    },
+    {
+      "name": "Pi's shape: no model, no model argument",
+      "entry": {
+        "id": "pi",
+        "name": "Pi",
+        "command": "pi",
+        "args": [
+          "{model}",
+          "{prompt}"
+        ],
+        "prompt": "/skill:plan2code",
+        "modelArgs": [
+          "--model",
+          "{model}"
+        ]
+      },
+      "options": {
+        "bypass": false
+      },
+      "args": [
+        "/skill:plan2code"
+      ]
     }
   ],
   "ids": [

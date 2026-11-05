@@ -11,6 +11,7 @@
 //! retry; every other failure stops at once through `stop_loop`, the one place
 //! a stop goes, with its evidence on the page.
 
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
@@ -27,6 +28,7 @@ use crate::loop_commit;
 use crate::loop_notify::{self, NotifyKind};
 use crate::loop_report::{self, EntryResult, LoopReport, ReportEntry};
 use crate::loop_tools;
+use crate::models::{self, StrengthRow};
 use crate::session_reader::{self, ReadError};
 
 // ---------------------------------------------------------------- the setup
@@ -74,6 +76,57 @@ pub enum AfterLast {
     RunFinalize,
 }
 
+/// A phase's strength word: what the person picked for one phase.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Strength {
+    Thrifty,
+    Balanced,
+    Best,
+}
+
+impl Strength {
+    /// The word the setup, the env var and the console use.
+    pub fn word(self) -> &'static str {
+        match self {
+            Strength::Thrifty => "thrifty",
+            Strength::Balanced => "balanced",
+            Strength::Best => "best",
+        }
+    }
+
+    /// The word for the report and the page.
+    pub fn label(self) -> &'static str {
+        match self {
+            Strength::Thrifty => "Thrifty",
+            Strength::Balanced => "Balanced",
+            Strength::Best => "Best",
+        }
+    }
+
+    pub fn from_word(word: &str) -> Option<Strength> {
+        match word {
+            "thrifty" => Some(Strength::Thrifty),
+            "balanced" => Some(Strength::Balanced),
+            "best" => Some(Strength::Best),
+            _ => None,
+        }
+    }
+}
+
+/// The env var a strength phase's agent gets; the console reads it so the
+/// phase's helpers follow the phase.
+pub const STRENGTH_ENV: &str = "PLAN2CODE_LOOP_STRENGTH";
+
+/// One saved pick: the phase's number and name (a renamed phase drops the pick)
+/// and the strength word chosen for it.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PhasePick {
+    pub n: u32,
+    pub name: String,
+    pub strength: Strength,
+}
+
 /// One project's entry in `loop-setup.json`.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
@@ -97,6 +150,10 @@ pub struct LoopSetup {
     /// The query parameter or JSON field that carries the message, for the
     /// kinds that let the person name it.
     pub notify_param: String,
+    /// Whether each phase runs on its own strength (off: every phase runs as today).
+    pub phase_strength: bool,
+    /// The picks per spec folder (`specs/<name>`), only for phases not yet done.
+    pub strengths: BTreeMap<String, Vec<PhasePick>>,
 }
 
 impl Default for LoopSetup {
@@ -114,6 +171,8 @@ impl Default for LoopSetup {
             notify_kind: NotifyKind::Query,
             notify_url: String::new(),
             notify_param: loop_notify::DEFAULT_PARAM.to_string(),
+            phase_strength: false,
+            strengths: BTreeMap::new(),
         }
     }
 }
@@ -260,6 +319,9 @@ pub struct PhaseRecord {
     pub commit: Option<String>,
     pub subject: Option<String>,
     pub retries: u32,
+    /// The strength this phase runs on now: its pick, stepped up by a retry.
+    /// `None` for Match my session and for a run with the toggle off.
+    pub strength: Option<Strength>,
 }
 
 #[derive(Clone, Debug)]
@@ -321,6 +383,37 @@ pub struct RunningRecord {
     /// How many looks in a row could not read the phase's session; reset by
     /// the next good read. While it is above zero a silence stop says why.
     pub read_failures: u32,
+    /// What each strength word maps to for the loop's agent, resolved once at
+    /// the start (empty with the toggle off), so no phase start rereads files.
+    pub strength_rows: BTreeMap<String, StrengthRow>,
+    /// The launch choice's model and effort, which a Match my session phase runs on.
+    pub launch_model: Option<String>,
+    pub launch_effort: Option<String>,
+}
+
+/// What one phase runs on, for its start, the strip and the report.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PhaseRun {
+    /// `None`: the phase runs on the launch choice.
+    pub strength: Option<Strength>,
+    pub model: Option<String>,
+    pub effort: Option<String>,
+}
+
+impl PhaseRun {
+    /// "sonnet, low", "opus", or "" when no model is known.
+    pub fn model_text(&self) -> String {
+        match (&self.model, &self.effort) {
+            (Some(m), Some(e)) => format!("{m}, {e}"),
+            (Some(m), None) => m.clone(),
+            _ => String::new(),
+        }
+    }
+
+    /// The report's word: "Thrifty", or "Match my session".
+    pub fn word_text(&self) -> &'static str {
+        self.strength.map_or("Match my session", Strength::label)
+    }
 }
 
 fn report_time() -> String {
@@ -375,6 +468,48 @@ impl RunningRecord {
             start_head: None,
             own_dirty: Vec::new(),
             read_failures: 0,
+            strength_rows: BTreeMap::new(),
+            launch_model: None,
+            launch_effort: None,
+        }
+    }
+
+    /// What phase `index` runs on, or `None` with Set strength per phase off.
+    /// A phase whose word the agent does not map runs on the launch choice
+    /// (Start is held for such a pick, so this is only a guard).
+    pub fn phase_run(&self, index: usize) -> Option<PhaseRun> {
+        if !self.setup.phase_strength {
+            return None;
+        }
+        let word = self.phases.get(index)?.strength;
+        if let Some(word) = word {
+            if let Some(row) = self.strength_rows.get(word.word()) {
+                return Some(PhaseRun {
+                    strength: Some(word),
+                    model: Some(row.model.clone()),
+                    effort: row.effort.clone(),
+                });
+            }
+        }
+        Some(PhaseRun {
+            strength: None,
+            model: self.launch_model.clone(),
+            effort: self.launch_effort.clone(),
+        })
+    }
+
+    /// Step phase `index` one strength up for its retry: Thrifty to Balanced,
+    /// Balanced to Best, Best stays; a partly mapped agent goes to the next
+    /// word it maps, or stays. A Match my session phase stays.
+    pub fn step_strength_up(&mut self, index: usize) {
+        let Some(phase) = self.phases.get_mut(index) else {
+            return;
+        };
+        let Some(word) = phase.strength else { return };
+        if let Some(next) = models::next_strength(&self.strength_rows, word.word())
+            .and_then(|w| Strength::from_word(&w))
+        {
+            phase.strength = Some(next);
         }
     }
 }
@@ -402,6 +537,11 @@ pub struct LoopStateEvent {
     pub stopping: bool,
     /// Stop after this phase can be turned on (false on the run's last phase).
     pub can_stop_after: bool,
+    /// The running phase's strength word, when it has one (not Match my session).
+    pub strength: Option<String>,
+    /// The model and effort the phase runs on, when known.
+    pub model: Option<String>,
+    pub effort: Option<String>,
 }
 
 impl LoopStateEvent {
@@ -422,6 +562,9 @@ impl LoopStateEvent {
             stop_after_phase: false,
             stopping: false,
             can_stop_after: false,
+            strength: None,
+            model: None,
+            effort: None,
         }
     }
 }
@@ -433,6 +576,7 @@ pub fn state_event(rec: &RunningRecord) -> LoopStateEvent {
         .checked_sub(1)
         .and_then(|at| rec.phases.get(at))
         .filter(|p| p.status == PhaseStatus::Done);
+    let run = rec.phase_run(rec.current);
     LoopStateEvent {
         running: true,
         spec_name: rec
@@ -452,6 +596,12 @@ pub fn state_event(rec: &RunningRecord) -> LoopStateEvent {
         stop_after_phase: rec.stop_after_phase,
         stopping: rec.stop_now,
         can_stop_after: rec.current + 1 < rec.phases.len(),
+        strength: run
+            .as_ref()
+            .and_then(|r| r.strength)
+            .map(|w| w.word().to_string()),
+        model: run.as_ref().and_then(|r| r.model.clone()),
+        effort: run.as_ref().and_then(|r| r.effort.clone()),
     }
 }
 
@@ -964,6 +1114,7 @@ pub fn prepare_with(
                         commit: None,
                         subject: None,
                         retries: 0,
+                        strength: phase_pick(&setup, spec, n, p["name"].as_str().unwrap_or("")),
                     })
                 })
                 .collect()
@@ -1018,6 +1169,33 @@ pub fn prepare_with(
     // is listed as the person's own, the known limit of a baseline.
     rec.own_dirty = own_dirty;
     Ok(rec)
+}
+
+/// The strength the person picked for phase `n` called `name` of `spec`, only
+/// with the toggle on. A renamed phase drops its pick.
+fn phase_pick(setup: &LoopSetup, spec: &str, n: u32, name: &str) -> Option<Strength> {
+    if !setup.phase_strength {
+        return None;
+    }
+    setup
+        .strengths
+        .get(spec)?
+        .iter()
+        .find(|p| p.n == n && p.name == name)
+        .map(|p| p.strength)
+}
+
+/// What each strength word maps to for `agent`, from the shipped and user
+/// model files: read once, when the loop begins.
+fn strength_rows_for(agent: &Agent) -> BTreeMap<String, StrengthRow> {
+    let models: Vec<String> = match agent {
+        Agent::Builtin(entry) => models::models_for_builtin(&entry.id),
+        Agent::Custom(custom) => custom.models.clone(),
+    }
+    .into_iter()
+    .map(|m| m.id)
+    .collect();
+    models::strengths_for(agent.id(), &models, agent.has_effort())
 }
 
 /// Open again the phases `prepare` found marked done with no commit behind
@@ -1281,6 +1459,11 @@ pub fn begin_with_limits(
     let home = session_reader::console_home().ok_or("no home folder found")?;
     // A build that stopped earlier carries on in the same report.
     let mut rec = rec;
+    if rec.setup.phase_strength {
+        rec.strength_rows = strength_rows_for(&launch.0);
+    }
+    rec.launch_model.clone_from(&launch.1);
+    rec.launch_effort.clone_from(&launch.2);
     if let Some(report) = loop_report::load(&home, &rec.project, &rec.spec) {
         rec.report = report;
     }
@@ -1340,6 +1523,32 @@ pub fn start_with(agent: &AgentManager, launch: &Launch, prompt: String) -> Resu
     }
 }
 
+/// Start a fresh agent on `prompt` for a phase that runs on `word`'s `row`: the
+/// agent starts on that model and effort with `PLAN2CODE_LOOP_STRENGTH` set,
+/// and the stored launch choice stays what it was (an agent the loop stopped
+/// gets the launch choice stored, then the phase's own run on top).
+pub fn start_phase_with(
+    agent: &AgentManager,
+    launch: &Launch,
+    prompt: String,
+    row: &StrengthRow,
+    word: Strength,
+) -> Result<(), String> {
+    let env = vec![(STRENGTH_ENV.to_string(), word.word().to_string())];
+    if agent.launch_choice().is_some() {
+        agent.start_phase_on(prompt, row.model.clone(), row.effort.clone(), env)
+    } else {
+        agent.forget_session();
+        agent.start_transient_on(
+            launch.clone(),
+            prompt,
+            row.model.clone(),
+            row.effort.clone(),
+            env,
+        )
+    }
+}
+
 /// The prompt behind Fix it by hand: an ordinary Implement session.
 pub fn fix_prompt(spec: &str) -> String {
     format!("/plan2code-3-implement {spec}/overview.md --web")
@@ -1376,12 +1585,21 @@ fn start_phase(ctx: &Ctx, index: usize) -> Result<(), String> {
         rec.phase_started_at = Instant::now();
         rec.activity_checked = Instant::now();
         rec.last_activity = SystemTime::now();
-        phase_prompt(&rec.spec, rec.phases[index].n, &rec.setup)
+        let prompt = phase_prompt(&rec.spec, rec.phases[index].n, &rec.setup);
+        let on = rec.phase_run(index).and_then(|run| {
+            let word = run.strength?;
+            Some((word, rec.strength_rows.get(word.word())?.clone()))
+        });
+        (prompt, on)
     };
+    let (prompt, on) = prompt;
     // Said before the agent starts: the banner is up from the moment of Start,
     // and says what is happening between phases.
     emit(ctx);
-    start_with(&ctx.agent, &ctx.launch, prompt)?;
+    match on {
+        Some((word, row)) => start_phase_with(&ctx.agent, &ctx.launch, prompt, &row, word)?,
+        None => start_with(&ctx.agent, &ctx.launch, prompt)?,
+    }
     let generation = ctx.agent.snapshot().generation;
     if let Some(rec) = lock(&ctx.slot).as_mut().filter(|r| r.run_id == ctx.run_id) {
         rec.generation = generation;
@@ -1719,6 +1937,10 @@ fn fail(ctx: &Ctx, snap: &Snapshot, cause: StopCause, detail: String) -> bool {
         return false;
     }
     if should_retry(&cause, &snap.setup, snap.phase_retries) {
+        // The retry runs one strength up, and its entry says so.
+        if let Some(rec) = lock(&ctx.slot).as_mut().filter(|r| r.run_id == ctx.run_id) {
+            rec.step_strength_up(snap.current);
+        }
         let why = stop_line(&cause, snap.phase_n, &detail, false);
         let name = phase_name(ctx);
         add_entry(
@@ -2098,11 +2320,19 @@ fn phase_assumptions(
 /// Add to the report and save it straight away, so a crash loses nothing. A save
 /// that fails never stops the loop; the report stays in memory and the end says so.
 fn add_entry(ctx: &Ctx, entry: ReportEntry) {
+    let mut entry = entry;
     let saved = {
         let mut guard = lock(&ctx.slot);
         let Some(rec) = guard.as_mut().filter(|r| r.run_id == ctx.run_id) else {
             return;
         };
+        // What the phase ran on, with Set strength per phase on.
+        if entry.strength.is_empty() {
+            if let Some(run) = rec.phase_run(rec.current) {
+                entry.strength = run.word_text().to_string();
+                entry.model = run.model_text();
+            }
+        }
         rec.report.entries.push(entry);
         (rec.project.clone(), rec.report.clone())
     };
@@ -2574,6 +2804,11 @@ fn stop_loop(ctx: &Ctx, cause: StopCause, line: String, can: &[&str]) {
         if let Some(outcome) = &rec.last_outcome {
             entry = entry.with_outcome(outcome);
         }
+    }
+    // What the phase ran on, as `add_entry` does for every other entry.
+    if let Some(run) = rec.phase_run(at) {
+        entry.strength = run.word_text().to_string();
+        entry.model = run.model_text();
     }
     rec.report.entries.push(entry);
     rec.report_failure = loop_report::save(&ctx.home, &rec.project, &rec.report).err();
@@ -3048,6 +3283,7 @@ mod tests {
             commit: None,
             subject: None,
             retries: 0,
+            strength: None,
         }
     }
 
@@ -3543,6 +3779,43 @@ second line"
         assert_eq!(s.on_question, OnQuestion::Guess);
         assert_eq!(s.after_last, AfterLast::RunFinalize);
         assert_eq!(s.silence_minutes, 30);
+    }
+
+    #[test]
+    fn an_older_entry_reads_without_phase_strengths() {
+        let s: LoopSetup =
+            serde_json::from_value(json!({ "review": true, "commit": false })).unwrap();
+        assert!(!s.phase_strength);
+        assert!(s.strengths.is_empty());
+    }
+
+    #[test]
+    fn a_full_entry_with_phase_strengths_round_trips() {
+        let entry = json!({
+            "phaseStrength": true,
+            "strengths": { "specs/lunch": [
+                { "n": 2, "name": "The API", "strength": "thrifty" },
+                { "n": 3, "name": "The page", "strength": "best" }
+            ] }
+        });
+        let s: LoopSetup = serde_json::from_value(entry.clone()).unwrap();
+        assert!(s.phase_strength);
+        let picks = &s.strengths["specs/lunch"];
+        assert_eq!(picks.len(), 2);
+        assert_eq!(picks[0].strength, Strength::Thrifty);
+        assert_eq!(
+            picks[1],
+            PhasePick {
+                n: 3,
+                name: "The page".to_string(),
+                strength: Strength::Best
+            }
+        );
+        let back = serde_json::to_value(&s).unwrap();
+        assert_eq!(back["phaseStrength"], true);
+        assert_eq!(back["strengths"], entry["strengths"]);
+        let again: LoopSetup = serde_json::from_value(back).unwrap();
+        assert_eq!(again, s);
     }
 
     #[test]
@@ -4426,6 +4699,223 @@ second line"
         assert_eq!(entry.result, EntryResult::Stopped);
         assert!(entry.line.contains("the agent crashed"), "{}", entry.line);
         assert!(entry.line.ends_with("after one retry"), "{}", entry.line);
+    }
+
+    fn strength_rows() -> BTreeMap<String, StrengthRow> {
+        let row = |model: &str, effort: Option<&str>| StrengthRow {
+            model: model.into(),
+            effort: effort.map(str::to_string),
+        };
+        BTreeMap::from([
+            ("thrifty".to_string(), row("sonnet", Some("low"))),
+            ("balanced".to_string(), row("opus", Some("medium"))),
+            ("best".to_string(), row("opus", Some("high"))),
+        ])
+    }
+
+    /// Turn Set strength per phase on for the harness loop: the phases'
+    /// words, the rows an agent maps and a launch model for Match my session.
+    fn with_strengths(ctx: &Ctx, words: &[Option<Strength>]) {
+        let mut guard = lock(&ctx.slot);
+        let rec = guard.as_mut().unwrap();
+        rec.setup.phase_strength = true;
+        rec.strength_rows = strength_rows();
+        rec.launch_model = Some("haiku".into());
+        for (phase, word) in rec.phases.iter_mut().zip(words) {
+            phase.strength = *word;
+        }
+    }
+
+    #[test]
+    fn a_thrifty_phase_starts_on_its_strength_and_a_retry_steps_it_up() {
+        if !git_ready("strength retry") {
+            return;
+        }
+        let repo = throwaway_repo("strength-retry");
+        let (ctx, home, seen) = running_loop_seen(&repo, Limits::default());
+        with_strengths(&ctx, &[Some(Strength::Thrifty), Some(Strength::Best)]);
+        let ready = |count: usize| {
+            wait_until("the fake agent ready", || {
+                lock(&seen).matches("FAKE-AGENT ready").count() >= count
+            })
+        };
+        start_phase(&ctx, 0).expect("start the fake agent");
+        ready(1);
+        ctx.agent.input(b"ENV PLAN2CODE_LOOP_STRENGTH\r").unwrap();
+        wait_until("the strength env", || {
+            lock(&seen).contains("ENV PLAN2CODE_LOOP_STRENGTH=thrifty")
+        });
+        // The strip says what the phase runs on.
+        let event = state_event(lock(&ctx.slot).as_ref().unwrap());
+        assert_eq!(event.strength.as_deref(), Some("thrifty"));
+        assert_eq!(event.model.as_deref(), Some("sonnet"));
+        assert_eq!(event.effort.as_deref(), Some("low"));
+        // The stored launch choice is the loop's own, not the phase's.
+        let (_, model, _, _) = ctx.agent.launch_choice().unwrap();
+        assert_eq!(model, None);
+
+        ctx.agent.input(b"EXIT 3\r").unwrap();
+        wait_until("the agent ended", || {
+            matches!(ctx.agent.snapshot().state, AgentState::Ended { .. })
+        });
+        assert!(tick(&ctx), "the crash is retried");
+        {
+            let guard = lock(&ctx.slot);
+            let rec = guard.as_ref().unwrap();
+            assert_eq!(rec.phases[0].strength, Some(Strength::Balanced));
+            let entry = rec.report.entries.last().unwrap();
+            assert_eq!(entry.result, EntryResult::Retried);
+            assert_eq!(entry.strength, "Balanced");
+            assert_eq!(entry.model, "opus, medium");
+        }
+        ready(2);
+        ctx.agent.input(b"ENV PLAN2CODE_LOOP_STRENGTH\r").unwrap();
+        wait_until("the stepped-up env", || {
+            lock(&seen).contains("ENV PLAN2CODE_LOOP_STRENGTH=balanced")
+        });
+        let saved = loop_report::load(&home, &repo, "specs/lunch").expect("a saved report");
+        assert_eq!(saved.entries.last().unwrap().strength, "Balanced");
+        end_the_test(&ctx);
+    }
+
+    #[test]
+    fn a_loop_with_the_toggle_off_starts_every_phase_without_the_strength_env() {
+        if !git_ready("strength off") {
+            return;
+        }
+        let repo = throwaway_repo("strength-off");
+        let (ctx, _home, seen) = running_loop_seen(&repo, Limits::default());
+        {
+            // The words are there, but the toggle is off: they are ignored.
+            let mut guard = lock(&ctx.slot);
+            let rec = guard.as_mut().unwrap();
+            rec.strength_rows = strength_rows();
+            rec.phases[0].strength = Some(Strength::Best);
+            assert!(rec.phase_run(0).is_none());
+        }
+        start_phase(&ctx, 0).expect("start the fake agent");
+        wait_until("the fake agent ready", || {
+            lock(&seen).contains("FAKE-AGENT ready")
+        });
+        ctx.agent.input(b"ENV PLAN2CODE_LOOP_STRENGTH\r").unwrap();
+        wait_until("the env line", || {
+            lock(&seen).contains("ENV PLAN2CODE_LOOP_STRENGTH=\r")
+        });
+        let event = state_event(lock(&ctx.slot).as_ref().unwrap());
+        assert_eq!(
+            (event.strength, event.model, event.effort),
+            (None, None, None)
+        );
+        end_the_test(&ctx);
+    }
+
+    #[test]
+    fn fix_it_by_hand_and_finalize_never_pass_the_strength_env() {
+        if !git_ready("strength fix") {
+            return;
+        }
+        let repo = throwaway_repo("strength-fix");
+        let (ctx, _home, seen) = running_loop_seen(&repo, Limits::default());
+        with_strengths(&ctx, &[Some(Strength::Thrifty), None]);
+        start_phase(&ctx, 0).expect("start the fake agent");
+        wait_until("the phase agent ready", || {
+            lock(&seen).matches("FAKE-AGENT ready").count() >= 1
+        });
+        for (round, prompt) in [fix_prompt("specs/lunch"), finalize_prompt("specs/lunch")]
+            .into_iter()
+            .enumerate()
+        {
+            start_with(&ctx.agent, &ctx.launch, prompt).unwrap();
+            wait_until("the next agent ready", || {
+                lock(&seen).matches("FAKE-AGENT ready").count() >= round + 2
+            });
+            ctx.agent.input(b"ENV PLAN2CODE_LOOP_STRENGTH\r").unwrap();
+            wait_until("the env line", || {
+                lock(&seen).matches("PLAN2CODE_LOOP_STRENGTH=\r").count() > round
+            });
+        }
+        assert!(!lock(&seen).contains("PLAN2CODE_LOOP_STRENGTH=thrifty"));
+        end_the_test(&ctx);
+    }
+
+    #[test]
+    fn a_retry_steps_best_stays_and_a_partly_mapped_agent_skips_to_its_next_word() {
+        let mut rec = record("specs/x", vec![phase(1), phase(2), phase(3), phase(4)]);
+        rec.strength_rows = strength_rows();
+        rec.phases[0].strength = Some(Strength::Thrifty);
+        rec.phases[1].strength = Some(Strength::Balanced);
+        rec.phases[2].strength = Some(Strength::Best);
+        for i in 0..4 {
+            rec.step_strength_up(i);
+        }
+        assert_eq!(rec.phases[0].strength, Some(Strength::Balanced));
+        assert_eq!(rec.phases[1].strength, Some(Strength::Best));
+        assert_eq!(rec.phases[2].strength, Some(Strength::Best), "Best stays");
+        assert_eq!(rec.phases[3].strength, None, "Match my session stays");
+
+        // An agent that maps only Thrifty and Best skips the gap, and stays
+        // when nothing above is mapped.
+        rec.strength_rows.remove("balanced");
+        rec.phases[0].strength = Some(Strength::Thrifty);
+        rec.step_strength_up(0);
+        assert_eq!(rec.phases[0].strength, Some(Strength::Best));
+        rec.strength_rows.remove("best");
+        rec.phases[1].strength = Some(Strength::Thrifty);
+        rec.step_strength_up(1);
+        assert_eq!(rec.phases[1].strength, Some(Strength::Thrifty));
+    }
+
+    #[test]
+    fn the_strip_says_a_match_my_session_phase_runs_on_the_launch_model() {
+        let mut rec = record("specs/x", vec![phase(1)]);
+        rec.setup.phase_strength = true;
+        rec.strength_rows = strength_rows();
+        rec.launch_model = Some("opus".into());
+        rec.launch_effort = Some("high".into());
+        let event = state_event(&rec);
+        assert_eq!(event.strength, None);
+        assert_eq!(event.model.as_deref(), Some("opus"));
+        assert_eq!(event.effort.as_deref(), Some("high"));
+        let json = serde_json::to_value(&event).unwrap();
+        assert_eq!(json["model"], "opus");
+        assert!(json["strength"].is_null());
+        // A pick the agent does not map runs on the launch choice too.
+        rec.strength_rows.clear();
+        rec.phases[0].strength = Some(Strength::Thrifty);
+        assert_eq!(rec.phase_run(0).unwrap().strength, None);
+    }
+
+    #[test]
+    fn a_stopped_phase_entry_says_what_it_ran_on() {
+        if !git_ready("stopped ran on") {
+            return;
+        }
+        let repo = throwaway_repo("stopped-ran-on");
+        let limits = Limits {
+            notice_wait: Duration::ZERO,
+            ..Limits::default()
+        };
+        let (ctx, home) = running_loop(&repo, limits);
+        {
+            let mut guard = lock(&ctx.slot);
+            let rec = guard.as_mut().unwrap();
+            rec.sid = None;
+            rec.setup.retry_once = false;
+            rec.setup.phase_strength = true;
+            rec.phases[rec.current].strength = Some(Strength::Thrifty);
+            rec.strength_rows.insert(
+                "thrifty".to_string(),
+                StrengthRow {
+                    model: "sonnet".to_string(),
+                    effort: Some("low".to_string()),
+                },
+            );
+        }
+        assert!(!tick(&ctx), "the loop is over");
+        let entry = last_entry_saved(&home, &repo);
+        assert_eq!(entry.result, EntryResult::Stopped);
+        assert_eq!(entry.strength, "Thrifty");
+        assert_eq!(entry.model, "sonnet, low");
     }
 
     #[test]

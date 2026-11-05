@@ -536,7 +536,7 @@ test("models: the user's additions round-trip, XHigh and Max are refused, and th
   assert.equal((await post("/models", { nope: true })).status, 400);
   assert.equal((await get()).user.devin.length, 1, "a refused write must not touch what is saved");
 
-  // Codex has no curated list, but the launcher reads a user `codex` list all the same.
+  // The launcher reads a user `codex` list too. The shipped file this test serves has no `codex` key, so that list is empty here.
   const codex = await post("/models", { models: { codex: [{ id: " gpt-5-codex ", label: "GPT-5 Codex" }, { id: "gpt-5-codex" }] } });
   assert.equal(codex.status, 200);
   assert.deepEqual((await get()).user, { claude: [], devin: [], codex: [{ id: "gpt-5-codex", label: "GPT-5 Codex" }] });
@@ -545,6 +545,88 @@ test("models: the user's additions round-trip, XHigh and Max are refused, and th
 
   assert.equal((await post("/models", { models: {} })).status, 200, "reset to default");
   assert.deepEqual((await get()).user, { claude: [], devin: [], codex: [] });
+});
+
+test("models: strengths come back shipped and user, round-trip, survive a models-only save, and bad rows name their field", async () => {
+  fs.mkdirSync(path.join(MODELS_DIR, "bin"), { recursive: true });
+  const shippedStrengths = { claude: { thrifty: { model: "sonnet", effort: "low" }, best: { model: "opus" } } };
+  fs.writeFileSync(
+    path.join(MODELS_DIR, "bin", "models.json"),
+    JSON.stringify({ claude: [{ id: "opus", label: "Opus" }, { id: "sonnet", label: "Sonnet" }], strengths: shippedStrengths })
+  );
+  const get = async () => (await fetch(baseUrl + "/models", { headers: { cookie: cookieFor(baseUrl, token) } })).json();
+  const userFile = () => JSON.parse(fs.readFileSync(path.join(MODELS_DIR, "models.json"), "utf8"));
+
+  const first = await get();
+  assert.deepEqual(first.strengths, { shipped: shippedStrengths, user: {} }, "shipped rows come back, no user rows yet");
+  assert.ok(!("strengths" in first.shipped) && !("strengths" in first.user), "strengths is never read as an agent's model list");
+
+  const mapping = { claude: { balanced: { model: " sonnet ", effort: "medium" }, best: { model: "opus" } }, codex: { thrifty: { model: "gpt-5-codex" } } };
+  const saved = await post("/models", { models: { claude: [{ id: "mine" }] }, strengths: mapping });
+  assert.equal(saved.status, 200);
+  const want = { claude: { balanced: { model: "sonnet", effort: "medium" }, best: { model: "opus" } }, codex: { thrifty: { model: "gpt-5-codex" } } };
+  assert.deepEqual((await get()).strengths.user, want);
+  assert.deepEqual(userFile().strengths, want, "the launcher's file carries the mapping beside the lists");
+  assert.equal(userFile().claude.length, 1);
+
+  // A save with only a Models list never wipes the mapping.
+  assert.equal((await post("/models", { models: { claude: [{ id: "mine" }, { id: "other" }] } })).status, 200);
+  assert.deepEqual((await get()).strengths.user, want);
+  assert.equal((await get()).user.claude.length, 2);
+
+  // The agents' own lists and the reset keep it too; an explicit empty mapping clears it.
+  assert.equal((await post("/models", { models: {} })).status, 200);
+  assert.deepEqual((await get()).strengths.user, want);
+
+  const refused = [
+    [{ claude: { thrifty: { model: "bad id!" } } }, /strengths\.claude\.thrifty\.model/],
+    [{ claude: { cheap: { model: "sonnet" } } }, /strengths\.claude\.cheap/],
+    [{ claude: { best: { model: "opus", effort: "max" } } }, /strengths\.claude\.best\.effort/],
+    [{ nobody: { best: { model: "opus" } } }, /strengths\.nobody/],
+    [{ claude: { best: "opus" } }, /strengths\.claude\.best/],
+    [["claude"], /strengths/],
+  ];
+  for (const [body, field] of refused) {
+    const res = await post("/models", { models: {}, strengths: body });
+    assert.equal(res.status, 400, JSON.stringify(body));
+    assert.match((await res.json()).error, field);
+  }
+  assert.deepEqual((await get()).strengths.user, want, "a refused write must not touch what is saved");
+
+  assert.equal((await post("/models", { models: {}, strengths: {} })).status, 200);
+  assert.deepEqual((await get()).strengths.user, {});
+  assert.ok(!("strengths" in userFile()), "an empty mapping leaves no key behind");
+});
+
+test("models: a saved mapping for an agent that is gone is skipped, and never hides or wipes the others", async (t) => {
+  const userFile = path.join(MODELS_DIR, "models.json");
+  t.after(() => fs.rmSync(userFile, { force: true }));
+  fs.writeFileSync(
+    userFile,
+    JSON.stringify({ claude: [], strengths: { claude: { best: { model: "opus" } }, "deleted-agent": { best: { model: "x" } }, devin: { cheap: { model: "y" } } } })
+  );
+  const get = async () => (await fetch(baseUrl + "/models", { headers: { cookie: cookieFor(baseUrl, token) } })).json();
+  assert.deepEqual((await get()).strengths.user, { claude: { best: { model: "opus" } } });
+  assert.equal((await post("/models", { models: { claude: [{ id: "mine" }] } })).status, 200);
+  assert.deepEqual(JSON.parse(fs.readFileSync(userFile, "utf8")).strengths, { claude: { best: { model: "opus" } } }, "the models-only save kept the good rows");
+});
+
+test("models: one bad saved row never drops the other rows of its agent, like the app", async (t) => {
+  const userFile = path.join(MODELS_DIR, "models.json");
+  t.after(() => fs.rmSync(userFile, { force: true }));
+  fs.writeFileSync(
+    userFile,
+    JSON.stringify({
+      claude: [],
+      strengths: { claude: { thrifty: { model: "haiku", effort: "max" }, balanced: { model: "bad id!" }, cheap: { model: "x" }, best: { model: "opus", effort: "high" } } },
+    })
+  );
+  const get = async () => (await fetch(baseUrl + "/models", { headers: { cookie: cookieFor(baseUrl, token) } })).json();
+  assert.deepEqual(
+    (await get()).strengths.user,
+    { claude: { thrifty: { model: "haiku" }, best: { model: "opus", effort: "high" } } },
+    "a bad effort is dropped and its row stays; a bad model or word drops only that row"
+  );
 });
 
 test("agents: no file is an empty list, a save is written whole and keeps unknown keys, and a bad save names its entry and field", async (t) => {

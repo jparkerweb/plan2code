@@ -11,6 +11,22 @@ export const MODEL_CLIS = ["claude", "devin", "codex"];
 // What the table calls each built-in, and the command it runs (the launcher's CLIS ids).
 export const BUILT_IN = { claude: "Claude", devin: "Devin", codex: "Codex" };
 
+// The built-ins that take an effort beside the model (agents.rs has_effort).
+export const HAS_EFFORT = ["claude", "codex"];
+
+// The loop's strength mapping as the page keeps it: the shipped rows and the
+// person's own, each { <agent id>: { thrifty?, balanced?, best? } }.
+export function emptyStrengths() {
+  return { shipped: {}, user: {} };
+}
+
+// The agent a form's strengths belong to: a built-in's cli, an added agent's id.
+// An agent not yet saved has no id, so nothing of anyone else's can be its rows.
+export function strengthOwner(key) {
+  if (key === "agent:new") return null;
+  return key.startsWith("cli:") ? cliOf(key) : agentId(key);
+}
+
 export function emptyLists() {
   return Object.fromEntries(MODEL_CLIS.map((cli) => [cli, []]));
 }
@@ -44,8 +60,15 @@ export function canonical(value) {
   );
 }
 
-export function isDirty(saved, drafts, key) {
-  return drafts.has(key) && canonical(drafts.get(key)) !== canonical(savedEntry(saved, key));
+// `strengthDrafts` holds, per form key, the person's own strength rows once the
+// fold changed them; absent means the fold was left alone.
+export function isDirty(saved, drafts, key, strengthDrafts) {
+  if (!drafts.has(key)) return false;
+  if (canonical(drafts.get(key)) !== canonical(savedEntry(saved, key))) return true;
+  const rows = strengthDrafts && strengthDrafts.get(key);
+  if (rows === undefined) return false;
+  const was = (saved.strengths && saved.strengths.user[strengthOwner(key)]) || {};
+  return canonical(rows) !== canonical(was);
 }
 
 export function nameOf(saved, drafts, key) {

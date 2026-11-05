@@ -1,0 +1,478 @@
+{
+  "schema": 1,
+  "cases": [
+    {
+      "name": "claude shipped only",
+      "agent": "claude",
+      "shipped": {
+        "thrifty": {
+          "model": "sonnet",
+          "effort": "low"
+        },
+        "balanced": {
+          "model": "sonnet",
+          "effort": "medium"
+        },
+        "best": {
+          "model": "opus",
+          "effort": "medium"
+        }
+      },
+      "user": null,
+      "models": [
+        "default",
+        "sonnet",
+        "opus",
+        "haiku"
+      ],
+      "hasEffort": true,
+      "expect": {
+        "resolved": {
+          "thrifty": {
+            "model": "sonnet",
+            "effort": "low"
+          },
+          "balanced": {
+            "model": "sonnet",
+            "effort": "medium"
+          },
+          "best": {
+            "model": "opus",
+            "effort": "medium"
+          }
+        },
+        "next": {
+          "thrifty": "balanced",
+          "balanced": "best",
+          "best": null
+        }
+      }
+    },
+    {
+      "name": "devin shipped only",
+      "agent": "devin",
+      "shipped": {
+        "thrifty": {
+          "model": "swe-2-medium"
+        },
+        "balanced": {
+          "model": "swe-2-high"
+        },
+        "best": {
+          "model": "claude-opus-5-5-medium"
+        }
+      },
+      "user": null,
+      "models": [
+        "adaptive",
+        "swe-2-medium",
+        "swe-2-high",
+        "claude-opus-5-5-medium"
+      ],
+      "hasEffort": false,
+      "expect": {
+        "resolved": {
+          "thrifty": {
+            "model": "swe-2-medium"
+          },
+          "balanced": {
+            "model": "swe-2-high"
+          },
+          "best": {
+            "model": "claude-opus-5-5-medium"
+          }
+        },
+        "next": {
+          "thrifty": "balanced",
+          "balanced": "best",
+          "best": null
+        }
+      }
+    },
+    {
+      "name": "a user row overrides one shipped row, the others follow shipped",
+      "agent": "claude",
+      "shipped": {
+        "thrifty": {
+          "model": "sonnet",
+          "effort": "low"
+        },
+        "balanced": {
+          "model": "sonnet",
+          "effort": "medium"
+        },
+        "best": {
+          "model": "opus",
+          "effort": "medium"
+        }
+      },
+      "user": {
+        "balanced": {
+          "model": "opus",
+          "effort": "low"
+        }
+      },
+      "models": [
+        "default",
+        "sonnet",
+        "opus",
+        "haiku"
+      ],
+      "hasEffort": true,
+      "expect": {
+        "resolved": {
+          "thrifty": {
+            "model": "sonnet",
+            "effort": "low"
+          },
+          "balanced": {
+            "model": "opus",
+            "effort": "low"
+          },
+          "best": {
+            "model": "opus",
+            "effort": "medium"
+          }
+        },
+        "next": {
+          "thrifty": "balanced",
+          "balanced": "best",
+          "best": null
+        }
+      }
+    },
+    {
+      "name": "user-only mapping for an agent with nothing shipped",
+      "agent": "codex",
+      "shipped": null,
+      "user": {
+        "thrifty": {
+          "model": "gpt-a"
+        },
+        "balanced": {
+          "model": "gpt-b"
+        },
+        "best": {
+          "model": "gpt-c"
+        }
+      },
+      "models": [
+        "gpt-a",
+        "gpt-b",
+        "gpt-c"
+      ],
+      "hasEffort": false,
+      "expect": {
+        "resolved": {
+          "thrifty": {
+            "model": "gpt-a"
+          },
+          "balanced": {
+            "model": "gpt-b"
+          },
+          "best": {
+            "model": "gpt-c"
+          }
+        },
+        "next": {
+          "thrifty": "balanced",
+          "balanced": "best",
+          "best": null
+        }
+      }
+    },
+    {
+      "name": "partly mapped: Balanced only",
+      "agent": "opencode",
+      "shipped": null,
+      "user": {
+        "balanced": {
+          "model": "m1"
+        }
+      },
+      "models": [
+        "m1",
+        "m2"
+      ],
+      "hasEffort": false,
+      "expect": {
+        "resolved": {
+          "balanced": {
+            "model": "m1"
+          }
+        },
+        "next": {
+          "thrifty": "balanced",
+          "balanced": null,
+          "best": null
+        }
+      }
+    },
+    {
+      "name": "partly mapped: Thrifty and Best only",
+      "agent": "opencode",
+      "shipped": null,
+      "user": {
+        "thrifty": {
+          "model": "m1"
+        },
+        "best": {
+          "model": "m2"
+        }
+      },
+      "models": [
+        "m1",
+        "m2"
+      ],
+      "hasEffort": false,
+      "expect": {
+        "resolved": {
+          "thrifty": {
+            "model": "m1"
+          },
+          "best": {
+            "model": "m2"
+          }
+        },
+        "next": {
+          "thrifty": "best",
+          "balanced": "best",
+          "best": null
+        }
+      }
+    },
+    {
+      "name": "a user row whose model left the list falls back to the shipped row",
+      "agent": "claude",
+      "shipped": {
+        "thrifty": {
+          "model": "sonnet",
+          "effort": "low"
+        },
+        "balanced": {
+          "model": "sonnet",
+          "effort": "medium"
+        },
+        "best": {
+          "model": "opus",
+          "effort": "medium"
+        }
+      },
+      "user": {
+        "best": {
+          "model": "gone",
+          "effort": "high"
+        }
+      },
+      "models": [
+        "default",
+        "sonnet",
+        "opus",
+        "haiku"
+      ],
+      "hasEffort": true,
+      "expect": {
+        "resolved": {
+          "thrifty": {
+            "model": "sonnet",
+            "effort": "low"
+          },
+          "balanced": {
+            "model": "sonnet",
+            "effort": "medium"
+          },
+          "best": {
+            "model": "opus",
+            "effort": "medium"
+          }
+        },
+        "next": {
+          "thrifty": "balanced",
+          "balanced": "best",
+          "best": null
+        }
+      }
+    },
+    {
+      "name": "a shipped row whose model left the list reads unmapped",
+      "agent": "claude",
+      "shipped": {
+        "thrifty": {
+          "model": "sonnet",
+          "effort": "low"
+        },
+        "balanced": {
+          "model": "sonnet",
+          "effort": "medium"
+        },
+        "best": {
+          "model": "opus",
+          "effort": "medium"
+        }
+      },
+      "user": null,
+      "models": [
+        "default",
+        "opus"
+      ],
+      "hasEffort": true,
+      "expect": {
+        "resolved": {
+          "best": {
+            "model": "opus",
+            "effort": "medium"
+          }
+        },
+        "next": {
+          "thrifty": "best",
+          "balanced": "best",
+          "best": null
+        }
+      }
+    },
+    {
+      "name": "an effort on an agent without one is dropped",
+      "agent": "devin",
+      "shipped": null,
+      "user": {
+        "thrifty": {
+          "model": "swe-2-medium",
+          "effort": "low"
+        },
+        "best": {
+          "model": "swe-2-high",
+          "effort": "high"
+        }
+      },
+      "models": [
+        "adaptive",
+        "swe-2-medium",
+        "swe-2-high",
+        "claude-opus-5-5-medium"
+      ],
+      "hasEffort": false,
+      "expect": {
+        "resolved": {
+          "thrifty": {
+            "model": "swe-2-medium"
+          },
+          "best": {
+            "model": "swe-2-high"
+          }
+        },
+        "next": {
+          "thrifty": "best",
+          "balanced": "best",
+          "best": null
+        }
+      }
+    },
+    {
+      "name": "an effort outside low, medium and high is dropped, the row stays",
+      "agent": "claude",
+      "shipped": null,
+      "user": {
+        "thrifty": {
+          "model": "haiku",
+          "effort": "max"
+        },
+        "balanced": {
+          "model": "sonnet",
+          "effort": "medium"
+        }
+      },
+      "models": [
+        "default",
+        "sonnet",
+        "opus",
+        "haiku"
+      ],
+      "hasEffort": true,
+      "expect": {
+        "resolved": {
+          "thrifty": {
+            "model": "haiku"
+          },
+          "balanced": {
+            "model": "sonnet",
+            "effort": "medium"
+          }
+        },
+        "next": {
+          "thrifty": "balanced",
+          "balanced": null,
+          "best": null
+        }
+      }
+    },
+    {
+      "name": "a bad word or a row that is not an object is ignored",
+      "agent": "claude",
+      "shipped": null,
+      "user": {
+        "cheap": {
+          "model": "haiku"
+        },
+        "thrifty": "haiku",
+        "balanced": [
+          "sonnet"
+        ],
+        "best": {
+          "model": 7
+        },
+        "extra": null
+      },
+      "models": [
+        "default",
+        "sonnet",
+        "opus",
+        "haiku"
+      ],
+      "hasEffort": true,
+      "expect": {
+        "resolved": {},
+        "next": {
+          "thrifty": null,
+          "balanced": null,
+          "best": null
+        }
+      }
+    },
+    {
+      "name": "nothing anywhere",
+      "agent": "pi",
+      "shipped": null,
+      "user": null,
+      "models": [],
+      "hasEffort": false,
+      "expect": {
+        "resolved": {},
+        "next": {
+          "thrifty": null,
+          "balanced": null,
+          "best": null
+        }
+      }
+    },
+    {
+      "name": "mappings that are not objects",
+      "agent": "pi",
+      "shipped": [
+        "x"
+      ],
+      "user": "y",
+      "models": [
+        "x"
+      ],
+      "hasEffort": false,
+      "expect": {
+        "resolved": {},
+        "next": {
+          "thrifty": null,
+          "balanced": null,
+          "best": null
+        }
+      }
+    }
+  ]
+}

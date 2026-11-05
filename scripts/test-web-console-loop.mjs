@@ -18,7 +18,7 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 import { applyPatch, blankState, validate, switchWorkflow } from "../src/web-console/patches.mjs";
-import { ROOT, CONSOLE_CLI, ENV, HOME, cli, readState, sessionUrl, payload } from "./web-console-test-helpers.mjs";
+import { ROOT, CONSOLE_CLI, ENV, HOME, MODELS_DIR, cli, readState, sessionUrl, payload } from "./web-console-test-helpers.mjs";
 
 const APP_VARS = ["PLAN2CODE_IN_APP", "PLAN2CODE_EMBED_ORIGIN", "PLAN2CODE_APP_ANNOUNCE", "PLAN2CODE_APP_TOKEN", "PLAN2CODE_CONSOLE_SID"];
 
@@ -472,10 +472,16 @@ test("loopEnd: a valid stopped with an evidence doc in the same patch is stored"
   assert.equal(replaced.next.loopEnd.line, "A later word replaces the earlier");
 });
 
+test("loopEnd: ask is accepted in can, so a stopped loop can offer a question before anything runs", () => {
+  const { problems, next } = tryPatch(loopState(), { loopEnd: goodEnd({ can: ["resume", "ask", "fix", "dashboard"] }) });
+  assert.deepEqual(problems, []);
+  assert.deepEqual(next.loopEnd.can, ["resume", "ask", "fix", "dashboard"]);
+});
+
 test("loopEnd: an unknown evidence id, a push in can, and the other bad fields are refused, each named", () => {
   const cases = [
     ["an unknown evidence id", goodEnd({ evidence: "nope" }), /loopEnd\.evidence must be the id of a doc on the page/],
-    ["a push in can", goodEnd({ can: ["resume", "push"] }), /loopEnd\.can must be an array with entries from resume, fix, finalize, dashboard/],
+    ["a push in can", goodEnd({ can: ["resume", "push"] }), /loopEnd\.can must be an array with entries from resume, ask, fix, finalize, dashboard/],
     ["a bad kind", goodEnd({ kind: "paused" }), /loopEnd\.kind must be "stopped" or "finished"/],
     ["a two-line line", goodEnd({ line: "one\ntwo" }), /loopEnd\.line must be one line/],
     ["an absolute uncommitted path", goodEnd({ uncommitted: ["/etc/passwd"] }), /loopEnd\.uncommitted must be an array of relative paths/],
@@ -772,7 +778,7 @@ test("loop-setup: GET /loop-setup lists the phases left for a spec and refuses a
     }
 
     // Saving through the route, then reading it back in a new request.
-    const save = await send({ review: true, fixMode: "smart", fix: ["critical"], commit: true, onQuestion: "stop", afterLast: "offer-finalize", quickCheck: "", notifyKind: "query", notifyUrl: "https://example.com/hook", notifyParam: "msg", retryOnce: true, silenceMinutes: 30 });
+    const save = await send({ review: true, fixMode: "smart", fix: ["critical"], commit: true, onQuestion: "stop", afterLast: "offer-finalize", quickCheck: "", notifyKind: "query", notifyUrl: "https://example.com/hook", notifyParam: "msg", retryOnce: true, silenceMinutes: 30, phaseStrength: false, strengths: {} });
     assert.equal(save.status, 200, await save.clone().text());
     const after = await get("?spec=specs/demo");
     assert.equal(after.body.remembered, true);
@@ -786,6 +792,173 @@ test("loop-setup: GET /loop-setup lists the phases left for a spec and refuses a
     assert.ok((await refusedSave.json()).problems.some((p) => /"silenceMinutes"/.test(p)));
     assert.equal((await get("")).body.silenceMinutes, 30, "a refused save changed nothing");
   } finally {
+    cli(["stop", "--session", opened.json.sid, "--force"], { cwd, expectFail: true });
+  }
+});
+
+/* ------------------------------ phase strength: the setup's new fields */
+
+const specWith = (project, name, phases) => {
+  const dir = path.join(project, "specs", name);
+  fs.mkdirSync(dir, { recursive: true });
+  const rows = phases.map(([mark, n, title]) => `- [${mark}] **Phase ${n}:** ${title} - [phase-${n}.md](phase-${n}.md)`);
+  fs.writeFileSync(path.join(dir, "overview.md"), ["# Demo", "", "## Phase Checklist", "", ...rows, ""].join("\n"));
+};
+
+test("loop-setup: the strength fields default off, and their bad values are named", () => {
+  fs.rmSync(LOOP_SETUP_PATH, { force: true });
+  const cases = [
+    ["phaseStrength as a string", { phaseStrength: "yes" }, /"phaseStrength" must be true or false/],
+    ["strengths as a list", { strengths: [] }, /"strengths" must be an object/],
+    ["a key outside specs/", { strengths: { "../x": [] } }, /must be a folder directly under specs\//],
+    ["a hidden spec folder", { strengths: { "specs/.hidden": [] } }, /must be a folder directly under specs\//],
+    ["a nested spec key", { strengths: { "specs/a/b": [] } }, /must be a folder directly under specs\//],
+    ["picks as an object", { strengths: { "specs/a": {} } }, /at most 100 phase picks/],
+    ["101 picks", { strengths: { "specs/a": Array.from({ length: 101 }, (_, i) => ({ n: i + 1, name: "p", strength: "best" })) } }, /at most 100 phase picks/],
+    ["n of 0", { strengths: { "specs/a": [{ n: 0, name: "p", strength: "best" }] } }, /positive whole number/],
+    ["n as text", { strengths: { "specs/a": [{ n: "2", name: "p", strength: "best" }] } }, /positive whole number/],
+    ["a repeated n", { strengths: { "specs/a": [{ n: 2, name: "p", strength: "best" }, { n: 2, name: "q", strength: "best" }] } }, /Phase 2 twice/],
+    ["a 201-character name", { strengths: { "specs/a": [{ n: 1, name: "x".repeat(201), strength: "best" }] } }, /at most 200 characters/],
+    ["an unknown word", { strengths: { "specs/a": [{ n: 1, name: "p", strength: "max" }] } }, /strength of thrifty, balanced, best/],
+  ];
+  const got = inStore(
+    (m, { project, list }) =>
+      list.map(([what, change]) => {
+        try {
+          m.saveLoopSetup(project, { ...m.LOOP_DEFAULTS, fix: [...m.LOOP_DEFAULTS.fix], ...change });
+          return { what, threw: false };
+        } catch (e) {
+          return { what, threw: true, message: e.message };
+        }
+      }),
+    { project: projectA, list: cases.map(([what, change]) => [what, change]) }
+  );
+  for (const [i, [what, , expected]] of cases.entries()) {
+    assert.equal(got[i].threw, true, `${what} is refused`);
+    assert.match(got[i].message, expected, what);
+  }
+  assert.equal(fs.existsSync(LOOP_SETUP_PATH), false, "a refused save writes nothing");
+  const fresh = inStore((m, { project }) => m.readLoopSetup(project), { project: projectA });
+  assert.equal(fresh.phaseStrength, false);
+  assert.deepEqual(fresh.strengths, {});
+});
+
+test("loop-setup: an entry saved before the strength fields reads as off with no picks", () => {
+  fs.rmSync(LOOP_SETUP_PATH, { force: true });
+  const project = path.join(HOME, "store-project-old");
+  inStore((m, { p }) => (m.saveLoopSetup(p, { ...m.LOOP_DEFAULTS, fix: ["warning"] }), null), { p: project });
+  const store = JSON.parse(fs.readFileSync(LOOP_SETUP_PATH, "utf8"));
+  const [folded] = Object.keys(store.projects);
+  delete store.projects[folded].phaseStrength;
+  delete store.projects[folded].strengths;
+  fs.writeFileSync(LOOP_SETUP_PATH, JSON.stringify(store));
+  const got = inStore((m, { p }) => m.readLoopSetup(p), { p: project });
+  assert.equal(got.remembered, true);
+  assert.equal(got.phaseStrength, false);
+  assert.deepEqual(got.strengths, {});
+  assert.deepEqual(got.fix, ["warning"]);
+});
+
+test("loop-setup: picks for a removed spec folder or a renamed phase are pruned on read and on save", () => {
+  fs.rmSync(LOOP_SETUP_PATH, { force: true });
+  const project = fs.mkdtempSync(path.join(HOME, "prune-"));
+  specWith(project, "keep", [["x", 1, "Done"], [" ", 2, "Build it"], [" ", 3, "Ship it"]]);
+  specWith(project, "gone", [[" ", 1, "Only"]]);
+  const picks = {
+    "specs/keep": [
+      { n: 2, name: "Build it", strength: "thrifty" },
+      { n: 3, name: "Ship it renamed", strength: "best" },
+      { n: 1, name: "Done", strength: "best" },
+    ],
+    "specs/gone": [{ n: 1, name: "Only", strength: "best" }],
+    "specs/never": [{ n: 1, name: "x", strength: "best" }],
+  };
+  const out = inStore(
+    async (m, { project, picks }) => {
+      const fs = await import("node:fs");
+      const path = await import("node:path");
+      const left = (spec) => {
+        const text = fs.readFileSync(path.join(project, spec, "overview.md"), "utf8");
+        return [...text.matchAll(/^- \[ \] \*\*Phase (\d+):\*\* (.+?) - /gm)].map((x) => ({ n: Number(x[1]), name: x[2] }));
+      };
+      fs.rmSync(path.join(project, "specs", "gone"), { recursive: true });
+      const saved = m.saveLoopSetup(project, { ...m.LOOP_DEFAULTS, fix: [...m.LOOP_DEFAULTS.fix], phaseStrength: true, strengths: picks }, left);
+      const onDisk = JSON.parse(fs.readFileSync(m.LOOP_SETUP_FILE, "utf8"));
+      const raw = Object.values(onDisk.projects)[0].strengths;
+      // A later read, with the overview changed again, drops the next pick too.
+      fs.writeFileSync(path.join(project, "specs", "keep", "overview.md"), "# Demo\n\n## Phase Checklist\n\n- [ ] **Phase 3:** Ship it - [phase-3.md](phase-3.md)\n");
+      const later = m.readLoopSetup(project, left);
+      return { saved: saved.strengths, raw, later: later.strengths };
+    },
+    { project, picks }
+  );
+  const kept = [{ n: 2, name: "Build it", strength: "thrifty" }];
+  assert.deepEqual(out.saved, { "specs/keep": kept }, "the removed folder, the never-made one, the renamed phase and the finished phase are dropped");
+  assert.deepEqual(out.raw, { "specs/keep": kept }, "the file holds the pruned copy");
+  assert.deepEqual(out.later, {}, "a later read prunes what the overview no longer lists");
+});
+
+test("loop-setup: the picks live only in loop-setup.json, never under specs/", () => {
+  fs.rmSync(LOOP_SETUP_PATH, { force: true });
+  const project = fs.mkdtempSync(path.join(HOME, "nowrite-"));
+  specWith(project, "demo", [[" ", 1, "One"]]);
+  const before = fs.readFileSync(path.join(project, "specs", "demo", "overview.md"), "utf8");
+  inStore(
+    (m, { project }) => (m.saveLoopSetup(project, { ...m.LOOP_DEFAULTS, fix: [...m.LOOP_DEFAULTS.fix], phaseStrength: true, strengths: { "specs/demo": [{ n: 1, name: "One", strength: "best" }] } }), null),
+    { project }
+  );
+  assert.ok(fs.existsSync(LOOP_SETUP_PATH));
+  assert.deepEqual(fs.readdirSync(path.join(project, "specs", "demo")), ["overview.md"]);
+  assert.equal(fs.readFileSync(path.join(project, "specs", "demo", "overview.md"), "utf8"), before);
+  assert.deepEqual(fs.readdirSync(project), ["specs"], "nothing else appears in the project");
+});
+
+test("GET /loop-setup?agent= answers the loop agent's resolved strengths and this spec's picks", async () => {
+  fs.rmSync(LOOP_SETUP_PATH, { force: true });
+  const cwd = tempProject("route-strength");
+  specWith(cwd, "demo", [[" ", 1, "One"], [" ", 2, "Two"]]);
+  // The installed copy of the shipped model menu, with its strengths, as install.js drops it.
+  const shipped = path.join(MODELS_DIR, "bin", "models.json");
+  const hadShipped = fs.existsSync(shipped) ? fs.readFileSync(shipped) : null;
+  fs.mkdirSync(path.dirname(shipped), { recursive: true });
+  fs.copyFileSync(path.join(ROOT, "src", "launcher", "models.json"), shipped);
+  const opened = run(["open", "--workflow", "implement", "--no-open"], { cwd });
+  assert.equal(opened.status, 0, opened.stderr);
+  const { base, cookie } = sessionUrl(opened.json.url);
+  const get = async (query) => {
+    const res = await fetch(`${base}/loop-setup${query}`, { headers: { cookie, connection: "close" } });
+    return { status: res.status, body: await res.json() };
+  };
+  try {
+    const none = await get("?spec=specs/demo");
+    assert.equal(none.body.resolved, null, "no agent asked, none answered");
+    assert.deepEqual(none.body.picks, []);
+    assert.equal(none.body.phaseStrength, false);
+
+    const claude = await get("?spec=specs/demo&agent=claude");
+    assert.equal(claude.status, 200);
+    assert.deepEqual(Object.keys(claude.body.resolved).sort(), ["balanced", "best", "thrifty"], "the shipped Claude Code rows");
+    for (const word of ["thrifty", "balanced", "best"]) assert.equal(typeof claude.body.resolved[word].model, "string");
+
+    const codex = await get("?spec=specs/demo&agent=codex");
+    assert.deepEqual(codex.body.resolved, {}, "codex has nothing mapped");
+
+    for (const agent of ["nobody", "..%2Fx", ""]) assert.equal((await get(`?spec=specs/demo&agent=${agent}`)).body.resolved, null, `agent=${agent}`);
+
+    // A save with picks reads back for its own spec; a pick for a phase that is not there is pruned.
+    const entry = {
+      review: true, fixMode: "smart", fix: ["critical"], commit: true, onQuestion: "guess", afterLast: "offer-finalize", quickCheck: "",
+      notifyKind: "query", notifyUrl: "", notifyParam: "message", retryOnce: true, silenceMinutes: 20, phaseStrength: true,
+      strengths: { "specs/demo": [{ n: 2, name: "Two", strength: "best" }, { n: 9, name: "Gone", strength: "best" }] },
+    };
+    const save = await fetch(`${base}/loop-setup`, { method: "POST", headers: { "content-type": "application/json", cookie, origin: base, connection: "close" }, body: JSON.stringify(entry) });
+    assert.equal(save.status, 200, await save.clone().text());
+    const back = await get("?spec=specs/demo&agent=claude");
+    assert.equal(back.body.phaseStrength, true);
+    assert.deepEqual(back.body.picks, [{ n: 2, name: "Two", strength: "best" }]);
+  } finally {
+    if (hadShipped) fs.writeFileSync(shipped, hadShipped);
+    else fs.rmSync(shipped, { force: true });
     cli(["stop", "--session", opened.json.sid, "--force"], { cwd, expectFail: true });
   }
 });

@@ -629,6 +629,15 @@
 .loop-radios { display: grid; gap: 6px; }
 .loop-radio-body { display: grid; gap: 1px; }
 .loop-radio-detail { font-size: 12.5px; color: var(--ink-3); }
+.loop-switch.is-gray { opacity: 0.55; cursor: default; }
+.loop-strength-none .linky { font-size: inherit; }
+.loop-strength-all { display: flex; align-items: center; gap: 10px; margin-top: 4px; font-size: 13px; color: var(--ink-2); }
+.loop-strength-rows { display: grid; gap: 6px; }
+.loop-strength-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(150px, 190px) minmax(70px, 120px); align-items: center; gap: 10px; font-size: 13.5px; }
+.loop-strength-phase { overflow-wrap: anywhere; color: var(--ink); }
+.loop-strength-model { font-size: 12.5px; color: var(--ink-3); overflow-wrap: anywhere; }
+.loop-select { font: inherit; font-size: 13.5px; padding: 5px 8px; color: var(--ink); background: var(--panel-2); border: 1px solid var(--rule); border-radius: 6px; max-width: 100%; }
+@media (max-width: 560px) { .loop-strength-row { grid-template-columns: 1fr 1fr; } .loop-strength-phase { grid-column: 1 / -1; } }
 .loop-ticks { display: flex; flex-wrap: wrap; gap: 6px 18px; margin-left: 4px; }
 .loop-text { font: inherit; font-size: 14px; padding: 6px 10px; color: var(--ink); background: var(--panel-2); border: 1px solid var(--rule); border-radius: 6px; max-width: 520px; width: 100%; }
 .loop-text.loop-narrow { width: 90px; }

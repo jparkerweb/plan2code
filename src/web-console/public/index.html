@@ -36,6 +36,8 @@
     <link rel="modulepreload" href="/screens/agents/agents-list-editor.js" />
     <link rel="modulepreload" href="/screens/agents/agents-summary.js" />
     <link rel="modulepreload" href="/screens/agents/agents-form.js" />
+    <link rel="modulepreload" href="/screens/agents/agents-strengths.js" />
+    <link rel="modulepreload" href="/strengths.js" />
     <link rel="modulepreload" href="/screens/cleanup.js" />
     <link rel="modulepreload" href="/screens/help-dialog.js" />
     <link rel="modulepreload" href="/screens/workspace.js" />
@@ -2251,6 +2253,15 @@
             wait on a prompt nobody sees, so Start stays grayed out.
           </li>
         </ul>
+        <h4>Strength per phase</h4>
+        <p>
+          Turn on <strong>Set strength per phase</strong> in the setup to run each
+          phase on <strong>Thrifty</strong>, <strong>Balanced</strong>, <strong>Best</strong>
+          or <strong>Match my session</strong>. A phase you leave untouched runs on
+          the launch model. The one retry after a crash or a quiet agent (when retry
+          is on) goes one step up (Match my session stays on the launch model),
+          and the phase's helpers follow.
+        </p>
         <h4>What is locked while it runs</h4>
         <p>
           Answers, sign-offs, launches, Workspace, Helpers and
@@ -3305,6 +3316,11 @@
           opens one agent's form, and <strong>Add agent</strong> a blank one.
         </p>
         <ul>
+          <li>
+            <strong>Strengths in the loop</strong>: under Models, map Thrifty,
+            Balanced and Best to one of the agent's own models. The Implementation
+            Loop's per-phase strength reads them. Untouched rows stay as shipped.
+          </li>
           <li>
             <strong>Models</strong>: each built-in agent (Claude, Devin, Codex)
             shows the models that come with Plan2Code, which every update

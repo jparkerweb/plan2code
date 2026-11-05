@@ -9,10 +9,15 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { defaultInstruction, offered, onLines, STRENGTH_LINES, STRENGTHS } from "../src/web-console/public/subagents.js";
-import { readSubagentCursor } from "../src/web-console/settings.mjs";
+import { spawnSync } from "node:child_process";
+import { readSubagentCursor, readSubagentSetting } from "../src/web-console/settings.mjs";
+import { foldKey } from "../src/web-console/workspace.mjs";
 import {
   ROOT,
   HOME,
+  ENV,
+  CONSOLE_CLI,
+  safeJson,
   cli,
   sessionUrl,
   readState,
@@ -508,5 +513,65 @@ test("subagents: a change arrives as reply lines only, carrying state, strength 
     }
   } finally {
     cli(["stop", "--session", s.sid, "--force"]);
+  }
+});
+
+/* ------------------------------------- a loop phase's helpers follow its strength */
+
+const loopOpen = (cwd, env, workflow = "implement", extraArgs = ["--loop"]) => {
+  const clean = { ...process.env, ...ENV };
+  for (const key of ["PLAN2CODE_IN_APP", "PLAN2CODE_EMBED_ORIGIN", "PLAN2CODE_APP_ANNOUNCE", "PLAN2CODE_APP_TOKEN", "PLAN2CODE_CONSOLE_SID", "PLAN2CODE_LOOP_STRENGTH"]) delete clean[key];
+  const res = spawnSync(process.execPath, [CONSOLE_CLI, "open", "--workflow", workflow, ...extraArgs, "--no-open"], { env: { ...clean, ...env }, encoding: "utf8", cwd });
+  assert.equal(res.status, 0, res.stderr);
+  return safeJson(res.stdout);
+};
+
+test("subagents: open --loop on a phase strength tells the agent that strength, leaves the stored setting alone and off stays off", () => {
+  const cwd = fs.mkdtempSync(path.join(HOME, "sub-loop-"));
+  const stored = (entry) => fs.writeFileSync(SUBAGENTS_STORE, JSON.stringify({ [foldKey(cwd)]: { implement: entry } }));
+  const sessions = [];
+  try {
+    stored({ on: true, instruction: null, max: 3, strength: "balanced" });
+    const before = fs.readFileSync(SUBAGENTS_STORE, "utf8");
+    const thrifty = loopOpen(cwd, { PLAN2CODE_IN_APP: "1", PLAN2CODE_LOOP_STRENGTH: "thrifty" });
+    sessions.push(thrifty.sid);
+    assert.deepEqual(subagentLines(thrifty.reply), ["Subagents: on, thrifty strength, at most 3 helpers at once (a console setting, not typed by the person)."]);
+    assert.deepEqual(readState(thrifty.session).loop, { driving: true, strength: "thrifty" });
+    assert.equal(fs.readFileSync(SUBAGENTS_STORE, "utf8"), before, "the stored setting is not rewritten");
+
+    // The next phase in the same session runs on another strength, then none.
+    const best = loopOpen(cwd, { PLAN2CODE_IN_APP: "1", PLAN2CODE_LOOP_STRENGTH: "best" }, "implement", ["--resume", thrifty.sid, "--loop"]);
+    assert.deepEqual(subagentLines(best.reply).map((l) => l.replace(/ \(a console.*/, "")), ["Subagents: on, best strength, at most 3 helpers at once"]);
+    assert.equal(fs.readFileSync(SUBAGENTS_STORE, "utf8"), before);
+
+    // A phase with no strength after a strength phase hears the stored one.
+    const none = loopOpen(cwd, { PLAN2CODE_IN_APP: "1" }, "implement", ["--resume", thrifty.sid, "--loop"]);
+    assert.deepEqual(subagentLines(none.reply).map((l) => l.replace(/ \(a console.*/, "")), ["Subagents: on, balanced strength, at most 3 helpers at once"]);
+    assert.deepEqual(readState(thrifty.session).loop, { driving: true });
+
+    // Off stays off, whatever the phase's strength.
+    stored({ on: false, instruction: null, max: 3, strength: "balanced" });
+    const off = loopOpen(cwd, { PLAN2CODE_IN_APP: "1", PLAN2CODE_LOOP_STRENGTH: "thrifty" }, "implement", ["--resume", thrifty.sid, "--loop"]);
+    assert.ok(!subagentLines(off.reply).some((l) => /on,/.test(l)), JSON.stringify(off.reply));
+    assert.equal(readSubagentSetting(thrifty.session).on, false);
+  } finally {
+    for (const sid of sessions) cli(["stop", "--session", sid, "--force"], { expectFail: true });
+  }
+});
+
+test("subagents: open without --loop ignores PLAN2CODE_LOOP_STRENGTH, and a word that is not a strength is dropped", () => {
+  const cwd = fs.mkdtempSync(path.join(HOME, "sub-noloop-"));
+  fs.writeFileSync(SUBAGENTS_STORE, JSON.stringify({ [foldKey(cwd)]: { implement: { on: true, instruction: null, max: 3, strength: "balanced" } } }));
+  const sessions = [];
+  try {
+    const plain = loopOpen(cwd, { PLAN2CODE_LOOP_STRENGTH: "thrifty" }, "implement", []);
+    sessions.push(plain.sid);
+    assert.deepEqual(subagentLines(plain.reply).map((l) => l.replace(/ \(a console.*/, "")), ["Subagents: on, balanced strength, at most 3 helpers at once"]);
+    assert.equal("loop" in readState(plain.session), false);
+    const odd = loopOpen(cwd, { PLAN2CODE_IN_APP: "1", PLAN2CODE_LOOP_STRENGTH: "session" });
+    sessions.push(odd.sid);
+    assert.deepEqual(readState(odd.session).loop, { driving: true });
+  } finally {
+    for (const sid of sessions) cli(["stop", "--session", sid, "--force"], { expectFail: true });
   }
 });

@@ -553,12 +553,14 @@ export function advanceWorkspace(dir, changes) {
 // an older server, which never writes one: a short look, not the full wait.
 const SUBAGENT_SYNC_WAIT_MS = 1500;
 const SUBAGENT_SYNC_MISSING_MS = 250;
-export function awaitSubagentSync(dir, workflow) {
+export function awaitSubagentSync(dir, workflow, strength) {
   if (!offered(workflow)) return;
   const start = Date.now();
   for (;;) {
     const setting = readSubagentSetting(dir);
-    if (setting && setting.workflow === workflow) return;
+    // A loop phase's strength rides on the session's state: the setting must
+    // carry it before the first block is built, or the agent hears the stored one.
+    if (setting && setting.workflow === workflow && (!strength || setting.strength === strength)) return;
     const budget = setting ? SUBAGENT_SYNC_WAIT_MS : SUBAGENT_SYNC_MISSING_MS;
     if (Date.now() - start >= budget) return;
     sleepSync(25);

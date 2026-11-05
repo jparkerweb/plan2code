@@ -1,5 +1,5 @@
 {
-  "_note": "Curated model menu for the plan2code launcher. Maintained by the Plan2Code authors; every install overwrites this file. Users add models in User Preferences (kept in ~/.plan2code/models.json). Devin entries are explicit ids at Low, Medium and High effort only, verified against `devin models list`. Codex has no curated entries yet (its docs name none to verify): the launcher skips the model question for it. Pass --model <name> to choose one.",
+  "_note": "Curated model menu for the plan2code launcher. Maintained by the Plan2Code authors; every install overwrites this file. Users add models in User Preferences (kept in ~/.plan2code/models.json). Devin entries are explicit ids at Low, Medium and High effort only, verified against `devin models list`. Codex entries are the models its docs name as current. The strengths key maps the loop's Thrifty, Balanced and Best to a model (and effort) per agent; users override it in User Preferences. Pass --model <name> to choose any other.",
   "claude": [
     {
       "id": "default",
@@ -138,7 +138,63 @@
     {
       "id": "gpt-6-astra-high",
       "label": "GPT-6 Astra High Thinking"
+    },
+    {
+      "id": "gpt-5-6-sol-low",
+      "label": "GPT-5.6 Sol Low Thinking"
+    },
+    {
+      "id": "gpt-5-6-sol-medium",
+      "label": "GPT-5.6 Sol Medium Thinking"
+    },
+    {
+      "id": "gpt-5-6-sol-high",
+      "label": "GPT-5.6 Sol High Thinking"
     }
   ],
-  "codex": []
+  "codex": [
+    {
+      "id": "gpt-6-astra",
+      "label": "GPT-6 Astra"
+    },
+    {
+      "id": "gpt-6.1-sol",
+      "label": "GPT-6.1 Sol"
+    },
+    {
+      "id": "gpt-6.1-terra",
+      "label": "GPT-6.1 Terra"
+    },
+    {
+      "id": "gpt-6-luna",
+      "label": "GPT-6 Luna"
+    }
+  ],
+  "strengths": {
+    "claude": {
+      "thrifty": {
+        "model": "sonnet",
+        "effort": "low"
+      },
+      "balanced": {
+        "model": "sonnet",
+        "effort": "medium"
+      },
+      "best": {
+        "model": "opus",
+        "effort": "medium"
+      }
+    },
+    "devin": {
+      "thrifty": {
+        "model": "swe-2-medium"
+      },
+      "balanced": {
+        "model": "swe-2-high"
+      },
+      "best": {
+        "model": "claude-opus-5-5-medium"
+      }
+    }
+  }
 }

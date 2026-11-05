@@ -334,6 +334,26 @@ test("launcher: mergeModels keeps the shipped list first and drops user duplicat
   assert.deepEqual(modelEntries({ devin: [{ id: 1 }, null, { id: "ok", label: "Ok" }] }, "devin"), [{ id: "ok", label: "Ok" }]);
 });
 
+test("launcher: a strengths key in the models files is never read as a model list, and every shipped strength names a listed model", () => {
+  const { modelEntries, mergeModels } = require(LAUNCHER);
+  const shipped = JSON.parse(fs.readFileSync(path.join(path.dirname(LAUNCHER), "models.json"), "utf8"));
+  assert.ok(shipped.strengths && typeof shipped.strengths === "object");
+  assert.deepEqual(modelEntries(shipped, "strengths"), []);
+  const claude = modelEntries(shipped, "claude");
+  assert.ok(claude.length > 0);
+  const user = { claude: [{ id: "mine", label: "Mine" }], strengths: { claude: { best: { model: "mine" } } } };
+  assert.deepEqual(modelEntries(user, "strengths"), []);
+  assert.deepEqual(mergeModels(claude, modelEntries(user, "claude")), [...claude, { id: "mine", label: "Mine" }]);
+  assert.deepEqual(mergeModels(claude, modelEntries({ claude: user.claude }, "claude")), mergeModels(claude, modelEntries(user, "claude")));
+  // Only Claude Code and Devin ship a mapping, and every row names a model in that agent's list.
+  assert.deepEqual(Object.keys(shipped.strengths).sort(), ["claude", "devin"]);
+  for (const [agent, rows] of Object.entries(shipped.strengths)) {
+    assert.deepEqual(Object.keys(rows), ["thrifty", "balanced", "best"], agent);
+    const ids = new Set(shipped[agent].map((m) => m.id));
+    for (const row of Object.values(rows)) assert.ok(ids.has(row.model), `${agent}: ${row.model}`);
+  }
+});
+
 test("launcher: the shipped models.json is curated Devin at low/medium/high only", () => {
   const shipped = JSON.parse(fs.readFileSync(path.join(path.dirname(LAUNCHER), "models.json"), "utf8"));
   assert.ok(shipped.claude.length > 0);

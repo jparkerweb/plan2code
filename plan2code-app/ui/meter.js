@@ -181,7 +181,22 @@ export function loopBanner(state) {
     }
     return { ...base, title: "Starting the loop", detail: `Opening a fresh agent for ${named}.` };
   }
-  return { ...base, title: "Implementation loop running", detail: step ? `${named} \u00b7 ${step}` : named };
+  const ran = loopRunText(state);
+  const where = step ? `${named} \u00b7 ${step}` : named;
+  return { ...base, title: "Implementation loop running", detail: ran ? `${where} \u00b7 ${ran}` : where };
+}
+
+/**
+ * What the running phase runs on, from the app's `loop-state`: "Thrifty (sonnet,
+ * low)" for a phase on a strength, "(opus, high)" for a Match my session phase
+ * with a known model, and "" when the loop runs as it always did.
+ */
+export function loopRunText(state) {
+  const model = state && typeof state.model === "string" ? state.model : "";
+  const effort = model && state.effort ? `, ${state.effort}` : "";
+  const word = state && typeof state.strength === "string" && state.strength ? state.strength[0].toUpperCase() + state.strength.slice(1) : "";
+  if (word) return model ? `${word} (${model}${effort})` : word;
+  return model ? `(${model}${effort})` : "";
 }
 
 /**

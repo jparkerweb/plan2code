@@ -2,7 +2,7 @@
 
 import path from "node:path";
 
-import { cleanSetting, defaultSetting, DEFAULT_STRENGTH, offered } from "./public/subagents.js";
+import { cleanSetting, defaultSetting, DEFAULT_STRENGTH, offered, STRENGTHS } from "./public/subagents.js";
 import { ensureDir, fileStamp, HOME_DIR, readJson, readJsonLines, withStateLock, writeJsonAtomic } from "./files.mjs";
 import { foldKey } from "./workspace.mjs";
 
@@ -174,7 +174,12 @@ export function serverSubagents(ctx) {
   function sync(state) {
     if (!state || typeof state.workflow !== "string") return;
     const { workflow } = state;
-    const { on, instruction, max, strength } = offered(workflow) ? subagentStoreEntry(ctx.worktree(), workflow) : defaultSetting(workflow);
+    const stored = offered(workflow) ? subagentStoreEntry(ctx.worktree(), workflow) : defaultSetting(workflow);
+    // A loop phase on a strength runs its helpers at that strength, for this
+    // session only: the stored setting is read, never written (FR-16).
+    const loopStrength = state.loop && state.loop.strength;
+    const { on, instruction, max } = stored;
+    const strength = STRENGTHS.includes(loopStrength) ? loopStrength : stored.strength;
     const target = { workflow, on, instruction, max, strength };
     const current = readSubagentSetting(dir);
     if (current && sameSetting(current, target)) return;

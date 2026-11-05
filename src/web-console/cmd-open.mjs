@@ -48,10 +48,11 @@ import {
   workspaceForAgent,
   writeWorkspaceCursor,
 } from "./workspace.mjs";
-import { readPrHosts, resetSubagentCursor } from "./settings.mjs";
+import { readPrHosts, resetSubagentCursor, subagentStoreEntry } from "./settings.mjs";
 import { resetPointers } from "./pointers.mjs";
 import { WORKFLOWS, isWorkflow } from "./public/skills.js";
 import { startsClean } from "./public/hops.js";
+import { STRENGTH_ORDER } from "./strengths.mjs";
 import { snapshot } from "./git-repo.mjs";
 import { announcePage, currentSession, inAppSignal } from "./in-app.mjs";
 import { findAgent } from "./agent-lookup.mjs";
@@ -106,6 +107,14 @@ const EMBED_API = 1;
 
 // The only workflows a loop drives (open --loop).
 const LOOP_WORKFLOWS = ["implement", "implement-review"];
+
+// What the loop locks a session with: `driving`, and, when the app started this
+// phase on a strength, its word (PLAN2CODE_LOOP_STRENGTH), which the server's
+// Subagents sync reads so the phase's helpers follow it.
+function loopLock() {
+  const strength = process.env.PLAN2CODE_LOOP_STRENGTH;
+  return STRENGTH_ORDER.includes(strength) ? { driving: true, strength } : { driving: true };
+}
 
 export async function cmdOpen() {
   trace("open: start");
@@ -256,7 +265,7 @@ export async function cmdOpen() {
       // without it (Fix it by hand, from a stop screen) is an ordinary,
       // unlocked session. `loopExpect` goes with the lock: the app restamps it
       // on its next look, so a stale setup never judges a new run.
-      if (loopMode) s.loop = { driving: true };
+      if (loopMode) s.loop = loopLock();
       else {
         delete s.loop;
         delete s.loopExpect;
@@ -288,7 +297,7 @@ export async function cmdOpen() {
     // Only a freshly opened dashboard plays Planny's wake-up.
     if (args.workflow === "dashboard") state.wake = true;
     // Locked from the first frame, before the state is first written.
-    if (loopMode) state.loop = { driving: true };
+    if (loopMode) state.loop = loopLock();
     // The setup session's hand-over data (forCli + the token /handover
     // checks), created with the state so the first write already has it.
     if (args.workflow === "setup") {
@@ -450,7 +459,11 @@ export async function cmdOpen() {
   // A standing instruction the new agent is owed, as a `reply` holding only
   // its lines; no key when nothing is owed.
   const subagentsOwed = () => {
-    awaitSubagentSync(dir, state.workflow);
+    // In a loop the setting must carry this phase's strength, or the stored one
+    // when the phase has none, before the first block is built: a resume leaves
+    // the earlier phase's strength in the setting until the server syncs.
+    const expected = loopMode ? (state.loop && state.loop.strength) || subagentStoreEntry(worktree, state.workflow).strength : undefined;
+    awaitSubagentSync(dir, state.workflow, expected);
     const [out, cursor] = withSubagents(dir, { reply: "" });
     return [cursor ? out : {}, cursor];
   };

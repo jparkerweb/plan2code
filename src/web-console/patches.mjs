@@ -1075,7 +1075,7 @@ export function isOpen(item) {
 
 const LOOP_LEVELS = ["critical", "warning", "suggestion"];
 const LOOP_REASONS = ["tests", "findings", "blocked", "conflict", "other"];
-const LOOP_CAN = ["resume", "fix", "finalize", "dashboard"];
+const LOOP_CAN = ["resume", "ask", "fix", "finalize", "dashboard"];
 const TASK_ID = /^\d+\.\d+$/;
 
 // A one-line path that stays inside the project: not absolute, no `..` step.
@@ -1298,7 +1298,7 @@ export function loopEndProblems(e, state) {
 }
 
 // Loop mode adds four optional keys that a blank state does not hold (absent,
-// not null): `loop: { driving: true }` (set by `open --loop`), `loopExpect`
+// not null): `loop: { driving: true, strength? }` (set by `open --loop`), `loopExpect`
 // (the app's judging criteria), `loopOutcome` (the skill's report) and
 // `loopEnd` (the app's ending).
 export function blankState({ sid, workflow, title, project, specDir }) {

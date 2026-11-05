@@ -104,8 +104,9 @@
       "kind": "template",
       "command": "opencode",
       "prompt": "Use the plan2code skill",
-      "args": ["--prompt", "{prompt}"],
-      "bypassArgs": ["--auto"]
+      "args": ["{model}", "--prompt", "{prompt}"],
+      "bypassArgs": ["--auto"],
+      "modelArgs": ["--model", "{model}"]
     },
     {
       "id": "gemini",
@@ -113,8 +114,9 @@
       "kind": "template",
       "command": "gemini",
       "prompt": "Use the plan2code skill",
-      "args": ["{prompt}"],
+      "args": ["{model}", "{prompt}"],
       "bypassArgs": ["--approval-mode=yolo"],
+      "modelArgs": ["--model", "{model}"],
       "note": "For unpaid tier and Google One accounts Gemini CLI was replaced by Antigravity CLI on June 18, 2026; whether gemini still runs depends on the account."
     },
     {
@@ -123,7 +125,8 @@
       "kind": "template",
       "command": "pi",
       "prompt": "/skill:plan2code",
-      "args": ["{prompt}"]
+      "args": ["{model}", "{prompt}"],
+      "modelArgs": ["--model", "{model}"]
     }
   ]
 }

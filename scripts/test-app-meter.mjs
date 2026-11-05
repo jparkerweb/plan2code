@@ -11,7 +11,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { attentionSignal, barNextSteps, continueKeys, defaultRightFraction, folderName, pickDefaultAgent, taskbarSwitch, windowTitleFor, deadConsoleAction, loopBanner, loopLocks, loopStopLabels, loopWindowTitle, CONSOLE_ASIDE_BREAKPOINT_PX, NEXT_STEP_LABELS } from "../plan2code-app/ui/meter.js";
+import { attentionSignal, barNextSteps, continueKeys, defaultRightFraction, folderName, pickDefaultAgent, taskbarSwitch, windowTitleFor, deadConsoleAction, loopBanner, loopRunText, loopLocks, loopStopLabels, loopWindowTitle, CONSOLE_ASIDE_BREAKPOINT_PX, NEXT_STEP_LABELS } from "../plan2code-app/ui/meter.js";
 import { findBrowser, launchBrowser } from "./browser.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -337,6 +337,18 @@ test("the loop banner says what the loop is doing at every moment", () => {
 
   assert.equal(said({ phaseName: "" }).detail, "Phase 2 of 4 \u00b7 Build");
   assert.deepEqual(said({ phase: 0, phases: 0 }).pips, []);
+});
+
+test("the loop banner names the strength and model a phase runs on, and nothing when the toggle is off", () => {
+  const base = { phase: 3, phases: 5, phaseName: "API", step: "Build" };
+  const said = (extra) => loopBanner({ ...base, ...extra }).detail;
+  assert.equal(said({ strength: "thrifty", model: "sonnet", effort: "low" }), "Phase 3 of 5: API \u00b7 Build \u00b7 Thrifty (sonnet, low)");
+  assert.equal(said({ strength: "best", model: "opus" }), "Phase 3 of 5: API \u00b7 Build \u00b7 Best (opus)");
+  assert.equal(said({ strength: "balanced" }), "Phase 3 of 5: API \u00b7 Build \u00b7 Balanced");
+  assert.equal(said({ strength: null, model: "opus", effort: "high" }), "Phase 3 of 5: API \u00b7 Build \u00b7 (opus, high)", "Match my session shows the launch model");
+  assert.equal(said({ strength: null, model: null, effort: null }), "Phase 3 of 5: API \u00b7 Build", "toggle off or no model known: unchanged");
+  assert.equal(said({}), "Phase 3 of 5: API \u00b7 Build");
+  assert.equal(loopRunText({}), "");
 });
 
 test("Stop now turns the banner to Stopping, ahead of a question or a stop on its way", () => {

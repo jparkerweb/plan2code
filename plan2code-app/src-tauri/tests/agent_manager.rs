@@ -432,3 +432,57 @@ fn a_custom_agent_runs_the_override_too_and_restart_keeps_its_id() {
     );
     h.manager.stop();
 }
+
+#[test]
+fn a_phase_start_runs_on_its_model_and_env_and_leaves_the_launch_choice_alone() {
+    let mut h = Harness::new();
+    h.manager
+        .start(
+            Agent::Builtin(builtin_entry("claude").unwrap()),
+            Some("opus".to_string()),
+            Some("high".to_string()),
+            PermissionMode::Checked,
+            None,
+        )
+        .expect("start the fake agent");
+    h.wait_for_output(READY, 1);
+
+    h.manager
+        .start_phase_on(
+            "/plan2code phase".to_string(),
+            "sonnet".to_string(),
+            Some("low".to_string()),
+            vec![("PLAN2CODE_LOOP_STRENGTH".to_string(), "thrifty".to_string())],
+        )
+        .expect("start the phase on its strength");
+    h.wait_for_output(READY, 2);
+    // The agent-bin override drops every argument, so the fake agent sees the
+    // env only; the model is checked through the stored choice below.
+    h.type_line("ENV PLAN2CODE_LOOP_STRENGTH");
+    h.wait_for_output("ENV PLAN2CODE_LOOP_STRENGTH=thrifty", 1);
+
+    // The stored choice, kind and mode are what they were.
+    let (kind, model, effort, mode) = h.manager.launch_choice().unwrap();
+    assert_eq!(kind.id(), "claude");
+    assert_eq!(model.as_deref(), Some("opus"));
+    assert_eq!(effort.as_deref(), Some("high"));
+    assert_eq!(mode, PermissionMode::Checked);
+
+    // The next plain start runs on the original choice, with no strength.
+    h.manager
+        .start_fresh("/plan2code next".to_string())
+        .unwrap();
+    h.wait_for_output(READY, 3);
+    h.type_line("ENV PLAN2CODE_LOOP_STRENGTH");
+    h.wait_for_output("ENV PLAN2CODE_LOOP_STRENGTH=\r", 1);
+    h.manager.stop();
+}
+
+#[test]
+fn a_phase_start_with_no_launch_choice_is_refused() {
+    let h = Harness::new();
+    let refused = h
+        .manager
+        .start_phase_on("p".to_string(), "sonnet".to_string(), None, Vec::new());
+    assert!(refused.is_err());
+}

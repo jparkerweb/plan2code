@@ -162,6 +162,199 @@ test("Agents & models: the table lists Claude, Devin and Codex, and a model id t
   assert.equal(await formField(s, "Model id").inputValue(), "gpt-test-codex-2");
 });
 
+// The "Strengths in the loop" fold: Thrifty, Balanced and Best mapped to the
+// agent's own models. models.json under PLAN2CODE_MODELS_DIR is what Save writes.
+const MODELS_FILE = path.join(MODELS_DIR, "models.json");
+const strengthsFold = (s) => agentForm(s).locator("details.prefs-agents-strengths");
+const strengthRow = (s, word) => strengthsFold(s).locator(`.strength-row[data-word="${word}"]`);
+const savedStrengths = () => {
+  try {
+    return JSON.parse(fs.readFileSync(MODELS_FILE, "utf8")).strengths ?? null;
+  } catch {
+    return null; // not written yet
+  }
+};
+
+// The shipped list the tests start with has no models at all; the fold needs some
+// (and Claude and Devin's shipped strengths), so a test writes them and puts the file back.
+const SHIPPED_FILE = path.join(MODELS_DIR, "bin", "models.json");
+function seedShippedModels(t) {
+  fs.mkdirSync(path.dirname(SHIPPED_FILE), { recursive: true });
+  fs.writeFileSync(
+    SHIPPED_FILE,
+    JSON.stringify({
+      claude: [{ id: "sonnet", label: "Sonnet" }, { id: "opus", label: "Opus" }],
+      devin: [{ id: "swe-2-medium", label: "SWE 2 Medium" }, { id: "swe-2-high", label: "SWE 2 High" }, { id: "claude-opus-5-5-medium", label: "Opus 5.5 Medium" }],
+      codex: [],
+      strengths: {
+        claude: { thrifty: { model: "sonnet", effort: "low" }, balanced: { model: "sonnet", effort: "medium" }, best: { model: "opus", effort: "medium" } },
+        devin: { thrifty: { model: "swe-2-medium" }, balanced: { model: "swe-2-high" }, best: { model: "claude-opus-5-5-medium" } },
+      },
+    })
+  );
+  t.after(() => fs.rmSync(SHIPPED_FILE, { force: true }));
+}
+
+// Save lands asynchronously and an earlier Saved mark may still be on screen, so wait on the file.
+async function savedStrengthsAre(expected) {
+  for (let i = 0; i < 100; i++) {
+    if (JSON.stringify(savedStrengths()) === JSON.stringify(expected)) return;
+    await new Promise((r) => setTimeout(r, 50));
+  }
+  assert.deepEqual(savedStrengths(), expected);
+}
+
+async function openStrengths(s, name) {
+  await s.page.getByRole("button", { name: `Edit ${name}` }).click();
+  await formPane(s).waitFor();
+  await strengthsFold(s).locator("summary").click();
+}
+
+test("Agents & models: Claude's fold shows the shipped rows as default, and only a changed row is saved, until Reset", async (t) => {
+  noSavedLooks(t);
+  seedAgents(t);
+  t.after(() => fs.rmSync(MODELS_FILE, { force: true }));
+  seedShippedModels(t);
+  fs.rmSync(MODELS_FILE, { force: true });
+  const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_QUESTION });
+  await openAgentsTab(s);
+  await openStrengths(s, "Claude");
+  assert.equal(await strengthRow(s, "thrifty").locator('select[data-field="model"]').inputValue(), "sonnet");
+  assert.equal(await strengthRow(s, "thrifty").locator('select[data-field="effort"]').inputValue(), "low");
+  assert.equal(await strengthRow(s, "best").locator('select[data-field="model"]').inputValue(), "opus");
+  assert.equal(await strengthsFold(s).locator(".strength-default").count(), 3, "all three rows are untouched defaults");
+  assert.equal(await textOf(strengthRow(s, "balanced").locator(".strength-default")), "default");
+  assert.equal(await strengthsFold(s).locator(".strength-reset").count(), 0, "nothing to reset yet");
+  assert.equal(await textOf(strengthsFold(s).locator(".strength-offer")), "The loop will offer: Thrifty, Balanced, Best");
+
+  await strengthRow(s, "thrifty").locator('select[data-field="model"]').selectOption("opus");
+  await agentForm(s).locator(".prefs-unsaved-badge").waitFor();
+  assert.equal(await strengthRow(s, "thrifty").locator(".strength-reset").count(), 1, "a changed row has Reset");
+  assert.equal(await strengthRow(s, "thrifty").locator(".strength-default").count(), 0);
+  assert.equal(await strengthRow(s, "balanced").locator(".strength-reset").count(), 0, "the other rows stay default");
+  assert.equal(fs.existsSync(MODELS_FILE), false, "nothing is saved before Save");
+
+  await formButton(s, "Save").click();
+  await agentForm(s).locator(".prefs-saved").filter({ hasText: /^Saved. Restart plan2code/ }).waitFor();
+  assert.deepEqual(savedStrengths(), { claude: { thrifty: { model: "opus", effort: "low" } } }, "only the changed row is written");
+
+  await strengthRow(s, "thrifty").locator(".strength-reset").click();
+  assert.equal(await strengthRow(s, "thrifty").locator('select[data-field="model"]').inputValue(), "sonnet", "Reset restores the shipped row");
+  assert.equal(await textOf(strengthRow(s, "thrifty").locator(".strength-default")), "default");
+  await agentForm(s).locator(".prefs-unsaved-badge").waitFor();
+  await formButton(s, "Save").click();
+  await savedStrengthsAre(null); // with every row back at its default, no strengths are stored
+});
+
+test("Agents & models: Codex has an effort select on each row and Devin does not", async (t) => {
+  noSavedLooks(t);
+  seedAgents(t);
+  t.after(() => fs.rmSync(MODELS_FILE, { force: true }));
+  seedShippedModels(t);
+  const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_QUESTION });
+  await openAgentsTab(s);
+  await openStrengths(s, "Codex");
+  assert.equal(await textOf(strengthsFold(s).locator(".strength-empty")), "Add a model under Models first", "no models ship for Codex");
+  await formButton(s, "Add a model").click();
+  await formField(s, "Model id").fill("gpt-test-codex-1");
+  assert.equal(await strengthsFold(s).locator('select[data-field="effort"]').count(), 3);
+  assert.equal(await strengthRow(s, "thrifty").locator('select[data-field="model"]').inputValue(), "", "nothing ships for Codex, so the row is not mapped");
+  assert.equal(await textOf(strengthsFold(s).locator(".strength-offer")), "The loop will not offer a strength for this agent until one is mapped.");
+  await formButton(s, "Discard").click(); // the added model is unsaved: leaving would ask first
+  await s.page.getByRole("button", { name: "Edit Devin" }).click();
+  await strengthsFold(s).locator("summary").click();
+  assert.equal(await strengthsFold(s).locator('select[data-field="model"]').count(), 3);
+  assert.equal(await strengthsFold(s).locator('select[data-field="effort"]').count(), 0, "Devin takes no separate effort");
+});
+
+test("Agents & models: a strength-only edit is unsaved until Save, Discard puts the shipped rows back, and Reset keeps focus on its row", async (t) => {
+  noSavedLooks(t);
+  seedAgents(t);
+  t.after(() => fs.rmSync(MODELS_FILE, { force: true }));
+  seedShippedModels(t);
+  const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_QUESTION });
+  await openAgentsTab(s);
+  await openStrengths(s, "Claude");
+  assert.equal(await agentForm(s).locator(".prefs-unsaved-badge").isVisible(), false);
+  await strengthRow(s, "best").locator('select[data-field="model"]').selectOption("sonnet");
+  await agentForm(s).locator(".prefs-unsaved-badge").waitFor();
+  await formButton(s, "Discard").click();
+  assert.equal(await agentForm(s).locator(".prefs-unsaved-badge").isVisible(), false, "Discard clears the strength-only change");
+  assert.equal(await strengthRow(s, "best").locator('select[data-field="model"]').inputValue(), "opus", "the shipped row is back");
+  assert.equal(fs.existsSync(MODELS_FILE), false, "nothing was written");
+
+  await strengthRow(s, "best").locator('select[data-field="model"]').selectOption("sonnet");
+  await strengthRow(s, "best").locator(".strength-reset").focus();
+  await strengthRow(s, "best").locator(".strength-reset").click();
+  assert.equal(
+    await s.page.evaluate(() => document.activeElement?.closest("[data-word]")?.dataset.word),
+    "best",
+    "focus stays in the row the Reset was in"
+  );
+});
+
+test("Agents & models: a saved row whose model was removed reads not mapped while other models remain, and Save drops it", async (t) => {
+  noSavedLooks(t);
+  seedAgents(t);
+  t.after(() => fs.rmSync(MODELS_FILE, { force: true }));
+  seedShippedModels(t);
+  fs.rmSync(MODELS_FILE, { force: true });
+  const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_QUESTION });
+  await openAgentsTab(s);
+  await s.page.click("#agents-add");
+  await formPane(s).waitFor();
+  await formField(s, "Name").fill("Gemini");
+  await formField(s, "Command").fill("node");
+  await agentForm(s).locator("details.agent-fold > summary", { hasText: /^Models$/ }).click();
+  await formButton(s, "Add a model").click();
+  await formField(s, "Model id").fill("model-a");
+  await formButton(s, "Add a model").click();
+  await formField(s, "Model id").nth(1).fill("model-b");
+  await strengthsFold(s).locator("summary").click();
+  await strengthRow(s, "thrifty").locator('select[data-field="model"]').selectOption("model-a");
+  await strengthRow(s, "best").locator('select[data-field="model"]').selectOption("model-b");
+  await formButton(s, "Save").click();
+  await savedStrengthsAre({ gemini: { thrifty: { model: "model-a" }, best: { model: "model-b" } } });
+
+  await agentForm(s).locator(".agent-row.model").first().getByRole("button", { name: "Remove" }).click();
+  assert.equal(await strengthRow(s, "thrifty").locator('select[data-field="model"]').inputValue(), "", "the removed model reads not mapped");
+  assert.equal(await textOf(strengthsFold(s).locator(".strength-offer")), "The loop will offer: Best");
+  await formButton(s, "Save").click();
+  await savedStrengthsAre({ gemini: { best: { model: "model-b" } } });
+});
+
+test("Agents & models: an added agent maps strengths only from its own Models, and a removed model reads not mapped", async (t) => {
+  noSavedLooks(t);
+  seedAgents(t);
+  t.after(() => fs.rmSync(MODELS_FILE, { force: true }));
+  seedShippedModels(t);
+  fs.rmSync(MODELS_FILE, { force: true });
+  const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_QUESTION });
+  await openAgentsTab(s);
+  await s.page.click("#agents-add");
+  await formPane(s).waitFor();
+  await formField(s, "Name").fill("Copilot");
+  await formField(s, "Command").fill("node");
+  await strengthsFold(s).locator("summary").click();
+  assert.equal(await textOf(strengthsFold(s).locator(".strength-empty")), "Add a model under Models first");
+  assert.equal(await strengthsFold(s).locator("select").count(), 0, "no selects without a model");
+
+  await agentForm(s).locator("details.agent-fold > summary", { hasText: /^Models$/ }).click();
+  await formButton(s, "Add a model").click();
+  await formField(s, "Model id").fill("gpt-test-1");
+  assert.equal(await strengthsFold(s).locator(".strength-empty").count(), 0, "the fold follows the Models list as it changes");
+  await strengthRow(s, "thrifty").locator('select[data-field="model"]').selectOption("gpt-test-1");
+  assert.equal(await strengthRow(s, "thrifty").locator('select[data-field="effort"]').count(), 0, "an added agent has no effort select");
+  await formButton(s, "Save").click();
+  await agentForm(s).locator(".prefs-saved").waitFor();
+  assert.deepEqual(savedStrengths(), { copilot: { thrifty: { model: "gpt-test-1" } } }, "saved under the new agent's id");
+
+  await agentForm(s).locator(".agent-row.model").first().getByRole("button", { name: "Remove" }).click();
+  assert.equal(await textOf(strengthsFold(s).locator(".strength-empty")), "Add a model under Models first");
+  await formButton(s, "Save").click();
+  await savedStrengthsAre(null);
+});
+
 test("Agents & models: a person adds an agent, tests its command, sees it after a reload, and deletes it", async (t) => {
   noSavedLooks(t);
   seedAgents(t);

@@ -15,6 +15,7 @@ import { hooks } from "../state.js";
 import {
   MODEL_CLIS,
   emptyLists,
+  emptyStrengths,
   newAgent,
   normalizeAgent,
   cliOf,
@@ -91,7 +92,16 @@ export function mountAgentsView(container, opts = {}) {
     $,
     // The last server reply for each list. Unknown keys on an agent ride along
     // untouched; builtins and templates only feed the setup pick list.
-    saved: { agents: [], user: emptyLists(), shipped: emptyLists(), builtins: [], templates: [] },
+    saved: { agents: [], user: emptyLists(), shipped: emptyLists(), builtins: [], templates: [], strengths: emptyStrengths() },
+    // The person's own strength rows per form key, once the fold changed them
+    // (agents-strengths.js); a form with no entry has not touched its fold.
+    strengthDrafts: new Map(),
+    strengthsOpen: false,
+    // The open fold's redraw, set by the fold itself.
+    strengthsRefresh: null,
+    // Whether GET /models answered: without it the page holds none of the
+    // person's models or strengths, so the fold stays away and no save sends them.
+    modelsLoaded: false,
     // At most one per form being edited: "cli:<cli>" for a built-in's own models,
     // "agent:<id>" for an added agent, "agent:new" for one being added.
     drafts: new Map(),
@@ -148,15 +158,20 @@ export function mountAgentsView(container, opts = {}) {
   }
 
   function edited() {
-    if (ctx.openKey) renderDirty(ctx, ctx.openKey);
+    if (ctx.openKey) {
+      // A model added or removed changes what the strengths fold may pick.
+      if (ctx.strengthsRefresh) ctx.strengthsRefresh();
+      renderDirty(ctx, ctx.openKey);
+    }
   }
 
   // Leaving a form for another row drops its draft, as closing it always did:
   // a dirty one asks first (the dialog's Save / Discard / Keep editing).
   async function leaveForm() {
     if (!ctx.openKey) return true;
-    if (isDirty(ctx.saved, ctx.drafts, ctx.openKey) && !(await confirmUnsaved())) return false;
+    if (isDirty(ctx.saved, ctx.drafts, ctx.openKey, ctx.strengthDrafts) && !(await confirmUnsaved())) return false;
     ctx.drafts.delete(ctx.openKey);
+    ctx.strengthDrafts.delete(ctx.openKey);
     ctx.openKey = null;
     return true;
   }
@@ -183,6 +198,7 @@ export function mountAgentsView(container, opts = {}) {
     ctx.formError = null;
     ctx.formReplace = null;
     ctx.confirming = false;
+    ctx.strengthsOpen = false;
     ctx.argsOpen = key === "agent:new";
     // A built-in's only section is its models: folded it would show nothing.
     ctx.modelsOpen = key.startsWith("cli:");
@@ -198,7 +214,10 @@ export function mountAgentsView(container, opts = {}) {
   // one just deleted).
   function closeForm() {
     const left = ctx.openKey;
-    if (ctx.openKey) ctx.drafts.delete(ctx.openKey);
+    if (ctx.openKey) {
+      ctx.drafts.delete(ctx.openKey);
+      ctx.strengthDrafts.delete(ctx.openKey);
+    }
     ctx.openKey = null;
     ctx.formError = null;
     ctx.formReplace = null;
@@ -286,6 +305,7 @@ export function mountAgentsView(container, opts = {}) {
   // Fresh from what was just saved: the form redraws on a clean draft.
   function savedAs(key) {
     ctx.drafts.delete(ctx.openKey);
+    ctx.strengthDrafts.delete(ctx.openKey);
     ctx.openKey = key;
     ctx.drafts.set(key, structuredClone(savedEntry(ctx.saved, key)));
     ctx.formError = null;
@@ -294,15 +314,35 @@ export function mountAgentsView(container, opts = {}) {
     drawForm(ctx);
   }
 
+  // The strengths mapping to send for `owner` (a built-in's cli or an added
+  // agent's id): every other agent's saved rows that still name a known agent
+  // (a deleted agent's rows drop out here), plus the owner's own rows. Those are
+  // the form's draft when its fold changed, else what is saved, keeping only
+  // rows whose model is still in `modelIds`.
+  function strengthsToSend(owner, key, modelIds) {
+    const known = new Set([...MODEL_CLIS, ...ctx.saved.agents.map((a) => a.id)]);
+    const out = {};
+    for (const [id, rows] of Object.entries(ctx.saved.strengths.user)) if (id !== owner && known.has(id)) out[id] = rows;
+    const mine = ctx.strengthDrafts.has(key) ? ctx.strengthDrafts.get(key) : ctx.saved.strengths.user[owner] || {};
+    const kept = Object.fromEntries(Object.entries(mine).filter(([, row]) => row && modelIds.includes(row.model)));
+    if (Object.keys(kept).length) out[owner] = kept;
+    return out;
+  }
+
   async function saveModelsFor(cli) {
-    const sent = ctx.drafts.get("cli:" + cli).filter((m) => m.id);
+    const key = "cli:" + cli;
+    const sent = ctx.drafts.get(key).filter((m) => m.id);
     try {
-      const { res, body } = await postJson("/models", { models: { ...ctx.saved.user, [cli]: sent } });
+      const modelIds = [...ctx.saved.shipped[cli], ...sent].map((m) => m.id);
+      const payload = { models: { ...ctx.saved.user, [cli]: sent } };
+      if (ctx.modelsLoaded) payload.strengths = strengthsToSend(cli, key, modelIds);
+      const { res, body } = await postJson("/models", payload);
       if (!res.ok) {
         formMark({ ok: false, error: body.error || "Could not save." });
         return false;
       }
       ctx.saved.user[cli] = (body.user && body.user[cli]) || sent;
+      if (ctx.modelsLoaded) ctx.saved.strengths.user = body.strengths || {};
     } catch {
       formMark({ ok: false, error: "Could not save." });
       return false;
@@ -343,6 +383,32 @@ export function mountAgentsView(container, opts = {}) {
       return false;
     }
     const id = ctx.saved.agents[at].id;
+    // The fold's rows ride a second save into models.json, under the id the
+    // agent has now (a new agent only gets one from the first).
+    const modelIds = draft.models.map((m) => m.id).filter(Boolean);
+    const savedRows = ctx.saved.strengths.user[id] || {};
+    const stale = Object.values(savedRows).some((row) => row && !modelIds.includes(row.model));
+    if (ctx.modelsLoaded && (ctx.strengthDrafts.has(key) || stale)) {
+      // The agent itself is saved by now: on a failure the form moves to its
+      // saved id, keeps the fold's unsaved rows and says what did not land.
+      const strengthsFailed = (message) => {
+        const mine = ctx.strengthDrafts.get(key);
+        ctx.found.delete(key);
+        ctx.found.delete("agent:" + id);
+        savedAs("agent:" + id);
+        if (mine !== undefined) ctx.strengthDrafts.set("agent:" + id, mine);
+        drawForm(ctx);
+        formMark({ ok: false, error: message });
+        return false;
+      };
+      try {
+        const { res, body } = await postJson("/models", { models: ctx.saved.user, strengths: strengthsToSend(id, key, modelIds) });
+        if (!res.ok) return strengthsFailed(body.error || "Saved, but the strengths could not be.");
+        ctx.saved.strengths.user = body.strengths || {};
+      } catch {
+        return strengthsFailed("Saved, but the strengths could not be.");
+      }
+    }
     ctx.found.delete(key);
     ctx.found.delete("agent:" + id);
     savedAs("agent:" + id);
@@ -379,7 +445,7 @@ export function mountAgentsView(container, opts = {}) {
 
   // An open form whose draft differs from what is saved.
   function hasUnsaved() {
-    return ctx.openKey !== null && isDirty(ctx.saved, ctx.drafts, ctx.openKey);
+    return ctx.openKey !== null && isDirty(ctx.saved, ctx.drafts, ctx.openKey, ctx.strengthDrafts);
   }
 
   // What the unsaved prompt calls the open form.
@@ -395,6 +461,7 @@ export function mountAgentsView(container, opts = {}) {
     if (!ctx.openKey) return;
     if (ctx.openKey === "agent:new") return closeForm();
     ctx.drafts.set(ctx.openKey, structuredClone(savedEntry(ctx.saved, ctx.openKey)));
+    ctx.strengthDrafts.delete(ctx.openKey);
     ctx.formError = null;
     ctx.formReplace = null;
     ctx.confirming = false;
@@ -414,6 +481,7 @@ export function mountAgentsView(container, opts = {}) {
     const seq = ++loadSeq;
     ctx.openKey = null;
     ctx.drafts.clear();
+    ctx.strengthDrafts.clear();
     ctx.found.clear();
     ctx.formError = null;
     ctx.formReplace = null;
@@ -437,7 +505,14 @@ export function mountAgentsView(container, opts = {}) {
     }
     ctx.saved.user = emptyLists();
     ctx.saved.shipped = emptyLists();
+    ctx.saved.strengths = emptyStrengths();
+    ctx.modelsLoaded = Boolean(models);
     if (models) {
+      // A failed or missing strengths answer reads as nothing mapped.
+      for (const part of ["shipped", "user"]) {
+        const rows = models.strengths && models.strengths[part];
+        if (rows && typeof rows === "object" && !Array.isArray(rows)) ctx.saved.strengths[part] = rows;
+      }
       for (const cli of MODEL_CLIS) {
         if (Array.isArray(models.user?.[cli])) ctx.saved.user[cli] = models.user[cli];
         if (Array.isArray(models.shipped?.[cli])) ctx.saved.shipped[cli] = models.shipped[cli];

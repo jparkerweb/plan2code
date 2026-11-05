@@ -59,6 +59,12 @@ pub struct ReportEntry {
     /// Things the app noticed that did not stop the phase (leftover Suggestions).
     pub warnings: Vec<String>,
     pub retries: u32,
+    /// What the phase ran on, with Set strength per phase on: "Thrifty",
+    /// "Balanced", "Best" or "Match my session" (the word a retry stepped up
+    /// to, for a retry); empty with the toggle off.
+    pub strength: String,
+    /// The model it ran on, with the effort folded in ("sonnet, low").
+    pub model: String,
 }
 
 impl ReportEntry {
@@ -280,6 +286,14 @@ fn entry_markdown(md: &mut String, e: &ReportEntry) {
         md.push_str(&format!("- Commit: `{commit}` {}\n", cell(&e.subject)));
     } else if e.result == EntryResult::Passed {
         md.push_str("- Commit: not committed\n");
+    }
+    if !e.strength.is_empty() {
+        let on = if e.model.is_empty() {
+            e.strength.clone()
+        } else {
+            format!("{} ({})", e.strength, e.model)
+        };
+        md.push_str(&format!("- Ran on: {}\n", cell(&on)));
     }
     if e.retries > 0 {
         md.push_str(&format!("- Retries: {}\n", e.retries));
@@ -564,5 +578,32 @@ mod tests {
         assert!(!body_markdown(&report).contains("Warnings"));
         let old: ReportEntry = serde_json::from_str(r#"{"phase":4,"name":"P4"}"#).unwrap();
         assert!(old.warnings.is_empty());
+    }
+
+    #[test]
+    fn a_phase_line_says_what_it_ran_on_and_an_old_store_says_nothing() {
+        let mut thrifty = entry(2, EntryResult::Passed);
+        thrifty.strength = "Thrifty".into();
+        thrifty.model = "sonnet, low".into();
+        let mut matched = entry(3, EntryResult::Passed);
+        matched.strength = "Match my session".into();
+        matched.model = "opus".into();
+        let mut bare = entry(4, EntryResult::Passed);
+        bare.strength = "Best".into();
+        let mut report = LoopReport::new("specs/x", "2026-11-01 10:00");
+        report.entries = vec![thrifty, matched, bare, entry(5, EntryResult::Passed)];
+        let md = body_markdown(&report);
+        assert!(md.contains("- Ran on: Thrifty (sonnet, low)"), "{md}");
+        assert!(md.contains("- Ran on: Match my session (opus)"), "{md}");
+        assert!(
+            md.contains(
+                "- Ran on: Best
+"
+            ),
+            "{md}"
+        );
+        assert_eq!(md.matches("Ran on").count(), 3, "toggle off adds nothing");
+        let old: ReportEntry = serde_json::from_str(r#"{"phase":4,"name":"P4"}"#).unwrap();
+        assert!(old.strength.is_empty() && old.model.is_empty());
     }
 }

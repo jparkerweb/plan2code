@@ -5,7 +5,11 @@
 
 import test from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { pageSuite, openSession, tempProject, textOf } from "./page-test-helpers.mjs";
+import { MODELS_DIR } from "./web-console-test-helpers.mjs";
 
 const suite = pageSuite(test);
 
@@ -46,6 +50,7 @@ test("the setup lists each phase on its own line, in the agreed order of fields 
 
   const labels = await s.page.locator(".loop-label").allInnerTexts();
   assert.deepEqual(labels, [
+    "Strength per phase",
     "Review",
     "Fix findings",
     "When a phase asks something",
@@ -256,6 +261,27 @@ test("the finish card counts each kind of decision per phase and opens on the fu
   assert.deepEqual(seen.actions, ["Finalize", "Back to the dashboard"], "the way home is offered next to Finalize");
 });
 
+test("a stopped loop offers Ask a question, which tells the app and wakes no loop", async (t) => {
+  const s = await openSetup(t);
+  await frameInFakeApp(s);
+  const seen = await s.page.evaluate(async () => {
+    const m = await import(new URL("screens/ending.js", document.baseURI).href);
+    const card = m.renderLoopEnd({
+      kind: "stopped",
+      line: "Phase 5 stopped",
+      phases: [{ n: 5, name: "Docs", commit: null, unfixed: 0, retries: 0 }],
+      uncommitted: [],
+      can: ["ask", "resume", "fix", "dashboard"],
+    });
+    const buttons = [...card.querySelectorAll(".loop-end-actions button")];
+    const ask = buttons.find((b) => b.textContent === "Ask a question");
+    if (ask) ask.click();
+    return { labels: buttons.map((b) => b.textContent), told: window.__told.map((x) => x.plan2code) };
+  });
+  assert.deepEqual(seen.labels, ["Ask a question", "Resume the loop", "Fix it by hand", "Back to the dashboard"]);
+  assert.deepEqual(seen.told, ["loop-ask"]);
+});
+
 // A real loop session: `open --loop` under the app's signal stamps the lock.
 async function openLoopPage(t) {
   return openSession(await suite.browser(), {
@@ -328,4 +354,173 @@ test("a loop phase still starting says the loop is starting it, and promises no 
   });
   await s.page.getByRole("heading", { name: "The loop is starting this phase" }).waitFor();
   assert.doesNotMatch(await textOf(s.page.locator("#main")), /pause for approvals/);
+});
+
+/* ------------------------------------------- Strength per phase (the section) */
+
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const LAUNCH = { agent: "claude", agentLabel: "Claude Code", model: "opus", effort: "medium", permissionMode: "bypass", promptSupport: true, running: false };
+
+// The installed copy of the shipped model menu, with its strengths, as install.js drops it.
+function installShippedModels() {
+  const shipped = path.join(MODELS_DIR, "bin", "models.json");
+  fs.mkdirSync(path.dirname(shipped), { recursive: true });
+  fs.copyFileSync(path.join(ROOT, "src", "launcher", "models.json"), shipped);
+}
+
+// The setup screen with the app's answer in: this launch choice, then the strengths read for it.
+async function openStrengthSetup(t, launch = LAUNCH) {
+  installShippedModels();
+  const s = await openSetup(t);
+  await s.page.evaluate(async (facts) => {
+    const { page, redraw } = await import(new URL("state.js", document.baseURI).href);
+    page.loopFacts = facts;
+    redraw();
+  }, launch);
+  return s;
+}
+
+const strengthRows = (s) =>
+  s.page.locator(".loop-strength-row").evaluateAll((rows) =>
+    rows.map((r) => ({ phase: r.querySelector(".loop-strength-phase").textContent, pick: r.querySelector("select").value, model: r.querySelector(".loop-strength-model").textContent }))
+  );
+
+test("the strength section is first in the form and off by default", async (t) => {
+  const s = await openStrengthSetup(t);
+  const toggle = s.page.locator("#loop-phase-strength");
+  await toggle.waitFor();
+  assert.equal(await toggle.isChecked(), false);
+  assert.equal(await s.page.locator(".loop-label").first().innerText(), "Strength per phase");
+  assert.equal(await s.page.locator(".loop-strength-row").count(), 0, "no rows until the toggle is on");
+  assert.equal(await s.page.locator("#loop-strength-all").count(), 0);
+});
+
+test("turning it on shows one row per phase left with the model each pick becomes, and Set all to fills them", async (t) => {
+  const s = await openStrengthSetup(t);
+  await s.page.locator("#loop-phase-strength").check();
+  await s.page.locator(".loop-strength-row").first().waitFor();
+  assert.deepEqual(await strengthRows(s), [
+    { phase: "Phase 1: One", pick: "", model: "opus, medium" },
+    { phase: "Phase 2: Two", pick: "", model: "opus, medium" },
+  ], "untouched rows match the session and show the launch choice");
+
+  await s.page.locator("#loop-strength-1").selectOption("thrifty");
+  assert.equal(await textOf(s.page.locator('[data-phase="1"] .loop-strength-model')), "sonnet, low");
+
+  assert.equal(await s.page.locator("#loop-strength-all").inputValue(), "-", "Set all to starts blank");
+  await s.page.locator("#loop-strength-all").selectOption("best");
+  assert.deepEqual((await strengthRows(s)).map((r) => [r.pick, r.model]), [["best", "opus, medium"], ["best", "opus, medium"]]);
+  assert.equal(await s.page.locator("#loop-strength-all").inputValue(), "-", "and goes blank again: it is not a saved value");
+
+  await s.page.locator("#loop-strength-2").selectOption("balanced");
+  assert.deepEqual((await strengthRows(s)).map((r) => [r.pick, r.model]), [["best", "opus, medium"], ["balanced", "sonnet, medium"]], "a row can change after Set all");
+
+  await s.page.locator("#loop-strength-all").selectOption("match");
+  assert.deepEqual((await strengthRows(s)).map((r) => r.pick), ["", ""], "Match my session fills every row too");
+});
+
+test("an agent with nothing mapped grays the section and links to Agents & models", async (t) => {
+  const s = await openStrengthSetup(t, { ...LAUNCH, agent: "codex", agentLabel: "Codex" });
+  const note = s.page.locator(".loop-strength-none");
+  await note.waitFor();
+  assert.match(await textOf(note), /This agent has no strengths mapped yet\./);
+  assert.equal(await s.page.locator("#loop-phase-strength").isDisabled(), true);
+  assert.equal(await s.page.locator(".loop-strength-row").count(), 0);
+  await note.getByRole("button").click();
+  await s.page.locator("#prefs-tab-agents[aria-selected='true']").waitFor();
+});
+
+test("a saved pick that is not mapped holds Start with a line naming the row, and a change releases it", async (t) => {
+  const s = await openStrengthSetup(t);
+  await s.page.locator("#loop-phase-strength").check();
+  await s.page.locator(".loop-strength-row").first().waitFor();
+  // Thrifty is no longer mapped for this agent (an override went away); Phase 2 still holds it.
+  await s.page.evaluate(async () => {
+    const { page, redraw } = await import(new URL("state.js", document.baseURI).href);
+    page.loopSetup.facts.resolved = { best: { model: "opus", effort: "medium" } };
+    page.loopSetup.form.strengths["specs/ready"] = [{ n: 2, name: "Two", strength: "thrifty" }];
+    redraw();
+  });
+  const why = s.page.locator(".loop-why");
+  assert.equal(await textOf(why), "Pick a new strength for Phase 2: not mapped for this agent.");
+  assert.equal(await s.page.locator("#loop-start").isDisabled(), true);
+  const pick = s.page.locator("#loop-strength-2");
+  assert.equal(await pick.inputValue(), "thrifty", "the saved word stays in the row");
+  assert.equal(await pick.locator("option:checked").innerText(), "Thrifty (not mapped)");
+  assert.equal(await pick.locator("option:checked").evaluate((o) => o.disabled), true);
+
+  await pick.selectOption("best");
+  assert.equal(await s.page.locator(".loop-why").count(), 0, "the hold is gone");
+  assert.equal(await s.page.locator("#loop-start").isDisabled(), false);
+});
+
+test("startBlock names every unmapped row, ignores the picks while the toggle is off, and waits for the strengths", async (t) => {
+  const s = await openSetup(t);
+  const lines = await s.page.evaluate(async () => {
+    const { startBlock } = await import(new URL("screens/loop-setup.js", document.baseURI).href);
+    const phasesLeft = [{ n: 2, name: "A" }, { n: 3, name: "B" }, { n: 4, name: "C" }];
+    const strengths = { "specs/x": [{ n: 2, name: "A", strength: "thrifty" }, { n: 3, name: "B", strength: "best" }, { n: 4, name: "C", strength: "thrifty" }] };
+    const facts = (resolved) => ({ spec: "specs/x", phasesLeft, pending: 0, resolved });
+    const form = (phaseStrength) => ({ commit: false, phaseStrength, strengths });
+    const app = { permissionMode: "bypass", promptSupport: true };
+    return {
+      two: startBlock(form(true), facts({ best: { model: "m" } }), app),
+      off: startBlock(form(false), facts({ best: { model: "m" } }), app),
+      allMapped: startBlock(form(true), facts({ thrifty: { model: "s" }, best: { model: "m" } }), app),
+      nothingMapped: startBlock(form(true), facts({}), app),
+      loading: startBlock(form(true), facts(undefined), app),
+      last: startBlock(form(true), { ...facts({ best: { model: "m" } }), phasesLeft: [] }, app),
+    };
+  });
+  assert.equal(lines.two, "Pick a new strength for Phase 2, Phase 4: not mapped for this agent.");
+  assert.equal(lines.off, "");
+  assert.equal(lines.allMapped, "");
+  assert.equal(lines.nothingMapped, "", "an agent with nothing mapped grays the section instead");
+  assert.equal(lines.loading, "Asking the app...");
+  assert.equal(lines.last, "Nothing left to build in this spec.", "the older checks keep their order");
+});
+
+test("the toggle and the picks survive reopening the screen, and the toggle off sends nothing for the loop", async (t) => {
+  const s = await openStrengthSetup(t);
+  await s.page.locator("#loop-phase-strength").check();
+  await s.page.locator("#loop-strength-1").selectOption("thrifty");
+  await s.page.locator("#loop-strength-2").selectOption("best");
+
+  const save = () =>
+    s.page.evaluate(async () => {
+      const { page } = await import(new URL("state.js", document.baseURI).href);
+      const { setupBody } = await import(new URL("screens/loop-setup.js", document.baseURI).href);
+      const res = await fetch("/loop-setup", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(setupBody(page.loopSetup.form, page.loopSetup)) });
+      return { status: res.status, body: await res.json() };
+    });
+  const saved = await save();
+  assert.equal(saved.status, 200, JSON.stringify(saved.body));
+  assert.equal(saved.body.setup.phaseStrength, true);
+  assert.deepEqual(saved.body.setup.strengths, { "specs/ready": [{ n: 1, name: "One", strength: "thrifty" }, { n: 2, name: "Two", strength: "best" }] });
+
+  const reopen = async () => {
+    await s.page.evaluate(async () => {
+      const m = await import(new URL("screens/loop-setup.js", document.baseURI).href);
+      const { page, redraw } = await import(new URL("state.js", document.baseURI).href);
+      await m.openLoopSetup({ dir: "specs/ready" });
+      redraw();
+    });
+    await s.page.locator("#loop-start").waitFor();
+  };
+  await reopen();
+  await s.page.locator("#loop-strength-1").waitFor();
+  assert.equal(await s.page.locator("#loop-phase-strength").isChecked(), true);
+  assert.deepEqual((await strengthRows(s)).map((r) => [r.pick, r.model]), [["thrifty", "sonnet, low"], ["best", "opus, medium"]]);
+
+  // Off: the picks stay saved, the loop is told nothing.
+  await s.page.locator("#loop-phase-strength").uncheck();
+  const off = await save();
+  assert.equal(off.body.setup.phaseStrength, false);
+  assert.equal(off.body.setup.strengths["specs/ready"].length, 2, "the toggle hides the picks, it does not erase them");
+
+  // Back to Match my session for every row removes the key.
+  await s.page.locator("#loop-phase-strength").check();
+  await s.page.locator("#loop-strength-all").selectOption("match");
+  const cleared = await save();
+  assert.deepEqual(cleared.body.setup.strengths, {});
 });
