@@ -240,7 +240,7 @@ Do NOT make documentation changes without user approval.
 
 **Objective:** Collect optional feedback before archival.
 
-Ask the user: "Would you like to provide feedback on this run? (optional)" If no, skip to Step 6.
+Ask this one question on its own, before any of the others: "Would you like to rate this run? (yes / no thank you)" On no, skip to Step 6 and ask nothing more about feedback.
 
 If yes, collect:
 1. **Rating** (1-10): "How would you rate this workflow run overall?"

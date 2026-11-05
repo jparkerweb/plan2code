@@ -1,4 +1,5 @@
-// Tests for plan2code-4-finalize's scripts/feedback-payload.mjs.
+// Tests for plan2code-4-finalize's scripts/feedback-payload.mjs and Step 5's
+// opening question.
 //
 // See skill-script-helpers.mjs for how these run.
 
@@ -171,4 +172,26 @@ test("feedback-payload: submit refuses an oversize URL when gh fails, and dry-ru
   assert.equal(j.error, "oversize");
   assert.match(j.next, /--truncate/);
   assert.match(j.next, /gh/);
+});
+
+/* ===================================================== Step 5's opening question */
+
+// What a person sees break: Finalize posts the rating and reason cards straight
+// away, and opting out takes a scroll to Skip on every one of them.
+test("Step 5 asks one question first, with a No thank you, on the page and in the terminal", () => {
+  const notes = fs.readFileSync(path.join(ROOT, "src/web-console/notes/finalize.md"), "utf8");
+  const row = notes.split("\n").find((line) => line.startsWith("| 5, Feedback"));
+  assert.ok(row, "the notes have a row for Step 5");
+  const opening = row.indexOf('`confirm` "Rate this run"');
+  assert.ok(opening !== -1, "the row opens on the Rate this run card");
+  assert.match(row, /`noLabel` "No thank you"/);
+  assert.ok(opening < row.indexOf("rating as `choice`"), "the opening card comes before the rating card");
+  assert.ok(row.indexOf("No thank you") < row.indexOf("rating as `choice`"), "the way out comes before the rating card");
+  assert.match(row, /No: Step 6, no more cards/, "No thank you ends the questions on the page");
+
+  const prompt = fs.readFileSync(path.join(ROOT, "src/plan2code-4-finalize.md"), "utf8");
+  const step = prompt.slice(prompt.indexOf("### STEP 5:"), prompt.indexOf("### STEP 6:"));
+  assert.match(step, /on its own/, "the prompt asks the opening question alone");
+  assert.ok(step.indexOf("on its own") < step.indexOf("**Rating**"), "the opening question comes before the rating");
+  assert.match(step, /On no, skip to Step 6 and ask nothing more/, "no ends the questions in the terminal");
 });

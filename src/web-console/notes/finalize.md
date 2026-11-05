@@ -7,7 +7,7 @@
 | 2.5, Final review | Always: `confirm` "Run a final review" (`yesLabel` "Review it", `noLabel` "Skip it", files and ~lines in `body`). Yes: `building-review.md`, the `finalize` door. |
 | 3, Summary | Written to `overview.md`; mirror it as a doc (`saved`, `file` block). |
 | 4, Docs review | Proposed-updates table as a doc, plus a `multi` of documents (ticked = approved, `required:false` so Skip means no doc changes); a `review` if all-or-nothing. |
-| 5, Feedback | `required:false`: rating as `choice` 1 to 10 or `text`, three reasons as `text`, maintainer consent as `confirm`. |
+| 5, Feedback | Alone first: `confirm` "Rate this run" (`yesLabel` "Rate it", `noLabel` "No thank you"). No: Step 6, no more cards. Yes, `required:false`: rating as `choice` 1 to 10 or `text`, three reasons as `text`, maintainer consent as `confirm`. |
 | 6, Cleanup | `review` (`doc` Step 3's summary), verdicts `yes` ("Archive it"), `show` (token `show me`), `no`; archive paths in `body`, and a line that remembered workspace folders are forgotten too (`console.mjs forget --spec specs/<feature>` after the move). On `show`, see `notes/implement.md`, then reopen without `show`. |
 
 Post `activity` as each step starts. Pass `--spec specs/<feature>` or post `specDir`.
