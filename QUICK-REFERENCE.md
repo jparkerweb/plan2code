@@ -16,7 +16,7 @@ The web console is the main way in: a local page where questions, documents, bui
 | From your project (shell) | `plan2code`                          | Opens Claude Code, Devin or Codex on the dashboard (`--cli claude` / `devin` / `codex` to choose) |
 | Inside any agent          | `/plan2code` (`$plan2code` in Codex) | Opens the dashboard: a card for every skill, launched on the same page                 |
 | Install                   | `npx --allow-git=all git+https://github.com/jparkerweb/plan2code.git` | Installs the skills and the `plan2code` command (re-run it to update without the `plan2code` command) |
-| Update                    | `plan2code update`                   | Updates everything that was installed, with no menu; never uninstalls anything |
+| Update                    | `plan2code update`                   | Updates the skills, command, app and status line, with no menu (metrics and the bot only from a git checkout: `node install.js`); never uninstalls anything |
 | Straight into a skill     | `/plan2code-1-plan --web` (any step) | Skips the "web console or terminal?" question and opens the page                       |
 
 The install command always opens a menu. Back at your prompt with no output at all? npm could not reach the repository and hid the reason: run `git ls-remote https://github.com/jparkerweb/plan2code.git` to see it (usually the network, a proxy or the VPN).

@@ -2305,10 +2305,12 @@ function getLauncherShims(binDir, nodePath = process.execPath) {
           '@echo off',
           `rem ${LAUNCHER_MARKER}`,
           `if not exist "${cmdNode}" goto p2c_path_node`,
-          `"${cmdNode}" "${cmdDest}" %*`,
-          'exit /b %ERRORLEVEL%',
+          // Each command ends its own line with `& exit /b`: cmd.exe reads a running .cmd by byte
+          // offset, and `plan2code update` rewrites this file while it runs, so nothing may be read
+          // after the command returns. A bare `exit /b` keeps the command's exit code.
+          `"${cmdNode}" "${cmdDest}" %* & exit /b`,
           ':p2c_path_node',
-          `node "${cmdDest}" %*`,
+          `node "${cmdDest}" %* & exit /b`,
           '',
         ].join('\r\n'),
       },
@@ -2597,7 +2599,7 @@ function uninstallLauncher() {
   const shortcut = getShortcutFile();
   if (isOurShortcut(shortcut)) remove(shortcut);
   forgetInstalled('launcher');
-  for (const file of [LAUNCHER_DEST, MODELS_DEST, UPDATE_CHECK_DEST, LAUNCHER_VERSION_DEST, SHORTCUT_ICON_DEST, SHORTCUT_PNG_DEST, LAUNCHER_STATE, INSTALL_RECORD]) {
+  for (const file of [LAUNCHER_DEST, MODELS_DEST, UPDATE_CHECK_DEST, LAUNCHER_VERSION_DEST, SHORTCUT_ICON_DEST, SHORTCUT_PNG_DEST, LAUNCHER_STATE, INSTALL_RECORD, AGENTS_DEST, AGENT_LOOKUP_DEST]) {
     if (fs.existsSync(file)) remove(file);
   }
   try {
@@ -2855,6 +2857,13 @@ async function update({ steps = UPDATE_STEPS, cleanShims = removeLegacyLoopShims
   const results = {};
   for (const piece of INSTALL_PIECES) {
     if (!pieces.includes(piece) || piece in results) continue;
+    // The metrics and bot commands run from this folder: from npx's cache (which the launcher
+    // note above calls free to delete) they would break once it is cleared, so only a checkout updates them.
+    if ((piece === 'metrics' || piece === 'bot') && !fs.existsSync(path.join(__dirname, '.git'))) {
+      results[piece] = 'kept (update it from a git checkout: node install.js)';
+      console.log('');
+      continue;
+    }
     const outcome = {};
     try {
       const code = await steps[piece]({ quiet: true, unattended: true, outcome });

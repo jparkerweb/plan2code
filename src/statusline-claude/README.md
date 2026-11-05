@@ -40,7 +40,7 @@ The absolute token count before the context bar (`84k ⋅`) only appears on Pro/
 
 ```bash
 node install.js
-# Select A (Install All + dev tools) or C (Custom) → S (Status Line)
+# Select A (Advanced) → S (Status Line), or A → E (Everything)
 ```
 
 This automatically:

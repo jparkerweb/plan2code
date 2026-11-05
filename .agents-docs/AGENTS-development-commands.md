@@ -126,7 +126,7 @@ The root `npm test` does not run the metrics or bot vitest suites; run them in t
 |------|--------|
 | `--build-skills` | Regenerate `skills/` from `src/`, pruning stale skills and reference files |
 | `--verify-skills` | Diff local `skills/` against `src/`; exits 1 on drift. Diagnostic only, the installer rebuilds anyway |
-| `--update` | No menu: reinstall what `~/.plan2code/install.json` lists (skills, launcher, statusline, metrics, bot), never uninstalling; with no record, the skills and the `plan2code` command. `plan2code update` runs it through npx |
+| `--update` | No menu: reinstall what `~/.plan2code/install.json` lists (skills, launcher, app, statusline; metrics and bot only when run from a git checkout, since they run from the install folder, which npx's cache is not), never uninstalling; with no record, the skills and the `plan2code` command. `plan2code update` runs it through npx |
 
 ## How the Installer Works
 
