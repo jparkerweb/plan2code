@@ -326,8 +326,14 @@ test("a stale dashboard launch says the pick is saved and how to wake the agent"
     kicker: "Saved",
     title: "Pathfinder is saved and waiting",
     quip: "Plan2Code is not running right now.",
-    hint: "Return to the terminal and send any message. Plan2Code will collect this launch and continue here.",
+    hint: "Return to the terminal and type continue. Plan2Code will collect this launch and continue here.",
   });
+  // Under the desktop app the Reconnect to agent button is on the screen, so
+  // the hint points at it instead of the terminal.
+  assert.equal(
+    staleLaunchFeedback("Pathfinder", true, true).hint,
+    "Press Reconnect to agent below. Plan2Code will collect this launch and continue here."
+  );
   assert.equal(staleLaunchFeedback("Pathfinder", false), null);
 });
 

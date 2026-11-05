@@ -861,13 +861,17 @@ export function deleteSummary(spec) {
   };
 }
 
-export function staleLaunchFeedback(title, adrift) {
+// `inApp`: the desktop app puts a Reconnect to agent button on the screen
+// (starting.js), so the hint points at it; a browser has only the terminal.
+export function staleLaunchFeedback(title, adrift, inApp = false) {
   if (!adrift) return null;
   return {
     kicker: "Saved",
     title: `${title || "Your workflow"} is saved and waiting`,
     quip: "Plan2Code is not running right now.",
-    hint: "Return to the terminal and send any message. Plan2Code will collect this launch and continue here.",
+    hint: inApp
+      ? "Press Reconnect to agent below. Plan2Code will collect this launch and continue here."
+      : "Return to the terminal and type continue. Plan2Code will collect this launch and continue here.",
   };
 }
 

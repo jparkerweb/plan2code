@@ -51,6 +51,7 @@ export const SERVABLE = new Set([
   "mentions.js",
   "favicon.js",
   "app-bridge.js",
+  "continue-button.js",
   "git-board.js",
   "git-board-view.js",
   "pr-url.js",

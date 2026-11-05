@@ -11,6 +11,7 @@ import { attachMentions } from "../mention-box.js";
 import { makeMdField } from "../md-field.js";
 import { pickerAccept, attachmentKind, noteAwaiting, threadWho, threadText } from "../answers.js";
 import { postJson } from "../net.js";
+import { reconnectOffer } from "../continue-button.js";
 import { suggestState } from "../send-state.js";
 import { CHECKIN_LINE, helperRows, showSwitch, switchLabel, defaultInstruction, PATHFINDER_RESEARCH_LINE, STRENGTHS, DEFAULT_STRENGTH, STRENGTH_HELP } from "../subagents.js";
 
@@ -336,6 +337,10 @@ function askComposer(ss) {
     hint.appendChild(el("kbd", null, "Enter"));
     row.appendChild(hint);
   }
+
+  // No agent there: under the app a button that types continue in its terminal,
+  // left of Send; in a browser, the line telling the person to.
+  if (ss.state === "offline" && !finish()) row.appendChild(reconnectOffer("ask-reconnect"));
 
   const go = el("button", "btn small primary", "Send");
   go.type = "button";

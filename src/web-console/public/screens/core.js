@@ -72,6 +72,7 @@ import { board, renderGitBoard, resetBoard } from "./git-host.js";
 import { renderWorkspace, tellFolderIssues } from "./workspace.js";
 import { openHelpOn } from "./help-dialog.js";
 import { linkLeavesPage, onAppMessage, startNewSession, tellApp } from "../app-bridge.js";
+import { continueButton } from "../continue-button.js";
 import { askOfflineFlipped, askState, declineOpen, renderAside, renderAsk, renderSubagents, renderSubagentsButton } from "./ask.js";
 import { renderHandoff, renderLoopEnd, renderHomeButton, renderStopButton, renderStopControls, renderStopping, stopInProgress, stopWarning } from "./ending.js";
 import { renderNotepadButton } from "./notepad.js";
@@ -1167,6 +1168,12 @@ let moodVar = 0;
 const STRANDED_LINE =
   "Plan2Code is not running. Your answers are saved and waiting for it. If the terminal is idle, type **continue** there and it will pick them up; it may also be waiting for your permission approval.";
 
+// The dashboard's quiet lines: the pick or the way home is saved, and typing
+// **continue** in the terminal (a button under the app) wakes the agent.
+const WAKE_TAIL = "If the terminal is idle, type **continue** there to wake it.";
+const DASH_QUIET_LINE = `Plan2Code has gone quiet. A pick still waits here for it. ${WAKE_TAIL}`;
+const HOMEWARD_QUIET_LINE = `Your way back to the dashboard is saved and waiting for Plan2Code. ${WAKE_TAIL}`;
+
 // The agent is out of `wait` answering an Ask message (askBusy()), so a send
 // waits for it to finish that first.
 const ASK_BUSY_LINE = "Plan2Code is answering your Ask message. Your answers are saved, and it picks them up after that.";
@@ -1174,23 +1181,6 @@ const ASK_BUSY_LINE = "Plan2Code is answering your Ask message. Your answers are
 // A finished screen's press that nothing is collecting (pressStranded()).
 const PRESS_STRANDED_LINE =
   "Plan2Code is not running. Your choice is saved and waiting for it. If the terminal is idle, type **continue** there and it will pick it up; it may also be waiting for your permission approval.";
-
-// The status line's **continue**, under the app: a press asks the app to type
-// it into the agent's terminal. Held off for a few seconds after, so a double
-// press does not send it twice.
-const CONTINUE_HOLD_MS = 4000;
-
-function continueButton() {
-  const btn = el("button", "agent-key agent-key-btn", "continue");
-  btn.type = "button";
-  btn.title = "Type continue in the agent's terminal";
-  btn.addEventListener("click", () => {
-    btn.disabled = true;
-    tellApp("agent-continue");
-    setTimeout(() => (btn.disabled = false), CONTINUE_HOLD_MS);
-  });
-  return btn;
-}
 
 // Under the app with its terminal panel collapsed (the app's `terminal-state`),
 // "terminal" in a What to check line is a button asking the app to expand it.
@@ -1325,7 +1315,7 @@ export function renderStatus() {
   // until the agent resumes the session as the dashboard.
   if (page.local.homeward && !isDashboard()) {
     return agentAdrift()
-      ? say("adrift", "Your way back to the dashboard is saved and waiting for Plan2Code.")
+      ? say("adrift", HOMEWARD_QUIET_LINE, "", false, true)
       : say("work", "Saving your place and opening the dashboard…", "", true);
   }
   // The dashboard's three states, ahead of the question logic it never
@@ -1335,13 +1325,13 @@ export function renderStatus() {
     if (page.local.launching) {
       const stale = staleLaunchFeedback(page.local.launching.title, agentAdrift());
       return stale
-        ? say("adrift", `${page.local.launching.title} is saved and waiting for Plan2Code.`)
+        ? say("adrift", `${page.local.launching.title} is saved and waiting for Plan2Code. ${WAKE_TAIL}`, "", false, true)
         : say("work", `Waking up ${page.local.launching.title}…`, "", true);
     }
     if (page.dashPick) return say("point", `Start ${page.dashPick.title} when you're ready.`);
     // The cards work before the agent's menu lands, so a pick is always
     // theirs; the line still says what the agent is up to, or that it went quiet.
-    if (agentAdrift()) return say("adrift", "Plan2Code has gone quiet. A pick still waits here for it.");
+    if (agentAdrift()) return say("adrift", DASH_QUIET_LINE, "", false, true);
     const doing = page.S.agent && typeof page.S.agent.activity === "string" ? page.S.agent.activity.trim() : "";
     if (agentWorking() && !page.S.menu) return say("point", `Pick what we are doing today. ${doing || "Plan2Code is looking over the project."}`);
     return say("point", "Your move: pick what we are doing today.");

@@ -173,6 +173,128 @@ test("a finished screen's press that nothing collects says Plan2Code is not runn
   await until(async () => (await toApp(s, "agent-continue")).length === 1, 5000);
 });
 
+// A dashboard whose agent stopped answering (its terminal died or sat idle for
+// a long while): the sidebar offers to wake it. Under the app that is the
+// continue button; in a browser it is the instruction to type it.
+const DASH_MENU = { menu: { note: "Pick one." }, agent: { status: "waiting" } };
+
+test("a quiet dashboard agent shows a continue button under the app, which asks the app to type it", async (t) => {
+  const s = await openSession(await suite.browser(), {
+    t,
+    workflow: "dashboard",
+    clock: true,
+    payload: DASH_MENU,
+    env: { PLAN2CODE_IN_APP: "1" },
+    init: FAKE_APP_FRAME,
+  });
+  // The dashboard's wake-up intro covers the page until it is skipped.
+  const skip = s.page.getByRole("button", { name: "Skip the intro" });
+  await skip.click();
+  await skip.waitFor({ state: "hidden" });
+  const welcomeDone = s.page.getByRole("button", { name: "Start building" });
+  if (await welcomeDone.isVisible()) {
+    await welcomeDone.click();
+    await welcomeDone.waitFor({ state: "hidden" });
+  }
+  await s.page.clock.fastForward(200_000);
+  await lineSays(s, /^Plan2Code has gone quiet\./);
+  assert.match(await s.page.locator("#planny").getAttribute("class"), /\bis-adrift\b/);
+  assert.equal(await whatToCheck(s).count(), 1, "the quiet line carries What to check");
+  const press = s.page.locator("#agent-text .agent-key-btn");
+  assert.equal(await press.textContent(), "continue");
+  await press.click();
+  await until(async () => (await toApp(s, "agent-continue")).length === 1, 5000);
+});
+
+test("a quiet dashboard agent in a browser says to type continue in the terminal, with no button", async (t) => {
+  const s = await openSession(await suite.browser(), { t, workflow: "dashboard", clock: true, payload: DASH_MENU });
+  await s.page.clock.fastForward(200_000);
+  await lineSays(s, /^Plan2Code has gone quiet\./);
+  assert.match(await textOf(statusLine(s)), /type continue there/);
+  assert.equal(await s.page.locator("#agent-text .agent-key-btn").count(), 0, "a browser cannot type into a terminal");
+  assert.equal(await s.page.locator("#agent-text .agent-key").count(), 1, "continue shows as a key to type");
+});
+
+// A pick nobody collected: the saved-and-waiting screen. Under the app it holds
+// a Reconnect to agent button; in a browser its hint says to type continue.
+async function pickFromMenu(s) {
+  const skip = s.page.getByRole("button", { name: "Skip the intro" });
+  await skip.click();
+  await skip.waitFor({ state: "hidden" });
+  const welcomeDone = s.page.getByRole("button", { name: "Start building" });
+  if (await welcomeDone.isVisible()) {
+    await welcomeDone.click();
+    await welcomeDone.waitFor({ state: "hidden" });
+  }
+  const main = s.page.locator("#main");
+  await main.getByRole("button").filter({ has: s.page.locator("code", { hasText: /^\/plan2code-1-plan$/ }) }).click();
+  await main.getByRole("button", { name: "Start Plan" }).click();
+  await main.getByRole("heading", { name: /^Waking up / }).waitFor();
+  await s.page.clock.fastForward(200_000);
+  await main.getByRole("heading", { name: /is saved and waiting$/ }).waitFor();
+  return main;
+}
+
+test("a saved pick nobody collected offers Reconnect to agent under the app, which asks the app to type continue", async (t) => {
+  const s = await openSession(await suite.browser(), {
+    t,
+    workflow: "dashboard",
+    clock: true,
+    payload: DASH_MENU,
+    env: { PLAN2CODE_IN_APP: "1" },
+    init: FAKE_APP_FRAME,
+  });
+  const main = await pickFromMenu(s);
+  assert.match(await textOf(main), /Press Reconnect to agent below\./);
+  await main.getByRole("button", { name: "Reconnect to agent", exact: true }).click();
+  await until(async () => (await toApp(s, "agent-continue")).length === 1, 5000);
+});
+
+test("a saved pick nobody collected says to type continue in a browser, with no button", async (t) => {
+  const s = await openSession(await suite.browser(), { t, workflow: "dashboard", clock: true, payload: DASH_MENU });
+  const main = await pickFromMenu(s);
+  assert.match(await textOf(main), /Return to the terminal and type continue\./);
+  assert.equal(await main.getByRole("button", { name: "Reconnect to agent" }).count(), 0);
+});
+
+// The Ask tab's red "No agent available" line leads nowhere on its own. Under
+// the app a Reconnect to agent button sits left of Send and asks the app to type
+// continue; in a browser the line tells the person to.
+async function askOffline(s) {
+  await s.page.locator("nav").getByRole("button", { name: "Ask", exact: true }).click();
+  await s.page.locator("#ask-input").waitFor();
+  await s.page.clock.fastForward(200_000);
+  await s.page.waitForFunction((t) => document.body.innerText.includes(t), CHAT_OFFLINE_TEXT, { timeout: 10000 });
+}
+
+test("the Ask tab offers Reconnect to agent left of Send when no agent is there, under the app", async (t) => {
+  const s = await openSession(await suite.browser(), {
+    t,
+    workflow: "plan",
+    clock: true,
+    payload: PLAN_QUESTION,
+    env: { PLAN2CODE_IN_APP: "1" },
+    init: FAKE_APP_FRAME,
+  });
+  await askOffline(s);
+  const row = s.page.locator(".ask-composer");
+  const reconnect = row.getByRole("button", { name: "Reconnect to agent", exact: true });
+  assert.equal(await reconnect.count(), 1);
+  const [r, send] = await Promise.all([reconnect.boundingBox(), row.getByRole("button", { name: "Send", exact: true }).boundingBox()]);
+  assert.ok(r.x + r.width <= send.x + 1, "Reconnect to agent sits left of Send");
+  assert.equal(await row.getByRole("button", { name: "Send", exact: true }).isDisabled(), true, "Send stays off");
+  await reconnect.click();
+  await until(async () => (await toApp(s, "agent-continue")).length === 1, 5000);
+});
+
+test("the Ask tab in a browser says to type continue in the terminal, with no reconnect button", async (t) => {
+  const s = await openSession(await suite.browser(), { t, workflow: "plan", clock: true, payload: PLAN_QUESTION });
+  await askOffline(s);
+  const row = s.page.locator(".ask-composer");
+  assert.equal(await row.getByRole("button", { name: "Reconnect to agent" }).count(), 0);
+  assert.match(await textOf(row), /type continue in your terminal/i);
+});
+
 test("Continue here is hidden once the session meter is red, and the command and fresh-session advice stay", async (t) => {
   const s = await openSession(await suite.browser(), { t, workflow: "implement", payload: { agent: { status: "working", activity: "Task 1 of 1" } } });
   // Ten points: a thirty-task phase scores ten, the red level.

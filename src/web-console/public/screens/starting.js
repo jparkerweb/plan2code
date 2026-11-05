@@ -3,6 +3,7 @@
 import { page, redraw } from "../state.js";
 import { el, approvalTip } from "../render.js";
 import { startPose, startingHint, staleLaunchFeedback, workflowTitle } from "../answers.js";
+import { continueButton } from "../continue-button.js";
 import { skillByName } from "../skills.js";
 import { agentAdrift, doingNow, docs, loopDriving } from "../selectors.js";
 
@@ -119,7 +120,7 @@ export function renderLaunching(main) {
   const l = page.local.launching || {};
   const pane = posePane(main, "launching", l.skill && skillByName(l.skill)?.workflow);
 
-  const stale = staleLaunchFeedback(l.title, agentAdrift());
+  const stale = staleLaunchFeedback(l.title, agentAdrift(), page.inApp);
   pane.appendChild(el("p", "card-kicker", stale ? stale.kicker : "On it"));
   pane.appendChild(el("h2", "launch-title", stale ? stale.title : `Waking up ${l.title || "the next mode"}`));
   pane.appendChild(el("p", "launch-quip", stale ? stale.quip : LAUNCH_QUIPS[0]));
@@ -130,6 +131,14 @@ export function renderLaunching(main) {
       stale ? stale.hint : "This page turns into its home the moment it answers. No need to touch anything."
     )
   );
+  // Under the app a saved pick no agent collects gets a button that types
+  // continue in the terminal; the ticker shows and hides it with the hint.
+  if (page.inApp) {
+    const row = el("div", "launch-reconnect");
+    row.hidden = !stale;
+    row.appendChild(continueButton("Reconnect to agent", "btn primary"));
+    pane.appendChild(row);
+  }
   startLaunchTicker();
 }
 
@@ -211,7 +220,9 @@ function startLaunchTicker() {
         return;
       }
       const elapsed = Date.now() - cur.at;
-      const stale = staleLaunchFeedback(cur.title, agentAdrift());
+      const stale = staleLaunchFeedback(cur.title, agentAdrift(), page.inApp);
+      const reconnect = document.querySelector(".launch-reconnect");
+      if (reconnect) reconnect.hidden = !stale;
       if (kicker) kicker.textContent = stale ? stale.kicker : "On it";
       if (title) title.textContent = stale ? stale.title : `Waking up ${cur.title || "the next mode"}`;
       q.textContent = stale ? stale.quip : LAUNCH_QUIPS[Math.floor(elapsed / 2600) % LAUNCH_QUIPS.length];

@@ -149,6 +149,11 @@
 .ask-actions .btn.primary { margin-left: auto; }
 .ask-send-hint { margin-left: auto; font-size: 12px; color: var(--ink-3); white-space: nowrap; }
 .ask-send-hint + .btn.primary { margin-left: 0; }
+/* The wake-the-agent offer when nobody is there: a button (or, in a browser, a
+   line) pushed right so it sits directly left of Send. */
+.ask-actions .ask-reconnect { margin-left: auto; }
+.ask-actions .ask-reconnect + .btn.primary { margin-left: 0; }
+p.ask-reconnect { margin-top: 0; margin-bottom: 0; font-size: 12.5px; }
 .ask-count { font: 12px/1 var(--mono); color: var(--ink-3); }
 .ask-count.is-over { color: var(--warn); font-weight: 700; }
 .ask-error { color: var(--warn); font-size: 13px; margin: 8px 0 0; }
