@@ -5,11 +5,11 @@
 
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import type { AggregatedMetrics } from './types.js';
 import { invokeLLM, type AgentType } from './invoke-llm.js';
 
-const ANALYZE_PROMPT_PATH = new URL('../src/prompts/analyze.md', import.meta.url).pathname
-  .replace(/^\/([A-Za-z]:)/, '$1'); // Fix Windows path
+const ANALYZE_PROMPT_PATH = fileURLToPath(new URL('../src/prompts/analyze.md', import.meta.url));
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -40,7 +40,7 @@ function readPromptFiles(plan2codeRoot: string): Record<string, string> {
 function interpolate(template: string, vars: Record<string, string>): string {
   let result = template;
   for (const [key, value] of Object.entries(vars)) {
-    result = result.replaceAll(`{{${key}}}`, value);
+    result = result.replaceAll(`{{${key}}}`, () => value);
   }
   return result;
 }

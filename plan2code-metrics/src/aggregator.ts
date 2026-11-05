@@ -230,6 +230,10 @@ export function loadAggregated(outputPath: string): AggregatedMetrics | null {
  * Returns true if written, false if a file for that run_id already existed.
  */
 export function writeRunFile(run: RunMetrics, runsDir: string): boolean {
+  // The id becomes a file name: only the collector's own shape may reach a path.
+  if (!/^run-[A-Za-z0-9-]{1,64}$/.test(run.run_id)) {
+    throw new Error(`Refusing run_id "${String(run.run_id).slice(0, 80)}": it is not a run-<id> name.`);
+  }
   const destPath = path.join(runsDir, `${run.run_id}.json`);
 
   if (fs.existsSync(destPath)) {

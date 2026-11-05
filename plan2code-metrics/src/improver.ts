@@ -6,19 +6,19 @@
 
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import type { PromptEdit, PromptProposal } from './types.js';
 import { invokeLLM, type AgentType } from './invoke-llm.js';
 
 const CHAR_LIMIT = 20_000;
-const IMPROVE_PROMPT_PATH = new URL('../src/prompts/improve.md', import.meta.url).pathname
-  .replace(/^\/([A-Za-z]:)/, '$1'); // Fix Windows path
+const IMPROVE_PROMPT_PATH = fileURLToPath(new URL('../src/prompts/improve.md', import.meta.url));
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function interpolate(template: string, vars: Record<string, string>): string {
   let result = template;
   for (const [key, value] of Object.entries(vars)) {
-    result = result.replaceAll(`{{${key}}}`, value);
+    result = result.replaceAll(`{{${key}}}`, () => value);
   }
   return result;
 }
@@ -93,7 +93,7 @@ export function validateEdit(
   }
 
   // Check char count after edit
-  const afterContent = fileContent.replace(edit.old_text, edit.new_text);
+  const afterContent = fileContent.replace(edit.old_text, () => edit.new_text);
   if (afterContent.length > CHAR_LIMIT) {
     errors.push(`Edit would cause "${edit.file}" to exceed ${CHAR_LIMIT} char limit (would be ${afterContent.length} chars).`);
   }
@@ -232,7 +232,7 @@ export async function generateImprovement(opts: ImproverOptions): Promise<Improv
     if (result.valid) {
       // Compute accurate char counts
       const fileContent = promptContents[edit.file] ?? '';
-      const afterContent = fileContent.replace(edit.old_text, edit.new_text);
+      const afterContent = fileContent.replace(edit.old_text, () => edit.new_text);
       edit.char_count_before = fileContent.length;
       edit.char_count_after = afterContent.length;
       edit.char_count_delta = afterContent.length - fileContent.length;

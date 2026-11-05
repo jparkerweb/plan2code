@@ -87,6 +87,12 @@ describe('parseSubmissionPayload', () => {
     expect(result).toBeNull();
   });
 
+  it('returns null when run_id is not a run-<id> name (it becomes a file name)', () => {
+    for (const run_id of ['../../x', 'run-../x', 'x', 'run-' + 'a'.repeat(65), 'run-a/b']) {
+      expect(parseSubmissionPayload(issueBody({ ...VALID_PAYLOAD, run_id }))).toBeNull();
+    }
+  });
+
   it('returns null when user_feedback.overall_rating is a string instead of a number', () => {
     const badPayload = {
       ...VALID_PAYLOAD,

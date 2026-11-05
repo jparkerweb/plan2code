@@ -2,7 +2,7 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { describe, it, expect, afterEach } from 'vitest';
-import { avg, rate, buildCohortKey, backfillPromptVersions, cohortKeyForRun, aggregate } from './aggregator.js';
+import { avg, rate, buildCohortKey, backfillPromptVersions, cohortKeyForRun, aggregate, writeRunFile } from './aggregator.js';
 import type { PromptVersions, RunMetrics } from './types.js';
 
 // ── avg() ─────────────────────────────────────────────────────────────────────
@@ -249,5 +249,18 @@ describe('aggregate', () => {
     const result = aggregate(runsDir, outPath);
 
     expect(result.current_cohort_key).toBe(buildCohortKey(local.prompt_versions));
+  });
+});
+
+describe('writeRunFile', () => {
+  it('refuses a run_id that is not a run-<id> name, so it cannot leave the runs folder', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'p2c-runs-'));
+    try {
+      const run = { ...makeRun({}), run_id: '../../escape' };
+      expect(() => writeRunFile(run, path.join(dir, 'runs'))).toThrow(/run-<id>/);
+      expect(fs.existsSync(path.join(dir, 'escape.json'))).toBe(false);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
