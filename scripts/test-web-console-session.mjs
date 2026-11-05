@@ -844,18 +844,18 @@ test("prefs: Back to default resets Appearance or Sounds & activities only, and 
 test("looks: resetLooks(keys) changes only those keys, and the role is marked as asked", () => {
   const before = { ...looks };
   try {
-    Object.assign(looks, { theme: "dark", width: "wide", accent: "violet", role: "pm", sound: false, soundQuestion: false, hideActivities: true, activityBestSnake: 7, lastActivity: "snake" });
+    Object.assign(looks, { theme: "dark", width: "wide", accent: "violet", role: "pm", sound: false, soundQuestion: false, hideActivities: false, activityBestSnake: 7, lastActivity: "snake" });
     resetLooks(prefsResetScope("appearance"));
     assert.equal(looks.theme, DEFAULT_LOOKS.theme);
     assert.equal(looks.width, DEFAULT_LOOKS.width);
     assert.equal(looks.accent, DEFAULT_LOOKS.accent);
     assert.equal(looks.role, ROLE_NOT_SET, "cleared but marked as asked");
     assert.equal(looks.sound, false, "sounds untouched by Appearance");
-    assert.equal(looks.hideActivities, true);
+    assert.equal(looks.hideActivities, false);
     resetLooks(prefsResetScope("sounds"));
     assert.equal(looks.sound, true);
     assert.equal(looks.soundQuestion, true);
-    assert.equal(looks.hideActivities, false);
+    assert.equal(looks.hideActivities, DEFAULT_LOOKS.hideActivities);
     assert.equal(looks.activityBestSnake, 7, "best scores stay");
     assert.equal(looks.lastActivity, "snake", "the last pick stays");
   } finally {

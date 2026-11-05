@@ -355,6 +355,10 @@ test("the Desktop app group shows only in the app's frame, reflects the app's sa
 });
 
 test("framed, an Activities game in full screen asks the app for the whole screen, and gives it back on F, Esc and a new question", async (t) => {
+  // Activities start off for a new person: save them on for this test.
+  const looksFile = path.join(HOME, "looks.json");
+  fs.writeFileSync(looksFile, JSON.stringify({ looks: { hideActivities: false } }));
+  t.after(() => fs.rmSync(looksFile, { force: true }));
   const s = await openSession(await pages.browser(), { t, workflow: "plan", payload: { agent: { status: "working", activity: "Reading" } }, env: { PLAN2CODE_IN_APP: "1" }, init: FAKE_APP_FRAME });
   await s.page.click("#btn-activities");
   await s.page.locator('.activities-card[data-activity="snake"]').click();

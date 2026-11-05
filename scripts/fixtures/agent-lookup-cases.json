@@ -81,7 +81,7 @@
     {
       "name": "an install folder with %NAME% expands against vars",
       "platform": "win",
-      "entry": { "command": "goose", "installDirs": { "win": ["%TOOLS%\\bin"] } },
+      "entry": { "command": "goose", "installDirs": { "win": ["%TOOLS%/bin"] } },
       "dirs": { "tools": ["bin/goose.exe"] },
       "env": { "path": "", "savedPath": "", "npmBin": "", "pathext": ".EXE;.CMD", "vars": { "TOOLS": "{tools}" } },
       "state": "outside",

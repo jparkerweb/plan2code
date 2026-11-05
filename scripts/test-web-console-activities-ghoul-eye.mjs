@@ -652,7 +652,8 @@ test("Ghoul Rush's dollhouse draws: the landing, the fight with the Eye in every
     standAt(r, 10);
     frame("the landing");
     standAt(r, r.spec.arena + 14);
-    for (let ms = 0; ms < 1600; ms += 16) g.tick(16);
+    // The House's intro runs a seed-dependent while: tick until its Eye exists, not a fixed time.
+    for (let ms = 0; ms < 1600 || (!r.boss.eye && ms < 20000); ms += 16) g.tick(16);
     for (const [state, decoy] of [["flare", -1], ["flare", 6], ["open", -1], ["closing", -1], ["shut", -1]]) {
       Object.assign(r.boss.eye, { state, ms: 300, full: 1000, room: 4, decoy });
       frame(`the Eye ${state}`);

@@ -20,7 +20,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import test from "node:test";
+import test, { beforeEach, after } from "node:test";
 import assert from "node:assert/strict";
 import { pageSuite, openSession, drawn, itemCard, boxValue, fillBox } from "./page-test-helpers.mjs";
 import { until, HOME } from "./web-console-test-helpers.mjs";
@@ -30,11 +30,17 @@ const suite = pageSuite(test);
 // The person's saved looks, shared by every session in this console home.
 const LOOKS_FILE = path.join(HOME, "looks.json");
 
-// Starts a test from the given saved looks (none when left out) and leaves
-// none behind, so a best score or a hidden die never leaks into the next test.
+// Activities start off for a new person, so a test that saves no looks of its
+// own still starts with the die showing. savedLooks() replaces this file.
+beforeEach(() => fs.writeFileSync(LOOKS_FILE, JSON.stringify({ looks: { hideActivities: false } })));
+after(() => fs.rmSync(LOOKS_FILE, { force: true }));
+
+// Starts a test from the given saved looks and leaves none behind, so a best
+// score or a hidden die never leaks into the next test. Activities start off
+// for a new person, so every test starts with them on (hideActivities false)
+// unless it saves its own switch.
 function savedLooks(t, looks) {
-  if (looks) fs.writeFileSync(LOOKS_FILE, JSON.stringify({ looks }));
-  else fs.rmSync(LOOKS_FILE, { force: true });
+  fs.writeFileSync(LOOKS_FILE, JSON.stringify({ looks: { hideActivities: false, ...looks } }));
   t.after(() => fs.rmSync(LOOKS_FILE, { force: true }));
 }
 
@@ -277,7 +283,7 @@ test("a new session's picker marks the last played and puts focus on it, and a l
   assert.match(await card(s, "golf").innerText(), /Last played/);
   assert.doesNotMatch(await card(s, "snake").innerText(), /Last played/);
 
-  fs.writeFileSync(LOOKS_FILE, JSON.stringify({ looks: { welcomeSeen: true, lastActivity: "chess" } }));
+  fs.writeFileSync(LOOKS_FILE, JSON.stringify({ looks: { welcomeSeen: true, hideActivities: false, lastActivity: "chess" } }));
   const again = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_WORKING });
   await openPicker(again);
   assert.equal(await focusedCard(again), "snake", "an unknown pick puts focus on the first card");
@@ -2085,26 +2091,26 @@ test("saved Activities values that do not hold up fall back to their defaults", 
   const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_WORKING });
   const looks = await pageLooks(s);
   assert.equal(looks.activityBestSnake, 0, "a negative best is none");
-  assert.equal(looks.hideActivities, false, "a switch that is not a boolean is on");
+  assert.equal(looks.hideActivities, true, "a switch that is not a boolean is off, the default");
   assert.equal(looks.lastActivity, "", "a last pick that is not a string is none");
-  await iconUsable(s, "a skill screen");
+  assert.ok(await s.page.locator("#btn-activities").isHidden(), "and the die stays hidden");
 
   fs.writeFileSync(LOOKS_FILE, JSON.stringify({ looks: { welcomeSeen: true, activityBestSnake: 3.7 } }));
   const again = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_WORKING });
   assert.equal((await pageLooks(again)).activityBestSnake, 3, "a best is a whole number");
 });
 
-test("Back to default turns Show Activities back on and keeps the best scores", async (t) => {
-  savedLooks(t, { welcomeSeen: true, activityBestSnake: 12, lastActivity: "snake", hideActivities: true });
+test("Back to default turns Show Activities back off and keeps the best scores", async (t) => {
+  savedLooks(t, { welcomeSeen: true, activityBestSnake: 12, lastActivity: "snake", hideActivities: false });
   const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_WORKING });
-  assert.ok(await s.page.locator("#btn-activities").isHidden(), "the saved switch hides the die");
+  await iconUsable(s, "a skill screen with the switch saved on");
   await s.page.click("#btn-looks");
   await s.page.click("#prefs-tab-sounds");
   await s.page.locator("#looks-modal[open]").waitFor();
   await s.page.click("#looks-reset");
   await s.page.click("#looks-done");
-  await iconUsable(s, "a skill screen after Back to default");
-  await until(async () => (await serverLooks(s)).hideActivities === false, 5000);
+  assert.ok(await s.page.locator("#btn-activities").isHidden(), "the default hides the die again");
+  await until(async () => (await serverLooks(s)).hideActivities === true, 5000);
   const saved = await serverLooks(s);
   assert.equal(saved.activityBestSnake, 12, "the best score stays");
   assert.equal(saved.lastActivity, "snake", "the last pick stays");
@@ -2139,7 +2145,7 @@ test("Show Activities in User Preferences hides the die on the dashboard and on 
   await dash.page.click("#prefs-tab-sounds");
   await dash.page.locator("#looks-modal[open]").waitFor();
   const box = dash.page.locator("#looks-activities");
-  assert.ok(await box.isChecked(), "on by default");
+  assert.ok(await box.isChecked(), "on as saved");
   await box.uncheck();
   await dash.page.click("#looks-done");
   assert.ok(await dash.page.locator("#btn-activities").isHidden(), "the die is gone from the dashboard");

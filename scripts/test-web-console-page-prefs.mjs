@@ -767,7 +767,7 @@ test("Back to default resets only the tab on screen, and is hidden on Agents & m
   await swatch(s, "violet").click();
   await s.page.click("#prefs-tab-sounds");
   await s.page.locator("#looks-sound").uncheck();
-  await s.page.locator("#looks-activities").uncheck();
+  await s.page.locator("#looks-activities").check();
 
   await s.page.click("#prefs-tab-agents");
   assert.equal(await s.page.locator("#looks-reset").isHidden(), true, "hidden on Agents & models");
@@ -780,18 +780,18 @@ test("Back to default resets only the tab on screen, and is hidden on Agents & m
   assert.equal(await swatch(s, "violet").getAttribute("aria-pressed"), "false");
   await s.page.click("#prefs-tab-sounds");
   assert.equal(await s.page.locator("#looks-sound").isChecked(), false, "Appearance's reset left sounds off");
-  assert.equal(await s.page.locator("#looks-activities").isChecked(), false);
+  assert.equal(await s.page.locator("#looks-activities").isChecked(), true, "and Activities on");
 
   await s.page.click("#prefs-tab-appearance");
   await s.page.locator('input[name="looks-theme"][value="dark"]').check();
   await s.page.click("#prefs-tab-sounds");
   await s.page.click("#looks-reset");
   await s.page.locator("#looks-sound:checked").waitFor();
-  assert.equal(await s.page.locator("#looks-activities").isChecked(), true);
+  assert.equal(await s.page.locator("#looks-activities").isChecked(), false, "the sounds reset puts Activities back off");
   assert.equal(await root(s, "data-theme"), "dark", "the sounds reset left the dark theme");
   await s.page.waitForFunction(async () => {
     const saved = (await (await fetch("/looks")).json()).looks || {};
-    return saved.sound === true && saved.hideActivities === false && saved.theme === "dark";
+    return saved.sound === true && saved.hideActivities === true && saved.theme === "dark";
   });
 });
 
