@@ -179,7 +179,8 @@ test("the Welcome shows on a first dashboard, saves that it was seen, and Help's
   await s.page.getByRole("button", { name: "Start building" }).click();
   await welcome.waitFor({ state: "hidden" });
   // Saved with the other looks, so it holds for the next page too.
-  await s.page.waitForFunction(async () => ((await (await fetch("/looks")).json()).looks || {}).welcomeSeen === true);
+  // Polled from here: waitForFunction does not wait on an async predicate, so it passed before the POST landed.
+  assert.ok(await until(() => s.page.evaluate(async () => ((await (await fetch("/looks")).json()).looks || {}).welcomeSeen === true)), "the Welcome being seen was saved");
 
   await s.page.reload({ waitUntil: "domcontentloaded" });
   await drawn(s.page);

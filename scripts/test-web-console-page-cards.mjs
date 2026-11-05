@@ -225,6 +225,11 @@ test("a redraw keeps your place: the scroll and the focused field survive an age
     },
   });
 
+  // The answer box's editor mounts after the first draw and may redraw the
+  // card: wait for it before scrolling, so no redraw can replace the card
+  // between the scroll and the agent's post.
+  await itemCard(s.page, "q1").locator(".md-host .cm-content").first().waitFor();
+
   // Reading a question part-way down: the card scrolls itself.
   const card = itemCard(s.page, "q1");
   assert.equal(await scrollCard(card, 400), 400, "the question card scrolls");
