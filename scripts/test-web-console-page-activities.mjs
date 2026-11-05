@@ -1,6 +1,6 @@
 // Page tests for Activities: the die in the top bar on every screen, the
 // window opening on the picker (a card per game, walked by the arrows, one
-// game at a time, All games back to it), Light Trails, Bug Hunt, Sunset Drive, Stack Deploy, Bumper Ring, Rapids Run, Hot Potato, Crossing Rush, Bounce Road and Ghoul Rush in play, the keys
+// game at a time, All games back to it), Light Trails, Bug Hunt, Sunset Drive, Stack Deploy, Bumper Ring, Rapids Run, Hot Potato, Crossing Rush, Bounce Road, Ghoul Rush and Flock Dash in play, the keys
 // staying inside the window, Esc and P, and every pause rule (a new question,
 // a finish, a hidden page, a window blur), none of which ever resumes play by
 // itself. Mini golf in the real window: aim by mouse, two clicks to putt,
@@ -166,7 +166,7 @@ test("the die sits right of the megaphone and opens on the picker, a card per ga
   const next = await s.page.evaluate(() => document.getElementById("btn-feedback").nextElementSibling?.id);
   assert.equal(next, "btn-activities");
   await openPicker(s);
-  assert.deepEqual(await cardTitles(s), ["Snake", "Mini golf", "Light Trails", "Bug Hunt", "Sunset Drive", "Stack Deploy", "Bumper Ring", "Rapids Run", "Hot Potato", "Crossing Rush", "Bounce Road", "Ghoul Rush"]);
+  assert.deepEqual(await cardTitles(s), ["Snake", "Mini golf", "Light Trails", "Bug Hunt", "Sunset Drive", "Stack Deploy", "Bumper Ring", "Rapids Run", "Hot Potato", "Crossing Rush", "Bounce Road", "Ghoul Rush", "Flock Dash"]);
   assert.ok(await s.page.locator("#activities-board").isHidden(), "no board behind the picker");
   assert.ok(await s.page.locator("#activities-back").isHidden(), "nothing to go back to");
   assert.equal(await s.page.locator("#activities-title").innerText(), "Activities", "the header names no game");
@@ -188,9 +188,9 @@ test("the arrows walk the picker's cards, and space or Enter opens the one in fo
   assert.equal(await focusedCard(s), "snake");
   await s.page.keyboard.press("ArrowRight");
   assert.equal(await focusedCard(s), "golf");
-  for (let i = 0; i < 11; i++) await s.page.keyboard.press("ArrowRight");
-  assert.equal(await focusedCard(s), "ghoul", "the last card stays put");
-  for (let i = 0; i < 10; i++) await s.page.keyboard.press("ArrowLeft");
+  for (let i = 0; i < 12; i++) await s.page.keyboard.press("ArrowRight");
+  assert.equal(await focusedCard(s), "flock", "the last card stays put");
+  for (let i = 0; i < 11; i++) await s.page.keyboard.press("ArrowLeft");
   assert.equal(await focusedCard(s), "golf");
   await s.page.keyboard.press("Enter");
   // Mini golf opens on its course dashboard, walked the same way.
@@ -2513,10 +2513,114 @@ test("Ghoul Rush plays in the real window: its board's shape and Planny big enou
   }, 5000);
 });
 
-test("the server serves the activities' scripts, golf's seventeen, Light Trails, Bug Hunt, Sunset Drive, Stack Deploy, Bumper Ring's two, Rapids Run's two, Hot Potato's two, Crossing Rush's two, Bounce Road's seven, Ghoul Rush's ninety-five, every game's sound effects and the shared pills included", () => {
+test("Flock Dash plays in the real window: its board's shape, Enter starts a round, a held up arrow raises the leader until let go, a stray in front of the leader joins the flock, F goes full screen and back, and the last life lost saves the best and the furthest stage", async (t) => {
+  savedLooks(t, { welcomeSeen: true });
+  const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_WORKING });
+  await handTicks(s);
+  // The hazards and crates are cleared before every tick and the leader kept
+  // in grace, so only the keys and the strays placed here move the round.
+  await s.page.evaluate(async () => {
+    const m = await import("/screens/activities.js");
+    const { ACTIVITIES } = await import("/activities.js");
+    const flock = (await import("/activities/flock.js")).default;
+    window.__calm = true;
+    const watched = {
+      ...flock,
+      create: (opts) => {
+        const g = flock.create(opts);
+        const tick = g.tick;
+        g.tick = (ms) => {
+          const r = g.round;
+          if (window.__calm && r) {
+            r.hazards.length = r.crates.length = 0;
+            r.leader.grace = 1e9;
+          }
+          tick(ms);
+        };
+        return (window.__flock = g);
+      },
+    };
+    m.setActivityList(ACTIVITIES.map((e) => (e.id === "flock" ? { ...e, game: watched } : e)));
+  });
+  await openActivities(s, "flock");
+  assert.equal(await overlay(s), "Press space to start");
+  const { W, H } = await s.page.evaluate(async () => {
+    const { W, H } = await import("/activities/flock.js");
+    return { W, H };
+  });
+  const box = await s.page.locator("#activities-canvas").boundingBox();
+  assert.ok(Math.abs(box.width / box.height - W / H) < 0.02, `a ${W} by ${H} board, not ${box.width} by ${box.height}`);
+  const you = () =>
+    s.page.evaluate(() => {
+      const r = window.__flock.round;
+      return { ...r.input, y: r.leader.y, flock: r.flock.length, strays: r.strays.length, over: r.over };
+    });
+  // Enter starts a round and has no release: nothing may be left held.
+  await s.page.keyboard.press("Enter");
+  assert.equal(await overlay(s), "", "Enter starts a round");
+  await step(s, 20, 16);
+  let me = await you();
+  assert.deepEqual([me.up, me.down, me.left, me.right], [false, false, false, false], "the start leaves no key held");
+  // A held up arrow raises the leader until let go.
+  const y0 = me.y;
+  await s.page.keyboard.down("ArrowUp");
+  await step(s, 12, 16);
+  me = await you();
+  assert.ok(me.up && me.y < y0 - 1, `held up climbs (${y0} to ${me.y})`);
+  await s.page.keyboard.up("ArrowUp");
+  assert.equal((await you()).up, false, "let go, it stops climbing");
+  await step(s, 40, 16);
+  const rest = (await you()).y;
+  await step(s, 10, 16);
+  assert.ok(Math.abs((await you()).y - rest) < 0.01, "and the leader holds its height");
+  // A stray placed just ahead of the leader joins the flock.
+  const before = (await you()).flock;
+  await s.page.evaluate(() => {
+    const r = window.__flock.round;
+    r.strays.length = 0;
+    window.__strayId = r.nextId++;
+    r.strays.push({ id: window.__strayId, x: r.leader.x + 1.5, y: r.leader.y, bob: 0 });
+  });
+  await until(async () => (await you()).flock > before || (await step(s, 2, 16), false), 5000);
+  assert.ok((await you()).flock >= before + 1, "the stray joined the flock");
+  assert.ok(
+    await s.page.evaluate(() => !window.__flock.round.strays.some((b) => b.id === window.__strayId)),
+    "and it is the placed stray that is gone from the sky"
+  );
+  // F fills the screen and F puts it back, the round still running.
+  await s.page.keyboard.press("f");
+  await until(async () => (await fullParts(s)).full, 5000);
+  await s.page.keyboard.press("f");
+  await until(async () => !(await fullParts(s)).full, 5000);
+  assert.equal(await overlay(s), "", "a running game");
+  // Lose the last life: the round ends and saves its best and furthest stage.
+  await s.page.evaluate(async () => {
+    const { hitLeader } = await import("/activities/flock.js");
+    window.__calm = false;
+    const r = window.__flock.round;
+    r.score = Math.max(r.score, 120);
+    r.lives = 1;
+    r.active.shields = 0;
+    r.leader.grace = 0;
+    hitLeader(r);
+  });
+  await step(s, 10, 16);
+  await until(async () => (await overlay(s)).startsWith("Score:"), 5000);
+  const score = await s.page.evaluate(() => window.__flock.score);
+  assert.ok(score >= 120);
+  await until(async () => {
+    const looks = await serverLooks(s);
+    return looks.activityBestFlock === score && looks.activityMemoFlock === 1;
+  }, 5000);
+});
+
+test("the server serves the activities' scripts, golf's seventeen, Light Trails, Bug Hunt, Sunset Drive, Stack Deploy, Bumper Ring's two, Rapids Run's two, Hot Potato's two, Crossing Rush's two, Bounce Road's seven, Ghoul Rush's ninety-five, Flock Dash's three, every game's sound effects and the shared pills included", () => {
   const server = fs.readFileSync(new URL("../src/web-console/static.mjs", import.meta.url), "utf8");
   const servable = server.slice(server.indexOf("const SERVABLE = new Set(["), server.indexOf("]);", server.indexOf("const SERVABLE = new Set([")));
-  for (const file of ["activities.js", "tones.js", "music.js", "activities/snake.js", "activities/snake-music.js", "screens/activities.js", "activities/golf.js", "activities/golf-holes.js", "activities/golf-draw.js", "activities/golf-decor.js", "activities/golf-kit.js", "activities/golf-paint.js", "activities/golf-looks.js", "activities/golf-course-pirate.js", "activities/golf-course-cave.js", "activities/golf-course-dino.js", "activities/golf-course-candy.js", "activities/golf-course-space.js", "activities/golf-course-frost.js", "activities/golf-look-dino.js", "activities/golf-look-candy.js", "activities/golf-look-space.js", "activities/golf-look-frost.js", "activities/trails.js", "activities/bugs.js", "activities/drive.js", "activities/stack.js", "activities/bumper.js", "activities/bumper-draw.js", "activities/rapids.js", "activities/rapids-draw.js", "activities/fuse.js", "activities/fuse-draw.js", "activities/hop.js", "activities/hop-draw.js", "activities/bounce.js", "activities/bounce-draw.js", "activities/bounce-roads.js", "activities/bounce-road.js", "activities/bounce-rivals.js", "activities/bounce-scenery.js", "activities/bounce-cars.js", "activities/ghoul-rush/ghoul.js", "activities/ghoul-rush/draw/ghoul-draw.js", "activities/ghoul-rush/core/ghoul-rooms.js", "activities/ghoul-rush/stages/wing/ghoul-bones.js", "activities/ghoul-rush/stages/wing/ghoul-bones-draw.js", "activities/ghoul-rush/stages/graveyard/ghoul-graveyard.js", "activities/ghoul-rush/stages/graveyard/ghoul-graveyard-draw.js", "activities/ghoul-rush/stages/grounds/ghoul-grounds.js", "activities/ghoul-rush/stages/grounds/ghoul-grounds-draw.js", "activities/ghoul-rush/stages/chapel/ghoul-chapel.js", "activities/ghoul-rush/stages/chapel/ghoul-chapel-draw.js", "activities/ghoul-rush/stages/sanatorium/ghoul-sanatorium.js", "activities/ghoul-rush/stages/sanatorium/ghoul-sanatorium-draw.js", "activities/ghoul-rush/stages/village/ghoul-village.js", "activities/ghoul-rush/stages/village/ghoul-village-draw.js", "activities/ghoul-rush/stages/village/ghoul-village-world.js", "activities/ghoul-rush/stages/village/ghoul-village-wolf.js", "activities/ghoul-rush/stages/mine/ghoul-mine.js", "activities/ghoul-rush/stages/mine/ghoul-mine-draw.js", "activities/ghoul-rush/stages/mine/ghoul-mine-world.js", "activities/ghoul-rush/stages/mine/ghoul-mine-tommy.js", "activities/ghoul-rush/rides/cart/ghoul-cart.js", "activities/ghoul-rush/rides/cart/ghoul-cart-draw.js", "activities/ghoul-rush/rides/sled/ghoul-sled.js", "activities/ghoul-rush/rides/sled/ghoul-sled-draw.js", "activities/ghoul-rush/rides/gurney/ghoul-gurney.js", "activities/ghoul-rush/rides/gurney/ghoul-gurney-draw.js", "activities/ghoul-rush/rides/banister/ghoul-banister.js", "activities/ghoul-rush/rides/banister/ghoul-banister-draw.js", "activities/ghoul-rush/rides/banister/ghoul-sfx-banister.js", "activities/ghoul-rush/rides/hearse/ghoul-hearse.js", "activities/ghoul-rush/rides/hearse/ghoul-hearse-draw.js", "activities/ghoul-rush/rides/wagon/ghoul-wagon.js", "activities/ghoul-rush/rides/wagon/ghoul-wagon-draw.js", "activities/ghoul-rush/rides/pew/ghoul-pew.js", "activities/ghoul-rush/rides/pew/ghoul-pew-draw.js", "activities/ghoul-rush/rides/pew/ghoul-pew-course.js", "activities/ghoul-rush/rides/pew/ghoul-pew-world.js", "activities/ghoul-rush/rides/mower/ghoul-mower.js", "activities/ghoul-rush/rides/mower/ghoul-mower-draw.js", "activities/ghoul-rush/rides/tray/ghoul-tray.js", "activities/ghoul-rush/rides/tray/ghoul-tray-draw.js", "activities/ghoul-rush/stages/carnival/ghoul-carnival.js", "activities/ghoul-rush/stages/carnival/ghoul-carnival-draw.js", "activities/ghoul-rush/stages/carnival/ghoul-carnival-world.js", "activities/ghoul-rush/stages/frozen/ghoul-frozen.js", "activities/ghoul-rush/stages/frozen/ghoul-frozen-draw.js", "activities/ghoul-rush/stages/frozen/ghoul-frozen-world.js", "activities/ghoul-rush/arms/ghoul-flare.js", "activities/ghoul-rush/stages/bog/ghoul-bog.js", "activities/ghoul-rush/stages/bog/ghoul-bog-draw.js", "activities/ghoul-rush/stages/marrow/ghoul-marrow.js", "activities/ghoul-rush/stages/marrow/ghoul-marrow-draw.js", "activities/ghoul-rush/rides/mat/ghoul-mat-room.js", "activities/ghoul-rush/rides/mat/ghoul-mat.js", "activities/ghoul-rush/rides/mat/ghoul-mat-draw.js", "activities/ghoul-rush/stages/marrow/ghoul-dollhouse-room.js", "activities/ghoul-rush/stages/marrow/ghoul-marrow-eye.js", "activities/ghoul-rush/stages/marrow/ghoul-marrow-eye-draw.js", "activities/ghoul-rush/rides/bonestair/ghoul-bonestair-room.js", "activities/ghoul-rush/rides/bonestair/ghoul-bonestair.js", "activities/ghoul-rush/rides/bonestair/ghoul-bonestair-draw.js", "activities/ghoul-rush/stages/marrow/ghoul-pit-room.js", "activities/ghoul-rush/stages/marrow/ghoul-marrow-heart.js", "activities/ghoul-rush/stages/marrow/ghoul-marrow-heart-draw.js", "activities/ghoul-rush/story/ghoul-ending.js", "activities/ghoul-rush/story/ghoul-ending-draw.js", "activities/ghoul-rush/draw/ghoul-picker-draw.js", "activities/ghoul-rush/core/ghoul-powers.js", "activities/ghoul-rush/arms/ghoul-arms.js", "activities/ghoul-rush/arms/ghoul-arms-draw.js", "activities/ghoul-rush/arms/ghoul-rockets.js", "activities/ghoul-rush/arms/ghoul-rockets-draw.js", "activities/ghoul-rush/arms/ghoul-pans.js", "activities/ghoul-rush/arms/ghoul-sfx-arms.js", "activities/ghoul-rush/core/ghoul-run.js", "activities/ghoul-rush/core/ghoul-dice.js", "activities/ghoul-rush/core/ghoul-dice-draw.js", "activities/ghoul-rush/story/ghoul-gameover-draw.js", "activities/ghoul-rush/story/ghoul-intros.js", "activities/ghoul-rush/story/ghoul-intro-draw.js", "activities/ghoul-rush/story/ghoul-boss-intros.js", "activities/ghoul-rush/story/ghoul-bossintro-draw.js", "activities/ghoul-rush/story/ghoul-story.js", "activities/ghoul-rush/story/ghoul-story-draw.js", "activities/ghoul-rush/story/ghoul-sfx-story.js", "activities/ghoul-rush/core/ghoul-bonus.js", "activities/ghoul-rush/core/ghoul-bonus-draw.js", "activities/ghoul-rush/draw/ghoul-monsters-draw.js", "activities/pills.js", "activities/snake-sfx.js", "activities/golf-sfx.js", "activities/trails-sfx.js", "activities/bugs-sfx.js", "activities/drive-sfx.js", "activities/stack-sfx.js", "activities/bumper-sfx.js", "activities/rapids-sfx.js", "activities/fuse-sfx.js", "activities/hop-sfx.js", "activities/bounce-sfx.js", "activities/ghoul-rush/sfx/ghoul-sfx.js", "activities/ghoul-rush/stages/graveyard/ghoul-sfx-graveyard.js", "activities/ghoul-rush/stages/grounds/ghoul-sfx-grounds.js", "activities/ghoul-rush/stages/chapel/ghoul-sfx-chapel.js", "activities/ghoul-rush/stages/sanatorium/ghoul-sfx-sanatorium.js", "activities/ghoul-rush/stages/village/ghoul-sfx-village.js", "activities/ghoul-rush/stages/mine/ghoul-sfx-mine.js", "activities/ghoul-rush/stages/carnival/ghoul-sfx-carnival.js", "activities/ghoul-rush/stages/frozen/ghoul-sfx-frozen.js", "activities/ghoul-rush/rides/sled/ghoul-sfx-sled.js", "activities/ghoul-rush/rides/gurney/ghoul-sfx-gurney.js", "activities/ghoul-rush/rides/hearse/ghoul-sfx-hearse.js", "activities/ghoul-rush/stages/bog/ghoul-sfx-bog.js", "activities/ghoul-rush/stages/marrow/ghoul-sfx-marrow.js", "activities/ghoul-rush/stages/marrow/ghoul-sfx-marrow-eye.js", "activities/ghoul-rush/stages/marrow/ghoul-sfx-marrow-heart.js", "activities/ghoul-rush/rides/mat/ghoul-sfx-mat.js", "activities/ghoul-rush/rides/bonestair/ghoul-sfx-bonestair.js", "activities/ghoul-rush/story/ghoul-sfx-ending.js", "activities/ghoul-rush/rides/wagon/ghoul-sfx-wagon.js", "activities/ghoul-rush/rides/pew/ghoul-sfx-pew.js", "activities/ghoul-rush/rides/mower/ghoul-sfx-mower.js", "activities/ghoul-rush/rides/tray/ghoul-sfx-tray.js", "activities/ghoul-rush/rides/dark-ride/ghoul-ride-core.js", "activities/ghoul-rush/rides/dark-ride/ghoul-ride-scenes.js", "activities/ghoul-rush/rides/dark-ride/ghoul-ride.js", "activities/ghoul-rush/rides/dark-ride/ghoul-ride-gfx.js", "activities/ghoul-rush/rides/dark-ride/ghoul-ride-draw-kinds.js", "activities/ghoul-rush/rides/dark-ride/ghoul-ride-draw-sets.js", "activities/ghoul-rush/rides/dark-ride/ghoul-ride-draw-hud.js", "activities/ghoul-rush/rides/dark-ride/ghoul-ride-draw.js", "activities/ghoul-rush/rides/dark-ride/ghoul-ride-voices.js", "activities/ghoul-rush/rides/dark-ride/ghoul-sfx-ride.js"]) {
+  for (const file of ["activities/flock.js", "activities/flock-draw.js", "activities/flock-sfx.js", "activities.js", "tones.js", "music.js", "activities/snake.js", "activities/snake-music.js", "screens/activities.js", "activities/golf.js", "activities/golf-holes.js", "activities/golf-draw.js", "activities/golf-decor.js", "activities/golf-kit.js", "activities/golf-paint.js", "activities/golf-looks.js", "activities/golf-course-pirate.js", "activities/golf-course-cave.js", "activities/golf-course-dino.js", "activities/golf-course-candy.js", "activities/golf-course-space.js", "activities/golf-course-frost.js", "activities/golf-look-dino.js", "activities/golf-look-candy.js", "activities/golf-look-space.js", "activities/golf-look-frost.js", "activities/trails.js", "activities/bugs.js", "activities/drive.js", "activities/stack.js", "activities/bumper.js", "activities/bumper-draw.js", "activities/rapids.js", "activities/rapids-draw.js", "activities/fuse.js", "activities/fuse-draw.js", "activities/hop.js", "activities/hop-draw.js", "activities/bounce.js", "activities/bounce-draw.js", "activities/bounce-roads.js", "activities/bounce-road.js", "activities/bounce-rivals.js", "activities/bounce-scenery.js", "activities/bounce-cars.js", "activities/ghoul-rush/ghoul.js", "activities/ghoul-rush/draw/ghoul-draw.js", "activities/ghoul-rush/core/ghoul-rooms.js", "activities/ghoul-rush/stages/wing/ghoul-bones.js", "activities/ghoul-rush/stages/wing/ghoul-bones-draw.js", "activities/ghoul-rush/stages/graveyard/ghoul-graveyard.js", "activities/ghoul-rush/stages/graveyard/ghoul-graveyard-draw.js", "activities/ghoul-rush/stages/grounds/ghoul-grounds.js", "activities/ghoul-rush/stages/grounds/ghoul-grounds-draw.js", "activities/ghoul-rush/stages/chapel/ghoul-chapel.js", "activities/ghoul-rush/stages/chapel/ghoul-chapel-draw.js", "activities/ghoul-rush/stages/sanatorium/ghoul-sanatorium.js", "activities/ghoul-rush/stages/sanatorium/ghoul-sanatorium-draw.js", "activities/ghoul-rush/stages/village/ghoul-village.js", "activities/ghoul-rush/stages/village/ghoul-village-draw.js", "activities/ghoul-rush/stages/village/ghoul-village-world.js", "activities/ghoul-rush/stages/village/ghoul-village-wolf.js", "activities/ghoul-rush/stages/mine/ghoul-mine.js", "activities/ghoul-rush/stages/mine/ghoul-mine-draw.js", "activities/ghoul-rush/stages/mine/ghoul-mine-world.js", "activities/ghoul-rush/stages/mine/ghoul-mine-tommy.js", "activities/ghoul-rush/rides/cart/ghoul-cart.js", "activities/ghoul-rush/rides/cart/ghoul-cart-draw.js", "activities/ghoul-rush/rides/sled/ghoul-sled.js", "activities/ghoul-rush/rides/sled/ghoul-sled-draw.js", "activities/ghoul-rush/rides/gurney/ghoul-gurney.js", "activities/ghoul-rush/rides/gurney/ghoul-gurney-draw.js", "activities/ghoul-rush/rides/banister/ghoul-banister.js", "activities/ghoul-rush/rides/banister/ghoul-banister-draw.js", "activities/ghoul-rush/rides/banister/ghoul-sfx-banister.js", "activities/ghoul-rush/rides/hearse/ghoul-hearse.js", "activities/ghoul-rush/rides/hearse/ghoul-hearse-draw.js", "activities/ghoul-rush/rides/wagon/ghoul-wagon.js", "activities/ghoul-rush/rides/wagon/ghoul-wagon-draw.js", "activities/ghoul-rush/rides/pew/ghoul-pew.js", "activities/ghoul-rush/rides/pew/ghoul-pew-draw.js", "activities/ghoul-rush/rides/pew/ghoul-pew-course.js", "activities/ghoul-rush/rides/pew/ghoul-pew-world.js", "activities/ghoul-rush/rides/mower/ghoul-mower.js", "activities/ghoul-rush/rides/mower/ghoul-mower-draw.js", "activities/ghoul-rush/rides/tray/ghoul-tray.js", "activities/ghoul-rush/rides/tray/ghoul-tray-draw.js", "activities/ghoul-rush/stages/carnival/ghoul-carnival.js", "activities/ghoul-rush/stages/carnival/ghoul-carnival-draw.js", "activities/ghoul-rush/stages/carnival/ghoul-carnival-world.js", "activities/ghoul-rush/stages/frozen/ghoul-frozen.js", "activities/ghoul-rush/stages/frozen/ghoul-frozen-draw.js", "activities/ghoul-rush/stages/frozen/ghoul-frozen-world.js", "activities/ghoul-rush/arms/ghoul-flare.js", "activities/ghoul-rush/stages/bog/ghoul-bog.js", "activities/ghoul-rush/stages/bog/ghoul-bog-draw.js", "activities/ghoul-rush/stages/marrow/ghoul-marrow.js", "activities/ghoul-rush/stages/marrow/ghoul-marrow-draw.js", "activities/ghoul-rush/rides/mat/ghoul-mat-room.js", "activities/ghoul-rush/rides/mat/ghoul-mat.js", "activities/ghoul-rush/rides/mat/ghoul-mat-draw.js", "activities/ghoul-rush/stages/marrow/ghoul-dollhouse-room.js", "activities/ghoul-rush/stages/marrow/ghoul-marrow-eye.js", "activities/ghoul-rush/stages/marrow/ghoul-marrow-eye-draw.js", "activities/ghoul-rush/rides/bonestair/ghoul-bonestair-room.js", "activities/ghoul-rush/rides/bonestair/ghoul-bonestair.js", "activities/ghoul-rush/rides/bonestair/ghoul-bonestair-draw.js", "activities/ghoul-rush/stages/marrow/ghoul-pit-room.js", "activities/ghoul-rush/stages/marrow/ghoul-marrow-heart.js", "activities/ghoul-rush/stages/marrow/ghoul-marrow-heart-draw.js", "activities/ghoul-rush/story/ghoul-ending.js", "activities/ghoul-rush/story/ghoul-ending-draw.js", "activities/ghoul-rush/draw/ghoul-picker-draw.js", "activities/ghoul-rush/core/ghoul-powers.js", "activities/ghoul-rush/arms/ghoul-arms.js", "activities/ghoul-rush/arms/ghoul-arms-draw.js", "activities/ghoul-rush/arms/ghoul-rockets.js", "activities/ghoul-rush/arms/ghoul-rockets-draw.js", "activities/ghoul-rush/arms/ghoul-pans.js", "activities/ghoul-rush/arms/ghoul-sfx-arms.js", "activities/ghoul-rush/core/ghoul-run.js", "activities/ghoul-rush/core/ghoul-dice.js", "activities/ghoul-rush/core/ghoul-dice-draw.js", "activities/ghoul-rush/story/ghoul-gameover-draw.js", "activities/ghoul-rush/story/ghoul-intros.js", "activities/ghoul-rush/story/ghoul-intro-draw.js", "activities/ghoul-rush/story/ghoul-boss-intros.js", "activities/ghoul-rush/story/ghoul-bossintro-draw.js", "activities/ghoul-rush/story/ghoul-story.js", "activities/ghoul-rush/story/ghoul-story-draw.js", "activities/ghoul-rush/story/ghoul-sfx-story.js", "activities/ghoul-rush/core/ghoul-bonus.js", "activities/ghoul-rush/core/ghoul-bonus-draw.js", "activities/ghoul-rush/draw/ghoul-monsters-draw.js", "activities/pills.js", "activities/snake-sfx.js", "activities/golf-sfx.js", "activities/trails-sfx.js", "activities/bugs-sfx.js", "activities/drive-sfx.js", "activities/stack-sfx.js", "activities/bumper-sfx.js", "activities/rapids-sfx.js", "activities/fuse-sfx.js", "activities/hop-sfx.js", "activities/bounce-sfx.js", "activities/ghoul-rush/sfx/ghoul-sfx.js", "activities/ghoul-rush/stages/graveyard/ghoul-sfx-graveyard.js", "activities/ghoul-rush/stages/grounds/ghoul-sfx-grounds.js", "activities/ghoul-rush/stages/chapel/ghoul-sfx-chapel.js", "activities/ghoul-rush/stages/sanatorium/ghoul-sfx-sanatorium.js", "activities/ghoul-rush/stages/village/ghoul-sfx-village.js", "activities/ghoul-rush/stages/mine/ghoul-sfx-mine.js", "activities/ghoul-rush/stages/carnival/ghoul-sfx-carnival.js", "activities/ghoul-rush/stages/frozen/ghoul-sfx-frozen.js", "activities/ghoul-rush/rides/sled/ghoul-sfx-sled.js", "activities/ghoul-rush/rides/gurney/ghoul-sfx-gurney.js", "activities/ghoul-rush/rides/hearse/ghoul-sfx-hearse.js", "activities/ghoul-rush/stages/bog/ghoul-sfx-bog.js", "activities/ghoul-rush/stages/marrow/ghoul-sfx-marrow.js", "activities/ghoul-rush/stages/marrow/ghoul-sfx-marrow-eye.js", "activities/ghoul-rush/stages/marrow/ghoul-sfx-marrow-heart.js", "activities/ghoul-rush/rides/mat/ghoul-sfx-mat.js", "activities/ghoul-rush/rides/bonestair/ghoul-sfx-bonestair.js", "activities/ghoul-rush/story/ghoul-sfx-ending.js", "activities/ghoul-rush/rides/wagon/ghoul-sfx-wagon.js", "activities/ghoul-rush/rides/pew/ghoul-sfx-pew.js", "activities/ghoul-rush/rides/mower/ghoul-sfx-mower.js", "activities/ghoul-rush/rides/tray/ghoul-sfx-tray.js", "activities/ghoul-rush/rides/dark-ride/ghoul-ride-core.js", "activities/ghoul-rush/rides/dark-ride/ghoul-ride-scenes.js", "activities/ghoul-rush/rides/dark-ride/ghoul-ride.js", "activities/ghoul-rush/rides/dark-ride/ghoul-ride-gfx.js", "activities/ghoul-rush/rides/dark-ride/ghoul-ride-draw-kinds.js", "activities/ghoul-rush/rides/dark-ride/ghoul-ride-draw-sets.js", "activities/ghoul-rush/rides/dark-ride/ghoul-ride-draw-hud.js", "activities/ghoul-rush/rides/dark-ride/ghoul-ride-draw.js", "activities/ghoul-rush/rides/dark-ride/ghoul-ride-voices.js", "activities/ghoul-rush/rides/dark-ride/ghoul-sfx-ride.js"]) {
     assert.ok(servable.includes(`"${file}"`), `SERVABLE includes ${file}`);
+  }
+  for (let n = 1; n <= 5; n++) {
+    assert.ok(servable.includes(`"activities/flock-dash/${n}.mp3"`), `SERVABLE includes activities/flock-dash/${n}.mp3`);
   }
 });

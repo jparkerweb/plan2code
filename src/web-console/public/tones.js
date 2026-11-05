@@ -13,6 +13,7 @@ import fuseSfx from "./activities/fuse-sfx.js";
 import hopSfx from "./activities/hop-sfx.js";
 import bounceSfx from "./activities/bounce-sfx.js";
 import ghoulSfx from "./activities/ghoul-rush/sfx/ghoul-sfx.js";
+import flockSfx from "./activities/flock-sfx.js";
 
 /* ------------------------------------------------------------- tones
 
@@ -376,7 +377,7 @@ const HUMS = hums({
 
 // Every game's own extras, merged after the shared kit; a name may be
 // defined only once across them all (the activities suite checks).
-const GAME_SFX = Object.freeze([snakeSfx, golfSfx, trailsSfx, bugsSfx, driveSfx, stackSfx, bumperSfx, rapidsSfx, fuseSfx, hopSfx, bounceSfx, ghoulSfx]);
+const GAME_SFX = Object.freeze([snakeSfx, golfSfx, trailsSfx, bugsSfx, driveSfx, stackSfx, bumperSfx, rapidsSfx, fuseSfx, hopSfx, bounceSfx, ghoulSfx, flockSfx]);
 
 // A game file holds plain objects; they are frozen here, all the way down.
 const deepFreeze = (o) => {

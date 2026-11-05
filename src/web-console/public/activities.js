@@ -44,6 +44,7 @@ export const ACTIVITIES = Object.freeze([
   entry("hop", "Crossing Rush", "Hop through traffic and rivers. Race your rivals to the top."),
   entry("bounce", "Bounce Road", "Ten wild stages of toy-car mayhem. Jump, stomp and outrun the Monster truck."),
   entry("ghoul", "Ghoul Rush", "Run and gun through a pitch-dark haunted house. Keep moving.", { music: 65, module: "/activities/ghoul-rush/ghoul.js" }),
+  entry("flock", "Flock Dash", "Lead your flock through the sunset sky. Dodge everything, keep the line.", { music: 70 }),
 ]);
 
 const cap = (word) => word[0].toUpperCase() + word.slice(1);

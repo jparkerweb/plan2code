@@ -528,8 +528,8 @@ working in.
 ### Activities
 
 The **die** in the top bar, right of the megaphone, opens **Activities**: small
-games to play while you wait, say through a long build. Twelve ship today,
-**Snake**, **Mini golf**, **Light Trails**, **Bug Hunt**, **Sunset Drive**, **Stack Deploy**, **Bumper Ring**, **Rapids Run**, **Hot Potato**, **Crossing Rush**, **Bounce Road** and **Ghoul Rush**. The window opens on a
+games to play while you wait, say through a long build. Thirteen ship today,
+**Snake**, **Mini golf**, **Light Trails**, **Bug Hunt**, **Sunset Drive**, **Stack Deploy**, **Bumper Ring**, **Rapids Run**, **Hot Potato**, **Crossing Rush**, **Bounce Road**, **Ghoul Rush** and **Flock Dash**. The window opens on a
 **picker**: a card per game with a small cover scene, a line about it, its best
 score, and a **Last played** tag on the one you played last, which also has the
 focus. Click a card (or walk the cards with the arrows and press space or
@@ -548,15 +548,15 @@ new bests and game over each get a sound of their own. A game can play
 chiptune music too, made the same way, which builds as play heats up (Sunset
 Drive has a song for each road, Snake a different one at every level, dealt from ten at
 the start of a round so none repeats, and Ghoul Rush a track for each room, played at
-one steady level and fuller in a boss fight), and Light Trails plays five
-recorded songs as background music, each in full, one after another in an
+one steady level and fuller in a boss fight), and Light Trails and Flock Dash play five
+recorded songs each as background music, each in full, one after another in an
 order shuffled for every run: turn on **Play game music** in **User
 Preferences → Sounds & activities** (it starts off). **Play game sounds** there turns the games'
 sounds (the 3, 2, 1 and the new-best burst included) and their music on or
 off and leaves the page's own cues alone; the **Play sounds** switch above it
 silences all of it, and a paused or closed game goes quiet at once. A game
 with music has its own **Music** slider beside **Full screen**, which sets that
-game's music volume and is remembered per game (Snake, Light Trails and Sunset Drive start at 70,
+game's music volume and is remembered per game (Snake, Light Trails, Sunset Drive and Flock Dash start at 70,
 Ghoul Rush at 65).
 
 - **Snake** speeds up as it grows: 120 ms a step at its starting three cells,
@@ -1431,6 +1431,22 @@ Ghoul Rush at 65).
   room starts again after a loss (a hit, a fall or the clock), a random
   power-up shimmers a few steps ahead of Planny on every restart until you
   clear the room (never a 1UP, and not in the bonus rides).
+- **Flock Dash** is a side-scrolling flight through a sunset sky, with Planny
+  as the lead bird. Hold up or down to climb and dive within a band in the
+  left part of the sky, and left or right to ease forward or back. Strays
+  drift in from the right; fly into one and it joins the flock, which
+  follows the exact path you flew, each bird a set distance behind the one
+  before. Balloons, gusts, slipstreams, storm clouds and kites are in the
+  way: a hit on the leader costs one of three lives, and a hit on the line
+  snaps it there, scattering the birds behind (fly back through them within
+  3 seconds or they are gone). Eight stages, each faster than the last,
+  each end at a jet stream portal: with enough birds the flock forms a V
+  and pays a bonus, and the final portal moves. Tailwind, shield and magnet
+  crates help, pickups in quick succession build a combo of up to x5, and a
+  stage with no snap and no bird lost pays a flawless bonus. Five recorded
+  songs play as background music in a shuffled order. The end screen's nudge
+  to play again names the next hazard or stage you have yet to reach, and the
+  furthest stage you reached is kept privately.
 - **It never hides your turn.** A new question, a sign-off or a finish pauses
   the game at once and shows a banner with **Go to it**, which closes the window
   on that question, and **Unpause game**. While that banner is up, only
@@ -1459,10 +1475,10 @@ Ghoul Rush at 65).
   P or Esc during the count pauses again.
 - **Keys.** Arrows or W/A/S/D steer, space starts and plays (and boosts in
   Light Trails, fires while held in Bug Hunt, burns nitro in Sunset Drive,
-  where held up drives and held down brakes, drops the block in Stack Deploy, dashes in Bumper Ring, where held arrows push, fires while held in Rapids Run, where held up speeds up and held down slows, dashes in Hot Potato, where held arrows run, uses the oldest pickup in Crossing Rush, where an arrow hops once a press, jumps once a press in Bounce Road, where held up drives and held down brakes, and fires while held in Ghoul Rush, where held arrows run, up jumps once a press and down drops through a shelf), P pauses, R starts the round over (from the 3, 2, 1), F (or **Full screen** under the board) gives the game the whole screen and F or Esc puts it back, and Esc closes the window with the game paused. In full screen the board takes the whole screen, as big as its shape allows, with black bars where the shape leaves room, and a panel (the game's name, the score line, the game's **Music** slider for a game with music, Exit full screen) is laid over it: docked in the side bar when that bar is at least 220 px wide, in the bottom bar on a tall screen when that is at least 110 px tall, and otherwise floating in the top right corner (Sunset Drive's 16:9 board on a 16:9 screen), where it shrinks to the score line in the bottom right corner while a round plays and the pointer is still. The board never gives up room for the panel. The pointer hides after two still seconds. In the desktop app the page asks the app (`activities-full`) to lay the console over its bar and terminal and put the window in full screen, since the app's frame allows the page no full screen of its own. A question, a sign-off or a finish takes a full-screen game back to the window's own size as it pauses it. A page with no mouse or trackpad
+  where held up drives and held down brakes, drops the block in Stack Deploy, dashes in Bumper Ring, where held arrows push, fires while held in Rapids Run, where held up speeds up and held down slows, dashes in Hot Potato, where held arrows run, uses the oldest pickup in Crossing Rush, where an arrow hops once a press, jumps once a press in Bounce Road, where held up drives and held down brakes, fires while held in Ghoul Rush, where held arrows run, up jumps once a press and down drops through a shelf, and climbs and dives in Flock Dash, where held up and down fly the leader and held left and right ease forward and back), P pauses, R starts the round over (from the 3, 2, 1), F (or **Full screen** under the board) gives the game the whole screen and F or Esc puts it back, and Esc closes the window with the game paused. In full screen the board takes the whole screen, as big as its shape allows, with black bars where the shape leaves room, and a panel (the game's name, the score line, the game's **Music** slider for a game with music, Exit full screen) is laid over it: docked in the side bar when that bar is at least 220 px wide, in the bottom bar on a tall screen when that is at least 110 px tall, and otherwise floating in the top right corner (Sunset Drive's 16:9 board on a 16:9 screen), where it shrinks to the score line in the bottom right corner while a round plays and the pointer is still. The board never gives up room for the panel. The pointer hides after two still seconds. In the desktop app the page asks the app (`activities-full`) to lay the console over its bar and terminal and put the window in full screen, since the app's frame allows the page no full screen of its own. A question, a sign-off or a finish takes a full-screen game back to the window's own size as it pauses it. A page with no mouse or trackpad
   (touch only) shows "Activities need a keyboard." in place of the board.
 - **Best scores** show beside the score while you play and after each round.
-  Snake, Light Trails, Bug Hunt, Sunset Drive, Stack Deploy, Bumper Ring, Rapids Run, Hot Potato, Crossing Rush, Bounce Road and Ghoul Rush keep their highest score. Mini golf keeps its lowest
+  Snake, Light Trails, Bug Hunt, Sunset Drive, Stack Deploy, Bumper Ring, Rapids Run, Hot Potato, Crossing Rush, Bounce Road, Ghoul Rush and Flock Dash keep their highest score. Mini golf keeps its lowest
   full round on each course, every course on its own, and a half-played round never counts. **Reset best scores** clears them after a
   second click to confirm.
   The line under the board is a pair of colored chips, Score and Best, with a
@@ -1472,7 +1488,7 @@ Ghoul Rush at 65).
   that beats a saved best ends with **New best!** on the end screen, and Mini
   golf, which only knows at the end, fires its sparks then. Reduced motion keeps
   the colors and drops the movement.
-- **Private.** Best scores, Snake's surprises found, Light Trails' furthest arena, Bug Hunt's finds, Sunset Drive's roads found, Stack Deploy's highest floor, Bumper Ring's furthest arena, Rapids Run's furthest dam, Hot Potato's furthest venue, Crossing Rush's furthest zone, Bounce Road's furthest stage, the most Ghoul Rush stages cleared in a run, the last pick and the **Show Activities** switch
+- **Private.** Best scores, Snake's surprises found, Light Trails' furthest arena, Bug Hunt's finds, Sunset Drive's roads found, Stack Deploy's highest floor, Bumper Ring's furthest arena, Rapids Run's furthest dam, Hot Potato's furthest venue, Crossing Rush's furthest zone, Bounce Road's furthest stage, the most Ghoul Rush stages cleared in a run, Flock Dash's furthest stage, the last pick and the **Show Activities** switch
   (User Preferences → Sounds & activities, which hides the die everywhere) are saved in
   `~/.plan2code/console/looks.json`. Nothing about Activities reaches the agent
   or the session.

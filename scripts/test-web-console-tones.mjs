@@ -18,6 +18,8 @@ import { MUSIC_TRACKS } from "../src/web-console/public/activities/snake.js";
 import snakeSfx from "../src/web-console/public/activities/snake-sfx.js";
 import { MUSIC_TRACKS as TRAILS_TRACKS } from "../src/web-console/public/activities/trails.js";
 import trailsSfx from "../src/web-console/public/activities/trails-sfx.js";
+import { MUSIC_TRACKS as FLOCK_TRACKS } from "../src/web-console/public/activities/flock.js";
+import flockSfx from "../src/web-console/public/activities/flock-sfx.js";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const GAMES = path.join(ROOT, "src/web-console/public/activities");
@@ -397,6 +399,20 @@ test("music: Light Trails lists exactly the songs it has, each an mp3 on disk th
     assert.equal(SONG_TABLES.filter((t) => Object.hasOwn(t, name)).length, 1, `${name} is defined once`);
     assert.ok(!musicNames().includes(name), `${name} is not also a chiptune track`);
     const file = trailsSfx.songs[name];
+    assert.ok(SERVABLE.has(file), `${file} is servable`);
+    assert.ok(fs.statSync(path.join(ROOT, "src/web-console/public", file)).size > 0, `${file} is on disk`);
+  }
+});
+
+test("music: Flock Dash lists exactly the songs it has, each an mp3 on disk the server serves, and no chiptune tracks", () => {
+  const songs = new Set(songNames());
+  assert.equal(flockSfx.music, undefined, "its music is the songs, not note data");
+  assert.deepEqual([...FLOCK_TRACKS].sort(), Object.keys(flockSfx.songs).sort(), "the game lists the songs its sound file has");
+  for (const name of FLOCK_TRACKS) {
+    assert.ok(songs.has(name), `song "${name}" exists`);
+    assert.equal(SONG_TABLES.filter((t) => Object.hasOwn(t, name)).length, 1, `${name} is defined once`);
+    assert.ok(!musicNames().includes(name), `${name} is not also a chiptune track`);
+    const file = flockSfx.songs[name];
     assert.ok(SERVABLE.has(file), `${file} is servable`);
     assert.ok(fs.statSync(path.join(ROOT, "src/web-console/public", file)).size > 0, `${file} is on disk`);
   }

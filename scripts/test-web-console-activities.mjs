@@ -1,4 +1,4 @@
-// Web console tests, the activities: the shared game contract every listed game answers, Snake's rules, mini golf's rules, course and controls, Light Trails' rules and rivals, Bug Hunt's waves, bugs and bosses, Sunset Drive's road, traffic and forks, Stack Deploy's drops, perfects and twists, Bumper Ring's physics, rivals and arenas, the lives pill and tones of Rapids Run, Ghoul Rush and Bounce Road (their rules live in their own suites), Hot Potato's bomb, fuse, rivals and venues, and Crossing Rush's lanes, hops, shoves, planner and zones.
+// Web console tests, the activities: the shared game contract every listed game answers, Snake's rules, mini golf's rules, course and controls, Light Trails' rules and rivals, Bug Hunt's waves, bugs and bosses, Sunset Drive's road, traffic and forks, Stack Deploy's drops, perfects and twists, Bumper Ring's physics, rivals and arenas, the lives pill and tones of Rapids Run, Ghoul Rush, Bounce Road and Flock Dash (their rules live in their own suites), Hot Potato's bomb, fuse, rivals and venues, and Crossing Rush's lanes, hops, shoves, planner and zones.
 // Run with: node --test scripts/test-web-console-activities.mjs
 //
 // No browser and no server: a game draws only through the canvas it is handed,
@@ -29,6 +29,7 @@ import { hudLayout as hopHudLayout, labelSpot as hopLabelSpot, LANES as HOP_LANE
 import * as bounce from "../src/web-console/public/activities/bounce.js";
 import * as rapids from "../src/web-console/public/activities/rapids.js";
 import * as ghoul from "../src/web-console/public/activities/ghoul-rush/ghoul.js";
+import * as flock from "../src/web-console/public/activities/flock.js";
 import { ACCENTS } from "../src/web-console/public/palette.js";
 import { LIVES, LIVES_BACK, LIVES_INK, livesText, pillContrast } from "../src/web-console/public/activities/pills.js";
 
@@ -262,8 +263,8 @@ const listedGames = async () => {
 
 /* --------------------------------------------------------------- list */
 
-test("the list names Snake, Mini golf, Light Trails, Bug Hunt, Sunset Drive, Stack Deploy, Bumper Ring, Rapids Run, Hot Potato, Crossing Rush, Bounce Road and Ghoul Rush, and each entry's module is a file under public/activities/", () => {
-  assert.deepEqual(ACTIVITIES.map((a) => a.id), ["snake", "golf", "trails", "bugs", "drive", "stack", "bumper", "rapids", "fuse", "hop", "bounce", "ghoul"]);
+test("the list names Snake, Mini golf, Light Trails, Bug Hunt, Sunset Drive, Stack Deploy, Bumper Ring, Rapids Run, Hot Potato, Crossing Rush, Bounce Road, Ghoul Rush and Flock Dash, and each entry's module is a file under public/activities/", () => {
+  assert.deepEqual(ACTIVITIES.map((a) => a.id), ["snake", "golf", "trails", "bugs", "drive", "stack", "bumper", "rapids", "fuse", "hop", "bounce", "ghoul", "flock"]);
   assert.equal(ACTIVITIES[1].title, "Mini golf");
   assert.equal(ACTIVITIES[2].title, "Light Trails");
   assert.equal(ACTIVITIES[3].title, "Bug Hunt");
@@ -275,6 +276,7 @@ test("the list names Snake, Mini golf, Light Trails, Bug Hunt, Sunset Drive, Sta
   assert.equal(ACTIVITIES[9].title, "Crossing Rush");
   assert.equal(ACTIVITIES[10].title, "Bounce Road");
   assert.equal(ACTIVITIES[11].title, "Ghoul Rush");
+  assert.equal(ACTIVITIES[12].title, "Flock Dash");
   for (const a of ACTIVITIES) {
     assert.ok(Object.isFrozen(a), `${a.id} is frozen`);
     assert.equal(a.module, a.id === "ghoul" ? "/activities/ghoul-rush/ghoul.js" : `/activities/${a.id}.js`);
@@ -308,7 +310,7 @@ test("memoKey builds a flat looks.json key from a list id", () => {
 
 test("musicKey builds a flat looks.json key, and a game with music has a default volume a saved one replaces", () => {
   assert.equal(musicKey("ghoul"), "activityMusicGhoul");
-  assert.deepEqual(ACTIVITIES.filter((a) => a.music !== undefined).map((a) => [a.id, a.music]), [["snake", 70], ["trails", 70], ["drive", 70], ["ghoul", 65]], "the games with music, at about the level they were picked at on the prototype pages");
+  assert.deepEqual(ACTIVITIES.filter((a) => a.music !== undefined).map((a) => [a.id, a.music]), [["snake", 70], ["trails", 70], ["drive", 70], ["ghoul", 65], ["flock", 70]], "the games with music, at about the level they were picked at on the prototype pages");
   const ghoulEntry = ACTIVITIES.find((a) => a.id === "ghoul");
   assert.equal(musicLevel(ghoulEntry, undefined), 0.65, "nothing saved: the default");
   assert.equal(musicLevel(ghoulEntry, "loud"), 0.65, "not a number: the default");
@@ -2448,6 +2450,30 @@ test("Light Trails: a Wide Trail lays your wall three cells wide, and the cells 
   assert.equal(you.wide.length, 2);
   trails.applyPower(round, "eraser");
   assert.equal(you.wide.length, 0, "wiped cells leave the list");
+});
+
+test("Light Trails: on a Wide Trail you turn onto the side cells just laid, but the older ones are still wall", () => {
+  const round = racing(trails.newRound(still));
+  const you = round.riders[0];
+  park(round, you, 10, 15, "right");
+  trails.applyPower(round, "wide");
+  trails.advance(round, trails.STEP_MS, still);
+  assert.deepEqual({ x: you.x, y: you.y }, { x: 11, y: 15 });
+  assert.equal(trails.turn(round, "up"), true);
+  trails.advance(round, trails.STEP_MS, still);
+  assert.equal(you.alive, true, "the corner turn rides onto the fresh side cell");
+  assert.deepEqual({ x: you.x, y: you.y }, { x: 11, y: 14 });
+  assert.ok(!you.wide.some((c) => c.x === 11 && c.y === 14), "that cell is the line now, not a side cell");
+  // Only the pair beside your head is fresh: one step on, the last pair is wall.
+  trails.advance(round, trails.STEP_MS, still);
+  assert.deepEqual({ x: you.x, y: you.y }, { x: 11, y: 13 });
+  assert.deepEqual(you.fresh.map((c) => `${c.x},${c.y}`).sort(), ["10,13", "12,13"]);
+  // Riding back down into a side cell laid two steps ago is a crash as ever.
+  park(round, you, 12, 15, "up");
+  round.grid[14 * trails.COLS + 12] = 1;
+  you.fresh = [];
+  trails.advance(round, trails.STEP_MS + trails.GRACE_MS + 8, still);
+  assert.equal(you.alive, false, "an older side cell is your wall");
 });
 
 test("Light Trails: Hyperjump moves you to an open cell clear of everyone, facing open space", () => {
@@ -6232,7 +6258,7 @@ test("lives read at a glance: a heart per life up to five, a count past that, an
 });
 
 test("every game with lives draws them in the lives pill, solid, with a heart per life", () => {
-  for (const [name, game] of [["trails", trails], ["bugs", bugs], ["bumper", bumper], ["fuse", fuse], ["hop", hop], ["bounce", bounce], ["rapids", rapids], ["ghoul", ghoul]]) {
+  for (const [name, game] of [["trails", trails], ["bugs", bugs], ["bumper", bumper], ["fuse", fuse], ["hop", hop], ["bounce", bounce], ["rapids", rapids], ["ghoul", ghoul], ["flock", flock]]) {
     const { canvas, pills, reset } = pillCanvas("#ffffff");
     const g = game.default.create({ canvas });
     g.resize(900, 900);
