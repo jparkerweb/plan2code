@@ -2,7 +2,7 @@
 //
 // Two directories with deliberately different durability:
 //
-//   runtime handle  os.tmpdir()/plan2code-console/<cwd-hash>/<sid>.json
+//   runtime handle  os.tmpdir()/plan2code-console[-<uid>]/<cwd-hash>/<sid>.json (0700 folder, 0600 file: it holds the session token)
 //                   port, pid, token, url. Losing it on reboot is correct,
 //                   because the server is gone too. (Jupyter's jpserver-<pid>.json pattern.)
 //
@@ -59,7 +59,7 @@ export const UPDATE_CHECK_FILE = path.join(HOME_DIR, "update-check.json");
 // session someone is actually using.
 export const RUNTIME_DIR = process.env.PLAN2CODE_CONSOLE_HOME
   ? path.join(process.env.PLAN2CODE_CONSOLE_HOME, "runtime")
-  : path.join(os.tmpdir(), "plan2code-console");
+  : path.join(os.tmpdir(), "plan2code-console" + (typeof process.getuid === "function" ? "-" + process.getuid() : ""));
 
 export const SCHEMA = 1;
 
@@ -81,8 +81,8 @@ export function parseArgs(argv) {
 
 /* ------------------------------------------------------------------- fs */
 
-export function ensureDir(dir) {
-  fs.mkdirSync(dir, { recursive: true });
+export function ensureDir(dir, mode) {
+  fs.mkdirSync(dir, mode === undefined ? { recursive: true } : { recursive: true, mode });
   return dir;
 }
 
@@ -91,21 +91,21 @@ export function ensureDir(dir) {
 // The retry loop is not paranoia: on Windows, antivirus and the search indexer
 // hold transient locks that surface as EPERM/EBUSY from rename. It is intermittent,
 // unreproducible on demand, and looks exactly like a logic bug. Retry from day one.
-export function writeJsonAtomic(file, data) {
+export function writeJsonAtomic(file, data, mode) {
   const body = JSON.stringify(data, null, 2);
-  writeTextAtomic(file, body);
+  writeTextAtomic(file, body, mode);
   return body;
 }
 
 // The same write for plain text, as UTF-8 (a Buffer is written as is): a temp
 // file beside the target, fsync, then a rename, retried while Windows still
 // holds the old file.
-export function writeTextAtomic(file, text) {
+export function writeTextAtomic(file, text, mode) {
   const tmp = file + "." + process.pid + ".tmp";
   let lastErr;
   for (let attempt = 0; attempt < 4; attempt++) {
     try {
-      const fd = fs.openSync(tmp, "w");
+      const fd = mode === undefined ? fs.openSync(tmp, "w") : fs.openSync(tmp, "w", mode);
       try {
         fs.writeFileSync(fd, text, "utf8");
         fs.fsyncSync(fd);

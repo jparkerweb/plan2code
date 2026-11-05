@@ -1217,7 +1217,7 @@ const COUNT_SOUNDS = () => {
   };
 };
 
-test("Play game sounds in User Preferences silences the games and the countdown, Play sounds off grays it out, and Back to default turns it back on", async (t) => {
+test("Play activity sounds in User Preferences silences the games and the countdown, Play sounds off grays it out, and Back to default turns it back on", async (t) => {
   const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_WORKING, init: COUNT_SOUNDS });
   const played = () => s.page.evaluate(() => window.__oscillators);
   // Starts a fresh round with the 3, 2, 1, which plays a blip, and closes it.
@@ -1261,7 +1261,7 @@ test("Play game sounds in User Preferences silences the games and the countdown,
   await s.page.waitForFunction(async () => ((await (await fetch("/looks")).json()).looks || {}).activitySounds === true);
 });
 
-test("a game with music has its own Music slider, at its default until moved, kept once moved, and dimmed while Play game music is off", async (t) => {
+test("a game with music has its own Music slider, at its default until moved, kept once moved, and dimmed while Play activity music is off", async (t) => {
   savedLooks(t, { gameMusic: true });
   const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_WORKING });
   const slider = s.page.locator("#activities-music-level");
@@ -1285,8 +1285,8 @@ test("a game with music has its own Music slider, at its default until moved, ke
   });
   await openActivities(s, "ghoul");
   assert.equal(await boxValue(slider), "80", "kept");
-  assert.equal(await slider.isDisabled(), true, "Play game music off: dimmed");
-  assert.match(await s.page.locator("#activities-music").getAttribute("title"), /Play game music/, "and says why");
+  assert.equal(await slider.isDisabled(), true, "Play activity music off: dimmed");
+  assert.match(await s.page.locator("#activities-music").getAttribute("title"), /Play activity music/, "and says why");
 });
 
 test("the board is laid out again when the banner appears, so the canvas is never clipped", async (t) => {

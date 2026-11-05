@@ -31,11 +31,11 @@ export const DEFAULT_LOOKS = {
   ...soundPrefs(null),
   width: DEFAULT_CARD_WIDTH,
   hideUnavailable: true,
-  // Activities: the top bar's die, whether its games play sounds (under Play
+  // Activities: the top bar's die (hidden until someone turns on Show Activities), whether its games play sounds (under Play
   // sounds, which silences them too), the game last picked, and one best score
   // per listed game (activityBestSnake) or, for a game with courses, per
   // course (activityBestGolfPirate), each a flat key for cleanLooks().
-  hideActivities: false,
+  hideActivities: true,
   activitySounds: true,
   // Whether a game plays its music too (chiptune or recorded songs): off until asked for.
   gameMusic: false,

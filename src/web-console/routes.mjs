@@ -132,6 +132,14 @@ const ROUTES = [
   { path: "/bye", origin: true, run: bye },
 ];
 
+// events.ndjson is an advisory log: a transient lock or a full disk must not
+// take a route (or the detached server) down after the real write landed.
+function noteEvent(dir, event) {
+  try {
+    appendEvent(dir, event);
+  } catch {}
+}
+
 export function handle(req, res, ctx) {
   const port = ctx.port();
   const url = new URL(req.url, `http://127.0.0.1:${port}`);
@@ -149,7 +157,15 @@ export function handle(req, res, ctx) {
     if (route.path !== undefined ? pathname !== route.path : !route.match(pathname, req)) continue;
     if (route.method && req.method !== route.method) continue;
     if (route.origin && !originOk(req, port)) return json(res, 403, { error: "bad origin" });
-    return route.run(req, res, ctx, url);
+    try {
+      return route.run(req, res, ctx, url);
+    } catch (e) {
+      if (!res.headersSent) return json(res, 500, { error: "server error" });
+      try {
+        res.end();
+      } catch {}
+      return undefined;
+    }
   }
   return json(res, 404, { error: "not found" });
 }
@@ -540,7 +556,7 @@ function subagentsPost(req, res, ctx) {
     }
     if (unchanged) return json(res, 200, { ok: true, setting: current });
     const setting = readSubagentSetting(ctx.dir);
-    appendEvent(ctx.dir, { type: "subagents", on, revision: setting.revision });
+    noteEvent(ctx.dir, { type: "subagents", on, revision: setting.revision });
     ctx.pushState();
     return json(res, 200, { ok: true, setting });
   });
@@ -567,7 +583,7 @@ function prHost(req, res, ctx) {
     } catch (e) {
       return json(res, 500, { error: String(e.message) });
     }
-    appendEvent(ctx.dir, { type: "pr-host", host, kind });
+    noteEvent(ctx.dir, { type: "pr-host", host, kind });
     return json(res, 200, { ok: true });
   });
 }
@@ -1184,7 +1200,7 @@ function upload(req, res, ctx) {
       const saved = store(buf, "jpg");
       if (!saved) return;
       const { id, file } = saved;
-      appendEvent(ctx.dir, { type: "upload", id, kind: "image", bytes: buf.length });
+      noteEvent(ctx.dir, { type: "upload", id, kind: "image", bytes: buf.length });
       return json(res, 200, {
         ok: true,
         id,
@@ -1213,7 +1229,7 @@ function upload(req, res, ctx) {
       const saved = store(buf, ext);
       if (!saved) return;
       const { id, file } = saved;
-      appendEvent(ctx.dir, { type: "upload", id, kind: "file", bytes: buf.length });
+      noteEvent(ctx.dir, { type: "upload", id, kind: "file", bytes: buf.length });
       return json(res, 200, { ok: true, id, kind: "file", path: file, name, size: buf.length });
     });
   }
@@ -1301,7 +1317,7 @@ function uploads(req, res, ctx, url) {
     } catch (e) {
       return json(res, 500, { error: String(e.message) });
     }
-    appendEvent(ctx.dir, { type: "upload-delete", id: m[1] });
+    noteEvent(ctx.dir, { type: "upload-delete", id: m[1] });
     res.writeHead(204, baseHeaders());
     return res.end();
   }
@@ -1437,7 +1453,7 @@ function submit(req, res, ctx) {
       });
     }
     if (refused) return json(res, 500, { error: refused });
-    appendEvent(ctx.dir, { type: "submit", rev: ctx.rev, count: body.actions.length });
+    noteEvent(ctx.dir, { type: "submit", rev: ctx.rev, count: body.actions.length });
     if (written) {
       // Account for our own write here rather than letting the watcher find
       // it: the watcher reads a changed state.json as proof the AGENT is
@@ -1489,7 +1505,7 @@ function chat(req, res, ctx) {
         workflow: state.workflow,
         reason: "button",
       });
-      appendEvent(ctx.dir, { type: "chat-reset", reason: "button" });
+      noteEvent(ctx.dir, { type: "chat-reset", reason: "button" });
       ctx.rev++;
       ctx.pushState();
       return json(res, 200, { ok: true, seq: entry.seq, conversation: entry.conversation });
@@ -1527,7 +1543,7 @@ function chat(req, res, ctx) {
         : undefined,
       files: body.files ? body.files.map((f) => ({ path: f.path, name: cleanLabel(f.name, "file") })) : undefined,
     });
-    appendEvent(ctx.dir, { type: "chat", seq: entry.seq });
+    noteEvent(ctx.dir, { type: "chat", seq: entry.seq });
     ctx.rev++;
     ctx.pushState();
     return json(res, 200, { ok: true, seq: entry.seq, conversation: current });
@@ -1564,7 +1580,7 @@ function chatDecision(req, res, ctx) {
       decision: body.decision,
       text: text || undefined,
     });
-    appendEvent(ctx.dir, { type: "chat-decision", decision: body.decision });
+    noteEvent(ctx.dir, { type: "chat-decision", decision: body.decision });
     ctx.rev++;
     ctx.pushState();
     return json(res, 200, { ok: true, seq: entry.seq });
@@ -1734,7 +1750,7 @@ function cancel(req, res, ctx) {
     return json(res, 500, { error: String(e.message) });
   }
   if (pending) return json(res, 409, { error: "pending", message: "A send is still on its way." });
-  appendEvent(ctx.dir, { type: "cancel", rev: ctx.rev });
+  noteEvent(ctx.dir, { type: "cancel", rev: ctx.rev });
   ctx.broadcast("cancelled", { rev: ctx.rev });
   return json(res, 200, { ok: true });
 }

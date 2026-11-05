@@ -899,7 +899,7 @@ export function renderStopping() {
   extra.replaceChildren();
   if (stuck) {
     extra.appendChild(
-      el(
+      textWithCode(
         "p",
         "stop-note",
         page.inApp

@@ -550,8 +550,8 @@ Drive has a song for each road, Snake a different one at every level, dealt from
 the start of a round so none repeats, and Ghoul Rush a track for each room, played at
 one steady level and fuller in a boss fight), and Light Trails and Flock Dash play five
 recorded songs each as background music, each in full, one after another in an
-order shuffled for every run: turn on **Play game music** in **User
-Preferences → Sounds & activities** (it starts off). **Play game sounds** there turns the games'
+order shuffled for every run: turn on **Play activity music** in **User
+Preferences → Sounds & activities** (it starts off). **Play activity sounds** there turns the games'
 sounds (the 3, 2, 1 and the new-best burst included) and their music on or
 off and leaves the page's own cues alone; the **Play sounds** switch above it
 silences all of it, and a paused or closed game goes quiet at once. A game
@@ -1711,7 +1711,8 @@ When a newer Plan2Code release is out, the dashboard shows an **UPDATE
 AVAILABLE** banner at the top. Click it for the details: the version you
 have, the new one (linked to its Releases page) and the command that updates
 you, `plan2code update`, with a Copy button. It updates everything that was
-installed (the skills, the `plan2code` command and any extras you added), with
+installed (the skills, the `plan2code` command, the app and the status line; the
+metrics and bot extras only from a git checkout), with
 no menu, and never uninstalls anything. If the `plan2code` command is not
 installed, the dialog also shows the install command,
 `npx --allow-git=all git+https://github.com/jparkerweb/plan2code.git`, to run
@@ -1753,7 +1754,7 @@ The gear button in the top bar opens **User Preferences**, always on its first t
 | **System** | Cleanup, and Desktop app (only inside the desktop app) |
 | **Sounds & activities** | Sounds and Activities |
 
-On Appearance and Sounds & activities each change saves the moment you make it, and a small **Saved** mark shows beside it. **Close** (or `Esc`) shuts the dialog. **Back to default** resets only the tab on screen: Appearance's four settings (Role back to *Not set*), or every sound and the two Activities switches (Show Activities and Play game sounds); Activities best scores stay. It is not shown on Agents & models or System, which have nothing to reset.
+On Appearance and Sounds & activities each change saves the moment you make it, and a small **Saved** mark shows beside it. **Close** (or `Esc`) shuts the dialog. **Back to default** resets only the tab on screen: Appearance's four settings (Role back to *Not set*), or every sound and the two Activities switches (Show Activities and Play activity sounds); Activities best scores stay. It is not shown on Agents & models or System, which have nothing to reset.
 
 ### Agents & models
 
@@ -1789,7 +1790,7 @@ Most people never need this tab: Plan2Code finds the agents installed on the mac
 | You closed the tab | Open the link again. Everything is where you left it. After about two minutes with no tab open the link stops working: ask the agent to resume the session for a new one. |
 | The link stopped working | Tell the agent. It restarts the session and gives you a new link. |
 | Your agent session died while you were mid-answer | Press Send anyway. Your answers are written to disk and are never discarded, including when the session is restarted. The next session picks them up. |
-| The page says Plan2Code is not running | It has not checked in for a few minutes. Look at the terminal: it may have finished its turn, hit an error, or be waiting on you there. If it is idle, type `continue` in the terminal and it picks your answers up. Answering here still works, and what you send is held for it. |
+| The page says Plan2Code is not running | It has not checked in for a few minutes. Look at the terminal: it may have finished its turn, hit an error, or be waiting on you there. If it is idle, type `continue` in the terminal and it picks your answers up (in the desktop app, the **continue** or **Reconnect to agent** button in the sidebar, beside Send on the Ask tab, and on a saved launch types it for you). Answering here still works, and what you send is held for it. |
 | You are not sure anything is connected | The **?** at the top right opens Help. Its *What this page is* tab says what keeps the page alive and whether both halves are talking at that moment, and *When something looks stuck* covers what to check. |
 | You would rather use the terminal after all | Say so. Nothing is lost. |
 
@@ -1864,7 +1865,7 @@ exception being the note attachments the agent keeps for a spec, above):
 | `~/.plan2code/console/sessions/<id>/uploads/` | images and documents attached to notes and quick questions | 30 days after the session was last touched |
 | `~/.plan2code/handoffs/<id>.md`, `<id>.json` | each handoff's document, and which checkout, spec and skill it belongs to and whether it was picked up (`handoffs.mjs` is their one owner) | 30 days after it was last touched, picked up or not |
 | `~/.plan2code/notepads/<folder-name>-<12 hex>/` | your notebook for one folder: `meta.json`, `tabs.json` and, per tab, `tabs/<id>/note.md` and `tabs/<id>/images/` (`notepads.mjs` is their one owner; the agent never reads them, except a tab you send) | until you delete it through Cleanup, which offers it once its newest file is 30 days old |
-| `~/.plan2code/console/looks.json` | your role, theme, colors, sounds and card width, the Show Activities and Play game sounds switches (`hideActivities`, `activitySounds`), the last activity picked (`lastActivity`), best scores (flat `activityBest<Id>` keys: `activityBestSnake`, one per Mini golf course from `activityBestGolfPirate` to `activityBestGolfFrost`, `activityBestTrails`, `activityBestBugs`, `activityBestDrive`, `activityBestStack`, `activityBestBumper`, `activityBestRapids`, `activityBestFuse`, `activityBestHop`, `activityBestBounce`, `activityBestGhoul`) and each game's memo (`activityMemo<Id>`: Snake's surprises found, Light Trails' furthest arena, Bug Hunt's bugs, bosses and power-ups found, Sunset Drive's roads found, Stack Deploy's highest floor, Bumper Ring's furthest arena, Rapids Run's furthest dam, Hot Potato's furthest venue, Crossing Rush's furthest zone, Bounce Road's furthest stage, Ghoul Rush's most stages cleared in a run) | always |
+| `~/.plan2code/console/looks.json` | your role, theme, colors, sounds and card width, the Show Activities and Play activity sounds switches (`hideActivities`, `activitySounds`), the last activity picked (`lastActivity`), best scores (flat `activityBest<Id>` keys: `activityBestSnake`, one per Mini golf course from `activityBestGolfPirate` to `activityBestGolfFrost`, `activityBestTrails`, `activityBestBugs`, `activityBestDrive`, `activityBestStack`, `activityBestBumper`, `activityBestRapids`, `activityBestFuse`, `activityBestHop`, `activityBestBounce`, `activityBestGhoul`) and each game's memo (`activityMemo<Id>`: Snake's surprises found, Light Trails' furthest arena, Bug Hunt's bugs, bosses and power-ups found, Sunset Drive's roads found, Stack Deploy's highest floor, Bumper Ring's furthest arena, Rapids Run's furthest dam, Hot Potato's furthest venue, Crossing Rush's furthest zone, Bounce Road's furthest stage, Ghoul Rush's most stages cleared in a run) | always |
 | `~/.plan2code/console/subagents.json` | your Subagents switch, instruction and limit, per project folder and skill | always |
 | `~/.plan2code/console/sessions/<id>/subagents-setting.json`, `subagents-cursor.json` | this session's copy of the switch, and how far the agent has been told of it | with the session |
 | `~/.plan2code/agents.json` | your custom agent CLIs (User Preferences → Agents & models), read by the `plan2code` command and the desktop app | always |

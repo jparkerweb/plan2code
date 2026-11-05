@@ -625,7 +625,7 @@ async function copyHandoffText(text, id, label) {
 // CLI reads the stored skill and spec, marks the handoff used and falls back
 // to Quick Task if either is gone.
 async function pickUpHandoff(h) {
-  if (page.gone || page.pendingResult || page.local.launching || finish()) return;
+  if (page.gone || page.pendingResult || page.local.launching || page.launchScoping || finish()) return;
   page.launchScoping = true;
   await hooks.syncWorkspaceScope(h.spec || "");
   try {
@@ -1091,7 +1091,7 @@ export function renderConfirm(main, entry) {
 // marks the action as being about the session, and it reaches the agent
 // through the same wait loop. The dashboard reads `skill` off it.
 export async function launchSkill(entry) {
-  if (page.gone || page.pendingResult || page.local.launching || finish()) return;
+  if (page.gone || page.pendingResult || page.local.launching || page.launchScoping || finish()) return;
   const target = launchTarget(entry, selSpec());
   // The card was clickable, so this should never fire — but a spec picked in
   // one tab could have shifted the ground under a stale render in another.
@@ -1351,7 +1351,7 @@ export function wireDashboard() {
   $("delete-name").addEventListener("keydown", (e) => {
     if (e.key === "Enter") {
       e.preventDefault();
-      deleteStep();
+      if (!$("delete-go").disabled) deleteStep();
     }
   });
   // `close` is queued, so it can land after the dialog was opened again for

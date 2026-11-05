@@ -262,6 +262,24 @@ function recoverIndex(dir) {
 function prepare(dir, folder) {
   migrate(dir, folder);
   let index = readIndex(dir);
+  if (!index && fs.existsSync(path.join(dir, INDEX_FILE))) {
+    // A scanner's brief lock reads as "damaged" through readJson: wait it out, and
+    // refuse the write (rather than rebuild every tab) while the file stays locked.
+    let lastErr = null;
+    for (let attempt = 0; attempt < 4 && !index; attempt++) {
+      try {
+        fs.readFileSync(path.join(dir, INDEX_FILE));
+        lastErr = null;
+        index = readIndex(dir);
+        break;
+      } catch (err) {
+        lastErr = err;
+        if (err.code !== "EPERM" && err.code !== "EBUSY" && err.code !== "EACCES") break;
+        sleepSync(40 * (attempt + 1));
+      }
+    }
+    if (!index && lastErr && (lastErr.code === "EPERM" || lastErr.code === "EBUSY" || lastErr.code === "EACCES")) throw lastErr;
+  }
   if (!index) {
     index = fs.existsSync(path.join(dir, INDEX_FILE)) ? recoverIndex(dir) : { order: [], last: null, tabs: {} };
     writeIndex(dir, index);

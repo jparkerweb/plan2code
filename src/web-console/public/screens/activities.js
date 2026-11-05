@@ -22,7 +22,7 @@ import { hushMusic, music as playMusic } from "../music.js";
 const $ = (id) => document.getElementById(id);
 
 // Every sound the window and its games make goes through these two, so
-// Preferences' Play game sounds silences them all (and Play sounds, which
+// Preferences' Play activity sounds silences them all (and Play sounds, which
 // tones.js checks, does too).
 const tone = (...args) => {
   if (looks.activitySounds) playTone(...args);
@@ -30,7 +30,7 @@ const tone = (...args) => {
 const hum = (...args) => {
   if (looks.activitySounds) playHum(...args);
 };
-// And the music, which also needs Play game music, at the game's own
+// And the music, which also needs Play activity music, at the game's own
 // music volume (the window's Music slider). A song's "playing" or "ended"
 // goes back to the game, which moves on to its next song on "ended".
 const musicFor = (entry) => (name, intensity, options) => {
@@ -38,7 +38,7 @@ const musicFor = (entry) => (name, intensity, options) => {
   return undefined;
 };
 const MUSIC_TITLE = "This game's music volume";
-const MUSIC_OFF_TITLE = "Turn on Play game music in User Preferences to hear it";
+const MUSIC_OFF_TITLE = "Turn on Play activity music in User Preferences to hear it";
 
 // Quiets every held sound and the music: the window stopped ticking a game.
 function hushTones() {

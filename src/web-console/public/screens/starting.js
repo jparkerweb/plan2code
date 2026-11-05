@@ -101,7 +101,8 @@ function posePane(main, cls, workflow) {
   const pane = el("div", cls);
   pane.dataset.pose = pose;
   pane.appendChild(startStage(workflow));
-  if (held) main.insertBefore(pane, held);
+  // The old pane (another pose) is replaced, not left beside the new one.
+  if (held && held.parentNode === main) held.replaceWith(pane);
   else main.appendChild(pane);
   return pane;
 }

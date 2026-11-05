@@ -391,7 +391,12 @@ export function renderCard(item) {
     const skip = el("button", "btn tiny", skipped ? "Do not skip" : "Skip this one");
     skip.type = "button";
     skip.style.marginTop = "16px";
-    skip.addEventListener("click", () => (skipped ? stage(item.id, null) : skipAndMoveOn(item.id)));
+    skip.addEventListener("click", () => {
+      if (!skipped) return skipAndMoveOn(item.id);
+      // Keep a note typed with the skip: the box still shows it, so the send must carry it.
+      const kept = page.local.staged[item.id];
+      stage(item.id, kept && kept.text ? { type: "answer", kind: item.kind, text: kept.text } : null);
+    });
     card.appendChild(skip);
     if (page.local.skipFlash === item.id) {
       card.classList.add("is-skip-flash");

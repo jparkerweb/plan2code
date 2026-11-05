@@ -529,11 +529,16 @@ setInterval(() => {
   // Answers nobody has collected yet keep the server up (bounded by MAX_LIFE_MS):
   // exiting would strand the tab and the send it holds.
   if (idle > IDLE_MS && !resultFlags().pending) {
-    appendEvent(DIR, { type: "exit", reason: "idle", idleMs: idle });
+    // The log is advisory: a failed append must never keep an orphan server alive.
+    try {
+      appendEvent(DIR, { type: "exit", reason: "idle", idleMs: idle });
+    } catch {}
     process.exit(0);
   }
   if (Date.now() - STARTED > MAX_LIFE_MS) {
-    appendEvent(DIR, { type: "exit", reason: "max-life" });
+    try {
+      appendEvent(DIR, { type: "exit", reason: "max-life" });
+    } catch {}
     process.exit(0);
   }
 }, 20000).unref();
@@ -543,6 +548,14 @@ for (const sig of ["SIGINT", "SIGTERM", "SIGHUP"]) {
     process.on(sig, () => process.exit(0));
   } catch {}
 }
+
+// A throw inside a request callback (a read or write failing on a locked file)
+// must not end the detached server: note it and carry on. The page retries.
+process.on("uncaughtException", (e) => {
+  try {
+    appendEvent(DIR, { type: "error", message: String(e?.message || e).slice(0, 200) });
+  } catch {}
+});
 
 // Every exit that gets to run code takes its handle file with it, so a pid
 // left behind in the runtime dir cannot later be mistaken for this server once
@@ -602,8 +615,9 @@ function onListening(port) {
     stateDir: DIR,
     startedAt: nowIso(),
   };
-  ensureDir(path.dirname(handleFile(PROJECT, SID)));
-  writeJsonAtomic(handleFile(PROJECT, SID), handle);
+  // The handle holds the session token: private to this user on a shared /tmp.
+  ensureDir(path.dirname(handleFile(PROJECT, SID)), 0o700);
+  writeJsonAtomic(handleFile(PROJECT, SID), handle, 0o600);
   appendEvent(DIR, { type: "listening", port, pid: process.pid });
   checkState();
   // A resume through a fresh server still starts a new conversation on a hop.

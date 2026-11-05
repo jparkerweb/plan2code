@@ -360,7 +360,11 @@ export async function cmdOpen() {
   // line, not from the state, and picks the state up on its first request or
   // poll tick. No page can reach it before it is listening, and the state is
   // on disk long before a browser gets there.
-  const existing = sid && (args.resume || args.session) ? listHandles(project).find((h) => h.sid === sid) : null;
+  // Looked up under the project the session itself names (as `post` and `wait`
+  // do), so an agent whose shell moved to another repo finds its server instead
+  // of starting a second one for the same session.
+  const sessionProj = state && typeof state.project === "string" && state.project ? state.project : project;
+  const existing = sid && (args.resume || args.session) ? listHandles(sessionProj).find((h) => h.sid === sid) : null;
   // A live pid gets a second, longer look before it is given up on, as `stop`
   // gives one: a server busy right after a post can miss the first, and a
   // second server for the same session strands the page on the first.
@@ -369,7 +373,7 @@ export async function cmdOpen() {
       ? healthOk(existing).then((ok) => ok || healthOk(existing, 5000))
       : Promise.resolve(false);
   let boot = null;
-  if (!existing) boot = await startServer(project, worktree, sid, dir, { noBrowser: Boolean(setupAnnounce) });
+  if (!existing) boot = await startServer(sessionProj, worktree, sid, dir, { noBrowser: Boolean(setupAnnounce) });
 
   // The dashboard's spec picker reads its inventory straight off the session
   // state, so the scan belongs to `open` rather than to the agent: filesystem
@@ -504,14 +508,14 @@ export async function cmdOpen() {
 
   // A handle whose pid is alive but is not ours (the pid was reused) leaves
   // this for last: nothing could be started until that was known.
-  let started = boot || (await startServer(project, worktree, sid, dir));
+  let started = boot || (await startServer(sessionProj, worktree, sid, dir));
   let handle = await awaitHandle(started);
   if (!handle && started.handoff) {
     // The handover went wrong somewhere (a platform that will not pass the
     // socket, a server that died taking it). Once more the old way, where
     // the server binds its own port: slower, and certain.
     started.kill();
-    started = await startServer(project, worktree, sid, dir, { handoff: false, noBrowser: Boolean(setupAnnounce) });
+    started = await startServer(sessionProj, worktree, sid, dir, { handoff: false, noBrowser: Boolean(setupAnnounce) });
     handle = await awaitHandle(started);
   }
   if (!handle) {
@@ -679,7 +683,7 @@ function isFolder(p) {
 async function startServer(project, worktree, sid, dir, { handoff = true, noBrowser = false } = {}) {
   const token = newToken();
   const handlePath = handleFile(project, sid);
-  ensureDir(path.dirname(handlePath));
+  ensureDir(path.dirname(handlePath), 0o700);
   fs.rmSync(handlePath, { force: true });
 
   const logFd = fs.openSync(path.join(dir, "server.log"), "a");
@@ -778,6 +782,16 @@ function tail(file, lines) {
   }
 }
 
+// A missing browser command raises ENOENT as an event, after the try/catch has
+// returned: without a listener it would end `open` before it printed the link.
+function quietSpawn(command, args, options) {
+  // The shell form passes its options in the second place.
+  const child = Array.isArray(args) ? spawn(command, args, options) : spawn(command, [], args);
+  child.on("error", () => {});
+  child.unref();
+  return child;
+}
+
 /**
  * Best-effort, never fatal. If we cannot open a browser we still printed the URL,
  * and the URL is the primary channel.
@@ -793,7 +807,7 @@ function openBrowser(url) {
     // carries nothing a shell would read.
     const custom = process.env.PLAN2CODE_BROWSER;
     if (custom) {
-      spawn(`${custom} "${url}"`, { shell: true, detached: true, stdio: "ignore", windowsHide: true }).unref();
+      quietSpawn(`${custom} "${url}"`, { shell: true, detached: true, stdio: "ignore", windowsHide: true });
       return;
     }
 
@@ -801,16 +815,16 @@ function openBrowser(url) {
     if (plat === "win32") {
       // The empty "" is the mandatory window-title argument: omit it and
       // `start` treats a quoted URL as the title and opens nothing.
-      spawn(process.env.COMSPEC || "cmd.exe", ["/d", "/s", "/c", "start", '""', `"${url}"`], {
+      quietSpawn(process.env.COMSPEC || "cmd.exe", ["/d", "/s", "/c", "start", '""', `"${url}"`], {
         windowsVerbatimArguments: true,
         detached: true,
         stdio: "ignore",
         windowsHide: true,
-      }).unref();
+      });
       return;
     }
     if (plat === "darwin") {
-      spawn("open", [url], { detached: true, stdio: "ignore" }).unref();
+      quietSpawn("open", [url], { detached: true, stdio: "ignore" });
       return;
     }
     // Linux and friends. WSL first: xdg-open there either is absent or opens a
@@ -818,11 +832,11 @@ function openBrowser(url) {
     if (isWsl()) {
       const exe = findAgent({ command: "wslview" }).state === "found" ? "wslview" : "powershell.exe";
       const argsFor = exe === "wslview" ? [url] : ["-NoProfile", "-Command", "Start-Process", `"${url}"`];
-      spawn(exe, argsFor, { detached: true, stdio: "ignore" }).unref();
+      quietSpawn(exe, argsFor, { detached: true, stdio: "ignore" });
       return;
     }
     if (!process.env.DISPLAY && !process.env.WAYLAND_DISPLAY) return; // headless
-    spawn(process.env.BROWSER || "xdg-open", [url], { detached: true, stdio: "ignore" }).unref();
+    quietSpawn(process.env.BROWSER || "xdg-open", [url], { detached: true, stdio: "ignore" });
   } catch {
     /* never fatal */
   }
