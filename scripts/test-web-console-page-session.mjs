@@ -191,11 +191,7 @@ test("a quiet dashboard agent shows a continue button under the app, which asks 
   const skip = s.page.getByRole("button", { name: "Skip the intro" });
   await skip.click();
   await skip.waitFor({ state: "hidden" });
-  const welcomeDone = s.page.getByRole("button", { name: "Start building" });
-  if (await welcomeDone.isVisible()) {
-    await welcomeDone.click();
-    await welcomeDone.waitFor({ state: "hidden" });
-  }
+  await dismissWelcome(s);
   await s.page.clock.fastForward(200_000);
   await lineSays(s, /^Plan2Code has gone quiet\./);
   assert.match(await s.page.locator("#planny").getAttribute("class"), /\bis-adrift\b/);
@@ -221,11 +217,7 @@ async function pickFromMenu(s) {
   const skip = s.page.getByRole("button", { name: "Skip the intro" });
   await skip.click();
   await skip.waitFor({ state: "hidden" });
-  const welcomeDone = s.page.getByRole("button", { name: "Start building" });
-  if (await welcomeDone.isVisible()) {
-    await welcomeDone.click();
-    await welcomeDone.waitFor({ state: "hidden" });
-  }
+  await dismissWelcome(s);
   const main = s.page.locator("#main");
   await main.getByRole("button").filter({ has: s.page.locator("code", { hasText: /^\/plan2code-1-plan$/ }) }).click();
   await main.getByRole("button", { name: "Start Plan" }).click();
@@ -877,9 +869,7 @@ test("the footer keeps its workspace label on the dashboard, and the label opens
   // Past Planny's wake-up and, on this console home's first run, the Welcome.
   await s.page.getByRole("button", { name: "Skip the intro" }).click();
   await s.page.locator("#main").getByRole("heading", { name: "What are we doing today?" }).waitFor();
-  const welcomeDone = s.page.getByRole("button", { name: "Start building" });
-  if (await welcomeDone.isVisible()) await welcomeDone.click();
-  await welcomeDone.waitFor({ state: "hidden" });
+  await dismissWelcome(s);
   const foot = s.page.locator("footer.footer");
   const where = s.page.locator("#footer-where");
   await where.waitFor();
@@ -925,14 +915,22 @@ test("a workflow page uses its modules: the full footer, the session meter, @ su
   await s.page.waitForFunction(() => document.querySelector('link[rel="icon"][type="image/svg+xml"]').href.startsWith("data:image/svg+xml"));
 });
 
+// The Welcome opens a moment after the page is drawn, so a one-shot
+// isVisible() can miss it and leave it covering the page. Give it a short
+// wait to appear; a console home that has seen it never shows it.
+async function dismissWelcome(s) {
+  const done = s.page.getByRole("button", { name: "Start building" });
+  const shown = await done.waitFor({ timeout: 2500 }).then(() => true, () => false);
+  if (shown) await done.click();
+  await done.waitFor({ state: "hidden" });
+}
+
 // The dashboard, past Planny's wake-up and the first-run Welcome.
 async function pastTheIntro(s) {
   const skip = s.page.getByRole("button", { name: "Skip the intro" });
   await skip.click();
   await s.page.locator("#main").getByRole("heading", { name: "What are we doing today?" }).waitFor();
-  const welcomeDone = s.page.getByRole("button", { name: "Start building" });
-  if (await welcomeDone.isVisible()) await welcomeDone.click();
-  await welcomeDone.waitFor({ state: "hidden" });
+  await dismissWelcome(s);
 }
 
 // What a person sees break: a handoff offered where there is nothing to hand off.
