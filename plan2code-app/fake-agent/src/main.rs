@@ -10,6 +10,7 @@
 //!   REPORT <json>  write <json> as `loopOutcome` into the session's state.json
 //!                  (PLAN2CODE_CONSOLE_HOME and PLAN2CODE_CONSOLE_SID name it), say
 //!                  `REPORT written` (`REPORT unavailable` when either is missing)
+//!   ENV <name> print the variable as `ENV <name>=<value>`
 //!   HANG       say `HANGING`, then go silent for good (no more lines read)
 //!   <other>    echoed back as `echo: <line>`
 //!

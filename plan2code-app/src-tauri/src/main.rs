@@ -798,7 +798,7 @@ async fn update_skills(
 
 /// The OS folder picker, shown when no folder is known; a choice becomes the
 /// launcher's remembered folder.
-#[tauri::command]
+#[tauri::command(async)]
 fn pick_project_folder(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
@@ -847,7 +847,7 @@ fn teardown_project(state: &AppState) -> Result<(), String> {
 /// fresh for it rather than reusing anything from the one just left. Picking
 /// nothing (canceled) leaves the current project untouched. One project per
 /// window stays; this replaces it, it does not add a second.
-#[tauri::command]
+#[tauri::command(async)]
 fn change_project(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
@@ -876,7 +876,7 @@ fn change_project(
 /// is `console_setup_start` below: the agent-less `setup` page, which is no
 /// dashboard and has no agent to announce it, so the app opens it itself.
 /// Nothing to show yet is an error the page words for the person.
-#[tauri::command]
+#[tauri::command(async)]
 fn console_start(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
     console_start_impl(&state)
 }
@@ -894,7 +894,7 @@ fn console_start_impl(state: &AppState) -> Result<serde_json::Value, String> {
 
 /// The bar's poll: none (never started or stopped on purpose), running, or
 /// dead (started but not answering).
-#[tauri::command]
+#[tauri::command(async)]
 fn console_status(state: State<'_, AppState>) -> serde_json::Value {
     let Ok(guard) = state.console.lock() else {
         return serde_json::json!({ "state": "none", "url": null });
@@ -927,7 +927,7 @@ fn console_stop(state: State<'_, AppState>) -> Result<(), String> {
 /// on its own), and the URL comes back for the page to frame. When
 /// `console.mjs` cannot be found the error names it, and the page shows its
 /// plain "skills are missing" checklist row.
-#[tauri::command]
+#[tauri::command(async)]
 fn console_setup_start(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
@@ -1254,7 +1254,7 @@ fn loop_finalize(state: State<'_, AppState>) -> Result<(), String> {
 /// fresh dashboard console in its place. Needs no agent: a dashboard session
 /// is only `console.mjs open --workflow dashboard`, which the supervisor runs
 /// itself.
-#[tauri::command]
+#[tauri::command(async)]
 fn loop_dashboard(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
     let app = state.app.get().cloned().ok_or("no window yet")?;
     let origin = window_origin(&app);

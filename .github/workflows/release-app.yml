@@ -14,8 +14,16 @@ on:
   push:
     tags: ['v*']
 
+# Read-only by default: the build jobs run dependency install scripts and build scripts, so
+# only the publish job holds a write token.
 permissions:
-  contents: write
+  contents: read
+
+# A release published after its tag push starts a second run for the same tag: queue it behind
+# the first so two builds never upload over each other.
+concurrency:
+  group: release-app-${{ github.event.release.tag_name || github.ref_name }}
+  cancel-in-progress: false
 
 jobs:
   build:
@@ -34,6 +42,8 @@ jobs:
         shell: bash
     steps:
       - uses: actions/checkout@v4.2.2
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v4.4.0
         with:
           node-version: 22
@@ -83,6 +93,8 @@ jobs:
     name: attach to the release
     needs: build
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     env:
       GH_TOKEN: ${{ github.token }}
       TAG: ${{ github.event.release.tag_name || github.ref_name }}

@@ -6,6 +6,7 @@
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -22,6 +23,13 @@ pub struct ToolRun {
 
 /// Output kept per call: the tail, which is where a failure says why.
 const OUTPUT_LIMIT: usize = 200 * 1024;
+
+/// What a stop says when too many files are staged to check.
+pub const STAGED_TOO_LONG: &str =
+    "too many changed files to check: add generated folders to .gitignore, then Resume";
+
+/// Output kept for the staged-file list the commit gate checks (far above any real list).
+const STAGED_LIST_LIMIT: usize = 64 * 1024 * 1024;
 
 /// The limit for node and git calls.
 pub const QUICK_LIMIT: Duration = Duration::from_secs(60);
@@ -42,6 +50,8 @@ fn append_tail(buf: &mut Vec<u8>, bytes: &[u8], limit: usize) {
 fn pump<R: Read + Send + 'static>(
     mut source: R,
     sink: Arc<Mutex<Vec<u8>>>,
+    keep: Keep,
+    cut: Arc<AtomicBool>,
 ) -> thread::JoinHandle<()> {
     thread::spawn(move || {
         let mut chunk = [0u8; 8192];
@@ -50,7 +60,16 @@ fn pump<R: Read + Send + 'static>(
                 Ok(0) | Err(_) => break,
                 Ok(n) => {
                     if let Ok(mut buf) = sink.lock() {
-                        append_tail(&mut buf, &chunk[..n], OUTPUT_LIMIT);
+                        match keep {
+                            Keep::Tail(cap) => append_tail(&mut buf, &chunk[..n], cap),
+                            Keep::Head(cap) => {
+                                let room = cap.saturating_sub(buf.len()).min(n);
+                                buf.extend_from_slice(&chunk[..room]);
+                                if room < n {
+                                    cut.store(true, Ordering::Relaxed);
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -67,16 +86,44 @@ fn run_limited(cmd: Command, stdin: Option<&str>, limit: Duration) -> ToolRun {
 /// `run_limited`, with stderr dropped when `keep_stderr` is false: a list read
 /// from stdout must not be mixed with a warning git printed beside it.
 fn run_limited_with(
-    mut cmd: Command,
+    cmd: Command,
     stdin: Option<&str>,
     limit: Duration,
     keep_stderr: bool,
 ) -> ToolRun {
+    run_capped(cmd, stdin, limit, keep_stderr, Keep::Tail(OUTPUT_LIMIT)).0
+}
+
+/// Which part of a long output a call keeps.
+#[derive(Clone, Copy)]
+enum Keep {
+    /// The last `n` bytes, where a failure says why.
+    Tail(usize),
+    /// The first `n` bytes; anything after is read and dropped, and the call
+    /// reports it was cut. For a list a safety check must read whole.
+    Head(usize),
+}
+
+/// `run_limited_with` with the part kept chosen, and whether output was dropped.
+fn run_capped(
+    mut cmd: Command,
+    stdin: Option<&str>,
+    limit: Duration,
+    keep_stderr: bool,
+    keep: Keep,
+) -> (ToolRun, bool) {
+    let cut = Arc::new(AtomicBool::new(false));
     cmd.env("PATH", crate::node_check::resolved_path());
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
         cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    }
+    #[cfg(unix)]
+    {
+        // Its own process group, so a timeout can end every descendant at once.
+        use std::os::unix::process::CommandExt;
+        cmd.process_group(0);
     }
     cmd.stdin(if stdin.is_some() {
         Stdio::piped()
@@ -92,17 +139,26 @@ fn run_limited_with(
     let mut child = match cmd.spawn() {
         Ok(child) => child,
         Err(e) => {
-            return ToolRun {
-                ok: false,
-                code: None,
-                output: format!("could not start: {e}"),
-            }
+            return (
+                ToolRun {
+                    ok: false,
+                    code: None,
+                    output: format!("could not start: {e}"),
+                },
+                false,
+            );
         }
     };
     let sink = Arc::new(Mutex::new(Vec::new()));
     let readers = [
-        child.stdout.take().map(|s| pump(s, Arc::clone(&sink))),
-        child.stderr.take().map(|s| pump(s, Arc::clone(&sink))),
+        child
+            .stdout
+            .take()
+            .map(|s| pump(s, Arc::clone(&sink), keep, Arc::clone(&cut))),
+        child
+            .stderr
+            .take()
+            .map(|s| pump(s, Arc::clone(&sink), keep, Arc::clone(&cut))),
     ];
     if let (Some(text), Some(mut pipe)) = (stdin, child.stdin.take()) {
         // A child that exits before reading closes the pipe: not an error here.
@@ -148,11 +204,14 @@ fn run_limited_with(
         }
         output.push_str(&format!("(stopped after {})", describe_limit(limit)));
     }
-    ToolRun {
-        ok: status.is_some_and(|s| s.success()),
-        code: status.and_then(|s| s.code()),
-        output,
-    }
+    (
+        ToolRun {
+            ok: status.is_some_and(|s| s.success()),
+            code: status.and_then(|s| s.code()),
+            output,
+        },
+        cut.load(Ordering::Relaxed),
+    )
 }
 
 /// "1 minute", "15 minutes", "2 seconds".
@@ -180,11 +239,14 @@ fn kill_tree(pid: u32) {
     }
     #[cfg(not(windows))]
     {
-        let _ = Command::new("pkill")
-            .args(["-KILL", "-P", &pid.to_string()])
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status();
+        // The child leads its own process group (see run_limited): a negative
+        // pid ends the whole group, grandchildren included.
+        if let Ok(pgid) = i32::try_from(pid) {
+            // SAFETY: kill(2) takes plain integers and touches no memory.
+            unsafe {
+                libc::kill(-pgid, libc::SIGKILL);
+            }
+        }
     }
 }
 
@@ -347,14 +409,25 @@ pub fn git_add_paths(project: &Path, paths: &[&Path]) -> ToolRun {
 /// The names of the staged files, as `git diff --cached --name-only -z` prints
 /// them: NUL-separated, so no path is quoted.
 pub fn git_staged(project: &Path) -> Result<Vec<String>, String> {
-    let run = run_limited_with(
+    git_staged_capped(project, STAGED_LIST_LIMIT)
+}
+
+/// `git_staged` with the size the list may reach. The secret and size gate
+/// reads every staged name, so a list over the cap fails closed rather than
+/// being checked in part.
+fn git_staged_capped(project: &Path, cap: usize) -> Result<Vec<String>, String> {
+    let (run, cut) = run_capped(
         git(project, &["diff", "--cached", "--name-only", "-z"]),
         None,
         QUICK_LIMIT,
         false,
+        Keep::Head(cap),
     );
     if !run.ok {
         return Err(run.output.trim().to_string());
+    }
+    if cut {
+        return Err(STAGED_TOO_LONG.to_string());
     }
     Ok(split_nul(&run.output))
 }
@@ -557,6 +630,62 @@ fn parse_json_object(run: &ToolRun) -> Result<serde_json::Value, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_capped_run_keeps_the_part_asked_for_and_says_when_output_was_cut() {
+        if Command::new("node").arg("--version").output().is_err() {
+            assert!(std::env::var_os("CI").is_none(), "node is not on PATH");
+            return;
+        }
+        fn run(keep: Keep, text: &str) -> (ToolRun, bool) {
+            let mut cmd = Command::new("node");
+            cmd.args(["-e", &format!("process.stdout.write('{text}')")]);
+            run_capped(cmd, None, QUICK_LIMIT, false, keep)
+        }
+        let (tail, tail_cut) = run(Keep::Tail(4), "aaaabbbb");
+        assert!(tail.ok);
+        assert_eq!(tail.output, "bbbb");
+        assert!(!tail_cut, "a tail keeper never reports a cut");
+        let (head, head_cut) = run(Keep::Head(4), "aaaabbbb");
+        assert_eq!(head.output, "aaaa");
+        assert!(head_cut);
+        let (whole, whole_cut) = run(Keep::Head(8), "aaaabbbb");
+        assert_eq!(whole.output, "aaaabbbb");
+        assert!(!whole_cut);
+    }
+
+    #[test]
+    fn a_staged_list_over_the_cap_is_refused_not_checked_in_part() {
+        if Command::new("git").arg("--version").output().is_err() {
+            assert!(std::env::var_os("CI").is_none(), "git is not on PATH");
+            return;
+        }
+        let repo =
+            std::env::temp_dir().join(format!("plan2code-staged-cap-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&repo);
+        std::fs::create_dir_all(&repo).unwrap();
+        let git_in = |args: &[&str]| {
+            let status = Command::new("git")
+                .args(args)
+                .current_dir(&repo)
+                .status()
+                .unwrap();
+            assert!(status.success(), "git {args:?}");
+        };
+        git_in(&["init", "-q"]);
+        for name in [".env", "a.txt", "b.txt"] {
+            std::fs::write(repo.join(name), "x").unwrap();
+        }
+        git_in(&["add", "-A"]);
+        // A cap below the list's size: refused, never a list missing its first names.
+        assert_eq!(
+            git_staged_capped(&repo, 8),
+            Err(STAGED_TOO_LONG.to_string())
+        );
+        let all = git_staged_capped(&repo, 1024).unwrap();
+        assert_eq!(all, [".env", "a.txt", "b.txt"]);
+        let _ = std::fs::remove_dir_all(&repo);
+    }
 
     #[test]
     fn the_commit_message_is_read_from_the_scripts_output_without_a_shell() {

@@ -153,7 +153,7 @@ fn write(file: &Path, settings: serde_json::Map<String, serde_json::Value>) -> R
     }
     let json = serde_json::to_string_pretty(&serde_json::Value::Object(settings))
         .map_err(|e| e.to_string())?;
-    std::fs::write(file, json).map_err(|e| e.to_string())
+    crate::loop_driver::write_atomic(file, &json)
 }
 
 #[cfg(test)]

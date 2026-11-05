@@ -366,8 +366,9 @@ pub fn commit(
 
 /// Take what a failed commit left staged out of the index, so a commit the
 /// person makes by hand does not carry a mark the loop took back.
-pub fn unstage(project: &Path) {
-    let _ = loop_tools::git_unstage_all(project);
+pub fn unstage(project: &Path) -> Option<String> {
+    let unstaged = loop_tools::git_unstage_all(project);
+    (!unstaged.ok).then(|| first_line(&unstaged.output))
 }
 
 /// The phases the spec shows done (`done`) that the commit log does not hold:
@@ -793,6 +794,10 @@ mod tests {
     #[test]
     fn commit_stages_the_marked_files_but_leaves_an_ignored_spec_folder_alone() {
         if !git_ready() || !node_ready() {
+            assert!(
+                std::env::var_os("CI").is_none(),
+                "git or node is not on PATH"
+            );
             return;
         }
         let repo = init_repo("commit-ignored");

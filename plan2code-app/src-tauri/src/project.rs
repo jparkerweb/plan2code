@@ -155,7 +155,7 @@ pub fn remember_folder(dir: &Path) -> Result<ProjectDir, String> {
         std::fs::create_dir_all(parent).map_err(err)?;
     }
     let json = serde_json::to_string_pretty(&serde_json::Value::Object(state)).map_err(err)?;
-    std::fs::write(file, json).map_err(err)?;
+    crate::loop_driver::write_atomic(&file, &json)?;
     Ok(ProjectDir {
         dir: dir.to_path_buf(),
         source: ProjectSource::Picked,

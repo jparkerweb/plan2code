@@ -2107,10 +2107,19 @@ fn handle_outcome(ctx: &Ctx, snap: &Snapshot, raw: &Value) -> bool {
             Ok(()) => {}
             Err(loop_commit::StageError::Add(failure)) => {
                 keep_output(ctx, &failure.output);
-                loop_commit::unstage(&snap.project);
+                let left_staged = loop_commit::unstage(&snap.project);
                 let cause = StopCause::Commit;
-                let detail = format!("git add failed: {}", failure.first_line);
-                let line = stop_line(&cause, n, &detail, false);
+                let detail = if failure.first_line == loop_tools::STAGED_TOO_LONG {
+                    failure.first_line.clone()
+                } else {
+                    format!("git add failed: {}", failure.first_line)
+                };
+                let mut line = stop_line(&cause, n, &detail, false);
+                if let Some(why) = left_staged {
+                    line = format!(
+                        "{line}. The files are still staged ({why}): run git reset before committing by hand"
+                    );
+                }
                 return stop(cause, line);
             }
             Err(loop_commit::StageError::Problem(problem)) => {
@@ -2145,11 +2154,18 @@ fn handle_outcome(ctx: &Ctx, snap: &Snapshot, raw: &Value) -> bool {
         }
         Err(failure) => {
             keep_output(ctx, &failure.message);
-            if snap.setup.commit {
-                loop_commit::unstage(&snap.project);
-            }
+            let left_staged = if snap.setup.commit {
+                loop_commit::unstage(&snap.project)
+            } else {
+                None
+            };
+            let staged_note = left_staged
+                .map(|why| {
+                    format!("; the files are still staged ({why}): run git reset before committing by hand")
+                })
+                .unwrap_or_default();
             return refused(format!(
-                "the phase could not be marked done ({})",
+                "the phase could not be marked done ({}){staged_note}",
                 one_line(&failure.message)
             ));
         }
@@ -2270,13 +2286,18 @@ fn commit_failed(
     keep_output(ctx, &failure.output);
     let (cause, line) = match loop_commit::undo(prepared, marked) {
         Ok(()) => {
-            loop_commit::unstage(&snap.project);
+            let left_staged = loop_commit::unstage(&snap.project);
             let cause = StopCause::Commit;
             let detail = match failure.stage {
                 loop_commit::Stage::Add => format!("git add failed: {}", failure.first_line),
                 loop_commit::Stage::Commit => failure.first_line.clone(),
             };
-            let line = stop_line(&cause, n, &detail, false);
+            let mut line = stop_line(&cause, n, &detail, false);
+            if let Some(why) = left_staged {
+                line = format!(
+                    "{line}. The files are still staged ({why}): run git reset before committing by hand"
+                );
+            }
             (cause, line)
         }
         Err(why) => {

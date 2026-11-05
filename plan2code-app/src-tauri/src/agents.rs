@@ -631,8 +631,30 @@ pub fn launch_spec(
             spec.args,
             &std::env::var("PATH").unwrap_or_default(),
         );
-        spec.program = program;
-        spec.args = args;
+        if program == "cmd" && args.first().map(String::as_str) == Some("/c") {
+            // A shim wrapped for cmd: quote the line, hand it over in a variable
+            // and keep cmd from trying the project folder before PATH, exactly as
+            // a custom .cmd agent does (a same-named file in a cloned repo must not
+            // run in the agent's place). Accepted trade-off: the variable reaches
+            // everything the agent starts, so a `cmd` it runs as a tool no longer
+            // finds `gradlew` or `setup.bat` in the project without `.\`; custom
+            // .cmd agents already behave this way.
+            let line: Vec<String> = args[1..].iter().map(|arg| quote_for_cmd(arg)).collect();
+            spec.env.push((CMD_LINE_ENV.to_string(), line.join(" ")));
+            spec.env.push((
+                "NoDefaultCurrentDirectoryInExePath".to_string(),
+                "1".to_string(),
+            ));
+            spec.args = vec![
+                "/d".to_string(),
+                "/c".to_string(),
+                format!("%{CMD_LINE_ENV}%"),
+            ];
+            spec.program = program;
+        } else {
+            spec.program = program;
+            spec.args = args;
+        }
     }
     spec
 }
