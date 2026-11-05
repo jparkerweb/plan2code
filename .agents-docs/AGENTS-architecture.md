@@ -461,7 +461,7 @@ Optional local browser UI shipped with **every** skill. Source lives in `src/web
 | `public/screens/cleanup.js` | User Preferences' Cleanup section, on the System tab |
 | `public/screens/core.js` | the core every screen sits inside: connection, the render loop, the page chrome and Send; the only file that imports the screens, and only `app.js` imports it |
 | `public/screens/dashboard.js` | the dashboard: cards, the spec picker, handoff chips, delete, and the first-open wake-up |
-| `public/screens/loop-setup.js` | the Implementation Loop's setup screen on the dashboard (app only): the fields, their defaults and read-only facts, the Start checks, and the request to the app. The page locks while `state.loop.driving` is set (`loopDriving()` in `selectors.js`) until the app posts `loopEnd`; Activities, Notebook, Help and Preferences stay usable |
+| `public/screens/loop-setup.js` | the Implementation Loop's setup screen on the dashboard (app only): the fields, their defaults and read-only facts, the Start checks, and the request to the app. The page locks while `state.loop.driving` is set (`loopDriving()` in `selectors.js`) until the app posts `loopEnd`; Activities, Notebook, Help and Preferences stay usable. `loopEnd.can` accepts `ask` (`LOOP_CAN` in `patches.mjs`); the app adds it first to every stop that offers `resume`, and the stopped screen's **Ask a question** wakes an ordinary agent on the same session |
 | `public/screens/docs.js` | documents: tabs, blocks, print and download, and the brief button |
 | `public/screens/ending.js` | how a session ends: the finished screen, its offers, Stop and the way home |
 | `public/screens/git-host.js` | hosts the git board: tabs, panels and what each click sends |

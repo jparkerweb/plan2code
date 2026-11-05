@@ -222,7 +222,7 @@ evidence, when:
 - the Smart pick skipped a Critical finding.
 
 A crashed or silent agent gets exactly one retry per phase when the retry tick is on, and none when it is off.
-It never retries a real failure. On a stop screen, **Resume the loop** carries on from the stopped
+It never retries a real failure. On a stop screen, **Ask a question** (first in the row, offered whenever Resume is) wakes an ordinary agent on the stopped phase on the same page, so the Ask tab answers; it starts no loop and changes nothing, and **Resume the loop** is still there afterwards. **Resume the loop** carries on from the stopped
 phase and **Fix it by hand** opens an ordinary Implement session on it.
 
 **The report.** One report follows the whole build, across stops and Resume. For every phase it says what

@@ -1554,6 +1554,27 @@ pub fn fix_prompt(spec: &str) -> String {
     format!("/plan2code-3-implement {spec}/overview.md --web")
 }
 
+/// The prompt behind Ask a question: an ordinary agent on the stopped phase
+/// that builds and fixes nothing. It opens the console with `--web`, which
+/// joins the session already on screen, and answers through its Ask tab.
+pub fn ask_prompt(spec: &str) -> String {
+    format!(
+        "The Implementation Loop for {spec} stopped. Change nothing: do not start the loop, \
+         do not edit files and do not run git. Read {spec}/overview.md and the report so far, \
+         then open the web console with --web (it joins the session already on screen) and \
+         answer the person's questions through its Ask tab until they press a button on the \
+         stopped screen."
+    )
+}
+
+/// Start the Ask agent: `start_with` without the forget step, so the agent's
+/// `open` joins the session on screen and the stopped screen stays up. The
+/// prompt is transient, as `start_with`'s is.
+pub fn start_asking(agent: &AgentManager, launch: &Launch, prompt: String) -> Result<(), String> {
+    let (kind, model, effort, mode) = launch.clone();
+    agent.start_transient(kind, model, effort, mode, prompt)
+}
+
 pub fn finalize_prompt(spec: &str) -> String {
     format!("/plan2code-4-finalize {spec}/overview.md --web")
 }
@@ -2752,6 +2773,19 @@ fn post_end(ctx: &Ctx, rec: &RunningRecord, patch: &Value) {
     let _ = loop_tools::console_post(&ctx.console_dir, &sid, &plain);
 }
 
+/// The buttons a stopped screen offers: `can`, with Ask a question first
+/// whenever Resume is offered (the person can ask before choosing), and Back
+/// to the dashboard last.
+fn stop_can(can: &[&str]) -> Vec<String> {
+    let ask = can.contains(&"resume") && !can.contains(&"ask");
+    ask.then_some("ask")
+        .into_iter()
+        .chain(can.iter().copied())
+        .chain(["dashboard"])
+        .map(String::from)
+        .collect()
+}
+
 /// End the loop, the one place every stop goes through: stop the agent, mark
 /// the phase stopped, write the evidence and the end to the page, clear the
 /// record and tell the strip. `can` names the buttons the stop screen offers.
@@ -2831,7 +2865,7 @@ fn stop_loop(ctx: &Ctx, cause: StopCause, line: String, can: &[&str]) {
             "evidence": "evidence",
             "phases": phase_rows(&rec),
             "uncommitted": uncommitted,
-            "can": can.iter().copied().chain(["dashboard"]).collect::<Vec<_>>(),
+            "can": stop_can(can),
         },
     });
     post_end(ctx, &rec, &patch);
@@ -6448,6 +6482,94 @@ second line"
             finalize_prompt("specs/x"),
             "/plan2code-4-finalize specs/x/overview.md --web"
         );
+    }
+
+    #[test]
+    fn the_ask_prompt_names_the_spec_and_changes_nothing() {
+        let prompt = ask_prompt("specs/x");
+        assert!(prompt.contains("specs/x"), "{prompt}");
+        assert!(prompt.contains("--web"), "{prompt}");
+        assert!(!prompt.contains("--loop"), "{prompt}");
+        assert!(!prompt.contains("--phase"), "{prompt}");
+        assert!(prompt.to_lowercase().contains("change nothing"), "{prompt}");
+        assert!(!prompt.contains('\u{2014}'), "{prompt}");
+    }
+
+    #[test]
+    fn every_resumable_stop_offers_ask_first_and_a_finalize_only_stop_does_not() {
+        assert_eq!(
+            stop_can(&["resume", "fix"]),
+            ["ask", "resume", "fix", "dashboard"]
+        );
+        assert_eq!(stop_can(&["resume"]), ["ask", "resume", "dashboard"]);
+        assert_eq!(stop_can(&["finalize"]), ["finalize", "dashboard"]);
+        // Never twice when a caller already named it.
+        assert_eq!(stop_can(&["ask", "resume"]), ["ask", "resume", "dashboard"]);
+    }
+
+    #[test]
+    fn asking_leaves_the_session_on_screen_and_fix_it_by_hand_still_forgets_it() {
+        let (agent, seen) = fake_agent_manager(Path::new("."));
+        let forgets = Arc::new(Mutex::new(0));
+        let counter = Arc::clone(&forgets);
+        agent.set_forget_session(Arc::new(move || *lock(&counter) += 1));
+        let launch = fake_agent_launch();
+
+        start_asking(&agent, &launch, ask_prompt("specs/x")).unwrap();
+        wait_until("the Ask agent ready", || {
+            lock(&seen).matches("FAKE-AGENT ready").count() >= 1
+        });
+        assert_eq!(*lock(&forgets), 0, "Ask must join the session on screen");
+
+        // The Ask agent is still running when the next button is pressed, as in
+        // the app: Fix it by hand replaces it and forgets the session.
+        start_with(&agent, &launch, fix_prompt("specs/x")).unwrap();
+        wait_until("the fix agent ready", || {
+            lock(&seen).matches("FAKE-AGENT ready").count() >= 2
+        });
+        assert_eq!(*lock(&forgets), 1, "Fix it by hand must forget the session");
+        let prompts = launched_prompts(&seen);
+        assert_eq!(
+            prompts,
+            vec![ask_prompt("specs/x"), fix_prompt("specs/x")],
+            "the fix prompt replaced the Ask agent's"
+        );
+        agent.stop();
+    }
+
+    #[test]
+    fn resuming_the_loop_after_asking_replaces_the_ask_agent_and_forgets_the_session() {
+        let (agent, seen) = fake_agent_manager(Path::new("."));
+        let forgets = Arc::new(Mutex::new(0));
+        let counter = Arc::clone(&forgets);
+        agent.set_forget_session(Arc::new(move || *lock(&counter) += 1));
+        let launch = fake_agent_launch();
+
+        start_asking(&agent, &launch, ask_prompt("specs/x")).unwrap();
+        wait_until("the Ask agent ready", || {
+            lock(&seen).matches("FAKE-AGENT ready").count() >= 1
+        });
+        assert_eq!(*lock(&forgets), 0, "Ask must join the session on screen");
+
+        let row = strength_rows()["balanced"].clone();
+        start_phase_with(
+            &agent,
+            &launch,
+            "resume prompt".into(),
+            &row,
+            Strength::Balanced,
+        )
+        .unwrap();
+        wait_until("the resumed agent ready", || {
+            lock(&seen).matches("FAKE-AGENT ready").count() >= 2
+        });
+        assert_eq!(*lock(&forgets), 1, "Resume must forget the session");
+        assert_eq!(
+            launched_prompts(&seen),
+            vec![ask_prompt("specs/x"), "resume prompt".to_string()],
+            "the resumed phase replaced the Ask agent's"
+        );
+        agent.stop();
     }
 
     /// The `ARGS` lines the fake agent has printed, one per generation, in the

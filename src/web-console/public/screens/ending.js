@@ -162,6 +162,7 @@ function closeGuideHeld() {
 let loopPressed = null;
 
 const LOOP_BUTTONS = [
+  ["ask", "loop-ask", "Ask a question", ""],
   ["resume", "loop-resume", "Resume the loop", "primary"],
   ["fix", "loop-fix", "Fix it by hand", ""],
   ["finalize", "loop-finalize", "Finalize", "primary"],

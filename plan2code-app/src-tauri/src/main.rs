@@ -1229,6 +1229,16 @@ fn loop_fix(state: State<'_, AppState>) -> Result<(), String> {
     loop_driver::start_with(&agent, &last.launch, loop_driver::fix_prompt(&last.spec))
 }
 
+// Ask a question: an ordinary agent on the stopped phase that changes nothing.
+// It starts without the forget step, so its `open` joins the stopped screen's
+// session and the Ask tab comes online beside the buttons.
+#[tauri::command]
+fn loop_ask(state: State<'_, AppState>) -> Result<(), String> {
+    let last = last_loop(&state)?;
+    let agent = current_agent(&state).ok_or("No agent is available")?;
+    loop_driver::start_asking(&agent, &last.launch, loop_driver::ask_prompt(&last.spec))
+}
+
 #[tauri::command]
 fn loop_finalize(state: State<'_, AppState>) -> Result<(), String> {
     let last = last_loop(&state)?;
@@ -1254,6 +1264,11 @@ fn loop_dashboard(state: State<'_, AppState>) -> Result<serde_json::Value, Strin
         .ok()
         .and_then(|p| p.as_ref().map(|p| p.dir.clone()))
         .ok_or("no project yet")?;
+    // An Ask or Fix agent started from the stopped screen would go on answering
+    // a session that is about to end: stop it first.
+    if let Some(agent) = current_agent(&state) {
+        agent.stop();
+    }
     let mut guard = state.console.lock().map_err(|e| e.to_string())?;
     if let Some(mut sup) = guard.take() {
         let _ = sup.stop();
@@ -1319,6 +1334,7 @@ fn main() {
             loop_state,
             loop_resume,
             loop_fix,
+            loop_ask,
             loop_finalize,
             loop_dashboard,
             set_attention,

@@ -63,7 +63,7 @@ export function wireLoopMessages(store, redraw) {
     store.loopNotifyTest = { waiting: false, ok: data.ok === true, sent: data.sent === true, error: data.ok === true ? null : String(data.error || "The app could not send the test.") };
     redraw();
   });
-  for (const kind of ["loop-resume-result", "loop-fix-result", "loop-finalize-result", "loop-dashboard-result"]) {
+  for (const kind of ["loop-resume-result", "loop-ask-result", "loop-fix-result", "loop-finalize-result", "loop-dashboard-result"]) {
     onAppMessage(kind, (data) => {
       store.loopAction = { kind, ok: data.ok === true, error: data.ok === true ? null : String(data.error || "The app could not do that.") };
       redraw();

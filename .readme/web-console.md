@@ -1583,6 +1583,12 @@ stopped, its actions sit beside a **Back to the dashboard** button that opens
 a fresh dashboard in the frame, no agent needed, and its status line marks it
 as your move rather than leaving a stale "starting" line behind.
 
+A stopped loop also offers **Ask a question**, first in the row. The app ended
+its agent when the loop stopped, so the Ask tab says no agent is available;
+the button wakes an ordinary agent on the same page, without starting the loop
+or changing anything, and **Resume the loop** is still there afterwards. **Back
+to the dashboard** ends that agent too.
+
 You don't have to finish first. On every skill but the dashboard itself, a
 small **triangle** pointing left, in your highlight color, sits beside *Stop
 session*. Press it, confirm, and the agent saves your place exactly as a stop

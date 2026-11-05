@@ -795,10 +795,10 @@ window.addEventListener('message', (event) => {
     invoke('loop_facts')
       .then((facts) => source.postMessage({ plan2code: 'loop-facts', facts }, '*'))
       .catch(() => {});
-  } else if (kind === 'loop-resume' || kind === 'loop-fix' || kind === 'loop-finalize') {
+  } else if (kind === 'loop-resume' || kind === 'loop-ask' || kind === 'loop-fix' || kind === 'loop-finalize') {
     // Fixed requests, no free text: the page answers with ok or the error.
     const source = event.source;
-    const command = { 'loop-resume': 'loop_resume', 'loop-fix': 'loop_fix', 'loop-finalize': 'loop_finalize' }[kind];
+    const command = { 'loop-resume': 'loop_resume', 'loop-ask': 'loop_ask', 'loop-fix': 'loop_fix', 'loop-finalize': 'loop_finalize' }[kind];
     invoke(command)
       .then(() => source.postMessage({ plan2code: `${kind}-result`, ok: true, error: null }, '*'))
       .catch((error) => source.postMessage({ plan2code: `${kind}-result`, ok: false, error: String(error) }, '*'));

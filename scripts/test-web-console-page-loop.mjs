@@ -294,6 +294,65 @@ async function openLoopPage(t) {
   });
 }
 
+const STOPPED = {
+  kind: "stopped",
+  line: "Phase 2 stopped",
+  phases: [{ n: 2, name: "Docs", commit: null, unfixed: 0, retries: 0 }],
+  uncommitted: [],
+  can: ["ask", "resume", "fix", "dashboard"],
+};
+const ASK_HINT = "Press Ask a question to wake an agent, then ask in the Ask tab.";
+const SETTLED = { id: "q1", kind: "text", title: "What to call it", body: "A short name.", status: "answered", answer: { text: "Flock" } };
+
+// The notes panel (#aside) of a stopped loop's screen: the agent is gone, so a
+// note box would reach nobody. It says how to ask instead.
+async function asideOf(s) {
+  await s.page.locator("#aside").waitFor();
+  return { text: await textOf(s.page.locator("#aside")), boxes: await s.page.locator("#aside textarea, #aside .field").count() };
+}
+
+test("a stopped loop's notes panel says to press Ask a question, then ask in the Ask tab, and draws no note box", async (t) => {
+  const s = await openLoopPage(t);
+  s.post({ items: [SETTLED], loopEnd: STOPPED, agent: { status: "waiting" } });
+  await s.page.locator(".loop-end-actions").waitFor();
+  const aside = await asideOf(s);
+  assert.ok(aside.text.includes(ASK_HINT), aside.text);
+  assert.doesNotMatch(aside.text, /Nothing was said about this one/);
+  assert.equal(aside.boxes, 0, "no note box on the stopped screen");
+});
+
+test("a stopped loop with a question left open still says how to ask and draws no note box", async (t) => {
+  const s = await openLoopPage(t);
+  s.post({ items: [{ id: "q2", kind: "text", title: "Which name", body: "A short name." }], loopEnd: STOPPED, agent: { status: "waiting" } });
+  await s.page.locator(".loop-end-actions").waitFor();
+  const aside = await asideOf(s);
+  assert.ok(aside.text.includes(ASK_HINT), aside.text);
+  assert.equal(aside.boxes, 0, "no agent to read a note");
+});
+
+test("a stopped loop that asked nothing still says how to ask", async (t) => {
+  const s = await openLoopPage(t);
+  s.post({ loopEnd: STOPPED, agent: { status: "waiting" } });
+  await s.page.locator(".loop-end-actions").waitFor();
+  const aside = await asideOf(s);
+  assert.ok(aside.text.includes(ASK_HINT), aside.text);
+  assert.equal(aside.boxes, 0);
+});
+
+test("a finished loop and a stop with no Ask keep the notes panel's old words", async (t) => {
+  const s = await openLoopPage(t);
+  s.post({ items: [SETTLED], loopEnd: { ...STOPPED, kind: "finished", line: "All phases done", can: ["finalize", "dashboard"] }, agent: { status: "waiting" } });
+  await s.page.locator(".loop-end-actions").waitFor();
+  let aside = await asideOf(s);
+  assert.ok(!aside.text.includes(ASK_HINT), "a finished loop does not offer Ask");
+  assert.match(aside.text, /Nothing was said about this one/);
+  s.post({ loopEnd: { ...STOPPED, can: ["resume", "fix", "dashboard"] } });
+  await s.page.getByRole("button", { name: "Resume the loop" }).waitFor();
+  aside = await asideOf(s);
+  assert.ok(!aside.text.includes(ASK_HINT), "no Ask button, so no hint to press it");
+  assert.match(aside.text, /Nothing was said about this one/);
+});
+
 test("a loop at work tells the person they have nothing to do, and Send comes back when a question waits", async (t) => {
   const s = await openLoopPage(t);
   const foot = s.page.locator(".footer");

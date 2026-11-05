@@ -617,6 +617,14 @@ async function decideChat(re, decision, text) {
   redraw();
 }
 
+// A stopped loop's screen, with its Ask a question button on offer: its agent
+// is gone, so a note here would reach nobody, and the panel says how to ask.
+const askOffered = () => {
+  const end = page.S && page.S.loopEnd;
+  return Boolean(end && end.kind !== "finished" && Array.isArray(end.can) && end.can.includes("ask") && !finish());
+};
+const ASK_HINT = "Press Ask a question to wake an agent, then ask in the Ask tab.";
+
 export function renderAside() {
   const aside = $("aside");
   // Redrawing empties the panel, which drops its scroll to the top. An image
@@ -630,7 +638,7 @@ export function renderAside() {
   const item = page.view === "end" ? null : byId(page.selected);
   if (!item) {
     // The menu has no questions, so no notes either: the pane stays empty.
-    if (!isDashboard()) aside.appendChild(el("p", "aside-empty", "Pick a question to see its notes."));
+    if (!isDashboard()) aside.appendChild(el("p", "aside-empty", askOffered() ? ASK_HINT : "Pick a question to see its notes."));
     return;
   }
   // Off the question's own page (a doc tab, Ask) "this" points at nothing on
@@ -644,9 +652,11 @@ export function renderAside() {
       el(
         "p",
         "aside-empty",
-        isOpen(item) && !finish()
-          ? "No back and forth yet. Anything you type here goes with your next send."
-          : "Nothing was said about this one."
+        askOffered()
+          ? ASK_HINT
+          : isOpen(item) && !finish()
+            ? "No back and forth yet. Anything you type here goes with your next send."
+            : "Nothing was said about this one."
       )
     );
   }
@@ -689,7 +699,8 @@ export function renderAside() {
 
   // A finished session has nobody left for a note to reach, so the box would
   // be a place to type words that go nowhere.
-  if (!isOpen(item) || finish()) {
+  // A stopped loop has no agent either, even with a question left open.
+  if (!isOpen(item) || finish() || askOffered()) {
     aside.scrollTop = place;
     return;
   }
