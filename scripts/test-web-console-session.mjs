@@ -343,10 +343,15 @@ test("a stale dashboard launch says the pick is saved and how to wake the agent"
 // never sent.
 test("the submitted event names the items that went", async () => {
   const port = Number(new URL(baseUrl).port);
+  // Resolved once the stream is connected: a submit posted before then is
+  // never delivered to it, which timed out on a slow runner.
+  let connected;
+  const open = new Promise((resolve) => (connected = resolve));
   const frame = new Promise((resolve, reject) => {
     const req = http.request(
       { host: "127.0.0.1", port, path: "/events", method: "GET", headers: { cookie: cookieFor(baseUrl, token) } },
       (res) => {
+        connected();
         let buf = "";
         res.setEncoding("utf8");
         res.on("data", (chunk) => {
@@ -372,6 +377,7 @@ test("the submitted event names the items that went", async () => {
     req.end();
   });
 
+  await open;
   await post("/submit", {
     actions: [{ i: "__brief", type: "brief", range: "today" }],
     reply: "Write a brief for today.",
