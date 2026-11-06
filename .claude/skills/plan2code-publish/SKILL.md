@@ -5,7 +5,7 @@ description: "Publish a GitHub Release for jparkerweb/plan2code whenever CHANGEL
 
 # Plan2Code Release Publisher
 
-Publish a GitHub Release for `jparkerweb/plan2code` whenever `CHANGELOG.md`'s top version is ahead of the latest published release on GitHub. This turns the merged CHANGELOG entry on `main` into an actual GitHub Release (which also creates the `vX.Y.Z` git tag).
+Publish a GitHub Release for `jparkerweb/plan2code` whenever `CHANGELOG.md`'s top version is ahead of the latest published release on GitHub. This turns the merged CHANGELOG entry on `main` into an actual GitHub Release (the `release-app` workflow builds the app first and creates the release, with its `vX.Y.Z` git tag, last).
 
 **Repo-local by design.** This skill lives in the repo's `.claude/skills/` and is intentionally NOT wired into `install.js` — it is a maintainer dev tool, not part of the shipped product, so it is never installed to `~/.claude/skills/`. Do **not** copy it there: the uninstaller (`uninstallFiles()` in `install.js`) and every re-install's pre-copy cleanup in `install()` both delete every entry matching `/^plan2code-/` under `~/.claude/skills/`, so a copy placed there would be silently removed.
 
@@ -103,57 +103,59 @@ Present all three to the user and wait for an explicit answer before any write. 
 
 If the user supplies a suffix, set `title = "v$CHANGELOG_VERSION " + <suffix>` (single space join) and proceed to publish. The tag and notes are unaffected by the suffix.
 
-### Step 9 — Publish (on approval)
+### Step 9 - Publish (on approval)
 
-On approval, write `$notes` to a temp file — never pass multiline text inline via `--notes`, that regresses into a quoting bug — then create the release targeting `main`. Two requirements for the temp file: `$notes` must already hold **real newlines** (per Step 8) because `printf '%s'` / `WriteAllText` write it byte-for-byte — a literal `\n` in the string lands literally in the release body; and it MUST be **UTF-8** because the notes contain emoji (`🎉`, `🐛`, `✨`, `🔧`).
+The release is created by the `release-app` workflow, **last**, not by this skill. The workflow builds the app on four systems, attaches every file to a draft release, and only then publishes it, so the `vX.Y.Z` tag (which the app's update check watches) never exists before its binaries do. Creating the release here with `gh release create` would put the tag up first and leave users offered an upgrade with nothing to download. Do not do that.
+
+On approval, write `$notes` to a temp file, never inline (multiline text on the command line is a quoting bug). `$notes` must already hold **real newlines** (per Step 8) because `printf '%s'` / `WriteAllText` write it byte-for-byte, and the file MUST be **UTF-8** because the notes contain emoji. Then start the workflow on `main`, passing the file as the `notes` input (`-F key=@file` reads the file's contents):
 
 **bash (preferred in this environment):**
 
 ```bash
 NOTES_FILE=$(mktemp)
 printf '%s' "$notes" > "$NOTES_FILE"
-gh release create "$tag" --repo jparkerweb/plan2code --title "$title" --notes-file "$NOTES_FILE" --target main
+gh workflow run release-app.yml --repo jparkerweb/plan2code --ref main -f version="$CHANGELOG_VERSION" -f title="$title" -F notes=@"$NOTES_FILE"
 rm -f "$NOTES_FILE"
 ```
 
-**PowerShell:** do NOT use `Set-Content` — under Windows PowerShell 5.1 it writes ANSI/UTF-16 by default and mangles the emoji into `??`. Write UTF-8 **without BOM** (a BOM would leak into the release body):
+**PowerShell:** do NOT use `Set-Content` (under Windows PowerShell 5.1 it writes ANSI/UTF-16 and mangles the emoji into `??`). Write UTF-8 **without BOM**:
 
 ```powershell
 $NotesFile = [System.IO.Path]::GetTempFileName()
 [System.IO.File]::WriteAllText($NotesFile, $notes, [System.Text.UTF8Encoding]::new($false))
-gh release create "$tag" --repo jparkerweb/plan2code --title "$title" --notes-file "$NotesFile" --target main
+gh workflow run release-app.yml --repo jparkerweb/plan2code --ref main -f version="$CHANGELOG_VERSION" -f title="$title" -F notes=@"$NotesFile"
 Remove-Item -Path $NotesFile
 ```
 
-Always delete the temp file afterward, regardless of whether `gh release create` succeeded or failed.
+Always delete the temp file afterward, whether or not the dispatch succeeded. If `gh workflow run` exits non-zero, show its error verbatim.
 
-**Failure handling — already-exists classification:** if `gh release create` exits non-zero, inspect the error text.
-
-- If and only if it contains the substring `already exists` (real output: `HTTP 422: Validation Failed` / `Release.tag_name already exists`), report this to the user as already published, not as a raw CLI error:
-
-  > This version ($CHANGELOG_VERSION) was already published as a release — nothing more to do.
-
-- Every other failure (auth, network, permissions, etc.) must be surfaced to the user verbatim. Never silently reclassify a genuine failure as "already published."
-
-### Step 10 — Verify
-
-Confirm the release now exists and report its URL:
+Then find the run it started and watch it to the end (the builds take a while; tell the user so):
 
 ```bash
-gh release view "$tag" --repo jparkerweb/plan2code
+gh run list --repo jparkerweb/plan2code --workflow release-app.yml --event workflow_dispatch --limit 1 --json databaseId,status,createdAt
+gh run watch <databaseId> --repo jparkerweb/plan2code --exit-status
 ```
 
-Report the release URL to the user.
+If the run list shows a run that started before the dispatch, wait a few seconds and list again. If the run fails, show which job failed and stop: no release or tag exists yet (a failed run leaves at most an unpublished draft, which a re-run reuses). Never publish a release by hand to get around a failed build.
+
+### Step 10 - Verify
+
+Confirm the release now exists, is published (not a draft) and carries the files, and report its URL:
+
+```bash
+gh release view "$tag" --repo jparkerweb/plan2code --json url,isDraft,assets -q '.url, .isDraft, (.assets | length)'
+```
+
+Expect `false` for the draft flag and five assets (four binaries and the SHA256SUMS file). Report the release URL to the user.
 
 ## Rules
 
-- **Repo-local only** — this skill is not part of the installed product; never add it to `install.js`, and never copy it to `~/.claude/skills/` (the uninstaller deletes `plan2code-*` entries there).
-- **Read-only on version files** — never modify `CHANGELOG.md`, `version.json`, or `package.json`; this skill only reads and compares them.
-- **Version-sync gate is hard** (Step 4) — if the three version sources disagree, stop and report; do not publish a release from an inconsistent repo.
-- **Never run a local `git tag` or `git push`** — tag creation is delegated entirely to `gh release create --target main`.
-- **Always use `--notes-file`**, never inline multiline `--notes`, and always write the notes file as UTF-8 (no BOM) so emoji survive.
+- **Repo-local only**: this skill is not part of the installed product; never add it to `install.js`, and never copy it to `~/.claude/skills/` (the uninstaller deletes `plan2code-*` entries there).
+- **Read-only on version files**: never modify `CHANGELOG.md`, `version.json`, or `package.json`; this skill only reads and compares them.
+- **Version-sync gate is hard** (Step 4): if the three version sources disagree, stop and report; do not publish a release from an inconsistent repo.
+- **Never run a local `git tag` or `git push`, and never run `gh release create` yourself**: the `release-app` workflow creates the release and its tag after the builds, so the tag never gets ahead of its binaries.
+- **Always pass the notes through a UTF-8 (no BOM) temp file**, never inline, so emoji survive.
 - **Always clean up the temp notes file**, even on a mid-run error.
-- **Always get explicit approval before any write** (Step 8) — no release is created without a yes (or a yes-with-suffix).
-- **Derive the current version from the highest published semver tag** (Step 5), never from GitHub's manually-pinnable "Latest" flag. On an empty or failed release list, treat it as "no prior release" (baseline `0.0.0`) — no error-text matching needed.
-- **On a `gh release create` failure** (Step 9), only reclassify as already-published when the error contains `already exists` — every other failure must be shown verbatim, never swallowed.
-- **Idempotent and safe to re-run** at any time — re-running after a successful publish hits the Step 7 no-op; re-running after a race-lost publish hits the Step 9 already-exists handling.
+- **Always get explicit approval before any write** (Step 8): no workflow run is started without a yes (or a yes-with-suffix).
+- **Derive the current version from the highest published semver tag** (Step 5), never from GitHub's manually-pinnable "Latest" flag. On an empty or failed release list, treat it as "no prior release" (baseline `0.0.0`); no error-text matching needed.
+- **Idempotent and safe to re-run** at any time: re-running after a successful publish hits the Step 7 no-op; re-running after a failed build starts a fresh run, which reuses any leftover draft.

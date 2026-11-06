@@ -17,8 +17,9 @@ concurrency:
   group: app-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
-# Speed: a pull request runs on Ubuntu only (the cheapest runner) unless it carries the
-# `full-matrix` label; pushes to main and manual runs use all three systems. A change that
+# Speed: pushes and pull requests run on Ubuntu only (the cheapest runner) unless a pull request
+# carries the `full-matrix` label; manual runs use all three systems. The release build
+# (release-app.yml) compiles on Windows and macOS too. A change that
 # touches only the website, the README, the changelog or similar skips the heavy `app` job. The
 # fast `prose` job runs on every push and pull request. The root `npm test` suite does not run on
 # pushes or pull requests at all: run it locally, or start `node-tests` by hand.
@@ -76,7 +77,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: ${{ fromJSON(github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'full-matrix') && '["ubuntu-latest"]' || '["windows-latest","macos-latest","ubuntu-latest"]') }}
+        os: ${{ fromJSON((github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'full-matrix')) && '["windows-latest","macos-latest","ubuntu-latest"]' || '["ubuntu-latest"]') }}
     defaults:
       run:
         working-directory: plan2code-app

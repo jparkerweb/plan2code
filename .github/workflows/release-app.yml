@@ -1,7 +1,12 @@
 name: release-app
 
-# Builds the desktop app on four systems when a GitHub release is published, or a v* tag is
-# pushed ahead of one, and attaches one file per system, named
+# The normal way to release is to start this workflow by hand (`plan2code-publish` does it) with
+# the version and the release notes. It builds first and creates the release LAST, so the vX.Y.Z
+# tag, which is what the app's update check looks for, only appears once every file is attached
+# and nobody is offered an upgrade that has no binary yet. A release published by hand, or a v*
+# tag pushed ahead of one, still starts it as a fallback; the tag then exists before the files.
+#
+# Builds the desktop app on four systems and attaches one file per system, named
 # plan2code-app-<version>-<os>-<arch>[.exe], plus one checksum file
 # (plan2code-app-<version>-SHA256SUMS.txt). install.js fetches the matching file and checks it
 # against that list. Linux ships the plain binary, not an AppImage: docs/desktop-app.md documents
@@ -9,6 +14,20 @@ name: release-app
 # how to allow it.
 
 on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release, without the v (it must match CHANGELOG.md, version.json and package.json)'
+        required: true
+        type: string
+      title:
+        description: 'Release title (defaults to the tag)'
+        required: false
+        type: string
+      notes:
+        description: 'Release notes (Markdown)'
+        required: false
+        type: string
   release:
     types: [published]
   push:
@@ -22,8 +41,12 @@ permissions:
 # A release published after its tag push starts a second run for the same tag: queue it behind
 # the first so two builds never upload over each other.
 concurrency:
-  group: release-app-${{ github.event.release.tag_name || github.ref_name }}
+  group: release-app-${{ github.event.release.tag_name || (inputs.version && format('v{0}', inputs.version)) || github.ref_name }}
   cancel-in-progress: false
+
+env:
+  # The release tag: the published release's, the version a manual run was given, or the pushed tag.
+  TAG: ${{ github.event.release.tag_name || (inputs.version && format('v{0}', inputs.version)) || github.ref_name }}
 
 jobs:
   build:
@@ -50,8 +73,6 @@ jobs:
           cache: npm
           cache-dependency-path: plan2code-app/package-lock.json
       - name: Check the versions agree with the release tag
-        env:
-          TAG: ${{ github.event.release.tag_name || github.ref_name }}
         run: node scripts/check-versions.mjs --tag "$TAG"
       - name: Install the pinned Rust toolchain
         working-directory: plan2code-app
@@ -97,7 +118,6 @@ jobs:
       contents: write
     env:
       GH_TOKEN: ${{ github.token }}
-      TAG: ${{ github.event.release.tag_name || github.ref_name }}
     steps:
       - uses: actions/checkout@v4.2.2
       - uses: actions/download-artifact@v4.3.0
@@ -123,9 +143,30 @@ jobs:
           cd dist
           sha256sum plan2code-app-* > "plan2code-app-${VERSION}-SHA256SUMS.txt"
           cat "plan2code-app-${VERSION}-SHA256SUMS.txt"
-      - name: Make sure the release exists
-        # A tag push alone names no release; create one (same tag, generated notes) so the
-        # upload below always has somewhere to go, whichever trigger ran it.
-        run: gh release view "$TAG" || gh release create "$TAG" --title "$TAG" --generate-notes
-      - name: Attach to the release
-        run: gh release upload "$TAG" dist/* --clobber
+      - name: Attach to the release, creating it last
+        env:
+          RELEASE_TITLE: ${{ inputs.title }}
+          RELEASE_NOTES: ${{ inputs.notes }}
+        # No release yet (a manual run, or a bare tag push): create it as a DRAFT with every file
+        # attached, then publish it, so the tag appears only when the files are already there.
+        # A release that already exists (published by hand) just gets the files. A draft left
+        # by an earlier failed run is reused. Releases made with the workflow's own token do not
+        # start another run.
+        run: |
+          state="$(gh release list --limit 100 --json tagName,isDraft -q ".[] | select(.tagName==\"$TAG\") | .isDraft")"
+          if [ -z "$state" ]; then
+            notes_file="$(mktemp)"
+            if [ -n "$RELEASE_NOTES" ]; then
+              printf '%s' "$RELEASE_NOTES" > "$notes_file"
+              notes_args=(--notes-file "$notes_file")
+            else
+              notes_args=(--generate-notes)
+            fi
+            gh release create "$TAG" dist/* --draft --target "$GITHUB_SHA" --title "${RELEASE_TITLE:-$TAG}" "${notes_args[@]}"
+            state=true
+          else
+            gh release upload "$TAG" dist/* --clobber
+          fi
+          if [ "$state" = "true" ]; then
+            gh release edit "$TAG" --draft=false
+          fi
