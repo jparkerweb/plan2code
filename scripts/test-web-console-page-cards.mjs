@@ -49,6 +49,9 @@ test("the answer box renders Markdown live, like the Notebook", async (t) => {
   const content = card.locator(".md-host .cm-content");
   await content.waitFor({ timeout: 15000 });
   assert.equal(await card.locator("textarea").count(), 0, "the answer box is the Markdown editor, not a textarea");
+  // A redraw that lands while the box is typed in sends the caret back to the start (seen on
+  // slow runners as "plain**bold**"): let the page go quiet before typing.
+  await settled(s.page, "#main");
   await content.click();
   await content.pressSequentially("**bold**\nplain");
   await card.locator(".cm-strong", { hasText: "bold" }).waitFor();
