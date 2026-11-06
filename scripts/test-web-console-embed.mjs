@@ -86,6 +86,15 @@ test("the session cookie is Strict standalone and None; Secure under embed", asy
   assert.match(embedded, /SameSite=None; Secure/);
 });
 
+// WebKit (the app on Linux and macOS) drops a Secure cookie sent over plain
+// http, so the page in the app's frame got a 403 after the sign-in.
+test("the session cookie is Lax and never Secure under the tauri://localhost embed", async () => {
+  const embedded = await cookieWith("tauri://localhost");
+  assert.match(embedded, /SameSite=Lax/);
+  assert.doesNotMatch(embedded, /Secure/);
+  assert.match(embedded, /HttpOnly/);
+});
+
 test("anything but exactly one allowed origin keeps frame-ancestors 'none'", async () => {
   const rejected = [
     "https://example.com",

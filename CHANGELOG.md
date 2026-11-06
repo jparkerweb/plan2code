@@ -2,6 +2,12 @@
 
 All notable changes to Plan2Code will be documented in this file.
 
+## v3.0.1
+
+### 🐛 Fixed
+
+- **desktop app**: on Linux (and macOS) the dashboard now shows in the app's window instead of "The console is running but its page did not show in this window." The console's sign-in cookie was marked `Secure`, which WebKit drops on a plain `http://127.0.0.1` page, so every request after sign-in was refused. Inside the app on those systems the cookie is now `SameSite=Lax`; Windows and the standalone browser are unchanged.
+
 ## v3.0.0
 
 ### ✨ Added

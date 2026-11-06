@@ -189,17 +189,31 @@ function signIn(req, res, ctx, url) {
   const given = url.pathname.slice(3).replace(/\/$/, "");
   if (!ctx.token || !timingSafeEq(given, ctx.token)) return send(res, 403, "Not found", "text/plain");
   ctx.touch();
-  // Inside the app's frame the page is cross-site, and SameSite=Strict would
-  // never be sent back, so embed mode loosens the cookie to None; Secure, which
-  // loopback counts as a trustworthy origin for. Anywhere else it stays Strict.
   res.writeHead(
     302,
     baseHeaders({
       location: "/",
-      "set-cookie": `${cookieName(ctx)}=${ctx.token}; HttpOnly; ${embedAncestor() === "'none'" ? "SameSite=Strict" : "SameSite=None; Secure"}; Path=/`,
+      "set-cookie": `${cookieName(ctx)}=${ctx.token}; HttpOnly; ${cookieSameSite(embedAncestor())}; Path=/`,
     })
   );
   return res.end();
+}
+
+// The cookie's SameSite (and Secure) for the frame the page is drawn in.
+// Standalone it stays Strict. Inside the app's frame the page is cross-site,
+// where Strict would never be sent back:
+// - WebView2 (Windows, http(s)://tauri.localhost) sends only a None cookie
+//   into a cross-site frame, and None needs Secure, which Chromium accepts
+//   over http because it counts loopback as a trustworthy origin.
+// - WebKit (Linux and macOS, tauri://localhost) drops a Secure cookie that
+//   arrives over plain http, so None; Secure never comes back and every
+//   request after the sign-in is a 403: the app shows "its page did not show
+//   in this window". Lax, without Secure, is kept and sent there (measured in
+//   WebKitGTK 2.52 under both its cookie policies).
+function cookieSameSite(ancestor) {
+  if (ancestor === "'none'") return "SameSite=Strict";
+  if (ancestor === "tauri://localhost") return "SameSite=Lax";
+  return "SameSite=None; Secure";
 }
 
 // The setup session's hand-over: a launcher process opened this session's
