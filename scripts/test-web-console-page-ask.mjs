@@ -197,6 +197,24 @@ test("a picture thumbnail opens the picview from the note tray and a sent Ask me
   const aside = s.page.locator("#aside");
   await aside.locator('input[type="file"]').setInputFiles({ name: "shot.png", mimeType: "image/png", buffer: PNG });
   await aside.locator(".attach-thumb.is-ready").waitFor();
+  // The tray can redraw a moment after an upload lands (the state it rides on arrives by event),
+  // and a redraw after Esc would take the restored focus with the old button: let it go quiet first.
+  await aside.evaluate(
+    (n) =>
+      new Promise((resolve) => {
+        let timer;
+        const done = () => {
+          observer.disconnect();
+          resolve();
+        };
+        const observer = new MutationObserver(() => {
+          clearTimeout(timer);
+          timer = setTimeout(done, 500);
+        });
+        observer.observe(n, { subtree: true, childList: true, attributes: true });
+        timer = setTimeout(done, 500);
+      })
+  );
 
   await aside.locator(".attach-open").click();
   await s.page.locator("#picview[open]").waitFor();
