@@ -540,6 +540,28 @@ export async function readSpecFile(root, specDir, kind) {
   }
 }
 
+// The project's agent guide as the Dashboard's AGENTS.md tab shows it: only
+// AGENTS.md itself or one markdown file directly under .agents-docs/, never any
+// other path. Kept inside the root by realpath, like readSpecFile().
+const AGENTS_DOC_RE = /^(?:AGENTS\.md|\.agents-docs\/[A-Za-z0-9._-]+\.md)$/;
+
+/**
+ * `{ file, text }` for an allowed agent-guide file (`rel` as written, with `/`
+ * separators), or null when it is not allowed, missing or outside the root.
+ */
+export async function readAgentsDoc(root, rel) {
+  if (!root || typeof rel !== "string" || !AGENTS_DOC_RE.test(rel)) return null;
+  try {
+    const file = path.resolve(root, ...rel.split("/"));
+    const [realFile, realRoot] = await Promise.all([fs.promises.realpath(file), fs.promises.realpath(root)]);
+    const inside = path.relative(realRoot, realFile);
+    if (!inside || inside === ".." || inside.startsWith(".." + path.sep) || path.isAbsolute(inside)) return null;
+    return { file: rel, text: await fs.promises.readFile(realFile, "utf8") };
+  } catch {
+    return null;
+  }
+}
+
 // The line every CLI command hands the agent to end its terminal messages with.
 // Under the desktop app the page is already in the window beside the terminal,
 // so the address would only be noise there: the line points at the window.

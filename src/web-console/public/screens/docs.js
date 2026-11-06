@@ -1,6 +1,6 @@
 // Plan2Code Web Console - documents: tabs, blocks, print and download, and the brief button; defines only.
 
-import { docs, agentWorking, workingMs, patience, WORKING_GRACE_MS, finish, SPEC_FILES } from "../selectors.js";
+import { docs, agentWorking, workingMs, patience, WORKING_GRACE_MS, finish, SPEC_FILES, loadAgentsDoc } from "../selectors.js";
 import { el, md } from "../render.js";
 import { downloadDocHtml, docSavedNote, downloadDoc, blockBody } from "../doc-files.js";
 import { hooks, page, redraw } from "../state.js";
@@ -236,6 +236,64 @@ export function renderOverview(main, kind = "overview") {
   main.appendChild(el("p", "help", `${page.overview.key}/${found ? found.file : ""} · read-only, straight from disk`));
   const box = el("div", "block settled");
   box.appendChild(md(found ? found.text : "", "md"));
+  main.appendChild(box);
+}
+
+// The files the AGENTS.md tab may show: the same two shapes the server serves.
+const AGENTS_FILE = /^(?:AGENTS\.md|\.agents-docs\/[A-Za-z0-9._-]+\.md)$/;
+
+// A link in an agent-guide file, resolved against the file it sits in: the
+// guide's own name when it points at another agent-guide file, else null (an
+// outside link keeps the usual rules).
+export function agentsLinkTarget(from, href) {
+  if (!href || /^[a-z][a-z0-9+.-]*:/i.test(href) || href.startsWith("#") || href.startsWith("/")) return null;
+  try {
+    const u = new URL(href, "http://guide.invalid/" + from);
+    const rel = decodeURIComponent(u.pathname.slice(1));
+    return AGENTS_FILE.test(rel) ? rel : null;
+  } catch {
+    return null;
+  }
+}
+
+// The Dashboard's AGENTS.md tab: the project's agent guide, read-only, straight
+// from disk. A link to another guide file (.agents-docs/...) opens in place,
+// with a way back to AGENTS.md.
+export function renderAgentsDoc(main) {
+  const { open, texts } = page.agentsDoc;
+  const head = el("div", "doc-head");
+  head.appendChild(el("h2", null, open === "AGENTS.md" ? "AGENTS.md" : open));
+  const tools = el("div", "doc-tools");
+  if (open !== "AGENTS.md") {
+    const guide = el("button", "btn small", "Back to AGENTS.md");
+    guide.type = "button";
+    guide.addEventListener("click", () => {
+      page.agentsDoc.open = "AGENTS.md";
+      redraw();
+      main.scrollTop = 0;
+    });
+    tools.appendChild(guide);
+  }
+  tools.appendChild(backButton());
+  tools.appendChild(printButton());
+  head.appendChild(tools);
+  main.appendChild(head);
+  main.appendChild(el("p", "help", open + " · read-only, straight from disk"));
+  const box = el("div", "block settled");
+  box.appendChild(
+    md(texts[open] || "", "md", {
+      link: (href) => {
+        const rel = agentsLinkTarget(open, href);
+        if (!rel) return null;
+        return () => {
+          page.agentsDoc.open = rel;
+          redraw();
+          main.scrollTop = 0;
+          loadAgentsDoc();
+        };
+      },
+    })
+  );
   main.appendChild(box);
 }
 

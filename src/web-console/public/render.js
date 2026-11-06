@@ -64,6 +64,11 @@ function takeMarker(item) {
   return TASK_MARKERS[m[1]];
 }
 
+// While md() runs with a `link` option: a function that takes a link's href and
+// returns a click handler to make it an in-page link, or null to leave it to the
+// usual rules. Set only for the duration of one md() call.
+let linkHook = null;
+
 function safeHref(href) {
   if (!href) return null;
   const trimmed = String(href).trim();
@@ -117,6 +122,19 @@ function inlineInto(parent, tokens) {
         parent.appendChild(document.createElement("br"));
         break;
       case "link": {
+        const onOpen = linkHook && linkHook(String(t.href || "").trim());
+        if (onOpen) {
+          const a = el("a");
+          a.href = "#";
+          a.addEventListener("click", (e) => {
+            e.preventDefault();
+            onOpen();
+          });
+          if (t.title) a.title = t.title;
+          inlineInto(a, t.tokens);
+          parent.appendChild(a);
+          break;
+        }
         const href = safeHref(t.href);
         if (!href) {
           inlineInto(parent, t.tokens);
@@ -288,7 +306,7 @@ function blockInto(parent, tokens) {
 }
 
 /** Render markdown into a fresh element. Returns the element. */
-export function md(source, className = "md") {
+export function md(source, className = "md", options = {}) {
   const host = el("div", className);
   if (!source) return host;
   let tokens;
@@ -298,7 +316,13 @@ export function md(source, className = "md") {
     host.appendChild(el("p", "md-p", String(source)));
     return host;
   }
-  blockInto(host, tokens);
+  // `options.link`: see linkHook above.
+  linkHook = typeof options.link === "function" ? options.link : null;
+  try {
+    blockInto(host, tokens);
+  } finally {
+    linkHook = null;
+  }
   return host;
 }
 

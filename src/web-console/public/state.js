@@ -136,6 +136,10 @@ export const page = {
   // for, `files` maps each SPEC_FILES kind (overview, map, draft) that exists
   // to `{ file, text }`. See loadOverview().
   overview: { key: null, files: {} },
+  // The Dashboard's AGENTS.md tab: `texts` maps each agent-guide file read so
+  // far (AGENTS.md, .agents-docs/<name>.md) to its text, `open` is the one in
+  // view. The tab exists while texts["AGENTS.md"] does. See loadAgentsDoc().
+  agentsDoc: { open: "AGENTS.md", texts: {} },
   // The dashboard's first-open wake-up (boot.js), while it runs. `cards` turns
   // true at the glide, which lets the menu in; `entered` once its entrance has
   // played; `typed` is how many characters of the note show, or null once all

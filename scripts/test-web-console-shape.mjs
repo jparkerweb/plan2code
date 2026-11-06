@@ -187,7 +187,7 @@ test("shape: no page module sets a style attribute from script", () => {
 // and WORKSPACE_EDITS for /workspace/add, /edit and /remove. The git board has
 // no routes of its own: its buttons are sends (`__git`), through /submit.
 const ROUTE_ORDER = [
-  "/health", "/s/", "/handover", "/", "SERVABLE", "/overview", "/handoff", "/version", "/state", "/events", "/draft",
+  "/health", "/s/", "/handover", "/", "SERVABLE", "/overview", "/agents-doc", "/handoff", "/version", "/state", "/events", "/draft",
   "/looks", "/looks", "/subagents", "/pr-host", "/models", "/models", "/agents", "/agents", "/agents/test", "/agents/use-path", "/cleanup", "/upload",
   "/notepad", "/notepad/text", "/notepad/image", "/notepad/thumb", "/notepad/image/delete", "/notepad/tab",
   "/notepad/tab/rename", "/notepad/tab/delete", "/notepad/tab/order", "/notepad/tab/last", "/notepad/tab/sent", "/notepad/images/",

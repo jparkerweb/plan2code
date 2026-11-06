@@ -8,6 +8,10 @@ All notable changes to Plan2Code will be documented in this file.
 
 - **desktop app**: the terminal now starts docked on the right on a fresh install, as intended, instead of at the bottom. The app always reported a saved `bottom` dock, so the page's right-dock default never ran; it now reports nothing until a dock is saved. A dock you already chose is kept.
 
+### ✨ Added
+
+- **web console**: the dashboard has an **AGENTS.md** tab right after Dashboard, shown while the project has an `AGENTS.md`. It reads the file fresh from disk, read-only, and links into `.agents-docs/` open in place with a way back.
+
 ## v3.0.2
 
 ### ✨ Added

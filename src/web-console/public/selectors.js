@@ -333,5 +333,46 @@ export async function loadOverview() {
   if (changed) redraw();
 }
 
+// The Dashboard's AGENTS.md tab: its view id, and whether it is on now (the
+// dashboard, with an AGENTS.md the last read found).
+export const AGENTS_VIEW = "agents-md";
+export const agentsTabShown = () => isDashboard() && typeof page.agentsDoc.texts["AGENTS.md"] === "string";
+
+// Read one agent-guide file fresh from disk (`rel` as the server names it) and
+// keep its text; null when it is not there. Off the dashboard nothing is read.
+async function fetchAgentsDoc(rel) {
+  try {
+    const res = await fetch("/agents-doc?file=" + encodeURIComponent(rel), { cache: "no-store" });
+    return res.status === 200 ? await res.text() : null;
+  } catch {
+    return null;
+  }
+}
+
+// Fresh from disk every time, like the spec file tabs: AGENTS.md changes under
+// init-update, and the tab is only worth having if it shows what is there now.
+// Reads AGENTS.md (does the tab exist?) and, when a linked file is open, that
+// file too. Repaints only when a tab would appear or vanish or a text changed.
+export async function loadAgentsDoc() {
+  if (!isDashboard()) {
+    if (Object.keys(page.agentsDoc.texts).length) page.agentsDoc = { open: "AGENTS.md", texts: {} };
+    return;
+  }
+  const open = page.agentsDoc.open;
+  const rels = open === "AGENTS.md" ? ["AGENTS.md"] : ["AGENTS.md", open];
+  const found = await Promise.all(rels.map(fetchAgentsDoc));
+  // The person moved on (Back to AGENTS.md) while this was in flight.
+  if (!isDashboard() || page.agentsDoc.open !== open) return;
+  const texts = {};
+  rels.forEach((rel, i) => {
+    if (typeof found[i] === "string") texts[rel] = found[i];
+  });
+  // A linked file that went missing: back to AGENTS.md itself.
+  const next = { open: texts[open] === undefined ? "AGENTS.md" : open, texts };
+  const changed = JSON.stringify(next) !== JSON.stringify(page.agentsDoc);
+  page.agentsDoc = next;
+  if (changed) redraw();
+}
+
 // The workspace's folders, original first, or none before a frame has them.
 export const workspaceFolders = () => (page.wsFrame && Array.isArray(page.wsFrame.folders) ? page.wsFrame.folders : []);

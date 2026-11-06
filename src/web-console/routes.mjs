@@ -30,7 +30,7 @@ import {
 } from "./files.mjs";
 import { AGENTS_SCHEMA, makeId, normalizeAgents, resolveCommand, validateForSave } from "./agents.mjs";
 import { findAgent, loadAgentList } from "./agent-lookup.mjs";
-import { checkDocument, cleanupFindings, readSpecFile, removeCleanup } from "./sessions.mjs";
+import { checkDocument, cleanupFindings, readAgentsDoc, readSpecFile, removeCleanup } from "./sessions.mjs";
 import { SHOTS_DIR_NAME, SHOT_NAME, shotType } from "./patches.mjs";
 import { appendChat, currentConversation, pendingChatCount, typedCount } from "./inbox.mjs";
 import { specKey } from "./workspace.mjs";
@@ -85,6 +85,7 @@ const ROUTES = [
   { path: "/", method: "GET", run: page },
   { match: (p, req) => req.method === "GET" && SERVABLE.has(p.slice(1)), run: publicFile },
   { path: "/overview", method: "GET", run: overview },
+  { path: "/agents-doc", method: "GET", run: agentsDoc },
   { path: "/handoff", method: "GET", run: handoffDoc },
   { path: "/version", method: "GET", run: version },
   { path: "/state", method: "GET", run: stateGet },
@@ -417,6 +418,29 @@ function overview(req, res, ctx, url) {
         : noOverview()
     )
     .catch(noOverview);
+}
+
+// The project's AGENTS.md (or one file under .agents-docs/), read-only, for the
+// dashboard's AGENTS.md tab. Only a dashboard serves it, and only the two
+// shapes readAgentsDoc() allows; anything else, or a missing file, is a 204
+// (no tab) so the browser console stays free of a failed request.
+function agentsDoc(req, res, ctx, url) {
+  const state = ctx.readState() || {};
+  const none = () => {
+    res.writeHead(204, baseHeaders({ "cache-control": "no-store" }));
+    res.end();
+  };
+  if (state.workflow !== "dashboard") return none();
+  readAgentsDoc(state.worktree || state.project, url.searchParams.get("file") || "AGENTS.md")
+    .then((found) =>
+      found
+        ? send(res, 200, found.text, "text/markdown; charset=utf-8", {
+            "cache-control": "no-store",
+            "x-spec-file": encodeURIComponent(found.file),
+          })
+        : none()
+    )
+    .catch(none);
 }
 
 // A handoff's document, read-only, for the dashboard's "Read it all". Only a
