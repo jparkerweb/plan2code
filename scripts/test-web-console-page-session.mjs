@@ -905,12 +905,18 @@ test("a workflow page uses its modules: the full footer, the session meter, @ su
   // The @ list is the workspace frame, which can land after the page draws;
   // the footer has one label per width tier once it has.
   await s.page.waitForFunction(() => (document.getElementById("footer-where").dataset.key || "").includes("\n"));
-  const box = itemCard(s.page, "q1").locator(".md-host");
-  const ed = box.locator(".cm-content");
-  await ed.click();
-  await ed.pressSequentially("See @");
-  await s.page.locator("#mention-pop").waitFor();
-  assert.match(await textOf(s.page.locator("#mention-pop")), new RegExp(name));
+  // A redraw can replace the box while it is typed in, and the typing is lost with it (seen on
+  // slow runners): clear the box and type again until the list shows, up to four times.
+  const pop = s.page.locator("#mention-pop");
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const ed = itemCard(s.page, "q1").locator(".md-host .cm-content").first();
+    await ed.click();
+    await ed.pressSequentially("See @");
+    if (await pop.waitFor({ timeout: 3000 }).then(() => true, () => false)) break;
+    await fillBox(itemCard(s.page, "q1").locator(".md-host"), "");
+  }
+  await pop.waitFor();
+  assert.match(await textOf(pop), new RegExp(name));
   // favicon.js: the person's move puts a bar on the tab icon.
   await s.page.waitForFunction(() => document.querySelector('link[rel="icon"][type="image/svg+xml"]').href.startsWith("data:image/svg+xml"));
 });
