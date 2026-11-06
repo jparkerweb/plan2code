@@ -1,4 +1,5 @@
 // Web console tests, Ghoul Rush's Lucky die: it comes only from a kill, stacks to nine and lasts the run; when a life would be lost one rolls: a 4 to 6 brings Planny back (the monsters in view blown apart in an ordinary room, a boss's room untouched; a 5 adds a heart, a 6 a heart and a Garlic shield), a 3 or 2 costs the life and leaves a gift for the respawn, a 1 only laughs.
+import "./seed-random.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import * as ghoul from "../src/web-console/public/activities/ghoul-rush/ghoul.js";

@@ -1,4 +1,5 @@
 // Web console tests, Ghoul Rush's boss intro cards: every boss room has an entry (the boss's exact name, an epithet, no em dash, never the hero's name), the card shows when a boss room is entered (after the bonus ride too) and in no other room, not again on a retry, any fresh move key, fire or click moves it on after the lockout (repeats and early presses never do), it never moves on by itself, a pause holds it, and it draws for every boss on a fake canvas (through the boss's own art, with a fallback when the art throws or is missing).
+import "./seed-random.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import * as ghoul from "../src/web-console/public/activities/ghoul-rush/ghoul.js";

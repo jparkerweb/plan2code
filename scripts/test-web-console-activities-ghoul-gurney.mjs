@@ -1,5 +1,6 @@
 // Web console tests, Ghoul Rush's Code Blue (Blackmoor Sanatorium's bonus round, between the Surgical Theater and the Night Ward): its shape (every elevator shaft clears with a jump and swallows a gurney that does not jump, every low can be ducked, spacing, the surge lamps and the blackout waves, checkpoints, the clock), the gurney's speed on slopes, its jump, ducking, a wheelchair that rolls, an IV stand, a lamp or a door overhead, an orderly in a doorway, the surge lamp shot from the air, the lights-out rhythm (the countdown, the dark, the lights back), the heartbeat monitor, a fall down a shaft, the checkpoint, the jump off the end and the door, the bonus round's hearts and dice (3 to 9) and the clean-dark-stretches die, endless lives for every cause, a voice for every event, the drawing, and bots that ride the whole way (one that dodges well, one that never does).
 // Run with: node --test scripts/test-web-console-activities-ghoul-gurney.mjs
+import "./seed-random.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import * as ghoul from "../src/web-console/public/activities/ghoul-rush/ghoul.js";

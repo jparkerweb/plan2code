@@ -5,6 +5,7 @@
 // and records every point it draws through, as in
 // scripts/test-web-console-activities-rapids.mjs.
 
+import "./seed-random.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { CAR_STYLES, MARGINS, STYLE_NAMES, carLength, carReach, drawCarBody, drawCarShadow, rgbOf, shade, styleOf } from "../src/web-console/public/activities/bounce-cars.js";

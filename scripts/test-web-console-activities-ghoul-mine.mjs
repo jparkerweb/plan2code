@@ -1,4 +1,5 @@
 // Web console tests, Ghoul Rush's Deep Seam Mine stage: its four rooms (always dark, the cage lifts, the water, the rockfall), rocks that fall after a dust warning and crush monsters and cost a life, the knocker imp that steals your light but never a life, the canary ghost whose scream brings three rocks down, the dead miner that digs out of the wall, the blind crawler that hunts by sound, the cage you can ride, the Hard Hat and Dynamite (found only here), and the Tommyknocker, who knocks, sweeps his hammer, puts the lights out, sinks into the seam and bursts out dazed, and rages at half his hp.
+import "./seed-random.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import * as ghoul from "../src/web-console/public/activities/ghoul-rush/ghoul.js";

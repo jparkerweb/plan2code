@@ -5,6 +5,7 @@
 // handed, so stub canvases that count or record calls stand in for the page.
 // The rules are plain functions over a round, driven here slice by slice.
 
+import "./seed-random.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";

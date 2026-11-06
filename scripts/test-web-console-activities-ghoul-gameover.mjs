@@ -1,4 +1,5 @@
 // Web console tests, Ghoul Rush's game over: a lost end plays the mechanical laugh track (and a win does not), and the "G A M E - O V E R" banner drops in letter by letter and draws on a fake canvas.
+import "./seed-random.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import * as ghoul from "../src/web-console/public/activities/ghoul-rush/ghoul.js";

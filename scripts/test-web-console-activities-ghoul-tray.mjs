@@ -1,5 +1,6 @@
 // Web console tests, Ghoul Rush's Servants' Back Stairs (the East Wing's bonus round, between the Attic and the Crypt): its shape (every gap between flights clears with a jump and swallows a tray that does not jump, every low can be ducked, spacing, checkpoints, greased stretches, the clock), the tray's speed on slopes and grease, its jump and duck, a pot, cutlery, a ham, pans, the cook's dish, the domes and plates (the courses), the cherries, a fall down the stairs, the checkpoint, the jump off the last shelf and the door, the bonus round's hearts and dice (3 to 9), endless lives for every new cause, a voice for every event, the drawing, and bots that ride the whole route (one that dodges well, one that never does).
 // Run with: node --test scripts/test-web-console-activities-ghoul-tray.mjs
+import "./seed-random.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import * as ghoul from "../src/web-console/public/activities/ghoul-rush/ghoul.js";

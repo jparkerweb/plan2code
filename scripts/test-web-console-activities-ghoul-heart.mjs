@@ -6,6 +6,7 @@
 // the weak beats that only knock it back, the white, the last thump, the fall, the daylight and its
 // door), a life lost keeping it all, a bot's fight length at full depth, the voices, words and drawing.
 // Run with: node --test scripts/test-web-console-activities-ghoul-heart.mjs
+import "./seed-random.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import * as ghoul from "../src/web-console/public/activities/ghoul-rush/ghoul.js";

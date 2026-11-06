@@ -1,5 +1,6 @@
 // Web console tests, Ghoul Rush's Gardener's Revenge (the Grounds' bonus round, between the Gazebo and the Groundskeeper's Yard): its shape (every pond and ditch clears with a jump and swallows a mower that does not jump, every low can be ducked), the mower's motion, each obstacle's cost and cause, the blades (cutting, the heat, the jam, the lawn cut), the topiary beasts, the hearts, the checkpoints, the finish and the dice, endless lives, the art on a fake canvas, and the two bots (one that plays well finishes in time, one that never dodges loses).
 // Run with: node --test scripts/test-web-console-activities-ghoul-mower.mjs
+import "./seed-random.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import * as ghoul from "../src/web-console/public/activities/ghoul-rush/ghoul.js";

@@ -1,4 +1,5 @@
 // Web console tests, Ghoul Rush's Graveyard stage: its four rooms, grasping hands, mourners and their wail, grave robbers, rotters and the legs they leave, carrion crows, the graves rotters climb out of, and Mother Mourning, who can only be hurt while she watches and drops a stone fist on whatever moves.
+import "./seed-random.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import * as ghoul from "../src/web-console/public/activities/ghoul-rush/ghoul.js";

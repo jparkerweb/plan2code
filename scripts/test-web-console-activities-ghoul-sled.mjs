@@ -1,5 +1,6 @@
 // Web console tests, Ghoul Rush's Coffin Sled (the Frozen Lake's bonus round, between the Black Ice and the Widow's Web): its shape (every crack clears with a jump and swallows a sled that does not jump, every low can be ducked, spacing, checkpoints, the clock), the sled's speed on slopes, its jump, ducking, a headstone, a drift, a branch, a hand in the snow, the ghoul that pops up and the icicles (bolts that follow the hill), a fall into a crack, the checkpoint, the jump off the end and the door, the bonus round's hearts and dice (3 to 9), endless lives for every new cause, a voice for every event, the drawing, and bots that ride the whole hill (one that dodges well, one that never does).
 // Run with: node --test scripts/test-web-console-activities-ghoul-sled.mjs
+import "./seed-random.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import * as ghoul from "../src/web-console/public/activities/ghoul-rush/ghoul.js";

@@ -1,4 +1,5 @@
 // Web console tests, Ghoul Rush's Hollow End Village stage: its four rooms, the moonrise (a moon that climbs over each room and, at full, turns the villagers into wolf-men and makes the moonhounds grow), torch mob villagers that lob fire, hanged men that drop on their ropes, shutter ghouls that can be hit only while out, moonhounds, Wolfsbane (found only here), and the Beast of Hollow End, which clings to the wall for double damage, pounces under a shadow, swipes, howls for hounds and rages at half its hp.
+import "./seed-random.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import * as ghoul from "../src/web-console/public/activities/ghoul-rush/ghoul.js";

@@ -5,6 +5,7 @@
 // weighted pick, the wall in front of the house, the retreat in order and its standing door, a
 // bot's fight length, the voices, words and drawing.
 // Run with: node --test scripts/test-web-console-activities-ghoul-marrow.mjs
+import "./seed-random.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import * as ghoul from "../src/web-console/public/activities/ghoul-rush/ghoul.js";

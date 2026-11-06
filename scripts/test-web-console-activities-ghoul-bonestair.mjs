@@ -1,5 +1,6 @@
 // Web console tests, Ghoul Rush's Bone Stair (the finale's second ride, between Kill II and the Pit): its shape (the spiral's flights and seams, every gap of missing treads clears with a jump and swallows YOU without one, every ribcage can be ducked, spacing, checkpoints, the last step over the Pit's floor), the run's speed (DOWN and LEFT slow YOU), every obstacle's cost and cause (missing treads, treads giving way, ribcages, skeletons, hands, masonry, the rubble), the telegraphs (shadows, creaks and cracks, fingers over the edge, skeletons rising), shooting skeletons down, the pursuit meter (the gap that clean running opens and hits, ducks and holds close), the catch, three hearts of its own, the grade and the dice, endless lives, the finish, no random numbers, its sounds and its drawing on a fake canvas, and bots that play it well and badly.
 // Run with: node --test scripts/test-web-console-activities-ghoul-bonestair.mjs
+import "./seed-random.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import * as ghoul from "../src/web-console/public/activities/ghoul-rush/ghoul.js";

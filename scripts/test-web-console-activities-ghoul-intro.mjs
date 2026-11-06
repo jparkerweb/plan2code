@@ -1,4 +1,5 @@
 // Web console tests, Ghoul Rush's stage intro cards: every stage has one (3 or 4 lines, short, no em dash, never the hero's name), the card shows when a stage is entered and not before the pick, any move key or fire moves it on after the minimum (repeats and early presses never do) and it never moves on by itself, and it draws on a fake canvas.
+import "./seed-random.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import * as ghoul from "../src/web-console/public/activities/ghoul-rush/ghoul.js";

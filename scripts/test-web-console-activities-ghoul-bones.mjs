@@ -1,4 +1,5 @@
 // Web console tests, Ghoul Rush's Old Rattlebones: his volley and slam, the skull he throws like a boomerang (and is headless without), the bone rain and the skeletons he raises once his rage begins, the double slam, and what each move looks and sounds like.
+import "./seed-random.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import * as ghoul from "../src/web-console/public/activities/ghoul-rush/ghoul.js";

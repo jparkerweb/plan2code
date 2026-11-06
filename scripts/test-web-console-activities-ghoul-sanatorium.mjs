@@ -1,4 +1,5 @@
 // Web console tests, Ghoul Rush's Blackmoor Sanatorium stage: its four rooms, orderlies that grab and throw you (and cost no life), gurneys that park, rattle and roll, flickers you can only hit and be hurt by when the lamps go out, specimen bloaters and their formaldehyde, the lamps' flicker, Smelling Salts and the Bone Saw (found only here), and the Night Matron, whose lantern cone builds heat, is stopped by the medicine cabinets and cannot reach the boards, with her syringes, arms and rage.
+import "./seed-random.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import * as ghoul from "../src/web-console/public/activities/ghoul-rush/ghoul.js";

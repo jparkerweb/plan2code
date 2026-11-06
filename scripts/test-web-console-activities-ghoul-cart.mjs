@@ -1,5 +1,6 @@
 // Web console tests, Ghoul Rush's Runaway Cart (the Deep Seam Mine's ride room): its shape (between the Collapse and the Seam, every gap clears at the cart's speed with a jump, every beam can be ducked, checkpoints spaced, the clock covers the ride), the cart's speed on slopes, leaning and braking, its jump and its steering in the air, a ramp's launch, landing on the upper or the lower line of a split, a fall into the chasm and the respawn at the last checkpoint, ducking under a beam, rubble, crates (two shots break one), the boulder behind, the buffer stop and the door, the ledge imp, a canary's slide of rubble, endless lives for every new cause, a voice for every event, the drawing, and a bot that rides the whole room.
 // Run with: node --test scripts/test-web-console-activities-ghoul-cart.mjs
+import "./seed-random.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import * as ghoul from "../src/web-console/public/activities/ghoul-rush/ghoul.js";

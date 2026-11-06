@@ -1,4 +1,5 @@
 // Web console tests, Ghoul Rush's Chapel stage: its four rooms, gargoyles that are stone on their perch and dive when you pass under, choir ghosts whose song quickens the monsters near them, censer monks and their smoke, bats in the bells, the bell toll that freezes everything for a second, Holy Water (found only here), and the Choirmaster, whose organ pipes guard him and whose columns of notes have one gap each.
+import "./seed-random.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import * as ghoul from "../src/web-console/public/activities/ghoul-rush/ghoul.js";

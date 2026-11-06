@@ -1,4 +1,5 @@
 // Web console tests, Ghoul Rush's Frozen Lake stage: its rooms (Ice Fishing Huts, Snowbound Lodge, The Black Ice, the Widow's Web), slippery ice and thin ice that cracks and breaks, under-ice hands, snow shades you only see by their footprints, frozen ghouls that slide and shatter, ice wraiths whose dive leaves you frozen, Hot Cocoa and the Road Flare (found only here), and the Frost Widow, whose veil melts only to a burning barrel or a flare.
+import "./seed-random.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import * as ghoul from "../src/web-console/public/activities/ghoul-rush/ghoul.js";

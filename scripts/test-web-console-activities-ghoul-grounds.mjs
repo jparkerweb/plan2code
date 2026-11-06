@@ -1,4 +1,5 @@
 // Web console tests, Ghoul Rush's Grounds stage: its four rooms, topiary beasts that creep only when your back is turned, rootlings under the lawn, lantern moths, mulch crawlers, the Hedge shears (found only here), and the Groundskeeper, whose lantern takes triple damage, whose scythe is jumped, whose fire burns the floor and who mounts a mower at half his hp.
+import "./seed-random.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import * as ghoul from "../src/web-console/public/activities/ghoul-rush/ghoul.js";

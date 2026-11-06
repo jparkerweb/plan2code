@@ -1,5 +1,6 @@
 // Web console tests, Ghoul Rush's Torch Mob (Hollow End Village's bonus round, between the Square and the Green): its shape (every ditch and the bridge clear with a jump and swallow a wagon that does not jump, every low can be ducked, spacing, checkpoints), the wagon's speed (the brake that is also a duck), every obstacle's cost and cause (barrels, crates, washing lines, inn signs, pitchforks, torches, horses, ditches, the river, the mob), the throwers' wind-up and aim, shooting torches and forks out of the air, the horses, the pursuit meter (the gap that clean riding opens and braking, hits and fire close), the hay fire, the catch, hearts of its own, the grade and the dice, endless lives, the checkpoints, the finish, no random numbers, its sounds and its drawing on a fake canvas, and bots that play it well and badly.
 // Run with: node --test scripts/test-web-console-activities-ghoul-wagon.mjs
+import "./seed-random.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import * as ghoul from "../src/web-console/public/activities/ghoul-rush/ghoul.js";

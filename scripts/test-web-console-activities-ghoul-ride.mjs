@@ -1,5 +1,6 @@
 // Web console tests, Ghoul Rush's dark ride (the Midnight Carnival's bonus round): its place (between the funhouse and the Big Top), the bonus round's five hearts and the flow on to the boss, the dice rule, the controls (arrows, Space, the mouse, the duck zone), aim assist, the mini-bosses, the Exit's twist, a bot that rides it all and one that does nothing, the endless-lives code, and every event voiced.
 // Run with: node --test scripts/test-web-console-activities-ghoul-ride.mjs
+import "./seed-random.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import * as ghoul from "../src/web-console/public/activities/ghoul-rush/ghoul.js";

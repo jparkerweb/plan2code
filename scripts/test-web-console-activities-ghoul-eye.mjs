@@ -8,6 +8,7 @@
 // shoot apart), the kill and its retreat in order with the door kept until it has gone, a bot's
 // fight length, the voices, words and drawing.
 // Run with: node --test scripts/test-web-console-activities-ghoul-eye.mjs
+import "./seed-random.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import * as ghoul from "../src/web-console/public/activities/ghoul-rush/ghoul.js";

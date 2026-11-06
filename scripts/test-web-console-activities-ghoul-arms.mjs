@@ -1,4 +1,5 @@
 // Web console tests, Ghoul Rush's secondary weapons: the double tap that uses one (hammering spends one at most, a hold carries on as bolts), the bag and its HUD pill, what each weapon does, what they may do to a boss, where they are placed and how they drop, and that all of it draws and sounds.
+import "./seed-random.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import * as ghoul from "../src/web-console/public/activities/ghoul-rush/ghoul.js";

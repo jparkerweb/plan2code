@@ -1,5 +1,6 @@
 // Web console tests, Ghoul Rush's Grand Banister (the Manor's bonus round, between the Library and the Ballroom): its shape (every break clears with a jump and swallows a rider that does not jump, the brass under-rails, every low can be ducked, spacing, checkpoints, the clock), the ride's speed on slopes and its lean and brake, its jump, ducking and diving, a vase, a candlestick, a hanging frame, a chandelier on its pendulum, a ghostly butler, the cobwebs, a fall off the rail, the checkpoint, the jump off the end and the door, the bonus round's hearts and dice (3 to 9), endless lives for every new cause, a voice for every event, the drawing, and bots that ride the whole stair (one that rides well, one that never dodges).
 // Run with: node --test scripts/test-web-console-activities-ghoul-banister.mjs
+import "./seed-random.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import * as ghoul from "../src/web-console/public/activities/ghoul-rush/ghoul.js";

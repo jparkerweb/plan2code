@@ -5,6 +5,7 @@
 // handed, so a stub canvas stands in for the page, as in
 // scripts/test-web-console-activities-rapids.mjs, whose helpers this file copies.
 
+import "./seed-random.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import * as flock from "../src/web-console/public/activities/flock.js";

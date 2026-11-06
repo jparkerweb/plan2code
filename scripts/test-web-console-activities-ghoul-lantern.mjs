@@ -1,5 +1,6 @@
 // Web console tests, Ghoul Rush's Drowned Lantern (Gallows Bog's bonus round, between the Stilt House and the Drowning Pool, a top-down game on one screen and not a ride): the island, the walk and the slide, the flare and the oil, the shrines and the run to the boat, each hunter's one rule (the Lurker hears steps on wood and dashes down a lane through where it heard you, the wisps guard the shrines and burst in a flare, the leeches never enter the light, the bog bodies take only someone standing still, Old Mother Bog's hand), the hearts and the grade, the clock, determinism, the balance (a bot that ignores the hunters loses, one that plays them wins), the voices, the hums and the drawing.
 // Run with: node --test scripts/test-web-console-activities-ghoul-lantern.mjs
+import "./seed-random.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import * as ghoul from "../src/web-console/public/activities/ghoul-rush/ghoul.js";

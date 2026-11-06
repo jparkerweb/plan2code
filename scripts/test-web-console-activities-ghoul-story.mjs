@@ -1,4 +1,5 @@
 // Web console tests, Ghoul Rush's intro story: 6 to 8 pages that fit the field, never name the hero, stay generic about stages (no names, no counts) and speak to YOU; a run opens on it and ends in The Long Hall; the lockout, the typing that finishes first, every key and a click, the skip by holding fire, a pause that holds it; never in the practice stage select, on a respawn or in a new room; every page draws on a fake canvas at many moments; every sound it asks for exists.
+import "./seed-random.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import * as ghoul from "../src/web-console/public/activities/ghoul-rush/ghoul.js";

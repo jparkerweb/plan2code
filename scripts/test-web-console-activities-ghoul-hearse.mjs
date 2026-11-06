@@ -1,5 +1,6 @@
 // Web console tests, Ghoul Rush's Midnight Hearse (the Graveyard's bonus round, between the Mausoleum Row and Angel's Rest): its shape (two lanes, the gates, every thing spaced for a player, the closed stretches with a gate before each), the hearse's motion (a steady speed, a jump, a duck, a hop between lanes only at a gate), each obstacle and its cost (grave, headstone, cross, branch, hand, crow, wreck), the lamp and its lanterns, the coffins thrown out and the ghouls that sit up in them, the hearts and the grade and the dice, endless lives, the drawing and the sounds, and bots that play it.
 // Run with: node --test scripts/test-web-console-activities-ghoul-hearse.mjs
+import "./seed-random.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import * as ghoul from "../src/web-console/public/activities/ghoul-rush/ghoul.js";

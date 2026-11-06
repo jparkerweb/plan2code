@@ -1,4 +1,5 @@
 // Web console tests, Ghoul Rush's Midnight Carnival stage: its four rooms (the Midway, the Hall of Mirrors, the Funhouse with its conveyor floors, the Big Top), grinners that honk out acid balloons, marionettes that drop on their strings, Mirror You that copies your moves and shots half a second late, strongmen that lob barbells, circus hounds that leap through hoops of fire, Cotton Candy and the Custard Pie (found only here), and the Ringmaster, whose puppet hangs on three strings: cut them all and he is open for four seconds.
+import "./seed-random.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import * as ghoul from "../src/web-console/public/activities/ghoul-rush/ghoul.js";

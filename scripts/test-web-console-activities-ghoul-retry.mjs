@@ -1,6 +1,7 @@
 // Web console tests, Ghoul Rush's retry mercy: after a loss in a room, each restart of it sets one power-up a few steps ahead of Planny (never the first attempt, never in a ride or bonus room), the kind from its own hash so no shared roll shifts, on a firm surface, replacing the last one uncollected, reset when the room is cleared.
 // Run with: node --test scripts/test-web-console-activities-ghoul-retry.mjs
 
+import "./seed-random.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import * as ghoul from "../src/web-console/public/activities/ghoul-rush/ghoul.js";

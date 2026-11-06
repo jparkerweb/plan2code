@@ -4,6 +4,7 @@
 // mud spans that slow and sink you, the Bog Runner's stub and the Drowning
 // Pool's boss spec. The monsters' rules, the fight and the ride land in
 // later phases.
+import "./seed-random.mjs";
 import { test } from "node:test";
 import { readFileSync } from "node:fs";
 import assert from "node:assert/strict";

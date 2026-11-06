@@ -1,5 +1,6 @@
 // Web console tests, Ghoul Rush's Holy Roller (the Chapel's bonus round, between the Organ Loft and the Choir): an endless-runner seen from behind, in three lanes. Its room and its seeded course (every thing in the way has a safe answer, a safe path exists at every moment), the speed ramp, the lanes and the wall bump, the jump and the slide, each kind of obstacle's cost and cause, the gargoyles and the bell ropes, the wax souls, the combo and the halo's magnet, the grade, the last heart ending the round with the run going on, endless lives, the Garlic shield, the sounds and words, the drawing on a fake canvas, and bots that play it well and badly.
 // Run with: node --test scripts/test-web-console-activities-ghoul-pew.mjs
+import "./seed-random.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import * as ghoul from "../src/web-console/public/activities/ghoul-rush/ghoul.js";

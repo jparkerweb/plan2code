@@ -6,6 +6,7 @@
 // walks every entry in ACTIVITIES plus a stub second game defined here, which
 // is what proves a new game needs no change to the window.
 
+import "./seed-random.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import path from "node:path";

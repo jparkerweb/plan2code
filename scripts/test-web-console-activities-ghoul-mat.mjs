@@ -1,5 +1,6 @@
 // Web console tests, Ghoul Rush's Down the Hatch (the finale's first ride, after the Front Lawn): its shape (eleven swallows, every fork's hole swallows a rider who does not jump and its gristle ledge catches one who does, every uvula can be ducked, spacing, checkpoints every 8 to 10 seconds, the lip), the ride's speed on slopes and bile, its jump and duck, a rib, a uvula-lamp, a squeeze's throb, close and ease (peristalsis), the swallowed furniture, a plunge, the checkpoints, the lip and the door, the bonus round's three hearts and dice (3 to 8), endless lives for every cause, a voice for every event, the drawing, the telegraphs, and bots that ride the whole throat (one that rides well finishes, one that never dodges loses all three hearts without a game over).
 // Run with: node --test scripts/test-web-console-activities-ghoul-mat.mjs
+import "./seed-random.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import * as ghoul from "../src/web-console/public/activities/ghoul-rush/ghoul.js";

@@ -1,5 +1,6 @@
 // Web console tests, Ghoul Rush's ending: four pages that obey the story's rules (2 to 4 short lines, no digits, no em dash, YOU on each, the gag's FINAL NOTICE); the House's last room opens it instead of the win; a press turns pages only after the lockout and finishes the typing first; holding fire skips it, a tap never does; the last page wins the run once, with n = round.winN; the window's keys, a click, a pause, its track and its sounds; every scene draws on a fake canvas at many moments; every event it raises has a react; every tone it names exists.
 // Run with: node --test scripts/test-web-console-activities-ghoul-ending.mjs
+import "./seed-random.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import * as ghoul from "../src/web-console/public/activities/ghoul-rush/ghoul.js";
