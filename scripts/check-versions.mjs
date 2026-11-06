@@ -1,7 +1,9 @@
 // Checks that every file carrying the product's version agrees, the desktop app's included:
-// version.json, package.json, CHANGELOG.md's top heading, and the app's tauri.conf.json,
-// package.json and Cargo.toml. The release-app workflow runs it before building, with
-// --tag <the release tag>, so a release cannot ship an app that names another version.
+// version.json, package.json, CHANGELOG.md's top heading, README's "Version X.Y.Z" line, and the
+// app's tauri.conf.json, package.json, package-lock.json (two lines), src-tauri/Cargo.toml,
+// fake-agent/Cargo.toml and Cargo.lock (the plan2code-app and fake-agent entries). `npm test` runs
+// it on this tree, and the release-app workflow runs it before building, with --tag <the release
+// tag>, so a release cannot ship a file that names another version.
 //
 //   node scripts/check-versions.mjs [--tag v3.0.0]
 //
@@ -16,19 +18,35 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const readJson = (file) => JSON.parse(fs.readFileSync(file, "utf8")).version;
 const CARGO_VERSION = /^\s*version\s*=\s*"([^"]+)"/m;
 const CHANGELOG_HEADING = /^##\s+v?(\d+\.\d+\.\d+)\b/m;
+const README_LINE = /^Version (\d+\.\d+\.\d+)\b/m;
 
-/** Each file that carries the version, with how to read it. Paths are relative to the repo root. */
+// The first `version =` line is the [package] one; dependencies come after it.
+const readCargoToml = (file) => fs.readFileSync(file, "utf8").match(CARGO_VERSION)?.[1];
+/** The version of the `[[package]]` called `name` in a Cargo.lock. */
+const lockEntry = (name) => (file) =>
+  fs.readFileSync(file, "utf8").match(new RegExp(`^name = "${name}"\\r?\\nversion = "([^"]+)"`, "m"))?.[1];
+
+/**
+ * Each place that carries the version, with how to read it. Paths are relative to the repo root;
+ * a file with two places gets a `label` so a mismatch says which one.
+ */
 const SOURCES = [
   { file: "version.json", read: readJson },
   { file: "package.json", read: readJson },
   { file: "CHANGELOG.md", read: (file) => fs.readFileSync(file, "utf8").match(CHANGELOG_HEADING)?.[1] },
+  { file: "README.md", read: (file) => fs.readFileSync(file, "utf8").match(README_LINE)?.[1] },
   { file: "plan2code-app/src-tauri/tauri.conf.json", read: readJson },
   { file: "plan2code-app/package.json", read: readJson },
+  { file: "plan2code-app/package-lock.json", label: "plan2code-app/package-lock.json (top)", read: readJson },
   {
-    file: "plan2code-app/src-tauri/Cargo.toml",
-    // The first `version =` line is the [package] one; dependencies come after it.
-    read: (file) => fs.readFileSync(file, "utf8").match(CARGO_VERSION)?.[1],
+    file: "plan2code-app/package-lock.json",
+    label: "plan2code-app/package-lock.json (packages[\"\"])",
+    read: (file) => JSON.parse(fs.readFileSync(file, "utf8")).packages?.[""]?.version,
   },
+  { file: "plan2code-app/src-tauri/Cargo.toml", read: readCargoToml },
+  { file: "plan2code-app/fake-agent/Cargo.toml", read: readCargoToml },
+  { file: "plan2code-app/Cargo.lock", label: "plan2code-app/Cargo.lock (plan2code-app)", read: lockEntry("plan2code-app") },
+  { file: "plan2code-app/Cargo.lock", label: "plan2code-app/Cargo.lock (fake-agent)", read: lockEntry("fake-agent") },
 ];
 
 /**
@@ -39,19 +57,19 @@ const SOURCES = [
 export function checkVersions(root = ROOT, { tag } = {}) {
   const versions = [];
   const problems = [];
-  for (const { file, read } of SOURCES) {
+  for (const { file, label = file, read } of SOURCES) {
     let version;
     try {
       version = read(path.join(root, file));
     } catch (error) {
-      problems.push(`${file}: cannot be read (${error.code || error.message})`);
+      problems.push(`${label}: cannot be read (${error.code || error.message})`);
       continue;
     }
     if (!version) {
-      problems.push(`${file}: no version found`);
+      problems.push(`${label}: no version found`);
       continue;
     }
-    versions.push({ file, version });
+    versions.push({ file: label, version });
   }
   const expected = versions.find((v) => v.file === "version.json")?.version;
   for (const { file, version } of versions) {

@@ -12,6 +12,10 @@ All notable changes to Plan2Code will be documented in this file.
 
 - **web console**: the dashboard has an **AGENTS.md** tab right after Dashboard, shown while the project has an `AGENTS.md`. It reads the file fresh from disk, read-only, and links into `.agents-docs/` open in place with a way back.
 
+### 🔧 Changed
+
+- **releases**: `npm test` now runs `scripts/check-versions.mjs` first, and that check reads every place that carries the version (README's `Version` line, both `package-lock.json` lines, `fake-agent/Cargo.toml` and both `Cargo.lock` entries as well as the six it read before), so a release that leaves any of them behind fails the tests instead of shipping.
+
 ## v3.0.2
 
 ### ✨ Added

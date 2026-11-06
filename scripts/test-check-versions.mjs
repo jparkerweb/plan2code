@@ -1,6 +1,6 @@
 // Tests for scripts/check-versions.mjs. Run with: node --test scripts/test-check-versions.mjs
 //
-// Each test builds a small tree in a temp folder holding the six files that carry the version,
+// Each test builds a small tree in a temp folder holding every file that carries the version,
 // so the check is exercised without depending on what the real repo says today.
 
 import test from "node:test";
@@ -14,6 +14,11 @@ import { checkVersions } from "./check-versions.mjs";
 
 const SCRIPT = path.join(path.dirname(fileURLToPath(import.meta.url)), "check-versions.mjs");
 
+/** A Cargo.lock whose two workspace entries sit among others that carry their own versions. */
+function cargoLock(app, fake) {
+  return `[[package]]\nname = "chrono"\nversion = "0.4.0"\n\n[[package]]\nname = "fake-agent"\nversion = "${fake}"\n\n[[package]]\nname = "plan2code-app"\nversion = "${app}"\n`;
+}
+
 /** A tree with every version file at `version`, each overridable by its path in `over`. */
 function tree(t, version = "3.0.0", over = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "p2c-versions-"));
@@ -23,8 +28,16 @@ function tree(t, version = "3.0.0", over = {}) {
     "package.json": JSON.stringify({ name: "plan2code", version }),
     "CHANGELOG.md": `# Changelog\n\n## v${version}\n\n### Added\n\n- something\n\n## v0.0.1\n`,
     "plan2code-app/src-tauri/tauri.conf.json": JSON.stringify({ productName: "Plan2Code", version }),
+    "README.md": `# Plan2Code\n\nVersion ${version} · MIT\n`,
     "plan2code-app/package.json": JSON.stringify({ name: "plan2code-app", version }),
+    "plan2code-app/package-lock.json": JSON.stringify({
+      name: "plan2code-app",
+      version,
+      packages: { "": { name: "plan2code-app", version } },
+    }),
     "plan2code-app/src-tauri/Cargo.toml": `[package]\nname = "plan2code-app"\nversion = "${version}"\n\n[dependencies]\nserde = { version = "1" }\n`,
+    "plan2code-app/fake-agent/Cargo.toml": `[package]\nname = "fake-agent"\nversion = "${version}"\n`,
+    "plan2code-app/Cargo.lock": cargoLock(version, version),
     ...over,
   };
   for (const [file, content] of Object.entries(files)) {
@@ -35,10 +48,10 @@ function tree(t, version = "3.0.0", over = {}) {
   return root;
 }
 
-test("versions: six files at one version pass, and each is listed", (t) => {
+test("versions: every file at one version passes, and each place is listed", (t) => {
   const result = checkVersions(tree(t));
   assert.equal(result.ok, true, result.problems.join("; "));
-  assert.equal(result.versions.length, 6);
+  assert.equal(result.versions.length, 12);
   assert.ok(result.versions.every((v) => v.version === "3.0.0"));
 });
 
@@ -56,6 +69,35 @@ test("versions: Cargo.toml's package version counts, a dependency's does not", (
     "plan2code-app/src-tauri/Cargo.toml": '[package]\nname = "x"\nversion = "3.1.0"\n',
   });
   assert.match(checkVersions(root).problems[0], /Cargo\.toml says 3\.1\.0/);
+});
+
+test("versions: README's line, a lockfile line and a fake-agent entry each disagree by name", (t) => {
+  const readme = checkVersions(tree(t, "3.0.0", { "README.md": "# Plan2Code\n\nVersion 2.6.0 · MIT\n" }));
+  assert.deepEqual(readme.problems, ["README.md says 2.6.0, version.json says 3.0.0"]);
+
+  const lock = checkVersions(
+    tree(t, "3.0.0", {
+      "plan2code-app/package-lock.json": JSON.stringify({ version: "3.0.0", packages: { "": { version: "2.9.0" } } }),
+    }),
+  );
+  assert.deepEqual(lock.problems, ['plan2code-app/package-lock.json (packages[""]) says 2.9.0, version.json says 3.0.0']);
+
+  const fake = checkVersions(
+    tree(t, "3.0.0", { "plan2code-app/fake-agent/Cargo.toml": '[package]\nname = "fake-agent"\nversion = "2.9.0"\n' }),
+  );
+  assert.deepEqual(fake.problems, ["plan2code-app/fake-agent/Cargo.toml says 2.9.0, version.json says 3.0.0"]);
+});
+
+test("versions: each Cargo.lock entry is read by its own name", (t) => {
+  const stale = checkVersions(tree(t, "3.0.0", { "plan2code-app/Cargo.lock": cargoLock("3.0.0", "2.9.0") }));
+  assert.deepEqual(stale.problems, ["plan2code-app/Cargo.lock (fake-agent) says 2.9.0, version.json says 3.0.0"]);
+  const other = checkVersions(tree(t, "3.0.0", { "plan2code-app/Cargo.lock": cargoLock("2.9.0", "3.0.0") }));
+  assert.deepEqual(other.problems, ["plan2code-app/Cargo.lock (plan2code-app) says 2.9.0, version.json says 3.0.0"]);
+  const gone = checkVersions(
+    tree(t, "3.0.0", { "plan2code-app/Cargo.lock": '[[package]]\nname = "chrono"\nversion = "0.4.0"\n' }),
+  );
+  assert.equal(gone.problems.length, 2);
+  assert.match(gone.problems[0], /Cargo\.lock \(plan2code-app\): no version found/);
 });
 
 test("versions: the changelog's top heading is the one read", (t) => {
