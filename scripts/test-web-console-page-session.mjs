@@ -904,14 +904,23 @@ test("a workflow page uses its modules: the full footer, the session meter, @ su
   // The @ list is the workspace frame, which can land after the page draws;
   // the footer has one label per width tier once it has.
   await s.page.waitForFunction(() => (document.getElementById("footer-where").dataset.key || "").includes("\n"));
-  // A redraw can replace the box while it is typed in, and the typing is lost with it (seen on
-  // slow runners): clear the box and type again until the list shows, up to four times.
+  // A redraw can replace the box while it is typed in: the typing is lost, or the list closes
+  // with the box it belonged to (both seen on slow runners). Clear the box and type again until
+  // the list is up and names the project, up to four times, then assert it for real.
   const pop = s.page.locator("#mention-pop");
+  const listed = async () => {
+    try {
+      await pop.waitFor({ timeout: 3000 });
+      return new RegExp(name).test(await pop.innerText({ timeout: 1500 }));
+    } catch {
+      return false;
+    }
+  };
   for (let attempt = 0; attempt < 4; attempt++) {
     const ed = itemCard(s.page, "q1").locator(".md-host .cm-content").first();
     await ed.click();
     await ed.pressSequentially("See @");
-    if (await pop.waitFor({ timeout: 3000 }).then(() => true, () => false)) break;
+    if (await listed()) break;
     await fillBox(itemCard(s.page, "q1").locator(".md-host"), "");
   }
   await pop.waitFor();

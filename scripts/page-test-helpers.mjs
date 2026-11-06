@@ -116,7 +116,36 @@ export async function openSession(browser, { t, workflow, payload: first, projec
   s.page.on("pageerror", (e) => s.errors.push(e.message));
   await s.page.goto(s.url, { waitUntil: "domcontentloaded" });
   await drawn(s.page);
+  // Redraws that follow the first one (the workspace frame, a scan, the update check) land a
+  // moment later, and on a busy runner a test that has already scrolled, typed or opened
+  // something loses it to them. Hand the test a page that has gone quiet. A fake clock freezes
+  // the page's own timers, so those sessions are left as they are.
+  if (!clock) await quiet(s.page);
   return s;
+}
+
+// Waits until the document has not changed for `quietMs`, or `maxMs` at most (a page that never
+// goes quiet must not block a test). Counts mutations in the page and polls the count from
+// here, so it needs no timer in the page.
+export async function quiet(page, { quietMs = 300, maxMs = 4000 } = {}) {
+  await page
+    .evaluate(() => {
+      if (window.__quiet) return;
+      window.__quiet = { n: 0 };
+      new MutationObserver(() => window.__quiet.n++).observe(document.body, { subtree: true, childList: true, attributes: true, characterData: true });
+    })
+    .catch(() => {});
+  const end = Date.now() + maxMs;
+  let last = -1;
+  let since = Date.now();
+  while (Date.now() < end) {
+    const n = await page.evaluate(() => (window.__quiet ? window.__quiet.n : -1)).catch(() => -1);
+    if (n !== last) {
+      last = n;
+      since = Date.now();
+    } else if (Date.now() - since >= quietMs) return;
+    await new Promise((r) => setTimeout(r, 50));
+  }
 }
 
 // The page has adopted a state frame: app.js has replaced the boot pane the
