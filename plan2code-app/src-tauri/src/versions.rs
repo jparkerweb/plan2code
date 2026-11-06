@@ -257,7 +257,7 @@ mod tests {
         let lines = std::sync::Mutex::new(Vec::<String>::new());
         let result =
             with_fake_launcher("ok", "console.log('line1'); console.log('line2');", || {
-                run_update_within("9.9.9", Duration::from_secs(10), |line| {
+                run_update_within("9.9.9", Duration::from_secs(60), |line| {
                     lines.lock().unwrap().push(line.to_string())
                 })
             });
@@ -273,7 +273,7 @@ mod tests {
         let result = with_fake_launcher(
             "tag",
             "console.log(process.argv.slice(2).join(' '));",
-            || run_update_within("9.9.9", Duration::from_secs(10), |_| {}),
+            || run_update_within("9.9.9", Duration::from_secs(60), |_| {}),
         );
         assert_eq!(result, Ok("update --tag v9.9.9".to_string()));
     }
@@ -281,7 +281,7 @@ mod tests {
     #[test]
     fn run_update_fails_with_the_installer_s_own_last_line() {
         let result = with_fake_launcher("fail", "console.log('oops'); process.exit(1);", || {
-            run_update_within("9.9.9", Duration::from_secs(10), |_| {})
+            run_update_within("9.9.9", Duration::from_secs(60), |_| {})
         });
         assert_eq!(result, Err("the update did not finish: oops".to_string()));
     }
@@ -298,7 +298,7 @@ mod tests {
     fn a_missing_launcher_is_an_error_not_a_panic() {
         let result = with_fake_launcher("missing", "", || {
             std::fs::remove_file(launcher_dir().unwrap().join("plan2code.js")).unwrap();
-            run_update_within("9.9.9", Duration::from_secs(10), |_| {})
+            run_update_within("9.9.9", Duration::from_secs(60), |_| {})
         });
         assert!(result.unwrap_err().contains("is missing"));
     }

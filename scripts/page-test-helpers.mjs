@@ -186,6 +186,14 @@ export async function fillBox(locator, text) {
   const box = locator.first();
   const isField = await box.evaluate((n) => Boolean(n.field)).catch(() => false);
   if (!isField) return box.fill(text);
+  // A field is drawn disabled until the page knows the agent's state (the Ask box, for one),
+  // and a disabled field drops what is typed into it, leaving Send off for good: give it a
+  // moment to open, on whichever element the box is by then.
+  for (let i = 0; i < 200; i++) {
+    const open = await box.evaluate((n) => n.isConnected && !n.classList.contains("is-disabled")).catch(() => false);
+    if (open) break;
+    await new Promise((r) => setTimeout(r, 50));
+  }
   await box.evaluate((n, t) => {
     n.field.value = t;
     n.field.emitInput();
