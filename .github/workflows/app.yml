@@ -19,8 +19,9 @@ concurrency:
 
 # Speed: a pull request runs on Ubuntu only (the cheapest runner) unless it carries the
 # `full-matrix` label; pushes to main and manual runs use all three systems. A change that
-# touches only the website, the README, the changelog or similar skips the heavy jobs and runs
-# the fast `prose` job instead, which keeps the checks that read those files.
+# touches only the website, the README, the changelog or similar skips the heavy `app` job. The
+# fast `prose` job runs on every push and pull request. The root `npm test` suite does not run on
+# pushes or pull requests at all: run it locally, or start `node-tests` by hand.
 jobs:
   changes:
     name: changes
@@ -56,8 +57,6 @@ jobs:
 
   prose:
     name: prose checks
-    needs: changes
-    if: needs.changes.outputs.code == 'false'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4.2.2
@@ -170,13 +169,14 @@ jobs:
 
   node-tests:
     name: npm test (${{ matrix.os }})
-    needs: changes
-    if: needs.changes.outputs.code == 'true'
+    # Manual runs only: run `npm test` on the dev machine before pushing. Start this from the
+    # Actions tab to check all three systems.
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: ${{ fromJSON(github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'full-matrix') && '["ubuntu-latest"]' || '["windows-latest","macos-latest","ubuntu-latest"]') }}
+        os: [windows-latest, macos-latest, ubuntu-latest]
     steps:
       - uses: actions/checkout@v4.2.2
       - uses: actions/setup-node@v4.4.0
