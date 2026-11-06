@@ -14,7 +14,7 @@ Interactive Q&A flow to update an existing `AGENTS.md` with new learnings and pr
 
 ## Interface
 
-The FIRST thing you do, before anything else in this file — before the Awareness Context: ask **web console** (browser page, suggested) or **terminal**? Console → run `node "<D>/console.mjs" open --workflow init-update` before reading (<D>: references/web-console/ beside this SKILL.md — ~/.agents/skills/plan2code-init-update/references/web-console/ globally — or the dir in ~/.plan2code/console/console-dir), then read <D>/console.md and <D>/notes/init.md. Every question in the Q&A flow and the restructure offer go through it. Switchable anytime. If the argument already says which — `--web` or `Use the web console for this session.` — take it and do not ask; drop the flag. Launched by the dashboard? Its session is already open — resume it (console-launches.md), then Awareness Context. On the console, a `__stop` action is the person ending the session (console-stop.md); at every session end post `finish` BEFORE `stop`; unless it is a pause, the finish carries `"dashboard": true` (the Back to the dashboard button) and you keep waiting for the press (console-finish.md).
+The FIRST thing you do, before anything else in this file — before the Awareness Context: ask **web console** (browser page, suggested) or **terminal**? Console → run `node "<D>/console.mjs" open --workflow init-update` before reading (<D>: references/web-console/ beside this SKILL.md — ~/.agents/skills/plan2code-init-update/references/web-console/ globally — or the dir in ~/.plan2code/console/console-dir), then read <D>/console.md and <D>/notes/init.md. Every question in the Q&A flow and the restructure offer go through it. Switchable anytime. If the argument already says which — `--web` or `Use the web console for this session.` — take it and do not ask; drop the flag. Launched by the dashboard? Its session is already open — resume it (console-launches.md), then Awareness Context.
 
 ## Scripts
 
@@ -24,12 +24,20 @@ The FIRST thing you do, before anything else in this file — before the Awarene
 - `node "<S>/agents-md.mjs" filename "<Section Name>"`: a new section file's name, link line and header.
 - `node "<S>/agent-files.mjs" detect` / `apply <id> ...`: Step 7.
 - `node "<S>/commit-msg.mjs" --subject "<subject>"`: the Session End commit.
+- `node "<S>/test-map.mjs" read` / `write --rows <file>` and `node "<S>/test-commands.mjs" discover`: the `## Test map` (Testing, Step 4); the rows file goes in the session folder or the OS temp folder, never the project.
 
 ---
 
 ## Awareness Context
 
 Before making any updates, orient yourself to current project state: read `AGENTS.md` and `README.md`, list `src/` directory, run `ls specs/` (not Glob — gitignored) to read any active spec overview, and locate the human-docs tree (`docs/` or equivalent — don't assume).
+
+## Helpers
+
+When your tool can start helpers (subagents) and they are not switched off for this run (on the web console a `Subagents:` block says which, console-subagents.md):
+- **Re-checking the project:** one area per helper; each reports what moved since AGENTS.md was written and where it shows.
+
+Keep with you: every question, and the edits to AGENTS.md and the `.agents-docs/` files. Strength and effort per references/helper-strength.md. No helpers? Do the same work yourself.
 
 ---
 
@@ -71,7 +79,7 @@ The `Failure log` section below is a recording of mistakes made by previous AI A
 
 When you make a mistake, get corrected, or discover something about this codebase that wasn't written down:
 
-1. Add one line to the `Failure log` below, in the imperative, describing the correct behaviour.
+1. Add one line to the `Failure log` below, in the imperative, describing the correct behavior.
 2. Keep it specific to this repo. General advice belongs nowhere.
 3. If this fix is a workflow rather than a rule, put it in `.claude/skills/` and link it from here.
 4. Include the change in the same commit and mention it in your summary.
@@ -131,7 +139,7 @@ Present the user with update options:
 > - **1. Commands** - Build, test, run, lint, how to run and view the app, or other CLI commands
 > - **2. Architecture** - How components interact, data flow, key patterns
 > - **3. Gotchas/Pitfalls** - Traps to avoid, non-obvious behaviors
-> - **4. Testing** - Test patterns, how to run specific tests, fixtures
+> - **4. Testing** - Test patterns, how to run specific tests, the `## Test map` table and quick checks, fixtures
 > - **5. Environment/Config** - Setup quirks, env variables, configuration
 > - **6. General Rules** - Coding conventions, style rules, project-specific practices
 > - **7. Failure Log** - Record a mistake or correction in the Failure log
@@ -153,10 +161,10 @@ Present the user with update options:
 | Commands | Purpose? Flags? Prerequisites? How to run and view the app? |
 | Architecture | Components? Interactions? Pattern? |
 | Gotchas | What was unexpected? Workaround? |
-| Testing | Commands? Fixtures? Mocking? |
+| Testing | Commands? Test map `Paths` still match real files and `Run` commands still exist (`test-map.mjs read` problems, `test-commands.mjs discover`)? Quick checks stale? Fixtures? Mocking? No map but tests exist: offer to create one, written only on a yes through `test-map.mjs write`. |
 | Environment | Local/CI/deploy? Env vars/files? |
 | Rules | Project-wide or specific? Why? |
-| Failure Log | What went wrong? Correct behaviour (imperative, one line)? Merge into an entry on the same topic if one exists; over 17 entries, propose what to prune (rule 7). |
+| Failure Log | What went wrong? Correct behavior (imperative, one line)? Merge into an entry on the same topic if one exists; over 17 entries, propose what to prune (rule 7). |
 | Other | "Tell me what to add." |
 | Sync & Maintain | Scope: all surfaces or specific? Then follow the Sync & Maintain section. |
 | Review | Per section: "Still accurate?" |

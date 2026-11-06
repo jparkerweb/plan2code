@@ -12,7 +12,7 @@
 // className, id, type, value, checked, disabled, textContent, placeholder,
 // title, open, href, target, rel, tabIndex. Text runs are h.el("span", null, text).
 //
-// Every button, input and select is made through control(), which greys it
+// Every button, input and select is made through control(), which grays it
 // out whenever controlAllowed(mode, role) says no and stamps data-gate with
 // its role; one disabled for a reason of the view's own also carries
 // data-own. The guard test in scripts/test-web-console-git-board.mjs holds
@@ -64,7 +64,7 @@ function control(ctx, tag, className, label, { role = "action", onClick, onInput
   return node;
 }
 
-// A copy button is a control like any other: greyed while busy.
+// A copy button is a control like any other: grayed while busy.
 function copy(ctx, text, cls, codeEl) {
   const b = ctx.h.copyButton(text, cls, codeEl);
   b.setAttribute("data-gate", "action");
@@ -130,7 +130,8 @@ export function drawGitBoard(ctx) {
   }
   const tab = activeTab(ctx);
   node.appendChild(header(ctx));
-  if (ctx.notice) node.appendChild(resultLine(ctx, ctx.notice));
+  // A landed result (`op` set) lives in the step strip's two zones instead.
+  if (ctx.notice && !ctx.notice.op) node.appendChild(resultLine(ctx, ctx.notice));
   node.appendChild(tabStrip(ctx, tab));
   node.appendChild(cardSlot);
   node.appendChild(tabPanel(ctx, tab));
@@ -165,9 +166,18 @@ function header(ctx) {
     meta.appendChild(code);
     meta.appendChild(copy(ctx, cmd, "btn small", code));
   } else meta.appendChild(h.el("span", "git-refreshed", refreshedLine(git, ctx.now)));
-  if (ctx.mode === "running" && ctx.activity) meta.appendChild(h.el("span", "git-activity", ctx.activity));
+  if (ctx.mode === "running" && ctx.activity) meta.appendChild(activityLine(ctx, "span", ctx.activity));
   box.appendChild(meta);
   return box;
+}
+
+// A line saying what the agent is doing, with the console's small ring in
+// front so a wait reads as work under way.
+function activityLine(ctx, tag, text) {
+  const line = ctx.h.el(tag, "git-activity");
+  line.appendChild(ctx.h.el("span", "spinner tiny"));
+  line.appendChild(ctx.h.el("span", null, text));
+  return line;
 }
 
 function resultLine(ctx, notice) {
@@ -228,8 +238,13 @@ function tabPanel(ctx, id) {
 function runStep(ctx, s) {
   const { git, on } = ctx;
   switch (s.op) {
-    case "commit":
-      return on.openPanel("commit");
+    // The commit table is always on show below, so the step commits what it
+    // has ticked, as its own button does; on a detached HEAD a branch comes first.
+    case "commit": {
+      const picks = tablePicks(ctx);
+      if (git.hasCommits !== false && !(git.head || {}).branch) return on.openPanel("create", { commit: true, ...picks });
+      return on.send("commit", picks);
+    }
     case "create-commit":
       return on.openPanel("create", { commit: true });
     case "create":
@@ -255,7 +270,25 @@ function runStep(ctx, s) {
 
 function stepButton(ctx, s, cls) {
   if (s.op === "pr") return prLink(ctx, s.url, cls);
-  return control(ctx, "button", cls, s.label, { onClick: () => runStep(ctx, s) });
+  const disabled = s.op === "commit" && !tablePicks(ctx).files.length;
+  return control(ctx, "button", cls, stepLabel(ctx, s), { disabled, onClick: () => runStep(ctx, s) });
+}
+
+// A step's name. A "Commit N files" count follows the table's ticks, so the
+// card and its button say what the click will send.
+function stepLabel(ctx, s) {
+  if (!s || s.op !== "commit" || !/^Commit \d+ files?$/.test(s.label)) return s ? s.label : "";
+  return `Commit ${plural(tablePicks(ctx).files.length, "file", "files")}`;
+}
+
+// The commit table's ticked files and .gitignore picks, checked against the snapshot.
+function tablePicks(ctx) {
+  const ch = ctx.git.changes || {};
+  const board = ctx.board;
+  const ticks = board.ticks || (board.ticks = commitTicks(ch));
+  const ignored = board.ignore || (board.ignore = new Set());
+  const known = new Set([...list(ch.files), ...list(ch.untrackedDirs)].map((f) => f.path));
+  return { files: [...ticks].filter((path) => known.has(path)), ignore: [...ignored].filter((path) => known.has(path)) };
 }
 
 function stepStrip(ctx, id) {
@@ -264,16 +297,60 @@ function stepStrip(ctx, id) {
   if (id !== step.tab) {
     if (!p) return null;
     const where = GIT_TABS.find((t) => t.id === step.tab);
-    return control(ctx, "button", "git-hint", `Next step is on ${where ? where.label : step.tab}: ${p.label} →`, {
+    return control(ctx, "button", "git-hint", `Next step is on ${where ? where.label : step.tab}: ${stepLabel(ctx, p)} →`, {
       role: "nav",
       onClick: () => ctx.on.pickTab(step.tab),
     });
   }
   // Mid-operation, Sync's own block is the step (syncBody).
   if (id === "sync" && git.inProgress) return null;
+  // A landed result: the notice (it carries `op`) becomes the left zone and
+  // the leftover step the right, muted, so the board reads "done, and this
+  // much is not yours" rather than one loud suggestion to commit it all.
+  if (ctx.notice && ctx.notice.op) {
+    const duo = h.el("div", "git-duo");
+    const landed = h.el("div", "git-landed");
+    landed.setAttribute("role", "status");
+    landed.appendChild(h.el("div", "git-step-kicker", "Just landed"));
+    landed.appendChild(h.el("h3", "git-step-title", ctx.notice.title || ""));
+    if (ctx.notice.body) landed.appendChild(h.md(ctx.notice.body, "md git-result-body"));
+    if (ctx.mode === "running") landed.appendChild(activityLine(ctx, "p", ctx.activity || "Plan2Code is working on it."));
+    // The landed zone's one action is the follow-through on their work, which
+    // only exists beside a leftover-commit primary (Push 5 there). Every other
+    // shape leaves the exit to the right zone, which always names the board's
+    // real next step, muted.
+    const theirs = p && p.op === "commit" ? p : null;
+    if (theirs && step.secondary[0]) {
+      const acts = h.el("div", "git-step-actions");
+      acts.appendChild(stepButton(ctx, step.secondary[0], "btn primary"));
+      landed.appendChild(acts);
+    }
+    duo.appendChild(landed);
+    const left = h.el("div", "git-left");
+    left.appendChild(h.el("div", "git-step-kicker", theirs ? "Still on the tree" : p ? "Still to do" : "All caught up"));
+    left.appendChild(h.el("h3", "git-step-title", p ? stepLabel(ctx, p) : step.line));
+    if (p && p.why) left.appendChild(h.el("p", "git-step-why", p.why));
+    if (step.stale) left.appendChild(staleLine(ctx, step.stale));
+    if (step.held) {
+      const held = h.el("div", "git-held");
+      held.appendChild(h.md(step.held, "md git-held-body"));
+      left.appendChild(held);
+    }
+    const acts = h.el("div", "git-step-actions");
+    if (theirs) {
+      acts.appendChild(stepButton(ctx, { ...theirs, label: "Commit other changes" }, "btn primary"));
+      for (const s of step.secondary.slice(1)) acts.appendChild(stepButton(ctx, s, "btn small"));
+    } else {
+      if (p) acts.appendChild(stepButton(ctx, p, "btn primary"));
+      for (const s of step.secondary) acts.appendChild(stepButton(ctx, s, "btn small"));
+    }
+    if (acts.children.length) left.appendChild(acts);
+    duo.appendChild(left);
+    return duo;
+  }
   const box = h.el("div", "git-step" + (git.inProgress ? " is-warn" : "") + (p ? "" : " is-calm"));
   box.appendChild(h.el("div", "git-step-kicker", p ? "Next step" : "Nothing to do"));
-  box.appendChild(h.el("h3", "git-step-title", p ? p.label : step.line));
+  box.appendChild(h.el("h3", "git-step-title", p ? stepLabel(ctx, p) : step.line));
   if (p && p.why) box.appendChild(h.el("p", "git-step-why", p.why));
   if (step.stale) box.appendChild(staleLine(ctx, step.stale));
   if (step.held) {
@@ -282,7 +359,7 @@ function stepStrip(ctx, id) {
     box.appendChild(held);
   }
   if (ctx.mode === "running") {
-    box.appendChild(h.el("p", "git-activity", ctx.activity || "Plan2Code is working on it."));
+    box.appendChild(activityLine(ctx, "p", ctx.activity || "Plan2Code is working on it."));
     return box;
   }
   const actions = h.el("div", "git-step-actions");
@@ -422,9 +499,7 @@ function commitPanel(ctx, frozen) {
   table.appendChild(tbody);
   p.appendChild(table);
 
-  const known = new Set([...list(ch.files), ...list(ch.untrackedDirs)].map((f) => f.path));
-  const files = [...ticks].filter((path) => known.has(path));
-  const ignore = [...ignored].filter((path) => known.has(path));
+  const { files, ignore } = tablePicks(ctx);
   const send = () => on.send("commit", { files, ignore });
   const actions = h.el("div", "git-panel-actions");
   const head = git.head || {};

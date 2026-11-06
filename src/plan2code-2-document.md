@@ -8,7 +8,7 @@ Technical writer transforming planning documents into precise, complete implemen
 
 ## Interface
 
-The FIRST thing you do, before anything else — before Auto-Discovery: ask **web console** (suggested) or **terminal**? Console → run `node "<D>/console.mjs" open --workflow document` before reading (<D>: references/web-console/ beside this SKILL.md, or the dir in ~/.plan2code/console/console-dir; `--spec` once known), then read <D>/console.md and <D>/notes/document.md. Switchable anytime. `--web` or `Use the web console for this session.` in the argument answers it; drop the flag. Dashboard-launched? Resume its open session (console-launches.md), then Auto-Discovery. `__stop` ends it; post `finish` BEFORE `stop` at every end.
+The FIRST thing you do, before anything else — before Auto-Discovery: ask **web console** (suggested) or **terminal**? Console → run `node "<D>/console.mjs" open --workflow document` before reading (<D>: references/web-console/ beside this SKILL.md, or the dir in ~/.plan2code/console/console-dir; `--spec` once known), then read <D>/console.md and <D>/notes/document.md. Switchable anytime. `--web` or `Use the web console for this session.` in the argument answers it; drop the flag. Dashboard-launched? Resume its open session (console-launches.md), then Auto-Discovery.
 
 ## Scripts
 
@@ -28,6 +28,13 @@ The FIRST thing you do, before anything else — before Auto-Discovery: ask **we
 - Verify all planning requirements are covered
 - Do NOT implement - documentation only
 - If no filesystem access, output in code blocks with file path headers
+
+## Helpers
+
+When your tool can start helpers (subagents) and they are not switched off for this run (on the web console a `Subagents:` block says which, console-subagents.md):
+- **Lookups while you write:** the files, seams and sizes behind the work a task names, so the details a builder needs rest on the real code; one lookup per helper, each returning facts with `file:line`.
+
+Keep with you: the breakdown, the task writing and every question. Strength and effort per references/helper-strength.md. No helpers? Do the same work yourself.
 
 ## Auto-Discovery
 
@@ -161,10 +168,12 @@ Use kebab-case for feature name (e.g., `user-authentication`).
 ### Special Cases
 
 **Testing Tasks:** Check PLAN-DRAFT Testing Strategy (section 2.4):
-- "Run after each phase": Add testing task block at end of EVERY phase
+- Read `references/test-runs.md` before writing the testing blocks. When you cannot tell which tests cover a file, or whether a check is fast, ask the person.
+- "Targeted per phase" (or the old "Run after each phase"): end EVERY phase with a `## Phase Testing` block: ``- [ ] Targeted: `<command>` (covers <files or area>)`` naming the tests that cover that phase's files (from `AGENTS.md`'s test map, else from the code), and ``- [ ] Quick checks: `<command>` `` only for checks known to be fast.
+- Full Suite: add ``- [ ] Full suite: `<command>` `` only to the phase named by "At Phase N"; none for "Offered at Finalize" or "Never" (under "Dedicated phase only", the testing phase carries it when it is Phase N). A draft with no Full Suite row: ask which they want before writing phase files.
 - "Dedicated phase only": Create final Phase N: Testing
 - "None" or empty: Omit testing tasks
-- `| Approach | Test first |` in 2.4: in every phase, order each task's test before its code and put a plain sub-bullet `  - Test: <where the test drives the behaviour>` directly under the task line (no checkbox, so the loop's task count is unchanged), for example ``  - Test: through `POST /votes` ``
+- `| Approach | Test first |` in 2.4: in every phase, order each task's test before its code and put a plain sub-bullet `  - Test: <where the test drives the behavior>` directly under the task line (no checkbox, so the loop's task count is unchanged), for example ``  - Test: through `POST /votes` ``
 
 **Small Projects (1-2 phases):** Combine sections, still create separate overview.md and phase-1.md. Note: "Small project - phases combined"
 
@@ -182,7 +191,7 @@ Sections, in this order: Summary (from Executive Summary), Phase Checklist, Para
 
 Header: Phase name, Status on its own line as `**Status:** <value>` (Not Started | In Progress | Complete; `specs.mjs mark` updates it), Estimated Tasks count.
 
-Sections: Overview (2-3 sentences), Prerequisites (plain bullet list, no checkboxes), Tasks (grouped by category, `- [ ] **Task X.N:** [Description]` with File path and details, plus a `  - Test:` sub-bullet under each task when the approach is Test first), Phase Testing (if enabled), Acceptance Criteria (plain bullet list, no checkboxes), Notes, Phase Completion Summary (filled after implementation: date, implementer, what was done, files changed, issues).
+Sections: Overview (2-3 sentences), Prerequisites (plain bullet list, no checkboxes), Tasks (grouped by category, `- [ ] **Task X.N:** [Description]` with File path and details, plus a `  - Test:` sub-bullet under each task when the approach is Test first), Phase Testing (if enabled: the Targeted, Quick checks and Full suite lines above), Acceptance Criteria (plain bullet list, no checkboxes), Notes, Phase Completion Summary (filled after implementation: date, implementer, what was done, files changed, issues).
 
 ## Session End
 

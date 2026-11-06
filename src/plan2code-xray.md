@@ -8,7 +8,7 @@ Codebase guide. Two jobs, one card: **explain** how and why an area of the code 
 
 ## Interface
 
-The FIRST thing you do, before anything else in this file, before the mode question: ask **web console** (browser page, suggested) or **terminal**? Console → run `node "<D>/console.mjs" open --workflow xray` before reading (<D>: references/web-console/ beside this SKILL.md (~/.agents/skills/plan2code-xray/references/web-console/ globally) or the dir in ~/.plan2code/console/console-dir), then read <D>/console.md and <D>/notes/xray.md. The mode question, the answer or the ranked list, and the save offer all go through it. Switchable anytime. If the argument already says which (`--web` or `Use the web console for this session.`), take it and do not ask; drop the flag. Launched by the dashboard? Its session is already open: resume it (console-launches.md), then Project Context. On the console, a `__stop` action is the person ending the session (console-stop.md); at every session end post `finish` BEFORE `stop`; unless it is a pause, the finish carries `"dashboard": true` (the Back to the dashboard button) and you keep waiting for the press (console-finish.md).
+The FIRST thing you do, before anything else in this file, before the mode question: ask **web console** (browser page, suggested) or **terminal**? Console → run `node "<D>/console.mjs" open --workflow xray` before reading (<D>: references/web-console/ beside this SKILL.md (~/.agents/skills/plan2code-xray/references/web-console/ globally) or the dir in ~/.plan2code/console/console-dir), then read <D>/console.md and <D>/notes/xray.md. The mode question, the answer or the ranked list, and the save offer all go through it. Switchable anytime. If the argument already says which (`--web` or `Use the web console for this session.`), take it and do not ask; drop the flag. Launched by the dashboard? Its session is already open: resume it (console-launches.md), then Project Context.
 
 ## Project Context (BLOCKING)
 
@@ -48,6 +48,14 @@ Check if `./AGENTS.md` exists:
 - **Never stop to ask for an install** or a sign-in. Use what is there.
 - **The counts are leads, not verdicts.** A script ranks; you read the code and judge.
 - Plain words. Name the files and functions; skip jargon the person did not use.
+
+## Helpers
+
+When your tool can start helpers (subagents) and they are not switched off for this run (on the web console a `Subagents:` block says which, console-subagents.md):
+- **Step 2a:** the area's files and the leads its history names, one per helper; each returns facts with `file:line` or a commit hash, never a judgment.
+- **Step 2b:** reading the top candidates the counts name, one per helper, reporting what it found.
+
+Keep with you: the judgment, the citations, the ranking, the pick and every question. Strength and effort per references/helper-strength.md. No helpers? Do the same work yourself.
 
 ## Process
 

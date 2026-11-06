@@ -78,7 +78,7 @@ From the plan2code repo root:
 node install.js
 ```
 
-Choose **A** (Install All + dev tools) to install prompts, loop CLI, bot, metrics, and status line together. Or choose **C** (Custom) then **M** (Metrics) to install just the metrics CLI.
+Choose **A** (Advanced) then **E** (Everything) to install prompts, bot, metrics, and status line together. Or choose **A** then **M** (Metrics) to install just the metrics CLI.
 
 The installer handles `npm install`, `npm run build`, and global linking automatically. After install, `plan2code-metrics` is available from any directory.
 
@@ -170,15 +170,11 @@ Each collection scrapes your spec files and extracts:
 - **Requirement coverage** — coverage percentage if present
 - **Verification items** — verification checklist items added
 
-### Step 3 (Implement) — from `.plan2code-loop/` data (loop mode only)
+### Step 3 (Implement) — from `phase-*.md` and `overview.md`
 
 - **Task completion rate** — completed / total tasks
-- **Blocker count** — tasks marked TASK_BLOCKED
-- **Blocker categories** — normalized reasons for blocks
-- **Total iterations** — loop iteration count
-- **Avg iteration duration** — mean time per iteration
-- **Exit code distribution** — process exit codes
-- **Completion marker success rate** — valid markers / total iterations
+- **Tasks completed / total** — task counts read from the METRICS_JSON block in `overview.md`, else the Completion Summary, else checkbox counts across the phase files
+- **Blocker count** — tasks marked `[!]`
 
 ### Step 4 (Finalize) — from `overview.md` and directory structure
 

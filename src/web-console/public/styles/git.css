@@ -22,10 +22,11 @@
   min-height: 0;
 }
 /* In the board's card slot a card's boxes cannot fill the column (it flows,
-   it does not stretch), so a note box grows with what is typed instead, where
-   the browser can, rather than scrolling inside a 96px box. */
-.git-cards > .card textarea { field-sizing: content; max-height: 50vh; }
-/* The card and the pager centre themselves with auto inline margins, and a
+   it does not stretch), so a note box grows with what is typed instead,
+   rather than scrolling inside a 96px box: an auto-height host does for the
+   Markdown field what field-sizing did for the textarea. */
+.git-cards > .card .md-host { min-height: 0; max-height: 50vh; }
+/* The card and the pager center themselves with auto inline margins, and a
    grid item with auto margins shrinks to its content, so a short confirm sat
    narrow in the middle of the board. In the slot both fill the board's width
    instead; the slot's gap spaces them. */
@@ -127,6 +128,17 @@
 .git-wait { margin: 0; font-size: 13.5px; color: var(--stage); }
 .git-fresh { margin: 0; font-size: 13px; color: var(--ink-3); }
 .git-fresh.is-stale { color: var(--stage); }
+/* A landed result fills the step strip's place with two zones: the result
+   itself (green, "Just landed") beside the leftover step (muted). The big
+   headline belongs to what happened, not to the work that is not yours. */
+.git-duo { display: grid; grid-template-columns: 3fr 2fr; gap: 10px; align-items: start; }
+.git-landed, .git-left { display: grid; gap: 6px; padding: 14px 18px; border-radius: var(--radius); }
+.git-landed { background: var(--ok-soft); border: 1px solid var(--ok); border-left-width: 4px; }
+.git-landed .git-step-kicker { color: var(--ok); }
+.git-landed .git-result-body { font-size: 14px; color: var(--ink-2); }
+.git-landed .git-result-body .md-p { margin: 0; }
+.git-left { background: var(--panel-2); border: 1px solid var(--rule-2); }
+.git-left .git-step-title { font-size: 16px; }
 .git-panel-tab { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
 .git-changes, .git-sync { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
 .git-sweep-offer { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0; font-size: 14px; color: var(--ink-2); }
@@ -144,7 +156,9 @@
 .git-track { font-family: var(--mono); font-size: 14px; color: var(--ink-2); }
 .git-head-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; font-size: 13.5px; color: var(--ink-2); }
 .git-noremote { font-weight: 600; color: var(--stage); }
-.git-activity { color: var(--accent); }
+/* The ring sits on the first line of a wrapped activity, as the dock's does. */
+.git-activity { display: flex; align-items: flex-start; gap: 8px; color: var(--accent); }
+.git-activity .spinner.tiny { margin-top: 0.25em; }
 .git-pr { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding-top: 6px; border-top: 1px solid var(--rule); }
 .git-pr-open { text-decoration: none; }
 .git-pr-ask { font-size: 14px; color: var(--ink); }
@@ -245,6 +259,7 @@
 
 /* Last on purpose: the narrow layout overrides the board rules above it. */
 @container git-board (max-width: 720px) {
+  .git-duo { grid-template-columns: 1fr; }
   .git-tab-bar { flex-wrap: wrap; }
   .git-tabs { flex-wrap: wrap; }
   .git-done { margin: 0 0 6px; }

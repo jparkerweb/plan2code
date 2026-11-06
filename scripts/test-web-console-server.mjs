@@ -25,6 +25,7 @@ import {
   handOff,
   PROTECTED_CONSOLE_FILES,
   readOverview,
+  readSpecFile,
   removeCleanup,
   removeScratch,
   removeSessions,
@@ -42,6 +43,7 @@ import {
   HANDOFFS_DIR,
   HOME,
   ENV,
+  MODELS_DIR,
   cookieFor,
   cli,
   payload,
@@ -51,6 +53,7 @@ import {
   sessionUrl,
   readState,
   sleep,
+  until,
 } from "./web-console-test-helpers.mjs";
 
 // Every page load used to fetch /state, then /looks, then open the stream,
@@ -79,14 +82,14 @@ test("the page carries its first state, title and badge, so the first paint need
   assert.ok(html.includes('<span class="badge" id="badge">Building</span>'));
   assert.ok(html.includes("Starting Implement"), "the static starting screen names the skill");
   assert.ok(html.includes('rel="modulepreload" href="/app.js"'));
-  cli(["stop", "--session", res.json.sid]);
+  cli(["stop", "--session", res.json.sid, "--force"]);
 });
 
 test("open without --title names the session after the project folder", () => {
   const res = cli(["open", "--workflow", "pathfinder", "--no-open"]);
   const state = JSON.parse(fs.readFileSync(path.join(res.json.session, "state.json"), "utf8"));
   assert.equal(state.title, path.basename(ROOT));
-  cli(["stop", "--session", res.json.sid]);
+  cli(["stop", "--session", res.json.sid, "--force"]);
 });
 
 // A saved dark theme and accent used to flash the default light accent for as
@@ -109,7 +112,7 @@ test("saved looks are painted by the server before any script runs", async () =>
     assert.ok(!css.includes(`data-looks-accent="${DEFAULT_ACCENT}"`), "the default needs no rule");
     const boot = JSON.parse(html.match(/id="boot">([\s\S]*?)<\/script>/)[1]);
     assert.equal(boot.looks.accent, "violet");
-    cli(["stop", "--session", res.json.sid]);
+    cli(["stop", "--session", res.json.sid, "--force"]);
   } finally {
     if (before) fs.writeFileSync(looksFile, before);
     else fs.rmSync(looksFile, { force: true });
@@ -128,7 +131,7 @@ test("static assets revalidate with an ETag instead of downloading again", async
   await first.arrayBuffer();
   const again = await fetch(m[1] + "/app.js", { headers: { cookie, "if-none-match": etag } });
   assert.equal(again.status, 304);
-  cli(["stop", "--session", res.json.sid]);
+  cli(["stop", "--session", res.json.sid, "--force"]);
 });
 
 // The page drew from the inline state; the stream's opening frame would only
@@ -172,7 +175,7 @@ test("the stream skips its opening frame only when the page already has that exa
   await sleep(1200);
   const still = await (await fetch(m[1] + "/state", { headers: { cookie } })).json();
   assert.doesNotMatch(await firstChunk(still.have), /event: state/, "the page's own key: skipped");
-  cli(["stop", "--session", res.json.sid]);
+  cli(["stop", "--session", res.json.sid, "--force"]);
 });
 
 // `open` binds the port and sends the browser before the server has booted.
@@ -226,7 +229,7 @@ test("the card-width presets validate a saved width and fall back to comfortable
   assert.equal(DEFAULT_CARD_WIDTH, "comfortable");
   assert.deepEqual(
     Object.values(CARD_WIDTHS).map((w) => w.px),
-    [720, 880, 1080]
+    [720, 880, 1080, 1440]
   );
 });
 
@@ -256,6 +259,10 @@ test("a working agent's line falls back to its headline note", () => {
 
 test("the terminal line is the exact text every command hands back", () => {
   assert.equal(terminalLine("http://127.0.0.1:1/s/abc/"), "→ Look at the web console: http://127.0.0.1:1/s/abc/");
+  // Under the desktop app the page is beside the terminal: no address to print.
+  const inApp = terminalLine("http://127.0.0.1:1/s/abc/", { PLAN2CODE_IN_APP: "1" });
+  assert.equal(inApp.includes("127.0.0.1"), false, "no address under the app");
+  assert.equal(terminalLine("http://127.0.0.1:1/s/abc/", {}), "→ Look at the web console: http://127.0.0.1:1/s/abc/");
 });
 
 test("repoRoots reads the branch off disk: named, detached, a linked worktree's own, and none", () => {
@@ -355,6 +362,8 @@ test("the scratch sweep removes old patches and helpers, never looks, the pointe
     const kept = [
       file("looks.json"),
       file("workspaces.json"),
+      file("loop-setup.json"),
+      file("loop-reports.json"),
       file("subagents.json"),
       file("pr-hosts.json"),
       file("console-dir"),
@@ -370,7 +379,7 @@ test("the scratch sweep removes old patches and helpers, never looks, the pointe
     const stale = staleScratch(dir, Date.now(), SESSION_MAX_AGE_MS).sort();
     assert.deepEqual(stale, ["helper.mjs", "p2.json"]);
     assert.deepEqual(
-      (await removeScratch(dir, [...stale, "looks.json", "workspaces.json", "subagents.json", "pr-hosts.json", "../p.json", "console-dir", "update-check.json"])).sort(),
+      (await removeScratch(dir, [...stale, "looks.json", "workspaces.json", "loop-setup.json", "loop-reports.json", "subagents.json", "pr-hosts.json", "../p.json", "console-dir", "update-check.json"])).sort(),
       ["helper.mjs", "p2.json"]
     );
     for (const p of removable) assert.equal(fs.existsSync(p), false, p);
@@ -378,6 +387,8 @@ test("the scratch sweep removes old patches and helpers, never looks, the pointe
     assert.deepEqual([...PROTECTED_CONSOLE_FILES].sort(), [
       "console-dir",
       "looks.json",
+      "loop-reports.json",
+      "loop-setup.json",
       "pr-hosts.json",
       "subagents.json",
       "update-check.json",
@@ -439,6 +450,11 @@ test("cleanup finds old sessions and strays in both folders, and keeps every pro
     // Handoffs are Plan2Code's own, however old: swept by age on open, never offered here.
     backdate(put(path.join(plan2code, "handoffs", "2025-01-01-0900-handoff.md")));
     backdate(path.join(plan2code, "handoffs"));
+    // The desktop app and its settings are Plan2Code's own too, however old.
+    backdate(put(path.join(plan2code, "app", "plan2code-app"), "x"));
+    backdate(path.join(plan2code, "app"));
+    backdate(put(path.join(plan2code, "app.json")));
+    backdate(put(path.join(plan2code, "agents.json")));
     // In use right now: a held lock and a temp between its write and rename.
     const live = [put(path.join(consoleDir, "workspaces.json.lock"), ""), put(path.join(plan2code, "models.json.123.tmp"))];
     kept.push(...live);
@@ -454,6 +470,7 @@ test("cleanup finds old sessions and strays in both folders, and keeps every pro
       "session:20250801-101010-aaaaaa",
     ]);
     assert.equal(items.some((i) => i.id === "root:handoffs"), false, "the handoffs folder is never a stray");
+    for (const id of ["root:app", "root:app.json", "root:agents.json"]) assert.equal(items.some((i) => i.id === id), false, `${id} is never a stray`);
     assert.equal(STRAY_GRACE_MS, 60 * 60 * 1000);
     assert.equal(items.find((i) => i.id === "console:p1.json").bytes, 5);
     assert.equal(items.find((i) => i.id === "root:console-dev").kind, "folder");
@@ -536,7 +553,7 @@ test("User Preferences: wider, its body scrolls and the button bar stays put, wi
   const actions = dialog[1].indexOf('<div class="modal-actions">');
   assert.ok(body >= 0 && actions > body, "the fieldsets sit in .prefs-body, before the actions");
   assert.ok(dialog[1].lastIndexOf("</fieldset>") < actions, "every fieldset is inside the scrolling body");
-  assert.match(css, /\.modal\.prefs \{ max-width: 880px; \}/);
+  assert.match(css, /\.modal\.prefs \{ width: min\(1080px, var\(--card-width\), calc\(100vw - 32px\)\); max-width: none; \}/);
   assert.match(css, /\.prefs-body \{[^}]*overflow-y: auto/);
   assert.match(css, /\.modal\.prefs \.modal-actions \{[^}]*flex: none/);
   assert.match(html, /<dialog class="modal looks subagents" id="subagents-modal"/, "Subagents keeps its own classes");
@@ -552,6 +569,12 @@ function overviewProject() {
   fs.writeFileSync(path.join(root, "specs", "a", "overview.md"), "# Overview A\n");
   fs.writeFileSync(path.join(root, "specs", "a", "phase-1.md"), "- [ ] **Task 1.1:** x\n");
   fs.writeFileSync(path.join(root, "specs", "b", "notes.md"), "notes\n");
+  // Planned, not documented: a Pathfinder map and a live draft beside the
+  // copy Revise plan keeps of the last one.
+  fs.mkdirSync(path.join(root, "specs", "c", "pathfinder"), { recursive: true });
+  fs.writeFileSync(path.join(root, "specs", "c", "pathfinder", "map.md"), "# Map C\n");
+  fs.writeFileSync(path.join(root, "specs", "c", "PLAN-DRAFT-20261020.md"), "# Draft C\n");
+  fs.writeFileSync(path.join(root, "specs", "c", "PLAN-DRAFT-20261020-prev.md"), "# Old draft C\n");
   fs.mkdirSync(path.join(base, "outside"));
   fs.writeFileSync(path.join(base, "outside", "overview.md"), "# SECRET\n");
   return { base, root };
@@ -588,6 +611,22 @@ test("readOverview reads a spec's overview and nothing outside the root", async 
   }
 });
 
+test("readSpecFile reads a spec's map and live plan draft, and names the file", async () => {
+  const { base, root } = overviewProject();
+  try {
+    assert.deepEqual(await readSpecFile(root, "specs/c", "map"), { file: "pathfinder/map.md", text: "# Map C\n" });
+    assert.deepEqual(await readSpecFile(root, "specs/c", "draft"), { file: "PLAN-DRAFT-20261020.md", text: "# Draft C\n" });
+    assert.deepEqual(await readSpecFile(root, "specs/a", "overview"), { file: "overview.md", text: "# Overview A\n" });
+    assert.equal(await readSpecFile(root, "specs/c", "overview"), null);
+    assert.equal(await readSpecFile(root, "specs/a", "map"), null);
+    assert.equal(await readSpecFile(root, "specs/a", "draft"), null);
+    assert.equal(await readSpecFile(root, "specs/c", "phase-1.md"), null, "only the known kinds");
+    assert.equal(await readSpecFile(root, "../outside", "draft"), null);
+  } finally {
+    fs.rmSync(base, { recursive: true, force: true });
+  }
+});
+
 test("GET /overview serves the session's spec, and on the dashboard only a scanned one", async () => {
   const { base, root } = overviewProject();
   const sids = [];
@@ -618,8 +657,18 @@ test("GET /overview serves the session's spec, and on the dashboard only a scann
     assert.equal((await get(d, "?spec=specs/b")).status, 204);
     assert.equal((await get(d, "?spec=specs/../..")).status, 204);
     assert.equal((await get(d, "?spec=specs/not-scanned")).status, 204);
+    // ?file= picks the map or the live draft, and names it for the page.
+    const map = await get(d, "?spec=specs/c&file=map");
+    assert.equal(map.status, 200);
+    assert.equal(map.headers.get("x-spec-file"), encodeURIComponent("pathfinder/map.md"));
+    assert.equal(await map.text(), "# Map C\n");
+    const draft = await get(d, "?spec=specs/c&file=draft");
+    assert.equal(draft.headers.get("x-spec-file"), "PLAN-DRAFT-20261020.md");
+    assert.equal(await draft.text(), "# Draft C\n");
+    assert.equal((await get(d, "?spec=specs/c")).status, 204, "no overview.md yet");
+    assert.equal((await get(d, "?spec=specs/c&file=nope")).status, 204);
   } finally {
-    for (const s of sids) cliIn(root, ["stop", "--session", s]);
+    for (const s of sids) cliIn(root, ["stop", "--session", s, "--force"]);
     fs.rmSync(base, { recursive: true, force: true });
   }
 });
@@ -640,32 +689,28 @@ test("open records worktree and branch, and wakes only a freshly opened dashboar
     cli(["open", "--resume", dash.json.sid, "--no-open"]);
     assert.equal("wake" in readState(dash.json.session), false);
   } finally {
-    cli(["stop", "--session", dash.json.sid]);
+    cli(["stop", "--session", dash.json.sid, "--force"]);
   }
 
   const plan = cli(["open", "--workflow", "plan", "--no-open"]);
   assert.equal("wake" in readState(plan.json.session), false);
-  cli(["stop", "--session", plan.json.sid]);
+  cli(["stop", "--session", plan.json.sid, "--force"]);
 });
 
-test("open reports a month-old session under swept and removes it after printing", async () => {
-  const quiet = cli(["open", "--workflow", "plan", "--no-open"]);
-  assert.equal("swept" in quiet.json, false, "nothing old, nothing reported");
-  cli(["stop", "--session", quiet.json.sid]);
-
+test("open removes a month-old session without printing it", async () => {
   const oldSid = "20250101-101010-abcdef";
   const oldDir = path.join(HOME, "sessions", oldSid);
   fs.mkdirSync(oldDir, { recursive: true });
   fs.writeFileSync(path.join(oldDir, "state.json"), "{}");
   backdate(path.join(oldDir, "state.json"));
   const res = cli(["open", "--workflow", "plan", "--no-open"]);
-  cli(["stop", "--session", res.json.sid]);
-  assert.deepEqual(res.json.swept.sessions, [oldSid]);
+  cli(["stop", "--session", res.json.sid, "--force"]);
+  assert.equal("swept" in res.json, false, "the sweep is housekeeping, not output");
   for (let i = 0; i < 20 && fs.existsSync(oldDir); i++) await new Promise((r) => setTimeout(r, 100));
   assert.equal(fs.existsSync(oldDir), false);
 });
 
-test("open reports a month-old handoff under swept.handoffs and removes both its files", async () => {
+test("open removes a month-old handoff and both its files without printing them", async () => {
   const id = "2025-01-01-0900-handoff";
   fs.mkdirSync(HANDOFFS_DIR, { recursive: true });
   const files = [path.join(HANDOFFS_DIR, id + ".md"), path.join(HANDOFFS_DIR, id + ".json")];
@@ -673,24 +718,23 @@ test("open reports a month-old handoff under swept.handoffs and removes both its
   fs.writeFileSync(files[1], "{}");
   for (const f of files) backdate(f);
   const res = cli(["open", "--workflow", "plan", "--no-open"]);
-  cli(["stop", "--session", res.json.sid]);
-  assert.deepEqual(res.json.swept.handoffs, [id]);
+  cli(["stop", "--session", res.json.sid, "--force"]);
+  assert.equal("swept" in res.json, false, "the sweep is housekeeping, not output");
   for (let i = 0; i < 20 && files.some((f) => fs.existsSync(f)); i++) await new Promise((r) => setTimeout(r, 100));
   assert.deepEqual(files.filter((f) => fs.existsSync(f)), []);
 });
 
-test("post and wait hand back the terminal line; the collected result on disk does not carry it", async () => {
+test("open prints the terminal line; post and wait leave it out until it changes; the collected result on disk does not carry it", async () => {
   const res = cli(["open", "--file", payload("tl.json", BASE), "--no-open"]);
   const s = sessionUrl(res.json.url);
   try {
     const posted = cli(["post", "--session", res.json.sid, "--file", payload("tl2.json", { agent: { status: "waiting" } })]);
-    assert.equal(posted.json.terminalLine, terminalLine(res.json.url));
+    assert.equal(res.json.terminalLine, terminalLine(res.json.url));
+    assert.equal("terminalLine" in posted.json, false, "unchanged, so not repeated");
 
     const waiting = cli(["wait", "--session", res.json.sid, "--seconds", "5"]);
     assert.equal(waiting.status, 10);
-    assert.equal(waiting.json.message, "Waiting on your answer in the web console");
-    assert.match(waiting.json.next, /run this same wait command again/);
-    assert.equal(waiting.json.terminalLine, terminalLine(res.json.url));
+    assert.deepEqual(waiting.json, { waiting: true, open: 1 });
 
     const sent = await fetch(`${s.base}/submit`, {
       method: "POST",
@@ -700,7 +744,8 @@ test("post and wait hand back the terminal line; the collected result on disk do
     assert.equal(sent.status, 200);
     const done = cli(["wait", "--session", res.json.sid, "--seconds", "10"]);
     assert.equal(done.status, 0);
-    assert.equal(done.json.terminalLine, terminalLine(res.json.url));
+    assert.equal("terminalLine" in done.json, false);
+    assert.equal(done.json.reply, "Export format: a");
     const onDisk = JSON.parse(fs.readFileSync(path.join(res.json.session, "result.json"), "utf8"));
     assert.equal("terminalLine" in onDisk, false);
     assert.ok(onDisk.consumedAt);
@@ -709,25 +754,24 @@ test("post and wait hand back the terminal line; the collected result on disk do
     assert.equal(js.status, 200);
     assert.match(js.headers.get("content-type"), /javascript/);
   } finally {
-    cli(["stop", "--session", res.json.sid]);
+    cli(["stop", "--session", res.json.sid, "--force"]);
   }
 });
 
 test("notes/quick-task.md has a quick-task build tick the Plan tab's steps live", () => {
   const md = fs.readFileSync(path.join(ROOT, "src", "web-console", "notes", "quick-task.md"), "utf8");
-  const section = md.slice(md.indexOf("## Quick task (`quick-task`)"), md.indexOf("## Stop requests during a build"));
-  assert.ok(!section.includes('"title": "Build progress"'), "no separate progress tab");
-  assert.match(section, /post after every step/i);
-  assert.ok(section.includes('{ "id": "steps", "state": "settled", "md": "## Steps\\n\\n- [ ] **1.**'), "the plan's Steps start as a checklist");
-  assert.ok(section.includes('"docs": [{ "id": "plan", "blocks": [\n      { "id": "steps"'), "a step post reposts the plan's steps block, its version moving by itself");
+  const section = md;
+  assert.ok(!section.includes('"title":"Build progress"'), "no separate progress tab");
+  assert.match(section, /After each step/);
+  assert.ok(section.includes('{"id":"steps","state":"settled","md":"## Steps\\n\\n- [ ] **1.**'), "the plan's Steps start as a checklist");
+  assert.ok(section.includes('"docs":[{"id":"plan","blocks":[{"id":"steps"'), "a step post reposts the plan's steps block, its version moving by itself");
   assert.ok(section.includes("- [x] **1.** Step one"));
 });
 
 test("notes/quick-task.md has the finished quick task offer Back to the dashboard as well as the review", () => {
   const md = fs.readFileSync(path.join(ROOT, "src", "web-console", "notes", "quick-task.md"), "utf8");
-  const section = md.slice(md.indexOf("## Quick task (`quick-task`)"));
-  const bullet = section.slice(section.indexOf("**The finish after the build:**"), section.indexOf("**Escalated / aborted:**"));
-  assert.ok(bullet.includes('"dashboard": true'));
+  const bullet = md.slice(md.indexOf("**Finish after the build:**"), md.indexOf("**Escalated / aborted:**"));
+  assert.ok(bullet.includes('"dashboard":true'));
   assert.ok(bullet.includes("Review it now"));
 });
 
@@ -752,7 +796,7 @@ test("an image block under the session's shots folder round-trips, and /shots/ s
     const jargon = { docs: [{ id: "shown", blocks: [{ id: "s1", image: "shots/home-page.png", alt: "Grilling the home page" }] }] };
     const refused = cli(["post", "--session", res.json.sid, "--file", payload("shots-jargon.json", jargon)], { expectFail: true });
     assert.equal(refused.status, 3);
-    assert.match(refused.stderr, /alt text contains internal vocabulary/);
+    assert.match(refused.stderr, /alt: contains internal vocabulary/);
     // A changed picture or caption is a new version of the doc.
     const before = readState(res.json.session).docs.find((d) => d.id === "shown").version;
     const recaption = { docs: [{ id: "shown", blocks: [{ id: "s1", image: "shots/home-page.png", alt: "The home page, after the fix" }] }] };
@@ -783,7 +827,7 @@ test("an image block under the session's shots folder round-trips, and /shots/ s
       assert.equal(await raw(p), 404, p);
     }
   } finally {
-    cli(["stop", "--session", res.json.sid]);
+    cli(["stop", "--session", res.json.sid, "--force"]);
   }
 });
 
@@ -821,7 +865,7 @@ test("/app.css is the style files joined in CSS_ORDER with the accent rules last
       await own.arrayBuffer();
     }
   } finally {
-    cli(["stop", "--session", res.json.sid]);
+    cli(["stop", "--session", res.json.sid, "--force"]);
   }
 });
 
@@ -841,6 +885,440 @@ test("the built skills tree serves the same /app.css as the source console", asy
     assert.equal(res.status, 200);
     assert.equal(await res.text(), asset("app.css").body.toString("utf8"));
   } finally {
-    execFileSync(process.execPath, [path.join(built, "console.mjs"), "stop", "--session", json.sid], { env: ENV, cwd: ROOT });
+    execFileSync(process.execPath, [path.join(built, "console.mjs"), "stop", "--session", json.sid, "--force"], { env: ENV, cwd: ROOT });
+  }
+});
+
+// The desktop app's webview opens no new windows, so a link the page shows
+// there goes through /open-link, which hands it to the default browser. Only
+// http and https: anything else would be the page asking the machine to run
+// whatever a link names.
+test("/open-link takes an http or https link and refuses every other kind", async () => {
+  const res = cli(["open", "--workflow", "git", "--no-open"]);
+  const m = res.json.url.match(/^(http:\/\/127\.0\.0\.1:\d+)\/s\/([^/]+)\//);
+  const cookie = cookieFor(m[1], m[2]);
+  const open = (url) =>
+    fetch(`${m[1]}/open-link`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie, origin: m[1], connection: "close" },
+      body: JSON.stringify({ url }),
+    });
+  try {
+    const ok = await open("https://github.com/jparkerweb/plan2code/compare/main...feature?expand=1");
+    assert.equal(ok.status, 200);
+    assert.deepEqual(await ok.json(), { ok: true, url: "https://github.com/jparkerweb/plan2code/compare/main...feature?expand=1" });
+    for (const bad of ["javascript:alert(1)", "file:///C:/Windows/System32/calc.exe", "ms-settings:", "not a link", "", 42]) {
+      const no = await open(bad);
+      assert.equal(no.status, 400, `${JSON.stringify(bad)} was not refused`);
+    }
+    const foreign = await fetch(`${m[1]}/open-link`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie, origin: "https://evil.example", connection: "close" },
+      body: JSON.stringify({ url: "https://example.com/" }),
+    });
+    assert.notEqual(foreign.status, 200, "another site's page cannot open links through the console");
+  } finally {
+    cli(["stop", "--session", res.json.sid, "--force"]);
+  }
+});
+
+/* ------------------------- first-run agent setup (the setup workflow) ------------------------- */
+
+// `open --workflow setup` is the agent-less page the launcher opens when no agent
+// can run: the session state carries the hand-over the launcher's agent posts
+// back to /handover, and `open` prints it for the launcher to read.
+test("open --workflow setup records the hand-over data and prints it, and a plain resume keeps its token", () => {
+  const res = cli(["open", "--workflow", "setup", "--for-cli", "devin", "--no-open"], { env: NO_APP });
+  try {
+    const state = readState(res.json.session);
+    assert.equal(state.workflow, "setup");
+    assert.equal(state.setup.forCli, "devin");
+    assert.match(state.setup.token, /^[A-Za-z0-9_-]{10,}$/);
+    assert.ok(state.setup.created);
+    assert.deepEqual(res.json.setup, { url: res.json.url, token: state.setup.token });
+    assert.match(res.json.setup.url, /\/s\/[A-Za-z0-9_-]+\/$/, "the page's own sign-in link");
+
+    cli(["open", "--resume", res.json.sid, "--workflow", "setup", "--no-open"], { env: NO_APP });
+    assert.equal(readState(res.json.session).setup.token, state.setup.token, "a plain resume keeps the token the launcher's agent holds");
+
+    // A resume naming --for-cli is a new hand-over: a fresh token and target.
+    const retarget = cli(["open", "--resume", res.json.sid, "--workflow", "setup", "--for-cli", "codex", "--no-open"], { env: NO_APP });
+    const now = readState(res.json.session).setup;
+    assert.equal(now.forCli, "codex");
+    assert.notEqual(now.token, state.setup.token);
+    assert.equal(retarget.json.setup.token, now.token);
+  } finally {
+    cli(["stop", "--session", res.json.sid, "--force"]);
+  }
+});
+
+// The shipped and custom agent lists the setup page shows. Commands carry .cmd
+// so one file name is found on every OS. The env points npm's global folder at
+// a fixture dir and kills the saved PATH: a builtin goes "outside" through its
+// installDirs, a custom agent through the npm folder (agentsGet looks custom
+// commands up by name only, so installDirs never applies to them).
+const NO_APP = {
+  PLAN2CODE_IN_APP: undefined,
+  PLAN2CODE_APP_TOKEN: undefined,
+  PLAN2CODE_APP_ANNOUNCE: undefined,
+  PLAN2CODE_EMBED_ORIGIN: undefined,
+  PLAN2CODE_CONSOLE_SID: undefined,
+  PLAN2CODE_APP_VERSION: undefined,
+};
+
+function agentFixtures(base) {
+  const outside = path.join(base, "outside");
+  fs.mkdirSync(outside);
+  fs.writeFileSync(path.join(outside, "testagent.cmd"), "@rem stand-in\r\n");
+  const onPath = path.join(base, "onpath.cmd");
+  fs.writeFileSync(onPath, "@rem stand-in\r\n");
+  // npm's global bin: the prefix itself on Windows, <prefix>/bin elsewhere.
+  const npmBin = process.platform === "win32" ? path.join(base, "npm-prefix") : path.join(base, "npm-prefix", "bin");
+  fs.mkdirSync(npmBin, { recursive: true });
+  const inNpm = path.join(npmBin, "agenttwo.cmd");
+  fs.writeFileSync(inNpm, "@rem stand-in\r\n");
+
+  const shipped = {
+    schema: 1,
+    agents: [
+      {
+        id: "testagent",
+        name: "Test Agent",
+        kind: "builtin",
+        command: "testagent.cmd",
+        prompt: "/plan2code",
+        args: ["{prompt}"],
+        bypassArgs: ["--yes"],
+        modelArgs: ["--model", "{model}"],
+        installUrl: "https://example.com/get",
+        install: {
+          win: [{ label: "PowerShell", run: "irm x | iex", note: "n" }],
+          mac: [{ label: "Terminal", run: "curl x" }],
+          linux: [],
+        },
+        installDirs: { win: [outside], mac: [outside], linux: [outside] },
+      },
+      { id: "gone", name: "Gone Agent", kind: "builtin", command: "gone-agent-xyz.cmd" },
+      { id: "templ", name: "Templ", kind: "template", command: "templ", prompt: "Use plan2code", args: ["{prompt}"], note: "a starter" },
+    ],
+  };
+  const user = {
+    schema: 1,
+    agents: [
+      { id: "myagent", name: "My Agent", command: onPath },
+      { id: "agenttwo", name: "Agent Two", command: "agenttwo.cmd" },
+    ],
+  };
+  const shippedFile = path.join(MODELS_DIR, "bin", "agents.json");
+  const userFile = path.join(MODELS_DIR, "agents.json");
+  fs.mkdirSync(path.dirname(shippedFile), { recursive: true });
+  fs.writeFileSync(shippedFile, JSON.stringify(shipped));
+  fs.writeFileSync(userFile, JSON.stringify(user));
+  return { outside, onPath, inNpm, shipped, shippedFile, userFile };
+}
+
+const AGENT_ENV = (base) => ({ PLAN2CODE_NO_SAVED_PATH: "1", npm_config_prefix: path.join(base, "npm-prefix"), ...NO_APP });
+
+test("GET /agents reports found, outside and missing for the custom and shipped lists", async () => {
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), "p2c-agents-"));
+  const res = cli(["open", "--workflow", "setup", "--no-open"], { env: AGENT_ENV(base) });
+  try {
+    const f = agentFixtures(base);
+    const { base: url, cookie } = sessionUrl(res.json.url);
+    const got = await (await fetch(`${url}/agents`, { headers: { cookie, connection: "close" } })).json();
+
+    const mine = got.agents.find((a) => a.id === "myagent");
+    assert.deepEqual(
+      { state: mine.state, path: mine.path, where: mine.where, folder: mine.folder },
+      { state: "found", path: f.onPath, where: "path", folder: path.dirname(f.onPath) }
+    );
+    const two = got.agents.find((a) => a.id === "agenttwo");
+    assert.deepEqual({ state: two.state, path: two.path, where: two.where }, { state: "outside", path: f.inNpm, where: "npm" });
+
+    const testagent = got.builtins.find((b) => b.id === "testagent");
+    assert.deepEqual({ state: testagent.state, where: testagent.where }, { state: "outside", where: "install-dir" });
+    assert.equal(testagent.name, "Test Agent");
+    assert.equal(testagent.command, "testagent.cmd");
+    assert.equal(testagent.prompt, "/plan2code");
+    assert.deepEqual(testagent.args, ["{prompt}"]);
+    assert.deepEqual(testagent.bypassArgs, ["--yes"]);
+    assert.deepEqual(testagent.modelArgs, ["--model", "{model}"]);
+    assert.equal(testagent.installUrl, "https://example.com/get");
+    const OS_KEY = process.platform === "win32" ? "win" : process.platform === "darwin" ? "mac" : "linux";
+    assert.deepEqual(testagent.install, f.shipped.agents[0].install[OS_KEY], "only this OS's install steps");
+
+    const gone = got.builtins.find((b) => b.id === "gone");
+    assert.deepEqual(
+      { state: gone.state, path: gone.path, where: gone.where, folder: gone.folder },
+      { state: "missing", path: null, where: null, folder: null }
+    );
+    // Templates come back as the form fields only: no `kind`, no found state.
+    assert.deepEqual(got.templates, [{ id: "templ", name: "Templ", command: "templ", prompt: "Use plan2code", args: ["{prompt}"], note: "a starter" }]);
+    assert.deepEqual(got.warnings, []);
+  } finally {
+    cli(["stop", "--session", res.json.sid, "--force"]);
+    fs.rmSync(path.join(MODELS_DIR, "agents.json"), { force: true });
+    fs.rmSync(path.join(MODELS_DIR, "bin", "agents.json"), { force: true });
+    fs.rmSync(base, { recursive: true, force: true });
+  }
+});
+
+test("POST /agents/use-path writes findAgent's hit into agents.json, and only that", async () => {
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), "p2c-agents-"));
+  const res = cli(["open", "--workflow", "setup", "--no-open"], { env: AGENT_ENV(base) });
+  try {
+    const f = agentFixtures(base);
+    const { base: url, cookie } = sessionUrl(res.json.url);
+    const usePath = (body) =>
+      fetch(`${url}/agents/use-path`, {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie, origin: url, connection: "close" },
+        body: JSON.stringify(body),
+      });
+    const readUser = () => JSON.parse(fs.readFileSync(f.userFile, "utf8"));
+
+    const missing = await usePath({ id: "gone" });
+    assert.equal(missing.status, 409, "not on PATH and nowhere else either");
+    assert.deepEqual(await missing.json(), { error: "not-found" });
+    const unknown = await usePath({ id: "nope" });
+    assert.equal(unknown.status, 404, "no such agent at all");
+    assert.deepEqual(await unknown.json(), { error: "not-found" });
+
+    // Already on PATH: a 200 and no write.
+    const before = fs.readFileSync(f.userFile, "utf8");
+    const found = await usePath({ id: "myagent" });
+    assert.equal(found.status, 200);
+    assert.deepEqual(await found.json(), { ok: true, id: "myagent", command: f.onPath });
+    assert.equal(fs.readFileSync(f.userFile, "utf8"), before);
+
+    // Off PATH ("outside"): the command becomes where it was found. A path in
+    // the body is never taken.
+    const outside = await usePath({ id: "agenttwo", command: "should-not-be-taken", path: "should-not-be-taken" });
+    assert.equal(outside.status, 200);
+    const wanted = f.inNpm;
+    assert.deepEqual(await outside.json(), { ok: true, id: "agenttwo", command: wanted });
+    assert.equal(readUser().agents.find((a) => a.id === "agenttwo").command, wanted);
+
+    // A built-in is materialized as a new custom entry under a generated id;
+    // the file's other entries stand.
+    const builtin = await usePath({ id: "testagent" });
+    assert.equal(builtin.status, 200);
+    const saved = await builtin.json();
+    assert.equal(saved.id, "test-agent", "makeId kebab-cases the name");
+    const created = readUser().agents.find((a) => a.id === "test-agent");
+    assert.equal(created.command, path.join(f.outside, "testagent.cmd"));
+    assert.equal(created.name, "Test Agent");
+    assert.equal(created.prompt, "/plan2code");
+    assert.equal(readUser().schema, 1);
+    assert.deepEqual(readUser().agents.map((a) => a.id), ["myagent", "agenttwo", "test-agent"]);
+  } finally {
+    cli(["stop", "--session", res.json.sid, "--force"]);
+    fs.rmSync(path.join(MODELS_DIR, "agents.json"), { force: true });
+    fs.rmSync(path.join(MODELS_DIR, "bin", "agents.json"), { force: true });
+    fs.rmSync(base, { recursive: true, force: true });
+  }
+});
+
+// The setup tab's move: another Plan2Code process POSTs the session's sign-in
+// link here, the page's stream gets a `move` event and state.setup.moved is
+// set. Only a setup session answers, only for the token `open` printed, and
+// only a loopback console /s/ link is a legal destination.
+test("POST /handover takes only the setup token and a console sign-in link, and moves the page", async () => {
+  const res = cli(["open", "--workflow", "setup", "--no-open"], { env: NO_APP });
+  const m = res.json.url.match(/^(http:\/\/127\.0\.0\.1:(\d+))\/s\/([^/]+)\//);
+  const cookie = cookieFor(m[1], m[3]);
+  const port = Number(m[2]);
+  const token = res.json.setup.token;
+  const handover = (body, headers = {}) =>
+    new Promise((resolve, reject) => {
+      const req = http.request(
+        {
+          host: "127.0.0.1",
+          port,
+          path: "/handover",
+          method: "POST",
+          headers: { "content-type": "application/json", "x-plan2code-token": token, connection: "close", ...headers },
+        },
+        (r) => {
+          const chunks = [];
+          r.on("data", (c) => chunks.push(c));
+          r.on("end", () => resolve({ status: r.statusCode, body: Buffer.concat(chunks).toString("utf8") }));
+        }
+      );
+      req.on("error", reject);
+      req.end(JSON.stringify(body));
+    });
+  const other = cli(["open", "--workflow", "plan", "--no-open"], { env: NO_APP });
+  try {
+    // No cookie at all: the hand-over has its own token, which is the point.
+    for (const headers of [{ "x-plan2code-token": "wrong-token" }, { "x-plan2code-token": "" }]) {
+      const no = await handover({ url: "http://127.0.0.1:9/s/abc/" }, headers);
+      assert.equal(no.status, 403, JSON.stringify(headers));
+      assert.deepEqual(JSON.parse(no.body), { error: "forbidden" });
+    }
+    for (const url of [
+      "https://127.0.0.1:9/s/abc/",
+      "http://example.com/s/abc/",
+      "http://127.0.0.1/s/abc/",
+      "http://127.0.0.1:9/x/abc/",
+      "http://127.0.0.1:9/s/a b/",
+      "javascript:alert(1)",
+      "",
+      42,
+      null,
+    ]) {
+      const no = await handover({ url });
+      assert.equal(no.status, 400, JSON.stringify(url));
+      assert.deepEqual(JSON.parse(no.body), { error: "bad-url" });
+    }
+
+    // The stream sees the move the POST causes.
+    const events = new Promise((resolve, reject) => {
+      const req = http.request({ host: "127.0.0.1", port, path: "/events", headers: { cookie } }, (r) => {
+        let buf = "";
+        r.setEncoding("utf8");
+        r.on("data", (c) => (buf += c));
+        setTimeout(() => {
+          req.destroy();
+          resolve(buf);
+        }, 1500);
+      });
+      req.on("error", reject);
+      req.end();
+    });
+    await sleep(150); // the GET must land before the POST
+    const target = "http://localhost:9/s/NewAgent_1-2/";
+    const ok = await handover({ url: target });
+    assert.equal(ok.status, 204);
+    const stream = await events;
+    assert.ok(stream.includes(`event: move\ndata: ${JSON.stringify({ url: target })}`), stream);
+    const setup = readState(res.json.session).setup;
+    assert.equal(setup.moved.url, target);
+    assert.ok(setup.moved.at);
+
+    // A session that is not the setup page never answers, whatever the header.
+    const otherPort = Number(other.json.url.match(/^http:\/\/127\.0\.0\.1:(\d+)\//)[1]);
+    const notSetup = await new Promise((resolve, reject) => {
+      const req = http.request(
+        {
+          host: "127.0.0.1",
+          port: otherPort,
+          path: "/handover",
+          method: "POST",
+          headers: { "content-type": "application/json", "x-plan2code-token": token },
+        },
+        (r) => {
+          const chunks = [];
+          r.on("data", (c) => chunks.push(c));
+          r.on("end", () => resolve({ status: r.statusCode, body: Buffer.concat(chunks).toString("utf8") }));
+        }
+      );
+      req.on("error", reject);
+      req.end(JSON.stringify({ url: "http://127.0.0.1:9/s/abc/" }));
+    });
+    assert.equal(notSetup.status, 404);
+    assert.deepEqual(JSON.parse(notSetup.body), { error: "not-found" });
+  } finally {
+    cli(["stop", "--session", res.json.sid, "--force"]);
+    cli(["stop", "--session", other.json.sid, "--force"]);
+  }
+});
+
+// The other half of the hand-over: an agent opened under PLAN2CODE_SETUP_* posts
+// its link to the setup console's /handover instead of opening a browser, and a
+// refused post falls back to the browser with a note saying so.
+test("an agent opened with the setup hand-over posts its link, and a refused post says so", async () => {
+  const setup = cli(["open", "--workflow", "setup", "--no-open"], { env: NO_APP });
+  const token = readState(setup.json.session).setup.token;
+  let agent;
+  try {
+    // setup.url is the setup session's own link; /handover resolves off it, so
+    // the running server answers. No --no-open: that flag is what skips this.
+    agent = cli(["open", "--workflow", "plan"], {
+      env: { ...NO_APP, PLAN2CODE_SETUP_ANNOUNCE: setup.json.setup.url, PLAN2CODE_SETUP_TOKEN: token },
+    });
+    assert.equal(agent.json.handover, true);
+    const moved = readState(setup.json.session).setup.moved;
+    assert.equal(moved.url, agent.json.url, "the setup session learned where its tab went");
+
+    const bad = cli(["open", "--workflow", "plan"], {
+      env: { ...NO_APP, PLAN2CODE_SETUP_ANNOUNCE: setup.json.setup.url, PLAN2CODE_SETUP_TOKEN: "wrong-token" },
+    });
+    try {
+      assert.equal("handover" in bad.json, false);
+      assert.match(bad.json.note, /Could not move the setup tab/);
+    } finally {
+      cli(["stop", "--session", bad.json.sid, "--force"]);
+    }
+  } finally {
+    if (agent) cli(["stop", "--session", agent.json.sid, "--force"]);
+    cli(["stop", "--session", setup.json.sid, "--force"]);
+  }
+});
+
+// The idle deadline is the only thing that stops an orphan server (server.mjs's
+// comment says why it must not be optimized away); a setup session honors it too.
+test("a setup session still stops on --idle-ms", async () => {
+  const res = cli(["open", "--workflow", "setup", "--idle-ms", "300", "--no-open"], { env: NO_APP });
+  try {
+    const events = path.join(res.json.session, "events.ndjson");
+    // The deadline is checked on a 20s tick, so the exit lands within a tick of the cap.
+    const gone = await until(() => fs.existsSync(events) && fs.readFileSync(events, "utf8").includes('"reason":"idle"'), 40000);
+    assert.ok(gone, "the server never recorded its idle exit");
+  } finally {
+    cli(["stop", "--session", res.json.sid, "--force"]);
+  }
+});
+
+// NFR-2: the launcher scrubs the app-window variables before spawning the setup
+// console (test-launcher.mjs has the spawn half), so nothing can leak the page
+// into an app window. Even with an announce URL left in the environment a
+// console without the full signal never calls it; with the signal it does.
+test("a setup console without the app signal never calls a leftover announce URL", async () => {
+  const calls = [];
+  const stub = http.createServer((req, res) => {
+    req.resume();
+    req.on("end", () => {
+      calls.push(`${req.method} ${req.url}`);
+      res.writeHead(req.url === "/session" ? 404 : 204).end();
+    });
+  });
+  await new Promise((r) => stub.listen(0, "127.0.0.1", r));
+  const announce = `http://127.0.0.1:${stub.address().port}`;
+  try {
+    const res = cli(["open", "--workflow", "setup", "--no-open"], { env: { ...NO_APP, PLAN2CODE_APP_ANNOUNCE: announce } });
+    try {
+      assert.equal(res.json.inApp, undefined);
+      assert.equal(res.json.announced, undefined);
+      assert.deepEqual(calls, [], "a stray announce URL alone is not the signal");
+    } finally {
+      cli(["stop", "--session", res.json.sid, "--force"]);
+    }
+
+    // With the full signal the same open announces, as the in-app tests cover.
+    // Spawned asynchronously: the announce endpoint lives in this process, so a
+    // blocking spawn would deadlock (the same reason test-in-app uses openAsync).
+    const inApp = await new Promise((resolve) => {
+      const child = spawn(
+        process.execPath,
+        [path.join(ROOT, "src", "web-console", "console.mjs"), "open", "--workflow", "setup", "--no-open"],
+        {
+          cwd: ROOT,
+          env: { ...ENV, ...NO_APP, PLAN2CODE_IN_APP: "1", PLAN2CODE_APP_ANNOUNCE: announce, PLAN2CODE_APP_TOKEN: "tok" },
+          windowsHide: true,
+        }
+      );
+      let out = "";
+      child.stdout.on("data", (c) => (out += c));
+      child.on("close", (status) => resolve({ status, json: JSON.parse(out.trim().split("\n").filter(Boolean).pop()) }));
+    });
+    try {
+      assert.equal(inApp.json.announced, true);
+      assert.ok(calls.some((c) => c.startsWith("POST /page")), JSON.stringify(calls));
+    } finally {
+      cli(["stop", "--session", inApp.json.sid, "--force"]);
+    }
+  } finally {
+    stub.close();
   }
 });

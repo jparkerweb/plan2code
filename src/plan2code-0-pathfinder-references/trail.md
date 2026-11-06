@@ -36,11 +36,11 @@ One idea per session, so there is only ever one trail.
   START ●━●━◉··○··○··⊘··⊝ ····⚑
   ● done · ◉ here · ○ open · ⊘ blocked · ⊝ out of scope · ⚑ destination · ~4 fog
   1 Codebase context ✔ · 2 Export format ✔ · 3 Row-count ceiling ◀ here · 4 Export authorization
-  5 Testing posture · 6 Delivery channel (blocked:3) · 7 SIEM push (out of scope)
+  5 Retention window · 6 Delivery channel (blocked:3) · 7 SIEM push (out of scope)
   Confidence: solid, but Risk is borderline.
 
 WAITING ON YOU · answer here, in this conversation:
-Q2 Ceiling behaviour past the cap (re-ask) · Q3 Who sees the truncation warning
+Q2 Ceiling behavior past the cap (re-ask) · Q3 Who sees the truncation warning
 ```
 
 - The heading counts resolved questions over every question except out-of-scope ones.

@@ -156,8 +156,9 @@ function build(view) {
 }
 
 // Redraws on what can change the picture: the text, the selection (which
-// lines are active), the lines in view, and the parse catching up.
-const livePreview = ViewPlugin.fromClass(
+// lines are active), the lines in view, and the parse catching up. Exported:
+// md-field.js puts the same live preview in every answer box.
+export const livePreview = ViewPlugin.fromClass(
   class {
     constructor(view) {
       this.decorations = build(view);

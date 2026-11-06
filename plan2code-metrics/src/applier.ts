@@ -67,7 +67,7 @@ function applyEdit(edit: PromptEdit, plan2codeRoot: string): boolean {
       console.error(chalk.red(`✗ Cannot apply: old_text not found in ${edit.file} (may have been modified by a previous edit)`));
       return false;
     }
-    content = content.replace(edit.old_text, edit.new_text);
+    content = content.replace(edit.old_text, () => edit.new_text);
 
     // Post-apply char count check
     if (content.length > CHAR_LIMIT) {
@@ -173,7 +173,7 @@ export async function reviewAndApply(opts: ApplierOptions): Promise<ApplierResul
     if (success) {
       applied++;
       // Update in-memory content to reflect the edit
-      promptContents[edit.file] = promptContents[edit.file].replace(edit.old_text, edit.new_text);
+      promptContents[edit.file] = promptContents[edit.file].replace(edit.old_text, () => edit.new_text);
     } else {
       failed++;
     }

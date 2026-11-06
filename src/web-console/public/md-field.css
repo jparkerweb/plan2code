@@ -1,0 +1,20 @@
+/* The frame a Markdown field (md-field.js) wears inside its shadow root;
+   linked beside notepad-editor.css, which carries the mark looks. The page's
+   own CSS cannot reach in, so a field's size, border and rounding are set
+   from outside on .md-host, and these rules only fill the host and draw what
+   CodeMirror needs. The chain is flex rather than height: 100%: a percentage
+   of a host whose height comes from min-height is never definite, and an
+   inherited min-height inside a bordered host counts the border twice. The
+   height: auto resets cut notepad-editor.css's height: 100% rules, which this
+   sheet is loaded beside and must never inherit sizing from. */
+:host { display: flex; flex-direction: column; height: auto; }
+.md-field { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+.cm-editor { flex: 1 1 auto; min-height: 0; height: auto; background: transparent; color: var(--ink); font: inherit; }
+div.cm-editor.cm-focused { outline: none; }
+div.cm-editor .cm-scroller { overflow: auto; font-family: inherit; }
+div.cm-editor .cm-content { padding: 10px 12px; caret-color: var(--accent); }
+div.cm-editor .cm-cursor { border-left-color: var(--accent); }
+div.cm-editor .cm-selectionBackground,
+div.cm-editor.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground { background: color-mix(in srgb, var(--accent) 25%, transparent) !important; }
+div.cm-editor .cm-line { padding: 0; }
+.cm-placeholder { color: var(--ink-3); }

@@ -1,16 +1,19 @@
 // Plan2Code Web Console - the Ask chat, the Subagents tab, and attaching files to notes.
 
 import { page, saveNow, redraw, freshChat, hooks, scrollMemory, setDraft } from "../state.js";
-import { chatOffline, chatView, sendState as chatSendState, newestReplyId, CHAT_MAX_CHARS, nextAbout, CHAT_MAX_ATTACHMENTS, contextOptions } from "../chat.js";
-import { finish, activity, agentAdrift, isDashboard, selSpec, byId, isOpen } from "../selectors.js";
+import { chatAnswering, chatOffline, chatView, sendState as chatSendState, newestReplyId, CHAT_MAX_CHARS, nextAbout, CHAT_MAX_ATTACHMENTS, contextOptions } from "../chat.js";
+import { finish, activity, agentAdrift, isDashboard, selSpec, byId, isOpen, loopAskLocked, loopDriving } from "../selectors.js";
 import { el, md, isMac, lightDismiss, shortTime } from "../render.js";
 import { startersFor } from "../starters.js";
 import { looks } from "../looks.js";
-import { thumbs, uploadUrl, docChip, attachTray, CHAT_IMAGES, attachFiles, incomingFiles, deleteUrl, sentAttachments, noteImages, attachRow } from "../uploads.js";
+import { thumbs, uploadUrl, docChip, attachTray, CHAT_IMAGES, attachFiles, incomingFiles, deleteUrl, sentAttachments, noteImages, attachRow, openPicview, refocusThumb } from "../uploads.js";
 import { attachMentions } from "../mention-box.js";
+import { makeMdField } from "../md-field.js";
 import { pickerAccept, attachmentKind, noteAwaiting, threadWho, threadText } from "../answers.js";
 import { postJson } from "../net.js";
-import { CHECKIN_LINE, helperRows, showSwitch, switchLabel, defaultInstruction, PATHFINDER_RESEARCH_LINE } from "../subagents.js";
+import { reconnectOffer } from "../continue-button.js";
+import { suggestState } from "../send-state.js";
+import { CHECKIN_LINE, helperRows, showSwitch, switchLabel, defaultInstruction, PATHFINDER_RESEARCH_LINE, STRENGTHS, DEFAULT_STRENGTH, STRENGTH_HELP } from "../subagents.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -26,6 +29,10 @@ export const declineOpen = new Map();
 
 const deciding = new Set();
 
+// The Subagents dialog's instruction box, a Markdown field made once in
+// wireAsk into its #subagents-instruction mount.
+let instrField = null;
+
 // The frame's chat block, with `offline` worked out now rather than when the
 // frame was sent: the agent comes and goes between frames, and /ping keeps
 // agentLastSeen current. The frame's own verdict stands when there is no clock.
@@ -37,6 +44,7 @@ function askFrame() {
     agent: page.S.agent,
     agentLastSeenMs: Date.parse(page.agentLastSeen),
     now: Date.now(),
+    answering: chatAnswering(base),
   });
   return { ...base, offline };
 }
@@ -45,7 +53,13 @@ export function askState() {
   const frame = askFrame();
   const shown = chatView(frame, { pendingSends: page.local.chat.pending, agentActivity: activity() });
   const pendingSendCount = shown.rows.filter((r) => r.pending && !r.failed).length;
-  return { frame, view: shown, send: chatSendState({ frameChat: frame, gone: page.gone, pendingSendCount }) };
+  const send = chatSendState({ frameChat: frame, gone: page.gone, pendingSendCount });
+  // The Implementation Loop locks Ask like everything else it drives (FR-15),
+  // unless a question waits for the person (FR-14).
+  if (send.canType && loopAskLocked()) {
+    return { frame, view: shown, send: { state: "ok", text: "Ask is off while the loop builds.", canType: false } };
+  }
+  return { frame, view: shown, send };
 }
 
 // The conversation a send belongs to. The page's own record wins over the
@@ -106,9 +120,9 @@ function askStarters(ss) {
       saveNow();
       redraw();
       const ta = $("ask-input");
-      if (!ta) return;
-      ta.focus();
-      ta.setSelectionRange(ta.value.length, ta.value.length);
+      if (!ta || !ta.field) return;
+      ta.field.focus();
+      ta.field.setSelectionRange(ta.field.value.length, ta.field.value.length);
     });
     box.appendChild(b);
   }
@@ -118,7 +132,11 @@ function askStarters(ss) {
 function askRow(r, ss, notes) {
   if (r.kind === "decision") {
     const row = el("div", "ask-row decision");
-    row.appendChild(el("p", "ask-decision", r.decision !== "approve" ? "You declined the edit." : r.done ? "You approved the edit." : "You approved the edit, please wait..."));
+    const working = r.decision === "approve" && !r.done;
+    const line = el("p", working ? "ask-decision working" : "ask-decision");
+    if (working) line.appendChild(el("span", "spinner tiny"));
+    line.appendChild(document.createTextNode(r.decision !== "approve" ? "You declined the edit." : r.done ? "You approved the edit." : "You approved the edit, please wait..."));
+    row.appendChild(line);
     if (r.text) row.appendChild(el("p", "ask-text", r.text));
     return row;
   }
@@ -146,14 +164,26 @@ function askRow(r, ss, notes) {
   const hasFiles = r.files && r.files.length;
   if (hasImages || hasFiles) {
     const tray = el("div", "attach-tray");
-    for (const img of r.images || []) {
+    // A message echoed by the server has no key (it keeps path and name), so
+    // the thumbnail's refocus token is the picture's own URL, which is unique
+    // and the same for a pending send and its echo: the token survives a
+    // redraw while the picview is open.
+    (r.images || []).forEach((img, i) => {
       const fig = el("figure", "attach-thumb is-ready");
+      fig.dataset.key = uploadUrl(img);
       const pic = el("img");
       pic.src = thumbs.get(img.key) || uploadUrl(img);
       pic.alt = img.name || "image";
-      fig.appendChild(pic);
+      const open = el("button", "attach-open");
+      open.type = "button";
+      open.appendChild(pic);
+      open.addEventListener("click", () => {
+        const slides = (r.images || []).map((x) => ({ url: uploadUrl(x), alt: x.name || "image" }));
+        openPicview(slides, i, () => refocusThumb(fig.dataset.key));
+      });
+      fig.appendChild(open);
       tray.appendChild(fig);
-    }
+    });
     for (const file of r.files || []) tray.appendChild(docChip(file, "ready"));
     row.appendChild(tray);
   }
@@ -264,14 +294,15 @@ function askComposer(ss) {
   }
   if (page.local.chat.images.length) comp.appendChild(attachTray(CHAT_IMAGES, page.local.chat.images));
 
-  const ta = el("textarea");
-  ta.id = "ask-input";
-  ta.placeholder = "Ask anything about this project";
-  ta.value = page.local.chat.draft || "";
-  ta.disabled = !ss.canType;
-  ta.setAttribute("aria-label", "Your question");
+  const ta = makeMdField({
+    id: "ask-input",
+    placeholder: "Ask anything about this project",
+    label: "Your question",
+    value: page.local.chat.draft || "",
+    disabled: !ss.canType,
+  });
   attachMentions(ta);
-  comp.appendChild(ta);
+  comp.appendChild(ta.el);
 
   const row = el("div", "ask-actions");
   const add = el("button", "btn small ghost", "+ Attach file");
@@ -306,6 +337,10 @@ function askComposer(ss) {
     hint.appendChild(el("kbd", null, "Enter"));
     row.appendChild(hint);
   }
+
+  // No agent there: under the app a button that types continue in its terminal,
+  // left of Send; in a browser, the line telling the person to.
+  if (ss.state === "offline" && !finish()) row.appendChild(reconnectOffer("ask-reconnect"));
 
   const go = el("button", "btn small primary", "Send");
   go.type = "button";
@@ -587,6 +622,14 @@ async function decideChat(re, decision, text) {
   redraw();
 }
 
+// A stopped loop's screen, with its Ask a question button on offer: its agent
+// is gone, so a note here would reach nobody, and the panel says how to ask.
+const askOffered = () => {
+  const end = page.S && page.S.loopEnd;
+  return Boolean(end && end.kind !== "finished" && Array.isArray(end.can) && end.can.includes("ask") && !finish());
+};
+const ASK_HINT = "Press Ask a question to wake an agent, then ask in the Ask tab.";
+
 export function renderAside() {
   const aside = $("aside");
   // Redrawing empties the panel, which drops its scroll to the top. An image
@@ -600,7 +643,7 @@ export function renderAside() {
   const item = page.view === "end" ? null : byId(page.selected);
   if (!item) {
     // The menu has no questions, so no notes either: the pane stays empty.
-    if (!isDashboard()) aside.appendChild(el("p", "aside-empty", "Pick a question to see its notes."));
+    if (!isDashboard()) aside.appendChild(el("p", "aside-empty", askOffered() ? ASK_HINT : "Pick a question to see its notes."));
     return;
   }
   // Off the question's own page (a doc tab, Ask) "this" points at nothing on
@@ -614,9 +657,11 @@ export function renderAside() {
       el(
         "p",
         "aside-empty",
-        isOpen(item) && !finish()
-          ? "No back and forth yet. Anything you type here goes with your next send."
-          : "Nothing was said about this one."
+        askOffered()
+          ? ASK_HINT
+          : isOpen(item) && !finish()
+            ? "No back and forth yet. Anything you type here goes with your next send."
+            : "Nothing was said about this one."
       )
     );
   }
@@ -636,6 +681,7 @@ export function renderAside() {
     if (pending) who.appendChild(el("span", null, "Sent, waiting for Plan2Code"));
     else if (m.at) who.appendChild(el("span", null, shortTime(m.at)));
     box.appendChild(who);
+    if (m.suggest === true) box.appendChild(suggestTag());
     const text = threadText(m);
     if (text) box.appendChild(md(text, "md"));
     const tray = mine ? sentAttachments(m) : null;
@@ -649,6 +695,7 @@ export function renderAside() {
     who.appendChild(el("span", null, "You"));
     who.appendChild(el("span", null, "Sent, waiting for Plan2Code"));
     box.appendChild(who);
+    if (waiting.suggest === true) box.appendChild(suggestTag());
     if (waiting.text) box.appendChild(md(waiting.text, "md"));
     const tray = sentAttachments(waiting);
     if (tray) box.appendChild(tray);
@@ -657,7 +704,8 @@ export function renderAside() {
 
   // A finished session has nobody left for a note to reach, so the box would
   // be a place to type words that go nowhere.
-  if (!isOpen(item) || finish()) {
+  // A stopped loop has no agent either, even with a question left open.
+  if (!isOpen(item) || finish() || askOffered()) {
     aside.scrollTop = place;
     return;
   }
@@ -669,14 +717,18 @@ export function renderAside() {
   wrap.appendChild(label);
 
   const attached = noteImages(item.id);
-  wrap.appendChild(attachRow(item.id, "Add files to this note"));
+  const row = attachRow(item.id, "Add files to this note");
+  if (!loopDriving() && !isDashboard() && SUGGEST_KINDS.includes(item.kind)) row.appendChild(suggestChip(item));
+  wrap.appendChild(row);
 
   if (attached.length) wrap.appendChild(attachTray(item.id, attached));
 
-  const ta = el("textarea");
-  ta.id = id;
-  ta.placeholder = "Goes with your next send. It does not answer the question.";
-  ta.value = page.local.drafts[id] || "";
+  const ta = makeMdField({
+    id,
+    placeholder: "Goes with your next send. It does not answer the question.",
+    label: "Add a note, attach a file, or ask something",
+    value: page.local.drafts[id] || "",
+  });
   attachMentions(ta);
   ta.addEventListener("input", () => {
     setDraft(id, ta.value);
@@ -690,9 +742,37 @@ export function renderAside() {
     if (!e.clipboardData.getData("text/plain")) e.preventDefault();
     attachFiles(item.id, files);
   });
-  wrap.appendChild(ta);
+  label.addEventListener("click", () => ta.focus());
+  wrap.appendChild(ta.el);
   aside.appendChild(wrap);
   aside.scrollTop = place;
+}
+
+// The cards with options to pick from, where asking what Plan2Code would pick
+// makes sense.
+const SUGGEST_KINDS = ["choice", "multi", "confirm"];
+
+// Ask for suggestions: its own send, beside the main one (core.js). Focus
+// stays in the panel: on the chip when it is live again, else the note box.
+function suggestChip(item) {
+  const st = suggestState(item);
+  const chip = el("button", "btn tiny suggest-chip", "Ask for suggestions");
+  chip.type = "button";
+  chip.id = "suggest-" + item.id;
+  chip.setAttribute("aria-label", "Ask Plan2Code for suggestions on this question");
+  chip.title = st.why;
+  chip.disabled = st.disabled;
+  chip.addEventListener("click", async () => {
+    await hooks.askSuggestions(item.id);
+    const again = $("suggest-" + item.id);
+    if (again && !again.disabled) again.focus();
+    else $("thread-" + item.id)?.field?.focus();
+  });
+  return chip;
+}
+
+function suggestTag() {
+  return el("span", "pill suggest-tag", "Asked for suggestions");
 }
 
 // The helpers the agent reported, as it last posted them. Everything here is
@@ -724,6 +804,24 @@ export function renderSubagents(main) {
     head.appendChild(pill);
     item.appendChild(head);
     item.appendChild(el("p", "sa-ask", row.ask));
+    if (row.strengthLine) {
+      // Badges for the eye, the plain line for screen readers and the tooltip.
+      const strength = el("p", "sa-strength");
+      strength.setAttribute("aria-label", row.strengthLine);
+      strength.title = row.strengthLine;
+      for (const badge of row.badges) {
+        const chip = el("span", `sa-badge is-${badge.kind} lvl-${badge.level}`);
+        chip.setAttribute("aria-hidden", "true");
+        if (badge.level) {
+          const bars = el("span", "sa-bars");
+          for (let i = 1; i <= 3; i++) bars.appendChild(el("i", i <= badge.level ? "on" : null));
+          chip.appendChild(bars);
+        }
+        chip.appendChild(document.createTextNode(badge.label));
+        strength.appendChild(chip);
+      }
+      item.appendChild(strength);
+    }
     if (row.result) item.appendChild(el("p", "sa-result", row.result));
     list.appendChild(item);
   }
@@ -742,7 +840,8 @@ export function renderSubagentsButton() {
   btn.setAttribute("aria-pressed", String(Boolean(page.subagentsFrame.on)));
   btn.title = label;
   btn.setAttribute("aria-label", label);
-  btn.disabled = page.gone;
+  // The Subagents switch is the person's setting for the next agent; the loop's phases are already started.
+  btn.disabled = page.gone || loopDriving();
 }
 
 // The Subagents dialog, filled from the frame each time it opens. A null
@@ -753,8 +852,11 @@ export function openSubagents() {
   for (const radio of document.querySelectorAll('input[name="subagents-on"]')) {
     radio.checked = radio.value === (on ? "on" : "off");
   }
-  $("subagents-instruction").value = page.subagentsFrame.instruction ?? defaultInstruction(page.S.workflow);
+  instrField.value = page.subagentsFrame.instruction ?? defaultInstruction(page.S.workflow);
   $("subagents-max").value = String(page.subagentsFrame.max);
+  const strength = STRENGTHS.includes(page.subagentsFrame.strength) ? page.subagentsFrame.strength : DEFAULT_STRENGTH;
+  for (const radio of document.querySelectorAll('input[name="subagents-strength"]')) radio.checked = radio.value === strength;
+  syncStrengthHelp();
   $("subagents-checkin").textContent = CHECKIN_LINE;
   const research = $("subagents-research");
   research.textContent = PATHFINDER_RESEARCH_LINE;
@@ -767,17 +869,26 @@ export function openSubagents() {
   if (checked) checked.focus();
 }
 
-// Instruction and "at most" only mean anything with helpers on, so they are
-// inert under Work alone (kept as typed, for when helpers go back on).
+// Instruction, "at most" and strength only mean anything with helpers on, so
+// they are inert under Work alone (kept as picked, for when helpers go back on).
 export function syncSubagentsFields() {
   const picked = document.querySelector('input[name="subagents-on"]:checked');
   const off = !picked || picked.value !== "on";
-  for (const id of ["subagents-instruction", "subagents-max", "subagents-default"]) $(id).disabled = off;
+  instrField.disabled = off;
+  for (const id of ["subagents-max", "subagents-default"]) $(id).disabled = off;
+  for (const radio of document.querySelectorAll('input[name="subagents-strength"]')) radio.disabled = off;
+}
+
+// The line under the strength radios explains the picked one.
+function syncStrengthHelp() {
+  const picked = document.querySelector('input[name="subagents-strength"]:checked');
+  $("subagents-strength-help").textContent = STRENGTH_HELP[picked ? picked.value : DEFAULT_STRENGTH];
 }
 
 const SUBAGENTS_ERRORS = {
   max: "Pick a number from 1 to 20.",
   "too-long": "The instruction is over 2,000 characters.",
+  strength: "That strength isn't one of the four choices.",
   "not-offered": "This skill doesn't use helpers.",
   bad: "That didn't save. Try again.",
 };
@@ -788,11 +899,17 @@ export async function saveSubagents() {
   const save = $("subagents-save");
   const status = $("subagents-status");
   const picked = document.querySelector('input[name="subagents-on"]:checked');
-  const text = $("subagents-instruction").value.trim();
+  const text = instrField.value.trim();
   // The shipped default is stored as null, so a later release's wording
   // reaches everyone who never changed it.
   const instruction = text === defaultInstruction(page.S.workflow) ? null : text;
-  const body = { on: Boolean(picked && picked.value === "on"), instruction, max: Number($("subagents-max").value) };
+  const strength = document.querySelector('input[name="subagents-strength"]:checked');
+  const body = {
+    on: Boolean(picked && picked.value === "on"),
+    instruction,
+    max: Number($("subagents-max").value),
+    strength: strength ? strength.value : DEFAULT_STRENGTH,
+  };
   save.disabled = true;
   status.textContent = "";
   const res = await postJson("/subagents", body);
@@ -810,11 +927,14 @@ export const askOfflineFlipped = () => (askState().send.state === "offline") !==
 
 // The Subagents dialog's buttons, and dropping files onto the notes panel.
 export function wireAsk() {
+  instrField = makeMdField({ className: "subagents-instruction", label: "Instruction", maxLength: 2000 });
+  $("subagents-instruction").appendChild(instrField.el);
   for (const radio of document.querySelectorAll('input[name="subagents-on"]')) radio.addEventListener("change", syncSubagentsFields);
+  for (const radio of document.querySelectorAll('input[name="subagents-strength"]')) radio.addEventListener("change", syncStrengthHelp);
   lightDismiss($("subagents-modal"));
   $("btn-subagents").addEventListener("click", openSubagents);
   $("subagents-default").addEventListener("click", () => {
-    $("subagents-instruction").value = defaultInstruction(page.S.workflow);
+    instrField.value = defaultInstruction(page.S.workflow);
   });
   $("subagents-save").addEventListener("click", saveSubagents);
   $("subagents-cancel").addEventListener("click", () => $("subagents-modal").close());

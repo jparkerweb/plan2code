@@ -58,6 +58,8 @@ The only type an agent resolves alone, and the only type that may run several at
 
 One subagent per research question. Do not read the docs yourself in the main session — the point is that the main session's context stays clean for the decision work.
 
+Start each research subagent at standard strength and medium effort per `helper-strength.md` (its fallback order applies; a re-fired subagent from `refire` goes one strength up).
+
 The subagent's brief must carry, verbatim:
 
 1. The absolute path of the question file it owns.

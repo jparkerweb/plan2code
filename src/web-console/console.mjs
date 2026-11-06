@@ -115,7 +115,7 @@ if (!cmd || !Object.hasOwn(COMMANDS, cmd)) {
 // A flag given with no value parses as `true`, and a boolean handed on as a
 // path or a name crashes somewhere deep (path.basename(true) throws). Every
 // flag that takes a value is checked once, here, and refused as bad usage.
-const VALUE_FLAGS = ["session", "sid", "resume", "file", "spec", "title", "workflow", "skill", "handoff", "upload", "name", "from", "seconds", "limit", "idle-ms"];
+const VALUE_FLAGS = ["session", "sid", "resume", "file", "spec", "title", "workflow", "skill", "handoff", "upload", "name", "from", "seconds", "limit", "idle-ms", "for-cli"];
 for (const flag of VALUE_FLAGS) {
   if (flag in args && typeof args[flag] !== "string") die(`--${flag} needs a value`, 2);
 }

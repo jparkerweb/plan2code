@@ -10,6 +10,7 @@
 // web-console-test-helpers.mjs; see the comment at its top.
 
 import test from "node:test";
+import { POINTER_FILES } from "../src/web-console/pointers.mjs";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
@@ -63,7 +64,7 @@ test("a collected send marks the agent working and drops the last stretch's acti
     assert.equal(agent.activity, undefined);
     assert.ok(agent.since, "the CLI stamps the time");
   } finally {
-    cli(["stop", "--session", s.sid]);
+    cli(["stop", "--session", s.sid, "--force"]);
   }
 });
 
@@ -74,7 +75,7 @@ test("a Quick question alone never marks the agent working", async () => {
     assert.equal(waitFor(s).status, 0);
     assert.equal(readState(s.session).agent.status, "waiting", "chat rides its own channel");
   } finally {
-    cli(["stop", "--session", s.sid]);
+    cli(["stop", "--session", s.sid, "--force"]);
   }
 });
 
@@ -89,7 +90,7 @@ test("post --wait posts, then waits in the same command", async () => {
     const lines = res.stdout.trim().split("\n").map((l) => JSON.parse(l));
     assert.equal(lines.length, 2, "the post's line, then the wait's");
     assert.equal(lines[0].ok, true);
-    assert.equal(lines[1].status, "waiting");
+    assert.deepEqual(lines[1], { waiting: true, open: 1 });
     assert.ok(Date.now() - started >= 4500, "it really waited the slice");
     assert.equal(readState(s.session).title, "Posted then waited");
 
@@ -98,7 +99,7 @@ test("post --wait posts, then waits in the same command", async () => {
     assert.equal(got.status, 0, "a waiting send comes straight back");
     assert.equal(got.json.reply, "Export format: a");
   } finally {
-    cli(["stop", "--session", s.sid]);
+    cli(["stop", "--session", s.sid, "--force"]);
   }
 });
 
@@ -115,7 +116,7 @@ test("a rejected post --wait exits 3 at once and never waits", () => {
     const bad = cli(["post", "--session", s.sid, "--file", payload("pw-ok.json", {}), "--wait", "soon"], { expectFail: true });
     assert.equal(bad.status, 2, "a slice that is no number is bad usage");
   } finally {
-    cli(["stop", "--session", s.sid]);
+    cli(["stop", "--session", s.sid, "--force"]);
   }
 });
 
@@ -126,7 +127,7 @@ test("a wait slice ends on time: a health check in flight never holds the proces
     assert.equal(waitFor(s, 6).status, 10);
     assert.ok(Date.now() - started < 9000, `took ${Date.now() - started}ms`);
   } finally {
-    cli(["stop", "--session", s.sid]);
+    cli(["stop", "--session", s.sid, "--force"]);
   }
 });
 
@@ -193,7 +194,7 @@ test("a doc block with a file takes its text from disk; select tasks keeps the t
     p.run(["post", "--session", opened.sid, "--file", payload("fd-3.json", { docs: [{ id: "phasefile", refresh: true }] })]);
     assert.equal(readState(opened.session).docs.find((d) => d.id === "phasefile").version, 2, "an unchanged file is not a new version");
   } finally {
-    p.run(["stop", "--session", opened.sid]);
+    p.run(["stop", "--session", opened.sid, "--force"]);
     p.cleanup();
   }
 });
@@ -223,9 +224,9 @@ test("a doc block's file must exist, be inside the project, and select only take
     const fresh = p.run(["open", "--no-open", "--workflow", "implement", "--file", payload("fd-open.json", { docs: [{ id: "phasefile", title: "phase-1.md", blocks: [{ id: "body", file: "specs/lunch/phase-1.md" }] }] })]);
     assert.equal(fresh.status, 0, fresh.stderr);
     assert.ok(readState(fresh.json.session).docs[0].blocks[0].md.startsWith("# Phase 1"), "open --file reads files too");
-    p.run(["stop", "--session", fresh.json.sid]);
+    p.run(["stop", "--session", fresh.json.sid, "--force"]);
   } finally {
-    p.run(["stop", "--session", opened.sid]);
+    p.run(["stop", "--session", opened.sid, "--force"]);
     fs.rmSync(outside, { force: true });
     p.cleanup();
   }
@@ -308,7 +309,9 @@ test("settle and a defaulted reply id go through post end to end", async () => {
     assert.equal((await s.send("/submit", { actions: [{ i: "q1", type: "answer", kind: "choice", k: "B" }], reply: "Question q1: B" })).status, 200);
     assert.equal(waitFor(s).status, 0);
     assert.equal((await ask(s, "Why?")).status, 200);
-    const msg = waitFor(s).json.chat.find((e) => e.kind === "message");
+    const seqs = waitFor(s).json.chat;
+    assert.equal(seqs.length, 1, "chat arrives as the seq numbers a reply needs");
+    const msg = { seq: seqs[0], conversation: 1 };
     const res = postPatch(s, { settle: true, chat: { replies: [{ re: msg.seq, conversation: msg.conversation, md: "Because." }] } });
     assert.equal(res.status, 0, res.stderr);
     const state = readState(s.session);
@@ -318,7 +321,7 @@ test("settle and a defaulted reply id go through post end to end", async () => {
     assert.equal(state.items.find((i) => i.id === "q2").status, "open");
     assert.equal(state.chat.replies[0].id, `r${msg.seq}`);
   } finally {
-    cli(["stop", "--session", s.sid]);
+    cli(["stop", "--session", s.sid, "--force"]);
   }
 });
 
@@ -375,7 +378,7 @@ test("a pick-up comes with the stored skill's resume command, handoffFile, and f
     assert.equal(bad.handoffFile, undefined);
     assert.equal(bad.fallback, true);
   } finally {
-    cli(["stop", "--session", s.sid]);
+    cli(["stop", "--session", s.sid, "--force"]);
     fs.rmSync(worktree, { recursive: true, force: true });
   }
 });
@@ -402,7 +405,7 @@ test("a launch, a dashboard press, Commit it now and Update CHANGELOG first each
     assert.equal((await s.send("/submit", EXPORT_A)).status, 200);
     assert.equal(waitFor(s).json.resume, undefined, "an answer is no hop");
   } finally {
-    cli(["stop", "--session", s.sid]);
+    cli(["stop", "--session", s.sid, "--force"]);
   }
 });
 
@@ -436,7 +439,7 @@ test("the built skills name the skill file to follow after a hop", async () => {
     const stopped = run(["wait", "--session", opened.sid, "--seconds", "10"]).json;
     assert.equal(stopped.handoffSkill, path.join(ROOT, "skills", "plan2code-handoff", "SKILL.md"), "a handoff stop in a built skill names the Handoff skill file");
   } finally {
-    run(["stop", "--session", opened.sid]);
+    run(["stop", "--session", opened.sid, "--force"]);
   }
 });
 
@@ -449,17 +452,19 @@ test("the built skills name the skill file to follow after a hop", async () => {
 // and the skills point at is real, and the core stays small.
 const DOC_REF = /`((?:console-[a-z-]+|building(?:-review)?|console|notes\/[a-z-]+)\.md)`|<D>\/((?:console-[a-z-]+|building(?:-review)?|console|notes\/[a-z-]+)\.md)/g;
 
-test("every doc console.md's index names exists, prints through help, and every topic file is indexed", () => {
+test("every doc the card or a pointer names exists, prints through help, and every topic file is reachable", () => {
   const core = consoleDoc("console.md");
-  const index = core.slice(core.indexOf("## What to read, and when"), core.indexOf("## Starting it"));
-  const named = new Set([...index.matchAll(/`([a-z/-]+\.md)`/g)].map((m) => m[1]));
+  const index = core.slice(core.indexOf("## Read when"));
+  const named = new Set([...index.matchAll(/`([a-z/<>-]+.md)`/g)].map((m) => m[1]));
+  const pointed = new Set(Object.values(POINTER_FILES));
   for (const file of consoleDocFiles().filter((f) => f !== "console.md" && !f.startsWith("notes/"))) {
-    assert.ok(named.has(file), `console.md's index names ${file}`);
+    assert.ok(named.has(file) || pointed.has(file), `${file} is named in the card's Read when table or by a pointer`);
   }
   for (const file of named) {
     if (file.includes("<")) continue;
     assert.ok(fs.existsSync(path.join(WEB_CONSOLE_DIR, file)), `${file} exists`);
   }
+  for (const file of pointed) assert.ok(fs.existsSync(path.join(WEB_CONSOLE_DIR, file)), `pointer file ${file} exists`);
   const topics = cli(["help", "topics"]).json.topics;
   for (const [topic, file] of Object.entries(topics)) {
     assert.ok(fs.existsSync(path.join(WEB_CONSOLE_DIR, file)), `help ${topic} -> ${file} exists`);
@@ -476,7 +481,7 @@ test("every console workflow has its notes, and its skill's Interface reads them
     init: "init", "init-update": "init", pathfinder: "pathfinder", plan: "plan", "revise-plan": "revise-plan",
     document: "document", implement: "implement", "implement-review": "implement", "quick-task": "quick-task",
     review: "review", finalize: "finalize", handoff: "handoff", changelog: "changelog", git: "git", xray: "xray",
-    diagnose: "diagnose",
+    diagnose: "diagnose", "pr-prep": "pr-prep", test: "test",
   };
   const skills = fs.readdirSync(path.join(ROOT, "src")).filter((f) => /^plan2code(-.*)?\.md$/.test(f));
   for (const f of skills) {
@@ -547,7 +552,7 @@ test("post --wait with no number takes the slice from --seconds", () => {
     assert.equal(res.status, 10);
     assert.ok(Date.now() - started < 12000, `took ${Date.now() - started}ms, not the default 240s`);
   } finally {
-    cli(["stop", "--session", s.sid]);
+    cli(["stop", "--session", s.sid, "--force"]);
   }
 });
 
@@ -566,7 +571,7 @@ test("a file block's own words are never refused by the prose scan, but typed te
     assert.equal(block.file, undefined, "typed text over a file block stops it being one");
     assert.equal(post("bait-5.json", [{ id: "summary", refresh: true }]).status, 3, "so a refresh finds nothing to re-read");
   } finally {
-    p.run(["stop", "--session", opened.sid]);
+    p.run(["stop", "--session", opened.sid, "--force"]);
     p.cleanup();
   }
 });
@@ -583,7 +588,7 @@ test("a file named again without select is the whole file, on every refresh", ()
     assert.equal(block.select, undefined);
     assert.ok(block.md.startsWith("# Phase 1"), "the whole file, not the task lines");
   } finally {
-    p.run(["stop", "--session", opened.sid]);
+    p.run(["stop", "--session", opened.sid, "--force"]);
     p.cleanup();
   }
 });
@@ -603,7 +608,7 @@ test("collecting a send restarts the working clock and keeps a build's quietMinu
     assert.equal(agent.quietMinutes, 20, "the build's patience survives the question");
     assert.ok(Date.parse(agent.since) > Date.parse(opened), "a fresh working turn, not the session's age");
   } finally {
-    cli(["stop", "--session", s.sid]);
+    cli(["stop", "--session", s.sid, "--force"]);
   }
 });
 
@@ -614,7 +619,7 @@ test("a wait with nothing open leaves a working agent working", () => {
     assert.equal(waitFor(s, 5).status, 10);
     assert.equal(readState(s.session).agent.status, "working", "research subagents still out: the page keeps saying so");
   } finally {
-    cli(["stop", "--session", s.sid]);
+    cli(["stop", "--session", s.sid, "--force"]);
   }
 });
 
@@ -630,9 +635,9 @@ test("post --file - reads the patch from stdin, UTF-8 and a BOM included", () =>
     assert.equal(waited.status, 10, "stdin and --wait together");
     const bad = run("not json");
     assert.equal(bad.status, 2);
-    assert.match(bad.stderr, /could not read --file - as one JSON object/);
+    assert.match(bad.stderr, /line 1, column 2/);
   } finally {
-    cli(["stop", "--session", s.sid]);
+    cli(["stop", "--session", s.sid, "--force"]);
   }
 });
 
@@ -667,10 +672,11 @@ test("collecting a send puts the phase back to collecting", async () => {
     assert.equal(readState(s.session).phase, "submitted", "waiting to be picked up");
     assert.equal(waitFor(s).status, 0);
     assert.equal(readState(s.session).phase, "collecting");
-    assert.equal(postPatch(s, { settle: true }).json.phase, "collecting", "and post says so");
+    assert.equal(postPatch(s, { settle: true }).status, 0);
+    assert.equal(readState(s.session).phase, "collecting", "and a post leaves it there");
     assert.equal(readState(s.session).agent.handled, undefined, "no dead fields on a fresh agent block");
   } finally {
-    cli(["stop", "--session", s.sid]);
+    cli(["stop", "--session", s.sid, "--force"]);
   }
 });
 
@@ -682,11 +688,11 @@ test("a run of resets reaches the agent as one line", async () => {
     assert.equal((await ask(s, "Hello?", { conversation: 3 })).status, 200);
     const res = waitFor(s);
     assert.equal(res.status, 0);
-    assert.equal(res.json.chat.filter((e) => e.kind === "reset").length, 1, JSON.stringify(res.json.chat));
+    assert.equal(res.json.chat.length, 1, "only the question needs a reply: " + JSON.stringify(res.json.chat));
     assert.equal(res.json.reply.match(/New conversation started/g).length, 1);
     assert.equal(cli(["chat", "--session", s.sid]).status, 10, "the cursor moved past every reset");
   } finally {
-    cli(["stop", "--session", s.sid]);
+    cli(["stop", "--session", s.sid, "--force"]);
   }
 });
 
@@ -706,7 +712,7 @@ test("a finish ends the working stretch, and resuming a pause starts a fresh one
     const told = applyPatch({ agent: { status: "working" } }, { finish: { headline: "Done" }, agent: { status: "working" } });
     assert.equal(told.agent.status, "working", "a status the patch says still wins");
   } finally {
-    cli(["stop", "--session", s.sid]);
+    cli(["stop", "--session", s.sid, "--force"]);
   }
 });
 
@@ -718,10 +724,10 @@ test("a card with a note box over the git board flows at its own height, never s
 
 test("a card and its pager in the git board's card slot fill the board's width, never shrink to their content", () => {
   const css = joinedCss();
-  // .card and .pager centre with auto inline margins; in the slot's grid those
+  // .card and .pager center with auto inline margins; in the slot's grid those
   // would shrink a short confirm, and the pager under it, to fit their content.
-  assert.match(css, /\.card\s*\{[^}]*margin:\s*0 auto/, "the base card still centres outside the board");
-  assert.match(css, /\.pager\s*\{[^}]*margin:\s*0 auto/, "the base pager still centres outside the board");
+  assert.match(css, /\.card\s*\{[^}]*margin:\s*0 auto/, "the base card still centers outside the board");
+  assert.match(css, /\.pager\s*\{[^}]*margin:\s*0 auto/, "the base pager still centers outside the board");
   assert.match(css, /\.git-cards > \.card,\s*\.git-cards > \.pager\s*\{\s*margin:\s*0;\s*\}/, "the card slot drops the auto margins for both");
 });
 
@@ -744,7 +750,7 @@ test("long task lines, long words, a narrow board and a narrow Ask pane never wi
 
 test("over the git board a note box grows with its text, and the no-repo note only points above when a card is there", () => {
   const css = joinedCss();
-  assert.match(css, /\.git-cards > \.card textarea \{ field-sizing: content; max-height: 50vh; \}/);
+  assert.match(css, /\.git-cards > \.card \.md-host \{ min-height: 0; max-height: 50vh; \}/);
   const view = fs.readFileSync(path.join(ROOT, "src", "web-console", "public", "git-board-view.js"), "utf8");
   const fn = view.slice(view.indexOf("export function drawGitBoard("), view.indexOf("function header("));
   assert.ok(fn.includes("ctx.hasCard"), "the note checks for a card first");

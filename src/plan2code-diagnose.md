@@ -8,7 +8,7 @@ Bug detective. Find a bug's cause and write it up, **without fixing it**: reprod
 
 ## Interface
 
-The FIRST thing you do, before anything else in this file, before asking about the bug: ask **web console** (browser page, suggested) or **terminal**? Console → run `node "<D>/console.mjs" open --workflow diagnose` before reading (<D>: references/web-console/ beside this SKILL.md (~/.agents/skills/plan2code-diagnose/references/web-console/ globally) or the dir in ~/.plan2code/console/console-dir), then read <D>/console.md and <D>/notes/diagnose.md. The bug questions, the growing cause, the bug name and the hand-off all go through it. Switchable anytime. If the argument already says which (`--web` or `Use the web console for this session.`), take it and do not ask; drop the flag. Launched by the dashboard? Its session is already open: resume it (console-launches.md), then Project Context. On the console, a `__stop` action is the person ending the session (console-stop.md); at every session end post `finish` BEFORE `stop`; unless it is a pause, the finish carries `"dashboard": true` (the Back to the dashboard button) and you keep waiting for the press (console-finish.md).
+The FIRST thing you do, before anything else in this file, before asking about the bug: ask **web console** (browser page, suggested) or **terminal**? Console → run `node "<D>/console.mjs" open --workflow diagnose` before reading (<D>: references/web-console/ beside this SKILL.md (~/.agents/skills/plan2code-diagnose/references/web-console/ globally) or the dir in ~/.plan2code/console/console-dir), then read <D>/console.md and <D>/notes/diagnose.md. The bug questions, the growing cause, the bug name and the hand-off all go through it. Switchable anytime. If the argument already says which (`--web` or `Use the web console for this session.`), take it and do not ask; drop the flag. Launched by the dashboard? Its session is already open: resume it (console-launches.md), then Project Context.
 
 ## Project Context (BLOCKING)
 
@@ -46,11 +46,18 @@ Check if `./AGENTS.md` exists:
 - **No git writes.** Read-only git (`log`, `show`, `diff`, and `bisect` as Step 3 says) is fine; never commit, stash, reset or switch the person's branch.
 - Plain words. Name the files and functions; skip jargon the person did not use.
 
+## Helpers
+
+When your tool can start helpers (subagents) and they are not switched off for this run (on the web console a `Subagents:` block says which, console-subagents.md):
+- **Step 3, read-only lookups:** the code path a suspect change touches, a suspect function's callers and the docs behind the failing behavior; one suspect per helper, each returning facts with `file:line`, never a verdict.
+
+Keep with you: the reproduction, any bisect, the cause judgment and every question. Strength and effort per references/helper-strength.md. No helpers? Do the same work yourself.
+
 ## Process
 
 ### Step 1: The Bug
 
-A typed argument is the report; ask only for what it leaves out. Otherwise ask in one batch (console: three `text` cards, the first with a placeholder example of a real report, no `"templates"`):
+A typed argument is the report; ask only for what it leaves out. Otherwise ask in one batch (console: three `text` cards, the first with a placeholder example of a real report, the last two `"required":false`, no `"templates"`):
 
 > "1. **What is wrong?** The bug, in a sentence or two.
 > 2. **Expected vs actual:** what should happen, and what happens instead.
@@ -71,7 +78,7 @@ A reproduction written as a new test inside the project is offered, never assume
 ### Step 3: Narrow
 
 - **A known-good version exists** (it worked before): `git bisect` with the reproduction as the check, in a throwaway worktree (`git worktree add <tmp> HEAD`, removed at the end) so the person's checkout never moves; in place only on a clean tree, with `git bisect reset` before you finish. Then read the commit it lands on.
-- **Otherwise:** read the code path from the entry point the reproduction hits to where the wrong value or behaviour first appears.
+- **Otherwise:** read the code path from the entry point the reproduction hits to where the wrong value or behavior first appears.
 - Temporary logging only outside the source tree, or reverted at once.
 
 Stop when you can name the line where right turns into wrong.

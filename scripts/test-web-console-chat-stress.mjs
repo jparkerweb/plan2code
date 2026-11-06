@@ -14,11 +14,13 @@ import { spawn } from "node:child_process";
 // is exactly why this lives in its own file.
 import { STALE_MS } from "../src/web-console/public/answers.js";
 import {
+  ASK_BUSY_MS,
   CHAT_LAST_WAIT_TEXT,
   CHAT_LIMIT_TEXT,
   CHAT_OFFLINE_TEXT,
   CHAT_WAITING_TEXT,
   CHAT_WORKING_TEXT,
+  chatAnswering,
   chatOffline,
   chatView,
   contextOptions,
@@ -52,9 +54,14 @@ test("stress: 200 posts interleaved with 200 chat messages lose no message from 
       const c = spawn(process.execPath, [CONSOLE_CLI, "post", "--session", s.sid, "--file", patchFile], {
         env: ENV,
         cwd: ROOT,
-        stdio: "ignore",
+        stdio: ["ignore", "ignore", "pipe"],
       });
-      c.on("exit", (code) => resolve(code));
+      let err = "";
+      c.stderr.on("data", (d) => (err += d));
+      c.on("exit", (code) => {
+        if (code !== 0) process.stderr.write(`[repro] exit ${code}: ${err}\n`);
+        resolve(code);
+      });
     });
   try {
     for (let block = 0; block < 20; block++) {
@@ -78,7 +85,7 @@ test("stress: 200 posts interleaved with 200 chat messages lose no message from 
     assert.equal(all.length, 200);
     assert.equal(new Set(all.map((e) => e.seq)).size, 200, "no seq handed out twice");
   } finally {
-    cli(["stop", "--session", s.sid]);
+    cli(["stop", "--session", s.sid, "--force"]);
   }
 });
 
@@ -144,7 +151,7 @@ test("the frame reports how far the agent has picked up the chat", async () => {
     assert.equal(cli(["chat", "--session", s.sid]).status, 0);
     assert.equal((await chatFrame(s)).pickedUp, body.seq);
   } finally {
-    cli(["stop", "--session", s.sid]);
+    cli(["stop", "--session", s.sid, "--force"]);
   }
 });
 
@@ -242,7 +249,7 @@ test("nextAbout: pick sets about, drop and sent clear it, the old Ask events do 
   assert.equal(JSON.stringify(picked), before, "prev is never mutated");
 });
 
-test("nextAbout: an old { about, frozen, dropped } tracker normalises to the new shape", () => {
+test("nextAbout: an old { about, frozen, dropped } tracker normalizes to the new shape", () => {
   const old = { about: CARD_Q1, frozen: true, dropped: false };
   assert.deepEqual(nextAbout(old, { type: "leave-ask" }), { history: [], about: CARD_Q1 });
   assert.deepEqual(nextAbout({ frozen: false, dropped: true }, {}), { history: [], about: null });
@@ -295,13 +302,36 @@ test("chatOffline: finished, paused, a stale working agent (with quietMinutes), 
   assert.equal(chatOffline({ agent: { status: "waiting", quietMinutes: 30 }, ...ago(4 * 60 * 1000) }), true, "quietMinutes only counts while working");
 });
 
+// A message the agent picked up and has not answered yet: the agent is busy
+// with it, not gone, even though it has stopped pinging from `wait`.
+test("chatAnswering: a picked-up message with no reply after it, and nothing else", () => {
+  const person = (seq, kind = "message") => ({ from: "person", kind, seq, text: "q" + seq });
+  const reply = (re) => ({ from: "agent", id: "r" + re, re, md: "a" });
+  assert.equal(chatAnswering(null), false, "no chat at all");
+  assert.equal(chatAnswering({ messages: [person(2)], pickedUp: 1 }), false, "sent, not picked up yet");
+  assert.equal(chatAnswering({ messages: [person(2)], pickedUp: 2 }), true, "picked up, no reply");
+  assert.equal(chatAnswering({ messages: [person(2), reply(2)], pickedUp: 2 }), false, "answered");
+  assert.equal(chatAnswering({ messages: [person(2), reply(2), person(3, "decision")], pickedUp: 3 }), true, "an approved edit in hand");
+  assert.equal(chatAnswering({ messages: [person(2), reply(2), person(3)], pickedUp: 2 }), false, "a follow-up not picked up yet");
+});
+
+test("chatOffline: an Ask message in hand holds off offline for ASK_BUSY_MS, then gives up", () => {
+  const now = 10 * 60 * 60 * 1000;
+  const ago = (ms) => ({ agentLastSeenMs: now - ms, now });
+  assert.equal(ASK_BUSY_MS, 10 * 60 * 1000);
+  assert.equal(chatOffline({ agent: { status: "waiting" }, answering: true, ...ago(9 * 60 * 1000) }), false, "busy with the Ask message");
+  assert.equal(chatOffline({ agent: { status: "waiting" }, answering: true, ...ago(ASK_BUSY_MS + 1000) }), true, "quiet past the allowance");
+  assert.equal(chatOffline({ agent: { status: "working" }, answering: true, ...ago(STALE_MS + 1000) }), false, "a working agent answering is not stale yet");
+  assert.equal(chatOffline({ agent: { status: "working", quietMinutes: 20 }, answering: true, ...ago(15 * 60 * 1000) }), false, "a longer quiet allowance still wins");
+});
+
 // The agent learns the chat from the console's docs and the help text alone,
 // so every name it has to type (the command, the reply field, the edit fields)
 // and every refusal the routes can give must actually be written there.
 test("the console docs, building.md and help teach the Quick question contract", () => {
   const dir = path.join(ROOT, "src", "web-console");
   const consoleMd = consoleDocs();
-  for (const word of ["chat --session", "chat.replies", "proposal", "changed", "too-long", "limit", "offline", "stale"]) {
+  for (const word of ["chat --session", "\"replies\"", "proposal", "changed", "limit", "stale"]) {
     assert.ok(consoleMd.includes(word), `the console docs must mention ${word}`);
   }
   assert.ok(fs.readFileSync(path.join(dir, "building.md"), "utf8").includes("chat --session"), "building.md must mention chat --session");
@@ -315,16 +345,14 @@ test("the console docs, building.md and help teach the Quick question contract",
 test("the console docs teach the workspace and session meter contract", () => {
   const consoleMd = consoleDocs();
   const buildingMd = consoleDoc("building.md") + consoleDoc("notes/implement.md");
-  for (const word of ["workspace", "pendingWorkspace", "folderIssue", "run", "pathfinder-question", "pathfinder-research", "pathfinder-chart", "AGENTS.md", "/add-dir"]) {
+  for (const word of ["workspace", "folderIssue", "run", "pathfinder-question", "pathfinder-research", "pathfinder-chart", "AGENTS.md", "/add-dir"]) {
     assert.ok(consoleMd.includes(word), `the console docs must mention ${word}`);
   }
   for (const word of ["implement-phase", "implement-review-phase"]) {
     assert.ok(buildingMd.includes(word), `the build docs must mention ${word}`);
   }
-  const section = consoleDoc("console-meter.md").match(/### Session meter\n([\s\S]*?)\n---/);
-  assert.ok(section, "console-meter.md has a Session meter section");
-  const list = section[1].match(/`event` is one of ([\s\S]*?)An unknown event/);
-  assert.ok(list, "the Session meter section lists the events");
+  const list = consoleDoc("console-meter.md").match(/- `event`: ([\s\S]*?)An unknown event/);
+  assert.ok(list, "console-meter.md lists the events");
   const listed = [...list[1].matchAll(/`([a-z-]+)`/g)].map((m) => m[1]);
   assert.equal(new Set(listed).size, listed.length, "no event is listed twice");
   assert.deepEqual([...listed].sort(), Object.keys(WEIGHTS).sort(), "console-meter.md lists exactly the WEIGHTS events");

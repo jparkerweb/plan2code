@@ -7,7 +7,8 @@
    rule, so it needs saying here. */
 .footer[hidden] { display: none; }
 
-.dash { max-width: 860px; padding-top: 8px; }
+/* The menu follows the Card width setting like the question column does. */
+.dash { max-width: min(var(--card-width), 100%); padding-top: 8px; }
 .dash-title { margin: 6px 0 8px; font: 600 clamp(26px, 4vw, 36px)/1.1 var(--serif); }
 .dash-note { margin: 0 0 26px; font-size: 14.5px; color: var(--ink-2); }
 /* The first-run role nudge: one line above the title, wrapping on a narrow
@@ -26,7 +27,7 @@
   font-size: 14px;
 }
 .dash-nudge-text { flex: 1 1 16em; }
-/* The session meter at red: the same slot, in the careful colour. */
+/* The session meter at red: the same slot, in the careful color. */
 .dash-nudge.meter-banner {
   background: var(--warn-soft);
   border-color: var(--warn);
@@ -57,7 +58,7 @@
   cursor: pointer;
 }
 .update-banner-open:hover { text-decoration: underline; }
-/* Pinned to the right edge, out of the flow, so the label centres on the
+/* Pinned to the right edge, out of the flow, so the label centers on the
    whole banner rather than on what the × leaves of it. */
 .update-banner-dismiss {
   position: absolute;
@@ -214,7 +215,21 @@
 }
 .dash-card.is-suggested .dash-chip { color: var(--accent); border-color: var(--accent-line); }
 
-.dash-card-title { font-size: 15px; font-weight: 650; }
+/* The card icon sheet: present for <use href>, never drawn itself. */
+.card-icons { position: absolute; width: 0; height: 0; overflow: hidden; }
+
+.dash-card-title { display: flex; align-items: center; gap: 7px; font-size: 15px; font-weight: 650; }
+.dash-card-icon {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.dash-card.is-suggested .dash-card-icon { stroke: var(--accent); }
 .dash-card-blurb { font-size: 13px; color: var(--ink-2); flex: 1; }
 .dash-card-detail { font-size: 12px; color: var(--accent); }
 
@@ -239,7 +254,7 @@
 .dash-card-go { color: var(--accent); font-weight: 700; transition: transform 0.15s ease; }
 .dash-card:hover:not(:disabled) .dash-card-go { transform: translateX(3px); }
 
-/* The reason a card is off. The card greys via :disabled; this line is why,
+/* The reason a card is off. The card grays via :disabled; this line is why,
    so the menu teaches the pipeline instead of just refusing clicks. */
 .dash-card-off { font-size: 12px; color: var(--ink-3); font-style: italic; }
 
@@ -276,7 +291,7 @@
 }
 .spec-chip:not(.is-sel) .spec-chip-state { color: var(--ink-3); }
 .spec-chip-detail { font-size: 11.5px; color: var(--ink-3); }
-/* A handoff in the picker: the same lozenge, dashed, in the stage colour. */
+/* A handoff in the picker: the same lozenge, dashed, in the stage color. */
 .spec-chip.is-handoff { border-style: dashed; }
 .spec-chip.is-handoff .spec-chip-state, .spec-chip.is-handoff:not(.is-sel) .spec-chip-state { color: var(--stage); }
 .spec-chip.is-handoff.is-sel { border-style: solid; border-color: var(--stage); }
@@ -303,9 +318,10 @@
 .handoff-preview-next { margin: 0 0 16px; font-size: 14px; color: var(--ink); }
 .handoff-preview-actions { display: flex; flex-wrap: wrap; gap: 10px; }
 .handoff-preview-actions .btn.danger { margin-left: auto; }
-.modal.handoff-read { max-width: 720px; }
+.modal.handoff-read { width: min(960px, calc(100vw - 32px)); max-width: none; }
 .modal.handoff-read[open] { display: flex; flex-direction: column; max-height: calc(100vh - 48px); }
 .handoff-body { flex: 1; min-height: 0; overflow-y: auto; margin-top: 8px; }
+.handoff-body.md { max-width: none; }
 .modal.handoff-read .modal-actions { flex: none; }
 
 /* A spec's Delete button sits beside its chip, not inside it: a button cannot
@@ -378,15 +394,22 @@
 /* ------------------------------------------------- dashboard confirm */
 
 /* The beat between "I clicked a card" and "it is running": what the pick is,
-   what it will do, and a START that means it. Narrower than the menu, centred
-   like the launching pane it precedes. */
+   what it will do, and a START that means it. As wide as the menu (the page
+   width setting), centered like the launching pane it precedes. */
 .dash-confirm {
-  max-width: 560px;
+  max-width: min(var(--card-width), 100%);
   margin: 3vh auto 0;
-  display: grid;
+  /* Column flex, not grid: a grid item's sticky range is its own row, so the
+     tail bar below could never travel. align-items does the centering
+     justify-items did; loop-setup opts back into grid. */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   gap: 10px;
-  justify-items: center;
   text-align: center;
+  /* Focused controls must land above the pinned bar, never under it:
+     roughly .confirm-tail's height — keep them in step if the bar grows. */
+  scroll-padding-bottom: 96px;
 }
 
 /* A smaller stage than the launching hero: the same sky, a moment shorter. */
@@ -405,6 +428,9 @@
 
 .confirm-head { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
 .dash-confirm .dash-title { margin: 2px 0 0; }
+/* The pane is as wide as the menu, but prose is not: its lines stop at a
+   readable measure while the controls below keep the full width. */
+.confirm-about, .confirm-detail, .confirm-spec { max-width: 70ch; }
 .confirm-about { margin: 0; font-size: 14.5px; line-height: 1.55; color: var(--ink-2); }
 .confirm-detail { margin: 0; font-size: 13px; color: var(--accent); }
 .confirm-spec { margin: 0; font-size: 13px; color: var(--ink-2); }
@@ -422,12 +448,103 @@
   border-radius: 6px;
   padding: 4px 10px;
 }
+.confirm-cmd-note { margin-left: 8px; font-family: var(--mono); font-size: 12.5px; color: var(--accent); }
 .confirm-actions { display: flex; gap: 10px; margin-top: 10px; }
+
+/* The command line and the buttons as one bar pinned to the pane's bottom
+   edge: .dash-confirm is the scroller, so a last-child sticky tail stays in
+   view whatever the Notebook box pushes past the fold. Opaque like .doc-head
+   (the pane sits on var(--bg)), with the footer's border and shadow for
+   separation; .confirm-actions keeps its own class so "Start" stays findable. */
+.confirm-tail {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  align-self: stretch;
+  display: grid;
+  gap: 10px;
+  justify-items: center;
+  padding: 10px 0 6px;
+  background: var(--bg);
+  border-top: 1px solid var(--rule);
+  box-shadow: 0 -4px 14px rgba(0, 0, 0, 0.07);
+}
+/* The bar's gap sets the rhythm; the row's own margin is for loop-setup,
+   which has no tail. */
+.confirm-tail .confirm-actions { margin-top: 0; }
+/* The Notebook box frames itself, so the rule line is one separation too
+   many when it is on the pane; the shadow still marks the bar in a scroll. */
+.dash-confirm:has(.confirm-note-box) .confirm-tail { border-top: 0; }
+
+/* "Start with a note from your Notebook": the switch, then the tabs beside a
+   preview of the picked one, its pictures each with a tick. */
+/* Capped rather than stretched past the confirm's centering, and left
+   aligned: a note reads as a document, and documents have a measure. */
+/* Its own frame sets it apart from the text above, so no rule: just room. */
+.confirm-note-box { display: grid; gap: 8px; width: min(720px, 100%); text-align: left; margin-top: 12px; }
+.confirm-note-head {
+  display: grid;
+  gap: 2px;
+  padding: 10px 12px;
+  border: 1px solid var(--accent-line);
+  border-left: 3px solid var(--accent);
+  border-radius: 8px;
+  background: var(--accent-soft);
+}
+.confirm-note-head.is-on { padding: 8px 12px; }
+.confirm-note-switch { display: flex; gap: 10px; align-items: center; color: var(--ink); font-weight: 600; cursor: pointer; }
+.confirm-note-switch input { width: 18px; height: 18px; margin: 0; flex: none; accent-color: var(--accent, currentColor); }
+.confirm-note-hint { padding-left: 28px; font-size: 12.5px; color: var(--ink-2); }
+.confirm-note { display: grid; grid-template-columns: minmax(130px, 200px) minmax(0, 1fr); gap: 10px; }
+.confirm-note > .confirm-note-msg { grid-column: 1 / -1; }
+.confirm-note-msg { margin: 0; font-size: 13px; color: var(--ink-3); }
+.confirm-note-tabs { display: flex; flex-direction: column; gap: 4px; max-height: 320px; overflow-y: auto; }
+.confirm-note-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border: 1px solid var(--rule-2);
+  border-radius: 8px;
+  background: var(--panel-2);
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+.confirm-note-tab:hover:not(:disabled) { border-color: var(--accent-line); color: var(--accent); }
+.confirm-note-tab.is-picked { border-color: var(--accent); background: var(--accent-soft); color: var(--ink); font-weight: 600; }
+.confirm-note-tab:disabled { opacity: 0.5; cursor: not-allowed; }
+.confirm-note-tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.confirm-note-tab-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.confirm-note-preview {
+  display: grid;
+  gap: 8px;
+  align-content: start;
+  min-width: 0;
+  max-height: 320px;
+  overflow-y: auto;
+  padding: 8px 10px;
+  border: 1px solid var(--rule-2);
+  border-radius: 8px;
+  background: var(--panel);
+}
+.confirm-note-text { font-size: 13.5px; max-width: 65ch; }
+.confirm-note-long { margin: 0; font-size: 12.5px; font-weight: 600; color: var(--warn); }
+.confirm-note-pics { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.confirm-note-pic label { position: relative; display: block; cursor: pointer; }
+.confirm-note-pic img { display: block; width: 72px; height: 72px; object-fit: cover; border: 1px solid var(--rule-2); border-radius: 6px; }
+.confirm-note-pic input { position: absolute; top: 4px; left: 4px; margin: 0; accent-color: var(--accent, currentColor); }
+.confirm-note-pic input:disabled + img { opacity: 0.45; }
+@media (max-width: 560px) {
+  .confirm-note { grid-template-columns: minmax(0, 1fr); }
+}
 
 /* ------------------------------------------------------- launching pane */
 
 .launching {
-  max-width: 560px;
+  max-width: min(var(--card-width), 100%);
   margin: 4vh auto 0;
   text-align: center;
   display: grid;
@@ -447,7 +564,7 @@
   mask-image: radial-gradient(120% 100% at 50% 40%, #000 42%, transparent 78%);
 }
 .launch-sky { opacity: 0.9; }
-/* The dock only animates its stars while .is-flying; centre stage they are
+/* The dock only animates its stars while .is-flying; center stage they are
    the show, so the flight runs unconditionally. */
 .launch-stage .sky .star { animation: star-fly var(--dur, 5s) linear var(--delay, 0s) infinite; }
 
@@ -485,6 +602,67 @@
   to { opacity: 1; transform: none; }
 }
 .launch-hint { margin: 0; font-size: 12.5px; color: var(--ink-3); max-width: 46ch; }
+/* Under the app, a saved pick nobody collected: the button that types continue. */
+.launch-reconnect { margin-top: 14px; }
+.launch-reconnect[hidden] { display: none; }
 /* A line, never a banner: no border, no background, no icon. */
-.approval-tip { margin: 18px 0 0; font-size: 12.5px; line-height: 1.5; color: var(--ink-3); }
+.approval-tip { max-width: 70ch; margin: 18px 0 0; font-size: 12.5px; line-height: 1.5; color: var(--ink-3); }
 
+
+/* --------------------------------------------- the Implementation Loop */
+
+/* The card's own link; a span, since a link may not sit inside a button. */
+.dash-card-link { font-size: 12px; color: var(--accent); text-decoration: underline; cursor: pointer; justify-self: start; }
+
+/* The setup screen: the confirm pane's width, with a left-aligned form. */
+.loop-setup { display: grid; justify-items: stretch; text-align: left; gap: 14px; }
+.loop-setup .card-kicker, .loop-setup .dash-title, .loop-setup .confirm-spec { justify-self: start; }
+.loop-lines { display: grid; gap: 4px; }
+.loop-line { margin: 0; font-size: 14px; line-height: 1.5; color: var(--ink-2); max-width: 75ch; }
+.loop-facts { display: grid; gap: 6px; margin: 0; padding: 12px 14px; background: var(--panel-2); border: 1px solid var(--rule); border-radius: 8px; }
+.loop-fact { display: grid; grid-template-columns: minmax(130px, 200px) 1fr; gap: 10px; font-size: 13px; }
+.loop-fact dt { color: var(--ink-3); }
+.loop-fact dd { margin: 0; color: var(--ink); overflow-wrap: anywhere; white-space: pre-line; }
+.loop-form { display: grid; gap: 16px; }
+.loop-field { display: grid; gap: 6px; }
+.loop-label { margin: 0; font-weight: 600; font-size: 13.5px; }
+.loop-hint { margin: 0; font-size: 12.5px; color: var(--ink-3); }
+.loop-switch, .loop-radio { display: flex; gap: 8px; align-items: flex-start; cursor: pointer; font-size: 14px; color: var(--ink-2); }
+.loop-switch input, .loop-radio input { accent-color: var(--accent, currentColor); margin-top: 3px; }
+.loop-radios { display: grid; gap: 6px; }
+.loop-radio-body { display: grid; gap: 1px; }
+.loop-radio-detail { font-size: 12.5px; color: var(--ink-3); }
+.loop-switch.is-gray { opacity: 0.55; cursor: default; }
+.loop-strength-none .linky { font-size: inherit; }
+.loop-strength-all { display: flex; align-items: center; gap: 10px; margin-top: 4px; font-size: 13px; color: var(--ink-2); }
+.loop-strength-rows { display: grid; gap: 6px; }
+.loop-strength-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(150px, 190px) minmax(70px, 120px); align-items: center; gap: 10px; font-size: 13.5px; }
+.loop-strength-phase { overflow-wrap: anywhere; color: var(--ink); }
+.loop-strength-model { font-size: 12.5px; color: var(--ink-3); overflow-wrap: anywhere; }
+.loop-select { font: inherit; font-size: 13.5px; padding: 5px 8px; color: var(--ink); background: var(--panel-2); border: 1px solid var(--rule); border-radius: 6px; max-width: 100%; }
+@media (max-width: 560px) { .loop-strength-row { grid-template-columns: 1fr 1fr; } .loop-strength-phase { grid-column: 1 / -1; } }
+.loop-ticks { display: flex; flex-wrap: wrap; gap: 6px 18px; margin-left: 4px; }
+.loop-text { font: inherit; font-size: 14px; padding: 6px 10px; color: var(--ink); background: var(--panel-2); border: 1px solid var(--rule); border-radius: 6px; max-width: 520px; width: 100%; }
+.loop-text.loop-narrow { width: 90px; }
+.loop-text.loop-param { width: 180px; }
+.loop-test { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+.loop-test p { margin: 0; font-size: 12.5px; }
+.loop-number { display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--ink-2); }
+.loop-warn { margin: 0; font-size: 12.5px; color: var(--warn); }
+.loop-start { display: grid; gap: 8px; justify-items: start; }
+.loop-why { margin: 0; font-size: 13px; color: var(--ink-2); }
+.loop-error { margin: 0; font-size: 13px; color: var(--warn); }
+.loop-problems { margin: 0; padding-left: 18px; font-size: 13px; color: var(--warn); }
+.loop-help { margin-left: auto; }
+
+/* A card the loop holds: a record with a tag, no inputs. */
+.card.is-loop-handled .loop-tag { margin: 0 0 4px; font-weight: 600; color: var(--accent); }
+.card.is-loop-locked .answered { opacity: 0.85; }
+
+/* The stop and finish screens the loop's end draws. */
+.loop-end { display: grid; gap: 14px; }
+.loop-end-phases { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.loop-end-phases th, .loop-end-phases td { text-align: left; padding: 5px 10px 5px 0; border-bottom: 1px solid var(--rule); vertical-align: top; }
+.loop-end-phases code { font-family: var(--mono); font-size: 12px; }
+.loop-end-files { margin: 0; padding-left: 18px; font-family: var(--mono); font-size: 12px; color: var(--ink-2); }
+.loop-end-actions { display: flex; flex-wrap: wrap; gap: 10px; }

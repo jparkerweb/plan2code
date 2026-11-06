@@ -9,12 +9,13 @@ import {
   handoffList,
   loadOverview,
   finish,
+  loopDriving,
 } from "../selectors.js";
 import { hooks, page, redraw, saveNow } from "../state.js";
-import { el, approvalTip, mdInto, releasesLink, copyButton } from "../render.js";
+import { el, approvalTip, mdInto, releasesLink, copyButton, lightDismiss, SVG_NS } from "../render.js";
 import { needsRoleNudge, ROLE_NOT_SET } from "../starters.js";
-import { looks, renderSwatches, saveLooks } from "../looks.js";
-import { RED_BANNER } from "../meter.js";
+import { looks, saveLooks } from "../looks.js";
+import { RED_BANNER, RED_BANNER_IN_APP } from "../meter.js";
 import {
   dashNoteKind,
   defaultSpec,
@@ -23,6 +24,8 @@ import {
   CATALOG_GROUPS,
   SKILL_CATALOG,
   catalogEntry,
+  LOOP_ENTRY,
+  OUTSIDE_APP_LINE,
   launchVariant,
   SPEC_STATE_LABELS,
   chipDetail,
@@ -39,6 +42,13 @@ import {
   deleteHandoffReply,
   deleteAction,
   deleteReply,
+  noteSwitchShows,
+  noteTabEmpty,
+  defaultNoteTicks,
+  toggleNoteTick,
+  formatBytes,
+  NOTE_LONG_BYTES,
+  MAX_ATTACHMENTS,
 } from "../answers.js";
 import { stateFor } from "../spec-states.js";
 import { sound, soundOn, fadeSound, dropSounds } from "../sound.js";
@@ -67,7 +77,6 @@ function roleNudge() {
   const setUp = el("button", "btn small primary", "Set up preferences");
   setUp.type = "button";
   setUp.addEventListener("click", () => {
-    renderSwatches();
     // Closed without a role is a "Not now" too: having been to the dialog,
     // they were asked, and the banner does not come back (Help says so).
     $("looks-modal").addEventListener(
@@ -81,7 +90,7 @@ function roleNudge() {
       },
       { once: true }
     );
-    $("looks-modal").showModal();
+    hooks.openPrefs("appearance");
   });
   const notNow = el("button", "btn tiny ghost", "Not now");
   notNow.type = "button";
@@ -139,6 +148,9 @@ function openUpdateModal() {
 
 export function renderDashboard(main) {
   maybeWake();
+  // The menu is up, so the confirm pane was left: its Notebook switch starts
+  // off again, with nothing picked, the next time a card is opened.
+  note = null;
   // First, so nothing below reads a pick whose handoff has left the scan, and
   // a delete the agent's rescan has finished stops holding the buttons.
   selHandoff();
@@ -148,12 +160,14 @@ export function renderDashboard(main) {
   if (needsRoleNudge(looks)) wrap.appendChild(roleNudge());
   // Advice only: words, never a button, and nothing is blocked.
   if (page.meterFrame && page.meterFrame.level === "red") {
-    const warn = el("div", "dash-nudge meter-banner", RED_BANNER);
+    const warn = el("div", "dash-nudge meter-banner", page.inApp ? RED_BANNER_IN_APP : RED_BANNER);
     warn.setAttribute("role", "status");
     wrap.appendChild(warn);
   }
-  // Built here only, so no other workflow's page ever shows it.
-  if (page.updateFrame && !updateDismissed()) {
+  // Built here only, so no other workflow's page ever shows it. Under the app
+  // this never shows at all: the app's own top bar already says so and, unlike
+  // this banner's copy-pasted command, updates the skills itself in one click.
+  if (page.updateFrame && !page.inApp && !updateDismissed()) {
     const notice = el("div", "dash-nudge update-banner");
     notice.setAttribute("role", "status");
     const open = el("button", "update-banner-open", "UPDATE AVAILABLE · v" + page.updateFrame.latest);
@@ -223,7 +237,7 @@ export function renderDashboard(main) {
   if (!page.local.launching && !page.launchScoping && wantScope !== page.scopeMine) hooks.syncWorkspaceScope();
 
   // "Unavailable" is the scan's verdict for the selected spec, not the
-  // momentary greying while a launch is in flight or the server is away, so
+  // momentary graying while a launch is in flight or the server is away, so
   // cards never blink out of the menu mid-handoff.
   const hide = looks.hideUnavailable;
   const sel = selSpec();
@@ -231,12 +245,16 @@ export function renderDashboard(main) {
   let shown = 0;
   for (const g of CATALOG_GROUPS) {
     const entries = SKILL_CATALOG.filter((e) => e.group === g.id && (!hide || available(e)));
-    if (!entries.length) continue;
-    shown += entries.length;
+    // The desktop app's Implementation Loop card closes its group. Outside the
+    // app it is always drawn, grayed, so the feature can be found.
+    const loopCard = LOOP_ENTRY && LOOP_ENTRY.group === g.id && (!page.inApp || !hide || available(LOOP_ENTRY));
+    if (!entries.length && !loopCard) continue;
+    shown += entries.length + (loopCard ? 1 : 0);
     const section = el("section", "dash-group");
     section.appendChild(el("h3", "dash-group-title", g.title));
     const grid = el("div", "dash-grid");
     for (const e of entries) grid.appendChild(dashCard(e, menu));
+    if (loopCard) grid.appendChild(dashCard(LOOP_ENTRY, menu));
     section.appendChild(grid);
     wrap.appendChild(section);
   }
@@ -556,13 +574,16 @@ function renderHandoffPreview(h) {
   const read = el("button", "btn", "Read it all");
   read.type = "button";
   read.addEventListener("click", () => readHandoff(h));
-  const copy = el("button", "btn", "Copy for a new conversation");
+  const copyLabel = page.inApp ? "Copy for another session" : "Copy for a new conversation";
+  const shown = handoffCopied && handoffCopied.id === h.id && Date.now() < handoffCopied.until ? handoffCopied.word : copyLabel;
+  const copy = el("button", "btn", shown);
   copy.type = "button";
+  copy.dataset.handoffCopy = h.id;
   copy.addEventListener("click", () => {
     const dir = (scan() && scan().handoffsDir) || "";
     const sep = dir.includes("\\") ? "\\" : "/";
     const file = dir ? dir.replace(/[\\/]+$/, "") + sep + h.id + ".md" : h.id + ".md";
-    copyHandoffText(handoffCopyText(file), copy);
+    copyHandoffText(handoffCopyText(file), h.id, copyLabel);
   });
   const del = el("button", "btn danger", "Delete");
   del.type = "button";
@@ -575,21 +596,36 @@ function renderHandoffPreview(h) {
 
 // The prompt that sends a new conversation to the handoff. A refused
 // clipboard gets a plain word on the button instead of a silent nothing.
-async function copyHandoffText(text, button) {
+// A redraw while the clipboard answers rebuilds the button, so the word is
+// kept in handoffCopied (which the rebuilt button reads) and put on whichever
+// button is on the page when the answer comes.
+let handoffCopied = null;
+const handoffCopyButton = (id) => document.querySelector(`button[data-handoff-copy="${CSS.escape(id)}"]`);
+async function copyHandoffText(text, id, label) {
+  let word;
   try {
     await navigator.clipboard.writeText(text);
-    button.textContent = "Copied";
+    word = "Copied";
   } catch {
-    button.textContent = "Copy was refused";
+    word = "Copy was refused";
   }
-  setTimeout(() => (button.textContent = "Copy for a new conversation"), 1500);
+  const mark = { id, word, until: Date.now() + 1500 };
+  handoffCopied = mark;
+  const shown = handoffCopyButton(id);
+  if (shown) shown.textContent = word;
+  setTimeout(() => {
+    if (handoffCopied !== mark) return;
+    handoffCopied = null;
+    const live = handoffCopyButton(id);
+    if (live) live.textContent = label;
+  }, 1500);
 }
 
 // Pick it up here: a hop like a card launch. The page sends only the id; the
 // CLI reads the stored skill and spec, marks the handoff used and falls back
 // to Quick Task if either is gone.
 async function pickUpHandoff(h) {
-  if (page.gone || page.pendingResult || page.local.launching || finish()) return;
+  if (page.gone || page.pendingResult || page.local.launching || page.launchScoping || finish()) return;
   page.launchScoping = true;
   await hooks.syncWorkspaceScope(h.spec || "");
   try {
@@ -634,10 +670,10 @@ async function readHandoff(h) {
 }
 
 function dashCard(entry, menu) {
-  const presentation = cardPresentation(entry, scan(), selSpec(), menu);
+  const presentation = entry.appOnly ? loopPresentation(entry, menu) : cardPresentation(entry, scan(), selSpec(), menu);
   // The agent's `recommend` and detail describe the initially selected spec.
   // Other picker choices derive both from the scan, so stale context never
-  // follows a person to a different spec or to "start from scratch". A greyed
+  // follows a person to a different spec or to "start from scratch". A grayed
   // recommendation also yields to the selected spec's actual next step.
   const going = page.local.launching && (page.local.launching.skill === entry.skill || page.local.launching.skill === entry.review);
   const b = el(
@@ -645,14 +681,25 @@ function dashCard(entry, menu) {
     "dash-card" + (presentation.recommended ? " is-suggested" : "") + (going ? " is-going" : "")
   );
   b.type = "button";
-  b.disabled = Boolean(page.local.launching) || page.gone || page.pendingResult || !presentation.on;
+  b.disabled = Boolean(page.local.launching) || page.gone || page.pendingResult || loopDriving() || !presentation.on;
   if (!presentation.on && presentation.reason) b.title = presentation.reason;
 
   const head = el("span", "dash-card-head");
   head.appendChild(el("span", "dash-chip", entry.chip));
   if (presentation.recommended) head.appendChild(el("span", "pill suggested", "Suggested"));
   b.appendChild(head);
-  b.appendChild(el("span", "dash-card-title", entry.title));
+  const title = el("span", "dash-card-title");
+  if (entry.icon) {
+    const svg = document.createElementNS(SVG_NS, "svg");
+    svg.setAttribute("class", "dash-card-icon");
+    svg.setAttribute("aria-hidden", "true");
+    const use = document.createElementNS(SVG_NS, "use");
+    use.setAttribute("href", "#ci-" + entry.icon);
+    svg.appendChild(use);
+    title.appendChild(svg);
+  }
+  title.appendChild(document.createTextNode(entry.title));
+  b.appendChild(title);
   b.appendChild(el("span", "dash-card-blurb", entry.blurb));
   if (presentation.detail) b.appendChild(el("span", "dash-card-detail", presentation.detail));
   if (!presentation.on && presentation.reason) b.appendChild(el("span", "dash-card-off", presentation.reason));
@@ -663,10 +710,261 @@ function dashCard(entry, menu) {
   b.appendChild(foot);
 
   b.addEventListener("click", () => {
+    // The loop card opens its own setup screen instead of a confirm pane.
+    if (entry.appOnly) return hooks.openLoopSetup(selSpec());
     page.dashPick = entry;
     redraw();
   });
+  if (entry.appOnly) b.appendChild(loopHelpLink());
   return b;
+}
+
+// The loop card is lit only inside the desktop app and, there, by the same
+// rule as Implement (a documented or building spec). Never recommended or
+// pre-selected: a person opts into running unattended.
+function loopPresentation(entry, menu) {
+  if (!page.inApp) return { on: false, reason: OUTSIDE_APP_LINE, recommended: false, detail: "" };
+  return { ...cardPresentation(entry, scan(), selSpec(), menu), recommended: false };
+}
+
+// "How the loop works" on the card: a link inside a button is not allowed, so
+// it is a span that acts like one and keeps the click from opening the setup.
+function loopHelpLink() {
+  const a = el("span", "dash-card-link", "How the loop works");
+  a.setAttribute("role", "link");
+  a.tabIndex = 0;
+  const open = (e) => {
+    e.stopPropagation();
+    e.preventDefault();
+    hooks.openHelpOn("loop");
+  };
+  a.addEventListener("click", open);
+  a.addEventListener("keydown", (e) => (e.key === "Enter" || e.key === " ") && open(e));
+  return a;
+}
+
+// "Start with a note from your Notebook": the switch a lit card's confirm
+// pane offers when noteSwitchShows() says so. The pane is rebuilt on every
+// state frame, so what the person did lives here, keyed to the card and the
+// picked spec it was done for: `on`, the tabs as read (`null` until then,
+// each with its text and pictures once fetched), the picked tab and its
+// ticked picture ids. `pick` is the pending pick Phase 2 reads at Start.
+let note = null;
+
+const noteKey = (entry) => entry.skill + "|" + ((selSpec() && selSpec().dir) || "");
+
+function noteFor(entry) {
+  const key = noteKey(entry);
+  if (!note || note.key !== key) note = { key, on: false, tabs: null, failed: false, picked: null, ticked: [] };
+  return note;
+}
+
+/**
+ * The tab the confirm pane has picked for this card, as `{ tab, name, text,
+ * images }` with only the ticked pictures, or null when the switch is off or
+ * no tab is picked.
+ */
+export function pendingNotePick(entry) {
+  if (!entry || !note || note.key !== noteKey(entry) || !note.on || !note.picked || !note.tabs) return null;
+  const tab = note.tabs.find((t) => t.id === note.picked);
+  if (!tab || !tab.read) return null;
+  return {
+    tab: tab.id,
+    name: tab.name,
+    text: tab.read.text,
+    images: tab.read.images.filter((img) => note.ticked.includes(img.id)),
+  };
+}
+
+// Every tab, then each tab's text and pictures (the list shows an empty tab
+// grayed, so each must be read). Read only: GET /notepad never writes.
+async function readNoteTabs(state) {
+  try {
+    const res = await fetch("/notepad", { cache: "no-store" });
+    if (!res.ok) throw new Error(String(res.status));
+    const body = await res.json();
+    const tabs = Array.isArray(body.tabs) ? body.tabs : [];
+    const read = await Promise.all(
+      tabs.map(async (t) => {
+        try {
+          const r = await fetch("/notepad?tab=" + encodeURIComponent(t.id), { cache: "no-store" });
+          if (!r.ok) return null;
+          const b = await r.json();
+          return b && b.tab ? { text: typeof b.tab.text === "string" ? b.tab.text : "", images: Array.isArray(b.tab.images) ? b.tab.images : [] } : null;
+        } catch {
+          return null;
+        }
+      }),
+    );
+    state.tabs = tabs.map((t, i) => ({ id: t.id, name: t.name, sent: t.sent || null, read: read[i] }));
+    state.failed = false;
+  } catch {
+    state.tabs = [];
+    state.failed = true;
+  }
+}
+
+// Read the tabs again (`fresh` shows "Reading…" meanwhile, for a first read).
+// The pick survives only while its tab is still there with something in it,
+// and its ticks only for pictures still in that tab, so what Start reads is
+// never older than the last time the Notebook was closed.
+async function refreshNoteTabs(state, fresh = false) {
+  if (state.reading) return;
+  state.reading = true;
+  if (fresh) {
+    state.tabs = null;
+    redraw();
+  }
+  await readNoteTabs(state);
+  state.reading = false;
+  const tab = state.tabs.find((t) => t.id === state.picked);
+  if (!tab || !tab.read || noteTabEmpty(tab.read)) {
+    state.picked = null;
+    state.ticked = [];
+  } else {
+    const ids = tab.read.images.map((img) => img.id);
+    state.ticked = state.ticked.filter((id) => ids.includes(id));
+  }
+  // A state frame may have rebuilt the pane while the read was out, so the
+  // whole page redraws rather than a (perhaps detached) box.
+  if (note === state) redraw();
+}
+
+// The switch, the tab list and the preview, drawn into `box`; `cmdNote` is the
+// command line's `+ note: <tab>` span. Each change redraws only this box, so
+// the rest of the pane (and the focus on it) stays put.
+function drawNoteBox(entry, box, cmdNote) {
+  const state = noteFor(entry);
+  const focusKey = document.activeElement && box.contains(document.activeElement) ? document.activeElement.dataset.noteFocus : null;
+  const again = () => drawNoteBox(entry, box, cmdNote);
+  box.replaceChildren();
+
+  const label = el("label", "confirm-note-switch");
+  const toggle = el("input");
+  toggle.type = "checkbox";
+  toggle.id = "confirm-note-switch";
+  toggle.dataset.noteFocus = "switch";
+  toggle.checked = state.on;
+  toggle.addEventListener("change", () => {
+    state.on = toggle.checked;
+    again();
+    if (state.on && (state.tabs === null || state.failed)) refreshNoteTabs(state, true);
+  });
+  label.append(toggle, el("span", "confirm-note-switch-text", "Start with a note from your Notebook"));
+  // A callout row, so the switch stands out under the card's long text; the
+  // hint sits outside the label to keep the checkbox's name short.
+  const head = el("div", "confirm-note-head" + (state.on ? " is-on" : ""));
+  head.appendChild(label);
+  if (!state.on) {
+    const hint = el("span", "confirm-note-hint", "Hand it a tab you wrote earlier, with its pictures.");
+    hint.id = "confirm-note-hint";
+    toggle.setAttribute("aria-describedby", hint.id);
+    head.appendChild(hint);
+  }
+  box.appendChild(head);
+
+  const picked = state.on && state.tabs ? state.tabs.find((t) => t.id === state.picked && t.read) : null;
+  cmdNote.textContent = picked ? " + note: " + picked.name : "";
+  cmdNote.hidden = !picked;
+  if (!state.on) return;
+
+  const wrap = el("div", "confirm-note");
+  if (state.tabs === null) {
+    wrap.appendChild(el("p", "confirm-note-msg", "Reading your Notebook…"));
+  } else if (state.failed) {
+    wrap.appendChild(el("p", "confirm-note-msg", "Your Notebook could not be read. Turn the switch off and on to try again."));
+  } else if (!state.tabs.length) {
+    wrap.appendChild(el("p", "confirm-note-msg", "Your Notebook has no tabs yet. Open it from the top bar to write one."));
+  } else {
+    const list = el("div", "confirm-note-tabs");
+    list.setAttribute("role", "group");
+    list.setAttribute("aria-label", "Notebook tabs");
+    for (const t of state.tabs) {
+      const empty = !t.read || noteTabEmpty(t.read);
+      const b = el("button", "confirm-note-tab" + (t.id === state.picked ? " is-picked" : ""));
+      b.type = "button";
+      b.dataset.noteFocus = "tab-" + t.id;
+      b.disabled = empty;
+      b.setAttribute("aria-pressed", String(t.id === state.picked));
+      b.appendChild(el("span", "confirm-note-tab-name", t.name));
+      if (t.sent) {
+        const badge = el("span", "notepad-sent-badge", "previously sent");
+        badge.setAttribute("aria-hidden", "true");
+        b.appendChild(badge);
+      }
+      b.setAttribute("aria-label", t.name + (t.sent ? ", previously sent" : "") + (empty ? ", empty" : ""));
+      if (empty) b.title = t.read ? "This tab has no text or pictures." : "This tab could not be read.";
+      b.addEventListener("click", () => {
+        if (state.picked === t.id) return;
+        state.picked = t.id;
+        state.ticked = defaultNoteTicks(t.read.images);
+        again();
+      });
+      list.appendChild(b);
+    }
+    wrap.appendChild(list);
+    wrap.appendChild(notePreview(picked, state, again));
+  }
+  box.appendChild(wrap);
+  if (focusKey) {
+    const back = box.querySelector(`[data-note-focus="${focusKey}"]`);
+    if (back && !back.disabled) back.focus();
+  }
+}
+
+// The picked tab in full: a "Long tab" note over NOTE_LONG_BYTES, its text as
+// Markdown, and its pictures, each with a tick (at most MAX_ATTACHMENTS).
+function notePreview(picked, state, again) {
+  const pane = el("div", "confirm-note-preview");
+  pane.setAttribute("role", "region");
+  pane.setAttribute("aria-label", "Preview of the picked tab");
+  if (!picked) {
+    pane.appendChild(el("p", "confirm-note-msg", "Pick a tab to see it here."));
+    return pane;
+  }
+  const bytes = new TextEncoder().encode(picked.read.text).length;
+  if (bytes > NOTE_LONG_BYTES) pane.appendChild(el("p", "confirm-note-long", "Long tab: " + formatBytes(bytes)));
+  const text = el("div", "confirm-note-text md");
+  if (picked.read.text.trim()) mdInto(text, picked.read.text);
+  else text.appendChild(el("p", "confirm-note-msg", "No text, only pictures."));
+  pane.appendChild(text);
+  const images = picked.read.images;
+  if (images.length) {
+    const full = state.ticked.length >= MAX_ATTACHMENTS;
+    pane.appendChild(
+      el(
+        "p",
+        "confirm-note-msg",
+        images.length > MAX_ATTACHMENTS
+          ? `Up to ${MAX_ATTACHMENTS} pictures go with it. Untick one to tick another.`
+          : "Untick a picture to leave it out.",
+      ),
+    );
+    const strip = el("ul", "confirm-note-pics");
+    images.forEach((img, i) => {
+      const li = el("li", "confirm-note-pic");
+      const lab = el("label");
+      const tick = el("input");
+      tick.type = "checkbox";
+      tick.dataset.noteFocus = "pic-" + img.id;
+      tick.checked = state.ticked.includes(img.id);
+      tick.disabled = !tick.checked && full;
+      tick.setAttribute("aria-label", `Picture ${i + 1} of ${images.length}`);
+      tick.addEventListener("change", () => {
+        state.ticked = toggleNoteTick(state.ticked, img.id);
+        again();
+      });
+      const pic = el("img");
+      pic.src = img.thumb || img.url;
+      pic.alt = "";
+      pic.loading = "lazy";
+      lab.append(tick, pic);
+      li.appendChild(lab);
+      strip.appendChild(li);
+    });
+    pane.appendChild(strip);
+  }
+  return pane;
 }
 
 // The confirm pane. A card or rail click lands here rather than launching
@@ -737,10 +1035,30 @@ export function renderConfirm(main, entry) {
     pane.appendChild(label);
   }
 
+  // The Notebook switch, on the cards and specs noteSwitchShows() names.
+  const cmdNote = el("span", "confirm-cmd-note");
+  cmdNote.hidden = true;
+  if (noteSwitchShows(entry, scan(), selSpec())) {
+    const box = el("div", "confirm-note-box");
+    // Which control in the box has the focus, so a rebuild of the whole pane
+    // can hand it back (see the end of this function).
+    box.addEventListener("focusin", (e) => (noteFor(entry).focus = e.target.dataset.noteFocus || null));
+    box.addEventListener("focusout", (e) => {
+      if (e.relatedTarget && !box.contains(e.relatedTarget)) noteFor(entry).focus = null;
+    });
+    drawNoteBox(entry, box, cmdNote);
+    pane.appendChild(box);
+  }
+
+  // The command line and the buttons ride in one bar (.confirm-tail) pinned
+  // to the pane's bottom edge: however tall the Notebook box makes this pane,
+  // START stays in view.
+  const tail = el("div", "confirm-tail");
   const cmd = el("p", "confirm-cmd");
   const cmdCode = el("code", null, launchVariant(entry, !review || review.checked).command);
   cmd.appendChild(cmdCode);
-  pane.appendChild(cmd);
+  cmd.appendChild(cmdNote);
+  tail.appendChild(cmd);
 
   const actions = el("div", "confirm-actions");
   const start = el("button", "btn primary", "Start " + entry.title);
@@ -755,20 +1073,25 @@ export function renderConfirm(main, entry) {
   });
   actions.appendChild(back);
   actions.appendChild(start);
-  pane.appendChild(actions);
+  tail.appendChild(actions);
+  pane.appendChild(tail);
 
   main.appendChild(pane);
   // Focus lands on START after a pick (the clicked control was rebuilt away,
   // leaving focus on <body>), but never yanked back from a deliberate click
-  // elsewhere: a state frame can re-render this pane at any time.
-  if (document.activeElement === document.body) start.focus();
+  // elsewhere: a state frame can re-render this pane at any time. A control
+  // in the Notebook box gets its focus back instead.
+  if (document.activeElement === document.body) {
+    const held = note && note.key === noteKey(entry) && note.focus ? pane.querySelector(`[data-note-focus="${note.focus}"]`) : null;
+    (held && !held.disabled ? held : start).focus();
+  }
 }
 
 // A pick is a send like a brief or a stop: it names no question, so `__launch`
 // marks the action as being about the session, and it reaches the agent
 // through the same wait loop. The dashboard reads `skill` off it.
-async function launchSkill(entry) {
-  if (page.gone || page.pendingResult || page.local.launching || finish()) return;
+export async function launchSkill(entry) {
+  if (page.gone || page.pendingResult || page.local.launching || page.launchScoping || finish()) return;
   const target = launchTarget(entry, selSpec());
   // The card was clickable, so this should never fire — but a spec picked in
   // one tab could have shifted the ground under a stale render in another.
@@ -789,6 +1112,22 @@ async function launchSkill(entry) {
   // cards that take no spec (utilities, setup) launch untargeted even while
   // a spec is selected, save Quick Task on a diagnosed bug.
   if (target) action.spec = target.dir;
+  // A Notebook tab picked in the pane rides the hop in this page only, never
+  // on the action: the launched skill's `fill: "note"` box is filled from it
+  // (core.js), and the agent reads it only when that box is sent.
+  // Set either way, so a pick left from a launch that never hopped cannot
+  // fill this one.
+  const pick = pendingNotePick(entry);
+  page.local.noteSend = pick
+    ? {
+        tab: pick.tab,
+        text: pick.text,
+        pictures: pick.images.map((img) => img.id),
+        workflow: entry.workflow,
+        ...(target ? { spec: target.dir } : {}),
+      }
+    : null;
+  saveNow();
   // The skill opens on the folders remembered for what it was launched for.
   // Held until the launch is in flight: the swap's own frame re-renders the
   // dashboard, which would otherwise sync back to the picker's spec.
@@ -805,6 +1144,7 @@ async function launchSkill(entry) {
     });
     if (res.status === 409) {
       page.launchScoping = false;
+      dropNoteSend();
       page.pendingResult = true;
       hooks.banner("Your last pick is still being picked up. One moment.", "info");
       return;
@@ -818,8 +1158,16 @@ async function launchSkill(entry) {
     redraw();
   } catch {
     page.launchScoping = false;
+    dropNoteSend();
     hooks.banner("That did not go through. Nothing was lost; try again.", "warn");
   }
+}
+
+// A launch that did not go through takes no Notebook tab anywhere.
+function dropNoteSend() {
+  if (!page.local.noteSend) return;
+  page.local.noteSend = null;
+  saveNow();
 }
 
 // The picker's Delete: a dialog in two steps. The first says what goes and
@@ -987,9 +1335,15 @@ async function sendDelete(spec) {
 // The dialogs' buttons, wired once at start-up: the update notice's Done, the
 // handoff preview's close, and the delete dialog's Cancel, name box and go.
 export function wireDashboard() {
+  // Closing the Notebook over an open confirm pane with the switch on reads
+  // the tabs again, so an edit or a delete made there shows in the preview.
+  $("notepad-modal").addEventListener("close", () => {
+    if (note && note.on && page.dashPick) refreshNoteTabs(note);
+  });
   $("update-done").addEventListener("click", () => $("update-modal").close());
   $("delete-cancel").addEventListener("click", () => $("delete-modal").close());
   $("handoff-close").addEventListener("click", () => $("handoff-modal").close());
+  lightDismiss($("handoff-modal"));
   $("delete-go").addEventListener("click", deleteStep);
   $("delete-name").addEventListener("input", () => {
     $("delete-go").disabled = !deleteTarget || $("delete-name").value.trim() !== deleteTarget.name;
@@ -997,10 +1351,12 @@ export function wireDashboard() {
   $("delete-name").addEventListener("keydown", (e) => {
     if (e.key === "Enter") {
       e.preventDefault();
-      deleteStep();
+      if (!$("delete-go").disabled) deleteStep();
     }
   });
+  // `close` is queued, so it can land after the dialog was opened again for
+  // another spec; that new target must survive it.
   $("delete-modal").addEventListener("close", () => {
-    deleteTarget = null;
+    if (!$("delete-modal").open) deleteTarget = null;
   });
 }

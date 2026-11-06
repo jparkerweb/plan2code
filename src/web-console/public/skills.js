@@ -33,7 +33,7 @@
 //              always on whatever is picked; null for no card
 //   marksNext  the card can be a state's natural next step, so its answer
 //              always says whether it is (`next`)
-//   greyed     its greyed reasons: `default`, plus one per state whose
+//   greyed     (the field keeps its old spelling) its grayed reasons: `default`, plus one per state whose
 //              wording differs, and `finished` for any finished state
 //              (spec-states.js); Init and Init update use `default` for the
 //              AGENTS.md check, which is a rule on the scan, not on the spec
@@ -42,11 +42,17 @@
 //   card       the dashboard card (group, chip, title, blurb, about, and
 //              `spec: true` when it takes the picked spec), or null; an
 //              optional `help` is Help's line for the card when it differs
-//              from `blurb`
+//              from `blurb`, and `icon` names the `ci-*` symbol in
+//              index.html's card-icons sheet drawn before the title
+//   appOnly    the entry is a card the desktop app alone offers (the
+//              Implementation Loop): no workflow, no installed skill, and no
+//              list derived from the workflows (WORKFLOWS, the meter, the
+//              resume command, Help's card list) holds it. `skill` is an id
+//              only; `workflow` is null. Use FLOW_SKILLS for those lists.
 
 // Shared by Implement and Implement + Review.
 const BUILD_HELPERS =
-  "Hand independent tasks in a phase to helpers: tasks that touch different files and do not depend on each other. Keep tasks that share files, the phase's tests and the sign-off with you.";
+  "Hand independent tasks in a phase to helpers: tasks that touch different files and do not depend on each other. Keep tasks that share files, the phase's tests and the sign-off with you. Pick each helper's strength and effort from helper-strength.md's table: light for a 1-2 file task the task file spells out, standard for multi-file or debugging work.";
 
 // Pathfinder's and Plan's reason on a finished spec (a fixed bug).
 export const FIXED_REASON = "This bug is fixed. Delete it with the Delete button on its chip, or move it to specs--completed/.";
@@ -58,7 +64,7 @@ function skill(entry) {
   const card = entry.card ? Object.freeze({ ...entry.card }) : null;
   const states = Array.isArray(entry.states) ? Object.freeze([...entry.states]) : entry.states;
   const greyed = entry.greyed ? Object.freeze({ ...entry.greyed }) : null;
-  return Object.freeze({ marksNext: false, ...entry, command: "/" + entry.skill, states, greyed, card });
+  return Object.freeze({ marksNext: false, ...entry, command: entry.skill ? "/" + entry.skill : null, states, greyed, card });
 }
 
 export const SKILLS = Object.freeze([
@@ -70,13 +76,14 @@ export const SKILLS = Object.freeze([
     pose: "init",
     builds: false, phased: false, metered: true, templates: false,
     weight: 2, started: "Init started", ran: "Init run", resume: null,
-    subagents: null,
+    subagents: "Use helpers to map the project in parallel, one per area: what it holds, how it builds and runs, and the conventions it follows. Keep every question, the judgment on what matters and the writing of AGENTS.md with you. Recon at light strength, low effort.",
     states: "any",
     greyed: { default: "AGENTS.md is already written. Refresh it instead." },
     card: {
       group: "setup",
       chip: "Set up",
       title: "Set up this project",
+      icon: "init",
       blurb: "Reads your project and writes AGENTS.md, the guide every later step works from.",
       about:
         "Plan2Code reads the whole project: how it is organized, how it runs, and where the sharp edges are. Then it writes AGENTS.md, the guide every later step steers by. It asks a few questions as it goes, so nothing important gets guessed. Run this once per project, or again when the project has moved on.",
@@ -90,13 +97,14 @@ export const SKILLS = Object.freeze([
     pose: "init",
     builds: false, phased: false, metered: true, templates: false,
     weight: 2, started: "Init update started", ran: "Init update run", resume: null,
-    subagents: null,
+    subagents: "Use helpers to re-check areas in parallel: what has moved since AGENTS.md was written, and where it shows. Keep every question and the edits to AGENTS.md and its notes with you. Recon at light strength, low effort.",
     states: "any",
     greyed: { default: "Needs an AGENTS.md. Set the project up first." },
     card: {
       group: "setup",
       chip: "Set up",
       title: "Refresh AGENTS.md",
+      icon: "init-update",
       blurb: "Brings AGENTS.md and its notes up to date with what the project has learned lately.",
       about:
         "The project moved on since AGENTS.md was written: new commands, new habits, new gotchas. This re-reads the project, asks what changed, and folds it into AGENTS.md and the notes beside it. Cheaper than a fresh setup, and whatever is still right is kept.",
@@ -110,7 +118,7 @@ export const SKILLS = Object.freeze([
     pose: "pathfinder",
     builds: false, phased: false, metered: false, templates: true,
     weight: null, started: null, ran: null, resume: "folder",
-    subagents: "Use helpers for codebase recon, sketches and lookups beside the conversation. Keep every question for the person with you.",
+    subagents: "Use helpers for codebase recon, sketches and lookups beside the conversation. Keep every question for the person with you. Recon and lookups at light strength, research questions at standard.",
     states: ["none", "unrecognized", "exploring"], marksNext: true,
     greyed: {
       default: "This spec is already past the questions",
@@ -122,6 +130,7 @@ export const SKILLS = Object.freeze([
       chip: "Step 0",
       spec: true,
       title: "Pathfinder",
+      icon: "pathfinder",
       blurb: "A foggy idea becomes a clear list of decisions, settled one question at a time.",
       about:
         "You have a rough idea and a lot of unknowns. Pathfinder asks one question at a time: who it is for, what it must do, what could go wrong. Each answer is written down in a spec folder. It ends with a list of decisions clear enough to plan from, and nothing gets built yet.",
@@ -135,7 +144,7 @@ export const SKILLS = Object.freeze([
     pose: "plan",
     builds: false, phased: false, metered: true, templates: true,
     weight: 2, started: "Plan started", ran: "Plan drafted", resume: null,
-    subagents: null,
+    subagents: "Use helpers for research and recon beside the conversation: reading the files and references the person points you to, mapping separate areas of the codebase in Phase 2, and gathering evidence on each open tech choice in Phase 4. In Phase 7, one fresh helper may cross-check the PLAN-DRAFT against the PLAN-CONVERSATION; confirm each gap it finds yourself. Keep every question, decision and sign-off, and the writing of the PLAN-DRAFT, with you. Recon and lookups at light strength, the cross-check at standard.",
     states: ["none", "unrecognized", "diagnosed", "mapped", "planned"], marksNext: true,
     greyed: {
       default: "The plan is written. Revise it instead if it moved.",
@@ -147,6 +156,7 @@ export const SKILLS = Object.freeze([
       chip: "Step 1",
       spec: true,
       title: "Plan",
+      icon: "plan",
       blurb: "Requirements, technical design and your approval: the shape of what gets built.",
       about:
         "Turns what you bring into a real plan: a finished Pathfinder map, a folder of design notes, or just the idea in your head. You get requirements, a technical design, a phase-by-phase breakdown, and a final version to approve before anything is built. This is where 'what are we building' becomes 'how it gets built'.",
@@ -160,14 +170,15 @@ export const SKILLS = Object.freeze([
     pose: "plan",
     builds: false, phased: false, metered: true, templates: false,
     weight: 1, started: "Revise plan started", ran: "Plan revised", resume: "overview",
-    subagents: null,
-    states: ["documented", "building"],
-    greyed: { default: "Needs a spec that is already written up", built: "The spec is fully built" },
+    subagents: "Use helpers for lookups at Steps 1 and 2: reading the code behind the affected tasks, and behind the completed tasks the change could undo. After the Step 2 approval, when the revision touches 3 or more phase files, one helper per phase file may apply the edits the approved plan spells out for it, editing under specs/ only. Keep the questions, the approval, overview.md, task numbering across phases and the consistency check with you, and re-read every file a helper edited. Lookups at light strength, low effort; phase-file edits at light, medium.",
+    states: ["documented", "building", "built"],
+    greyed: { default: "Needs a spec that is already written up" },
     card: {
       group: "pipeline",
       chip: "Step 1b",
       spec: true,
       title: "Revise the plan",
+      icon: "revise-plan",
       blurb: "Requirements changed mid-build? Adjust the plan without starting over.",
       about:
         "Requirements moved mid-build: a feature added, a rule dropped, a deadline pulled in. This adjusts the existing spec for the change, shows you what it affects, and only rewrites what actually has to move. The approved plan stays the plan.",
@@ -181,7 +192,7 @@ export const SKILLS = Object.freeze([
     pose: "document",
     builds: false, phased: false, metered: true, templates: false,
     weight: 2, started: "Document started", ran: "Spec documented", resume: "overview",
-    subagents: null,
+    subagents: "Use helpers for lookups while you write the phases: the files, seams and sizes behind the work a task names. Keep the breakdown, the writing and every question with you. Lookups at light strength, low effort.",
     states: ["planned"], marksNext: true,
     greyed: {
       default: "Needs a drafted plan first",
@@ -194,6 +205,7 @@ export const SKILLS = Object.freeze([
       chip: "Step 2",
       spec: true,
       title: "Document",
+      icon: "document",
       blurb: "The plan becomes a checklist of small tasks, grouped into phases, that a developer can just do.",
       about:
         "Writes the plan as numbered phase files. Each phase is a checklist of tasks small enough to just do, with the details a builder needs right there. This is the file the build step works from, and the thing a later session can pick up cold.",
@@ -216,6 +228,7 @@ export const SKILLS = Object.freeze([
       chip: "Step 3",
       spec: true,
       title: "Implement",
+      icon: "implement",
       blurb: "Builds the next phase, task by task, then reviews it, with your sign-off at the end.",
       about:
         "Builds the next phase of the spec. Tasks get checked off one by one, with progress and the occasional decision landing on this page as it goes. With Review ticked, a fresh pass then hunts for problems in exactly what changed and you pick what gets fixed. It ends with a report of what was built and a sign-off card you approve before the phase counts as done.",
@@ -235,6 +248,33 @@ export const SKILLS = Object.freeze([
     // No card of its own: Implement's card launches it when Review is ticked.
     card: null,
   }),
+  // The desktop app's Implementation Loop: a card, not a skill. It has no
+  // SKILL.md and no console workflow; it drives Implement (or Implement +
+  // Review) once per phase, each in a fresh agent. Drawn by the dashboard in
+  // the app only.
+  skill({
+    skill: "plan2code-loop",
+    workflow: null,
+    appOnly: true,
+    label: "Implementation Loop",
+    name: "Implementation Loop",
+    pose: null,
+    builds: false, phased: false, metered: false, templates: false,
+    weight: null, started: null, ran: null, resume: null,
+    subagents: null,
+    states: ["documented", "building"],
+    greyed: BUILD_GREYED,
+    card: {
+      group: "pipeline",
+      chip: "Step 3",
+      spec: true,
+      title: "Implementation Loop",
+      icon: "loop",
+      blurb: "Build every remaining phase unattended, one fresh agent per phase.",
+      about:
+        "Builds every remaining phase of the spec without you at the keyboard. Each phase gets a fresh agent that builds it and reviews it. The app checks the result against the spec, runs your quick check, commits, and moves on. It stops at the first phase that goes wrong and tells you why. Desktop app only.",
+    },
+  }),
   skill({
     skill: "plan2code-4-finalize",
     workflow: "finalize",
@@ -243,7 +283,7 @@ export const SKILLS = Object.freeze([
     pose: "finalize",
     builds: false, phased: false, metered: true, templates: false,
     weight: 1, started: "Finalize started", ran: "Finalize run", resume: "overview",
-    subagents: null,
+    subagents: "Run Step 2.5's final review analysis in one fresh helper briefed only with the spec and the feature's change set (references/reviewer-brief.md); verify every finding yourself before you report. Keep the audit, every question, the fixes and the archive with you. At standard strength or above (strongest when the feature touches security, auth or data), high effort.",
     states: ["built"], marksNext: true,
     greyed: { default: "Needs a spec that is fully built" },
     card: {
@@ -251,6 +291,7 @@ export const SKILLS = Object.freeze([
       chip: "Step 4",
       spec: true,
       title: "Finalize",
+      icon: "finalize",
       blurb: "Checks the work, writes the summary, files the specs away and suggests the commit message.",
       about:
         "The closer. Checks every task against the spec, makes sure the build actually works, writes the summary into overview.md, updates the project docs, and suggests the commit message. Run it when the feature is done. It leaves the project tidy behind it.",
@@ -264,13 +305,14 @@ export const SKILLS = Object.freeze([
     pose: "quick-task",
     builds: true, phased: false, metered: true, templates: true,
     weight: 1, started: "Quick task started", ran: "Quick task built", resume: null,
-    subagents: "Use helpers for side lookups, such as reading unfamiliar code or checking documentation, while you make the change yourself.",
+    subagents: "Use helpers for side lookups, such as reading unfamiliar code or checking documentation, while you make the change yourself. Side lookups at light strength, low effort.",
     states: "any",
     greyed: null,
     card: {
       group: "extra",
       chip: "Utility",
       title: "Quick task",
+      icon: "quick-task",
       blurb: "Too small for the full process? A quick plan, then it just builds it.",
       about:
         "A fix, a tweak, a small feature. Not worth a spec folder. Describe it, confirm the one-line plan, and it builds it right there, with a report at the end. The fast lane for work the full process would over-plan.",
@@ -284,13 +326,14 @@ export const SKILLS = Object.freeze([
     pose: "review",
     builds: false, phased: false, metered: true, templates: false,
     weight: 2, started: "Review started", ran: "Code review run", resume: null,
-    subagents: "Run the review's analysis in one fresh helper briefed only with the spec and the change set (references/reviewer-brief.md); verify every finding yourself before you report.",
+    subagents: "Run the review's analysis in one fresh helper briefed only with the spec and the change set (references/reviewer-brief.md); verify every finding yourself before you report. At standard strength or above (strongest for branch or full scope), high effort.",
     states: "any",
     greyed: null,
     card: {
       group: "extra",
       chip: "Utility",
       title: "Review",
+      icon: "review",
       blurb: "A second opinion on the changes. Problems ranked, and you pick what gets fixed.",
       about:
         "A fresh-eyes pass over what changed: bugs, gaps, and the things the builder was too close to see. Problems come back ranked with a suggestion each, you pick which ones get fixed, and it fixes them.",
@@ -304,13 +347,14 @@ export const SKILLS = Object.freeze([
     pose: "xray",
     builds: false, phased: false, metered: true, templates: false,
     weight: 1, started: "X-ray started", ran: "X-ray run", resume: null,
-    subagents: null,
+    subagents: "Use helpers for the reading both modes lean on: explain mode's area files and history leads, and rough-spots mode's top candidates, one helper per area or candidate. Keep the judgment, the citations, the ranking, the pick and every question with you. Lookups at light strength, low effort.",
     states: "any",
     greyed: null,
     card: {
       group: "extra",
       chip: "Utility",
       title: "Codebase X-ray",
+      icon: "xray",
       blurb: "Explain how and why an area works, or find the rough spots worth fixing.",
       about:
         "Two ways into code you did not write. Explain an area: how it works, step by step, and why it is that way, citing the files and the commits and pull requests behind it. Or find the rough spots: files that always change together, thin layers, tangled boundaries and busy code with no tests, ranked with a concrete example each. You tick the ones worth fixing and they become a brief for Pathfinder or Plan. It never changes code.",
@@ -324,17 +368,62 @@ export const SKILLS = Object.freeze([
     pose: "diagnose",
     builds: false, phased: false, metered: true, templates: false,
     weight: 1, started: "Diagnose started", ran: "Diagnose run", resume: null,
-    subagents: null,
+    subagents: "Use helpers for side lookups while you narrow: the code path a suspect change touches, a suspect function's callers, and the docs behind the failing behavior. Keep the reproduction, any bisect, the cause judgment and every question with you. Lookups at light strength, low effort.",
     states: "any",
     greyed: null,
     card: {
       group: "extra",
       chip: "Utility",
       title: "Diagnose a bug",
+      icon: "diagnose",
       blurb: "Find a bug's cause and write it up, without fixing it.",
       help: "Finds a bug's cause and writes it up without fixing it, ready to hand to Quick Task or Plan.",
       about:
         "Something is broken and nobody knows why. Diagnose asks what goes wrong and how to see it, then builds a command that fails on the bug before it forms a theory. It narrows the cause down to a file and a function, says how sure it is, and sizes the fix. The write-up lands in a spec folder, and the dashboard then offers Quick Task to fix it, or Plan when the fix is big. It never changes code.",
+    },
+  }),
+  skill({
+    skill: "plan2code-pr-prep",
+    workflow: "pr-prep",
+    label: "PR prep",
+    name: "PR Prep",
+    pose: "pr-prep",
+    builds: false, phased: false, metered: true, templates: false,
+    weight: 1, started: "PR Prep started", ran: "PR Prep run", resume: null,
+    subagents: "Use helpers to read the files behind changes no test map row covers, and to draft the Changes by area section of the description. Keep the check plan, the runs, the verdict and every question with you. Light strength, low effort.",
+    states: "any",
+    greyed: null,
+    card: {
+      group: "extra",
+      chip: "Utility",
+      title: "Get a PR ready",
+      icon: "pr-prep",
+      blurb: "Runs the checks your branch needs, says if it is ready, and writes the PR description.",
+      help: "Picks and runs the checks a branch needs, gives a readiness verdict and writes a PR description to copy.",
+      about:
+        "Before you open a pull request. PR Prep reads what changed on the branch and picks the checks that cover it from the project's test map (or from its config files when there is no map), each with a reason. You untick what to skip, then it runs the rest and says Ready, Ready with notes or Not ready. It writes a PR description to copy, following the repo's template when there is one, and gives the link to open the PR. It never commits, pushes or opens the PR for you.",
+    },
+  }),
+  skill({
+    skill: "plan2code-test",
+    workflow: "test",
+    label: "Testing",
+    name: "Test",
+    pose: "test",
+    builds: false, phased: false, metered: true, templates: false,
+    weight: 1, started: "Test started", ran: "Test run", resume: null,
+    subagents: "Use helpers to read the nearest tests and runner configs for each runner group. Keep the gaps, the plan, the style block, every question and the writing of tests with you. Light strength, low effort.",
+    states: "any",
+    greyed: null,
+    card: {
+      group: "extra",
+      chip: "Utility",
+      title: "Write missing tests",
+      icon: "test",
+      blurb: "Finds code with no tests and writes them in your project's own style.",
+      help: "Finds untested files, shows a test plan in the project's style, then writes and runs unit and integration tests.",
+      about:
+        "When parts of the code have no tests. Test asks where to look (the branch's changes, one folder or the whole project) and finds the files no test covers, and offers a real coverage run when the project already has a coverage tool. It shows a plan that opens with how this project writes tests, so the new tests match the old ones, then writes and runs unit and integration tests. It never changes source code: a test that finds a real bug is handed to Diagnose.",
     },
   }),
   skill({
@@ -352,6 +441,7 @@ export const SKILLS = Object.freeze([
       group: "extra",
       chip: "Utility",
       title: "Changelog",
+      icon: "changelog",
       blurb: "Checks the CHANGELOG version against the main branch and suggests entries for what is new.",
       about:
         "Works out the right version from the default branch, then compares your branch with the latest CHANGELOG entry and suggests the entries it is missing. You edit them before anything is written, it keeps package.json in step, and it offers to commit the result in Git. If the newest version is not released or on another branch yet, it adds to that entry instead of starting a new one.",
@@ -372,6 +462,7 @@ export const SKILLS = Object.freeze([
       group: "extra",
       chip: "Utility",
       title: "Git",
+      icon: "git",
       blurb: "Branches, pull, push and commits on one board that stays open while you work.",
       help: "Branches, pull, push and commits on one board, asking before anything leaves your machine. See \"The git board\".",
       about:
@@ -393,10 +484,31 @@ export const SKILLS = Object.freeze([
       group: "extra",
       chip: "Utility",
       title: "Handoff",
+      icon: "handoff",
       blurb: "Pack the current session into a document a fresh session can pick up cold.",
       about:
         "Writes down everything a new session would need, as a single document: what was decided, what is done, what is left. Use it when a conversation got long, a machine changed, or tomorrow-you deserves the context today-you has.",
     },
+  }),
+  // The agent-less setup page: opened by the `plan2code` command (or the app)
+  // when no agent can run. It is a workflow, not a skill: no command, no card,
+  // and every list derived from FLOW_SKILLS leaves it out (no card, no command,
+  // no resume, metered false). `agentless` switches off the agent-silence
+  // states, the Ask and Subagents tabs, the Notebook send and most of the top
+  // bar, all checked through isAgentless().
+  skill({
+    skill: null,
+    workflow: "setup",
+    agentless: true,
+    label: "Agent setup",
+    name: "Setup",
+    pose: "setup",
+    builds: false, phased: false, metered: false, templates: false,
+    weight: null, started: null, ran: null, resume: null,
+    subagents: null,
+    states: null,
+    greyed: null,
+    card: null,
   }),
   skill({
     skill: "plan2code",
@@ -413,11 +525,16 @@ export const SKILLS = Object.freeze([
   }),
 ]);
 
-const BY_WORKFLOW = new Map(SKILLS.map((s) => [s.workflow, s]));
-const BY_SKILL = new Map(SKILLS.map((s) => [s.skill, s]));
+// The entries that are skills with a workflow, in SKILLS order: what every
+// list derived from the workflows is built from (an `appOnly` card is not one).
+export const FLOW_SKILLS = Object.freeze(SKILLS.filter((s) => !s.appOnly));
+
+const BY_WORKFLOW = new Map(FLOW_SKILLS.map((s) => [s.workflow, s]));
+// Entries with no skill (the agent-less setup page) are not looked up by one.
+const BY_SKILL = new Map(FLOW_SKILLS.filter((s) => s.skill).map((s) => [s.skill, s]));
 
 // Every workflow name the console knows, in SKILLS order.
-export const WORKFLOWS = Object.freeze(SKILLS.map((s) => s.workflow));
+export const WORKFLOWS = Object.freeze(FLOW_SKILLS.map((s) => s.workflow));
 
 /** Whether a name is one of WORKFLOWS (`open --workflow`, `handoff new --workflow`). */
 export function isWorkflow(name) {
@@ -438,6 +555,8 @@ export const isBuild = (workflow) => Boolean(skillFor(workflow)?.builds);
 export const isPhased = (workflow) => Boolean(skillFor(workflow)?.phased);
 export const isMetered = (workflow) => Boolean(skillFor(workflow)?.metered);
 export const takesTemplates = (workflow) => Boolean(skillFor(workflow)?.templates);
+/** A session with no agent behind it: silence states, Ask and helpers stay off. */
+export const isAgentless = (workflow) => Boolean(skillFor(workflow)?.agentless);
 
 /** The Subagents switch's instruction for a workflow, or null when it is not offered. */
 export function subagentsFor(workflow) {

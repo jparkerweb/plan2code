@@ -14,7 +14,7 @@ Analyze this codebase and create `AGENTS.md` to guide future AI coding agents (C
 
 ## Interface
 
-The FIRST thing you do, before anything else in this file — before exploring the codebase: ask **web console** (browser page, suggested) or **terminal**? Console → run `node "<D>/console.mjs" open --workflow init` before reading (<D>: references/web-console/ beside this SKILL.md — ~/.agents/skills/plan2code-init/references/web-console/ globally — or the dir in ~/.plan2code/console/console-dir), then read <D>/console.md and <D>/notes/init.md. Every confirmation — the restructure offer, the AI-agent file-sync prompt — goes through it, and the finished AGENTS.md lands on the page as a doc marked `saved` (the file is already on disk — no download offered). Switchable anytime. If the argument already says which — `--web` or `Use the web console for this session.` — take it and do not ask; drop the flag. Launched by the dashboard? Its session is already open — resume it (console-launches.md), then Content. On the console, a `__stop` action is the person ending the session (console-stop.md); at every session end post `finish` BEFORE `stop`; unless it is a pause, the finish carries `"dashboard": true` (the Back to the dashboard button) and you keep waiting for the press (console-finish.md).
+The FIRST thing you do, before anything else in this file — before exploring the codebase: ask **web console** (browser page, suggested) or **terminal**? Console → run `node "<D>/console.mjs" open --workflow init` before reading (<D>: references/web-console/ beside this SKILL.md — ~/.agents/skills/plan2code-init/references/web-console/ globally — or the dir in ~/.plan2code/console/console-dir), then read <D>/console.md and <D>/notes/init.md. Every confirmation — the restructure offer, the AI-agent file-sync prompt — goes through it, and the finished AGENTS.md lands on the page as a doc marked `saved` (the file is already on disk — no download offered). Switchable anytime. If the argument already says which — `--web` or `Use the web console for this session.` — take it and do not ask; drop the flag. Launched by the dashboard? Its session is already open — resume it (console-launches.md), then Content.
 
 ## Scripts
 
@@ -26,7 +26,7 @@ The FIRST thing you do, before anything else in this file — before exploring t
 
 ## Content
 
-1. **Commands**: Build, lint, test, run single test, other common development tasks, and how to start the app and where to view it (URL or command), when it has one
+1. **Commands**: Build, lint, test, run single test (and beside it a note of which checks are quick), other common development tasks, and how to start the app and where to view it (URL or command), when it has one. Then the **`## Test map`** section: run `node "<S>/test-commands.mjs" discover` and `node "<S>/test-map.mjs" read`. When test commands are found and no map exists, propose a `## Test map` table (`| Area | Paths | Run | Shared |`, one row per area with its own run command, `Shared: yes` for helper, fixture and config areas) for the person to approve, and write it only on a yes with `test-map.mjs write --rows <file>` (the rows file in the session folder or the OS temp folder, never the project). In a progressive `AGENTS.md`, the heading holds one link to `.agents-docs/AGENTS-test-map.md` and the table goes there. Omit the map when the project has no tests.
 2. **Architecture**: High-level "big picture" structure requiring multi-file context to understand
 3. **How to Use This File**: A short paragraph explaining that sections below contain brief summaries and agents should follow the markdown links to `.agents-docs/` for full details — only read what's relevant to the current task.
 4. **Failure Log**: running list of mistakes and/or corrections that went wrong via the AI Agent at least once. 
@@ -46,6 +46,13 @@ Prefix the file with:
 
 This file provides guidance to AI coding agents working with code in this repository.
 ```
+
+## Helpers
+
+When your tool can start helpers (subagents) and they are not switched off for this run (on the web console a `Subagents:` block says which, console-subagents.md):
+- **Mapping the project:** one area per helper; each reports what the area holds, how it builds and runs, and the conventions it follows, with `file:line` where it matters.
+
+Keep with you: every question, the judgment on what matters and the writing of AGENTS.md and its notes. Strength and effort per references/helper-strength.md. No helpers? Do the same work yourself.
 
 ---
 
@@ -74,7 +81,7 @@ The `Failure log` section below is a recording of mistakes made by previous AI A
 
 When you make a mistake, get corrected, or discover something about this codebase that wasn't written down:
 
-1. Add one line to the `Failure log` below, in the imperative, describing the correct behaviour.
+1. Add one line to the `Failure log` below, in the imperative, describing the correct behavior.
 2. Keep it specific to this repo. General advice belongs nowhere.
 3. If this fix is a workflow rather than a rule, put it in `.claude/skills/` and link it from here.
 4. Include the change in the same commit and mention it in your summary.

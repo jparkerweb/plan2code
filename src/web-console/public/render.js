@@ -7,11 +7,11 @@
 // that reads and writes the user's files and holds the session cookie. Script
 // running here could post arbitrary answers back to the agent, which would then
 // act on them with the agent's full tool permissions. And the markdown is only
-// nominally agent-authored: in practice the agent is summarising a dependency
+// nominally agent-authored: in practice the agent is summarizing a dependency
 // README, a scraped page, a PR description, a log. Treat it as hostile.
 //
 // Building nodes rather than parsing a string makes injection structurally
-// impossible instead of filtered, so there is nothing for a sanitiser bypass to
+// impossible instead of filtered, so there is nothing for a sanitizer bypass to
 // bypass. `html` tokens render as visible text, on purpose.
 
 import { marked } from "./vendor/marked.esm.js";
@@ -406,7 +406,7 @@ export function isMac() {
 // backdrop is the <dialog> itself to the event, and so is its own padding, so
 // the point has to fall outside its box -- for the press as well as the
 // release, or selecting text inside and letting go outside would close it.
-export function lightDismiss(dlg) {
+export function lightDismiss(dlg, beforeClose) {
   const outside = (e) => {
     const r = dlg.getBoundingClientRect();
     return e.target === dlg && (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom);
@@ -414,7 +414,11 @@ export function lightDismiss(dlg) {
   let pressedOutside = false;
   dlg.addEventListener("pointerdown", (e) => (pressedOutside = outside(e)));
   dlg.addEventListener("click", (e) => {
-    if (pressedOutside && outside(e)) dlg.close();
+    if (pressedOutside && outside(e)) {
+      // `beforeClose` may hold the close: false, or a Promise of false.
+      if (!beforeClose) dlg.close();
+      else Promise.resolve(beforeClose()).then((go) => go !== false && dlg.close());
+    }
     pressedOutside = false;
   });
 }

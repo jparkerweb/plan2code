@@ -33,6 +33,10 @@ import {
 import { CHAT_LIMIT, CHAT_MAX_CHARS } from "../src/web-console/public/chat.js";
 import { ACCENTS, CARD_WIDTHS, SOUND_EVENTS, soundKey, soundPrefs } from "../src/web-console/public/palette.js";
 import { HELP_TABS, helpTabFor, helpKeyTarget } from "../src/web-console/public/help.js";
+import { tabKeyTarget } from "../src/web-console/public/tabs.js";
+import { PREFS_TABS, prefsOpenTab, prefsResetScope } from "../src/web-console/public/prefs.js";
+import { DEFAULT_LOOKS, looks, resetLooks } from "../src/web-console/public/looks.js";
+import { ROLE_NOT_SET } from "../src/web-console/public/starters.js";
 import { RED_AT, YELLOW_AT } from "../src/web-console/public/meter.js";
 import { REMOTE_FOLD } from "../src/web-console/public/git-board.js";
 import { readLedger, SESSION_MAX_AGE_MS, sweepUploads, UPLOAD_MAX_AGE_MS } from "../src/web-console/sessions.mjs";
@@ -122,11 +126,14 @@ test("the page is served with a CSP that forbids inline script", async () => {
   assert.ok(csp.includes("media-src 'self'"));
 });
 
+// result.json keeps the whole send; the agent's output carries only `reply`,
+// the `__` session actions and the hop fields.
+const sentActions = () => JSON.parse(fs.readFileSync(path.join(session, "result.json"), "utf8")).actions;
+
 test("wait returns 10 with a progress summary while nobody has answered", () => {
   const res = cli(["wait", "--session", sid, "--seconds", "5"]);
   assert.equal(res.status, 10);
-  assert.equal(res.json.status, "waiting");
-  assert.equal(res.json.total, 1);
+  assert.deepEqual(res.json, { waiting: true, open: 1 }, "nothing else rides on a quiet slice");
 });
 
 test("a submit round-trips to the agent with the literal reply token", async () => {
@@ -136,9 +143,11 @@ test("a submit round-trips to the agent with the literal reply token", async () 
   });
   const res = cli(["wait", "--session", sid, "--seconds", "10"]);
   assert.equal(res.status, 0);
-  assert.equal(res.json.type, "submit");
   assert.equal(res.json.reply, "Export format: b");
-  assert.equal(res.json.actions[0].k, "B");
+  for (const dropped of ["type", "at", "sid", "rev", "consumedAt", "actions"]) assert.equal(res.json[dropped], undefined, `${dropped} stays in result.json`);
+  const kept = JSON.parse(fs.readFileSync(path.join(session, "result.json"), "utf8"));
+  assert.equal(kept.type, "submit");
+  assert.equal(kept.actions[0].k, "B");
 });
 
 test("a collected answer is written to the meter ledger once, and a button press is not", async () => {
@@ -176,8 +185,8 @@ test("a brief request round-trips with a range the playbook can read", async () 
   });
   const res = cli(["wait", "--session", sid, "--seconds", "10"]);
   assert.equal(res.status, 0);
-  assert.equal(res.json.actions[0].type, "brief");
-  assert.equal(res.json.actions[0].range, "since 2026-09-15");
+  assert.equal(res.json.session[0].i, "__brief");
+  assert.equal(res.json.session[0].range, "since 2026-09-15");
   assert.match(res.json.reply, /since 2026-09-15/);
 
   // `__brief` is not an item, so nothing on the board may have been touched.
@@ -195,7 +204,7 @@ test("a review request round-trips without touching any question", async () => {
   });
   const res = cli(["wait", "--session", sid, "--seconds", "10"]);
   assert.equal(res.status, 0);
-  assert.equal(res.json.actions[0].i, "__review");
+  assert.equal(res.json.session[0].i, "__review");
   assert.equal(res.json.reply, REVIEW_REPLY);
   const state = JSON.parse(fs.readFileSync(path.join(session, "state.json"), "utf8"));
   assert.ok(state.items.every((i) => i.id !== "__review"), "a review request must not become a question");
@@ -212,9 +221,10 @@ test("a launch request round-trips with the skill the dashboard resumes as", asy
   });
   const res = cli(["wait", "--session", sid, "--seconds", "10"]);
   assert.equal(res.status, 0);
-  assert.equal(res.json.actions[0].i, "__launch");
-  assert.equal(res.json.actions[0].skill, "plan2code-3-implement");
-  assert.equal(res.json.actions[0].workflow, "implement");
+  assert.equal(res.json.session[0].i, "__launch");
+  assert.equal(res.json.session[0].skill, "plan2code-3-implement");
+  assert.equal(res.json.session[0].workflow, "implement");
+  assert.match(res.json.resume, /--no-open --workflow implement$/);
   const state = JSON.parse(fs.readFileSync(path.join(session, "state.json"), "utf8"));
   assert.ok(state.items.every((i) => i.id !== "__launch"), "a launch must not become a question");
 });
@@ -228,7 +238,7 @@ test("a launch sent from a finished screen carries the resume for the next skill
   });
   const res = cli(["wait", "--session", sid, "--seconds", "10"]);
   assert.equal(res.status, 0);
-  assert.equal(res.json.actions[0].i, "__launch");
+  assert.equal(res.json.session[0].i, "__launch");
   assert.match(res.json.resume, /--no-open --workflow document --spec specs\/lunch-vote$/);
 });
 
@@ -263,8 +273,8 @@ test("a delete request round-trips with the spec folder and no resume", async ()
   });
   const res = cli(["wait", "--session", sid, "--seconds", "10"]);
   assert.equal(res.status, 0);
-  assert.equal(res.json.actions[0].i, "__delete");
-  assert.equal(res.json.actions[0].spec, "specs/lunch-vote");
+  assert.equal(res.json.session[0].i, "__delete");
+  assert.equal(res.json.session[0].spec, "specs/lunch-vote");
   assert.equal(res.json.resume, undefined);
   assert.equal(res.json.skillFile, undefined);
   const state = JSON.parse(fs.readFileSync(path.join(session, "state.json"), "utf8"));
@@ -289,7 +299,7 @@ test("a dashboard request round-trips and the session resumes as the dashboard",
 
   const res = cli(["wait", "--session", sid, "--seconds", "10"]);
   assert.equal(res.status, 0);
-  assert.deepEqual(res.json.actions, [{ i: "__dashboard", type: "dashboard" }]);
+  assert.deepEqual(res.json.session, [{ i: "__dashboard" }]);
   assert.equal(res.json.reply, DASHBOARD_REPLY);
   const after = readState();
   assert.ok(after.items.every((i) => i.id !== "__dashboard"), "a dashboard request must not become a question");
@@ -316,8 +326,14 @@ test("a stale dashboard launch says the pick is saved and how to wake the agent"
     kicker: "Saved",
     title: "Pathfinder is saved and waiting",
     quip: "Plan2Code is not running right now.",
-    hint: "Return to the terminal and send any message. Plan2Code will collect this launch and continue here.",
+    hint: "Return to the terminal and type continue. Plan2Code will collect this launch and continue here.",
   });
+  // Under the desktop app the Reconnect to agent button is on the screen, so
+  // the hint points at it instead of the terminal.
+  assert.equal(
+    staleLaunchFeedback("Pathfinder", true, true).hint,
+    "Press Reconnect to agent below. Plan2Code will collect this launch and continue here."
+  );
   assert.equal(staleLaunchFeedback("Pathfinder", false), null);
 });
 
@@ -327,10 +343,15 @@ test("a stale dashboard launch says the pick is saved and how to wake the agent"
 // never sent.
 test("the submitted event names the items that went", async () => {
   const port = Number(new URL(baseUrl).port);
+  // Resolved once the stream is connected: a submit posted before then is
+  // never delivered to it, which timed out on a slow runner.
+  let connected;
+  const open = new Promise((resolve) => (connected = resolve));
   const frame = new Promise((resolve, reject) => {
     const req = http.request(
       { host: "127.0.0.1", port, path: "/events", method: "GET", headers: { cookie: cookieFor(baseUrl, token) } },
       (res) => {
+        connected();
         let buf = "";
         res.setEncoding("utf8");
         res.on("data", (chunk) => {
@@ -356,6 +377,7 @@ test("the submitted event names the items that went", async () => {
     req.end();
   });
 
+  await open;
   await post("/submit", {
     actions: [{ i: "__brief", type: "brief", range: "today" }],
     reply: "Write a brief for today.",
@@ -409,11 +431,8 @@ test("a stop request carries the staged answers, reaches the agent as a send, an
 
   const res = cli(["wait", "--session", sid, "--seconds", "5"]);
   assert.equal(res.status, 0, "a stop is a send, not a cancel");
-  assert.deepEqual(
-    res.json.actions.map((a) => a.type),
-    ["answer", "stop"],
-    "the answers and the stop arrive together"
-  );
+  assert.deepEqual(res.json.session, [{ i: "__stop" }], "the stop arrives whole, the answer in reply");
+  assert.match(res.json.reply, /^Export format: b/, "the staged answer arrives with it");
   assert.equal((await ping()).pendingStop, false);
 });
 
@@ -430,7 +449,7 @@ test("a handoff stop keeps its flag, reports as a stop until collected, and name
   assert.equal((await ping()).pendingStop, true, "an uncollected handoff stop shows on the heartbeat");
   const res = cli(["wait", "--session", sid, "--seconds", "5"]);
   assert.equal(res.status, 0);
-  assert.equal(res.json.actions[0].handoff, true, "the flag reaches the agent");
+  assert.equal(res.json.session[0].handoff, true, "the flag reaches the agent");
   assert.equal(res.json.handoffSkill, undefined, "no built skill beside the source tree");
   assert.equal((await ping()).pendingStop, false);
 });
@@ -453,7 +472,8 @@ test("a mid-workflow way home carries the staged answers and resumes as the dash
   assert.equal(res.status, 200);
   const got = cli(["wait", "--session", sid, "--seconds", "5"]);
   assert.equal(got.status, 0, "the way home is a send, not a cancel");
-  assert.deepEqual(got.json.actions.map((a) => a.type), ["answer", "dashboard"], "the answers and the way home arrive together");
+  assert.deepEqual(got.json.session, [{ i: "__dashboard" }], "the way home arrives whole, the answer in reply");
+  assert.match(got.json.reply, /^Export format: a/, "the staged answer arrives with it");
   assert.ok(got.json.reply.endsWith(HOME_REPLY));
 
   cli(["open", "--resume", sid, "--no-open", "--workflow", "dashboard"]);
@@ -520,12 +540,11 @@ test("the way home cannot be mistaken for a brief request", () => {
 test("console-stop.md, building.md and the dashboard prompt teach the mid-workflow way home", () => {
   const read = (...p) => fs.readFileSync(path.join(ROOT, ...p), "utf8");
   const stopMd = read("src", "web-console", "console-stop.md");
-  assert.ok(stopMd.includes("## Back to the dashboard, mid-workflow"));
-  assert.ok(stopMd.includes(HOME_REPLY), "console-stop.md quotes the reply line the agent will see");
-  assert.match(stopMd, /No `finish` and no `stop` in between/);
-  assert.ok(stopMd.includes("## Stop with a handoff"));
+  assert.ok(stopMd.includes("## `__dashboard` with no finish up (home, mid-workflow)"));
+  assert.match(stopMd, /No `finish` and no `stop`: the menu is the ending/);
+  assert.ok(stopMd.includes("## `__stop` with a handoff"));
   for (const word of ["handoff new", "--from-stop", "handoffSkill"]) assert.ok(stopMd.includes(word), `console-stop.md names ${word}`);
-  assert.match(read("src", "web-console", "console.md"), /`__stop` \(plain, or with `handoff: true`\), `__dashboard` \(no finish up\) \| `console-stop\.md`/, "console.md's action table sends a handoff stop and a mid-workflow __dashboard there");
+  assert.match(read("src", "web-console", "console.md"), /`__stop`, `__dashboard`[^\n]*covered by the topic file `read` names/, "the card hands a stop and a dashboard press to the topic file its pointer names");
   assert.ok(read("src", "web-console", "building.md").includes("mid-build `__dashboard`"));
   assert.ok(read("src", "plan2code.md").includes("mid-workflow from the top bar's triangle"));
 });
@@ -536,7 +555,7 @@ test("console-launches.md and the dashboard prompt teach the handoff pick-up and
   for (const word of ["__pickup", "handoffFile", "delete-handoff", "handoffsDir", "fallback"]) {
     assert.ok(launches.includes(word), `console-launches.md names ${word}`);
   }
-  assert.ok(launches.includes("handoffs, handoffsDir"), "console-launches.md lists the scan fields");
+  assert.ok(launches.includes("handoffs,handoffsDir"), "console-launches.md lists the scan fields");
   const prompt = read("src", "plan2code.md");
   for (const word of ["__pickup", "delete-handoff"]) assert.ok(prompt.includes(word), `src/plan2code.md names ${word}`);
 });
@@ -548,9 +567,11 @@ test("console-launches.md and the dashboard prompt teach the handoff pick-up and
 test("every module the page imports is actually served", async () => {
   const dir = path.join(ROOT, "src", "web-console", "public");
   const wanted = new Set(["app.js"]);
-  // The modules beside app.js and the screens under screens/, each import
-  // resolved from the file that makes it (a screen's "../state.js" is state.js).
-  const files = [...fs.readdirSync(dir).filter((f) => f.endsWith(".js")), ...fs.readdirSync(path.join(dir, "screens")).map((f) => `screens/${f}`)];
+  // The modules beside app.js and the screens under screens/ (subfolders too:
+  // screens/agents/ is a directory), each import resolved from the file that
+  // makes it (a screen's "../state.js" is state.js).
+  const screens = (abs, rel) => fs.readdirSync(abs, { withFileTypes: true }).flatMap((e) => e.isDirectory() ? screens(path.join(abs, e.name), `${rel}${e.name}/`) : e.name.endsWith(".js") ? [`${rel}${e.name}`] : []);
+  const files = [...fs.readdirSync(dir).filter((f) => f.endsWith(".js")), ...screens(path.join(dir, "screens"), "screens/")];
   for (const f of files) {
     const src = fs.readFileSync(path.join(dir, f), "utf8");
     for (const m of src.matchAll(/^\s*import\b[^"']*["'](\.\.?\/[^"']+)["']/gm)) wanted.add(path.posix.join(path.posix.dirname(f), m[1]));
@@ -644,16 +665,24 @@ test("the favicon is served as an SVG with a PNG fallback and the page points at
 /* ---------------------------------------------------------------- help */
 
 
-test("help: 18 tabs with unique ids", () => {
-  assert.equal(HELP_TABS.length, 18);
-  assert.equal(new Set(HELP_TABS.map((t) => t.id)).size, 18);
+test("help: 21 tabs with unique ids", () => {
+  assert.equal(HELP_TABS.length, 21);
+  assert.equal(new Set(HELP_TABS.map((t) => t.id)).size, 21);
   assert.ok(Object.isFrozen(HELP_TABS) && HELP_TABS.every((t) => Object.isFrozen(t)), "the tab list is frozen");
   const ids = HELP_TABS.map((t) => t.id);
-  assert.equal(ids.indexOf("git"), ids.indexOf("build") + 1, "The git board comes right after Watching a build");
+  assert.equal(ids.indexOf("loop"), ids.indexOf("build") + 1, "Implementation Loop comes right after Watching a build");
+  assert.equal(HELP_TABS[ids.indexOf("loop")].label, "Implementation Loop");
+  assert.equal(ids.indexOf("git"), ids.indexOf("loop") + 1, "The git board comes right after Implementation Loop");
   assert.equal(HELP_TABS[ids.indexOf("git")].label, "The git board");
   assert.equal(helpTabFor({ workflow: "git" }), "git");
+  assert.equal(ids.indexOf("activities"), ids.indexOf("ask") + 1, "Activities comes right after Ask a quick question");
+  assert.equal(HELP_TABS[ids.indexOf("activities")].label, "Activities");
   const tpl = helpTemplate();
   for (const id of ids) assert.match(tpl, new RegExp(`<section class="help-panel" data-tab="${id}">`), `${id} has a section`);
+  // The die sits right of the megaphone, so the megaphone is no longer the far-right button.
+  assert.doesNotMatch(tpl, /far right/, "no line calls a top-bar button the far-right one");
+  const around = tpl.match(/<section class="help-panel" data-tab="around">([\s\S]*?)<\/section>/)[1];
+  assert.match(around, /<strong>die<\/strong>[\s\S]*?"Activities"/, "Finding your way around points the die at the Activities topic");
 });
 
 test("help: the template's icons and panels match HELP_TABS in order, headed by their labels", () => {
@@ -671,7 +700,7 @@ test("help: the template's icons and panels match HELP_TABS in order, headed by 
   }
 });
 
-test("help: every diagram tab has one labelled picture, the rest none; no inline styles or scripts", () => {
+test("help: every diagram tab has one labeled picture, the rest none; no inline styles or scripts", () => {
   const tpl = helpTemplate();
   assert.doesNotMatch(tpl, /\sstyle=/);
   assert.doesNotMatch(tpl, /<script/i);
@@ -691,7 +720,7 @@ test("help: every diagram tab has one labelled picture, the rest none; no inline
     assert.doesNotMatch(body, /<div class="help-figure"[^>]*><\/div>/, `${t.id}'s insertion point is filled`);
     if (t.id === "planny") {
       const fig = body.match(/<figure class="help-figure help-moods"[^>]*role="img"[^>]*aria-labelledby="hd-planny-title"/);
-      assert.ok(fig, "the Planny moods are one labelled role=img figure");
+      assert.ok(fig, "the Planny moods are one labeled role=img figure");
       const label = body.match(/id="hd-planny-title"[^>]*>([^<]*)</);
       assert.ok(label && label[1].trim(), "the moods figure's label exists and says something");
       continue;
@@ -700,9 +729,9 @@ test("help: every diagram tab has one labelled picture, the rest none; no inline
     assert.ok(svg, `${t.id} draws an svg diagram`);
     const open = svg[0].slice(0, svg[0].indexOf(">"));
     assert.match(open, /role="img"/, `${t.id}'s diagram is an image`);
-    const labelled = open.match(/aria-labelledby="([^"]+)"/);
-    assert.ok(labelled, `${t.id}'s diagram is labelled`);
-    for (const id of labelled[1].split(/\s+/)) {
+    const labeled = open.match(/aria-labelledby="([^"]+)"/);
+    assert.ok(labeled, `${t.id}'s diagram is labeled`);
+    for (const id of labeled[1].split(/\s+/)) {
       const ref = svg[1].match(new RegExp(`<(title|desc) id="${id}">([\\s\\S]*?)</\\1>`));
       assert.ok(ref && ref[2].trim(), `${t.id}'s diagram has a non-empty #${id}`);
     }
@@ -734,6 +763,8 @@ test("help: helpTabFor opens on the tab for where the person is", () => {
     [{ dashboard: true, meterRed: true, view: "ask" }, "ask"],
     [{ meterRed: true }, "about"],
     [{ view: "overview" }, "docs"],
+    [{ view: "map" }, "docs"],
+    [{ view: "draft" }, "docs"],
     [{ view: "doc:plan" }, "docs"],
     [{ view: "doc:plan", workflow: "implement" }, "docs"],
     [{ workflow: "implement" }, "build"],
@@ -779,6 +810,64 @@ test("help: helpKeyTarget moves, wraps and jumps", () => {
   ];
   for (const [key, from, to] of cases) assert.equal(helpKeyTarget(key, from, n), to, `${key} from ${from}`);
   assert.equal(helpKeyTarget("a", 3, n), -1);
+});
+
+test("tabs: tabKeyTarget is Help's key rule, shared under both names", () => {
+  assert.equal(helpKeyTarget, tabKeyTarget, "help.js re-exports the shared function");
+  const n = 4;
+  for (const [key, from, to] of [["ArrowDown", 3, 0], ["ArrowRight", 1, 2], ["ArrowUp", 0, 3], ["ArrowLeft", 2, 1], ["Home", 2, 0], ["End", 0, 3]]) {
+    assert.equal(tabKeyTarget(key, from, n), to, `${key} from ${from}`);
+  }
+  assert.equal(tabKeyTarget("Enter", 1, n), -1);
+});
+
+test("prefs: four tabs in order, each section in exactly one", () => {
+  assert.deepEqual(PREFS_TABS.map((t) => t.id), ["appearance", "agents", "system", "sounds"]);
+  assert.deepEqual(PREFS_TABS.map((t) => t.label), ["Appearance", "Agents & models", "System", "Sounds & activities"]);
+  for (const t of PREFS_TABS) assert.ok(t.hint, `${t.id} has a hint`);
+  const sections = PREFS_TABS.flatMap((t) => t.sections);
+  assert.equal(new Set(sections).size, sections.length, "no section sits in two tabs");
+  assert.deepEqual(PREFS_TABS[0].sections, ["theme", "width", "accent", "role"], "Appearance in its order");
+});
+
+test("prefs: the dialog opens on the tab asked for, else Appearance", () => {
+  for (const t of PREFS_TABS) assert.equal(prefsOpenTab(t.id), t.id);
+  for (const asked of [undefined, "", "nope", "Appearance"]) assert.equal(prefsOpenTab(asked), "appearance", String(asked));
+});
+
+test("prefs: Back to default resets Appearance or Sounds & activities only, and nothing on the other two", () => {
+  assert.deepEqual(prefsResetScope("appearance"), ["theme", "width", "accent", "role"]);
+  const sounds = prefsResetScope("sounds");
+  assert.deepEqual(sounds, ["sound", ...Object.keys(SOUND_EVENTS).map(soundKey), "hideActivities", "activitySounds", "gameMusic"]);
+  for (const key of [...prefsResetScope("appearance"), ...sounds]) {
+    if (key !== "role") assert.ok(Object.hasOwn(DEFAULT_LOOKS, key), `${key} has a default`);
+  }
+  assert.equal(prefsResetScope("agents"), null);
+  assert.equal(prefsResetScope("system"), null);
+  assert.equal(prefsResetScope("nope"), null);
+});
+
+test("looks: resetLooks(keys) changes only those keys, and the role is marked as asked", () => {
+  const before = { ...looks };
+  try {
+    Object.assign(looks, { theme: "dark", width: "wide", accent: "violet", role: "pm", sound: false, soundQuestion: false, hideActivities: false, activityBestSnake: 7, lastActivity: "snake" });
+    resetLooks(prefsResetScope("appearance"));
+    assert.equal(looks.theme, DEFAULT_LOOKS.theme);
+    assert.equal(looks.width, DEFAULT_LOOKS.width);
+    assert.equal(looks.accent, DEFAULT_LOOKS.accent);
+    assert.equal(looks.role, ROLE_NOT_SET, "cleared but marked as asked");
+    assert.equal(looks.sound, false, "sounds untouched by Appearance");
+    assert.equal(looks.hideActivities, false);
+    resetLooks(prefsResetScope("sounds"));
+    assert.equal(looks.sound, true);
+    assert.equal(looks.soundQuestion, true);
+    assert.equal(looks.hideActivities, DEFAULT_LOOKS.hideActivities);
+    assert.equal(looks.activityBestSnake, 7, "best scores stay");
+    assert.equal(looks.lastActivity, "snake", "the last pick stays");
+  } finally {
+    for (const key of Object.keys(looks)) delete looks[key];
+    Object.assign(looks, before);
+  }
 });
 
 // A constant's value from source text, for files the test cannot import. Only
@@ -949,7 +1038,7 @@ test("a send refuses comment images that are too many or not this session's uplo
   assert.equal(ok.status, 200);
   const res = cli(["wait", "--session", sid, "--seconds", "10"]);
   assert.equal(res.status, 0, "collected, so the tests after this start with no send in flight");
-  assert.equal(res.json.actions[0].images.length, 2);
+  assert.equal(sentActions()[0].images.length, 2);
 });
 
 test("a note with two images reaches the agent with both absolute paths, in the action and the reply", async () => {
@@ -963,7 +1052,7 @@ test("a note with two images reaches the agent with both absolute paths, in the 
   assert.equal(ok.status, 200);
   const res = cli(["wait", "--session", sid, "--seconds", "10"]);
   assert.equal(res.status, 0);
-  const note = res.json.actions.find((x) => x.type === "comment");
+  const note = sentActions().find((x) => x.type === "comment");
   assert.deepEqual(note.images, [
     { path: a.path, name: "first.png" },
     { path: b.path, name: "second.png" },
@@ -1149,7 +1238,7 @@ test("a send takes documents as files, counts them with images, and keeps each k
   assert.equal(ok.status, 200);
   const res = cli(["wait", "--session", sid, "--seconds", "10"]);
   assert.equal(res.status, 0);
-  const note = res.json.actions.find((x) => x.type === "comment");
+  const note = sentActions().find((x) => x.type === "comment");
   assert.deepEqual(note.images, [i1, i2]);
   assert.deepEqual(note.files, [d1, d2, d3]);
   assert.match(res.json.reply, /^Note on Export format: \(attachments only\)$/m);
@@ -1201,6 +1290,30 @@ test("a send records its note and attachments on the item, so the page can show 
     ["see these", "just a note"],
     "every note stays in the thread, not just the latest one",
   );
+  assert.equal(cli(["wait", "--session", sid, "--seconds", "10"]).status, 0);
+});
+
+test("a request for suggestions is recorded with its flag and threaded even with no note; a non-boolean flag is dropped", async () => {
+  const readState = () => JSON.parse(fs.readFileSync(path.join(HOME, "sessions", sid, "state.json"), "utf8"));
+  const userCount = () => readState().items.find((i) => i.id === "q1").thread.filter((m) => m.who === "user").length;
+
+  let before = userCount();
+  const ok = await post("/submit", { actions: [{ i: "q1", type: "comment", text: "", suggest: true }], reply: "Suggestions wanted on q1: (no note)" });
+  assert.equal(ok.status, 200);
+  let q1 = readState().items.find((i) => i.id === "q1");
+  assert.equal(q1.sentNote.suggest, true);
+  const mine = q1.thread.filter((m) => m.who === "user").at(-1);
+  assert.equal(userCount(), before + 1, "an empty request still goes into the thread");
+  assert.equal(mine.who, "user");
+  assert.equal(mine.suggest, true);
+  assert.equal(mine.at, q1.sentNote.at);
+  assert.equal(cli(["wait", "--session", sid, "--seconds", "10"]).status, 0);
+
+  before = userCount();
+  assert.equal((await post("/submit", { actions: [{ i: "q1", type: "comment", text: "", suggest: "yes" }], reply: "z" })).status, 200);
+  q1 = readState().items.find((i) => i.id === "q1");
+  assert.equal("suggest" in q1.sentNote, false, "only true is kept");
+  assert.equal(userCount(), before, "a plain empty comment still adds no thread entry");
   assert.equal(cli(["wait", "--session", sid, "--seconds", "10"]).status, 0);
 });
 
@@ -1392,7 +1505,7 @@ test("a changelog request from a finished screen carries the resume into the cha
   });
   const res = cli(["wait", "--session", sid, "--seconds", "10"]);
   assert.equal(res.status, 0);
-  assert.equal(res.json.actions[0].i, "__changelog");
+  assert.equal(res.json.session[0].i, "__changelog");
   assert.match(res.json.resume, /--no-open --workflow changelog$/);
   const state = JSON.parse(fs.readFileSync(path.join(session, "state.json"), "utf8"));
   assert.ok(state.items.every((i) => i.id !== "__changelog"), "a changelog request must not become a question");
@@ -1412,7 +1525,7 @@ test("a thread reply in another shape is lifted into { who, text }, and an empty
     "aliases lifted, and the echoed note is not shown twice");
   assert.equal(thread[1].md, undefined);
   assert.equal(thread[1].from, undefined);
-  assert.throws(() => applyPatch(base, { items: [{ id: "n1", thread: [{ who: "agent" }] }] }), /thread entry has no "text"/);
+  assert.throws(() => applyPatch(base, { items: [{ id: "n1", thread: [{ who: "agent" }] }] }), /an entry has no "text"/);
   assert.throws(() => applyPatch(base, { items: [{ id: "n1", thread: [{ who: "agent", md: "  " }] }] }), /no "text"/);
 });
 
@@ -1422,4 +1535,99 @@ test("the page reads older { from, md } thread entries", () => {
   assert.equal(threadText({ from: "agent", md: "Older shape." }), "Older shape.");
   assert.equal(threadText({ who: "agent", text: "Now." }), "Now.");
   assert.equal(threadText({ who: "agent" }), "");
+});
+
+/* --------------------------------- output shape at each exit code (FR-1 to FR-3) */
+
+test("the shape of every exit: 0 for an answer and a launch, 10, 30, 3 and 2", async (t) => {
+  const opened = cli(["open", "--file", payload("shape-open.json", BASE), "--no-open"]);
+  const s = opened.json;
+  // open names the link; the very next post and wait do not repeat it.
+  assert.equal(typeof s.terminalLine, "string");
+  assert.ok(s.terminalLine.length > 0);
+  const m = s.url.match(/^(http:\/\/127\.0\.0\.1:\d+)\/s\/([^/]+)\//);
+  const sendTo = (pathname, body) =>
+    fetch(m[1] + pathname, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: cookieFor(m[1], m[2]), connection: "close" },
+      body: JSON.stringify(body),
+    });
+  try {
+    await t.test("post prints only ok and open, no terminalLine", () => {
+      const res = cli(["post", "--session", s.sid, "--file", payload("shape-post.json", { headline: { stage: "Working" } })]);
+      assert.deepEqual(Object.keys(res.json).sort(), ["ok", "open"]);
+    });
+
+    await t.test("exit 10 is {waiting, open} and nothing else", () => {
+      const res = cli(["wait", "--session", s.sid, "--seconds", "5"]);
+      assert.equal(res.status, 10);
+      assert.deepEqual(res.json, { waiting: true, open: 1 });
+    });
+
+    await t.test("exit 0 for an answer: reply only, the rest stays in result.json", async () => {
+      assert.equal((await sendTo("/submit", { actions: [{ i: "q1", type: "answer", kind: "choice", k: "B" }], reply: "Export format: b" })).status, 200);
+      const res = cli(["wait", "--session", s.sid, "--seconds", "10"]);
+      assert.equal(res.status, 0);
+      assert.deepEqual(res.json, { reply: "Export format: b" });
+      const kept = JSON.parse(fs.readFileSync(path.join(s.session, "result.json"), "utf8"));
+      for (const k of ["type", "at", "sid", "rev", "consumedAt", "actions"]) assert.ok(k in kept, `result.json keeps ${k}`);
+    });
+
+    await t.test("exit 0 for a launch carries the session action whole, with resume", async () => {
+      const send = { actions: [{ i: "__launch", type: "launch", skill: "plan2code-3-implement", workflow: "implement" }], reply: "Start Implement." };
+      assert.equal((await sendTo("/submit", send)).status, 200);
+      const res = cli(["wait", "--session", s.sid, "--seconds", "10"]);
+      assert.equal(res.status, 0);
+      assert.equal(res.json.session[0].i, "__launch");
+      assert.match(res.json.resume, /--no-open --workflow implement$/);
+      assert.equal(res.json.actions, undefined);
+      assert.equal(res.json.terminalLine, undefined, "the link is not repeated");
+    });
+
+    await t.test("exit 30 for a cancel", async () => {
+      await sendTo("/cancel", {});
+      const res = cli(["wait", "--session", s.sid, "--seconds", "5"]);
+      assert.equal(res.status, 30);
+    });
+
+    await t.test("exit 3 names the item id, the field and a way to do it right", () => {
+      const bad = { items: [{ id: "bad1", kind: "choice", title: "Pick", options: [{ k: "A", label: "x" }] }] };
+      const res = cli(["post", "--session", s.sid, "--file", payload("shape-bad.json", bad)], { expectFail: true });
+      assert.equal(res.status, 3);
+      assert.equal(res.stdout.trim(), "");
+      assert.match(res.stderr, /bad1/);
+      assert.match(res.stderr, /options/);
+      assert.match(res.stderr, /Like this:/);
+    });
+
+    await t.test("exit 2 gives the line, column and a caret for a cut-off patch", () => {
+      const file = path.join(HOME, "shape-cut.json");
+      fs.writeFileSync(file, '{\n  "headline": { "stage": "Working"\n');
+      const res = cli(["post", "--session", s.sid, "--file", file], { expectFail: true });
+      assert.equal(res.status, 2);
+      assert.match(res.stderr, /line \d+, column \d+/);
+      assert.match(res.stderr, /\^/);
+    });
+  } finally {
+    cli(["stop", "--session", s.sid, "--force"]);
+  }
+});
+
+test("exit 20 is {gone, fix} naming the session, and a resume to a restarted server prints the link again", () => {
+  const opened = cli(["open", "--file", payload("shape-gone.json", BASE), "--no-open"]);
+  const sid2 = opened.json.sid;
+  assert.equal(typeof opened.json.terminalLine, "string");
+  cli(["stop", "--session", sid2, "--force"]);
+  const gone = cli(["wait", "--session", sid2, "--seconds", "5"]);
+  assert.equal(gone.status, 20);
+  assert.deepEqual(gone.json, { gone: true, fix: `open --resume ${sid2} --workflow <yours>` });
+  const again = cli(["open", "--resume", sid2, "--no-open"]);
+  try {
+    assert.notEqual(again.json.url, opened.json.url, "a restart has a new link");
+    assert.equal(typeof again.json.terminalLine, "string", "the new link is printed again");
+    const post = cli(["post", "--session", sid2, "--file", payload("shape-after.json", { headline: { stage: "Working" } })]);
+    assert.equal(post.json.terminalLine, undefined, "and not again on the next post");
+  } finally {
+    cli(["stop", "--session", sid2, "--force"]);
+  }
 });

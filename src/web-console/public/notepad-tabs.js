@@ -1,6 +1,6 @@
 // Plan2Code Web Console - the Notebook's tab bar.
 //
-// Draws #notepad-tabs from a list of { id, name } and tells screens/notepad.js
+// Draws #notepad-tabs from a list of { id, name, sent? } and tells screens/notepad.js
 // what the person did: pick a tab (onSwitch), reorder with a drag, ask to
 // rename (a double-click or F2) or ask to delete (the x beside the name, or the
 // Delete key) (onChange). No fetches here: the screen owns every request, and
@@ -96,7 +96,17 @@ export function createTabs({ onSwitch, onChange }) {
     x.addEventListener("click", () => onChange({ type: "delete", id: tab.id }));
     const wrap = el("div", "notepad-tabwrap");
     wrap.setAttribute("role", "presentation");
-    wrap.append(b, x);
+    wrap.append(b);
+    // A tab sent from the dashboard wears a small badge after its name, outside
+    // the button so a long name's ellipsis never cuts it; the button's name
+    // says it for a screen reader.
+    if (tab.sent) {
+      b.setAttribute("aria-label", tab.name + ", sent");
+      const badge = el("span", "notepad-sent-badge", "sent");
+      badge.setAttribute("aria-hidden", "true");
+      wrap.append(badge);
+    }
+    wrap.append(x);
     wrap.addEventListener("dragover", (e) => {
       if (dragging === null) return;
       e.preventDefault();

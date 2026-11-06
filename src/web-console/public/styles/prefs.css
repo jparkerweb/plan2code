@@ -1,0 +1,148 @@
+/* prefs.css: User Preferences' tabs (the side list, the narrow strip), the Saved
+   mark, and the unsaved prompt. The Agents & models view's rules moved to
+   agents.css when it became a master-detail split. */
+
+/* --------------------------------------------------------- tabs and panels */
+
+.prefs-layout {
+  display: grid;
+  grid-template-columns: 200px minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+.prefs-tabs {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.prefs-tab {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-left: 3px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 13.5px;
+  text-align: left;
+  cursor: pointer;
+}
+.prefs-tab:hover { background: var(--panel-2); color: var(--ink); }
+.prefs-tab[aria-selected="true"] { background: var(--accent-soft); color: var(--accent); border-left-color: var(--accent); font-weight: 600; }
+.prefs-tab:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.prefs-tab-label { display: block; line-height: 1.3; }
+.prefs-tab-hint { display: block; font-size: 12px; line-height: 1.35; color: var(--ink-3); }
+
+.prefs-panels { min-width: 0; }
+.prefs-panel[hidden] { display: none; }
+
+/* --------------------------------------------------------- Saved mark */
+
+/* At the fieldset's top right, level with its legend. Out of the flow: the
+   fieldsets are grids (the shared range and row classes), where an in-flow mark
+   would take a cell and push the choices about. It fades out after about
+   2 s when the JS adds `is-saved`; an `error` stays put and never fades. */
+.prefs-panel fieldset { position: relative; }
+.prefs-saved {
+  position: absolute;
+  top: 0;
+  right: 0;
+  max-width: 60%;
+  font-size: 12px;
+  line-height: 1.3;
+  text-align: right;
+  color: var(--ok);
+  opacity: 0;
+}
+.prefs-saved.is-saved { opacity: 1; }
+.prefs-saved.error { color: var(--danger, #d64545); opacity: 1; }
+
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes prefs-saved-fade {
+    0%, 70% { opacity: 1; }
+    100% { opacity: 0; }
+  }
+  .prefs-saved.is-saved { animation: prefs-saved-fade 2s ease-out forwards; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .prefs-saved.is-saved { opacity: 1; }
+}
+
+/* --------------------------------------------------------- unsaved prompt */
+
+/* Over the dialog, inside it: never the browser's confirm(). */
+.prefs-unsaved {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: color-mix(in srgb, var(--bg, #000) 55%, transparent);
+}
+.prefs-unsaved[hidden] { display: none; }
+.prefs-unsaved-box {
+  max-width: 380px;
+  padding: 16px 18px;
+  border: 1px solid var(--rule-2);
+  border-radius: 10px;
+  background: var(--panel);
+  box-shadow: 0 8px 30px rgb(0 0 0 / 0.25);
+}
+.prefs-unsaved-box h3 { margin: 0 0 6px; font-size: 15px; }
+.prefs-unsaved-box p { margin: 0 0 12px; }
+.prefs-unsaved-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* --------------------------------------------------------- narrow screens */
+
+@media (max-width: 720px) {
+  .prefs-layout { grid-template-columns: 1fr; gap: 12px; }
+  .prefs-tabs {
+    flex-direction: row;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 0 0 4px;
+    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 32px), transparent);
+    mask-image: linear-gradient(to right, #000 calc(100% - 32px), transparent);
+  }
+  .prefs-tab {
+    width: auto;
+    flex: none;
+    white-space: nowrap;
+    border-left: 0;
+    border-bottom: 3px solid transparent;
+    border-radius: 6px 6px 0 0;
+  }
+  .prefs-tab[aria-selected="true"] { border-bottom-color: var(--accent); }
+  .prefs-tab-hint { display: none; }
+}
+
+/* ------------------------------------------------------- the setup page
+
+   The agent-less setup screen (workflow "setup"): Planny's pose over the
+   agents view, which now draws its own split inside .setup-agents. */
+.setup-screen {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 24px 16px 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.setup-stage { display: flex; justify-content: center; }
+.setup-stage .pose { width: 150px; height: auto; }
+.setup-screen h2 { margin: 0; }
+.setup-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 14px 0 0;
+}
+.setup-no-page { margin: 10px 0 0; }
+.setup-no-page[hidden] { display: none; }

@@ -90,7 +90,7 @@ A probe may join the current batch only if **all three** hold:
 
 In doubt, hold it back. A held probe costs one extra round trip. A dependent probe sent early costs a wrong answer recorded as a decision, and you will not find out until the plan contradicts itself.
 
-Independent probes are usually the ones that came from **different areas** — data, interface, security, operations, testing. Dependent probes are usually consecutive steps down one thread.
+Independent probes are usually the ones that came from **different areas** — data, interface, security, operations. Dependent probes are usually consecutive steps down one thread.
 
 ### Delivering a batch: structured UI first
 
@@ -112,13 +112,13 @@ The primary channel. One question object per probe, up to three in a single call
 
 - **Header** — the decision in two or three plain words (`Export format`, `Size cap`). Not a type, not a marker, not a number.
 - **Question** — the probe, with its why-it-matters. This is prose and it is not rationed; the same sentences you would have written in a Q block go here.
-- **Options** — the genuine alternatives, each described by its trade-off, with the recommended one named as such in its description. Two to four; the free-text escape hatch covers the rest. Label plainly, then let the description carry the precise term: `One file per message` labelling the `.eml`-in-a-ZIP option, with `.eml` named in the description.
+- **Options** — the genuine alternatives, each described by its trade-off, with the recommended one named as such in its description. Two to four; the free-text escape hatch covers the rest. Label plainly, then let the description carry the precise term: `One file per message` labeling the `.eml`-in-a-ZIP option, with `.eml` named in the description.
 
 A short *label* is not a short *decision*. The label is a handle — `Fixed tick count` — and the description carries the trade-off that makes it choosable. A label bundling several independent answers is a probe that wants splitting.
 
 **A click is a decision, not a sentence.** The HITL rule wants an `## Answer` traceable to something the human actually said, and a selected option label is thin evidence on its own. What makes tool-delivered answers legitimate is the recap turn in *Landing the grill* — you play the choices back in the tool's question text and they confirm or correct in their own words. Never skip the recap on the grounds that the tool already captured the answer; the tool captured the *pick*, and the recap captures the *agreement*.
 
-**If a reply comes back thinner than the decision** — a bare click on something you now realise carries weight — do not paper over it. Fold the why into the recap turn as one more probe before writing the `## Answer`.
+**If a reply comes back thinner than the decision** — a bare click on something you now realize carries weight — do not paper over it. Fold the why into the recap turn as one more probe before writing the `## Answer`.
 
 #### Numbered Q blocks
 
@@ -314,25 +314,9 @@ Offer it, do not impose it: *"This one looks hard to reverse and the reasoning w
 
 **Where locks go at handoff:** the handoff playbook lifts every `Locked: yes` question into the PLAN-DRAFT's **Architecture** section, and their rejected alternatives and standing constraints into **Assumptions**. Unlocked answers still inform the draft, but locks are the ones that survive verbatim into planning. Grill them harder for that reason.
 
-## The one grill every map must resolve, and the lens applied to all of them
+## The lens applied to every grill
 
-### 1. Testing posture — `grill · HITL`
-
-Chart Step 6 requires this question. It exists because `/plan2code-1-plan` Phase 1 asks for exactly three things and stalls without them: testing types, whether tests run after each phase, and the coverage target. A map that clears without answering them hands the human a plan session that immediately re-asks.
-
-The first three probes below pass the independence test against each other — none reads differently under another's answer — so **send all three as one structured-tool batch**. Every probe has named alternatives and fixed literals; `Other` remains available.
-
-| Probe | Recommend by default |
-|---|---|
-| Which types are in scope — unit, integration, E2E, or none? | Unit plus integration; E2E only where a real browser or real broker is the only honest test |
-| Does the suite run after each implementation phase, or once at the end? | `Run after each phase` — work that cannot be verified when it lands cannot be signed off |
-| Coverage target: critical paths, moderate (~60-80%), or comprehensive (>80%)? | Critical paths, named explicitly, rather than a percentage nobody defends |
-| What is deliberately not tested, and why? | **Fourth probe, and it does not ride in the batch.** It has no option set — the explicit no-s have to be composed — and it reads differently once the types are settled. Fold it into the recap turn, where you are already waiting on them. |
-| What is already there — runner, fixtures, CI wiring? | **Not a probe.** Look it up before you send the batch, and cite it in the probes above |
-
-Record the answer in the exact literals `/plan2code-2-document` string-matches: the types; `Run after each phase` or `Dedicated phase only`; and `Critical paths`, `Moderate (~60-80%)`, or `Comprehensive (>80%)`. Not prose — a paraphrase matches no branch downstream.
-
-### 2. Test seams and verifiability — a lens, not a question file
+### Test seams and verifiability — a lens, not a question file
 
 For each major decision on the map, ask the same question: **how will anyone know it works?** A decision nobody can verify is a decision that silently rots.
 

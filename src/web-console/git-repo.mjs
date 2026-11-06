@@ -451,6 +451,36 @@ export function readRemotes(root, prHosts = {}) {
   return remotes;
 }
 
+export const PR_LINK_CODES = new Set(["detached", "unknown-branch", "no-base", "is-base", "not-pushed"]);
+
+function prLinkError(code, message, next, branch = null) {
+  throw Object.assign(new Error(message), { code, next, branch });
+}
+
+/**
+ * The create-a-pull-request link for `branch` (default: the current branch)
+ * into `base` (default: the default branch). Returns { url, host, kind,
+ * needsKind, branch, base, ahead }; ahead is the branch's commits not yet on
+ * its upstream. Throws an Error tagged { code, message, next, branch }, code
+ * one of PR_LINK_CODES, when there is no link to give.
+ */
+export function prLink(root, { branch, base, prHosts = {} } = {}) {
+  const parsed = parseStatusV2(git(["status", "--porcelain=v2", "-z", "--branch", "--untracked-files=no"], root, { raw: true }).out);
+  const refs = readRefs(root);
+  const def = refs.length ? defaultBranchFromRefs(refs, parsed) : defaultBranch(root, parsed);
+  const b = (branch || "").trim() || parsed.branch;
+  if (!b) prLinkError("detached", "HEAD is detached, so there is no branch to open a pull request for.", "Switch to a branch, or pass --branch.");
+  const row = branchesFromRefs(refs, root, { current: parsed.branch, defaultName: def.name }).find((r) => !r.remote && r.name === b);
+  if (!row) prLinkError("unknown-branch", `There is no local branch named "${b}".`, "Pick a branch from the list.", b);
+  const into = (base || "").trim() || def.name;
+  if (!into) prLinkError("no-base", "There is no default branch to open the pull request against.", "Pass --base <branch>.", b);
+  // A pull request from a branch into itself is no pull request (a push to main).
+  if (into === b) prLinkError("is-base", `${b} is the branch pull requests go into, so there is nothing to open.`, "Post no link for this push.", b);
+  const remote = row.upstream && !row.gone ? readRemotes(root, prHosts).find((r) => r.name === row.upstreamRemote) : null;
+  if (!remote) prLinkError("not-pushed", `${b} is not on a remote yet.`, "Publish it first (plan publish).", b);
+  return { url: prUrl(remote, { base: into, head: b }), host: remote.host, kind: remote.kind, needsKind: !!remote.host && !remote.kind, branch: b, base: into, ahead: row.ahead };
+}
+
 /* ------------------------------------------------- snapshot and the count */
 
 const MARKER = /^(<{7}|={7}|>{7})( |$)/m;

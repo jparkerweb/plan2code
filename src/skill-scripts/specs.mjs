@@ -206,7 +206,7 @@ function parseGroups(overview) {
     if (cells.length < 2 || /^group$/i.test(cells[0])) continue;
     const id = plainText(cells[0]);
     const phases = phaseList(cells[1]);
-    // "None", a dash, a single phase, a group its author labelled sequential
+    // "None", a dash, a single phase, a group its author labeled sequential
     // ("A (sequential)"), or a Phases cell written as a chain ("1 → 2") is not
     // a parallel group.
     if (!id || /^(none|-|–|—)$/i.test(id) || /\bsequential\b/i.test(id) || /→|->|\bthen\b/i.test(cells[1]) || phases.length < 2) continue;
@@ -773,7 +773,7 @@ const CONFIDENCE_HITS = ["overall confidence with %", "confidence table cell"];
 
 function proseChecks(text, file, add, { allowConfidence = false } = {}) {
   const m = text.match(LOOP_TOKENS);
-  if (m) add("error", file, "loop-token", `contains the loop completion token ${m[0]} (the loop scans specs/ for these)`);
+  if (m) add("error", file, "loop-token", `contains the loop completion token ${m[0]} (reserved; these never belong under specs/)`);
   for (const h of scrapeHits(text.replace(METRICS_COMMENT_RE, ""))) {
     if (allowConfidence && CONFIDENCE_HITS.some((name) => h.startsWith(`${name}:`))) continue;
     add("error", file, "metric-word", `metrics-scraper bait (${h}); hyphenate the label or reword`);
@@ -828,7 +828,7 @@ async function cmdCheck(args) {
   checkReport("check", { spec: spec.rel, checked: names.map(at) }, problems);
 }
 
-const DRAFT_STATUSES = ["Draft", "Phase 3 Complete - Resume at Phase 4", "Escalated from Quick Task - Resume at Phase 2", "Complete"];
+const DRAFT_STATUSES = ["Draft", "Phase 3 Complete - Resume at Phase 4", "Escalated from Quick Task - Resume at Phase 2", "Escalated from Test - Resume at Phase 2", "Complete"];
 // The headings Document reads out of a Complete draft.
 const DRAFT_SECTIONS = [
   { name: "## 1. Executive Summary", re: /^##\s+1\.\s+Executive Summary\b/im },

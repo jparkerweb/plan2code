@@ -45,15 +45,16 @@ import {
 } from "./inbox.mjs";
 import { serverWorkspace } from "./workspace.mjs";
 import { serverSubagents } from "./settings.mjs";
-import { chatOffline } from "./public/chat.js";
+import { inAppSignal } from "./in-app.mjs";
+import { chatAnswering, chatOffline } from "./public/chat.js";
+import { isAgentless } from "./public/skills.js";
 import { meterView } from "./public/meter.js";
-import { startsClean } from "./public/hops.js";
 import { SERVABLE, asset } from "./static.mjs";
 import { handle } from "./routes.mjs";
 import { checkForUpdate } from "./update-check.mjs";
 
 const args = parseArgs(process.argv.slice(2));
-// Canonicalise before anything derives a path from it: a session dir reached
+// Canonicalize before anything derives a path from it: a session dir reached
 // through a junction or a subst'd drive is watched under the wrong spelling,
 // which is the libuv assert described below. The native realpath resolves
 // those AND expands 8.3 short names, which lets the watcher run in a TEMP
@@ -174,12 +175,18 @@ function chatPickedUp() {
   return cursorSeen.seq;
 }
 
-function chatOfflineNow(state) {
+// The frame's chat block without `offline`. A caller that already built it
+// (stateFrame) passes it in rather than building it twice.
+const chatNow = (state) => ({ ...chatForFrame(chatEntries(), state), pickedUp: chatPickedUp() });
+
+function chatOfflineNow(state, chat = chatNow(state)) {
   return chatOffline({
     finish: state && state.finish,
     agent: state && state.agent,
     agentLastSeenMs: agentSeenAt,
     now: Date.now(),
+    answering: chatAnswering(chat),
+    agentless: isAgentless(state && state.workflow),
   });
 }
 
@@ -213,31 +220,15 @@ const workspace = serverWorkspace({
 });
 
 /**
- * Open a conversation when there is none, and a new one whenever the page
- * passes through the dashboard. The reset line carries the workflow it was
- * opened under, so a server that restarts across a hop still sees the switch.
- * A resume that keeps its workflow keeps its conversation.
+ * Open a conversation when there is none. A hop to another skill keeps it:
+ * the person is still talking to the same agent, and switchWorkflow() carries
+ * the agent's replies across, so only New conversation starts a new one.
  */
 function ensureConversation(state) {
   if (!state) return;
-  const last = currentConversation(readChat(DIR));
-  let entry = null;
-  if (!last.conversation) {
-    entry = appendChat(DIR, { kind: "reset", conversation: 1, workflow: state.workflow, reason: "start" });
-  } else if (
-    // The same hops `open --resume` treats as a fresh start, by the rule in
-    // public/hops.js (a blank page, the agent's replies included). Without a
-    // new conversation, the old questions would show as unanswered again.
-    startsClean(last.workflow, state.workflow)
-  ) {
-    entry = appendChat(DIR, {
-      kind: "reset",
-      conversation: last.conversation + 1,
-      workflow: state.workflow,
-      reason: "switch",
-    });
-  }
-  if (entry) appendEvent(DIR, { type: "chat-reset", reason: entry.reason });
+  if (currentConversation(readChat(DIR)).conversation) return;
+  const entry = appendChat(DIR, { kind: "reset", conversation: 1, workflow: state.workflow, reason: "start" });
+  appendEvent(DIR, { type: "chat-reset", reason: entry.reason });
 }
 
 /* ------------------------------------------------------------ subagents */
@@ -246,21 +237,32 @@ function ensureConversation(state) {
 // writer, this server.
 const subagents = serverSubagents({ dir: DIR, worktree: sessionWorktree });
 
+// Whether the agent driving this session is the desktop app: fixed for the
+// process's whole life (the env var that says so is set once, at spawn), so
+// read once rather than on every frame. The page uses it to drop advice that
+// only makes sense in a plain terminal (a command to copy into a new
+// conversation) in favor of the app's own Restart and Update skills buttons.
+const IN_APP = Boolean(inAppSignal());
+
 // What the page needs to draw itself, in the shape of the SSE state frame.
 // `have` names that exact view, for the page to hand back when it opens its
 // stream (see /events).
 function stateFrame(state) {
   const { pending, stop } = resultFlags();
+  const chat = chatNow(state);
   return {
     rev,
-    state,
+    // The setup hand-over token is for the launcher only: the page gets
+    // forCli, which is all the setup screen reads.
+    state: state.setup ? { ...state, setup: { forCli: state.setup.forCli || null } } : state,
     agentLastSeen: agentLastSeen(),
     pendingResult: pending,
     pendingStop: stop,
-    chat: { ...chatForFrame(chatEntries(), state), pickedUp: chatPickedUp(), offline: chatOfflineNow(state) },
+    chat: { ...chat, offline: chatOfflineNow(state, chat) },
     workspace: workspace.workspaceView(),
     meter: meterView(ledgerEntries()),
     subagents: subagents.view(state),
+    inApp: IN_APP,
     ...(updateInfo ? { update: updateInfo } : {}),
     have: haveKey(),
   };
@@ -516,22 +518,27 @@ setInterval(() => {
 
 // This is the mechanism, not a nicety.
 //
-// Windows has no real SIGTERM, Node only synthesises SIGINT for Ctrl+C on an
+// Windows has no real SIGTERM, Node only synthesizes SIGINT for Ctrl+C on an
 // attached console, and this process is detached with no console at all.
 // taskkill /F and Task Manager give zero cleanup opportunity. A Job Object with
 // KILL_ON_JOB_CLOSE would be the proper fix and needs native code, which is out
 // under zero-dependencies. So the only thing that reliably stops an orphan is
-// the server deciding to stop. Do not "optimise" this away.
+// the server deciding to stop. Do not "optimize" this away.
 setInterval(() => {
   const idle = Date.now() - lastContact;
   // Answers nobody has collected yet keep the server up (bounded by MAX_LIFE_MS):
   // exiting would strand the tab and the send it holds.
   if (idle > IDLE_MS && !resultFlags().pending) {
-    appendEvent(DIR, { type: "exit", reason: "idle", idleMs: idle });
+    // The log is advisory: a failed append must never keep an orphan server alive.
+    try {
+      appendEvent(DIR, { type: "exit", reason: "idle", idleMs: idle });
+    } catch {}
     process.exit(0);
   }
   if (Date.now() - STARTED > MAX_LIFE_MS) {
-    appendEvent(DIR, { type: "exit", reason: "max-life" });
+    try {
+      appendEvent(DIR, { type: "exit", reason: "max-life" });
+    } catch {}
     process.exit(0);
   }
 }, 20000).unref();
@@ -541,6 +548,14 @@ for (const sig of ["SIGINT", "SIGTERM", "SIGHUP"]) {
     process.on(sig, () => process.exit(0));
   } catch {}
 }
+
+// A throw inside a request callback (a read or write failing on a locked file)
+// must not end the detached server: note it and carry on. The page retries.
+process.on("uncaughtException", (e) => {
+  try {
+    appendEvent(DIR, { type: "error", message: String(e?.message || e).slice(0, 200) });
+  } catch {}
+});
 
 // Every exit that gets to run code takes its handle file with it, so a pid
 // left behind in the runtime dir cannot later be mistaken for this server once
@@ -600,8 +615,9 @@ function onListening(port) {
     stateDir: DIR,
     startedAt: nowIso(),
   };
-  ensureDir(path.dirname(handleFile(PROJECT, SID)));
-  writeJsonAtomic(handleFile(PROJECT, SID), handle);
+  // The handle holds the session token: private to this user on a shared /tmp.
+  ensureDir(path.dirname(handleFile(PROJECT, SID)), 0o700);
+  writeJsonAtomic(handleFile(PROJECT, SID), handle, 0o600);
   appendEvent(DIR, { type: "listening", port, pid: process.pid });
   checkState();
   // A resume through a fresh server still starts a new conversation on a hop.
@@ -621,9 +637,11 @@ function onListening(port) {
   try {
     process.send?.({ type: "listening", port });
   } catch {}
-  // Warm the asset cache while the browser is still on its way.
+  // Warm the asset cache while the browser is still on its way. Not with a
+  // game's songs: megabytes read for a game that may never be played.
   setImmediate(() => {
     for (const rel of SERVABLE) {
+      if (rel.startsWith("activities/") && rel.endsWith(".mp3")) continue;
       try {
         asset(rel);
       } catch {}

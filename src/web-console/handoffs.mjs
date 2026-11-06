@@ -130,7 +130,22 @@ export function markHandoffUsed(id, now = clock()) {
   const file = path.join(handoffsDir(), id + ".json");
   const tmp = `${file}.${process.pid}.tmp`;
   fs.writeFileSync(tmp, JSON.stringify(next, null, 2) + "\n");
-  fs.renameSync(tmp, file);
+  // Windows scanners hold transient locks: retry the rename, and never leave the temp file.
+  for (let attempt = 0; ; attempt++) {
+    try {
+      fs.renameSync(tmp, file);
+      break;
+    } catch (err) {
+      const transient = err.code === "EPERM" || err.code === "EBUSY" || err.code === "EACCES";
+      if (!transient || attempt >= 3) {
+        try {
+          fs.rmSync(tmp, { force: true });
+        } catch {}
+        throw err;
+      }
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 40 * (attempt + 1));
+    }
+  }
   return next;
 }
 

@@ -19,6 +19,7 @@ import {
   STALE_MS,
   agentRepliedAfterSend,
   approvalHint,
+  APPROVAL_HINT_IN_APP,
   cardAvailability,
   cardPresentation,
   finishPaused,
@@ -27,10 +28,13 @@ import {
   noteAction,
   noteReplyLines,
   progressTotal,
+  pruneStaged,
   recordedAnswer,
   sentAnswer,
   staleLaunchFeedback,
   submittedAwaiting,
+  suggestAction,
+  suggestReplyLines,
   verdictText,
   workflowLabel,
   workflowTitle,
@@ -43,36 +47,42 @@ import {
   unreadDot,
 } from "../chat.js";
 import { copyButton, el, isMac, textWithCode } from "../render.js";
-import { isBuild } from "../skills.js";
+import { isBuild, isAgentless } from "../skills.js";
 import { startsClean } from "../hops.js";
 import { faviconState, setFavicon } from "../favicon.js";
 import { helperRows, showTab } from "../subagents.js";
 import { FOOTER_TIERS, footerLabel } from "../workspace.js";
 import {
-  activity, agentAdrift, agentWorking, asked, awaitingReply, byId, dashboardLive, docs, doingNow,
-  finish, gitAwaiting, isDashboard, isGitBoard, isOpen, items, loadOverview, myTurn, openItems,
-  overviewSpec, patience, reviewPending, scan, selSpec, sendCollected, stagedCount, stranded,
+  activity, agentAdrift, agentWorking, askBusy, loopDriving, loopWaiting, loopWaitingKey, asked, awaitingReply, byId, dashboardLive, docs, doingNow,
+  finish, gitAwaiting, isDashboard, isGitBoard, isOpen, isSpecFileView, items, loadOverview, myTurn, openItems,
+  patience, pressStranded, reviewPending, scan, selSpec, sendCollected, specFileTabs, stagedCount, stranded,
   topics, workingMs, WORKING_GRACE_MS,
   workspaceFolders,
 } from "../selectors.js";
 import { sound } from "../sound.js";
 import { renderConfirm, renderDashboard } from "./dashboard.js";
+import { renderLoopSetup } from "./loop-setup.js";
 import { renderLaunching, renderWaiting } from "./starting.js";
-import { heldNotes, noteImages, pendingNotes, removeImage } from "../uploads.js";
+import { attachFiles, heldNotes, noteImages, pendingNotes, removeImage } from "../uploads.js";
 import { closeMentions } from "../mention-box.js";
 import { buildPager, fitGrowBox, markFor, markMore, renderCard, renderEndItem, renderNotice } from "./cards.js";
-import { sendState } from "../send-state.js";
+import { sendState, suggestState } from "../send-state.js";
 import { renderBriefButton, renderDoc, renderOverview } from "./docs.js";
 import { board, renderGitBoard, resetBoard } from "./git-host.js";
 import { renderWorkspace, tellFolderIssues } from "./workspace.js";
 import { openHelpOn } from "./help-dialog.js";
+import { linkLeavesPage, onAppMessage, startNewSession, tellApp } from "../app-bridge.js";
+import { continueButton } from "../continue-button.js";
 import { askOfflineFlipped, askState, declineOpen, renderAside, renderAsk, renderSubagents, renderSubagentsButton } from "./ask.js";
-import { renderHandoff, renderHomeButton, renderStopButton, renderStopControls, renderStopping, stopInProgress, stopWarning } from "./ending.js";
+import { renderHandoff, renderLoopEnd, renderHomeButton, renderStopButton, renderStopControls, renderStopping, stopInProgress, stopWarning } from "./ending.js";
 import { renderNotepadButton } from "./notepad.js";
+import { renderActivities } from "./activities.js";
+import { renderSetup, setupMoved } from "./setup.js";
+import { mountAgentsView } from "./agents-view.js";
 
 // What the entry needs from the screens at start-up, handed on from here: only
 // the core imports a screen.
-export { wakeHoldsChime, wireDashboard } from "./dashboard.js";
+export { launchSkill, wakeHoldsChime, wireDashboard } from "./dashboard.js";
 export { fillSky } from "./starting.js";
 export { fitGrowBox, wireCards } from "./cards.js";
 export { wireDocs } from "./docs.js";
@@ -81,8 +91,12 @@ export { syncWorkspaceScope, wireWorkspace } from "./workspace.js";
 export { maybeWelcome, openHelpOn, wireHelp } from "./help-dialog.js";
 export { wireCleanup } from "./cleanup.js";
 export { startLooks, wireLooks } from "./looks.js";
+export { confirmUnsaved, markSaved, openPrefs, wirePrefs } from "./prefs-dialog.js";
+export { discardOpen, focusOpen, hasUnsaved, loadAgentsView, saveOpen, unsavedName, wireAgentsView } from "./agents-view.js";
 export { wireEnding } from "./ending.js";
 export { wireNotepad } from "./notepad.js";
+export { wireActivities } from "./activities.js";
+export { openLoopSetup, wireLoopSetup } from "./loop-setup.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -174,6 +188,58 @@ function settleStaleUploads() {
   }
 }
 
+// A Notebook tab picked at Start (dashboard.js) fills the launched skill's
+// first open `fill: "note"` box, once. It is claimed before anything is
+// fetched, so a redraw or a reload never fills the box a second time.
+function fillNoteBox() {
+  const ns = page.local.noteSend;
+  // An agent-less session has nobody to fill a box for; a leftover pick is dropped.
+  if (ns && isAgentless(page.S.workflow)) {
+    page.local.noteSend = null;
+    save();
+  }
+  if (!ns || isDashboard() || finish() || page.S.workflow !== ns.workflow) return;
+  const item = items().find((i) => i.kind === "text" && i.fill === "note" && i.status === "open");
+  if (!item) return;
+  page.local.noteSend = null;
+  save();
+  seedNoteBox(item, ns);
+}
+
+// The tab's text as the box's draft and staged answer, then its ticked
+// pictures through the same path a pasted picture takes. A tab deleted since
+// Start leaves the box empty; a picture deleted since is skipped.
+async function seedNoteBox(item, ns) {
+  const tab = encodeURIComponent(ns.tab);
+  try {
+    const res = await fetch("/notepad?tab=" + tab, { cache: "no-store" });
+    if (res.status === 404) {
+      banner("That Notebook tab is gone; the box starts empty.", "warn");
+      return;
+    }
+  } catch {}
+  const text = typeof ns.text === "string" ? ns.text : "";
+  if (text.trim()) {
+    page.local.drafts["text-" + item.id] = text;
+    page.local.staged[item.id] = { type: "answer", kind: "text", text: text.trim() };
+  }
+  page.local.noteSent = { item: item.id, tab: ns.tab, workflow: ns.workflow, ...(ns.spec ? { spec: ns.spec } : {}) };
+  save();
+  redraw();
+  const files = await Promise.all(
+    (ns.pictures || []).map(async (id) => {
+      try {
+        const r = await fetch("/notepad/images/" + tab + "/" + encodeURIComponent(id) + ".jpg", { cache: "no-store" });
+        return r.ok ? new File([await r.blob()], id + ".jpg", { type: "image/jpeg" }) : null;
+      } catch {
+        return null;
+      }
+    }),
+  );
+  const found = files.filter(Boolean);
+  if (found.length) attachFiles(item.id, found);
+}
+
 async function pushDraft() {
   try {
     await fetch("/draft", {
@@ -238,6 +304,15 @@ export function adopt(body) {
   page.chatFrame = body.chat || null;
   if (body.workspace) page.wsFrame = body.workspace;
   if (body.meter) page.meterFrame = body.meter;
+  // Fixed for the session's whole life, but cheap enough to just copy.
+  page.inApp = Boolean(body.inApp);
+  // Help's `.for-app` / `.for-browser` wording switches on this (help.css).
+  document.documentElement.classList.toggle("in-app", page.inApp);
+  // The Implementation Loop's lock: `loop: { driving: true }` on the state,
+  // ended by the app's `loopEnd`. Screens ask loopDriving(); the class is for
+  // the stylesheet.
+  page.loop = (body.state && body.state.loop && body.state.loop.driving === true) || body.loop === true ? { driving: true } : null;
+  document.documentElement.classList.toggle("loop-driving", loopDriving());
   // Always replaced: an absent key means no update.
   page.updateFrame = body.update || null;
   // Always replaced too: an older server sends none, and then there is no switch.
@@ -263,17 +338,29 @@ export function adopt(body) {
   // session; what this page kept for the last skill -- the question on
   // screen, the open tab, anything staged or typed against its item ids --
   // goes too. The launch in flight and the dashboard's spec pick are about the
-  // hand-off itself, so they stay. A skill run inline from another (a quick
-  // task's review) keeps all of it.
+  // hand-off itself, so they stay, and so does the Ask tab: the conversation
+  // outlives the hop. A skill run inline from another (a quick task's review)
+  // keeps all of it.
   if (startsClean(prevWorkflow, page.S.workflow)) {
     // The pick rides into the skill it launched, never back home: arriving at
     // the dashboard, the picker starts on the most recently touched spec still
     // in play, the one the agent's fresh menu recommends for.
     const keepPick = page.S.workflow !== "dashboard" && "specSel" in page.local;
-    page.local = { ...fresh(), launching: page.local.launching, ...(keepPick ? { specSel: page.local.specSel } : {}) };
+    // A Notebook tab picked at Start rides into the skill it was picked for,
+    // and nowhere else: back home, or a hop to another skill, drops it.
+    const ns = page.local.noteSend;
+    const keepNote = Boolean(ns) && page.S.workflow !== "dashboard" && page.S.workflow === ns.workflow;
+    page.local = {
+      ...fresh(),
+      chat: page.local.chat,
+      launching: page.local.launching,
+      ...(keepPick ? { specSel: page.local.specSel } : {}),
+      ...(keepNote ? { noteSend: ns } : {}),
+    };
     save();
     page.selected = null;
-    page.view = "questions";
+    // Someone reading the Ask tab across the hop stays on it.
+    if (page.view !== "ask") page.view = "questions";
     // And forget which tab is drawn, or the next render would store the old
     // skill's offset straight back under a tab id the new one may reuse.
     scrollMemory.clear();
@@ -330,7 +417,10 @@ export function adopt(body) {
   // session under its own workflow, so `dashboard` stops being what the state
   // says it is. A finish while still on the dashboard is the launch declined
   // or the session ended; either way the menu is not mid-handoff any more.
-  if (!isDashboard() || finish()) page.dashPick = null;
+  if (!isDashboard() || finish()) {
+    page.dashPick = null;
+    page.loopSetup = null;
+  }
   // A launch (or an ending) mid wake-up: cut it short rather than play on
   // over a page that is no longer the menu.
   if (page.wake && (!isDashboard() || finish())) page.wake.abort.abort();
@@ -376,6 +466,19 @@ export function adopt(body) {
       delete page.local.sent[id];
     }
   }
+  // A re-posted card can drop or rekey an option a pick was staged on: that
+  // pick goes, and the person is told which question lost it.
+  const pruned = pruneStaged(page.S.items || [], page.local.staged);
+  let staleLine = "";
+  if (pruned.dropped.length) {
+    page.local.staged = pruned.staged;
+    save();
+    const titles = pruned.dropped.map((id) => (byId(id) && byId(id).title) || id).join(", ");
+    staleLine = `A pick on ${titles} no longer matches the reworded question, so it was cleared.`;
+    banner(staleLine, "info");
+    clearTimeout(arrivalBannerTimer);
+    arrivalBannerTimer = setTimeout(() => !page.gone && $("banner").textContent === staleLine && banner(null), 8000);
+  }
   // A retracted send suppresses exactly that send. Once the item moves --
   // settled, sent again (a new `at`), or answered by an agent reply -- the
   // mark is stale and keeping it would hide a send that is not that one.
@@ -389,6 +492,7 @@ export function adopt(body) {
       (r === "any" || (item.submitted && item.submitted.at === r));
     if (!live) delete page.local.retract[id];
   }
+  fillNoteBox();
 
   // New work: a question that is theirs to answer now and was not a moment ago.
   // That covers a brand new question and one the agent reopened or answered
@@ -403,12 +507,13 @@ export function adopt(body) {
     if (typingHere()) {
       // Mid-sentence somewhere. Moving the page under their cursor would lose
       // their place for the sake of telling them something that can wait.
-      banner(
+      // A cleared pick from this same update is said in the same line, so
+      // neither notice hides the other.
+      const arrivedLine =
         arrived.length === 1
           ? "A new question from Plan2Code. It is in the list on the left."
-          : `${arrived.length} new questions from Plan2Code. They are in the list on the left.`,
-        "info"
-      );
+          : `${arrived.length} new questions from Plan2Code. They are in the list on the left.`;
+      banner(staleLine ? `${staleLine} ${arrivedLine}` : arrivedLine, "info");
       clearTimeout(arrivalBannerTimer);
       arrivalBannerTimer = setTimeout(() => !page.gone && banner(null), 8000);
     } else {
@@ -427,9 +532,9 @@ export function adopt(body) {
   render();
   if ($("workspace-modal").open) renderWorkspace();
   tellFolderIssues();
-  // The Overview tab's file changes under a build, so a tab you are watching
+  // A spec file tab's file changes under a build, so a tab you are watching
   // refetches on every new frame too, not only on the click that opened it.
-  if (firstLoad || page.S.specDir !== prevSpecDir || page.S.workflow !== prevWorkflow || page.view === "overview") loadOverview();
+  if (firstLoad || page.S.specDir !== prevSpecDir || page.S.workflow !== prevWorkflow || isSpecFileView(page.view)) loadOverview();
   if (announce) showArrival(announce);
   // New entries land at the bottom of the rail. Gliding down to them beats
   // leaving the list parked where it was while it grew underneath.
@@ -440,7 +545,7 @@ export function adopt(body) {
 }
 
 // The chat's half of adopt(). A new conversation (New conversation pressed in
-// any tab, or a skill switch) is a clean page: nothing typed or waiting for
+// any tab) is a clean page: nothing typed or waiting for
 // the old one carries over. Conversations only ever count up, so a frame that
 // names an older one than this page already moved to is a late frame, not a
 // switch. Sends the server has now echoed stop being pending.
@@ -450,8 +555,7 @@ function adoptChat() {
     if (page.local.chat.conversation == null) page.local.chat.conversation = conv;
     else if (conv > page.local.chat.conversation) {
       // What they were typing, and what they had attached to it, is theirs:
-      // a new conversation started elsewhere (another tab, a skill switch)
-      // must not wipe a message they have not sent yet.
+      // a new conversation started elsewhere (another tab) must not wipe a message they have not sent yet.
       page.local.chat = { ...freshChat(), history: page.local.chat.history, draft: page.local.chat.draft, images: page.local.chat.images, about: null, conversation: conv };
       page.chatError = "";
       page.askRowCount = 0;
@@ -485,11 +589,13 @@ function scrollRail(where) {
 
 let arrivalBannerTimer = null;
 
-// Typing in any text field, the question's own or the notes beside it.
+// Typing in any text field, the question's own or the notes beside it. A
+// focused Markdown field surfaces as its .md-host (the editor inside its
+// shadow root is what document.activeElement cannot see).
 function typingHere() {
   const a = document.activeElement;
   if (!a) return false;
-  return a.tagName === "TEXTAREA" || (a.tagName === "INPUT" && (a.type === "text" || a.type === "date"));
+  return Boolean(a.field) || a.tagName === "TEXTAREA" || (a.tagName === "INPUT" && (a.type === "text" || a.type === "date"));
 }
 
 // The moment the ball comes back.
@@ -590,6 +696,18 @@ export function connect() {
     esErrors = 0;
     try {
       adopt(JSON.parse(e.data));
+    } catch {}
+  });
+  // The agent-less setup session's hand-over: the console its pick launched
+  // POSTed /handover, and this page moves itself to that session's url.
+  es.addEventListener("move", (e) => {
+    if (!isAgentless(page.S && page.S.workflow)) return;
+    try {
+      const u = JSON.parse(e.data).url;
+      if (typeof u === "string" && /^http:\/\/(127\.0\.0\.1|localhost):\d+\/s\//.test(u)) {
+        setupMoved(u);
+        location.assign(u);
+      }
     } catch {}
   });
   es.addEventListener("submitted", (e) => {
@@ -701,6 +819,7 @@ export function render() {
     renderSubagentsButton();
     renderStopButton();
     renderNotepadButton();
+    renderActivities();
     renderHomeButton();
     tabAdded = renderViews();
     renderSidebar();
@@ -708,18 +827,32 @@ export function render() {
     restoreScroll();
     renderAside();
     renderFooter();
+    agentlessChrome();
   });
   // The box an `@` list belonged to was just redrawn away.
   if (page.mentionPop && !page.mentionPop.box.isConnected) closeMentions();
   if (enteringAsk) {
     const box = $("ask-input");
-    if (box && !box.disabled) box.focus({ preventScroll: true });
+    if (box && box.field && !box.field.disabled) box.field.focus();
   }
   if (switchingTab || tabAdded) replayViewsArrow();
   if (tabAdded) sound("newTab");
   renderStopping();
   } finally {
     rendering = false;
+  }
+}
+
+// An agent-less session's top bar is down to Help: every button listed here
+// either sends to the agent or reports on it, and there is no agent to reach.
+// Runs after the other renders, which may re-show their button each pass.
+const AGENTLESS_CHROME = ["meter-pill", "btn-activities", "btn-subagents", "btn-notepad", "btn-home", "btn-stop", "btn-brief"];
+
+function agentlessChrome() {
+  if (!isAgentless(page.S && page.S.workflow)) return;
+  for (const id of AGENTLESS_CHROME) {
+    const n = $(id);
+    if (n) n.hidden = true;
   }
 }
 
@@ -821,9 +954,12 @@ function restoreMainPlace(place) {
 
 function withFocus(fn) {
   const a = document.activeElement;
+  // A Markdown field surfaces as its host: its facade (.field) is what keeps
+  // the caret, and what the restore below focuses.
+  const box = a && a.field ? a.field : a;
   const keep =
-    a && (a.tagName === "TEXTAREA" || a.tagName === "INPUT" || a.tagName === "SELECT") && a.id
-      ? { id: a.id, start: a.selectionStart, end: a.selectionEnd }
+    a && (a.field || a.tagName === "TEXTAREA" || a.tagName === "INPUT" || a.tagName === "SELECT") && a.id
+      ? { id: a.id, start: box.selectionStart, end: box.selectionEnd }
       : null;
   const place = mainPlace();
 
@@ -834,10 +970,11 @@ function withFocus(fn) {
   restoreMainPlace(place);
   if (keep) {
     const n = $(keep.id);
-    if (n) {
-      n.focus();
+    const f = n && (n.field || n);
+    if (f) {
+      f.focus();
       try {
-        n.setSelectionRange(keep.start, keep.end);
+        f.setSelectionRange(keep.start, keep.end);
       } catch {}
     }
   }
@@ -854,7 +991,7 @@ function withFocus(fn) {
 // (the dashboard menu, the end page).
 function currentScroller() {
   if (!drawnView) return null;
-  if (drawnView.startsWith("doc:") || drawnView === "overview") return $("main");
+  if (drawnView.startsWith("doc:") || isSpecFileView(drawnView)) return $("main");
   if (drawnView === "questions") return $("main").querySelector(":scope > .card.question");
   if (drawnView === "ask") return $("main").querySelector(".ask-list");
   return null;
@@ -925,11 +1062,28 @@ function renderMeter() {
       return li;
     })
   );
-  // Once the session is past fresh, say how to start a new one.
+  // Once the session is past fresh, say how to start a new one. Under the app
+  // that is one button doing what the app bar's New Session does, instead of
+  // a command to copy into a new conversation.
   const fresh = $("meter-fresh");
   fresh.hidden = page.meterFrame.level === "green";
+  // The loop's agents run on; a new session mid-loop is the loop banner's Stop.
+  const built = fresh.querySelector(".meter-fresh-btn");
+  if (built) {
+    built.disabled = loopDriving();
+    built.title = loopDriving() ? "The loop is building. Stop it from the banner at the top of the window." : "";
+  }
   if (fresh.hidden || fresh.dataset.built) return;
   fresh.dataset.built = "1";
+  if (page.inApp) {
+    // The same press as the app bar's New Session, confirm and all.
+    const press = el("button", "btn small primary meter-fresh-btn", "Start a New Session");
+    press.type = "button";
+    press.addEventListener("click", () => !loopDriving() && tellApp("new-session"));
+    press.disabled = loopDriving();
+    fresh.append(press);
+    return;
+  }
   const text = handoffText({ command: DASHBOARD_COMMAND });
   const code = el("code", "handoff-code", text);
   const row = el("div", "handoff-command meter-fresh-row");
@@ -974,7 +1128,9 @@ function renderChrome() {
   // The menu has no questions to count: an empty bar there reads as a stall.
   document.querySelector(".progress-block").hidden = (isDashboard() || page.S.workflow === "git") && !finish();
   $("progress-text").textContent = total
-    ? `${done} of ${total} ${building ? "done" : "answered"}`
+    ? loopDriving() && building
+      ? `${done} of ${total} tasks in this phase`
+      : `${done} of ${total} ${building ? "done" : "answered"}`
     : h.stage || "Getting started";
   $("confidence").textContent = h.confidence || "";
   $("progress-fill").style.width = pct + "%";
@@ -995,17 +1151,62 @@ function renderChrome() {
 //   done    the session is over, and there is one thing left to do elsewhere
 //   adrift  the server is up but nothing is listening at the other end
 //   gone    no server, eye shut
+//   setup   the agent-less setup page, waving while it waits on a pick
 //
 // Each mood is a family: v0 is the plain drawing and the rest are alternates
 // (a hop, star-scanning, sparkles, Z's -- see the "mood variants"
 // section of app.css). A new variant is rolled only when the mood CHANGES, so
 // the once-a-second status tick does not restart his animation every time it
 // runs, and the same state keeps the same face until the state itself moves.
-const MOOD_VARIANTS = { point: 3, work: 3, happy: 3, done: 2, adrift: 2, gone: 2 };
+const MOOD_VARIANTS = { point: 3, work: 3, happy: 3, done: 2, adrift: 2, gone: 2, setup: 1 };
 
 let moodNow = null;
 
 let moodVar = 0;
+
+// Sent answers that nothing is collecting (stranded() in selectors.js).
+const STRANDED_LINE =
+  "Plan2Code is not running. Your answers are saved and waiting for it. If the terminal is idle, type **continue** there and it will pick them up; it may also be waiting for your permission approval.";
+
+// The dashboard's quiet lines: the pick or the way home is saved, and typing
+// **continue** in the terminal (a button under the app) wakes the agent.
+const WAKE_TAIL = "If the terminal is idle, type **continue** there to wake it.";
+const DASH_QUIET_LINE = `Plan2Code has gone quiet. A pick still waits here for it. ${WAKE_TAIL}`;
+const HOMEWARD_QUIET_LINE = `Your way back to the dashboard is saved and waiting for Plan2Code. ${WAKE_TAIL}`;
+
+// The agent is out of `wait` answering an Ask message (askBusy()), so a send
+// waits for it to finish that first.
+const ASK_BUSY_LINE = "Plan2Code is answering your Ask message. Your answers are saved, and it picks them up after that.";
+
+// A finished screen's press that nothing is collecting (pressStranded()).
+const PRESS_STRANDED_LINE =
+  "Plan2Code is not running. Your choice is saved and waiting for it. If the terminal is idle, type **continue** there and it will pick it up; it may also be waiting for your permission approval.";
+
+// Under the app with its terminal panel collapsed (the app's `terminal-state`),
+// "terminal" in a What to check line is a button asking the app to expand it.
+function terminalButton(word) {
+  const btn = el("button", "agent-terminal-btn", word);
+  btn.type = "button";
+  btn.title = "Expand the agent terminal panel";
+  btn.addEventListener("click", () => tellApp("terminal-open"));
+  return btn;
+}
+
+// A line's plain text with its first "terminal" turned into terminalButton().
+function withTerminalButton(part) {
+  const word = /\bterminal\b/.exec(part);
+  return [document.createTextNode(part.slice(0, word.index)), terminalButton(word[0]), document.createTextNode(part.slice(word.index + word[0].length))];
+}
+
+// The favicon state last told to the app (attention.rs turns it into the
+// taskbar's dot). Told only when it changes, never on every status redraw.
+let lastAttention = null;
+
+function tellAttention(state) {
+  if (state === lastAttention) return;
+  lastAttention = state;
+  tellApp("attention", { state });
+}
 
 export function renderStatus() {
   if (!page.S) return;
@@ -1026,11 +1227,20 @@ export function renderStatus() {
       moodVar = Math.floor(Math.random() * MOOD_VARIANTS[mood]);
     }
     bot.setAttribute("class", `planny is-${mood} v${moodVar}`);
-    const shown = check ? `${line}|check` : line;
+    const terminalLink = Boolean(check && page.inApp && page.terminalCollapsed);
+    const shown = check ? `${line}|check${terminalLink ? "|terminal" : ""}` : line;
     if (text.dataset.line !== shown) {
       text.dataset.line = shown;
-      const parts = line.split(/\*\*(.+?)\*\*/).map((part, i) => {
-        if (i % 2 === 0) return document.createTextNode(part);
+      let linked = !terminalLink;
+      const parts = line.split(/\*\*(.+?)\*\*/).flatMap((part, i) => {
+        if (i % 2 === 0) {
+          if (linked || !/\bterminal\b/.test(part)) return document.createTextNode(part);
+          linked = true;
+          return withTerminalButton(part);
+        }
+        // Under the app the terminal is in the same window, so the word to
+        // type is a button that types it there instead.
+        if (page.inApp && part === "continue") return continueButton();
         const key = document.createElement("strong");
         key.className = "agent-key";
         key.textContent = part;
@@ -1049,13 +1259,26 @@ export function renderStatus() {
     tick.textContent = count || "";
     $("agent-spin").hidden = !spin;
     $("dock").classList.toggle("is-flying", Boolean(spin));
-    // The tab icon's bar says the same thing from another tab (favicon.js).
-    setFavicon(faviconState({ mood, spin, finished: Boolean(finish()) }));
+    // The tab icon's bar says the same thing from another tab (favicon.js),
+    // and the app's taskbar entry from another window.
+    const icon = faviconState({ mood, spin });
+    setFavicon(icon);
+    tellAttention(icon);
   };
+
+  // An agent-less session has no agent to report on: the setup page IS the
+  // state, so the dock's line says where it stands and nothing more.
+  if (isAgentless(page.S.workflow)) {
+    return say("setup", page.local.setupStart ? "Starting " + page.local.setupStart.label + "…" : "No agent yet. Pick one below to get started.");
+  }
 
   // Before `gone`, deliberately. Once a session has finished, no server is the
   // expected state, and Planny shutting his eye over it reads as a breakage.
   if (finish()) {
+    // A press the agent never came back for: its turn ended while the screen
+    // waited. The press is saved, and **continue** in the terminal collects
+    // it (a button that types it there, under the app).
+    if (pressStranded()) return say("adrift", PRESS_STRANDED_LINE, "", false, true);
     // A finish with the review or the way back to the dashboard still on
     // offer has something left to press here, and only while the server is
     // there to take the press.
@@ -1064,22 +1287,35 @@ export function renderStatus() {
     if (page.local.afterBuild === "changelog" && !page.gone) return say("work", "Opening Changelog…", "", true);
     if (page.local.afterBuild === "launch" && !page.gone) return say("work", "Starting the next step…", "", true);
     const offer = reviewPending();
+    // There is no tab to close under the app, only the one window.
+    const closeWord = page.inApp ? "window" : "tab";
     if (dashboardLive(finish()) && !page.gone && !offer) {
-      return say("point", "Done. Head back to the dashboard, or close this tab.");
+      return say("point", `Done. Head back to the dashboard, or close this ${closeWord}.`);
     }
     if (offer === "asked") return say("work", "Review requested. Plan2Code is starting it.", "", true);
-    if (offer === "open") return say("point", "Done. Review it here first, or close this tab.");
+    if (offer === "open") return say("point", `Done. Review it here first, or close this ${closeWord}.`);
     // A stop past a warning kept nothing, so it promises no saved place.
     if (finishPaused(finish()))
       return say("done", stopWarning() ? "Paused. The command above starts it again." : "Paused. Your place is saved: the command above picks it up.");
-    return say("done", "All done. You can close this tab.");
+    return say("done", `All done. You can close this ${closeWord}.`);
   }
   if (page.gone) return say("gone", "Not connected. Your answers are saved.", "", false, true);
+  // The loop's own end screen (the app's `loopEnd`) is no `finish()`: while it
+  // still has presses on offer the move is theirs; with none, it is done.
+  if (page.S.loopEnd) {
+    const end = page.S.loopEnd;
+    const moves = Array.isArray(end.can) ? end.can.length : 0;
+    if (!moves) return say("done", "The loop is done.");
+    return say(
+      "point",
+      end.kind === "finished" ? "Loop finished. Pick what happens next." : "The loop stopped. Pick what happens next."
+    );
+  }
   // On the way home: the request is sent, and the page stays this skill's
   // until the agent resumes the session as the dashboard.
   if (page.local.homeward && !isDashboard()) {
     return agentAdrift()
-      ? say("adrift", "Your way back to the dashboard is saved and waiting for Plan2Code.")
+      ? say("adrift", HOMEWARD_QUIET_LINE, "", false, true)
       : say("work", "Saving your place and opening the dashboard…", "", true);
   }
   // The dashboard's three states, ahead of the question logic it never
@@ -1089,13 +1325,13 @@ export function renderStatus() {
     if (page.local.launching) {
       const stale = staleLaunchFeedback(page.local.launching.title, agentAdrift());
       return stale
-        ? say("adrift", `${page.local.launching.title} is saved and waiting for Plan2Code.`)
+        ? say("adrift", `${page.local.launching.title} is saved and waiting for Plan2Code. ${WAKE_TAIL}`, "", false, true)
         : say("work", `Waking up ${page.local.launching.title}…`, "", true);
     }
     if (page.dashPick) return say("point", `Start ${page.dashPick.title} when you're ready.`);
     // The cards work before the agent's menu lands, so a pick is always
     // theirs; the line still says what the agent is up to, or that it went quiet.
-    if (agentAdrift()) return say("adrift", "Plan2Code has gone quiet. A pick still waits here for it.");
+    if (agentAdrift()) return say("adrift", DASH_QUIET_LINE, "", false, true);
     const doing = page.S.agent && typeof page.S.agent.activity === "string" ? page.S.agent.activity.trim() : "";
     if (agentWorking() && !page.S.menu) return say("point", `Pick what we are doing today. ${doing || "Plan2Code is looking over the project."}`);
     return say("point", "Your move: pick what we are doing today.");
@@ -1106,6 +1342,10 @@ export function renderStatus() {
   if (!asked().length && !doingNow() && !isGitBoard()) {
     return say("work", `Starting ${workflowTitle(page.S.workflow)}…`, "", true);
   }
+
+  // Answers nobody collected outrank a working line: the agent's last word
+  // was "working", but it is not in `wait` to take them (agentAdrift).
+  if (stranded()) return say("adrift", STRANDED_LINE, "", false, true);
 
   // Show the AGENT's liveness, not the server's: if the agent's turn crashed
   // the server is still happily up, and a plain spinner would lie forever.
@@ -1121,9 +1361,13 @@ export function renderStatus() {
     }
     // Same clock as agentStale(), so the soft line at 30 s hands over to the
     // stale message at two minutes on one timeline.
-    const hint = page.agentLastSeen ? approvalHint(page.S.agent, Date.now() - Date.parse(page.agentLastSeen)) : "";
+    const quiet = page.agentLastSeen ? approvalHint(page.S.agent, Date.now() - Date.parse(page.agentLastSeen)) : "";
+    const hint = quiet && page.inApp ? APPROVAL_HINT_IN_APP : quiet;
     return say("work", hint || activity() || "Plan2Code is thinking…", fmtMs(workingMs()), true, Boolean(hint));
   }
+  // Only once something is waiting on it, and nothing else is theirs to answer:
+  // with a card still open, "Sent. N still for you" is the truer line.
+  if (askBusy() && !myTurn().length && (page.pendingResult || awaitingReply().length)) return say("work", ASK_BUSY_LINE, "", true);
   // Between pressing Send and the agent picking it up, the agent's own status
   // is still "waiting" because it has not started yet. Reading that as "your
   // turn" told someone who had just answered everything that the ball was back
@@ -1133,9 +1377,7 @@ export function renderStatus() {
   if (agentAdrift()) {
     return say(
       "adrift",
-      stranded()
-        ? "Plan2Code is not running. Your answers are saved and waiting for it. If the terminal is idle, type **continue** there and it will pick them up; it may also be waiting for your permission approval."
-        : "Plan2Code is not running right now. Anything you answer here is saved. If the terminal is idle, type **continue** there to wake it; it may also be waiting for your permission approval.",
+      "Plan2Code is not running right now. Anything you answer here is saved. If the terminal is idle, type **continue** there to wake it; it may also be waiting for your permission approval.",
       "",
       false,
       true
@@ -1183,14 +1425,15 @@ function renderViews() {
     },
   ];
   // Built in rather than posted: present exactly while the spec in view has
-  // an overview.md. A tab that vanishes under the person sends them home.
-  const hasOverview = typeof page.overview.text === "string" && page.overview.key === overviewSpec();
-  if (hasOverview) tabs.push({ id: "overview", label: "Overview", count: 0 });
-  else if (page.view === "overview") page.view = "questions";
+  // the file (an overview.md, or before one a map or a plan draft). A tab
+  // that vanishes under the person sends them home.
+  const fileTabs = specFileTabs();
+  for (const f of fileTabs) tabs.push({ id: f.id, label: f.label, count: 0 });
+  if (isSpecFileView(page.view) && !fileTabs.some((f) => f.id === page.view)) page.view = "questions";
   for (const d of docs()) tabs.push({ id: "doc:" + d.id, label: d.title || "Document", count: 0 });
   // The helpers the agent reported, from the first one on; cleared by a
   // dashboard hop, which sends the person home like the Overview tab does.
-  if (showTab(page.subagentsFrame, page.S.helpers)) {
+  if (showTab(page.subagentsFrame, page.S.helpers) && !isAgentless(page.S.workflow)) {
     // From the rows the tab draws, so the badge never counts helpers the
     // working-alone note hides.
     const running = helperRows(page.S.helpers).rows.filter((r) => r.state === "running").length;
@@ -1198,10 +1441,13 @@ function renderViews() {
   } else if (page.view === "subagents") page.view = "questions";
   // Always last, on every workflow and after a finish: the Quick question chat.
   // The ring left of "Ask" shows exactly when the conversation's own ring does:
-  // a question the agent picked up and has not answered yet.
-  const ask = askState();
-  const askBusy = ask.view.rows.some((r) => r.working) && ask.send.state !== "offline" && !agentAdrift();
-  tabs.push({ id: "ask", label: "Ask", count: 0, dot: page.chatDot, busy: askBusy });
+  // a question the agent picked up and has not answered yet. An agent-less
+  // session has nobody to ask, so the tab stays off.
+  if (!isAgentless(page.S.workflow)) {
+    const ask = askState();
+    const askBusy = ask.view.rows.some((r) => r.working) && ask.send.state !== "offline" && !agentAdrift();
+    tabs.push({ id: "ask", label: "Ask", count: 0, dot: page.chatDot, busy: askBusy });
+  } else if (page.view === "ask") page.view = "questions";
 
   for (const t of tabs) {
     const b = el("button", "view-tab", t.label);
@@ -1235,7 +1481,7 @@ function renderViews() {
       // The cached text paints at once; the fresh read repaints if the file
       // changed on disk since.
       render();
-      if (t.id === "overview") loadOverview();
+      if (isSpecFileView(t.id)) loadOverview();
     });
     nav.appendChild(b);
   }
@@ -1266,7 +1512,7 @@ export function renderSidebar() {
       box.appendChild(head);
       for (const e of SKILL_CATALOG.filter((x) => x.group === g.id)) {
         const av = cardPresentation(e, scan(), selSpec(), menu);
-        // Unavailable for the selected spec fades hard; the brief greying
+        // Unavailable for the selected spec fades hard; the brief graying
         // while a launch is in flight or the server is away does not.
         const b = el(
           "button",
@@ -1370,11 +1616,15 @@ function renderMain() {
 }
 
 function paintMain(main) {
-  main.classList.toggle("is-doc", page.view.startsWith("doc:") || page.view === "overview");
+  main.classList.toggle("is-doc", page.view.startsWith("doc:") || isSpecFileView(page.view));
   main.classList.toggle("is-ask", page.view === "ask");
 
+  // An agent-less session has no questions, docs or board to draw: its whole
+  // pane is the setup screen.
+  if (isAgentless(page.S.workflow)) return renderSetup(main, mountAgentsView);
+
   if (page.view.startsWith("doc:")) return renderDoc(main, page.view.slice(4));
-  if (page.view === "overview") return renderOverview(main);
+  if (isSpecFileView(page.view)) return renderOverview(main, page.view);
   if (page.view === "ask") return renderAsk(main);
   if (page.view === "subagents") return renderSubagents(main);
 
@@ -1393,8 +1643,9 @@ function paintMain(main) {
   // falls through to the ordinary path below, which hands it the card.
   if (isDashboard() && !finish()) {
     if (page.local.launching) renderLaunching(main);
+    else if (page.loopSetup) renderLoopSetup(main);
     else if (page.dashPick) {
-      // A spec-switch under an open confirm can grey the pick out. Rather
+      // A spec-switch under an open confirm can gray the pick out. Rather
       // than offer START on a card that cannot launch, drop back to the
       // menu — the picker's new selection speaks for itself there.
       if (cardAvailability(page.dashPick, scan(), selSpec()).on) renderConfirm(main, page.dashPick);
@@ -1429,6 +1680,15 @@ function paintMain(main) {
       pager = item ? buildPager(item) : null;
     }
     renderGitBoard(main, card, pager);
+    return;
+  }
+
+  // How the Implementation Loop ended, from the app's `loopEnd`: its own
+  // screen, ahead of any card the last phase left behind.
+  if (page.S.loopEnd && !finish()) {
+    const card = renderLoopEnd(page.S.loopEnd);
+    card.classList.add("is-primary");
+    main.appendChild(card);
     return;
   }
 
@@ -1493,6 +1753,9 @@ export function renderFooter() {
   if (foot) foot.classList.toggle("is-dash", Boolean(isDashboard() && !finish()));
   // A finished dashboard keeps its summary line but still has nothing to send.
   if (foot) foot.classList.toggle("is-dash-done", Boolean(isDashboard() && finish()));
+  // A loop at work has nothing for the person to send, so no Send to suggest
+  // otherwise; it comes back the moment a question waits.
+  if (foot) foot.classList.toggle("is-loop-idle", loopDriving() && !loopWaiting() && !finish());
 
   const summary = $("footer-summary");
   const notes = pendingNotes();
@@ -1575,7 +1838,7 @@ export function renderFooter() {
   const hint = $("send-hint");
   hint.replaceChildren();
   hint.title = state.why;
-  // Something is turning while the turn is not theirs. A line of grey text
+  // Something is turning while the turn is not theirs. A line of gray text
   // saying "one moment" reads the same whether the agent is working on it or
   // has quietly died; a spinner is the difference between the two at a glance.
   // A spinner says "something is happening". Nothing is, once the other end
@@ -1717,17 +1980,86 @@ export function markSent({ sentIds, sentNotes = {}, summaries, values }) {
   for (const id of sentIds) {
     for (const prefix of ["other-", "text-", "note-"]) delete page.local.drafts[prefix + id];
     if (sentNotes[id]) {
-      delete page.local.drafts["thread-" + id];
-      const rest = noteImages(id).filter((img) => !sentNotes[id].has(img.key));
-      if (rest.length) page.local.images[id] = rest;
-      else delete page.local.images[id];
+      clearSentNote(id, sentNotes[id]);
     } else if (!page.local.images[id]) {
       delete page.local.drafts["thread-" + id];
     }
     page.local.sent[id] = { at: Date.now(), summary: summaries[id] || "", value: values[id] || null };
   }
   page.local.staged = {};
+  // The box a Notebook tab filled went with this send: only now does the
+  // Notebook say the tab was sent. A failed mark is not worth a banner.
+  const ns = page.local.noteSent;
+  if (ns && sentIds.has(ns.item)) {
+    page.local.noteSent = null;
+    fetch("/notepad/tab/sent", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ id: ns.tab, workflow: ns.workflow, ...(ns.spec ? { spec: ns.spec } : {}) }),
+    }).catch(() => {});
+  }
   save();
+}
+
+// A card's note went: its draft goes, and of its attachments only those whose
+// `key` is not in `keys` (the ones that did not go with it) stay. Shared by
+// Send and the suggestion send.
+export function clearSentNote(id, keys) {
+  delete page.local.drafts["thread-" + id];
+  const rest = noteImages(id).filter((img) => !keys.has(img.key));
+  if (rest.length) page.local.images[id] = rest;
+  else delete page.local.images[id];
+}
+
+// The Ask for suggestions chip: one request for suggestions on one card, with
+// the card's ready note riding along. Its own send, beside Send: nothing
+// staged goes or is cleared, and the card stays open to answer.
+export async function askSuggestions(itemId) {
+  const item = byId(itemId);
+  if (!item || suggestState(item).disabled) return;
+  const note = pendingNotes().find((n) => n.id === itemId);
+  const text = note ? note.text : "";
+  const images = note ? note.images : [];
+  try {
+    const res = await fetch("/submit", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        actions: [suggestAction(itemId, text, images)],
+        reply: suggestReplyLines(item.title, text, images).join("\n"),
+      }),
+    });
+    if (res.status === 409) {
+      banner(
+        "Your last answers are still being picked up. Nothing is lost, and nothing was sent twice. Try again in a moment.",
+        "info"
+      );
+      page.pendingBannerUp = true;
+      page.pendingResult = true;
+    } else if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      banner(refusedLine({ status: res.status, reason: (body && (body.message || body.error)) || `error ${res.status}` }), "warn");
+    } else {
+      // A note held back on an upload did not go, so it stays drafted.
+      if (note) clearSentNote(itemId, new Set(images.map((i) => i.key)));
+      save();
+      banner("Asked for suggestions. Plan2Code is picking it up now.", "good");
+      setTimeout(() => banner(null), 4000);
+    }
+  } catch {
+    await sendLost();
+  } finally {
+    render();
+  }
+}
+
+// The menu card whose staged pick is an option marked `fresh`, if any.
+function freshMenuPick(actions) {
+  for (const a of actions) {
+    const item = a.kind === "menu" ? byId(a.i) : null;
+    if (item && (item.options || []).some((o) => o.k === a.k && o.fresh === true)) return item;
+  }
+  return null;
 }
 
 export async function send() {
@@ -1750,10 +2082,24 @@ export async function send() {
       e.pending = true;
       throw e;
     }
-    if (!res.ok) throw new Error(String(res.status));
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      const e = new Error(String(res.status));
+      e.reason = (body && (body.message || body.error)) || `error ${res.status}`;
+      e.status = res.status;
+      throw e;
+    }
+    // Ask locks again once the loop's question is answered (FR-14); it opens
+    // for the next, different one.
+    if (loopWaiting()) page.local.askLockedAfterSend = loopWaitingKey();
     markSent(payload);
     banner("Sent. Plan2Code is picking it up now.", "good");
     setTimeout(() => banner(null), 4000);
+    // A menu option the agent marked `fresh` is a clean start, which under the
+    // app is the bar's New Session; the agent still gets the pick, so a
+    // declined confirm carries on with its usual finish.
+    const freshMenu = page.inApp && !loopDriving() ? freshMenuPick(actions) : null;
+    if (freshMenu) startNewSession(freshMenu.command ? handoffText({ command: freshMenu.command }) : "");
   } catch (err) {
     if (err && err.pending) {
       banner(
@@ -1762,13 +2108,45 @@ export async function send() {
       );
       page.pendingBannerUp = true;
       page.pendingResult = true;
+    } else if (err && err.reason) {
+      banner(refusedLine(err), "warn");
     } else {
-      banner("That did not go through. Nothing was lost, try Send again.", "warn");
+      await sendLost();
     }
   } finally {
     btn.textContent = "Send to Plan2Code";
     render();
   }
+}
+
+// A send that never reached an answer: ask the server at once, rather than
+// leaving one line for every cause until the page's own timers catch up. No
+// server is the lost-contact state now, with its reconnect help; a server
+// still there was a blip, and Send is the whole fix.
+async function sendLost() {
+  const up = await fetch("/state", { cache: "no-store" })
+    .then((res) => res.ok)
+    .catch(() => false);
+  if (up) {
+    banner("That did not go through, but the console is still up. Nothing was lost, press Send again.", "warn");
+    return;
+  }
+  lastContact = 0;
+  markGone();
+  // A stream left half open (after the machine slept) still reads as
+  // connected, so markGone() can leave the page up: the send still needs
+  // saying it did not go.
+  if (!page.gone) {
+    banner("That did not go through. Nothing was lost, try Send again.", "warn");
+  }
+}
+
+// The server said no. A 5xx can pass on a retry; a 4xx is the same refusal
+// every time, so it gets no "try again", and the one a person can fix says how.
+function refusedLine(err) {
+  if (err.status === 413) return "That is too big to send in one go. Nothing was lost: remove an attachment, then press Send.";
+  if (err.status >= 400 && err.status < 500) return `The console turned that send down: ${err.reason}. Nothing was lost.`;
+  return `The console turned that send down: ${err.reason}. Nothing was lost, try Send again.`;
 }
 
 const STATE_WORDS = { done: "all done", blocked: "blocked", help: "need help", defer: "later" };
@@ -1829,12 +2207,51 @@ let whereResizeTimer = null;
 
 // The listeners that belong to no screen: leaving the page, the session meter's
 // pop-over, the footer's label on a resize, Send, Clear, and the page-wide keys.
+// A link the console could not hand to a browser is shown, with a Copy
+// button, for the person to paste into one.
+async function openOutside(href) {
+  const ok = await fetch("/open-link", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ url: href }),
+  })
+    .then((res) => res.ok)
+    .catch(() => false);
+  if (ok) return;
+  const link = el("code", "banner-link", href);
+  banner("That link could not open from here. Copy it and paste it into your browser: ", "warn", [link, document.createTextNode(" "), copyButton(href, "btn small", link)]);
+}
+
 export function wireChrome() {
   addEventListener("pagehide", () => {
     try {
       navigator.sendBeacon("/bye");
     } catch {}
+    // A page that goes away leaves no dot on the app's taskbar behind it.
+    tellAttention("plain");
   });
+
+  // The app says whether its terminal panel is collapsed, on the page's hello
+  // and on every change; the status line's terminal button follows it.
+  onAppMessage("terminal-state", (data) => {
+    page.terminalCollapsed = data.collapsed === true;
+    renderStatus();
+  });
+
+  // Under the app, a link off the page goes to the default browser through
+  // the console: the app's window opens no new ones, so the click alone would
+  // do nothing. Capture phase, ahead of any handler on the link itself.
+  document.addEventListener(
+    "click",
+    (e) => {
+      if (!page.inApp || e.defaultPrevented || !(e.target instanceof Element)) return;
+      const a = e.target.closest("a[href]");
+      if (!a || !linkLeavesPage(a.href, location.origin)) return;
+      e.preventDefault();
+      openOutside(a.href);
+    },
+    true
+  );
 
   $("meter-pill").addEventListener("click", () => toggleMeterPop());
   $("meter-help").addEventListener("click", () => {
@@ -1886,8 +2303,9 @@ export function wireChrome() {
     // Escape is the confirm pane's Back — but not while a dialog has it. Native
     // dialogs close themselves on the same key; backing out of the pick at the
     // same time would be two undos for one press.
-    if (e.key === "Escape" && page.dashPick && isDashboard() && !finish() && !document.querySelector("dialog[open]")) {
+    if (e.key === "Escape" && (page.dashPick || page.loopSetup) && isDashboard() && !finish() && !document.querySelector("dialog[open]")) {
       page.dashPick = null;
+      page.loopSetup = null;
       redraw();
     }
   });

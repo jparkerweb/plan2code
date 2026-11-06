@@ -46,6 +46,12 @@ export function fresh() {
     launching: null,
     // A picker Delete sent and not yet answered by a rescan: { dir, scanAt }.
     deleting: null,
+    // A Notebook tab picked at Start, riding the hop until the launched
+    // skill's `fill: "note"` box takes it: { tab, text, pictures, workflow, spec? }.
+    noteSend: null,
+    // The box it filled, until a send carrying that box marks the tab sent:
+    // { item, tab, workflow, spec? }.
+    noteSent: null,
     retract: {},
     chat: freshChat(),
   };
@@ -101,12 +107,35 @@ export const page = {
   // The frame's update ({ installed, latest }), present only when a newer
   // release is out; null otherwise.
   updateFrame: null,
+  // Whether the desktop app is driving this session (the frame's `inApp`):
+  // false until the first frame lands, same as every other flag here, and
+  // from an older server that sends none.
+  inApp: false,
+  // The app's terminal panel is collapsed (its `terminal-state`): the status
+  // line's What to check lines then make "terminal" a button that expands it.
+  terminalCollapsed: false,
+  // The Implementation Loop, as the desktop app drives it: `loop` is the
+  // state's `{ driving: true }` or null (it locks the page, selectors.js
+  // loopDriving); `loopFacts` is what the app answered to `loop-facts`
+  // (agent, model, effort, permission mode, prompt support); `loopStart` is
+  // `{ ok, error }` once the app answered a `loop-start`; `loopAction` is the
+  // same for the stop screen's Resume, Fix and Finalize; `loopNotifyTest` is
+  // Send a test's `{ waiting }`, then `{ ok, sent, error }` once the app answered.
+  loop: null,
+  // The setup screen the dashboard's Implementation Loop card opened, or null
+  // (screens/loop-setup.js owns the shape).
+  loopSetup: null,
+  loopFacts: null,
+  loopStart: null,
+  loopNotifyTest: null,
+  loopAction: null,
   // The frame's Subagents switch ({ offered, supported, on, instruction, max,
   // revision }), or null before a server that sends it.
   subagentsFrame: null,
-  // The spec's overview.md as last fetched: `key` is the spec dir it was read
-  // for, `text` the file, or null when there is none. See loadOverview().
-  overview: { key: null, text: null },
+  // The spec's files as last fetched: `key` is the spec dir they were read
+  // for, `files` maps each SPEC_FILES kind (overview, map, draft) that exists
+  // to `{ file, text }`. See loadOverview().
+  overview: { key: null, files: {} },
   // The dashboard's first-open wake-up (boot.js), while it runs. `cards` turns
   // true at the glide, which lets the menu in; `entered` once its entrance has
   // played; `typed` is how many characters of the note show, or null once all

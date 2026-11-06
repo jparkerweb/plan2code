@@ -11,7 +11,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { gitInit } from "./skill-script-helpers.mjs";
-import { pageSuite, openSession, tempProject, sendAndCollect, itemCard, scrollTopOf } from "./page-test-helpers.mjs";
+import { pageSuite, openSession, tempProject, sendAndCollect, itemCard, scrollTopOf, scrollCard, stylesOf, styleOf , fillBox, boxValue, settled } from "./page-test-helpers.mjs";
 
 const suite = pageSuite(test);
 
@@ -29,7 +29,7 @@ test("a text answer typed on the page reaches the agent as it was typed", async 
     workflow: "plan",
     payload: { items: [{ id: "q1", kind: "text", title: "What to call it", body: "A short name for the export." }] },
   });
-  await itemCard(s.page, "q1").locator("textarea, input[type=text]").first().fill("audit-export");
+  await fillBox(itemCard(s.page, "q1").locator(".md-host, input[type=text]").first(), "audit-export");
   const got = await sendAndCollect(s);
   assert.equal(got.type, "submit");
   assert.deepEqual(
@@ -37,6 +37,27 @@ test("a text answer typed on the page reaches the agent as it was typed", async 
     [{ i: "q1", type: "answer", text: "audit-export" }]
   );
   assert.match(got.reply, /audit-export/);
+});
+
+test("the answer box renders Markdown live, like the Notebook", async (t) => {
+  const s = await openSession(await suite.browser(), {
+    t,
+    workflow: "plan",
+    payload: { items: [{ id: "q1", kind: "text", title: "What to build", body: "Describe it." }] },
+  });
+  const card = itemCard(s.page, "q1");
+  const content = card.locator(".md-host .cm-content");
+  await content.waitFor({ timeout: 15000 });
+  assert.equal(await card.locator("textarea").count(), 0, "the answer box is the Markdown editor, not a textarea");
+  // A redraw that lands while the box is typed in sends the caret back to the start (seen on
+  // slow runners as "plain**bold**"): let the page go quiet before typing.
+  await settled(s.page, "#main");
+  await content.click();
+  await content.pressSequentially("**bold**\nplain");
+  await card.locator(".cm-strong", { hasText: "bold" }).waitFor();
+  assert.equal(await content.innerText(), "bold\nplain", "the marks hide off the cursor's line");
+  const got = await sendAndCollect(s);
+  assert.deepEqual(answerTo(got, "q1"), { text: "**bold**\nplain" });
 });
 
 // The agent's side of one question: settle what came before, post `item`
@@ -70,7 +91,7 @@ test("every kind of question card sends the answer shape the agent reads", async
 
   card = await ask(s, { id: "c2", kind: "choice", title: "Where it goes", body: "Where?", allowOther: true, options: [opt("A", "Email"), opt("B", "Slack")] });
   await card.getByRole("radio", { name: "Something else, in your own words" }).check();
-  await card.locator("textarea").fill("A shared drive");
+  await fillBox(card.locator(".md-host"), "A shared drive");
   got = await sendAndCollect(s);
   assert.deepEqual(answerTo(got, "c2"), { text: "A shared drive" });
   assert.equal(got.reply, "Where it goes: A shared drive");
@@ -78,7 +99,7 @@ test("every kind of question card sends the answer shape the agent reads", async
   card = await ask(s, { id: "m1", kind: "multi", title: "Columns", body: "Which?", options: [opt("1", "Date"), opt("2", "User"), opt("3", "Action")], presets: [{ label: "Date and user", ks: ["1", "2"] }] });
   await card.getByRole("button", { name: "Date and user" }).click();
   await card.getByLabel("Action").check();
-  await card.locator("textarea").fill("and the IP");
+  await fillBox(card.locator(".md-host"), "and the IP");
   got = await sendAndCollect(s);
   assert.deepEqual(answerTo(got, "m1"), { ks: ["1", "2", "3"], text: "and the IP" });
   assert.equal(got.reply, "Columns: 1, 2, 3; and the IP");
@@ -87,11 +108,11 @@ test("every kind of question card sends the answer shape the agent reads", async
   const field = card.locator("input[type=text]");
   // The suggestion is the placeholder without its "For example:" lead-in.
   await card.getByRole("button", { name: "Autofill suggestion" }).click();
-  assert.equal(await field.inputValue(), "audit-export");
-  await field.fill("Audit Export");
+  assert.equal(await boxValue(field), "audit-export");
+  await fillBox(field, "Audit Export");
   await card.getByText("Lowercase letters, digits and hyphens.").waitFor();
   assert.equal(await s.page.locator("#btn-send").isDisabled(), true, "a value that breaks the pattern is not sendable");
-  await field.fill("audit-export");
+  await fillBox(field, "audit-export");
   got = await sendAndCollect(s);
   assert.deepEqual(answerTo(got, "t1"), { text: "audit-export" });
   assert.equal(got.reply, "What to call it: audit-export");
@@ -132,7 +153,7 @@ test("every kind of question card sends the answer shape the agent reads", async
   assert.equal(got.reply, "The steps: no changes");
 
   card = await ask(s, { id: "l2", kind: "list", title: "The steps again", body: "Reorder or rename.", rows });
-  await card.locator("input[type=text]").first().fill("Read the audit log");
+  await fillBox(card.locator("input[type=text]").first(), "Read the audit log");
   got = await sendAndCollect(s);
   assert.deepEqual(
     answerTo(got, "l2").rows.map((r) => [r.id, r.title]),
@@ -171,7 +192,7 @@ test("a sign-off card opens its document, and each verdict reaches the agent", a
   await card.getByRole("button", { name: /Read .*Completion report.* in full/ }).click();
   await s.page.getByText("Phase 3 adds the /tasks endpoints.").waitFor();
   assert.ok(await s.page.getByText("Phase 3 adds the /tasks endpoints.").isVisible(), "the report is on screen");
-  // The danger verdict is marked as such: here the class is the behaviour.
+  // The danger verdict is marked as such: here the class is the behavior.
   await s.page.locator("#views").getByRole("button", { name: /^Questions/ }).click();
   card = itemCard(s.page, "so1");
   assert.match(await card.getByRole("button", { name: "Throw it away" }).getAttribute("class"), /danger/);
@@ -183,7 +204,7 @@ test("a sign-off card opens its document, and each verdict reaches the agent", a
 
   card = await ask(s, signoff("so2"));
   await card.getByRole("button", { name: "I want changes" }).click();
-  await card.locator("textarea").fill("Keep the header row.");
+  await fillBox(card.locator(".md-host"), "Keep the header row.");
   got = await sendAndCollect(s);
   assert.deepEqual(answerTo(got, "so2"), { verdict: "changes", text: "Keep the header row." });
 });
@@ -207,29 +228,34 @@ test("a redraw keeps your place: the scroll and the focused field survive an age
     },
   });
 
+  // The answer box's editor mounts after the first draw and may redraw the
+  // card: wait for it before scrolling, so no redraw can replace the card
+  // between the scroll and the agent's post.
+  await itemCard(s.page, "q1").locator(".md-host .cm-content").first().waitFor();
+
   // Reading a question part-way down: the card scrolls itself.
   const card = itemCard(s.page, "q1");
-  await card.evaluate((el) => (el.scrollTop = 400));
-  assert.equal(await card.evaluate((el) => el.scrollTop), 400, "the question card scrolls");
+  assert.equal(await scrollCard(card, 400), 400, "the question card scrolls");
   await unrelatedPost(s, "Audit export, take two");
   assert.equal(await itemCard(s.page, "q1").evaluate((el) => el.scrollTop), 400);
 
   // Typing in its answer box: the box keeps the focus and the caret, and the
-  // card stays where it was.
-  const field = itemCard(s.page, "q1").locator("textarea, input[type=text]").first();
-  await field.click();
-  await field.pressSequentially("audit-ex");
-  await field.evaluate((el) => el.setSelectionRange(3, 3));
+  // card stays where it was. A Markdown field's own API is on its facade:
+  // document.activeElement is its host, its value and caret on .field.
+  const field = itemCard(s.page, "q1").locator(".md-host").first();
+  await field.locator(".cm-content").click();
+  await field.locator(".cm-content").pressSequentially("audit-ex");
+  await field.evaluate((el) => el.field.setSelectionRange(3, 3));
   const typingAt = await itemCard(s.page, "q1").evaluate((el) => el.scrollTop);
   await unrelatedPost(s, "Audit export, take three");
-  const after = itemCard(s.page, "q1").locator("textarea, input[type=text]").first();
-  assert.deepEqual(await after.evaluate((el) => [el === document.activeElement, el.value, el.selectionStart]), [true, "audit-ex", 3]);
+  const after = itemCard(s.page, "q1").locator(".md-host").first();
+  assert.deepEqual(await after.evaluate((el) => [el === document.activeElement, el.field.value, el.field.selectionStart]), [true, "audit-ex", 3]);
   assert.equal(await itemCard(s.page, "q1").evaluate((el) => el.scrollTop), typingAt);
 
   // On a doc: the column scrolls.
   await s.page.locator("#views").getByRole("button", { name: /What we've agreed/ }).click();
   await s.page.getByText("Paragraph 80.").waitFor();
-  await s.page.locator("#main").evaluate((el) => (el.scrollTop = 900));
+  await scrollCard(s.page.locator("#main"), 900);
   const docBefore = await scrollTopOf(s.page, "#main");
   assert.ok(docBefore > 0, "the doc column scrolls");
   await unrelatedPost(s, "Audit export, take four");
@@ -281,7 +307,7 @@ test("an answer typed over several lines reaches the agent under its title, neve
     workflow: "plan",
     payload: { items: [{ id: "q1", kind: "text", title: "What to call it", body: "A short name for the export." }] },
   });
-  await itemCard(s.page, "q1").locator("textarea").fill("audit-export\nIdea name: not a heading");
+  await fillBox(itemCard(s.page, "q1").locator(".md-host"), "audit-export\nIdea name: not a heading");
   const got = await sendAndCollect(s);
   assert.equal(answerTo(got, "q1").text, "audit-export\nIdea name: not a heading");
   assert.ok(got.reply.includes("What to call it: audit-export\n  Idea name: not a heading"), `the second line is not indented under its title: ${JSON.stringify(got.reply)}`);
@@ -296,7 +322,8 @@ test("a redraw keeps the place of the dashboard, the waiting screen and the fini
   const welcomeDone = s.page.getByRole("button", { name: "Start building" });
   if (await welcomeDone.isVisible()) await welcomeDone.click();
   await welcomeDone.waitFor({ state: "hidden" });
-  await s.page.locator("#main > .dash").evaluate((el) => (el.scrollTop = 150));
+  await settled(s.page, "#main > .dash");
+  await scrollCard(s.page.locator("#main > .dash"), 150);
   assert.equal(await scrollTopOf(s.page, "#main > .dash"), 150, "the dashboard scrolls");
   await unrelatedPost(s, "Dashboard, take two");
   assert.equal(await scrollTopOf(s.page, "#main > .dash"), 150, "the dashboard lost its place");
@@ -311,7 +338,8 @@ test("a redraw keeps the place of the dashboard, the waiting screen and the fini
   await s.page.setViewportSize({ width: 1280, height: 300 });
   const pane = "#main > .waiting-pane";
   await s.page.locator(pane).waitFor();
-  await s.page.locator(pane).evaluate((el) => (el.scrollTop = 60));
+  await settled(s.page, pane);
+  await scrollCard(s.page.locator(pane), 60);
   const waitingAt = await scrollTopOf(s.page, pane);
   assert.ok(waitingAt > 0, "the waiting screen scrolls");
   await unrelatedPost(s, "Phase 1, take two");
@@ -320,7 +348,7 @@ test("a redraw keeps the place of the dashboard, the waiting screen and the fini
   s.post({ finish: { headline: "Phase 1 is done", body: longText(30), command: "/plan2code-3-implement specs/audit-export/overview.md" } });
   await s.page.locator("#main").getByRole("heading", { name: "Phase 1 is done" }).waitFor();
   const end = "#main > .card";
-  await s.page.locator(end).evaluate((el) => (el.scrollTop = 300));
+  await scrollCard(s.page.locator(end), 300);
   assert.equal(await scrollTopOf(s.page, end), 300, "the finished screen scrolls");
   await unrelatedPost(s, "Phase 1, take three");
   assert.equal(await scrollTopOf(s.page, end), 300, "the finished screen lost its place");
@@ -332,32 +360,32 @@ test("a redraw keeps the place of the dashboard, the waiting screen and the fini
     workflow: "plan",
     payload: { items: [{ id: "q1", kind: "text", title: "What to call it", body: longText(40) }] },
   });
-  await itemCard(s.page, "q1").evaluate((el) => (el.scrollTop = 400));
+  await scrollCard(itemCard(s.page, "q1"), 400);
   s.post({ items: [{ id: "q2", kind: "text", title: "Who uses it", body: longText(40) }] });
   await itemCard(s.page, "q2").waitFor();
   assert.equal(await itemCard(s.page, "q2").evaluate((el) => el.scrollTop), 0, "the new question opened part-way down");
 });
 
-// The accent colour as the browser resolves it, and a button's outline colour,
+// The accent color as the browser resolves it, and a button's outline color,
 // so "wears the accent" is read off the screen, not off a class name.
 const accentOf = (page) =>
   page.evaluate(() => {
     const probe = document.createElement("i");
     probe.style.color = "var(--accent)";
     document.body.appendChild(probe);
-    const colour = getComputedStyle(probe).color;
+    const color = getComputedStyle(probe).color;
     probe.remove();
-    return colour;
+    return color;
   });
-const outlineOf = (button) => button.evaluate((b) => getComputedStyle(b).borderTopColor);
+const outlineOf = (button) => styleOf(button, "borderTopColor");
 const warnOf = (page) =>
   page.evaluate(() => {
     const probe = document.createElement("i");
     probe.style.color = "var(--warn)";
     document.body.appendChild(probe);
-    const colour = getComputedStyle(probe).color;
+    const color = getComputedStyle(probe).color;
     probe.remove();
-    return colour;
+    return color;
   });
 
 // What a person sees break: the way forward on a sign-off card looks like any
@@ -373,7 +401,7 @@ test("on a sign-off card, approve and yes are outlined in the accent until picke
   assert.notEqual(await outlineOf(card.getByRole("button", { name: "I want changes" })), accent, "the other verdict is not");
   await approve.click();
   await s.page.waitForFunction(() => document.querySelector("#btn-send:not(:disabled)"));
-  assert.equal(await approve.evaluate((b) => getComputedStyle(b).backgroundColor), accent, "picked, approve fills with the accent");
+  assert.equal(await styleOf(approve, "backgroundColor"), accent, "picked, approve fills with the accent");
 
   card = await ask(s, review("so2", [{ id: "yes", label: "Build it" }, { id: "no", label: "Not yet" }]));
   assert.equal(await outlineOf(card.getByRole("button", { name: "Build it" })), accent, "an unpicked yes is outlined too");
@@ -388,11 +416,28 @@ test("Skip this one and a comment box's quick answer are the same small accent b
   const card = await ask(s, { id: "l1", kind: "list", title: "The steps", body: "Rename.", required: false, rows });
   const skip = card.getByRole("button", { name: "Skip this one" });
   const quick = card.getByRole("button", { name: "No changes" });
-  const look = (b) => b.evaluate((x) => { const c = getComputedStyle(x); return [c.fontSize, c.paddingTop, c.paddingLeft, c.color]; });
+  const look = async (b) => Object.values(await stylesOf(b, ["fontSize", "paddingTop", "paddingLeft", "color"]));
   assert.deepEqual(await look(skip), await look(quick), "the two chips look alike");
-  const [size, , , colour] = await look(skip);
+  const [size, , , color] = await look(skip);
   assert.equal(size, "12px", "small, not a full-size button");
-  assert.equal(colour, await accentOf(s.page), "in the accent");
+  assert.equal(color, await accentOf(s.page), "in the accent");
+});
+
+// What a person sees break: Combine phases is missing from a plan's breakdown,
+// fills nothing, or shows on a list that is not phases.
+test("a plan's breakdown offers Combine phases beside No changes, and other workflows do not", async (t) => {
+  const rows = [{ id: "a", title: "Read the data", body: "x" }];
+  let s = await openSession(await suite.browser(), { t, workflow: "plan" });
+  let card = await ask(s, { id: "l1", kind: "list", title: "Build order", body: "Reorder.", rows });
+  const quicks = card.locator(".quick-answer");
+  assert.deepEqual(await quicks.allTextContents(), ["No changes", "Combine phases"]);
+  await card.getByRole("button", { name: "Combine phases" }).click();
+  const got = await sendAndCollect(s);
+  assert.match(answerTo(got, "l1").text, /^Combine phases where possible/);
+
+  s = await openSession(await suite.browser(), { t, workflow: "quick-task" });
+  card = await ask(s, { id: "l2", kind: "list", title: "Steps", body: "Reorder.", rows });
+  assert.deepEqual(await card.locator(".quick-answer").allTextContents(), ["No changes"]);
 });
 
 // What a person sees break: a safe yes looks like any button, or a risky yes
@@ -408,7 +453,7 @@ test("a confirm's safe yes and a recap's yes are outlined in the accent, and a d
   assert.notEqual(await outlineOf(card.getByRole("button", { name: "No" })), accent, "the no does not");
   await yes.click();
   await s.page.waitForFunction(() => document.querySelector("#btn-send:not(:disabled)"));
-  assert.equal(await yes.evaluate((b) => getComputedStyle(b).backgroundColor), accent, "picked, it fills");
+  assert.equal(await styleOf(yes, "backgroundColor"), accent, "picked, it fills");
 
   card = await ask(s, { id: "y2", kind: "confirm", title: "Delete it", body: "Really?", danger: true });
   assert.equal(await outlineOf(card.getByRole("button", { name: "Yes" })), warn, "a dangerous yes stays red");
@@ -423,11 +468,11 @@ test("a card cut by the window fades at its bottom edge while there is more belo
   const s = await openSession(await suite.browser(), { t, workflow: "plan" });
   await s.page.setViewportSize({ width: 1280, height: 420 });
   const card = await ask(s, { id: "q1", kind: "text", title: "What to call it", body: longText(40) });
-  const fades = () => card.evaluate((el) => { const c = getComputedStyle(el); return (c.maskImage || c.webkitMaskImage || "none") !== "none"; });
+  const fades = async () => { const c = await stylesOf(card, ["maskImage", "webkitMaskImage"]); return (c.maskImage || c.webkitMaskImage || "none") !== "none"; };
   await s.page.waitForFunction(() => { const c = document.querySelector("#main > .card"); return c && c.scrollHeight > c.clientHeight + 4; });
   await s.page.waitForFunction(() => { const c = document.querySelector("#main > .card"); const m = getComputedStyle(c); return (m.maskImage || m.webkitMaskImage || "none") !== "none"; });
   assert.equal(await fades(), true, "a cut card fades at the bottom");
-  await card.evaluate((el) => (el.scrollTop = el.scrollHeight));
+  await scrollCard(card, "end");
   await s.page.waitForFunction(() => { const c = document.querySelector("#main > .card"); const m = getComputedStyle(c); return (m.maskImage || m.webkitMaskImage || "none") === "none"; });
   assert.equal(await fades(), false, "at the end, the fade is gone");
 });
@@ -440,11 +485,11 @@ test("a list rename is staged as it is typed, so Ctrl+Enter or an agent post nev
   const card = await ask(s, { id: "l1", kind: "list", title: "The steps", body: "Rename.", rows });
   const first = card.locator("input.row-title").first();
   await first.click();
-  await first.fill("Read the audit log");
+  await fillBox(first, "Read the audit log");
   // The field is still focused: it has not changed or blurred.
   await s.page.waitForFunction(() => document.querySelector("#btn-send:not(:disabled)"));
   await unrelatedPost(s, "Steps, take two");
-  assert.equal(await itemCard(s.page, "l1").locator("input.row-title").first().inputValue(), "Read the audit log", "the agent post kept the typed name");
+  assert.equal(await boxValue(itemCard(s.page, "l1").locator("input.row-title").first()), "Read the audit log", "the agent post kept the typed name");
   await itemCard(s.page, "l1").locator("input.row-title").first().focus();
   await s.page.keyboard.press("Control+Enter");
   const got = s.wait(10);
@@ -467,11 +512,11 @@ test("a send made before the last collection is never shown as still with the ag
   );
   const lock = card.getByText(/Plan2Code is working on it|Waiting for Plan2Code to pick this up/);
   await lock.waitFor();
-  assert.equal(await card.locator("textarea").count(), 0, "before the agent collects it, the card is locked");
+  assert.equal(await card.locator(".md-host").count(), 0, "before the agent collects it, the card is locked");
   // The agent collects it, leaves the question open and waits again.
   assert.equal(s.wait(10).code, 0);
   s.post({ agent: { status: "waiting" } });
-  await card.locator("textarea").waitFor();
+  await card.locator(".md-host").waitFor();
   assert.equal(await lock.count(), 0, "after the collection, it is not shown as sent");
 });
 
@@ -493,7 +538,7 @@ test("a note box over the git board grows no box, and the card flows at its own 
   await git.page.getByRole("tablist").waitFor();
   const gitCard = itemCard(git.page, "y1");
   await gitCard.waitFor();
-  const note = gitCard.locator("textarea").first();
+  const note = gitCard.locator(".md-host").first();
   const gitBox = await note.evaluate((el) => ({ min: el.style.minHeight, height: el.offsetHeight }));
   assert.equal(gitBox.min, "", "no height was filled in for the note box");
   assert.ok(gitBox.height < 120, `the note box keeps its ordinary height over the board: ${gitBox.height}`);
@@ -501,9 +546,9 @@ test("a note box over the git board grows no box, and the card flows at its own 
 
   // The same card away from the board does fill the free height of the card.
   const plan = await openSession(await suite.browser(), { t, workflow: "plan", payload: { items: [confirm] } });
-  const planBox = plan.page.locator('[data-item="y1"] textarea').first();
+  const planBox = plan.page.locator('[data-item="y1"] .md-host').first();
   await planBox.waitFor();
-  await plan.page.waitForFunction(() => document.querySelector('[data-item="y1"] textarea').offsetHeight >= 160);
+  await plan.page.waitForFunction(() => document.querySelector('[data-item="y1"] .md-host').offsetHeight >= 160);
   assert.ok((await planBox.evaluate((el) => el.offsetHeight)) > gitBox.height, "away from the board, the note box grows");
 });
 
@@ -536,9 +581,9 @@ test("Skip this one on an optional card moves on, and the skip reaches the agent
   await card.getByRole("button", { name: "Skip this one" }).click();
   await s.page.waitForFunction(() => document.querySelector("#main [data-item]")?.dataset.item === "q2");
   assert.equal(await itemCard(s.page, "q3").getByRole("button", { name: "Skip this one" }).count(), 0, "a required card cannot be skipped");
-  await itemCard(s.page, "q2").locator("textarea").fill("Ana");
+  await fillBox(itemCard(s.page, "q2").locator(".md-host"), "Ana");
   await s.page.getByRole("navigation", { name: "Move between the questions waiting" }).getByRole("button", { name: /Next/ }).click();
-  await itemCard(s.page, "q3").locator("textarea").fill("Bo");
+  await fillBox(itemCard(s.page, "q3").locator(".md-host"), "Bo");
   const got = await sendAndCollect(s);
   assert.deepEqual(
     got.actions.map(({ i, type, text }) => ({ i, type, text })),
@@ -563,7 +608,7 @@ test("a settled card is a record: your answer in words, the options as marks, an
   const record = card.locator(".answered");
   assert.match(await record.innerText(), /Your answer[\s\S]*JSON/i);
   assert.match(await record.innerText(), /Locked\./);
-  assert.equal(await card.locator("input, textarea").count(), 0, "a record has no inputs");
+  assert.equal(await card.locator("input, textarea, .md-host").count(), 0, "a record has no inputs");
 });
 
 // What a person sees break: a card still takes edits after Send, or never
@@ -571,15 +616,15 @@ test("a settled card is a record: your answer in words, the options as marks, an
 test("a sent card locks, and the agent's next post on it unlocks it", async (t) => {
   const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: { items: [three[0]] } });
   const card = itemCard(s.page, "q1");
-  await card.locator("textarea").fill("Ana");
+  await fillBox(card.locator(".md-host"), "Ana");
   await s.page.click("#btn-send");
   const lock = card.getByText(/Plan2Code is working on it|Waiting for Plan2Code to pick this up/);
   await lock.waitFor();
   assert.match(await card.locator(".answered").innerText(), /Sent[\s\S]*Ana/i);
-  assert.equal(await card.locator("textarea").count(), 0, "no form while the agent has it");
+  assert.equal(await card.locator(".md-host").count(), 0, "no form while the agent has it");
   s.wait(10);
   s.post({ items: [{ id: "q1", status: "reopened", thread: [{ who: "agent", text: "Which Ana?" }] }], agent: { status: "waiting" } });
-  await card.locator("textarea").waitFor();
+  await card.locator(".md-host").waitFor();
   assert.equal(await lock.count(), 0, "the next post gives the card back");
 });
 
@@ -591,13 +636,34 @@ test("Something else in your own words replaces the pick, and picking an option 
   await card.getByLabel("Email").check();
   const other = card.getByRole("radio", { name: "Something else, in your own words" });
   await other.check();
-  await card.locator("textarea.other-text").fill("A shared drive");
+  await fillBox(card.locator(".md-host.other-text"), "A shared drive");
   assert.equal(await card.getByLabel("Email").isChecked(), false, "the options and the other share one group");
   await card.getByLabel("Slack").check();
   await other.check();
-  assert.equal(await card.locator("textarea.other-text").inputValue(), "A shared drive", "the words survive a switch");
+  assert.equal(await boxValue(card.locator(".md-host.other-text")), "A shared drive", "the words survive a switch");
   const got = await sendAndCollect(s);
   assert.deepEqual(answerTo(got, "c1"), { text: "A shared drive" });
+});
+
+// What a person sees break: a stray pick on a one-answer question can only be
+// swapped for another, never taken back, or Clear shows on a card already sent.
+test("Clear on a one-answer question takes back the pick and the words, and a sent card has no Clear", async (t) => {
+  const s = await openSession(await suite.browser(), { t, workflow: "plan" });
+  const card = await ask(s, { id: "c1", kind: "choice", title: "Where", body: "Where?", options: [opt("A", "Email"), opt("B", "Slack")] });
+  const clear = card.getByRole("button", { name: "Clear your answer to this question" });
+  await card.getByRole("radio", { name: "Something else, in your own words" }).check();
+  await fillBox(card.locator(".md-host.other-text"), "A shared drive");
+  await clear.click();
+  await s.page.waitForFunction(() => !document.querySelector("#main .card.is-staged"));
+  assert.equal(await boxValue(card.locator(".md-host.other-text")), "", "the words go too");
+  await card.getByLabel("Slack").check();
+  await clear.click();
+  await s.page.waitForFunction(() => !document.querySelector("#main .card.is-staged"));
+  assert.equal(await card.locator("input[type=radio]:checked").count(), 0, "no pick is left");
+  await card.getByLabel("Email").check();
+  await s.page.click("#btn-send");
+  await card.getByText(/Plan2Code is working on it|Waiting for Plan2Code to pick this up/).waitFor();
+  assert.equal(await clear.count(), 0, "a sent card cannot be cleared");
 });
 
 // What a person sees break: a note typed on a card is dropped by the verdict,
@@ -605,7 +671,7 @@ test("Something else in your own words replaces the pick, and picking an option 
 test("a note's comment field rides along with the answer, typed before or after the pick", async (t) => {
   const s = await openSession(await suite.browser(), { t, workflow: "plan" });
   let card = await ask(s, { id: "y1", kind: "confirm", title: "Keep going", body: "Carry on?" });
-  await card.getByLabel("Anything to add?").fill("Only on weekdays.");
+  await fillBox(card.getByLabel("Anything to add?"), "Only on weekdays.");
   await card.getByRole("button", { name: "Yes" }).click();
   let got = await sendAndCollect(s);
   assert.deepEqual(answerTo(got, "y1"), { yes: true, text: "Only on weekdays." });
@@ -613,7 +679,7 @@ test("a note's comment field rides along with the answer, typed before or after 
 
   card = await ask(s, { id: "y2", kind: "confirm", title: "And this", body: "Also?" });
   await card.getByRole("button", { name: "No" }).click();
-  await card.getByLabel("Anything to add?").fill("Not this quarter.");
+  await fillBox(card.getByLabel("Anything to add?"), "Not this quarter.");
   got = await sendAndCollect(s);
   assert.deepEqual(answerTo(got, "y2"), { yes: false, text: "Not this quarter." });
 });

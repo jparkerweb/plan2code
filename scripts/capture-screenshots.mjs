@@ -74,7 +74,7 @@ const SHOTS = {
   },
   question: { workflow: "plan", posts: ["question"] },
   doc: { workflow: "plan", posts: ["doc"], tab: "What we've agreed" },
-  build: { workflow: "implement", posts: ["build"], tab: "Phase 3 tasks" },
+  build: { workflow: "implement", posts: ["build"], tab: "phase-3.md" },
   signoff: { workflow: "implement", posts: ["signoff"] },
   finish: { workflow: "implement", posts: ["signoff", "finish"] },
   ask: { workflow: "plan", posts: ["question"], ask: "Where are tasks paged?" },
@@ -164,16 +164,17 @@ const COMPARE_SHOTS = {
     open: async (page) => {
       await page.click("#btn-looks");
       await page.waitForSelector("#looks-modal[open]", { timeout: 10000 });
+      await page.waitForSelector('#prefs-tab-appearance[aria-selected="true"]', { timeout: 10000 });
     },
   },
-  // Preferences scrolled to Cleanup once its scan has answered.
+  // Preferences on the System tab, once the Cleanup scan has answered.
   cleanup: {
     workflow: "plan",
     posts: ["cleanup"],
     open: async (page) => {
       await page.click("#btn-looks");
       await page.waitForSelector("#looks-modal[open]", { timeout: 10000 });
-      await page.locator(".looks-cleanup").scrollIntoViewIfNeeded();
+      await page.click("#prefs-tab-system");
       await page.click("#cleanup-scan");
       await page.waitForFunction(() => document.getElementById("cleanup-status").textContent.trim() !== "", null, { timeout: 15000 }).catch(() => {});
     },

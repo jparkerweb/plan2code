@@ -8,7 +8,7 @@ Careful git operator. Read where the repository stands, do what the person asks 
 
 ## Interface
 
-An instruction in the argument (`/plan2code-git switch to main`, `/plan2code-git commit and push`, a commit subject) runs in the terminal at once: do not ask about the console. With no argument, the FIRST thing you do, before anything else in this file, before reading the repository: ask **web console** (browser page, suggested) or **terminal**? Console → run `node "<D>/console.mjs" open --workflow git` before reading (<D>: references/web-console/ beside this SKILL.md, ~/.agents/skills/plan2code-git/references/web-console/ globally, or the dir in ~/.plan2code/console/console-dir), then read <D>/console.md and <D>/notes/git.md. Switchable anytime. If the argument already says which (`--web` or `Use the web console for this session.`) take it and do not ask; drop the flag. Launched by the dashboard, or by a **Commit it now** or Changelog hand-off? Its session is already open: resume it with `--workflow git` (console-launches.md). Handed off to commit (Commit it now, Changelog's yes): post `reread`, then run the Commit flow from step 1 over every changed file (risky ones left out and named), its cards on the board; afterwards the board is theirs with Push lit. On the console, a `__stop` action is the person ending the session (console-stop.md); at every session end post `finish` BEFORE `stop`.
+An instruction in the argument (`/plan2code-git switch to main`, `/plan2code-git commit and push`, a commit subject) runs in the terminal at once: do not ask about the console. With no argument, the FIRST thing you do, before anything else in this file, before reading the repository: ask **web console** (browser page, suggested) or **terminal**? Console → run `node "<D>/console.mjs" open --workflow git` before reading (<D>: references/web-console/ beside this SKILL.md, ~/.agents/skills/plan2code-git/references/web-console/ globally, or the dir in ~/.plan2code/console/console-dir), then read <D>/console.md and <D>/notes/git.md. Switchable anytime. If the argument already says which (`--web` or `Use the web console for this session.`) take it and do not ask; drop the flag. Launched by the dashboard, or by a **Commit it now** or Changelog hand-off? Its session is already open: resume it with `--workflow git` (console-launches.md). Handed off to commit (Commit it now, Changelog's yes): post `reread`, then run the Commit flow from step 1 over every changed file (risky ones left out and named), its cards on the board; afterwards the board is theirs with Push lit.
 
 ## Project context
 
@@ -55,15 +55,15 @@ Optional: a plain instruction (`switch to main`, `pull`, `commit and push`, `del
 
 ## The board
 
-On the console the page draws the board itself from `state.git`; you never post it. Each click arrives through the wait loop as one `__git` action (`{ "i": "__git", "type": "git", "op": "switch", "branch": "main" }`, field shapes in notes/git.md), with `reply` the plain instruction the terminal would get. One action per turn:
+On the console the page draws the board itself from `state.git`; you never post it. Each click arrives through the wait loop as one `__git` action (its `op` and fields in notes/git.md), with `reply` the plain instruction the terminal would get. One action per turn:
 
 1. Post an `activity` line ("Pulling from origin…"); collecting the click already set the page to working.
 2. Run `git.mjs plan <op>` with the action's fields as flags.
-3. With `ask: true`: a `confirm` becomes a `confirm` card, posted verbatim (`danger` and `consequences` as given; `files` as a `[{ path, state }]` table where the plan names files). A `card` of kind `switch`, `dirty` or `remote` becomes a `choice` card with exactly its `options`, labelled **Switch and bring them** (`bring`), **Commit first** (`commit-first`) and **Cancel** (`cancel`), or for `remote` one option per remote with `preset` recommended; put git's `reason` in `body` when given. Then wait for the answer. A `remote` pick plans `publish --remote <it>` again and asks its `confirm`.
+3. With `ask: true`: a `confirm` becomes a `confirm` card, posted verbatim (`danger` and `consequences` as given; `files` as a `[{ path, state }]` table where the plan names files). A `card` of kind `switch`, `dirty` or `remote` becomes a `choice` card with exactly its `options`, labeled **Switch and bring them** (`bring`), **Commit first** (`commit-first`) and **Cancel** (`cancel`), or for `remote` one option per remote with `preset` recommended; put git's `reason` in `body` when given. Then wait for the answer. A `remote` pick plans `publish --remote <it>` again and asks its `confirm`.
 4. Run the command(s).
-5. In ONE post: `{ "reread": true }`, the `git-result` notice (one line: what happened, with short hashes, and after a push or publish the link from `pr-url`), `board: { describe }` when changes remain (a short kebab-case description of them, for the Create prompt), posted with `--wait`.
+5. In ONE post: `{ "reread": true }`, the `git-result` notice (one line: what happened, with short hashes, and after a push or publish the link from `pr-url`, plus `op` naming the action that succeeded so the board shows it as the landed zone), `board: { describe }` when changes remain (a short kebab-case description of them, for the Create prompt), posted with `--wait`.
 
-On a non-zero exit, save git's stderr to the session folder, run `classify-error --file <it>`, quote git's error verbatim in the `git-result` notice with `next`, and post `reread` the same way. A Refresh failure posts `reread: { refreshFailed: true }`. An `auth` kind gets a card saying this tool never handles logins, with `next`. A plan that exits 4 or 5 runs nothing: its `message` and `next` are the `git-result` notice. A `conflict` kind, or `state` showing `inProgress` after the command, is not a failure line: post `reread` and go to Conflict help.
+On a non-zero exit, save git's stderr to the session folder, run `classify-error --file <it>`, quote git's error verbatim in the `git-result` notice with `next` and no `op`, and post `reread` the same way. A Refresh failure posts `reread: { refreshFailed: true }`. An `auth` kind gets a card saying this tool never handles logins, with `next`. A plan that exits 4 or 5 runs nothing: its `message` and `next` are the `git-result` notice. A `conflict` kind, or `state` showing `inProgress` after the command, is not a failure line: post `reread` and go to Conflict help.
 
 ## Actions
 
@@ -74,7 +74,7 @@ On a non-zero exit, save git's stderr to the session folder, run `classify-error
 - **commit** commits only the paths in `files`. With `ignore[]`, first propose those `.gitignore` lines as a doc plus a `review` card (approve / change), write them on approve, and add `.gitignore` to the commit.
 - **abort**, **continue**: `plan abort` / `plan continue`, then `reread`.
 - **pr-host**: the server already saved the answer; post `reread` only.
-- **done** (Done with git): Session End; a card of yours still open is cancelled first (notes/git.md).
+- **done** (Done with git): Session End; a card of yours still open is canceled first (notes/git.md).
 - Deleting a branch on the remote is never offered and never run.
 
 ## Conflict help
@@ -97,13 +97,13 @@ In the terminal the same stops are asked in prose, with the diff printed.
 3. **Branch.** On the board, skip this: the page's **You're on main** line already offered it, and its answer arrives as `create` with `then: "commit"`. In the terminal, when `onDefault` (or `detached`) and `hasCommits`, offer one drafted branch name `<type>/<short-description>` (types: feature, fix, chore, docs, refactor, test; `feature/export-csv`). Run any name the person types through `branch-check`, then `plan create`. Skipping is always fine (on a detached HEAD, warn that commits there are easy to lose). When `defaultBranch` is null say why there is no offer.
 4. **Read the changes.** `git diff`, `git diff --cached` and the untracked files (an `untracked` path ending in `/` is a folder: list its files with `git ls-files -o --exclude-standard -- <folder>` and stage them by name). If the person staged some files, work from that staged set and leave the rest alone (say what was left). On the board, only the paths the action named, or every changed file on a hand-off. Decide whether the work is one concern or several.
 5. **Message.** One concern: draft a subject, or use the argument and skip approval; ask **Yes** / **Edit** / **No**. Several: always suggest whole-file groups, each with a subject, naming any file that mixes concerns and which group took it; ask **Approve** / **Change it** / **One commit instead** (asked even when the subject came as the argument). Name the `sensitive` and `large` files you are leaving out.
-6. **Commit.** For each group in order: with more than one group, run `git reset -q` first so only that group is staged; then run `commit-msg.mjs --subject "<s>" --files <a> --files <b>` (`--files` once per path) and its `command` (or `add`, then `commit`). Finish with `git log --oneline -<n>`. On the console post `run: { "event": "git-commits", "id": "<first short hash>", "commits": <n> }` with the `reread` and a `git-result` line naming the hashes, so the board lights Push.
+6. **Commit.** For each group in order: with more than one group, run `git reset -q` first so only that group is staged; then run `commit-msg.mjs --subject "<s>" --files <a> --files <b>` (`--files` once per path) and its `command` (or `add`, then `commit`). Finish with `git log --oneline -<n>`. On the console post `run: { "event": "git-commits", "id": "<first short hash>", "commits": <n> }` with the `reread` and a `git-result` line naming the hashes with `op: "commit"`, so the board lights Push.
 7. **Push.** In the terminal, stop after committing with a one-line push hint and no push prompt. `commit and push` (or a push the person asks for) runs `plan push` / `plan publish` and asks its `confirm`. A rejected push: report it, suggest Pull, run nothing more.
 
 ## Terminal
 
 - **No instruction:** print the status from `state` (branch, ahead/behind, changed files) and ask what to do, `next` first.
-- **After an action:** show the new state and one line naming the likely next step, then stop. A follow-up reply runs it; there is no "what next?" loop.
+- **After an action:** show the new state and one line naming the likely next step, then stop. A follow-up reply runs it; there is no "what next?" loop. After a push or publish (or when the branch is pushed with nothing left to commit), that next step may be `/plan2code-pr-prep`: run the checks and write the PR description.
 - **Several actions in one instruction** (`commit and push`): state the plan in one line, run each step in order, ask each ask-first confirm at its own step with the same `confirm` text the board shows, and stop at the first failure with git's error and `classify-error`'s `next`.
 - **An unclear instruction:** offer the two or three likely readings through the question tool, the state-based guess first. Never run on a guess.
 - Print the pull-request link from `pr-url` after a push or publish (`needsKind` → ask the host's kind once and say it is remembered).
@@ -112,7 +112,7 @@ In the terminal the same stops are asked in prose, with the diff printed.
 
 - **Done on the board, with something done this session:** post `finish` with a headline, a `body` listing the commits with hashes, pushes, and branches created or deleted, no `command`, and `"dashboard": true`. Then keep waiting for the dashboard press (console-finish.md).
 - **Done with nothing done:** resume as the dashboard at once (`open --resume <sid> --no-open --workflow dashboard`, then read the dashboard skill, post its menu and follow its "Coming back from another skill"), with no finish screen.
-- **A `__stop`:** a finish whose headline starts "Paused", with `"command": "/plan2code-git"`, then `stop`.
+- **A `__stop`:** a Paused finish with the command `/plan2code-git`.
 - **Terminal:** the last state line is enough.
 
 Returning context: run `/plan2code-git` again for the next action.

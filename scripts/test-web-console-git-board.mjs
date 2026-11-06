@@ -368,7 +368,7 @@ test("git board view: no control leaks the busy lock, in any state, mode, tab or
       assert.ok(["nav", "action", "done"].includes(gate), `${where}: "${words(c)}" (${c.tag}) has no data-gate`);
       const own = c.attrs["data-own"] === "true";
       if (!controlAllowed(mode, gate)) assert.ok(isOff(c), `${where}: "${words(c)}" is live while busy`);
-      else assert.equal(isOff(c), own, `${where}: "${words(c)}" is ${isOff(c) ? "greyed with no reason of its own" : "live despite its own reason"}`);
+      else assert.equal(isOff(c), own, `${where}: "${words(c)}" is ${isOff(c) ? "grayed with no reason of its own" : "live despite its own reason"}`);
       checked++;
     }
     const done = all.filter((c) => c.textContent === "Done with git");
@@ -435,6 +435,25 @@ test("git board view: pins on its source and on a few states", () => {
   assert.ok(hint.textContent.startsWith("Next step is on Changes:"));
 });
 
+test("git board view: a working line carries the spinner, and only while running", () => {
+  const lines = (r) => walk(r.node).filter((n) => n.classes.has("git-activity"));
+  const spun = (n) => n.children.some((c) => c.classes.has("spinner") && c.classes.has("tiny"));
+
+  const busy = lines(draw("cp-committing", { mode: "running", tab: "changes" }));
+  assert.equal(busy.length, 2, "the header and the step strip both say what is under way");
+  for (const n of busy) {
+    assert.ok(spun(n), `"${n.textContent}" has a spinner`);
+    assert.equal(n.textContent, "Committing 3 files on feature/ABC-12001-export-csv");
+  }
+
+  const quiet = lines(draw("cp-dirty", { mode: "running", tab: "changes" }));
+  assert.equal(quiet.length, 1, "with no activity, only the step strip speaks");
+  assert.ok(spun(quiet[0]));
+  assert.equal(quiet[0].textContent, "Plan2Code is working on it.");
+
+  assert.equal(lines(draw("cp-committing", { mode: "idle", tab: "changes" })).length, 0, "idle shows no working line");
+});
+
 const click = (n) => n.listeners.click.forEach((fn) => fn());
 const stepButtons = (r) => controls(walk(r.node).find((n) => n.classes.has("git-step")));
 
@@ -451,7 +470,35 @@ test("git board view: each step's click goes out as the board offers it", () => 
   const [branch, onMain] = stepButtons(main);
   click(branch);
   click(onMain);
-  assert.deepEqual(main.on.calls, [["openPanel", "create", { commit: true }], ["openPanel", "commit"]]);
+  const mainFiles = [...commitTicks(STATES["nb-main-dirty"].git.changes)];
+  assert.deepEqual(main.on.calls, [["openPanel", "create", { commit: true }], ["send", "commit", { files: mainFiles, ignore: [] }]]);
+
+  // The commit table is always on show below the step, so the step's Commit
+  // sends what the table has ticked rather than "opening" a panel already open.
+  const dirty = draw("cp-dirty", { tab: "changes" });
+  const ticked = [...commitTicks(STATES["cp-dirty"].git.changes)];
+  const top = stepButtons(dirty).find((c) => c.textContent.startsWith("Commit "));
+  assert.equal(top.textContent, `Commit ${ticked.length} file${ticked.length === 1 ? "" : "s"}`);
+  click(top);
+  assert.deepEqual(dirty.on.calls, [["send", "commit", { files: ticked, ignore: [] }]]);
+
+  const unticked = draw("cp-dirty", { tab: "changes" });
+  unticked.board.ticks.clear();
+  const redrawn = drawGitBoard({
+    git: STATES["cp-dirty"].git, board: unticked.board, now: NOW, mode: "idle", step: unticked.step,
+    badges: tabBadges(STATES["cp-dirty"].git, { now: NOW, stepTab: unticked.step.tab }), notice: null, activity: null, hasCard: false, h: fakeH(), on: fakeOn(),
+  });
+  const none = controls(walk(redrawn.node).find((n) => n.classes.has("git-step"))).find((c) => c.textContent.startsWith("Commit "));
+  assert.ok(none.disabled, "nothing ticked: the step's Commit is grayed, like the table's");
+
+  const one = draw("cp-dirty", { tab: "changes" });
+  one.board.ticks = new Set([ticked[0]]);
+  const again = drawGitBoard({
+    git: STATES["cp-dirty"].git, board: one.board, now: NOW, mode: "idle", step: one.step,
+    badges: tabBadges(STATES["cp-dirty"].git, { now: NOW, stepTab: one.step.tab }), notice: null, activity: null, hasCard: false, h: fakeH(), on: fakeOn(),
+  });
+  const card = walk(again.node).find((n) => n.classes.has("git-step"));
+  assert.equal(walk(card).find((n) => n.classes.has("git-step-title")).textContent, "Commit 1 file", "the card's title follows the ticks too");
 
   const away = draw("pc-conflict", { tab: "changes" });
   click(walk(away.node).find((n) => n.classes.has("git-hint")));
@@ -512,12 +559,12 @@ test("git board host: the host draws the board only through drawGitBoard, and th
 
 // The commit table's ticks and the click that re-seeds them are page tests now
 // ("the commit table keeps the person's ticks across an agent post, and a click
-// re-seeds them" and its neighbours in test-web-console-page-git.mjs).
+// re-seeds them" and its neighbors in test-web-console-page-git.mjs).
 
 test("git board docs: the agent prose, Help topic and readme describe the tabbed board", () => {
   const read = (p) => fs.readFileSync(new URL(p, import.meta.url), "utf8");
   const notes = read("../src/web-console/notes/git.md");
-  const finishing = notes.slice(notes.indexOf("**Finishing**"));
+  const finishing = notes.slice(notes.indexOf("**Finishing"));
   assert.ok(finishing.includes("Done with git"), "notes/git.md Finishing names Done with git");
   assert.ok(finishing.includes("cancel"), "notes/git.md Finishing cancels an open card");
   assert.ok(!finishing.includes('"settle": ["<id>"]'), "the cancel rule never settles a card nothing was sent to");
@@ -529,4 +576,41 @@ test("git board docs: the agent prose, Help topic and readme describe the tabbed
   for (const word of ["Changes", "Branches", "Sync", "Done with git"]) assert.ok(help.includes(word), `Help's git topic mentions ${word}`);
   for (const old of ["one board", "one page"]) assert.ok(!help.includes(old), `Help's git topic no longer says "${old}"`);
   assert.ok(!read("../.readme/web-console.md").includes("commits on one page"), "the readme no longer says commits on one page");
+});
+
+test("git board view: a landed result splits the step strip into Just landed and Still on the tree", () => {
+  const landed = (id, notice) => {
+    const s = STATES[id];
+    const git = s.git;
+    const step = nextStep(git, { now: NOW });
+    const badges = tabBadges(git, { now: NOW, stepTab: step.tab });
+    const board = { tab: null, panel: null, create: null, ticks: null, ignore: new Set(), sweep: null, query: "", showAll: false, remoteOpen: null, base: null };
+    const h = fakeH();
+    const on = fakeOn();
+    const { node } = drawGitBoard({ git, board, now: NOW, mode: "idle", step, badges, notice, activity: null, hasCard: false, h, on });
+    return { node, on, step };
+  };
+  const notice = { id: "git-result", kind: "notice", op: "commit", title: "Committed 1eef797", body: "Mark the last-used model in the launcher menu (3 files, +845/-71)." };
+
+  const r = landed("cp-dirty", notice);
+  const duo = walk(r.node).find((n) => n.classes.has("git-duo"));
+  assert.ok(duo, "a landed notice draws the two zones");
+  const left = walk(duo).find((n) => n.classes.has("git-landed"));
+  const rest = walk(duo).find((n) => n.classes.has("git-left"));
+  assert.ok(left, "the landed zone is there");
+  assert.ok(rest, "the still-on-the-tree zone is there");
+  assert.ok(left.textContent.includes("Committed 1eef797"), "the landed zone carries the notice");
+  assert.ok(rest.textContent.includes("Commit other changes"), "the leftover commit is relabeled");
+  assert.ok(!walk(r.node).some((n) => n.classes.has("git-result")), "no thin result line beside the zones");
+  const commit = controls(rest).find((c) => c.textContent === "Commit other changes");
+  click(commit);
+  assert.deepEqual(r.on.calls[0], ["send", "commit", { files: [...commitTicks(STATES["cp-dirty"].git.changes)], ignore: [] }], "the leftover offer runs the same op the primary would");
+
+  const plain = landed("cp-dirty", { id: "git-result", kind: "notice", title: "Committed 1eef797", body: "no op marker" });
+  assert.ok(walk(plain.node).some((n) => n.classes.has("git-result")), "a notice with no op keeps the thin line");
+  assert.ok(!walk(plain.node).some((n) => n.classes.has("git-duo")), "and no zones");
+
+  const clean = landed("nb-unpublished", notice);
+  const duoClean = walk(clean.node).find((n) => n.classes.has("git-duo"));
+  assert.ok(duoClean, "zones still draw when nothing is left to commit");
 });

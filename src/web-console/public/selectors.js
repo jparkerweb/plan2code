@@ -6,7 +6,9 @@
 import { page, redraw } from "./state.js";
 import { boardAwaiting } from "./git-board.js";
 import { defaultSpec, reviewOffer, dashboardOffer, submittedAwaiting, quietLimitMs } from "./answers.js";
+import { isAgentless } from "./skills.js";
 import { activityLabel, workingLine } from "./labels.js";
+import { ASK_BUSY_MS, chatAnswering } from "./chat.js";
 
 export const WORKING_GRACE_MS = 5 * 60 * 1000;
 
@@ -17,6 +19,33 @@ export const WORKING_GRACE_MS = 5 * 60 * 1000;
 // failure. `wait` pokes /health every five seconds, so either threshold is
 // many missed pokes, not a slow one.
 const ADRIFT_MS = 3 * 60 * 1000;
+
+// The Implementation Loop is driving this page: the app started the session
+// with `open --loop`, and no `loopEnd` has been posted yet. Locks the page
+// (FR-15); the stop and finish screens end it.
+export const loopDriving = () => Boolean(page.S && page.S.loop && page.S.loop.driving === true && !page.S.loopEnd);
+
+// Driving, and a required question the loop does not handle itself is open:
+// the one case where its card (and Ask) unlock (FR-14).
+export const loopWaiting = () =>
+  loopDriving() &&
+  openItems().some((i) => i.required !== false && i.handledBy !== "loop");
+
+// The ids of the cards the loop is waiting on the person for, as one string:
+// what `local.askLockedAfterSend` remembers, so Ask locks again after a Send
+// and stays locked until a different question waits (FR-14).
+export const loopWaitingKey = () =>
+  loopWaiting()
+    ? openItems()
+        .filter((i) => i.required !== false && i.handledBy !== "loop")
+        .map((i) => i.id)
+        .sort()
+        .join("|")
+    : "";
+
+// Ask is off while the loop drives, except while a question waits and no Send
+// has answered that same question yet.
+export const loopAskLocked = () => loopDriving() && !(loopWaiting() && page.local.askLockedAfterSend !== loopWaitingKey());
 
 export const items = () => (page.S && Array.isArray(page.S.items) ? page.S.items : []);
 
@@ -175,7 +204,7 @@ export function workingMs() {
 
 // The three silence thresholds below, stretched while the agent has said a
 // long quiet stretch is normal (a build task). See quietLimitMs.
-export const patience = (baseMs) => quietLimitMs(page.S && page.S.agent, baseMs);
+export const patience = (baseMs) => quietLimitMs(page.S && page.S.agent, baseMs, isAgentless(page.S && page.S.workflow));
 
 // What the agent says it is doing right now, when it has said: "Task 3 of 9:
 // the user service". Only meaningful while it is working. A build's line is
@@ -200,9 +229,31 @@ export const doingNow = () => workingLine(page.S && page.S.agent, page.S && page
 // well clear of its idle deadline, so the server happily outlives the agent
 // for hours. Until now nothing said so unless the agent had also declared
 // itself "working", and the normal state while someone answers is "waiting".
+//
+// An agent answering an Ask message is out of `wait` too, and busy rather than
+// gone, so it gets ASK_BUSY_MS before anything calls it adrift.
 export function agentAdrift() {
+  // An agent-less session has nobody to be adrift: silence means nothing there.
+  if (isAgentless(page.S && page.S.workflow)) return false;
   if (!page.agentLastSeen || page.gone || finish()) return false;
-  return Date.now() - Date.parse(page.agentLastSeen) > patience(ADRIFT_MS);
+  const silent = Date.now() - Date.parse(page.agentLastSeen);
+  const limit = page.pendingResult ? uncollectedLimit() : patience(ADRIFT_MS);
+  return silent > (chatAnswering(page.chatFrame) ? Math.max(limit, ASK_BUSY_MS) : limit);
+}
+
+// Answering an Ask message, and not yet quiet for long enough to doubt it.
+export const askBusy = () => chatAnswering(page.chatFrame) && !agentAdrift();
+
+// With answers sent and nothing collecting them, the agent's quiet allowance
+// stops counting: those answers are what it is meant to come back for. An
+// agent that said it is waiting pings from `wait` every five seconds, so a
+// minute of silence means it is not there. One that said it is working (it
+// asked and carried on) collects at its next `wait`, so it gets the plain
+// three minutes, never the half hour a build task may have asked for.
+const UNCOLLECTED_MS = 60 * 1000;
+
+function uncollectedLimit() {
+  return agentWorking() ? ADRIFT_MS : UNCOLLECTED_MS;
 }
 
 // Answers that went nowhere: pressed Send, and nothing has collected them.
@@ -210,26 +261,75 @@ export function agentAdrift() {
 // them up -- but "Sent. Waiting for Plan2Code." forever does not say that.
 export const stranded = () => page.pendingResult && agentAdrift();
 
-// The spec whose overview.md the Overview tab shows: the dashboard picker's
+// A press on a finished screen (Commit it now, Update CHANGELOG first, the way
+// back to the dashboard, Continue here, a review) that nothing has collected.
+// agentAdrift() stays quiet after a finish, where no agent is the normal end,
+// but a press sent to one means somebody is waiting on it: an agent still in
+// `wait` pings every five seconds, so a minute of silence says it is gone (its
+// turn ended while the person was away) and the press sits saved until it
+// is woken.
+export function pressStranded() {
+  if (isAgentless(page.S && page.S.workflow)) return false;
+  if (!finish() || page.gone || !page.pendingResult || !page.agentLastSeen) return false;
+  if (!page.local.afterBuild || page.local.afterBuild === "done") return false;
+  return Date.now() - Date.parse(page.agentLastSeen) > UNCOLLECTED_MS;
+}
+
+// The spec whose files the spec file tabs show: the dashboard picker's
 // selection on the dashboard, the session's own spec everywhere else.
 export const overviewSpec = () => (isDashboard() ? selSpec()?.dir || "" : (page.S && page.S.specDir) || "");
 
-// Fresh from disk every time, never cached: the file changes under a build,
-// and the tab is only worth having if it shows what is there now. Repaints
-// only when the tab would appear, vanish or show different text.
+// The spec files a tab can show, in tab order: each a view id, which is also
+// the server's ?file= kind. Document's overview stands for the whole spec
+// once it exists; before that the dashboard offers Pathfinder's map and
+// Plan's draft.
+export const SPEC_FILES = [
+  { id: "overview", label: "Overview" },
+  { id: "map", label: "Map" },
+  { id: "draft", label: "Plan draft" },
+];
+export const isSpecFileView = (v) => SPEC_FILES.some((f) => f.id === v);
+
+// The spec file tabs to draw now: Overview alone when the spec has one, else
+// the map and the draft that exist. Only for the spec in view, so a pick that
+// moved on never shows the last spec's files.
+export function specFileTabs() {
+  if (page.overview.key !== overviewSpec()) return [];
+  const has = (id) => Boolean(page.overview.files[id]);
+  if (has("overview")) return SPEC_FILES.filter((f) => f.id === "overview");
+  return SPEC_FILES.filter((f) => f.id !== "overview" && has(f.id));
+}
+
+async function fetchSpecFile(spec, kind) {
+  try {
+    const res = await fetch("/overview?spec=" + encodeURIComponent(spec) + "&file=" + kind, { cache: "no-store" });
+    if (res.status !== 200) return null;
+    const file = decodeURIComponent(res.headers.get("x-spec-file") || "") || kind;
+    return { file, text: await res.text() };
+  } catch {
+    return null;
+  }
+}
+
+// Fresh from disk every time, never cached: the files change under a build,
+// and the tabs are only worth having if they show what is there now. Away
+// from the dashboard only the overview is read: a session's own map or draft
+// is the work already in front of it. Repaints only when a tab would appear,
+// vanish or show different text.
 export async function loadOverview() {
   const spec = overviewSpec();
-  let text = null;
+  const kinds = isDashboard() ? SPEC_FILES.map((f) => f.id) : ["overview"];
+  const files = {};
   if (spec) {
-    try {
-      const res = await fetch("/overview?spec=" + encodeURIComponent(spec), { cache: "no-store" });
-      if (res.status === 200) text = await res.text();
-    } catch {}
+    const found = await Promise.all(kinds.map((k) => fetchSpecFile(spec, k)));
+    kinds.forEach((k, i) => {
+      if (found[i]) files[k] = found[i];
+    });
   }
   // The selection moved on while this was in flight; its own fetch will land.
   if (spec !== overviewSpec()) return;
-  const changed = page.overview.key !== spec || page.overview.text !== text;
-  page.overview = { key: spec, text };
+  const changed = page.overview.key !== spec || JSON.stringify(page.overview.files) !== JSON.stringify(files);
+  page.overview = { key: spec, files };
   if (changed) redraw();
 }
 

@@ -20,6 +20,8 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const readline = require('readline');
+const crypto = require('crypto');
+const { execSync, execFileSync } = require('child_process');
 
 // Load project version metadata
 let projectVersion = { name: 'Plan2Code', version: 'unknown' };
@@ -141,8 +143,11 @@ const SOURCE_PROMPTS = [
     displayName: 'Init Mode',
     description: 'Generate AGENTS.md file for project-specific guidance',
     isUtility: true,
-    scripts: ['agents-md.mjs', 'agent-files.mjs'],
-    additionalReferences: [{ source: 'web-console', target: 'web-console' }]
+    scripts: ['agents-md.mjs', 'agent-files.mjs', 'test-map.mjs', 'glob.mjs', 'test-commands.mjs'],
+    additionalReferences: [
+      { source: 'web-console', target: 'web-console' },
+      { source: 'shared-references/helper-strength.md', target: 'helper-strength.md' }
+    ]
   },
   {
     source: 'plan2code-init-update.md',
@@ -151,8 +156,11 @@ const SOURCE_PROMPTS = [
     displayName: 'Init Update Mode',
     description: 'Update existing AGENTS.md with new learnings',
     isUtility: true,
-    scripts: ['agents-md.mjs', 'agent-files.mjs', 'commit-msg.mjs'],
-    additionalReferences: [{ source: 'web-console', target: 'web-console' }]
+    scripts: ['agents-md.mjs', 'agent-files.mjs', 'commit-msg.mjs', 'test-map.mjs', 'glob.mjs', 'test-commands.mjs'],
+    additionalReferences: [
+      { source: 'web-console', target: 'web-console' },
+      { source: 'shared-references/helper-strength.md', target: 'helper-strength.md' }
+    ]
   },
   {
     source: 'plan2code-0-pathfinder.md',
@@ -160,7 +168,10 @@ const SOURCE_PROMPTS = [
     name: 'pathfinder',
     displayName: 'Pathfinder Mode',
     description: 'charting of a foggy idea as a map of decision questions, cleared one at a time',
-    additionalReferences: [{ source: 'web-console', target: 'web-console' }]
+    additionalReferences: [
+      { source: 'web-console', target: 'web-console' },
+      { source: 'shared-references/helper-strength.md', target: 'helper-strength.md' }
+    ]
   },
   {
     source: 'plan2code-quick-task.md',
@@ -175,6 +186,8 @@ const SOURCE_PROMPTS = [
     additionalReferences: [
       { source: 'web-console', target: 'web-console' },
       { source: 'shared-references/building-habits.md', target: 'building-habits.md' },
+      { source: 'shared-references/helper-strength.md', target: 'helper-strength.md' },
+      { source: 'shared-references/test-runs.md', target: 'test-runs.md' },
       { source: 'plan2code-review.md', target: 'review.md' },
       { source: 'plan2code-review-references' }
     ]
@@ -186,7 +199,10 @@ const SOURCE_PROMPTS = [
     displayName: 'Planning Mode',
     description: 'Requirements analysis and architecture design',
     scripts: ['specs.mjs'],
-    additionalReferences: [{ source: 'web-console', target: 'web-console' }]
+    additionalReferences: [
+      { source: 'web-console', target: 'web-console' },
+      { source: 'shared-references/helper-strength.md', target: 'helper-strength.md' }
+    ]
   },
   {
     source: 'plan2code-1b-revise-plan.md',
@@ -195,7 +211,10 @@ const SOURCE_PROMPTS = [
     displayName: 'Revision Mode',
     description: 'Modify specs mid-implementation when requirements change',
     scripts: ['specs.mjs'],
-    additionalReferences: [{ source: 'web-console', target: 'web-console' }]
+    additionalReferences: [
+      { source: 'web-console', target: 'web-console' },
+      { source: 'shared-references/helper-strength.md', target: 'helper-strength.md' }
+    ]
   },
   {
     source: 'plan2code-2-document.md',
@@ -204,7 +223,11 @@ const SOURCE_PROMPTS = [
     displayName: 'Documentation Mode',
     description: 'Transform planning output into structured implementation docs',
     scripts: ['specs.mjs'],
-    additionalReferences: [{ source: 'web-console', target: 'web-console' }]
+    additionalReferences: [
+      { source: 'web-console', target: 'web-console' },
+      { source: 'shared-references/helper-strength.md', target: 'helper-strength.md' },
+      { source: 'shared-references/test-runs.md', target: 'test-runs.md' }
+    ]
   },
   {
     source: 'plan2code-3-implement.md',
@@ -218,6 +241,8 @@ const SOURCE_PROMPTS = [
     additionalReferences: [
       { source: 'web-console', target: 'web-console' },
       { source: 'shared-references/building-habits.md', target: 'building-habits.md' },
+      { source: 'shared-references/helper-strength.md', target: 'helper-strength.md' },
+      { source: 'shared-references/test-runs.md', target: 'test-runs.md' },
       { source: 'plan2code-review.md', target: 'review.md' },
       { source: 'plan2code-review-references' }
     ]
@@ -233,6 +258,8 @@ const SOURCE_PROMPTS = [
       { source: 'web-console', target: 'web-console' },
       { source: 'plan2code-3-implement.md', target: 'implement.md' },
       { source: 'shared-references/building-habits.md', target: 'building-habits.md' },
+      { source: 'shared-references/helper-strength.md', target: 'helper-strength.md' },
+      { source: 'shared-references/test-runs.md', target: 'test-runs.md' },
       { source: 'plan2code-review.md', target: 'review.md' },
       { source: 'plan2code-review-references' }
     ]
@@ -245,7 +272,11 @@ const SOURCE_PROMPTS = [
     description: 'Comprehensive post-implementation review with spec compliance checking',
     isUtility: true,
     scripts: ['specs.mjs', 'commit-msg.mjs', 'review-scope.mjs'],
-    additionalReferences: [{ source: 'web-console', target: 'web-console' }]
+    additionalReferences: [
+      { source: 'web-console', target: 'web-console' },
+      { source: 'shared-references/helper-strength.md', target: 'helper-strength.md' },
+      { source: 'shared-references/test-runs.md', target: 'test-runs.md' }
+    ]
   },
   {
     source: 'plan2code-4-finalize.md',
@@ -253,8 +284,16 @@ const SOURCE_PROMPTS = [
     name: 'finalize',
     displayName: 'Finalization Mode',
     description: 'Validate, summarize, and archive completed work',
-    scripts: ['specs.mjs', 'commit-msg.mjs'],
-    additionalReferences: [{ source: 'web-console', target: 'web-console' }]
+    // review.md rides along for Step 2.5's final review, which runs in the
+    // same session before the summary is written and the spec is archived.
+    scripts: ['specs.mjs', 'commit-msg.mjs', 'review-scope.mjs'],
+    additionalReferences: [
+      { source: 'web-console', target: 'web-console' },
+      { source: 'shared-references/helper-strength.md', target: 'helper-strength.md' },
+      { source: 'shared-references/test-runs.md', target: 'test-runs.md' },
+      { source: 'plan2code-review.md', target: 'review.md' },
+      { source: 'plan2code-review-references' }
+    ]
   },
   {
     source: 'plan2code-handoff.md',
@@ -274,7 +313,10 @@ const SOURCE_PROMPTS = [
     description: 'Explain how and why an area of the code works, or find the rough spots worth fixing',
     isUtility: true,
     scripts: [],
-    additionalReferences: [{ source: 'web-console', target: 'web-console' }]
+    additionalReferences: [
+      { source: 'web-console', target: 'web-console' },
+      { source: 'shared-references/helper-strength.md', target: 'helper-strength.md' }
+    ]
   },
   {
     source: 'plan2code-diagnose.md',
@@ -286,7 +328,37 @@ const SOURCE_PROMPTS = [
     scripts: ['specs.mjs'],
     additionalReferences: [
       { source: 'web-console', target: 'web-console' },
-      { source: 'shared-references/building-habits.md', target: 'building-habits.md' }
+      { source: 'shared-references/building-habits.md', target: 'building-habits.md' },
+      { source: 'shared-references/helper-strength.md', target: 'helper-strength.md' }
+    ]
+  },
+  {
+    source: 'plan2code-pr-prep.md',
+    stepNumber: 'pr-prep',
+    name: 'pr-prep',
+    displayName: 'PR Prep Mode',
+    description: 'Pick and run the checks a branch needs, give a readiness verdict and write the PR description',
+    isUtility: true,
+    scripts: ['review-scope.mjs', 'glob.mjs', 'test-map.mjs', 'test-match.mjs', 'test-commands.mjs', 'run-check.mjs'],
+    additionalReferences: [
+      { source: 'web-console', target: 'web-console' },
+      { source: 'shared-references/test-runs.md', target: 'test-runs.md' },
+      { source: 'shared-references/helper-strength.md', target: 'helper-strength.md' }
+    ]
+  },
+  {
+    source: 'plan2code-test.md',
+    stepNumber: 'test',
+    name: 'test',
+    displayName: 'Test Mode',
+    description: 'Find untested code and write unit and integration tests in the project\'s own style',
+    isUtility: true,
+    scripts: ['review-scope.mjs', 'glob.mjs', 'test-map.mjs', 'test-match.mjs', 'test-commands.mjs', 'run-check.mjs'],
+    additionalReferences: [
+      { source: 'web-console', target: 'web-console' },
+      { source: 'shared-references/test-runs.md', target: 'test-runs.md' },
+      { source: 'shared-references/building-habits.md', target: 'building-habits.md' },
+      { source: 'shared-references/helper-strength.md', target: 'helper-strength.md' }
     ]
   },
   {
@@ -337,6 +409,8 @@ function generateStepLabel(prompt) {
   if (prompt.stepNumber === 'git') return 'Git';
   if (prompt.stepNumber === 'xray') return 'X-ray';
   if (prompt.stepNumber === 'diagnose') return 'Diagnose';
+  if (prompt.stepNumber === 'pr-prep') return 'PR Prep';
+  if (prompt.stepNumber === 'test') return 'Test';
   if (prompt.stepNumber === 'changelog') return 'Changelog';
   if (prompt.stepNumber === 'quick') return 'Quick Task';
   return `Step ${prompt.stepNumber}`;
@@ -983,6 +1057,9 @@ async function install({ unattended = false, outcome = {} } = {}) {
   const launcherFailed = failed ? false : (await installLauncher({ quiet: true, unattended })) !== 0;
   outcome.launcher = !failed && !launcherFailed;
 
+  // The desktop app comes last and is an extra: its failure leaves the install a success.
+  if (!failed && !launcherFailed) await offerDesktopApp({ unattended, outcome });
+
   // Summary
   console.log(`${COLORS.CYAN}╔═══════════════════════════════════════════════════════════════════════════╗${COLORS.RESET}`);
   console.log(`${COLORS.CYAN}║${COLORS.RESET}${' '.repeat(75)}${COLORS.CYAN}║${COLORS.RESET}`);
@@ -1207,15 +1284,16 @@ function runInteractive() {
       if (confirmInput === 'Y') {
         rl.close();
         const uninstallResult = uninstallSkills();
-        const loopResult = uninstallPlan2CodeLoop();
+        removeLegacyLoopShims();
         const metricsResult = uninstallPlan2CodeMetrics();
         const botResult = uninstallPlan2CodeBot();
         const statusLineResult = uninstallStatusLine();
         const launcherResult = uninstallLauncher();
-        const exitCode = uninstallResult !== 0 ? uninstallResult : loopResult !== 0 ? loopResult : metricsResult !== 0 ? metricsResult : botResult !== 0 ? botResult : statusLineResult !== 0 ? statusLineResult : launcherResult;
+        uninstallDesktopApp();
+        const exitCode = uninstallResult !== 0 ? uninstallResult : metricsResult !== 0 ? metricsResult : botResult !== 0 ? botResult : statusLineResult !== 0 ? statusLineResult : launcherResult;
         process.exit(exitCode);
       } else {
-        console.log(`\n${COLORS.YELLOW}${SYMBOLS.WARNING} CANCELLED${COLORS.RESET}\n`);
+        console.log(`\n${COLORS.YELLOW}${SYMBOLS.WARNING} CANCELED${COLORS.RESET}\n`);
         rl.close();
         process.exit(0);
       }
@@ -1228,7 +1306,6 @@ function runInteractive() {
       console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET} ${COLORS.BRIGHT}ADVANCED OPTIONS${COLORS.RESET}`, 65) + `${COLORS.CYAN}║${COLORS.RESET}`);
       console.log(`${COLORS.CYAN}╠════════════════════════════════════════════════════════════════╣${COLORS.RESET}`);
       console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET}  ${COLORS.BRIGHT}L.${COLORS.RESET}  ${COLORS.BLUE}LOCAL${COLORS.RESET}      Install skills into the current project only`, 65) + `${COLORS.CYAN}║${COLORS.RESET}`);
-      console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET}  ${COLORS.BRIGHT}O.${COLORS.RESET}  ${COLORS.GREEN}LOOP CLI${COLORS.RESET}   Install plan2code-loop CLI only`, 65) + `${COLORS.CYAN}║${COLORS.RESET}`);
       console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET}  ${COLORS.BRIGHT}M.${COLORS.RESET}  ${COLORS.GREEN}METRICS${COLORS.RESET}    Install plan2code-metrics CLI only`, 65) + `${COLORS.CYAN}║${COLORS.RESET}`);
       console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET}  ${COLORS.BRIGHT}S.${COLORS.RESET}  ${COLORS.GREEN}STATUS${COLORS.RESET}     Install Claude Code status line`, 65) + `${COLORS.CYAN}║${COLORS.RESET}`);
       console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET}  ${COLORS.BRIGHT}B.${COLORS.RESET}  ${COLORS.GREEN}BOT${COLORS.RESET}        Install plan2code-bot CLI only`, 65) + `${COLORS.CYAN}║${COLORS.RESET}`);
@@ -1237,14 +1314,12 @@ function runInteractive() {
       console.log(padEndVisible(`${COLORS.CYAN}║${COLORS.RESET}  ${COLORS.BRIGHT}Q.${COLORS.RESET}  ${COLORS.DIM}BACK${COLORS.RESET}       Return to main menu`, 65) + `${COLORS.CYAN}║${COLORS.RESET}`);
       console.log(`${COLORS.CYAN}╚════════════════════════════════════════════════════════════════╝${COLORS.RESET}`);
       console.log('');
-      const customAnswer = await question(`${COLORS.CYAN}${SYMBOLS.SELECT} SELECT OPTION${COLORS.RESET} (L, O, M, S, B, D, E, Q) [Q]: `);
+      const customAnswer = await question(`${COLORS.CYAN}${SYMBOLS.SELECT} SELECT OPTION${COLORS.RESET} (L, M, S, B, D, E, Q) [Q]: `);
       const customInput = customAnswer.trim().toUpperCase() || 'Q';
 
-      // A > E: install everything (skills + loop + bot + metrics + Claude status line)
+      // A > E: install everything (skills + bot + metrics + Claude status line)
       if (customInput === 'E') {
         rl.close();
-        const loopResult = installPlan2CodeLoop();
-        console.log('');
         const botResult = installPlan2CodeBot();
         console.log('');
         const metricsResult = installPlan2CodeMetrics();
@@ -1252,7 +1327,7 @@ function runInteractive() {
         const statusLineResult = await installStatusLine();
         console.log('');
         const installResult = await install();
-        const exitCode = loopResult !== 0 ? loopResult : botResult !== 0 ? botResult : metricsResult !== 0 ? metricsResult : statusLineResult !== 0 ? statusLineResult : installResult;
+        const exitCode = botResult !== 0 ? botResult : metricsResult !== 0 ? metricsResult : statusLineResult !== 0 ? statusLineResult : installResult;
         process.exit(exitCode);
       }
 
@@ -1260,13 +1335,6 @@ function runInteractive() {
       if (customInput === 'L') {
         rl.close();
         process.exit(installProjectSkills());
-      }
-
-      // A > O: install loop CLI only
-      if (customInput === 'O') {
-        rl.close();
-        const result = installPlan2CodeLoop();
-        process.exit(result);
       }
 
       // A > M: install metrics CLI only
@@ -1302,7 +1370,7 @@ function runInteractive() {
 
     // Q — exit
     if (input === 'Q') {
-      console.log(`\n${COLORS.YELLOW}${SYMBOLS.WARNING} CANCELLED${COLORS.RESET}\n`);
+      console.log(`\n${COLORS.YELLOW}${SYMBOLS.WARNING} CANCELED${COLORS.RESET}\n`);
       rl.close();
       process.exit(0);
     }
@@ -1320,266 +1388,44 @@ function runInteractive() {
 }
 
 // ============================================================================
-// PLAN2CODE-LOOP INSTALLATION
+// LEGACY PLAN2CODE-LOOP SHIMS
 // ============================================================================
 
-const { execSync, execFileSync } = require('child_process');
-
 /**
- * Build plan2code-loop package
+ * Remove stale plan2code-loop artifacts left behind by the retired CLI package:
+ * the shims under the npm bin/prefix dir and the link under the npm root.
+ * Silently does nothing when none are present.
  */
-function buildPlan2CodeLoop() {
-  const loopDir = path.join(__dirname, 'plan2code-loop');
-
-  // Check if directory exists
-  if (!fs.existsSync(loopDir)) {
-    console.log(`${COLORS.YELLOW}${SYMBOLS.WARNING}${COLORS.RESET} plan2code-loop directory not found`);
-    return false;
-  }
-
-  console.log(`${COLORS.CYAN}${SYMBOLS.ACTIVE} Building plan2code-loop...${COLORS.RESET}`);
-
+function removeLegacyLoopShims() {
+  let npmPrefix;
   try {
-    // Install dependencies
-    console.log(`  ${COLORS.DIM}Installing dependencies...${COLORS.RESET}`);
-    execSync('npm install', { cwd: loopDir, stdio: 'pipe' });
-
-    // Build
-    console.log(`  ${COLORS.DIM}Running build...${COLORS.RESET}`);
-    execSync('npm run build', { cwd: loopDir, stdio: 'pipe' });
-
-    console.log(`  ${COLORS.GREEN}${SYMBOLS.SUCCESS}${COLORS.RESET} Build complete`);
-    return true;
+    npmPrefix = execSync('npm config get prefix', { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
   } catch (error) {
-    console.log(`  ${COLORS.RED}${SYMBOLS.ERROR}${COLORS.RESET} Build failed: ${error.message}`);
-    return false;
+    return;
   }
-}
-/**
- * Clean up existing plan2code-loop symlinks/files before creating new ones
- * This prevents the Windows lstat error with stale symlinks
- */
-function cleanupExistingSymlinks() {
-  console.log(`  ${COLORS.DIM}Cleaning up existing symlinks...${COLORS.RESET}`);
 
-  try {
-    // Get npm global prefix - more reliable than npm bin -g on Windows
-    const npmPrefix = execSync('npm config get prefix', { encoding: 'utf8' }).trim();
+  // On Windows, bin files are directly in prefix; on Unix they are in prefix/bin
+  const npmBinGlobal = process.platform === 'win32' ? npmPrefix : path.join(npmPrefix, 'bin');
+  const npmRootGlobal = path.join(npmPrefix, 'node_modules');
 
-    // On Windows, bin files are directly in prefix; on Unix they're in prefix/bin
-    const npmBinGlobal = process.platform === 'win32' ? npmPrefix : path.join(npmPrefix, 'bin');
-    const npmRootGlobal = path.join(npmPrefix, 'node_modules');
+  const artifacts = [
+    { path: path.join(npmBinGlobal, 'plan2code-loop'), name: 'plan2code-loop' },
+    { path: path.join(npmBinGlobal, 'plan2code-loop.cmd'), name: 'plan2code-loop.cmd' },
+    { path: path.join(npmBinGlobal, 'plan2code-loop.ps1'), name: 'plan2code-loop.ps1' },
+    { path: path.join(npmRootGlobal, 'plan2code-loop'), name: 'node_modules/plan2code-loop' }
+  ];
 
-    // Files/symlinks to clean up in npm bin directory
-    const binFiles = [
-      path.join(npmBinGlobal, 'plan2code-loop'),
-      path.join(npmBinGlobal, 'plan2code-loop.cmd'),
-      path.join(npmBinGlobal, 'plan2code-loop.ps1')
-    ];
-
-    // Symlink in node_modules - this is the main culprit for the lstat error
-    const nodeModulesLink = path.join(npmRootGlobal, 'plan2code-loop');
-
-    // Remove bin files first
-    for (const file of binFiles) {
-      try {
-        const stats = fs.lstatSync(file);
-        if (stats) {
-          fs.unlinkSync(file);
-          console.log(`    ${COLORS.DIM}Removed: ${path.basename(file)}${COLORS.RESET}`);
-        }
-      } catch (err) {
-        if (err.code !== 'ENOENT') {
-          // File exists but can't be removed normally, try rmSync
-          try {
-            fs.rmSync(file, { force: true, recursive: true });
-            console.log(`    ${COLORS.DIM}Removed: ${path.basename(file)}${COLORS.RESET}`);
-          } catch (rmErr) {
-            console.log(`    ${COLORS.DIM}Could not remove: ${path.basename(file)}${COLORS.RESET}`);
-          }
-        }
-      }
-    }
-
-    // Remove node_modules symlink - this is critical for fixing the lstat error
+  for (const artifact of artifacts) {
     try {
-      const stats = fs.lstatSync(nodeModulesLink);
-      if (stats) {
-        // On Windows, junction points need special handling
-        if (process.platform === 'win32') {
-          // Try using rmdir for junction points
-          try {
-            fs.rmdirSync(nodeModulesLink);
-            console.log(`    ${COLORS.DIM}Removed: node_modules/plan2code-loop (junction)${COLORS.RESET}`);
-          } catch (rmdirErr) {
-            // Fall back to rmSync
-            fs.rmSync(nodeModulesLink, { force: true, recursive: true });
-            console.log(`    ${COLORS.DIM}Removed: node_modules/plan2code-loop${COLORS.RESET}`);
-          }
-        } else {
-          fs.rmSync(nodeModulesLink, { force: true, recursive: true });
-          console.log(`    ${COLORS.DIM}Removed: node_modules/plan2code-loop${COLORS.RESET}`);
-        }
-      }
+      fs.lstatSync(artifact.path);
+      fs.rmSync(artifact.path, { force: true, recursive: true });
+      console.log(`  ${COLORS.GREEN}${SYMBOLS.SUCCESS}${COLORS.RESET} Removed: ${artifact.name}`);
     } catch (err) {
       if (err.code !== 'ENOENT') {
-        console.log(`    ${COLORS.DIM}Could not remove node_modules symlink: ${err.message}${COLORS.RESET}`);
+        console.log(`  ${COLORS.RED}${SYMBOLS.ERROR}${COLORS.RESET} Failed to remove ${artifact.name}: ${err.message}`);
       }
     }
-
-    return true;
-  } catch (error) {
-    // Non-fatal - npm link might still work
-    console.log(`    ${COLORS.DIM}Cleanup skipped: ${error.message}${COLORS.RESET}`);
-    return true;
   }
-}
-
-/**
- * Create global symlink for plan2code-loop
- */
-function createGlobalSymlink() {
-  const loopDir = path.join(__dirname, 'plan2code-loop');
-  const distBin = path.join(loopDir, 'dist', 'bin', 'plan2code-loop.js');
-  // Check if built binary exists
-  if (!fs.existsSync(distBin)) {
-    console.log(`${COLORS.YELLOW}${SYMBOLS.WARNING}${COLORS.RESET} plan2code-loop binary not found. Run build first.`);
-    return false;
-  }
-  console.log(`${COLORS.CYAN}${SYMBOLS.ACTIVE} Creating global symlink...${COLORS.RESET}`);
-
-  // Clean up existing symlinks first to prevent Windows lstat errors
-  cleanupExistingSymlinks();
-
-  // On Windows, skip npm link entirely and create batch file directly
-  // npm link has persistent issues with junctions and lstat errors on Windows
-  if (process.platform === 'win32') {
-    try {
-      const npmPrefix = execSync('npm config get prefix', { encoding: 'utf8' }).trim();
-      const symlinkCmd = path.join(npmPrefix, 'plan2code-loop.cmd');
-      const symlinkPs1 = path.join(npmPrefix, 'plan2code-loop.ps1');
-
-      // Create batch file wrapper for cmd.exe
-      const batchContent = `@echo off\r\nnode "${distBin}" %*\r\n`;
-      fs.writeFileSync(symlinkCmd, batchContent);
-      console.log(`  ${COLORS.GREEN}${SYMBOLS.SUCCESS}${COLORS.RESET} Created: plan2code-loop.cmd`);
-
-      // Create PowerShell wrapper for better shell support
-      const ps1Content = `#!/usr/bin/env pwsh\r\nnode "${distBin}" $args\r\n`;
-      fs.writeFileSync(symlinkPs1, ps1Content);
-      console.log(`  ${COLORS.GREEN}${SYMBOLS.SUCCESS}${COLORS.RESET} Created: plan2code-loop.ps1`);
-
-      console.log(`  ${COLORS.DIM}Run 'plan2code-loop --help' from any directory${COLORS.RESET}`);
-      return true;
-    } catch (error) {
-      console.log(`  ${COLORS.RED}${SYMBOLS.ERROR}${COLORS.RESET} Failed to create wrappers: ${error.message}`);
-      return false;
-    }
-  }
-
-  // On Unix systems, use npm link as it works reliably
-  try {
-    execSync('npm link', { cwd: loopDir, stdio: 'pipe' });
-    console.log(`  ${COLORS.GREEN}${SYMBOLS.SUCCESS}${COLORS.RESET} Global symlink created`);
-    console.log(`  ${COLORS.DIM}Run 'plan2code-loop --help' from any directory${COLORS.RESET}`);
-    return true;
-  } catch (error) {
-    console.log(`  ${COLORS.RED}${SYMBOLS.ERROR}${COLORS.RESET} Symlink failed: ${error.message}`);
-    return false;
-  }
-}
-/**
- * Remove global symlink for plan2code-loop
- */
-function removeGlobalSymlink() {
-  console.log(`${COLORS.CYAN}${SYMBOLS.ACTIVE} Removing global symlink...${COLORS.RESET}`);
-
-  let removedCount = 0;
-
-  try {
-    // Get npm global prefix
-    const npmPrefix = execSync('npm config get prefix', { encoding: 'utf8' }).trim();
-
-    // On Windows, bin files are directly in prefix; on Unix they're in prefix/bin
-    const npmBinGlobal = process.platform === 'win32' ? npmPrefix : path.join(npmPrefix, 'bin');
-    const npmRootGlobal = path.join(npmPrefix, 'node_modules');
-
-    // Files to remove
-    const filesToRemove = [
-      { path: path.join(npmBinGlobal, 'plan2code-loop'), name: 'plan2code-loop' },
-      { path: path.join(npmBinGlobal, 'plan2code-loop.cmd'), name: 'plan2code-loop.cmd' },
-      { path: path.join(npmBinGlobal, 'plan2code-loop.ps1'), name: 'plan2code-loop.ps1' },
-      { path: path.join(npmRootGlobal, 'plan2code-loop'), name: 'node_modules/plan2code-loop' }
-    ];
-
-    for (const file of filesToRemove) {
-      try {
-        fs.lstatSync(file.path);
-        fs.rmSync(file.path, { force: true, recursive: true });
-        console.log(`  ${COLORS.GREEN}${SYMBOLS.SUCCESS}${COLORS.RESET} Removed: ${file.name}`);
-        removedCount++;
-      } catch (err) {
-        if (err.code !== 'ENOENT') {
-          console.log(`  ${COLORS.RED}${SYMBOLS.ERROR}${COLORS.RESET} Failed to remove ${file.name}: ${err.message}`);
-        }
-      }
-    }
-
-    if (removedCount === 0) {
-      console.log(`  ${COLORS.DIM}${SYMBOLS.INFO} No files found to remove${COLORS.RESET}`);
-    }
-
-    return true;
-  } catch (error) {
-    console.log(`  ${COLORS.RED}${SYMBOLS.ERROR}${COLORS.RESET} Uninstall failed: ${error.message}`);
-    return false;
-  }
-}
-
-/**
- * Install plan2code-loop (build + symlink)
- */
-function installPlan2CodeLoop() {
-  displaySectionHeader('PLAN2CODE-LOOP', '[ BUILD & INSTALL ]');
-
-  const buildSuccess = buildPlan2CodeLoop();
-  if (!buildSuccess) {
-    return 1;
-  }
-
-  const symlinkSuccess = createGlobalSymlink();
-  if (!symlinkSuccess) {
-    return 1;
-  }
-
-  console.log('');
-  recordInstalled('loop');
-  console.log(`${COLORS.GREEN}${SYMBOLS.SUCCESS} plan2code-loop installed successfully!${COLORS.RESET}`);
-  console.log('');
-  console.log(`${COLORS.CYAN}Usage:${COLORS.RESET}`);
-  console.log(`  ${COLORS.BRIGHT}plan2code-loop${COLORS.RESET}          Start the autonomous loop`);
-  console.log(`  ${COLORS.BRIGHT}plan2code-loop -c${COLORS.RESET}       Resume previous session`);
-  console.log(`  ${COLORS.BRIGHT}plan2code-loop -v${COLORS.RESET}       Verbose mode`);
-  console.log(`  ${COLORS.BRIGHT}plan2code-loop --help${COLORS.RESET}   Show all options`);
-  console.log('');
-
-  return 0;
-}
-
-/**
- * Uninstall plan2code-loop
- */
-function uninstallPlan2CodeLoop() {
-  displaySectionHeader('PLAN2CODE-LOOP', '[ UNINSTALL ]');
-
-  removeGlobalSymlink();
-  forgetInstalled('loop');
-
-  console.log('');
-  console.log(`${COLORS.GREEN}${SYMBOLS.SUCCESS} plan2code-loop uninstalled${COLORS.RESET}`);
-  console.log('');
-
-  return 0;
 }
 
 // ============================================================================
@@ -2297,8 +2143,8 @@ function uninstallPlan2CodeBot() {
 
 /**
  * `plan2code` typed in any directory opens the dashboard skill there in Claude Code
- * (`claude /plan2code --permission-mode bypassPermissions`) or Devin
- * (`devin --permission-mode bypass -- /plan2code`), asking which when both are installed.
+ * (`claude /plan2code`), Devin (`devin -- /plan2code`) or Codex (`codex $plan2code`), asking
+ * which when more than one is installed, then whether to turn permission prompts off.
  * The launcher is copied out of the package into ~/.plan2code/bin/ because the installer
  * normally runs from an npx cache directory that npm is free to delete; the shims in the bin
  * directory point at that stable copy.
@@ -2314,13 +2160,23 @@ const LAUNCHER_STATE = path.join(os.homedir(), '.plan2code', 'launcher.json');
 // compares it with the version.json written beside it.
 const UPDATE_CHECK_SRC = path.join(__dirname, 'src', 'web-console', 'update-check.mjs');
 const UPDATE_CHECK_DEST = path.join(path.dirname(LAUNCHER_DEST), 'update-check.mjs');
+// The shared agent list and lookup rule live beside the launcher so the command, the console
+// and the app all read one copy; both are overwritten on every install.
+const AGENTS_SRC = path.join(__dirname, 'src', 'launcher', 'agents.json');
+const AGENTS_DEST = path.join(path.dirname(LAUNCHER_DEST), 'agents.json');
+const AGENT_LOOKUP_SRC = path.join(__dirname, 'src', 'web-console', 'agent-lookup.mjs');
+const AGENT_LOOKUP_DEST = path.join(path.dirname(LAUNCHER_DEST), 'agent-lookup.mjs');
 const LAUNCHER_VERSION_DEST = path.join(path.dirname(LAUNCHER_DEST), 'version.json');
 // What a global install put on this machine, so `plan2code update` reinstalls exactly that.
 const INSTALL_RECORD = path.join(os.homedir(), '.plan2code', 'install.json');
-const INSTALL_PIECES = ['skills', 'launcher', 'statusline', 'loop', 'metrics', 'bot'];
+const INSTALL_PIECES = ['skills', 'launcher', 'app', 'statusline', 'metrics', 'bot'];
 const LAUNCHER_PICK_FOLDER_FLAG = '--pick-folder';
 
-/** `~/.plan2code/install.json` as `{ version, scope, pieces }`, or null when missing or unparsable. */
+/**
+ * `~/.plan2code/install.json` as `{ version, scope, pieces }`, or null when missing or unparsable.
+ * `skipped` lists optional pieces (the desktop app) the person said no to, so an unattended
+ * `plan2code update` does not install them; it is left out of the file while empty.
+ */
 function readInstallRecord() {
   try {
     const record = JSON.parse(fs.readFileSync(INSTALL_RECORD, 'utf8'));
@@ -2330,12 +2186,14 @@ function readInstallRecord() {
 }
 
 /** Temp file, then rename, so a crash never leaves a half-written record. A failure only skips the record. */
-function writeInstallRecord(pieces) {
+function writeInstallRecord(pieces, skipped = (readInstallRecord() || {}).skipped || []) {
   const record = {
     version: projectVersion.version,
     scope: 'global',
     pieces: [...new Set(pieces)].filter((piece) => INSTALL_PIECES.includes(piece)).sort(),
   };
+  const declined = [...new Set(skipped)].filter((piece) => INSTALL_PIECES.includes(piece) && !record.pieces.includes(piece)).sort();
+  if (declined.length > 0) record.skipped = declined;
   const tmp = `${INSTALL_RECORD}.${process.pid}.tmp`;
   try {
     fs.mkdirSync(path.dirname(INSTALL_RECORD), { recursive: true });
@@ -2352,6 +2210,12 @@ function writeInstallRecord(pieces) {
 function recordInstalled(piece) {
   const record = readInstallRecord();
   writeInstallRecord([...(record ? record.pieces : []), piece]);
+}
+
+/** Remember that an optional piece was declined. Needs a record: one holding no pieces would make update do nothing. */
+function recordSkipped(piece) {
+  const record = readInstallRecord();
+  if (record) writeInstallRecord(record.pieces, [...(record.skipped || []), piece]);
 }
 
 /** Drop a piece after its uninstall; no record means nothing to forget. */
@@ -2441,10 +2305,12 @@ function getLauncherShims(binDir, nodePath = process.execPath) {
           '@echo off',
           `rem ${LAUNCHER_MARKER}`,
           `if not exist "${cmdNode}" goto p2c_path_node`,
-          `"${cmdNode}" "${cmdDest}" %*`,
-          'exit /b %ERRORLEVEL%',
+          // Each command ends its own line with `& exit /b`: cmd.exe reads a running .cmd by byte
+          // offset, and `plan2code update` rewrites this file while it runs, so nothing may be read
+          // after the command returns. A bare `exit /b` keeps the command's exit code.
+          `"${cmdNode}" "${cmdDest}" %* & exit /b`,
           ':p2c_path_node',
-          `node "${cmdDest}" %*`,
+          `node "${cmdDest}" %* & exit /b`,
           '',
         ].join('\r\n'),
       },
@@ -2539,6 +2405,8 @@ function isOurShortcut(file) {
 /**
  * Put a shortcut on the desktop that runs `plan2code --pick-folder` through the shim in
  * `binDir`, so the person picks the project folder in a native dialog before the CLI opens.
+ * It is the same `plan2code` command as a typed one, so it opens the desktop app instead
+ * when the app is installed (the launcher decides; the shortcut never names the app).
  * On Windows it opens in PowerShell — PowerShell 7 (`pwsh`) when installed, Windows
  * PowerShell otherwise — running the `.ps1` shim, rather than cmd.exe running the `.cmd` one.
  */
@@ -2575,7 +2443,7 @@ function installDesktopShortcut(binDir, file) {
           P2C_FILE: file,
           P2C_SCRIPT: `${shim}.ps1`,
           P2C_ARGS: LAUNCHER_PICK_FOLDER_FLAG,
-          P2C_DESCRIPTION: 'Open the Plan2Code dashboard in Claude Code, Devin or Codex',
+          P2C_DESCRIPTION: 'Open Plan2Code: the desktop app when it is installed, otherwise your agent in a terminal',
           P2C_ICON: icon,
         }
       );
@@ -2595,7 +2463,7 @@ function installDesktopShortcut(binDir, file) {
           `# ${LAUNCHER_MARKER}`,
           'Type=Application',
           `Name=${SHORTCUT_NAME}`,
-          'Comment=Open the Plan2Code dashboard in Claude Code, Devin or Codex',
+          'Comment=Open Plan2Code: the desktop app when it is installed, otherwise your agent in a terminal',
           `Exec="${shim}" ${LAUNCHER_PICK_FOLDER_FLAG}`,
           ...(icon ? [`Icon=${icon}`] : []),
           'Terminal=true',
@@ -2659,6 +2527,8 @@ async function installLauncher({ quiet = false, unattended = false } = {}) {
     // Models the user added in User Preferences live in ~/.plan2code/models.json and are untouched.
     fs.copyFileSync(MODELS_SRC, MODELS_DEST);
     fs.copyFileSync(UPDATE_CHECK_SRC, UPDATE_CHECK_DEST);
+    fs.copyFileSync(AGENTS_SRC, AGENTS_DEST);
+    fs.copyFileSync(AGENT_LOOKUP_SRC, AGENT_LOOKUP_DEST);
     fs.writeFileSync(LAUNCHER_VERSION_DEST, JSON.stringify(projectVersion, null, 2) + '\n');
     if (process.platform !== 'win32') fs.chmodSync(LAUNCHER_DEST, 0o755);
     console.log(`  ${COLORS.GREEN}${SYMBOLS.SUCCESS}${COLORS.RESET} Installed: ${LAUNCHER_DEST}`);
@@ -2696,7 +2566,6 @@ async function installLauncher({ quiet = false, unattended = false } = {}) {
   recordInstalled('launcher');
   // The shortcut is a convenience on top of the command, so a failure here only warns.
   if (!unattended) await offerDesktopShortcut(binDir);
-  console.log(`  ${COLORS.YELLOW}${SYMBOLS.WARNING}${COLORS.RESET} The ${LAUNCHER_COMMAND} command starts the agent with permission prompts off (${COLORS.CYAN}--permission-mode bypassPermissions${COLORS.RESET} in Claude Code, ${COLORS.CYAN}bypass${COLORS.RESET} in Devin, ${COLORS.CYAN}--dangerously-bypass-approvals-and-sandbox${COLORS.RESET} in Codex). Run ${COLORS.CYAN}claude /plan2code${COLORS.RESET} yourself if you want prompts.`);
   console.log('');
   // Inside install() the final summary prints the steps once, after everything else.
   if (!quiet) printGettingStarted({ commandInstalled: true });
@@ -2730,7 +2599,7 @@ function uninstallLauncher() {
   const shortcut = getShortcutFile();
   if (isOurShortcut(shortcut)) remove(shortcut);
   forgetInstalled('launcher');
-  for (const file of [LAUNCHER_DEST, MODELS_DEST, UPDATE_CHECK_DEST, LAUNCHER_VERSION_DEST, SHORTCUT_ICON_DEST, SHORTCUT_PNG_DEST, LAUNCHER_STATE, INSTALL_RECORD]) {
+  for (const file of [LAUNCHER_DEST, MODELS_DEST, UPDATE_CHECK_DEST, LAUNCHER_VERSION_DEST, SHORTCUT_ICON_DEST, SHORTCUT_PNG_DEST, LAUNCHER_STATE, INSTALL_RECORD, AGENTS_DEST, AGENT_LOOKUP_DEST]) {
     if (fs.existsSync(file)) remove(file);
   }
   try {
@@ -2746,6 +2615,210 @@ function uninstallLauncher() {
 }
 
 // ============================================================================
+// DESKTOP APP
+// ============================================================================
+
+/**
+ * The desktop app is one plain executable per system, attached to each GitHub release by
+ * .github/workflows/release-app.yml as `plan2code-app-<version>-<os>-<arch>[.exe]` beside
+ * `plan2code-app-<version>-SHA256SUMS.txt`. Installing it downloads the file for this machine,
+ * checks it against that list and puts it in ~/.plan2code/app/, where the launcher looks.
+ * PLAN2CODE_RELEASE_BASE replaces the release download URL (the tests serve a stand-in).
+ * The app is an extra on top of the skills and the command: when it cannot be installed they
+ * stay installed, and `plan2code --classic` is today's flow.
+ */
+const APP_DIR = path.join(os.homedir(), '.plan2code', 'app');
+const APP_DEST = path.join(APP_DIR, process.platform === 'win32' ? 'plan2code-app.exe' : 'plan2code-app');
+const APP_DOWNLOAD_TIMEOUT_MS = 120000;
+
+function releaseBase(version) {
+  const base = process.env.PLAN2CODE_RELEASE_BASE || `https://github.com/jparkerweb/plan2code/releases/download/v${version}`;
+  return base.replace(/\/+$/, '');
+}
+
+/** The release file for a system, or null when the app is not built for it. */
+function appAssetName(version, platform = process.platform, arch = process.arch) {
+  const system = { win32: 'windows', darwin: 'macos', linux: 'linux' }[platform];
+  const cpu = { x64: 'x64', arm64: 'arm64' }[arch];
+  if (!system || !cpu) return null;
+  return `plan2code-app-${version}-${system}-${cpu}${platform === 'win32' ? '.exe' : ''}`;
+}
+
+/** The SHA-256 a checksum list (`<hex>  <name>` or `<hex> *<name>` lines) gives for `name`, or null. */
+function checksumFor(list, name) {
+  for (const line of list.split(/\r?\n/)) {
+    const match = line.trim().match(/^([0-9a-fA-F]{64})\s+\*?(.+)$/);
+    if (match && match[2] === name) return match[1].toLowerCase();
+  }
+  return null;
+}
+
+/** The bytes at `url`; an HTTP error is thrown with its `status`. */
+async function download(url) {
+  const response = await fetch(url, { signal: AbortSignal.timeout(APP_DOWNLOAD_TIMEOUT_MS) });
+  if (!response.ok) {
+    const error = new Error(`HTTP ${response.status} from ${url}`);
+    error.status = response.status;
+    throw error;
+  }
+  return Buffer.from(await response.arrayBuffer());
+}
+
+/**
+ * Put the app at `dest`, replacing an older one. The new file is written beside it first, and
+ * the old one is renamed aside rather than overwritten: Windows will not overwrite a running
+ * program but will rename it, and the old file goes when the app next ends.
+ */
+function placeApp(bytes, dest) {
+  fs.mkdirSync(path.dirname(dest), { recursive: true });
+  const tmp = `${dest}.${process.pid}.tmp`;
+  const aside = `${dest}.old`;
+  fs.writeFileSync(tmp, bytes, { mode: 0o755 });
+  try {
+    fs.rmSync(aside, { force: true });
+  } catch {}
+  let movedAside = false;
+  try {
+    fs.renameSync(dest, aside);
+    movedAside = true;
+  } catch (error) {
+    if (error.code !== 'ENOENT') {
+      fs.rmSync(tmp, { force: true });
+      throw error;
+    }
+  }
+  try {
+    fs.renameSync(tmp, dest);
+  } catch (error) {
+    if (movedAside) {
+      try {
+        fs.renameSync(aside, dest);
+      } catch {}
+    }
+    fs.rmSync(tmp, { force: true });
+    throw error;
+  }
+  try {
+    fs.rmSync(aside, { force: true });
+  } catch {}
+  if (process.platform !== 'win32') fs.chmodSync(dest, 0o755);
+}
+
+/**
+ * Download, verify and place the desktop app for this release. Returns 0, or 1 after saying
+ * plainly why not (and that the skills and the command are fine); `outcome.app` is true or false.
+ */
+async function installDesktopApp({ quiet = false, unattended = false, outcome = {} } = {}) {
+  if (quiet) {
+    console.log(`${COLORS.YELLOW}${SYMBOLS.ACTIVE} INSTALLING THE DESKTOP APP${COLORS.RESET}`);
+  } else {
+    displaySectionHeader('DESKTOP APP', '[ INSTALL ]');
+  }
+  const version = projectVersion.version;
+  const name = appAssetName(version);
+  const base = releaseBase(version);
+  const fail = (reason) => {
+    console.log(`  ${COLORS.RED}${SYMBOLS.ERROR}${COLORS.RESET} The desktop app was not installed: ${reason}`);
+    console.log(`  ${COLORS.DIM}The skills and the plan2code command are installed and work as before; run ${COLORS.CYAN}plan2code --classic${COLORS.DIM} to stay in your terminal, or install again later.${COLORS.RESET}`);
+    console.log('');
+    outcome.app = false;
+    return 1;
+  };
+  // No build for this system or this release yet (the version is bumped on main before the
+  // release's files are attached): not a failure when unattended, since an update must not fail
+  // for it and an app that is installed stays as it is.
+  const noBuild = (reason) => {
+    if (!unattended) return fail(reason);
+    outcome.app = false;
+    outcome.appMissing = reason;
+    console.log(`  ${COLORS.DIM}${SYMBOLS.INFO} No desktop app update: ${reason}${COLORS.RESET}`);
+    console.log('');
+    return 0;
+  };
+
+  if (!name) return noBuild(`there is no desktop app build for ${process.platform}-${process.arch}.`);
+  let bytes;
+  try {
+    const list = (await download(`${base}/plan2code-app-${version}-SHA256SUMS.txt`)).toString('utf8');
+    const expected = checksumFor(list, name);
+    if (!expected) return fail(`the release's checksum list has no entry for ${name}.`);
+    bytes = await download(`${base}/${name}`);
+    const actual = crypto.createHash('sha256').update(bytes).digest('hex');
+    if (actual !== expected) {
+      return fail(`${name} does not match its checksum (expected ${expected.slice(0, 12)}..., got ${actual.slice(0, 12)}...), so it was thrown away.`);
+    }
+  } catch (error) {
+    return error.status === 404
+      ? noBuild(`release v${version} has no desktop app file for ${process.platform}-${process.arch} yet.`)
+      : fail(`could not download it (${error.message}).`);
+  }
+  try {
+    placeApp(bytes, APP_DEST);
+  } catch (error) {
+    return fail(`the file was verified but could not be put in ${APP_DIR} (${error.message}); close the app and try again.`);
+  }
+  recordInstalled('app');
+  console.log(`  ${COLORS.GREEN}${SYMBOLS.SUCCESS}${COLORS.RESET} Installed: ${APP_DEST}`);
+  console.log(`  ${COLORS.YELLOW}${SYMBOLS.WARNING}${COLORS.RESET} The app is unsigned, and it starts the agent with permission checks off. See docs/desktop-app.md for how to allow it on macOS and Windows.`);
+  console.log('');
+  outcome.app = true;
+  return 0;
+}
+
+/**
+ * The app step of a skills install. Interactive: ask (default yes), and remember a no.
+ * Unattended (`plan2code update`): yes, without asking, unless the app is already recorded (the
+ * update loop updates it as its own piece) or was declined before.
+ */
+async function offerDesktopApp({ unattended = false, outcome = {} } = {}) {
+  const record = readInstallRecord();
+  // A system the app is not built for is never asked about, or retried on every update.
+  if (!appAssetName(projectVersion.version)) {
+    if (!unattended) console.log(`  ${COLORS.DIM}${SYMBOLS.INFO} No desktop app is built for ${process.platform}-${process.arch}; skipping it.${COLORS.RESET}`);
+    return;
+  }
+  if (unattended) {
+    if (record && (record.pieces.includes('app') || (record.skipped || []).includes('app'))) return;
+    await installDesktopApp({ quiet: true, unattended, outcome });
+    return;
+  }
+  if (!process.stdin.isTTY) return;
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  const answer = await new Promise((resolve) => {
+    rl.question(`  ${COLORS.CYAN}Also install the Plan2Code desktop app?${COLORS.RESET} (Y/n): `, resolve);
+  });
+  rl.close();
+  if (answer.trim().toLowerCase().startsWith('n')) {
+    recordSkipped('app');
+    return;
+  }
+  await installDesktopApp({ quiet: true, outcome });
+}
+
+/** Remove the desktop app and what the installer left beside it. */
+function uninstallDesktopApp() {
+  displaySectionHeader('DESKTOP APP', '[ UNINSTALL ]');
+  let removed = false;
+  for (const file of [APP_DEST, `${APP_DEST}.old`]) {
+    if (!fs.existsSync(file)) continue;
+    try {
+      fs.rmSync(file, { force: true });
+      console.log(`  ${COLORS.GREEN}${SYMBOLS.SUCCESS}${COLORS.RESET} Removed: ${file}`);
+      removed = true;
+    } catch (error) {
+      console.log(`  ${COLORS.RED}${SYMBOLS.ERROR}${COLORS.RESET} Failed to remove ${file}: ${error.message}`);
+    }
+  }
+  forgetInstalled('app');
+  try {
+    fs.rmdirSync(APP_DIR);
+  } catch {}
+  if (!removed) console.log(`  ${COLORS.DIM}${SYMBOLS.INFO} No desktop app found${COLORS.RESET}`);
+  console.log('');
+  return 0;
+}
+
+// ============================================================================
 // UPDATE (`plan2code update` runs the npx install with --update)
 // ============================================================================
 
@@ -2757,8 +2830,8 @@ function uninstallLauncher() {
 const UPDATE_STEPS = {
   skills: install,
   launcher: installLauncher,
+  app: installDesktopApp,
   statusline: installStatusLine,
-  loop: installPlan2CodeLoop,
   metrics: installPlan2CodeMetrics,
   bot: installPlan2CodeBot,
 };
@@ -2767,7 +2840,7 @@ const UPDATE_STEPS = {
  * Reinstall whatever ~/.plan2code/install.json lists, without the menu or any prompt. Returns
  * the exit code: 0 when every piece updated, 1 naming the pieces that failed.
  */
-async function update({ steps = UPDATE_STEPS } = {}) {
+async function update({ steps = UPDATE_STEPS, cleanShims = removeLegacyLoopShims } = {}) {
   displaySectionHeader('  UPDATING PLAN2CODE  ');
   console.log(`${COLORS.BLUE}${COLORS.BRIGHT}Installing:${COLORS.RESET} ${projectVersion.name} ${projectVersion.version}`);
   console.log('');
@@ -2779,13 +2852,24 @@ async function update({ steps = UPDATE_STEPS } = {}) {
     console.log('');
   }
 
+  cleanShims();
+
   const results = {};
   for (const piece of INSTALL_PIECES) {
     if (!pieces.includes(piece) || piece in results) continue;
+    // The metrics and bot commands run from this folder: from npx's cache (which the launcher
+    // note above calls free to delete) they would break once it is cleared, so only a checkout updates them.
+    if ((piece === 'metrics' || piece === 'bot') && !fs.existsSync(path.join(__dirname, '.git'))) {
+      results[piece] = 'kept (update it from a git checkout: node install.js)';
+      console.log('');
+      continue;
+    }
     const outcome = {};
     try {
       const code = await steps[piece]({ quiet: true, unattended: true, outcome });
       results[piece] = code === 0 ? 'updated' : 'failed: see the messages above';
+      // The release has no app file yet: the installed one stays, and the update does not fail.
+      if (piece === 'app' && code === 0 && outcome.appMissing) results[piece] = 'kept (no new desktop app file yet)';
     } catch (error) {
       results[piece] = `failed: ${error.message}`;
     }
@@ -2796,13 +2880,15 @@ async function update({ steps = UPDATE_STEPS } = {}) {
       results.skills = outcome.skills ? 'updated' : 'failed: see the messages above';
     }
     if (piece === 'skills' && outcome.launcher === true) results.launcher = 'updated';
+    // The same for the app, when install() brought it in for the first time.
+    if (piece === 'skills' && outcome.app === true) results.app = 'updated';
     console.log('');
   }
 
   console.log(`${COLORS.BRIGHT}UPDATE SUMMARY${COLORS.RESET}`);
   const failed = [];
   for (const piece of INSTALL_PIECES.filter((p) => p in results)) {
-    const ok = results[piece] === 'updated';
+    const ok = results[piece] === 'updated' || results[piece].startsWith('kept');
     if (!ok) failed.push(piece);
     console.log(`  ${ok ? COLORS.GREEN + SYMBOLS.SUCCESS : COLORS.RED + SYMBOLS.ERROR}${COLORS.RESET} ${piece}: ${results[piece]}`);
   }
@@ -2840,4 +2926,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { update, UPDATE_STEPS, INSTALL_RECORD, INSTALL_PIECES, readInstallRecord, recordInstalled, forgetInstalled, SOURCE_PROMPTS, generateSkillName };
+module.exports = { update, installDesktopApp, offerDesktopApp, recordSkipped, appAssetName, checksumFor, APP_DEST, UPDATE_STEPS, INSTALL_RECORD, INSTALL_PIECES, readInstallRecord, recordInstalled, forgetInstalled, SOURCE_PROMPTS, generateSkillName };

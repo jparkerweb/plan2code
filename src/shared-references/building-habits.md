@@ -15,17 +15,17 @@ When a bug is reported or turns up, or a test fails unexpectedly:
 Applies only when the phase's tasks carry `Test:` lines (the plan picked Test first), or the person said yes to "Write the test first?" in Quick Task. For each task:
 
 1. Write the test at the task's named test spot (its `Test:` line, or the plan's Verify section).
-2. Run it and see it fail for the right reason: the behaviour is missing, not a typo or an import error.
+2. Run it and see it fail for the right reason: the behavior is missing, not a typo or an import error.
 3. Write the code until the test passes. Keep the change to what the test asks for.
 4. Never weaken, skip or delete a test to make it pass. If the test itself is wrong, say so and fix the test on its own.
 
-## Pin behaviour first
+## Pin behavior first
 
-For a task meant to change no behaviour (a restructure, a rename, a move):
+For a task meant to change no behavior (a restructure, a rename, a move):
 
 1. Before touching the code, add or confirm tests that cover what the task touches.
 2. Run them and see them pass.
 3. Make the change.
-4. Run the same tests, unchanged. They must pass. A test that needs editing means behaviour changed: stop and say so.
+4. Run the same tests, unchanged. They must pass. A test that needs editing means behavior changed: stop and say so.
 
 Adapted from Matt Pocock's `diagnose` and `tdd` skills and pstack's debugging playbook (both MIT).

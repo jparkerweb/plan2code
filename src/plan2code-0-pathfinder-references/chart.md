@@ -1,9 +1,9 @@
 # Chart Playbook
 > Part of plan2code-0-pathfinder — loaded at the top of MODE A (Chart). Expands the numbered Chart steps.
 >
-> **Backend note.** Steps 0, 2, and 4 — the gates and the grills — are identical either way, and so is every judgement call below (fog vs question, in scope vs out, the destination test). What differs is where Steps 3 and 5-7 put the bytes: on `**Backend:** github`, `github-issues.md` overrides the `map.md` and question-file templates here, the single-pass rule under *Step 6: Numbering and dependency order*, and the timing of the recon. Read it alongside this file, not instead of it.
+> **Backend note.** Steps 0, 2, and 4 — the gates and the grills — are identical either way, and so is every judgment call below (fog vs question, in scope vs out, the destination test). What differs is where Steps 3 and 5-7 put the bytes: on `**Backend:** github`, `github-issues.md` overrides the `map.md` and question-file templates here, the single-pass rule under *Step 6: Numbering and dependency order*, and the timing of the recon. Read it alongside this file, not instead of it.
 
-Charting produces a map and a set of question files. It resolves nothing by hand. Every judgement below serves one goal: put a sharp question on the map for everything you can phrase now, and leave everything else honestly in the fog.
+Charting produces a map and a set of question files. It resolves nothing by hand. Every judgment below serves one goal: put a sharp question on the map for everything you can phrase now, and leave everything else honestly in the fog.
 
 ---
 
@@ -33,7 +33,7 @@ This gate and the Step 4 no-fog off-ramp are the same instinct at two moments: t
 
 ## Step 2: The destination grill
 
-The destination is settled **first** because it fixes scope. Every later judgement — is this a question or fog, is this in scope or past the edge, is this map cleared — is measured against it. A vague destination makes all three unanswerable, and you will spend the rest of the map arguing about boundaries instead of decisions.
+The destination is settled **first** because it fixes scope. Every later judgment — is this a question or fog, is this in scope or past the edge, is this map cleared — is measured against it. A vague destination makes all three unanswerable, and you will spend the rest of the map arguing about boundaries instead of decisions.
 
 A destination is **one or two lines** describing what exists when the map clears. It is not a feature description. It is not a value proposition. It names the artifact and draws the edge.
 
@@ -50,7 +50,7 @@ Recommend an answer with each probe — the human corrects faster than they comp
 
 Two round trips, not six. Three probes each — exactly the cap, so neither batch needs splitting.
 
-Batch 2 bends the independence test on purpose. The arrival signal (5) can shift under the smallest arrival (4), so strictly it should be held back — but holding it costs a third round trip to catch a conflict that is rare and cheap to spot. The trade is to send them together and reconcile at the recap: if the smallest arrival comes back materially smaller than the artifact you were told about, re-check the arrival signal against it before writing the destination. A knowing trade here, not a licence to batch dependent probes elsewhere.
+Batch 2 bends the independence test on purpose. The arrival signal (5) can shift under the smallest arrival (4), so strictly it should be held back — but holding it costs a third round trip to catch a conflict that is rare and cheap to spot. The trade is to send them together and reconcile at the recap: if the smallest arrival comes back materially smaller than the artifact you were told about, re-check the arrival signal against it before writing the destination. A knowing trade here, not a license to batch dependent probes elsewhere.
 
 **Both batches go through the structured question tool.** Give each probe genuine candidate options with trade-offs and a recommendation; the built-in `Other` path is where the human composes the actor, a further feature to leave out, the arrival signal, or forcing-function detail in their own words. A clicked option is not written verbatim as the destination — the recap-confirmation tool call turns all six answers into the agreed one-or-two-line destination before disk write.
 
@@ -90,7 +90,7 @@ Deliver it as a multi-select (`multi` on the web console) of 3–5 features a re
 
 > "What made this come up now? A deadline, an incident, an audit, a customer?"
 
-*Fishing for:* constraints that will shape half the questions and that nobody volunteers unprompted. A regulatory deadline changes the delivery question, the testing posture question, and the out-of-scope line all at once.
+*Fishing for:* constraints that will shape half the questions and that nobody volunteers unprompted. A regulatory deadline changes the delivery question and the out-of-scope line all at once.
 
 **The probe names above are internal labels, not headings the human reads.** Head each Q block plainly — *What you end up with*, *Who uses it*, *Leave for later*, *Smallest version that counts*, *How you know it's done*, *Why now* — and keep the probe text itself as plain as the quotes above. "The sacrificial boundary" and "the arrival signal" mean something to this playbook and nothing to the person answering. Full rule in the grilling playbook, *Say it in plain English*.
 
@@ -141,7 +141,7 @@ Recon is `legwork · AFK` — you do it alone, and you write it down **already r
 
 Two disciplines keep this file useful:
 
-- **Verify behaviour against actual code, never against a filename.** A file called `auditLogger.ts` may log nothing.
+- **Verify behavior against actual code, never against a filename.** A file called `auditLogger.ts` may log nothing.
 - **Scope the recon to the destination.** A recon of the whole repo is unreadable and stale in a week. If a subtree cannot plausibly be touched by the destination, say so in one line and move on.
 
 Record what you could **not** determine as an explicit gap. Gaps at recon time are often the first real fog bullets.
@@ -257,7 +257,7 @@ The destination grill went **deep on one thing**. This grill goes **wide on ever
 
 **You are not resolving anything here.** You are taking inventory. The instant an answer feels satisfying, you are probably going deep.
 
-### Recognising that you have gone deep
+### Recognizing that you have gone deep
 
 Watch for these. Any one of them means stop and pull back:
 
@@ -275,7 +275,7 @@ Say it out loud so the human tracks the move, then jump:
 
 Two mechanics keep the fan-out honest:
 
-1. **Round-robin the areas.** Before you start, list the axes you intend to cross — engineering axes (data, surface, permissions, volume, delivery, failure, operations, testing) AND product axes (user value, success measurement, target user, rollout, analytics, support & docs, legal/compliance). Not every axis applies to every destination: name the ones that do before the first probe, say which you are skipping and why, then take one probe per axis before any second probe on any axis.
+1. **Round-robin the areas.** Before you start, list the axes you intend to cross — engineering axes (data, surface, permissions, volume, delivery, failure, operations) AND product axes (user value, success measurement, target user, rollout, analytics, support & docs, legal/compliance). Not every axis applies to every destination: name the ones that do before the first probe, say which you are skipping and why, then take one probe per axis before any second probe on any axis.
 2. **Ask for the axis you have not touched.** Near the end: "What have I not asked about that would embarrass us to discover in week three?"
 
 **Breadth-first is the ideal batch.** One probe per axis means the probes are independent by construction — that is what breadth-first *means* — so this grill should run as batches of three, not as a stream of singles. If you catch yourself wanting to batch two probes on the same axis, that is depth wearing a batch's clothes; pull back.
@@ -294,7 +294,6 @@ Each opens a different axis. Batch three at a time in list order (skipping axes 
 4. **Volume and time** — "If an export takes four minutes, is that fine, bad, or a redesign?"
 5. **Delivery and failure** — "The export succeeds but the download link expires before they click it. What should have happened?"
 6. **Operations** — "Six months from now someone asks who exported what. Does this feature audit itself?"
-7. **Testing** — "What would you need to see pass before you would let this near a customer's compliance data?" *(This one always runs — see the mandatory testing-posture question below.)*
 
 The product axes, same style — one sample probe each:
 
@@ -312,7 +311,7 @@ Record each answer as one line in your working notes with an area label. At the 
 
 ## The fog-vs-question test
 
-This is the single most important judgement in the skill. Get it wrong toward questions and the map fills with unanswerable stubs that block the frontier. Get it wrong toward fog and the map has nothing takeable on it.
+This is the single most important judgment in the skill. Get it wrong toward questions and the map fills with unanswerable stubs that block the frontier. Get it wrong toward fog and the map has nothing takeable on it.
 
 > **The test is whether you can STATE the question precisely now — not whether you can ANSWER it now.**
 
@@ -382,7 +381,6 @@ A worked ordering for the audit-log export map:
 | `01` | Export format | `grill · HITL` | none | Nothing gates it; it gates the artifact shape |
 | `02` | Row-count ceiling | `research · AFK` | none | A fact about the data, independent of every preference |
 | `03` | Export authorization | `grill · HITL` | none | Independent axis; can be argued today |
-| `04` | Testing posture | `grill · HITL` | none | Mandatory; independent of everything else |
 | `05` | Delivery channel | `grill · HITL` | `02` | Synchronous download versus queued link turns entirely on volume |
 | `06` | SIEM push connector | `grill · HITL` | none | Created, then immediately ruled out of scope during charting — `State: out-of-scope`, no `## Answer` |
 
@@ -446,7 +444,7 @@ plan, not at shipped code. Continuous streaming to external systems is not on th
 - Questions are put to the human in plain English. Technical terms only where the term is the decision.
 - HITL questions are answered by the human in their own words. Never self-answered.
 - No new runtime dependency is assumed without a `research` question backing it.
-- Compliance language is reviewed by Dana before anything user-facing is finalised.
+- Compliance language is reviewed by Dana before anything user-facing is finalized.
 - Sketches are throwaway and live only under `pathfinder/sketch-NN/`.
 
 ## Glossary
@@ -473,7 +471,6 @@ plan, not at shipped code. Continuous streaming to external systems is not on th
 - [x] [Export format](./questions/01-export-format.md) — CSV with a UTF-8 BOM and RFC 4180 quoting, plus a sidecar SHA-256 manifest; JSONL rejected because recipients open these in Excel. *(2026-08-03)*
 - [/] [Row-count ceiling](./questions/02-row-count-ceiling.md)
 - [ ] [Export authorization](./questions/03-export-authorization.md)
-- [ ] [Testing posture](./questions/04-testing-posture.md)
 - [!] [Delivery channel](./questions/05-delivery-channel.md) — Blocked by 02
 - [-] [SIEM push connector](./questions/06-siem-push-connector.md) — out of scope, see below
 
@@ -631,61 +628,3 @@ Do this, in order:
 4. **Stop.** Do not chart anyway "just in case", do not create questions, do not start planning in this session.
 
 Be honest about the trigger. If two areas are genuinely unformed, that is fog and the map earns its keep. The off-ramp is for the case where you fanned out across every axis and kept landing on solid ground.
-
----
-
-## Step 6: The mandatory testing-posture question
-
-**Every map includes a `grill · HITL` question on testing posture.** No exceptions, including maps where testing feels obvious.
-
-The reason is mechanical: `/plan2code-1-plan` Phase 1 asks for three things — testing types, whether tests run after each implementation phase, and a coverage target — and `/plan2code-2-document` **string-matches** that answer, either appending a testing block to every phase, creating a dedicated final testing phase, or omitting testing entirely. A map that clears without this answer hands the human a planning session that stalls on its first question. Ask it while there is still someone in the room.
-
-Record the answer in the literals downstream matches on, not in paraphrase. ("Phase" here names `/plan2code-1-plan`'s implementation phases and is a downstream contract string — it is never a pathfinder unit of work.)
-
-It is almost never blocked. Give it whatever number the dependency ordering leaves free, and expect it to sit on the frontier from day one.
-
-```markdown
-> Pathfinder planning note - decisions, not implementation work. Archive with the spec; do not delete.
-
-# Testing posture
-
-Type: grill · HITL
-State: open
-Blocked by: none
-Claimed: none
-Resolved: none
-Locked: no
-
-## Question
-
-What testing does this work carry, so `/plan2code-1-plan` Phase 1 can be answered without
-stalling? Three parts, all needed:
-
-- **Types** — unit, integration, end-to-end, some combination, or none.
-- **Phase testing** — record one of the two literals `/plan2code-2-document` matches:
-  `Run after each phase` (a testing block closes every implementation phase) or
-  `Dedicated phase only` (one final testing phase).
-- **Coverage target** — record one of Phase 1's three literals: `Critical paths`,
-  `Moderate (~60-80%)`, or `Comprehensive (>80%)`.
-
-Recommended answer to react to: unit plus integration; `Run after each phase`;
-`Critical paths`. Rationale — this touches compliance data, so the correctness of the
-CSV writer and the authorization predicate must be pinned by tests, but the admin UI is thin
-enough that end-to-end coverage would cost more than it catches.
-
-Two specific cases worth naming in the answer regardless of the general posture, because
-Codebase context shows both are easy to get wrong here:
-
-- The UTF-8 BOM survives Excel round-tripping for non-ASCII actor names.
-- The tenant-scope predicate actually excludes other tenants' events, asserted against seeded
-  cross-tenant data rather than a mock.
-
-Note for whoever resolves this: the coverage target is a number the human owns. Do not infer
-it from the codebase's current coverage, and do not soften it to whatever the repo already
-achieves.
-
-## Evidence
-
-- `AGENTS.md` records Vitest as the runner with fixtures colocated under `test/`.
-- Codebase context: no end-to-end harness exists today; adding one is a real cost, not a flag.
-```

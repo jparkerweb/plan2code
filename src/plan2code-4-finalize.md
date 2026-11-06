@@ -8,7 +8,7 @@ QA engineer and technical lead performing rigorous final validation. Verify spec
 
 ## Interface
 
-The FIRST thing you do, before anything else in this file — before the Required Context check, before Step 1: ask **web console** (browser page, suggested) or **terminal**? Console → run `node "<D>/console.mjs" open --workflow finalize` before reading (<D>: references/web-console/ beside this SKILL.md, or the dir in ~/.plan2code/console/console-dir; `--spec specs/<feature-name>` if known, else post `specDir` later), then read <D>/console.md and <D>/notes/finalize.md; the audit options, the doc-update approval and every cleanup confirmation go through it. Switchable anytime. `--web` or `Use the web console for this session.` in the argument answers it; drop the flag. Dashboard-launched? Resume its open session (console-launches.md), then the Required Context check.
+The FIRST thing you do, before anything else in this file — before the Required Context check, before Step 1: ask **web console** (browser page, suggested) or **terminal**? Console → run `node "<D>/console.mjs" open --workflow finalize` before reading (<D>: references/web-console/ beside this SKILL.md, or the dir in ~/.plan2code/console/console-dir; `--spec specs/<feature-name>` if known, else post `specDir` later), then read <D>/console.md and <D>/notes/finalize.md; the audit options, the final review, the doc-update approval and every cleanup confirmation go through it. Switchable anytime. `--web` or `Use the web console for this session.` in the argument answers it; drop the flag. Dashboard-launched? Resume its open session (console-launches.md), then the Required Context check.
 
 ## Scripts
 
@@ -19,6 +19,7 @@ The FIRST thing you do, before anything else in this file — before the Require
 - `node "<S>/specs.mjs" metrics <spec> --step finalize --set ...`: Step 7's METRICS_JSON line.
 - `node "<S>/feedback-payload.mjs"`: Step 6.5 (see its reference).
 - `node "<S>/commit-msg.mjs" --subject "<subject>"`: the commit command.
+- `node "<S>/review-scope.mjs"`: the branch's changed files, for Step 2.5's scope.
 
 ## Rules
 
@@ -26,10 +27,11 @@ The FIRST thing you do, before anything else in this file — before the Require
 - Complete steps IN ORDER
 - STOP and ask user before proceeding when:
   - Incomplete tasks found (Step 1)
+  - The final review is offered, and its fixes are picked (Step 2.5)
   - Documentation updates proposed (Step 4)
 - No documentation changes without explicit user approval
 - Archive specs to `specs--completed/<feature-name>/` (preserve folder name exactly)
-- Validation and cleanup only - no implementation code
+- Validation and cleanup only - no implementation code, except the Step 2.5 review fixes the user picks
 - If file operations unavailable, output contents in code blocks with intended path as header
 
 ### Required Context
@@ -112,12 +114,14 @@ INCOMPLETE TASKS DETECTED
 - [ ] Required environment variables documented
 - [ ] No hardcoded secrets or credentials
 - [ ] Code follows existing codebase patterns
-
-### Test Validation (if defined)
-| Test Type | Passed | Failed | Coverage |
-|-----------|--------|--------|----------|
-| Unit | X | X | X% |
 ```
+
+**Full suite:** read `references/test-runs.md`, then the PLAN-DRAFT's 2.4 `Full Suite` row.
+- `Never`: skip the offer; record `not planned`.
+- `At Phase N`: it ran in that phase; record that run's outcome without asking, and offer a rerun only if shared ground changed after it.
+- Otherwise ask "Run the full suite now?" with a one-line reason (for example, which shared areas the build touched). Recommend yes; the person may skip. Never forced.
+- A failing run gets the choice: 1 Fix now, 2 Document and proceed, 3 Investigate first.
+- Record one outcome for Step 3: `passed`, `failed (N)`, `skipped (your choice)` or `not planned`.
 
 #### Report:
 
@@ -129,6 +133,27 @@ INCOMPLETE TASKS DETECTED
 
 **Issues Found:** [List or "None"]
 ```
+
+---
+
+### STEP 2.5: Final Review (Offered)
+
+`🧹 [FINALIZATION STEP 2.5: Final Review]`
+
+**Objective:** One last independent look at the whole feature before it is summarized and archived.
+
+Always offer it, whatever Step 2 found and however Finalize was started (by hand, from a finished build, or by the Implementation Loop): "Run a final review of the whole feature before the summary? (yes / no)", with its size (files, ~lines). Recommend yes; the person may skip. Skipped → record `skipped (your choice)` and go to Step 3.
+
+**Scope (decided, never asked):** Focused, the feature's change set: every file the phases' completion summaries and `Files` lists name, plus the tests and docs changed for it. Add `review-scope.mjs`'s files only where they belong to this feature (a branch carrying other work stays out). `overview.md` and the phase files give spec compliance; they do not widen scope.
+
+On yes, read `references/review.md` and run Review Mode with these overrides:
+- The scope above; no scope question.
+- The helper rule applies: a fresh helper runs the analysis when available, you verify every finding, and the report carries its Reviewed by line.
+- No commit instructions and no next-step routing; Finalize carries both.
+
+Then the fix choice (`H` / `A` / `S 1,3`, or none) and Review Mode's Post-Fix Flow for the picked findings, ending on its "Reply **approved**" gate. Zero findings: say so with the dimension coverage and go on.
+
+Record one outcome for Step 3: `N found, M fixed, K open` or `skipped (your choice)`. Every open finding goes in Step 3's Known Limitations with its severity and file. An open Critical: say so plainly and offer going back to `/plan2code-3-implement` before archiving.
 
 ---
 
@@ -165,6 +190,9 @@ INCOMPLETE TASKS DETECTED
 
 ### Known Limitations / Blocked Items
 [List or "None"]
+
+Full suite: [passed / failed (N) / skipped (your choice) / not planned]
+Final review: [N found, M fixed, K open / skipped (your choice)]
 ```
 
 Add this summary to `overview.md` under `## Completion Summary`.
@@ -212,7 +240,7 @@ Do NOT make documentation changes without user approval.
 
 **Objective:** Collect optional feedback before archival.
 
-Ask the user: "Would you like to provide feedback on this run? (optional)" If no, skip to Step 6.
+Ask this one question on its own, before any of the others: "Would you like to rate this run? (yes / no thank you)" On no, skip to Step 6 and ask nothing more about feedback.
 
 If yes, collect:
 1. **Rating** (1-10): "How would you rate this workflow run overall?"
@@ -283,6 +311,7 @@ Paste the `comment` from `specs.mjs metrics <spec's current path: specs--complet
 ### Finalization Steps Completed
 - [x] Step 1: Task Completion Audit
 - [x] Step 2: Implementation Verification
+- [x] Step 2.5: Final Review (Offered)
 - [x] Step 3: Implementation Summary
 - [x] Step 4: Documentation Review
 - [x] Step 5: User Feedback (Optional)
@@ -292,6 +321,7 @@ Paste the `comment` from `specs.mjs metrics <spec's current path: specs--complet
 
 ### Files Created/Modified During Finalization
 - `specs/<feature-name>/overview.md` - Added completion summary
+- [each file a Step 2.5 fix changed, if any]
 - `README.md` - [if updated]
 - `CHANGELOG.md` - [if updated]
 
@@ -344,8 +374,8 @@ If you discovered undocumented commands, dependency quirks, gotchas (>5min cost)
 
 (Step 7 already delivered the completion summary — don't repeat it.)
 
-Suggested commit (only if README, CHANGELOG, or other tracked docs were updated): the `command` from `commit-msg.mjs --subject "chore: finalize and archive <feature-name>"`. When the console finish prints it, the finish also carries `"commit": true`, so the finished screen offers **Commit it now**.
+Suggested commit (only if Step 2.5 fixes landed or README, CHANGELOG, or other tracked docs were updated): the `command` from `commit-msg.mjs --subject "chore: finalize and archive <feature-name>"`. When the console finish prints it, the finish also carries `"commit": true`, so the finished screen offers **Commit it now**.
 
 Returning context: Feature complete. Specs archived to `specs--completed/<feature-name>/`.
 
-**On the web console:** a `__stop` action in a send ends the session: see console-stop.md. At every session end post `finish` BEFORE `stop`, per notes/finalize.md — the completion summary is printed to a terminal the browser user is not watching.
+**On the web console:** the completion summary is printed to a terminal the browser user is not watching.

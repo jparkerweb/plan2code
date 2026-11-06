@@ -40,7 +40,7 @@ export function fail(exit, error, message, next, extra) {
 }
 
 export function out(obj) {
-  process.stdout.write(JSON.stringify(obj, null, 2) + "\n");
+  process.stdout.write(JSON.stringify(obj) + "\n");
 }
 
 /**
@@ -177,7 +177,7 @@ export function writeIfChanged(file, content) {
   return true;
 }
 
-/** Normalise line endings for parsing; keep the original for writing back. */
+/** Normalize line endings for parsing; keep the original for writing back. */
 export function eol(text) {
   return text.includes("\r\n") ? "\r\n" : "\n";
 }
@@ -212,8 +212,8 @@ export function rel(root, p) {
 
 /* ------------------------------------------------- planning-file patterns */
 
-// The loop completion markers. The loop scans specs/ for them, so no planning
-// file may contain one. The one copy every skill script checks against.
+// The loop completion markers, reserved outright so nothing under specs/ can
+// fake a finished run. The one copy every skill script checks against.
 export const LOOP_TOKENS = /\b(TASK_COMPLETE|PHASE_COMPLETE|ALL_TASKS_COMPLETE|IMPLEMENTATION_COMPLETE|SPEC_COMPLETE|WORK_COMPLETE)\b/;
 
 // The metrics collector's own scrape patterns (plan2code-metrics/src/collector.ts).

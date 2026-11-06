@@ -231,7 +231,14 @@ export function serverWorkspace(ctx) {
   }
 
   function saveWorkspace(ws) {
-    writeWorkspace(dir, ws);
+    try {
+      writeWorkspace(dir, ws);
+    } catch (e) {
+      // The caller changed the cached object before saving: drop it, so the next
+      // read starts from what is on disk and a retry is not told "duplicate".
+      workspaceSeen = { stamp: null, ws: null };
+      throw e;
+    }
     workspaceSeen = { stamp: fileStamp(WORKSPACE_PATH), ws };
   }
 

@@ -23,7 +23,7 @@ test("playwright-core is pinned exactly in the root devDependencies", () => {
 // A fake file system holding only `present`.
 const only = (...present) => (p) => present.includes(p);
 
-test("findBrowser picks Chrome, then Edge, and honours PLAN2CODE_TEST_BROWSER", async () => {
+test("findBrowser picks Chrome, then Edge, and honors PLAN2CODE_TEST_BROWSER", async () => {
   const { findBrowser, BROWSER_PATHS } = await import("./browser.mjs");
   const chrome = BROWSER_PATHS.chrome[0];
   const edge = BROWSER_PATHS.msedge[0];

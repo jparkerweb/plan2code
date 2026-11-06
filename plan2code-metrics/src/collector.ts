@@ -1,7 +1,7 @@
 /**
  * collector.ts
  * Reads finished project artifacts and writes a RunMetrics JSON file.
- * Zero dependency on plan2code-loop internals — reads files directly.
+ * Reads the spec files directly; no dependency on other plan2code packages.
  */
 
 import fs from 'fs';

@@ -14,7 +14,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
-import { pageSuite, openSession, tempProject, textOf, itemCard } from "./page-test-helpers.mjs";
+import { pageSuite, openSession, tempProject, textOf, itemCard, scrollCard , fillBox} from "./page-test-helpers.mjs";
 import { until } from "./web-console-test-helpers.mjs";
 
 const suite = pageSuite(test);
@@ -74,7 +74,7 @@ test("each git tab keeps its own scroll place, across a tab switch and an agent 
   const column = () => page.locator("#main").evaluate((el) => el.scrollTop);
   await tab("Changes").click();
   await page.getByRole("tabpanel").getByText("src/app.js", { exact: true }).waitFor();
-  await page.locator("#main").evaluate((el) => (el.scrollTop = 120));
+  await scrollCard(page.locator("#main"), 120);
   const changesAt = await column();
   assert.ok(changesAt > 0, "the board's column scrolls");
   // Another tab opens at its own place, not where Changes was left.
@@ -137,15 +137,14 @@ const settles = (control, enabled) => until(async () => (await control.isEnabled
 const settlesUsable = (page, want) => until(async () => (await usable(page)) === want, 8000);
 const titled = (page, text) => page.waitForFunction((x) => document.getElementById("title").textContent.includes(x), text);
 
-test("the commit dialog sends the ticked files as one __git action, with its reply sentence", async (t) => {
+test("the next step's Commit sends the files ticked in the table as one __git action, with its reply sentence", async (t) => {
   const s = await openSession(await suite.browser(), { t, workflow: "git", project: changesProject({ branch: "feature/x" }), payload: READY });
   const { page } = s;
   await page.getByRole("tablist").waitFor();
-  await stepButton(page, "Commit 2 files").click();
-  const panel = page.locator(".git-panel");
-  await panel.getByRole("button", { name: "Close" }).waitFor();
+  await stepButton(page, "Commit 2 files").waitFor();
   await tickBox(page, "notes.md").uncheck();
-  await panel.getByRole("button", { name: "Commit 1 file" }).click();
+  // The table is already on show below, so the step's button commits rather than opening it.
+  await stepButton(page, "Commit 1 file").click();
   const got = s.wait(10);
   assert.equal(got.code, 0, "the agent collected the click");
   assert.deepEqual(got.actions, [{ i: "__git", type: "git", op: "commit", files: ["src/app.js"], ignore: [] }]);
@@ -261,7 +260,7 @@ test("a commit with no branch to land on carries the ticked files into the new b
   await tickBox(page, "notes.md").uncheck();
   // The step is on the Branches tab, and its Commit button finds no branch to commit on.
   await tabButton(page, "Branches").click();
-  await stepButton(page, "Commit 2 files").click();
+  await stepButton(page, "Commit 1 file").click();
   const panel = page.locator(".git-panel");
   await panel.getByRole("heading", { name: "New branch for this commit" }).waitFor();
   const create = panel.getByRole("button", { name: "Create", exact: true });
@@ -296,10 +295,10 @@ test("Publish names a remote only when there is exactly one", async (t) => {
 test("over the git board a note box grows with its text, and the no-repo note only points above when a card is there", async (t) => {
   const s = await openSession(await suite.browser(), { t, workflow: "git", project: gitProject(), payload: READY });
   s.post({ items: [confirmCard], agent: { status: "waiting" } });
-  const note = itemCard(s.page, "y1").locator("textarea").first();
+  const note = itemCard(s.page, "y1").locator(".md-host").first();
   await note.waitFor();
   const before = await note.evaluate((el) => el.offsetHeight);
-  await note.fill(Array.from({ length: 8 }, (_, n) => `Line ${n + 1} of a longer note.`).join("\n"));
+  await fillBox(note, Array.from({ length: 8 }, (_, n) => `Line ${n + 1} of a longer note.`).join("\n"));
   const after = await note.evaluate((el) => el.offsetHeight);
   assert.ok(after > before + 40, `the note box grew with its text: ${before} to ${after}`);
 

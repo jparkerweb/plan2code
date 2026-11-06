@@ -70,9 +70,21 @@ test("scripts are self-contained: built-ins and siblings only", () => {
     for (const f of fs.readdirSync(dir).filter((n) => n.endsWith(".mjs"))) {
       const t = fs.readFileSync(path.join(dir, f), "utf8");
       for (const m of t.matchAll(/^import .* from "([^"]+)";$/gm)) {
-        assert.ok(m[1].startsWith("node:") || m[1] === "./common.mjs", `${f} imports ${m[1]}`);
+        const sibling = /^\.\/[\w-]+\.mjs$/.test(m[1]) && fs.existsSync(path.join(dir, m[1]));
+        assert.ok(m[1].startsWith("node:") || m[1] === "./common.mjs" || sibling, `${f} imports ${m[1]}`);
       }
       assert.ok(!/[\u0000-\u0008]/.test(t), `${f} contains a control character (an escape lost in an edit?)`);
+    }
+  }
+  // A sibling import ships with its importer: every skill that carries a
+  // script also carries each ./x.mjs it imports.
+  for (const skill of fs.readdirSync(SKILLS)) {
+    const dir = path.join(SKILLS, skill, "scripts");
+    if (!fs.existsSync(dir)) continue;
+    for (const f of fs.readdirSync(dir).filter((n) => n.endsWith(".mjs"))) {
+      for (const m of fs.readFileSync(path.join(dir, f), "utf8").matchAll(/^import .* from "(\.\/[^"]+)";$/gm)) {
+        assert.ok(fs.existsSync(path.join(dir, m[1])), `${skill}/scripts/${f} imports ${m[1]}, which the skill does not ship`);
+      }
     }
   }
 });
@@ -158,7 +170,7 @@ test("specs status: checklist formats, groups, task markers, numbering, totals, 
     [3, "Web UI", "pending"],
     [4, "Docs", "pending"],
   ]);
-  assert.deepEqual(j.parallelGroups.map((g) => [g.id, g.phases]), [["A", [3, 4]]], "a group labelled sequential is not a parallel group");
+  assert.deepEqual(j.parallelGroups.map((g) => [g.id, g.phases]), [["A", [3, 4]]], "a group labeled sequential is not a parallel group");
   assert.deepEqual(j.totals, { total: 11, complete: 4, assumed: 1, pending: 5, "in-progress": 0, blocked: 1, unknown: 0, completed: 5, incomplete: 5 });
   assert.equal(j.completionPercent, 45);
   assert.equal(j.phases[0].tasks.total, 3, "a named testing task (1.T) counts");
@@ -705,6 +717,23 @@ test("specs check-draft: a pathfinder draft at Resume at Phase 4 is checked ligh
   const bad = runScript("plan2code-1-plan", "specs.mjs", ["check-draft", "idea-only", "--root", root]);
   assert.equal(bad.code, 4);
   assert.deepEqual(bad.json.problems.map((p) => p.code).sort(), ["loop-token", "metric-word"]);
+});
+
+test("specs check-draft: a Test escalation draft passes like a Quick Task one", () => {
+  const root = specFixture();
+  for (const from of ["Quick Task", "Test"]) {
+    write(root, "specs/idea-only/PLAN-DRAFT-20260801.md", `# PLAN-DRAFT: Tests\n\n**Status:** Escalated from ${from} - Resume at Phase 2\n**Source:** ${from} escalation\n\n## 1. Executive Summary\n\nWrite the tests.\n`);
+    const r = runScript("plan2code-1-plan", "specs.mjs", ["check-draft", "idea-only", "--root", root]);
+    assert.equal(r.code, 0, r.stdout);
+    assert.equal(r.json.status, `Escalated from ${from} - Resume at Phase 2`);
+  }
+});
+
+test("the skills that run test-match.mjs ship glob.mjs and test-map.mjs beside it", () => {
+  for (const s of ["plan2code-pr-prep", "plan2code-test"]) {
+    for (const f of ["test-match.mjs", "glob.mjs", "test-map.mjs"]) assert.ok(fs.existsSync(path.join(SKILLS, s, "scripts", f)), `${s}/scripts/${f}`);
+  }
+  assert.ok(fs.existsSync(path.join(SKILLS, "plan2code-test", "scripts", "coverage.mjs")), "plan2code-test ships its own coverage.mjs");
 });
 
 test("common.mjs exports the shared loop-token and scrape patterns", async () => {

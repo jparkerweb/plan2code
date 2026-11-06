@@ -14,20 +14,29 @@ import crypto from "node:crypto";
 import {
   LOOKS_FILE,
   PUBLIC_DIR,
+  SHIPPED_AGENTS_FILE,
   SHIPPED_MODELS_FILE,
+  USER_AGENTS_FILE,
   USER_MODELS_FILE,
   appendEvent,
   ensureDir,
   fileStamp,
   nowIso,
   readJson,
+  readText,
+  updateState,
   withStateLock,
   writeJsonAtomic,
 } from "./files.mjs";
-import { checkDocument, cleanupFindings, readOverview, removeCleanup } from "./sessions.mjs";
+import { AGENTS_SCHEMA, makeId, normalizeAgents, resolveCommand, validateForSave } from "./agents.mjs";
+import { findAgent, loadAgentList } from "./agent-lookup.mjs";
+import { checkDocument, cleanupFindings, readSpecFile, removeCleanup } from "./sessions.mjs";
 import { SHOTS_DIR_NAME, SHOT_NAME, shotType } from "./patches.mjs";
 import { appendChat, currentConversation, pendingChatCount, typedCount } from "./inbox.mjs";
 import { specKey } from "./workspace.mjs";
+import { readLoopSetup, saveLoopSetup } from "./loop-setup.mjs";
+import { resolveStrengths } from "./strengths.mjs";
+import { MARKERS, phaseChecklist } from "./spec-files.mjs";
 import {
   PR_HOST_KINDS,
   readSubagentSetting,
@@ -39,9 +48,10 @@ import {
 import { DOC_TYPES, MAX_ATTACHMENTS, MAX_DOC_BYTES, docExt, workflowLabel, workflowTitle } from "./public/answers.js";
 import { CHAT_LIMIT, CHAT_MAX_CHARS } from "./public/chat.js";
 import { cleanSetting, offered } from "./public/subagents.js";
-import { ACCENTS, DEFAULT_ACCENT, DEFAULT_CARD_WIDTH, cardWidth } from "./public/palette.js";
+import { DEFAULT_ACCENT, DEFAULT_CARD_WIDTH, accentId, cardWidth } from "./public/palette.js";
 import { SERVABLE, TYPES, asset } from "./static.mjs";
 import { handoffsDir, isHandoffId } from "./handoffs.mjs";
+import { linkToOpen, openLink } from "./open-link.mjs";
 import {
   NotepadError,
   addImage,
@@ -50,6 +60,7 @@ import {
   defaultTabId,
   deleteTab,
   imagePath,
+  markTabSent,
   readNotepad,
   removeImage,
   renameTab,
@@ -68,6 +79,9 @@ const WORKSPACE_EDITS = { "/workspace/add": "addFolder", "/workspace/edit": "edi
 const ROUTES = [
   { path: "/health", open: true, run: health },
   { match: (p) => p.startsWith("/s/"), open: true, run: signIn },
+  // Open on purpose: the caller is another Plan2Code process handing the
+  // setup tab over, not a cookied browser. It has its own token (state.setup).
+  { path: "/handover", method: "POST", open: true, run: handover },
   { path: "/", method: "GET", run: page },
   { match: (p, req) => req.method === "GET" && SERVABLE.has(p.slice(1)), run: publicFile },
   { path: "/overview", method: "GET", run: overview },
@@ -82,6 +96,10 @@ const ROUTES = [
   { path: "/pr-host", method: "POST", origin: true, run: prHost },
   { path: "/models", method: "GET", run: modelsGet },
   { path: "/models", method: "POST", origin: true, run: modelsPost },
+  { path: "/agents", method: "GET", run: agentsGet },
+  { path: "/agents", method: "POST", origin: true, run: agentsPost },
+  { path: "/agents/test", method: "POST", origin: true, run: agentsTest },
+  { path: "/agents/use-path", method: "POST", origin: true, run: agentsUsePath },
   { path: "/cleanup", method: "POST", origin: true, run: cleanup },
   { path: "/upload", method: "POST", origin: true, run: upload },
   { path: "/notepad", method: "GET", run: notepadGet },
@@ -94,21 +112,33 @@ const ROUTES = [
   { path: "/notepad/tab/delete", method: "POST", origin: true, run: notepadTabDelete },
   { path: "/notepad/tab/order", method: "POST", origin: true, run: notepadTabOrder },
   { path: "/notepad/tab/last", method: "POST", origin: true, run: notepadTabLast },
+  { path: "/notepad/tab/sent", method: "POST", origin: true, run: notepadTabSent },
   { match: (p, req) => p.startsWith("/notepad/images/") || req.url.startsWith("/notepad/images/"), method: "GET", run: notepadImageGet },
   { match: (p, req) => p.startsWith("/attachments/") || req.url.startsWith("/attachments/"), run: attachment },
   { match: (p, req) => p.startsWith("/shots/") || req.url.startsWith("/shots/"), run: shot },
   { match: (p, req) => p.startsWith("/uploads/") || req.url.startsWith("/uploads/"), run: uploads },
   { path: "/submit", method: "POST", origin: true, run: submit },
+  { path: "/open-link", method: "POST", origin: true, run: openLinkRoute },
   { path: "/chat", method: "POST", origin: true, run: chat },
   { path: "/chat/decision", method: "POST", origin: true, run: chatDecision },
   { path: "/workspace", method: "GET", run: workspaceGet },
   { match: (p) => Object.hasOwn(WORKSPACE_EDITS, p), method: "POST", origin: true, run: workspaceEdit },
   { path: "/workspace/scope", method: "POST", origin: true, run: workspaceScope },
   { path: "/workspace/browse", method: "POST", origin: true, run: workspaceBrowse },
+  { path: "/loop-setup", method: "GET", run: loopSetupGet },
+  { path: "/loop-setup", method: "POST", origin: true, run: loopSetupPost },
   { path: "/cancel", method: "POST", origin: true, run: cancel },
   { path: "/ping", method: "POST", run: ping },
   { path: "/bye", origin: true, run: bye },
 ];
+
+// events.ndjson is an advisory log: a transient lock or a full disk must not
+// take a route (or the detached server) down after the real write landed.
+function noteEvent(dir, event) {
+  try {
+    appendEvent(dir, event);
+  } catch {}
+}
 
 export function handle(req, res, ctx) {
   const port = ctx.port();
@@ -127,7 +157,15 @@ export function handle(req, res, ctx) {
     if (route.path !== undefined ? pathname !== route.path : !route.match(pathname, req)) continue;
     if (route.method && req.method !== route.method) continue;
     if (route.origin && !originOk(req, port)) return json(res, 403, { error: "bad origin" });
-    return route.run(req, res, ctx, url);
+    try {
+      return route.run(req, res, ctx, url);
+    } catch (e) {
+      if (!res.headersSent) return json(res, 500, { error: "server error" });
+      try {
+        res.end();
+      } catch {}
+      return undefined;
+    }
   }
   return json(res, 404, { error: "not found" });
 }
@@ -151,17 +189,75 @@ function signIn(req, res, ctx, url) {
   const given = url.pathname.slice(3).replace(/\/$/, "");
   if (!ctx.token || !timingSafeEq(given, ctx.token)) return send(res, 403, "Not found", "text/plain");
   ctx.touch();
+  // Inside the app's frame the page is cross-site, and SameSite=Strict would
+  // never be sent back, so embed mode loosens the cookie to None; Secure, which
+  // loopback counts as a trustworthy origin for. Anywhere else it stays Strict.
   res.writeHead(
     302,
     baseHeaders({
       location: "/",
-      "set-cookie": `${cookieName(ctx)}=${ctx.token}; HttpOnly; SameSite=Strict; Path=/`,
+      "set-cookie": `${cookieName(ctx)}=${ctx.token}; HttpOnly; ${embedAncestor() === "'none'" ? "SameSite=Strict" : "SameSite=None; Secure"}; Path=/`,
     })
   );
   return res.end();
 }
 
+// The setup session's hand-over: a launcher process opened this session's
+// /s/ link in its own web view, then POSTs here so the launcher's setup page
+// (the caller's own console) can move that tab to the new session. Only a
+// setup session answers, and only for the per-session setup token that
+// `open` printed for the launcher, never the browser cookie. On success the
+// page gets a `move` SSE event carrying the url to hand itself to.
+function handover(req, res, ctx) {
+  const state = ctx.readState();
+  if (!state || state.workflow !== "setup" || !state.setup || !state.setup.token) {
+    return json(res, 404, { error: "not-found" });
+  }
+  if (!timingSafeEq(req.headers["x-plan2code-token"] || "", state.setup.token)) {
+    return json(res, 403, { error: "forbidden" });
+  }
+  ctx.touch();
+  // The tab moved once; a second open in the same conversation is not a
+  // hand-over, so the caller can open a browser without a failure note.
+  if (state.setup.moved) return json(res, 409, { error: "moved" });
+  return readBody(req, (err, body) => {
+    if (err) return json(res, err.tooBig ? 413 : 400, { error: err.tooBig ? "too large" : "bad-url" });
+    const target = typeof body?.url === "string" ? body.url : "";
+    // Only another console's sign-in link is a legal destination.
+    if (!/^http:\/\/(127\.0\.0\.1|localhost):\d+\/s\/[A-Za-z0-9_-]+\/?$/.test(target)) {
+      return json(res, 400, { error: "bad-url" });
+    }
+    try {
+      updateState(ctx.dir, (fresh) => {
+        if (!fresh) return null;
+        fresh.setup = { ...(fresh.setup || {}), moved: { url: target, at: nowIso() } };
+        return fresh;
+      });
+    } catch (e) {
+      return json(res, 500, { error: String(e.message) });
+    }
+    ctx.broadcast("move", { url: target });
+    return send(res, 204, "");
+  });
+}
+
 /* -------------------------------------------------------- the page itself */
+
+// PLAN2CODE_EMBED_ORIGIN is an opt-in widening of frame-ancestors for a shell
+// that embeds the page. The whole value must be exactly one allowed origin:
+// a loopback http origin with a real port, or one of the three tauri origins,
+// which name the embedding app page itself (that page is not on 127.0.0.1).
+// Anything else (a list, a wildcard, a bare host, another scheme) is ignored
+// and the directive keeps 'none'.
+function embedAncestor() {
+  const value = process.env.PLAN2CODE_EMBED_ORIGIN;
+  if (!value) return "'none'";
+  if (value === "http://tauri.localhost" || value === "https://tauri.localhost" || value === "tauri://localhost") return value;
+  const m = /^http:\/\/(127\.0\.0\.1|localhost):(\d{1,5})$/.exec(value);
+  if (!m) return "'none'";
+  const port = Number(m[2]);
+  return port >= 1 && port <= 65535 ? value : "'none'";
+}
 
 function page(req, res, ctx) {
   let html;
@@ -176,7 +272,7 @@ function page(req, res, ctx) {
   const csp =
     "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; " +
     "font-src 'self'; connect-src 'self'; media-src 'self'; " +
-    "base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
+    "base-uri 'none'; form-action 'none'; frame-ancestors " + embedAncestor();
   return send(res, 200, html, TYPES[".html"], { "content-security-policy": csp });
 }
 
@@ -238,8 +334,8 @@ function renderIndex(ctx) {
   };
   let htmlAttrs = "";
   if (looks && (looks.theme === "light" || looks.theme === "dark")) htmlAttrs += ` data-theme="${looks.theme}"`;
-  if (looks && looks.accent !== DEFAULT_ACCENT && Object.hasOwn(ACCENTS, String(looks.accent))) {
-    htmlAttrs += ` data-looks-accent="${looks.accent}"`;
+  if (looks && accentId(looks.accent) !== DEFAULT_ACCENT) {
+    htmlAttrs += ` data-looks-accent="${accentId(looks.accent)}"`;
   }
   // The same first-paint reasoning as the accent: a Wide user never sees the
   // column jump from the default width. The value is one of the fixed preset
@@ -275,12 +371,15 @@ function renderIndex(ctx) {
 
 /* ------------------------------------------------------ read-only routes */
 
-// The spec's overview.md, read-only. A dashboard honours ?spec= only for a
-// spec its own scan found; every other workflow reads its own specDir.
-// readOverview() keeps the read inside the project root.
+// One of the spec's files, read-only: overview.md by default, or with
+// ?file=draft or ?file=map the live PLAN-DRAFT or the Pathfinder map. A
+// dashboard honors ?spec= only for a spec its own scan found; every other
+// workflow reads its own specDir. readSpecFile() keeps the read inside the
+// project root, and names the file it read in X-Spec-File.
 function overview(req, res, ctx, url) {
   const state = ctx.readState() || {};
   const asked = url.searchParams.get("spec");
+  const kind = url.searchParams.get("file") || "overview";
   const spec =
     state.workflow === "dashboard"
       ? (state.scan?.specs || []).some((s) => s && s.dir === asked)
@@ -293,10 +392,14 @@ function overview(req, res, ctx, url) {
     res.writeHead(204, baseHeaders({ "cache-control": "no-store" }));
     res.end();
   };
-  readOverview(state.worktree || state.project, spec)
-    .then((text) =>
-      typeof text === "string"
-        ? send(res, 200, text, "text/markdown; charset=utf-8", { "cache-control": "no-store" })
+  readSpecFile(state.worktree || state.project, spec, kind)
+    .then((found) =>
+      found
+        ? send(res, 200, found.text, "text/markdown; charset=utf-8", {
+            "cache-control": "no-store",
+            // Encoded: a header value is bytes, and a file name need not be ASCII.
+            "x-spec-file": encodeURIComponent(found.file),
+          })
         : noOverview()
     )
     .catch(noOverview);
@@ -382,7 +485,7 @@ function draft(req, res, ctx) {
  * Whittle a POSTed settings object down to what a settings file may hold.
  * The page only sends { theme, accent } today, but the file is shared and
  * forward-compatible: any flat string/number/boolean may live in it. Nested
- * objects, arrays and a hundred-key dump may not — this is a preference file,
+ * objects, arrays and a two-hundred-key dump may not: this is a preference file,
  * not free storage, and it is read back into the page unfiltered.
  */
 function cleanLooks(input) {
@@ -392,7 +495,9 @@ function cleanLooks(input) {
     if (k === "__proto__" || k.length > 64) continue;
     const t = typeof v;
     if (t === "number" || t === "boolean" || (t === "string" && v.length <= 256)) out[k] = v;
-    if (Object.keys(out).length > 40) return null;
+    // The Activities' best scores alone take a key per game and per golf
+    // course, so the cap leaves room for them all.
+    if (Object.keys(out).length > 120) return null;
   }
   return Object.keys(out).length ? out : null;
 }
@@ -436,22 +541,22 @@ function subagentsPost(req, res, ctx) {
     if (!state || !offered(state.workflow)) return json(res, 400, { error: "not-offered" });
     const clean = cleanSetting(body);
     if (clean.error) return json(res, 400, { error: clean.error });
-    const { on, instruction, max } = clean;
+    const { on, instruction, max, strength } = clean;
     const current = readSubagentSetting(ctx.dir);
-    const next = { workflow: state.workflow, on, instruction, max };
+    const next = { workflow: state.workflow, on, instruction, max, strength };
     // The store is per project, so another session may have moved it since
     // this one synced: it always takes the person's latest pick. Only a
     // real change to this session's setting bumps what the agent hears.
     const unchanged = Boolean(current && sameSetting(current, next));
     try {
-      saveSubagentStoreEntry(ctx.worktree(), state.workflow, { on, instruction, max });
+      saveSubagentStoreEntry(ctx.worktree(), state.workflow, { on, instruction, max, strength });
       if (!unchanged) writeSubagentSetting(ctx.dir, { ...next, revision: (current ? current.revision : 0) + 1 });
     } catch (e) {
       return json(res, 500, { error: String(e.message) });
     }
     if (unchanged) return json(res, 200, { ok: true, setting: current });
     const setting = readSubagentSetting(ctx.dir);
-    appendEvent(ctx.dir, { type: "subagents", on, revision: setting.revision });
+    noteEvent(ctx.dir, { type: "subagents", on, revision: setting.revision });
     ctx.pushState();
     return json(res, 200, { ok: true, setting });
   });
@@ -478,13 +583,21 @@ function prHost(req, res, ctx) {
     } catch (e) {
       return json(res, 500, { error: String(e.message) });
     }
-    appendEvent(ctx.dir, { type: "pr-host", host, kind });
+    noteEvent(ctx.dir, { type: "pr-host", host, kind });
     return json(res, 200, { ok: true });
   });
 }
 
-// The CLIs the launcher reads a model list for (src/launcher/plan2code.js listModels).
-const MODEL_CLIS = ["claude", "devin", "codex"];
+// The CLIs the launcher reads a model list for (src/launcher/plan2code.js
+// listModels): the shipped agent list's built-ins. Worked out per call so a
+// bin/agents.json written after server boot is picked up; the hard-coded
+// trio is only the fallback for a missing or bad file.
+const MODEL_CLI_FALLBACK = ["claude", "devin", "codex"];
+function modelClis() {
+  const { builtins } = loadAgentList({ dir: path.dirname(SHIPPED_AGENTS_FILE) });
+  const ids = builtins.map((a) => a && a.id).filter((id) => typeof id === "string" && id);
+  return ids.length ? ids : MODEL_CLI_FALLBACK;
+}
 const MODEL_ID = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,99}$/;
 // Devin's XHigh and Max efforts are never offered, curated or added.
 const MODEL_EFFORT_BLOCKED = /-(xhigh|max)$/i;
@@ -497,7 +610,7 @@ const MODEL_EFFORT_BLOCKED = /-(xhigh|max)$/i;
 function cleanModels(input) {
   if (!input || typeof input !== "object" || Array.isArray(input)) return { error: "models must be an object" };
   const models = {};
-  for (const cli of MODEL_CLIS) {
+  for (const cli of modelClis()) {
     const list = input[cli] == null ? [] : input[cli];
     if (!Array.isArray(list) || list.length > 50) return { error: `${cli} must be a list of at most 50 models` };
     const seen = new Set();
@@ -516,10 +629,83 @@ function cleanModels(input) {
   return { models };
 }
 
+// The loop's strength words and the efforts a mapping may carry (strengths.mjs).
+const STRENGTH_WORDS = ["thrifty", "balanced", "best"];
+const STRENGTH_EFFORTS = ["low", "medium", "high"];
+
+// Agent ids a strengths mapping may name: the shipped built-ins plus the ids of
+// the person's own added agents.
+function strengthAgentIds() {
+  const ids = new Set(modelClis());
+  try {
+    const raw = fs.existsSync(USER_AGENTS_FILE) ? readText(USER_AGENTS_FILE) : undefined;
+    for (const a of normalizeAgents(raw).agents) if (a && typeof a.id === "string" && a.id) ids.add(a.id);
+  } catch {
+    // A broken agents file adds no ids; the built-ins still map.
+  }
+  return ids;
+}
+
+/**
+ * The user's strengths mapping: { <agent id>: { thrifty|balanced|best: { model, effort? } } }.
+ * Returns { strengths } or { error } naming the field. Only known agent ids, the three
+ * words, a model matching MODEL_ID and an effort of low, medium or high survive; an
+ * agent left with no row is dropped.
+ */
+function cleanStrengths(input) {
+  if (input == null) return { strengths: {} };
+  if (typeof input !== "object" || Array.isArray(input)) return { error: "strengths must be an object" };
+  const known = strengthAgentIds();
+  const strengths = {};
+  for (const [agent, rows] of Object.entries(input)) {
+    if (!known.has(agent)) return { error: `strengths.${agent}: not a known agent` };
+    if (!rows || typeof rows !== "object" || Array.isArray(rows)) return { error: `strengths.${agent} must be an object` };
+    const out = {};
+    for (const [word, row] of Object.entries(rows)) {
+      if (!STRENGTH_WORDS.includes(word)) return { error: `strengths.${agent}.${word}: not a strength (thrifty, balanced or best)` };
+      if (!row || typeof row !== "object" || Array.isArray(row)) return { error: `strengths.${agent}.${word} must be an object` };
+      const model = typeof row.model === "string" ? row.model.trim() : "";
+      if (!MODEL_ID.test(model)) return { error: `strengths.${agent}.${word}.model: "${model}" is not a valid model id` };
+      const entry = { model };
+      if (row.effort != null && row.effort !== "") {
+        if (!STRENGTH_EFFORTS.includes(row.effort)) return { error: `strengths.${agent}.${word}.effort: must be low, medium or high` };
+        entry.effort = row.effort;
+      }
+      out[word] = entry;
+    }
+    if (Object.keys(out).length) strengths[agent] = out;
+  }
+  return { strengths };
+}
+
+// Strengths from a models file that was read from disk. Tolerant, unlike a POST body:
+// an agent that is no longer known (a deleted custom agent) or whose rows are bad is
+// skipped on its own, so it never hides or wipes the other agents' mapping.
+function savedStrengths(file) {
+  const saved = file && file.strengths;
+  if (!saved || typeof saved !== "object" || Array.isArray(saved)) return {};
+  const out = {};
+  for (const [agent, rows] of Object.entries(saved)) {
+    if (!rows || typeof rows !== "object" || Array.isArray(rows)) continue;
+    // Row by row, like the app: a bad row is dropped, a bad effort is dropped and
+    // its row stays, and the agent keeps every other row.
+    const kept = {};
+    for (const [word, row] of Object.entries(rows)) {
+      let one = cleanStrengths({ [agent]: { [word]: row } });
+      if (!one.strengths && row && typeof row === "object" && !Array.isArray(row) && row.effort != null) {
+        one = cleanStrengths({ [agent]: { [word]: { model: row.model } } });
+      }
+      if (one.strengths && one.strengths[agent]) Object.assign(kept, one.strengths[agent]);
+    }
+    if (Object.keys(kept).length) out[agent] = kept;
+  }
+  return out;
+}
+
 function shippedModels() {
   const file = readJson(SHIPPED_MODELS_FILE, null) || {};
   const out = {};
-  for (const cli of MODEL_CLIS) {
+  for (const cli of modelClis()) {
     out[cli] = (Array.isArray(file[cli]) ? file[cli] : []).filter((m) => m && typeof m.id === "string");
   }
   return out;
@@ -529,7 +715,12 @@ function shippedModels() {
 function modelsGet(req, res) {
   const saved = readJson(USER_MODELS_FILE, null) || {};
   const { models } = cleanModels(saved);
-  return json(res, 200, { shipped: shippedModels(), user: models || Object.fromEntries(MODEL_CLIS.map((cli) => [cli, []])) });
+  const shippedFile = readJson(SHIPPED_MODELS_FILE, null) || {};
+  return json(res, 200, {
+    shipped: shippedModels(),
+    user: models || Object.fromEntries(modelClis().map((cli) => [cli, []])),
+    strengths: { shipped: savedStrengths(shippedFile), user: savedStrengths(saved) },
+  });
 }
 
 function modelsPost(req, res) {
@@ -537,17 +728,180 @@ function modelsPost(req, res) {
     if (err) return json(res, err.tooBig ? 413 : 400, { error: err.tooBig ? "too large" : "body must be JSON" });
     const { models, error } = cleanModels(body && body.models);
     if (error) return json(res, 400, { error });
+    // A body without strengths keeps the mapping already saved, so saving a Models list never wipes it.
+    let strengths;
+    if (body && body.strengths !== undefined) {
+      const cleaned = cleanStrengths(body.strengths);
+      if (cleaned.error) return json(res, 400, { error: cleaned.error });
+      strengths = cleaned.strengths;
+    } else {
+      strengths = savedStrengths(readJson(USER_MODELS_FILE, null));
+    }
     try {
       ensureDir(path.dirname(USER_MODELS_FILE));
-      writeJsonAtomic(USER_MODELS_FILE, models);
+      writeJsonAtomic(USER_MODELS_FILE, Object.keys(strengths).length ? { ...models, strengths } : models);
     } catch (e) {
       return json(res, 500, { error: String(e.message) });
     }
-    return json(res, 200, { ok: true, user: models });
+    return json(res, 200, { ok: true, user: models, strengths });
   });
 }
 
-// User Preferences -> Cleanup. `{ scan: true }` lists what is not needed in
+// This OS's key in the shipped install instructions / installDirs.
+const OS_KEY = process.platform === "win32" ? "win" : process.platform === "darwin" ? "mac" : "linux";
+
+// The person's custom agents (agents.mjs has the rules) plus the shipped
+// list: built-ins with only this OS's install lines and their found state,
+// and the starter templates as-is. The custom file is read as text, not with
+// readJson: a half-written or broken file has to come back as a warning,
+// which readJson would turn into the same nothing as a missing file. Each
+// entry's {state,path,where,folder} is the "found badge" data, from
+// findAgent (a bare name searches PATH + saved PATH + npm + installDirs; a
+// path is a file check).
+function agentsGet(req, res) {
+  const raw = fs.existsSync(USER_AGENTS_FILE) ? readText(USER_AGENTS_FILE) : undefined;
+  const { agents, warnings } = normalizeAgents(raw);
+  const agentsWithState = agents.map((a) => ({ ...a, ...findAgent({ command: a.command }) }));
+
+  const { builtins, templates, warnings: shippedWarnings } = loadAgentList({ dir: path.dirname(SHIPPED_AGENTS_FILE), optional: true });
+  warnings.push(...shippedWarnings);
+  const builtinsForOs = builtins.map((entry) => ({
+    id: entry.id,
+    name: entry.name,
+    command: entry.command,
+    prompt: entry.prompt,
+    args: entry.args,
+    bypassArgs: entry.bypassArgs,
+    modelArgs: entry.modelArgs,
+    installUrl: entry.installUrl,
+    install: (entry.install && entry.install[OS_KEY]) || [],
+    ...findAgent(entry),
+  }));
+  const TEMPLATE_FIELDS = ["id", "name", "command", "prompt", "args", "bypassArgs", "modelArgs", "note"];
+  const templatesAsIs = templates.map((entry) =>
+    Object.fromEntries(TEMPLATE_FIELDS.filter((f) => entry[f] !== undefined).map((f) => [f, entry[f]]))
+  );
+  return json(res, 200, { agents: agentsWithState, warnings, builtins: builtinsForOs, templates: templatesAsIs });
+}
+
+// The whole list from User Preferences, checked, then written atomically. The
+// first failure names the entry and field so the page can mark them, and
+// nothing is written. Top-level keys the file already had are kept. A file
+// holding anything GET /agents could not read (another schema, a skipped
+// entry) is refused with 409 unless the page says `replace: true`, so a save
+// never silently drops what the person wrote there by hand.
+function agentsPost(req, res) {
+  return readBody(req, (err, body) => {
+    if (err) return json(res, err.tooBig ? 413 : 400, { error: err.tooBig ? "too large" : "body must be JSON" });
+    const { agents, error, index, field } = validateForSave(body && body.agents);
+    if (error) return json(res, 400, { error, index, field });
+    if (body.replace !== true && fs.existsSync(USER_AGENTS_FILE)) {
+      const { warnings } = normalizeAgents(readText(USER_AGENTS_FILE));
+      if (warnings.length) {
+        return json(res, 409, { error: "agents.json holds entries this page could not read. Saving replaces them.", warnings });
+      }
+    }
+    const saved = readJson(USER_AGENTS_FILE, null);
+    const kept = saved && typeof saved === "object" && !Array.isArray(saved) ? saved : {};
+    try {
+      ensureDir(path.dirname(USER_AGENTS_FILE));
+      writeJsonAtomic(USER_AGENTS_FILE, { ...kept, schema: AGENTS_SCHEMA, agents });
+    } catch (e) {
+      return json(res, 500, { error: String(e.message) });
+    }
+    return json(res, 200, { ok: true, agents });
+  });
+}
+
+// Where a command would run from, for the form's Test button. Only looks: it
+// never runs the command.
+function agentsTest(req, res) {
+  return readBody(req, (err, body) => {
+    if (err) return json(res, err.tooBig ? 413 : 400, { error: err.tooBig ? "too large" : "body must be JSON" });
+    const command = typeof body?.command === "string" ? body.command.trim() : "";
+    if (!command || command.length > 1024) return json(res, 400, { error: "command must be 1 to 1024 characters" });
+    const found = resolveCommand(command);
+    return json(res, 200, found ? { found: true, path: found } : { found: false });
+  });
+}
+
+// "Use this path instead": findAgent found the command off this process's
+// PATH (saved Windows PATH, npm's global folder, an install dir), so the
+// found location becomes the agent's command. Only findAgent's result is
+// ever saved, never a path the request carried. A built-in is materialized
+// as a new custom entry; a custom agent gets its command rewritten.
+function agentsUsePath(req, res, ctx) {
+  return readBody(req, (err, body) => {
+    if (err) return json(res, err.tooBig ? 413 : 400, { error: err.tooBig ? "too large" : "body must be JSON" });
+    const id = typeof body?.id === "string" ? body.id.trim() : "";
+    if (!id) return json(res, 400, { error: "id is required" });
+
+    const { builtins } = loadAgentList({ dir: path.dirname(SHIPPED_AGENTS_FILE) });
+    const builtin = builtins.find((a) => a && a.id === id);
+    const raw = fs.existsSync(USER_AGENTS_FILE) ? readText(USER_AGENTS_FILE) : undefined;
+    const { agents: customAgents, warnings } = normalizeAgents(raw);
+    // Same guard as agentsPost: a rewrite would drop the entries it skipped.
+    if (warnings.length) {
+      return json(res, 409, { error: "agents.json holds entries this page could not read. Saving replaces them.", warnings });
+    }
+    const custom = builtin ? null : customAgents.find((a) => a.id === id);
+    const entry = builtin || custom;
+    if (!entry) return json(res, 404, { error: "not-found" });
+
+    const found = findAgent(entry);
+    if (found.state === "missing") return json(res, 409, { error: "not-found" });
+    // Already on PATH: nothing to write, the badge can just say so.
+    if (found.state === "found") return json(res, 200, { ok: true, id, command: found.path || entry.command });
+
+    const list = customAgents.map((a) => ({ ...a }));
+    let savedId;
+    if (builtin) {
+      savedId = makeId(entry.name || id, list.map((a) => a.id));
+      list.push({
+        id: savedId,
+        name: entry.name,
+        command: found.path,
+        prompt: entry.prompt,
+        args: entry.args,
+        bypassArgs: entry.bypassArgs,
+        modelArgs: entry.modelArgs,
+        models: [],
+      });
+    } else {
+      savedId = id;
+      list.find((a) => a.id === id).command = found.path;
+    }
+    const { agents, error, index, field } = validateForSave(list);
+    if (error) return json(res, 400, { error, index, field });
+    // Same write as agentsPost: top-level keys the file already had are kept.
+    const saved = readJson(USER_AGENTS_FILE, null);
+    const kept = saved && typeof saved === "object" && !Array.isArray(saved) ? saved : {};
+    try {
+      ensureDir(path.dirname(USER_AGENTS_FILE));
+      writeJsonAtomic(USER_AGENTS_FILE, { ...kept, schema: AGENTS_SCHEMA, agents });
+    } catch (e) {
+      return json(res, 500, { error: String(e.message) });
+    }
+    // A --for-cli setup asked for this built-in: the materialized entry carries
+    // its id over, or the page's Start gate would never match it again. Done
+    // after the write so a failed save never leaves a dangling forCli.
+    const setup = ctx && ctx.readState && ctx.readState()?.setup;
+    if (builtin && setup && setup.forCli === id) {
+      try {
+        updateState(ctx.dir, (fresh) => {
+          if (!fresh) return null;
+          fresh.setup = { ...(fresh.setup || {}), forCli: savedId };
+          return fresh;
+        });
+      } catch {
+        return json(res, 500, { error: "could not update the session" });
+      }
+    }
+    return json(res, 200, { ok: true, id: savedId, command: found.path });
+  });
+}
+
+// User Preferences -> System -> Cleanup. `{ scan: true }` lists what is not needed in
 // ~/.plan2code and the project's old completed specs; `{ delete: [id] }`
 // removes those of the ids a fresh scan still finds. Never this session,
 // never a path the page sent.
@@ -569,7 +923,8 @@ function cleanup(req, res, ctx) {
 
 // The person's private notepad for the folder this session runs in, kept by
 // notepads.mjs outside the session. Nothing here writes to ctx.dir or the
-// event log: the agent reads both, and the notepad is never the agent's.
+// event log: the agent reads both, and the agent CLI never imports the store.
+// A tab leaves it only through a send the person starts on the dashboard.
 const notepadRoot = (ctx) => ctx.worktree() || ctx.project;
 
 function notepadFail(res, e) {
@@ -682,6 +1037,9 @@ function notepadTabOrder(req, res, ctx) {
 }
 function notepadTabLast(req, res, ctx) {
   return notepadTabRoute((root, body) => setLastTab(root, body.id))(req, res, ctx);
+}
+function notepadTabSent(req, res, ctx) {
+  return notepadTabRoute((root, body) => markTabSent(root, body.id, { workflow: body.workflow, spec: body.spec }))(req, res, ctx);
 }
 
 // Matched on the raw request line too, as /uploads/ is: URL parsing folds
@@ -842,7 +1200,7 @@ function upload(req, res, ctx) {
       const saved = store(buf, "jpg");
       if (!saved) return;
       const { id, file } = saved;
-      appendEvent(ctx.dir, { type: "upload", id, kind: "image", bytes: buf.length });
+      noteEvent(ctx.dir, { type: "upload", id, kind: "image", bytes: buf.length });
       return json(res, 200, {
         ok: true,
         id,
@@ -871,7 +1229,7 @@ function upload(req, res, ctx) {
       const saved = store(buf, ext);
       if (!saved) return;
       const { id, file } = saved;
-      appendEvent(ctx.dir, { type: "upload", id, kind: "file", bytes: buf.length });
+      noteEvent(ctx.dir, { type: "upload", id, kind: "file", bytes: buf.length });
       return json(res, 200, { ok: true, id, kind: "file", path: file, name, size: buf.length });
     });
   }
@@ -959,7 +1317,7 @@ function uploads(req, res, ctx, url) {
     } catch (e) {
       return json(res, 500, { error: String(e.message) });
     }
-    appendEvent(ctx.dir, { type: "upload-delete", id: m[1] });
+    noteEvent(ctx.dir, { type: "upload-delete", id: m[1] });
     res.writeHead(204, baseHeaders());
     return res.end();
   }
@@ -988,11 +1346,18 @@ function recordSubmitted(state, actions) {
     if (!item) continue;
     if (action.type === "comment") {
       const pick = (list) => (Array.isArray(list) ? list.map(({ path, name }) => ({ path, name })) : []);
-      item.sentNote = { at, text: String(action.text || ""), images: pick(action.images), files: pick(action.files) };
+      item.sentNote = {
+        at,
+        text: String(action.text || ""),
+        images: pick(action.images),
+        files: pick(action.files),
+        ...(action.suggest === true ? { suggest: true } : {}),
+      };
       // The person's side of the Notes thread. Left to the agent it was never
       // written, so a question asked in a note vanished once it was picked up
-      // and the reply under it answered nothing on the page.
-      if (item.sentNote.text.trim() || item.sentNote.images.length || item.sentNote.files.length) {
+      // and the reply under it answered nothing on the page. A request for
+      // suggestions is always written, note or not.
+      if (item.sentNote.text.trim() || item.sentNote.images.length || item.sentNote.files.length || item.sentNote.suggest) {
         item.thread = [...(Array.isArray(item.thread) ? item.thread : []), { who: "user", ...item.sentNote }];
       }
       continue;
@@ -1004,6 +1369,18 @@ function recordSubmitted(state, actions) {
     // A skip says so on the record, so settling it can record a skip.
     item.submitted = { at, ...rest, ...(type === "skip" ? { skipped: true } : {}) };
   }
+}
+
+// A link the page inside the desktop app cannot open itself (open-link.mjs).
+// http and https only; the page shows the link to paste when this says no.
+function openLinkRoute(req, res) {
+  return readBody(req, (err, body) => {
+    if (err) return json(res, err.tooBig ? 413 : 400, { error: err.tooBig ? "too large" : "body must be JSON" });
+    const href = linkToOpen(body && body.url);
+    if (!href) return json(res, 400, { error: "only http and https links open" });
+    if (!openLink(href)) return json(res, 500, { error: "no browser could be started" });
+    return json(res, 200, { ok: true, url: href });
+  });
 }
 
 function submit(req, res, ctx) {
@@ -1076,7 +1453,7 @@ function submit(req, res, ctx) {
       });
     }
     if (refused) return json(res, 500, { error: refused });
-    appendEvent(ctx.dir, { type: "submit", rev: ctx.rev, count: body.actions.length });
+    noteEvent(ctx.dir, { type: "submit", rev: ctx.rev, count: body.actions.length });
     if (written) {
       // Account for our own write here rather than letting the watcher find
       // it: the watcher reads a changed state.json as proof the AGENT is
@@ -1096,10 +1473,11 @@ function submit(req, res, ctx) {
     }
     // Name the items that went. A page with OTHER answers staged should drop
     // only what was sent, and a brief request is a submit carrying no answers
-    // at all, so a blanket "everything is gone" is wrong for both.
+    // at all, so a blanket "everything is gone" is wrong for both. A request
+    // for suggestions sends no answer, so the pick staged on its card stays.
     ctx.broadcast("submitted", {
       rev: ctx.rev,
-      ids: body.actions.map((a) => a && a.i).filter(Boolean),
+      ids: body.actions.filter((a) => a && !(a.type === "comment" && a.suggest === true)).map((a) => a.i).filter(Boolean),
     });
     ctx.pushState();
     return json(res, 200, { ok: true });
@@ -1127,7 +1505,7 @@ function chat(req, res, ctx) {
         workflow: state.workflow,
         reason: "button",
       });
-      appendEvent(ctx.dir, { type: "chat-reset", reason: "button" });
+      noteEvent(ctx.dir, { type: "chat-reset", reason: "button" });
       ctx.rev++;
       ctx.pushState();
       return json(res, 200, { ok: true, seq: entry.seq, conversation: entry.conversation });
@@ -1165,7 +1543,7 @@ function chat(req, res, ctx) {
         : undefined,
       files: body.files ? body.files.map((f) => ({ path: f.path, name: cleanLabel(f.name, "file") })) : undefined,
     });
-    appendEvent(ctx.dir, { type: "chat", seq: entry.seq });
+    noteEvent(ctx.dir, { type: "chat", seq: entry.seq });
     ctx.rev++;
     ctx.pushState();
     return json(res, 200, { ok: true, seq: entry.seq, conversation: current });
@@ -1202,10 +1580,102 @@ function chatDecision(req, res, ctx) {
       decision: body.decision,
       text: text || undefined,
     });
-    appendEvent(ctx.dir, { type: "chat-decision", decision: body.decision });
+    noteEvent(ctx.dir, { type: "chat-decision", decision: body.decision });
     ctx.rev++;
     ctx.pushState();
     return json(res, 200, { ok: true, seq: entry.seq });
+  });
+}
+
+/* ---------------------------------------------- the Implementation Loop */
+
+// The Implementation Loop's setup for this project (loop-setup.mjs): what was
+// saved over the defaults. The quick check is text the console only stores.
+const loopProject = (ctx) => (ctx.readState() || {}).project || ctx.project || ctx.worktree() || "";
+
+// `?spec=specs/<name>` adds the setup screen's read-only facts (FR-3): the
+// phases not yet marked done, the branch and the count of uncommitted files.
+// The server reads the project here and never writes it.
+// The phases of `spec` not yet done, as [{ n, name }]; null when its overview.md
+// cannot be read (the store then keeps that spec's picks as they are).
+function phasesLeftOf(project, spec) {
+  try {
+    const overview = fs.readFileSync(path.join(project, spec, "overview.md"), "utf8");
+    // Done as specs.mjs reads it ([x], [X], [?]), the same rule the app's Start uses.
+    return phaseChecklist(overview)
+      .filter((p) => !["complete", "assumed"].includes(MARKERS[p.marker]))
+      .map((p) => ({ n: p.number, name: p.name }));
+  } catch {
+    return null;
+  }
+}
+
+// Agents that take an effort beside the model (the Preferences page's HAS_EFFORT).
+const EFFORT_AGENTS = ["claude", "codex"];
+
+/**
+ * The loop agent's resolved strengths ({ thrifty?, balanced?, best? }, each { model, effort? })
+ * for `?agent=<id>`: a built-in's Models list is what ships plus what the person added; an
+ * added agent's is its own. null when the id is neither.
+ */
+function resolvedStrengthsFor(agentId) {
+  if (typeof agentId !== "string" || !agentId) return null;
+  const shippedFile = readJson(SHIPPED_MODELS_FILE, null) || {};
+  const savedFile = readJson(USER_MODELS_FILE, null) || {};
+  let models;
+  let hasEffort = false;
+  if (modelClis().includes(agentId)) {
+    const user = cleanModels(savedFile).models || {};
+    models = [...(shippedModels()[agentId] || []), ...(user[agentId] || [])].map((m) => m.id);
+    hasEffort = EFFORT_AGENTS.includes(agentId);
+  } else {
+    const raw = fs.existsSync(USER_AGENTS_FILE) ? readText(USER_AGENTS_FILE) : undefined;
+    let found = null;
+    try {
+      found = normalizeAgents(raw).agents.find((a) => a && a.id === agentId) || null;
+    } catch {
+      found = null;
+    }
+    if (!found) return null;
+    models = (Array.isArray(found.models) ? found.models : []).map((m) => m.id);
+  }
+  const owned = (file) => savedStrengths(file)[agentId] || {};
+  return resolveStrengths({ shipped: owned(shippedFile), user: owned(savedFile), models, hasEffort });
+}
+
+function loopSetupGet(req, res, ctx, url) {
+  const answer = readLoopSetup(loopProject(ctx), (s) => phasesLeftOf(loopProject(ctx), s));
+  const spec = url && url.searchParams.get("spec");
+  if (spec === null || spec === undefined) return json(res, 200, answer);
+  if (!/^specs\/[^/\\]+$/.test(spec) || /^specs\/\./.test(spec)) return json(res, 400, { error: "spec must be a folder directly under specs/" });
+  const state = ctx.readState() || {};
+  const phasesLeft = phasesLeftOf(loopProject(ctx), spec) || [];
+  const pending = state.scan && Number.isInteger(state.scan.pending) ? state.scan.pending : null;
+  // What to prefill an empty quick check with: the project's own build, then
+  // lint, script. Text only; nothing here runs it.
+  let suggestedQuickCheck = "";
+  try {
+    const scripts = JSON.parse(fs.readFileSync(path.join(loopProject(ctx), "package.json"), "utf8")).scripts || {};
+    const name = ["build", "lint"].find((n) => typeof scripts[n] === "string");
+    if (name) suggestedQuickCheck = "npm run " + name;
+  } catch {
+    /* no package.json, or not JSON: no suggestion */
+  }
+  const agent = url.searchParams.get("agent");
+  const picks = Array.isArray(answer.strengths[spec]) ? answer.strengths[spec] : [];
+  return json(res, 200, { ...answer, phasesLeft, branch: state.branch || "", pending, suggestedQuickCheck, picks, resolved: resolvedStrengthsFor(agent) });
+}
+
+function loopSetupPost(req, res, ctx) {
+  return readBody(req, (err, body) => {
+    if (err && err.tooBig) return json(res, 413, { error: "too large" });
+    if (err || !body || typeof body !== "object" || Array.isArray(body)) return json(res, 400, { ok: false, problems: ["the setup must be a JSON object"] });
+    try {
+      return json(res, 200, { ok: true, setup: saveLoopSetup(loopProject(ctx), body, (s) => phasesLeftOf(loopProject(ctx), s)) });
+    } catch (e) {
+      if (Array.isArray(e.problems)) return json(res, 400, { ok: false, problems: e.problems });
+      return json(res, 500, { error: String(e.message) });
+    }
   });
 }
 
@@ -1280,7 +1750,7 @@ function cancel(req, res, ctx) {
     return json(res, 500, { error: String(e.message) });
   }
   if (pending) return json(res, 409, { error: "pending", message: "A send is still on its way." });
-  appendEvent(ctx.dir, { type: "cancel", rev: ctx.rev });
+  noteEvent(ctx.dir, { type: "cancel", rev: ctx.rev });
   ctx.broadcast("cancelled", { rev: ctx.rev });
   return json(res, 200, { ok: true });
 }
@@ -1365,7 +1835,7 @@ function authed(req, ctx) {
 }
 
 /**
- * The DNS-rebinding defence, and the highest-value check in this file.
+ * The DNS-rebinding defense, and the highest-value check in this file.
  *
  * Without it, any page the user visits can resolve its own hostname to
  * 127.0.0.1 and then talk to this server as same-origin. That is not

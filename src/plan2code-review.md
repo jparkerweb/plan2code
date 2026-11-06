@@ -8,7 +8,7 @@ Critical review specialist -- experienced senior engineer providing independent 
 
 ## Interface
 
-The FIRST thing you do, before anything else in this file — before the scope detection: ask **web console** (browser page, suggested) or **terminal**? Console → run `node "<D>/console.mjs" open --workflow review` before reading (<D>: references/web-console/ beside this SKILL.md — ~/.agents/skills/plan2code-review/references/web-console/ globally — or the dir in ~/.plan2code/console/console-dir), then read <D>/console.md and <D>/notes/review.md. Scope questions, the findings report and the pick-what-gets-fixed menu all go through it; the report lands on the page as a doc. Switchable anytime. If the argument already says which — `--web` or `Use the web console for this session.` — take it and do not ask; drop the flag. Launched by the dashboard? Its session is already open — resume it (console-launches.md), then Process. Read inside a build session for its review button? Skip this section — building-review.md's overrides govern, the session is already running. On the console, a `__stop` action is the person ending the session (console-stop.md); at every session end post `finish` BEFORE `stop`; unless it is a pause, the finish carries `"dashboard": true` (the Back to the dashboard button) and you keep waiting for the press (console-finish.md).
+The FIRST thing you do, before anything else in this file — before the scope detection: ask **web console** (browser page, suggested) or **terminal**? Console → run `node "<D>/console.mjs" open --workflow review` before reading (<D>: references/web-console/ beside this SKILL.md — ~/.agents/skills/plan2code-review/references/web-console/ globally — or the dir in ~/.plan2code/console/console-dir), then read <D>/console.md and <D>/notes/review.md. Scope questions, the findings report and the pick-what-gets-fixed menu all go through it; the report lands on the page as a doc. Switchable anytime. If the argument already says which — `--web` or `Use the web console for this session.` — take it and do not ask; drop the flag. Launched by the dashboard? Its session is already open — resume it (console-launches.md), then Process. Read inside a build session for its review button? Skip this section — building-review.md's overrides govern, the session is already running.
 
 ## Scripts
 
@@ -93,7 +93,7 @@ Three levels -- auto-detected, always respect explicit user override:
 
 ### Step 3: Analyze
 
-**Who reviews:** when your tool can start a helper (subagent) and helpers are not switched off for this skill run, fill references/reviewer-brief.md and hand the analysis to ONE fresh helper; do not analyze in parallel. The brief carries the review-depth references, the dimensions and the finding format: send only the filled brief. With no helper, or one that fails or returns nothing usable, run this step in this session.
+**Who reviews:** when your tool can start a helper (subagent) and helpers are not switched off for this skill run, fill references/reviewer-brief.md and hand the analysis to ONE fresh helper; do not analyze in parallel. The brief carries the review-depth references, the dimensions and the finding format: send only the filled brief. Start the helper at the strength and effort references/helper-strength.md gives for review analysis (standard and high for a focused scope; strongest and high for branch or full scope, or changes touching security, auth or data), following its fallback order. With no helper, or one that fails or returns nothing usable, run this step in this session.
 
 **Load review depth (conditional on scope):**
 
@@ -167,7 +167,7 @@ Run every finding through the false-positive detection shortcuts before presenti
 
 1. **Plan** -- research best practices, investigate root cause, design optimal solution per fix.
 2. **Apply** -- read target files completely, implement precisely, update related docs. Track: `**Fix Progress: X/Y addressed**`.
-3. **Verify** -- build and test, re-read every modified file, check for introduced issues.
+3. **Verify** -- build and run the tests covering the fixed files (per `references/test-runs.md`; ask the person when you cannot tell which tests cover a fix), re-read every modified file, check for introduced issues.
 
 > Reply **approved** to commit, or request changes. Never auto-approve.
 

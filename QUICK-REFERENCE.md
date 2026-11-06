@@ -5,7 +5,7 @@
 - **Node.js 18 or newer.** Check with `node --version`. No Node? Get it from [nodejs.org](https://nodejs.org/) (the LTS download), or run `winget install OpenJS.NodeJS.LTS` on Windows, `brew install node` on macOS, or use `nvm` on Linux. Then open a new terminal.
 - **Start from your project.** Open your terminal in the project you want to work on (`cd` into it) before you run anything. Plan2Code works on the folder you start it in.
 - **Ways in.** `plan2code` (Claude Code, Devin or Codex), or type `/plan2code` in your agent (`$plan2code` in Codex).
-- **No agent yet?** Install Claude Code, Codex or Devin first.
+- **No agent yet?** Install Claude Code, Codex or Devin first, or let the `plan2code` command's setup page walk you through it.
 
 ## Launch
 
@@ -16,14 +16,14 @@ The web console is the main way in: a local page where questions, documents, bui
 | From your project (shell) | `plan2code`                          | Opens Claude Code, Devin or Codex on the dashboard (`--cli claude` / `devin` / `codex` to choose) |
 | Inside any agent          | `/plan2code` (`$plan2code` in Codex) | Opens the dashboard: a card for every skill, launched on the same page                 |
 | Install                   | `npx --allow-git=all git+https://github.com/jparkerweb/plan2code.git` | Installs the skills and the `plan2code` command (re-run it to update without the `plan2code` command) |
-| Update                    | `plan2code update`                   | Updates everything that was installed, with no menu; never uninstalls anything |
+| Update                    | `plan2code update`                   | Updates the skills, command, app and status line, with no menu (metrics and the bot only from a git checkout: `node install.js`); never uninstalls anything |
 | Straight into a skill     | `/plan2code-1-plan --web` (any step) | Skips the "web console or terminal?" question and opens the page                       |
 
 The install command always opens a menu. Back at your prompt with no output at all? npm could not reach the repository and hid the reason: run `git ls-remote https://github.com/jparkerweb/plan2code.git` to see it (usually the network, a proxy or the VPN).
 
 Pick a skill on the dashboard and the same page becomes that session. Details: [.readme/web-console.md](.readme/web-console.md) · worked example: [.readme/walkthrough.md](.readme/walkthrough.md).
 
-The **Notebook** icon in the top bar opens a private scratch pad for the folder you are in (Markdown and pictures, kept in `~/.plan2code/notepads/`, never shown to the agent).
+The **Notebook** icon in the top bar opens a private scratch pad for the folder you are in (Markdown and pictures, kept in `~/.plan2code/notepads/`). Private: the agent never reads your Notebook. A tab reaches it only when you start a workflow with it.
 
 ## Commands
 
@@ -46,6 +46,8 @@ Every command below is what a dashboard card runs. Typed on its own, each one as
 | handoff    | /plan2code-handoff            | Conversation    | Self-contained handoff doc (OS temp dir by default, or a folder you pick such as `handoffs/`)                 |
 | xray       | /plan2code-xray               | An area, or none | An explanation citing files and commits, or `ARCHITECTURE-BRIEF-<date>.md` with the rough spots you picked |
 | diagnose   | /plan2code-diagnose           | A bug, or none  | `DIAGNOSIS-<date>.md` with the cause and its evidence, then Quick Task (or Plan for a big fix) to fix it |
+| pr-prep    | /plan2code-pr-prep            | Your branch     | A readiness verdict (Ready, Ready with notes, Not ready) and a PR description to copy; no commits, no push |
+| test       | /plan2code-test               | An area, or none | New unit and integration tests in the project's style, run; a bug handed to Diagnose; no source changes |
 | changelog  | /plan2code-changelog          | Your branch     | `CHANGELOG.md` entries and the `package.json` version, from the default branch's latest version |
 | git        | /plan2code-git                | Your repo       | Commits (`<subject>` / `AI Assisted`), branches, pull with conflict help, push, publish                       |
 
@@ -130,14 +132,9 @@ Is it a quick, small task?
 └── No → /plan2code-1-plan (full workflow)
          ├── /plan2code-2-document
          ├── /plan2code-3-implement (repeat per phase)
-         │   ├── OR: /plan2code-3-implement-review (review gate before approval)
-         │   └── OR: plan2code-loop (autonomous alternative)
+         │   └── OR: /plan2code-3-implement-review (review gate before approval)
          └── /plan2code-4-finalize
 
 Need to revise mid-implementation?
 └── /plan2code-1b-revise-plan
 ```
-
-## Autonomous Loop (Alternative)
-
-`plan2code-loop` is a hands-off alternative to Step 3. See [.readme/autonomous-loop.md](.readme/autonomous-loop.md).

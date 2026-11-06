@@ -14,11 +14,12 @@ import {
   repoRoots,
   terminalLine,
 } from "./sessions.mjs";
-import { applyPatch, isOpen, proseProblems, resolveDocFiles, resolveDocImages, validate } from "./patches.mjs";
+import { applyPatch, isOpen, proseProblems, resolveDocFiles, resolveDocImages, rule, validate } from "./patches.mjs";
 import {
   CHAT_FILE,
   chatReplyLines,
   collectChat,
+  currentConversation,
   deliverableChat,
   unansweredChat,
   readChat,
@@ -32,6 +33,7 @@ import { handoffsDir, isHandoffId, markHandoffUsed, readHandoffMeta } from "./ha
 import { RUN_EVENTS, TASK_EVENTS, MAX_COMMITS, MAX_TASKS, isTaskCount, progressEntry } from "./public/meter.js";
 import { blockFor, offered } from "./public/subagents.js";
 import { changeLine } from "./public/workspace.js";
+import { duePointers, pointersForSend, rememberPointers } from "./pointers.mjs";
 
 // The CLI's own pieces, handed over by console.mjs through useCli() before
 // any command runs: console.mjs runs on import, so it cannot be imported back.
@@ -40,31 +42,132 @@ export function useCli(cli) {
   ({ args, print, die, mustSession, sessionProject } = cli);
 }
 
+/* --------------------------------------------------------- printed line */
+
+// The link line is printed by `open` and then only when it changes (a new URL
+// after a restart or a resume). What was last printed lives in the session
+// folder, never in state.json, which rides every frame to the page.
+const PRINTED_FILE = "printed.json";
+
+export function printedLine(dir) {
+  const saved = readJson(path.join(dir, PRINTED_FILE), {});
+  return saved && typeof saved.terminalLine === "string" ? saved.terminalLine : "";
+}
+
+export function rememberLine(dir, line) {
+  try {
+    writeJsonAtomic(path.join(dir, PRINTED_FILE), { terminalLine: line });
+  } catch {}
+}
+
+// `{ terminalLine }` when the line for this link differs from the one last
+// printed, else `{}`. Printing is printOut(), which stores the line after the
+// print, the order advanceCursor() uses: a kill in between repeats a line,
+// never loses one.
+export function lineIfChanged(dir, url) {
+  if (!url) return {};
+  const line = terminalLine(url);
+  return line === printedLine(dir) ? {} : { terminalLine: line };
+}
+
+export function printOut(dir, out) {
+  print(out);
+  if (typeof out.terminalLine === "string") rememberLine(dir, out.terminalLine);
+}
+
 /* ----------------------------------------------------------------- post */
 
 // A patch from a file, or from stdin with `--file -`: a heredoc piped into
 // the command saves the agent writing a file first, one tool call a turn.
 // A file PowerShell wrote comes with a BOM (Out-File / Set-Content in 5.1) or
 // in UTF-16 (its `>`), and both are the documented Windows route, so both read.
+// Indented and minified JSON read alike. Returns `{ patch }`, or `{ error }`
+// saying what is wrong and where, for the caller to print with exit 2.
 export function readPatch(file) {
+  let text;
   try {
     const buf = fs.readFileSync(file === "-" ? 0 : path.resolve(file));
-    let text;
     if (buf[0] === 0xff && buf[1] === 0xfe) text = buf.subarray(2).toString("utf16le");
     else if (buf[0] === 0xfe && buf[1] === 0xff) text = Buffer.from(buf.subarray(2)).swap16().toString("utf16le");
     else text = buf.toString("utf8");
-    // A patch is one JSON object: an array, string or number would merge
-    // into the state as junk keys ("0", "1"...) and still report ok.
-    const patch = JSON.parse(text.replace(/^\uFEFF/, ""));
-    return patch && typeof patch === "object" && !Array.isArray(patch) ? patch : null;
-  } catch {
-    return null;
+  } catch (e) {
+    return { error: `could not read --file ${file}: ${e.code === "ENOENT" ? "no such file" : e.message}` };
   }
+  text = text.replace(/^\uFEFF/, "");
+  if (!text.trim()) return { error: "the patch is empty (nothing arrived on stdin? use a quoted heredoc, <<'EOF')" };
+  let patch;
+  try {
+    patch = JSON.parse(text);
+  } catch (e) {
+    return { error: parseErrorAt(text, e.message) };
+  }
+  // A patch is one JSON object: an array, string or number would merge
+  // into the state as junk keys ("0", "1"...) and still report ok.
+  if (!patch || typeof patch !== "object" || Array.isArray(patch)) {
+    const what = patch === null ? "null" : Array.isArray(patch) ? "an array" : `a ${typeof patch}`;
+    return { error: `the patch must be one JSON object ({...}), not ${what}` };
+  }
+  return { patch };
+}
+
+// Whether `prefix` could still grow into valid JSON: it parses, or it only
+// fails by stopping short.
+function viablePrefix(prefix) {
+  try {
+    JSON.parse(prefix);
+    return true;
+  } catch (e) {
+    if (/end of JSON input|Unterminated/.test(e.message)) return true;
+    const at = /(?:in|after) JSON at position (\d+)/.exec(e.message);
+    return Boolean(at) && Number(at[1]) >= prefix.length;
+  }
+}
+
+// Where JSON.parse gave up, as a 0-based character index. Node 18 and Node 20+
+// word the message differently (and some messages carry no position at all),
+// so the message's position is used when there is one and the spot is found
+// by search when there is not.
+function errorIndex(text, message) {
+  const at = /(?:in|after) JSON at position (\d+)/.exec(message);
+  if (at) return Math.min(Number(at[1]), text.length);
+  const lc = /position \d+ \(line (\d+) column (\d+)\)/.exec(message);
+  if (lc) {
+    const lines = text.split("\n");
+    let index = 0;
+    for (let i = 0; i < Number(lc[1]) - 1 && i < lines.length; i++) index += lines[i].length + 1;
+    return Math.min(index + Number(lc[2]) - 1, text.length);
+  }
+  let lo = 0;
+  let hi = text.length;
+  while (lo < hi) {
+    const mid = Math.ceil((lo + hi) / 2);
+    if (viablePrefix(text.slice(0, mid))) lo = mid;
+    else hi = mid - 1;
+  }
+  return lo;
+}
+
+// `line L, column C: <what the parser said>`, then up to 30 characters either
+// side of the spot (newlines shown as \n) and a caret under it.
+export function parseErrorAt(text, message) {
+  const index = errorIndex(text, message);
+  const before = text.slice(0, index).split("\n");
+  const line = before.length;
+  const column = before[before.length - 1].length + 1;
+  const show = (t) => t.replaceAll("\r", "").replaceAll("\n", "\\n");
+  const left = show(text.slice(Math.max(0, index - 30), index));
+  const right = show(text.slice(index, index + 31));
+  const said = message
+    .replace(/ in JSON at position \d+( \(line \d+ column \d+\))?/, "")
+    .replace(/,\s.*is not valid JSON$/s, "")
+    .replace(/ at position \d+.*$/, "");
+  return `line ${line}, column ${column}: ${said}\n${left}${right}\n${" ".repeat(left.length)}^`;
 }
 
 export function failValidation(problems) {
   process.stderr.write("console: the payload was rejected, nothing was written.\n");
-  for (const p of problems) process.stderr.write("  - " + p + "\n");
+  // A problem that runs over several lines stays under its own bullet.
+  for (const p of problems) process.stderr.write("  - " + String(p).replaceAll("\n", "\n    ") + "\n");
   // exitCode, not exit(): the agent has to read these lines to fix the patch,
   // and process.exit() can truncate a pipe Node has not flushed.
   process.exitCode = 3;
@@ -87,8 +190,9 @@ function postOnce() {
   const dir = mustSession();
   const file = args.file;
   if (!file) die("post needs --file <path to a JSON patch>", 2);
-  let patch = readPatch(file);
-  if (!patch) die(`could not read --file ${file} as one JSON object`, 2);
+  const read = readPatch(file);
+  if (read.error) die(read.error, 2);
+  let patch = read.patch;
 
   const statePath = path.join(dir, "state.json");
   const before = readJson(statePath);
@@ -98,6 +202,13 @@ function postOnce() {
     patch = resolveDocImages(patch, before, dir);
   } catch (e) {
     die(e.message, 3);
+  }
+
+  // A chat reply names the conversation it answers; the agent is no longer
+  // handed the entries, so a missing one means the current conversation.
+  if (patch.chat && Array.isArray(patch.chat.replies)) {
+    const { conversation } = currentConversation(readChat(dir));
+    patch.chat.replies = patch.chat.replies.map((r) => (r && typeof r === "object" && !Array.isArray(r) && r.conversation === undefined ? { ...r, conversation } : r));
   }
 
   // Meter and folder reports go to the ledger, never into state.json. Checked
@@ -162,14 +273,18 @@ function postOnce() {
   const open = next.items.filter((i) => isOpen(i) && i.required !== false && i.kind !== "notice").length;
   // Only a live server's link: no handle, no line, never a dead link.
   const handle = listHandles(sessionProject(dir)).find((h) => h.sid === path.basename(dir));
-  print({
+  // The first patch carrying documents names the docs topic file; a refused
+  // post returned above and recorded nothing.
+  const topics = Array.isArray(patch.docs) && patch.docs.length ? ["docs"] : [];
+  const due = duePointers(dir, topics);
+  printOut(dir, {
     ok: true,
-    items: next.items.length,
     open,
-    phase: next.phase,
+    ...(due.length ? { read: due } : {}),
     ...unansweredNote(dir, next),
-    ...(handle && handle.url ? { terminalLine: terminalLine(handle.url) } : {}),
+    ...(handle && handle.url ? lineIfChanged(dir, handle.url) : {}),
   });
+  rememberPointers(dir, topics);
   return true;
 }
 
@@ -179,14 +294,14 @@ function postOnce() {
  * git session. state.git itself is the console's own: a patch never carries it.
  */
 export function liftReread(patch, workflow) {
-  if (Object.hasOwn(patch, "git")) die("state.git is the console's own: post reread instead", 3);
+  if (Object.hasOwn(patch, "git")) die(rule("", "git", "is the console's own state; post reread instead", { reread: true }), 3);
   const { reread } = patch;
   delete patch.reread;
   if (reread === undefined) return undefined;
   const flagOnly =
     reread && typeof reread === "object" && !Array.isArray(reread) && Object.keys(reread).length === 1 && typeof reread.refreshFailed === "boolean";
-  if (reread !== true && !flagOnly) die("reread must be true or { refreshFailed: true|false }", 3);
-  if (workflow !== "git") die("reread only goes with the git workflow", 3);
+  if (reread !== true && !flagOnly) die(rule("", "reread", "must be true or { refreshFailed: true|false }", { reread: true }), 3);
+  if (workflow !== "git") die(rule("", "reread", "only goes with the git workflow", { reread: null }), 3);
   return reread;
 }
 
@@ -218,16 +333,17 @@ export function ledgerFromPost(dir, run, issue, workflow) {
   const lines = [];
   if (run !== undefined) {
     const event = run && typeof run === "object" ? run.event : undefined;
-    if (!RUN_EVENTS.has(event)) die(`run: unknown event "${event}"`, 3);
-    if (typeof run.id !== "string" || !run.id.trim()) die("run: id required", 3);
+    const runRight = { run: { event: "implement-phase", id: "phase-2" } };
+    if (!RUN_EVENTS.has(event)) die(rule("", "run", `unknown event "${event}" (one of: ${[...RUN_EVENTS].join(", ")})`, runRight), 3);
+    if (typeof run.id !== "string" || !run.id.trim()) die(rule("", "run", "needs an id", runRight), 3);
     if (run.tasks !== undefined) {
-      if (!TASK_EVENTS.has(event)) die(`run: tasks only goes with ${[...TASK_EVENTS].join(" or ")}`, 3);
-      if (!isTaskCount(run.tasks)) die(`run: tasks must be a whole number from 1 to ${MAX_TASKS}`, 3);
+      if (!TASK_EVENTS.has(event)) die(rule("", "run", `tasks only goes with ${[...TASK_EVENTS].join(" or ")}`, { run: { event: [...TASK_EVENTS][0], id: "phase-2", tasks: 9 } }), 3);
+      if (!isTaskCount(run.tasks)) die(rule("", "run", `tasks must be a whole number from 1 to ${MAX_TASKS}`, { run: { event, id: run.id, tasks: 9 } }), 3);
     }
     if (run.commits !== undefined) {
-      if (event !== "git-commits") die("run: commits only goes with git-commits", 3);
+      if (event !== "git-commits") die(rule("", "run", "commits only goes with git-commits", { run: { event: "git-commits", id: "commits-1", commits: 2 } }), 3);
       const ok = Number.isInteger(run.commits) && run.commits >= 1 && run.commits <= MAX_COMMITS;
-      if (!ok) die(`run: commits must be a whole number from 1 to ${MAX_COMMITS}`, 3);
+      if (!ok) die(rule("", "run", `commits must be a whole number from 1 to ${MAX_COMMITS}`, { run: { event, id: run.id, commits: 2 } }), 3);
     }
     lines.push({
       kind: "run",
@@ -242,8 +358,8 @@ export function ledgerFromPost(dir, run, issue, workflow) {
     const text = (v) => typeof v === "string" && v.trim() !== "";
     const ok =
       issue && typeof issue === "object" && text(issue.name) && text(issue.reason) && (issue.hint === undefined || text(issue.hint));
-    if (!ok) die("folderIssue must be { name, reason, hint? }, each a non-empty string", 3);
-    const problems = proseProblems(JSON.stringify([issue.reason, issue.hint || ""]), "folderIssue");
+    if (!ok) die(rule("", "folderIssue", "must be { name, reason, hint? }, each a non-empty string", { folderIssue: { name: "api", reason: "..." } }), 3);
+    const problems = [...proseProblems(issue.reason, "folderIssue reason"), ...(issue.hint ? proseProblems(issue.hint, "folderIssue hint") : [])];
     if (problems.length) die(problems.join("\n  "), 3);
     lines.push({
       kind: "folder-issue",
@@ -282,7 +398,7 @@ export async function cmdWait() {
   const existing = readJson(resultPath);
   if (existing && !existing.consumedAt) return consume(dir, resultPath, existing, liveUrl(), pendingChat());
   const earlyChat = pendingChat();
-  if (earlyChat.length) return deliverChat(dir, sid, earlyChat, liveUrl());
+  if (earlyChat.length) return deliverChat(dir, earlyChat, liveUrl());
   markWaiting(dir);
 
   // A stat every 50ms, and a read only when the file has moved. The old tick
@@ -324,7 +440,7 @@ export async function cmdWait() {
     if (chatStamp !== chatSeen) {
       chatSeen = chatStamp;
       const entries = pendingChat();
-      if (entries.length) return deliverChat(dir, sid, entries, liveUrl());
+      if (entries.length) return deliverChat(dir, entries, liveUrl());
     }
 
     // The health check runs beside the polling, never in its way: awaited
@@ -356,26 +472,15 @@ export async function cmdWait() {
   }
 
   const state = readJson(path.join(dir, "state.json")) || {};
-  const items = (state.items || []).filter((i) => i.required !== false && i.kind !== "notice");
-  const answered = items.filter((i) => !isOpen(i)).length;
-  const draft = readJson(path.join(dir, "draft.json"), {});
-  const staged = Object.keys(draft.staged || {}).length;
+  const open = (state.items || []).filter((i) => i.required !== false && i.kind !== "notice" && isOpen(i)).length;
   const handle = listHandles(project).find((h) => h.sid === sid);
 
-  print({
-    status: "waiting",
-    sid,
-    elapsed: fmtMs(Date.now() - Date.parse(state.created || nowIso())),
-    answered,
-    total: items.length,
-    staged,
-    url: handle ? handle.url : "",
-    message: "Waiting on your answer in the web console",
-    next: "NOT FINISHED, do not end your turn or write a summary: relay the message in one line, then run this same wait command again right now. Repeat until the exit code is not 10.",
+  // A workspace change alone never ends a slice: it rides on the next send.
+  printOut(dir, {
+    waiting: true,
+    open,
     ...unansweredNote(dir, state),
-    // A workspace change alone never ends a slice: it rides on the next send.
-    pendingWorkspace: pendingWorkspaceChanges(dir).length,
-    ...(handle && handle.url ? { terminalLine: terminalLine(handle.url) } : {}),
+    ...(handle && handle.url ? lineIfChanged(dir, handle.url) : {}),
   });
   process.exitCode = 10;
   }
@@ -390,25 +495,24 @@ function unansweredNote(dir, state) {
 }
 
 export function serverGone(sid) {
-  return {
-    status: "server-gone",
-    sid,
-    message: "The console server is not running. Start it again with `open --resume <sid> --workflow <yours>` (it gets a new link: give it to the person; without --no-open the browser opens it), then keep waiting: at a finished screen too, since the person's Ask messages and the dashboard button still need you.",
-  };
+  return { gone: true, fix: `open --resume ${sid} --workflow <yours>` };
 }
 
-// Quick questions and nothing else: an ordinary exit 0 with no card actions.
-function deliverChat(dir, sid, entries, url) {
-  const [withWs, changes] = withWorkspace(dir, {
-    type: "chat",
-    at: nowIso(),
-    sid,
-    actions: [],
-    chat: entries,
-    reply: chatReplyLines(entries),
-  });
+// The seq numbers of the Quick questions handed over: the ids a `chat.replies`
+// entry's `re` needs. The questions themselves travel in `reply`.
+export function chatSeqs(entries) {
+  return entries.filter((e) => e.kind === "message").map((e) => e.seq);
+}
+
+// Quick questions and nothing else: an ordinary exit 0 with no card send.
+function deliverChat(dir, entries, url) {
+  const [withWs, changes] = withWorkspace(dir, { reply: chatReplyLines(entries) });
   const [out, subCursor] = withSubagents(dir, withWs);
-  print({ ...out, ...(url ? { terminalLine: terminalLine(url) } : {}) });
+  const seqs = chatSeqs(entries);
+  const topics = pointersForSend({}, readJson(path.join(dir, "state.json")) || {}, owedFlags(changes, subCursor), entries);
+  const due = duePointers(dir, topics);
+  printOut(dir, { ...out, ...(seqs.length ? { chat: seqs } : {}), ...(due.length ? { read: due } : {}), ...lineIfChanged(dir, url) });
+  rememberPointers(dir, topics);
   advanceCursor(dir, entries);
   advanceWorkspace(dir, changes);
   advanceSubagents(dir, subCursor);
@@ -416,12 +520,20 @@ function deliverChat(dir, sid, entries, url) {
 }
 
 // The workspace changes the agent is owed, added to what it is about to read:
-// the list as `workspace`, and one line each at the end of `reply`.
-function withWorkspace(dir, out) {
+// one `Workspace:` line each at the end of `reply`, in words only. The second
+// value is the changes, whose length is the "a change happened" flag
+// (see owedFlags()); the cursor moves after the print.
+export function withWorkspace(dir, out) {
   const changes = pendingWorkspaceChanges(dir);
   if (!changes.length) return [out, changes];
   const reply = [out.reply, ...changes.map(changeLine)].filter(Boolean).join("\n");
-  return [{ ...out, workspace: changes, reply }, changes];
+  return [{ ...out, reply }, changes];
+}
+
+// Whether the standing instructions in a reply carried a change, for the
+// pointers that name a topic file when one is delivered.
+export function owedFlags(changes, subCursor) {
+  return { workspaceChanged: changes.length > 0, subagentsChanged: Boolean(subCursor) };
 }
 
 // Print first, then this, as with the chat cursor: a kill in between can only
@@ -441,12 +553,14 @@ export function advanceWorkspace(dir, changes) {
 // an older server, which never writes one: a short look, not the full wait.
 const SUBAGENT_SYNC_WAIT_MS = 1500;
 const SUBAGENT_SYNC_MISSING_MS = 250;
-export function awaitSubagentSync(dir, workflow) {
+export function awaitSubagentSync(dir, workflow, strength) {
   if (!offered(workflow)) return;
   const start = Date.now();
   for (;;) {
     const setting = readSubagentSetting(dir);
-    if (setting && setting.workflow === workflow) return;
+    // A loop phase's strength rides on the session's state: the setting must
+    // carry it before the first block is built, or the agent hears the stored one.
+    if (setting && setting.workflow === workflow && (!strength || setting.strength === strength)) return;
     const budget = setting ? SUBAGENT_SYNC_WAIT_MS : SUBAGENT_SYNC_MISSING_MS;
     if (Date.now() - start >= budget) return;
     sleepSync(25);
@@ -454,7 +568,7 @@ export function awaitSubagentSync(dir, workflow) {
 }
 
 // The Subagents switch the agent is owed, added to what it is about to read:
-// the setting as `subagents`, and its lines last in `reply`, after card lines,
+// its lines last in `reply` (in words only), after card lines,
 // Quick questions and Workspace lines (FR-9). Read from the session's own
 // setting file only, which only the server writes (FR-7). A setting for
 // another workflow is the server not having caught up with a hop yet: it
@@ -467,7 +581,7 @@ export function withSubagents(dir, out) {
   const block = blockFor(setting, readSubagentCursor(dir));
   if (!block) return [out, null];
   const reply = [out.reply, ...block.lines].filter(Boolean).join("\n");
-  return [{ ...out, subagents: block.field, reply }, block.cursor];
+  return [{ ...out, reply }, block.cursor];
 }
 
 // After the print, like advanceWorkspace(): a kill in between repeats the
@@ -507,15 +621,33 @@ export function advanceCursor(dir, entries) {
  */
 function consume(dir, resultPath, result, url, chat = []) {
   const collected = { ...result, consumedAt: nowIso() };
-  // The link, any chat and any workspace change ride on what the agent reads,
-  // never on result.json itself.
-  const withChat = { ...collected, chat };
-  if (chat.length) withChat.reply = [collected.reply, chatReplyLines(chat)].filter(Boolean).join("\n");
+  // What the agent reads is a trimmed view: `reply` (the card answers, any
+  // Quick question and any Workspace or Subagents line), the `__` session
+  // actions and the hop fields `reply` cannot carry. result.json keeps the
+  // whole send; the link, chat and standing lines never go into it.
+  const withChat = { reply: chat.length ? [result.reply, chatReplyLines(chat)].filter(Boolean).join("\n") : result.reply };
   const [withWs, changes] = withWorkspace(dir, withChat);
   const [out, subCursor] = withSubagents(dir, withWs);
   const hop = hopFor(path.basename(dir), result);
+  const session = sessionActions(result);
+  const seqs = chatSeqs(chat);
+  // Read before markWorking() below: a __dashboard asks for the finish topic
+  // or the stop topic by whether a finish is up as the person pressed it.
+  const stateNow = readJson(path.join(dir, "state.json")) || {};
+  const topics = pointersForSend(result, stateNow, owedFlags(changes, subCursor), chat);
+  const due = duePointers(dir, topics);
   markPickedUp(result);
-  print({ ...out, ...hop, ...handoffFor(result), ...(url ? { terminalLine: terminalLine(url) } : {}) });
+  printOut(dir, {
+    ...(out.reply ? { reply: out.reply } : {}),
+    ...(session ? { session } : {}),
+    ...hop,
+    ...handoffFor(result),
+    ...(seqs.length ? { chat: seqs } : {}),
+    ...(due.length ? { read: due } : {}),
+    ...unansweredNote(dir, stateNow),
+    ...lineIfChanged(dir, url),
+  });
+  rememberPointers(dir, topics);
   try {
     writeJsonAtomic(resultPath, collected);
   } catch {}
@@ -632,6 +764,21 @@ function markPickedUp(result) {
 // data off disk or the wire, so the name is checked here and not trusted.
 const SAFE_SPEC = /^specs\/[^/\\"'`$;&|<>(){}*?!#~\r\n]+$/;
 
+// The send's `__` actions, whole, for the agent: the docs dispatch on them by
+// `i`. A `type` that only repeats `i` ("__stop" and "stop") is left out. The
+// card answers, comments and skips are already in `reply`.
+export function sessionActions(result) {
+  const actions = (result && Array.isArray(result.actions) && result.actions) || [];
+  const kept = actions
+    .filter((a) => a && typeof a.i === "string" && a.i.startsWith("__"))
+    .map((a) => {
+      if (a.type !== a.i.slice(2)) return a;
+      const { type, ...rest } = a;
+      return rest;
+    });
+  return kept.length ? kept : undefined;
+}
+
 function hopFor(sid, result) {
   const actions = (result && Array.isArray(result.actions) && result.actions) || [];
   const action = actions.find((a) => a && Object.hasOwn(HOP_ACTIONS, a.type) && typeof a.i === "string" && a.i.startsWith("__"));
@@ -668,10 +815,3 @@ function ledgerAnswers(dir, result) {
   } catch {}
 }
 
-function fmtMs(ms) {
-  if (!Number.isFinite(ms) || ms < 0) return "0s";
-  const s = Math.round(ms / 1000);
-  if (s < 60) return `${s}s`;
-  const m = Math.floor(s / 60);
-  return `${m}m ${s % 60}s`;
-}

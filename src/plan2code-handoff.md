@@ -9,7 +9,7 @@ and can open files, but they cannot see this conversation. Write for them.
 
 ## Interface
 
-The FIRST thing you do, before anything else in this file — before inferring the next task: ask **web console** (browser page, suggested) or **terminal**? Console → run `node "<D>/console.mjs" open --workflow handoff` before reading (<D>: references/web-console/ beside this SKILL.md — ~/.agents/skills/plan2code-handoff/references/web-console/ globally — or the dir in ~/.plan2code/console/console-dir), then read <D>/console.md and <D>/notes/handoff.md. The next-task confirmation and any clarifying questions go through it, and the finished handoff lands on the page as a doc with the download the page offers. Switchable anytime. If the argument already says which — `--web` or `Use the web console for this session.` — take it and do not ask; drop the flag. Launched by the dashboard? Its session is already open — resume it (console-launches.md), then the one hard rule. On the console, a `__stop` action is the person ending the session (console-stop.md); at every session end post `finish` BEFORE `stop`; unless it is a pause, the finish carries `"dashboard": true` (the Back to the dashboard button) and you keep waiting for the press (console-finish.md).
+The FIRST thing you do, before anything else in this file — before inferring the next task: ask **web console** (browser page, suggested) or **terminal**? Console → run `node "<D>/console.mjs" open --workflow handoff` before reading (<D>: references/web-console/ beside this SKILL.md — ~/.agents/skills/plan2code-handoff/references/web-console/ globally — or the dir in ~/.plan2code/console/console-dir), then read <D>/console.md and <D>/notes/handoff.md. The next-task confirmation and any clarifying questions go through it, and the finished handoff lands on the page as a doc with the download the page offers. Switchable anytime. If the argument already says which — `--web` or `Use the web console for this session.` — take it and do not ask; drop the flag. Launched by the dashboard? Its session is already open — resume it (console-launches.md), then the one hard rule.
 
 ## The one hard rule: capture the next task, and confirm it with the user
 
@@ -52,7 +52,7 @@ The dashboard lists the handoff for this checkout until it is picked up, and old
 
 `specs/` is gitignored — Glob/Grep and file search silently skip it. If the
 conversation worked inside `specs/<feature>/`, confirm the exact state before
-writing with `node "<S>/specs.mjs" status specs/<feature>`, which reads the disk:
+writing with `node "<S>/specs.mjs" status specs/<feature>` (`<S>` is `scripts/` beside this SKILL.md: `~/.agents/skills/plan2code-handoff/scripts/` globally), which reads the disk:
 
 - Which `phase-X.md` is in progress, and which of its tasks are still open
   (each phase's `tasks` and `openTasks`: checkboxes are ground truth, not the
@@ -70,7 +70,7 @@ No `specs/` activity this session? Skip this section entirely.
 ## What to include
 
 Keep it tight and high-signal. Prefer pointers over prose: this repo already
-records a lot (plan specs, the loop's NDJSON logs, git history, diffs), so
+records a lot (plan specs, the loop's reports, git history, diffs), so
 **reference those by path or URL instead of copying them in**. The reader can
 open a file; they can't open your memory.
 
@@ -96,7 +96,7 @@ them. Note anything half-applied or left uncommitted.>
 
 ## Key files & pointers
 <Bulleted paths the reader will need, each with a one-line "why". Include plan
-specs, the files you were editing, relevant logs (e.g. .plan2code-loop NDJSON),
+specs, the files you were editing, relevant logs (e.g. `specs/<feature>/LOOP-SUMMARY-<date>.md`, `~/.plan2code/console/loop-reports.json`),
 and any PR/issue URLs.>
 
 ## Gotchas & decisions

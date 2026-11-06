@@ -126,11 +126,12 @@
    they carry view-box origins rather than their own boxes. */
 .planny .arms { display: none; }
 .planny .a-rest { display: inline; }
-.planny:is(.is-point, .is-work, .is-done, .is-gone, .is-adrift) .a-rest { display: none; }
+.planny:is(.is-point, .is-work, .is-done, .is-gone, .is-adrift, .is-setup) .a-rest { display: none; }
 .planny.is-point .a-point,
 .planny.is-work .a-work,
 .planny.is-done .a-done,
-.planny.is-gone .a-gone { display: inline; }
+.planny.is-gone .a-gone,
+.planny.is-setup .a-setup { display: inline; }
 .planny .arm.wave,
 .planny .arm.pump-l,
 .planny .arm.pump-r { transform-box: view-box; }
@@ -153,7 +154,7 @@
 @keyframes foot-step-a { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-1.1px); } }
 @keyframes foot-step-b { 0%, 100% { transform: translateY(-1.1px); } 50% { transform: translateY(0); } }
 
-/* Something for you to do: star lit in the highlight colour, a wave. */
+/* Something for you to do: star lit in the highlight color, a wave. */
 .planny.is-point { animation: planny-lean 2.6s ease-in-out infinite; }
 .planny.is-point .eye { fill: var(--accent); }
 
@@ -167,7 +168,7 @@
 
 /* The server is up, but nothing is answering at the other end of it. Not the
    faded, eye-shut `gone` look: this page is working perfectly, and the thing
-   that is not is somewhere else. Grey, still, and no arms: he has nothing to
+   that is not is somewhere else. Gray, still, and no arms: he has nothing to
    do with them until someone answers. */
 .planny.is-adrift .eye { fill: var(--ink-3); animation: none; }
 .planny.is-adrift .smile { opacity: 0.6; }
@@ -178,9 +179,14 @@
 .planny.is-done .eye { fill: var(--ok); animation: none; }
 .planny.is-done .smile { stroke-width: 1.5; }
 
-/* No server: faded, eye shut in the warning colour, arms hanging. */
+/* No server: faded, eye shut in the warning color, arms hanging. */
 .planny.is-gone { opacity: 0.5; }
 .planny.is-gone .eye { fill: var(--warn); animation: none; transform: scaleY(0.12); }
+
+/* The setup page, waiting on a pick: the point look without the work
+   spinner -- a friendly lean and wave, star lit, while nothing runs yet. */
+.planny.is-setup { animation: planny-lean 2.6s ease-in-out infinite; }
+.planny.is-setup .eye { fill: var(--accent); }
 
 /* ------------------------------------------------------ mood variants
 
@@ -293,13 +299,13 @@
 
 /* ------------------------------------------------------------ wake-up
 
-   A freshly opened dashboard: Planny powers on centre stage, then glides
+   A freshly opened dashboard: Planny powers on center stage, then glides
    into the rail (boot.js). Each beat is a keyframe on a delay under
    `.booting`, one class for the whole run; the glide's target depends on
    where the rail sits, so boot.js hands it over as --wake-glide. The layer
    takes clicks so none lands on a card underneath while he wakes. */
 .wake { position: fixed; inset: 0; z-index: 45; pointer-events: auto; }
-/* Solid page colour behind the sleeping bot, following light/dark via --bg. */
+/* Solid page color behind the sleeping bot, following light/dark via --bg. */
 .wake::before { content: ""; position: absolute; inset: 0; background: var(--bg); }
 .wake[hidden] { display: none; }
 .wake-bot {

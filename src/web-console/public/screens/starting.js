@@ -3,8 +3,9 @@
 import { page, redraw } from "../state.js";
 import { el, approvalTip } from "../render.js";
 import { startPose, startingHint, staleLaunchFeedback, workflowTitle } from "../answers.js";
+import { continueButton } from "../continue-button.js";
 import { skillByName } from "../skills.js";
-import { agentAdrift, doingNow, docs } from "../selectors.js";
+import { agentAdrift, doingNow, docs, loopDriving } from "../selectors.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -17,11 +18,35 @@ const LAUNCH_QUIPS = [
   "Consulting the map…",
   "Putting the kettle on…",
   "Rolling out the checklist…",
+  "Tying Planny's laces…",
+  "Winding up the star…",
+  "Sharpening the pencils…",
+  "Untangling the fairy lights…",
+  "Bribing the progress bar…",
+  "Warming up the ink…",
+  "Aligning the stars…",
+  "Blowing the dust off the plans…",
+  "Locating the missing semicolon…",
+  "Feeding the hamster…",
+  "Buttering the toast…",
+  "Spinning up the idea mill…",
+  "Plumping the cushions…",
+  "Turning the whimsy dial…",
+  "Oiling the gears…",
+  "Counting the paperclips…",
+  "Practicing the victory wave…",
+  "Rolling a fresh D20…",
+  "Peeling the shrink-wrap…",
+  "Summoning the right incantation…",
+  "Rounding up the ideas…",
+  "Stretching before the sprint…",
+  "Packing a tiny lunch…",
+  "Fluffing the checklist…",
 ];
 
 let launchTicker = null;
 
-// Planny flies centre stage: the same drawing as the dock's, cloned so the
+// Planny flies center stage: the same drawing as the dock's, cloned so the
 // markup stays the single source of him, and the same sky the dock fills.
 function flightStage() {
   const stage = el("div", "launch-stage");
@@ -76,7 +101,8 @@ function posePane(main, cls, workflow) {
   const pane = el("div", cls);
   pane.dataset.pose = pose;
   pane.appendChild(startStage(workflow));
-  if (held) main.insertBefore(pane, held);
+  // The old pane (another pose) is replaced, not left beside the new one.
+  if (held && held.parentNode === main) held.replaceWith(pane);
   else main.appendChild(pane);
   return pane;
 }
@@ -95,7 +121,7 @@ export function renderLaunching(main) {
   const l = page.local.launching || {};
   const pane = posePane(main, "launching", l.skill && skillByName(l.skill)?.workflow);
 
-  const stale = staleLaunchFeedback(l.title, agentAdrift());
+  const stale = staleLaunchFeedback(l.title, agentAdrift(), page.inApp);
   pane.appendChild(el("p", "card-kicker", stale ? stale.kicker : "On it"));
   pane.appendChild(el("h2", "launch-title", stale ? stale.title : `Waking up ${l.title || "the next mode"}`));
   pane.appendChild(el("p", "launch-quip", stale ? stale.quip : LAUNCH_QUIPS[0]));
@@ -106,6 +132,14 @@ export function renderLaunching(main) {
       stale ? stale.hint : "This page turns into its home the moment it answers. No need to touch anything."
     )
   );
+  // Under the app a saved pick no agent collects gets a button that types
+  // continue in the terminal; the ticker shows and hides it with the hint.
+  if (page.inApp) {
+    const row = el("div", "launch-reconnect");
+    row.hidden = !stale;
+    row.appendChild(continueButton("Reconnect to agent", "btn primary"));
+    pane.appendChild(row);
+  }
   startLaunchTicker();
 }
 
@@ -121,6 +155,26 @@ const START_QUIPS = [
   "Polishing the star…",
   "Laying out the good pens…",
   "Consulting the map…",
+  "Skimming the table of contents…",
+  "Following the paper trail…",
+  "Reading the footnotes first…",
+  "Taking attendance of the files…",
+  "Decoding the ancient scrolls…",
+  "Listening for plot holes…",
+  "Sharpening the highlighters…",
+  "Counting the moving parts…",
+  "Making friends with the codebase…",
+  "Checking under the hood…",
+  "Peeking behind the curtain…",
+  "Dusting the shelves…",
+  "Cross-referencing the references…",
+  "Interviewing the git history…",
+  "Warming up the magnifying glass…",
+  "Lacing up the walking boots…",
+  "Consulting the elder scrolls…",
+  "Unrolling the blueprints…",
+  "Sniffing out the good bits…",
+  "Asking the comments what they meant…",
 ];
 
 function startingElapsed() {
@@ -132,10 +186,12 @@ function renderStarting(main) {
   const elapsed = startingElapsed();
   const pane = posePane(main, "launching starting", page.S.workflow);
   pane.appendChild(el("p", "card-kicker", "Starting up"));
-  pane.appendChild(el("h2", "launch-title", `Starting ${workflowTitle(page.S.workflow)}`));
+  const looping = loopDriving();
+  pane.appendChild(el("h2", "launch-title", looping ? "The loop is starting this phase" : `Starting ${workflowTitle(page.S.workflow)}`));
   pane.appendChild(el("p", "launch-quip", START_QUIPS[Math.floor(elapsed / 2600) % START_QUIPS.length]));
   pane.appendChild(el("p", "launch-hint", startingHint(elapsed)));
-  pane.appendChild(approvalTip());
+  // A loop runs with permission checks off, so no approval will come.
+  if (!looping) pane.appendChild(approvalTip());
   startLaunchTicker();
 }
 
@@ -165,7 +221,9 @@ function startLaunchTicker() {
         return;
       }
       const elapsed = Date.now() - cur.at;
-      const stale = staleLaunchFeedback(cur.title, agentAdrift());
+      const stale = staleLaunchFeedback(cur.title, agentAdrift(), page.inApp);
+      const reconnect = document.querySelector(".launch-reconnect");
+      if (reconnect) reconnect.hidden = !stale;
       if (kicker) kicker.textContent = stale ? stale.kicker : "On it";
       if (title) title.textContent = stale ? stale.title : `Waking up ${cur.title || "the next mode"}`;
       q.textContent = stale ? stale.quip : LAUNCH_QUIPS[Math.floor(elapsed / 2600) % LAUNCH_QUIPS.length];
@@ -180,8 +238,17 @@ function startLaunchTicker() {
   }
 }
 
+// A phase that has reported is not starting: the app is checking the report,
+// running the quick check and committing, which can take minutes.
+function renderLoopChecking(main) {
+  const pane = posePane(main, "waiting-pane", page.S.workflow);
+  pane.appendChild(el("h2", null, "The loop is checking this phase"));
+  pane.appendChild(el("p", null, "The agent has reported. The app is checking that against the spec before it moves on, so you don't need to do anything."));
+}
+
 export function renderWaiting(main) {
   const doing = doingNow();
+  if (!doing && loopDriving() && page.S.loopOutcome) return renderLoopChecking(main);
   // Nothing asked and nothing said yet: the session is still starting.
   if (!doing) return renderStarting(main);
   // The same Planny the session started with, still at it: the spinner that
@@ -199,17 +266,21 @@ export function renderWaiting(main) {
   }
   pane.appendChild(title);
   pane.appendChild(el("p", null, doing));
-  const ask = "If Plan2Code needs you, the question appears here on its own.";
+  const ask = loopDriving()
+    ? "The loop is running this phase by itself, so you don't need to do anything. If it needs you, the question appears here."
+    : "If Plan2Code needs you, the question appears here on its own.";
   if (!docs().length) {
     pane.appendChild(el("p", null, ask));
     return;
   }
-  // "Task" and the tasks tab's own name both open that tab, so the pointer is
-  // one click from what it points at. A build posts it as `phase` ("Phase N
-  // tasks"); a quick task ticks the steps of its `plan` in place (an older
-  // agent may still post a separate `tasks` tab). A skill with no task list
-  // (Document, Plan) has nothing live to follow, so it gets no pointer at all.
+  // "Task" and the tab's own name both open that tab, so the pointer is one
+  // click from what it points at. A build posts `phasefile` ("phase-N.md"):
+  // the whole phase file, task list included. An older agent may still post
+  // a separate `phase` or `tasks` list, and a quick task ticks the steps of
+  // its `plan` in place. A skill with no task list (Document, Plan) has
+  // nothing live to follow, so it gets no pointer at all.
   const list =
+    docs().find((d) => d.id === "phasefile") ||
     docs().find((d) => d.id === "phase") ||
     docs().find((d) => d.id === "tasks") ||
     (page.S.workflow === "quick-task" && docs().find((d) => d.id === "plan")) ||

@@ -1,7 +1,7 @@
 # Reviewer Brief
 > Part of plan2code-review: filled in by the main session at Step 3 (Analyze) and handed, whole, to ONE fresh helper.
 
-Fill every `{{...}}` field, drop the lines that do not apply, and send the filled text as the helper's entire instructions. Never add the builder's conversation, reasoning, work notes or self-review: the helper's value is that it did not see them.
+Fill every `{{...}}` field, drop the lines that do not apply, and send the filled text as the helper's entire instructions. Never add the builder's conversation, reasoning, work notes or self-review: the helper's value is that it did not see them. Start the helper at the strength and effort `helper-strength.md` gives for review analysis, following its fallback order.
 
 ---
 

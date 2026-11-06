@@ -176,7 +176,7 @@ const CARDS = {
     planned: { on: false, reason: "Needs a spec that is already written up" },
     documented: { on: true },
     building: { on: true },
-    built: { on: false, reason: "The spec is fully built" },
+    built: { on: true },
     unrecognized: { on: false, reason: "Needs a spec that is already written up" },
   },
   "plan2code-2-document": {
@@ -264,6 +264,30 @@ const CARDS = {
     unrecognized: { on: true },
   },
   "plan2code-diagnose": {
+    "none": { on: true },
+    diagnosed: { on: true },
+    fixed: { on: true },
+    exploring: { on: true },
+    mapped: { on: true },
+    planned: { on: true },
+    documented: { on: true },
+    building: { on: true },
+    built: { on: true },
+    unrecognized: { on: true },
+  },
+  "plan2code-pr-prep": {
+    "none": { on: true },
+    diagnosed: { on: true },
+    fixed: { on: true },
+    exploring: { on: true },
+    mapped: { on: true },
+    planned: { on: true },
+    documented: { on: true },
+    building: { on: true },
+    built: { on: true },
+    unrecognized: { on: true },
+  },
+  "plan2code-test": {
     "none": { on: true },
     diagnosed: { on: true },
     fixed: { on: true },
@@ -365,7 +389,7 @@ test("finished: any finished state is never the picker's default, not only fixed
   assert.equal(defaultSpec(specs.slice(0, 2), lookup), null, "only finished specs: start from scratch");
   assert.equal(defaultSpec(specs)?.dir, "specs/a", "the real table does not know archived, so it is in play");
 
-  // The cards greyed for a fixed bug give a made-up finished state the same reason.
+  // The cards grayed for a fixed bug give a made-up finished state the same reason.
   const archived = { dir: "specs/a", name: "a", state: "archived" };
   for (const entry of CARD_ENTRIES) {
     const fixed = cardAvailability(entry, SCAN, { dir: "specs/b", name: "b", state: "fixed" });
@@ -418,6 +442,27 @@ test("the scan: every state it can return is in the table, and a fixture reaches
   assert.deepEqual(scanProblems(FIXTURES, known), ["the scan returns unrecognized, which spec-states.js lacks"]);
 });
 
+test("the scan: a PR-READINESS report changes no spec's state, and alone it stays unrecognized", () => {
+  const scanOf = (fixtures) => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "p2c-spec-readiness-"));
+    try {
+      for (const [name, files] of Object.entries(fixtures))
+        for (const [rel, text] of Object.entries(files)) {
+          const file = path.join(root, "specs", name, rel);
+          fs.mkdirSync(path.dirname(file), { recursive: true });
+          fs.writeFileSync(file, text);
+        }
+      return Object.fromEntries(scanProject(root).specs.map((sp) => [sp.name, [sp.state, sp.detail]]));
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  };
+  const REPORT = { "PR-READINESS-20261103.md": "# PR readiness\n\n**Verdict:** Ready\n\n- [x] Unit tests\n- [ ] Lint (trimmed)\n" };
+  const withReport = Object.fromEntries(Object.entries(FIXTURES).map(([name, files]) => [name, { ...files, ...REPORT }]));
+  assert.deepEqual(scanOf(withReport), scanOf(FIXTURES));
+  assert.equal(scanOf({ only: REPORT }).only[0], "unrecognized");
+});
+
 test("the scan: an assumed task counts as done and is named, and numbered task lines count", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "p2c-spec-assumed-"));
   const specs = {
@@ -437,6 +482,46 @@ test("the scan: an assumed task counts as done and is named, and numbered task l
     assert.deepEqual([by.assumed.state, by.assumed.detail], ["built", "all tasks done, 2 assumed"]);
     assert.deepEqual([by.numbered.state, by.numbered.detail], ["building", "1 of 3 tasks done"]);
     assert.deepEqual([by.plain.state, by.plain.detail], ["built", "all tasks done"], "no assumed tasks, no \", 0 assumed\"");
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("the scan: planChange is true for a waiting Plan change brief, and absent once it is applied or dropped", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "p2c-spec-brief-"));
+  const notes = (line) => "# Phase 1\n\n- [x] **Task 1.1:** One\n- [ ] **Task 1.2:** Two\n\n## Notes\n\n### Paused 2026-10-27\n" + line + "\n\n## Phase Completion Summary\n";
+  const checklist = (mark) => `# Overview\n\n## Phase Checklist\n\n- [${mark}] Phase 1: One\n- [ ] Phase 2: Two\n`;
+  const specs = {
+    waiting: { "overview.md": checklist("/"), "phase-1.md": notes("**Plan change:** add a phase first"), "phase-2.md": PHASE([false]) },
+    applied: { "overview.md": checklist("/"), "phase-1.md": notes("**Plan change (applied 2026-10-27):** add a phase first"), "phase-2.md": PHASE([false]) },
+    dropped: { "overview.md": checklist("/"), "phase-1.md": notes("**Plan change (dropped 2026-10-27):** add a phase first"), "phase-2.md": PHASE([false]) },
+    // No phase marked [/]: every phase file is read.
+    unmarked: { "overview.md": checklist(" "), "phase-1.md": PHASE([false]), "phase-2.md": notes("**Plan change:** rename a task") },
+    // A brief in a phase that is not the one in progress is not waiting on it.
+    otherPhase: { "overview.md": checklist("/"), "phase-1.md": notes("Nothing to change."), "phase-2.md": notes("**Plan change:** later") },
+    // Outside the Notes section it is only prose.
+    notInNotes: { "overview.md": checklist("/"), "phase-1.md": "# Phase 1\n\n**Plan change:** quoted in the overview\n\n- [ ] **Task 1.1:** One\n", "phase-2.md": PHASE([false]) },
+    built: { "overview.md": checklist("x"), "phase-1.md": notes("**Plan change:** found in the last checks").replace("- [ ] **Task 1.2:**", "- [x] **Task 1.2:**"), "phase-2.md": PHASE([true]) },
+    planned: { "PLAN-DRAFT-20261027.md": "# Plan draft\n\n**Status:** Draft\n\n## Notes\n\n**Plan change:** not a phased spec\n" },
+  };
+  try {
+    for (const [name, files] of Object.entries(specs))
+      for (const [rel, text] of Object.entries(files)) {
+        fs.mkdirSync(path.join(root, "specs", name), { recursive: true });
+        fs.writeFileSync(path.join(root, "specs", name, rel), text);
+      }
+    const by = Object.fromEntries(scanProject(root).specs.map((sp) => [sp.name, sp]));
+    assert.equal(by.waiting.planChange, true);
+    assert.equal(by.waiting.state, "building");
+    assert.equal("planChange" in by.applied, false);
+    assert.equal("planChange" in by.dropped, false);
+    assert.equal(by.unmarked.planChange, true);
+    assert.equal(by.unmarked.state, "building");
+    assert.equal("planChange" in by.otherPhase, false);
+    assert.equal("planChange" in by.notInNotes, false);
+    assert.equal(by.built.state, "built");
+    assert.equal(by.built.planChange, true, "a built spec can still have a brief waiting");
+    assert.equal("planChange" in by.planned, false);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
@@ -463,12 +548,12 @@ test("card rules: every state still in play is taken by at least one card", () =
   assert.deepEqual(untakenStates(without, TABLE), ["no card's states take planned: add it to the skills.js entries whose card it lights"]);
 });
 
-test("card rules: a card's states and greyed reasons name only real states", () => {
+test("card rules: a card's states and grayed reasons name only real states", () => {
   const known = new Set([...Object.keys(TABLE), "none"]);
   for (const sk of SKILLS) {
     if (Array.isArray(sk.states)) for (const st of sk.states) assert.ok(known.has(st), `${sk.skill} takes ${st}, which is no state`);
-    for (const key of Object.keys(sk.greyed || {})) assert.ok(key === "default" || key === "finished" || known.has(key), `${sk.skill}'s greyed names ${key}, which is no state`);
-    if (Array.isArray(sk.states) && sk.card) assert.ok(sk.greyed && sk.greyed.default, `${sk.skill} has a default greyed reason`);
+    for (const key of Object.keys(sk.greyed || {})) assert.ok(key === "default" || key === "finished" || known.has(key), `${sk.skill}'s grayed names ${key}, which is no state`);
+    if (Array.isArray(sk.states) && sk.card) assert.ok(sk.greyed && sk.greyed.default, `${sk.skill} has a default grayed reason`);
   }
 });
 

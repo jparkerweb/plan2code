@@ -11,12 +11,17 @@ import {
   WORKING_GRACE_MS,
   openItems,
   agentAdrift,
+  loopDriving,
+  loopWaiting,
 } from "./selectors.js";
-import { finishPaused } from "./answers.js";
+import { finishPaused, noteAwaiting } from "./answers.js";
 import { page } from "./state.js";
 import { pendingNotes } from "./uploads.js";
 
-export function sendState() {
+// `hasPayload` says whether there is something to send; left out, it is what
+// the main Send would carry. The suggestion chip passes `true`: its request is
+// the payload.
+export function sendState(hasPayload = stagedCount() || pendingNotes().length > 0) {
   // Before `gone`, and before the grace period that can re-enable a send. A
   // finished session has nobody left to send to, whatever the socket says.
   if (finish())
@@ -24,6 +29,11 @@ export function sendState() {
       ? { disabled: true, why: "This session is paused.", short: "Session paused" }
       : { disabled: true, why: "This session is finished.", short: "Session finished" };
   if (page.gone) return { disabled: true, why: "Not connected right now.", short: "Not connected" };
+  // The Implementation Loop answers for the agent: nothing to send until it
+  // stops to ask the person something (FR-15, FR-14).
+  if (loopDriving() && !loopWaiting()) {
+    return { disabled: true, why: "The loop is building. Cards unlock when it needs you.", short: "The loop is building" };
+  }
   // A send is still being collected. Blocking here is what keeps someone from
   // writing over answers nobody has read yet.
   if (page.pendingResult) {
@@ -41,7 +51,7 @@ export function sendState() {
     // "waiting" before asking, but an agent that asks and carries on ("while
     // you decide") must not lock the person out of answering for up to an
     // hour of quietMinutes.
-    if (myTurn().length && (stagedCount() || pendingNotes().length)) {
+    if (myTurn().length && hasPayload) {
       return {
         disabled: false,
         why: "Plan2Code is still working. Your answers wait for it to look.",
@@ -58,7 +68,7 @@ export function sendState() {
       // duration printed here freezes between them, and a frozen number
       // beside "is it stuck?" makes the page look like the thing it is
       // warning about. The exact time already ticks away in the dock.
-      if (stagedCount() || pendingNotes().length) {
+      if (hasPayload) {
         return { disabled: false, why: "Plan2Code has been busy a while. You can send anyway.", short: "Busy · send anyway" };
       }
       return openItems().length
@@ -71,6 +81,15 @@ export function sendState() {
     }
     return { disabled: true, why: "Wait for Plan2Code to finish.", short: agentAdrift() ? "Gone quiet" : "" };
   }
-  if (!stagedCount() && !pendingNotes().length) return { disabled: true, why: "" };
+  if (!hasPayload) return { disabled: true, why: "" };
   return { disabled: false, why: "" };
+}
+
+// Whether the Ask for suggestions chip on `item` can fire, and why not. One
+// request for suggestions waits at a time per card; otherwise it follows Send.
+export function suggestState(item) {
+  const note = noteAwaiting(item);
+  if (note && note.suggest === true) return { disabled: true, why: "Plan2Code has your request for suggestions on this one." };
+  const { disabled, why } = sendState(true);
+  return { disabled, why: why || (disabled ? "" : "Ask Plan2Code what it would pick here, and why.") };
 }

@@ -44,7 +44,7 @@ The 18-boundary is the honest line between *"needs designing"* and *"needs decid
 
 | Dimension | Scores | Raises it | Lowers it |
 |---|---|---|---|
-| **Requirements Clarity** | Are the requirements unambiguous? | Every resolved `grill` answer states the decision AND what was rejected; the testing-posture answer names types, cadence, and coverage | Answers phrased as preferences ("probably NDJSON") instead of decisions; a requirement that only exists in the map gist and not in a question file |
+| **Requirements Clarity** | Are the requirements unambiguous? | Every resolved `grill` answer states the decision AND what was rejected | Answers phrased as preferences ("probably NDJSON") instead of decisions; a requirement that only exists in the map gist and not in a question file |
 | **Technical Feasibility** | Do we know HOW to build each component? | Resolved `sketch` questions with a real artifact under `sketch-NN/`; `research` answers citing primary sources under `## Evidence`; `00-codebase-context.md` naming the actual files that change | A mechanism nobody has exercised in this codebase; a research answer whose `## Evidence` is empty or cites only a blog post |
 | **Integration Points** | Are all external dependencies identified? | Every system named in `## Destination` has a resolved question touching it; auth, quota, and failure behavior named per integration | An integration mentioned in an answer but never questioned; a config store that was read but never written to during a sketch |
 | **Risk Assessment** | Are blockers documented with mitigations? | Answers that record consequences; `Locked: yes` answers that say what breaks if reversed; ceilings with a stated behavior at the ceiling | A recorded limit with no decided behavior past it; a `Locked: yes` answer with no consequences section |
@@ -55,7 +55,6 @@ A cap overrides your judgment. While a cap condition holds, the dimension **cann
 
 | Cap | Condition |
 |---|---|
-| Requirements ≤ 17 | The testing-posture question is not `resolved`, or its answer omits any of types / cadence / coverage |
 | Feasibility ≤ 17 | Any `research` question is `resolved` with an empty `## Evidence` |
 | Integration ≤ 17 | A system named in `## Destination` has no resolved question touching it |
 | Risk ≤ 17 | Any `Locked: yes` answer records no consequences |
@@ -72,13 +71,13 @@ A cap overrides your judgment. While a cap condition holds, the dimension **cann
 
 Destination: *"A spec a developer can implement: nightly export of tenant audit logs to customer-owned S3 buckets, with a signed manifest per run."*
 
-Resolved questions: [Codebase context](./questions/00-codebase-context.md), [Export format](./questions/01-export-format.md), [Scheduling model](./questions/02-scheduling-model.md), [Destination auth](./questions/03-destination-auth.md), [Retention and replay](./questions/04-retention-and-replay.md), [Testing posture](./questions/05-testing-posture.md), [Throughput ceiling](./questions/06-throughput-ceiling.md). Ruled out: [Failure notification](./questions/07-failure-notification.md).
+Resolved questions: [Codebase context](./questions/00-codebase-context.md), [Export format](./questions/01-export-format.md), [Scheduling model](./questions/02-scheduling-model.md), [Destination auth](./questions/03-destination-auth.md), [Retention and replay](./questions/04-retention-and-replay.md), [Throughput ceiling](./questions/06-throughput-ceiling.md). Ruled out: [Failure notification](./questions/07-failure-notification.md).
 
 **First scoring pass:**
 
 | Dimension | Score | Justification against evidence |
 |---|---|---|
-| Requirements Clarity | 22/25 | Four `grill` answers state decisions and rejections (NDJSON chosen, CSV rejected for nested actor payloads). Testing posture settled: integration + unit, run after each phase, moderate coverage. Minus 3: the manifest's exact field list is unspecified — a Phase 5 spec detail, not an open decision. |
+| Requirements Clarity | 22/25 | Four `grill` answers state decisions and rejections (NDJSON chosen, CSV rejected for nested actor payloads). Minus 3: the manifest's exact field list is unspecified — a Phase 5 spec detail, not an open decision. |
 | Technical Feasibility | 21/25 | `sketch-02` uploaded a 400 MB multipart object to a real bucket end to end. `00-codebase-context.md` names `AuditExportJob` and the existing Hangfire registration as the extension points. Minus 4: no component in this codebase has ever assumed a cross-account IAM role; the pattern is documented in AWS docs cited under `## Evidence` but unexercised here. |
 | Integration Points | 23/25 | Three integrations, each with a resolved question: S3 (Destination auth), Hangfire (Scheduling model), tenant config store (Codebase context). Auth and quota named per integration. Minus 2: the tenant config store's write path was read but never exercised by a sketch. |
 | Risk Assessment | **16/25** | Consequences recorded on Export format and Destination auth. But Throughput ceiling establishes 200 MB per tenant per day at p95 and **records no decided behavior above it** — truncate, spill to the next run, or fail the run is still undecided. |
@@ -102,7 +101,7 @@ Pathfinder writes `specs/<idea>/PLAN-DRAFT-<YYYYMMDD>.md` with the header line:
 
 `**Status:** Phase 3 Complete - Resume at Phase 4`
 
-`/plan2code-1-plan` **already recognises that exact string.** Its "Check for Existing Progress" block, which runs before Phase 1, reads:
+`/plan2code-1-plan` **already recognizes that exact string.** Its "Check for Existing Progress" block, which runs before Phase 1, reads:
 
 `- Status "Phase 3 Complete - Resume at Phase 4": Resume at Phase 4`
 
@@ -117,7 +116,7 @@ Consequences of that being a literal string match:
 
 **Discovery is shell-only.** `specs/` is gitignored, so Glob silently returns nothing and every downstream skill would report "no PLAN-DRAFT found". Use `ls specs/` and `ls specs/<idea>/` (Bash) or `Get-ChildItem specs/` (PowerShell) — the same rule 1-plan and `/plan2code-2-document` follow when they look for the file you are about to write.
 
-**Do not append `## Planning Metrics` or any metrics comment.** Pathfinder is not a metered step. 1-plan's Phase 7 owns that block and will add it when it finishes the plan. Do not emit any of the loop's completion tokens listed in the skill's Rules anywhere under `specs/`.
+**Do not append `## Planning Metrics` or any metrics comment.** Pathfinder is not a metered step. 1-plan's Phase 7 owns that block and will add it when it finishes the plan. Do not emit any of the completion tokens listed in the skill's Rules anywhere under `specs/`.
 
 ## Map to PLAN-DRAFT mapping
 
@@ -128,8 +127,8 @@ Everything in the draft traces to something on the map. Nothing is invented at h
 | `## Destination` | Section 1 Executive Summary (2-3 sentences, present tense) and Section 7 Success Criteria (the destination restated as checkable outcomes) |
 | Resolved `grill` answers describing behavior | Section 2.1 Functional Requirements, one `FR-N` per decided behavior |
 | Resolved `grill` answers describing performance, security, scale, operability | Section 2.2 Non-Functional Requirements, one `NFR-N` each |
-| `## Out of scope` | Section 2.3 Out of Scope — copied line for line, wording and order intact. The ONLY permitted change is the link prefix: `./questions/` becomes `./pathfinder/questions/`, because the draft sits one level above the map. Do not re-word, re-order, or summarise; a re-worded scope boundary is a re-litigated one. |
-| The testing-posture question's answer | Section 2.4 Testing Strategy table (Types / Phase Testing / Coverage) |
+| `## Out of scope` | Section 2.3 Out of Scope — copied line for line, wording and order intact. The ONLY permitted change is the link prefix: `./questions/` becomes `./pathfinder/questions/`, because the draft sits one level above the map. Do not re-word, re-order, or summarize; a re-worded scope boundary is a re-litigated one. |
+| Testing | Section 2.4 Testing Strategy: the single row `Status` = `Deferred to Plan` (the 2.4 table below shows it), which Plan Phase 1 replaces. A map from an older version that holds a resolved testing answer has it copied into the 2.4 table as before |
 | Resolved `research` answers and their `## Evidence` | Section 3 Tech Stack — the cited source becomes the Justification cell |
 | `questions/00-codebase-context.md` | The `## System Context` section, and the components table in 4.3 |
 | Answers with `Locked: yes` | Section 4 Architecture (4.1 Pattern rationale, 4.4 Data Model, 4.5 API Design) **and** Section 9 Assumptions — a locked decision is an assumption downstream work is allowed to rely on |
@@ -198,9 +197,7 @@ next run rather than truncating.
 
 | Aspect | Decision |
 |---|---|
-| Types | Unit + Integration |
-| Phase Testing | Run after each phase |
-| Coverage | Moderate (~60-80%) |
+| Status | Deferred to Plan |
 
 ## System Context
 
@@ -211,7 +208,7 @@ next run rather than truncating.
 | Entry points to change | `AuditExportJob`, registered in `HangfireStartup.ConfigureRecurringJobs()` | [Codebase context](./pathfinder/questions/00-codebase-context.md) |
 | Existing patterns to follow | Jobs resolve tenant scope via `ITenantScopeFactory`; no job reads config directly | [Codebase context](./pathfinder/questions/00-codebase-context.md) |
 | Integration surfaces | S3 (customer-owned), Hangfire scheduler, `TenantConfigStore` | [Destination auth](./pathfinder/questions/03-destination-auth.md), [Scheduling model](./pathfinder/questions/02-scheduling-model.md) |
-| Technical debt in the path | `AuditQuery` materialises full result sets; streaming reader needed before FR-1 | [Codebase context](./pathfinder/questions/00-codebase-context.md) |
+| Technical debt in the path | `AuditQuery` materializes full result sets; streaming reader needed before FR-1 | [Codebase context](./pathfinder/questions/00-codebase-context.md) |
 | System boundaries | Read-only against the audit store; writes only to customer buckets and the run-log table | [Retention and replay](./pathfinder/questions/04-retention-and-replay.md) |
 | Conventions in force | `AGENTS.md` present and read; its logging and DI conventions govern | `pathfinder/map.md` ## Ground rules |
 
@@ -280,7 +277,7 @@ Manifest sequence numbers are per tenant, monotonic, and reused on replay.
 | Cross-account role assumption is unexercised in this codebase | Medium | High | Spike `S3RoleAssumer` against a second AWS account before any other component |
 | A tenant exceeds the daily ceiling indefinitely | Medium | Medium | Spill oldest-first plus a three-run alarm — [Overflow behavior](./pathfinder/questions/08-overflow-behavior.md) |
 | Partial objects visible after a failed run | Low | High | Upload to a run-scoped prefix, publish the manifest last — the manifest is the commit point |
-| `AuditQuery` materialises full result sets | High | High | Streaming reader is a prerequisite, not an optimisation |
+| `AuditQuery` materializes full result sets | High | High | Streaming reader is a prerequisite, not an optimization |
 | Customer revokes the role mid-run | Low | Medium | Fail the run whole; replay window covers recovery |
 
 ## 7. Success Criteria
@@ -317,7 +314,6 @@ question for what was rejected, why, and what it costs.
 | [Scheduling model](./pathfinder/questions/02-scheduling-model.md) | Reuse the existing Hangfire recurring job; a dedicated export service was rejected |
 | [Destination auth](./pathfinder/questions/03-destination-auth.md) | Customer-owned bucket via assumed role plus external ID; no platform-held customer credentials |
 | [Retention and replay](./pathfinder/questions/04-retention-and-replay.md) | 7-day replay window, sequence numbers reused on replay |
-| [Testing posture](./pathfinder/questions/05-testing-posture.md) | Unit + integration, run after each phase, moderate coverage |
 | [Throughput ceiling](./pathfinder/questions/06-throughput-ceiling.md) | 200 MB per tenant per day at p95; multipart upload proven in `pathfinder/sketch-02/` |
 | [Overflow behavior](./pathfinder/questions/08-overflow-behavior.md) | Spill oldest-first into the next run; alarm after three consecutive spills |
 
@@ -335,7 +331,7 @@ Ruled out of scope: [Failure notification](./pathfinder/questions/07-failure-not
 
 **No scrapable confidence numbers anywhere in the file.** Write the confidence as `Requirements-clarity 22/25 · Feasibility-technical 21/25 · Integration-points 23/25 · Risk-assessment 20/25` — hyphenated dimension labels, sub-scores over 25, no total, no percent sign.
 
-The reason is exact. When a PLAN-DRAFT carries no `METRICS_JSON` comment, the metrics collector falls back to scraping it by regex: an overall-confidence pattern that requires a literal `%`, and four breakdown patterns that match a bare `Requirements` / `Feasibility` / `Integration` / `Risk` followed directly by whitespace, a colon, or a pipe and then digits. **The breakdown patterns do not require a percent sign.** A pathfinder-written draft always lacks that comment until `/plan2code-1-plan` Phase 7 appends one, so both the percent sign *and* the bare dimension words have to be kept off the page — otherwise the pipeline records a planning-step confidence that no planning step ever produced. The hyphen in `Requirements-clarity` breaks the match; a table row reading `| Requirements | 11 |` does not, which is why the Scope Assessment row is labelled `Requirements decided`.
+The reason is exact. When a PLAN-DRAFT carries no `METRICS_JSON` comment, the metrics collector falls back to scraping it by regex: an overall-confidence pattern that requires a literal `%`, and four breakdown patterns that match a bare `Requirements` / `Feasibility` / `Integration` / `Risk` followed directly by whitespace, a colon, or a pipe and then digits. **The breakdown patterns do not require a percent sign.** A pathfinder-written draft always lacks that comment until `/plan2code-1-plan` Phase 7 appends one, so both the percent sign *and* the bare dimension words have to be kept off the page — otherwise the pipeline records a planning-step confidence that no planning step ever produced. The hyphen in `Requirements-clarity` breaks the match; a table row reading `| Requirements | 11 |` does not, which is why the Scope Assessment row is labeled `Requirements decided`.
 
 **The `**Next:**` footer must ship with both bullets.** Pathfinder cannot edit the planning skill, so those two instructions travel inside the artifact:
 
@@ -352,7 +348,7 @@ These two named, unnumbered sections are what make "Resume at Phase 4" legitimat
 
 | Draft section | Satisfies | Because pathfinder already |
 |---|---|---|
-| Sections 1 and 2 (including 2.4 Testing Strategy) | 1-plan **Phase 1: Requirements Analysis** | Grilled every functional and non-functional decision, and always charted a testing-posture question — that question exists specifically so Phase 1's testing prompt is already answered |
+| Sections 1 and 2 (including 2.4 Testing Strategy) | 1-plan **Phase 1: Requirements Analysis** | Grilled every functional and non-functional decision, and left testing to Plan Phase 1, which still owns 2.4's testing answer |
 | `## System Context` | 1-plan **Phase 2: System Context Examination** | Wrote `questions/00-codebase-context.md` at Chart Step 3: directory structure, key components verified against actual code, patterns and conventions, integration points, technical debt, boundaries — Phase 2's own checklist, item for item |
 | `## Scope Assessment` | 1-plan **Phase 3: Scope Assessment** | Produced the counts Phase 3 measures — requirements, components, integrations — as a byproduct of charting. Map the totals onto Phase 3's Small / Medium / Large table and state the verdict |
 

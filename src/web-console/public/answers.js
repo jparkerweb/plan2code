@@ -10,7 +10,7 @@
 // No DOM, no `local`, no fetch. If a function in here needs any of those, it
 // belongs in app.js instead.
 
-import { FIXED_REASON, SKILLS, labelFor, skillByName, skillFor } from "./skills.js";
+import { FIXED_REASON, FLOW_SKILLS, SKILLS, labelFor, skillByName, skillFor } from "./skills.js";
 import { SPEC_STATES, stateFor } from "./spec-states.js";
 
 /* ----------------------------------------------------- the sent answer */
@@ -244,7 +244,7 @@ export function suggestionFrom(item) {
   if (!raw) return "";
   const stripped = raw.replace(EXAMPLE_LEAD, "").trim();
   if (!stripped) return "";
-  // Recapitalise only when a lead-in was actually removed, and never on a
+  // Recapitalize only when a lead-in was actually removed, and never on a
   // field with a shape to match: "audit-export" must not become "Audit-export".
   if (stripped !== raw && !item.pattern && /^[a-z]/.test(stripped)) {
     return stripped[0].toUpperCase() + stripped.slice(1);
@@ -257,7 +257,7 @@ export function suggestionFrom(item) {
 // The badge each workflow wears. Shared with the server, which writes it into
 // the page it serves so the first paint already names the session instead of
 // flashing a placeholder until the script arrives. Derived from skills.js.
-export const WORKFLOW_LABEL = Object.fromEntries(SKILLS.map((s) => [s.workflow, s.label]));
+export const WORKFLOW_LABEL = Object.fromEntries(FLOW_SKILLS.map((s) => [s.workflow, s.label]));
 
 export function workflowLabel(workflow) {
   return labelFor(workflow) || workflow || "Session";
@@ -267,7 +267,7 @@ export function workflowLabel(workflow) {
 // skill as `additionalReferences`). Any other next step has no browser page
 // to open, and asking for one would send the next session looking for
 // something that is not there. Derived from skills.js: every entry is one.
-export const CONSOLE_WORKFLOWS = SKILLS.map((s) => s.command);
+export const CONSOLE_WORKFLOWS = FLOW_SKILLS.map((s) => s.command).filter(Boolean);
 
 // Rides on the end of the command as part of the skill's argument. Every
 // console skill takes it as the answer to "web console or terminal?" instead
@@ -319,6 +319,9 @@ export function finishPaused(fin) {
 // read as one sentence.
 export const ALL_DONE_LEAD = "All done, nothing left to run.";
 export const ALL_DONE_REST = "To start something else, run `/plan2code` in a new conversation to open the dashboard.";
+// The same line for the desktop app: there is no separate "new conversation"
+// to paste this into, only the one terminal panel the agent already runs in.
+export const ALL_DONE_REST_IN_APP = "To start something else, paste `/plan2code` into the terminal panel below to open the dashboard.";
 export const DASHBOARD_COMMAND = "/plan2code";
 
 /**
@@ -355,7 +358,7 @@ export function stopAction({ handoff } = {}) {
  * answers into the files, and a request landing then is how a question ends up
  * half recorded. `waiting` is the caller's "the agent is working or a reply is
  * owed, and it has not gone adrift" -- an agent that has stopped checking in
- * never replies, and a button greyed out forever would lock the person in. An
+ * never replies, and a button grayed out forever would lock the person in. An
  * uncollected send still blocks even then, because the server takes one at a
  * time.
  */
@@ -417,8 +420,10 @@ export function resumeCommand({ workflow, specDir } = {}) {
   // someone with no way to tell it was wrong.
   const dir = /^specs\/[a-z0-9][a-z0-9._-]*$/i.test(raw) ? raw : "";
   // What follows the command is the entry's `resume` (skills.js). A workflow
-  // the console does not know (an old session's) resumes as Pathfinder.
-  const entry = skillFor(workflow) || skillFor("pathfinder");
+  // the console does not know (an old session's, or an agent-less one like
+  // setup, which has no command) resumes as Pathfinder.
+  let entry = skillFor(workflow);
+  if (!entry || !entry.command) entry = skillFor("pathfinder");
   if (dir && entry.resume === "overview") return `${entry.command} ${dir}/overview.md`;
   if (dir && entry.resume === "folder") return `${entry.command} ${dir}/pathfinder`;
   return entry.command;
@@ -440,6 +445,10 @@ export const CHANGELOG_REPLY = "Update the CHANGELOG before I commit: open Chang
 // conversation, which carries a long skill's context into the next one.
 export const DASHBOARD_NOTE =
   "This picks up in the same conversation. That's fine after a quick or small skill; after a long one, type `/clear` in your terminal and run `/plan2code` for a clean start.";
+// Under the app, a clean start is New Session, not typing `/clear` by hand:
+// it also leaves the dashboard a handoff brief of where this step left off.
+export const DASHBOARD_NOTE_IN_APP =
+  "This picks up in the same conversation. That's fine after a quick or small skill; after a long one, press New Session at the top of the window for a clean start instead.";
 
 /**
  * Whether a finish offers the way back to the dashboard. The agent opts in
@@ -543,13 +552,22 @@ export const CATALOG_GROUPS = [
 // action so the launched skill knows which spec it was picked for. Derived from
 // skills.js: the entries with a card, in their order, each card's fields
 // beside the skill's name, command and workflow.
-export const SKILL_CATALOG = SKILLS.filter((s) => s.card).map((s) => ({
+export const SKILL_CATALOG = FLOW_SKILLS.filter((s) => s.card).map((s) => ({
   skill: s.skill,
   command: s.command,
   workflow: s.workflow,
   ...(s.review ? { review: s.review } : {}),
   ...s.card,
 }));
+
+// The desktop app's Implementation Loop card: not a skill, so not in
+// SKILL_CATALOG. The dashboard draws it after its group's other cards, and its
+// click opens the setup screen instead of launching anything.
+const LOOP_SKILL = SKILLS.find((s) => s.appOnly && s.card);
+export const LOOP_ENTRY = LOOP_SKILL
+  ? { skill: LOOP_SKILL.skill, command: "Desktop app only", workflow: null, appOnly: true, ...LOOP_SKILL.card }
+  : null;
+export const OUTSIDE_APP_LINE = "Runs only in the Plan2Code desktop app.";
 
 // A workflow by the name its dashboard card gives it ("Implement"), for the
 // screens that speak of it as a thing being started rather than as a badge.
@@ -658,7 +676,7 @@ export function dashNoteKind({ menu, hasMenu, onInitial, working }) {
  * availability — but its folder still goes along on a Pathfinder or Plan
  * launch, since the files may be reference docs.
  *
- * Returns { on, reason?, note?, next? } — `reason` is the one line a greyed card
+ * Returns { on, reason?, note?, next? } — `reason` is the one line a grayed card
  * shows, `note` the one line a clickable card shows when there is something to
  * know before launching it, `next` marks the state's natural step. `lookup` is
  * stateFor unless a test hands in its own table.
@@ -667,14 +685,14 @@ export function cardAvailability(entry, scan, sel, lookup = stateFor) {
   const hasAgents = Boolean(scan && scan.hasAgents);
   const state = sel && sel.state && sel.state !== "unrecognized" ? sel.state : null;
   const next = sel ? Boolean(state) && NEXT_FOR_STATE[state] === entry.skill : entry.skill === "plan2code-0-pathfinder";
-  const rule = skillByName(entry.skill);
+  const rule = skillByName(entry.skill) || (entry.appOnly ? LOOP_SKILL : null);
   if (!rule || !rule.states) return ON;
 
   // The three cards whose rules read the scan rather than the spec.
   if (entry.skill === "plan2code-init") return hasAgents ? off(rule.greyed.default) : ON;
   if (entry.skill === "plan2code-init-update") return hasAgents ? ON : off(rule.greyed.default);
   if (entry.skill === "plan2code-git") {
-    // Never greyed: a clean tree still has branches to switch, pull and push.
+    // Never grayed: a clean tree still has branches to switch, pull and push.
     if (scan && scan.isGit === false) return { on: true, note: GIT_INIT_NOTE };
     if (scan && Number.isInteger(scan.pending) && scan.pending > 0) return { on: true, note: pendingNote(scan.pending) };
     return ON;
@@ -686,6 +704,49 @@ export function cardAvailability(entry, scan, sel, lookup = stateFor) {
   const taken = !sel || !sel.state ? "none" : lookup(sel.state) ? sel.state : "unrecognized";
   if (rule.states.includes(taken)) return rule.marksNext ? { ...ON, next } : ON;
   return off(rule.greyed[taken] || (lookup(taken)?.finished && rule.greyed.finished) || rule.greyed.default);
+}
+
+// The cards whose confirm pane offers "Start with a note from your Notebook"
+// on Start fresh: the three that open on an idea box.
+const NOTE_FRESH_CARDS = new Set(["plan2code-0-pathfinder", "plan2code-1-plan", "plan2code-quick-task"]);
+
+/**
+ * Whether a lit card's confirm pane offers the Notebook switch: Pathfinder,
+ * Plan and Quick Task on Start fresh (no spec picked), and Revise plan on a
+ * picked spec with no plan change brief waiting (a waiting brief is what that
+ * revision is about). Never on a grayed card, never on any other card.
+ */
+export function noteSwitchShows(entry, scan, sel) {
+  if (!entry || !cardAvailability(entry, scan, sel).on) return false;
+  if (NOTE_FRESH_CARDS.has(entry.skill)) return !sel;
+  if (entry.skill === "plan2code-1b-revise-plan") return Boolean(sel) && sel.planChange !== true;
+  return false;
+}
+
+// A Notebook tab's text over this many UTF-8 bytes gets a "Long tab" note in
+// the confirm pane's preview, so the person can trim it before it is sent.
+export const NOTE_LONG_BYTES = 51200;
+
+/** Whether a Notebook tab, as GET /notepad?tab= reads it, holds nothing to send. */
+export function noteTabEmpty(tab) {
+  const text = tab && typeof tab.text === "string" ? tab.text : "";
+  const images = tab && Array.isArray(tab.images) ? tab.images : [];
+  return text.trim() === "" && images.length === 0;
+}
+
+/** The pictures ticked when a tab is first picked: its first MAX_ATTACHMENTS, in its own order. */
+export function defaultNoteTicks(images) {
+  return (Array.isArray(images) ? images : []).slice(0, MAX_ATTACHMENTS).map((img) => img.id);
+}
+
+/**
+ * The ticked ids after a click on `id`: unticked if it was ticked, else ticked
+ * while fewer than MAX_ATTACHMENTS are; past that the click changes nothing.
+ */
+export function toggleNoteTick(ticked, id) {
+  const list = Array.isArray(ticked) ? ticked : [];
+  if (list.includes(id)) return list.filter((t) => t !== id);
+  return list.length < MAX_ATTACHMENTS ? [...list, id] : list;
 }
 
 /**
@@ -800,13 +861,17 @@ export function deleteSummary(spec) {
   };
 }
 
-export function staleLaunchFeedback(title, adrift) {
+// `inApp`: the desktop app puts a Reconnect to agent button on the screen
+// (starting.js), so the hint points at it; a browser has only the terminal.
+export function staleLaunchFeedback(title, adrift, inApp = false) {
   if (!adrift) return null;
   return {
     kicker: "Saved",
     title: `${title || "Your workflow"} is saved and waiting`,
     quip: "Plan2Code is not running right now.",
-    hint: "Return to the terminal and send any message. Plan2Code will collect this launch and continue here.",
+    hint: inApp
+      ? "Press Reconnect to agent below. Plan2Code will collect this launch and continue here."
+      : "Return to the terminal and type continue. Plan2Code will collect this launch and continue here.",
   };
 }
 
@@ -961,6 +1026,61 @@ export function noteReplyLines(title, text, attachments) {
   ];
 }
 
+// A request for suggestions on a card: a note's action flagged `suggest`, so
+// the server records it as one and the page can tell it from a plain note.
+export function suggestAction(id, text, attachments) {
+  return { ...noteAction(id, text, attachments), suggest: true };
+}
+
+// The same request as `reply` lines. Its lead differs from `Note on` on
+// purpose: that is how the agent tells a request for suggestions from a note.
+export function suggestReplyLines(title, text, attachments) {
+  const list = attachments || [];
+  return [
+    `Suggestions wanted on ${title}: ${indentReply(text || "(no note)")}`,
+    ...list.map((a) => `  ${attachmentKind(a) === "file" ? "File" : "Image"}: ${a.path} (${a.name})`),
+  ];
+}
+
+/* --------------------------------------------------------- stale picks */
+
+/**
+ * Staged picks that a re-posted card no longer offers, dropped. A `choice`
+ * loses a `k` its options no longer carry; a `multi` keeps only the `ks`
+ * still there. An entry left with nothing meaningful goes. Every other kind,
+ * and any id not among `items`, stays as it was. `dropped` lists the ids that
+ * lost a pick. The inputs are never changed.
+ */
+export function pruneStaged(items, staged) {
+  const out = { ...(staged || {}) };
+  const dropped = [];
+  const byId = new Map((items || []).filter((it) => it && it.id).map((it) => [it.id, it]));
+  for (const [id, v] of Object.entries(out)) {
+    const item = byId.get(id);
+    if (!item || !v || typeof v !== "object" || (item.kind !== "choice" && item.kind !== "multi")) continue;
+    const keys = new Set((item.options || []).map((o) => o && o.k));
+    const next = { ...v };
+    let lost = false;
+    if (item.kind === "choice" && next.k && !keys.has(next.k)) {
+      delete next.k;
+      lost = true;
+    }
+    if (item.kind === "multi" && Array.isArray(next.ks)) {
+      const kept = next.ks.filter((k) => keys.has(k));
+      if (kept.length !== next.ks.length) {
+        next.ks = kept;
+        lost = true;
+      }
+    }
+    if (!lost) continue;
+    dropped.push(id);
+    const left = next.k || (Array.isArray(next.ks) && next.ks.length) || next.text || next.verdict || next.skipped;
+    if (left) out[id] = next;
+    else delete out[id];
+  }
+  return { staged: out, dropped };
+}
+
 /* ------------------------------------------------------------ patience */
 
 /**
@@ -977,7 +1097,9 @@ export function noteReplyLines(title, text, attachments) {
  * below the page's own threshold, and capped at an hour so a typo cannot hide
  * a dead session.
  */
-export function quietLimitMs(agent, baseMs) {
+export function quietLimitMs(agent, baseMs, agentless = false) {
+  // An agent-less session has nobody to go quiet: the limit is infinite.
+  if (agentless) return Number.POSITIVE_INFINITY;
   if (!agent || agent.status !== "working") return baseMs;
   const m = Number(agent.quietMinutes);
   if (!Number.isFinite(m) || m <= 0) return baseMs;
@@ -1016,6 +1138,8 @@ export function nextOpenAfter(openIds, staged, sent, currentId) {
 export const APPROVAL_TIP =
   "Your agent may pause for approvals in the terminal. A hands-off mode (e.g. `auto` mode in Claude Code, `smart` mode in Devin) can help avoid that, but additional attention may still be required.";
 export const APPROVAL_HINT = "Still working, or waiting on an approval in your terminal?";
+// The same line under the desktop app, where the terminal is the window's own panel.
+export const APPROVAL_HINT_IN_APP = "Still working, or waiting on an approval in the terminal panel?";
 export const APPROVAL_HINT_MS = 30_000;
 // When a working agent's silence turns into "has not checked in".
 export const STALE_MS = 2 * 60 * 1000;

@@ -9,7 +9,7 @@ A persistent three-line status bar for Claude Code that displays model info, pro
 ```
  ╭───╮  Opus 4.6 | High │ plan2code │ feature/statusline │ +12 -3
  │ ★ │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
- ╰┬─┬╯  3h 5m ($4.62) │ ▰▰▰▰▰▱▱▱▱▱▱▱ 42% (84k) │ 5h: 28% · 7d: 61%
+ ╰┬─┬╯  84k ⋅ ▰▰▰▰▰▱▱▱▱▱▱▱ 42% │ 5h: 28% · 7d: 61% | 3h 5m ($4.62)
 ```
 
 **Enterprise / Bedrock / Vertex / PAYG** — session token counts (no `rate_limits` in stdin):
@@ -17,7 +17,7 @@ A persistent three-line status bar for Claude Code that displays model info, pro
 ```
  ╭───╮  Sonnet 4.5 | Medium │ plan2code │ main │ +12 -3
  │ ★ │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
- ╰┬─┬╯  2m ($0.18) │ ▰▰▱▱▱▱▱▱▱▱▱▱ 18% │ 88k in · 3k out
+ ╰┬─┬╯  ▰▰▱▱▱▱▱▱▱▱▱▱ 18% │ 88k in · 3k out | 2m ($0.18)
 ```
 
 **Git worktree** — session running in a linked worktree at `C:\git\plan2code-user-auth`:
@@ -25,14 +25,14 @@ A persistent three-line status bar for Claude Code that displays model info, pro
 ```
  ╭───╮  Opus 4.6 | High │ plan2code ⑂ │ feature/user-auth │ +12 -3
  │ ★ │  ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
- ╰┬─┬╯  3h 5m ($4.62) │ ▰▰▰▰▰▱▱▱▱▱▱▱ 42% (84k) │ 5h: 28% · 7d: 61%
+ ╰┬─┬╯  84k ⋅ ▰▰▰▰▰▱▱▱▱▱▱▱ 42% │ 5h: 28% · 7d: 61% | 3h 5m ($4.62)
 ```
 
 **Line 1:** Planny icon | Model name + reasoning effort | Project name | Git branch | Uncommitted changes
 **Line 2:** Planny icon | Gray separator
-**Line 3:** Planny icon | Session duration + cost | Context window bar (+ absolute tokens used, Pro/Max/Teams only) | Usage (rate limits or token counts)
+**Line 3:** Planny icon | Context window bar (after absolute tokens used, Pro/Max/Teams only) | Usage (rate limits or token counts) | Session duration + cost
 
-The context bar's absolute token count `(84k)` only appears on Pro/Max/Teams (rate-limit) accounts, where it's the only place total context tokens are shown. On Enterprise/Bedrock/Vertex/PAYG accounts, it's suppressed because the `in`/`out` token counts already cover it.
+The absolute token count before the context bar (`84k ⋅`) only appears on Pro/Max/Teams (rate-limit) accounts, where it's the only place total context tokens are shown. On Enterprise/Bedrock/Vertex/PAYG accounts, it's suppressed because the `in`/`out` token counts already cover it.
 
 ## Installation
 
@@ -40,7 +40,7 @@ The context bar's absolute token count `(84k)` only appears on Pro/Max/Teams (ra
 
 ```bash
 node install.js
-# Select A (Install All + dev tools) or C (Custom) → S (Status Line)
+# Select A (Advanced) → S (Status Line), or A → E (Everything)
 ```
 
 This automatically:
@@ -97,7 +97,7 @@ Edit `~/.claude/statusline-config.json`:
 | `items.worktree` | `true` | Detect [git worktrees](https://git-scm.com/docs/git-worktree) and render the project segment as `repo ⑂ worktree` instead of just the worktree's directory name. See [Worktree Display](#worktree-display). Requires `items.project`. |
 | `items.branch` | `true` | Show current git branch (falls back to short SHA when detached HEAD) |
 | `items.contextBar` | `true` | Show context window usage bar with percentage |
-| `items.contextTokens` | `true` | Append raw tokens used in the context window next to the percentage, e.g. `42% (84k)`. Reads `context_window.total_input_tokens` (the same input-token count `used_percentage` is derived from — excludes output tokens). Requires `items.contextBar` to also be enabled. Suppressed automatically on Enterprise/Bedrock/Vertex/PAYG accounts, where the `in`/`out` token usage segment already shows the same number. |
+| `items.contextTokens` | `true` | Append raw tokens used in the context window before the bar, e.g. `84k ⋅ ▰▰▰▰▰▱▱▱▱▱▱▱ 42%`. Reads `context_window.total_input_tokens` (the same input-token count `used_percentage` is derived from — excludes output tokens). Requires `items.contextBar` to also be enabled. Suppressed automatically on Enterprise/Bedrock/Vertex/PAYG accounts, where the `in`/`out` token usage segment already shows the same number. |
 | `items.planUsage` | `true` | Show usage info: rate limits (Pro/Max) or token counts (Bedrock/Vertex/PAYG) |
 | `items.linesChanged` | `true` | Show uncommitted git diff stats (+added -removed) |
 | `items.duration` | `true` | Show session duration |

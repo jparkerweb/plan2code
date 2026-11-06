@@ -242,7 +242,8 @@ export function parseSubmissionPayload(body: string): RunMetrics | null {
   if (!parsed) return null;
 
   if (parsed['schema_version'] !== '1.0') return null;
-  if (!isString(parsed['run_id'])) return null;
+  // The id becomes a file name in the runs folder: only the collector's own shape.
+  if (!isString(parsed['run_id']) || !/^run-[A-Za-z0-9-]{1,64}$/.test(parsed['run_id'])) return null;
   if (!isString(parsed['plan2code_version'])) return null;
 
   const feedbackRaw = parsed['user_feedback'];

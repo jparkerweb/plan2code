@@ -64,10 +64,11 @@ export function scrubbedEnv(extra = {}) {
 for (const k of AMBIENT_GIT_ENV) delete process.env[k];
 Object.assign(process.env, { GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: EMPTY_GITCONFIG });
 
-export function runScript(skill, script, args, { cwd, env } = {}) {
+export function runScript(skill, script, args, { cwd, env, input } = {}) {
   const r = spawnSync(process.execPath, [path.join(SKILLS, skill, "scripts", script), ...args], {
     cwd: cwd || ROOT,
     encoding: "utf8",
+    input,
     env: scrubbedEnv({ PLAN2CODE_NOW: NOW, ...env }),
   });
   let json = null;
@@ -99,6 +100,11 @@ export function gitInit(dir, branch = "main") {
   g("config", "user.email", "t@example.com");
   g("config", "user.name", "Test");
   g("config", "commit.gpgsign", "false");
+  // No background maintenance after a commit: on macOS it held
+  // .git/objects/maintenance.lock while copyFixture copied the template, and
+  // the copy failed with ENOENT once the lock was gone.
+  g("config", "maintenance.auto", "false");
+  g("config", "gc.auto", "0");
   return g;
 }
 

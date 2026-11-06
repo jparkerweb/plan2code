@@ -16,6 +16,8 @@ import {
   byId,
   docs,
   isGitBoard,
+  loopDriving,
+  loopWaiting,
 } from "../selectors.js";
 import {
   lastOpenCard,
@@ -44,6 +46,7 @@ import {
   attachTray,
 } from "../uploads.js";
 import { attachMentions } from "../mention-box.js";
+import { makeMdField } from "../md-field.js";
 import { TEMPLATE_WORKFLOWS, templatesFor, templateSwap } from "../starters.js";
 import { looks } from "../looks.js";
 
@@ -107,13 +110,13 @@ export function markMore() {
 function markGrowBox(card) {
   if (!card) return;
   const id = card.dataset.item;
-  const areas = [...card.querySelectorAll("textarea")];
+  const areas = [...card.querySelectorAll(".md-host")];
   // Not over the git board: the column there flows card and board at natural
   // height, so there is no free height for a box to grow into.
   const box = isGitBoard()
     ? null
     : areas.find((t) => t.id === "text-" + id) ||
-      card.querySelector(".option.is-other.is-picked textarea.other-text") ||
+      card.querySelector(".option.is-other.is-picked .md-host.other-text") ||
       areas.find((t) => t.id === "note-" + id);
   // Only a box that stops being the one gives its fill back, so a keystroke
   // that re-marks the same box leaves its height alone.
@@ -146,7 +149,7 @@ function naturalHeight(card) {
 // handle only ever make it taller: resize: vertical alone cannot hold a floor
 // that moves with the window. Below a 160px fill the card scrolls instead.
 export function fitGrowBox() {
-  const box = $("main").querySelector(":scope > .card.has-grow textarea.grow");
+  const box = $("main").querySelector(":scope > .card.has-grow .md-host.grow");
   if (!box) return;
   const card = box.closest(".card");
   const other = naturalHeight(card) - box.offsetHeight;
@@ -245,7 +248,7 @@ export function buildPager(item) {
   // Once this question is answered, the step is the next unanswered one, not
   // Send. Send lighting up the moment a single answer is staged pulls people
   // into sending one question at a time, which is three round trips where the
-  // workflow wanted one. So the emphasis moves to whichever neighbour still
+  // workflow wanted one. So the emphasis moves to whichever neighbor still
   // needs them, and Send goes quiet until nothing does.
   const here = Boolean(page.local.staged[item.id]);
   const nextT = open[at + 1];
@@ -257,7 +260,7 @@ export function buildPager(item) {
   const leadNext = here && needs(nextT);
   const leadPrev = here && !leadNext && needs(prevT);
 
-  // An end of the queue is an empty slot, not a disabled button. A greyed
+  // An end of the queue is an empty slot, not a disabled button. A grayed
   // "Previous" pointing at nothing is a control that exists only to say no.
   const mk = (target, back, lead) => {
     if (!target) return el("span", "pager-slot");
@@ -316,14 +319,38 @@ function inFlightFor(item) {
   return sub ? { value: sub, summary: "" } : null;
 }
 
+// While the Implementation Loop drives, an open card is a record, not a form
+// (FR-15): "handled" when the loop answers it itself, "locked" otherwise. The
+// one exception (FR-14) is a required question the loop does not handle, which
+// stays a live form while it waits for the person.
+function loopLockFor(item) {
+  if (!loopDriving() || !isOpen(item) || finish()) return null;
+  if (item.handledBy === "loop") return "handled";
+  return loopWaiting() && item.required !== false ? null : "locked";
+}
+
+function renderLoopLocked(card, item, why) {
+  const box = el("div", "answered is-loop " + (why === "handled" ? "is-handled" : "is-locked"));
+  if (why === "handled") {
+    box.appendChild(el("p", "answered-head loop-tag", "The loop handles this"));
+    box.appendChild(el("p", "answered-lock", "The Implementation Loop answers this one itself, so there is nothing to do here."));
+  } else {
+    box.appendChild(el("p", "answered-lock", "The Implementation Loop is building. This unlocks by itself if it needs you."));
+  }
+  card.appendChild(box);
+  lockedOptions(card, item, []);
+}
+
 export function renderCard(item) {
   const staged = page.local.staged[item.id];
   const flight = inFlightFor(item);
+  const loopLock = loopLockFor(item);
   const card = el(
     "article",
     "card question" +
       (!isOpen(item) || finish() ? " is-answered" : staged ? " is-staged" : "") +
-      (flight ? " is-inflight" : "")
+      (flight ? " is-inflight" : "") +
+      (loopLock ? " is-loop-" + loopLock : "")
   );
 
   // Which question this card is for, so a render can tell whether the card it
@@ -348,6 +375,8 @@ export function renderCard(item) {
   // send can no longer go anywhere and the form would be a trap.
   if (!isOpen(item) || finish()) {
     renderSettled(card, item);
+  } else if (loopLock) {
+    renderLoopLocked(card, item, loopLock);
   } else if (flight) {
     renderInFlight(card, item, flight);
   } else {
@@ -355,14 +384,19 @@ export function renderCard(item) {
     if (build) build(card, item, staged);
   }
 
-  if (item.required === false && isOpen(item) && !flight && !finish()) {
+  if (item.required === false && isOpen(item) && !flight && !finish() && !loopLock) {
     const skipped = Boolean(staged && staged.skipped);
     // A small accent chip, like a comment box's quick answer ("No changes"),
     // rather than an underlined link that reads as fine print.
     const skip = el("button", "btn tiny", skipped ? "Do not skip" : "Skip this one");
     skip.type = "button";
     skip.style.marginTop = "16px";
-    skip.addEventListener("click", () => (skipped ? stage(item.id, null) : skipAndMoveOn(item.id)));
+    skip.addEventListener("click", () => {
+      if (!skipped) return skipAndMoveOn(item.id);
+      // Keep a note typed with the skip: the box still shows it, so the send must carry it.
+      const kept = page.local.staged[item.id];
+      stage(item.id, kept && kept.text ? { type: "answer", kind: item.kind, text: kept.text } : null);
+    });
     card.appendChild(skip);
     if (page.local.skipFlash === item.id) {
       card.classList.add("is-skip-flash");
@@ -372,7 +406,7 @@ export function renderCard(item) {
     }
   }
 
-  if (isOpen(item) && !flight && !finish()) markGrowBox(card);
+  if (isOpen(item) && !flight && !finish() && !loopLock) markGrowBox(card);
   return card;
 }
 
@@ -636,15 +670,18 @@ function otherOption(list, item, staged, name) {
   head.appendChild(label);
   body.appendChild(head);
 
-  const ta = el("textarea", "other-text");
-  ta.id = id;
-  ta.placeholder = "If none of the above fit, say what does.";
-  // A draft survives picking a listed option, so switching back and forth
-  // never costs someone the sentence they already wrote.
-  ta.value = (on && staged.text) || page.local.drafts[id] || "";
+  const ta = makeMdField({
+    id,
+    className: "other-text",
+    placeholder: "If none of the above fit, say what does.",
+    label: "Something else, in your own words",
+    // A draft survives picking a listed option, so switching back and forth
+    // never costs someone the sentence they already wrote.
+    value: (on && staged.text) || page.local.drafts[id] || "",
+  });
 
   // Repaint the row highlights without a full render, which would rebuild this
-  // textarea mid-keystroke. Setting the radio marks the rest of the group off
+  // box mid-keystroke. Setting the radio marks the rest of the group off
   // by itself; only the `is-picked` classes need saying out loud.
   const pick = (chosen) => {
     for (const node of list.children) node.classList.toggle("is-picked", node === chosen);
@@ -679,7 +716,10 @@ function otherOption(list, item, staged, name) {
     ta.focus();
   });
 
-  body.appendChild(ta);
+  // htmlFor cannot reach a div the way it reached the textarea: the label's
+  // click hands the field its focus here instead.
+  label.addEventListener("click", () => ta.focus());
+  body.appendChild(ta.el);
   li.appendChild(radio);
   li.appendChild(body);
   list.appendChild(li);
@@ -697,10 +737,12 @@ function otherField(card, item, staged) {
   const label = el("label", null, "Anything else, in your own words");
   label.htmlFor = id;
   wrap.appendChild(label);
-  const ta = el("textarea");
-  ta.id = id;
-  ta.placeholder = "Optional. This adds to the ones you picked above; it does not replace them.";
-  ta.value = (staged && staged.text) || page.local.drafts[id] || "";
+  const ta = makeMdField({
+    id,
+    placeholder: "Optional. This adds to the ones you picked above; it does not replace them.",
+    label: "Anything else, in your own words",
+    value: (staged && staged.text) || page.local.drafts[id] || "",
+  });
   ta.addEventListener("input", () => {
     setDraft(id, ta.value);
     const cur = page.local.staged[item.id];
@@ -713,7 +755,7 @@ function otherField(card, item, staged) {
     }
     stagedChanged();
   });
-  wrap.appendChild(ta);
+  wrap.appendChild(ta.el);
   card.appendChild(wrap);
 }
 
@@ -835,6 +877,28 @@ function buildChoice(card, item, staged) {
   }
   otherOption(list, item, staged, name);
   card.appendChild(list);
+  clearRow(card, item);
+}
+
+// Takes a one-answer question back to how it arrived: no pick, and nothing in
+// "Something else" (its draft too, or the render would put the words straight
+// back). A radio group cannot be unticked by clicking it again, so without
+// this a stray pick could only be swapped for another one. Only the builders
+// call it, and they only run for a form that has not been sent.
+function clearRow(card, item) {
+  const row = el("div", "btn-row options-clear");
+  const b = el("button", "btn small ghost", "Clear");
+  b.type = "button";
+  // An id so focus survives the render the click sets off (see withFocus).
+  b.id = "clear-" + item.id;
+  b.setAttribute("aria-label", "Clear your answer to this question");
+  b.addEventListener("click", () => {
+    const other = "other-" + item.id;
+    if (page.local.drafts[other]) setDraft(other, "");
+    stage(item.id, null);
+  });
+  row.appendChild(b);
+  card.appendChild(row);
 }
 
 function buildMulti(card, item, staged) {
@@ -940,11 +1004,20 @@ function buildText(card, item, staged) {
     } catch {}
   }
   const single = Boolean(pattern);
-  const input = el(single ? "input" : "textarea");
-  if (single) input.type = "text";
-  input.id = id;
-  input.placeholder = item.placeholder || "Type here. Plain language is fine.";
-  input.value = (staged && staged.text) || page.local.drafts[id] || "";
+  const input = single
+    ? el("input")
+    : makeMdField({
+        id,
+        placeholder: item.placeholder || "Type here. Plain language is fine.",
+        label: item.inputLabel || "Your answer",
+        value: (staged && staged.text) || page.local.drafts[id] || "",
+      });
+  if (single) {
+    input.type = "text";
+    input.id = id;
+    input.placeholder = item.placeholder || "Type here. Plain language is fine.";
+    input.value = (staged && staged.text) || page.local.drafts[id] || "";
+  }
   attachMentions(input);
 
   const err = el("p", "field-error");
@@ -999,9 +1072,13 @@ function buildText(card, item, staged) {
   if (item.templates === "idea" && TEMPLATE_WORKFLOWS.includes(page.S.workflow)) {
     wrap.appendChild(templateRow(item, input, templatesFor(page.S.workflow, looks.role), check));
   }
-  wrap.appendChild(input);
-  // Fresh-idea boxes take files as context, the same ones the note pane holds.
-  if (!single && TEMPLATE_WORKFLOWS.includes(page.S.workflow)) {
+  // A Markdown field's host is .el; the single-line input appends as itself.
+  wrap.appendChild(input.el || input);
+  if (!single) label.addEventListener("click", () => input.focus());
+  // Fresh-idea boxes take files as context, the same ones the note pane holds,
+  // and so does any box the page fills from a Notebook tab (Revise plan's
+  // "What should change"), whose ticked pictures land here.
+  if (!single && (TEMPLATE_WORKFLOWS.includes(page.S.workflow) || item.fill === "note")) {
     input.addEventListener("paste", (e) => {
       const files = incomingFiles(e.clipboardData && e.clipboardData.files);
       if (!files.length) return;
@@ -1317,11 +1394,13 @@ function buildMenu(card, item, staged) {
     radio.id = optionId(item, o, i);
     radio.value = o.k;
     radio.checked = Boolean(picked);
-    radio.setAttribute("aria-label", o.k ? `${o.k}: ${o.text}` : o.text);
+    // Under the app a fresh start is the bar's New Session, so say that.
+    const text = page.inApp && o.fresh === true ? "Start New Session" : o.text;
+    radio.setAttribute("aria-label", o.k ? `${o.k}: ${text}` : text);
     radio.addEventListener("change", () => stage(item.id, { type: "answer", kind: "menu", k: o.k }));
     const body = el("div", "option-body");
     const head = el("div", "option-label");
-    head.appendChild(el("span", null, o.text));
+    head.appendChild(el("span", null, text));
     if (o.recommended) head.appendChild(el("span", "pill suggested", "Suggested"));
     body.appendChild(head);
     if (o.detail) body.appendChild(el("p", "option-detail", o.detail));
@@ -1331,6 +1410,7 @@ function buildMenu(card, item, staged) {
     list.appendChild(li);
   }
   card.appendChild(list);
+  clearRow(card, item);
 
   if (item.command) {
     const note = el("div", "card-note");
@@ -1348,7 +1428,7 @@ function buildList(card, item, staged) {
   // over the array from render time. A reorder replaces that array, so a stale
   // closure would quietly undo the reorder the next time a rename committed.
   // A name still being typed counts too: the tool buttons below keep the
-  // field's focus (their mousedown is cancelled), so its `change` has not
+  // field's focus (their mousedown is canceled), so its `change` has not
   // fired yet when they act, and the re-render would otherwise drop it.
   const ul = el("ul", "rows");
   const baseRows = () => {
@@ -1495,26 +1575,35 @@ function buildList(card, item, staged) {
   }
   card.appendChild(row);
   card.appendChild(el("p", "help", "Drag to reorder, click a name to rename it."));
-  commentField(card, item, "Anything else about this breakdown?", false, "no changes");
+  const quick = [{ label: "No changes", text: "no changes" }];
+  // Only a plan's breakdown is phases; a list card elsewhere is something else.
+  if (PHASE_WORKFLOWS.includes(page.S.workflow)) quick.push({ label: "Combine phases", text: COMBINE_PHASES });
+  commentField(card, item, "Anything else about this breakdown?", false, quick);
 }
 
-function commentField(card, item, labelText, required, quickText) {
+const PHASE_WORKFLOWS = ["plan", "revise-plan"];
+const COMBINE_PHASES =
+  "Combine phases where possible to simplify and reduce the total number of phases, while still keeping a clear separation of concerns.";
+
+function commentField(card, item, labelText, required, quickAnswers = []) {
   const wrap = el("div", "field");
   const id = "note-" + item.id;
   const label = el("label", null, labelText);
   label.htmlFor = id;
   wrap.appendChild(label);
-  let quick = null;
-  if (quickText) {
-    quick = el("button", "btn tiny", quickText.charAt(0).toUpperCase() + quickText.slice(1));
-    quick.type = "button";
-    quick.title = "Fill in \"" + quickText + "\"";
-    wrap.appendChild(quick);
-  }
-  const ta = el("textarea");
-  ta.id = id;
-  ta.placeholder = required ? "Tell Plan2Code what to change." : "Optional.";
-  ta.value = (page.local.staged[item.id] && page.local.staged[item.id].text) || page.local.drafts[id] || "";
+  const quicks = quickAnswers.map(({ label, text }) => {
+    const b = el("button", "btn tiny quick-answer", label);
+    b.type = "button";
+    b.title = "Fill in \"" + text + "\"";
+    wrap.appendChild(b);
+    return [b, text];
+  });
+  const ta = makeMdField({
+    id,
+    placeholder: required ? "Tell Plan2Code what to change." : "Optional.",
+    label: labelText,
+    value: (page.local.staged[item.id] && page.local.staged[item.id].text) || page.local.drafts[id] || "",
+  });
   attachMentions(ta);
   ta.addEventListener("input", () => {
     setDraft(id, ta.value);
@@ -1530,11 +1619,12 @@ function commentField(card, item, labelText, required, quickText) {
       stageQuiet(item.id, { type: "answer", kind: item.kind, text: ta.value.trim() });
     stagedChanged();
   });
-  wrap.appendChild(ta);
-  if (quick)
-    quick.addEventListener("click", () => {
-      ta.value = quickText;
-      ta.dispatchEvent(new Event("input", { bubbles: true }));
+  label.addEventListener("click", () => ta.focus());
+  wrap.appendChild(ta.el);
+  for (const [b, text] of quicks)
+    b.addEventListener("click", () => {
+      ta.value = text;
+      ta.emitInput();
       ta.focus();
     });
   card.appendChild(wrap);

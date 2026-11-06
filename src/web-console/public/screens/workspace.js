@@ -2,7 +2,7 @@
 
 import { hooks, page } from "../state.js";
 import { copyButton, el, lightDismiss, selectContents } from "../render.js";
-import { selSpec, specList, workspaceFolders } from "../selectors.js";
+import { loopDriving, selSpec, specList, workspaceFolders } from "../selectors.js";
 import { postJson } from "../net.js";
 import { nameProblem } from "../workspace.js";
 
@@ -114,6 +114,12 @@ export function renderWorkspace() {
   folders.forEach((f, i) => paintWorkspaceRow(list.children[i], f));
   $("workspace-browse").hidden = Boolean(page.wsFrame && page.wsFrame.remote);
   $("workspace-scope").textContent = workspaceScopeText();
+  // The loop's agents were started with this workspace; changing it now would
+  // reach nobody (FR-15). Reading and copying paths stays.
+  const locked = loopDriving();
+  for (const id of ["workspace-add", "workspace-browse", "workspace-path"]) $(id).disabled = locked || (id === "workspace-add" && wsBusy);
+  for (const rm of list.querySelectorAll(".ws-remove")) rm.disabled = locked;
+  if (locked) setAddMsg("The workspace is fixed while the loop builds.");
 }
 
 function workspaceRow(f) {
@@ -281,7 +287,7 @@ function paintWorkspaceRow(li, f) {
 // sent when the person took a suggested name after a clash.
 async function addWorkspaceFolder(path, name) {
   const trimmed = String(path || "").trim();
-  if (!trimmed || wsBusy) return;
+  if (!trimmed || wsBusy || loopDriving()) return;
   wsBusy = true;
   $("workspace-add").disabled = true;
   const { status, body } = await postJson("/workspace/add", name ? { path: trimmed, name } : { path: trimmed });
@@ -318,7 +324,7 @@ async function addWorkspaceFolder(path, name) {
 
 async function browseWorkspace() {
   const b = $("workspace-browse");
-  if (b.disabled) return;
+  if (b.disabled || loopDriving()) return;
   b.disabled = true;
   setAddMsg("Waiting for the folder picker…");
   const { status, body } = await postJson("/workspace/browse", {});

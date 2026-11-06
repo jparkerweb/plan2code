@@ -11,7 +11,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
-import { pageSuite, openSession, itemCard, textOf } from "./page-test-helpers.mjs";
+import { pageSuite, openSession, itemCard, textOf , fillBox, boxValue} from "./page-test-helpers.mjs";
 import { tempFolder } from "./web-console-test-helpers.mjs";
 
 const suite = pageSuite(test);
@@ -33,7 +33,7 @@ function datasetsFolder() {
 async function addFolderFromDialog(s, dir) {
   await s.page.locator("#footer-where").click();
   await s.page.locator("#workspace-modal[open]").waitFor();
-  await s.page.locator("#workspace-path").fill(dir);
+  await fillBox(s.page.locator("#workspace-path"), dir);
   await s.page.locator("#workspace-add").click();
   await s.page.locator("#workspace-add-msg.is-good").waitFor();
 }
@@ -53,11 +53,11 @@ test("a folder added in Workspace is listed with its @name, and the next send te
   assert.equal(await textOf(added.locator(".ws-path")), dir);
   assert.equal(await added.locator(".ws-original").count(), 0, "only the first folder is the original");
   assert.equal(await rows.first().locator(".ws-original").count(), 1);
-  assert.equal(await s.page.locator("#workspace-path").inputValue(), "", "the path box empties after an add");
+  assert.equal(await boxValue(s.page.locator("#workspace-path")), "", "the path box empties after an add");
 
   await s.page.locator("#workspace-done").click();
   await s.page.locator("#workspace-modal[open]").waitFor({ state: "detached" });
-  await itemCard(s.page, "q1").locator("textarea, input[type=text]").first().fill("audit-export");
+  await fillBox(itemCard(s.page, "q1").locator(".md-host, input[type=text]").first(), "audit-export");
   await s.page.click("#btn-send");
   const got = s.wait(10);
   assert.equal(got.code, 0, `nothing was sent (wait exit ${got.code})`);
@@ -73,20 +73,28 @@ test("an @ in a note offers the workspace's folders, and picking one writes its 
   await addFolderFromDialog(s, datasetsFolder());
   await s.page.locator("#workspace-done").click();
   await s.page.locator("#workspace-modal[open]").waitFor({ state: "detached" });
+  // The @ list is the page's workspace frame, which can land after the
+  // dialog closes; typed before then, the @ has nothing to offer. The footer
+  // reads the same frame.
+  await s.page.waitForFunction(() => (document.getElementById("footer-where").dataset.key || "").includes("+ 1 folder"));
 
   const note = s.page.locator("#aside #thread-q1");
-  await note.click();
-  await note.pressSequentially("Look in @da");
+  const ed = note.locator(".cm-content");
+  await ed.click();
+  await ed.pressSequentially("Look in @da");
   const pop = s.page.locator("#mention-pop");
   await pop.waitFor();
   const options = pop.locator(".mention-opt");
   assert.deepEqual(await options.allTextContents(), ["@datasets"], "only the folder that matches what was typed");
-  await options.first().click();
+  // The list repaints on every key release, so Playwright's click can lose
+  // its option to a repaint on a slow machine and retry for a minute: click
+  // the option in one step from the page instead.
+  await s.page.evaluate(() => document.querySelector("#mention-pop .mention-opt").click());
   await pop.waitFor({ state: "detached" });
-  assert.equal(await note.inputValue(), "Look in @datasets ");
+  assert.equal(await boxValue(note), "Look in @datasets ");
 
   // A bare @ lists every folder, the project's own first.
-  await note.pressSequentially("and @");
+  await ed.pressSequentially("and @");
   await pop.waitFor();
   assert.equal(await pop.locator(".mention-opt").count(), 2);
   await s.page.keyboard.press("Escape");

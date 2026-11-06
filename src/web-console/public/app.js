@@ -19,10 +19,11 @@
 
 import { page, onRedraw, onSave, useHooks, bootData } from "./state.js";
 import {
-  adopt, banner, connect, fillSky, fitGrowBox, loadState, markSent, maybeWelcome, render, renderFooter,
+  adopt, askSuggestions, banner, connect, fillSky, fitGrowBox, loadState, markSent, maybeWelcome, render, renderFooter,
   renderSidebar, renderWhere, save, startClock, startLooks, stagedPayload, syncWorkspaceScope,
   wakeHoldsChime, wireAsk, wireCards, wireChrome, wireCleanup, wireDashboard, wireDocs, wireEnding,
-  wireHelp, wireLooks, wireNotepad, wireWorkspace,
+  wireActivities, wireLoopSetup, wireHelp, launchSkill, openHelpOn, openLoopSetup, wireLooks, wireNotepad, wirePrefs, wireWorkspace,
+  openPrefs, markSaved, confirmUnsaved, loadAgentsView, wireAgentsView, hasUnsaved, unsavedName, saveOpen, discardOpen, focusOpen,
 } from "./screens/core.js";
 import { sound } from "./sound.js";
 
@@ -34,7 +35,10 @@ import { sound } from "./sound.js";
 // last the session itself (its first state and the stream). The draft's save
 // and the few calls a screen makes into another are handed to state.js first.
 onSave(save);
-useHooks({ banner, fitGrowBox, markSent, maybeWelcome, renderFooter, renderSidebar, renderWhere, stagedPayload, syncWorkspaceScope });
+useHooks({
+  launchSkill, openHelpOn, openLoopSetup, askSuggestions, banner, fitGrowBox, markSent, maybeWelcome, renderFooter, renderSidebar, renderWhere, stagedPayload, syncWorkspaceScope,
+  openPrefs, markSaved, confirmUnsaved, loadAgentsView, wireAgentsView, hasUnsaved, unsavedName, saveOpen, discardOpen, focusOpen,
+});
 
 const boot = bootData();
 startLooks(boot);
@@ -46,10 +50,13 @@ wireHelp();
 wireDashboard();
 wireEnding();
 wireLooks();
+wirePrefs();
 wireCleanup();
 wireDocs();
 wireAsk();
 wireNotepad();
+wireActivities();
+wireLoopSetup();
 wireChrome();
 startClock();
 
@@ -66,3 +73,14 @@ connect();
 setTimeout(() => {
   if (!wakeHoldsChime) sound("sessionStart");
 }, 0);
+
+// Inside the desktop app's frame, tell the app this page drew. A frame the
+// browser refused (or a server that died) never sends it, which is how the app
+// tells a blocked page from a slow one. The message carries no data.
+if (window.parent && window.parent !== window) {
+  try {
+    window.parent.postMessage({ plan2code: "console-ready" }, "*");
+  } catch {
+    /* no parent to tell */
+  }
+}

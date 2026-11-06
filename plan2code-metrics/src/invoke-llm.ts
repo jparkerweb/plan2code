@@ -3,7 +3,7 @@
  * Unified LLM invocation for plan2code-metrics.
  * Supports Claude Code (temp file → stdin), Copilot CLI (stdin string), and
  * Devin CLI (temp prompt file).
- * Mirrors the agent pattern from plan2code-loop.
+ * Each supported agent is one AgentDef: a presence check plus an invoke call.
  */
 
 import { execa } from 'execa';

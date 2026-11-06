@@ -1,5 +1,5 @@
 {
-  "_note": "Curated model menu for the plan2code launcher. Maintained by the Plan2Code authors; every install overwrites this file. Users add models in User Preferences (kept in ~/.plan2code/models.json). Devin entries are explicit ids at Low, Medium and High effort only, verified against `devin models list`. Codex has no curated entries yet (its docs name none to verify): the launcher skips the model question for it. Pass --model <name> to choose one.",
+  "_note": "Curated model menu for the plan2code launcher. Maintained by the Plan2Code authors; every install overwrites this file. Users add models in User Preferences (kept in ~/.plan2code/models.json). Devin entries are explicit ids at Low, Medium and High effort only, verified against `devin models list`. Codex entries are the models its docs name as current. The strengths key maps the loop's Thrifty, Balanced and Best to a model (and effort) per agent; users override it in User Preferences. Pass --model <name> to choose any other.",
   "claude": [
     {
       "id": "default",
@@ -20,6 +20,14 @@
     {
       "id": "opusplan",
       "label": "Opus Plan — Opus in plan mode, Sonnet otherwise"
+    },
+    {
+      "id": "fable",
+      "label": "Fable, latest Fable"
+    },
+    {
+      "id": "best",
+      "label": "Best, Fable where available, otherwise Opus"
     }
   ],
   "devin": [
@@ -60,18 +68,6 @@
       "label": "Claude Sonnet 5.5 High"
     },
     {
-      "id": "gpt-6-sol-low",
-      "label": "GPT-6 Sol Low Thinking"
-    },
-    {
-      "id": "gpt-6-sol-medium",
-      "label": "GPT-6 Sol Medium Thinking"
-    },
-    {
-      "id": "gpt-6-sol-high",
-      "label": "GPT-6 Sol High Thinking"
-    },
-    {
       "id": "gpt-6-luna-low",
       "label": "GPT-6 Luna Low Thinking"
     },
@@ -96,21 +92,109 @@
       "label": "Gemini 3.8 Flash High"
     },
     {
-      "id": "kimi-k3-low",
-      "label": "Kimi K3 Low"
-    },
-    {
-      "id": "kimi-k3-high",
-      "label": "Kimi K3 High"
-    },
-    {
       "id": "glm-5-3-low",
       "label": "GLM-5.3 Low"
     },
     {
       "id": "glm-5-3-high",
       "label": "GLM-5.3 High"
+    },
+    {
+      "id": "gpt-6-1-sol-low",
+      "label": "GPT-6.1 Sol Low Thinking"
+    },
+    {
+      "id": "gpt-6-1-sol-medium",
+      "label": "GPT-6.1 Sol Medium Thinking"
+    },
+    {
+      "id": "gpt-6-1-sol-high",
+      "label": "GPT-6.1 Sol High Thinking"
+    },
+    {
+      "id": "claude-haiku-5-5-high",
+      "label": "Claude Haiku 5.5 High"
+    },
+    {
+      "id": "claude-fable-5-1-low",
+      "label": "Claude Fable 5.1 Low"
+    },
+    {
+      "id": "claude-fable-5-1-medium",
+      "label": "Claude Fable 5.1 Medium"
+    },
+    {
+      "id": "claude-fable-5-1-high",
+      "label": "Claude Fable 5.1 High"
+    },
+    {
+      "id": "gpt-6-astra-low",
+      "label": "GPT-6 Astra Low Thinking"
+    },
+    {
+      "id": "gpt-6-astra-medium",
+      "label": "GPT-6 Astra Medium Thinking"
+    },
+    {
+      "id": "gpt-6-astra-high",
+      "label": "GPT-6 Astra High Thinking"
+    },
+    {
+      "id": "gpt-5-6-sol-low",
+      "label": "GPT-5.6 Sol Low Thinking"
+    },
+    {
+      "id": "gpt-5-6-sol-medium",
+      "label": "GPT-5.6 Sol Medium Thinking"
+    },
+    {
+      "id": "gpt-5-6-sol-high",
+      "label": "GPT-5.6 Sol High Thinking"
     }
   ],
-  "codex": []
+  "codex": [
+    {
+      "id": "gpt-6-astra",
+      "label": "GPT-6 Astra"
+    },
+    {
+      "id": "gpt-6.1-sol",
+      "label": "GPT-6.1 Sol"
+    },
+    {
+      "id": "gpt-6.1-terra",
+      "label": "GPT-6.1 Terra"
+    },
+    {
+      "id": "gpt-6-luna",
+      "label": "GPT-6 Luna"
+    }
+  ],
+  "strengths": {
+    "claude": {
+      "thrifty": {
+        "model": "sonnet",
+        "effort": "low"
+      },
+      "balanced": {
+        "model": "sonnet",
+        "effort": "medium"
+      },
+      "best": {
+        "model": "opus",
+        "effort": "medium"
+      }
+    },
+    "devin": {
+      "thrifty": {
+        "model": "swe-2-medium"
+      },
+      "balanced": {
+        "model": "swe-2-high"
+      },
+      "best": {
+        "model": "claude-opus-5-5-medium"
+      }
+    }
+  }
 }

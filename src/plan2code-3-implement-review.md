@@ -8,7 +8,7 @@ Orchestrate one implementation phase and its focused independent review as a sin
 
 ## Web Console
 
-The FIRST thing you do, before anything else in this file: Implementation Mode's Interface question — **web console** or **terminal**? On the web console, run `node "<D>/console.mjs" open --workflow implement-review` before reading (<D>: references/web-console/ beside this SKILL.md — ~/.agents/skills/plan2code-3-implement-review/references/web-console/ globally — or the dir in ~/.plan2code/console/console-dir), then read <D>/console.md, <D>/building.md and <D>/notes/implement.md in one batch (all of it; its Implement + Review section covers Stages 2–5), and <D>/building-review.md when Stage 2 starts: the Stage 2 findings go out as the page's fix list, Stage 4 is the only sign-off item, and the Stage 5 `finish` never carries the review offer. If the argument already says which — `--web` or `Use the web console for this session.` — take it and do not ask; drop the flag. Launched by the dashboard? Its session is already open — resume it (console-launches.md), then the spec.
+The FIRST thing you do, before anything else in this file: Implementation Mode's Interface question — **web console** or **terminal**? On the web console, run `node "<D>/console.mjs" open --workflow implement-review` before reading (<D>: references/web-console/ beside this SKILL.md — ~/.agents/skills/plan2code-3-implement-review/references/web-console/ globally — or the dir in ~/.plan2code/console/console-dir), then read <D>/console.md, <D>/building.md and <D>/notes/implement.md in one batch (all of it; its Implement + Review section covers Stages 2–5), and <D>/building-review.md when Stage 2 starts: the Stage 2 findings go out as the page's fix list, Stage 4 is the only sign-off item, and the Stage 5 `finish` never carries the review offer. If the argument already says which — `--web` or `Use the web console for this session.` — take it and do not ask; drop the flag. `--loop` (only inside the desktop app): read <D>/notes/loop.md after console.md; it replaces the sign-off, marking and git steps, and Stages 2 to 4 run as its review section says. Launched by the dashboard? Its session is already open — resume it (console-launches.md), then the spec.
 
 ## Controlling Contract
 
@@ -19,7 +19,7 @@ This file controls the two referenced workflows. Follow each referenced workflow
 - Never treat implementation completion, review completion, or a fix selection as phase approval.
 - Never ask for implementation sign-off before review.
 - Never invoke another installed skill; load the packaged references below.
-- Preserve Implementation Mode's rule that tests run only when explicitly listed as a phase task.
+- Preserve Implementation Mode's tests rule: after each task the tests covering what it touched; at phase end the phase file's `## Phase Testing` lines plus tests for any other file the phase changed; never the full suite unless the phase file lists a `Full suite:` line. Read `references/test-runs.md` before the first test run of a phase.
 - Track an exact phase change set: files created or modified while implementing this phase, plus implementation artifacts named by its tasks. Do not include unrelated working-tree changes.
 - Abort, blockers, and spec conflicts stop or pause the combined workflow exactly as Implementation Mode requires. Do not begin review when implementation cannot reach its self-review gate.
 
@@ -54,7 +54,7 @@ Run Review Mode with this explicit scope:
 - Use overview.md and the active phase file for spec-compliance context; they do not broaden scope to other phases.
 - Read related callers, dependencies, and project files when needed to verify a finding, but do not turn them into unrelated review targets.
 - Review all changed files completely and apply the full focused-review depth required by Review Mode.
-- Review Mode's helper rule applies: a fresh helper runs the analysis when available, this session verifies every finding, and the Stage 4 report carries the Reviewed by line. The helper's brief carries the phase's `phase-X.md` and its change set only, never Stage 1's work notes.
+- Review Mode's helper rule applies: a fresh helper runs the analysis when available, at the strength `helper-strength.md` gives for the phase's review (standard and high, or strongest and high when the phase touches security, auth or data), this session verifies every finding, and the Stage 4 report carries the Reviewed by line. The helper's brief carries the phase's `phase-X.md` and its change set only, never Stage 1's work notes.
 
 Override Review Mode's completion and session-end behavior:
 

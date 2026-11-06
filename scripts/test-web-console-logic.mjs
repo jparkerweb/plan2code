@@ -48,6 +48,11 @@ import {
   handoffText,
   launchReply,
   launchTarget,
+  noteSwitchShows,
+  noteTabEmpty,
+  defaultNoteTicks,
+  toggleNoteTick,
+  NOTE_LONG_BYTES,
   deleteAction,
   deleteReply,
   chipDetail,
@@ -57,6 +62,9 @@ import {
   MAX_NOTE_IMAGES,
   noteAction,
   noteReplyLines,
+  pruneStaged,
+  suggestAction,
+  suggestReplyLines,
   progressTotal,
   quietLimitMs,
   resumeCommand,
@@ -87,7 +95,7 @@ import {
   nextOpenAfter,
 } from "../src/web-console/public/answers.js";
 import { chatView } from "../src/web-console/public/chat.js";
-import { ACCENTS, DEFAULT_ACCENT } from "../src/web-console/public/palette.js";
+import { ACCENTS, DEFAULT_ACCENT, RETIRED_ACCENTS, accentId } from "../src/web-console/public/palette.js";
 import {
   needsRoleNudge,
   normalizeRole,
@@ -267,11 +275,12 @@ test("every dashboard card is filled in and launches a real skill", () => {
 // The review button runs review.md inside the build's own session, so the
 // skills that offer it have to carry review.md and its references.
 test("the skills that run a review on the page carry the review", () => {
-  for (const skill of ["plan2code-3-implement", "plan2code-quick-task", "plan2code-3-implement-review"]) {
+  for (const skill of ["plan2code-3-implement", "plan2code-quick-task", "plan2code-3-implement-review", "plan2code-4-finalize"]) {
     const refs = path.join(ROOT, "skills", skill, "references");
-    for (const f of ["review.md", "dimensions.md", "false-positives.md", "session-end.md", "verification-protocol.md"]) {
+    for (const f of ["review.md", "dimensions.md", "false-positives.md", "session-end.md", "verification-protocol.md", "reviewer-brief.md", "helper-strength.md"]) {
       assert.ok(fs.existsSync(path.join(refs, f)), `${skill} must carry references/${f}`);
     }
+    assert.ok(fs.existsSync(path.join(ROOT, "skills", skill, "scripts", "review-scope.mjs")), `${skill} must carry scripts/review-scope.mjs`);
   }
 });
 
@@ -509,6 +518,69 @@ test("a note with documents splits them into files, keeps attach order in its li
   ]);
 });
 
+test("a request for suggestions reads apart from a note, with its note and attachments", () => {
+  assert.deepEqual(suggestReplyLines("Export format", "Which suits Excel?", []), ["Suggestions wanted on Export format: Which suits Excel?"]);
+  assert.deepEqual(suggestReplyLines("Export format", "", []), ["Suggestions wanted on Export format: (no note)"]);
+  assert.deepEqual(suggestReplyLines("Export format", "", undefined), ["Suggestions wanted on Export format: (no note)"]);
+  assert.deepEqual(suggestReplyLines("Export format", "Line one\nLine two", []), [
+    "Suggestions wanted on Export format: Line one\n  Line two",
+  ]);
+  const atts = [
+    { key: "k1", path: "C:\\x\\a.jpg", name: "shot.png", status: "ready" },
+    { key: "k2", kind: "file", path: "C:\\x\\b.pdf", name: "spec.pdf", status: "ready" },
+  ];
+  assert.deepEqual(suggestReplyLines("Export format", "See these", atts), [
+    "Suggestions wanted on Export format: See these",
+    "  Image: C:\\x\\a.jpg (shot.png)",
+    "  File: C:\\x\\b.pdf (spec.pdf)",
+  ]);
+  assert.deepEqual(suggestAction("q1", "See these", atts), {
+    i: "q1",
+    type: "comment",
+    text: "See these",
+    images: [{ path: "C:\\x\\a.jpg", name: "shot.png" }],
+    files: [{ path: "C:\\x\\b.pdf", name: "spec.pdf" }],
+    suggest: true,
+  });
+  assert.deepEqual(suggestAction("q1", "", []), { i: "q1", type: "comment", text: "", suggest: true });
+});
+
+test("pruneStaged drops only the picks a re-posted card no longer offers, without touching its inputs", () => {
+  const opts = (...ks) => ks.map((k) => ({ k, text: k }));
+  const items = [
+    { id: "c1", kind: "choice", options: opts("A", "B") },
+    { id: "c2", kind: "choice", options: opts("A") },
+    { id: "m1", kind: "multi", options: opts("1", "3") },
+    { id: "m2", kind: "multi", options: opts("1") },
+    { id: "f1", kind: "confirm" },
+    { id: "u1", kind: "choice", options: opts("A", "B") },
+  ];
+  const staged = {
+    c1: { type: "answer", kind: "choice", k: "C" },
+    c2: { type: "answer", kind: "choice", k: "B", text: "or something else" },
+    m1: { type: "answer", kind: "multi", ks: ["1", "2", "3"] },
+    m2: { type: "answer", kind: "multi", ks: ["2"] },
+    f1: { type: "answer", kind: "confirm", yes: true },
+    u1: { type: "answer", kind: "choice", k: "B" },
+    gone: { type: "answer", kind: "choice", k: "Z" },
+  };
+  const before = structuredClone(staged);
+  const itemsBefore = structuredClone(items);
+  const out = pruneStaged(items, staged);
+  assert.deepEqual(out.dropped.sort(), ["c1", "c2", "m1", "m2"]);
+  assert.equal("c1" in out.staged, false, "a choice left with nothing goes");
+  assert.deepEqual(out.staged.c2, { type: "answer", kind: "choice", text: "or something else" }, "typed text keeps the entry");
+  assert.deepEqual(out.staged.m1.ks, ["1", "3"], "a multi keeps the keys still offered");
+  assert.equal("m2" in out.staged, false, "a multi left empty goes");
+  assert.equal(out.staged.f1, staged.f1, "a confirm is left alone");
+  assert.equal(out.staged.u1, staged.u1, "an unchanged card is left alone");
+  assert.equal(out.staged.gone, staged.gone, "an id not among the items is left alone");
+  assert.notEqual(out.staged, staged, "a new object comes back");
+  assert.deepEqual(staged, before, "staged is not changed");
+  assert.deepEqual(items, itemsBefore, "items are not changed");
+  assert.deepEqual(pruneStaged(items, { u1: staged.u1 }), { staged: { u1: staged.u1 }, dropped: [] });
+});
+
 test("document helpers: the extension allow-list, the picker's accept, sizes, and the kind of an old entry", () => {
   assert.equal(MAX_ATTACHMENTS, 5);
   assert.equal(MAX_DOC_BYTES, 10 * 1024 * 1024);
@@ -571,12 +643,13 @@ test("chat lines list documents after images, and chatView carries files on sent
   const lines = chatReplyLines([
     {
       kind: "message",
+      seq: 7,
       text: "Read these",
       images: [{ path: "/u/a.jpg", name: "a.png" }],
       files: [{ path: "/u/b.md", name: "b.md" }],
     },
   ]);
-  assert.equal(lines, "Quick question: Read these\n  Image: /u/a.jpg (a.png)\n  File: /u/b.md (b.md)");
+  assert.equal(lines, "Quick question (7): Read these\n  Image: /u/a.jpg (a.png)\n  File: /u/b.md (b.md)");
   const view = chatView(
     { conversation: 1, messages: [{ from: "person", kind: "message", seq: 1, text: "Read", files: [{ path: "/u/b.md", name: "b.md" }] }] },
     { pendingSends: [{ tempId: "t", text: "More", files: [{ path: "/u/c.pdf", name: "c.pdf" }] }] }
@@ -665,7 +738,8 @@ const contrast = (a, b) => {
 
 test("every highlight color is readable in both themes", () => {
   const panel = { light: "#ffffff", dark: "#201d1a" };
-  assert.ok(Object.keys(ACCENTS).length >= 32);
+  // Nineteen a row in the wide Preferences dialog, two rows at most.
+  assert.ok(Object.keys(ACCENTS).length >= 32 && Object.keys(ACCENTS).length <= 38);
   assert.ok(ACCENTS[DEFAULT_ACCENT], "the default must be in the list");
   const names = new Set();
   for (const [id, a] of Object.entries(ACCENTS)) {
@@ -681,11 +755,22 @@ test("every highlight color is readable in both themes", () => {
   }
 });
 
+test("a retired highlight color keeps its closest twin, an unknown one the default", () => {
+  for (const [old, now] of Object.entries(RETIRED_ACCENTS)) {
+    assert.ok(!ACCENTS[old], `${old} is retired, so it is not offered`);
+    assert.ok(ACCENTS[now], `${old} maps to ${now}, which must exist`);
+    assert.equal(accentId(old), now);
+  }
+  assert.equal(accentId("violet"), "violet");
+  assert.equal(accentId("nope"), DEFAULT_ACCENT);
+  assert.equal(accentId(undefined), DEFAULT_ACCENT);
+});
+
 /* ------------------------------------------------- the spec-aware dashboard */
 
 // The console scans the repo itself, so the states the picker shows have to
 // be read off real folder shapes — a fixture per stage, then the matrix that
-// turns a stage into lit or greyed cards.
+// turns a stage into lit or grayed cards.
 function fakeSpec(root, name, files) {
   const dir = path.join(root, "specs", name);
   for (const [rel, text] of Object.entries(files)) {
@@ -847,7 +932,7 @@ test("a delete is a session action naming the folder, and its reply says it is f
   assert.equal(deleteSummary({ ...spec, detail: "" }).stage, SPEC_STATE_LABELS.building);
 });
 
-test("a fixed bug says so once: on its chip, in the delete dialog and on its greyed cards", () => {
+test("a fixed bug says so once: on its chip, in the delete dialog and on its grayed cards", () => {
   const fixed = { dir: "specs/old-bug", name: "old-bug", state: "fixed", detail: "bug fixed", files: 1, touched: 1 };
   assert.equal(deleteSummary(fixed).stage, "Bug fixed");
   const building = { dir: "specs/lunch-vote", name: "lunch-vote", state: "building", detail: "1 of 2 tasks done" };
@@ -984,7 +1069,7 @@ test("the Git card stays clickable outside a repository and says what happens", 
   assert.equal(cardPresentation(entry, withSpec, withSpec.specs[0], menu).detail, "Two changes ready");
 });
 
-test("the Git card is never greyed", () => {
+test("the Git card is never grayed", () => {
   const entry = SKILL_CATALOG.find((e) => e.skill === "plan2code-git");
   const clean = cardAvailability(entry, { hasAgents: true, isGit: true, pending: 0 }, null);
   assert.equal(clean.on, true);
@@ -1144,7 +1229,8 @@ test("the dashboard matrix lights only the cards a spec state allows", () => {
       assert.equal(on(skill, scan, s), true, `${skill} on for ${s.state}`);
     }
   }
-  assert.equal(on("plan2code-1b-revise-plan", scan, sel("built")), false);
+  // Revise stays lit on a built spec: a change found in the last manual checks is still a plan change.
+  assert.equal(on("plan2code-1b-revise-plan", scan, sel("built")), true);
   assert.equal(on("plan2code-4-finalize", scan, sel("built")), true);
 
   // A diagnosed bug: Quick Task (its next step) and Plan, never the build steps.
@@ -1190,7 +1276,7 @@ test("the dashboard matrix lights only the cards a spec state allows", () => {
   assert.ok(!cardAvailability(entry("plan2code-quick-task"), scan, sel("fixed")).next);
   assert.equal(launchTarget(entry("plan2code-quick-task"), sel("fixed")), null);
 
-  // A greyed card always says why, and a selected spec's next step is marked.
+  // A grayed card always says why, and a selected spec's next step is marked.
   assert.ok(cardAvailability(entry("plan2code-3-implement"), scan, sel("exploring")).reason);
   assert.equal(cardAvailability(entry("plan2code-3-implement"), scan, sel("documented")).next, true);
   assert.ok(!cardAvailability(entry("plan2code-1-plan"), scan, sel("documented")).next);
@@ -1480,11 +1566,22 @@ test("no starter steers the workflow: approve, skip, commit, run, execute, delet
 
 test("validate: templates only as \"idea\", only on a text item", () => {
   const item = (extra) => ({ items: [{ id: "idea", kind: "text", title: "What's the idea?", ...extra }] });
-  const message = 'item "idea" has "templates": only a text item can carry it, and its only value is "idea".';
+  const message = 'item "idea" templates: only a text item can carry it, and its only value is "idea".';
   assert.deepEqual(validate(item({ templates: "idea" })), []);
   assert.deepEqual(validate(item({})), []);
-  assert.ok(validate(item({ kind: "choice", options: [{ k: "A", text: "a" }], templates: "idea" })).includes(message));
-  assert.ok(validate(item({ templates: "yes" })).includes(message));
+  assert.ok(validate(item({ kind: "choice", options: [{ k: "A", text: "a" }], templates: "idea" })).some((p) => p.startsWith(message)));
+  assert.ok(validate(item({ templates: "yes" })).some((p) => p.startsWith(message)));
+});
+
+test("validate: fill only as \"note\", only on a text item", () => {
+  const item = (extra) => ({ items: [{ id: "idea", kind: "text", title: "What's the idea?", ...extra }] });
+  const message = 'item "idea" fill: only a text item can carry it, and its only value is "note".';
+  assert.deepEqual(validate(item({ fill: "note" })), []);
+  assert.deepEqual(validate(item({ fill: "note", templates: "idea" })), []);
+  assert.ok(validate(item({ kind: "choice", options: [{ k: "A", text: "a" }], fill: "note" })).some((p) => p.startsWith(message)));
+  assert.ok(validate(item({ kind: "confirm", fill: "note" })).some((p) => p.startsWith(message)));
+  assert.ok(validate(item({ fill: "idea" })).some((p) => p.startsWith(message)));
+  assert.ok(validate(item({ fill: true })).some((p) => p.startsWith(message)));
 });
 
 test("attachmentName: slug of the original name, 8 characters of the upload id, the upload's own extension", () => {
@@ -1719,7 +1816,7 @@ test("meter: a build post's headline.cleared reaches the ledger as progress", ()
     assert.equal(postPatch(s, { headline: { cleared: 7 }, run: { event: "implement-phase", id: "phase-1", tasks: 7 } }).status, 0);
     assert.equal(points(), 3, "the phase's run took over: 7 tasks score 3, not 3 + 3");
   } finally {
-    cli(["stop", "--session", s.sid]);
+    cli(["stop", "--session", s.sid, "--force"]);
   }
 });
 
@@ -1988,18 +2085,18 @@ test("workspace cursor never moves backwards, and only changes past it are pendi
   }
 });
 
-test("subagents: only the five opted-in workflows offer the switch", () => {
-  for (const w of ["implement", "implement-review", "quick-task", "review", "pathfinder"]) {
+test("subagents: only the fifteen opted-in workflows offer the switch", () => {
+  for (const w of ["init", "init-update", "pathfinder", "plan", "revise-plan", "document", "implement", "implement-review", "quick-task", "review", "finalize", "xray", "diagnose", "pr-prep", "test"]) {
     assert.equal(offered(w), true, w);
     assert.ok(defaultInstruction(w).length > 0, `${w} has a default instruction`);
   }
-  for (const w of ["dashboard", "plan", "document", "init", "handoff", "constructor", "toString", undefined]) {
+  for (const w of ["dashboard", "changelog", "git", "handoff", "constructor", "toString", undefined]) {
     assert.equal(offered(w), false, String(w));
     assert.equal(defaultInstruction(w), "");
   }
-  assert.equal(Object.keys(SUBAGENT_WORKFLOWS).length, 5);
-  assert.deepEqual(defaultSetting("review"), { workflow: "review", on: true, instruction: null, max: 3 });
-  assert.equal(defaultSetting("plan").on, false, "a skill without the switch is never on");
+  assert.equal(Object.keys(SUBAGENT_WORKFLOWS).length, 15);
+  assert.deepEqual(defaultSetting("review"), { workflow: "review", on: true, instruction: null, max: 3, strength: "balanced" });
+  assert.equal(defaultSetting("changelog").on, false, "a skill without the switch is never on");
   assert.equal(effectiveInstruction({ workflow: "review", instruction: "  " }), defaultInstruction("review"));
   assert.equal(effectiveInstruction({ workflow: "review", instruction: " Mine " }), "Mine");
 });
@@ -2011,26 +2108,25 @@ test("subagents: blockFor walks every switch transition, and never says off to a
   assert.equal(blockFor(setting(false, 1), none), null, "never on: nothing");
   assert.equal(blockFor(null, none), null, "no setting: nothing");
 
+  const line = (word, max) => `Subagents: on, ${word} strength, at most ${max} helpers at once (a console setting, not typed by the person).`;
   const on = blockFor(setting(true, 2), none);
-  assert.equal(on.lines[0], "Subagents: on (revision 2) — a console setting, not typed by the person.");
-  assert.ok(!on.lines[0].includes("replaces"));
-  assert.deepEqual(on.field, { state: "on", revision: 2, max: 3, instruction: defaultInstruction("implement") });
+  assert.equal(on.lines[0], line("balanced", 3));
+  assert.deepEqual(on.field, { state: "on", revision: 2, max: 3, instruction: defaultInstruction("implement"), strength: "balanced" });
   assert.deepEqual(on.cursor, { revision: 2, state: "on" });
-  assert.equal(on.lines[on.lines.length - 1], "  At most 3 helpers at once.");
-  for (const frame of FRAME_LINES) assert.ok(on.lines.includes("  " + frame), frame);
+  for (const frame of FRAME_LINES) assert.ok(!on.lines.some((l) => l.includes(frame)), "the frame sentences live in console-subagents.md, not in the block");
 
   const edit = blockFor(setting(true, 5, { instruction: "First line\n\nSecond line", max: 7 }), { revision: 4, state: "on" });
-  assert.equal(edit.lines[0], "Subagents: on (revision 5, replaces revision 4) — a console setting, not typed by the person.");
+  assert.equal(edit.lines[0], line("balanced", 7));
   assert.ok(edit.lines.includes("  First line") && edit.lines.includes("  Second line"), "the instruction's own lines are indented");
-  assert.ok(!edit.lines.some((line) => !line.trim()), "blank instruction lines are dropped");
+  assert.ok(!edit.lines.some((l) => !l.trim()), "blank instruction lines are dropped");
   const nested = blockFor(setting(true, 2, { instruction: "- a\r\n  - b\n   \n" }), none);
-  assert.deepEqual(nested.lines.slice(-3, -1), ["  - a", "    - b"], "the person's own indentation survives, CRLF and blank lines do not");
+  assert.deepEqual(nested.lines.slice(-2), ["  - a", "    - b"], "the person's own indentation survives, CRLF and blank lines do not");
   assert.equal(edit.field.max, 7);
-  for (const line of edit.lines.slice(1)) assert.match(line, /^ {2}\S/, "only the first line starts at column 0");
+  for (const l of edit.lines.slice(1)) assert.match(l, /^ {2}\S/, "only the first line starts at column 0");
 
   const off = blockFor(setting(false, 6), { revision: 5, state: "on" });
   assert.deepEqual(off.lines, [offLine(6)]);
-  assert.equal(off.lines[0], "Subagents: off (revision 6) — don't start new helpers for the rest of this session.");
+  assert.equal(off.lines[0], "Subagents: off. Start no new helpers for the rest of this session.");
   assert.deepEqual(off.cursor, { revision: 6, state: "off" });
   assert.equal(off.field.state, "off");
 
@@ -2038,9 +2134,9 @@ test("subagents: blockFor walks every switch transition, and never says off to a
   assert.equal(blockFor(setting(true, 6), { revision: 6, state: "on" }), null, "same revision while on: nothing");
   assert.equal(blockFor(setting(false, 3), { revision: 2, state: "off" }), null, "off after off: nothing");
 
-  assert.equal(blockFor(setting(true, 6), none).lines[0], "Subagents: on (revision 6) — a console setting, not typed by the person.", "a reset cursor re-states on");
+  assert.equal(blockFor(setting(true, 6), none).lines[0], line("balanced", 3), "a reset cursor re-states on");
   assert.equal(blockFor(setting(false, 6), none), null, "a reset cursor with it off: nothing");
-  assert.equal(blockFor({ ...setting(true, 9), workflow: "plan" }, none), null, "a workflow that does not offer it: nothing");
+  assert.equal(blockFor({ ...setting(true, 9), workflow: "changelog" }, none), null, "a workflow that does not offer it: nothing");
 });
 
 test("subagents: the injected wording names no harness tool", () => {
@@ -2052,9 +2148,26 @@ test("subagents: the injected wording names no harness tool", () => {
   }
 });
 
+// Guards NFR-1: the strength guidance and the wording the console injects speak
+// in strength words only, never a model or vendor name, so they stay right on
+// every harness and every model line-up.
+const MODEL_NAMES = /\b(haiku|sonnet|opus|fable|gpt|o\d|codex|gemini|flash|pro|claude|anthropic|openai|google|swe-\d)\b/i;
+
+test("subagents: the strength guidance and the injected wording name no model or vendor", () => {
+  const texts = [
+    fs.readFileSync(path.join(ROOT, "src", "shared-references", "helper-strength.md"), "utf8"),
+    ...FRAME_LINES,
+    ...Object.keys(SUBAGENT_WORKFLOWS).map(defaultInstruction),
+  ];
+  for (const text of texts) assert.doesNotMatch(text, MODEL_NAMES);
+  assert.match("Start it on Sonnet at high effort.", MODEL_NAMES, "the check catches a model name");
+});
+
 test("subagents: cleanSetting accepts a good setting and names the field that fails", () => {
-  assert.deepEqual(cleanSetting({ on: true, instruction: null, max: 3 }), { on: true, instruction: null, max: 3 });
-  assert.deepEqual(cleanSetting({ on: false, instruction: "  Do it  ", max: 20 }), { on: false, instruction: "Do it", max: 20 });
+  assert.deepEqual(cleanSetting({ on: true, instruction: null, max: 3 }), { on: true, instruction: null, max: 3, strength: "balanced" });
+  assert.deepEqual(cleanSetting({ on: false, instruction: "  Do it  ", max: 20, strength: "best" }), { on: false, instruction: "Do it", max: 20, strength: "best" });
+  assert.equal(cleanSetting({ on: true, instruction: null, max: 3, strength: null }).strength, "balanced", "a null strength is the default");
+  for (const strength of ["fast", "Balanced", 1, ""]) assert.deepEqual(cleanSetting({ on: true, instruction: null, max: 3, strength }), { error: "strength" }, String(strength));
   assert.equal(cleanSetting({ on: true, instruction: "", max: 1 }).instruction, null, "an empty instruction is the default");
   for (const max of [0, 21, 2.5, "3"]) assert.deepEqual(cleanSetting({ on: true, instruction: null, max }), { error: "max" }, String(max));
   assert.deepEqual(cleanSetting({ on: true, instruction: "x".repeat(2001), max: 3 }), { error: "too-long" });
@@ -2128,6 +2241,42 @@ test("subagents: helperRows labels each state, shows a result only once a helper
   assert.equal(rows[2].result, "Timed out");
 });
 
+test("subagents: helperRows turns a reported strength and effort into one line, and leaves it out when neither was reported", () => {
+  const line = (extra) => helperRows([{ id: "h1", title: "One", ask: "a", state: "running", ...extra }]).rows[0];
+  const cases = [
+    [{ strength: "standard", effort: "medium" }, "Standard, medium effort"],
+    [{ strength: "light" }, "Light"],
+    [{ strength: "strongest", effort: "high" }, "Strongest, high effort"],
+    [{ strength: "inherit", effort: "high" }, "Session model, high effort"],
+    [{ strength: "inherit" }, "Session model"],
+    [{ effort: "low" }, "Low effort"],
+  ];
+  for (const [extra, want] of cases) {
+    const row = line(extra);
+    assert.equal(row.strengthLine, want, JSON.stringify(extra));
+    assert.equal(row.strength, extra.strength);
+    assert.equal(row.effort, extra.effort);
+  }
+  for (const extra of [{}, { strength: "huge", effort: "max" }]) {
+    const row = line(extra);
+    for (const key of ["strengthLine", "badges", "strength", "effort"]) assert.equal(key in row, false, `${JSON.stringify(extra)}: no ${key}`);
+  }
+});
+
+test("subagents: helperRows gives each reported strength and effort a badge ranked 1-3, and the session's own model rank 0", () => {
+  const badges = (extra) => helperRows([{ id: "h1", title: "One", ask: "a", state: "running", ...extra }]).rows[0].badges;
+  assert.deepEqual(badges({ strength: "standard", effort: "high" }), [
+    { kind: "strength", label: "Standard", level: 2 },
+    { kind: "effort", label: "High effort", level: 3 },
+  ]);
+  assert.deepEqual(badges({ strength: "light" }), [{ kind: "strength", label: "Light", level: 1 }]);
+  assert.deepEqual(badges({ strength: "strongest", effort: "low" }).map((b) => b.level), [3, 1]);
+  assert.deepEqual(badges({ strength: "inherit", effort: "medium" }), [
+    { kind: "strength", label: "Session model", level: 0 },
+    { kind: "effort", label: "Medium effort", level: 2 },
+  ]);
+});
+
 test("page: the Subagents button sits right after Write a brief, and its dialog is in the page with no inline styles or scripts", () => {
   const html = fs.readFileSync(path.join(ROOT, "src", "web-console", "public", "index.html"), "utf8");
   const row = html.match(/<div class="row-left">([\s\S]*?)<\/div>\s*<div class="views-group">/);
@@ -2152,7 +2301,7 @@ test("subagents: the store round-trips per project and workflow under the consol
     const script = `
       const lib = await import(${JSON.stringify(new URL("../src/web-console/settings.mjs", import.meta.url).href)});
       const project = ${JSON.stringify(project)};
-      lib.saveSubagentStoreEntry(project, "implement", { on: true, instruction: "Mine", max: 5 });
+      lib.saveSubagentStoreEntry(project, "implement", { on: true, instruction: "Mine", max: 5, strength: "best" });
       const flipped = project.replace(/My Repo$/, "MY REPO");
       console.log(JSON.stringify({
         file: lib.SUBAGENTS_FILE,
@@ -2168,11 +2317,11 @@ test("subagents: the store round-trips per project and workflow under the consol
     assert.equal(res.status, 0, res.stderr);
     const out = JSON.parse(res.stdout);
     assert.equal(out.file, path.join(home, "subagents.json"), "the store follows PLAN2CODE_CONSOLE_HOME");
-    assert.deepEqual(out.saved, { on: true, instruction: "Mine", max: 5 });
+    assert.deepEqual(out.saved, { on: true, instruction: "Mine", max: 5, strength: "best" });
     if (process.platform === "win32" || process.platform === "darwin") {
       assert.deepEqual(out.otherCase, out.saved, "a different-case path reads the same entry");
     }
-    assert.deepEqual(out.unsaved, { on: true, instruction: null, max: 3 }, "nothing saved means on");
+    assert.deepEqual(out.unsaved, { on: true, instruction: null, max: 3, strength: "balanced" }, "nothing saved means on, at balanced");
     assert.ok(!fs.existsSync(path.join(home, "subagents.json.lock")), "the lock is released");
   } finally {
     fs.rmSync(home, { recursive: true, force: true });
@@ -2235,13 +2384,14 @@ test("meter: the weights and labels built from the skill list are the ones writt
     "pathfinder-chart": 2, "pathfinder-question": 0, "pathfinder-research": 1,
     plan: 2, "revise-plan": 1, document: 2, "implement-phase": 2, "implement-review-phase": 3,
     review: 2, "quick-task": 1, init: 2, "init-update": 2, finalize: 1, handoff: 0, git: 1,
-    "git-commits": 0, "git-conflict": 1, changelog: 1, xray: 1, diagnose: 1,
+    "git-commits": 0, "git-conflict": 1, changelog: 1, xray: 1, diagnose: 1, "pr-prep": 1, test: 1,
   });
   assert.deepEqual({ ...LAUNCH_LABELS }, {
     plan: "Plan started", "revise-plan": "Revise plan started", document: "Document started",
     review: "Review started", "quick-task": "Quick task started", init: "Init started",
     "init-update": "Init update started", finalize: "Finalize started", git: "Git started",
     changelog: "Changelog started", xray: "X-ray started", diagnose: "Diagnose started",
+    "pr-prep": "PR Prep started", test: "Test started",
   });
   assert.deepEqual({ ...RUN_LABELS }, {
     "pathfinder-chart": "Pathfinder map written", "pathfinder-question": "Pathfinder question settled",
@@ -2251,6 +2401,240 @@ test("meter: the weights and labels built from the skill list are the ones writt
     "quick-task": "Quick task built", init: "Init run", "init-update": "Init update run",
     finalize: "Finalize run", handoff: "Handoff written", git: "Git run", "git-commits": "Commits in Git",
     "git-conflict": "Git conflict help", changelog: "Changelog run", xray: "X-ray run", diagnose: "Diagnose run",
+    "pr-prep": "PR Prep run", test: "Test run",
   });
   for (const t of [WEIGHTS, LAUNCH_LABELS, RUN_LABELS]) assert.ok(Object.isFrozen(t));
+});
+
+test("noteSwitchShows: Pathfinder, Plan and Quick Task on Start fresh, Revise plan on a picked spec with no brief waiting", () => {
+  const entry = (skill) => SKILL_CATALOG.find((e) => e.skill === skill);
+  const scan = { hasAgents: true, isGit: true, pending: 0, specs: [] };
+  const sel = (state, extra = {}) => ({ dir: "specs/x", name: "x", state, ...extra });
+  const fresh = ["plan2code-0-pathfinder", "plan2code-1-plan", "plan2code-quick-task"];
+  for (const skill of fresh) {
+    assert.equal(noteSwitchShows(entry(skill), scan, null), true, `${skill} on Start fresh`);
+    assert.equal(noteSwitchShows(entry(skill), scan, sel("exploring")), false, `${skill} on a picked spec`);
+    assert.equal(noteSwitchShows(entry(skill), scan, sel("exploring", { planChange: true })), false, `${skill} on a picked spec with a brief`);
+  }
+  const revise = entry("plan2code-1b-revise-plan");
+  assert.equal(noteSwitchShows(revise, scan, null), false, "Revise plan is grayed on Start fresh");
+  for (const state of ["documented", "building", "built"]) {
+    assert.equal(noteSwitchShows(revise, scan, sel(state)), true, `Revise plan on ${state}`);
+    assert.equal(noteSwitchShows(revise, scan, sel(state, { planChange: true })), false, `Revise plan on ${state} with a brief waiting`);
+  }
+  assert.equal(noteSwitchShows(revise, scan, sel("exploring")), false, "never on a grayed card");
+  for (const skill of ["plan2code-3-implement", "plan2code-2-document", "plan2code-git", "plan2code-xray"]) {
+    assert.equal(noteSwitchShows(entry(skill), scan, null), false, `${skill} on Start fresh`);
+    assert.equal(noteSwitchShows(entry(skill), scan, sel("documented")), false, `${skill} on a picked spec`);
+  }
+  assert.equal(noteSwitchShows(null, scan, null), false);
+});
+
+test("Notebook pick rules: an empty tab, the first five pictures ticked, and no sixth tick", () => {
+  assert.equal(noteTabEmpty({ text: "", images: [] }), true);
+  assert.equal(noteTabEmpty({ text: "  \n", images: [] }), true, "whitespace is nothing to send");
+  assert.equal(noteTabEmpty({ text: "", images: [{ id: "a" }] }), false);
+  assert.equal(noteTabEmpty({ text: "idea", images: [] }), false);
+  assert.equal(noteTabEmpty(null), true);
+  const imgs = ["a", "b", "c", "d", "e", "f", "g"].map((id) => ({ id }));
+  assert.deepEqual(defaultNoteTicks(imgs), ["a", "b", "c", "d", "e"]);
+  assert.deepEqual(defaultNoteTicks(imgs.slice(0, 2)), ["a", "b"]);
+  assert.deepEqual(defaultNoteTicks(undefined), []);
+  const five = defaultNoteTicks(imgs);
+  assert.deepEqual(toggleNoteTick(five, "f"), five, "a sixth tick changes nothing");
+  const four = toggleNoteTick(five, "c");
+  assert.deepEqual(four, ["a", "b", "d", "e"]);
+  assert.deepEqual(toggleNoteTick(four, "f"), ["a", "b", "d", "e", "f"], "untick one to tick another");
+  assert.equal(NOTE_LONG_BYTES, 51200);
+});
+
+/* ------------------------------------- the wire: defaults, patch reading, errors */
+
+import { applyPatch, blankState } from "../src/web-console/patches.mjs";
+import { readPatch } from "../src/web-console/cmd-post-wait.mjs";
+import { openSession } from "./web-console-test-helpers.mjs";
+
+const wireState = () => blankState({ sid: "x", project: "p", workflow: "plan" });
+const wireItem = (kind, options) => ({ id: "q1", kind, title: "Pick one", body: "Which?", ...(options ? { options } : {}) });
+
+test("defaults: options with no k are lettered A, B, C on choice, multi and menu", () => {
+  for (const kind of ["choice", "multi", "menu"]) {
+    const next = applyPatch(wireState(), { items: [wireItem(kind, [{ text: "CSV" }, { text: "Excel" }, { text: "JSON" }])] });
+    assert.deepEqual(next.items[0].options.map((o) => o.k), ["A", "B", "C"], kind);
+    assert.deepEqual(validate(next), [], kind);
+  }
+});
+
+test("defaults: options that all carry a k keep it, and a mix is refused naming the item and options", () => {
+  const next = applyPatch(wireState(), { items: [wireItem("choice", [{ k: "1", text: "CSV" }, { k: "9", text: "Excel" }])] });
+  assert.deepEqual(next.items[0].options.map((o) => o.k), ["1", "9"]);
+  assert.throws(
+    () => applyPatch(wireState(), { items: [wireItem("choice", [{ k: "A", text: "CSV" }, { text: "Excel" }])] }),
+    (e) => /item "q1" options:/.test(e.message) && /Like this:/.test(e.message)
+  );
+});
+
+test("defaults: a new item gets status, required and allowOther filled, and a given value is kept", () => {
+  const next = applyPatch(wireState(), { items: [wireItem("choice", [{ text: "CSV" }]), { ...wireItem("text"), id: "q2", required: false, allowOther: false }] });
+  const [a, b] = next.items;
+  assert.equal(a.status, "open");
+  assert.equal(a.required, true);
+  assert.equal(a.allowOther, true);
+  assert.deepEqual(a.thread, []);
+  assert.equal(b.required, false);
+  assert.equal(b.allowOther, false);
+});
+
+test("readPatch: indented, minified, BOM and UTF-16 patches all read the same", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "p2c-readpatch-"));
+  try {
+    const patch = { title: "Café – résumé", items: [{ id: "q1", kind: "text", title: "Name" }] };
+    const json = JSON.stringify(patch);
+    const write = (name, buf) => {
+      const p = path.join(dir, name);
+      fs.writeFileSync(p, buf);
+      return p;
+    };
+    const le = Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(json, "utf16le")]);
+    const be = Buffer.concat([Buffer.from([0xfe, 0xff]), Buffer.from(json, "utf16le").swap16()]);
+    for (const [name, buf] of [
+      ["minified.json", json],
+      ["indented.json", JSON.stringify(patch, null, 4)],
+      ["bom.json", "﻿" + json],
+      ["le.json", le],
+      ["be.json", be],
+    ]) {
+      assert.deepEqual(readPatch(write(name, buf)), { patch }, name);
+    }
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("readPatch: a cut-off, a trailing comma and a missing brace name the line and column, show the spot and a caret", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "p2c-readpatch-"));
+  try {
+    const read = (text) => {
+      const p = path.join(dir, "p.json");
+      fs.writeFileSync(p, text);
+      return readPatch(p);
+    };
+    const cases = {
+      "a cut-off write": '{"title":"Audit export","items":[{"id":"q1","kind":"te',
+      "a trailing comma": '{"title":"Audit",\n"items":[],\n}',
+      "a missing brace": '{"title":"Audit","agent":{"status":"waiting"}',
+    };
+    for (const [what, text] of Object.entries(cases)) {
+      const { error, patch } = read(text);
+      assert.equal(patch, undefined, what);
+      const lines = error.split("\n");
+      assert.match(lines[0], /^line \d+, column \d+: \S/, `${what}: ${error}`);
+      assert.equal(lines.length, 3, `${what}: the message, the excerpt, the caret`);
+      assert.match(lines[2], /^ *\^$/, `${what}: a caret under the spot`);
+      assert.ok(lines[1].length > 0 && lines[1].length <= 61, `${what}: an excerpt around the spot`);
+    }
+    const comma = read(cases["a trailing comma"]).error;
+    assert.match(comma, /^line 3, column 1:/, "the trailing comma is reported on the closing brace's line");
+    const cut = read(cases["a cut-off write"]).error;
+    assert.match(cut, /^line 1, column \d+:/);
+    assert.ok(cut.split("\n")[1].includes('"kind":"te'), "the excerpt shows where the write stopped");
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("readPatch: empty input and a JSON array each get their own message", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "p2c-readpatch-"));
+  try {
+    const read = (text) => {
+      const p = path.join(dir, "p.json");
+      fs.writeFileSync(p, text);
+      return readPatch(p).error;
+    };
+    const empty = read("  \n");
+    const array = read("[1,2]");
+    const nul = read("null");
+    assert.match(empty, /empty/);
+    assert.match(array, /one JSON object/);
+    assert.match(array, /an array/);
+    assert.match(nul, /null/);
+    assert.notEqual(empty, array);
+    assert.match(readPatch(path.join(dir, "missing.json")).error, /no such file/);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// Each rule break names the item id, the field and a "Like this:" fragment.
+// The fragment is applied to the patch by `fix`, and the result must pass.
+test("rule breaks name the item and field, and their Like this: passes validate() when applied", () => {
+  const withFragment = (problem) => {
+    const at = problem.indexOf("Like this: ");
+    assert.ok(at > 0, `a Like this: in ${problem}`);
+    return JSON.parse(problem.slice(at + "Like this: ".length));
+  };
+  const cases = [
+    {
+      what: "an unknown kind",
+      patch: { items: [{ id: "q1", kind: "nope", title: "Pick one", body: "Which?" }] },
+      start: /^item "q1" kind:/,
+      fix: (p, like) => Object.assign(p.items[0], like),
+    },
+    {
+      what: "an option with label",
+      patch: { items: [{ id: "q1", kind: "choice", title: "Pick one", body: "Which?", options: [{ label: "CSV" }, { text: "Excel" }] }] },
+      start: /^item "q1" options:/,
+      fix: (p, like) => (p.items[0].options[0] = like),
+    },
+    {
+      what: "two recommended options",
+      patch: { items: [{ id: "q1", kind: "choice", title: "Pick one", body: "Which?", options: [{ text: "CSV", recommended: true }, { text: "Excel", recommended: true }] }] },
+      start: /^item "q1" options:/,
+      fix: (p, like) => (p.items[0].options = like),
+    },
+    {
+      what: "a finish with a placeholder",
+      patch: { finish: { headline: "Done", command: "/plan2code-<x>" } },
+      start: /^finish\.command:/,
+      fix: (p, like) => Object.assign(p.finish, like.finish),
+    },
+  ];
+  for (const { what, patch, start, fix } of cases) {
+    const problems = validate(applyPatch(wireState(), structuredClone(patch)));
+    assert.equal(problems.length, 1, `${what}: ${JSON.stringify(problems)}`);
+    assert.match(problems[0], start, what);
+    const fixed = structuredClone(patch);
+    fix(fixed, withFragment(problems[0]));
+    assert.deepEqual(validate(applyPatch(wireState(), fixed)), [], `${what}: the Like this: passes`);
+  }
+
+  // An unanswered note: the person wrote in a thread and the patch settles without replying.
+  const note = { ...wireItem("choice", [{ k: "A", text: "CSV" }]), thread: [{ who: "user", text: "Why?" }], submitted: { k: "A", at: "2026-01-01T00:00:00.000Z" } };
+  const base = { ...wireState(), items: [note] };
+  const stuck = validate(applyPatch(base, { settle: ["q1"] }));
+  assert.equal(stuck.length, 1);
+  assert.match(stuck[0], /^item "q1" thread:/);
+  const like = withFragment(stuck[0]);
+  assert.deepEqual(validate(applyPatch(base, { settle: ["q1"], items: [{ id: "q1", thread: like.thread.map((t) => ({ ...t, text: "Because." })) }] })), []);
+});
+
+test("a refused patch leaves state.json byte for byte as it was", () => {
+  const s = openSession();
+  try {
+    const file = path.join(s.session, "state.json");
+    const before = fs.readFileSync(file);
+    const refused = [
+      { items: [{ id: "q9", kind: "nope", title: "Pick one", body: "Which?" }] },
+      { items: [{ id: "q9", kind: "choice", title: "Pick one", body: "Which?", options: [{ k: "A", text: "x" }, { text: "y" }] }] },
+      { finish: { headline: "Done", command: "/plan2code-<x>" } },
+    ];
+    for (const patch of refused) {
+      const res = postPatch(s, patch, { expectFail: true });
+      assert.equal(res.status, 3, JSON.stringify(patch));
+      assert.match(res.stderr, /Like this:/);
+      assert.ok(fs.readFileSync(file).equals(before), "state.json is untouched");
+    }
+  } finally {
+    cli(["stop", "--session", s.sid, "--force"]);
+  }
 });

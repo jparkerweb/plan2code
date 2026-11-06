@@ -128,7 +128,7 @@ describe('parseProposalFromResponse', () => {
   });
 
   it('returns null for malformed JSON', () => {
-    const result = parseProposalFromResponse('```json\n{broken json]\n```');
+    const result = parseProposalFromResponse('```json\n[{"old_text": broken]\n```');
     expect(result).toBeNull();
   });
 

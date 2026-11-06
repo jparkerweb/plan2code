@@ -15,9 +15,17 @@ node install.js
 # Regenerate skills/ from src/ (non-interactive)
 npm run build:skills
 
+# Try the Activities games from src/: opens the console in the browser, served
+# fresh from disk, so a saved game file shows on the next page reload
+npm run play
+
 # Full check (about 70s): char limits, skills/ build, browser-module parse check,
 # dashboard skill-table check, web console + launcher + getting-started node:test suites
 npm test
+
+# Put every text file git sees back to LF (also runs by itself as pretest and in
+# the pre-commit hook); --check only lists
+npm run fix:eol
 
 # One web console or launcher test
 node --test --test-name-pattern "<regex>" scripts/test-web-console-<area>.mjs
@@ -38,21 +46,42 @@ node scripts/capture-screenshots.mjs --only dashboard  # one screen (dashboard-u
 node scripts/css-snapshot.mjs --out before.json
 node scripts/css-snapshot.mjs --compare before.json
 
-# Plan2Code Loop
-cd plan2code-loop && npm install   # First time setup
-cd plan2code-loop && npm run build # Build the CLI
-
 # Plan2Code Metrics
 cd plan2code-metrics && npm install   # First time setup
 cd plan2code-metrics && npm run build # Build the CLI
 cd plan2code-metrics && npm test      # vitest (aggregator, community, improver)
+
+# Desktop app (plan2code-app/, Rust + Tauri). CI's `app` workflow runs all three on
+# Windows, macOS and Linux and fails on any rustfmt difference or clippy warning, so run
+# them before pushing, not only cargo test (see plan2code-app/README.md "Tests").
+# First time: rustup component add rustfmt clippy (for the toolchain in rust-toolchain.toml)
+cd plan2code-app && node scripts/vendor.mjs && cargo fmt --check
+cd plan2code-app && cargo clippy --workspace --all-targets -- -D warnings
+cd plan2code-app && cargo test --workspace
 
 # Plan2Code Bot (end-to-end workflow runner, Claude Agent SDK)
 cd plan2code-bot && npm install && npm run build
 cd plan2code-bot && npm test          # vitest
 ```
 
-The root `npm test` does not run the metrics or bot vitest suites; run them in their package. `npm run dev` in loop, metrics and bot is `tsup --watch`. The web console and launcher suites isolate themselves with `PLAN2CODE_CONSOLE_HOME`, `PLAN2CODE_MODELS_DIR` and `PLAN2CODE_NO_BROWSER=1` (`scripts/web-console-test-helpers.mjs`), so they never open a browser or touch your real console home. The web console suites are split by area so `node --test` runs them in parallel.
+## Targeted tests first
+
+The full `npm test` takes minutes and drives a browser per page suite. When a change stays inside one part of the project, run that part's suites instead (with the `PLAN2CODE_*` app variables unset, as for `npm test`), and leave the full run for when a change reaches shared code.
+
+| What changed | Run |
+|---|---|
+| An Activities game (`public/activities/*`), `public/tones.js` or `public/music.js` | `node --test scripts/test-web-console-tones.mjs scripts/test-web-console-activities.mjs`, plus the game's own `scripts/test-web-console-activities-<game>*.mjs` when it has one; add `test-web-console-page-activities.mjs` when the Activities window or its switches changed |
+| A music prototype (`prototypes/music/<game>/`) | `node prototypes/music/check.cjs <game>` (nothing in `npm test` reads `prototypes/`) |
+| One web console area (server routes, chat, git board, workspace, notepad, Implementation Loop...) | that area's `scripts/test-web-console-<area>.mjs` (the loop's is `test-web-console-loop.mjs`), and its `test-web-console-page-<area>.mjs` when the page changed; `node scripts/parse-check.mjs` after editing any browser module under `public/` |
+| The launcher (`src/launcher/`) | `node --test scripts/test-launcher.mjs` |
+| A skill's script | `npm run build:skills`, then `node --test scripts/test-script-<skill>.mjs` (and `test-skill-scripts.mjs` for the shared plumbing) |
+| A workflow prompt (`src/plan2code-*.md`) | `node scripts/validate-char-count.js` and `node scripts/check-skill-table.mjs` |
+| A new skill or console workflow | First update the hand-written tables that list every workflow: the `SUBAGENT_WORKFLOWS` count and the meter's `WEIGHTS`, `LAUNCH_LABELS` and `RUN_LABELS` in `test-web-console-logic.mjs`, `notesFor` in `test-web-console-speed.mjs`, the event list in `src/web-console/console-meter.md` (checked by `test-web-console-chat-stress.mjs`) and a `BUDGETS.notes` entry in `test-console-wire-budgets.mjs`. Then run those four suites plus `test-web-console-skills.mjs` and `test-web-console-spec-states.mjs`; the PR Prep and Test build missed all five tables and only the full suite caught them |
+| Docs or comments only | `node --test scripts/test-us-english.mjs scripts/test-line-endings.mjs` |
+
+Run the full `npm test` when the change touches something many suites lean on: `web-console-test-helpers.mjs` or `page-test-helpers.mjs`, `looks.js` / `prefs.js` / `static.mjs` (the `SERVABLE` list), `skills.js`, `install.js`, the server's shared modules (`console.mjs`, `routes.mjs`); after a sync merge or a version bump; before opening a PR or cutting a release; and whenever you cannot say which suites a change reaches.
+
+The root `npm test` does not run the metrics or bot vitest suites; run them in their package. `npm run dev` in metrics and bot is `tsup --watch`. The web console and launcher suites isolate themselves with `PLAN2CODE_CONSOLE_HOME`, `PLAN2CODE_MODELS_DIR` and `PLAN2CODE_NO_BROWSER=1` (`scripts/web-console-test-helpers.mjs`), so they never open a browser or touch your real console home. The web console suites are split by area so `node --test` runs them in parallel. `npm test` runs them through `scripts/node-test.mjs`, which caps the files run at once at one per spare core (8 at most): each page test file drives a browser, and more at once than the cores can carry fails page tests at random (a flat 8 did on 3 and 4 core CI runners). Page tests (`test-web-console-page-*.mjs`) read styles and set scrolls only through `styleOf()`, `stylesOf()` and `scrollCard()` from `page-test-helpers.mjs`, which retry until the element is still on the page; `test-web-console-shape.mjs` fails a raw `locator.evaluate` that does either.
 
 ## Test/Dev Env Vars
 
@@ -62,7 +91,8 @@ The root `npm test` does not run the metrics or bot vitest suites; run them in t
 | `PLAN2CODE_NO_BROWSER` | `open` does not launch a browser (`NO_BROWSER` also works). |
 | `PLAN2CODE_BROWSER` | Browser command line to run with the link appended, instead of the system default. |
 | `PLAN2CODE_MODELS_DIR` | Moves the launcher model menus (`bin/models.json`, `models.json`) away from `~/.plan2code`, for tests. |
-| `PLAN2CODE_PICKER_ECHO` | Tests only: `/workspace/browse` returns this as the picked folder instead of opening a picker (`-` means cancelled). |
+| `PLAN2CODE_PICKER_ECHO` | Tests only: `/workspace/browse` returns this as the picked folder instead of opening a picker (`-` means canceled). |
+| `PLAN2CODE_CONSOLE_DEV` | Set to `1` (by `npm run play`) and the server reads every page file from disk on each request instead of once, so a reload shows edits (`src/web-console/static.mjs`). |
 | `PLAN2CODE_CONSOLE_TRACE` | Set to `1` on `open` to print a start-up step timeline to stderr. |
 
 ## Installer Menu Options
@@ -72,7 +102,7 @@ The root `npm test` does not run the metrics or bot vitest suites; run them in t
 | Option | Action |
 |--------|--------|
 | `I` | Install the Plan2Code skills globally via the `skills` CLI, plus the global `plan2code` command (opens the dashboard in Claude Code, Devin or Codex), then print the getting-started steps. No dev tools |
-| `U` | Uninstall Plan2Code: skills + `plan2code` command + `plan2code-loop` + `plan2code-metrics` + `plan2code-bot` + Claude Code status line (confirmation required) |
+| `U` | Uninstall Plan2Code: skills + `plan2code` command + `plan2code-metrics` + `plan2code-bot` + Claude Code status line (confirmation required) |
 | `A` | Open the ADVANCED sub-menu |
 | `Q` | Quit |
 
@@ -81,12 +111,11 @@ The root `npm test` does not run the metrics or bot vitest suites; run them in t
 | Option | Action |
 |--------|--------|
 | `L` | Install the skills into the current project instead of globally |
-| `O` | Install plan2code-loop CLI only |
 | `M` | Install plan2code-metrics CLI only |
 | `S` | Install Claude Code status line only |
 | `B` | Install plan2code-bot CLI only |
 | `D` | Install the global `plan2code` command only |
-| `E` | Everything: the skills, the `plan2code` command and every dev tool (`plan2code-loop`, `plan2code-bot`, `plan2code-metrics`, the Claude Code status line) |
+| `E` | Everything: the skills, the `plan2code` command and every dev tool (`plan2code-bot`, `plan2code-metrics`, the Claude Code status line) |
 | `Q` | Return to main menu |
 
 ## Non-Interactive Flags
@@ -97,7 +126,7 @@ The root `npm test` does not run the metrics or bot vitest suites; run them in t
 |------|--------|
 | `--build-skills` | Regenerate `skills/` from `src/`, pruning stale skills and reference files |
 | `--verify-skills` | Diff local `skills/` against `src/`; exits 1 on drift. Diagnostic only, the installer rebuilds anyway |
-| `--update` | No menu: reinstall what `~/.plan2code/install.json` lists (skills, launcher, statusline, loop, metrics, bot), never uninstalling; with no record, the skills and the `plan2code` command. `plan2code update` runs it through npx |
+| `--update` | No menu: reinstall what `~/.plan2code/install.json` lists (skills, launcher, app, statusline; metrics and bot only when run from a git checkout, since they run from the install folder, which npx's cache is not), never uninstalling; with no record, the skills and the `plan2code` command. `plan2code update` runs it through npx |
 
 ## How the Installer Works
 
@@ -144,7 +173,7 @@ See the `skills/` build-artifact gotcha in [Code Style & Gotchas](./AGENTS-code-
 1. Create `src/plan2code-<name>.md` with body content only and keep it under 20,000 characters.
 2. Register it in `SOURCE_PROMPTS` in `install.js` (with the web-console `additionalReferences` entry every skill carries); add a `generateStepLabel()` case when needed. List any shared scripts it runs in `scripts: [...]`, and put its own scripts in `src/plan2code-<name>-scripts/` (with a `scripts/test-script-<name>.mjs` added to `package.json`'s `test` list).
 3. Register it with the web console. The meter's points and labels, the resume command, Help's card list and `console.mjs help`'s workflow list are all derived from `skills.js`, so the edits are `skills.js`, `install.js` (step 2), the skill's prompt (step 1), its pose and its notes; `npm test` names anything else left out:
-   - `src/web-console/public/skills.js`: one entry (workflow, label, start pose, flags, subagents line, the meter's `weight`, `started` and `ran`, and `resume`) with its card (plus `help` when Help's line should differ from the blurb), and the card's `states` and `greyed`. Utilities go in group `"extra"` before Changelog.
+   - `src/web-console/public/skills.js`: one entry (workflow, label, start pose, flags, subagents line, the meter's `weight`, `started` and `ran`, and `resume`) with its card (plus `help` when Help's line should differ from the blurb), and the card's `states` and `grayed`. Utilities go in group `"extra"` before Changelog.
    - `src/web-console/public/index.html`: its start pose, an `<svg class="pose pose-<workflow>" data-pose="<workflow>">` in `<template id="start-poses">` (pose CSS in `public/styles/poses.css`), unless its `pose` borrows an existing one (as Implement + Review borrows Implement's).
    - Its help topic: a `src/web-console/notes/<workflow>.md` (named in the skill's Interface line) or a `HELP_TOPICS` alias in `src/web-console/cmd-help.mjs`.
    - `src/plan2code.md`: the skill/workflow table and "What each skill reads and writes" (`scripts/check-skill-table.mjs`: every backticked token must appear in the skill's prompt).

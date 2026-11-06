@@ -1,0 +1,19 @@
+{
+  "name": "plan2code-app",
+  "version": "3.0.0",
+  "private": true,
+  "description": "Plan2Code desktop app (Tauri). Separate from the repo root so the root and the web console stay dependency-free.",
+  "scripts": {
+    "tauri": "tauri",
+    "dev": "tauri dev",
+    "build": "tauri build"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "2.12.4",
+    "@xterm/addon-fit": "0.11.0",
+    "@xterm/xterm": "6.0.0"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "2.12.3"
+  }
+}

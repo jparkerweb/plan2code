@@ -2,15 +2,15 @@
 //
 // Two directories with deliberately different durability:
 //
-//   runtime handle  os.tmpdir()/plan2code-console/<cwd-hash>/<sid>.json
+//   runtime handle  os.tmpdir()/plan2code-console[-<uid>]/<cwd-hash>/<sid>.json (0700 folder, 0600 file: it holds the session token)
 //                   port, pid, token, url. Losing it on reboot is correct,
 //                   because the server is gone too. (Jupyter's jpserver-<pid>.json pattern.)
 //
 //   session state   ~/.plan2code/console/sessions/<sid>/
 //                   the request, the human's draft, the result, the event log.
 //                   Deliberately NOT under specs/: that keeps the console clear of
-//                   the metrics confidence scraper and the loop's completion-marker
-//                   parser, and it survives a `git clean`.
+//                   the metrics confidence scraper and completion-marker parsers,
+//                   and it survives a `git clean`.
 //
 // Node built-ins only. No build step.
 
@@ -39,7 +39,13 @@ export const SESSIONS_DIR = path.join(HOME_DIR, "sessions");
 // theirs. The launcher reads both. PLAN2CODE_MODELS_DIR moves them, for tests.
 export const PLAN2CODE_DIR = process.env.PLAN2CODE_MODELS_DIR || path.join(os.homedir(), ".plan2code");
 export const SHIPPED_MODELS_FILE = path.join(PLAN2CODE_DIR, "bin", "models.json");
+// The shipped agent list (builtins + starter templates), same override
+// mechanism: install.js drops it in bin/ beside models.json.
+export const SHIPPED_AGENTS_FILE = path.join(PLAN2CODE_DIR, "bin", "agents.json");
 export const USER_MODELS_FILE = path.join(PLAN2CODE_DIR, "models.json");
+// The person's custom agent CLIs (agents.mjs has the rules). The console is its only
+// writer, from User Preferences; the launcher and the desktop app read it.
+export const USER_AGENTS_FILE = path.join(PLAN2CODE_DIR, "agents.json");
 
 export const LOOKS_FILE = path.join(HOME_DIR, "looks.json");
 
@@ -53,7 +59,7 @@ export const UPDATE_CHECK_FILE = path.join(HOME_DIR, "update-check.json");
 // session someone is actually using.
 export const RUNTIME_DIR = process.env.PLAN2CODE_CONSOLE_HOME
   ? path.join(process.env.PLAN2CODE_CONSOLE_HOME, "runtime")
-  : path.join(os.tmpdir(), "plan2code-console");
+  : path.join(os.tmpdir(), "plan2code-console" + (typeof process.getuid === "function" ? "-" + process.getuid() : ""));
 
 export const SCHEMA = 1;
 
@@ -75,8 +81,8 @@ export function parseArgs(argv) {
 
 /* ------------------------------------------------------------------- fs */
 
-export function ensureDir(dir) {
-  fs.mkdirSync(dir, { recursive: true });
+export function ensureDir(dir, mode) {
+  fs.mkdirSync(dir, mode === undefined ? { recursive: true } : { recursive: true, mode });
   return dir;
 }
 
@@ -85,21 +91,21 @@ export function ensureDir(dir) {
 // The retry loop is not paranoia: on Windows, antivirus and the search indexer
 // hold transient locks that surface as EPERM/EBUSY from rename. It is intermittent,
 // unreproducible on demand, and looks exactly like a logic bug. Retry from day one.
-export function writeJsonAtomic(file, data) {
+export function writeJsonAtomic(file, data, mode) {
   const body = JSON.stringify(data, null, 2);
-  writeTextAtomic(file, body);
+  writeTextAtomic(file, body, mode);
   return body;
 }
 
 // The same write for plain text, as UTF-8 (a Buffer is written as is): a temp
 // file beside the target, fsync, then a rename, retried while Windows still
 // holds the old file.
-export function writeTextAtomic(file, text) {
+export function writeTextAtomic(file, text, mode) {
   const tmp = file + "." + process.pid + ".tmp";
   let lastErr;
   for (let attempt = 0; attempt < 4; attempt++) {
     try {
-      const fd = fs.openSync(tmp, "w");
+      const fd = mode === undefined ? fs.openSync(tmp, "w") : fs.openSync(tmp, "w", mode);
       try {
         fs.writeFileSync(fd, text, "utf8");
         fs.fsyncSync(fd);
@@ -192,7 +198,11 @@ export function appendEvent(dir, event) {
 // past the stale age, so a writer always gets in eventually.
 export const STATE_LOCK_FILE = "state.json.lock";
 const LOCK_STALE_MS = 5000;
-const LOCK_WAIT_MS = 7000;
+// A pile-up of many writers (a burst of concurrent `post`s) queues behind
+// each other's hold, milliseconds long apiece; 7s left too little headroom
+// for that queue to drain under real machine load, throwing "busy" on a
+// writer that was never going to be denied, just slow to get its turn.
+const LOCK_WAIT_MS = 20000;
 
 function lockStale(lock) {
   try {

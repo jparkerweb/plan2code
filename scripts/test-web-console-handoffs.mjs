@@ -388,7 +388,7 @@ async function withDashboard(fn) {
   try {
     return await fn({ sid: opened.json.sid, session: opened.json.session, get });
   } finally {
-    run(["stop", "--session", opened.json.sid]);
+    run(["stop", "--session", opened.json.sid, "--force"]);
   }
 }
 
@@ -411,7 +411,7 @@ test("a dashboard open scans this checkout's handoffs and the folder; other work
     try {
       assert.equal(readStateOf(quick.json.session).scan, undefined, "no scan, so no handoffs, off the dashboard");
     } finally {
-      run(["stop", "--session", quick.json.sid]);
+      run(["stop", "--session", quick.json.sid, "--force"]);
     }
   } finally {
     fresh();
@@ -472,7 +472,7 @@ test("a __pickup round trip prints the hop, marks the handoff used, and the next
       assert.equal(back.status, 0, back.stderr);
       assert.deepEqual(readStateOf(opened.json.session).scan.handoffs, [], "a used handoff is no longer listed");
     } finally {
-      run(["stop", "--session", opened.json.sid]);
+      run(["stop", "--session", opened.json.sid, "--force"]);
     }
   } finally {
     fresh();
@@ -495,12 +495,12 @@ test("a __delete with a handoff round-trips like a spec delete: no resume, no sk
       assert.equal(res.status, 200);
       const got = run(["wait", "--session", opened.json.sid, "--seconds", "10"]);
       assert.equal(got.status, 0, got.stderr);
-      assert.equal(got.json.actions[0].handoff, made.id);
+      assert.equal(got.json.session[0].handoff, made.id);
       assert.equal(got.json.resume, undefined);
       assert.equal(got.json.skillFile, undefined);
       assert.equal(got.json.handoffFile, undefined);
     } finally {
-      run(["stop", "--session", opened.json.sid]);
+      run(["stop", "--session", opened.json.sid, "--force"]);
     }
   } finally {
     fresh();

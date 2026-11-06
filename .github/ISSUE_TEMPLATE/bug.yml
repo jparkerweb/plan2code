@@ -42,7 +42,7 @@ body:
         - Finalize
         - Handoff
         - Web console (page itself)
-        - Loop (plan2code-loop)
+        - Implementation Loop (desktop app)
         - Metrics
         - Status line
         - Installer

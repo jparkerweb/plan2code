@@ -29,6 +29,7 @@ import {
   cookieFor,
   cli,
   payload,
+  stopSession,
   BASE,
   backdate,
   readState,
@@ -147,7 +148,7 @@ test("open --resume never discards an uncollected result", async () => {
 
 test("open clears a result that was already collected", () => {
   const before = cli(["open", "--resume", sid, "--no-open"]);
-  assert.equal(before.json.pendingResult, false);
+  assert.ok(!before.json.pendingResult, "open prints pendingResult only when true");
   const res = cli(["wait", "--session", sid, "--seconds", "3"]);
   assert.equal(res.status, 10, "a consumed result must not be handed over again");
 });
@@ -186,6 +187,68 @@ test("open --resume takes a pause down, and only a pause", () => {
   cli(["post", "--session", sid, "--file", payload("fin-clear.json", { finish: null })]);
 });
 
+// Continue here on a finished screen resumes into the SAME skill (Pathfinder
+// into Pathfinder), which is no hop. The old ending must still come down, or
+// its card freezes every question the new run asks. A question posted over a
+// standing ending clears it too, for an agent that forgot `finish: null`.
+test("a launch resume and a new question both take a real ending down", () => {
+  const stateFile = path.join(session, "state.json");
+  const readState = () => JSON.parse(fs.readFileSync(stateFile, "utf8"));
+  const wf = readState().workflow;
+
+  cli(["post", "--session", sid, "--file", payload("fin-launch.json", {
+    finish: { headline: "The map is charted", command: "/plan2code-0-pathfinder", dashboard: true },
+  })]);
+  cli(["open", "--resume", sid, "--no-open", "--workflow", wf]);
+  assert.equal(readState().finish, undefined, "a launch resume into the same skill clears the ending");
+
+  cli(["post", "--session", sid, "--file", payload("fin-ask.json", {
+    finish: { headline: "The map is charted", command: "/plan2code-0-pathfinder" },
+  })]);
+  cli(["post", "--session", sid, "--file", payload("ask-over-fin.json", {
+    items: [{ id: "q-over-fin", kind: "text", title: "Next thing", body: "Asked after the ending." }],
+  })]);
+  assert.equal(readState().finish, undefined, "a new open question clears a standing ending");
+
+  // A patch that posts its own finish, even with items, keeps it.
+  cli(["post", "--session", sid, "--file", payload("fin-with-item.json", {
+    items: [{ id: "q-with-fin", kind: "notice", title: "Heads up", body: "Read only." }],
+    finish: { headline: "All done", command: "/plan2code-0-pathfinder" },
+  })]);
+  assert.equal(readState().finish.headline, "All done", "a patch's own finish stays");
+
+  // Leave the session the way later tests expect to find it.
+  cli(["post", "--session", sid, "--file", payload("fin-clear2.json", { finish: null })]);
+});
+
+// A new question posted under an answered card's id used to merge into the
+// old card and stay answered, leaving the person a dead page. It is refused
+// with the fix named; a typo fix on the same title still goes through.
+test("a new question under an answered id is refused, a typo fix is not", () => {
+  const stateFile = path.join(session, "state.json");
+  const readState = () => JSON.parse(fs.readFileSync(stateFile, "utf8"));
+  cli(["post", "--session", sid, "--file", payload("reuse-a.json", {
+    items: [{ id: "q-reuse", kind: "choice", title: "Pick one", body: "Which?", options: [{ text: "A" }, { text: "B" }] }],
+  })]);
+  cli(["post", "--session", sid, "--file", payload("reuse-b.json", { items: [{ id: "q-reuse", status: "answered", answer: { k: "A" } }] })]);
+
+  const typo = cli(["post", "--session", sid, "--file", payload("reuse-typo.json", { items: [{ id: "q-reuse", title: "Pick one", body: "Which one?" }] })]);
+  assert.equal(typo.status, 0, "a body fix under the same title is allowed");
+  assert.equal(readState().items.find((i) => i.id === "q-reuse").status, "answered");
+
+  const reuse = cli(["post", "--session", sid, "--file", payload("reuse-new.json", {
+    items: [{ id: "q-reuse", kind: "choice", title: "Something else", body: "A different question", options: [{ text: "X" }, { text: "Y" }] }],
+  })], { expectFail: true });
+  assert.equal(reuse.status, 3, "a new question under an old id is refused");
+  assert.match(reuse.stderr, /already used for the answered question "Pick one"/);
+  assert.match(reuse.stderr, /new id/);
+
+  const reopened = cli(["post", "--session", sid, "--file", payload("reuse-reopen.json", {
+    items: [{ id: "q-reuse", status: "reopened", title: "Something else", body: "A different question" }],
+  })]);
+  assert.equal(reopened.status, 0, "an explicit reopen is allowed");
+});
+
 // The dashboard hands its live session to the skill it launched: one
 // `open --resume` turns the page (workflow, title, spec) while reusing the
 // server. If the flags did not apply on resume, the launched skill would
@@ -199,7 +262,7 @@ test("open --resume restates workflow, title and spec on the live session", () =
   const res = cli(["open", "--resume", sid, "--no-open", "--workflow", "implement", "--title", "Lunch vote: Phase 2", "--spec", "specs/lunch-vote"]);
   assert.equal(res.json.ok, true);
   assert.equal(res.json.sid, sid);
-  assert.equal(res.json.reused, true, "the live server must be reused, not replaced");
+  assert.ok(res.json.url.startsWith(baseUrl + "/"), "the live server must be reused, not replaced");
 
   const state = JSON.parse(fs.readFileSync(path.join(session, "state.json"), "utf8"));
   assert.equal(state.workflow, "implement");
@@ -243,7 +306,7 @@ test("open with no --workflow still opens a Pathfinder session", () => {
     assert.equal(res.json.ok, true);
     assert.equal(readState(res.json.session).workflow, "pathfinder");
   } finally {
-    cli(["stop", "--session", res.json.sid]);
+    cli(["stop", "--session", res.json.sid, "--force"]);
   }
 });
 
@@ -473,7 +536,7 @@ test("models: the user's additions round-trip, XHigh and Max are refused, and th
   assert.equal((await post("/models", { nope: true })).status, 400);
   assert.equal((await get()).user.devin.length, 1, "a refused write must not touch what is saved");
 
-  // Codex has no curated list, but the launcher reads a user `codex` list all the same.
+  // The launcher reads a user `codex` list too. The shipped file this test serves has no `codex` key, so that list is empty here.
   const codex = await post("/models", { models: { codex: [{ id: " gpt-5-codex ", label: "GPT-5 Codex" }, { id: "gpt-5-codex" }] } });
   assert.equal(codex.status, 200);
   assert.deepEqual((await get()).user, { claude: [], devin: [], codex: [{ id: "gpt-5-codex", label: "GPT-5 Codex" }] });
@@ -482,6 +545,165 @@ test("models: the user's additions round-trip, XHigh and Max are refused, and th
 
   assert.equal((await post("/models", { models: {} })).status, 200, "reset to default");
   assert.deepEqual((await get()).user, { claude: [], devin: [], codex: [] });
+});
+
+test("models: strengths come back shipped and user, round-trip, survive a models-only save, and bad rows name their field", async () => {
+  fs.mkdirSync(path.join(MODELS_DIR, "bin"), { recursive: true });
+  const shippedStrengths = { claude: { thrifty: { model: "sonnet", effort: "low" }, best: { model: "opus" } } };
+  fs.writeFileSync(
+    path.join(MODELS_DIR, "bin", "models.json"),
+    JSON.stringify({ claude: [{ id: "opus", label: "Opus" }, { id: "sonnet", label: "Sonnet" }], strengths: shippedStrengths })
+  );
+  const get = async () => (await fetch(baseUrl + "/models", { headers: { cookie: cookieFor(baseUrl, token) } })).json();
+  const userFile = () => JSON.parse(fs.readFileSync(path.join(MODELS_DIR, "models.json"), "utf8"));
+
+  const first = await get();
+  assert.deepEqual(first.strengths, { shipped: shippedStrengths, user: {} }, "shipped rows come back, no user rows yet");
+  assert.ok(!("strengths" in first.shipped) && !("strengths" in first.user), "strengths is never read as an agent's model list");
+
+  const mapping = { claude: { balanced: { model: " sonnet ", effort: "medium" }, best: { model: "opus" } }, codex: { thrifty: { model: "gpt-5-codex" } } };
+  const saved = await post("/models", { models: { claude: [{ id: "mine" }] }, strengths: mapping });
+  assert.equal(saved.status, 200);
+  const want = { claude: { balanced: { model: "sonnet", effort: "medium" }, best: { model: "opus" } }, codex: { thrifty: { model: "gpt-5-codex" } } };
+  assert.deepEqual((await get()).strengths.user, want);
+  assert.deepEqual(userFile().strengths, want, "the launcher's file carries the mapping beside the lists");
+  assert.equal(userFile().claude.length, 1);
+
+  // A save with only a Models list never wipes the mapping.
+  assert.equal((await post("/models", { models: { claude: [{ id: "mine" }, { id: "other" }] } })).status, 200);
+  assert.deepEqual((await get()).strengths.user, want);
+  assert.equal((await get()).user.claude.length, 2);
+
+  // The agents' own lists and the reset keep it too; an explicit empty mapping clears it.
+  assert.equal((await post("/models", { models: {} })).status, 200);
+  assert.deepEqual((await get()).strengths.user, want);
+
+  const refused = [
+    [{ claude: { thrifty: { model: "bad id!" } } }, /strengths\.claude\.thrifty\.model/],
+    [{ claude: { cheap: { model: "sonnet" } } }, /strengths\.claude\.cheap/],
+    [{ claude: { best: { model: "opus", effort: "max" } } }, /strengths\.claude\.best\.effort/],
+    [{ nobody: { best: { model: "opus" } } }, /strengths\.nobody/],
+    [{ claude: { best: "opus" } }, /strengths\.claude\.best/],
+    [["claude"], /strengths/],
+  ];
+  for (const [body, field] of refused) {
+    const res = await post("/models", { models: {}, strengths: body });
+    assert.equal(res.status, 400, JSON.stringify(body));
+    assert.match((await res.json()).error, field);
+  }
+  assert.deepEqual((await get()).strengths.user, want, "a refused write must not touch what is saved");
+
+  assert.equal((await post("/models", { models: {}, strengths: {} })).status, 200);
+  assert.deepEqual((await get()).strengths.user, {});
+  assert.ok(!("strengths" in userFile()), "an empty mapping leaves no key behind");
+});
+
+test("models: a saved mapping for an agent that is gone is skipped, and never hides or wipes the others", async (t) => {
+  const userFile = path.join(MODELS_DIR, "models.json");
+  t.after(() => fs.rmSync(userFile, { force: true }));
+  fs.writeFileSync(
+    userFile,
+    JSON.stringify({ claude: [], strengths: { claude: { best: { model: "opus" } }, "deleted-agent": { best: { model: "x" } }, devin: { cheap: { model: "y" } } } })
+  );
+  const get = async () => (await fetch(baseUrl + "/models", { headers: { cookie: cookieFor(baseUrl, token) } })).json();
+  assert.deepEqual((await get()).strengths.user, { claude: { best: { model: "opus" } } });
+  assert.equal((await post("/models", { models: { claude: [{ id: "mine" }] } })).status, 200);
+  assert.deepEqual(JSON.parse(fs.readFileSync(userFile, "utf8")).strengths, { claude: { best: { model: "opus" } } }, "the models-only save kept the good rows");
+});
+
+test("models: one bad saved row never drops the other rows of its agent, like the app", async (t) => {
+  const userFile = path.join(MODELS_DIR, "models.json");
+  t.after(() => fs.rmSync(userFile, { force: true }));
+  fs.writeFileSync(
+    userFile,
+    JSON.stringify({
+      claude: [],
+      strengths: { claude: { thrifty: { model: "haiku", effort: "max" }, balanced: { model: "bad id!" }, cheap: { model: "x" }, best: { model: "opus", effort: "high" } } },
+    })
+  );
+  const get = async () => (await fetch(baseUrl + "/models", { headers: { cookie: cookieFor(baseUrl, token) } })).json();
+  assert.deepEqual(
+    (await get()).strengths.user,
+    { claude: { thrifty: { model: "haiku" }, best: { model: "opus", effort: "high" } } },
+    "a bad effort is dropped and its row stays; a bad model or word drops only that row"
+  );
+});
+
+test("agents: no file is an empty list, a save is written whole and keeps unknown keys, and a bad save names its entry and field", async (t) => {
+  const file = path.join(MODELS_DIR, "agents.json");
+  t.after(() => fs.rmSync(file, { force: true }));
+  fs.rmSync(file, { force: true });
+  const get = async () => (await fetch(baseUrl + "/agents", { headers: { cookie: cookieFor(baseUrl, token) } })).json();
+
+  assert.deepEqual(await get(), { agents: [], warnings: [], builtins: [], templates: [] }, "no file");
+  fs.mkdirSync(MODELS_DIR, { recursive: true });
+  fs.writeFileSync(file, "{ \"schema\": 1, \"agents\": [");
+  const broken = await get();
+  assert.deepEqual(broken.agents, [], "a half-written file is no agents");
+  assert.match(broken.warnings.join(" "), /not valid JSON/, "and says why");
+
+  fs.writeFileSync(file, JSON.stringify({ schema: 1, theme: "kept", agents: [] }));
+  const saved = await post("/agents", { agents: [{ name: "My Agent", command: " my-agent ", note: "mine" }] });
+  assert.equal(saved.status, 200);
+  const body = await saved.json();
+  assert.equal(body.ok, true);
+  assert.equal(body.agents[0].id, "my-agent", "an id is made from the name");
+  const written = JSON.parse(fs.readFileSync(file, "utf8"));
+  assert.equal(written.schema, 1);
+  assert.equal(written.theme, "kept", "a top-level key the file had survives the rewrite");
+  assert.deepEqual(written.agents, [
+    { name: "My Agent", command: "my-agent", note: "mine", id: "my-agent", args: [], bypassArgs: [], modelArgs: ["--model", "{model}"], prompt: "/plan2code", models: [] },
+  ]);
+  assert.deepEqual(fs.readdirSync(MODELS_DIR).filter((n) => n.startsWith("agents.json.")), [], "no temp file left behind");
+  assert.deepEqual((await get()).agents.map((a) => a.id), ["my-agent"]);
+
+  const before = fs.readFileSync(file, "utf8");
+  const dup = await post("/agents", { agents: [{ id: "my-agent", name: "My Agent", command: "my-agent" }, { name: "MY AGENT", command: "x" }] });
+  assert.equal(dup.status, 400);
+  assert.deepEqual(await dup.json(), { error: 'name "MY AGENT" is already used', index: 1, field: "name" });
+  for (const agents of [[{ name: "A", command: "  " }], [{ id: "codex", name: "A", command: "a" }], "nope"]) {
+    assert.equal((await post("/agents", { agents })).status, 400, JSON.stringify(agents));
+  }
+  assert.equal((await raw("POST", "/agents", "not json")).status, 400);
+  assert.equal(fs.readFileSync(file, "utf8"), before, "a refused save writes nothing");
+});
+
+test("agents: a file with entries the page could not read is not overwritten unless the save says replace", async (t) => {
+  const file = path.join(MODELS_DIR, "agents.json");
+  t.after(() => fs.rmSync(file, { force: true }));
+  fs.mkdirSync(MODELS_DIR, { recursive: true });
+  const mine = { agents: [{ name: "Mine", command: "mine" }] };
+
+  for (const text of [
+    JSON.stringify({ schema: 2, agents: [{ id: "future", name: "Future", command: "future" }] }),
+    JSON.stringify({ schema: 1, agents: [{ id: "Hand", name: "Hand", command: "hand" }] }),
+    "{ \"schema\": 1, \"agents\": [",
+  ]) {
+    fs.writeFileSync(file, text);
+    const refused = await post("/agents", mine);
+    assert.equal(refused.status, 409, text);
+    const body = await refused.json();
+    assert.match(body.error, /could not read/);
+    assert.ok(body.warnings.length > 0, "the warnings come back with it");
+    assert.equal(fs.readFileSync(file, "utf8"), text, "nothing is written");
+  }
+
+  const replaced = await post("/agents", { ...mine, replace: true });
+  assert.equal(replaced.status, 200, "replace: true writes anyway");
+  const written = JSON.parse(fs.readFileSync(file, "utf8"));
+  assert.equal(written.schema, 1);
+  assert.deepEqual(written.agents.map((a) => a.id), ["mine"]);
+  assert.equal((await post("/agents", mine)).status, 200, "a file the page reads whole saves as usual");
+});
+
+test("agents/test: finds a command on PATH or says it is not there, and never runs it", async () => {
+  const found = await (await post("/agents/test", { command: "node" })).json();
+  assert.equal(found.found, true);
+  assert.ok(fs.statSync(found.path).isFile(), found.path);
+  assert.deepEqual(await (await post("/agents/test", { command: "p2c-no-such-agent-cli" })).json(), { found: false });
+  for (const command of ["", "   ", 7, "x".repeat(1025)]) {
+    assert.equal((await post("/agents/test", { command })).status, 400, String(command).slice(0, 20));
+  }
 });
 
 test("cleanup over HTTP: a scan lists strays in the console home, and a delete removes only what the scan found", async () => {
@@ -548,10 +770,10 @@ test("stop leaves a process it cannot identify as ours alone", () => {
 /* ----------------------------------------------------------- lifecycle */
 
 test("stop shuts the server down and wait then reports exit 20", () => {
-  cli(["stop", "--session", sid]);
+  cli(["stop", "--session", sid, "--force"]);
   const res = cli(["wait", "--session", sid, "--seconds", "12"]);
   assert.equal(res.status, 20);
-  assert.equal(res.json.status, "server-gone");
+  assert.deepEqual(res.json, { gone: true, fix: `open --resume ${sid} --workflow <yours>` });
 });
 
 // A 127.0.0.1 link is only the person's machine if the agent is on it too.
@@ -564,7 +786,7 @@ test("open flags an environment where the link may not reach the person", () => 
   assert.equal(res.json.ok, true, "it still starts");
   assert.equal(res.json.remote, "SSH_CONNECTION");
   assert.match(res.json.note, /not necessarily theirs/);
-  cli(["stop", "--session", res.json.sid]);
+  cli(["stop", "--session", res.json.sid, "--force"]);
 });
 
 test("the runtime dir is isolated by PLAN2CODE_CONSOLE_HOME", () => {
@@ -588,7 +810,7 @@ test("resume brings the session back on a new port with state intact", async () 
   const looksRes = await fetch(m[1] + "/looks", { headers: { cookie: cookieFor(m[1], m[2]) } });
   assert.deepEqual((await looksRes.json()).looks, { theme: "dark", accent: "cobalt" });
 
-  cli(["stop", "--session", sid]);
+  cli(["stop", "--session", sid, "--force"]);
 });
 
 /* ------------------------------------------------- the page's own logic */
@@ -781,7 +1003,7 @@ test("a present finish command must be a non-empty string without a placeholder"
       expectFail: true,
     });
     assert.equal(res.status, 3);
-    assert.match(res.stderr, /"finish\.command" must be a non-empty string, or left out when there is nothing to run/);
+    assert.match(res.stderr, /finish\.command: must be a non-empty string, or left out when there is nothing to run/);
   }
   const tmpl = cli(
     [
@@ -890,7 +1112,7 @@ test("a finish can carry the dashboard flag, and only as a boolean", () => {
     expectFail: true,
   });
   assert.equal(bad.status, 3);
-  assert.match(bad.stderr, /"finish\.dashboard" must be true or false \(or left out: no dashboard button\)/);
+  assert.match(bad.stderr, /finish\.dashboard: must be true or false \(or left out: no dashboard button\)/);
 });
 
 // The Commit it now button is the same kind of opt-in.
@@ -904,7 +1126,7 @@ test("a finish can carry the commit flag, and only as a boolean", () => {
     expectFail: true,
   });
   assert.equal(bad.status, 3);
-  assert.match(bad.stderr, /"finish.commit" must be true or false/);
+  assert.match(bad.stderr, /finish.commit: must be true or false/);
 });
 
 // Taking the review up is the agent posting `"finish": null`: the session goes
@@ -966,4 +1188,66 @@ test("post refuses a misplaced templates flag with exit 3", () => {
   const res = cli(["post", "--session", sid, "--file", payload("templates.json", p)], { expectFail: true });
   assert.equal(res.status, 3);
   assert.match(res.stderr, /only a text item can carry it/);
+});
+
+/* ------------------------------------------- stop needs a finish (FR-12, FR-13) */
+
+const healthOf = async (url) => {
+  const m = url.match(/^(http:\/\/127\.0\.0\.1:\d+)\//);
+  try {
+    return (await fetch(m[1] + "/health")).status;
+  } catch {
+    return 0;
+  }
+};
+
+test("stop with no finish posted exits 3 naming finish and --force, and leaves the server up", async () => {
+  const opened = cli(["open", "--file", payload("stop-nofinish.json", BASE), "--no-open"]);
+  try {
+    const res = cli(["stop", "--session", opened.json.sid], { expectFail: true });
+    assert.equal(res.status, 3);
+    assert.match(res.stderr, /finish/);
+    assert.match(res.stderr, /--force/);
+    assert.equal(await healthOf(opened.json.url), 200, "the server still answers /health");
+  } finally {
+    cli(["stop", "--session", opened.json.sid, "--force"]);
+  }
+});
+
+test("stop stops a session once a finish is posted", async () => {
+  const opened = cli(["open", "--file", payload("stop-finish.json", BASE), "--no-open"]);
+  const res = stopSession(opened.json.sid);
+  assert.equal(res.status, 0);
+  assert.equal(res.json.stopped, 1);
+  assert.equal(await healthOf(opened.json.url), 0, "the server is gone");
+});
+
+test("stop --force stops a session with no finish, and stop --all does so unchanged", async () => {
+  const one = cli(["open", "--file", payload("stop-force.json", BASE), "--no-open"]);
+  const forced = cli(["stop", "--session", one.json.sid, "--force"]);
+  assert.equal(forced.status, 0);
+  assert.equal(forced.json.stopped, 1);
+  assert.equal(await healthOf(one.json.url), 0);
+
+  const two = cli(["open", "--file", payload("stop-all.json", BASE), "--no-open"]);
+  const all = cli(["stop", "--all"]);
+  assert.equal(all.status, 0);
+  assert.ok(all.json.stopped >= 1, "--all needs no finish");
+  assert.equal(await healthOf(two.json.url), 0);
+});
+
+test("a finish posted while stopWarning is set is refused naming stopWarning, and passes once it is cleared", () => {
+  const opened = cli(["open", "--file", payload("stopwarn.json", BASE), "--no-open"]);
+  try {
+    cli(["post", "--session", opened.json.sid, "--file", payload("stopwarn-set.json", { stopWarning: "Unsaved answers are lost." })]);
+    const finish = { headline: "Paused: your answers are saved", command: "/plan2code-1-plan" };
+    const refused = cli(["post", "--session", opened.json.sid, "--file", payload("stopwarn-finish.json", { finish })], { expectFail: true });
+    assert.equal(refused.status, 3);
+    assert.match(refused.stderr, /stopWarning/);
+    const ok = cli(["post", "--session", opened.json.sid, "--file", payload("stopwarn-clear.json", { stopWarning: "", finish })]);
+    assert.equal(ok.status, 0);
+    assert.equal(ok.json.ok, true);
+  } finally {
+    cli(["stop", "--session", opened.json.sid, "--force"]);
+  }
 });

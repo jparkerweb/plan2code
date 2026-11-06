@@ -1,4 +1,4 @@
-// Plan2Code Web Console - pictures and documents attached to a note: chips, trays, re-encoding, upload, retry; defines only.
+// Plan2Code Web Console - pictures and documents attached to a note: chips, trays, re-encoding, upload, retry, the shared picture preview; defines only.
 //
 // Shared by the question cards and the Ask pane, so neither imports the other.
 
@@ -19,6 +19,7 @@ import {
 } from "./answers.js";
 import { hooks, page, saveNow, redraw } from "./state.js";
 import { CHAT_MAX_ATTACHMENTS } from "./chat.js";
+import { step } from "./notepad.js";
 
 // The chat's images live under local.chat, not beside the notes: the card
 // send gathers every entry of local.images, and a chat picture is not a note.
@@ -91,12 +92,26 @@ export function attachTray(itemId, attached) {
     if (attachmentKind(img) === "file") fig = docChip(img, img.status);
     else {
       fig = el("figure", "attach-thumb is-" + img.status);
+      fig.dataset.key = img.key;
       const src = thumbs.get(img.key) || img.url;
       if (src) {
         const pic = el("img");
         pic.src = src;
         pic.alt = img.name;
-        fig.appendChild(pic);
+        // The picture fills a button that opens the picview; inert until the
+        // upload lands (the spinner or Retry overlay covers it meanwhile).
+        const open = el("button", "attach-open");
+        open.type = "button";
+        open.appendChild(pic);
+        if (img.status === "ready" && (img.url || img.path)) {
+          open.addEventListener("click", () => {
+            const slides = attached
+              .filter((x) => attachmentKind(x) !== "file" && x.status === "ready" && (x.url || x.path))
+              .map((x) => ({ key: x.key, url: uploadUrl(x), alt: x.name || "image" }));
+            openPicview(slides, slides.findIndex((s) => s.key === img.key), () => refocusThumb(img.key));
+          });
+        } else open.setAttribute("aria-disabled", "true");
+        fig.appendChild(open);
       }
     }
     const rm = el("button", "attach-remove", "×");
@@ -366,30 +381,115 @@ export function heldNotes() {
   return draftedNotes().filter((n) => n.held);
 }
 
-// A sent note's attachments as links: an image opens full size, a document
-// opens in its own tab. The page serves both by the upload's own file name.
+// A sent note's attachments: an image's thumbnail opens the picview like every
+// other tray's (the refocus token is its URL, sent entries carrying no key), a
+// document stays a link that opens in its own tab.
 export function sentAttachments(note) {
   const entries = [
     ...(note.images || []).map((e) => ({ ...e, kind: "image" })),
     ...(note.files || []).map((e) => ({ ...e, kind: "file" })),
   ];
   if (!entries.length) return null;
+  const slides = entries.filter((e) => e.kind === "image").map((e) => ({ url: uploadUrl(e), alt: e.name || "image" }));
   const tray = el("div", "attach-tray");
   for (const e of entries) {
-    const a = el("a", "attach-link");
-    a.href = uploadUrl(e);
-    a.target = "_blank";
-    a.rel = "noopener";
-    a.title = e.name || "attachment";
     if (e.kind === "image") {
+      const url = uploadUrl(e);
       const fig = el("figure", "attach-thumb is-ready");
+      fig.dataset.key = url;
       const pic = el("img");
-      pic.src = a.href;
+      pic.src = url;
       pic.alt = e.name || "image";
-      fig.appendChild(pic);
-      a.appendChild(fig);
-    } else a.appendChild(docChip({ name: e.name || "file" }, "ready"));
-    tray.appendChild(a);
+      const open = el("button", "attach-open");
+      open.type = "button";
+      open.appendChild(pic);
+      open.addEventListener("click", () => openPicview(slides, slides.findIndex((s) => s.url === url), () => refocusThumb(url)));
+      fig.appendChild(open);
+      tray.appendChild(fig);
+    } else {
+      const a = el("a", "attach-link");
+      a.href = uploadUrl(e);
+      a.target = "_blank";
+      a.rel = "noopener";
+      a.title = e.name || "attachment";
+      a.appendChild(docChip({ name: e.name || "file" }, "ready"));
+      tray.appendChild(a);
+    }
   }
   return tray;
+}
+
+/* ------------------------------------------------------------ picview */
+
+// The page's one full-screen picture preview (the #picview dialog in
+// index.html), opened from any thumbnail: the Notebook's strip, the note
+// trays and sent pictures all land here. `slides` is the set it steps
+// through as [{ url, alt }], `index` where it starts, and `restore` (a
+// function, optional) gets the focus back when it closes.
+let viewing = { list: [], index: -1, restore: null };
+let picviewWired = false;
+
+// Focus the open button of the thumbnail with this key again; whether found.
+// The tray may have redrawn while the preview was up, so the lookup runs at
+// close time, not from a held element. Exported for the trays uploads.js does
+// not draw itself (sent Ask messages).
+export function refocusThumb(key) {
+  const btn = key && document.querySelector(`[data-key="${CSS.escape(key)}"] .attach-open`);
+  if (!btn) return false;
+  btn.focus();
+  return true;
+}
+
+function picviewAt(index) {
+  const { list } = viewing;
+  const entry = list[index];
+  viewing.index = index;
+  const pic = document.getElementById("picview-img");
+  pic.src = entry.url;
+  pic.alt = entry.alt || "";
+  document.getElementById("picview-count").textContent = `${index + 1} of ${list.length}`;
+  document.getElementById("picview-prev").hidden = document.getElementById("picview-next").hidden = list.length < 2;
+}
+
+const picviewStep = (delta) => {
+  const index = step(viewing.index, delta, viewing.list.length);
+  if (index >= 0) picviewAt(index);
+};
+
+// Bound on first use: the arrows and Esc (kept from whatever sits under the
+// dialog, as the Notebook is), the close button, and the focus restore.
+function wirePicview() {
+  if (picviewWired) return;
+  picviewWired = true;
+  const dlg = document.getElementById("picview");
+  document.getElementById("picview-prev").addEventListener("click", () => picviewStep(-1));
+  document.getElementById("picview-next").addEventListener("click", () => picviewStep(1));
+  document.getElementById("picview-close").addEventListener("click", () => dlg.close());
+  dlg.addEventListener("keydown", (e) => {
+    if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+      e.preventDefault();
+      picviewStep(e.key === "ArrowLeft" ? -1 : 1);
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      e.stopPropagation();
+      dlg.close();
+    }
+  });
+  dlg.addEventListener("close", () => {
+    document.getElementById("picview-img").removeAttribute("src");
+    const restore = viewing.restore;
+    viewing = { list: [], index: -1, restore: null };
+    if (restore) restore();
+  });
+}
+
+export function openPicview(slides, index, restore) {
+  const list = (Array.isArray(slides) ? slides : []).filter((s) => s && s.url);
+  if (index < 0 || index >= list.length) return;
+  wirePicview();
+  viewing = { list, index, restore: typeof restore === "function" ? restore : null };
+  picviewAt(index);
+  const dlg = document.getElementById("picview");
+  if (!dlg.open) dlg.showModal();
+  document.getElementById("picview-close").focus();
 }

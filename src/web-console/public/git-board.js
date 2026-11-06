@@ -194,7 +194,7 @@ const button = (shown, enabled, label, title) => ({ shown, enabled: shown && ena
 /**
  * Every board button as `{ shown, enabled, label, title? }`. Pull is enabled
  * only with an upstream to pull from; Push shows with an upstream, Publish
- * without one. `busy` greys everything out but Done; an operation in
+ * without one. `busy` grays everything out but Done; an operation in
  * progress hides everything but Done (its banner carries Abort / Continue).
  */
 export function boardActions(git, { busy = false } = {}) {

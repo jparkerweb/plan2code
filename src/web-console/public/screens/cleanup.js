@@ -1,4 +1,4 @@
-// Plan2Code Web Console - User Preferences, Cleanup tab.
+// Plan2Code Web Console - User Preferences, the Cleanup section on the System tab.
 
 import { formatBytes } from "../answers.js";
 import { el } from "../render.js";
@@ -123,7 +123,7 @@ async function deleteCleanup() {
   setCleanupStatus((failed ? done + " " + failed + " could not be removed." : done) + keptLine, Boolean(failed));
 }
 
-// The Cleanup tab's buttons, and starting over whenever Preferences closes.
+// The Cleanup section's buttons, and starting over whenever Preferences closes.
 export function wireCleanup() {
   $("cleanup-scan").addEventListener("click", scanCleanup);
   $("cleanup-delete").addEventListener("click", deleteCleanup);
