@@ -21,7 +21,6 @@ pub struct TermPanelSettings {
     pub collapsed: bool,
 }
 
-pub const DEFAULT_TERM_DOCK: &str = "bottom";
 pub const DEFAULT_TERM_FRACTION: f64 = 0.25;
 const TERM_FRACTION_MIN: f64 = 0.05;
 const TERM_FRACTION_MAX: f64 = 0.9;
@@ -53,15 +52,16 @@ pub fn save_last_agent(file: &Path, id: &str) -> Result<(), String> {
     write(file, settings)
 }
 
-/// The terminal pane's shape, from the file or the defaults. A dock other
-/// than `bottom` or `right`, or a fraction outside its range, is the default.
-pub fn load_term_panel(file: &Path) -> TermPanelSettings {
+/// The terminal pane's saved shape, or `None` when no valid dock is saved (a
+/// fresh install, or a dock other than `bottom` or `right`): the page then
+/// picks its own default, docked right. A fraction outside its range falls
+/// back to the default fraction.
+pub fn load_term_panel(file: &Path) -> Option<TermPanelSettings> {
     let settings = read(file);
     let dock = settings
         .get(TERM_DOCK_KEY)
         .and_then(|v| v.as_str())
-        .filter(|d| *d == "bottom" || *d == "right")
-        .unwrap_or(DEFAULT_TERM_DOCK)
+        .filter(|d| *d == "bottom" || *d == "right")?
         .to_string();
     let fraction = settings
         .get(TERM_FRACTION_KEY)
@@ -72,11 +72,11 @@ pub fn load_term_panel(file: &Path) -> TermPanelSettings {
         .get(TERM_COLLAPSED_KEY)
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
-    TermPanelSettings {
+    Some(TermPanelSettings {
         dock,
         fraction,
         collapsed,
-    }
+    })
 }
 
 /// Save the terminal pane's shape, keeping any other key the file holds. An
@@ -202,13 +202,8 @@ mod tests {
     }
 
     #[test]
-    fn the_term_panel_defaults_to_bottom_at_a_quarter() {
-        let want = TermPanelSettings {
-            dock: "bottom".into(),
-            fraction: 0.25,
-            collapsed: false,
-        };
-        assert_eq!(load_term_panel(&temp_file("term-missing")), want);
+    fn nothing_saved_reports_no_term_panel_so_the_page_docks_right() {
+        assert_eq!(load_term_panel(&temp_file("term-missing")), None);
     }
 
     #[test]
@@ -219,11 +214,11 @@ mod tests {
         save_term_panel(&file, "right", 0.4, true).unwrap();
         assert_eq!(
             load_term_panel(&file),
-            TermPanelSettings {
+            Some(TermPanelSettings {
                 dock: "right".into(),
                 fraction: 0.4,
                 collapsed: true
-            }
+            })
         );
         assert!(std::fs::read_to_string(&file)
             .unwrap()
@@ -272,11 +267,13 @@ mod tests {
     }
 
     #[test]
-    fn a_bad_dock_or_out_of_range_fraction_on_disk_reads_as_the_default() {
+    fn a_bad_dock_on_disk_reads_as_nothing_saved_and_a_bad_fraction_as_the_default() {
         let file = temp_file("term-bad-load");
         std::fs::create_dir_all(file.parent().unwrap()).unwrap();
         std::fs::write(&file, r#"{"termDock": "top", "termFraction": 5}"#).unwrap();
-        let loaded = load_term_panel(&file);
+        assert_eq!(load_term_panel(&file), None);
+        std::fs::write(&file, r#"{"termDock": "bottom", "termFraction": 5}"#).unwrap();
+        let loaded = load_term_panel(&file).unwrap();
         assert_eq!(loaded.dock, "bottom");
         assert_eq!(loaded.fraction, 0.25);
         let _ = std::fs::remove_dir_all(file.parent().unwrap());

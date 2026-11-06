@@ -706,14 +706,11 @@ fn app_state(state: State<'_, AppState>) -> serde_json::Value {
                 .filter(known)
         })
         .or_else(|| project::remembered_agent().filter(known));
-    let term_panel = settings_file.as_ref().map_or(
-        settings::TermPanelSettings {
-            dock: settings::DEFAULT_TERM_DOCK.to_string(),
-            fraction: settings::DEFAULT_TERM_FRACTION,
-            collapsed: false,
-        },
-        |file| settings::load_term_panel(file),
-    );
+    // Null until the person has docked, dragged or collapsed the pane: the
+    // page then starts it docked right.
+    let term_panel = settings_file
+        .as_ref()
+        .and_then(|file| settings::load_term_panel(file));
     let first_run_done = settings_file
         .as_ref()
         .is_some_and(|file| settings::load_first_run_done(file));

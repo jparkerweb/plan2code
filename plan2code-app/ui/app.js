@@ -1,5 +1,6 @@
 // The app page: the top bar, the console dashboard in an iframe, and the
-// agent's terminal panel docked at the bottom with a drag handle.
+// agent's terminal panel, docked right by default (or at the bottom on
+// request) with a drag handle.
 
 import { mountTerminal } from './terminal.js';
 import { NEW_RELEASE_COMMAND, attentionSignal, barNextSteps, continueKeys, defaultRightFraction, folderName, lastAgentNotice, pickDefaultAgent, taskbarSwitch, windowTitleFor, deadConsoleAction, loopBanner, loopLocks, loopStopLabels, loopWindowTitle } from './meter.js';
