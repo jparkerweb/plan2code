@@ -372,7 +372,8 @@ test("framed, an Activities game in full screen asks the app for the whole scree
   assert.deepEqual(await told(), [true, false, true, false], "F and Esc each give it back");
   await s.page.keyboard.press("f");
   s.post({ items: [{ id: "q2", kind: "text", title: "Who uses it", body: "Who opens the export?" }], agent: { status: "waiting" } });
-  await until(async () => (await told()).at(-1) === false, 5000);
+  // Wait for both new messages: the list already ends in false, so checking only its last item passed at once.
+  await until(async () => (await told()).length >= 6, 5000);
   assert.deepEqual(await told(), [true, false, true, false, true, false], "and so does a new question");
 });
 
