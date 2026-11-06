@@ -11,7 +11,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { attentionSignal, barNextSteps, continueKeys, defaultRightFraction, folderName, pickDefaultAgent, taskbarSwitch, windowTitleFor, deadConsoleAction, loopBanner, loopRunText, loopLocks, loopStopLabels, loopWindowTitle, CONSOLE_ASIDE_BREAKPOINT_PX, NEXT_STEP_LABELS } from "../plan2code-app/ui/meter.js";
+import { attentionSignal, barNextSteps, continueKeys, defaultRightFraction, folderName, pickDefaultAgent, taskbarSwitch, windowTitleFor, deadConsoleAction, loopBanner, loopRunText, loopLocks, loopStopLabels, loopWindowTitle, CONSOLE_ASIDE_BREAKPOINT_PX, NEXT_STEP_LABELS, NEW_RELEASE_COMMAND } from "../plan2code-app/ui/meter.js";
 import { findBrowser, launchBrowser } from "./browser.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -36,6 +36,34 @@ test("barNextSteps puts the most pressing step first: a done update, then a stop
 test("only one control for reconnecting the console is ever offered: after an update, its Reconnect covers a stopped console too", () => {
   const steps = barNextSteps({ consoleDead: true, version: { kind: "updated" } });
   assert.deepEqual(steps.map((step) => step.action), ["restart-console"], "the plain reconnect steps aside for the one that stops the old console first");
+});
+
+test("a newer GitHub release is offered last, with the command to copy; a mismatch or a stopped console comes first", () => {
+  const newRelease = { latest: "3.0.1" };
+  const ids = (input) => barNextSteps(input).map((step) => step.id);
+  assert.deepEqual(ids({ newRelease }), ["new-release"]);
+  assert.deepEqual(ids({ consoleDead: true, version: { kind: "mismatch", skills: "3.0.0", app: "3.1.0" }, newRelease }), ["console-dead", "mismatch", "new-release"]);
+  const [step] = barNextSteps({ newRelease });
+  assert.equal(step.text, "Update available: v3.0.1");
+  assert.equal(step.label, "Copy update command");
+  assert.equal(step.action, "copy-update");
+  assert.equal(NEW_RELEASE_COMMAND, "plan2code update");
+  assert.deepEqual(barNextSteps({ newRelease: null }), [], "nothing newer, nothing shown");
+});
+
+test("after the copy the bar says what to do next; if the clipboard was refused it spells the command out", () => {
+  const [copied] = barNextSteps({ newRelease: { latest: "3.0.1", copied: true } });
+  assert.match(copied.text, /^Copied: run `plan2code update` in a terminal/);
+  assert.equal(copied.action, null);
+  const [manual] = barNextSteps({ newRelease: { latest: "3.0.1", manual: true } });
+  assert.match(manual.text, /^Run `plan2code update` in a terminal/);
+  assert.equal(manual.action, null);
+});
+
+test("the app asks once at start for a newer release, and the bar is wired to the copy action", () => {
+  assert.match(APP_JS, /invoke\('check_new_release'\)/);
+  assert.match(APP_JS, /'copy-update': copyUpdateCommand/);
+  assert.match(APP_JS, /barNextSteps\(\{ consoleDead, version: versionState, newRelease \}\)/);
 });
 
 test("each version state reads and acts as the old version bar did", () => {
@@ -63,7 +91,7 @@ test("every control that reconnects the console carries the same label, never 'R
 });
 
 test("app.js draws the bar's right end through barNextSteps, not a hand-rolled copy of its order", () => {
-  assert.match(APP_JS, /const steps = barNextSteps\(\{ consoleDead, version: versionState \}\);/);
+  assert.match(APP_JS, /const steps = barNextSteps\(\{ consoleDead, version: versionState, newRelease \}\);/);
   for (const gone of ["console-again", "version-update", "permissions-note", "console-status", "project-dir"]) {
     assert.ok(!INDEX_HTML.includes(`id="${gone}"`), `index.html still has #${gone}`);
   }

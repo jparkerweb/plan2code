@@ -2,7 +2,7 @@
 // agent's terminal panel docked at the bottom with a drag handle.
 
 import { mountTerminal } from './terminal.js';
-import { attentionSignal, barNextSteps, continueKeys, defaultRightFraction, folderName, lastAgentNotice, pickDefaultAgent, taskbarSwitch, windowTitleFor, deadConsoleAction, loopBanner, loopLocks, loopStopLabels, loopWindowTitle } from './meter.js';
+import { NEW_RELEASE_COMMAND, attentionSignal, barNextSteps, continueKeys, defaultRightFraction, folderName, lastAgentNotice, pickDefaultAgent, taskbarSwitch, windowTitleFor, deadConsoleAction, loopBanner, loopLocks, loopStopLabels, loopWindowTitle } from './meter.js';
 
 const { invoke, Channel } = window.__TAURI__.core;
 
@@ -1012,6 +1012,29 @@ async function checkVersions() {
   }
 }
 
+// Once, at start, and never waited on: is a newer Plan2Code release out on GitHub? The Rust
+// side asks (the same tag lookup the web console uses) and answers with the newer version, or
+// nothing when the app is current or the lookup failed.
+async function checkNewRelease() {
+  try {
+    const latest = await invoke('check_new_release');
+    if (latest) setNewRelease({ latest, copied: false });
+  } catch {
+    // No answer is no reason to nag.
+  }
+}
+
+async function copyUpdateCommand() {
+  if (!newRelease) return;
+  try {
+    await navigator.clipboard.writeText(NEW_RELEASE_COMMAND);
+    setNewRelease({ ...newRelease, copied: true });
+  } catch {
+    // The webview refused the clipboard: the bar spells the command out instead.
+    setNewRelease({ ...newRelease, manual: true });
+  }
+}
+
 async function updateSkills() {
   setVersionState({ kind: 'updating', line: 'Updating Plan2Code...' });
   const progress = new Channel();
@@ -1225,11 +1248,12 @@ loopStopNowBtn.onclick = () =>
 // barNextSteps decides which, and its button), with the rest as "+N more".
 let consoleDead = false;
 let versionState = null;
-const NEXT_STEP_ACTIONS = { reconnect: reconnectConsole, 'restart-console': restartConsole, update: updateSkills };
+let newRelease = null;
+const NEXT_STEP_ACTIONS = { reconnect: reconnectConsole, 'restart-console': restartConsole, update: updateSkills, 'copy-update': copyUpdateCommand };
 let nextStepAction = null;
 
 function renderNextStep() {
-  const steps = barNextSteps({ consoleDead, version: versionState });
+  const steps = barNextSteps({ consoleDead, version: versionState, newRelease });
   nextStepEl.hidden = steps.length === 0;
   const [first, ...rest] = steps;
   nextStepTextEl.textContent = first ? first.text : '';
@@ -1246,6 +1270,11 @@ function renderNextStep() {
 
 function setVersionState(next) {
   versionState = next;
+  renderNextStep();
+}
+
+function setNewRelease(next) {
+  newRelease = next;
   renderNextStep();
 }
 
@@ -1425,6 +1454,7 @@ async function main() {
   applyDefaultAgent(state.lastAgent);
   setInterval(updateBadge, BADGE_POLL_MS);
   checkVersions();
+  checkNewRelease();
 
   let reattach = null;
   try {

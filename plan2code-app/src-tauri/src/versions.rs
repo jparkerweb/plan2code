@@ -73,6 +73,84 @@ pub fn status(app: &str, skills: Option<String>) -> VersionStatus {
     }
 }
 
+/// The repo's tags, asked of GitHub the way the web console's own check does it
+/// (src/web-console/update-check.mjs): `git ls-remote --tags` needs no token and rides on the
+/// person's own git and proxy setup.
+const REPO_URL: &str = "https://github.com/jparkerweb/plan2code.git";
+/// How long the tag lookup may take before it is given up on (nothing waits on it).
+const RELEASE_CHECK_TIMEOUT: Duration = Duration::from_secs(10);
+
+/// The highest plain `vX.Y.Z` tag in `git ls-remote --tags` output, without the `v`. Peeled
+/// lines (`^{}`) and pre-release or other tag names never match.
+pub fn latest_tag(text: &str) -> Option<String> {
+    let mut best: Option<((u64, u64, u64), String)> = None;
+    for line in text.lines() {
+        let Some(version) = line.trim().rsplit_once("refs/tags/v").map(|(_, v)| v) else {
+            continue;
+        };
+        let Some(triple) = parse(version) else {
+            continue;
+        };
+        if best.as_ref().is_none_or(|(top, _)| triple > *top) {
+            best = Some((triple, version.to_string()));
+        }
+    }
+    best.map(|(_, version)| version)
+}
+
+/// The newest release's version when it is newer than `app`; none when the app is current,
+/// ahead, or either version is not a plain `X.Y.Z`.
+pub fn newer_release(app: &str, ls_remote: &str) -> Option<String> {
+    let latest = latest_tag(ls_remote)?;
+    (parse(&latest)? > parse(app)?).then_some(latest)
+}
+
+/// Ask GitHub for the newest release and return its version when it is newer than `app`.
+/// None on any failure (no git, no network, a login prompt, the timeout): a missing answer
+/// is never a reason to nag. No prompt and no console window.
+pub fn check_new_release(app: &str) -> Option<String> {
+    let mut command = Command::new("git");
+    command
+        .env("PATH", crate::node_check::resolved_path())
+        .env("GIT_TERMINAL_PROMPT", "0")
+        .env("GCM_INTERACTIVE", "never")
+        .args(["ls-remote", "--tags", REPO_URL])
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null());
+    if std::env::var_os("GIT_SSH_COMMAND").is_none() {
+        command.env("GIT_SSH_COMMAND", "ssh -o BatchMode=yes");
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(0x08000000); // CREATE_NO_WINDOW, as the console calls are
+    }
+    let mut child = command.spawn().ok()?;
+    let mut stdout = child.stdout.take()?;
+    let (tx, rx) = mpsc::channel::<String>();
+    std::thread::spawn(move || {
+        let mut text = String::new();
+        let _ = std::io::Read::read_to_string(&mut stdout, &mut text);
+        let _ = tx.send(text);
+    });
+    match rx.recv_timeout(RELEASE_CHECK_TIMEOUT) {
+        Ok(text) => {
+            let ok = child.wait().is_ok_and(|status| status.success());
+            if ok {
+                newer_release(app, &text)
+            } else {
+                None
+            }
+        }
+        Err(_) => {
+            let _ = child.kill();
+            let _ = child.wait();
+            None
+        }
+    }
+}
+
 /// Run the existing installer's update (`plan2code update`, through the launcher's own copy),
 /// which brings the skills, the launcher and the app level. Pinned to the release tag `app_version`
 /// names, not `main`, so Update skills never pulls in work the app does not know about yet. Blocks
@@ -213,6 +291,34 @@ mod tests {
         assert!(!status("3.0.0", Some("3.0.0-beta".into())).mismatch);
         assert!(!status("3.0", Some("3.0.0".into())).mismatch);
         assert!(!status("3.0.0", Some("".into())).mismatch);
+    }
+
+    const TAGS: &str = "aaa\trefs/tags/v2.11.0\n\
+        bbb\trefs/tags/v3.0.0\n\
+        ccc\trefs/tags/v3.0.0^{}\n\
+        ddd\trefs/tags/v3.0.1\n\
+        eee\trefs/tags/v3.10.0\n\
+        fff\trefs/tags/v3.11.0-beta\n\
+        ggg\trefs/tags/not-a-version\n";
+
+    #[test]
+    fn the_latest_tag_is_the_highest_plain_version_compared_by_number() {
+        assert_eq!(latest_tag(TAGS).as_deref(), Some("3.10.0"));
+        assert_eq!(
+            latest_tag("aaa\trefs/tags/v3.0.1\r\nbbb\trefs/tags/v3.0.9\r\n").as_deref(),
+            Some("3.0.9")
+        );
+        assert_eq!(latest_tag(""), None);
+        assert_eq!(latest_tag("aaa\trefs/tags/v3.0.0-beta\n"), None);
+    }
+
+    #[test]
+    fn a_newer_release_is_reported_only_when_it_is_ahead_of_the_app() {
+        assert_eq!(newer_release("3.0.0", TAGS).as_deref(), Some("3.10.0"));
+        assert_eq!(newer_release("3.10.0", TAGS), None);
+        assert_eq!(newer_release("3.11.0", TAGS), None);
+        assert_eq!(newer_release("3.0.0-beta", TAGS), None);
+        assert_eq!(newer_release("3.0.0", ""), None);
     }
 
     #[test]

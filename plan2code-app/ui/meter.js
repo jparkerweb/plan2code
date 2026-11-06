@@ -9,7 +9,13 @@ export const NEXT_STEP_LABELS = {
   reconnect: 'Reconnect the console',
   'restart-console': 'Reconnect the console',
   update: 'Update skills',
+  'copy-update': 'Copy update command',
 };
+
+// What a person runs in a terminal to move to the newest release: the same line the web
+// console's banner gives. The app cannot replace itself, and Update skills is pinned to the
+// app's own version, so only this brings the app, the skills and the launcher up together.
+export const NEW_RELEASE_COMMAND = 'plan2code update';
 
 /**
  * What the console page's **continue** button types into the agent's
@@ -76,7 +82,7 @@ export function lastAgentNotice(list, remembered) {
  * update, its Reconnect (which stops the old console first, so the new skills
  * are really picked up) covers a console that has also stopped.
  */
-export function barNextSteps({ consoleDead = false, version = null } = {}) {
+export function barNextSteps({ consoleDead = false, version = null, newRelease = null } = {}) {
   const v = version || {};
   const steps = [];
   if (v.kind === 'updated') {
@@ -107,6 +113,17 @@ export function barNextSteps({ consoleDead = false, version = null } = {}) {
       break;
     default:
       break;
+  }
+  // Last: the pending fix for a mismatch or a stopped console comes before a release that is
+  // merely out. `newRelease` is `{ latest, copied, manual }`.
+  if (newRelease && newRelease.latest) {
+    steps.push(
+      newRelease.manual
+        ? { id: 'new-release', text: `Run \`${NEW_RELEASE_COMMAND}\` in a terminal, then reopen the app`, title: `Plan2Code v${newRelease.latest} is out. Run \`${NEW_RELEASE_COMMAND}\` in a terminal, then reopen the app.`, tone: 'warn', action: null }
+        : newRelease.copied
+        ? { id: 'new-release', text: `Copied: run \`${NEW_RELEASE_COMMAND}\` in a terminal, then reopen the app`, title: `Plan2Code v${newRelease.latest} is out. Run \`${NEW_RELEASE_COMMAND}\` in a terminal, then reopen the app.`, tone: 'ok', action: null }
+        : { id: 'new-release', text: `Update available: v${newRelease.latest}`, title: `Plan2Code v${newRelease.latest} is out. Copy the command, run it in a terminal, then reopen the app.`, tone: 'warn', action: 'copy-update' }
+    );
   }
   return steps.map((step) => ({ ...step, label: step.action ? NEXT_STEP_LABELS[step.action] : null }));
 }

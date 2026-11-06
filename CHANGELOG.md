@@ -2,6 +2,16 @@
 
 All notable changes to Plan2Code will be documented in this file.
 
+## v3.0.2
+
+### ✨ Added
+
+- **desktop app**: the app now checks GitHub for a newer release when it starts, and its top bar says `Update available: vX.Y.Z` with a button that copies `plan2code update`, the command that brings the app, skills and launcher up together. The web console already showed this in the browser; the app only compared its own version with the installed skills, so it never knew a release was out.
+
+### 🔧 Changed
+
+- **releases**: the release workflow now builds all four systems first and creates the release, with its `vX.Y.Z` tag, last, so nobody is offered an upgrade before its downloads exist. CI runs the root `npm test` suite only by hand, and the app job on Ubuntu only for pushes.
+
 ## v3.0.1
 
 ### 🐛 Fixed

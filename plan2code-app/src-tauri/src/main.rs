@@ -765,6 +765,17 @@ fn version_status(app: tauri::AppHandle) -> versions::VersionStatus {
     )
 }
 
+/// The newest GitHub release's version when it is newer than this app, else none (also none on
+/// any failure to ask). The page asks once at start and never waits on it.
+#[tauri::command]
+async fn check_new_release(app: tauri::AppHandle) -> Option<String> {
+    let version = app.package_info().version.to_string();
+    tauri::async_runtime::spawn_blocking(move || versions::check_new_release(&version))
+        .await
+        .ok()
+        .flatten()
+}
+
 /// What `update_skills` resolves with: the installer's last line, and the version status
 /// re-read afterwards, so the bar can say plainly whether the mismatch is actually gone.
 #[derive(serde::Serialize)]
@@ -1319,6 +1330,7 @@ fn main() {
             save_term_panel,
             save_first_run_done,
             version_status,
+            check_new_release,
             update_skills,
             pick_project_folder,
             change_project,
