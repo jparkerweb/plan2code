@@ -11,7 +11,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { gitInit } from "./skill-script-helpers.mjs";
-import { pageSuite, openSession, tempProject, sendAndCollect, itemCard, scrollTopOf, scrollCard, stylesOf, styleOf , fillBox, boxValue} from "./page-test-helpers.mjs";
+import { pageSuite, openSession, tempProject, sendAndCollect, itemCard, scrollTopOf, scrollCard, stylesOf, styleOf , fillBox, boxValue, settled } from "./page-test-helpers.mjs";
 
 const suite = pageSuite(test);
 
@@ -319,6 +319,7 @@ test("a redraw keeps the place of the dashboard, the waiting screen and the fini
   const welcomeDone = s.page.getByRole("button", { name: "Start building" });
   if (await welcomeDone.isVisible()) await welcomeDone.click();
   await welcomeDone.waitFor({ state: "hidden" });
+  await settled(s.page, "#main > .dash");
   await scrollCard(s.page.locator("#main > .dash"), 150);
   assert.equal(await scrollTopOf(s.page, "#main > .dash"), 150, "the dashboard scrolls");
   await unrelatedPost(s, "Dashboard, take two");
@@ -334,6 +335,7 @@ test("a redraw keeps the place of the dashboard, the waiting screen and the fini
   await s.page.setViewportSize({ width: 1280, height: 300 });
   const pane = "#main > .waiting-pane";
   await s.page.locator(pane).waitFor();
+  await settled(s.page, pane);
   await scrollCard(s.page.locator(pane), 60);
   const waitingAt = await scrollTopOf(s.page, pane);
   assert.ok(waitingAt > 0, "the waiting screen scrolls");

@@ -200,6 +200,48 @@ export async function fillBox(locator, text) {
   }, text);
 }
 
+// Waits until nothing inside the element has changed for `quietMs`. A late redraw (state that
+// rides an event, a scan that lands after the page is drawn) replaces what a test has just
+// scrolled or opened, and the test then fails on a slow runner: let the page go quiet first.
+export async function settled(page, selector, quietMs = 500) {
+  await page.locator(selector).first().evaluate(
+    (n, ms) =>
+      new Promise((resolve) => {
+        let timer;
+        const done = () => {
+          observer.disconnect();
+          resolve();
+        };
+        const observer = new MutationObserver(() => {
+          clearTimeout(timer);
+          timer = setTimeout(done, ms);
+        });
+        observer.observe(n, { subtree: true, childList: true, attributes: true, characterData: true });
+        timer = setTimeout(done, ms);
+      }),
+    quietMs
+  );
+}
+
+// Types a message in the Ask box and presses Send. The composer is rebuilt whenever the page's
+// view of the agent changes, and a box filled just before a rebuild can come back empty with Send
+// off: fill again until Send is on, and when it never is, fail with the composer's own reason
+// (its disabled note) instead of a minute-long click timeout.
+export async function sendAsk(page, text) {
+  const send = page.locator(".ask-composer").getByRole("button", { name: "Send", exact: true });
+  let on = false;
+  for (let attempt = 0; attempt < 6 && !on; attempt++) {
+    await fillBox(page.locator("#ask-input"), text);
+    on = await send.isEnabled().catch(() => false);
+    if (!on) await page.waitForTimeout(500);
+  }
+  if (!on) {
+    const note = await page.locator(".ask-composer .ask-disabled-note").innerText().catch(() => "no disabled note");
+    throw new Error(`Send in the Ask box stayed off after typing ${text.length} characters: ${note}`);
+  }
+  await send.click();
+}
+
 // The text a box holds: a Markdown field through its facade, a real input
 // through its value.
 export const boxValue = (locator) => locator.first().evaluate((n) => (n.field ? n.field.value : n.value));

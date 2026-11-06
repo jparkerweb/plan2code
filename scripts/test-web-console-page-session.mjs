@@ -11,7 +11,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
-import { pageSuite, openSession, itemCard, drawn, textOf, tempProject , fillBox, boxValue} from "./page-test-helpers.mjs";
+import { pageSuite, openSession, itemCard, drawn, textOf, tempProject , fillBox, boxValue, sendAsk } from "./page-test-helpers.mjs";
 import { cli, until } from "./web-console-test-helpers.mjs";
 import { STOP_HANDOFF_REPLY, HOME_REPLY } from "../src/web-console/public/answers.js";
 import { CHAT_OFFLINE_TEXT } from "../src/web-console/public/chat.js";
@@ -757,8 +757,7 @@ test("answers a working agent has not collected bring up the saved-and-waiting l
 test("a card sent while the agent answers an Ask message says it is answering, and not running only after ten minutes", async (t) => {
   const s = await openSession(await suite.browser(), { t, workflow: "plan", clock: true, payload: PLAN_QUESTION });
   await s.page.locator("nav").getByRole("button", { name: "Ask", exact: true }).click();
-  await fillBox(s.page.locator("#ask-input"), "What does the export include?");
-  await s.page.locator(".ask-composer").getByRole("button", { name: "Send", exact: true }).click();
+  await sendAsk(s.page, "What does the export include?");
   const got = s.wait(10);
   assert.equal(got.code, 0, `the Ask message was not handed over (wait exit ${got.code})`);
   await s.page.locator("#views").getByRole("button", { name: /^Questions/ }).click();

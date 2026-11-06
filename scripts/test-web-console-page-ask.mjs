@@ -9,7 +9,7 @@
 
 import test from "node:test";
 import assert from "node:assert/strict";
-import { pageSuite, openSession, itemCard, textOf , fillBox, boxValue} from "./page-test-helpers.mjs";
+import { pageSuite, openSession, itemCard, textOf , fillBox, boxValue, sendAsk, settled } from "./page-test-helpers.mjs";
 import { reportedHelper } from "./web-console-test-helpers.mjs";
 import { readChat } from "../src/web-console/inbox.mjs";
 
@@ -56,9 +56,7 @@ async function openAsk(s) {
 
 // Types a question and presses Send in the Ask pane.
 async function askQuestion(s, text) {
-  const box = s.page.locator("#ask-input");
-  await fillBox(box, text);
-  await s.page.locator(".ask-composer").getByRole("button", { name: "Send", exact: true }).click();
+  await sendAsk(s.page, text);
 }
 
 // What a person sees break: a question typed in Ask that never reaches the
@@ -199,22 +197,7 @@ test("a picture thumbnail opens the picview from the note tray and a sent Ask me
   await aside.locator(".attach-thumb.is-ready").waitFor();
   // The tray can redraw a moment after an upload lands (the state it rides on arrives by event),
   // and a redraw after Esc would take the restored focus with the old button: let it go quiet first.
-  await aside.evaluate(
-    (n) =>
-      new Promise((resolve) => {
-        let timer;
-        const done = () => {
-          observer.disconnect();
-          resolve();
-        };
-        const observer = new MutationObserver(() => {
-          clearTimeout(timer);
-          timer = setTimeout(done, 500);
-        });
-        observer.observe(n, { subtree: true, childList: true, attributes: true });
-        timer = setTimeout(done, 500);
-      })
-  );
+  await settled(s.page, "#aside");
 
   await aside.locator(".attach-open").click();
   await s.page.locator("#picview[open]").waitFor();
@@ -234,8 +217,7 @@ test("a picture thumbnail opens the picview from the note tray and a sent Ask me
   const comp = s.page.locator(".ask-composer");
   await comp.locator('input[type="file"]').setInputFiles({ name: "shot2.png", mimeType: "image/png", buffer: PNG });
   await comp.locator(".attach-thumb.is-ready").waitFor();
-  await fillBox(box, "See the screenshot.");
-  await s.page.locator(".ask-composer").getByRole("button", { name: "Send", exact: true }).click();
+  await sendAsk(s.page, "See the screenshot.");
   const sent = s.page.locator(".ask-row.person .attach-thumb").last();
   await sent.waitFor();
   await sent.locator(".attach-open").click();
