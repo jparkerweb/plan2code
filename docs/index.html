@@ -133,7 +133,7 @@ h3 { font-size: 1.45rem; margin: 8px 0; }
 .copy.-done .clip { display: none; }
 .copy.-done .tick { display: block; }
 .before { margin: 22px auto 0; max-width: 640px; text-align: left; background: var(--panel); border: 1px solid var(--rule-2); border-radius: var(--radius); padding: 14px 18px; font-size: 15px; }
-.before .bh { margin: 0 0 8px; font: 700 1.05rem var(--serif); }
+.before h3 { margin: 0 0 8px; font: 700 1.05rem var(--serif); }
 .before ul { margin: 0; padding-left: 20px; color: var(--ink-2); }
 .before li { margin: 4px 0; }
 .before strong { color: var(--ink); }
@@ -393,14 +393,8 @@ footer a { color: inherit; }
     <svg class="planny" style="margin:0 auto 6px" viewBox="0 0 22 30" aria-hidden="true" focusable="false" data-mood="up"><rect class="foot" x="5.7" y="27.1" width="3.6" height="1.7" rx="0.85"/><rect class="foot" x="12.7" y="27.1" width="3.6" height="1.7" rx="0.85"/><rect class="shell" x="3" y="7" width="16" height="20" rx="3.2"/><path class="eye" d="M11 10.95 L11.79 12.91 L13.9 13.06 L12.28 14.42 L12.79 16.47 L11 15.35 L9.21 16.47 L9.72 14.42 L8.1 13.06 L10.21 12.91 Z"/><path class="smile" d="M8.3 18.4 Q11 21 13.7 18.4"/><g class="arms"><g class="a-up"><g class="arm"><path d="M3 16.5 L1.1 13.7"/><circle cx="1.1" cy="13.7" r="0.85"/></g><g class="arm"><path d="M19 16.5 L20.9 13.7"/><circle cx="20.9" cy="13.7" r="0.85"/></g></g></g></svg>
     <h1 id="hero-title">Your agent and your plan, in one window.</h1>
     <p class="lede">Plan2Code is a short, structured workflow where your AI agent asks, you decide, and the specs land in your repo as plain files. Version 3 adds an optional desktop app that holds the dashboard and your agent side by side.</p>
-    <div class="cmd">
-      <pre id="install-cmd"><span aria-hidden="true">$ </span>npx --allow-git=all git+https://github.com/jparkerweb/plan2code.git</pre>
-      <button class="copy" type="button" aria-label="Copy the install command"><svg class="clip" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><svg class="tick" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12.5 9.5 18 20 6.5"/></svg><span class="label">Copy</span></button>
-    </div>
-    <p class="then">then, from your project, run <code>plan2code</code> (Claude Code, Devin or Codex), or type <code>/plan2code</code> in your agent (<code>$plan2code</code> in Codex).</p>
-    <p class="links-row"><a href="#terminal">Prefer the terminal?</a> <a href="#workflow">See the workflow</a> <a href="#v3">What is new in v3</a></p>
     <div class="before">
-      <p class="bh">Before you start</p>
+      <h3>Before you start</h3>
       <ul>
         <li><strong>Node.js 18 or newer.</strong> Check with <code>node --version</code>. No Node? Get it from <a href="https://nodejs.org/">nodejs.org</a> (the LTS download), or run <code>winget install OpenJS.NodeJS.LTS</code> on Windows, <code>brew install node</code> on macOS, or use <code>nvm</code> on Linux. Then open a new terminal.</li>
         <li><strong>Start from your project.</strong> Open your terminal in the project you want to work on (<code>cd</code> into it) before you run anything. Plan2Code works on the folder you start it in.</li>
@@ -408,6 +402,12 @@ footer a { color: inherit; }
         <li><strong>No agent yet?</strong> Install Claude Code, Codex or Devin first, or let the <code>plan2code</code> command's setup page walk you through it.</li>
       </ul>
     </div>
+    <div class="cmd">
+      <pre id="install-cmd"><span aria-hidden="true">$ </span>npx --allow-git=all git+https://github.com/jparkerweb/plan2code.git</pre>
+      <button class="copy" type="button" aria-label="Copy the install command"><svg class="clip" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><svg class="tick" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12.5 9.5 18 20 6.5"/></svg><span class="label">Copy</span></button>
+    </div>
+    <p class="then">then, from your project, run <code>plan2code</code> (Claude Code, Devin or Codex), or type <code>/plan2code</code> in your agent (<code>$plan2code</code> in Codex).</p>
+    <p class="links-row"><a href="#terminal">Prefer the terminal?</a> <a href="#workflow">See the workflow</a> <a href="#v3">What is new in v3</a></p>
   </div>
 </section>
 
@@ -859,15 +859,8 @@ plan2code --classic
   <div class="narrow">
     <h2 id="install-title">Install</h2>
     <p class="muted">Run it again any time to update.</p>
-    <div class="cmd">
-      <pre><span aria-hidden="true">$ </span>npx --allow-git=all git+https://github.com/jparkerweb/plan2code.git</pre>
-      <button class="copy" type="button" aria-label="Copy the install command"><svg class="clip" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><svg class="tick" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12.5 9.5 18 20 6.5"/></svg><span class="label">Copy</span></button>
-    </div>
-    <p class="then">then, from your project, run <code>plan2code</code> (Claude Code, Devin or Codex), or type <code>/plan2code</code> in your agent (<code>$plan2code</code> in Codex).</p>
-    <p class="then">It always opens a menu; no output at all means npm could not reach the repository and hid the reason: <code>git ls-remote https://github.com/jparkerweb/plan2code.git</code> shows why.</p>
-    <p class="app-note">The installer also offers the desktop app. Answer Y to install it: the file is checked against the release's checksum before it is kept. There are builds for Windows x64, macOS (Apple silicon and Intel) and Linux x64, and the app needs Node.js 18 or newer. Plan2Code works without it.</p>
     <div class="before">
-      <p class="bh">Before you start</p>
+      <h3>Before you start</h3>
       <ul>
         <li><strong>Node.js 18 or newer.</strong> Check with <code>node --version</code>. No Node? Get it from <a href="https://nodejs.org/">nodejs.org</a> (the LTS download), or run <code>winget install OpenJS.NodeJS.LTS</code> on Windows, <code>brew install node</code> on macOS, or use <code>nvm</code> on Linux. Then open a new terminal.</li>
         <li><strong>Start from your project.</strong> Open your terminal in the project you want to work on (<code>cd</code> into it) before you run anything. Plan2Code works on the folder you start it in.</li>
@@ -875,6 +868,13 @@ plan2code --classic
         <li><strong>No agent yet?</strong> Install Claude Code, Codex or Devin first, or let the <code>plan2code</code> command's setup page walk you through it.</li>
       </ul>
     </div>
+    <div class="cmd">
+      <pre><span aria-hidden="true">$ </span>npx --allow-git=all git+https://github.com/jparkerweb/plan2code.git</pre>
+      <button class="copy" type="button" aria-label="Copy the install command"><svg class="clip" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><svg class="tick" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12.5 9.5 18 20 6.5"/></svg><span class="label">Copy</span></button>
+    </div>
+    <p class="then">then, from your project, run <code>plan2code</code> (Claude Code, Devin or Codex), or type <code>/plan2code</code> in your agent (<code>$plan2code</code> in Codex).</p>
+    <p class="then">It always opens a menu; no output at all means npm could not reach the repository and hid the reason: <code>git ls-remote https://github.com/jparkerweb/plan2code.git</code> shows why.</p>
+    <p class="app-note">The installer also offers the desktop app. Answer Y to install it: the file is checked against the release's checksum before it is kept. There are builds for Windows x64, macOS (Apple silicon and Intel) and Linux x64, and the app needs Node.js 18 or newer. Plan2Code works without it.</p>
   </div>
 </section>
 

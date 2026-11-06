@@ -4,18 +4,80 @@ on:
   push:
     branches: [main]
   pull_request:
+    types: [opened, synchronize, reopened, labeled]
+  # Run the full three-system matrix by hand on any branch.
+  workflow_dispatch:
 
 permissions:
   contents: read
 
+# A newer push to a pull request replaces its still-running checks. A push to main always
+# finishes, so a merged change is never left half checked.
+concurrency:
+  group: app-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# Speed: a pull request runs on Ubuntu only (the cheapest runner) unless it carries the
+# `full-matrix` label; pushes to main and manual runs use all three systems. A change that
+# touches only the website, the README, the changelog or similar skips the heavy jobs and runs
+# the fast `prose` job instead, which keeps the checks that read those files.
 jobs:
+  changes:
+    name: changes
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.diff.outputs.code }}
+    steps:
+      - uses: actions/checkout@v4.2.2
+        with:
+          fetch-depth: 0
+      - id: diff
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "${{ github.event_name }}" in
+            pull_request) base="${{ github.event.pull_request.base.sha }}" ;;
+            push) base="${{ github.event.before }}" ;;
+            *) base="" ;;
+          esac
+          # A manual run, a new branch or a base git cannot find: run everything.
+          if [ -z "$base" ] || [ "$base" = "0000000000000000000000000000000000000000" ] || ! git cat-file -e "$base^{commit}" 2>/dev/null; then
+            echo "code=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          files="$(git diff --name-only "$base" HEAD)"
+          echo "Changed files:"; echo "$files"
+          # .readme/, AGENTS.md and .agents-docs/ are read by tests, so they count as code.
+          if [ -n "$files" ] && ! echo "$files" | grep -qvE '^(docs/|prototypes/|README\.md$|CHANGELOG\.md$|QUICK-REFERENCE\.md$|LICENSE$)'; then
+            echo "code=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "code=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  prose:
+    name: prose checks
+    needs: changes
+    if: needs.changes.outputs.code == 'false'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - uses: actions/setup-node@v4.4.0
+        with:
+          node-version: 20
+      - name: Versions agree
+        run: node scripts/check-versions.mjs
+      - name: Spelling, install command in the docs, line endings
+        run: node --test scripts/test-us-english.mjs scripts/test-getting-started.mjs scripts/test-line-endings.mjs scripts/test-check-versions.mjs
+
   app:
     name: app (${{ matrix.os }})
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, macos-latest, ubuntu-latest]
+        os: ${{ fromJSON(github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'full-matrix') && '["ubuntu-latest"]' || '["windows-latest","macos-latest","ubuntu-latest"]') }}
     defaults:
       run:
         working-directory: plan2code-app
@@ -90,16 +152,19 @@ jobs:
 
   node-tests:
     name: npm test (${{ matrix.os }})
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, macos-latest, ubuntu-latest]
+        os: ${{ fromJSON(github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'full-matrix') && '["ubuntu-latest"]' || '["windows-latest","macos-latest","ubuntu-latest"]') }}
     steps:
       - uses: actions/checkout@v4.2.2
       - uses: actions/setup-node@v4.4.0
         with:
           node-version: 20
+          cache: npm
       - run: npm install
       - run: npm test
       - name: Metrics tests
