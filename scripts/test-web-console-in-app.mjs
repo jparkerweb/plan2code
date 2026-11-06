@@ -370,6 +370,9 @@ test("framed, an Activities game in full screen asks the app for the whole scree
   await s.page.keyboard.press("f");
   await s.page.keyboard.press("Escape");
   assert.deepEqual(await told(), [true, false, true, false], "F and Esc each give it back");
+  // The focus comes back to the board a moment after leaving full screen: an F pressed before
+  // that goes nowhere (seen on slow runners).
+  await s.page.waitForFunction(() => document.activeElement && document.activeElement.id === "activities-board");
   await s.page.keyboard.press("f");
   s.post({ items: [{ id: "q2", kind: "text", title: "Who uses it", body: "Who opens the export?" }], agent: { status: "waiting" } });
   // Wait for both new messages: the list already ends in false, so checking only its last item passed at once.

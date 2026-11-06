@@ -193,7 +193,10 @@ const eventsOf = (round, type) => round.events.filter((e) => e.type === type);
 // A rival of `kind` put at (x, d), still and on the ground, going nowhere on
 // its own.
 function bounceRival(round, kind, x, d, over = {}) {
-  const car = bounce.spawnRival(round, kind, steady, round.cars[0].d + 300);
+  // A rival only spawns on plain road, and the road is generated at random: a crack or a bridge can
+  // sit at the first spot tried, so try further along until one takes. The rival is moved anyway.
+  let car = null;
+  for (let at = round.cars[0].d + 300; !car && at < round.cars[0].d + 3000; at += 40) car = bounce.spawnRival(round, kind, steady, at);
   assert.ok(car, `a ${kind} spawns`);
   Object.assign(car, { x, d, v: 0, tv: 0, vx: 0, kx: 0, air: 0, tx: x, lane: x, hopIn: 1e9, dropIn: 1e9, mode: "calm", ...over });
   return car;
