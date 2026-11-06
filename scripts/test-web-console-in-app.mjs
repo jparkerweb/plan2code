@@ -364,18 +364,23 @@ test("framed, an Activities game in full screen asks the app for the whole scree
   await s.page.locator('.activities-card[data-activity="snake"]').click();
   await s.page.locator("#activities-board").waitFor();
   const told = async () => (await toApp(s, "activities-full")).map((m) => m.on);
-  await s.page.keyboard.press("f");
+  // Each key asks the browser for its own full screen too, and the browser answers a moment
+  // later: keys fired faster than a person could press them let a late answer to one undo the
+  // next (seen on slow runners). Pace them: wait for the message to the app, then let the
+  // browser settle.
+  const pace = async (key, count) => {
+    await s.page.keyboard.press(key);
+    await until(async () => (await told()).length >= count, 5000);
+    await s.page.waitForTimeout(250);
+  };
+  await pace("f", 1);
   assert.deepEqual(await told(), [true], "a named request with one boolean");
-  await s.page.keyboard.press("f");
-  await s.page.keyboard.press("f");
-  await s.page.keyboard.press("Escape");
+  await pace("f", 2);
+  await pace("f", 3);
+  await pace("Escape", 4);
   assert.deepEqual(await told(), [true, false, true, false], "F and Esc each give it back");
-  // The focus comes back to the board a moment after leaving full screen: an F pressed before
-  // that goes nowhere (seen on slow runners).
-  await s.page.waitForFunction(() => document.activeElement && document.activeElement.id === "activities-board");
-  await s.page.keyboard.press("f");
+  await pace("f", 5);
   s.post({ items: [{ id: "q2", kind: "text", title: "Who uses it", body: "Who opens the export?" }], agent: { status: "waiting" } });
-  // Wait for both new messages: the list already ends in false, so checking only its last item passed at once.
   await until(async () => (await told()).length >= 6, 5000);
   assert.deepEqual(await told(), [true, false, true, false, true, false], "and so does a new question");
 });
