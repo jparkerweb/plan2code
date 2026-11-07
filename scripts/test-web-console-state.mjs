@@ -33,6 +33,7 @@ test("state: the rest of the shared state starts as app.js always started it", (
   const { S, local, selected, view, ...rest } = page;
   assert.deepEqual(rest, {
     agentLastSeen: null,
+    agentsDoc: { open: "AGENTS.md", texts: {} },
     pendingResult: false,
     pendingStop: false,
     pendingBannerUp: false,
