@@ -37,8 +37,8 @@ export const DEFAULT_LOOKS = {
   // course (activityBestGolfPirate), each a flat key for cleanLooks().
   hideActivities: true,
   activitySounds: true,
-  // Whether a game plays its music too (chiptune or recorded songs): off until asked for.
-  gameMusic: false,
+  // Whether a game plays its music too (chiptune or recorded songs): on, like the sounds.
+  gameMusic: true,
   lastActivity: "",
   ...Object.fromEntries(ACTIVITIES.flatMap((a) => bestKeys(a).map((key) => [key, 0]))),
   // And one memo per game (activityMemoSnake): Snake's surprises found.

@@ -550,8 +550,8 @@ Drive has a song for each road, Snake a different one at every level, dealt from
 the start of a round so none repeats, and Ghoul Rush a track for each room, played at
 one steady level and fuller in a boss fight), and Light Trails and Flock Dash play five
 recorded songs each as background music, each in full, one after another in an
-order shuffled for every run: turn on **Play activity music** in **User
-Preferences → Sounds & activities** (it starts off). **Play activity sounds** there turns the games'
+order shuffled for every run: **Play activity music** in **User
+Preferences → Sounds & activities** is on by default (turn it off there). **Play activity sounds** there turns the games'
 sounds (the 3, 2, 1 and the new-best burst included) and their music on or
 off and leaves the page's own cues alone; the **Play sounds** switch above it
 silences all of it, and a paused or closed game goes quiet at once. A game

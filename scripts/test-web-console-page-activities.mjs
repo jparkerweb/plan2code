@@ -1259,12 +1259,12 @@ test("Play activity sounds in User Preferences silences the games and the countd
   await s.page.click("#btn-looks");
   await s.page.click("#prefs-tab-sounds");
   const tune = s.page.locator("#looks-game-music");
-  assert.equal(await tune.isChecked(), false, "game music is off by default");
-  await tune.check();
-  await s.page.waitForFunction(async () => ((await (await fetch("/looks")).json()).looks || {}).gameMusic === true);
+  assert.equal(await tune.isChecked(), true, "game music is on by default");
+  await tune.uncheck();
+  await s.page.waitForFunction(async () => ((await (await fetch("/looks")).json()).looks || {}).gameMusic === false);
   await s.page.click("#looks-reset");
   await s.page.locator("#looks-activity-sounds:checked").waitFor();
-  await s.page.waitForFunction(async () => ((await (await fetch("/looks")).json()).looks || {}).gameMusic === false);
+  await s.page.waitForFunction(async () => ((await (await fetch("/looks")).json()).looks || {}).gameMusic === true);
   await s.page.waitForFunction(async () => ((await (await fetch("/looks")).json()).looks || {}).activitySounds === true);
 });
 
