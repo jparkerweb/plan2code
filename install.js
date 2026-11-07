@@ -2759,7 +2759,8 @@ async function installDesktopApp({ quiet = false, unattended = false, outcome = 
   }
   recordInstalled('app');
   console.log(`  ${COLORS.GREEN}${SYMBOLS.SUCCESS}${COLORS.RESET} Installed: ${APP_DEST}`);
-  console.log(`  ${COLORS.YELLOW}${SYMBOLS.WARNING}${COLORS.RESET} The app is unsigned, and it starts the agent with permission checks off. See docs/desktop-app.md for how to allow it on macOS and Windows.`);
+  console.log(`  ${COLORS.YELLOW}${SYMBOLS.WARNING}${COLORS.RESET} The app is unsigned, and it starts the agent with permission checks off.`);
+  console.log(`  ${COLORS.YELLOW}${SYMBOLS.WARNING}${COLORS.RESET} See docs/desktop-app.md for how to allow it on macOS and Windows if needed.`);
   console.log('');
   outcome.app = true;
   return 0;
