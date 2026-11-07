@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Plan2Code",
-  "version": "3.0.3",
+  "version": "3.0.4",
   "identifier": "com.plan2code.desktop",
   "build": {
     "frontendDist": "../ui",

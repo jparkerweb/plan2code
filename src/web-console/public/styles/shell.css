@@ -282,6 +282,19 @@ h1 {
   padding-right: 32px;
 }
 
+/* The agent setup page is the column's whole contents too, and its agent list
+   runs past the fold, so it scrolls itself like the menu above. */
+.main > .setup-screen {
+  flex: 0 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+/* Its parts keep their height: the agent list clips its own overflow, so left
+   to shrink it would be cut at the fold instead of scrolling. */
+.main > .setup-screen > * { flex-shrink: 0; }
+
 /* The column itself never scrolls; the card does. The git board is the one
    exception, below: its card sits in the board's card slot, so the column
    takes the scroll there and card and board flow through it at natural height. */

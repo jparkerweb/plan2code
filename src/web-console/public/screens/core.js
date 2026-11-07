@@ -71,7 +71,7 @@ import { renderAgentsDoc, renderBriefButton, renderDoc, renderOverview } from ".
 import { board, renderGitBoard, resetBoard } from "./git-host.js";
 import { renderWorkspace, tellFolderIssues } from "./workspace.js";
 import { openHelpOn } from "./help-dialog.js";
-import { linkLeavesPage, onAppMessage, startNewSession, tellApp } from "../app-bridge.js";
+import { framed, linkLeavesPage, onAppMessage, startNewSession, tellApp } from "../app-bridge.js";
 import { continueButton } from "../continue-button.js";
 import { askOfflineFlipped, askState, declineOpen, renderAside, renderAsk, renderSubagents, renderSubagentsButton } from "./ask.js";
 import { renderHandoff, renderLoopEnd, renderHomeButton, renderStopButton, renderStopControls, renderStopping, stopInProgress, stopWarning } from "./ending.js";
@@ -2251,11 +2251,13 @@ export function wireChrome() {
 
   // Under the app, a link off the page goes to the default browser through
   // the console: the app's window opens no new ones, so the click alone would
-  // do nothing. Capture phase, ahead of any handler on the link itself.
+  // do nothing. Capture phase, ahead of any handler on the link itself. The
+  // setup page runs in the app's frame without the in-app flag (the app starts
+  // its console without it), so a framed page counts too.
   document.addEventListener(
     "click",
     (e) => {
-      if (!page.inApp || e.defaultPrevented || !(e.target instanceof Element)) return;
+      if (!(page.inApp || framed()) || e.defaultPrevented || !(e.target instanceof Element)) return;
       const a = e.target.closest("a[href]");
       if (!a || !linkLeavesPage(a.href, location.origin)) return;
       e.preventDefault();

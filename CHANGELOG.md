@@ -2,6 +2,14 @@
 
 All notable changes to Plan2Code will be documented in this file.
 
+## v3.0.4
+
+### 🐛 Fixed
+
+- **desktop app**: the agent setup page's **Back** button now sits in the app's top bar instead of floating over the page, where it covered the settings and help icons.
+- **web console**: the agent setup page's middle pane now scrolls, so the agent options below the fold (the rest of the list and the templates) can be reached. The list used to be cut off with no scrollbar.
+- **web console**: the **Install page** link on the agent setup page now opens in your default browser inside the desktop app. It did nothing there, because the page was not told it was running in the app.
+
 ## v3.0.3
 
 ### 🐛 Fixed

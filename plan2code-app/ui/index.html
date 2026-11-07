@@ -193,11 +193,7 @@
     /* Set up an agent, shown wherever the app says "no agent". */
     .setup-agent-btn { font: inherit; font-size: 12px; margin-top: 4px; padding: 3px 10px; cursor: pointer;
       background: var(--accent); color: var(--accent-ink); border: 1px solid var(--accent); border-radius: 4px; }
-    /* The way out of the setup page, over its frame. */
-    #setup-close { position: absolute; top: 10px; right: 10px; z-index: 2; font: inherit; font-size: 12px;
-      padding: 4px 10px; border-radius: 6px; cursor: pointer; border: 1px solid var(--rule-2);
-      background: var(--panel); color: var(--ink); }
-    #setup-close:hover { background: var(--panel-2); }
+    /* The way out of the setup page: a bar button, so it never covers the page. */
     #setup-close[hidden] { display: none; }
     #launch-missing code { color: #ddd; }
     #launch-agents-warning { margin: 0; font-size: 12px; color: #d7ba7d; white-space: pre-line; }
@@ -291,6 +287,8 @@
       <span id="agent-none">No agent</span>
       <span id="agent-status" role="status"></span>
       <span id="bar-grow"></span>
+      <!-- Shown only on the agent setup page, in the bar rather than over its frame. -->
+      <button id="setup-close" type="button" hidden>Back</button>
       <!-- The console's or the skills' one next step (meter.js barNextSteps), when there is one. -->
       <span id="next-step" role="status" hidden>
         <span id="next-step-text"></span>
@@ -332,7 +330,6 @@
   <div id="workspace">
     <main id="dashboard">
       <iframe id="console-frame" title="Plan2Code console dashboard" allow="clipboard-write"></iframe>
-      <button id="setup-close" type="button" hidden>Back</button>
       <div id="dashboard-state" hidden>
         <!-- Planny on a coffee break: shown only before a New Session press,
              the one state here that is a question rather than a status. The

@@ -25,7 +25,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { pageSuite, openSession, tempProject, textOf } from "./page-test-helpers.mjs";
+import { pageSuite, openSession, tempProject, textOf, scrollCard } from "./page-test-helpers.mjs";
 import { cli, sessionUrl, readState, until, MODELS_DIR } from "./web-console-test-helpers.mjs";
 
 const suite = pageSuite(test);
@@ -378,6 +378,45 @@ test("a /handover post with the setup token moves the page to the new session", 
   assert.equal(res.status, 204);
   // The sign-in link sets the session cookie and lands on the session's root.
   await s.page.waitForURL((u) => u.origin === target.base && u.pathname === "/", { timeout: 15000 });
+});
+
+test("in the app's frame, the Install page link opens in the default browser through the console", async (t) => {
+  const f = agentFixtures(t);
+  // The app starts the setup console without the in-app flag: only the frame says it is there.
+  const s = await openSession(await suite.browser(), {
+    t,
+    workflow: "setup",
+    env: f.env,
+    init: () => Object.defineProperty(window, "parent", { configurable: true, get: () => ({ postMessage() {} }) }),
+  });
+  const asked = [];
+  await s.page.route("**/open-link", async (route) => {
+    asked.push(route.request().postDataJSON());
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true }) });
+  });
+  let popups = 0;
+  s.page.context().on("page", () => popups++);
+  const gone = await pick(s, "gone", "Gone Agent");
+  await gone.locator("a", { hasText: "Install page" }).click();
+  await until(async () => asked.length === 1, 5000);
+  assert.deepEqual(asked, [{ url: "https://example.com/gone" }]);
+  await new Promise((r) => setTimeout(r, 300));
+  assert.equal(popups, 0, "no window opened inside the app");
+});
+
+test("the setup page scrolls its own pane so every agent option can be reached", async (t) => {
+  const f = agentFixtures(t);
+  const s = await openSession(await suite.browser(), { t, workflow: "setup", env: f.env });
+  await s.page.locator(".setup-screen").waitFor();
+  await rowByKey(s, "gone").waitFor();
+  // A short window: the list and the buttons under it run past the fold.
+  await s.page.setViewportSize({ width: 1200, height: 520 });
+  const screen = s.page.locator(".setup-screen");
+  // scrollCard fails unless the pane holds a scroll, so a clipped pane fails here.
+  await scrollCard(screen, "end");
+  const check = s.page.locator(".setup-actions button", { hasText: "Check again" });
+  const [box, pane] = await Promise.all([check.boundingBox(), screen.boundingBox()]);
+  assert.ok(box.y + box.height <= pane.y + pane.height + 1, "the last control is reachable at the pane's bottom");
 });
 
 test("the setup page keeps no agent-silence UI: no adrift or offline lines, no Ask, top bar down to Help", async (t) => {
