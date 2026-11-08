@@ -8,11 +8,13 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import { SPEC_STATES as TABLE, stateFor } from "../src/web-console/public/spec-states.js";
 import { SKILLS } from "../src/web-console/public/skills.js";
 import { SKILL_CATALOG, cardAvailability, defaultSpec, launchVariant } from "../src/web-console/public/answers.js";
 import { scanProject } from "../src/web-console/scan.mjs";
-import { MARKERS, TASK_LINE_RE, TASK_ID_RE, CHECKBOX_RE, STATUS_RE, statusOf, countTasks } from "../src/web-console/spec-files.mjs";
+import { MARKERS, TASK_LINE_RE, TASK_ID_RE, CHECKBOX_RE, STATUS_RE, statusOf, countTasks, deriveSpecState, pickPhaseFiles } from "../src/web-console/spec-files.mjs";
 
 // The task pattern specs.mjs used before spec-files.mjs: TASK_ID_RE must take
 // a `-` task line apart into the same groups.
@@ -68,10 +70,11 @@ test("spec files: countTasks() counts task lines only when there are any, every 
     "- [ ] It works",
     "- [x] It is fast",
   ].join("\r\n");
-  assert.deepEqual(countTasks(phase), { done: 1, assumed: 1, open: 3, total: 5 });
+  // [~] is an unknown marker: not done, so it counts as open.
+  assert.deepEqual(countTasks(phase), { done: 1, assumed: 1, open: 3, blocked: 1, bare: 1, total: 6 });
   const older = "# Phase 1\n\n- [x] Make it\n- [ ] Ship it\n- [?] Check it\n";
-  assert.deepEqual(countTasks(older), { done: 1, assumed: 1, open: 1, total: 3 });
-  assert.deepEqual(countTasks(""), { done: 0, assumed: 0, open: 0, total: 0 });
+  assert.deepEqual(countTasks(older), { done: 1, assumed: 1, open: 1, blocked: 0, bare: 0, total: 3 });
+  assert.deepEqual(countTasks(""), { done: 0, assumed: 0, open: 0, blocked: 0, bare: 0, total: 0 });
 });
 
 // What the picker labels each state and which card each state lights, as
@@ -485,6 +488,95 @@ test("the scan: an assumed task counts as done and is named, and numbered task l
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
+});
+
+// The seven cases where the dashboard scan and specs.mjs once disagreed
+// (recorded in the hardening spec's Phase 5 notes; the same cases are in
+// test-skill-scripts.mjs). Each is a spec folder and the
+// [state, detail, finalizeReady] both must now report.
+const DESYNC_CHECKLIST = (...marks) => `# Overview\n\n## Phase Checklist\n\n${marks.map((m, i) => `- [${m}] [Phase ${i + 1}: Step ${i + 1}](./phase-${i + 1}.md)`).join("\n")}\n`;
+const DESYNC_PHASE = (n, lines) => `# Phase ${n}: Step ${n}\n\n**Status:** In Progress\n\n## Tasks\n\n${lines.join("\n")}\n\n## Acceptance Criteria\n\n- It works\n`;
+const DESYNC_CASES = {
+  "blocked-reasoned": {
+    files: { "overview.md": DESYNC_CHECKLIST("x"), "phase-1.md": DESYNC_PHASE(1, ["- [x] **Task 1.1:** One", "- [!] **Task 1.2:** Two", "  > BLOCKED: needs admin access. User action: create the app."]) },
+    want: ["building", "1 of 2 tasks done, 1 blocked", true],
+  },
+  "unknown-marker": {
+    files: { "overview.md": DESYNC_CHECKLIST("/"), "phase-1.md": DESYNC_PHASE(1, ["- [x] **Task 1.1:** One", "- [~] **Task 1.2:** Two"]) },
+    want: ["building", "1 of 2 tasks done", false],
+  },
+  "row-without-file": {
+    files: { "overview.md": DESYNC_CHECKLIST("x", " "), "phase-1.md": DESYNC_PHASE(1, ["- [x] **Task 1.1:** One", "- [x] **Task 1.2:** Two"]) },
+    want: ["building", "2 of 2 tasks done, Phase 2 not written up", false],
+  },
+  "phase-without-tasks": {
+    files: { "overview.md": DESYNC_CHECKLIST("x", " "), "phase-1.md": DESYNC_PHASE(1, ["- [x] **Task 1.1:** One"]), "phase-2.md": DESYNC_PHASE(2, ["To be written."]) },
+    want: ["building", "1 of 1 tasks done, Phase 2 not written up", false],
+  },
+  "stale-duplicate": {
+    files: { "overview.md": DESYNC_CHECKLIST("x"), "phase-1.md": DESYNC_PHASE(1, ["- [x] **Task 1.1:** One"]), "phase-1-old.md": DESYNC_PHASE(1, ["- [ ] **Task 1.1:** One", "- [ ] **Task 1.2:** Two"]) },
+    want: ["built", "all tasks done", false],
+  },
+  "not-a-phase-file": {
+    files: { "overview.md": DESYNC_CHECKLIST("x"), "phase-1.md": DESYNC_PHASE(1, ["- [x] **Task 1.1:** One"]), "phase-notes.md": "# Notes\n\n- [ ] Ask about colors\n" },
+    want: ["built", "all tasks done", false],
+  },
+  "blocked-bare": {
+    files: { "overview.md": DESYNC_CHECKLIST("x"), "phase-1.md": DESYNC_PHASE(1, ["- [x] **Task 1.1:** One", "- [!] **Task 1.2:** Two"]) },
+    want: ["building", "1 of 2 tasks done, 1 blocked", false],
+  },
+};
+
+const SPECS_SCRIPT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "src", "skill-scripts", "specs.mjs");
+
+test("the scan: the dashboard and specs.mjs status report the same state on the seven desync cases", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "p2c-spec-desync-"));
+  try {
+    for (const [name, c] of Object.entries(DESYNC_CASES))
+      for (const [rel, text] of Object.entries(c.files)) {
+        fs.mkdirSync(path.join(root, "specs", name), { recursive: true });
+        fs.writeFileSync(path.join(root, "specs", name, rel), text);
+      }
+    const by = Object.fromEntries(scanProject(root).specs.map((sp) => [sp.name, sp]));
+    for (const [name, c] of Object.entries(DESYNC_CASES)) {
+      assert.deepEqual([by[name].state, by[name].detail, Boolean(by[name].finalizeReady)], c.want, `${name}: the dashboard scan`);
+      const r = spawnSync(process.execPath, [SPECS_SCRIPT, "status", name, "--root", root], { encoding: "utf8" });
+      assert.equal(r.status, 0, r.stderr);
+      const st = JSON.parse(r.stdout);
+      assert.deepEqual([st.state, st.stateDetail, st.finalizeReady], c.want, `${name}: specs.mjs status`);
+    }
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("deriveSpecState: blocked tasks keep a spec building, and finalizeReady needs a reason on each", () => {
+  const phase = (lines) => [{ number: 1, text: `# Phase 1\n\n${lines.join("\n")}\n` }];
+  const ready = deriveSpecState({ phases: phase(["- [x] **Task 1.1:** One", "- [!] **Task 1.2:** Two Blocked: no key yet", "- [!] **Task 1.3:** Three", "  Reason: waiting on legal"]) });
+  assert.deepEqual([ready.state, ready.detail, ready.finalizeReady, ready.blocked, ready.bare], ["building", "1 of 3 tasks done, 2 blocked", true, 2, 0]);
+  const open = deriveSpecState({ phases: phase(["- [x] **Task 1.1:** One", "- [!] **Task 1.2:** Two", "  > BLOCKED: no key.", "- [ ] **Task 1.3:** Three"]) });
+  assert.deepEqual([open.state, open.finalizeReady], ["building", false], "an open task left keeps Finalize dark");
+  // A reason belongs to its own task: the next task's line does not lend one.
+  const borrowed = deriveSpecState({ phases: phase(["- [x] **Task 1.1:** One", "- [!] **Task 1.2:** Two", "- [x] **Task 1.3:** Blocked: on purpose"]) });
+  assert.deepEqual([borrowed.bare, borrowed.finalizeReady], [1, false]);
+  assert.equal(deriveSpecState({ phases: phase(["- [!] **Task 1.1:** One", "  > BLOCKED: no key."]) }).state, "documented", "nothing done yet is still documented");
+  // An approved phase with no task lines is not waiting to be written up.
+  const approved = deriveSpecState({ overview: "## Phase Checklist\n\n- [x] Phase 1: One\n- [x] Phase 2: Two\n", phases: [...phase(["- [x] **Task 1.1:** One"]), { number: 2, text: "# Phase 2\n" }] });
+  assert.deepEqual([approved.state, approved.unwritten], ["built", []]);
+});
+
+test("pickPhaseFiles: one file per phase number, the exact phase-N.md first, the rest listed as extra", () => {
+  const picked = pickPhaseFiles(["phase-2-old.md", "phase-2.md", "phase-1-setup.md", "phase-notes.md", "overview.md", "phase-10.md"]);
+  assert.deepEqual([...picked.entries()].sort((a, b) => a[0] - b[0]), [[1, "phase-1-setup.md"], [2, "phase-2.md"], [10, "phase-10.md"]]);
+  assert.deepEqual([...picked.extra.entries()], [[2, ["phase-2-old.md"]]]);
+});
+
+test("card rules: Finalize lights for a building spec only when the scan says finalizeReady", () => {
+  const entry = SKILL_CATALOG.find((e) => e.skill === "plan2code-4-finalize");
+  const spec = (extra) => ({ dir: "specs/x", name: "x", state: "building", ...extra });
+  assert.equal(cardAvailability(entry, SCAN, spec({ finalizeReady: true })).on, true);
+  assert.equal(cardAvailability(entry, SCAN, spec({})).on, false);
+  assert.equal(cardAvailability(entry, SCAN, { dir: "specs/x", name: "x", state: "documented", finalizeReady: true }).on, false, "only a building spec");
 });
 
 test("the scan: planChange is true for a waiting Plan change brief, and absent once it is applied or dropped", () => {

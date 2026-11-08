@@ -45,35 +45,13 @@ State:
 
 > 🔬 [Review Mode] Implementation complete; reviewing before sign-off.
 
-Read references/review.md
+Read references/review.md and references/review-in-build.md
 
-Run Review Mode with this explicit scope:
-
-- Scope is **Focused**.
-- Review the exact phase change set tracked in Stage 1, including any relevant tests and documentation changed for the phase.
-- Use overview.md and the active phase file for spec-compliance context; they do not broaden scope to other phases.
-- Read related callers, dependencies, and project files when needed to verify a finding, but do not turn them into unrelated review targets.
-- Review all changed files completely and apply the full focused-review depth required by Review Mode.
-- Review Mode's helper rule applies: a fresh helper runs the analysis when available, at the strength `helper-strength.md` gives for the phase's review (standard and high, or strongest and high when the phase touches security, auth or data), this session verifies every finding, and the Stage 4 report carries the Reviewed by line. The helper's brief carries the phase's `phase-X.md` and its change set only, never Stage 1's work notes.
-
-Override Review Mode's completion and session-end behavior:
-
-1. Do not provide commit instructions or next-conversation routing.
-2. Do not ask the user to approve the review or commit.
-3. If there are findings, present Review Mode's normal `H`, `A`, and `S` fix options and wait for the user's choice.
-4. If there are zero findings, proceed directly to Stage 4.
-5. If the user explicitly declines or defers findings, preserve them as unresolved and proceed to Stage 4.
+Run Review Mode as `references/review-in-build.md` says, over the exact phase change set tracked in Stage 1 (including the relevant tests and documentation changed for the phase). Findings go to the person as Review Mode's `H`, `A` and `S` options; zero findings go straight to Stage 4, and declined or deferred findings stay unresolved.
 
 ## Stage 3: Resolve Findings
 
-When the user selects fixes, follow Review Mode's Post-Fix Flow to plan, apply, and verify them.
-
-- Add every review-fix file to the phase change set.
-- Re-read every file modified by a fix and check for introduced issues.
-- Update the Phase Completion Summary if a fix materially changes the implementation summary or test results.
-- Do not mark the phase complete and do not ask for approval during fix processing.
-- Ignore Review Mode's `Reply approved to commit` instruction; selected-fix verification transitions directly to Stage 4.
-- When selected fixes are verified, preserve any unselected findings as unresolved and proceed to Stage 4.
+When the user selects fixes, apply and verify them as `references/review-in-build.md` says (Fixing). Every review-fix file joins the phase change set. Selected-fix verification goes straight to Stage 4 with any unselected findings kept as unresolved; do not mark the phase complete or ask for approval here.
 
 ## Stage 4: Final Implementation Sign-Off
 

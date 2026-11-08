@@ -671,6 +671,31 @@ test("Cleanup scans the console home and lists an old session folder with its si
   assert.equal(await s.page.locator("#cleanup-delete").isHidden(), true);
 });
 
+// The server refuses to delete a completed spec git does not track as it
+// stands, so the list shows it apart as kept, never as something to delete.
+test("Cleanup lists an untracked completed spec as kept, out of the total and out of Delete", async (t) => {
+  noSavedLooks(t);
+  const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_QUESTION });
+  const spec = path.join(s.project, "specs--completed", "old-spec");
+  fs.mkdirSync(spec, { recursive: true });
+  fs.writeFileSync(path.join(spec, "overview.md"), "x".repeat(2000));
+  backdate(path.join(spec, "overview.md"));
+  backdate(spec);
+
+  await s.page.click("#btn-looks");
+  await s.page.click("#prefs-tab-system");
+  await s.page.click("#cleanup-scan");
+  const list = s.page.locator("#cleanup-list");
+  const kept = list.locator(".cleanup-kept").filter({ hasText: "old-spec" });
+  await kept.waitFor();
+  assert.match(await textOf(kept), /specs--completed\/old-spec\/\s*kept: git does not track it as it stands/);
+  assert.equal(await list.locator(".cleanup-row:not(.cleanup-kept)").filter({ hasText: "old-spec" }).count(), 0, "not listed to delete");
+  const summary = list.locator(".cleanup-summary");
+  if (await summary.count()) assert.doesNotMatch(await textOf(summary), /completed spec/, "not counted in the summary");
+  assert.match(await textOf(s.page.locator("#cleanup-status")), /1 old completed spec is kept: git does not track it as it stands\./);
+  assert.equal(fs.existsSync(spec), true);
+});
+
 /* ------------------------------------------------------------- the tabs */
 
 const tabNames = async (s) => (await s.page.locator("#prefs-tabs [role=tab] .prefs-tab-label").allInnerTexts()).map((x) => x.trim());

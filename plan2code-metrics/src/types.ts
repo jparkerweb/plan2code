@@ -1,15 +1,12 @@
 // All TypeScript interfaces for plan2code-metrics
 
-export interface PromptVersions {
-  plan: string;           // sha256:... plan2code-1-plan.md
-  revise_plan: string;    // plan2code-1b-revise-plan.md
-  document: string;       // plan2code-2-document.md
-  implement: string;      // plan2code-3-implement.md
-  finalize: string;       // plan2code-4-finalize.md
-  init: string;           // plan2code-init.md
-  init_update: string;    // plan2code-init-update.md
-  quick_task: string;     // plan2code-quick-task.md
-}
+/**
+ * SHA-256 fingerprint of every src/plan2code-*.md prompt, keyed by name
+ * (promptKey in collector.ts). The eight prompts recorded before the
+ * collector read the folder keep their old keys: plan, revise_plan, document,
+ * implement, finalize, init, init_update, quick_task.
+ */
+export type PromptVersions = Record<string, string>;
 
 export interface Step1PlanMetrics {
   present: boolean;

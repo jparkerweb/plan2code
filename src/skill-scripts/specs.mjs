@@ -14,7 +14,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { EXIT, fail, out, parseArgs, run, readText, isDir, rel, eol, consoleModule, isoDate, phaseFiles, LOOP_TOKENS, scrapeHits } from "./common.mjs";
+import { EXIT, fail, out, parseArgs, run, readText, isDir, rel, eol, consoleModule, isoDate, LOOP_TOKENS, scrapeHits } from "./common.mjs";
 
 const USAGE = `
 specs.mjs: spec state for the Plan2Code pipeline skills. JSON on stdout.
@@ -25,7 +25,8 @@ specs.mjs: spec state for the Plan2Code pipeline skills. JSON on stdout.
       phase count. Also the names already archived in specs--completed/.
 
   node specs.mjs status <spec> [--root <dir>]
-      One spec in full: the overview's Phase Checklist, Parallel Execution
+      One spec in full: its dashboard state (state, stateDetail,
+      finalizeReady; null before Document), the overview's Phase Checklist, Parallel Execution
       Groups, per-phase task counts by marker, task-numbering problems,
       completion, the implement phase-selection verdict ("next": choose,
       ask-resume, auto-start, checkoff or none), the pending
@@ -37,7 +38,11 @@ specs.mjs: spec state for the Plan2Code pipeline skills. JSON on stdout.
       checkbox under ## Tasks being a "- [ ] **Task N.M:**" line, no loop
       completion token and no bare metric word (outside a METRICS_JSON
       comment) in overview.md or a phase file. An indented "  - Test:"
-      sub-bullet is fine. Exit 4 with the problems when any is an error.
+      sub-bullet is fine. The format rules (a phase file with no Status
+      line, a checkbox under Notes, a task pointing at a line number, a [!]
+      task with no reason) are errors when overview.md carries
+      "<!-- plan2code-format: 2 -->" and warnings otherwise. Exit 4 with the
+      problems when any is an error.
 
   node specs.mjs check-draft <file|spec> [--root <dir>]
       Fail on a malformed PLAN-DRAFT (a path, or a spec's newest non-archived
@@ -62,8 +67,9 @@ specs.mjs: spec state for the Plan2Code pipeline skills. JSON on stdout.
   node specs.mjs mark <spec> --phase <N> --to open|in-progress|done [--dry-run]
       Set phase N's Phase Checklist marker in overview.md ([ ], [/], [x]).
       done also sets the phase file's Status line (**Status:**, **Status**:
-      or Status:) to Complete (and warns if tasks are unfinished); open on a
-      Complete phase sets it to In Progress. Warns when the phase file has no
+      or Status:) to Complete (and warns if tasks are unfinished);
+      in-progress sets it to In Progress, and so does open on a Complete
+      phase. Warns when the phase file has no
       Status line. Refuses a phase with duplicate checklist rows, and refuses
       in-progress -> open (started work stays marked).
 
@@ -76,7 +82,9 @@ specs.mjs: spec state for the Plan2Code pipeline skills. JSON on stdout.
 
   node specs.mjs archive <spec> [--dry-run]
       Move specs/<name>/ to specs--completed/<name>/. Refuses if the target
-      exists, or if <spec> is not a folder directly under specs/.
+      exists, or if <spec> is not a folder directly under specs/. When the
+      move has to copy, the source is removed only after every file name
+      and size at the target matches it.
 
 Markers: [ ] pending · [/] in progress · [x] complete · [!] blocked · [?] assumed.
 Exit: 0 ok · 2 bad arguments · 3 spec not found · 4 cannot parse / check
@@ -123,11 +131,17 @@ function resolveSpec(root, arg, { allowArchived = false } = {}) {
 /* -------------------------------------------------------------- parsing */
 
 // The task markers, the task-line (TASK_RE: marker, phase, task, sub-task
-// suffix), checkbox and Status-line patterns, and statusOf(), come from the web
-// console's spec-files.mjs, so this script and the dashboard read a spec the
-// same way. run() binds them once before any command, so the synchronous
-// readers below keep using them as plain module bindings.
-let MARKERS, TASK_RE, CHECKBOX_RE, STATUS_RE, statusOf;
+// suffix), checkbox and Status-line patterns, statusOf(), the phase-file pick
+// and deriveSpecState() come from the web console's spec-files.mjs, so this
+// script and the dashboard read a spec, and name its state, the same way.
+// run() binds them once before any command, so the synchronous readers below
+// keep using them as plain module bindings.
+let MARKERS, TASK_RE, CHECKBOX_RE, STATUS_RE, statusOf, pickPhaseFiles, deriveSpecState, BLOCK_REASON_RE;
+
+/** A spec folder's phase files by number (Map, with `extra`), as the dashboard picks them. */
+function phaseFiles(dir) {
+  return pickPhaseFiles(fs.readdirSync(dir));
+}
 
 /** A markdown section's lines: from its heading to the next heading of the same or higher level. */
 function section(text, headingRe) {
@@ -413,12 +427,18 @@ function specStatus(spec) {
   for (const p of phases) if (p.tasks) for (const k of Object.keys(totals)) totals[k] += p.tasks[k] || 0;
   const completed = totals.complete + totals.assumed;
   const completion = totals.total ? completed / totals.total : null;
+  // The dashboard's state for this spec, from the same deriveSpecState() its
+  // scan uses (null with no phase files: the scan reads earlier stages then).
+  const derived = files.size ? deriveSpecState({ overview, phases: [...files.keys()].map((n) => ({ number: n, text: readText(path.join(spec.dir, files.get(n))) || "" })) }) : null;
 
   return {
     ok: true,
     spec: spec.rel,
     name: spec.name,
     overview: hasOverview ? "overview.md" : null,
+    state: derived ? derived.state : null,
+    stateDetail: derived ? derived.detail : null,
+    finalizeReady: derived ? derived.finalizeReady : false,
     planDrafts: planDrafts(spec.dir),
     phases,
     parallelGroups: groups.groups,
@@ -506,10 +526,11 @@ async function cmdList(args) {
       name: s.name,
       state: s.state,
       detail: s.detail,
+      ...(s.finalizeReady ? { finalizeReady: true } : {}),
       touched: s.touched ? new Date(s.touched).toISOString() : null,
       planDrafts: planDrafts(dir),
       overview: names.includes("overview.md"),
-      phaseFiles: names.filter((n) => /^phase-\d+\b.*\.md$/i.test(n)).length,
+      phaseFiles: pickPhaseFiles(names).size,
       pathfinder: isDir(path.join(dir, "pathfinder")),
     };
   });
@@ -624,8 +645,9 @@ async function cmdMark(args) {
     lines[idx] = next;
     changes.push({ file: `${spec.rel}/overview.md`, line: row.line, from: `[${row.marker}]`, to: `[${target}]` });
   }
-  // The phase file's Status line follows: done -> Complete; re-opening a Complete
-  // phase -> In Progress (revise-plan), so the two files never disagree.
+  // The phase file's Status line follows: done -> Complete; in-progress -> In
+  // Progress (Implement claiming the phase); re-opening a Complete phase -> In
+  // Progress (revise-plan), so the two files never disagree.
   let phaseText = null;
   let phasePath = null;
   let unfinished = [];
@@ -637,13 +659,13 @@ async function cmdMark(args) {
     const parsed = parsePhaseFile(phasePath, number);
     unfinished = parsed.tasks.filter((t) => ["pending", "in-progress", "unknown"].includes(t.state)).map((t) => t.id);
     const status = statusOf(text);
-    const want = target === "x" ? "Complete" : target === " " && status && /^complete$/i.test(status) ? "In Progress" : null;
+    const want = target === "x" ? "Complete" : target === "/" ? "In Progress" : target === " " && status && /^complete$/i.test(status) ? "In Progress" : null;
     if (status && want && status !== want) {
       phaseText = text.replace(STATUS_RE, (_, before, _value, after) => before + want + after);
       changes.push({ file: `${spec.rel}/${file}`, field: "Status", from: status, to: want });
     }
-    // done and open keep the Status line in step; with none to find, say so.
-    if (!status && target !== "/") warnings.push(`${file} has no Status line, so only the Phase Checklist checkbox changed; add a "**Status:** <value>" line under its title.`);
+    // Every mark keeps the Status line in step; with none to find, say so.
+    if (!status) warnings.push(`${file} has no Status line, so only the Phase Checklist checkbox changed; add a "**Status:** <value>" line under its title.`);
   }
   if (!args["dry-run"]) {
     if (changes.some((c) => c.file.endsWith("overview.md"))) fs.writeFileSync(overviewPath, lines.join(eol(overview)));
@@ -715,6 +737,27 @@ function listRel(dir, base = dir) {
   return outList.sort();
 }
 
+// Every file under dir with its size, by forward-slash relative path: what
+// archive compares between the source and the target.
+function manifest(dir) {
+  return new Map(listRel(dir).map((f) => [f, fs.statSync(path.join(dir, f)).size]));
+}
+
+// The names and sizes in `want` that `got` lacks or holds at another size,
+// and the names `got` has beyond them, as one line each (empty: they match).
+function manifestDiff(want, got) {
+  const lines = [];
+  for (const [f, size] of want) {
+    if (!got.has(f)) lines.push(`${f} is missing`);
+    else if (got.get(f) !== size) lines.push(`${f} is ${got.get(f)} bytes, not ${size}`);
+  }
+  for (const f of got.keys()) if (!want.has(f)) lines.push(`${f} was not in the source`);
+  return lines;
+}
+
+// PLAN2CODE_ARCHIVE_FAULT is a test seam: "copy" skips the rename so the copy
+// path runs; "truncate" also cuts the first copied file short, the way a copy
+// that failed part-way leaves it.
 async function cmdArchive(args) {
   const root = path.resolve(args.root || ".");
   const spec = resolveSpec(root, args._[1]);
@@ -723,9 +766,12 @@ async function cmdArchive(args) {
     fail(EXIT.REFUSED, "target-exists", `specs--completed/${spec.name}/ already exists; nothing was moved.`, "Ask the user whether to merge by hand or archive under another name.");
   }
   const files = listRel(spec.dir);
+  const before = manifest(spec.dir);
+  const fault = process.env.PLAN2CODE_ARCHIVE_FAULT || "";
   if (!args["dry-run"]) {
     fs.mkdirSync(path.dirname(target), { recursive: true });
     try {
+      if (fault) throw Object.assign(new Error("rename skipped (PLAN2CODE_ARCHIVE_FAULT)"), { code: "EXDEV" });
       fs.renameSync(spec.dir, target);
     } catch (err) {
       // A rename across volumes (or a locked file on Windows) fails; copy then remove.
@@ -733,6 +779,13 @@ async function cmdArchive(args) {
         fs.cpSync(spec.dir, target, { recursive: true, errorOnExist: true, force: false });
       } catch (copyErr) {
         fail(EXIT.INVALID, "archive-failed", `Could not move or copy ${spec.rel} (${err.code || err.message}; copy: ${copyErr.code || copyErr.message}).`, `Close anything holding files in ${spec.rel} open, check specs--completed/${spec.name} for a partial copy, then rerun.`);
+      }
+      if (fault === "truncate" && files.length) fs.truncateSync(path.join(target, files[0]), Math.max(0, before.get(files[0]) - 1));
+      // The source goes only once the copy holds every file at the same size:
+      // specs--completed/ is gitignored, so a short copy would be all that is left.
+      const short = manifestDiff(before, manifest(target));
+      if (short.length) {
+        fail(EXIT.INVALID, "copy-unverified", `The copy of ${spec.rel} to specs--completed/${spec.name}/ does not match it (${short.slice(0, 5).join("; ")}${short.length > 5 ? `; and ${short.length - 5} more` : ""}); ${spec.rel} was left in place.`, `Delete the partial specs--completed/${spec.name}/, then rerun archive.`);
       }
       try {
         fs.rmSync(spec.dir, { recursive: true, force: true });
@@ -743,11 +796,12 @@ async function cmdArchive(args) {
   }
   const sourceGone = args["dry-run"] ? null : !fs.existsSync(spec.dir);
   const moved = args["dry-run"] ? null : listRel(target);
-  if (!args["dry-run"] && !(sourceGone && moved.length === files.length)) {
+  const diff = args["dry-run"] ? [] : manifestDiff(before, manifest(target));
+  if (!args["dry-run"] && !(sourceGone && !diff.length)) {
     fail(
       EXIT.INVALID,
       "archive-unverified",
-      `The move of ${spec.rel} to specs--completed/${spec.name}/ did not verify: ${moved.length} of ${files.length} file(s) at the target, and ${spec.rel} ${sourceGone ? "is gone" : "still exists"}.`,
+      `The move of ${spec.rel} to specs--completed/${spec.name}/ did not verify: ${moved.length} of ${files.length} file(s) at the target${diff.length ? ` (${diff.slice(0, 5).join("; ")})` : ""}, and ${spec.rel} ${sourceGone ? "is gone" : "still exists"}.`,
       `Compare ${spec.rel} with specs--completed/${spec.name}/ and finish the move by hand; archive refuses to rerun while the target exists.`
     );
   }
@@ -825,7 +879,49 @@ async function cmdCheck(args) {
     }
     proseChecks(text, at(name), add);
   }
-  checkReport("check", { spec: spec.rel, checked: names.map(at) }, problems);
+  // The format rules: errors in a spec carrying Document's format marker,
+  // warnings in one written before it, so specs people already have pass.
+  const overviewText = readText(path.join(spec.dir, "overview.md")) || "";
+  const marked = formatVersion(overviewText) >= FORMAT_VERSION;
+  const level = marked ? "error" : "warn";
+  for (const n of [...files.keys()].sort((a, b) => a - b)) formatChecks(path.join(spec.dir, files.get(n)), n, (code, message) => add(level, at(files.get(n)), code, message));
+  checkReport("check", { spec: spec.rel, checked: names.map(at), format: marked ? FORMAT_VERSION : null }, problems);
+}
+
+// The format marker Document writes into overview.md: a spec carrying it (at
+// FORMAT_VERSION or later) fails the format rules; one without it only warns.
+const FORMAT_VERSION = 2;
+const FORMAT_MARKER_RE = /^<!--\s*plan2code-format:\s*(\d+)\s*-->[ \t]*$/m;
+
+function formatVersion(overview) {
+  const m = (overview || "").match(FORMAT_MARKER_RE);
+  return m ? Number(m[1]) : 0;
+}
+
+// A file:line or "line N" reference: the spec's rule is to name a function or
+// symbol, since line numbers move. A `~` before the number marks it as
+// approximate, which is allowed.
+const LINE_REF_RE = /(?:\b[\w./-]+\.[A-Za-z][\w]{0,5}:\d+|\blines?\s+\d+)/i;
+
+/** The format rules for one phase file, each reported through add(code, message). */
+function formatChecks(file, number, add) {
+  const name = path.basename(file);
+  const text = readText(file) || "";
+  if (statusOf(text) === null) add("no-status", `${name} has no Status line; add "**Status:** Not Started" under its title`);
+  const notes = section(text, /^#{1,6}\s+Notes\b/i);
+  for (const [i, line] of (notes ? notes.lines : []).entries()) {
+    if (CHECKBOX_RE.test(line)) add("notes-checkbox", `${name}:${notes.start + 2 + i} is a checkbox under Notes; notes are plain text, and work belongs in Tasks`);
+  }
+  const parsed = parsePhaseFile(file, number);
+  const lines = text.split(/\r?\n/);
+  for (const t of parsed.tasks) {
+    if (LINE_REF_RE.test(lines[t.line - 1].replace(TASK_RE, ""))) {
+      add("line-reference", `${name}:${t.line} (Task ${t.id}) points at a line number; name the function or symbol instead (line numbers move), or mark the number approximate with ~`);
+    }
+    if (t.state === "blocked" && !BLOCK_REASON_RE.test(lines[t.line - 1].replace(CHECKBOX_RE, "")) && !BLOCK_REASON_RE.test(t.detail)) {
+      add("bare-blocked", `${name}:${t.line} (Task ${t.id}) is [!] with no reason; add "> BLOCKED: <why>. User action: <what>" under it`);
+    }
+  }
 }
 
 const DRAFT_STATUSES = ["Draft", "Phase 3 Complete - Resume at Phase 4", "Escalated from Quick Task - Resume at Phase 2", "Escalated from Test - Resume at Phase 2", "Complete"];
@@ -898,7 +994,7 @@ async function cmdCheckDraft(args) {
 run(USAGE, async (argv) => {
   const args = parseArgs(argv, { booleans: ["dry-run"], values: ["root", "step", "phase", "to", "task"], lists: ["set"] });
   const cmd = args._[0];
-  ({ MARKERS, TASK_ID_RE: TASK_RE, CHECKBOX_RE, STATUS_RE, statusOf } = await consoleModule("spec-files.mjs"));
+  ({ MARKERS, TASK_ID_RE: TASK_RE, CHECKBOX_RE, STATUS_RE, statusOf, pickPhaseFiles, deriveSpecState, BLOCK_REASON_RE } = await consoleModule("spec-files.mjs"));
   const commands = { list: cmdList, status: cmdStatus, metrics: cmdMetrics, mark: cmdMark, tick: cmdTick, archive: cmdArchive, check: cmdCheck, "check-draft": cmdCheckDraft };
   if (!commands[cmd]) fail(EXIT.USAGE, "unknown-command", cmd ? `Unknown command "${cmd}".` : "No command given.", "Commands: list, status, check, check-draft, metrics, mark, tick, archive. Run with --help.");
   await commands[cmd](args);

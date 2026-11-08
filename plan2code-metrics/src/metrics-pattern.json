@@ -1,0 +1,42 @@
+{
+  "_note": "The shapes plan2code-metrics scrapes from a PLAN-DRAFT: one source for the console's bait scanner (src/web-console/patches.mjs), the skill scripts' SCRAPE (src/skill-scripts/common.mjs) and the collector's copy (plan2code-metrics/src/metrics-pattern.json). scripts/test-web-console-hardening.mjs fails when the copies drift. A label then a number in a table row counts only when the number ends the row.",
+  "metricsComment": "<!--\\s*METRICS_JSON\\s+(\\{[\\s\\S]*?\\})\\s*-->",
+  "confidence": [
+    {
+      "name": "overall confidence with %",
+      "source": "(?:Overall|Final|Total)?\\s*\\**[Cc]onfidence\\**[:\\s*]+(\\d{1,3})%",
+      "flags": ""
+    },
+    {
+      "name": "confidence table cell",
+      "source": "[|]\\s*[Cc]onfidence\\s*[|]\\s*(\\d{1,3})",
+      "flags": ""
+    }
+  ],
+  "breakdown": [
+    {
+      "key": "requirements",
+      "name": "Requirements",
+      "source": "[Rr]equirements?(?:[:\\s]+|[ \\t:]*\\|[ \\t:|]*(?=\\d{1,2}(?:\\/\\d+)?[ \\t]*\\|?[ \\t]*$))(\\d{1,2})",
+      "flags": "m"
+    },
+    {
+      "key": "feasibility",
+      "name": "Feasibility",
+      "source": "[Ff]easibility(?:[:\\s]+|[ \\t:]*\\|[ \\t:|]*(?=\\d{1,2}(?:\\/\\d+)?[ \\t]*\\|?[ \\t]*$))(\\d{1,2})",
+      "flags": "m"
+    },
+    {
+      "key": "integration",
+      "name": "Integration",
+      "source": "[Ii]ntegration(?:[:\\s]+|[ \\t:]*\\|[ \\t:|]*(?=\\d{1,2}(?:\\/\\d+)?[ \\t]*\\|?[ \\t]*$))(\\d{1,2})",
+      "flags": "m"
+    },
+    {
+      "key": "risk",
+      "name": "Risk",
+      "source": "[Rr]isk(?:[:\\s]+|[ \\t:]*\\|[ \\t:|]*(?=\\d{1,2}(?:\\/\\d+)?[ \\t]*\\|?[ \\t]*$))(\\d{1,2})",
+      "flags": "m"
+    }
+  ]
+}

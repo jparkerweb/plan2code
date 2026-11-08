@@ -16,6 +16,7 @@ import type {
   Step4FinalizeMetrics,
   UserFeedback,
 } from './types.js';
+import metricsPattern from './metrics-pattern.json' with { type: 'json' };
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -44,7 +45,7 @@ function readFileSafe(filePath: string): string | null {
  * Returns parsed object or null if not found / invalid.
  */
 export function extractMetricsJson(content: string, stepFilter?: string): Record<string, unknown> | null {
-  const re = /<!--\s*METRICS_JSON\s+(\{[\s\S]*?\})\s*-->/g;
+  const re = new RegExp(metricsPattern.metricsComment, 'g');
   let match: RegExpExecArray | null;
   while ((match = re.exec(content)) !== null) {
     try {
@@ -96,18 +97,38 @@ function generateRunId(): string {
 
 // ── Prompt version hashing ────────────────────────────────────────────────────
 
+// The prompts recorded before the collector read the folder keep their keys.
+const LEGACY_PROMPT_KEYS: Record<string, string> = {
+  'plan2code-1-plan.md': 'plan',
+  'plan2code-1b-revise-plan.md': 'revise_plan',
+  'plan2code-2-document.md': 'document',
+  'plan2code-3-implement.md': 'implement',
+  'plan2code-4-finalize.md': 'finalize',
+  'plan2code-init.md': 'init',
+  'plan2code-init-update.md': 'init_update',
+  'plan2code-quick-task.md': 'quick_task',
+};
+
+/** The PromptVersions key for a prompt file: its legacy key, else its name without "plan2code-" and ".md", dashes as underscores. */
+export function promptKey(fileName: string): string {
+  return LEGACY_PROMPT_KEYS[fileName]
+    ?? fileName.replace(/^plan2code-/, '').replace(/\.md$/, '').replace(/-/g, '_');
+}
+
+/** Fingerprint every src/plan2code-*.md prompt, read from the folder so a new skill is covered at once. */
 export function collectPromptVersions(plan2codeRoot: string): PromptVersions {
   const srcDir = path.join(plan2codeRoot, 'src');
-  return {
-    plan:        sha256File(path.join(srcDir, 'plan2code-1-plan.md')),
-    revise_plan: sha256File(path.join(srcDir, 'plan2code-1b-revise-plan.md')),
-    document:    sha256File(path.join(srcDir, 'plan2code-2-document.md')),
-    implement:   sha256File(path.join(srcDir, 'plan2code-3-implement.md')),
-    finalize:    sha256File(path.join(srcDir, 'plan2code-4-finalize.md')),
-    init:        sha256File(path.join(srcDir, 'plan2code-init.md')),
-    init_update: sha256File(path.join(srcDir, 'plan2code-init-update.md')),
-    quick_task:  sha256File(path.join(srcDir, 'plan2code-quick-task.md')),
-  };
+  let files: string[] = [];
+  try {
+    files = fs.readdirSync(srcDir)
+      .filter(f => /^plan2code-.+\.md$/.test(f) && fs.statSync(path.join(srcDir, f)).isFile())
+      .sort();
+  } catch {
+    return {};
+  }
+  const versions: PromptVersions = {};
+  for (const f of files) versions[promptKey(f)] = sha256File(path.join(srcDir, f));
+  return versions;
 }
 
 // ── Step 1: Plan ──────────────────────────────────────────────────────────────
@@ -184,24 +205,34 @@ export function collectStep1(specDir: string): Step1PlanMetrics {
   };
 
   // ── Confidence ──
+  // The patterns are the shared ones in metrics-pattern.json, by name, like the breakdown below.
+  const confidenceMatch = (name: string) => {
+    const p = metricsPattern.confidence.find(c => c.name === name);
+    return p ? latestDraft.match(new RegExp(p.source, p.flags)) : null;
+  };
   let finalConfidence = parseMetricField('confidence');
   if (finalConfidence === null) {
     // Fallback: prose scraping — handle bold markdown like **Confidence:** 95%
-    const confMatch = latestDraft.match(/(?:Overall|Final|Total)?\s*\**[Cc]onfidence\**[:\s*]+(\d{1,3})%/);
+    const confMatch = confidenceMatch('overall confidence with %');
     if (confMatch) {
       finalConfidence = parseInt(confMatch[1], 10);
     } else {
-      const tableMatch = latestDraft.match(/[|]\s*[Cc]onfidence\s*[|]\s*(\d{1,3})/);
+      const tableMatch = confidenceMatch('confidence table cell');
       if (tableMatch) finalConfidence = parseInt(tableMatch[1], 10);
     }
   }
 
   // Confidence breakdown (requirements, feasibility, integration, risk)
   let confidenceBreakdown: Step1PlanMetrics['confidence_breakdown'] = null;
-  const reqMatch = latestDraft.match(/[Rr]equirements?[:\s|]+(\d{1,2})/);
-  const feasMatch = latestDraft.match(/[Ff]easibility[:\s|]+(\d{1,2})/);
-  const intMatch = latestDraft.match(/[Ii]ntegration[:\s|]+(\d{1,2})/);
-  const riskMatch = latestDraft.match(/[Rr]isk[:\s|]+(\d{1,2})/);
+  // The patterns are the shared ones in metrics-pattern.json (the console's bait scanner reads the same).
+  const breakdownMatch = (key: string): RegExpMatchArray | null => {
+    const p = metricsPattern.breakdown.find(b => b.key === key);
+    return p ? latestDraft.match(new RegExp(p.source, p.flags)) : null;
+  };
+  const reqMatch = breakdownMatch('requirements');
+  const feasMatch = breakdownMatch('feasibility');
+  const intMatch = breakdownMatch('integration');
+  const riskMatch = breakdownMatch('risk');
   if (reqMatch || feasMatch || intMatch || riskMatch) {
     confidenceBreakdown = {
       requirements: reqMatch ? parseInt(reqMatch[1], 10) : null,
@@ -596,7 +627,7 @@ export async function collectRun(opts: CollectorOptions): Promise<RunMetrics> {
 
   const runId = generateRunId();
 
-  // Get started_at / completed_at from spec directory mtime / iteration.log
+  // Get started_at / completed_at from the spec directory's birth and modified times
   let startedAt: string | null = null;
   let completedAt: string | null = null;
   try {

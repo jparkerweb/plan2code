@@ -33,7 +33,7 @@ import {
   readJson,
   writeJsonAtomic,
 } from "./files.mjs";
-import { LEDGER_FILE, handleFile, readLedger } from "./sessions.mjs";
+import { LEDGER_FILE, SERVER_MAX_LIFE_MS, handleFile, readLedger } from "./sessions.mjs";
 import {
   CHAT_CURSOR_FILE,
   CHAT_FILE,
@@ -74,14 +74,32 @@ if (!DIR) {
 }
 
 const SID = path.basename(DIR);
+// The session token. `open` leaves it in a one-shot file in the session
+// folder (`--token-file=<name>`, a bare name inside DIR) so it never appears
+// on this process's command line; it is read once and the file deleted at
+// once. `--token=<token>` is kept for a server started by hand or by a test.
 // No token, no server: authed() waves everything through on an empty one. A
 // bare `--token` (or one whose value parseArgs took for a flag) arrives as
 // `true`, so anything but a non-empty string is refused here, at boot.
-if (typeof args.token !== "string" || !args.token) {
-  process.stderr.write("server: --token=<token> is required (a non-empty string)\n");
+const TOKEN = (() => {
+  const name = args["token-file"];
+  if (typeof name === "string" && name && path.basename(name) === name) {
+    const file = path.join(DIR, name);
+    let text = "";
+    try {
+      text = fs.readFileSync(file, "utf8").trim();
+    } catch {}
+    try {
+      fs.rmSync(file, { force: true });
+    } catch {}
+    return text;
+  }
+  return typeof args.token === "string" ? args.token : "";
+})();
+if (!TOKEN) {
+  process.stderr.write("server: a token is required: --token-file=<name in the session folder> or --token=<token> (a non-empty string)\n");
   process.exit(2);
 }
-const TOKEN = args.token;
 const PROJECT = args.project || process.cwd();
 // The checkout this session runs in, from `open`. PROJECT is the folder that
 // holds .git, which for a linked worktree is the MAIN checkout: the wrong
@@ -90,7 +108,7 @@ const PROJECT = args.project || process.cwd();
 // there this is the only place the worktree can come from.
 const WORKTREE = typeof args.worktree === "string" ? args.worktree : "";
 const IDLE_MS = Number(args["idle-ms"] || 30 * 60 * 1000);
-const MAX_LIFE_MS = Number(args["max-life-ms"] || 4 * 60 * 60 * 1000);
+const MAX_LIFE_MS = Number(args["max-life-ms"] || SERVER_MAX_LIFE_MS);
 
 const STATE_FILE = path.join(DIR, "state.json");
 const DRAFT_FILE = path.join(DIR, "draft.json");
@@ -526,16 +544,18 @@ setInterval(() => {
 // the server deciding to stop. Do not "optimize" this away.
 setInterval(() => {
   const idle = Date.now() - lastContact;
-  // Answers nobody has collected yet keep the server up (bounded by MAX_LIFE_MS):
-  // exiting would strand the tab and the send it holds.
-  if (idle > IDLE_MS && !resultFlags().pending) {
+  // Answers nobody has collected yet keep the server up, past the idle limit
+  // and past MAX_LIFE_MS alike: exiting would strand the tab and the send it
+  // holds. Once a `wait` collects them (consumedAt) both limits apply again.
+  const pending = resultFlags().pending;
+  if (idle > IDLE_MS && !pending) {
     // The log is advisory: a failed append must never keep an orphan server alive.
     try {
       appendEvent(DIR, { type: "exit", reason: "idle", idleMs: idle });
     } catch {}
     process.exit(0);
   }
-  if (Date.now() - STARTED > MAX_LIFE_MS) {
+  if (Date.now() - STARTED > MAX_LIFE_MS && !pending) {
     try {
       appendEvent(DIR, { type: "exit", reason: "max-life" });
     } catch {}
@@ -630,7 +650,10 @@ function onListening(port) {
   try {
     subagents.sync(readState());
   } catch {}
-  process.stdout.write(JSON.stringify({ type: "ready", url, port, sid: SID }) + "\n");
+  // stdout is server.log (`open` points it there), so the ready line names
+  // the server without the token segment: the log is not a place for it. The
+  // full link lives only in the handle file, which is private to this user.
+  process.stdout.write(JSON.stringify({ type: "ready", url: `http://127.0.0.1:${port}/`, port, sid: SID }) + "\n");
   try {
     startUpdateCheck();
   } catch {}

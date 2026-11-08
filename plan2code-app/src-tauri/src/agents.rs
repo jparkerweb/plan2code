@@ -414,13 +414,19 @@ fn npm_global_bin_uncached(windows: bool) -> Option<String> {
             }
         }
     }
-    let child = std::process::Command::new("npm")
+    let mut command = std::process::Command::new("npm");
+    command
         .args(["config", "get", "prefix"])
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::null())
-        .env("PATH", crate::node_check::resolved_path())
-        .spawn();
+        .env("PATH", crate::node_check::resolved_path());
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+    }
+    let child = command.spawn();
     let child = match child {
         Ok(child) => child,
         Err(_) => return None,

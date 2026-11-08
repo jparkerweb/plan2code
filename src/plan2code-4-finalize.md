@@ -8,7 +8,7 @@ QA engineer and technical lead performing rigorous final validation. Verify spec
 
 ## Interface
 
-The FIRST thing you do, before anything else in this file — before the Required Context check, before Step 1: ask **web console** (browser page, suggested) or **terminal**? Console → run `node "<D>/console.mjs" open --workflow finalize` before reading (<D>: references/web-console/ beside this SKILL.md, or the dir in ~/.plan2code/console/console-dir; `--spec specs/<feature-name>` if known, else post `specDir` later), then read <D>/console.md and <D>/notes/finalize.md; the audit options, the final review, the doc-update approval and every cleanup confirmation go through it. Switchable anytime. `--web` or `Use the web console for this session.` in the argument answers it; drop the flag. Dashboard-launched? Resume its open session (console-launches.md), then the Required Context check.
+The FIRST thing you do, before anything else in this file — before the Required Context check, before Step 1: ask **web console** (browser page, suggested) or **terminal**? Console → run `node "<D>/console.mjs" open --workflow finalize` before reading (<D>: references/web-console/ beside this SKILL.md, or the dir in ~/.plan2code/console/console-dir; `--spec specs/<feature-name>` if known, else post `specDir` later), then read <D>/console.md and <D>/notes/finalize.md; the audit options, the final review, the doc-update approval and every cleanup confirmation go through it. Switchable anytime. If the argument already says which (`--web` or `Use the web console for this session.`), take it and do not ask; drop the flag. Launched by the dashboard? Its session is already open: resume it (console-launches.md), then the Required Context check.
 
 ## Scripts
 
@@ -36,7 +36,7 @@ The FIRST thing you do, before anything else in this file — before the Require
 
 ### Required Context
 
-Need all implementation spec files. If the user hasn't named the spec, run `specs.mjs list` (it reads gitignored `specs/` directly, where Glob silently finds nothing, and never offers `specs--completed/`, which holds archives only). Exactly one active spec → use it.
+Need all implementation spec files. If the user hasn't named the spec, run `specs.mjs list` (it reads gitignored `specs/` directly, where a file search silently finds nothing, and never offers `specs--completed/`, which holds archives only). Exactly one active spec → use it.
 
 If multiple active spec folders exist or nothing provided, ask user for:
 1. The entire `specs/<feature-name>/` directory: `overview.md` and all `phase-X.md` files
@@ -209,10 +209,11 @@ Add this summary to `overview.md` under `## Completion Summary`.
 |----------|-----------|--------|
 | `AGENTS.md` + `.agents-docs/*` | Commands/architecture/gotchas changed; stale paths | Update ALL applicable files (agent voice) |
 | `README.md` | New features, setup, API docs | Update if feature affects usage |
-| `CHANGELOG.md` | Version history | Add entry for feature |
 | `.env.example` | Environment variables | Add new required vars |
 | `API.md` / human docs | API documentation | Update with new endpoints |
 | `CLAUDE.md` | AI assistant context | Update if patterns changed |
+
+The CHANGELOG is the Changelog skill's job (the web console's finish offers it): Finalize writes no entry.
 
 Route each fact per tier voice (agent vs human) — never copy text across tiers; cut redundancy.
 
@@ -323,7 +324,6 @@ Paste the `comment` from `specs.mjs metrics <spec's current path: specs--complet
 - `specs/<feature-name>/overview.md` - Added completion summary
 - [each file a Step 2.5 fix changed, if any]
 - `README.md` - [if updated]
-- `CHANGELOG.md` - [if updated]
 
 ### Archived Files
 [List all files moved to specs--completed/<feature-name>/]
@@ -374,7 +374,7 @@ If you discovered undocumented commands, dependency quirks, gotchas (>5min cost)
 
 (Step 7 already delivered the completion summary — don't repeat it.)
 
-Suggested commit (only if Step 2.5 fixes landed or README, CHANGELOG, or other tracked docs were updated): the `command` from `commit-msg.mjs --subject "chore: finalize and archive <feature-name>"`. When the console finish prints it, the finish also carries `"commit": true`, so the finished screen offers **Commit it now**.
+Suggested commit (only if Step 2.5 fixes landed or README or other tracked docs were updated): the `command` from `commit-msg.mjs --subject "chore: finalize and archive <feature-name>"`. When the console finish prints it, the finish also carries `"commit": true`, so the finished screen offers **Commit it now**.
 
 Returning context: Feature complete. Specs archived to `specs--completed/<feature-name>/`.
 

@@ -18,10 +18,9 @@ A quick-task finish carries `review` and `dashboard:true` and waits for whicheve
 | `__done` | `stop` the server: the session is over |
 | `wait` exit 20 | `open --resume <sid> --workflow <yours>`, give the new link, keep waiting |
 
-**Read `references/review.md`** and run Review Mode with these overrides:
+**Read `references/review.md`** and run the review as `references/review-in-build.md` says (on Finalize, Step 2.5 adds the whole feature's scope). Only what the page does differently is here:
 
-- Scope is Focused and decided: the exact change set of this session (files created or modified by the phase or the quick task, or by the whole feature on Finalize, plus the tests and docs changed for it). Do not ask about scope. `overview.md` and the phase file give spec compliance; they do not widen scope.
-- The helper rule applies: a fresh helper runs the analysis when available, you verify every finding, and the report carries its Reviewed by line.
+- Scope is decided and not asked: the change set of this session. On Finalize it is the whole feature's (Step 2.5), not one phase.
 - No commit instructions and no next-conversation routing mid-review; the way back out carries both.
 - The page takes the whole report: the "top 10 of 15+" rule does not apply, and tables go in the doc.
 

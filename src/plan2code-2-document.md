@@ -8,7 +8,7 @@ Technical writer transforming planning documents into precise, complete implemen
 
 ## Interface
 
-The FIRST thing you do, before anything else — before Auto-Discovery: ask **web console** (suggested) or **terminal**? Console → run `node "<D>/console.mjs" open --workflow document` before reading (<D>: references/web-console/ beside this SKILL.md, or the dir in ~/.plan2code/console/console-dir; `--spec` once known), then read <D>/console.md and <D>/notes/document.md. Switchable anytime. `--web` or `Use the web console for this session.` in the argument answers it; drop the flag. Dashboard-launched? Resume its open session (console-launches.md), then Auto-Discovery.
+The FIRST thing you do, before anything else in this file — before Auto-Discovery: ask **web console** (browser page, suggested) or **terminal**? Console → run `node "<D>/console.mjs" open --workflow document` before reading (<D>: references/web-console/ beside this SKILL.md, or the dir in ~/.plan2code/console/console-dir; `--spec` once known), then read <D>/console.md and <D>/notes/document.md. Switchable anytime. If the argument already says which (`--web` or `Use the web console for this session.`), take it and do not ask; drop the flag. Launched by the dashboard? Its session is already open: resume it (console-launches.md), then Auto-Discovery.
 
 ## Scripts
 
@@ -38,7 +38,7 @@ Keep with you: the breakdown, the task writing and every question. Strength and 
 
 ## Auto-Discovery
 
-`specs/` is gitignored, so Glob silently finds nothing there; `specs.mjs` reads it directly.
+`specs/` is gitignored, so a file search silently finds nothing there; `specs.mjs` reads it directly.
 
 **Before asking user for input:**
 
@@ -103,7 +103,7 @@ Line numbers may only appear as SUPPLEMENTAL context alongside a semantic refere
 3. **Analyze** planning document thoroughly
 4. **Identify** phase boundaries by dependencies and deliverables
 5. **Use existing** `specs/<feature-name>/` directory
-6. **Write** `overview.md` first, copying from PLAN-DRAFT:
+6. **Write** `overview.md` first (header with the format marker, see Templates), copying from PLAN-DRAFT:
    - Summary (from Executive Summary)
    - Phase Checklist (Implementation Phases), directly under Summary
    - Parallel Execution Groups (filled in step 8)
@@ -183,7 +183,7 @@ Use kebab-case for feature name (e.g., `user-authentication`).
 
 ### overview.md
 
-Header: Title, Created date, Source (PLAN-DRAFT path), Status on its own line as `**Status:** <value>` (Not Started | In Progress | Complete).
+Header: Title, Created date, Source (PLAN-DRAFT path), Status on its own line as `**Status:** <value>` (Not Started | In Progress | Complete), then the format marker on its own line, `<!-- plan2code-format: 2 -->` (it makes `specs.mjs check` hold this spec to the current format rules as errors).
 
 Sections, in this order: Summary (from Executive Summary), Phase Checklist, Parallel Execution Groups table (from analysis), Tech Stack table (exact copy from PLAN-DRAFT), Architecture (Pattern + Component Overview table), Risks and Mitigations table, Success Criteria checklist, Quick Reference (Key Files, Environment Variables, External Dependencies), Completion Summary (filled during finalization).
 
@@ -245,12 +245,9 @@ Paste the `comment` from `specs.mjs metrics specs/<feature-name> --step document
    ╲│ ★ │╱
     │ ◡ │   Specs are ready! Time to build!
     ╰┬─┬╯
-============================================
-NEXT STEP: Start a NEW conversation and run:
-`/plan2code-3-implement-review --web`
-
-Or use `/plan2code-3-implement --web` for implementation without the review gate.
 ```
+
+In the terminal, end with `NEXT STEP: start a NEW conversation and run /plan2code-3-implement-review --web` (or `/plan2code-3-implement --web` for implementation without the review gate). The web console's finish carries it, so print nothing there.
 
 ## Abort Handling
 

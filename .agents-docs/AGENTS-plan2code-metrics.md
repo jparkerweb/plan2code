@@ -39,7 +39,8 @@ Community submissions arrive as GitHub issues labeled `community-feedback` on `j
 | File | Purpose |
 |------|---------|
 | `types.ts` | All interfaces (`RunMetrics`, `UserFeedback`, `CohortMetrics`, etc.) + `METRIC_TARGETS` |
-| `collector.ts` | Reads project artifacts → run JSON (parses plan drafts, overview.md, loop logs) |
+| `collector.ts` | Reads project artifacts → run JSON (parses plan drafts, overview.md, phase files) and fingerprints every `src/plan2code-*.md` prompt |
+| `metrics-pattern.json` | The scrape shapes the collector reads, a byte-for-byte copy of `src/web-console/metrics-pattern.json` |
 | `aggregator.ts` | Merges runs by prompt generation (SHA cohort) → `aggregated.json` |
 | `community.ts` | Lists/parses/closes `community-feedback`-labeled GitHub issues via `gh` CLI |
 | `analyzer.ts` | AI diagnosis via `prompts/analyze.md` template |
@@ -47,7 +48,7 @@ Community submissions arrive as GitHub issues labeled `community-feedback` on `j
 | `applier.ts` | Interactive diff review + file patching |
 | `cli.ts` | Menu-driven interactive CLI (100% prompts, no flags) |
 | `invoke-llm.ts` | Unified LLM interface (Claude Code, GitHub Copilot CLI, or Devin CLI) |
-| `*.test.ts` | vitest suites for aggregator, community, improver (`npm test` in `plan2code-metrics/`) |
+| `*.test.ts` | vitest suites for aggregator, collector, community, improver (`npm test` in `plan2code-metrics/`) |
 
 ## User Feedback
 
@@ -87,3 +88,13 @@ Feedback is collected during finalize (Step 5) or retroactively via the CLI. Pip
 | `avg_user_rating` | ≥ 7.0 | higher is better |
 
 On start the CLI asks for the plan2code repo path (default: saved `plan2codeRepoPath` in `~/.plan2code-metrics.json`, else auto-detected up to 5 parent dirs) and the project path (default: cwd). Data is stored in `<project>/.plan2code-metrics/` (runs/, aggregated.json, proposals/).
+
+## Prompt fingerprints and the one-time regrouping
+
+`collectPromptVersions` reads every `src/plan2code-*.md` file from the folder (so a new skill is covered with no code change) and keys each hash by name: the eight prompts recorded earlier keep their keys (`plan`, `revise_plan`, `document`, `implement`, `finalize`, `init`, `init_update`, `quick_task`), any other file becomes its name without `plan2code-` and `.md`, dashes as underscores (`3_implement_review`, `git`).
+
+The cohort key hashes every fingerprint that is not the `sha256:missing` sentinel, so the first run recorded after this change has more entries than any earlier one and starts a new cohort. Runs recorded before stay as they are and group together as the previous prompt generation; nothing is rewritten or dropped. This happens once, at the change, and again only when a prompt file is edited or added.
+
+## The scrape pattern (one source)
+
+What the collector reads from a plan draft (the `METRICS_JSON` comment, the confidence labels and the four breakdown labels) lives in `src/web-console/metrics-pattern.json`. The console's bait scanner (`src/web-console/patches.mjs`) reads it, `plan2code-metrics/src/metrics-pattern.json` is its copy (bundled by tsup), and `SCRAPE` in `src/skill-scripts/common.mjs` mirrors it for `specs.mjs check`. `scripts/test-web-console-hardening.mjs` fails when any copy differs. After editing the pattern, copy the file to `plan2code-metrics/` and update `SCRAPE`. A breakdown label then a number counts in prose, and in a table row only when the number ends the row, so an ordinary risk-register row is not refused.

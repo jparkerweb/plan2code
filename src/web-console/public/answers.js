@@ -700,6 +700,9 @@ export function cardAvailability(entry, scan, sel, lookup = stateFor) {
 
   // Always on; a diagnosed bug is the one spec Quick Task is the next step for.
   if (rule.states === "any") return next ? { ...ON, next } : ON;
+  // A building spec whose only unfinished tasks are blocked, each with a
+  // written reason (the scan's finalizeReady), is ready for Finalize too.
+  if (entry.skill === "plan2code-4-finalize" && state === "building" && sel.finalizeReady === true) return ON;
   // A state the table does not know is treated like files on disk.
   const taken = !sel || !sel.state ? "none" : lookup(sel.state) ? sel.state : "unrecognized";
   if (rule.states.includes(taken)) return rule.marksNext ? { ...ON, next } : ON;

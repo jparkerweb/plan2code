@@ -41,7 +41,7 @@ On `show`, run the workflow's **Show me it working** paragraph. Save screenshots
 Do what the workflow does on approval and print it in the terminal as usual, then:
 
 ```jsonc
-{"settle":true,"run":{"event":"implement-phase","id":"phase-3","tasks":9},"finish":{"headline":"Phase 3 is done","body":"9 of 9 tasks, all on disk.\n\n| Phase | Tasks | Goal |\n| --- | --- | --- |\n| Phase 4: ... | 6 | ... |\n\nCommit it with:\n\n```\ngit add -A && git commit -m \"...\" -m \"AI Assisted\"\n```","command":"/plan2code-3-implement specs/lunch-vote/overview.md","doc":"report","commit":true,"dashboard":true}}
+{"settle":true,"run":{"event":"implement-phase","id":"phase-3","tasks":9},"finish":{"headline":"Phase 3 is done","body":"9 of 9 tasks, all on disk.\n\n| Phase | Tasks | Goal |\n| --- | --- | --- |\n| Phase 4: ... | 6 | ... |\n\nCommit it with:\n\n```\ngit add -- src/vote.js && git commit -m \"...\" -m \"AI Assisted\"\n```","command":"/plan2code-3-implement specs/lunch-vote/overview.md","doc":"report","commit":true,"dashboard":true}}
 ```
 
 `commit:true` only when the body prints a commit. `command` is the next step: `/plan2code-3-implement specs/<feature>/overview.md`, or `/plan2code-4-finalize specs/<feature>/overview.md` after the last phase. No `review` on the finish.

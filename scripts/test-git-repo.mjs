@@ -12,7 +12,9 @@ import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { tmp, write, gitInit, gitIn, copyFixture, slashed, fixtureCleanup } from "./skill-script-helpers.mjs";
 import {
+  GIT_TIMEOUT_MS,
   countPending,
+  git,
   gitFloor,
   parseRemoteUrl,
   parseStatusV2,
@@ -408,4 +410,38 @@ test("snapshot: a 300-branch repo reads in under 5 seconds", () => {
   const took = Date.now() - started;
   assert.equal(s.branches.length, 301);
   assert.ok(took < 5000, `took ${took} ms`);
+});
+
+// A git that never returns (a stuck credential helper, hook or network drive)
+// used to hold the console server's only thread for good. The alias stands in
+// for one: real git, running a command that just sleeps.
+test("git() gives up on a hanging git: 10 seconds by default, or the caller's limit", () => {
+  const repo = tmp("git-hang");
+  const hang = (ms) => ["-c", `alias.hang=!node -e "setTimeout(() => {}, ${ms})"`, "hang"];
+  assert.equal(GIT_TIMEOUT_MS, 10000);
+
+  let t = Date.now();
+  const quick = git(hang(30000), repo, { timeout: 500 });
+  assert.equal(quick.ok, false);
+  assert.match(quick.err, /did not finish within 0\.5s/);
+  assert.ok(Date.now() - t < 8000, "the caller's limit applies");
+
+  t = Date.now();
+  const byDefault = git(hang(14000), repo);
+  const took = Date.now() - t;
+  assert.equal(byDefault.ok, false);
+  assert.match(byDefault.err, /did not finish within 10s/);
+  assert.ok(took >= 9000 && took < 13500, `the default limit applies (took ${took}ms)`);
+});
+
+// A repository whose status fails (here a corrupt index; a status past git()'s
+// time limit fails the same way) has an unknown tree: snapshot says so
+// instead of drawing an empty, clean-looking board.
+test("snapshot reports an error, not a clean tree, when git status fails in a repository", () => {
+  const { repo } = repoWithCommit("status-fails");
+  fs.writeFileSync(path.join(repo, ".git", "index"), "not an index");
+  const snap = snapshot(repo);
+  assert.equal(snap.repo, true);
+  assert.ok(snap.error, "the failure is reported");
+  assert.equal(snap.changes, undefined, "no change list is drawn from an empty status");
 });

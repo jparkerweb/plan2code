@@ -20,7 +20,7 @@ The FIRST thing you do, before anything else in this file — before exploring t
 
 `<S>` is `scripts/` beside this SKILL.md (`~/.agents/skills/plan2code-init/scripts/` globally). Run from the project root; each prints one JSON object, and on a non-zero exit `next` says what to do.
 
-- `node "<S>/agents-md.mjs" inspect`: does AGENTS.md exist, its line count against 500, `structure` (`progressive` or `single-file`), sections, `.agents-docs/` files, broken links, orphans. Run it first.
+- `node "<S>/agents-md.mjs" inspect`: does AGENTS.md exist, its line count against 500, `structure` (`progressive` or `single-file`), sections, `.agents-docs/` files, broken links, orphans. Run it first. Any `notices` it returns (such as `specs--completed/` being gitignored, so finished specs are not backed up): tell the user once, in your closing summary.
 - `node "<S>/agents-md.mjs" filename "<Section Name>"`: a section's detail file name, its `Details:` link line and its two header lines.
 - `node "<S>/agent-files.mjs" detect` / `apply <id> ... [--dry-run]`: AI Agent File Sync (below).
 

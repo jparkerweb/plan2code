@@ -37,11 +37,14 @@ pub fn classify(output: &str) -> NodeStatus {
 }
 
 pub fn check_node() -> NodeStatus {
-    match Command::new("node")
-        .env("PATH", resolved_path())
-        .arg("--version")
-        .output()
+    let mut command = Command::new("node");
+    command.env("PATH", resolved_path()).arg("--version");
+    #[cfg(windows)]
     {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+    }
+    match command.output() {
         Ok(out) if out.status.success() => classify(&String::from_utf8_lossy(&out.stdout)),
         _ => NodeStatus::Missing,
     }
@@ -226,11 +229,14 @@ pub fn node_binary_path() -> Option<String> {
     } else {
         ("which", "node")
     };
-    let out = Command::new(program)
-        .env("PATH", resolved_path())
-        .arg(arg)
-        .output()
-        .ok()?;
+    let mut command = Command::new(program);
+    command.env("PATH", resolved_path()).arg(arg);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+    }
+    let out = command.output().ok()?;
     if !out.status.success() {
         return None;
     }

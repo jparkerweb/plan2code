@@ -8,7 +8,7 @@ Senior software architect and technical PM. Analyze requirements critically, ask
 
 ## Interface
 
-The FIRST thing you do, before anything else in this file — before the AGENTS.md check, before looking for a draft: ask **web console** (suggested — far easier for sign-offs with a non-engineer) or **terminal**? Console → run `node "<D>/console.mjs" open --workflow plan` before reading (<D>: references/web-console/ beside this SKILL.md, or the dir in ~/.plan2code/console/console-dir), then read <D>/console.md and <D>/notes/plan.md. `--web` or `Use the web console for this session.` in the argument answers it; drop the flag. Dashboard-launched? Resume its open session (console-launches.md), then the AGENTS.md check.
+The FIRST thing you do, before anything else in this file — before the AGENTS.md check, before looking for a draft: ask **web console** (browser page, suggested) or **terminal**? Console → run `node "<D>/console.mjs" open --workflow plan` before reading (<D>: references/web-console/ beside this SKILL.md, or the dir in ~/.plan2code/console/console-dir), then read <D>/console.md and <D>/notes/plan.md. Switchable anytime. The console is far easier for sign-offs with a non-engineer. If the argument already says which (`--web` or `Use the web console for this session.`), take it and do not ask; drop the flag. Launched by the dashboard? Its session is already open: resume it (console-launches.md), then the AGENTS.md check.
 
 ## Project Context (BLOCKING)
 
@@ -57,7 +57,7 @@ Keep with you: every question, confidence score, decision and sign-off, Phases 3
 
 ### Check for Existing Progress
 
-Before Phase 1, run `node "<S>/specs.mjs" list` from the project root (`<S>`: `scripts/` beside this SKILL.md, `~/.agents/skills/plan2code-1-plan/scripts/` globally). It reads gitignored `specs/` (Glob silently finds nothing there) and gives each spec's `planDrafts` with its **Status:** line (`-prev` copies are `archived`; ignore them). Route on that status:
+Before Phase 1, run `node "<S>/specs.mjs" list` from the project root (`<S>`: `scripts/` beside this SKILL.md, `~/.agents/skills/plan2code-1-plan/scripts/` globally). It reads gitignored `specs/` (a file search silently finds nothing there) and gives each spec's `planDrafts` with its **Status:** line (`-prev` copies are `archived`; ignore them). Route on that status:
 - Status "Phase 3 Complete - Resume at Phase 4": Resume at Phase 4
 - Status "Escalated from Quick Task - Resume at Phase 2" or "Escalated from Test - Resume at Phase 2": Acknowledge, verify requirements, skip to Phase 2
 - Status "Draft" or "Complete": Ask user how to proceed
@@ -119,7 +119,7 @@ After confirmation, proceed with analysis:
    >
    > Say 'skip testing' to omit."
 
-   Default if skipped: Phase Testing `None`, Full Suite `Never`.
+   Question skipped or unanswered: infer the posture from `AGENTS.md`'s `## Test map` (else its test commands): tests exist → Phase Testing `Targeted per phase`, Full Suite `Offered at Finalize`; none found → `None`, `Never`. Say what you inferred and from what in the sign-off's Testing line. 'skip testing' said outright still writes `None` and `Never`.
 
 7. Report confidence score
 8. **Requirements Sign-Off:**
@@ -131,7 +131,7 @@ After confirmation, proceed with analysis:
    > **Non-Functional:**
    > NFR-1: [req]
    > ...
-   > **Testing:** [types, phase testing, full suite, approach, or None]
+   > **Testing:** [types, phase testing, full suite, approach, or None; "inferred from the test map" when you chose it]
    >
    > **Confirm:** Complete and accurate? (approved / needs changes)
 
@@ -298,10 +298,9 @@ When complete (PLAN-DRAFT created), tell user:
 >    ╲│ ★ │╱
 >     │ ◡ │   Planning done! Ready for documentation!
 >     ╰┬─┬╯
-> =============================================
-> NEXT STEP: Start a NEW conversation then run:
-> `/plan2code-2-document --web`
 > ```"
+
+In the terminal, end with `NEXT STEP: /plan2code-2-document --web` in a NEW conversation. The web console's finish carries it, so print nothing there.
 
 ## Abort / Recovery
 

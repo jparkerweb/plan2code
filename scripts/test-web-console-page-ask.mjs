@@ -83,6 +83,52 @@ test("a Quick question typed in Ask reaches the agent under chat, and the agent'
   assert.match(await textOf(s.page.locator(".ask-counter")), /1/);
 });
 
+// What a person hears break: every redraw rewrote the Ask log and the footer
+// summary, both live regions, so a screen reader read the whole conversation
+// and the summary again on each agent post or tick, not only what was new.
+test("a redraw leaves the Ask log and the footer summary untouched, and a new message only appends its row", async (t) => {
+  const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_QUESTION });
+  await openAsk(s);
+  await askQuestion(s, "Where does the export live?");
+  const [asked] = messages(collect(s));
+  s.post({ chat: { replies: [{ id: "r1", re: asked.seq, conversation: 1, md: "It lives in `exports/`." }] } });
+  await s.page.locator(".ask-row.agent").getByText("It lives in").waitFor();
+  await settled(s.page, ".ask-list");
+
+  // Count every change inside both live regions from here on, and tag the rows on the page.
+  await s.page.evaluate(() => {
+    window.__live = { list: 0, footer: 0 };
+    const list = document.querySelector(".ask-list");
+    for (const row of list.children) row.__kept = true;
+    new MutationObserver((records) => (window.__live.list += records.length)).observe(list, {
+      subtree: true,
+      childList: true,
+      attributes: true,
+      characterData: true,
+    });
+    new MutationObserver((records) => (window.__live.footer += records.length)).observe(document.getElementById("footer-summary"), {
+      subtree: true,
+      childList: true,
+      attributes: true,
+      characterData: true,
+    });
+  });
+
+  // An agent post that changes nothing in the log or the summary redraws the page all the same:
+  // the new document gets its tab, and the Ask tab stays open on the same list.
+  s.post({ docs: [{ id: "notes", title: "Export notes", blocks: [{ id: "b1", state: "settled", md: "Nothing yet." }] }] });
+  await s.page.locator("nav").getByRole("button", { name: "Export notes" }).waitFor();
+  await settled(s.page, "#main");
+  assert.equal(await s.page.evaluate(() => [...document.querySelector(".ask-list").children].every((row) => row.__kept)), true, "the Ask tab shows the same rows");
+  assert.deepEqual(await s.page.evaluate(() => window.__live), { list: 0, footer: 0 }, "the redraw rewrote a live region");
+
+  // A second question appends one row; the two already there stay the same nodes.
+  await askQuestion(s, "And the importer?");
+  await s.page.locator(".ask-row.person").getByText("And the importer?").waitFor();
+  const rows = await s.page.evaluate(() => [...document.querySelector(".ask-list").children].map((row) => Boolean(row.__kept)));
+  assert.deepEqual(rows, [true, true, false], "only the new message's row is new");
+});
+
 // What a person sees break: a prompt the agent wrote for a new conversation with no
 // Copy button, or one that tells them to "paste it into the Ask tab" as though it
 // were a terminal command.

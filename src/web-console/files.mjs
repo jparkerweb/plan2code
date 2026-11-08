@@ -193,9 +193,10 @@ export function appendEvent(dir, event) {
 // writes it back, so two of them overlapping lose whichever wrote first. Every
 // read-modify-write of state.json therefore runs under this lock, a file
 // created with O_EXCL beside it. The sections it guards are a read, a merge
-// and a write, milliseconds long, so a lock older than LOCK_STALE_MS, or one
-// whose holder has died, is a crash left behind and is broken. The wait runs
-// past the stale age, so a writer always gets in eventually.
+// and a write, milliseconds long, so a lock whose holder has died is a crash
+// left behind and is broken; age alone breaks one only when no live holder is
+// named (lockStale below). The wait runs past the stale age, so a writer
+// always gets in once the holder is done or gone.
 export const STATE_LOCK_FILE = "state.json.lock";
 const LOCK_STALE_MS = 5000;
 // A pile-up of many writers (a burst of concurrent `post`s) queues behind
@@ -204,12 +205,20 @@ const LOCK_STALE_MS = 5000;
 // writer that was never going to be denied, just slow to get its turn.
 const LOCK_WAIT_MS = 20000;
 
-function lockStale(lock) {
+// The holder's pid decides first: a lock whose holder is still running is
+// held, however old it looks (a writer under a heavy machine can sit past the
+// stale age, and breaking its lock lets two writers in at once), and one whose
+// holder is gone is free at once. Age decides only when the pid cannot: an
+// empty file (the holder is between its create and its write, or died there)
+// or this process's own pid (a hold is synchronous, so a lock naming us while
+// we wait for it is a leftover from a process that had our number).
+export function lockStale(lock) {
   try {
     const st = fs.statSync(lock);
-    if (Date.now() - st.mtimeMs > LOCK_STALE_MS) return true;
+    const old = Date.now() - st.mtimeMs > LOCK_STALE_MS;
     const pid = Number.parseInt(fs.readFileSync(lock, "utf8"), 10);
-    return Number.isInteger(pid) && pid > 0 && pid !== process.pid && !pidAlive(pid);
+    if (!Number.isInteger(pid) || pid <= 0 || pid === process.pid) return old;
+    return !pidAlive(pid);
   } catch (err) {
     // Gone between the failed create and this look: free, so try again.
     return err.code === "ENOENT";

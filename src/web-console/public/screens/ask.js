@@ -8,7 +8,7 @@ import { startersFor } from "../starters.js";
 import { looks } from "../looks.js";
 import { thumbs, uploadUrl, docChip, attachTray, CHAT_IMAGES, attachFiles, incomingFiles, deleteUrl, sentAttachments, noteImages, attachRow, openPicview, refocusThumb } from "../uploads.js";
 import { attachMentions } from "../mention-box.js";
-import { makeMdField } from "../md-field.js";
+import { destroyFields, makeMdField } from "../md-field.js";
 import { pickerAccept, attachmentKind, noteAwaiting, threadWho, threadText } from "../answers.js";
 import { postJson } from "../net.js";
 import { reconnectOffer } from "../continue-button.js";
@@ -29,9 +29,18 @@ export const declineOpen = new Map();
 
 const deciding = new Set();
 
-// The Subagents dialog's instruction box, a Markdown field made once in
-// wireAsk into its #subagents-instruction mount.
+// The Subagents dialog's instruction box, a Markdown field made the first
+// time the dialog needs it, into its #subagents-instruction mount: made at
+// start-up, it would pull CodeMirror into every page load (md-field.js).
 let instrField = null;
+
+function instr() {
+  if (!instrField) {
+    instrField = makeMdField({ className: "subagents-instruction", label: "Instruction", maxLength: 2000 });
+    $("subagents-instruction").appendChild(instrField.el);
+  }
+  return instrField;
+}
 
 // The frame's chat block, with `offline` worked out now rather than when the
 // frame was sent: the agent comes and goes between frames, and /ping keeps
@@ -66,7 +75,7 @@ export function askState() {
 // frame for the moment after a 409 stale, before the new frame lands.
 const askConversation = () => page.local.chat.conversation ?? askFrame().conversation;
 
-export function renderAsk(main) {
+export function renderAsk(main, held = null) {
   const { frame, view: v, send: ss } = askState();
   // Anything drawn here has been seen: no dot for it later.
   const newest = newestReplyId(frame);
@@ -77,7 +86,6 @@ export function renderAsk(main) {
   page.chatDot = false;
   askPaintedOffline = ss.state === "offline";
 
-  const pane = el("section", "ask-pane");
   const head = el("div", "ask-head");
   head.appendChild(el("h2", null, "Quick question"));
   head.appendChild(el("span", "ask-counter", v.counterText));
@@ -86,17 +94,42 @@ export function renderAsk(main) {
   reset.disabled = ss.state === "offline" || chatResetting;
   reset.addEventListener("click", newConversation);
   head.appendChild(reset);
-  pane.appendChild(head);
 
-  const list = el("div", "ask-list");
-  list.setAttribute("role", "log");
-  list.setAttribute("aria-live", "polite");
-  if (!v.rows.length) list.appendChild(askStarters(ss));
+  // The list is a live region (role="log"): one taken up from the last render
+  // keeps every row that would draw the same, so a redraw announces nothing
+  // and a new message is one appended row, the only thing read out.
+  const kept = held && held.querySelector(":scope > .ask-list");
+  const list = kept || el("div", "ask-list");
+  if (!kept) {
+    list.setAttribute("role", "log");
+    list.setAttribute("aria-live", "polite");
+  }
   const notes = new Map(v.rows.filter((r) => r.kind === "decision").map((r) => [r.re, r.text]));
-  for (const r of v.rows) list.appendChild(askRow(r, ss, notes));
-  pane.appendChild(list);
-  pane.appendChild(askComposer(ss));
-  main.appendChild(pane);
+  const wanted = v.rows.length
+    ? v.rows.map((r) => [askRowKey(r, ss, notes), () => askRow(r, ss, notes)])
+    : [[askStartersKey(ss), () => askStarters(ss)]];
+  syncRows(list, wanted);
+
+  const composer = askComposer(ss);
+  if (kept) {
+    const oldHead = held.querySelector(":scope > .ask-head");
+    const oldComposer = held.querySelector(":scope > .ask-composer");
+    if (oldHead) oldHead.replaceWith(head);
+    else held.insertBefore(head, list);
+    if (oldComposer) {
+      destroyFields(oldComposer);
+      oldComposer.replaceWith(composer);
+    } else held.appendChild(composer);
+    if (held.parentNode !== main) main.appendChild(held);
+  } else {
+    if (held) {
+      destroyFields(held);
+      held.remove();
+    }
+    const pane = el("section", "ask-pane");
+    pane.append(head, list, composer);
+    main.appendChild(pane);
+  }
 
   // Back where the person left the list, unless something new arrived (or it
   // is the first look), which brings the newest row into view.
@@ -104,6 +137,44 @@ export function renderAsk(main) {
   const grew = v.rows.length > page.askRowCount;
   page.askRowCount = v.rows.length;
   list.scrollTop = !saved || grew ? list.scrollHeight : saved.top;
+}
+
+// What a row draws from: the row itself and every outside fact askRow() reads,
+// so two equal keys draw the same row and the one on the page can stay.
+// Each outside fact counts only on the rows that read it, or a send in flight
+// (chatSending) would redraw every row in the log.
+function askRowKey(r, ss, notes) {
+  const offline = ss.state === "offline";
+  if (r.kind === "decision") return JSON.stringify([r]);
+  if (r.kind === "agent") {
+    const open = Boolean(r.proposal && !r.decided);
+    return JSON.stringify([r, notes.get(r.id) ?? null, open && [offline, deciding.has(r.id), declineOpen.has(r.id)]]);
+  }
+  return JSON.stringify([
+    r,
+    r.pending && r.failed ? [offline, chatSending] : null,
+    !r.pending && r.waiting && r.working ? [offline, agentAdrift()] : null,
+    (r.images || []).map((img) => thumbs.get(img.key) || ""),
+  ]);
+}
+
+const askStartersKey = (ss) =>
+  JSON.stringify(["starters", ss.canType, page.S.workflow, looks.role, Boolean(page.local.chat.about)]);
+
+// Brings the live list's children in line with `wanted` ([key, make] pairs,
+// in order): a child whose key matches stays untouched, a changed one is
+// redrawn in its place, new ones are appended and leftovers removed.
+function syncRows(list, wanted) {
+  const have = [...list.children];
+  wanted.forEach(([key, make], i) => {
+    const cur = have[i];
+    if (cur && cur.dataset.rowKey === key) return;
+    const node = make();
+    node.dataset.rowKey = key;
+    if (cur) cur.replaceWith(node);
+    else list.appendChild(node);
+  });
+  for (const extra of have.slice(wanted.length)) extra.remove();
 }
 
 // An empty conversation offers a few questions for this step, the role's
@@ -867,7 +938,7 @@ export function openSubagents() {
   for (const radio of document.querySelectorAll('input[name="subagents-on"]')) {
     radio.checked = radio.value === (on ? "on" : "off");
   }
-  instrField.value = page.subagentsFrame.instruction ?? defaultInstruction(page.S.workflow);
+  instr().value = page.subagentsFrame.instruction ?? defaultInstruction(page.S.workflow);
   $("subagents-max").value = String(page.subagentsFrame.max);
   const strength = STRENGTHS.includes(page.subagentsFrame.strength) ? page.subagentsFrame.strength : DEFAULT_STRENGTH;
   for (const radio of document.querySelectorAll('input[name="subagents-strength"]')) radio.checked = radio.value === strength;
@@ -889,7 +960,7 @@ export function openSubagents() {
 export function syncSubagentsFields() {
   const picked = document.querySelector('input[name="subagents-on"]:checked');
   const off = !picked || picked.value !== "on";
-  instrField.disabled = off;
+  instr().disabled = off;
   for (const id of ["subagents-max", "subagents-default"]) $(id).disabled = off;
   for (const radio of document.querySelectorAll('input[name="subagents-strength"]')) radio.disabled = off;
 }
@@ -914,7 +985,7 @@ export async function saveSubagents() {
   const save = $("subagents-save");
   const status = $("subagents-status");
   const picked = document.querySelector('input[name="subagents-on"]:checked');
-  const text = instrField.value.trim();
+  const text = instr().value.trim();
   // The shipped default is stored as null, so a later release's wording
   // reaches everyone who never changed it.
   const instruction = text === defaultInstruction(page.S.workflow) ? null : text;
@@ -942,14 +1013,12 @@ export const askOfflineFlipped = () => (askState().send.state === "offline") !==
 
 // The Subagents dialog's buttons, and dropping files onto the notes panel.
 export function wireAsk() {
-  instrField = makeMdField({ className: "subagents-instruction", label: "Instruction", maxLength: 2000 });
-  $("subagents-instruction").appendChild(instrField.el);
   for (const radio of document.querySelectorAll('input[name="subagents-on"]')) radio.addEventListener("change", syncSubagentsFields);
   for (const radio of document.querySelectorAll('input[name="subagents-strength"]')) radio.addEventListener("change", syncStrengthHelp);
   lightDismiss($("subagents-modal"));
   $("btn-subagents").addEventListener("click", openSubagents);
   $("subagents-default").addEventListener("click", () => {
-    instrField.value = defaultInstruction(page.S.workflow);
+    instr().value = defaultInstruction(page.S.workflow);
   });
   $("subagents-save").addEventListener("click", saveSubagents);
   $("subagents-cancel").addEventListener("click", () => $("subagents-modal").close());

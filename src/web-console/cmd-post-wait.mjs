@@ -1,8 +1,10 @@
 // Plan2Code Web Console - `post` and `wait`: publish a patch, then collect what the person sent.
 
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 
+import { CONSOLE_VERSION_DIR } from "./sessions.mjs";
 import { HERE, appendEvent, fileStamp, nowIso, readJson, sleepSync, updateState, writeJsonAtomic } from "./files.mjs";
 import {
   appendLedger,
@@ -716,8 +718,14 @@ const HOP_ACTIONS = {
 // flagged so the agent says so. In a
 // source tree no skill sits beside the console, so nothing can be told to be
 // missing and the stored skill stands.
+// The console is shared (~/.plan2code/console/<version>/), so the skills are
+// found in the agent skills store; the folder three levels up holds them only
+// when a skill carries its own console.
 function skillPath(skill) {
-  return path.resolve(HERE, "..", "..", "..", skill, "SKILL.md");
+  const candidates = [path.resolve(HERE, "..", "..", "..", skill, "SKILL.md")];
+  // Only an installed console (a version folder) looks in the store: a source tree names no skill file.
+  if (CONSOLE_VERSION_DIR.test(path.basename(HERE))) candidates.push(path.join(os.homedir(), ".agents", "skills", skill, "SKILL.md"));
+  return candidates.find((file) => fs.existsSync(file)) || candidates[0];
 }
 
 function pickupHop(action) {
@@ -742,7 +750,7 @@ function pickupHop(action) {
 function handoffFor(result) {
   const actions = (result && Array.isArray(result.actions) && result.actions) || [];
   if (!actions.some((a) => a && a.type === "stop" && a.i === "__stop" && a.handoff === true)) return {};
-  const file = path.resolve(HERE, "..", "..", "..", "plan2code-handoff", "SKILL.md");
+  const file = skillPath("plan2code-handoff");
   return fs.existsSync(file) ? { handoffSkill: file } : {};
 }
 

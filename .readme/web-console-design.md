@@ -3,7 +3,7 @@
 **Status:** implemented in v2.4.0. Kept as the design record, because it explains
 *why* the thing is shaped the way it is. For how to use it, see
 [web-console.md](./web-console.md); for where the code lives, see
-[AGENTS-architecture.md](../.agents-docs/AGENTS-architecture.md).
+[AGENTS-architecture.md](../.agents-docs/AGENTS-architecture.md) (an index of the area files).
 **Date:** 2026-09-20
 **Scope:** an optional local browser UI that `plan2code-0-pathfinder` and `plan2code-1-plan` can offer at startup, built as a shared component other workflow steps can adopt later.
 

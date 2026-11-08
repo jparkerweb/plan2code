@@ -101,7 +101,7 @@ Pathfinder writes `specs/<idea>/PLAN-DRAFT-<YYYYMMDD>.md` with the header line:
 
 `**Status:** Phase 3 Complete - Resume at Phase 4`
 
-`/plan2code-1-plan` **already recognizes that exact string.** Its "Check for Existing Progress" block, which runs before Phase 1, reads:
+(`gate` prints this line as `planDraftStatus`: copy it from there.) `/plan2code-1-plan` **already recognizes that exact string.** Its "Check for Existing Progress" block, which runs before Phase 1, reads:
 
 `- Status "Phase 3 Complete - Resume at Phase 4": Resume at Phase 4`
 
@@ -114,7 +114,7 @@ Consequences of that being a literal string match:
 - The file must be named `PLAN-DRAFT-<YYYYMMDD>.md` and live directly in `specs/<idea>/`. `PLAN-DRAFT-*.md` is a reserved name inside `pathfinder/` — never write it there.
 - Use the date in `gate`'s `planDraftPath` (it reads the clock). Do not guess it. On `github` (no `gate`), take today's date from the shell and check `ls specs/<idea>/` for an existing draft.
 
-**Discovery is shell-only.** `specs/` is gitignored, so Glob silently returns nothing and every downstream skill would report "no PLAN-DRAFT found". Use `ls specs/` and `ls specs/<idea>/` (Bash) or `Get-ChildItem specs/` (PowerShell) — the same rule 1-plan and `/plan2code-2-document` follow when they look for the file you are about to write.
+**Discovery is shell-only.** `specs/` is gitignored, so a file search silently returns nothing and every downstream skill would report "no PLAN-DRAFT found". Use `ls specs/` and `ls specs/<idea>/` (Bash) or `Get-ChildItem specs/` (PowerShell) — the same rule 1-plan and `/plan2code-2-document` follow when they look for the file you are about to write.
 
 **Do not append `## Planning Metrics` or any metrics comment.** Pathfinder is not a metered step. 1-plan's Phase 7 owns that block and will add it when it finishes the plan. Do not emit any of the completion tokens listed in the skill's Rules anywhere under `specs/`.
 
@@ -411,7 +411,7 @@ Nothing to commit — `specs/` is gitignored. Say so once, then stop.
 | Symptom | Cause | Fix |
 |---|---|---|
 | 1-plan starts at Phase 1 and re-asks for requirements | The status string does not match byte for byte | Compare against the quoted line above; watch for en dashes and casing |
-| 1-plan cannot find the draft at all | Glob was used to discover `specs/` | Shell only: `ls specs/` |
+| 1-plan cannot find the draft at all | A file search was used to discover `specs/` | Shell only: `ls specs/` |
 | `/plan2code-2-document` asks which of two drafts to use | The replace-in-place bullet was dropped from the footer | Merge the two drafts into the pathfinder-dated one, delete the other, restore the footer |
 | The finished plan is missing requirements the map decided | The verification bullet was dropped from the footer | Re-derive 2.1 and 2.2 from the resolved answers, restore the footer |
 | Metrics report a planning confidence nobody scored | A percent sign, or a bare dimension word followed by a number, reached the file | Hyphenate the dimension labels and drop the percent sign |

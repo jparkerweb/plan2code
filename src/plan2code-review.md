@@ -42,7 +42,7 @@ Three levels -- auto-detected, always respect explicit user override:
 | **Branch** | "review my changes", or picked when asked | Branch changes vs main |
 | **Full** | "full review" or names a subsystem | Entire codebase/subsystem |
 
-**Detection:** 1) User prompt wins. 2) Conversation context = `focused`. 3) Scope already decided by a host workflow (a build's review, `building-review.md`) = use it. 4) Standalone with nothing named = scan, then ask (Step 1). Never default to `branch` silently. Ambiguous? Ask.
+**Detection:** 1) User prompt wins. 2) Conversation context = `focused`. 3) Scope already decided by a host workflow (a build's review: `references/review-in-build.md`, `building-review.md`) = use it. 4) Standalone with nothing named = scan, then ask (Step 1). Never default to `branch` silently. Ambiguous? Ask.
 
 **Thoroughness:** Scope controls WHAT is reviewed, not HOW DEEPLY. Every review is thorough.
 
@@ -52,7 +52,7 @@ Three levels -- auto-detected, always respect explicit user override:
 
 ## Process
 
-**Pre-flight:** Check AGENTS.md — use conventions if found, note if missing. Determine review target from user prompt or conversation context. If neither provides clear signal, scan and use `ask_user_question` (Step 1) — never guess.
+**Pre-flight:** Check AGENTS.md — use conventions if found, note if missing. Determine review target from user prompt or conversation context. If neither provides clear signal, scan and use the question tool (Step 1) — never guess.
 
 **Reference files:** Companion files loaded via Read directives. Fallback rules inline if unavailable.
 
@@ -62,10 +62,10 @@ Three levels -- auto-detected, always respect explicit user override:
 
 1. **User prompt** — use it.
 2. **Conversation context** — recent work? Those artifacts. Scope: `focused`.
-3. **Standalone, nothing named** — do not assume a target. Do a quick scan (no file reading): `review-scope.mjs`, `specs.mjs list`, recent commits. Then ask what to review (`ask_user_question`; a `choice` on the console, scope questions up front), offering only options the scan supports, each with its size: the branch's changes vs base (files, ~lines, `commits`), uncommitted changes only (when any), a spec/plan under `specs/` (when any), a named subsystem or full codebase, or specific files/folders (free text via Other). Recommend the likeliest first. Nothing found (`empty: true`, no specs)? Ask for files or a subsystem. Use the answer as the scope, then continue.
+3. **Standalone, nothing named** — do not assume a target. Do a quick scan (no file reading): `review-scope.mjs`, `specs.mjs list`, recent commits. Then ask what to review (the question tool; a `choice` on the console, scope questions up front), offering only options the scan supports, each with its size: the branch's changes vs base (files, ~lines, `commits`), uncommitted changes only (when any), a spec/plan under `specs/` (when any), a named subsystem or full codebase, or specific files/folders (free text via Other). Recommend the likeliest first. Nothing found (`empty: true`, no specs)? Ask for files or a subsystem. Use the answer as the scope, then continue.
 4. **Scan details** — `review-scope.mjs` diffs the branch against its base (`main`, else `master`, or `--base`) plus staged, unstaged and untracked changes: `files`, `counts`, `commits`, `mix`, `batchByRisk`. `empty: true` or exit 3 `not-a-repo`? Ask user what to review. Exit 3 `no-base`? Rerun with `--base <trunk>`, asking which branch is the trunk if unclear.
 
-**Classify review type** from context (auto-detect; use `ask_user_question` only if ambiguous):
+**Classify review type** from context (auto-detect; use the question tool only if ambiguous):
 
 | Signal | Type | Prioritize |
 |--------|------|-------------|

@@ -39,7 +39,7 @@ import { DEFAULT_LOOKS, looks, resetLooks } from "../src/web-console/public/look
 import { ROLE_NOT_SET } from "../src/web-console/public/starters.js";
 import { RED_AT, YELLOW_AT } from "../src/web-console/public/meter.js";
 import { REMOTE_FOLD } from "../src/web-console/public/git-board.js";
-import { readLedger, SESSION_MAX_AGE_MS, sweepUploads, UPLOAD_MAX_AGE_MS } from "../src/web-console/sessions.mjs";
+import { readLedger, SERVER_MAX_LIFE_MS, SESSION_MAX_AGE_MS, sweepUploads, UPLOAD_MAX_AGE_MS } from "../src/web-console/sessions.mjs";
 import { applyPatch, validate } from "../src/web-console/patches.mjs";
 import { joinedCss } from "./css-helpers.mjs";
 import {
@@ -897,7 +897,8 @@ const helpFacts = () => ({
   adriftMinutes: sourceConst("public/selectors.js", /const ADRIFT_MS = ([^;]+);/, "ADRIFT_MS") / 60000,
   maxUploadMb: sourceConst("public/uploads.js", /const MAX_UPLOAD_BYTES = ([^;]+);/, "MAX_UPLOAD_BYTES") / 1024 / 1024,
   idleMinutes: sourceConst("server.mjs", /const IDLE_MS = Number\(args\[[^\]]+\] \|\| ([^)]+)\)/, "IDLE_MS") / 60000,
-  maxLifeHours: sourceConst("server.mjs", /const MAX_LIFE_MS = Number\(args\[[^\]]+\] \|\| ([^)]+)\)/, "MAX_LIFE_MS") / 3600000,
+  // server.mjs and stop share this one constant (sessions.mjs).
+  maxLifeHours: SERVER_MAX_LIFE_MS / 3600000,
   closedTabMinutes: sourceConst("server.mjs", /\(IDLE_MS - ([^)]+)\)/, "the closed-tab shutdown") / 60000,
   accentCount: Object.keys(ACCENTS).length,
   // The one fact quoted as several numbers: each span holds one of the widths.

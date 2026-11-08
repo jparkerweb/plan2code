@@ -7,6 +7,7 @@ import { spawn } from "node:child_process";
 
 import { HERE, HOME_DIR, SESSIONS_DIR, appendEvent, ensureDir, nowIso, readJson, updateState } from "./files.mjs";
 import {
+  CONSOLE_VERSION_DIR,
   appendLedger,
   bindLoopback,
   handOff,
@@ -93,6 +94,9 @@ function trace(what) {
 // install dirs again. Written by `open` alone, which starts every session: a
 // `wait` or a `post` every few seconds need not rewrite it each time.
 function leavePointer() {
+  // Only an installed console (a version folder) leaves it: a source checkout or an old per-skill
+  // copy pointing console-dir at itself would leave every skill stub unable to find the shared one.
+  if (!CONSOLE_VERSION_DIR.test(path.basename(HERE))) return;
   try {
     ensureDir(HOME_DIR);
     fs.writeFileSync(path.join(HOME_DIR, "console-dir"), HERE + "\n");
@@ -686,16 +690,23 @@ async function startServer(project, worktree, sid, dir, { handoff = true, noBrow
   ensureDir(path.dirname(handlePath), 0o700);
   fs.rmSync(handlePath, { force: true });
 
+  // The token never goes on the command line, where any process on the
+  // machine can read it (ps, Task Manager, /proc/<pid>/cmdline). It waits in a
+  // one-shot file in the private session folder, named afresh for each spawn
+  // so two opens racing on one session cannot read each other's, and the
+  // server deletes it as soon as it has read it.
+  const tokenName = `server-token-${newToken().slice(0, 12).replace(/[^A-Za-z0-9]/g, "x")}`;
+  const tokenPath = path.join(dir, tokenName);
+  fs.writeFileSync(tokenPath, token, { mode: 0o600 });
   const logFd = fs.openSync(path.join(dir, "server.log"), "a");
   const child = spawn(
     process.execPath,
     [
       path.join(HERE, "server.mjs"),
-      // Always `--flag=value`, never two words: a base64url token can start
-      // with "--", and parseArgs would read it as the next flag and leave the
-      // server with `token: true`. The paths get the same form for the same reason.
+      // Always `--flag=value`, never two words: parseArgs would read a value
+      // that starts with "--" as the next flag.
       `--session=${dir}`,
-      `--token=${token}`,
+      `--token-file=${tokenName}`,
       `--project=${project}`,
       // The checkout the session runs in, which the state does not hold yet
       // on a fresh open. See WORKTREE in server.mjs.
@@ -721,8 +732,14 @@ async function startServer(project, worktree, sid, dir, { handoff = true, noBrow
   );
   fs.closeSync(logFd);
   let exited = false;
-  child.on("exit", () => (exited = true));
-  child.on("error", () => (exited = true));
+  // A server that never started never took its token file: do not leave it.
+  const dropTokenFile = () => {
+    try {
+      fs.rmSync(tokenPath, { force: true });
+    } catch {}
+  };
+  child.on("exit", () => ((exited = true), dropTokenFile()));
+  child.on("error", () => ((exited = true), dropTokenFile()));
   trace("open: server spawned");
 
   let opened = null;

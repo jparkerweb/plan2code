@@ -186,6 +186,37 @@ describe('installSkillsForBot', () => {
     expect(content).toContain('name: doc');
   });
 
+  it('copies the whole skill folder, references and scripts included', () => {
+    const srcDir = path.join(fakeHome, '.claude', 'skills', 'plan2code-3-implement');
+    fs.ensureDirSync(path.join(srcDir, 'references', 'web-console', 'notes'));
+    fs.ensureDirSync(path.join(srcDir, 'scripts'));
+    fs.writeFileSync(path.join(srcDir, 'SKILL.md'), 'disable-model-invocation: true\n---\nname: impl\n---\nBody');
+    fs.writeFileSync(path.join(srcDir, 'references', 'implement.md'), 'implement rules');
+    fs.writeFileSync(path.join(srcDir, 'references', 'web-console', 'notes', 'implement.md'), 'console notes');
+    fs.writeFileSync(path.join(srcDir, 'scripts', 'specs.mjs'), 'export {};');
+
+    installSkillsForBot(projectDir);
+
+    const dest = path.join(projectDir, '.claude', 'skills', 'plan2code-3-implement');
+    expect(fs.readFileSync(path.join(dest, 'references', 'implement.md'), 'utf-8')).toBe('implement rules');
+    expect(fs.readFileSync(path.join(dest, 'references', 'web-console', 'notes', 'implement.md'), 'utf-8')).toBe('console notes');
+    expect(fs.readFileSync(path.join(dest, 'scripts', 'specs.mjs'), 'utf-8')).toBe('export {};');
+    expect(fs.readFileSync(path.join(dest, 'SKILL.md'), 'utf-8')).not.toContain('disable-model-invocation');
+  });
+
+  it('copies only its five skills, not every installed plan2code skill', () => {
+    for (const name of ['plan2code-init', 'plan2code-git', 'plan2code-quick-task']) {
+      const dir = path.join(fakeHome, '.claude', 'skills', name);
+      fs.ensureDirSync(dir);
+      fs.writeFileSync(path.join(dir, 'SKILL.md'), 'content');
+    }
+
+    installSkillsForBot(projectDir);
+
+    const skills = fs.readdirSync(path.join(projectDir, '.claude', 'skills'));
+    expect(skills).toEqual(['plan2code-init']);
+  });
+
   it('skips gracefully when source skill does not exist', () => {
     // No skills in fakeHome — should not throw
     expect(() => installSkillsForBot(projectDir)).not.toThrow();

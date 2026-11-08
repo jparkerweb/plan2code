@@ -33,7 +33,9 @@ const SKILL_MAP: Record<StepName, string> = {
  * Install bot-friendly copies of plan2code skills into the project's .claude/skills/.
  * The global skills have `disable-model-invocation: true` which prevents the autonomous
  * session from invoking them via the Skill tool. We copy them with that flag removed
- * so the session can invoke the real workflow prompts instead of guessing.
+ * so the session can open and follow the real workflow prompts instead of guessing.
+ * The whole skill folder is copied (its references and scripts too), because a skill
+ * reads its references and runs its shipped scripts by path from beside SKILL.md.
  */
 export function installSkillsForBot(projectDir: string): void {
   const userSkillsDir = path.join(
@@ -44,15 +46,17 @@ export function installSkillsForBot(projectDir: string): void {
   const projectSkillsDir = path.join(projectDir, '.claude', 'skills');
 
   for (const skillName of Object.values(SKILL_MAP)) {
-    const srcFile = path.join(userSkillsDir, skillName, 'SKILL.md');
+    const srcDir = path.join(userSkillsDir, skillName);
+    const srcFile = path.join(srcDir, 'SKILL.md');
     if (!fs.existsSync(srcFile)) continue;
-
-    const content = fs.readFileSync(srcFile, 'utf-8');
-    // Remove the disable-model-invocation line so the bot session can invoke the skill
-    const patched = content.replace(/^disable-model-invocation:\s*true\n?/m, '');
 
     const destDir = path.join(projectSkillsDir, skillName);
     fs.ensureDirSync(destDir);
+    fs.copySync(srcDir, destDir, { overwrite: true });
+
+    // Remove the disable-model-invocation line so the bot session can use the skill
+    const content = fs.readFileSync(srcFile, 'utf-8');
+    const patched = content.replace(/^disable-model-invocation:\s*true\n?/m, '');
     fs.writeFileSync(path.join(destDir, 'SKILL.md'), patched);
   }
 }

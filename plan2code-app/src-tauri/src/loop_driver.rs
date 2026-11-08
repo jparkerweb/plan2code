@@ -389,6 +389,15 @@ pub struct RunningRecord {
     /// The launch choice's model and effort, which a Match my session phase runs on.
     pub launch_model: Option<String>,
     pub launch_effort: Option<String>,
+    /// What `git status` listed when the current phase began: changes that
+    /// are not the phase's, left out of its commit. `None` when it could not
+    /// be read, and the commit then stages nothing. A retry keeps the first
+    /// try's baseline, so the work the crashed try left is still the phase's.
+    pub phase_baseline: Option<Vec<String>>,
+    /// An Implement page announced while the phase had no session yet, but
+    /// not yet locked by the agent's `open --loop`: adopted on a later look
+    /// once its state shows the lock (`note_page`).
+    pub page_candidate: Option<String>,
 }
 
 /// What one phase runs on, for its start, the strip and the report.
@@ -471,6 +480,8 @@ impl RunningRecord {
             strength_rows: BTreeMap::new(),
             launch_model: None,
             launch_effort: None,
+            phase_baseline: None,
+            page_candidate: None,
         }
     }
 
@@ -897,14 +908,37 @@ pub fn should_retry(cause: &StopCause, setup: &LoopSetup, retries_used_this_phas
 /// Whether the session state holds a question for the person: an item still
 /// open or reopened, required, not handled by the loop and not just a notice.
 pub fn open_question(state: &Value) -> bool {
-    state["items"].as_array().is_some_and(|items| {
-        items.iter().any(|item| {
-            matches!(item["status"].as_str(), Some("open" | "reopened"))
-                && item["required"].as_bool() != Some(false)
-                && item["kind"].as_str() != Some("notice")
-                && item.get("handledBy").is_none_or(Value::is_null)
-        })
+    first_open_question(state).is_some()
+}
+
+/// The first question `open_question` would count, as its title (the
+/// question's body when it has no title), or `None`.
+pub fn first_open_question(state: &Value) -> Option<String> {
+    state["items"].as_array()?.iter().find_map(|item| {
+        let open = matches!(item["status"].as_str(), Some("open" | "reopened"))
+            && item["required"].as_bool() != Some(false)
+            && item["kind"].as_str() != Some("notice")
+            && item.get("handledBy").is_none_or(Value::is_null);
+        if !open {
+            return None;
+        }
+        let title = item["title"].as_str().map(str::trim).unwrap_or_default();
+        let text = if title.is_empty() {
+            item["body"].as_str().map(str::trim).unwrap_or_default()
+        } else {
+            title
+        };
+        Some(one_line(text))
     })
+}
+
+/// Whether an announced page can be the running phase's session: the agent
+/// has locked it with `open --loop` (`loop.driving`) and it holds no report
+/// yet. A page without the lock is a plain `open` (or not a loop page at all),
+/// and a report already there belongs to an older run.
+pub fn page_is_this_phase(state: &Value) -> bool {
+    state["loop"]["driving"].as_bool().unwrap_or(false)
+        && state.get("loopOutcome").is_none_or(Value::is_null)
 }
 
 /// The line the stop screen leads with. `detail` is the exit reason for a
@@ -946,7 +980,13 @@ pub fn stop_line(cause: &StopCause, phase: u32, detail: &str, retried: bool) -> 
                 shown.join(", ")
             )
         }
-        StopCause::Question => format!("Phase {phase} stopped: it asked a question"),
+        StopCause::Question if detail.is_empty() => {
+            format!("Phase {phase} stopped: it asked a question")
+        }
+        StopCause::Question => {
+            let asked: String = one_line(detail).chars().take(100).collect();
+            format!("Phase {phase} stopped: it asked a question, \"{asked}\"")
+        }
         StopCause::StoppedByPerson => {
             format!("Stopped during Phase {phase}. This phase's changes stay uncommitted.")
         }
@@ -1228,7 +1268,10 @@ pub fn commits_to_trunk(rec: &RunningRecord) -> bool {
 /// that were already changed when the loop started. A file both the person and
 /// the agent changed is hidden from the list, a known limit.
 pub fn agent_work(now: Vec<String>, own: &[String]) -> Vec<String> {
-    now.into_iter().filter(|file| !own.contains(file)).collect()
+    let before: std::collections::HashSet<&str> = own.iter().map(String::as_str).collect();
+    now.into_iter()
+        .filter(|file| !before.contains(file.as_str()))
+        .collect()
 }
 
 /// The app's own Start confirm.
@@ -1495,18 +1538,57 @@ pub fn begin_with_limits(
 }
 
 /// A page the app took: while a loop waits for its phase's session, an
-/// Implement or Implement + Review page is that session.
-pub fn note_page(slot: &LoopSlot, workflow: &str, sid: &str) {
+/// Implement or Implement + Review page whose `state` the agent has locked
+/// with `open --loop`, and that holds no report yet, is that session
+/// (`page_is_this_phase`). One without the lock is kept as a candidate the
+/// watch adopts once the lock shows; one with a report is ignored.
+pub fn note_page(slot: &LoopSlot, workflow: &str, sid: &str, state: &Value) {
     if !matches!(workflow, "implement" | "implement-review") {
         return;
     }
     if let Some(rec) = lock(slot).as_mut() {
-        if rec.sid.is_none() {
-            rec.sid = Some(sid.to_string());
-            rec.last_sid = Some(sid.to_string());
-            rec.last_activity = SystemTime::now();
+        if rec.sid.is_some() {
+            return;
+        }
+        if page_is_this_phase(state) {
+            adopt_page(rec, sid);
+        } else if state.is_object() && state.get("loopOutcome").is_none_or(Value::is_null) {
+            // An unreadable page (no state) is no candidate: it must not replace a real one.
+            rec.page_candidate = Some(sid.to_string());
         }
     }
+}
+
+/// Follow `sid` as the phase's session from here.
+fn adopt_page(rec: &mut RunningRecord, sid: &str) {
+    rec.sid = Some(sid.to_string());
+    rec.last_sid = Some(sid.to_string());
+    rec.last_activity = SystemTime::now();
+    rec.page_candidate = None;
+}
+
+/// The candidate `note_page` held back, adopted once its state shows the
+/// agent's lock; the session to follow, or `None` while there is none yet.
+fn adopt_candidate(ctx: &Ctx, candidate: Option<&str>) -> Option<String> {
+    let sid = candidate?;
+    let session = session_reader::load(&ctx.home, sid).ok()?;
+    if !page_is_this_phase(&session.state) {
+        return None;
+    }
+    let mut guard = lock(&ctx.slot);
+    let rec = guard.as_mut().filter(|r| r.run_id == ctx.run_id)?;
+    if rec.sid.is_none() && rec.page_candidate.as_deref() == Some(sid) {
+        adopt_page(rec, sid);
+    }
+    rec.sid.clone()
+}
+
+/// What `git status` lists as the phase begins, as its commit's baseline.
+/// The first phase of a resumed run leaves out the stopped phase's files: that
+/// work is this phase's to commit.
+fn phase_baseline(project: &Path, carried: &[String]) -> Option<Vec<String>> {
+    let now = loop_tools::git_status_porcelain(project).ok()?;
+    Some(agent_work(now, carried))
 }
 
 /// Start a fresh agent on `prompt`: on the agent's stored launch choice when it
@@ -1593,9 +1675,29 @@ fn emit(ctx: &Ctx) {
 }
 
 fn start_phase(ctx: &Ctx, index: usize) -> Result<(), String> {
+    // The baseline is read before the agent starts, outside the lock; a retry
+    // keeps the first try's.
+    let baseline = {
+        let guard = lock(&ctx.slot);
+        let rec = guard.as_ref().ok_or("the loop ended")?;
+        let first_try = rec.phases.get(index).is_some_and(|p| p.retries == 0);
+        first_try.then(|| {
+            let carried = if index == 0 && rec.resumed_files.is_some() {
+                rec.own_dirty.clone()
+            } else {
+                Vec::new()
+            };
+            (rec.project.clone(), carried)
+        })
+    }
+    .map(|(project, carried)| phase_baseline(&project, &carried));
     let prompt = {
         let mut guard = lock(&ctx.slot);
         let rec = guard.as_mut().ok_or("the loop ended")?;
+        if let Some(baseline) = baseline {
+            rec.phase_baseline = baseline;
+        }
+        rec.page_candidate = None;
         rec.current = index;
         rec.phases[index].status = PhaseStatus::Running;
         rec.step = Step::Starting;
@@ -1677,6 +1779,7 @@ struct Snapshot {
     phase_retries: u32,
     last_activity: SystemTime,
     activity_due: bool,
+    page_candidate: Option<String>,
 }
 
 /// The running loop as one look sees it, or `None` when this loop is over.
@@ -1696,6 +1799,7 @@ fn take_snapshot(ctx: &Ctx) -> Option<Snapshot> {
             phase_retries: rec.phases[rec.current].retries,
             last_activity: rec.last_activity,
             activity_due: rec.activity_checked.elapsed() >= ctx.limits.activity_every,
+            page_candidate: rec.page_candidate.clone(),
         }),
         _ => None,
     }
@@ -1710,7 +1814,8 @@ fn tick(ctx: &Ctx) -> bool {
         stop_by_person(ctx, &snap);
         return false;
     }
-    let Some(sid) = snap.sid.clone() else {
+    let adopted = || adopt_candidate(ctx, snap.page_candidate.as_deref());
+    let Some(sid) = snap.sid.clone().or_else(adopted) else {
         if let Some(reason) = crashed(ctx, &snap) {
             return fail(ctx, &snap, StopCause::Crash, reason);
         }
@@ -1765,6 +1870,16 @@ fn tick(ctx: &Ctx) -> bool {
     ensure_expect(ctx, &snap, &sid, state);
     if let Some(go) = crash_or_outcome(ctx, &snap, &sid) {
         return go;
+    }
+    // Under best guess a question is one the agent could not guess: the phase
+    // stops on it at once, the stop card naming it, rather than waiting.
+    if snap.setup.on_question == OnQuestion::Guess {
+        if let Some(question) = first_open_question(state) {
+            let cause = StopCause::Question;
+            let line = stop_line(&cause, snap.phase_n, &question, false);
+            stop_loop(ctx, cause, line, &["resume", "fix"]);
+            return false;
+        }
     }
     let asked = snap.setup.on_question != OnQuestion::Guess && open_question(state);
     if asked && snap.setup.on_question == OnQuestion::Stop {
@@ -2103,13 +2218,19 @@ fn handle_outcome(ctx: &Ctx, snap: &Snapshot, raw: &Value) -> bool {
     // a secret or an oversized file stops the phase with nothing to undo.
     if snap.setup.commit {
         set_step(ctx, Step::Commit);
-        match loop_commit::stage_and_check(&snap.project) {
+        let baseline = lock(&ctx.slot)
+            .as_ref()
+            .filter(|r| r.run_id == ctx.run_id)
+            .and_then(|r| r.phase_baseline.clone());
+        match loop_commit::stage_and_check(&snap.project, baseline.as_deref()) {
             Ok(()) => {}
             Err(loop_commit::StageError::Add(failure)) => {
                 keep_output(ctx, &failure.output);
                 let left_staged = loop_commit::unstage(&snap.project);
                 let cause = StopCause::Commit;
-                let detail = if failure.first_line == loop_tools::STAGED_TOO_LONG {
+                let detail = if failure.first_line == loop_tools::STAGED_TOO_LONG
+                    || failure.first_line == loop_commit::OWN_FILES_UNKNOWN
+                {
                     failure.first_line.clone()
                 } else {
                     format!("git add failed: {}", failure.first_line)
@@ -2703,7 +2824,8 @@ pub fn evidence_markdown(cause: &StopCause, line: &str, rec: &RunningRecord) -> 
         StopCause::UnsafeFiles(files) => {
             md.push_str("\n## The files\n\n");
             for file in files {
-                let reason = loop_commit::denied(file).unwrap_or("over 5 MB");
+                let reason =
+                    loop_commit::denied(file).unwrap_or("over 5 MB, or its size could not be read");
                 md.push_str(&format!("- `{file}` ({reason})\n"));
             }
             md.push_str(
@@ -2731,6 +2853,9 @@ pub fn evidence_markdown(cause: &StopCause, line: &str, rec: &RunningRecord) -> 
             md.push_str(
                 "\nThe loop's own watcher stopped working, so the agent was ended. Whatever was committed stays committed; nothing more was. Press Resume to carry on from the spec.\n",
             );
+        }
+        StopCause::Question if rec.setup.on_question == OnQuestion::Guess => {
+            md.push_str("\nBest guess was on, but the phase asked a question it could not guess, so the loop stopped rather than wait. Answer it with Fix it by hand, or settle it in the spec, then press Resume.\n");
         }
         StopCause::Question => {
             md.push_str("\nThe setup says to stop when a phase asks something.\n");
@@ -3801,13 +3926,95 @@ second line"
     fn the_first_phase_page_wins_and_other_workflows_are_ignored() {
         let rec = record("specs/x", vec![]);
         let slot: LoopSlot = Arc::new(Mutex::new(Some(rec)));
-        note_page(&slot, "dashboard", "s0");
+        let locked = json!({ "loop": { "driving": true } });
+        note_page(&slot, "dashboard", "s0", &locked);
         assert!(lock(&slot).as_ref().unwrap().sid.is_none());
-        note_page(&slot, "implement-review", "s1");
-        note_page(&slot, "implement", "s2");
+        note_page(&slot, "implement-review", "s1", &locked);
+        note_page(&slot, "implement", "s2", &locked);
         let guard = lock(&slot);
         assert_eq!(guard.as_ref().unwrap().sid.as_deref(), Some("s1"));
         assert_eq!(guard.as_ref().unwrap().last_sid.as_deref(), Some("s1"));
+    }
+
+    #[test]
+    fn a_page_without_the_loops_lock_or_with_a_stale_report_is_never_the_phases() {
+        let rec = record("specs/x", vec![]);
+        let slot: LoopSlot = Arc::new(Mutex::new(Some(rec)));
+        // A plain open (no lock yet): held as a candidate, not followed.
+        note_page(
+            &slot,
+            "implement-review",
+            "plain",
+            &json!({ "workflow": "implement-review" }),
+        );
+        assert!(lock(&slot).as_ref().unwrap().sid.is_none());
+        assert_eq!(
+            lock(&slot).as_ref().unwrap().page_candidate.as_deref(),
+            Some("plain")
+        );
+        // A locked page that already holds a report belongs to an older run.
+        let stale = json!({ "loop": { "driving": true }, "loopOutcome": { "phase": 1 } });
+        note_page(&slot, "implement", "stale", &stale);
+        assert!(lock(&slot).as_ref().unwrap().sid.is_none());
+        assert_eq!(
+            lock(&slot).as_ref().unwrap().page_candidate.as_deref(),
+            Some("plain"),
+            "a stale page is not even a candidate"
+        );
+        // An unreadable page (no state) is no session either.
+        note_page(&slot, "implement", "gone", &Value::Null);
+        assert!(lock(&slot).as_ref().unwrap().sid.is_none());
+        assert_eq!(
+            lock(&slot).as_ref().unwrap().page_candidate.as_deref(),
+            Some("plain"),
+            "an unreadable page does not replace the candidate"
+        );
+        // The locked page with no report is the phase's session.
+        note_page(
+            &slot,
+            "implement",
+            "s1",
+            &json!({ "loop": { "driving": true } }),
+        );
+        let guard = lock(&slot);
+        let rec = guard.as_ref().unwrap();
+        assert_eq!(rec.sid.as_deref(), Some("s1"));
+        assert_eq!(rec.page_candidate, None);
+        assert!(page_is_this_phase(
+            &json!({ "loop": { "driving": true }, "loopOutcome": null })
+        ));
+        assert!(!page_is_this_phase(
+            &json!({ "loop": { "driving": false } })
+        ));
+    }
+
+    #[test]
+    fn the_first_open_question_is_named_by_its_title_or_its_body() {
+        let state = json!({ "items": [
+            { "id": "a", "kind": "notice", "status": "open", "title": "Just so you know" },
+            { "id": "b", "kind": "choice", "status": "answered", "title": "Old one" },
+            { "id": "c", "kind": "multi", "status": "open", "title": "Which to fix", "handledBy": "loop" },
+            { "id": "d", "kind": "text", "status": "open", "required": false, "title": "Optional" },
+            { "id": "e", "kind": "choice", "status": "open", "title": "  Which database  " },
+        ] });
+        assert_eq!(
+            first_open_question(&state).as_deref(),
+            Some("Which database")
+        );
+        let untitled = json!({ "items": [{ "id": "f", "kind": "text", "status": "reopened", "body": "Where do\nthe files go?" }] });
+        assert_eq!(
+            first_open_question(&untitled).as_deref(),
+            Some("Where do the files go?")
+        );
+        assert_eq!(first_open_question(&json!({ "items": [] })), None);
+        assert_eq!(
+            stop_line(&StopCause::Question, 2, "Which database", false),
+            "Phase 2 stopped: it asked a question, \"Which database\""
+        );
+        assert_eq!(
+            stop_line(&StopCause::Question, 2, "", false),
+            "Phase 2 stopped: it asked a question"
+        );
     }
 
     #[test]
@@ -4576,6 +4783,8 @@ second line"
         );
         rec.sid = Some("s1".into());
         rec.last_sid = Some("s1".into());
+        // What a phase start reads from the clean throwaway repo.
+        rec.phase_baseline = Some(Vec::new());
         let run_id = rec.run_id;
         let ctx = Ctx {
             slot: Arc::new(Mutex::new(Some(rec))),
@@ -4656,7 +4865,7 @@ second line"
         assert_eq!(status["phases"][0]["tasks"]["open"], 2);
         add_failing_hook(&repo, "hook says no");
         std::fs::write(repo.join("new.txt"), "x").unwrap();
-        let added = loop_tools::git_add_all(&repo);
+        let added = loop_tools::git_add_listed(&repo, &loop_tools::git_changed(&repo).unwrap());
         assert!(added.ok);
         let done = loop_tools::git_commit(&repo, "Add new\n\nAI Assisted");
         assert!(!done.ok);
@@ -4688,6 +4897,129 @@ second line"
         );
         assert_eq!(spec_status(&repo)["phases"][0]["marker"], "x");
         end_the_test(&ctx);
+    }
+
+    #[test]
+    fn under_best_guess_a_question_stops_the_phase_at_once_naming_it() {
+        if !git_ready("guess question") {
+            return;
+        }
+        let repo = throwaway_repo("guess-question");
+        let (ctx, home) = running_loop(&repo, Limits::default());
+        lock(&ctx.slot).as_mut().unwrap().setup.on_question = OnQuestion::Guess;
+        // The loop's own cards never stop it.
+        write_session(
+            &home,
+            json!({ "loop": { "driving": true }, "items": [
+                { "id": "fixes", "kind": "multi", "status": "answered", "title": "Which to fix", "handledBy": "loop" },
+            ] }),
+        );
+        assert!(tick(&ctx), "nothing to answer yet");
+        write_session(
+            &home,
+            json!({ "loop": { "driving": true }, "items": [
+                { "id": "q1", "kind": "choice", "status": "open", "title": "Which database" },
+            ] }),
+        );
+        assert!(!tick(&ctx), "the question stops the loop on the first look");
+        assert!(lock(&ctx.slot).is_none());
+        let entry = last_entry_saved(&home, &repo);
+        assert_eq!(entry.result, EntryResult::Stopped);
+        assert_eq!(
+            entry.line,
+            "Phase 2 stopped: it asked a question, \"Which database\""
+        );
+    }
+
+    #[test]
+    fn a_page_announced_before_the_lock_is_followed_once_the_lock_shows() {
+        if !git_ready("candidate page") {
+            return;
+        }
+        let repo = throwaway_repo("candidate-page");
+        let (ctx, home) = running_loop(&repo, Limits::default());
+        lock(&ctx.slot).as_mut().unwrap().sid = None;
+        // The skill's first, plain open announces the page before `open --loop`.
+        write_session(&home, json!({ "workflow": "implement-review" }));
+        note_page(
+            &ctx.slot,
+            "implement-review",
+            "s1",
+            &json!({ "workflow": "implement-review" }),
+        );
+        assert!(tick(&ctx));
+        assert!(
+            lock(&ctx.slot).as_ref().unwrap().sid.is_none(),
+            "not locked yet"
+        );
+        // `open --loop` locks it: the next look follows it.
+        write_session(
+            &home,
+            json!({ "workflow": "implement-review", "loop": { "driving": true } }),
+        );
+        assert!(tick(&ctx));
+        assert_eq!(lock(&ctx.slot).as_ref().unwrap().sid.as_deref(), Some("s1"));
+        end_the_test(&ctx);
+    }
+
+    #[test]
+    fn the_commit_takes_only_the_files_the_phase_changed() {
+        if !harness_ready("own files") {
+            return;
+        }
+        let repo = throwaway_repo("own-files");
+        let (ctx, home) = running_loop(&repo, Limits::default());
+        // The person's own change, there before the phase began.
+        std::fs::write(repo.join("mine.txt"), "the person's").unwrap();
+        start_phase(&ctx, 0).expect("start the fake agent");
+        assert_eq!(
+            lock(&ctx.slot).as_ref().unwrap().phase_baseline.as_deref(),
+            Some(&["mine.txt".to_string()][..])
+        );
+        let locked = json!({ "loop": { "driving": true } });
+        write_session(&home, locked.clone());
+        note_page(&ctx.slot, "implement-review", "s1", &locked);
+        // The agent's work.
+        finish_phase_tasks(&repo, 2);
+        std::fs::write(repo.join("agent.txt"), "built").unwrap();
+        write_session(
+            &home,
+            json!({ "loop": { "driving": true }, "loopOutcome": good_report(2) }),
+        );
+        assert!(tick(&ctx), "the loop goes on to Phase 3");
+        let shown = git_in(&repo, &["show", "--name-only", "--format=", "HEAD"]);
+        assert!(shown.contains("agent.txt"), "{shown}");
+        assert!(shown.contains("specs/lunch/phase-2.md"), "{shown}");
+        assert!(!shown.contains("mine.txt"), "{shown}");
+        assert_eq!(git_in(&repo, &["status", "--porcelain"]), "?? mine.txt");
+        end_the_test(&ctx);
+    }
+
+    #[test]
+    fn a_phase_whose_start_could_not_list_the_tree_commits_nothing() {
+        if !harness_ready("no baseline") {
+            return;
+        }
+        let repo = throwaway_repo("no-baseline");
+        let (ctx, home) = running_loop(&repo, Limits::default());
+        lock(&ctx.slot).as_mut().unwrap().phase_baseline = None;
+        finish_phase_tasks(&repo, 2);
+        std::fs::write(repo.join("agent.txt"), "built").unwrap();
+        write_session(&home, json!({ "loopOutcome": good_report(2) }));
+        let head = git_in(&repo, &["rev-parse", "HEAD"]);
+        assert!(!tick(&ctx), "the commit stops the loop");
+        assert_eq!(
+            git_in(&repo, &["rev-parse", "HEAD"]),
+            head,
+            "nothing committed"
+        );
+        assert_eq!(git_in(&repo, &["diff", "--cached", "--name-only"]), "");
+        let entry = last_entry_saved(&home, &repo);
+        assert!(
+            entry.line.contains(loop_commit::OWN_FILES_UNKNOWN),
+            "{}",
+            entry.line
+        );
     }
 
     #[test]
@@ -5260,7 +5592,7 @@ second line"
         assert!(md.contains("(a key or certificate)"), "{md}");
         assert!(md.contains("## Your own files") && md.contains("`mine.txt`"));
         let big = evidence_markdown(&StopCause::UnsafeFiles(vec!["dump.bin".into()]), "l", &rec);
-        assert!(big.contains("`dump.bin` (over 5 MB)"), "{big}");
+        assert!(big.contains("`dump.bin` (over 5 MB"), "{big}");
         // The line is never sent as a notification for a stop by the person.
         assert!(stop_message(&cause, "specs/lunch", 4, "x").is_some());
     }

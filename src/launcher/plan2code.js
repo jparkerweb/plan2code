@@ -18,8 +18,15 @@
  * that agent (marked `(last used)`), or keeps the agent's own last-used model when none is
  * recorded, and `--model` (or Codex's `-m`) skips the question. Right after the agent is chosen, when it has a
  * flag for skipping permission prompts (every built-in does; a custom agent only with bypassArgs),
- * it asks whether to turn them off, Yes by default; `--keep-permissions` answers no, and with no
- * terminal to ask on they are off. Any other arguments are forwarded to the CLI.
+ * it asks at a keyboard, on every launch, whether to turn them off, Yes by default and nothing
+ * remembered (Codex's question also names its sandbox, which the flag turns off too).
+ *
+ * Permission flags (never forwarded to the CLI):
+ *   --bypass-permissions   turn the agent's permission prompts off without asking; the only way
+ *                          a run with no terminal (a script, a pipe) starts with them off
+ *   --keep-permissions     keep the prompts on without asking (if both are given, this wins)
+ * With no terminal to ask on and neither flag, the prompts stay on. Any other arguments are
+ * forwarded to the CLI.
  * Self-contained, Node built-ins only, with one exception: the shared agent list and lookup
  * rule (agents.json and agent-lookup.mjs, installed beside this file in ~/.plan2code/bin/) are
  * loaded by dynamic import inside chooseCli() so the command, the web console and the desktop
@@ -64,6 +71,7 @@ const PICK_FOLDER_FLAG = '--pick-folder';
 const CLI_FLAG = '--cli';
 const CLASSIC_FLAG = '--classic';
 const KEEP_PERMISSIONS_FLAG = '--keep-permissions';
+const BYPASS_PERMISSIONS_FLAG = '--bypass-permissions';
 // Where install.js puts the desktop app, and the one file in it the launcher starts.
 // PLAN2CODE_APP names a different executable (the tests start a stand-in this way).
 const APP_DIR = path.join(os.homedir(), '.plan2code', 'app');
@@ -1069,21 +1077,50 @@ async function chooseCli(requested, { fromShortcut } = {}) {
 }
 
 /**
- * Whether to start the agent with permission prompts off. Asked only for an agent that has a flag
- * for it (a custom agent may have none), with Yes as the default; `--keep-permissions` answers no
- * without asking, and with no terminal to ask on the prompts are off.
+ * What turning the prompts off drops, in the words the keyboard question uses: Codex's flag also
+ * turns off its sandbox, so its question names both.
  */
-async function chooseBypass(cli, keep) {
+function bypassDrops(cli) {
+  return cli.id === 'codex' ? 'approval prompts and its sandbox' : 'permission prompts';
+}
+
+/**
+ * The keyboard question's lines for an agent with a bypass flag: the heading, the line naming
+ * what the flag drops, the prompt, and the hint after an answer it cannot read.
+ */
+function bypassQuestion(cli) {
+  const drops = bypassDrops(cli);
+  return {
+    heading: `Turn ${cli.label}'s ${drops} off?`,
+    detail:
+      cli.id === 'codex'
+        ? `It would read, edit and run commands in this project without asking, outside its sandbox (${cli.bypassArgs.join(' ')}).`
+        : `It would read, edit and run commands in this project without asking (${cli.bypassArgs.join(' ')}).`,
+    prompt: `Turn ${drops} off?`,
+    hint: `Type n to keep the ${drops}, or press Enter to turn them off.`,
+  };
+}
+
+/**
+ * Whether to start the agent with permission prompts off. Asked only for an agent that has a flag
+ * for it (a custom agent may have none), on every launch at a keyboard, with Yes as the default
+ * and no answer remembered. `--keep-permissions` answers no and `--bypass-permissions` answers yes
+ * without asking. With no terminal to ask on the prompts stay on unless `--bypass-permissions`
+ * was passed: a run nobody watches never drops them silently.
+ */
+async function chooseBypass(cli, { keep = false, bypass = false } = {}) {
   if (!cli.bypassArgs || !cli.bypassArgs.length || keep) return false;
-  if (!process.stdin.isTTY) return true;
+  if (bypass) return true;
+  if (!process.stdin.isTTY) return false;
+  const question = bypassQuestion(cli);
   console.log('');
-  console.log(c.bright(`Turn ${cli.label}'s permission prompts off?`));
-  console.log(c.dim(`It would read, edit and run commands in this project without asking (${cli.bypassArgs.join(' ')}).`));
+  console.log(c.bright(question.heading));
+  console.log(c.dim(question.detail));
   for (;;) {
-    const answer = (await ask(`Prompts off? ${c.green('[Y/n]')}: `)).trim().toLowerCase();
+    const answer = (await ask(`${question.prompt} ${c.green('[Y/n]')}: `)).trim().toLowerCase();
     if (!answer || answer === 'y' || answer === 'yes') return true;
     if (answer === 'n' || answer === 'no') return false;
-    console.log(c.yellow('Type n to keep the prompts, or press Enter to turn them off.'));
+    console.log(c.yellow(question.hint));
   }
 }
 
@@ -1546,10 +1583,12 @@ async function launch() {
   }
   const fromShortcut = argv.includes(PICK_FOLDER_FLAG);
   const classic = argv.includes(CLASSIC_FLAG);
-  const keepPermissions = argv.includes(KEEP_PERMISSIONS_FLAG);
-  const { cli: requestedCli, rest: extraArgs } = takeCliFlag(
-    argv.filter((arg) => arg !== PICK_FOLDER_FLAG && arg !== CLASSIC_FLAG && arg !== KEEP_PERMISSIONS_FLAG)
-  );
+  const permissions = {
+    keep: argv.includes(KEEP_PERMISSIONS_FLAG),
+    bypass: argv.includes(BYPASS_PERMISSIONS_FLAG),
+  };
+  const ownFlags = new Set([PICK_FOLDER_FLAG, CLASSIC_FLAG, KEEP_PERMISSIONS_FLAG, BYPASS_PERMISSIONS_FLAG]);
+  const { cli: requestedCli, rest: extraArgs } = takeCliFlag(argv.filter((arg) => !ownFlags.has(arg)));
 
   printIntro();
   await releaseNotice();
@@ -1599,7 +1638,7 @@ async function launch() {
   // terminal flow (asked late if the app fails to start). An agent the setup page started runs
   // in this terminal even with the app installed: the waiting setup tab is owed the hand-over.
   const app = !setup && !classic && hasDisplay() ? findApp() : null;
-  let bypass = app ? null : await chooseBypass(cli, keepPermissions);
+  let bypass = app ? null : await chooseBypass(cli, permissions);
 
   if (!cwdSettled) {
     const picked = await projectCwd(fromShortcut);
@@ -1622,7 +1661,7 @@ async function launch() {
     console.log(`Opened the Plan2Code app in ${c.cyan(cwd)} ${c.dim('(run `plan2code --classic` to stay in this terminal)')}`);
     return process.exit(0);
   }
-  if (bypass === null) bypass = await chooseBypass(cli, keepPermissions);
+  if (bypass === null) bypass = await chooseBypass(cli, permissions);
 
   const args = cli.args(extraArgs, { bypass });
   const options = { cwd, stdio: 'inherit', ...(cli.fullPath ? { fromFullPath: true } : {}) };
@@ -1659,4 +1698,4 @@ async function launch() {
 // Run only when invoked directly; requiring the file (the tests do) is load-only.
 if (require.main === module) launch();
 
-module.exports = { normalizeAgents, buildArgs, parseRegQueryValue, expandPercentVars, addSavedWindowsPath, customClis, resolveCustomCommand, runnableClis, listModels, mergeModels, modelEntries, renderBanner, paint, hasModelFlag, compareVersions, modelFrom, hasDisplay, looksLikeProject, lastUsedNotice, leadInstall, installLine, findConsoleMjs, runSetupFlow, projectCwd };
+module.exports = { bypassQuestion, normalizeAgents, buildArgs, parseRegQueryValue, expandPercentVars, addSavedWindowsPath, customClis, resolveCustomCommand, runnableClis, listModels, mergeModels, modelEntries, renderBanner, paint, hasModelFlag, compareVersions, modelFrom, hasDisplay, looksLikeProject, lastUsedNotice, leadInstall, installLine, findConsoleMjs, runSetupFlow, projectCwd };

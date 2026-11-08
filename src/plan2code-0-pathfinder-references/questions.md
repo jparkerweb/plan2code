@@ -40,8 +40,8 @@ Each question file carries six contiguous `Key: value` lines after its H1 — NO
 
 ## Markers and blocking
 
-**Map markers**, rebuilt from the files every session: `[ ]` open — **these rows ARE the frontier** · `[/]` claimed · `[x]` resolved · `[!]` open but blocked · `[-]` out of scope. Resolved rows carry the gist plus the `Resolved:` date in italics: `— <gist> *(YYYY-MM-DD)*`.
+**Map markers**, rebuilt from the files every session: `[ ]` open — **these rows ARE the frontier** · `[/]` claimed · `[x]` resolved · `[!]` open but blocked · `[-]` out of scope. Resolved rows carry the gist plus the `Resolved:` date in italics, after a colon: `[x] [<name>](./questions/<file>): <gist> *(YYYY-MM-DD)*`. A map written before this format has an em dash there; both read the same, since a row is its checkbox and link.
 
-`scripts/pathfinder.mjs` implements exactly these rules (`reconcile` rebuilds the markers, `frontier` computes blocking, `lint` checks the schema), so this file is the reference for reading its output and for writing a question file. Apply the rules by hand only when the script cannot run.
+`scripts/pathfinder.mjs` implements exactly these rules (`init` writes the map, `add` writes a question file and its row, `reconcile` rebuilds the markers, `frontier` computes blocking, `lint` checks the schema), so this file is the reference for reading its output and for writing a question file by hand. Apply the rules by hand only when the script cannot run.
 
 **Unblocked** ⟺ every `NN` in `Blocked by:` is `resolved`. **Stranded:** a blocker gone `out-of-scope` never resolves — the question is not merely blocked. Re-frame its `## Question` to drop the dependency, or rule it out too. Never leave it sitting.

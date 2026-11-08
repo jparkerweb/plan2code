@@ -1664,7 +1664,7 @@ named `<slug of your file name>-<8 characters of the upload id>.<ext>`, so
 keeping the same upload twice reuses it. Attachments nothing cites stay in the
 session, and quick-question attachments are never kept. `keep` is run by the
 agent, in its own shell; the server itself still never writes into your
-project.
+project (its one delete there is Cleanup's, below).
 
 ### Ask a quick question
 
@@ -1830,8 +1830,9 @@ roughly the time the browser itself takes to open.
 
 **It stays up while the page is open.** The page pings it every few seconds, so
 the idle clock never runs down while you are there. Close the tab and it shuts
-itself down about two minutes later; it stops after four hours regardless, and
-the agent stops it outright when the session ends.
+itself down about two minutes later; it stops after four hours unless answers
+you sent are still waiting for the agent, and the agent stops it outright when
+the session ends.
 
 **The setup session hands its tab to the agent it finds.** A `setup` session is
 agent-less: nothing reads its sends, so the page's agent-silence and question
@@ -1905,8 +1906,9 @@ reads), `models.json`, `handoffs/` (old handoffs go by age, above),
 more is listed as one item, *Notebook for* its folder, and goes whole; no
 automatic sweep ever removes one. It also lists each
 folder in the project's `specs--completed/` whose newest file is more than 30
-days old: archived specs Finalize moved there. Deleting one is permanent:
-`specs--completed/` is usually gitignored, so git can't restore it. A stray is listed once
+days old: archived specs Finalize moved there. Only a folder git tracks is
+deleted: `specs--completed/` is usually gitignored, so git couldn't restore
+it, and Cleanup keeps it and says why instead. A stray is listed once
 it has sat untouched for an hour, so a lock or temp file another session is
 writing right now is never caught. **Delete these** removes
 that list and nothing else. A console running from another home
@@ -1985,7 +1987,7 @@ origin.
 
 | | |
 | --- | --- |
-| Source | `src/web-console/` (one row per file in the files table of `.agents-docs/AGENTS-architecture.md`; a test keeps it complete) |
+| Source | `src/web-console/` (one row per file in the files tables of the `.agents-docs/AGENTS-architecture-*.md` area files; a test keeps it complete) |
 | Ships as | `skills/<every skill>/references/web-console/` |
 | Wiring | one `additionalReferences` entry per skill in `install.js`; the dashboard's menu lives in `public/skills.js` (each entry's `card`; `SKILL_CATALOG` in `public/answers.js` is a lookup on it) |
 | Agent contract | a card, `src/web-console/console.md` (read once), plus pointers: the console names a topic file (`console-*.md`, `notes/<workflow>.md`, `building.md` / `building-review.md`) in its own `read` output, once per session per topic, when its moment comes; `console.mjs help <topic>` prints any of them. A `stop` with no `finish`, or a `finish` while `stopWarning` is set, is refused with the fix; `stop --session <sid> --force` ends a dead page or an abandoned session anyway. Patches are one line, with lettered options and the console's own defaults filled in; a refused patch names the field and the fix. Byte budgets keep the card, the notes and a sample session's outputs from growing back (`scripts/test-console-wire-budgets.mjs`) |
@@ -2046,10 +2048,12 @@ Two environment variables help when the start is what you are looking at:
 | `PLAN2CODE_CONSOLE_TRACE=1` | `open` prints a timeline of its steps to stderr (roots found, server spawned, port bound, browser sent, state written, server listening). |
 | `PLAN2CODE_BROWSER` | The command that opens the link instead of the system default, run through the shell with the link appended, e.g. `PLAN2CODE_BROWSER='firefox --new-tab'`. |
 
-Every `console.mjs open` also writes its own directory to
+Every `console.mjs open` of an installed console (one run from a version folder
+under `~/.plan2code/console/`) also writes its own directory to
 `$PLAN2CODE_CONSOLE_HOME/console-dir` (or `~/.plan2code/console/console-dir`
 when the override is unset): it is how an agent finds the console on a later
-session without searching the skill install dirs.
+session without searching the skill install dirs. A console run from a source
+checkout leaves the pointer alone.
 
 The vendored file is `src/web-console/public/vendor/marked.esm.js`,
 sha256 `7a7d9a521ac9384e0c3a075120a7c486cbd0c3c32cc5601bbb79a23e97403690`.

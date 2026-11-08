@@ -1,2 +1,3 @@
+node scripts/check-staged-nul.mjs
 node scripts/fix-line-endings.mjs
 node scripts/validate-char-count.js

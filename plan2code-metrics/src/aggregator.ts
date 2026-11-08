@@ -56,18 +56,25 @@ export function cohortKeyForRun(run: RunMetrics): string {
 }
 
 /**
- * Backfill missing PromptVersions fields for old run files (pre-v1.1).
+ * Backfill missing PromptVersions fields for old run files (pre-v1.1): the
+ * eight prompts every run once recorded are padded with the missing sentinel
+ * (buildCohortKey ignores it), and any other prompt a run recorded is kept.
+ *
+ * One-time regrouping: a run recorded before the collector fingerprinted every
+ * prompt has fewer entries than a new one, so its cohort key differs and it
+ * groups as the previous prompt generation.
  */
 export function backfillPromptVersions(pv: PromptVersions): PromptVersions {
   return {
-    plan:        pv.plan        ?? 'sha256:missing',
-    revise_plan: pv.revise_plan ?? 'sha256:missing',
-    document:    pv.document    ?? 'sha256:missing',
-    implement:   pv.implement   ?? 'sha256:missing',
-    finalize:    pv.finalize    ?? 'sha256:missing',
-    init:        pv.init        ?? 'sha256:missing',
-    init_update: pv.init_update ?? 'sha256:missing',
-    quick_task:  pv.quick_task  ?? 'sha256:missing',
+    plan:        'sha256:missing',
+    revise_plan: 'sha256:missing',
+    document:    'sha256:missing',
+    implement:   'sha256:missing',
+    finalize:    'sha256:missing',
+    init:        'sha256:missing',
+    init_update: 'sha256:missing',
+    quick_task:  'sha256:missing',
+    ...(pv ?? {}),
   };
 }
 

@@ -1,5 +1,6 @@
 // Web console tests, the shape of the source: no console file grows past
-// 3,000 lines, and the files lib.mjs split into stand on their own.
+// 3,000 lines, the files lib.mjs split into stand on their own, and the
+// light theme's faintest ink meets WCAG AA contrast.
 // Run with: node --test scripts/test-web-console-shape.mjs
 
 import test from "node:test";
@@ -293,11 +294,19 @@ test("shape: CSS_ORDER names every file in public/styles/ once, and none is serv
   for (const rel of SERVABLE) assert.ok(!rel.startsWith("styles/") && !CSS_ORDER.includes(rel), `${rel} must not be served on its own`);
 });
 
-// The files table in AGENTS-architecture.md gives every console file a row,
+// The files tables in the AGENTS-architecture-*.md area files give every console file a row,
 // so a contributor finds where a job lives without searching. A row's first
 // cell names the file by its path under src/web-console/ (backticked; one cell
 // may name several files, joined by "·").
-const ARCHITECTURE_DOC = path.join(ROOT, ".agents-docs", "AGENTS-architecture.md");
+const DOCS_DIR = path.join(ROOT, ".agents-docs");
+// Every architecture file (the index and its area files): the tables run across several.
+function architectureMarkdown() {
+  return fs.readdirSync(DOCS_DIR)
+    .filter((f) => /^AGENTS-architecture(-[a-z-]+)?\.md$/.test(f))
+    .sort()
+    .map((f) => fs.readFileSync(path.join(DOCS_DIR, f), "utf8"))
+    .join("\n");
+}
 
 // The paths the files table names, from the first cell of each table row.
 function tableFiles(markdown) {
@@ -315,11 +324,11 @@ function undocumented(dir, markdown) {
   const named = tableFiles(markdown);
   return sourceFiles(dir)
     .filter((p) => !named.has(p))
-    .map((p) => `${p} has no row in the files table of AGENTS-architecture.md: add one with its one-line job`);
+    .map((p) => `${p} has no row in the files tables of the AGENTS-architecture area files: add one with its one-line job`);
 }
 
-test("shape: every console file has a row in the files table of AGENTS-architecture.md", () => {
-  const problems = undocumented(CONSOLE_DIR, fs.readFileSync(ARCHITECTURE_DOC, "utf8"));
+test("shape: every console file has a row in the files tables of the AGENTS-architecture area files", () => {
+  const problems = undocumented(CONSOLE_DIR, architectureMarkdown());
   assert.deepEqual(problems, []);
 });
 
@@ -331,7 +340,7 @@ test("shape: the docs-table check names a file with no row, and passes one that 
     fs.writeFileSync(path.join(dir, "public", "b.js"), "");
     const table = "| File | Role |\n|---|---|\n| `a.mjs` | the first |\n";
     assert.deepEqual(undocumented(dir, table), [
-      "public/b.js has no row in the files table of AGENTS-architecture.md: add one with its one-line job",
+      "public/b.js has no row in the files tables of the AGENTS-architecture area files: add one with its one-line job",
     ]);
     assert.deepEqual(undocumented(dir, `${table}| \`public/b.js\` · \`x.js\` | the second |\n`), []);
   } finally {
@@ -383,4 +392,28 @@ test("shape: the redraw-safe check names a locator's style read and scroll, and 
     'const color = await s.page.evaluate((el) => getComputedStyle(el).color);',
   ].join("\n");
   assert.deepEqual(racyPageReads("x.mjs", fine), []);
+});
+
+// The WCAG 2 contrast ratio of two "#rrggbb" colors.
+function contrastRatio(a, b) {
+  const lum = (hex) => {
+    const [r, g, bl] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255).map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
+    return 0.2126 * r + 0.7152 * g + 0.0722 * bl;
+  };
+  const [hi, lo] = [lum(a), lum(b)].sort((x, y) => y - x);
+  return (hi + 0.05) / (lo + 0.05);
+}
+
+test("shape: the light theme's faintest ink, --ink-3, reads at 4.5:1 or better on --bg", () => {
+  const css = fs.readFileSync(path.join(CONSOLE_DIR, "public", "styles", "tokens.css"), "utf8");
+  // The first :root block is the light theme; the dark ones sit under their own selectors.
+  const light = css.match(/^:root \{([^}]*)\}/m);
+  assert.ok(light, "tokens.css opens with a :root block");
+  const token = (name) => {
+    const m = light[1].match(new RegExp(`--${name}:\\s*(#[0-9a-fA-F]{6})\\s*;`));
+    assert.ok(m, `--${name} is a #rrggbb color in the light :root block`);
+    return m[1];
+  };
+  const ratio = contrastRatio(token("ink-3"), token("bg"));
+  assert.ok(ratio >= 4.5, `--ink-3 ${token("ink-3")} on --bg ${token("bg")} is ${ratio.toFixed(2)}:1, under 4.5:1`);
 });

@@ -1,0 +1,79 @@
+name: fast-tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    types: [opened, synchronize, reopened, labeled]
+
+permissions:
+  contents: read
+
+# A newer push to a pull request replaces its still-running checks. A push to main always
+# finishes.
+concurrency:
+  group: fast-tests-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# The fast lane is the files listed under `fast` in scripts/test-lanes.json (no console server,
+# no console page tests, no games; test-app-meter.mjs opens one static page in a browser and
+# skips when none is installed). Every pull request runs it on Ubuntu; main and pull requests labeled
+# `full-matrix` run it on all three systems. The full `npm test` stays manual (see app.yml).
+jobs:
+  ubuntu:
+    name: fast lane (ubuntu)
+    # A pull request labeled `full-matrix` gets its Ubuntu run from the matrix job below.
+    if: github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'full-matrix')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - uses: actions/setup-node@v4.4.0
+        with:
+          node-version: 20
+      - name: Cache the npm downloads
+        # setup-node's own cache needs a tracked lockfile and the root has none, so cache npm's
+        # download folder directly, as app.yml does.
+        uses: actions/cache@v6.1.0
+        with:
+          path: ~/.npm
+          key: npm-fast-${{ runner.os }}-${{ hashFiles('package.json') }}
+          restore-keys: |
+            npm-fast-${{ runner.os }}-
+      - run: npm install
+      - run: npm run build:skills
+      - name: Run the fast lane
+        # The desktop app's variables change what the tests check; a runner has none, but unset
+        # them anyway so the run matches a terminal outside the app.
+        run: env -u PLAN2CODE_IN_APP -u PLAN2CODE_APP_TOKEN -u PLAN2CODE_APP_VERSION -u PLAN2CODE_APP_ANNOUNCE -u PLAN2CODE_EMBED_ORIGIN -u PLAN2CODE_CONSOLE_SID -u PLAN2CODE_LOOP_STRENGTH npm run test:fast
+
+  matrix:
+    name: fast lane (${{ matrix.os }})
+    if: github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'full-matrix')
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - uses: actions/setup-node@v4.4.0
+        with:
+          node-version: 20
+      - name: Cache the npm downloads
+        uses: actions/cache@v6.1.0
+        with:
+          path: |
+            ~/.npm
+            ~/AppData/Local/npm-cache
+          key: npm-fast-${{ runner.os }}-${{ hashFiles('package.json') }}
+          restore-keys: |
+            npm-fast-${{ runner.os }}-
+      - run: npm install
+      - run: npm run build:skills
+      - name: Run the fast lane
+        run: env -u PLAN2CODE_IN_APP -u PLAN2CODE_APP_TOKEN -u PLAN2CODE_APP_VERSION -u PLAN2CODE_APP_ANNOUNCE -u PLAN2CODE_EMBED_ORIGIN -u PLAN2CODE_CONSOLE_SID -u PLAN2CODE_LOOP_STRENGTH npm run test:fast

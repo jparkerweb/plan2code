@@ -26,7 +26,7 @@ Determine it like this:
 2. **Present it to the user for confirmation before writing the file.** If you
    inferred a candidate, show it and ask them to confirm or correct it. If you
    genuinely can't infer one, ask them to tell you what the next agent should do.
-   Use `AskUserQuestion` (offer your inferred task as the recommended option) or
+   Use the question tool (offer your inferred task as the recommended option) or
    a plain question — either is fine.
 3. **Do not write the document until the user has confirmed or supplied the next
    task.** This gate is mandatory even when your inference feels obviously
@@ -50,7 +50,7 @@ The dashboard lists the handoff for this checkout until it is picked up, and old
 
 ## If this touched a plan2code spec
 
-`specs/` is gitignored — Glob/Grep and file search silently skip it. If the
+`specs/` is gitignored — file search and text search silently skip it. If the
 conversation worked inside `specs/<feature>/`, confirm the exact state before
 writing with `node "<S>/specs.mjs" status specs/<feature>` (`<S>` is `scripts/` beside this SKILL.md: `~/.agents/skills/plan2code-handoff/scripts/` globally), which reads the disk:
 

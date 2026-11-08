@@ -17,6 +17,7 @@ use plan2code_app_lib::node_check;
 use plan2code_app_lib::project::{self, ProjectDir};
 use plan2code_app_lib::quit_prompt::{loop_quit_prompt, quit_prompt, QuitCase};
 use plan2code_app_lib::restart_brief;
+use plan2code_app_lib::session_reader;
 use plan2code_app_lib::settings;
 #[cfg(windows)]
 use plan2code_app_lib::task_dialog;
@@ -185,10 +186,14 @@ fn open_install_page(id: String) -> Result<(), String> {
 
 // `cmd /c ver` prints e.g. `Microsoft Windows [Version 10.0.26300.1234]`.
 fn windows_build() -> Option<u32> {
-    let out = std::process::Command::new("cmd")
-        .args(["/c", "ver"])
-        .output()
-        .ok()?;
+    let mut command = std::process::Command::new("cmd");
+    command.args(["/c", "ver"]);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+    }
+    let out = command.output().ok()?;
     let text = String::from_utf8_lossy(&out.stdout);
     let version = text.split("Version ").nth(1)?;
     version.split('.').nth(2)?.trim().parse().ok()
@@ -889,13 +894,23 @@ fn console_start(state: State<'_, AppState>) -> Result<serde_json::Value, String
     console_start_impl(&state)
 }
 
+/// What `console_start` says before the agent has announced any page.
+const NO_DASHBOARD_YET: &str = "The agent has not opened the dashboard yet.";
+
+/// The health check runs with the console lock released (the announce thread
+/// takes it to follow a new page); a console the person stopped, or one found
+/// dead, is opened again on its session, unless a new page was followed
+/// meanwhile.
 fn console_start_impl(state: &AppState) -> Result<serde_json::Value, String> {
+    let probe = {
+        let guard = state.console.lock().map_err(|e| e.to_string())?;
+        guard.as_ref().ok_or(NO_DASHBOARD_YET)?.probe()
+    };
+    let alive = !probe.stopped() && probe.alive();
     let mut guard = state.console.lock().map_err(|e| e.to_string())?;
-    let sup = guard
-        .as_mut()
-        .ok_or("The agent has not opened the dashboard yet.")?;
-    if !sup.health() {
-        sup.restart_if_dead()?;
+    let sup = guard.as_mut().ok_or(NO_DASHBOARD_YET)?;
+    if !alive && sup.probe() == probe {
+        sup.reopen()?;
     }
     serde_json::to_value(sup.session()).map_err(|e| e.to_string())
 }
@@ -904,23 +919,37 @@ fn console_start_impl(state: &AppState) -> Result<serde_json::Value, String> {
 /// dead (started but not answering).
 #[tauri::command(async)]
 fn console_status(state: State<'_, AppState>) -> serde_json::Value {
-    let Ok(guard) = state.console.lock() else {
-        return serde_json::json!({ "state": "none", "url": null });
-    };
-    match guard.as_ref() {
-        Some(sup) if sup.stopped() => serde_json::json!({ "state": "none", "url": null }),
-        Some(sup) if sup.health() => {
-            serde_json::json!({ "state": "running", "url": sup.session().url })
+    console_status_impl(&state)
+}
+
+/// The health check runs with the console lock released, as in `console_start`.
+fn console_status_impl(state: &AppState) -> serde_json::Value {
+    let none = serde_json::json!({ "state": "none", "url": null });
+    let seen = state.console.lock().ok().and_then(|guard| {
+        guard
+            .as_ref()
+            .map(|sup| (sup.probe(), sup.session().url.clone()))
+    });
+    match seen {
+        Some((probe, _)) if probe.stopped() => none,
+        Some((probe, url)) if probe.health() => {
+            serde_json::json!({ "state": "running", "url": url })
         }
-        Some(sup) => serde_json::json!({ "state": "dead", "url": sup.session().url }),
-        None => serde_json::json!({ "state": "none", "url": null }),
+        Some((_, url)) => serde_json::json!({ "state": "dead", "url": url }),
+        None => none,
     }
 }
 
 #[tauri::command]
 fn console_stop(state: State<'_, AppState>) -> Result<(), String> {
+    console_stop_impl(&state)
+}
+
+/// Stop the console but keep its supervisor, so a start after a stop opens
+/// the same session again instead of finding nothing to start.
+fn console_stop_impl(state: &AppState) -> Result<(), String> {
     let mut guard = state.console.lock().map_err(|e| e.to_string())?;
-    if let Some(mut sup) = guard.take() {
+    if let Some(sup) = guard.as_mut() {
         sup.stop()?;
     }
     Ok(())
@@ -1374,8 +1403,13 @@ fn main() {
                 let taken =
                     take_announced(&state, &notice, window_origin(&handle), session_on_disk);
                 if taken {
-                    // A running loop follows its phase's session from here.
-                    loop_driver::note_page(&state.loop_run, &notice.workflow, &notice.sid);
+                    // A running loop follows its phase's session from here,
+                    // once the agent's `open --loop` has locked it.
+                    let page = session_reader::console_home()
+                        .and_then(|home| session_reader::load(&home, &notice.sid).ok())
+                        .map(|session| session.state)
+                        .unwrap_or(serde_json::Value::Null);
+                    loop_driver::note_page(&state.loop_run, &notice.workflow, &notice.sid, &page);
                     let _ = handle.emit("console-page", &notice);
                 } else {
                     eprintln!(
@@ -1425,6 +1459,7 @@ fn main() {
 mod tests {
     use super::*;
     use std::path::PathBuf;
+    use std::time::{Duration, Instant};
 
     fn state_for(dir: &str) -> AppState {
         AppState {
@@ -1799,6 +1834,69 @@ mod tests {
         let event = loop_driver::current_event(&busy.loop_run).expect("a loop runs");
         assert!(event.running);
         assert_eq!(event.spec_name, "x");
+    }
+
+    #[test]
+    fn a_start_after_a_stop_opens_the_same_session_again() {
+        let Some(sup) = real_console() else { return };
+        let state = state_for("project-a");
+        let sid = sup.session().sid.clone();
+        *state.console.lock().unwrap() = Some(sup);
+        assert_eq!(console_status_impl(&state)["state"], "running");
+
+        console_stop_impl(&state).unwrap();
+        assert_eq!(console_status_impl(&state)["state"], "none");
+        assert!(
+            state.console.lock().unwrap().is_some(),
+            "the supervisor stays"
+        );
+
+        let session = console_start_impl(&state).expect("a start after a stop works");
+        assert_eq!(
+            session["sid"].as_str(),
+            Some(sid.as_str()),
+            "the same session"
+        );
+        assert_eq!(console_status_impl(&state)["state"], "running");
+        let _ = state.console.lock().unwrap().take().unwrap().stop();
+    }
+
+    #[test]
+    fn a_slow_health_check_never_holds_the_console_lock() {
+        // A server that takes the connection and never answers: the check
+        // waits out its whole timeout.
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        std::env::set_var(
+            "PLAN2CODE_CONSOLE_DIR",
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../src/web-console"),
+        );
+        let sup = ConsoleSupervisor::adopt(
+            PathBuf::from("."),
+            app_origin().to_string(),
+            &format!("http://127.0.0.1:{port}/s/slow/"),
+            "slow",
+        )
+        .expect("adopt");
+        let state = state_for("project-a");
+        *state.console.lock().unwrap() = Some(sup);
+        std::thread::scope(|scope| {
+            let poll = scope.spawn(|| console_status_impl(&state));
+            // The poll is in its health check by now; the announce thread's
+            // lock must not wait for it.
+            std::thread::sleep(Duration::from_millis(300));
+            let asked = Instant::now();
+            drop(state.console.lock().unwrap());
+            assert!(
+                asked.elapsed() < Duration::from_millis(500),
+                "the lock waited {:?} on the health check",
+                asked.elapsed()
+            );
+            assert_eq!(poll.join().unwrap()["state"], "dead");
+        });
+        drop(listener);
+        // Leave nothing to stop: the adopted console was never started.
+        std::mem::forget(state.console.lock().unwrap().take());
     }
 
     #[test]

@@ -19,8 +19,17 @@ npm run build:skills
 # fresh from disk, so a saved game file shows on the next page reload
 npm run play
 
-# Full check (about 70s): char limits, skills/ build, browser-module parse check,
-# dashboard skill-table check, web console + launcher + getting-started node:test suites
+# Fast lane (about 2 minutes on a 24-core machine, measured outside the desktop app):
+# the files listed under "fast" in scripts/test-lanes.json, none of which start a
+# console server, run a console page suite or play a game (test-app-meter.mjs opens one
+# static page in a browser and skips when none is installed). CI runs it on Ubuntu for
+# every pull request, and on all three systems for a push to main or a pull request
+# labeled `full-matrix`.
+npm run test:fast
+
+# Full check (takes minutes; every page suite drives a browser): list check, char limits,
+# skills/ build, browser-module parse check, dashboard skill-table check, web console +
+# launcher + getting-started node:test suites
 npm test
 
 # Put every text file git sees back to LF (also runs by itself as pretest and in
@@ -51,8 +60,9 @@ cd plan2code-metrics && npm install   # First time setup
 cd plan2code-metrics && npm run build # Build the CLI
 cd plan2code-metrics && npm test      # vitest (aggregator, community, improver)
 
-# Desktop app (plan2code-app/, Rust + Tauri). CI's `app` workflow runs all three on
-# Windows, macOS and Linux and fails on any rustfmt difference or clippy warning, so run
+# Desktop app (plan2code-app/, Rust + Tauri). CI's `app` workflow runs all three on Ubuntu
+# for every pull request and push to main, and on Windows and macOS too for a manual run or a
+# pull request labeled `full-matrix`. It fails on any rustfmt difference or clippy warning, so run
 # them before pushing, not only cargo test (see plan2code-app/README.md "Tests").
 # First time: rustup component add rustfmt clippy (for the toolchain in rust-toolchain.toml)
 cd plan2code-app && node scripts/vendor.mjs && cargo fmt --check
@@ -67,6 +77,8 @@ cd plan2code-bot && npm test          # vitest
 ## Targeted tests first
 
 The full `npm test` takes minutes and drives a browser per page suite. When a change stays inside one part of the project, run that part's suites instead (with the `PLAN2CODE_*` app variables unset, as for `npm test`), and leave the full run for when a change reaches shared code.
+
+The fast lane is `npm run test:fast` (`scripts/test-fast.mjs`): it runs the files in `scripts/test-lanes.json`'s `fast` array through `node-test.mjs`. **Two-list rule:** every `scripts/test-*.mjs` is named in exactly one of `fast` and `skipFast`. A new test file that starts a console server, runs a console page suite or plays a game goes in `skipFast`; anything else goes in `fast`. `node scripts/check-test-lanes.mjs` fails (and runs first in `npm test`) when a file is in neither list, in both, or named but missing. `test-fast.mjs` itself is a runner and sits in `skipFast`. `.github/workflows/fast-tests.yml` runs the lane on Ubuntu for every pull request, and on all three systems for pushes to main and pull requests labeled `full-matrix`.
 
 | What changed | Run |
 |---|---|
@@ -131,9 +143,9 @@ The root `npm test` does not run the metrics or bot vitest suites; run them in t
 ## How the Installer Works
 
 1. **Builds `skills/` from `src/`** — one Agent Skill per source prompt, including uncommitted source edits.
-2. **Checks the skills CLI is reachable** with `npx --yes skills --version`.
+2. **Checks the skills CLI is reachable** with `npx --yes skills@1.7.6 --version` (the version is pinned: `SKILLS_CLI_VERSION` in `install.js`).
 3. **Sweeps pre-2.2 install paths** and removes installed `plan2code-*` skills so renamed or retired prompts cannot survive as orphans.
-4. **Delegates installation** to `npx --yes skills add "<repo>/skills" -g -s <skill names> -y`.
+4. **Delegates installation** to `npx --yes skills@1.7.6 add "<repo>/skills" -g -s <skill names> -y`.
 5. **Installs the global `plan2code` command** (only when step 4 succeeded). Advanced → `L` runs the same flow without `-g` and without the launcher.
 
 The skills CLI owns distribution from step 4 onward. It stores canonical skills under `~/.agents/skills/` and links them into agents that maintain their own skill directory. Plan2Code no longer maintains platform-specific output formats.
@@ -181,5 +193,5 @@ See the `skills/` build-artifact gotcha in [Code Style & Gotchas](./AGENTS-code-
    - Optional: `STARTER_SET_FOR` in `public/starters.js` (unlisted gets "general").
 
    **Adding a spec state** is shorter: one entry in `src/web-console/public/spec-states.js`, the detection in `classifySpec()` in `src/web-console/scan.mjs`, the `states` of each card in `skills.js` that takes it, and a line in the dashboard skill (`src/plan2code.md`); then `npm test`.
-4. Update command inventories in `README.md` (dashboard-card and command tables), `QUICK-REFERENCE.md`, `.agents-docs/AGENTS-architecture.md` (prompt table, own-script rows, notes list), and `CHANGELOG.md`. Update `docs/index.html` for core pipeline steps, and for a utility only when it is a headline change (its `.utils` block).
+4. Update command inventories in `README.md` (dashboard-card and command tables), `QUICK-REFERENCE.md`, `.agents-docs/AGENTS-architecture-install.md` (prompt table), `.agents-docs/AGENTS-architecture-skill-scripts.md` (own-script rows) and `.agents-docs/AGENTS-architecture-console.md` (notes list), and `CHANGELOG.md`. Update `docs/index.html` for core pipeline steps, and for a utility only when it is a headline change (its `.utils` block).
 5. Run `npm run build:skills` and `npm test`.

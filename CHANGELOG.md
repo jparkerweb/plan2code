@@ -4,6 +4,12 @@ All notable changes to Plan2Code will be documented in this file.
 
 ## v3.0.4
 
+### ✨ Added
+
+- **tests**: a fast test lane, `npm run test:fast`, runs the quick suites (none starts a console server, runs a page suite or plays a game) in about two minutes. `scripts/test-lanes.json` lists every test file in exactly one of two lists, and `scripts/check-test-lanes.mjs` fails when a new test file is in neither. A new `fast-tests` workflow runs the lane on Ubuntu for every pull request, and on all three systems for main and for a pull request labeled `full-matrix`.
+- **tooling**: `scripts/set-version.mjs <x.y.z>` writes one version into every file that carries it (`version.json` with its release date, the root `package.json`, README's `Version` line, and the desktop app's `package.json`, `package-lock.json`, `tauri.conf.json`, both `Cargo.toml` files and `Cargo.lock`), and `scripts/check-doc-size.mjs` keeps every file in `.agents-docs/` under a size limit.
+- **skill scripts**: one shared rule now derives a spec's state for both the dashboard and `specs.mjs status`, and a spec whose only open tasks are blocked ones, each with a written reason, now lights Finalize. `specs.mjs` gains a format `check` with four rules (a warning, or an error for a spec marked `<!-- plan2code-format: 2 -->`) and an `archive` that verifies names and sizes before it removes a copied source, and Pathfinder's script gains `init` and `add` commands.
+
 ### 🐛 Fixed
 
 - **desktop app**: the agent setup page's **Back** button now sits in the app's top bar instead of floating over the page, where it covered the settings and help icons.
@@ -11,10 +17,32 @@ All notable changes to Plan2Code will be documented in this file.
 - **web console**: the **Install page** link on the agent setup page now opens in your default browser inside the desktop app. It did nothing there, because the page was not told it was running in the app.
 - **web console**: a note you have sent now shows a small spinner in front of "Sent, waiting for Plan2Code" in the Notes panel, so it is clear Plan2Code is still working on it. The spinner hides when the agent has gone quiet, so a dead session is not mistaken for a slow one.
 - **web console**: a finished session now has a **Back to the dashboard** button in the footer, beside the disabled Send, so the way home is always in reach. It used to sit far down the finish card, which left the top bar's New Session as the only visible way out.
+- **web console**: the session token no longer appears on the server's command line or in its log. `open` hands it over in a one-shot file the server reads and deletes.
+- **web console**: a server no longer exits after four hours while a result is waiting to be collected, and a stale lock is judged by whether its holder is still running, not by its age.
+- **web console**: Cleanup now refuses a `specs--completed/<feature>` folder that git does not track, and says why on the page.
+- **web console**: the light theme's faintest ink now meets WCAG AA contrast, the verdict buttons carry `aria-pressed`, and the Ask log and footer no longer redraw when nothing changed.
+- **desktop app**: stopping the console and starting it again reopens the same session, a start or status check no longer holds the console lock while it probes, and the remaining Windows spawns no longer flash a console window. The release build is smaller (`lto`, `strip`, `panic = abort`).
+- **install**: each skill's console stub now looks for its own version folder before the `console-dir` pointer, and only an installed console writes that pointer, so running the console from a source checkout can no longer leave every skill unable to find it. An update removes the older console versions only after the skills have installed, so a failed update leaves the old skills working.
+- **desktop app**: the Implementation Loop now lists untracked files one by one, so a folder that was untracked before a phase neither hides the agent's new files from the phase commit nor takes the person's files into it, and an unreadable page no longer replaces the Loop's page candidate.
+- **skill scripts**: `pathfinder init` now refuses a checkbox line or a loop completion token in its arguments, as `pathfinder add` already did.
+- **install**: `plan2code-init` warns once when `specs--completed/` is gitignored, and the test-map and run-check scripts now ship to the skills that use them.
 
 ### 🔧 Changed
 
 - **web console**: the Notebook's tab name dialog now counts characters as you type (such as `41/40`), warns the moment a name passes the 40 character limit and disables Save until it fits, instead of only saying so after you press Save.
+- **install**: the web console is now installed once, under `~/.plan2code/console/<version>/`, and shared by all 19 skills through a small stub in each, instead of being copied into every skill. An install removes the older version folders and leaves every other entry alone.
+- **install**: the `skills` CLI now runs pinned to an exact version (`skills@1.7.6`), so a new release of it can never change an install between two runs of the same Plan2Code.
+- **launcher**: with no terminal to ask on (a script or a pipe), `plan2code` now keeps the agent's permission prompts on. `--bypass-permissions` turns them off without asking, and `--keep-permissions` still keeps them and wins. The question names what the flag drops (for Codex, its approval prompts and its sandbox).
+- **implementation loop**: a phase run on best guess now stops on the next look when a question is open, instead of carrying on. The loop's commit stages only the phase's own files, by name, and fails closed when it cannot read the list. `commit-msg.mjs --add-all` is retired for `--files`.
+- **prompts**: product tool names (the question tool, Glob, Grep) are gone from the prompts, and `scripts/check-prompt-wording.mjs` keeps them out of the built skills. The eighteen console openings are held to nine shared sentences by `scripts/check-console-openings.mjs`, and the rules for a review inside a build live once, in `src/shared-references/review-in-build.md`.
+- **metrics**: the metrics scanner no longer refuses ordinary text, so a risk-register row that ends in text is accepted, and the collector now fingerprints every prompt, keyed by name. The dead loop-token item is gone.
+- **bot**: the bot copies each of its skills' whole folder, so a skill's references and scripts come along.
+- **prompts**: Plan infers the testing posture from the test map instead of asking, Document writes `<!-- plan2code-format: 2 -->` into a new `overview.md`, the six side skills have descriptions that say when they fit, Pathfinder reads its `grilling.md` and `trail.md` only when it needs them, and Finalize's changelog row is gone.
+- **tooling**: a stray `nul` file at the repo root and its ignore line are removed, and `scripts/check-staged-nul.mjs` runs first in the pre-commit hook so one cannot be committed again.
+
+### 📚 Documentation
+
+- **docs**: `.agents-docs/AGENTS-architecture.md` is now a short index. The 280 KB file is split by area into the layout and install notes, skill scripts, the status line, the web console (server and contract, page files, design points), the Activities games and Ghoul Rush. Stale facts are corrected (CI runs on Ubuntu for every pull request, and on three systems for main and `full-matrix`), and the lists of supported agents now say what each means: the agents the skills CLI installs into, and the built-ins and starter templates `plan2code` launches.
 
 ## v3.0.3
 

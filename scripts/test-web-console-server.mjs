@@ -37,6 +37,8 @@ import {
   terminalLine,
 } from "../src/web-console/sessions.mjs";
 import { validate } from "../src/web-console/patches.mjs";
+// Scrubs this process's git config, so the Cleanup fixtures and git-repo.mjs agree.
+import { gitInit } from "./skill-script-helpers.mjs";
 import { joinedCss } from "./css-helpers.mjs";
 import {
   ROOT,
@@ -439,6 +441,13 @@ test("cleanup finds old sessions and strays in both folders, and keeps every pro
     ];
     stray(path.join(consoleDir, "p1.json"), "12345");
     put(path.join(consoleDir, "runtime", "x.json"));
+    // The shared console install, one folder per version, however old: never a stray.
+    const installed = stray(path.join(consoleDir, "3.0.4", "console.mjs"), "x");
+    backdate(path.dirname(installed));
+    kept.push(installed);
+    // A folder that is not a version stays a stray.
+    backdate(put(path.join(consoleDir, "3.0", "x.txt")));
+    backdate(path.join(consoleDir, "3.0"));
     backdate(put(path.join(plan2code, "console-dev", "sessions", "x.txt"), "abc"));
     backdate(path.join(plan2code, "console-dev"));
     // An old folder with a file rewritten just now: the folder's own mtime
@@ -463,6 +472,7 @@ test("cleanup finds old sessions and strays in both folders, and keeps every pro
     const opts = { consoleDir, plan2codeDir: plan2code, skipSid: "20250801-101010-bbbbbb" };
     const { items, bytes } = await cleanupFindings(opts);
     assert.deepEqual(items.map((i) => i.id).sort(), [
+      "console:3.0",
       "console:looks.json.456.tmp",
       "console:p1.json",
       "root:console-dev",
@@ -478,7 +488,7 @@ test("cleanup finds old sessions and strays in both folders, and keeps every pro
 
     // A console running from another home never reaches the folder above it.
     const elsewhere = await cleanupFindings({ ...opts, plan2codeDir: path.join(plan2code, "other") });
-    assert.deepEqual(elsewhere.items.map((i) => i.where).sort(), ["console", "console", "session"]);
+    assert.deepEqual(elsewhere.items.map((i) => i.where).sort(), ["console", "console", "console", "session"]);
 
     // Only ids a fresh scan still finds are removed; anything else is ignored.
     const done = await removeCleanup(
@@ -510,6 +520,8 @@ test("cleanup lists the project's completed specs untouched for 30 days, and rem
       return p;
     };
     fs.mkdirSync(consoleDir, { recursive: true });
+    fs.mkdirSync(project, { recursive: true });
+    const g = gitInit(project);
     const opts = { consoleDir, plan2codeDir: path.join(base, "home"), skipSid: "x", project };
 
     // No specs--completed/ at all is just nothing to list.
@@ -523,6 +535,9 @@ test("cleanup lists the project's completed specs untouched for 30 days, and rem
     put(path.join(completed, "touched-spec", "overview.md"));
     backdate(put(path.join(completed, "README.md")));
     backdate(put(path.join(project, "specs", "live-spec", "overview.md")));
+    // Committed, so Cleanup may delete it (an untracked one is refused: see the next test).
+    g("add", "specs--completed/old-spec");
+    g("commit", "-q", "-m", "archive old-spec");
 
     const { items } = await cleanupFindings(opts);
     assert.deepEqual(items.map((i) => i.id), ["completed:old-spec"]);
@@ -539,6 +554,78 @@ test("cleanup lists the project's completed specs untouched for 30 days, and rem
     assert.equal(fs.existsSync(path.join(completed, "old-spec")), false);
     for (const p of ["fresh-spec", "touched-spec", "README.md"]) assert.ok(fs.existsSync(path.join(completed, p)), p);
     assert.ok(fs.existsSync(path.join(project, "specs", "live-spec")));
+  } finally {
+    fs.rmSync(base, { recursive: true, force: true });
+  }
+});
+
+test("cleanup refuses a completed spec git does not track, says why, and still deletes a tracked one and everything else", async () => {
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), "p2c-cleanup-guard-"));
+  const home = path.join(base, "home");
+  const consoleDir = path.join(home, "console");
+  const project = path.join(base, "project");
+  const completed = path.join(project, "specs--completed");
+  try {
+    const put = (p, body = "{}") => {
+      fs.mkdirSync(path.dirname(p), { recursive: true });
+      fs.writeFileSync(p, body);
+      return p;
+    };
+    const oldSpec = (name, file = "overview.md") => {
+      backdate(put(path.join(completed, name, file), "abc"));
+      backdate(path.join(completed, name));
+    };
+    fs.mkdirSync(consoleDir, { recursive: true });
+    fs.mkdirSync(project, { recursive: true });
+    const g = gitInit(project);
+    // The default: Init gitignores the archive, so only a forced add tracks a spec.
+    put(path.join(project, ".gitignore"), "specs--completed/\n");
+    oldSpec("tracked-spec");
+    oldSpec("untracked-spec");
+    oldSpec("partly-spec");
+    oldSpec("edited-spec");
+    g("add", ".gitignore");
+    g("add", "-f", "specs--completed/tracked-spec", "specs--completed/partly-spec", "specs--completed/edited-spec");
+    g("commit", "-q", "-m", "archive");
+    // A file added after the commit: git could not give it back.
+    oldSpec("partly-spec", "notes.md");
+    // A tracked file edited after the commit: git could give back only the old text.
+    backdate(put(path.join(completed, "edited-spec", "overview.md"), "edited"));
+    backdate(path.join(completed, "edited-spec"));
+    // Not a spec: removed as before, in the same call.
+    backdate(put(path.join(consoleDir, "stray.json")));
+
+    const opts = { consoleDir, plan2codeDir: home, skipSid: "x", project };
+    const ids = ["completed:tracked-spec", "completed:untracked-spec", "completed:partly-spec", "completed:edited-spec", "console:stray.json"];
+    assert.deepEqual((await cleanupFindings(opts)).items.map((i) => i.id).sort(), [...ids].sort(), "the scan still lists all of them");
+
+    const done = await removeCleanup(ids, opts);
+    assert.deepEqual(done.removed.sort(), ["completed:tracked-spec", "console:stray.json"]);
+    assert.deepEqual(done.refused.sort(), ["completed:edited-spec", "completed:partly-spec", "completed:untracked-spec"]);
+    assert.deepEqual(done.failed, []);
+    assert.equal(fs.existsSync(path.join(completed, "tracked-spec")), false, "a tracked spec is deleted");
+    assert.equal(fs.existsSync(path.join(consoleDir, "stray.json")), false);
+    for (const name of ["untracked-spec", "partly-spec", "edited-spec"]) assert.ok(fs.existsSync(path.join(completed, name, "overview.md")), name + " is kept");
+    assert.ok(fs.existsSync(path.join(completed, "partly-spec", "notes.md")));
+    assert.match(done.refusal, /^Kept 3 completed specs git does not track as they stand, so deleting them would lose them for good: /);
+    assert.ok(done.refusal.includes("specs--completed/untracked-spec/"), done.refusal);
+    assert.ok(done.refusal.includes("specs--completed/partly-spec/"), done.refusal);
+    assert.ok(done.refusal.includes("specs--completed/edited-spec/"), done.refusal);
+    assert.equal(fs.readFileSync(path.join(completed, "edited-spec", "overview.md"), "utf8"), "edited", "the uncommitted edit survives");
+    assert.equal(done.refusal.includes("specs--completed/tracked-spec/"), false, "the deleted spec is not named");
+
+    // A project that is not a repository at all: nothing there is tracked.
+    const loose = path.join(base, "loose");
+    backdate(put(path.join(loose, "specs--completed", "only-spec", "overview.md")));
+    backdate(path.join(loose, "specs--completed", "only-spec"));
+    const alone = await removeCleanup(["completed:only-spec"], { ...opts, project: loose });
+    assert.deepEqual(alone.removed, []);
+    assert.deepEqual(alone.refused, ["completed:only-spec"]);
+    assert.equal(alone.refusal, "Kept specs--completed/only-spec/: git does not track it as it stands, so deleting it would lose it for good. Commit it first, or delete it yourself once it is backed up.");
+    assert.ok(fs.existsSync(path.join(loose, "specs--completed", "only-spec")));
+
+    // Nothing refused: no line.
+    assert.equal((await removeCleanup([], opts)).refusal, "");
   } finally {
     fs.rmSync(base, { recursive: true, force: true });
   }
@@ -871,9 +958,11 @@ test("/app.css is the style files joined in CSS_ORDER with the accent rules last
 
 // The skills the build writes carry public/styles/ with every file in CSS_ORDER,
 // and a console started from that tree serves the same /app.css as this one.
-test("the built skills tree serves the same /app.css as the source console", async (t) => {
+test("the built shared console serves the same /app.css as the source console", async (t) => {
   const { CSS_ORDER, asset } = await import("../src/web-console/static.mjs");
-  const built = path.join(ROOT, "skills", "plan2code", "references", "web-console");
+  // The console is built once, as skills/_console/<version>/, and every skill forwards to it.
+  const version = JSON.parse(fs.readFileSync(path.join(ROOT, "version.json"), "utf8")).version;
+  const built = path.join(ROOT, "skills", "_console", version);
   // npm test builds first; a bare run of this file may not have.
   if (!fs.existsSync(path.join(built, "console.mjs"))) return t.skip("skills/ is not built: run npm run build:skills");
   for (const f of CSS_ORDER) assert.ok(fs.existsSync(path.join(built, "public", "styles", f)), `the build is missing public/styles/${f}`);

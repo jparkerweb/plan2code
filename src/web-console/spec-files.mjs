@@ -2,7 +2,8 @@
 //
 // The task markers and the task-line, checkbox and Status-line patterns, in
 // one place, so every reader of a spec counts and names its tasks the same
-// way. Imported by scan.mjs (the dashboard's spec states), patches.mjs (a doc
+// way, and deriveSpecState(), the one rule for a documented spec's state.
+// Imported by scan.mjs (the dashboard's spec states), patches.mjs (a doc
 // block's `select: "tasks"`) and src/skill-scripts/specs.mjs (through
 // consoleModule(), so the installed skill reads with this same copy). No
 // imports and nothing runs at load but building the patterns.
@@ -73,23 +74,112 @@ export function phaseChecklist(overview) {
 }
 
 /**
+ * A spec folder's phase files by phase number, from its file names: the
+ * `phase-<N>...md` files, one per number. When a number has several files
+ * the exact `phase-<N>.md` wins, else the first by name; the rest are listed
+ * in the map's `extra` (number -> names). The one rule for which files are a
+ * spec's phases, shared by the dashboard scan and specs.mjs.
+ */
+export function pickPhaseFiles(names) {
+  const files = new Map();
+  const extra = new Map();
+  for (const name of [...(names || [])].sort()) {
+    const m = name.match(/^phase-(\d+)\b[^/]*\.md$/i);
+    if (!m) continue;
+    const n = Number(m[1]);
+    const exact = new RegExp(`^phase-0*${n}\\.md$`, "i").test(name);
+    if (!files.has(n)) files.set(n, name);
+    else if (exact) {
+      (extra.get(n) || extra.set(n, []).get(n)).push(files.get(n));
+      files.set(n, name);
+    } else (extra.get(n) || extra.set(n, []).get(n)).push(name);
+  }
+  files.extra = extra;
+  return files;
+}
+
+// A written reason on a blocked task: "BLOCKED: <why>" (Implementation
+// Mode's blocker format) or "Reason: <why>", on the task line or under it.
+export const BLOCK_REASON_RE = /\b(?:blocked|reason)\s*:\s*\S/i;
+
+/**
  * A phase file's tasks by where they stand. The task lines when the file has
  * them, so an Acceptance Criteria checkbox is not counted as a task; every
  * checkbox in a file written before that format. `[?]` (assumed done) is
- * counted apart from `[x]`; an unknown marker is not counted at all.
+ * counted apart from `[x]`, `[!]` (blocked) apart from the open ones, and an
+ * unknown marker (`[~]`) is open: it is not done. `bare` counts the blocked
+ * tasks with no written reason (BLOCK_REASON_RE) on their line or under it.
  */
 export function countTasks(text) {
   const lines = (text || "").split(/\r?\n/);
-  const tasks = lines.filter((l) => TASK_LINE_RE.test(l));
+  const hasTasks = lines.some((l) => TASK_LINE_RE.test(l));
   let done = 0;
   let assumed = 0;
   let open = 0;
-  for (const line of tasks.length ? tasks : lines) {
+  let blocked = 0;
+  let bare = 0;
+  lines.forEach((line, i) => {
+    if (hasTasks && !TASK_LINE_RE.test(line)) return;
     const m = line.match(CHECKBOX_RE);
-    if (!m) continue;
+    if (!m) return;
     if (m[1] === "x" || m[1] === "X") done++;
     else if (m[1] === "?") assumed++;
-    else if (m[1] === " " || m[1] === "/" || m[1] === "!") open++;
+    else if (m[1] === "!") {
+      blocked++;
+      // The task's body runs to the next heading or checkbox.
+      let end = i + 1;
+      while (end < lines.length && !/^#{1,6}\s/.test(lines[end]) && !CHECKBOX_RE.test(lines[end])) end++;
+      if (!BLOCK_REASON_RE.test(line.replace(CHECKBOX_RE, "")) && !BLOCK_REASON_RE.test(lines.slice(i + 1, end).join("\n"))) bare++;
+    } else open++;
+  });
+  return { done, assumed, open, blocked, bare, total: done + assumed + open + blocked };
+}
+
+/**
+ * A documented spec's state, from its overview.md text (or null) and its
+ * phase files' texts (`[{ number, text }]`, one per phase number, as
+ * pickPhaseFiles() picks them). The one derivation the dashboard scan and
+ * specs.mjs both use, so they cannot drift:
+ *
+ * - `built`: no task is open or blocked, at least one is done, and every
+ *   phase the Phase Checklist lists as not yet approved has a phase file with
+ *   tasks in it.
+ * - `building`: some task is done but the spec is not built. Blocked tasks
+ *   are named in `detail`; when they are all that is left and each carries a
+ *   written reason, `finalizeReady` is true (the dashboard lights Finalize).
+ * - `documented`: nothing done yet.
+ *
+ * Returns { state, detail, done, assumed, open, blocked, bare, total,
+ * unwritten, finalizeReady }, where `unwritten` lists the phase numbers the
+ * checklist names as open with no phase file, or with a phase file holding
+ * no tasks.
+ */
+export function deriveSpecState({ overview = null, phases = [] } = {}) {
+  const rows = overview == null ? [] : phaseChecklist(overview);
+  const approved = (n) => rows.some((r) => r.number === n && (r.marker === "x" || r.marker === "X" || r.marker === "?"));
+  const sum = { done: 0, assumed: 0, open: 0, blocked: 0, bare: 0, total: 0 };
+  const unwritten = [];
+  const numbers = new Set();
+  for (const p of phases) {
+    numbers.add(p.number);
+    const n = countTasks(p.text);
+    for (const k of Object.keys(sum)) sum[k] += n[k];
+    if (n.total === 0 && !approved(p.number)) unwritten.push(p.number);
   }
-  return { done, assumed, open, total: done + assumed + open };
+  for (const r of rows) if (!numbers.has(r.number) && !approved(r.number) && !unwritten.includes(r.number)) unwritten.push(r.number);
+  unwritten.sort((a, b) => a - b);
+  const finished = sum.done + sum.assumed;
+  const assumedNote = sum.assumed > 0 ? `, ${sum.assumed} assumed` : "";
+  const blockedNote = sum.blocked > 0 ? `, ${sum.blocked} blocked` : "";
+  const unwrittenNote = unwritten.length ? `, Phase ${unwritten.join(", ")} not written up` : "";
+  const base = { ...sum, unwritten, finalizeReady: false };
+  if (finished > 0 && sum.open === 0 && sum.blocked === 0 && !unwritten.length) {
+    return { ...base, state: "built", detail: `all tasks done${assumedNote}` };
+  }
+  if (finished > 0) {
+    const finalizeReady = sum.open === 0 && sum.blocked > 0 && sum.bare === 0 && !unwritten.length;
+    return { ...base, finalizeReady, state: "building", detail: `${finished} of ${sum.total} tasks done${assumedNote}${blockedNote}${unwrittenNote}` };
+  }
+  const count = phases.length;
+  return { ...base, state: "documented", detail: `${count} phase${count === 1 ? "" : "s"}, ${sum.total || "?"} tasks ready` };
 }

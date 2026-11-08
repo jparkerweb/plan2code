@@ -37,6 +37,61 @@ pub struct ConsoleSession {
 pub const OLD_CONSOLE: &str =
     "The installed Plan2Code console is too old to show inside the app. Press Update skills, then try again.";
 
+/// A supervisor's health check, copied out of it (`ConsoleSupervisor::probe`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ConsoleProbe {
+    url: String,
+    stopped: bool,
+}
+
+impl ConsoleProbe {
+    /// Was the supervisor stopped on purpose when the probe was taken.
+    pub fn stopped(&self) -> bool {
+        self.stopped
+    }
+
+    /// A GET on the session URL: any HTTP answer means the server is alive.
+    pub fn health(&self) -> bool {
+        self.health_within(HEALTH_TIMEOUT)
+    }
+
+    /// `health`, then once more with the longer timeout: a machine busy with
+    /// a test run can keep a healthy server from answering inside the first.
+    pub fn alive(&self) -> bool {
+        self.health() || self.health_within(BUSY_HEALTH_TIMEOUT)
+    }
+
+    fn health_within(&self, timeout: Duration) -> bool {
+        if self.stopped {
+            return false;
+        }
+        let Ok((host, port, path)) = split_url(&self.url) else {
+            return false;
+        };
+        let Some(addr) = (host.as_str(), port)
+            .to_socket_addrs()
+            .ok()
+            .and_then(|mut a| a.next())
+        else {
+            return false;
+        };
+        let Ok(mut stream) = TcpStream::connect_timeout(&addr, timeout) else {
+            return false;
+        };
+        let _ = stream.set_read_timeout(Some(timeout));
+        let _ = stream.set_write_timeout(Some(timeout));
+        let request = format!("GET {path} HTTP/1.1\r\nHost: {host}\r\nConnection: close\r\n\r\n");
+        if stream.write_all(request.as_bytes()).is_err() {
+            return false;
+        }
+        let mut status = [0u8; 64];
+        match stream.read(&mut status) {
+            Ok(n) => String::from_utf8_lossy(&status[..n]).starts_with("HTTP/"),
+            Err(_) => false,
+        }
+    }
+}
+
 /// One supervised console for one project folder.
 pub struct ConsoleSupervisor {
     console_dir: PathBuf,
@@ -273,8 +328,10 @@ impl ConsoleSupervisor {
 
     /// The console moved to another address or session (an announced page that
     /// is not the one this supervisor opened): health, stop and the restart
-    /// brief follow it from now on.
+    /// brief follow it from now on. An announced page is a running console, so
+    /// a supervisor the person stopped is no longer stopped.
     pub fn follow(&mut self, url: &str, sid: &str) {
+        self.stopped = false;
         if self.session.url == url && self.session.sid == sid {
             return;
         }
@@ -296,32 +353,16 @@ impl ConsoleSupervisor {
     }
 
     fn health_within(&self, timeout: Duration) -> bool {
-        if self.stopped {
-            return false;
-        }
-        let Ok((host, port, path)) = split_url(&self.session.url) else {
-            return false;
-        };
-        let Some(addr) = (host.as_str(), port)
-            .to_socket_addrs()
-            .ok()
-            .and_then(|mut a| a.next())
-        else {
-            return false;
-        };
-        let Ok(mut stream) = TcpStream::connect_timeout(&addr, timeout) else {
-            return false;
-        };
-        let _ = stream.set_read_timeout(Some(timeout));
-        let _ = stream.set_write_timeout(Some(timeout));
-        let request = format!("GET {path} HTTP/1.1\r\nHost: {host}\r\nConnection: close\r\n\r\n");
-        if stream.write_all(request.as_bytes()).is_err() {
-            return false;
-        }
-        let mut status = [0u8; 64];
-        match stream.read(&mut status) {
-            Ok(n) => String::from_utf8_lossy(&status[..n]).starts_with("HTTP/"),
-            Err(_) => false,
+        self.probe().health_within(timeout)
+    }
+
+    /// What a health check needs, copied out, so a caller can check with the
+    /// app's console lock released: the announce thread takes that lock to
+    /// follow a new page, and a check can wait seconds on a busy machine.
+    pub fn probe(&self) -> ConsoleProbe {
+        ConsoleProbe {
+            url: self.session.url.clone(),
+            stopped: self.stopped,
         }
     }
 
@@ -329,9 +370,17 @@ impl ConsoleSupervisor {
     /// when a new session was started. Never loops: the caller (the bar) asks
     /// and shows the outcome.
     pub fn restart_if_dead(&mut self) -> Result<bool, String> {
-        if self.stopped || self.health() || self.health_within(BUSY_HEALTH_TIMEOUT) {
+        if self.stopped || self.probe().alive() {
             return Ok(false);
         }
+        self.reopen()?;
+        Ok(true)
+    }
+
+    /// A fresh `open` on the same session (a new one only when it is gone from
+    /// disk), with no health check: for a console the caller already found
+    /// dead, or one the person stopped and now starts again. Clears `stopped`.
+    pub fn reopen(&mut self) -> Result<(), String> {
         let sid = self.session.sid.clone();
         let on_disk = session_on_disk(&sid);
         let (console_dir, project_dir, embed_origin, workflow) = (
@@ -344,7 +393,7 @@ impl ConsoleSupervisor {
             Self::open_session(console_dir, project_dir, embed_origin, resume, workflow)
         })?;
         self.stopped = false;
-        Ok(true)
+        Ok(())
     }
 
     /// `console.mjs stop --session <sid> --force`: the console's own orderly

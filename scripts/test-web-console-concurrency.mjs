@@ -9,10 +9,10 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { execFileSync, spawn } from "node:child_process";
+import { execFileSync, spawn, spawnSync } from "node:child_process";
 import http from "node:http";
 import { meterView } from "../src/web-console/public/meter.js";
-import { STATE_LOCK_FILE } from "../src/web-console/files.mjs";
+import { STATE_LOCK_FILE, lockStale } from "../src/web-console/files.mjs";
 import { cwdHash, readLedger, repoRoots } from "../src/web-console/sessions.mjs";
 import { validate } from "../src/web-console/patches.mjs";
 import { WORKSPACE_FILE } from "../src/web-console/workspace.mjs";
@@ -241,6 +241,34 @@ test("a lock left by a writer that died is broken rather than waited on for good
   }
 });
 
+// Age alone used to break a lock: a writer slowed past LOCK_STALE_MS by a busy
+// machine lost its lock to the next writer, and both wrote. The holder's pid
+// decides now; age only breaks a lock that names no live holder.
+test("a lock whose holder is still running is kept past the stale age; age breaks only an unnamed one", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "p2c-lock-"));
+  const lock = path.join(dir, STATE_LOCK_FILE);
+  const holder = spawn(process.execPath, ["-e", "setTimeout(() => {}, 60000)"], { stdio: "ignore", windowsHide: true });
+  try {
+    await new Promise((r) => holder.once("spawn", r));
+    const old = new Date(Date.now() - 60000);
+    fs.writeFileSync(lock, String(holder.pid));
+    fs.utimesSync(lock, old, old);
+    assert.equal(lockStale(lock), false, "a live holder keeps its lock, however old");
+
+    holder.kill();
+    await new Promise((r) => (holder.exitCode !== null || holder.signalCode ? r() : holder.once("exit", r)));
+    assert.equal(lockStale(lock), true, "a gone holder frees it");
+
+    fs.writeFileSync(lock, "");
+    assert.equal(lockStale(lock), false, "an unnamed young lock is a holder mid-create");
+    fs.utimesSync(lock, old, old);
+    assert.equal(lockStale(lock), true, "an unnamed old lock is a crash left behind");
+  } finally {
+    holder.kill();
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 // A young handle and a live pid are what a server that died a minute ago
 // leaves behind for any process to inherit. Only /health is proof.
 test("stop never kills a live process that does not answer /health as ours", () => {
@@ -345,7 +373,7 @@ test("wait reads --seconds 6s as six seconds, not as nothing", () => {
   }
 });
 
-test("only open leaves the console-dir pointer; status, help and a bad command do not", () => {
+test("only an installed console's open leaves the console-dir pointer; status, help, a bad command and a source checkout's open do not", () => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), "p2c-pointer-"));
   const env = { PLAN2CODE_CONSOLE_HOME: home, PLAN2CODE_MODELS_DIR: path.join(home, "plan2code") };
   const pointer = path.join(home, "console-dir");
@@ -356,9 +384,18 @@ test("only open leaves the console-dir pointer; status, help and a bad command d
     const usage = cli(["nope"], { env, expectFail: true });
     assert.match(usage.stderr, /keep/, "the usage line names every command");
     assert.equal(fs.existsSync(pointer), false);
-    const opened = cli(["open", "--no-open"], { env });
-    assert.equal(fs.readFileSync(pointer, "utf8").trim(), path.join(ROOT, "src", "web-console"));
-    cli(["stop", "--session", opened.json.sid, "--force"], { env });
+    // A source checkout never points every skill stub at itself.
+    const fromSource = cli(["open", "--no-open"], { env });
+    assert.equal(fs.existsSync(pointer), false, "a source checkout leaves no pointer");
+    cli(["stop", "--session", fromSource.json.sid, "--force"], { env });
+    // An installed console (a version folder) does.
+    const installed = path.join(home, "9.9.9");
+    fs.cpSync(path.join(ROOT, "src", "web-console"), installed, { recursive: true });
+    const res = spawnSync(process.execPath, [path.join(installed, "console.mjs"), "open", "--no-open"], { env: { ...ENV, ...env }, encoding: "utf8", cwd: ROOT });
+    assert.equal(res.status, 0, res.stderr);
+    assert.equal(fs.readFileSync(pointer, "utf8").trim(), installed);
+    const sid = JSON.parse(res.stdout.trim().split(/\r?\n/)[0]).sid;
+    spawnSync(process.execPath, [path.join(installed, "console.mjs"), "stop", "--session", sid, "--force"], { env: { ...ENV, ...env }, encoding: "utf8", cwd: ROOT });
   } finally {
     fs.rmSync(home, { recursive: true, force: true });
   }

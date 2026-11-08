@@ -6,7 +6,8 @@
   background: var(--panel);
   border: 1px solid var(--rule);
   border-radius: var(--radius);
-  padding: 24px 26px;
+  --card-pad-b: 24px;
+  padding: 24px 26px var(--card-pad-b);
   max-width: min(var(--card-width), 100%);
   box-shadow: var(--shadow);
   margin: 0 auto 18px;
@@ -74,7 +75,15 @@
 /* ------------------------------------------------------------ options */
 
 .options { list-style: none; margin: 20px 0 0; padding: 0; display: grid; gap: 9px; }
-.options-clear { margin-top: 10px; }
+/* Pinned to the foot of the card's scroll area, so a question taller than the
+   window keeps its Clear in reach; it settles under the options at the end. */
+.options-clear {
+  position: sticky; bottom: calc(var(--card-pad-b) * -1); z-index: 1;
+  margin: 10px 0 calc(var(--card-pad-b) * -1); padding: 8px 0 var(--card-pad-b);
+  background: linear-gradient(to bottom, transparent, var(--panel) 8px);
+}
+.clear-btn { display: inline-flex; align-items: center; gap: 6px; }
+.clear-btn svg { flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 
 .option {
   display: flex;

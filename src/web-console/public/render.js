@@ -305,13 +305,46 @@ function blockInto(parent, tokens) {
   }
 }
 
+// The token trees of recent md() sources, newest last, so a redraw that draws
+// the same Markdown again (every agent post redraws every card) skips the
+// lexer. Only the tokens are kept, never the DOM: md() still builds fresh
+// nodes with their own listeners each call, so a caller may change what it
+// gets back. Bounded by count and by total source length; a source over the
+// length cap on its own is never kept.
+const MD_CACHE_ENTRIES = 200;
+const MD_CACHE_CHARS = 2_000_000;
+const mdCache = new Map();
+let mdCacheChars = 0;
+
+function lexed(text) {
+  const hit = mdCache.get(text);
+  if (hit) {
+    mdCache.delete(text);
+    mdCache.set(text, hit);
+    // A copy: drawing takes a task marker off its token (takeMarker), and the
+    // kept tree must stay as the lexer made it.
+    return structuredClone(hit);
+  }
+  const tokens = marked.lexer(text);
+  if (text.length <= MD_CACHE_CHARS) {
+    mdCache.set(text, structuredClone(tokens));
+    mdCacheChars += text.length;
+    for (const [key] of mdCache) {
+      if (mdCache.size <= MD_CACHE_ENTRIES && mdCacheChars <= MD_CACHE_CHARS) break;
+      mdCache.delete(key);
+      mdCacheChars -= key.length;
+    }
+  }
+  return tokens;
+}
+
 /** Render markdown into a fresh element. Returns the element. */
 export function md(source, className = "md", options = {}) {
   const host = el("div", className);
   if (!source) return host;
   let tokens;
   try {
-    tokens = marked.lexer(String(source));
+    tokens = lexed(String(source));
   } catch {
     host.appendChild(el("p", "md-p", String(source)));
     return host;

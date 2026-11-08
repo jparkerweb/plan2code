@@ -19,8 +19,15 @@ export { prUrl };
 
 /* ----------------------------------------------------------- running git */
 
+// Every call here is a local read, milliseconds long. A git that hangs (a
+// credential helper waiting on a prompt nobody sees, a network drive gone
+// away, a hook or fsmonitor stuck) would otherwise hold the server's single
+// thread, and every page with it, for good. A caller may pass its own limit;
+// 0 means none.
+export const GIT_TIMEOUT_MS = 10000;
+
 /** Run git with an args array (never a shell). { ok, out, err }. */
-export function git(args, cwd, { raw = false, timeout } = {}) {
+export function git(args, cwd, { raw = false, timeout = GIT_TIMEOUT_MS } = {}) {
   try {
     const stdout = execFileSync("git", args, {
       cwd,
@@ -34,6 +41,7 @@ export function git(args, cwd, { raw = false, timeout } = {}) {
     });
     return { ok: true, out: raw ? stdout : stdout.trim(), err: "" };
   } catch (e) {
+    if (e?.code === "ETIMEDOUT") return { ok: false, out: "", err: `git did not finish within ${timeout / 1000}s` };
     return { ok: false, out: "", err: String(e?.stderr || e?.message || "").trim() };
   }
 }
@@ -512,6 +520,9 @@ export function snapshot(worktree, { prHosts = {} } = {}) {
   if (!floor.ok) return { at, repo: true, error: floor.message };
   const status = git(["status", "--porcelain=v2", "-z", "--branch", "--untracked-files=normal"], worktree, { raw: true });
   if (!status.ok && !git(["rev-parse", "--git-dir"], worktree).ok) return { at, repo: false };
+  // A repository whose status failed (or ran past git()'s time limit) has an
+  // unknown tree, never a clean one: say so rather than draw an empty board.
+  if (!status.ok) return { at, repo: true, error: status.err || "git status failed." };
   const parsed = safe(() => parseStatusV2(status.out), parseStatusV2(""));
   // The branch table's for-each-ref already reads every ref: the default
   // branch comes off it instead of three more probes. When it is empty the

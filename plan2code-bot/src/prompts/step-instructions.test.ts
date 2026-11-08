@@ -24,14 +24,16 @@ describe('buildStepPrompt', () => {
     expect(prompt).toContain('/plan2code-init');
   });
 
-  it('plan prompt includes /plan2code-1-plan skill invocation', () => {
+  it('plan prompt says to open the skill file and follow it', () => {
     const prompt = buildStepPrompt('plan', config);
-    expect(prompt).toContain('/plan2code-1-plan');
+    expect(prompt).toContain('Open the skill file .claude/skills/plan2code-1-plan/SKILL.md and follow it');
+    expect(prompt).not.toContain('Run the /plan2code');
   });
 
-  it('document prompt includes /plan2code-2-document skill invocation', () => {
+  it('document prompt says to open the skill file and follow it', () => {
     const prompt = buildStepPrompt('document', config);
-    expect(prompt).toContain('/plan2code-2-document');
+    expect(prompt).toContain('Open the skill file .claude/skills/plan2code-2-document/SKILL.md and follow it');
+    expect(prompt).not.toContain('Run the /plan2code');
   });
 
   it('implement prompt instructs direct tool usage without skill invocation', () => {
@@ -39,9 +41,10 @@ describe('buildStepPrompt', () => {
     expect(prompt).toContain('Do NOT use the Skill tool');
   });
 
-  it('finalize prompt includes /plan2code-4-finalize skill invocation', () => {
+  it('finalize prompt says to open the skill file and follow it', () => {
     const prompt = buildStepPrompt('finalize', config);
-    expect(prompt).toContain('/plan2code-4-finalize');
+    expect(prompt).toContain('Open the skill file .claude/skills/plan2code-4-finalize/SKILL.md and follow it');
+    expect(prompt).not.toContain('Run the /plan2code');
   });
 
   it('plan prompt includes project name and description', () => {

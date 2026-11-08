@@ -500,3 +500,108 @@ test("app declined: the no is remembered next to the pieces, and needs a record 
   installer.recordInstalled("launcher");
   assert.deepEqual(installer.readInstallRecord().skipped, ["app"], "other writes keep the decline");
 });
+
+test("shared console install: the new version is placed, old versions go, and every other entry is left byte-identical", () => {
+  const SHARED = path.join(ROOT, "skills", installer.CONSOLE_SHARED_DIR, VERSION, "console.mjs");
+  if (!fs.existsSync(SHARED)) spawnSync(process.execPath, [INSTALL, "--build-skills"], { stdio: "ignore" });
+  const home = installer.consoleHomeDir();
+  assert.equal(home, path.join(HOME, ".plan2code", "console"), "the default home is under the temp HOME");
+  fs.rmSync(home, { recursive: true, force: true });
+  const put = (rel, body) => {
+    const p = path.join(home, ...rel.split("/"));
+    fs.mkdirSync(path.dirname(p), { recursive: true });
+    fs.writeFileSync(p, body);
+    return p;
+  };
+  put("2.9.9/console.mjs", "old");
+  put("2.9.9/public/core.js", "old");
+  put("10.0.0/console.mjs", "an older or newer version folder goes too");
+  put(`${VERSION}/stale.txt`, "a leftover inside the folder being replaced");
+  const kept = {
+    "sessions/20261108-101010-aaaaaa/state.json": '{"a":1}',
+    "sessions/20261108-101010-aaaaaa/shots/x.png": "png",
+    "looks.json": '{"theme":"dark"}',
+    "workspaces.json": "{}",
+    "subagents.json": "[]",
+    "runtime/x.json": "{}",
+    "notes.txt": "not ours",
+    "3.0/keep.txt": "not a version folder",
+  };
+  for (const [rel, body] of Object.entries(kept)) put(rel, body);
+
+  const lines = [];
+  const log = console.log;
+  console.log = (...a) => lines.push(a.join(" "));
+  let ok;
+  try {
+    ok = installer.installSharedConsole({ quiet: false });
+  } finally {
+    console.log = log;
+  }
+  assert.equal(ok, true);
+
+  assert.equal(fs.existsSync(path.join(home, "2.9.9")), false, "an old version folder is gone");
+  assert.equal(fs.existsSync(path.join(home, "10.0.0")), false, "every other version folder is gone");
+  assert.ok(fs.existsSync(path.join(home, VERSION, "console.mjs")), "the new version is present");
+  assert.equal(fs.readFileSync(path.join(home, VERSION, "version.txt"), "utf8").trim(), VERSION);
+  assert.equal(fs.existsSync(path.join(home, VERSION, "stale.txt")), false, "the folder is replaced, not merged");
+  assert.equal(fs.readFileSync(path.join(home, "console-dir"), "utf8").trim(), path.join(home, VERSION));
+  for (const [rel, body] of Object.entries(kept)) {
+    assert.equal(fs.readFileSync(path.join(home, ...rel.split("/")), "utf8"), body, rel + " is untouched");
+  }
+  assert.ok(lines.some((line) => line.includes("Removed old console 2.9.9")), lines.join("\n"));
+
+  // A second run changes nothing it should not.
+  assert.equal(installer.installSharedConsole({ quiet: true }), true);
+  assert.equal(fs.readFileSync(path.join(home, "looks.json"), "utf8"), kept["looks.json"]);
+  assert.ok(fs.existsSync(path.join(home, VERSION, "console.mjs")));
+});
+
+test("shared console install: sweep false keeps old versions until sweepOldConsoles runs", () => {
+  const SHARED = path.join(ROOT, "skills", installer.CONSOLE_SHARED_DIR, VERSION, "console.mjs");
+  if (!fs.existsSync(SHARED)) spawnSync(process.execPath, [INSTALL, "--build-skills"], { stdio: "ignore" });
+  const home = installer.consoleHomeDir();
+  fs.rmSync(home, { recursive: true, force: true });
+  fs.mkdirSync(path.join(home, "2.9.9"), { recursive: true });
+  fs.writeFileSync(path.join(home, "2.9.9", "console.mjs"), "old");
+  fs.writeFileSync(path.join(home, "2.9.9", "version.txt"), "2.9.9\n");
+  assert.equal(installer.installSharedConsole({ quiet: true, sweep: false }), true);
+  assert.ok(fs.existsSync(path.join(home, "2.9.9", "console.mjs")), "a failed skills add leaves the old version for the old stubs");
+  assert.ok(fs.existsSync(path.join(home, VERSION, "console.mjs")), "the new version is placed");
+  installer.sweepOldConsoles({ quiet: true });
+  assert.equal(fs.existsSync(path.join(home, "2.9.9")), false, "swept once skills add worked");
+  assert.ok(fs.existsSync(path.join(home, VERSION, "console.mjs")), "the current version stays");
+});
+
+test("shared console install: a missing build fails plainly and removes nothing", () => {
+  const home = installer.consoleHomeDir();
+  fs.mkdirSync(home, { recursive: true });
+  fs.writeFileSync(path.join(home, "looks.json"), "{}");
+  const errors = [];
+  const error = console.error;
+  console.error = (...a) => errors.push(a.join(" "));
+  try {
+    // An empty folder stands in for a build that did not happen; the real build is never touched.
+    const empty = fs.mkdtempSync(path.join(HOME, "no-build-"));
+    assert.equal(installer.installSharedConsole({ quiet: true, source: empty }), false);
+  } finally {
+    console.error = error;
+  }
+  assert.ok(errors.join("\n").includes("Could not install the shared console"));
+  assert.ok(fs.existsSync(path.join(home, "looks.json")), "what was there stays");
+});
+
+test("the skills CLI is pinned to one exact version, and every doc line that runs it names that version", () => {
+  const source = fs.readFileSync(INSTALL, "utf8");
+  const pinned = source.match(/const SKILLS_CLI_VERSION = '(\d+\.\d+\.\d+)';/);
+  assert.ok(pinned, "install.js pins SKILLS_CLI_VERSION to an exact x.y.z");
+  assert.ok(source.includes("npx --yes skills@${SKILLS_CLI_VERSION}"), "SKILLS_CLI runs the pinned version");
+  assert.ok(!/npx (--yes )?skills( |')/.test(source), "no unpinned `npx skills` in install.js");
+  for (const doc of ["README.md", ".agents-docs/AGENTS-development-commands.md"]) {
+    const text = fs.readFileSync(path.join(ROOT, doc), "utf8");
+    assert.ok(!/npx (--yes )?skills (add|list|remove|--version)/.test(text), `${doc} has an unpinned \`npx skills\` command`);
+    for (const m of text.matchAll(/npx (?:--yes )?skills@(\d+\.\d+\.\d+)/g)) {
+      assert.equal(m[1], pinned[1], `${doc} names skills@${m[1]}, install.js pins ${pinned[1]}`);
+    }
+  }
+});

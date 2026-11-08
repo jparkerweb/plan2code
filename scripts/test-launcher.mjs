@@ -140,7 +140,7 @@ function writeCache(box, latest, ageMs = 0) {
 test("launcher: Claude Code gets the prompt first, then bypassPermissions and the forwarded args", (t) => {
   const box = sandbox(["claude"]);
   t.after(box.cleanup);
-  const result = box.run(["--verbose"]);
+  const result = box.run(["--bypass-permissions", "--verbose"]);
   assert.equal(result.status, 0, result.stderr);
   assert.deepEqual(box.argsOf("claude"), ["/plan2code", "--permission-mode", "bypassPermissions", "--verbose"]);
   assert.match(result.stdout, new RegExp(`Claude Code ${NOTICE}`));
@@ -149,7 +149,7 @@ test("launcher: Claude Code gets the prompt first, then bypassPermissions and th
 test("launcher: Devin keeps its args ahead of the -- and the prompt", (t) => {
   const box = sandbox(["devin"]);
   t.after(box.cleanup);
-  const result = box.run(["--verbose"]);
+  const result = box.run(["--bypass-permissions", "--verbose"]);
   assert.equal(result.status, 0, result.stderr);
   assert.deepEqual(box.argsOf("devin"), ["--permission-mode", "bypass", "--verbose", "--", "/plan2code"]);
 });
@@ -157,7 +157,7 @@ test("launcher: Devin keeps its args ahead of the -- and the prompt", (t) => {
 test("launcher: Codex gets the bypass flag, the forwarded args, then the $plan2code prompt", (t) => {
   const box = sandbox(["codex"]);
   t.after(box.cleanup);
-  const result = box.run(["--verbose"]);
+  const result = box.run(["--bypass-permissions", "--verbose"]);
   assert.equal(result.status, 0, result.stderr);
   assert.deepEqual(box.argsOf("codex"), ["--dangerously-bypass-approvals-and-sandbox", "--verbose", "$plan2code"]);
 });
@@ -175,6 +175,59 @@ test("launcher: --keep-permissions keeps every built-in's permission prompts, an
     assert.equal(result.status, 0, result.stderr);
     assert.deepEqual(box.argsOf(cli), args, cli);
   }
+});
+
+test("launcher: with no terminal and no flag every built-in keeps its permission prompts", (t) => {
+  const box = sandbox(["claude", "devin", "codex"]);
+  t.after(box.cleanup);
+  const expected = {
+    claude: ["/plan2code", "--verbose"],
+    devin: ["--verbose", "--", "/plan2code"],
+    codex: ["--verbose", "$plan2code"],
+  };
+  for (const [cli, args] of Object.entries(expected)) {
+    const result = box.run(["--cli", cli, "--verbose"]);
+    assert.equal(result.status, 0, result.stderr);
+    assert.deepEqual(box.argsOf(cli), args, cli);
+    assert.doesNotMatch(result.stdout, /off\?/, cli);
+  }
+});
+
+test("launcher: --bypass-permissions turns every built-in's prompts off with no terminal, and is never forwarded", (t) => {
+  const box = sandbox(["claude", "devin", "codex"]);
+  t.after(box.cleanup);
+  const expected = {
+    claude: ["/plan2code", "--permission-mode", "bypassPermissions", "--verbose"],
+    devin: ["--permission-mode", "bypass", "--verbose", "--", "/plan2code"],
+    codex: ["--dangerously-bypass-approvals-and-sandbox", "--verbose", "$plan2code"],
+  };
+  for (const [cli, args] of Object.entries(expected)) {
+    const result = box.run(["--cli", cli, "--bypass-permissions", "--verbose"]);
+    assert.equal(result.status, 0, result.stderr);
+    assert.deepEqual(box.argsOf(cli), args, cli);
+  }
+  // --keep-permissions wins when both are given.
+  assert.equal(box.run(["--cli", "claude", "--bypass-permissions", "--keep-permissions"]).status, 0);
+  assert.deepEqual(box.argsOf("claude"), ["/plan2code"]);
+});
+
+test("launcher: the keyboard question names what the flag drops, and Codex's names its sandbox", () => {
+  const { bypassQuestion } = require(LAUNCHER);
+  const claude = bypassQuestion({ id: "claude", label: "Claude Code", bypassArgs: ["--permission-mode", "bypassPermissions"] });
+  assert.equal(claude.heading, "Turn Claude Code's permission prompts off?");
+  assert.equal(claude.prompt, "Turn permission prompts off?");
+  assert.match(claude.detail, /without asking \(--permission-mode bypassPermissions\)/);
+  assert.doesNotMatch(claude.detail, /sandbox/);
+  assert.equal(claude.hint, "Type n to keep the permission prompts, or press Enter to turn them off.");
+  const codex = bypassQuestion({ id: "codex", label: "Codex", bypassArgs: ["--dangerously-bypass-approvals-and-sandbox"] });
+  assert.equal(codex.heading, "Turn Codex's approval prompts and its sandbox off?");
+  assert.equal(codex.prompt, "Turn approval prompts and its sandbox off?");
+  assert.match(codex.detail, /outside its sandbox \(--dangerously-bypass-approvals-and-sandbox\)/);
+  assert.equal(codex.hint, "Type n to keep the approval prompts and its sandbox, or press Enter to turn them off.");
+  // A custom agent gets the plain wording, with its own arguments.
+  const goose = bypassQuestion({ id: "goose", label: "Goose", bypassArgs: ["--bypass"] });
+  assert.equal(goose.heading, "Turn Goose's permission prompts off?");
+  assert.match(goose.detail, /\(--bypass\)/);
 });
 
 test("launcher: --cli codex picks Codex when it is installed beside another CLI", (t) => {
@@ -200,7 +253,7 @@ test("launcher: Codex takes a forwarded --model ahead of the $plan2code prompt, 
   const result = box.run(["--cli", "codex", "--model", "x"]);
   assert.equal(result.status, 0, result.stderr);
   assert.doesNotMatch(result.stdout, new RegExp(NOTICE));
-  assert.deepEqual(box.argsOf("codex"), ["--dangerously-bypass-approvals-and-sandbox", "--model", "x", "$plan2code"]);
+  assert.deepEqual(box.argsOf("codex"), ["--model", "x", "$plan2code"]);
 });
 
 test("launcher: Codex's -m counts as a model already chosen", (t) => {
@@ -209,7 +262,7 @@ test("launcher: Codex's -m counts as a model already chosen", (t) => {
   const result = box.run(["--cli", "codex", "-m", "x"]);
   assert.equal(result.status, 0, result.stderr);
   assert.doesNotMatch(result.stdout, new RegExp(NOTICE));
-  assert.deepEqual(box.argsOf("codex"), ["--dangerously-bypass-approvals-and-sandbox", "-m", "x", "$plan2code"]);
+  assert.deepEqual(box.argsOf("codex"), ["-m", "x", "$plan2code"]);
 });
 
 test("launcher: hasModelFlag reads -m as a model only for Codex", () => {
@@ -241,7 +294,7 @@ test("launcher: a forwarded --model skips the model notice", (t) => {
     const result = box.run(args);
     assert.equal(result.status, 0, result.stderr);
     assert.doesNotMatch(result.stdout, new RegExp(NOTICE));
-    assert.deepEqual(box.argsOf("claude"), ["/plan2code", "--permission-mode", "bypassPermissions", ...args]);
+    assert.deepEqual(box.argsOf("claude"), ["/plan2code", ...args]);
   }
 });
 
@@ -270,7 +323,7 @@ test("launcher: --cli picks the CLI and is never forwarded; the pick is merged i
   for (const args of [["--cli", "devin"], ["--cli=DEVIN"]]) {
     const result = box.run(args);
     assert.equal(result.status, 0, result.stderr);
-    assert.deepEqual(box.argsOf("devin"), ["--permission-mode", "bypass", "--", "/plan2code"]);
+    assert.deepEqual(box.argsOf("devin"), ["--", "/plan2code"]);
   }
   assert.equal(box.argsOf("claude"), null);
   assert.deepEqual(JSON.parse(fs.readFileSync(box.stateFile, "utf8")), { lastFolder: box.home, lastCli: "devin" });
@@ -393,7 +446,7 @@ test("launcher: a forwarded argument with a space and a cmd metacharacter arrive
   t.after(box.cleanup);
   const result = box.run(["--append-system-prompt", "a b&c"]);
   assert.equal(result.status, 0, result.stderr);
-  assert.deepEqual(box.argsOf("claude"), ["/plan2code", "--permission-mode", "bypassPermissions", "--append-system-prompt", "a b&c"]);
+  assert.deepEqual(box.argsOf("claude"), ["/plan2code", "--append-system-prompt", "a b&c"]);
 });
 
 test("launcher: the CLI's non-zero exit code is passed through", (t) => {
@@ -533,7 +586,7 @@ test("launcher: a piped run prints no escape codes, with or without NO_COLOR", (
 // The desktop app hand-off. The stand-in app is found through PLAN2CODE_APP; "no display" is
 // only something a Linux run can ask for, since Windows and macOS always count as having one.
 const NO_DISPLAY = { DISPLAY: "", WAYLAND_DISPLAY: "" };
-const CLASSIC_ARGS = ["/plan2code", "--permission-mode", "bypassPermissions"];
+const CLASSIC_ARGS = ["/plan2code"];
 
 test("launcher app: with no app installed the agent starts exactly as before", (t) => {
   const box = sandbox(["claude"]);
@@ -759,13 +812,13 @@ test("launcher agents: --cli <custom id> starts it with args, the model through 
   const box = sandbox(["claude", "goose"]);
   t.after(box.cleanup);
   writeAgents(box, goose());
-  const result = box.run(["--cli", "goose", "--model", "m1", "--verbose"]);
+  const result = box.run(["--cli", "goose", "--bypass-permissions", "--model", "m1", "--verbose"]);
   assert.equal(result.status, 0, result.stderr);
   assert.deepEqual(box.argsOf("goose"), ["--yes", "/plan2code", "--model", "m1", "--bypass", "--verbose"]);
   assert.equal(box.argsOf("claude"), null);
   assert.equal(JSON.parse(fs.readFileSync(box.stateFile, "utf8")).lastCli, "goose");
   // No model chosen and no models flag: the model arguments are left out.
-  assert.equal(box.run(["--cli=goose"]).status, 0);
+  assert.equal(box.run(["--cli=goose", "--bypass-permissions"]).status, 0);
   assert.deepEqual(box.argsOf("goose"), ["--yes", "/plan2code", "--bypass"]);
   // --keep-permissions leaves bypassArgs out.
   assert.equal(box.run(["--cli=goose", "--keep-permissions"]).status, 0);
@@ -903,7 +956,7 @@ const leadRun = (id) => builtin(id).install[OS_KEY][0].run;
 test("launcher list: the menu and launch come from the sandboxed agents.json + agent-lookup.mjs", (t) => {
   const box = sandbox(["claude", "devin", "codex"], { installed: "0.0.0" });
   t.after(box.cleanup);
-  const result = box.run(["--cli", "devin", "--verbose"]);
+  const result = box.run(["--cli", "devin", "--bypass-permissions", "--verbose"]);
   assert.equal(result.status, 0, result.stderr);
   assert.deepEqual(box.argsOf("devin"), ["--permission-mode", "bypass", "--verbose", "--", "/plan2code"]);
   // The menu's order and shape come from the list: --cli errors list the same ids.
@@ -916,9 +969,9 @@ test("launcher list: a forwarded --model fills {model} in place; Codex's -m forw
   const box = sandbox(["claude", "codex"], { installed: "0.0.0" });
   t.after(box.cleanup);
   assert.equal(box.run(["--cli", "claude", "--model", "opus"]).status, 0);
-  assert.deepEqual(box.argsOf("claude"), ["/plan2code", "--permission-mode", "bypassPermissions", "--model", "opus"]);
+  assert.deepEqual(box.argsOf("claude"), ["/plan2code", "--model", "opus"]);
   assert.equal(box.run(["--cli", "codex", "-m", "x"]).status, 0);
-  assert.deepEqual(box.argsOf("codex"), ["--dangerously-bypass-approvals-and-sandbox", "-m", "x", "$plan2code"]);
+  assert.deepEqual(box.argsOf("codex"), ["-m", "x", "$plan2code"]);
 });
 
 test("launcher list: the last-used notice names the gone agent and the pick, on a terminal only", () => {
@@ -940,7 +993,7 @@ test("launcher list: a missing agent-lookup.mjs falls back to the built-in list"
   t.after(box.cleanup);
   const result = box.run([]);
   assert.equal(result.status, 0, result.stderr);
-  assert.deepEqual(box.argsOf("claude"), ["/plan2code", "--permission-mode", "bypassPermissions"]);
+  assert.deepEqual(box.argsOf("claude"), ["/plan2code"]);
 });
 
 test("launcher list: with no agent and no terminal it prints this OS's install steps and exits 127", (t) => {

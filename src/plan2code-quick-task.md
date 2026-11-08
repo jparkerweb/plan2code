@@ -161,6 +161,6 @@ Ready to implement? (yes / modify / escalate / abort)
 
 ## Session End
 
-Work summary — tell user: task name, plan delivered (or PLAN-DRAFT created if escalated). After a build, offer: "Reply `show me` to see it running." **Show me it working** (offered, never required): start the app as `AGENTS.md` Commands says (missing: work it out from `package.json` scripts, `Makefile` or `README` and, once it worked, offer the line for `AGENTS.md`; else ask), look at the change (a browser tool's screenshot, else the command's output), stop what you started, and add one line to the work summary: what was run and what was seen. Screenshots go on the web console page only.
+Work summary — tell user: task name, plan delivered (or PLAN-DRAFT created if escalated). After a build, offer: "Reply `show me` to see it running." A review the person asks for after the build runs as `references/review-in-build.md` says. **Show me it working** (offered, never required): start the app as `AGENTS.md` Commands says (missing: work it out from `package.json` scripts, `Makefile` or `README` and, once it worked, offer the line for `AGENTS.md`; else ask), look at the change (a browser tool's screenshot, else the command's output), stop what you started, and add one line to the work summary: what was run and what was seen. Screenshots go on the web console page only.
 
 **On the web console:** after a build, keep waiting for the review button's answer before you stop.

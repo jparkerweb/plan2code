@@ -880,6 +880,23 @@ function buildChoice(card, item, staged) {
   clearRow(card, item);
 }
 
+// A small eraser-style mark: a cross in a circle, drawn inline so it takes the
+// button's text color in both themes. Hidden from readers; the aria-label names it.
+function clearIcon() {
+  const ns = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(ns, "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("width", "14");
+  svg.setAttribute("height", "14");
+  svg.setAttribute("aria-hidden", "true");
+  for (const d of ["M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z", "M9 9l6 6M15 9l-6 6"]) {
+    const path = document.createElementNS(ns, "path");
+    path.setAttribute("d", d);
+    svg.appendChild(path);
+  }
+  return svg;
+}
+
 // Takes a one-answer question back to how it arrived: no pick, and nothing in
 // "Something else" (its draft too, or the render would put the words straight
 // back). A radio group cannot be unticked by clicking it again, so without
@@ -887,8 +904,10 @@ function buildChoice(card, item, staged) {
 // call it, and they only run for a form that has not been sent.
 function clearRow(card, item) {
   const row = el("div", "btn-row options-clear");
-  const b = el("button", "btn small ghost", "Clear");
+  const b = el("button", "btn small ghost clear-btn");
   b.type = "button";
+  b.appendChild(clearIcon());
+  b.appendChild(el("span", null, "Clear answer"));
   // An id so focus survives the render the click sets off (see withFocus).
   b.id = "clear-" + item.id;
   b.setAttribute("aria-label", "Clear your answer to this question");
@@ -1307,9 +1326,16 @@ function buildReview(card, item, staged) {
       verdictText(v)
     );
     b.type = "button";
-    b.addEventListener("click", () =>
-      stage(item.id, withNote(item, on ? null : { type: "answer", kind: "review", verdict: v.id }))
-    );
+    // A toggle: a screen reader hears which verdict is picked, not only sees
+    // it in the fill. Set on the row at once, ahead of the redraw the stage
+    // sets off, so the state never lags the click.
+    b.setAttribute("aria-pressed", String(Boolean(on)));
+    b.addEventListener("click", () => {
+      for (const other of row.querySelectorAll("button[aria-pressed]")) {
+        other.setAttribute("aria-pressed", String(other === b && !on));
+      }
+      stage(item.id, withNote(item, on ? null : { type: "answer", kind: "review", verdict: v.id }));
+    });
     row.appendChild(b);
   }
   card.appendChild(row);

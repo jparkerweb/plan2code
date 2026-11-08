@@ -7,6 +7,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { spawn, spawnSync } from "node:child_process";
+import { pathToFileURL } from "node:url";
 import { parseArgs } from "../src/web-console/files.mjs";
 import { BASE, cli, consoleSession, cookieFor, ENV, HOME, payload, ROOT } from "./web-console-test-helpers.mjs";
 
@@ -102,7 +103,7 @@ test("a token that starts with -- survives the trip to the server", async () => 
       windowsHide: true,
     });
     assert.equal(res.status, 2, `refused: ${JSON.stringify(tokenArgs)}`);
-    assert.match(res.stderr, /--token=<token> is required/);
+    assert.match(res.stderr, /a token is required/);
   }
 
   const child = spawn(process.execPath, [SERVER_JS, `--session=${dir}`, "--token=--dashy", `--project=${dir}`], {
@@ -120,12 +121,62 @@ test("a token that starts with -- survives the trip to the server", async () => 
       });
       child.on("exit", () => reject(new Error("server exited before it was ready")));
     });
-    assert.ok(ready.url.endsWith("/s/--dashy/"));
-    const res = await fetch(ready.url, { redirect: "manual" });
+    assert.equal(ready.url, `http://127.0.0.1:${ready.port}/`, "the ready line carries no token");
+    const res = await fetch(`${ready.url}s/--dashy/`, { redirect: "manual" });
     assert.equal(res.status, 302);
     assert.ok(res.headers.get("set-cookie").startsWith(`p2c_console_${ready.port}=--dashy;`));
   } finally {
     child.kill();
+  }
+});
+
+// The command line of a process is readable by anyone on the machine (ps,
+// Task Manager), and server.log is the server's stdout. Neither may carry the
+// session token: `open` hands it over in a one-shot file the server deletes.
+function commandLineOf(pid) {
+  const res =
+    process.platform === "win32"
+      ? spawnSync("powershell", ["-NoProfile", "-Command", `(Get-CimInstance Win32_Process -Filter "ProcessId=${pid}").CommandLine`], {
+          encoding: "utf8",
+          windowsHide: true,
+        })
+      : spawnSync("ps", ["-o", "args=", "-p", String(pid)], { encoding: "utf8" });
+  return String(res.stdout || "");
+}
+
+test("the session token is in neither the server's arguments nor server.log", async () => {
+  const s = consoleSession(["--file", payload("token-off-argv.json", BASE)]);
+  try {
+    const token = s.opened.url.match(/\/s\/([^/]+)\//)[1];
+    let handle = null;
+    const runtime = path.join(HOME, "runtime");
+    for (const bucket of fs.readdirSync(runtime)) {
+      const file = path.join(runtime, bucket, s.sid + ".json");
+      if (fs.existsSync(file)) handle = JSON.parse(fs.readFileSync(file, "utf8"));
+    }
+    assert.ok(handle?.pid, "the server wrote its handle");
+    assert.equal(handle.token, token, "the server took the token open made");
+
+    const args = commandLineOf(handle.pid);
+    assert.match(args, /server\.mjs/, "read the server's own command line");
+    assert.match(args, /--token-file=server-token-/);
+    assert.ok(!args.includes(token), "the token is not on the command line");
+
+    const log = fs.readFileSync(path.join(s.session, "server.log"), "utf8");
+    assert.match(log, /"ready"/, "the server logged its ready line");
+    assert.ok(!log.includes(token), "the token is not in server.log");
+    assert.deepEqual(
+      fs.readdirSync(s.session).filter((f) => f.startsWith("server-token-")),
+      [],
+      "the one-shot token file is gone once read"
+    );
+
+    // The page still signs in with it.
+    const res = await fetch(s.base + "/state", { headers: { cookie: cookieFor(s.base, token), connection: "close" } });
+    assert.equal(res.status, 200);
+    await res.arrayBuffer();
+  } finally {
+    cli(["stop", "--session", s.sid, "--force"]);
   }
 });
 
@@ -224,5 +275,81 @@ test("an image block outside the session's shots folder, or not an image, is ref
     assert.match(res.stderr, /cannot also carry "md" or "file"/);
   } finally {
     cli(["stop", "--session", s.sid, "--force"]);
+  }
+});
+
+// A route callback that threw used to run twice (readBody's catch fed the
+// throw back in as a parse error) or leave the request hanging (readRaw). It
+// now answers once with 400, runs once, and the throw still reaches the
+// process's uncaughtException handler, which the real server logs. Run in a
+// child so that rethrow lands on a handler like the server's, not the runner's.
+test("a route callback that throws answers once with 400 and runs once", () => {
+  const routes = path.join(ROOT, "src", "web-console", "routes.mjs");
+  const script = `
+    import http from "node:http";
+    import { readBody, readRaw } from ${JSON.stringify(pathToFileURL(routes).href)};
+    const caught = [];
+    process.on("uncaughtException", (e) => caught.push(e.message));
+    const calls = { body: 0, raw: 0 };
+    const server = http.createServer((req, res) => {
+      if (req.url === "/body") return readBody(req, res, () => { calls.body++; throw new Error("body boom"); });
+      if (req.url === "/half") return readBody(req, res, () => { calls.body++; res.writeHead(200); res.write("x"); throw new Error("half boom"); });
+      return readRaw(req, res, 1024, () => { calls.raw++; throw new Error("raw boom"); });
+    });
+    server.listen(0, "127.0.0.1", async () => {
+      const base = "http://127.0.0.1:" + server.address().port;
+      const out = {};
+      for (const p of ["/body", "/raw", "/half"]) {
+        const r = await fetch(base + p, { method: "POST", body: p === "/raw" ? "bytes" : "{}" });
+        out[p] = { status: r.status, text: await r.text() };
+      }
+      await new Promise((r) => setTimeout(r, 50));
+      process.stdout.write(JSON.stringify({ out, calls, caught }));
+      server.close();
+    });
+  `;
+  const res = spawnSync(process.execPath, ["--input-type=module", "-e", script], { encoding: "utf8", timeout: 15000, windowsHide: true });
+  assert.equal(res.status, 0, res.stderr);
+  const { out, calls, caught } = JSON.parse(res.stdout);
+  assert.equal(out["/body"].status, 400);
+  assert.match(out["/body"].text, /bad request/);
+  assert.equal(out["/raw"].status, 400);
+  assert.deepEqual([out["/half"].status, out["/half"].text], [200, "x"], "a started answer is ended, not answered twice");
+  assert.deepEqual(calls, { body: 2, raw: 1 }, "each callback ran once");
+  assert.deepEqual(caught.sort(), ["body boom", "half boom", "raw boom"], "every throw still reaches the process handler");
+});
+
+// ── The metrics scrape pattern: one shared source, no drift ──────────────────
+
+test("the bait scanner, the skill scripts and the collector read one metrics pattern", async () => {
+  const { SCRAPE } = await import("../src/skill-scripts/common.mjs");
+  const shared = JSON.parse(fs.readFileSync(path.join(ROOT, "src", "web-console", "metrics-pattern.json"), "utf8"));
+  const collectorCopy = fs.readFileSync(path.join(ROOT, "plan2code-metrics", "src", "metrics-pattern.json"), "utf8");
+  assert.equal(
+    collectorCopy,
+    fs.readFileSync(path.join(ROOT, "src", "web-console", "metrics-pattern.json"), "utf8"),
+    "plan2code-metrics/src/metrics-pattern.json must be a byte-for-byte copy of src/web-console/metrics-pattern.json",
+  );
+  const bySource = (re) => `${re.source}/${re.flags}`;
+  const scripts = new Map(SCRAPE.map((s) => [s.name, bySource(s.re)]));
+  for (const c of shared.confidence) assert.equal(scripts.get(c.name), `${c.source}/${c.flags}`, `skill scripts' "${c.name}" drifted from the shared pattern`);
+  for (const b of shared.breakdown) assert.equal(scripts.get(`bare ${b.name} + number`), `${b.source}/${b.flags}`, `skill scripts' ${b.name} pattern drifted from the shared pattern`);
+  assert.equal(SCRAPE.length, shared.confidence.length + shared.breakdown.length);
+});
+
+test("an ordinary table row that pairs Risk with a number is accepted, the real scrape shapes are refused", async () => {
+  const { proseProblems } = await import("../src/web-console/patches.mjs");
+  for (const ok of [
+    "| Risk | 3 | High |",
+    "| Requirements | 7 | Medium | Owner |",
+    "| R2 | Slow build | A risk to the plan | High |",
+    "Risk-assessment 22/25",
+  ]) {
+    assert.deepEqual(proseProblems(ok), [], ok);
+  }
+  for (const bad of ["Risk: 3", "Risk 3", "Requirements 22 of 25", "| Requirements | 24 |", "| Integration | 23/25 |", "- Feasibility: 23"]) {
+    const found = proseProblems(bad);
+    assert.equal(found.length, 1, bad);
+    assert.match(found[0], /metrics collector scrapes that pattern/);
   }
 });

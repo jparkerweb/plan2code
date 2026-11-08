@@ -689,11 +689,15 @@ const JARGON = [
 const FORBIDDEN_TOKENS =
   /\b(TASK_COMPLETE|PHASE_COMPLETE|ALL_TASKS_COMPLETE|IMPLEMENTATION_COMPLETE|SPEC_COMPLETE|WORK_COMPLETE)\b/;
 
-// plan2code-metrics scrapes confidence with patterns that do NOT require a
-// percent sign, so a bare "Requirements 22" in a rendered doc can poison a run's
-// metrics. Keep those four words away from bare numbers. The skill scripts'
-// copy is SCRAPE in src/skill-scripts/common.mjs; keep the two in step.
-const METRICS_BAIT = /\b(Requirements?|Feasibility|Integration|Risk)[:\s|]+\d{1,2}\b/;
+// plan2code-metrics scrapes the confidence breakdown from a rendered doc, so a
+// label and score it reads must not appear in agent text. The shapes live in
+// metrics-pattern.json beside this file; the skill scripts' copy is SCRAPE in
+// src/skill-scripts/common.mjs and the collector's is
+// plan2code-metrics/src/metrics-pattern.json. A test fails when they drift.
+const METRICS_BAIT = JSON.parse(fs.readFileSync(new URL("./metrics-pattern.json", import.meta.url), "utf8")).breakdown.map((b) => ({
+  name: b.name,
+  re: new RegExp(b.source, b.flags),
+}));
 
 // The marker and metrics-bait scan on its own, for agent text that never
 // reaches state.json (a post's `run` / `folderIssue`). Problems as sentences.
@@ -705,11 +709,13 @@ export function proseProblems(prose, subject = "text") {
       rule("", subject, `contains a loop completion marker (${marker[0]}); these are reserved. Reword it`, marker[0].toLowerCase().replaceAll("_", " ")),
     );
   }
-  const bait = prose.match(METRICS_BAIT);
-  if (bait) {
+  for (const { name, re } of METRICS_BAIT) {
+    const bait = prose.match(re);
+    if (!bait) continue;
     problems.push(
-      rule("", subject, `contains ${JSON.stringify(bait[0])}; the metrics collector scrapes that pattern. Hyphenate it or reword`, `${bait[1]}-score ${bait[0].match(/\d+$/)[0]}`),
+      rule("", subject, `contains ${JSON.stringify(bait[0].trim())}; the metrics collector scrapes that pattern. Hyphenate it or reword`, `${name}-score ${bait[1]}`),
     );
+    break;
   }
   return problems;
 }

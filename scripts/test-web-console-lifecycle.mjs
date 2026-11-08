@@ -9,6 +9,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import http from "node:http";
+import { spawn } from "node:child_process";
 // The page's pure answer-shaping logic. app.js itself cannot be imported here
 // (it touches `document` at module scope and starts a session on import), which
 // is exactly why this lives in its own file.
@@ -24,8 +25,10 @@ import {
 } from "../src/web-console/public/answers.js";
 import { WORKFLOWS } from "../src/web-console/public/skills.js";
 import {
+  ENV,
   HOME,
   MODELS_DIR,
+  ROOT,
   cookieFor,
   cli,
   payload,
@@ -1249,5 +1252,44 @@ test("a finish posted while stopWarning is set is refused naming stopWarning, an
     assert.equal(ok.json.ok, true);
   } finally {
     cli(["stop", "--session", opened.json.sid, "--force"]);
+  }
+});
+
+// The four-hour cap used to exit with answers nobody had collected, stranding
+// the person's send. A pending result now holds the server past the cap; once
+// a wait collects it (consumedAt), the cap applies again. A control server
+// with a collected result shows when a 20s tick has passed.
+test("a pending result holds the server past its lifetime cap; once collected it exits", async () => {
+  const SERVER_JS = path.join(ROOT, "src", "web-console", "server.mjs");
+  const start = (label, consumed) => {
+    const dir = fs.mkdtempSync(path.join(HOME, `max-life-${label}-`));
+    fs.writeFileSync(path.join(dir, "state.json"), JSON.stringify({ sid: path.basename(dir), phase: "collecting" }));
+    const result = { actions: [{ i: "q1", type: "answer", kind: "choice", k: "A" }], reply: "Export format: a", ...(consumed ? { consumedAt: new Date().toISOString() } : {}) };
+    fs.writeFileSync(path.join(dir, "result.json"), JSON.stringify(result));
+    const child = spawn(process.execPath, [SERVER_JS, `--session=${dir}`, "--token=t", `--project=${dir}`, "--max-life-ms=300"], {
+      env: ENV,
+      stdio: "ignore",
+      windowsHide: true,
+    });
+    const exited = new Promise((r) => child.once("exit", r));
+    return { dir, child, exited, gone: false };
+  };
+  const held = start("held", false);
+  const control = start("control", true);
+  held.exited.then(() => (held.gone = true));
+  try {
+    // The control exits on the first tick past its cap...
+    await Promise.race([control.exited, new Promise((_, no) => setTimeout(() => no(new Error("the control server never hit its cap")), 45000))]);
+    assert.match(fs.readFileSync(path.join(control.dir, "events.ndjson"), "utf8"), /"reason":"max-life"/);
+    // ...and that same tick left the held server running.
+    assert.equal(held.gone, false, "a pending result keeps the server past its cap");
+
+    const file = path.join(held.dir, "result.json");
+    fs.writeFileSync(file, JSON.stringify({ ...JSON.parse(fs.readFileSync(file, "utf8")), consumedAt: new Date().toISOString() }));
+    await Promise.race([held.exited, new Promise((_, no) => setTimeout(() => no(new Error("the collected server never exited")), 45000))]);
+    assert.match(fs.readFileSync(path.join(held.dir, "events.ndjson"), "utf8"), /"reason":"max-life"/);
+  } finally {
+    held.child.kill();
+    control.child.kill();
   }
 });

@@ -10,7 +10,8 @@
   --panel-2: #fbf9f6;
   --ink: #1d1a17;
   --ink-2: #5d564d;
-  --ink-3: #8f8779;
+  /* Same hue as before, darkened to 4.56:1 on --bg (WCAG AA for body text). */
+  --ink-3: #756e62;
   --rule: #e4ddd1;
   --rule-2: #cfc6b6;
   --accent: #206cc3;

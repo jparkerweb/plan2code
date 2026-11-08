@@ -1,3 +1,10 @@
 [workspace]
 resolver = "2"
 members = ["src-tauri", "fake-agent"]
+
+# Release builds: whole-program optimization, no symbols in the shipped
+# binary, and a panic ends the process instead of unwinding.
+[profile.release]
+lto = true
+strip = true
+panic = "abort"

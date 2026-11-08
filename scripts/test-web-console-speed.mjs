@@ -412,8 +412,25 @@ test("a launch, a dashboard press, Commit it now and Update CHANGELOG first each
 test("the built skills name the skill file to follow after a hop", async () => {
   const builtCli = path.join(ROOT, "skills", "plan2code", "references", "web-console", "console.mjs");
   if (!fs.existsSync(builtCli)) return;
+  // The built console.mjs is a stub that forwards to the shared install, so
+  // point it at the console this build produced, in a throwaway console home.
+  const sharedRoot = path.join(ROOT, "skills", "_console");
+  const sharedVersion = fs.existsSync(sharedRoot) ? fs.readdirSync(sharedRoot)[0] : undefined;
+  if (!sharedVersion) return;
+  const stubHome = fs.mkdtempSync(path.join(os.tmpdir(), "p2c-speed-home-"));
+  fs.writeFileSync(path.join(stubHome, "console-dir"), path.join(sharedRoot, sharedVersion));
+  // A shared console finds skill files in the agent skills store under the home folder.
+  const storeHome = fs.mkdtempSync(path.join(os.tmpdir(), "p2c-speed-store-"));
+  const storeSkill = (name) => {
+    const dir = path.join(storeHome, ".agents", "skills", name);
+    fs.mkdirSync(dir, { recursive: true });
+    fs.copyFileSync(path.join(ROOT, "skills", name, "SKILL.md"), path.join(dir, "SKILL.md"));
+    return path.join(dir, "SKILL.md");
+  };
+  const reviewFile = storeSkill("plan2code-review");
+  const handoffFile = storeSkill("plan2code-handoff");
   const run = (args) => {
-    const res = spawnSync(process.execPath, [builtCli, ...args], { env: ENV, encoding: "utf8", cwd: ROOT });
+    const res = spawnSync(process.execPath, [builtCli, ...args], { env: { ...ENV, PLAN2CODE_CONSOLE_HOME: stubHome, HOME: storeHome, USERPROFILE: storeHome }, encoding: "utf8", cwd: ROOT });
     return { ...res, json: JSON.parse(res.stdout.trim().split("\n").pop()) };
   };
   const opened = run(["open", "--no-open", "--workflow", "dashboard"]).json;
@@ -428,7 +445,7 @@ test("the built skills name the skill file to follow after a hop", async () => {
     });
     assert.equal(res.status, 200);
     const got = run(["wait", "--session", opened.sid, "--seconds", "10"]).json;
-    assert.equal(got.skillFile, path.join(ROOT, "skills", "plan2code-review", "SKILL.md"));
+    assert.equal(got.skillFile, reviewFile);
     assert.equal(got.handoffSkill, undefined, "a launch is not a handoff stop");
     const stopRes = await fetch(`${m[1]}/submit`, {
       method: "POST",
@@ -437,7 +454,7 @@ test("the built skills name the skill file to follow after a hop", async () => {
     });
     assert.equal(stopRes.status, 200);
     const stopped = run(["wait", "--session", opened.sid, "--seconds", "10"]).json;
-    assert.equal(stopped.handoffSkill, path.join(ROOT, "skills", "plan2code-handoff", "SKILL.md"), "a handoff stop in a built skill names the Handoff skill file");
+    assert.equal(stopped.handoffSkill, handoffFile, "a handoff stop in a built skill names the Handoff skill file");
   } finally {
     run(["stop", "--session", opened.sid, "--force"]);
   }

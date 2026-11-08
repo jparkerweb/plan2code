@@ -1,6 +1,6 @@
 # Community Feedback Submission (STEP 6.5 detail)
 
-> Loaded by `src/plan2code-4-finalize.md` STEP 6.5. This file has no character limit (see `AGENTS-architecture.md` Reference Files).
+> Loaded by `src/plan2code-4-finalize.md` STEP 6.5. This file has no character limit (see `AGENTS-architecture-install.md` Reference Files).
 
 Everything in the payload is read from files, so a script builds it: the metrics from the `METRICS_JSON` comments the pipeline already wrote, the task counts from the phase files, your Step 5 answers from overview.md's `## User Feedback` table, the installed version, and a sha256 prefix of each prompt. Your part is the two judgment counts, the preview, and the user's approval.
 

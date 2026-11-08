@@ -56,7 +56,7 @@ If IDEA.md does not already exist, create it with the project name and descripti
 function buildPlanPrompt(config: BotConfig): string {
   return `${AUTONOMOUS_PREAMBLE}
 
-Run the /plan2code-1-plan skill to create a plan for this project.
+Open the skill file .claude/skills/plan2code-1-plan/SKILL.md and follow it to create a plan for this project.
 
 Read the IDEA.md file first to understand the project. The project is: ${config.ideaDescription}
 
@@ -72,7 +72,7 @@ When making decisions during planning:
 function buildDocumentPrompt(config: BotConfig): string {
   return `${AUTONOMOUS_PREAMBLE}
 
-Run the /plan2code-2-document skill to transform the plan into implementation specs.
+Open the skill file .claude/skills/plan2code-2-document/SKILL.md and follow it to transform the plan into implementation specs.
 
 Read the existing plan output in specs/ first to understand what was planned.
 
@@ -121,7 +121,7 @@ You are a senior software engineer implementing a project phase. Do NOT use the 
 function buildFinalizePrompt(config: BotConfig): string {
   return `${AUTONOMOUS_PREAMBLE}
 
-Run the /plan2code-4-finalize skill to validate and archive the completed project.
+Open the skill file .claude/skills/plan2code-4-finalize/SKILL.md and follow it to validate and archive the completed project.
 
 When making decisions:
 - Approve all documentation updates

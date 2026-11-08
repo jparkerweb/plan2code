@@ -7,7 +7,7 @@ import { isDeletableSpecDir } from "./public/answers.js";
 import { SPEC_STATES as STATE_TABLE } from "./public/spec-states.js";
 import { nowIso, readText } from "./files.mjs";
 import { insideGitRepo, pendingFiles } from "./sessions.mjs";
-import { countTasks, statusOf } from "./spec-files.mjs";
+import { deriveSpecState, pickPhaseFiles, statusOf } from "./spec-files.mjs";
 
 // The task-line pattern lives in spec-files.mjs; re-exported for any importer
 // that still takes it from here.
@@ -88,7 +88,8 @@ function classifySpec(dir, names) {
   const has = (re) => names.some((n) => re.test(n));
   const pfDir = path.join(dir, "pathfinder");
   const overview = names.includes("overview.md");
-  const phases = names.filter((n) => /^phase-.*\.md$/i.test(n));
+  const picked = pickPhaseFiles(names);
+  const phases = [...picked.keys()].sort((a, b) => a - b).map((n) => picked.get(n));
   const drafts = names.filter((n) => /^PLAN-DRAFT.*\.md$/i.test(n));
   const planDraft = drafts.length > 0;
   const planConv = has(/^PLAN-CONVERSATION.*\.md$/i);
@@ -97,31 +98,17 @@ function classifySpec(dir, names) {
   const resumeAt = draftStatus.match(/Resume at Phase\s*(\d+)/i);
 
   if (phases.length) {
-    // countTasks() counts a file's task lines (every checkbox in a file
-    // written before that format). An assumed-done task (`[?]`) counts as
-    // done, and the detail names how many there are.
-    let done = 0;
-    let assumed = 0;
-    let open = 0;
-    for (const f of phases) {
-      const n = countTasks(readText(path.join(dir, f)));
-      done += n.done;
-      assumed += n.assumed;
-      open += n.open;
-    }
-    const finished = done + assumed;
-    const total = finished + open;
-    const suffix = assumed > 0 ? `, ${assumed} assumed` : "";
+    // deriveSpecState() is the one rule for a documented spec's state,
+    // shared with specs.mjs (status), so the two never disagree.
+    const derived = deriveSpecState({
+      overview: overview ? readText(path.join(dir, "overview.md")) : null,
+      phases: [...picked.keys()].map((n) => ({ number: n, text: readText(path.join(dir, picked.get(n))) })),
+    });
     // Documented, building and built specs all land here: each says whether a
-    // Revise plan brief is waiting, and only when one is.
+    // Revise plan brief is waiting, and only when one is. finalizeReady rides
+    // along only when true (only blocked tasks left, each with a reason).
     const brief = planChangeWaiting(dir, phases) ? { planChange: true } : {};
-    if (open === 0 && finished > 0) return { state: "built", detail: `all tasks done${suffix}`, ...brief };
-    if (finished > 0) return { state: "building", detail: `${finished} of ${total} tasks done${suffix}`, ...brief };
-    return {
-      state: "documented",
-      detail: `${phases.length} phase${phases.length === 1 ? "" : "s"}, ${total || "?"} tasks ready`,
-      ...brief,
-    };
+    return { state: derived.state, detail: derived.detail, ...(derived.finalizeReady ? { finalizeReady: true } : {}), ...brief };
   }
   // An overview with no phase files means Document was interrupted mid-write;
   // its next step is the same as a finished plan's.

@@ -9,17 +9,21 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { ROOT, SKILLS, NOW, runScript, tmp, write, read, gitInit, phase } from "./skill-script-helpers.mjs";
 
+// skills/ also holds _console, the shared console build: not a skill.
+const skillNames = () => fs.readdirSync(SKILLS).filter((name) => !name.startsWith("_"));
+
 /* ================================================================ install */
 
 test("npm test runs every scripts/test-*.mjs file, and names none that is missing", () => {
   const command = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8")).scripts.test;
   const listed = [...command.matchAll(/scripts\/(test-[\w-]+\.mjs)/g)].map((m) => m[1]).sort();
-  const onDisk = fs.readdirSync(path.join(ROOT, "scripts")).filter((f) => /^test-[\w-]+\.mjs$/.test(f)).sort();
+  // test-fast.mjs runs the fast lane (npm run test:fast); it is a runner, not a test file.
+  const onDisk = fs.readdirSync(path.join(ROOT, "scripts")).filter((f) => /^test-[\w-]+\.mjs$/.test(f) && f !== "test-fast.mjs").sort();
   assert.deepEqual(listed, onDisk);
 });
 
 test("every skill with scripts ships common.mjs and version.json; dashboard ships none", () => {
-  const withScripts = fs.readdirSync(SKILLS).filter((s) => fs.existsSync(path.join(SKILLS, s, "scripts")));
+  const withScripts = skillNames().filter((s) => fs.existsSync(path.join(SKILLS, s, "scripts")));
   assert.ok(withScripts.length >= 11, `expected most skills to carry scripts, got ${withScripts.join(", ")}`);
   for (const s of withScripts) {
     for (const f of ["common.mjs", "version.json"]) assert.ok(fs.existsSync(path.join(SKILLS, s, "scripts", f)), `${s}/scripts/${f}`);
@@ -41,7 +45,7 @@ test("the Handoff skill writes through the console's handoff new, with no folder
 });
 
 test("every script a SKILL.md (or a reference it ships) runs exists beside it, and answers --help", () => {
-  for (const skill of fs.readdirSync(SKILLS)) {
+  for (const skill of skillNames()) {
     const dir = path.join(SKILLS, skill);
     const texts = [];
     const walk = (d) => {
@@ -78,7 +82,7 @@ test("scripts are self-contained: built-ins and siblings only", () => {
   }
   // A sibling import ships with its importer: every skill that carries a
   // script also carries each ./x.mjs it imports.
-  for (const skill of fs.readdirSync(SKILLS)) {
+  for (const skill of skillNames()) {
     const dir = path.join(SKILLS, skill, "scripts");
     if (!fs.existsSync(dir)) continue;
     for (const f of fs.readdirSync(dir).filter((n) => n.endsWith(".mjs"))) {
@@ -157,6 +161,58 @@ test("specs list: a diagnosis Quick Task marked Fixed is a fixed bug", () => {
   const bug = r.json.specs.find((s) => s.name === "csv-drops-rows");
   assert.equal(bug.state, "fixed");
   assert.equal(bug.detail, "bug fixed");
+});
+
+// The seven cases where the dashboard scan and specs.mjs once disagreed
+// (recorded in the hardening spec's Phase 5 notes; the same cases are in
+// test-web-console-spec-states.mjs). Each is a spec folder and the
+// [state, detail, finalizeReady] both must now report.
+const DESYNC_CHECKLIST = (...marks) => `# Overview\n\n## Phase Checklist\n\n${marks.map((m, i) => `- [${m}] [Phase ${i + 1}: Step ${i + 1}](./phase-${i + 1}.md)`).join("\n")}\n`;
+const DESYNC_PHASE = (n, lines) => `# Phase ${n}: Step ${n}\n\n**Status:** In Progress\n\n## Tasks\n\n${lines.join("\n")}\n\n## Acceptance Criteria\n\n- It works\n`;
+const DESYNC_CASES = {
+  "blocked-reasoned": {
+    files: { "overview.md": DESYNC_CHECKLIST("x"), "phase-1.md": DESYNC_PHASE(1, ["- [x] **Task 1.1:** One", "- [!] **Task 1.2:** Two", "  > BLOCKED: needs admin access. User action: create the app."]) },
+    want: ["building", "1 of 2 tasks done, 1 blocked", true],
+  },
+  "unknown-marker": {
+    files: { "overview.md": DESYNC_CHECKLIST("/"), "phase-1.md": DESYNC_PHASE(1, ["- [x] **Task 1.1:** One", "- [~] **Task 1.2:** Two"]) },
+    want: ["building", "1 of 2 tasks done", false],
+  },
+  "row-without-file": {
+    files: { "overview.md": DESYNC_CHECKLIST("x", " "), "phase-1.md": DESYNC_PHASE(1, ["- [x] **Task 1.1:** One", "- [x] **Task 1.2:** Two"]) },
+    want: ["building", "2 of 2 tasks done, Phase 2 not written up", false],
+  },
+  "phase-without-tasks": {
+    files: { "overview.md": DESYNC_CHECKLIST("x", " "), "phase-1.md": DESYNC_PHASE(1, ["- [x] **Task 1.1:** One"]), "phase-2.md": DESYNC_PHASE(2, ["To be written."]) },
+    want: ["building", "1 of 1 tasks done, Phase 2 not written up", false],
+  },
+  "stale-duplicate": {
+    files: { "overview.md": DESYNC_CHECKLIST("x"), "phase-1.md": DESYNC_PHASE(1, ["- [x] **Task 1.1:** One"]), "phase-1-old.md": DESYNC_PHASE(1, ["- [ ] **Task 1.1:** One", "- [ ] **Task 1.2:** Two"]) },
+    want: ["built", "all tasks done", false],
+  },
+  "not-a-phase-file": {
+    files: { "overview.md": DESYNC_CHECKLIST("x"), "phase-1.md": DESYNC_PHASE(1, ["- [x] **Task 1.1:** One"]), "phase-notes.md": "# Notes\n\n- [ ] Ask about colors\n" },
+    want: ["built", "all tasks done", false],
+  },
+  "blocked-bare": {
+    files: { "overview.md": DESYNC_CHECKLIST("x"), "phase-1.md": DESYNC_PHASE(1, ["- [x] **Task 1.1:** One", "- [!] **Task 1.2:** Two"]) },
+    want: ["building", "1 of 2 tasks done, 1 blocked", false],
+  },
+};
+
+test("specs: list and status agree with the dashboard scan on the seven desync cases", () => {
+  const root = tmp("desync");
+  for (const [name, c] of Object.entries(DESYNC_CASES)) for (const [file, text] of Object.entries(c.files)) write(root, `specs/${name}/${file}`, text);
+  const S = (...a) => runScript("plan2code-3-implement", "specs.mjs", [...a, "--root", root]);
+  const list = S("list");
+  assert.equal(list.code, 0, list.stderr);
+  for (const [name, c] of Object.entries(DESYNC_CASES)) {
+    const row = list.json.specs.find((s) => s.name === name);
+    const st = S("status", name);
+    assert.equal(st.code, 0, st.stderr);
+    assert.deepEqual([row.state, row.detail, Boolean(row.finalizeReady)], c.want, `${name}: specs.mjs list (the dashboard scan)`);
+    assert.deepEqual([st.json.state, st.json.stateDetail, st.json.finalizeReady], c.want, `${name}: specs.mjs status`);
+  }
 });
 
 test("specs status: checklist formats, groups, task markers, numbering, totals, checks", () => {
@@ -310,6 +366,7 @@ test("specs mark: transitions, the no-reset rule, dry-run and idempotence", () =
   assert.match(read(root, "specs/lunch-vote/overview.md"), /- \[ \] \*\*Phase 3/, "dry-run writes nothing");
   assert.equal(S("mark", "lunch-vote", "--phase", "3", "--to", "in-progress").code, 0);
   assert.match(read(root, "specs/lunch-vote/overview.md"), /- \[\/\] \*\*Phase 3 — Web UI\*\* — see/, "only the marker changes");
+  assert.match(read(root, "specs/lunch-vote/phase-3.md"), /^\*\*Status:\*\* In Progress$/m, "in-progress writes the phase file's Status line too");
   assert.equal(S("mark", "lunch-vote", "--phase", "3", "--to", "in-progress").json.changed, false);
   const reset = S("mark", "lunch-vote", "--phase", "3", "--to", "open");
   assert.equal(reset.code, 5);
@@ -366,11 +423,11 @@ test("commit-msg: the two -m flags on any branch, subject rules", () => {
   g("add", "-A");
   g("commit", "-q", "-m", "init");
   const C = (...a) => runScript("plan2code-review", "commit-msg.mjs", a, { cwd: repo });
-  const ok = C("--subject", "Add the export endpoint", "--add-all");
+  const ok = C("--subject", "Add the export endpoint", "--files", "src/export.js");
   assert.equal(ok.code, 0, ok.stderr);
   assert.equal(ok.json.ticket, undefined);
   assert.equal(ok.json.branch, undefined);
-  assert.equal(ok.json.command, 'git add -A && git commit -m "Add the export endpoint" -m "AI Assisted"');
+  assert.equal(ok.json.command, 'git add -- src/export.js && git commit -m "Add the export endpoint" -m "AI Assisted"');
   assert.equal(ok.json.message, "Add the export endpoint\n\nAI Assisted");
   assert.equal(C("--subject", "x".repeat(101)).code, 4);
   assert.equal(C("--subject", 'say "hi"').code, 4);
@@ -437,6 +494,22 @@ test("agent-files: detect, apply only what was chosen, rules folders, idempotent
 });
 
 /* ============================================================== agents-md.mjs */
+
+test("agents-md: Init's first run warns once that a gitignored specs--completed/ is not backed up", () => {
+  const root = tmp("notices");
+  const I = () => runScript("plan2code-init", "agents-md.mjs", ["inspect", "--root", root]).json;
+  assert.deepEqual(I().notices, [], "no .gitignore, nothing to say");
+  for (const line of ["specs--completed/", "/specs--completed", "specs*"]) {
+    write(root, ".gitignore", `node_modules\nspecs/\n${line}\n`);
+    assert.deepEqual(I().notices.map((n) => n.code), ["specs-not-backed-up"], line);
+  }
+  assert.match(I().notices[0].message, /not backed up/);
+  write(root, ".gitignore", "node_modules\nspecs/\n");
+  assert.deepEqual(I().notices, [], "only specs/ ignored: archives are committed");
+  write(root, ".gitignore", "specs--completed/\n");
+  write(root, "AGENTS.md", "# AGENTS.md\n\n## Project Overview\n\nA thing.\n");
+  assert.equal(I().notices, undefined, "once AGENTS.md exists (Init Update), it is not said again");
+});
 
 test("agents-md: structure, budget, orphans, broken links, inline rules", () => {
   const root = tmp("agentsmd");
@@ -579,6 +652,35 @@ test("specs check: a well-formed spec passes", () => {
   assert.equal(r.json.errors, 0);
   assert.deepEqual(r.json.checked, ["specs/clean/overview.md", "specs/clean/phase-1.md", "specs/clean/phase-2.md"]);
   assert.deepEqual(r.json.problems, []);
+});
+
+test("specs check: the format rules warn on an unmarked spec and fail one carrying the format marker", () => {
+  const root = cleanSpec(specFixture());
+  write(
+    root,
+    "specs/clean/phase-1.md",
+    phase(1, "x", [["x", "1.1"], ["!", "1.2"], ["!", "1.3"], [" ", "1.4"], [" ", "1.5"]])
+      .replace("**Status:** x\n", "")
+      .replace("**Task 1.3:** Do 1.3", "**Task 1.3:** Do 1.3\n  > BLOCKED: needs admin. User action: grant it.")
+      .replace("**Task 1.4:** Do 1.4", "**Task 1.4:** Change `src/app.js:42` to retry")
+      .replace("**Task 1.5:** Do 1.5", "**Task 1.5:** Change `src/app.js:~42` (approximate) to retry")
+      .replace("## Acceptance Criteria", "## Notes\n\n- [ ] Ask about colors\n\n## Acceptance Criteria")
+  );
+  const C = () => runScript("plan2code-2-document", "specs.mjs", ["check", "clean", "--root", root]);
+  const codes = (r) => r.json.problems.filter((p) => p.file === "specs/clean/phase-1.md").map((p) => [p.level, p.code]);
+  const old = C();
+  assert.equal(old.code, 0, old.stdout);
+  assert.equal(old.json.format, null);
+  assert.deepEqual(codes(old), [["warn", "no-status"], ["warn", "notes-checkbox"], ["warn", "bare-blocked"], ["warn", "line-reference"]], "an unmarked spec only warns; the reasoned blocker and the ~ reference pass");
+  write(root, "specs/clean/overview.md", read(root, "specs/clean/overview.md") + "\n<!-- plan2code-format: 2 -->\n");
+  const marked = C();
+  assert.equal(marked.code, 4, marked.stdout);
+  assert.equal(marked.json.format, 2);
+  assert.deepEqual(codes(marked), [["error", "no-status"], ["error", "notes-checkbox"], ["error", "bare-blocked"], ["error", "line-reference"]]);
+  assert.match(marked.json.problems.find((p) => p.code === "bare-blocked").message, /Task 1\.2/);
+  assert.match(marked.json.problems.find((p) => p.code === "line-reference").message, /Task 1\.4/);
+  // The clean phase file passes the same rules under the marker.
+  assert.ok(!marked.json.problems.some((p) => p.file === "specs/clean/phase-2.md"));
 });
 
 test("specs check: a bad task line, a checklist row with no phase file, a loop token and a bare metric word each fail", () => {
@@ -869,6 +971,23 @@ test("specs mark: a plain or bold Status: line is updated; a missing one is repo
   assert.match(read(root, "specs/lunch-vote/overview.md"), /- \[x\] \[Phase 2: API\]/);
 });
 
+test("specs archive: a copy that does not match the source by name and size keeps the source", () => {
+  const root = specFixture();
+  const S = (env, ...a) => runScript("plan2code-4-finalize", "specs.mjs", [...a, "--root", root], { env });
+  const bad = S({ PLAN2CODE_ARCHIVE_FAULT: "truncate" }, "archive", "lunch-vote");
+  assert.equal(bad.code, 4, bad.stdout);
+  assert.equal(bad.json.error, "copy-unverified");
+  assert.match(bad.json.message, /PLAN-DRAFT-20260801\.md is \d+ bytes, not \d+/, "the short file is named with both sizes");
+  assert.ok(fs.existsSync(path.join(root, "specs/lunch-vote/phase-4.md")), "the source stays when the copy is short");
+  assert.match(bad.json.next, /Delete the partial specs--completed\/lunch-vote\//);
+  // The same move through the copy path, intact, removes the source.
+  fs.rmSync(path.join(root, "specs--completed/lunch-vote"), { recursive: true });
+  const good = S({ PLAN2CODE_ARCHIVE_FAULT: "copy" }, "archive", "lunch-vote");
+  assert.equal(good.code, 0, good.stdout);
+  assert.equal(good.json.sourceRemoved, true);
+  assert.ok(!fs.existsSync(path.join(root, "specs/lunch-vote")));
+});
+
 test("specs: only a folder directly under specs/ is a spec; archive verification fails loudly", () => {
   const root = specFixture();
   write(root, "src/app.js", "x\n");
@@ -901,7 +1020,6 @@ test("commit-msg: @ and - paths are quoted, git add ends its options, risky subj
   assert.equal(files.json.add, "git add -- '@types/x.d.ts' '-weird.md' src/a@b.js");
   assert.equal(files.json.commit, 'git commit -m "Fix" -m "AI Assisted"');
   assert.equal(files.json.command, `${files.json.add} && ${files.json.commit}`);
-  assert.equal(C("--subject", "Fix", "--add-all").json.add, "git add -A");
   const bare = C("--subject", "Fix").json;
   assert.equal(bare.add, null);
   assert.equal(bare.command, bare.commit);

@@ -6,7 +6,7 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { execFileSync } from "node:child_process";
 
-import { countPending } from "./git-repo.mjs";
+import { countPending, git } from "./git-repo.mjs";
 import { DOC_TYPES } from "./public/answers.js";
 import { appendJsonLine, HOME_DIR, newestMtime, nowIso, PLAN2CODE_DIR, readJson, readJsonLines, readText, RUNTIME_DIR, SESSIONS_DIR } from "./files.mjs";
 
@@ -210,6 +210,24 @@ export function attachmentName({ upload, name }) {
 // Sessions and their uploads age out on the same clock: a month untouched.
 export const SESSION_MAX_AGE_MS = UPLOAD_MAX_AGE_MS;
 
+// A server's lifetime cap, one number for the server (MAX_LIFE_MS in
+// server.mjs) and for `stop`, which reasons about how old a server can be.
+// A server past it stays up only while answers nobody collected wait in its
+// session (resultWaiting below): exiting would strand them.
+export const SERVER_MAX_LIFE_MS = 4 * 60 * 60 * 1000;
+
+// Answers the person sent that no agent has collected yet: a result.json with
+// no consumedAt. The server keeps its own cached reading of the same rule
+// (resultFlags in server.mjs); this one is for the CLI side.
+export function resultWaiting(dir) {
+  try {
+    const r = JSON.parse(fs.readFileSync(path.join(dir, "result.json"), "utf8"));
+    return Boolean(r && !r.consumedAt);
+  } catch {
+    return false;
+  }
+}
+
 const PDF_MAGIC = Buffer.from("%PDF-", "ascii");
 
 /**
@@ -351,6 +369,10 @@ export async function removeScratch(consoleDir, names) {
 // the desktop app (app/, which install.js fills, and app.json, its settings)
 // and the custom agents the person added (agents.json).
 const KEPT_CONSOLE_ENTRIES = new Set([...PROTECTED_CONSOLE_FILES, "sessions", "runtime"]);
+// The shared console install: install.js copies one folder per version here
+// (~/.plan2code/console/<version>/) and removes the old ones, so Cleanup never
+// offers it.
+export const CONSOLE_VERSION_DIR = /^\d+\.\d+\.\d+$/;
 export const KEPT_PLAN2CODE_ENTRIES = new Set(["console", "bin", "launcher.json", "install.json", "models.json", "handoffs", "notepads", "app", "app.json", "agents.json"]);
 // A stray must sit untouched this long before Cleanup lists it. The same
 // folders hold files that live for milliseconds -- a held
@@ -384,7 +406,7 @@ function entryKind(entry) {
   return entry.isDirectory() ? "folder" : "file";
 }
 
-function strayEntries(dir, kept, where, now) {
+function strayEntries(dir, kept, where, now, keptPattern = null) {
   let entries;
   try {
     entries = fs.readdirSync(dir, { withFileTypes: true });
@@ -393,14 +415,15 @@ function strayEntries(dir, kept, where, now) {
   }
   const settled = (p) => now - newestMtime(p) >= STRAY_GRACE_MS;
   return entries
-    .filter((e) => !kept.has(e.name))
+    .filter((e) => !kept.has(e.name) && !(keptPattern && e.isDirectory() && keptPattern.test(e.name)))
     .map((e) => ({ id: where + ":" + e.name, where, name: e.name, kind: entryKind(e), path: path.join(dir, e.name) }))
     .filter((e) => settled(e.path));
 }
 
 // Finalize's archive, `<project>/specs--completed/<feature>/`: each feature
 // folder (or link) nobody has touched for `maxAgeMs`, judged by its newest
-// file. Loose files at the top are not specs and stay.
+// file. Loose files at the top are not specs and stay. `tracked` says whether
+// git could give it back after a delete (removeCleanup refuses one it could not).
 function completedSpecs(project, now, maxAgeMs) {
   const dir = path.join(project, "specs--completed");
   let entries;
@@ -412,7 +435,33 @@ function completedSpecs(project, now, maxAgeMs) {
   return entries
     .filter((e) => e.isDirectory() || e.isSymbolicLink())
     .map((e) => ({ id: "completed:" + e.name, where: "completed", name: e.name, kind: entryKind(e), path: path.join(dir, e.name) }))
-    .filter((e) => now - newestMtime(e.path) > maxAgeMs);
+    .filter((e) => now - newestMtime(e.path) > maxAgeMs)
+    .map((e) => ({ ...e, tracked: trackedByGit(dir, e.name) }));
+}
+
+// True only when git tracks `name` (under `dir`) and could give back every
+// file in it as it stands: `git ls-files` lists something, and `git status`
+// (untracked, ignored, modified and staged alike) lists nothing, since git can
+// restore only what was committed. Outside a repository, or when git fails, it
+// is not tracked. `specs--completed/` is gitignored by default, so most
+// archives answer false. Nothing records a backup copy yet, so tracked and
+// committed is the only way through.
+function trackedByGit(dir, name) {
+  const run = (args) => git(["--literal-pathspecs", ...args, "--", name], dir, { raw: true });
+  const cached = run(["ls-files", "-z"]);
+  if (!cached.ok || !cached.out) return false;
+  const changed = run(["status", "--porcelain=v1", "-z", "--ignored", "--untracked-files=all"]);
+  return changed.ok && !changed.out;
+}
+
+// The line the page shows for completed specs Cleanup kept because deleting
+// them would lose them for good. "" when none was refused.
+function refusalLine(names) {
+  if (!names.length) return "";
+  const list = names.map((n) => "specs--completed/" + n + "/").join(", ");
+  return names.length === 1
+    ? `Kept ${list}: git does not track it as it stands, so deleting it would lose it for good. Commit it first, or delete it yourself once it is backed up.`
+    : `Kept ${names.length} completed specs git does not track as they stand, so deleting them would lose them for good: ${list}. Commit them first, or delete them yourself once they are backed up.`;
 }
 
 /**
@@ -444,7 +493,7 @@ export async function cleanupFindings({
     if (now - newestMtime(path.join(sessionsDir, sid)) <= maxAgeMs) continue;
     found.push({ id: "session:" + sid, where: "session", name: sid, kind: "folder", path: path.join(sessionsDir, sid) });
   }
-  found.push(...strayEntries(consoleDir, KEPT_CONSOLE_ENTRIES, "console", now));
+  found.push(...strayEntries(consoleDir, KEPT_CONSOLE_ENTRIES, "console", now, CONSOLE_VERSION_DIR));
   if (path.resolve(consoleDir) === path.resolve(plan2codeDir, "console")) {
     found.push(...strayEntries(plan2codeDir, KEPT_PLAN2CODE_ENTRIES, "root", now));
   }
@@ -463,6 +512,7 @@ export async function cleanupFindings({
     bytes += size;
     const item = { id: f.id, where: f.where, name: f.name, kind: f.kind, bytes: size, path: f.path };
     if (f.where === "notepad") item.folder = f.folder;
+    if (f.where === "completed") item.tracked = f.tracked;
     items.push(item);
   }
   return { items, bytes };
@@ -472,8 +522,10 @@ export async function cleanupFindings({
  * Remove what Cleanup found, limited to `ids` the page was shown. The list is
  * worked out afresh first and only ids on it are touched, so a name from the
  * page is never a path, and anything that stopped qualifying since the scan
- * (a session touched again) stays. A link is unlinked, never followed.
- * Resolves to `{ removed: [id], bytes, failed: [id] }`.
+ * (a session touched again) stays. A link is unlinked, never followed. A
+ * completed spec git does not track is refused, never deleted: it lands in
+ * `refused`, and `refusal` is the line the page shows ("" when none was).
+ * Resolves to `{ removed: [id], bytes, failed: [id], refused: [id], refusal }`.
  */
 export async function removeCleanup(ids, opts = {}) {
   const wanted = new Set((Array.isArray(ids) ? ids : []).filter((id) => typeof id === "string"));
@@ -481,9 +533,16 @@ export async function removeCleanup(ids, opts = {}) {
   const { removeNotepad } = await import("./notepads.mjs");
   const removed = [];
   const failed = [];
+  const refused = [];
+  const refusedNames = [];
   let bytes = 0;
   for (const item of items) {
     if (!wanted.has(item.id)) continue;
+    if (item.where === "completed" && !item.tracked) {
+      refused.push(item.id);
+      refusedNames.push(item.name);
+      continue;
+    }
     try {
       if (item.where === "notepad") removeNotepad(item.name);
       else if (item.kind === "link") await fs.promises.unlink(item.path);
@@ -494,7 +553,7 @@ export async function removeCleanup(ids, opts = {}) {
       failed.push(item.id);
     }
   }
-  return { removed, bytes, failed };
+  return { removed, bytes, failed, refused, refusal: refusalLine(refusedNames) };
 }
 
 /**

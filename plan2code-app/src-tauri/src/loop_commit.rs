@@ -1,8 +1,8 @@
 //! The commit step of the Implementation Loop: its order, and nothing else.
 //!
 //! A passed phase goes through five calls, in this order: `prepare` (everything
-//! that can fail, before any file is touched), `stage_and_check` (stage, then
-//! refuse a secret or an oversized file), `mark` (save the files, mark the
+//! that can fail, before any file is touched), `stage_and_check` (stage the
+//! files the phase changed, then refuse a secret or an oversized file), `mark` (save the files, mark the
 //! phase done, write the approval line), `commit` (stage the marked files and
 //! commit) and, when the commit fails, `undo` (put the saved text back). The
 //! driver decides what to say and where to stop; this module only does the work
@@ -252,6 +252,22 @@ pub fn too_big(file: &StagedFile) -> bool {
     file.bytes > MAX_STAGED_BYTES
 }
 
+/// A staged file's size from its `symlink_metadata` result: a file that is
+/// gone is a deletion and counts as 0 bytes; any other error means the size is
+/// not known, so the gate refuses it (`None`) rather than counting 0.
+pub fn staged_size(meta: std::io::Result<u64>) -> Option<u64> {
+    match meta {
+        Ok(bytes) => Some(bytes),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Some(0),
+        Err(_) => None,
+    }
+}
+
+/// What a stop says when the files this phase changed cannot be listed, so the
+/// loop cannot tell its own files from the person's.
+pub const OWN_FILES_UNKNOWN: &str =
+    "the files this phase changed could not be listed, so nothing was staged";
+
 /// Staged files the loop refuses to commit, by their names.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct StagedProblem {
@@ -270,11 +286,47 @@ pub enum StageError {
     Problem(StagedProblem),
 }
 
-/// Stage everything and look at the list before anything is marked. Any
-/// secret-looking or oversized file takes everything out of the index again and
+/// Stage the files this phase changed and look at the list before anything is
+/// marked. `baseline` is what `git status` listed when the phase began (the
+/// person's own changes, left out); `None` when it could not be read. The
+/// phase's files are what `git status` lists now less the baseline, staged by
+/// name, never with `git add -A`. A baseline or a list that cannot be read
+/// stops here with nothing staged. Any secret-looking or oversized file, or
+/// one whose size cannot be read, takes everything out of the index again and
 /// returns every offending path.
-pub fn stage_and_check(project: &Path) -> Result<(), StageError> {
-    let added = loop_tools::git_add_all(project);
+pub fn stage_and_check(project: &Path, baseline: Option<&[String]>) -> Result<(), StageError> {
+    let unknown = |output: String| {
+        StageError::Add(CommitFailure {
+            stage: Stage::Add,
+            first_line: OWN_FILES_UNKNOWN.to_string(),
+            output,
+        })
+    };
+    let baseline = baseline
+        .ok_or_else(|| unknown("git status could not be read when the phase began".to_string()))?;
+    // Changed names are relative to the repository's top folder.
+    let top = loop_tools::git_toplevel(project)
+        .ok_or_else(|| unknown("the repository's top folder could not be found".to_string()))?;
+    // A list over the cap keeps its own advice (add generated folders to
+    // .gitignore) as the stop line; any other failure is the generic one.
+    let changed = loop_tools::git_changed(project).map_err(|output| {
+        if output == loop_tools::STAGED_TOO_LONG {
+            StageError::Add(CommitFailure {
+                stage: Stage::Add,
+                first_line: output.clone(),
+                output,
+            })
+        } else {
+            unknown(output)
+        }
+    })?;
+    // A set, not a slice scan: with every untracked file listed, a big folder makes both lists long.
+    let before: std::collections::HashSet<&str> = baseline.iter().map(String::as_str).collect();
+    let own: Vec<loop_tools::GitPath> = changed
+        .into_iter()
+        .filter(|path| !before.contains(path.shown.as_str()))
+        .collect();
+    let added = loop_tools::git_add_listed(&top, &own);
     if !added.ok {
         return Err(StageError::Add(CommitFailure {
             stage: Stage::Add,
@@ -289,20 +341,25 @@ pub fn stage_and_check(project: &Path) -> Result<(), StageError> {
             output,
         })
     })?;
-    // Staged names are relative to the repository's top folder.
-    let top = loop_tools::git_toplevel(project).unwrap_or_else(|| project.to_path_buf());
     let mut secrets = false;
     let mut big = false;
+    let mut unreadable = false;
     let mut files = Vec::new();
     for path in staged {
-        // A deleted file is gone from the tree: it counts as 0 bytes.
-        let bytes = std::fs::symlink_metadata(top.join(&path)).map_or(0, |m| m.len());
-        let file = StagedFile { path, bytes };
+        // Sized by the exact bytes git wrote, so a name that is not UTF-8 is
+        // still the real file. A deleted file counts as 0 bytes.
+        let size = staged_size(std::fs::symlink_metadata(path.under(&top)).map(|m| m.len()));
+        let file = StagedFile {
+            path: path.shown,
+            bytes: size.unwrap_or(0),
+        };
         let is_secret = denied(&file.path).is_some();
         let is_big = too_big(&file);
-        if is_secret || is_big {
+        let is_unsized = size.is_none();
+        if is_secret || is_big || is_unsized {
             secrets |= is_secret;
             big |= is_big;
+            unreadable |= is_unsized;
             files.push(file.path);
         }
     }
@@ -311,10 +368,14 @@ pub fn stage_and_check(project: &Path) -> Result<(), StageError> {
     }
     let unstaged = loop_tools::git_unstage_all(project);
     let left_staged = (!unstaged.ok).then(|| first_line(&unstaged.output));
-    let why = match (secrets, big) {
-        (true, true) => "look like secrets or are over 5 MB",
-        (true, false) => "look like secrets",
-        _ => "are over 5 MB",
+    let why = match (secrets, big, unreadable) {
+        (true, true, false) => "look like secrets or are over 5 MB",
+        (true, false, false) => "look like secrets",
+        (false, true, false) => "are over 5 MB",
+        (false, false, true) => "could not be sized",
+        (true, false, true) => "look like secrets or could not be sized",
+        (false, true, true) => "are over 5 MB or could not be sized",
+        _ => "look like secrets, are over 5 MB or could not be sized",
     };
     Err(StageError::Problem(StagedProblem {
         files,
@@ -751,7 +812,7 @@ mod tests {
         let big = std::fs::File::create(repo.join("big.bin")).unwrap();
         big.set_len(MAX_STAGED_BYTES + 1).unwrap();
         // No commit yet: unstaging must work without a HEAD.
-        let Err(StageError::Problem(problem)) = stage_and_check(&repo) else {
+        let Err(StageError::Problem(problem)) = stage_and_check(&repo, Some(&[])) else {
             panic!("expected a problem");
         };
         let mut files = problem.files.clone();
@@ -764,7 +825,7 @@ mod tests {
         std::fs::remove_file(repo.join(".env")).unwrap();
         std::fs::remove_file(repo.join("big.bin")).unwrap();
         std::fs::remove_file(repo.join("sub/server.pem")).unwrap();
-        stage_and_check(&repo).expect("a clean list passes");
+        stage_and_check(&repo, Some(&[])).expect("a clean list passes");
         let staged = git_in(&repo, &["diff", "--cached", "--name-only"]);
         assert!(staged.contains("ok.txt") && staged.contains(".env.example"));
     }
@@ -779,11 +840,11 @@ mod tests {
         git_in(&repo, &["add", "-A"]);
         git_in(&repo, &["commit", "-q", "-m", "First"]);
         std::fs::remove_file(repo.join("a.txt")).unwrap();
-        stage_and_check(&repo).expect("a deletion of an ordinary file passes");
+        stage_and_check(&repo, Some(&[])).expect("a deletion of an ordinary file passes");
         git_in(&repo, &["reset", "-q"]);
         let big = std::fs::File::create(repo.join("huge.dat")).unwrap();
         big.set_len(MAX_STAGED_BYTES + 1).unwrap();
-        let Err(StageError::Problem(problem)) = stage_and_check(&repo) else {
+        let Err(StageError::Problem(problem)) = stage_and_check(&repo, Some(&[])) else {
             panic!("expected a problem");
         };
         assert_eq!(problem.files, vec!["huge.dat"]);
@@ -811,7 +872,7 @@ mod tests {
             message: "Add it\n\nAI Assisted".to_string(),
             phase_file: spec.join("phase-2.md"),
         };
-        stage_and_check(&repo).unwrap();
+        stage_and_check(&repo, Some(&[])).unwrap();
         let marked = mark(&prepared, &repo, "specs/lunch", 2, "Approved.").unwrap();
         let head = commit(&repo, &prepared, &marked, Duration::from_secs(30)).unwrap();
         assert!(head.is_some());
@@ -862,5 +923,120 @@ mod tests {
         );
         // A phase the spec no longer shows done is not listed.
         assert!(marks_without_commits(&base, "specs/lunch", &[2], &report).is_empty());
+    }
+
+    #[test]
+    fn only_the_phases_own_files_are_staged_and_the_baseline_is_left_alone() {
+        if !git_ready() {
+            return;
+        }
+        let repo = init_repo("stage-own");
+        // A setting that hides untracked files from a plain `git status`.
+        git_in(&repo, &["config", "status.showUntrackedFiles", "no"]);
+        std::fs::create_dir_all(repo.join("app")).unwrap();
+        std::fs::write(repo.join("tracked.txt"), "a").unwrap();
+        std::fs::write(repo.join("app/keep.tsx"), "k").unwrap();
+        git_in(&repo, &["add", "tracked.txt", "app/keep.tsx"]);
+        git_in(&repo, &["commit", "-q", "-m", "First"]);
+        // When the phase began, the person already had two files of their
+        // own: one of them a name a glob reading of `app/[id].tsx` matches.
+        std::fs::write(repo.join("mine.txt"), "the person's").unwrap();
+        std::fs::write(repo.join("app/i.tsx"), "decoy").unwrap();
+        let mut baseline = loop_tools::git_status_porcelain(&repo).unwrap();
+        baseline.sort_unstable();
+        assert_eq!(baseline, vec!["app/i.tsx", "mine.txt"]);
+        // The agent then edits a tracked file and adds files, one with a
+        // name that reads as a pattern (listed on its own line, since `app/`
+        // is tracked).
+        std::fs::write(repo.join("tracked.txt"), "b").unwrap();
+        std::fs::write(repo.join("app/[id].tsx"), "x").unwrap();
+        std::fs::write(repo.join("new.rs"), "y").unwrap();
+        stage_and_check(&repo, Some(&baseline)).expect("the agent's files pass");
+        let staged = git_in(&repo, &["diff", "--cached", "--name-only"]);
+        let mut staged: Vec<&str> = staged.lines().collect();
+        staged.sort_unstable();
+        assert_eq!(staged, vec!["app/[id].tsx", "new.rs", "tracked.txt"]);
+    }
+
+    #[test]
+    fn an_untracked_folder_from_before_the_phase_neither_hides_nor_swallows_files() {
+        if !git_ready() {
+            return;
+        }
+        let repo = init_repo("stage-untracked-dir");
+        std::fs::write(repo.join("tracked.txt"), "a").unwrap();
+        git_in(&repo, &["add", "tracked.txt"]);
+        git_in(&repo, &["commit", "-q", "-m", "First"]);
+        // The person's scratch folder was untracked when the phase began.
+        std::fs::create_dir_all(repo.join("scratch")).unwrap();
+        std::fs::write(repo.join("scratch/mine.txt"), "the person's").unwrap();
+        let mut baseline = loop_tools::git_status_porcelain(&repo).unwrap();
+        baseline.sort_unstable();
+        assert_eq!(baseline, vec!["scratch/mine.txt"]);
+        // The agent adds a file beside it, and a folder of its own.
+        std::fs::write(repo.join("scratch/new.txt"), "the agent's").unwrap();
+        std::fs::create_dir_all(repo.join("made")).unwrap();
+        std::fs::write(repo.join("made/a.txt"), "the agent's").unwrap();
+        stage_and_check(&repo, Some(&baseline)).expect("the agent's files pass");
+        let staged = git_in(&repo, &["diff", "--cached", "--name-only"]);
+        let mut staged: Vec<&str> = staged.lines().collect();
+        staged.sort_unstable();
+        assert_eq!(staged, vec!["made/a.txt", "scratch/new.txt"]);
+    }
+
+    #[test]
+    fn staging_fails_closed_when_the_phases_files_cannot_be_listed() {
+        if !git_ready() {
+            return;
+        }
+        let repo = init_repo("stage-unknown");
+        std::fs::write(repo.join("a.txt"), "a").unwrap();
+        // No baseline from the phase's start: nothing is staged.
+        let Err(StageError::Add(failure)) = stage_and_check(&repo, None) else {
+            panic!("expected a refusal");
+        };
+        assert_eq!(failure.first_line, OWN_FILES_UNKNOWN);
+        assert_eq!(git_in(&repo, &["diff", "--cached", "--name-only"]), "");
+        // Outside any repository the list cannot be read either.
+        let (plain, _) = temp_spec("stage-no-repo");
+        let Err(StageError::Add(failure)) = stage_and_check(&plain, Some(&[])) else {
+            panic!("expected a refusal");
+        };
+        assert_eq!(failure.first_line, OWN_FILES_UNKNOWN);
+    }
+
+    #[test]
+    fn a_size_that_cannot_be_read_is_refused_and_a_deletion_is_zero() {
+        use std::io::{Error, ErrorKind};
+        assert_eq!(staged_size(Ok(12)), Some(12));
+        assert_eq!(staged_size(Err(Error::from(ErrorKind::NotFound))), Some(0));
+        assert_eq!(
+            staged_size(Err(Error::from(ErrorKind::PermissionDenied))),
+            None
+        );
+        assert_eq!(staged_size(Err(Error::other("odd"))), None);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_big_file_whose_name_is_not_utf8_hits_the_size_gate() {
+        use std::os::unix::ffi::OsStrExt;
+        if !git_ready() {
+            return;
+        }
+        let repo = init_repo("stage-non-utf8");
+        let name = std::ffi::OsStr::from_bytes(b"caf\xe9.bin");
+        let big = match std::fs::File::create(repo.join(name)) {
+            Ok(file) => file,
+            // A file system that refuses such a name (some macOS volumes) has nothing to check.
+            Err(_) => return,
+        };
+        big.set_len(MAX_STAGED_BYTES + 1).unwrap();
+        let Err(StageError::Problem(problem)) = stage_and_check(&repo, Some(&[])) else {
+            panic!("expected the size gate to stop it");
+        };
+        assert_eq!(problem.files, vec!["caf\u{fffd}.bin"]);
+        assert_eq!(problem.why, "are over 5 MB");
+        assert_eq!(git_in(&repo, &["diff", "--cached", "--name-only"]), "");
     }
 }

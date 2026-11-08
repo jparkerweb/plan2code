@@ -119,6 +119,18 @@ const SRC_DIR = path.join(__dirname, 'src');
 const SHARED_SCRIPTS_DIR = 'skill-scripts';
 const SHARED_SCRIPTS_ALWAYS = ['common.mjs'];
 
+// The web console is built once, into skills/_console/<version>/, and installed once, into
+// ~/.plan2code/console/<version>/. Each skill carries only a forwarding stub
+// (src/web-console-stub/) and the markdown the agent reads by path (the card, its topic files
+// and notes/).
+const CONSOLE_SOURCE = 'web-console';
+const CONSOLE_SHARED_DIR = '_console';
+const CONSOLE_STUB_SRC = path.join(SRC_DIR, 'web-console-stub', 'console.mjs');
+const CONSOLE_STUB_VERSION_TOKEN = '__PLAN2CODE_VERSION__';
+// The same pattern as CONSOLE_VERSION_DIR in src/web-console/sessions.mjs, which keeps these
+// folders out of Cleanup.
+const CONSOLE_VERSION_DIR = /^\d+\.\d+\.\d+$/;
+
 // ============================================================================
 // SYNC PROMPTS CONFIGURATION (merged from sync-prompts.js)
 // ============================================================================
@@ -182,10 +194,11 @@ const SOURCE_PROMPTS = [
     isUtility: true,
     // review.md rides along for the web console's "Review it now" button, which
     // runs the review in the same session once the quick task is built.
-    scripts: ['specs.mjs', 'commit-msg.mjs', 'review-scope.mjs'],
+    scripts: ['specs.mjs', 'commit-msg.mjs', 'review-scope.mjs', 'glob.mjs', 'test-map.mjs', 'test-match.mjs', 'run-check.mjs'],
     additionalReferences: [
       { source: 'web-console', target: 'web-console' },
       { source: 'shared-references/building-habits.md', target: 'building-habits.md' },
+      { source: 'shared-references/review-in-build.md', target: 'review-in-build.md' },
       { source: 'shared-references/helper-strength.md', target: 'helper-strength.md' },
       { source: 'shared-references/test-runs.md', target: 'test-runs.md' },
       { source: 'plan2code-review.md', target: 'review.md' },
@@ -237,10 +250,11 @@ const SOURCE_PROMPTS = [
     description: 'Execute implementation phase by phase',
     // review.md rides along for the web console's review offer on the sign-off
     // card, which runs the review in the same session before the phase is approved.
-    scripts: ['specs.mjs', 'commit-msg.mjs', 'review-scope.mjs'],
+    scripts: ['specs.mjs', 'commit-msg.mjs', 'review-scope.mjs', 'glob.mjs', 'test-map.mjs', 'test-match.mjs', 'run-check.mjs'],
     additionalReferences: [
       { source: 'web-console', target: 'web-console' },
       { source: 'shared-references/building-habits.md', target: 'building-habits.md' },
+      { source: 'shared-references/review-in-build.md', target: 'review-in-build.md' },
       { source: 'shared-references/helper-strength.md', target: 'helper-strength.md' },
       { source: 'shared-references/test-runs.md', target: 'test-runs.md' },
       { source: 'plan2code-review.md', target: 'review.md' },
@@ -253,11 +267,12 @@ const SOURCE_PROMPTS = [
     name: 'implement-review',
     displayName: 'Implementation + Review Mode',
     description: 'Implement one phase, review it, then request sign-off',
-    scripts: ['specs.mjs', 'commit-msg.mjs', 'review-scope.mjs'],
+    scripts: ['specs.mjs', 'commit-msg.mjs', 'review-scope.mjs', 'glob.mjs', 'test-map.mjs', 'test-match.mjs', 'run-check.mjs'],
     additionalReferences: [
       { source: 'web-console', target: 'web-console' },
       { source: 'plan2code-3-implement.md', target: 'implement.md' },
       { source: 'shared-references/building-habits.md', target: 'building-habits.md' },
+      { source: 'shared-references/review-in-build.md', target: 'review-in-build.md' },
       { source: 'shared-references/helper-strength.md', target: 'helper-strength.md' },
       { source: 'shared-references/test-runs.md', target: 'test-runs.md' },
       { source: 'plan2code-review.md', target: 'review.md' },
@@ -270,10 +285,13 @@ const SOURCE_PROMPTS = [
     name: 'review',
     displayName: 'Review Mode',
     description: 'Comprehensive post-implementation review with spec compliance checking',
+    // Shown to the agent in place of the generic header text: when the skill fits and its command.
+    skillDescription: "Use when a change, branch or spec needs an independent review for bugs, spec drift and gaps, before a commit or pull request. Run it as /plan2code-review.",
     isUtility: true,
     scripts: ['specs.mjs', 'commit-msg.mjs', 'review-scope.mjs'],
     additionalReferences: [
       { source: 'web-console', target: 'web-console' },
+      { source: 'shared-references/review-in-build.md', target: 'review-in-build.md' },
       { source: 'shared-references/helper-strength.md', target: 'helper-strength.md' },
       { source: 'shared-references/test-runs.md', target: 'test-runs.md' }
     ]
@@ -286,11 +304,12 @@ const SOURCE_PROMPTS = [
     description: 'Validate, summarize, and archive completed work',
     // review.md rides along for Step 2.5's final review, which runs in the
     // same session before the summary is written and the spec is archived.
-    scripts: ['specs.mjs', 'commit-msg.mjs', 'review-scope.mjs'],
+    scripts: ['specs.mjs', 'commit-msg.mjs', 'review-scope.mjs', 'glob.mjs', 'test-map.mjs', 'test-match.mjs', 'run-check.mjs'],
     additionalReferences: [
       { source: 'web-console', target: 'web-console' },
       { source: 'shared-references/helper-strength.md', target: 'helper-strength.md' },
       { source: 'shared-references/test-runs.md', target: 'test-runs.md' },
+      { source: 'shared-references/review-in-build.md', target: 'review-in-build.md' },
       { source: 'plan2code-review.md', target: 'review.md' },
       { source: 'plan2code-review-references' }
     ]
@@ -311,6 +330,8 @@ const SOURCE_PROMPTS = [
     name: 'xray',
     displayName: 'X-ray Mode',
     description: 'Explain how and why an area of the code works, or find the rough spots worth fixing',
+    // Shown to the agent in place of the generic header text: when the skill fits and its command.
+    skillDescription: "Use when you want to understand how and why an area of the code works, or find its rough spots worth fixing. Run it as /plan2code-xray.",
     isUtility: true,
     scripts: [],
     additionalReferences: [
@@ -324,6 +345,8 @@ const SOURCE_PROMPTS = [
     name: 'diagnose',
     displayName: 'Diagnose Mode',
     description: 'Find and write up a bug\'s cause without fixing it',
+    // Shown to the agent in place of the generic header text: when the skill fits and its command.
+    skillDescription: "Use when a bug's cause is unknown and you want it found and written up without a fix. Run it as /plan2code-diagnose.",
     isUtility: true,
     scripts: ['specs.mjs'],
     additionalReferences: [
@@ -338,6 +361,8 @@ const SOURCE_PROMPTS = [
     name: 'pr-prep',
     displayName: 'PR Prep Mode',
     description: 'Pick and run the checks a branch needs, give a readiness verdict and write the PR description',
+    // Shown to the agent in place of the generic header text: when the skill fits and its command.
+    skillDescription: "Use when a branch is nearly done and you want its checks run, a readiness verdict and a pull-request description. Run it as /plan2code-pr-prep.",
     isUtility: true,
     scripts: ['review-scope.mjs', 'glob.mjs', 'test-map.mjs', 'test-match.mjs', 'test-commands.mjs', 'run-check.mjs'],
     additionalReferences: [
@@ -352,6 +377,8 @@ const SOURCE_PROMPTS = [
     name: 'test',
     displayName: 'Test Mode',
     description: 'Find untested code and write unit and integration tests in the project\'s own style',
+    // Shown to the agent in place of the generic header text: when the skill fits and its command.
+    skillDescription: "Use when code has no tests or weak ones and you want unit and integration tests written in the project's own style. Run it as /plan2code-test.",
     isUtility: true,
     scripts: ['review-scope.mjs', 'glob.mjs', 'test-map.mjs', 'test-match.mjs', 'test-commands.mjs', 'run-check.mjs'],
     additionalReferences: [
@@ -367,6 +394,8 @@ const SOURCE_PROMPTS = [
     name: 'changelog',
     displayName: 'Changelog Mode',
     description: 'Check the CHANGELOG version against the default branch, suggest entries for new work, keep package.json aligned',
+    // Shown to the agent in place of the generic header text: when the skill fits and its command.
+    skillDescription: "Use before a pull request when CHANGELOG.md needs its version checked against the default branch and entries for the new work. Run it as /plan2code-changelog.",
     isUtility: true,
     scripts: [],
     additionalReferences: [{ source: 'web-console', target: 'web-console' }]
@@ -421,7 +450,7 @@ function generateSkillHeader(prompt, disableModelInvocation = false) {
   const lines = [
     '---',
     `name: ${generateSkillName(prompt)}`,
-    `description: "Plan2Code ${generateStepLabel(prompt)}: ${prompt.displayName} - user-initiated workflow step. Do not invoke autonomously."`,
+    `description: "Plan2Code ${generateStepLabel(prompt)}: ${prompt.skillDescription ? `${prompt.skillDescription} User-initiated only; do not invoke autonomously.` : `${prompt.displayName} - user-initiated workflow step. Do not invoke autonomously.`}"`,
   ];
   if (disableModelInvocation) lines.push('disable-model-invocation: true');
   lines.push('---');
@@ -654,9 +683,39 @@ function listFilesRecursive(dir, prefix = '') {
   return out;
 }
 
+/**
+ * The web console's files, split two ways. `local` is what each skill carries: the forwarding
+ * stub (with the version baked in) and the markdown the agent reads by path. `shared` is the
+ * whole console plus its version.txt and version.json, built once under
+ * skills/_console/<version>/. Both map a path (relative to its folder) to a Buffer.
+ */
+function loadConsoleFiles(errors) {
+  const local = new Map();
+  const shared = new Map();
+  const version = JSON.parse(fs.readFileSync(path.join(__dirname, 'version.json'), 'utf8')).version;
+  const source = path.join(SRC_DIR, CONSOLE_SOURCE);
+  try {
+    for (const relPath of listFilesRecursive(source)) {
+      const key = relPath.split(path.sep).join('/');
+      const bytes = fs.readFileSync(path.join(source, relPath));
+      shared.set(key, bytes);
+      if (key.endsWith('.md') && !key.startsWith('public/')) local.set(key, bytes);
+    }
+    const stub = fs.readFileSync(CONSOLE_STUB_SRC, 'utf8');
+    if (!stub.includes(CONSOLE_STUB_VERSION_TOKEN)) throw new Error(`no ${CONSOLE_STUB_VERSION_TOKEN} to bake the version into`);
+    local.set('console.mjs', Buffer.from(stub.replace(CONSOLE_STUB_VERSION_TOKEN, version)));
+  } catch (err) {
+    errors.push(`Could not read the web console sources: ${err.message}`);
+  }
+  shared.set('version.txt', Buffer.from(`${version}\n`));
+  shared.set('version.json', fs.readFileSync(path.join(__dirname, 'version.json')));
+  return { local, shared, version };
+}
+
 function computeExpectedSkills() {
   const expected = new Map();
   const errors = [];
+  const consoleFiles = loadConsoleFiles(errors);
 
   for (const prompt of SOURCE_PROMPTS) {
     const sourcePath = path.join(SRC_DIR, prompt.source);
@@ -689,11 +748,11 @@ function computeExpectedSkills() {
 
     for (const reference of prompt.additionalReferences || []) {
       const absSource = path.join(SRC_DIR, reference.source);
-      if (reference.source === 'web-console') {
-        expected.set(
-          `${SKILLS_DIR_NAME}/${skillName}/references/${reference.target}/version.json`,
-          fs.readFileSync(path.join(__dirname, 'version.json'))
-        );
+      if (reference.source === CONSOLE_SOURCE) {
+        for (const [relPath, bytes] of consoleFiles.local) {
+          expected.set(`${SKILLS_DIR_NAME}/${skillName}/references/${reference.target}/${relPath}`, bytes);
+        }
+        continue;
       }
       try {
         if (fs.statSync(absSource).isDirectory()) {
@@ -750,6 +809,10 @@ function computeExpectedSkills() {
     }
   }
 
+  for (const [relPath, bytes] of consoleFiles.shared) {
+    expected.set(`${SKILLS_DIR_NAME}/${CONSOLE_SHARED_DIR}/${consoleFiles.version}/${relPath}`, bytes);
+  }
+
   return { expected, errors };
 }
 
@@ -775,14 +838,15 @@ function buildSkills(quiet = false) {
   if (fs.existsSync(SKILLS_DIR)) {
     for (const entry of fs.readdirSync(SKILLS_DIR)) {
       const entryPath = path.join(SKILLS_DIR, entry);
-      if (!fs.statSync(entryPath).isDirectory() || expectedSkillNames.has(entry)) continue;
+      if (!fs.statSync(entryPath).isDirectory() || expectedSkillNames.has(entry) || entry === CONSOLE_SHARED_DIR) continue;
       deleteDirectory(entryPath);
       stats.pruned++;
       if (!quiet) console.log(`  ${COLORS.YELLOW}░░░${COLORS.RESET} Pruned: ${entry}/`);
     }
   }
 
-  for (const skillName of expectedSkillNames) {
+  // The shared console is swept like a skill folder: an older version's files are not expected.
+  for (const skillName of [...expectedSkillNames, CONSOLE_SHARED_DIR]) {
     const skillDir = path.join(SKILLS_DIR, skillName);
     if (!fs.existsSync(skillDir)) continue;
     for (const relPath of listFilesRecursive(skillDir)) {
@@ -859,6 +923,62 @@ function verifySkillsSync() {
   return true;
 }
 
+/**
+ * The folder the shared console lives in: ~/.plan2code/console, or PLAN2CODE_CONSOLE_HOME (the
+ * console's own override, which the tests use). Read when called, never at load.
+ */
+function consoleHomeDir() {
+  return process.env.PLAN2CODE_CONSOLE_HOME || path.join(os.homedir(), '.plan2code', 'console');
+}
+
+/**
+ * Put the console built under skills/_console/<version>/ at <console home>/<version>/, point
+ * console-dir at it, and remove every other version folder. Nothing else in the console home is
+ * touched: sessions/, looks.json, console-dir's siblings and any other kept entry stay as they
+ * are. Returns true on success, false after saying why not. `sweep: false` keeps the old version
+ * folders for now: an install calls sweepOldConsoles() once `skills add` has worked, so a failed
+ * update leaves the old stubs, which name the old version, still able to find their console.
+ */
+function installSharedConsole({ quiet = false, source: builtFrom, sweep = true } = {}) {
+  const version = JSON.parse(fs.readFileSync(path.join(__dirname, 'version.json'), 'utf8')).version;
+  const source = builtFrom || path.join(SKILLS_DIR, CONSOLE_SHARED_DIR, version);
+  const home = consoleHomeDir();
+  const dest = path.join(home, version);
+  try {
+    if (!fs.existsSync(path.join(source, 'console.mjs'))) throw new Error(`${source} is not built`);
+    fs.mkdirSync(home, { recursive: true });
+    // A server still running from this folder holds files open on Windows: the copy below
+    // overwrites them in place when the removal cannot.
+    try { fs.rmSync(dest, { recursive: true, force: true }); } catch (err) { /* overwritten below */ }
+    fs.cpSync(source, dest, { recursive: true, force: true });
+    fs.writeFileSync(path.join(home, 'console-dir'), `${dest}\n`);
+  } catch (err) {
+    console.error(`  ${COLORS.RED}${SYMBOLS.ERROR}${COLORS.RESET} Could not install the shared console into ${home}: ${err.message}`);
+    return false;
+  }
+  if (sweep) sweepOldConsoles({ quiet, version });
+  if (!quiet) console.log(`  ${COLORS.GREEN}${SYMBOLS.SUCCESS}${COLORS.RESET} Shared console ${version} installed in ${dest}`);
+  return true;
+}
+
+/** Remove every console version folder but the current one. */
+function sweepOldConsoles({ quiet = false, version } = {}) {
+  version = version || JSON.parse(fs.readFileSync(path.join(__dirname, "version.json"), "utf8")).version;
+  const home = consoleHomeDir();
+  let entries = [];
+  try { entries = fs.readdirSync(home, { withFileTypes: true }); } catch { return; }
+  for (const entry of entries) {
+    if (!entry.isDirectory() || entry.name === version || !CONSOLE_VERSION_DIR.test(entry.name)) continue;
+    try {
+      fs.rmSync(path.join(home, entry.name), { recursive: true, force: true });
+      if (!quiet) console.log(`  ${COLORS.YELLOW}░░░${COLORS.RESET} Removed old console ${entry.name}`);
+    } catch (err) {
+      // An old console still running keeps its folder; the next update removes it.
+      if (!quiet) console.log(`  ${COLORS.YELLOW}${SYMBOLS.WARNING}${COLORS.RESET} Kept old console ${entry.name}: ${err.message}`);
+    }
+  }
+}
+
 function cleanLegacyPaths(quiet = false) {
   const stats = { removed: 0, errors: 0 };
   for (const legacy of LEGACY_PATHS) {
@@ -892,7 +1012,11 @@ function cleanLegacyPaths(quiet = false) {
 // SKILLS CLI DELEGATION
 // ============================================================================
 
-const SKILLS_CLI = 'npx --yes skills';
+// The skills CLI runs pinned to one exact version, so a new release of it can never change an install
+// between two runs of the same Plan2Code. Checked against npm on 2026-11-08 (latest was 1.7.6); raise it
+// on purpose, after trying an install, never by switching back to an unpinned `npx skills`.
+const SKILLS_CLI_VERSION = '1.7.6';
+const SKILLS_CLI = `npx --yes skills@${SKILLS_CLI_VERSION}`;
 const BENIGN_SKILLS_FAILURE = /does not support (global|project) skill installation/i;
 
 function execSkillsCli(args) {
@@ -946,7 +1070,7 @@ function ensureSkillsCli() {
   console.log(`  ${COLORS.RED}${SYMBOLS.ERROR}${COLORS.RESET} Could not run the ${COLORS.BRIGHT}skills${COLORS.RESET} CLI.`);
   console.log(`\n  ${COLORS.DIM}Plan2Code installs through skills.sh, which needs Node 18+ and network access.${COLORS.RESET}`);
   console.log(`  ${COLORS.DIM}Check that this works, then re-run the installer:${COLORS.RESET}`);
-  console.log(`    ${COLORS.CYAN}npx --yes skills --version${COLORS.RESET}\n`);
+  console.log(`    ${COLORS.CYAN}${SKILLS_CLI} --version${COLORS.RESET}\n`);
   return false;
 }
 
@@ -1013,6 +1137,11 @@ async function install({ unattended = false, outcome = {} } = {}) {
   }
   console.log(`${COLORS.GREEN}${SYMBOLS.SUCCESS} Built ${SOURCE_PROMPTS.length} skills from src/${COLORS.RESET}`);
   if (!ensureSkillsCli()) return 1;
+  // The skills carry only a stub; the console they forward to goes in with them.
+  if (!installSharedConsole({ quiet: true, sweep: false })) {
+    outcome.skills = false;
+    return 1;
+  }
 
   console.log('');
   displayStatusBox('PARAMETERS', [
@@ -1050,7 +1179,10 @@ async function install({ unattended = false, outcome = {} } = {}) {
   reportSkillsOutput(result);
   const failed = !result.ok;
   outcome.skills = !failed;
-  if (!failed) recordInstalled('skills');
+  if (!failed) {
+    recordInstalled('skills');
+    sweepOldConsoles({ quiet: true });
+  }
 
   // The `plan2code` command opens the dashboard skill, so it's only worth adding once the
   // skills themselves are in place.
@@ -1081,7 +1213,7 @@ async function install({ unattended = false, outcome = {} } = {}) {
 
   if (failed) {
     console.log(`${COLORS.RED}${SYMBOLS.ERROR} skills add failed. Re-run, or install by hand:${COLORS.RESET}`);
-    console.log(`    ${COLORS.CYAN}npx --yes skills add "${SKILLS_DIR}" -g ${skillNameArgs()} -y${COLORS.RESET}\n`);
+    console.log(`    ${COLORS.CYAN}${SKILLS_CLI} add "${SKILLS_DIR}" -g ${skillNameArgs()} -y${COLORS.RESET}\n`);
     return 1;
   }
 
@@ -1198,6 +1330,8 @@ function installProjectSkills() {
   }
   console.log(`${COLORS.GREEN}${SYMBOLS.SUCCESS} Built ${SOURCE_PROMPTS.length} skills from src/${COLORS.RESET}`);
   if (!ensureSkillsCli()) return 1;
+  // Project skills forward to the same shared console in the home folder.
+  if (!installSharedConsole({ quiet: true, sweep: false })) return 1;
 
   console.log('');
   displayStatusBox('OVERVIEW', [
@@ -1219,9 +1353,10 @@ function installProjectSkills() {
   console.log('');
   if (!result.ok) {
     console.log(`${COLORS.RED}${SYMBOLS.ERROR} skills add failed. Run it by hand from your project root:${COLORS.RESET}`);
-    console.log(`    ${COLORS.CYAN}npx --yes skills add "${SKILLS_DIR}" ${skillNameArgs()} -y${COLORS.RESET}\n`);
+    console.log(`    ${COLORS.CYAN}${SKILLS_CLI} add "${SKILLS_DIR}" ${skillNameArgs()} -y${COLORS.RESET}\n`);
     return 1;
   }
+  sweepOldConsoles({ quiet: true });
   console.log(`${COLORS.GREEN}${SYMBOLS.SUCCESS} Installed into ${projectDir}${COLORS.RESET}\n`);
   console.log(`${COLORS.DIM}  Check the new directories aren't gitignored, or your agents won't see them.${COLORS.RESET}\n`);
   return 0;
@@ -2927,4 +3062,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { update, installDesktopApp, offerDesktopApp, recordSkipped, appAssetName, checksumFor, APP_DEST, UPDATE_STEPS, INSTALL_RECORD, INSTALL_PIECES, readInstallRecord, recordInstalled, forgetInstalled, SOURCE_PROMPTS, generateSkillName };
+module.exports = { installSharedConsole, sweepOldConsoles, consoleHomeDir, CONSOLE_SHARED_DIR, update, installDesktopApp, offerDesktopApp, recordSkipped, appAssetName, checksumFor, APP_DEST, UPDATE_STEPS, INSTALL_RECORD, INSTALL_PIECES, readInstallRecord, recordInstalled, forgetInstalled, SOURCE_PROMPTS, generateSkillName };

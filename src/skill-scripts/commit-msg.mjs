@@ -15,13 +15,14 @@ import { EXIT, fail, out, parseArgs, run } from "./common.mjs";
 const USAGE = `
 commit-msg.mjs: build the commit command from a subject. JSON on stdout.
 
-  node commit-msg.mjs --subject "<subject>" [--add-all | --files <path> ...]
+  node commit-msg.mjs --subject "<subject>" [--files <path> ...]
 
   --subject   the one-line description (at most 100 characters). No double
               quotes (straight or curly), backticks, $, backslashes or ! in it,
               so the command pastes unchanged into bash, zsh and PowerShell.
-  --add-all   prefix the command with "git add -A &&".
-  --files     prefix it with "git add -- <files> &&" (repeat --files per path).
+  --files     prefix the command with "git add -- <files> &&" (repeat
+              --files per path). Name the files the work changed: there is
+              no add-everything option, so nothing unrelated gets staged.
 
 Prints { ok, subject, message, command, add, commit }. The commit is two -m
 flags, exactly: subject, "AI Assisted". command is add && commit, one line for
@@ -41,12 +42,12 @@ function quoteFile(f) {
   const p = f.replace(/\\/g, "/");
   if (/^[\w./:+][\w./:@+-]*$/.test(p)) return p;
   // PowerShell treats the curly single quotes as quote characters too.
-  if (/['\u2018-\u201B]/.test(p)) fail(EXIT.INVALID, "unsafe-path", `The path ${p} contains a single quote, which cannot be quoted the same way in bash and PowerShell.`, "Use --add-all, or leave that file out and stage it by hand.");
+  if (/['\u2018-\u201B]/.test(p)) fail(EXIT.INVALID, "unsafe-path", `The path ${p} contains a single quote, which cannot be quoted the same way in bash and PowerShell.`, "Leave that file out of --files and stage it by hand.");
   return `'${p}'`;
 }
 
 run(USAGE, async (argv) => {
-  const args = parseArgs(argv, { booleans: ["add-all"], values: ["subject"], lists: ["files"] });
+  const args = parseArgs(argv, { values: ["subject"], lists: ["files"] });
   if (args._.length) fail(EXIT.USAGE, "stray-argument", `Unexpected argument(s): ${args._.join(" ")}.`, "Each path needs its own --files (e.g. --files a.js --files b.js); quote a subject with spaces.");
   const subject = (args.subject || "").trim();
   if (!subject) fail(EXIT.USAGE, "missing-subject", "--subject is required.", 'Example: --subject "Add the export endpoint"');
@@ -56,9 +57,8 @@ run(USAGE, async (argv) => {
   // bash and zsh treat \ as an escape, and ! is history expansion in an
   // interactive bash or zsh.
   if (/["`$\\!\u201C-\u201F]/.test(subject)) fail(EXIT.INVALID, "unsafe-subject", "The subject contains a double quote (straight or curly), backtick, $, backslash or !, which bash, zsh and PowerShell read differently inside double quotes.", "Rephrase without those characters (single quotes are fine).");
-  if (args["add-all"] && args.files) fail(EXIT.USAGE, "add-conflict", "Use --add-all or --files, not both.", "Pick one.");
 
-  const add = args["add-all"] ? "git add -A" : args.files ? `git add -- ${args.files.map(quoteFile).join(" ")}` : null;
+  const add = args.files ? `git add -- ${args.files.map(quoteFile).join(" ")}` : null;
   const commit = `git commit -m "${subject}" -m "AI Assisted"`;
   out({
     ok: true,

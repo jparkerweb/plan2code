@@ -87,11 +87,28 @@ jobs:
           key: cargo-release-${{ matrix.label }}-${{ hashFiles('plan2code-app/Cargo.lock') }}
           restore-keys: |
             cargo-release-${{ matrix.label }}-
+      - name: Name this week for the apt cache
+        if: runner.os == 'Linux'
+        id: week
+        run: echo "week=$(date +%G-%V)" >> "$GITHUB_OUTPUT"
+      - name: Cache the Linux system packages
+        # Keep the downloaded .deb files (the WebKit packages are hundreds of MB, and the runner's
+        # mirror is sometimes slow), as app.yml does. The key rolls over weekly.
+        if: runner.os == 'Linux'
+        uses: actions/cache@v6.1.0
+        with:
+          path: ~/apt-archives
+          key: apt-tauri-release-${{ runner.os }}-${{ steps.week.outputs.week }}
+          restore-keys: |
+            apt-tauri-release-${{ runner.os }}-
       - name: Install Linux system packages
         if: runner.os == 'Linux'
         run: |
+          mkdir -p "$HOME/apt-archives/partial"
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
+          sudo apt-get -o Dir::Cache::archives="$HOME/apt-archives" install -y libwebkit2gtk-4.1-dev build-essential libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
+          # apt ran as root: hand the folder back so the cache step can read and save it.
+          sudo chown -R "$(id -u):$(id -g)" "$HOME/apt-archives"
       - name: Install the app's packages
         working-directory: plan2code-app
         run: npm ci

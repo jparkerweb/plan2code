@@ -185,8 +185,12 @@ async function prHosts() {
   return (await consoleModule("settings.mjs")).readPrHosts();
 }
 
+// A status that failed (or ran past git()'s time limit) is an unknown tree,
+// never a clean one: a plan built on it would offer to commit nothing.
 function readStatus(root) {
-  return R.parseStatusV2(g(["status", "--porcelain=v2", "-z", "--branch", "--untracked-files=normal"], root, { raw: true }).out);
+  const res = g(["status", "--porcelain=v2", "-z", "--branch", "--untracked-files=normal"], root, { raw: true });
+  if (!res.ok) fail(EXIT.CRASH, "status-failed", `git status failed: ${res.err || "no message"}`, "Run git status yourself to see why, then try again.");
+  return R.parseStatusV2(res.out);
 }
 
 // The commit flow's lists and letters: a conflicted file only under conflicted.

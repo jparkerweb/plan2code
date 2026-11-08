@@ -84,3 +84,29 @@ test("--hook fixes the file a Write or Edit names, and nothing outside the repo"
 
   for (const input of ["", "not json", "{}"]) assert.equal(run(dir, ["--hook"], input).status, 0, `never fails the tool call (${JSON.stringify(input)})`);
 });
+
+test("the pre-commit hook refuses a staged file named nul, and .gitignore no longer hides one", async () => {
+  const { nulPaths } = await import("./check-staged-nul.mjs");
+  assert.deepEqual(nulPaths(["nul", "src/NUL", "docs/nul.txt", "null.md", "src/nullable.js", "annul", "a/b/Nul.log"]), ["nul", "src/NUL", "docs/nul.txt", "a/b/Nul.log"]);
+  assert.match(fs.readFileSync(path.join(HERE, "..", ".husky", "pre-commit"), "utf8"), /^node scripts\/check-staged-nul\.mjs$/m);
+  assert.ok(!/^nul$/m.test(fs.readFileSync(path.join(HERE, "..", ".gitignore"), "utf8")), "the check replaces the ignore line");
+
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "p2c-nul-"));
+  try {
+    const g = (...a) => execFileSync("git", ["-C", dir, ...a], { encoding: "utf8", stdio: "pipe" });
+    g("init", "-q");
+    fs.writeFileSync(path.join(dir, "ok.txt"), "ok\n");
+    g("add", "ok.txt");
+    const check = () => spawnSync(process.execPath, [path.join(HERE, "check-staged-nul.mjs")], { cwd: dir, encoding: "utf8" });
+    assert.equal(check().status, 0, "an ordinary file passes");
+    // Staged through the index, with no file on disk: Windows cannot create
+    // one, and git there refuses the path unless protectNTFS is off.
+    const blob = execFileSync("git", ["-C", dir, "hash-object", "-w", "--stdin"], { input: "", encoding: "utf8" }).trim();
+    g("-c", "core.protectNTFS=false", "update-index", "--add", "--cacheinfo", `100644,${blob},sub/nul.txt`);
+    const refused = check();
+    assert.equal(refused.status, 1);
+    assert.match(refused.stderr, /refusing to commit a file named nul.*sub\/nul\.txt/);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});

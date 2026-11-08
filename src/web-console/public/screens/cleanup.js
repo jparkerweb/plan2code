@@ -46,6 +46,12 @@ function cleanupSummary(items, bytes) {
   return parts.join(", ") + " · " + formatBytes(bytes);
 }
 
+// A completed spec git does not track as it stands is never deleted (the
+// server refuses it), so it is listed apart as kept, out of the total and out
+// of what Delete these sends.
+const keptBack = (item) => item.where === "completed" && item.tracked === false;
+const deletable = () => ((cleanupFound && cleanupFound.items) || []).filter((i) => !keptBack(i));
+
 function resetCleanup() {
   cleanupGen++;
   cleanupFound = null;
@@ -59,19 +65,28 @@ function resetCleanup() {
 function renderCleanup() {
   const list = $("cleanup-list");
   list.replaceChildren();
-  const items = (cleanupFound && cleanupFound.items) || [];
+  const all = (cleanupFound && cleanupFound.items) || [];
+  const items = deletable();
+  const kept = all.filter(keptBack);
   $("cleanup-delete").hidden = !items.length;
-  if (!items.length) return;
   const rows = (some) => some.map((item) => {
     const row = el("div", "cleanup-row");
     row.append(el("span", null, cleanupLabel(item)), el("span", "cleanup-size", formatBytes(item.bytes)));
     return row;
   });
-  list.append(el("p", "cleanup-summary", cleanupSummary(items, cleanupFound.bytes)), ...rows(items.slice(0, CLEANUP_SHOWN)));
-  if (items.length > CLEANUP_SHOWN) {
-    const more = el("details", "cleanup-more");
-    more.append(el("summary", null, (items.length - CLEANUP_SHOWN) + " more"), ...rows(items.slice(CLEANUP_SHOWN)));
-    list.appendChild(more);
+  if (items.length) {
+    const bytes = Math.max(0, cleanupFound.bytes - kept.reduce((n, i) => n + (i.bytes || 0), 0));
+    list.append(el("p", "cleanup-summary", cleanupSummary(items, bytes)), ...rows(items.slice(0, CLEANUP_SHOWN)));
+    if (items.length > CLEANUP_SHOWN) {
+      const more = el("details", "cleanup-more");
+      more.append(el("summary", null, (items.length - CLEANUP_SHOWN) + " more"), ...rows(items.slice(CLEANUP_SHOWN)));
+      list.appendChild(more);
+    }
+  }
+  for (const item of kept) {
+    const row = el("div", "cleanup-row cleanup-kept");
+    row.append(el("span", null, cleanupLabel(item)), el("span", "cleanup-size", "kept: git does not track it as it stands"));
+    list.appendChild(row);
   }
 }
 
@@ -93,17 +108,20 @@ async function scanCleanup() {
   renderCleanup();
   // Left in the status line, not cleared: it is the live region, so this is
   // what a screen reader hears when the scan finishes.
-  const found = cleanupFound.items.length;
-  setCleanupStatus(found ? "Found " + found + (found === 1 ? " item." : " items.") : "Nothing to clean up.", false);
+  const found = deletable().length;
+  const keptCount = cleanupFound.items.length - found;
+  const keptNote = keptCount ? ` ${keptCount} old completed ${keptCount === 1 ? "spec is" : "specs are"} kept: git does not track ${keptCount === 1 ? "it" : "them"} as ${keptCount === 1 ? "it stands" : "they stand"}.` : "";
+  setCleanupStatus((found ? "Found " + found + (found === 1 ? " item." : " items.") : "Nothing to clean up.") + keptNote, false);
 }
 
 async function deleteCleanup() {
-  if (!cleanupFound || !cleanupFound.items.length) return;
+  const ids = deletable().map((i) => i.id);
+  if (!ids.length) return;
   const gen = ++cleanupGen;
   $("cleanup-delete").disabled = true;
   $("cleanup-scan").disabled = true;
   setCleanupStatus("Deleting…", false);
-  const { status, body } = await postJson("/cleanup", { delete: cleanupFound.items.map((i) => i.id) });
+  const { status, body } = await postJson("/cleanup", { delete: ids });
   if (gen !== cleanupGen) return;
   $("cleanup-delete").disabled = false;
   $("cleanup-scan").disabled = false;
@@ -112,15 +130,18 @@ async function deleteCleanup() {
   }
   const removed = (body.removed || []).length;
   const failed = (body.failed || []).length;
+  // A completed spec git does not track is refused, and the server says why.
+  const refused = (body.refused || []).length;
   // The server re-checks every id and keeps anything that changed since the
   // scan; say so, rather than let a count that came up short pass unremarked.
-  const asked = cleanupFound.items.length;
-  const kept = Math.max(0, asked - removed - failed);
+  const asked = ids.length;
+  const kept = Math.max(0, asked - removed - failed - refused);
   cleanupFound = null;
   renderCleanup();
   const done = removed ? "Deleted " + removed + (removed === 1 ? " item" : " items") + " · " + formatBytes(body.bytes) + " freed." : "Nothing was deleted.";
   const keptLine = kept ? ` ${kept} ${kept === 1 ? "was" : "were"} kept because ${kept === 1 ? "it" : "they"} changed since the scan.` : "";
-  setCleanupStatus((failed ? done + " " + failed + " could not be removed." : done) + keptLine, Boolean(failed));
+  const refusalLine = refused && body.refusal ? " " + body.refusal : "";
+  setCleanupStatus((failed ? done + " " + failed + " could not be removed." : done) + keptLine + refusalLine, Boolean(failed || refused));
 }
 
 // The Cleanup section's buttons, and starting over whenever Preferences closes.

@@ -25,7 +25,7 @@ const MAP = `${B}
 
 # Map: audit-export
 
-*Decisions live in \`questions/\` — one file each. This file is just the index.*
+*Decisions live in \`questions/\`, one file each. This file is just the index.*
 
 **Status:** Working
 **Updated:** 2026-08-01
@@ -43,7 +43,7 @@ A locked plan for exporting audit events.
 
 <!-- Rebuilt from questions/ every session. -->
 
-- [x] [Codebase context](./questions/00-codebase-context.md) — Node and Postgres; a long gist
+- [x] [Codebase context](./questions/00-codebase-context.md): Node and Postgres; a long gist
   that wraps onto a second line. *(2026-08-01)*
 - [ ] [Export format](./questions/01-export-format.md)
 - [ ] [Row-count
@@ -89,11 +89,11 @@ test("pathfinder reconcile: files win, dates backfill, stale claims reset, rows 
   assert.deepEqual(r.json.refire.map((x) => x.nn), ["02"], "research with no Research complete line is re-fired");
   assert.equal(r.json.refire[0].partialEvidence, true);
   const map = read(root, `${pf}/map.md`);
-  assert.match(map, /- \[x\] \[Codebase context\]\(\.\/questions\/00-codebase-context\.md\) — Node and Postgres; a long gist\n  that wraps onto a second line\. \*\(2026-08-01\)\*/, "an unchanged row keeps its own wrapped text");
-  assert.match(map, /- \[x\] \[Export format\]\(\.\/questions\/01-export-format\.md\) — CSV with a BOM\. \*\(2026-08-02\)\*/);
+  assert.match(map, /- \[x\] \[Codebase context\]\(\.\/questions\/00-codebase-context\.md\): Node and Postgres; a long gist\n  that wraps onto a second line\. \*\(2026-08-01\)\*/, "an unchanged row keeps its own wrapped text");
+  assert.match(map, /- \[x\] \[Export format\]\(\.\/questions\/01-export-format\.md\): CSV with a BOM\. \*\(2026-08-02\)\*/);
   assert.match(map, /- \[ \] \[Row-count\n  ceiling\]\(\.\/questions\/02-row-count-ceiling\.md\)/, "a wrapped link is still one row");
-  assert.match(map, /- \[!\] \[Delivery channel\]\(\.\/questions\/04-delivery-channel\.md\) — Blocked by 02/);
-  assert.match(map, /- \[-\] \[SIEM push\]\(\.\/questions\/05-siem-push\.md\) — out of scope, see below/);
+  assert.match(map, /- \[!\] \[Delivery channel\]\(\.\/questions\/04-delivery-channel\.md\): Blocked by 02/);
+  assert.match(map, /- \[-\] \[SIEM push\]\(\.\/questions\/05-siem-push\.md\): out of scope, see below/);
   assert.ok(!map.includes("09-gone"), "a row with no file is dropped");
   assert.match(map, /<!-- Rebuilt from questions\/ every session\. -->/);
   const q1 = read(root, `${pf}/questions/01-export-format.md`);
@@ -132,13 +132,13 @@ test("pathfinder frontier, claim, resolve, rule-out", () => {
   assert.equal(res.code, 0, res.stderr);
   assert.deepEqual(res.json.unblocked, [{ nn: "04", name: "Delivery channel" }]);
   const map = read(root, `${pf}/map.md`);
-  assert.match(map, /- \[x\] \[Row-count ceiling\]\(\.\/questions\/02-row-count-ceiling\.md\) — 2M rows at the 99th percentile\. \*\(2026-08-03\)\*/);
+  assert.match(map, /- \[x\] \[Row-count ceiling\]\(\.\/questions\/02-row-count-ceiling\.md\): 2M rows at the 99th percentile\. \*\(2026-08-03\)\*/);
   assert.match(map, /- \[ \] \[Delivery channel\]\(\.\/questions\/04-delivery-channel\.md\)\n/, "the Blocked by tail goes with the [!] marker");
   assert.match(map, /^\*\*Updated:\*\* 2026-08-03$/m);
   const ro = P("rule-out", "audit-export", "03", "--reason", "testing is owned elsewhere");
   assert.equal(ro.code, 0, ro.stderr);
   assert.match(read(root, `${pf}/questions/03-testing-posture.md`), /State: out-of-scope[\s\S]*## Question\n\nOut of scope: testing is owned elsewhere/);
-  assert.match(read(root, `${pf}/map.md`), /## Out of scope\n\n- Redesign of the schema\.\n- \[Testing posture\]\(\.\/questions\/03-testing-posture\.md\) — testing is owned elsewhere/);
+  assert.match(read(root, `${pf}/map.md`), /## Out of scope\n\n- Redesign of the schema\.\n- \[Testing posture\]\(\.\/questions\/03-testing-posture\.md\): testing is owned elsewhere/);
   assert.equal(P("rule-out", "audit-export", "04").code, 2, "--reason is required");
   assert.equal(P("rule-out", "audit-export", "00", "--reason", "x").code, 5, "a resolved decision is not ruled out");
 });
@@ -156,7 +156,7 @@ test("pathfinder trail: exact footer for forms A, B and C", () => {
     "  ● done · ◉ here · ○ open · ⊘ blocked · ⊝ out of scope · ⚑ destination · ~1 fog",
     "  1 Codebase context ✔ · 2 Export format ✔ · 3 Row-count ceiling · 4 Testing posture ◀ here",
     "  5 Delivery channel (blocked:3) · 6 SIEM push (out of scope)",
-    "  Confidence: not yet — Feasibility still needs work.",
+    "  Confidence: not yet, Feasibility still needs work.",
     "",
     "WAITING ON YOU · answer here, in this conversation:",
     "Q1 Types · Q2 Cadence",
@@ -266,7 +266,7 @@ test("pathfinder brief-data: range filtering, frontier notes, plain sections", (
   assert.deepEqual(full.waiting, [{ name: "Delivery channel", waitingOn: ["Row-count ceiling"] }]);
   assert.deepEqual(full.fog, ["How far back an export may reach."]);
   assert.deepEqual(full.ruledOut, ["Redesign of the schema."]);
-  assert.equal(full.confidence, "Confidence: not yet — Feasibility still needs work.");
+  assert.equal(full.confidence, "Confidence: not yet, Feasibility still needs work.");
   const since = P("brief-data", "audit-export", "--range", "since:2026-08-02").json;
   assert.deepEqual(since.decided.map((d) => d.name), ["Export format"]);
   assert.deepEqual(P("brief-data", "audit-export", "--range", "2026-08-01..2026-08-01").json.decided.map((d) => d.name), ["Codebase context"]);
@@ -304,7 +304,7 @@ test("pathfinder reconcile: an unrepairable file is skipped and named, nothing h
 test("pathfinder reconcile: rows stay in place among grouping lines, a re-opened row loses its gist, stray claims clear", () => {
   const { root, pf } = mapFixture();
   const mp = path.join(root, pf, "map.md");
-  fs.writeFileSync(mp, fs.readFileSync(mp, "utf8").replace("- [ ] [Export format]", "### Group two\n\n- [x] [Export format]").replace("- [ ] [Export format](./questions/01-export-format.md)", "- [x] [Export format](./questions/01-export-format.md) — old gist *(2026-07-01)*"));
+  fs.writeFileSync(mp, fs.readFileSync(mp, "utf8").replace("- [ ] [Export format]", "### Group two\n\n- [x] [Export format]").replace("- [ ] [Export format](./questions/01-export-format.md)", "- [x] [Export format](./questions/01-export-format.md): old gist *(2026-07-01)*"));
   fs.writeFileSync(path.join(root, pf, "questions/01-export-format.md"), q("Export format", { claimed: "2026-08-02 10:00" }));
   const r = runScript("plan2code-0-pathfinder", "pathfinder.mjs", ["reconcile", "audit-export", "--root", root]);
   assert.ok(r.json.repairs.some((x) => x.nn === "01" && x.repair === "stray-claim-cleared"));
@@ -366,10 +366,10 @@ test("pathfinder brief-data: calendar dates only, no future since, no NNs or lin
   assert.equal(P("brief-data", "audit-export", "--range", "since:2026-13-99").json.error, "bad-date");
   assert.equal(P("brief-data", "audit-export", "--range", "since:2026-09-01").code, 2);
   const mp = path.join(root, pf, "map.md");
-  fs.writeFileSync(mp, fs.readFileSync(mp, "utf8").replace("- Redesign of the schema.", "- [SIEM push](./questions/05-siem-push.md) — not ours.\n- Nothing yet."));
+  fs.writeFileSync(mp, fs.readFileSync(mp, "utf8").replace("- Redesign of the schema.", "- [SIEM push](./questions/05-siem-push.md): not ours.\n- Nothing yet."));
   fs.writeFileSync(path.join(root, pf, "questions/04-delivery-channel.md"), q("Delivery channel", { blocked: "09" }));
   const j = P("brief-data", "audit-export", "--range", "full").json;
-  assert.deepEqual(j.ruledOut, ["SIEM push — not ours."]);
+  assert.deepEqual(j.ruledOut, ["SIEM push: not ours."]);
   assert.deepEqual(j.waiting.find((w) => w.name === "Delivery channel").waitingOn, ["a question that no longer exists"]);
 });
 
@@ -445,15 +445,15 @@ test("pathfinder: an author's sub-bullet under a row survives resolve, rule-out 
     .replace("- [ ] [Delivery channel](./questions/04-delivery-channel.md)", "- [ ] [Delivery channel](./questions/04-delivery-channel.md)\n  - note: depends on the volume\n    and wraps"));
   P("reconcile", "audit-export");
   let map = read(root, `${pf}/map.md`);
-  assert.match(map, /- \[!\] \[Delivery channel\]\(\.\/questions\/04-delivery-channel\.md\) — Blocked by 02\n  - note: depends on the volume\n    and wraps\n/, "kept under a regenerated [!] row");
+  assert.match(map, /- \[!\] \[Delivery channel\]\(\.\/questions\/04-delivery-channel\.md\): Blocked by 02\n  - note: depends on the volume\n    and wraps\n/, "kept under a regenerated [!] row");
   P("claim", "audit-export", "03");
   fs.appendFileSync(path.join(root, pf, "questions/03-testing-posture.md"), "\n## Answer\n\nUnit.\n\n**Gist:** Unit tests only.\n");
   assert.equal(P("resolve", "audit-export", "03").code, 0);
   map = read(root, `${pf}/map.md`);
-  assert.match(map, /- \[x\] \[Testing posture\]\(\.\/questions\/03-testing-posture\.md\) — Unit tests only\. \*\(2026-08-03\)\*\n  - note: ask Dana first\n/, "kept on resolve");
+  assert.match(map, /- \[x\] \[Testing posture\]\(\.\/questions\/03-testing-posture\.md\): Unit tests only\. \*\(2026-08-03\)\*\n  - note: ask Dana first\n/, "kept on resolve");
   assert.equal(P("rule-out", "audit-export", "04", "--reason", "not ours").code, 0);
   map = read(root, `${pf}/map.md`);
-  assert.match(map, /- \[-\] \[Delivery channel\]\(\.\/questions\/04-delivery-channel\.md\) — out of scope, see below\n  - note: depends on the volume\n    and wraps\n/, "kept on rule-out");
+  assert.match(map, /- \[-\] \[Delivery channel\]\(\.\/questions\/04-delivery-channel\.md\): out of scope, see below\n  - note: depends on the volume\n    and wraps\n/, "kept on rule-out");
   assert.deepEqual(P("frontier", "audit-export").json.drift, []);
 });
 
@@ -539,4 +539,162 @@ test("pathfinder lint: the chart.md map template lints clean", () => {
   const l = runScript("plan2code-0-pathfinder", "pathfinder.mjs", ["lint", "audit-log-export", "--root", root]);
   assert.equal(l.code, 0, JSON.stringify(l.json.problems));
   assert.deepEqual([l.json.errors, l.json.warnings], [0, 0], JSON.stringify(l.json.problems));
+});
+
+/* ============================================== separators, init and add */
+
+// U+2014, built from its code so this file carries none: maps written before
+// the ": " separator used it between a row's link and its tail.
+const EM = String.fromCharCode(0x2014);
+
+test("pathfinder: a map written the old way (em dash tails) still reads, and nothing the script writes has an em dash", () => {
+  const { root, pf } = mapFixture();
+  const P = (...a) => runScript("plan2code-0-pathfinder", "pathfinder.mjs", [...a, "--root", root]);
+  const mp = path.join(root, pf, "map.md");
+  const oldRow00 = `- [x] [Codebase context](./questions/00-codebase-context.md) ${EM} Node and Postgres; a long gist\n  that wraps onto a second line. *(2026-08-01)*`;
+  const oldRow04 = `- [!] [Delivery channel](./questions/04-delivery-channel.md) ${EM} Blocked by 02`;
+  const OLD = MAP
+    .replace(", one file each", ` ${EM} one file each`)
+    .replace(/- \[x\] \[Codebase context\][^\n]*\n[^\n]*\n/, `${oldRow00}\n`)
+    .replace("- [ ] [Testing posture](./questions/03-testing-posture.md)", `- [x] [Testing posture](./questions/03-testing-posture.md) ${EM} an old gist *(2026-07-01)*`)
+    .replace("- [ ] [Delivery channel](./questions/04-delivery-channel.md)", `${oldRow04}\n- [-] [SIEM push](./questions/05-siem-push.md) ${EM} out of scope, see below`)
+    .replace("- [ ] [Gone question](./questions/09-gone.md)\n", "")
+    .replace("- Redesign of the schema.", `- [SIEM push](./questions/05-siem-push.md) ${EM} not ours.\n- Nothing yet.`);
+  fs.writeFileSync(mp, OLD);
+  // Every old row is found by its checkbox and link: drift is about markers only.
+  const before = P("frontier", "audit-export").json;
+  assert.ok(!before.drift.some((d) => /no map row|no question file|appears/.test(d)), JSON.stringify(before.drift));
+  const r = P("reconcile", "audit-export");
+  assert.equal(r.code, 0, r.stderr);
+  let map = read(root, `${pf}/map.md`);
+  assert.ok(map.includes(`${oldRow00}\n`), "an unchanged row keeps the author's words, old separator and all");
+  assert.ok(map.includes(`${oldRow04}\n`), "a [!] row that stays [!] is kept as written");
+  assert.match(map, /- \[x\] \[Export format\]\(\.\/questions\/01-export-format\.md\): CSV with a BOM\. \*\(2026-08-02\)\*\n/, "a row turning [x] is written with the new separator");
+  assert.match(map, /- \[ \] \[Testing posture\]\(\.\/questions\/03-testing-posture\.md\)\n/, "a re-opened row drops its old em dash tail");
+  assert.deepEqual(P("frontier", "audit-export").json.drift, []);
+  assert.equal(P("reconcile", "audit-export").json.mapWritten, false, "stable on an old map");
+  fs.appendFileSync(path.join(root, pf, "questions/02-row-count-ceiling.md"), "\n## Answer\n\nFacts.\n\n**Gist:** 2M rows.\n");
+  assert.equal(P("resolve", "audit-export", "02").code, 0);
+  assert.equal(P("rule-out", "audit-export", "03", "--reason", "owned elsewhere").code, 0);
+  map = read(root, `${pf}/map.md`);
+  assert.match(map, /- \[ \] \[Delivery channel\]\(\.\/questions\/04-delivery-channel\.md\)\n/, "the old Blocked by tail goes with the [!] marker");
+  assert.match(map, /- \[-\] \[Testing posture\]\(\.\/questions\/03-testing-posture\.md\): out of scope, see below\n/);
+  assert.match(map, /- \[Testing posture\]\(\.\/questions\/03-testing-posture\.md\): owned elsewhere\n/);
+  const oldLines = new Set(OLD.split("\n"));
+  const written = map.split("\n").filter((l) => !oldLines.has(l));
+  assert.ok(written.length > 0);
+  assert.deepEqual(written.filter((l) => l.includes(EM)), [], "no line the script wrote carries an em dash");
+  const brief = P("brief-data", "audit-export", "--range", "full").json;
+  assert.deepEqual(brief.ruledOut, [`SIEM push ${EM} not ours.`, "Testing posture: owned elsewhere"], "old and new out-of-scope lines both read; the placeholder is skipped");
+  assert.ok(!brief.confidence.includes(EM), brief.confidence);
+  const trail = P("trail", "audit-export", "--form", "A", "--text").stdout;
+  assert.ok(!trail.includes(EM), trail);
+  const src = fs.readFileSync(path.join(SKILLS, "plan2code-0-pathfinder", "scripts", "pathfinder.mjs"), "utf8");
+  assert.ok(!src.includes(EM), "pathfinder.mjs holds no em dash; a reader of old maps spells it \\u2014");
+});
+
+test("pathfinder gate: the PLAN-DRAFT status line is byte-exact with the one specs.mjs reads", () => {
+  const { root } = mapFixture();
+  const P = (...a) => runScript("plan2code-0-pathfinder", "pathfinder.mjs", [...a, "--root", root]);
+  P("reconcile", "audit-export");
+  const line = P("gate", "audit-export").json.planDraftStatus;
+  const m = /^\*\*Status:\*\* (.+)$/.exec(line || "");
+  assert.ok(m, `gate prints the **Status:** line: ${line}`);
+  const status = m[1];
+  assert.match(status, /^[\x20-\x7e]+$/, "plain ASCII: an en dash or a smart character breaks the match");
+  const specs = fs.readFileSync(path.join(ROOT, "src", "skill-scripts", "specs.mjs"), "utf8");
+  const decl = /const DRAFT_STATUSES = \[([^\]]*)\]/.exec(specs);
+  assert.ok(decl, "specs.mjs still declares DRAFT_STATUSES");
+  const statuses = [...decl[1].matchAll(/"([^"\\]*)"/g)].map((x) => x[1]);
+  assert.ok(statuses.includes(status), `"${status}" is not in specs.mjs DRAFT_STATUSES: ${JSON.stringify(statuses)}`);
+  assert.ok(fs.readFileSync(path.join(ROOT, "src", "plan2code-1-plan.md"), "utf8").includes(`Status "${status}": Resume at Phase 4`), "Plan resumes from the same string");
+  assert.ok(fs.readFileSync(path.join(SKILLS, "plan2code-0-pathfinder", "references", "handoff.md"), "utf8").includes(line), "handoff.md quotes the same line");
+});
+
+test("pathfinder init and add: the map and every question type from the templates, lint-clean, with their refusals", () => {
+  const root = tmp("pfi");
+  const pf = "specs/audit-export/pathfinder";
+  const P = (...a) => runScript("plan2code-0-pathfinder", "pathfinder.mjs", [...a, "--root", root]);
+  const INIT = ["--destination", "A locked plan for exporting audit events as one file.", "--scores", "10,8,12,9", "--fog", "How far back an export may reach."];
+  assert.equal(P("init", "Audit_Export", ...INIT).json.error, "bad-idea-name");
+  assert.equal(P("add", "audit-export", "--name", "Export format", "--question", "Which format?").json.error, "reserved-00", "00 is the codebase context");
+
+  // Chart Step 3: the codebase context, written before there is a map.
+  const c = P("add", "audit-export", "--name", "Codebase context", "--type", "legwork-afk", "--question", "What does the codebase provide?");
+  assert.equal(c.code, 0, c.stderr);
+  assert.deepEqual([c.json.nn, c.json.file, c.json.mapRow, c.json.nextNN], ["00", `${pf}/questions/00-codebase-context.md`, null, "01"]);
+  assert.match(c.json.next, /init/);
+  assert.equal(read(root, `${pf}/questions/00-codebase-context.md`), [B, "", "# Codebase context", "", "Type: legwork · AFK", "State: open", "Blocked by: none", "Claimed: none", "Resolved: none", "Locked: no", "", "## Question", "", "What does the codebase provide?", "", "## Evidence", ""].join("\n"));
+
+  // Chart Step 5: init.
+  assert.equal(P("init", "audit-export", "--scores", "1,1,1,1", "--fog", "x").code, 2, "--destination is required");
+  assert.equal(P("init", "audit-export", "--destination", "d", "--scores", "10,8,30,9", "--fog", "x").json.error, "bad-scores");
+  assert.equal(P("init", "audit-export", "--destination", "d", "--scores", "10,8,12,9").json.error, "no-fog", "no fog is the off-ramp, not a map");
+  assert.equal(P("init", "audit-export", "--destination", "d", "--scores", "10,8,12,9", "--fog", "[ ] decide x").json.error, "checkbox", "init refuses a checkbox as add does");
+  assert.equal(P("init", "audit-export", "--destination", "d", "--scores", "10,8,12,9", "--fog", "x", "--rule", "TASK_COMPLETE").json.error, "loop-token", "init refuses a loop token as add does");
+  const dry = P("init", "audit-export", ...INIT, "--dry-run");
+  assert.deepEqual([dry.code, dry.json.mapWritten, fs.existsSync(path.join(root, pf, "map.md"))], [0, false, false], "--dry-run writes nothing");
+  const i = P("init", "audit-export", ...INIT, "--rule", "Dana reviews compliance text.", "--out", "Schema redesign: the write path is untouched.");
+  assert.equal(i.code, 0, i.stderr);
+  assert.deepEqual([i.json.status, i.json.agentsAbsent, i.json.indexed], ["Charting", true, [{ nn: "00", name: "Codebase context", marker: "[ ]" }]]);
+  let map = read(root, `${pf}/map.md`);
+  assert.ok(map.startsWith(`${B}\n\n# Map: audit-export\n`), map);
+  assert.match(map, /^\*\*Status:\*\* Charting\n\*\*Updated:\*\* 2026-08-03\n\*\*Confidence:\*\* Requirements-clarity 10\/25 · Feasibility-technical 8\/25 · Integration-points 12\/25 · Risk-assessment 9\/25\n/m);
+  assert.match(map, /## Destination\n\nA locked plan for exporting audit events as one file\.\n/);
+  assert.match(map, /<!-- Standing[\s\S]*?-->\n\n- \*\*Backend:\*\* local\n- `AGENTS\.md` is absent\.\n- One question _file_ at a time;[\s\S]*\n- Dana reviews compliance text\.\n\n## Glossary/, "Backend first, then AGENTS.md as found on disk, the standing rules, then --rule");
+  assert.match(map, /## Question Checklist\n\n<!--[\s\S]*?-->\n\n- \[ \] \[Codebase context\]\(\.\/questions\/00-codebase-context\.md\)\n\n## Not yet specified/, "a question written before the map is indexed");
+  assert.match(map, /-->\n\n- How far back an export may reach\.\n\n## Out of scope\n\n<!--[\s\S]*?-->\n\n- Schema redesign: the write path is untouched\.\n$/);
+  assert.ok(!map.includes(EM), "init writes no em dash");
+  assert.equal(P("init", "audit-export", ...INIT).json.error, "map-exists", "never overwrites a map");
+
+  // Chart Step 6: one question of each type, in dependency order.
+  const types = [["Export format", "grill", "grill · HITL"], ["Row-count ceiling", "research", "research · AFK"], ["Delivery sketch", "sketch", "sketch · HITL"], ["Ask legal", "legwork-hitl", "legwork · HITL"], ["Load figures", "legwork · AFK", "legwork · AFK"]];
+  const extra = { "Row-count ceiling": ["--evidence", "audit_events is partitioned monthly.", "--recommended", "Cap at 2M rows."], "Delivery sketch": ["--blocked-by", "2", "--locked"] };
+  types.forEach(([name, flag, type], n) => {
+    const a = P("add", "audit-export", "--name", name, "--type", flag, "--question", `What about ${name}?`, ...(extra[name] || []));
+    assert.equal(a.code, 0, a.stderr);
+    assert.deepEqual([a.json.nn, a.json.type, a.json.mapWritten, a.json.nextNN], [`0${n + 1}`, type, true, `0${n + 2}`], name);
+  });
+  assert.equal(read(root, `${pf}/questions/02-row-count-ceiling.md`).split("## Question\n")[1], "\nWhat about Row-count ceiling?\n\nRecommended answer to react to: Cap at 2M rows.\n\n## Evidence\n\n- audit_events is partitioned monthly.\n");
+  assert.match(read(root, `${pf}/questions/03-delivery-sketch.md`), /Type: sketch · HITL\nState: open\nBlocked by: 02\nClaimed: none\nResolved: none\nLocked: yes\n/);
+  map = read(root, `${pf}/map.md`);
+  assert.match(map, /- \[ \] \[Codebase context\]\(\.\/questions\/00-codebase-context\.md\)\n- \[ \] \[Export format\]\(\.\/questions\/01-export-format\.md\)\n- \[ \] \[Row-count ceiling\]\(\.\/questions\/02-row-count-ceiling\.md\)\n- \[!\] \[Delivery sketch\]\(\.\/questions\/03-delivery-sketch\.md\): Blocked by 02\n- \[ \] \[Ask legal\]\(\.\/questions\/04-ask-legal\.md\)\n- \[ \] \[Load figures\]\(\.\/questions\/05-load-figures\.md\)\n\n## Not yet specified/);
+  assert.match(map, /^\*\*Next NN:\*\* 06$/m);
+
+  // Refusals, and a dry run that writes nothing.
+  const refused = (args, code, error, why) => {
+    const x = P("add", "audit-export", ...args);
+    assert.deepEqual([x.code, x.json.error], [code, error], why);
+  };
+  refused(["--name", "export FORMAT", "--question", "Again?"], 5, "duplicate", "one file per decision");
+  refused(["--name", "Codebase context", "--slug", "codebase-context-two", "--question", "Again?"], 5, "duplicate", "the same name under another file name");
+  const bare = tmp("pfr");
+  write(bare, "specs/odd/pathfinder/questions/01-first.md", q("First"));
+  const late = runScript("plan2code-0-pathfinder", "pathfinder.mjs", ["add", "odd", "--name", "Codebase context", "--question", "What?", "--root", bare]);
+  assert.deepEqual([late.code, late.json.error], [5, "reserved-name"], "codebase-context is 00 only");
+  refused(["--name", "Odd", "--type", "legwork", "--question", "Which?"], 2, "bad-type", "legwork names its mode");
+  refused(["--name", "Odd", "--question", "Which?", "--blocked-by", "09"], 3, "no-blocker", "a blocker must exist");
+  refused(["--name", "Odd", "--question", "Which?\n- [ ] a checkbox"], 5, "checkbox", "plain bullets only");
+  refused(["--name", "Odd", "--question", "Done. TASK_COMPLETE"], 5, "loop-token", "loop tokens never land under specs/");
+  refused(["--name", "Odd"], 2, "missing-question", "--question is required");
+  refused(["--name", "Odd", "--slug", "Not Kebab", "--question", "Which?"], 2, "bad-slug", "the file name is kebab-case");
+  const mapBefore = read(root, `${pf}/map.md`);
+  const d = P("add", "audit-export", "--name", "Retention", "--question", "How long?", "--dry-run");
+  assert.deepEqual([d.code, d.json.nn, d.json.dryRun, d.json.mapWritten], [0, "06", true, false]);
+  assert.ok(!fs.existsSync(path.join(root, pf, "questions/06-retention.md")), "add --dry-run writes no file");
+  assert.equal(read(root, `${pf}/map.md`), mapBefore, "nor the map");
+
+  // Chart Step 7: the index already agrees with the files, and lint accepts all of it.
+  const r = P("reconcile", "audit-export");
+  assert.deepEqual([r.json.repairs, r.json.mapChanges, r.json.mapWritten], [[], [], false], JSON.stringify(r.json));
+  const l = P("lint", "audit-export");
+  assert.equal(l.code, 0, JSON.stringify(l.json.problems));
+  assert.deepEqual([l.json.errors, l.json.warnings], [0, 0], JSON.stringify(l.json.problems));
+});
+
+test("pathfinder --help lists init and add", () => {
+  const h = runScript("plan2code-0-pathfinder", "pathfinder.mjs", ["--help"]);
+  assert.equal(h.code, 0);
+  assert.match(h.stdout, /node pathfinder\.mjs init <map>/);
+  assert.match(h.stdout, /node pathfinder\.mjs add <map>/);
 });

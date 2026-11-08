@@ -1095,7 +1095,7 @@
           it shuts itself down <span data-fact="closedTabMinutes">2</span> minutes
           later. It also stops after <span data-fact="idleMinutes">30</span>
           minutes without hearing from anyone, and after
-          <span data-fact="maxLifeHours">4</span> hours regardless. Reopening the same link brings everything back: nothing you
+          <span data-fact="maxLifeHours">4</span> hours unless answers you sent are still waiting for the agent. Reopening the same link brings everything back: nothing you
           typed is kept in the browser alone.
         </p>
         <p class="for-app">
@@ -1103,7 +1103,7 @@
           window and it shuts itself down <span data-fact="closedTabMinutes">2</span>
           minutes later. It also stops after <span data-fact="idleMinutes">30</span>
           minutes without hearing from anyone, and after
-          <span data-fact="maxLifeHours">4</span> hours regardless. When it
+          <span data-fact="maxLifeHours">4</span> hours unless answers you sent are still waiting for the agent. When it
           stops, the app's own bar notices and brings it back on the same
           session, or offers <strong>Reconnect the console</strong>: nothing you
           typed is kept in the window alone.
@@ -1287,8 +1287,8 @@
             from anyone, or
           </li>
           <li>
-            after <span data-fact="maxLifeHours">4</span> hours, whatever is
-            happening.
+            after <span data-fact="maxLifeHours">4</span> hours, unless answers
+            you sent are still waiting for the agent.
           </li>
         </ul>
         <p id="help-stuck-reconnect-text">
@@ -3374,8 +3374,9 @@
             <code>~/.plan2code</code> folder: sessions nobody has opened for
             30 days, and files or folders that ended up there by mistake. It
             also lists this project's <code>specs--completed/</code> folders
-            nobody has touched for 30 days; deleting one is permanent, since
-            that folder is usually gitignored and git can't restore it. It
+            nobody has touched for 30 days, and deletes one only when git
+            tracks it, so git can restore it; one git does not track (the
+            folder is usually gitignored) is kept, with the reason shown. It
             shows each one with its size, and <strong>Delete these</strong>
             removes exactly that list. Your preferences, saved folders, models,
             the launcher and the session you are in always stay, and the
@@ -3641,7 +3642,7 @@
             <section class="prefs-panel" data-tab="system">
               <fieldset data-section="cleanup" class="modal-ranges">
                 <legend>Cleanup</legend>
-                <p class="help">Finds what Plan2Code doesn't need in your <code>~/.plan2code</code> folder: sessions nobody has opened for 30 days, and files or folders that ended up there by mistake. It also lists this project's <code>specs--completed/</code> folders nobody has touched for 30 days; deleting one is permanent, since that folder is usually gitignored and git can't restore it. You see the list before anything is deleted. Your preferences, saved folders, models, the launcher and this session always stay.</p>
+                <p class="help">Finds what Plan2Code doesn't need in your <code>~/.plan2code</code> folder: sessions nobody has opened for 30 days, and files or folders that ended up there by mistake. It also lists this project's <code>specs--completed/</code> folders nobody has touched for 30 days, and deletes one only when git tracks it, so git can restore it; one git does not track (the folder is usually gitignored) is kept, with the reason shown. You see the list before anything is deleted. Your preferences, saved folders, models, the launcher and this session always stay.</p>
                 <div class="cleanup-list" id="cleanup-list" aria-label="What would be deleted"></div>
                 <div class="models-actions">
                   <button type="button" class="btn small" id="cleanup-scan">Find files to clean up</button>

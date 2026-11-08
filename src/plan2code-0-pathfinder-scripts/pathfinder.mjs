@@ -6,8 +6,9 @@
 // each row carries, which questions are on the frontier, which are blocked or
 // stranded, what NN comes next, what the Trail Footer looks like, which
 // clearing checks pass, which dates fall in a brief's range. This script
-// computes all of it and performs the bookkeeping writes (reconcile, claim,
-// resolve, rule out), so the agent spends its attention on the decisions.
+// computes all of it and performs the bookkeeping writes (init, add,
+// reconcile, claim, resolve, rule out), so the agent spends its attention on
+// the decisions.
 //
 // It never writes an ## Answer, never decides a question, never scores
 // confidence. Those stay with the agent and the human.
@@ -19,6 +20,28 @@ import { EXIT, fail, out, parseArgs, run, readText, isDir, rel, eol, isoDate, st
 const USAGE = `
 pathfinder.mjs: Pathfinder map bookkeeping. JSON on stdout (trail: --text prints the footer itself).
 <map> is specs/<idea>/pathfinder, specs/<idea>, <idea>, or a path to map.md.
+
+  node pathfinder.mjs init <map> --destination "<one or two lines>" --scores R,F,I,K
+                      --fog "<bullet>" [--fog ...] [--rule "<ground rule>" ...]
+                      [--out "<out-of-scope line>" ...] [--dry-run]
+      Chart Step 5: writes map.md from the template (creating the idea folder
+      and questions/): **Status:** Charting, the destination, the ground rules
+      (Backend local, AGENTS.md as found on disk, the standing rules, then each
+      --rule), the fog, an index of any question files already written.
+      --scores are the four confidence scores out of 25, in order
+      Requirements-clarity, Feasibility-technical, Integration-points,
+      Risk-assessment. Refuses an existing map, and a map with no --fog (no fog
+      is the Step 4 off-ramp: no map).
+
+  node pathfinder.mjs add <map> --name "<question name>" --question "<text>"
+                      [--type grill|research|sketch|legwork-hitl|legwork-afk]
+                      [--blocked-by "02, 04"] [--locked] [--recommended "<text>"]
+                      [--evidence "<line>" ...] [--slug <kebab-name>] [--dry-run]
+      Chart Steps 3 and 6, Work Step 8: writes questions/NN-<slug>.md from the
+      template (NN is nextNN, State open, the type defaults to grill) and adds
+      its row to the map when one exists. Refuses a name already used, 00 for
+      anything but codebase-context (and that name at any other NN), a
+      checkbox or loop token in the text; a Blocked by: NN must exist.
 
   node pathfinder.mjs reconcile <map> [--dry-run]
       Work Step 2. Files win: an ## Answer under a non-resolved State becomes
@@ -62,7 +85,8 @@ pathfinder.mjs: Pathfinder map bookkeeping. JSON on stdout (trail: --text prints
       The Clearing Gate's mechanical checks and the handoff preflight: zero
       [ ] [/] [!] rows, empty fog, a Gist on every resolved answer, an existing
       PLAN-DRAFT to update in place, the four hard caps, the map's scores >= 18.
-      Lists what stays your judgment.
+      Lists what stays your judgment, and prints the PLAN-DRAFT's byte-exact
+      **Status:** line (planDraftStatus).
 
   node pathfinder.mjs lint <map>
       Standing rules: loop tokens anywhere under specs/<idea>/, checkboxes or
@@ -84,6 +108,25 @@ const SCHEMA_KEYS = ["Type", "State", "Blocked by", "Claimed", "Resolved", "Lock
 const TYPES = ["grill · HITL", "research · AFK", "sketch · HITL", "legwork · HITL", "legwork · AFK"];
 const STATES = ["open", "claimed", "resolved", "out-of-scope"];
 const GLYPH = { x: "●", "/": "◉", " ": "○", "!": "⊘", "-": "⊝" };
+// What sits between a row's link and its tail (gist, blocker, out-of-scope
+// note) and between an ## Out of scope link and its reason. Maps written
+// before it carried an em dash there; rows are found by checkbox and link, so
+// both read the same.
+const SEP = ": ";
+// The PLAN-DRAFT hand-off status /plan2code-1-plan resumes from, byte for byte
+// (DRAFT_STATUSES in specs.mjs reads the same string; a test holds them equal).
+const PLAN_DRAFT_STATUS = "Phase 3 Complete - Resume at Phase 4";
+// Written as the ground rules of every map init creates, after the Backend and
+// AGENTS.md lines (chart.md's map template carries the same ones).
+const STANDING_RULES = [
+  "One question _file_ at a time; the fork-menu between decisions; a fresh session recommended after ~3. `research` questions may run as parallel subagents.",
+  "Every user-facing question uses the structured question tool when available; probes batch at most three. Prose Q blocks are fallback only when the tool is unavailable.",
+  "Questions are put to the human in plain English. Technical terms only where the term is the decision.",
+  "HITL questions are answered by the human in their own words. Never self-answered.",
+  "No new runtime dependency is assumed without a `research` question backing it.",
+  "Sketches are throwaway and live only under `pathfinder/sketch-NN/`.",
+];
+const KEBAB = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const DIMENSIONS = [
   { key: "Requirements-clarity", word: "Requirements" },
   { key: "Feasibility-technical", word: "Feasibility" },
@@ -93,14 +136,22 @@ const DIMENSIONS = [
 
 /* ------------------------------------------------------------- locating */
 
-function locate(root, arg) {
+/**
+ * The map's folders from the <map> argument. `create` (init, add) accepts an
+ * idea folder that does not exist yet, as long as its name is kebab-case: the
+ * command writing the first file creates it.
+ */
+function locate(root, arg, { create = false } = {}) {
   if (!arg) fail(EXIT.USAGE, "missing-map", "Name the map: specs/<idea>/pathfinder, specs/<idea>, or <idea>.", "Example: node pathfinder.mjs frontier specs/audit-export/pathfinder");
   let p = arg.replace(/\\/g, "/").replace(/\/+$/, "");
   if (/\/map\.md$/i.test(p)) p = p.replace(/\/map\.md$/i, "");
   let abs = path.isAbsolute(p) ? p : p.includes("/") ? path.join(root, p) : path.join(root, "specs", p);
   if (path.basename(abs) !== "pathfinder") abs = path.join(abs, "pathfinder");
   const ideaDir = path.dirname(abs);
-  if (!isDir(ideaDir)) fail(EXIT.NOT_FOUND, "no-idea", `No idea folder at ${rel(root, ideaDir)}.`, "Check the idea name with `ls specs/` (shell, not Glob: specs/ is gitignored).");
+  if (!isDir(ideaDir)) {
+    if (!create) fail(EXIT.NOT_FOUND, "no-idea", `No idea folder at ${rel(root, ideaDir)}.`, "Check the idea name with `ls specs/` (shell, not a file search: specs/ is gitignored).");
+    if (!KEBAB.test(path.basename(ideaDir))) fail(EXIT.USAGE, "bad-idea-name", `"${path.basename(ideaDir)}" is not a kebab-case idea name.`, "Use lowercase words joined by hyphens, for example audit-log-export.");
+  }
   return { root, pf: abs, ideaDir, idea: path.basename(ideaDir), mapPath: path.join(abs, "map.md"), qDir: path.join(abs, "questions"), relPf: rel(root, abs) };
 }
 
@@ -204,7 +255,7 @@ function parseQuestion(file, text) {
     // Consequences under any of the names the playbooks use: a grill's
     // "Consequences", a research answer's "What this implies", or a stated
     // "breaks if reversed" for a locked decision.
-    hasConsequences: answer ? /\*\*(Consequences|What this implies)\b|^#{2,6}\s*(Consequences|What this implies)\b|^\s*Consequences\s*[:—-]|\bif (this is |it is )?reversed\b|breaks if reversed/im.test(answer.body) : false,
+    hasConsequences: answer ? /\*\*(Consequences|What this implies)\b|^#{2,6}\s*(Consequences|What this implies)\b|^\s*Consequences\s*[:\u2014-]|\bif (this is |it is )?reversed\b|breaks if reversed/im.test(answer.body) : false,
     hasEvidence: hasContent(evidence),
     researchComplete: evidence ? (evidence.body.match(/\*\*Research complete:\*\*\s*(\d{4}-\d{2}-\d{2})/) || [])[1] || null : null,
     questionText: question ? stripComments(question.body).trim() : "",
@@ -346,10 +397,10 @@ function rowFor(q, byNN, nameOverride) {
   const link = `- [${q.marker}] [${name}](./questions/${q.file})`;
   if (q.marker === "x") {
     const date = q.resolved ? ` *(${q.resolved})*` : "";
-    return q.gist ? `${link} — ${q.gist}${date}` : `${link}${date}`;
+    return q.gist ? `${link}${SEP}${q.gist}${date}` : `${link}${date}`;
   }
-  if (q.marker === "!") return `${link} — Blocked by ${openBlockers(q, byNN).join(", ")}`;
-  if (q.marker === "-") return `${link} — out of scope, see below`;
+  if (q.marker === "!") return `${link}${SEP}Blocked by ${openBlockers(q, byNN).join(", ")}`;
+  if (q.marker === "-") return `${link}${SEP}out of scope, see below`;
   return link;
 }
 
@@ -365,11 +416,11 @@ function updateRow({ lines: block, rowLines, extra, m }, q, byNN, regenerate) {
   if (regenerate || !m) return [rowFor(q, byNN, name), ...extra];
   const oldMarker = m[1];
   if (oldMarker === q.marker) return block;
-  const hasSuffix = /^\s*—/.test(m[4]);
-  if (q.marker === "x" && !(oldMarker === "x" && hasSuffix)) return [rowFor(q, byNN, name), ...extra];
-  if (q.marker === "!" || q.marker === "-" || oldMarker === "!" || oldMarker === "-" || oldMarker === "x") {
-    // The tail ("— Blocked by", "— out of scope", a resolved row's gist and
-    // date) belongs to the old marker.
+  // A marker change that adds a tail ([x] gist and date, [!] blocker, [-]
+  // note) or drops one (whatever follows an old [x], [!] or [-] link, in
+  // either separator) writes the row fresh. The tail itself is never parsed:
+  // the checkbox and the link are what make it a row.
+  if (["x", "!", "-"].includes(q.marker) || ["x", "!", "-"].includes(oldMarker)) {
     return [rowFor(q, byNN, name), ...extra];
   }
   return [rowLines[0].replace(/\[(.)\]/, `[${q.marker}]`), ...rowLines.slice(1), ...extra];
@@ -596,6 +647,244 @@ function drift(questions, map) {
   return d;
 }
 
+/* ------------------------------------------------------- init and add */
+
+// The chart.md templates, in code: init and add write these, and the
+// templates in the references stay as the fallback for when the script
+// cannot run. The comments are written for the next session.
+const MAP_COMMENTS = {
+  status: [
+    "<!-- Status: Charting while the map is being built (Chart Steps 1-6) -> Working once the",
+    "     checklist is indexed (Chart Step 7) -> Cleared only when the Clearing Gate passes.",
+    "     A fresh session routes on this line, so it must be correct before the session ends. -->",
+  ],
+  nextNN: [
+    "<!-- Next NN: the number the next new question file takes. Kept by the script (reconcile",
+    "     adds it at Chart Step 7 and every write command raises it); it never goes down, so a",
+    "     deleted question's number is never reused. Never edit it by hand. -->",
+  ],
+  confidence: [
+    "<!-- Confidence: four dimensions, each scored out of 25, re-scored at every resolution.",
+    "     The Clearing Gate requires all four at 18/25 or better. Score against evidence. -->",
+  ],
+  destination: [
+    "<!-- Settled at Chart Step 2 and quoted as agreed. Every question is measured against it:",
+    "     in scope or past the edge, still needed or now moot. Change it only with the human",
+    "     present: a silent redraw invalidates every scope call already made. -->",
+  ],
+  groundRules: [
+    "<!-- Standing constraints for every session on this map. Read before choosing a question,",
+    "     obeyed while resolving it. Nothing here is re-asked. The Backend line comes first, then",
+    "     AGENTS.md: \"- `AGENTS.md` exists and governs.\" or, when it is missing, exactly",
+    "     \"- `AGENTS.md` is absent.\" (the handoff then routes to /plan2code-init first). -->",
+  ],
+  glossary: [
+    "<!-- Terms this effort uses precisely, as a table: | Term | Meaning here | Avoid |.",
+    "     Prevents two sessions meaning different things by the same word. -->",
+  ],
+  checklist: [
+    "<!-- Rebuilt from questions/ every session: the files are ground truth, this is an index.",
+    "     [ ] open (the frontier) · [/] claimed · [x] resolved · [!] open but blocked",
+    "     [-] out of scope. Resolved rows carry the one-line gist from the question's Answer,",
+    "     then the Resolved: date in italics; briefs filter on these dates. -->",
+  ],
+  fog: [
+    "<!-- The fog: in-scope areas you can see but cannot yet phrase as a question. Graduates into",
+    "     question files as answers land, and the graduated bullet is deleted from here.",
+    "     Do NOT pre-slice these into question-sized pieces: one bullet may become three",
+    "     questions, or none. Nothing already decided, already a question, or out of scope. -->",
+  ],
+  outOfScope: [
+    "<!-- Work consciously ruled past the destination. Never graduates; returns only if the",
+    "     destination is redrawn, and then as a fresh effort. One line each: gist plus why. -->",
+  ],
+};
+
+const bulletsOf = (list) => (list || []).map((s) => s.trim()).filter(Boolean).map((s) => `- ${s}`);
+
+function parseScores(v) {
+  const nums = String(v || "").split(/[\s,]+/).filter(Boolean);
+  if (nums.length !== 4 || nums.some((n) => !/^\d{1,2}$/.test(n) || Number(n) > 25)) {
+    fail(EXIT.USAGE, "bad-scores", `--scores needs four whole numbers from 0 to 25${v ? `, not "${v}"` : ""}.`, "Order: Requirements-clarity, Feasibility-technical, Integration-points, Risk-assessment. Example: --scores 12,9,14,10 (charting scores are low by construction).");
+  }
+  return nums.map(Number);
+}
+
+async function cmdInit(loc, args) {
+  const dry = !!args["dry-run"];
+  if (fs.existsSync(loc.mapPath)) fail(EXIT.REFUSED, "map-exists", `${loc.relPf}/map.md already exists; init never overwrites a map.`, "Resume it instead: run reconcile (Work Step 2), or frontier to see where it stands.");
+  const destination = (args.destination || "").trim();
+  if (!destination) fail(EXIT.USAGE, "missing-destination", "--destination is required: the one or two lines settled at Chart Step 2.", 'Example: --destination "A locked plan for exporting a filtered range of audit events as one file."');
+  const scores = parseScores(args.scores);
+  const fog = bulletsOf(args.fog);
+  if (!fog.length) fail(EXIT.REFUSED, "no-fog", "No --fog: a map with nothing in ## Not yet specified is the Chart Step 4 off-ramp, not a map.", "Pass each fog bullet as --fog, or take the off-ramp: create no map, keep the codebase context, hand it to /plan2code-1-plan.");
+  const agentsAbsent = !fs.existsSync(path.join(loc.root, "AGENTS.md"));
+  const rules = [
+    "- **Backend:** local",
+    agentsAbsent ? "- `AGENTS.md` is absent." : "- `AGENTS.md` exists and governs. Its conventions are not re-litigated by any question here.",
+    ...STANDING_RULES.map((r) => `- ${r}`),
+    ...bulletsOf(args.rule),
+  ];
+  const outOfScope = bulletsOf(args.out);
+  // The same two refusals add applies: a checkbox line or a loop token never lands in a map.
+  for (const t of [destination, ...fog, ...bulletsOf(args.rule), ...outOfScope]) {
+    if (/^\s*[-*] \[.\]/m.test(t)) fail(EXIT.REFUSED, "checkbox", "A map never holds a checkbox line (the loop and metrics read checkboxes).", "Use plain bullets.");
+    const tok = t.match(LOOP_TOKENS);
+    if (tok) fail(EXIT.REFUSED, "loop-token", `${tok[0]} is a reserved loop completion token; it never belongs under specs/.`, "Reword it.");
+  }
+  const [r, f, i, k] = scores;
+  const lines = [
+    BANNER,
+    "",
+    `# Map: ${loc.idea}`,
+    "",
+    "*Decisions live in `questions/`, one file each. This file is just the index.*",
+    "",
+    "**Status:** Charting",
+    `**Updated:** ${isoDate()}`,
+    `**Confidence:** Requirements-clarity ${r}/25 · Feasibility-technical ${f}/25 · Integration-points ${i}/25 · Risk-assessment ${k}/25`,
+    "",
+    ...MAP_COMMENTS.status, "",
+    ...MAP_COMMENTS.nextNN, "",
+    ...MAP_COMMENTS.confidence, "",
+    "## Destination", "", destination, "", ...MAP_COMMENTS.destination, "",
+    "## Ground rules", "", ...MAP_COMMENTS.groundRules, "", ...rules, "",
+    "## Glossary", "", ...MAP_COMMENTS.glossary, "",
+    "## Question Checklist", "", ...MAP_COMMENTS.checklist, "",
+    "## Not yet specified", "", ...MAP_COMMENTS.fog, "", ...fog, "",
+    "## Out of scope", "", ...MAP_COMMENTS.outOfScope, ...(outOfScope.length ? ["", ...outOfScope] : []),
+  ];
+  let mapText = lines.join("\n") + "\n";
+  // Question files written before the map (the Step 3 codebase context) get
+  // their rows now, so the index starts out agreeing with the files.
+  const questions = loadQuestions(loc);
+  const byNN = derive(questions);
+  if (questions.length) mapText = rebuildChecklist(mapText, questions, byNN).text;
+  if (!dry) {
+    fs.mkdirSync(loc.qDir, { recursive: true });
+    fs.writeFileSync(loc.mapPath, mapText);
+  }
+  out({
+    ok: true,
+    map: `${loc.relPf}/map.md`,
+    status: "Charting",
+    agentsAbsent,
+    indexed: questions.map((q) => ({ nn: q.nn, name: q.name, marker: `[${q.marker}]` })),
+    nextNN: nextNN(loc, questions),
+    dryRun: dry,
+    mapWritten: !dry,
+    next: "Write each question with add (Chart Step 6), then reconcile, set **Status:** Working and lint (Chart Step 7).",
+  });
+}
+
+const TYPE_WORDS = { grill: "grill · HITL", research: "research · AFK", sketch: "sketch · HITL" };
+
+/** --type as written in a file ("legwork · AFK") or typed ("legwork-afk", "research"); grill by default. */
+function parseType(v) {
+  if (v === undefined) return TYPES[0];
+  const key = String(v).toLowerCase().replace(/[·\s_-]+/g, "-").replace(/^-+|-+$/g, "");
+  const type = TYPES.find((t) => t.toLowerCase().replace(/[·\s]+/g, "-") === key) || TYPE_WORDS[key];
+  if (!type) fail(EXIT.USAGE, "bad-type", `--type "${v}" is not a question type.`, "Use grill, research, sketch, legwork-hitl or legwork-afk (questions.md: Type meanings).");
+  return type;
+}
+
+function slugOf(name) {
+  return name
+    .normalize("NFKD")
+    .replace(/\p{M}/gu, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 60)
+    .replace(/-+$/, "");
+}
+
+async function cmdAdd(loc, args) {
+  const dry = !!args["dry-run"];
+  const name = (args.name || "").trim();
+  if (!name) fail(EXIT.USAGE, "missing-name", "--name is required: the question's name, its H1 and its map row.", 'Example: --name "Export authorization"');
+  if (/[\r\n]/.test(name)) fail(EXIT.USAGE, "bad-name", "--name is one line.", "Put the detail in --question.");
+  const question = (args.question || "").trim();
+  if (!question) fail(EXIT.USAGE, "missing-question", "--question is required: the ## Question text, phrased sharply.", 'Example: --question "Who may run an audit-log export, and over whose events?"');
+  const type = parseType(args.type);
+  const slug = args.slug !== undefined ? String(args.slug) : slugOf(name);
+  if (!KEBAB.test(slug)) fail(EXIT.USAGE, "bad-slug", args.slug !== undefined ? `--slug "${slug}" is not kebab-case.` : `"${name}" gives no usable file name.`, "Pass --slug with lowercase words joined by hyphens.");
+  const recommended = (args.recommended || "").trim();
+  const evidence = bulletsOf(args.evidence);
+  for (const t of [name, question, recommended, ...evidence]) {
+    if (/^\s*[-*] \[.\]/m.test(t)) fail(EXIT.REFUSED, "checkbox", "A question file never holds a checkbox line (the loop and metrics read checkboxes).", "Use plain bullets.");
+    const tok = t.match(LOOP_TOKENS);
+    if (tok) fail(EXIT.REFUSED, "loop-token", `${tok[0]} is a reserved loop completion token; it never belongs under specs/.`, "Reword it.");
+  }
+
+  const questions = loadQuestions(loc);
+  const byNN = derive(questions);
+  const same = questions.find((q) => q.file.replace(/^\d+-/, "") === `${slug}.md` || q.name.toLowerCase() === name.toLowerCase());
+  if (same) fail(EXIT.REFUSED, "duplicate", `${same.file} already holds "${same.name}"; one file per decision.`, "Work in that file, or name this question apart from it (--name, or --slug for the file name).");
+  const nn = nextNN(loc, questions);
+  if (nn === "00" && slug !== "codebase-context") fail(EXIT.REFUSED, "reserved-00", `This would be question 00, and 00 is always 00-codebase-context.md.`, 'Add the codebase context first (Chart Step 3): --name "Codebase context" --type legwork-afk.');
+  if (nn !== "00" && slug === "codebase-context") fail(EXIT.REFUSED, "reserved-name", `codebase-context is question 00's name; this would be ${nn}-codebase-context.md.`, "Name this question for its own decision.");
+  const blockedBy = args["blocked-by"] === undefined ? [] : parseBlockers(String(args["blocked-by"]));
+  const missing = blockedBy.filter((b) => !byNN.has(b));
+  if (missing.length) fail(EXIT.NOT_FOUND, "no-blocker", `Blocked by ${missing.join(", ")}, which ${missing.length === 1 ? "is not a question" : "are not questions"} in questions/.`, "Name blockers by an existing NN (frontier lists them); a blocker is written before what it blocks.");
+  const file = `${nn}-${slug}.md`;
+  const full = path.join(loc.qDir, file);
+  if (fs.existsSync(full)) fail(EXIT.REFUSED, "exists", `questions/${file} already exists.`, "Run reconcile, then frontier for the next NN.");
+
+  const text = [
+    BANNER,
+    "",
+    `# ${name}`,
+    "",
+    `Type: ${type}`,
+    "State: open",
+    `Blocked by: ${blockedBy.length ? blockedBy.join(", ") : "none"}`,
+    "Claimed: none",
+    "Resolved: none",
+    `Locked: ${args.locked ? "yes" : "no"}`,
+    "",
+    "## Question",
+    "",
+    question,
+    ...(recommended ? ["", `Recommended answer to react to: ${recommended}`] : []),
+    "",
+    "## Evidence",
+    ...(evidence.length ? ["", ...evidence] : []),
+  ].join("\n") + "\n";
+  if (!dry) {
+    fs.mkdirSync(loc.qDir, { recursive: true });
+    fs.writeFileSync(full, text);
+  }
+  const q = { ...parseQuestion(full, text), path: full };
+  const all = [...questions, q];
+  const byNNAfter = derive(all);
+  const after = String(parseInt(nn, 10) + 1).padStart(2, "0");
+  const original = readText(loc.mapPath);
+  let mapRow = null;
+  let mapWritten = false;
+  if (original !== null) {
+    const mapText = rebuildChecklist(original, all, byNNAfter).text;
+    mapRow = rowFor(q, byNNAfter);
+    mapWritten = saveMap(loc, original, mapText, after, dry);
+  }
+  out({
+    ok: true,
+    nn,
+    name,
+    file: rel(loc.root, full),
+    type,
+    state: "open",
+    marker: `[${q.marker}]`,
+    blockedBy,
+    locked: !!args.locked,
+    mapRow,
+    dryRun: dry,
+    mapWritten,
+    nextNN: after,
+    ...(original === null ? { next: "No map yet: init writes it at Chart Step 5 and indexes this file." } : {}),
+  });
+}
+
 /* ----------------------------------------------------------- commands */
 
 async function cmdReconcile(loc, args) {
@@ -805,7 +1094,7 @@ async function cmdRuleOut(loc, args) {
   q.state = "out-of-scope";
   const byNN = derive(questions);
   mapText = rebuildChecklist(mapText, questions, byNN).text;
-  const line = `- [${q.name}](./questions/${q.file}) — ${reason}`;
+  const line = `- [${q.name}](./questions/${q.file})${SEP}${reason}`;
   const mapNl = eol(mapText);
   const lines = mapText.split(/\r?\n/);
   const at = lines.findIndex((l) => /^## +Out of scope\s*$/i.test(l));
@@ -834,7 +1123,7 @@ function confidenceLine(scores) {
   const vals = DIMENSIONS.map((d) => ({ word: d.word, v: scores[d.word] }));
   if (vals.some((x) => x.v === null)) return null;
   const low = vals.filter((x) => x.v < 18).map((x) => x.word);
-  if (low.length) return `Confidence: not yet — ${low.join(", ")} still ${low.length === 1 ? "needs" : "need"} work.`;
+  if (low.length) return `Confidence: not yet, ${low.join(", ")} still ${low.length === 1 ? "needs" : "need"} work.`;
   const border = vals.filter((x) => x.v < 20).map((x) => x.word);
   if (border.length) return `Confidence: solid, but ${border.join(", ")} ${border.length === 1 ? "is" : "are"} borderline.`;
   return "Confidence: solid.";
@@ -1000,6 +1289,7 @@ async function cmdGate(loc) {
     caps,
     existingPlanDraft: drafts.length ? drafts.map((n) => rel(loc.root, path.join(loc.ideaDir, n))) : null,
     planDraftPath: drafts.length ? rel(loc.root, path.join(loc.ideaDir, drafts.sort().at(-1))) : `${rel(loc.root, loc.ideaDir)}/PLAN-DRAFT-${isoDate().replace(/-/g, "")}.md`,
+    planDraftStatus: `**Status:** ${PLAN_DRAFT_STATUS}`,
     agentsAbsent: map.agentsAbsent,
     initFirst: needsInit(loc, map),
     judgment: [
@@ -1215,7 +1505,8 @@ async function cmdBriefData(loc, args) {
     decided,
     // Link markup dropped (a brief has no links); placeholder bullets ("None yet.") skipped.
     // A link text may hold one level of brackets ("Retention [legal] hold").
-    ruledOut: map.outOfScope.map((b) => b.replace(/\[((?:[^[\]]|\[[^\]]*\])+)\]\([^)]*\)/g, "$1")).filter((b) => !/^(none|nothing)\b[^—:]*\.?$/i.test(b.trim())),
+    // A placeholder has no separator after it (an em dash in maps written before SEP).
+    ruledOut: map.outOfScope.map((b) => b.replace(/\[((?:[^[\]]|\[[^\]]*\])+)\]\([^)]*\)/g, "$1")).filter((b) => !/^(none|nothing)\b[^\u2014:]*\.?$/i.test(b.trim())),
     ready,
     waiting,
     fog: map.fog,
@@ -1230,12 +1521,14 @@ async function cmdBriefData(loc, args) {
 
 run(USAGE, async (argv) => {
   const args = parseArgs(argv, {
-    booleans: ["dry-run", "text", "heavy"],
-    values: ["root", "form", "reason", "range", "resolved-this-session"],
-    lists: ["item"],
+    booleans: ["dry-run", "text", "heavy", "locked"],
+    values: ["root", "form", "reason", "range", "resolved-this-session", "destination", "scores", "name", "question", "type", "blocked-by", "recommended", "slug"],
+    lists: ["item", "fog", "rule", "out", "evidence"],
   });
   const cmd = args._[0];
   const commands = {
+    init: cmdInit,
+    add: cmdAdd,
     reconcile: cmdReconcile,
     frontier: cmdFrontier,
     claim: cmdClaim,
@@ -1247,6 +1540,6 @@ run(USAGE, async (argv) => {
     "brief-data": cmdBriefData,
   };
   if (!commands[cmd]) fail(EXIT.USAGE, "unknown-command", cmd ? `Unknown command "${cmd}".` : "No command given.", `Commands: ${Object.keys(commands).join(", ")}. Run with --help.`);
-  const loc = locate(path.resolve(args.root || "."), args._[1]);
+  const loc = locate(path.resolve(args.root || "."), args._[1], { create: cmd === "init" || cmd === "add" });
   await commands[cmd](loc, args);
 });

@@ -19,7 +19,9 @@ agents-md.mjs: inspect AGENTS.md and .agents-docs/. JSON on stdout.
       (progressive or single-file), every ## section with its line count and
       its Details link, the always-inline sections, .agents-docs/ files with
       their breadcrumb check, broken links, orphan section files (no link from
-      AGENTS.md).
+      AGENTS.md). With no AGENTS.md yet (Init's first run, so it is said
+      once), "notices" warns when .gitignore keeps specs--completed/ out of
+      git: finished specs archived there are not backed up.
 
   node agents-md.mjs filename "<Section Name>"
       The detail file for a section: AGENTS-<kebab-case>.md, its link line
@@ -66,6 +68,22 @@ function sectionsOf(text) {
   return outList;
 }
 
+// A .gitignore line that keeps specs--completed/ out of git: the folder
+// itself, or a specs* pattern that takes it along.
+const IGNORES_COMPLETED_RE = /^\/?(?:specs--completed|specs-\*|specs\*)\/?(?:\*\*?)?$/;
+
+/** The one-time notices for a project Init is about to set up. */
+function firstRunNotices(root) {
+  const lines = (readText(path.join(root, ".gitignore")) || "").split(/\r?\n/).map((l) => l.trim());
+  if (!lines.some((l) => IGNORES_COMPLETED_RE.test(l))) return [];
+  return [
+    {
+      code: "specs-not-backed-up",
+      message: "specs--completed/ is gitignored, so finished specs archived there are not in git and not backed up. Copy that folder somewhere safe, or remove its .gitignore line to commit it.",
+    },
+  ];
+}
+
 function inspect(root) {
   const file = path.join(root, "AGENTS.md");
   const text = readText(file);
@@ -86,7 +104,7 @@ function inspect(root) {
       })
     : [];
   if (text === null) {
-    return { ok: true, root, exists: false, hasAgentsDocs: hasDocs, agentsDocs: docFiles, otherFiles: ["CLAUDE.md", "README.md", "PROJECT.md", "GEMINI.md", ".cursorrules", ".github/copilot-instructions.md"].filter((f) => fs.existsSync(path.join(root, f))) };
+    return { ok: true, root, exists: false, notices: firstRunNotices(root), hasAgentsDocs: hasDocs, agentsDocs: docFiles, otherFiles: ["CLAUDE.md", "README.md", "PROJECT.md", "GEMINI.md", ".cursorrules", ".github/copilot-instructions.md"].filter((f) => fs.existsSync(path.join(root, f))) };
   }
   const sections = sectionsOf(text);
   const linked = new Set();

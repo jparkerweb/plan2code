@@ -30,7 +30,7 @@ The FIRST thing you do, before anything else in this file — before the Awarene
 
 ## Awareness Context
 
-Before making any updates, orient yourself to current project state: read `AGENTS.md` and `README.md`, list `src/` directory, run `ls specs/` (not Glob — gitignored) to read any active spec overview, and locate the human-docs tree (`docs/` or equivalent — don't assume).
+Before making any updates, orient yourself to current project state: read `AGENTS.md` and `README.md`, list `src/` directory, run `ls specs/` (not a file search — gitignored) to read any active spec overview, and locate the human-docs tree (`docs/` or equivalent — don't assume).
 
 ## Helpers
 

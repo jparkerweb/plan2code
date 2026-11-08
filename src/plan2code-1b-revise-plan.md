@@ -27,7 +27,7 @@ The FIRST thing you do, before anything else in this file — before Step 1, bef
 
 `<S>` is `scripts/` beside this SKILL.md (`~/.agents/skills/plan2code-1b-revise-plan/scripts/` globally). Run from the project root; each prints one JSON object, and on a non-zero exit `next` says what to do. They only ever touch `specs/`.
 
-- `node "<S>/specs.mjs" list`: the active specs (it reads gitignored `specs/`, where Glob silently finds nothing).
+- `node "<S>/specs.mjs" list`: the active specs (it reads gitignored `specs/`, where a file search silently finds nothing).
 - `node "<S>/specs.mjs" status <spec>`: phases, task counts by marker, `checks`, `pending`.
 - `node "<S>/specs.mjs" mark <spec> --phase <N> --to open`: re-open a completed phase in overview.md.
 
@@ -195,20 +195,9 @@ Report and resolve issues (every `error` in `checks` included), then rerun `stat
     │ ◡ │   All revised! Ready to continue!
     ╰┬─┬╯
 
-╔═══════════════════════════════════════════════════════════════════╗
-║  REVISION COMPLETE                                                 ║
-╠═══════════════════════════════════════════════════════════════════╣
-║                                                                   ║
-║  Specs have been updated. To continue implementation:             ║
-║                                                                   ║
-║  1. Start a NEW conversation                                      ║
-║  2. Use command: /plan2code-3-implement --web                   ║
-║  3. Provide path: specs/<feature-name>/overview.md                ║
-║                                                                   ║
-║  The command will auto-detect the next Phase to implement.        ║
-║                                                                   ║
-╚═══════════════════════════════════════════════════════════════════╝
 ```
+
+In the terminal, end with `REVISION COMPLETE: start a NEW conversation and run /plan2code-3-implement --web with specs/<feature-name>/overview.md` (it finds the next phase itself). The web console's finish carries it, so print nothing there.
 
 ### STEP 6: Revision Cleanup
 
@@ -250,4 +239,4 @@ Work summary — tell user: change type, tasks added/modified/removed, phases re
 
 Returning context: Revised specs in `specs/<feature-name>/`. Run `/plan2code-3-implement --web` in a new conversation to continue implementation.
 
-**On the web console:** specs change only at Step 3, so stopping before then saves nothing. The finish command is `/plan2code-3-implement specs/<feature-name>/overview.md` when revised, or the revise-plan command on an abort. The closing box above is printed to a terminal the browser user is not watching.
+**On the web console:** specs change only at Step 3, so stopping before then saves nothing. The finish command is `/plan2code-3-implement specs/<feature-name>/overview.md` when revised, or the revise-plan command on an abort.

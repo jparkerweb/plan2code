@@ -16,7 +16,7 @@ The FIRST thing you do, before anything else in this file — before reading a s
 
 - `node "<S>/specs.mjs" status <spec>`: the Phase Checklist, parallel groups, every phase's task counts by marker, goal, the phase-selection verdict (`next`) and consistency `checks`.
 - `node "<S>/specs.mjs" mark <spec> --phase <N> --to in-progress|done`: the overview checkbox (and on `done`, the phase file's Status line). It refuses to reset `[/]` to `[ ]`.
-- `node "<S>/commit-msg.mjs" --subject "<subject>" --add-all`: the commit command (`<subject>`, then `AI Assisted`).
+- `node "<S>/commit-msg.mjs" --subject "<subject>" --files <path> ...`: the commit command for the phase's own files (`<subject>`, then `AI Assisted`).
 
 ## Rules
 
@@ -32,7 +32,7 @@ The FIRST thing you do, before anything else in this file — before reading a s
 
 ## Required Context
 
-Needs the spec files. `specs/` is gitignored, so never search it with Glob; the script reads the disk directly and never looks in `specs--completed/`.
+Needs the spec files. `specs/` is gitignored, so never search it with a file search; the script reads the disk directly and never looks in `specs--completed/`.
 
 **Option 1: User provides an overview.md path** → `specs.mjs status <that path>`.
 
@@ -78,7 +78,7 @@ Before acting on `ask-resume` or `choose`, read the Notes of each `[/]` phase on
 
 ### Manual Check-Off
 
-`next.tasks` lists each open task (`id`, `marker`, `text`, `detail` with any BLOCKED / User action note). The spec is not built, and Finalize stays unavailable on the dashboard, until each is `[x]`. Say so in one line, then ask about them **one at a time**, in order:
+`next.tasks` lists each open task (`id`, `marker`, `text`, `detail` with any BLOCKED / User action note). The spec is not built until each is `[x]`; Finalize stays unavailable on the dashboard until then, or until the only ones left are `[!]` tasks that each carry a written reason (`status`'s `finalizeReady`). Say so in one line, then ask about them **one at a time**, in order:
 
 1. Show the task: id, `text`, and what `detail` says the person must do or check.
 2. Ask: "Is this done? (yes / not yet)". Console: a `confirm` item (`yesLabel` "Done, check it off", `noLabel` "Not yet"), posted with `--wait`, a new id per task.
@@ -147,7 +147,7 @@ After all tasks:
 4. Use Completion Report Format
 5. Do NOT mark phase `[x]` until user says "approved"
 6. Address issues before re-requesting sign-off
-7. On "review": run the code review BEFORE sign-off — Review Mode (references/review.md in the installed skill, src/plan2code-review.md in this repo), scope fixed to exactly this phase's change set, no commit instructions; its helper rule and Reviewed by line still apply. Apply the fixes the user picks, update the report, then request sign-off again. The phase stays `[/]` throughout.
+7. On "review": run the code review BEFORE sign-off as `references/review-in-build.md` says, over exactly this phase's change set. Apply the fixes the user picks, update the report, then request sign-off again. The phase stays `[/]` throughout.
 8. **Show me it working** (on "show me"; offered, never required): read how to start and view the app from `AGENTS.md` (Commands). Missing: work it out from the project (`package.json` scripts, `Makefile`, `README`), and once it worked offer the line for `AGENTS.md`; cannot work it out: ask the person. Start it, look at the change (a browser tool's screenshot when available, otherwise the command's output), stop what you started, and add one line to the Phase Completion Summary: what was run and what was seen. Screenshots go on the web console page only, never under `specs/`. Then request sign-off again.
 
 ## Issue Handling
@@ -207,7 +207,7 @@ On user "approved":
    | Phase X: [Name] | Y | [One-sentence goal] |
    | Phase X+1: [Name] | Z | [One-sentence goal] |
 
-5. Write a one-line subject for the phase, then give the user the `command` from `commit-msg.mjs --subject "<subject>" --add-all`. It enforces the format: subject ≤100 chars and EXACTLY TWO -m flags (subject, `AI Assisted`), no body. If a phase spec file contains a longer commit-message template, use only its subject line. The diff is the body; the PR is the explanation. On Windows PowerShell 5.1 (no `&&`), give `add` and `commit` as two commands instead.
+5. Write a one-line subject for the phase, then give the user the `command` from `commit-msg.mjs --subject "<subject>" --files <path> ...`, one `--files` per file the phase created or changed. It enforces the format: subject ≤100 chars and EXACTLY TWO -m flags (subject, `AI Assisted`), no body. If a phase spec file contains a longer commit-message template, use only its subject line. The diff is the body; the PR is the explanation. On Windows PowerShell 5.1 (no `&&`), give `add` and `commit` as two commands instead.
 6. **If more phases:** "NEXT STEP: Start NEW conversation and run: `/plan2code-3-implement specs/<feature>/overview.md --web`"
 7. **If final phase:** "NEXT STEP: Start NEW conversation and run: `/plan2code-4-finalize --web`"
 8. Mention `/plan2code-1b-revise-plan --web` option

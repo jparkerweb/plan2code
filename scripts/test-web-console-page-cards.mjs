@@ -408,6 +408,36 @@ test("on a sign-off card, approve and yes are outlined in the accent until picke
   assert.notEqual(await outlineOf(card.getByRole("button", { name: "Not yet" })), accent);
 });
 
+// What a person hears break: a screen reader names the verdicts on a sign-off
+// card but never says which one is picked.
+test("a sign-off card's verdicts expose aria-pressed, kept in step with each click", async (t) => {
+  const s = await openSession(await suite.browser(), { t, workflow: "implement" });
+  const card = await ask(s, {
+    id: "so1",
+    kind: "review",
+    title: "Sign off",
+    body: "Read it.",
+    verdicts: [{ id: "approve", label: "Approve this phase" }, { id: "changes", label: "I want changes" }],
+  });
+  const approve = card.getByRole("button", { name: "Approve this phase" });
+  const changes = card.getByRole("button", { name: "I want changes" });
+  const pressed = async () => [await approve.getAttribute("aria-pressed"), await changes.getAttribute("aria-pressed")];
+  assert.deepEqual(await pressed(), ["false", "false"], "nothing picked yet");
+
+  await approve.click();
+  await s.page.waitForFunction(() => document.querySelector("#btn-send:not(:disabled)"));
+  assert.deepEqual(await pressed(), ["true", "false"], "approve picked");
+  assert.equal(await card.getByRole("button", { name: "Approve this phase", pressed: true }).count(), 1);
+
+  await changes.click();
+  await s.page.waitForFunction(() => document.querySelector('[data-item="so1"] button[aria-pressed="true"]')?.textContent.includes("I want changes"));
+  assert.deepEqual(await pressed(), ["false", "true"], "the pick moved to changes");
+
+  await changes.click();
+  await s.page.waitForFunction(() => !document.querySelector('[data-item="so1"] button[aria-pressed="true"]'));
+  assert.deepEqual(await pressed(), ["false", "false"], "a second click takes the pick back");
+});
+
 // What a person sees break: Skip this one turns into a full-size button, or
 // the quick answer under a note box does.
 test("Skip this one and a comment box's quick answer are the same small accent button", async (t) => {
@@ -664,6 +694,26 @@ test("Clear on a one-answer question takes back the pick and the words, and a se
   await s.page.click("#btn-send");
   await card.getByText(/Plan2Code is working on it|Waiting for Plan2Code to pick this up/).waitFor();
   assert.equal(await clear.count(), 0, "a sent card cannot be cleared");
+});
+
+// What a person sees break: on a question taller than the window, Clear sat at
+// the card's foot, out of sight until the options were scrolled past.
+test("Clear on a tall question reads \"Clear answer\" and stays on screen while the options scroll", async (t) => {
+  const s = await openSession(await suite.browser(), { t, workflow: "plan" });
+  await s.page.setViewportSize({ width: 1280, height: 520 });
+  const options = Array.from({ length: 14 }, (_, i) => opt(String.fromCharCode(65 + i), `Choice ${i + 1}`));
+  const card = await ask(s, { id: "c1", kind: "choice", title: "Which", body: "Which one?", options });
+  const clear = card.getByRole("button", { name: "Clear your answer to this question" });
+  assert.equal((await clear.innerText()).trim(), "Clear answer");
+  assert.equal(await clear.locator("svg").count(), 1, "an icon leads the label");
+  const visible = () => clear.evaluate((b) => {
+    const c = b.getBoundingClientRect();
+    const card = b.closest(".card").getBoundingClientRect();
+    return c.top >= card.top && c.bottom <= card.bottom + 1 && c.bottom <= window.innerHeight;
+  });
+  assert.equal(await visible(), true, "in view with the card scrolled to the top");
+  await scrollCard(card, "end");
+  assert.equal(await visible(), true, "still in view at the foot of the card");
 });
 
 // What a person sees break: a note typed on a card is dropped by the verdict,

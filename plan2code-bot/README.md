@@ -83,7 +83,7 @@ If no state file is found, the bot starts a fresh run.
 1. Detects mode based on presence of `AGENTS.md`
 2. Generates an idea (new app or enhancement) via Claude, optionally guided by `--idea` seed
 3. Writes `IDEA.md` to the project directory
-4. Installs bot-friendly copies of plan2code skills (strips `disable-model-invocation` so sessions can invoke them)
+4. Installs bot-friendly copies of five plan2code skills (init, plan, document, implement, finalize), each whole folder with its references and scripts, and strips `disable-model-invocation`; the plan, document and finalize prompts tell the session to open the skill file and follow it (init writes a stub by hand and implement works from the spec directly)
 5. Runs each workflow step as a separate Claude Agent SDK session:
    - **init** — generates `AGENTS.md` (new-project mode only)
    - **plan** — creates plan draft in `specs/<feature>/`

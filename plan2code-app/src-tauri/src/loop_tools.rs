@@ -106,12 +106,26 @@ enum Keep {
 
 /// `run_limited_with` with the part kept chosen, and whether output was dropped.
 fn run_capped(
-    mut cmd: Command,
+    cmd: Command,
     stdin: Option<&str>,
     limit: Duration,
     keep_stderr: bool,
     keep: Keep,
 ) -> (ToolRun, bool) {
+    let (run, cut, _) = run_capped_bytes(cmd, stdin.map(str::as_bytes), limit, keep_stderr, keep);
+    (run, cut)
+}
+
+/// `run_capped` that also hands back the kept output as the bytes the child
+/// wrote: a path list read from git must not pass through a lossy decode, or a
+/// name that is not UTF-8 no longer names its file.
+fn run_capped_bytes(
+    mut cmd: Command,
+    stdin: Option<&[u8]>,
+    limit: Duration,
+    keep_stderr: bool,
+    keep: Keep,
+) -> (ToolRun, bool, Vec<u8>) {
     let cut = Arc::new(AtomicBool::new(false));
     cmd.env("PATH", crate::node_check::resolved_path());
     #[cfg(windows)]
@@ -146,6 +160,7 @@ fn run_capped(
                     output: format!("could not start: {e}"),
                 },
                 false,
+                Vec::new(),
             );
         }
     };
@@ -162,7 +177,7 @@ fn run_capped(
     ];
     if let (Some(text), Some(mut pipe)) = (stdin, child.stdin.take()) {
         // A child that exits before reading closes the pipe: not an error here.
-        let _ = pipe.write_all(text.as_bytes());
+        let _ = pipe.write_all(text);
     }
     let pid = child.id();
     let started = Instant::now();
@@ -194,10 +209,8 @@ fn run_capped(
             let _ = reader.join();
         }
     }
-    let mut output = sink
-        .lock()
-        .map(|buf| String::from_utf8_lossy(&buf).into_owned())
-        .unwrap_or_default();
+    let raw = sink.lock().map(|buf| buf.clone()).unwrap_or_default();
+    let mut output = String::from_utf8_lossy(&raw).into_owned();
     if timed_out {
         if !output.is_empty() && !output.ends_with('\n') {
             output.push('\n');
@@ -211,6 +224,7 @@ fn run_capped(
             output,
         },
         cut.load(Ordering::Relaxed),
+        raw,
     )
 }
 
@@ -332,12 +346,13 @@ pub fn specs_mark(project: &Path, spec: &str, phase: u32, to: &str) -> ToolRun {
     )
 }
 
-/// `commit-msg.mjs --subject <subject> --add-all`: the checked message. The
+/// `commit-msg.mjs --subject <subject>`: the checked message (the Loop stages
+/// its own files through `git_add_listed`, so no add is asked for). The
 /// script's own subject checks are the only ones.
 pub fn commit_message(project: &Path, subject: &str) -> Result<String, String> {
     let script = script_or_err("commit-msg.mjs")?;
     let run = run_limited(
-        node_script(&script, project, &["--subject", subject, "--add-all"]),
+        node_script(&script, project, &["--subject", subject]),
         None,
         QUICK_LIMIT,
     );
@@ -366,8 +381,40 @@ fn parse_commit_msg(stdout: &str) -> Result<String, String> {
         .unwrap_or_else(|| stdout.trim().to_string()))
 }
 
-pub fn git_add_all(project: &Path) -> ToolRun {
-    run_limited(git(project, &["add", "-A"]), None, QUICK_LIMIT)
+/// `git add` of exactly `paths` (relative to the repository's top folder
+/// `top`), read from stdin NUL-separated and taken literally: no command line
+/// to outgrow, no quoting, and a name such as `[id].tsx` is a file, not a
+/// pattern. Nothing to stage is a success.
+pub fn git_add_listed(top: &Path, paths: &[GitPath]) -> ToolRun {
+    if paths.is_empty() {
+        return ToolRun {
+            ok: true,
+            code: Some(0),
+            output: String::new(),
+        };
+    }
+    let mut list = Vec::new();
+    for path in paths {
+        list.extend_from_slice(&path.bytes);
+        list.push(0);
+    }
+    let cmd = git(
+        top,
+        &[
+            "--literal-pathspecs",
+            "add",
+            "--pathspec-from-file=-",
+            "--pathspec-file-nul",
+        ],
+    );
+    run_capped_bytes(
+        cmd,
+        Some(&list),
+        QUICK_LIMIT,
+        true,
+        Keep::Tail(OUTPUT_LIMIT),
+    )
+    .0
 }
 
 /// `git commit -F -` with the message on stdin: no shell, nothing quoted.
@@ -406,17 +453,49 @@ pub fn git_add_paths(project: &Path, paths: &[&Path]) -> ToolRun {
     run_limited(cmd, None, QUICK_LIMIT)
 }
 
+/// A path git printed, relative to the repository's top folder: the bytes as
+/// git wrote them (so a name that is not UTF-8 still reaches its file) and the
+/// same name made readable, for messages and for comparing with name lists.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct GitPath {
+    pub bytes: Vec<u8>,
+    pub shown: String,
+}
+
+impl GitPath {
+    pub fn from_bytes(bytes: &[u8]) -> GitPath {
+        GitPath {
+            bytes: bytes.to_vec(),
+            shown: String::from_utf8_lossy(bytes).into_owned(),
+        }
+    }
+
+    /// The file on disk under `top`. On Unix the name is the exact bytes; git
+    /// writes UTF-8 names on Windows, where a file name cannot be anything else.
+    pub fn under(&self, top: &Path) -> PathBuf {
+        #[cfg(unix)]
+        {
+            use std::os::unix::ffi::OsStrExt;
+            top.join(std::ffi::OsStr::from_bytes(&self.bytes))
+        }
+        #[cfg(not(unix))]
+        {
+            top.join(&self.shown)
+        }
+    }
+}
+
 /// The names of the staged files, as `git diff --cached --name-only -z` prints
-/// them: NUL-separated, so no path is quoted.
-pub fn git_staged(project: &Path) -> Result<Vec<String>, String> {
+/// them: NUL-separated, so no path is quoted, and read as bytes.
+pub fn git_staged(project: &Path) -> Result<Vec<GitPath>, String> {
     git_staged_capped(project, STAGED_LIST_LIMIT)
 }
 
 /// `git_staged` with the size the list may reach. The secret and size gate
 /// reads every staged name, so a list over the cap fails closed rather than
 /// being checked in part.
-fn git_staged_capped(project: &Path, cap: usize) -> Result<Vec<String>, String> {
-    let (run, cut) = run_capped(
+fn git_staged_capped(project: &Path, cap: usize) -> Result<Vec<GitPath>, String> {
+    let (run, cut, raw) = run_capped_bytes(
         git(project, &["diff", "--cached", "--name-only", "-z"]),
         None,
         QUICK_LIMIT,
@@ -429,13 +508,14 @@ fn git_staged_capped(project: &Path, cap: usize) -> Result<Vec<String>, String> 
     if cut {
         return Err(STAGED_TOO_LONG.to_string());
     }
-    Ok(split_nul(&run.output))
+    Ok(split_nul(&raw))
 }
 
-fn split_nul(text: &str) -> Vec<String> {
-    text.split('\0')
+fn split_nul(bytes: &[u8]) -> Vec<GitPath> {
+    bytes
+        .split(|b| *b == 0)
         .filter(|name| !name.is_empty())
-        .map(str::to_string)
+        .map(GitPath::from_bytes)
         .collect()
 }
 
@@ -529,39 +609,67 @@ pub fn git_head_full(project: &Path) -> Option<String> {
 
 /// The paths `git status --porcelain=v1 -z` lists (renames name the new path).
 pub fn git_status_porcelain(project: &Path) -> Result<Vec<String>, String> {
-    let run = run_limited_with(
-        git(project, &["status", "--porcelain=v1", "-z"]),
+    Ok(git_changed(project)?
+        .into_iter()
+        .map(|path| path.shown)
+        .collect())
+}
+
+/// `git_status_porcelain` with each path kept as git wrote it, relative to the
+/// repository's top folder: the list the loop stages from.
+pub fn git_changed(project: &Path) -> Result<Vec<GitPath>, String> {
+    let (run, cut, raw) = run_capped_bytes(
+        // Untracked files are listed whatever `status.showUntrackedFiles`
+        // says: with it at `no`, the agent's new files would miss the commit. `all` lists each file,
+        // not a folder, so a folder that was untracked before the phase never hides or swallows files.
+        git(
+            project,
+            &["status", "--porcelain=v1", "-z", "--untracked-files=all"],
+        ),
         None,
         QUICK_LIMIT,
         false,
+        Keep::Head(STAGED_LIST_LIMIT),
     );
     if !run.ok {
         return Err(run.output.trim().to_string());
     }
-    Ok(parse_porcelain(&run.output))
+    // A list cut short would name only some of the files: never stage from it.
+    if cut {
+        return Err(STAGED_TOO_LONG.to_string());
+    }
+    Ok(porcelain_paths(&raw)
+        .into_iter()
+        .map(GitPath::from_bytes)
+        .collect())
 }
 
 /// Read `git status --porcelain=v1 -z`: NUL-separated records of `XY path`, no
 /// quoting. A rename or copy record is followed by one more field, the old
 /// path, which is skipped (the new path is the one listed).
 pub fn parse_porcelain(text: &str) -> Vec<String> {
+    porcelain_paths(text.as_bytes())
+        .into_iter()
+        .map(|path| String::from_utf8_lossy(path).into_owned())
+        .collect()
+}
+
+/// `parse_porcelain` over the bytes git wrote. The two status letters and the
+/// space are ASCII, so the path is whatever follows them.
+fn porcelain_paths(bytes: &[u8]) -> Vec<&[u8]> {
     let mut paths = Vec::new();
-    let mut fields = text.split('\0');
+    let mut fields = bytes.split(|b| *b == 0);
     while let Some(record) = fields.next() {
-        let mut chars = record.chars();
-        let (Some(x), Some(y), Some(' ')) = (chars.next(), chars.next(), chars.next()) else {
-            continue;
-        };
-        let Some(path) = record.get(x.len_utf8() + y.len_utf8() + 1..) else {
+        let [x, y, b' ', path @ ..] = record else {
             continue;
         };
         if path.is_empty() {
             continue;
         }
-        if matches!(x, 'R' | 'C') || matches!(y, 'R' | 'C') {
+        if matches!(x, b'R' | b'C') || matches!(y, b'R' | b'C') {
             fields.next();
         }
-        paths.push(path.to_string());
+        paths.push(path);
     }
     paths
 }
@@ -682,7 +790,11 @@ mod tests {
             git_staged_capped(&repo, 8),
             Err(STAGED_TOO_LONG.to_string())
         );
-        let all = git_staged_capped(&repo, 1024).unwrap();
+        let all: Vec<String> = git_staged_capped(&repo, 1024)
+            .unwrap()
+            .into_iter()
+            .map(|path| path.shown)
+            .collect();
         assert_eq!(all, [".env", "a.txt", "b.txt"]);
         let _ = std::fs::remove_dir_all(&repo);
     }
@@ -749,11 +861,28 @@ mod tests {
 
     #[test]
     fn staged_names_are_split_on_nul() {
-        assert_eq!(
-            split_nul("a b.txt\0dir/c.rs\0"),
-            vec!["a b.txt", "dir/c.rs"]
-        );
-        assert!(split_nul("").is_empty());
+        let shown: Vec<String> = split_nul(b"a b.txt\0dir/c.rs\0")
+            .into_iter()
+            .map(|path| path.shown)
+            .collect();
+        assert_eq!(shown, vec!["a b.txt", "dir/c.rs"]);
+        assert!(split_nul(b"").is_empty());
+    }
+
+    #[test]
+    fn a_name_that_is_not_utf8_keeps_its_bytes() {
+        let names = split_nul(b"caf\xe9.bin\0ok.txt\0");
+        assert_eq!(names[0].bytes, b"caf\xe9.bin");
+        assert_eq!(names[0].shown, "caf\u{fffd}.bin");
+        // The porcelain reader keeps the bytes too, and still skips a rename's old path.
+        let paths = porcelain_paths(b"?? caf\xe9.bin\0R  new.rs\0old.rs\0");
+        assert_eq!(paths, vec![&b"caf\xe9.bin"[..], &b"new.rs"[..]]);
+        #[cfg(unix)]
+        {
+            use std::os::unix::ffi::OsStrExt;
+            let file = names[0].under(Path::new("/top"));
+            assert_eq!(file.as_os_str().as_bytes(), b"/top/caf\xe9.bin");
+        }
     }
 
     #[test]

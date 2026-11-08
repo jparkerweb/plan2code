@@ -14,6 +14,7 @@
 // Node 18+ built-ins only, no build step: this ships inside every skill.
 
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -182,28 +183,8 @@ export function eol(text) {
   return text.includes("\r\n") ? "\r\n" : "\n";
 }
 
-/**
- * phase-N.md per phase number. An exact phase-N.md always wins over a sibling
- * such as phase-1-old.md; more than one candidate is reported, never guessed.
- * Shared so every script that counts a spec's tasks reads the same files.
- */
-export function phaseFiles(dir) {
-  const files = new Map();
-  const extra = new Map();
-  for (const name of fs.readdirSync(dir).sort()) {
-    const m = name.match(/^phase-(\d+)\b[^/]*\.md$/i);
-    if (!m) continue;
-    const n = Number(m[1]);
-    const exact = new RegExp(`^phase-0*${n}\\.md$`, "i").test(name);
-    if (!files.has(n)) files.set(n, name);
-    else if (exact) {
-      (extra.get(n) || extra.set(n, []).get(n)).push(files.get(n));
-      files.set(n, name);
-    } else (extra.get(n) || extra.set(n, []).get(n)).push(name);
-  }
-  files.extra = extra;
-  return files;
-}
+// A spec's phase files are picked by pickPhaseFiles() in the web console's
+// spec-files.mjs (through consoleModule()), the one rule the dashboard uses.
 
 /** Forward-slash path relative to root, for output the agent pastes into prompts. */
 export function rel(root, p) {
@@ -216,14 +197,19 @@ export function rel(root, p) {
 // fake a finished run. The one copy every skill script checks against.
 export const LOOP_TOKENS = /\b(TASK_COMPLETE|PHASE_COMPLETE|ALL_TASKS_COMPLETE|IMPLEMENTATION_COMPLETE|SPEC_COMPLETE|WORK_COMPLETE)\b/;
 
-// The metrics collector's own scrape patterns (plan2code-metrics/src/collector.ts).
+// The metrics collector's own scrape patterns. One shared source,
+// src/web-console/metrics-pattern.json (the console's bait scanner reads it,
+// the collector keeps a copy); a skill script is installed alone and cannot
+// read it, so these are copies and scripts/test-web-console-hardening.mjs fails
+// when any copy drifts. A label then a number in a table row counts only when
+// the number ends the row, so an ordinary risk-register row is left alone.
 export const SCRAPE = [
   { name: "overall confidence with %", re: /(?:Overall|Final|Total)?\s*\**[Cc]onfidence\**[:\s*]+(\d{1,3})%/ },
   { name: "confidence table cell", re: /[|]\s*[Cc]onfidence\s*[|]\s*(\d{1,3})/ },
-  { name: "bare Requirements + number", re: /[Rr]equirements?[:\s|]+(\d{1,2})/ },
-  { name: "bare Feasibility + number", re: /[Ff]easibility[:\s|]+(\d{1,2})/ },
-  { name: "bare Integration + number", re: /[Ii]ntegration[:\s|]+(\d{1,2})/ },
-  { name: "bare Risk + number", re: /[Rr]isk[:\s|]+(\d{1,2})/ },
+  { name: "bare Requirements + number", re: /[Rr]equirements?(?:[:\s]+|[ \t:]*\|[ \t:|]*(?=\d{1,2}(?:\/\d+)?[ \t]*\|?[ \t]*$))(\d{1,2})/m },
+  { name: "bare Feasibility + number", re: /[Ff]easibility(?:[:\s]+|[ \t:]*\|[ \t:|]*(?=\d{1,2}(?:\/\d+)?[ \t]*\|?[ \t]*$))(\d{1,2})/m },
+  { name: "bare Integration + number", re: /[Ii]ntegration(?:[:\s]+|[ \t:]*\|[ \t:|]*(?=\d{1,2}(?:\/\d+)?[ \t]*\|?[ \t]*$))(\d{1,2})/m },
+  { name: "bare Risk + number", re: /[Rr]isk(?:[:\s]+|[ \t:]*\|[ \t:|]*(?=\d{1,2}(?:\/\d+)?[ \t]*\|?[ \t]*$))(\d{1,2})/m },
 ];
 
 /** Every SCRAPE pattern that matches `text`, as `<name>: "<match>"`. */
@@ -238,15 +224,26 @@ export function scrapeHits(text) {
 
 /* --------------------------------------------------------- the web console */
 
-// The web console ships beside these scripts in every installed skill
-// (references/web-console/), and in this repo it sits at src/web-console/. Its
-// scan.mjs is the one home of the spec-state classifier, and its settings.mjs
-// of the pull-request host store, so the scripts import them rather than keep
-// a second copy.
-const CONSOLE_DIR_CANDIDATES = [
-  path.join(HERE, "..", "references", "web-console"), // installed skill
-  path.join(HERE, "..", "web-console"), // src/skill-scripts in the repo
-];
+// The web console is installed once and shared by every skill: under
+// ~/.plan2code/console/<version>/, found through the console-dir pointer, and in
+// a checkout's built skills/ tree as the sibling skills/_console/<version>/. In
+// this repo it also sits at src/web-console/. Its scan.mjs is the one home of
+// the spec-state classifier, and its settings.mjs of the pull-request host
+// store, so the scripts import them rather than keep a second copy. A skill's
+// own references/web-console/ holds a stub and notes, and is tried first only
+// for a build that still carries a whole console.
+function consoleDirCandidates() {
+  const dirs = [
+    path.join(HERE, "..", "references", "web-console"), // a skill that carries a whole console
+    path.join(HERE, "..", "web-console"), // src/skill-scripts in the repo
+  ];
+  const v = version();
+  if (v) dirs.push(path.join(HERE, "..", "..", "_console", v)); // a checkout's built skills/
+  const home = process.env.PLAN2CODE_CONSOLE_HOME || path.join(os.homedir(), ".plan2code", "console");
+  const pointed = (readText(path.join(home, "console-dir")) || "").trim();
+  if (pointed) dirs.push(pointed); // the installed, shared console
+  return dirs;
+}
 
 const consoleModules = new Map();
 /** One of the web console's modules by file name ("scan.mjs"), imported once. */
@@ -255,7 +252,7 @@ export function consoleModule(file) {
     consoleModules.set(
       file,
       (async () => {
-        const candidates = CONSOLE_DIR_CANDIDATES.map((dir) => path.join(dir, file));
+        const candidates = consoleDirCandidates().map((dir) => path.join(dir, file));
         for (const candidate of candidates) {
           if (fs.existsSync(candidate)) return import(pathToFileURL(candidate).href);
         }
@@ -271,23 +268,20 @@ export function consoleModule(file) {
   return consoleModules.get(file);
 }
 
-// The one read-only git reader (git-repo.mjs) ships beside scan.mjs, so the git
+// The one read-only git reader (git-repo.mjs) sits beside scan.mjs, so the git
 // skill's scripts read the repository with exactly the code the console uses.
-const GIT_REPO_CANDIDATES = [
-  path.join(HERE, "..", "references", "web-console", "git-repo.mjs"), // installed skill
-  path.join(HERE, "..", "web-console", "git-repo.mjs"), // src/skill-scripts in the repo
-];
 
 let gitRepoPromise;
 export function gitRepo() {
   gitRepoPromise ||= (async () => {
-    for (const candidate of GIT_REPO_CANDIDATES) {
+    const candidates = consoleDirCandidates().map((dir) => path.join(dir, "git-repo.mjs"));
+    for (const candidate of candidates) {
       if (fs.existsSync(candidate)) return import(pathToFileURL(candidate).href);
     }
     fail(
       EXIT.NOT_FOUND,
       "git-repo-missing",
-      `The web console's git-repo.mjs is not beside this script (looked in ${GIT_REPO_CANDIDATES.join(", ")}).`,
+      `The web console's git-repo.mjs is not beside this script (looked in ${candidates.join(", ")}).`,
       "The skill install is incomplete; reinstall the Plan2Code skills (node install.js)."
     );
   })();

@@ -146,6 +146,8 @@ Two disciplines keep this file useful:
 
 Record what you could **not** determine as an explicit gap. Gaps at recon time are often the first real fog bullets.
 
+On `local`, `node "<S>/pathfinder.mjs" add specs/<idea>/pathfinder --name "Codebase context" --type legwork-afk --question "<what the recon establishes>"` writes the file (it refuses any other name as `00`); append the `## Answer` below to it, and Step 7's `reconcile` marks it resolved and dates it. Without the script, write the whole file by hand.
+
 ### The literal file
 
 ```markdown
@@ -398,6 +400,8 @@ Write the four dimension labels **hyphenated exactly as shown** — `Requirement
 
 Say once, at Step 5: *"This map lives in gitignored `specs/` — local to you, not shared. `git add -f` it to track it."*
 
+On `local`, write it with `node "<S>/pathfinder.mjs" init specs/<idea>/pathfinder --destination "<agreed lines>" --scores R,F,I,K --fog "<bullet>"` (one `--fog` per bullet; `--rule` adds a project ground rule, `--out` an out-of-scope line). It writes this structure at its Step 5 state: the banner, `**Status:** Charting`, the scores in the hyphenated form, the comments, `**Backend:** local` and the `AGENTS.md` line as found on disk, the standing ground rules, the fog, and a row for each question file already written. It refuses to overwrite a map and refuses a map with no fog (the off-ramp below). The template is the fallback when the script cannot run, and the reference for what `init` writes.
+
 ```markdown
 > Pathfinder planning note - decisions, not implementation work. Archive with the spec; do not delete.
 
@@ -467,12 +471,12 @@ plan, not at shipped code. Continuous streaming to external systems is not on th
      [-] out of scope. Resolved rows carry the one-line gist from the question's Answer,
      then the Resolved: date in italics — briefs filter on these dates. -->
 
-- [x] [Codebase context](./questions/00-codebase-context.md) — Node/Express/Knex/React with a BullMQ-to-S3 export precedent; `audit_events` is 180M rows partitioned monthly, no `actor_id` index, `requireAdmin` has no tenant scoping. *(2026-08-03)*
-- [x] [Export format](./questions/01-export-format.md) — CSV with a UTF-8 BOM and RFC 4180 quoting, plus a sidecar SHA-256 manifest; JSONL rejected because recipients open these in Excel. *(2026-08-03)*
+- [x] [Codebase context](./questions/00-codebase-context.md): Node/Express/Knex/React with a BullMQ-to-S3 export precedent; `audit_events` is 180M rows partitioned monthly, no `actor_id` index, `requireAdmin` has no tenant scoping. *(2026-08-03)*
+- [x] [Export format](./questions/01-export-format.md): CSV with a UTF-8 BOM and RFC 4180 quoting, plus a sidecar SHA-256 manifest; JSONL rejected because recipients open these in Excel. *(2026-08-03)*
 - [/] [Row-count ceiling](./questions/02-row-count-ceiling.md)
 - [ ] [Export authorization](./questions/03-export-authorization.md)
-- [!] [Delivery channel](./questions/05-delivery-channel.md) — Blocked by 02
-- [-] [SIEM push connector](./questions/06-siem-push-connector.md) — out of scope, see below
+- [!] [Delivery channel](./questions/05-delivery-channel.md): Blocked by 02
+- [-] [SIEM push connector](./questions/06-siem-push-connector.md): out of scope, see below
 
 ## Not yet specified
 
@@ -497,7 +501,7 @@ plan, not at shipped code. Continuous streaming to external systems is not on th
 <!-- Work consciously ruled past the destination. Never graduates; returns only if the
      destination is redrawn, and then as a fresh effort. One line each: gist plus why. -->
 
-- [SIEM push connector](./questions/06-siem-push-connector.md) — scheduled push to Splunk or
+- [SIEM push connector](./questions/06-siem-push-connector.md): scheduled push to Splunk or
   similar. The destination ends at an operator-initiated export; anything continuous is a
   different effort with a different owner.
 - Redesign of the `audit_events` schema. The write path is untouched by this destination;
@@ -514,6 +518,8 @@ plan, not at shipped code. Continuous streaming to external systems is not on th
 Six contiguous `Key: value` lines after the H1. Not YAML. No frontmatter delimiters. No `- [ ]` checkboxes anywhere inside a question file — use plain bullets, including for legwork checklists.
 
 `## Question` is written at charting. `## Answer` is appended only when the question resolves. `## Evidence` holds sources, links, and artifacts, and a `research` subagent writes into it during Chart Step 8 without deciding anything.
+
+On `local`, `node "<S>/pathfinder.mjs" add specs/<idea>/pathfinder --name "<name>" --question "<text>"` writes an open question in this shape and adds its map row: `NN` is `nextNN`, `--type` is `grill` (the default), `research`, `sketch`, `legwork-hitl` or `legwork-afk`, plus `--blocked-by "02, 04"`, `--locked`, `--recommended "<answer to react to>"` and one `--evidence` per bullet. Add the rest of the `## Question` detail (sub-decisions, why it is locked) to the file afterwards. It refuses a name already on the map and a `Blocked by:` number with no file. The templates below are the fallback when the script cannot run.
 
 ### An open question
 

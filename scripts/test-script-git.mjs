@@ -1043,3 +1043,15 @@ test("the git prompt never instructs a forbidden command, stays under 20,000 cha
     assert.ok(prompt.includes(name), `the prompt names ${name}`);
   }
 });
+
+test("commit-msg has no add-everything option: --add-all is refused, and no prompt, reference or script names it", () => {
+  const r = runScript("plan2code-git", "commit-msg.mjs", ["--subject", "Fix", "--add-all"]);
+  assert.equal(r.code, 2, r.stdout);
+  assert.equal(r.json.error, "unknown-flag");
+  // Every source a skill ships (prompts, references, scripts and the console)
+  // and the desktop app, whose Loop runs the script too.
+  const walk = (dir) => fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? walk(path.join(dir, e.name)) : /\.(md|mjs|js|rs)$/.test(e.name) ? [path.join(dir, e.name)] : []));
+  const sources = [...walk(path.join(ROOT, "src")), ...walk(path.join(ROOT, "plan2code-app", "src-tauri", "src"))];
+  const found = sources.filter((f) => !/[\\/]public[\\/]vendor[\\/]/.test(f) && fs.readFileSync(f, "utf8").includes("--add-all"));
+  assert.deepEqual(found.map((f) => path.relative(ROOT, f)), [], "--add-all is retired: stage the work's own files with --files");
+});

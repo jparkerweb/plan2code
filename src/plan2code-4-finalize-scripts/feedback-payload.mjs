@@ -14,7 +14,11 @@ import os from "node:os";
 import path from "node:path";
 import crypto from "node:crypto";
 import { execFileSync, spawn } from "node:child_process";
-import { EXIT, HERE, fail, out, parseArgs, run, readText, isDir, rel, compactDate, clock, version, phaseFiles } from "./common.mjs";
+import { EXIT, HERE, fail, out, parseArgs, run, readText, isDir, rel, compactDate, clock, version, consoleModule } from "./common.mjs";
+
+// The phase-file pick specs.mjs and the dashboard use (the console's
+// spec-files.mjs), bound in run() before any command.
+let pickPhaseFiles;
 
 const USAGE = `
 feedback-payload.mjs: build and submit the community feedback payload. JSON on stdout.
@@ -115,7 +119,7 @@ function parseFeedbackTable(overview) {
 function phaseTasks(dir) {
   const c = { total: 0, complete: 0, assumed: 0, blocked: 0 };
   // The same files specs.mjs reads: a stale sibling like phase-1-old.md is not counted.
-  for (const n of phaseFiles(dir).values()) {
+  for (const n of pickPhaseFiles(fs.readdirSync(dir)).values()) {
     for (const line of (readText(path.join(dir, n)) || "").split(/\r?\n/)) {
       // The same task line specs.mjs counts: 2.3, 3.6a, or a named 1.T.
       const m = line.match(/^\s*[-*] \[(.)\]\s+\*\*Task\s+\d+\.(?:\d+|[A-Za-z]+)[a-z]*\b/);
@@ -371,6 +375,7 @@ async function cmdSubmit(args) {
 }
 
 run(USAGE, async (argv) => {
+  ({ pickPhaseFiles } = await consoleModule("spec-files.mjs"));
   const args = parseArgs(argv, { booleans: ["dry-run", "truncate"], values: ["root", "out", "from"], lists: ["set"] });
   const cmd = args._[0];
   if (cmd === "build") return cmdBuild(args);

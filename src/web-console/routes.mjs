@@ -235,7 +235,7 @@ function handover(req, res, ctx) {
   // The tab moved once; a second open in the same conversation is not a
   // hand-over, so the caller can open a browser without a failure note.
   if (state.setup.moved) return json(res, 409, { error: "moved" });
-  return readBody(req, (err, body) => {
+  return readBody(req, res, (err, body) => {
     if (err) return json(res, err.tooBig ? 413 : 400, { error: err.tooBig ? "too large" : "bad-url" });
     const target = typeof body?.url === "string" ? body.url : "";
     // Only another console's sign-in link is a legal destination.
@@ -506,7 +506,7 @@ function events(req, res, ctx, url) {
 /* ---------------------------------------------------- settings and drafts */
 
 function draft(req, res, ctx) {
-  return readBody(req, (err, body) => {
+  return readBody(req, res, (err, body) => {
     if (err) return json(res, err.tooBig ? 413 : 400, { error: err.tooBig ? "too large" : "body must be JSON" });
     // Debounced client-side; this is just the durable mirror. Twenty minutes
     // of someone's structured answers must not die with a closed tab.
@@ -551,7 +551,7 @@ function looksGet(req, res) {
 }
 
 function looksPost(req, res) {
-  return readBody(req, (err, body) => {
+  return readBody(req, res, (err, body) => {
     if (err) return json(res, err.tooBig ? 413 : 400, { error: err.tooBig ? "too large" : "body must be JSON" });
     // `set` carries only the keys one tab changed, merged onto what is on
     // disk, so a tab holding stale settings cannot undo another tab's change.
@@ -573,7 +573,7 @@ function looksPost(req, res) {
 // is what console.mjs hands the agent at its next pickup. Never blocked by,
 // and never blocking, a card send.
 function subagentsPost(req, res, ctx) {
-  return readBody(req, (err, body) => {
+  return readBody(req, res, (err, body) => {
     if (err) return json(res, err.tooBig ? 413 : 400, { error: err.tooBig ? "too large" : "body must be JSON" });
     const state = ctx.readState();
     if (!state || !offered(state.workflow)) return json(res, 400, { error: "not-offered" });
@@ -605,7 +605,7 @@ function subagentsPost(req, res, ctx) {
 // The page follows it with a __git pr-host action, and the agent's reread
 // rebuilds the link.
 function prHost(req, res, ctx) {
-  return readBody(req, (err, body) => {
+  return readBody(req, res, (err, body) => {
     if (err) return json(res, err.tooBig ? 413 : 400, { error: err.tooBig ? "too large" : "body must be JSON" });
     const { host: raw, kind } = body && typeof body === "object" ? body : {};
     if (typeof raw !== "string" || !raw || raw.length > 253 || !/^[a-z0-9.-]+$/i.test(raw)) {
@@ -762,7 +762,7 @@ function modelsGet(req, res) {
 }
 
 function modelsPost(req, res) {
-  return readBody(req, (err, body) => {
+  return readBody(req, res, (err, body) => {
     if (err) return json(res, err.tooBig ? 413 : 400, { error: err.tooBig ? "too large" : "body must be JSON" });
     const { models, error } = cleanModels(body && body.models);
     if (error) return json(res, 400, { error });
@@ -829,7 +829,7 @@ function agentsGet(req, res) {
 // entry) is refused with 409 unless the page says `replace: true`, so a save
 // never silently drops what the person wrote there by hand.
 function agentsPost(req, res) {
-  return readBody(req, (err, body) => {
+  return readBody(req, res, (err, body) => {
     if (err) return json(res, err.tooBig ? 413 : 400, { error: err.tooBig ? "too large" : "body must be JSON" });
     const { agents, error, index, field } = validateForSave(body && body.agents);
     if (error) return json(res, 400, { error, index, field });
@@ -854,7 +854,7 @@ function agentsPost(req, res) {
 // Where a command would run from, for the form's Test button. Only looks: it
 // never runs the command.
 function agentsTest(req, res) {
-  return readBody(req, (err, body) => {
+  return readBody(req, res, (err, body) => {
     if (err) return json(res, err.tooBig ? 413 : 400, { error: err.tooBig ? "too large" : "body must be JSON" });
     const command = typeof body?.command === "string" ? body.command.trim() : "";
     if (!command || command.length > 1024) return json(res, 400, { error: "command must be 1 to 1024 characters" });
@@ -869,7 +869,7 @@ function agentsTest(req, res) {
 // ever saved, never a path the request carried. A built-in is materialized
 // as a new custom entry; a custom agent gets its command rewritten.
 function agentsUsePath(req, res, ctx) {
-  return readBody(req, (err, body) => {
+  return readBody(req, res, (err, body) => {
     if (err) return json(res, err.tooBig ? 413 : 400, { error: err.tooBig ? "too large" : "body must be JSON" });
     const id = typeof body?.id === "string" ? body.id.trim() : "";
     if (!id) return json(res, 400, { error: "id is required" });
@@ -944,7 +944,7 @@ function agentsUsePath(req, res, ctx) {
 // removes those of the ids a fresh scan still finds. Never this session,
 // never a path the page sent.
 function cleanup(req, res, ctx) {
-  return readBody(req, (err, body) => {
+  return readBody(req, res, (err, body) => {
     if (err) return json(res, err.tooBig ? 413 : 400, { error: err.tooBig ? "too large" : "body must be JSON" });
     if (body && Array.isArray(body.delete)) {
       return removeCleanup(body.delete, { skipSid: ctx.sid, project: ctx.worktree() || ctx.project })
@@ -990,7 +990,7 @@ function notepadTab(ctx, url, create) {
 }
 
 function notepadText(req, res, ctx, url) {
-  return readBody(req, (err, body) => {
+  return readBody(req, res, (err, body) => {
     if (err) return json(res, err.tooBig ? 413 : 400, { error: err.tooBig ? "too-long" : "bad" });
     try {
       return json(res, 200, { ok: true, ...saveNote(notepadRoot(ctx), notepadTab(ctx, url, true), body && body.text) });
@@ -1006,7 +1006,7 @@ function readJpeg(req, res, then) {
     req.resume();
     return json(res, 415, { error: "not-jpeg" });
   }
-  return readRaw(req, MAX_BODY, (err, buf) => {
+  return readRaw(req, res, MAX_BODY, (err, buf) => {
     if (err) return json(res, err.tooBig ? 413 : 400, { error: err.tooBig ? "too-large" : "bad" });
     return then(buf);
   });
@@ -1034,7 +1034,7 @@ function notepadThumb(req, res, ctx, url) {
 }
 
 function notepadDelete(req, res, ctx, url) {
-  return readBody(req, (err, body) => {
+  return readBody(req, res, (err, body) => {
     if (err) return json(res, err.tooBig ? 413 : 400, { error: "bad" });
     try {
       removeImage(notepadRoot(ctx), notepadTab(ctx, url, false), body && body.id);
@@ -1050,7 +1050,7 @@ function notepadDelete(req, res, ctx, url) {
 // ctx.dir and add nothing to the event log.
 function notepadTabRoute(act) {
   return (req, res, ctx) =>
-    readBody(req, (err, body) => {
+    readBody(req, res, (err, body) => {
       if (err) return json(res, err.tooBig ? 413 : 400, { error: "bad" });
       try {
         return json(res, 200, { ok: true, ...act(notepadRoot(ctx), body && typeof body === "object" ? body : {}) });
@@ -1230,7 +1230,7 @@ function upload(req, res, ctx) {
   };
 
   if (contentType.startsWith("image/jpeg")) {
-    return readRaw(req, MAX_BODY, (err, buf) => {
+    return readRaw(req, res, MAX_BODY, (err, buf) => {
       if (err) return err.tooBig ? json(res, 413, { error: "too large" }) : json(res, 400, { error: String(err.message) });
       if (buf.length < 3 || buf[0] !== 0xff || buf[1] !== 0xd8 || buf[2] !== 0xff) {
         return json(res, 415, { error: "JPEG only" });
@@ -1260,8 +1260,8 @@ function upload(req, res, ctx) {
     const name = uploadLabel(req, "");
     const ext = docExt(rawUploadName(req));
     // Refused on its name alone, but drained first, so the page gets the 415.
-    if (!ext) return readRaw(req, 0, () => json(res, 415, { error: "type" }));
-    return readRaw(req, MAX_DOC_BYTES, (err, buf) => {
+    if (!ext) return readRaw(req, res, 0, () => json(res, 415, { error: "type" }));
+    return readRaw(req, res, MAX_DOC_BYTES, (err, buf) => {
       if (err) return err.tooBig ? json(res, 413, { error: "too large" }) : json(res, 400, { error: String(err.message) });
       if (checkDocument(buf, ext)) return json(res, 415, { error: "type" });
       const saved = store(buf, ext);
@@ -1272,7 +1272,7 @@ function upload(req, res, ctx) {
     });
   }
 
-  return readRaw(req, 0, () => json(res, 415, { error: "type" }));
+  return readRaw(req, res, 0, () => json(res, 415, { error: "type" }));
 }
 
 // A note attachment the agent kept into the spec (`console.mjs keep`), so a
@@ -1412,7 +1412,7 @@ function recordSubmitted(state, actions) {
 // A link the page inside the desktop app cannot open itself (open-link.mjs).
 // http and https only; the page shows the link to paste when this says no.
 function openLinkRoute(req, res) {
-  return readBody(req, (err, body) => {
+  return readBody(req, res, (err, body) => {
     if (err) return json(res, err.tooBig ? 413 : 400, { error: err.tooBig ? "too large" : "body must be JSON" });
     const href = linkToOpen(body && body.url);
     if (!href) return json(res, 400, { error: "only http and https links open" });
@@ -1422,7 +1422,7 @@ function openLinkRoute(req, res) {
 }
 
 function submit(req, res, ctx) {
-  return readBody(req, (err, body) => {
+  return readBody(req, res, (err, body) => {
     if (err) return json(res, err.tooBig ? 413 : 400, { error: err.tooBig ? "too large" : "body must be JSON" });
     if (!body || !Array.isArray(body.actions) || body.actions.length === 0) {
       return json(res, 400, { error: "actions must be a non-empty array" });
@@ -1528,7 +1528,7 @@ function submit(req, res, ctx) {
 // this route never looks at result.json, so a card send waiting to be
 // collected never holds up a question, and a question never holds up a card.
 function chat(req, res, ctx) {
-  return readBody(req, (err, body) => {
+  return readBody(req, res, (err, body) => {
     if (err && err.tooBig) return json(res, 413, { error: "too large" });
     if (err || !body || typeof body !== "object" || Array.isArray(body)) return json(res, 400, { error: "bad" });
     const state = ctx.readState() || {};
@@ -1591,7 +1591,7 @@ function chat(req, res, ctx) {
 // Approve or Decline on an edit the agent proposed in the chat. `re` is the
 // proposing reply's id. Decisions never count toward the message limit.
 function chatDecision(req, res, ctx) {
-  return readBody(req, (err, body) => {
+  return readBody(req, res, (err, body) => {
     if (err && err.tooBig) return json(res, 413, { error: "too large" });
     if (err || !body || typeof body !== "object" || Array.isArray(body)) return json(res, 400, { error: "bad" });
     if (body.decision !== "approve" && body.decision !== "decline") return json(res, 400, { error: "bad" });
@@ -1705,7 +1705,7 @@ function loopSetupGet(req, res, ctx, url) {
 }
 
 function loopSetupPost(req, res, ctx) {
-  return readBody(req, (err, body) => {
+  return readBody(req, res, (err, body) => {
     if (err && err.tooBig) return json(res, 413, { error: "too large" });
     if (err || !body || typeof body !== "object" || Array.isArray(body)) return json(res, 400, { ok: false, problems: ["the setup must be a JSON object"] });
     try {
@@ -1732,7 +1732,7 @@ function workspaceGet(req, res, ctx, url) {
 }
 
 function workspaceEdit(req, res, ctx, url) {
-  return readBody(req, (err, body) => {
+  return readBody(req, res, (err, body) => {
     if (err && err.tooBig) return json(res, 413, { error: "too large" });
     if (err || !body || typeof body !== "object" || Array.isArray(body)) return json(res, 400, { error: "bad" });
     let answer;
@@ -1749,7 +1749,7 @@ function workspaceEdit(req, res, ctx, url) {
 // The dashboard's picker sends it as the selection moves and before a
 // launch, so a skill opens on the list of the spec it was launched for.
 function workspaceScope(req, res, ctx) {
-  return readBody(req, (err, body) => {
+  return readBody(req, res, (err, body) => {
     if (err && err.tooBig) return json(res, 413, { error: "too large" });
     if (err || !body || typeof body !== "object" || Array.isArray(body)) return json(res, 400, { error: "bad" });
     const spec = typeof body.spec === "string" ? body.spec : "";
@@ -1765,7 +1765,7 @@ function workspaceScope(req, res, ctx) {
 
 // Only ever returns a path: the page then adds it through /workspace/add.
 function workspaceBrowse(req, res, ctx) {
-  return readBody(req, () => {
+  return readBody(req, res, () => {
     ctx.workspace.browse().then(([code, body]) => json(res, code, body));
   });
 }
@@ -1893,7 +1893,35 @@ function originOk(req, port) {
 
 const MAX_BODY = 4 * 1024 * 1024;
 
-function readBody(req, cb) {
+// The one way a body reader hands over: at most once, and a callback that
+// throws still gets its request answered. Before this, readBody's catch fed
+// a throw from the route's own callback back into that callback as a parse
+// error (a second run, a second answer), an 'error' after 'end' called it
+// again, and readRaw let the throw escape with the request left hanging. A
+// throw now answers 400 if nothing went out yet, or ends what was started,
+// and is rethrown on the next turn so the server's uncaughtException handler
+// still records it in events.ndjson.
+function deliverOnce(res, cb) {
+  let done = false;
+  return (err, value) => {
+    if (done) return;
+    done = true;
+    try {
+      cb(err, value);
+    } catch (e) {
+      try {
+        if (!res.headersSent) json(res, 400, { error: "bad request" });
+        else if (!res.writableEnded) res.end();
+      } catch {}
+      setImmediate(() => {
+        throw e;
+      });
+    }
+  };
+}
+
+export function readBody(req, res, cb) {
+  const deliver = deliverOnce(res, cb);
   // Collect Buffers and decode once at the end. Appending each chunk to a
   // string decodes it in isolation, so a multi-byte character split across a
   // chunk boundary becomes U+FFFD. Rare, silent, and impossible to reproduce
@@ -1915,21 +1943,24 @@ function readBody(req, cb) {
     chunks.push(c);
   });
   req.on("end", () => {
-    if (tooBig) return cb(Object.assign(new Error("too large"), { tooBig: true }));
+    if (tooBig) return deliver(Object.assign(new Error("too large"), { tooBig: true }));
+    let body;
     try {
-      cb(null, JSON.parse(Buffer.concat(chunks).toString("utf8")));
+      body = JSON.parse(Buffer.concat(chunks).toString("utf8"));
     } catch (e) {
-      cb(e);
+      return deliver(e);
     }
+    deliver(null, body);
   });
-  req.on("error", (e) => cb(e));
+  req.on("error", (e) => deliver(e));
 }
 
 // The binary sibling of readBody, for image and document uploads, each with
 // its own cap. Past the cap it stops keeping chunks but drains the rest
 // instead of destroying the request: a destroyed socket reaches the page as a
 // network error, never as the 413 that lets it say the file was too large.
-function readRaw(req, limit, cb) {
+export function readRaw(req, res, limit, cb) {
+  const deliver = deliverOnce(res, cb);
   const chunks = [];
   let size = 0;
   let tooBig = false;
@@ -1943,8 +1974,8 @@ function readRaw(req, limit, cb) {
     chunks.push(c);
   });
   req.on("end", () => {
-    if (tooBig) return cb(Object.assign(new Error("too large"), { tooBig: true }));
-    cb(null, Buffer.concat(chunks));
+    if (tooBig) return deliver(Object.assign(new Error("too large"), { tooBig: true }));
+    deliver(null, Buffer.concat(chunks));
   });
-  req.on("error", (e) => cb(e));
+  req.on("error", (e) => deliver(e));
 }

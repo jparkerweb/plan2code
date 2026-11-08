@@ -6,13 +6,13 @@ Start all PATHFINDER MODE responses with '🧭 [PATHFINDER: Chart - Step X: Name
 
 Pathfinder, not architect. An idea has arrived too big or unclear to plan. Chart the way as a map of decision **questions**, then clear them one at a time until nothing is left to decide. Hand off to `/plan2code-1-plan`.
 
-Read references/grilling.md
+Read references/grilling.md at the first question you grill (Chart Step 2, or a `grill` question in Work), not before: the intent gate, backend choice and a brief never need it.
 
-> Fallback: ≤3 independent probes/turn, each with a recommendation, re-ask any skipped; AskUserQuestion for every question, prose only if unavailable; plain English; facts you look up, decisions are the human's.
+> Fallback: ≤3 independent probes/turn, each with a recommendation, re-ask any skipped; the question tool for every question, prose only if unavailable; plain English; facts you look up, decisions are the human's.
 
 ## Interface
 
-The FIRST thing you do, before anything else in this file — before Step 0: ask **web console** (suggested) or **terminal**? Console → run `node "<D>/console.mjs" open --workflow pathfinder` before reading (<D>: references/web-console/ beside this SKILL.md, or the dir in ~/.plan2code/console/console-dir), then read <D>/console.md and <D>/notes/pathfinder.md. Switchable anytime. `--web` or `Use the web console for this session.` in the argument answers it; drop the flag. Dashboard-launched? Resume its open session (console-launches.md), then Step 0.
+The FIRST thing you do, before anything else in this file — before Step 0: ask **web console** (browser page, suggested) or **terminal**? Console → run `node "<D>/console.mjs" open --workflow pathfinder` before reading (<D>: references/web-console/ beside this SKILL.md, or the dir in ~/.plan2code/console/console-dir), then read <D>/console.md and <D>/notes/pathfinder.md. Switchable anytime. If the argument already says which (`--web` or `Use the web console for this session.`), take it and do not ask; drop the flag. Launched by the dashboard? Its session is already open: resume it (console-launches.md), then Step 0.
 
 ## Backend
 
@@ -51,7 +51,7 @@ Load `./AGENTS.md` if it exists — its conventions govern; never re-ask what it
 
 ## Auto-Discovery and Mode Selection
 
-⚠️ `specs/` is gitignored: NEVER use Glob; list it with `ls specs/` or `Get-ChildItem specs/`.
+⚠️ `specs/` is gitignored: NEVER use a file-search tool; list it with `ls specs/` or `Get-ChildItem specs/`.
 
 **Brief/recap/minutes asked?** → read references/brief.md: `reconcile`, then `brief-data --range <range>` (`github`: its brief section), write plain-English `briefs/brief-<YYYYMMDD>.md` from the output, STOP. Never resolves.
 
@@ -80,13 +80,13 @@ Read references/chart.md
 
 > Fallback: confirm the outcome with the human FIRST; only then grill the destination, then breadth-first; write the map and one question per sharp decision.
 
-0. `[Chart - Step 0: Intent Gate]` **Before creating anything**, use AskUserQuestion for the outcome and WAIT: **chart a map** (foggy — Step 1), **`/plan2code-1-plan`** (clear — STOP), **`/plan2code-quick-task`** (tiny — STOP). HITL, never self-select "chart".
+0. `[Chart - Step 0: Intent Gate]` **Before creating anything**, use the question tool for the outcome and WAIT: **chart a map** (foggy — Step 1), **`/plan2code-1-plan`** (clear — STOP), **`/plan2code-quick-task`** (tiny — STOP). HITL, never self-select "chart".
 1. `[Chart - Step 1: Name and backend]` Only after the gate says "chart." Confirm the kebab-case idea name, then ask — HITL, never self-picked — **local files or GitHub Issues?** Recommend `local` for solo work; offer `github` only if preflight passes, naming the repo's visibility. THEN the first write.
 2. `[Chart - Step 2: Destination]` Grill until it is one or two lines. It fixes scope — settle it first.
-3. `[Chart - Step 3: Recon]` Explore the codebase; record codebase context, resolved on the spot, `legwork · AFK`. On `github` hold it until Step 6 so a Step 4 off-ramp leaves no litter. Unfamiliar code? `/plan2code-xray` explains an area first.
+3. `[Chart - Step 3: Recon]` Explore the codebase; record codebase context, resolved on the spot, `legwork · AFK` (`local`: `add` writes `00`, then its `## Answer`). On `github` hold it until Step 6 so a Step 4 off-ramp leaves no litter. Unfamiliar code? `/plan2code-xray` explains an area first.
 4. `[Chart - Step 4: Map the frontier]` Grill again **breadth-first**: fan out, never deep on one thread. Surface the open decisions and what is takeable now.
-5. `[Chart - Step 5: Create the map]` `**Status:** Charting`, Destination, Ground rules (backend first), an empty index, the fog in `## Not yet specified`. Say once where it lives and who sees it.
-6. `[Chart - Step 6: Write the questions]` One per decision you can phrase sharply NOW, dependency order, `Blocked by:` filled the same pass — on `github`, create all first, wire edges second. The rest stays fog. Testing is not charted here: `/plan2code-1-plan` Phase 1 asks it.
+5. `[Chart - Step 5: Create the map]` `**Status:** Charting`, Destination, Ground rules (backend first), an empty index, the fog in `## Not yet specified` (`local`: `init` writes it). Say once where it lives and who sees it.
+6. `[Chart - Step 6: Write the questions]` One per decision you can phrase sharply NOW, dependency order, `Blocked by:` filled the same pass (`local`: `add` each) — on `github`, create all first, wire edges second. The rest stays fog. Testing is not charted here: `/plan2code-1-plan` Phase 1 asks it.
 7. `[Chart - Step 7: Index]` `local`: `reconcile` fills `## Question Checklist` from the files (every missing row, with its marker). Either backend: set `**Status:** Working`. `local`: then `lint`.
 8. `[Chart - Step 8: Fire research]` One subagent per `research` question, in parallel. Each writes only its `## Evidence`, never decides. **Wait for all** (they die with the terminal), then Session End.
 
@@ -110,7 +110,7 @@ Assume NO memory of any prior session.
 5. `[Work - Step 5: Zoom]` Read the claimed question in full, plus any closed question it references. Obey `## Ground rules`.
 6. `[Work - Step 6: Resolve]` Route by type per the resolve playbook. HITL needs the human's own words.
 7. `[Work - Step 7: Record]` Write `## Answer`: the decision, what was rejected and why, consequences, a one-line `**Gist:**` last. Sources under `## Evidence`. Mark it resolved, dated today, index the gist + date on the map, bump `**Updated:**` (`local`: `resolve <NN>` does all four; its `unblocked` list feeds the menu).
-8. `[Work - Step 8: Graduate]` Fog now sharp? Write those questions (`local`: numbered from `nextNN`, then `reconcile` to index them), delete the graduated bullets. Past the destination? Rule it out of scope, one line in `## Out of scope` (`local`: `rule-out <NN> --reason "<why>"`; handle anything it reports `stranded`). Invalidated? Re-frame or rule out.
+8. `[Work - Step 8: Graduate]` Fog now sharp? Write those questions (`local`: `add` numbers and indexes each), delete the graduated bullets. Past the destination? Rule it out of scope, one line in `## Out of scope` (`local`: `rule-out <NN> --reason "<why>"`; handle anything it reports `stranded`). Invalidated? Re-frame or rule out.
 9. `[Work - Step 9: Menu]` Run The Clearing Gate. Not cleared: fork-menu (Form C; resolve.md §Cadence) — pick → Step 4, stop → Session End.
 
 ## The Clearing Gate
@@ -130,7 +130,7 @@ Score the four dimensions (handoff.md rubric) and write them to the map's `**Con
 
 ## Trail Footer
 
-Read references/trail.md
+Read references/trail.md before the first footer (your first response once the map exists), not before.
 
 > Fallback: once the map exists, end every response with a marker path (`●` done · `◉` here · `○` open · `⊘` blocked · `⊝` out of scope) `START`→`⚑`, a named legend, a plain-English confidence note, then ONE closer: asking → Form B, `WAITING ON YOU`, no command; menu → Form C, `NEXT UP` + `OR START FRESH`; session end → Form A, `NEXT STEP` + resume command with `--web` (map issue URL on `github`).
 

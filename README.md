@@ -85,7 +85,10 @@ chooses the model. It works in cmd, PowerShell, Git Bash, macOS and Linux shells
 Claude Code, Devin or Codex CLI on your `PATH`. After you pick the agent it asks whether to turn its
 permission prompts off (Yes by default; `--permission-mode bypassPermissions` in Claude Code, `--permission-mode bypass`
 in Devin, `--dangerously-bypass-approvals-and-sandbox` in Codex, a custom agent's bypass arguments, and no question for a
-custom agent that has none). `plan2code --keep-permissions` keeps the prompts without asking. The installer then offers a desktop shortcut (answer `y`),
+custom agent that has none; for Codex the question names its sandbox, which that flag turns off too). It asks on every
+launch and remembers no answer. `plan2code --keep-permissions` keeps the prompts without asking, and
+`plan2code --bypass-permissions` turns them off without asking. With no terminal to ask on (a script or a pipe) the
+prompts stay on unless `--bypass-permissions` is given. The installer then offers a desktop shortcut (answer `y`),
 which opens a folder picker first. Uninstalling (`U`) removes both.
 </details>
 
@@ -140,9 +143,11 @@ plain `plan2code` command above, without the app, asks instead, with prompts off
 [docs/desktop-app.md](docs/desktop-app.md).
 </details>
 
-**Supported tools:** every agent supported by the skills CLI, including Claude Code · Cursor ·
+**Supported tools** (the agents the skills CLI can install into): every agent it supports, including Claude Code · Cursor ·
 GitHub Copilot · Windsurf · Codex · Continue · Codeium · Zed · Amp · OpenCode · Devin · Crush · Pi ·
 Gemini CLI · Cline · Roo · Kilo · Goose · Trae · Qwen Code.
+
+**Launched by `plan2code`:** the `plan2code` command and the desktop app open the dashboard directly in Claude Code, Devin and Codex (the built-ins in `src/launcher/agents.json`). GitHub Copilot CLI, OpenCode, Gemini CLI and Pi come as starter templates, and you can add any other agent CLI as a custom agent in User Preferences → Agents & models.
 
 The installer keeps one canonical copy of each skill under `~/.agents/skills/` and links it into
 agents that maintain their own directory. To update, run `plan2code update` (or re-run the install command).
@@ -432,7 +437,7 @@ console or the terminal; add `--web` to skip the question and go straight to the
 ## Troubleshooting
 
 **The skills aren't recognized.** Re-run the installer and restart your AI tool. Confirm the global
-install with `npx skills list -g`. For a project install, check the generated directories aren't
+install with `npx skills@1.7.6 list -g`. For a project install, check the generated directories aren't
 gitignored.
 
 **Your tool doesn't read Agent Skills.** Since v2.2.0, Plan2Code ships only as skills. If your tool

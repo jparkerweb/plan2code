@@ -65,6 +65,7 @@ import { renderLoopSetup } from "./loop-setup.js";
 import { renderLaunching, renderWaiting } from "./starting.js";
 import { attachFiles, heldNotes, noteImages, pendingNotes, removeImage } from "../uploads.js";
 import { closeMentions } from "../mention-box.js";
+import { destroyFields } from "../md-field.js";
 import { buildPager, fitGrowBox, markFor, markMore, renderCard, renderEndItem, renderNotice } from "./cards.js";
 import { sendState, suggestState } from "../send-state.js";
 import { renderAgentsDoc, renderBriefButton, renderDoc, renderOverview } from "./docs.js";
@@ -1608,16 +1609,31 @@ export function renderSidebar() {
   }
 }
 
+// The Ask pane on screen when a render of the Ask tab began, held back from
+// the clear like the pose pane, so renderAsk() can take it up again: its list
+// is a live region, and a list rebuilt on every redraw would be announced
+// over and over instead of only its new rows.
+let heldAsk = null;
+
+// Takes `node` off the page, ending the editor of every Markdown field in it.
+function discard(node) {
+  destroyFields(node);
+  node.remove();
+}
+
 function renderMain() {
   const main = $("main");
   page.heldPose = main.querySelector(":scope > [data-pose]");
-  for (const child of [...main.children]) if (child !== page.heldPose) child.remove();
+  heldAsk = page.view === "ask" ? main.querySelector(":scope > .ask-pane") : null;
+  for (const child of [...main.children]) if (child !== page.heldPose && child !== heldAsk) discard(child);
   try {
     paintMain(main);
   } finally {
     // Nothing took it up: this screen is not the same pose.
-    page.heldPose?.remove();
+    if (page.heldPose) discard(page.heldPose);
     page.heldPose = null;
+    if (heldAsk) discard(heldAsk);
+    heldAsk = null;
   }
   // Inside the render pass, before withFocus restores the card's scroll, so
   // the restore is measured against the box's final height.
@@ -1636,7 +1652,11 @@ function paintMain(main) {
   if (page.view.startsWith("doc:")) return renderDoc(main, page.view.slice(4));
   if (isSpecFileView(page.view)) return renderOverview(main, page.view);
   if (page.view === AGENTS_VIEW) return renderAgentsDoc(main);
-  if (page.view === "ask") return renderAsk(main);
+  if (page.view === "ask") {
+    const held = heldAsk;
+    heldAsk = null;
+    return renderAsk(main, held);
+  }
   if (page.view === "subagents") return renderSubagents(main);
 
   // The session's own page, reached from the PAUSED / SESSION ENDED item at
@@ -1771,20 +1791,23 @@ export function renderFooter() {
   const summary = $("footer-summary");
   const notes = pendingNotes();
   const n = stagedCount();
-  summary.replaceChildren();
+  // Built off the page and swapped in only when it reads differently: the
+  // summary is a live region and the footer renders on every tick, so a
+  // rewrite with the same words would be announced again each time.
+  const next = document.createElement("div");
 
   const sent = awaitingReply();
 
   if (!n && !notes.length && sent.length) {
     // "Answer a question above" is nonsense when everything answerable has
     // already gone. Say what is actually outstanding instead: their own send.
-    summary.appendChild(el("strong", null, stranded() ? `${sent.length} saved, not picked up yet` : `${sent.length} with Plan2Code`));
-    summary.appendChild(document.createTextNode(" · " + sent.map((i) => i.title).join(" · ")));
+    next.appendChild(el("strong", null, stranded() ? `${sent.length} saved, not picked up yet` : `${sent.length} with Plan2Code`));
+    next.appendChild(document.createTextNode(" · " + sent.map((i) => i.title).join(" · ")));
   } else if (finish()) {
     // Not "nothing to send yet". There is no yet.
     const fin = finish();
-    summary.appendChild(el("strong", null, finishPaused(fin) ? "Paused." : "All done."));
-    summary.appendChild(
+    next.appendChild(el("strong", null, finishPaused(fin) ? "Paused." : "All done."));
+    next.appendChild(
       document.createTextNode(
         n || notes.length
           ? " Anything still waiting here was never sent."
@@ -1796,7 +1819,7 @@ export function renderFooter() {
       )
     );
   } else if (!n && !notes.length) {
-    summary.appendChild(
+    next.appendChild(
       document.createTextNode(
         myTurn().length
           ? "Nothing to send yet. Answer a question above, then press Send."
@@ -1805,7 +1828,7 @@ export function renderFooter() {
     );
   } else {
     const strong = el("strong", null, `${n + notes.length} ready`);
-    summary.appendChild(strong);
+    next.appendChild(strong);
     const bits = [];
     for (const [id, v] of Object.entries(page.local.staged)) {
       const item = byId(id);
@@ -1819,12 +1842,12 @@ export function renderFooter() {
       const item = byId(note.id);
       bits.push(`note on ${item ? item.title : "a question"}`);
     }
-    summary.appendChild(document.createTextNode(" · " + bits.join(" · ")));
+    next.appendChild(document.createTextNode(" · " + bits.join(" · ")));
   }
 
   const held = finish() ? 0 : heldNotes().length;
   if (held) {
-    summary.appendChild(
+    next.appendChild(
       el(
         "div",
         "footer-held",
@@ -1834,6 +1857,7 @@ export function renderFooter() {
       )
     );
   }
+  if (summary.innerHTML !== next.innerHTML) summary.replaceChildren(...next.childNodes);
 
   const state = sendState();
   const btn = $("btn-send");

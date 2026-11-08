@@ -4,7 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { SESSIONS_DIR, appendEvent, readJson } from "./files.mjs";
-import { attachmentName, healthOk, listHandles, pidAlive, projectRoot, repoRoots, sessionDir } from "./sessions.mjs";
+import { SERVER_MAX_LIFE_MS, attachmentName, healthOk, listHandles, pidAlive, projectRoot, repoRoots, resultWaiting, sessionDir } from "./sessions.mjs";
 import { removeSpec } from "./scan.mjs";
 import { isOpen, rule } from "./patches.mjs";
 import { pendingChatCount } from "./inbox.mjs";
@@ -19,9 +19,6 @@ export function useCli(cli) {
   ({ args, print, die, mustSession, sessionProject } = cli);
 }
 
-// Mirrors the server's absolute lifetime cap: a handle older than this cannot
-// still be one of our servers, so its pid gets no second look.
-const MAX_SERVER_LIFE_MS = 4 * 60 * 60 * 1000;
 
 /* ----------------------------------------------------------------- keep */
 
@@ -284,7 +281,11 @@ export async function cmdStop() {
     // minute ago leaves exactly that behind for any process to inherit. A
     // busy server gets a second, longer look, and still has to answer as
     // ours; one that does not is left alone, and only its handle goes.
-    const young = Date.now() - Date.parse(h.startedAt || 0) < MAX_SERVER_LIFE_MS;
+    // A handle past the server's lifetime cap cannot still be one of our
+    // servers, so its pid gets no second look, unless the session holds
+    // answers nobody collected: the server outlives its cap for those.
+    const young =
+      Date.now() - Date.parse(h.startedAt || 0) < SERVER_MAX_LIFE_MS || (h.stateDir ? resultWaiting(h.stateDir) : false);
     const ours = (await healthOk(h)) || (young && pidAlive(h.pid) && (await healthOk(h, 5000)));
     if (!ours) {
       skipped++;
