@@ -74,7 +74,7 @@ import { openHelpOn } from "./help-dialog.js";
 import { framed, linkLeavesPage, onAppMessage, startNewSession, tellApp } from "../app-bridge.js";
 import { continueButton } from "../continue-button.js";
 import { askOfflineFlipped, askState, declineOpen, renderAside, renderAsk, renderSubagents, renderSubagentsButton } from "./ask.js";
-import { renderHandoff, renderLoopEnd, renderHomeButton, renderStopButton, renderStopControls, renderStopping, stopInProgress, stopWarning } from "./ending.js";
+import { renderHandoff, renderLoopEnd, renderHomeButton, renderStopButton, renderStopControls, renderStopping, renderFooterDashboard, stopInProgress, stopWarning } from "./ending.js";
 import { renderNotepadButton } from "./notepad.js";
 import { renderActivities } from "./activities.js";
 import { renderSetup, setupMoved } from "./setup.js";
@@ -1871,6 +1871,7 @@ export function renderFooter() {
   }
   $("btn-clear").hidden = !(n || notes.length || held);
   if (foot) foot.hidden = false;
+  renderFooterDashboard();
   renderWhere();
   if (foot) foot.hidden = foot.classList.contains("is-dash") && $("footer-where").hidden;
 }

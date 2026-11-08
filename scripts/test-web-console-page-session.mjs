@@ -94,6 +94,37 @@ test("the finished screen shows the next command with --web, copies it, turns Se
   );
 });
 
+// A finish card is long: the way home must not hide below its fold. The footer
+// carries the same button while the dashboard is on offer and the server is
+// there, and not on a pause or a finish that never offered it.
+test("the footer offers Back to the dashboard on a finish that offers it, and not on a pause or a finish without it", async (t) => {
+  const browser = await suite.browser();
+  const s = await openSession(browser, { t, workflow: "plan", payload: PLAN_QUESTION });
+  const home = s.page.locator("#btn-dashboard");
+  assert.equal(await home.isHidden(), true, "no way home before the session finishes");
+  s.post({ settle: true, finish: { headline: "The plan is written", body: "Done.", command: "/plan2code-2-document", dashboard: true } });
+  await s.page.locator("#main").getByRole("heading", { name: "The plan is written" }).waitFor();
+  await home.waitFor({ state: "visible" });
+  await home.click();
+  const got = collect(s);
+  assert.deepEqual(
+    got.actions.map(({ i, type }) => ({ i, type })),
+    [{ i: "__dashboard", type: "dashboard" }]
+  );
+  await s.page.getByRole("button", { name: "Opening the dashboard…" }).first().waitFor();
+  assert.equal(await home.isDisabled(), true, "one press locks the button");
+
+  const plain = await openSession(browser, { t, workflow: "plan", payload: PLAN_QUESTION });
+  plain.post({ settle: true, finish: { headline: "Nothing else to do", body: "Done." } });
+  await plain.page.locator("#main").getByRole("heading", { name: "Nothing else to do" }).waitFor();
+  assert.equal(await plain.page.locator("#btn-dashboard").isHidden(), true, "no dashboard on offer, no button");
+
+  const paused = await openSession(browser, { t, workflow: "implement", payload: { agent: { status: "working", activity: "Task 1 of 1" } } });
+  paused.post({ finish: { headline: "Paused at Phase 2", command: "/plan2code-3-implement specs/audit-export/overview.md" } });
+  await paused.page.locator("#main").getByRole("heading", { name: "Paused at Phase 2" }).waitFor();
+  assert.equal(await paused.page.locator("#btn-dashboard").isHidden(), true, "a pause has no dashboard button");
+});
+
 // What a person sees break: no Continue here on a finish that names a skill, one
 // beside a git command or a pause, one at the red meter level, or a press that
 // reaches the agent as anything but the dashboard's own launch.

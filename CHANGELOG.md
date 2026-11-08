@@ -10,6 +10,7 @@ All notable changes to Plan2Code will be documented in this file.
 - **web console**: the agent setup page's middle pane now scrolls, so the agent options below the fold (the rest of the list and the templates) can be reached. The list used to be cut off with no scrollbar.
 - **web console**: the **Install page** link on the agent setup page now opens in your default browser inside the desktop app. It did nothing there, because the page was not told it was running in the app.
 - **web console**: a note you have sent now shows a small spinner in front of "Sent, waiting for Plan2Code" in the Notes panel, so it is clear Plan2Code is still working on it. The spinner hides when the agent has gone quiet, so a dead session is not mistaken for a slow one.
+- **web console**: a finished session now has a **Back to the dashboard** button in the footer, beside the disabled Send, so the way home is always in reach. It used to sit far down the finish card, which left the top bar's New Session as the only visible way out.
 
 ### 🔧 Changed
 

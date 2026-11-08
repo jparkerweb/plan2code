@@ -974,8 +974,21 @@ function closeStopping() {
   setStoppingDone(false);
 }
 
+// The way back to the dashboard in the footer of a finished screen, where the
+// finish card's own button may sit below the fold. Same offer, same press.
+export function renderFooterDashboard() {
+  const b = $("btn-dashboard");
+  const fin = page.S && finish();
+  b.hidden = !(fin && dashboardLive(fin) && !page.gone);
+  if (b.hidden) return;
+  const { asked, disabled } = afterFinishButton(page.local.afterBuild, "dashboard", page.pendingResult);
+  b.disabled = disabled;
+  b.textContent = asked ? "Opening the dashboard…" : "Back to the dashboard";
+}
+
 // The top bar's way home and Stop, wired once at start-up.
 export function wireEnding() {
+  $("btn-dashboard").addEventListener("click", () => sendAfterBuild("dashboard"));
   $("btn-home").addEventListener("click", openHomeConfirm);
   $("home-cancel").addEventListener("click", () => $("home-modal").close());
   $("home-go").addEventListener("click", goHome);
