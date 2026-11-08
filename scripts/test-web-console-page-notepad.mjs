@@ -477,6 +477,17 @@ test("New tab asks for a name, refuses a bad or duplicate one, and Escape backs 
   await s.page.fill("#notepad-name", "   ");
   await s.page.click("#notepad-name-save");
   assert.equal(await nameError(s), "Give the tab a name.");
+  await s.page.fill("#notepad-name", "x".repeat(40));
+  assert.equal(await s.page.locator("#notepad-name-count").textContent(), "40/40");
+  assert.equal(await s.page.locator("#notepad-name-save").isDisabled(), false, "40 characters still saves");
+  await s.page.fill("#notepad-name", "x".repeat(41));
+  // The warning and the count show as you type, before Save is pressed.
+  assert.match(await nameError(s), /40 characters or fewer/);
+  assert.equal(await s.page.locator("#notepad-name-count").textContent(), "41/40");
+  assert.equal(await s.page.locator("#notepad-name-save").isDisabled(), true, "Save waits until the name fits");
+  await s.page.fill("#notepad-name", "x".repeat(40));
+  assert.equal(await nameError(s), "", "the warning goes once it fits");
+  assert.equal(await s.page.locator("#notepad-name-save").isDisabled(), false);
   await s.page.fill("#notepad-name", "x".repeat(41));
   await s.page.keyboard.press("Enter");
   assert.match(await nameError(s), /40 characters or fewer/);
@@ -582,6 +593,7 @@ test("Double-click opens the rename modal with the name selected; F2 works too, 
   await s.page.locator("#notepad-name-dlg[open]").waitFor();
   assert.equal(await s.page.locator("#notepad-name-label").textContent(), "Rename this tab");
   assert.equal(await s.page.inputValue("#notepad-name"), "Ideas");
+  assert.equal(await s.page.locator("#notepad-name-count").textContent(), "5/40", "Rename shows the count too");
   assert.equal(await s.page.evaluate(() => document.getElementById("notepad-name").selectionEnd - document.getElementById("notepad-name").selectionStart), 5, "the name is selected");
   // Its own name is not a duplicate; another tab's is.
   await s.page.keyboard.press("Enter");

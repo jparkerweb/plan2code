@@ -199,6 +199,8 @@
   font: inherit;
 }
 .notepad-name-form input:focus-visible { outline: 2px solid var(--accent); outline-offset: 0; }
+.notepad-name-count { margin: 4px 0 0; text-align: right; font-variant-numeric: tabular-nums; }
+.notepad-name-count.over { color: var(--warn); }
 .notepad-name-error { min-height: 1.2em; margin: 6px 0 0; }
 .notepad-name-error:not(:empty) { color: var(--warn); }
 .modal.notepad-delete { border-color: var(--warn); }

@@ -19,6 +19,7 @@ import {
   NOT_LOADED,
   SAVE_START,
   TAB_ID_RE,
+  TAB_NAME_MAX,
   cleanTabName,
   errorSentence,
   keepsText,
@@ -274,7 +275,7 @@ function drawTabs() {
   drawSent();
   $("notepad-tab-new").disabled = busy;
   $("notepad-empty-new").disabled = busy;
-  $("notepad-name-save").disabled = busy;
+  $("notepad-name-save").disabled = busy || nameTooLong();
 }
 
 // Put a read tab on screen: its text, its pictures, the bar. `keep` leaves
@@ -390,6 +391,24 @@ function nameError(sentence) {
   $("notepad-name").focus();
 }
 
+// The name as the server would count it: trimmed, inner spaces collapsed.
+const nameLength = () => [...$("notepad-name").value.trim().replace(/\s+/g, " ")].length;
+const nameTooLong = () => nameLength() > TAB_NAME_MAX;
+
+// The count under the box, and the too-long warning and Save as you type,
+// not only once Save is pressed. Other problems are still said on Save.
+let liveWarning = false;
+function paintNameCount() {
+  const over = nameTooLong();
+  const count = $("notepad-name-count");
+  count.textContent = `${nameLength()}/${TAB_NAME_MAX}`;
+  count.classList.toggle("over", over);
+  if (over) $("notepad-name-error").textContent = tabNameProblem([], $("notepad-name").value);
+  else if (liveWarning) $("notepad-name-error").textContent = "";
+  liveWarning = over;
+  $("notepad-name-save").disabled = busy || over;
+}
+
 function openNameForm(mode) {
   if (busy || (mode === "rename" && !activeId)) return;
   closeDelete();
@@ -399,6 +418,7 @@ function openNameForm(mode) {
   if (!$("notepad-name-dlg").open) $("notepad-name-dlg").showModal();
   const input = $("notepad-name");
   input.value = mode === "rename" ? nameOf(activeId) : "";
+  paintNameCount();
   input.focus();
   input.select();
 }
@@ -911,6 +931,7 @@ export function wireNotepad() {
   $("notepad-delete-keep").addEventListener("click", () => closeDelete(true));
   $("notepad-delete-go").addEventListener("click", confirmDelete);
   $("notepad-name-cancel").addEventListener("click", () => closeNameForm());
+  $("notepad-name").addEventListener("input", paintNameCount);
   $("notepad-name-form").addEventListener("submit", (e) => {
     e.preventDefault();
     submitName();

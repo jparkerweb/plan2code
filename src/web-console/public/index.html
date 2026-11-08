@@ -3786,7 +3786,8 @@
     <dialog class="modal notepad-sub" id="notepad-name-dlg" aria-labelledby="notepad-name-label">
       <form class="notepad-name-form" id="notepad-name-form" novalidate>
         <h2 id="notepad-name-label">Name this tab</h2>
-        <input type="text" id="notepad-name" autocomplete="off" spellcheck="false" aria-describedby="notepad-name-error" />
+        <input type="text" id="notepad-name" autocomplete="off" spellcheck="false" aria-describedby="notepad-name-error notepad-name-count" />
+        <p class="help notepad-name-count" id="notepad-name-count"></p>
         <p class="help notepad-name-error" id="notepad-name-error" aria-live="polite"></p>
         <div class="modal-actions">
           <button type="button" class="btn ghost" id="notepad-name-cancel">Cancel</button>
@@ -4102,6 +4103,7 @@
       <div class="footer-actions">
         <span class="hint" id="send-hint"></span>
         <button type="button" class="btn ghost" id="btn-clear" hidden>Clear</button>
+        <button type="button" class="btn" id="btn-dashboard" hidden>Back to the dashboard</button>
         <button type="button" class="btn primary" id="btn-send" disabled>Send to Plan2Code</button>
       </div>
     </footer>

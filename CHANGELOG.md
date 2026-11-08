@@ -11,6 +11,10 @@ All notable changes to Plan2Code will be documented in this file.
 - **web console**: the **Install page** link on the agent setup page now opens in your default browser inside the desktop app. It did nothing there, because the page was not told it was running in the app.
 - **web console**: a note you have sent now shows a small spinner in front of "Sent, waiting for Plan2Code" in the Notes panel, so it is clear Plan2Code is still working on it. The spinner hides when the agent has gone quiet, so a dead session is not mistaken for a slow one.
 
+### 🔧 Changed
+
+- **web console**: the Notebook's tab name dialog now counts characters as you type (such as `41/40`), warns the moment a name passes the 40 character limit and disables Save until it fits, instead of only saying so after you press Save.
+
 ## v3.0.3
 
 ### 🐛 Fixed
