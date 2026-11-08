@@ -678,7 +678,7 @@ export function renderAside() {
     const box = el("div", "msg" + (mine ? " you" : "") + (pending ? " pending" : ""));
     const who = el("div", "msg-who");
     who.appendChild(el("span", null, mine ? "You" : "Plan2Code"));
-    if (pending) who.appendChild(el("span", null, "Sent, waiting for Plan2Code"));
+    if (pending) who.appendChild(sentWaitingTag());
     else if (m.at) who.appendChild(el("span", null, shortTime(m.at)));
     box.appendChild(who);
     if (m.suggest === true) box.appendChild(suggestTag());
@@ -693,7 +693,7 @@ export function renderAside() {
     const box = el("div", "msg you pending");
     const who = el("div", "msg-who");
     who.appendChild(el("span", null, "You"));
-    who.appendChild(el("span", null, "Sent, waiting for Plan2Code"));
+    who.appendChild(sentWaitingTag());
     box.appendChild(who);
     if (waiting.suggest === true) box.appendChild(suggestTag());
     if (waiting.text) box.appendChild(md(waiting.text, "md"));
@@ -769,6 +769,21 @@ function suggestChip(item) {
     else $("thread-" + item.id)?.field?.focus();
   });
   return chip;
+}
+
+// The label on a note that is sent and not yet picked up, with the page's small
+// ring in front so it is plain Plan2Code is still on it. Like the Ask reply
+// line, no ring once the agent has gone quiet: a turning ring would pass a
+// dead session for a slow one.
+function sentWaitingTag() {
+  const tag = el("span", "sent-wait");
+  if (askState().send.state !== "offline" && !agentAdrift()) {
+    const spin = el("span", "spinner tiny");
+    spin.setAttribute("aria-hidden", "true");
+    tag.appendChild(spin);
+  }
+  tag.appendChild(el("span", null, "Sent, waiting for Plan2Code"));
+  return tag;
 }
 
 function suggestTag() {

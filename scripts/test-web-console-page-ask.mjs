@@ -433,6 +433,7 @@ test("a request for suggestions shows tagged and waiting, and the chip comes bac
   const mine = s.page.locator("#aside .msg.you.pending");
   await mine.locator(".suggest-tag", { hasText: "Asked for suggestions" }).waitFor();
   assert.match(await textOf(mine), /Sent, waiting for Plan2Code/i);
+  assert.equal(await mine.locator(".msg-who .sent-wait .spinner").count(), 1, "a pending note shows the ring");
   await s.page.waitForFunction(() => document.getElementById("suggest-c1")?.disabled);
 
   s.post({ items: [{ id: "c1", thread: [{ who: "agent", text: "I would pick JSON: your scripts read it directly." }] }], agent: { status: "waiting" } });
