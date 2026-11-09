@@ -2416,6 +2416,9 @@ test("noteSwitchShows: Pathfinder, Plan and Quick Task on Start fresh, Revise pl
     assert.equal(noteSwitchShows(entry(skill), scan, sel("exploring")), false, `${skill} on a picked spec`);
     assert.equal(noteSwitchShows(entry(skill), scan, sel("exploring", { planChange: true })), false, `${skill} on a picked spec with a brief`);
   }
+  const diagnose = entry("plan2code-diagnose");
+  assert.equal(noteSwitchShows(diagnose, scan, null), true, "Diagnose on Start fresh");
+  assert.equal(noteSwitchShows(diagnose, scan, sel("documented")), true, "Diagnose launches untargeted, so a picked spec does not hide it");
   const revise = entry("plan2code-1b-revise-plan");
   assert.equal(noteSwitchShows(revise, scan, null), false, "Revise plan is grayed on Start fresh");
   for (const state of ["documented", "building", "built"]) {

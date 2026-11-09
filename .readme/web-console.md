@@ -232,7 +232,7 @@ and hides it while *Hide unavailable workflows* is on. Its chip has a visible
 removes the folder (any other spec also asks you to type its name). Click a card and Planny
 flies while it gets ready;
 a few seconds later the same page is that skill's console, already running. No
-command names to remember. Pathfinder, Plan, Quick Task and Revise plan can also
+command names to remember. Pathfinder, Plan, Quick Task, Diagnose and Revise plan can also
 start from one of your [Notebook](#your-notebook) tabs: see *Sent from the
 dashboard* there.
 
@@ -1974,7 +1974,7 @@ origin.
 | `POST /notepad/tab/delete` | `{ id }`. Removes the tab from the index, then its folder (text and pictures); 404 `no-such-tab`. |
 | `POST /notepad/tab/order` | `{ order: [id] }`, every current id exactly once; 400 `bad` otherwise. |
 | `POST /notepad/tab/last` | `{ id }`. Remembers the open tab; 404 `no-such-tab`. |
-| `POST /notepad/tab/sent` | `{ id, workflow, spec? }`. Records that the tab was sent (`workflow` one of `pathfinder`, `plan`, `quick-task`, `revise-plan`; `spec` like `specs/<name>`) as `sent: { workflow, spec?, at }` on its `tabs.json` entry, shown back in `GET /notepad`'s `tabs`. The page posts it only after the Send that carried the filled box; 400 `bad-sent`, 404 `no-such-tab`. |
+| `POST /notepad/tab/sent` | `{ id, workflow, spec? }`. Records that the tab was sent (`workflow` one of `pathfinder`, `plan`, `quick-task`, `revise-plan`, `diagnose`; `spec` like `specs/<name>`) as `sent: { workflow, spec?, at }` on its `tabs.json` entry, shown back in `GET /notepad`'s `tabs`. The page posts it only after the Send that carried the filled box; 400 `bad-sent`, 404 `no-such-tab`. |
 | `GET /notepad/images/<tab>/<uuid>.jpg`, `<uuid>.thumb.jpg` | Serves a picture or its thumbnail as `image/jpeg`, only by a tab id and a UUID name, a regular file (never a link) whose real path stays inside `~/.plan2code/notepads/`; anything else is 404. |
 | `POST /subagents` | `{ on, instruction, max }` (`instruction: null` for the shipped default). Saves the switch for this project and skill and answers `{ ok, setting }`; 400 `not-offered` on a skill without the switch, `bad`, `too-long` (over 2,000 characters) or `max` (outside 1 to 20). |
 | `GET /agents` | The agents view's data: your custom agents and the shipped built-ins and templates, each entry merged with its lookup result `{ state, path, where, folder }`: `state` is `found` (on PATH), `outside` (saved Windows PATH, npm's global folder or an install folder) or `missing`, and `where` says which search found it. Built-ins carry their `install` lines for the server's OS only. |

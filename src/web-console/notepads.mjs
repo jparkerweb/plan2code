@@ -114,7 +114,7 @@ const isFile = (p) => {
 
 // The workflows a tab can be sent to from the dashboard, and the spec a Revise
 // plan send names.
-export const SENT_WORKFLOWS = ["pathfinder", "plan", "quick-task", "revise-plan"];
+export const SENT_WORKFLOWS = ["pathfinder", "plan", "quick-task", "revise-plan", "diagnose"];
 const SENT_SPEC_RE = /^specs\/[A-Za-z0-9._-]+$/;
 
 // A tab's `sent` record as stored, or null when it does not hold up.

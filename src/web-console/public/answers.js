@@ -715,12 +715,14 @@ const NOTE_FRESH_CARDS = new Set(["plan2code-0-pathfinder", "plan2code-1-plan", 
 
 /**
  * Whether a lit card's confirm pane offers the Notebook switch: Pathfinder,
- * Plan and Quick Task on Start fresh (no spec picked), and Revise plan on a
- * picked spec with no plan change brief waiting (a waiting brief is what that
- * revision is about). Never on a grayed card, never on any other card.
+ * Plan and Quick Task on Start fresh (no spec picked), Diagnose whenever it is
+ * lit (it launches untargeted, so a picked spec does not matter), and Revise
+ * plan on a picked spec with no plan change brief waiting (a waiting brief is
+ * what that revision is about). Never on a grayed card, never on any other card.
  */
 export function noteSwitchShows(entry, scan, sel) {
   if (!entry || !cardAvailability(entry, scan, sel).on) return false;
+  if (entry.skill === "plan2code-diagnose") return true;
   if (NOTE_FRESH_CARDS.has(entry.skill)) return !sel;
   if (entry.skill === "plan2code-1b-revise-plan") return Boolean(sel) && sel.planChange !== true;
   return false;

@@ -581,6 +581,8 @@ test("the Notebook switch shows on Start fresh for Pathfinder, Plan and Quick Ta
   assert.equal(await offersNote(main, "paused", "/plan2code-1b-revise-plan"), false, "Revise plan with a brief waiting");
   assert.equal(await offersNote(main, "ready", "/plan2code-3-implement"), false, "Implement never");
   assert.equal(await offersNote(main, "Start from scratch", "/plan2code-xray"), false, "a utility never");
+  assert.equal(await offersNote(main, "Start from scratch", "/plan2code-diagnose"), true, "Diagnose on Start fresh");
+  assert.equal(await offersNote(main, "ready", "/plan2code-diagnose"), true, "Diagnose on a picked spec");
 });
 
 test("the switch lists the Notebook's tabs beside a preview: an empty tab grayed, five ticks at most, a Long tab note, and + note: on the command", async (t) => {
