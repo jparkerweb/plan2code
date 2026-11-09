@@ -254,6 +254,24 @@ export function deadConsoleAction({ loopRunning, loopStep, frameReady, reconnect
 }
 
 /**
+ * What the window does when a page's hello did not come in time. While a loop
+ * starts a phase the poll words the wait, so the check is not run now, but it
+ * must be armed again: dropped for good, a page that never says hello left the
+ * center message on screen with no way out once the step moved on.
+ */
+export function helloRetryAction({ loopRunning, loopStep }) {
+  return loopRunning && loopStep === "Starting" ? "rearm" : "check";
+}
+
+/** Seconds a waiting message stays before it offers Try reconnecting. */
+export const RETRY_AFTER_SECONDS = 10;
+
+/** The retry button's label: counting down, then plain. */
+export function retryLabel(secondsLeft) {
+  return secondsLeft > 0 ? `Try reconnecting in ${secondsLeft}s` : "Try reconnecting";
+}
+
+/**
  * A project folder's own name, for the bar's project menu: the same last
  * segment the window title uses, or the whole path when there is none (a
  * root such as `/`), so the menu never shows an empty name.

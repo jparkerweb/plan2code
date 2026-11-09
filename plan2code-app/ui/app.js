@@ -3,7 +3,7 @@
 // request) with a drag handle.
 
 import { mountTerminal } from './terminal.js';
-import { NEW_RELEASE_COMMAND, attentionSignal, barNextSteps, continueKeys, defaultRightFraction, folderName, lastAgentNotice, pickDefaultAgent, taskbarSwitch, windowTitleFor, deadConsoleAction, loopBanner, loopLocks, loopStopLabels, loopWindowTitle } from './meter.js';
+import { NEW_RELEASE_COMMAND, attentionSignal, barNextSteps, continueKeys, defaultRightFraction, folderName, lastAgentNotice, pickDefaultAgent, taskbarSwitch, windowTitleFor, deadConsoleAction, loopBanner, loopLocks, loopStopLabels, loopWindowTitle, helloRetryAction, retryLabel, RETRY_AFTER_SECONDS } from './meter.js';
 
 const { invoke, Channel } = window.__TAURI__.core;
 
@@ -910,8 +910,13 @@ async function onNoHello() {
   if (frameReady || !consoleKnown || restarting) return;
   // A page that does not answer cannot say it is done needing the person.
   clearAttention();
-  // The next phase's console is on its way; the poll says so instead.
-  if (loopRunning && loopStep === 'Starting') return;
+  // The next phase's console is on its way; the poll says so instead. Look
+  // again later all the same: dropped for good, a page that never said hello
+  // left its message on screen with no way out once the step moved on.
+  if (helloRetryAction({ loopRunning, loopStep }) === 'rearm') {
+    helloTimer = setTimeout(onNoHello, HELLO_WAIT_MS);
+    return;
+  }
   let status = null;
   try {
     status = await invoke('console_status');
@@ -928,7 +933,21 @@ async function onNoHello() {
   }
 }
 
-function showState(text, buttonLabel, onButton, onCancel, { tired = false } = {}) {
+// A waiting message that offers a way out after a countdown: the button shows
+// disabled, counting down, then turns into `buttonLabel`'s plain retry.
+let retryTimer = null;
+
+function stopRetryCountdown() {
+  clearInterval(retryTimer);
+  retryTimer = null;
+  stateButton.disabled = false;
+}
+
+function showState(text, buttonLabel, onButton, onCancel, { tired = false, retryAfter = 0 } = {}) {
+  // The poll repeats the same waiting message every tick: that must not
+  // restart a countdown that is already running (or its button).
+  if (retryAfter > 0 && !stateBox.hidden && stateText.textContent === text && stateButton.textContent.startsWith('Try reconnecting')) return;
+  stopRetryCountdown();
   hideLaunchCard();
   hideFirstRun();
   // statePlannyEl is an <svg>: unlike HTMLElement, it does not reflect the
@@ -942,9 +961,20 @@ function showState(text, buttonLabel, onButton, onCancel, { tired = false } = {}
   stateCancelEl.hidden = !onCancel;
   stateCancelEl.onclick = onCancel || null;
   stateBox.hidden = false;
+  if (retryAfter > 0 && buttonLabel) {
+    let left = retryAfter;
+    stateButton.disabled = true;
+    stateButton.textContent = retryLabel(left);
+    retryTimer = setInterval(() => {
+      left -= 1;
+      stateButton.textContent = retryLabel(left);
+      if (left <= 0) stopRetryCountdown();
+    }, 1000);
+  }
 }
 
 function hideState() {
+  stopRetryCountdown();
   stateBox.hidden = true;
 }
 
@@ -983,7 +1013,7 @@ async function pollConsole() {
     if (action === 'wait-for-phase') {
       // Covers the old phase's page and its "Lost contact" until the new one
       // says hello. Never over a question the box is already asking.
-      if (stateCancelEl.hidden) showState(loopDetailEl.textContent);
+      if (stateCancelEl.hidden) showState(loopDetailEl.textContent, 'Try reconnecting', reconnectConsole, undefined, { retryAfter: RETRY_AFTER_SECONDS });
       return;
     }
     markConsoleDead();
@@ -1167,6 +1197,7 @@ function applyLoopState(state) {
   }
   if (!loopRunning) loopTypingNoted = false;
   loopRunning = true;
+  const stepBefore = loopStep;
   loopStep = state.step || '';
   restartBtn.hidden = true;
   applyLoopLocks(state);
@@ -1176,6 +1207,9 @@ function applyLoopState(state) {
   // Only a change of words: this is a live region, and screen readers read it out.
   if (loopTitleEl.textContent !== banner.title) loopTitleEl.textContent = banner.title;
   if (loopDetailEl.textContent !== banner.detail) loopDetailEl.textContent = banner.detail;
+  // A phase starting: look at the console now, so its waiting message and
+  // countdown begin at once, not at the next status poll.
+  if (loopStep === 'Starting' && stepBefore !== 'Starting' && consoleKnown) void pollConsole();
   loopHintEl.textContent = banner.hint;
   loopSpecEl.textContent = state.specName || '';
   loopPipsEl.replaceChildren(

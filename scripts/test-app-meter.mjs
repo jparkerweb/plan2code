@@ -11,7 +11,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { attentionSignal, barNextSteps, continueKeys, defaultRightFraction, folderName, pickDefaultAgent, taskbarSwitch, windowTitleFor, deadConsoleAction, loopBanner, loopRunText, loopLocks, loopStopLabels, loopWindowTitle, CONSOLE_ASIDE_BREAKPOINT_PX, NEXT_STEP_LABELS, NEW_RELEASE_COMMAND } from "../plan2code-app/ui/meter.js";
+import { helloRetryAction, retryLabel, RETRY_AFTER_SECONDS, attentionSignal, barNextSteps, continueKeys, defaultRightFraction, folderName, pickDefaultAgent, taskbarSwitch, windowTitleFor, deadConsoleAction, loopBanner, loopRunText, loopLocks, loopStopLabels, loopWindowTitle, CONSOLE_ASIDE_BREAKPOINT_PX, NEXT_STEP_LABELS, NEW_RELEASE_COMMAND } from "../plan2code-app/ui/meter.js";
 import { findBrowser, launchBrowser } from "./browser.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -421,6 +421,27 @@ test("a console dead between a loop's phases waits for the next phase; any other
   assert.equal(deadConsoleAction(base), "reconnect");
   assert.equal(deadConsoleAction({ ...base, reconnects: 3 }), "offer-button");
   assert.equal(deadConsoleAction({ ...base, frameReady: false }), "no-hello");
+});
+
+test("a page that said no hello is looked at again while a loop starts a phase, and the retry button counts down", () => {
+  assert.equal(helloRetryAction({ loopRunning: true, loopStep: "Starting" }), "rearm", "the poll covers Starting, but nothing may drop the check for good");
+  assert.equal(helloRetryAction({ loopRunning: true, loopStep: "Build" }), "check");
+  assert.equal(helloRetryAction({ loopRunning: false, loopStep: "Starting" }), "check");
+  assert.equal(retryLabel(10), "Try reconnecting in 10s");
+  assert.equal(retryLabel(1), "Try reconnecting in 1s");
+  assert.equal(retryLabel(0), "Try reconnecting");
+  assert.equal(retryLabel(-3), "Try reconnecting");
+  assert.equal(RETRY_AFTER_SECONDS, 10);
+});
+
+test("app.js re-arms the hello check and offers Try reconnecting on the loop's waiting message", () => {
+  const app = fs.readFileSync(path.join(HERE, "..", "plan2code-app", "ui", "app.js"), "utf8");
+  const noHello = app.slice(app.indexOf("async function onNoHello"), app.indexOf("function showState"));
+  assert.match(noHello, /helloRetryAction\(/);
+  assert.match(noHello, /setTimeout\(onNoHello, HELLO_WAIT_MS\)/, "a swallowed hello check is armed again");
+  assert.match(app, /showState\(loopDetailEl\.textContent[^)]*retryAfter/s, "the loop's wait for a phase's page offers the button");
+  assert.doesNotMatch(app, /showState\('Opening the page'[^)]*retryAfter/s, "onNoHello swaps that message at 8s, so a 10s countdown there never finishes");
+  assert.match(app, /loopStep === 'Starting' && stepBefore !== 'Starting' && consoleKnown\) void pollConsole\(\)/, "a phase starting looks at the console at once, so the countdown does not wait for the next poll");
 });
 
 test("app.js refills the reconnect budget on a new page and brings the page back when a loop ends", () => {
