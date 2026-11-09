@@ -1059,6 +1059,38 @@ test("a different finish posted over a pressed Review starts with its own button
   assert.equal(await main.getByRole("button", { name: "Commit it now" }).isEnabled(), true, "Commit stayed dead after the new finish");
 });
 
+// What a person sees break: a finish screen whose every button is disabled while nothing answers them, with no way off the page but a toolbar button, and a footer pointing at buttons that do nothing.
+const STRANDED_FINISH = { ...OFFERS, command: 'git commit -m "Fix it"' };
+async function strandedFinish(t, opts) {
+  const s = await openSession(await suite.browser(), { t, workflow: "quick-task", clock: true, ...opts, payload: { agent: { status: "working", activity: "Task 1 of 1" } } });
+  s.post({ finish: STRANDED_FINISH });
+  const main = s.page.locator("#main");
+  await main.getByRole("button", { name: "Review it now" }).click();
+  await main.getByRole("button", { name: "Review requested…" }).waitFor();
+  await s.page.clock.fastForward(200_000);
+  await s.page.waitForFunction(() => document.body.innerText.includes("Plan2Code is not running"));
+  return { s, main };
+}
+
+test("a finish press nothing collects offers Start a New Session under the app, which asks the app for one", async (t) => {
+  const { s, main } = await strandedFinish(t, { env: { PLAN2CODE_IN_APP: "1" }, init: FAKE_APP_FRAME });
+  const press = main.getByRole("button", { name: "Start a New Session" });
+  assert.equal(await press.isEnabled(), true, "the escape hatch must not be disabled");
+  assert.equal(await closeGuide(s).count(), 1, "the guide stays while the press is stranded");
+  const foot = await textOf(s.page.locator("#footer-summary"));
+  assert.doesNotMatch(foot, /next step is above/i);
+  assert.match(foot, /New Session/);
+  await press.click();
+  await until(async () => (await toApp(s, "new-session")).length === 1, 5000);
+});
+
+test("a finish press nothing collects shows the dashboard command in a browser, with no button", async (t) => {
+  const { s, main } = await strandedFinish(t, {});
+  assert.equal(await main.getByRole("button", { name: "Start a New Session" }).count(), 0);
+  assert.match(await textOf(main), /\/plan2code\b/);
+  assert.doesNotMatch(await textOf(s.page.locator("#footer-summary")), /next step is above/i);
+});
+
 // What a person sees break: the guide missing while a commit or the dashboard
 // is starting (it would say "start a new one" under "Opening Git"), or missing
 // once they said they are done or the server is gone.

@@ -1812,6 +1812,17 @@ export function renderFooter() {
     // already gone. Say what is actually outstanding instead: their own send.
     next.appendChild(el("strong", null, stranded() ? `${sent.length} saved, not picked up yet` : `${sent.length} with Plan2Code`));
     next.appendChild(document.createTextNode(" · " + sent.map((i) => i.title).join(" · ")));
+  } else if (finish() && pressStranded()) {
+    // Every button on the screen waits on an agent that is gone; say so, and
+    // name the one way off.
+    next.appendChild(el("strong", null, "Plan2Code is not running."));
+    next.appendChild(
+      document.createTextNode(
+        page.inApp
+          ? " Press New Session at the top of the window, or the button above."
+          : " Start a new conversation with the command above."
+      )
+    );
   } else if (finish()) {
     // Not "nothing to send yet". There is no yet.
     const fin = finish();
@@ -1823,7 +1834,9 @@ export function renderFooter() {
           : finishPaused(fin)
             ? " Run the command above to pick this up."
             : fin.command
-              ? " The next step is above."
+              ? String(fin.command).trim().startsWith("/")
+                ? " The next step is above."
+                : " Run the command above in your terminal."
               : " Nothing left to run."
       )
     );

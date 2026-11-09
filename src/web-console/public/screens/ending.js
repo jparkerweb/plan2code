@@ -39,6 +39,7 @@ import {
   docs,
   finish,
   finishKey,
+  pressStranded,
   agentAdrift,
   agentWorking,
   awaitingReply,
@@ -154,7 +155,7 @@ function renderCloseGuide(shape, fin = {}) {
 // A review, a commit in Git, the dashboard or the next step the person just asked for is starting
 // here, so the page is about to carry on rather than end.
 function closeGuideHeld() {
-  if (page.gone) return false;
+  if (page.gone || pressStranded()) return false;
   return ["review", "commit", "changelog", "dashboard", "launch"].includes(page.local.afterBuild) || reviewPending() === "asked";
 }
 
@@ -269,6 +270,10 @@ export function renderHandoff(fin) {
   card.appendChild(el("h2", null, fin.headline));
   if (fin.body) card.appendChild(md(fin.body, "md prompt"));
 
+  // Every press below is waiting on an agent that is gone: the way off this
+  // page must not be one of them.
+  if (pressStranded()) card.appendChild(renderStrandedEscape());
+
   // A finished build offers its review first, above the next step, because it
   // is the one thing on this screen that has to happen before they leave.
   const offer = reviewOffer(fin);
@@ -334,7 +339,7 @@ export function renderHandoff(fin) {
     step.appendChild(row);
     // Under the app a clean start is the bar's New Session: one press, with
     // the command already on the clipboard to paste into the new terminal.
-    if (page.inApp && command.startsWith("/") && !page.gone) {
+    if (page.inApp && command.startsWith("/") && !page.gone && !pressStranded()) {
       const fresh = el("div", "handoff-newsession");
       const press = el("button", "btn small", "Start a New Session");
       press.type = "button";
@@ -434,6 +439,45 @@ export function renderHandoff(fin) {
     );
   }
   return card;
+}
+
+// The escape hatch of a finished screen whose press nothing collects (the
+// agent's turn ended while the page waited). Always enabled: under the app a
+// New Session, with the dashboard command copied first; in a browser the
+// command itself to run in a new conversation.
+function renderStrandedEscape() {
+  const box = el("section", "review-offer stranded-escape");
+  box.appendChild(el("p", "handoff-label", "Nothing is answering"));
+  const text = handoffText({ command: DASHBOARD_COMMAND });
+  if (page.inApp) {
+    box.appendChild(
+      el(
+        "p",
+        "review-offer-text",
+        "The buttons here cannot reach Plan2Code any more. Start a new session to carry on; the dashboard command is copied first, so paste it into the terminal panel once the new session opens."
+      )
+    );
+    const row = el("div", "btn-row");
+    const go = el("button", "btn primary", "Start a New Session");
+    go.type = "button";
+    go.addEventListener("click", () => startNewSession(text));
+    row.appendChild(go);
+    box.appendChild(row);
+    return box;
+  }
+  box.appendChild(
+    el(
+      "p",
+      "review-offer-text",
+      "The buttons here cannot reach Plan2Code any more. To carry on, run this in a new conversation:"
+    )
+  );
+  const row = el("div", "handoff-command");
+  const code = el("code", "handoff-code", text);
+  row.appendChild(code);
+  row.appendChild(copyButton(text, "btn small handoff-copy", code));
+  box.appendChild(row);
+  return box;
 }
 
 // The review button, on the hand-off of a finished build (a finished quick
