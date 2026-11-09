@@ -166,7 +166,8 @@ test("no built skill holds the large console files; the shared copy keeps every 
     assert.ok(fs.readFileSync(built).equals(fs.readFileSync(path.join(src, ...rel.split("/")))), `${rel} differs from src/`);
   }
   assert.ok(fs.existsSync(path.join(shared, "public", "vendor", "codemirror.esm.js")), "codemirror ships");
-  assert.ok(fs.readdirSync(path.join(shared, "public")).filter((f) => f.endsWith(".mp3")).length >= 3, "every sound ships");
+  assert.equal(fs.readdirSync(path.join(shared, "public", "sounds")).filter((f) => /^sound-\d\d\.mp3$/.test(f)).length, 19, "every pickable sound ships");
+  assert.equal(fs.readdirSync(path.join(shared, "public")).filter((f) => f.endsWith(".mp3")).length, 2, "the boot and snore sounds ship");
 });
 
 test("the shared copy ships a module for every game listed in public/activities.js", async () => {

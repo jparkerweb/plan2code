@@ -799,10 +799,48 @@ h4.md-h, h5.md-h, h6.md-h { font-size: 15px; }
 .looks-desktop[hidden] { display: none; }
 /* The per-cue boxes sit under the master switch, grayed and locked while it
    is off rather than hidden, so the picks stay visible. */
-.looks-sound-events { display: grid; gap: 8px; }
+.looks-sound-events { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
 .looks-sound-events.is-off { opacity: 0.45; }
 .looks-sound-events.is-off label { cursor: default; }
-.looks-sound-events.is-off label:hover { border-color: var(--rule-2); }
+.looks-sound-events.is-off label:hover,
+.looks-sound-events.is-off .sound-row:hover { border-color: var(--rule-2); }
+.looks-sound-events.is-off select,
+.looks-sound-events.is-off .sound-row .btn { cursor: default; }
+/* Planny's snoring and waking keep plain boxes in a row of their own; the
+   seven pickable cues are a list, each a label with its sound and a play
+   button on the right, stacked on a narrow window. */
+.sound-plain { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.sound-rows { display: grid; gap: 8px; }
+.sound-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--rule-2);
+  border-radius: 8px;
+  padding: 6px 8px 6px 0;
+  background: var(--panel);
+}
+.sound-row:hover { border-color: var(--accent-line); }
+.modal-ranges .sound-row label { flex: 1 1 auto; border: 0; border-radius: 0; background: none; padding: 4px 13px; }
+.sound-row select {
+  flex: none;
+  font: inherit;
+  color: var(--ink);
+  background: var(--panel);
+  border: 1px solid var(--rule-2);
+  border-radius: 8px;
+  padding: 6px 8px;
+}
+.sound-row select:focus-visible,
+.sound-row .btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.sound-row select:disabled,
+.sound-row .btn:disabled { opacity: 1; cursor: default; }
+@media (max-width: 720px) {
+  .sound-plain { grid-template-columns: 1fr; }
+  .sound-row { flex-wrap: wrap; padding: 6px 8px; }
+  .modal-ranges .sound-row label { flex: 1 1 100%; padding: 4px 5px; }
+  .sound-row select { flex: 1 1 auto; min-width: 0; }
+}
 @media (max-width: 720px) {
   .looks-row, .looks-row.four { grid-template-columns: 1fr; }
 }

@@ -4,7 +4,7 @@
 // `looks` is a live binding: every file reads the current object, and only
 // this file replaces it.
 
-import { DEFAULT_ACCENT, soundPrefs, DEFAULT_CARD_WIDTH, ACCENTS, accentId, cardWidth, soundKey } from "./palette.js";
+import { DEFAULT_ACCENT, soundPrefs, soundFilePrefs, DEFAULT_CARD_WIDTH, ACCENTS, accentId, cardWidth, soundKey, soundFileKey } from "./palette.js";
 import { normalizeRole, ROLE_NOT_SET } from "./starters.js";
 import { bootData, hooks } from "./state.js";
 import { el } from "./render.js";
@@ -29,6 +29,8 @@ export const DEFAULT_LOOKS = {
   accent: DEFAULT_ACCENT,
   sound: true,
   ...soundPrefs(null),
+  // Which sound file each pickable cue plays (soundFileQuestion: "sound-03").
+  ...soundFilePrefs(null),
   width: DEFAULT_CARD_WIDTH,
   hideUnavailable: true,
   // Always SKIP Intro: never play the dashboard's first-open wake-up (Planny asleep), off by default.
@@ -61,6 +63,7 @@ export function adoptLooks(saved) {
   if (!["system", "light", "dark"].includes(looks.theme)) looks.theme = DEFAULT_LOOKS.theme;
   if (typeof looks.sound !== "boolean") looks.sound = DEFAULT_LOOKS.sound;
   Object.assign(looks, soundPrefs(looks));
+  Object.assign(looks, soundFilePrefs(looks));
   if (typeof looks.hideUnavailable !== "boolean") looks.hideUnavailable = DEFAULT_LOOKS.hideUnavailable;
   looks.width = cardWidth(looks.width);
   if (typeof looks.skipIntro !== "boolean") looks.skipIntro = DEFAULT_LOOKS.skipIntro;
@@ -265,6 +268,12 @@ export function renderSwatches() {
     box.checked = looks[soundKey(box.dataset.sound)];
     box.disabled = !looks.sound;
   }
+  // The pick per pickable cue; a select and a play button lock with the master switch.
+  for (const select of document.querySelectorAll("select[data-sound-file]")) {
+    select.value = looks[soundFileKey(select.dataset.soundFile)];
+    select.disabled = !looks.sound;
+  }
+  for (const button of document.querySelectorAll("button[data-sound-play]")) button.disabled = !looks.sound;
   $("looks-role").value = looks.role ?? ROLE_NOT_SET;
   $("looks-skip-intro").checked = looks.skipIntro;
   $("looks-activities").checked = !looks.hideActivities;

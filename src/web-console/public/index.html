@@ -3684,15 +3684,47 @@
                 <legend>Sounds</legend>
                 <label><input type="checkbox" id="looks-sound" checked /> <span>Play sounds</span></label>
                 <div class="looks-row looks-sound-events" id="looks-sound-events">
-                  <label><input type="checkbox" data-sound="snore" checked /> <span>Planny snoring</span></label>
-                  <label><input type="checkbox" data-sound="bootup" checked /> <span>Planny waking up</span></label>
-                  <label><input type="checkbox" data-sound="startSkill" checked /> <span>Starting a skill</span></label>
-                  <label><input type="checkbox" data-sound="sessionStart" checked /> <span>Session opens</span></label>
-                  <label><input type="checkbox" data-sound="skillReady" checked /> <span>Skill is ready</span></label>
-                  <label><input type="checkbox" data-sound="sessionEnd" checked /> <span>Session ends</span></label>
-                  <label><input type="checkbox" data-sound="question" checked /> <span>New questions for you</span></label>
-                  <label><input type="checkbox" data-sound="chatReply" checked /> <span>Reply on the Ask tab</span></label>
-                  <label><input type="checkbox" data-sound="newTab" checked /> <span>New tab added</span></label>
+                  <div class="sound-plain">
+                    <label><input type="checkbox" data-sound="snore" checked /> <span>Planny snoring</span></label>
+                    <label><input type="checkbox" data-sound="bootup" checked /> <span>Planny waking up</span></label>
+                  </div>
+                  <div class="sound-rows">
+                    <div class="sound-row">
+                      <label><input type="checkbox" data-sound="startSkill" checked /> <span>Starting a skill</span></label>
+                      <select data-sound-file="startSkill" aria-label="Starting a skill sound"><option value="sound-01">sound-01</option><option value="sound-02">sound-02</option><option value="sound-03">sound-03</option><option value="sound-04">sound-04</option><option value="sound-05">sound-05</option><option value="sound-06">sound-06</option><option value="sound-07">sound-07</option><option value="sound-08">sound-08</option><option value="sound-09">sound-09</option><option value="sound-10">sound-10</option><option value="sound-11">sound-11</option><option value="sound-12">sound-12</option><option value="sound-13">sound-13</option><option value="sound-14">sound-14</option><option value="sound-15">sound-15</option><option value="sound-16">sound-16</option><option value="sound-17">sound-17</option><option value="sound-18">sound-18</option><option value="sound-19">sound-19</option></select>
+                      <button type="button" class="btn ghost" data-sound-play="startSkill" aria-label="Play Starting a skill sound">Play</button>
+                    </div>
+                    <div class="sound-row">
+                      <label><input type="checkbox" data-sound="sessionStart" checked /> <span>Session opens</span></label>
+                      <select data-sound-file="sessionStart" aria-label="Session opens sound"><option value="sound-01">sound-01</option><option value="sound-02">sound-02</option><option value="sound-03">sound-03</option><option value="sound-04">sound-04</option><option value="sound-05">sound-05</option><option value="sound-06">sound-06</option><option value="sound-07">sound-07</option><option value="sound-08">sound-08</option><option value="sound-09">sound-09</option><option value="sound-10">sound-10</option><option value="sound-11">sound-11</option><option value="sound-12">sound-12</option><option value="sound-13">sound-13</option><option value="sound-14">sound-14</option><option value="sound-15">sound-15</option><option value="sound-16">sound-16</option><option value="sound-17">sound-17</option><option value="sound-18">sound-18</option><option value="sound-19">sound-19</option></select>
+                      <button type="button" class="btn ghost" data-sound-play="sessionStart" aria-label="Play Session opens sound">Play</button>
+                    </div>
+                    <div class="sound-row">
+                      <label><input type="checkbox" data-sound="skillReady" checked /> <span>Skill is ready</span></label>
+                      <select data-sound-file="skillReady" aria-label="Skill is ready sound"><option value="sound-01">sound-01</option><option value="sound-02">sound-02</option><option value="sound-03">sound-03</option><option value="sound-04">sound-04</option><option value="sound-05">sound-05</option><option value="sound-06">sound-06</option><option value="sound-07">sound-07</option><option value="sound-08">sound-08</option><option value="sound-09">sound-09</option><option value="sound-10">sound-10</option><option value="sound-11">sound-11</option><option value="sound-12">sound-12</option><option value="sound-13">sound-13</option><option value="sound-14">sound-14</option><option value="sound-15">sound-15</option><option value="sound-16">sound-16</option><option value="sound-17">sound-17</option><option value="sound-18">sound-18</option><option value="sound-19">sound-19</option></select>
+                      <button type="button" class="btn ghost" data-sound-play="skillReady" aria-label="Play Skill is ready sound">Play</button>
+                    </div>
+                    <div class="sound-row">
+                      <label><input type="checkbox" data-sound="sessionEnd" checked /> <span>Session ends</span></label>
+                      <select data-sound-file="sessionEnd" aria-label="Session ends sound"><option value="sound-01">sound-01</option><option value="sound-02">sound-02</option><option value="sound-03">sound-03</option><option value="sound-04">sound-04</option><option value="sound-05">sound-05</option><option value="sound-06">sound-06</option><option value="sound-07">sound-07</option><option value="sound-08">sound-08</option><option value="sound-09">sound-09</option><option value="sound-10">sound-10</option><option value="sound-11">sound-11</option><option value="sound-12">sound-12</option><option value="sound-13">sound-13</option><option value="sound-14">sound-14</option><option value="sound-15">sound-15</option><option value="sound-16">sound-16</option><option value="sound-17">sound-17</option><option value="sound-18">sound-18</option><option value="sound-19">sound-19</option></select>
+                      <button type="button" class="btn ghost" data-sound-play="sessionEnd" aria-label="Play Session ends sound">Play</button>
+                    </div>
+                    <div class="sound-row">
+                      <label><input type="checkbox" data-sound="question" checked /> <span>New questions for you</span></label>
+                      <select data-sound-file="question" aria-label="New questions for you sound"><option value="sound-01">sound-01</option><option value="sound-02">sound-02</option><option value="sound-03">sound-03</option><option value="sound-04">sound-04</option><option value="sound-05">sound-05</option><option value="sound-06">sound-06</option><option value="sound-07">sound-07</option><option value="sound-08">sound-08</option><option value="sound-09">sound-09</option><option value="sound-10">sound-10</option><option value="sound-11">sound-11</option><option value="sound-12">sound-12</option><option value="sound-13">sound-13</option><option value="sound-14">sound-14</option><option value="sound-15">sound-15</option><option value="sound-16">sound-16</option><option value="sound-17">sound-17</option><option value="sound-18">sound-18</option><option value="sound-19">sound-19</option></select>
+                      <button type="button" class="btn ghost" data-sound-play="question" aria-label="Play New questions for you sound">Play</button>
+                    </div>
+                    <div class="sound-row">
+                      <label><input type="checkbox" data-sound="chatReply" checked /> <span>Reply on the Ask tab</span></label>
+                      <select data-sound-file="chatReply" aria-label="Reply on the Ask tab sound"><option value="sound-01">sound-01</option><option value="sound-02">sound-02</option><option value="sound-03">sound-03</option><option value="sound-04">sound-04</option><option value="sound-05">sound-05</option><option value="sound-06">sound-06</option><option value="sound-07">sound-07</option><option value="sound-08">sound-08</option><option value="sound-09">sound-09</option><option value="sound-10">sound-10</option><option value="sound-11">sound-11</option><option value="sound-12">sound-12</option><option value="sound-13">sound-13</option><option value="sound-14">sound-14</option><option value="sound-15">sound-15</option><option value="sound-16">sound-16</option><option value="sound-17">sound-17</option><option value="sound-18">sound-18</option><option value="sound-19">sound-19</option></select>
+                      <button type="button" class="btn ghost" data-sound-play="chatReply" aria-label="Play Reply on the Ask tab sound">Play</button>
+                    </div>
+                    <div class="sound-row">
+                      <label><input type="checkbox" data-sound="newTab" checked /> <span>New tab added</span></label>
+                      <select data-sound-file="newTab" aria-label="New tab added sound"><option value="sound-01">sound-01</option><option value="sound-02">sound-02</option><option value="sound-03">sound-03</option><option value="sound-04">sound-04</option><option value="sound-05">sound-05</option><option value="sound-06">sound-06</option><option value="sound-07">sound-07</option><option value="sound-08">sound-08</option><option value="sound-09">sound-09</option><option value="sound-10">sound-10</option><option value="sound-11">sound-11</option><option value="sound-12">sound-12</option><option value="sound-13">sound-13</option><option value="sound-14">sound-14</option><option value="sound-15">sound-15</option><option value="sound-16">sound-16</option><option value="sound-17">sound-17</option><option value="sound-18">sound-18</option><option value="sound-19">sound-19</option></select>
+                      <button type="button" class="btn ghost" data-sound-play="newTab" aria-label="Play New tab added sound">Play</button>
+                    </div>
+                  </div>
                 </div>
                 <p class="help">Ticking one plays it. Play sounds switches them all off at once and keeps your picks for when you switch back on.</p>
               </fieldset>

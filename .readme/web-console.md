@@ -150,7 +150,10 @@ Scroll down for the utilities. Outside a git repository the **Git** card says so
   snoring, Planny waking up, starting a skill, session opens, skill is ready,
   session ends, new questions, a reply on Ask, a new tab), so you can keep only
   the ones you want. Ticking a box plays its sound; everything is remembered
-  like the colors.
+  like the colors. Seven of the moments (everything except Planny snoring and
+  waking up) also have a menu of 19 sounds and a Play button, so you can give
+  each its own; picking one plays it, and the sounds you hear today are the
+  defaults.
 - **Files in your notes.** Show instead of describe: attach a screenshot, a
   photo or a document to any note or quick question (see *Attachments in notes
   and questions* below).

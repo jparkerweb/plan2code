@@ -31,7 +31,7 @@ import {
   turnGate,
 } from "../src/web-console/public/answers.js";
 import { CHAT_LIMIT, CHAT_MAX_CHARS } from "../src/web-console/public/chat.js";
-import { ACCENTS, CARD_WIDTHS, SOUND_EVENTS, soundKey, soundPrefs } from "../src/web-console/public/palette.js";
+import { ACCENTS, CARD_WIDTHS, SOUND_EVENTS, soundKey, soundPrefs, SOUND_FILES, PICKABLE_SOUNDS, DEFAULT_SOUND_FILE, soundFileKey, soundFilePrefs } from "../src/web-console/public/palette.js";
 import { HELP_TABS, helpTabFor, helpKeyTarget } from "../src/web-console/public/help.js";
 import { tabKeyTarget } from "../src/web-console/public/tabs.js";
 import { PREFS_TABS, prefsOpenTab, prefsResetScope } from "../src/web-console/public/prefs.js";
@@ -602,7 +602,8 @@ test("boot.js is served as JavaScript and imports without a DOM", async () => {
 // nobody adds serves 404 and the sound just never plays, so assert every file
 // the page asks for comes back as audio.
 test("the chime files are served as audio", async () => {
-  for (const f of ["start-stop.mp3", "next.mp3", "insert.mp3", "sleeping.mp3", "bootup.mp3", "start-skill.mp3"]) {
+  const sounds = Array.from({ length: 19 }, (_, i) => `sounds/sound-${String(i + 1).padStart(2, "0")}.mp3`);
+  for (const f of [...sounds, "sleeping.mp3", "bootup.mp3"]) {
     const res = await fetch(`${baseUrl}/${f}`, { headers: { cookie: cookieFor(baseUrl, token) } });
     assert.equal(res.status, 200, `${f} is played but the server will not serve it`);
     assert.match(res.headers.get("content-type"), /^audio\//);
@@ -613,7 +614,7 @@ test("the chime files are served as audio", async () => {
 // names a real event, and every event's file is served. A box with no event
 // saves a setting nothing reads; an event with no box can never be muted.
 test("every sound event has a preference box and a served file", async () => {
-  assert.equal(SOUND_EVENTS.startSkill.file, "start-skill", "starting a skill has its own sound");
+  assert.equal(SOUND_EVENTS.startSkill.file, "sounds/sound-01", "starting a skill has its own sound");
   const html = fs.readFileSync(path.join(ROOT, "src", "web-console", "public", "index.html"), "utf8");
   const boxes = [...html.matchAll(/data-sound="(\w+)"/g)].map((m) => m[1]);
   assert.deepEqual([...boxes].sort(), Object.keys(SOUND_EVENTS).sort());
@@ -640,6 +641,31 @@ test("soundPrefs: missing switches are on, saved booleans hold, anything else is
   assert.equal(prefs.soundNewTab, true);
   assert.equal(prefs.soundStartSkill, true);
   assert.ok(!("extra" in prefs), "only the sound switches come back");
+});
+
+// The picked file per cue: a looks.json from before the picker, an unknown
+// name or a non-string gets the cue's default; a valid name holds.
+test("soundFilePrefs: defaults for anything not a known file, a valid pick holds", () => {
+  assert.equal(soundFileKey("startSkill"), "soundFileStartSkill");
+  assert.equal(SOUND_FILES.length, 19);
+  const keys = PICKABLE_SOUNDS.map(soundFileKey).sort();
+  const defaults = Object.fromEntries(PICKABLE_SOUNDS.map((e) => [soundFileKey(e), DEFAULT_SOUND_FILE[e]]));
+  for (const saved of [null, undefined, {}, { soundFileQuestion: "sound-99" }, { soundFileQuestion: 7 }, { soundFileQuestion: null }]) {
+    const prefs = soundFilePrefs(saved);
+    assert.deepEqual(Object.keys(prefs).sort(), keys);
+    assert.deepEqual(prefs, defaults, `defaults for ${JSON.stringify(saved)}`);
+  }
+  const prefs = soundFilePrefs({ soundFileQuestion: "sound-07", soundFileNewTab: "bootup", extra: "sound-01" });
+  assert.equal(prefs.soundFileQuestion, "sound-07");
+  assert.equal(prefs.soundFileNewTab, DEFAULT_SOUND_FILE.newTab);
+  assert.ok(!("extra" in prefs));
+});
+
+test("every default sound file is a known file, and the pickable cues are the seven", () => {
+  for (const file of Object.values(DEFAULT_SOUND_FILE)) assert.ok(SOUND_FILES.includes(file), file);
+  assert.deepEqual(PICKABLE_SOUNDS, ["startSkill", "sessionStart", "skillReady", "sessionEnd", "question", "chatReply", "newTab"]);
+  assert.ok(!PICKABLE_SOUNDS.includes("snore") && !PICKABLE_SOUNDS.includes("bootup"));
+  for (const event of PICKABLE_SOUNDS) assert.equal(SOUND_EVENTS[event].file, `sounds/${DEFAULT_SOUND_FILE[event]}`);
 });
 
 // The favicon rides the same allow-list, so a missing entry is a silent 404
@@ -838,7 +864,7 @@ test("prefs: the dialog opens on the tab asked for, else Appearance", () => {
 test("prefs: Back to default resets Appearance or Sounds & activities only, and nothing on the other two", () => {
   assert.deepEqual(prefsResetScope("appearance"), ["theme", "width", "accent", "role", "skipIntro"]);
   const sounds = prefsResetScope("sounds");
-  assert.deepEqual(sounds, ["sound", ...Object.keys(SOUND_EVENTS).map(soundKey), "hideActivities", "activitySounds", "gameMusic"]);
+  assert.deepEqual(sounds, ["sound", ...Object.keys(SOUND_EVENTS).map(soundKey), ...PICKABLE_SOUNDS.map(soundFileKey), "hideActivities", "activitySounds", "gameMusic"]);
   for (const key of [...prefsResetScope("appearance"), ...sounds]) {
     if (key !== "role") assert.ok(Object.hasOwn(DEFAULT_LOOKS, key), `${key} has a default`);
   }

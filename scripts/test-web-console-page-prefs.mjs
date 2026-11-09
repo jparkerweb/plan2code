@@ -942,3 +942,163 @@ test("the Subagents dialog looks as it did before Preferences moved to tabs", as
   if (process.env.P2C_PRINT_SUBAGENTS) console.log("SUBAGENTS " + JSON.stringify(got));
   assert.deepEqual(got, SUBAGENTS_BEFORE);
 });
+
+// The sound picker: a select of the 19 files and a play button for each of the
+// seven pickable cues, Planny's snoring and waking keeping plain boxes.
+const PICK_EVENTS = ["startSkill", "sessionStart", "skillReady", "sessionEnd", "question", "chatReply", "newTab"];
+const PICK_DEFAULTS = {
+  startSkill: "sound-01",
+  sessionStart: "sound-02",
+  skillReady: "sound-03",
+  sessionEnd: "sound-02",
+  question: "sound-03",
+  chatReply: "sound-03",
+  newTab: "sound-04",
+};
+const pickSelect = (s, event) => s.page.locator(`select[data-sound-file="${event}"]`);
+
+async function openSoundsTab(s) {
+  await s.page.click("#btn-looks");
+  await s.page.click("#prefs-tab-sounds");
+  // Wait for the dialog to hold every row before acting on one.
+  await s.page.waitForFunction((n) => document.querySelectorAll("select[data-sound-file]").length === n, PICK_EVENTS.length);
+}
+
+// Counts the files the page asks to play, without making a sound. Installed
+// before the page loads (then reloaded), so a cue the session itself plays
+// never really plays: a preview is dropped while a higher-ranked cue is
+// audible, and an audible one would hide the click under test.
+async function stubPlay(s) {
+  await s.page.addInitScript(() => {
+    window.__played = [];
+    HTMLMediaElement.prototype.play = function () {
+      window.__played.push(this.src);
+      return Promise.resolve();
+    };
+  });
+  await s.page.reload({ waitUntil: "domcontentloaded" });
+  await drawn(s.page);
+}
+const played = (s) => s.page.evaluate(() => window.__played);
+
+test("the sound picker: seven cues have a select of 19 sounds on their default, snoring and waking have none", async (t) => {
+  noSavedLooks(t);
+  const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_QUESTION });
+  await openSoundsTab(s);
+  for (const event of PICK_EVENTS) {
+    assert.equal(await pickSelect(s, event).locator("option").count(), 19, `${event} lists 19 sounds`);
+    assert.equal(await pickSelect(s, event).inputValue(), PICK_DEFAULTS[event], `${event} starts on its default`);
+    assert.equal(await s.page.locator(`[data-sound-play="${event}"]`).count(), 1, `${event} has a play button`);
+  }
+  for (const event of ["snore", "bootup"]) {
+    assert.equal(await s.page.locator(`[data-sound="${event}"]`).count(), 1, `${event} keeps its box`);
+    assert.equal(await s.page.locator(`[data-sound-file="${event}"], [data-sound-play="${event}"]`).count(), 0, `${event} has no picker`);
+  }
+});
+
+test("the sound picker: a pick plays once and persists across a reload, and Play replays it even with the cue unticked", async (t) => {
+  noSavedLooks(t);
+  const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_QUESTION });
+  await stubPlay(s);
+  await openSoundsTab(s);
+  await s.page.evaluate(() => (window.__played.length = 0));
+  await pickSelect(s, "question").selectOption("sound-07");
+  await s.page.waitForFunction(() => window.__played.length === 1);
+  assert.match((await played(s))[0], /\/sounds\/sound-07\.mp3$/, "the pick played");
+  await s.page.waitForFunction(async () => ((await (await fetch("/looks")).json()).looks || {}).soundFileQuestion === "sound-07");
+
+  await s.page.locator('[data-sound="question"]').uncheck();
+  await s.page.locator('[data-sound-play="question"]').click();
+  await s.page.waitForFunction(() => window.__played.length === 2);
+  assert.match((await played(s))[1], /\/sounds\/sound-07\.mp3$/, "Play replays the pick with the cue unticked");
+
+  await s.page.click("#looks-done");
+  await s.page.reload({ waitUntil: "domcontentloaded" });
+  await drawn(s.page);
+  await openSoundsTab(s);
+  assert.equal(await pickSelect(s, "question").inputValue(), "sound-07", "the pick did not survive a reload");
+  assert.equal(await pickSelect(s, "newTab").inputValue(), "sound-04", "an untouched cue kept its default");
+});
+
+test("the sound picker: Play sounds off disables the selects and play buttons, and Back to default restores the defaults", async (t) => {
+  noSavedLooks(t);
+  const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_QUESTION });
+  await openSoundsTab(s);
+  await pickSelect(s, "newTab").selectOption("sound-15");
+  await s.page.waitForFunction(async () => ((await (await fetch("/looks")).json()).looks || {}).soundFileNewTab === "sound-15");
+
+  await s.page.locator("#looks-sound").uncheck();
+  for (const event of PICK_EVENTS) {
+    assert.equal(await pickSelect(s, event).isDisabled(), true, `${event}'s select is disabled`);
+    assert.equal(await s.page.locator(`[data-sound-play="${event}"]`).isDisabled(), true, `${event}'s play button is disabled`);
+  }
+  assert.equal(await pickSelect(s, "newTab").inputValue(), "sound-15", "the pick is kept while sounds are off");
+  assert.equal(Number(await styleOf(s.page.locator("#looks-sound-events"), "opacity")) < 1, true, "the rows are dimmed");
+
+  await s.page.locator("#looks-sound").check();
+  assert.equal(await pickSelect(s, "newTab").isDisabled(), false, "switching sounds on enables the select again");
+
+  await s.page.click("#looks-reset");
+  await s.page.waitForFunction(() => document.querySelector('select[data-sound-file="newTab"]').value === "sound-04");
+  for (const event of PICK_EVENTS) {
+    assert.equal(await pickSelect(s, event).inputValue(), PICK_DEFAULTS[event], `${event} is back on its default`);
+  }
+  await s.page.waitForFunction(async () => ((await (await fetch("/looks")).json()).looks || {}).soundFileNewTab !== "sound-15");
+});
+
+test("the sound picker: a preview is dropped behind a ranked cue that is still playing, and plays once it has stopped", async (t) => {
+  noSavedLooks(t);
+  const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_QUESTION });
+  // A stub whose Audio reports itself playing until the test says otherwise.
+  await s.page.addInitScript(() => {
+    window.__played = [];
+    window.__audible = true;
+    HTMLMediaElement.prototype.play = function () {
+      window.__played.push(this.src);
+      Object.defineProperty(this, "paused", { configurable: true, get: () => !window.__audible });
+      return Promise.resolve();
+    };
+  });
+  await s.page.reload({ waitUntil: "domcontentloaded" });
+  await drawn(s.page);
+  await openSoundsTab(s);
+  // Let the cues the session itself played settle, then start a ranked one.
+  await s.page.evaluate(async () => {
+    window.__audible = false;
+    const { sound } = await import("/sound.js");
+    window.__played.length = 0;
+    sound("question");
+    await new Promise((r) => setTimeout(r, 0));
+    window.__audible = true;
+  });
+  await s.page.waitForFunction(() => window.__played.length === 1);
+  await s.page.locator('[data-sound-play="newTab"]').click();
+  assert.equal((await played(s)).length, 1, "the preview was dropped behind the audible cue");
+
+  await s.page.evaluate(() => (window.__audible = false));
+  await s.page.locator('[data-sound-play="newTab"]').click();
+  await s.page.waitForFunction(() => window.__played.length === 2);
+  assert.match((await played(s))[1], /\/sounds\/sound-04\.mp3$/, "the preview played once the cue had stopped");
+});
+
+test("the sound picker: Tab reaches Play from the select, and a row stacks inside the dialog at a narrow width", async (t) => {
+  noSavedLooks(t);
+  const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_QUESTION });
+  await s.page.setViewportSize({ width: 600, height: 900 });
+  await openSoundsTab(s);
+  await pickSelect(s, "question").focus();
+  await s.page.keyboard.press("Tab");
+  assert.equal(await s.page.evaluate(() => document.activeElement?.dataset.soundPlay), "question", "Tab from the select lands on its Play button");
+
+  const fits = await s.page.evaluate(() => {
+    const box = document.getElementById("looks-modal").getBoundingClientRect();
+    return [...document.querySelectorAll(".sound-row")].map((row) =>
+      [...row.querySelectorAll("label, select, button")].every((n) => {
+        const r = n.getBoundingClientRect();
+        return r.left >= box.left - 1 && r.right <= box.right + 1;
+      })
+    );
+  });
+  assert.equal(fits.length, PICK_EVENTS.length, "every row is drawn");
+  assert.equal(fits.every(Boolean), true, "no control spills out of the dialog at 600px");
+});

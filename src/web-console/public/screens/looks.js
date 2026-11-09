@@ -2,10 +2,10 @@
 // Agents & models tab is agents-view.js's.
 
 import { adoptLooks, applyLooks, loadLooks, looks, renderSwatches, saveLooks, syncLooks } from "../looks.js";
-import { dropHeldSound, releaseHeldSound, sound, soundOn } from "../sound.js";
+import { dropHeldSound, previewSound, releaseHeldSound, sound, soundOn } from "../sound.js";
 import { hushTones, tone, unlockTones } from "../tones.js";
 import { hushMusic } from "../music.js";
-import { SOUND_EVENTS, soundKey } from "../palette.js";
+import { SOUND_EVENTS, soundFileKey, soundKey } from "../palette.js";
 import { ROLES, ROLE_NOT_SET, ROLE_NOT_SET_LABEL, needsRoleNudge, normalizeRole } from "../starters.js";
 import { isDashboard } from "../selectors.js";
 import { el } from "../render.js";
@@ -115,6 +115,21 @@ export function wireLooks() {
       hooks.markSaved(fieldsetOf(box), saveLooks());
       // Ticking one plays it, so the label has a sound to go with it.
       if (box.checked) sound(event);
+    });
+  }
+
+  // The sound picked for a cue: a change saves it and plays it once, and the
+  // play button replays the current pick. Neither depends on the cue's own tick.
+  for (const select of document.querySelectorAll("select[data-sound-file]")) {
+    select.addEventListener("change", () => {
+      looks[soundFileKey(select.dataset.soundFile)] = select.value;
+      hooks.markSaved(fieldsetOf(select), saveLooks());
+      previewSound(select.value);
+    });
+  }
+  for (const button of document.querySelectorAll("button[data-sound-play]")) {
+    button.addEventListener("click", () => {
+      previewSound(looks[soundFileKey(button.dataset.soundPlay)]);
     });
   }
 

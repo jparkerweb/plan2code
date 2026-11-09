@@ -1,7 +1,7 @@
 // Plan2Code Web Console - the sound cues: which plays, one at a time, held until the first click; defines only.
 
 import { looks } from "./looks.js";
-import { soundKey, SOUND_EVENTS } from "./palette.js";
+import { soundKey, SOUND_EVENTS, PICKABLE_SOUNDS, soundFileKey } from "./palette.js";
 
 /* ------------------------------------------------------------- sounds
 
@@ -34,7 +34,17 @@ let soundPlaying = null;
 
 export const soundOn = (event) => looks.sound && looks[soundKey(event)];
 
-const soundAudio = (event) => SOUNDS[SOUND_EVENTS[event].file];
+// The file (path under the page's root, no extension) a cue plays: the pick
+// for a pickable cue, the event's own file otherwise.
+const soundPath = (event) =>
+  PICKABLE_SOUNDS.includes(event) && looks[soundFileKey(event)] ? `sounds/${looks[soundFileKey(event)]}` : SOUND_EVENTS[event].file;
+
+const audioFor = (path) => (SOUNDS[path] ||= new Audio(`/${path}.mp3`));
+
+// The Audio a cue last played, so a pick changed mid-sound still stops the right one.
+const soundAudio = (event) => SOUNDS[playingPath[event] || soundPath(event)];
+
+const playingPath = {};
 
 const louderSound = (a, b) => (!b || SOUND_EVENTS[a].rank > SOUND_EVENTS[b].rank ? a : b);
 
@@ -51,14 +61,31 @@ function flushSound() {
   const busy = soundPlaying && !soundAudio(soundPlaying).paused;
   if (busy && SOUND_EVENTS[event].rank <= SOUND_EVENTS[soundPlaying].rank) return;
   if (busy) soundAudio(soundPlaying).pause();
-  const { file } = SOUND_EVENTS[event];
-  const a = (SOUNDS[file] ||= new Audio(`/${file}.mp3`));
+  const path = soundPath(event);
+  playingPath[event] = path;
+  const a = audioFor(path);
+  // Stops a preview, or any cue the rank check let through, before this one starts.
+  for (const other of Object.values(SOUNDS)) if (other !== a) other.pause();
   a.currentTime = 0;
   soundPlaying = event;
   a.play().catch(() => {
     if (soundPlaying === event) soundPlaying = null;
     soundHeld = louderSound(event, soundHeld);
   });
+}
+
+// Plays one picked file (sound-07) from the start for the picker's preview,
+// cutting off whatever is playing. Dropped while a higher-ranked cue is
+// playing, on the same busy check as flushSound. A preview is always a click
+// or change, so the browser lets it play.
+export function previewSound(file) {
+  const busy = soundPlaying && !soundAudio(soundPlaying).paused;
+  if (busy && SOUND_EVENTS[soundPlaying].rank > 0) return;
+  const a = audioFor(`sounds/${file}`);
+  for (const other of Object.values(SOUNDS)) if (other !== a) other.pause();
+  a.currentTime = 0;
+  soundPlaying = null;
+  a.play().catch(() => {});
 }
 
 // Fades a cue out over `ms` and stops it, so a long one never outlasts the

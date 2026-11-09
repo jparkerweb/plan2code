@@ -249,20 +249,40 @@ export function cardWidth(value) {
   return typeof value === "string" && Object.hasOwn(CARD_WIDTHS, value) ? value : DEFAULT_CARD_WIDTH;
 }
 
+// The sound files a person can give a cue, sound-01 to sound-19, served from
+// /sounds/<name>.mp3 (static.mjs).
+export const SOUND_FILES = Array.from({ length: 19 }, (_, i) => `sound-${String(i + 1).padStart(2, "0")}`);
+
+// The cues that take a picked file, in the order the picker lists them.
+// Planny snoring and waking (snore, bootup) keep their own files.
+export const PICKABLE_SOUNDS = ["startSkill", "sessionStart", "skillReady", "sessionEnd", "question", "chatReply", "newTab"];
+
+// The file each pickable cue plays until a person picks another.
+export const DEFAULT_SOUND_FILE = {
+  startSkill: "sound-01",
+  sessionStart: "sound-02",
+  sessionEnd: "sound-02",
+  question: "sound-03",
+  skillReady: "sound-03",
+  chatReply: "sound-03",
+  newTab: "sound-04",
+};
+
 // Every moment the page makes a noise, each switchable on its own in User
 // Preferences (the `data-sound` boxes in index.html). Several share a file;
 // the event, not the file, is what a person turns off. `rank` settles which
 // wins when two ask at once (see the sounds section in app.js). Stored flat as
-// `soundQuestion` and so on, because looks.json only holds flat values.
+// `soundQuestion` and so on, because looks.json only holds flat values. For a
+// pickable cue `file` is its default; the pick is `soundFile<Event>` in looks.
 export const SOUND_EVENTS = {
-  startSkill: { file: "start-skill", rank: 5 },
+  startSkill: { file: `sounds/${DEFAULT_SOUND_FILE.startSkill}`, rank: 5 },
   bootup: { file: "bootup", rank: 4 },
-  sessionStart: { file: "start-stop", rank: 3 },
-  sessionEnd: { file: "start-stop", rank: 3 },
-  question: { file: "next", rank: 2 },
-  skillReady: { file: "next", rank: 2 },
-  chatReply: { file: "next", rank: 2 },
-  newTab: { file: "insert", rank: 1 },
+  sessionStart: { file: `sounds/${DEFAULT_SOUND_FILE.sessionStart}`, rank: 3 },
+  sessionEnd: { file: `sounds/${DEFAULT_SOUND_FILE.sessionEnd}`, rank: 3 },
+  question: { file: `sounds/${DEFAULT_SOUND_FILE.question}`, rank: 2 },
+  skillReady: { file: `sounds/${DEFAULT_SOUND_FILE.skillReady}`, rank: 2 },
+  chatReply: { file: `sounds/${DEFAULT_SOUND_FILE.chatReply}`, rank: 2 },
+  newTab: { file: `sounds/${DEFAULT_SOUND_FILE.newTab}`, rank: 1 },
   snore: { file: "sleeping", rank: 0 },
 };
 
@@ -277,6 +297,21 @@ export function soundPrefs(saved) {
     Object.keys(SOUND_EVENTS).map((event) => {
       const value = source[soundKey(event)];
       return [soundKey(event), typeof value === "boolean" ? value : true];
+    })
+  );
+}
+
+export const soundFileKey = (event) => "soundFile" + event[0].toUpperCase() + event.slice(1);
+
+// The picked file per pickable cue out of a saved looks object: each one as
+// saved when it names one of SOUND_FILES, the cue's default otherwise (a
+// looks.json from before the picker, a removed file, a non-string).
+export function soundFilePrefs(saved) {
+  const source = saved && typeof saved === "object" ? saved : {};
+  return Object.fromEntries(
+    PICKABLE_SOUNDS.map((event) => {
+      const value = source[soundFileKey(event)];
+      return [soundFileKey(event), typeof value === "string" && SOUND_FILES.includes(value) ? value : DEFAULT_SOUND_FILE[event]];
     })
   );
 }

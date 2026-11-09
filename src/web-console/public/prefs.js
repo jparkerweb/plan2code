@@ -4,7 +4,7 @@
 // each. No DOM access at module scope, and its one import is the data-only
 // palette.js: the page and `node --test` both import this file.
 
-import { SOUND_EVENTS, soundKey } from "./palette.js";
+import { SOUND_EVENTS, soundKey, PICKABLE_SOUNDS, soundFileKey } from "./palette.js";
 
 const tab = (id, label, hint, sections) => Object.freeze({ id, label, hint, sections: Object.freeze(sections) });
 
@@ -26,6 +26,6 @@ export function prefsOpenTab(asked) {
 // nothing to reset (and is hidden).
 export function prefsResetScope(tab) {
   if (tab === "appearance") return ["theme", "width", "accent", "role", "skipIntro"];
-  if (tab === "sounds") return ["sound", ...Object.keys(SOUND_EVENTS).map(soundKey), "hideActivities", "activitySounds", "gameMusic"];
+  if (tab === "sounds") return ["sound", ...Object.keys(SOUND_EVENTS).map(soundKey), ...PICKABLE_SOUNDS.map(soundFileKey), "hideActivities", "activitySounds", "gameMusic"];
   return null;
 }
