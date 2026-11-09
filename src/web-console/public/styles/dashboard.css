@@ -646,12 +646,12 @@
 .loop-strength-line .col.lvl-3 { stroke: var(--lvl-3); }
 .loop-strength-rows { display: grid; gap: 0; }
 .loop-strength-head, .loop-strength-row { position: relative; z-index: 1; display: grid; grid-template-columns: minmax(130px, 1.5fr) repeat(4, minmax(0, 1fr)) 64px; align-items: center; column-gap: 4px; font-size: 13.5px; }
-.loop-strength-row { min-height: 34px; }
+.loop-strength-row { min-height: 46px; }
 .loop-strength-chip { justify-self: center; font-size: 12px; padding: 5px 9px; white-space: normal; text-align: center; line-height: 1.15; max-width: 100%; border-radius: 16px; }
 .loop-strength-chip.is-unmapped { opacity: 0.5; }
 .loop-strength-phase { overflow-wrap: anywhere; color: var(--ink); padding-right: 8px; }
 .loop-strength-model { font-size: 12.5px; color: var(--ink-3); overflow-wrap: anywhere; text-align: right; }
-.loop-strength-cell { --b: var(--lvl-0); position: relative; display: flex; align-items: center; justify-content: center; height: 34px; cursor: pointer; }
+.loop-strength-cell { --b: var(--lvl-0); position: relative; display: flex; align-items: center; justify-content: center; height: 46px; cursor: pointer; }
 .loop-strength-cell.lvl-1 { --b: var(--lvl-1); }
 .loop-strength-cell.lvl-2 { --b: var(--lvl-2); }
 .loop-strength-cell.lvl-3 { --b: var(--lvl-3); }
