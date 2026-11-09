@@ -827,7 +827,7 @@ test("prefs: four tabs in order, each section in exactly one", () => {
   for (const t of PREFS_TABS) assert.ok(t.hint, `${t.id} has a hint`);
   const sections = PREFS_TABS.flatMap((t) => t.sections);
   assert.equal(new Set(sections).size, sections.length, "no section sits in two tabs");
-  assert.deepEqual(PREFS_TABS[0].sections, ["theme", "width", "accent", "role"], "Appearance in its order");
+  assert.deepEqual(PREFS_TABS[0].sections, ["theme", "width", "accent", "role", "intro"], "Appearance in its order");
 });
 
 test("prefs: the dialog opens on the tab asked for, else Appearance", () => {
@@ -836,7 +836,7 @@ test("prefs: the dialog opens on the tab asked for, else Appearance", () => {
 });
 
 test("prefs: Back to default resets Appearance or Sounds & activities only, and nothing on the other two", () => {
-  assert.deepEqual(prefsResetScope("appearance"), ["theme", "width", "accent", "role"]);
+  assert.deepEqual(prefsResetScope("appearance"), ["theme", "width", "accent", "role", "skipIntro"]);
   const sounds = prefsResetScope("sounds");
   assert.deepEqual(sounds, ["sound", ...Object.keys(SOUND_EVENTS).map(soundKey), "hideActivities", "activitySounds", "gameMusic"]);
   for (const key of [...prefsResetScope("appearance"), ...sounds]) {
@@ -850,7 +850,7 @@ test("prefs: Back to default resets Appearance or Sounds & activities only, and 
 test("looks: resetLooks(keys) changes only those keys, and the role is marked as asked", () => {
   const before = { ...looks };
   try {
-    Object.assign(looks, { theme: "dark", width: "wide", accent: "violet", role: "pm", sound: false, soundQuestion: false, hideActivities: false, activityBestSnake: 7, lastActivity: "snake" });
+    Object.assign(looks, { theme: "dark", width: "wide", accent: "violet", role: "pm", sound: false, soundQuestion: false, hideActivities: false, activityBestSnake: 7, lastActivity: "snake", skipIntro: true });
     resetLooks(prefsResetScope("appearance"));
     assert.equal(looks.theme, DEFAULT_LOOKS.theme);
     assert.equal(looks.width, DEFAULT_LOOKS.width);
@@ -858,6 +858,7 @@ test("looks: resetLooks(keys) changes only those keys, and the role is marked as
     assert.equal(looks.role, ROLE_NOT_SET, "cleared but marked as asked");
     assert.equal(looks.sound, false, "sounds untouched by Appearance");
     assert.equal(looks.hideActivities, false);
+    assert.equal(looks.skipIntro, DEFAULT_LOOKS.skipIntro, "Appearance resets Always SKIP Intro");
     resetLooks(prefsResetScope("sounds"));
     assert.equal(looks.sound, true);
     assert.equal(looks.soundQuestion, true);

@@ -31,6 +31,8 @@ export const DEFAULT_LOOKS = {
   ...soundPrefs(null),
   width: DEFAULT_CARD_WIDTH,
   hideUnavailable: true,
+  // Always SKIP Intro: never play the dashboard's first-open wake-up (Planny asleep), off by default.
+  skipIntro: false,
   // Activities: the top bar's die (hidden until someone turns on Show Activities), whether its games play sounds (under Play
   // sounds, which silences them too), the game last picked, and one best score
   // per listed game (activityBestSnake) or, for a game with courses, per
@@ -61,6 +63,7 @@ export function adoptLooks(saved) {
   Object.assign(looks, soundPrefs(looks));
   if (typeof looks.hideUnavailable !== "boolean") looks.hideUnavailable = DEFAULT_LOOKS.hideUnavailable;
   looks.width = cardWidth(looks.width);
+  if (typeof looks.skipIntro !== "boolean") looks.skipIntro = DEFAULT_LOOKS.skipIntro;
   if (typeof looks.hideActivities !== "boolean") looks.hideActivities = DEFAULT_LOOKS.hideActivities;
   if (typeof looks.activitySounds !== "boolean") looks.activitySounds = DEFAULT_LOOKS.activitySounds;
   if (typeof looks.gameMusic !== "boolean") looks.gameMusic = DEFAULT_LOOKS.gameMusic;
@@ -263,6 +266,7 @@ export function renderSwatches() {
     box.disabled = !looks.sound;
   }
   $("looks-role").value = looks.role ?? ROLE_NOT_SET;
+  $("looks-skip-intro").checked = looks.skipIntro;
   $("looks-activities").checked = !looks.hideActivities;
   // Like a cue, the game sounds keep their tick while Play sounds is off.
   $("looks-activity-sounds").checked = looks.activitySounds;

@@ -96,6 +96,10 @@ export function wireLooks() {
     if (!looks.gameMusic) hushMusic();
     hooks.markSaved(fieldsetOf(e.target), saveLooks());
   });
+  $("looks-skip-intro").addEventListener("change", (e) => {
+    looks.skipIntro = e.target.checked;
+    hooks.markSaved(fieldsetOf(e.target), saveLooks());
+  });
   $("looks-activities").addEventListener("change", (e) => {
     looks.hideActivities = !e.target.checked;
     hooks.markSaved(fieldsetOf(e.target), saveLooks());

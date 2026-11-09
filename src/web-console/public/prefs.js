@@ -10,7 +10,7 @@ const tab = (id, label, hint, sections) => Object.freeze({ id, label, hint, sect
 
 // Each section id names one fieldset in the dialog (its data-section).
 export const PREFS_TABS = Object.freeze([
-  tab("appearance", "Appearance", "Theme, width, color, role", ["theme", "width", "accent", "role"]),
+  tab("appearance", "Appearance", "Theme, width, color, role, intro", ["theme", "width", "accent", "role", "intro"]),
   tab("agents", "Agents & models", "Your CLIs and models", ["agents"]),
   tab("system", "System", "Cleanup, desktop app", ["cleanup", "desktop"]),
   tab("sounds", "Sounds & activities", "What plays", ["sounds", "activities"]),
@@ -25,7 +25,7 @@ export function prefsOpenTab(asked) {
 // The looks keys Back to default resets on a tab, or null where it has
 // nothing to reset (and is hidden).
 export function prefsResetScope(tab) {
-  if (tab === "appearance") return ["theme", "width", "accent", "role"];
+  if (tab === "appearance") return ["theme", "width", "accent", "role", "skipIntro"];
   if (tab === "sounds") return ["sound", ...Object.keys(SOUND_EVENTS).map(soundKey), "hideActivities", "activitySounds", "gameMusic"];
   return null;
 }

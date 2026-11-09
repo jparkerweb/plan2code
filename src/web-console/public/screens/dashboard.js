@@ -298,6 +298,7 @@ const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 function maybeWake() {
   if (wakeTried || page.S.wake !== true || finish()) return;
   wakeTried = true;
+  if (looks.skipIntro === true) return;
   const key = "p2c-console:woke:" + page.S.sid;
   try {
     if (sessionStorage.getItem(key)) return;
