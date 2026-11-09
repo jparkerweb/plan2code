@@ -51,6 +51,10 @@ approve.
     `tasks.blocked`, report `failed`, reason `blocked`.
   - Failing tests: try one fix, then report `tests.passed: false`, `failed`,
     reason `tests`. Never post the Fix now, Document or Investigate options.
+    Exception: tests the phase file's Notes say will fail until a later phase.
+    Name every failing test in `tests.failing` and list the expected ones in
+    `tests.expectedFailures`; when every failing test is on that list, report
+    `passed`. Never list a failure the Notes do not name.
   - A waiting `**Plan change:**` line in the phase's Notes: do not ask Revise
     first or Resume; report `failed`, reason `other`, and say so in `summary`.
 - Run only the tests the phase file names, as the Implement prompt's tests rule
