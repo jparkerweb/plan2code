@@ -3280,7 +3280,8 @@
           </li>
           <li>
             <strong>Agents &amp; models</strong>: the agents you can start and
-            the models each one offers.
+            the models each one offers. Each agent is a card; open one to edit
+            it in a side drawer.
           </li>
           <li>
             <strong>System</strong>: Cleanup<span class="for-app">, and Desktop
@@ -3334,9 +3335,11 @@
         </p>
         <ul>
           <li>
-            <strong>Strengths in the loop</strong>: under Models, map Thrifty,
-            Balanced and Best to one of the agent's own models. The Implementation
-            Loop's per-phase strength reads them. Untouched rows stay as shipped.
+            <strong>Strengths in the loop</strong>: each agent's
+            <strong>In the loop</strong> box shows the model Thrifty, Balanced
+            and Best use, and you change one by tapping that word on a model in
+            the list below it. The Implementation Loop's per-phase strength
+            reads them. Untouched rows stay as shipped.
           </li>
           <li>
             <strong>Models</strong>: each built-in agent (Claude, Devin, Codex)
@@ -3349,8 +3352,11 @@
           <li>
             <strong>Agents</strong>: an agent you add is another command-line
             tool the <code>plan2code</code> launcher can start, beside the
-            built-in ones. Give it a name, the command to run and, if you like,
-            a start prompt and models. <strong>Test</strong> checks the command
+            built-in ones. <strong>Add agent</strong> offers the starter
+            templates (each says whether its command is installed) or a custom
+            command. Give it a name, the command to run and, if you like, a
+            start prompt and models, on the drawer's <strong>Launch</strong>
+            tab. <strong>Test</strong> checks the command
             is on your PATH. The <strong>Command-line arguments</strong> fold
             holds the arguments it is started with, the ones that skip its
             permission prompts, and the ones that pick a model, where
@@ -3629,14 +3635,17 @@
             </section>
             <section class="prefs-panel" data-tab="agents">
               <div class="prefs-agents" data-section="agents">
-                <p class="help" id="agents-intro" data-av="intro">Most people never need to change this. Plan2Code finds the agents installed on this machine and ships an up-to-date model list with every release.</p>
-                <div class="split" id="agents-split">
-                  <div class="split-list" id="agents-table" data-av="table">
-                    <button type="button" class="btn small ghost split-add" id="agents-add" data-av="add">Add agent</button>
-                  </div>
-                  <div class="split-pane" id="agents-form" data-av="form"></div>
+                <div class="roster-head">
+                  <p class="help" id="agents-intro" data-av="intro">Most people never need to change this. Plan2Code finds the agents installed on this machine and ships an up-to-date model list with every release. Open an agent to choose the models the loop uses for each strength.</p>
+                  <button type="button" class="btn small primary" id="agents-add" data-av="add">Add agent</button>
                 </div>
+                <div class="roster" id="agents-table" data-av="table"></div>
                 <span class="help" id="agents-status" data-av="status" role="status"></span>
+                <div class="agents-drawer" id="agents-drawer" data-av="drawer" hidden>
+                  <div class="drawer-scrim" data-av="scrim"></div>
+                  <aside class="drawer" id="agents-form" data-av="form" aria-label="Agent"></aside>
+                </div>
+                <div class="agents-chooser" id="agents-chooser" data-av="chooser" hidden></div>
               </div>
             </section>
             <section class="prefs-panel" data-tab="system">

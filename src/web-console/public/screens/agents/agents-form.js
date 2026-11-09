@@ -1,17 +1,19 @@
-// Plan2Code Web Console - the agents view's per-agent form, the detail pane.
+// Plan2Code Web Console - the agents view's per-agent form, the drawer's content.
 //
-// What the right pane draws while a draft is being edited: the built-in's
-// models fold or an added agent's fields (identity inline, Models and
-// Command-line arguments folded), the foot (Save, Discard, the Unsaved
-// badge, Save anyway after a 409, Delete with its inline confirm), error
-// marking, and the focus save/restore that keeps a redraw from stealing
-// where the person was. It only draws and listens: state and fetches live
-// in the mount, reached through `ctx`.
+// What the drawer (or, on the setup page, the split's right pane) draws while a
+// draft is being edited: the head (name, command, a close button), two tabs,
+// Models & strengths and Launch, the foot (Save, Discard, the Unsaved badge,
+// Save anyway after a 409, Delete with its inline confirm), error marking, and
+// the focus save/restore that keeps a redraw from stealing where the person
+// was. A built-in's Launch tab only reads (Plan2Code owns its command); an
+// added agent's holds the fields. It only draws and listens: state and fetches
+// live in the mount, reached through `ctx`.
 
 import { el } from "../../render.js";
 import { listEditor } from "./agents-list-editor.js";
 import { BUILT_IN, HAS_EFFORT, cliOf, savedEntry, isDirty } from "./agents-data.js";
-import { strengthsFold } from "./agents-strengths.js";
+import { strengthsPanel } from "./agents-strengths.js";
+import { drawBadge } from "./agents-summary.js";
 
 function agentField(label, field, child) {
   const wrap = el("div", "agent-field");
@@ -63,50 +65,152 @@ function fold(ctx, which, title, cls, kids) {
   return d;
 }
 
-// A built-in's whole form is its models, so the one fold holds the note, the
-// locked shipped list and the editor for the person's own additions.
-function builtInFields(ctx, cli, draft) {
-  const shipped = el("div", "models-list prefs-agents-shipped");
-  shipped.setAttribute("aria-label", "Comes with Plan2Code");
-  for (const m of ctx.saved.shipped[cli]) {
-    const row = el("div", "models-row locked");
-    row.append(el("span", null, m.id), el("span", null, m.label || ""));
-    shipped.appendChild(row);
+/* ------------------------------------------------------------ models tab */
+
+// One model: its name and id, the pill set (when the strengths loaded), and a
+// Remove for the ones the person added.
+function modelRow(ctx, m, panel, onRemove) {
+  const row = el("div", onRemove ? "models-row" : "models-row locked");
+  const name = el("span", "model-name");
+  const named = m.label && m.label !== m.id;
+  name.append(named ? m.label : m.id);
+  if (named) name.append(el("code", null, m.id));
+  row.appendChild(name);
+  row.appendChild(panel ? panel.pills(m.id, m.label || m.id) : el("span"));
+  if (onRemove) {
+    const remove = el("button", "btn small ghost", "Remove");
+    remove.type = "button";
+    remove.setAttribute("aria-label", "Remove " + (m.label || m.id));
+    remove.addEventListener("click", onRemove);
+    row.appendChild(remove);
+  } else {
+    row.appendChild(el("span"));
   }
-  const note = el("div", "models-note");
-  note.innerHTML =
-    "<ul>" +
-    "<li>Restart <code>plan2code</code> to see a change in its model menu.</li>" +
-    "<li>At any time, run <code>plan2code --model &lt;id&gt;</code>, or pick your model inside your agent before running a skill.</li>" +
-    "<li>Updating Plan2Code refreshes the built-in list. Models you added stay, unless the built-in list now includes them.</li>" +
-    "<li>Devin models are limited to Low, Medium and High effort.</li>" +
-    "</ul>";
-  const comes = el("div", "agent-field");
-  comes.append(el("span", null, "Comes with Plan2Code"));
-  if (ctx.saved.shipped[cli].length) comes.append(shipped);
-  else comes.append(el("p", "help prefs-agents-none", `No models ship for ${BUILT_IN[cli]} yet; add your own below.`));
-  const yours = agentField(
-    "Models you added",
-    "models",
-    listEditor({ list: draft, kind: "models", field: "models", optionalName: false, addLabel: "Add a model", onChange: ctx.edited })
-  );
-  const models = () => [...ctx.saved.shipped[cli], ...draft];
-  return [
-    fold(ctx, "modelsOpen", "Models", "agent-fold", [note, comes, yours]),
-    ...(ctx.modelsLoaded ? [strengthsFold(ctx, cli, draft, { models, hasEffort: HAS_EFFORT.includes(cli) })] : []),
-  ];
+  return row;
 }
 
-function addedFields(ctx, draft) {
+// The add-a-model row: an id, a name for the menu, and the button that moves
+// them into the draft, so the draft never holds a half-typed model.
+function addModelRow(ctx, list, { nameRequired, taken }) {
+  const wrap = el("div", "agent-row model model-add");
+  const id = el("input");
+  id.placeholder = "Model id, for {model}";
+  id.setAttribute("aria-label", "Model id");
+  id.dataset.field = "models";
+  const label = el("input");
+  label.placeholder = nameRequired ? "Name shown in the menu" : "Name shown in the menu (optional)";
+  label.setAttribute("aria-label", "Name shown in the menu");
+  label.dataset.field = "models";
+  const add = el("button", "btn small", "Add a model");
+  add.type = "button";
+  const submit = () => {
+    const value = id.value.trim();
+    const text = label.value.trim();
+    id.classList.toggle("invalid", !value || taken(value));
+    if (!value || taken(value)) {
+      id.focus();
+      return;
+    }
+    list.push(nameRequired ? { id: value, label: text || value } : text ? { id: value, label: text } : { id: value });
+    ctx.edited();
+    ctx.drawForm();
+    ctx.$("form").querySelector(".model-add input")?.focus();
+  };
+  add.addEventListener("click", submit);
+  for (const input of [id, label]) {
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        submit();
+      }
+    });
+  }
+  wrap.append(id, label, add);
+  return wrap;
+}
+
+function modelsTab(ctx, key, draft) {
+  const isCli = key.startsWith("cli:");
+  const cli = isCli ? cliOf(key) : null;
+  const mine = isCli ? draft : draft.models;
+  const shipped = isCli ? ctx.saved.shipped[cli] : [];
+  const all = () => [...shipped, ...mine.filter((m) => m.id)];
+  const owner = isCli ? cli : key === "agent:new" ? "" : savedEntry(ctx.saved, key).id;
+  const panel = ctx.modelsLoaded ? strengthsPanel(ctx, owner, draft, { models: all, hasEffort: isCli && HAS_EFFORT.includes(cli) }) : null;
+  const kids = [];
+  if (panel) {
+    const lead = agentField("In the loop", "strengths", panel.box);
+    lead.classList.add("prefs-agents-strengths-field");
+    kids.push(lead);
+    kids.push(el("p", "help models-tip", "Tap Thrifty, Balanced or Best on a model below to make it that strength's pick."));
+  }
+  if (isCli) {
+    const comes = el("div", "agent-field");
+    comes.append(el("span", null, "Comes with Plan2Code"));
+    if (shipped.length) {
+      const list = el("div", "models-list prefs-agents-shipped");
+      list.setAttribute("aria-label", "Comes with Plan2Code");
+      for (const m of shipped) list.appendChild(modelRow(ctx, m, panel, null));
+      comes.append(list);
+    } else {
+      comes.append(el("p", "help prefs-agents-none", `No models ship for ${BUILT_IN[cli]} yet; add your own below.`));
+    }
+    kids.push(comes);
+  }
+  const yours = agentField(isCli ? "Models you added" : "Models", "models", el("div", "models-list prefs-agents-mine"));
+  const rows = yours.querySelector(".models-list");
+  mine.forEach((m, i) =>
+    rows.appendChild(
+      modelRow(ctx, m, panel, () => {
+        mine.splice(i, 1);
+        ctx.edited();
+        ctx.drawForm();
+      })
+    )
+  );
+  const taken = (id) => all().some((m) => m.id === id);
+  yours.appendChild(addModelRow(ctx, mine, { nameRequired: isCli, taken }));
+  kids.push(yours);
+  if (isCli) {
+    const note = el("div", "models-note");
+    note.innerHTML =
+      "<ul>" +
+      "<li>Restart <code>plan2code</code> to see a change in its model menu.</li>" +
+      "<li>At any time, run <code>plan2code --model &lt;id&gt;</code>, or pick your model inside your agent before running a skill.</li>" +
+      "<li>Updating Plan2Code refreshes the built-in list. Models you added stay, unless the built-in list now includes them.</li>" +
+      "<li>Devin models are limited to Low, Medium and High effort.</li>" +
+      "</ul>";
+    kids.push(fold(ctx, "modelsOpen", "About this list", "agent-fold", [note]));
+  }
+  return kids;
+}
+
+/* ------------------------------------------------------------ launch tab */
+
+// A built-in's Launch tab only reads: Plan2Code ships and updates its command.
+function builtInLaunch(ctx, key) {
+  const cli = cliOf(key);
+  const entry = ctx.saved.builtins.find((b) => b.id === cli);
+  const note = el("div", "note");
+  note.append(el("b", null, "Managed by Plan2Code. "), `The command and arguments for ${BUILT_IN[cli]} ship with the app and update with it. Only its models are yours to change.`);
+  const list = el("dl", "kv");
+  const state = el("span", "prefs-badge");
+  const known = ctx.found.get(key);
+  drawBadge(state, known ? known.state : "unknown");
+  const command = el("dd");
+  command.append(el("code", null, (entry && entry.command) || cli), " ", state);
+  list.append(el("dt", null, "Command"), command);
+  if (entry && entry.prompt) {
+    const prompt = el("dd");
+    prompt.appendChild(el("code", null, entry.prompt));
+    list.append(el("dt", null, "Start prompt"), prompt);
+  }
+  return [note, list];
+}
+
+function addedLaunch(ctx, draft) {
   const command = agentField("Command", "command", agentInput(ctx, draft, "command", "Command", "Program to run, such as myagent", true));
   command.append(agentTest(ctx, draft));
-  const models = fold(ctx, "modelsOpen", "Models", "agent-fold", [
-    agentField(
-      "Models",
-      "models",
-      listEditor({ list: draft.models, kind: "models", field: "models", addLabel: "Add a model", onChange: ctx.edited })
-    ),
-  ]);
   const args = fold(ctx, "argsOpen", "Command-line arguments", "agent-fold prefs-agents-args", [
     agentField("Arguments", "args", listEditor({ list: draft.args, field: "args", placeholder: "--message={prompt}", addLabel: "Add an argument", aria: "Arguments", onChange: ctx.edited })),
     agentField("Bypass arguments", "bypassArgs", listEditor({ list: draft.bypassArgs, field: "bypassArgs", placeholder: "--yes-always", addLabel: "Add an argument", aria: "Bypass arguments", onChange: ctx.edited })),
@@ -116,13 +220,11 @@ function addedFields(ctx, draft) {
     agentField("Name", "name", agentInput(ctx, draft, "name", "Name", "Name shown in the menu", true)),
     command,
     agentField("Start prompt", "prompt", agentInput(ctx, draft, "prompt", "Start prompt", "/plan2code (blank starts with nothing typed)", false)),
-    models,
-    ...(ctx.modelsLoaded
-      ? [strengthsFold(ctx, ctx.openKey === "agent:new" ? "" : savedEntry(ctx.saved, ctx.openKey).id, draft, { models: () => draft.models, hasEffort: false })]
-      : []),
     args,
   ];
 }
+
+/* ------------------------------------------------------------------ foot */
 
 // Save, Discard and the Unsaved badge (shown only while the draft differs),
 // the Saved mark's spot, Save anyway after a 409, and Delete agent with its
@@ -180,7 +282,7 @@ export function renderDirty(ctx, key) {
 // Which field or button has focus, so a redraw (an id assigned, an error
 // marked) puts the person back where they were: { nth, start, end }. What
 // they typed is already in the draft the redraw reads.
-const FORM_FOCUSABLE = "input, button, summary";
+const FORM_FOCUSABLE = "input, button, summary, select";
 
 function formFocus(form) {
   const active = document.activeElement;
@@ -203,29 +305,68 @@ function restoreFormFocus(form, at) {
   }
 }
 
+const TABS = [
+  ["models", "Models & strengths"],
+  ["launch", "Launch"],
+];
+
 export function drawForm(ctx) {
   const pane = ctx.$("form");
   const key = ctx.openKey;
   const draft = ctx.drafts.get(key);
   const focus = formFocus(pane);
   pane.replaceChildren();
+  const isCli = key.startsWith("cli:");
   const head = el("div", "form-head");
   const title = el("h3", "prefs-agents-title");
   title.tabIndex = -1;
-  if (key.startsWith("cli:")) title.append(el("span", null, BUILT_IN[cliOf(key)]), el("code", null, cliOf(key)));
-  else title.append(el("span", null, key === "agent:new" ? "New agent" : savedEntry(ctx.saved, key).name));
+  if (isCli) title.append(el("span", null, BUILT_IN[cliOf(key)]), el("code", null, cliOf(key)));
+  else {
+    title.append(el("span", null, key === "agent:new" ? "New agent" : savedEntry(ctx.saved, key).name));
+    if (key === "agent:new" && ctx.draftFrom) title.append(el("span", "tag", `From the ${ctx.draftFrom} template`));
+  }
   head.appendChild(title);
+  if (ctx.$("drawer")) {
+    const close = el("button", "btn small ghost drawer-close", "Close");
+    close.type = "button";
+    close.setAttribute("aria-label", "Close");
+    close.addEventListener("click", () => ctx.closeDrawer());
+    head.appendChild(close);
+  }
   pane.appendChild(head);
+
+  const tabs = el("div", "agent-tabs");
+  tabs.setAttribute("role", "tablist");
+  const order = key === "agent:new" ? [...TABS].reverse() : TABS;
+  for (const [id, label] of order) {
+    const tab = el("button", "agent-tab", label);
+    tab.type = "button";
+    tab.setAttribute("role", "tab");
+    tab.dataset.tab = id;
+    tab.setAttribute("aria-selected", String(ctx.tab === id));
+    tab.addEventListener("click", () => {
+      if (ctx.tab === id) return;
+      ctx.tab = id;
+      ctx.drawForm();
+    });
+    tabs.appendChild(tab);
+  }
+  pane.appendChild(tabs);
+
+  const body = el("div", "agent-body");
   const fields = el("div", "prefs-agents-fields");
-  fields.append(...(key.startsWith("cli:") ? builtInFields(ctx, cliOf(key), draft) : addedFields(ctx, draft)));
-  pane.appendChild(fields);
+  fields.setAttribute("role", "tabpanel");
+  if (ctx.tab === "models") fields.append(...modelsTab(ctx, key, draft));
+  else fields.append(...(isCli ? builtInLaunch(ctx, key) : addedLaunch(ctx, draft)));
+  body.appendChild(fields);
   if (ctx.formError) {
-    for (const input of pane.querySelectorAll("input")) {
+    for (const input of body.querySelectorAll("input")) {
       if (input.dataset.field === ctx.formError.field) input.classList.add("invalid");
     }
-    pane.appendChild(el("p", "agent-error", ctx.formError.error));
+    body.appendChild(el("p", "agent-error", ctx.formError.error));
   }
-  if (ctx.formReplace && ctx.formReplace.length) pane.appendChild(el("p", "agent-error", ctx.formReplace.join(" ")));
+  if (ctx.formReplace && ctx.formReplace.length) body.appendChild(el("p", "agent-error", ctx.formReplace.join(" ")));
+  pane.appendChild(body);
   pane.appendChild(formFoot(ctx, key));
   renderDirty(ctx, key);
   restoreFormFocus(pane, focus);

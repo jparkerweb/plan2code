@@ -1,11 +1,14 @@
 // Plan2Code Web Console - the agents view's mount, state and server calls.
 //
 // One mount serves the User Preferences Agents & models tab and the
-// agent-less setup page, drawn as a master-detail split: the list on the
-// left (agents-summary.js), the picked agent's form or state in the right
-// pane (agents-form.js / agents-summary.js), the row-list editor shared by
-// every list field (agents-list-editor.js) and the pure helpers underneath
-// (agents-data.js). Picking a row is the navigation; there is no back page.
+// agent-less setup page. Preferences draws a roster of agent cards
+// (agents-summary.js) with the picked agent's form in a side drawer
+// (agents-form.js) and an Add agent chooser where the starter templates are an
+// opt-in; the setup page keeps a master-detail split, its list on the left and
+// the picked entry's state (or the same form) in the right pane. The row-list
+// editor shared by every list field is agents-list-editor.js and the pure
+// helpers underneath are agents-data.js. Picking a card or row is the
+// navigation; there is no back page.
 // Nothing saves as it changes: a form edits a draft, and its Save sends the
 // saved list with only that draft swapped in, so a half-typed command line
 // never reaches agents.json or models.json.
@@ -24,8 +27,9 @@ import {
   isDirty,
   nameOf,
   cleanAgent,
+  templateDraft,
 } from "./agents/agents-data.js";
-import { renderSummary, drawSummaryPane, drawBadge } from "./agents/agents-summary.js";
+import { renderSummary, drawSummaryPane, drawBadge, drawChooser, markTemplateState } from "./agents/agents-summary.js";
 import { drawForm, renderDirty } from "./agents/agents-form.js";
 
 /**
@@ -113,6 +117,13 @@ export function mountAgentsView(container, opts = {}) {
     // warnings while Save anyway is on offer.
     formError: null,
     formReplace: null,
+    // The drawer's tab ("models" or "launch"), the template a new agent was
+    // started from (its name, for the form's head), and whether the Add agent
+    // chooser is up; templateState remembers each template command's check.
+    tab: "models",
+    draftFrom: null,
+    chooserOpen: false,
+    templateState: new Map(),
     // Delete agent waiting for its second click; the folds' open state, kept
     // across redraws.
     confirming: false,
@@ -125,6 +136,10 @@ export function mountAgentsView(container, opts = {}) {
     confirmUnsaved,
     pick,
     pickSetup,
+    openChooser,
+    closeChooser,
+    startNew,
+    closeDrawer,
     save: (key, options) => saveForm(key, options),
     discard: () => discardOpen(),
     deleteAgent,
@@ -157,6 +172,24 @@ export function mountAgentsView(container, opts = {}) {
     else drawSummaryPane(ctx);
   }
 
+  // Preferences only: the drawer shows while a form is open, and the roster
+  // behind it is out of reach (it also sits behind a scrim).
+  function syncDrawer() {
+    const drawer = $("drawer");
+    if (!drawer) return;
+    drawer.hidden = !ctx.openKey;
+    const behind = Boolean(ctx.openKey || ctx.chooserOpen);
+    $("table").inert = behind;
+    if ($("add")) $("add").inert = behind;
+  }
+
+  function syncChooser() {
+    const box = $("chooser");
+    if (!box) return;
+    box.hidden = !ctx.chooserOpen;
+    syncDrawer();
+  }
+
   function edited() {
     if (ctx.openKey) {
       // A model added or removed changes what the strengths fold may pick.
@@ -173,6 +206,7 @@ export function mountAgentsView(container, opts = {}) {
     ctx.drafts.delete(ctx.openKey);
     ctx.strengthDrafts.delete(ctx.openKey);
     ctx.openKey = null;
+    ctx.draftFrom = null;
     return true;
   }
 
@@ -199,14 +233,18 @@ export function mountAgentsView(container, opts = {}) {
     ctx.formReplace = null;
     ctx.confirming = false;
     ctx.strengthsOpen = false;
+    ctx.tab = key === "agent:new" ? "launch" : "models";
     ctx.argsOpen = key === "agent:new";
     // A built-in's only section is its models: folded it would show nothing.
     ctx.modelsOpen = key.startsWith("cli:");
     if (mode === "setup") ctx.setupSel = key.startsWith("agent:") && key !== "agent:new" ? "setup:" + agentId(key) : null;
     if (!ctx.drafts.has(key)) ctx.drafts.set(key, structuredClone(key === "agent:new" ? newAgent() : savedEntry(ctx.saved, key)));
     renderSummary(ctx);
+    syncDrawer();
     drawForm(ctx);
-    $("form").querySelector("input")?.focus();
+    // A form of fields starts in its first one; the models list would scroll to its add row, so it starts on its tab.
+    const first = ctx.tab === "launch" ? $("form").querySelector(".prefs-agents-fields input") : null;
+    (first || $("form").querySelector('.agent-tab[aria-selected="true"]'))?.focus();
   }
 
   // The form goes back to the empty or picked pane; focus goes to the row
@@ -219,14 +257,75 @@ export function mountAgentsView(container, opts = {}) {
       ctx.strengthDrafts.delete(ctx.openKey);
     }
     ctx.openKey = null;
+    ctx.draftFrom = null;
     ctx.formError = null;
     ctx.formReplace = null;
     ctx.confirming = false;
     renderSummary(ctx);
     drawPane();
+    syncDrawer();
     const rowKey = left && mode === "setup" && left.startsWith("agent:") ? "setup:" + agentId(left) : left;
     const row = rowKey && $("table").querySelector(`[data-key="${CSS.escape(rowKey)}"]`);
     (row || $("add")).focus();
+  }
+
+  const agentCardFor = (key) => $("table").querySelector(`[data-key="${CSS.escape(key)}"]`);
+
+  // The drawer's way out (Close, its scrim, Esc): a dirty draft asks first.
+  async function closeDrawer() {
+    const left = ctx.openKey;
+    if (!left) return;
+    if (!(await leaveForm())) return focusOpen();
+    ctx.formError = null;
+    ctx.formReplace = null;
+    ctx.confirming = false;
+    renderSummary(ctx);
+    drawPane();
+    syncDrawer();
+    (agentCardFor(left) || $("add"))?.focus();
+  }
+
+  // Add agent: the chooser, with the templates as an opt-in. Picking a tile is
+  // what starts the draft (and asks about an unsaved one first).
+  function openChooser() {
+    ctx.chooserOpen = true;
+    drawChooser(ctx);
+    syncChooser();
+    $("chooser").querySelector(".chooser-tile:not(:disabled)")?.focus();
+    for (const t of ctx.saved.templates) checkTemplate(t.command);
+  }
+
+  function closeChooser() {
+    ctx.chooserOpen = false;
+    syncChooser();
+    $("add")?.focus();
+  }
+
+  // Whether a template's command is on this computer, asked once per load.
+  async function checkTemplate(command) {
+    let state = ctx.templateState.get(command) || "unknown";
+    if (state === "unknown") {
+      try {
+        const res = await fetch("/agents/test", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ command }),
+        });
+        if (res.ok) state = (await res.json()).found ? "ok" : "missing";
+      } catch {}
+      ctx.templateState.set(command, state);
+    }
+    if (ctx.chooserOpen) markTemplateState(ctx, command, state);
+  }
+
+  async function startNew(template) {
+    if (!(await leaveForm())) return;
+    ctx.chooserOpen = false;
+    syncChooser();
+    ctx.drafts.set("agent:new", structuredClone(template ? templateDraft(template) : newAgent()));
+    openForm("agent:new");
+    ctx.draftFrom = template ? template.name : null;
+    drawForm(ctx);
   }
 
   /* ------------------------------------------------------------- badges */
@@ -308,6 +407,7 @@ export function mountAgentsView(container, opts = {}) {
     ctx.strengthDrafts.delete(ctx.openKey);
     ctx.openKey = key;
     ctx.drafts.set(key, structuredClone(savedEntry(ctx.saved, key)));
+    ctx.draftFrom = null;
     ctx.formError = null;
     ctx.formReplace = null;
     renderSummary(ctx);
@@ -357,6 +457,7 @@ export function mountAgentsView(container, opts = {}) {
     const isNew = key === "agent:new";
     if (isNew && (!String(draft.name || "").trim() || !String(draft.command || "").trim())) {
       ctx.formError = { field: String(draft.name || "").trim() ? "command" : "name", error: "Give it a name and a command first." };
+      ctx.tab = "launch";
       drawForm(ctx);
       return false;
     }
@@ -373,6 +474,7 @@ export function mountAgentsView(container, opts = {}) {
       }
       if (!res.ok) {
         ctx.formError = { field: body.index === at ? body.field : null, error: body.error || "Could not save." };
+        if (ctx.formError.field) ctx.tab = ctx.formError.field === "models" ? "models" : "launch";
         ctx.formReplace = null;
         drawForm(ctx);
         return false;
@@ -471,7 +573,7 @@ export function mountAgentsView(container, opts = {}) {
   // Back into the form after Keep editing or a failed Save: the marked field, else the first.
   function focusOpen() {
     const form = $("form");
-    (form.querySelector("input.invalid") || form.querySelector("input"))?.focus();
+    (form.querySelector("input.invalid") || form.querySelector('.agent-tab[aria-selected="true"]'))?.focus();
   }
 
   // Each time the dialog opens: the list, from the server. The setup mount
@@ -480,6 +582,9 @@ export function mountAgentsView(container, opts = {}) {
   async function load() {
     const seq = ++loadSeq;
     ctx.openKey = null;
+    ctx.draftFrom = null;
+    ctx.chooserOpen = false;
+    ctx.templateState.clear();
     ctx.drafts.clear();
     ctx.strengthDrafts.clear();
     ctx.found.clear();
@@ -530,10 +635,28 @@ export function mountAgentsView(container, opts = {}) {
     setAgentsStatus(problems.join(" "), problems.length > 0);
     renderSummary(ctx);
     drawPane();
+    syncChooser();
   }
 
   function wire() {
-    $("add")?.addEventListener("click", () => pick("agent:new"));
+    $("add")?.addEventListener("click", () => (mode === "setup" ? pick("agent:new") : openChooser()));
+    $("scrim")?.addEventListener("click", () => closeDrawer());
+    // Esc backs out of the topmost layer first: the chooser, then the drawer
+    // (a dirty draft asks), before the dialog's own Esc closes Preferences.
+    if (mode === "prefs") {
+      container.addEventListener("keydown", (e) => {
+        if (e.key !== "Escape" || e.defaultPrevented) return;
+        if (ctx.chooserOpen) {
+          e.preventDefault();
+          e.stopPropagation();
+          closeChooser();
+        } else if (ctx.openKey) {
+          e.preventDefault();
+          e.stopPropagation();
+          closeDrawer();
+        }
+      });
+    }
   }
 
   return { load, wire, hasUnsaved, unsavedName, saveOpen, discardOpen, focusOpen };

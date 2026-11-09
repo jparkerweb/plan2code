@@ -1,16 +1,19 @@
 // Plan2Code Web Console - the agents view's collection side.
 //
-// The master-detail's left column for both mounts: Preferences draws one
-// pickable row per agent (name, command, found badge, its models) plus the
-// v3 orchestrator placeholder; the setup page draws the same rows with their
-// found/outside/missing badges and the starter templates. While no form is
-// open the right pane is this module's too: the empty text, or the picked
-// entry's state and way forward (Start, Use it from here, the install lines).
+// The collection side for both mounts. Preferences draws a roster of cards,
+// one per agent (name, command, found badge, the model each strength uses),
+// and the Add agent chooser, where the starter templates are an opt-in. The
+// setup page keeps its master-detail list: the same agents with their
+// found/outside/missing badges and the starter templates, and a right pane that
+// shows the picked entry's state and way forward (Start, Use it from here, the
+// install lines).
 // It only draws and listens: every fetch and every piece of state lives in
 // the mount, reached through `ctx`.
 
 import { el, copyButton } from "../../render.js";
-import { summaryRows, serverStateFor, modelNames, agentId, templateDraft } from "./agents-data.js";
+import { summaryRows, serverStateFor, agentId, templateDraft, HAS_EFFORT } from "./agents-data.js";
+import { STRENGTH_ORDER, resolveStrengths } from "../../strengths.js";
+import { wordChip } from "./agents-strengths.js";
 
 /* ------------------------------------------------------------- badges */
 
@@ -26,22 +29,46 @@ export function drawBadge(badge, state) {
   if (state !== "unknown") badge.classList.add(state);
 }
 
-/* --------------------------------------------------------- the prefs rows */
+/* -------------------------------------------------------- the prefs cards */
 
-// One pickable row: the whole row is the Edit button, so it carries the
-// data-key and the "Edit <name>" aria-label the flows rely on.
-function prefsRow(ctx, row, check) {
-  const r = el("button", "split-row");
+// A model's name without its gloss ("Sonnet, latest Sonnet" or "Opus plan: Opus in plan mode" is cut at the first separator), so a card line stays one line.
+const GLOSS = new RegExp(" " + String.fromCharCode(8212) + " |, |: ");
+const shortLabel = (label) => label.split(GLOSS)[0];
+
+// The model each strength resolves to for one row, as [word, label, effort]
+// triples; empty while the strengths did not load.
+function strengthLines(ctx, row) {
+  if (!ctx.modelsLoaded) return [];
+  const isCli = row.key.startsWith("cli:");
+  const owner = isCli ? row.command : agentId(row.key);
+  const resolved = resolveStrengths({
+    shipped: (ctx.saved.strengths.shipped && ctx.saved.strengths.shipped[owner]) || {},
+    user: (ctx.saved.strengths.user && ctx.saved.strengths.user[owner]) || {},
+    models: row.models.map((m) => m.id),
+    hasEffort: isCli && HAS_EFFORT.includes(owner),
+  });
+  return STRENGTH_ORDER.map((word) => {
+    const pick = resolved[word];
+    const model = pick && row.models.find((m) => m.id === pick.model);
+    return [word, model ? shortLabel(model.label || model.id) : null, pick && pick.effort];
+  });
+}
+
+// One card: the whole card is the Edit button, so it carries the data-key and
+// the "Edit <name>" aria-label the flows rely on.
+function agentCard(ctx, row, check) {
+  const r = el("button", "agent-card");
   r.type = "button";
   r.dataset.key = row.key;
   r.setAttribute("aria-label", "Edit " + row.name);
   r.setAttribute("aria-current", ctx.openKey === row.key ? "true" : "false");
   r.addEventListener("click", () => ctx.pick(row.key));
-  r.appendChild(el("span", "row-name", row.name));
-  const sub = el("span", "row-sub");
-  sub.id = "row-sub-" + row.key;
-  r.setAttribute("aria-describedby", sub.id);
-  sub.appendChild(el("code", null, row.command));
+  const top = el("span", "card-top");
+  const who = el("span", "card-who");
+  const name = el("span", "row-name", row.name);
+  if (row.key.startsWith("agent:")) name.append(" ", el("span", "tag", "Custom"));
+  who.append(name, el("code", null, row.command));
+  top.appendChild(who);
   const badge = el("span", "prefs-badge");
   const known = serverStateFor(ctx.saved, row);
   if (known) {
@@ -55,11 +82,22 @@ function prefsRow(ctx, row, check) {
       check.push(row);
     }
   }
-  sub.appendChild(badge);
-  const names = modelNames(row.models);
-  sub.appendChild(el("span", "row-models", names.length ? `${names.length}: ${names.join(", ")}` : "None"));
-  r.appendChild(sub);
-  if (row.noneShip) r.appendChild(el("span", "help row-note", `No models ship for ${row.name} yet; open this row to add your own.`));
+  top.appendChild(badge);
+  r.appendChild(top);
+  const lines = strengthLines(ctx, row);
+  if (lines.length) {
+    const tiers = el("span", "card-tiers");
+    for (const [word, label, effort] of lines) {
+      const line = el("span", "card-tier");
+      line.append(wordChip(word), label ? el("span", null, effort ? `${label} · ${effort}` : label) : el("span", "muted", "not mapped"));
+      tiers.appendChild(line);
+    }
+    r.appendChild(tiers);
+  }
+  const foot = el("span", "card-foot");
+  foot.append(el("span", "row-models", `${row.models.length} ${row.models.length === 1 ? "model" : "models"}`), el("span", "card-edit", "Edit ›"));
+  r.appendChild(foot);
+  if (row.noneShip && !row.models.length) r.appendChild(el("span", "help row-note", `No models ship for ${row.name} yet; open this card to add your own.`));
   return r;
 }
 
@@ -120,15 +158,14 @@ export function renderSummary(ctx) {
     }
   } else {
     const check = [];
-    for (const row of summaryRows(ctx.saved)) list.appendChild(prefsRow(ctx, row, check));
-    if (ctx.saved.templates.length) {
-      list.appendChild(el("div", "split-list-head", "Or start from a template"));
-      for (const t of ctx.saved.templates) list.appendChild(setupRow(ctx, t, "setup:" + t.name));
-    }
-    const soon = el("div", "split-row soon");
-    soon.append(el("span", "row-name", "v3 orchestrator"), el("span", "row-sub", "Nothing to set yet."));
-    list.appendChild(soon);
+    for (const row of summaryRows(ctx.saved)) list.appendChild(agentCard(ctx, row, check));
+    const ghost = el("button", "agent-card ghost");
+    ghost.type = "button";
+    ghost.append(el("span", "plus", "+"), el("b", null, "Add an agent"), el("span", "muted", "From a starter template or your own command"));
+    ghost.addEventListener("click", () => ctx.openChooser());
+    list.appendChild(ghost);
     if (check.length) ctx.checkFound(check);
+    return;
   }
   if (add) list.appendChild(add);
 }
@@ -227,10 +264,8 @@ export function drawSummaryPane(ctx) {
   const all = [...ctx.saved.builtins, ...ctx.saved.agents];
   const entry = sel && all.find((e) => "setup:" + e.id === sel);
   const template = sel && !entry && ctx.saved.templates.find((t) => "setup:" + t.name === sel);
-  if (ctx.mode !== "setup") {
-    pane.appendChild(template ? templatePane(ctx, template) : el("div", "split-empty", "Pick an agent on the left to edit it here."));
-    return;
-  }
+  // Preferences' drawer holds nothing while no form is open.
+  if (ctx.mode !== "setup") return;
   if (entry) {
     const box = el("div", "setup-detail");
     const head = el("div", "form-head");
@@ -253,4 +288,72 @@ export function drawSummaryPane(ctx) {
     return;
   }
   pane.appendChild(el("div", "split-empty", "Pick an agent on the left to see its state and the way forward."));
+}
+
+/* ------------------------------------------------------ the Add agent chooser */
+
+const TEMPLATE_STATE = { ok: "Installed on this computer", missing: "Not installed yet", unknown: "" };
+
+// The Add agent sheet: the starter templates as an opt-in, each with whether
+// its command is on this computer, and a Custom agent tile for any other tool.
+// A template whose command an agent already uses is shown, not offered.
+export function drawChooser(ctx) {
+  const box = ctx.$("chooser");
+  box.replaceChildren();
+  const scrim = el("div", "chooser-scrim");
+  scrim.addEventListener("click", () => ctx.closeChooser());
+  const sheet = el("div", "chooser-sheet");
+  sheet.setAttribute("role", "dialog");
+  sheet.setAttribute("aria-labelledby", "agents-chooser-title");
+  const head = el("div", "chooser-head");
+  const title = el("h3", null, "Add an agent");
+  title.id = "agents-chooser-title";
+  const close = el("button", "btn small ghost", "Cancel");
+  close.type = "button";
+  close.addEventListener("click", () => ctx.closeChooser());
+  head.append(title, close);
+  sheet.appendChild(head);
+  const have = new Set([...ctx.saved.builtins, ...ctx.saved.agents].map((a) => a.command));
+  if (ctx.saved.templates.length) {
+    sheet.appendChild(el("p", "help", "Start from a ready-made setup. You can change everything afterwards."));
+    const tiles = el("div", "chooser-tiles");
+    for (const t of ctx.saved.templates) {
+      const done = have.has(t.command);
+      const tile = el("button", "chooser-tile");
+      tile.type = "button";
+      tile.dataset.template = t.name;
+      tile.disabled = done;
+      const state = el("span", "chooser-state");
+      state.dataset.command = t.command;
+      const known = ctx.templateState.get(t.command);
+      state.textContent = done ? "Already added" : TEMPLATE_STATE[known || "unknown"];
+      if (known) state.classList.add(known);
+      tile.append(el("b", null, t.name), el("code", null, t.command));
+      if (t.note) tile.appendChild(el("span", "muted", t.note));
+      tile.appendChild(state);
+      tile.addEventListener("click", () => ctx.startNew(t));
+      tiles.appendChild(tile);
+    }
+    sheet.appendChild(tiles);
+    sheet.appendChild(el("div", "chooser-or", "or"));
+  } else {
+    sheet.appendChild(el("p", "help", "Add any command-line agent: give it a name and a command, then its models."));
+  }
+  const custom = el("button", "chooser-tile wide");
+  custom.type = "button";
+  custom.dataset.template = "";
+  custom.append(el("b", null, "Custom agent"), el("span", "muted", "Any command-line tool. You give it a name and a command, and add its models."));
+  custom.addEventListener("click", () => ctx.startNew(null));
+  sheet.appendChild(custom);
+  box.append(scrim, sheet);
+}
+
+// Fills each tile's "installed" line once /agents/test has answered for its command.
+export function markTemplateState(ctx, command, state) {
+  for (const node of ctx.$("chooser").querySelectorAll(".chooser-state")) {
+    if (node.dataset.command !== command || node.textContent === "Already added") continue;
+    node.textContent = TEMPLATE_STATE[state];
+    node.classList.remove("ok", "missing");
+    if (state !== "unknown") node.classList.add(state);
+  }
 }

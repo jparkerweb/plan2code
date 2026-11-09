@@ -1,17 +1,21 @@
-// Plan2Code Web Console - the "Strengths in the loop" fold of an agent's form.
+// Plan2Code Web Console - the "In the loop" panel of an agent's form.
 //
 // Maps the loop's three words (Thrifty, Balanced, Best) to one of the agent's
-// own models, and to an effort where the agent takes one. Choices are
-// select-only from the agent's Models list. An untouched row follows what
-// ships; only a row the person changed is kept in the form's strength draft
-// (ctx.strengthDrafts, by form key), which the form's Save sends. The rule that
-// reads a row is resolveStrengths, the same module the server uses.
+// own models, and to an effort where the agent takes one. The panel is two
+// halves that stay in step: a summary box (one row per word: the model it
+// resolves to, an effort select, and Reset or "default") and a pill set each
+// model row carries, where tapping a word on a model makes it that word's pick.
+// An untouched row follows what ships; only a row the person changed is kept in
+// the form's strength draft (ctx.strengthDrafts, by form key), which the form's
+// Save sends. The rule that reads a row is resolveStrengths, the same module the
+// server uses.
 
 import { el } from "../../render.js";
 import { STRENGTH_ORDER, resolveStrengths } from "../../strengths.js";
 import { canonical, strengthOwner } from "./agents-data.js";
 
-const WORDS = { thrifty: "Thrifty", balanced: "Balanced", best: "Best" };
+export const WORDS = { thrifty: "Thrifty", balanced: "Balanced", best: "Best" };
+const HINTS = { thrifty: "Quick, cheap steps", balanced: "The everyday pick", best: "The hardest steps" };
 const EFFORTS = ["low", "medium", "high"];
 
 function option(value, text) {
@@ -20,12 +24,19 @@ function option(value, text) {
   return o;
 }
 
+// A word as a colored chip: Thrifty, Balanced and Best get the rank colors.
+export function wordChip(word) {
+  return el("span", "tier t-" + word, WORDS[word]);
+}
+
 /**
- * The fold for the open form. `models` is the agent's Models list ({ id, label }
+ * The panel for the open form. `models` is the agent's Models list ({ id, label }
  * rows) or a function returning it, read at every redraw so a model added in the
- * same form shows up. `hasEffort` adds the effort select.
+ * same form shows up. `hasEffort` adds the effort select. Returns
+ * { box, pills(id, label), refresh }: the summary box, a builder for one model's
+ * pill set, and the redraw the form's edits call through ctx.strengthsRefresh.
  */
-export function strengthsFold(ctx, agentId, draft, { models, hasEffort }) {
+export function strengthsPanel(ctx, agentId, draft, { models, hasEffort }) {
   const key = ctx.openKey;
   const owner = agentId || strengthOwner(key);
   const shipped = (ctx.saved.strengths.shipped && ctx.saved.strengths.shipped[owner]) || {};
@@ -39,13 +50,18 @@ export function strengthsFold(ctx, agentId, draft, { models, hasEffort }) {
     const rows = ctx.strengthDrafts.has(key) ? ctx.strengthDrafts.get(key) : ctx.saved.strengths.user && ctx.saved.strengths.user[owner];
     return rows && typeof rows === "object" ? rows : {};
   };
+  const state = () => {
+    const list = modelList();
+    const base = { shipped, models: list.map((m) => m.id), hasEffort };
+    return { list, user: userRows(), resolved: resolveStrengths({ ...base, user: userRows() }), dflt: resolveStrengths({ ...base, user: {} }) };
+  };
+  const labelOf = (id) => {
+    const m = modelList().find((x) => x.id === id);
+    return m ? m.label || m.id : id;
+  };
 
-  const details = el("details", "agent-fold prefs-agents-strengths");
-  details.open = ctx.strengthsOpen;
-  details.addEventListener("toggle", () => (ctx.strengthsOpen = details.open));
-  details.appendChild(el("summary", null, "Strengths in the loop"));
-  const body = el("div", "strength-body");
-  details.appendChild(body);
+  const box = el("div", "strength-body prefs-agents-strengths");
+  const pillSets = [];
 
   function setRow(word, row) {
     const next = { ...userRows() };
@@ -55,86 +71,107 @@ export function strengthsFold(ctx, agentId, draft, { models, hasEffort }) {
     ctx.edited();
   }
 
-  function draw() {
-    const active = document.activeElement;
-    const back = active && body.contains(active) ? { word: active.closest("[data-word]")?.dataset.word, field: active.dataset.field } : null;
-    body.replaceChildren();
-    const list = modelList();
-    if (!list.length) {
-      body.appendChild(el("p", "help strength-empty", "Add a model under Models first"));
+  function choose(word, id) {
+    const { resolved, dflt } = state();
+    const now = resolved[word];
+    if (now && now.model === id) {
+      // Tapping the pick again clears it only where nothing ships for the word;
+      // with a default, putting it back is Reset's job.
+      if (!dflt[word]) setRow(word, null);
       return;
     }
-    const base = { shipped, models: list.map((m) => m.id), hasEffort };
-    const user = userRows();
-    const resolved = resolveStrengths({ ...base, user });
-    const dflt = resolveStrengths({ ...base, user: {} });
+    const next = { model: id };
+    if (hasEffort && now && now.effort) next.effort = now.effort;
+    setRow(word, canonical(next) === canonical(dflt[word]) ? null : next);
+  }
 
-    for (const word of STRENGTH_ORDER) {
-      const row = el("div", "strength-row");
-      row.dataset.word = word;
-      row.appendChild(el("span", "strength-word", WORDS[word]));
-
-      const model = el("select");
-      model.dataset.field = "model";
-      model.setAttribute("aria-label", `${WORDS[word]} model`);
-      // Nothing ships for this word: "not mapped" is a real choice. With a default,
-      // clearing a row is Reset's job.
-      if (!dflt[word]) model.appendChild(option("", "not mapped"));
-      for (const m of list) model.appendChild(option(m.id, m.label && m.label !== m.id ? `${m.label} (${m.id})` : m.id));
-      model.value = resolved[word] ? resolved[word].model : "";
-      model.addEventListener("change", () => {
-        if (!model.value) return setRow(word, null);
-        const next = { model: model.value };
-        if (hasEffort && resolved[word] && resolved[word].effort) next.effort = resolved[word].effort;
-        setRow(word, canonical(next) === canonical(dflt[word]) ? null : next);
-      });
-      row.appendChild(model);
-
-      if (hasEffort) {
-        const effort = el("select");
-        effort.dataset.field = "effort";
-        effort.setAttribute("aria-label", `${WORDS[word]} effort`);
-        effort.disabled = !resolved[word];
-        effort.appendChild(option("", "no effort"));
-        for (const e of EFFORTS) effort.appendChild(option(e, e));
-        effort.value = (resolved[word] && resolved[word].effort) || "";
-        effort.addEventListener("change", () => {
-          const next = { model: resolved[word].model };
-          if (effort.value) next.effort = effort.value;
-          setRow(word, canonical(next) === canonical(dflt[word]) ? null : next);
-        });
-        row.appendChild(effort);
+  function refresh() {
+    const active = document.activeElement;
+    const back = active && box.contains(active) ? active.closest("[data-word]")?.dataset.word : null;
+    box.replaceChildren();
+    const { list, user, resolved, dflt } = state();
+    if (!list.length) {
+      box.appendChild(el("p", "help strength-empty", "Add a model first, then choose which one the loop uses for each strength."));
+    } else {
+      for (const word of STRENGTH_ORDER) {
+        const row = el("div", "strength-row");
+        row.dataset.word = word;
+        const label = el("span", "strength-word");
+        label.append(wordChip(word), el("small", "help", HINTS[word]));
+        row.appendChild(label);
+        const pick = resolved[word];
+        row.appendChild(el("span", pick ? "strength-model" : "strength-model none", pick ? labelOf(pick.model) : "not mapped"));
+        if (hasEffort) {
+          const effort = el("select");
+          effort.dataset.field = "effort";
+          effort.setAttribute("aria-label", `${WORDS[word]} effort`);
+          effort.disabled = !pick;
+          effort.appendChild(option("", "no effort"));
+          for (const e of EFFORTS) effort.appendChild(option(e, e));
+          effort.value = (pick && pick.effort) || "";
+          effort.addEventListener("change", () => {
+            const next = { model: pick.model };
+            if (effort.value) next.effort = effort.value;
+            setRow(word, canonical(next) === canonical(dflt[word]) ? null : next);
+          });
+          row.appendChild(effort);
+        }
+        if (Object.prototype.hasOwnProperty.call(user, word)) {
+          const reset = el("button", "btn small ghost strength-reset", "Reset");
+          reset.type = "button";
+          reset.dataset.field = "reset";
+          reset.setAttribute("aria-label", `Reset ${WORDS[word]}`);
+          reset.addEventListener("click", () => setRow(word, null));
+          row.appendChild(reset);
+        } else if (pick) {
+          row.appendChild(el("span", "help strength-default", "default"));
+        }
+        box.appendChild(row);
       }
-
-      if (Object.prototype.hasOwnProperty.call(user, word)) {
-        const reset = el("button", "btn small ghost strength-reset", "Reset");
-        reset.type = "button";
-        reset.dataset.field = "reset";
-        reset.setAttribute("aria-label", `Reset ${WORDS[word]}`);
-        reset.addEventListener("click", () => setRow(word, null));
-        row.appendChild(reset);
-      } else if (resolved[word]) {
-        row.appendChild(el("span", "help strength-default", "default"));
-      }
-      body.appendChild(row);
+      const offered = STRENGTH_ORDER.filter((w) => resolved[w]).map((w) => WORDS[w]);
+      box.appendChild(
+        el(
+          "p",
+          "help strength-offer",
+          offered.length ? `The loop will offer: ${offered.join(", ")}` : "The loop will not offer a strength for this agent until one is mapped."
+        )
+      );
     }
-
-    const offered = STRENGTH_ORDER.filter((w) => resolved[w]).map((w) => WORDS[w]);
-    body.appendChild(
-      el(
-        "p",
-        "help strength-offer",
-        offered.length ? `The loop will offer: ${offered.join(", ")}` : "The loop will not offer a strength for this agent until one is mapped."
-      )
-    );
+    for (const set of pillSets) {
+      const now = state().resolved;
+      for (const p of set.pills) p.btn.setAttribute("aria-pressed", String(Boolean(now[p.word] && now[p.word].model === set.id)));
+    }
     if (back) {
-      // A Reset that was pressed is gone with its row's change: the model select takes the focus.
-      const row = body.querySelector(`[data-word="${back.word}"]`);
-      (row?.querySelector(`[data-field="${back.field}"]`) || row?.querySelector('[data-field="model"]'))?.focus();
+      // A Reset that was pressed is gone with its change: the row's effort select, else its pick, takes the focus.
+      const row = box.querySelector(`[data-word="${back}"]`);
+      const target = row?.querySelector("select") || document.querySelector(`.strength-pill[data-word="${back}"][aria-pressed="true"]`);
+      target?.focus();
     }
   }
 
-  ctx.strengthsRefresh = draw;
-  draw();
-  return details;
+  // One model's pill set: the three words as toggle buttons, one pressed per word.
+  function pills(id, label) {
+    const wrap = el("span", "strength-pills");
+    wrap.setAttribute("role", "group");
+    wrap.setAttribute("aria-label", `Use ${label} as`);
+    const set = { id, pills: [] };
+    const now = state().resolved;
+    for (const word of STRENGTH_ORDER) {
+      const btn = el("button", "strength-pill t-" + word, WORDS[word]);
+      btn.type = "button";
+      btn.dataset.word = word;
+      btn.dataset.model = id;
+      btn.setAttribute("aria-pressed", String(Boolean(now[word] && now[word].model === id)));
+      btn.setAttribute("aria-label", `Use ${label} as ${WORDS[word]}`);
+      btn.addEventListener("click", () => choose(word, id));
+      set.pills.push({ btn, word });
+      wrap.appendChild(btn);
+    }
+    pillSets.push(set);
+    return wrap;
+  }
+
+  ctx.strengthsRefresh = refresh;
+  refresh();
+  return { box, pills, refresh };
 }
