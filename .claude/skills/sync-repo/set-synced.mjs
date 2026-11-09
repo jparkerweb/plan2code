@@ -3,8 +3,9 @@
 // Decrypts, replaces exactly one anchored line, re-encrypts, then decrypts again to verify.
 // Plaintext never touches disk and never passes through a shell pipe (PowerShell pipes
 // re-encode UTF-8 through the console code page, which is how the body got mojibake).
-// Usage: SKILL_PASSWORD=... node set-synced.mjs <file.enc> "<new value>"
+// Usage: SKILL_PASSWORD=... node set-synced.mjs [--reverse] <file.enc> "<new value>"
 //   e.g. node set-synced.mjs sync-repo.enc "v2.4.0 (main @ 1a2b3c4)"
+//   --reverse rewrites the "Last reverse-ported plan2code" line instead (a port from plan2code to upstream).
 import { readFileSync, writeFileSync } from 'node:fs';
 import { scryptSync, randomBytes, createCipheriv, createDecipheriv } from 'node:crypto';
 
@@ -14,12 +15,16 @@ const SCRYPT = { N: 1 << 17, r: 8, p: 1, maxmem: 256 * 1024 * 1024 };
 const KEYLEN = 32, SALTLEN = 16, IVLEN = 12, TAGLEN = 16;
 // Anchored to a whole line that starts with "**Last synced upstream:". Command text elsewhere in
 // the body can mention the phrase without ever matching, because it never starts a line this way.
-const LINE = /^\*\*Last synced upstream: .*\*\*$/gm;
+const args = process.argv.slice(2);
+const reverse = args[0] === '--reverse';
+if (reverse) args.shift();
+const LABEL = reverse ? 'Last reverse-ported plan2code' : 'Last synced upstream';
+const LINE = new RegExp(`^\\*\\*${LABEL}: .*\\*\\*$`, 'gm');
 
 const password = process.env.SKILL_PASSWORD;
-const [encPath, value] = process.argv.slice(2);
+const [encPath, value] = args;
 if (!password) { console.error('ERROR: set SKILL_PASSWORD env var.'); process.exit(2); }
-if (!encPath || !value) { console.error('Usage: node set-synced.mjs <file.enc> "<new value>"'); process.exit(2); }
+if (!encPath || !value) { console.error('Usage: node set-synced.mjs [--reverse] <file.enc> "<new value>"'); process.exit(2); }
 if (value.includes('*') || value.includes('\n')) { console.error('ERROR: value may not contain * or a newline.'); process.exit(2); }
 
 function decrypt(b64) {
@@ -46,11 +51,11 @@ try { body = decrypt(readFileSync(encPath, 'utf8')); }
 catch { console.error('Decryption failed: wrong password or corrupted data.'); process.exit(1); }
 
 const hits = body.match(LINE) || [];
-if (hits.length !== 1) { console.error(`ERROR: expected exactly one "Last synced" line, found ${hits.length}. Nothing written.`); process.exit(1); }
+if (hits.length !== 1) { console.error(`ERROR: expected exactly one "${LABEL}" line, found ${hits.length}. Nothing written.`); process.exit(1); }
 if (body.includes('�')) { console.error('ERROR: body contains U+FFFD (encoding damage). Nothing written.'); process.exit(1); }
 
-const next = body.replace(LINE, `**Last synced upstream: ${value}**`);
+const next = body.replace(LINE, `**${LABEL}: ${value}**`);
 const out = encrypt(next);
 if (decrypt(out) !== next) { console.error('ERROR: round-trip verification failed. Nothing written.'); process.exit(1); }
 writeFileSync(encPath, out);
-console.error(`Updated: ${hits[0]}  ->  **Last synced upstream: ${value}**`);
+console.error(`Updated: ${hits[0]}  ->  **${LABEL}: ${value}**`);
