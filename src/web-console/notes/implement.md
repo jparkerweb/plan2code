@@ -34,7 +34,7 @@ A later phase in the same session asks with a new id (`signoff-phase-2`, title "
 
 ### Show me it working
 
-On `show`, run the workflow's **Show me it working** paragraph. Save screenshots under the session's `shots/`, never `specs/`, and post them as image blocks in a `shown` doc with what was run in a `md` block above (no browser tool: that block alone says what the command printed). Then reopen the same card without the `show` verdict, with a `thread` reply naming what was seen. Same on Finalize's card and the one `building-review.md` reopens; Quick Task's card is settled instead.
+On `show`, run the workflow's **Show me it working** paragraph. Save screenshots under the session's `shots/`, never `specs/`, and post them as image blocks in a `shown` doc with what was run in a `md` block above (no browser tool: that block alone says what the command printed). Then reopen the same card without the `show` verdict, with a `thread` reply naming what was seen. Same on Finalize's card and the one `building-review.md` reopens; Quick Task's card is settled instead, and a "Does it look right?" card follows it (`notes/quick-task.md`).
 
 ## After approval: the finish
 
