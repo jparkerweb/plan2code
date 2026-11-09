@@ -284,8 +284,138 @@ test("a stopped loop offers Ask a question, which tells the app and wakes no loo
     if (ask) ask.click();
     return { labels: buttons.map((b) => b.textContent), told: window.__told.map((x) => x.plan2code) };
   });
-  assert.deepEqual(seen.labels, ["Ask a question", "Resume the loop", "Fix it by hand", "Back to the dashboard"]);
+  assert.deepEqual(seen.labels, ["Ask a question", "Continue building", "Fix together with an agent", "Back to the dashboard"]);
   assert.deepEqual(seen.told, ["loop-ask"]);
+});
+
+// Draws a stopped card in the page and reads what a person sees on it.
+async function drawStop(s, end) {
+  return s.page.evaluate(async (end) => {
+    const m = await import(new URL("screens/ending.js", document.baseURI).href);
+    const card = m.renderLoopEnd(end);
+    const choices = [...card.querySelectorAll(".loop-end-choice")];
+    const details = card.querySelector("details.loop-end-details");
+    return {
+      heading: card.querySelector("h2").textContent,
+      line: card.querySelector(".loop-line")?.textContent ?? null,
+      safe: card.querySelector(".loop-end-safe")?.textContent ?? null,
+      choices: choices.map((c) => ({ label: c.querySelector("button").textContent, primary: c.querySelector("button").classList.contains("primary"), hint: c.querySelector(".loop-end-hint").textContent })),
+      details: details ? { open: details.open, summary: details.querySelector("summary").textContent, hasTable: Boolean(details.querySelector("table")), files: details.querySelectorAll("li").length } : null,
+      tableOutside: Boolean(card.querySelector(":scope > table")),
+      order: [...card.children].map((c) => c.className || c.tagName),
+    };
+  }, end);
+}
+
+const HARD_STOP = {
+  kind: "stopped",
+  line: "Phase 3 stopped: 1 test outside this spec failed (test-web-console-shape.mjs: a raw locator.evaluate reads a style and the redraw replaced the card in between)",
+  reason: "Phase 3 stopped on a problem the loop cannot fix by itself.",
+  recommend: "fix",
+  phase: 3,
+  // Phase 4 is still to come: the button lines must name Phase 3, not the last row.
+  phases: [{ n: 2, name: "API", commit: "abc1234", unfixed: 0, retries: 0 }, { n: 3, name: "Docs", commit: null, unfixed: 0, retries: 0 }, { n: 4, name: "Polish", commit: null, unfixed: 0, retries: 0 }],
+  uncommitted: ["src/a.js", "src/b.js"],
+  can: ["ask", "resume", "fix", "dashboard"],
+};
+
+test("a stopped loop leads with its short reason and puts the long line under it", async (t) => {
+  const s = await openSetup(t);
+  const seen = await drawStop(s, HARD_STOP);
+  assert.equal(seen.heading, HARD_STOP.reason);
+  assert.equal(seen.line, HARD_STOP.line, "the full line is still there, under the heading");
+  const old = await drawStop(s, { ...HARD_STOP, reason: undefined, recommend: undefined });
+  assert.equal(old.heading, HARD_STOP.line, "an older app without a reason keeps its line as the heading");
+});
+
+test("every stop-screen button carries one plain line saying what it does", async (t) => {
+  const s = await openSetup(t);
+  const seen = await drawStop(s, HARD_STOP);
+  assert.deepEqual(
+    seen.choices.map((c) => [c.label, c.hint]),
+    [
+      ["Ask a question", "Wake an agent that answers your questions in the Ask tab. It changes nothing."],
+      ["Continue building", "Carry on unattended from Phase 3, the way the loop was running."],
+      ["Fix together with an agent", "Open a normal session on Phase 3 to fix this together with an agent."],
+      ["Back to the dashboard", "Leave this screen and pick another skill. Your work stays as it is."],
+    ],
+  );
+  const old = await drawStop(s, { ...HARD_STOP, phase: undefined });
+  assert.equal(old.choices[1].hint, "Carry on unattended from where it stopped, the way the loop was running.", "an older app names no phase, and the line guesses none");
+  const fin = await drawStop(s, { kind: "finished", line: "All 2 phases built", phases: [], uncommitted: [], can: ["finalize", "dashboard"] });
+  assert.deepEqual(fin.choices.map((c) => c.hint), ["Write the feature's summary and move its spec to specs--completed/.", "Leave this screen and pick another skill. Your work stays as it is."]);
+  assert.deepEqual(fin.choices.map((c) => c.primary), [true, false], "Finalize is the finish screen's one primary button");
+});
+
+test("only the recommended button is primary: Fix together after a hard stop, Continue building after a soft one", async (t) => {
+  const s = await openSetup(t);
+  const hard = await drawStop(s, HARD_STOP);
+  assert.deepEqual(hard.choices.filter((c) => c.primary).map((c) => c.label), ["Fix together with an agent"]);
+  const soft = await drawStop(s, { ...HARD_STOP, reason: "Phase 3 stopped because the agent crashed.", recommend: "resume" });
+  assert.deepEqual(soft.choices.filter((c) => c.primary).map((c) => c.label), ["Continue building"]);
+  const old = await drawStop(s, { ...HARD_STOP, recommend: undefined });
+  assert.deepEqual(old.choices.filter((c) => c.primary).map((c) => c.label), ["Continue building"], "an older app's stop keeps Continue building as the one primary");
+});
+
+test("a stop says nothing is lost and keeps the phases and files under a closed Details, below the buttons", async (t) => {
+  const s = await openSetup(t);
+  const seen = await drawStop(s, HARD_STOP);
+  assert.equal(seen.safe, "Nothing is lost. Your work stays on disk.");
+  assert.deepEqual(seen.details, { open: false, summary: "Details: 3 phases, 2 uncommitted files", hasTable: true, files: 2 });
+  assert.equal(seen.tableOutside, false, "no commit table between the reason and the buttons");
+  const at = (cls) => seen.order.findIndex((c) => String(c).includes(cls));
+  assert.ok(at("loop-end-safe") < at("loop-end-actions") && at("loop-end-actions") < at("loop-end-details"), seen.order.join(" > "));
+  const fin = await drawStop(s, { kind: "finished", line: "All 1 phases built", phases: [{ n: 1, name: "API", commit: "abc1234", unfixed: 0, retries: 0 }], uncommitted: [], can: ["finalize", "dashboard"] });
+  assert.equal(fin.safe, null, "the finish screen has nothing to reassure about");
+  assert.equal(fin.details, null);
+  assert.equal(fin.tableOutside, true, "the finish keeps its counts open");
+});
+
+test("once the app starts the Ask agent, Ask a question opens the Ask tab and never asks the app twice", async (t) => {
+  const s = await openSetup(t);
+  await frameInFakeApp(s);
+  const seen = await s.page.evaluate(async (end) => {
+    const m = await import(new URL("screens/ending.js", document.baseURI).href);
+    const { page } = await import(new URL("state.js", document.baseURI).href);
+    const askOf = (card) => [...card.querySelectorAll(".loop-end-choice")].find((c) => c.querySelector("button").textContent.includes("Ask"));
+    const first = askOf(m.renderLoopEnd(end));
+    first.querySelector("button").click();
+    page.loopAction = { kind: "loop-ask-result", ok: true, error: null };
+    const after = askOf(m.renderLoopEnd(end));
+    const label = after.querySelector("button").textContent;
+    const hint = after.querySelector(".loop-end-hint").textContent;
+    after.querySelector("button").click();
+    const view = page.view;
+    page.view = "questions";
+    page.loopAction = null;
+    return { label, hint, view, told: window.__told.map((x) => x.plan2code) };
+  }, HARD_STOP);
+  assert.equal(seen.label, "Open the Ask tab");
+  assert.equal(seen.hint, "The Ask agent is ready. Type your question in the Ask tab.");
+  assert.equal(seen.view, "ask");
+  assert.deepEqual(seen.told, ["loop-ask"], "the second press went to the Ask tab, not to the app");
+});
+
+test("after Continue building replaces the Ask agent, the same stop again offers Ask a question afresh", async (t) => {
+  const s = await openSetup(t);
+  await frameInFakeApp(s);
+  const seen = await s.page.evaluate(async (end) => {
+    const m = await import(new URL("screens/ending.js", document.baseURI).href);
+    const { page } = await import(new URL("state.js", document.baseURI).href);
+    const button = (card, text) => [...card.querySelectorAll(".loop-end-choice button")].find((b) => b.textContent.includes(text));
+    button(m.renderLoopEnd(end), "Ask").click();
+    page.loopAction = { kind: "loop-ask-result", ok: true, error: null };
+    const asked = button(m.renderLoopEnd(end), "Ask").textContent;
+    button(m.renderLoopEnd(end), "Continue building").click();
+    page.loopAction = { kind: "loop-resume-result", ok: true, error: null };
+    // The loop ran and stopped again, the same way.
+    const again = button(m.renderLoopEnd(end), "Ask").textContent;
+    page.loopAction = null;
+    return { asked, again, told: window.__told.map((x) => x.plan2code) };
+  }, HARD_STOP);
+  assert.equal(seen.asked, "Open the Ask tab");
+  assert.equal(seen.again, "Ask a question", "no Ask agent is left to open");
+  assert.deepEqual(seen.told, ["loop-ask", "loop-resume"]);
 });
 
 // A real loop session: `open --loop` under the app's signal stamps the lock.
@@ -353,7 +483,7 @@ test("a finished loop and a stop with no Ask keep the notes panel's old words", 
   assert.ok(!aside.text.includes(ASK_HINT), "a finished loop does not offer Ask");
   assert.match(aside.text, /Nothing was said about this one/);
   s.post({ loopEnd: { ...STOPPED, can: ["resume", "fix", "dashboard"] } });
-  await s.page.getByRole("button", { name: "Resume the loop" }).waitFor();
+  await s.page.getByRole("button", { name: "Continue building" }).waitFor();
   aside = await asideOf(s);
   assert.ok(!aside.text.includes(ASK_HINT), "no Ask button, so no hint to press it");
   assert.match(aside.text, /Nothing was said about this one/);

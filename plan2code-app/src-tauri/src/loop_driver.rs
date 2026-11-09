@@ -631,7 +631,7 @@ pub fn current_event(slot: &LoopSlot) -> Option<LoopStateEvent> {
     lock(slot).as_ref().map(state_event)
 }
 
-/// What Resume, Fix it by hand and Finalize need after the running record is
+/// What Resume, Fix together with an agent and Finalize need after the running record is
 /// gone. Memory only (NFR-5).
 #[derive(Clone)]
 pub struct LastLoop {
@@ -993,7 +993,7 @@ pub fn stop_line(cause: &StopCause, phase: u32, detail: &str, retried: bool) -> 
                 why
             };
             format!(
-                "Phase {phase} was not committed: {why}. The work is uncommitted; Resume tries the commit again"
+                "Phase {phase} was not committed: {why}. The work is uncommitted; Continue building tries the commit again"
             )
         }
         StopCause::MarkedNotCommitted(file) => {
@@ -1023,7 +1023,7 @@ pub fn stop_line(cause: &StopCause, phase: u32, detail: &str, retried: bool) -> 
         StopCause::WatcherFailed(text) => {
             let text: String = one_line(text).chars().take(100).collect();
             format!(
-                "The loop's watcher failed: {text}. Nothing more was committed; Resume starts again"
+                "The loop's watcher failed: {text}. Nothing more was committed; Continue building starts again"
             )
         }
     }
@@ -1803,7 +1803,7 @@ pub fn start_phase_with(
     }
 }
 
-/// The prompt behind Fix it by hand: an ordinary Implement session.
+/// The prompt behind Fix together with an agent: an ordinary Implement session.
 pub fn fix_prompt(spec: &str) -> String {
     format!("/plan2code-3-implement {spec}/overview.md --web")
 }
@@ -1825,7 +1825,15 @@ pub fn ask_prompt(spec: &str) -> String {
 /// Start the Ask agent: `start_with` without the forget step, so the agent's
 /// `open` joins the session on screen and the stopped screen stays up. The
 /// prompt is transient, as `start_with`'s is.
+///
+/// An agent already running here is the Ask agent from an earlier press (the
+/// loop's own agent ended with the stop, and Continue building, Fix together
+/// and Finalize replace the screen), so a second press is answered with it,
+/// never with the "already running" refusal.
 pub fn start_asking(agent: &AgentManager, launch: &Launch, prompt: String) -> Result<(), String> {
+    if agent.snapshot().state == crate::agent_manager::AgentState::Running {
+        return Ok(());
+    }
     let (kind, model, effort, mode) = launch.clone();
     agent.start_transient(kind, model, effort, mode, prompt)
 }
@@ -3004,7 +3012,7 @@ pub fn evidence_markdown(cause: &StopCause, line: &str, rec: &RunningRecord) -> 
                 rec.failure_output.as_deref().unwrap_or("(no output)"),
             ));
             md.push_str(
-                "\nThe phase was approved, but its changes are not committed. The mark was taken back, so the spec still shows the phase open. Fix what git says, then press Resume to try the commit again.\n",
+                "\nThe phase was approved, but its changes are not committed. The mark was taken back, so the spec still shows the phase open. Fix what git says, then press Continue building to try the commit again.\n",
             );
         }
         StopCause::MarkedNotCommitted(file) => {
@@ -3013,7 +3021,7 @@ pub fn evidence_markdown(cause: &StopCause, line: &str, rec: &RunningRecord) -> 
                 rec.failure_output.as_deref().unwrap_or("(no output)"),
             ));
             md.push_str(&format!(
-                "\nThe phase is marked done in `{file}` (and in overview.md), but its changes are not committed, and the mark could not be taken back. Set the phase back to in progress by hand, or press Resume: it checks every done mark against the commit log and builds this phase again.\n"
+                "\nThe phase is marked done in `{file}` (and in overview.md), but its changes are not committed, and the mark could not be taken back. Set the phase back to in progress by hand, or press Continue building: it checks every done mark against the commit log and builds this phase again.\n"
             ));
         }
         StopCause::UnsafeFiles(files) => {
@@ -3024,7 +3032,7 @@ pub fn evidence_markdown(cause: &StopCause, line: &str, rec: &RunningRecord) -> 
                 md.push_str(&format!("- `{file}` ({reason})\n"));
             }
             md.push_str(
-                "\nThe phase was approved, but these files were staged and the loop does not commit secrets or files over 5 MB. Nothing was marked done or committed, and everything was taken out of the index again (unless the stop line says otherwise). Remove the files, or add them to `.gitignore`, then press Resume.\n",
+                "\nThe phase was approved, but these files were staged and the loop does not commit secrets or files over 5 MB. Nothing was marked done or committed, and everything was taken out of the index again (unless the stop line says otherwise). Remove the files, or add them to `.gitignore`, then press Continue building.\n",
             );
         }
         StopCause::Refused(_) => {
@@ -3046,11 +3054,11 @@ pub fn evidence_markdown(cause: &StopCause, line: &str, rec: &RunningRecord) -> 
         }
         StopCause::WatcherFailed(_) => {
             md.push_str(
-                "\nThe loop's own watcher stopped working, so the agent was ended. Whatever was committed stays committed; nothing more was. Press Resume to carry on from the spec.\n",
+                "\nThe loop's own watcher stopped working, so the agent was ended. Whatever was committed stays committed; nothing more was. Press Continue building to carry on from the spec.\n",
             );
         }
         StopCause::Question if rec.setup.on_question == OnQuestion::Guess => {
-            md.push_str("\nBest guess was on, but the phase asked a question it could not guess, so the loop stopped rather than wait. Answer it with Fix it by hand, or settle it in the spec, then press Resume.\n");
+            md.push_str("\nBest guess was on, but the phase asked a question it could not guess, so the loop stopped rather than wait. Answer it with Fix together with an agent, or settle it in the spec, then press Continue building.\n");
         }
         StopCause::Question => {
             md.push_str("\nThe setup says to stop when a phase asks something.\n");
@@ -3207,9 +3215,86 @@ fn stop_loop(ctx: &Ctx, cause: StopCause, line: String, can: &[&str]) {
             "phases": phase_rows(&rec),
             "uncommitted": uncommitted,
             "can": stop_can(can),
+            "reason": stop_reason(&cause, rec.phases[at].n, built),
+            "recommend": stop_recommend(&cause, can),
+            "phase": continue_phase(
+                &rec.phases.iter().map(|p| p.n).collect::<Vec<_>>(),
+                at,
+                built
+            ),
         },
     });
     post_end(ctx, &rec, &patch);
+}
+
+/// The phase Continue building (and Fix together) starts on, for the stop
+/// screen's button lines: the stopped phase, or, when that phase was already
+/// built (Stop after this phase), the next one in the run. `numbers` are the
+/// run's phase numbers in order and `at` the stopped phase's index.
+pub fn continue_phase(numbers: &[u32], at: usize, built: bool) -> u32 {
+    let next = if built { at + 1 } else { at };
+    numbers
+        .get(next)
+        .or_else(|| numbers.get(at))
+        .copied()
+        .unwrap_or(1)
+}
+
+/// The stop screen's heading: one short plain sentence saying where the loop
+/// stopped and why, with no detail that could run long (the `line` under it
+/// carries the detail). `built` is a phase already built and recorded.
+pub fn stop_reason(cause: &StopCause, phase: u32, built: bool) -> String {
+    match cause {
+        StopCause::StoppedByPerson if built => {
+            format!("Phase {phase} is built. The loop stopped there, as you asked.")
+        }
+        StopCause::StoppedByPerson => format!("You stopped the loop during Phase {phase}."),
+        StopCause::Crash => format!("Phase {phase} stopped because the agent crashed."),
+        StopCause::Silence => {
+            format!("Phase {phase} stopped because the agent went quiet for too long.")
+        }
+        StopCause::NoSession => {
+            format!("Phase {phase} stopped because the agent never opened its page.")
+        }
+        StopCause::WatcherFailed(_) => {
+            format!("The loop stopped during Phase {phase} because of an error in the app.")
+        }
+        StopCause::Refused(_) => {
+            format!("Phase {phase} stopped on a problem the loop cannot fix by itself.")
+        }
+        StopCause::QuickCheck => format!("Phase {phase} stopped because the quick check failed."),
+        StopCause::Commit => format!("Phase {phase} is built, but git refused its commit."),
+        StopCause::MarkedNotCommitted(_) => {
+            format!("Phase {phase} is marked done, but its work is not committed.")
+        }
+        StopCause::UnsafeFiles(_) => {
+            format!("Phase {phase} is built, but some files look unsafe to commit.")
+        }
+        StopCause::Question => format!("Phase {phase} stopped to ask you something."),
+    }
+}
+
+/// The one button the stop screen recommends, from `can` (the buttons it
+/// offers). A soft stop (the agent crashed or went quiet, the person stopped
+/// it, the watcher failed) recommends Continue building: nothing in the work
+/// needs changing. A hard stop (a refused phase, failing checks, a refused or
+/// unsafe commit, a question) recommends Fix together with an agent, since
+/// continuing would meet the same wall. When that button is not offered, the
+/// first of Continue building, Fix together and Finalize that is.
+pub fn stop_recommend(cause: &StopCause, can: &[&str]) -> Option<String> {
+    let soft = matches!(
+        cause,
+        StopCause::Crash
+            | StopCause::Silence
+            | StopCause::NoSession
+            | StopCause::StoppedByPerson
+            | StopCause::WatcherFailed(_)
+    );
+    let first = if soft { "resume" } else { "fix" };
+    [first, "resume", "fix", "finalize"]
+        .into_iter()
+        .find(|key| can.contains(key))
+        .map(String::from)
 }
 
 fn finish(ctx: &Ctx) {
@@ -4631,7 +4716,7 @@ second line"
         );
         assert_eq!(
             stop_line(&StopCause::Commit, 4, "lint says no", false),
-            "Phase 4 was not committed: lint says no. The work is uncommitted; Resume tries the commit again"
+            "Phase 4 was not committed: lint says no. The work is uncommitted; Continue building tries the commit again"
         );
         assert_eq!(
             stop_line(
@@ -5657,7 +5742,7 @@ second line"
         assert_eq!(entry.result, EntryResult::Stopped);
         assert_eq!(
             entry.line,
-            "Phase 2 was not committed: lint says no. The work is uncommitted; Resume tries the commit again"
+            "Phase 2 was not committed: lint says no. The work is uncommitted; Continue building tries the commit again"
         );
         assert_eq!(
             git_in(&repo, &["log", "-1", "--format=%s"]),
@@ -6230,7 +6315,7 @@ second line"
     fn a_commit_that_gives_no_reason_still_reads_as_a_sentence() {
         assert_eq!(
             stop_line(&StopCause::Commit, 2, "", false),
-            "Phase 2 was not committed: git gave no reason. The work is uncommitted; Resume tries the commit again"
+            "Phase 2 was not committed: git gave no reason. The work is uncommitted; Continue building tries the commit again"
         );
     }
 
@@ -6389,7 +6474,7 @@ second line"
         assert_eq!(entry.result, EntryResult::Stopped);
         assert_eq!(
             entry.line,
-            "The loop's watcher failed: boom inside the lock. Nothing more was committed; Resume starts again"
+            "The loop's watcher failed: boom inside the lock. Nothing more was committed; Continue building starts again"
         );
         // A new loop can take the slot.
         *lock(&ctx.slot) = Some(record("specs/lunch", vec![phase(2), phase(3)]));
@@ -6878,7 +6963,7 @@ second line"
         let cause = StopCause::WatcherFailed("index out of bounds".into());
         assert_eq!(
             stop_line(&cause, 3, "", false),
-            "The loop's watcher failed: index out of bounds. Nothing more was committed; Resume starts again"
+            "The loop's watcher failed: index out of bounds. Nothing more was committed; Continue building starts again"
         );
         assert!(!should_retry(&cause, &setup(), 0));
         let line = stop_line(&cause, 3, "", false);
@@ -7202,6 +7287,85 @@ second line"
     }
 
     #[test]
+    fn a_soft_stop_recommends_continue_building_and_a_hard_stop_recommends_fixing_together() {
+        let both = ["resume", "fix"];
+        for soft in [
+            StopCause::Crash,
+            StopCause::Silence,
+            StopCause::NoSession,
+            StopCause::StoppedByPerson,
+            StopCause::WatcherFailed("x".into()),
+        ] {
+            assert_eq!(
+                stop_recommend(&soft, &both).as_deref(),
+                Some("resume"),
+                "{soft:?}"
+            );
+        }
+        for hard in [
+            StopCause::Refused("1 test failed".into()),
+            StopCause::QuickCheck,
+            StopCause::Commit,
+            StopCause::MarkedNotCommitted("phase-2.md".into()),
+            StopCause::UnsafeFiles(vec![".env".into()]),
+            StopCause::Question,
+        ] {
+            assert_eq!(
+                stop_recommend(&hard, &both).as_deref(),
+                Some("fix"),
+                "{hard:?}"
+            );
+        }
+        // Only an offered button is ever recommended.
+        assert_eq!(
+            stop_recommend(&StopCause::Question, &["resume"]).as_deref(),
+            Some("resume")
+        );
+        assert_eq!(
+            stop_recommend(&StopCause::StoppedByPerson, &["finalize"]).as_deref(),
+            Some("finalize")
+        );
+        assert_eq!(stop_recommend(&StopCause::Crash, &[]), None);
+    }
+
+    #[test]
+    fn continue_building_starts_on_the_stopped_phase_or_the_one_after_a_built_phase() {
+        // A run over Phases 2 to 5, stopped in Phase 3: never the last phase.
+        assert_eq!(continue_phase(&[2, 3, 4, 5], 1, false), 3);
+        // Phase 3 built, then stopped as asked: the next phase is where it goes on.
+        assert_eq!(continue_phase(&[2, 3, 4, 5], 1, true), 4);
+        // The last phase built: nothing after it, so the phase itself.
+        assert_eq!(continue_phase(&[2, 3, 4, 5], 3, true), 5);
+    }
+
+    #[test]
+    fn the_stop_reason_is_one_short_sentence_naming_the_phase() {
+        let causes = [
+            StopCause::Crash,
+            StopCause::Silence,
+            StopCause::NoSession,
+            StopCause::StoppedByPerson,
+            StopCause::WatcherFailed("a very long panic text ".repeat(20)),
+            StopCause::Refused("a very long reason ".repeat(20)),
+            StopCause::QuickCheck,
+            StopCause::Commit,
+            StopCause::MarkedNotCommitted("specs/x/phase-3.md".into()),
+            StopCause::UnsafeFiles(vec![".env".into()]),
+            StopCause::Question,
+        ];
+        for cause in &causes {
+            let reason = stop_reason(cause, 3, false);
+            assert!(reason.contains("Phase 3"), "{reason}");
+            assert!(reason.chars().count() <= 80, "{reason}");
+            assert!(!reason.contains('\u{2014}'), "{reason}");
+        }
+        assert_eq!(
+            stop_reason(&StopCause::StoppedByPerson, 4, true),
+            "Phase 4 is built. The loop stopped there, as you asked."
+        );
+    }
+
+    #[test]
     fn every_resumable_stop_offers_ask_first_and_a_finalize_only_stop_does_not() {
         assert_eq!(
             stop_can(&["resume", "fix"]),
@@ -7214,7 +7378,25 @@ second line"
     }
 
     #[test]
-    fn asking_leaves_the_session_on_screen_and_fix_it_by_hand_still_forgets_it() {
+    fn asking_twice_keeps_the_ask_agent_and_is_never_refused() {
+        let (agent, seen) = fake_agent_manager(Path::new("."));
+        let launch = fake_agent_launch();
+        start_asking(&agent, &launch, ask_prompt("specs/x")).unwrap();
+        wait_until("the Ask agent ready", || {
+            lock(&seen).matches("FAKE-AGENT ready").count() >= 1
+        });
+        // The refusal the stopped screen once showed came from this second press.
+        start_asking(&agent, &launch, ask_prompt("specs/x")).unwrap();
+        assert_eq!(
+            launched_prompts(&seen),
+            vec![ask_prompt("specs/x")],
+            "the running Ask agent answers the second press; no second agent starts"
+        );
+        agent.stop();
+    }
+
+    #[test]
+    fn asking_leaves_the_session_on_screen_and_fixing_together_still_forgets_it() {
         let (agent, seen) = fake_agent_manager(Path::new("."));
         let forgets = Arc::new(Mutex::new(0));
         let counter = Arc::clone(&forgets);
@@ -7228,12 +7410,16 @@ second line"
         assert_eq!(*lock(&forgets), 0, "Ask must join the session on screen");
 
         // The Ask agent is still running when the next button is pressed, as in
-        // the app: Fix it by hand replaces it and forgets the session.
+        // the app: Fix together with an agent replaces it and forgets the session.
         start_with(&agent, &launch, fix_prompt("specs/x")).unwrap();
         wait_until("the fix agent ready", || {
             lock(&seen).matches("FAKE-AGENT ready").count() >= 2
         });
-        assert_eq!(*lock(&forgets), 1, "Fix it by hand must forget the session");
+        assert_eq!(
+            *lock(&forgets),
+            1,
+            "Fix together with an agent must forget the session"
+        );
         let prompts = launched_prompts(&seen);
         assert_eq!(
             prompts,

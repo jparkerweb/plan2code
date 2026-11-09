@@ -478,6 +478,17 @@ test("loopEnd: ask is accepted in can, so a stopped loop can offer a question be
   assert.deepEqual(next.loopEnd.can, ["resume", "ask", "fix", "dashboard"]);
 });
 
+test("loopEnd: a short reason and a recommended button are stored, and both stay optional", () => {
+  const { problems, next } = tryPatch(loopState(), {
+    loopEnd: goodEnd({ can: ["ask", "resume", "fix", "dashboard"], reason: "Phase 2 stopped because the quick check failed.", recommend: "fix", phase: 2 }),
+  });
+  assert.deepEqual(problems, []);
+  assert.equal(next.loopEnd.phase, 2);
+  assert.equal(next.loopEnd.reason, "Phase 2 stopped because the quick check failed.");
+  assert.equal(next.loopEnd.recommend, "fix");
+  assert.deepEqual(tryPatch(loopState(), { loopEnd: goodEnd() }).problems, [], "an older app sends neither");
+});
+
 test("loopEnd: an unknown evidence id, a push in can, and the other bad fields are refused, each named", () => {
   const cases = [
     ["an unknown evidence id", goodEnd({ evidence: "nope" }), /loopEnd\.evidence must be the id of a doc on the page/],
@@ -489,6 +500,10 @@ test("loopEnd: an unknown evidence id, a push in can, and the other bad fields a
     ["a bad decision count", goodEnd({ phases: [{ n: 1, name: "Setup", commit: "abc1234", unfixed: 0, retries: 0, assumed: -1 }] }), /loopEnd\.phases\[0\]\.assumed must be a non-negative integer/],
     ["a bad commit hash", goodEnd({ phases: [{ n: 1, name: "Setup", commit: "zzz", unfixed: 0, retries: 0 }] }), /loopEnd\.phases\[0\]\.commit must be a short hex hash or null/],
     ["a forbidden completion marker in line", goodEnd({ line: "TASK_COMPLETE" }), /loopEnd\.line: contains a loop completion marker/],
+    ["a two-line reason", goodEnd({ reason: "one\ntwo" }), /loopEnd\.reason must be one line/],
+    ["a recommend the screen does not offer", goodEnd({ can: ["resume", "dashboard"], recommend: "fix" }), /loopEnd\.recommend must be resume, fix or finalize, and one of can/],
+    ["a recommend that is not a choice", goodEnd({ can: ["ask", "resume"], recommend: "ask" }), /loopEnd\.recommend must be resume, fix or finalize/],
+    ["a phase that is not a positive integer", goodEnd({ phase: 0 }), /loopEnd\.phase must be a positive integer/],
   ];
   for (const [what, end, expected] of cases) {
     const { problems } = tryPatch(loopState(), { loopEnd: end });

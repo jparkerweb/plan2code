@@ -2314,15 +2314,21 @@
             the loop stops.
           </li>
           <li>
-            A stop screen says what failed and shows the evidence.
-            <strong>Resume the loop</strong> carries on from that phase;
-            <strong>Fix it by hand</strong> opens an ordinary Implement session
-            on it.
+            A stop screen leads with why it stopped, and the evidence is one
+            button away. Every button has a line saying what it does, and the
+            one that fits the stop is highlighted.
+            <strong>Continue building</strong> carries on unattended from that
+            phase (recommended when the agent crashed, went quiet or you
+            stopped it); <strong>Fix together with an agent</strong> opens an
+            ordinary Implement session on it (recommended when a check failed,
+            a task is blocked or the commit was refused).
+            <strong>Ask a question</strong> wakes an agent that only answers,
+            in the Ask tab. Nothing is lost on a stop: your work stays on disk.
           </li>
         </ul>
         <h4>The report</h4>
         <p>
-          One report follows the whole build, across stops and Resume: what each
+          One report follows the whole build, across stops and Continue building: what each
           phase built and committed, the findings it fixed, the findings it chose
           not to fix and why, the findings left open, each assumption, any other
           decisions the agent reported, and every retry and stop. The agent writes

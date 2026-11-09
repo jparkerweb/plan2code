@@ -56,7 +56,7 @@ struct AppState {
     // restart ends it (NFR-5).
     loop_run: LoopSlot,
     // The last loop's project, spec, launch choice and confirmed quick check,
-    // kept after the running record is gone so Resume, Fix it by hand and
+    // kept after the running record is gone so Resume, Fix together with an agent and
     // Finalize still work. Memory only.
     last_loop: Mutex<Option<LastLoop>>,
 }
@@ -1257,7 +1257,7 @@ async fn loop_resume(app: tauri::AppHandle, state: State<'_, AppState>) -> Resul
     start_loop(&app, &state, last.spec, true).await.map(|_| ())
 }
 
-// Fix it by hand: an ordinary Implement session on the stopped phase, with no
+// Fix together with an agent: an ordinary Implement session on the stopped phase, with no
 // `--loop`, so the person talks to the agent as usual.
 #[tauri::command]
 fn loop_fix(state: State<'_, AppState>) -> Result<(), String> {

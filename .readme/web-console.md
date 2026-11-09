@@ -1605,8 +1605,13 @@ as your move rather than leaving a stale "starting" line behind.
 A stopped loop also offers **Ask a question**, first in the row. The app ended
 its agent when the loop stopped, so the Ask tab says no agent is available;
 the button wakes an ordinary agent on the same page, without starting the loop
-or changing anything, and **Resume the loop** is still there afterwards. **Back
-to the dashboard** ends that agent too.
+or changing anything, and **Continue building** is still there afterwards; once
+the agent is up, the button opens the Ask tab instead. **Back to the dashboard**
+ends that agent too. The stop screen leads with a short reason, puts one line
+under each button saying what it does, and highlights the one that fits the
+stop: **Continue building** after a crash, a silence or your own stop, **Fix
+together with an agent** after a failed check, a blocked task, a refused commit
+or a question. The phases and uncommitted files sit under **Details**.
 
 You don't have to finish first. On every skill but the dashboard itself, a
 small **triangle** pointing left, in your highlight color, sits beside *Stop

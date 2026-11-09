@@ -163,16 +163,53 @@ function closeGuideHeld() {
 // second press cannot send the same request twice.
 let loopPressed = null;
 
+// The stop screen's Ask agent is up once the app answered a press of Ask a
+// question: from then on the button opens the Ask tab, so it can never ask the
+// app for a second agent. Keyed by the ending it was pressed on.
+let askUpFor = null;
+
+// Whether the stop screen's Details is open, kept across redraws (keyed like askUpFor).
+let loopDetailsOpen = null;
+
 const LOOP_BUTTONS = [
-  ["ask", "loop-ask", "Ask a question", ""],
-  ["resume", "loop-resume", "Resume the loop", "primary"],
-  ["fix", "loop-fix", "Fix it by hand", ""],
-  ["finalize", "loop-finalize", "Finalize", "primary"],
-  ["dashboard", "loop-dashboard", "Back to the dashboard", ""],
+  ["ask", "loop-ask", "Ask a question"],
+  ["resume", "loop-resume", "Continue building"],
+  ["fix", "loop-fix", "Fix together with an agent"],
+  ["finalize", "loop-finalize", "Finalize"],
+  ["dashboard", "loop-dashboard", "Back to the dashboard"],
 ];
+
+/** One plain sentence under each stop-screen button: what pressing it does. */
+function loopButtonLine(key, phase, askUp) {
+  const at = phase ? `Phase ${phase}` : "the stopped phase";
+  switch (key) {
+    case "ask":
+      return askUp ? "The Ask agent is ready. Type your question in the Ask tab." : "Wake an agent that answers your questions in the Ask tab. It changes nothing.";
+    case "resume":
+      return phase ? `Carry on unattended from Phase ${phase}, the way the loop was running.` : "Carry on unattended from where it stopped, the way the loop was running.";
+    case "fix":
+      return `Open a normal session on ${at} to fix this together with an agent.`;
+    case "finalize":
+      return "Write the feature's summary and move its spec to specs--completed/.";
+    case "dashboard":
+      return "Leave this screen and pick another skill. Your work stays as it is.";
+    default:
+      return "";
+  }
+}
+
+/** The one button drawn as primary: the app's pick when it offers it, else Continue building or Finalize. */
+function loopRecommended(end, can) {
+  if (typeof end.recommend === "string" && can.includes(end.recommend)) return end.recommend;
+  return ["resume", "finalize"].find((k) => can.includes(k)) || null;
+}
 
 function shortHash(h) {
   return typeof h === "string" ? h.slice(0, 7) : "";
+}
+
+function loopEndKey(end) {
+  return `${end.kind}|${end.line}|${end.reason || ""}`;
 }
 
 /**
@@ -185,8 +222,11 @@ export function renderLoopEnd(end) {
   const card = el("article", "card handoff loop-end");
   const finished = end.kind === "finished";
   card.appendChild(el("p", "card-kicker", finished ? "Loop finished" : "Loop stopped"));
-  card.appendChild(el("h2", null, finished ? "Every phase is built" : end.line));
-  if (finished && end.line) card.appendChild(el("p", "loop-line", end.line));
+  // A stop leads with the app's short reason; the full line, which can run
+  // long, goes under it rather than in the heading.
+  const reason = !finished && typeof end.reason === "string" && end.reason ? end.reason : "";
+  card.appendChild(el("h2", "loop-end-heading", finished ? "Every phase is built" : reason || end.line));
+  if ((finished || reason) && end.line) card.appendChild(el("p", "loop-line", end.line));
 
   const evidence = end.evidence && docs().find((d) => d.id === end.evidence);
   if (evidence) {
@@ -199,7 +239,12 @@ export function renderLoopEnd(end) {
     card.appendChild(read);
   }
 
+  // The record (phases with their commits, files left uncommitted). On a stop
+  // it sits under Details, below the choice, so the reason and the buttons come
+  // first; the finish screen keeps its table open, since the counts are its point.
   const phases = Array.isArray(end.phases) ? end.phases : [];
+  const files = Array.isArray(end.uncommitted) ? end.uncommitted : [];
+  const record = [];
   if (phases.length) {
     const table = el("table", "loop-end-phases");
     const head = el("tr");
@@ -220,45 +265,82 @@ export function renderLoopEnd(end) {
       }
       table.appendChild(row);
     }
-    card.appendChild(table);
+    record.push(table);
   }
-
-  const files = Array.isArray(end.uncommitted) ? end.uncommitted : [];
   if (files.length) {
-    card.appendChild(el("h3", null, "Uncommitted in this phase"));
+    record.push(el("h3", null, "Uncommitted in this phase"));
     const list = el("ul", "loop-end-files");
     const fill = (items, into) => items.forEach((f) => into.appendChild(el("li", null, f)));
     fill(files.slice(0, 10), list);
+    record.push(list);
     if (files.length > 10) {
       const more = el("details");
       more.appendChild(el("summary", null, `${files.length - 10} more files`));
       const rest = el("ul", "loop-end-files");
       fill(files.slice(10), rest);
       more.appendChild(rest);
-      card.append(list, more);
-    } else {
-      card.appendChild(list);
+      record.push(more);
     }
   }
+  if (finished) record.forEach((node) => card.appendChild(node));
 
   const can = Array.isArray(end.can) ? end.can : [];
+  const key = loopEndKey(end);
+  if (page.loopAction && page.loopAction.kind === "loop-ask-result" && page.loopAction.ok) askUpFor = key;
+  const askUp = askUpFor === key;
+  const recommended = loopRecommended(end, can);
+  // The phase Continue building starts on, as the app names it: the last row of
+  // `phases` can be a phase the run never reached.
+  const stoppedPhase = Number.isInteger(end.phase) && end.phase > 0 ? end.phase : null;
+
+  // A stop never throws work away: the app only ends the agent and, at most,
+  // takes files back out of the index.
+  if (!finished && can.length) card.appendChild(el("p", "loop-end-safe", "Nothing is lost. Your work stays on disk."));
+
   const actions = el("div", "loop-end-actions");
-  for (const [key, message, label, kind] of LOOP_BUTTONS) {
-    if (!can.includes(key)) continue;
-    const b = el("button", "btn" + (kind ? " " + kind : ""), label);
+  for (const [k, message, label] of LOOP_BUTTONS) {
+    if (!can.includes(k)) continue;
+    const choice = el("div", "loop-end-choice" + (k === recommended ? " is-recommended" : ""));
+    const asked = k === "ask" && askUp;
+    const b = el("button", "btn" + (k === recommended ? " primary" : ""), asked ? "Open the Ask tab" : label);
     b.type = "button";
-    b.disabled = page.gone || (loopPressed === message && !page.loopAction);
+    b.disabled = page.gone || (!asked && loopPressed === message && !page.loopAction);
     b.addEventListener("click", () => {
+      if (asked) {
+        page.view = "ask";
+        redraw();
+        return;
+      }
+      // Any other press replaces the Ask agent, so its button must ask again on
+      // the next stop, even one that reads the same.
+      askUpFor = null;
+      loopDetailsOpen = null;
       loopPressed = message;
       page.loopAction = null;
       tellApp(message);
       redraw();
     });
-    actions.appendChild(b);
+    choice.appendChild(b);
+    choice.appendChild(el("p", "loop-end-hint", loopButtonLine(k, stoppedPhase, asked)));
+    actions.appendChild(choice);
   }
   if (actions.childElementCount) card.appendChild(actions);
   if (page.loopAction && !page.loopAction.ok) {
     card.appendChild(el("p", "loop-error", page.loopAction.error));
+  }
+
+  if (!finished && record.length) {
+    const details = el("details", "loop-end-details");
+    details.open = loopDetailsOpen === key;
+    details.addEventListener("toggle", () => {
+      loopDetailsOpen = details.open ? key : null;
+    });
+    const parts = [];
+    if (phases.length) parts.push(phases.length === 1 ? "1 phase" : `${phases.length} phases`);
+    if (files.length) parts.push(files.length === 1 ? "1 uncommitted file" : `${files.length} uncommitted files`);
+    details.appendChild(el("summary", null, `Details: ${parts.join(", ")}`));
+    record.forEach((node) => details.appendChild(node));
+    card.appendChild(details);
   }
   return card;
 }

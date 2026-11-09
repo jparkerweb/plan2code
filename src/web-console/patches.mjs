@@ -1369,6 +1369,19 @@ export function loopEndProblems(e, state) {
   if (!Array.isArray(e.can) || !e.can.every((c) => LOOP_CAN.includes(c))) {
     bad("can", `must be an array with entries from ${LOOP_CAN.join(", ")}`);
   }
+  // `reason` (the stop screen's short heading) and `recommend` (the one button
+  // drawn as primary) are optional: an older app sends neither.
+  if (e.reason !== undefined) {
+    if (!oneLine(e.reason, 200)) bad("reason", "must be one line of 1 to 200 characters");
+    else prose("reason", e.reason);
+  }
+  if (e.phase !== undefined && !isPosInt(e.phase)) bad("phase", "must be a positive integer");
+  if (e.recommend !== undefined && e.recommend !== null) {
+    const offered = Array.isArray(e.can) ? e.can : [];
+    if (!["resume", "fix", "finalize"].includes(e.recommend) || !offered.includes(e.recommend)) {
+      bad("recommend", "must be resume, fix or finalize, and one of can");
+    }
+  }
   return p;
 }
 

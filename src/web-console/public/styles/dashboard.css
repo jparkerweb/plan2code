@@ -701,4 +701,13 @@
 .loop-end-phases th, .loop-end-phases td { text-align: left; padding: 5px 10px 5px 0; border-bottom: 1px solid var(--rule); vertical-align: top; }
 .loop-end-phases code { font-family: var(--mono); font-size: 12px; }
 .loop-end-files { margin: 0; padding-left: 18px; font-family: var(--mono); font-size: 12px; color: var(--ink-2); }
-.loop-end-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.loop-end-heading, .loop-end .loop-line { overflow-wrap: anywhere; }
+/* Each button with one plain line under it saying what it does. */
+.loop-end-actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; }
+.loop-end-choice { display: grid; gap: 6px; align-content: start; justify-items: start; }
+.loop-end-choice .btn { max-width: 100%; }
+.loop-end-hint { margin: 0; font-size: 13px; line-height: 1.45; color: var(--ink-2); }
+.loop-end-safe { margin: 0; font-size: 13.5px; color: var(--ink-2); }
+.loop-end-details { display: grid; gap: 10px; }
+.loop-end-details > summary { cursor: pointer; font-size: 13.5px; color: var(--ink-2); }
+.loop-end-details[open] > summary { margin-bottom: 8px; }

@@ -163,7 +163,7 @@ not), so your own edits never end up inside a phase's commit.
 The last setup is remembered per project in `~/.plan2code/console/loop-setup.json`, so the next loop
 starts from it. The quick check is typed text the page never runs: the app reads it from that file
 itself and names it in its own window before the loop begins. The notification gets the same treatment,
-and Resume asks again if either one changed.
+and Continue building asks again if either one changed.
 
 **The notification.** The loop says a question is waiting, that it is complete, or why it stopped, and,
 when you turn on **Also tell me when each phase is complete**, that a phase passed. Nothing is sent when you
@@ -233,17 +233,17 @@ evidence, when:
 - the Smart pick skipped a Critical finding.
 
 A crashed or silent agent gets exactly one retry per phase when the retry tick is on, and none when it is off.
-It never retries a real failure. On a stop screen, **Ask a question** (first in the row, offered whenever Resume is) wakes an ordinary agent on the stopped phase on the same page, so the Ask tab answers; it starts no loop and changes nothing, and **Resume the loop** is still there afterwards. **Resume the loop** carries on from the stopped
-phase and **Fix it by hand** opens an ordinary Implement session on it.
+It never retries a real failure. On a stop screen, **Ask a question** (first in the row, offered whenever Continue building is) wakes an ordinary agent on the stopped phase on the same page, so the Ask tab answers; it starts no loop and changes nothing, and **Continue building** is still there afterwards (pressing Ask again only opens the Ask tab). **Continue building** carries on unattended from the stopped
+phase and **Fix together with an agent** opens an ordinary Implement session on it. The stop screen leads with a short reason, puts one line under each button saying what it does, and highlights one: Continue building after a crash, a silence or your own stop, Fix together after a failed check, a blocked task, a refused commit or a question. The phase list and uncommitted files sit under **Details**.
 
-**The report.** One report follows the whole build, across stops and Resume. For every phase it says what
+**The report.** One report follows the whole build, across stops and Continue building. For every phase it says what
 was built and committed, the tests, the findings fixed, the findings it chose not to fix and why, the
 findings left open, each assumption with its note, and any other decisions the agent reported, plus every
 retry and stop, in order. The agent writes most of this, so it holds what the agent noticed; the task marks,
 the quick check and the commits are the app's own. The finish screen counts each kind per phase, and **Read
 the full report** opens it, saved as `specs/<feature>/LOOP-SUMMARY-<date>.md` (`-2` and so on for another
 the same day). After a stop, **Read why, and the report so far** shows it on the stop screen. While a build
-is unfinished it lives in `~/.plan2code/console/loop-reports.json`, not the project, because Resume needs a
+is unfinished it lives in `~/.plan2code/console/loop-reports.json`, not the project, because Continue building needs a
 clean tree. The in-app **Help** has a matching topic, **Implementation Loop**, which the loop card links to as "How the loop works".
 
 ## Keep it up to date

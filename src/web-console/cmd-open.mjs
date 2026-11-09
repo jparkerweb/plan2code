@@ -266,7 +266,7 @@ export async function cmdOpen() {
         s.setup = { forCli: args["for-cli"] || null, token: newToken(), created: nowIso() };
       }
       // The loop lock follows the flag: --loop locks the page, and a resume
-      // without it (Fix it by hand, from a stop screen) is an ordinary,
+      // without it (Fix together with an agent, from a stop screen) is an ordinary,
       // unlocked session. `loopExpect` goes with the lock: the app restamps it
       // on its next look, so a stale setup never judges a new run.
       if (loopMode) s.loop = loopLock();
