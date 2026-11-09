@@ -46,6 +46,13 @@ pub struct AgentSnapshot {
     /// The running (or last started) agent's permission mode, so the bar's
     /// note can name it instead of assuming bypass.
     pub mode: Option<PermissionMode>,
+    /// The model the agent was started on, shown beside its name. `None` when
+    /// it runs on its own default, which the app cannot know.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
+    /// The effort the agent was started with, when its kind takes one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub effort: Option<String>,
     /// What the last Restart left for the dashboard, for the bar.
     #[serde(rename = "briefNote", skip_serializing_if = "Option::is_none")]
     pub brief_note: Option<String>,
@@ -398,9 +405,9 @@ impl AgentManager {
         lock(&self.shared.inner).replay.clone()
     }
 
-    /// The model and effort the current (or last) start chose. The bar only
-    /// ever needs `snapshot`'s `kind` and `mode`; this exists so a test can
-    /// confirm Restart keeps the other two of the four just as unchanged.
+    /// The model and effort the current (or last) start chose, the same two
+    /// `snapshot` sends to the bar; a test uses this to confirm Restart keeps
+    /// them unchanged.
     pub fn model_and_effort(&self) -> (Option<String>, Option<String>) {
         match &lock(&self.shared.inner).last_start {
             Some((choice, _)) => (choice.model.clone(), choice.effort.clone()),
@@ -482,6 +489,14 @@ impl Shared {
                 .as_ref()
                 .map(|(choice, _)| choice.kind.id().to_string()),
             mode: inner.last_start.as_ref().map(|(choice, _)| choice.mode),
+            model: inner
+                .last_start
+                .as_ref()
+                .and_then(|(choice, _)| choice.model.clone()),
+            effort: inner
+                .last_start
+                .as_ref()
+                .and_then(|(choice, _)| choice.effort.clone()),
             generation: self.generation.load(Ordering::SeqCst),
             brief_note: inner.brief_note.clone(),
         }

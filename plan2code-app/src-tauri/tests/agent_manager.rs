@@ -198,6 +198,49 @@ fn restart_keeps_the_previous_agent_kind_mode_model_and_effort() {
 }
 
 #[test]
+fn snapshot_carries_the_model_and_effort_for_the_bar_only_when_known() {
+    let mut h = Harness::new();
+    h.manager
+        .start(
+            Agent::Builtin(builtin_entry("codex").unwrap()),
+            Some("gpt-5".to_string()),
+            Some("high".to_string()),
+            PermissionMode::Checked,
+            None,
+        )
+        .expect("start the fake agent");
+    h.wait_for_output(READY, 1);
+    let known = h.manager.snapshot();
+    assert_eq!(known.model.as_deref(), Some("gpt-5"));
+    assert_eq!(known.effort.as_deref(), Some("high"));
+    let json = serde_json::to_value(&known).unwrap();
+    assert_eq!(json["model"], "gpt-5");
+    assert_eq!(json["effort"], "high");
+    h.manager.stop();
+
+    h.manager
+        .start(
+            Agent::Builtin(builtin_entry("codex").unwrap()),
+            None,
+            None,
+            PermissionMode::Checked,
+            None,
+        )
+        .expect("start the fake agent on its own model");
+    h.wait_for_output(READY, 2);
+    let unknown = h.manager.snapshot();
+    assert_eq!(unknown.model, None);
+    assert_eq!(unknown.effort, None);
+    let json = serde_json::to_value(&unknown).unwrap();
+    assert!(json.get("model").is_none(), "an unknown model is left out");
+    assert!(
+        json.get("effort").is_none(),
+        "an unknown effort is left out"
+    );
+    h.manager.stop();
+}
+
+#[test]
 fn restart_between_steps_replaces_the_agent_at_once() {
     let mut h = Harness::new();
     h.start_and_wait_ready();

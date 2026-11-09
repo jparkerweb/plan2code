@@ -18,6 +18,7 @@ const agentDotEl = document.getElementById('agent-dot');
 const agentNameEl = document.getElementById('agent-name');
 const agentEndedEl = document.getElementById('agent-ended');
 const agentBypassEl = document.getElementById('agent-bypass');
+const agentModelEl = document.getElementById('agent-model');
 const agentNoneEl = document.getElementById('agent-none');
 const agentStatusEl = document.getElementById('agent-status');
 const restartBtn = document.getElementById('agent-restart');
@@ -166,6 +167,12 @@ function applyAgentState(next, { skipReset } = {}) {
   agentNameEl.textContent = active || ended ? label || 'The agent' : '';
   agentDotEl.className = `agent-dot${active ? (bypassActive ? ' is-warn' : ' is-ok') : ''}`;
   agentEndedEl.hidden = !ended;
+  // The model and effort the app started it with, when it knows them: an agent
+  // on its own default model has none to show, and an effort needs a model.
+  const modelText = agent.model ? (agent.effort ? `${agent.model} · ${agent.effort}` : agent.model) : '';
+  agentModelEl.textContent = active || ended ? modelText : '';
+  agentModelEl.hidden = !agentModelEl.textContent;
+  agentModelEl.title = agentModelEl.textContent ? `Started on ${agentModelEl.textContent}` : '';
   agentBypassEl.hidden = !bypassActive;
   renderAgentMenuHead(label || 'The agent', { active, ended, bypassActive });
   if (agentMenu.hidden === false && agentMenuBtn.hidden) closeBarMenus();

@@ -45,7 +45,8 @@
     .agent-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: #666; }
     .agent-dot.is-ok { background: #6a9955; }
     .agent-dot.is-warn { background: #d7ba7d; }
-    #agent-ended { color: var(--ink-3); font-weight: 400; }
+    #agent-ended, #agent-model { color: var(--ink-3); font-weight: 400; }
+    #agent-model { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     #agent-bypass { flex: none; font-size: 11px; font-weight: 600; line-height: 1.3; padding: 0 7px; border-radius: 999px; border: 1px solid #d7ba7d; color: #d7ba7d; }
     #agent-none { color: var(--ink-3); }
     #agent-status { color: var(--ink-3); overflow: hidden; text-overflow: ellipsis; min-width: 0; max-width: 320px; }
@@ -283,7 +284,7 @@
       <button id="project-menu-button" class="bar-menu" aria-haspopup="menu" aria-expanded="false" aria-controls="project-menu" hidden><span id="project-name"></span><span class="bar-caret" aria-hidden="true">&#9662;</span></button>
       <!-- Whenever an agent exists, running or ended, just left of its menu. -->
       <button id="agent-restart" hidden>New Session</button>
-      <button id="agent-menu-button" class="bar-menu" aria-haspopup="menu" aria-expanded="false" aria-controls="agent-menu" hidden><span id="agent-dot" class="agent-dot" aria-hidden="true"></span><span id="agent-name"></span><span id="agent-ended" hidden>ended</span><span id="agent-bypass" title="Permission checks are off: the agent runs commands and changes files without asking" hidden>checks off</span><span class="bar-caret" aria-hidden="true">&#9662;</span></button>
+      <button id="agent-menu-button" class="bar-menu" aria-haspopup="menu" aria-expanded="false" aria-controls="agent-menu" hidden><span id="agent-dot" class="agent-dot" aria-hidden="true"></span><span id="agent-name"></span><span id="agent-model" title="The model and effort this agent was started with" hidden></span><span id="agent-ended" hidden>ended</span><span id="agent-bypass" title="Permission checks are off: the agent runs commands and changes files without asking" hidden>checks off</span><span class="bar-caret" aria-hidden="true">&#9662;</span></button>
       <span id="agent-none">No agent</span>
       <span id="agent-status" role="status"></span>
       <span id="bar-grow"></span>
