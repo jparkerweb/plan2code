@@ -40,6 +40,7 @@ export const LOOP_DEFAULTS = Object.freeze({
   notifyKind: "query",
   notifyUrl: "",
   notifyParam: "message",
+  notifyPhases: false,
   phaseStrength: false,
   strengths: Object.freeze({}),
 });
@@ -61,7 +62,7 @@ export function loopSetupProblems(entry) {
   for (const key of Object.keys(entry)) {
     if (!Object.hasOwn(LOOP_DEFAULTS, key)) problems.push(`"${key}" is not a setup field`);
   }
-  for (const key of ["review", "commit", "retryOnce"]) {
+  for (const key of ["review", "commit", "retryOnce", "notifyPhases"]) {
     if (typeof entry[key] !== "boolean") problems.push(`"${key}" must be true or false`);
   }
   if (!Array.isArray(entry.fix) || !entry.fix.every((l) => LEVELS.includes(l)) || new Set(entry.fix).size !== entry.fix.length) {

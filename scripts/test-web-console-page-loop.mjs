@@ -73,6 +73,8 @@ test("the web address field shows the name only beside an address, warns while t
 
   assert.equal(await url.inputValue(), "");
   assert.equal(await param.isVisible(), false, "no address, no name to set");
+  const phases = s.page.locator("#loop-notify-phases");
+  assert.equal(await phases.isVisible(), false, "no address, no phase messages to choose");
   assert.equal(await warn.isVisible(), false);
 
   await url.fill("example.com");
@@ -83,6 +85,9 @@ test("the web address field shows the name only beside an address, warns while t
   assert.equal(await warn.isVisible(), false);
   assert.equal(await param.isVisible(), true);
   assert.equal(await param.inputValue(), "message", "the default name");
+  assert.equal(await phases.isVisible(), true);
+  assert.equal(await phases.isChecked(), false, "a message per phase is opt-in");
+  await phases.check();
 
   await param.fill("a b");
   assert.match(await textOf(warn), /letters, digits/);
@@ -103,6 +108,7 @@ test("the web address field shows the name only beside an address, warns while t
   const reread = await s.page.evaluate(async () => (await fetch("/loop-setup")).json());
   assert.equal(reread.notifyUrl, "https://example.com/hook?team=a");
   assert.equal(reread.notifyParam, "msg");
+  assert.equal(reread.notifyPhases, true, "the box is saved with the setup");
   assert.equal(reread.remembered, true);
 });
 

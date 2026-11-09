@@ -557,6 +557,7 @@ test("loop-setup: a new project reads as the defaults with remembered false, and
   assert.equal(got.setup.notifyUrl, "", "no web address is called by default");
   assert.equal(got.setup.notifyKind, "query");
   assert.equal(got.setup.notifyParam, "message");
+  assert.equal(got.setup.notifyPhases, false, "a phase-complete message is opt-in");
   assert.equal(fs.existsSync(LOOP_SETUP_PATH), false, "reading never creates the file");
 });
 
@@ -624,6 +625,31 @@ test("loop-setup: an entry saved before fixMode existed reads as levels", () => 
   assert.equal(got.read.remembered, true);
   assert.equal(got.read.fixMode, "levels", "an older entry keeps fixing by level, not the new default");
   assert.deepEqual(got.read.fix, ["warning"], "the saved fields are kept");
+});
+
+test("loop-setup: the phase-complete message saves as a yes or no, and an older entry reads as no", () => {
+  fs.rmSync(LOOP_SETUP_PATH, { force: true });
+  const got = inStore(
+    async (m, { project, workspace }) => {
+      const fs = await import("node:fs");
+      const { foldKey } = await import(workspace);
+      const base = { ...m.LOOP_DEFAULTS, fix: [...m.LOOP_DEFAULTS.fix], notifyUrl: "https://example.com/hook" };
+      const on = m.saveLoopSetup(project, { ...base, notifyPhases: true }).notifyPhases;
+      let refused = "";
+      try {
+        m.saveLoopSetup(project, { ...base, notifyPhases: "yes" });
+      } catch (e) {
+        refused = e.message;
+      }
+      const { notifyPhases, ...older } = { ...base, saved: "2026-01-01T00:00:00.000Z" };
+      fs.writeFileSync(m.LOOP_SETUP_FILE, JSON.stringify({ schema: 1, projects: { [foldKey(project)]: older } }));
+      return { on, refused, older: m.readLoopSetup(project).notifyPhases };
+    },
+    { project: projectA, workspace: WORKSPACE_URL }
+  );
+  assert.equal(got.on, true);
+  assert.match(got.refused, /"notifyPhases" must be true or false/);
+  assert.equal(got.older, false, "an entry saved before the box existed sends no phase messages");
 });
 
 test("loop-setup: good web addresses save, with a bad name allowed only while no address is set", () => {
@@ -778,7 +804,7 @@ test("loop-setup: GET /loop-setup lists the phases left for a spec and refuses a
     }
 
     // Saving through the route, then reading it back in a new request.
-    const save = await send({ review: true, fixMode: "smart", fix: ["critical"], commit: true, onQuestion: "stop", afterLast: "offer-finalize", quickCheck: "", notifyKind: "query", notifyUrl: "https://example.com/hook", notifyParam: "msg", retryOnce: true, silenceMinutes: 30, phaseStrength: false, strengths: {} });
+    const save = await send({ review: true, fixMode: "smart", fix: ["critical"], commit: true, onQuestion: "stop", afterLast: "offer-finalize", quickCheck: "", notifyKind: "query", notifyUrl: "https://example.com/hook", notifyParam: "msg", notifyPhases: true, retryOnce: true, silenceMinutes: 30, phaseStrength: false, strengths: {} });
     assert.equal(save.status, 200, await save.clone().text());
     const after = await get("?spec=specs/demo");
     assert.equal(after.body.remembered, true);
@@ -948,7 +974,7 @@ test("GET /loop-setup?agent= answers the loop agent's resolved strengths and thi
     // A save with picks reads back for its own spec; a pick for a phase that is not there is pruned.
     const entry = {
       review: true, fixMode: "smart", fix: ["critical"], commit: true, onQuestion: "guess", afterLast: "offer-finalize", quickCheck: "",
-      notifyKind: "query", notifyUrl: "", notifyParam: "message", retryOnce: true, silenceMinutes: 20, phaseStrength: true,
+      notifyKind: "query", notifyUrl: "", notifyParam: "message", notifyPhases: false, retryOnce: true, silenceMinutes: 20, phaseStrength: true,
       strengths: { "specs/demo": [{ n: 2, name: "Two", strength: "best" }, { n: 9, name: "Gone", strength: "best" }] },
     };
     const save = await fetch(`${base}/loop-setup`, { method: "POST", headers: { "content-type": "application/json", cookie, origin: base, connection: "close" }, body: JSON.stringify(entry) });

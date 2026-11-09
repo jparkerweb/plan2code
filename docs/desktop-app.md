@@ -168,7 +168,7 @@ and Resume asks again if either one changed.
 **The notification.** The loop says a question is waiting, that it is complete, or why it stopped, and,
 when you turn on **Also tell me when each phase is complete**, that a phase passed. Nothing is sent when you
 stopped it yourself, and with **Take the agent's best guess** no question ever waits on you. Every message
-names the project and spec and the phase as `Phase 2 of 4 (name)`, and ends with the time the phase and the
+names the project and spec and the phase as `Phase 2 of 4 (name)`, and, except the finish message (run time only), ends with the time the phase and the
 whole run have taken. A phase message also says how many tasks are done, the commit's subject and short id,
 and what comes next, for example: `Plan2Code loop on plan2code / lunch-vote: Phase 2 of 4 (Votes) is complete.
 Done: 5 tasks, committed "Add votes" (abc1234). Next: Phase 3, Results. Elapsed: phase 6m, run 14m.` What the app sends depends on the **Send to** choice:

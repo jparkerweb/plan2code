@@ -101,6 +101,7 @@ export async function openLoopSetup(spec) {
     notifyKind: NOTIFY_KINDS.some((k) => k.id === setup.notifyKind) ? setup.notifyKind : "query",
     notifyUrl: typeof setup.notifyUrl === "string" ? setup.notifyUrl : "",
     notifyParam: setup.notifyParam || DEFAULT_NOTIFY_PARAM,
+    notifyPhases: setup.notifyPhases === true,
     phaseStrength: setup.phaseStrength === true,
     // Every spec's picks, as saved; only this spec's key is changed here.
     strengths: setup.strengths && typeof setup.strengths === "object" && !Array.isArray(setup.strengths) ? structuredClone(setup.strengths) : {},
@@ -182,6 +183,7 @@ export function pickModelText(resolved, word, appFacts) {
 }
 
 function close() {
+  stopWatchingLine();
   page.loopSetup = null;
   page.loopStart = null;
   redraw();
@@ -354,8 +356,97 @@ function select(id, label, options, value, onChange) {
   return box;
 }
 
+/**
+ * The rising-bar badge of the Subagents tab for a strength level: bars up to
+ * `level` (1 to 3) are on. Level 0 (Match my session) has no rank, so it draws
+ * three flat bars with the middle one lighter. `text` adds the name after the bars.
+ */
+export function strengthBadge(level, text) {
+  const chip = el("span", `sa-badge lvl-${level}`);
+  chip.appendChild(strengthBars(level));
+  if (text) chip.appendChild(document.createTextNode(text));
+  return chip;
+}
+
+function strengthBars(level) {
+  const bars = el("span", level ? "sa-bars" : "sa-bars is-flat");
+  bars.setAttribute("aria-hidden", "true");
+  for (let i = 1; i <= 3; i++) bars.appendChild(el("i", level && i <= level ? "on" : null));
+  return bars;
+}
+
+const SVG_NS = "http://www.w3.org/2000/svg";
+let lineGrid = null;
+let lineWatching = false;
+
+function svgPart(name, attrs) {
+  const part = document.createElementNS(SVG_NS, name);
+  for (const [k, v] of Object.entries(attrs)) part.setAttribute(k, String(v));
+  return part;
+}
+
+/**
+ * Draw the strength line into the grid's SVG from where the checked nodes sit:
+ * a dashed column line per strength, then a square-step path from each row's
+ * picked node to the next. Derived from the DOM on every call, so it cannot
+ * disagree with the radios.
+ */
+export function drawStrengthLine(grid) {
+  const svg = grid && grid.querySelector(".loop-strength-line");
+  if (!svg) return;
+  svg.replaceChildren();
+  const gr = grid.getBoundingClientRect();
+  const nodes = [...grid.querySelectorAll(".loop-strength-row input:checked + .loop-strength-node")];
+  if (nodes.length < 2 || !gr.width) return;
+  svg.setAttribute("viewBox", `0 0 ${gr.width} ${gr.height}`);
+  const pts = nodes.map((n) => {
+    const b = n.getBoundingClientRect();
+    return { x: b.left - gr.left + b.width / 2, y: b.top - gr.top + b.height / 2 };
+  });
+  const top = grid.querySelector(".loop-strength-row").getBoundingClientRect().top - gr.top;
+  grid.querySelectorAll(".loop-strength-head .loop-strength-chip").forEach((chip, k) => {
+    const b = chip.getBoundingClientRect();
+    const x = b.left - gr.left + b.width / 2;
+    svg.appendChild(svgPart("line", { class: `col lvl-${k}`, x1: x, x2: x, y1: top, y2: gr.height }));
+  });
+  for (let i = 1; i < pts.length; i++) {
+    const a = pts[i - 1];
+    const p = pts[i];
+    // The run across sits at the top of the next node's cell, so it stays clear of a phase name above the cells.
+    const m = nodes[i].parentElement.getBoundingClientRect().top - gr.top;
+    let d = `M${a.x} ${a.y}V${p.y}`;
+    if (a.x !== p.x) {
+      const r = Math.min(8, Math.abs(p.x - a.x) / 2);
+      const dir = p.x > a.x ? 1 : -1;
+      d = `M${a.x} ${a.y}V${m - r}Q${a.x} ${m} ${a.x + dir * r} ${m}H${p.x - dir * r}Q${p.x} ${m} ${p.x} ${m + r}V${p.y}`;
+    }
+    svg.appendChild(svgPart("path", { class: "step", d }));
+  }
+}
+
+function redrawLine() {
+  if (lineGrid && lineGrid.isConnected) drawStrengthLine(lineGrid);
+  else stopWatchingLine();
+}
+
+function stopWatchingLine() {
+  lineGrid = null;
+  if (lineWatching) window.removeEventListener("resize", redrawLine);
+  lineWatching = false;
+}
+
+/** Draw once layout exists, and again on resize and when fonts load; stop once the grid is gone. */
+function watchStrengthLine(grid) {
+  lineGrid = grid;
+  if (!lineWatching) window.addEventListener("resize", redrawLine);
+  lineWatching = true;
+  requestAnimationFrame(redrawLine);
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(redrawLine);
+}
+
 /** The "Strength per phase" field: the toggle, Set all to, and one row per phase left. */
 function strengthField(s, redo) {
+  stopWatchingLine();
   const f = s.form;
   const resolved = s.facts.resolved;
   const box = field("Strength per phase");
@@ -400,23 +491,59 @@ function strengthField(s, redo) {
   all.appendChild(everyone);
   box.appendChild(all);
 
+  // One column per option, in rank order: level 0 is Match my session.
+  const columns = [["", MATCH_SESSION], ...STRENGTH_WORDS].map(([value, label], level) => ({ value, label, level, mapped: value === "" || Boolean(resolved[value]) }));
+  const grid = el("div", "loop-strength-grid");
+  const line = svgPart("svg", { class: "loop-strength-line", "aria-hidden": "true", focusable: "false" });
+  const head = el("div", "loop-strength-head");
+  head.appendChild(el("span", "loop-strength-spacer"));
+  for (const c of columns) {
+    const chip = strengthBadge(c.level, c.mapped ? c.label : `${c.label} (not mapped)`);
+    chip.classList.add("loop-strength-chip");
+    if (!c.mapped) chip.classList.add("is-unmapped");
+    head.appendChild(chip);
+  }
+  head.appendChild(el("span", "loop-strength-spacer"));
+  grid.appendChild(head);
+
   const rows = el("div", "loop-strength-rows");
   for (const p of s.facts.phasesLeft) {
     const word = pickOf(f, s.spec, p);
     const row = el("div", "loop-strength-row");
     row.dataset.phase = String(p.n);
+    row.setAttribute("role", "radiogroup");
+    row.setAttribute("aria-label", `Phase ${p.n} strength`);
     row.appendChild(el("span", "loop-strength-phase", `Phase ${p.n}: ${p.name}`));
-    row.appendChild(
-      select(`loop-strength-${p.n}`, `Phase ${p.n} strength`, options, word, (v) => {
-        setPick(f, s.spec, p, v);
+    for (const c of columns) {
+      const cell = el("label", `loop-strength-cell lvl-${c.level}${c.mapped ? "" : " is-unmapped"}`);
+      const input = el("input");
+      input.type = "radio";
+      input.name = `loop-strength-${p.n}`;
+      input.id = `loop-strength-${p.n}-${c.value || "match"}`;
+      input.value = c.value;
+      input.checked = word === c.value;
+      input.disabled = !c.mapped;
+      input.setAttribute("aria-label", `Phase ${p.n} ${c.label}`);
+      input.addEventListener("change", () => {
+        if (!input.checked) return;
+        setPick(f, s.spec, p, c.value);
         s.problems = [];
         redraw();
-      })
-    );
+      });
+      const node = el("span", "loop-strength-node");
+      node.appendChild(strengthBars(c.level));
+      cell.append(input, node);
+      row.appendChild(cell);
+    }
     row.appendChild(el("span", "loop-strength-model", pickModelText(resolved, word, page.loopFacts)));
     rows.appendChild(row);
   }
-  box.appendChild(rows);
+  grid.appendChild(rows);
+  if (s.facts.phasesLeft.length >= 2) {
+    grid.prepend(line);
+    watchStrengthLine(grid);
+  }
+  box.appendChild(grid);
   return box;
 }
 
@@ -496,7 +623,7 @@ function drawBody(pane, s) {
 
   const notify = field(
     "Send a notification",
-    "When the loop waits on your answer or ends, except when you stop it yourself, the app sends a short message saying which. Leave the address empty to send nothing."
+    "When the loop waits on your answer or ends, except when you stop it yourself, the app sends a short message saying which, with the project, the phase, what it built and how long it took. Leave the address empty to send nothing."
   );
   const kindLabel = el("label", "loop-number");
   kindLabel.appendChild(el("span", null, "Send to"));
@@ -529,6 +656,9 @@ function drawBody(pane, s) {
   paramInput.maxLength = 64;
   paramLabel.appendChild(paramInput);
   paramRow.appendChild(paramLabel);
+  const phasesRow = toggle("loop-notify-phases", "Also tell me when each phase is complete", f.notifyPhases, (v) => {
+    f.notifyPhases = v;
+  });
   const notifyWarn = el("p", "loop-warn");
   const testRow = el("div", "loop-test");
   const testButton = el("button", "btn", "Send a test");
@@ -545,6 +675,7 @@ function drawBody(pane, s) {
     notifyInput.placeholder = kind.placeholder;
     paramText.textContent = kind.name || "";
     paramRow.hidden = !kind.name || f.notifyUrl.trim() === "";
+    phasesRow.hidden = f.notifyUrl.trim() === "";
     const problem = notifyProblem(f.notifyUrl, f.notifyParam, kind.id);
     notifyWarn.textContent = problem;
     notifyWarn.hidden = !problem;
@@ -577,7 +708,7 @@ function drawBody(pane, s) {
     showNotify();
   });
   showNotify();
-  notify.append(kindLabel, notifyInput, kindHint, paramRow, notifyWarn, testRow);
+  notify.append(kindLabel, notifyInput, kindHint, paramRow, phasesRow, notifyWarn, testRow);
   form.appendChild(notify);
 
   const check = field("Quick check", "A command the app runs after each phase, such as npm run build. The page never runs it.");

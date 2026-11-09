@@ -150,6 +150,9 @@ pub struct LoopSetup {
     /// The query parameter or JSON field that carries the message, for the
     /// kinds that let the person name it.
     pub notify_param: String,
+    /// Whether a phase that passes is told to the address too (the question,
+    /// stop and finish messages are always sent).
+    pub notify_phases: bool,
     /// Whether each phase runs on its own strength (off: every phase runs as today).
     pub phase_strength: bool,
     /// The picks per spec folder (`specs/<name>`), only for phases not yet done.
@@ -171,6 +174,7 @@ impl Default for LoopSetup {
             notify_kind: NotifyKind::Query,
             notify_url: String::new(),
             notify_param: loop_notify::DEFAULT_PARAM.to_string(),
+            notify_phases: false,
             phase_strength: false,
             strengths: BTreeMap::new(),
         }
@@ -242,6 +246,12 @@ pub struct TestsPart {
     pub ran: bool,
     pub passed: bool,
     pub summary: String,
+    /// Names of the tests that failed, when `passed` is false.
+    pub failing: Vec<String>,
+    /// Names of the failing tests the phase file's Notes say are expected to
+    /// fail until a later phase (`expectedFailures` on the wire).
+    #[serde(rename = "expectedFailures")]
+    pub expected_failures: Vec<String>,
 }
 
 /// What a phase's skill reported (`loopOutcome`, overview API).
@@ -754,6 +764,15 @@ fn expect_patch(setup: &LoopSetup) -> Value {
 /// Whether to take the skill's report at its word, cross-checked against the
 /// spec's own marks (`phase_status` is the phase's entry from `specs.mjs
 /// status`). The quick check runs after an Approve, not here.
+/// Whether every failing test the report names is also listed as expected.
+fn excused_failures(tests: &TestsPart) -> bool {
+    !tests.failing.is_empty()
+        && tests
+            .failing
+            .iter()
+            .all(|name| tests.expected_failures.contains(name))
+}
+
 pub fn judge_outcome(outcome: &Outcome, phase_status: &Value, setup: &LoopSetup) -> Verdict {
     let refuse = |why: String| Verdict::Refuse(why);
     if outcome.result == "failed" {
@@ -782,14 +801,26 @@ pub fn judge_outcome(outcome: &Outcome, phase_status: &Value, setup: &LoopSetup)
     // tasks and listed conflicts are not: the checks below cover blocked tasks
     // through the spec's own marks, and a conflict the agent worked around is
     // reported to the person, not refused (FR-7).
+    // A failure is excused only when every failing test is named and also
+    // listed as expected: a bare "expected" never passes, so a real failure
+    // cannot be waved through.
+    let mut warnings = Vec::new();
     if let Some(tests) = &outcome.tests {
         if tests.ran && !tests.passed {
-            let summary = one_line(&tests.summary);
-            return refuse(if summary.is_empty() {
-                "its tests ran and failed".to_string()
+            if excused_failures(tests) {
+                warnings.push(format!(
+                    "{} test(s) failed as the phase's Notes expect: {}",
+                    tests.failing.len(),
+                    tests.failing.join(", ")
+                ));
             } else {
-                format!("its tests ran and failed: {summary}")
-            });
+                let summary = one_line(&tests.summary);
+                return refuse(if summary.is_empty() {
+                    "its tests ran and failed".to_string()
+                } else {
+                    format!("its tests ran and failed: {summary}")
+                });
+            }
         }
     }
     let blocked = count(tasks, "blocked");
@@ -808,7 +839,6 @@ pub fn judge_outcome(outcome: &Outcome, phase_status: &Value, setup: &LoopSetup)
     if done != total {
         return refuse(format!("the spec shows {done} of {total} tasks done"));
     }
-    let mut warnings = Vec::new();
     if setup.review {
         let review = outcome.review.clone().unwrap_or_default();
         if !review.ran {
@@ -1313,8 +1343,14 @@ pub fn confirm_text(rec: &RunningRecord) -> String {
         ));
     }
     if !rec.setup.notify_url.is_empty() {
+        let when = if rec.setup.notify_phases {
+            "after each phase, when the loop needs you, or when it ends"
+        } else {
+            "When the loop needs you or ends"
+        };
         text.push_str(&format!(
-            " When the loop needs you or ends, {}.",
+            " {}, {}.",
+            capitalized(when),
             loop_notify::describe(
                 rec.setup.notify_kind,
                 &rec.setup.notify_url,
@@ -1325,6 +1361,14 @@ pub fn confirm_text(rec: &RunningRecord) -> String {
     text
 }
 
+fn capitalized(text: &str) -> String {
+    let mut chars = text.chars();
+    chars
+        .next()
+        .map(|c| c.to_uppercase().collect::<String>() + chars.as_str())
+        .unwrap_or_default()
+}
+
 /// What the Start confirm promised about the notification, to tell a change on
 /// Resume; empty when no address is set.
 pub fn confirmed_notify(setup: &LoopSetup) -> String {
@@ -1332,8 +1376,8 @@ pub fn confirmed_notify(setup: &LoopSetup) -> String {
         String::new()
     } else {
         format!(
-            "{:?} {} {}",
-            setup.notify_kind, setup.notify_url, setup.notify_param
+            "{:?} {} {} {}",
+            setup.notify_kind, setup.notify_url, setup.notify_param, setup.notify_phases
         )
     }
 }
@@ -1364,37 +1408,165 @@ pub fn send_notify_test(setup: &LoopSetup) -> Result<(), String> {
     }
 }
 
-/// The message for a question holding the loop, or ending it (On question: Stop).
-pub fn question_message(spec: &str, phase: u32, ended: bool) -> String {
-    let name = spec.strip_prefix("specs/").unwrap_or(spec);
-    if ended {
-        format!("Plan2Code loop stopped on {name}: Phase {phase} has a question for you to answer.")
-    } else {
+/// Where the loop is, copied out of the record so a message can be written, and
+/// sent, with no lock held.
+#[derive(Clone, Debug)]
+pub struct Where {
+    pub project: String,
+    pub spec: String,
+    pub n: u32,
+    /// The spec's last phase number (phases already done are not in the record).
+    pub of: usize,
+    pub name: String,
+    pub phase_time: Duration,
+    pub run_time: Duration,
+}
+
+impl Where {
+    pub fn of(rec: &RunningRecord, index: usize) -> Where {
+        let phase = &rec.phases[index];
+        Where {
+            project: rec
+                .project
+                .file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_default(),
+            spec: rec
+                .spec
+                .strip_prefix("specs/")
+                .unwrap_or(&rec.spec)
+                .to_string(),
+            n: phase.n,
+            of: rec.phases.last().map_or(0, |p| p.n as usize),
+            name: phase.name.clone(),
+            phase_time: rec.phase_started_at.elapsed(),
+            run_time: rec.started_at.elapsed(),
+        }
+    }
+
+    /// "plan2code / lunch", or just the spec when the folder has no name.
+    fn label(&self) -> String {
+        if self.project.is_empty() {
+            self.spec.clone()
+        } else {
+            format!("{} / {}", self.project, self.spec)
+        }
+    }
+
+    /// "Phase 2 of 4 (Setup screen)".
+    fn phase_text(&self) -> String {
+        let mut text = format!("Phase {} of {}", self.n, self.of);
+        if !self.name.is_empty() {
+            text.push_str(&format!(" ({})", self.name));
+        }
+        text
+    }
+
+    /// "Elapsed: phase 6m, run 14m."
+    fn elapsed(&self) -> String {
         format!(
-            "Plan2Code loop is waiting on {name}: Phase {phase} has a question for you to answer."
+            "Elapsed: phase {}, run {}.",
+            minutes(self.phase_time),
+            minutes(self.run_time)
         )
     }
 }
 
+/// "under 1m", "6m", "1h 5m".
+fn minutes(time: Duration) -> String {
+    let total = time.as_secs() / 60;
+    match total {
+        0 => "under 1m".to_string(),
+        1..=59 => format!("{total}m"),
+        _ => format!("{}h {}m", total / 60, total % 60),
+    }
+}
+
+/// The message for a question holding the loop, or ending it (On question: Stop).
+pub fn question_message(at: &Where, ended: bool) -> String {
+    let (verb, tail) = if ended {
+        ("stopped on", "has a question for you to answer")
+    } else {
+        ("is waiting on", "has a question for you to answer")
+    };
+    format!(
+        "Plan2Code loop {verb} {}: {} {tail}. {}",
+        at.label(),
+        at.phase_text(),
+        at.elapsed()
+    )
+}
+
 /// The message for a loop that built everything.
-pub fn finished_message(spec: &str, phases: usize) -> String {
-    let name = spec.strip_prefix("specs/").unwrap_or(spec);
+pub fn finished_message(at: &Where, phases: usize) -> String {
     let built = if phases == 1 {
         "1 phase".to_string()
     } else {
         format!("all {phases} phases")
     };
-    format!("Plan2Code loop complete on {name}: {built} built.")
+    format!(
+        "Plan2Code loop complete on {}: {built} built. Elapsed: {}.",
+        at.label(),
+        minutes(at.run_time)
+    )
 }
 
 /// The message for a stop, or none when the person stopped it themselves.
-pub fn stop_message(cause: &StopCause, spec: &str, phase: u32, line: &str) -> Option<String> {
-    let name = spec.strip_prefix("specs/").unwrap_or(spec);
+pub fn stop_message(cause: &StopCause, at: &Where, line: &str) -> Option<String> {
     match cause {
         StopCause::StoppedByPerson => None,
-        StopCause::Question => Some(question_message(spec, phase, true)),
-        _ => Some(format!("Plan2Code loop stopped on {name}: {line}")),
+        StopCause::Question => Some(question_message(at, true)),
+        _ => Some(format!(
+            "Plan2Code loop stopped on {} at {}: {line} {}",
+            at.label(),
+            at.phase_text(),
+            at.elapsed()
+        )),
     }
+}
+
+/// What a phase that passed did, for its message.
+pub struct PhaseDone {
+    /// How many tasks the phase had, all of them done (the approval checked).
+    pub tasks: Option<u64>,
+    pub subject: String,
+    /// The commit's short id, when one was made.
+    pub commit: Option<String>,
+    /// The next phase's number and name, or none after the last.
+    pub next: Option<(u32, String)>,
+}
+
+/// The message for a phase that passed (Also tell me when each phase is complete).
+pub fn phase_message(at: &Where, done: &PhaseDone) -> String {
+    let mut text = format!(
+        "Plan2Code loop on {}: {} is complete.",
+        at.label(),
+        at.phase_text()
+    );
+    let mut did = Vec::new();
+    if let Some(tasks) = done.tasks {
+        did.push(format!(
+            "{tasks} {}",
+            if tasks == 1 { "task" } else { "tasks" }
+        ));
+    }
+    match (done.subject.trim(), done.commit.as_deref()) {
+        ("", Some(commit)) => did.push(format!("committed {commit}")),
+        ("", None) => {}
+        (subject, Some(commit)) => did.push(format!("committed \"{subject}\" ({commit})")),
+        (subject, None) => did.push(format!("\"{subject}\", not committed")),
+    }
+    if !did.is_empty() {
+        text.push_str(&format!(" Done: {}.", did.join(", ")));
+    }
+    match &done.next {
+        Some((n, name)) if name.is_empty() => text.push_str(&format!(" Next: Phase {n}.")),
+        Some((n, name)) => text.push_str(&format!(" Next: Phase {n}, {name}.")),
+        None => text.push_str(" That was the last phase."),
+    }
+    text.push(' ');
+    text.push_str(&at.elapsed());
+    text
 }
 
 /// Send the setup's notification, when it has one; the reason it failed, if it did.
@@ -1643,8 +1815,9 @@ pub fn ask_prompt(spec: &str) -> String {
     format!(
         "The Implementation Loop for {spec} stopped. Change nothing: do not start the loop, \
          do not edit files and do not run git. Read {spec}/overview.md and the report so far, \
-         then open the web console with --web (it joins the session already on screen) and \
-         answer the person's questions through its Ask tab until they press a button on the \
+         then open the web console with --web (it joins the session already on screen). Pass \
+         neither --workflow nor --spec to that open: any workflow name makes it a hop to \
+         another skill, which wipes the stopped screen. Answer the person's questions through its Ask tab until they press a button on the \
          stopped screen."
     )
 }
@@ -1989,21 +2162,15 @@ fn observe(ctx: &Ctx, stage: Option<&str>, asked: bool) {
         } else if rec.step == Step::WaitingOnYou {
             rec.step = Step::Build;
         }
-        let hold = newly_waiting.then(|| {
-            (
-                rec.setup.clone(),
-                rec.spec.clone(),
-                rec.phases[rec.current].n,
-            )
-        });
+        let hold = newly_waiting.then(|| (rec.setup.clone(), Where::of(rec, rec.current)));
         ((rec.step, rec.waiting) != before, hold)
     };
-    if let Some((setup, spec, phase)) = hold {
+    if let Some((setup, at)) = hold {
         (ctx.hooks.attention)();
         // On its own thread: a slow address must not delay the watch.
         let (slot, run_id) = (Arc::clone(&ctx.slot), ctx.run_id);
         thread::spawn(move || {
-            if let Some(reason) = notify(&setup, &question_message(&spec, phase, false)) {
+            if let Some(reason) = notify(&setup, &question_message(&at, false)) {
                 if let Some(rec) = lock(&slot).as_mut().filter(|r| r.run_id == run_id) {
                     rec.notify_failure = Some(reason);
                 }
@@ -2328,7 +2495,7 @@ fn handle_outcome(ctx: &Ctx, snap: &Snapshot, raw: &Value) -> bool {
     }
     .with_outcome(&outcome);
     add_entry(ctx, passed);
-    let (next, stop_after, stop_now) = {
+    let (next, stop_after, stop_now, told) = {
         let mut guard = lock(&ctx.slot);
         let Some(rec) = guard.as_mut().filter(|r| r.run_id == ctx.run_id) else {
             return false;
@@ -2337,12 +2504,40 @@ fn handle_outcome(ctx: &Ctx, snap: &Snapshot, raw: &Value) -> bool {
         phase.status = PhaseStatus::Done;
         phase.commit = commit;
         phase.subject = Some(outcome.subject.clone());
+        let told = (rec.setup.notify_phases && !rec.setup.notify_url.is_empty()).then(|| {
+            let tasks = &entry["tasks"];
+            let done = PhaseDone {
+                tasks: counted(tasks, "total"),
+                subject: outcome.subject.clone(),
+                commit: rec.phases[snap.current].commit.clone(),
+                next: rec
+                    .phases
+                    .get(snap.current + 1)
+                    .map(|p| (p.n, p.name.clone())),
+            };
+            (
+                rec.setup.clone(),
+                phase_message(&Where::of(rec, snap.current), &done),
+            )
+        });
         (
             (snap.current + 1 < rec.phases.len()).then_some(snap.current + 1),
             rec.stop_after_phase,
             rec.stop_now,
+            told,
         )
     };
+    if let Some((setup, message)) = told {
+        // On its own thread: a slow address must not delay the next phase.
+        let (slot, run_id) = (Arc::clone(&ctx.slot), ctx.run_id);
+        thread::spawn(move || {
+            if let Some(reason) = notify(&setup, &message) {
+                if let Some(rec) = lock(&slot).as_mut().filter(|r| r.run_id == run_id) {
+                    rec.notify_failure = Some(reason);
+                }
+            }
+        });
+    }
     // Stop now, even on the last phase: the phase is recorded as it stands,
     // and no next phase or Finalize follows.
     if stop_now {
@@ -2993,7 +3188,7 @@ fn stop_loop(ctx: &Ctx, cause: StopCause, line: String, can: &[&str]) {
     rec.report.entries.push(entry);
     rec.report_failure = loop_report::save(&ctx.home, &rec.project, &rec.report).err();
     let mut evidence = evidence_with_report(&evidence_markdown(&cause, &line, &rec), &rec);
-    let sent = stop_message(&cause, &rec.spec, rec.phases[at].n, &line)
+    let sent = stop_message(&cause, &Where::of(&rec, at), &line)
         .and_then(|message| notify(&rec.setup, &message));
     if let Some(reason) = sent.or_else(|| rec.notify_failure.clone()) {
         let said = notify_failed(&reason);
@@ -3084,7 +3279,7 @@ fn finish(ctx: &Ctx) {
     if skip_finalize && rec.setup.after_last == AfterLast::RunFinalize {
         said = format!("{said}; Finalize was not started, as you asked to stop");
     }
-    let message = finished_message(&rec.spec, built);
+    let message = finished_message(&Where::of(&rec, rec.current), built);
     if let Some(reason) = notify(&rec.setup, &message).or_else(|| rec.notify_failure.clone()) {
         said = format!("{said}; {}", notify_failed(&reason));
     }
@@ -3304,39 +3499,112 @@ mod tests {
         }
     }
 
+    /// Where a message is written from, without a record behind it.
+    fn at_phase(spec: &str, n: u32, of: usize) -> Where {
+        Where {
+            project: "plan2code".into(),
+            spec: spec.strip_prefix("specs/").unwrap_or(spec).into(),
+            n,
+            of,
+            name: format!("P{n}"),
+            phase_time: Duration::from_secs(6 * 60 + 20),
+            run_time: Duration::from_secs(74 * 60),
+        }
+    }
+
     #[test]
     fn the_messages_say_what_the_person_needs_to_know() {
+        let at = at_phase("specs/lunch", 2, 4);
         assert_eq!(
-            question_message("specs/lunch", 2, false),
-            "Plan2Code loop is waiting on lunch: Phase 2 has a question for you to answer."
+            question_message(&at, false),
+            "Plan2Code loop is waiting on plan2code / lunch: Phase 2 of 4 (P2) has a question for you to answer. Elapsed: phase 6m, run 1h 14m."
         );
         assert_eq!(
-            stop_message(&StopCause::Question, "specs/lunch", 2, "ignored").unwrap(),
-            "Plan2Code loop stopped on lunch: Phase 2 has a question for you to answer."
+            stop_message(&StopCause::Question, &at, "ignored").unwrap(),
+            "Plan2Code loop stopped on plan2code / lunch: Phase 2 of 4 (P2) has a question for you to answer. Elapsed: phase 6m, run 1h 14m."
         );
         assert_eq!(
-            finished_message("specs/lunch", 3),
-            "Plan2Code loop complete on lunch: all 3 phases built."
+            finished_message(&at, 3),
+            "Plan2Code loop complete on plan2code / lunch: all 3 phases built. Elapsed: 1h 14m."
         );
         assert_eq!(
-            finished_message("specs/lunch", 1),
-            "Plan2Code loop complete on lunch: 1 phase built."
+            finished_message(&at, 1),
+            "Plan2Code loop complete on plan2code / lunch: 1 phase built. Elapsed: 1h 14m."
         );
         assert_eq!(
-            stop_message(
-                &StopCause::QuickCheck,
-                "specs/lunch",
-                2,
-                "Phase 2 stopped: tests"
-            )
-            .unwrap(),
-            "Plan2Code loop stopped on lunch: Phase 2 stopped: tests"
+            stop_message(&StopCause::QuickCheck, &at, "Phase 2 stopped: tests").unwrap(),
+            "Plan2Code loop stopped on plan2code / lunch at Phase 2 of 4 (P2): Phase 2 stopped: tests Elapsed: phase 6m, run 1h 14m."
         );
         assert_eq!(
-            stop_message(&StopCause::StoppedByPerson, "specs/lunch", 2, "x"),
+            stop_message(&StopCause::StoppedByPerson, &at, "x"),
             None,
             "the person is already there"
         );
+    }
+
+    #[test]
+    fn the_total_is_the_specs_last_phase_not_the_phases_left() {
+        let rec = record("specs/x", vec![phase(4), phase(5)]);
+        assert_eq!(Where::of(&rec, 0).phase_text(), "Phase 4 of 5 (P4)");
+    }
+
+    #[test]
+    fn a_phase_message_says_what_was_done_and_what_is_next() {
+        let at = at_phase("specs/lunch", 2, 4);
+        let done = PhaseDone {
+            tasks: Some(5),
+            subject: "Add votes".into(),
+            commit: Some("abc1234".into()),
+            next: Some((3, "Results".into())),
+        };
+        assert_eq!(
+            phase_message(&at, &done),
+            "Plan2Code loop on plan2code / lunch: Phase 2 of 4 (P2) is complete. Done: 5 tasks, committed \"Add votes\" (abc1234). Next: Phase 3, Results. Elapsed: phase 6m, run 1h 14m."
+        );
+        // Commit off, the last phase, one task: nothing invented.
+        let last = PhaseDone {
+            tasks: Some(1),
+            subject: "Add votes".into(),
+            commit: None,
+            next: None,
+        };
+        let text = phase_message(&at_phase("specs/lunch", 4, 4), &last);
+        assert!(
+            text.contains("Done: 1 task, \"Add votes\", not committed."),
+            "{text}"
+        );
+        assert!(text.contains("That was the last phase."), "{text}");
+        assert!(!text.contains("Next:"), "{text}");
+        let bare = PhaseDone {
+            tasks: None,
+            subject: String::new(),
+            commit: None,
+            next: Some((3, String::new())),
+        };
+        let text = phase_message(&at, &bare);
+        assert!(!text.contains("Done:"), "{text}");
+        assert!(text.contains("Next: Phase 3."), "{text}");
+    }
+
+    #[test]
+    fn the_phase_message_is_opt_in_and_changes_what_the_confirm_promises() {
+        let mut s = setup();
+        assert!(!s.notify_phases, "off by default");
+        let older: LoopSetup = serde_json::from_value(json!({ "review": true })).unwrap();
+        assert!(!older.notify_phases, "an older entry sends none");
+        s.notify_url = "https://e.com/hook".into();
+        let off = confirmed_notify(&s);
+        let rec = RunningRecord::new("p".into(), "specs/x".into(), s.clone(), vec![phase(1)]);
+        assert!(confirm_text(&rec).contains("When the loop needs you or ends"));
+        s.notify_phases = true;
+        assert_ne!(
+            off,
+            confirmed_notify(&s),
+            "Resume asks again when the box changes"
+        );
+        let rec = RunningRecord::new("p".into(), "specs/x".into(), s, vec![phase(1)]);
+        assert!(confirm_text(&rec)
+            .contains("After each phase, when the loop needs you, or when it ends"));
     }
 
     #[test]
@@ -3782,6 +4050,7 @@ mod tests {
             summary: "3 failed
 second line"
                 .into(),
+            ..Default::default()
         });
         assert_eq!(
             refused(judge_outcome(&o, &st, &setup())),
@@ -3796,10 +4065,43 @@ second line"
             ran: false,
             passed: false,
             summary: String::new(),
+            ..Default::default()
         });
         assert_eq!(judge_outcome(&o, &st, &setup()), approved());
         o.tests = None;
         assert_eq!(judge_outcome(&o, &st, &setup()), approved());
+    }
+
+    #[test]
+    fn failing_tests_the_notes_expect_pass_with_a_warning_and_others_are_refused() {
+        let st = status(14, 0, 0, 0);
+        let mut o = passed();
+        o.tests = Some(TestsPart {
+            ran: true,
+            passed: false,
+            summary: "3 failed".into(),
+            failing: vec!["a".into(), "b".into()],
+            expected_failures: vec!["a".into(), "b".into()],
+        });
+        match judge_outcome(&o, &st, &setup()) {
+            Verdict::Approve { warnings } => assert!(warnings
+                .iter()
+                .any(|w| w.contains("2 test(s) failed as the phase's Notes expect: a, b"))),
+            other => panic!("expected approval, got {other:?}"),
+        }
+        o.tests.as_mut().unwrap().expected_failures = vec!["a".into()];
+        assert_eq!(
+            refused(judge_outcome(&o, &st, &setup())),
+            "its tests ran and failed: 3 failed"
+        );
+        let t = o.tests.as_mut().unwrap();
+        t.failing.clear();
+        t.expected_failures = vec!["a".into()];
+        assert_eq!(
+            refused(judge_outcome(&o, &st, &setup())),
+            "its tests ran and failed: 3 failed",
+            "a bare expectation with no named failure never passes"
+        );
     }
 
     #[test]
@@ -4364,6 +4666,7 @@ second line"
             ran: true,
             passed: false,
             summary: "2 failed".into(),
+            ..Default::default()
         });
         let review = outcome.review.as_mut().unwrap();
         review.left = Left {
@@ -4897,6 +5200,38 @@ second line"
         );
         assert_eq!(spec_status(&repo)["phases"][0]["marker"], "x");
         end_the_test(&ctx);
+    }
+
+    #[test]
+    fn a_passing_phase_calls_the_web_address_only_when_the_box_is_on() {
+        if !harness_ready("phase message") {
+            return;
+        }
+        for (on, name) in [(true, "phase-message-on"), (false, "phase-message-off")] {
+            let repo = throwaway_repo(name);
+            let (ctx, home) = running_loop(&repo, Limits::default());
+            let (url, calls) = listening_address();
+            {
+                let mut guard = lock(&ctx.slot);
+                let setup = &mut guard.as_mut().unwrap().setup;
+                setup.notify_url = url;
+                setup.notify_param = "msg".into();
+                setup.notify_phases = on;
+            }
+            finish_phase_tasks(&repo, 2);
+            write_session(&home, json!({ "loopOutcome": good_report(2) }));
+            assert!(tick(&ctx), "the loop goes on to Phase 3");
+            if on {
+                let call = calls.recv_timeout(CALL_WAIT).unwrap();
+                assert!(call.contains("is%20complete."), "{call}");
+                assert!(call.contains("Phase%202%20of%203%20"), "{call}");
+                assert!(call.contains("Add%20the%20driver"), "{call}");
+                assert!(call.contains("Next%3A%20Phase%203"), "{call}");
+            } else {
+                assert!(calls.recv_timeout(QUIET).is_err(), "the box is off");
+            }
+            end_the_test(&ctx);
+        }
     }
 
     #[test]
@@ -5594,7 +5929,7 @@ second line"
         let big = evidence_markdown(&StopCause::UnsafeFiles(vec!["dump.bin".into()]), "l", &rec);
         assert!(big.contains("`dump.bin` (over 5 MB"), "{big}");
         // The line is never sent as a notification for a stop by the person.
-        assert!(stop_message(&cause, "specs/lunch", 4, "x").is_some());
+        assert!(stop_message(&cause, &at_phase("specs/lunch", 4, 5), "x").is_some());
     }
 
     #[test]
@@ -6547,7 +6882,7 @@ second line"
         );
         assert!(!should_retry(&cause, &setup(), 0));
         let line = stop_line(&cause, 3, "", false);
-        assert!(stop_message(&cause, "specs/lunch", 3, &line)
+        assert!(stop_message(&cause, &at_phase("specs/lunch", 3, 3), &line)
             .unwrap()
             .contains("watcher failed"));
         let rec = record("specs/x", vec![phase(3)]);
@@ -6724,9 +7059,17 @@ second line"
     fn a_finished_loop_calls_the_web_address_with_the_message() {
         let (ctx, calls) = notifying_loop("finish");
         finish(&ctx);
-        assert_eq!(
-            calls.recv_timeout(CALL_WAIT).unwrap(),
-            "GET /hook?msg=Plan2Code%20loop%20complete%20on%20lunch%3A%20all%202%20phases%20built. HTTP/1.1"
+        let call = calls.recv_timeout(CALL_WAIT).unwrap();
+        assert!(
+            call.starts_with("GET /hook?msg=Plan2Code%20loop%20complete%20on%20"),
+            "{call}"
+        );
+        // The project's folder comes first, then the spec, then the time taken.
+        assert!(
+            call.ends_with(
+                "%20%2F%20lunch%3A%20all%202%20phases%20built.%20Elapsed%3A%20under%201m. HTTP/1.1"
+            ),
+            "{call}"
         );
     }
 
@@ -6740,7 +7083,11 @@ second line"
             &["resume"],
         );
         let call = calls.recv_timeout(CALL_WAIT).unwrap();
-        assert!(call.contains("loop%20stopped%20on%20lunch"), "{call}");
+        assert!(call.contains("loop%20stopped%20on%20"), "{call}");
+        assert!(
+            call.contains("%20%2F%20lunch%20at%20Phase%202%20of%203"),
+            "{call}"
+        );
         assert!(call.contains("the%20quick%20check%20failed"), "{call}");
 
         let (ctx, calls) = notifying_loop("question");
@@ -6758,8 +7105,11 @@ second line"
         let (ctx, calls) = notifying_loop("hold");
         observe(&ctx, None, true);
         let call = calls.recv_timeout(CALL_WAIT).unwrap();
-        assert!(call.contains("is%20waiting%20on%20lunch"), "{call}");
-        assert!(call.contains("Phase%202"), "{call}");
+        assert!(call.contains("is%20waiting%20on%20"), "{call}");
+        assert!(
+            call.contains("%20%2F%20lunch%3A%20Phase%202%20of%203"),
+            "{call}"
+        );
         // Still the same question: no second call. Answered, then a new one: another.
         observe(&ctx, None, true);
         assert!(calls.recv_timeout(QUIET).is_err());
@@ -6846,6 +7196,9 @@ second line"
         assert!(!prompt.contains("--phase"), "{prompt}");
         assert!(prompt.to_lowercase().contains("change nothing"), "{prompt}");
         assert!(!prompt.contains('\u{2014}'), "{prompt}");
+        // The open must not name a workflow or a spec: a hop wipes the stopped screen.
+        assert!(prompt.contains("neither --workflow nor --spec"), "{prompt}");
+        assert!(!prompt.contains("--workflow implement"), "{prompt}");
     }
 
     #[test]
