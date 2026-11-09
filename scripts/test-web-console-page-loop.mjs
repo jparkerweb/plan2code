@@ -447,8 +447,16 @@ async function openStrengthSetup(t, launch = LAUNCH) {
 
 const strengthRows = (s) =>
   s.page.locator(".loop-strength-row").evaluateAll((rows) =>
-    rows.map((r) => ({ phase: r.querySelector(".loop-strength-phase").textContent, pick: r.querySelector("select").value, model: r.querySelector(".loop-strength-model").textContent }))
+    rows.map((r) => ({ phase: r.querySelector(".loop-strength-phase").textContent, pick: r.querySelector("input:checked")?.value ?? null, model: r.querySelector(".loop-strength-model").textContent }))
   );
+
+// Each row is a radio group, one radio per column: #loop-strength-<n>-<word>, "match" for Match my session.
+// The cell is clicked, as a person does: its dot sits over the hidden radio.
+const pickStrength = async (s, n, word) => {
+  const radio = s.page.locator(`#loop-strength-${n}-${word || "match"}`);
+  await radio.locator("..").click();
+  await s.page.locator(`#loop-strength-${n}-${word || "match"}:checked`).waitFor({ state: "attached" });
+};
 
 test("the strength section is first in the form and off by default", async (t) => {
   const s = await openStrengthSetup(t);
@@ -469,7 +477,7 @@ test("turning it on shows one row per phase left with the model each pick become
     { phase: "Phase 2: Two", pick: "", model: "opus, medium" },
   ], "untouched rows match the session and show the launch choice");
 
-  await s.page.locator("#loop-strength-1").selectOption("thrifty");
+  await pickStrength(s, 1, "thrifty");
   assert.equal(await textOf(s.page.locator('[data-phase="1"] .loop-strength-model')), "sonnet, low");
 
   assert.equal(await s.page.locator("#loop-strength-all").inputValue(), "-", "Set all to starts blank");
@@ -477,7 +485,7 @@ test("turning it on shows one row per phase left with the model each pick become
   assert.deepEqual((await strengthRows(s)).map((r) => [r.pick, r.model]), [["best", "opus, medium"], ["best", "opus, medium"]]);
   assert.equal(await s.page.locator("#loop-strength-all").inputValue(), "-", "and goes blank again: it is not a saved value");
 
-  await s.page.locator("#loop-strength-2").selectOption("balanced");
+  await pickStrength(s, 2, "balanced");
   assert.deepEqual((await strengthRows(s)).map((r) => [r.pick, r.model]), [["best", "opus, medium"], ["balanced", "sonnet, medium"]], "a row can change after Set all");
 
   await s.page.locator("#loop-strength-all").selectOption("match");
@@ -509,12 +517,12 @@ test("a saved pick that is not mapped holds Start with a line naming the row, an
   const why = s.page.locator(".loop-why");
   assert.equal(await textOf(why), "Pick a new strength for Phase 2: not mapped for this agent.");
   assert.equal(await s.page.locator("#loop-start").isDisabled(), true);
-  const pick = s.page.locator("#loop-strength-2");
-  assert.equal(await pick.inputValue(), "thrifty", "the saved word stays in the row");
-  assert.equal(await pick.locator("option:checked").innerText(), "Thrifty (not mapped)");
-  assert.equal(await pick.locator("option:checked").evaluate((o) => o.disabled), true);
+  const held = s.page.locator("#loop-strength-2-thrifty");
+  assert.equal(await held.isChecked(), true, "the saved word stays in the row");
+  assert.equal(await held.isDisabled(), true);
+  assert.deepEqual(await s.page.locator(".loop-strength-head .loop-strength-chip.is-unmapped").allInnerTexts(), ["Thrifty (not mapped)", "Balanced (not mapped)"]);
 
-  await pick.selectOption("best");
+  await pickStrength(s, 2, "best");
   assert.equal(await s.page.locator(".loop-why").count(), 0, "the hold is gone");
   assert.equal(await s.page.locator("#loop-start").isDisabled(), false);
 });
@@ -548,8 +556,8 @@ test("startBlock names every unmapped row, ignores the picks while the toggle is
 test("the toggle and the picks survive reopening the screen, and the toggle off sends nothing for the loop", async (t) => {
   const s = await openStrengthSetup(t);
   await s.page.locator("#loop-phase-strength").check();
-  await s.page.locator("#loop-strength-1").selectOption("thrifty");
-  await s.page.locator("#loop-strength-2").selectOption("best");
+  await pickStrength(s, 1, "thrifty");
+  await pickStrength(s, 2, "best");
 
   const save = () =>
     s.page.evaluate(async () => {
@@ -573,7 +581,7 @@ test("the toggle and the picks survive reopening the screen, and the toggle off 
     await s.page.locator("#loop-start").waitFor();
   };
   await reopen();
-  await s.page.locator("#loop-strength-1").waitFor();
+  await s.page.locator(".loop-strength-row").first().waitFor();
   assert.equal(await s.page.locator("#loop-phase-strength").isChecked(), true);
   assert.deepEqual((await strengthRows(s)).map((r) => [r.pick, r.model]), [["thrifty", "sonnet, low"], ["best", "opus, medium"]]);
 

@@ -1,8 +1,7 @@
 # Loop Mode on the Web Console
 
-Workflow notes for Implement and Implement + Review started by the desktop app's
-Implementation Loop with `--loop`, part of the web console contract
-(`console.md`). Read `building.md` and `notes/implement.md` first: this note says
+Notes for Implement and Implement + Review run by the desktop app's
+Implementation Loop (`--loop`), part of the `console.md` contract. Read `building.md` and `notes/implement.md` first: this note says
 only where loop mode differs. The app judges the result, so you report and never
 approve.
 
@@ -57,16 +56,14 @@ approve.
     `passed`. Never list a failure the Notes do not name.
   - A waiting `**Plan change:**` line in the phase's Notes: do not ask Revise
     first or Resume; report `failed`, reason `other`, and say so in `summary`.
-- Run only the tests the phase file names, as the Implement prompt's tests rule
-  says: a phase task or a task's `Test:` line (a `## Phase Testing` block counts
-  when it lists them as tasks). Never the full suite unless the phase file names it.
+- Run only the tests the phase file names (a phase task, a task's `Test:` line,
+  or tasks under `## Phase Testing`), never the full suite unless it names it.
 
 ## Headline stages
 
 Post `headline.stage` as each begins, using only these words: `Build`, `Review`,
-`Fixes`, `Re-check`, `Reporting`. The app's strip reads them, and any other word
-shows as Build, so do not invent new ones in loop mode. Keep `cleared` and
-`total` as in any build.
+`Fixes`, `Re-check`, `Reporting` (the app's strip shows any other word as
+Build). Keep `cleared` and `total` as in any build.
 
 ## Choosing the phase
 
@@ -99,8 +96,8 @@ or `checkoff` post `result: "failed"`, `reason: "other"` and
   `"handledBy": "loop"` and the answer filled in, so the page shows "The loop
   handles this", for example
   `{ "id": "fixes", "kind": "multi", "title": "Which to fix", "options": [ ... ], "status": "answered", "answer": { "ks": ["1", "2"] }, "handledBy": "loop" }`.
-- Ask (chat) questions do not arrive while the loop drives. If one does, answer
-  it briefly as usual.
+- Ask (chat) questions do not arrive while the loop drives; if one does, answer
+  it briefly.
 
 ## Review, one fix round and the re-check
 
@@ -130,8 +127,7 @@ say why. Post the triage's answers for the record as the settled `fixes` item (i
 
 Then run the one fix round on the findings marked `fix`, and the fresh re-check
 of only those fixes, as above. `left` counts the picked findings still open after
-the re-check. Smart pick always reports `triage.ran: true` and `review.recheck: true`, even when no finding was raised or none was picked (an empty re-check). The triage runs under the `Review` stage; the stage words do not
-change.
+the re-check. Smart pick always reports `triage.ran: true` and `review.recheck: true`, even when no finding was raised or none was picked (an empty re-check). The triage runs under the `Review` stage.
 
 ## Reporting the outcome
 
