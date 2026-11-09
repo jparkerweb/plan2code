@@ -26,6 +26,8 @@
   --warn-soft: #fbe7e3;
   --focus: #1f6feb;
   /* Rank colors for low / mid / high badges (a helper's strength and effort). */
+  --lvl-0: #5b6472;
+  --lvl-0-soft: #e8eaee;
   --lvl-1: #23716a;
   --lvl-1-soft: #e1f1ee;
   --lvl-2: #9a6a12;
@@ -73,6 +75,8 @@
     --stage-soft: #332a17;
     --warn: #f0897a;
     --warn-soft: #34201d;
+    --lvl-0: #a9b1bf;
+    --lvl-0-soft: #262a31;
     --lvl-1: #6cc4b8;
     --lvl-1-soft: #172b28;
     --lvl-2: #e0ab4c;
@@ -104,6 +108,8 @@
   --stage-soft: #332a17;
   --warn: #f0897a;
   --warn-soft: #34201d;
+  --lvl-0: #a9b1bf;
+  --lvl-0-soft: #262a31;
   --lvl-1: #6cc4b8;
   --lvl-1-soft: #172b28;
   --lvl-2: #e0ab4c;

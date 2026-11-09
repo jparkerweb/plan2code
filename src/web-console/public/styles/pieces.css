@@ -189,6 +189,7 @@
   color: var(--b);
   white-space: nowrap;
 }
+.sa-badge.lvl-0 { --b: var(--lvl-0); --b-soft: var(--lvl-0-soft); }
 .sa-badge.lvl-1 { --b: var(--lvl-1); --b-soft: var(--lvl-1-soft); }
 .sa-badge.lvl-2 { --b: var(--lvl-2); --b-soft: var(--lvl-2-soft); }
 .sa-badge.lvl-3 { --b: var(--lvl-3); --b-soft: var(--lvl-3-soft); }
