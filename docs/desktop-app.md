@@ -176,11 +176,17 @@ Done: 5 tasks, committed "Add votes" (abc1234). Next: Phase 3, Results. Elapsed:
 | Send to | Request | Where the message goes |
 | --- | --- | --- |
 | A web address, query string | GET | A parameter you name (`message` by default), added to the address's own |
-| Discord webhook | POST JSON | `content`, with mentions turned off |
-| Slack webhook | POST JSON | `text` |
+| Discord webhook | POST JSON | An embed with a colored bar, mentions turned off |
+| Slack webhook | POST JSON | An attachment with a colored bar |
 | Microsoft Teams webhook | POST JSON | An Adaptive Card, for a Workflows "when a webhook request is received" trigger |
-| Google Chat webhook | POST JSON | `text` |
+| Google Chat webhook | POST JSON | A `cardsV2` card |
 | A web address, JSON body | POST JSON | A field you name (`message` by default) |
+
+The four chat services get a card, not a line of text: a title with an emoji that says what happened
+(`✅ Loop complete`, `✅ Phase complete`, `❓ Waiting for you`, `❓ Stopped on a question`, `🛑 Loop stopped`), the
+message, **Project**, **Spec** and **Elapsed** fields, and a footer. Discord, Slack and Teams color it by outcome
+(green done, yellow waiting on you, red stopped); Google Chat has no color bar, so the emoji carries it. The
+two plain web-address choices still get the message exactly as written.
 
 **Send a test** saves the setup and sends a test message right away, after the app names the address in its
 own window, so a wrong address shows up before a long run. A name can use letters, digits and `- _ . ~`. Pasting a Discord, Slack, Teams or Google Chat address picks
