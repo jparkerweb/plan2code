@@ -71,6 +71,11 @@ export const stagedCount = () => Object.keys(page.local.staged).length;
 // sessions end with nothing left to run.
 export const finish = () => (page.S && page.S.finish && typeof page.S.finish === "object" ? page.S.finish : null);
 
+// A finish's identity: what a press was made against. A different finish
+// replacing it (the agent took the review up and posted a new one without
+// clearing the old) is a new offer, not the old press's answer.
+export const finishKey = (fin) => (fin ? JSON.stringify([fin.headline, fin.command, fin.body]) : null);
+
 // The dashboard is the one workflow that is not a conversation: a menu of the
 // skills, rendered from the page's own catalog, where a click IS the answer.
 export const isDashboard = () => page.S && page.S.workflow === "dashboard";

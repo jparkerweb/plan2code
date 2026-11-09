@@ -38,6 +38,7 @@ import {
   reviewPending,
   docs,
   finish,
+  finishKey,
   agentAdrift,
   agentWorking,
   awaitingReply,
@@ -645,6 +646,7 @@ async function sendAfterBuild(kind, launch = null) {
     }
     if (!res.ok) throw new Error(String(res.status));
     page.local.afterBuild = kind;
+    page.local.afterBuildFinish = finishKey(finish());
     page.pendingResult = true;
     saveNow();
     const started = {

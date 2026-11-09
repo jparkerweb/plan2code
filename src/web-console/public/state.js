@@ -42,6 +42,8 @@ export function fresh() {
     sent: {},
     stopping: null,
     afterBuild: null,
+    // The finish `afterBuild` was pressed on (finishKey), so a different one is a new offer.
+    afterBuildFinish: null,
     homeward: null,
     launching: null,
     // A picker Delete sent and not yet answered by a rescan: { dir, scanAt }.

@@ -1042,6 +1042,23 @@ test("Before you close this shows while a review is on offer, goes while it is a
   assert.equal(await closeGuide(s).count(), 0, "the guide came back on a reload");
 });
 
+// What a person sees break: Commit, Changelog and Dashboard dead on the finish after a review, because the agent posted the new finish without clearing the old one.
+test("a different finish posted over a pressed Review starts with its own buttons live", async (t) => {
+  const s = await openSession(await suite.browser(), { t, workflow: "quick-task", payload: { agent: { status: "working", activity: "Task 1 of 1" } } });
+  s.post({ finish: OFFERS });
+  const main = s.page.locator("#main");
+  await main.getByRole("button", { name: "Review it now" }).click();
+  await main.getByRole("button", { name: "Review requested…" }).waitFor();
+  collect(s);
+  s.post({ finish: { ...OFFERS, headline: "The review is done", review: false } });
+  await main.getByRole("heading", { name: "The review is done" }).waitFor();
+  await s.page.waitForFunction(() => {
+    const b = [...document.querySelectorAll("#main button")].find((x) => x.textContent.trim() === "Commit it now");
+    return b && !b.disabled;
+  });
+  assert.equal(await main.getByRole("button", { name: "Commit it now" }).isEnabled(), true, "Commit stayed dead after the new finish");
+});
+
 // What a person sees break: the guide missing while a commit or the dashboard
 // is starting (it would say "start a new one" under "Opening Git"), or missing
 // once they said they are done or the server is gone.

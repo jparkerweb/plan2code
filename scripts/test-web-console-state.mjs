@@ -19,6 +19,7 @@ test("state: page starts as app.js always started it", () => {
     sent: {},
     stopping: null,
     afterBuild: null,
+    afterBuildFinish: null,
     homeward: null,
     launching: null,
     deleting: null,

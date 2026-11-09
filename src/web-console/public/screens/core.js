@@ -55,7 +55,7 @@ import { FOOTER_TIERS, footerLabel } from "../workspace.js";
 import {
   activity, agentAdrift, agentWorking, askBusy, loopDriving, loopWaiting, loopWaitingKey, asked, awaitingReply, byId, dashboardLive, docs, doingNow,
   AGENTS_VIEW, agentsTabShown, finish, gitAwaiting, isDashboard, isGitBoard, isOpen, isSpecFileView, items, loadAgentsDoc, loadOverview, myTurn, openItems,
-  patience, pressStranded, reviewPending, scan, selSpec, sendCollected, specFileTabs, stagedCount, stranded,
+  finishKey, patience, pressStranded, reviewPending, scan, selSpec, sendCollected, specFileTabs, stagedCount, stranded,
   topics, workingMs, WORKING_GRACE_MS,
   workspaceFolders,
 } from "../selectors.js";
@@ -394,6 +394,15 @@ export function adopt(body) {
   // with its own offer unanswered.
   if (!finish() && page.local.afterBuild) {
     page.local.afterBuild = null;
+    page.local.afterBuildFinish = null;
+    save();
+  }
+  // Same when the agent took the review up and posted a different finish
+  // without clearing the old one: the press was on the old finish, so the new
+  // finish's Commit, Changelog and Dashboard start live.
+  if (page.local.afterBuild === "review" && finish() && page.local.afterBuildFinish && page.local.afterBuildFinish !== finishKey(finish())) {
+    page.local.afterBuild = null;
+    page.local.afterBuildFinish = null;
     save();
   }
   // A way home that ended in a finish instead (the agent paused rather than
