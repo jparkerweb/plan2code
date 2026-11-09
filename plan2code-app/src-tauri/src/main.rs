@@ -1678,24 +1678,40 @@ mod tests {
         assert!(error.contains("project"), "{error}");
     }
 
-    #[test]
-    fn the_setup_console_starts_on_the_setup_workflow() {
-        // Same setup as `real_console` below: the repo's own console source,
-        // a throwaway session home, no browser, no in-app variables.
+    /// Held by every test that starts a real console. The console's variables
+    /// are process-wide and tests run on parallel threads: when two tests set
+    /// `PLAN2CODE_CONSOLE_HOME` to different folders, one test's session was
+    /// looked for in the other's home, found gone, and replaced with a fresh
+    /// one (a Linux CI failure Windows timing hid).
+    static CONSOLE_ENV: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    /// Take the lock, then point the console at the repo's own source and one
+    /// throwaway session home shared by these tests (sids keep them apart),
+    /// with no browser and no in-app variables. `None` (lock released) when
+    /// node or the console source is not here.
+    fn console_test_env() -> Option<std::sync::MutexGuard<'static, ()>> {
+        let guard = CONSOLE_ENV.lock().unwrap_or_else(|e| e.into_inner());
+        if !have_node() {
+            eprintln!("skipping: node is not on PATH");
+            return None;
+        }
         let console_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../src/web-console");
-        if !have_node() || !console_dir.join("console.mjs").is_file() {
-            eprintln!("skipping: node or the console source is not here");
-            return;
+        if !console_dir.join("console.mjs").is_file() {
+            eprintln!(
+                "skipping: console source missing at {}",
+                console_dir.display()
+            );
+            return None;
         }
         let pid = std::process::id();
-        let project = std::env::temp_dir().join(format!("p2c-setup-test-project-{pid}"));
-        std::fs::create_dir_all(&project).unwrap();
         std::env::set_var("PLAN2CODE_CONSOLE_DIR", &console_dir);
         std::env::set_var(
             "PLAN2CODE_CONSOLE_HOME",
-            std::env::temp_dir().join(format!("p2c-setup-test-home-{pid}")),
+            std::env::temp_dir().join(format!("p2c-main-test-home-{pid}")),
         );
         std::env::set_var("PLAN2CODE_NO_BROWSER", "1");
+        // Run inside the desktop app, the agent's in-app variables would have this
+        // console announce itself to the live window and take it over.
         for name in [
             "PLAN2CODE_IN_APP",
             "PLAN2CODE_APP_ANNOUNCE",
@@ -1704,6 +1720,17 @@ mod tests {
         ] {
             std::env::remove_var(name);
         }
+        Some(guard)
+    }
+
+    #[test]
+    fn the_setup_console_starts_on_the_setup_workflow() {
+        let Some(_env) = console_test_env() else {
+            return;
+        };
+        let pid = std::process::id();
+        let project = std::env::temp_dir().join(format!("p2c-setup-test-project-{pid}"));
+        std::fs::create_dir_all(&project).unwrap();
 
         let state = state_for("project-a");
         state.project.lock().unwrap().as_mut().unwrap().dir = project.clone();
@@ -1753,47 +1780,22 @@ mod tests {
     }
 
     /// A real console, the same way `tests/console_supervisor.rs` sets one
-    /// up: `PLAN2CODE_CONSOLE_DIR` points at the repo's own console source,
-    /// `PLAN2CODE_CONSOLE_HOME` keeps its session files out of the real one.
-    fn real_console() -> Option<plan2code_app_lib::console_supervisor::ConsoleSupervisor> {
-        if !have_node() {
-            eprintln!("skipping: node is not on PATH");
-            return None;
-        }
-        let console_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../src/web-console");
-        if !console_dir.join("console.mjs").is_file() {
-            eprintln!(
-                "skipping: console source missing at {}",
-                console_dir.display()
-            );
-            return None;
-        }
+    /// up (see `console_test_env`). Keep the guard until the test ends: the
+    /// console's variables must not change while its session is in use.
+    fn real_console() -> Option<(
+        std::sync::MutexGuard<'static, ()>,
+        plan2code_app_lib::console_supervisor::ConsoleSupervisor,
+    )> {
+        let guard = console_test_env()?;
         let pid = std::process::id();
         let project = std::env::temp_dir().join(format!("p2c-main-test-project-{pid}"));
         std::fs::create_dir_all(&project).unwrap();
-        std::env::set_var("PLAN2CODE_CONSOLE_DIR", &console_dir);
-        std::env::set_var(
-            "PLAN2CODE_CONSOLE_HOME",
-            std::env::temp_dir().join(format!("p2c-main-test-home-{pid}")),
-        );
-        std::env::set_var("PLAN2CODE_NO_BROWSER", "1");
-        // Run inside the desktop app, the agent's in-app variables would have this
-        // console announce itself to the live window and take it over.
-        for name in [
-            "PLAN2CODE_IN_APP",
-            "PLAN2CODE_APP_ANNOUNCE",
-            "PLAN2CODE_APP_TOKEN",
-            "PLAN2CODE_CONSOLE_SID",
-        ] {
-            std::env::remove_var(name);
-        }
-        Some(
-            plan2code_app_lib::console_supervisor::ConsoleSupervisor::start(
-                project,
-                plan2code_app_lib::console_supervisor::app_origin().to_string(),
-            )
-            .expect("start a real console for the test"),
+        let sup = plan2code_app_lib::console_supervisor::ConsoleSupervisor::start(
+            project,
+            plan2code_app_lib::console_supervisor::app_origin().to_string(),
         )
+        .expect("start a real console for the test");
+        Some((guard, sup))
     }
 
     fn state_with_loop(running: bool) -> AppState {
@@ -1838,7 +1840,9 @@ mod tests {
 
     #[test]
     fn a_start_after_a_stop_opens_the_same_session_again() {
-        let Some(sup) = real_console() else { return };
+        let Some((_env, sup)) = real_console() else {
+            return;
+        };
         let state = state_for("project-a");
         let sid = sup.session().sid.clone();
         *state.console.lock().unwrap() = Some(sup);
@@ -1901,7 +1905,9 @@ mod tests {
 
     #[test]
     fn teardown_clears_the_console_so_console_start_refuses_not_reconnects() {
-        let Some(sup) = real_console() else { return };
+        let Some((_env, sup)) = real_console() else {
+            return;
+        };
         let state = state_for("project-a");
         *state.console.lock().unwrap() = Some(sup);
         assert!(
