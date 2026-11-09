@@ -8,6 +8,17 @@ All notable changes to Plan2Code will be documented in this file.
 
 - **web console**: the Implementation Loop's **Strength per phase** setting is now a grid instead of a dropdown per phase: one row per phase, a column each for Match my session, Thrifty, Balanced and Best, and a thick stepped line through each row's pick so the choices read at a glance. The saved picks and the loop's behavior are unchanged.
 
+### ✨ Added
+
+- **web console**: Diagnose can now start from a Notebook tab.
+
+### 🐛 Fixed
+
+- **web console**: a question you put a note on is now flagged as noted, and the console refuses a new question from the agent until it rewords, deletes or confirms the noted one, so a question a reply made moot no longer sits open while the next one is buried; the page tags the card, keeps the new-question notice up until dismissed, and marks the new question "New" in the list.
+- **web console**: a finish screen that was left stranded now has a way out, and a pressed Review clears when a different finish replaces it.
+- **web console**: Quick Task asks for sign-off after its See it running demo.
+- **web console**: a loop phase whose page does not show now offers a reconnect button.
+
 ## v3.0.4
 
 ### ✨ Added

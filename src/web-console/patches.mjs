@@ -123,10 +123,21 @@ const QUESTION_FIELDS = ["kind", "title", "body", "options", "steps", "rows", "s
  * settle it, that record (and any stale `answer`) is dropped, so the page shows
  * the new question as open instead of "Sent, waiting for Plan2Code" forever.
  */
-function dropStaleSubmissions(currentItems, before, patchList) {
+function dropStaleSubmissions(currentItems, before, patchList, stands = new Set()) {
   const merged = mergeKeyed(currentItems, patchList, "id", ITEM_DEFAULTS, "items");
   for (const entry of patchList) {
     const prev = (before || []).find((x) => x.id === entry.id);
+    // The person's note landed on this question (`noted`, set by the server).
+    // It stays until the agent deals with the question: rewords it, settles it,
+    // or says in the patch that the question stands as it is.
+    if (prev && prev.noted) {
+      const reworded = ["title", "body", "options"].some(
+        (f) => f in entry && JSON.stringify(entry[f]) !== JSON.stringify(prev[f]),
+      );
+      const settled = entry.status === "answered" || entry.status === "skipped" || "answer" in entry;
+      const item = merged.find((x) => x.id === entry.id);
+      if (item && (reworded || settled || stands.has(entry.id))) delete item.noted;
+    }
     // A whole new question under an answered card's id is not a typo fix: the
     // card would stay answered and nothing would be left for the person, who
     // sees a dead page. Refuse it so the agent picks a new id on the spot.
@@ -296,8 +307,11 @@ function settleItems(items, settle, patchItems, collected) {
     // report) means it is not settled: no answer is recorded over the reopen.
     if (entry.status === "open" || entry.status === "reopened") return item;
     const { at, kind, ...answer } = item.submitted;
+    // A settled card has been dealt with, so a note on it no longer holds
+    // anything up, even when it is reopened later.
+    const { noted: _noted, ...settled } = item;
     return {
-      ...item,
+      ...settled,
       // A "Skip this one" send settles as skipped, not as an answer.
       status: "status" in entry ? item.status : answer.skipped === true ? "skipped" : "answered",
       ...("answer" in entry ? {} : { answer }),
@@ -531,8 +545,22 @@ export function applyPatch(state, patch) {
         break;
       case "items":
         if (!Array.isArray(v)) throw new Error(rule("", "items", "must be an array", { items: [{ id: "q7", kind: "text", title: "Name" }] }));
-        next.items = dropStaleSubmissions(next.items, state.items, normalizeThreads(letterOptions(v), state.items));
-        break;
+        {
+          // `stands: true` says "the question is still right after the note". It
+          // only clears `noted`, so it is never stored.
+          const stands = new Set();
+          const list = v.map((entry) => {
+            if (!isPlainObject(entry) || !("stands" in entry)) return entry;
+            if (typeof entry.stands !== "boolean") {
+              throw new Error(rule(`item "${entry.id}"`, "stands", "must be true or false", { stands: true }));
+            }
+            if (entry.stands) stands.add(entry.id);
+            const { stands: _stands, ...rest } = entry;
+            return rest;
+          });
+          next.items = dropStaleSubmissions(next.items, state.items, normalizeThreads(letterOptions(list), state.items), stands);
+          break;
+        }
       case "topics":
         if (!Array.isArray(v)) throw new Error(rule("", "topics", "must be an array", { topics: [{ id: "t2", title: "How it behaves", status: "current" }] }));
         next.topics = mergeKeyed(next.topics, v, "id", {}, "topics");
@@ -610,7 +638,57 @@ export function applyPatch(state, patch) {
   if (next.finish && !Object.hasOwn(patch, "finish") && asksSomething(patch.items, state.items)) {
     delete next.finish;
   }
+  refuseQuestionPastNote(state, next);
   return stampTimes(state, settleAgent(next, patch, state));
+}
+
+/**
+ * A question the person put a note on (`noted`, set by the server) stays in
+ * front of them until the agent deals with it. A new question asked past it
+ * would be buried behind a card the reply may have made moot, so the patch
+ * that adds one must also reword, delete or confirm (`stands`) every noted
+ * card. Only a new open required question counts: a reply alone, an optional
+ * card or a notice asks nothing new. A finish ends the session, and the
+ * dashboard draws no cards, so neither is held to it.
+ */
+function refuseQuestionPastNote(before, next) {
+  if (next.finish != null || next.workflow === "dashboard" || !Array.isArray(next.items)) return;
+  const noted = next.items.filter((i) => isPlainObject(i) && i.noted === true && isOpen(i));
+  if (!noted.length) return;
+  const had = new Set((Array.isArray(before.items) ? before.items : []).map((i) => i && i.id));
+  const asksNew = next.items.some(
+    (i) => isPlainObject(i) && !had.has(i.id) && i.required !== false && i.kind !== "notice" && i.noted !== true && isOpen(i),
+  );
+  if (!asksNew) return;
+  // A note not yet replied to is named too: validate() never runs after this
+  // throw, and the agent would otherwise fix one and be refused for the other.
+  throw new Error(
+    noted
+      .flatMap((i) => [
+        ...(lastWordIsTheirs(i) ? [unansweredNote(i)] : []),
+        rule(
+          `item "${i.id}"`,
+          "noted",
+          'has a note from the person that you answered in the thread: reword it, delete it ("_delete": true) or send "stands": true, in the same patch that adds a new question',
+          { id: i.id, stands: true },
+        ),
+      ])
+      .join("\n"),
+  );
+}
+
+// The person had the last word in a card's thread: their note waits for a reply.
+function lastWordIsTheirs(item) {
+  const thread = Array.isArray(item.thread) ? item.thread : [];
+  const last = thread[thread.length - 1];
+  return isPlainObject(last) && last.who === "user";
+}
+
+function unansweredNote(item) {
+  return rule(`item "${item.id}"`, "thread", "has an unanswered note from the person; reply in its thread in this patch", {
+    id: item.id,
+    thread: [{ who: "agent", text: "..." }],
+  });
 }
 
 // `activity` belongs under `agent`, which is the only place the page reads it.
@@ -862,16 +940,7 @@ export function validate(state) {
   // nothing further is coming to answer into.
   if (state.finish == null) {
     for (const item of state.items) {
-      const thread = Array.isArray(item.thread) ? item.thread : [];
-      const last = thread[thread.length - 1];
-      if (isPlainObject(last) && last.who === "user") {
-        problems.push(
-          rule(`item "${item.id}"`, "thread", "has an unanswered note from the person; reply in its thread in this patch", {
-            id: item.id,
-            thread: [{ who: "agent", text: "..." }],
-          }),
-        );
-      }
+      if (lastWordIsTheirs(item)) problems.push(unansweredNote(item));
     }
   }
 

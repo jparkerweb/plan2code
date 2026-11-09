@@ -280,10 +280,14 @@
 .card.is-inflight { border-color: var(--stage); }
 .card.is-inflight .option.is-locked.is-recorded {
   border-color: var(--stage);
+  text-transform: none;
+  letter-spacing: 0;
   background: var(--stage-soft);
 }
 .card.is-inflight .option.is-locked.is-recorded:hover {
   border-color: var(--stage);
+  text-transform: none;
+  letter-spacing: 0;
   background: var(--stage-soft);
 }
 .card.is-inflight .option-mark.on { color: var(--stage); }
@@ -961,3 +965,14 @@ h4.md-h, h5.md-h, h6.md-h { font-size: 15px; }
   .modal-actions:has(#stop-cancel) .btn { width: 100%; }
 }
 
+
+/* A noted card whose last word in the thread is the agent's reply. */
+.noted-tag {
+  display: block;
+  margin: 2px 0 10px;
+  background: var(--stage-soft);
+  color: var(--stage);
+  border-color: var(--stage);
+  text-transform: none;
+  letter-spacing: 0;
+}

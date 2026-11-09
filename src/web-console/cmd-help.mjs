@@ -68,10 +68,16 @@ port, and the filesystem as transport; this CLI is the whole agent surface.
           then waits up to N seconds in the same command (two JSON lines;
           the exit code is the wait's). The patch may carry settle: true
           (or a list of item ids) to mark the latest send's cards answered
-          with what was sent; doc blocks may carry file: "<path>" (and
-          select: "tasks"), read from the project, and a doc refresh: true
-          re-reads them. A doc's version moves up by itself. A patch may
-          carry run: { event, id, tasks? } (session meter points) and folderIssue:
+          with what was sent. An item may carry stands: true, saying it
+          still applies after its note's thread reply: it clears the
+          item's noted flag (set when the person's note lands on an open
+          question) and is never stored. While any open item is noted, a
+          patch adding a new open required question is refused unless it
+          also rewords, deletes ("_delete": true) or stands each one. Doc
+          blocks may carry file: "<path>" (and select: "tasks"), read from
+          the project, and a doc refresh: true re-reads them. A doc's
+          version moves up by itself. A patch may carry run: { event, id,
+          tasks? } (session meter points) and folderIssue:
           { name, reason, hint? } (a workspace folder you could not read);
           both go to the ledger, never into the state. A patch may also
           carry helpers: [{ id, title, ask, state, result?, strength?,

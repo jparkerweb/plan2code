@@ -31,7 +31,7 @@ import {
 import { AGENTS_SCHEMA, makeId, normalizeAgents, resolveCommand, validateForSave } from "./agents.mjs";
 import { findAgent, loadAgentList } from "./agent-lookup.mjs";
 import { checkDocument, cleanupFindings, readAgentsDoc, readSpecFile, removeCleanup } from "./sessions.mjs";
-import { SHOTS_DIR_NAME, SHOT_NAME, shotType } from "./patches.mjs";
+import { SHOTS_DIR_NAME, SHOT_NAME, shotType, isOpen } from "./patches.mjs";
 import { appendChat, currentConversation, pendingChatCount, typedCount } from "./inbox.mjs";
 import { specKey } from "./workspace.mjs";
 import { readLoopSetup, saveLoopSetup } from "./loop-setup.mjs";
@@ -1395,9 +1395,15 @@ function recordSubmitted(state, actions) {
       // written, so a question asked in a note vanished once it was picked up
       // and the reply under it answered nothing on the page. A request for
       // suggestions is always written, note or not.
-      if (item.sentNote.text.trim() || item.sentNote.images.length || item.sentNote.files.length || item.sentNote.suggest) {
+      const hasNote = Boolean(item.sentNote.text.trim() || item.sentNote.images.length || item.sentNote.files.length);
+      if (hasNote || item.sentNote.suggest) {
         item.thread = [...(Array.isArray(item.thread) ? item.thread : []), { who: "user", ...item.sentNote }];
       }
+      // A note on a question still open marks it `noted`: the agent has to deal
+      // with the question before it can ask another. A request for suggestions
+      // is not a note on the question, and an empty comment leaves nothing in
+      // the thread to deal with.
+      if (isOpen(item) && hasNote && action.suggest !== true) item.noted = true;
       continue;
     }
     const { i, type, ...rest } = action;

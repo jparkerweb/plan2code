@@ -827,3 +827,111 @@ test("a pathfinder session offers Write a brief, and the picked range reaches th
   assert.deepEqual(got.actions.map(({ i, type, range }) => ({ i, type, range })), [{ i: "__brief", type: "brief", range: "this week" }]);
   assert.equal(got.reply, "Write a brief for this week.");
 });
+
+// What a person sees break: the agent answers a note in the thread and the
+// card says nothing, so the question looks as current as before the reply.
+test("a noted card with a trailing agent reply shows the check tag, and an un-noted one does not", async (t) => {
+  const s = await openSession(await suite.browser(), {
+    t,
+    workflow: "plan",
+    payload: {
+      items: [
+        { id: "q1", kind: "text", title: "What to call it", body: "A short name." },
+        { id: "q2", kind: "text", title: "Who uses it", body: "Who, and for what?" },
+      ],
+    },
+  });
+  const aside = s.page.locator("#aside");
+  const tag = aside.locator(".noted-tag");
+  await itemCard(s.page, "q1").waitFor();
+  assert.equal(await tag.count(), 0, "no tag before any note");
+
+  await fillBox(s.page.locator("#thread-q1"), "Maybe two names?");
+  await sendAndCollect(s);
+  s.post({ items: [{ id: "q1", thread: [{ who: "agent", text: "Two names fit, I will ask." }] }, { id: "q2", thread: [{ who: "agent", text: "A plain reply, no note from you." }] }] });
+  await aside.getByText("Two names fit, I will ask.").waitFor();
+  await tag.waitFor();
+  assert.equal((await tag.innerText()).trim(), "Plan2Code replied, check this still fits");
+  assert.equal(await tag.getAttribute("role"), "note", "the tag has an accessible role");
+  assert.notEqual(await styleOf(tag, "backgroundColor"), "rgba(0, 0, 0, 0)", "the tag is drawn, not bare text");
+
+  await s.page.locator("#sidebar .rail-item", { hasText: "Who uses it" }).click();
+  await aside.getByText("A plain reply, no note from you.").waitFor();
+  assert.equal(await aside.locator(".noted-tag").count(), 0, "a reply on a question nobody noted gets no tag");
+});
+
+// What a person sees break: a question arrives while they type, the notice
+// vanishes after 8 seconds, and the question stays buried in the list.
+test("a question arriving while a note is typed keeps its notice and a New mark until it is opened", async (t) => {
+  const s = await openSession(await suite.browser(), {
+    t,
+    workflow: "plan",
+    clock: true,
+    payload: { items: [{ id: "q1", kind: "text", title: "What to call it", body: "A short name." }] },
+  });
+  const note = s.page.locator("#thread-q1");
+  await itemCard(s.page, "q1").waitFor();
+  await fillBox(note, "my half-written thought");
+  await note.click();
+  await s.page.waitForFunction(() => Boolean(document.activeElement && document.activeElement.field));
+
+  s.post({ items: [{ id: "q2", kind: "text", title: "Who uses it", body: "Who, and for what?" }] });
+  const banner = s.page.locator("#banner");
+  await s.page.getByText("A new question from Plan2Code").waitFor();
+  const entry = s.page.locator("#sidebar .rail-item", { hasText: "Who uses it" });
+  await entry.locator(".rail-new").waitFor();
+
+  await s.page.clock.fastForward(20000);
+  assert.equal(await banner.isVisible(), true, "the notice is still up after 20 seconds");
+  assert.match(await banner.innerText(), /new question/);
+  assert.equal(await boxValue(note), "my half-written thought", "the draft is untouched");
+  assert.equal(await s.page.evaluate(() => Boolean(document.activeElement && document.activeElement.field)), true, "focus is still in the note box");
+  assert.equal(await itemCard(s.page, "q1").isVisible(), true, "the selection did not move");
+
+  // By keyboard, so no pointer press clears the notice first: only the prune can.
+  await entry.focus();
+  await s.page.keyboard.press("Enter");
+  await itemCard(s.page, "q2").waitFor();
+  assert.equal(await s.page.locator("#sidebar .rail-new").count(), 0, "the mark is gone once the question is opened");
+  assert.equal(await banner.isVisible(), false, "the notice goes with the last mark");
+});
+
+test("opening the marked question from the pager clears its New mark", async (t) => {
+  const s = await openSession(await suite.browser(), {
+    t,
+    workflow: "plan",
+    payload: { items: [{ id: "q1", kind: "text", title: "What to call it", body: "A short name." }] },
+  });
+  const note = s.page.locator("#thread-q1");
+  await itemCard(s.page, "q1").waitFor();
+  await fillBox(note, "half a thought");
+  await note.click();
+  await s.page.waitForFunction(() => Boolean(document.activeElement && document.activeElement.field));
+  s.post({ items: [{ id: "q2", kind: "text", title: "Who uses it", body: "Who, and for what?" }] });
+  const entry = s.page.locator("#sidebar .rail-item", { hasText: "Who uses it" });
+  await entry.locator(".rail-new").waitFor();
+  const pager = s.page.getByRole("navigation", { name: "Move between the questions waiting" });
+  await pager.getByRole("button", { name: /Next.*Who uses it/ }).click();
+  await itemCard(s.page, "q2").waitFor();
+  assert.equal(await s.page.locator("#sidebar .rail-new").count(), 0, "the mark is gone once the pager opens the question");
+});
+
+test("a staying arrival notice survives typing, goes on Escape, and the New mark outlasts it", async (t) => {
+  const s = await openSession(await suite.browser(), {
+    t,
+    workflow: "plan",
+    payload: { items: [{ id: "q1", kind: "text", title: "What to call it", body: "A short name." }] },
+  });
+  const note = s.page.locator("#thread-q1");
+  await itemCard(s.page, "q1").waitFor();
+  await note.click();
+  await s.page.waitForFunction(() => Boolean(document.activeElement && document.activeElement.field));
+  s.post({ items: [{ id: "q2", kind: "text", title: "Who uses it", body: "Who, and for what?" }] });
+  const banner = s.page.locator("#banner");
+  await s.page.getByText("A new question from Plan2Code").waitFor();
+  await s.page.keyboard.press("a");
+  assert.equal(await banner.isVisible(), true, "a letter typed in the note does not clear the notice");
+  await s.page.keyboard.press("Escape");
+  await banner.waitFor({ state: "hidden" });
+  assert.equal(await s.page.locator("#sidebar .rail-item", { hasText: "Who uses it" }).locator(".rail-new").count(), 1, "the New mark stays after the notice is dismissed");
+});

@@ -3,6 +3,7 @@
 Read `building.md` first.
 
 - Clarifying questions are `text` or `choice`. The first (what to build) carries `"templates":"idea"`, `"fill":"note"`.
+- A note on an open question: reword it, `"_delete":true` it or send `"stands":true` (still fits), with your reply.
 - Post `"stopWarning":"A quick task saves nothing until it is built, so stopping now loses what we have worked out."` at the start and `""` once the build is under way.
 - **Scope check:** `choice` "Too big for a quick task?": `1` Continue (lightweight format), `2` Escalate to a full plan; measured counts against thresholds in `body`.
 - **Feature name** (escalating): `text`, `"pattern":"^[a-z0-9]+(-[a-z0-9]+)*$"`, kebab-case placeholder.

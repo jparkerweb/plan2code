@@ -30,6 +30,10 @@ A rule stated in six files is read six times and still skipped. The console sees
 
 Documents are read from `file` blocks rather than pasted so the page and the disk cannot disagree, and a progress post only has to ask for `refresh`. `assumed` and `draft` exist so a half-finished doc is not read as decisions. A doc `version` never goes back because the page keys its "new version" marker on it.
 
+## Noted questions
+
+A person's note on an open question may change what it asks, and the agent's reply in the thread does not say what happens to the question. The server therefore records the fact (`noted`) when the note lands, and `validate()` refuses a new open required question until each noted one is reworded, deleted or confirmed with `stands: true`. A thread cannot answer this: it stays true forever after one reply. The page shows the same flag as a tag, and keeps the arrival notice and a New mark until the new question is opened, since eight seconds is easy to miss mid-sentence.
+
 ## console-finish.md and console-stop.md
 
 - **Finish before stop.** The page tells the person to leave the tab open until the next question appears. Stopping first leaves them looking at a promise about a session that is over, and the one thing they need, a command to run in a terminal they are not looking at, never reaches them. The console refuses a `stop` with no `finish` (`--force` for a dead page).

@@ -155,6 +155,9 @@ export const page = {
   // The pose pane on screen when a render began, held back from the clear so
   // posePane() can take it up again. See posePane.
   heldPose: null,
+  // Questions that arrived while the person was typing and are not opened yet
+  // (a "New" mark in the list). Page-local, never saved.
+  newQuestions: new Set(),
   // The workspace scope (a spec dir, "" for the project) this tab last asked
   // for: its own pick, not whatever the frame says. And true from a launch's
   // scope sync until its send has gone (or failed).

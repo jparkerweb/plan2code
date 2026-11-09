@@ -3,6 +3,7 @@
 - Post `"stopWarning"` while no map exists (Steps 0 to 4), `""` once it does, and `"specDir":"specs/<idea>"` when the folder is created.
 - The menu after a decision is a `menu` card: `options` are `trail --form C`'s, the `Start fresh` one keeps `"fresh":true`. Set the card's `command` to the resume command printed under `OR START FRESH`. A declined confirm leaves you the pick: carry on as for `Start fresh`.
 - The fresh-idea card carries `"templates":"idea"`, `"fill":"note"`.
+- A note on an open question: reword it (same `id`), `"_delete":true` it or send `"stands":true` on it if it still fits, in the patch with your reply.
 - A doc that is a file as written (the map, a brief) is a `file` block (`{"id":"body","file":"specs/<idea>/pathfinder/map.md"}`). Keep `md` where `assumed` / `draft` state matters.
 - Step 8 research subagents all report before the finish; the finish `body` names what each found. Report every one as a helper, whatever the Subagents switch says.
 - Every session end `finish`es with Form A's command as `command`.

@@ -61,6 +61,7 @@ test("state: the rest of the shared state starts as app.js always started it", (
     dashPick: null,
     mentionPop: null,
     heldPose: null,
+    newQuestions: new Set(),
     scopeMine: null,
     launchScoping: false,
   });

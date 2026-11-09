@@ -156,6 +156,161 @@ test("a finish patch is exempt from the unanswered-note check", () => {
   assert.deepEqual(validate(next), []);
 });
 
+/* ------------------------------------------------- a note on a question */
+
+const guardNoted = () => ({
+  ...choice("guard"),
+  thread: [{ who: "user", text: "Why this option?" }],
+  noted: true,
+});
+const plan = (items) => ({ ...blankState({ sid: "x", project: "p", workflow: "plan" }), items });
+const notedAfter = (patch, item = guardNoted()) => applyPatch(plan([item]), patch).items.find((i) => i.id === "guard");
+
+// The reported session: a note lands on an open question, the agent replies in
+// its thread and asks the next question in the same patch, and the page buries
+// the new one while the person is still typing. The console refuses the patch
+// and names the fix.
+const NOTED_REFUSAL =
+  'item "guard" noted: has a note from the person that you answered in the thread: reword it, delete it ("_delete": true) or send "stands": true, in the same patch that adds a new question. Like this: {"id":"guard","stands":true}';
+const guardReply = { id: "guard", thread: [{ who: "agent", text: "Because it matches the brief." }] };
+const refusedPast = (state, patch) => assert.throws(() => applyPatch(state, patch), (e) => e.message === NOTED_REFUSAL);
+const passesPast = (state, patch) => {
+  const next = applyPatch(state, patch);
+  assert.deepEqual(validate(next), []);
+  return next;
+};
+
+test("a reply in the thread of a noted question, with a new question in the same patch, is refused", () => {
+  const state = plan([choice("guard")]);
+  state.items[0].noted = true; // the way the server sets it when the note lands
+  refusedPast(state, { items: [guardReply, choice("build")] });
+});
+
+test("the refusal names every noted question still standing, and only those", () => {
+  const state = plan([guardNoted(), { ...guardNoted(), id: "other" }]);
+  assert.throws(
+    () => applyPatch(state, { items: [guardReply, { id: "other", stands: true, thread: [{ who: "agent", text: "Still right." }] }, choice("build")] }),
+    (e) => e.message === NOTED_REFUSAL,
+  );
+});
+
+test("a reply alone on a noted question passes and keeps it noted: only a new question is refused", () => {
+  const next = passesPast(plan([guardNoted()]), { items: [guardReply] });
+  assert.equal(next.items[0].noted, true);
+});
+
+test("a later patch that adds a new question past a still-noted card is refused", () => {
+  const replied = applyPatch(plan([guardNoted()]), { items: [guardReply] });
+  refusedPast(replied, { items: [choice("build")] });
+});
+
+test('"stands": true on the noted question lets a new question through', () => {
+  const next = passesPast(plan([guardNoted()]), { items: [{ ...guardReply, stands: true }, choice("build")] });
+  assert.equal("noted" in next.items[0], false);
+});
+
+test("rewording the noted question lets a new question through", () => {
+  passesPast(plan([guardNoted()]), { items: [{ ...guardReply, body: "Which option fits the brief?" }, choice("build")] });
+});
+
+test("deleting the noted question in the same patch lets a new question through", () => {
+  const next = passesPast(plan([guardNoted()]), { items: [{ id: "guard", _delete: true }, choice("build")] });
+  assert.deepEqual(next.items.map((i) => i.id), ["build"]);
+});
+
+test("settling the noted question in the same patch lets a new question through", () => {
+  passesPast(plan([guardNoted()]), { items: [{ ...guardReply, status: "answered", answer: { k: "A" } }, choice("build")] });
+});
+
+test("an answered or skipped card that still carries noted holds nothing up", () => {
+  for (const status of ["answered", "skipped"]) {
+    passesPast(plan([{ ...guardNoted(), thread: [], status }]), { items: [choice("build")] });
+  }
+});
+
+test("an optional question or a notice may follow a noted card", () => {
+  passesPast(plan([guardNoted()]), { items: [guardReply, choice("maybe", { required: false })] });
+  passesPast(plan([guardNoted()]), { items: [guardReply, { id: "fyi", kind: "notice", title: "Heads up" }] });
+});
+
+test("a patch that posts a finish is not held to the noted rule", () => {
+  const finish = { headline: "Paused at the guard question", body: "Picked up later." };
+  assert.doesNotThrow(() => applyPatch(plan([guardNoted()]), { items: [guardReply, choice("build")], finish }));
+});
+
+test("the dashboard is not held to the noted rule (it draws no cards at all)", () => {
+  const state = { ...blankState({ sid: "x", project: "p", workflow: "dashboard" }), items: [guardNoted()] };
+  assert.doesNotThrow(() => applyPatch(state, { items: [guardReply, choice("build")] }));
+});
+
+test("a noted card whose note is not yet replied to is refused for both, in one message", () => {
+  assert.throws(
+    () => applyPatch(plan([guardNoted()]), { items: [choice("build")] }),
+    (e) =>
+      e.message ===
+      'item "guard" thread: has an unanswered note from the person; reply in its thread in this patch. Like this: {"id":"guard","thread":[{"who":"agent","text":"..."}]}\n' +
+        NOTED_REFUSAL,
+  );
+});
+
+test("a top-level settle clears noted, so reopening the card later holds nothing up", () => {
+  for (const settle of [true, ["guard"]]) {
+    const sent = { ...guardNoted(), thread: [...guardNoted().thread, guardReply.thread[0]], submitted: { at: "2026-11-09T08:00:00.000Z", k: "A" } };
+    const settled = applyPatch(plan([sent]), { settle });
+    assert.equal(settled.items[0].status, "answered");
+    assert.equal("noted" in settled.items[0], false);
+    passesPast(settled, { items: [{ id: "guard", status: "reopened" }, choice("build")] });
+  }
+});
+
+test("one patch may settle an answered noted card and ask the next question", () => {
+  const sent = { ...guardNoted(), thread: [...guardNoted().thread, guardReply.thread[0]], submitted: { at: "2026-11-09T08:00:00.000Z", k: "A" } };
+  passesPast(plan([sent]), { settle: true, items: [choice("build")] });
+});
+
+test("a reworded body clears noted", () => {
+  assert.equal("noted" in notedAfter({ items: [{ id: "guard", body: "A different question." }] }), false);
+});
+
+test("changed options clear noted", () => {
+  const options = [{ k: "A", text: "Only this" }];
+  assert.equal("noted" in notedAfter({ items: [{ id: "guard", options }] }), false);
+});
+
+test("a reply that leaves the question alone keeps noted", () => {
+  const item = notedAfter({ items: [{ id: "guard", thread: [{ who: "agent", text: "Seen." }] }] });
+  assert.equal(item.noted, true);
+});
+
+test("a patch that repeats the same body keeps noted", () => {
+  assert.equal(notedAfter({ items: [{ id: "guard", body: guardNoted().body }] }).noted, true);
+});
+
+test("deleting a noted question removes it with its flag", () => {
+  assert.deepEqual(applyPatch(plan([guardNoted()]), { items: [{ id: "guard", _delete: true }] }).items, []);
+});
+
+test("settling a noted question clears noted", () => {
+  assert.equal("noted" in notedAfter({ items: [{ id: "guard", status: "answered" }] }), false);
+  assert.equal("noted" in notedAfter({ items: [{ id: "guard", status: "skipped" }] }), false);
+  assert.equal("noted" in notedAfter({ items: [{ id: "guard", answer: { k: "A" } }] }), false);
+});
+
+test("stands: true clears noted and is never stored; a non-boolean stands is refused", () => {
+  const item = notedAfter({ items: [{ id: "guard", stands: true }] });
+  assert.equal("noted" in item, false);
+  assert.equal("stands" in item, false);
+  const kept = notedAfter({ items: [{ id: "guard", stands: false }] });
+  assert.equal(kept.noted, true, "stands: false clears nothing");
+  assert.equal("stands" in kept, false);
+  assert.throws(() => applyPatch(plan([guardNoted()]), { items: [{ id: "guard", stands: "yes" }] }), /stands/);
+});
+
+test("stands on a new question is dropped, not stored", () => {
+  const next = applyPatch(plan([]), { items: [{ ...choice("fresh"), stands: true }] });
+  assert.equal("stands" in next.items[0], false);
+});
+
 /* ------------------------------------------------------------- the CLI */
 
 test("post --file reads a patch PowerShell wrote: a UTF-8 BOM, or UTF-16", () => {

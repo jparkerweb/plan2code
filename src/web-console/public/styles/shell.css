@@ -777,3 +777,18 @@ button.waiting-jump:hover { text-decoration-color: var(--accent); }
 }
 @keyframes arrival-draw { from { transform: scaleX(0); } to { transform: scaleX(1); } }
 
+
+/* A question that arrived while the person was typing, until it is opened. */
+.rail-new {
+  flex: none;
+  align-self: flex-start;
+  margin-top: 2px;
+  padding: 0 6px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  background: var(--accent-soft);
+  color: var(--accent);
+}

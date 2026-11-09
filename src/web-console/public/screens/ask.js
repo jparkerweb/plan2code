@@ -760,6 +760,15 @@ export function renderAside() {
     aside.appendChild(box);
   }
 
+  // The agent answered a note and has not yet dealt with the question itself:
+  // say so, because the reply may have changed what the question asks.
+  const last = thread[thread.length - 1];
+  if (item.noted === true && isOpen(item) && !finish() && last && threadWho(last) === "agent") {
+    const tag = el("p", "pill noted-tag", "Plan2Code replied, check this still fits");
+    tag.setAttribute("role", "note");
+    aside.appendChild(tag);
+  }
+
   if (waiting && !waitingShown) {
     const box = el("div", "msg you pending");
     const who = el("div", "msg-who");

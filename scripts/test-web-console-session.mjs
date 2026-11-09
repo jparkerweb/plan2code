@@ -1285,6 +1285,7 @@ test("a send records its note and attachments on the item, so the page can show 
   assert.equal(only.status, 200);
   const after = readState().items.find((i) => i.id === "q1");
   assert.equal(after.sentNote.text, "just a note");
+  assert.equal(after.noted, true, "a note on an open question marks it noted");
   assert.deepEqual(after.sentNote.images ?? [], []);
   assert.deepEqual(
     after.thread.filter((m) => m.who === "user").map((m) => m.text).slice(-2),
@@ -1298,11 +1299,18 @@ test("a request for suggestions is recorded with its flag and threaded even with
   const readState = () => JSON.parse(fs.readFileSync(path.join(HOME, "sessions", sid, "state.json"), "utf8"));
   const userCount = () => readState().items.find((i) => i.id === "q1").thread.filter((m) => m.who === "user").length;
 
+  // Earlier notes on q1 left it noted: the agent says the question stands.
+  assert.equal(readState().items.find((i) => i.id === "q1").noted, true);
+  assert.equal(cli(["post", "--session", sid, "--file", payload("stands-q1.json", { items: [{ id: "q1", stands: true }] })]).status, 0);
+  assert.equal("noted" in readState().items.find((i) => i.id === "q1"), false, "stands: true clears noted");
+  assert.equal("stands" in readState().items.find((i) => i.id === "q1"), false, "stands is never stored");
+
   let before = userCount();
   const ok = await post("/submit", { actions: [{ i: "q1", type: "comment", text: "", suggest: true }], reply: "Suggestions wanted on q1: (no note)" });
   assert.equal(ok.status, 200);
   let q1 = readState().items.find((i) => i.id === "q1");
   assert.equal(q1.sentNote.suggest, true);
+  assert.equal("noted" in q1, false, "a request for suggestions is not a note on the question");
   const mine = q1.thread.filter((m) => m.who === "user").at(-1);
   assert.equal(userCount(), before + 1, "an empty request still goes into the thread");
   assert.equal(mine.who, "user");
@@ -1315,6 +1323,7 @@ test("a request for suggestions is recorded with its flag and threaded even with
   q1 = readState().items.find((i) => i.id === "q1");
   assert.equal("suggest" in q1.sentNote, false, "only true is kept");
   assert.equal(userCount(), before, "a plain empty comment still adds no thread entry");
+  assert.equal("noted" in q1, false, "an empty comment leaves nothing to deal with, so it does not mark the question noted");
   assert.equal(cli(["wait", "--session", sid, "--seconds", "10"]).status, 0);
 });
 

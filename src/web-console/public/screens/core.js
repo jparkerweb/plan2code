@@ -523,9 +523,13 @@ export function adopt(body) {
         arrived.length === 1
           ? "A new question from Plan2Code. It is in the list on the left."
           : `${arrived.length} new questions from Plan2Code. They are in the list on the left.`;
-      banner(staleLine ? `${staleLine} ${arrivedLine}` : arrivedLine, "info");
+      // The notice stays until a click, Escape or opening the question: a
+      // question that arrives mid-sentence is easy to miss in eight seconds.
+      // The question already on screen needs no mark: it is where they are looking.
+      for (const q of arrived) if (!(page.view === "questions" && page.selected === q.id)) page.newQuestions.add(q.id);
+      arrivalNotice = staleLine ? `${staleLine} ${arrivedLine}` : arrivedLine;
+      banner(arrivalNotice, "info");
       clearTimeout(arrivalBannerTimer);
-      arrivalBannerTimer = setTimeout(() => !page.gone && banner(null), 8000);
     } else {
       page.selected = arrived[0].id;
       page.view = "questions";
@@ -534,6 +538,7 @@ export function adopt(body) {
   }
 
   if (!page.selected || !byId(page.selected)) page.selected = pickDefault();
+  pruneNewQuestions();
   // A reply that lands while another tab is open: a dot on Ask, and one chime.
   // Not on the first load, which has nothing new to announce.
   const dot = unreadDot({ lastSeenReplyId: page.local.chat.lastSeenReplyId, frameChat: page.chatFrame, viewIsAsk: page.view === "ask" });
@@ -600,6 +605,24 @@ function scrollRail(where) {
 }
 
 let arrivalBannerTimer = null;
+// The text of a notice that stays up (see adopt), so only that banner is cleared.
+let arrivalNotice = "";
+
+function dropArrivalNotice() {
+  if (arrivalNotice && $("banner").textContent === arrivalNotice) banner(null);
+  arrivalNotice = "";
+}
+
+// Marks that no longer apply: a question that is answered or gone, or the one
+// now on screen. The notice goes with the last mark.
+function pruneNewQuestions() {
+  const had = page.newQuestions.size;
+  for (const id of [...page.newQuestions]) {
+    const item = byId(id);
+    if (!item || !isOpen(item) || (page.view === "questions" && page.selected === id)) page.newQuestions.delete(id);
+  }
+  if (had && !page.newQuestions.size) dropArrivalNotice();
+}
 
 // Typing in any text field, the question's own or the notes beside it. A
 // focused Markdown field surfaces as its .md-host (the editor inside its
@@ -819,6 +842,8 @@ export function render() {
   if (rendering) return;
   rendering = true;
   try {
+  // A question opened by any route (the pager, a tab switch) loses its New mark.
+  pruneNewQuestions();
   trackAbout();
   const enteringAsk = page.view === "ask" && drawnView !== "ask";
   const switchingTab = drawnView !== null && page.view !== drawnView;
@@ -1606,9 +1631,15 @@ export function renderSidebar() {
       mark.title = m.label;
       b.appendChild(mark);
       b.appendChild(el("span", null, item.title));
+      if (page.newQuestions.has(item.id)) {
+        const fresh = el("span", "rail-new", "New");
+        fresh.title = "arrived while you were typing";
+        b.appendChild(fresh);
+      }
       b.addEventListener("click", () => {
         page.selected = item.id;
         page.view = "questions";
+        pruneNewQuestions();
         render();
         $("main").focus();
       });
@@ -2312,6 +2343,10 @@ export function wireChrome() {
     },
     true
   );
+
+  // A click or Escape puts a staying arrival notice away; the list keeps the "New" mark.
+  document.addEventListener("pointerdown", () => arrivalNotice && dropArrivalNotice(), true);
+  document.addEventListener("keydown", (e) => e.key === "Escape" && arrivalNotice && dropArrivalNotice(), true);
 
   $("meter-pill").addEventListener("click", () => toggleMeterPop());
   $("meter-help").addEventListener("click", () => {

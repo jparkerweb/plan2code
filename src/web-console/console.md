@@ -77,6 +77,8 @@ Items show in the order sent: send them in the order you want them answered.
 
 Every note in an item's `thread` gets a reply: `{"id":"p4","thread":[{"who":"agent","text":"..."}]}`. Send only new entries.
 
+After the person's note on an open question, reword it (same `id`), retire it with `"_delete":true`, or send `"stands":true` if it still applies, in the patch with your reply or your next question. Until you do, a new open required question is refused. Do the same when an Ask reply or your own finding changes what a question assumed.
+
 ## What the console refuses (exit 3)
 
 - more than three open required questions at once (optional cards and notices do not count)
