@@ -1418,15 +1418,7 @@ function runInteractive() {
 
       if (confirmInput === 'Y') {
         rl.close();
-        const uninstallResult = uninstallSkills();
-        removeLegacyLoopShims();
-        const metricsResult = uninstallPlan2CodeMetrics();
-        const botResult = uninstallPlan2CodeBot();
-        const statusLineResult = uninstallStatusLine();
-        const launcherResult = uninstallLauncher();
-        uninstallDesktopApp();
-        const exitCode = uninstallResult !== 0 ? uninstallResult : metricsResult !== 0 ? metricsResult : botResult !== 0 ? botResult : statusLineResult !== 0 ? statusLineResult : launcherResult;
-        process.exit(exitCode);
+        process.exit(uninstallAll());
       } else {
         console.log(`\n${COLORS.YELLOW}${SYMBOLS.WARNING} CANCELED${COLORS.RESET}\n`);
         rl.close();
@@ -2955,6 +2947,82 @@ function uninstallDesktopApp() {
 }
 
 // ============================================================================
+// UNINSTALL ALL (`plan2code uninstall` runs the npx install with --uninstall)
+// ============================================================================
+
+/**
+ * Everything Plan2Code installed, in the order the menu's U option has always removed it.
+ * Your own data under ~/.plan2code (notebooks, handoffs, console settings) stays; see
+ * purgeData(). Returns the first non-zero exit code, else 0.
+ */
+function uninstallAll() {
+  const uninstallResult = uninstallSkills();
+  removeLegacyLoopShims();
+  const metricsResult = uninstallPlan2CodeMetrics();
+  const botResult = uninstallPlan2CodeBot();
+  const statusLineResult = uninstallStatusLine();
+  const launcherResult = uninstallLauncher();
+  uninstallDesktopApp();
+  return uninstallResult !== 0 ? uninstallResult : metricsResult !== 0 ? metricsResult : botResult !== 0 ? botResult : statusLineResult !== 0 ? statusLineResult : launcherResult;
+}
+
+/** The folder purgeData() empties: Plan2Code's own home, which holds the data uninstallAll() keeps. */
+const PLAN2CODE_HOME = path.join(os.homedir(), '.plan2code');
+
+/**
+ * Delete ~/.plan2code and everything left in it (notebooks, handoffs, console settings and
+ * the installed console). Returns 0 when it is gone, 1 when something could not be removed.
+ */
+function purgeData(home = PLAN2CODE_HOME) {
+  displaySectionHeader('PLAN2CODE DATA', '[ DELETE ]');
+  if (!fs.existsSync(home)) {
+    console.log(`  ${COLORS.DIM}${SYMBOLS.INFO} No ${home} folder found${COLORS.RESET}\n`);
+    return 0;
+  }
+  try {
+    fs.rmSync(home, { recursive: true, force: true });
+    console.log(`  ${COLORS.GREEN}${SYMBOLS.SUCCESS}${COLORS.RESET} Removed: ${home}\n`);
+    return 0;
+  } catch (error) {
+    console.log(`  ${COLORS.RED}${SYMBOLS.ERROR}${COLORS.RESET} Failed to remove ${home}: ${error.message}\n`);
+    return 1;
+  }
+}
+
+/** One y/N question on the terminal; false without a terminal (nothing can answer it). */
+async function askYesNo(prompt, { input = process.stdin, output = process.stdout } = {}) {
+  if (!input.isTTY) return false;
+  const rl = readline.createInterface({ input, output });
+  const answer = await new Promise((resolve) => rl.question(prompt, resolve));
+  rl.close();
+  return answer.trim().toLowerCase().startsWith('y');
+}
+
+/**
+ * `plan2code uninstall`: confirm, remove everything, then ask whether your data goes too.
+ * `yes` skips the confirmation (the data stays unless `purge` is set); `purge` deletes the
+ * data without asking. `ask` is the y/N prompt, replaced in tests. Returns the exit code.
+ */
+async function uninstall({ yes = false, purge = false, ask = askYesNo, remove = uninstallAll, purgeIt = purgeData } = {}) {
+  displaySectionHeader('  UNINSTALLING PLAN2CODE  ');
+  console.log(`${COLORS.DIM}This removes the skills, the plan2code command, the desktop app and any dev tools.${COLORS.RESET}\n`);
+  if (!yes && !process.stdin.isTTY && ask === askYesNo) {
+    console.log(`${COLORS.YELLOW}${SYMBOLS.WARNING} Not a terminal, so nothing can answer the questions. Run plan2code uninstall --yes (add --purge to delete your data too).${COLORS.RESET}\n`);
+    return 1;
+  }
+  if (!yes && !(await ask(`${COLORS.RED}${SYMBOLS.SELECT} CONFIRM UNINSTALL${COLORS.RESET} (y/N): `))) {
+    console.log(`\n${COLORS.YELLOW}${SYMBOLS.WARNING} CANCELED${COLORS.RESET}\n`);
+    return 0;
+  }
+  let code = remove();
+  const wipe = purge || (!yes && (await ask(`${COLORS.CYAN}Also delete your Plan2Code data (notebooks, handoffs, settings) in ${PLAN2CODE_HOME}?${COLORS.RESET} (y/N): `)));
+  if (wipe) code = purgeIt() || code;
+  else console.log(`${COLORS.DIM}${SYMBOLS.INFO} Your data in ${PLAN2CODE_HOME} was kept. Delete the folder to remove it.${COLORS.RESET}\n`);
+  if (code === 0) console.log(`${COLORS.GREEN}${SYMBOLS.SUCCESS} Plan2Code is uninstalled${COLORS.RESET}\n`);
+  return code;
+}
+
+// ============================================================================
 // UPDATE (`plan2code update` runs the npx install with --update)
 // ============================================================================
 
@@ -3052,9 +3120,11 @@ if (require.main === module) {
     process.exit(verifySkillsSync() ? 0 : 1);
   } else if (argv.length === 1 && argv[0] === '--update') {
     update().then((code) => process.exit(code));
+  } else if (argv[0] === '--uninstall' && argv.slice(1).every((a) => a === '--yes' || a === '--purge')) {
+    uninstall({ yes: argv.includes('--yes'), purge: argv.includes('--purge') }).then((code) => process.exit(code));
   } else if (argv.length > 0) {
     console.error(`Unknown option(s): ${argv.join(' ')}`);
-    console.error('Usage: node install.js [--build-skills | --verify-skills | --update]');
+    console.error('Usage: node install.js [--build-skills | --verify-skills | --update | --uninstall [--yes] [--purge]]');
     console.error('Run with no options for the interactive installer.');
     process.exit(1);
   } else {
@@ -3062,4 +3132,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { installSharedConsole, sweepOldConsoles, consoleHomeDir, CONSOLE_SHARED_DIR, update, installDesktopApp, offerDesktopApp, recordSkipped, appAssetName, checksumFor, APP_DEST, UPDATE_STEPS, INSTALL_RECORD, INSTALL_PIECES, readInstallRecord, recordInstalled, forgetInstalled, SOURCE_PROMPTS, generateSkillName };
+module.exports = { uninstall, uninstallAll, purgeData, installSharedConsole, sweepOldConsoles, consoleHomeDir, CONSOLE_SHARED_DIR, update, installDesktopApp, offerDesktopApp, recordSkipped, appAssetName, checksumFor, APP_DEST, UPDATE_STEPS, INSTALL_RECORD, INSTALL_PIECES, readInstallRecord, recordInstalled, forgetInstalled, SOURCE_PROMPTS, generateSkillName };

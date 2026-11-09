@@ -50,7 +50,9 @@
  * again, and the run carries on as if that agent had been found all along.
  *
  * `plan2code update` starts no agent: it re-runs the npx install with `--update`, which
- * reinstalls whatever ~/.plan2code/install.json lists (the desktop app included). Before an agent starts, one line says
+ * reinstalls whatever ~/.plan2code/install.json lists (the desktop app included).
+ * `plan2code uninstall [--yes] [--purge]` starts no agent either: it runs the same npx install
+ * with `--uninstall`. Before an agent starts, one line says
  * when a newer release is out (releaseNotice), read from the web console's cached release check
  * and never waiting on the network.
  *
@@ -84,6 +86,7 @@ const USER_AGENTS_FILE = path.join(os.homedir(), '.plan2code', 'agents.json');
 const MODELS_MENU_COMPACT_AT = 30;
 const PICKER_PROMPT = 'Choose the project folder to open Plan2Code in';
 const UPDATE_COMMAND = 'update';
+const UNINSTALL_COMMAND = 'uninstall';
 // The same URL src/web-console/update-check.mjs exports as REPO_URL. Apart from the
 // agent-lookup.mjs import noted in the header, this file may require nothing but Node
 // built-ins (and update-check.mjs is ESM), so it keeps its own copy.
@@ -1516,13 +1519,28 @@ function spawnCommand(file, args, options) {
 function runUpdate(tag) {
   console.log('Updating Plan2Code...');
   console.log(c.dim('One update covers the skills, the plan2code command and the desktop app (when installed).'));
+  return runInstaller(['--update'], tag);
+}
+
+/**
+ * `plan2code uninstall [--yes] [--purge]`: the npx install with --uninstall, which asks before
+ * it removes anything (--yes skips that) and then whether your data in ~/.plan2code goes too
+ * (--purge says yes). The prompts run on this terminal, so stdio is inherited.
+ */
+function runUninstall(flags) {
+  console.log('Uninstalling Plan2Code...');
+  return runInstaller(['--uninstall', ...flags]);
+}
+
+/** Run install.js through npx with the given flags, passing npx's exit code through. */
+function runInstaller(installerArgs, tag) {
   const npx = findOnPath('npx');
   if (!npx) {
     console.error(`${ce.red('plan2code:')} npx was not found on your PATH. It comes with Node.js 18+ (https://nodejs.org).`);
     return process.exit(127);
   }
   const spec = tag ? `git+${REPO_URL}#${tag}` : `git+${REPO_URL}`;
-  const child = spawnCommand(npx, ['--yes', '--allow-git=all', spec, '--update'], { stdio: 'inherit' });
+  const child = spawnCommand(npx, ['--yes', '--allow-git=all', spec, ...installerArgs], { stdio: 'inherit' });
   for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) {
     process.on(signal, () => {});
   }
@@ -1580,6 +1598,16 @@ async function launch() {
   if (argv[0] === UPDATE_COMMAND) {
     const tagAt = argv.indexOf('--tag');
     return runUpdate(tagAt >= 0 ? argv[tagAt + 1] : undefined);
+  }
+  if (argv[0] === UNINSTALL_COMMAND) {
+    const flags = argv.slice(1);
+    const unknown = flags.filter((flag) => flag !== '--yes' && flag !== '--purge');
+    if (unknown.length > 0) {
+      console.error(`${ce.red('plan2code:')} unknown option(s) for uninstall: ${unknown.join(' ')}`);
+      console.error('Usage: plan2code uninstall [--yes] [--purge]');
+      return process.exit(2);
+    }
+    return runUninstall(flags);
   }
   const fromShortcut = argv.includes(PICK_FOLDER_FLAG);
   const classic = argv.includes(CLASSIC_FLAG);

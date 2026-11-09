@@ -37,7 +37,7 @@ The dashboard, in a project halfway through a build. It suggests the next step f
 - **Ways in.** `plan2code` (Claude Code, Devin or Codex), or type `/plan2code` in your agent (`$plan2code` in Codex).
 - **No agent yet?** Install Claude Code, Codex or Devin first, or let the `plan2code` command's setup page walk you through it.
 
-Installation needs network access and runs through the [skills CLI](https://skills.sh). To update, run `plan2code update` (or re-run the install command).
+Installation needs network access and runs through the [skills CLI](https://skills.sh). To update, run `plan2code update` (or re-run the install command). To remove everything, run `plan2code uninstall`: it asks first, then asks whether your own data in `~/.plan2code/` (notebooks, handoffs, settings) goes too. `--yes` skips the questions and keeps your data; add `--purge` to delete it.
 
 ```bash
 npx --allow-git=all git+https://github.com/jparkerweb/plan2code.git
@@ -89,7 +89,7 @@ custom agent that has none; for Codex the question names its sandbox, which that
 launch and remembers no answer. `plan2code --keep-permissions` keeps the prompts without asking, and
 `plan2code --bypass-permissions` turns them off without asking. With no terminal to ask on (a script or a pipe) the
 prompts stay on unless `--bypass-permissions` is given. The installer then offers a desktop shortcut (answer `y`),
-which opens a folder picker first. Uninstalling (`U`) removes both.
+which opens a folder picker first. Uninstalling (`U`, or `plan2code uninstall` from any terminal) removes both.
 </details>
 
 <details>
@@ -132,7 +132,7 @@ session is getting long. Once it is installed, `plan2code` opens the app instead
 in your terminal. `plan2code --classic` keeps the terminal flow, and so does a Linux machine with no
 display (over SSH, say) or any machine over an SSH session. `plan2code update` updates the skills, the
 command and the app together, and the bar offers the same **Update skills** when the app and the
-installed skills disagree.
+installed skills disagree. `plan2code uninstall` removes all three.
 
 The app can also build a whole spec unattended with the Implementation Loop; see [docs/desktop-app.md](docs/desktop-app.md#implementation-loop).
 
@@ -150,7 +150,7 @@ Gemini CLI · Cline · Roo · Kilo · Goose · Trae · Qwen Code.
 **Launched by `plan2code`:** the `plan2code` command and the desktop app open the dashboard directly in Claude Code, Devin and Codex (the built-ins in `src/launcher/agents.json`). GitHub Copilot CLI, OpenCode, Gemini CLI and Pi come as starter templates, and you can add any other agent CLI as a custom agent in User Preferences → Agents & models.
 
 The installer keeps one canonical copy of each skill under `~/.agents/skills/` and links it into
-agents that maintain their own directory. To update, run `plan2code update` (or re-run the install command).
+agents that maintain their own directory. To update, run `plan2code update` (or re-run the install command); to remove it all, run `plan2code uninstall`.
 
 Use the installer rather than calling `skills add` against the repository root: recursive discovery
 would also find maintainer-only skills under `.claude/skills/`. The installer targets `skills/`

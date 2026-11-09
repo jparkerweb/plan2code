@@ -475,6 +475,34 @@ test("launcher: update passes npx's exit code through", (t) => {
   assert.equal(box.run(["update"], { P2C_TEST_EXIT: "3" }).status, 3);
 });
 
+test("launcher: uninstall runs the npx install with --uninstall and starts no agent", (t) => {
+  const box = sandbox(["npx", "claude"]);
+  t.after(box.cleanup);
+  const result = box.run(["uninstall", "--yes", "--purge"]);
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /Uninstalling Plan2Code\.\.\./);
+  const args = box.argsOf("npx");
+  assert.ok(args, "npx was not run");
+  assert.ok(args.includes("--uninstall") && args.includes("--yes") && args.includes("--purge"), args.join(" "));
+  assert.ok(!args.includes("--update"), args.join(" "));
+  assert.equal(box.argsOf("claude"), null);
+});
+
+test("launcher: uninstall passes npx's exit code through", (t) => {
+  const box = sandbox(["npx"]);
+  t.after(box.cleanup);
+  assert.equal(box.run(["uninstall"], { P2C_TEST_EXIT: "4" }).status, 4);
+});
+
+test("launcher: uninstall refuses an unknown option without running npx", (t) => {
+  const box = sandbox(["npx"]);
+  t.after(box.cleanup);
+  const result = box.run(["uninstall", "--nuke"]);
+  assert.equal(result.status, 2);
+  assert.match(result.stderr, /unknown option\(s\) for uninstall: --nuke/);
+  assert.equal(box.argsOf("npx"), null);
+});
+
 test("launcher: release notice prints from a fresh cache", (t) => {
   const box = sandbox(["claude"], { installed: "1.0.0" });
   t.after(box.cleanup);

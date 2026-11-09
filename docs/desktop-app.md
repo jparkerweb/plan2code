@@ -156,7 +156,8 @@ not), so your own edits never end up inside a phase's commit.
   session, count the agent as stuck (20). Waiting on your answer does not count.
 - **Send a notification** (no address, so off): a message from the loop when it waits on your answer or
   ends. Send it to a Discord, Slack, Microsoft Teams or Google Chat webhook, or to any `http` or `https`
-  address with the message in its query string or a JSON body.
+  address with the message in its query string or a JSON body. With an address set, **Also tell me when each
+  phase is complete** (off) adds a message after every phase that passes.
 - **Commit each phase** (on): one local commit per phase, with the subject and `AI Assisted`.
 
 The last setup is remembered per project in `~/.plan2code/console/loop-setup.json`, so the next loop
@@ -164,9 +165,13 @@ starts from it. The quick check is typed text the page never runs: the app reads
 itself and names it in its own window before the loop begins. The notification gets the same treatment,
 and Resume asks again if either one changed.
 
-**The notification.** The loop says a question is waiting, that it is complete, or why it stopped. Nothing
-is sent when you stopped it yourself, and with **Take the agent's best guess** no question ever waits on
-you. What the app sends depends on the **Send to** choice:
+**The notification.** The loop says a question is waiting, that it is complete, or why it stopped, and,
+when you turn on **Also tell me when each phase is complete**, that a phase passed. Nothing is sent when you
+stopped it yourself, and with **Take the agent's best guess** no question ever waits on you. Every message
+names the project and spec and the phase as `Phase 2 of 4 (name)`, and ends with the time the phase and the
+whole run have taken. A phase message also says how many tasks are done, the commit's subject and short id,
+and what comes next, for example: `Plan2Code loop on plan2code / lunch-vote: Phase 2 of 4 (Votes) is complete.
+Done: 5 tasks, committed "Add votes" (abc1234). Next: Phase 3, Results. Elapsed: phase 6m, run 14m.` What the app sends depends on the **Send to** choice:
 
 | Send to | Request | Where the message goes |
 | --- | --- | --- |
@@ -240,6 +245,11 @@ clean tree. The in-app **Help** has a matching topic, **Implementation Loop**, w
 `plan2code update` brings the skills, the `plan2code` command and the app up together. If the app
 and the installed skills ever differ in version, the app's top bar says so and offers **Update
 skills**, which runs that same update when you press it. It never updates on its own.
+
+To remove the app along with the skills and the command, run `plan2code uninstall`. It asks first,
+then asks whether your own data in `~/.plan2code/` (notebooks, handoffs, settings) goes too.
+`--yes` skips both questions and keeps that data; add `--purge` to delete it. Close the app first:
+Windows cannot delete a running file.
 
 ## The first release is unsigned
 

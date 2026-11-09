@@ -114,7 +114,7 @@ The root `npm test` does not run the metrics or bot vitest suites; run them in t
 | Option | Action |
 |--------|--------|
 | `I` | Install the Plan2Code skills globally via the `skills` CLI, plus the global `plan2code` command (opens the dashboard in Claude Code, Devin or Codex), then print the getting-started steps. No dev tools |
-| `U` | Uninstall Plan2Code: skills + `plan2code` command + `plan2code-metrics` + `plan2code-bot` + Claude Code status line (confirmation required) |
+| `U` | Uninstall Plan2Code: skills + `plan2code` command + `plan2code-metrics` + `plan2code-bot` + Claude Code status line + desktop app (confirmation required; `plan2code uninstall` runs the same removal, see `--uninstall` below) |
 | `A` | Open the ADVANCED sub-menu |
 | `Q` | Quit |
 
@@ -139,6 +139,7 @@ The root `npm test` does not run the metrics or bot vitest suites; run them in t
 | `--build-skills` | Regenerate `skills/` from `src/`, pruning stale skills and reference files |
 | `--verify-skills` | Diff local `skills/` against `src/`; exits 1 on drift. Diagnostic only, the installer rebuilds anyway |
 | `--update` | No menu: reinstall what `~/.plan2code/install.json` lists (skills, launcher, app, statusline; metrics and bot only when run from a git checkout, since they run from the install folder, which npx's cache is not), never uninstalling; with no record, the skills and the `plan2code` command. `plan2code update` runs it through npx |
+| `--uninstall [--yes] [--purge]` | No menu: confirm y/N (`--yes` skips it), run `uninstallAll()` (the menu's U sequence: skills, dev tools, status line, `plan2code` command, desktop app), then ask whether to also delete `~/.plan2code` (`purgeData()`; `--purge` says yes without asking, `--yes` alone keeps the data). `plan2code uninstall [--yes] [--purge]` runs it through npx |
 
 ## How the Installer Works
 

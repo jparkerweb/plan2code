@@ -183,10 +183,10 @@ test("update: every step is an install function, never an uninstall", () => {
   }
 });
 
-test("install.js: --update is in the usage line, and an unknown option still exits 1", () => {
+test("install.js: --update and --uninstall are in the usage line, and an unknown option still exits 1", () => {
   const result = spawnSync(process.execPath, [INSTALL, "--bogus"], { encoding: "utf8" });
   assert.equal(result.status, 1);
-  assert.ok(result.stderr.includes("Usage: node install.js [--build-skills | --verify-skills | --update]"), result.stderr);
+  assert.ok(result.stderr.includes("Usage: node install.js [--build-skills | --verify-skills | --update | --uninstall [--yes] [--purge]]"), result.stderr);
 });
 
 // ---------------------------------------------------------------------------------------------
@@ -604,4 +604,101 @@ test("the skills CLI is pinned to one exact version, and every doc line that run
       assert.equal(m[1], pinned[1], `${doc} names skills@${m[1]}, install.js pins ${pinned[1]}`);
     }
   }
+});
+
+/** Run uninstall() with console output captured and the answers to its y/N questions scripted. */
+async function runUninstall(options, answers = []) {
+  const lines = [];
+  const asked = [];
+  const calls = [];
+  const log = console.log;
+  console.log = (...args) => lines.push(args.join(" "));
+  try {
+    const code = await installer.uninstall({
+      ask: async (prompt) => {
+        asked.push(prompt.replace(/\x1b\[[0-9;]*m/g, ""));
+        return answers.shift() ?? false;
+      },
+      remove: () => (calls.push("remove"), 0),
+      purgeIt: () => (calls.push("purge"), 0),
+      ...options,
+    });
+    return { code, asked, calls, out: lines.join("\n").replace(/\x1b\[[0-9;]*m/g, "") };
+  } finally {
+    console.log = log;
+  }
+}
+
+test("uninstall: a no at the confirmation removes nothing", async () => {
+  const r = await runUninstall({}, [false]);
+  assert.equal(r.code, 0);
+  assert.deepEqual(r.calls, []);
+  assert.equal(r.asked.length, 1);
+  assert.match(r.out, /CANCELED/);
+});
+
+test("uninstall: a yes removes everything, then asks about the data and keeps it on a no", async () => {
+  const r = await runUninstall({}, [true, false]);
+  assert.equal(r.code, 0);
+  assert.deepEqual(r.calls, ["remove"]);
+  assert.equal(r.asked.length, 2);
+  assert.match(r.asked[1], /Also delete your Plan2Code data/);
+  assert.match(r.out, /data in .* was kept/);
+});
+
+test("uninstall: a yes to the data question purges it", async () => {
+  const r = await runUninstall({}, [true, true]);
+  assert.deepEqual(r.calls, ["remove", "purge"]);
+});
+
+test("uninstall: --yes skips both questions and keeps the data", async () => {
+  const r = await runUninstall({ yes: true });
+  assert.deepEqual(r.asked, []);
+  assert.deepEqual(r.calls, ["remove"]);
+});
+
+test("uninstall: --yes --purge deletes the data without a question", async () => {
+  const r = await runUninstall({ yes: true, purge: true });
+  assert.deepEqual(r.asked, []);
+  assert.deepEqual(r.calls, ["remove", "purge"]);
+});
+
+test("uninstall: --purge alone still confirms the uninstall but never asks about the data", async () => {
+  const r = await runUninstall({ purge: true }, [true]);
+  assert.equal(r.asked.length, 1);
+  assert.deepEqual(r.calls, ["remove", "purge"]);
+});
+
+test("uninstall: a failing removal or purge makes the exit code non-zero", async () => {
+  assert.equal((await runUninstall({ yes: true, remove: () => 1 })).code, 1);
+  assert.equal((await runUninstall({ yes: true, purge: true, purgeIt: () => 1 })).code, 1);
+});
+
+test("purgeData: deletes the folder and everything in it, and copes with it missing", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "p2c-purge-"));
+  fs.mkdirSync(path.join(dir, "notepads"));
+  fs.writeFileSync(path.join(dir, "notepads", "a.json"), "{}");
+  const log = console.log;
+  console.log = () => {};
+  try {
+    assert.equal(installer.purgeData(dir), 0);
+    assert.equal(fs.existsSync(dir), false);
+    assert.equal(installer.purgeData(dir), 0);
+  } finally {
+    console.log = log;
+  }
+});
+
+test("install.js --uninstall: an unknown extra option is refused", () => {
+  const r = spawnSync(process.execPath, [INSTALL, "--uninstall", "--nuke"], { encoding: "utf8", env: { ...process.env, HOME, USERPROFILE: HOME } });
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /Unknown option\(s\): --uninstall --nuke/);
+});
+
+test("install.js --uninstall: with no terminal and no --yes it explains, exits 1 and removes nothing", () => {
+  fs.mkdirSync(path.join(HOME, ".plan2code"), { recursive: true });
+  const r = spawnSync(process.execPath, [INSTALL, "--uninstall"], { encoding: "utf8", input: "", env: { ...process.env, HOME, USERPROFILE: HOME } });
+  assert.equal(r.status, 1, r.stderr);
+  assert.match(r.stdout, /Run plan2code uninstall --yes/);
+  assert.ok(fs.existsSync(path.join(HOME, ".plan2code")));
 });
