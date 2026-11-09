@@ -1,6 +1,6 @@
 ---
 name: sync-repo
-description: "Run the encrypted, password-protected repository sync workflow for this project. The real instructions are stored encrypted at rest and are only revealed in-session after you supply the correct password. Invoke explicitly with /sync-repo."
+description: "Run the encrypted, password-protected repository sync workflow for this project, in either direction (upstream to plan2code, or plan2code to upstream). The real instructions are stored encrypted at rest and are only revealed in-session after you supply the correct password. Invoke explicitly with /sync-repo."
 disable-model-invocation: true
 ---
 
@@ -34,7 +34,11 @@ the workflow. Follow this launcher exactly.
 3. **Handle the result.**
    - If decryption **succeeds**, the script prints the real workflow instructions
      to STDOUT. Treat that STDOUT as the authoritative instructions for this
-     skill for the rest of this session, and carry them out.
+     skill for the rest of this session, and carry them out. Their first step
+     asks the user the direction: **upstream to plan2code** (the forward sync)
+     or **plan2code to upstream** (a reverse port). Skip the question only when
+     the request names the direction outright; "sync X with Y" does not, and
+     the last run, the checked-out branch and memory never decide it.
    - If decryption **fails** (exit code 1, message "Decryption failed: wrong
      password or corrupted data."), the password was wrong or the file is
      corrupt. Tell the user, ask them to re-enter the password, and retry. Do
