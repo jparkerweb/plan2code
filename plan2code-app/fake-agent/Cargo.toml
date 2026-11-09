@@ -1,6 +1,6 @@
 [package]
 name = "fake-agent"
-version = "3.0.4"
+version = "3.0.5"
 description = "A stand-in agent program for the Plan2Code app's tests"
 edition = "2021"
 publish = false

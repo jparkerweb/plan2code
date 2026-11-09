@@ -378,6 +378,8 @@ function strengthBars(level) {
 const SVG_NS = "http://www.w3.org/2000/svg";
 let lineGrid = null;
 let lineWatching = false;
+// The grid can change width with no window resize (Preferences' page width): watch the grid itself too.
+const lineObserver = typeof ResizeObserver === "function" ? new ResizeObserver(() => redrawLine()) : null;
 
 function svgPart(name, attrs) {
   const part = document.createElementNS(SVG_NS, name);
@@ -432,14 +434,16 @@ function redrawLine() {
 function stopWatchingLine() {
   lineGrid = null;
   if (lineWatching) window.removeEventListener("resize", redrawLine);
+  if (lineObserver) lineObserver.disconnect();
   lineWatching = false;
 }
 
-/** Draw once layout exists, and again on resize and when fonts load; stop once the grid is gone. */
+/** Draw once layout exists, and again on resize (the window's or the grid's) and when fonts load; stop once the grid is gone. */
 function watchStrengthLine(grid) {
   lineGrid = grid;
   if (!lineWatching) window.addEventListener("resize", redrawLine);
   lineWatching = true;
+  if (lineObserver) lineObserver.observe(grid);
   requestAnimationFrame(redrawLine);
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(redrawLine);
 }

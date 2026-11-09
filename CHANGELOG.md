@@ -2,6 +2,12 @@
 
 All notable changes to Plan2Code will be documented in this file.
 
+## v3.0.5
+
+### 🔧 Changed
+
+- **web console**: the Implementation Loop's **Strength per phase** setting is now a grid instead of a dropdown per phase: one row per phase, a column each for Match my session, Thrifty, Balanced and Best, and a thick stepped line through each row's pick so the choices read at a glance. The saved picks and the loop's behavior are unchanged.
+
 ## v3.0.4
 
 ### ✨ Added

@@ -757,7 +757,7 @@ dependencies = [
 
 [[package]]
 name = "fake-agent"
-version = "3.0.4"
+version = "3.0.5"
 dependencies = [
  "serde_json",
  "terminal_size",
@@ -2371,7 +2371,7 @@ checksum = "f6b464fbc74e149a392436b17d523f769e057cb6877f6a5c4618bc6f11800548"
 
 [[package]]
 name = "plan2code-app"
-version = "3.0.4"
+version = "3.0.5"
 dependencies = [
  "chrono",
  "libc",

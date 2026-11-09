@@ -492,6 +492,75 @@ test("turning it on shows one row per phase left with the model each pick become
   assert.deepEqual((await strengthRows(s)).map((r) => r.pick), ["", ""], "Match my session fills every row too");
 });
 
+test("the arrow keys move the checked radio inside a row, and only that row", async (t) => {
+  const s = await openStrengthSetup(t);
+  await s.page.locator("#loop-phase-strength").check();
+  await s.page.locator(".loop-strength-row").first().waitFor();
+  // Focus once: every change redraws the section, and the page must put focus back on the new radio by itself.
+  await s.page.locator("#loop-strength-1-match").focus();
+  await s.page.keyboard.press("ArrowRight");
+  await s.page.locator("#loop-strength-1-thrifty:checked").waitFor({ state: "attached" });
+  await s.page.keyboard.press("ArrowRight");
+  await s.page.locator("#loop-strength-1-balanced:checked").waitFor({ state: "attached" });
+  await s.page.keyboard.press("ArrowLeft");
+  await s.page.locator("#loop-strength-1-thrifty:checked").waitFor({ state: "attached" });
+  assert.deepEqual((await strengthRows(s)).map((r) => r.pick), ["thrifty", ""], "the other row did not move");
+});
+
+// The step path starts on the first row's checked node and ends on the last one's, within a pixel;
+// a corner (Q) only when the two nodes sit in different columns. Waits, then asserts, so a redraw cannot race it.
+async function waitLineOnNodes(s, corner) {
+  const read = () =>
+    s.page.evaluate(() => {
+      const grid = document.querySelector(".loop-strength-grid");
+      const gr = grid.getBoundingClientRect();
+      const nodes = [...grid.querySelectorAll(".loop-strength-row input:checked + .loop-strength-node")];
+      const centers = nodes.map((n) => {
+        const b = n.getBoundingClientRect();
+        return { x: b.left - gr.left + b.width / 2, y: b.top - gr.top + b.height / 2 };
+      });
+      const d = grid.querySelector(".loop-strength-line path.step")?.getAttribute("d") || "";
+      const nums = (d.match(/-?\d+(?:\.\d+)?/g) || []).map(Number);
+      return { d, centers, nums };
+    });
+  const onNodes = ({ d, centers, nums }) =>
+    centers.length === 2 &&
+    nums.length >= 3 &&
+    d.includes("Q") === corner &&
+    Math.abs(nums[0] - centers[0].x) <= 1 &&
+    Math.abs(nums[1] - centers[0].y) <= 1 &&
+    Math.abs(nums[nums.length - 3] - centers[1].x) <= 1 &&
+    Math.abs(nums[nums.length - 1] - centers[1].y) <= 1;
+  const deadline = Date.now() + 5000;
+  let got = await read();
+  while (!onNodes(got) && Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, 50));
+    got = await read();
+  }
+  assert.ok(onNodes(got), `the step path should run node to node (corner: ${corner}); got ${JSON.stringify(got)}`);
+}
+
+test("the strength line has one path fewer than there are rows, and none with the toggle off", async (t) => {
+  const s = await openStrengthSetup(t);
+  const paths = s.page.locator(".loop-strength-line path.step");
+  assert.equal(await paths.count(), 0, "no line while the toggle is off");
+  await s.page.locator("#loop-phase-strength").check();
+  await s.page.locator(".loop-strength-row").first().waitFor();
+  // The line is drawn a frame after the rows exist: wait for it, never read straight after a click.
+  await s.page.waitForFunction(() => document.querySelectorAll(".loop-strength-line path.step").length === 1);
+  assert.equal(await s.page.locator(".loop-strength-row").count(), 2);
+  assert.equal(await paths.count(), 1, "two rows, one path between them");
+  assert.equal(await s.page.locator(".loop-strength-line line.col").count(), 4, "a dashed column line per strength, Match my session included");
+
+  // Both rows start on Match my session: one column, so a straight path with no corner.
+  await waitLineOnNodes(s, false);
+  await pickStrength(s, 2, "best");
+  await waitLineOnNodes(s, true);
+  await s.page.locator("#loop-phase-strength").uncheck();
+  await s.page.locator(".loop-strength-row").first().waitFor({ state: "detached" });
+  assert.equal(await paths.count(), 0, "the toggle off draws no line");
+});
+
 test("an agent with nothing mapped grays the section and links to Agents & models", async (t) => {
   const s = await openStrengthSetup(t, { ...LAUNCH, agent: "codex", agentLabel: "Codex" });
   const note = s.page.locator(".loop-strength-none");
