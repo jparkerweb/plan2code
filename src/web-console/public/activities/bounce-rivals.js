@@ -34,7 +34,6 @@ export const RIVALS = Object.freeze({
 export const RIVAL_KINDS = Object.freeze(Object.keys(RIVALS));
 // A car this heavy gives no ground to a ram, and its back is a wall.
 export const HEAVY = 4;
-export const HAUL_MASS = RIVALS.hauler.mass;
 
 // Rivals spawn SPAWN_AHEAD to SPAWN_AHEAD + 40 units ahead of you (just over
 // the board's top), one that comes from behind SPAWN_BEHIND under its

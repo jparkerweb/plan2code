@@ -6,7 +6,7 @@
 // (ghoul-sfx-ride.js) at the event's `level` and `pitch`. A heart lost is the
 // game's own `lose` event with one of the ride's causes (ghoul-ride.js CAUSES).
 
-import { CAUSES, EVENTS, SOUNDS } from "./ghoul-ride.js";
+import { SOUNDS } from "./ghoul-ride.js";
 
 const freeze = (o) => Object.freeze(o);
 const cap = (s) => s[0].toUpperCase() + s.slice(1);
@@ -71,5 +71,3 @@ export function react(e, k) {
   k.tone(name, Math.min(1, 0.55 * (e.level ?? 1)), (e.pitch ?? 1) * (0.97 + Math.random() * 0.06));
   return true;
 }
-export const RIDE_EVENTS = EVENTS;
-export const RIDE_CAUSES = CAUSES;

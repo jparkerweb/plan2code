@@ -542,8 +542,6 @@ export function ensureRoad(road, d) {
 // The row index for `d`, kept on the road.
 export const rowIn = (road, d) => clamp(rowOf(d), 0, road.rows - 1);
 
-export const hasBed = (road, i) => road.ML[i] < road.MR[i];
-
 /* ---------------------------------------------------- the timed parts */
 
 // A swaying bridge's shift across at `t`.

@@ -139,7 +139,6 @@ export const CANARY_REST_MS = 4500;
 // A dead miner: see the header.
 export const MINER_NEAR = 44;
 export const MINER_DIG_MS = 650;
-export const MINER_V = 8;
 export const PICK_NEAR = 5;
 export const PICK_WIND_MS = 400;
 export const PICK_REACH = 5;

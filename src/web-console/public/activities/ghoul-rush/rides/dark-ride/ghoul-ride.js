@@ -42,7 +42,6 @@ export const SPD = 2.1;
 export const FIRE_GAP = 0.16;
 export const RIDE_FLOOR = 5;
 export const RIDE_EXTRA = 4;
-export const DEAD_BAND = freeze({ on: DUCK_ON, off: DUCK_OFF });
 
 /* ------------------------------------------------------------- sounds */
 
@@ -1054,5 +1053,4 @@ export const RIDE = freeze({
 
 // What the art and the tests read of the rules.
 export { K, bossActive, miniHp, mirRect, groundSpeedWant, update as stepRide };
-export const popRect = (e) => K.pop.rect(e);
 export const handTip = (e) => K.hand.tip(e);

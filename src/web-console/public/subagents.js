@@ -34,8 +34,7 @@ export const HELPER_STATES = Object.freeze(["running", "done", "failed"]);
 // The person's Helper strength profile, applied on top of helper-strength.md's table.
 export const STRENGTHS = Object.freeze(["balanced", "thrifty", "best", "session"]);
 export const DEFAULT_STRENGTH = "balanced";
-// What the dialog's strength radios say, and the line under them for the picked one.
-export const STRENGTH_LABELS = Object.freeze({ balanced: "Balanced", thrifty: "Thrifty", best: "Best", session: "Match my session" });
+// The line under the dialog's strength radios for the picked one.
 export const STRENGTH_HELP = Object.freeze({
   balanced: "Each helper gets the strength its job needs: light for lookups, stronger for reviews and design work.",
   thrifty: "One step lighter everywhere to save cost; reviews stay at standard or above.",

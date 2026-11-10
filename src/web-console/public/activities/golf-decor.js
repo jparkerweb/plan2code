@@ -1041,7 +1041,6 @@ const DECOR = {
 // Every kind of scenery a hole on `theme` may use: the built-in ones and its
 // look's own.
 export const decorKinds = (theme) => [...Object.keys(DECOR), ...Object.keys((LOOKS[theme] || {}).decor || {})];
-export const DECOR_KINDS = Object.freeze(Object.keys(DECOR));
 
 const decorKind = (theme, kind) => ((LOOKS[theme] || {}).decor || {})[kind] || DECOR[kind];
 

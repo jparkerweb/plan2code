@@ -25,3 +25,4 @@ prototypes/
 plan2code-app/target/
 plan2code-app/src-tauri/gen/
 plan2code-app/ui/vendor/
+.plan2code-dead-code/reports/
