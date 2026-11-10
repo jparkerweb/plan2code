@@ -83,7 +83,7 @@
         ]
       },
       "installDirs": {
-        "win": ["%USERPROFILE%\\.local\\bin"],
+        "win": ["%LOCALAPPDATA%\\Programs\\OpenAI\\Codex\\bin", "%USERPROFILE%\\.local\\bin"],
         "mac": ["~/.local/bin"],
         "linux": ["~/.local/bin"]
       }
@@ -117,7 +117,7 @@
       "args": ["{model}", "{prompt}"],
       "bypassArgs": ["--approval-mode=yolo"],
       "modelArgs": ["--model", "{model}"],
-      "note": "For unpaid tier and Google One accounts Gemini CLI was replaced by Antigravity CLI on June 18, 2026; whether gemini still runs depends on the account."
+      "note": "For Google AI Pro and Ultra accounts and free Gemini Code Assist for individuals, Gemini CLI was replaced by Antigravity CLI on June 18, 2026; Standard and Enterprise licenses and paid API keys are unaffected."
     },
     {
       "id": "pi",
@@ -126,6 +126,16 @@
       "command": "pi",
       "prompt": "/skill:plan2code",
       "args": ["{model}", "{prompt}"],
+      "modelArgs": ["--model", "{model}"]
+    },
+    {
+      "id": "cursor",
+      "name": "Cursor CLI",
+      "kind": "template",
+      "command": "agent",
+      "prompt": "/plan2code",
+      "args": ["{model}", "{prompt}"],
+      "bypassArgs": ["--force"],
       "modelArgs": ["--model", "{model}"]
     }
   ]

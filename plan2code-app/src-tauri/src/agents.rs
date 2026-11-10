@@ -1670,7 +1670,7 @@ mod tests {
                 .iter()
                 .map(|e| e.id.as_str())
                 .collect::<Vec<_>>(),
-            ["copilot", "opencode", "gemini", "pi"]
+            ["copilot", "opencode", "gemini", "pi", "cursor"]
         );
         assert!(list
             .builtins

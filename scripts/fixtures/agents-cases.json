@@ -2054,6 +2054,61 @@
       "args": [
         "/skill:plan2code"
       ]
+    },
+    {
+      "name": "Cursor CLI's shape: a chosen model goes ahead of the prompt",
+      "entry": {
+        "id": "cursor",
+        "name": "Cursor CLI",
+        "command": "agent",
+        "args": [
+          "{model}",
+          "{prompt}"
+        ],
+        "prompt": "/plan2code",
+        "bypassArgs": [
+          "--force"
+        ],
+        "modelArgs": [
+          "--model",
+          "{model}"
+        ]
+      },
+      "options": {
+        "model": "sonnet-4",
+        "bypass": false
+      },
+      "args": [
+        "--model",
+        "sonnet-4",
+        "/plan2code"
+      ]
+    },
+    {
+      "name": "Cursor CLI's shape: no model, no model argument",
+      "entry": {
+        "id": "cursor",
+        "name": "Cursor CLI",
+        "command": "agent",
+        "args": [
+          "{model}",
+          "{prompt}"
+        ],
+        "prompt": "/plan2code",
+        "bypassArgs": [
+          "--force"
+        ],
+        "modelArgs": [
+          "--model",
+          "{model}"
+        ]
+      },
+      "options": {
+        "bypass": false
+      },
+      "args": [
+        "/plan2code"
+      ]
     }
   ],
   "ids": [

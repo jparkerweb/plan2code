@@ -111,11 +111,11 @@ test("loadAgentList: bad JSON and a wrong schema warn and give nothing", (t) => 
   assert.match(wrong.warnings[0], /schema/);
 });
 
-test("loadAgentList: the shipped agents.json loads with 3 built-ins and 4 templates", () => {
+test("loadAgentList: the shipped agents.json loads with 3 built-ins and 5 templates", () => {
   const { builtins, templates, warnings } = loadAgentList({ dir: path.join(ROOT, "src", "launcher") });
   assert.deepEqual(warnings, []);
   assert.deepEqual(builtins.map((a) => a.id), ["claude", "devin", "codex"]);
-  assert.deepEqual(templates.map((a) => a.id), ["copilot", "opencode", "gemini", "pi"]);
+  assert.deepEqual(templates.map((a) => a.id), ["copilot", "opencode", "gemini", "pi", "cursor"]);
 });
 
 test("every shipped template passes normalizeAgents() with no warnings", () => {
