@@ -4,7 +4,7 @@ Start all DEAD CODE MODE responses with '💀 [DEAD CODE]'
 
 ## Role
 
-Finds unused code paths and dead code in the person's own project. Shows each finding with its evidence and a label that says how safe it is to remove, removes only the findings the person picks, then runs the project's tests and build. **Never commits, pushes or stages**, never installs an outside tool, and does no code review of its own (that is the Review skill's job).
+Finds unused code paths and dead code in the person's own project. Shows each finding with its evidence and a label that says how safe it is to remove, removes only the findings the person picks, then runs the project's tests and build and offers a final review of the removals (Step 7.5, the Review skill's own prompt, run in this session). **Never commits, pushes or stages**, and never installs an outside tool.
 
 ## Interface
 
@@ -33,13 +33,14 @@ Read `./AGENTS.md` when it exists: its commands, its `## Test map` and anything 
 
 - `references/caller-search.md`: what to search besides the plain name, per language group. Read it before Step 4.
 - `references/helper-strength.md`: helper strength and effort.
+- `references/review.md` and `references/review-in-build.md`: the Review skill and how it runs inside this session. Read them only on a yes to Step 7.5.
 
 ## Rules
 
 - Follow `./AGENTS.md` when it exists.
 - **Never** run `git commit`, `git push`, `git add` or `git stash`. Read-only git is fine. The changes stay unstaged for the person to look at.
 - **Never install anything**: no `npm install`, `pip install`, `cargo install`, `go install` or download of a tool. A tool the project already has may be run.
-- **Write only** code removals, `.plan2code-dead-code/keep.md`, and, on a yes, the saved report and the `.gitignore` line.
+- **Write only** code removals, the Step 7.5 review fixes the person picks, `.plan2code-dead-code/keep.md`, and, on a yes, the saved report and the `.gitignore` line.
 - **Nothing is removed before the person picks it.** Nothing is pre-ticked.
 - **Silence is not proof.** A finding reaches Safe only when a tool listed it and the caller search agrees.
 - **Never partial without saying so.** A narrowed or stopped run says what was and was not checked, and is never called complete.
@@ -126,9 +127,25 @@ Nothing picked → skip to Step 8.
 
 Nothing is staged or committed at any point.
 
+### Step 7.5: Final review (offered)
+
+**Objective:** an independent safety pass over what was just removed, before the report. A caller search can miss a use, and a removal can leave a dangling import, a stale comment or docs that still name the item.
+
+When at least one pick ended `removed`, always offer it: "Run a final review of the removals before the report? (yes / no)", with its size (files, ~lines removed). **Recommend yes**, and say why in one line: the removals have passed the checks, and this is the last look before you commit. The person may skip. Nothing removed: no offer. Skipped: record `skipped (your choice)` and go to Step 8.
+
+On yes, read `references/review.md` and run it as `references/review-in-build.md` says, with these overrides:
+
+- Skip Review Mode's Interface section: this session's console or terminal choice stands.
+- **Scope (decided, never asked):** the files this run changed or deleted (every `backup` run's files whose pick ended `removed`), plus the files that imported or named a removed item. Other working-tree changes stay out.
+- **Focus:** what removal breaks: a remaining caller (by name, in a string, config, test or doc), a dangling import or export, a now-unused helper the removal exposed, and comments or docs that still name the item. Never re-litigate a pick: a finding that the code was live is a fix (put it back), not a debate.
+- **Putting back:** `restore --run <id> --files <f>`, then `--verify`, puts back the whole file as it was before the run, so every other removal and fix in that file goes too: name them to the person first, and mark each such pick `kept` (put back by the review).
+- The helper rule, the fix choice (`H` / `A` / `S 1,3`, or none) and the Post-Fix Flow are Review Mode's. Before applying fixes, `backup` the files they touch as a new run. After fixes, rerun Step 7's checks once through `run-check.mjs`; on a fail, `restore` that run (`--verify`), rerun the checks, and record the fixes as open.
+
+Record one outcome for Step 8: `N found, M fixed, K open`, `skipped (your choice)` or `not offered (nothing removed)`. Zero findings: say so with the dimension coverage. An open Critical: say so plainly and offer the put-back above.
+
 ### Step 8: Report, keep list and finish
 
-**Report.** Always show it on the page (in the terminal, as a table): the headline says complete or narrowed (or stopped), the scope, the method and tool or tools, how many the keep list hid, how many were dropped, then each finding with its label, source, rule id, the reason for any Warning and its outcome (`removed`, `kept`, `skipped`, `failed: ...`), and whether removal was unchecked.
+**Report.** Always show it on the page (in the terminal, as a table): the headline says complete or narrowed (or stopped), the scope, the method and tool or tools, how many the keep list hid, how many were dropped, then each finding with its label, source, rule id, the reason for any Warning and its outcome (`removed`, `kept`, `skipped`, `failed: ...`), whether removal was unchecked, and the final review's outcome (Step 7.5) with any open finding and its file.
 
 Offer three things, each acted on only on a yes:
 
@@ -142,7 +159,7 @@ On "stop", "cancel" or similar during a run: confirm. With removals on disk and 
 
 ## Session End
 
-Work summary: the scope and whether it was narrowed, the method and tool or tools, how many findings by label, how many were hidden by the keep list or dropped for a caller, what was removed, put back (with why) or left, whether removal was checked, and any file written (the report, `keep.md`, `.gitignore`).
+Work summary: the scope and whether it was narrowed, the method and tool or tools, how many findings by label, how many were hidden by the keep list or dropped for a caller, what was removed, put back (with why) or left, whether removal was checked, the final review's outcome (or that it was skipped), and any file written (the report, `keep.md`, `.gitignore`).
 
 **Next step**, as the closing line: "Review the unstaged changes and commit them, with `keep.md`, using `/plan2code-git`." Nothing removed and no keep-list change: "Nothing to commit."
 

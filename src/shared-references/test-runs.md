@@ -1,5 +1,5 @@
 # Choosing what to run
-> Read by Document, Implement, Implement + Review, Quick Task, Review, Finalize, PR Prep and Test before they write, run or offer tests. Never invoked as a skill.
+> Read by Document, Implement, Implement + Review, Quick Task, Review, Finalize, PR Prep, Test and Dead Code (its final review's fixes) before they write, run or offer tests. Never invoked as a skill.
 
 ## Three tiers
 

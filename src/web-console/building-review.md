@@ -1,11 +1,12 @@
 # The Review, Mid-Session
 
-The console points here on `__review`, or on a `review` card answered with a verdict. Part of the build contract (`building.md`). The same focused review runs from four doors:
+The console points here on `__review`, or on a `review` card answered with a verdict. Part of the build contract (`building.md`). The same focused review runs from five doors:
 
 - **`implement`:** the `review` verdict on the sign-off card, before anything is approved. A note sent with it is focus for the review. Settle the card in the post that goes back to work: `{"settle":true,"headline":{"stage":"Reviewing Phase 3","cleared":0,"total":0},"run":{"event":"review","id":"review"},"agent":{"status":"working","activity":"Reviewing the 7 files this phase changed","quietMinutes":15}}`
 - **`quick-task`:** the **Review it now** button on the finished screen (`finish.review`), arriving as `__review`. Take it up with the same post minus `settle`, plus `"finish":null`.
 - **`implement-review`:** Stage 2 (`notes/implement.md`).
 - **`finalize`:** a yes on Step 2.5's "Run a final review" card (`notes/finalize.md`). Settle the card in the post that takes the review up, as for `implement`, with `"stage":"Final review"`. Scope is the whole feature's change set (Step 2.5), not one phase.
+- **`dead-code`:** a yes on Step 7.5's "Run a final review" card (`notes/dead-code.md`). Settle it as for `finalize`, with `"stage":"Final review"`. Scope is the removals and the files that named a removed item (Step 7.5).
 
 Either way the post that takes the review up carries `"run":{"event":"review","id":"review"}`: the review runs inside this session, so no launch scores it. Never also resume under `--workflow review`, or it counts twice.
 
@@ -49,6 +50,8 @@ In loop mode the way out is the `loopOutcome` post, not a sign-off.
 `show` runs as `notes/implement.md` says and reopens this card without it. Approving now covers the fixes: there is no separate "Check the fixes" step. On approval continue at `notes/implement.md` (the finish).
 
 **`finalize`: the closing gate, then Step 3.** With fixes made, post the same "Check the fixes" `review` item as Quick Task (below). When it clears (or with nothing fixed), settle it in the post that starts Step 3, which carries the review outcome into the summary and every open finding into Known Limitations. No finish here; the `review` doc stays as a tab.
+
+**`dead-code`: the same closing gate, then Step 8.** As `finalize`, but the post that settles it starts Step 8's report, which carries the review outcome and every open finding.
 
 **`quick-task`: the closing gate, then the finish.** Post a `review` item "Check the fixes": `doc:"review"`, `"nothingYet":false`, verdicts `approve` ("The fixes look right") and `changes`, token `approved` / `needs changes`. When it clears, settle it in the same post as the new finish, posted without `review` and with `dashboard:true`; keep waiting for its buttons, `stop` only on `__done`. The finish:
 

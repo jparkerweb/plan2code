@@ -1,5 +1,5 @@
 # Review Inside a Build
-> Read by Review, Implement, Implement + Review and Quick Task when a review runs inside a build: before a phase is signed off, or after a quick task is built. Never invoked as a skill. The web console's `building-review.md` adds only what the page does differently.
+> Read by Review, Implement, Implement + Review, Quick Task, Finalize and Dead Code when a review runs inside a session: before a phase is signed off, after a quick task is built, or as a final review (Finalize's Step 2.5, Dead Code's Step 7.5, whose own steps replace "Back to the build"). Never invoked as a skill. The web console's `building-review.md` adds only what the page does differently.
 
 Run Review Mode (`references/review.md`, or this skill's own SKILL.md in Review) with these rules. They win over Review Mode's own scope questions, completion and session-end steps.
 

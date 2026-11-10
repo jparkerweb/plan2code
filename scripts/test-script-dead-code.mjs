@@ -1225,3 +1225,19 @@ test("run: each tail line is capped at 400 characters", () => {
   assert.equal(r.json.tail.length, 1);
   assert.equal(r.json.tail[0].length, 400);
 });
+
+/* ---------------------------------------------------- the final review */
+
+test("the built skill ships the Review files its Step 7.5 final review reads", () => {
+  const refs = path.join(SKILLS, "plan2code-dead-code", "references");
+  for (const file of ["review.md", "review-in-build.md", "test-runs.md", "reviewer-brief.md", "verification-protocol.md", "dimensions.md", "false-positives.md", "session-end.md"]) {
+    assert.ok(fs.existsSync(path.join(refs, file)), `references/${file} is missing from plan2code-dead-code`);
+  }
+  // review.md runs these from <S>.
+  for (const script of ["specs.mjs", "commit-msg.mjs", "review-scope.mjs"]) {
+    assert.ok(fs.existsSync(path.join(SKILLS, "plan2code-dead-code", "scripts", script)), `scripts/${script} is missing from plan2code-dead-code`);
+  }
+  const skill = fs.readFileSync(path.join(SKILLS, "plan2code-dead-code", "SKILL.md"), "utf8");
+  assert.match(skill, /### Step 7\.5: Final review/);
+  for (const ref of ["references/review.md", "references/review-in-build.md"]) assert.ok(skill.includes(ref), `SKILL.md names ${ref}`);
+});

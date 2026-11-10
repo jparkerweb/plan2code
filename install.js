@@ -397,11 +397,18 @@ const SOURCE_PROMPTS = [
     // Shown to the agent in place of the generic header text: when the skill fits and its command.
     skillDescription: "Use when you want unused code paths and dead code in your project found, labeled by how safe each is to remove, and removed only where you pick. Run it as /plan2code-dead-code.",
     isUtility: true,
-    scripts: ['test-map.mjs', 'glob.mjs', 'test-commands.mjs', 'run-check.mjs'],
+    // review.md rides along for Step 7.5's final review of the removals, which
+    // runs in the same session, as Finalize's Step 2.5 does, with the scripts
+    // review.md names.
+    scripts: ['test-map.mjs', 'glob.mjs', 'test-commands.mjs', 'run-check.mjs', 'specs.mjs', 'commit-msg.mjs', 'review-scope.mjs'],
     additionalReferences: [
       { source: 'web-console', target: 'web-console' },
       { source: 'plan2code-dead-code-references/caller-search.md', target: 'caller-search.md' },
-      { source: 'shared-references/helper-strength.md', target: 'helper-strength.md' }
+      { source: 'shared-references/helper-strength.md', target: 'helper-strength.md' },
+      { source: 'shared-references/test-runs.md', target: 'test-runs.md' },
+      { source: 'shared-references/review-in-build.md', target: 'review-in-build.md' },
+      { source: 'plan2code-review.md', target: 'review.md' },
+      { source: 'plan2code-review-references' }
     ]
   },
   {

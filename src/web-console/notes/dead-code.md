@@ -26,6 +26,10 @@ With no test map: one `confirm` listing each command and the folder it runs in, 
 
 One progress post per check, no `--wait`, its `activity` naming the check and `quietMinutes` sized to its timeout (600 s is 10 minutes, plus a margin). Run the `chat` check between checks, as a build does.
 
+## Final review
+
+Once Step 7 ends with at least one pick `removed` (Step 7.5): `confirm` "Run a final review", `--wait`, `"yesLabel":"Review it","noLabel":"Skip it"`, files and ~lines removed in `body` with the one-line reason to say yes. Yes: read `<D>/building-review.md`, the `dead-code` door.
+
 ## The report and the offers
 
 Doc `report`: one `md` block, the headline first (Complete, Narrowed or Stopped), then scope, method and tools, the hidden and dropped counts, and the findings table with each outcome. Then each offer as a `confirm`, `--wait`, `"doc":"report"`: "Save the report" (naming `.plan2code-dead-code/reports/DEAD-CODE-<date>.md`), "Keep these findings" (the reasons asked as a `text` card after a yes), and on first save ".gitignore line".

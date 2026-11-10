@@ -47,7 +47,7 @@ test("Document writes Targeted, Quick checks and Full suite lines and reads test
   assert.match(doc, /no Full Suite row: ask/);
 });
 
-test("test-runs.md ships in the eight skills that run, write or offer tests, and in no other", () => {
+test("test-runs.md ships in the nine skills that run, write or offer tests, and in no other", () => {
   // npm test has just built skills/; a direct run builds it so the check never reads a stale tree.
   if (process.env.npm_lifecycle_event !== "test") {
     execFileSync(process.execPath, [path.join(ROOT, "install.js"), "--build-skills"], { stdio: "ignore" });
@@ -59,6 +59,7 @@ test("test-runs.md ships in the eight skills that run, write or offer tests, and
     "plan2code-3-implement",
     "plan2code-3-implement-review",
     "plan2code-4-finalize",
+    "plan2code-dead-code",
     "plan2code-pr-prep",
     "plan2code-quick-task",
     "plan2code-review",
