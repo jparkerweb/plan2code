@@ -89,6 +89,7 @@ After the person's note on an open question, reword it (same `id`), retire it wi
 - a doc `version` that goes back (leave `version` out)
 - a finish `command` with `<` or `>` in it
 - a note left without a reply
+- a new open required question while a card from the send you just collected is still open (add `"settle":true`, or reword, reopen, delete or `"stands":true` it)
 - a `finish` while `stopWarning` is set or a helper is still `running`
 - a `stop` with no `finish` (`stop --session <sid> --force` for a dead page)
 

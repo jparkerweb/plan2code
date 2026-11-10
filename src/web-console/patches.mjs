@@ -639,6 +639,7 @@ export function applyPatch(state, patch) {
     delete next.finish;
   }
   refuseQuestionPastNote(state, next);
+  refuseQuestionPastAnswers(state, next, patch);
   return stampTimes(state, settleAgent(next, patch, state));
 }
 
@@ -673,6 +674,46 @@ function refuseQuestionPastNote(before, next) {
           { id: i.id, stands: true },
         ),
       ])
+      .join("\n"),
+  );
+}
+
+/**
+ * The cards the person just sent (`state.collected.ids`, written when `wait`
+ * handed the send over) are the agent's to settle. A patch that asks a new
+ * question while one of them is still open, untouched and unsettled, leaves
+ * two cards in front of the person, and the page can land on the old, already
+ * answered one (seen in the Dead Code skill: the first and second questions
+ * stayed in the list after they were answered). So the patch that adds a new
+ * open required question must also settle each of them (`settle: true`),
+ * reword it, reopen it, delete it or say it `stands`. A finish ends the
+ * session and the dashboard draws no cards, so neither is held to it.
+ */
+function refuseQuestionPastAnswers(before, next, patch) {
+  if (next.finish != null || next.workflow === "dashboard" || !Array.isArray(next.items)) return;
+  const ids = Array.isArray(before.collected?.ids) ? before.collected.ids : [];
+  if (!ids.length) return;
+  const had = new Set((Array.isArray(before.items) ? before.items : []).map((i) => i && i.id));
+  const asksNew = next.items.some(
+    (i) => isPlainObject(i) && !had.has(i.id) && i.required !== false && i.kind !== "notice" && isOpen(i),
+  );
+  if (!asksNew) return;
+  // `stands` keeps a card open on purpose; an `answer` in the patch is the agent settling it with its own reading (see settleItems).
+  const dealt = new Set((patch.items || []).filter((e) => isPlainObject(e) && (e.stands === true || "answer" in e)).map((e) => e.id));
+  const left = next.items.filter(
+    (i) => isPlainObject(i) && ids.includes(i.id) && i.kind !== "notice" && isOpen(i) && isPlainObject(i.submitted) && !dealt.has(i.id),
+  );
+  if (!left.length) return;
+  throw new Error(
+    left
+      .map((i) =>
+        rule(
+          `item "${i.id}"`,
+          "settle",
+          'was answered in the send you just collected and is still open: settle it in the same patch that adds a new question, with "settle": true (or a list of ids), or reword it, reopen it ("status": "reopened"), delete it ("_delete": true) or send "stands": true',
+          { settle: true },
+        ),
+      )
       .join("\n"),
   );
 }

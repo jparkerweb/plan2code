@@ -1380,6 +1380,31 @@ test("rejects more than three open required questions", () => {
   assert.match(res.stderr, /open at once/);
 });
 
+// The Dead Code run left the first two questions open after they were
+// answered, because the next post never settled them, and the page landed on
+// the old card. A post that asks something new now has to deal with them.
+test("refuses a new question while the cards just collected stay open and unsettled", () => {
+  const sent = { at: "2026-11-10T10:00:00.000Z", kind: "choice", k: "A" };
+  const base = {
+    collected: { at: sent.at, ids: ["q1"] },
+    items: [{ id: "q1", kind: "choice", title: "Where to look", body: "b", status: "open", required: true, options: [], thread: [], submitted: sent }],
+  };
+  const ask = { id: "q2", kind: "text", title: "What next", body: "b" };
+  assert.throws(() => applyPatch(base, { items: [ask] }), /item "q1" settle: .*settle/);
+  const settled = applyPatch(base, { settle: true, items: [ask] });
+  assert.equal(settled.items.find((i) => i.id === "q1").status, "answered", "settle: true closes the card just answered");
+  assert.doesNotThrow(() => applyPatch(base, { settle: ["q1"], items: [ask] }));
+  assert.doesNotThrow(() => applyPatch(base, { items: [{ id: "q1", stands: true }, ask] }), "stands keeps a card open on purpose");
+  assert.doesNotThrow(() => applyPatch(base, { items: [{ id: "q1", _delete: true }, ask] }), "a deleted card is dealt with");
+  assert.doesNotThrow(() => applyPatch(base, { items: [{ id: "q1", body: "reworded" }, ask] }), "a reworded card is a new question");
+  assert.doesNotThrow(() => applyPatch(base, { items: [{ id: "q1", status: "reopened", body: "asked again" }, ask] }), "a reopened card is asked again");
+  assert.doesNotThrow(() => applyPatch(base, { items: [{ id: "q1", answer: { k: "A" } }, ask] }), "the agent's own answer settles the card");
+  assert.doesNotThrow(() => applyPatch({ ...base, collected: { at: sent.at, ids: ["q9"] } }, { items: [ask] }), "an id that is no longer on the page holds nothing up");
+  assert.doesNotThrow(() => applyPatch(base, { items: [{ ...ask, required: false }] }), "an optional card asks nothing new");
+  assert.doesNotThrow(() => applyPatch(base, { items: [{ id: "n1", kind: "notice", title: "Heads up", body: "b" }] }), "a notice asks nothing");
+  assert.doesNotThrow(() => applyPatch(base, { finish: { headline: "Done", body: "b" }, items: [ask] }), "a finish is not held to it");
+});
+
 test("rejects internal vocabulary in a title", () => {
   const p = { items: [{ id: "j1", kind: "text", title: "Frontier grill posture", body: "b", required: false }] };
   const res = cli(["post", "--session", sid, "--file", payload("jargon.json", p)], { expectFail: true });

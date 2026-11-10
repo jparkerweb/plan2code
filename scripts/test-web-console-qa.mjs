@@ -43,7 +43,7 @@ test("settle: true records the send wait handed over, never a later one still un
     assert.equal((await s.send("/submit", EXPORT_A)).status, 200);
     assert.equal(waitFor(s).status, 0);
     assert.deepEqual(readState(s.session).collected.ids, ["q1"], "collecting records which cards the send carried");
-    postPatch(s, { items: [choice("q2")] });
+    postPatch(s, { settle: true, items: [choice("q2")] });
     assert.equal((await s.send("/submit", { actions: [{ i: "q2", type: "answer", kind: "choice", k: "B" }], reply: "Question q2: B" })).status, 200);
     postPatch(s, { settle: true });
     const items = readState(s.session).items;
