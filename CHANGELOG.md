@@ -2,6 +2,12 @@
 
 All notable changes to Plan2Code will be documented in this file.
 
+## v3.0.6
+
+### 🔧 Changed
+
+- **tooling**: `npm run set-version` runs `scripts/set-version.mjs`, and with no version on a terminal it shows the current one and asks for the new one, Enter taking the next patch; a script or a pipe still gets the usage line and exits 2.
+
 ## v3.0.5
 
 ### 🔧 Changed
