@@ -1894,8 +1894,10 @@ mod tests {
 
     #[test]
     fn ids_round_trip() {
-        for entry in [entry("claude"), entry("devin"), entry("codex")] {
-            assert_eq!(builtin_entry(&entry.id), Some(entry));
+        // Ids only: builtin_entry reads the installed agents.json first, which
+        // can be older than the source on a machine with a release installed.
+        for id in ["claude", "devin", "codex"] {
+            assert_eq!(builtin_entry(id).map(|e| e.id), Some(id.to_string()));
         }
         assert!(builtin_entry("nope").is_none());
     }

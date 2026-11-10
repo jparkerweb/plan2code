@@ -31,9 +31,10 @@ const UK = new RegExp(
 
 // Names that keep the UK spelling because they are data contracts read in
 // several places (see Code Style in .agents-docs/AGENTS-code-style.md), plus
-// HTML's own attribute. Removed before the scan.
+// HTML's own attribute and PHPStan's own subcommand. Removed before the scan.
 const CONTRACTS = [
   /aria-labelledby/g,
+  /\banalyse(?= --level)/g,
   /\.greyed\b/g,
   /\bgreyed(?=\s*:)/g,
   /\bconst greyed\b/g,
