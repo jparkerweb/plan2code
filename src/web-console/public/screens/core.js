@@ -54,8 +54,8 @@ import { helperRows, showTab } from "../subagents.js";
 import { FOOTER_TIERS, footerLabel } from "../workspace.js";
 import {
   activity, agentAdrift, agentWorking, askBusy, loopDriving, loopWaiting, loopWaitingKey, asked, awaitingReply, byId, dashboardLive, docs, doingNow,
-  AGENTS_VIEW, agentsTabShown, finish, gitAwaiting, isDashboard, isGitBoard, isOpen, isSpecFileView, items, loadAgentsDoc, loadOverview, myTurn, openItems,
-  finishKey, patience, pressStranded, reviewPending, scan, selSpec, sendCollected, specFileTabs, stagedCount, stranded,
+  AGENTS_VIEW, agentsTabShown, finish, gitAwaiting, isDashboard, isGitBoard, isOpen, isSpecFileView, items, loadAgentsDoc, loadOverview, loadSpecCarry, myTurn, openItems,
+  finishKey, overviewSpec, patience, pressStranded, reviewPending, scan, selSpec, sendCollected, specFileTabs, stagedCount, stranded,
   topics, workingMs, WORKING_GRACE_MS,
   workspaceFolders,
 } from "../selectors.js";
@@ -550,6 +550,8 @@ export function adopt(body) {
   // A spec file tab's file changes under a build, so a tab you are watching
   // refetches on every new frame too, not only on the click that opened it.
   if (firstLoad || page.S.specDir !== prevSpecDir || page.S.workflow !== prevWorkflow || isSpecFileView(page.view)) loadOverview();
+  // A New Session in the app leaves the spec it was in; the fresh dashboard picks it up once its scan is here.
+  loadSpecCarry();
   // The Dashboard's AGENTS.md tab: found on arrival, re-read while it is open.
   if (firstLoad || page.S.workflow !== prevWorkflow || page.view === AGENTS_VIEW) loadAgentsDoc();
   if (announce) showArrival(announce);
@@ -1131,8 +1133,20 @@ function renderMeter() {
   );
 }
 
+// The spec in hand, quiet beside the meter: the picker's pick on the
+// dashboard, the session's own spec everywhere else (overviewSpec()).
+function renderSpecTag() {
+  const tag = $("spec-tag");
+  const dir = isAgentless(page.S.workflow) ? "" : overviewSpec();
+  const name = dir ? (isDashboard() && selSpec()?.name) || dir.replace(/^specs\//, "") : "";
+  tag.hidden = !name;
+  tag.textContent = name;
+  tag.title = name ? "Spec: " + dir : "";
+}
+
 function renderChrome() {
   renderMeter();
+  renderSpecTag();
   $("title").textContent = page.S.title || "Session";
   $("badge").textContent = workflowLabel(page.S.workflow);
   renderTabTitle();

@@ -193,7 +193,7 @@ const ROUTE_ORDER = [
   "/notepad", "/notepad/text", "/notepad/image", "/notepad/thumb", "/notepad/image/delete", "/notepad/tab",
   "/notepad/tab/rename", "/notepad/tab/delete", "/notepad/tab/order", "/notepad/tab/last", "/notepad/tab/sent", "/notepad/images/",
   "/attachments/", "/shots/", "/uploads/", "/submit", "/open-link", "/chat", "/chat/decision", "/workspace",
-  "WORKSPACE_EDITS", "/workspace/scope", "/workspace/browse", "/loop-setup", "/loop-setup", "/cancel", "/ping", "/bye",
+  "WORKSPACE_EDITS", "/workspace/scope", "/workspace/browse", "/loop-setup", "/loop-setup", "/spec-carry", "/cancel", "/ping", "/bye",
 ];
 
 test("shape: routes.mjs lists every URL the server answers, in order", () => {

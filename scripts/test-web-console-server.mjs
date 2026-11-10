@@ -365,6 +365,7 @@ test("the scratch sweep removes old patches and helpers, never looks, the pointe
       file("looks.json"),
       file("workspaces.json"),
       file("loop-setup.json"),
+      file("spec-carry.json"),
       file("loop-reports.json"),
       file("subagents.json"),
       file("pr-hosts.json"),
@@ -381,7 +382,7 @@ test("the scratch sweep removes old patches and helpers, never looks, the pointe
     const stale = staleScratch(dir, Date.now(), SESSION_MAX_AGE_MS).sort();
     assert.deepEqual(stale, ["helper.mjs", "p2.json"]);
     assert.deepEqual(
-      (await removeScratch(dir, [...stale, "looks.json", "workspaces.json", "loop-setup.json", "loop-reports.json", "subagents.json", "pr-hosts.json", "../p.json", "console-dir", "update-check.json"])).sort(),
+      (await removeScratch(dir, [...stale, "looks.json", "workspaces.json", "loop-setup.json", "loop-reports.json", "subagents.json", "spec-carry.json", "pr-hosts.json", "../p.json", "console-dir", "update-check.json"])).sort(),
       ["helper.mjs", "p2.json"]
     );
     for (const p of removable) assert.equal(fs.existsSync(p), false, p);
@@ -392,6 +393,7 @@ test("the scratch sweep removes old patches and helpers, never looks, the pointe
       "loop-reports.json",
       "loop-setup.json",
       "pr-hosts.json",
+      "spec-carry.json",
       "subagents.json",
       "update-check.json",
       "workspaces.json",

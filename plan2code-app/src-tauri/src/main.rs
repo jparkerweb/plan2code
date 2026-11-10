@@ -265,6 +265,9 @@ fn before_fresh_hook(state: &AppState) -> BeforeFresh {
             .lock()
             .ok()
             .and_then(|guard| guard.as_ref().map(|sup| sup.session().sid.clone()));
+        if let (Some(sid), Some(home)) = (sid.as_deref(), session_reader::console_home()) {
+            restart_brief::leave_spec(&home, sid, chrono::Utc::now().timestamp_millis());
+        }
         let note = sid.and_then(|sid| restart_brief::note_for_restart(&sid));
         if let Ok(guard) = announce.lock() {
             if let Some(server) = guard.as_ref() {

@@ -3,7 +3,7 @@
 // Plain functions over `page` (state.js) that more than one screen asks the
 // same question of, kept here so no screen has to import another to ask it.
 
-import { page, redraw } from "./state.js";
+import { page, redraw, saveNow } from "./state.js";
 import { boardAwaiting } from "./git-board.js";
 import { defaultSpec, reviewOffer, dashboardOffer, submittedAwaiting, quietLimitMs } from "./answers.js";
 import { isAgentless } from "./skills.js";
@@ -336,6 +336,26 @@ export async function loadOverview() {
   const changed = page.overview.key !== spec || JSON.stringify(page.overview.files) !== JSON.stringify(files);
   page.overview = { key: spec, files };
   if (changed) redraw();
+}
+
+// A New Session in the desktop app leaves the spec it was in for the fresh
+// dashboard (spec-carry.mjs). Asked once per page, before the picker is
+// touched; used only if the picker lists that spec, else the default stands.
+let specCarryAsked = false;
+export async function loadSpecCarry() {
+  if (specCarryAsked || !isDashboard() || !scan() || page.local.specSel !== undefined) return;
+  specCarryAsked = true;
+  try {
+    const res = await fetch("/spec-carry", { method: "POST", cache: "no-store" });
+    const { spec } = res.status === 200 ? await res.json() : {};
+    if (!spec || page.local.specSel !== undefined || !specList().some((s) => s.dir === spec)) return;
+    page.local.specSel = spec;
+    saveNow();
+    redraw();
+    loadOverview();
+  } catch {
+    /* no hint: the picker keeps its default */
+  }
 }
 
 // The Dashboard's AGENTS.md tab: its view id, and whether it is on now (the

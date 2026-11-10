@@ -35,6 +35,7 @@ import { SHOTS_DIR_NAME, SHOT_NAME, shotType, isOpen } from "./patches.mjs";
 import { appendChat, currentConversation, pendingChatCount, typedCount } from "./inbox.mjs";
 import { specKey } from "./workspace.mjs";
 import { readLoopSetup, saveLoopSetup } from "./loop-setup.mjs";
+import { takeSpecCarry } from "./spec-carry.mjs";
 import { resolveStrengths } from "./strengths.mjs";
 import { MARKERS, phaseChecklist } from "./spec-files.mjs";
 import {
@@ -128,6 +129,7 @@ const ROUTES = [
   { path: "/workspace/browse", method: "POST", origin: true, run: workspaceBrowse },
   { path: "/loop-setup", method: "GET", run: loopSetupGet },
   { path: "/loop-setup", method: "POST", origin: true, run: loopSetupPost },
+  { path: "/spec-carry", method: "POST", origin: true, run: specCarry },
   { path: "/cancel", method: "POST", origin: true, run: cancel },
   { path: "/ping", method: "POST", run: ping },
   { path: "/bye", origin: true, run: bye },
@@ -1721,6 +1723,12 @@ function loopSetupPost(req, res, ctx) {
       return json(res, 500, { error: String(e.message) });
     }
   });
+}
+
+// The spec the app's New Session carried over (spec-carry.mjs), taken once by
+// the fresh dashboard's page, which keeps it only if its picker lists that spec.
+function specCarry(req, res, ctx) {
+  return json(res, 200, { spec: takeSpecCarry(loopProject(ctx)) });
 }
 
 /* --------------------------------------------------------- the workspace */

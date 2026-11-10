@@ -65,6 +65,39 @@ pub fn leave_brief(
     handoff::write(handoffs, when, &record, &body).map(Some)
 }
 
+/// The spec session `sid` was on, if the fresh dashboard's picker can offer
+/// it: a skill's `specDir`, or, from the dashboard itself, the spec its picker
+/// had selected (the page's draft keeps it as `specSel`).
+pub fn spec_in(console_home: &Path, sid: &str) -> Option<String> {
+    let session = session_reader::load(console_home, sid).ok()?;
+    let spec = if text(&session.state, "workflow") == Some("dashboard") {
+        let draft = std::fs::read_to_string(session.dir.join("draft.json")).ok()?;
+        let draft: Value = serde_json::from_str(&draft).ok()?;
+        text(&draft, "specSel")?.to_string()
+    } else {
+        text(&session.state, "specDir")?.to_string()
+    };
+    valid_spec(&spec).then_some(spec)
+}
+
+/// Leave the spec session `sid` was on for the next dashboard in the same
+/// folder (the web console's `spec-carry.mjs` reads and removes it). A hint
+/// only: nothing here fails a Restart, a failed write loses the preselection.
+pub fn leave_spec(console_home: &Path, sid: &str, now_ms: i64) {
+    let Some(spec) = spec_in(console_home, sid) else {
+        return;
+    };
+    let Ok(session) = session_reader::load(console_home, sid) else {
+        return;
+    };
+    let Some(worktree) = text(&session.state, "worktree") else {
+        return;
+    };
+    let entry = serde_json::json!({ "project": worktree, "spec": spec, "at": now_ms });
+    let _ = std::fs::create_dir_all(console_home);
+    let _ = std::fs::write(console_home.join("spec-carry.json"), entry.to_string());
+}
+
 /// The bar's line for a Restart on session `sid`, written to the real console
 /// and handoff folders. `None` when there was nothing to leave.
 pub fn note_for_restart(sid: &str) -> Option<String> {
@@ -197,6 +230,44 @@ mod tests {
         let doc = fs::read_to_string(handoffs.join(format!("{id}.md"))).unwrap();
         assert!(doc.contains("## Next task\n\nTask 5.1: Create the reader"));
         assert!(doc.contains("Phase 5: Restart brief: 4 of 11 done."));
+    }
+
+    fn carried(home: &Path) -> Option<Value> {
+        let text = fs::read_to_string(home.join("spec-carry.json")).ok()?;
+        serde_json::from_str(&text).ok()
+    }
+
+    #[test]
+    fn a_skill_session_carries_its_spec_to_the_next_dashboard() {
+        let (home, project, _) = session("carry-skill", "implement", Some("specs/feature"));
+        leave_spec(&home, "s1", 1234);
+        let entry = carried(&home).expect("a carry file");
+        assert_eq!(entry["spec"], "specs/feature");
+        assert_eq!(entry["project"], project.to_string_lossy().as_ref());
+        assert_eq!(entry["at"], 1234);
+    }
+
+    #[test]
+    fn a_dashboard_session_carries_the_spec_its_picker_had() {
+        let (home, _, _) = session("carry-dash", "dashboard", None);
+        let draft = home.join("sessions").join("s1").join("draft.json");
+        fs::write(&draft, r#"{"specSel":"specs/other"}"#).unwrap();
+        leave_spec(&home, "s1", 1);
+        assert_eq!(carried(&home).unwrap()["spec"], "specs/other");
+        // Start from scratch, a handoff pick and an untouched picker carry nothing.
+        for body in [r#"{"specSel":null}"#, r#"{"specSel":"handoff:x"}"#, "{}"] {
+            let _ = fs::remove_file(home.join("spec-carry.json"));
+            fs::write(&draft, body).unwrap();
+            leave_spec(&home, "s1", 1);
+            assert!(carried(&home).is_none(), "{body}");
+        }
+    }
+
+    #[test]
+    fn a_session_with_no_spec_carries_nothing() {
+        let (home, _, _) = session("carry-none", "quick-task", None);
+        leave_spec(&home, "s1", 1);
+        assert!(carried(&home).is_none());
     }
 
     #[test]

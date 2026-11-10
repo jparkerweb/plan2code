@@ -306,6 +306,7 @@ export const PROTECTED_CONSOLE_FILES = new Set([
   "workspaces.json",
   "loop-setup.json",
   "loop-reports.json",
+  "spec-carry.json",
   "subagents.json",
   "pr-hosts.json",
   "console-dir",
