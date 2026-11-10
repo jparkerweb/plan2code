@@ -5,8 +5,11 @@
 // entries). It never touches CHANGELOG.md: write its heading by hand, then run this.
 // `check-versions.mjs` is the reader of the same places and stays the judge.
 //
-//   node scripts/set-version.mjs <x.y.z> [--date YYYY-MM-DD] [--root <dir>]
+//   node scripts/set-version.mjs [x.y.z] [--date YYYY-MM-DD] [--root <dir>]
+//   npm run set-version [-- x.y.z]
 //
+// With no version on a terminal it shows the current one and asks (Enter takes the next patch);
+// with no version and no terminal (a script, a pipe) it prints the usage line and exits 2.
 // The release date defaults to today (local time). Every carrier is read and checked before any is
 // written, so a file that has no version leaves the tree as it was. Exit 0 when written, 1 when a
 // carrier could not be edited, 2 for bad arguments.
@@ -111,6 +114,47 @@ export function setVersion(root, version, date = today()) {
 
 export const CARRIER_FILES = CARRIERS.map((c) => c.file);
 
+// The next patch after `current` (x.y.z), or "" when `current` is not one.
+export function nextPatch(current) {
+  if (!SEMVER.test(current || "")) return "";
+  const [major, minor, patch] = current.split(".").map(Number);
+  return `${major}.${minor}.${patch + 1}`;
+}
+
+// Ask on the terminal until a valid x.y.z is typed. Enter takes the suggested next patch.
+// Returns "" when the input ends (Ctrl+D, Ctrl+C) without one.
+async function askVersion(root) {
+  let current = "";
+  try {
+    current = JSON.parse(fs.readFileSync(path.join(root, "version.json"), "utf8")).version || "";
+  } catch {
+    // No readable version.json: ask without a current version or a suggestion.
+  }
+  const suggested = nextPatch(current);
+  const { createInterface } = await import("node:readline");
+  const rl = createInterface({ input: process.stdin, terminal: false });
+  // The line iterator buffers what is typed and ends on Ctrl+D or Ctrl+C, where a pending
+  // rl.question() would never settle and leave the process to exit on an unsettled await.
+  const lines = rl[Symbol.asyncIterator]();
+  rl.on("SIGINT", () => rl.close());
+  try {
+    if (current) console.log(`Current version: ${current}`);
+    for (;;) {
+      process.stdout.write(`New version (x.y.z)${suggested ? ` [${suggested}]` : ""}: `);
+      const { value, done } = await lines.next();
+      if (done) {
+        process.stdout.write("\n");
+        return "";
+      }
+      const picked = value.trim() || suggested;
+      if (SEMVER.test(picked)) return picked;
+      console.log(picked ? `"${picked}" is not x.y.z, for example 3.1.0.` : "Type a version, for example 3.1.0.");
+    }
+  } finally {
+    rl.close();
+  }
+}
+
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const args = process.argv.slice(2);
   const take = (flag) => {
@@ -121,13 +165,26 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   };
   const date = take("--date");
   const rootArg = take("--root");
-  const [version, ...extra] = args;
-  const usage = "Usage: node scripts/set-version.mjs <x.y.z> [--date YYYY-MM-DD] [--root <dir>]";
-  if (!version || extra.length || !SEMVER.test(version) || (date !== undefined && !validDate(date)) || rootArg === "") {
+  let [version, ...extra] = args;
+  const usage = "Usage: node scripts/set-version.mjs [x.y.z] [--date YYYY-MM-DD] [--root <dir>]  (npm run set-version)";
+  const root = rootArg ? path.resolve(rootArg) : ROOT;
+  if (extra.length || (version !== undefined && !SEMVER.test(version)) || (date !== undefined && !validDate(date)) || rootArg === "") {
     console.error(usage);
     process.exit(2);
   }
-  const { ok, written, problems } = setVersion(rootArg ? path.resolve(rootArg) : ROOT, version, date);
+  // No version given: ask for one on a terminal; a script or a pipe gets the usage line instead.
+  if (version === undefined) {
+    if (!process.stdin.isTTY) {
+      console.error(usage);
+      process.exit(2);
+    }
+    version = await askVersion(root);
+    if (!version) {
+      console.error("No version given. Nothing was written.");
+      process.exit(2);
+    }
+  }
+  const { ok, written, problems } = setVersion(root, version, date);
   if (!ok) {
     for (const problem of problems) console.error(`CANNOT SET: ${problem}`);
     console.error("Nothing was written.");

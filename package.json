@@ -1,6 +1,6 @@
 {
   "name": "plan2code",
-  "version": "3.0.5",
+  "version": "3.0.6",
   "private": true,
   "bin": {
     "plan2code-install": "./install.js"
@@ -9,6 +9,7 @@
     "prepare": "husky",
     "build:skills": "node install.js --build-skills",
     "fix:eol": "node scripts/fix-line-endings.mjs",
+    "set-version": "node scripts/set-version.mjs",
     "play": "node scripts/play.mjs",
     "pretest": "node scripts/fix-line-endings.mjs",
     "test:fast": "node scripts/test-fast.mjs",

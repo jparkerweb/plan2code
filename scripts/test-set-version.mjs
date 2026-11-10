@@ -12,7 +12,7 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { checkVersions } from "./check-versions.mjs";
-import { CARRIER_FILES } from "./set-version.mjs";
+import { CARRIER_FILES, nextPatch } from "./set-version.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(here, "..");
@@ -124,12 +124,29 @@ test("a carrier with no version in it fails and writes nothing", () => {
 
 test("bad arguments exit 2 and write nothing", () => {
   const dir = scratch();
+  // Compared with the file as copied, not with a number: the repo may already be at 3.0.1.
+  const before = read(dir, "version.json");
   for (const args of [[], ["3.0"], ["v3.0.1"], ["3.0.1-beta"], ["3.0.1", "extra"], ["3.0.1", "--date", "yesterday"], ["3.0.1", "--root"]]) {
     const r = run(...args, ...(args.includes("--root") ? [] : ["--root", dir]));
     assert.equal(r.status, 2, `${args.join(" ")}: ${r.stderr}`);
     assert.match(r.stderr, /Usage: node scripts\/set-version\.mjs/);
   }
-  assert.ok(!read(dir, "version.json").includes("3.0.1"));
+  assert.equal(read(dir, "version.json"), before);
+});
+
+test("no version and no terminal prints the usage line instead of asking", () => {
+  // run() pipes stdin, so this is the script-or-pipe case: no prompt, exit 2, nothing written.
+  const dir = scratch();
+  const r = run("--root", dir);
+  assert.equal(r.status, 2, r.stderr);
+  assert.match(r.stderr, /npm run set-version/);
+});
+
+test("the prompt suggests the next patch", () => {
+  assert.equal(nextPatch("3.0.9"), "3.0.10");
+  assert.equal(nextPatch("2.10.0"), "2.10.1");
+  assert.equal(nextPatch("v3.0.1"), "");
+  assert.equal(nextPatch(undefined), "");
 });
 
 test("an impossible date is refused", () => {

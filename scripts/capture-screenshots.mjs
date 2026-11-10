@@ -535,10 +535,17 @@ async function captureAsk(browser, project, sid, url, question) {
       if (send) send.click();
     });
 
+    // `chat` hands over only the message's seq (its text goes in `reply`) and
+    // moves its cursor past it, so the first seq seen is the one; the entry
+    // itself, with its conversation, is read from the session's chat log.
     let entry = null;
     for (let i = 0; i < 40 && !entry; i++) {
       const r = cli(project, "chat", "--session", sid);
-      if (r.code === 0 && r.out && r.out.chat) entry = r.out.chat.find((c) => c.kind === "message");
+      const seq = r.code === 0 && r.out && Array.isArray(r.out.chat) ? r.out.chat[0] : undefined;
+      if (Number.isInteger(seq)) {
+        const log = path.join(HOME, "sessions", sid, "chat.ndjson");
+        entry = fs.readFileSync(log, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l)).find((e) => e.seq === seq) || null;
+      }
       if (!entry) await sleep(250);
     }
     if (!entry) throw new Error("the Ask question never reached the console");
