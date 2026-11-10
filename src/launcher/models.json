@@ -183,7 +183,7 @@
     },
     "devin": {
       "thrifty": {
-        "model": "swe-2-medium"
+        "model": "swe-2-flash-high"
       },
       "balanced": {
         "model": "swe-2-high"
