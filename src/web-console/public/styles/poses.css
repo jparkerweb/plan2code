@@ -473,6 +473,21 @@
   60%, 85% { transform: translate(4px, -4px); }
 }
 
+/* Dead code -- the skull's jaw chatters a few times, then rests; his star
+   glances over at it while it talks. */
+.pose .dd-bone { fill: var(--panel-2); stroke: var(--ink-2); stroke-width: 4; stroke-linejoin: round; }
+.pose .dd-jaw { animation: dd-jaw 3.6s ease-in-out infinite; }
+@keyframes dd-jaw {
+  0%, 10%, 60%, 100% { transform: translateY(0); }
+  18%, 34%, 50% { transform: translateY(4px); }
+  26%, 42% { transform: translateY(1px); }
+}
+.pose .dd-look { animation: dd-look 3.6s ease-in-out infinite; }
+@keyframes dd-look {
+  0%, 70%, 100% { transform: translate(2px, 0); }
+  14%, 56% { transform: translate(5px, -2px); }
+}
+
 @media (max-width: 720px) {
   .dash { padding-top: 0; }
   .launch-stage { height: 140px; }

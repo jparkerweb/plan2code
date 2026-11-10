@@ -389,6 +389,22 @@ const SOURCE_PROMPTS = [
     ]
   },
   {
+    source: 'plan2code-dead-code.md',
+    stepNumber: 'dead-code',
+    name: 'dead-code',
+    displayName: 'Dead Code Mode',
+    description: 'Find unused code and dead code, show how safe each is to remove, and remove only what you pick',
+    // Shown to the agent in place of the generic header text: when the skill fits and its command.
+    skillDescription: "Use when you want unused code paths and dead code in your project found, labeled by how safe each is to remove, and removed only where you pick. Run it as /plan2code-dead-code.",
+    isUtility: true,
+    scripts: ['test-map.mjs', 'glob.mjs', 'test-commands.mjs', 'run-check.mjs'],
+    additionalReferences: [
+      { source: 'web-console', target: 'web-console' },
+      { source: 'plan2code-dead-code-references/caller-search.md', target: 'caller-search.md' },
+      { source: 'shared-references/helper-strength.md', target: 'helper-strength.md' }
+    ]
+  },
+  {
     source: 'plan2code-changelog.md',
     stepNumber: 'changelog',
     name: 'changelog',
@@ -440,6 +456,7 @@ function generateStepLabel(prompt) {
   if (prompt.stepNumber === 'diagnose') return 'Diagnose';
   if (prompt.stepNumber === 'pr-prep') return 'PR Prep';
   if (prompt.stepNumber === 'test') return 'Test';
+  if (prompt.stepNumber === 'dead-code') return 'Dead Code';
   if (prompt.stepNumber === 'changelog') return 'Changelog';
   if (prompt.stepNumber === 'quick') return 'Quick Task';
   return `Step ${prompt.stepNumber}`;

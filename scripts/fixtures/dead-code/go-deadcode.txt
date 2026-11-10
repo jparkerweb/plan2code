@@ -1,0 +1,3 @@
+internal/report/format.go:12:6: unreachable func: formatLegacy
+cmd/tool/main.go:40:6: unreachable func: (*server).shutdownOld
+not a deadcode line

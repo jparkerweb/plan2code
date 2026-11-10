@@ -259,13 +259,13 @@ export const PICKABLE_SOUNDS = ["startSkill", "sessionStart", "skillReady", "ses
 
 // The file each pickable cue plays until a person picks another.
 export const DEFAULT_SOUND_FILE = {
-  startSkill: "sound-01",
-  sessionStart: "sound-02",
-  sessionEnd: "sound-02",
-  question: "sound-03",
-  skillReady: "sound-03",
-  chatReply: "sound-03",
-  newTab: "sound-04",
+  startSkill: "sound-14",
+  sessionStart: "sound-07",
+  sessionEnd: "sound-15",
+  question: "sound-14",
+  skillReady: "sound-16",
+  chatReply: "sound-06",
+  newTab: "sound-05",
 };
 
 // Every moment the page makes a noise, each switchable on its own in User

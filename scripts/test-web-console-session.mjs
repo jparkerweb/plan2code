@@ -614,7 +614,7 @@ test("the chime files are served as audio", async () => {
 // names a real event, and every event's file is served. A box with no event
 // saves a setting nothing reads; an event with no box can never be muted.
 test("every sound event has a preference box and a served file", async () => {
-  assert.equal(SOUND_EVENTS.startSkill.file, "sounds/sound-01", "starting a skill has its own sound");
+  assert.equal(SOUND_EVENTS.startSkill.file, "sounds/sound-14", "starting a skill has its own default sound");
   const html = fs.readFileSync(path.join(ROOT, "src", "web-console", "public", "index.html"), "utf8");
   const boxes = [...html.matchAll(/data-sound="(\w+)"/g)].map((m) => m[1]);
   assert.deepEqual([...boxes].sort(), Object.keys(SOUND_EVENTS).sort());
@@ -1572,6 +1572,53 @@ test("the page reads older { from, md } thread entries", () => {
   assert.equal(threadText({ from: "agent", md: "Older shape." }), "Older shape.");
   assert.equal(threadText({ who: "agent", text: "Now." }), "Now.");
   assert.equal(threadText({ who: "agent" }), "");
+});
+
+/* --------------------------------- the Dead Code findings page (notes/dead-code.md) */
+
+test("Dead Code's findings page: one multi in three groups with All Safe and None presets is accepted, two recommended stay refused", () => {
+  const opened = cli(["open", "--file", payload("dead-code-open.json", BASE), "--no-open"]);
+  const s = opened.json;
+  try {
+    const findings = {
+      id: "findings",
+      kind: "multi",
+      title: "What to remove",
+      required: false,
+      body: "- Safe to remove: 2\n- Check first: 1\n- Warning: 1\n\nNothing is removed until you send.",
+      options: [
+        { k: "1", text: "formatDate in src/dates.js:14", detail: "Safe. Knip (exports): no caller found." },
+        { k: "2", text: "src/old/legacy.js", detail: "Safe. Knip (files): no caller found." },
+        { k: "3", text: "parseRow in src/csv.js:40", detail: "Check first. Own search only." },
+        { k: "4", text: "onLoad in src/plugin.js:8", detail: "Warning. A framework hook: the host calls it by name." },
+      ],
+      presets: [{ label: "All Safe", ks: ["1", "2"] }, { label: "None", ks: [] }],
+    };
+    const ok = cli(["post", "--session", s.sid, "--file", payload("dead-code-findings.json", { items: [findings] })]);
+    assert.equal(ok.status, 0, ok.stderr);
+    const item = readState(s.session).items.find((i) => i.id === "findings");
+    assert.ok(item, "the findings card is on the page");
+    assert.deepEqual(item.options.map((o) => o.k), ["1", "2", "3", "4"], "Safe, Check first, Warning, in order");
+    assert.deepEqual(item.presets, findings.presets, "both presets are kept for the page");
+    assert.ok(!item.answer, "nothing starts ticked");
+
+    const twice = cli(
+      ["post", "--session", s.sid, "--file", payload("dead-code-twice.json", {
+        items: [{ id: "method", kind: "choice", title: "How to look", body: "Which?", options: [{ text: "Knip", recommended: true }, { text: "Own search", recommended: true }] }],
+      })],
+      { expectFail: true }
+    );
+    assert.equal(twice.status, 3, "a second recommended option is still refused");
+    assert.match(twice.stderr, /recommended/);
+  } finally {
+    cli(["stop", "--session", s.sid, "--force"]);
+  }
+  // The budget is read as text: importing the budgets suite would run its tests here too.
+  const budgets = fs.readFileSync(path.join(ROOT, "scripts", "test-console-wire-budgets.mjs"), "utf8");
+  const budget = Number((budgets.match(/"dead-code\.md": (\d+)/) || [])[1]);
+  assert.ok(budget > 0, "notes/dead-code.md has a byte budget");
+  const bytes = fs.statSync(path.join(ROOT, "src", "web-console", "notes", "dead-code.md")).size;
+  assert.ok(bytes <= budget, `notes/dead-code.md is ${bytes} bytes, over its ${budget} budget`);
 });
 
 /* --------------------------------- output shape at each exit code (FR-1 to FR-3) */

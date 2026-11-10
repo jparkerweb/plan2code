@@ -69,6 +69,7 @@ Ground truth for menu notes and Ask-tab answers. For anything beyond this table,
 | diagnose | the bug, the codebase, `references/building-habits.md` | `DIAGNOSIS-<date>.md`; no code changes |
 | pr-prep | git diff and status, the `AGENTS.md` test map, the project's config files, the PR template | the page report and description; `PR-READINESS-<date>.md` on a yes; the `AGENTS.md` test map on a yes; no commits, no push |
 | test | the codebase, the `AGENTS.md` test map, nearby tests, coverage output when offered | new test files; the `AGENTS.md` test map on a yes; `PLAN-DRAFT-<date>.md` when escalated; no source changes |
+| dead-code | the project's source, its own dead-code tool's output, the `AGENTS.md` test map, `.plan2code-dead-code/keep.md` | code removals the person picks; `.plan2code-dead-code/keep.md`; `.plan2code-dead-code/reports/DEAD-CODE-<date>.md` and the `.gitignore` line on a yes; no commits, no staging |
 
 ## A pick arrives
 
@@ -105,6 +106,7 @@ If `skill` is not in the table below, say so on the page and stay the dashboard.
 | plan2code-git | git | | plan2code-changelog | changelog |
 | plan2code-xray | xray | | plan2code-diagnose | diagnose |
 | plan2code-pr-prep | pr-prep | | plan2code-test | test |
+| plan2code-dead-code | dead-code | | | |
 
 ## A pick-up arrives
 

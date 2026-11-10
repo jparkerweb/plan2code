@@ -101,8 +101,8 @@ Devin or Codex, and no working custom agent),
 The page lists each agent as **Found**, **Found outside PATH** or **Not found**, with its install
 commands for your system, a Copy button per command and an **Install page** link. Install one and
 press **Check again**: no restart needed. An agent found outside `PATH` gets **Use it from here**,
-which saves where it was found so you never touch `PATH` yourself. Below the list sit four starter
-templates (GitHub Copilot CLI, OpenCode, Gemini CLI and Pi) for agents Plan2Code does not ship.
+which saves where it was found so you never touch `PATH` yourself. Below the list sit five starter
+templates (GitHub Copilot CLI, OpenCode, Gemini CLI, Pi and Cursor CLI) for agents Plan2Code does not ship.
 **Start with this agent** carries the run straight on in the same tab, onto the new agent's
 dashboard. Naming a built-in that is missing with `--cli <name>` opens the same page on that agent
 (a missing custom agent prints its own steps and exits 127). In the
@@ -147,7 +147,7 @@ plain `plan2code` command above, without the app, asks instead, with prompts off
 GitHub Copilot · Windsurf · Codex · Continue · Codeium · Zed · Amp · OpenCode · Devin · Crush · Pi ·
 Gemini CLI · Cline · Roo · Kilo · Goose · Trae · Qwen Code.
 
-**Launched by `plan2code`:** the `plan2code` command and the desktop app open the dashboard directly in Claude Code, Devin and Codex (the built-ins in `src/launcher/agents.json`). GitHub Copilot CLI, OpenCode, Gemini CLI and Pi come as starter templates, and you can add any other agent CLI as a custom agent in User Preferences → Agents & models.
+**Launched by `plan2code`:** the `plan2code` command and the desktop app open the dashboard directly in Claude Code, Devin and Codex (the built-ins in `src/launcher/agents.json`). GitHub Copilot CLI, OpenCode, Gemini CLI, Pi and Cursor CLI come as starter templates, and you can add any other agent CLI as a custom agent in User Preferences → Agents & models.
 
 The installer keeps one canonical copy of each skill under `~/.agents/skills/` and links it into
 agents that maintain their own directory. To update, run `plan2code update` (or re-run the install command); to remove it all, run `plan2code uninstall`.
@@ -257,6 +257,7 @@ The dashboard's cards, and when each one lights up for the spec you pick:
 | Diagnose a bug | Find a bug's cause and write it up, without fixing it. | Always |
 | Get a PR ready | Runs the checks your branch needs, says if it is ready, and writes the PR description to copy. Never commits, pushes or opens the PR. | Always |
 | Write missing tests | Finds code with no tests and writes unit and integration tests in your project's own style. Never changes source code. | Always |
+| Clear out dead code | Finds code nothing uses, says how safe each piece is to remove, and removes only what you pick. Uses the dead-code tools your project already has, and never commits. | Always |
 | Changelog | Checks the CHANGELOG version against the main branch and suggests entries for what is new. | Always |
 | Git | Branches, pull, push and commits on one board, asking before anything leaves your machine. | Always (offers to start a repository outside one) |
 
@@ -429,6 +430,7 @@ console or the terminal; add `--web` to skip the question and go straight to the
 | `/plan2code-diagnose` | Find a bug's cause and write it up as `specs/<bug-name>/DIAGNOSIS-<date>.md` without fixing it, then offer `/plan2code-quick-task` to fix it, or `/plan2code-1-plan` when the fix is big |
 | `/plan2code-pr-prep` | Before you open a pull request. Picks the checks the branch's changes need from the project's `## Test map` (or its config files), runs the ones you keep, says Ready, Ready with notes or Not ready, and writes a PR description to copy with the create-a-PR link; never commits, pushes or opens the PR |
 | `/plan2code-test` | Parts of the code have no tests. Asks where to look, finds the untested files (plus real coverage when the project already has a coverage tool), shows a plan in the project's own style, then writes and runs unit and integration tests; never changes source code, hands a real bug to `/plan2code-diagnose` |
+| `/plan2code-dead-code` | Code nothing calls anymore. Uses the project's own dead-code tools, one per language (Knip, vulture, cargo check and others), or searches by itself, checks every item for callers across the project, labels each Safe to remove, Check first or Warning, removes only what you pick, then runs the tests and build and puts back anything that breaks them; never commits, never installs anything |
 | `/plan2code-changelog` | Check the CHANGELOG version against the default branch, suggest entries for new work you can edit, keep `package.json` aligned, then hand off to Git to commit |
 | `/plan2code-git` | Branches, pull, push and commits on one board (or plain instructions in the terminal); asks before every push, publish and delete |
 

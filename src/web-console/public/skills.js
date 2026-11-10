@@ -427,6 +427,28 @@ export const SKILLS = Object.freeze([
     },
   }),
   skill({
+    skill: "plan2code-dead-code",
+    workflow: "dead-code",
+    label: "Dead code",
+    name: "Dead Code",
+    pose: "dead-code",
+    builds: false, phased: false, metered: true, templates: false,
+    weight: 1, started: "Dead Code started", ran: "Dead Code run", resume: null,
+    subagents: "Use helpers for the caller search, one batch of candidates each, returning what each searched and found, never a label. Keep the labels, the Safe call, the removals, the checks and every question with you. Light strength, low effort.",
+    states: "any",
+    greyed: null,
+    card: {
+      group: "extra",
+      chip: "Utility",
+      title: "Clear out dead code",
+      icon: "dead-code",
+      blurb: "Finds code nothing uses, says how safe each piece is to remove, and removes only what you pick.",
+      help: "Finds unused code, labels each piece Safe, Check first or Warning, removes only what you pick, then runs the tests and build.",
+      about:
+        "For code nothing calls anymore. Dead Code uses the project's own dead-code tool when there is one (Knip, vulture, cargo check and others), or searches by itself when there is not, then checks every item for callers across the whole project. Each one gets a label: Safe to remove, Check first or Warning, with the reason. It removes only what you pick, runs the tests and build, and puts back anything that breaks them. It never commits and never installs anything.",
+    },
+  }),
+  skill({
     skill: "plan2code-changelog",
     workflow: "changelog",
     label: "Changelog",

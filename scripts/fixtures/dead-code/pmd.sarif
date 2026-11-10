@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": { "driver": { "name": "PMD", "version": "7.29.0" } },
+      "results": [
+        {
+          "ruleId": "UnusedPrivateMethod",
+          "message": { "text": "Avoid unused private methods such as 'helper(String)'." },
+          "locations": [{ "physicalLocation": { "artifactLocation": { "uri": "src/main/java/app/Service.java" }, "region": { "startLine": 42 } } }]
+        },
+        {
+          "ruleId": "UnusedPrivateField",
+          "message": { "text": "Avoid unused private fields such as 'cache'." },
+          "locations": [{ "physicalLocation": { "artifactLocation": { "uri": "src/main/java/app/Store.java" }, "region": { "startLine": 7 } } }]
+        },
+        {
+          "ruleId": "UseUtilityClass",
+          "message": { "text": "This utility class has a non-private constructor" },
+          "locations": [{ "physicalLocation": { "artifactLocation": { "uri": "src/main/java/app/Util.java" }, "region": { "startLine": 3 } } }]
+        },
+        {
+          "ruleId": "UnusedLocalVariable",
+          "message": { "text": "Avoid unused local variables such as 'tmp'." }
+        }
+      ]
+    }
+  ]
+}

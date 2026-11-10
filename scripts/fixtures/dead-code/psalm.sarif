@@ -1,0 +1,25 @@
+{
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": { "driver": { "name": "Psalm", "version": "7.2.0" } },
+      "results": [
+        {
+          "ruleId": "PossiblyUnusedMethod",
+          "message": { "text": "Cannot find any calls to method App\\Mailer::sendLater" },
+          "locations": [{ "physicalLocation": { "artifactLocation": { "uri": "file:///ROOT/src/Mailer.php" }, "region": { "startLine": 18 } } }]
+        },
+        {
+          "ruleId": "UnusedClass",
+          "message": { "text": "Class `App\\Legacy` is never used" },
+          "locations": [{ "physicalLocation": { "artifactLocation": { "uri": "src/Legacy.php" }, "region": { "startLine": 5 } } }]
+        },
+        {
+          "ruleId": "UnreachableCode",
+          "message": { "text": "Unreachable code" },
+          "locations": [{ "physicalLocation": { "artifactLocation": { "uri": "src/Flow.php" }, "region": { "startLine": 30 } } }]
+        }
+      ]
+    }
+  ]
+}

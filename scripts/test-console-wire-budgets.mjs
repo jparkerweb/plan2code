@@ -29,6 +29,7 @@ export const BUDGETS = {
   // Each topic file under notes/, read when its workflow starts.
   notes: {
     "changelog.md": 1400,
+    "dead-code.md": 4250,
     "diagnose.md": 2700,
     "document.md": 400,
     "finalize.md": 2000,

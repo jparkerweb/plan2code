@@ -1,0 +1,5 @@
+app/models.py:3: unused import 'os' (90% confidence)
+app/models.py:14: unused function 'legacy_total' (60% confidence)
+app/views.py:22: unused variable 'retries' (60% confidence, 1 line)
+app/views.py:40: unreachable code after 'return' (100% confidence)
+this line is mangled

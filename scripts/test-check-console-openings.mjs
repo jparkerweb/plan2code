@@ -58,7 +58,7 @@ test("a wrong workflow name or a missing notes file is reported", () => {
 test("a skill that loses its opening is caught by the count", () => {
   const dir = copySrc();
   fs.rmSync(path.join(dir, "plan2code-pr-prep.md"));
-  assert.match(check(dir).join("\n"), /expected 18 skills with a console opening, found 17/);
+  assert.match(check(dir).join("\n"), /expected 19 skills with a console opening, found 18/);
 });
 
 test("helpers", () => {
@@ -66,6 +66,7 @@ test("helpers", () => {
   assert.equal(workflowOf("plan2code-1b-revise-plan"), "revise-plan");
   assert.equal(workflowOf("plan2code-3-implement-review"), "implement-review");
   assert.equal(workflowOf("plan2code-pr-prep"), "pr-prep");
+  assert.equal(workflowOf("plan2code-dead-code"), "dead-code");
 });
 
 test("the CLI exits 1 on drift", () => {

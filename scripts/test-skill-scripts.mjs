@@ -70,11 +70,15 @@ test("every script a SKILL.md (or a reference it ships) runs exists beside it, a
 });
 
 test("scripts are self-contained: built-ins and siblings only", () => {
-  for (const dir of [path.join(ROOT, "src", "skill-scripts"), ...fs.readdirSync(path.join(ROOT, "src")).filter((n) => n.endsWith("-scripts")).map((n) => path.join(ROOT, "src", n))]) {
+  const shared = path.join(ROOT, "src", "skill-scripts");
+  for (const dir of [shared, ...fs.readdirSync(path.join(ROOT, "src")).filter((n) => n.endsWith("-scripts")).map((n) => path.join(ROOT, "src", n))]) {
     for (const f of fs.readdirSync(dir).filter((n) => n.endsWith(".mjs"))) {
       const t = fs.readFileSync(path.join(dir, f), "utf8");
       for (const m of t.matchAll(/^import .* from "([^"]+)";$/gm)) {
-        const sibling = /^\.\/[\w-]+\.mjs$/.test(m[1]) && fs.existsSync(path.join(dir, m[1]));
+        // A skill's own script may import a shared script too: the build lays
+        // both in one scripts/ folder, and the check below holds the skill to
+        // shipping it.
+        const sibling = /^\.\/[\w-]+\.mjs$/.test(m[1]) && (fs.existsSync(path.join(dir, m[1])) || fs.existsSync(path.join(shared, m[1])));
         assert.ok(m[1].startsWith("node:") || m[1] === "./common.mjs" || sibling, `${f} imports ${m[1]}`);
       }
       assert.ok(!/[\u0000-\u0008]/.test(t), `${f} contains a control character (an escape lost in an edit?)`);

@@ -947,13 +947,13 @@ test("the Subagents dialog looks as it did before Preferences moved to tabs", as
 // seven pickable cues, Planny's snoring and waking keeping plain boxes.
 const PICK_EVENTS = ["startSkill", "sessionStart", "skillReady", "sessionEnd", "question", "chatReply", "newTab"];
 const PICK_DEFAULTS = {
-  startSkill: "sound-01",
-  sessionStart: "sound-02",
-  skillReady: "sound-03",
-  sessionEnd: "sound-02",
-  question: "sound-03",
-  chatReply: "sound-03",
-  newTab: "sound-04",
+  startSkill: "sound-14",
+  sessionStart: "sound-07",
+  skillReady: "sound-16",
+  sessionEnd: "sound-15",
+  question: "sound-14",
+  chatReply: "sound-06",
+  newTab: "sound-05",
 };
 const pickSelect = (s, event) => s.page.locator(`select[data-sound-file="${event}"]`);
 
@@ -1017,7 +1017,7 @@ test("the sound picker: a pick plays once and persists across a reload, and Play
   await drawn(s.page);
   await openSoundsTab(s);
   assert.equal(await pickSelect(s, "question").inputValue(), "sound-07", "the pick did not survive a reload");
-  assert.equal(await pickSelect(s, "newTab").inputValue(), "sound-04", "an untouched cue kept its default");
+  assert.equal(await pickSelect(s, "newTab").inputValue(), "sound-05", "an untouched cue kept its default");
 });
 
 test("the sound picker: Play sounds off disables the selects and play buttons, and Back to default restores the defaults", async (t) => {
@@ -1039,7 +1039,7 @@ test("the sound picker: Play sounds off disables the selects and play buttons, a
   assert.equal(await pickSelect(s, "newTab").isDisabled(), false, "switching sounds on enables the select again");
 
   await s.page.click("#looks-reset");
-  await s.page.waitForFunction(() => document.querySelector('select[data-sound-file="newTab"]').value === "sound-04");
+  await s.page.waitForFunction(() => document.querySelector('select[data-sound-file="newTab"]').value === "sound-05");
   for (const event of PICK_EVENTS) {
     assert.equal(await pickSelect(s, event).inputValue(), PICK_DEFAULTS[event], `${event} is back on its default`);
   }
@@ -1078,7 +1078,7 @@ test("the sound picker: a preview is dropped behind a ranked cue that is still p
   await s.page.evaluate(() => (window.__audible = false));
   await s.page.locator('[data-sound-play="newTab"]').click();
   await s.page.waitForFunction(() => window.__played.length === 2);
-  assert.match((await played(s))[1], /\/sounds\/sound-04\.mp3$/, "the preview played once the cue had stopped");
+  assert.match((await played(s))[1], /\/sounds\/sound-05\.mp3$/, "the preview played once the cue had stopped");
 });
 
 test("the sound picker: Tab reaches Play from the select, and a row stacks inside the dialog at a narrow width", async (t) => {

@@ -212,11 +212,15 @@ test("picking Start from scratch instead of a spec grays Document, and a launch 
   const document = lightOf(main, "/plan2code-2-document");
   await pickedChip(main, "demo").waitFor();
   assert.equal(await document.isEnabled(), true, "Document is lit for the drafted spec");
+  // The top bar names the picked spec beside the meter, and drops it from scratch.
+  const specTag = main.page().locator("#spec-tag");
+  assert.ok(await until(async () => (await specTag.isVisible()) && (await specTag.textContent()) === "demo"), "the top bar names the spec demo");
 
   // From scratch there is no draft to document: the card grays.
   await chipFor(main, "Start from scratch").click();
   await pickedChip(main, "Start from scratch").waitFor();
   assert.equal(await document.isDisabled(), true, "Document is grayed with no spec picked");
+  assert.ok(await until(() => specTag.isHidden()), "the top bar's spec name goes from scratch");
   assert.equal(await chipFor(main, "demo").getAttribute("aria-current"), "false");
 
   // Back on the spec it is lit again; then from scratch once more to launch.
@@ -230,6 +234,40 @@ test("picking Start from scratch instead of a spec grays Document, and a launch 
   const launch = collect(s).actions.find((a) => a.i === "__launch");
   assert.equal(launch.skill, "plan2code-1-plan");
   assert.ok(!launch.spec, `a launch from scratch names no spec: ${JSON.stringify(launch)}`);
+});
+
+// What a person would see break: the Dead Code card missing from Useful any
+// time, drawn without its skull, grayed for want of a spec it never takes, or
+// launching with the picked spec riding along.
+test("the Dead Code card sits in Useful any time with its skull, is lit with or without a spec, and launches with no spec", async (t) => {
+  const s = await openSession(await suite.browser(), { t, workflow: "dashboard", payload: MENU, project: tempProject(DRAFT_PROJECT) });
+  const main = await toTheMenu(s);
+  await hideUnavailable(main, false);
+  const card = lightOf(main, "/plan2code-dead-code");
+  await card.waitFor();
+
+  const group = main.locator("section.dash-group").filter({ has: s.page.locator("h3", { hasText: /^Useful any time$/ }) });
+  assert.equal(await group.locator("code", { hasText: /^\/plan2code-dead-code$/ }).count(), 1, "the card is in the Useful any time group");
+  assert.match(await textOf(card), /Utility/i, "it wears the Utility chip (drawn in capitals)");
+  assert.match(await textOf(card), /Clear out dead code/, "it has its title");
+  assert.equal(await card.locator("use").getAttribute("href"), "#ci-dead-code", "its icon is the skull");
+  assert.equal(await s.page.locator("symbol#ci-dead-code").count(), 1, "the skull symbol is drawn in the icon sheet");
+
+  // Lit with no spec picked, and with one.
+  await chipFor(main, "Start from scratch").click();
+  await pickedChip(main, "Start from scratch").waitFor();
+  assert.equal(await card.isEnabled(), true, "lit with no spec picked");
+  await chipFor(main, "demo").click();
+  await pickedChip(main, "demo").waitFor();
+  assert.equal(await card.isEnabled(), true, "lit with a spec picked");
+
+  // A launch with the spec still picked names no spec: Dead Code takes none.
+  await card.click();
+  await main.getByRole("button", { name: "Start Clear out dead code" }).click();
+  const launch = collect(s).actions.find((a) => a.i === "__launch");
+  assert.ok(launch, "the send carries a launch");
+  assert.deepEqual({ skill: launch.skill, workflow: launch.workflow }, { skill: "plan2code-dead-code", workflow: "dead-code" });
+  assert.ok(!launch.spec, `a Dead Code launch names no spec: ${JSON.stringify(launch)}`);
 });
 
 // What a person would see break: a spec not documented yet offers nothing to

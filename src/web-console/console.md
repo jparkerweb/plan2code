@@ -6,7 +6,7 @@ A local page where the person answers your questions, reads your drafts and appr
 
 ## Start
 
-`node "<CONSOLE>" open --workflow <w>` (add `--spec specs/<idea>` when known). `<w>` is one of `dashboard`, `init`, `init-update`, `pathfinder`, `quick-task`, `plan`, `revise-plan`, `document`, `implement`, `implement-review`, `review`, `finalize`, `handoff`, `git`, `changelog`, `xray`, `diagnose`, `pr-prep`, `test`. Launched from the dashboard? The session is open: run the `resume` command the launch carried instead.
+`node "<CONSOLE>" open --workflow <w>` (add `--spec specs/<idea>` when known). `<w>` is one of `dashboard`, `init`, `init-update`, `pathfinder`, `quick-task`, `plan`, `revise-plan`, `document`, `implement`, `implement-review`, `review`, `finalize`, `handoff`, `git`, `changelog`, `xray`, `diagnose`, `pr-prep`, `test`, `dead-code`. Launched from the dashboard? The session is open: run the `resume` command the launch carried instead.
 
 Keep `sid`: every later command takes `--session <sid>`. `open` failing: carry on in the terminal. When `open` adds `remote` and a `note`, give the link, ask whether it opened, and move to the terminal if not. Tell the person the link (with `"inApp":true`, never print it: only how many questions are waiting) and end every terminal message with the latest `terminalLine`, verbatim.
 

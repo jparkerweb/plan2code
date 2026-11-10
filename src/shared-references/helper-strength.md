@@ -1,5 +1,5 @@
 # Helper Strength
-> Shared by the skills that start helpers (subagents): Init, Init Update, Pathfinder, Plan, Revise Plan, Document, Quick Task, Implement, Implement + Review, Review, Finalize, X-ray and Diagnose. Read it when you first start a helper in a session. Never invoked as a skill.
+> Shared by the skills that start helpers (subagents): Init, Init Update, Pathfinder, Plan, Revise Plan, Document, Quick Task, Implement, Implement + Review, Review, Finalize, X-ray, Diagnose, PR Prep, Test and Dead Code. Read it when you first start a helper in a session. Never invoked as a skill.
 
 ## The words
 

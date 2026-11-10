@@ -76,7 +76,7 @@ export function check(srcDir) {
     if (!note) problems.push(`${file}: names no <D>/notes/<workflow>.md file`);
     else if (!fs.existsSync(path.join(notesDir, `${note[1]}.md`))) problems.push(`${file}: notes file ${note[1]}.md is not in src/web-console/notes/`);
   }
-  if (seen !== 18) problems.push(`expected 18 skills with a console opening, found ${seen}`);
+  if (seen !== 19) problems.push(`expected 19 skills with a console opening, found ${seen}`);
   return problems;
 }
 
@@ -87,5 +87,5 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     for (const p of problems) console.error(`  FAIL ${p}`);
     process.exit(1);
   }
-  console.log("All 18 console openings share their sentences.");
+  console.log("All 19 console openings share their sentences.");
 }

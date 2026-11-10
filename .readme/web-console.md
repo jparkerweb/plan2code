@@ -55,7 +55,7 @@ Scroll down for the utilities. Outside a git repository the **Git** card says so
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="../docs/screenshots/dashboard-utilities-dark.webp">
-  <img src="../docs/screenshots/dashboard-utilities-light.webp" alt="The utility cards: Quick task, Review, Handoff and Git, which notes that the folder is not a git repository yet and offers to start one.">
+  <img src="../docs/screenshots/dashboard-utilities-light.webp" alt="The utility cards: Get a PR ready, Write missing tests, Clear out dead code, Changelog, Git, which notes that the folder is not a git repository yet and offers to start one, and Handoff.">
 </picture>
 
 ---
@@ -322,8 +322,8 @@ command and the app use, so all three agree):
   system are listed, each with a Copy button, beside an **Install page** link.
 
 **Check again** re-runs the lookup without restarting anything, so an agent you just installed
-turns up. Under the list are four starter templates (GitHub Copilot CLI, OpenCode, Gemini CLI,
-Pi): starting setups for agent CLIs Plan2Code does not ship, which fill in the same form as adding
+turns up. Under the list are five starter templates (GitHub Copilot CLI, OpenCode, Gemini CLI,
+Pi, Cursor CLI): starting setups for agent CLIs Plan2Code does not ship, which fill in the same form as adding
 an agent by hand and save as custom agents. The page's Help has a *Setting up an agent* topic, and
 signing in to the agent itself is always your own step.
 
