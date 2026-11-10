@@ -100,7 +100,7 @@ me** under **User Preferences → System → Desktop app** (shown only inside th
 
 A slim top bar reads, left to right: the project folder's name, a menu holding its full path and
 **Change project**; **New Session**, whenever an agent exists; the agent's own menu, with a dot for its
-state, an amber **checks off** badge while permission checks are off, and **Change agent** once it has
+state, the model (and effort, when it takes one) it was started on, when you picked one, an amber **checks off** badge while permission checks are off, and **Change agent** once it has
 ended; a short line (why the agent ended, a New Session's brief, or what went wrong); and, at the right
 end, the one next step for the console or the skills when there is one (**Reconnect the console**,
 **Update skills**), with "+N more" if anything else is waiting behind it. The console itself, opening inside the
