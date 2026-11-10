@@ -2902,7 +2902,7 @@ async function installDesktopApp({ quiet = false, unattended = false, outcome = 
     return fail(`the file was verified but could not be put in ${APP_DIR} (${error.message}); close the app and try again.`);
   }
   recordInstalled('app');
-  console.log(`  ${COLORS.YELLOW}${SYMBOLS.INFO}${COLORS.RESET} The app is unsigned, if need see docs/desktop-app.md for how to allow it.`);
+  console.log(`  ${COLORS.YELLOW}${SYMBOLS.INFO}${COLORS.RESET} The app is unsigned; if needed, see docs/desktop-app.md for how to allow it.`);
   console.log('');
   outcome.app = true;
   return 0;
