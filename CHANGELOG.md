@@ -7,10 +7,19 @@ All notable changes to Plan2Code will be documented in this file.
 ### 🔧 Changed
 
 - **web console**: the Implementation Loop's **Strength per phase** setting is now a grid instead of a dropdown per phase: one row per phase, a column each for Match my session, Thrifty, Balanced and Best, and a thick stepped line through each row's pick so the choices read at a glance. The saved picks and the loop's behavior are unchanged.
+- **desktop app**: the Loop's stopped screen says why it stopped and recommends one button.
+- **desktop app**: loop webhook notifications arrive as cards (Discord embeds, Slack attachments, Google Chat cards) with a colored bar.
+- **launcher**: refreshed model menu and agent data: Devin's SWE-2 Flash models replace GPT-5.6 Sol (SWE-2 Flash High is the Loop's Thrifty default), Codex is also found in its Windows install folder, and the Gemini CLI note names the accounts Antigravity replaced.
 
 ### ✨ Added
 
 - **web console**: Diagnose can now start from a Notebook tab.
+- **Dead Code**: a new `/plan2code-dead-code` skill (and a dashboard card in Useful any time) finds code nothing uses with the project's own tools, one per language, or a search of its own, checks every item for callers, labels it Safe, Check first or Warning, and removes only what you pick; a shared keep list hides items you mean to keep, matched by their own declaration line so a kept item never hides a same-named one.
+- **launcher**: a Cursor CLI starter template.
+- **desktop app**: the app bar shows the model, and effort when it takes one, that the agent was started on.
+- **web console**: each sound cue can pick from 19 sounds in Preferences.
+- **web console**: an Always SKIP Intro preference goes straight to the dashboard instead of waking Planny first.
+- **desktop app**: a New Session keeps the spec you were in, and the top bar names the spec beside the meter.
 
 ### 🐛 Fixed
 
