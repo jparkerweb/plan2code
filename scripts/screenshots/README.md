@@ -8,6 +8,7 @@ and dark WebP images in `docs/screenshots/`.
 | File | Stages |
 | --- | --- |
 | `dashboard.json` | The dashboard menu, suggesting the next build phase |
+| `dashboard-plan.json` | The dashboard in a project with no specs yet, suggesting Plan (the script builds that project) |
 | `question.json` | A Plan session with three questions open (also the base of the Ask shot) |
 | `doc.json` | A living document with settled, assumed and draft sections, and its review card |
 | `build.json` | A phase being built: the progress bar, the task list and the current task |

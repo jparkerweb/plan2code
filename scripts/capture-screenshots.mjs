@@ -13,7 +13,7 @@
 // The shots use the console's Ocean highlight rather than its default orange:
 // it is the console's nearest to the Plan2Code blue the site and README use.
 //
-// Shots: dashboard, dashboard-utilities, question, doc, build, signoff, finish, ask, git.
+// Shots: dashboard, dashboard-plan, dashboard-utilities, question, doc, build, signoff, finish, ask, git.
 // --compare adds workspace, stop, delete, help, prefs and cleanup: screens the
 // docs never show, for checking a change by eye against a "before" set. Its
 // --out must be outside docs/screenshots/, so the set is never published.
@@ -61,6 +61,15 @@ const SHOTS = {
   dashboard: {
     workflow: "dashboard",
     posts: ["dashboard"],
+    scrollTo: ".dash-toggle",
+    mustShow: ".dash-card:has(.pill.suggested)",
+  },
+  // The same dashboard in a project with no specs yet, where Plan is the
+  // suggested card: the landing page's first step, before the questions.
+  "dashboard-plan": {
+    workflow: "dashboard",
+    posts: ["dashboard-plan"],
+    fresh: true,
     scrollTo: ".dash-toggle",
     mustShow: ".dash-card:has(.pill.suggested)",
   },
@@ -282,6 +291,15 @@ function makeSampleProject() {
     path.join(spec, "phase-4.md"),
     phaseFile(4, "Authentication", ["Add API keys", "Require a key on every route", "Scope tasks to the key's team"], false)
   );
+  return project;
+}
+
+// The dashboard-plan shot's project: the same name and AGENTS.md, nothing
+// planned yet. It sits in its own folder so both can be called task-api.
+function makeFreshProject() {
+  const project = path.join(SCRATCH, "fresh", "task-api");
+  fs.mkdirSync(project, { recursive: true });
+  fs.copyFileSync(path.join(SCRATCH, "task-api", "AGENTS.md"), path.join(project, "AGENTS.md"));
   return project;
 }
 
@@ -580,7 +598,7 @@ async function main() {
       args: ["--no-first-run", "--no-default-browser-check", "--mute-audio"],
     });
     for (const name of names) {
-      const where = table[name].repo ? makeGitProject() : project;
+      const where = table[name].repo ? makeGitProject() : table[name].fresh ? makeFreshProject() : project;
       const { sid, url } = stage(where, table[name]);
       try {
         if (table[name].ask) await captureAsk(browser, where, sid, url, table[name].ask);

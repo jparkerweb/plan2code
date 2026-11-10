@@ -31,7 +31,8 @@ function blockOf(file) {
 for (const file of DOCS) {
   test(`${file} tells a newcomer how to get started`, () => {
     const block = blockOf(file);
-    for (const needle of ['Node.js 18', 'node --version', 'nodejs.org', '/plan2code', '$plan2code']) {
+    // Git is a prerequisite too: npm fetches the installer with it (git+https).
+    for (const needle of ['Node.js 18', 'node --version', 'nodejs.org', 'git --version', 'git-scm.com', '/plan2code', '$plan2code']) {
       assert.ok(block.includes(needle), `${file} is missing "${needle}" in its "Before you start" block`);
     }
     assert.match(block, /project you want to (work on|work in)/, `${file} does not say to start from your project`);
