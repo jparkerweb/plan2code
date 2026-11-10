@@ -300,10 +300,9 @@ test("the update banner opens a modal with the exact update commands, and its di
   assert.equal(await main.getByRole("button", { name: /UPDATE AVAILABLE/ }).count(), 0, "the banner came back after a reload");
 });
 
-// Under the app the dashboard's own UPDATE AVAILABLE banner never shows (a
-// separate test already covers that), so Help's own line about it must not
-// send an in-app reader to a terminal command for a banner they can never see.
-test("under the app, Help's update line points at Update skills, not the dashboard banner's terminal command", async (t) => {
+// Under the app Help's update line names both notices, says the command runs
+// outside the app with a reopen after, and keeps Update skills for a mismatch.
+test("under the app, Help's update line says to run the command outside the app and keeps Update skills for a mismatch", async (t) => {
   savedLooks(t, { welcomeSeen: true });
   const s = await openSession(await suite.browser(), {
     t,
@@ -317,8 +316,9 @@ test("under the app, Help's update line points at Update skills, not the dashboa
   await tabButton(s, "dashboard").click();
   const text = s.page.locator("#help-update-text");
   await text.getByText("Update skills", { exact: false }).waitFor();
-  assert.equal(await text.locator("code").count(), 0, "no terminal command under the app");
-  assert.equal(await text.getByText("UPDATE AVAILABLE", { exact: false }).count(), 0, "no mention of a banner that never shows there");
+  assert.equal(await text.locator("code").textContent(), "plan2code update");
+  await text.getByText("outside the app", { exact: false }).waitFor();
+  assert.equal(await text.getByText("/plan2code", { exact: false }).count(), 0, "no restart through /plan2code under the app");
 });
 
 // Under the app, when the console server itself is gone, the live "About"

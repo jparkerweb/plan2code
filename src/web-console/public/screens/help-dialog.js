@@ -67,18 +67,23 @@ function renderAbout() {
   }
 }
 
-// Under the app, the dashboard's own UPDATE AVAILABLE banner never shows (the
-// app's bar already nags about a skills/app mismatch and updates in one
-// click, see docs/desktop-app.md), so this line would describe a banner the
-// reader can never find and send them to a terminal the app's own button
-// already makes unnecessary. Patched once, the first time Help opens, since
-// page.inApp never changes for the session's life.
+// Under the app, a new release still needs a terminal (the app cannot replace
+// itself), but not the terminal panel, and the restart is the app's, not a
+// new /plan2code; a skills/app mismatch is the bar's one-click Update
+// skills (see docs/desktop-app.md). Patched once, the first time Help opens,
+// since page.inApp never changes for the session's life.
 function renderUpdateHelp() {
   if (!page.inApp) return;
   $("help-update-text").replaceChildren(
-    "When the app and the installed skills fall out of step, its own top bar says so and offers ",
+    "When a newer Plan2Code release is out, the dashboard shows ",
+    el("strong", null, "UPDATE AVAILABLE"),
+    " at the top and the app's top bar shows ",
+    el("strong", null, "Update available"),
+    ". Both give you the same command, ",
+    el("code", null, "plan2code update"),
+    ": run it in a terminal outside the app (not its terminal panel), then close the app and open it again. The app cannot replace itself while it runs, so a new release has no one-click update. When the app and the installed skills fall out of step, the bar offers ",
     el("strong", null, "Update skills"),
-    ", which brings them level in one click, no terminal needed."
+    " instead, which brings them level in one click."
   );
 }
 

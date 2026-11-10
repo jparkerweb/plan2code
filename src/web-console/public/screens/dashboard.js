@@ -143,6 +143,16 @@ function openUpdateModal() {
   const fallbackRow = $("update-fallback");
   const fallback = el("code", null, UPDATE_FALLBACK_COMMAND);
   fallbackRow.replaceChildren(fallback, copyButton(UPDATE_FALLBACK_COMMAND, "btn small ghost handoff-copy", fallback));
+  // Under the app, its terminal panel runs the agent, and the app it would
+  // update is the one running this page.
+  $("update-step-run").textContent = page.inApp
+    ? "Run this in a terminal outside the app (not in its terminal panel, which runs your agent):"
+    : "Run this in your terminal (not in this page or your agent):";
+  $("update-step-restart").replaceChildren(
+    ...(page.inApp
+      ? ["When it finishes, close the app and open it again."]
+      : ["When it finishes, close this console and start ", el("code", null, "plan2code"), " again."])
+  );
   $("update-modal").showModal();
 }
 
@@ -164,10 +174,12 @@ export function renderDashboard(main) {
     warn.setAttribute("role", "status");
     wrap.appendChild(warn);
   }
-  // Built here only, so no other workflow's page ever shows it. Under the app
-  // this never shows at all: the app's own top bar already says so and, unlike
-  // this banner's copy-pasted command, updates the skills itself in one click.
-  if (page.updateFrame && !page.inApp && !updateDismissed()) {
+  // Built here only, so no other workflow's page ever shows it. It shows under
+  // the app too, beside the app bar's own "Update available": the app cannot
+  // replace itself, so a new release is the same terminal command either way
+  // (the bar's one-click Update skills only levels skills to the app's own
+  // version), and the modal words its steps for the app.
+  if (page.updateFrame && !updateDismissed()) {
     const notice = el("div", "dash-nudge update-banner");
     notice.setAttribute("role", "status");
     const open = el("button", "update-banner-open", "UPDATE AVAILABLE · v" + page.updateFrame.latest);

@@ -121,9 +121,9 @@ to that offers the same **Reconnect the console** button — never "Restart the 
 The console also knows when it is running inside the app (the agent it talks to carries that signal):
 its session meter, the "Before you close this" guide on a finished step, and the dashboard's red-session
 banner all point at the app's own **New Session** button instead of a command to paste into a new
-conversation, since New Session already does that in one click; and the console's own "update available"
-banner never shows, since the app's **Update skills** button (below) already covers it with no shell
-involved. A slash command still offered to continue a step (such as `/plan2code-4-finalize`) stays
+conversation, since New Session already does that in one click. The dashboard's **UPDATE AVAILABLE**
+banner still shows, beside the bar's own **Update available**, and its steps say to run the command in a
+terminal outside the app and then reopen the app (see "Keep it up to date" below). A slash command still offered to continue a step (such as `/plan2code-4-finalize`) stays
 exactly as it would in a terminal: paste it into the app's own terminal panel, which runs the real
 agent CLI.
 
@@ -248,9 +248,17 @@ clean tree. The in-app **Help** has a matching topic, **Implementation Loop**, w
 
 ## Keep it up to date
 
-`plan2code update` brings the skills, the `plan2code` command and the app up together. If the app
-and the installed skills ever differ in version, the app's top bar says so and offers **Update
-skills**, which runs that same update when you press it. It never updates on its own.
+`plan2code update` brings the skills, the `plan2code` command and the app up together.
+
+When a newer release is out, the app's top bar shows **Update available** with **Copy update command**,
+and the dashboard shows its **UPDATE AVAILABLE** banner. Neither updates for you: the app cannot replace
+itself while it runs (Windows will not overwrite a running file), so copy the command, run it in a
+terminal outside the app (not the app's terminal panel, which runs your agent), then close the app and
+open it again.
+
+If the app and the installed skills ever differ in version, the app's top bar says so and offers **Update
+skills**, which brings the skills level with the app's own version when you press it. That one is a
+single click, because it never has to replace the app. Nothing updates on its own.
 
 To remove the app along with the skills and the command, run `plan2code uninstall`. It asks first,
 then asks whether your own data in `~/.plan2code/` (notebooks, handoffs, settings) goes too.

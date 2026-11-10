@@ -4174,7 +4174,7 @@
       <p class="modal-blurb" id="update-versions"></p>
       <ol class="update-steps">
         <li>
-          Run this in your terminal (not in this page or your agent):
+          <span id="update-step-run">Run this in your terminal (not in this page or your agent):</span>
           <div class="update-command" id="update-command"></div>
           It updates everything that was installed (the skills, the <code>plan2code</code>
           command and any extras you added), with no menu. If the <code>plan2code</code>
@@ -4184,7 +4184,7 @@
           could not reach the repository and hid the reason: run
           <code>git ls-remote https://github.com/jparkerweb/plan2code.git</code> to see it.
         </li>
-        <li>When it finishes, close this console and start <code>plan2code</code> again.</li>
+        <li id="update-step-restart">When it finishes, close this console and start <code>plan2code</code> again.</li>
       </ol>
       <div class="modal-actions">
         <button type="button" class="btn primary" id="update-done">Close</button>

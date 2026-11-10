@@ -131,8 +131,9 @@ one on a brief built from the session, and the console's own Session meter point
 session is getting long. Once it is installed, `plan2code` opens the app instead of running the agent
 in your terminal. `plan2code --classic` keeps the terminal flow, and so does a Linux machine with no
 display (over SSH, say) or any machine over an SSH session. `plan2code update` updates the skills, the
-command and the app together, and the bar offers the same **Update skills** when the app and the
-installed skills disagree. `plan2code uninstall` removes all three.
+command and the app together; run it in a terminal outside the app when the bar says **Update
+available**, then reopen the app. The bar also offers **Update skills** when the app and the installed
+skills disagree. `plan2code uninstall` removes all three.
 
 The app can also build a whole spec unattended with the Implementation Loop; see [docs/desktop-app.md](docs/desktop-app.md#implementation-loop).
 

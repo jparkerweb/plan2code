@@ -466,10 +466,10 @@ test("the update banner shows on the dashboard only, and its dismiss hides it", 
   await banner.waitFor({ state: "hidden" });
 });
 
-// Under the desktop app (PLAN2CODE_IN_APP=1) the app's own top bar already
-// nags about a skills/app mismatch and updates in one click, so this banner
-// (a copy-pasted shell command) must never show there, newer release or not.
-test("under the app, the update banner never shows", async (t) => {
+// Under the desktop app (PLAN2CODE_IN_APP=1) the banner shows too: the app
+// cannot replace itself, so a new release is a terminal command there as well,
+// and the modal says to run it outside the app and reopen the app.
+test("under the app, the update banner shows and its steps are worded for the app", async (t) => {
   aNewerReleaseExists(t);
   const dash = await openSession(await suite.browser(), {
     t,
@@ -479,8 +479,12 @@ test("under the app, the update banner never shows", async (t) => {
     env: { PLAN2CODE_IN_APP: "1" },
   });
   const main = await toTheMenu(dash);
-  await main.getByText("One spec on disk, with a plan drafted.").waitFor();
-  assert.equal(await main.getByText("UPDATE AVAILABLE").count(), 0, "no banner under the app");
+  await main.getByRole("button", { name: /UPDATE AVAILABLE · v99\.0\.0/ }).click();
+  const modal = dash.page.locator("#update-modal");
+  await modal.waitFor();
+  await modal.getByText("a terminal outside the app", { exact: false }).waitFor();
+  await modal.getByText("close the app and open it again", { exact: false }).waitFor();
+  assert.equal(await modal.locator("#update-command code").textContent(), "plan2code update");
 });
 
 // Same reasoning for the dashboard's own red-meter banner: under the app it
