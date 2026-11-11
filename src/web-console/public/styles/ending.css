@@ -13,6 +13,24 @@
   border: 1px solid var(--accent-line);
   border-radius: var(--radius);
 }
+/* Diagnose's saved write-up, whole, for pasting into a ticket elsewhere. It
+   scrolls past a set height so Next step stays close below it. */
+.handoff-report {
+  margin: 20px 0 0;
+  padding: 14px 18px 16px;
+  border: 1px solid var(--rule-2);
+  border-radius: var(--radius);
+}
+.handoff-report-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.handoff-report-head .handoff-label { margin: 0; }
+.handoff-report-body { max-height: 420px; overflow-y: auto; }
+
 .handoff-label {
   margin: 0 0 6px;
   font-size: 11px;

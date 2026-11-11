@@ -11,6 +11,8 @@
   .layout { display: block; overflow: visible; }
   .main { overflow: visible; padding: 0; max-width: none; }
   .main > * { max-width: none; }
+  /* The diagnosis prints whole, not cut at the box's on-screen height. */
+  .handoff-report-body { max-height: none; overflow: visible; }
   .block, .card { break-inside: avoid; box-shadow: none; }
   .doc-head { border-bottom: 1px solid #ccc; }
   .md a { color: #000; }

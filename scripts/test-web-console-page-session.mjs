@@ -11,7 +11,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
-import { pageSuite, openSession, itemCard, drawn, textOf, tempProject , fillBox, boxValue, sendAsk } from "./page-test-helpers.mjs";
+import { pageSuite, openSession, itemCard, drawn, textOf, tempProject , fillBox, boxValue, sendAsk, styleOf } from "./page-test-helpers.mjs";
 import { cli, until } from "./web-console-test-helpers.mjs";
 import { STOP_HANDOFF_REPLY, HOME_REPLY } from "../src/web-console/public/answers.js";
 import { CHAT_OFFLINE_TEXT } from "../src/web-console/public/chat.js";
@@ -45,6 +45,23 @@ function collect(s) {
   assert.equal(got.code, 0, `nothing was sent (wait exit ${got.code}): ${got.message || ""}`);
   return got;
 }
+
+// A diagnosis as Diagnose writes it, for the finish screen's report box.
+const DIAGNOSIS = [
+  "# Diagnosis: CSV export drops rows",
+  "",
+  "**Date:** 2026-11-10",
+  "**Status:** Diagnosed",
+  "",
+  "## The Cause",
+  "",
+  "`exportCsv` stops at the first empty cell. **Proven**",
+  "",
+  "## Suggested Fix",
+  "",
+  "Skip empty cells instead of breaking. **Size:** Small (Quick Task)",
+  "",
+].join("\n");
 
 // Local helper: checks `fn` keeps returning true for `ms`. A sleep would
 // prove nothing; this fails the moment the page shows what it must not.
@@ -92,6 +109,76 @@ test("the finished screen shows the next command with --web, copies it, turns Se
     got.actions.map(({ i, type }) => ({ i, type })),
     [{ i: "__dashboard", type: "dashboard" }]
   );
+});
+
+// A diagnosed bug often goes into another team's ticket system instead of
+// being fixed here, so Diagnose's finish shows the whole saved write-up and
+// copies it, word for word, as Markdown.
+test("a Diagnose finish shows the saved report in full above Next step, and Copy report copies its Markdown", async (t) => {
+  const project = tempProject({ "specs/csv-export-drops-rows/DIAGNOSIS-20261110.md": DIAGNOSIS });
+  const s = await openSession(await suite.browser(), { t, workflow: "diagnose", project, payload: { agent: { status: "working" } } });
+  await s.context.grantPermissions(["clipboard-read", "clipboard-write"], { origin: new URL(s.url).origin });
+  s.post({
+    docs: [
+      {
+        id: "cause",
+        title: "The cause",
+        saved: "specs/csv-export-drops-rows/DIAGNOSIS-20261110.md",
+        blocks: [{ id: "diagnosis", file: "specs/csv-export-drops-rows/DIAGNOSIS-20261110.md" }],
+      },
+    ],
+  });
+  s.post({
+    settle: true,
+    finish: {
+      headline: "The bug is diagnosed",
+      body: "The cause is proven.",
+      command: "/plan2code-quick-task specs/csv-export-drops-rows",
+      doc: "cause",
+      dashboard: true,
+    },
+  });
+  const main = s.page.locator("#main");
+  await main.getByRole("heading", { name: "The bug is diagnosed" }).waitFor();
+
+  const report = main.locator(".handoff-report");
+  await report.waitFor();
+  await report.getByRole("heading", { name: "Diagnosis: CSV export drops rows" }).waitFor();
+  assert.ok(await report.getByRole("heading", { name: "Suggested Fix" }).isVisible(), "the report is not shown in full");
+  const above = await s.page.evaluate(() => {
+    const box = document.querySelector("#main .handoff-report");
+    const next = document.querySelector("#main .handoff-step");
+    return Boolean(box && next && box.compareDocumentPosition(next) & Node.DOCUMENT_POSITION_FOLLOWING);
+  });
+  assert.ok(above, "the report does not sit above Next step");
+  // It scrolls, so a keyboard must be able to reach it.
+  await s.page.getByRole("region", { name: "Bug report" }).focus();
+  assert.ok(await s.page.evaluate(() => document.activeElement?.classList.contains("handoff-report-body")), "the report text takes no keyboard focus");
+
+  // Printed, it comes out whole rather than cut at its on-screen height.
+  await s.page.emulateMedia({ media: "print" });
+  assert.equal(await styleOf(main.locator(".handoff-report-body"), "maxHeight"), "none", "the printed report is cut short");
+  await s.page.emulateMedia({ media: "screen" });
+
+  await report.getByRole("button", { name: "Copy report" }).click();
+  await s.page.waitForFunction(async (want) => (await navigator.clipboard.readText()) === want, DIAGNOSIS);
+});
+
+// A finish that saved nothing (a bug that did not reproduce) has no report,
+// and no other workflow's finish grows one from its doc.
+test("no report box on a Diagnose finish without a saved doc, nor on another workflow's finish", async (t) => {
+  const s = await openSession(await suite.browser(), { t, workflow: "diagnose", payload: { agent: { status: "working" } } });
+  s.post({ docs: [{ id: "cause", title: "The cause", blocks: [{ id: "repro", md: "## Reproduction\n\nIt passed." }] }] });
+  s.post({ finish: { headline: "It did not reproduce", body: "Nothing was kept.", doc: "cause", dashboard: true } });
+  await s.page.locator("#main").getByRole("heading", { name: "It did not reproduce" }).waitFor();
+  assert.equal(await s.page.locator("#main .handoff-report").count(), 0, "an unsaved diagnosis grew a report box");
+
+  const project = tempProject({ "specs/x/PLAN-DRAFT-20261110.md": "# Plan draft\n" });
+  const plan = await openSession(await suite.browser(), { t, workflow: "plan", project, payload: PLAN_QUESTION });
+  plan.post({ docs: [{ id: "draft", title: "Draft", saved: "specs/x/PLAN-DRAFT-20261110.md", blocks: [{ id: "d", file: "specs/x/PLAN-DRAFT-20261110.md" }] }] });
+  plan.post({ settle: true, finish: { headline: "The plan is written", command: "/plan2code-2-document", doc: "draft", dashboard: true } });
+  await plan.page.locator("#main").getByRole("heading", { name: "The plan is written" }).waitFor();
+  assert.equal(await plan.page.locator("#main .handoff-report").count(), 0, "a plan finish grew a report box");
 });
 
 // A finish card is long: the way home must not hide below its fold. The footer

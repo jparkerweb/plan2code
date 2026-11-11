@@ -1,6 +1,6 @@
 // Plan2Code Web Console - how a session ends: the finished screen, its offers, Stop and the way home; defines only.
 
-import { el, md, copyButton, textWithCode, SVG_NS } from "../render.js";
+import { el, md, copyButton, copyText, selectContents, textWithCode, SVG_NS } from "../render.js";
 import {
   finishPaused,
   reviewOffer,
@@ -345,12 +345,56 @@ export function renderLoopEnd(end) {
   return card;
 }
 
+// The Markdown of Diagnose's saved write-up, or null: only a diagnose finish
+// whose doc mirrors a file on disk (nothing is saved when the bug did not
+// reproduce, and a doc living only on the page is no report yet).
+function diagnosisReport(fin) {
+  if (!page.S || page.S.workflow !== "diagnose") return null;
+  const doc = docs().find((d) => d.id === fin.doc);
+  if (!doc || !doc.saved) return null;
+  const text = (doc.blocks || [])
+    .map((b) => (typeof b.md === "string" ? b.md : ""))
+    .filter((t) => t.trim())
+    .join("\n\n");
+  return text.trim() ? text : null;
+}
+
+function renderReport(text) {
+  const box = el("section", "handoff-report");
+  const head = el("div", "handoff-report-head");
+  head.appendChild(el("p", "handoff-label", "Bug report"));
+  const body = md(text, "md handoff-report-body");
+  // It scrolls past a set height and holds nothing focusable, so it takes a
+  // keyboard stop of its own to be read without a mouse.
+  body.tabIndex = 0;
+  body.setAttribute("role", "region");
+  body.setAttribute("aria-label", "Bug report");
+  const copy = el("button", "btn small", "Copy report");
+  copy.type = "button";
+  // Word for word what the file holds, so it pastes into a ticket as Markdown.
+  copy.addEventListener("click", () =>
+    copyText(text, copy, "Copy report", () => {
+      selectContents(body);
+      copy.textContent = "Press Ctrl+C";
+    })
+  );
+  head.appendChild(copy);
+  box.appendChild(head);
+  box.appendChild(body);
+  return box;
+}
+
 export function renderHandoff(fin) {
   if (page.S && page.S.loopEnd) return renderLoopEnd(page.S.loopEnd);
   const card = el("article", "card handoff");
   card.appendChild(el("p", "card-kicker", finishPaused(fin) ? "Session paused" : "Session ended"));
   card.appendChild(el("h2", null, fin.headline));
   if (fin.body) card.appendChild(md(fin.body, "md prompt"));
+
+  // A diagnosed bug often goes into another team's ticket system rather than
+  // being fixed here, so the saved write-up is shown whole, above the hand-off.
+  const report = diagnosisReport(fin);
+  if (report) card.appendChild(renderReport(report));
 
   // Every press below is waiting on an agent that is gone: the way off this
   // page must not be one of them.
