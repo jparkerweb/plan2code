@@ -32,7 +32,7 @@ The dashboard, in a project halfway through a build. It suggests the next step f
 
 ### Before you start
 
-- **Node.js 18 or newer.** Check with `node --version`. No Node? Get it from [nodejs.org](https://nodejs.org/) (the LTS download), or run `winget install OpenJS.NodeJS.LTS` on Windows, `brew install node` on macOS, or use `nvm` on Linux. Then open a new terminal.
+- **Node.js 18 or newer** (22 or newer if you install Claude Code with npm). Check with `node --version`. No Node? Get it from [nodejs.org](https://nodejs.org/) (the LTS download), or run `winget install OpenJS.NodeJS.LTS` on Windows, `brew install node` on macOS, or use `nvm` on Linux. Then open a new terminal.
 - **Git.** Check with `git --version`. The installer is fetched from GitHub with Git, and without it npm stops with `spawn git ENOENT`. No Git? Get it from [git-scm.com](https://git-scm.com/downloads), or run `winget install Git.Git` on Windows, `brew install git` on macOS, or use your package manager on Linux. Then open a new terminal.
 - **Start from your project.** Open your terminal in the project you want to work on (`cd` into it) before you run anything. Plan2Code works on the folder you start it in.
 - **Ways in.** `plan2code` (Claude Code, Devin or Codex), or type `/plan2code` in your agent (`$plan2code` in Codex).
@@ -212,7 +212,7 @@ documents. The folder label in the bottom bar opens your workspace, where you ad
 as read-only context and point at them by `@name`. The **Notebook** in the top bar is a private pad of your own for the
 folder, in Markdown with pictures, that the agent reads only when you start a workflow from one of its tabs on
 the dashboard and send the box it fills. The **die** beside it opens **Activities**,
-two small games (Snake and Mini golf) to play through a long wait, which pause the moment it is your turn. The session meter in the top bar turns from green
+thirteen small games to play through a long wait, which pause the moment it is your turn. The session meter in the top bar turns from green
 to red as a session grows long and suggests a fresh one. **Stop session** saves your place and gives
 you the command to carry on later, and **Back to the dashboard** takes you home to pick the next
 step in the same session.

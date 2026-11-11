@@ -80,6 +80,8 @@ The full `npm test` takes minutes and drives a browser per page suite. When a ch
 
 The fast lane is `npm run test:fast` (`scripts/test-fast.mjs`): it runs the files in `scripts/test-lanes.json`'s `fast` array through `node-test.mjs`. **Two-list rule:** every `scripts/test-*.mjs` is named in exactly one of `fast` and `skipFast`. A new test file that starts a console server, runs a console page suite or plays a game goes in `skipFast`; anything else goes in `fast`. `node scripts/check-test-lanes.mjs` fails (and runs first in `npm test`) when a file is in neither list, in both, or named but missing. `test-fast.mjs` itself is a runner and sits in `skipFast`. `.github/workflows/fast-tests.yml` runs the lane on Ubuntu for every pull request, and on all three systems for pushes to main and pull requests labeled `full-matrix`.
 
+The same areas as one-command rows live in the [Test map](./AGENTS-test-map.md), which PR Prep and Test read; keep both in step.
+
 | What changed | Run |
 |---|---|
 | An Activities game (`public/activities/*`), `public/tones.js` or `public/music.js` | `node --test scripts/test-web-console-tones.mjs scripts/test-web-console-activities.mjs`, plus the game's own `scripts/test-web-console-activities-<game>*.mjs` when it has one; add `test-web-console-page-activities.mjs` when the Activities window or its switches changed |
@@ -167,7 +169,7 @@ The skills CLI owns distribution from step 4 onward. It stores canonical skills 
 | Path | `skills/<skill-name>/SKILL.md` |
 | Skill name | `generateSkillName(prompt)`, such as `plan2code-1-plan` or `plan2code-init` |
 | Frontmatter | `name`, `description`, `disable-model-invocation: true` |
-| Reference files | `skills/<skill-name>/references/<path>`, copied from `src/<prompt>-references/` and `additionalReferences` (any file type; every skill bundles `web-console/` plus a copy of `version.json`) |
+| Reference files | `skills/<skill-name>/references/<path>`, copied from `src/<prompt>-references/` and `additionalReferences` (any file type; every skill bundles `web-console/`, and a skill with scripts also gets `scripts/version.json`) |
 | Scripts | `skills/<skill-name>/scripts/<file>.mjs`, plus `common.mjs` and a generated `version.json` (see Skill Scripts in the architecture doc) |
 
 `disable-model-invocation: true` is unconditional because these workflows are user-initiated. Agents that do not recognize the field ignore it.

@@ -9,7 +9,7 @@ Optional local browser UI shipped with **every** skill. Source lives in `src/web
 
 | File | Role |
 |---|---|
-| `console.mjs` | the CLI the agent drives: `open`, `post`, `wait`, `chat` (the instant Quick question check), `keep` (copy a cited note attachment into `specs/<idea>/attachments/`), `delete-spec`, `handoff new`, `delete-handoff` (both on `handoffs.mjs`), `status`, `stop`, `help` (a compact summary for an agent that found the binary but not `console.md`; `help <topic>` prints one contract file, `help topics` lists them). `post --wait <N>` posts and waits in one command |
+| `console.mjs` | the CLI the agent drives: `open`, `post`, `wait`, `chat` (the instant Quick question check), `keep`, `forget` (copy a cited note attachment into `specs/<idea>/attachments/`), `delete-spec`, `handoff new`, `delete-handoff` (both on `handoffs.mjs`), `status`, `stop`, `help` (a compact summary for an agent that found the binary but not `console.md`; `help <topic>` prints one contract file, `help topics` lists them). `post --wait <N>` posts and waits in one command |
 | `server.mjs` | HTTP server, spawned **detached** by `open` (never as a harness background task, which get killed on compaction and at assorted timeouts) |
 | `cmd-chat.mjs` | the `chat` command: hand over Quick questions now, never waiting |
 | `cmd-help.mjs` | the `help` command: the CLI's usage and the contract's topic files; the usage's workflow list and its build sessions come from `WORKFLOWS` and `isBuild()` in `skills.js` |
@@ -26,6 +26,7 @@ Optional local browser UI shipped with **every** skill. Source lives in `src/web
 | `inbox.mjs` | the Quick question chat's inbox beside the card slot |
 | `console-docs.md` | the topic file for `docs` in a patch (tabs of blocks), named by the console at the first patch that carries `docs`; not read up front. Byte-budgeted with the card and the notes in `scripts/test-console-wire-budgets.mjs` |
 | `pointers.mjs` | which topic file the console names and when: once per session per topic, remembered in the session folder (`pointers.json`), reset by a resume |
+| `metrics-pattern.json` | the PLAN-DRAFT scrape shapes the bait scanner in `patches.mjs` reads (`METRICS_BAIT`); one of three copies with the skill scripts' `SCRAPE` and `plan2code-metrics/src/metrics-pattern.json`, which `test-web-console-hardening.mjs` keeps in step |
 | `patches.mjs` | checking and merging an agent's patch into the session state: `validate()` (the house rules; allows `templates` only as `"idea"` on a `text` item, anything else exits 3), the patch merge, `resolveDocFiles()` and `applyPatch()` |
 | `routes.mjs` | every URL the page can call, in one ordered list (`ROUTES`, walked by `handle()`); `server.mjs` hands each request to it |
 | `scan.mjs` | what the dashboard knows about the repo: `scanProject()`, `classifySpec()` (a folder's files to a spec state), `TASK_LINE_RE` (re-exported from `spec-files.mjs`) and `removeSpec()` |
