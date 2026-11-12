@@ -617,6 +617,8 @@
 .launch-reconnect[hidden] { display: none; }
 /* A line, never a banner: no border, no background, no icon. */
 .approval-tip { max-width: 70ch; margin: 18px 0 0; font-size: 12.5px; line-height: 1.5; color: var(--ink-3); }
+/* Under the dashboard's cards it centers on the grid and runs most of its width. */
+.dash > .approval-tip { max-width: 140ch; margin-inline: auto; text-align: center; }
 
 
 /* --------------------------------------------- the Implementation Loop */
