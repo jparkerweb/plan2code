@@ -974,6 +974,7 @@ test("POST /notepad/tab/sent answers 200, 400 and 404, and GET /notepad carries 
   assert.equal(ok.body.sent.workflow, "quick-task");
   assert.deepEqual((await getJson(s, "/notepad")).body.tabs, [{ id, name: "Idea", sent: ok.body.sent }]);
   assert.equal((await post({ id, workflow: "diagnose" })).status, 200, "Diagnose can be sent from a tab");
+  assert.equal((await post({ id, workflow: "ui-prototype" })).status, 200, "UI Prototype can be sent from a tab");
   assert.equal((await post({ id, workflow: "quick-task" })).status, 200);
   assert.deepEqual(await post({ id, workflow: "document" }), { status: 400, body: { error: "bad-sent" } });
   assert.deepEqual(await post({ id, workflow: "revise-plan", spec: "../x" }), { status: 400, body: { error: "bad-sent" } });

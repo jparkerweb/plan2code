@@ -1,5 +1,13 @@
 # UI Prototype
 
+## The request
+
+Nothing yet says what to prototype: before Step 1, one `--wait` card (a Notebook tab fills it):
+
+```jsonc
+{"title":"UI prototype","items":[{"id":"request","kind":"text","title":"What to prototype","fill":"note","body":"The screen or flow, and what it is for."}]}
+```
+
 ## Starting card
 
 One `--wait` batch after Step 1. A card cannot open with its boxes ticked, so the carry-over card's preset ticks every found item in one press, and a Skip on it keeps everything found (all ticked is the default); leave the card out for a project with no screens:

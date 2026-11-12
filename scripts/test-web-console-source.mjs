@@ -537,6 +537,15 @@ test("prefs: Help and the readme name every tab and section, and the dialog's un
   }
 });
 
+test("UI Prototype's request card is the box a Notebook tab fills, and the prompt asks for the request first", () => {
+  const notes = fs.readFileSync(path.join(ROOT, "src", "web-console", "notes", "ui-prototype.md"), "utf8");
+  const batch = JSON.parse(notes.match(/## The request[\s\S]*?```jsonc\n(.*)\n```/)[1]);
+  assert.deepEqual(batch.items.map((item) => [item.id, item.kind, item.fill]), [["request", "text", "note"]]);
+  assert.ok(notes.indexOf("## The request") < notes.indexOf("## Starting card"), "it comes before the starting card");
+  const prompt = fs.readFileSync(path.join(ROOT, "src", "plan2code-ui-prototype.md"), "utf8");
+  assert.match(prompt, /\*\*The request\.\*\* When nothing yet says what to prototype/, "Step 1 asks for the request when none came");
+});
+
 test("Diagnose's opening cards: only What is wrong is required", () => {
   const notes = fs.readFileSync(path.join(ROOT, "src", "web-console", "notes", "diagnose.md"), "utf8");
   const batch = JSON.parse(notes.match(/```jsonc\n(.*)\n```/)[1]);

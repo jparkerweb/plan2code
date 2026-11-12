@@ -124,6 +124,7 @@ const CASES = [
   { workflow: "plan", chip: "Start from scratch", command: "/plan2code-1-plan" },
   { workflow: "quick-task", chip: "Start from scratch", command: "/plan2code-quick-task" },
   { workflow: "revise-plan", chip: "ready", command: "/plan2code-1b-revise-plan", spec: "specs/ready" },
+  { workflow: "ui-prototype", chip: "Start from scratch", command: "/plan2code-ui-prototype" },
 ];
 
 for (const c of CASES) {

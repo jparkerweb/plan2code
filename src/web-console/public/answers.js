@@ -710,15 +710,17 @@ export function cardAvailability(entry, scan, sel, lookup = stateFor) {
 }
 
 // The cards whose confirm pane offers "Start with a note from your Notebook"
-// on Start fresh: the three that open on an idea box.
-const NOTE_FRESH_CARDS = new Set(["plan2code-0-pathfinder", "plan2code-1-plan", "plan2code-quick-task"]);
+// on Start fresh: the three that open on an idea box, and UI Prototype, whose
+// request box it fills.
+const NOTE_FRESH_CARDS = new Set(["plan2code-0-pathfinder", "plan2code-1-plan", "plan2code-quick-task", "plan2code-ui-prototype"]);
 
 /**
  * Whether a lit card's confirm pane offers the Notebook switch: Pathfinder,
- * Plan and Quick Task on Start fresh (no spec picked), Diagnose whenever it is
- * lit (it launches untargeted, so a picked spec does not matter), and Revise
- * plan on a picked spec with no plan change brief waiting (a waiting brief is
- * what that revision is about). Never on a grayed card, never on any other card.
+ * Plan, Quick Task and UI Prototype on Start fresh (no spec picked), Diagnose
+ * whenever it is lit (it launches untargeted, so a picked spec does not
+ * matter), and Revise plan on a picked spec with no plan change brief waiting
+ * (a waiting brief is what that revision is about). Never on a grayed card,
+ * never on any other card.
  */
 export function noteSwitchShows(entry, scan, sel) {
   if (!entry || !cardAvailability(entry, scan, sel).on) return false;

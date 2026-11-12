@@ -57,8 +57,9 @@ Read `./AGENTS.md` when it exists: its stack, its style files and its convention
 ### Step 1: Start
 
 1. Run `sweep --project .` silently.
-2. **The kind.** From the request: a **screen**, a **flow** (several screens of one journey, shown side by side, not linked) or a **terminal** screen. Ask only when it cannot be told.
-3. **What can be carried over.** Read source files only: stylesheets, theme and config files (a Tailwind or theme config, CSS custom properties, design files), and component files. For each of the five items (colors, fonts, spacing, components, layout) note what you found and where (`src/styles/theme.css`: accent #0f766e, gray #64748b), or "none found". Note the app's own font files when it ships some (at most 4, 2 MB together). A project with no screens yet skips the checklist: say you found no existing look and start fresh.
+2. **The request.** When nothing yet says what to prototype (no argument, no host handing it over), ask for it first, in one question (console: the request card in `notes/ui-prototype.md`). Images sent with the answer are Step 2's images.
+3. **The kind.** From the request: a **screen**, a **flow** (several screens of one journey, shown side by side, not linked) or a **terminal** screen. Ask only when it cannot be told.
+4. **What can be carried over.** Read source files only: stylesheets, theme and config files (a Tailwind or theme config, CSS custom properties, design files), and component files. For each of the five items (colors, fonts, spacing, components, layout) note what you found and where (`src/styles/theme.css`: accent #0f766e, gray #64748b), or "none found". Note the app's own font files when it ships some (at most 4, 2 MB together). A project with no screens yet skips the checklist: say you found no existing look and start fresh.
 
 ### Step 2: The starting screen
 

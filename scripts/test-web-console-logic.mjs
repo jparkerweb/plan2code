@@ -2429,6 +2429,9 @@ test("noteSwitchShows: Pathfinder, Plan and Quick Task on Start fresh, Revise pl
   const diagnose = entry("plan2code-diagnose");
   assert.equal(noteSwitchShows(diagnose, scan, null), true, "Diagnose on Start fresh");
   assert.equal(noteSwitchShows(diagnose, scan, sel("documented")), true, "Diagnose launches untargeted, so a picked spec does not hide it");
+  const prototype = entry("plan2code-ui-prototype");
+  assert.equal(noteSwitchShows(prototype, scan, null), true, "UI Prototype on Start fresh");
+  assert.equal(noteSwitchShows(prototype, scan, sel("documented")), false, "UI Prototype on a picked spec");
   const revise = entry("plan2code-1b-revise-plan");
   assert.equal(noteSwitchShows(revise, scan, null), false, "Revise plan is grayed on Start fresh");
   for (const state of ["documented", "building", "built"]) {
