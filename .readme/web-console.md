@@ -142,7 +142,8 @@ Scroll down for the utilities. Outside a git repository the **Git** card says so
   picked on the dashboard, or the session's own) has saved UI prototypes in
   its `prototypes/` folder, a **Prototypes** tab lists them. An `.md` opens
   in place, with **Back to Prototypes**; an `.html` opens in your default
-  browser.
+  browser. Once Quick Task has built from a folder that holds only
+  prototypes, it offers to archive that folder to `specs--completed/`.
 - **Where you are, at the bottom.** The footer names the folder the session
   was launched from and its git branch (`plan2code · feature/…`), muted in
   the middle. Click it to open the Workspace dialog (see *Your workspace*).

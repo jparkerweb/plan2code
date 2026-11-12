@@ -57,7 +57,7 @@ Ground truth for menu notes and Ask-tab answers. For anything beyond this table,
 | 0-pathfinder | the idea, loose notes | `pathfinder/map.md`, `pathfinder/questions/NN-<slug>.md`; cleared → `PLAN-DRAFT-<date>.md`; a UI prototype's `prototypes/<name>.html` and `<name>.md` on a yes |
 | 1-plan | idea or `PLAN-DRAFT` | `PLAN-DRAFT-<date>.md`, `PLAN-CONVERSATION-<date>.md`; a UI prototype's `prototypes/<name>.html` and `<name>.md` on a yes |
 | 1b-revise-plan | `overview.md`, `phase-X.md`, a waiting `**Plan change:**` brief | the same, revised; the brief marked applied or dropped; a UI prototype's `prototypes/<name>.html` and `<name>.md` on a yes |
-| quick-task | the ask; a `DIAGNOSIS-*.md` when launched on one; a saved prototype's `.md` and `.html` when launched on its folder | code; the diagnosis set to `Fixed`, then the folder moved to `specs--completed/` on a yes; escalated → `PLAN-DRAFT-<date>.md`; a UI prototype's `prototypes/<name>.html` and `<name>.md` only when asked |
+| quick-task | the ask; a `DIAGNOSIS-*.md` when launched on one; a saved prototype's `.md` and `.html` when launched on its folder | code; the diagnosis set to `Fixed`, then the folder moved to `specs--completed/` on a yes; a built prototype's folder moved there too on a yes; escalated → `PLAN-DRAFT-<date>.md`; a UI prototype's `prototypes/<name>.html` and `<name>.md` only when asked |
 | 2-document | `PLAN-DRAFT`, `PLAN-CONVERSATION` (optional) | `overview.md`, `phase-X.md` |
 | 3-implement(-review) | `overview.md`, `phase-X.md` | code; `[x]` marks + completion summary in `phase-X.md`; paused for a revision, a `**Plan change:**` brief in its Notes |
 | review | spec, diff | the fixes picked; no spec writes |

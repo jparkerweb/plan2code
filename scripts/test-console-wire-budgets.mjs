@@ -41,7 +41,7 @@ export const BUDGETS = {
     "pathfinder.md": 2622, // raised by the UI prototype line's bytes only
     "plan.md": 1023, // raised by the UI prototype line's bytes only
     "pr-prep.md": 4500,
-    "quick-task.md": 4589, // raised by the UI prototype line's and the prototype recap line's bytes only
+    "quick-task.md": 4729, // raised by the UI prototype line's, the prototype recap line's and the prototype archive wording's bytes only
     "review.md": 1000,
     "revise-plan.md": 1422, // raised by the UI prototype line's bytes only
     "test.md": 5400,
