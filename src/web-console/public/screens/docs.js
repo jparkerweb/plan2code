@@ -1,6 +1,8 @@
 // Plan2Code Web Console - documents: tabs, blocks, print and download, and the brief button; defines only.
 
-import { docs, agentWorking, workingMs, patience, WORKING_GRACE_MS, finish, SPEC_FILES, loadAgentsDoc } from "../selectors.js";
+import {
+  docs, agentWorking, workingMs, patience, WORKING_GRACE_MS, finish, SPEC_FILES, loadAgentsDoc, openPrototypeDoc, closePrototypeDoc,
+} from "../selectors.js";
 import { el, md } from "../render.js";
 import { downloadDocHtml, docSavedNote, downloadDoc, blockBody } from "../doc-files.js";
 import { hooks, page, redraw } from "../state.js";
@@ -295,6 +297,70 @@ export function renderAgentsDoc(main) {
     })
   );
   main.appendChild(box);
+}
+
+// A saved prototype page, handed to the server to open in the person's
+// default browser (the app's webview opens no windows, and a page served over
+// http cannot open a file:// link). A failure says so on the banner.
+async function openPrototypePage(spec, name) {
+  const ok = await fetch("/open-prototype", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ spec, name }),
+  })
+    .then((res) => res.ok)
+    .catch(() => false);
+  if (!ok) hooks.banner(`${name} could not open in your browser. Open it from ${spec}/prototypes/ yourself.`, "warn");
+}
+
+// The Prototypes tab: the .md and .html files in the spec's prototypes/
+// folder. An .md opens in place, with a way back to the list (like Back to
+// AGENTS.md); an .html opens in the default browser.
+export function renderPrototypes(main) {
+  const { key, files, open, texts } = page.prototypes;
+  const reading = open && typeof texts[open] === "string";
+  const head = el("div", "doc-head");
+  head.appendChild(el("h2", null, reading ? open : "Prototypes"));
+  const tools = el("div", "doc-tools");
+  if (reading) {
+    const list = el("button", "btn small", "Back to Prototypes");
+    list.type = "button";
+    list.addEventListener("click", () => {
+      closePrototypeDoc();
+      main.scrollTop = 0;
+    });
+    tools.appendChild(list);
+  }
+  tools.appendChild(backButton());
+  if (reading) tools.appendChild(printButton());
+  head.appendChild(tools);
+  main.appendChild(head);
+  main.appendChild(el("p", "help", `${key}/prototypes/${reading ? open : ""} · read-only, straight from disk`));
+  if (reading) {
+    const box = el("div", "block settled");
+    box.appendChild(md(texts[open], "md"));
+    main.appendChild(box);
+    return;
+  }
+  const list = el("ul", "proto-list");
+  for (const f of files) {
+    const row = el("li", "proto-row");
+    const b = el("button", "proto-open", null);
+    b.type = "button";
+    b.appendChild(el("span", "proto-kind proto-kind-" + f.kind, f.kind === "md" ? "MD" : "HTML"));
+    b.appendChild(el("span", "proto-name", f.name));
+    b.appendChild(el("span", "proto-how", f.kind === "md" ? "Read it here" : "Opens in your browser ↗"));
+    b.title = f.kind === "md" ? `Read ${f.name} here` : `Open ${f.name} in your default browser`;
+    b.addEventListener("click", () => {
+      if (f.kind === "md") {
+        openPrototypeDoc(f.name);
+        main.scrollTop = 0;
+      } else openPrototypePage(key, f.name);
+    });
+    row.appendChild(b);
+    list.appendChild(row);
+  }
+  main.appendChild(list);
 }
 
 // The brief dialog's buttons, wired once at start-up.

@@ -138,6 +138,11 @@ export const page = {
   // for, `files` maps each SPEC_FILES kind (overview, map, draft) that exists
   // to `{ file, text }`. See loadOverview().
   overview: { key: null, files: {} },
+  // The Prototypes tab: `key` is the spec dir `files` ([{ name, kind }], the
+  // .md and .html in its prototypes/ folder) was read for, `open` the .md in
+  // view (null for the list), `texts` the .md texts read so far. The tab
+  // exists while `files` has any. See loadPrototypes().
+  prototypes: { key: null, files: [], open: null, texts: {} },
   // The Dashboard's AGENTS.md tab: `texts` maps each agent-guide file read so
   // far (AGENTS.md, .agents-docs/<name>.md) to its text, `open` is the one in
   // view. The tab exists while texts["AGENTS.md"] does. See loadAgentsDoc().

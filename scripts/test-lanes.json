@@ -34,6 +34,7 @@
     "test-us-english.mjs",
     "test-web-console-agents-doc.mjs",
     "test-web-console-git-board.mjs",
+    "test-web-console-prototypes.mjs",
     "test-web-console-send-state.mjs",
     "test-web-console-shape.mjs",
     "test-web-console-skills.mjs",

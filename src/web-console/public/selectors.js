@@ -322,6 +322,8 @@ async function fetchSpecFile(spec, kind) {
 // is the work already in front of it. Repaints only when a tab would appear,
 // vanish or show different text.
 export async function loadOverview() {
+  // The Prototypes tab rides on every reason the spec file tabs re-read.
+  loadPrototypes();
   const spec = overviewSpec();
   const kinds = isDashboard() ? SPEC_FILES.map((f) => f.id) : ["overview"];
   const files = {};
@@ -336,6 +338,60 @@ export async function loadOverview() {
   const changed = page.overview.key !== spec || JSON.stringify(page.overview.files) !== JSON.stringify(files);
   page.overview = { key: spec, files };
   if (changed) redraw();
+}
+
+// The Prototypes tab: present while the spec in view has .md or .html files
+// in its prototypes/ folder, on the dashboard and in a session alike.
+export const PROTOTYPES_VIEW = "prototypes";
+export const prototypesTabShown = () => page.prototypes.key === overviewSpec() && page.prototypes.files.length > 0;
+
+async function fetchPrototypeList(spec) {
+  try {
+    const res = await fetch("/prototypes?spec=" + encodeURIComponent(spec), { cache: "no-store" });
+    if (res.status !== 200) return [];
+    const body = await res.json();
+    return Array.isArray(body.files) ? body.files : [];
+  } catch {
+    return [];
+  }
+}
+
+async function fetchPrototypeDoc(spec, name) {
+  try {
+    const res = await fetch("/prototype?spec=" + encodeURIComponent(spec) + "&name=" + encodeURIComponent(name), { cache: "no-store" });
+    return res.status === 200 ? await res.text() : null;
+  } catch {
+    return null;
+  }
+}
+
+// Fresh from disk every time, like the spec file tabs: the list, and the .md
+// in view when one is open. A spec switch goes back to the list; an open .md
+// that went missing goes back to the list too. Repaints only on a change.
+export async function loadPrototypes() {
+  const spec = overviewSpec();
+  const open = page.prototypes.key === spec ? page.prototypes.open : null;
+  const files = spec ? await fetchPrototypeList(spec) : [];
+  const text = spec && open && files.some((f) => f.name === open) ? await fetchPrototypeDoc(spec, open) : null;
+  // The selection or the open file moved on while this was in flight.
+  if (spec !== overviewSpec() || (page.prototypes.key === spec && page.prototypes.open !== open)) return;
+  const next = { key: spec, files, open: typeof text === "string" ? open : null, texts: typeof text === "string" ? { [open]: text } : {} };
+  const changed = JSON.stringify(next) !== JSON.stringify(page.prototypes);
+  page.prototypes = next;
+  if (changed) redraw();
+}
+
+// Open one .md from the list in place.
+export function openPrototypeDoc(name) {
+  page.prototypes = { ...page.prototypes, open: name };
+  redraw();
+  loadPrototypes();
+}
+
+// Back from an .md to the list.
+export function closePrototypeDoc() {
+  page.prototypes = { ...page.prototypes, open: null, texts: {} };
+  redraw();
 }
 
 // A New Session in the desktop app leaves the spec it was in for the fresh

@@ -30,7 +30,7 @@ import {
 } from "./files.mjs";
 import { AGENTS_SCHEMA, makeId, normalizeAgents, resolveCommand, validateForSave } from "./agents.mjs";
 import { findAgent, loadAgentList } from "./agent-lookup.mjs";
-import { checkDocument, cleanupFindings, readAgentsDoc, readSpecFile, removeCleanup } from "./sessions.mjs";
+import { checkDocument, cleanupFindings, listPrototypes, prototypeHtmlPath, readAgentsDoc, readPrototype, readSpecFile, removeCleanup } from "./sessions.mjs";
 import { SHOTS_DIR_NAME, SHOT_NAME, shotType, isOpen } from "./patches.mjs";
 import { appendChat, currentConversation, pendingChatCount, typedCount } from "./inbox.mjs";
 import { specKey } from "./workspace.mjs";
@@ -52,7 +52,7 @@ import { cleanSetting, offered } from "./public/subagents.js";
 import { DEFAULT_ACCENT, DEFAULT_CARD_WIDTH, accentId, cardWidth } from "./public/palette.js";
 import { SERVABLE, TYPES, asset } from "./static.mjs";
 import { handoffsDir, isHandoffId } from "./handoffs.mjs";
-import { linkToOpen, openLink } from "./open-link.mjs";
+import { linkToOpen, openFile, openLink } from "./open-link.mjs";
 import {
   NotepadError,
   addImage,
@@ -87,6 +87,8 @@ const ROUTES = [
   { match: (p, req) => req.method === "GET" && SERVABLE.has(p.slice(1)), run: publicFile },
   { path: "/overview", method: "GET", run: overview },
   { path: "/agents-doc", method: "GET", run: agentsDoc },
+  { path: "/prototypes", method: "GET", run: prototypesList },
+  { path: "/prototype", method: "GET", run: prototypeDoc },
   { path: "/handoff", method: "GET", run: handoffDoc },
   { path: "/version", method: "GET", run: version },
   { path: "/state", method: "GET", run: stateGet },
@@ -121,6 +123,7 @@ const ROUTES = [
   { match: (p, req) => p.startsWith("/uploads/") || req.url.startsWith("/uploads/"), run: uploads },
   { path: "/submit", method: "POST", origin: true, run: submit },
   { path: "/open-link", method: "POST", origin: true, run: openLinkRoute },
+  { path: "/open-prototype", method: "POST", origin: true, run: openPrototypeRoute },
   { path: "/chat", method: "POST", origin: true, run: chat },
   { path: "/chat/decision", method: "POST", origin: true, run: chatDecision },
   { path: "/workspace", method: "GET", run: workspaceGet },
@@ -395,20 +398,11 @@ function renderIndex(ctx) {
 // project root, and names the file it read in X-Spec-File.
 function overview(req, res, ctx, url) {
   const state = ctx.readState() || {};
-  const asked = url.searchParams.get("spec");
   const kind = url.searchParams.get("file") || "overview";
-  const spec =
-    state.workflow === "dashboard"
-      ? (state.scan?.specs || []).some((s) => s && s.dir === asked)
-        ? asked
-        : ""
-      : state.specDir;
+  const spec = specInView(state, url.searchParams.get("spec"));
   // Most specs have no overview.md yet, which is normal, not an error: 204
   // keeps the browser console free of a failed request per pick.
-  const noOverview = () => {
-    res.writeHead(204, baseHeaders({ "cache-control": "no-store" }));
-    res.end();
-  };
+  const noOverview = () => noContent(res);
   readSpecFile(state.worktree || state.project, spec, kind)
     .then((found) =>
       found
@@ -422,16 +416,64 @@ function overview(req, res, ctx, url) {
     .catch(noOverview);
 }
 
+// The spec a spec-file route may read: on a dashboard the one asked for, but
+// only when its own scan found it; on every other workflow the session's own.
+function specInView(state, asked) {
+  if (state.workflow !== "dashboard") return state.specDir || "";
+  return (state.scan?.specs || []).some((s) => s && s.dir === asked) ? asked : "";
+}
+
+// No file to show: a 204, so the browser console stays free of a failed
+// request per spec that has none.
+function noContent(res) {
+  res.writeHead(204, baseHeaders({ "cache-control": "no-store" }));
+  res.end();
+}
+
+// The Prototypes tab's list: the .md and .html files in the spec's
+// prototypes/ folder (listPrototypes() keeps it inside the project), as
+// { files: [{ name, kind }] }, or a 204 when there are none.
+function prototypesList(req, res, ctx, url) {
+  const state = ctx.readState() || {};
+  listPrototypes(state.worktree || state.project, specInView(state, url.searchParams.get("spec")))
+    .then((files) => (files.length ? json(res, 200, { files }, { "cache-control": "no-store" }) : noContent(res)))
+    .catch(() => noContent(res));
+}
+
+// One .md from the spec's prototypes/ folder, read-only; anything else is a 204.
+function prototypeDoc(req, res, ctx, url) {
+  const state = ctx.readState() || {};
+  readPrototype(state.worktree || state.project, specInView(state, url.searchParams.get("spec")), url.searchParams.get("name"))
+    .then((found) => (found ? send(res, 200, found.text, "text/markdown; charset=utf-8", { "cache-control": "no-store" }) : noContent(res)))
+    .catch(() => noContent(res));
+}
+
+// A saved prototype page, opened in the person's default browser (the app's
+// webview opens no windows, and a file:// link from an http page is blocked).
+// The page names only the spec and a bare file name; prototypeHtmlPath()
+// turns that into a path inside the spec's prototypes/ folder or refuses it,
+// so nothing else on disk can be opened this way.
+function openPrototypeRoute(req, res, ctx) {
+  return readBody(req, res, (err, body) => {
+    if (err) return json(res, err.tooBig ? 413 : 400, { error: err.tooBig ? "too large" : "body must be JSON" });
+    const state = ctx.readState() || {};
+    prototypeHtmlPath(state.worktree || state.project, specInView(state, body && body.spec), body && body.name)
+      .then((file) => {
+        if (!file) return json(res, 404, { error: "no such prototype page" });
+        if (!openFile(file)) return json(res, 500, { error: "no browser could be started" });
+        return json(res, 200, { ok: true });
+      })
+      .catch(() => json(res, 500, { error: "no browser could be started" }));
+  });
+}
+
 // The project's AGENTS.md (or one file under .agents-docs/), read-only, for the
 // dashboard's AGENTS.md tab. Only a dashboard serves it, and only the two
 // shapes readAgentsDoc() allows; anything else, or a missing file, is a 204
 // (no tab) so the browser console stays free of a failed request.
 function agentsDoc(req, res, ctx, url) {
   const state = ctx.readState() || {};
-  const none = () => {
-    res.writeHead(204, baseHeaders({ "cache-control": "no-store" }));
-    res.end();
-  };
+  const none = () => noContent(res);
   if (state.workflow !== "dashboard") return none();
   readAgentsDoc(state.worktree || state.project, url.searchParams.get("file") || "AGENTS.md")
     .then((found) =>

@@ -765,6 +765,71 @@ test("GET /overview serves the session's spec, and on the dashboard only a scann
   }
 });
 
+// The Prototypes tab's routes: the list, one .md, and opening one .html in the
+// default browser (PLAN2CODE_NO_BROWSER keeps the suite from starting one).
+// The spec is chosen as /overview chooses it, and nothing outside the spec's
+// prototypes/ folder is read or opened.
+test("the Prototypes routes list, read and open only a scanned spec's prototypes", async () => {
+  const { base, root } = overviewProject();
+  const protos = path.join(root, "specs", "p", "prototypes");
+  fs.mkdirSync(protos, { recursive: true });
+  fs.writeFileSync(path.join(protos, "pick.md"), "# Pick\n");
+  fs.writeFileSync(path.join(protos, "pick.html"), "<p>pick</p>\n");
+  const sids = [];
+  try {
+    const dash = cliIn(root, ["open", "--workflow", "dashboard", "--no-open"]);
+    sids.push(dash.json.sid);
+    const d = sessionUrl(dash.json.url);
+    const get = (q, cookie = d.cookie) =>
+      fetch(`${d.base}${q}`, { headers: cookie ? { cookie, connection: "close" } : { connection: "close" } });
+    const open = (body, origin = d.base) =>
+      fetch(`${d.base}/open-prototype`, {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie: d.cookie, origin, connection: "close" },
+        body: JSON.stringify(body),
+      });
+
+    const list = await get("/prototypes?spec=specs/p");
+    assert.equal(list.status, 200);
+    assert.deepEqual(await list.json(), { files: [{ name: "pick.html", kind: "html" }, { name: "pick.md", kind: "md" }] });
+    assert.equal((await get("/prototypes?spec=specs/p", null)).status, 403);
+    assert.equal((await get("/prototypes?spec=specs/a")).status, 204, "no prototypes folder: no tab");
+    assert.equal((await get("/prototypes?spec=specs/not-scanned")).status, 204);
+
+    const doc = await get("/prototype?spec=specs/p&name=pick.md");
+    assert.equal(doc.status, 200);
+    assert.equal(await doc.text(), "# Pick\n");
+    for (const name of ["pick.html", "../../a/overview.md", "missing.md"]) {
+      assert.equal((await get("/prototype?spec=specs/p&name=" + encodeURIComponent(name))).status, 204, name);
+    }
+
+    const ok = await open({ spec: "specs/p", name: "pick.html" });
+    assert.equal(ok.status, 200);
+    assert.deepEqual(await ok.json(), { ok: true });
+    for (const body of [
+      { spec: "specs/p", name: "pick.md" },
+      { spec: "specs/p", name: "../pick.html" },
+      { spec: "specs/p", name: path.join(protos, "pick.html") },
+      { spec: "specs/not-scanned", name: "pick.html" },
+      { spec: "specs/p" },
+    ]) {
+      assert.equal((await open(body)).status, 404, JSON.stringify(body));
+    }
+    assert.notEqual((await open({ spec: "specs/p", name: "pick.html" }, "https://evil.example")).status, 200, "another site's page cannot open files");
+
+    // Away from the dashboard, the session's own spec is used and ?spec= is ignored.
+    const plan = cliIn(root, ["open", "--workflow", "plan", "--spec", "specs/p", "--no-open"]);
+    sids.push(plan.json.sid);
+    const p = sessionUrl(plan.json.url);
+    const own = await fetch(`${p.base}/prototypes?spec=specs/a`, { headers: { cookie: p.cookie, connection: "close" } });
+    assert.equal(own.status, 200);
+    assert.equal((await own.json()).files.length, 2);
+  } finally {
+    for (const s of sids) cliIn(root, ["stop", "--session", s, "--force"]);
+    fs.rmSync(base, { recursive: true, force: true });
+  }
+});
+
 test("open records worktree and branch, and wakes only a freshly opened dashboard", () => {
   const dash = cli(["open", "--workflow", "dashboard", "--no-open"]);
   try {

@@ -56,6 +56,7 @@ import {
   activity, agentAdrift, agentWorking, askBusy, loopDriving, loopWaiting, loopWaitingKey, asked, awaitingReply, byId, dashboardLive, docs, doingNow,
   AGENTS_VIEW, agentsTabShown, finish, gitAwaiting, isDashboard, isGitBoard, isOpen, isSpecFileView, items, loadAgentsDoc, loadOverview, loadSpecCarry, myTurn, openItems,
   finishKey, overviewSpec, patience, pressStranded, reviewPending, scan, selSpec, sendCollected, specFileTabs, stagedCount, stranded,
+  PROTOTYPES_VIEW, prototypesTabShown, loadPrototypes,
   topics, workingMs, WORKING_GRACE_MS,
   workspaceFolders,
 } from "../selectors.js";
@@ -68,7 +69,7 @@ import { closeMentions } from "../mention-box.js";
 import { destroyFields } from "../md-field.js";
 import { buildPager, fitGrowBox, markFor, markMore, renderCard, renderEndItem, renderNotice } from "./cards.js";
 import { sendState, suggestState } from "../send-state.js";
-import { renderAgentsDoc, renderBriefButton, renderDoc, renderOverview } from "./docs.js";
+import { renderAgentsDoc, renderBriefButton, renderDoc, renderOverview, renderPrototypes } from "./docs.js";
 import { board, renderGitBoard, resetBoard } from "./git-host.js";
 import { renderWorkspace, tellFolderIssues } from "./workspace.js";
 import { openHelpOn } from "./help-dialog.js";
@@ -550,6 +551,7 @@ export function adopt(body) {
   // A spec file tab's file changes under a build, so a tab you are watching
   // refetches on every new frame too, not only on the click that opened it.
   if (firstLoad || page.S.specDir !== prevSpecDir || page.S.workflow !== prevWorkflow || isSpecFileView(page.view)) loadOverview();
+  else if (page.view === PROTOTYPES_VIEW) loadPrototypes();
   // A New Session in the app leaves the spec it was in; the fresh dashboard picks it up once its scan is here.
   loadSpecCarry();
   // The Dashboard's AGENTS.md tab: found on arrival, re-read while it is open.
@@ -1030,7 +1032,7 @@ function withFocus(fn) {
 // (the dashboard menu, the end page).
 function currentScroller() {
   if (!drawnView) return null;
-  if (drawnView.startsWith("doc:") || isSpecFileView(drawnView) || drawnView === AGENTS_VIEW) return $("main");
+  if (drawnView.startsWith("doc:") || isSpecFileView(drawnView) || drawnView === AGENTS_VIEW || drawnView === PROTOTYPES_VIEW) return $("main");
   if (drawnView === "questions") return $("main").querySelector(":scope > .card.question");
   if (drawnView === "ask") return $("main").querySelector(".ask-list");
   return null;
@@ -1481,6 +1483,10 @@ function renderViews() {
   const fileTabs = specFileTabs();
   for (const f of fileTabs) tabs.push({ id: f.id, label: f.label, count: 0 });
   if (isSpecFileView(page.view) && !fileTabs.some((f) => f.id === page.view)) page.view = "questions";
+  // After the spec file tabs: the spec's saved prototypes, present while its
+  // prototypes/ folder holds an .md or .html. Gone, it sends the person home.
+  if (prototypesTabShown()) tabs.push({ id: PROTOTYPES_VIEW, label: "Prototypes", count: 0 });
+  else if (page.view === PROTOTYPES_VIEW) page.view = "questions";
   // Right after Dashboard: the project's AGENTS.md, present while the file is.
   // Like a spec file tab, it sends the person home if the file goes away.
   if (agentsTabShown()) tabs.splice(1, 0, { id: AGENTS_VIEW, label: "AGENTS.md", count: 0 });
@@ -1533,10 +1539,14 @@ function renderViews() {
         save();
       }
       page.view = t.id === "questions" && finish() ? "end" : t.id;
+      // The tab always opens on the list, so the .md last read there must not
+      // paint first.
+      if (t.id === PROTOTYPES_VIEW) page.prototypes = { ...page.prototypes, open: null, texts: {} };
       // The cached text paints at once; the fresh read repaints if the file
       // changed on disk since.
       render();
       if (isSpecFileView(t.id)) loadOverview();
+      if (t.id === PROTOTYPES_VIEW) loadPrototypes();
       if (t.id === AGENTS_VIEW) {
         page.agentsDoc.open = "AGENTS.md";
         loadAgentsDoc();
@@ -1696,7 +1706,10 @@ function renderMain() {
 }
 
 function paintMain(main) {
-  main.classList.toggle("is-doc", page.view.startsWith("doc:") || isSpecFileView(page.view) || page.view === AGENTS_VIEW);
+  main.classList.toggle(
+    "is-doc",
+    page.view.startsWith("doc:") || isSpecFileView(page.view) || page.view === AGENTS_VIEW || page.view === PROTOTYPES_VIEW
+  );
   main.classList.toggle("is-ask", page.view === "ask");
 
   // An agent-less session has no questions, docs or board to draw: its whole
@@ -1706,6 +1719,7 @@ function paintMain(main) {
   if (page.view.startsWith("doc:")) return renderDoc(main, page.view.slice(4));
   if (isSpecFileView(page.view)) return renderOverview(main, page.view);
   if (page.view === AGENTS_VIEW) return renderAgentsDoc(main);
+  if (page.view === PROTOTYPES_VIEW) return renderPrototypes(main);
   if (page.view === "ask") {
     const held = heldAsk;
     heldAsk = null;

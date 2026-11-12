@@ -22,14 +22,29 @@ export function linkToOpen(raw) {
 
 /** Opens `href` (from linkToOpen) in the default browser; false when it could not start one. */
 export function openLink(href) {
+  return launch(href, process.env.BROWSER);
+}
+
+/**
+ * Opens a local file the server already checked (an absolute path, such as a
+ * saved prototype's .html) with the system's default handler for its type,
+ * which for a web page is the default browser; false when nothing started.
+ */
+export function openFile(file) {
+  if (typeof file !== "string" || !file) return false;
+  return launch(file, null);
+}
+
+// The system's own opener, handed one target as one argument, never a shell.
+function launch(target, linuxOpener) {
   // Tests, and a person who turned the console's own browser launches off.
   if (process.env.NO_BROWSER || process.env.PLAN2CODE_NO_BROWSER) return true;
   const [cmd, args] =
     process.platform === "win32"
-      ? ["rundll32.exe", ["url.dll,FileProtocolHandler", href]]
+      ? ["rundll32.exe", ["url.dll,FileProtocolHandler", target]]
       : process.platform === "darwin"
-        ? ["open", [href]]
-        : [process.env.BROWSER || "xdg-open", [href]];
+        ? ["open", [target]]
+        : [linuxOpener || "xdg-open", [target]];
   try {
     const child = spawn(cmd, args, { detached: true, stdio: "ignore", windowsHide: true });
     child.on("error", () => {});

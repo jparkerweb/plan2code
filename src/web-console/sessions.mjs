@@ -600,6 +600,86 @@ export async function readSpecFile(root, specDir, kind) {
   }
 }
 
+// The Prototypes tab: the .md and .html files saved directly in a spec's
+// prototypes/ folder (a UI prototype's page and its brief). A name never
+// carries a separator, and every file's realpath must sit inside the folder's,
+// which must sit inside the root's, so `../`, an absolute path and a link
+// pointing anywhere else all come back null.
+const PROTOTYPE_NAME_RE = /^[^\\/:*?"<>|]+\.(md|html?)$/i;
+const insideOf = (outer, inner) => {
+  const rel = path.relative(outer, inner);
+  return Boolean(rel) && rel !== ".." && !rel.startsWith(".." + path.sep) && !path.isAbsolute(rel);
+};
+const prototypeKind = (name) => (/\.md$/i.test(name) ? "md" : "html");
+
+// The real path of the spec's prototypes/ folder, or null.
+async function prototypesDir(root, specDir) {
+  if (!root || !specDir || typeof specDir !== "string" || path.isAbsolute(specDir)) return null;
+  try {
+    const [realDir, realRoot] = await Promise.all([
+      fs.promises.realpath(path.resolve(root, specDir, "prototypes")),
+      fs.promises.realpath(root),
+    ]);
+    return insideOf(realRoot, realDir) ? realDir : null;
+  } catch {
+    return null;
+  }
+}
+
+// The real path of one prototype file of `kind` (md or html), or null.
+async function prototypeFile(root, specDir, name, kind) {
+  const dir = await prototypesDir(root, specDir);
+  return dir ? fileIn(dir, name, kind) : null;
+}
+
+// The real path of `name` (a bare .md or .html name of `kind`) directly in the
+// already-resolved prototypes folder `dir`, as a regular file, or null.
+async function fileIn(dir, name, kind) {
+  if (typeof name !== "string" || !PROTOTYPE_NAME_RE.test(name) || prototypeKind(name) !== kind) return null;
+  try {
+    const real = await fs.promises.realpath(path.join(dir, name));
+    if (path.dirname(real) !== dir || !(await fs.promises.stat(real)).isFile()) return null;
+    return real;
+  } catch {
+    return null;
+  }
+}
+
+/** The prototype files of a spec as [{ name, kind }] ("md" or "html"), by name; [] when there are none. */
+export async function listPrototypes(root, specDir) {
+  const dir = await prototypesDir(root, specDir);
+  if (!dir) return [];
+  let names;
+  try {
+    names = await fs.promises.readdir(dir);
+  } catch {
+    return [];
+  }
+  const found = await Promise.all(
+    names.filter((n) => PROTOTYPE_NAME_RE.test(n)).map(async (n) => ((await fileIn(dir, n, prototypeKind(n))) ? n : null))
+  );
+  return found
+    .filter(Boolean)
+    .sort((a, b) => a.localeCompare(b, "en", { sensitivity: "base" }))
+    .map((name) => ({ name, kind: prototypeKind(name) }));
+}
+
+/** `{ file, text }` for one .md in the spec's prototypes/ folder, or null. */
+export async function readPrototype(root, specDir, name) {
+  const real = await prototypeFile(root, specDir, name, "md");
+  if (!real) return null;
+  try {
+    return { file: name, text: await fs.promises.readFile(real, "utf8") };
+  } catch {
+    return null;
+  }
+}
+
+/** The real path of one .html (or .htm) in the spec's prototypes/ folder, or null. */
+export async function prototypeHtmlPath(root, specDir, name) {
+  return prototypeFile(root, specDir, name, "html");
+}
+
 // The project's agent guide as the Dashboard's AGENTS.md tab shows it: only
 // AGENTS.md itself or one markdown file directly under .agents-docs/, never any
 // other path. Kept inside the root by realpath, like readSpecFile().

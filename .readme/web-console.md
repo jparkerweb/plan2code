@@ -138,6 +138,11 @@ Scroll down for the utilities. Outside a git repository the **Git** card says so
   not documented yet shows its **Map** (`pathfinder/map.md`) and its
   **Plan draft** (the live `PLAN-DRAFT-*.md`) as tabs instead, each when it
   exists.
+- **Saved prototypes, beside the spec.** When the spec in view (the one
+  picked on the dashboard, or the session's own) has saved UI prototypes in
+  its `prototypes/` folder, a **Prototypes** tab lists them. An `.md` opens
+  in place, with **Back to Prototypes**; an `.html` opens in your default
+  browser.
 - **Where you are, at the bottom.** The footer names the folder the session
   was launched from and its git branch (`plan2code · feature/…`), muted in
   the middle. Click it to open the Workspace dialog (see *Your workspace*).
@@ -1966,6 +1971,9 @@ origin.
 | `POST /chat/decision` | Approve or Decline on an edit the agent proposed: `{ re, decision, text?, conversation }`. Once per proposal; does not count toward the 10. |
 | `GET /overview?spec=specs/<name>[&file=map\|draft]` | The Overview tab's read of `<spec>/overview.md` (or, with `file=`, the Map tab's `pathfinder/map.md` or the Plan draft tab's live `PLAN-DRAFT-*.md`), as `text/markdown` with `cache-control: no-store` and the file's spec-relative name, URL-encoded, in `x-spec-file`. A missing file is a 204. On the dashboard `spec` must be one of the scanned specs; elsewhere the session's own spec is used. The file's real path must stay inside the project, so `../`, absolute paths and symlinks pointing out all get the same 204 as a missing file, as does an unscanned `spec` or an unknown `file`. |
 | `GET /agents-doc[?file=<name>]` | The Dashboard's AGENTS.md tab: `AGENTS.md` (the default) or one `.agents-docs/<name>.md`, as `text/markdown` with `cache-control: no-store`. A dashboard only; any other file name, a missing file or a path that leaves the project is a 204. |
+| `GET /prototypes?spec=specs/<name>` | The Prototypes tab's list: `{ files: [{ name, kind }] }` (`kind` `md` or `html`) for the files directly in `<spec>/prototypes/`, or a 204 when there are none. The spec is chosen as for `/overview`. |
+| `GET /prototype?spec=specs/<name>&name=<file>.md` | One `.md` from `<spec>/prototypes/`, as `text/markdown` with `cache-control: no-store`; any other name, a missing file or a path that leaves the folder is a 204. |
+| `POST /open-prototype` | `{ spec, name }`: opens one `.html` from `<spec>/prototypes/` in the person's default browser. 404 for any other name, 500 when no browser could start. |
 | `GET /handoff?id=<id>` | *Read it all*: the handoff's `.md` from `~/.plan2code/handoffs/`, as `text/markdown` with `cache-control: no-store`. A dashboard only, and only an id its own scan listed: a used, unknown or malformed id is 404. |
 | `GET /workspace` | The Workspace dialog's list: folders, `missing`, `remote` and the agent's folder `issues`. `?check=1` re-checks every folder on disk first. |
 | `POST /workspace/add` | `{ path, name?, description? }`. The path is resolved against the folder the session started in (`~` expanded) and must be a folder: 400 `not-a-folder`, `duplicate` (with its `name`; compared case-insensitively on Windows and macOS), `bad-name`, or `name-taken` with a `suggest`. Answers the new entry, `nested: true` when it sits inside another folder in the list. |
