@@ -12,7 +12,7 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { SPEC_STATES as TABLE, stateFor } from "../src/web-console/public/spec-states.js";
 import { SKILLS } from "../src/web-console/public/skills.js";
-import { SKILL_CATALOG, cardAvailability, defaultSpec, launchVariant } from "../src/web-console/public/answers.js";
+import { SKILL_CATALOG, cardAvailability, defaultSpec, launchTarget, launchVariant } from "../src/web-console/public/answers.js";
 import { scanProject } from "../src/web-console/scan.mjs";
 import { MARKERS, TASK_LINE_RE, TASK_ID_RE, CHECKBOX_RE, STATUS_RE, statusOf, countTasks, deriveSpecState, pickPhaseFiles } from "../src/web-console/spec-files.mjs";
 
@@ -314,6 +314,18 @@ const CARDS = {
     built: { on: true },
     unrecognized: { on: true },
   },
+  "plan2code-ui-prototype": {
+    "none": { on: true },
+    diagnosed: { on: true },
+    fixed: { on: true },
+    exploring: { on: true },
+    mapped: { on: true },
+    planned: { on: true },
+    documented: { on: true },
+    building: { on: true },
+    built: { on: true },
+    unrecognized: { on: true },
+  },
   "plan2code-changelog": {
     "none": { on: true },
     diagnosed: { on: true },
@@ -476,6 +488,43 @@ test("the scan: a PR-READINESS report changes no spec's state, and alone it stay
   const withReport = Object.fromEntries(Object.entries(FIXTURES).map(([name, files]) => [name, { ...files, ...REPORT }]));
   assert.deepEqual(scanOf(withReport), scanOf(FIXTURES));
   assert.equal(scanOf({ only: REPORT }).only[0], "unrecognized");
+});
+
+test("the scan: saved prototypes are counted in every spec's detail, and alone they stay files on disk", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "p2c-spec-prototypes-"));
+  const SAVED = (n) => Object.fromEntries(Array.from({ length: n }, (_, i) => [[`prototypes/screen-${i + 1}.html`, "<!doctype html>\n"], [`prototypes/screen-${i + 1}.md`, "# Screen\n"]]).flat());
+  const specs = {
+    one: SAVED(1),
+    two: SAVED(2),
+    planned: { ...FIXTURES.planned, ...SAVED(2) },
+    building: { ...FIXTURES.building, ...SAVED(2) },
+    empty: { ...FIXTURES.planned },
+  };
+  try {
+    for (const [name, files] of Object.entries(specs))
+      for (const [rel, text] of Object.entries(files)) {
+        const file = path.join(root, "specs", name, rel);
+        fs.mkdirSync(path.dirname(file), { recursive: true });
+        fs.writeFileSync(file, text);
+      }
+    fs.mkdirSync(path.join(root, "specs", "empty", "prototypes"));
+    const by = Object.fromEntries(scanProject(root).specs.map((sp) => [sp.name, sp]));
+    assert.deepEqual([by.one.state, by.one.detail], ["unrecognized", "1 prototype saved"]);
+    assert.deepEqual([by.two.state, by.two.detail], ["unrecognized", "2 prototypes saved"]);
+    assert.deepEqual([by.planned.state, by.planned.detail], ["planned", "plan drafted · 2 prototypes"]);
+    assert.deepEqual([by.building.state, by.building.detail], ["building", "1 of 2 tasks done · 2 prototypes"]);
+    assert.deepEqual([by.empty.state, by.empty.detail], ["planned", "plan drafted"], "an empty prototypes/ folder changes nothing");
+    // A prototype-only spec lights only Pathfinder and Plan among the pipeline cards.
+    const lit = CARD_ENTRIES.filter((e) => e.group === "pipeline" && cardAvailability(e, SCAN, by.one).on).map((e) => e.skill);
+    assert.deepEqual(lit, ["plan2code-0-pathfinder", "plan2code-1-plan"]);
+    // Each spec carries its count, and a prototype-only folder rides along on Quick Task.
+    assert.deepEqual([by.one.prototypes, by.two.prototypes, by.building.prototypes, by.empty.prototypes], [1, 2, 2, 0]);
+    const quick = CARD_ENTRIES.find((e) => e.skill === "plan2code-quick-task");
+    assert.equal(launchTarget(quick, by.one).dir, "specs/one");
+    assert.equal(launchTarget(quick, by.building), null);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test("the scan: an assumed task counts as done and is named, and numbered task lines count", () => {

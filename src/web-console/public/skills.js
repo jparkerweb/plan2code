@@ -449,6 +449,31 @@ export const SKILLS = Object.freeze([
     },
   }),
   skill({
+    skill: "plan2code-ui-prototype",
+    workflow: "ui-prototype",
+    label: "UI prototype",
+    name: "UI Prototype",
+    pose: "ui-prototype",
+    // The launch scores nothing (not metered, no `weight`, as Pathfinder): each
+    // round drawn scores through the `ui-prototype-round` run event in meter.js.
+    builds: false, phased: false, metered: false, templates: false,
+    weight: null, started: null, ran: null, resume: null,
+    subagents: null,
+    states: "any",
+    greyed: null,
+    card: {
+      group: "extra",
+      chip: "Utility",
+      spec: true,
+      title: "Prototype a screen",
+      icon: "ui-prototype",
+      blurb: "Several versions of a screen on one page, tuned with live dials, and your pick brought back.",
+      help: "Draws several versions of a screen or flow on one page with live dials; Copy and paste brings your pick back, saved into a spec only when you say.",
+      about:
+        "For when you want to see a screen before it gets built. UI Prototype draws several versions of a screen or flow on one page that opens in your browser. Flip between them, tune fonts, colors, spacing and feel with live dials, then press Copy and paste the result back so the next round starts from your pick. Nothing is saved into a spec until you say so, and it never changes your code.",
+    },
+  }),
+  skill({
     skill: "plan2code-changelog",
     workflow: "changelog",
     label: "Changelog",

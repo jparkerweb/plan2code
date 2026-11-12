@@ -63,6 +63,7 @@ Before Phase 1, run `node "<S>/specs.mjs" list` from the project root (`<S>`: `s
 - Status "Draft" or "Complete": Ask user how to proceed
 - Before going on with any existing draft (a Pathfinder handoff, a Quick Task escalation, a Draft or Complete one), read its 2.4: `| Status | Deferred to Plan |`, empty or `Not discussed` means ask the Phase 1 testing question now and write the answer into 2.4; a cadence with no `Full Suite` row means ask only the full-suite part.
 - A spec folder holding a `DIAGNOSIS-*.md` (Diagnose's write-up of a bug): read it first, as the Phase 1 brief (the bug, its cause, the suggested fix); that folder's name is the feature name (do not ask for one), so the PLAN-DRAFT lands beside the diagnosis
+- A spec folder holding `prototypes/*.md` has saved prototype choices: read each as a reference to build from
 - No PLAN-DRAFT: Begin at Phase 1. Console: its idea card carries `"templates": "idea"` (console.md → A patch)
 
 `node "<S>/specs.mjs" check-draft specs/<feature-name>` checks a written PLAN-DRAFT (Phase 7).
@@ -101,6 +102,8 @@ Report each sub-score with overall percentage.
 1. Additional files/folders to examine?
 2. Reference materials? (designs, mockups, API specs)
 3. External systems/APIs to integrate?
+
+When a requirement or an architecture choice turns on how a screen looks or flows, offer a UI prototype (`references/ui-prototype.md`, run in this conversation): nothing is built without a yes, and a yes to saving puts `prototypes/<name>.html` and `<name>.md` in this spec (no spec folder yet: ask the kebab-case feature name then, and keep it for the checkpoint and Phase 7).
 
 After confirmation, proceed with analysis:
 
@@ -259,7 +262,7 @@ File: `specs/<feature-name>/PLAN-DRAFT-<YYYYMMDD>.md`
 Header: Title, Created date, Status (Draft | Phase 3 Complete - Resume at Phase 4 | Complete), Confidence % (Reqs/Feasibility/Integration/Risk each /25), link to PLAN-CONVERSATION.
 
 Sections:
-1. **Executive Summary** — 2-3 sentences
+1. **Executive Summary** — 2-3 sentences, then a **Prototypes** line naming each saved `prototypes/<name>.md` as a reference to build from (only when there are any)
 2. **Requirements** — 2.1 Functional (FR-N checklist), 2.2 Non-Functional (NFR-N checklist), 2.3 Out of Scope, 2.4 Testing Strategy table (Types, Phase Testing, Full Suite, Coverage, plus a `| Approach | Test first |` row only when picked; absent means code first). Phase Testing is `Targeted per phase`, `Dedicated phase only` or `None` (an old `Run after each phase` reads as `Targeted per phase`; 'skip testing' writes `None` and `Never`); Full Suite is `Offered at Finalize`, `At Phase N` or `Never`
 3. **Tech Stack** — table: Category / Technology / Version / Justification
 4. **Architecture** — 4.1 Pattern (name + rationale), 4.2 System Context Diagram, 4.3 Components table, 4.4 Data Model, 4.5 API Design

@@ -180,9 +180,15 @@ const SOURCE_PROMPTS = [
     name: 'pathfinder',
     displayName: 'Pathfinder Mode',
     description: 'charting of a foggy idea as a map of decision questions, cleared one at a time',
+    // ui-prototype.md rides along (with its references, shell and scripts) for the
+    // offer of a UI prototype, which runs in the same conversation; every carried
+    // name starts with ui-prototype so none collides with this skill's own files.
+    scripts: ['ui-prototype.mjs', 'ui-prototype-round.mjs', 'ui-prototype-page.mjs', 'ui-prototype-drafts.mjs', 'ui-prototype-block.mjs'],
     additionalReferences: [
       { source: 'web-console', target: 'web-console' },
-      { source: 'shared-references/helper-strength.md', target: 'helper-strength.md' }
+      { source: 'shared-references/helper-strength.md', target: 'helper-strength.md' },
+      { source: 'plan2code-ui-prototype.md', target: 'ui-prototype.md' },
+      { source: 'plan2code-ui-prototype-references' }
     ]
   },
   {
@@ -194,7 +200,10 @@ const SOURCE_PROMPTS = [
     isUtility: true,
     // review.md rides along for the web console's "Review it now" button, which
     // runs the review in the same session once the quick task is built.
-    scripts: ['specs.mjs', 'commit-msg.mjs', 'review-scope.mjs', 'glob.mjs', 'test-map.mjs', 'test-match.mjs', 'run-check.mjs'],
+    // ui-prototype.md rides along (with its references, shell and scripts) for the
+    // offer of a UI prototype, which runs in the same conversation; every carried
+    // name starts with ui-prototype so none collides with this skill's own files.
+    scripts: ['specs.mjs', 'commit-msg.mjs', 'review-scope.mjs', 'glob.mjs', 'test-map.mjs', 'test-match.mjs', 'run-check.mjs', 'ui-prototype.mjs', 'ui-prototype-round.mjs', 'ui-prototype-page.mjs', 'ui-prototype-drafts.mjs', 'ui-prototype-block.mjs'],
     additionalReferences: [
       { source: 'web-console', target: 'web-console' },
       { source: 'shared-references/building-habits.md', target: 'building-habits.md' },
@@ -202,7 +211,9 @@ const SOURCE_PROMPTS = [
       { source: 'shared-references/helper-strength.md', target: 'helper-strength.md' },
       { source: 'shared-references/test-runs.md', target: 'test-runs.md' },
       { source: 'plan2code-review.md', target: 'review.md' },
-      { source: 'plan2code-review-references' }
+      { source: 'plan2code-review-references' },
+      { source: 'plan2code-ui-prototype.md', target: 'ui-prototype.md' },
+      { source: 'plan2code-ui-prototype-references' }
     ]
   },
   {
@@ -211,10 +222,15 @@ const SOURCE_PROMPTS = [
     name: 'plan',
     displayName: 'Planning Mode',
     description: 'Requirements analysis and architecture design',
-    scripts: ['specs.mjs'],
+    // ui-prototype.md rides along (with its references, shell and scripts) for the
+    // offer of a UI prototype, which runs in the same conversation; every carried
+    // name starts with ui-prototype so none collides with this skill's own files.
+    scripts: ['specs.mjs', 'ui-prototype.mjs', 'ui-prototype-round.mjs', 'ui-prototype-page.mjs', 'ui-prototype-drafts.mjs', 'ui-prototype-block.mjs'],
     additionalReferences: [
       { source: 'web-console', target: 'web-console' },
-      { source: 'shared-references/helper-strength.md', target: 'helper-strength.md' }
+      { source: 'shared-references/helper-strength.md', target: 'helper-strength.md' },
+      { source: 'plan2code-ui-prototype.md', target: 'ui-prototype.md' },
+      { source: 'plan2code-ui-prototype-references' }
     ]
   },
   {
@@ -223,10 +239,15 @@ const SOURCE_PROMPTS = [
     name: 'revise-plan',
     displayName: 'Revision Mode',
     description: 'Modify specs mid-implementation when requirements change',
-    scripts: ['specs.mjs'],
+    // ui-prototype.md rides along (with its references, shell and scripts) for the
+    // offer of a UI prototype, which runs in the same conversation; every carried
+    // name starts with ui-prototype so none collides with this skill's own files.
+    scripts: ['specs.mjs', 'ui-prototype.mjs', 'ui-prototype-round.mjs', 'ui-prototype-page.mjs', 'ui-prototype-drafts.mjs', 'ui-prototype-block.mjs'],
     additionalReferences: [
       { source: 'web-console', target: 'web-console' },
-      { source: 'shared-references/helper-strength.md', target: 'helper-strength.md' }
+      { source: 'shared-references/helper-strength.md', target: 'helper-strength.md' },
+      { source: 'plan2code-ui-prototype.md', target: 'ui-prototype.md' },
+      { source: 'plan2code-ui-prototype-references' }
     ]
   },
   {
@@ -412,6 +433,18 @@ const SOURCE_PROMPTS = [
     ]
   },
   {
+    source: 'plan2code-ui-prototype.md',
+    stepNumber: 'ui-prototype',
+    name: 'ui-prototype',
+    displayName: 'UI Prototype Mode',
+    description: 'Draw several versions of a screen or flow on one page, tune them with live dials, and bring the choice back',
+    // Shown to the agent in place of the generic header text: when the skill fits and its command.
+    skillDescription: "Use when you want to see several versions of a screen or flow, tune them with live dials and bring your choice back. Run it as /plan2code-ui-prototype.",
+    isUtility: true,
+    scripts: ['ui-prototype.mjs', 'ui-prototype-round.mjs', 'ui-prototype-page.mjs', 'ui-prototype-drafts.mjs', 'ui-prototype-block.mjs'],
+    additionalReferences: [{ source: 'web-console', target: 'web-console' }]
+  },
+  {
     source: 'plan2code-changelog.md',
     stepNumber: 'changelog',
     name: 'changelog',
@@ -464,6 +497,7 @@ function generateStepLabel(prompt) {
   if (prompt.stepNumber === 'pr-prep') return 'PR Prep';
   if (prompt.stepNumber === 'test') return 'Test';
   if (prompt.stepNumber === 'dead-code') return 'Dead Code';
+  if (prompt.stepNumber === 'ui-prototype') return 'UI Prototype';
   if (prompt.stepNumber === 'changelog') return 'Changelog';
   if (prompt.stepNumber === 'quick') return 'Quick Task';
   return `Step ${prompt.stepNumber}`;

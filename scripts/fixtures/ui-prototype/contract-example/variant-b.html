@@ -1,0 +1,19 @@
+<style>
+  .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr)); gap: var(--p2c-space-4); padding: var(--p2c-space-5); font-family: var(--p2c-font); font-size: var(--p2c-text-size); color: var(--p2c-text); }
+  .cards article { background: var(--p2c-surface); border: 1px solid var(--p2c-border); border-radius: var(--p2c-radius); padding: var(--p2c-space-4); }
+  .cards .role { color: var(--p2c-muted); }
+  .cards .add { border-style: dashed; color: var(--p2c-accent); }
+</style>
+<div class="cards">
+  <article data-p2c-when="ready">
+    <strong data-p2c-text="short">Ana Ruiz</strong>
+    <strong data-p2c-text="typical">Ana Ruiz-Okafor</strong>
+    <strong data-p2c-text="long">Anastasia Ruiz-Okafor, Regional Accounts Lead, Northern Office</strong>
+    <p class="role">Admin since March 2024</p>
+  </article>
+  <article data-p2c-when="ready"><strong>Tomas Berg</strong><p class="role">Editor since June 2025</p></article>
+  <article data-p2c-when="loading"><p class="role">Loading team members…</p></article>
+  <article data-p2c-when="empty"><p>Just you so far. Invite a teammate to share the work.</p></article>
+  <article data-p2c-when="error"><p>The team did not load. Check your connection, then reload.</p></article>
+  <article class="add" data-p2c-when="ready empty">Invite a teammate</article>
+</div>

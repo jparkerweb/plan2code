@@ -44,6 +44,7 @@ Load `./AGENTS.md` if it exists — its conventions govern; never re-ask what it
 - **HITL questions are never self-answered.** Ask and wait; an agent that answers its own grill has broken the skill.
 - **Questions are ground truth; the map is a rebuildable index.** A filled `## Answer` beats any state marker; detail lives in one place.
 - **Never write implementation code** into the project. Sketches are throwaway, living only under `pathfinder/sketch-NN/`.
+- A question about how a screen looks or flows that paper did not settle: offer a UI prototype (`references/ui-prototype.md`, run in this conversation). Nothing is built without a yes; it stays a draft outside the project unless saved.
 - **Reserved names — never create inside `pathfinder/`:** `overview.md`, `phase-<N>.md`, `PLAN-DRAFT-*.md`, `PLAN-CONVERSATION-*.md`.
 - **Never emit completion tokens under `specs/`** — `TASK_COMPLETE`, `PHASE_COMPLETE`, `ALL_TASKS_COMPLETE`, `IMPLEMENTATION_COMPLETE`, `SPEC_COMPLETE`, `WORK_COMPLETE`. They are reserved; a stray one would read as a finished run.
 - **No `- [ ]` checkboxes inside question files**, and no `METRICS_JSON` anywhere.

@@ -21,7 +21,7 @@ The FIRST thing you do, before anything else in this file — before Step 1, bef
 - This mode modifies **`specs/` paths only** — do NOT implement code or modify any file outside `specs/`
 - **Allowed file paths:** ONLY paths under `specs/`. Forbidden: `skills/`, `src/`, `.claude/`, `.agents/`, `.codeium/`, configs, source code. Creating, modifying, or deleting any file outside `specs/` is a violation.
 - **Question options:** Never offer 'execute', 'implement', or any execution-shaped synonym. Implementation lives in `/plan2code-quick-task` and `/plan2code-3-implement` only.
-- **Web console exception:** the console's temporary payload files (outside the repo, in the session folder `open` prints) are the one allowed write outside `specs/`. They are messages to the page, never project files.
+- **Web console exception:** the console's temporary payload files (outside the repo, in the session folder `open` prints) are the one allowed write outside `specs/`. They are messages to the page, never project files. A UI prototype's drafts (the round folders its scripts make and sweep under `~/.plan2code/prototypes/`) are allowed too: they sit outside the project.
 
 ## Scripts
 
@@ -60,6 +60,8 @@ Do not proceed without spec files.
 | Affected Area | Files | Sections |
 |---------------|-------|----------|
 | [Component] | [File list] | [Section names] |
+
+4. When the change is about how a screen looks or flows, offer a UI prototype before the impact assessment (`references/ui-prototype.md`, run in this conversation): nothing is built without a yes, and a yes to saving puts `prototypes/<name>.html` and `<name>.md` in this spec.
 
 Present findings and confirm understanding before continuing.
 
@@ -140,6 +142,8 @@ Approve the spec-update plan? (approve / refine / abort). Implementation of any 
    - Add comment: `<!-- Re-opened: [date] - [reason] -->`
 
 6. **A waiting brief:** rewrite its `**Plan change:**` line to `**Plan change (applied <YYYY-MM-DD>):**` when this revision covers it, or `**Plan change (dropped <YYYY-MM-DD>):**` when the person replaced or declined it at Step 1, so the dashboard and Implement stop pointing back here.
+
+7. **A saved prototype:** point each revised task that builds the screen at its `prototypes/<name>.md`.
 
 ### STEP 4: Consistency Check
 

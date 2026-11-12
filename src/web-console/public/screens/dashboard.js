@@ -1123,7 +1123,8 @@ export async function launchSkill(entry) {
   };
   // The picker's spec goes to the skill being launched, not to the card:
   // cards that take no spec (utilities, setup) launch untargeted even while
-  // a spec is selected, save Quick Task on a diagnosed bug.
+  // a spec is selected, save Quick Task on a diagnosed bug or a folder of
+  // saved prototypes (launchTarget).
   if (target) action.spec = target.dir;
   // A Notebook tab picked in the pane rides the hop in this page only, never
   // on the action: the launched skill's `fill: "note"` box is filled from it

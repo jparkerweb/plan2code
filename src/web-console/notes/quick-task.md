@@ -3,6 +3,7 @@
 Read `building.md` first.
 
 - Clarifying questions are `text` or `choice`. The first (what to build) carries `"templates":"idea"`, `"fill":"note"`.
+- Launched on saved prototypes: the first card (after a `choice` of which prototype, if several) is a `recap` "What the prototype says" (`summary`: the request, the chosen variant, what carried over) in place of that `text` card; `{ok:false,text}` adds to the brief.
 - A note on an open question: reword it, `"_delete":true` it or send `"stands":true` (still fits), with your reply.
 - Post `"stopWarning":"A quick task saves nothing until it is built, so stopping now loses what we have worked out."` at the start and `""` once the build is under way.
 - **Scope check:** `choice` "Too big for a quick task?": `1` Continue (lightweight format), `2` Escalate to a full plan; measured counts against thresholds in `body`.
@@ -33,3 +34,5 @@ Read `building.md` first.
 - **Escalated / aborted:** settle the verdict in the finish post: `"command":"/plan2code-1-plan"` with the PLAN-DRAFT's path in `body`, no review; or `"command":"/plan2code-quick-task"`. Both `"dashboard":true`.
 
 Stop requests during a build: `building.md`.
+
+A UI prototype run inside this skill posts `{"run":{"event":"ui-prototype-round","id":"<name>-round-<N>"}}` once per round drawn, uses a `text` card to paste the choice into, and opens its page in a separate browser tab.

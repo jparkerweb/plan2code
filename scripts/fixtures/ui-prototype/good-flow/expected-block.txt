@@ -1,0 +1,20 @@
+Plan2Code UI prototype choice
+Prototype: signup-flow
+File: <FILE>
+Round: 1
+Chosen: A "Single column" (others: B "Side rail")
+Carried over: colors, fonts, spacing, components, layout
+Freed up: none
+Preset: Compact
+Screen size: Tablet 820 (changed from Phone 390)
+Theme: Dark
+Accent color: #1a7f37
+Neutral color: #5b6170
+Font set: Humanist
+Text size: 14px (changed from 15px)
+Spacing: 0.75 (changed from 1.25)
+Corners: 4px (changed from 12px)
+State: Empty (changed from Ready)
+Content length: Typical
+Extra, Progress bar: Off (changed from On)
+Note: keep the rail

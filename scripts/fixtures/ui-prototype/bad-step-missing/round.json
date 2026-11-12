@@ -1,0 +1,29 @@
+{
+  "name": "signup-flow",
+  "round": 1,
+  "kind": "flow",
+  "request": "The three screens of signing up: account, team, done.",
+  "direction": "",
+  "carried": ["colors", "fonts", "spacing", "components", "layout"],
+  "freed": [],
+  "notFound": [],
+  "variants": [
+    { "letter": "A", "name": "Single column", "file": "variant-a.html", "what": "One centered form per step", "starts": {} },
+    { "letter": "B", "name": "Side rail", "file": "variant-b.html", "what": "Steps listed in a rail beside each form", "starts": {} }
+  ],
+  "starts": {
+    "screen": "Phone 390",
+    "theme": "dark",
+    "accent": "#1a7f37",
+    "neutral": "#5b6170",
+    "fontSet": "Humanist",
+    "textSize": 15,
+    "space": 1.25,
+    "radius": 12,
+    "state": "ready",
+    "length": "typical"
+  },
+  "extras": [],
+  "images": [],
+  "fonts": []
+}

@@ -488,6 +488,17 @@
   14%, 56% { transform: translate(5px, -2px); }
 }
 
+/* UI Prototype -- he holds a screen up, and its three dials slide one after
+   another, as if he were tuning it. */
+.pose .up-knob { animation: up-knob 4.2s ease-in-out infinite; }
+.pose .up-knob.k2 { animation-delay: -1.4s; }
+.pose .up-knob.k3 { animation-delay: -2.8s; }
+@keyframes up-knob {
+  0%, 20%, 100% { transform: translateX(0); }
+  40%, 60% { transform: translateX(12px); }
+  80% { transform: translateX(4px); }
+}
+
 @media (max-width: 720px) {
   .dash { padding-top: 0; }
   .launch-stage { height: 140px; }

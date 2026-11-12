@@ -757,12 +757,16 @@ export function toggleNoteTick(ticked, id) {
 /**
  * The spec a card's launch carries: the picker's selection for the cards that
  * take a spec, and for Quick Task only a diagnosed bug, whose write-up it reads
- * first. Every other card launches untargeted.
+ * first, or a folder holding only saved prototypes (files on disk with a
+ * `prototypes` count), which it builds from. A mid-pipeline spec with
+ * prototypes is Implement's to build. Every other card launches untargeted.
  */
 export function launchTarget(entry, sel) {
   if (!entry || !sel) return null;
   if (entry.spec) return sel;
-  return entry.skill === "plan2code-quick-task" && sel.state === "diagnosed" ? sel : null;
+  if (entry.skill !== "plan2code-quick-task") return null;
+  const prototypeOnly = sel.state === "unrecognized" && sel.prototypes > 0;
+  return sel.state === "diagnosed" || prototypeOnly ? sel : null;
 }
 
 export function cardPresentation(entry, scan, sel, menu = {}) {

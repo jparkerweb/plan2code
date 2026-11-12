@@ -1,0 +1,582 @@
+/* Plan2Code UI prototype: the tool's own look (top bar, backdrop, frames,
+   floating panel). It never styles a variant: each variant lives in its own
+   frame with base.css, and every value here is a --tool- one. Long-supported
+   features only (no nesting, no @scope, no light-dark()): the page is checked
+   by hand in Firefox and Safari. */
+
+:root {
+  --tool-bar-h: 48px;
+  --tool-backdrop: #d5d8dd;
+  --tool-bar-bg: #ffffff;
+  --tool-surface: #ffffff;
+  --tool-surface-2: #f3f4f6;
+  --tool-text: #1f2328;
+  --tool-muted: #5c6370;
+  --tool-line: #c9cdd3;
+  --tool-line-soft: #e3e5e9;
+  --tool-focus: #1d5fd1;
+  --tool-pick: #1f2328;
+  --tool-on-pick: #ffffff;
+  --tool-shadow: 0 1px 2px rgba(15, 18, 24, 0.12), 0 8px 24px rgba(15, 18, 24, 0.14);
+  --tool-frame-shadow: 0 1px 3px rgba(15, 18, 24, 0.18), 0 6px 18px rgba(15, 18, 24, 0.1);
+  --tool-font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --tool-mono: ui-monospace, "Cascadia Code", Menlo, Consolas, monospace;
+  --tool-radius: 8px;
+  --tool-panel-w: 300px;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--tool-backdrop);
+  color: var(--tool-text);
+  font-family: var(--tool-font);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+/* ---------------------------------------------------------------- controls */
+
+.tool-button {
+  font: inherit;
+  color: var(--tool-text);
+  background: var(--tool-surface);
+  border: 1px solid var(--tool-line);
+  border-radius: 6px;
+  padding: 5px 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.tool-button:hover {
+  background: var(--tool-surface-2);
+}
+
+.tool-button[aria-pressed="true"] {
+  background: var(--tool-pick);
+  border-color: var(--tool-pick);
+  color: var(--tool-on-pick);
+}
+
+.tool-primary {
+  background: var(--tool-pick);
+  border-color: var(--tool-pick);
+  color: var(--tool-on-pick);
+}
+
+.tool-primary:hover {
+  background: #3a3f47;
+}
+
+.tool-small {
+  padding: 2px 8px;
+  font-size: 12px;
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+[role="tab"]:focus-visible {
+  outline: 2px solid var(--tool-focus);
+  outline-offset: 2px;
+}
+
+/* ------------------------------------------------------------- the top bar */
+
+#p2c-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 30;
+  height: var(--tool-bar-h);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 16px;
+  background: var(--tool-bar-bg);
+  border-bottom: 1px solid var(--tool-line);
+}
+
+.tool-name {
+  font-weight: 650;
+  font-size: 14px;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 0 1 auto;
+}
+
+.tool-tabs {
+  display: flex;
+  gap: 4px;
+  min-width: 0;
+  flex: 0 1 auto;
+  overflow-x: auto;
+}
+
+.tool-tab {
+  font: inherit;
+  color: var(--tool-muted);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 5px 10px;
+  cursor: pointer;
+  white-space: nowrap;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tool-tab:hover {
+  background: var(--tool-surface-2);
+  color: var(--tool-text);
+}
+
+.tool-tab[aria-selected="true"] {
+  color: var(--tool-text);
+  background: var(--tool-surface-2);
+  border-color: var(--tool-line);
+}
+
+.tool-tab-letter {
+  font-weight: 700;
+  margin-right: 6px;
+}
+
+.tool-spacer {
+  flex: 1 1 0;
+}
+
+/* --------------------------------------------------- the backdrop and frames */
+
+#p2c-stage {
+  position: fixed;
+  top: var(--tool-bar-h);
+  left: 0;
+  right: 0;
+  bottom: 0;
+  overflow: auto;
+  background: var(--tool-backdrop);
+}
+
+.tool-sizer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1px;
+  height: 1px;
+  pointer-events: none;
+}
+
+.p2c-frame {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: block;
+  /* The width set on a frame is its inside: what a variant's @media sees. */
+  box-sizing: content-box;
+  border: 1px solid var(--tool-line);
+  background: #ffffff;
+  box-shadow: var(--tool-frame-shadow);
+  transform-origin: 0 0;
+}
+
+.p2c-frame.tool-away {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.p2c-frame.tool-current-frame {
+  border-color: #8a9099;
+}
+
+.tool-compare .p2c-frame {
+  /* In the row a click picks the variant, so the frame does not take it. */
+  pointer-events: none;
+}
+
+.tool-compare #p2c-stage {
+  cursor: pointer;
+}
+
+.tool-compare .p2c-frame.tool-current-frame {
+  outline: 3px solid var(--tool-focus);
+  outline-offset: 2px;
+}
+
+.tool-label {
+  position: absolute;
+  top: 0;
+  left: 0;
+  font: inherit;
+  font-size: 12px;
+  color: var(--tool-text);
+  background: transparent;
+  border: 0;
+  padding: 2px 0;
+  cursor: pointer;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tool-label[aria-current="true"] {
+  font-weight: 700;
+  color: var(--tool-focus);
+}
+
+/* -------------------------------------------------------- the floating panel */
+
+.tool-panel {
+  position: fixed;
+  top: calc(var(--tool-bar-h) + 16px);
+  left: 16px;
+  z-index: 20;
+  width: var(--tool-panel-w);
+  max-width: 320px;
+  max-height: calc(100vh - var(--tool-bar-h) - 24px);
+  display: flex;
+  flex-direction: column;
+  background: var(--tool-surface);
+  border: 1px solid var(--tool-line);
+  border-radius: var(--tool-radius);
+  box-shadow: var(--tool-shadow);
+}
+
+.tool-panel-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--tool-line-soft);
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+}
+
+.tool-panel-head.tool-dragging {
+  cursor: grabbing;
+}
+
+.tool-grip {
+  width: 10px;
+  height: 14px;
+  border-left: 2px dotted var(--tool-muted);
+  border-right: 2px dotted var(--tool-muted);
+}
+
+.tool-panel-title {
+  flex: 1 1 auto;
+  margin: 0;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.tool-panel-body {
+  overflow-y: auto;
+  padding: 6px 12px 12px;
+}
+
+.tool-dials-tab {
+  position: fixed;
+  z-index: 20;
+  box-shadow: var(--tool-shadow);
+}
+
+/* --------------------------------------------------------------- dial rows */
+
+.tool-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 4px 8px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--tool-line-soft);
+}
+
+.tool-row:last-child {
+  border-bottom: 0;
+}
+
+.tool-row-label {
+  font-weight: 600;
+  color: var(--tool-text);
+}
+
+.tool-row-side {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--tool-muted);
+  font-family: var(--tool-mono);
+  font-size: 12px;
+}
+
+.tool-row-control {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.tool-row-control input[type="range"] {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+}
+
+.tool-row-control input[type="color"] {
+  width: 40px;
+  height: 26px;
+  padding: 0 2px;
+  border: 1px solid var(--tool-line);
+  border-radius: 4px;
+  background: var(--tool-surface);
+}
+
+.tool-row-control input[type="text"],
+.tool-row-control select {
+  flex: 1 1 auto;
+  min-width: 0;
+  font: inherit;
+  padding: 4px 6px;
+  border: 1px solid var(--tool-line);
+  border-radius: 4px;
+  background: var(--tool-surface);
+  color: var(--tool-text);
+}
+
+.tool-seg {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  border: 1px solid var(--tool-line);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.tool-seg button {
+  flex: 1 1 0;
+  min-width: 0;
+  font: inherit;
+  font-size: 12px;
+  padding: 4px 4px;
+  border: 0;
+  border-right: 1px solid var(--tool-line);
+  background: var(--tool-surface);
+  color: var(--tool-text);
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tool-seg button:last-child {
+  border-right: 0;
+}
+
+.tool-seg button[aria-pressed="true"] {
+  background: var(--tool-pick);
+  color: var(--tool-on-pick);
+}
+
+.tool-switch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.tool-switch input {
+  margin: 0;
+  width: 16px;
+  height: 16px;
+}
+
+.tool-scale {
+  color: var(--tool-muted);
+}
+
+.tool-reset {
+  display: inline-flex;
+}
+
+.tool-reset-button {
+  font: inherit;
+  font-family: var(--tool-font);
+  font-size: 11px;
+  color: var(--tool-focus);
+  background: transparent;
+  border: 1px solid var(--tool-line);
+  border-radius: 4px;
+  padding: 0 6px;
+  cursor: pointer;
+}
+
+.tool-reset-button:hover {
+  background: var(--tool-surface-2);
+}
+
+.tool-own {
+  font-family: var(--tool-font);
+  font-size: 11px;
+  color: var(--tool-muted);
+  background: var(--tool-surface-2);
+  border: 1px solid var(--tool-line-soft);
+  border-radius: 999px;
+  padding: 0 6px;
+  white-space: nowrap;
+}
+
+/* ------------------------------------------------- presets, extras, foot */
+
+.tool-presets {
+  display: flex;
+  gap: 4px;
+  padding: 6px 0 8px;
+  border-bottom: 1px solid var(--tool-line-soft);
+}
+
+.tool-presets .tool-button {
+  flex: 1 1 0;
+  min-width: 0;
+  padding-left: 4px;
+  padding-right: 4px;
+}
+
+.tool-dials .tool-row:last-child {
+  border-bottom: 1px solid var(--tool-line-soft);
+}
+
+.tool-extras {
+  padding: 4px 0;
+  border-bottom: 1px solid var(--tool-line-soft);
+}
+
+.tool-extras-title {
+  font-weight: 650;
+  padding: 6px 0;
+  cursor: pointer;
+}
+
+.tool-panel-foot {
+  display: flex;
+  gap: 8px;
+  padding-top: 10px;
+}
+
+.tool-panel-foot .tool-button {
+  flex: 1 1 0;
+}
+
+/* ------------------------------------------------------- the Copy popover */
+
+.tool-pop {
+  position: fixed;
+  top: calc(var(--tool-bar-h) + 8px);
+  right: 16px;
+  z-index: 40;
+  width: 420px;
+  max-width: calc(100vw - 32px);
+  max-height: calc(100vh - var(--tool-bar-h) - 24px);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px;
+  background: var(--tool-surface);
+  border: 1px solid var(--tool-line);
+  border-radius: var(--tool-radius);
+  box-shadow: var(--tool-shadow);
+}
+
+.tool-pop-label {
+  font-weight: 600;
+}
+
+.tool-pop-hint {
+  font-weight: 400;
+  color: var(--tool-muted);
+}
+
+.tool-pop textarea {
+  width: 100%;
+  font: inherit;
+  color: var(--tool-text);
+  background: var(--tool-surface);
+  border: 1px solid var(--tool-line);
+  border-radius: 4px;
+  padding: 6px 8px;
+  resize: vertical;
+}
+
+#p2c-block {
+  font-family: var(--tool-mono);
+  font-size: 12px;
+  background: var(--tool-surface-2);
+  white-space: pre;
+}
+
+.tool-pop-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tool-pop-status {
+  flex: 1 1 auto;
+  color: var(--tool-muted);
+}
+
+/* ------------------------------------------------- the terminal window */
+
+.tool-term-title {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  background: #2b2d31;
+  color: #d7dae0;
+  font-family: var(--tool-mono);
+  font-size: 12px;
+  border-radius: 6px 6px 0 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.tool-term-title.tool-away {
+  visibility: hidden;
+}
+
+.tool-term-dots {
+  flex: 0 0 auto;
+  width: 34px;
+  height: 10px;
+  background: radial-gradient(circle at 5px 5px, #ff5f57 4px, transparent 4.5px), radial-gradient(circle at 17px 5px, #febc2e 4px, transparent 4.5px), radial-gradient(circle at 29px 5px, #28c840 4px, transparent 4.5px);
+}
+
+.tool-term-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

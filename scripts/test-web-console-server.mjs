@@ -466,6 +466,9 @@ test("cleanup finds old sessions and strays in both folders, and keeps every pro
     backdate(path.join(plan2code, "app"));
     backdate(put(path.join(plan2code, "app.json")));
     backdate(put(path.join(plan2code, "agents.json")));
+    // UI Prototype drafts are swept by age by the skill's own script, never offered here.
+    backdate(put(path.join(plan2code, "prototypes", "my-app-0123456789ab", "invoices", "invoices-round-1.html"), "x"));
+    backdate(path.join(plan2code, "prototypes"));
     // In use right now: a held lock and a temp between its write and rename.
     const live = [put(path.join(consoleDir, "workspaces.json.lock"), ""), put(path.join(plan2code, "models.json.123.tmp"))];
     kept.push(...live);
@@ -482,7 +485,7 @@ test("cleanup finds old sessions and strays in both folders, and keeps every pro
       "session:20250801-101010-aaaaaa",
     ]);
     assert.equal(items.some((i) => i.id === "root:handoffs"), false, "the handoffs folder is never a stray");
-    for (const id of ["root:app", "root:app.json", "root:agents.json"]) assert.equal(items.some((i) => i.id === id), false, `${id} is never a stray`);
+    for (const id of ["root:app", "root:app.json", "root:agents.json", "root:prototypes"]) assert.equal(items.some((i) => i.id === id), false, `${id} is never a stray`);
     assert.equal(STRAY_GRACE_MS, 60 * 60 * 1000);
     assert.equal(items.find((i) => i.id === "console:p1.json").bytes, 5);
     assert.equal(items.find((i) => i.id === "root:console-dev").kind, "folder");

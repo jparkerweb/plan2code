@@ -1,0 +1,27 @@
+<style>
+  .team { padding: var(--p2c-space-5); font-family: var(--p2c-font); font-size: var(--p2c-text-size); color: var(--p2c-text); background: var(--p2c-bg); }
+  .team h1 { font-size: calc(var(--p2c-text-size) * 1.5); margin: 0 0 var(--p2c-space-4); text-wrap: balance; }
+  .team ul { list-style: none; margin: 0; padding: 0; background: var(--p2c-surface); border: 1px solid var(--p2c-border); border-radius: var(--p2c-radius); }
+  .team li { display: flex; justify-content: space-between; gap: var(--p2c-space-3); padding: var(--p2c-space-3) var(--p2c-space-4); border-top: 1px solid var(--p2c-border); }
+  .team li:first-child { border-top: 0; }
+  .team .role { color: var(--p2c-muted); }
+  .team .bar { height: calc(var(--p2c-text-size) * 1.2); margin: var(--p2c-space-3) var(--p2c-space-4); border-radius: var(--p2c-radius); background: color-mix(in oklab, var(--p2c-neutral) 18%, var(--p2c-surface)); }
+  .team button { background: var(--p2c-accent); color: var(--p2c-on-accent); border: 0; border-radius: var(--p2c-radius); padding: var(--p2c-space-2) var(--p2c-space-4); font: inherit; }
+  .team button:focus-visible { outline: 2px solid var(--p2c-accent); outline-offset: 2px; }
+</style>
+<section class="team">
+  <h1>Team members</h1>
+  <ul data-p2c-when="ready">
+    <li>
+      <span data-p2c-text="short">Ana Ruiz</span>
+      <span data-p2c-text="typical">Ana Ruiz-Okafor</span>
+      <span data-p2c-text="long">Anastasia Ruiz-Okafor, Regional Accounts Lead, Northern Office</span>
+      <span class="role">Admin</span>
+    </li>
+    <li><span>Tomas Berg</span><span class="role">Editor</span></li>
+  </ul>
+  <div data-p2c-when="loading" aria-label="Loading team members"><div class="bar"></div><div class="bar"></div></div>
+  <p data-p2c-when="empty">No one else is on this team yet. Invite a teammate to share the work.</p>
+  <p data-p2c-when="error">The team list did not load. Check your connection, then reload this page.</p>
+  <button data-p2c-when="ready empty">Invite a teammate</button>
+</section>

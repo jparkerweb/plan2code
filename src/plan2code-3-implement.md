@@ -42,6 +42,8 @@ Needs the spec files. `specs/` is gitignored, so never search it with a file sea
 
 Then read overview.md and act on `next` (Parallel Phase Selection below). Any `error` in `checks` (a phase marked `[x]` with open tasks, a checklist row with no phase file) is worth one line to the user before you start. Do not proceed without a readable overview.md and a `next` verdict.
 
+A spec with `prototypes/*.md` (saved prototype choices): read the ones overview.md or the phase's tasks name, and open the matching `.html` only when a task says to match it.
+
 ## Phase Status Tracking
 
 | Checkbox | Status | Meaning |

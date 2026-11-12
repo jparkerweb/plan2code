@@ -10,3 +10,5 @@
 No option, verdict, label, or helper `title`, `ask` or `result` ever offers to execute or implement. Pass `--spec specs/<feature>` to `open` or post `specDir`. Finish `command`: `/plan2code-3-implement specs/<feature>/overview.md`; abort: `/plan2code-1b-revise-plan specs/<feature>/overview.md`.
 
 Helpers: lookup helpers report before the Step 2 review goes up; phase-file helpers before the Step 4 check.
+
+A UI prototype run inside this skill posts `{"run":{"event":"ui-prototype-round","id":"<name>-round-<N>"}}` once per round drawn, uses a `text` card to paste the choice into, and opens its page in a separate browser tab.

@@ -1,0 +1,21 @@
+<style>
+  .split { display: grid; grid-template-columns: 1fr 2fr; gap: var(--p2c-space-4); padding: var(--p2c-space-4); }
+  .split nav, .split article { background: var(--p2c-surface); border: 1px solid var(--p2c-border); border-radius: var(--p2c-radius); padding: var(--p2c-space-3); }
+  .split h2 { font-size: var(--p2c-text-size); color: var(--p2c-muted); }
+  .split .total { color: var(--p2c-accent); font-weight: 700; }
+</style>
+<div class="split">
+  <nav>
+    <h2>Invoices</h2>
+    <ul data-p2c-when="ready"><li>INV-1042</li><li>INV-1043</li></ul>
+    <p data-p2c-when="empty">Nothing to show yet.</p>
+    <p data-p2c-when="loading">Loading...</p>
+    <p data-p2c-when="error">Could not load the list.</p>
+  </nav>
+  <article data-p2c-when="ready empty loading error">
+    <p data-p2c-text="short">Harbor</p>
+    <p data-p2c-text="typical">Harbor Supply, net 30</p>
+    <p data-p2c-text="long">Harbor Supply and Logistics Cooperative, net 30, billed to the Northern Region office</p>
+    <p class="total">$1,240.00</p>
+  </article>
+</div>

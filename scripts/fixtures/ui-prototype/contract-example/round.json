@@ -1,0 +1,29 @@
+{
+  "name": "team-members",
+  "round": 1,
+  "kind": "screen",
+  "request": "A screen listing the people on a team, with a way to invite someone.",
+  "direction": "",
+  "carried": ["colors", "fonts", "spacing", "components"],
+  "freed": ["layout"],
+  "notFound": [],
+  "variants": [
+    { "letter": "A", "name": "Plain list", "file": "variant-a.html", "what": "One row per person, role on the right", "starts": {} },
+    { "letter": "B", "name": "Card grid", "file": "variant-b.html", "what": "One card per person, invite as the last card", "starts": {} }
+  ],
+  "starts": {
+    "screen": "Desktop 1280",
+    "theme": "light",
+    "accent": "#0f766e",
+    "neutral": "#64748b",
+    "fontSet": "System UI",
+    "textSize": 16,
+    "space": 1,
+    "radius": 8,
+    "state": "ready",
+    "length": "typical"
+  },
+  "extras": [],
+  "images": [],
+  "fonts": []
+}

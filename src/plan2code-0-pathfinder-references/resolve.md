@@ -316,7 +316,7 @@ Every other plan2code step forbids writing code during planning. **Pathfinder is
 **All three gates must open before you write a line of code:**
 
 1. The paper sketch was tried and did not settle it. Not skipped — tried. Say what the paper sketch failed to resolve.
-2. There is an obvious way to run it in this project — an existing runtime and task runner. Do not add a package manager, language, or framework for a sketch.
+2. There is an obvious way to run it in this project — an existing runtime and task runner. Do not add a package manager, language, or framework for a sketch. (Logic sketches only: a UI prototype runs on this skill's own scripts, so only gates 1 and 3 apply to it.)
 3. The user says go. Ask explicitly: *"Paper didn't settle row 5. I can build a throwaway terminal app under `specs/audit-export/pathfinder/sketch-01/` that lets you drive the state machine by hand — about 60 lines, one command, deleted after. Go?"*
 
 Any gate that stays shut: stay on paper, or convert the question to a `grill`.
@@ -324,11 +324,11 @@ Any gate that stays shut: stay on paper, or convert the question to a `grill`.
 #### Rules for a runnable sketch
 
 1. **Throwaway from day one, and clearly marked.** Its README's first line is the banner, and its second says what question it exists to answer.
-2. **It lives ONLY at `specs/<idea>/pathfinder/sketch-NN/`** — never in the project's own source tree, never beside the module it is sketching for. This is where pathfinder deliberately departs from upstream: upstream co-locates prototypes with the real code; pathfinder quarantines them, because `specs/` is gitignored scratch and the project tree is not.
+2. **It lives ONLY at `specs/<idea>/pathfinder/sketch-NN/`** (logic sketches only; a UI prototype keeps its drafts outside the project and saves into `specs/<idea>/prototypes/`) — never in the project's own source tree, never beside the module it is sketching for. This is where pathfinder deliberately departs from upstream: upstream co-locates prototypes with the real code; pathfinder quarantines them, because `specs/` is gitignored scratch and the project tree is not.
 3. **One command to run.** Print the exact command to the user. They must not have to remember a path or a flag. If the project has a task runner, use the runner's own idiom, but keep the entry point inside `sketch-NN/`.
 4. **No persistence.** State lives in memory. Persistence is what the sketch is checking, not something it leans on. If the question is specifically about storage, use a local file named so its disposability is obvious.
 5. **Skip all polish.** No tests, no error handling beyond what makes it run, no abstractions, no "we might want X later."
-6. **Surface the full relevant state after every action** (logic) **or on every variant switch** (UI). The user must see the whole picture change, not a delta.
+6. **Surface the full relevant state after every action.** The user must see the whole picture change, not a delta.
 7. **Never merged.** The sketch is not lifted into the project. Only the validated decision it produced survives, in the `## Answer`. Reference the sketch directory from `## Evidence` so a later reader can re-run it, but the code is scaffolding, not output.
 
 #### Pick the branch: logic or UI
@@ -336,13 +336,13 @@ Any gate that stays shut: stay on paper, or convert the question to a `grill`.
 | Question shape | Branch | Artifact |
 |---|---|---|
 | "Does this state model / data model / rule hold?" | **Logic** | One tiny interactive terminal app |
-| "What should this look like?" | **UI** | Several radically different variations, switchable |
+| "What should this look like?" | **UI** | UI prototype |
 
-Getting this wrong wastes the entire sketch. If the question is genuinely ambiguous and the user is unreachable, default by what the question touches — a backend module or a rules engine points to logic, a page or component points to UI — and **state the assumption in the first lines of the sketch's README**, so the human can reject the framing before reading the code.
+Getting this wrong wastes the entire sketch. If the question is genuinely ambiguous and the user is unreachable, default by what the question touches — a backend module or a rules engine points to logic, a page or component points to UI — and **state the assumption in the first lines of the sketch's README** (for a UI prototype, in the line that offers it), so the human can reject the framing before reading the code.
 
 **Logic branch.** Build the smallest interactive terminal app that pushes the machine through the cases that are hard to reason about on paper. Keep the logic itself pure — a reducer, a state machine, or a small set of pure functions over a plain data type — with the terminal shell as a thin wrapper that imports it and never the reverse. Each frame: clear the screen, print the whole current state one field per line, then print the key legend, e.g. `[f] flag  [c] clear  [e] escalate  [h] hold  [t] advance clock 1d  [q] quit`. Re-render the entire frame after every keystroke; never append to scrollback. The whole frame fits on one screen. The interesting moment is the user saying "wait, that shouldn't have been possible" — that is a bug in the *idea*, which is the entire point. Add actions on request; sketches evolve.
 
-**UI branch.** Generate **several radically different variations side by side, switchable** — not one polished take. Default to 3, cap at 5. They must disagree about structure: different layout, different information hierarchy, different primary affordance. Three tweaked card grids is wallpaper, not a sketch. If two drafts come out similar, redo one with an explicit constraint against the shape they share. Switch by a URL search param plus a small floating bar (previous / current variant name / next), following whatever routing convention the project already uses — but with the files under `sketch-NN/`. Wire variants to stubbed data, never to real mutations; the question is what it should look like, not whether the backend works. The most valuable feedback is usually "I want the header from B with the list from C" — that hybrid IS the answer, and it goes in the `## Answer`.
+**UI branch.** Offer a UI prototype instead of building a sketch. On a yes, open `references/ui-prototype.md` and follow it from its Step 1, with the question's own wording as the request. Each round drawn posts the `ui-prototype-round` meter event. On a yes to saving, the pair goes straight into `specs/<idea>/prototypes/`; you only propose the name. Record the outcome in the question file being answered: the choices from the block in its `## Answer`, a link to the saved pair (`prototypes/<name>.md` and `prototypes/<name>.html`) in its `## Evidence`. The most valuable feedback is usually "I want the header from B with the list from C": that hybrid IS the answer.
 
 #### After a runnable sketch
 

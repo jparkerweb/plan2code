@@ -38,13 +38,14 @@ export const BUDGETS = {
     "implement.md": 5700,
     "init.md": 300,
     "loop.md": 11600,
-    "pathfinder.md": 2400,
-    "plan.md": 800,
+    "pathfinder.md": 2622, // raised by the UI prototype line's bytes only
+    "plan.md": 1023, // raised by the UI prototype line's bytes only
     "pr-prep.md": 4500,
-    "quick-task.md": 4100,
+    "quick-task.md": 4589, // raised by the UI prototype line's and the prototype recap line's bytes only
     "review.md": 1000,
-    "revise-plan.md": 1200,
+    "revise-plan.md": 1422, // raised by the UI prototype line's bytes only
     "test.md": 5400,
+    "ui-prototype.md": 4000,
     "xray.md": 2500,
   },
   // One printed line each, for a session with one choice card.

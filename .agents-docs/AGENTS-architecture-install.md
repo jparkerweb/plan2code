@@ -5,7 +5,7 @@
 
 ```
 plan2code/
-├── src/                        # Source workflow prompts (20 markdown files)
+├── src/                        # Source workflow prompts (21 markdown files)
 │   ├── plan2code-0-pathfinder-references/ # Reference files for pathfinder skill
 │   │   ├── brief.md                        # Dated plain-English decision briefs
 │   │   ├── chart.md                        # MODE A: destination + frontier grills, templates
@@ -32,6 +32,11 @@ plan2code/
 │   │   └── community-feedback-submission.md # STEP 6.5 payload schema + submission tiers
 │   ├── plan2code-dead-code-references/ # Reference files for dead-code skill
 │   │   └── caller-search.md                # How to search for a symbol's callers before calling it dead
+│   ├── plan2code-ui-prototype-references/ # Reference files for ui-prototype skill
+│   │   ├── ui-prototype-contract.md        # The contract between model-written variants and the shipped shell
+│   │   ├── ui-prototype-design.md          # Making each variant look designed: structure, type, color, the dials
+│   │   ├── ui-prototype-rounds.md          # Rounds, the paste back, the save into a spec
+│   │   └── ui-prototype-shell/             # The page shell the script assembles every round from (shell.html, shell.js, shell.css, base.css)
 │   ├── skill-scripts/                # Scripts shared across skills: install.js copies the ones a skill lists into skills/<skill>/scripts/ (specs, commit-msg, review-scope, agents-md, agent-files, glob, test-map, test-match, test-commands, run-check, common)
 │   └── plan2code-<skill>-scripts/    # A skill's own scripts, same copy rule (pathfinder, finalize, changelog, git, xray, pr-prep, test and dead-code each have one)
 ├── plan2code-bot/            # Autonomous end-to-end workflow test runner (TypeScript, tsup, Claude Agent SDK, vitest); user docs in .readme/test-bot.md
@@ -134,10 +139,10 @@ plan2code/
 | `plan2code.md` | — | The dashboard: opens the web console's skill menu and launches the picked skill into its own session |
 | `plan2code-init.md` | Init | Generate AGENTS.md as index + `.agents-docs/` section files (progressive discovery) |
 | `plan2code-init-update.md` | Update | Update AGENTS.md with learnings; detects and routes edits to `.agents-docs/` files |
-| `plan2code-0-pathfinder.md` | 0 | Chart a foggy idea as a map (local files, or GitHub Issues) of decision questions under `specs/<idea>/pathfinder/`, resolve them one at a time, hand a seeded PLAN-DRAFT to Step 1 |
-| `plan2code-quick-task.md` | quick | Lightweight planning for small tasks (standalone — not a pipeline step) |
-| `plan2code-1-plan.md` | 1 | Requirements analysis & architecture |
-| `plan2code-1b-revise-plan.md` | 1b | Mid-implementation revisions |
+| `plan2code-0-pathfinder.md` | 0 | Chart a foggy idea as a map (local files, or GitHub Issues) of decision questions under `specs/<idea>/pathfinder/`, resolve them one at a time, hand a seeded PLAN-DRAFT to Step 1; ships `ui-prototype.md`, its `ui-prototype-*` references, the shell and the five `ui-prototype*.mjs` scripts (ride-along) for its offer of a UI prototype, which replaces the runnable UI sketch |
+| `plan2code-quick-task.md` | quick | Lightweight planning for small tasks (standalone — not a pipeline step); ships `ui-prototype.md`, its `ui-prototype-*` references, the shell and the five `ui-prototype*.mjs` scripts (ride-along) for its offer of a UI prototype |
+| `plan2code-1-plan.md` | 1 | Requirements analysis & architecture; ships `ui-prototype.md`, its `ui-prototype-*` references, the shell and the five `ui-prototype*.mjs` scripts (ride-along) for its offer of a UI prototype |
+| `plan2code-1b-revise-plan.md` | 1b | Mid-implementation revisions; ships `ui-prototype.md`, its `ui-prototype-*` references, the shell and the five `ui-prototype*.mjs` scripts (ride-along) for its offer of a UI prototype |
 | `plan2code-2-document.md` | 2 | Create implementation specs |
 | `plan2code-3-implement.md` | 3 | Execute implementation (phase by phase) |
 | `plan2code-3-implement-review.md` | 3 | Execute one phase, run focused review and fixes, then request approval |
@@ -149,6 +154,7 @@ plan2code/
 | `plan2code-pr-prep.md` | pr-prep | Get a branch ready for review: pick the checks its changes need from the project's `## Test map` (or its config files), let the person trim the plan, run it, give Ready, Ready with notes or Not ready, and write a PR description to copy (following the repo's template) with the create-a-PR link; offers to save `PR-READINESS-<date>.md` into the branch's spec folder; never commits, pushes or opens the PR |
 | `plan2code-test.md` | test | Write missing tests: ask where to look, find source files no test covers (matching, plus real coverage when the project already has a coverage tool, offered first), show a plan opening with how this project writes tests, then write and run unit and integration tests; escalates past 8 source files, 8 new test files or 2 runners to a PLAN-DRAFT for Plan, hands a real bug to Diagnose, never changes source code |
 | `plan2code-dead-code.md` | dead-code | Find unused code and dead code: use the project's own dead-code tools, one per language that has files (Knip, vulture, cargo check and others), or search by itself, check every item for callers across the project (`references/caller-search.md`), label each Safe to remove, Check first or Warning, remove only what the person picks, then run the tests and build and put back anything that breaks them, then offer a final review of the removals in the same session (Step 7.5, recommended yes; ships `review.md`, `review-in-build.md`, `test-runs.md` and the review references, as Finalize does); never commits, never installs a tool. Scripts: `dead-code.mjs` (own), `test-map.mjs`, `glob.mjs`, `test-commands.mjs`, `run-check.mjs`, `specs.mjs`, `commit-msg.mjs`, `review-scope.mjs` |
+| `plan2code-ui-prototype.md` | ui-prototype | Draw several versions of a screen or flow on one page with live dials (drafts under `~/.plan2code/prototypes/`), bring the pick back by Copy and paste for the next round, and save the pair into `specs/<spec>/prototypes/` only on a yes; never changes code |
 | `plan2code-changelog.md` | changelog | Check the CHANGELOG version against the default branch, suggest editable entries for new work, keep `package.json` aligned, offer to commit the result through Git |
 | `plan2code-git.md` | git | Branches, pull (with conflict help), push, publish and commits (clear message, suggested splits) on the web console's git board, or plain instructions in the terminal (`switch to main`, `commit and push`); asks before every push, publish and delete |
 

@@ -1,0 +1,23 @@
+<style>
+  .inv { padding: var(--p2c-space-5); color: var(--p2c-text); }
+  .inv h1 { font-family: var(--p2c-font); font-size: calc(var(--p2c-text-size) * 1.5); margin: 0 0 var(--p2c-space-4); }
+  .inv table { width: 100%; border-collapse: collapse; background: var(--p2c-surface); border-radius: var(--p2c-radius); }
+  .inv td { padding: var(--p2c-space-2) var(--p2c-space-3); border-bottom: 1px solid var(--p2c-border); }
+  .inv .late { color: var(--p2c-accent); }
+  .inv button { background: var(--p2c-accent); color: var(--p2c-on-accent); border: 0; border-radius: var(--p2c-radius); padding: var(--p2c-space-2) var(--p2c-space-4); }
+</style>
+<div class="inv">
+  <h1>
+    <span data-p2c-text="short">Bills</span>
+    <span data-p2c-text="typical">Invoices for Harbor Supply</span>
+    <span data-p2c-text="long">Invoices for Harbor Supply and Logistics Cooperative, Northern Region</span>
+  </h1>
+  <table data-p2c-when="ready">
+    <tr><td>INV-1042</td><td class="late">Overdue 12 days</td><td>$1,240.00</td></tr>
+    <tr><td>INV-1043</td><td>Due Dec 2</td><td>$310.50</td></tr>
+  </table>
+  <p data-p2c-when="empty">No invoices yet. The first one appears here once it is sent.</p>
+  <p data-p2c-when="loading">Loading invoices...</p>
+  <p data-p2c-when="error">The invoices could not be loaded. Try again in a minute.</p>
+  <button>New invoice</button>
+</div>

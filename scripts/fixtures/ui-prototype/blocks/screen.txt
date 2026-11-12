@@ -1,0 +1,21 @@
+Plan2Code UI prototype choice
+Prototype: invoices-screen
+File: <FILE>
+Round: 2
+Chosen: B "Split view" (others: A "Dense table", C "Cards")
+Carried over: colors, fonts, spacing
+Freed up: components, layout
+Direction: calmer, more room around totals
+Preset: Airy
+Screen size: Desktop 1280
+Theme: Dark (changed from Light)
+Accent color: #2f6fed
+Neutral color: #6b7280
+Font set: Humanist (changed from System UI)
+Text size: 16px
+Spacing: 1.25 (changed from 1)
+Corners: 8px
+State: Ready
+Content length: Typical
+Extra, Shadows: Soft
+Note: header from A with these cards

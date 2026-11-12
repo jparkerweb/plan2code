@@ -1,0 +1,21 @@
+```
+Plan2Code UI prototype choice
+Prototype: invoices-screen
+Round: 2
+File: <FILE>
+Chosen: C "Cards" (others: A "Dense table", B "Split view")
+Carried over: colors, fonts, spacing
+Freed up: components, layout
+Screen size: Phone 390 (changed from Desktop 1280)
+Theme: Light
+Accent color: #d9480f (changed from #2f6fed)
+Neutral color: #6b7280
+Font set: System UI
+Text size: 16px
+Spacing: 1
+Corners: 16px (changed from 8px)
+State: Empty (changed from Ready)
+Content length: Long (changed from Typical)
+Mood: warmer, like the old app
+Note: keep the overdue badge
+```

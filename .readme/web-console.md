@@ -55,7 +55,7 @@ Scroll down for the utilities. Outside a git repository the **Git** card says so
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="../docs/screenshots/dashboard-utilities-dark.webp">
-  <img src="../docs/screenshots/dashboard-utilities-light.webp" alt="The utility cards: Get a PR ready, Write missing tests, Clear out dead code, Changelog, Git, which notes that the folder is not a git repository yet and offers to start one, and Handoff.">
+  <img src="../docs/screenshots/dashboard-utilities-light.webp" alt="The utility cards: Get a PR ready, Write missing tests, Clear out dead code, Prototype a screen, Changelog, and Git, which notes that the folder is not a git repository yet and offers to start one.">
 </picture>
 
 ---

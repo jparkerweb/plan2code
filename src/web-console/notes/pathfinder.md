@@ -25,3 +25,5 @@ The page shows **Write a brief** for this workflow. It arrives as a send:
 ```
 
 Say in chat where the file went.
+
+A UI prototype run inside this skill posts `{"run":{"event":"ui-prototype-round","id":"<name>-round-<N>"}}` once per round drawn, uses a `text` card to paste the choice into, and opens its page in a separate browser tab.

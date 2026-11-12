@@ -51,6 +51,7 @@ Every command below is what a dashboard card runs. Typed on its own, each one as
 | pr-prep    | /plan2code-pr-prep            | Your branch     | A readiness verdict (Ready, Ready with notes, Not ready) and a PR description to copy; no commits, no push |
 | test       | /plan2code-test               | An area, or none | New unit and integration tests in the project's style, run; a bug handed to Diagnose; no source changes |
 | dead-code  | /plan2code-dead-code          | A folder, or none | Findings labeled Safe, Check first or Warning, then only the removals you pick, checked by the tests and build; no commits, no installs |
+| ui-prototype | /plan2code-ui-prototype     | A screen or flow, or none | One page of several versions with live dials, your pick pasted back; `prototypes/<name>.html` and `.md` in a spec on a yes; no code changes |
 | changelog  | /plan2code-changelog          | Your branch     | `CHANGELOG.md` entries and the `package.json` version, from the default branch's latest version |
 | git        | /plan2code-git                | Your repo       | Commits (`<subject>` / `AI Assisted`), branches, pull with conflict help, push, publish                       |
 

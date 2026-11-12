@@ -1,0 +1,34 @@
+{
+  "name": "invoices-screen",
+  "round": 1,
+  "kind": "screen",
+  "request": "A screen listing a customer's invoices, with what is overdue easy to spot.",
+  "direction": "calm, plenty of room around totals",
+  "carried": ["colors", "fonts", "spacing"],
+  "freed": ["components"],
+  "notFound": ["layout"],
+  "variants": [
+    { "letter": "A", "name": "Dense table", "file": "variant-a.html", "what": "A table with overdue rows tinted", "starts": { "radius": 4 } },
+    { "letter": "B", "name": "Split view", "file": "variant-b.html", "what": "A list on the left, the open invoice on the right", "starts": { "radius": 10 } },
+    { "letter": "C", "name": "Cards", "file": "variant-c.html", "what": "One card per invoice, overdue ones first", "starts": { "radius": 16 } }
+  ],
+  "starts": {
+    "screen": "Desktop 1280",
+    "theme": "light",
+    "accent": "#2f6fed",
+    "neutral": "#6b7280",
+    "fontSet": "System UI",
+    "textSize": 16,
+    "space": 1,
+    "radius": 8,
+    "state": "ready",
+    "length": "typical"
+  },
+  "extras": [
+    { "name": "shadows", "label": "Shadows", "type": "pick", "choices": ["none", "soft", "strong"], "start": "soft", "look": true },
+    { "name": "columns", "label": "Columns", "type": "slider", "min": 1, "max": 4, "step": 1, "start": 2, "look": false },
+    { "name": "dividers", "label": "Row dividers", "type": "toggle", "start": true, "look": true }
+  ],
+  "images": [],
+  "fonts": []
+}

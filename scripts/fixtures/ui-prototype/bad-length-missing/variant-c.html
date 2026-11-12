@@ -1,0 +1,18 @@
+<style>
+  .cards { display: grid; grid-template-columns: repeat(var(--p2c-x-columns), 1fr); gap: var(--p2c-space-4); padding: var(--p2c-space-5); }
+  .card { background: var(--p2c-surface); border-radius: var(--p2c-radius); padding: var(--p2c-space-4); }
+  :root[data-p2c-x-shadows="soft"] .card { box-shadow: 0 2px 8px color-mix(in srgb, var(--p2c-text) 12%, transparent); }
+  .card strong { font-size: calc(var(--p2c-text-size) * 1.25); }
+  .card .due { color: var(--p2c-accent); }
+</style>
+<div class="cards">
+  <div class="card" data-p2c-when="ready">
+    <strong>$1,240.00</strong>
+    <p class="due">Overdue 12 days</p>
+    <p data-p2c-text="short">Harbor</p>
+    <p data-p2c-text="typical">Harbor Supply</p>
+  </div>
+  <div class="card" data-p2c-when="empty">No invoices yet.</div>
+  <div class="card" data-p2c-when="loading">Loading invoices...</div>
+  <div class="card" data-p2c-when="error">Something went wrong loading invoices.</div>
+</div>

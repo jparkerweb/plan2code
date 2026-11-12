@@ -1,0 +1,170 @@
+/* Plan2Code UI prototype: the base stylesheet placed inside every variant frame.
+   It implements the shared values, root attributes and marks named in
+   ui-prototype-contract.md. The page's dials set the inputs on each frame's
+   <html>; everything below derives from them. No rule here loads anything. */
+
+/* ------------------------------------------------------------ dial inputs */
+
+:root {
+  /* Font sets, verbatim from Modern Font Stacks (fetched 2026-11-11). */
+  --p2c-font-set-system-ui: system-ui, sans-serif;
+  --p2c-font-set-humanist: Seravek, 'Gill Sans Nova', Ubuntu, Calibri, 'DejaVu Sans', source-sans-pro, sans-serif;
+  --p2c-font-set-transitional: Charter, 'Bitstream Charter', 'Sitka Text', Cambria, serif;
+  --p2c-font-set-slab-serif: Rockwell, 'Rockwell Nova', 'Roboto Slab', 'DejaVu Serif', 'Sitka Small', serif;
+  --p2c-font-set-rounded-sans: ui-rounded, 'Hiragino Maru Gothic ProN', Quicksand, Comfortaa, Manjari, 'Arial Rounded MT', 'Arial Rounded MT Bold', Calibri, source-sans-pro, sans-serif;
+  --p2c-font-set-monospace-code: ui-monospace, 'Cascadia Code', 'Source Code Pro', Menlo, Consolas, 'DejaVu Sans Mono', monospace;
+
+  /* Terminal palettes: background, text and accent for each theme. */
+  --p2c-palette-graphite-dark-bg: #1e1f22;
+  --p2c-palette-graphite-dark-fg: #d7dae0;
+  --p2c-palette-graphite-dark-accent: #6cb6ff;
+  --p2c-palette-graphite-light-bg: #fafafa;
+  --p2c-palette-graphite-light-fg: #24292f;
+  --p2c-palette-graphite-light-accent: #0969da;
+  --p2c-palette-amber-dark-bg: #1a1408;
+  --p2c-palette-amber-dark-fg: #ffcc66;
+  --p2c-palette-amber-dark-accent: #ff9e3d;
+  --p2c-palette-amber-light-bg: #fff8e8;
+  --p2c-palette-amber-light-fg: #4a3200;
+  --p2c-palette-amber-light-accent: #b35c00;
+  --p2c-palette-phosphor-dark-bg: #0b140d;
+  --p2c-palette-phosphor-dark-fg: #9ef0a8;
+  --p2c-palette-phosphor-dark-accent: #3fd96b;
+  --p2c-palette-phosphor-light-bg: #f2fbf3;
+  --p2c-palette-phosphor-light-fg: #1d4d27;
+  --p2c-palette-phosphor-light-accent: #1a7f37;
+  --p2c-palette-ocean-dark-bg: #0f1b2a;
+  --p2c-palette-ocean-dark-fg: #cfe3f7;
+  --p2c-palette-ocean-dark-accent: #4fc1e9;
+  --p2c-palette-ocean-light-bg: #f3f8fd;
+  --p2c-palette-ocean-light-fg: #16324f;
+  --p2c-palette-ocean-light-accent: #0b6fa4;
+
+  /* Defaults for every dial input; the page overrides them on the root. */
+  --p2c-accent: #2f6fed;
+  --p2c-neutral: #6b7280;
+  --p2c-font: var(--p2c-font-set-system-ui);
+  --p2c-text-size: 16px;
+  --p2c-space: 1;
+  --p2c-radius: 8px;
+  --p2c-density: 1.4;
+  /* The Screen size dial's width; a flow's screens each take it. */
+  --p2c-screen-width: 390px;
+  --p2c-step-width: var(--p2c-screen-width);
+
+  /* The spacing scale. */
+  --p2c-space-1: calc(var(--p2c-space) * 4px);
+  --p2c-space-2: calc(var(--p2c-space) * 8px);
+  --p2c-space-3: calc(var(--p2c-space) * 12px);
+  --p2c-space-4: calc(var(--p2c-space) * 16px);
+  --p2c-space-5: calc(var(--p2c-space) * 24px);
+  --p2c-space-6: calc(var(--p2c-space) * 32px);
+}
+
+/* --------------------------------------------------------- light and dark */
+
+:root,
+:root[data-p2c-theme="light"] {
+  color-scheme: light;
+  --p2c-bg: color-mix(in srgb, var(--p2c-neutral) 5%, #ffffff);
+  --p2c-surface: color-mix(in srgb, var(--p2c-neutral) 1%, #ffffff);
+  --p2c-text: color-mix(in srgb, var(--p2c-neutral) 20%, #0d0e10);
+  --p2c-muted: color-mix(in srgb, var(--p2c-neutral) 85%, #000000);
+  --p2c-border: color-mix(in srgb, var(--p2c-neutral) 28%, #ffffff);
+  --p2c-on-accent: color-mix(in srgb, var(--p2c-accent) 4%, #ffffff);
+  --p2c-term-bg: var(--p2c-palette-graphite-light-bg);
+  --p2c-term-fg: var(--p2c-palette-graphite-light-fg);
+  --p2c-term-accent: var(--p2c-palette-graphite-light-accent);
+}
+
+:root[data-p2c-theme="dark"] {
+  color-scheme: dark;
+  --p2c-bg: color-mix(in srgb, var(--p2c-neutral) 12%, #0b0c0e);
+  --p2c-surface: color-mix(in srgb, var(--p2c-neutral) 18%, #121316);
+  --p2c-text: color-mix(in srgb, var(--p2c-neutral) 10%, #f4f5f7);
+  --p2c-muted: color-mix(in srgb, var(--p2c-neutral) 70%, #ffffff);
+  --p2c-border: color-mix(in srgb, var(--p2c-neutral) 35%, #17181b);
+  --p2c-on-accent: color-mix(in srgb, var(--p2c-accent) 4%, #ffffff);
+  --p2c-term-bg: var(--p2c-palette-graphite-dark-bg);
+  --p2c-term-fg: var(--p2c-palette-graphite-dark-fg);
+  --p2c-term-accent: var(--p2c-palette-graphite-dark-accent);
+}
+
+/* ------------------------------------------------------------------- body */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: var(--p2c-font);
+  font-size: var(--p2c-text-size);
+  line-height: 1.5;
+  background: var(--p2c-bg);
+  color: var(--p2c-text);
+}
+
+img {
+  max-width: 100%;
+}
+
+/* ------------------------------------------------- states and text length */
+
+/* A mark holds one value or several separated by spaces; only the parts whose
+   list holds the root's value show. Unmarked parts always show. */
+:root[data-p2c-state="ready"] [data-p2c-when]:not([data-p2c-when~="ready"]),
+:root[data-p2c-state="empty"] [data-p2c-when]:not([data-p2c-when~="empty"]),
+:root[data-p2c-state="loading"] [data-p2c-when]:not([data-p2c-when~="loading"]),
+:root[data-p2c-state="error"] [data-p2c-when]:not([data-p2c-when~="error"]),
+:root[data-p2c-length="short"] [data-p2c-text]:not([data-p2c-text~="short"]),
+:root[data-p2c-length="typical"] [data-p2c-text]:not([data-p2c-text~="typical"]),
+:root[data-p2c-length="long"] [data-p2c-text]:not([data-p2c-text~="long"]) {
+  display: none !important;
+}
+
+/* ------------------------------------------------------------------- flow */
+
+:root[data-p2c-kind="flow"] body {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: flex-start;
+  gap: var(--p2c-space-6);
+  padding: var(--p2c-space-5);
+  overflow-x: auto;
+}
+
+:root[data-p2c-kind="flow"] [data-p2c-step] {
+  flex: 0 0 auto;
+  width: var(--p2c-step-width);
+  position: relative;
+  margin-top: calc(var(--p2c-text-size) * 2);
+}
+
+:root[data-p2c-kind="flow"] [data-p2c-step]::before {
+  content: attr(data-p2c-step);
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  padding-bottom: var(--p2c-space-2);
+  font-size: 0.8em;
+  font-weight: 600;
+  color: var(--p2c-muted);
+  white-space: nowrap;
+}
+
+/* --------------------------------------------------------------- terminal */
+
+:root[data-p2c-kind="terminal"] {
+  --p2c-font: var(--p2c-font-set-monospace-code);
+}
+
+:root[data-p2c-kind="terminal"] body {
+  font-family: var(--p2c-font-set-monospace-code);
+  background: var(--p2c-term-bg);
+  color: var(--p2c-term-fg);
+  line-height: var(--p2c-density);
+  padding: 0.5ch 1ch;
+}

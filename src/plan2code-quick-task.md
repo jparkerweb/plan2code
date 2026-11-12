@@ -39,6 +39,7 @@ Check for `./AGENTS.md` first:
 - Complete clarification before presenting the plan; keep it concise, actionable and about this change only
 - Standalone workflow - does NOT create spec files or feed into steps 2-4
 - Launched with a spec folder holding a `DIAGNOSIS-*.md`: read it first, as the bug's context (its cause and suggested fix are already found; re-run its reproduction before and after the fix). Once it passes, set the diagnosis `**Status:**` to `Fixed`; escalating, use that folder rather than asking for a name. Fixed, with nothing in the folder past the diagnosis (no `PLAN-CONVERSATION`, `PLAN-DRAFT`, `pathfinder/map.md` or `overview.md`)? It is done: run `node "<S>/specs.mjs" archive <spec> --dry-run` from the project root (`<S>` is `scripts/` beside this SKILL.md, `~/.agents/skills/plan2code-quick-task/scripts/` globally), show its `files`, ask "Archive it to `specs--completed/`? (yes / no)", and on yes run it without `--dry-run`. On no it stays on the dashboard as "Bug fixed".
+- Launched with a spec folder holding only saved prototypes (`prototypes/<name>.html` and `<name>.md`): read each `.md` first, as the brief (the request, the chosen variant and its settings, why the others lost), and open the `.html` for the look; with several, ask which to build. Then show what you read (the request, the chosen variant and the settings carried over) and ask them to confirm or add to it before any follow-ups or plan; this stands in for asking what to build (console: a `recap` card). Build the chosen variant into the app's own code and styles, never the prototype page itself, and skip the "See it first?" offer. Escalating, use that folder rather than asking for a name. Nothing is archived: the prototype stays as the reference.
 - Cause unclear or the fix big? Stop and suggest `/plan2code-diagnose`.
 - Read `references/building-habits.md` when the ask is a bug fix or a test fails unexpectedly, after a yes to "Write the test first?", and before a change meant to alter no behavior; follow it.
 - Read `references/test-runs.md` before the first test run: run the tests covering the changed files, and offer the full suite at sign-off when the change touched shared ground.
@@ -51,9 +52,11 @@ Check for `./AGENTS.md` first:
     ╰┬─┬╯
 ```
 
-Ask what feature the user wants, then ask follow-up questions until 100% clear. Console: that first card carries `"templates": "idea"` (console.md → A patch).
+Ask what feature the user wants (not on saved prototypes: the recap in Rules replaces it), then ask follow-up questions until 100% clear. Console: otherwise that first card carries `"templates": "idea"` (console.md → A patch).
 
 **Write the test first?** Ask it with the follow-ups (or on its own if there are none) only when the change alters behavior AND the project already has a test runner you can see (a `test` script in `package.json`, pytest config in `pytest.ini` or `pyproject.toml`, `go.mod` with `_test.go` files, or similar). Never for a pure refactor, a docs change, or a project with no runner. Console: one `confirm` card in the same batch as the other plan questions; terminal: one line in the same prompt. On yes, name the test spot in the plan's Verify section and follow the test-first habit.
+
+**See it first?** When the task is a visual change with more than one reasonable look, offer a UI prototype (`references/ui-prototype.md`, run in this conversation) before the plan; nothing is built without a yes. Build from the choice directly; it is not saved as `prototypes/<name>.html` and `<name>.md` unless the person asks (then offer the usual folder list), and the draft stays 30 days.
 
 ## Scope Validation
 

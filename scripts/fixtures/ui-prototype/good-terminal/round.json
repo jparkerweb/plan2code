@@ -1,0 +1,25 @@
+{
+  "name": "deploy-status",
+  "round": 2,
+  "kind": "terminal",
+  "request": "What the deploy command prints while it runs.",
+  "direction": "quiet unless something fails",
+  "carried": [],
+  "freed": [],
+  "notFound": ["colors", "fonts", "spacing", "components", "layout"],
+  "variants": [
+    { "letter": "A", "name": "Progress lines", "file": "variant-a.html", "what": "One line per step with a check mark", "starts": {} },
+    { "letter": "B", "name": "Table", "file": "variant-b.html", "what": "A live table of services and their state", "starts": { "palette": "Amber" } }
+  ],
+  "starts": {
+    "window": "120x30",
+    "theme": "dark",
+    "palette": "Graphite",
+    "density": 1.4,
+    "state": "ready",
+    "length": "typical"
+  },
+  "extras": [],
+  "images": [],
+  "fonts": []
+}

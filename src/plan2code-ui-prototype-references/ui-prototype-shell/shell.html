@@ -1,0 +1,51 @@
+<!doctype html>
+<!--
+  Plan2Code UI prototype page shell. ui-prototype.mjs assemble fills three
+  placeholders, each a comment alone on its line:
+    p2c:tool-styles  the tool styles (shell.css) in a <style>
+    p2c:frames       one sandboxed iframe per variant
+    p2c:script       the round facts (JSON) and the tool script (shell.js)
+  Everything else here is the tool part of the page, the same for every round.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; font-src data:; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>UI prototype</title>
+<!-- p2c:tool-styles -->
+</head>
+<body>
+<header id="p2c-bar">
+  <span id="p2c-name" class="tool-name">UI prototype</span>
+  <div id="p2c-tabs" class="tool-tabs" role="tablist" aria-label="Variants"></div>
+  <span class="tool-spacer"></span>
+  <button type="button" id="p2c-compare" class="tool-button" aria-pressed="false">Compare all</button>
+  <button type="button" id="p2c-copy" class="tool-button tool-primary">Copy</button>
+</header>
+<div id="p2c-copy-pop" class="tool-pop" role="dialog" aria-label="Copy your choice" hidden>
+  <label for="p2c-note" class="tool-pop-label">Note <span class="tool-pop-hint">(optional)</span></label>
+  <textarea id="p2c-note" rows="2" placeholder="For example: the header from A with these cards"></textarea>
+  <label for="p2c-block" class="tool-pop-label">What gets copied</label>
+  <textarea id="p2c-block" rows="12" readonly spellcheck="false"></textarea>
+  <div class="tool-pop-foot">
+    <span id="p2c-copy-status" class="tool-pop-status" role="status" aria-live="polite"></span>
+    <button type="button" id="p2c-copy-block" class="tool-button tool-primary">Copy block</button>
+    <button type="button" id="p2c-copy-close" class="tool-button">Close</button>
+  </div>
+</div>
+<main id="p2c-stage" aria-label="Variants">
+<!-- p2c:frames -->
+</main>
+<aside id="p2c-panel" class="tool-panel" aria-labelledby="p2c-panel-title">
+  <div id="p2c-panel-handle" class="tool-panel-head">
+    <span class="tool-grip" aria-hidden="true"></span>
+    <h2 id="p2c-panel-title" class="tool-panel-title">Dials</h2>
+    <button type="button" id="p2c-hide" class="tool-button tool-small">Hide</button>
+  </div>
+  <div id="p2c-panel-body" class="tool-panel-body"></div>
+</aside>
+<button type="button" id="p2c-dials-tab" class="tool-button tool-dials-tab" hidden>Dials</button>
+<!-- p2c:script -->
+</body>
+</html>

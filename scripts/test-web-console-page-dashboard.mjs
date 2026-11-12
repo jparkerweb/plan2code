@@ -270,6 +270,39 @@ test("the Dead Code card sits in Useful any time with its skull, is lit with or 
   assert.ok(!launch.spec, `a Dead Code launch names no spec: ${JSON.stringify(launch)}`);
 });
 
+test("the UI Prototype card sits in Useful any time with its screen icon, is lit with or without a spec, and launches with the picked spec", async (t) => {
+  const s = await openSession(await suite.browser(), { t, workflow: "dashboard", payload: MENU, project: tempProject(DRAFT_PROJECT) });
+  const main = await toTheMenu(s);
+  await hideUnavailable(main, false);
+  const card = lightOf(main, "/plan2code-ui-prototype");
+  await card.waitFor();
+
+  const group = main.locator("section.dash-group").filter({ has: s.page.locator("h3", { hasText: /^Useful any time$/ }) });
+  assert.equal(await group.locator("code", { hasText: /^\/plan2code-ui-prototype$/ }).count(), 1, "the card is in the Useful any time group");
+  assert.match(await textOf(card), /Utility/i, "it wears the Utility chip (drawn in capitals)");
+  assert.match(await textOf(card), /Prototype a screen/, "it has its title");
+  assert.equal(await card.locator("use").getAttribute("href"), "#ci-ui-prototype", "its icon is the framed screen");
+  assert.equal(await s.page.locator("symbol#ci-ui-prototype").count(), 1, "the screen symbol is drawn in the icon sheet");
+
+  // Lit with no spec picked, and with one.
+  await chipFor(main, "Start from scratch").click();
+  await pickedChip(main, "Start from scratch").waitFor();
+  assert.equal(await card.isEnabled(), true, "lit with no spec picked");
+  await chipFor(main, "demo").click();
+  await pickedChip(main, "demo").waitFor();
+  assert.equal(await card.isEnabled(), true, "lit with a spec picked");
+
+  // A launch with the spec picked carries it: the save list starts there.
+  await card.click();
+  await main.getByRole("button", { name: "Start Prototype a screen" }).click();
+  const launch = collect(s).actions.find((a) => a.i === "__launch");
+  assert.ok(launch, "the send carries a launch");
+  assert.deepEqual(
+    { skill: launch.skill, workflow: launch.workflow, spec: launch.spec },
+    { skill: "plan2code-ui-prototype", workflow: "ui-prototype", spec: "specs/demo" }
+  );
+});
+
 // What a person would see break: a spec not documented yet offers nothing to
 // read, or its Map and Plan draft tabs stay up for a spec that has an
 // overview (or for no spec at all).

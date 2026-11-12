@@ -1257,6 +1257,14 @@ test("the dashboard matrix lights only the cards a spec state allows", () => {
   assert.equal(launchTarget(entry("plan2code-1-plan"), sel("diagnosed")).dir, "specs/x");
   assert.equal(launchTarget(entry("plan2code-review"), sel("diagnosed")), null);
   assert.equal(launchTarget(entry("plan2code-1-plan"), null), null);
+  // A folder holding only saved prototypes rides along on Quick Task too, as
+  // what to build from; a plain folder of files, or a mid-pipeline spec that
+  // also has prototypes (Implement builds those), still launches untargeted.
+  assert.equal(launchTarget(entry("plan2code-quick-task"), { ...sel("unrecognized"), prototypes: 1 }).dir, "specs/x");
+  assert.equal(launchTarget(entry("plan2code-quick-task"), { ...sel("unrecognized"), prototypes: 0 }), null);
+  assert.equal(launchTarget(entry("plan2code-quick-task"), sel("unrecognized")), null);
+  assert.equal(launchTarget(entry("plan2code-quick-task"), { ...sel("building"), prototypes: 2 }), null);
+  assert.equal(launchTarget(entry("plan2code-review"), { ...sel("unrecognized"), prototypes: 1 }), null);
 
   // A fixed bug is finished: no pipeline card, and Quick Task starts fresh.
   for (const skill of [
@@ -2090,7 +2098,7 @@ test("subagents: only the sixteen opted-in workflows offer the switch", () => {
     assert.equal(offered(w), true, w);
     assert.ok(defaultInstruction(w).length > 0, `${w} has a default instruction`);
   }
-  for (const w of ["dashboard", "changelog", "git", "handoff", "constructor", "toString", undefined]) {
+  for (const w of ["dashboard", "changelog", "git", "handoff", "ui-prototype", "constructor", "toString", undefined]) {
     assert.equal(offered(w), false, String(w));
     assert.equal(defaultInstruction(w), "");
   }
@@ -2385,6 +2393,7 @@ test("meter: the weights and labels built from the skill list are the ones writt
     plan: 2, "revise-plan": 1, document: 2, "implement-phase": 2, "implement-review-phase": 3,
     review: 2, "quick-task": 1, init: 2, "init-update": 2, finalize: 1, handoff: 0, git: 1,
     "git-commits": 0, "git-conflict": 1, changelog: 1, xray: 1, diagnose: 1, "pr-prep": 1, test: 1, "dead-code": 1,
+    "ui-prototype-round": 1,
   });
   assert.deepEqual({ ...LAUNCH_LABELS }, {
     plan: "Plan started", "revise-plan": "Revise plan started", document: "Document started",
@@ -2402,6 +2411,7 @@ test("meter: the weights and labels built from the skill list are the ones writt
     finalize: "Finalize run", handoff: "Handoff written", git: "Git run", "git-commits": "Commits in Git",
     "git-conflict": "Git conflict help", changelog: "Changelog run", xray: "X-ray run", diagnose: "Diagnose run",
     "pr-prep": "PR Prep run", test: "Test run", "dead-code": "Dead Code run",
+    "ui-prototype-round": "Prototype round drawn",
   });
   for (const t of [WEIGHTS, LAUNCH_LABELS, RUN_LABELS]) assert.ok(Object.isFrozen(t));
 });

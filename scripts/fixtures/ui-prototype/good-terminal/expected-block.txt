@@ -1,0 +1,17 @@
+Plan2Code UI prototype choice
+Prototype: deploy-status
+File: <FILE>
+Round: 2
+Chosen: A "Progress lines" (others: B "Table")
+Carried over: none
+Freed up: none
+Direction: quiet unless something fails
+Preset: Bold
+Window size: 80x24 (changed from 120x30)
+Theme: Dark
+Palette: Ocean (changed from Graphite)
+Density: 1.5 (changed from 1.4)
+State: Ready
+Content length: Typical
+Extra, Spinner: line (changed from dots)
+Note: fewer lines while it runs

@@ -22,6 +22,9 @@ const EVENT_WEIGHTS = {
   // Scores 0 itself: Git's commits are tallied per run (COMMITS_PER_POINT).
   "git-commits": 0,
   "git-conflict": 1,
+  // UI Prototype scores per round drawn, not per launch: one point a round,
+  // wherever the round runs (its own skill or a host skill that offers it).
+  "ui-prototype-round": 1,
 };
 // A skill's fields as a table by workflow, leaving out the entries without one.
 const bySkill = (field) => Object.fromEntries(FLOW_SKILLS.filter((s) => s[field] !== null).map((s) => [s.workflow, s[field]]));
@@ -137,6 +140,7 @@ export const RUN_LABELS = Object.freeze({
   "implement-review-phase": "Implement + Review phase built",
   "git-commits": "Commits in Git",
   "git-conflict": "Git conflict help",
+  "ui-prototype-round": "Prototype round drawn",
   ...bySkill("ran"),
 });
 

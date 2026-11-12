@@ -1,0 +1,3 @@
+I like the second one best, but with a darker header.
+Theme: Dark
+Spacing: 1.25

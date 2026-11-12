@@ -81,10 +81,35 @@ function planChangeWaiting(dir, phases) {
   return files.some((f) => PLAN_CHANGE_RE.test(notesOf(readText(path.join(dir, f)))));
 }
 
+// A spec folder's pipeline position and detail, with the count of its saved
+// prototypes added to the detail and kept as `prototypes` (the dashboard
+// hands a prototype-only folder to Quick Task as what to build from). A
+// folder holding only prototypes stays `unrecognized` ("Files on disk"); its
+// detail says how many it holds.
+function classifySpec(dir, names) {
+  const result = specPosition(dir, names);
+  const count = prototypeCount(dir, names);
+  if (!count) return { ...result, prototypes: 0 };
+  const noun = count === 1 ? "prototype" : "prototypes";
+  const detail = result.state === "unrecognized" ? `${count} ${noun} saved` : `${result.detail} · ${count} ${noun}`;
+  return { ...result, detail, prototypes: count };
+}
+
+// How many prototypes a spec has saved: the .html files directly inside its
+// prototypes/ folder (each saved with a .md beside it).
+function prototypeCount(dir, names) {
+  if (!names.includes("prototypes")) return 0;
+  try {
+    return fs.readdirSync(path.join(dir, "prototypes"), { withFileTypes: true }).filter((e) => e.isFile() && /\.html$/i.test(e.name)).length;
+  } catch {
+    return 0;
+  }
+}
+
 // A spec folder's pipeline position, from its files alone. Furthest artifact
 // wins: an overview beats a draft beats a map, so a spec mid-way through two
 // stages reports the later one.
-function classifySpec(dir, names) {
+function specPosition(dir, names) {
   const has = (re) => names.some((n) => re.test(n));
   const pfDir = path.join(dir, "pathfinder");
   const overview = names.includes("overview.md");

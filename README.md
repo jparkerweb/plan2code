@@ -260,8 +260,11 @@ The dashboard's cards, and when each one lights up for the spec you pick:
 | Get a PR ready | Runs the checks your branch needs, says if it is ready, and writes the PR description to copy. Never commits, pushes or opens the PR. | Always |
 | Write missing tests | Finds code with no tests and writes unit and integration tests in your project's own style. Never changes source code. | Always |
 | Clear out dead code | Finds code nothing uses, says how safe each piece is to remove, and removes only what you pick. Uses the dead-code tools your project already has, and never commits. | Always |
+| Prototype a screen | Several versions of a screen on one page, tuned with live dials, and your pick brought back by Copy and paste. Saved into a spec only when you say, and never changes your code. | Always (takes the picked spec as the save folder) |
 | Changelog | Checks the CHANGELOG version against the main branch and suggests entries for what is new. | Always |
 | Git | Branches, pull, push and commits on one board, asking before anything leaves your machine. | Always (offers to start a repository outside one) |
+
+Pathfinder, Plan, Revise the plan and Quick task can each offer a prototype when a decision is about how a screen looks or flows, and run it right there in the same session; nothing is drawn without your yes.
 
 ---
 
@@ -433,6 +436,7 @@ console or the terminal; add `--web` to skip the question and go straight to the
 | `/plan2code-pr-prep` | Before you open a pull request. Picks the checks the branch's changes need from the project's `## Test map` (or its config files), runs the ones you keep, says Ready, Ready with notes or Not ready, and writes a PR description to copy with the create-a-PR link; never commits, pushes or opens the PR |
 | `/plan2code-test` | Parts of the code have no tests. Asks where to look, finds the untested files (plus real coverage when the project already has a coverage tool), shows a plan in the project's own style, then writes and runs unit and integration tests; never changes source code, hands a real bug to `/plan2code-diagnose` |
 | `/plan2code-dead-code` | Code nothing calls anymore. Uses the project's own dead-code tools, one per language (Knip, vulture, cargo check and others), or searches by itself, checks every item for callers across the project, labels each Safe to remove, Check first or Warning, removes only what you pick, then runs the tests and build and puts back anything that breaks them; never commits, never installs anything |
+| `/plan2code-ui-prototype` | See a screen before it gets built. Draws several versions of a screen or flow on one page that opens in your browser, with live dials for fonts, colors, spacing and feel; Copy and paste brings your pick back for the next round, and a yes saves it as `specs/<spec>/prototypes/<name>.html` and `.md`; never changes your code |
 | `/plan2code-changelog` | Check the CHANGELOG version against the default branch, suggest entries for new work you can edit, keep `package.json` aligned, then hand off to Git to commit |
 | `/plan2code-git` | Branches, pull, push and commits on one board (or plain instructions in the terminal); asks before every push, publish and delete |
 
