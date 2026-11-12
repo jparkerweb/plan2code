@@ -1936,6 +1936,8 @@ export function renderFooter() {
   const sendIsStep = !state.disabled && !unanswered().length;
   btn.classList.toggle("primary", state.disabled || sendIsStep);
   btn.classList.toggle("standby", !state.disabled && !sendIsStep);
+  // The chevron before Send sways only while Send is the filled, live step.
+  $("send-nudge").hidden = !sendIsStep;
 
   const hint = $("send-hint");
   hint.replaceChildren();
@@ -2173,6 +2175,7 @@ export async function send() {
 
   const btn = $("btn-send");
   btn.disabled = true;
+  $("send-nudge").hidden = true;
   btn.textContent = "Sending…";
   try {
     const res = await fetch("/submit", {

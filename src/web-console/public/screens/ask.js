@@ -798,7 +798,11 @@ export function renderAside() {
 
   const attached = noteImages(item.id);
   const row = attachRow(item.id, "Add files to this note");
-  if (!loopDriving() && !isDashboard() && SUGGEST_KINDS.includes(item.kind)) row.appendChild(suggestChip(item));
+  if (!loopDriving() && !isDashboard() && SUGGEST_KINDS.includes(item.kind)) {
+    const chip = suggestChip(item);
+    if (!chip.disabled) row.appendChild(suggestNudge());
+    row.appendChild(chip);
+  }
   wrap.appendChild(row);
 
   if (attached.length) wrap.appendChild(attachTray(item.id, attached));
@@ -849,6 +853,17 @@ function suggestChip(item) {
     else $("thread-" + item.id)?.field?.focus();
   });
   return chip;
+}
+
+// The question mark that sways beside a live Ask for suggestions chip, so the
+// chip is noticed. The panel is redrawn often, so the sway starts where the
+// clock says it should be: a fresh mark never jumps back to its first frame.
+const NUDGE_CYCLE_MS = 2800;
+function suggestNudge() {
+  const mark = el("span", "nudge suggest-nudge", "?");
+  mark.setAttribute("aria-hidden", "true");
+  mark.style.animationDelay = `-${Math.round(performance.now() % NUDGE_CYCLE_MS)}ms`;
+  return mark;
 }
 
 // The label on a note that is sent and not yet picked up, with the page's small

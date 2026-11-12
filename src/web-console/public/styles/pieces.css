@@ -483,6 +483,22 @@ input[type="text"].invalid, .md-host.invalid { border-color: var(--warn); }
   100% { box-shadow: var(--glow), 0 0 0 6px transparent; }
 }
 #btn-send.primary:not(:disabled) { animation: send-pulse 2.4s ease-out infinite; }
+/* A small accent mark that sways toward the button on its right: the chevron
+   before Send once Send is the step, the question mark before a live Ask for
+   suggestions. One sway there and back is 2.8s (NUDGE_CYCLE_MS in ask.js);
+   reduced motion holds it still. */
+.nudge {
+  flex: none; display: inline-flex; align-items: center; justify-content: center;
+  color: var(--accent); pointer-events: none; user-select: none;
+  animation: nudge-sway 1.4s ease-in-out infinite alternate;
+}
+.nudge[hidden] { display: none; }
+@keyframes nudge-sway {
+  from { transform: translateX(-3px); }
+  to { transform: translateX(3px); }
+}
+.suggest-nudge { font-size: 15px; font-weight: 800; line-height: 1; }
+.send-nudge svg { width: 16px; height: 16px; display: block; }
 .btn.ghost { background: transparent; border-color: transparent; color: var(--ink-2); }
 .btn.ghost:hover { background: var(--panel-2); color: var(--ink); }
 .btn.danger { border-color: var(--warn); color: var(--warn); }

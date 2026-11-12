@@ -95,6 +95,7 @@
      still, the working star included. */
   .help-mood-bot, .help-mood-bot *, .help-mood-bot.is-work .eye { animation: none !important; }
   #btn-send { animation: none; }
+  .nudge { animation: none; }
 }
 
 /* User Preferences: action rows (Cleanup's scan/delete buttons share this
