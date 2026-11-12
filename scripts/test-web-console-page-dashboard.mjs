@@ -14,6 +14,7 @@ import assert from "node:assert/strict";
 import { pageSuite, openSession, tempProject, textOf, styleOf } from "./page-test-helpers.mjs";
 import { cli, until, CONSOLE_CLI, HOME, JPEG } from "./web-console-test-helpers.mjs";
 import { addImage, createTab, deleteTab, markTabSent, saveNote } from "../src/web-console/notepads.mjs";
+import { steadyColumns } from "../src/web-console/public/card-rows.js";
 
 const suite = pageSuite(test);
 
@@ -758,11 +759,13 @@ test("the switch reads the Notebook again when it closes, and starts off again a
 });
 
 // The cards of a group as rows: each card's left edge and width, grouped by
-// the top edge it sits at.
+// the top edge it sits at. Null while a redraw is replacing the cards (a card
+// with no box), so `until` reads it as not settled yet.
 async function cardRows(grid) {
   const rows = new Map();
   for (const card of await grid.locator(":scope > .dash-card").all()) {
     const box = await card.boundingBox();
+    if (!box) return null;
     const top = Math.round(box.y);
     if (!rows.has(top)) rows.set(top, []);
     rows.get(top).push({ x: Math.round(box.x), w: Math.round(box.width) });
@@ -785,11 +788,16 @@ test("every group keeps one card width and leaves no card alone on a row, at eac
 
   for (const width of ["narrow", "comfortable", "wide", "ultrawide"]) {
     await s.page.evaluate((w) => (document.documentElement.dataset.width = w), width);
-    let rows;
+    // What card-rows.js picks for this many cards at the grid's width: the
+    // first row holds that many, so a new utility card never breaks this.
+    let rows, want;
     const settled = await until(async () => {
-      rows = await cardRows(utilities);
-      return rows.length > 1 && rows.every((r) => r.length >= 2) && new Set(rows.flat().map((c) => c.w)).size === 1 && (width !== "ultrawide" || rows[0].length === 6);
+      const box = await utilities.boundingBox();
+      rows = box && (await cardRows(utilities));
+      if (!rows) return false;
+      want = steadyColumns(rows.flat().length, Math.round(box.width)).cols;
+      return rows.length > 1 && rows[0].length === want && rows.every((r) => r.length >= 2) && new Set(rows.flat().map((c) => c.w)).size === 1;
     });
-    assert.ok(settled, `at ${width}, every row holds two cards or more, all one width: ${JSON.stringify(rows)}`);
+    assert.ok(settled, `at ${width}, ${want} across, every row holding two cards or more, all one width: ${JSON.stringify(rows)}`);
   }
 });

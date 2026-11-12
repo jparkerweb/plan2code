@@ -304,8 +304,10 @@ function fitCardRows(root) {
 }
 
 // One watcher, on the menu drawn last: a resize refits its groups. Fitting
-// changes only the menu's height, which refits to the same columns, so the
-// watcher never feeds itself.
+// changes the menu's height, which usually refits to the same columns. It can
+// feed itself only when that height change adds or removes the main column's
+// scrollbar and the grid's width sits within a scrollbar's width of a column
+// break; then the count may swap back and forth.
 const rowsObserver = typeof ResizeObserver === "function" ? new ResizeObserver((entries) => entries.forEach((e) => fitCardRows(e.target))) : null;
 function watchCardRows(wrap) {
   if (!rowsObserver) return;
