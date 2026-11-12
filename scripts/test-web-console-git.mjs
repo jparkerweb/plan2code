@@ -26,6 +26,7 @@ import {
   UNTRACKED_TICK_LIMIT,
   boardActions,
   boardAwaiting,
+  boardBranchLink,
   boardPrLink,
   commitTicks,
   composeBranchName,
@@ -36,7 +37,7 @@ import {
   orderBranches,
   refreshedLine,
 } from "../src/web-console/public/git-board.js";
-import { prUrl } from "../src/web-console/public/pr-url.js";
+import { prUrl, branchUrl } from "../src/web-console/public/pr-url.js";
 import { PROTECTED_CONSOLE_FILES, readLedger } from "../src/web-console/sessions.mjs";
 import {
   CONSOLE_CLI,
@@ -557,6 +558,31 @@ test("git board: boardPrLink builds the link for a pushed feature branch only", 
     remotes: [{ name: "origin", url: "git@git.example.com:a/b.git", host: "git.example.com", web: "https://git.example.com/a/b", kind: null }],
   });
   assert.deepEqual(boardPrLink(unknown, "main"), { url: null, needsKind: true, host: "git.example.com" });
+});
+
+test("git board: boardBranchLink opens the current branch on its host, once it is pushed", () => {
+  assert.equal(boardBranchLink(snap()), "https://github.com/jparkerweb/plan2code/tree/feature/x");
+  const onMain = snap({ branches: [row("main", { default: true, current: true })] });
+  assert.equal(boardBranchLink(onMain), "https://github.com/jparkerweb/plan2code/tree/main", "the default branch has a page too");
+  // A branch made from origin/main tracks origin/main until it is published: that page is not this branch.
+  const fromMain = snap({ branches: [row("feature/x", { current: true, upstream: "origin/main" })] });
+  assert.equal(boardBranchLink(fromMain), null, "no link to the branch it was made from");
+  const renamed = snap({ branches: [row("feature/x", { current: true, upstream: "origin/feature/theirs" })] });
+  assert.equal(boardBranchLink(renamed), null, "nor to an upstream under another name");
+  const unpushed = snap({ branches: [row("feature/x", { current: true, upstream: null, upstreamRemote: null })] });
+  assert.equal(boardBranchLink(unpushed), null, "nothing to open before a publish");
+  assert.equal(boardBranchLink(snap({ branches: [row("feature/x", { current: true, gone: true })] })), null, "nor once the remote copy is deleted");
+  const unknown = snap({
+    remotes: [{ name: "origin", url: "git@git.example.com:a/b.git", host: "git.example.com", web: "https://git.example.com/a/b", kind: null }],
+  });
+  assert.equal(boardBranchLink(unknown), null, "nor on a host of unknown kind");
+
+  const web = "https://h.example.com/a/b";
+  assert.equal(branchUrl({ web, kind: "gitlab" }, "feature/a b"), `${web}/-/tree/feature/a%20b`);
+  assert.equal(branchUrl({ web, kind: "azure" }, "feature/x"), `${web}?version=GBfeature%2Fx`);
+  assert.equal(branchUrl({ web, kind: "bitbucket" }, "feature/x"), `${web}/branch/feature/x`);
+  assert.equal(branchUrl({ web, kind: "none" }, "main"), null);
+  assert.equal(branchUrl({ web: "http://h.example.com/a/b", kind: "github" }, "main"), null, "https only");
 });
 
 test("git board: the page draws it from git-board.js, with no inline styles", () => {

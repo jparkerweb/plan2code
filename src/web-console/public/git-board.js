@@ -12,7 +12,7 @@
 // module scope and only one import: the page and `node --test` both import
 // this file.
 
-import { prUrl } from "./pr-url.js";
+import { prUrl, branchUrl } from "./pr-url.js";
 
 export const BRANCH_TYPES = Object.freeze(["feature", "fix", "chore", "docs", "refactor", "test"]);
 export const REMOTE_FOLD = 50;
@@ -421,6 +421,21 @@ export function boardPrLink(git, base) {
     needsKind,
     host: remote.host || null,
   };
+}
+
+/**
+ * The current branch's page on its remote, or null when there is nothing to
+ * open: not pushed, gone upstream, or a host of unknown kind. Also null when
+ * the upstream has another name: a branch made from origin/main tracks
+ * origin/main until it is published, and that page is not this branch.
+ */
+export function boardBranchLink(git) {
+  const cur = currentRow(git);
+  if (!cur || !cur.upstream || cur.gone || !cur.upstreamRemote) return null;
+  const remote = list(git.remotes).find((r) => r && r.name === cur.upstreamRemote);
+  if (!remote) return null;
+  if (cur.upstream !== `${cur.upstreamRemote}/${cur.name}`) return null;
+  return branchUrl(remote, cur.name);
 }
 
 /* ----------------------------------------------------------- next step */

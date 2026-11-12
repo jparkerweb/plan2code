@@ -408,6 +408,17 @@ test("git board view: every function of today's board is reachable on some tab",
     const head = draw(id).node.children.find((c) => c.tag === "header");
     if (s.git.head.branch) assert.ok(head.textContent.includes(s.git.head.branch), `${id}: the header names the branch`);
   }
+  // A pushed branch's name is a link to it on its host, in every mode; an unpublished one is plain text.
+  const branchLink = (id, mode) => walk(draw(id, { mode }).node).find((n) => n.tag === "a" && n.classes.has("git-branch-link"));
+  for (const mode of MODES) {
+    const a = branchLink("cp-pushed", mode);
+    assert.equal(a.href, `https://github.com/jparkerweb/plan2code/tree/${STATES["cp-pushed"].git.head.branch}`, `cp-pushed · ${mode}`);
+    assert.equal(a.target, "_blank");
+    assert.equal(a.rel, "noopener");
+    assert.equal(a.textContent, STATES["cp-pushed"].git.head.branch);
+  }
+  assert.equal(branchLink("e-gone", "idle"), undefined, "no link once the remote copy is deleted");
+  assert.equal(branchLink("e-no-remote", "idle"), undefined, "no link with no remote");
   assert.ok(draw("e-no-remote").node.children[0].textContent.includes("git remote add origin <url>"));
 });
 

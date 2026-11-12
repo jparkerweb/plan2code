@@ -1,4 +1,5 @@
-// Plan2Code Web Console - the pull-request link for a branch.
+// Plan2Code Web Console - the pull-request link for a branch, and the link to
+// the branch itself.
 //
 // One pure builder for the four host shapes in the git-dashboard spec
 // (overview.md -> Pull-request URL shapes). git-repo.mjs re-exports it for the
@@ -27,10 +28,31 @@ const SHAPES = {
 export function prUrl({ web, kind } = {}, { base, head } = {}) {
   const shape = SHAPES[kind];
   if (!shape || !web || !base || !head) return null;
-  const url = shape(String(web).replace(/\/+$/, ""), base, head);
+  return httpsOnly(shape(String(web).replace(/\/+$/, ""), base, head));
+}
+
+const httpsOnly = (url) => {
   try {
     return new URL(url).protocol === "https:" ? url : null;
   } catch {
     return null;
   }
+};
+
+// Where each host shows one branch's files.
+const BRANCH_SHAPES = {
+  github: (web, branch) => `${web}/tree/${segments(branch)}`,
+  gitlab: (web, branch) => `${web}/-/tree/${segments(branch)}`,
+  azure: (web, branch) => `${web}?version=GB${q(branch)}`,
+  bitbucket: (web, branch) => `${web}/branch/${segments(branch)}`,
+};
+
+/**
+ * The page for `branch` on a remote, under the same rules as prUrl(): null
+ * for an unknown host kind, no web address, or a result that is not https:.
+ */
+export function branchUrl({ web, kind } = {}, branch) {
+  const shape = BRANCH_SHAPES[kind];
+  if (!shape || !web || !branch) return null;
+  return httpsOnly(shape(String(web).replace(/\/+$/, ""), branch));
 }

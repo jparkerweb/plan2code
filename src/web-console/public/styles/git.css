@@ -153,6 +153,10 @@
 }
 .git-head-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 14px; }
 .git-branch { margin: 0; font: 600 22px/1.2 var(--serif); overflow-wrap: anywhere; }
+/* The branch name as a link to its host: it reads as the title until hovered. */
+.git-branch-link { color: inherit; text-decoration: underline; text-decoration-color: var(--rule-2); text-decoration-thickness: 1px; text-underline-offset: 4px; }
+.git-branch-link::after { content: " ↗"; font: 400 14px/1 var(--mono); color: var(--ink-2); }
+.git-branch-link:hover, .git-branch-link:focus-visible { color: var(--accent); text-decoration-color: currentColor; }
 .git-track { font-family: var(--mono); font-size: 14px; color: var(--ink-2); }
 .git-head-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; font-size: 13.5px; color: var(--ink-2); }
 .git-noremote { font-weight: 600; color: var(--stage); }

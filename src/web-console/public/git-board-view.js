@@ -23,6 +23,7 @@ import {
   GIT_TABS,
   PR_HOST_LABELS,
   boardActions,
+  boardBranchLink,
   boardPrLink,
   cleanupGroups,
   commitTicks,
@@ -149,7 +150,19 @@ function header(ctx) {
   const row = h.el("div", "git-head-row");
   // Mid-rebase HEAD is detached, but the person is still on their branch.
   const title = head.branch || (head.rebasing ? `${head.rebasing} · rebasing` : `Not on a branch (at ${head.detached || "an unknown commit"})`);
-  row.appendChild(h.el("h2", "git-branch", title));
+  // A pushed branch's name opens it on its host. The link only leaves the
+  // page, so it is not a board control and stays live while the board is busy.
+  const url = head.branch ? boardBranchLink(git) : null;
+  if (url) {
+    const h2 = h.el("h2", "git-branch");
+    const a = h.el("a", "git-branch-link", title);
+    a.href = url;
+    a.target = "_blank";
+    a.rel = "noopener";
+    a.title = `Open ${title} on ${(cur && cur.upstreamRemote) || "the remote"} in your browser`;
+    h2.appendChild(a);
+    row.appendChild(h2);
+  } else row.appendChild(h.el("h2", "git-branch", title));
   if (head.branch) {
     row.appendChild(
       h.el("span", "git-track", head.upstream && head.gone ? "remote copy deleted" : head.upstream ? `↑${head.ahead || 0} ↓${head.behind || 0}` : "not published")
