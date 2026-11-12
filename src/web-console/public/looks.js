@@ -9,7 +9,7 @@ import { normalizeRole, ROLE_NOT_SET } from "./starters.js";
 import { bootData, hooks } from "./state.js";
 import { el } from "./render.js";
 import { tellApp } from "./app-bridge.js";
-import { ACTIVITIES, bestKeys, memoKey, musicKey, musicLevel } from "./activities.js";
+import { ACTIVITIES, bestKeys, memoKey, musicKey, musicLevel, playedKey } from "./activities.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -49,6 +49,11 @@ export const DEFAULT_LOOKS = {
   ...Object.fromEntries(ACTIVITIES.map((a) => [memoKey(a.id), 0])),
   // And, for a game with music, its music volume (activityMusicDrive), 0 to 100.
   ...Object.fromEntries(ACTIVITIES.filter((a) => a.music !== undefined).map((a) => [musicKey(a.id), a.music])),
+  // And when each game was last picked (activityPlayedSnake, epoch ms, 0 for
+  // never) and the picker's order, "recent" or "az". Neither is cleared by
+  // Reset best scores or Back to default.
+  ...Object.fromEntries(ACTIVITIES.map((a) => [playedKey(a.id), 0])),
+  activityOrder: "recent",
 };
 
 export let looks = { ...DEFAULT_LOOKS };
@@ -79,8 +84,11 @@ export function adoptLooks(saved) {
     }
     const memo = Number(looks[memoKey(a.id)]);
     looks[memoKey(a.id)] = Number.isFinite(memo) && memo > 0 ? Math.floor(memo) : 0;
+    const played = Number(looks[playedKey(a.id)]);
+    looks[playedKey(a.id)] = Number.isFinite(played) && played > 0 ? Math.floor(played) : 0;
     if (a.music !== undefined) looks[musicKey(a.id)] = Math.round(musicLevel(a, looks[musicKey(a.id)]) * 100);
   }
+  if (!["recent", "az"].includes(looks.activityOrder)) looks.activityOrder = DEFAULT_LOOKS.activityOrder;
   if (saved && typeof saved === "object" && Object.hasOwn(saved, "role")) looks.role = normalizeRole(saved.role);
   else delete looks.role;
 }
@@ -286,7 +294,8 @@ export function renderSwatches() {
 
 // "Back to default": every look returns to its default, but the role is
 // marked as asked, the welcome stays seen, and the Activities' best scores
-// and last pick stay (only Reset best scores clears those). Given `keys` (one
+// and last pick stay (only Reset best scores clears those), and so do the
+// played times and the picker's order (nothing clears those). Given `keys` (one
 // Preferences tab's, prefsResetScope() in prefs.js), only those change: the
 // role is cleared but marked as asked, the rest take their defaults, and
 // every other key stays as it is.
@@ -295,10 +304,11 @@ export function resetLooks(keys) {
     for (const key of keys) looks[key] = key === "role" ? ROLE_NOT_SET : DEFAULT_LOOKS[key];
     return;
   }
-  const kept = { lastActivity: looks.lastActivity };
+  const kept = { lastActivity: looks.lastActivity, activityOrder: looks.activityOrder };
   for (const a of ACTIVITIES) {
     for (const key of bestKeys(a)) kept[key] = looks[key];
     kept[memoKey(a.id)] = looks[memoKey(a.id)];
+    kept[playedKey(a.id)] = looks[playedKey(a.id)];
   }
   looks = { ...DEFAULT_LOOKS, ...kept, role: ROLE_NOT_SET, welcomeSeen: looks.welcomeSeen };
 }

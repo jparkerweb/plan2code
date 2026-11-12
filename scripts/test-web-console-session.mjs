@@ -878,7 +878,7 @@ test("prefs: Back to default resets Appearance or Sounds & activities only, and 
 test("looks: resetLooks(keys) changes only those keys, and the role is marked as asked", () => {
   const before = { ...looks };
   try {
-    Object.assign(looks, { theme: "dark", width: "wide", accent: "violet", role: "pm", sound: false, soundQuestion: false, hideActivities: false, activityBestSnake: 7, lastActivity: "snake", skipIntro: true });
+    Object.assign(looks, { theme: "dark", width: "wide", accent: "violet", role: "pm", sound: false, soundQuestion: false, hideActivities: false, activityBestSnake: 7, lastActivity: "snake", activityPlayedSnake: 1700000000000, activityOrder: "az", skipIntro: true });
     resetLooks(prefsResetScope("appearance"));
     assert.equal(looks.theme, DEFAULT_LOOKS.theme);
     assert.equal(looks.width, DEFAULT_LOOKS.width);
@@ -893,6 +893,8 @@ test("looks: resetLooks(keys) changes only those keys, and the role is marked as
     assert.equal(looks.hideActivities, DEFAULT_LOOKS.hideActivities);
     assert.equal(looks.activityBestSnake, 7, "best scores stay");
     assert.equal(looks.lastActivity, "snake", "the last pick stays");
+    assert.equal(looks.activityPlayedSnake, 1700000000000, "played times stay");
+    assert.equal(looks.activityOrder, "az", "the picker's order stays");
   } finally {
     for (const key of Object.keys(looks)) delete looks[key];
     Object.assign(looks, before);

@@ -64,6 +64,42 @@ export const bestKeys = (entry) => (entry.courses ? entry.courses.map((c) => bes
 // leaves it at 0.
 export const memoKey = (id) => "activityMemo" + cap(id);
 
+// The looks.json key that holds when a game was last picked, in epoch
+// milliseconds: activityPlayedSnake. Set on pick (screens/activities.js
+// pick()), never by a score; 0 means never picked.
+export const playedKey = (id) => "activityPlayed" + cap(id);
+
+// Splits the game list into the games the person has played and the ones not
+// played yet, for the picker's rows. Returns { played, unplayed }, arrays of
+// the `list` entries themselves. A game is played when it has a played time,
+// is the last pick, or has a best score on any course. `unplayed` is always
+// A to Z. `order` "az" sorts `played` A to Z; anything else (the default
+// "recent") sorts it newest pick first, the last pick ahead of games with no
+// time, ties A to Z. Keys for games not in `list` are ignored.
+export function orderGames(list, looks, order) {
+  const byTitle = (a, b) => a.title.localeCompare(b.title);
+  const timeOf = (e) => {
+    const n = Number(looks[playedKey(e.id)]);
+    return Number.isFinite(n) && n > 0 ? n : 0;
+  };
+  const isPlayed = (e) => timeOf(e) > 0 || e.id === looks.lastActivity || bestKeys(e).some((key) => looks[key] > 0);
+  const played = list.filter(isPlayed);
+  const unplayed = list.filter((e) => !isPlayed(e)).sort(byTitle);
+  if (order === "az") return { played: played.sort(byTitle), unplayed };
+  played.sort((a, b) => {
+    const ta = timeOf(a);
+    const tb = timeOf(b);
+    if (ta !== tb) return tb - ta;
+    if (ta === 0) {
+      const la = a.id === looks.lastActivity;
+      const lb = b.id === looks.lastActivity;
+      if (la !== lb) return la ? -1 : 1;
+    }
+    return byTitle(a, b);
+  });
+  return { played, unplayed };
+}
+
 // The looks.json key that holds a game's music volume, 0 to 100:
 // activityMusicDrive. Only a game whose entry sets `music` has one.
 export const musicKey = (id) => "activityMusic" + cap(id);

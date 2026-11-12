@@ -361,7 +361,7 @@ test("framed, an Activities game in full screen asks the app for the whole scree
   t.after(() => fs.rmSync(looksFile, { force: true }));
   const s = await openSession(await pages.browser(), { t, workflow: "plan", payload: { agent: { status: "working", activity: "Reading" } }, env: { PLAN2CODE_IN_APP: "1" }, init: FAKE_APP_FRAME });
   await s.page.click("#btn-activities");
-  await s.page.locator('.activities-card[data-activity="snake"]').click();
+  await s.page.locator('.activities-row[data-activity="snake"]').click();
   await s.page.locator("#activities-board").waitFor();
   const told = async () => (await toApp(s, "activities-full")).map((m) => m.on);
   // Each key asks the browser for its own full screen too, and the browser answers a moment

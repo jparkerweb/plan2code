@@ -108,7 +108,7 @@ async function openActivities(s, id = "snake", course = "pirate") {
   const board = s.page.locator("#activities-board");
   await until(async () => (await picker.isVisible()) || (await board.isVisible()), 5000);
   if (await picker.isVisible()) {
-    await picker.locator(`.activities-card[data-activity="${id}"]`).click();
+    await picker.locator(`.activities-row[data-activity="${id}"]`).click();
     if (id === "golf") await courseCard(s, course).click();
   }
   await until(async () => (await board.isVisible()) && (await overlay(s)) !== "", 5000);
@@ -158,13 +158,13 @@ async function iconUsable(s, where) {
   assert.ok(await btn.isEnabled(), `the die is usable on ${where}`);
 }
 
-const cardTitles = (s) => s.page.locator("#activities-picker .activities-card-title").allInnerTexts();
-const card = (s, id) => s.page.locator(`#activities-picker .activities-card[data-activity="${id}"]`);
+const cardTitles = (s) => s.page.locator("#activities-picker .activities-row-title").allInnerTexts();
+const card = (s, id) => s.page.locator(`#activities-picker .activities-row[data-activity="${id}"]`);
 const focusedCard = (s) => s.page.evaluate(() => document.activeElement?.dataset?.activity || null);
 const courseCard = (s, id) => s.page.locator(`#activities-picker .activities-course[data-course="${id}"]`);
 const focusedCourse = (s) => s.page.evaluate(() => document.activeElement?.dataset?.course || null);
 
-test("the die sits right of the megaphone and opens on the picker, a card per game with its best, and a card opens its game", async (t) => {
+test("the die sits right of the megaphone and opens on the picker, a ledger row per game with its best, and a row opens its game", async (t) => {
   savedLooks(t, { welcomeSeen: true, activityBestSnake: 12 });
   const s = await openSession(await suite.browser(), { t, workflow: "dashboard" });
   await pastTheIntro(s);
@@ -172,11 +172,20 @@ test("the die sits right of the megaphone and opens on the picker, a card per ga
   const next = await s.page.evaluate(() => document.getElementById("btn-feedback").nextElementSibling?.id);
   assert.equal(next, "btn-activities");
   await openPicker(s);
-  assert.deepEqual(await cardTitles(s), ["Snake", "Mini golf", "Light Trails", "Bug Hunt", "Sunset Drive", "Stack Deploy", "Bumper Ring", "Rapids Run", "Hot Potato", "Crossing Rush", "Bounce Road", "Ghoul Rush", "Flock Dash"]);
+  // Snake's seeded best makes it the one played row; the rest sit under Not played yet, A to Z.
+  assert.deepEqual(await cardTitles(s), ["Snake", "Bounce Road", "Bug Hunt", "Bumper Ring", "Crossing Rush", "Flock Dash", "Ghoul Rush", "Hot Potato", "Light Trails", "Mini golf", "Rapids Run", "Stack Deploy", "Sunset Drive"]);
+  assert.equal(await s.page.locator("#activities-picker .activities-count").innerText(), "13 games");
+  assert.equal((await s.page.locator("#activities-picker .activities-group").innerText()).replace(/\s+/g, " "), "Not played yet 12");
+  assert.equal(await s.page.locator("#activities-picker .activities-order-pill[aria-pressed=true]").innerText(), "Recently played");
+  const rowTop = (id) => card(s, id).evaluate((n) => n.offsetTop);
+  assert.equal(await rowTop("bounce"), await rowTop("bugs"), "two rows to a line on a wide dialog");
+  await s.page.setViewportSize({ width: 560, height: 800 });
+  assert.ok(await until(async () => (await rowTop("bounce")) !== (await rowTop("bugs")), 5000), "one column when the dialog is narrow");
+  await s.page.setViewportSize({ width: 1280, height: 800 });
   assert.ok(await s.page.locator("#activities-board").isHidden(), "no board behind the picker");
   assert.ok(await s.page.locator("#activities-back").isHidden(), "nothing to go back to");
   assert.equal(await s.page.locator("#activities-title").innerText(), "Activities", "the header names no game");
-  assert.match(await card(s, "snake").innerText(), /Best: 12/);
+  assert.match(await card(s, "snake").innerText(), /Best 12/);
   assert.match(await card(s, "golf").innerText(), /6 courses to play/);
   assert.equal(await s.page.locator("#activities-picker svg").count(), (await cardTitles(s)).length, "each card has its cover");
   assert.equal(await focusedCard(s), "snake", "with no last pick, focus is on the first card");
@@ -187,23 +196,42 @@ test("the die sits right of the megaphone and opens on the picker, a card per ga
   assert.equal(await s.page.evaluate(() => document.activeElement?.id), "activities-board", "keys reach the game with no extra click");
 });
 
-test("the arrows walk the picker's cards, and space or Enter opens the one in focus", async (t) => {
-  savedLooks(t, { welcomeSeen: true });
+test("the arrows walk the picker's rows by position across the Not played yet heading, and space or Enter opens the one in focus", async (t) => {
+  savedLooks(t, { welcomeSeen: true, activityBestSnake: 12 });
   const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_WORKING });
   await openPicker(s);
+  const press = async (key, n = 1) => {
+    for (let i = 0; i < n; i++) await s.page.keyboard.press(key);
+  };
+  // Rows: snake (played), then A to Z under the heading, two to a line:
+  // bounce bugs / bumper hop / flock ghoul / fuse trails / golf rapids / stack drive.
+  assert.equal(await focusedCard(s), "snake", "the last played, here the one played row, has focus");
+  await press("ArrowDown");
+  assert.equal(await focusedCard(s), "bounce", "down from the last played row lands on the nearest unplayed row");
+  await press("ArrowUp");
   assert.equal(await focusedCard(s), "snake");
-  await s.page.keyboard.press("ArrowRight");
+  await press("ArrowUp");
+  assert.equal(await focusedCard(s), "snake", "the first line stays put");
+  await press("ArrowRight", 2);
+  assert.equal(await focusedCard(s), "bugs", "right steps through the list, across the heading");
+  await press("ArrowDown");
+  assert.equal(await focusedCard(s), "hop", "down keeps the column");
+  await press("ArrowLeft");
+  assert.equal(await focusedCard(s), "bumper");
+  await press("ArrowRight", 12);
+  assert.equal(await focusedCard(s), "drive", "the last row stays put");
+  await press("ArrowDown");
+  assert.equal(await focusedCard(s), "drive", "the last line stays put");
+  await press("ArrowUp");
+  assert.equal(await focusedCard(s), "rapids");
+  await press("ArrowLeft");
   assert.equal(await focusedCard(s), "golf");
-  for (let i = 0; i < 12; i++) await s.page.keyboard.press("ArrowRight");
-  assert.equal(await focusedCard(s), "flock", "the last card stays put");
-  for (let i = 0; i < 11; i++) await s.page.keyboard.press("ArrowLeft");
-  assert.equal(await focusedCard(s), "golf");
-  await s.page.keyboard.press("Enter");
+  await press("Enter");
   // Mini golf opens on its course dashboard, walked the same way.
   await until(async () => (await focusedCourse(s)) === "pirate", 5000);
-  await s.page.keyboard.press("ArrowRight");
+  await press("ArrowRight");
   assert.equal(await focusedCourse(s), "cave");
-  await s.page.keyboard.press("Enter");
+  await press("Enter");
   await until(async () => (await overlay(s)) === "Press space or click to start", 5000);
   assert.equal(await s.page.locator("#activities-title").innerText(), "Activities · Mini golf, Caves of Doom: no best yet");
   assert.equal(await s.page.locator("#activities-back").innerText(), "All courses");
@@ -211,11 +239,30 @@ test("the arrows walk the picker's cards, and space or Enter opens the one in fo
   await until(async () => (await focusedCourse(s)) === "cave", 5000);
   assert.equal(await s.page.locator("#activities-back").innerText(), "All games");
   await s.page.click("#activities-back");
-  await s.page.locator("#activities-picker .activities-card[data-activity]").first().waitFor();
+  await s.page.locator("#activities-picker .activities-row[data-activity]").first().waitFor();
   assert.equal(await focusedCard(s), "golf", "back on the picker, the game just left is in focus");
+  // Mini golf was just picked, so it leads Recently played; right steps to Snake.
+  await press("ArrowRight");
+  assert.equal(await focusedCard(s), "snake");
+  await press(" ");
+  assert.ok(await until(async () => (await s.page.locator("#activities-title").innerText()) .startsWith("Activities · Snake"), 5000), "space opens the row in focus");
+});
+
+test("the Order buttons keep their arrows, and a press redraws the picker and keeps focus on the button", async (t) => {
+  savedLooks(t, { welcomeSeen: true, activityBestSnake: 12 });
+  const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_WORKING });
+  await openPicker(s);
+  const az = s.page.locator('#activities-picker .activities-order-pill[data-order="az"]');
+  const focusedOrder = () => s.page.evaluate(() => document.activeElement?.dataset?.order || null);
+  await az.focus();
   await s.page.keyboard.press("ArrowRight");
-  await s.page.keyboard.press(" ");
-  await until(async () => (await s.page.locator("#activities-title").innerText()) === "Activities · Light Trails: no best yet", 5000);
+  await s.page.keyboard.press("ArrowDown");
+  assert.equal(await focusedOrder(), "az", "the arrows leave an Order button where it is");
+  await az.press("Enter");
+  assert.equal(await focusedOrder(), "az", "focus is back on the pressed button after the redraw");
+  assert.equal(await az.getAttribute("aria-pressed"), "true");
+  await az.press("Enter");
+  assert.equal(await az.getAttribute("aria-pressed"), "true", "a press on the pressed button does nothing");
 });
 
 test("picking Mini golf shows it, saves it as the last played, and keys reach it with no extra click", async (t) => {
@@ -254,7 +301,7 @@ test("one game at a time: All games keeps the round paused for its own card, and
   await s.page.locator("#activities-picker").waitFor();
   await step(s, 1);
   assert.equal(await framesWaiting(s), 0, "the picker does not tick the game");
-  assert.match(await card(s, "snake").innerText(), /Round paused, score 0/);
+  assert.match(await card(s, "snake").innerText(), /Paused at 0/);
   assert.match(await s.page.locator("#activities-picker").innerText(), /Picking a different game ends the paused round/);
   // Closed and reopened with a round waiting: straight back into it.
   await s.page.keyboard.press("Escape");
@@ -270,12 +317,12 @@ test("one game at a time: All games keeps the round paused for its own card, and
   await card(s, "trails").click();
   await until(async () => (await overlay(s)) === "Press space to start", 5000);
   await s.page.click("#activities-back");
-  assert.doesNotMatch(await s.page.locator("#activities-picker").innerText(), /Round paused/);
+  assert.doesNotMatch(await s.page.locator("#activities-picker").innerText(), /Paused at/);
   await card(s, "snake").click();
   await until(async () => (await overlay(s)) === "Press space to start", 5000);
 });
 
-test("a new session's picker marks the last played and puts focus on it, and a last pick no longer listed falls back to the first card", async (t) => {
+test("a new session's picker marks the last played and puts focus on it, and a last pick no longer listed falls back to the first row", async (t) => {
   savedLooks(t, { welcomeSeen: true, lastActivity: "golf" });
   const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_WORKING });
   await openPicker(s);
@@ -286,8 +333,45 @@ test("a new session's picker marks the last played and puts focus on it, and a l
   fs.writeFileSync(LOOKS_FILE, JSON.stringify({ looks: { welcomeSeen: true, hideActivities: false, lastActivity: "chess" } }));
   const again = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_WORKING });
   await openPicker(again);
-  assert.equal(await focusedCard(again), "snake", "an unknown pick puts focus on the first card");
-  assert.equal(await again.page.locator("#activities-picker .activities-card-tag").count(), 0);
+  assert.equal(await focusedCard(again), "bounce", "an unknown pick puts focus on the first row drawn, the first of A to Z");
+  assert.equal(await again.page.locator("#activities-picker .activities-row-tag").count(), 0);
+});
+
+test("picking a game moves it to the top of Recently played and stamps its played time, and A to Z reorders the played rows and is still chosen after closing and reopening, and after a reload", async (t) => {
+  savedLooks(t, { welcomeSeen: true, activityBestSnake: 12 });
+  const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_WORKING });
+  await openPicker(s);
+  const playedTitles = async (page = s) => (await cardTitles(page)).slice(0, 2);
+  assert.deepEqual(await playedTitles(), ["Snake", "Bounce Road"]);
+  await card(s, "stack").click();
+  await until(async () => (await overlay(s)) === "Press space to start", 5000);
+  await until(async () => (await serverLooks(s)).activityPlayedStack > 0, 5000);
+  await s.page.click("#activities-back");
+  assert.deepEqual(await playedTitles(), ["Stack Deploy", "Snake"], "the new pick leads Recently played");
+  assert.match(await card(s, "stack").innerText(), /Last played/);
+  const az = s.page.locator('#activities-picker .activities-order-pill[data-order="az"]');
+  const recent = s.page.locator('#activities-picker .activities-order-pill[data-order="recent"]');
+  await az.click();
+  assert.equal(await az.getAttribute("aria-pressed"), "true");
+  assert.equal(await recent.getAttribute("aria-pressed"), "false");
+  assert.deepEqual(await playedTitles(), ["Snake", "Stack Deploy"], "A to Z reorders the played rows");
+  await until(async () => (await serverLooks(s)).activityOrder === "az", 5000);
+  await s.page.keyboard.press("Escape");
+  await s.page.waitForFunction(() => !document.getElementById("activities-modal").open);
+  await openPicker(s);
+  assert.equal(await az.getAttribute("aria-pressed"), "true", "still chosen after closing and reopening");
+  assert.deepEqual(await playedTitles(), ["Snake", "Stack Deploy"]);
+  const again = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_WORKING });
+  await openPicker(again);
+  assert.equal(await again.page.locator('#activities-picker .activities-order-pill[data-order="az"]').getAttribute("aria-pressed"), "true", "read from looks in a new page");
+  assert.deepEqual(await playedTitles(again), ["Snake", "Stack Deploy"]);
+});
+
+test("a best score reads with thousands separators on its row", async (t) => {
+  savedLooks(t, { welcomeSeen: true, activityBestSnake: 51900 });
+  const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_WORKING });
+  await openPicker(s);
+  assert.match(await card(s, "snake").innerText(), /Best 51,900/);
 });
 
 test("Light Trails plays in the real window: a wide board, the rivals ride, and an arrow steers you", async (t) => {
@@ -1100,7 +1184,7 @@ test("Full screen gives the board the whole screen with a panel holding the scor
   await openPicker(s);
   const btn = s.page.locator("#activities-full");
   assert.ok(await btn.isHidden(), "no Full screen on the picker");
-  await s.page.locator('.activities-card[data-activity="snake"]').click();
+  await s.page.locator('.activities-row[data-activity="snake"]').click();
   await until(async () => (await overlay(s)) !== "", 5000);
   const before = await fullParts(s);
   assert.ok(!before.full && !before.rail && !before.scoreInRail, "the window opens at its own size, with no panel");
@@ -2055,7 +2139,7 @@ test("Mini golf: a full round saves its total as its course's best, a lower one 
   await s.page.click("#activities-back");
   await courseCard(s, "pirate").waitFor();
   await s.page.click("#activities-back");
-  assert.match(await card(s, "golf").innerText(), /Best on 2 of 6 courses/);
+  assert.match(await card(s, "golf").innerText(), /2 of 6 courses/);
 
   const reset = s.page.locator("#activities-reset");
   await reset.click();
@@ -2088,10 +2172,14 @@ test("Mini golf running breaks no content-security rule and logs no error", asyn
 });
 
 test("saved Activities values that do not hold up fall back to their defaults", async (t) => {
-  savedLooks(t, { welcomeSeen: true, activityBestSnake: -5, hideActivities: "yes", lastActivity: 5 });
+  savedLooks(t, { welcomeSeen: true, activityBestSnake: -5, hideActivities: "yes", lastActivity: 5, activityPlayedSnake: -5, activityPlayedGolf: 1.9, activityPlayedBugs: "soon", activityOrder: "bogus" });
   const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_WORKING });
   const looks = await pageLooks(s);
   assert.equal(looks.activityBestSnake, 0, "a negative best is none");
+  assert.equal(looks.activityPlayedSnake, 0, "a negative played time is never");
+  assert.equal(looks.activityPlayedGolf, 1, "a played time is a whole number");
+  assert.equal(looks.activityPlayedBugs, 0, "a played time that is not a number is never");
+  assert.equal(looks.activityOrder, "recent", "an order that is not recent or az is recent, the default");
   assert.equal(looks.hideActivities, true, "a switch that is not a boolean is off, the default");
   assert.equal(looks.lastActivity, "", "a last pick that is not a string is none");
   assert.ok(await s.page.locator("#btn-activities").isHidden(), "and the die stays hidden");
@@ -2118,7 +2206,7 @@ test("Back to default turns Show Activities back off and keeps the best scores",
 });
 
 test("Reset best scores asks once inside the window, then writes 0", async (t) => {
-  savedLooks(t, { welcomeSeen: true, activityBestSnake: 12 });
+  savedLooks(t, { welcomeSeen: true, activityBestSnake: 12, activityPlayedBugs: 1700000000000, activityOrder: "az" });
   const s = await openSession(await suite.browser(), { t, workflow: "plan", payload: PLAN_WORKING });
   await handTicks(s);
   await listScoringSnake(s, 3);
@@ -2132,6 +2220,9 @@ test("Reset best scores asks once inside the window, then writes 0", async (t) =
   await reset.click();
   assert.equal(await reset.innerText(), "Reset best scores");
   await until(async () => (await serverLooks(s)).activityBestSnake === 0, 5000);
+  const kept = await serverLooks(s);
+  assert.equal(kept.activityPlayedBugs, 1700000000000, "played times stay");
+  assert.equal(kept.activityOrder, "az", "the picker's order stays");
   await s.page.locator("#activities-board").focus();
   await s.page.keyboard.press(" ");
   assert.equal(await s.page.locator("#activities-score").innerText(), "Score: 3 · Best: 0", "the window shows the cleared best");

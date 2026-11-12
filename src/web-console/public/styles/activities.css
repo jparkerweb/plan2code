@@ -175,14 +175,16 @@
 .activities-banner .btn { flex: none; }
 .activities-banner .btn[hidden] { display: none; }
 
-/* The picker: a page of game cards in place of the board, shown once two or
-   more games are listed. Each card is one button: a cover scene, the title,
+/* The picker: a page of game rows in place of the board, shown once two or
+   more games are listed. Each row is one button: a cover scene, the title,
    a line about the game, its best, and a tag for the last one played. */
 .activities-picker {
   flex: 1 1 auto;
   min-height: 0;
   overflow: auto;
   padding: 4px 2px 8px;
+  /* The rows' columns follow the picker's own width, not the window's. */
+  container-type: inline-size;
 }
 .activities-picker[hidden] { display: none; }
 /* Cards keep one width and wrap, and each row (a short last one too) sits in
@@ -255,6 +257,85 @@
 }
 .activities-card-tag.waiting { border-color: var(--accent-line); background: var(--accent-soft); color: var(--ink); }
 .activities-picker-note { margin: 12px 0 0; }
+
+/* The game picker's ledger: an Order bar, then one grid of compact rows (one
+   column, two from about 640px of picker width). The Not played yet heading
+   spans both columns, so the arrows walk one grid. */
+.activities-order { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 0 0 12px; }
+.activities-order-label { color: var(--ink-3); font-size: 0.85em; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
+.activities-order-pill {
+  padding: 3px 12px;
+  border: 1px solid var(--rule-2);
+  border-radius: 999px;
+  background: var(--panel);
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 0.9em;
+  font-weight: 600;
+  cursor: pointer;
+}
+.activities-order-pill:hover { border-color: var(--accent-line); color: var(--ink); }
+.activities-order-pill[aria-pressed="true"] { border-color: var(--accent); background: var(--accent); color: var(--accent-ink); }
+.activities-order-pill:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.activities-count { margin-left: auto; color: var(--ink-3); font-size: 0.9em; font-weight: 600; font-variant-numeric: tabular-nums; }
+.activities-rows { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
+@container (min-width: 640px) {
+  .activities-rows { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+.activities-row {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px 8px 8px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: var(--panel);
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 120ms ease-out, box-shadow 120ms ease-out, transform 120ms ease-out;
+}
+.activities-row:hover,
+.activities-row:focus-visible { border-color: var(--accent-line); background: var(--panel-2); }
+.activities-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.activities-row .activities-cover { border: 1px solid var(--rule-2); border-radius: 6px; overflow: hidden; }
+.activities-row-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.activities-row-head { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 8px; }
+.activities-row-title { font-size: 1.05em; font-weight: 800; }
+.activities-row-blurb { color: var(--ink-2); font-size: 0.92em; line-height: 1.35; }
+.activities-row-tag {
+  padding: 1px 8px;
+  border: 1px solid var(--rule-2);
+  border-radius: 999px;
+  color: var(--ink-2);
+  font-size: 0.78em;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.activities-row-tag.waiting { border-color: var(--accent-line); background: var(--accent-soft); color: var(--ink); }
+.activities-row-best {
+  padding: 3px 10px;
+  border: 1px solid var(--rule-2);
+  border-radius: 999px;
+  background: var(--panel-2);
+  color: var(--ink-3);
+  font-size: 0.85em;
+  font-weight: 600;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.activities-row-best-value { color: var(--ink); font-weight: 800; }
+.activities-row-best.none { border-color: transparent; background: transparent; }
+.activities-group {
+  grid-column: 1 / -1;
+  margin-top: 6px;
+  padding-top: 10px;
+  border-top: 1px solid var(--rule);
+  font-weight: 800;
+}
+.activities-group-count { color: var(--ink-3); font-weight: 600; font-variant-numeric: tabular-nums; }
 /* All games sits at the far left of the actions, away from Close. */
 .modal.activities .activities-back { margin-right: auto; }
 .modal.activities .activities-back[hidden] { display: none; }
@@ -264,7 +345,8 @@
 .modal.activities .activities-music input { width: 110px; accent-color: var(--accent); }
 .modal.activities .activities-music:has(input:disabled) { opacity: 0.55; }
 @media (prefers-reduced-motion: no-preference) {
-  .activities-card:hover { transform: translateY(-2px); }
+  .activities-card:hover,
+  .activities-row:hover { transform: translateY(-2px); }
 }
 
 /* The board: fills the free space and centers the canvas, with the state

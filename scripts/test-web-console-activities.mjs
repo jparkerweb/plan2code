@@ -11,7 +11,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { ACTIVITIES, bestKey, bestKeys, memoKey, musicKey, musicLevel } from "../src/web-console/public/activities.js";
+import { ACTIVITIES, bestKey, bestKeys, memoKey, musicKey, musicLevel, orderGames, playedKey } from "../src/web-console/public/activities.js";
 import { BOSS_BITES, COMBO_MS, MAX_LEVEL, MUSIC_TRACKS, dealMusic, heat, trackFor, DISCOVERIES, FOOD_PER_LEVEL, FRUITS, GRID, ICE_STEPS, LEVELS, MAX_COMBO, MIN_CELL, MIN_STEP_MS, POWERS, STEP_MS, SURPRISES, age, applyPower, applySurprise, fruitFor, tallyBit, newRound, onFood, SPECIALS, pace, placeFood, step, stepMs, turn } from "../src/web-console/public/activities/snake.js";
 import golf, * as golfRules from "../src/web-console/public/activities/golf.js";
 import { COURSE_W, COURSE_H, COURSES, FRONT_NINE, HOLE_COUNT, courseById } from "../src/web-console/public/activities/golf-holes.js";
@@ -305,6 +305,62 @@ test("bestKey builds a flat looks.json key from a list id", () => {
 test("memoKey builds a flat looks.json key from a list id", () => {
   assert.equal(memoKey("snake"), "activityMemoSnake");
   assert.equal(memoKey("golf"), "activityMemoGolf");
+});
+
+test("playedKey builds a flat looks.json key from a list id, distinct for every game", () => {
+  assert.equal(playedKey("snake"), "activityPlayedSnake");
+  assert.equal(playedKey("golf"), "activityPlayedGolf");
+  const keys = ACTIVITIES.map((a) => playedKey(a.id));
+  assert.equal(new Set(keys).size, ACTIVITIES.length, "every listed game has its own key");
+});
+
+test("orderGames splits played from not played yet and orders each group", () => {
+  const ids = (entries) => entries.map((e) => e.id);
+  const byId = (id) => ACTIVITIES.find((a) => a.id === id);
+  const az = [...ACTIVITIES].sort((a, b) => a.title.localeCompare(b.title));
+
+  // Nothing saved: every game is unplayed, A to Z, and `list`'s own entries come back.
+  let out = orderGames(ACTIVITIES, {}, "recent");
+  assert.deepEqual(out.played, []);
+  assert.deepEqual(ids(out.unplayed), ids(az));
+  assert.ok(out.unplayed.every((e) => ACTIVITIES.includes(e)), "entries, never copies");
+
+  // The last pick alone makes that game played.
+  out = orderGames(ACTIVITIES, { lastActivity: "bugs" }, "recent");
+  assert.deepEqual(ids(out.played), ["bugs"]);
+  assert.equal(out.unplayed.length, ACTIVITIES.length - 1);
+  assert.ok(!ids(out.unplayed).includes("bugs"));
+
+  // A best counts as played, Mini golf's on any one course too.
+  out = orderGames(ACTIVITIES, { activityBestSnake: 40, activityBestGolfFrost: 61 }, "recent");
+  assert.deepEqual(ids(out.played).sort(), ["golf", "snake"]);
+
+  // Mixed times: newest first, then the last pick (no time), then A to Z.
+  const looks = { activityPlayedStack: 300, activityPlayedSnake: 100, activityPlayedBugs: 200, lastActivity: "golf", activityBestFlock: 5, activityBestBounce: 9 };
+  out = orderGames(ACTIVITIES, looks, "recent");
+  assert.deepEqual(ids(out.played), ["stack", "bugs", "snake", "golf", "bounce", "flock"]);
+  assert.ok(!ids(out.unplayed).some((id) => ids(out.played).includes(id)), "no game in both groups");
+  assert.equal(out.played.length + out.unplayed.length, ACTIVITIES.length);
+
+  // Equal times sort A to Z.
+  out = orderGames(ACTIVITIES, { activityPlayedSnake: 50, activityPlayedBugs: 50, activityPlayedStack: 50 }, "recent");
+  assert.deepEqual(ids(out.played), ["bugs", "snake", "stack"]);
+
+  // "az" sorts the played group A to Z; unplayed stays A to Z.
+  out = orderGames(ACTIVITIES, looks, "az");
+  assert.deepEqual(ids(out.played), ids(out.played.slice().sort((a, b) => a.title.localeCompare(b.title))));
+  assert.deepEqual(ids(out.played).sort(), ["bounce", "bugs", "flock", "golf", "snake", "stack"]);
+  assert.deepEqual(ids(out.unplayed), ids(az.filter((e) => !out.played.includes(e))));
+
+  // An unknown or missing order reads as "recent".
+  assert.deepEqual(ids(orderGames(ACTIVITIES, looks, "nope").played), ids(orderGames(ACTIVITIES, looks, "recent").played));
+  assert.deepEqual(ids(orderGames(ACTIVITIES, looks).played), ids(orderGames(ACTIVITIES, looks, "recent").played));
+
+  // A time for an id not in the list is ignored, and nothing outside `list` is returned.
+  const some = [byId("snake"), byId("golf"), byId("stack")];
+  out = orderGames(some, { activityPlayedBugs: 999, activityPlayedStack: 10, lastActivity: "bugs" }, "recent");
+  assert.deepEqual(ids(out.played), ["stack"]);
+  assert.deepEqual(ids(out.unplayed), ["golf", "snake"]);
 });
 
 /* ----------------------------------------------------------- contract */

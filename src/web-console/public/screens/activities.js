@@ -3,7 +3,7 @@
 // Small games for a long wait. The list of games is activities.js; each game
 // is its own module under activities/, loaded with import() the first time it
 // is picked, and answers the calls the list's header names. The window opens
-// on a picker of game cards and plays one game at a time. This file owns
+// on a picker of game rows and plays one game at a time. This file owns
 // everything around a game: the dialog, the picker, the one frame timer, the
 // keys and the pauses. A game never runs a timer of its own, so a paused game cannot move:
 // pausing is this file not ticking plus the game's own paused state. Nothing
@@ -15,7 +15,7 @@ import { finish, myTurn } from "../selectors.js";
 import { looks, saveLooks } from "../looks.js";
 import { el, lightDismiss, SVG_NS } from "../render.js";
 import { tellApp } from "../app-bridge.js";
-import { ACTIVITIES, bestKey, bestKeys, memoKey, musicKey, musicLevel } from "../activities.js";
+import { ACTIVITIES, bestKey, bestKeys, memoKey, musicKey, musicLevel, orderGames, playedKey } from "../activities.js";
 import { hum as playHum, hushTones as hushSounds, tone as playTone, unlockTones } from "../tones.js";
 import { hushMusic, music as playMusic } from "../music.js";
 
@@ -97,7 +97,7 @@ const games = new Map();
 // A load in flight per game id, so two quick opens share one import().
 const loading = new Map();
 let currentId = null;
-// What the window shows: "picker", the page of game cards, "courses", the
+// What the window shows: "picker", the page of game rows, "courses", the
 // dashboard of a game with courses (Mini golf's six), or "game", the board of
 // the game on screen. With one game listed there is no picker.
 let view = "game";
@@ -399,6 +399,7 @@ function resetBest() {
     return;
   }
   disarmReset();
+  // Best keys only: the played times and the picker's order stay.
   for (const entry of list) for (const key of bestKeys(entry)) looks[key] = 0;
   saveLooks();
   paintOverlay();
@@ -758,7 +759,7 @@ async function showGame(id) {
 
 /* ------------------------------------------------------------- picker */
 
-// Each card's cover, drawn as a little SVG scene: [tag, attributes] pairs on
+// Each row's cover, drawn as a little SVG scene: [tag, attributes] pairs on
 // a 120 by 72 box. A `cv-` class carries one of the page's tokens
 // (styles/activities.css), since the page's policy refuses a style attribute.
 // A game with no cover of its own gets the plain one.
@@ -1084,53 +1085,114 @@ function cover(id) {
   return svg;
 }
 
-// The round a card's game has waiting, if any: only the game last played can
+// The round a row's game has waiting, if any: only the game last played can
 // have one, since picking another lets it go.
 const pausedRound = (id) => {
   const g = games.get(id);
   return g && g.state === "paused" ? g : null;
 };
 
-// The picker: a card per game with its cover, its line, its best and, for the
-// game last played, whether a round of it is waiting.
+// The "N games" count the Order bar shows.
+const countText = (n) => `${n} game${n === 1 ? "" : "s"}`;
+
+// A row's best chip: a muted label and a value. Mini golf counts the courses
+// it has a best on; a game with no best yet reads "No best yet" with no value.
+function bestChip(entry) {
+  const chip = el("span", "activities-row-best");
+  const label = (text) => chip.append(el("span", "activities-row-best-label", text));
+  const value = (text) => chip.append(el("span", "activities-row-best-value", text));
+  if (entry.courses) {
+    const n = entry.courses.filter((c) => best(entry.id, c)).length;
+    if (n) value(`${n} of ${entry.courses.length} courses`);
+    else label(`${entry.courses.length} courses to play`);
+    return chip;
+  }
+  const n = best(entry.id);
+  if (!n) {
+    chip.classList.add("none");
+    label("No best yet");
+    return chip;
+  }
+  label(lowerIsBetter.has(entry.id) ? "Best round" : "Best");
+  chip.append(" ");
+  value(n.toLocaleString("en-US"));
+  return chip;
+}
+
+// One row of the picker: the cover, the title with its tag, the line about the
+// game and its best chip. The tag says whether a round is waiting, else
+// whether this was the last game played.
+function gameRow(entry) {
+  const b = el("button", "activities-row");
+  b.type = "button";
+  b.dataset.activity = entry.id;
+  const art = el("span", "activities-cover");
+  art.append(cover(entry.id));
+  const head = el("span", "activities-row-head", "");
+  head.append(el("span", "activities-row-title", entry.title));
+  const waiting = pausedRound(entry.id);
+  const tag = waiting ? `Paused at ${Number(waiting.score).toLocaleString("en-US")}` : entry.id === looks.lastActivity ? "Last played" : "";
+  if (tag) head.append(el("span", `activities-row-tag${waiting ? " waiting" : ""}`, tag));
+  const text = el("span", "activities-row-text");
+  text.append(head, el("span", "activities-row-blurb", entry.blurb || ""));
+  b.append(art, text, bestChip(entry));
+  b.addEventListener("click", () => pick(entry.id));
+  return b;
+}
+
+// The picker: an Order bar (Recently played or A to Z, and the game count),
+// then one grid of game rows, with the games never picked under a Not played
+// yet heading that spans both columns.
 function drawPicker() {
   const picker = $("activities-picker");
   if (!hasPicker()) return picker.replaceChildren();
-  const cards = el("div", "activities-cards");
-  cards.setAttribute("role", "group");
-  cards.setAttribute("aria-label", "Pick a game");
-  for (const entry of list) {
-    const b = el("button", "activities-card");
-    b.type = "button";
-    b.dataset.activity = entry.id;
-    const art = el("span", "activities-cover");
-    art.append(cover(entry.id));
-    const body = el("span", "activities-card-body");
-    const n = best(entry.id);
-    // A game with courses counts the courses it has a best on.
-    const played = entry.courses ? entry.courses.filter((c) => best(entry.id, c)).length : 0;
-    const bestText = entry.courses
-      ? played ? `Best on ${played} of ${entry.courses.length} courses` : `${entry.courses.length} courses to play`
-      : n ? `${lowerIsBetter.has(entry.id) ? "Best round" : "Best"}: ${n}` : "No best yet";
-    body.append(el("span", "activities-card-title", entry.title), el("span", "activities-card-blurb", entry.blurb || ""), el("span", "activities-card-best", bestText));
-    b.append(art, body);
-    const waiting = pausedRound(entry.id);
-    const tag = waiting ? `Round paused, score ${waiting.score}` : entry.id === looks.lastActivity ? "Last played" : "";
-    if (tag) b.append(el("span", `activities-card-tag${waiting ? " waiting" : ""}`, tag));
-    b.addEventListener("click", () => pick(entry.id));
-    cards.append(b);
+  const order = looks.activityOrder === "az" ? "az" : "recent";
+  const { played, unplayed } = orderGames(list, looks, order);
+  const bar = el("div", "activities-order");
+  bar.append(el("span", "activities-order-label", "Order"));
+  for (const [key, text] of [["recent", "Recently played"], ["az", "A to Z"]]) {
+    const pill = el("button", "activities-order-pill", text);
+    pill.type = "button";
+    pill.dataset.order = key;
+    pill.setAttribute("aria-pressed", String(order === key));
+    pill.addEventListener("click", () => setOrder(key));
+    bar.append(pill);
   }
-  const parts = [cards];
+  bar.append(el("span", "activities-count", countText(list.length)));
+  const rows = el("div", "activities-rows");
+  rows.setAttribute("role", "group");
+  rows.setAttribute("aria-label", "Pick a game");
+  rows.append(...played.map(gameRow));
+  if (unplayed.length) {
+    const group = el("div", "activities-group", "Not played yet");
+    group.setAttribute("role", "heading");
+    group.setAttribute("aria-level", "3");
+    group.append(" ", el("span", "activities-group-count", String(unplayed.length)));
+    rows.append(group, ...unplayed.map(gameRow));
+  }
+  const parts = [bar, rows];
   if (list.some((e) => pausedRound(e.id))) parts.push(el("p", "help activities-picker-note", "Picking a different game ends the paused round."));
   picker.replaceChildren(...parts);
 }
 
+// An Order button pressed: keep the order, draw the picker again and put
+// focus back on the button, which the redraw replaced. The pressed one does nothing.
+function setOrder(order) {
+  if ((looks.activityOrder === "az" ? "az" : "recent") === order) return;
+  looks.activityOrder = order;
+  saveLooks();
+  drawPicker();
+  const pill = $("activities-picker").querySelector(`[data-order="${order}"]`);
+  if (pill) pill.focus({ preventScroll: true });
+}
+
 // The game to put focus on when the picker shows: the one with a round
-// waiting, else the last one played, else the first.
+// waiting, else the last one played; none means the first row drawn.
 function focusId() {
-  if (currentId && list.some((e) => e.id === currentId)) return currentId;
+  const waiting = list.find((e) => pausedRound(e.id));
+  if (waiting) return waiting.id;
   if (list.some((e) => e.id === looks.lastActivity)) return looks.lastActivity;
-  return list.length ? list[0].id : null;
+  return null;
 }
 
 function showPicker() {
@@ -1142,7 +1204,8 @@ function showPicker() {
   paintTitle();
   drawPicker();
   layout();
-  const card = $("activities-picker").querySelector(`[data-activity="${focusId()}"]`);
+  const id = focusId();
+  const card = (id && $("activities-picker").querySelector(`[data-activity="${id}"]`)) || $("activities-picker").querySelector(".activities-row");
   if (card) card.focus({ preventScroll: true });
 }
 
@@ -1150,10 +1213,9 @@ function showPicker() {
 // one picked, so only one game is ever loaded with a round in it. A game
 // with courses opens on its dashboard.
 function pick(id) {
-  if (looks.lastActivity !== id) {
-    looks.lastActivity = id;
-    saveLooks();
-  }
+  looks.lastActivity = id;
+  looks[playedKey(id)] = Date.now();
+  saveLooks();
   if (currentId && currentId !== id) {
     pauseAll("closed");
     games.delete(currentId);
@@ -1248,16 +1310,25 @@ function playCourse(id, course) {
   showGame(id);
 }
 
-// The arrows walk the cards: left and right one at a time, up and down a row.
+// The arrows walk the rows and the course cards by position: left and right
+// one at a time through the list, up and down to the nearest button in the
+// next line above or below (closest left edge), staying put at the first or
+// last line. The group heading is no button, so it is never focused. An Order
+// button keeps its arrows, as a normal tab stop.
 function moveFocus(dir) {
-  const cards = [...$("activities-picker").querySelectorAll(".activities-card")];
+  const active = document.activeElement;
+  if (active instanceof Element && active.classList.contains("activities-order-pill")) return;
+  const cards = [...$("activities-picker").querySelectorAll(".activities-row, .activities-card")];
   if (!cards.length) return;
-  const at = cards.indexOf(document.activeElement);
+  const at = cards.indexOf(active);
   if (at < 0) return cards[0].focus();
-  const perRow = Math.max(1, cards.filter((c) => c.offsetTop === cards[0].offsetTop).length);
-  const step = { left: -1, right: 1, up: -perRow, down: perRow }[dir];
-  const next = cards[Math.min(cards.length - 1, Math.max(0, at + step))];
-  next.focus();
+  if (dir === "left" || dir === "right") return cards[Math.min(cards.length - 1, Math.max(0, at + (dir === "left" ? -1 : 1)))].focus();
+  const tops = [...new Set(cards.map((c) => c.offsetTop))].sort((a, b) => a - b);
+  const line = tops.indexOf(cards[at].offsetTop) + (dir === "up" ? -1 : 1);
+  if (line < 0 || line >= tops.length) return;
+  const left = cards[at].offsetLeft;
+  const near = cards.filter((c) => c.offsetTop === tops[line]).sort((a, b) => Math.abs(a.offsetLeft - left) - Math.abs(b.offsetLeft - left))[0];
+  near.focus();
 }
 
 /* ------------------------------------------------------------ opening */
@@ -1344,8 +1415,8 @@ function onGameKey(e, key) {
     e.stopPropagation();
     return full ? toggleFull() : closeActivities();
   }
-  // On the picker and a course dashboard the arrows walk the cards, and
-  // space and Enter press one.
+  // On the picker and a course dashboard the arrows walk the rows and
+  // cards, and space and Enter press one.
   if (view === "picker" || view === "courses") {
     if (Object.hasOwn(KEYS, key) && KEYS[key] !== "action") {
       e.preventDefault();
