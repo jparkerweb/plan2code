@@ -56,6 +56,8 @@ import {
   ask,
   until,
   clientFor,
+  consoleSession,
+  postPatch,
 } from "./web-console-test-helpers.mjs";
 
 let sid;
@@ -1557,6 +1559,27 @@ test("finish.changelog is accepted on quick-task and finalize, and refused on im
   // false is always fine, and a pause ignores it
   assert.deepEqual(problems("implement", false), []);
   assert.deepEqual(problems("implement", true, "Paused at Phase 2"), []);
+});
+
+// A quick task once re-posted its finish with Review it now after every
+// review, so each press started the same review again.
+test("a quick-task finish offering the review again after one ran in that launch is refused", () => {
+  const s = consoleSession(["--workflow", "quick-task"]);
+  try {
+    const finish = (review) => ({ finish: { headline: "Built", command: "git add -A", ...(review ? { review: true } : {}), dashboard: true } });
+    assert.equal(postPatch(s, finish(true)).status, 0, "before any review, the finish offers it");
+    assert.equal(postPatch(s, { finish: null, run: { event: "review", id: "review" } }).status, 0);
+    const again = postPatch(s, finish(true), { expectFail: true });
+    assert.equal(again.status, 3);
+    assert.match(again.stderr, /finish\.review: a review already ran in this quick task/);
+    assert.equal(postPatch(s, finish(false)).status, 0, "the finish without review goes through");
+    // A new launch starts clean.
+    cli(["open", "--resume", s.sid, "--no-open", "--workflow", "dashboard"]);
+    cli(["open", "--resume", s.sid, "--no-open", "--workflow", "quick-task"]);
+    assert.equal(postPatch(s, finish(true)).status, 0, "a new quick task may offer its own review");
+  } finally {
+    cli(["stop", "--session", s.sid, "--force"]);
+  }
 });
 
 // Update CHANGELOG first is a hop like Commit it now, into Changelog.

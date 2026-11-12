@@ -220,6 +220,7 @@ function postOnce() {
   delete patch.folderIssue;
   const reread = liftReread(patch, before.workflow);
   const ledgerLines = ledgerFromPost(dir, run, folderIssue, before.workflow);
+  refuseReviewAgain(dir, patch.finish, ledgerLines, before.workflow);
   // Taken before the lock: git processes must not run while it is held.
   const snap = reread === undefined ? null : snapshot(before.worktree || repoRoots().worktree, { prHosts: readPrHosts() });
 
@@ -321,6 +322,29 @@ export function gitBlock(snap, reread, previous) {
   // the board keeps saying when the last one that worked was.
   if (refreshFailed === true && reread && typeof reread === "object") return { ...snap, lastFetch: previous?.lastFetch ?? null, refreshFailed };
   return { ...snap, refreshFailed };
+}
+
+/**
+ * A quick task whose review already ran in this launch ends on a finish
+ * without `review` (building-review.md, "The way back out"). Offering
+ * Review it now again sends the person round the same review for as long as
+ * they press it, which happened once: exit 3 instead.
+ */
+export function refuseReviewAgain(dir, finish, ledgerLines, workflow) {
+  if (workflow !== "quick-task" || !finish || typeof finish !== "object" || !finish.review) return;
+  const ledger = readLedger(dir);
+  const launch = lastLaunchId(ledger);
+  const reviewed = [...ledger, ...ledgerLines].some((e) => e.kind === "run" && e.event === "review" && String(e.id).startsWith(`${launch}:`));
+  if (!reviewed) return;
+  die(
+    rule(
+      "",
+      "finish.review",
+      'a review already ran in this quick task, so offering it again only loops. Post "Check the fixes" if anything was fixed, then the finish without "review" (building-review.md, "The way back out")',
+      { finish: { headline: "The review is done", doc: "review", commit: true, changelog: true, dashboard: true } },
+    ),
+    3,
+  );
 }
 
 /**
