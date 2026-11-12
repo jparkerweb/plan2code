@@ -440,7 +440,9 @@ h1 {
 
 .attach-row { display: flex; align-items: center; margin: -4px 0 6px -13px; }
 .attach-row.is-under { margin: 6px 0 4px -13px; }
-.attach-row .suggest-chip { margin: 0 0 0 auto; }
+/* .btn on the chip's rule: pieces.css loads later, and .btn.tiny's bottom
+   margin would otherwise lift the chip off the row's center line. */
+.attach-row .btn.suggest-chip { margin: 0 0 0 auto; }
 .attach-row .suggest-nudge { margin-left: auto; }
 .attach-row .suggest-nudge + .suggest-chip { margin-left: 9px; }
 .msg .suggest-tag {

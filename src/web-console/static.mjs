@@ -25,6 +25,7 @@ export const SERVABLE = new Set([
   "skills.js",
   "hops.js",
   "spec-states.js",
+  "card-rows.js",
   "state.js",
   "doc-files.js",
   "send-state.js",

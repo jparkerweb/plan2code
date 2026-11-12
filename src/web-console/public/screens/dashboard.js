@@ -16,6 +16,7 @@ import { el, approvalTip, mdInto, releasesLink, copyButton, lightDismiss, SVG_NS
 import { needsRoleNudge, ROLE_NOT_SET } from "../starters.js";
 import { looks, saveLooks } from "../looks.js";
 import { RED_BANNER, RED_BANNER_IN_APP } from "../meter.js";
+import { steadyColumns } from "../card-rows.js";
 import {
   dashNoteKind,
   defaultSpec,
@@ -285,8 +286,31 @@ export function renderDashboard(main) {
     if (note) revealNote(note, page.wake.typed);
   }
   main.appendChild(wrap);
+  fitCardRows(wrap);
+  watchCardRows(wrap);
   // Deferred: this runs inside render(), and the dialog is not part of it.
   queueMicrotask(hooks.maybeWelcome);
+}
+
+// Each group's cards share one width, in as many columns as leave no card
+// alone on a row (card-rows.js). Measured from the grid's own width, so the
+// Card width setting and the window both count; only a change is written.
+function fitCardRows(root) {
+  for (const grid of root.querySelectorAll(".dash-grid")) {
+    const { cols, center } = steadyColumns(grid.children.length, grid.clientWidth);
+    if (grid.style.getPropertyValue("--dash-cols") !== String(cols)) grid.style.setProperty("--dash-cols", String(cols));
+    grid.classList.toggle("is-centered", center);
+  }
+}
+
+// One watcher, on the menu drawn last: a resize refits its groups. Fitting
+// changes only the menu's height, which refits to the same columns, so the
+// watcher never feeds itself.
+const rowsObserver = typeof ResizeObserver === "function" ? new ResizeObserver((entries) => entries.forEach((e) => fitCardRows(e.target))) : null;
+function watchCardRows(wrap) {
+  if (!rowsObserver) return;
+  rowsObserver.disconnect();
+  rowsObserver.observe(wrap);
 }
 
 const WAKE_TYPE_DELAY_MS = 350;

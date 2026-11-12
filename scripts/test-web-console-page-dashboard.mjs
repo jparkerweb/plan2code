@@ -658,6 +658,8 @@ test("the Notebook switch shows on Start fresh for Pathfinder, Plan and Quick Ta
   assert.equal(await offersNote(main, "Start from scratch", "/plan2code-xray"), false, "a utility never");
   assert.equal(await offersNote(main, "Start from scratch", "/plan2code-diagnose"), true, "Diagnose on Start fresh");
   assert.equal(await offersNote(main, "ready", "/plan2code-diagnose"), true, "Diagnose on a picked spec");
+  assert.equal(await offersNote(main, "Start from scratch", "/plan2code-ui-prototype"), true, "UI Prototype on Start fresh");
+  assert.equal(await offersNote(main, "ready", "/plan2code-ui-prototype"), false, "UI Prototype on a picked spec");
 });
 
 test("the switch lists the Notebook's tabs beside a preview: an empty tab grayed, five ticks at most, a Long tab note, and + note: on the command", async (t) => {
@@ -753,4 +755,41 @@ test("the switch reads the Notebook again when it closes, and starts off again a
   assert.equal(await noteSwitch(main).isChecked(), false);
   assert.equal(await main.locator(".confirm-cmd-note").isHidden(), true);
   assert.equal(await tabs.count(), 0);
+});
+
+// The cards of a group as rows: each card's left edge and width, grouped by
+// the top edge it sits at.
+async function cardRows(grid) {
+  const rows = new Map();
+  for (const card of await grid.locator(":scope > .dash-card").all()) {
+    const box = await card.boundingBox();
+    const top = Math.round(box.y);
+    if (!rows.has(top)) rows.set(top, []);
+    rows.get(top).push({ x: Math.round(box.x), w: Math.round(box.width) });
+  }
+  return [...rows.keys()].sort((a, b) => a - b).map((k) => rows.get(k));
+}
+
+test("every group keeps one card width and leaves no card alone on a row, at each Card width setting", async (t) => {
+  const s = await openSession(await suite.browser(), { t, workflow: "dashboard", payload: MENU, project: tempProject(DRAFT_PROJECT) });
+  await s.page.setViewportSize({ width: 2400, height: 1000 });
+  const main = await toTheMenu(s);
+  await hideUnavailable(main, false);
+  const utilities = main
+    .locator("section.dash-group")
+    .filter({ has: s.page.locator("h3", { hasText: /^Useful any time$/ }) })
+    .locator(".dash-grid");
+  await utilities.waitFor();
+  const count = await utilities.locator(":scope > .dash-card").count();
+  assert.ok(count >= 9, `the utilities hold enough cards to wrap: ${count}`);
+
+  for (const width of ["narrow", "comfortable", "wide", "ultrawide"]) {
+    await s.page.evaluate((w) => (document.documentElement.dataset.width = w), width);
+    let rows;
+    const settled = await until(async () => {
+      rows = await cardRows(utilities);
+      return rows.length > 1 && rows.every((r) => r.length >= 2) && new Set(rows.flat().map((c) => c.w)).size === 1 && (width !== "ultrawide" || rows[0].length === 6);
+    });
+    assert.ok(settled, `at ${width}, every row holds two cards or more, all one width: ${JSON.stringify(rows)}`);
+  }
 });

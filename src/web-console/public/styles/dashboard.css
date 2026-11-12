@@ -173,7 +173,17 @@
   padding-bottom: 8px;
 }
 
-.dash-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
+/* Every card in a group has one width, `--dash-cols` to a row: the dashboard
+   picks the count (card-rows.js) so no card sits alone on a row, and centers a
+   last row still short. The 3 is only the first paint's guess. */
+.dash-grid {
+  --dash-cols: 3;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.dash-grid > .dash-card { flex: 0 0 calc((100% - (var(--dash-cols) - 1) * 12px) / var(--dash-cols)); min-width: 0; }
+.dash-grid.is-centered { justify-content: center; }
 
 /* A card IS a button, so it carries the reset the page's other big clickable
    surfaces do; the look is the panel look with a lift on hover, and the
