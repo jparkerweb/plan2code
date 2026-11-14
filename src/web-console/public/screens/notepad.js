@@ -445,7 +445,11 @@ async function createNamed(name) {
   busy = false;
   tell("");
   inform("");
-  if (await showTab(id, false)) tabBar.focusTab(activeId);
+  if (!(await showTab(id, false))) return;
+  // The server seeded `## <name>` and blank lines: start typing under the heading.
+  const text = editor.getValue();
+  if (text.startsWith("## ")) editor.focus(text.indexOf("\n") + 2);
+  else tabBar.focusTab(activeId);
 }
 
 async function renameTo(name) {

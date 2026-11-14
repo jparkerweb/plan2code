@@ -226,7 +226,14 @@ export function makeCodeMirrorEditor(parent, { onChange, label }) {
       readOnly = Boolean(on);
       view.dispatch({ effects: access.reconfigure(accessOf(readOnly)) });
     },
-    focus: () => view.focus(),
+    // `at`, when given, is the caret's offset in the text.
+    focus(at) {
+      if (Number.isInteger(at)) {
+        const pos = Math.min(Math.max(at, 0), view.state.doc.length);
+        view.dispatch({ selection: { anchor: pos }, scrollIntoView: true });
+      }
+      view.focus();
+    },
     destroy() {
       view.destroy();
       host.remove();

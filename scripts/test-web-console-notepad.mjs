@@ -821,6 +821,7 @@ test("GET /notepad answers a two-tab notepad, one tab at a time, and refuses an 
   assert.equal(a.ok, true);
   assert.match(a.id, store.TAB_ID_RE);
   assert.equal(a.name, "Ideas");
+  assert.equal((await getJson(s, `/notepad?tab=${a.id}`)).body.tab.text, "## Ideas\n\n\n", "a tab made through the route opens with its name as a heading");
   assert.equal((await s.send(`/notepad/text?tab=${a.id}`, { text: "about ideas" })).status, 200);
   assert.equal((await s.send(`/notepad/text?tab=${b.id}`, { text: "about chores" })).status, 200);
   const dflt = await getJson(s, "/notepad");

@@ -196,3 +196,7 @@
 /* Review from the dashboard: the same card in a dialog over the menu. */
 .modal.lessons-dialog { width: min(720px, calc(100vw - 32px)); }
 .lessons-dialog .card { margin: 0; box-shadow: none; border: 0; padding: 0; }
+
+/* Switching Learning on or off: shown the moment the button is pressed. */
+.learn-busy { display: inline-flex; align-items: center; gap: 8px; color: var(--ink-3); }
+.learn-row.is-busy .learn-pill { opacity: 0.6; }

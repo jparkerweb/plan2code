@@ -86,7 +86,7 @@ const DRUM_TOKENS = { k: "k", s: "s", h: "h", o: "o", K: "kh", S: "sh", O: "ko",
 // The chips: a bass, a lead and an arpeggio voice each.
 const VIBRATO = { rate: 6, depth: 0.012, delay: 0.14 };
 const KITS = {
-  // The triangle bass and thin squares of a grey home console.
+  // The triangle bass and thin squares of a gray home console.
   nes: {
     bass: { wave: "triangle", gain: 0.9, decay: 0.08, sustain: 0.55 },
     lead: { wave: "pulse", duty: 0.25, gain: 0.3, decay: 0.07, sustain: 0.7, vibrato: VIBRATO },

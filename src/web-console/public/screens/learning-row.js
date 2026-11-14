@@ -48,6 +48,25 @@ export function learningBlocked() {
   return "";
 }
 
+// How long a switch on or off may show as working before the row gives up
+// waiting for the new state (the agent normally answers in a second or two).
+const BUSY_MS = 30000;
+
+/**
+ * The switch the person just pressed while the agent works on it, or null.
+ * sendLearning() sets page.learningBusy the instant a switch is pressed;
+ * it ends when the scan shows a different state, the send fails, or BUSY_MS pass.
+ */
+function busySwitch(state) {
+  const busy = page.learningBusy;
+  if (!busy) return null;
+  if (busy.from !== state || Date.now() - busy.at > BUSY_MS) {
+    page.learningBusy = null;
+    return null;
+  }
+  return busy;
+}
+
 function agentButton(text, cls, what) {
   const b = el("button", cls, text);
   b.type = "button";
@@ -342,7 +361,16 @@ export function renderLearningRow(scan, position) {
   const pill = PILLS[state];
   line.appendChild(el("span", "learn-pill" + pill.cls, pill.text));
   const controls = el("span", "learn-controls");
-  if (state === "not-set-up") {
+  const busy = busySwitch(state);
+  if (busy) {
+    row.classList.add("is-busy");
+    row.setAttribute("aria-busy", "true");
+    const working = el("span", "learn-busy");
+    working.setAttribute("role", "status");
+    working.append(el("span", "spinner tiny"), document.createTextNode(busy.what === "switch-on" ? "Switching on…" : "Switching off…"));
+    line.appendChild(el("span", "learn-say", busy.what === "switch-on" ? "Switching Learning on for this project." : "Switching Learning off for this project."));
+    controls.appendChild(working);
+  } else if (state === "not-set-up") {
     line.appendChild(el("span", "learn-say", "Plan2Code can keep lessons about this codebase, approved by you."));
     controls.appendChild(agentButton("Switch on", "btn small primary", "switch-on"));
   } else if (state === "off") {

@@ -1208,7 +1208,14 @@ function notepadTabRoute(act) {
 
 // Declarations, not consts: ROUTES above names them before this line runs.
 function notepadTabNew(req, res, ctx) {
-  return notepadTabRoute((root, body) => createTab(root, body.name))(req, res, ctx);
+  return notepadTabRoute((root, body) => {
+    const made = createTab(root, body.name);
+    // The new tab opens with its own name as a heading; a failed seed leaves it empty.
+    try {
+      saveNote(root, made.id, `## ${made.name}\n\n\n`);
+    } catch {}
+    return made;
+  })(req, res, ctx);
 }
 function notepadTabRename(req, res, ctx) {
   return notepadTabRoute((root, body) => renameTab(root, body.id, body.name))(req, res, ctx);

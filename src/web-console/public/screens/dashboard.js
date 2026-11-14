@@ -1413,6 +1413,15 @@ function learningBanner(sc) {
 // lessons.mjs, rescans and posts the menu again.
 export async function sendLearning(what) {
   if (hooks.learningBlocked()) return;
+  // Switching on or off shows as working at once, before the agent answers.
+  const sc = scan();
+  const from = sc && sc.learning && sc.learning.state;
+  if ((what === "switch-on" || what === "switch-off") && from) {
+    page.learningBusy = { what, from, at: Date.now() };
+    redraw();
+    // One redraw at the limit, so a switch the agent never answers stops spinning.
+    setTimeout(redraw, 30500);
+  }
   try {
     const res = await fetch("/submit", {
       method: "POST",
@@ -1424,6 +1433,7 @@ export async function sendLearning(what) {
     page.pendingResult = true;
     saveNow();
   } catch (err) {
+    page.learningBusy = null;
     if (err && err.pending) page.pendingResult = true;
     hooks.banner(
       err && err.pending

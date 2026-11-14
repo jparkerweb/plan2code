@@ -510,8 +510,11 @@ test("New tab asks for a name, refuses a bad or duplicate one, and Escape backs 
   await newTab(s, "  Big   ideas ", "Big ideas");
   assert.deepEqual(await tabNames(s), ["Notes", "Big ideas"]);
   assert.deepEqual(await selectedName(s), ["Big ideas"]);
-  assert.equal(await docText(s), "", "the new tab starts empty");
+  assert.equal(readNotepad(s.project, idOf(s, "Big ideas")).text, "## Big ideas\n\n\n", "the new tab opens with its name as a heading");
   assert.equal(await input(s).getAttribute("aria-readonly"), null, "and can be typed in");
+  // The editor has the focus, the caret under the heading and one blank line.
+  await s.page.keyboard.type("hello");
+  await until(() => readNotepad(s.project, idOf(s, "Big ideas")).text === "## Big ideas\n\nhello\n\n", 4000);
   assert.deepEqual(listTabs(s.project).tabs.map((tab) => tab.name), ["Notes", "Big ideas"]);
   assert.deepEqual(await violations(), []);
 });
@@ -524,7 +527,10 @@ test("each tab keeps its own text and pictures, and switching never saves into t
   await newTab(s, "Ideas");
   const notes = idOf(s, "Notes");
   const ideas = idOf(s, "Ideas");
-  await until(() => readNotepad(s.project, notes).text === "notes text", 4000);
+  // The new tab opens with its heading and the editor focused: clear it to start from empty.
+  await s.page.keyboard.press("Control+a");
+  await s.page.keyboard.press("Delete");
+  await until(() => readNotepad(s.project, notes).text === "notes text" && readNotepad(s.project, ideas).text === "", 4000);
   await typeInto(s, "ideas text");
   // Switch at once, before the debounce: the text still goes to Ideas.
   await tabNamed(s, "Notes").click();
