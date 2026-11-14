@@ -1,0 +1,18 @@
+[
+  {
+    "version": "1.2.5",
+    "repository.url": "git://github.com/substack/minimist.git"
+  },
+  {
+    "version": "1.2.6",
+    "repository.url": "git://github.com/substack/minimist.git"
+  },
+  {
+    "version": "1.2.7",
+    "repository.url": "git://github.com/minimistjs/minimist.git"
+  },
+  {
+    "version": "1.2.8",
+    "repository.url": "git://github.com/minimistjs/minimist.git"
+  }
+]

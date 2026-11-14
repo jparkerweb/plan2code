@@ -935,3 +935,60 @@ test("a staying arrival notice survives typing, goes on Escape, and the New mark
   await banner.waitFor({ state: "hidden" });
   assert.equal(await s.page.locator("#sidebar .rail-item", { hasText: "Who uses it" }).locator(".rail-new").count(), 1, "the New mark stays after the notice is dismissed");
 });
+
+test("a long pick list draws group headings, opens a row, holds a locked row and counts picks and rounds live", async (t) => {
+  const s = await openSession(await suite.browser(), { t, workflow: "plan" });
+  const card = await ask(s, {
+    id: "deps",
+    kind: "multi",
+    title: "Updates to apply",
+    body: "Tick the updates to apply.",
+    counter: { rounds: "check rounds" },
+    presets: [{ label: "All safe", ks: ["S1", "S2"] }],
+    options: [
+      { k: "S1", text: "react 18.3.1 to 18.3.2", group: "Safe", batch: "npm-root" },
+      { k: "S2", text: "vite 6.0.1 to 6.0.3", group: "Safe", batch: "npm-root" },
+      { k: "C1", text: "zod 3.23.0 to 3.24.1", group: "Check first", more: "**Changed:** `z.string().email()` is stricter." },
+      { k: "W1", text: "eslint 8.57.0 to 9.0.0", group: "Warning", locked: true, detail: "Needs Node 20." },
+    ],
+  });
+
+  // Headings in the order sent, one per run.
+  await card.locator(".option-group", { hasText: "Warning" }).waitFor();
+  assert.deepEqual(await card.locator(".option-group").allTextContents(), ["Safe", "Check first", "Warning"]);
+
+  // The row that opens: closed at first, opened by its button, and the tick stays as it was.
+  assert.equal(await card.locator(".option-more").count(), 0, "closed by default");
+  const more = card.getByRole("button", { name: /^More about zod/ });
+  assert.equal(await more.getAttribute("aria-expanded"), "false");
+  // From the keyboard: focus stays on the rebuilt button, now named for its visible word.
+  // The "Plan2Code is back" notice takes the first key and moves focus to the pane: let it go first.
+  await s.page.locator(".arrival").waitFor({ state: "detached" });
+  await settled(s.page, "#main");
+  await more.press("Enter");
+  await card.locator(".option-more", { hasText: "is stricter" }).waitFor();
+  const less = card.getByRole("button", { name: /^Less about zod/ });
+  assert.equal(await less.getAttribute("aria-expanded"), "true");
+  assert.equal(await s.page.evaluate(() => document.activeElement && document.activeElement.textContent), "Less", "focus stays on the toggle");
+  assert.equal(await card.getByLabel("C1: zod").isChecked(), false, "opening a row does not tick it");
+
+  // The locked row cannot be ticked.
+  const locked = card.getByLabel("W1: eslint");
+  assert.equal(await locked.isDisabled(), true);
+  assert.equal(await locked.getAttribute("aria-disabled"), "true");
+
+  // The counter: two Safe picks in one batch are one round; a Check first row adds one.
+  await card.getByRole("button", { name: "All safe" }).click();
+  await card.locator(".option-counter", { hasText: "2 picked, 1 check rounds" }).waitFor();
+  await card.getByLabel("C1: zod").check();
+  await card.locator(".option-counter", { hasText: "3 picked, 2 check rounds" }).waitFor();
+  // The fixed live node beside the footer speaks the same count.
+  assert.equal(await s.page.locator("#pick-count-live").textContent(), "3 picked, 2 check rounds");
+  // The opened row stayed open through the redraws the ticks set off.
+  await card.locator(".option-more", { hasText: "is stricter" }).waitFor();
+  await card.getByLabel("S2: vite").uncheck();
+  await card.locator(".option-counter", { hasText: "2 picked, 2 check rounds" }).waitFor();
+
+  const got = await sendAndCollect(s);
+  assert.deepEqual(answerTo(got, "deps").ks.sort(), ["C1", "S1"], "the locked row never reaches the agent");
+});

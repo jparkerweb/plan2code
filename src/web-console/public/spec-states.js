@@ -24,6 +24,8 @@ function state(label, next, finished = false) {
 export const SPEC_STATES = Object.freeze({
   diagnosed: state("Bug diagnosed", "plan2code-quick-task"),
   fixed: state("Bug fixed", null, true),
+  upgrade: state("Upgrade ready", "plan2code-quick-task"),
+  upgraded: state("Upgrade done", null, true),
   exploring: state("Exploring", "plan2code-0-pathfinder"),
   mapped: state("Ready to plan", "plan2code-1-plan"),
   planned: state("Ready to document", "plan2code-2-document"),

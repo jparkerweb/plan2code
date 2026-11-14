@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "parameters": "--outdated",
+  "sources": [
+    "https://api.nuget.org/v3/index.json"
+  ],
+  "projects": [
+    {
+      "path": "C:\\work\\fixture\\App.csproj",
+      "frameworks": [
+        {
+          "framework": "net8.0",
+          "topLevelPackages": [
+            {
+              "id": "Microsoft.NET.ILLink.Tasks",
+              "requestedVersion": "[8.0.11, )",
+              "resolvedVersion": "8.0.11",
+              "autoReferenced": "true",
+              "latestVersion": "10.0.0"
+            },
+            {
+              "id": "Newtonsoft.Json",
+              "requestedVersion": "13.0.1",
+              "resolvedVersion": "13.0.1",
+              "latestVersion": "13.0.4"
+            },
+            {
+              "id": "Serilog",
+              "requestedVersion": "3.1.1",
+              "resolvedVersion": "3.1.1",
+              "latestVersion": "4.3.0"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

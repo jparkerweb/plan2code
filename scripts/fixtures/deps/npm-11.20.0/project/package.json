@@ -1,0 +1,20 @@
+{
+  "name": "fixture-root",
+  "version": "1.0.0",
+  "private": true,
+  "engines": {
+    "node": ">=12"
+  },
+  "workspaces": [
+    "packages/*"
+  ],
+  "dependencies": {
+    "chalk": "^4.1.0",
+    "left-pad": "1.1.0",
+    "semver": "^7.5.0",
+    "mkdirp": "^0.5.5"
+  },
+  "overrides": {
+    "ms": "2.1.2"
+  }
+}

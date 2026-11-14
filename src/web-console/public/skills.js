@@ -57,6 +57,11 @@ const BUILD_HELPERS =
 // Pathfinder's and Plan's reason on a finished spec (a fixed bug).
 export const FIXED_REASON = "This bug is fixed. Delete it with the Delete button on its chip, or move it to specs--completed/.";
 
+// Pathfinder's and Plan's reason on a finished upgrade brief, and Pathfinder's
+// on one still waiting (Plan takes it).
+export const UPGRADED_REASON = "This upgrade is done. Delete it with the Delete button on its chip, or move it to specs--completed/.";
+const UPGRADE_REASON = "An upgrade brief. Apply it in a quick task, or plan it.";
+
 // Shared by Implement and Implement + Review.
 const BUILD_GREYED = { default: "Needs the phase checklists written up first", built: "All tasks are already done" };
 
@@ -123,6 +128,8 @@ export const SKILLS = Object.freeze([
     greyed: {
       default: "This spec is already past the questions",
       diagnosed: "The cause is found. Fix it in a quick task, or plan it.",
+      upgrade: UPGRADE_REASON,
+      upgraded: UPGRADED_REASON,
       finished: FIXED_REASON,
     },
     card: {
@@ -145,10 +152,11 @@ export const SKILLS = Object.freeze([
     builds: false, phased: false, metered: true, templates: true,
     weight: 2, started: "Plan started", ran: "Plan drafted", resume: null,
     subagents: "Use helpers for research and recon beside the conversation: reading the files and references the person points you to, mapping separate areas of the codebase in Phase 2, and gathering evidence on each open tech choice in Phase 4. In Phase 7, one fresh helper may cross-check the PLAN-DRAFT against the PLAN-CONVERSATION; confirm each gap it finds yourself. Keep every question, decision and sign-off, and the writing of the PLAN-DRAFT, with you. Recon and lookups at light strength, the cross-check at standard.",
-    states: ["none", "unrecognized", "diagnosed", "mapped", "planned"], marksNext: true,
+    states: ["none", "unrecognized", "diagnosed", "upgrade", "mapped", "planned"], marksNext: true,
     greyed: {
       default: "The plan is written. Revise it instead if it moved.",
       exploring: "Pathfinder is not finished with this spec yet",
+      upgraded: UPGRADED_REASON,
       finished: FIXED_REASON,
     },
     card: {
@@ -446,6 +454,30 @@ export const SKILLS = Object.freeze([
       help: "Finds unused code, labels each piece Safe, Check first or Warning, removes only what you pick, then runs the tests and build.",
       about:
         "For code nothing calls anymore. Dead Code uses the project's own dead-code tool when there is one (Knip, vulture, cargo check and others), or searches by itself when there is not, then checks every item for callers across the whole project. Each one gets a label: Safe to remove, Check first or Warning, with the reason. It removes only what you pick, runs the tests and build, and puts back anything that breaks them. It never commits and never installs anything.",
+    },
+  }),
+  skill({
+    skill: "plan2code-deps",
+    workflow: "deps",
+    label: "Update dependencies",
+    name: "Update Dependencies",
+    pose: "deps",
+    // Not metered: the launch scores nothing, and the `deps` run event scores
+    // `weight` once, posted only by a run that applies something.
+    builds: false, phased: false, metered: false, templates: false,
+    weight: 1, started: "Update Dependencies started", ran: "Update Dependencies run", resume: null,
+    subagents: "Use helpers for the assess step, one batch of up to 8 packages of one ecosystem each (packages that move together in the same batch), reading the release notes and searching for callers, each returning one record per package, never a label. Keep the labels, the pick list, every apply, every check and every question with you. Light strength, medium effort.",
+    states: "any",
+    greyed: null,
+    card: {
+      group: "extra",
+      chip: "Utility",
+      title: "Update dependencies",
+      icon: "deps",
+      blurb: "Finds outdated packages, says how safe each update is, and applies only what you pick.",
+      help: "Finds outdated dependencies, labels each update Safe, Check first or Warning, applies only what you pick in batches, then runs the install and checks.",
+      about:
+        "For a dependency backlog. Update dependencies scans every manifest in the project (npm, pnpm and Yarn, Cargo, pip and uv, Go and .NET), reads the release notes and checks which changed APIs your code calls. Each update gets a label: Safe, Check first or Warning, with the reason. It applies only what you pick, in batches, runs the install and your checks after each one, and puts back anything that breaks them. Updates that need code changes become a brief for Quick Task or Plan. It never commits, never edits source code and never installs a tool.",
     },
   }),
   skill({

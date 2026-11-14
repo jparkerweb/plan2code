@@ -1,0 +1,17 @@
+[
+  { "id": "r1", "notes": "read", "source": "GitHub releases", "breaking": [], "files": 2, "calls": [] },
+  { "id": "r2", "notes": "read", "source": "GitHub releases", "breaking": ["Removed the legacy() export."], "files": 1, "calls": [] },
+  { "id": "r3", "notes": "read", "source": "CHANGELOG.md", "breaking": [], "files": 1, "calls": [] },
+  { "id": "r4", "notes": "read", "source": "GitHub releases", "breaking": ["Drops Node 18 support."], "files": 2, "calls": [] },
+  { "id": "r5", "notes": "read", "source": "GitHub releases", "breaking": ["Drops CommonJS."], "files": 14, "calls": [{ "file": "src/log.js", "line": 3, "api": "require('chalk')" }] },
+  { "id": "r6", "notes": "could not read", "source": "none", "breaking": [], "files": 7, "calls": [] },
+  { "id": "r7", "notes": "could not read", "source": "none", "breaking": [], "files": 3, "calls": [] },
+  { "id": "r9", "notes": "could not read", "source": "none", "breaking": [], "files": 1, "calls": [] },
+  { "id": "r10", "notes": "read", "source": "GitHub releases", "breaking": [], "files": 1, "calls": [] },
+  { "id": "r11", "notes": "read", "source": "GitHub releases", "breaking": [], "files": 4, "calls": [] },
+  { "id": "r12", "notes": "read", "source": "GitHub releases", "breaking": [], "files": 1, "calls": [] },
+  { "id": "r13", "notes": "read", "source": "GitHub releases", "breaking": [], "files": 9, "calls": [] },
+  { "id": "r15", "notes": "read", "source": "GitHub releases", "breaking": [], "files": 1, "calls": [] },
+  { "id": "r16", "notes": "read", "source": "GitHub releases", "breaking": [], "files": 1, "calls": [] },
+  { "id": "r20", "notes": "read", "source": "GitHub releases", "breaking": [], "files": 1, "calls": [] }
+]

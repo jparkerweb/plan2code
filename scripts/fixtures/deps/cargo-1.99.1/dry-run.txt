@@ -1,0 +1,8 @@
+    Updating crates.io index
+     Locking 2 packages to highest compatible versions
+   Unchanged bitflags v1.3.2 (available: v2.13.2)
+   Unchanged cfg-if v0.1.10 (available: v1.0.5)
+    Updating hex v0.4.2 -> v0.4.3
+    Updating itoa v1.0.9 -> v1.0.19
+note: to see how you depend on a package, run `cargo tree --invert <dep>@<ver>`
+warning: not updating lockfile due to dry run

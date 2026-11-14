@@ -1,0 +1,142 @@
+[
+  {
+    "version": "7.5.1",
+    "engines": {
+      "node": ">=10"
+    },
+    "repository.url": "git+https://github.com/npm/node-semver.git"
+  },
+  {
+    "version": "7.5.2",
+    "engines": {
+      "node": ">=10"
+    },
+    "repository.url": "git+https://github.com/npm/node-semver.git"
+  },
+  {
+    "version": "7.5.3",
+    "engines": {
+      "node": ">=10"
+    },
+    "repository.url": "git+https://github.com/npm/node-semver.git"
+  },
+  {
+    "version": "7.5.4",
+    "engines": {
+      "node": ">=10"
+    },
+    "repository.url": "git+https://github.com/npm/node-semver.git"
+  },
+  {
+    "version": "7.6.0",
+    "engines": {
+      "node": ">=10"
+    },
+    "repository.url": "git+https://github.com/npm/node-semver.git"
+  },
+  {
+    "version": "7.6.1",
+    "engines": {
+      "node": ">=10"
+    },
+    "repository.url": "git+https://github.com/npm/node-semver.git"
+  },
+  {
+    "version": "7.6.2",
+    "engines": {
+      "node": ">=10"
+    },
+    "repository.url": "git+https://github.com/npm/node-semver.git"
+  },
+  {
+    "version": "7.6.3",
+    "engines": {
+      "node": ">=10"
+    },
+    "repository.url": "git+https://github.com/npm/node-semver.git"
+  },
+  {
+    "version": "7.7.0",
+    "engines": {
+      "node": ">=10"
+    },
+    "repository.url": "git+https://github.com/npm/node-semver.git"
+  },
+  {
+    "version": "7.7.1",
+    "engines": {
+      "node": ">=10"
+    },
+    "repository.url": "git+https://github.com/npm/node-semver.git"
+  },
+  {
+    "version": "7.7.2",
+    "engines": {
+      "node": ">=10"
+    },
+    "repository.url": "git+https://github.com/npm/node-semver.git"
+  },
+  {
+    "version": "7.7.3",
+    "engines": {
+      "node": ">=10"
+    },
+    "repository.url": "git+https://github.com/npm/node-semver.git"
+  },
+  {
+    "version": "7.7.4",
+    "engines": {
+      "node": ">=10"
+    },
+    "repository.url": "git+https://github.com/npm/node-semver.git"
+  },
+  {
+    "version": "7.8.0",
+    "engines": {
+      "node": ">=10"
+    },
+    "repository.url": "git+https://github.com/npm/node-semver.git"
+  },
+  {
+    "version": "7.8.1",
+    "engines": {
+      "node": ">=10"
+    },
+    "repository.url": "git+https://github.com/npm/node-semver.git"
+  },
+  {
+    "version": "7.8.2",
+    "engines": {
+      "node": ">=10"
+    },
+    "repository.url": "git+https://github.com/npm/node-semver.git"
+  },
+  {
+    "version": "7.8.3",
+    "engines": {
+      "node": ">=10"
+    },
+    "repository.url": "git+https://github.com/npm/node-semver.git"
+  },
+  {
+    "version": "7.8.4",
+    "engines": {
+      "node": ">=10"
+    },
+    "repository.url": "git+https://github.com/npm/node-semver.git"
+  },
+  {
+    "version": "7.8.5",
+    "engines": {
+      "node": ">=10"
+    },
+    "repository.url": "git+https://github.com/npm/node-semver.git"
+  },
+  {
+    "version": "7.8.6",
+    "engines": {
+      "node": ">=10"
+    },
+    "repository.url": "git+https://github.com/npm/node-semver.git"
+  }
+]

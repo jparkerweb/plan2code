@@ -145,6 +145,64 @@
 }
 .option-detail { color: var(--ink-2); font-size: 13.5px; margin-top: 4px; }
 
+/* A long pick list (Update dependencies): group headings, rows that open, rows
+   shown but never picked, and the live pick and round count. Every piece is
+   optional, so a plain multi draws as it always has. */
+.option-group-row { list-style: none; margin: 10px 0 -2px; }
+.option-group-row:first-child { margin-top: 0; }
+.option-group {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.option.has-more { flex-wrap: wrap; }
+.option-more-btn {
+  flex: none;
+  align-self: flex-start;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+  background: transparent;
+  border: 1px solid var(--rule-2);
+  border-radius: 99px;
+  padding: 2px 9px;
+  cursor: pointer;
+}
+.option-more-btn:hover { border-color: var(--accent-line); background: var(--panel-2); }
+.option-more-btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.option-more-btn[aria-expanded="true"] { background: var(--panel-2); }
+.option-more {
+  flex-basis: 100%;
+  min-width: 0;
+  margin: 2px 0 0 29px;
+  padding-top: 9px;
+  border-top: 1px solid var(--rule);
+  color: var(--ink-2);
+  font-size: 13.5px;
+  cursor: default;
+}
+.option.is-held { cursor: default; background: var(--panel-2); border-color: var(--rule); }
+.option.is-held .option-body { opacity: 0.6; }
+.option.is-held input { cursor: not-allowed; opacity: 0.6; }
+.option.is-held:hover { border-color: var(--rule); background: var(--panel-2); }
+.option-counter { margin: 10px 0 0; font-size: 13px; font-weight: 600; color: var(--ink-2); }
+/* The counter's spoken twin: one fixed node, read by screen readers only. */
+.pick-count-live {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
 .pill {
   font-size: 10.5px;
   font-weight: 700;
@@ -611,6 +669,15 @@ h4.md-h, h5.md-h, h6.md-h { font-size: 15px; }
   margin: 0 0 11px; padding: 2px 0 2px 15px;
   border-left: 3px solid var(--rule-2); color: var(--ink-2);
 }
+/* `> [!CAUTION]` and `> [!TIP]`: the stop report's reason and advice boxes. */
+.md-alert {
+  padding: 10px 14px; border-left-width: 4px; border-radius: 0 6px 6px 0; color: var(--ink);
+}
+.md-alert > .md-p:last-child { margin-bottom: 0; }
+.md-alert-caution { background: var(--warn-soft); border-left-color: var(--warn); }
+.md-alert-caution strong:first-child { color: var(--warn); }
+.md-alert-tip { background: var(--accent-soft); border-left-color: var(--accent); }
+.md-alert-tip strong:first-child { color: var(--accent); }
 .md-code {
   font: 0.88em var(--mono);
   background: var(--panel-2);

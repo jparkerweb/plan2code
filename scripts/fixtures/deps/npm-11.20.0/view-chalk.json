@@ -1,0 +1,114 @@
+[
+  {
+    "version": "4.1.1",
+    "engines": {
+      "node": ">=10"
+    },
+    "repository.url": "git+https://github.com/chalk/chalk.git"
+  },
+  {
+    "version": "4.1.2",
+    "engines": {
+      "node": ">=10"
+    },
+    "repository.url": "git+https://github.com/chalk/chalk.git"
+  },
+  {
+    "version": "5.0.0",
+    "engines": {
+      "node": "^12.17.0 || ^14.13 || >=16.0.0"
+    },
+    "repository.url": "git+https://github.com/chalk/chalk.git"
+  },
+  {
+    "version": "5.0.1",
+    "engines": {
+      "node": "^12.17.0 || ^14.13 || >=16.0.0"
+    },
+    "repository.url": "git+https://github.com/chalk/chalk.git"
+  },
+  {
+    "version": "5.1.0",
+    "engines": {
+      "node": "^12.17.0 || ^14.13 || >=16.0.0"
+    },
+    "repository.url": "git+https://github.com/chalk/chalk.git"
+  },
+  {
+    "version": "5.1.1",
+    "engines": {
+      "node": "^12.17.0 || ^14.13 || >=16.0.0"
+    },
+    "repository.url": "git+https://github.com/chalk/chalk.git"
+  },
+  {
+    "version": "5.1.2",
+    "engines": {
+      "node": "^12.17.0 || ^14.13 || >=16.0.0"
+    },
+    "repository.url": "git+https://github.com/chalk/chalk.git"
+  },
+  {
+    "version": "5.2.0",
+    "engines": {
+      "node": "^12.17.0 || ^14.13 || >=16.0.0"
+    },
+    "repository.url": "git+https://github.com/chalk/chalk.git"
+  },
+  {
+    "version": "5.3.0",
+    "engines": {
+      "node": "^12.17.0 || ^14.13 || >=16.0.0"
+    },
+    "repository.url": "git+https://github.com/chalk/chalk.git"
+  },
+  {
+    "version": "5.4.0",
+    "engines": {
+      "node": "^12.17.0 || ^14.13 || >=16.0.0"
+    },
+    "repository.url": "git+https://github.com/chalk/chalk.git"
+  },
+  {
+    "version": "5.4.1",
+    "engines": {
+      "node": "^12.17.0 || ^14.13 || >=16.0.0"
+    },
+    "repository.url": "git+https://github.com/chalk/chalk.git"
+  },
+  {
+    "version": "5.5.0",
+    "engines": {
+      "node": "^12.17.0 || ^14.13 || >=16.0.0"
+    },
+    "repository.url": "git+https://github.com/chalk/chalk.git"
+  },
+  {
+    "version": "5.6.0",
+    "engines": {
+      "node": "^12.17.0 || ^14.13 || >=16.0.0"
+    },
+    "repository.url": "git+https://github.com/chalk/chalk.git"
+  },
+  {
+    "version": "5.6.2",
+    "engines": {
+      "node": "^12.17.0 || ^14.13 || >=16.0.0"
+    },
+    "repository.url": "git+https://github.com/chalk/chalk.git"
+  },
+  {
+    "version": "6.0.0",
+    "engines": {
+      "node": ">=22"
+    },
+    "repository.url": "git+https://github.com/chalk/chalk.git"
+  },
+  {
+    "version": "6.0.1",
+    "engines": {
+      "node": ">=22"
+    },
+    "repository.url": "git+https://github.com/chalk/chalk.git"
+  }
+]

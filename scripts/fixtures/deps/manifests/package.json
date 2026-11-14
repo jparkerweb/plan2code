@@ -1,0 +1,13 @@
+{
+  "name": "fixture-app",
+  "version": "1.0.0",
+  "engines": { "node": ">=18" },
+  "dependencies": {
+    "chalk": "^5.6.2",
+    "chalk-template": "^5.6.2",
+    "playwright-core": "1.64.1"
+  },
+  "devDependencies": {
+    "execa": "^9.6.1"
+  }
+}

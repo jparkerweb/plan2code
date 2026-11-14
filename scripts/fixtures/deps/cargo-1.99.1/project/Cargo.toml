@@ -1,0 +1,10 @@
+[package]
+name = "fixture"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+itoa = "1.0"
+bitflags = "1"
+cfg-if = "0.1"
+hex = "0.4"

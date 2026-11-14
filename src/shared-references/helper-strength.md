@@ -1,5 +1,5 @@
 # Helper Strength
-> Shared by the skills that start helpers (subagents): Init, Init Update, Pathfinder, Plan, Revise Plan, Document, Quick Task, Implement, Implement + Review, Review, Finalize, X-ray, Diagnose, PR Prep, Test and Dead Code. Read it when you first start a helper in a session. Never invoked as a skill.
+> Shared by the skills that start helpers (subagents): Init, Init Update, Pathfinder, Plan, Revise Plan, Document, Quick Task, Implement, Implement + Review, Review, Finalize, X-ray, Diagnose, PR Prep, Test, Dead Code and Update Dependencies. Read it when you first start a helper in a session. Never invoked as a skill.
 
 ## The words
 
@@ -17,6 +17,7 @@ Never write a model or vendor name in a brief, a report or a file, and never inv
 | Helper's job | Strength | Effort |
 |---|---|---|
 | Lookups, reading code, checking docs, recon | light | low |
+| Update Dependencies assess batch: release notes and caller search | light | medium |
 | Revise Plan edit to one phase file, spelled out in the approved plan | light | medium |
 | Build task in 1 or 2 files, with the change spelled out in the task | light | medium |
 | Build task across several files, integration work, debugging | standard | medium |

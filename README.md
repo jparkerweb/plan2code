@@ -252,7 +252,7 @@ The dashboard's cards, and when each one lights up for the spec you pick:
 | Implement | Builds the next phase, task by task, with a report and your sign-off at the end. | The spec has phases with tasks still to build |
 | Implement + review | One phase built, then a careful review of the changes, then your sign-off. All in one run. | The spec has phases with tasks still to build |
 | Finalize | Checks the work, writes the summary, files the specs away and suggests the commit message. | Every task in the spec is done |
-| Quick task | Too small for the full process? A quick plan, then it just builds it. | Always (suggested when the spec is a diagnosed bug) |
+| Quick task | Too small for the full process? A quick plan, then it just builds it. | Always (suggested when the spec is a diagnosed bug or an upgrade brief) |
 | Review | A second opinion on the changes. Problems ranked, and you pick what gets fixed. | Always |
 | Handoff | Pack this conversation into a document a fresh session can pick up cold. Any skill's **Stop with a handoff** writes one too, and the dashboard lists them to pick up. | Always |
 | Codebase X-ray | Explain how and why an area works, or find the rough spots worth fixing. | Always |
@@ -260,6 +260,7 @@ The dashboard's cards, and when each one lights up for the spec you pick:
 | Get a PR ready | Runs the checks your branch needs, says if it is ready, and writes the PR description to copy. Never commits, pushes or opens the PR. | Always |
 | Write missing tests | Finds code with no tests and writes unit and integration tests in your project's own style. Never changes source code. | Always |
 | Clear out dead code | Finds code nothing uses, says how safe each piece is to remove, and removes only what you pick. Uses the dead-code tools your project already has, and never commits. | Always |
+| Update dependencies | Scans every manifest, labels each update Safe, Check first or Warning, applies only what you pick in batches with your checks after each, and puts back whatever breaks. A ticked Warning becomes an upgrade brief for Quick task or Plan. Never commits. | Always |
 | Prototype a screen | Several versions of a screen on one page, tuned with live dials, and your pick brought back by Copy and paste. Saved into a spec only when you say, and never changes your code. | Always (takes the picked spec as the save folder) |
 | Changelog | Checks the CHANGELOG version against the main branch and suggests entries for what is new. | Always |
 | Git | Branches, pull, push and commits on one board, asking before anything leaves your machine. | Always (offers to start a repository outside one) |
@@ -294,6 +295,8 @@ moves it to `specs--completed/`. The layout and progress marks are on the
 
 Add `specs/` to your project's `.gitignore`: it's your working
 drawing, not a deliverable. Share a folder deliberately with `git add -f` when you want to.
+
+`.plan2code/` is what Plan2Code saves with the repository: the project's lessons and the Learning switch. It's shared with your team, so commit it and don't add it to `.gitignore`.
 
 Step 2 marks which phases don't share files. Open a second agent on one of those, and the `[/]` marks
 keep the two out of each other's way.
@@ -436,6 +439,7 @@ console or the terminal; add `--web` to skip the question and go straight to the
 | `/plan2code-pr-prep` | Before you open a pull request. Picks the checks the branch's changes need from the project's `## Test map` (or its config files), runs the ones you keep, says Ready, Ready with notes or Not ready, and writes a PR description to copy with the create-a-PR link; never commits, pushes or opens the PR |
 | `/plan2code-test` | Parts of the code have no tests. Asks where to look, finds the untested files (plus real coverage when the project already has a coverage tool), shows a plan in the project's own style, then writes and runs unit and integration tests; never changes source code, hands a real bug to `/plan2code-diagnose` |
 | `/plan2code-dead-code` | Code nothing calls anymore. Uses the project's own dead-code tools, one per language (Knip, vulture, cargo check and others), or searches by itself, checks every item for callers across the project, labels each Safe to remove, Check first or Warning, removes only what you pick, then runs the tests and build and puts back anything that breaks them; never commits, never installs anything |
+| `/plan2code-deps` | Clear a dependency backlog in one sitting. Scans every manifest (npm, pnpm, Yarn, Cargo, pip, uv, Go, .NET), labels each update Safe, Check first or Warning with a reason, applies the ones you pick in batches, runs the install and your checks after each batch and puts back whatever breaks; a ticked Warning writes `specs/<package>-upgrade/UPGRADE-<date>.md`, which the dashboard shows as *Upgrade ready* for `/plan2code-quick-task` or `/plan2code-1-plan`; never commits, never installs a tool, never edits source code |
 | `/plan2code-ui-prototype` | See a screen before it gets built. Draws several versions of a screen or flow on one page that opens in your browser, with live dials for fonts, colors, spacing and feel; Copy and paste brings your pick back for the next round, and a yes saves it as `specs/<spec>/prototypes/<name>.html` and `.md`; never changes your code |
 | `/plan2code-changelog` | Check the CHANGELOG version against the default branch, suggest entries for new work you can edit, keep `package.json` aligned, then hand off to Git to commit |
 | `/plan2code-git` | Branches, pull, push and commits on one board (or plain instructions in the terminal); asks before every push, publish and delete |

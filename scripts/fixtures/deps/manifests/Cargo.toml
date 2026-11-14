@@ -1,0 +1,18 @@
+[package]
+name = "fixture"
+version = "0.1.0"
+rust-version = "1.75"
+
+[dependencies]
+serde = { version = "1.0.200", features = ["derive"] }
+toml = "0.8.2"
+
+[[bin]]
+name = "fixture"
+rust-version = "9.99"
+
+[patch.crates-io]
+tokio = { git = "https://github.com/tokio-rs/tokio" }
+
+[patch."https://github.com/example/repo"]
+foo = { path = "../foo" }

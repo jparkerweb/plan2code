@@ -196,6 +196,71 @@ test("a fixed bug's Delete asks once with no name to type, while any other spec 
   assert.deepEqual({ type: action?.type, spec: action?.spec }, { type: "delete", spec: "specs/old-bug" });
 });
 
+// A project holding an upgrade brief Update dependencies wrote for a ticked
+// Warning (newest on disk, so the picker opens on it) and an older one Quick
+// Task already applied and marked Done.
+const UPGRADE_MENU = {
+  menu: { note: "An upgrade brief is waiting.", recommend: "plan2code-quick-task", details: { "plan2code-quick-task": "vite 7.1.2 to 8.0.1" } },
+  agent: { status: "waiting" },
+};
+function upgradeProject() {
+  const project = tempProject({
+    "AGENTS.md": "# AGENTS.md\n\nA small demo project.\n",
+    "specs/old-upgrade/UPGRADE-20261101.md": "# Upgrade eslint 9.6.1 to 10.2.1\n\n**Status:** Done\n**Ecosystem:** npm\n",
+    "specs/vite-upgrade/UPGRADE-20261113.md": "# Upgrade vite 7.1.2 to 8.0.1\n\n**Status:** Ready\n**Ecosystem:** npm\n",
+  });
+  const later = new Date(Date.now() + 60_000);
+  fs.utimesSync(path.join(project, "specs/vite-upgrade/UPGRADE-20261113.md"), later, later);
+  return project;
+}
+
+test("an upgrade brief shows as Upgrade ready with Quick Task and Plan lit, and Quick Task's launch carries it", async (t) => {
+  const s = await openSession(await suite.browser(), { t, workflow: "dashboard", payload: UPGRADE_MENU, project: upgradeProject() });
+  const main = await toTheMenu(s);
+  await hideUnavailable(main, false);
+  const brief = chipFor(main, "vite-upgrade");
+  await brief.waitFor();
+  assert.equal(await brief.getAttribute("aria-current"), "true", "the picker opens on the waiting brief");
+  assert.match(await textOf(brief), /Upgrade ready/i, "the chip names its state");
+
+  const quick = lightOf(main, "/plan2code-quick-task");
+  assert.equal(await quick.isEnabled(), true, "Quick Task is lit");
+  assert.equal(await lightOf(main, "/plan2code-1-plan").isEnabled(), true, "Plan is lit");
+  assert.equal(await lightOf(main, "/plan2code-0-pathfinder").isDisabled(), true, "Pathfinder is grayed");
+  assert.equal(await lightOf(main, "/plan2code-2-document").isDisabled(), true, "Document is grayed");
+
+  await quick.click();
+  await main.getByRole("button", { name: "Start Quick task" }).click();
+  const launch = collect(s).actions.find((a) => a.i === "__launch");
+  assert.ok(launch, "the send carries a launch");
+  assert.deepEqual({ skill: launch.skill, spec: launch.spec }, { skill: "plan2code-quick-task", spec: "specs/vite-upgrade" });
+});
+
+test("a Done upgrade brief is hidden while unavailable workflows are, reads Upgrade done, and deletes after one confirm", async (t) => {
+  const s = await openSession(await suite.browser(), { t, workflow: "dashboard", payload: UPGRADE_MENU, project: upgradeProject() });
+  const main = await toTheMenu(s);
+  await hideUnavailable(main, true);
+  await chipFor(main, "vite-upgrade").waitFor();
+  assert.equal(await chipFor(main, "old-upgrade").count(), 0, "the done brief's chip is hidden while unavailable workflows are");
+
+  await hideUnavailable(main, false);
+  const done = chipFor(main, "old-upgrade");
+  await done.waitFor();
+  assert.match(await textOf(done), /Upgrade done/i, "the chip names its state");
+  assert.equal(await done.getAttribute("aria-current"), "false", "the done brief is not picked");
+
+  const dialog = s.page.locator("#delete-modal");
+  const del = main.getByRole("button", { name: "Delete the spec old-upgrade" });
+  assert.equal(await textOf(del), "Delete", "a done brief's Delete is a labeled button");
+  await del.click({ force: true });
+  await dialog.waitFor();
+  assert.match(await textOf(s.page.locator("#delete-warn")), /The upgrade is done, so this only clears the brief/);
+  assert.equal(await s.page.locator("#delete-confirm").isHidden(), true, "no name step for a done brief");
+  await s.page.locator("#delete-go").click();
+  const action = collect(s).actions.find((a) => a.i === "__delete");
+  assert.deepEqual({ type: action?.type, spec: action?.spec }, { type: "delete", spec: "specs/old-upgrade" });
+});
+
 // ---------------------------------------------------------------------------
 // The picker's switching, the first-open wake-up, handoffs, the update banner,
 // the workspace scope, and the pose that carries a launch into the work.

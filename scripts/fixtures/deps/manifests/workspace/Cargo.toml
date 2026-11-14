@@ -1,0 +1,5 @@
+[workspace]
+members = ["app", "core"]
+
+[workspace.package]
+rust-version = "1.80"

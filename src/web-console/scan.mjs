@@ -29,6 +29,10 @@ export { TASK_LINE_RE } from "./spec-files.mjs";
 // wrote up and nobody has fixed or planned yet: it lights Quick Task and Plan.
 // "fixed" is that bug once Quick Task marked it Fixed: finished, so the
 // dashboard never picks or suggests it, and Quick Task offers to archive it.
+// "upgrade" is a dependency upgrade brief (UPGRADE-*.md) Update dependencies
+// wrote for a ticked Warning: like "diagnosed", it lights Quick Task and Plan.
+// "upgraded" is that brief once Quick Task marked it Done: finished, archived
+// the same way as "fixed".
 // The states themselves, with their labels and flags, are public/spec-states.js.
 export const SPEC_STATES = new Set(Object.keys(STATE_TABLE));
 
@@ -152,6 +156,12 @@ function specPosition(dir, names) {
     return /^fixed/i.test(diagnosisStatus)
       ? { state: "fixed", detail: "bug fixed" }
       : { state: "diagnosed", detail: "bug diagnosed, not fixed" };
+  // An upgrade brief Update dependencies wrote, read the same way: planning
+  // wins over it, and Quick Task marks it Done once the upgrade is applied.
+  const upgrade = names.filter((n) => /^UPGRADE-.*\.md$/i.test(n)).sort().reverse()[0];
+  const upgradeStatus = upgrade ? (statusOf(readText(path.join(dir, upgrade))) || "").replace(/\*+/g, "").trim() : "";
+  if (upgrade && !planConv && !fs.existsSync(path.join(pfDir, "map.md")))
+    return /^done/i.test(upgradeStatus) ? { state: "upgraded", detail: "upgrade done" } : { state: "upgrade", detail: "upgrade ready" };
   if (isDir(pfDir)) {
     const mapText = readText(path.join(pfDir, "map.md"));
     const status = (statusOf(mapText) || "").replace(/\*+/g, "").trim();

@@ -1,0 +1,7 @@
+{
+  "version": "7.0.0",
+  "engines": {
+    "node": ">=0.12.0"
+  },
+  "repository.url": "git+https://github.com/jonschlinkert/is-number.git"
+}

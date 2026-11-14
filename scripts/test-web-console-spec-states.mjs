@@ -82,6 +82,8 @@ test("spec files: countTasks() counts task lines only when there are any, every 
 const LABELS = {
   diagnosed: "Bug diagnosed",
   fixed: "Bug fixed",
+  upgrade: "Upgrade ready",
+  upgraded: "Upgrade done",
   exploring: "Exploring",
   mapped: "Ready to plan",
   planned: "Ready to document",
@@ -93,6 +95,8 @@ const LABELS = {
 const NEXT = {
   diagnosed: "plan2code-quick-task",
   fixed: null,
+  upgrade: "plan2code-quick-task",
+  upgraded: null,
   exploring: "plan2code-0-pathfinder",
   mapped: "plan2code-1-plan",
   planned: "plan2code-2-document",
@@ -102,14 +106,14 @@ const NEXT = {
   unrecognized: null,
 };
 
-test("spec states: each state keeps its label and next step, and only fixed is finished", () => {
+test("spec states: each state keeps its label and next step, and only fixed and upgraded are finished", () => {
   assert.deepEqual(Object.keys(TABLE), Object.keys(LABELS), "the states, in the scan's order");
   for (const [name, label] of Object.entries(LABELS)) {
     const s = stateFor(name);
     assert.ok(s, `${name} is in the table`);
     assert.equal(s.label, label, `${name}'s label`);
     assert.equal(s.next, NEXT[name], `${name}'s next step`);
-    assert.equal(s.finished, name === "fixed", `${name}'s finished flag`);
+    assert.equal(s.finished, name === "fixed" || name === "upgraded", `${name}'s finished flag`);
   }
   assert.equal(stateFor("made-up"), null, "an unknown state is null");
   assert.ok(Object.isFrozen(TABLE) && Object.values(TABLE).every(Object.isFrozen), "the table is frozen");
@@ -125,7 +129,9 @@ const CARDS = {
   "plan2code-init": {
     "none": { on: false, reason: "AGENTS.md is already written. Refresh it instead." },
     diagnosed: { on: false, reason: "AGENTS.md is already written. Refresh it instead." },
+    upgrade: { on: false, reason: "AGENTS.md is already written. Refresh it instead." },
     fixed: { on: false, reason: "AGENTS.md is already written. Refresh it instead." },
+    upgraded: { on: false, reason: "AGENTS.md is already written. Refresh it instead." },
     exploring: { on: false, reason: "AGENTS.md is already written. Refresh it instead." },
     mapped: { on: false, reason: "AGENTS.md is already written. Refresh it instead." },
     planned: { on: false, reason: "AGENTS.md is already written. Refresh it instead." },
@@ -137,7 +143,9 @@ const CARDS = {
   "plan2code-init-update": {
     "none": { on: true },
     diagnosed: { on: true },
+    upgrade: { on: true },
     fixed: { on: true },
+    upgraded: { on: true },
     exploring: { on: true },
     mapped: { on: true },
     planned: { on: true },
@@ -149,7 +157,9 @@ const CARDS = {
   "plan2code-0-pathfinder": {
     "none": { on: true, next: true },
     diagnosed: { on: false, reason: "The cause is found. Fix it in a quick task, or plan it." },
+    upgrade: { on: false, reason: "An upgrade brief. Apply it in a quick task, or plan it." },
     fixed: { on: false, reason: "This bug is fixed. Delete it with the Delete button on its chip, or move it to specs--completed/." },
+    upgraded: { on: false, reason: "This upgrade is done. Delete it with the Delete button on its chip, or move it to specs--completed/." },
     exploring: { on: true, next: true },
     mapped: { on: false, reason: "This spec is already past the questions" },
     planned: { on: false, reason: "This spec is already past the questions" },
@@ -161,7 +171,9 @@ const CARDS = {
   "plan2code-1-plan": {
     "none": { on: true, next: false },
     diagnosed: { on: true, next: false },
+    upgrade: { on: true, next: false },
     fixed: { on: false, reason: "This bug is fixed. Delete it with the Delete button on its chip, or move it to specs--completed/." },
+    upgraded: { on: false, reason: "This upgrade is done. Delete it with the Delete button on its chip, or move it to specs--completed/." },
     exploring: { on: false, reason: "Pathfinder is not finished with this spec yet" },
     mapped: { on: true, next: true },
     planned: { on: true, next: false },
@@ -173,7 +185,9 @@ const CARDS = {
   "plan2code-1b-revise-plan": {
     "none": { on: false, reason: "Needs a spec that is already written up" },
     diagnosed: { on: false, reason: "Needs a spec that is already written up" },
+    upgrade: { on: false, reason: "Needs a spec that is already written up" },
     fixed: { on: false, reason: "Needs a spec that is already written up" },
+    upgraded: { on: false, reason: "Needs a spec that is already written up" },
     exploring: { on: false, reason: "Needs a spec that is already written up" },
     mapped: { on: false, reason: "Needs a spec that is already written up" },
     planned: { on: false, reason: "Needs a spec that is already written up" },
@@ -185,7 +199,9 @@ const CARDS = {
   "plan2code-2-document": {
     "none": { on: false, reason: "Needs a drafted plan first" },
     diagnosed: { on: false, reason: "Needs a drafted plan first" },
+    upgrade: { on: false, reason: "Needs a drafted plan first" },
     fixed: { on: false, reason: "Needs a drafted plan first" },
+    upgraded: { on: false, reason: "Needs a drafted plan first" },
     exploring: { on: false, reason: "Needs a drafted plan first" },
     mapped: { on: false, reason: "Needs a drafted plan first" },
     planned: { on: true, next: true },
@@ -197,7 +213,9 @@ const CARDS = {
   "plan2code-3-implement": {
     "none": { on: false, reason: "Needs the phase checklists written up first" },
     diagnosed: { on: false, reason: "Needs the phase checklists written up first" },
+    upgrade: { on: false, reason: "Needs the phase checklists written up first" },
     fixed: { on: false, reason: "Needs the phase checklists written up first" },
+    upgraded: { on: false, reason: "Needs the phase checklists written up first" },
     exploring: { on: false, reason: "Needs the phase checklists written up first" },
     mapped: { on: false, reason: "Needs the phase checklists written up first" },
     planned: { on: false, reason: "Needs the phase checklists written up first" },
@@ -209,7 +227,9 @@ const CARDS = {
   "plan2code-3-implement-review": {
     "none": { on: false, reason: "Needs the phase checklists written up first" },
     diagnosed: { on: false, reason: "Needs the phase checklists written up first" },
+    upgrade: { on: false, reason: "Needs the phase checklists written up first" },
     fixed: { on: false, reason: "Needs the phase checklists written up first" },
+    upgraded: { on: false, reason: "Needs the phase checklists written up first" },
     exploring: { on: false, reason: "Needs the phase checklists written up first" },
     mapped: { on: false, reason: "Needs the phase checklists written up first" },
     planned: { on: false, reason: "Needs the phase checklists written up first" },
@@ -221,7 +241,9 @@ const CARDS = {
   "plan2code-4-finalize": {
     "none": { on: false, reason: "Needs a spec that is fully built" },
     diagnosed: { on: false, reason: "Needs a spec that is fully built" },
+    upgrade: { on: false, reason: "Needs a spec that is fully built" },
     fixed: { on: false, reason: "Needs a spec that is fully built" },
+    upgraded: { on: false, reason: "Needs a spec that is fully built" },
     exploring: { on: false, reason: "Needs a spec that is fully built" },
     mapped: { on: false, reason: "Needs a spec that is fully built" },
     planned: { on: false, reason: "Needs a spec that is fully built" },
@@ -233,7 +255,9 @@ const CARDS = {
   "plan2code-quick-task": {
     "none": { on: true },
     diagnosed: { on: true, next: true },
+    upgrade: { on: true, next: true },
     fixed: { on: true },
+    upgraded: { on: true },
     exploring: { on: true },
     mapped: { on: true },
     planned: { on: true },
@@ -245,7 +269,9 @@ const CARDS = {
   "plan2code-review": {
     "none": { on: true },
     diagnosed: { on: true },
+    upgrade: { on: true },
     fixed: { on: true },
+    upgraded: { on: true },
     exploring: { on: true },
     mapped: { on: true },
     planned: { on: true },
@@ -257,7 +283,9 @@ const CARDS = {
   "plan2code-xray": {
     "none": { on: true },
     diagnosed: { on: true },
+    upgrade: { on: true },
     fixed: { on: true },
+    upgraded: { on: true },
     exploring: { on: true },
     mapped: { on: true },
     planned: { on: true },
@@ -269,7 +297,9 @@ const CARDS = {
   "plan2code-diagnose": {
     "none": { on: true },
     diagnosed: { on: true },
+    upgrade: { on: true },
     fixed: { on: true },
+    upgraded: { on: true },
     exploring: { on: true },
     mapped: { on: true },
     planned: { on: true },
@@ -281,7 +311,9 @@ const CARDS = {
   "plan2code-pr-prep": {
     "none": { on: true },
     diagnosed: { on: true },
+    upgrade: { on: true },
     fixed: { on: true },
+    upgraded: { on: true },
     exploring: { on: true },
     mapped: { on: true },
     planned: { on: true },
@@ -293,7 +325,9 @@ const CARDS = {
   "plan2code-test": {
     "none": { on: true },
     diagnosed: { on: true },
+    upgrade: { on: true },
     fixed: { on: true },
+    upgraded: { on: true },
     exploring: { on: true },
     mapped: { on: true },
     planned: { on: true },
@@ -305,7 +339,23 @@ const CARDS = {
   "plan2code-dead-code": {
     "none": { on: true },
     diagnosed: { on: true },
+    upgrade: { on: true },
     fixed: { on: true },
+    upgraded: { on: true },
+    exploring: { on: true },
+    mapped: { on: true },
+    planned: { on: true },
+    documented: { on: true },
+    building: { on: true },
+    built: { on: true },
+    unrecognized: { on: true },
+  },
+  "plan2code-deps": {
+    "none": { on: true },
+    diagnosed: { on: true },
+    upgrade: { on: true },
+    fixed: { on: true },
+    upgraded: { on: true },
     exploring: { on: true },
     mapped: { on: true },
     planned: { on: true },
@@ -317,7 +367,9 @@ const CARDS = {
   "plan2code-ui-prototype": {
     "none": { on: true },
     diagnosed: { on: true },
+    upgrade: { on: true },
     fixed: { on: true },
+    upgraded: { on: true },
     exploring: { on: true },
     mapped: { on: true },
     planned: { on: true },
@@ -329,7 +381,9 @@ const CARDS = {
   "plan2code-changelog": {
     "none": { on: true },
     diagnosed: { on: true },
+    upgrade: { on: true },
     fixed: { on: true },
+    upgraded: { on: true },
     exploring: { on: true },
     mapped: { on: true },
     planned: { on: true },
@@ -341,7 +395,9 @@ const CARDS = {
   "plan2code-git": {
     "none": { on: true },
     diagnosed: { on: true },
+    upgrade: { on: true },
     fixed: { on: true },
+    upgraded: { on: true },
     exploring: { on: true },
     mapped: { on: true },
     planned: { on: true },
@@ -353,7 +409,9 @@ const CARDS = {
   "plan2code-handoff": {
     "none": { on: true },
     diagnosed: { on: true },
+    upgrade: { on: true },
     fixed: { on: true },
+    upgraded: { on: true },
     exploring: { on: true },
     mapped: { on: true },
     planned: { on: true },
@@ -429,6 +487,8 @@ const PHASE = (ticks) => "# Phase 1\n\n" + ticks.map((x, i) => `- [${x ? "x" : "
 const FIXTURES = {
   diagnosed: { "DIAGNOSIS-20261017.md": "# Diagnosis\n\n**Status:** Diagnosed\n" },
   fixed: { "DIAGNOSIS-20261017.md": "# Diagnosis\n\n**Status:** Fixed\n" },
+  upgrade: { "UPGRADE-20261113.md": "# Upgrade vite 7.1.2 to 8.0.1\n\n**Status:** Ready\n**Ecosystem:** npm\n" },
+  upgraded: { "UPGRADE-20261113.md": "# Upgrade vite 7.1.2 to 8.0.1\n\n**Status:** Done\n**Ecosystem:** npm\n" },
   exploring: { "pathfinder/map.md": "# Map\n\nStatus: Working\n" },
   mapped: { "PLAN-DRAFT-20261017.md": "# Plan draft\n\n**Status:** Phase 3 Complete - Resume at Phase 4\n" },
   planned: { "PLAN-DRAFT-20261017.md": "# Plan draft\n\n**Status:** Draft\n" },
@@ -467,6 +527,48 @@ test("the scan: every state it can return is in the table, and a fixture reaches
   assert.deepEqual(scanProblems(short, TABLE), ["no fixture reaches built: add one, or drop it from spec-states.js"]);
   const { unrecognized, ...known } = TABLE;
   assert.deepEqual(scanProblems(FIXTURES, known), ["the scan returns unrecognized, which spec-states.js lacks"]);
+});
+
+test("the scan: an upgrade brief reads upgrade or upgraded by its Status, the newest wins, and planning wins over it", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "p2c-upgrade-"));
+  const brief = (status) => `# Upgrade vite\n\n**Status:** ${status}\n`;
+  const folders = {
+    ready: { "UPGRADE-20261113.md": brief("Ready") },
+    done: { "UPGRADE-20261113.md": brief("**Done**") },
+    newest: { "UPGRADE-20261101.md": brief("Done"), "UPGRADE-20261113.md": brief("Ready") },
+    mapped: { "UPGRADE-20261113.md": brief("Ready"), "pathfinder/map.md": "# Map\n\nStatus: Working\n" },
+    talked: { "UPGRADE-20261113.md": brief("Done"), "PLAN-CONVERSATION-20261113.md": "# Conversation\n" },
+    drafted: { "UPGRADE-20261113.md": brief("Ready"), "PLAN-DRAFT-20261113.md": "# Plan draft\n\n**Status:** Draft\n" },
+  };
+  try {
+    for (const [name, files] of Object.entries(folders))
+      for (const [rel, text] of Object.entries(files)) {
+        const file = path.join(root, "specs", name, rel);
+        fs.mkdirSync(path.dirname(file), { recursive: true });
+        fs.writeFileSync(file, text);
+      }
+    const got = Object.fromEntries(scanProject(root).specs.map((sp) => [sp.name, [sp.state, sp.detail]]));
+    assert.deepEqual(got.ready, ["upgrade", "upgrade ready"]);
+    assert.deepEqual(got.done, ["upgraded", "upgrade done"], "bold around Done still reads Done");
+    assert.deepEqual(got.newest, ["upgrade", "upgrade ready"], "the newest brief decides");
+    assert.equal(got.mapped[0], "exploring", "a pathfinder map wins over a brief");
+    assert.equal(got.talked[0], "mapped", "a plan conversation wins over a brief");
+    assert.equal(got.drafted[0], "planned", "a plan draft wins over a brief");
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("card rules: Quick Task carries an upgrade brief like a diagnosed bug, never a done one", () => {
+  const quick = SKILL_CATALOG.find((e) => e.skill === "plan2code-quick-task");
+  const plan = SKILL_CATALOG.find((e) => e.skill === "plan2code-1-plan");
+  const ready = { dir: "specs/vite-upgrade", name: "vite-upgrade", state: "upgrade" };
+  const done = { ...ready, state: "upgraded" };
+  assert.equal(launchTarget(quick, ready), ready);
+  assert.equal(launchTarget(quick, done), null);
+  assert.equal(launchTarget(plan, ready), ready);
+  assert.deepEqual(cardAvailability(quick, SCAN, ready), { on: true, next: true }, "Quick Task is the suggested step");
+  assert.equal(defaultSpec([done, { ...ready, dir: "specs/b" }])?.dir, "specs/b", "a done brief is never the default");
 });
 
 test("the scan: a PR-READINESS report changes no spec's state, and alone it stays unrecognized", () => {

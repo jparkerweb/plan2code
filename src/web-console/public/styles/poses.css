@@ -488,6 +488,22 @@
   14%, 56% { transform: translate(5px, -2px); }
 }
 
+/* Update dependencies: he holds up a package box, and an arrow rises out
+   of it and fades, over and over, as one version gives way to the next;
+   his star follows it up. */
+.pose .dp-box { fill: var(--panel-2); stroke: var(--ink-2); stroke-width: 4; stroke-linejoin: round; }
+.pose .dp-arrow { animation: dp-arrow 3.2s ease-in-out infinite; }
+@keyframes dp-arrow {
+  0%, 15% { transform: translateY(10px); opacity: 0; }
+  40%, 70% { transform: translateY(0); opacity: 1; }
+  100% { transform: translateY(-8px); opacity: 0; }
+}
+.pose .dp-look { animation: dp-look 3.2s ease-in-out infinite; }
+@keyframes dp-look {
+  0%, 20%, 100% { transform: translate(3px, 0); }
+  45%, 75% { transform: translate(4px, -3px); }
+}
+
 /* UI Prototype -- he holds a screen up, and its three dials slide one after
    another, as if he were tuning it. */
 .pose .up-knob { animation: up-knob 4.2s ease-in-out infinite; }
