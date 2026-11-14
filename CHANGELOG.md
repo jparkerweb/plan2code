@@ -2,6 +2,33 @@
 
 All notable changes to Plan2Code will be documented in this file.
 
+## v3.1.0
+
+### ✨ Added
+
+- **Learning**: a dashboard row (and a banner) that keeps lessons about the codebase, approved by you. Switch it on or off per project, and the row shows "Switching on…" or "Switching off…" the moment you press the button. Lessons live under `.plan2code/lessons/`, and the failure log can be moved into them.
+- **Update dependencies**: a new `/plan2code-deps` skill that updates a project's dependencies using each package manager's own outdated and audit output, and writes a held-back upgrade up as an `UPGRADE-<date>.md` brief. Quick Task or Plan can pick that brief up, and the dashboard shows it as "Upgrade ready" and "Upgrade done".
+- **UI Prototype**: a new skill, and Quick Task confirms a saved prototype's brief before planning. It can also start from a Notebook tab.
+- **web console**: a **Prototypes** tab lists a spec's saved prototypes. An `.md` is read in place, and an `.html` opens in the default browser.
+- **web console**: the Activities picker is a two-column Score ledger, ordered by recently played or A to Z.
+- **web console**: a swaying question mark beside Ask for suggestions, and a chevron before Send.
+- **Snake**: lives, bonus lives at score marks, and three bosses (Grumpy Golem, Comet Queen, Thunder Toad).
+- **Bounce Road**: four new music tracks and extras.
+
+### 🔧 Changed
+
+- **tooling**: tool folders (Dead Code's keep list and reports, Learning's settings) now live under `.plan2code/`, which is gitignored.
+- **web console**: a new Notebook tab opens with its name as a `## heading`, and the caret waits under it.
+- **web console**: the git board's branch title links to the branch on its host.
+- **web console**: the dashboard keeps each group at one card width with no card left alone on a row, and the approval tip sits centered under the cards.
+- **web console**: the Diagnose finish shows the saved diagnosis in full, with Copy report for a ticket elsewhere.
+- **Quick Task**: offers to archive a prototype-only spec folder once it has built from it.
+- **desktop app**: the window no longer takes file drops, and the Loop driver was updated.
+
+### 🐛 Fixed
+
+- **Quick Task**: a finish that offers the review again after a review already ran in that launch is refused.
+
 ## v3.0.6
 
 ### 🔧 Changed
