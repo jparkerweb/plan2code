@@ -1,4 +1,4 @@
-// Plan2Code Web Console - Bounce Road's rivals: the kinds and what each is like, a car's starting state, where a new rival goes on the road, which kind comes next, and each rival's choice of speed and line every slice (blocking, ramming, chasing, dodging your landings, littering, hopping the holes, and the Monster truck's chase).
+// Plan2Code Web Console - Bounce Road's rivals: the kinds and what each is like (the plain cars, the ones with a trick of their own, the friendly supply truck and the five bosses), a car's starting state, where a new rival goes on the road, which kind comes next, and each rival's choice of speed and line every slice (blocking, ramming, chasing, dodging your landings, littering, shooting, hopping the holes, and each boss's fight).
 //
 // Rules only: bounce.js moves the cars, bumps them and settles their
 // landings; this file decides what a rival wants. Every rival keeps to the
@@ -8,7 +8,7 @@
 // slower car's speed, so no rival stops or sticks. How keenly it blocks,
 // rams and dodges grows with the stage's `sharp`.
 
-import { CAR_L, CAR_W, FIELD_W, GROUND, JUMP_MIN, MAX_SPEED, ROW, SPAN, ensureRoad, firstAt, rowGone, rowIn, spanAt, stageFor, swayOff, trainAt } from "./bounce-road.js";
+import { CAR_L, CAR_W, FIELD_W, GROUND, JUMP_MIN, MAX_SPEED, ROW, SPAN, ballX, ensureRoad, firstAt, laserAt, rowGone, rowIn, spanAt, stageFor, swayOff, trainAt } from "./bounce-road.js";
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 
@@ -18,7 +18,13 @@ const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 // under your landing (times the stage's sharpness), `weight` how often it
 // comes, `style` the car it is drawn as, and `behind` true for one that
 // comes up from under the board. A rival with no `points` cannot be
-// flattened: its roof is a trampoline.
+// flattened: its roof is a trampoline. The later kinds each have a trick:
+// the Blaster shoots back down the road, the Slasher's blades cut you when
+// it leans in, the Spike's roof is a crash to land on (`spiky`), the Bomber
+// leaves lit bombs, the Phantom fades out of reach, the Splitter bursts into
+// two Minis when flattened, the Magnet drags you toward it, and the Supply
+// truck is a friend (`friend`): land on its roof for a power-up. A `boss`
+// has `hp` landings in it and its own fight.
 export const RIVALS = Object.freeze({
   zigzag: Object.freeze({ name: "Zigzag", w: 4.2, l: 6.8, mass: 1, speed: 42, points: 100, dodge: 0.45, weight: 3, style: "hatch" }),
   brick: Object.freeze({ name: "Brick", w: 4.6, l: 8.6, mass: 1.4, speed: 37, points: 100, dodge: 0.25, weight: 2.4, style: "van" }),
@@ -29,9 +35,24 @@ export const RIVALS = Object.freeze({
   bruiser: Object.freeze({ name: "Bruiser", w: 4.8, l: 10.4, mass: 2.6, speed: 40, points: 180, dodge: 0.3, weight: 1, style: "pickup" }),
   racer: Object.freeze({ name: "Racer", w: 4, l: 7.6, mass: 0.9, speed: 64, points: 300, dodge: 0.9, weight: 0.8, style: "racer", behind: true }),
   cop: Object.freeze({ name: "Cop", w: 4.2, l: 8.6, mass: 1.6, speed: 52, points: 250, dodge: 0.65, weight: 0.9, style: "police", behind: true }),
-  monster: Object.freeze({ name: "Monster", w: 9, l: 13, mass: 12, speed: 52, points: 0, dodge: 0, weight: 0, style: "monster" }),
+  monster: Object.freeze({ name: "Monster", w: 9, l: 13, mass: 12, speed: 52, points: 0, dodge: 0, weight: 0, style: "monster", boss: true, hp: 5, hint: "Land on its roof" }),
+  blaster: Object.freeze({ name: "Blaster", w: 4.2, l: 8.2, mass: 1.1, speed: 44, points: 200, dodge: 0.5, weight: 1, style: "coupe", hint: "It shoots back. Jump the bolts" }),
+  slasher: Object.freeze({ name: "Slasher", w: 4.2, l: 8.6, mass: 1.3, speed: 48, points: 250, dodge: 0.6, weight: 0.9, style: "sedan", behind: true, hint: "Blades out: keep off its sides" }),
+  spike: Object.freeze({ name: "Spike", w: 4.8, l: 7.8, mass: 1.5, speed: 36, points: 200, dodge: 0, weight: 1.1, style: "armor", spiky: true, hint: "Never land on it. Bump it off" }),
+  bomber: Object.freeze({ name: "Bomber", w: 4.4, l: 7.4, mass: 1.1, speed: 45, points: 220, dodge: 0.6, weight: 1, style: "buggy", hint: "Steer round its bombs, or jump them" }),
+  phantom: Object.freeze({ name: "Phantom", w: 4.2, l: 7.6, mass: 1, speed: 43, points: 220, dodge: 0.5, weight: 0.9, style: "bubble", hint: "Hit it while you can see it" }),
+  splitter: Object.freeze({ name: "Splitter", w: 5, l: 11, mass: 2.2, speed: 35, points: 150, dodge: 0.15, weight: 0.9, style: "bus", hint: "Flatten it and two Minis pop out" }),
+  mini: Object.freeze({ name: "Mini", w: 3, l: 4.8, mass: 0.6, speed: 54, points: 80, dodge: 0.3, weight: 0, style: "mini" }),
+  magnet: Object.freeze({ name: "Magnet", w: 4.6, l: 8.6, mass: 1.6, speed: 42, points: 220, dodge: 0.4, weight: 0.9, style: "tow", hint: "It drags you over. Steer away" }),
+  supply: Object.freeze({ name: "Supply truck", w: 5.6, l: 11, mass: 3, speed: 40, points: 0, dodge: 0, weight: 0, style: "supply", friend: true }),
+  tanker: Object.freeze({ name: "Big Rig", w: 7, l: 17, mass: 12, speed: 52, points: 0, dodge: 0, weight: 0, style: "tanker", boss: true, hp: 4, hint: "Dodge the barrels. Land on its roof" }),
+  vac: Object.freeze({ name: "Robo-Vac", w: 10, l: 10, mass: 10, speed: 52, points: 0, dodge: 0, weight: 0, style: "vac", boss: true, hp: 4, hint: "Jump on it when it charges" }),
+  chopper: Object.freeze({ name: "Whirlybird", w: 8, l: 11, mass: 6, speed: 52, points: 0, dodge: 0, weight: 0, style: "chopper", boss: true, hp: 4, hint: "Dodge the bombs. Stomp it when it swoops" }),
+  cat: Object.freeze({ name: "The Cat", w: 11, l: 12, mass: 14, speed: 52, points: 0, dodge: 0, weight: 0, style: "paw", boss: true, hp: 6, hint: "Jump its paw as it sweeps, and land on it" }),
 });
 export const RIVAL_KINDS = Object.freeze(Object.keys(RIVALS));
+export const BOSS_KINDS = Object.freeze(RIVAL_KINDS.filter((k) => RIVALS[k].boss));
+export const isBoss = (car) => car.kind !== "you" && RIVALS[car.kind].boss === true;
 // A car this heavy gives no ground to a ram, and its back is a wall.
 export const HEAVY = 4;
 
@@ -95,6 +116,75 @@ export const BOSS_HOP_MS = 3600;
 export const BOSS_AIR = 1000;
 const BOSS_DROP_MS = 2600;
 export const BOSS_HP = 5;
+// The Blaster lines up on you from BLAST_NEAR to BLAST_FAR ahead, glows for
+// AIM_MS and fires a bolt back down the road, then reloads for RELOAD_MS.
+const BLAST_NEAR = 26;
+const BLAST_FAR = 76;
+export const AIM_MS = 650;
+const RELOAD_MS = 2300;
+export const BOLT_SPEED = 62;
+// The Slasher chases like a Nudge for up to SLASH_MS; once alongside, its
+// blades glint for BLADE_WARN_MS, then stay out for BLADE_MS (a side touch
+// is a crash) and rest for BLADE_REST_MS.
+const SLASH_MS = 10000;
+export const BLADE_WARN_MS = 550;
+export const BLADE_MS = 1500;
+const BLADE_REST_MS = 1700;
+// The Bomber drops a bomb every BOMBER_MS while you follow BOMB_NEAR to
+// BOMB_FAR behind it, up to BOMBER_DROPS; each blows BOMB_FUSE_MS after it
+// lands, BOMB_R round.
+const BOMBER_MS = 1700;
+export const BOMBER_DROPS = 4;
+const BOMB_NEAR = 34;
+const BOMB_FAR = 96;
+export const BOMB_FUSE_MS = 1350;
+export const BOMB_R = 8;
+// The Phantom is solid for PHASE_ON_MS, then out of reach for PHASE_OFF_MS.
+export const PHASE_ON_MS = 2500;
+export const PHASE_OFF_MS = 1500;
+// The Magnet holds your speed within MAG_RANGE for up to MAG_MS, keeping to
+// the road's edge so its pull drags you toward it.
+export const MAG_RANGE = 26;
+const MAG_MS = 6500;
+// The Supply truck keeps SUPPLY_AHEAD in front of you for SUPPLY_MS, then
+// drives off.
+const SUPPLY_AHEAD = 30;
+const SUPPLY_MS = 14000;
+// The bosses. The Big Rig keeps TANKER_AHEAD in front and lobs a barrel at
+// where you are heading every TANKER_DROP_MS (an oil spill in between). The
+// Robo-Vac sweeps from edge to edge VAC_AHEAD in front, then warns for
+// VAC_WARN_MS and charges back down the road at you, VAC_CHARGE slower than
+// you, every VAC_EVERY_MS. The Whirlybird flies out of reach for
+// CHOPPER_HIGH_MS, bombing where you are heading every CHOPPER_BOMB_MS, then
+// swoops down to the road for CHOPPER_LOW_MS. The Cat's paw slams down like
+// the Monster every CAT_HOP_MS, then sweeps across the road for CAT_SWIPE_MS.
+// A thing lobbed lands LOB_MS after it is thrown.
+export const TANKER_AHEAD = 44;
+const TANKER_DROP_MS = 2500;
+// A boss that kept your speed could never be landed on (a jump holds your
+// speed), so each comes back to you in its own way. The Big Rig brake-checks
+// every TANKER_BRAKE_EVERY_MS: TANKER_BRAKE slower than you for
+// TANKER_BRAKE_MS, its back a wall and its roof in reach. The Whirlybird's
+// swoop drifts back at CHOPPER_DRIFT, and the Cat's paw sweeps CAT_DRIFT
+// slower than you.
+export const TANKER_BRAKE_MS = 1200;
+const TANKER_BRAKE_EVERY_MS = 5200;
+const TANKER_BRAKE = 26;
+const CHOPPER_DRIFT = 16;
+const CAT_DRIFT = 6;
+export const VAC_AHEAD = 42;
+export const VAC_WARN_MS = 850;
+const VAC_CHARGE = 46;
+const VAC_EVERY_MS = 4200;
+export const CHOPPER_AHEAD = 38;
+export const CHOPPER_HIGH_MS = 4400;
+export const CHOPPER_LOW_MS = 3000;
+const CHOPPER_BOMB_MS = 1150;
+export const CAT_HOP_MS = 2900;
+export const CAT_SWIPE_MS = 1700;
+const CAT_STEER = 36;
+export const LOB_MS = 950;
+export const LOB_R = 7;
 
 // A car's state. `kind` is "you" or a rival's.
 export function makeCar(id, kind, x, d, v) {
@@ -143,8 +233,29 @@ export function makeCar(id, kind, x, d, v) {
     nearDone: false,
     dropIn: SNEAK_MS,
     drops: 0,
-    hp: kind === "monster" ? BOSS_HP : 0,
+    hp: spec && spec.hp ? spec.hp : 0,
     stunMs: 0,
+    // The later kinds' own state: how fast the car may steer, a Blaster's
+    // aim, a Slasher's blades ("", "warn" or "out"), a Phantom out of reach,
+    // a boss flying (`lift` 0 on the road to 1 up high), a car zapped or
+    // spinning on oil, and a boss driving through you on its way back.
+    steer: RIVAL_STEER,
+    aimMs: 0,
+    blade: "",
+    bladeMs: 0,
+    phased: false,
+    phaseIn: PHASE_ON_MS,
+    lift: 0,
+    high: false,
+    thru: false,
+    zapMs: 0,
+    spinMs: 0,
+    wasAir: false,
+    gave: false,
+    // You: the gadget held ({ kind, uses } or null) and what is running.
+    held: null,
+    magnetMs: 0,
+    pounding: false,
     // You: the power-ups held, and what your jump flew over.
     spring: false,
     bubble: false,
@@ -223,7 +334,39 @@ function thingAhead(round, car, nose, look) {
     const tr = trainAt(h, round.clock + ((h.d - nose) / Math.max(car.v, 1)) * 1000);
     if (tr.warn) return h.d + h.half;
   }
+  // A laser that will be on, or a roller that will be across the car's
+  // line, by the time it gets there.
+  for (let k = firstAt(road.hazards, "d", nose - 4); k < road.hazards.length && road.hazards[k].d < nose + look + 12; k++) {
+    const h = road.hazards[k];
+    if (h.d < nose - 1 || h.d - 2 > nose + look + car.v * 0.1) continue;
+    const at = round.clock + ((h.d - nose) / Math.max(car.v, 1)) * 1000;
+    if (h.kind === "laser" && laserAt(h, at).warn) return h.d + h.half;
+    if (h.kind === "roller" && Math.abs(ballX(h, at) - car.x) < h.half + car.w / 2 + 1.5) return h.d + h.r;
+  }
   return 0;
+}
+
+// A thing thrown at where you are heading: it lands LOB_MS on, on the road
+// just ahead of you (`boom`: it blows up LOB_R round; else it lies there).
+export function lob(round, from, what, boom = 0) {
+  const you = round.cars[0];
+  const road = round.road;
+  const d = you.d + Math.max(you.v, 20) * (LOB_MS / 1000) + 2;
+  ensureRoad(road, d);
+  const i = rowIn(road, d);
+  const x = clamp(you.x + you.vx * 0.3, road.L[i] + 3, road.R[i] - 3);
+  round.lobs.push({ x, d, at: round.clock + LOB_MS, what, boom, w: boom ? 4 : 4.4, l: boom ? 4 : 4.4, fx: from.x, fd: from.d });
+  round.events.push({ type: "lob", id: from.id, what, x, d });
+}
+
+// A boss's speed to sit `ahead` of you.
+const paceTo = (you, car, ahead) => you.v + clamp((you.d + ahead - car.d) * 1.4, -26, 26);
+
+// A boss sweeping from edge to edge between `lo` and `hi`.
+function sweep(car, lo, hi) {
+  if (car.offside > 0 && car.x > hi - 1.5) car.offside = -1;
+  else if (car.offside < 0 && car.x < lo + 1.5) car.offside = 1;
+  return car.offside > 0 ? hi : lo;
 }
 
 // Whether the road from `d` to `look` ahead is plain enough for a Frog to
@@ -274,11 +417,23 @@ export function think(round, car, ms, random = Math.random) {
   if (car.out > 0) return;
   const you = round.cars[0];
   const spec = RIVALS[car.kind];
-  const stage = stageFor(round.stage);
+  const stage = stageFor(round.stage, round.road);
   const sharp = stage.sharp || 0;
   const behind = car.d - you.d;
   let base = spec.speed * stage.pace * car.pace;
-  if (car.kind !== "racer" && car.kind !== "monster") {
+  // Zapped, or spinning on your oil: it coasts where it points, sees nothing
+  // and hops nothing, so a hole or the road's edge takes it.
+  if (car.zapMs > 0 || car.spinMs > 0) {
+    car.zapMs = Math.max(0, car.zapMs - ms);
+    car.spinMs = Math.max(0, car.spinMs - ms);
+    car.tv = Math.max(RIVAL_MIN_SPEED, base * 0.6);
+    car.tx = car.x;
+    car.gain = 0;
+    car.blade = "";
+    car.aimMs = 0;
+    return;
+  }
+  if (car.kind !== "racer" && car.kind !== "mini" && !spec.boss && !spec.friend) {
     if (behind < -BAND_BEHIND) base *= 1 + Math.min(BAND_MAX, (-behind - BAND_BEHIND) / 120);
     else if (behind > BAND_AHEAD) base *= 1 - Math.min(BAND_MAX, (behind - BAND_AHEAD) / 300);
   }
@@ -291,7 +446,10 @@ export function think(round, car, ms, random = Math.random) {
   let tx = car.lane;
   let tv = base;
   let gain = RIVAL_GAIN;
+  car.steer = RIVAL_STEER;
   const youHere = you.out === 0 && round.phase === "drive" && you.ghostMs <= 0;
+  const landed = car.wasAir && car.air <= 0;
+  car.wasAir = car.air > 0;
   car.modeMs = Math.max(0, car.modeMs - ms);
   car.stunMs = Math.max(0, car.stunMs - ms);
   car.brakeIn = Math.max(0, car.brakeIn - ms);
@@ -379,6 +537,233 @@ export function think(round, car, ms, random = Math.random) {
       tx = you.x;
       gain = 0.5 + sharp;
     }
+  } else if (car.kind === "spike") {
+    // It sits in your lane and dares you to jump on it.
+    if (youHere && behind > 0 && behind < 46 && you.air <= 0) {
+      tx = you.x;
+      gain = 0.9 + sharp;
+      tv = clamp(you.v - 6, base * 0.8, base * 1.3);
+    }
+  } else if (car.kind === "splitter") {
+    if (youHere && behind > 0 && behind < 60) {
+      tx = you.x;
+      gain = 0.5 + 0.6 * sharp;
+    }
+  } else if (car.kind === "mini") {
+    tx = mid + ((hi - lo) / 2) * Math.sin(round.clock / 420 + car.seed);
+    gain = 4;
+  } else if (car.kind === "blaster") {
+    const inRange = youHere && behind > BLAST_NEAR && behind < BLAST_FAR;
+    if (inRange) {
+      tx = you.x;
+      gain = 1.2 + sharp;
+      tv = clamp(you.v + (behind < 44 ? 6 : -4), base * 0.8, base * 1.4);
+    }
+    car.dropIn -= ms;
+    if (car.aimMs > 0) {
+      car.aimMs -= ms;
+      if (car.aimMs <= 0) {
+        car.aimMs = 0;
+        car.dropIn = RELOAD_MS * (1.3 - 0.5 * sharp);
+        if (car.air <= 0) {
+          round.bolts.push({ x: car.x, d: car.d - car.l / 2 - 1, v: car.v - BOLT_SPEED, from: car.id });
+          round.events.push({ type: "bolt", id: car.id, x: car.x, d: car.d });
+        }
+      }
+    } else if (inRange && car.dropIn <= 0 && car.air <= 0 && Math.abs(you.x - car.x) < 9) {
+      car.aimMs = AIM_MS;
+      round.events.push({ type: "aim", id: car.id, x: car.x, d: car.d });
+    }
+  } else if (car.kind === "slasher") {
+    car.chaseMs += ms;
+    if (car.mode === "chase" && (!youHere || behind > 16 || car.chaseMs > SLASH_MS)) {
+      car.mode = "calm";
+      car.blade = "";
+    }
+    if (car.mode === "chase") {
+      tv = Math.min(you.v + NUDGE_CATCH, MAX_SPEED - 2);
+      if (behind > -2) tv = you.v + 1;
+      const beside = you.x + car.offside * ((you.w + car.w) / 2 + 1.8);
+      if (beside < lo || beside > hi) car.offside = -car.offside;
+      const along = Math.abs(behind) < (you.l + car.l) * 0.45;
+      // Alongside: the blades glint, come out, and it leans in; then a rest.
+      car.bladeMs -= ms;
+      if (car.blade === "" && along && car.bladeMs <= 0) {
+        car.blade = "warn";
+        car.bladeMs = BLADE_WARN_MS;
+        round.events.push({ type: "blade", id: car.id, x: car.x, d: car.d });
+      } else if (car.blade === "warn" && car.bladeMs <= 0) {
+        car.blade = "out";
+        car.bladeMs = BLADE_MS;
+      } else if (car.blade === "out" && car.bladeMs <= 0) {
+        car.blade = "";
+        car.bladeMs = BLADE_REST_MS * (1.2 - 0.4 * sharp);
+      }
+      tx = along && car.blade === "out" && you.air <= 0 ? you.x + car.offside * (car.w / 2) : beside;
+      gain = 2.6;
+    } else tv = base * 1.3;
+  } else if (car.kind === "bomber") {
+    if (youHere && behind > 12 && behind < BOMB_FAR) {
+      tx = you.x;
+      gain = 1 + sharp;
+      tv = Math.max(base, you.v + 3);
+      car.dropIn -= ms;
+      if (car.dropIn <= 0 && car.drops < BOMBER_DROPS && car.air <= 0 && behind > BOMB_NEAR) {
+        car.dropIn = BOMBER_MS * (1.3 - 0.5 * sharp);
+        car.drops++;
+        round.bombs.push({ x: car.x, d: car.d - car.l / 2 - 2, at: round.clock + BOMB_FUSE_MS, t0: round.clock, r: BOMB_R });
+        round.events.push({ type: "bomb", id: car.id, x: car.x, d: car.d });
+      }
+    }
+  } else if (car.kind === "phantom") {
+    tx = mid + ((hi - lo) / 2) * Math.sin((round.clock / 1000) * 0.9 + car.seed);
+    if (youHere && behind > 0 && behind < 46) tx += (you.x - tx) * (0.5 + 0.4 * sharp);
+    car.phaseIn -= ms;
+    if (car.phaseIn <= 0) {
+      car.phased = !car.phased;
+      car.phaseIn = car.phased ? PHASE_OFF_MS : PHASE_ON_MS * (1.2 - 0.3 * sharp);
+      round.events.push({ type: "phase", id: car.id, x: car.x, d: car.d, on: car.phased });
+    }
+  } else if (car.kind === "magnet") {
+    car.chaseMs += youHere && Math.abs(behind) < MAG_RANGE ? ms : 0;
+    if (car.mode !== "calm" && car.chaseMs > MAG_MS) car.mode = "calm";
+    // Hard against the nearer edge, and at your speed while it has you.
+    tx = car.x < mid ? lo : hi;
+    gain = 2;
+    if (car.mode === "calm") tv = base * 1.3;
+    else if (youHere && Math.abs(behind) < MAG_RANGE + 14) tv = clamp(you.v + (behind < 0 ? 8 : -4), RIVAL_MIN_SPEED, MAX_SPEED - 2);
+  } else if (car.kind === "supply") {
+    car.chaseMs += ms;
+    tx = mid;
+    gain = 1.2;
+    if (car.gave || car.chaseMs > SUPPLY_MS) tv = MAX_SPEED - 4;
+    else if (youHere) tv = clamp(paceTo(you, car, SUPPLY_AHEAD), RIVAL_MIN_SPEED, MAX_SPEED - 4);
+  } else if (car.kind === "tanker") {
+    tv = paceTo(you, car, TANKER_AHEAD);
+    if (car.stunMs > 0) tv = Math.max(RIVAL_MIN_SPEED, you.v - 20);
+    if (youHere) {
+      tx = you.x;
+      gain = 0.5 + 0.4 * sharp;
+    }
+    // The brake check: its brake lights on, and back it comes.
+    if (car.mode === "brake" && car.modeMs > 0 && behind > car.l / 2 + 4) tv = Math.max(RIVAL_MIN_SPEED, you.v - TANKER_BRAKE);
+    else if (car.mode === "brake") car.mode = "";
+    else if (youHere && car.brakeIn <= 0 && car.stunMs <= 0 && car.air <= 0 && behind > 30) {
+      car.mode = "brake";
+      car.modeMs = TANKER_BRAKE_MS;
+      car.brakeIn = TANKER_BRAKE_MS + TANKER_BRAKE_EVERY_MS * (1.2 - 0.3 * sharp);
+      round.events.push({ type: "brake", id: car.id, kind: car.kind, x: car.x, d: car.d });
+    }
+    car.dropIn -= ms;
+    if (youHere && car.dropIn <= 0 && car.air <= 0 && car.stunMs <= 0 && car.mode !== "brake" && behind > 16) {
+      const rage = car.hp <= 2 ? 0.7 : 1;
+      car.dropIn = TANKER_DROP_MS * (1.25 - 0.4 * sharp) * rage;
+      car.drops++;
+      if (car.drops % 3 === 0) {
+        round.spills.push({ x: car.x, d: car.d - car.l / 2 - 5, w: 9, l: 11, until: round.clock + 7000, foe: true });
+        round.events.push({ type: "litter", id: car.id, x: car.x, d: car.d, what: "oil" });
+      } else lob(round, car, "barrel");
+    }
+  } else if (car.kind === "vac") {
+    car.thru = false;
+    if (car.stunMs > 0 && car.mode !== "back") car.mode = "back";
+    if (car.mode === "warn") {
+      tv = paceTo(you, car, VAC_AHEAD);
+      tx = you.x;
+      gain = 2.4;
+      if (car.modeMs <= 0) {
+        car.mode = "charge";
+        car.lane = car.x;
+        round.events.push({ type: "bossCharge", id: car.id, x: car.x, d: car.d });
+      }
+    } else if (car.mode === "charge") {
+      tv = Math.max(RIVAL_MIN_SPEED, you.v - VAC_CHARGE);
+      tx = clamp(car.lane, lo, hi);
+      if (!youHere || behind < -14) car.mode = "back";
+    } else if (car.mode === "back") {
+      // Back up the road, through anything, to sweep again.
+      car.thru = behind < 20;
+      tv = car.stunMs > 0 ? Math.max(RIVAL_MIN_SPEED, you.v - 12) : you.v + 30;
+      tx = you.x > mid ? lo : hi;
+      gain = 2.5;
+      if (behind > VAC_AHEAD - 8 && car.stunMs <= 0) {
+        car.mode = "sweep";
+        car.hopIn = VAC_EVERY_MS * (1.2 - 0.4 * sharp) + random() * 800;
+      }
+    } else {
+      car.mode = "sweep";
+      tv = paceTo(you, car, VAC_AHEAD);
+      tx = sweep(car, lo, hi);
+      gain = 3;
+      car.hopIn -= ms;
+      if (youHere && car.hopIn <= 0 && car.air <= 0 && behind > 20) {
+        car.mode = "warn";
+        car.modeMs = VAC_WARN_MS;
+        round.events.push({ type: "bossWarn", id: car.id, kind: car.kind, x: car.x, d: car.d });
+      }
+    }
+  } else if (car.kind === "chopper") {
+    if (car.mode !== "low") {
+      // Up high: over your line, bombing where you are heading.
+      car.mode = "high";
+      car.lift = Math.min(1, car.lift + ms / 500);
+      tv = paceTo(you, car, CHOPPER_AHEAD);
+      if (youHere) {
+        tx = you.x;
+        gain = 1.4;
+      }
+      car.dropIn -= ms;
+      car.hopIn -= ms;
+      if (youHere && car.dropIn <= 0 && car.lift >= 1) {
+        car.dropIn = CHOPPER_BOMB_MS * (1.25 - 0.4 * sharp);
+        lob(round, car, "bomb", LOB_R);
+      }
+      if (youHere && car.hopIn <= 0 && car.stunMs <= 0) {
+        car.mode = "low";
+        car.modeMs = CHOPPER_LOW_MS;
+        round.events.push({ type: "bossWarn", id: car.id, kind: car.kind, x: car.x, d: car.d });
+      }
+    } else {
+      // Down on the road: sweeping across as it drifts back to you, there
+      // to be stomped; past you, or out of time, up it goes.
+      car.lift = Math.max(0, car.lift - ms / 450);
+      tv = Math.max(RIVAL_MIN_SPEED, you.v - CHOPPER_DRIFT);
+      tx = sweep(car, lo, hi);
+      gain = 2.4;
+      if (car.modeMs <= 0 || car.stunMs > 0 || behind < 4) {
+        car.mode = "high";
+        car.hopIn = CHOPPER_HIGH_MS * (1.15 - 0.3 * sharp);
+        car.dropIn = 700;
+      }
+    }
+    car.high = car.lift > 0.35;
+  } else if (car.kind === "cat") {
+    tv = paceTo(you, car, BOSS_AHEAD - 6);
+    if (car.stunMs > 0) tv = Math.max(RIVAL_MIN_SPEED, you.v - 22);
+    if (landed && car.stunMs <= 0) {
+      car.mode = "swipe";
+      car.modeMs = CAT_SWIPE_MS;
+      car.offside = car.x < mid ? 1 : -1;
+      round.events.push({ type: "swipe", id: car.id, x: car.x, d: car.d });
+    }
+    if (car.mode === "swipe" && car.modeMs > 0 && car.stunMs <= 0) {
+      tx = sweep(car, lo, hi);
+      gain = 4;
+      car.steer = CAT_STEER;
+      if (behind > 8) tv = Math.max(RIVAL_MIN_SPEED, you.v - CAT_DRIFT);
+    } else {
+      car.mode = "stalk";
+      if (youHere) {
+        tx = you.x;
+        gain = 0.8 + 0.5 * sharp;
+      }
+      car.hopIn -= ms;
+      if (youHere && car.air <= 0 && car.hopIn <= 0 && car.stunMs <= 0 && Math.abs(behind) < 60) {
+        car.hopIn = CAT_HOP_MS * (1.2 - 0.4 * sharp) + random() * 700;
+        hop(round, car, BOSS_AIR * 0.9, "bossHop");
+        car.v = clamp((you.d + you.v * ((BOSS_AIR * 0.9) / 1000) + 6 - car.d) / ((BOSS_AIR * 0.9) / 1000), RIVAL_MIN_SPEED, MAX_SPEED);
+      }
+    }
   } else if (car.kind === "monster") {
     tv = you.v + clamp((you.d + BOSS_AHEAD - car.d) * 1.4, -26, 26);
     if (car.stunMs > 0) tv = Math.max(RIVAL_MIN_SPEED, you.v - 22);
@@ -401,7 +786,7 @@ export function think(round, car, ms, random = Math.random) {
     }
   }
   // Your landing: a sharp enough rival under it swerves away (a Frog hops).
-  if (youHere && you.air > 0 && spec.dodge > 0 && car.air <= 0) {
+  if (youHere && you.air > 0 && spec.dodge > 0 && car.air <= 0 && !car.phased) {
     const t = you.air / 1000;
     const landD = you.d + you.v * t;
     const carD = car.d + car.v * t;
@@ -424,18 +809,18 @@ export function think(round, car, ms, random = Math.random) {
   // A slower car in the way, just ahead: hold its speed, and a Frog edges its
   // lane round it. One that means to hit you never holds back for you.
   for (const o of round.cars) {
-    if (o === car || o.out > 0 || o.air > 0) continue;
+    if (o === car || o.out > 0 || o.air > 0 || o.high || o.phased || o.thru || car.high || car.thru || car.phased) continue;
     const ahead = o.d - car.d;
     if (ahead <= 0 || ahead > (o.l + car.l) / 2 + 6 || Math.abs(o.x - car.x) > (o.w + car.w) / 2 + 0.5) continue;
-    if (o.id === 0 && (car.mode === "chase" || car.kind === "bruiser" || car.kind === "monster")) continue;
+    if (o.id === 0 && (car.mode === "chase" || car.kind === "bruiser" || spec.boss)) continue;
     if (o.v < tv) tv = Math.max(RIVAL_MIN_SPEED, o.v);
     if (car.kind === "frog") car.lane = clamp(car.lane + (o.x < car.x ? 1 : -1) * 24 * (ms / 1000), lo, hi);
   }
   car.tx = clamp(tx, lo, hi);
   car.tv = Math.max(RIVAL_MIN_SPEED, tv);
   car.gain = gain;
-  // A hole, a barrier or a train just ahead: hop it.
-  if (car.air <= 0) {
+  // A hole, a barrier or a train just ahead: hop it (never a boss in flight).
+  if (car.air <= 0 && !car.high) {
     const nose = car.d + car.l / 2;
     const len = holeAhead(round.road, nose, HOP_LOOK, round.clock);
     const v = Math.max(car.v, RIVAL_MIN_SPEED);
@@ -468,11 +853,18 @@ export function spawnRival(round, kind, random = Math.random, at = null) {
     if (room < 0) continue;
     const x = span.lo + spec.w / 2 + 2 + random() * room;
     if (round.cars.some((o) => o.out === 0 && Math.abs(o.d - d) < (o.l + spec.l) / 2 + 8 && Math.abs(o.x - x) < (o.w + spec.w) / 2 + 3)) continue;
-    const car = makeCar(round.nextId++, kind, clamp(x, spec.w / 2, FIELD_W - spec.w / 2), d, spec.speed * stageFor(round.stage).pace);
+    const car = makeCar(round.nextId++, kind, clamp(x, spec.w / 2, FIELD_W - spec.w / 2), d, spec.speed * stageFor(round.stage, round.road).pace);
     car.pace = 0.92 + random() * 0.16;
     car.seed = random() * 6.28;
-    car.hopIn = kind === "monster" ? BOSS_HOP_MS * 0.6 : FROG_EVERY * random() + 600;
-    car.dropIn = kind === "monster" ? BOSS_DROP_MS : SNEAK_MS * (0.5 + random());
+    car.hopIn = kind === "monster" ? BOSS_HOP_MS * 0.6 : kind === "cat" ? CAT_HOP_MS * 0.7 : kind === "vac" ? VAC_EVERY_MS * 0.7 : kind === "chopper" ? CHOPPER_HIGH_MS : FROG_EVERY * random() + 600;
+    car.dropIn = kind === "monster" ? BOSS_DROP_MS : kind === "tanker" ? TANKER_DROP_MS * 0.8 : kind === "chopper" ? CHOPPER_BOMB_MS * 1.6 : kind === "blaster" ? RELOAD_MS * 0.5 : kind === "bomber" ? BOMBER_MS * 0.6 : SNEAK_MS * (0.5 + random());
+    car.phaseIn = PHASE_ON_MS * (0.5 + random() * 0.6);
+    if (kind === "tanker") car.brakeIn = TANKER_BRAKE_EVERY_MS * 0.6;
+    if (kind === "chopper") {
+      car.lift = 1;
+      car.high = true;
+      car.mode = "high";
+    }
     car.offside = x < you.x ? -1 : 1;
     if (spec.behind) car.v = kind === "racer" ? you.v + RACER_CATCH : you.v;
     round.cars.push(car);
@@ -484,11 +876,13 @@ export function spawnRival(round, kind, random = Math.random, at = null) {
 
 // Kinds only one of which is on the road at a time, and those that come up
 // from behind only once you are quick enough to chase.
-const ONE_AT_A_TIME = Object.freeze(new Set(["hauler", "nudge", "cop", "racer", "bruiser", "sneak"]));
+const ONE_AT_A_TIME = Object.freeze(new Set(["hauler", "nudge", "cop", "racer", "bruiser", "sneak", "blaster", "slasher", "spike", "bomber", "phantom", "splitter", "magnet"]));
+// A kind new to the stage comes this much more often.
+const FRESH_WEIGHT = 2.6;
 
 // The kind to spawn next: weighted among the stage's.
 export function pickKind(round, random) {
-  const spec = stageFor(round.stage);
+  const spec = stageFor(round.stage, round.road);
   const you = round.cars[0];
   let total = 0;
   const ok = (k) => {
@@ -496,11 +890,12 @@ export function pickKind(round, random) {
     if (RIVALS[k].behind && you.v < 30) return false;
     return true;
   };
-  for (const k of spec.kinds) if (ok(k)) total += RIVALS[k].weight;
+  const weight = (k) => RIVALS[k].weight * (spec.fresh && spec.fresh.includes(k) ? FRESH_WEIGHT : 1);
+  for (const k of spec.kinds) if (ok(k)) total += weight(k);
   let roll = random() * total;
   for (const k of spec.kinds) {
     if (!ok(k)) continue;
-    roll -= RIVALS[k].weight;
+    roll -= weight(k);
     if (roll < 0) return k;
   }
   return spec.kinds[0];

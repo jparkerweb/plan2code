@@ -20,6 +20,8 @@ import { MUSIC_TRACKS as TRAILS_TRACKS } from "../src/web-console/public/activit
 import trailsSfx from "../src/web-console/public/activities/trails-sfx.js";
 import { MUSIC_TRACKS as FLOCK_TRACKS } from "../src/web-console/public/activities/flock.js";
 import flockSfx from "../src/web-console/public/activities/flock-sfx.js";
+import { MUSIC_TRACKS as BOUNCE_TRACKS } from "../src/web-console/public/activities/bounce.js";
+import bounceSfx from "../src/web-console/public/activities/bounce-sfx.js";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const GAMES = path.join(ROOT, "src/web-console/public/activities");
@@ -439,6 +441,43 @@ class FakeAudio {
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+test("music: Bounce Road lists exactly the tracks it has, each a real track that no other game defines, and no recorded songs", () => {
+  const tracks = new Set(musicNames());
+  assert.equal(bounceSfx.songs, undefined, "its music is note data, not recordings");
+  assert.deepEqual([...BOUNCE_TRACKS].sort(), Object.keys(bounceSfx.music).sort(), "the game lists the tracks its sound file has");
+  for (const name of BOUNCE_TRACKS) {
+    assert.ok(tracks.has(name), `track "${name}" exists`);
+    assert.equal(MUSIC_TABLES.filter((t) => Object.hasOwn(t, name)).length, 1, `${name} is defined once`);
+  }
+  assert.ok(![...SERVABLE].some((f) => f.startsWith("activities/bounce-road/")), "no Bounce Road mp3 is served");
+});
+
+test("music: a track says it is playing until it has run through, then that it ended while it loops on, and a restart takes it back to its top", async () => {
+  const saved = { sound: looks.sound, ctor: globalThis.AudioContext };
+  globalThis.AudioContext = AUDIO.Ctx;
+  try {
+    hushMusic();
+    looks.sound = true;
+    const name = BOUNCE_TRACKS[0];
+    assert.equal(music(name, 1, 1, { restart: true }), "playing", "from its top");
+    let heard = "playing";
+    for (let k = 0; k < 400 && heard !== "ended"; k++) {
+      await sleep(25);
+      heard = music(name, 1, 1);
+    }
+    assert.equal(heard, "ended", "run through");
+    assert.equal(music(name, 1, 1), "ended", "and it says so for as long as it loops on");
+    assert.equal(music(name, 1, 1, { restart: true }), "playing", "a restart plays it again");
+    assert.equal(music(name, 1, 0), undefined, "a volume of 0: nothing playing");
+    looks.sound = false;
+    assert.equal(music(name, 1, 1), undefined, "Play sounds off: nothing playing");
+  } finally {
+    hushMusic();
+    looks.sound = saved.sound;
+    globalThis.AudioContext = saved.ctor;
+  }
+});
 
 async function withSongs(fn) {
   const saved = { sound: looks.sound, Audio: globalThis.Audio };

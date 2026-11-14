@@ -7,9 +7,9 @@
 // the round's clock, so a paused round holds still and a test can ask where
 // anything will be.
 
-import { FIELD_H, FIELD_W, LAP_FROM, MAX_HOLE, ROW, STAGES } from "./bounce-roads.js";
+import { ARENAS, BOSS_ORDER, CYCLE, FIELD_H, FIELD_W, KIND_FROM, MAX_HOLE, MAX_RIVALS, REGULAR, REGULAR_PER_CYCLE, ROW, STAGES, THEMES, TWISTS, TWIST_NAMES, TWIST_SHARE, WILD, WORLD, classicTheme, slotFor, stageSpec } from "./bounce-roads.js";
 
-export { FIELD_H, FIELD_W, LAP_FROM, MAX_HOLE, ROW, STAGES };
+export { ARENAS, BOSS_ORDER, CYCLE, FIELD_H, FIELD_W, KIND_FROM, MAX_HOLE, MAX_RIVALS, REGULAR, ROW, STAGES, THEMES, TWISTS, WILD, WORLD, slotFor, stageSpec };
 
 const TAU = Math.PI * 2;
 
@@ -44,9 +44,6 @@ export const reach = (v) => (v * airMs(v)) / 1000;
 // shorter).
 export const LONGEST_JUMP = reach(MAX_SPEED) * Math.max(SPRING_AIR, RAMP_AIR);
 
-// At most this many rivals on the road at once, however far you get.
-export const MAX_RIVALS = 7;
-
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const smooth = (t) => t * t * (3 - 2 * t);
 
@@ -64,42 +61,74 @@ export function seeded(seed) {
 
 /* ------------------------------------------------------------- stages */
 
-// A stage's numbers, built once each: the first ten from bounce-roads.js,
-// and past the last, the road goes round again from LAP_FROM, the rivals
-// quicker, keener and more of them each lap, the holes a little longer
-// (never past MAX_HOLE), the Monster truck back at every Monster Mash.
+// A run's plan: which theme each stage is, and the twist on it. With no
+// road, or a road made with no shuffle, the classic order of
+// bounce-roads.js. A shuffled road deals each lap of CYCLE stages from its
+// seed: the plain themes picked and ordered afresh (the first lap opens on
+// Chalk Lane and runs roughly from the gentle themes to the hard ones; a
+// later lap is any order), the bosses in a new order (the Cat always last
+// on the first lap), and a twist on some of the plain stages.
+function shuffled(list, random) {
+  const out = [...list];
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(random() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+}
+
+function deckFor(road, cycle) {
+  if (road.decks[cycle]) return road.decks[cycle];
+  const random = seeded((road.seed ^ Math.imul(cycle + 1, 0x9e3779b1)) >>> 0);
+  let regular;
+  let bosses;
+  if (cycle === 0) {
+    const rest = shuffled(REGULAR.filter((id) => id !== "chalk"), random).slice(0, REGULAR_PER_CYCLE - 1);
+    regular = ["chalk", ...rest.map((id) => [id, THEMES[id].tier + random() * 1.3]).sort((p, q) => p[1] - q[1]).map((e) => e[0])];
+    bosses = [...shuffled(BOSS_ORDER.filter((k) => k !== "cat"), random), "cat"];
+  } else {
+    regular = shuffled(REGULAR, random).slice(0, REGULAR_PER_CYCLE);
+    bosses = shuffled(BOSS_ORDER, random);
+  }
+  return (road.decks[cycle] = { regular, bosses });
+}
+
+// The theme id and the twist of stage `n` on `road`.
+export function planAt(road, n) {
+  if (!road || !road.shuffle) return { theme: classicTheme(n), twist: null };
+  const cycle = Math.floor((n - 1) / CYCLE);
+  const k = 1 + ((n - 1) % CYCLE);
+  const deck = deckFor(road, cycle);
+  if (k % WORLD === 0) return { theme: ARENAS[deck.bosses[k / WORLD - 1]], twist: null };
+  const theme = deck.regular[k - Math.floor(k / WORLD) - 1];
+  let twist = null;
+  if (n > 1) {
+    const random = seeded((road.seed + n * 104729) >>> 0);
+    if (random() < TWIST_SHARE) {
+      const spec = THEMES[theme];
+      const fits = TWIST_NAMES.filter((t) => !(t === "dark" && spec.dark) && !(t === "rain" && spec.ice));
+      twist = fits[Math.floor(random() * fits.length)];
+    }
+  }
+  return { theme, twist };
+}
+
+// A stage's numbers, built once each (per road when it shuffles): its slot's
+// difficulty with its theme's pieces, from bounce-roads.js.
 const BUILT_STAGES = new Map();
 
-export function stageFor(n) {
+export function stageFor(n, road = null) {
   const k = Math.max(1, Math.floor(n) || 1);
-  if (BUILT_STAGES.has(k)) return BUILT_STAGES.get(k);
-  let spec;
-  if (k <= STAGES.length) spec = { ...STAGES[k - 1], n: k, lap: 1, name: STAGES[k - 1].title };
-  else {
-    const loop = STAGES.length - LAP_FROM + 1;
-    const past = k - STAGES.length - 1;
-    const base = STAGES[LAP_FROM - 1 + (past % loop)];
-    const lap = 2 + Math.floor(past / loop);
-    const longer = (r) => (r ? Object.freeze([r[0], Math.min(MAX_HOLE, r[1] + 3 * (lap - 1))]) : r);
-    spec = {
-      ...base,
-      n: k,
-      lap,
-      name: `${base.title} ${lap}`,
-      rivals: Math.min(MAX_RIVALS, base.rivals + lap - 1),
-      pace: Math.min(1.45, base.pace + 0.07 * (lap - 1)),
-      sharp: 1,
-      crack: longer(base.crack),
-      gap: longer(base.gap),
-    };
-  }
-  const frozen = Object.freeze(spec);
-  BUILT_STAGES.set(k, frozen);
-  return frozen;
+  const cache = road && road.shuffle ? road.specs : BUILT_STAGES;
+  if (cache.has(k)) return cache.get(k);
+  const plan = planAt(road, k);
+  const spec = stageSpec(k, plan.theme, plan.twist);
+  cache.set(k, spec);
+  return spec;
 }
 
 // "Kitchen Floor (stage 3)".
-export const stageName = (n) => `${stageFor(n).name} (stage ${n})`;
+export const stageName = (n, road = null) => `${stageFor(n, road).name} (stage ${n})`;
 
 /* --------------------------------------------------------------- road */
 
@@ -125,11 +154,15 @@ export const rowOf = (d) => Math.floor(d / ROW);
 // (a drop's aim), so a road belongs to one round.
 let roadSerial = 0;
 
-export function newRoad(seed = 1) {
+export function newRoad(seed = 1, shuffle = false) {
   const spec = STAGES[0];
   const road = {
     id: ++roadSerial,
     seed: seed >>> 0,
+    shuffle: Boolean(shuffle),
+    decks: [],
+    specs: new Map(),
+    forceItem: null,
     rows: 0,
     L: [],
     R: [],
@@ -192,13 +225,33 @@ export const roadEnd = (road) => road.rows * ROW;
 const between = (random, [lo, hi]) => lo + random() * (hi - lo);
 // A hole's length, a whole number of rows.
 const holeLen = (random, range, more = 0) => ROW * Math.round(clamp(between(random, range) + more, MIN_HOLE, MAX_HOLE) / ROW);
-// The power-ups, and how often each turns up.
-const POWER_ROLL = Object.freeze([
-  ["spring", 0.3],
-  ["bubble", 0.25],
-  ["nitro", 0.25],
-  ["mega", 0.2],
+// The power-ups, how often each turns up, and the stage each waits for.
+export const POWER_ROLL = Object.freeze([
+  ["rocket", 0.17, 2],
+  ["spring", 0.11, 2],
+  ["bubble", 0.13, 2],
+  ["nitro", 0.11, 2],
+  ["mega", 0.09, 2],
+  ["oil", 0.1, 3],
+  ["pound", 0.1, 4],
+  ["magnet", 0.08, 3],
+  ["zap", 0.08, 5],
+  ["heart", 0.03, 6],
 ]);
+
+// A power-up for stage `n`, from a roll of 0 to 1.
+export function rollPower(n, roll) {
+  let total = 0;
+  for (const [, share, from] of POWER_ROLL) if (n >= from) total += share;
+  let left = roll * total;
+  let kind = "spring";
+  for (const [k, share, from] of POWER_ROLL) {
+    if (n < from) continue;
+    kind = k;
+    if ((left -= share) < 0) break;
+  }
+  return kind;
+}
 
 // Plain road, with a power-up on it when one is due.
 function plain(road, spec, random, len, c1, w1) {
@@ -207,14 +260,10 @@ function plain(road, spec, random, len, c1, w1) {
   if (!spec.pickups || roadEnd(road) < road.nextItem) return;
   const j = from + Math.floor((road.rows - from) / 2);
   const half = (road.R[j] - road.L[j]) / 2 - 4;
-  let roll = random();
-  let kind = "spring";
-  for (const [k, share] of POWER_ROLL) {
-    kind = k;
-    if ((roll -= share) < 0) break;
-  }
+  const kind = road.forceItem || rollPower(spec.n, random());
+  road.forceItem = null;
   road.items.push({ d: j * ROW + ROW / 2, x: (road.L[j] + road.R[j]) / 2 + (random() * 2 - 1) * Math.max(0, half), kind, taken: false });
-  road.nextItem = roadEnd(road) + ITEM_GAP + random() * ITEM_SPREAD;
+  road.nextItem = roadEnd(road) + (ITEM_GAP + random() * ITEM_SPREAD) / (spec.itemRate || 1);
 }
 
 // The road is built a stage at a time, at least BUILD_AHEAD units ahead of
@@ -239,8 +288,8 @@ const SLOPE = 0.28;
 // A field edge no road comes nearer than.
 const EDGE = 3;
 // Power-ups lie ITEM_GAP to ITEM_GAP + ITEM_SPREAD units apart.
-const ITEM_GAP = 300;
-const ITEM_SPREAD = 120;
+const ITEM_GAP = 230;
+const ITEM_SPREAD = 110;
 // Stars over a hole, STAR_STEP apart.
 const STAR_STEP = 4;
 
@@ -462,7 +511,7 @@ function ball(road, spec, random) {
   sign(road, d0 - 10, "ball");
   plain(road, spec, random, len, road.c, road.w);
   const i = rowOf(d0 + len / 2);
-  road.hazards.push({ kind: "ball", d: d0 + len / 2, c: (road.L[i] + road.R[i]) / 2, amp: (road.R[i] - road.L[i]) / 2 - 3, r: 3, period: (2300 + random() * 900) / (spec.pace || 1), phase: random() * TAU });
+  road.hazards.push({ kind: "ball", what: spec.roll || "orange", d: d0 + len / 2, c: (road.L[i] + road.R[i]) / 2, amp: (road.R[i] - road.L[i]) / 2 - 3, r: 3, period: (2300 + random() * 900) / (spec.pace || 1), phase: random() * TAU });
 }
 
 function sprinkler(road, spec, random) {
@@ -489,7 +538,183 @@ function wind(road, spec, random) {
   road.hazards.push({ kind: "wind", d: d0, d1: roadEnd(road), dir: random() < 0.5 ? -1 : 1, period: 2600 + random() * 600, onMs: 1300, phase: random() * 3000 });
 }
 
-const PIECES = Object.freeze({ straight, crack, river, split, ramp, chicane, crumble, train, sway, boost, slick, ball, sprinkler, drop, wind });
+// A conveyor or two right across the road, each carrying whatever is on it
+// toward one edge, with stars along the edge it carries you away from.
+function belt(road, spec, random) {
+  const n = random() < 0.5 ? 1 : 2;
+  const each = 34 + random() * 14;
+  const w = clamp(road.w, spec.width[0], spec.width[1]);
+  const c = clamp(road.c, w / 2 + EDGE, FIELD_W - w / 2 - EDGE);
+  plain(road, spec, random, 30, c, w);
+  let dir = random() < 0.5 ? -1 : 1;
+  sign(road, roadEnd(road) - 16, "belt");
+  for (let k = 0; k < n; k++) {
+    const d0 = roadEnd(road);
+    lay(road, each, c, w);
+    road.pads.push({ kind: "belt", x: c, d: d0 + each / 2, w, l: each, dir });
+    for (let d = d0 + 6; d < d0 + each - 4; d += 7) road.stars.push({ x: c - dir * (w / 2 - 4), d, taken: false });
+    lay(road, 16, c, w);
+    dir = -dir;
+  }
+  plain(road, spec, random, 20, c, w);
+}
+
+// A spring pad on plain road: it throws any car that crosses it up, POP_AIR
+// the usual jump, through an arc of stars.
+function pop(road, spec, random) {
+  const len = 110 + random() * 30;
+  const d0 = roadEnd(road);
+  plain(road, spec, random, len, road.c, road.w);
+  const d = d0 + 24;
+  const i = rowOf(d);
+  const x = (road.L[i] + road.R[i]) / 2 + (random() * 2 - 1) * Math.max(0, (road.R[i] - road.L[i]) / 2 - 6);
+  road.pads.push({ kind: "pop", x, d, w: 6.5, l: 5 });
+  starLine(road, x, d + 8, d + Math.min(len - 40, reach(JUMP_FAIR * TOP_SPEED) * POP_AIR - 6));
+}
+
+// Pinball bumpers scattered over a wide stretch, never two so close that no
+// car fits between them or between one and the road's edge.
+function bumpers(road, spec, random) {
+  const w = Math.max(road.w, spec.width[1] - 2);
+  const c = clamp(road.c, w / 2 + EDGE, FIELD_W - w / 2 - EDGE);
+  plain(road, spec, random, 30, c, w);
+  const d0 = roadEnd(road);
+  sign(road, d0 - 14, "bumper");
+  const n = 4 + Math.floor(random() * 4);
+  const step = 20;
+  lay(road, n * step + 14, c, w);
+  let last = 0;
+  for (let k = 0; k < n; k++) {
+    // Three lanes across; never the lane the last one took.
+    let lane = Math.floor(random() * 3) - 1;
+    if (lane === last) lane = lane >= 1 ? -1 : lane + 1;
+    last = lane;
+    road.blocks.push({ kind: "bumper", x: c + lane * (w / 2 - BUMPER_R - CAR_W - 2.5), d: d0 + 10 + k * step, w: BUMPER_R * 2, l: BUMPER_R * 2, hit: 0, lit: -1e9 });
+  }
+  plain(road, spec, random, 20, c, w);
+}
+
+// A beam across the road between two posts, on for `onMs` of every
+// `period`, the posts blinking LASER_WARN_MS before: wait for it, or jump it.
+function laser(road, spec, random) {
+  plain(road, spec, random, 56, road.c, road.w);
+  const n = random() < 0.4 ? 2 : 1;
+  sign(road, roadEnd(road) - 36, "laser");
+  for (let k = 0; k < n; k++) {
+    const d = roadEnd(road) + 2;
+    lay(road, 4, road.c, road.w);
+    const i = rowOf(d);
+    road.hazards.push({ kind: "laser", d, half: 0.9, x0: road.L[i] - 1.5, x1: road.R[i] + 1.5, period: 2300 + random() * 600, onMs: 950, phase: random() * 3000 });
+    if (k < n - 1) lay(road, 36, road.c, road.w);
+  }
+  plain(road, spec, random, 34, road.c, road.w);
+}
+
+// Something heavy slamming down on one side of the road on a timer, then
+// the other: its shadow grows STOMP_WARN_MS before it lands, it stays down
+// `downMs` (a block while it does) and lifts again.
+function stomper(road, spec, random) {
+  const w = clamp(road.w, spec.width[0], spec.width[1]);
+  const c = clamp(road.c, w / 2 + EDGE, FIELD_W - w / 2 - EDGE);
+  plain(road, spec, random, 44, c, w);
+  const d0 = roadEnd(road);
+  sign(road, d0 - 24, "stomper");
+  const n = 2 + Math.floor(random() * 2);
+  const gap = 38;
+  lay(road, n * gap + 6, c, w);
+  let side = random() < 0.5 ? -1 : 1;
+  const period = 2300 + random() * 500;
+  for (let k = 0; k < n; k++) {
+    const sw = w * 0.5;
+    road.hazards.push({ kind: "stomper", d: d0 + 14 + k * gap, x: c + side * (w / 2 - sw / 2), w: sw, l: 7, what: spec.stomp || "book", period, downMs: 850, phase: random() * 500 + k * (period / 2) });
+    side = -side;
+  }
+  plain(road, spec, random, 26, c, w);
+}
+
+// A long thing rolling from edge to edge and back: a crash to drive into,
+// points to jump.
+function roller(road, spec, random) {
+  const len = 84 + random() * 30;
+  const d0 = roadEnd(road);
+  sign(road, d0 - 8, "ball");
+  plain(road, spec, random, len, road.c, road.w);
+  const i = rowOf(d0 + len / 2);
+  const half = (road.R[i] - road.L[i]) * 0.2;
+  road.hazards.push({ kind: "roller", d: d0 + len / 2, c: (road.L[i] + road.R[i]) / 2, amp: (road.R[i] - road.L[i]) / 2 - half - 0.5, r: 1.5, half, what: spec.roller || "pin", period: (3000 + random() * 900) / (spec.pace || 1), phase: random() * TAU });
+}
+
+// A kicker: a big ramp in one lane that throws you KICKER_AIR the usual
+// jump, over a whole chicane of barriers and through a long line of stars,
+// with clear road to come down on. Miss it and the chicane is there to weave.
+function kicker(road, spec, random) {
+  const w = clamp(road.w, spec.width[0], spec.width[1]);
+  const c = clamp(road.c, w / 2 + EDGE, FIELD_W - w / 2 - EDGE);
+  plain(road, spec, random, 50, c, w);
+  const d0 = roadEnd(road);
+  sign(road, d0 - 30, "chicane");
+  const x = c + (random() * 2 - 1) * Math.max(0, w / 2 - 7);
+  road.pads.push({ kind: "kicker", x, d: d0 - 5, w: 9, l: 8, air: KICKER_AIR });
+  const n = 3;
+  const gap = 30;
+  lay(road, n * gap + 16, c, w);
+  const kind = spec.barrier || "cone";
+  const first = random() < 0.5 ? -1 : 1;
+  for (let k = 0; k < n; k++) {
+    const side = k % 2 ? -first : first;
+    const bw = Math.min(w * 0.46, w - CAR_W - 7);
+    const d = d0 + 16 + k * gap;
+    const i = rowOf(d);
+    road.blocks.push({ kind, x: side < 0 ? road.L[i] + bw / 2 : road.R[i] - bw / 2, d, w: bw, l: 3, side, hit: 0 });
+  }
+  starLine(road, x, d0 + 2, d0 + reach(JUMP_FAIR * TOP_SPEED) * KICKER_AIR - 8);
+  lay(road, 96, c, w);
+}
+
+// A row of blocks right across the road, after a run-up and a sign: there
+// is no way round, only over.
+function wall(road, spec, random) {
+  plain(road, spec, random, 64, road.c, road.w);
+  const d0 = roadEnd(road);
+  sign(road, d0 - 44, "chicane");
+  lay(road, 8, road.c, road.w);
+  const i = rowOf(d0 + 3);
+  road.blocks.push({ kind: "block", x: (road.L[i] + road.R[i]) / 2, d: d0 + 3, w: road.R[i] - road.L[i] - 0.6, l: 3, side: 1, hit: 0, wall: true });
+  if (random() < (spec.stars || 0)) starLine(road, road.c + (random() * 2 - 1) * (road.w / 2 - 5), d0 - 4, d0 + 12);
+  plain(road, spec, random, 30, road.c, road.w);
+}
+
+// Spring pads right across the road, one after another: each throws every
+// car on it up, so the stretch is three bounces long.
+function trampoline(road, spec, random) {
+  const w = clamp(road.w, spec.width[0], spec.width[1]);
+  const c = clamp(road.c, w / 2 + EDGE, FIELD_W - w / 2 - EDGE);
+  plain(road, spec, random, 34, c, w);
+  for (let k = 0; k < 3; k++) {
+    const d = roadEnd(road) + 4;
+    lay(road, 56, c, w);
+    road.pads.push({ kind: "pop", x: c, d, w: w - 2, l: 4 });
+    starLine(road, c + (random() * 2 - 1) * (w / 2 - 5), d + 10, d + 38);
+  }
+  plain(road, spec, random, 34, c, w);
+}
+
+// A narrow lane of boost strips, one after another, with a star after each.
+function turbo(road, spec, random) {
+  const w1 = between(random, spec.width);
+  const c = clamp(road.c, w1 / 2 + EDGE, FIELD_W - w1 / 2 - EDGE);
+  lay(road, 26, c, TURBO_W);
+  const d0 = roadEnd(road);
+  lay(road, 96, c, TURBO_W);
+  for (let k = 0; k < 4; k++) {
+    const d = d0 + 8 + k * 24;
+    road.pads.push({ kind: "boost", x: c, d, w: 5, l: 8 });
+    for (let s = 1; s <= 3; s++) road.stars.push({ x: c, d: d + 4 + s * 4, taken: false });
+  }
+  lay(road, 26, c, w1);
+}
+
+const PIECES = Object.freeze({ kicker, wall, trampoline, turbo, straight, crack, river, split, ramp, chicane, crumble, train, sway, boost, slick, ball, sprinkler, drop, wind, belt, pop, bumpers, laser, stomper, roller });
 export const PIECE_NAMES = Object.freeze(Object.keys(PIECES));
 
 // Lays stage `n` on the end of the road, from its own seeded random, so the
@@ -498,31 +723,52 @@ export const PIECE_NAMES = Object.freeze(Object.keys(PIECES));
 // is `len` long. stageAt[n - 1] is where it starts, stageAt[n] where the
 // next one will.
 export function buildStage(road, n, random = seeded(road.seed + n * 7919)) {
-  const spec = stageFor(n);
+  const spec = stageFor(n, road);
   road.building = n;
   const start = roadEnd(road);
   road.stageAt[n - 1] = start;
   if (n === 1) road.nextItem = 0;
+  // A boss stage opens with rockets on the road: something to fight with.
+  if (spec.boss) {
+    road.nextItem = 0;
+    road.forceItem = "rocket";
+  }
   plain(road, spec, random, n === 1 ? START_RUN : LINE_RUN, road.c, road.w);
   let last = "straight";
-  while (roadEnd(road) - start < spec.len) {
-    const far = (roadEnd(road) - start) / spec.len;
-    let total = 0;
-    for (const name of PIECE_NAMES) total += pieceWeight(spec, name, far, last);
-    let roll = random() * total;
-    let pick = "straight";
-    for (const name of PIECE_NAMES) {
-      roll -= pieceWeight(spec, name, far, last);
-      if (roll < 0) {
-        pick = name;
-        break;
-      }
-    }
-    PIECES[pick](road, spec, random);
-    last = pick;
-  }
+  while (roadEnd(road) - start < spec.len) last = layPiece(road, spec, random, (roadEnd(road) - start) / spec.len, last);
   road.built = n;
   road.stageAt[n] = roadEnd(road);
+}
+
+// One more piece on the end of the road, by the stage's weights.
+function layPiece(road, spec, random, far, last) {
+  let total = 0;
+  for (const name of PIECE_NAMES) total += pieceWeight(spec, name, far, last);
+  let roll = random() * total;
+  let pick = "straight";
+  for (const name of PIECE_NAMES) {
+    roll -= pieceWeight(spec, name, far, last);
+    if (roll < 0) {
+      pick = name;
+      break;
+    }
+  }
+  PIECES[pick](road, spec, random);
+  return pick;
+}
+
+// More of stage `n`, the last one built, until the road reaches `to`: its
+// line moves to the new end. bounce.js calls this while a boss is still
+// alive, so a boss stage lasts until its boss is beaten.
+export function extendStage(road, n, to) {
+  if (road.built !== n || roadEnd(road) >= to) return false;
+  const spec = stageFor(n, road);
+  road.building = n;
+  const random = seeded((road.seed + n * 7919 + road.rows * 31) >>> 0);
+  let last = "straight";
+  while (roadEnd(road) < to) last = layPiece(road, spec, random, 0.5, last);
+  road.stageAt[n] = roadEnd(road);
+  return true;
 }
 
 // A piece's weight: no crack before `crackFrom` of the stage, and never the
@@ -695,6 +941,40 @@ export function trainAt(h, t) {
 
 // A ball's middle across the road at `t`, and its roll (for its stripes).
 export const ballX = (h, t) => h.c + h.amp * Math.sin((t / h.period) * TAU + h.phase);
+
+// A spring pad throws a car up POP_AIR the usual jump; a bumper is BUMPER_R
+// round.
+export const POP_AIR = 1.25;
+// A kicker throws a car KICKER_AIR the usual jump; a turbo lane is TURBO_W wide.
+export const KICKER_AIR = 1.9;
+export const TURBO_W = 20;
+export const BUMPER_R = 2.6;
+
+// A laser's beam at `t`: on for `onMs` of each `period`, its posts
+// blinking for LASER_WARN_MS before. Into LASER.
+export const LASER_WARN_MS = 600;
+export const LASER = { on: false, warn: false };
+export function laserAt(h, t) {
+  const c = (t + h.phase) % h.period;
+  LASER.on = c < h.onMs;
+  LASER.warn = LASER.on || c > h.period - LASER_WARN_MS;
+  return LASER;
+}
+
+// A stomper at `t`: down (on the road, a block) for `downMs` of each
+// `period`, its shadow growing for STOMP_WARN_MS before it lands (`fall`
+// 0 to 1), and `hit` true only in the STOMP_HIT_MS it comes down in. Into
+// STOMP.
+export const STOMP_WARN_MS = 800;
+export const STOMP_HIT_MS = 90;
+export const STOMP = { down: false, hit: false, fall: 0 };
+export function stomperAt(h, t) {
+  const c = (t + h.phase) % h.period;
+  STOMP.down = c < h.downMs;
+  STOMP.hit = c < STOMP_HIT_MS;
+  STOMP.fall = STOMP.down ? 1 : Math.max(0, 1 - (h.period - c) / STOMP_WARN_MS);
+  return STOMP;
+}
 
 // A sprinkler's spray at `t`: the end of its jet, sweeping SPRAY_SWEEP each
 // way of straight across the road. Into SPRAY.

@@ -25,10 +25,10 @@
 // truck to beat on the way), and the memo keeps the furthest stage reached.
 
 import {
-  CAR_L, CAR_W, CRUMBLE_DELAY, CRUMBLE_SPEED, DROP_FALL_MS, DROP_TRIGGER, FIELD_H, FIELD_W, GROUND, JUMP_MIN, LONGEST_JUMP, MAX_HOLE, MAX_SPEED, NITRO_TOP, RAMP_AIR, ROW, SLICE_MS, SPRAY, SPRING_AIR, STAGES, TOP_SPEED,
-  airMs, ballX, ensureRoad, firstAt, groundAt, gustAt, holesIn, newRoad, rowIn, rowOf, safeSpot, sprayAt, stageFor, stageName, trainAt,
+  BOSS_ORDER, CAR_L, CAR_W, CRUMBLE_DELAY, CRUMBLE_SPEED, CYCLE, DROP_FALL_MS, DROP_TRIGGER, FIELD_H, FIELD_W, GROUND, JUMP_MIN, LONGEST_JUMP, MAX_HOLE, MAX_SPEED, NITRO_TOP, POP_AIR, RAMP_AIR, ROW, SLICE_MS, SPRAY, SPRING_AIR, STAGES, TOP_SPEED, TWISTS,
+  BUILD_AHEAD, airMs, ballX, ensureRoad, extendStage, firstAt, groundAt, gustAt, holesIn, laserAt, newRoad, rowIn, rowOf, safeSpot, sprayAt, stageFor, stageName, stomperAt, trainAt,
 } from "./bounce-road.js";
-import { BOSS_HP, DROP_AHEAD, DROP_BEHIND, HEAVY, RIVALS, RIVAL_ACCEL, RIVAL_KINDS, RIVAL_MIN_SPEED, RIVAL_STEER, makeCar, pickKind, spawnRival, think } from "./bounce-rivals.js";
+import { DROP_AHEAD, DROP_BEHIND, HEAVY, MAG_RANGE, RIVALS, RIVAL_ACCEL, RIVAL_KINDS, RIVAL_MIN_SPEED, makeCar, pickKind, spawnRival, think } from "./bounce-rivals.js";
 import { DANGER, GOLD, drawScene, readColors, stageColor } from "./bounce-draw.js";
 
 export * from "./bounce-road.js";
@@ -79,6 +79,11 @@ export const VERGE_TOP = 0.5;
 export const SLICK_MS = 650;
 const SLICK_EASE = 2.4;
 const SLICK_PULL = 0.35;
+// On an icy or a wet stage the whole road has less grip: the steering eases
+// at ICE_EASE, the pull is ICE_PULL of its own and a knock lasts longer.
+export const ICE_EASE = 6.5;
+const ICE_PULL = 0.8;
+const ICE_KNOCK = 0.6;
 
 // In the air the steering does only AIR_STEER of its usual. A press up to
 // JUMP_BUFFER_MS before you land jumps as you land. A landing on a car
@@ -99,6 +104,40 @@ export const BOOST_MS = 1100;
 export const MEGA_MS = 5000;
 export const MEGA_SIZE = 1.4;
 const MEGA_MASS = 3;
+
+// The gadgets, held one at a time and set off with a double tap of the jump
+// key: a second press within DOUBLE_TAP_MS of the last (the first press
+// still jumps at once, so a jump never waits). A rocket flies ROCKET_SPEED
+// faster than you for ROCKET_RANGE and blows up the first rival or barrier
+// in its way; an oil spill lies OIL_MS behind you and spins any rival that
+// crosses it for OIL_SPIN_MS; a ground pound brings you down in
+// POUND_DROP_MS and its shockwave flattens what is within POUND_FLAT and
+// throws what is within POUND_R; a zap stops every rival within ZAP_RANGE
+// steering, dodging or hopping for ZAP_MS. A Magnet pulls in the stars and
+// power-ups within MAGNET_R for MAGNET_MS.
+export const DOUBLE_TAP_MS = 280;
+export const ROCKET_SPEED = 110;
+export const ROCKET_RANGE = 130;
+export const OIL_MS = 6000;
+export const OIL_SPIN_MS = 1100;
+const OIL_KICK = 40;
+export const POUND_DROP_MS = 140;
+export const POUND_R = 20;
+export const POUND_FLAT = 10;
+const POUND_KICK = 48;
+export const ZAP_MS = 3500;
+export const ZAP_RANGE = 100;
+export const MAGNET_MS = 9000;
+export const MAGNET_R = 15;
+
+// Fever: every stunt fills the meter by FEVER_GAIN; full (FEVER_FULL), it
+// burns for FEVER_MS, every point doubled and any rival you touch
+// flattened. A life lost halves what the meter holds.
+export const FEVER_FULL = 100;
+export const FEVER_GAIN = 5;
+export const FEVER_MS = 7000;
+// A life (up to MAX_LIVES) every LIFE_SCORE points.
+export const LIFE_SCORE = 8000;
 
 // Bumps. Side on, each car takes a knock of SIDE_KICK, plus SIDE_BOUNCE of
 // the speed they closed at, split by mass, the one that steered in taking
@@ -134,6 +173,18 @@ const RIVAL_WIND = 0.4;
 const CONE_SLOW = 0.62;
 const QUAKE_R = 16;
 const QUAKE_KICK = 26;
+// A conveyor carries a car across at BELT_PUSH; a bumper kicks it away at
+// BUMPER_KICK. A Blaster's bolt knocks you by BOLT_KICK and down to
+// BOLT_SLOW of your speed; a Magnet rival drags you at MAG_PULL a second,
+// the Robo-Vac at VAC_PULL from up to VAC_REACH ahead.
+export const BELT_PUSH = 24;
+const BUMPER_KICK = 34;
+const BUMPER_REST_MS = 260;
+const BOLT_KICK = 24;
+const BOLT_SLOW = 0.7;
+export const MAG_PULL = 100;
+const VAC_PULL = 46;
+const VAC_REACH = 64;
 
 // A life lost holds CRASH_MS while the car sinks, falls or spins, then puts
 // you back before the spot (on plain road) for a hold of READY_MS, driving
@@ -176,6 +227,11 @@ export const BOOST_POINTS = 10;
 export const STAR_POINTS = 10;
 export const STOMP_POINTS = 250;
 export const BOSS_POINTS = 2000;
+// A rival blown up by a rocket scores its own points, BLAST_POINTS at least
+// (and a rocket into a boss ROCKET_BOSS_POINTS); a bumper BUMPER_POINTS.
+export const BLAST_POINTS = 100;
+export const ROCKET_BOSS_POINTS = 150;
+export const BUMPER_POINTS = 20;
 export const STAGE_POINTS = 100;
 export const TIME_POINTS = 15;
 export const FLAWLESS_POINTS = 250;
@@ -188,29 +244,130 @@ export const comboOf = (streak) => Math.min(MAX_COMBO, 1 + Math.floor(streak / C
 // Rivals come one every SPAWN_MS at most while fewer than the stage's count
 // are on the road. The Monster comes BOSS_AT of the way into its stage.
 const SPAWN_MS = 650;
-const BOSS_AT = 0.18;
+const BOSS_AT = 0.12;
+const HOLD_AHEAD = 220;
+// The Supply truck comes SUPPLY_EVERY_MS to twice that after the last one,
+// only while you hold no gadget and no boss is about.
+const SUPPLY_EVERY_MS = 22000;
 export const ITEM_R = 1.8;
 export const STAR_R = 1.4;
 
 /* ------------------------------------------------------------ powers */
 
-// The power-ups lying on the road.
+// The power-ups lying on the road. One with `uses` is a gadget: taken, it
+// is held (one at a time, a new one taking the old one's place) until a
+// double tap of the jump key sets it off; the rest work as they are taken.
+const HOW = "Double-tap space";
 export const POWERS = Object.freeze({
   spring: Object.freeze({ name: "Spring", blurb: "Your next jump goes higher and further", color: "#ffd84a" }),
   bubble: Object.freeze({ name: "Bubble", blurb: "One free save from water, a hole, a crash or a squash", color: "#7fd8ff" }),
-  nitro: Object.freeze({ name: "Nitro", blurb: "A burst of speed", color: "#ff7a2f" }),
-  mega: Object.freeze({ name: "Mega wheels", blurb: "Bigger and heavier: flatten whatever you touch", color: "#7ad151" }),
+  nitro: Object.freeze({ name: "Nitro", tag: "NITRO", blurb: `${HOW} for a burst of speed`, color: "#ff7a2f", uses: 1 }),
+  mega: Object.freeze({ name: "Mega wheels", tag: "MEGA", blurb: `${HOW}: bigger, heavier, flatten whatever you touch`, color: "#7ad151", uses: 1 }),
+  rocket: Object.freeze({ name: "Rockets", tag: "ROCKET", blurb: `${HOW} to fire. Three shots`, color: "#ff5a4f", uses: 3 }),
+  oil: Object.freeze({ name: "Oil slick", tag: "OIL", blurb: `${HOW} to spill it behind you. Two spills`, color: "#b08cff", uses: 2 }),
+  pound: Object.freeze({ name: "Ground pound", tag: "POUND", blurb: `${HOW} to slam down with a shockwave. Two slams`, color: "#ffb02e", uses: 2 }),
+  zap: Object.freeze({ name: "Zapper", tag: "ZAP", blurb: `${HOW} to fry every rival's steering`, color: "#5ef2e0", uses: 1 }),
+  magnet: Object.freeze({ name: "Star magnet", blurb: "Stars and power-ups fly to you", color: "#ff6fb5" }),
+  heart: Object.freeze({ name: "Extra life", blurb: "One more life", color: "#ff4d6d" }),
 });
+export const GADGETS = Object.freeze(Object.keys(POWERS).filter((k) => POWERS[k].uses));
 
+// A power-up taken: a gadget is held, the rest work at once.
 export function applyPower(round, kind) {
   const you = round.cars[0];
-  if (kind === "spring") you.spring = true;
+  const spec = POWERS[kind];
+  if (!spec) return;
+  if (spec.uses) you.held = { kind, uses: spec.uses };
+  else if (kind === "spring") you.spring = true;
   else if (kind === "bubble") you.bubble = true;
-  else if (kind === "nitro") you.nitroMs = NITRO_MS;
+  else if (kind === "magnet") you.magnetMs = MAGNET_MS;
+  else if (kind === "heart" && round.lives < MAX_LIVES) round.lives++;
+}
+
+// The gadget you hold, set off: one of its uses spent. Returns its kind, or
+// null with none held or no way to use one now.
+export function usePower(round) {
+  const you = round.cars[0];
+  const held = you.held;
+  if (!held || round.phase !== "drive" || you.out > 0) return null;
+  const kind = held.kind;
+  if (kind === "nitro") you.nitroMs = NITRO_MS;
   else if (kind === "mega") {
     you.megaMs = MEGA_MS;
     sizeYou(you);
+  } else if (kind === "rocket") round.shots.push({ x: you.x, d: you.d + you.l / 2 + 1, v: Math.max(you.v, ROLL_SPEED) + ROCKET_SPEED, left: ROCKET_RANGE });
+  else if (kind === "oil") round.spills.push({ x: you.x, d: you.d - you.l / 2 - 5, w: 9, l: 11, until: round.clock + OIL_MS, foe: false });
+  else if (kind === "pound") {
+    if (you.air > 0) {
+      you.pounding = true;
+      you.air = Math.min(you.air, POUND_DROP_MS);
+    } else shockwave(round, you);
+  } else if (kind === "zap") zap(round);
+  held.uses--;
+  if (held.uses <= 0) you.held = null;
+  round.stats.fired++;
+  round.events.push({ type: "use", kind, x: you.x, d: you.d, left: Math.max(0, held.uses) });
+  return kind;
+}
+
+// A ground pound's shockwave round `at`: a boss in it takes a hit, a rival
+// within POUND_FLAT is flattened, the rest are thrown outward (and yours if
+// that takes them off the road), and barriers, bolts and bombs are gone.
+function shockwave(round, at) {
+  const road = round.road;
+  let hit = 0;
+  for (const o of [...round.cars]) {
+    if (o.id === 0 || o.out > 0 || o.air > 0 || o.high || o.phased) continue;
+    const dx = o.x - at.x;
+    const gap = Math.hypot(dx, (o.d - at.d) * 0.8);
+    if (gap > POUND_R + o.l / 2) continue;
+    const spec = RIVALS[o.kind];
+    if (spec.friend) continue;
+    hit++;
+    if (spec.boss) hurtBoss(round, o, "pound");
+    else if (spec.points && gap < POUND_FLAT + o.l / 2) flatten(round, o, 1, "pound");
+    else {
+      o.kx += ((dx >= 0 ? 1 : -1) * POUND_KICK) / Math.min(o.mass, 3);
+      o.credit = CREDIT_MS * 2;
+      o.spinMs = 700;
+    }
   }
+  const smash = (b) => {
+    if (b.hit || b.kind === "bumper" || Math.hypot(b.x - at.x, b.d - at.d) > POUND_R) return;
+    b.hit = round.clock || 1;
+    b.side = b.x >= at.x ? 1 : -1;
+  };
+  for (let k = firstAt(road.blocks, "d", at.d - POUND_R); k < road.blocks.length && road.blocks[k].d < at.d + POUND_R; k++) smash(road.blocks[k]);
+  for (const b of round.drops) smash(b);
+  const far = (e) => Math.hypot(e.x - at.x, e.d - at.d) > POUND_R;
+  round.bolts = round.bolts.filter(far);
+  round.bombs = round.bombs.filter(far);
+  round.events.push({ type: "pound", x: at.x, d: at.d, hit });
+}
+
+// A zap: every rival within ZAP_RANGE loses its steering, its tricks and
+// its hops for ZAP_MS (so the road takes it, and it is yours); a boss is
+// stunned, and the Whirlybird drops to the road.
+function zap(round) {
+  const you = round.cars[0];
+  let hit = 0;
+  for (const o of round.cars) {
+    if (o.id === 0 || o.out > 0 || Math.abs(o.d - you.d) > ZAP_RANGE) continue;
+    const spec = RIVALS[o.kind];
+    if (spec.friend) continue;
+    hit++;
+    if (o.kind === "chopper") {
+      o.mode = "low";
+      o.modeMs = ZAP_MS;
+    } else if (spec.boss) o.stunMs = Math.max(o.stunMs, ZAP_MS * 0.6);
+    else {
+      o.zapMs = ZAP_MS;
+      o.credit = ZAP_MS + CREDIT_MS;
+      o.phased = false;
+    }
+  }
+  round.bolts.length = 0;
+  round.events.push({ type: "zap", x: you.x, d: you.d, hit });
 }
 
 // Your box: bigger and heavier while Mega wheels last.
@@ -234,7 +391,8 @@ export function move(round, car, ms) {
   const you = car.id === 0;
   car.pnose = car.d + car.l / 2;
   const slick = car.slickMs > 0;
-  car.kx *= Math.exp(-(slick ? KNOCK_EASE * 0.35 : KNOCK_EASE) * dt);
+  const ice = stageFor(round.stage, round.road).ice === true;
+  car.kx *= Math.exp(-(slick ? KNOCK_EASE * 0.35 : ice ? KNOCK_EASE * ICE_KNOCK : KNOCK_EASE) * dt);
   if (car.slickMs > 0) car.slickMs = Math.max(0, car.slickMs - ms);
   if (car.bonkMs > 0) car.bonkMs = Math.max(0, car.bonkMs - ms);
   if (car.out > 0) {
@@ -257,14 +415,15 @@ export function move(round, car, ms) {
       if (inp.down) car.boostMs = 0;
       const fast = car.nitroMs > 0 || car.boostMs > 0;
       const top = TOP_SPEED * (fast ? NITRO_TOP : 1) * (verge ? VERGE_TOP : 1);
-      const pull = ACCEL * (fast ? NITRO_ACCEL : 1) * (slick ? SLICK_PULL : 1);
+      const pull = ACCEL * (fast ? NITRO_ACCEL : 1) * (slick ? SLICK_PULL : ice ? ICE_PULL : 1);
       if (inp.up || car.boostMs > 0) car.v = car.v < top ? Math.min(top, car.v + pull * dt) : car.v;
       else if (inp.down) car.v = Math.max(ROLL_SPEED, car.v - BRAKE * dt);
       else if (car.v > ROLL_SPEED) car.v = Math.max(ROLL_SPEED, car.v - COAST * dt);
       if (car.v < ROLL_SPEED) car.v = Math.min(ROLL_SPEED, car.v + ACCEL * dt);
       if (car.v > top) car.v = Math.max(top, car.v - OVER_DRAG * dt);
-      car.vx += (steer * STEER_SPEED - car.vx) * Math.min(1, (slick ? SLICK_EASE : STEER_EASE) * dt);
+      car.vx += (steer * STEER_SPEED - car.vx) * Math.min(1, (slick ? SLICK_EASE : ice ? ICE_EASE : STEER_EASE) * dt);
     }
+    if (car.magnetMs > 0) car.magnetMs = Math.max(0, car.magnetMs - ms);
     if (car.nitroMs > 0) car.nitroMs = Math.max(0, car.nitroMs - ms);
     if (car.boostMs > 0) car.boostMs = Math.max(0, car.boostMs - ms);
     if (car.megaMs > 0) {
@@ -275,11 +434,11 @@ export function move(round, car, ms) {
     car.vx *= Math.exp(-6 * dt);
     // A Frog or the Monster leans toward you in the air, never past the
     // road's edge (think() keeps its spot on the road).
-    if (car.kind === "frog" || car.kind === "monster") car.vx = clamp((car.tx - car.x) * 0.9, -10, 10);
+    if (car.kind === "frog" || car.kind === "monster" || car.kind === "cat") car.vx = clamp((car.tx - car.x) * 0.9, -10, 10);
   } else {
     car.v += clamp(car.tv - car.v, -RIVAL_ACCEL * dt, RIVAL_ACCEL * dt);
     car.v = Math.max(RIVAL_MIN_SPEED, car.v);
-    car.vx = clamp((car.tx - car.x) * car.gain, -RIVAL_STEER, RIVAL_STEER);
+    car.vx = clamp((car.tx - car.x) * car.gain, -car.steer, car.steer);
   }
   car.v = Math.min(MAX_SPEED, car.v);
   car.x = clamp(car.x + (car.vx + car.kx) * dt, car.w / 2, FIELD_W - car.w / 2);
@@ -310,13 +469,14 @@ function carBelow(round, car) {
   let best = null;
   let gap = Infinity;
   for (const o of round.cars) {
-    if (o === car || o.out > 0) continue;
+    if (o === car || o.out > 0 || o.high || o.phased || o.thru) continue;
     if (o.air > (car.id === 0 ? SLICE_MS : 0)) continue;
     if (o.id === 0 && o.ghostMs > 0) continue;
     const dx = Math.abs(o.x - car.x);
     const dd = Math.abs(o.d - car.d);
-    const reachX = o.w / 2 + (car.kind === "monster" ? car.w / 2 : 1);
-    const reachD = o.l / 2 + (car.kind === "monster" ? car.l / 2 : 1.5);
+    const big = car.kind === "monster" || car.kind === "cat";
+    const reachX = o.w / 2 + (big ? car.w / 2 : 1);
+    const reachD = o.l / 2 + (big ? car.l / 2 : 1.5);
     if (dx < reachX && dd < reachD && dx + dd < gap) {
       gap = dx + dd;
       best = o;
@@ -327,17 +487,59 @@ function carBelow(round, car) {
 
 // A stunt worth `points`: times the combo, and the combo steps on.
 export function stunt(round, points) {
-  const got = points * comboOf(round.streak);
+  const got = points * comboOf(round.streak) * (round.feverMs > 0 ? 2 : 1);
   round.score += got;
   round.streak++;
   round.streakMs = STREAK_MS;
-  round.bestCombo = Math.max(round.bestCombo, comboOf(round.streak));
+  const combo = comboOf(round.streak);
+  round.bestCombo = Math.max(round.bestCombo, combo);
+  round.stageCombo = Math.max(round.stageCombo, combo);
+  if (round.feverMs <= 0) {
+    round.fever = Math.min(FEVER_FULL, round.fever + FEVER_GAIN);
+    if (round.fever >= FEVER_FULL) startFever(round);
+  }
   return got;
+}
+
+// Fever lit: FEVER_MS of double points and flattening whatever you touch.
+export function startFever(round) {
+  const you = round.cars[0];
+  round.fever = FEVER_FULL;
+  round.feverMs = FEVER_MS;
+  round.stats.fevers++;
+  round.events.push({ type: "fever", x: you.x, d: you.d });
 }
 
 const award = (round, points) => {
   round.score += points;
 };
+
+// A rival flattened by you (landed on, touched with Mega wheels or in a
+// Fever, or caught in a ground pound): its points times the chain, and a
+// Splitter bursts into its two Minis.
+function flatten(round, o, chain, how) {
+  knockOut(round, o, "flat", true);
+  const points = stunt(round, RIVALS[o.kind].points * chain);
+  round.stats.crushed++;
+  const e = { type: "crush", x: o.x, d: o.d, kind: o.kind, id: o.id, chain, points };
+  if (how) e[how] = true;
+  round.events.push(e);
+  if (o.kind === "splitter") split(round, o);
+  return points;
+}
+
+// A Splitter's two Minis, popping out either side of it and off up the road.
+function split(round, o) {
+  for (const side of [-1, 1]) {
+    const m = makeCar(round.nextId++, "mini", clamp(o.x + side * 3, 2, FIELD_W - 2), o.d + 2, Math.max(o.v, 30) + 16);
+    m.kx = side * 16;
+    m.seed = side * 1.6;
+    m.air = m.airMax = 360;
+    m.pace = 1;
+    round.cars.push(m);
+  }
+  round.events.push({ type: "split", x: o.x, d: o.d });
+}
 
 // A landing. On a car: it is flattened (a truck only rolls on, the Monster
 // loses a life of its own) and the lander rebounds; when that is you, the
@@ -345,38 +547,58 @@ const award = (round, points) => {
 // you flew over score, and a ramp's jump too. Water or a hole under the
 // wheels is settled by the slice's ground check, after the bumps.
 export function land(round, car) {
+  const pounding = car.id === 0 && car.pounding;
+  car.pounding = false;
+  const how = touchDown(round, car);
+  if (pounding && round.phase === "drive" && car.out === 0) shockwave(round, car);
+  return how;
+}
+
+function touchDown(round, car) {
   car.air = 0;
   const you = car.id === 0;
   const under = carBelow(round, car);
   if (under) {
-    car.air = car.airMax = REBOUND_MS * (under.kind === "monster" ? 1.3 : 1);
+    const spec = under.id === 0 ? null : RIVALS[under.kind];
+    // A Spike's roof is no place to land, unless Mega wheels or a Fever
+    // flatten it first.
+    if (you && spec.spiky && !(car.megaMs > 0 || round.feverMs > 0)) {
+      round.events.push({ type: "spiked", x: under.x, d: under.d, id: under.id });
+      lose(round, "spike");
+      return "spiked";
+    }
+    car.air = car.airMax = REBOUND_MS * (spec && spec.boss ? 1.3 : 1);
     if (under.id === 0) {
       lose(round, "squash");
       return "squash";
     }
-    const pts = RIVALS[under.kind].points;
+    const pts = spec.points;
     if (!you) {
       if (pts) knockOut(round, under, "flat");
       return "crush";
     }
     round.chain = Math.min(MAX_CHAIN, round.chain + 1);
     round.bestChain = Math.max(round.bestChain, round.chain);
-    if (under.kind === "monster") return stomp(round, under);
+    if (spec.boss) return hurtBoss(round, under, "stomp");
     if (!pts) {
       const points = stunt(round, HAUL_POINTS * round.chain);
       round.stats.hauls++;
       round.events.push({ type: "haul", x: under.x, d: under.d, kind: under.kind, id: under.id, chain: round.chain, points });
+      // The Supply truck hands over a gadget, once.
+      if (spec.friend && !under.gave) {
+        under.gave = true;
+        const kind = GADGETS[Math.floor(Math.random() * GADGETS.length)];
+        applyPower(round, kind);
+        round.events.push({ type: "power", kind, x: under.x, d: under.d, supply: true });
+      }
       return "haul";
     }
-    knockOut(round, under, "flat", true);
-    const points = stunt(round, pts * round.chain);
-    round.stats.crushed++;
-    round.events.push({ type: "crush", x: under.x, d: under.d, kind: under.kind, id: under.id, chain: round.chain, points });
+    flatten(round, under, round.chain, "");
     return "crush";
   }
   car.rescueX = null;
   if (!you) {
-    if (car.kind === "monster") quake(round, car);
+    if (car.kind === "monster" || car.kind === "cat") quake(round, car);
     return "road";
   }
   const g = groundAt(round.road, car.x, car.d, round.clock);
@@ -389,7 +611,7 @@ export function land(round, car) {
       round.clearedTo = h.d1;
     }
   }
-  const overs = clean ? car.overs.map((o) => o.kind) : [];
+  const overs = clean ? car.overs.map((o) => o.kind || "bomb") : [];
   const big = clean && car.ramped;
   let points = 0;
   if (holes) {
@@ -408,21 +630,28 @@ export function land(round, car) {
   return "road";
 }
 
-// A landing on the Monster: it loses one of BOSS_HP and slows a moment, and
-// the last one flattens it for BOSS_POINTS times the lap and a life back.
-function stomp(round, m) {
+// A hit on a boss (a landing on it, a rocket or a ground pound): it loses
+// one of its hp and slows a moment, and the last one flattens it for
+// BOSS_POINTS times the lap, a life back and a Fever.
+export function hurtBoss(round, m, how = "stomp") {
+  if (m.out > 0) return "";
   m.hp--;
   m.stunMs = 1300;
-  const points = stunt(round, STOMP_POINTS * round.chain);
-  round.events.push({ type: "stomp", x: m.x, d: m.d, id: m.id, hp: m.hp, chain: round.chain, points });
+  const chain = how === "stomp" ? round.chain : 1;
+  const points = stunt(round, how === "rocket" ? ROCKET_BOSS_POINTS : STOMP_POINTS * chain);
+  round.events.push({ type: "stomp", x: m.x, d: m.d, id: m.id, kind: m.kind, hp: m.hp, chain, points, how });
   if (m.hp > 0) return "stomp";
   knockOut(round, m, "flat", true);
-  const lap = stageFor(round.stage).lap || 1;
+  const lap = stageFor(round.stage, round.road).lap || 1;
   const bonus = stunt(round, BOSS_POINTS * lap);
   const life = round.lives < MAX_LIVES;
   if (life) round.lives++;
   round.stats.bosses++;
-  round.events.push({ type: "boss", x: m.x, d: m.d, points: bonus, life });
+  round.bossBeat = round.stage;
+  round.trophies |= 1 << Math.max(0, BOSS_ORDER.indexOf(m.kind));
+  round.lobs.length = 0;
+  round.events.push({ type: "boss", x: m.x, d: m.d, kind: m.kind, points: bonus, life });
+  if (round.feverMs <= 0) startFever(round);
   return "boss";
 }
 
@@ -457,11 +686,8 @@ export function collide(round, a, b) {
     [a, b],
     [b, a],
   ]) {
-    if (me.id === 0 && me.megaMs > 0 && o.kind !== "you" && RIVALS[o.kind].points) {
-      knockOut(round, o, "flat", true);
-      const points = stunt(round, RIVALS[o.kind].points);
-      round.stats.crushed++;
-      round.events.push({ type: "crush", x: o.x, d: o.d, kind: o.kind, id: o.id, chain: 1, points, mega: true });
+    if (me.id === 0 && (me.megaMs > 0 || round.feverMs > 0) && o.kind !== "you" && RIVALS[o.kind].points) {
+      flatten(round, o, 1, me.megaMs > 0 ? "mega" : "fever");
       return "mega";
     }
   }
@@ -484,6 +710,13 @@ export function collide(round, a, b) {
     const aRams = pa >= pb;
     a.kx -= s * j * ia * (even ? 1 : aRams ? RAM_BACK : RAM_HIT);
     b.kx += s * j * ib * (even ? 1 : aRams ? RAM_HIT : RAM_BACK);
+    // A Slasher's blades, out: its side is a crash.
+    const blade = a.id === 0 ? b : b.id === 0 ? a : null;
+    if (blade && blade.blade === "out") {
+      round.events.push({ type: "bump", a: a.id, b: b.id, x: (a.x + b.x) / 2, d: (a.d + b.d) / 2, speed, kind });
+      lose(round, "slash");
+      return kind;
+    }
   } else {
     kind = "end";
     const s = dd >= 0 ? 1 : -1;
@@ -562,21 +795,41 @@ const OUT_HOW = Object.freeze(["", "tip", "splash", "fall", "tip"]);
 // Boost strips, ramps and slicks under the cars. A boost strip pushes you
 // on; a ramp launches whoever crosses its lip quick enough, RAMP_AIR the
 // usual jump; a slick takes your grip.
-function pads(round) {
+function pads(round, ms) {
   const road = round.road;
   const t = round.clock;
+  const dt = ms / 1000;
   const you = round.cars[0];
   const lo = firstAt(road.pads, "d", you.d - DROP_BEHIND - 10);
   for (let k = lo; k < road.pads.length && road.pads[k].d < you.d + DROP_AHEAD; k++) {
     const p = road.pads[k];
     for (const car of round.cars) {
-      if (car.out > 0 || car.air > 0 || Math.abs(car.x - p.x) > p.w / 2 + (p.kind === "ramp" ? 0.5 : 0)) continue;
+      if (car.out > 0 || car.air > 0 || car.high || Math.abs(car.x - p.x) > p.w / 2 + (p.kind === "ramp" || p.kind === "kicker" || p.kind === "pop" ? 0.5 : 0)) continue;
       const mine = car.id === 0;
-      if (p.kind === "ramp") {
+      if (p.kind === "pop") {
+        // A spring pad: whoever crosses its middle quick enough goes up.
+        if (car.pnose - car.l / 2 < p.d && car.d >= p.d && car.v >= JUMP_MIN && !isBossCar(car)) {
+          if (mine && round.phase !== "drive") continue;
+          car.air = car.airMax = airMs(car.v) * POP_AIR;
+          car.jumpFrom = car.d;
+          car.jumps++;
+          if (mine) car.ramped = true;
+          round.events.push({ type: "pop", id: car.id, x: car.x, d: car.d, v: car.v });
+        }
+        continue;
+      }
+      if (p.kind === "belt") {
+        if (Math.abs(car.d - p.d) > p.l / 2) continue;
+        car.x = clamp(car.x + p.dir * BELT_PUSH * dt, car.w / 2, FIELD_W - car.w / 2);
+        if (mine && p.rode !== true && round.phase === "drive") round.events.push({ type: "belt", x: car.x, d: car.d, dir: p.dir });
+        if (mine) p.rode = true;
+        continue;
+      }
+      if (p.kind === "ramp" || p.kind === "kicker") {
         const lip = p.d + p.l / 2;
         if (car.pnose - car.l / 2 < lip && car.d >= lip && car.v >= JUMP_MIN) {
           if (mine && round.phase !== "drive") continue;
-          car.air = car.airMax = airMs(car.v) * RAMP_AIR;
+          car.air = car.airMax = airMs(car.v) * (p.air || RAMP_AIR);
           car.jumpFrom = car.d;
           car.jumps++;
           if (mine) car.ramped = true;
@@ -613,16 +866,32 @@ function barriers(round) {
   const check = (b) => {
     if (b.hit) return;
     for (const car of round.cars) {
-      if (car.out > 0) continue;
+      if (car.out > 0 || car.high || car.thru) continue;
       if (Math.abs(car.d - b.d) >= (car.l + b.l) / 2 || Math.abs(car.x - b.x) >= (car.w + b.w) / 2) continue;
       const mine = car.id === 0;
       if (car.air > 0) {
-        if (mine && !car.overs.includes(b)) car.overs.push(b);
+        if (mine && b.kind !== "bumper" && !car.overs.includes(b)) car.overs.push(b);
         continue;
       }
       if (mine && (car.ghostMs > 0 || round.phase !== "drive")) continue;
+      if (b.kind === "bumper") {
+        // A pinball bumper: out to its side and kicked away, for points.
+        const side = car.x === b.x ? (car.id % 2 ? 1 : -1) : car.x > b.x ? 1 : -1;
+        car.x = clamp(b.x + side * ((b.w + car.w) / 2 + 0.05), car.w / 2, FIELD_W - car.w / 2);
+        car.vx = 0;
+        car.kx = (side * BUMPER_KICK) / Math.min(car.mass, 2);
+        if (car.d < b.d) car.v = Math.max(mine ? ROLL_SPEED : RIVAL_MIN_SPEED, car.v * 0.85);
+        const rested = round.clock - b.lit >= BUMPER_REST_MS;
+        b.lit = round.clock;
+        if (mine && rested) {
+          const points = stunt(round, BUMPER_POINTS);
+          round.stats.bumpers++;
+          round.events.push({ type: "bumper", x: b.x, d: b.d, points });
+        }
+        continue;
+      }
       const soft = b.kind === "cone" || b.kind === "tire";
-      if (soft || (mine && car.megaMs > 0)) {
+      if (soft || (mine && b.kind !== "stomper" && (car.megaMs > 0 || round.feverMs > 0))) {
         b.hit = round.clock || 1;
         b.side = car.x >= b.x ? -1 : 1;
         car.v *= mine ? (car.megaMs > 0 ? 0.95 : CONE_SLOW) : 0.75;
@@ -632,7 +901,7 @@ function barriers(round) {
       }
       if (car.pnose <= b.d - b.l / 2 + 0.45) {
         if (mine) lose(round, "crash");
-        else if (car.kind !== "monster") knockOut(round, car, "tip");
+        else if (!isBossCar(car)) knockOut(round, car, "tip");
         return;
       }
       car.x = car.x < b.x ? b.x - (b.w + car.w) / 2 : b.x + (b.w + car.w) / 2;
@@ -642,7 +911,16 @@ function barriers(round) {
   };
   for (let k = lo; k < hi; k++) check(road.blocks[k]);
   for (const b of round.drops) check(b);
+  // A stomper that is down is a block, from the moment after it lands.
+  for (let k = firstAt(road.hazards, "d", you.d - 40); k < road.hazards.length && road.hazards[k].d < you.d + DROP_AHEAD; k++) {
+    const h = road.hazards[k];
+    if (h.kind !== "stomper") continue;
+    const st = stomperAt(h, round.clock);
+    if (st.down && !st.hit) check(h);
+  }
 }
+
+const isBossCar = (car) => car.id !== 0 && RIVALS[car.kind].boss === true;
 
 // Point-to-segment distance, for a sprinkler's jet.
 function segGap(px, pd, s) {
@@ -671,7 +949,7 @@ function hazards(round, ms) {
       h.passing = tr.on;
       if (!tr.on) continue;
       for (const car of round.cars) {
-        if (car.out > 0 || car.kind === "monster" || Math.abs(car.d - h.d) >= h.half + car.l / 2) continue;
+        if (car.out > 0 || isBossCar(car) || Math.abs(car.d - h.d) >= h.half + car.l / 2) continue;
         if (car.x + car.w / 2 <= tr.x0 || car.x - car.w / 2 >= tr.x1) continue;
         if (car.air > 0) {
           if (car.id === 0 && !car.overs.includes(h)) car.overs.push(h);
@@ -681,7 +959,7 @@ function hazards(round, ms) {
     } else if (h.kind === "ball") {
       const bx = ballX(h, t);
       for (const car of round.cars) {
-        if (car.out > 0 || Math.abs(car.d - h.d) >= car.l / 2 + h.r || Math.abs(car.x - bx) >= car.w / 2 + h.r) continue;
+        if (car.out > 0 || car.high || Math.abs(car.d - h.d) >= car.l / 2 + h.r || Math.abs(car.x - bx) >= car.w / 2 + h.r) continue;
         if (car.air > 0) {
           if (car.id === 0 && !car.overs.includes(h)) car.overs.push(h);
           continue;
@@ -719,9 +997,48 @@ function hazards(round, ms) {
         for (const car of round.cars) {
           if (car.out > 0 || car.air > 0 || Math.abs(car.d - h.d) >= (car.l + h.l) / 2 || Math.abs(car.x - h.x) >= (car.w + h.w) / 2) continue;
           if (car.id !== 0) {
-            if (car.kind !== "monster") knockOut(round, car, "flat");
+            if (!isBossCar(car)) knockOut(round, car, "flat");
           } else if (driving && car.ghostMs <= 0) lose(round, "squash");
         }
+      }
+    } else if (h.kind === "laser") {
+      const lz = laserAt(h, t);
+      if (lz.warn && !h.warned && Math.abs(h.d - you.d) < 120) round.events.push({ type: "laserWarn", x: you.x, d: h.d });
+      h.warned = lz.warn;
+      if (!lz.on) continue;
+      for (const car of round.cars) {
+        if (car.out > 0 || car.high || isBossCar(car) || Math.abs(car.d - h.d) >= h.half + car.l / 2) continue;
+        if (car.air > 0) {
+          if (car.id === 0 && !car.overs.includes(h)) car.overs.push(h);
+        } else if (car.id !== 0) knockOut(round, car, "tip");
+        else if (driving && car.ghostMs <= 0) lose(round, "laser");
+      }
+    } else if (h.kind === "stomper") {
+      const st = stomperAt(h, t);
+      const falling = st.fall > 0 && !st.down;
+      if (falling && !h.warned && Math.abs(h.d - you.d) < 110) round.events.push({ type: "stompWarn", x: h.x, d: h.d, what: h.what });
+      h.warned = falling;
+      if (!st.hit) {
+        h.struck = false;
+        continue;
+      }
+      if (h.struck) continue;
+      h.struck = true;
+      round.events.push({ type: "stompLand", x: h.x, d: h.d, what: h.what });
+      for (const car of round.cars) {
+        if (car.out > 0 || car.air > 0 || car.high || Math.abs(car.d - h.d) >= (car.l + h.l) / 2 - 0.6 || Math.abs(car.x - h.x) >= (car.w + h.w) / 2 - 0.6) continue;
+        if (car.id !== 0) {
+          if (!isBossCar(car)) knockOut(round, car, "flat");
+        } else if (driving && car.ghostMs <= 0) lose(round, "squash");
+      }
+    } else if (h.kind === "roller") {
+      const bx = ballX(h, t);
+      for (const car of round.cars) {
+        if (car.out > 0 || car.high || isBossCar(car) || Math.abs(car.d - h.d) >= car.l / 2 + h.r || Math.abs(car.x - bx) >= car.w / 2 + h.half) continue;
+        if (car.air > 0) {
+          if (car.id === 0 && !car.overs.includes(h)) car.overs.push(h);
+        } else if (car.id !== 0) knockOut(round, car, "tip");
+        else if (driving && car.ghostMs <= 0) lose(round, "crash");
       }
     } else if (h.kind === "wind") {
       const g = gustAt(h, t);
@@ -736,10 +1053,157 @@ function hazards(round, ms) {
   }
 }
 
+/* --------------------------------------------- weapons and the rivals' */
+
+// A blast `r` round (x, d): you in it on the ground lose a life, a rival is
+// out. A boss shrugs it off.
+function explode(round, x, d, r, what) {
+  const you = round.cars[0];
+  round.events.push({ type: "boom", x, d, r, what, near: Math.abs(d - you.d) < 90 });
+  for (const car of [...round.cars]) {
+    if (car.out > 0 || car.air > 0 || car.high || Math.hypot(car.x - x, (car.d - d) * 0.8) > r + car.w / 2) continue;
+    if (car.id !== 0) {
+      if (!isBossCar(car) && !RIVALS[car.kind].friend) knockOut(round, car, "tip");
+    } else if (round.phase === "drive" && car.ghostMs <= 0) lose(round, "blast");
+  }
+}
+
+// Everything in flight or lying in wait: your rockets, a Blaster's bolts, a
+// Bomber's bombs, what a boss lobbed, the oil on the road, and the pull of a
+// Magnet rival or the Robo-Vac.
+function threats(round, ms) {
+  const road = round.road;
+  const t = round.clock;
+  const dt = ms / 1000;
+  const you = round.cars[0];
+  const driving = round.phase === "drive" && you.out === 0;
+  // Rockets: the first rival, boss or barrier in the way.
+  if (round.shots.length) {
+    round.shots = round.shots.filter((s) => {
+      const step = s.v * dt;
+      s.d += step;
+      s.left -= step;
+      for (const o of round.cars) {
+        if (o.id === 0 || o.out > 0 || o.phased || o.thru || RIVALS[o.kind].friend) continue;
+        if (Math.abs(o.x - s.x) > o.w / 2 + 1 || Math.abs(o.d - s.d) > o.l / 2 + 1.5) continue;
+        if (isBossCar(o)) hurtBoss(round, o, "rocket");
+        else {
+          knockOut(round, o, "blast", true);
+          const points = stunt(round, Math.max(BLAST_POINTS, RIVALS[o.kind].points));
+          round.stats.blasted++;
+          round.events.push({ type: "blast", x: o.x, d: o.d, kind: o.kind, id: o.id, points });
+        }
+        return false;
+      }
+      const smash = (b) => {
+        if (b.hit || b.kind === "bumper" || Math.abs(b.x - s.x) > b.w / 2 + 0.8 || Math.abs(b.d - s.d) > b.l / 2 + 1.2) return false;
+        b.hit = t || 1;
+        b.side = b.x >= s.x ? 1 : -1;
+        round.events.push({ type: "cone", x: b.x, d: b.d, kind: b.kind, mine: true, blast: true });
+        return true;
+      };
+      for (let k = firstAt(road.blocks, "d", s.d - 4); k < road.blocks.length && road.blocks[k].d < s.d + 4; k++) if (smash(road.blocks[k])) return false;
+      for (const b of round.drops) if (smash(b)) return false;
+      return s.left > 0;
+    });
+  }
+  // Bolts: a knock and a slide, never a life. Mega wheels and a Fever shrug
+  // them off.
+  if (round.bolts.length) {
+    round.bolts = round.bolts.filter((b) => {
+      b.d += b.v * dt;
+      if (b.d < you.d - 50) return false;
+      if (!driving || you.air > 0 || you.ghostMs > 0) return true;
+      if (Math.abs(b.x - you.x) > you.w / 2 + 0.8 || Math.abs(b.d - you.d) > you.l / 2 + 1) return true;
+      const tough = you.megaMs > 0 || round.feverMs > 0;
+      if (!tough) {
+        you.kx += (b.x <= you.x ? 1 : -1) * BOLT_KICK;
+        you.v = Math.max(ROLL_SPEED, you.v * BOLT_SLOW);
+        you.slickMs = Math.max(you.slickMs, 450);
+      }
+      round.events.push({ type: "shot", x: you.x, d: you.d, tough });
+      return false;
+    });
+  }
+  // Bombs: flown over, they score on landing; then they blow.
+  if (round.bombs.length) {
+    round.bombs = round.bombs.filter((b) => {
+      if (t >= b.at) {
+        explode(round, b.x, b.d, b.r, "bomb");
+        return false;
+      }
+      if (you.air > 0 && Math.abs(b.x - you.x) < you.w / 2 + 1.6 && Math.abs(b.d - you.d) < you.l / 2 + 1.6 && !you.overs.includes(b)) you.overs.push(b);
+      return b.d > you.d - 60;
+    });
+  }
+  // Lobbed things coming down: a bomb blows, a barrel lies there as a block
+  // (and squashes what it lands on).
+  if (round.lobs.length) {
+    round.lobs = round.lobs.filter((h) => {
+      if (t < h.at) return true;
+      if (h.boom) explode(round, h.x, h.d, h.boom, h.what);
+      else {
+        round.drops.push({ kind: "block", what: h.what, x: h.x, d: h.d, w: h.w, l: h.l, hit: 0 });
+        round.events.push({ type: "dropLand", x: h.x, d: h.d, what: h.what });
+        for (const car of round.cars) {
+          if (car.out > 0 || car.air > 0 || car.high || Math.abs(car.d - h.d) >= (car.l + h.l) / 2 || Math.abs(car.x - h.x) >= (car.w + h.w) / 2) continue;
+          if (car.id !== 0) {
+            if (!isBossCar(car)) knockOut(round, car, "flat");
+          } else if (driving && car.ghostMs <= 0) lose(round, "squash");
+        }
+      }
+      return false;
+    });
+  }
+  // Oil: a rival's takes your grip; yours spins a rival, and the road's
+  // edge does the rest.
+  if (round.spills.length) {
+    round.spills = round.spills.filter((sp) => sp.until > t && sp.d > you.d - 80);
+    for (const sp of round.spills) {
+      for (const car of round.cars) {
+        if (car.out > 0 || car.air > 0 || car.high || car.thru || Math.abs(car.d - sp.d) > sp.l / 2 + car.l * 0.3 || Math.abs(car.x - sp.x) > sp.w / 2 + car.w * 0.3) continue;
+        if (car.id === 0) {
+          if (!sp.foe || !driving) continue;
+          if (car.slickMs <= 0) round.events.push({ type: "slick", x: car.x, d: car.d });
+          car.slickMs = SLICK_MS;
+        } else if (!sp.foe && car.spinMs <= 0 && !RIVALS[car.kind].friend) {
+          if (isBossCar(car)) {
+            car.slickMs = SLICK_MS;
+            if (car.stunMs <= 0) car.stunMs = 700;
+            continue;
+          }
+          car.spinMs = OIL_SPIN_MS;
+          car.slickMs = OIL_SPIN_MS;
+          car.kx += (car.x >= sp.x ? 1 : -1) * OIL_KICK;
+          car.credit = OIL_SPIN_MS + CREDIT_MS;
+          round.stats.spun++;
+          round.events.push({ type: "spin", x: car.x, d: car.d, id: car.id, kind: car.kind });
+        }
+      }
+    }
+  }
+  // The pull of a Magnet rival, and the Robo-Vac's suction.
+  if (driving && you.air <= 0) {
+    for (const o of round.cars) {
+      if (o.id === 0 || o.out > 0 || o.zapMs > 0 || o.spinMs > 0) continue;
+      const gap = o.d - you.d;
+      if (o.kind === "magnet") {
+        o.pulling = o.mode !== "calm" && Math.abs(gap) < MAG_RANGE;
+        if (!o.pulling) continue;
+        you.kx += (o.x >= you.x ? 1 : -1) * MAG_PULL * dt;
+        if (!(o.pullAt > t - 900)) {
+          o.pullAt = t;
+          round.events.push({ type: "magnet", x: o.x, d: o.d, id: o.id });
+        }
+      } else if (o.kind === "vac" && o.stunMs <= 0 && (o.mode === "sweep" || o.mode === "warn") && gap > 0 && gap < VAC_REACH) you.kx += (o.x >= you.x ? 1 : -1) * VAC_PULL * dt;
+    }
+  }
+}
+
 /* -------------------------------------------------------------- round */
 
-export function newRound(seed = (Math.random() * 2 ** 31) >>> 0, random = Math.random) {
-  const road = newRoad(seed);
+export function newRound(seed = (Math.random() * 2 ** 31) >>> 0, random = Math.random, shuffle = false) {
+  const road = newRoad(seed, shuffle);
   const START_D = 24;
   const i = rowOf(START_D);
   const you = makeCar(0, "you", (road.L[i] + road.R[i]) / 2, START_D, ROLL_SPEED);
@@ -748,6 +1212,23 @@ export function newRound(seed = (Math.random() * 2 ** 31) >>> 0, random = Math.r
     seed,
     cars: [you],
     drops: [],
+    // Your rockets, the rivals' bolts and bombs, what a boss lobbed, and the
+    // oil on the road.
+    shots: [],
+    bolts: [],
+    bombs: [],
+    lobs: [],
+    spills: [],
+    // The Fever meter and how long it burns, the score the next life comes
+    // at, the bosses beaten (a bit each, in BOSS_ORDER), the rival kinds met.
+    fever: 0,
+    feverMs: 0,
+    lifeAt: LIFE_SCORE,
+    trophies: 0,
+    bossBeat: 0,
+    met: {},
+    stageCombo: 1,
+    supplyMs: SUPPLY_EVERY_MS,
     nextId: 1,
     stage: 1,
     lives: START_LIVES,
@@ -763,18 +1244,19 @@ export function newRound(seed = (Math.random() * 2 ** 31) >>> 0, random = Math.r
     phaseMs: 0,
     clock: 0,
     stageClock: 0,
+    ranks: [],
     crashD: START_D,
     clearedTo: 0,
     stageLost: false,
     spawnMs: SPAWN_MS,
     bossFor: 0,
-    input: { up: false, down: false, left: false, right: false, jump: 0 },
+    input: { up: false, down: false, left: false, right: false, jump: 0, fire: false },
     events: [],
     over: false,
-    stats: { bumped: 0, crushed: 0, hauls: 0, holes: 0, overs: 0, near: 0, stars: 0, bosses: 0 },
+    stats: { bumped: 0, crushed: 0, hauls: 0, holes: 0, overs: 0, near: 0, stars: 0, bosses: 0, blasted: 0, spun: 0, fired: 0, bumpers: 0, fevers: 0 },
   };
   // The first rivals already on the road ahead, in sight.
-  for (const at of [40, 76]) spawnRival(round, stageFor(1).kinds[round.cars.length - 1] || "zigzag", random, START_D + at);
+  for (const at of [40, 76]) spawnRival(round, stageFor(1, road).kinds[round.cars.length - 1] || "zigzag", random, START_D + at);
   return round;
 }
 
@@ -801,8 +1283,13 @@ export function lose(round, cause) {
   round.streak = 0;
   round.streakMs = 0;
   round.stageLost = true;
+  round.feverMs = 0;
+  round.fever = Math.floor(round.fever >= FEVER_FULL ? 0 : round.fever / 2);
+  round.input.fire = false;
+  you.pounding = false;
+  you.magnetMs = 0;
   you.out = CRASH_MS;
-  you.outKind = cause === "train" ? "crash" : cause;
+  you.outKind = CRASH_AS[cause] || cause;
   you.air = 0;
   you.overs.length = 0;
   you.ramped = false;
@@ -815,6 +1302,10 @@ export function lose(round, cause) {
   round.events.push({ type: "lose", cause, x: you.x, d: you.d, lives: round.lives });
   return true;
 }
+
+// How each way to lose a life is drawn: as a crash but for a splash, a
+// fall and a squash.
+const CRASH_AS = Object.freeze({ train: "crash", spike: "crash", slash: "crash", blast: "crash", laser: "crash" });
 
 // The Bubble's throw: up and on to the first row ahead with road under the
 // middle, steering itself to it. The holes it carries you over are the
@@ -848,10 +1339,14 @@ function respawn(round) {
   const d = safeSpot(road, round.crashD);
   const i = rowIn(road, d);
   Object.assign(you, { x: (road.L[i] + road.R[i]) / 2, d, v: ROLL_SPEED, vx: 0, kx: 0, air: 0, out: 0, outKind: "", ghostMs: GHOST_MS, nitroMs: 0, boostMs: 0, slickMs: 0, rescueX: null, jumpFrom: d, pnose: d + you.l / 2 });
-  round.cars = round.cars.filter((c) => c.id === 0 || c.kind === "monster" || c.d < d - 30 || c.d > d + 80);
-  for (const c of round.cars) if (c.kind === "monster" && c.d < d + 70) Object.assign(c, { d: d + 70, air: 0 });
+  round.cars = round.cars.filter((c) => c.id === 0 || isBossCar(c) || c.d < d - 30 || c.d > d + 80);
+  for (const c of round.cars) if (isBossCar(c) && c.d < d + 70) Object.assign(c, { d: d + 70, air: 0, mode: "", thru: false });
   for (const s of road.dyn) if (s.kind === "crumble" && s.d1 > d) s.start = null;
   round.drops = round.drops.filter((b) => b.d < d - 20 || b.d > d + 60);
+  round.bolts.length = 0;
+  round.bombs.length = 0;
+  round.lobs.length = 0;
+  round.spills = round.spills.filter((b) => !b.foe || b.d < d - 20 || b.d > d + 60);
   round.phase = "ready";
   round.phaseMs = READY_MS;
   round.input.jump = 0;
@@ -894,7 +1389,7 @@ function grounds(round) {
     else bedCheck(round, you);
   }
   for (const car of round.cars) {
-    if (car.id === 0 || car.out > 0 || car.air > 0 || car.kind === "monster") continue;
+    if (car.id === 0 || car.out > 0 || car.air > 0 || isBossCar(car)) continue;
     const g = groundAt(road, car.x, car.d, t);
     if (g !== GROUND.road) knockOut(round, car, OUT_HOW[g]);
   }
@@ -914,11 +1409,11 @@ function bumps(round) {
   const you = cars[0];
   for (let i = 0; i < cars.length; i++) {
     const a = cars[i];
-    if (a.out > 0 || a.air > 0) continue;
+    if (a.out > 0 || a.air > 0 || a.high || a.phased || a.thru) continue;
     if (a.id === 0 && (a.ghostMs > 0 || round.phase !== "drive")) continue;
     for (let j = i + 1; j < cars.length; j++) {
       const b = cars[j];
-      if (b.out > 0 || b.air > 0) continue;
+      if (b.out > 0 || b.air > 0 || b.high || b.phased || b.thru) continue;
       if (a === you) nearCheck(round, you, b);
       collide(round, a, b);
       if (round.phase !== "drive" && a === you) return;
@@ -936,27 +1431,48 @@ function traffic(round, ms, random) {
   let n = 0;
   for (const c of cars) {
     if (c.id !== 0 && c.outKind) c.out -= ms;
-    const keep = c.kind === "monster" ? !c.outKind || c.out > 0 : c.outKind ? c.out > 0 : c.d > you.d - DROP_BEHIND && c.d < you.d + DROP_AHEAD;
+    const keep = isBossCar(c) ? !c.outKind || c.out > 0 : c.outKind ? c.out > 0 : c.d > you.d - DROP_BEHIND && c.d < you.d + DROP_AHEAD;
     if (c.id === 0 || keep) cars[n++] = c;
   }
   cars.length = n;
   if (round.drops.length && round.drops[0].d < you.d - 60) round.drops = round.drops.filter((b) => b.d > you.d - 60);
-  const spec = stageFor(round.stage);
+  const spec = stageFor(round.stage, round.road);
   if (spec.boss && round.bossFor !== round.stage && round.phase === "drive") {
     const from = round.road.stageAt[round.stage - 1];
     if (you.d > from + spec.len * BOSS_AT) {
-      const m = spawnRival(round, "monster", random, you.d + 70);
+      const m = spawnRival(round, spec.boss, random, you.d + 70);
       if (m) {
         round.bossFor = round.stage;
-        m.hp = BOSS_HP;
+        m.hp = RIVALS[spec.boss].hp + (spec.lap - 1);
+        m.hpMax = m.hp;
       }
     }
   }
   round.spawnMs -= ms;
-  const live = round.cars.reduce((k, c) => k + (c.id !== 0 && c.out === 0 && c.kind !== "monster" ? 1 : 0), 0);
+  let live = 0;
+  let boss = false;
+  let truck = false;
+  for (const c of round.cars) {
+    if (c.id === 0 || c.out > 0) continue;
+    if (isBossCar(c)) boss = true;
+    else if (c.kind === "supply") truck = true;
+    else live++;
+  }
   if (round.spawnMs <= 0 && live < spec.rivals && round.phase === "drive") {
     round.spawnMs = SPAWN_MS;
-    spawnRival(round, pickKind(round, random), random);
+    const car = spawnRival(round, pickKind(round, random), random);
+    // The first of a kind in a run is named as it comes.
+    if (car && !round.met[car.kind]) {
+      round.met[car.kind] = true;
+      round.events.push({ type: "meet", kind: car.kind, x: car.x, d: car.d });
+    }
+  }
+  // The Supply truck: now and then, while you hold no gadget.
+  round.supplyMs -= ms;
+  if (round.supplyMs <= 0 && round.phase === "drive") {
+    if (you.held || boss || truck || round.stage < 2) round.supplyMs = 3000;
+    else if (spawnRival(round, "supply", random)) round.supplyMs = SUPPLY_EVERY_MS * (1 + random());
+    else round.supplyMs = 1500;
   }
 }
 
@@ -970,23 +1486,25 @@ function progress(round) {
     if (steps > 0) award(round, steps * DIST_POINTS);
     round.far = you.d;
   }
-  if (you.air <= 0 && you.out === 0) {
-    const reachD = you.l / 2 + ITEM_R;
+  const pull = you.magnetMs > 0 && you.out === 0 ? MAGNET_R : 0;
+  if ((you.air <= 0 || pull) && you.out === 0) {
+    const reachD = you.l / 2 + ITEM_R + pull;
     for (let k = firstAt(road.items, "d", you.d - reachD); k < road.items.length && road.items[k].d <= you.d + reachD; k++) {
       const it = road.items[k];
-      if (it.taken || Math.abs(it.x - you.x) > you.w / 2 + ITEM_R) continue;
+      if (it.taken || Math.abs(it.x - you.x) > you.w / 2 + ITEM_R + pull) continue;
       it.taken = true;
       applyPower(round, it.kind);
       round.events.push({ type: "power", kind: it.kind, x: it.x, d: it.d });
     }
   }
-  const reachS = you.l / 2 + STAR_R;
+  const reachS = you.l / 2 + STAR_R + pull;
+  const gold = stageFor(round.stage, road).gold ? 2 : 1;
   for (let k = firstAt(road.stars, "d", you.d - reachS); k < road.stars.length && road.stars[k].d <= you.d + reachS; k++) {
     const s = road.stars[k];
-    if (s.taken || Math.abs(s.x - you.x) > you.w / 2 + STAR_R) continue;
+    if (s.taken || Math.abs(s.x - you.x) > you.w / 2 + STAR_R + pull) continue;
     s.taken = true;
     round.starRun++;
-    const points = STAR_POINTS * comboOf(round.streak);
+    const points = STAR_POINTS * comboOf(round.streak) * gold * (round.feverMs > 0 ? 2 : 1);
     award(round, points);
     round.stats.stars++;
     round.events.push({ type: "star", x: s.x, d: s.d, run: round.starRun, points });
@@ -998,10 +1516,15 @@ function progress(round) {
       round.events.push({ type: "crumble", x: you.x, d: s.d0 });
     }
   }
-  ensureRoad(road, you.d);
+  // A boss stage lasts until its boss is beaten: while it lives, more of
+  // the same stage is laid ahead of you and its line moves on with it.
+  const held = road.built === round.stage && round.cars.some((c) => isBossCar(c) && c.out === 0);
+  // (further ahead than any rival is put, so nothing builds the next stage first)
+  if (held) extendStage(road, round.stage, you.d + BUILD_AHEAD + HOLD_AHEAD);
+  else ensureRoad(road, you.d);
   while (you.d >= road.stageAt[round.stage]) {
     const done = round.stage;
-    const spec = stageFor(done);
+    const spec = stageFor(done, road);
     const secs = (round.clock - round.stageClock) / 1000;
     const bonus = Math.max(0, Math.round((spec.par - secs) * TIME_POINTS));
     const flawless = !round.stageLost;
@@ -1009,17 +1532,30 @@ function progress(round) {
     award(round, points);
     const life = flawless && round.lives < MAX_LIVES;
     if (life) round.lives++;
+    // The stage's rank: flawless counts double, then under par, a combo of
+    // three or more, and its boss beaten.
+    const marks = (flawless ? 2 : 0) + (bonus > 0 ? 1 : 0) + (round.stageCombo >= 3 ? 1 : 0) + (spec.boss && round.bossBeat === done ? 1 : 0);
+    const rank = marks >= 4 ? "S" : marks === 3 ? "A" : marks >= 1 ? "B" : "C";
+    round.ranks.push(rank);
     round.stage++;
     round.stageLost = false;
+    round.stageCombo = 1;
     round.stageClock = round.clock;
     for (const c of round.cars) {
-      if (c.kind !== "monster" || c.out > 0) continue;
+      if (!isBossCar(c) || c.out > 0) continue;
       c.out = OUT_MS;
       c.outKind = "gone";
-      round.events.push({ type: "escape", x: c.x, d: c.d });
+      round.events.push({ type: "escape", x: c.x, d: c.d, kind: c.kind });
     }
-    round.events.push({ type: "stage", stage: round.stage, points, bonus, flawless, life, secs });
-    ensureRoad(road, road.stageAt[round.stage]);
+    round.lobs.length = 0;
+    round.events.push({ type: "stage", stage: round.stage, points, bonus, flawless, life, secs, rank });
+  }
+  // A life at every LIFE_SCORE points.
+  while (round.score >= round.lifeAt) {
+    round.lifeAt += LIFE_SCORE;
+    if (round.lives >= MAX_LIVES) continue;
+    round.lives++;
+    round.events.push({ type: "life", x: you.x, d: you.d });
   }
 }
 
@@ -1035,16 +1571,27 @@ function drive(round, ms, random) {
       round.events.push({ type: "jump", x: you.x, d: you.d, v: you.v, spring });
     } else inp.jump = Math.max(0, inp.jump - ms);
   }
+  // A double tap sets off the gadget held, after the jump its first press made.
+  if (inp.fire) {
+    inp.fire = false;
+    usePower(round);
+  }
   if (round.streakMs > 0 && (round.streakMs -= ms) <= 0) {
     round.streak = 0;
     round.streakMs = 0;
   }
+  if (round.feverMs > 0 && (round.feverMs -= ms) <= 0) {
+    round.feverMs = 0;
+    round.fever = 0;
+    round.events.push({ type: "feverEnd" });
+  }
   move(round, you, ms);
   rivals(round, ms, random);
-  if (round.phase === "drive") pads(round);
+  if (round.phase === "drive") pads(round, ms);
   if (round.phase === "drive") bumps(round);
   if (round.phase === "drive") barriers(round);
   hazards(round, ms);
+  threats(round, ms);
   grounds(round);
   if (round.phase === "drive") progress(round);
   traffic(round, ms, random);
@@ -1070,6 +1617,7 @@ export function advance(round, ms, random = Math.random) {
       round.cars[0].out = Math.max(1, round.phaseMs);
       rivals(round, slice, random);
       hazards(round, slice);
+      threats(round, slice);
       grounds(round);
       traffic(round, slice, random);
       if (round.phaseMs <= 0) respawn(round);
@@ -1092,8 +1640,10 @@ export function underBanner(round, y, cam) {
   for (let k = firstAt(road.hazards, "d", cam - 10); k < road.hazards.length && road.hazards[k].d < cam + FIELD_H + 10; k++) {
     const h = road.hazards[k];
     if (!near(h.d, 4)) continue;
-    if (h.kind === "ball" || (h.kind === "train" && trainAt(h, round.clock).warn) || (h.kind === "drop" && h.at && !h.landed)) return true;
+    if (h.kind === "ball" || h.kind === "roller" || (h.kind === "train" && trainAt(h, round.clock).warn) || (h.kind === "drop" && h.at && !h.landed)) return true;
+    if ((h.kind === "laser" && laserAt(h, round.clock).warn) || (h.kind === "stomper" && stomperAt(h, round.clock).fall > 0)) return true;
   }
+  for (const list of [round.lobs, round.bombs, round.bolts]) if (list.some((e) => near(e.d, 4))) return true;
   return false;
 }
 
@@ -1102,13 +1652,17 @@ export function underBanner(round, y, cam) {
 // The rivals' colors, one per kind in RIVALS order, kept apart from the
 // roads and from each other where they share a stage; the Cop is drawn in
 // its own black and white, so its color is only its trim.
-export const RIVAL_COLORS = Object.freeze(["#a466ff", "#ff8a1f", "#2fbf71", "#e8483c", "#00a39b", "#ffd21f", "#c7623a", "#ff4fa3", "#5aa0ff", "#c6f03a"]);
+export const RIVAL_COLORS = Object.freeze([
+  "#a466ff", "#ff8a1f", "#2fbf71", "#e8483c", "#00a39b", "#ffd21f", "#c7623a", "#ff4fa3", "#5aa0ff", "#c6f03a",
+  // Blaster, Slasher, Spike, Bomber, Phantom, Splitter, Mini, Magnet, Supply truck, then the Big Rig, the Robo-Vac, the Whirlybird and the Cat.
+  "#f06bff", "#ff3d5a", "#b8c2cc", "#ffa63d", "#dfe8ff", "#49b6ff", "#ff9ec4", "#ff5d3a", "#f4f1ea", "#d6dbe2", "#8fd3c8", "#b7d957", "#f0a04b",
+]);
 
 // Your color is the page's highlight, any of many, so a rival's can land
 // next to it. A rival color nearer yours than NEAR_COLOR (a distance in RGB)
 // gives way to the spare that stands furthest from yours and from every
 // other rival's.
-export const SPARE_COLORS = Object.freeze(["#1fb6d9", "#e0368a", "#d4a017", "#7ad151", "#8a5cf0", "#f2f2f2", "#b0f0ff"]);
+export const SPARE_COLORS = Object.freeze(["#1fb6d9", "#e0368a", "#d4a017", "#7ad151", "#8a5cf0", "#f2f2f2", "#b0f0ff", "#ffe08a", "#6ee7b7", "#c4a1ff", "#ffb4a2", "#9bd0f2"]);
 export const NEAR_COLOR = 70;
 
 // "#rgb", "#rrggbb" or "rgb(r, g, b)" as [r, g, b]; null for anything else.
@@ -1138,6 +1692,8 @@ export function rivalColors(you) {
       if (out.includes(spare)) continue;
       const rgb = rgbOf(spare);
       let gap = colorGap(rgb, mine);
+      // Never a spare as near yours as the color it would stand in for.
+      if (gap < NEAR_COLOR) continue;
       for (let j = 0; j < out.length; j++) if (j !== k) gap = Math.min(gap, colorGap(rgb, rgbOf(out[j])));
       if (gap > bestGap) {
         bestGap = gap;
@@ -1150,6 +1706,8 @@ export function rivalColors(you) {
 }
 
 const MAX_PARTS = 400;
+// A power-up's name flashes for TOAST_MS as it is taken.
+export const TOAST_MS = 1100;
 // Under the held motor hum (see runHums), the engine blips every ENGINE_MS
 // while you pick up speed, pitched by your speed, and is quiet once you
 // cruise, in the air and while the round holds; the verge rumbles every
@@ -1171,14 +1729,37 @@ const wob = (spread = 0.1) => 1 - spread / 2 + Math.random() * spread;
 
 // The end screen's nudge to play again: the next stage not yet reached.
 function teaser(furthest) {
-  if (furthest < STAGES.length) return `Next to reach: ${STAGES[furthest].title}.`;
+  if (furthest < WORLD_STAGES) return "Next to reach: the first boss, at stage 3.";
+  if (furthest < STAGES.length) return `Next to reach: stage ${furthest + 1} of ${STAGES.length}. A boss waits at every third.`;
   return `Every stage reached. How many laps can you go?`;
 }
+const WORLD_STAGES = 3;
 
 // What a jump flew over, for the word that pops up as you land.
-const OVER_WORD = Object.freeze({ train: "the train", ball: "the ball", cone: "the cones", tire: "the tire", block: "the block" });
+const OVER_WORD = Object.freeze({ train: "the train", ball: "the ball", cone: "the cones", tire: "the tire", block: "the block", laser: "the laser", roller: "the roller", stomper: "the stomper", bomb: "the bomb" });
 
-function create({ canvas, tone = () => {}, hum = () => {}, onScore = () => {}, best = () => 0, memo = null }) {
+// The words a combo and a kill shout, 1989 style.
+const RAD = Object.freeze(["RADICAL!", "GNARLY!", "TUBULAR!", "BODACIOUS!", "WICKED!", "AWESOME!", "TOTALLY RAD!"]);
+
+// The music: the car's radio, twenty chip tracks (bounce-music.js). A run
+// deals them in a new order and plays each through, one after another; once
+// the last has played they are dealt again, never opening on the track that
+// just ended.
+export const MUSIC_TRACKS = Object.freeze(Array.from({ length: 20 }, (_, k) => `bounceSong${k + 1}`));
+// How hot the music plays: an echo of the lead joins for a boss and a
+// harmony in a Fever, and the tempo climbs with both.
+export const MUSIC_HEAT = Object.freeze({ road: 0.5, boss: 0.8, fever: 1 });
+export function dealMusic(random = Math.random, last = null) {
+  const deck = [...MUSIC_TRACKS];
+  for (let i = deck.length - 1; i > 0; i--) {
+    const j = Math.floor(random() * (i + 1));
+    [deck[i], deck[j]] = [deck[j], deck[i]];
+  }
+  if (deck[0] === last) [deck[0], deck[1]] = [deck[1], deck[0]];
+  return deck;
+}
+
+function create({ canvas, tone = () => {}, hum = () => {}, music = () => {}, onScore = () => {}, best = () => 0, memo = null }) {
   const ctx = canvas.getContext("2d");
   let colors = null;
   let round = newRound();
@@ -1200,8 +1781,32 @@ function create({ canvas, tone = () => {}, hum = () => {}, onScore = () => {}, b
   // distance along the road), the chain's big number, the shake and the
   // flash, in field units and ms.
   let fx = null;
-  const resetFx = () => (fx = { parts: [], floats: [], banners: [], rings: [], shake: 0, shakeMag: 0, flash: null, clock: 0, cam: START_D - BEHIND, engine: 0, lastV: ROLL_SPEED, rumble: 0, bumpTone: -1e9, cheer: 0, combo: null, skidTone: -1e9, steer: 0, nitro: 0, mega: 0 });
+  const resetFx = () => (fx = { parts: [], floats: [], banners: [], rings: [], booms: [], shake: 0, shakeMag: 0, flash: null, clock: 0, cam: START_D - BEHIND, engine: 0, lastV: ROLL_SPEED, rumble: 0, bumpTone: -1e9, cheer: 0, combo: null, skidTone: -1e9, steer: 0, nitro: 0, mega: 0, lastTap: -1e9, rad: 0, trail: 0, shout: -1e9 });
   resetFx();
+  // The songs' deal, the one playing and whether it starts from its top.
+  let deck = [];
+  let songAt = 0;
+  let fresh = true;
+  const playMusic = () => {
+    const heat = round.feverMs > 0 ? MUSIC_HEAT.fever : round.cars.some((c) => !c.out && isBossCar(c)) ? MUSIC_HEAT.boss : MUSIC_HEAT.road;
+    const heard = music(deck[songAt], heat, fresh ? { restart: true } : undefined);
+    if (heard) fresh = false;
+    if (heard !== "ended") return;
+    songAt += 1;
+    if (songAt >= deck.length) {
+      deck = dealMusic(Math.random, deck.at(-1));
+      songAt = 0;
+    }
+    fresh = true;
+  };
+  // A fireball where something blew up, and a shout of the day's slang.
+  const boom = (x, d, r, ms = 520) => fx.booms.push({ x, d, r, life: ms, max: ms });
+  const shout = () => {
+    if (fx.clock - fx.shout < 1500) return;
+    fx.shout = fx.clock;
+    const you = round.cars[0];
+    float(you.x, you.d + 12, RAD[fx.rad++ % RAD.length], "#7fe3ff", 3.2);
+  };
 
   // The rivals' colors, worked out again whenever yours changes.
   let rivalPalette = RIVAL_COLORS;
@@ -1249,12 +1854,17 @@ function create({ canvas, tone = () => {}, hum = () => {}, onScore = () => {}, b
     try {
       if (memo) memo.set(furthest);
     } catch {}
-    if (b) b.tag = n > STAGES.length ? `NEW FURTHEST: ${stageFor(n).name.toUpperCase()}` : `NEW STAGE ${n} / ${STAGES.length}`;
+    if (b) b.tag = n > STAGES.length ? `NEW FURTHEST: ${stageFor(n, round.road).name.toUpperCase()}` : `NEW STAGE ${n} / ${STAGES.length}`;
   };
 
+  // A stage's banner: its name and what it brings; a boss stage warns of
+  // its boss, and a twist is named under the stage.
   const stageBanner = (n) => {
-    const spec = stageFor(n);
-    return banner(n > STAGES.length ? spec.name : `Stage ${n}: ${spec.name}`, spec.sub, stageColor(spec.id), 2200);
+    const spec = stageFor(n, round.road);
+    const twist = spec.twist ? TWISTS[spec.twist] : null;
+    const b = banner(n > STAGES.length ? spec.name : `Stage ${n}: ${spec.name}`, twist ? `${twist.name}! ${twist.blurb}` : spec.sub, stageColor(spec.id), 2400);
+    if (b && spec.boss) b.tag = `BOSS STAGE: ${RIVALS[spec.boss].name.toUpperCase()}`;
+    return b;
   };
 
   const near = (d) => Math.abs(d - round.cars[0].d) < 70;
@@ -1300,6 +1910,176 @@ function create({ canvas, tone = () => {}, hum = () => {}, onScore = () => {}, b
         }
         break;
       }
+      case "pop":
+        if (e.id === 0) {
+          tone("bounceSproing", 0.8, 1.15);
+          tone("boing", 0.6, 1.3);
+          burst(e.x, e.d - 2, "#ff6fb5", 8, 10);
+        } else if (near(e.d)) tone("spring", 0.25, 0.9);
+        break;
+      case "belt":
+        tone("shift", 0.5);
+        float(e.x, e.d + 4, e.dir > 0 ? "Conveyor >>" : "<< Conveyor", "#ffffff", 2.2);
+        break;
+      case "bumper":
+        tone("bounceBumper", 0.8, 1 + 0.06 * Math.min(8, round.streak));
+        tone("coin", 0.4, 1.4);
+        burst(e.x, e.d, "#ff6fb5", 8, 14);
+        ring(e.x, e.d, "#ffffff", 2.4, 3, 240);
+        float(e.x, e.d + 3, `+${e.points}`, "#ff9ad5", 2.2);
+        break;
+      case "laserWarn":
+        tone("warn", 0.4, 1.4);
+        break;
+      case "stompWarn":
+        tone("bounceDropWhistle", 0.35, 0.8);
+        break;
+      case "stompLand":
+        if (near(e.d)) {
+          tone("thud", 0.9, 0.7);
+          tone("thunk", 0.8, 0.6);
+          shake(140, 0.6);
+          burst(e.x, e.d, "#d9d1c3", 8, 12);
+        }
+        break;
+      case "use": {
+        const spec = POWERS[e.kind];
+        if (e.kind === "rocket") {
+          tone("bounceRocket", 0.9, wob());
+          burst(e.x, e.d + 4, "#ffd84a", 6, 10);
+        } else if (e.kind === "oil") {
+          tone("splat", 0.8);
+          tone("bounceOilSplat", 0.7, wob());
+        } else if (e.kind === "nitro") {
+          tone("boost", 0.9);
+          tone("zoom", 0.7, 1.2);
+        } else if (e.kind === "mega") {
+          tone("powerUp", 0.8, 0.7);
+          tone("riser", 0.5);
+        } else if (e.kind === "pound") tone("whoosh", 0.6, 0.7);
+        else tone("charge", 0.6, 1.3);
+        float(e.x, e.d + 6, e.left ? `${spec.name}! ${e.left} left` : `${spec.name}!`, spec.color, 2.6);
+        break;
+      }
+      case "pound":
+        tone("bouncePound", 1);
+        tone("boom", 0.8);
+        tone("rumbleLong", 0.5);
+        shake(320, 1.3);
+        flash("#ffffff", 180);
+        ring(e.x, e.d, "#ffffff", 3, POUND_R - 3, 420);
+        ring(e.x, e.d, POWERS.pound.color, 2, POUND_R - 6, 520);
+        burst(e.x, e.d, POWERS.pound.color, 22, 28);
+        break;
+      case "zap":
+        tone("zapBig", 0.9);
+        tone("zap", 0.7, 0.8);
+        flash(POWERS.zap.color, 300);
+        ring(e.x, e.d, POWERS.zap.color, 4, 50, 500);
+        if (e.hit) float(e.x, e.d + 8, `${e.hit} fried!`, POWERS.zap.color, 2.6);
+        break;
+      case "fever":
+        tone("bounceFever", 0.9);
+        tone("fanfare", 0.6, 1.2);
+        tone("riser", 0.6);
+        flash("#ff6fb5", 420);
+        banner("FEVER!", "Double points. Flatten whatever you touch", "#ff6fb5", 1700);
+        break;
+      case "feverEnd":
+        tone("powerDown", 0.5, 0.9);
+        break;
+      case "life":
+        tone("extraLife", 0.9);
+        float(e.x, e.d + 8, "1UP!", "#ff4d6d", 3.4);
+        break;
+      case "blast":
+        tone("explode", 0.9, wob());
+        tone("bounceTinCrush", 0.5, wob());
+        boom(e.x, e.d, 7);
+        burst(e.x, e.d, "#ffb02e", 18, 24);
+        burst(e.x, e.d, colorOfKind(e.kind), 10, 16);
+        shake(160, 0.7);
+        float(e.x, e.d + 4, `Boom! +${e.points}`, GOLD, 2.8);
+        shout();
+        break;
+      case "boom":
+        if (e.near) {
+          tone("explode", 0.9, wob() * 0.9);
+          tone("boom", 0.6);
+          shake(220, 0.9);
+        }
+        boom(e.x, e.d, e.r);
+        burst(e.x, e.d, "#ffb02e", 16, 22);
+        break;
+      case "lob":
+        tone("bounceDropWhistle", 0.5, e.what === "bomb" ? 1.2 : 0.9);
+        break;
+      case "aim":
+        if (near(e.d)) tone("charge", 0.4, 1.5);
+        break;
+      case "bolt":
+        if (near(e.d)) tone("laser", 0.5, wob());
+        break;
+      case "shot":
+        if (e.tough) tone("clank", 0.5, 1.4);
+        else {
+          tone("zap", 0.8);
+          tone("skid", 0.5, wob());
+          shake(140, 0.6);
+          float(e.x, e.d + 4, "Zapped!", DANGER, 2.6);
+        }
+        burst(e.x, e.d, "#f06bff", 10, 14);
+        break;
+      case "blade":
+        if (near(e.d)) {
+          tone("bounceBlade", 0.7);
+          float(e.x, e.d + 5, "Blades!", DANGER, 2.4);
+        }
+        break;
+      case "bomb":
+        if (near(e.d)) tone("tick", 0.6, 1.4);
+        break;
+      case "phase":
+        if (near(e.d)) tone(e.on ? "warp" : "trailsPhaseIn", 0.35);
+        break;
+      case "magnet":
+        tone("bumperMagnet", 0.45);
+        break;
+      case "spin":
+        tone("skid", 0.7, wob());
+        tone("squeak", 0.4);
+        float(e.x, e.d + 3, "Spun out!", POWERS.oil.color, 2.4);
+        break;
+      case "split":
+        tone("pop", 0.8, 1.3);
+        tone("boing", 0.5, 1.5);
+        float(e.x, e.d + 8, "Minis!", "#ff9ec4", 2.6);
+        break;
+      case "spiked":
+        tone("crunch", 0.9, 1.3);
+        burst(e.x, e.d, "#b8c2cc", 12, 16);
+        break;
+      case "meet": {
+        const spec = RIVALS[e.kind];
+        if (!spec.hint) break;
+        tone("mystery", 0.4);
+        if (fx.banners.length === 0) banner(`${spec.name}!`, spec.hint, colorOfKind(e.kind), 1500);
+        break;
+      }
+      case "bossWarn":
+        tone("warn", 0.8);
+        tone(e.kind === "chopper" ? "whoosh" : "bounceVacCharge", 0.8);
+        float(e.x, e.d - 4, e.kind === "chopper" ? "It swoops! Stomp it!" : "It charges! Jump on it!", DANGER, 2.8);
+        break;
+      case "bossCharge":
+        tone("zoom", 0.8, 0.7);
+        tone("rev", 0.8, 0.6);
+        break;
+      case "swipe":
+        tone("bounceMeow", 0.8, wob());
+        tone("swoosh", 0.7, 0.7);
+        float(e.x, e.d - 6, "Jump the paw!", DANGER, 2.8);
+        break;
       case "crush":
       case "haul": {
         const crush = e.type === "crush";
@@ -1313,7 +2093,8 @@ function create({ canvas, tone = () => {}, hum = () => {}, onScore = () => {}, b
         burst(e.x, e.d, crush ? colorOfKind(e.kind) : "#ffffff", crush ? 14 : 6, 16);
         burst(e.x, e.d, GOLD, 6, 12);
         ring(e.x, e.d, GOLD, 1.5, 5, 380);
-        const what = e.mega ? "Mega! " : e.kind === "racer" ? "Caught! " : e.kind === "cop" ? "Busted! " : "";
+        const what = e.mega ? "Mega! " : e.fever ? "Fever! " : e.pound ? "Pounded! " : e.kind === "racer" ? "Caught! " : e.kind === "cop" ? "Busted! " : "";
+        if (crush && e.chain >= 3) shout();
         float(e.x, e.d + 4, e.chain > 1 ? `${what}+${e.points} chain x${e.chain}` : `${what}+${e.points}`, GOLD, 2.8);
         if (e.chain > 1) fx.combo = { n: e.chain, life: 1200, max: 1200 };
         if (crush) shake(120, 0.4);
@@ -1324,11 +2105,16 @@ function create({ canvas, tone = () => {}, hum = () => {}, onScore = () => {}, b
         tone("squash", 0.8, 0.6);
         tone("crunch", 0.9, 0.7);
         // Each stomp rings a little higher, the last nearly flat.
-        tone("bounceRoofSlam", 1, 1 + 0.08 * (BOSS_HP - Math.max(0, e.hp)));
+        tone("bounceRoofSlam", 1, 1 + 0.08 * (5 - Math.min(5, Math.max(0, e.hp))));
+        if (e.kind === "cat") tone("bounceMeow", 0.9, 1.3);
+        if (e.how === "rocket") {
+          tone("explode", 0.8, wob());
+          boom(e.x, e.d, 6);
+        }
         burst(e.x, e.d, GOLD, 14, 18);
         ring(e.x, e.d, GOLD, 3, 9, 500);
         shake(200, 0.8);
-        float(e.x, e.d + 6, e.hp > 0 ? `Stomp! +${e.points} (${e.hp} to go)` : `Stomp! +${e.points}`, GOLD, 3);
+        float(e.x, e.d + 6, `${e.how === "rocket" ? "Direct hit!" : e.how === "pound" ? "Pounded!" : "Stomp!"} +${e.points}${e.hp > 0 ? ` (${e.hp} to go)` : ""}`, GOLD, 3);
         break;
       case "boss":
         tone("ace");
@@ -1340,7 +2126,9 @@ function create({ canvas, tone = () => {}, hum = () => {}, onScore = () => {}, b
         flash(GOLD, 420);
         shake(400, 1.2);
         burst(e.x, e.d, GOLD, 30, 26);
-        banner("Monster crushed!", e.life ? `+${e.points}, and a life back` : `+${e.points}`, GOLD, 2200);
+        boom(e.x, e.d, 12, 800);
+        fx.banners.length = 0;
+        banner(e.kind && e.kind !== "monster" ? `${RIVALS[e.kind].name} beaten!` : "Monster crushed!", e.life ? `+${e.points}, and a life back` : `+${e.points}`, GOLD, 2200);
         break;
       case "quake":
         if (!e.near) tone("thud", 0.3, 0.6);
@@ -1362,12 +2150,20 @@ function create({ canvas, tone = () => {}, hum = () => {}, onScore = () => {}, b
         float(e.x, e.d, "It got away!", DANGER, 2.6);
         break;
       case "spawn":
-        if (e.kind === "monster") {
-          tone("ghoulRoar");
+        if (RIVALS[e.kind].boss) {
+          const spec = RIVALS[e.kind];
+          tone(e.kind === "cat" ? "bounceMeow" : "ghoulRoar", 1, e.kind === "cat" ? 0.7 : 1);
           tone("bossIntro", 0.9);
-          tone("bounceMonsterRev", 0.8);
+          if (e.kind === "monster" || e.kind === "tanker") tone("bounceMonsterRev", 0.8);
           shake(300, 0.7);
-          banner("The Monster truck!", "Land on its roof five times", DANGER, 2000);
+          flash(DANGER, 380);
+          fx.banners.length = 0;
+          const b = banner(e.kind === "monster" ? "The Monster truck!" : e.kind === "cat" ? "The Cat!" : `The ${spec.name}!`, spec.hint, DANGER, 2400);
+          if (b) b.tag = "WARNING! BOSS";
+        } else if (e.kind === "supply") {
+          tone("honk", 0.7);
+          tone("bounceBeepBeep", 0.5);
+          float(you.x, you.d + 14, "Supply truck! Land on its roof", "#7ad151", 2.5);
         } else if (e.kind === "cop") {
           tone("horn", 0.7, 1.2);
           tone("bounceSiren", 0.6);
@@ -1415,12 +2211,13 @@ function create({ canvas, tone = () => {}, hum = () => {}, onScore = () => {}, b
       case "brake":
         if (near(e.d)) {
           tone("shank", 0.3);
-          tone("brake", 0.3, wob());
+          tone("brake", e.kind === "tanker" ? 0.8 : 0.3, wob() * (e.kind === "tanker" ? 0.7 : 1));
         }
+        if (e.kind === "tanker") float(e.x, e.d - 12, "Brake check! Jump on its roof!", DANGER, 2.6);
         break;
       case "litter":
         if (near(e.d)) {
-          tone("pop", 0.3, 0.8);
+          tone(e.what === "oil" ? "splat" : "pop", 0.3, 0.8);
           tone("knock", 0.3, wob());
         }
         break;
@@ -1495,9 +2292,10 @@ function create({ canvas, tone = () => {}, hum = () => {}, onScore = () => {}, b
       case "power": {
         const spec = POWERS[e.kind];
         tone("power");
-        tone("powerUp", 0.6);
+        tone(spec.uses ? "bounceArmed" : e.kind === "heart" ? "extraLife" : "powerUp", 0.6);
         burst(e.x, e.d, spec.color, 12, 12);
-        banner(spec.name, spec.blurb, spec.color, 1300);
+        // Its name, flashed near the top of the field (a banner would wait its turn).
+        fx.toast = { text: spec.name, color: spec.color, life: TOAST_MS, max: TOAST_MS };
         break;
       }
       case "bubble":
@@ -1525,7 +2323,8 @@ function create({ canvas, tone = () => {}, hum = () => {}, onScore = () => {}, b
         shake(e.cause === "fall" ? 200 : 300, e.cause === "fall" ? 0.5 : 1);
         if (e.lives > 0) tone("lifeLost", 0.5);
         flash(DANGER, 220);
-        float(e.x, e.d + 4, { splash: "Splash!", fall: "Down the hole!", squash: "Squashed!", train: "Hit by the train!" }[e.cause] || "Crash!", DANGER, 2.8);
+        if (e.cause === "blast" || e.cause === "laser") boom(e.x, e.d, 6);
+        float(e.x, e.d + 4, { splash: "Splash!", fall: "Down the hole!", squash: "Squashed!", train: "Hit by the train!", spike: "Spiked!", slash: "Slashed!", blast: "Blown up!", laser: "Fried by the laser!" }[e.cause] || "Crash!", DANGER, 2.8);
         break;
       case "respawn":
         fx.cam = e.d - BEHIND;
@@ -1543,10 +2342,12 @@ function create({ canvas, tone = () => {}, hum = () => {}, onScore = () => {}, b
         tone("cheer", 0.5);
         if (e.life) tone("extraLife", 0.7);
         else if (e.flawless) tone("sparkle", 0.6);
-        flash(stageColor(stageFor(e.stage).id), 360);
+        flash(stageColor(stageFor(e.stage, round.road).id), 360);
         fx.cheer = 1400;
+        fx.banners.length = 0;
         markFurthest(e.stage, stageBanner(e.stage));
         float(you.x, you.d + 6, `+${e.points}${e.bonus ? `, ${Math.round(e.secs)} s` : ""}${e.life ? ", and a life back!" : e.flawless ? ", flawless!" : ""}`, GOLD, 2.6);
+        if (e.rank) float(you.x, you.d + 13, `RANK ${e.rank}`, e.rank === "S" ? "#ff6fb5" : e.rank === "A" ? GOLD : "#ffffff", e.rank === "S" ? 4.6 : 3.6);
         break;
     }
   };
@@ -1633,14 +2434,17 @@ function create({ canvas, tone = () => {}, hum = () => {}, onScore = () => {}, b
     else if (side < 0.1) fx.steer = 0;
     // The Monster truck: a deep engine, nearer is louder, stunned it idles low.
     let monster = null;
-    for (const c of round.cars) if (c.kind === "monster" && c.out <= 0 && (!monster || Math.abs(c.d - you.d) < Math.abs(monster.d - you.d))) monster = c;
+    for (const c of round.cars) if (c.id !== 0 && RIVALS[c.kind].boss && c.out <= 0 && (!monster || Math.abs(c.d - you.d) < Math.abs(monster.d - you.d))) monster = c;
     if (monster) {
       const gap = Math.abs(monster.d - you.d);
       if (gap < MONSTER_EAR) {
         const pitch = (0.9 + 1.1 * Math.min(1.4, monster.v / RIVALS.monster.speed)) * (monster.stunMs > 0 ? 0.7 : 1) * (monster.air > 0 ? 1.25 : 1);
-        hum("bounce:monster", "bounceMonster", 0.25 + 0.75 * (1 - gap / MONSTER_EAR), pitch);
+        const name = monster.kind === "chopper" ? "bounceChopper" : monster.kind === "vac" ? "bounceVac" : "bounceMonster";
+        hum("bounce:monster", name, 0.25 + 0.75 * (1 - gap / MONSTER_EAR), monster.kind === "chopper" ? 1 + 0.3 * monster.lift : pitch);
       }
     }
+    // A laser nearby hums while it is on.
+    if (round.feverMs > 0) hum("bounce:fever", "electric", 0.5, 1.2 + 0.4 * Math.sin(fx.clock / 200));
     // A Nitro or a Mega running out.
     if (fx.nitro > 0 && you.nitroMs <= 0 && down) tone("powerDown", 0.35, 1.2);
     if (fx.mega > 0 && you.megaMs <= 0 && down) tone("powerDown", 0.4);
@@ -1695,6 +2499,17 @@ function create({ canvas, tone = () => {}, hum = () => {}, onScore = () => {}, b
       return f.life > 0;
     });
     fx.rings = fx.rings.filter((r) => (r.life -= ms) > 0);
+    fx.booms = fx.booms.filter((b) => (b.life -= ms) > 0);
+    if (fx.toast && (fx.toast.life -= ms) <= 0) fx.toast = null;
+    // A Fever, a Nitro and rockets leave sparks behind them.
+    fx.trail += ms;
+    if (fx.trail >= 40 && round.phase === "drive") {
+      fx.trail = 0;
+      const you = round.cars[0];
+      const hot = ["#ff6fb5", "#ffd84a", "#7fe3ff", "#7ad151"];
+      if (round.feverMs > 0) burst(you.x, you.d - you.l / 2, hot[Math.floor(fx.clock / 40) % 4], 2, 9);
+      for (const sh of round.shots) burst(sh.x, sh.d - 2, "#ffb02e", 1, 5);
+    }
     if (fx.combo && (fx.combo.life -= ms) <= 0) fx.combo = null;
     fx.cheer = Math.max(0, fx.cheer - ms);
     if (fx.banners.length) {
@@ -1720,15 +2535,20 @@ function create({ canvas, tone = () => {}, hum = () => {}, onScore = () => {}, b
     if (you.bubble) effects.push({ text: "BUBBLE", color: POWERS.bubble.color, fill: 1 });
     if (you.nitroMs > 0) effects.push({ text: "NITRO", color: POWERS.nitro.color, fill: you.nitroMs / NITRO_MS });
     if (you.megaMs > 0) effects.push({ text: "MEGA", color: POWERS.mega.color, fill: you.megaMs / MEGA_MS });
+    if (you.magnetMs > 0) effects.push({ text: "MAGNET", color: POWERS.magnet.color, fill: you.magnetMs / MAGNET_MS });
+    if (round.feverMs > 0) effects.push({ text: "FEVER x2", color: "#ff6fb5", fill: round.feverMs / FEVER_MS });
+    if (you.held) effects.push({ text: `TAP x2: ${POWERS[you.held.kind].tag}${POWERS[you.held.kind].uses > 1 ? ` ${you.held.uses}` : ""}`, color: POWERS[you.held.kind].color, fill: 1 });
     const road = round.road;
     const from = road.stageAt[round.stage - 1] || 0;
     const to = road.stageAt[round.stage] || from + 1;
     const mult = comboOf(round.streak);
-    return { stage: `STAGE ${round.stage}`, effects, chain: round.chain, combo: mult > 1 ? { mult, fill: round.streakMs / STREAK_MS } : null, progress: clamp((you.d - from) / (to - from), 0, 1) };
+    let boss = null;
+    for (const c of round.cars) if (c.id !== 0 && RIVALS[c.kind].boss && c.out <= 0) boss = { name: RIVALS[c.kind].name, hp: c.hp, max: c.hpMax || RIVALS[c.kind].hp, stun: c.stunMs > 0 };
+    return { stage: `STAGE ${round.stage}`, effects, chain: round.chain, combo: mult > 1 ? { mult, fill: round.streakMs / STREAK_MS } : null, progress: boss ? 1 - boss.hp / boss.max : clamp((you.d - from) / (to - from), 0, 1), fever: round.feverMs > 0 ? 1 : round.fever / FEVER_FULL, feverOn: round.feverMs > 0, boss };
   };
 
   // The view bounce-draw.js draws from: one object, refilled each frame.
-  const view = { g: Object.freeze({ W, H, HUD_H, PAD, GAP, BAR_W, FIELD_W, FIELD_H, ROW, CAR_W, CAR_L, ITEM_R, CRASH_MS, OUT_MS }), ground: GROUND, powers: POWERS, rivals: RIVALS, colorOf, heightOf, stageFor, firstAt, order: [], maxStage: STAGES.length };
+  const view = { g: Object.freeze({ W, H, HUD_H, PAD, GAP, BAR_W, FIELD_W, FIELD_H, ROW, CAR_W, CAR_L, ITEM_R, CRASH_MS, OUT_MS }), ground: GROUND, powers: POWERS, rivals: RIVALS, colorOf, heightOf, stageFor: (n) => stageFor(n, round.road), firstAt, order: [], maxStage: STAGES.length };
   const shakeAt = { x: 0, y: 0 };
 
   const paint = () => {
@@ -1753,6 +2573,7 @@ function create({ canvas, tone = () => {}, hum = () => {}, onScore = () => {}, b
     view.combo = fx.combo;
     view.flash = fx.flash;
     view.banner = head;
+    view.toast = fx.toast || null;
     view.furthest = furthest;
     view.lost = state === "over";
     view.shake = null;
@@ -1763,12 +2584,13 @@ function create({ canvas, tone = () => {}, hum = () => {}, onScore = () => {}, b
     }
     view.tally = null;
     view.big = null;
-    const reached = `Furthest: ${stageName(furthest)}`;
-    if (state === "ready") view.tally = ["Bump them off, jump the gaps, land on top", `Arrows drive, space jumps. ${reached}`];
+    view.title = state === "ready" || state === "over";
+    if (state === "ready") view.tally = ["Bump them off, jump the gaps, land on top", `Arrows drive, space jumps, double-tap space fires. Furthest: stage ${furthest}`];
     else if (state === "over") {
       const st = round.stats;
       view.big = String(round.score);
-      view.tally = [`Reached ${stageName(round.stage)}${further ? ". New furthest!" : ""}${beaten ? " A new best!" : ""}`, `${st.bumped} bumped, ${st.crushed} crushed, chain x${Math.max(1, round.bestChain)}, combo x${round.bestCombo}, ${st.stars} stars. ${teaser(furthest)}`];
+      view.ranks = round.ranks;
+      view.tally = [`Reached ${stageName(round.stage, round.road)}${further ? ". New furthest!" : ""}${beaten ? " A new best!" : ""}`, `${st.bumped} bumped, ${st.crushed + st.blasted} wrecked, ${st.bosses} boss${st.bosses === 1 ? "" : "es"}, chain x${Math.max(1, round.bestChain)}, combo x${round.bestCombo}. ${teaser(furthest)}`];
     }
     drawScene(ctx, view);
   };
@@ -1779,15 +2601,20 @@ function create({ canvas, tone = () => {}, hum = () => {}, onScore = () => {}, b
     const inp = round.input;
     inp.up = inp.down = inp.left = inp.right = false;
     inp.jump = 0;
+    inp.fire = false;
+    fx.lastTap = -1e9;
   };
 
   const start = () => {
     colors = readColors(canvas);
-    round = newRound();
+    round = newRound(undefined, Math.random, true);
     state = "running";
     further = false;
     armed = false;
     resetFx();
+    deck = dealMusic(Math.random, deck[songAt] ?? null);
+    songAt = 0;
+    fresh = true;
     try {
       bestAtStart = Number(best()) || 0;
     } catch {
@@ -1840,7 +2667,17 @@ function create({ canvas, tone = () => {}, hum = () => {}, onScore = () => {}, b
     key(name, repeat = false) {
       if (name === "action") {
         if (state === "ready" || state === "over") start();
-        else if (state === "running" && !repeat && armed && round.phase === "drive") round.input.jump = JUMP_BUFFER_MS;
+        else if (state === "running" && !repeat && armed && round.phase === "drive") {
+          // A second press within DOUBLE_TAP_MS of the last sets off the
+          // gadget held; the first has already jumped, with no wait.
+          if (round.cars[0].held && fx.clock - fx.lastTap <= DOUBLE_TAP_MS) {
+            round.input.fire = true;
+            fx.lastTap = -1e9;
+          } else {
+            round.input.jump = JUMP_BUFFER_MS;
+            fx.lastTap = fx.clock;
+          }
+        }
         return true;
       }
       if (!MOVES[name]) return false;
@@ -1856,6 +2693,7 @@ function create({ canvas, tone = () => {}, hum = () => {}, onScore = () => {}, b
       if (state !== "running") return;
       runFx(ms);
       runSound(ms);
+      playMusic();
       advance(round, ms);
       drain();
       if (round.over) end();

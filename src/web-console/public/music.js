@@ -11,7 +11,12 @@ import { MUSIC_TABLES, SONG_TABLES, audioOut } from "./tones.js";
    third argument, the game's music volume); stop calling and it
    fades out within MUSIC_HOLD_MS, the way a hum does, so a paused, closed or
    finished game falls quiet by itself, and hushMusic() quiets it at once. A
-   track picks up again where it left off, at the start of that bar.
+   track picks up again where it left off, at the start of that bar. A track
+   loops for as long as it is asked for, and music() says how far along it
+   is: "playing", then "ended" once it has run through to its last bar, the
+   cue for a game that plays its tracks one after another (Bounce Road) to
+   ask for the next, and { restart: true } as the fourth argument starts it
+   from its top. It returns nothing while it plays nothing.
 
    A track is:
 
@@ -467,8 +472,10 @@ function playSong(name, level, options) {
 // different track crossfades from the last one to this one over
 // CROSSFADE_S. `volume` (0 to 1) scales the whole track; at 0 it is not
 // asked for, so it fades out. Silence, never an error, while Play sounds is
-// off or audio cannot play. A song (above) plays instead when `name` is one,
-// and what it returns is the song's "playing" or "ended".
+// off or audio cannot play. It returns "playing", or "ended" once the track
+// has run through (it keeps looping), and `options.restart` starts it from
+// its top. A song (above) plays instead when `name` is one, and what it
+// returns is the song's "playing" or "ended".
 export function music(name, intensity = 0.5, volume = 1, options = undefined) {
   try {
     const level = Math.min(1, Math.max(0, Number(volume) || 0));
@@ -478,6 +485,10 @@ export function music(name, intensity = 0.5, volume = 1, options = undefined) {
     const a = audioOut();
     if (!a) return;
     let ramp = 0.25;
+    if (options && options.restart) {
+      if (now && now.name === name) now.step = 0;
+      else positions.delete(name);
+    }
     if (now && now.name !== name) {
       crossOut(a, now);
       now = null;
@@ -499,6 +510,7 @@ export function music(name, intensity = 0.5, volume = 1, options = undefined) {
       ticker = setInterval(tick, TICK_MS);
       book(a, now);
     }
+    return now.step >= now.song.length ? "ended" : "playing";
   } catch {}
 }
 

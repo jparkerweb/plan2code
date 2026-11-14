@@ -1,4 +1,4 @@
-// Plan2Code Web Console - Bounce Road's drawing: the road a chunk at a time, the layers over it (from bounce-scenery.js), the cars (from bounce-cars.js, Planny's convertible and every rival's), jumps and their landing rings, the pills, the stage bar, the banners and the start and end screens, from a view bounce.js refills.
+// Plan2Code Web Console - Bounce Road's drawing: the road a chunk at a time, the layers over it (from bounce-scenery.js), the cars (from bounce-cars.js, Planny's convertible and every rival's; the three bosses that are no car, and what the rivals carry, from bounce-extras.js), the weapons, jumps and their landing rings, the pills and the Fever meter, the stage bar, a boss's health bar, the banners and the start and end screens with their logo, from a view bounce.js refills.
 //
 // Drawing only: no rules and no state of its own beyond the chunks of road
 // it keeps. bounce.js hands drawScene() one view object of the moment (the
@@ -19,9 +19,10 @@
 
 import { drawPill, LIVES, livesText } from "./pills.js";
 import { drawCarBody, drawCarShadow } from "./bounce-cars.js";
-import { DARK_INK, LIGHT_INK, LOOKS, better, circle, contrast, drawBlocks, drawFireflies, drawHazardsHigh, drawHazardsLow, drawItems, drawNight, drawPads, drawRow, drawSigns, drawStars, drawTimed, ellipse, luminance, lookOf, roundRect, star, stageColor } from "./bounce-scenery.js";
+import { DARK_INK, LIGHT_INK, LOOKS, better, circle, contrast, drawBeams, drawBlocks, drawFireflies, drawHazardsHigh, drawHazardsLow, drawItems, drawLava, drawNight, drawPads, drawRain, drawRow, drawSheen, drawSigns, drawStars, drawTimed, ellipse, luminance, lookOf, roundRect, star, stageColor } from "./bounce-scenery.js";
+import { CUSTOM_STYLES, drawBossBar, drawBossBody, drawBossShadow, drawCarExtras, drawFever, drawPulls, drawScanlines, drawSpills, drawThreatsHigh, drawThreatsLow, drawTitle, drawYouOver, drawYouUnder } from "./bounce-extras.js";
 
-export { DARK_INK, LIGHT_INK, LOOKS, contrast, luminance, lookOf, stageColor };
+export { CUSTOM_STYLES, DARK_INK, LIGHT_INK, LOOKS, contrast, luminance, lookOf, stageColor };
 
 const FALLBACK_COLORS = Object.freeze({ board: "#ffffff", line: "#e4ddd1", you: "#206cc3", ink: "#1d1a17" });
 
@@ -45,6 +46,8 @@ export function readColors(canvas) {
 export const GOLD = "#f5b301";
 export const DANGER = "#e2553f";
 const SHADE = "rgba(0, 0, 0, 0.55)";
+// Where a power-up's name flashes, in units down the field.
+export const TOAST_Y = 7;
 const BANNER_SHADE = "rgba(0, 0, 0, 0.32)";
 const EDGE_DARK = "rgba(0, 0, 0, 0.75)";
 
@@ -202,11 +205,17 @@ function carOpts(car, v) {
     if (car.mode === "chase") o.siren = v.clock;
   }
   if (car.kind === "racer") o.number = 1 + (car.id % 9);
-  if (car.kind === "brick") o.brake = car.mode === "brake";
-  if (car.kind === "monster") o.damage = 1 - car.hp / 5;
-  if (car.kind === "racer" || car.kind === "nudge") o.boost = car.mode === "chase";
+  if (car.kind === "brick" || car.kind === "tanker") o.brake = car.mode === "brake";
+  // A boss shows its hits; the three that are no car take their own state.
+  if (spec.boss) o.damage = Math.max(0, 1 - car.hp / (car.hpMax || spec.hp || 1));
+  if (car.kind === "racer" || car.kind === "nudge" || car.kind === "slasher") o.boost = car.mode === "chase";
+  if (CUSTOM_STYLES.includes(spec.style)) o.mode = car.mode;
   return [spec.style, o];
 }
+
+// How far the Whirlybird's body is drawn up the board from its shadow at
+// its full height.
+const LIFT_RISE = 7;
 
 // Where a car is drawn, or null off the board: its middle, its tumble's
 // spin and fade.
@@ -227,43 +236,60 @@ function placeOf(car, v) {
     alpha = car.id === 0 ? 1 : Math.max(0, 1 - out * 1.1);
   } else if (how === "gone") alpha = Math.max(0, 1 - out);
   if (car.id === 0 && car.ghostMs > 0 && Math.floor(v.clock / 90) % 2 === 0) alpha *= 0.45;
+  // A rival spinning on your oil turns as it slides; a Phantom out of reach
+  // and the Robo-Vac driving back through things are see-through.
+  if (!how && car.spinMs > 0) spin = car.spinMs * 0.012;
+  if (car.phased && car.out <= 0) alpha *= 0.28;
+  else if (car.thru && car.out <= 0) alpha *= 0.5;
   return alpha > 0 ? { x: car.x, y, spin, alpha, scale } : null;
 }
 
 // A car where it is, in one of two passes: its shadow on the road (placed
 // upright, only its footprint turned with a tumble), or its body (lifted
 // for a jump by bounce-cars.js), turned and faded through its tumble once
-// it is out: tipping, sinking, falling or flattened.
+// it is out: tipping, sinking, falling or flattened. The three bosses that
+// are no car (CUSTOM_STYLES) go to bounce-extras.js, which also draws what
+// a rival carries over its body. The Whirlybird's shadow stays on the road
+// where it is; its body is drawn up the board and bigger by its `lift`.
 function drawCar(ctx, car, v, pass) {
   const at = placeOf(car, v);
   if (!at) return;
   const [style, o] = carOpts(car, v);
+  const custom = CUSTOM_STYLES.includes(style);
+  const lift = car.kind === "chopper" && car.out <= 0 ? Math.max(0, Math.min(1, car.lift || 0)) : 0;
   const was = ctx.globalAlpha;
   ctx.globalAlpha = was * at.alpha;
   ctx.save();
-  ctx.translate(at.x, at.y);
+  ctx.translate(at.x, at.y - (pass === "shadow" ? 0 : lift * LIFT_RISE));
   if (pass !== "shadow" && at.spin && typeof ctx.rotate === "function") ctx.rotate(at.spin);
   if (at.scale !== 1) ctx.scale(at.scale, at.scale);
   if (pass === "shadow") {
     o.turn = at.spin;
-    drawCarShadow(ctx, style, o);
+    if (lift) o.fade = lift;
+    if (custom) drawBossShadow(ctx, style, o);
+    else drawCarShadow(ctx, style, o);
   } else {
     o.shadow = false;
-    drawCarBody(ctx, style, o);
+    if (lift) o.air = Math.max(o.air, lift);
+    if (custom) drawBossBody(ctx, style, o);
+    else drawCarBody(ctx, style, o);
+    drawCarExtras(ctx, car, v, o, was);
   }
   ctx.restore();
   ctx.globalAlpha = was;
-  if (car.kind === "monster" && pass !== "shadow" && car.out <= 0) drawBossLives(ctx, car, v, at);
+  if (car.id !== 0 && pass !== "shadow" && car.out <= 0 && v.rivals[car.kind].boss) drawBossLives(ctx, car, v, at, lift * LIFT_RISE);
 }
 
-// The Monster's lives: a pip each above it, lit while it has them.
-function drawBossLives(ctx, car, v, at) {
-  const n = 5;
-  const y = at.y - car.l / 2 - 2.4 - v.heightOf(car) * 4;
+// A boss's lives: a pip each above it (a star each for the Monster), lit
+// while it has them. `rise` is how far up the board its body is drawn.
+function drawBossLives(ctx, car, v, at, rise = 0) {
+  const n = car.hpMax || v.rivals[car.kind].hp || 0;
+  const y = Math.max(6.4, at.y - rise - car.l / 2 - 2.4 - v.heightOf(car) * 4);
   for (let k = 0; k < n; k++) {
     const x = at.x + (k - (n - 1) / 2) * 2.2;
-    star(ctx, x, y, 0.95, 0.42);
-    ctx.fillStyle = k < car.hp ? GOLD : "rgba(0, 0, 0, 0.4)";
+    if (car.kind === "monster") star(ctx, x, y, 0.95, 0.42);
+    else roundRect(ctx, x - 0.75, y - 0.6, 1.5, 1.2, 0.35);
+    ctx.fillStyle = k < car.hp ? (car.kind === "monster" ? GOLD : DANGER) : "rgba(0, 0, 0, 0.4)";
     ctx.fill();
     ctx.strokeStyle = EDGE_DARK;
     ctx.lineWidth = 0.2;
@@ -274,22 +300,40 @@ function drawBossLives(ctx, car, v, at) {
 // Where a car in the air comes down (its speed holds up there): a ring on
 // the road, in red for a rival, so a landing on you never comes from
 // nowhere, and in your highlight, the size of your car, for you, so you can
-// see whether a jump ends on a rival, the road or the water.
+// see whether a jump ends on a rival, the road or the water. Yours turns
+// red, crossed out, while it sits over a Spike: its roof is no place to
+// land.
 function drawLandings(ctx, v) {
   for (const car of v.round.cars) {
     if (car.air <= 0 || car.out > 0) continue;
-    const y = v.yOf(car.d + (car.v * car.air) / 1000);
+    const secs = car.air / 1000;
+    const y = v.yOf(car.d + car.v * secs);
     if (y < -3 || y > v.g.FIELD_H + 3) continue;
     const mine = car.id === 0;
-    const big = car.kind === "monster";
+    const big = car.kind === "monster" || car.kind === "cat";
     const r = mine ? car.w / 2 : big ? car.w / 2 : 1.6 + (car.air / Math.max(1, car.airMax)) * 1.6;
+    let spiked = false;
+    if (mine) {
+      for (const o of v.round.cars) {
+        if (o.id === 0 || o.out > 0 || o.phased || !v.rivals[o.kind].spiky) continue;
+        if (Math.abs(o.x - car.x) < o.w / 2 + 1 && Math.abs(o.d + o.v * secs - (car.d + car.v * secs)) < o.l / 2 + 1.5) spiked = true;
+      }
+    }
     ellipse(ctx, car.x, y, r, mine || big ? car.l / 2 : r * 0.8);
     ctx.strokeStyle = EDGE_DARK;
     ctx.lineWidth = 0.7;
     ctx.stroke();
-    ctx.strokeStyle = mine ? v.colors.you : DANGER;
-    ctx.lineWidth = 0.35;
+    ctx.strokeStyle = mine && !spiked ? v.colors.you : DANGER;
+    ctx.lineWidth = spiked ? 0.5 : 0.35;
     ctx.stroke();
+    if (spiked) {
+      ctx.beginPath();
+      ctx.moveTo(car.x - r * 0.6, y - car.l * 0.3);
+      ctx.lineTo(car.x + r * 0.6, y + car.l * 0.3);
+      ctx.moveTo(car.x + r * 0.6, y - car.l * 0.3);
+      ctx.lineTo(car.x - r * 0.6, y + car.l * 0.3);
+      ctx.stroke();
+    }
   }
 }
 
@@ -358,6 +402,7 @@ function drawHud(ctx, v) {
   ctx.fillRect(0, 0, g.W, g.HUD_H);
   ctx.fillStyle = colors.line;
   ctx.fillRect(0, g.HUD_H - 0.25, g.W, 0.25);
+  drawFever(ctx, v);
 }
 
 // The pills, painted after the field so a row spilled below the strip (the
@@ -458,14 +503,16 @@ function drawTally(ctx, v, lines) {
 // the state, the pill numbers and the lines for the start and end screens.
 export function drawScene(ctx, v) {
   const { g, round } = v;
-  v.night = v.stageFor(round.stage).id === "night";
+  const spec = v.stageFor(round.stage);
+  // Dark for Night Lights and for any stage with its lights out.
+  v.night = spec.dark === true;
   ctx.save();
   ctx.scale(v.u, v.u);
   ctx.fillStyle = v.colors.board;
   ctx.fillRect(0, 0, g.W, g.H);
   drawHud(ctx, v);
   drawBar(ctx, v);
-  if (!v.lines || v.lines.road !== v.road || v.lines.count !== v.road.stageAt.length) v.lines = linesOf(v.road, g.ROW);
+  if (!v.lines || v.lines.road !== v.road || v.lines.count !== v.road.stageAt.length || v.lines.last !== v.road.stageAt.at(-1)) v.lines = linesOf(v.road, g.ROW);
   ctx.translate(g.PAD, g.HUD_H);
   ctx.save();
   ctx.beginPath();
@@ -473,14 +520,20 @@ export function drawScene(ctx, v) {
   if (typeof ctx.clip === "function") ctx.clip();
   if (v.shake) ctx.translate(v.shake.x, v.shake.y);
   drawRoad(ctx, v);
+  drawLava(ctx, v);
   drawTimed(ctx, v);
   drawPads(ctx, v);
+  drawSpills(ctx, v);
+  drawSheen(ctx, v);
   drawSigns(ctx, v);
   drawItems(ctx, v);
   drawBlocks(ctx, v);
   drawHazardsLow(ctx, v);
+  drawThreatsLow(ctx, v);
   drawStars(ctx, v);
   drawLandings(ctx, v);
+  const mine = placeOf(round.cars[0], v);
+  if (mine) drawYouUnder(ctx, v, mine);
   // Cars further up the road first, those in the air over the rest; every
   // shadow before any car, so no car's shadow falls across another car.
   const order = v.order;
@@ -489,6 +542,8 @@ export function drawScene(ctx, v) {
   order.sort((a, b) => (a.air > 0) - (b.air > 0) || b.d - a.d);
   for (const car of order) drawCar(ctx, car, v, "shadow");
   for (const car of order) drawCar(ctx, car, v, "body");
+  if (mine) drawYouOver(ctx, v, mine);
+  drawPulls(ctx, v);
   drawHazardsHigh(ctx, v);
   for (const p of v.fx.parts) {
     ctx.globalAlpha = Math.max(0, p.life / p.max);
@@ -507,10 +562,15 @@ export function drawScene(ctx, v) {
     ctx.stroke();
   }
   ctx.globalAlpha = 1;
+  drawRain(ctx, v);
   if (v.night) {
     drawNight(ctx, v);
-    drawFireflies(ctx, v);
+    if (spec.id === "night") drawFireflies(ctx, v);
+    // A laser's beam again, over the dark, so it never hides in it.
+    drawBeams(ctx, v);
   }
+  // What flies and what blows up, bright over everything, the dark too.
+  drawThreatsHigh(ctx, v);
   if (v.shake) ctx.translate(-v.shake.x, -v.shake.y);
   for (const f of v.fx.floats) {
     ctx.globalAlpha = Math.min(1, (f.life / f.max) * 1.6);
@@ -535,8 +595,19 @@ export function drawScene(ctx, v) {
     ctx.fillRect(0, 0, g.FIELD_W, g.FIELD_H);
     ctx.globalAlpha = 1;
   }
+  drawBossBar(ctx, v, label);
   if (v.state === "running" && v.banner) drawBanner(ctx, v, v.banner);
+  // A power-up just taken: its name, flashed near the top of the field.
+  if (v.state === "running" && v.toast) {
+    const p = 1 - v.toast.life / v.toast.max;
+    const pop = p < 0.15 ? 0.6 + (p / 0.15) * 0.6 : p < 0.28 ? 1.2 - ((p - 0.15) / 0.13) * 0.2 : 1;
+    ctx.globalAlpha = p > 0.75 ? Math.max(0, (1 - p) / 0.25) : 1;
+    label(ctx, v.toast.text.toUpperCase(), g.FIELD_W / 2, v.hud.boss ? TOAST_Y + 7 : TOAST_Y, 4 * pop, v.toast.color, "center", g.FIELD_W - 4);
+    ctx.globalAlpha = 1;
+  }
+  if (v.title) drawTitle(ctx, v, label);
   if (v.tally) drawTally(ctx, v, v.tally);
+  drawScanlines(ctx, v);
   ctx.restore();
   ctx.translate(-g.PAD, -g.HUD_H);
   drawPills(ctx, v);
@@ -550,5 +621,6 @@ function linesOf(road, row) {
   for (const d of road.stageAt) if (d > 0) set.add(Math.floor(d / row));
   set.road = road;
   set.count = road.stageAt.length;
+  set.last = road.stageAt.at(-1);
   return set;
 }

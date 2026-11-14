@@ -247,6 +247,21 @@ test("Bounce Road: every pill's text reads at 4.5:1 on its backing and its timer
   });
 });
 
+test("Bounce Road: the gadget held, a Magnet and a Fever each show as a pill that reads, every gadget in its own color", () => {
+  for (const kind of bounce.GADGETS) {
+    checkPills({
+      setup: (r) => {
+        const you = r.cars[0];
+        bounce.applyPower(r, kind);
+        you.magnetMs = bounce.MAGNET_MS / 2;
+        r.feverMs = bounce.FEVER_MS / 2;
+        r.fever = bounce.FEVER_FULL;
+      },
+      expect: [`TAP x2: ${bounce.POWERS[kind].tag}`, "~MAGNET", "~FEVER x2"],
+    });
+  }
+});
+
 test("Bounce Road game: held arrows drive and steer until let go; space jumps once a press, never on its key repeat, never with the press that plays on; a pause lets go of every key, drops an early press and holds a jump mid-air; and the board refuses a tiny window", () => {
   const { canvas } = stubCanvas();
   const t = game.create({ canvas });
@@ -279,7 +294,7 @@ test("Bounce Road game: held arrows drive and steer until let go; space jumps on
   g.key("left");
   g.key("action");
   g.pause();
-  assert.deepEqual(Object.values(g.round.input), [false, false, false, false, 0], "a pause holds nothing, the early press dropped");
+  assert.deepEqual(Object.values(g.round.input), [false, false, false, false, 0, false], "a pause holds nothing, the early press dropped");
   g.key("action");
   assert.equal(g.state, "paused", "space never plays on by itself: the window resumes through resume()");
   g.resume();
@@ -316,7 +331,8 @@ test("Bounce Road game: the start screen names the furthest stage, the memo only
   const scores = [];
   const g = game.create({ canvas: { width: 0, height: 0, getContext: () => ctx }, memo, onScore: (n) => scores.push(n) });
   g.resize(900, 900);
-  assert.ok(texts.some(([t]) => t.includes(`Furthest: ${bounce.STAGES[2].title} (stage 3)`)), "the start screen names the furthest stage");
+  assert.ok(texts.some(([t]) => t.includes("Furthest: stage 3")), "the start screen names the furthest stage");
+  assert.ok(texts.some(([t]) => t.includes("double-tap space")), "and how to set off a gadget");
   g.key("action");
   g.tick(16);
   g.round.cars.length = 1;
@@ -347,7 +363,7 @@ test("Bounce Road game: the start screen names the furthest stage, the memo only
   texts.length = 0;
   g.resize(900, 900);
   assert.ok(texts.some(([t, f]) => t === String(g.score) && /\b7px/.test(f)), "the score, big");
-  assert.ok(texts.some(([t]) => t.includes(`Reached ${bounce.STAGES[3].title} (stage 4). New furthest!`)));
+  assert.ok(texts.some(([t]) => t.includes(`Reached ${bounce.stageName(4, g.round.road)}. New furthest!`)));
   g.tick(1000);
   assert.equal(scores.length, 1, "once");
 });
@@ -384,7 +400,7 @@ test("Bounce Road game: a jump springs, a crush squashes higher up the chain, pa
   g.tick(16);
   g.tick(16);
   assert.equal(tones.filter(([n]) => n === "best").length, 1);
-  for (let n = 1; n <= 12; n++) {
+  for (let n = 1; n <= 31; n++) {
     while (g.round.road.built < n + 1) bounce.buildStage(g.round.road, g.round.road.built + 1);
     g.round.stage = n;
     you.d = g.round.road.stageAt[n - 1] + 400;
@@ -412,6 +428,16 @@ test("Bounce Road game: every event plays a tone that tones.js has (its blips, i
     { type: "spawn", id: 5, kind: "monster", ...at }, { type: "power", kind: "mega", ...at }, { type: "crush", ...at, kind: "cop", id: 3, chain: 2, points: 500 },
     { type: "copGone", id: 3, ...at }, { type: "bubble", ...at, cause: "crash" }, { type: "bump", a: 0, b: 3, ...at, speed: 30, kind: "zigzag" },
     { type: "bumped", ...at, id: 3, kind: "zigzag", how: "splash", points: 50 }, { type: "haul", ...at, kind: "truck", id: 3, chain: 1, points: 50 },
+    // The arcade layer: the newer things on the road, the gadgets, the Fever, the rivals' tricks and the bosses.
+    { type: "pop", id: 0, ...at, v: 50 }, { type: "belt", ...at, dir: 1 }, { type: "bumper", ...at, points: 20 }, { type: "laserWarn", ...at }, { type: "stompWarn", ...at, what: "book" },
+    { type: "stompLand", ...at, what: "book" }, ...bounce.GADGETS.map((kind) => ({ type: "use", kind, ...at, left: 1 })), { type: "pound", ...at, hit: 2 }, { type: "zap", ...at, hit: 2 },
+    { type: "fever", ...at }, { type: "feverEnd" }, { type: "life", ...at }, { type: "blast", ...at, kind: "brick", id: 3, points: 100 }, { type: "boom", ...at, r: 8, what: "bomb", near: true },
+    { type: "lob", id: 3, what: "barrel", ...at }, { type: "aim", id: 3, ...at }, { type: "bolt", id: 3, ...at }, { type: "shot", ...at, tough: false }, { type: "shot", ...at, tough: true },
+    { type: "blade", id: 3, ...at }, { type: "bomb", id: 3, ...at }, { type: "phase", id: 3, ...at, on: true }, { type: "phase", id: 3, ...at, on: false }, { type: "magnet", id: 3, ...at },
+    { type: "spin", id: 3, kind: "brick", ...at }, { type: "split", ...at }, { type: "spiked", id: 3, ...at }, { type: "meet", kind: "spike", ...at }, { type: "bossWarn", id: 3, kind: "vac", ...at },
+    { type: "bossWarn", id: 3, kind: "chopper", ...at }, { type: "bossCharge", id: 3, ...at }, { type: "swipe", id: 3, ...at }, { type: "power", kind: "rocket", ...at }, { type: "power", kind: "heart", ...at },
+    ...["tanker", "vac", "chopper", "cat", "supply"].map((kind, k) => ({ type: "spawn", id: 6 + k, kind, ...at })), { type: "stomp", ...at, id: 3, kind: "cat", hp: 2, chain: 1, points: 150, how: "rocket" },
+    { type: "boss", ...at, kind: "vac", points: 2000, life: false }, { type: "escape", ...at, kind: "tanker" }, { type: "lose", cause: "laser", ...at, lives: 2 },
   ];
   for (const e of events) {
     tones.length = 0;
@@ -456,7 +482,9 @@ test("Bounce Road game: Planny keeps his star eye in your highlight driving, in 
     },
     "at the end": (g, you) => {
       g.round.lives = 1;
+      bounce.ensureRoad(g.round.road, 9000);
       const hole = g.round.road.holes.find((h) => h.kind === "crack");
+      while (g.round.road.stageAt[g.round.stage] <= hole.d0) g.round.stage++;
       you.d = hole.d0 - 6;
       g.round.far = you.d;
       for (let ms = 0; ms < bounce.CRASH_MS + 2000 && g.state === "running"; ms += 16) g.tick(16);
@@ -681,7 +709,12 @@ test("Bounce Road game: Night Lights is dark but for your headlights' reach", ()
   g.tick(16);
   assert.ok(!fills.includes("evenodd"), "by day, no dark");
   bounce.ensureRoad(g.round.road, 30000);
-  const night = bounce.STAGES.findIndex((s) => s.id === "night") + 1;
+  // The real game shuffles its stages: the first dark one on this road (Night Lights, or a Lights out twist).
+  let night = 1;
+  while (night < 90 && !bounce.stageFor(night, g.round.road).dark) night++;
+  assert.ok(bounce.stageFor(night, g.round.road).dark, "a dark stage in the run");
+  bounce.ensureRoad(g.round.road, g.round.road.stageAt.at(-1) + 1);
+  while (g.round.road.built < night + 1) bounce.buildStage(g.round.road, g.round.road.built + 1);
   g.round.stage = night;
   const you = g.round.cars[0];
   you.d = g.round.road.stageAt[night - 1] + 30;

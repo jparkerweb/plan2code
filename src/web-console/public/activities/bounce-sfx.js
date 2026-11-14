@@ -1,12 +1,82 @@
-// Plan2Code Web Console - bounce: its own sound effects, merged into tones.js beside the shared kit; defines only.
+// Plan2Code Web Console - bounce: its own sound effects and music, merged into tones.js beside the shared kit; defines only.
 //
 // `tones` are one-shot sounds played with tone(name, level, pitch); `hums` are
 // held sounds kept going with hum(id, name, level, pitch). Both take the shapes
 // tones.js documents, as plain objects (tones.js freezes them). A name may be
-// defined only once across tones.js and every game's file. No imports.
+// defined only once across tones.js and every game's file. The music is in
+// bounce-music.js, merged in below as `music`: that file is the only import.
+
+import { BOUNCE_MUSIC } from "./bounce-music.js";
 
 export default {
+  music: BOUNCE_MUSIC,
   tones: {
+    // A pinball bumper: a bright bell with a solenoid's thwack.
+    bounceBumper: {
+      layers: [
+        { type: "triangle", from: 1568, to: 1560, seconds: 0.22, gain: 0.6 },
+        { type: "sine", from: 3136, to: 3120, seconds: 0.12, gain: 0.25 },
+        { type: "noise", seconds: 0.03, gain: 0.5, filter: { type: "bandpass", from: 2200, to: 1400, q: 2 } },
+      ],
+    },
+    // A rocket leaving its rail: a hiss that climbs away.
+    bounceRocket: {
+      layers: [
+        { type: "noise", seconds: 0.42, attack: 0.01, filter: { type: "bandpass", from: 900, to: 3600, q: 1.4 } },
+        { type: "sawtooth", from: 180, to: 620, seconds: 0.3, gain: 0.35, filter: { type: "lowpass", from: 1400, to: 2600 } },
+      ],
+    },
+    // Oil hitting the road: a thick glug.
+    bounceOilSplat: {
+      layers: [
+        { type: "sine", from: 260, to: 70, seconds: 0.22, gain: 0.8, vibrato: { rate: 18, depth: 0.12 } },
+        { type: "brown", seconds: 0.2, gain: 0.5, filter: { type: "lowpass", from: 700, to: 200 } },
+      ],
+    },
+    // A ground pound: the car slamming down and the road ringing with it.
+    bouncePound: {
+      layers: [
+        { type: "sine", from: 120, to: 30, seconds: 0.5, gain: 1 },
+        { type: "brown", seconds: 0.45, gain: 0.9, filter: { type: "lowpass", from: 1500, to: 100 } },
+        { type: "noise", seconds: 0.08, gain: 0.5, filter: { type: "highpass", from: 2400, to: 1200 } },
+        { type: "triangle", from: 420, to: 180, seconds: 0.3, delay: 0.04, gain: 0.3 },
+      ],
+    },
+    // Fever lit: an arcade run up the scale.
+    bounceFever: {
+      layers: [
+        { type: "square", notes: [523, 659, 784, 1047, 1319, 1568], seconds: 0.5, gain: 0.4, filter: { type: "lowpass", from: 2600, to: 4200 } },
+        { type: "triangle", notes: [262, 330, 392, 523, 659, 784], seconds: 0.5, gain: 0.5 },
+      ],
+    },
+    // A Slasher's blades snapping out: steel on steel.
+    bounceBlade: {
+      layers: [
+        { type: "noise", seconds: 0.18, filter: { type: "bandpass", from: 5200, to: 7400, q: 6 } },
+        { type: "triangle", from: 2400, to: 3600, seconds: 0.16, gain: 0.3 },
+      ],
+    },
+    // The Cat: a toy's idea of a yowl.
+    bounceMeow: {
+      layers: [
+        { type: "sawtooth", from: 520, to: 880, seconds: 0.18, gain: 0.5, filter: { type: "bandpass", from: 1200, to: 2200, q: 3 } },
+        { type: "sawtooth", from: 880, to: 420, seconds: 0.4, delay: 0.18, gain: 0.5, vibrato: { rate: 9, depth: 0.04 }, filter: { type: "bandpass", from: 2200, to: 900, q: 3 } },
+      ],
+    },
+    // The Robo-Vac winding up to charge: a motor's whine climbing.
+    bounceVacCharge: {
+      layers: [
+        { type: "sawtooth", from: 140, to: 720, seconds: 0.7, attack: 0.05, gain: 0.5, filter: { type: "lowpass", from: 800, to: 3200, q: 3 } },
+        { type: "pink", seconds: 0.7, attack: 0.1, gain: 0.5, filter: { type: "bandpass", from: 600, to: 2400, q: 1.2 } },
+      ],
+    },
+    // A gadget picked up and loaded: a clack and two rising notes.
+    bounceArmed: {
+      layers: [
+        { type: "noise", seconds: 0.04, gain: 0.6, filter: { type: "bandpass", from: 1800, to: 1200, q: 2 } },
+        { type: "square", notes: [392, 784], seconds: 0.2, delay: 0.05, gain: 0.4, filter: { type: "lowpass", from: 2400, to: 2400 } },
+      ],
+    },
     // A landing on plastic wheels: a soft body thump, the knock of the
     // chassis and the toy suspension's little rattle. The game makes it
     // louder and lower the longer the fall.
@@ -110,6 +180,10 @@ export default {
     bounceMotor: { parts: [{ type: "square", freq: 104 }, { type: "square", freq: 104.9, gain: 0.5 }, { type: "sawtooth", freq: 312, gain: 0.12 }], noise: { color: "brown", gain: 0.12 }, filter: { type: "lowpass", freq: 900, q: 2.5, follow: 1 }, pulse: { rate: 22, depth: 0.35 }, peak: 0.035 },
     // The Monster truck's big engine: a low, lumpy V8 burble.
     bounceMonster: { parts: [{ type: "sawtooth", freq: 40 }, { type: "sawtooth", freq: 40.6, gain: 0.7 }, { type: "square", freq: 20, gain: 0.6 }], noise: { color: "brown", gain: 0.3 }, filter: { type: "lowpass", freq: 300, q: 5, follow: 0.9 }, pulse: { rate: 8, depth: 0.55 }, peak: 0.06 },
+    // The Whirlybird's rotor: a fast chop.
+    bounceChopper: { parts: [{ type: "sawtooth", freq: 62 }, { type: "square", freq: 31, gain: 0.5 }], noise: { color: "pink", gain: 0.5 }, filter: { type: "lowpass", freq: 700, q: 2, follow: 0.6 }, pulse: { rate: 17, depth: 0.8 }, peak: 0.05 },
+    // The Robo-Vac: a steady suction whine.
+    bounceVac: { parts: [{ type: "sawtooth", freq: 190 }, { type: "sawtooth", freq: 193, gain: 0.6 }], noise: { color: "pink", gain: 0.8 }, filter: { type: "bandpass", freq: 900, q: 1.4, follow: 0.7 }, pulse: { rate: 30, depth: 0.2 }, peak: 0.04 },
     // Crumbling road falling away behind you: a low, gritty rumble.
     bounceCrumbling: { noise: { color: "brown", gain: 1 }, parts: [{ type: "sine", freq: 48, gain: 0.4 }], filter: { type: "lowpass", freq: 380, q: 1, follow: 0.6 }, pulse: { rate: 7, depth: 0.6 }, peak: 0.045 },
     // A sprinkler nearby: a soft, ticking hiss of water.

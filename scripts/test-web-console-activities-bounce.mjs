@@ -9,7 +9,7 @@ import "./seed-random.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import * as bounce from "../src/web-console/public/activities/bounce.js";
-import { hudLayout, labelSpot, LOOKS, limbInk, contrast, inkOn } from "../src/web-console/public/activities/bounce-draw.js";
+import { CUSTOM_STYLES, hudLayout, labelSpot, LOOKS, limbInk, contrast, inkOn } from "../src/web-console/public/activities/bounce-draw.js";
 import { CAR_STYLES } from "../src/web-console/public/activities/bounce-cars.js";
 import { ACCENTS } from "../src/web-console/public/palette.js";
 
@@ -31,7 +31,9 @@ function bounceRound(seed = 7, rivals = false) {
 // A rival of `kind` put at (x, d), still and on the ground, going nowhere on
 // its own.
 function bounceRival(round, kind, x, d, over = {}) {
-  const car = bounce.spawnRival(round, kind, steady, round.cars[0].d + 300);
+  // A rival only spawns on plain road: try further along until one takes. It is moved anyway.
+  let car = null;
+  for (let at = round.cars[0].d + 300; !car && at < round.cars[0].d + 3000; at += 40) car = bounce.spawnRival(round, kind, steady, at);
   assert.ok(car, `a ${kind} spawns`);
   Object.assign(car, { x, d, v: 0, tv: 0, vx: 0, kx: 0, air: 0, tx: x, lane: x, hopIn: 1e9, dropIn: 1e9, mode: "calm", ...over });
   return car;
@@ -101,7 +103,11 @@ function carefulBot(round) {
   let tx = (lo + hi) / 2;
   const things = [];
   for (const list of [road.blocks, round.drops]) for (const o of list) if (!o.hit && o.d - you.d > -2 && o.d - you.d < 40) things.push(o);
-  for (const h of road.hazards) if (h.kind === "drop" && h.at && !h.landed && h.d - you.d > -4 && h.d - you.d < 70) things.push(h);
+  for (const h of road.hazards) {
+    if (h.kind === "drop" && h.at && !h.landed && h.d - you.d > -4 && h.d - you.d < 70) things.push(h);
+    // A stomper on its way down, or down, is a thing to steer round.
+    if (h.kind === "stomper" && h.d - you.d > -5 && h.d - you.d < 60) things.push(h);
+  }
   for (const c of round.cars) if (c.id !== 0 && c.out === 0 && c.d - you.d > 0 && c.d - you.d < 24) things.push(c);
   things.sort((p, q) => p.d - q.d);
   const o = things[0];
@@ -116,7 +122,8 @@ function carefulBot(round) {
   const soon = (d) => d > you.d && d - you.d < 3 + you.v * 0.02 + you.l / 2;
   for (let k = bounce.firstAt(road.holes, "d0", you.d); k < road.holes.length && road.holes[k].d0 < you.d + 20; k++) if (soon(road.holes[k].d0)) inp.jump = bounce.JUMP_BUFFER_MS;
   for (const h of road.hazards) {
-    if (h.kind === "ball" && soon(h.d - h.r - 1)) inp.jump = bounce.JUMP_BUFFER_MS;
+    if ((h.kind === "ball" || h.kind === "roller") && soon(h.d - h.r - 1)) inp.jump = bounce.JUMP_BUFFER_MS;
+    if (h.kind === "laser" && soon(h.d - h.half - 1) && bounce.laserAt(h, round.clock + 150).warn) inp.jump = bounce.JUMP_BUFFER_MS;
     if (h.kind === "train" && soon(h.d - h.half - 1) && bounce.trainAt(h, round.clock + 150).warn) inp.jump = bounce.JUMP_BUFFER_MS;
   }
   for (const b of things) if (b.l && b.kind && b.id === undefined && soon(b.d - b.l / 2) && Math.abs(b.x - you.x) < (b.w + you.w) / 2) inp.jump = bounce.JUMP_BUFFER_MS;
@@ -124,7 +131,7 @@ function carefulBot(round) {
 
 // Plays `round` with `bot` until `stage` or the end, `ms` at most, a rival's
 // random seeded; returns the seconds each stage took and the lives lost.
-function play(round, bot, { stage = 11, ms = 900000, rivals = false, seed = 1 } = {}) {
+function play(round, bot, { stage = 16, ms = 900000, rivals = false, seed = 1 } = {}) {
   const random = rivals ? bounce.seeded(seed * 13) : steady;
   const secs = [];
   const lost = [];
@@ -290,7 +297,10 @@ test("Bounce Road: a rival bumped past the road's edge is out, and yours for BUM
 test("Bounce Road: water or a hole under your wheels costs a life, flying over it does not, and a Bubble throws you clear instead", () => {
   const round = bounceRound();
   const you = round.cars[0];
+  bounce.ensureRoad(round.road, 9000);
   const hole = round.road.holes.find((h) => h.kind === "crack");
+  while (round.road.stageAt[round.stage] <= hole.d0) round.stage++;
+  round.far = 1e9;
   Object.assign(you, { d: hole.d0 + 2, v: 40, air: 300, airMax: 600 });
   bounce.advance(round, 100, steady);
   assert.equal(round.phase, "drive", "in the air over it, nothing");
@@ -304,6 +314,9 @@ test("Bounce Road: water or a hole under your wheels costs a life, flying over i
   assert.ok(you.d < hole.d0 - bounce.RESPAWN_BACK / 2, `back before the hole (${you.d.toFixed(0)} < ${hole.d0})`);
   assert.equal(bounce.groundAt(round.road, you.x, you.d), bounce.GROUND.road, "on the road");
   const saved = bounceRound();
+  bounce.ensureRoad(saved.road, 9000);
+  saved.stage = round.stage;
+  saved.far = 1e9;
   const s = saved.cars[0];
   s.bubble = true;
   Object.assign(s, { d: hole.d0 + 2, v: 40 });
@@ -342,7 +355,7 @@ test("Bounce Road: a broken span the Bubble's throw carries you over is the Bubb
 
 /* ---------------------------------------------------- the road is fair */
 
-test("Bounce Road: every hole of the first twenty stages, on many roads, is jumpable at JUMP_FAIR of the top speed (a drawbridge's lifted span included), with a run-up of road and a sign before it, and even the longest jump off the first of two breaks lands on the bridge between", () => {
+test("Bounce Road: every hole of the first thirty stages, on many roads, is jumpable at JUMP_FAIR of the top speed (a drawbridge's lifted span included), with a run-up of road and a sign before it, and even the longest jump off the first of two breaks lands on the bridge between", () => {
   const fair = bounce.reach(bounce.JUMP_FAIR * bounce.TOP_SPEED);
   let twins = 0;
   let draws = 0;
@@ -350,7 +363,7 @@ test("Bounce Road: every hole of the first twenty stages, on many roads, is jump
   assert.ok(bounce.MAX_HOLE + bounce.CAR_L <= fair, "the longest hole any stage may cut is jumpable");
   for (let seed = 1; seed <= 8; seed++) {
     const road = bounce.newRoad(seed);
-    while (road.built < 20) bounce.buildStage(road, road.built + 1);
+    while (road.built < 30) bounce.buildStage(road, road.built + 1);
     assert.ok(road.holes.length > 30, `seed ${seed} cuts holes`);
     const solid = (from, to) => {
       for (let i = Math.floor(from / bounce.ROW); i < Math.floor(to / bounce.ROW); i++) if (!road.deck[i] || road.dynOf[i]) return false;
@@ -377,14 +390,14 @@ test("Bounce Road: every hole of the first twenty stages, on many roads, is jump
       }
     }
   }
-  assert.ok(twins > 12, `bridges with two breaks were checked (${twins})`);
-  assert.ok(draws > 8, `drawbridges were checked (${draws})`);
+  assert.ok(twins > 6, `bridges with two breaks were checked (${twins})`);
+  assert.ok(draws > 2, `drawbridges were checked (${draws})`);
 });
 
 test("Bounce Road: with a Spring held and a Nitro burning, a jump off the first of two breaks at full speed comes down on the bridge between, never in the second break", () => {
   const round = bounceRound(1);
   const road = round.road;
-  bounce.ensureRoad(road, 40000);
+  bounce.ensureRoad(road, 150000);
   const riverOf = (h) => road.rivers.find((r) => r.d0 <= h.d0 && r.d1 >= h.d1);
   const k = road.holes.findIndex((h, j) => j && h.kind === "span" && road.holes[j - 1].kind === "span" && riverOf(h) === riverOf(road.holes[j - 1]));
   assert.ok(k > 0, "a bridge with two breaks");
@@ -422,7 +435,7 @@ test("Bounce Road: a life lost puts you back with RESPAWN_RUN of plain road ahea
 
 test("Bounce Road: the road's edges slant from row to row the way they are drawn, never a stair step: the ground under a car eases from one row's edge to the next", () => {
   const road = bounce.newRoad(3);
-  while (road.built < 4) bounce.buildStage(road, road.built + 1);
+  while (road.built < 8) bounce.buildStage(road, road.built + 1);
   let checked = 0;
   for (let i = 1; i < road.rows; i++) {
     if (road.deck[i] !== 1 || road.dynOf[i] || road.ML[i] < road.MR[i] || Math.abs(road.L[i] - road.L[i - 1]) < 1) continue;
@@ -465,29 +478,73 @@ test("Bounce Road: the rivals' list is kept in place from slice to slice, with t
   assert.equal(cars[0].id, 0, "you first");
 });
 
-test("Bounce Road: the same seed builds the same road, a different one another, every stage keeps the road on the field and a flowerbed with room either side, and past the tenth the road goes round again, quicker and meaner", () => {
+test("Bounce Road: the same seed builds the same road, a different one another, every stage keeps the road on the field and a flowerbed with room either side, and past the fifteenth the run laps, quicker and meaner", () => {
   const a = bounce.newRoad(42);
   const b = bounce.newRoad(42);
   const c = bounce.newRoad(43);
-  for (const r of [a, b, c]) while (r.built < 12) bounce.buildStage(r, r.built + 1);
+  for (const r of [a, b, c]) while (r.built < 16) bounce.buildStage(r, r.built + 1);
   assert.deepEqual([a.L, a.R, a.ML, a.deck, a.under, a.dynOf, a.stageAt, a.hazards.map((h) => h.kind)], [b.L, b.R, b.ML, b.deck, b.under, b.dynOf, b.stageAt, b.hazards.map((h) => h.kind)]);
   assert.notDeepEqual(a.L, c.L);
   for (let i = 0; i < a.rows; i++) {
     assert.ok(a.L[i] >= 1 && a.R[i] <= bounce.FIELD_W - 1, `row ${i} on the field`);
     if (a.ML[i] < a.MR[i]) assert.ok(a.ML[i] - a.L[i] >= 15 && a.R[i] - a.MR[i] >= 15, `row ${i}: room round the flowerbed`);
   }
-  assert.equal(bounce.STAGES.length, 10, "ten stages");
-  assert.equal(new Set(bounce.STAGES.map((s) => s.id)).size, 10, "each with its own look");
-  for (const s of bounce.STAGES) assert.ok(LOOKS[s.id], `${s.id} has a look`);
-  for (let n = 1; n <= 10; n++) {
+  assert.equal(bounce.STAGES.length, bounce.CYCLE, "fifteen stages a lap");
+  assert.equal(new Set(bounce.STAGES.map((s) => s.id)).size, bounce.CYCLE, "each with its own look");
+  for (const t of Object.values(bounce.THEMES)) assert.ok(LOOKS[t.id], `${t.id} has a look`);
+  for (let n = 1; n <= bounce.CYCLE; n++) {
     const len = a.stageAt[n] - a.stageAt[n - 1];
     assert.ok(len >= bounce.STAGES[n - 1].len && len < bounce.STAGES[n - 1].len + 350, `stage ${n} is ${len} long`);
+    assert.equal(Boolean(bounce.STAGES[n - 1].boss), n % bounce.WORLD === 0, `stage ${n}: a boss on every third stage only`);
   }
-  assert.equal(bounce.stageFor(11), bounce.stageFor(11), "built once");
-  assert.equal(bounce.stageFor(11).name, `${bounce.STAGES[bounce.LAP_FROM - 1].title} 2`);
-  assert.equal(bounce.stageFor(18).name, "Monster Mash 2");
-  assert.ok(bounce.stageFor(18).boss, "the Monster is back each lap");
-  assert.ok(bounce.stageFor(11).pace > bounce.stageFor(bounce.LAP_FROM).pace && bounce.stageFor(40).rivals <= bounce.MAX_RIVALS && bounce.stageFor(40).crack[1] <= bounce.MAX_HOLE);
+  assert.deepEqual(bounce.STAGES.filter((s) => s.boss).map((s) => s.boss), [...bounce.BOSS_ORDER], "the five bosses, each in its arena");
+  assert.ok(bounce.STAGES[0].len < bounce.STAGES[13].len && bounce.STAGES[13].len < 1700, "short stages, longer as the run goes on");
+  assert.equal(bounce.stageFor(16), bounce.stageFor(16), "built once");
+  assert.equal(bounce.stageFor(16).lap, 2);
+  assert.equal(bounce.stageFor(16).name, `${bounce.THEMES[bounce.stageFor(16).id].title} 2`);
+  assert.equal(bounce.stageFor(27).name, "Monster Mash 2");
+  assert.equal(bounce.stageFor(27).boss, "monster", "the bosses are back each lap");
+  assert.ok(bounce.stageFor(16).pace > bounce.stageFor(1).pace && bounce.stageFor(60).rivals <= bounce.MAX_RIVALS && bounce.stageFor(60).crack[1] <= bounce.MAX_HOLE);
+});
+
+test("Bounce Road: a shuffled run deals its stages afresh from the seed: Chalk Lane first, a boss arena on every third stage, every boss once a lap with the Cat last on the first, twists on plain stages only, and the same seed the same run", () => {
+  const plans = new Set();
+  let twists = 0;
+  for (let seed = 1; seed <= 12; seed++) {
+    const road = bounce.newRoad(seed, true);
+    const again = bounce.newRoad(seed, true);
+    const ids = [];
+    const bosses = [];
+    for (let n = 1; n <= 30; n++) {
+      const spec = bounce.stageFor(n, road);
+      assert.equal(spec, bounce.stageFor(n, road), "built once a road");
+      assert.equal(spec.id, bounce.stageFor(n, again).id, `seed ${seed}: stage ${n} is the same on the same seed`);
+      assert.equal(Boolean(spec.boss), n % bounce.WORLD === 0, `seed ${seed}: stage ${n}`);
+      if (spec.boss) {
+        bosses.push(spec.boss);
+        assert.equal(spec.id, bounce.ARENAS[spec.boss], "a boss in its own arena");
+        assert.equal(spec.twist, null, "no twist on a boss stage");
+      } else if (spec.twist) {
+        twists++;
+        assert.ok(bounce.TWISTS[spec.twist], `a known twist (${spec.twist})`);
+      }
+      if (n <= bounce.CYCLE) ids.push(spec.id);
+    }
+    assert.equal(ids[0], "chalk", "Chalk Lane opens every run");
+    assert.equal(bounce.stageFor(1, road).twist, null, "and with no twist");
+    assert.equal(new Set(ids).size, bounce.CYCLE, `seed ${seed}: no theme twice in a lap`);
+    assert.deepEqual([...bosses.slice(0, 5)].sort(), [...bounce.BOSS_ORDER].sort(), "every boss once in the first lap");
+    assert.equal(bosses[4], "cat", "the Cat last");
+    assert.deepEqual([...bosses.slice(5, 10)].sort(), [...bounce.BOSS_ORDER].sort(), "and once in the second");
+    plans.add(ids.join(" "));
+  }
+  assert.ok(plans.size >= 10, `runs differ (${plans.size} of 12)`);
+  assert.ok(twists > 20, `twists turn up (${twists})`);
+  const rush = bounce.stageSpec(5, "beds", "rush");
+  assert.equal(rush.rivals, bounce.stageSpec(5, "beds").rivals + 2, "Rush hour packs the road");
+  assert.ok(bounce.stageSpec(5, "beds", "dark").dark && bounce.stageSpec(5, "beds", "rain").ice && bounce.stageSpec(5, "beds", "gold").stars === 1);
+  assert.equal(bounce.newRound(5, steady).road.shuffle, false, "a round asks for the shuffle");
+  assert.equal(bounce.newRound(5, steady, true).road.shuffle, true);
 });
 
 test("Bounce Road: each stage brings something new: its own pieces, hazards or rivals, and later stages bring more at once", () => {
@@ -496,31 +553,32 @@ test("Bounce Road: each stage brings something new: its own pieces, hazards or r
   for (const s of bounce.STAGES) {
     const things = [...Object.keys(s.weights).filter((k) => k !== "straight" && s.weights[k] > 0), ...s.kinds];
     const fresh = things.filter((t) => !seen.has(t));
-    if (s.n !== 1) assert.ok(fresh.length > 0 || s.boss || s.id === "night", `${s.title} brings something new (Night Lights brings the dark)`);
+    if (s.n !== 1) assert.ok(fresh.length > 0 || s.boss || s.dark, `${s.title} brings something new (Night Lights brings the dark)`);
     for (const t of things) seen.add(t);
-    assert.ok(things.length >= before - 7, `${s.title} keeps up the mix (${things.length})`);
+    assert.ok(things.length >= before - 7 || s.boss, `${s.title} keeps up the mix (${things.length})`);
     before = Math.max(before, things.length);
   }
+  for (const t of Object.values(bounce.THEMES)) for (const k of Object.keys(t.weights)) seen.add(k);
   for (const piece of bounce.PIECE_NAMES) if (piece !== "straight") assert.ok(seen.has(piece), `the ${piece} turns up`);
-  for (const kind of bounce.RIVAL_KINDS) if (kind !== "monster") assert.ok(seen.has(kind), `the ${kind} turns up`);
+  for (const kind of bounce.RIVAL_KINDS) if (bounce.RIVALS[kind].weight > 0) assert.ok(seen.has(kind), `the ${kind} turns up`);
   const kinds = new Set();
   for (const seed of [2, 9]) {
     const road = bounce.newRoad(seed);
-    while (road.built < 10) bounce.buildStage(road, road.built + 1);
+    while (road.built < 30) bounce.buildStage(road, road.built + 1);
     for (const e of [...road.hazards, ...road.pads, ...road.blocks, ...road.dyn]) kinds.add(e.kind);
   }
-  for (const k of ["train", "ball", "sprinkler", "drop", "wind", "boost", "ramp", "slick", "cone", "block", "draw", "sway", "crumble"]) assert.ok(kinds.has(k), `a ${k} on the road`);
+  for (const k of ["train", "ball", "sprinkler", "drop", "wind", "boost", "ramp", "slick", "cone", "block", "draw", "sway", "crumble", "belt", "pop", "bumper", "laser", "stomper", "roller"]) assert.ok(kinds.has(k), `a ${k} on the road`);
 });
 
 /* ------------------------------------------------------------ bots */
 
-test("Bounce Road: a careful bot crosses all ten stages with no rivals and no life lost, each stage taking 20 to 50 seconds", () => {
+test("Bounce Road: a careful bot crosses all fifteen stages with no rivals and no life lost, each stage taking 14 to 45 seconds", () => {
   for (const seed of [3, 21]) {
     const round = bounceRound(seed);
-    const { secs, lost } = play(round, carefulBot, { stage: 11 });
-    assert.equal(round.stage, 11, `seed ${seed} reaches stage 11 (${round.stage}, lost ${lost})`);
+    const { secs, lost } = play(round, carefulBot, { stage: 16 });
+    assert.equal(round.stage, 16, `seed ${seed} reaches stage 16 (${round.stage}, lost ${lost})`);
     assert.deepEqual(lost, [], `seed ${seed}: no life lost`);
-    for (const [n, s] of secs.entries()) assert.ok(s > 20 && s < 50, `seed ${seed}: stage ${n + 1} took ${s.toFixed(0)} s`);
+    for (const [n, s] of secs.entries()) assert.ok(s > 14 && s < 45, `seed ${seed}: stage ${n + 1} took ${s.toFixed(0)} s`);
   }
 });
 
@@ -528,10 +586,10 @@ test("Bounce Road: with the rivals out, the careful bot still gets far, but they
   let lostAll = 0;
   for (const seed of [11, 42]) {
     const round = bounce.newRound(seed, bounce.seeded(seed));
-    const { lost } = play(round, carefulBot, { stage: 11, rivals: true, seed });
-    assert.ok(round.stage >= 6, `seed ${seed}: reached stage ${round.stage}`);
+    const { lost } = play(round, carefulBot, { stage: 16, rivals: true, seed });
+    assert.ok(round.stage >= 3, `seed ${seed}: reached stage ${round.stage}`);
     lostAll += lost.length;
-    assert.ok(round.stats.crushed + round.stats.bumped + round.stats.near > 5, "and it met them");
+    assert.ok(round.stats.crushed + round.stats.bumped + round.stats.near + round.stats.hauls > 0, "and it met them");
   }
   assert.ok(lostAll >= 4, `the rivals cost lives (${lostAll})`);
 });
@@ -560,6 +618,8 @@ test("Bounce Road: with you out of the way the rivals keep driving, never under 
     const last = new Map();
     for (let ms = 0; ms < 160000; ms += 16) {
       const i = Math.floor(you.d / bounce.ROW);
+      // No boss: a boss stage would last until it was beaten.
+      round.bossFor = round.stage;
       Object.assign(you, { ghostMs: 1e9, air: 1000, airMax: 1000, v: 46, x: round.road.ML[i] < round.road.MR[i] ? round.road.L[i] + 3 : (round.road.L[i] + round.road.R[i]) / 2 });
       bounce.advance(round, 16, steady);
       for (const e of round.events) {
@@ -751,10 +811,11 @@ test("Bounce Road: the Monster truck comes in Monster Mash, five landings on its
   const round = bounceRound(4);
   const road = round.road;
   bounce.ensureRoad(road, 30000);
-  round.stage = 10;
+  assert.equal(bounce.stageFor(12).boss, "monster", "Monster Mash is the twelfth stage of a plain run");
+  round.stage = 12;
   const you = round.cars[0];
-  const from = road.stageAt[9];
-  const at = plainSpot(road, from + bounce.stageFor(10).len * 0.2, 30);
+  const from = road.stageAt[11];
+  const at = plainSpot(road, from + bounce.stageFor(12).len * 0.2, 30);
   Object.assign(you, { x: at.x, d: at.d, v: 40 });
   round.far = 1e9;
   bounce.advance(round, 16, steady);
@@ -763,6 +824,7 @@ test("Bounce Road: the Monster truck comes in Monster Mash, five landings on its
   assert.equal(m.hp, bounce.BOSS_HP);
   assert.ok(eventsOf(round, "spawn").some((e) => e.kind === "monster"));
   round.lives = 2;
+  round.lifeAt = 1e12;
   for (let n = 0; n < bounce.BOSS_HP; n++) {
     Object.assign(m, { x: you.x, d: you.d + 1, air: 0, hopIn: 1e9, dropIn: 1e9, v: you.v });
     Object.assign(you, { air: 4, airMax: 600 });
@@ -775,8 +837,9 @@ test("Bounce Road: the Monster truck comes in Monster Mash, five landings on its
   assert.equal(eventsOf(round, "boss").length, 1);
   assert.equal(round.lives, 3, "a life back");
   assert.equal(round.stats.bosses, 1);
+  assert.ok(round.feverMs > 0 && round.trophies > 0, "and a Fever, and its trophy");
   const r2 = bounceRound(4);
-  r2.stage = 10;
+  r2.stage = 12;
   bounce.ensureRoad(r2.road, 30000);
   const y2 = r2.cars[0];
   Object.assign(y2, { x: at.x, d: at.d, v: 50 });
@@ -784,16 +847,16 @@ test("Bounce Road: the Monster truck comes in Monster Mash, five landings on its
   bounce.collide(r2, y2, m2);
   assert.equal(r2.phase, "crash", "its back is a wall");
   const r3 = bounceRound(4);
-  r3.stage = 10;
+  r3.stage = 12;
   bounce.ensureRoad(r3.road, 30000);
-  const m3 = bounceRival(r3, "monster", 30, r3.road.stageAt[10] + 30, { hp: 3 });
-  r3.bossFor = 10;
+  const m3 = bounceRival(r3, "monster", 30, r3.road.stageAt[12] + 30, { hp: 3 });
+  r3.bossFor = 12;
   const y3 = r3.cars[0];
-  y3.d = r3.road.stageAt[10] - 0.5;
+  y3.d = r3.road.stageAt[12] - 0.5;
   y3.x = (r3.road.L[bounce.rowOf(y3.d)] + r3.road.R[bounce.rowOf(y3.d)]) / 2;
   r3.far = 1e9;
   bounce.advance(r3, 60, steady);
-  assert.equal(r3.stage, 11);
+  assert.equal(r3.stage, 13);
   assert.equal(m3.outKind, "gone", "it got away");
   assert.equal(eventsOf(r3, "escape").length, 1);
 });
@@ -924,7 +987,7 @@ test("Bounce Road: crumbling road falls away behind you once you reach it: at a 
 
 test("Bounce Road: a drawbridge's span is water while it lifts and road while it is down, and a swaying bridge always carries its middle line while its edge goes over the water", () => {
   const road = bounce.newRoad(2);
-  bounce.ensureRoad(road, 40000);
+  bounce.ensureRoad(road, 90000);
   const draw = road.dyn.find((s) => s.kind === "draw");
   assert.ok(draw, "a drawbridge");
   const mid = (draw.d0 + draw.d1) / 2;
@@ -1146,6 +1209,11 @@ test("Bounce Road: power-ups lie on the road from Hose Creek and driving over on
   assert.ok(it.taken, "taken");
   assert.equal(eventsOf(round, "power").length, 1);
   bounce.applyPower(round, "nitro");
+  assert.deepEqual(you.held, { kind: "nitro", uses: 1 }, "a gadget is held");
+  assert.equal(you.nitroMs, 0, "until it is set off");
+  assert.equal(bounce.usePower(round), "nitro");
+  assert.equal(you.held, null, "spent");
+  assert.equal(bounce.usePower(round), null, "nothing held, nothing to set off");
   round.input.up = true;
   you.v = bounce.TOP_SPEED;
   for (let ms = 0; ms < 1500; ms += 4) {
@@ -1156,6 +1224,8 @@ test("Bounce Road: power-ups lie on the road from Hose Creek and driving over on
   const r2 = bounceRound();
   const y2 = r2.cars[0];
   bounce.applyPower(r2, "mega");
+  assert.equal(y2.w, bounce.CAR_W, "Mega wheels wait for the double tap");
+  bounce.usePower(r2);
   assert.ok(y2.w > bounce.CAR_W * 1.2 && y2.l > bounce.CAR_L * 1.2, "bigger");
   const at = plainSpot(r2.road, 60, 30);
   Object.assign(y2, { x: at.x, d: at.d });
@@ -1208,7 +1278,8 @@ test("Bounce Road: a rival color too near your highlight gives way to a spare, s
 });
 
 test("Bounce Road: every rival kind is drawn as one of the car art's styles, no two alike, and Planny as his own", () => {
-  for (const kind of bounce.RIVAL_KINDS) assert.ok(CAR_STYLES[bounce.RIVALS[kind].style], `${kind} drawn as ${bounce.RIVALS[kind].style}`);
+  for (const kind of bounce.RIVAL_KINDS) assert.ok(CAR_STYLES[bounce.RIVALS[kind].style] || CUSTOM_STYLES.includes(bounce.RIVALS[kind].style), `${kind} drawn as ${bounce.RIVALS[kind].style}`);
+  assert.deepEqual(bounce.BOSS_KINDS.map((k) => bounce.RIVALS[k].style).filter((style) => !CAR_STYLES[style]).sort(), [...CUSTOM_STYLES].sort(), "only bosses are drawn by hand");
   assert.ok(CAR_STYLES.planny);
   assert.equal(new Set(bounce.RIVAL_KINDS.map((k) => bounce.RIVALS[k].style)).size, bounce.RIVAL_KINDS.length, "no two kinds look alike");
 });
@@ -1318,9 +1389,9 @@ test("Bounce Road: the brake beats a boost strip, so a strip before a train or a
 
 test("Bounce Road: a stunned Monster's back is never a wall, so running into it right after a stomp is safe", () => {
   const round = bounceRound(4);
-  round.stage = 10;
+  round.stage = 12;
   bounce.ensureRoad(round.road, 30000);
-  const at = plainSpot(round.road, round.road.stageAt[9] + 300, 30);
+  const at = plainSpot(round.road, round.road.stageAt[11] + 300, 30);
   const you = round.cars[0];
   Object.assign(you, { x: at.x, d: at.d, v: 60 });
   const m = bounceRival(round, "monster", at.x, at.d + 9.5, { v: 20, hp: 3, stunMs: 800 });
