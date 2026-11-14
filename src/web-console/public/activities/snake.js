@@ -18,7 +18,7 @@
 // bit of a saved tally (the host's memo), so the start and end screens can
 // say how much is still out there to find.
 
-import { drawPill } from "./pills.js";
+import { drawPill, LIVES, livesText } from "./pills.js";
 
 // The step at the starting length of three cells, in ms. The snake speeds up as
 // it grows (see stepMs), so this is the slowest step a round begins at.
@@ -109,6 +109,35 @@ export const BOSS_BITES = 3;
 const BOSS_BONUS = 5;
 
 const deepFreeze = (o) => Object.freeze(Object.fromEntries(Object.entries(o).map(([k, v]) => [k, Object.freeze(v)])));
+
+// Lives: a round starts with START_LIVES and a crash costs one (the snake is
+// put back mid-board, riding out GRACE_MS of free passage). Reaching each
+// score in LIFE_MARKS earns one back, then one for every LIFE_EVERY points
+// past the last mark, up to MAX_LIVES; past the cap the mark still moves on.
+// Beating a boss earns one as well.
+export const START_LIVES = 3;
+export const MAX_LIVES = 9;
+export const LIFE_MARKS = Object.freeze([100, 250, 450, 700]);
+export const LIFE_EVERY = 300;
+export const GRACE_MS = 2500;
+
+// The score at which the n-th bonus life (counting from 0) is earned.
+export const lifeMark = (n) => (n < LIFE_MARKS.length ? LIFE_MARKS[n] : LIFE_MARKS[LIFE_MARKS.length - 1] + (n - LIFE_MARKS.length + 1) * LIFE_EVERY);
+
+// The bosses, by the level whose start brings them. A boss holds a square of
+// `size` cells and wanders the board, and the food is its orbs: each one
+// eaten costs it a hit point, and the regular food and the level count wait
+// until it is beaten. Touching it is a crash. Each has its own trick: the
+// Golem stomps rocks down around the snake, the Comet Queen calls comets, the
+// Thunder Toad leaps and lands where a warning ring showed.
+export const BOSSES = deepFreeze({
+  4: { id: "golem", name: "Grumpy Golem", sub: "Eat its orbs. Mind the falling rocks", color: "#8f877c", size: 3, hp: 4, moveMs: 520, actMs: 4200 },
+  6: { id: "queen", name: "Comet Queen", sub: "Eat its orbs. She throws comets", color: "#a466ff", size: 3, hp: 5, moveMs: 330, actMs: 5200 },
+  8: { id: "toad", name: "Thunder Toad", sub: "Eat its orbs. Dodge the landing ring", color: "#3fae5a", size: 3, hp: 6, moveMs: 0, actMs: 2800 },
+});
+const BOSS_KILL_POINTS = 12;
+const BOSSES_BY_ID = Object.freeze(Object.fromEntries(Object.values(BOSSES).map((b) => [b.id, b])));
+const TOAD_WARN_MS = 900;
 
 // The power-ups. A timed one lasts `ms`; Shield and Scissors act at once.
 export const POWERS = deepFreeze({
@@ -277,8 +306,18 @@ function taken(round) {
   (round.coins || []).forEach(add);
   (round.portals || []).forEach(add);
   (round.comets || []).forEach(add);
+  bossCells(round.boss).forEach(add);
   return cells;
 }
+
+// The cells a boss covers, and whether one of them is c.
+function bossCells(b, at = b) {
+  const cells = [];
+  if (!b) return cells;
+  for (let dy = 0; dy < b.size; dy++) for (let dx = 0; dx < b.size; dx++) cells.push({ x: at.x + dx, y: at.y + dy });
+  return cells;
+}
+export const onBoss = (b, c) => Boolean(b) && c.x >= b.x && c.y >= b.y && c.x < b.x + b.size && c.y < b.y + b.size;
 
 // A free cell at random, listed row by row, among those `ok` allows; null
 // when there is none.
@@ -326,7 +365,7 @@ export function placeBoss(round, random = Math.random) {
 
 // Three cells mid-board heading right, food somewhere else, nothing scored,
 // and nothing else on the board yet.
-export function newRound(size = GRID, random = Math.random) {
+export function newRound(size = GRID, random = Math.random, lives = START_LIVES) {
   const mid = Math.floor(size / 2);
   const round = {
     size,
@@ -355,6 +394,12 @@ export function newRound(size = GRID, random = Math.random) {
     spawnMs: FIRST_SPAWN_MS,
     chaosMs: 0,
     crashed: null,
+    lives,
+    // The next bonus life is at lifeMark(lifeAt); grace is the free passage left after a lost life.
+    lifeAt: 0,
+    grace: 0,
+    boss: null,
+    infinite: false,
     // What happened since the game last looked, for its sounds and sparks.
     events: [],
   };
@@ -514,9 +559,139 @@ function levelUp(round, random) {
   if (level === 5 || level === 7 || level === 9) addComet(round, random);
   if (level >= CHAOS_LEVEL) dropRocks(round, 2, random);
   if (level === CHAOS_LEVEL) round.chaosMs = CHAOS_FIRST_MS;
+  if (BOSSES[level]) startFight(round, random);
+}
+
+/* ------------------------------------------------------------- bosses */
+
+// A boss takes the board: out of the head's reach, off the snake, with the
+// food turned into its first orb.
+function startFight(round, random) {
+  const spec = BOSSES[round.level];
+  const head = round.snake[0];
+  const used = taken(round);
+  const spots = [];
+  for (let y = 0; y <= round.size - spec.size; y++) {
+    for (let x = 0; x <= round.size - spec.size; x++) {
+      const cells = bossCells({ size: spec.size }, { x, y });
+      const mid = { x: x + 1, y: y + 1 };
+      if (near(head, mid) >= 9 && !cells.some((c) => used.has(c.y * round.size + c.x))) spots.push({ x, y });
+    }
+  }
+  if (!spots.length) return;
+  const at = pickOf(spots, random);
+  round.boss = { id: spec.id, name: spec.name, sub: spec.sub, color: spec.color, size: spec.size, hp: spec.hp, max: spec.hp, x: at.x, y: at.y, tx: null, ty: null, moveMs: spec.moveMs, actMs: spec.actMs, leap: null, hurt: 0 };
+  round.rocks = round.rocks.filter((r) => !onBoss(round.boss, r));
+  round.food = placeFood(round, random);
+  if (round.food) round.food.orb = true;
+  round.events.push({ type: "fight", x: at.x + 1, y: at.y + 1, id: spec.id, name: spec.name, sub: spec.sub, color: spec.color });
+}
+
+// An orb eaten: the boss loses a hit point, and at none it is beaten, which
+// pays out, grows the snake and earns a life.
+function hitBoss(round, random) {
+  const b = round.boss;
+  const at = round.snake[0];
+  round.combo = round.comboMs > 0 ? Math.min(MAX_COMBO, round.combo + 1) : 1;
+  round.comboMs = COMBO_MS;
+  b.hp -= 1;
+  b.hurt = 450;
+  let points = round.combo * multiplier(round);
+  round.events.push({ type: "bossHit", x: at.x, y: at.y, hp: b.hp, max: b.max, combo: round.combo, points });
+  if (b.hp <= 0) {
+    const bonus = BOSS_KILL_POINTS * round.level * multiplier(round);
+    points += bonus;
+    round.grow += 3;
+    if (round.lives < MAX_LIVES) round.lives += 1;
+    round.events.push({ type: "bossDown", x: b.x + 1, y: b.y + 1, name: b.name, color: b.color, points: bonus, lives: round.lives });
+    round.boss = null;
+    round.comets = [];
+  }
+  round.score += points;
+  round.food = placeFood(round, random);
+  if (round.boss && round.food) round.food.orb = true;
+}
+
+// A boss moving one cell toward a waypoint: blocked by the body, a crash into
+// the head (once the grace is over), and never over the food.
+function moveBoss(round, random) {
+  const b = round.boss;
+  if (b.tx == null || (b.tx === b.x && b.ty === b.y)) {
+    b.tx = Math.floor(random() * (round.size - b.size + 1));
+    b.ty = Math.floor(random() * (round.size - b.size + 1));
+    return null;
+  }
+  const dx = b.tx - b.x;
+  const dy = b.ty - b.y;
+  const to = Math.abs(dx) >= Math.abs(dy) && dx !== 0 ? { x: b.x + Math.sign(dx), y: b.y } : { x: b.x, y: b.y + Math.sign(dy) };
+  const cells = bossCells(b, to);
+  const blocked = cells.some((c) => round.snake.slice(1).some((s) => same(s, c)) || (round.food && onFood(round.food, c)));
+  if (blocked) {
+    b.tx = null;
+    return null;
+  }
+  b.x = to.x;
+  b.y = to.y;
+  if (cells.some((c) => same(c, round.snake[0])) && !(round.grace > 0)) return crash(round, "boss", random);
+  return null;
+}
+
+// The boss's own trick, once its timer runs out.
+function bossAct(round, random) {
+  const b = round.boss;
+  const head = round.snake[0];
+  if (b.id === "golem") {
+    dropRocks(round, 3, random);
+    round.events.push({ type: "bossAct", id: b.id, x: b.x + 1, y: b.y + 1 });
+  } else if (b.id === "queen") {
+    addComet(round, random);
+    round.events.push({ type: "bossAct", id: b.id, x: b.x + 1, y: b.y + 1 });
+  } else if (b.id === "toad" && !b.leap) {
+    // It aims where the head is heading.
+    const ax = head.x + round.dir.x * 3;
+    const ay = head.y + round.dir.y * 3;
+    const clamp = (v) => Math.max(0, Math.min(round.size - b.size, v - 1));
+    b.leap = { x: clamp(ax), y: clamp(ay), warn: TOAD_WARN_MS };
+    round.events.push({ type: "bossAct", id: b.id, x: b.x + 1, y: b.y + 1 });
+  }
+}
+
+// A boss's time passing: its hurt flash, its walk, its trick and the toad's
+// landing. "crash" when it ends the round.
+function ageBoss(round, ms, random) {
+  const b = round.boss;
+  b.hurt = Math.max(0, b.hurt - ms);
+  if (b.moveMs) {
+    b.walk = (b.walk || 0) + ms;
+    while (b.walk >= b.moveMs && round.boss) {
+      b.walk -= b.moveMs;
+      if (moveBoss(round, random) === "crash") return "crash";
+    }
+  }
+  if (b.leap) {
+    b.leap.warn -= ms;
+    if (b.leap.warn <= 0) {
+      const { x, y } = b.leap;
+      b.leap = null;
+      b.actMs = BOSSES_BY_ID[b.id].actMs;
+      b.x = x;
+      b.y = y;
+      round.events.push({ type: "land", x: x + 1, y: y + 1 });
+      round.rocks = round.rocks.filter((r) => !onBoss(b, r));
+      if (onBoss(b, round.snake[0]) && !(round.grace > 0)) return crash(round, "boss", random);
+    }
+    return null;
+  }
+  b.actMs -= ms;
+  if (b.actMs <= 0) {
+    b.actMs = BOSSES_BY_ID[b.id].actMs + random() * 1200;
+    bossAct(round, random);
+  }
+  return null;
 }
 
 function eat(round, random) {
+  if (round.boss) return hitBoss(round, random);
   const at = round.snake[0];
   const boss = Boolean(round.food && round.food.boss);
   round.combo = round.comboMs > 0 ? Math.min(MAX_COMBO, round.combo + 1) : 1;
@@ -533,6 +708,17 @@ function eat(round, random) {
   if (round.food && round.food.boss) round.events.push({ type: "boss", x: round.food.x + 0.5, y: round.food.y + 0.5 });
   if (round.level >= 2 && random() < 0.35) dropRocks(round, 1, random);
   while (round.level < level) levelUp(round, random);
+}
+
+// A bonus life at each LIFE_MARK score, up to MAX_LIVES: past the cap the
+// mark still moves on, so a life is never saved up for later.
+export function awardLives(round) {
+  while (round.score >= lifeMark(round.lifeAt)) {
+    round.lifeAt += 1;
+    if (round.lives >= MAX_LIVES) continue;
+    round.lives += 1;
+    round.events.push({ type: "bonusLife", lives: round.lives, x: round.snake[0].x, y: round.snake[0].y });
+  }
 }
 
 // Magnet: food and coins in reach slide a cell toward the head each step.
@@ -557,14 +743,60 @@ function pull(round) {
   round.coins.forEach(slide);
 }
 
-function crash(round, by) {
+// A crash costs a life: with one to spare the snake is put back mid-board
+// ("hit"), else the round is over ("crash"). Never takes a life while
+// round.infinite is set.
+function crash(round, by, random = Math.random) {
+  const at = round.snake[0];
+  if (round.infinite || round.lives > 1) {
+    if (!round.infinite) round.lives -= 1;
+    round.events.push({ type: "life", by, x: at.x, y: at.y, lives: round.lives });
+    respawn(round, random);
+    return "hit";
+  }
+  round.lives = 0;
   round.crashed = by;
-  round.events.push({ type: "crash", by, x: round.snake[0].x, y: round.snake[0].y });
+  round.events.push({ type: "crash", by, x: at.x, y: at.y });
   return "crash";
 }
 
-// A shield takes the hit in place of the snake.
+// Puts the snake back mid-board, three cells heading right, with its length
+// and everything else kept, GRACE_MS of free passage, and the middle of the
+// board cleared of rocks, comets, portals, a boss and food.
+function respawn(round, random) {
+  const mid = Math.floor(round.size / 2);
+  const clear = (c) => Math.abs(c.x - mid) <= 5 && Math.abs(c.y - mid) <= 3;
+  round.snake = [{ x: mid, y: mid }, { x: mid - 1, y: mid }, { x: mid - 2, y: mid }];
+  round.prev = null;
+  round.dir = DIRS.right;
+  round.queue = [];
+  round.slide = 0;
+  round.grow = 0;
+  round.grace = GRACE_MS;
+  round.rocks = round.rocks.filter((r) => !clear(r));
+  round.comets = round.comets.filter((c) => !clear(c));
+  round.items = round.items.filter((i) => !clear(i));
+  if (round.runner && clear(round.runner)) round.runner = null;
+  if (round.portals && round.portals.some(clear)) openPortals(round, random);
+  const b = round.boss;
+  if (b) {
+    if (bossCells(b).some(clear)) b.x = b.x < mid ? 1 : round.size - b.size - 1;
+    b.leap = null;
+    b.tx = null;
+  }
+  if (round.food && foodCells(round.food).some(clear)) {
+    const bites = round.food.bites;
+    const moved = round.food.boss ? placeBoss(round, random) : placeFood(round, random);
+    if (moved && round.food.boss && moved.boss) moved.bites = bites;
+    if (moved && round.food.orb) moved.orb = true;
+    round.food = moved;
+  }
+}
+
+// The free passage after a lost life: a hit is taken like a shield's, but
+// nothing is used up.
 function shielded(round, at) {
+  if (round.grace > 0) return true;
   if (!(round.shield > 0)) return false;
   round.shield -= 1;
   round.events.push({ type: "shield", x: at.x, y: at.y });
@@ -575,6 +807,12 @@ function shielded(round, at) {
 // way pushed to round.events. A crash leaves the snake where it was, so the
 // last frame shows what it hit.
 export function step(round, random = Math.random) {
+  const what = stepOnce(round, random);
+  awardLives(round);
+  return what;
+}
+
+function stepOnce(round, random) {
   if (round.queue.length) {
     // On ice a turn slides on for ICE_STEPS steps before it takes.
     if (icy(round) && round.slide < ICE_STEPS) round.slide += 1;
@@ -594,7 +832,7 @@ export function step(round, random = Math.random) {
   }
   if (next.x < 0 || next.y < 0 || next.x >= round.size || next.y >= round.size) {
     // Ghost and a shield both wrap the snake to the far side.
-    if (!active(round, "ghost") && !shielded(round, head)) return crash(round, "wall");
+    if (!active(round, "ghost") && !shielded(round, head)) return crash(round, "wall", random);
     next = { x: (next.x + round.size) % round.size, y: (next.y + round.size) % round.size };
   }
   const food = round.food;
@@ -604,18 +842,19 @@ export function step(round, random = Math.random) {
   const body = eating || round.grow > 0 ? round.snake : round.snake.slice(0, -1);
   const rock = round.rocks.findIndex((r) => !(r.warn > 0) && same(r, next));
   if (rock >= 0) {
-    if (!shielded(round, next)) return crash(round, "rock");
+    if (!shielded(round, next)) return crash(round, "rock", random);
     round.rocks.splice(rock, 1);
     const points = 3 * multiplier(round);
     round.score += points;
     round.events.push({ type: "smash", x: next.x, y: next.y, points });
   }
+  if (onBoss(round.boss, next)) return crash(round, "boss", random);
   const comet = round.comets.findIndex((c) => !(c.warn > 0) && same(c, next));
   if (comet >= 0) {
-    if (!shielded(round, next)) return crash(round, "comet");
+    if (!shielded(round, next)) return crash(round, "comet", random);
     round.comets.splice(comet, 1);
   }
-  if (body.some((c) => same(c, next)) && !shielded(round, next)) return crash(round, "self");
+  if (body.some((c) => same(c, next)) && !shielded(round, next)) return crash(round, "self", random);
   round.prev = round.snake;
   round.snake = [next, ...body];
   if (!eating && round.grow > 0) round.grow -= 1;
@@ -660,7 +899,7 @@ export function step(round, random = Math.random) {
 
 // A comet moves one cell on the diagonal, bouncing off the walls and rocks.
 // Into the head it is a crash; into the body it cuts the tail off there.
-function moveComet(round, c) {
+function moveComet(round, c, random) {
   let nx = c.x + c.dx;
   let ny = c.y + c.dy;
   if (nx < 0 || nx >= round.size) {
@@ -683,7 +922,7 @@ function moveComet(round, c) {
   c.y = ny;
   const hit = round.snake.findIndex((s) => same(s, c));
   if (hit === 0) {
-    if (!shielded(round, c)) return crash(round, "comet");
+    if (!shielded(round, c)) return crash(round, "comet", random);
     round.comets.splice(round.comets.indexOf(c), 1);
     return null;
   }
@@ -705,6 +944,14 @@ function moveComet(round, c) {
 // CHAOS_LEVEL, a surprise now and then happens on its own. "crash" when a
 // comet hits the head, else null.
 export function age(round, ms, random = Math.random) {
+  const what = ageOnce(round, ms, random);
+  awardLives(round);
+  return what;
+}
+
+function ageOnce(round, ms, random) {
+  if (round.grace > 0) round.grace = Math.max(0, round.grace - ms);
+  if (round.boss && ageBoss(round, ms, random) === "crash") return "crash";
   for (const kind of Object.keys(round.effects)) {
     round.effects[kind] -= ms;
     if (round.effects[kind] <= 0) {
@@ -765,7 +1012,7 @@ export function age(round, ms, random = Math.random) {
     c.ms += ms;
     while (c.ms >= COMET_MS && round.comets.includes(c)) {
       c.ms -= COMET_MS;
-      if (moveComet(round, c) === "crash") return "crash";
+      if (moveComet(round, c, random) === "crash") return "crash";
     }
   }
   return null;
@@ -1409,6 +1656,111 @@ function drawDark(ctx, round, cell, head, clock) {
   }
 }
 
+// A boss: its own body and face over a pair of eyes that follow the head. A
+// hit flashes it white, and the toad's landing is shown as a ring that fills.
+function drawBossMonster(ctx, round, cell, clock) {
+  const b = round.boss;
+  if (!b) return;
+  const head = round.snake[0];
+  if (b.leap) {
+    const p = 1 - b.leap.warn / TOAD_WARN_MS;
+    const lx = b.leap.x * cell;
+    const ly = b.leap.y * cell;
+    const lw = b.size * cell;
+    ctx.fillStyle = `rgba(226, 85, 63, ${0.12 + 0.3 * p})`;
+    ctx.fillRect(lx, ly, lw, lw);
+    ctx.strokeStyle = "#e2553f";
+    ctx.lineWidth = Math.max(2, cell * 0.12);
+    ctx.setLineDash([cell * 0.3, cell * 0.2]);
+    ctx.strokeRect(lx + 1, ly + 1, lw - 2, lw - 2);
+    ctx.setLineDash([]);
+  }
+  const hurt = b.hurt > 0 && Math.floor(b.hurt / 70) % 2 === 0;
+  const w = b.size * cell;
+  const jig = b.hurt > 0 ? (Math.random() - 0.5) * cell * 0.12 : 0;
+  const bob = Math.sin(clock / 260) * cell * 0.06;
+  const x = b.x * cell + jig;
+  const y = b.y * cell + bob;
+  const body = hurt ? "#ffffff" : b.color;
+  const dark = "rgba(0, 0, 0, 0.45)";
+  ctx.lineWidth = Math.max(2, cell * 0.1);
+  ctx.strokeStyle = dark;
+  ctx.fillStyle = body;
+  if (b.id === "golem") {
+    roundRect(ctx, x + cell * 0.1, y + cell * 0.1, w - cell * 0.2, w - cell * 0.2, cell * 0.45);
+    ctx.fill();
+    ctx.stroke();
+    ctx.lineWidth = Math.max(1, cell * 0.07);
+    ctx.beginPath();
+    ctx.moveTo(x + w * 0.62, y + w * 0.12);
+    ctx.lineTo(x + w * 0.54, y + w * 0.3);
+    ctx.lineTo(x + w * 0.66, y + w * 0.4);
+    ctx.moveTo(x + w * 0.2, y + w * 0.78);
+    ctx.lineTo(x + w * 0.34, y + w * 0.66);
+    ctx.lineTo(x + w * 0.3, y + w * 0.56);
+    ctx.stroke();
+  } else if (b.id === "queen") {
+    ctx.globalAlpha = 0.55;
+    for (const side of [-1, 1]) {
+      ctx.beginPath();
+      if (typeof ctx.ellipse === "function") ctx.ellipse(x + w / 2 + side * w * 0.5, y + w * 0.45 + Math.sin(clock / 120) * cell * 0.1, w * 0.22, w * 0.38, side * 0.4, 0, Math.PI * 2);
+      else ctx.arc(x + w / 2 + side * w * 0.5, y + w * 0.45, w * 0.25, 0, Math.PI * 2);
+      ctx.fillStyle = "#d9c2ff";
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = body;
+    ctx.beginPath();
+    ctx.arc(x + w / 2, y + w / 2 + cell * 0.1, w * 0.46, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    const cw = cell * 0.55;
+    const cy = y + w * 0.1;
+    ctx.fillStyle = GOLD;
+    ctx.beginPath();
+    ctx.moveTo(x + w / 2 - cw, cy);
+    ctx.lineTo(x + w / 2 - cw, cy - cw * 0.8);
+    ctx.lineTo(x + w / 2 - cw * 0.5, cy - cw * 0.35);
+    ctx.lineTo(x + w / 2, cy - cw);
+    ctx.lineTo(x + w / 2 + cw * 0.5, cy - cw * 0.35);
+    ctx.lineTo(x + w / 2 + cw, cy - cw * 0.8);
+    ctx.lineTo(x + w / 2 + cw, cy);
+    ctx.closePath();
+    ctx.fill();
+  } else {
+    ctx.beginPath();
+    if (typeof ctx.ellipse === "function") ctx.ellipse(x + w / 2, y + w * 0.58, w * 0.48, w * 0.4, 0, 0, Math.PI * 2);
+    else ctx.arc(x + w / 2, y + w * 0.58, w * 0.44, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    for (const [px, py] of [[0.25, 0.7], [0.72, 0.74], [0.5, 0.85]]) dot(ctx, x + w * px, y + w * py, cell * 0.14, "rgba(0, 0, 0, 0.2)");
+  }
+  // Eyes that follow the head.
+  const eyeY = b.id === "toad" ? y + w * 0.3 : y + w * 0.4;
+  const ang = Math.atan2(head.y - (b.y + b.size / 2), head.x - (b.x + b.size / 2));
+  for (const side of [-1, 1]) {
+    const cx = x + w / 2 + side * w * 0.2;
+    dot(ctx, cx, eyeY, cell * 0.3, "#ffffff");
+    dot(ctx, cx + Math.cos(ang) * cell * 0.12, eyeY + Math.sin(ang) * cell * 0.12, cell * 0.14, "#1d1a17");
+  }
+  // A scowl for the golem and the queen, a wide mouth for the toad.
+  ctx.strokeStyle = "#1d1a17";
+  ctx.lineWidth = Math.max(2, cell * 0.1);
+  ctx.beginPath();
+  if (b.id === "toad") {
+    ctx.moveTo(x + w * 0.22, y + w * 0.62);
+    ctx.quadraticCurveTo(x + w / 2, y + w * 0.82, x + w * 0.78, y + w * 0.62);
+  } else {
+    ctx.moveTo(x + w * 0.2, eyeY - cell * 0.4);
+    ctx.lineTo(x + w * 0.42, eyeY - cell * 0.22);
+    ctx.moveTo(x + w * 0.8, eyeY - cell * 0.4);
+    ctx.lineTo(x + w * 0.58, eyeY - cell * 0.22);
+    ctx.moveTo(x + w * 0.35, y + w * 0.72);
+    ctx.lineTo(x + w * 0.65, y + w * 0.72);
+  }
+  ctx.stroke();
+}
+
 function pill(ctx, x, y, h, text, color, fill = 1) {
   ctx.font = `800 ${Math.round(h * 0.62)}px system-ui, -apple-system, "Segoe UI", sans-serif`;
   const w = h * 0.7 + text.length * h * 0.42;
@@ -1424,6 +1776,7 @@ function drawHud(ctx, round, cell) {
   let x = cell * 0.25;
   const y = cell * 0.2;
   x += pill(ctx, x, y, h, `LV ${round.level}`, levelColor(round.level)) + 6;
+  x += pill(ctx, x, y, h, livesText(round.infinite ? Infinity : round.lives), LIVES) + 6;
   if (round.combo > 1) x += pill(ctx, x, y, h, `x${round.combo} COMBO`, GOLD, round.comboMs / COMBO_MS) + 6;
   if (round.shield > 0) x += pill(ctx, x, y, h, round.shield > 1 ? "SHIELD x2" : "SHIELD", POWERS.shield.color) + 6;
   if (icy(round)) x += pill(ctx, x, y, h, "ICE", THEMES[ICE_LEVEL].tint) + 6;
@@ -1431,6 +1784,22 @@ function drawHud(ctx, round, cell) {
     const spec = POWERS[kind] || SURPRISES[kind];
     if (!spec || !EFFECT_LABELS[kind]) continue;
     x += pill(ctx, x, y, h, EFFECT_LABELS[kind], spec.color, left / spec.ms) + 6;
+  }
+  // The boss's name and a block for each hit point, on a row of their own.
+  const b = round.boss;
+  if (b) {
+    const y2 = y + h + 4;
+    let bx = cell * 0.25;
+    bx += pill(ctx, bx, y2, h, b.name.toUpperCase(), b.color) + 6;
+    const bw = h * 0.9;
+    for (let i = 0; i < b.max; i++) {
+      ctx.fillStyle = i < b.hp ? b.color : "rgba(0, 0, 0, 0.5)";
+      ctx.strokeStyle = "#1d1a17";
+      ctx.lineWidth = 1;
+      roundRect(ctx, bx + i * (bw + 3), y2, bw, h, h * 0.25);
+      ctx.fill();
+      ctx.stroke();
+    }
   }
 }
 
@@ -1737,11 +2106,68 @@ function create({ canvas, tone = () => {}, hum = () => {}, music = () => {}, onS
         tone("hit", 0.8);
       } else if (e.by === "rock") tone("smash", 1);
       else if (e.by === "comet") tone("blast", 1);
+      else if (e.by === "boss") tone("boom", 1);
       else tone("squish", 1);
       burst(at, colors.snake, 40, 10);
       burst(at, colors.head, 16, 6);
       shake(450, 0.35);
       flash("#e2553f", 320);
+    } else if (e.type === "life") {
+      // A crash that was not the last: the same noise as one, then a heart lost.
+      if (e.by === "wall") tone("thud", 1);
+      else if (e.by === "rock") tone("smash", 1);
+      else if (e.by === "comet") tone("blast", 1);
+      else if (e.by === "boss") tone("boom", 1);
+      else tone("squish", 1);
+      tone("hit", 0.8);
+      burst(at, colors.snake, 40, 10);
+      burst(at, colors.head, 16, 6);
+      shake(450, 0.35);
+      flash("#e2553f", 320);
+      banner(round.infinite ? "Ouch!" : "Life lost", round.infinite ? "Endless lives" : e.lives === 1 ? "One life left" : `${e.lives} lives left`, LIVES, 1500);
+    } else if (e.type === "bonusLife") {
+      tone("extraLife", 0.9);
+      sfx.later.push({ ms: 260, play: () => tone("sparkle", 0.6) });
+      burst(at, LIVES, 30, 8);
+      float(at, "+1 LIFE", LIVES);
+      banner("Extra life!", `${e.lives} lives`, LIVES, 1500);
+    } else if (e.type === "fight") {
+      tone("mystery");
+      tone("bossIntro", 0.9);
+      sfx.later.push({ ms: 400, play: () => tone("riser", 0.6) });
+      shake(500, 0.3);
+      flash(e.color, 500);
+      burst(at, e.color, 40, 9);
+      banner(e.name, e.sub, e.color, 2800);
+    } else if (e.type === "bossHit") {
+      tone("snakeBite", 0.9, scaleStep(e.max - e.hp));
+      tone("boom", 0.8);
+      burst(at, round.boss ? round.boss.color : GOLD, 24, 8);
+      float(at, e.hp > 0 ? `+${e.points}  ${e.hp} left` : `+${e.points}`, GOLD);
+      shake(220, 0.18);
+    } else if (e.type === "bossDown") {
+      tone("explode", 1);
+      tone("fanfare", 0.9);
+      tone("snakeBossDown", 0.9);
+      sfx.later.push({ ms: 500, play: () => tone("cheer", 0.6) });
+      burst(at, e.color, 80, 12);
+      burst(at, GOLD, 40, 10);
+      shake(700, 0.4);
+      flash(GOLD, 600);
+      float(at, `+${e.points}`, GOLD);
+      banner(`${e.name} beaten!`, e.lives >= MAX_LIVES ? "Bonus points" : "Bonus life", GOLD, 2400);
+    } else if (e.type === "bossAct") {
+      if (e.id === "golem") {
+        tone("rumbleLong", 0.8);
+        shake(260, 0.2);
+      } else if (e.id === "queen") tone("snakeCometWarn", 0.7);
+      else tone("warn", 0.8);
+      burst(at, round.boss ? round.boss.color : GOLD, 14, 6);
+    } else if (e.type === "land") {
+      tone("boom", 1);
+      tone("rumbleLong", 0.6);
+      burst(at, "#3fae5a", 40, 10);
+      shake(380, 0.3);
     }
   };
 
@@ -1919,8 +2345,20 @@ function create({ canvas, tone = () => {}, hum = () => {}, music = () => {}, onS
     if (fx.shake > 0) ctx.translate((Math.random() - 0.5) * 2 * fx.shakeMag * cell, (Math.random() - 0.5) * 2 * fx.shakeMag * cell);
     drawBoard(ctx, round, cell, colors, clock);
     drawThings(ctx, round, cell, colors, clock);
+    if (round.boss && round.food && round.food.orb) {
+      const r = cell * (0.62 + 0.08 * Math.sin(clock / 140));
+      ctx.strokeStyle = round.boss.color;
+      ctx.lineWidth = Math.max(2, cell * 0.1);
+      ctx.beginPath();
+      ctx.arc((round.food.x + 0.5) * cell, (round.food.y + 0.5) * cell, r, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    drawBossMonster(ctx, round, cell, clock);
     const t = state === "running" ? Math.min(1, elapsed / pace(round)) : 1;
+    // Free passage after a lost life: the snake flickers.
+    if (round.grace > 0 && Math.floor(clock / 110) % 2 === 0) ctx.globalAlpha = 0.4;
     const head = drawSnake(ctx, round, cell, colors, clock, t, state === "over" && Boolean(round.crashed));
+    ctx.globalAlpha = 1;
     if (active(round, "lightsOut")) drawDark(ctx, round, cell, head, clock);
     for (const p of fx.parts) {
       ctx.globalAlpha = Math.max(0, p.life / p.max);
@@ -1949,7 +2387,7 @@ function create({ canvas, tone = () => {}, hum = () => {}, music = () => {}, onS
 
   const start = () => {
     colors = null;
-    round = newRound();
+    round = newRound(GRID, Math.random, START_LIVES);
     deck = dealMusic(Math.random, opener);
     opener = deck[0];
     elapsed = 0;
@@ -1980,6 +2418,14 @@ function create({ canvas, tone = () => {}, hum = () => {}, music = () => {}, onS
   return {
     get score() {
       return round.score;
+    },
+    // For the tests only: the window never reads it.
+    get round() {
+      return round;
+    },
+    // Endless lives for this round (the Activities window's code), or not.
+    cheat(on) {
+      round.infinite = Boolean(on);
     },
     get state() {
       return state;

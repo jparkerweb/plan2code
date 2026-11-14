@@ -155,6 +155,17 @@ test("pointer: __review names building-review.md", async () => {
   }
 });
 
+test("pointer: __learning names console-launches.md", async () => {
+  const s = fresh({ workflow: "dashboard", items: [], menu: { note: "Nothing yet." } });
+  try {
+    const { out } = await send(s, [{ i: "__learning", type: "learning", do: "switch-on" }]);
+    assert.deepEqual(out.read, [file("console-launches.md")]);
+    assert.deepEqual(out.session, [{ i: "__learning", do: "switch-on" }], "the action reaches the agent whole");
+  } finally {
+    done(s);
+  }
+});
+
 test("pointer: a review card answered with a verdict names building-review.md", async () => {
   const s = fresh({ workflow: "implement" });
   try {
@@ -252,6 +263,7 @@ test("pointersForSend: the whole table", () => {
   assert.deepEqual(pointersForSend(act({ i: "__stop" }), empty, noFlags), ["stop"]);
   assert.deepEqual(pointersForSend(act({ i: "__stop", handoff: true }), empty, noFlags), ["stop"]);
   assert.deepEqual(pointersForSend(act({ i: "__review" }), empty, noFlags), ["review"]);
+  assert.deepEqual(pointersForSend(act({ i: "__learning", type: "learning", do: "remove" }), empty, noFlags), ["learning"]);
   const reviewCard = { items: [{ id: "signoff", kind: "review" }] };
   assert.deepEqual(pointersForSend(act({ i: "signoff", type: "answer", verdict: "review" }), reviewCard, noFlags), ["review"]);
   assert.deepEqual(pointersForSend(act({ i: "signoff", type: "answer", answer: { verdict: "approve" } }), reviewCard, noFlags), ["review"]);

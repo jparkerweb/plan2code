@@ -43,6 +43,9 @@ import {
   deleteHandoffReply,
   deleteAction,
   deleteReply,
+  learningAction,
+  learningReply,
+  learningBannerText,
   noteSwitchShows,
   noteTabEmpty,
   defaultNoteTicks,
@@ -198,6 +201,10 @@ export function renderDashboard(main) {
     notice.append(open, dismiss);
     wrap.appendChild(notice);
   }
+  // Lessons waiting for review: last of the banners, so it sits nearest the
+  // title (the others are more urgent). Hidden while paused or off.
+  const learnBanner = learningBanner(scan());
+  if (learnBanner) wrap.appendChild(learnBanner);
   wrap.appendChild(el("p", "card-kicker", "Plan2Code"));
   wrap.appendChild(el("h2", "dash-title", "What are we doing today?"));
   // The agent's note reads the spec the picker opened on (the same "initial"
@@ -243,6 +250,10 @@ export function renderDashboard(main) {
     return;
   }
   wrap.appendChild(hideUnavailableToggle());
+  // Learning while it needs the person (not set up, off, paused): under the
+  // picker. Never while a handoff preview shows (returned above).
+  const learnTop = hooks.renderLearningRow(scan(), "top");
+  if (learnTop) wrap.appendChild(learnTop);
   // Only when this tab's own pick moved: another tab changing the scope
   // sends a frame here too, and re-asserting this tab's pick on every render
   // had two dashboards trade the workspace back and forth without end.
@@ -276,6 +287,9 @@ export function renderDashboard(main) {
       el("p", "dash-empty", "Nothing fits this pick right now. Turn off the toggle above to see every workflow.")
     );
   }
+  // Learning while on: after the last card group, before the approval tip.
+  const learnBottom = hooks.renderLearningRow(scan(), "bottom");
+  if (learnBottom) wrap.appendChild(learnBottom);
   wrap.appendChild(approvalTip());
   // Mid wake-up: the groups wait hidden until the glide lets them rise in,
   // and the note shows only as far as it has been typed. Once the entrance
@@ -1149,9 +1163,12 @@ export async function launchSkill(entry) {
   };
   // The picker's spec goes to the skill being launched, not to the card:
   // cards that take no spec (utilities, setup) launch untargeted even while
-  // a spec is selected, save Quick Task on a diagnosed bug or a folder of
-  // saved prototypes (launchTarget).
+  // a spec is selected, save Quick Task on a diagnosed bug, an upgrade brief
+  // or a folder of saved prototypes (launchTarget).
   if (target) action.spec = target.dir;
+  // Launched from a dashboard showing lessons waiting: the skill's Start reads
+  // with --from-banner (shared-references/lessons.md).
+  if (learningBannerText(scan() && scan().learning)) action.fromBanner = true;
   // A Notebook tab picked in the pane rides the hop in this page only, never
   // on the action: the launched skill's `fill: "note"` box is filled from it
   // (core.js), and the agent reads it only when that box is sent.
@@ -1253,14 +1270,15 @@ function openHandoffDelete(h) {
 function openDeleteConfirm(spec) {
   if (!isDeletableSpecDir(spec.dir) || page.gone || page.pendingResult || page.local.launching || page.local.deleting) return;
   deleteTarget = spec;
-  // A finished spec (a fixed bug): one confirm, and a warning that says so.
+  // A finished spec (a fixed bug, a done upgrade): one confirm, and a warning that says so.
   const fixed = Boolean(stateFor(spec.state)?.finished);
+  const done = spec.state === "upgraded" ? "The upgrade is done, so this only clears the brief. " : "The bug is fixed, so this only clears the write-up. ";
   $("delete-title").textContent = "Delete this spec?";
   const warn = $("delete-warn");
   if (!deleteWarnDefault) deleteWarnDefault = [...warn.childNodes].map((n) => n.cloneNode(true));
   warn.replaceChildren(
     ...(fixed
-      ? ["The bug is fixed, so this only clears the write-up. ", el("code", "", "specs/"), " is not tracked by git, so it cannot be brought back."]
+      ? [done, el("code", "", "specs/"), " is not tracked by git, so it cannot be brought back."]
       : deleteWarnDefault.map((n) => n.cloneNode(true)))
   );
   warn.hidden = false;
@@ -1368,6 +1386,52 @@ async function sendDelete(spec) {
     );
   } finally {
     deleteTarget = null;
+    redraw();
+  }
+}
+
+// The Learning banner above the title, or null: only while lessons wait and
+// Learning is on or not set up. Review sends the __learning action.
+function learningBanner(sc) {
+  const text = learningBannerText(sc && sc.learning);
+  if (!text) return null;
+  const banner = el("div", "dash-nudge learn-banner");
+  banner.setAttribute("role", "status");
+  banner.appendChild(el("span", "dash-nudge-text", text));
+  const review = el("button", "btn small primary", "Review");
+  review.type = "button";
+  const why = hooks.learningBlocked();
+  review.disabled = Boolean(why);
+  if (why) review.title = why;
+  review.addEventListener("click", () => sendLearning("review"));
+  banner.appendChild(review);
+  return banner;
+}
+
+// A Learning control that changes the project: a __learning action to the
+// dashboard agent, posted the way sendDelete() posts. No hop: the agent runs
+// lessons.mjs, rescans and posts the menu again.
+export async function sendLearning(what) {
+  if (hooks.learningBlocked()) return;
+  try {
+    const res = await fetch("/submit", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ actions: [learningAction(what)], reply: learningReply(what) }),
+    });
+    if (res.status === 409) throw Object.assign(new Error("pending"), { pending: true });
+    if (!res.ok) throw new Error(String(res.status));
+    page.pendingResult = true;
+    saveNow();
+  } catch (err) {
+    if (err && err.pending) page.pendingResult = true;
+    hooks.banner(
+      err && err.pending
+        ? "Your last pick is still being picked up, so that could not go yet. Try again in a moment."
+        : "That did not go through. Nothing changed; try again.",
+      "warn"
+    );
+  } finally {
     redraw();
   }
 }

@@ -38,6 +38,8 @@ On `show`, run the workflow's **Show me it working** paragraph. Save screenshots
 
 ## After approval: the finish
 
+Lessons first: with lessons to offer (`references/lessons.md`, End), post its `card` as one `lessons` item with `--wait` before the finish.
+
 Do what the workflow does on approval and print it in the terminal as usual, then:
 
 ```jsonc

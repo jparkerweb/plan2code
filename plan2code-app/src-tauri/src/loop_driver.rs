@@ -268,6 +268,10 @@ pub struct Outcome {
     pub conflicts: Vec<String>,
     pub decisions: Vec<String>,
     pub subject: String,
+    /// What the failing phase's agent suggests the person do next (a failed
+    /// report only): shown on the stop screen and at the top of its report.
+    #[serde(rename = "nextStep")]
+    pub next_step: Option<String>,
 }
 
 // -------------------------------------------------------------- the record
@@ -717,19 +721,44 @@ fn leftover(review: &ReviewPart, level: FixLevel) -> u32 {
 
 /// Why a phase says it failed, for the stop line and the notification: what the
 /// agent wrote, which a person can read, else the contract's reason in words.
+///
+/// The reason leads and the agent's summary follows it: a failed report's
+/// summary often reads like success ("12 of 12 tasks, 77 tests pass"), so on
+/// its own it hides why the phase stopped.
 fn failed_words(outcome: &Outcome) -> String {
-    let summary = outcome.summary.trim();
-    if !summary.is_empty() {
-        return summary.to_string();
-    }
-    match outcome.reason.as_deref() {
+    let mut words = match outcome.reason.as_deref() {
         Some("tests") => "its tests failed",
         Some("findings") => "the review left findings it had to fix",
         Some("blocked") => "a task is blocked",
         Some("conflict") => "the spec conflicts with the code",
         _ => "it reported a failure",
     }
-    .to_string()
+    .to_string();
+    if outcome.reason.as_deref() == Some("findings") {
+        if let Some(review) = &outcome.review {
+            let mut left = Vec::new();
+            for (level, word) in [
+                (FixLevel::Critical, "Critical"),
+                (FixLevel::Warning, "Warning"),
+            ] {
+                let n = leftover(review, level);
+                if n > 0 {
+                    left.push(format!("{n} {word}"));
+                }
+            }
+            if !left.is_empty() {
+                words.push_str(&format!(" ({})", left.join(" / ")));
+            }
+        }
+    }
+    let summary = one_line(&outcome.summary);
+    if summary.is_empty() {
+        words
+    } else if words.starts_with("it reported") {
+        format!("{words}: {summary}")
+    } else {
+        format!("{words}. The agent said: {summary}")
+    }
 }
 
 /// The report's note about Suggestions the phase left unfixed, if any. They
@@ -2984,7 +3013,20 @@ fn report_section(outcome: &Outcome, entry: Option<&Value>) -> String {
 /// The markdown behind "Why the loop stopped": what failed and the proof, by
 /// cause. Kept under 100 KB (output is trimmed to its tail).
 pub fn evidence_markdown(cause: &StopCause, line: &str, rec: &RunningRecord) -> String {
-    let mut md = format!("## What happened\n\n{line}\n");
+    let at = rec.current.min(rec.phases.len().saturating_sub(1));
+    let (phase, built) = rec
+        .phases
+        .get(at)
+        .map_or((1, false), |p| (p.n, p.status == PhaseStatus::Done));
+    // The cause and what to do about it come before everything else, in boxes
+    // the page colors (`> [!CAUTION]` red, `> [!TIP]` blue).
+    let mut md = format!(
+        "> [!CAUTION]\n> **Why it stopped:** {}\n>\n> {}\n\n> [!TIP]\n> **What to do next:** {}\n\n",
+        stop_reason(cause, phase, built),
+        one_line(line),
+        stop_advice(cause, rec.last_outcome.as_ref())
+    );
+    md.push_str(&format!("## What happened\n\n{line}\n"));
     let phase_report = matches!(
         cause,
         StopCause::Refused(_)
@@ -3118,6 +3160,7 @@ fn post_end(ctx: &Ctx, rec: &RunningRecord, patch: &Value) {
     }
     if let Some(end) = plain.get_mut("loopEnd").and_then(Value::as_object_mut) {
         end.remove("evidence");
+        end.remove("advice");
     }
     let _ = loop_tools::console_post(&ctx.console_dir, &sid, &plain);
 }
@@ -3216,6 +3259,11 @@ fn stop_loop(ctx: &Ctx, cause: StopCause, line: String, can: &[&str]) {
             "uncommitted": uncommitted,
             "can": stop_can(can),
             "reason": stop_reason(&cause, rec.phases[at].n, built),
+            // The page refuses a longer line, and a refused end is never drawn.
+            "advice": stop_advice(&cause, rec.last_outcome.as_ref())
+                .chars()
+                .take(300)
+                .collect::<String>(),
             "recommend": stop_recommend(&cause, can),
             "phase": continue_phase(
                 &rec.phases.iter().map(|p| p.n).collect::<Vec<_>>(),
@@ -3271,6 +3319,44 @@ pub fn stop_reason(cause: &StopCause, phase: u32, built: bool) -> String {
             format!("Phase {phase} is built, but some files look unsafe to commit.")
         }
         StopCause::Question => format!("Phase {phase} stopped to ask you something."),
+    }
+}
+
+/// What the person should do next, in one line. A phase that reported `failed`
+/// and refused to go on brings its own `nextStep` (the agent that just failed
+/// knows the most); without one, and for every other cause, plain words by cause.
+pub fn stop_advice(cause: &StopCause, outcome: Option<&Outcome>) -> String {
+    let failed = outcome.filter(|o| o.result == "failed");
+    if matches!(cause, StopCause::Refused(_)) {
+        let own = failed
+            .and_then(|o| o.next_step.as_deref())
+            .map(one_line)
+            .filter(|s| !s.is_empty());
+        if let Some(step) = own {
+            return step;
+        }
+    }
+    match cause {
+        StopCause::Refused(_) => match failed.and_then(|o| o.reason.as_deref()) {
+            Some("tests") => "Press Fix together with an agent to work through the failing tests, then press Continue building.",
+            Some("findings") => "Press Fix together with an agent to settle the findings listed below, then press Continue building.",
+            Some("blocked") => "Unblock the task named below (the spec or the setup may need a change), then press Continue building.",
+            Some("conflict") => "Settle the conflict between the spec and the code, together with an agent or by revising the plan, then press Continue building.",
+            _ => "Press Fix together with an agent: it can read the report below, sort out the problem, and then you can press Continue building.",
+        }
+        .to_string(),
+        StopCause::QuickCheck => "Fix what the quick check printed below (Fix together with an agent can do it), then press Continue building.".to_string(),
+        StopCause::Commit => "Fix what git said below, then press Continue building to try the commit again.".to_string(),
+        StopCause::MarkedNotCommitted(file) => format!(
+            "Set the phase back to in progress in {file} by hand, or press Continue building: it checks every done mark against the commit log."
+        ),
+        StopCause::UnsafeFiles(_) => "Remove the files listed below or add them to .gitignore, then press Continue building.".to_string(),
+        StopCause::Question => "Press Fix together with an agent to answer the question, or settle it in the spec, then press Continue building.".to_string(),
+        StopCause::Crash => "Press Continue building: nothing was undone. If it crashes again, press Fix together with an agent and read the terminal beside this page.".to_string(),
+        StopCause::Silence => "Press Continue building to start the phase again. If it goes quiet again, raise the silence limit in the loop setup or press Fix together with an agent.".to_string(),
+        StopCause::NoSession => "Press Continue building to try again. If the agent still never opens its page, press Fix together with an agent to see why.".to_string(),
+        StopCause::WatcherFailed(_) => "Press Continue building to carry on from the spec. Whatever was committed stays committed.".to_string(),
+        StopCause::StoppedByPerson => "Press Continue building when you are ready. Nothing was undone.".to_string(),
     }
 }
 
@@ -3906,8 +3992,8 @@ mod tests {
         o.summary = "Opus misses the 40% target".into();
         assert_eq!(
             refused(judge_outcome(&o, &status(14, 0, 0, 0), &setup())),
-            "Opus misses the 40% target",
-            "the person is told what the agent found, not a contract word"
+            "its tests failed. The agent said: Opus misses the 40% target",
+            "the reason leads, and the agent's own words follow it"
         );
         o.summary = "  ".into();
         assert_eq!(
@@ -3918,6 +4004,34 @@ mod tests {
         assert_eq!(
             refused(judge_outcome(&o, &status(14, 0, 0, 0), &setup())),
             "it reported a failure"
+        );
+    }
+
+    #[test]
+    fn a_failed_report_that_reads_like_success_still_leads_with_why_it_failed() {
+        let mut o = passed();
+        o.result = "failed".into();
+        o.reason = Some("findings".into());
+        o.summary = "12 of 12 tasks, 77 tests pass; the re-check found 1 new warning".into();
+        let review = o.review.as_mut().unwrap();
+        review.left = Left {
+            critical: 0,
+            warning: 1,
+            suggestion: 0,
+        };
+        let why = refused(judge_outcome(&o, &status(12, 0, 0, 0), &setup()));
+        assert!(
+            why.starts_with(
+                "the review left findings it had to fix (1 Warning). The agent said: 12 of 12"
+            ),
+            "{why}"
+        );
+        // A reason the contract has no words for takes the agent's summary alone.
+        o.reason = Some("other".into());
+        o.summary = "A plan change is waiting".into();
+        assert_eq!(
+            refused(judge_outcome(&o, &status(12, 0, 0, 0), &setup())),
+            "it reported a failure: A plan change is waiting"
         );
     }
 
@@ -4776,13 +4890,91 @@ second line"
             "Phase 2 stopped: 1 Warning left after the re-check",
             &rec,
         );
-        assert!(md.starts_with("## What happened"));
+        // The cause and what to do about it come before everything else.
+        assert!(md.starts_with("> [!CAUTION]\n"), "{md}");
+        let caution = md.find("> [!CAUTION]").unwrap();
+        let tip = md.find("> [!TIP]").expect("a what-to-do-next box");
+        let happened = md.find("## What happened").unwrap();
+        assert!(caution < tip && tip < happened, "{md}");
+        assert!(md.contains("> **Why it stopped:** Phase 2 stopped on a problem"));
+        assert!(md.contains("> Phase 2 stopped: 1 Warning left after the re-check"));
+        assert!(md.contains("> **What to do next:**"));
         assert!(md.contains("- Summary: Built the screen"));
         assert!(md.contains("- Tests: 2 failed"));
         assert!(md.contains("0 Critical, 1 Warning, 2 Suggestion"));
         assert!(md.contains("- Blocked tasks: 2.3, 2.4"));
         assert!(md.contains("- Assumed tasks: none"));
         assert!(md.contains("warning: Name the timer (src/x.js)"));
+    }
+
+    #[test]
+    fn the_advice_is_the_failed_phases_own_next_step_or_built_in_words_for_the_cause() {
+        let mut o = passed();
+        o.result = "failed".into();
+        o.reason = Some("tests".into());
+        o.next_step =
+            Some("  Run test-deps.mjs, fix the failing range check, then continue  ".into());
+        let refused = StopCause::Refused("its tests failed".into());
+        assert_eq!(
+            stop_advice(&refused, Some(&o)),
+            "Run test-deps.mjs, fix the failing range check, then continue"
+        );
+        // No next step from the agent: words for its reason, then for the cause.
+        o.next_step = None;
+        assert!(stop_advice(&refused, Some(&o)).contains("failing tests"));
+        o.reason = Some("findings".into());
+        assert!(stop_advice(&refused, Some(&o)).contains("findings"));
+        assert!(stop_advice(&refused, None).contains("Fix together with an agent"));
+        // A next step belongs to a failed report that refused the phase, never to a
+        // passed one that stopped later on a failed check.
+        o.result = "passed".into();
+        o.next_step = Some("Do not show this".into());
+        assert!(!stop_advice(&StopCause::QuickCheck, Some(&o)).contains("Do not show this"));
+        assert!(!stop_advice(&refused, Some(&o)).contains("Do not show this"));
+        for cause in [
+            StopCause::Crash,
+            StopCause::Silence,
+            StopCause::NoSession,
+            StopCause::StoppedByPerson,
+            StopCause::WatcherFailed("x".into()),
+            refused,
+            StopCause::QuickCheck,
+            StopCause::Commit,
+            StopCause::MarkedNotCommitted("phase-3.md".into()),
+            StopCause::UnsafeFiles(vec![".env".into()]),
+            StopCause::Question,
+        ] {
+            let advice = stop_advice(&cause, None);
+            assert!(!advice.is_empty(), "{cause:?}");
+            assert!(!advice.contains('\u{2014}'), "{advice}");
+        }
+        assert!(
+            stop_advice(&StopCause::MarkedNotCommitted("phase-3.md".into()), None)
+                .contains("phase-3.md")
+        );
+    }
+
+    #[test]
+    fn the_failed_phases_next_step_leads_the_evidence_box() {
+        let mut rec = record("specs/x", vec![phase(2)]);
+        let mut o = passed();
+        o.result = "failed".into();
+        o.reason = Some("findings".into());
+        o.summary = "Built it; the re-check found 1 new warning".into();
+        o.next_step = Some("Fix the unreadable range in deps.mjs, then continue".into());
+        rec.last_outcome = Some(o);
+        let cause = StopCause::Refused("the review left findings it had to fix".into());
+        let md = evidence_markdown(
+            &cause,
+            "Phase 2 stopped: the review left findings it had to fix",
+            &rec,
+        );
+        assert!(
+            md.contains(
+                "> **What to do next:** Fix the unreadable range in deps.mjs, then continue"
+            ),
+            "{md}"
+        );
     }
 
     #[test]

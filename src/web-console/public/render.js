@@ -192,6 +192,25 @@ export function runHint(text) {
   return COMMAND_WORDS.test(firstLine) ? "hint" : null;
 }
 
+const ALERT_MARK = /^\[!(CAUTION|TIP)\][ \t]*\n?/;
+
+/**
+ * "caution" or "tip" when a blockquote's first words are `[!CAUTION]` or
+ * `[!TIP]`, and the marker is taken out of the tokens so it is not drawn;
+ * null for an ordinary quote.
+ */
+function alertKind(tokens) {
+  const first = Array.isArray(tokens) ? tokens[0] : null;
+  if (!first || first.type !== "paragraph" || !Array.isArray(first.tokens)) return null;
+  const lead = first.tokens[0];
+  if (!lead || lead.type !== "text" || typeof lead.text !== "string") return null;
+  const found = ALERT_MARK.exec(lead.text);
+  if (!found) return null;
+  lead.text = lead.text.slice(found[0].length);
+  if (!lead.text) first.tokens.shift();
+  return found[1].toLowerCase();
+}
+
 function blockInto(parent, tokens) {
   for (const t of tokens || []) {
     switch (t.type) {
@@ -218,7 +237,9 @@ function blockInto(parent, tokens) {
         break;
       }
       case "blockquote": {
-        const q = el("blockquote", "md-quote");
+        // A quote that opens with `[!CAUTION]` or `[!TIP]` is a colored alert box.
+        const alert = alertKind(t.tokens);
+        const q = el("blockquote", alert ? `md-quote md-alert md-alert-${alert}` : "md-quote");
         blockInto(q, t.tokens);
         parent.appendChild(q);
         break;

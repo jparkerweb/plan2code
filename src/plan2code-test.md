@@ -14,6 +14,8 @@ The FIRST thing you do, before anything else in this file, before reading the co
 
 Read `./AGENTS.md` when it exists: its commands, its `## Test map` and anything it says about tests, helpers or slow suites. Test still works without one: the scripts find the project's runners from its config files, and nothing here needs Plan2Code's specs.
 
+**Lessons:** then read `references/lessons.md` and follow its Start and While working sections (`node "<S>/lessons.mjs"`), and its End section before Session End.
+
 ## Scripts
 
 `<S>` is `scripts/` beside this SKILL.md (`~/.agents/skills/plan2code-test/scripts/` globally). Run from the project root. Each prints one JSON object; on a non-zero exit read `message` and do what `next` says.
@@ -182,6 +184,8 @@ A new test that fails because the source is wrong is never "fixed" by changing t
 When the run had no map, or found runners or areas the map lacks, offer to write or update it (one table under `## Test map` in `AGENTS.md`, columns `Area`, `Paths`, `Run`, `Shared`). On a yes, write the rows to a JSON file in the session folder (or the OS temp folder) and run `test-map.mjs write --rows <file>`. Never without a yes. No `AGENTS.md` (`write` refuses with `no-agents-md`) → offer Init (`/plan2code-init`) instead.
 
 ## Session End
+
+Before this, follow `references/lessons.md` → End.
 
 Work summary: the scope, how gaps were found (matching, and coverage run or skipped), the tests added (file, cases, unit or integration), each run's outcome, any bug kept for Diagnose, any gap left for later, and any file written outside the tests (the built-in runner's command, the test map, a PLAN-DRAFT).
 

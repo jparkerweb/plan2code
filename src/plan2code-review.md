@@ -21,6 +21,7 @@ The FIRST thing you do, before anything else in this file — before the scope d
 ## Rules
 
 - Follow `./AGENTS.md` if it exists -- use all rules and conventions. If missing, warn and proceed with caution.
+- **Lessons:** then read `references/lessons.md` and follow its Start and While working sections (`node "<S>/lessons.mjs"`).
 - **Fresh eyes.** Question everything -- even work just implemented by another workflow.
 - **Read every changed file completely.** Never skip. Full context before flagging.
 - **Spec compliance.** Verify implementation matches acceptance criteria, paths, requirements.
@@ -173,6 +174,8 @@ Run every finding through the false-positive detection shortcuts before presenti
 
 ## Session End
 
+Before this, follow `references/lessons.md` → End.
+
 Render this section only when the session is over: fix options resolved (fixes applied and verified, or user declined) or the review had zero findings. Step 5 ends at fix options — stop there and wait.
 
 Work summary — tell user: scope reviewed, findings count by severity (Critical/Warning/Suggestion), fixes applied, unresolved findings.
@@ -206,5 +209,7 @@ Returning context: Review complete. Unresolved findings documented for follow-up
 | 50+ files | Prioritize by risk; batch |
 
 ## Learning Capture
+
+With Learning active, `references/lessons.md` → End replaces this section. Otherwise:
 
 At session end, if you discovered undocumented gotchas or missing AGENTS.md patterns → prompt user to update. If yes, apply directly.

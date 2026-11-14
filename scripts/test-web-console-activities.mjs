@@ -12,7 +12,7 @@ import assert from "node:assert/strict";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { ACTIVITIES, bestKey, bestKeys, memoKey, musicKey, musicLevel, orderGames, playedKey } from "../src/web-console/public/activities.js";
-import { BOSS_BITES, COMBO_MS, MAX_LEVEL, MUSIC_TRACKS, dealMusic, heat, trackFor, DISCOVERIES, FOOD_PER_LEVEL, FRUITS, GRID, ICE_STEPS, LEVELS, MAX_COMBO, MIN_CELL, MIN_STEP_MS, POWERS, STEP_MS, SURPRISES, age, applyPower, applySurprise, fruitFor, tallyBit, newRound, onFood, SPECIALS, pace, placeFood, step, stepMs, turn } from "../src/web-console/public/activities/snake.js";
+import { BOSSES, GRACE_MS, MAX_LIVES, START_LIVES, awardLives, lifeMark, onBoss, BOSS_BITES, COMBO_MS, MAX_LEVEL, MUSIC_TRACKS, dealMusic, heat, trackFor, DISCOVERIES, FOOD_PER_LEVEL, FRUITS, GRID, ICE_STEPS, LEVELS, MAX_COMBO, MIN_CELL, MIN_STEP_MS, POWERS, STEP_MS, SURPRISES, age, applyPower, applySurprise, fruitFor, tallyBit, newRound, onFood, SPECIALS, pace, placeFood, step, stepMs, turn } from "../src/web-console/public/activities/snake.js";
 import golf, * as golfRules from "../src/web-console/public/activities/golf.js";
 import { COURSE_W, COURSE_H, COURSES, FRONT_NINE, HOLE_COUNT, courseById } from "../src/web-console/public/activities/golf-holes.js";
 import { holeQuip, holeWord, knownGround, knownLiquid } from "../src/web-console/public/activities/golf-draw.js";
@@ -367,7 +367,7 @@ test("orderGames splits played from not played yet and orders each group", () =>
 
 test("musicKey builds a flat looks.json key, and a game with music has a default volume a saved one replaces", () => {
   assert.equal(musicKey("ghoul"), "activityMusicGhoul");
-  assert.deepEqual(ACTIVITIES.filter((a) => a.music !== undefined).map((a) => [a.id, a.music]), [["snake", 70], ["trails", 70], ["drive", 70], ["ghoul", 65], ["flock", 70]], "the games with music, at about the level they were picked at on the prototype pages");
+  assert.deepEqual(ACTIVITIES.filter((a) => a.music !== undefined).map((a) => [a.id, a.music]), [["snake", 70], ["trails", 70], ["drive", 70], ["bounce", 70], ["ghoul", 65], ["flock", 70]], "the games with music, at about the level they were picked at on the prototype pages");
   const ghoulEntry = ACTIVITIES.find((a) => a.id === "ghoul");
   assert.equal(musicLevel(ghoulEntry, undefined), 0.65, "nothing saved: the default");
   assert.equal(musicLevel(ghoulEntry, "loud"), 0.65, "not a number: the default");
@@ -506,6 +506,7 @@ test("Snake: a wall hit ends the round and onScore fires once", async () => {
   const g = game.create({ canvas, tone: (n) => tones.push(n), onScore: (s) => scores.push(s) });
   g.resize(GRID * MIN_CELL, GRID * MIN_CELL);
   g.start();
+  g.round.lives = 1;
   // Heading right from mid-board, the wall is at most GRID steps away, and a
   // tick of STEP_MS is at least one step whatever the snake has eaten.
   for (let i = 0; i < GRID + 2 && g.state === "running"; i++) g.tick(STEP_MS);
@@ -553,6 +554,7 @@ test("Snake: it asks for the deal's track while a round runs, and the next round
   g.tick(STEP_MS);
   assert.equal(asked.length, 0, "silent before a round");
   g.start();
+  g.round.lives = 1;
   g.tick(16);
   assert.equal(asked.length, 1, "asked once a tick");
   const [first, opening] = asked[0];
@@ -564,12 +566,14 @@ test("Snake: it asks for the deal's track while a round runs, and the next round
   g.tick(STEP_MS * 10);
   assert.equal(asked.length, before, "nothing asked for once the round is over");
   g.start();
+  g.round.lives = 1;
   g.tick(16);
   assert.notEqual(asked.at(-1)[0], first, "the next round opens on another track");
 });
 
 test("Snake: running into its own body ends the round", () => {
   const round = newRound(GRID, () => 0);
+  round.lives = 1;
   // Head at (5,5) heading right into (6,5), which is body, not the tail.
   round.snake = [{ x: 5, y: 5 }, { x: 5, y: 6 }, { x: 6, y: 6 }, { x: 6, y: 5 }, { x: 6, y: 4 }];
   round.dir = { x: 1, y: 0 };
@@ -634,6 +638,7 @@ async function snakeGame(randomValue) {
   Math.random = () => randomValue;
   try {
     g.start();
+    g.round.lives = 1;
   } finally {
     Math.random = real;
   }
@@ -678,6 +683,7 @@ test("Snake game: after eating, the snake moves on the shorter step", async () =
   Math.random = () => roll;
   try {
     g.start();
+    g.round.lives = 1;
     roll = 0;
     g.tick(stepMs(3));
     assert.equal(g.score, 1, "the first food is eaten at the starting step");
@@ -729,6 +735,7 @@ function plainRound() {
   round.snake = [{ x: 5, y: 5 }, { x: 4, y: 5 }, { x: 3, y: 5 }];
   round.dir = { x: 1, y: 0 };
   round.food = { x: 0, y: 19 };
+  round.lives = 1;
   return round;
 }
 
@@ -6349,4 +6356,176 @@ test("Stack Deploy and Sunset Drive: the banner's strip counts the slider, and a
   assert.equal(stack.underBanner(stack.H * 0.4), false, "the slider up where the camera keeps it");
   assert.equal(drive.underBanner(drive.H / 2), false, "a flat road stays below the strip");
   assert.equal(drive.underBanner(drive.H * 0.36), true, "a hill into the strip");
+});
+
+/* ------------------------------------------------- Snake's lives and bosses */
+
+test("Snake: a round starts with three lives, a crash costs one and puts the snake back mid-board with free passage, and the last ends the round", () => {
+  assert.equal(START_LIVES, 3);
+  const round = newRound(GRID, () => 0);
+  assert.equal(round.lives, 3);
+  round.snake = [{ x: 19, y: 5 }, { x: 18, y: 5 }, { x: 17, y: 5 }];
+  round.dir = { x: 1, y: 0 };
+  round.score = 7;
+  assert.equal(step(round), "hit");
+  assert.equal(round.lives, 2);
+  assert.equal(round.crashed, null);
+  assert.equal(round.score, 7, "the score is kept");
+  assert.deepEqual(round.snake[0], { x: 10, y: 10 });
+  assert.equal(round.grace, GRACE_MS);
+  assert.ok(round.events.some((e) => e.type === "life" && e.by === "wall" && e.lives === 2));
+  // Free passage: the wall wraps the snake and costs nothing, until it runs out.
+  round.snake = [{ x: 19, y: 5 }, { x: 18, y: 5 }, { x: 17, y: 5 }];
+  assert.equal(step(round), null);
+  assert.equal(round.lives, 2);
+  age(round, GRACE_MS, () => 0.99);
+  assert.equal(round.grace, 0);
+  round.snake = [{ x: 19, y: 5 }, { x: 18, y: 5 }, { x: 17, y: 5 }];
+  assert.equal(step(round), "hit");
+  assert.equal(round.lives, 1);
+  age(round, GRACE_MS, () => 0.99);
+  round.snake = [{ x: 19, y: 5 }, { x: 18, y: 5 }, { x: 17, y: 5 }];
+  assert.equal(step(round), "crash");
+  assert.equal(round.lives, 0);
+  assert.equal(round.crashed, "wall");
+});
+
+test("Snake: a lost life clears the middle of the board, and endless lives never cost one", () => {
+  const round = plainRound();
+  round.lives = 3;
+  round.rocks = [{ x: 10, y: 10, warn: 0 }, { x: 1, y: 1, warn: 0 }];
+  round.snake = [{ x: 19, y: 5 }, { x: 18, y: 5 }, { x: 17, y: 5 }];
+  step(round);
+  assert.deepEqual(round.rocks, [{ x: 1, y: 1, warn: 0 }], "only the rock in the way is cleared");
+  const endless = plainRound();
+  endless.infinite = true;
+  for (let i = 0; i < 6; i++) {
+    endless.snake = [{ x: 19, y: 5 }, { x: 18, y: 5 }, { x: 17, y: 5 }];
+    endless.grace = 0;
+    assert.equal(step(endless), "hit");
+  }
+  assert.equal(endless.lives, 1, "lives stay as they were");
+});
+
+test("Snake: a life is earned at each score mark, never past MAX_LIVES, and the mark moves on at the cap", () => {
+  assert.deepEqual([0, 1, 2, 3, 4, 5].map(lifeMark), [100, 250, 450, 700, 1000, 1300]);
+  const round = plainRound();
+  round.lives = 3;
+  round.score = 99;
+  awardLives(round);
+  assert.equal(round.lives, 3);
+  round.score = 100;
+  awardLives(round);
+  assert.equal(round.lives, 4);
+  assert.ok(round.events.some((e) => e.type === "bonusLife" && e.lives === 4));
+  round.score = 5000;
+  awardLives(round);
+  assert.equal(round.lives, MAX_LIVES);
+  assert.ok(round.lifeAt > 6, "the marks passed at the cap are used up");
+  const before = round.events.length;
+  awardLives(round);
+  assert.equal(round.events.length, before, "nothing more until the next mark");
+});
+
+test("Snake: levels 4, 6 and 8 each open with a boss whose orbs are the food", () => {
+  assert.deepEqual(Object.keys(BOSSES), ["4", "6", "8"]);
+  for (const level of [4, 6, 8]) {
+    const round = plainRound();
+    round.level = level - 1;
+    round.eaten = (level - 1) * FOOD_PER_LEVEL - 1;
+    round.food = { x: 6, y: 5 };
+    step(round, () => 0.5);
+    assert.equal(round.level, level);
+    const b = round.boss;
+    assert.ok(b, `level ${level} has a boss`);
+    assert.equal(b.hp, BOSSES[level].hp);
+    assert.ok(round.food.orb, "the food is an orb");
+    assert.ok(!onBoss(b, round.food), "the orb is not under the boss");
+    assert.ok(!round.snake.some((c) => onBoss(b, c)), "the boss is clear of the snake");
+    assert.ok(round.events.some((e) => e.type === "fight" && e.id === b.id));
+  }
+});
+
+test("Snake: each orb hurts the boss and the level waits, the last pays out, grows the snake and earns a life", () => {
+  const round = plainRound();
+  round.level = 4;
+  round.eaten = 15;
+  round.lives = 3;
+  round.boss = { id: "golem", name: "Grumpy Golem", sub: "", color: "#8f877c", size: 3, hp: 2, max: 2, x: 15, y: 15, tx: null, ty: null, moveMs: 0, actMs: 9e9, leap: null, hurt: 0 };
+  round.food = { x: 6, y: 5, orb: true };
+  assert.equal(step(round, () => 0.5), "eat");
+  assert.equal(round.boss.hp, 1);
+  assert.equal(round.eaten, 15, "an orb is not a food toward the next level");
+  assert.ok(round.food.orb);
+  round.snake = [{ x: round.food.x - 1, y: round.food.y }, { x: round.food.x - 2, y: round.food.y }, { x: round.food.x - 3, y: round.food.y }];
+  round.dir = { x: 1, y: 0 };
+  const before = round.score;
+  step(round, () => 0.5);
+  assert.equal(round.boss, null, "beaten");
+  assert.equal(round.lives, 4);
+  assert.ok(round.score - before >= 12 * 4, "a bonus of 12 a level");
+  assert.ok(round.events.some((e) => e.type === "bossDown" && e.lives === 4));
+  assert.ok(!round.food.orb, "the food is plain again");
+});
+
+test("Snake: running into a boss is a crash, with or without free passage", () => {
+  const round = plainRound();
+  round.lives = 1;
+  round.boss = { id: "golem", name: "G", sub: "", color: "#888", size: 3, hp: 3, max: 3, x: 6, y: 4, tx: null, ty: null, moveMs: 0, actMs: 9e9, leap: null, hurt: 0 };
+  round.grace = 1000;
+  assert.equal(step(round), "crash");
+  assert.equal(round.crashed, "boss");
+});
+
+test("Snake: the Golem drops rocks, the Comet Queen calls a comet and the Thunder Toad lands where its ring showed", () => {
+  const base = (id) => ({ id, name: id, sub: "", color: "#888", size: 3, hp: 4, max: 4, x: 14, y: 14, tx: null, ty: null, moveMs: 0, actMs: 100, leap: null, hurt: 0 });
+  const golem = plainRound();
+  golem.boss = base("golem");
+  age(golem, 150, () => 0.5);
+  assert.ok(golem.rocks.length >= 1, "rocks come down");
+  const queen = plainRound();
+  queen.boss = base("queen");
+  age(queen, 150, () => 0.5);
+  assert.equal(queen.comets.length, 1);
+  const toad = plainRound();
+  toad.boss = base("toad");
+  age(toad, 150, () => 0.5);
+  assert.ok(toad.boss.leap, "a landing ring is shown first");
+  const ring = { ...toad.boss.leap };
+  assert.equal(toad.boss.x, 14, "still where it was");
+  age(toad, 1000, () => 0.5);
+  assert.deepEqual([toad.boss.x, toad.boss.y], [ring.x, ring.y]);
+  assert.ok(toad.events.some((e) => e.type === "land"));
+  // Landing on the head is a crash, unless free passage still runs.
+  const stomp = plainRound();
+  stomp.lives = 1;
+  stomp.boss = { ...base("toad"), leap: { x: 4, y: 4, warn: 50 } };
+  assert.equal(age(stomp, 100, () => 0.5), "crash");
+  assert.equal(stomp.crashed, "boss");
+});
+
+test("Snake game: the lives pill is drawn, a crash with lives to spare keeps the round going, and the endless-lives code is answered", async () => {
+  const { g } = await snakeGame(0);
+  g.start();
+  assert.equal(g.round.lives, 3);
+  g.round.lives = 2;
+  for (let i = 0; i < GRID + 2 && g.round.lives === 2; i++) g.tick(STEP_MS);
+  assert.equal(g.round.lives, 1);
+  assert.equal(g.state, "running", "one life lost, the round goes on");
+  g.cheat(true);
+  assert.equal(g.round.infinite, true);
+  g.start();
+  assert.equal(g.round.infinite, false, "a new round starts without it");
+});
+
+test("Snake game: every boss and the toad's landing ring draw, and the HUD shows its hit points", async () => {
+  const { g } = await snakeGame(0);
+  g.start();
+  for (const id of ["golem", "queen", "toad"]) {
+    g.round.boss = { id, name: id, sub: "", color: "#888888", size: 3, hp: 2, max: 3, x: 14, y: 2, tx: null, ty: null, moveMs: 0, actMs: 9e9, leap: id === "toad" ? { x: 2, y: 14, warn: 400 } : null, hurt: 100 };
+    g.round.food = { x: 0, y: 19, orb: true };
+    g.round.grace = 500;
+    g.tick(16);
+  }
+  assert.equal(g.state, "running");
 });

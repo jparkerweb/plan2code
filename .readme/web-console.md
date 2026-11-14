@@ -183,7 +183,7 @@ Scroll down for the utilities. Outside a git repository the **Git** card says so
   turns red if that press was never collected, and goes back to the plain
   icon once nothing is left, so a console left in a background tab can be
   checked at a glance.
-- **Help.** The **?** at the top right opens a Help dialog with 21 topics,
+- **Help.** The **?** at the top right opens a Help dialog with 23 topics,
   one per tab down the left (across the top on a narrow window), opening on
   the one for where you are. It is part of the page itself, so it still reads
   fully when the page has lost its program.
@@ -238,7 +238,13 @@ Quick Task has fixed it, the folder reads *Bug fixed*: Quick Task offers to
 archive it to `specs--completed/`, and until then the picker never opens on it
 and hides it while *Hide unavailable workflows* is on. Its chip has a visible
 **Delete** button in place of the hover ✕ other specs carry, and one confirm
-removes the folder (any other spec also asks you to type its name). Click a card and Planny
+removes the folder (any other spec also asks you to type its name).
+**Update dependencies** works the same way for a held-back upgrade: a ticked
+Warning on its pick list writes `specs/<package>-upgrade/UPGRADE-<date>.md`,
+and the picker reads *Upgrade ready* with Quick Task (suggested) and Plan lit.
+Once Quick Task has applied it and its checks pass, the folder reads *Upgrade
+done*, treated like *Bug fixed* (Help's *Update dependencies* topic covers the
+whole run). Click a card and Planny
 flies while it gets ready;
 a few seconds later the same page is that skill's console, already running. No
 command names to remember. Pathfinder, Plan, Quick Task, Diagnose, UI Prototype and Revise plan can also
@@ -255,6 +261,15 @@ opens the whole document, **Copy for a new conversation** copies a one-line
 prompt that points a fresh conversation at the file, and **Delete** removes it
 for good after one confirm. Handoffs from *Stop with a handoff* (below) and
 from the Handoff skill land in the same place, `~/.plan2code/handoffs/`.
+
+The dashboard also has a **Learning** row, showing one of four states for the
+project: *Not set up*, *Off*, *On* or *Paused for you*. **Pause for me** is
+personal: it pauses Learning for you alone, and nobody else on the project is
+affected. When lessons are waiting for your review, a banner at the top of the
+dashboard says how many and offers **Review**. Lessons you keep are saved as the
+project's lessons in `.plan2code/lessons/`, saved with the repository, while
+waiting lessons and your pause stay on this machine only, in `~/.plan2code/`;
+nothing is saved without your approval, and nothing is committed for you.
 
 A freshly opened dashboard starts with Planny asleep in the middle of the page.
 Click to wake him: he snores once while he gets a gentle shake side to side,
@@ -562,7 +577,9 @@ new bests and game over each get a sound of their own. A game can play
 chiptune music too, made the same way, which builds as play heats up (Sunset
 Drive has a song for each road, Snake a different one at every level, dealt from ten at
 the start of a round so none repeats, and Ghoul Rush a track for each room, played at
-one steady level and fuller in a boss fight), and Light Trails and Flock Dash play five
+one steady level and fuller in a boss fight, and Bounce Road a radio of twenty fast
+arcade tunes in a shuffled order, with an extra voice for a boss and another in a
+Fever), and Light Trails and Flock Dash play five
 recorded songs each as background music, each in full, one after another in an
 order shuffled for every run: **Play activity music** in **User
 Preferences → Sounds & activities** is on by default (turn it off there). **Play activity sounds** there turns the games'
@@ -570,9 +587,10 @@ sounds (the 3, 2, 1 and the new-best burst included) and their music on or
 off and leaves the page's own cues alone; the **Play sounds** switch above it
 silences all of it, and a paused or closed game goes quiet at once. A game
 with music has its own **Music** slider beside **Full screen**, which sets that
-game's music volume and is remembered per game (Snake, Light Trails, Sunset Drive and Flock Dash start at 70,
+game's music volume and is remembered per game (Snake, Light Trails, Sunset Drive, Bounce Road and Flock Dash start at 70,
 Ghoul Rush at 65).
 
+- **Snake** gives you three lives: a crash costs one and puts the snake back mid-board with its length and score, flickering through 2.5 seconds of free passage. A life is earned back at 100, 250, 450 and 700 points, then every 300, up to nine (the endless-lives code works here too). Levels 4, 6 and 8 open with a boss that wanders the board while the food becomes its orbs: the Grumpy Golem stomps rocks down, the Comet Queen throws comets and the Thunder Toad leaps where a ring warned. Each orb eaten costs the boss a hit point, touching it is a crash, and beating it earns a life.
 - **Snake** speeds up as it grows: 120 ms a step at its starting three cells,
   4 ms quicker for each cell beyond, never under 60 ms, and 3% quicker again
   for each level. Every 5 foods is a new level, which opens with Slow-mo on
@@ -924,46 +942,91 @@ Ghoul Rush at 65).
   coin. Planny's star is your highlight color, and a rival whose color sits
   too close to it wears a spare one. The start and end screens show the
   furthest zone you have reached.
-- **Bounce Road** is a fast scrolling road seen from above: Planny races a
-  springy toy car up a road laid across a giant's house and yard, with
-  rival toy cars on it that mean to stop him. Hold up to drive, down to brake
-  (a toy car never quite stops), the arrows to steer (a little less in the
-  air) and space to jump, once a press; a jump needs a little speed and goes
-  further the faster you are, and a ramp launches you on its own. Bump a
+- **Bounce Road** is a fast arcade road seen from above, in the spirit of
+  the late 80s cabinets: Planny races a springy toy car up a road laid across
+  a giant's house and yard, with rival toy cars on it that mean to stop him.
+  Hold up to drive, down to brake (a toy car never quite stops), the arrows
+  to steer (a little less in the air) and space to jump, once a press; a
+  jump needs a little speed and goes further the faster you are. Bump a
   rival sideways and it slides: one that leaves the road within 1.5 seconds
   of your bump is yours. Land on one and it is flattened while you bounce up
   again; land on another before your wheels touch the road and the **bounce
-  chain** climbs, up to x8. Every stunt in quick succession (a crush, a
-  bump-off, a hole, train, ball or barrier jumped, a ramp's big air, a close
-  shave past a rival, a boost strip) steps the **combo**, which multiplies
-  the points once more every third stunt in a row, up to x4, and runs out
-  after 2.6 seconds without one. Water or a hole under your wheels, a crash
-  (a flowerbed or a toy block nose first, a train, a truck's back) or
-  anything landing on you (a ring on the road shows where) costs one of three
-  lives, and you go back a little before the spot, with room to get up to
-  speed. Ten stages of 25 to 45 seconds each, every one bringing something
-  new: **Chalk Lane** (cracks, boost strips, cones), **Hose Creek** (broken
-  bridges, a sprinkler, the Frog), **Kitchen Floor** (oil slicks, a rolling
-  orange, the Sneak, who drops cones), **Flowerbed Fork** (splits, ramps,
-  falling flowerpots, the Nudge), **Sandbox Run** (road that crumbles behind
-  you, the Hauler, the Bruiser), **Toy Room** (a toy train crossing, toy-block
-  chicanes, the Racer), **Garden Pond** (swaying bridges, drawbridges, the
-  Cop), **Rooftop Gutter** (gusts), **Night Lights** (everything, in the dark)
-  and **Monster Mash**, where the Monster truck hops at you and must be
-  stomped five times; then the road goes round again from Kitchen Floor,
-  quicker and meaner. The rivals get keener every stage: they block your
-  line, brake in front of you, swerve from under your landings, hop the gaps
-  and keep the pack close. Every hole has a warning sign and a straight
-  run-up, and can be cleared at 80% of the top speed. Power-ups lie on the
-  road from Hose Creek: **Spring**, **Bubble** (one free save), **Nitro** and
-  **Mega wheels** (bigger and heavier: flatten whatever you touch). Points
-  come from new road, rivals flattened (each kind its own, times the chain)
-  and bumped off, jumps, big air, close shaves, stars and boost strips (times
-  the combo), the Monster (2,000 for beating it), and each stage line (100
-  times the stage, a bonus for beating its par time, and with no life lost
-  250 more and a life back, up to five). Planny's car is your highlight
-  color, and a rival whose color sits too close to it wears a spare one. The
-  start and end screens show the furthest stage you have reached.
+  chain** climbs, up to x8. Every stunt in quick succession steps the
+  **combo**, which multiplies the points once more every third stunt in a
+  row, up to x4, and runs out after 2.6 seconds without one. Stunts also
+  fill the **Fever** meter along the bottom of the pills: full, it burns for
+  seven seconds of double points, with any rival you touch flattened.
+  Water or a hole under your wheels, a crash or anything landing on you (a
+  ring or a growing shadow shows where) costs one of three lives, and you go
+  back a little before the spot, with room to get up to speed. A life comes
+  back for a stage with none lost, for a boss beaten and at every 8,000
+  points, up to five.
+  - **Gadgets and weapons.** Power-ups lie on the road from the second
+    stage, and each one's name flashes at the top of the field as you take
+    it. Some work as you take them: **Spring** (a longer next jump),
+    **Bubble** (one free save), **Star magnet** and, rarely, an **extra
+    life**. The rest are gadgets, held one at a time (the pill reads
+    `TAP x2`) until you **double-tap space**: the first press still jumps at
+    once, so a jump never waits, and a second within about a quarter of a
+    second sets the gadget off. **Rockets** (three shots: the first rival or
+    barrier ahead blows up, and a boss takes a hit), **Oil slick** (two
+    spills behind you: a rival that crosses one spins off the road, and it is
+    yours), **Ground pound** (two slams: you drop like a stone and the
+    shockwave flattens what is near and throws the rest), **Zapper** (every
+    rival near loses its steering, its tricks and its hops for 3.5 seconds),
+    **Nitro** and **Mega wheels**. With nothing held, a **Supply truck** turns
+    up now and then: land on its roof for a gadget.
+  - **Stages and bosses.** A lap is fifteen short stages of 20 to 35 seconds,
+    and every third is a boss stage, which opens with rockets on the road.
+    Each run deals the stages afresh: Chalk Lane first, then ten of the
+    fourteen plain themes, roughly from gentle to hard, and the five bosses
+    in a new order with the Cat last. Some stages carry a **twist**, named
+    under the stage: Rush hour, Gold rush, Lights out, Downpour, Supply drop
+    or Turbo lane. The themes: **Chalk Lane**, **Hose Creek** (broken
+    bridges, a sprinkler), **Kitchen Floor** (oil, a rolling orange, the
+    rolling pin), **Bubble Bath** (soap, faucet jets that throw you up),
+    **Flowerbed Fork** (forks, ramps, falling flowerpots), **Pinball Alley**
+    (bumpers that kick you away for points, conveyors), **Homework Desk**
+    (rolling pencils, slamming books), **Sandbox Run** (road that crumbles
+    behind you), **Toy Room** (a toy train, a mallet), **Freezer Aisle** (no
+    grip anywhere, snowballs), **Garden Pond** (swaying bridges,
+    drawbridges), **Rooftop Gutter** (gusts), **The Floor Is Lava** and
+    **Night Lights** (everything, in the dark, with lasers across the road).
+    Every theme also lays stunt pieces: a **kicker** (a big ramp that flies
+    you over a whole chicane, through a long line of stars), a **wall** of
+    blocks right across the road (jump it), a **trampoline** (three rows of
+    spring pads, bounce after bounce) and a **turbo lane** (a narrow run of
+    boost strips).
+    The bosses, each in its own arena and each beaten by landing on it (a
+    rocket or a ground pound counts too): the **Big Rig** lobs barrels at
+    where you are heading and leaks oil; the **Robo-Vac** sweeps the hall,
+    then charges back down the road at you, which is your moment to jump on
+    it; the **Whirlybird** bombs from out of reach, then swoops down to the
+    road; the **Monster truck** hops at you and drops tires; **the Cat**
+    slams its paw down and sweeps it across the road. A boss stage lasts
+    until its boss is beaten: the road keeps coming, and the stage line only
+    turns up once the boss is flattened. Past the fifteenth stage the run laps:
+    quicker, keener, and every boss with one more hit in it.
+  - **Rivals.** The Zigzag, Brick, Frog, Sneak, Nudge, Hauler, Bruiser,
+    Racer and Cop block, brake, hop, litter, shove and chase. The later ones
+    each have a trick, named as they first come: the **Blaster** shoots back
+    down the road (a bolt knocks and slows you, never a life; jump it), the
+    **Slasher** pulls alongside and its blades come out (keep off its
+    sides), the **Spike** must never be landed on (bump it off or shoot it),
+    the **Bomber** leaves lit bombs, the **Phantom** fades out of reach, the
+    **Splitter** bursts into two Minis when flattened (two more for the
+    chain), and the **Magnet** drags you toward the edge it hugs.
+  - **Scoring.** Points come from new road, rivals flattened (each kind its
+    own, times the chain), blown up and bumped off, jumps over holes, trains,
+    balls, rollers, lasers, stompers and barriers, big air, close shaves,
+    stars, bumpers and boost strips (times the combo), a boss (2,000 for
+    beating it), and each stage line (100 times the stage, a bonus for
+    beating its par time, and with no life lost 250 more). Each stage is
+    ranked S, A, B or C, and the end screen lines the ranks up. The game has
+    its own radio: twenty synthesized arcade tunes, played in a random order. Planny's car is your
+    highlight color, and a rival whose color sits too close to it wears a
+    spare one. The start and end screens show the furthest stage you have
+    reached.
 - **Ghoul Rush** is a fast, dark run-and-gun through a haunted house:
   Planny sprints left to right through a mansion a room at a time, the view
   scrolling with him. The house is pitch dark: you see what his glow, his
@@ -1489,7 +1552,7 @@ Ghoul Rush at 65).
   P or Esc during the count pauses again.
 - **Keys.** Arrows or W/A/S/D steer, space starts and plays (and boosts in
   Light Trails, fires while held in Bug Hunt, burns nitro in Sunset Drive,
-  where held up drives and held down brakes, drops the block in Stack Deploy, dashes in Bumper Ring, where held arrows push, fires while held in Rapids Run, where held up speeds up and held down slows, dashes in Hot Potato, where held arrows run, uses the oldest pickup in Crossing Rush, where an arrow hops once a press, jumps once a press in Bounce Road, where held up drives and held down brakes, fires while held in Ghoul Rush, where held arrows run, up jumps once a press and down drops through a shelf, and climbs and dives in Flock Dash, where held up and down fly the leader and held left and right ease forward and back), P pauses, R starts the round over (from the 3, 2, 1), F (or **Full screen** under the board) gives the game the whole screen and F or Esc puts it back, and Esc closes the window with the game paused. In full screen the board takes the whole screen, as big as its shape allows, with black bars where the shape leaves room, and a panel (the game's name, the score line, the game's **Music** slider for a game with music, Exit full screen) is laid over it: docked in the side bar when that bar is at least 220 px wide, in the bottom bar on a tall screen when that is at least 110 px tall, and otherwise floating in the top right corner (Sunset Drive's 16:9 board on a 16:9 screen), where it shrinks to the score line in the bottom right corner while a round plays and the pointer is still. The board never gives up room for the panel. The pointer hides after two still seconds. In the desktop app the page asks the app (`activities-full`) to lay the console over its bar and terminal and put the window in full screen, since the app's frame allows the page no full screen of its own. A question, a sign-off or a finish takes a full-screen game back to the window's own size as it pauses it. A page with no mouse or trackpad
+  where held up drives and held down brakes, drops the block in Stack Deploy, dashes in Bumper Ring, where held arrows push, fires while held in Rapids Run, where held up speeds up and held down slows, dashes in Hot Potato, where held arrows run, uses the oldest pickup in Crossing Rush, where an arrow hops once a press, jumps once a press in Bounce Road, where held up drives and held down brakes and a double tap sets off the gadget held, fires while held in Ghoul Rush, where held arrows run, up jumps once a press and down drops through a shelf, and climbs and dives in Flock Dash, where held up and down fly the leader and held left and right ease forward and back), P pauses, R starts the round over (from the 3, 2, 1), F (or **Full screen** under the board) gives the game the whole screen and F or Esc puts it back, and Esc closes the window with the game paused. In full screen the board takes the whole screen, as big as its shape allows, with black bars where the shape leaves room, and a panel (the game's name, the score line, the game's **Music** slider for a game with music, Exit full screen) is laid over it: docked in the side bar when that bar is at least 220 px wide, in the bottom bar on a tall screen when that is at least 110 px tall, and otherwise floating in the top right corner (Sunset Drive's 16:9 board on a 16:9 screen), where it shrinks to the score line in the bottom right corner while a round plays and the pointer is still. The board never gives up room for the panel. The pointer hides after two still seconds. In the desktop app the page asks the app (`activities-full`) to lay the console over its bar and terminal and put the window in full screen, since the app's frame allows the page no full screen of its own. A question, a sign-off or a finish takes a full-screen game back to the window's own size as it pauses it. A page with no mouse or trackpad
   (touch only) shows "Activities need a keyboard." in place of the board.
 - **Best scores** show beside the score while you play and after each round.
   Snake, Light Trails, Bug Hunt, Sunset Drive, Stack Deploy, Bumper Ring, Rapids Run, Hot Potato, Crossing Rush, Bounce Road, Ghoul Rush and Flock Dash keep their highest score. Mini golf keeps its lowest
@@ -1981,6 +2044,9 @@ origin.
 | `GET /prototype?spec=specs/<name>&name=<file>.md` | One `.md` from `<spec>/prototypes/`, as `text/markdown` with `cache-control: no-store`; any other name, a missing file or a path that leaves the folder is a 204. |
 | `POST /open-prototype` | `{ spec, name }`: opens one `.html` from `<spec>/prototypes/` in the person's default browser. 404 for any other name, 500 when no browser could start. |
 | `GET /handoff?id=<id>` | *Read it all*: the handoff's `.md` from `~/.plan2code/handoffs/`, as `text/markdown` with `cache-control: no-store`. A dashboard only, and only an id its own scan listed: a used, unknown or malformed id is 404. |
+| `POST /learning/pause` | Pause for me: `{ paused: boolean }` (origin-checked; anything else is 400 `bad-request`, and 409 `not-on` unless Learning is On or Paused for you). Writes the personal pause on this machine only (`pause.json` under `~/.plan2code/learning/<key>/`), the server's only write for Learning, and repaints the row with no agent. |
+| `GET /learning/state` | The Learning row's state worked out now, `{ state, pausedSince, waiting, oldestDays }` (`{}` when the project's settings file is from a format it cannot read), with `cache-control: no-store`. |
+| `GET /learning/lessons` | Open the lessons, read only: `{ files: [{ name, title, text }] }` from the project's lessons (`.plan2code/lessons/`, saved with the repository), `general.md` first, then the other `.md` files in name order (plain files only, at most 100 of 512 KB each), with `cache-control: no-store`. |
 | `GET /workspace` | The Workspace dialog's list: folders, `missing`, `remote` and the agent's folder `issues`. `?check=1` re-checks every folder on disk first. |
 | `POST /workspace/add` | `{ path, name?, description? }`. The path is resolved against the folder the session started in (`~` expanded) and must be a folder: 400 `not-a-folder`, `duplicate` (with its `name`; compared case-insensitively on Windows and macOS), `bad-name`, or `name-taken` with a `suggest`. Answers the new entry, `nested: true` when it sits inside another folder in the list. |
 | `POST /workspace/edit` | `{ id, name?, description? }`. Renames or re-describes one folder: 400 `bad-name` / `name-taken`, 404 `unknown`. |

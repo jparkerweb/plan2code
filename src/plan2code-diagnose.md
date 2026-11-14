@@ -31,6 +31,8 @@ Check if `./AGENTS.md` exists:
    >
    > Let me know when ready to continue."
 
+**Lessons:** then read `references/lessons.md` and follow its Start and While working sections (`node "<S>/lessons.mjs"`), and its End section before Session End.
+
 ## Scripts
 
 `<S>` is `scripts/` beside this SKILL.md (`~/.agents/skills/plan2code-diagnose/scripts/` globally). Run from the project root. Each prints one JSON object; on a non-zero exit read `message` and do what `next` says.
@@ -127,6 +129,8 @@ Once fixed, turn the reproduction into a regression test (references/building-ha
 Nothing was found worth writing (the bug did not reproduce and no guess holds up)? Say so, write nothing, and end.
 
 ## Session End
+
+Before this, follow `references/lessons.md` → End.
 
 Work summary: the bug, the cause and how sure, the fix's size, the file written (or that nothing was kept), and anything else you wrote (a kept failing test, a throwaway script and where).
 

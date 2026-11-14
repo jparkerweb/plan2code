@@ -6,4 +6,6 @@ Findings are doc `report`; the fix menu is a `multi` or `choice` keyed by findin
 
 Closing gate: `review` "Check the fixes", `"doc":"report"`, `"nothingYet":false`, verdicts `approve`, `changes`.
 
+Lessons first: with lessons to offer (`references/lessons.md`, End), post its `card` as one `lessons` item with `--wait` before the finish.
+
 Completion finish: `command` is the suggested commit when fixes landed (AGENTS.md format, `"where":"When you are happy with it, commit it from your terminal:"`, `"commit":true`), else none; `"dashboard":true`. A stop's `command` is the bare `/plan2code-review`, no dashboard.

@@ -374,7 +374,7 @@ const KEPT_CONSOLE_ENTRIES = new Set([...PROTECTED_CONSOLE_FILES, "sessions", "r
 // (~/.plan2code/console/<version>/) and removes the old ones, so Cleanup never
 // offers it.
 export const CONSOLE_VERSION_DIR = /^\d+\.\d+\.\d+$/;
-export const KEPT_PLAN2CODE_ENTRIES = new Set(["console", "bin", "launcher.json", "install.json", "models.json", "handoffs", "notepads", "app", "app.json", "agents.json", "prototypes"]);
+export const KEPT_PLAN2CODE_ENTRIES = new Set(["console", "bin", "launcher.json", "install.json", "models.json", "handoffs", "notepads", "app", "app.json", "agents.json", "prototypes", "learning"]);
 // A stray must sit untouched this long before Cleanup lists it. The same
 // folders hold files that live for milliseconds -- a held
 // `workspaces.json.lock`, a `<file>.<pid>.tmp` between its write and its

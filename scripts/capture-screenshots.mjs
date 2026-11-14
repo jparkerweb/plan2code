@@ -6,7 +6,8 @@
 //        [--out <dir>] [--compare]
 //
 // Every shot is staged with no agent: a throwaway sample project called
-// `task-api`, a throwaway console home (PLAN2CODE_CONSOLE_HOME), then
+// `task-api`, a throwaway console home (PLAN2CODE_CONSOLE_HOME) and Learning
+// store (PLAN2CODE_LEARNING_DIR), then
 // `console.mjs open` and `post` with the payloads in scripts/screenshots/.
 // Each screen is saved light and dark, at 1280x800 and twice the pixel
 // density, as `<out>/<shot>-light.webp` and `<out>/<shot>-dark.webp`.
@@ -589,7 +590,15 @@ async function main() {
 
   SCRATCH = fs.mkdtempSync(path.join(SCRATCH_ROOT, "p2c-shots-"));
   HOME = path.join(SCRATCH, "console-home");
-  ENV = { ...process.env, PLAN2CODE_CONSOLE_HOME: HOME, PLAN2CODE_NOTEPADS_DIR: path.join(SCRATCH, "notepads"), PLAN2CODE_NO_BROWSER: "1" };
+  // A throwaway Learning store too, and no sample project has a .plan2code/settings.json,
+  // so the dashboard's Learning row reads Not set up with nothing waiting in every shot.
+  ENV = {
+    ...process.env,
+    PLAN2CODE_CONSOLE_HOME: HOME,
+    PLAN2CODE_NOTEPADS_DIR: path.join(SCRATCH, "notepads"),
+    PLAN2CODE_LEARNING_DIR: path.join(SCRATCH, "learning"),
+    PLAN2CODE_NO_BROWSER: "1",
+  };
   fs.mkdirSync(HOME, { recursive: true });
   fs.mkdirSync(OUT, { recursive: true });
   let browser = null;

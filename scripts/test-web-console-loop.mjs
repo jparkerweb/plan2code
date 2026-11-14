@@ -245,6 +245,30 @@ test("each bad loopOutcome field is refused with a message naming it", () => {
   assert.deepEqual(tryPatch(loopState(), { loopOutcome: edge }).problems, [], "100 characters, 50 entries and 200 characters are the limits, not over them");
 });
 
+test("loopOutcome: a failed report may carry one next step for the person, and it is bounded like the other prose", () => {
+  const failed = goodOutcome();
+  Object.assign(failed, { result: "failed", reason: "findings", nextStep: "Fix the unreadable range in deps.mjs, then press Continue building" });
+  const ok = tryPatch(loopState(), { loopOutcome: failed });
+  assert.deepEqual(ok.problems, []);
+  assert.equal(ok.next.loopOutcome.nextStep, failed.nextStep);
+  assert.deepEqual(tryPatch(loopState(), { loopOutcome: goodOutcome() }).problems, [], "it stays optional");
+  const cases = [
+    ["a two-line next step", "one\ntwo", /loopOutcome\.nextStep must be one line of 1 to 300 characters/],
+    ["a 301-character next step", "n".repeat(301), /loopOutcome\.nextStep must be one line of 1 to 300 characters/],
+    ["an empty next step", "", /loopOutcome\.nextStep must be one line/],
+    ["a completion marker in the next step", "All set, PHASE_COMPLETE", /loopOutcome\.nextStep: contains a loop completion marker/],
+  ];
+  for (const [what, value, expected] of cases) {
+    const o = goodOutcome();
+    Object.assign(o, { result: "failed", reason: "tests", nextStep: value });
+    const { problems } = tryPatch(loopState(), { loopOutcome: o });
+    assert.ok(problems.some((p) => expected.test(p)), `${what}: ${JSON.stringify(problems)}`);
+  }
+  const edge = goodOutcome();
+  Object.assign(edge, { result: "failed", reason: "tests", nextStep: "n".repeat(300) });
+  assert.deepEqual(tryPatch(loopState(), { loopOutcome: edge }).problems, [], "300 characters is the limit, not over it");
+});
+
 test("an unfixed finding's title and file are one line, as in the fixed and skipped lists", () => {
   const o = goodOutcome();
   o.review.unfixed = [{ level: "suggestion", title: "Name\nthe timer", file: "src/x.js\nsrc/y.js" }];
@@ -487,6 +511,17 @@ test("loopEnd: a short reason and a recommended button are stored, and both stay
   assert.equal(next.loopEnd.reason, "Phase 2 stopped because the quick check failed.");
   assert.equal(next.loopEnd.recommend, "fix");
   assert.deepEqual(tryPatch(loopState(), { loopEnd: goodEnd() }).problems, [], "an older app sends neither");
+});
+
+test("loopEnd: the advice for the person is stored, optional, one line of up to 300 characters", () => {
+  const { problems, next } = tryPatch(loopState(), { loopEnd: goodEnd({ advice: "Fix the failing test, then press Continue building." }) });
+  assert.deepEqual(problems, []);
+  assert.equal(next.loopEnd.advice, "Fix the failing test, then press Continue building.");
+  assert.deepEqual(tryPatch(loopState(), { loopEnd: goodEnd() }).problems, [], "an older app sends none");
+  for (const advice of ["one\ntwo", "a".repeat(301), ""]) {
+    const bad = tryPatch(loopState(), { loopEnd: goodEnd({ advice }) });
+    assert.ok(bad.problems.some((p) => /loopEnd\.advice must be one line of 1 to 300 characters/.test(p)), JSON.stringify(bad.problems));
+  }
 });
 
 test("loopEnd: an unknown evidence id, a push in can, and the other bad fields are refused, each named", () => {

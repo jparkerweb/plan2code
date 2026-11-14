@@ -132,7 +132,7 @@ plan2code-metrics
 
 Pick **"Collect metrics"** and point it at your spec directory (`specs/<feature>/` or `specs--completed/<feature>/`). It reads your artifacts, extracts ~30 metrics, and writes a run JSON. Takes about 5 seconds.
 
-The data stays local to that project in `.plan2code-metrics/runs/`. To aggregate across multiple projects, use **"Import"** to copy run files into one central location.
+The data stays local to that project in `.plan2code/metrics/runs/`. To aggregate across multiple projects, use **"Import"** to copy run files into one central location.
 
 ### Cross-Project Aggregation
 
@@ -142,7 +142,7 @@ If you use plan2code across several repos, you can consolidate all run data in o
 # From your central repo (e.g., the plan2code repo itself):
 plan2code-metrics
 # → "Import run data"
-# → Paste path to: /path/to/other-project/.plan2code-metrics/runs/run-xxx.json
+# → Paste path to: /path/to/other-project/.plan2code/metrics/runs/run-xxx.json
 ```
 
 Imported runs are copied locally and included in all future aggregations, analyses, and comparisons.
@@ -205,7 +205,7 @@ Green checkmark = meeting target. Red X = below target (with the target shown).
 
 ### 1. Collect
 
-Reads completed project artifacts from `specs/` or `specs--completed/` and extracts metrics for each workflow step. Output: `.plan2code-metrics/runs/run-<timestamp>.json`
+Reads completed project artifacts from `specs/` or `specs--completed/` and extracts metrics for each workflow step. Output: `.plan2code/metrics/runs/run-<timestamp>.json`
 
 ### 2. Aggregate
 
@@ -215,7 +215,7 @@ Merges all run files into `aggregated.json`, grouped by **prompt generation** �
 
 Sends aggregated metrics to an AI model with an analyst prompt. The AI produces a diagnosis identifying the weakest workflow steps and root causes. No edits are proposed at this stage.
 
-Output: `.plan2code-metrics/proposals/<timestamp>-diagnosis.md`
+Output: `.plan2code/metrics/proposals/<timestamp>-diagnosis.md`
 
 ### 4. Improve
 
@@ -224,7 +224,7 @@ Sends the diagnosis plus current prompt file contents to an AI model. The AI pro
 - The `old_text` actually exists in the target file
 - The edited file stays under the 20,000 character limit
 
-Output: `.plan2code-metrics/proposals/prop-<timestamp>.json`
+Output: `.plan2code/metrics/proposals/prop-<timestamp>.json`
 
 ### 5. Apply
 
@@ -232,10 +232,10 @@ Interactive diff review for each proposed edit. Accept, reject, or skip individu
 
 ## Data Directory
 
-All metrics data lives in `.plan2code-metrics/` (add to `.gitignore` if desired):
+All metrics data lives in `.plan2code/metrics/` (add to `.gitignore` if desired):
 
 ```
-.plan2code-metrics/
+.plan2code/metrics/
 ├── runs/                  # Individual run JSONs
 │   ├── run-20260215-120000-a1b2.json
 │   └── run-20260220-090000-c3d4.json

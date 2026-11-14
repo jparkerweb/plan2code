@@ -204,6 +204,20 @@ export function readTestMap(root) {
   return { agentsMd: true, found: true, source: "AGENTS.md", file: agentsFile, ...parseTable(lines, table) };
 }
 
+/**
+ * One rendered row line (`| Area | Paths | Run | Shared |`) read back into
+ * `{ area, paths, run, shared }`, unchecked: pass it to validRows. Null when
+ * the line is not four cells or Shared is neither yes nor no.
+ */
+export function rowFromLine(line) {
+  if (typeof line !== "string" || /[\r\n]/.test(line.trim())) return null;
+  const cells = cellsOf(line);
+  if (cells.length !== COLUMNS.length) return null;
+  const [area, paths, run, shared] = cells;
+  if (!/^(?:yes|no)$/i.test(shared)) return null;
+  return { area, paths: splitPaths(paths), run: unquote(run), shared: /^yes$/i.test(shared) };
+}
+
 const cell = (s) => String(s).replace(/\|/g, "\\|");
 
 /** The table's lines for `rows`. */
@@ -215,7 +229,8 @@ export function renderTable(rows) {
   ];
 }
 
-function validRows(data) {
+/** Validate rows as `write` does: exit 4 `invalid-rows` naming the first bad row. Returns the cleaned rows. */
+export function validRows(data) {
   if (!Array.isArray(data)) fail(EXIT.INVALID, "invalid-rows", "The rows file must hold a JSON array of { area, paths, run, shared }.", "Fix the rows file and run write again.");
   return data.map((r, i) => {
     const bad = (what) => fail(EXIT.INVALID, "invalid-rows", `Row ${i} ${what}.`, "Fix the rows file and run write again.", { row: i });
@@ -242,7 +257,7 @@ function insertAt(lines, at, table) {
 }
 
 /** The new text of a file whose Test map section (or whole body) gets `table`. */
-function placeIn(text, table, { linked }) {
+export function placeIn(text, table, { linked }) {
   const nl = eol(text);
   const { lines, fenced } = linesOf(text);
   if (linked) {
@@ -269,6 +284,26 @@ function placeIn(text, table, { linked }) {
   return insertAt(lines, at, table).join(nl);
 }
 
+/** The file a map's table is written to: the linked .agents-docs/ file, or AGENTS.md. */
+export function tableFile(root, map) {
+  return map.source && map.source !== "AGENTS.md" ? map.file : path.join(root, "AGENTS.md");
+}
+
+/**
+ * The splice: the new text of the map's file (`current`, null when a linked
+ * file does not exist yet) with `table` in place. Every line outside the table
+ * stays byte-identical.
+ */
+export function spliceTable(root, map, current, table) {
+  if (map.source && map.source !== "AGENTS.md") {
+    if (current === null) {
+      return ["# Test map", "", `> Part of [AGENTS.md](${"../".repeat(map.source.split("/").length - 1)}AGENTS.md): which checks cover which files.`, "", ...table, ""].join(eol(readText(path.join(root, "AGENTS.md")) || "\n"));
+    }
+    return placeIn(current, table, { linked: true });
+  }
+  return placeIn(current, table, { linked: false });
+}
+
 function write(root, rowsFile, dryRun) {
   const raw = readText(path.resolve(rowsFile));
   if (raw === null) fail(EXIT.NOT_FOUND, "no-rows-file", `No rows file at ${rowsFile}.`, "Write the rows as a JSON array to a file and pass its path to --rows.");
@@ -282,22 +317,9 @@ function write(root, rowsFile, dryRun) {
   const map = readTestMap(root);
   if (!map.agentsMd) fail(EXIT.NOT_FOUND, "no-agents-md", `No AGENTS.md in ${root}.`, "Create AGENTS.md first (Init), then write the test map.");
   if (map.linkOutside) fail(EXIT.REFUSED, "link-outside", `The Test map section links to ${map.linkOutside}, outside .agents-docs/.`, "Point the link at .agents-docs/AGENTS-test-map.md, or remove it, then write again.");
-  const table = renderTable(rows);
-  const linked = map.source && map.source !== "AGENTS.md";
-  let file;
-  let next;
-  if (linked) {
-    file = map.file;
-    const current = readText(file);
-    next =
-      current === null
-        ? ["# Test map", "", `> Part of [AGENTS.md](${"../".repeat(map.source.split("/").length - 1)}AGENTS.md): which checks cover which files.`, "", ...table, ""].join(eol(readText(path.join(root, "AGENTS.md")) || "\n"))
-        : placeIn(current, table, { linked: true });
-  } else {
-    file = path.join(root, "AGENTS.md");
-    next = placeIn(readText(file), table, { linked: false });
-  }
-  const source = linked ? map.source : "AGENTS.md";
+  const file = tableFile(root, map);
+  const next = spliceTable(root, map, readText(file), renderTable(rows));
+  const source = map.source && map.source !== "AGENTS.md" ? map.source : "AGENTS.md";
   const written = dryRun ? false : writeIfChanged(file, next);
   return { ok: true, written, source, dryRun: !!dryRun };
 }

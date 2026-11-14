@@ -24,6 +24,8 @@ When this file is `references/ui-prototype.md` inside Pathfinder, Plan, Revise p
 
 Read `./AGENTS.md` when it exists: its stack, its style files and its conventions help Step 1 find the look. Its absence does not block this skill.
 
+**Lessons:** then read `references/lessons.md` and follow its Start and While working sections (`node "<S>/lessons.mjs"`).
+
 ## Scripts
 
 `<S>` is `scripts/` beside this SKILL.md (`~/.agents/skills/plan2code-ui-prototype/scripts/` globally). Run from the project root. Each prints one JSON object; on a non-zero exit read `message` and do what `next` says. Exit codes: 0 ok, 3 not found, 4 invalid (or `check` findings), 5 refused.

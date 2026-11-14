@@ -114,7 +114,7 @@ function letterOptions(patchList) {
 
 // The question a card asks. If a patch rewrites any of these on a known id, it
 // is a new question wearing an old id.
-const QUESTION_FIELDS = ["kind", "title", "body", "options", "steps", "rows", "summary", "doc", "verdicts"];
+const QUESTION_FIELDS = ["kind", "title", "body", "options", "steps", "rows", "firstAsk", "summary", "doc", "verdicts"];
 
 /**
  * Merge item patches by id, and keep a reused id from inheriting the person's
@@ -783,8 +783,85 @@ export const ITEM_KINDS = new Set([
   "checklist",
   "menu",
   "list",
+  "lessons",
   "notice",
 ]);
+
+// The approval card for noted lessons (lessons.mjs list's `card`). Each row is
+// decided on its own with the words that fit its type, so a row names its
+// type and its choices, and nothing arrives already chosen (FR-14, FR-15).
+// `gone` is a saved lesson whose files no longer exist: the list offers it
+// with a doubt's words.
+export const LESSON_ROW_TYPES = ["lesson", "doubt", "gone", "agents-fix", "log-line", "area"];
+const LESSON_ROW_TEXT = ["why", "kind", "area", "origin", "note", "before", "after", "found", "heading", "file", "name"];
+const LESSON_ROW_LISTS = ["about", "areas", "flags", "lessons", "paths"];
+const LESSONS_RIGHT = {
+  kind: "lessons",
+  rows: [{ id: "w1", type: "lesson", text: "Run a page test with node scripts/node-test.mjs <file>.", choices: ["Keep", "Reword", "Drop"] }],
+};
+const FIRST_ASK_RIGHT = {
+  kind: "lessons",
+  firstAsk: { lesson: { id: "w1", text: "..." }, sentences: ["...", "...", "..."], yes: "Switch Learning on", no: "Not for this project", later: "..." },
+};
+
+// What is wrong with a lessons item, as rule() sentences.
+function lessonsProblems(item, at) {
+  const problems = [];
+  if (item.opening != null && typeof item.opening !== "string") {
+    problems.push(rule(at, "opening", "must be a string (the line shown first), or left out", { opening: "You are on main: kept lessons will be uncommitted changes here." }));
+  }
+  const fa = item.firstAsk;
+  if (fa != null) {
+    const ok =
+      isPlainObject(fa) &&
+      isPlainObject(fa.lesson) &&
+      typeof fa.lesson.text === "string" &&
+      Array.isArray(fa.sentences) &&
+      fa.sentences.length === 3 &&
+      fa.sentences.every((x) => typeof x === "string" && x.trim()) &&
+      ["yes", "no", "later"].every((k) => typeof fa[k] === "string" && fa[k].trim());
+    if (!ok) problems.push(rule(at, "firstAsk", "needs lesson { text }, three sentences, and the yes, no and later words (lessons.mjs list --first-ask's firstAsk)", FIRST_ASK_RIGHT));
+  }
+  const hasRows = Array.isArray(item.rows) && item.rows.length > 0;
+  if (item.rows != null && !Array.isArray(item.rows)) {
+    problems.push(rule(at, "rows", "must be an array of rows", LESSONS_RIGHT));
+  } else if (!hasRows && fa == null) {
+    problems.push(rule(at, "rows", 'is empty and there is no "firstAsk". Post the card lessons.mjs list printed, or nothing when its items are empty', LESSONS_RIGHT));
+  }
+  const seen = new Set();
+  (hasRows ? item.rows : []).forEach((row, i) => {
+    const where = `rows[${i}]`;
+    if (!isPlainObject(row)) {
+      problems.push(rule(at, where, "must be an object", LESSONS_RIGHT));
+      return;
+    }
+    const name = typeof row.id === "string" && row.id.trim() ? `row "${row.id}"` : where;
+    if (typeof row.id !== "string" || !row.id.trim()) problems.push(rule(at, where, 'needs an "id" (the id the list gave the waiting item)', LESSONS_RIGHT));
+    else if (seen.has(row.id)) problems.push(rule(at, name, "is used twice. Each row is one waiting item", LESSONS_RIGHT));
+    else seen.add(row.id);
+    if (!LESSON_ROW_TYPES.includes(row.type)) {
+      problems.push(rule(at, `${name} type`, `must be one of ${LESSON_ROW_TYPES.join(", ")}`, LESSONS_RIGHT));
+    }
+    if (typeof row.text !== "string") problems.push(rule(at, `${name} text`, "must be a string (what the person reads)", LESSONS_RIGHT));
+    if (!Array.isArray(row.choices) || !row.choices.length || !row.choices.every((c) => typeof c === "string" && c.trim())) {
+      problems.push(rule(at, `${name} choices`, "must be a non-empty array of the choice words for this row", LESSONS_RIGHT));
+    }
+    // Nothing is pre-selected (FR-14): the person picks every row themselves.
+    for (const key of ["choice", "selected"]) {
+      if (key in row) problems.push(rule(at, `${name} ${key}`, "is not allowed: nothing on this card is chosen for the person. Leave it out", { [key]: null }));
+    }
+    for (const key of LESSON_ROW_TEXT) {
+      if (row[key] != null && typeof row[key] !== "string") problems.push(rule(at, `${name} ${key}`, "must be a string, or left out", LESSONS_RIGHT));
+    }
+    for (const key of LESSON_ROW_LISTS) {
+      if (row[key] != null && !Array.isArray(row[key])) problems.push(rule(at, `${name} ${key}`, "must be an array, or left out", LESSONS_RIGHT));
+    }
+    if (row.refused != null && !isPlainObject(row.refused)) {
+      problems.push(rule(at, `${name} refused`, "must be the { pattern, part } lessons.mjs gave, or null", { refused: { pattern: "aws-access-key", part: "AKIA" } }));
+    }
+  });
+  return problems;
+}
 
 // grilling.md keeps an explicit do-not-say list: this bookkeeping vocabulary is
 // internal and must never reach the human. In the terminal that is a prompt rule
@@ -848,6 +925,45 @@ function walkStrings(value, base, visit) {
 }
 
 export const MAX_OPEN_REQUIRED = 3;
+
+// The `more` body is markdown drawn under its row: kept short enough to read.
+export const MAX_MORE_BYTES = 4096;
+export const MAX_GROUP_CHARS = 40;
+
+// A multi's optional pick-list fields: `group`, `more`, `batch` and `locked` on
+// options, and no preset naming a locked option (a preset only ticks what can
+// be picked).
+function pickListProblems(item, at) {
+  const problems = [];
+  const locked = new Set();
+  for (const o of item.options) {
+    if (!isPlainObject(o)) continue;
+    const which = typeof o.k === "string" && o.k ? `option "${o.k}"` : "an option";
+    if (o.group != null && (typeof o.group !== "string" || !o.group.trim() || o.group.length > MAX_GROUP_CHARS)) {
+      problems.push(rule(at, "options", `${which} has a "group" that is not a string of 1 to ${MAX_GROUP_CHARS} characters (the heading drawn above its run)`, { text: "react 18.3.1 to 18.3.2", group: "Safe" }));
+    }
+    if (o.more != null && (typeof o.more !== "string" || Buffer.byteLength(o.more, "utf8") > MAX_MORE_BYTES)) {
+      problems.push(rule(at, "options", `${which} has a "more" that is not a markdown string of at most 4 KB (the text the row opens to). Shorten it`, { text: "react 18.3.1 to 19.0.0", more: "Breaking: drops legacy context." }));
+    }
+    if (o.batch != null && (typeof o.batch !== "string" || !o.batch.trim())) {
+      problems.push(rule(at, "options", `${which} has a "batch" that is not a non-empty string (options sharing it count as one round)`, { text: "react 18.3.1 to 18.3.2", batch: "npm-root" }));
+    }
+    if (o.locked != null && typeof o.locked !== "boolean") {
+      problems.push(rule(at, "options", `${which} has a "locked" that is not true or false`, { text: "left-pad 1.0.0 to 2.0.0", locked: true }));
+    }
+    if (o.locked === true && typeof o.k === "string") locked.add(o.k);
+  }
+  if (locked.size && Array.isArray(item.presets)) {
+    for (const p of item.presets) {
+      const named = ((p && Array.isArray(p.ks) && p.ks) || []).filter((k) => locked.has(k));
+      if (named.length) {
+        const label = p && typeof p.label === "string" ? p.label : "";
+        problems.push(rule(at, "presets", `preset "${label}" names locked option${named.length > 1 ? "s" : ""} ${named.map((k) => `"${k}"`).join(", ")}; a locked option can never be picked. Drop ${named.length > 1 ? "them" : "it"} from "ks"`, { presets: [{ label: label || "All safe", ks: ["A", "B"] }] }));
+      }
+    }
+  }
+  return problems;
+}
 
 const OPTIONS_RIGHT = { options: [{ text: "CSV" }, { text: "Excel" }] };
 const OPTION_RIGHT = { text: "CSV", detail: "Opens in any spreadsheet" };
@@ -923,6 +1039,17 @@ export function validate(state) {
         }
       });
     }
+    // The long pick list's optional fields (group headings, rows that open,
+    // round keys and rows shown but never picked). Checked only when present,
+    // so every multi without them passes as before.
+    if (item.kind === "multi" && Array.isArray(item.options)) problems.push(...pickListProblems(item, at));
+    if (item.counter != null) {
+      if (item.kind !== "multi") {
+        problems.push(rule(at, "counter", "only a multi item can carry it", { kind: "multi", counter: { rounds: "check rounds" } }));
+      } else if (!isPlainObject(item.counter) || typeof item.counter.rounds !== "string" || !item.counter.rounds.trim()) {
+        problems.push(rule(at, "counter", 'must be an object with a string "rounds" (the label after the round count)', { counter: { rounds: "check rounds" } }));
+      }
+    }
     if (item.verdicts != null) {
       if (!Array.isArray(item.verdicts) || !item.verdicts.length) {
         problems.push(rule(at, "verdicts", "must be a non-empty array of { id, label }", VERDICTS_RIGHT));
@@ -961,6 +1088,7 @@ export function validate(state) {
     if (recs.length > 1) {
       problems.push(rule(at, "options", `${recs.length} options are marked recommended; at most one`, [{ text: "A", recommended: true }, { text: "B" }]));
     }
+    if (item.kind === "lessons") problems.push(...lessonsProblems(item, at));
     // Which cards the Implementation Loop answers itself; the page draws them.
     if (item.handledBy != null) {
       if (item.handledBy !== "loop") problems.push(rule(at, "handledBy", 'can only be "loop"', { handledBy: "loop" }));
@@ -985,9 +1113,21 @@ export function validate(state) {
     }
   }
 
+  // One approval card at a time: two would ask about the same waiting items.
+  const openLessons = state.items.filter((i) => i.kind === "lessons" && isOpen(i));
+  if (openLessons.length > 1) {
+    problems.push(
+      rule("", "items", `${openLessons.length} lessons cards are open at once (${openLessons.map((i) => i.id).join(", ")}). Post one, and the next only after it is answered (settle an answered one with "settle": true)`, {
+        id: openLessons[0].id,
+      }),
+    );
+  }
+
   // The dashboard's page is the menu: a card posted there is drawn nowhere,
   // yet counts as open (and keeps Stop live for a question nobody can see).
-  if (state.workflow === "dashboard" && state.items.some((i) => isOpen(i))) {
+  // The lessons card is the exception: the dashboard draws it in a dialog, for
+  // Review from the Learning banner with no skill running (FR-18).
+  if (state.workflow === "dashboard" && state.items.some((i) => isOpen(i) && i.kind !== "lessons")) {
     problems.push(
       rule("", "items", "the dashboard draws no question cards. Post its menu (and agent), and launch the skill a question belongs to", {
         menu: { note: "...", recommend: "plan2code-init" },
@@ -1140,6 +1280,15 @@ export function validate(state) {
       ...rest,
       thread: Array.isArray(thread) ? thread.filter((m) => !m || m.who !== "user") : thread,
     };
+    // A lessons card's rows and its first-ask lesson are the project's own
+    // words (waiting lessons, failure log lines, an AGENTS.md fix), which Keep
+    // saves exactly as noted: the agent cannot reword them, and one lesson
+    // about "Risk 3" would otherwise block the whole card. The card's own
+    // title, body and opening are still scanned.
+    if (item.kind === "lessons") {
+      delete item.rows;
+      if (isPlainObject(item.firstAsk)) item.firstAsk = { ...item.firstAsk, lesson: undefined };
+    }
     scan(item, `item "${item.id}"`);
   }
   // A doc block read from a file (`file`) is the file's own words, already on
@@ -1330,6 +1479,12 @@ export function loopOutcomeProblems(o, expect) {
   if (!oneLine(o.subject, 100)) bad("subject", "must be one line of 1 to 100 characters");
   else prose("subject", o.subject);
 
+  // The agent's one-line advice to the person on a failed phase (optional).
+  if (o.nextStep !== undefined) {
+    if (!oneLine(o.nextStep, 300)) bad("nextStep", "must be one line of 1 to 300 characters when present");
+    else prose("nextStep", o.nextStep);
+  }
+
   // A report that misses what the app said it would judge by is refused here,
   // while the run can still do the step and repost, rather than stopping the
   // phase on the driver's verdict later. The driver checks the criteria only
@@ -1417,6 +1572,11 @@ export function loopEndProblems(e, state) {
     else prose("reason", e.reason);
   }
   if (e.phase !== undefined && !isPosInt(e.phase)) bad("phase", "must be a positive integer");
+  // `advice`: what the person should do next, drawn under the reason on a stop.
+  if (e.advice !== undefined) {
+    if (!oneLine(e.advice, 300)) bad("advice", "must be one line of 1 to 300 characters");
+    else prose("advice", e.advice);
+  }
   if (e.recommend !== undefined && e.recommend !== null) {
     const offered = Array.isArray(e.can) ? e.can : [];
     if (!["resume", "fix", "finalize"].includes(e.recommend) || !offered.includes(e.recommend)) {

@@ -10,7 +10,7 @@ A session handed to you is resumed, never re-opened (`--title` and `--spec` are 
 
 ## What the page knows
 
-`state.scan` is `{hasAgents,isGit,pending,specs:[{dir,name,state,detail,touched}],handoffs,handoffsDir}`, a snapshot of the last `open` (a spec created mid-session appears at the next dashboard resume). `pending` is the count a commit would take (`null` when git cannot say). The `menu` you post (`note`, `recommend`, `details`) describes the initially selected spec; leave any field out and the page falls back to that spec's own next step, and derives them again when the person switches specs. Post it with `--wait`.
+`state.scan` is `{hasAgents,isGit,pending,specs:[{dir,name,state,detail,touched}],handoffs,handoffsDir,learning}` (`learning` is `{state,pausedSince,waiting,oldestDays}` for the Learning row, absent when its settings format is unknown), a snapshot of the last `open` (a spec created mid-session appears at the next dashboard resume). `pending` is the count a commit would take (`null` when git cannot say). The `menu` you post (`note`, `recommend`, `details`) describes the initially selected spec; leave any field out and the page falls back to that spec's own next step, and derives them again when the person switches specs. Post it with `--wait`.
 
 A `__stop` before a pick ends the session the usual way: `finish` (headline "Paused", `"command":"/plan2code"`), then `stop` (`console-stop.md`).
 
@@ -23,3 +23,7 @@ A `__stop` before a pick ends the session the usual way: `finish` (headline "Pau
 ## A delete
 
 The ✕ on a chip (after the page's two-step confirm) sends `session:[{"i":"__delete","type":"delete","spec":"specs/<name>"}]` (a handoff has `handoff` where a spec has `spec`). It is no hop: no `resume`, you stay the dashboard. Delete through `node "<CONSOLE>" delete-spec --spec <spec>` or `delete-handoff --handoff <id>`, never your own `rm`; exit 3 with `message` means refused with nothing touched. Then `open --resume <sid> --no-open --workflow dashboard` to rescan, and post the menu again with `--wait`, its note saying what went or why not.
+
+## A Learning action
+
+The Learning row and banner send `session:[{"i":"__learning","do":"switch-on"}]` (`do` is `review`, `switch-on`, `switch-off`, `move-log` or `remove`; Remove was confirmed on the page). No hop: you stay the dashboard. Run `lessons.mjs` as the dashboard skill's "A Learning action arrives" says (a `review` while Learning is not set up is `list --first-ask` and the first ask, before anything is kept; the lessons card is the only question this page shows), then `open --resume <sid> --no-open --workflow dashboard` and post the menu again with `--wait`. Pause for me never reaches you: the page saves it itself. A `__launch` with `fromBanner: true` came from a dashboard showing lessons waiting.

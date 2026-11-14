@@ -328,6 +328,47 @@ test("a stopped loop leads with its short reason and puts the long line under it
   assert.equal(old.heading, HARD_STOP.line, "an older app without a reason keeps its line as the heading");
 });
 
+test("a stop shows why in a danger strip and what to do next under it, before the buttons", async (t) => {
+  const s = await openSetup(t);
+  const advice = "Fix the unreadable range in deps.mjs, then press Continue building.";
+  const seen = await s.page.evaluate(async (end) => {
+    const m = await import(new URL("screens/ending.js", document.baseURI).href);
+    const card = m.renderLoopEnd(end);
+    const why = card.querySelector(".loop-why");
+    const next = card.querySelector(".loop-advice");
+    const order = [...card.children].map((c) => c.className || c.tagName);
+    return { why: why?.textContent ?? null, next: next?.textContent ?? null, order };
+  }, { ...HARD_STOP, advice });
+  assert.equal(seen.why, HARD_STOP.line, "the reason strip holds the full line");
+  assert.equal(seen.next, `What to do next: ${advice}`);
+  const at = (cls) => seen.order.findIndex((c) => String(c).includes(cls));
+  assert.ok(at("loop-why") < at("loop-advice") && at("loop-advice") < at("loop-end-actions"), seen.order.join(" > "));
+  const old = await drawStop(s, { ...HARD_STOP, reason: undefined, advice: undefined });
+  assert.equal(old.line, null, "an older app without a reason keeps its line as the heading and draws no strip");
+  const finished = await s.page.evaluate(async () => {
+    const m = await import(new URL("screens/ending.js", document.baseURI).href);
+    const card = m.renderLoopEnd({ kind: "finished", line: "All 1 phases built", phases: [], uncommitted: [], can: ["finalize", "dashboard"], advice: "never shown" });
+    return Boolean(card.querySelector(".loop-why, .loop-advice"));
+  });
+  assert.equal(finished, false, "a finish has no reason to give");
+});
+
+test("a doc blockquote opening with [!CAUTION] or [!TIP] becomes a colored alert box with the marker removed", async (t) => {
+  const s = await openSetup(t);
+  const seen = await s.page.evaluate(async () => {
+    const { md } = await import(new URL("render.js", document.baseURI).href);
+    const root = md("> [!CAUTION]\n> **Why it stopped:** a test failed\n\n> [!TIP]\n> **What to do next:** fix it\n\n> a plain quote");
+    const boxes = [...root.querySelectorAll("blockquote")].map((q) => ({ cls: q.className, text: q.textContent.trim() }));
+    return boxes;
+  });
+  assert.equal(seen.length, 3);
+  assert.ok(seen[0].cls.includes("md-alert") && seen[0].cls.includes("md-alert-caution"), seen[0].cls);
+  assert.ok(seen[1].cls.includes("md-alert-tip"), seen[1].cls);
+  assert.equal(seen[2].cls, "md-quote", "an ordinary quote is unchanged");
+  assert.equal(seen[0].text.includes("[!CAUTION]"), false, "the marker is not shown");
+  assert.ok(seen[0].text.startsWith("Why it stopped: a test failed"), seen[0].text);
+});
+
 test("every stop-screen button carries one plain line saying what it does", async (t) => {
   const s = await openSetup(t);
   const seen = await drawStop(s, HARD_STOP);

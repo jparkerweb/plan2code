@@ -22,6 +22,7 @@ The FIRST thing you do, before anything else in this file — before Auto-Discov
 ## Rules
 
 - Follow `./AGENTS.md` if it exists
+- **Lessons:** then read `references/lessons.md` and follow its Start and While working sections (`node "<S>/lessons.mjs"`).
 - Require planning document before proceeding
 - Tasks must be specific enough for a developer with NO context
 - Use checkbox format `- [ ]` for Task items ONLY (not prerequisites, acceptance criteria, or success criteria)

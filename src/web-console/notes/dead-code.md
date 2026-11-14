@@ -32,7 +32,7 @@ Once Step 7 ends with at least one pick `removed` (Step 7.5): `confirm` "Run a f
 
 ## The report and the offers
 
-Doc `report`: one `md` block, the headline first (Complete, Narrowed or Stopped), then scope, method and tools, the hidden and dropped counts, and the findings table with each outcome. Then each offer as a `confirm`, `--wait`, `"doc":"report"`: "Save the report" (naming `.plan2code-dead-code/reports/DEAD-CODE-<date>.md`), "Keep these findings" (the reasons asked as a `text` card after a yes), and on first save ".gitignore line".
+Doc `report`: one `md` block, the headline first (Complete, Narrowed or Stopped), then scope, method and tools, the hidden and dropped counts, and the findings table with each outcome. Then each offer as a `confirm`, `--wait`, `"doc":"report"`: "Save the report" (naming `.plan2code/dead-code/reports/DEAD-CODE-<date>.md`), "Keep these findings" (the reasons asked as a `text` card after a yes), and on first save ".gitignore line".
 
 Helpers are reported as `helpers`, each `done` or `failed` before the findings page goes up. Labels, picks and questions stay with you.
 

@@ -33,6 +33,7 @@ import {
   UPLOAD_MAX_AGE_MS,
 } from "./sessions.mjs";
 import { scanProject } from "./scan.mjs";
+import { learningScan } from "./learning.mjs";
 import {
   applyPatch,
   blankState,
@@ -392,6 +393,13 @@ export async function cmdOpen() {
   if (scan) {
     scan.handoffs = listHandoffs(worktree);
     scan.handoffsDir = handoffsDir();
+    // Learning's row and banner (learning.mjs). Absent when the settings file
+    // is of a format this console does not know, so the page draws no row; a
+    // failure in the core never fails open.
+    try {
+      const learning = learningScan(worktree);
+      if (learning) scan.learning = learning;
+    } catch {}
   }
   // The git board's data, the same way: the console's own read-only snapshot
   // (git-repo.mjs), taken before the lock so no git process runs under it.

@@ -6,7 +6,7 @@ A local page where the person answers your questions, reads your drafts and appr
 
 ## Start
 
-`node "<CONSOLE>" open --workflow <w>` (add `--spec specs/<idea>` when known). `<w>` is one of `dashboard`, `init`, `init-update`, `pathfinder`, `quick-task`, `plan`, `revise-plan`, `document`, `implement`, `implement-review`, `review`, `finalize`, `handoff`, `git`, `changelog`, `xray`, `diagnose`, `pr-prep`, `test`, `dead-code`, `ui-prototype`. Launched from the dashboard? The session is open: run the `resume` command the launch carried instead.
+`node "<CONSOLE>" open --workflow <w>` (add `--spec specs/<idea>` when known). `<w>` is one of `dashboard`, `init`, `init-update`, `pathfinder`, `quick-task`, `plan`, `revise-plan`, `document`, `implement`, `implement-review`, `review`, `finalize`, `handoff`, `git`, `changelog`, `xray`, `diagnose`, `pr-prep`, `test`, `dead-code`, `deps`, `ui-prototype`. Launched from the dashboard? The session is open: run the `resume` command the launch carried instead.
 
 Keep `sid`: every later command takes `--session <sid>`. `open` failing: carry on in the terminal. When `open` adds `remote` and a `note`, give the link, ask whether it opened, and move to the terminal if not. Tell the person the link (with `"inApp":true`, never print it: only how many questions are waiting) and end every terminal message with the latest `terminalLine`, verbatim.
 
@@ -49,7 +49,7 @@ One-line JSON, only what changed; the patch merges (`items`, `topics`, `docs` an
 
 `{"title":"Audit export","headline":{"stage":"Working","cleared":4,"total":9,"confidence":"One area still needs work."},"items":[...],"agent":{"status":"working","activity":"Reading the plan"}}`
 
-`headline.cleared`/`total` drive the progress bar: always fill them. `agent.activity` is one plain sentence; add `quietMinutes` (1 to 60) when a stretch may go silent. Say `status:"working"` only while you work on with nothing for the person to answer. A new open question hands the turn over by itself; with only a doc or notice up, post `"agent":{"status":"waiting"}` yourself before you wait.
+`headline.cleared`/`total` drive the progress bar: fill them. `agent.activity` is one plain sentence; add `quietMinutes` (1 to 60) when a stretch may go silent. Say `status:"working"` only while nothing waits on the person. A new open question hands the turn over by itself; with only a doc or notice up, post `"agent":{"status":"waiting"}` yourself before you wait.
 
 Every item: `id` (new for each question, whole session), `kind`, `title` (2 to 4 plain words), `body` (markdown: the question and why it matters), optional `topic`, `doc`, `required:false` (adds Skip), `token` (`{"A":"approved"}`: the typed word an answer stands for).
 
@@ -65,9 +65,10 @@ Every item: `id` (new for each question, whole session), `kind`, `title` (2 to 4
 | `review` | read, then approve | `doc` (required), `summary`, `verdicts:[{id,label,danger?}]`, `nothingYet` (false once the change is on disk) | `{verdict,text?}` |
 | `checklist` | steps only they can do | `steps`, `valuesLabel` | `{done?,state?,text?}` |
 | `list` | reorder or edit a breakdown | `rows:[{id,title,body}]` | `{rows}` or `{text}` |
+| `lessons` | approve noted lessons | `rows`, `opening`, `firstAsk` (from `lessons.mjs list`) | `{decisions}` or `{firstAsk}` |
 | `notice` | read, no answer | none | none |
 
-Items show in the order sent: send them in the order you want them answered.
+Items show in the order sent, so send them in answering order.
 
 **Documents:** the first patch that carries `docs` is answered with a `read` pointer to `console-docs.md`.
 

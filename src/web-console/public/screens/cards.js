@@ -35,6 +35,13 @@ import {
   verdictText,
   handoffText,
   finishPaused,
+  LESSON_KEEP_WORD,
+  LESSON_EDIT_WORDS,
+  LESSON_EDIT_WORD,
+  lessonDecision,
+  lessonMissing,
+  lessonEditStart,
+  lessonReworded,
 } from "../answers.js";
 import { el, md } from "../render.js";
 import {
@@ -352,6 +359,9 @@ export function renderCard(item) {
       (flight ? " is-inflight" : "") +
       (loopLock ? " is-loop-" + loopLock : "")
   );
+
+  // The pick count's fixed live node speaks only for a card that counts.
+  if (!(item.kind === "multi" && item.counter && isOpen(item))) announceCount("");
 
   // Which question this card is for, so a render can tell whether the card it
   // is replacing is the same one (keep the scroll) or a different one (start
@@ -770,6 +780,7 @@ function otherField(card, item, staged) {
 // the pager kept pointing the wrong way while the footer said "1 ready".
 function stagedChanged() {
   hooks.renderFooter();
+  hooks.refreshLessonsSend();
   hooks.renderSidebar();
   renderStagedMarks();
 }
@@ -920,12 +931,55 @@ function clearRow(card, item) {
   card.appendChild(row);
 }
 
+// Which `more` bodies are open, by question and option key, so a redraw (every
+// tick is one) leaves an opened row open. Page memory only: a reload starts
+// with every row closed.
+const openMore = new Set();
+const moreKey = (item, o) => `${item.id}\u0000${o.k}`;
+
+// The keys a multi may never send: a locked row is shown, never picked.
+function lockedKeys(item) {
+  return new Set((item.options || []).filter((o) => o && o.locked === true).map((o) => o.k));
+}
+
+// "N picked, M <label>": M counts the distinct `batch` values among the ticked
+// options, and an option with no `batch` counts as a round of its own.
+function multiCount(item, ks) {
+  const picked = new Set(ks || []);
+  const rounds = new Set();
+  let n = 0;
+  for (const o of item.options || []) {
+    if (!o || !picked.has(o.k) || o.locked === true) continue;
+    n++;
+    rounds.add(typeof o.batch === "string" ? "b\u0000" + o.batch : "k\u0000" + o.k);
+  }
+  return { picked: n, rounds: rounds.size };
+}
+
 function buildMulti(card, item, staged) {
-  const chosen = new Set((staged && staged.ks) || []);
+  const locked = lockedKeys(item);
+  const chosen = new Set(((staged && staged.ks) || []).filter((k) => !locked.has(k)));
+  const grouped = (item.options || []).some((o) => o && typeof o.group === "string" && o.group);
   const list = el("ul", "options");
+  let lastGroup;
   for (const [i, o] of (item.options || []).entries()) {
-    const on = chosen.has(o.k);
-    const li = el("li", "option" + (on ? " is-picked" : ""));
+    // A heading before the first option of each run sharing a group, in the
+    // order sent. A run with no group gets none, as a list with no groups does.
+    if (grouped) {
+      const g = typeof o.group === "string" && o.group ? o.group : null;
+      if (g && g !== lastGroup) {
+        const head = el("li", "option-group-row");
+        head.setAttribute("role", "presentation");
+        head.appendChild(el("h4", "option-group", g));
+        list.appendChild(head);
+      }
+      lastGroup = g;
+    }
+    const isLocked = o.locked === true;
+    const on = !isLocked && chosen.has(o.k);
+    const hasMore = typeof o.more === "string" && Boolean(o.more);
+    // "is-held", not "is-locked": that class is the settled record's (lockedOptions).
+    const li = el("li", "option" + (on ? " is-picked" : "") + (isLocked ? " is-held" : "") + (hasMore ? " has-more" : ""));
     const label = el("label");
     label.style.display = "contents";
 
@@ -935,9 +989,14 @@ function buildMulti(card, item, staged) {
     box.value = o.k;
     box.checked = on;
     box.setAttribute("aria-label", o.k ? `${o.k}: ${o.text}` : o.text);
+    if (isLocked) {
+      box.disabled = true;
+      box.setAttribute("aria-disabled", "true");
+    }
     box.addEventListener("change", () => {
+      if (isLocked) return;
       const cur = page.local.staged[item.id];
-      const next = new Set((cur && cur.ks) || []);
+      const next = new Set(((cur && cur.ks) || []).filter((k) => !locked.has(k)));
       if (box.checked) next.add(o.k);
       else next.delete(o.k);
       // Unticking the last box keeps what is written in "Anything else".
@@ -962,12 +1021,67 @@ function buildMulti(card, item, staged) {
     label.appendChild(box);
     label.appendChild(body);
     li.appendChild(label);
+
+    // A row that opens: the button sits outside the label, so pressing it
+    // never toggles the tick, and the tick never opens the row.
+    if (hasMore) {
+      const key = moreKey(item, o);
+      const open = openMore.has(key);
+      const bodyId = `more-${item.id}-${o.k || i}`;
+      const toggle = el("button", "option-more-btn", open ? "Less" : "More");
+      toggle.type = "button";
+      // Stable across redraws, so the click handler can find the new button.
+      toggle.id = `more-btn-${item.id}-${o.k || i}`;
+      toggle.setAttribute("aria-expanded", String(open));
+      toggle.setAttribute("aria-controls", bodyId);
+      // The name starts with the visible word, so "click Less" finds it.
+      toggle.setAttribute("aria-label", `${open ? "Less" : "More"} about ${o.text}`);
+      toggle.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (openMore.has(key)) openMore.delete(key);
+        else openMore.add(key);
+        const id = toggle.id;
+        // The redraw rebuilds the card, and withFocus keeps focus only on
+        // fields, so put it back on the new button by hand.
+        redraw();
+        const again = document.getElementById(id);
+        if (again) again.focus();
+      });
+      li.appendChild(toggle);
+      if (open) {
+        const more = md(o.more, "md option-more");
+        more.id = bodyId;
+        li.appendChild(more);
+      }
+    }
     list.appendChild(li);
   }
   card.appendChild(list);
   card.appendChild(el("p", "help", "Pick as many as apply."));
   renderPresets(card, item, staged);
+  renderCounter(card, item, chosen);
   otherField(card, item, staged);
+}
+
+// The live pick and round count a long pick list carries (`counter`), so the
+// person sees how many check rounds their ticks will cost before sending.
+// Every tick, preset and clear stages, and staging redraws the card, so the
+// count is always the one for the ticks on screen.
+function renderCounter(card, item, chosen) {
+  const c = item.counter;
+  if (!c || typeof c !== "object" || typeof c.rounds !== "string" || !c.rounds) return;
+  const { picked, rounds } = multiCount(item, [...chosen]);
+  const text = `${picked} picked, ${rounds} ${c.rounds}`;
+  card.appendChild(el("p", "option-counter", text));
+  // The card is rebuilt on every tick, and a live region announces only a
+  // node already on the page: speak through the one fixed node in index.html.
+  announceCount(text);
+}
+
+function announceCount(text) {
+  const live = document.getElementById("pick-count-live");
+  if (live && live.textContent !== text) live.textContent = text;
 }
 
 // Shortcuts that tick a named set in one go, for a long list where the usual
@@ -976,7 +1090,8 @@ function buildMulti(card, item, staged) {
 // still the ticks, so they can adjust after pressing one, and what reaches the
 // agent is the same list it would have got from ticking by hand.
 function renderPresets(card, item, staged) {
-  const known = new Set((item.options || []).map((o) => o.k));
+  // A locked option is never part of a preset, whatever the preset names.
+  const known = new Set((item.options || []).filter((o) => o && o.locked !== true).map((o) => o.k));
   const presets = (Array.isArray(item.presets) ? item.presets : [])
     .map((p) => ({ label: String((p && p.label) || "").trim(), ks: ((p && p.ks) || []).filter((k) => known.has(k)) }))
     .filter((p) => p.label && p.ks.length);
@@ -1607,6 +1722,323 @@ function buildList(card, item, staged) {
   commentField(card, item, "Anything else about this breakdown?", false, quick);
 }
 
+/* ------------------------------------------------------ the lessons card */
+
+// What the person has chosen on a lessons card, kept as a draft beside the
+// staged answer: the pick and any edits per row, and whether they chose to
+// leave everything waiting. The staged answer is built from it, and is held
+// back while an edit is missing a required field.
+const lessonsKey = (item) => "lessons-" + item.id;
+
+function lessonsDraft(item) {
+  const raw = page.local.drafts[lessonsKey(item)];
+  let d = null;
+  try {
+    d = raw ? JSON.parse(raw) : null;
+  } catch {
+    d = null;
+  }
+  const picks = d && d.picks && typeof d.picks === "object" ? d.picks : {};
+  const edits = d && d.edits && typeof d.edits === "object" ? d.edits : {};
+  return { picks, edits, leaveAll: Boolean(d && d.leaveAll) };
+}
+
+// The answer the draft stands for, or null with the field still missing.
+function lessonsAnswer(item, draft) {
+  const rows = item.rows || [];
+  const decisions = [];
+  let missing = "";
+  for (const row of rows) {
+    const choice = draft.picks[row.id];
+    if (!choice) continue;
+    const d = lessonDecision(row, choice, draft.edits[row.id] || {});
+    const gap = lessonMissing(row, d);
+    if (gap && !missing) missing = `${gap} is empty on “${row.text || row.id}”. Write it, or choose another option.`;
+    decisions.push(d);
+  }
+  if (missing) return { value: null, missing };
+  // Nothing chosen yet: only a typed note stays staged, as it would on any card.
+  if (!decisions.length && !draft.leaveAll) return { value: lessonsNote(item, null), missing: "" };
+  return { value: lessonsNote(item, { type: "answer", kind: "lessons", decisions }), missing: "" };
+}
+
+// withNote, also reading the note box's draft: while a field is empty the
+// staged answer is taken back, note and all, and the box still shows the note.
+function lessonsNote(item, value) {
+  const cur = page.local.staged[item.id];
+  const text = (cur && cur.text) || String(page.local.drafts["note-" + item.id] || "").trim();
+  if (!text) return value;
+  return value ? { ...value, text } : { type: "answer", kind: item.kind, text };
+}
+
+// What the draft leaves: "2 chosen, 1 left waiting."
+function lessonsSummary(item, draft) {
+  const rows = item.rows || [];
+  const chosen = rows.filter((r) => draft.picks[r.id]).length;
+  const left = rows.length - chosen;
+  if (!chosen) return draft.leaveAll ? `Nothing chosen: all ${left} stay waiting.` : `Nothing chosen yet. ${left} waiting.`;
+  return `${chosen} chosen${left ? `, ${left} left waiting` : ""}.`;
+}
+
+const FLAG_WORDS = {
+  email: "an email address",
+  handle: "a handle (@name)",
+  "person-name": "a person's name",
+};
+
+function buildLessons(card, item, staged) {
+  if (item.firstAsk) return buildFirstAsk(card, item, staged);
+  const draft = lessonsDraft(item);
+  const summary = el("p", "lessons-summary");
+  summary.setAttribute("role", "status");
+  const error = el("p", "field-error lessons-error");
+  error.hidden = true;
+
+  // Save the draft and stage what it stands for. A pick redraws the card; an
+  // edit being typed does not, so the caret stays where it is.
+  const commit = (redrawCard) => {
+    setDraft(lessonsKey(item), JSON.stringify(draft));
+    const { value, missing } = lessonsAnswer(item, draft);
+    error.hidden = !missing;
+    error.textContent = missing;
+    summary.textContent = lessonsSummary(item, draft);
+    if (redrawCard) return stage(item.id, value);
+    stageQuiet(item.id, value);
+    stagedChanged();
+  };
+
+  if (item.opening) card.appendChild(el("p", "lessons-opening", item.opening));
+  const list = el("ul", "lessons-rows");
+  for (const row of item.rows || []) list.appendChild(lessonRow(item, row, draft, commit));
+  card.appendChild(list);
+
+  const { missing } = lessonsAnswer(item, draft);
+  error.hidden = !missing;
+  error.textContent = missing;
+  summary.textContent = lessonsSummary(item, draft);
+  card.appendChild(error);
+  const foot = el("div", "lessons-foot");
+  foot.appendChild(summary);
+  // Sending with nothing chosen is allowed: everything keeps waiting (FR-14).
+  const leave = el("button", "btn tiny" + (draft.leaveAll ? " primary" : ""), "Leave them all waiting");
+  leave.type = "button";
+  leave.setAttribute("aria-pressed", String(draft.leaveAll));
+  leave.addEventListener("click", () => {
+    draft.leaveAll = !draft.leaveAll;
+    if (draft.leaveAll) draft.picks = {};
+    commit(true);
+  });
+  foot.appendChild(leave);
+  card.appendChild(foot);
+  commentField(card, item, "Anything to add?");
+}
+
+// One waiting item: what it is, why, where it came from, and its own choices.
+function lessonRow(item, row, draft, commit) {
+  const pick = draft.picks[row.id] || "";
+  const li = el("li", "lessons-row is-" + row.type + (pick ? " is-chosen" : ""));
+  li.dataset.row = row.id;
+
+  if (row.type === "doubt" || row.type === "gone") {
+    li.appendChild(el("p", "lessons-heading", row.heading || (row.type === "doubt" ? "This lesson may no longer be true:" : "Its files no longer exist.")));
+    li.appendChild(el("p", "lessons-text", row.text));
+    if (row.found) li.appendChild(el("p", "lessons-found", "Found: " + row.found));
+  } else if (row.type === "agents-fix") {
+    li.appendChild(el("p", "lessons-heading", "A fix to " + (row.file || "AGENTS.md")));
+    const pair = el("div", "lessons-fix");
+    pair.appendChild(el("p", "lessons-fix-label", "Before"));
+    pair.appendChild(el("blockquote", "lessons-before", row.before || "(a new line)"));
+    pair.appendChild(el("p", "lessons-fix-label", "After"));
+    pair.appendChild(el("blockquote", "lessons-after", row.after || row.text || ""));
+    li.appendChild(pair);
+  } else if (row.type === "log-line") {
+    li.appendChild(el("p", "lessons-text", row.text));
+    const become = (row.lessons || []).filter(Boolean);
+    if (become.length) {
+      li.appendChild(el("p", "lessons-heading", become.length === 1 ? "It would become this lesson:" : "It would become these lessons:"));
+      const ul = el("ul", "lessons-become");
+      for (const t of become) ul.appendChild(el("li", null, t));
+      li.appendChild(ul);
+    }
+  } else {
+    li.appendChild(el("p", "lessons-text", row.text));
+  }
+  if (row.why && row.type !== "area") li.appendChild(el("p", "lessons-why", "Why: " + row.why));
+  if (row.type === "area") li.appendChild(el("p", "lessons-why", row.why || "Paths: " + (row.paths || []).join(", ")));
+  // The doubt's and the fix's origin repeat what is drawn above them.
+  if (row.origin && !["doubt", "gone", "agents-fix"].includes(row.type)) li.appendChild(el("p", "lessons-origin", row.origin));
+  if (row.note) li.appendChild(el("p", "lessons-note", row.note));
+
+  for (const f of Array.isArray(row.flags) ? row.flags : []) {
+    const what = FLAG_WORDS[f && f.pattern] || "something personal";
+    li.appendChild(el("p", "lessons-flag", `Holds what looks like ${what}${f && f.part ? ` (“${f.part}”)` : ""}. Keep only if that is intended.`));
+  }
+
+  const reworded = lessonReworded(row, draft.edits[row.id] || {});
+  const keepWord = LESSON_KEEP_WORD[row.type];
+  if (row.refused) {
+    const part = row.refused.part ? ` (it starts “${row.refused.part}”)` : "";
+    li.appendChild(el("p", "lessons-refused", `Refused: part of it looks like a secret${part}. Reword it to ${keepWord.toLowerCase()} it.`));
+  }
+
+  // The choices, in the order given; a refused row shows its keep word
+  // unavailable until the words change.
+  const choices = [...(row.choices || [])];
+  if (row.refused && keepWord && !choices.includes(keepWord)) choices.unshift(keepWord);
+  const group = el("div", "lessons-choices");
+  group.setAttribute("role", "group");
+  group.setAttribute("aria-label", "Choices for: " + (row.text || row.id));
+  choices.forEach((word, i) => {
+    const on = pick === word;
+    const b = el("button", "btn small" + (on ? " primary" : ""), word);
+    b.type = "button";
+    b.id = `lesson-${item.id}-${row.id}-${i}`;
+    b.setAttribute("aria-pressed", String(on));
+    if (row.refused && word === keepWord && !reworded) {
+      b.disabled = true;
+      b.title = "Reword it first: part of it was refused.";
+    }
+    b.addEventListener("click", () => {
+      // Read the pick as the click lands: a refused row's typing can move it
+      // from Keep to Reword without a redraw.
+      const on = draft.picks[row.id] === word;
+      if (on) delete draft.picks[row.id];
+      else draft.picks[row.id] = word;
+      if (!on) draft.leaveAll = false;
+      // Opening an edit starts from the row's own words.
+      if (!on && LESSON_EDIT_WORDS.has(word) && !draft.edits[row.id]) draft.edits[row.id] = lessonEditStart(row);
+      commit(true);
+      // The redraw replaced the button; keep the keyboard where it was.
+      document.getElementById(b.id)?.focus();
+    });
+    group.appendChild(b);
+  });
+  li.appendChild(group);
+
+  // Reword (or Rename): the row opens in place with its words editable. A
+  // refused row keeps its reworded words while Keep is chosen, so Keep goes as
+  // a Reword of the new words.
+  const editing = LESSON_EDIT_WORDS.has(pick) || (row.refused && pick === keepWord);
+  if (editing) li.appendChild(lessonEditor(item, row, draft, commit));
+  return li;
+}
+
+function lessonEditor(item, row, draft, commit) {
+  const box = el("div", "lessons-edit");
+  if (!draft.edits[row.id]) draft.edits[row.id] = lessonEditStart(row);
+  const edit = draft.edits[row.id];
+  const base = `lesson-edit-${item.id}-${row.id}`;
+  const keepWord = LESSON_KEEP_WORD[row.type];
+
+  const input = (key, label, value, onValue) => {
+    const wrap = el("div", "field lessons-field");
+    const id = `${base}-${key}`;
+    const lab = el("label", null, label);
+    lab.htmlFor = id;
+    const field = el("input", "lessons-input");
+    field.type = "text";
+    field.id = id;
+    field.value = value || "";
+    field.addEventListener("input", () => {
+      onValue(field.value);
+      // A refused row's keep word becomes available the moment its words
+      // change; the rest of the card stays as it is, so the caret stays.
+      if (row.refused) {
+        const keep = [...box.parentNode.querySelectorAll(".lessons-choices button")].find((b) => b.textContent === keepWord);
+        if (keep) {
+          keep.disabled = !lessonReworded(row, edit);
+          if (keep.disabled) keep.title = "Reword it first: part of it was refused.";
+          else keep.removeAttribute("title");
+          // Back to the refused words: Keep cannot stand, so the row goes back to its edit word.
+          if (keep.disabled && draft.picks[row.id] === keepWord) {
+            draft.picks[row.id] = LESSON_EDIT_WORD[row.type];
+            keep.classList.remove("primary");
+            keep.setAttribute("aria-pressed", "false");
+            const editBtn = [...box.parentNode.querySelectorAll(".lessons-choices button")].find((b) => b.textContent === draft.picks[row.id]);
+            if (editBtn) {
+              editBtn.classList.add("primary");
+              editBtn.setAttribute("aria-pressed", "true");
+            }
+          }
+        }
+      }
+      commit(false);
+    });
+    wrap.append(lab, field);
+    return wrap;
+  };
+
+  if (row.type === "agents-fix") {
+    box.appendChild(input("after", "The new wording", edit.after, (v) => (edit.after = v)));
+  } else if (row.type === "area") {
+    box.appendChild(input("name", "The area's name", edit.name, (v) => (edit.name = v)));
+    box.appendChild(
+      input("paths", "Its paths (comma-separated)", (edit.paths || []).join(", "), (v) => (edit.paths = v.split(",").map((p) => p.trim()).filter(Boolean)))
+    );
+  } else {
+    if (row.type === "log-line") {
+      const list = Array.isArray(edit.lessons) ? edit.lessons : (edit.lessons = lessonEditStart(row).lessons);
+      list.forEach((t, i) =>
+        box.appendChild(input(`lesson-${i}`, list.length > 1 ? `Lesson ${i + 1}` : "The lesson", t, (v) => (list[i] = v)))
+      );
+    } else {
+      box.appendChild(input("text", "The lesson", edit.text, (v) => (edit.text = v)));
+    }
+    box.appendChild(input("why", "Why", edit.why, (v) => (edit.why = v)));
+    const areas = [...(Array.isArray(row.areas) ? row.areas : [])];
+    if (row.area && !areas.includes(row.area)) areas.unshift(row.area);
+    if (areas.length) {
+      const wrap = el("div", "field lessons-field");
+      const id = `${base}-area`;
+      const lab = el("label", null, "Saved in");
+      lab.htmlFor = id;
+      const sel = el("select", "lessons-select");
+      sel.id = id;
+      for (const a of areas) {
+        const o = el("option", null, a);
+        o.value = a;
+        if (a === (edit.area || row.area)) o.selected = true;
+        sel.appendChild(o);
+      }
+      sel.addEventListener("change", () => {
+        edit.area = sel.value;
+        commit(false);
+      });
+      wrap.append(lab, sel);
+      box.appendChild(wrap);
+    }
+  }
+  return box;
+}
+
+// The first ask (FR-30): the real lesson first, then what Learning is in three
+// sentences, then the two answers and the line saying it can change later.
+function buildFirstAsk(card, item, staged) {
+  const fa = item.firstAsk;
+  const lesson = el("div", "lessons-first-lesson");
+  lesson.appendChild(el("p", "lessons-text", (fa.lesson && fa.lesson.text) || ""));
+  if (fa.lesson && fa.lesson.why) lesson.appendChild(el("p", "lessons-why", "Why: " + fa.lesson.why));
+  card.appendChild(lesson);
+  const about = el("div", "lessons-first-about");
+  for (const s of fa.sentences || []) about.appendChild(md(s, "md"));
+  card.appendChild(about);
+  const row = el("div", "btn-row");
+  for (const [answer, label] of [
+    ["yes", fa.yes],
+    ["no", fa.no],
+  ]) {
+    const on = staged && staged.firstAsk === answer;
+    const b = el("button", "btn" + (on ? " primary" : answer === "yes" ? " is-approve" : ""), label);
+    b.type = "button";
+    b.setAttribute("aria-pressed", String(Boolean(on)));
+    b.addEventListener("click", () => stage(item.id, withNote(item, on ? null : { type: "answer", kind: "lessons", firstAsk: answer })));
+    row.appendChild(b);
+  }
+  card.appendChild(row);
+  if (fa.later) card.appendChild(el("p", "help lessons-later", fa.later));
+  commentField(card, item, "Anything to add?");
+}
+
 const PHASE_WORKFLOWS = ["plan", "revise-plan"];
 const COMBINE_PHASES =
   "Combine phases where possible to simplify and reduce the total number of phases, while still keeping a clear separation of concerns.";
@@ -1672,6 +2104,7 @@ const BUILDERS = {
   checklist: buildChecklist,
   menu: buildMenu,
   list: buildList,
+  lessons: buildLessons,
 };
 
 // The listeners that keep the cards honest, wired once at start-up: the fade at

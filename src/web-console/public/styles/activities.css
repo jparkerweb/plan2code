@@ -21,6 +21,10 @@
   flex-direction: column;
 }
 .modal.activities[open] { display: flex; }
+/* While the picker is showing, the two columns of rows only need so much room:
+   wider and the name and blurb sit far from their score. A game keeps the
+   whole window. */
+.modal.activities:has(#activities-picker:not([hidden])) { max-width: 1100px; }
 .modal.activities h2,
 .modal.activities .modal-blurb,
 .modal.activities .modal-actions { flex: none; }

@@ -57,7 +57,7 @@ narrow     Groups a candidates file (the candidates array run printed, or the
            whole run output) by the first --depth folder levels. Prints
            { ok, folders: [{ path, candidates }], total }, the folders with
            the most candidates first, ties by path.
-keep       The shared keep list, .plan2code-dead-code/keep.md (tracked, safe
+keep       The shared keep list, .plan2code/dead-code/keep.md (tracked, safe
            to commit): a table | File | Name | Hash | Reason | Date |. Hash
            is <12 hex>, the first 12 hex of the sha256 of the item's
            declaration line, trimmed with whitespace runs collapsed;
@@ -116,7 +116,7 @@ restore    Copies a run's files (all, or --files) back over the project,
            nothing and only checks (verified lists the matches). A run with
            no manifest exits 3; a manifest path outside the project exits 5
            before anything is copied. Never deletes.
-report     write: .plan2code-dead-code/reports/DEAD-CODE-<date>.md from
+report     write: .plan2code/dead-code/reports/DEAD-CODE-<date>.md from
            --findings, a JSON file { scope, mode, tool, ranFrom, findings,
            hidden?, notChecked? }. mode: verify (the tool's list checked by
            a caller search), full (plus a full search of our own) or own (no
@@ -131,11 +131,11 @@ report     write: .plan2code-dead-code/reports/DEAD-CODE-<date>.md from
            preview, the first lines.
 gitignore-check
            Prints { ok, isGit, hasGitignore, ignored, line, file }: ignored
-           when .gitignore holds .plan2code-dead-code/reports/ (or
-           .plan2code-dead-code/.gitignore holds reports/), or git
+           when .gitignore holds .plan2code/dead-code/reports/ (or
+           .plan2code/dead-code/.gitignore holds reports/), or git
            check-ignore says another rule covers it.
 gitignore-add
-           Appends .plan2code-dead-code/reports/ to the root .gitignore
+           Appends .plan2code/dead-code/reports/ to the root .gitignore
            (made if missing; no other line is touched). Not a git repo: exit
            5. Already ignored: added: false, already: true.
 
@@ -810,8 +810,10 @@ export function readOutput(format, text, root) {
 // The shared keep list (FR-13): tracked in the person's project, safe to
 // commit. One table row per kept item; prose around the table is the
 // person's and is never rewritten.
-export const STATE_DIR = ".plan2code-dead-code";
+export const STATE_DIR = ".plan2code/dead-code";
 const KEEP_REL = `${STATE_DIR}/keep.md`;
+/** A project path from a slash-separated relative one (the state folder is two levels deep). */
+const inRoot = (root, rel) => path.join(root, ...rel.split("/"));
 const KEEP_COLUMNS = ["File", "Name", "Hash", "Reason", "Date"];
 const KEEP_HEADER_LINE = /^\|\s*File\s*\|\s*Name\s*\|\s*Hash\s*\|\s*Reason\s*\|\s*Date\s*\|\s*$/i;
 const KEEP_INTRO = [
@@ -843,7 +845,7 @@ function keepTableSpan(lines) {
 
 /** The keep list: { entries: [{ file, name, hash, reason, date }], path, exists }. A missing file or one with no table has no entries. */
 export function readKeep(root) {
-  const file = path.join(root, KEEP_REL);
+  const file = inRoot(root, KEEP_REL);
   const text = readText(file);
   if (text === null) return { entries: [], path: file, exists: false };
   const lines = text.split(/\r?\n/);
@@ -885,7 +887,7 @@ function keepText(current, entries) {
 
 /** Rewrite the keep table (creating the folder and the file on first write). Returns the file's path. */
 export function writeKeep(root, entries) {
-  const file = path.join(root, KEEP_REL);
+  const file = inRoot(root, KEEP_REL);
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, keepText(readText(file), entries));
   return file;
@@ -1522,7 +1524,7 @@ function cmdReport(argv) {
   const doc = readFindings(args.findings);
   const date = args.date || isoDate();
   const rel = `${REPORTS_REL}/DEAD-CODE-${date}.md`;
-  const file = path.join(root, rel);
+  const file = inRoot(root, rel);
   if (fs.existsSync(file) && !args.replace) fail(EXIT.REFUSED, "report-exists", `${rel} already exists.`, "Ask the person whether to replace it, then pass --replace.", { path: rel });
   const text = reportMarkdown(doc, date);
   if (args["dry-run"]) return out({ ok: true, dryRun: true, path: rel, preview: text.split("\n").slice(0, 14) });
@@ -1550,7 +1552,7 @@ function gitignoreState(root) {
   let line = lineIn(rootIgnore, [REPORTS_LINE]);
   let file = line ? ".gitignore" : null;
   if (!line) {
-    line = lineIn(readText(path.join(root, STATE_DIR, ".gitignore")), ["reports/"]);
+    line = lineIn(readText(inRoot(root, `${STATE_DIR}/.gitignore`)), ["reports/"]);
     if (line) file = `${STATE_DIR}/.gitignore`;
   }
   // Any other rule that covers the folder (a wider pattern) counts too.

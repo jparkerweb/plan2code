@@ -24,6 +24,7 @@ The FIRST thing you do, before anything else in this file — before the Require
 ## Rules
 
 - Follow `./AGENTS.md` if it exists
+- **Lessons:** then read `references/lessons.md` and follow its Start and While working sections (`node "<S>/lessons.mjs"`).
 - Complete steps IN ORDER
 - STOP and ask user before proceeding when:
   - Incomplete tasks found (Step 1)

@@ -1,0 +1,374 @@
+// Plan2Code Web Console - Learning's row on the dashboard: one slim line in four
+// states and two places, built from the saved prototype (specs/project-learning
+// prototypes/learning-row.html, variant A). Under the spec picker while it needs
+// the person (not set up, off, paused); after the last card group while on.
+//
+// Pause for me is the one control that needs no agent: it posts to
+// /learning/pause and the server pushes the new scan. Everything that changes
+// the project goes to the dashboard agent as a __learning action (sendLearning
+// in dashboard.js, reached through hooks: a screen never imports another),
+// and is disabled whenever a card would be.
+
+import { page, redraw, hooks } from "../state.js";
+import { el, mdInto, lightDismiss } from "../render.js";
+import { postJson } from "../net.js";
+import { sendState } from "../send-state.js";
+import { loopDriving, isOpen, stagedCount } from "../selectors.js";
+
+const TOP_STATES = new Set(["not-set-up", "off", "paused"]);
+
+const PILLS = {
+  "not-set-up": { text: "Not set up", cls: "" },
+  off: { text: "Off", cls: "" },
+  on: { text: "On", cls: " is-on" },
+  paused: { text: "Paused for you", cls: " is-hold" },
+};
+
+// The More menu stays open across the dashboard's redraws until it is closed.
+let moreOpen = false;
+// A pause post in flight: the switch holds until the pushed state lands.
+let pausing = false;
+
+/** "Nov 13", the way the page's other short dates read. */
+function shortDate(iso) {
+  const at = new Date(iso);
+  if (!iso || Number.isNaN(at.getTime())) return "";
+  return at.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+/**
+ * Why an agent-run control is unavailable, or "" when it can be pressed: the
+ * same conditions that disable a dashboard card (dashCard()).
+ */
+export function learningBlocked() {
+  if (page.gone) return "Plan2Code is not answering right now.";
+  if (page.pendingResult) return "Plan2Code is still picking up your last choice.";
+  if (page.local && page.local.launching) return "A workflow is starting.";
+  if (loopDriving()) return "The Implementation Loop is running.";
+  return "";
+}
+
+function agentButton(text, cls, what) {
+  const b = el("button", cls, text);
+  b.type = "button";
+  const why = learningBlocked();
+  b.disabled = Boolean(why);
+  if (why) b.title = why;
+  b.addEventListener("click", () => {
+    if (!learningBlocked()) hooks.sendLearning(what);
+  });
+  return b;
+}
+
+function pauseSwitch(paused) {
+  const b = el("button", "learn-switch" + (paused ? " is-on" : ""));
+  b.type = "button";
+  b.setAttribute("role", "switch");
+  b.setAttribute("aria-checked", paused ? "true" : "false");
+  b.disabled = pausing || Boolean(page.gone);
+  if (page.gone) b.title = "The console is not reachable right now.";
+  const track = el("span", "learn-track");
+  track.setAttribute("aria-hidden", "true");
+  b.append(track, document.createTextNode("Pause for me"));
+  b.addEventListener("click", async () => {
+    if (pausing) return;
+    pausing = true;
+    redraw();
+    const { status } = await postJson("/learning/pause", { paused: !paused });
+    pausing = false;
+    if (status !== 200) {
+      hooks.banner(
+        status === 409 ? "Learning is no longer on for this project, so there is nothing to pause." : "The pause did not go through. Try again.",
+        "warn"
+      );
+    }
+    redraw();
+  });
+  return b;
+}
+
+function closeMore(focusButton) {
+  if (!moreOpen) return;
+  moreOpen = false;
+  redraw();
+  if (focusButton) queueMicrotask(() => document.querySelector(".learn-row .learn-more-btn")?.focus());
+}
+
+function moreMenu() {
+  const wrap = document.createDocumentFragment();
+  const btn = el("button", "learn-link learn-more-btn", "More ▴");
+  btn.type = "button";
+  btn.setAttribute("aria-haspopup", "menu");
+  btn.setAttribute("aria-expanded", moreOpen ? "true" : "false");
+  btn.addEventListener("click", () => {
+    moreOpen = !moreOpen;
+    redraw();
+    if (moreOpen) queueMicrotask(() => document.querySelector(".learn-more [role=menuitem]:not([aria-disabled=true])")?.focus());
+  });
+  btn.addEventListener("keydown", (e) => {
+    if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+      e.preventDefault();
+      moreOpen = true;
+      redraw();
+      queueMicrotask(() => document.querySelector(".learn-more [role=menuitem]")?.focus());
+    }
+  });
+  const list = el("ul", "learn-more");
+  list.setAttribute("role", "menu");
+  list.setAttribute("aria-label", "More Learning actions");
+  list.hidden = !moreOpen;
+  const why = learningBlocked();
+  const item = (text, act, cls = "") => {
+    const li = el("li", "learn-more-item" + cls, text);
+    li.setAttribute("role", "menuitem");
+    li.tabIndex = -1;
+    if (why) {
+      li.setAttribute("aria-disabled", "true");
+      li.title = why;
+    }
+    const run = () => {
+      if (learningBlocked()) return;
+      moreOpen = false;
+      act();
+      redraw();
+    };
+    li.addEventListener("click", run);
+    li.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        run();
+      }
+    });
+    return li;
+  };
+  list.append(
+    item("Switch off for this project", () => hooks.sendLearning("switch-off")),
+    item("Move the failure log into lessons", () => hooks.sendLearning("move-log")),
+    item("Remove all lessons…", () => openRemoveConfirm(), " is-danger")
+  );
+  list.addEventListener("keydown", (e) => {
+    const items = [...list.querySelectorAll("[role=menuitem]")];
+    const at = items.indexOf(document.activeElement);
+    if (e.key === "Escape") {
+      e.preventDefault();
+      e.stopPropagation();
+      closeMore(true);
+    } else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      const step = e.key === "ArrowDown" ? 1 : -1;
+      items[(at + step + items.length) % items.length]?.focus();
+    } else if (e.key === "Home" || e.key === "End") {
+      e.preventDefault();
+      (e.key === "Home" ? items[0] : items[items.length - 1])?.focus();
+    } else if (e.key === "Tab") {
+      closeMore(false);
+    }
+  });
+  wrap.append(btn, list);
+  return wrap;
+}
+
+// One listener for the page's life: a click outside the row, or Escape
+// anywhere, closes an open More menu.
+let outsideWired = false;
+function wireOutside() {
+  if (outsideWired) return;
+  outsideWired = true;
+  document.addEventListener("pointerdown", (e) => {
+    if (moreOpen && !(e.target instanceof Element && e.target.closest(".learn-more, .learn-more-btn"))) closeMore(false);
+  });
+  document.addEventListener("keydown", (e) => {
+    if (moreOpen && e.key === "Escape") closeMore(true);
+  });
+}
+
+/* ------------------------------------------------------------- the dialogs */
+
+/**
+ * Review from the dashboard (FR-18): the dashboard agent posts the lessons
+ * card while the workflow is still `dashboard`, and its page draws no question
+ * cards, so the card is shown here, in a dialog over the menu, built by the
+ * same builder as on any other page (reached through hooks). It opens while an
+ * open lessons item waits for the person and closes once it is sent or
+ * answered. `on` is false off the dashboard menu, which closes it.
+ */
+export function renderLessonsDialog(on) {
+  const items = (page.S && Array.isArray(page.S.items) && page.S.items) || [];
+  const item = on ? items.find((i) => i && i.kind === "lessons" && isOpen(i)) : null;
+  // Any send closes it for good: a dashboard lessons card is never asked
+  // again, and once the agent collects the send and goes back to waiting, the
+  // page no longer counts it in flight while the card may still read open.
+  const sent = item && ((page.local.sent && page.local.sent[item.id]?.value) || item.submitted);
+  let dlg = document.getElementById("lessons-modal");
+  if (!item || sent) {
+    if (dlg && dlg.open) dlg.close();
+    return;
+  }
+  if (!dlg) {
+    dlg = el("dialog", "modal lessons-dialog");
+    dlg.id = "lessons-modal";
+    dlg.setAttribute("aria-label", "Lessons to review");
+    // Not light-dismissed, and Escape does not close it: the agent is waiting
+    // on this card, and the dialog is the only place it is drawn. Leave them
+    // all waiting, then Send, is the way out.
+    dlg.addEventListener("cancel", (e) => e.preventDefault());
+    document.body.appendChild(dlg);
+  }
+  const scroll = dlg.scrollTop;
+  const card = hooks.renderCard(item);
+  const actions = el("div", "modal-actions");
+  const go = el("button", "btn primary", "Send to Plan2Code");
+  go.type = "button";
+  go.id = "lessons-send";
+  go.addEventListener("click", () => hooks.send());
+  actions.appendChild(go);
+  if (stagedCount() > 1) actions.appendChild(el("p", "help", "Anything else ready to send goes with it."));
+  dlg.replaceChildren(card, actions);
+  refreshLessonsSend();
+  if (!dlg.open) dlg.showModal();
+  dlg.scrollTop = scroll;
+}
+
+/**
+ * The dialog's Send, set again whenever what is staged changes, including the
+ * quiet staging of typing (a Reword field emptied, a note): on only while the
+ * lessons card holds an answer and a send can go.
+ */
+export function refreshLessonsSend() {
+  const go = document.getElementById("lessons-send");
+  if (!go) return;
+  const items = (page.S && Array.isArray(page.S.items) && page.S.items) || [];
+  const item = items.find((i) => i && i.kind === "lessons" && isOpen(i));
+  go.disabled = !item || !page.local.staged[item.id] || sendState().disabled;
+}
+
+function dialog(id, cls, title) {
+  let dlg = document.getElementById(id);
+  if (dlg) return dlg;
+  dlg = el("dialog", "modal " + cls);
+  dlg.id = id;
+  dlg.setAttribute("aria-labelledby", id + "-title");
+  const h = el("h2", null, title);
+  h.id = id + "-title";
+  dlg.appendChild(h);
+  document.body.appendChild(dlg);
+  lightDismiss(dlg);
+  return dlg;
+}
+
+// Remove all lessons asks first, in the style of the spec delete dialog.
+function openRemoveConfirm() {
+  let dlg = document.getElementById("learn-remove-modal");
+  if (!dlg) {
+    dlg = dialog("learn-remove-modal", "learn-remove", "Remove all lessons?");
+    dlg.appendChild(el("p", "modal-blurb", "Remove all saved lessons from this project? Learning stays on."));
+    const actions = el("div", "modal-actions");
+    const keep = el("button", "btn ghost", "Keep them");
+    keep.type = "button";
+    keep.addEventListener("click", () => dlg.close());
+    const go = el("button", "btn danger is-on", "Remove all lessons");
+    go.type = "button";
+    go.id = "learn-remove-go";
+    go.addEventListener("click", () => {
+      dlg.close();
+      if (!learningBlocked()) hooks.sendLearning("remove");
+    });
+    actions.append(keep, go);
+    dlg.appendChild(actions);
+  }
+  dlg.showModal();
+}
+
+// Open the lessons: every lesson file, read-only, through the page's Markdown.
+async function openLessons() {
+  let dlg = document.getElementById("learn-lessons-modal");
+  if (!dlg) {
+    dlg = dialog("learn-lessons-modal", "handoff-read learn-lessons", "The project's lessons");
+    const where = el("p", "modal-blurb learn-lessons-where");
+    mdInto(where, "The project's lessons (`.plan2code/lessons/`, saved with the repository)");
+    const body = el("div", "handoff-body md learn-lessons-body");
+    const actions = el("div", "modal-actions");
+    const close = el("button", "btn ghost", "Close");
+    close.type = "button";
+    close.addEventListener("click", () => dlg.close());
+    actions.appendChild(close);
+    dlg.append(where, body, actions);
+  }
+  const body = dlg.querySelector(".learn-lessons-body");
+  body.replaceChildren(el("p", "md-p", "Reading…"));
+  dlg.showModal();
+  try {
+    const res = await fetch("/learning/lessons", { cache: "no-store" });
+    if (res.status !== 200) throw new Error(String(res.status));
+    const { files } = await res.json();
+    body.replaceChildren();
+    if (!files || !files.length) {
+      body.appendChild(el("p", "md-p", "No lessons are saved in this project yet."));
+      return;
+    }
+    for (const f of files) {
+      const part = el("section", "learn-lessons-file");
+      part.appendChild(el("p", "learn-lessons-name", f.name));
+      const text = el("div", "md");
+      mdInto(text, f.text || "");
+      part.appendChild(text);
+      body.appendChild(part);
+    }
+  } catch {
+    body.replaceChildren(el("p", "md-p", "The lessons could not be read."));
+  }
+}
+
+/* ----------------------------------------------------------------- the row */
+
+/**
+ * The Learning row for `position` ("top" or "bottom"), or null: the top place
+ * takes Not set up, Off and Paused, the bottom place takes On, and no row is
+ * drawn when the scan carries no `learning` (an unknown settings format).
+ */
+export function renderLearningRow(scan, position) {
+  const learning = scan && scan.learning;
+  if (!learning || !PILLS[learning.state]) return null;
+  const top = TOP_STATES.has(learning.state);
+  if ((position === "top") !== top) return null;
+  if (position !== "top" && position !== "bottom") return null;
+  wireOutside();
+  const state = learning.state;
+  const row = el("section", `learn-row is-${position} is-${state}`);
+  row.setAttribute("aria-label", "Learning");
+  row.dataset.learning = state;
+  const line = el("div", "learn-line");
+  line.appendChild(el("span", "learn-label", "Learning"));
+  const pill = PILLS[state];
+  line.appendChild(el("span", "learn-pill" + pill.cls, pill.text));
+  const controls = el("span", "learn-controls");
+  if (state === "not-set-up") {
+    line.appendChild(el("span", "learn-say", "Plan2Code can keep lessons about this codebase, approved by you."));
+    controls.appendChild(agentButton("Switch on", "btn small primary", "switch-on"));
+  } else if (state === "off") {
+    line.appendChild(el("span", "learn-say", "Off for this project."));
+    controls.appendChild(agentButton("Switch on", "btn small", "switch-on"));
+  } else if (state === "paused") {
+    const since = shortDate(learning.pausedSince);
+    line.appendChild(
+      el(
+        "span",
+        "learn-say",
+        `On for this project. Paused ${since ? "since " + since : "for you"}: your runs are not reading or offering lessons.`
+      )
+    );
+    controls.appendChild(pauseSwitch(true));
+  } else {
+    line.appendChild(el("span", "learn-say", "On for this project."));
+    controls.appendChild(pauseSwitch(false));
+    const open = el("button", "learn-link", "Open the lessons");
+    open.type = "button";
+    open.addEventListener("click", openLessons);
+    controls.appendChild(open);
+    controls.appendChild(moreMenu());
+  }
+  line.appendChild(controls);
+  row.appendChild(line);
+  if (state !== "on") moreOpen = false;
+  return row;
+}

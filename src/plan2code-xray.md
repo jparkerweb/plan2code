@@ -31,6 +31,8 @@ Check if `./AGENTS.md` exists:
    >
    > Let me know when ready to continue."
 
+**Lessons:** then read `references/lessons.md` and follow its Start and While working sections (`node "<S>/lessons.mjs"`), and its End section before Session End.
+
 ## Scripts
 
 `<S>` is `scripts/` beside this SKILL.md (`~/.agents/skills/plan2code-xray/scripts/` globally). Run from the project root. Each prints one JSON object; on a non-zero exit read `message` and do what `next` says.
@@ -139,6 +141,8 @@ Explain with no area: ask for one. Never guess the mode from a vague request.
    Nothing picked: write nothing, and say so.
 
 ## Session End
+
+Before this, follow `references/lessons.md` → End.
 
 Work summary: the mode, the area, the sources used, and the file written (or that nothing was kept).
 

@@ -70,6 +70,8 @@ Per bug, one `confirm`, `--wait`: `{"id":"bug-1","kind":"confirm","title":"Found
 
 ## The finish
 
+Lessons first: with lessons to offer (`references/lessons.md`, End), post its `card` as one `lessons` item with `--wait` before the finish.
+
 `headline` the tests added and their results ("6 tests added, all passing"); `body` the summary (scope, coverage run or skipped, files written, gaps left), ending "Commit the new tests with `/plan2code-git`."; `"dashboard":true`; no `commit`. `command` `/plan2code-diagnose` when a bug was kept (its file and case in `body`), `/plan2code-1-plan` when escalated (the PLAN-DRAFT's path in `body`), else none.
 
 A stop before anything was written: `body` says no tests were written, `"command":"/plan2code-test"`.

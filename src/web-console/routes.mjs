@@ -52,6 +52,7 @@ import { cleanSetting, offered } from "./public/subagents.js";
 import { DEFAULT_ACCENT, DEFAULT_CARD_WIDTH, accentId, cardWidth } from "./public/palette.js";
 import { SERVABLE, TYPES, asset } from "./static.mjs";
 import { handoffsDir, isHandoffId } from "./handoffs.mjs";
+import { learningScan, learningState, writePause } from "./learning.mjs";
 import { linkToOpen, openFile, openLink } from "./open-link.mjs";
 import {
   NotepadError,
@@ -97,6 +98,9 @@ const ROUTES = [
   { path: "/looks", method: "GET", run: looksGet },
   { path: "/looks", method: "POST", origin: true, run: looksPost },
   { path: "/subagents", method: "POST", origin: true, run: subagentsPost },
+  { path: "/learning/pause", method: "POST", origin: true, run: learningPause },
+  { path: "/learning/state", method: "GET", run: learningStateGet },
+  { path: "/learning/lessons", method: "GET", run: learningLessons },
   { path: "/pr-host", method: "POST", origin: true, run: prHost },
   { path: "/models", method: "GET", run: modelsGet },
   { path: "/models", method: "POST", origin: true, run: modelsPost },
@@ -642,6 +646,104 @@ function subagentsPost(req, res, ctx) {
     ctx.pushState();
     return json(res, 200, { ok: true, setting });
   });
+}
+
+// Learning's Pause for me (learning.mjs). The one thing the console writes for
+// Learning, and it lands on this machine only (pause.json under the learning
+// store), never inside the project. It needs no agent: the dashboard's
+// scan.learning is patched in place and pushed, so the row repaints at once.
+function learningPause(req, res, ctx) {
+  return readBody(req, res, (err, body) => {
+    if (err) return json(res, err.tooBig ? 413 : 400, { error: err.tooBig ? "too large" : "body must be JSON" });
+    if (!body || typeof body !== "object" || typeof body.paused !== "boolean") return json(res, 400, { error: "bad-request" });
+    const worktree = ctx.worktree() || ctx.project;
+    let learning;
+    let written = null;
+    let agentWrote = false;
+    try {
+      const current = learningState(worktree, undefined, { prune: false });
+      if (current.state !== "on" && current.state !== "paused") return json(res, 409, { error: "not-on" });
+      writePause(worktree, body.paused);
+      learning = learningScan(worktree);
+      written = updateState(ctx.dir, (fresh) => {
+        if (!fresh || !fresh.scan || typeof fresh.scan !== "object") return null;
+        try {
+          agentWrote = fs.readFileSync(ctx.files.state, "utf8") !== ctx.stateText();
+        } catch {}
+        if (learning) fresh.scan.learning = learning;
+        else delete fresh.scan.learning;
+        return fresh;
+      });
+    } catch (e) {
+      return json(res, 500, { error: String(e.message) });
+    }
+    // Account for our own write here, as /submit does: the watcher reads a
+    // changed state.json as proof the agent is alive, and this write is not
+    // that, and the push below must carry the new scan.
+    if (written) {
+      ctx.adoptStateText(written.text, written.state);
+      ctx.rev++;
+      if (agentWrote) {
+        ctx.sawAgent();
+        try {
+          ctx.ensureConversation(written.state);
+        } catch {}
+        try {
+          ctx.subagents.sync(written.state);
+        } catch {}
+      }
+    }
+    noteEvent(ctx.dir, { type: "learning-pause", paused: body.paused });
+    ctx.pushState();
+    return json(res, 200, { ok: true, learning });
+  });
+}
+
+// The same object as scan.learning, worked out now (the Loop's stop card, a
+// page after a pause). `{}` when the settings format is unknown. Read-only.
+function learningStateGet(req, res, ctx) {
+  const learning = learningScan(ctx.worktree() || ctx.project);
+  return json(res, 200, learning || {}, { "cache-control": "no-store" });
+}
+
+// The project's lessons for the dashboard's Open the lessons dialog, read-only:
+// general.md first, then every other *.md directly inside .plan2code/lessons/
+// in name order. No sub-folders, and nothing reached through a link: an entry
+// must be a plain file whose real path is still inside the folder.
+const LESSON_FILES_MAX = 100;
+const LESSON_FILE_MAX_BYTES = 512 * 1024;
+function readLessonFiles(worktree) {
+  const dir = path.join(worktree, ".plan2code", "lessons");
+  let real;
+  let names;
+  try {
+    if (fs.lstatSync(dir).isSymbolicLink()) return [];
+    real = fs.realpathSync(dir);
+    names = fs.readdirSync(dir);
+  } catch {
+    return [];
+  }
+  const md = names.filter((n) => n.toLowerCase().endsWith(".md")).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+  const ordered = md.includes("general.md") ? ["general.md", ...md.filter((n) => n !== "general.md")] : md;
+  const files = [];
+  for (const name of ordered) {
+    if (files.length >= LESSON_FILES_MAX) break;
+    const file = path.join(dir, name);
+    try {
+      const st = fs.lstatSync(file);
+      if (!st.isFile() || st.size > LESSON_FILE_MAX_BYTES) continue;
+      const where = fs.realpathSync(file);
+      if (path.dirname(where) !== real) continue;
+      const text = fs.readFileSync(file, "utf8");
+      const heading = /^#\s+(.+?)\s*$/m.exec(text);
+      files.push({ name, title: heading ? heading[1] : name.replace(/\.md$/i, ""), text });
+    } catch {}
+  }
+  return files;
+}
+
+function learningLessons(req, res, ctx) {
+  return json(res, 200, { files: readLessonFiles(ctx.worktree() || ctx.project) }, { "cache-control": "no-store" });
 }
 
 // What an unknown git host is, for the git board's pull-request link. Saved

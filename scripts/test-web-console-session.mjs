@@ -693,16 +693,18 @@ test("the favicon is served as an SVG with a PNG fallback and the page points at
 /* ---------------------------------------------------------------- help */
 
 
-test("help: 21 tabs with unique ids", () => {
-  assert.equal(HELP_TABS.length, 21);
-  assert.equal(new Set(HELP_TABS.map((t) => t.id)).size, 21);
+test("help: 23 tabs with unique ids", () => {
+  assert.equal(HELP_TABS.length, 23);
+  assert.equal(new Set(HELP_TABS.map((t) => t.id)).size, 23);
   assert.ok(Object.isFrozen(HELP_TABS) && HELP_TABS.every((t) => Object.isFrozen(t)), "the tab list is frozen");
   const ids = HELP_TABS.map((t) => t.id);
+  assert.equal(ids.indexOf("learning"), ids.indexOf("dashboard") + 1, "Learning comes right after The dashboard");
   assert.equal(ids.indexOf("loop"), ids.indexOf("build") + 1, "Implementation Loop comes right after Watching a build");
   assert.equal(HELP_TABS[ids.indexOf("loop")].label, "Implementation Loop");
   assert.equal(ids.indexOf("git"), ids.indexOf("loop") + 1, "The git board comes right after Implementation Loop");
   assert.equal(HELP_TABS[ids.indexOf("git")].label, "The git board");
   assert.equal(helpTabFor({ workflow: "git" }), "git");
+  assert.equal(ids.indexOf("deps"), ids.indexOf("git") + 1, "Update dependencies comes right after The git board");
   assert.equal(ids.indexOf("activities"), ids.indexOf("ask") + 1, "Activities comes right after Ask a quick question");
   assert.equal(HELP_TABS[ids.indexOf("activities")].label, "Activities");
   const tpl = helpTemplate();
@@ -800,6 +802,7 @@ test("help: helpTabFor opens on the tab for where the person is", () => {
     [{ workflow: "quick-task" }, "build"],
     [{ workflow: "git" }, "git"],
     [{ workflow: "git", view: "ask" }, "ask"],
+    [{ workflow: "deps" }, "deps"],
     [{ workflow: "git", dashboard: true }, "dashboard"],
     [{ workflow: "plan", view: "questions" }, "about"],
     [{ view: undefined }, "about"],

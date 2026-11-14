@@ -30,21 +30,22 @@ export const BUDGETS = {
   notes: {
     "changelog.md": 1400,
     "dead-code.md": 4900,
-    "diagnose.md": 2700,
+    "deps.md": 5700,
+    "diagnose.md": 2840, // raised by the lessons card line's bytes only
     "document.md": 400,
     "finalize.md": 2000,
     "git.md": 6500,
     "handoff.md": 300,
     "implement.md": 5700,
     "init.md": 300,
-    "loop.md": 11600,
+    "loop.md": 11712, // raised by the failed report's nextStep line's bytes only
     "pathfinder.md": 2622, // raised by the UI prototype line's bytes only
     "plan.md": 1023, // raised by the UI prototype line's bytes only
     "pr-prep.md": 4500,
-    "quick-task.md": 4729, // raised by the UI prototype line's, the prototype recap line's and the prototype archive wording's bytes only
-    "review.md": 1000,
+    "quick-task.md": 4869, // raised by the UI prototype line's, the prototype recap line's, the prototype archive wording's and the lessons card line's bytes only
+    "review.md": 1140, // raised by the lessons card line's bytes only
     "revise-plan.md": 1422, // raised by the UI prototype line's bytes only
-    "test.md": 5400,
+    "test.md": 5540, // raised by the lessons card line's bytes only
     "ui-prototype.md": 4000,
     "xray.md": 2500,
   },

@@ -491,7 +491,7 @@ test("narrow: a missing file exits 3, invalid JSON or no candidates array exits 
 
 /* ------------------------------------------------------------- keep list */
 
-const KEEP = ".plan2code-dead-code/keep.md";
+const KEEP = ".plan2code/dead-code/keep.md";
 
 /** A small project: two source files with declarations to keep. */
 function keepProject(name) {
@@ -554,6 +554,20 @@ test("keep add: an empty reason exits 2, a missing line exits 3, and keep list w
   const list = runDeadCode(["keep", "list"], { cwd: dir });
   assert.deepEqual([list.code, list.json.exists, list.json.entries], [0, false, []]);
   assert.equal(runDeadCode(["keep", "sweep"], { cwd: dir }).code, 2);
+});
+
+test("keep: an old .plan2code-dead-code/keep.md is neither read nor changed", () => {
+  const dir = keepProject("dc-keep-old-folder");
+  const old = "# Dead Code keep list\n\n| File | Name | Hash | Reason | Date |\n| --- | --- | --- | --- | --- |\n| src/a.js | foo | 0123456789ab | Old reason | 2026-01-01 |\n";
+  write(dir, ".plan2code-dead-code/keep.md", old);
+  const list = runDeadCode(["keep", "list"], { cwd: dir });
+  assert.equal(list.code, 0, list.stderr);
+  assert.deepEqual([list.json.exists, list.json.entries, list.json.path], [false, [], KEEP]);
+  const add = runDeadCode(["keep", "add", "--file", "src/a.js", "--name", "bar", "--line", "5", "--reason", "Kept"], { cwd: dir });
+  assert.equal(add.code, 0, add.stderr);
+  assert.equal(add.json.path, KEEP);
+  assert.match(read(dir, KEEP), /\| src\/a\.js \| bar \|/);
+  assert.equal(read(dir, ".plan2code-dead-code/keep.md"), old);
 });
 
 test("keep filter: hides a current entry, shows an edited one as wasKept, lists a deleted file as gone; --fresh shows all", () => {
@@ -1003,7 +1017,7 @@ test("report write: three sections in order with label, source, rule, reason and
   const dir = tmp("dc-report");
   const r = runDeadCode(["report", "write", "--findings", findingsFile(dir, FINDINGS)], { cwd: dir });
   assert.equal(r.code, 0, r.stderr);
-  assert.equal(r.json.path, ".plan2code-dead-code/reports/DEAD-CODE-2026-08-03.md");
+  assert.equal(r.json.path, ".plan2code/dead-code/reports/DEAD-CODE-2026-08-03.md");
   const text = read(dir, r.json.path);
   assert.match(text, /^# Dead Code report/);
   assert.match(text, /\*\*Date:\*\* 2026-08-03/);
@@ -1073,8 +1087,8 @@ test("report write: a list of two or more tools prints Tools, one prints Tool, n
     assert.equal(r.code, 0, r.stderr);
     assert.match(read(dir, r.json.path), line);
   }
-  assert.match(read(dir, ".plan2code-dead-code/reports/DEAD-CODE-2026-08-10.md"), /\*\*Found by:\*\* the tools' lists, verified by a caller search/);
-  const one = read(dir, ".plan2code-dead-code/reports/DEAD-CODE-2026-08-11.md");
+  assert.match(read(dir, ".plan2code/dead-code/reports/DEAD-CODE-2026-08-10.md"), /\*\*Found by:\*\* the tools' lists, verified by a caller search/);
+  const one = read(dir, ".plan2code/dead-code/reports/DEAD-CODE-2026-08-11.md");
   assert.doesNotMatch(one, /\*\*Tools:\*\*/);
   assert.match(one, /\*\*Found by:\*\* the tool's list, verified by a caller search/);
 });
@@ -1085,7 +1099,7 @@ test("report write: a tool that is not an id, a list of ids or null exits 4 and 
   assert.equal(r.code, 4);
   assert.equal(r.json.error, "findings-invalid");
   assert.match(r.json.message, /tool must be a tool id, a list of ids, or null/);
-  assert.equal(fs.existsSync(path.join(dir, ".plan2code-dead-code", "reports", "DEAD-CODE-2026-08-13.md")), false);
+  assert.equal(fs.existsSync(path.join(dir, ".plan2code", "dead-code", "reports", "DEAD-CODE-2026-08-13.md")), false);
 });
 
 /* ------------------------------------------------------------- gitignore */
@@ -1108,23 +1122,31 @@ test("gitignore-check and gitignore-add on a git project: appends one line, neve
   const add = runDeadCode(["gitignore-add"], { cwd: dir });
   assert.equal(add.code, 0, add.stderr);
   assert.equal(add.json.added, true);
-  assert.equal(read(dir, ".gitignore"), "node_modules/\n.plan2code-dead-code/reports/\n");
+  assert.equal(read(dir, ".gitignore"), "node_modules/\n.plan2code/dead-code/reports/\n");
   const after = runDeadCode(["gitignore-check"], { cwd: dir });
-  assert.deepEqual([after.json.ignored, after.json.line, after.json.file], [true, ".plan2code-dead-code/reports/", ".gitignore"]);
+  assert.deepEqual([after.json.ignored, after.json.line, after.json.file], [true, ".plan2code/dead-code/reports/", ".gitignore"]);
   const again = runDeadCode(["gitignore-add"], { cwd: dir });
   assert.deepEqual([again.json.added, again.json.already], [false, true]);
-  assert.equal(read(dir, ".gitignore"), "node_modules/\n.plan2code-dead-code/reports/\n");
+  assert.equal(read(dir, ".gitignore"), "node_modules/\n.plan2code/dead-code/reports/\n");
 });
 
 test("gitignore-check: reports/ in the state folder's .gitignore, or a wider rule git applies, counts as ignored", () => {
   const own = gitProject("dc-gitignore-own");
-  write(own, ".plan2code-dead-code/.gitignore", "reports/\n");
+  write(own, ".plan2code/dead-code/.gitignore", "reports/\n");
   const r = runDeadCode(["gitignore-check"], { cwd: own });
-  assert.deepEqual([r.json.ignored, r.json.line, r.json.file], [true, "reports/", ".plan2code-dead-code/.gitignore"]);
+  assert.deepEqual([r.json.ignored, r.json.line, r.json.file], [true, "reports/", ".plan2code/dead-code/.gitignore"]);
   const wide = gitProject("dc-gitignore-wide");
-  write(wide, ".gitignore", ".plan2code-dead-code/\n");
+  write(wide, ".gitignore", ".plan2code/dead-code/\n");
   const w = runDeadCode(["gitignore-check"], { cwd: wide });
   assert.deepEqual([w.json.ignored, w.json.line], [true, null]);
+});
+
+test("gitignore-check: the old .plan2code-dead-code/reports/ line does not count", () => {
+  const dir = gitProject("dc-gitignore-old-line");
+  write(dir, ".gitignore", ".plan2code-dead-code/reports/\n");
+  const r = runDeadCode(["gitignore-check"], { cwd: dir });
+  assert.equal(r.code, 0, r.stderr);
+  assert.deepEqual([r.json.ignored, r.json.line, r.json.file], [false, null, null]);
 });
 
 test("gitignore-check and gitignore-add on a folder that is not a git repo", () => {
@@ -1172,7 +1194,7 @@ test("--dry-run writes nothing for every writing command", () => {
   assert.deepEqual(snapshot(dir), project, "the project is unchanged");
   assert.deepEqual(snapshot(temp), temps, "the backups are unchanged");
   const preview = runDeadCode(runs["report write"], { cwd: dir, env }).json;
-  assert.equal(preview.path, ".plan2code-dead-code/reports/DEAD-CODE-2026-08-03.md");
+  assert.equal(preview.path, ".plan2code/dead-code/reports/DEAD-CODE-2026-08-03.md");
   assert.equal(preview.preview[0], "# Dead Code report");
 });
 

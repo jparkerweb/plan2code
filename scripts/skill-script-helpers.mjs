@@ -64,12 +64,22 @@ export function scrubbedEnv(extra = {}) {
 for (const k of AMBIENT_GIT_ENV) delete process.env[k];
 Object.assign(process.env, { GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: EMPTY_GITCONFIG });
 
+// Learning's store on this machine (~/.plan2code/learning): a script run from a
+// test never reaches the real one. A test that checks the store passes its own
+// PLAN2CODE_LEARNING_DIR in `env`; every other run shares this throwaway one.
+let sandboxLearningDir;
+const learningDirFor = (env) => {
+  if (env && env.PLAN2CODE_LEARNING_DIR) return env.PLAN2CODE_LEARNING_DIR;
+  sandboxLearningDir ||= fs.mkdtempSync(path.join(fs.realpathSync.native(os.tmpdir()), "p2c-learning-"));
+  return sandboxLearningDir;
+};
+
 export function runScript(skill, script, args, { cwd, env, input } = {}) {
   const r = spawnSync(process.execPath, [path.join(SKILLS, skill, "scripts", script), ...args], {
     cwd: cwd || ROOT,
     encoding: "utf8",
     input,
-    env: scrubbedEnv({ PLAN2CODE_NOW: NOW, ...env }),
+    env: scrubbedEnv({ PLAN2CODE_NOW: NOW, ...env, PLAN2CODE_LEARNING_DIR: learningDirFor(env) }),
   });
   let json = null;
   try {

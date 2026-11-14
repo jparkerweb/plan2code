@@ -32,6 +32,8 @@ Nothing ticked: nothing written. Otherwise write the brief and add it as a secon
 
 ## The finish
 
+Lessons first: with lessons to offer (`references/lessons.md`, End), post its `card` as one `lessons` item with `--wait` before the finish.
+
 `command` is `/plan2code-0-pathfinder` (big or unclear) or `/plan2code-1-plan` (settled); none when nothing was kept. `doc` is the brief or saved answer. `"dashboard":true`.
 
 A stop before anything was written: `body` says nothing was kept, `"command":"/plan2code-xray"`.

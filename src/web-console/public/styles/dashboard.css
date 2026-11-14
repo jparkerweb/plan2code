@@ -714,6 +714,12 @@
 .loop-end-phases code { font-family: var(--mono); font-size: 12px; }
 .loop-end-files { margin: 0; padding-left: 18px; font-family: var(--mono); font-size: 12px; color: var(--ink-2); }
 .loop-end-heading, .loop-end .loop-line { overflow-wrap: anywhere; }
+.loop-end .loop-why, .loop-end .loop-advice {
+  padding: 9px 13px; border-left: 4px solid var(--warn); border-radius: 0 6px 6px 0;
+  background: var(--warn-soft); color: var(--ink); font-size: 14px; line-height: 1.5; max-width: 75ch; margin: 0;
+}
+.loop-end .loop-advice { border-left-color: var(--accent); background: var(--accent-soft); }
+.loop-end .loop-advice strong { color: var(--accent); }
 /* Each button with one plain line under it saying what it does. */
 .loop-end-actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; }
 .loop-end-choice { display: grid; gap: 6px; align-content: start; justify-items: start; }

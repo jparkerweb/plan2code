@@ -55,6 +55,10 @@ export const HANDOFFS_DIR = path.join(HOME, "handoffs");
 // real folder (notepadsDir() reads the variable on every call).
 export const NOTEPADS_DIR = path.join(HOME, "notepads");
 process.env.PLAN2CODE_NOTEPADS_DIR = NOTEPADS_DIR;
+// Learning's store on this machine (~/.plan2code/learning) likewise, set for
+// this process too so a test importing learning.mjs never reaches the real one.
+export const LEARNING_DIR = path.join(HOME, "learning");
+process.env.PLAN2CODE_LEARNING_DIR = LEARNING_DIR;
 // A spawned console server or CLI must not inherit relocation vars (an
 // exported GIT_DIR would redirect the board's reads), SSH markers (they set
 // `remote` in open output) or leftover PLAN2CODE_* knobs.
@@ -78,7 +82,7 @@ for (const k of AMBIENT_ENV_KEYS) delete scrubbed[k];
 // cannot open. An empty file is the portable "no global config".
 const EMPTY_GITCONFIG = path.join(HOME, "empty-gitconfig");
 fs.writeFileSync(EMPTY_GITCONFIG, "");
-export const ENV = { ...scrubbed, PLAN2CODE_CONSOLE_HOME: HOME, PLAN2CODE_MODELS_DIR: MODELS_DIR, PLAN2CODE_HANDOFFS_DIR: HANDOFFS_DIR, PLAN2CODE_NOTEPADS_DIR: NOTEPADS_DIR, PLAN2CODE_NO_BROWSER: "1", GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: EMPTY_GITCONFIG };
+export const ENV = { ...scrubbed, PLAN2CODE_CONSOLE_HOME: HOME, PLAN2CODE_MODELS_DIR: MODELS_DIR, PLAN2CODE_HANDOFFS_DIR: HANDOFFS_DIR, PLAN2CODE_NOTEPADS_DIR: NOTEPADS_DIR, PLAN2CODE_LEARNING_DIR: LEARNING_DIR, PLAN2CODE_NO_BROWSER: "1", GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: EMPTY_GITCONFIG };
 // Every server these tests start runs the release check at boot. A fresh
 // cached failure keeps the whole suite off the network and bannerless.
 fs.writeFileSync(path.join(HOME, "update-check.json"), JSON.stringify({ checkedAt: Date.now(), latest: null }));

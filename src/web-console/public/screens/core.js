@@ -25,6 +25,7 @@ import {
   finishPaused,
   handoffText,
   indentReply,
+  lessonsReply,
   noteAction,
   noteReplyLines,
   progressTotal,
@@ -84,9 +85,11 @@ import { mountAgentsView } from "./agents-view.js";
 
 // What the entry needs from the screens at start-up, handed on from here: only
 // the core imports a screen.
-export { launchSkill, wakeHoldsChime, wireDashboard } from "./dashboard.js";
+export { launchSkill, sendLearning, wakeHoldsChime, wireDashboard } from "./dashboard.js";
+export { renderLearningRow, learningBlocked, refreshLessonsSend } from "./learning-row.js";
+import { renderLessonsDialog } from "./learning-row.js";
 export { fillSky } from "./starting.js";
-export { fitGrowBox, wireCards } from "./cards.js";
+export { fitGrowBox, wireCards, renderCard } from "./cards.js";
 export { wireDocs } from "./docs.js";
 export { wireAsk } from "./ask.js";
 export { syncWorkspaceScope, wireWorkspace } from "./workspace.js";
@@ -1753,8 +1756,11 @@ function paintMain(main) {
         renderDashboard(main);
       }
     } else renderDashboard(main);
+    // Review from the Learning banner: the lessons card, over the menu.
+    renderLessonsDialog(!page.local.launching && !page.loopSetup && !page.dashPick);
     return;
   }
+  renderLessonsDialog(false);
 
   // The git board stays up after every action until Done with git. The
   // agent's confirm and result cards sit in the board's cardSlot, under the
@@ -2097,7 +2103,8 @@ export function markSent({ sentIds, sentNotes = {}, summaries, values }) {
   // even when an answer on the same item went. The sent images' files stay
   // on disk for the agent; the sweep cleans them up.
   for (const id of sentIds) {
-    for (const prefix of ["other-", "text-", "note-"]) delete page.local.drafts[prefix + id];
+    // `lessons-` is the lessons card's picks: a later card must start with nothing chosen.
+    for (const prefix of ["other-", "text-", "note-", "lessons-"]) delete page.local.drafts[prefix + id];
     if (sentNotes[id]) {
       clearSentNote(id, sentNotes[id]);
     } else if (!page.local.images[id]) {
@@ -2279,6 +2286,8 @@ const STATE_WORDS = { done: "all done", blocked: "blocked", help: "need help", d
 function tokenFor(item, v) {
   const map = item.token || {};
   if (v.skipped) return v.text ? `skip; ${v.text}` : "skip";
+  // The lessons card: a line per decision and the decisions file's JSON.
+  if (item.kind === "lessons") return lessonsReply(item, v);
   const parts = [];
   if (v.k) parts.push(map[v.k] || v.k);
   if (Array.isArray(v.ks) && v.ks.length) parts.push(v.ks.map((k) => map[k] || k).join(", "));

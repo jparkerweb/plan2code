@@ -177,7 +177,159 @@ export function answerLines(item, v) {
   if (Array.isArray(v.rows) && v.rows.length) {
     out.push(`${v.rows.length} steps, in the order you set`);
   }
+  if (item && item.kind === "lessons") out.push(...lessonLines(item, v));
   return out;
+}
+
+/* ------------------------------------------------------ the lessons card */
+
+// The choice that keeps a row as it stands, per row type (FR-15). A refused
+// row cannot take it until it is reworded.
+export const LESSON_KEEP_WORD = { lesson: "Keep", doubt: "Keep", gone: "Keep", "agents-fix": "Apply", "log-line": "Move", area: "Create" };
+// The choices that open the row for editing.
+export const LESSON_EDIT_WORDS = new Set(["Reword", "Reword and move", "Rename"]);
+// The edit word per row type: what a refused row's keep word goes back to.
+export const LESSON_EDIT_WORD = { lesson: "Reword", doubt: "Reword", gone: "Reword", "agents-fix": "Reword", "log-line": "Reword and move", area: "Rename" };
+// The first ask's answers, as the agent reads them.
+export const FIRST_ASK_WORDS = { yes: "Switch Learning on", no: "Not for this project" };
+
+/** The field a row's edit must fill, and the label that names it. */
+export function lessonEditField(row) {
+  if (row && row.type === "agents-fix") return { key: "after", label: "The new wording" };
+  if (row && row.type === "area") return { key: "name", label: "The area's name" };
+  if (row && row.type === "log-line") return { key: "lessons", label: "The lesson" };
+  return { key: "text", label: "The lesson" };
+}
+
+// The lessons a failure log line would become, or the line itself when the
+// list gave none (a refused line comes masked and with none).
+const logLessons = (row) => (Array.isArray(row.lessons) && row.lessons.length ? row.lessons.map(String) : [row.text || ""]);
+
+/** The edit fields' first values: the row as it stands. */
+export function lessonEditStart(row) {
+  if (row.type === "agents-fix") return { after: lessonOriginal(row) };
+  if (row.type === "area") return { name: lessonOriginal(row), paths: [...(row.paths || [])] };
+  if (row.type === "log-line") return { lessons: logLessons(row), why: row.why || "", area: row.area || "" };
+  return { text: lessonOriginal(row), why: row.why || "", area: row.area || "" };
+}
+
+/**
+ * The row's own words, the ones its edit starts from and is compared with to
+ * tell whether it was reworded. A log line's lessons are joined by newlines.
+ */
+export function lessonOriginal(row) {
+  if (row.type === "agents-fix") return row.after || row.text || "";
+  if (row.type === "area") return row.name || row.text || "";
+  if (row.type === "log-line") return logLessons(row).join("\n");
+  return row.text || "";
+}
+
+/** The edit's words in the same form as lessonOriginal, or the original when untouched. */
+function lessonTyped(row, edit) {
+  const field = lessonEditField(row).key;
+  if (field === "lessons") return Array.isArray(edit.lessons) ? edit.lessons.map((t) => String(t).trim()).join("\n") : lessonOriginal(row);
+  return typeof edit[field] === "string" ? edit[field].trim() : lessonOriginal(row);
+}
+
+/** Whether a row's edit changed its words. */
+export function lessonReworded(row, edit = {}) {
+  return lessonTyped(row, edit) !== lessonOriginal(row);
+}
+
+/**
+ * One decision as lessons.mjs decide takes it: `{ id, choice }` plus what the
+ * choice needs from the row's edits (`edit`, the person's typed values). A
+ * refused row kept after a reword goes as a Reword, since its words changed.
+ * Only values that differ from the row are sent for an area's paths or a
+ * lesson's area; `why` goes whenever it is not empty or was emptied. A log
+ * line's "Reword and move" goes as `lessons: [{ text, why?, area? }]`; the
+ * agent adds each `about` (End step 6).
+ */
+export function lessonDecision(row, choice, edit = {}) {
+  const typed = lessonTyped(row, edit);
+  const keepWord = LESSON_KEEP_WORD[row.type];
+  let pick = choice;
+  if (row.refused && choice === keepWord && typed !== lessonOriginal(row)) pick = LESSON_EDIT_WORD[row.type];
+  const d = { id: row.id, choice: pick };
+  if (!LESSON_EDIT_WORDS.has(pick)) return d;
+  if (row.type === "agents-fix") return { ...d, after: typed };
+  if (row.type === "area") {
+    const out = { ...d, name: typed };
+    if (Array.isArray(edit.paths)) {
+      const paths = edit.paths.map((p) => String(p).trim()).filter(Boolean);
+      if (paths.join(",") !== (row.paths || []).join(",")) out.paths = paths;
+    }
+    return out;
+  }
+  const why = typeof edit.why === "string" ? edit.why.trim() : row.why || "";
+  const area = typeof edit.area === "string" && edit.area && edit.area !== (row.area || "") ? edit.area : "";
+  if (row.type === "log-line") {
+    const texts = typed.split("\n");
+    return { ...d, lessons: texts.map((text) => ({ text, ...(why ? { why } : {}), ...(area ? { area } : {}) })) };
+  }
+  const out = { ...d, text: typed };
+  // An emptied Why is sent as "", so decide does not keep the old one.
+  if (why || (typeof edit.why === "string" && row.why)) out.why = why;
+  if (area) out.area = area;
+  return out;
+}
+
+/** What is still missing before a row's decision can go, or "" when nothing is. */
+export function lessonMissing(row, decision) {
+  if (!decision || !LESSON_EDIT_WORDS.has(decision.choice)) return "";
+  const { key, label } = lessonEditField(row);
+  if (key === "lessons") {
+    const list = Array.isArray(decision.lessons) ? decision.lessons : [];
+    return list.length && list.every((l) => String((l && l.text) || "").trim()) ? "" : label;
+  }
+  return String(decision[key] || "").trim() ? "" : label;
+}
+
+/** The words one decision reads as: "Keep: <text>", "Reword: <new text>", "Apply: <file>". */
+export function lessonDecisionLine(row, d) {
+  const shown =
+    d.choice === "Apply"
+      ? (row && row.file) || "AGENTS.md"
+      : Array.isArray(d.lessons)
+        ? d.lessons.map((l) => (l && l.text) || "").join(" / ")
+        : d.after || d.name || d.text || (row ? (row.type === "area" ? row.name || row.text : row.text) : "") || d.id;
+  return `${d.choice}: ${shown}`;
+}
+
+/**
+ * The lessons card's answer as lines: one per decision, then how many were
+ * left waiting; or the first ask's answer.
+ */
+export function lessonLines(item, v) {
+  if (!v) return [];
+  if (v.firstAsk === "yes" || v.firstAsk === "no") return [FIRST_ASK_WORDS[v.firstAsk]];
+  if (!Array.isArray(v.decisions)) return [];
+  const rows = Array.isArray(item && item.rows) ? item.rows : [];
+  const byRow = new Map(rows.map((r) => [r.id, r]));
+  const out = v.decisions.map((d) => lessonDecisionLine(byRow.get(d.id), d));
+  const left = rows.filter((r) => !v.decisions.some((d) => d.id === r.id)).length;
+  if (left) out.push(`${left} left waiting`);
+  else if (!out.length) out.push("Nothing chosen");
+  return out;
+}
+
+/**
+ * What the agent reads for the lessons card: the lines above, and the
+ * decisions exactly as lessons.mjs decide takes them, on one `Decisions:`
+ * line, so the console and the terminal write the same decisions file.
+ */
+export function lessonsReply(item, v) {
+  if (!v) return "";
+  if (!Array.isArray(v.decisions)) return [...lessonLines(item, v), ...(v.text ? [v.text] : [])].join("\n");
+  const rows = Array.isArray(item && item.rows) ? item.rows : [];
+  const byRow = new Map(rows.map((r) => [r.id, r]));
+  const left = rows.filter((r) => !v.decisions.some((d) => d.id === r.id)).length;
+  // The count leads, so each decision starts a line of its own under the card's title.
+  const lines = [`${v.decisions.length} decided${left ? `, ${left} left waiting` : ""}`];
+  for (const d of v.decisions) lines.push(lessonDecisionLine(byRow.get(d.id), d));
+  lines.push(`Decisions: ${JSON.stringify(v.decisions)}`);
+  if (v.text) lines.push(v.text);
+  return lines.join("\n");
 }
 
 /**
@@ -698,7 +850,7 @@ export function cardAvailability(entry, scan, sel, lookup = stateFor) {
     return ON;
   }
 
-  // Always on; a diagnosed bug is the one spec Quick Task is the next step for.
+  // Always on; a diagnosed bug and an upgrade brief are the specs Quick Task is the next step for.
   if (rule.states === "any") return next ? { ...ON, next } : ON;
   // A building spec whose only unfinished tasks are blocked, each with a
   // written reason (the scan's finalizeReady), is ready for Finalize too.
@@ -758,8 +910,8 @@ export function toggleNoteTick(ticked, id) {
 
 /**
  * The spec a card's launch carries: the picker's selection for the cards that
- * take a spec, and for Quick Task only a diagnosed bug, whose write-up it reads
- * first, or a folder holding only saved prototypes (files on disk with a
+ * take a spec, and for Quick Task only a diagnosed bug or an upgrade brief
+ * waiting to be applied, whose write-up it reads first, or a folder holding only saved prototypes (files on disk with a
  * `prototypes` count), which it builds from. A mid-pipeline spec with
  * prototypes is Implement's to build. Every other card launches untargeted.
  */
@@ -768,7 +920,7 @@ export function launchTarget(entry, sel) {
   if (entry.spec) return sel;
   if (entry.skill !== "plan2code-quick-task") return null;
   const prototypeOnly = sel.state === "unrecognized" && sel.prototypes > 0;
-  return sel.state === "diagnosed" || prototypeOnly ? sel : null;
+  return sel.state === "diagnosed" || sel.state === "upgrade" || prototypeOnly ? sel : null;
 }
 
 export function cardPresentation(entry, scan, sel, menu = {}) {
@@ -819,6 +971,43 @@ export function deleteAction(spec) {
 
 export function deleteReply(spec) {
   return `Delete the spec folder ${spec.dir}/ for good, right here in this session.`;
+}
+
+// A Learning control on the dashboard (screens/learning-row.js and the
+// waiting banner). No hop: the dashboard agent runs lessons.mjs for it. Plain
+// wording, no em dashes: these lines are read by the agent.
+export const LEARNING_ACTIONS = ["review", "switch-on", "switch-off", "move-log", "remove"];
+const LEARNING_REPLIES = {
+  review: "Review the waiting lessons.",
+  "switch-on": "Switch Learning on for this project.",
+  "switch-off": "Switch Learning off for this project.",
+  "move-log": "Move the failure log into lessons.",
+  remove: "Remove all saved lessons from this project. Learning stays on.",
+};
+export function learningAction(what) {
+  if (!LEARNING_ACTIONS.includes(what)) throw new Error("unknown Learning action: " + what);
+  return { i: "__learning", type: "learning", do: what };
+}
+export function learningReply(what) {
+  return LEARNING_REPLIES[what] || "";
+}
+/**
+ * The Implementation Loop's stop card's line about waiting lessons (FR-13),
+ * from /learning/state, or "" when none wait or Learning is off or paused.
+ */
+export function loopLessonsLine(learning) {
+  if (!learning || !(learning.waiting > 0) || (learning.state !== "on" && learning.state !== "not-set-up")) return "";
+  const n = learning.waiting;
+  return `${n} ${n === 1 ? "lesson is" : "lessons are"} waiting for your review. Open the dashboard to review them.`;
+}
+
+// The waiting banner's line, or "" when it shows nothing: lessons waiting and
+// Learning on or not set up (hidden while paused or off).
+export function learningBannerText(learning) {
+  if (!learning || !(learning.waiting > 0) || (learning.state !== "on" && learning.state !== "not-set-up")) return "";
+  const n = learning.waiting;
+  const d = Number.isInteger(learning.oldestDays) ? learning.oldestDays : 0;
+  return `${n} ${n === 1 ? "lesson is" : "lessons are"} waiting for your review (oldest ${d} ${d === 1 ? "day" : "days"}).`;
 }
 
 // What the delete dialog says about the spec, from the scan alone. `touched`
@@ -1069,7 +1258,11 @@ export function pruneStaged(items, staged) {
   for (const [id, v] of Object.entries(out)) {
     const item = byId.get(id);
     if (!item || !v || typeof v !== "object" || (item.kind !== "choice" && item.kind !== "multi")) continue;
-    const keys = new Set((item.options || []).map((o) => o && o.k));
+    // A multi's locked option is shown, never picked: a tick staged before a
+    // re-post locked it goes like a key the card no longer offers.
+    const keys = new Set(
+      (item.options || []).filter((o) => o && !(item.kind === "multi" && o.locked === true)).map((o) => o && o.k)
+    );
     const next = { ...v };
     let lost = false;
     if (item.kind === "choice" && next.k && !keys.has(next.k)) {

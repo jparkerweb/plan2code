@@ -93,6 +93,14 @@ import {
   verdictText,
   lastOpenCard,
   nextOpenAfter,
+  answerLines,
+  lessonDecision,
+  lessonEditStart,
+  lessonReworded,
+  lessonLines,
+  lessonMissing,
+  lessonsReply,
+  loopLessonsLine,
 } from "../src/web-console/public/answers.js";
 import { chatView } from "../src/web-console/public/chat.js";
 import { ACCENTS, DEFAULT_ACCENT, RETIRED_ACCENTS, accentId } from "../src/web-console/public/palette.js";
@@ -579,6 +587,23 @@ test("pruneStaged drops only the picks a re-posted card no longer offers, withou
   assert.deepEqual(staged, before, "staged is not changed");
   assert.deepEqual(items, itemsBefore, "items are not changed");
   assert.deepEqual(pruneStaged(items, { u1: staged.u1 }), { staged: { u1: staged.u1 }, dropped: [] });
+});
+
+test("pruneStaged drops a multi pick the re-posted card now locks, and leaves a choice's locked field alone", () => {
+  const items = [
+    { id: "m1", kind: "multi", options: [{ k: "1", text: "a" }, { k: "2", text: "b", locked: true }] },
+    { id: "m2", kind: "multi", options: [{ k: "1", text: "a", locked: true }] },
+    { id: "c1", kind: "choice", options: [{ k: "A", text: "a", locked: true }] },
+  ];
+  const out = pruneStaged(items, {
+    m1: { type: "answer", kind: "multi", ks: ["1", "2"] },
+    m2: { type: "answer", kind: "multi", ks: ["1"] },
+    c1: { type: "answer", kind: "choice", k: "A" },
+  });
+  assert.deepEqual(out.dropped.sort(), ["m1", "m2"]);
+  assert.deepEqual(out.staged.m1.ks, ["1"], "the locked key goes, the other stays");
+  assert.equal("m2" in out.staged, false, "a multi left with only a locked pick goes");
+  assert.deepEqual(out.staged.c1.k, "A", "only a multi draws locked rows");
 });
 
 test("document helpers: the extension allow-list, the picker's accept, sizes, and the kind of an old entry", () => {
@@ -1592,6 +1617,176 @@ test("validate: fill only as \"note\", only on a text item", () => {
   assert.ok(validate(item({ fill: true })).some((p) => p.startsWith(message)));
 });
 
+test("validate: a lessons item takes rows each with a type and its own choices, and nothing chosen", () => {
+  const row = (extra = {}) => ({ id: "w1", type: "lesson", text: "Run a page test alone first.", choices: ["Keep", "Reword", "Drop"], ...extra });
+  const item = (extra) => ({ id: "lessons", kind: "lessons", title: "Lessons to keep", status: "open", ...extra });
+  const one = (extra) => validate({ items: [item(extra)] });
+  assert.deepEqual(one({ opening: "You are on main: kept lessons will be uncommitted changes here.", rows: [row({ why: "A full run hides it.", origin: "You said this.", note: "", flags: [], refused: null, area: "General", areas: ["General"] })] }), []);
+  assert.deepEqual(
+    one({ rows: ["lesson", "doubt", "gone", "agents-fix", "log-line", "area"].map((type, i) => row({ id: `w${i}`, type })) }),
+    [],
+    "every row type the list gives"
+  );
+  const firstAsk = { lesson: { id: "w1", text: "x" }, sentences: ["a", "b", "c"], yes: "Switch Learning on", no: "Not for this project", later: "Later." };
+  assert.deepEqual(one({ firstAsk }), [], "a first ask needs no rows");
+
+  const refused = (extra, field) => {
+    const problems = one(extra);
+    assert.ok(problems.some((p) => p.includes(field)), `${field}: ${problems.join(" | ")}`);
+  };
+  refused({}, "rows: is empty");
+  refused({ rows: [] }, "rows: is empty");
+  refused({ rows: [row({ choices: [] })] }, 'row "w1" choices');
+  refused({ rows: [row({ choices: undefined })] }, 'row "w1" choices');
+  refused({ rows: [row({ type: "rule" })] }, 'row "w1" type');
+  refused({ rows: [row({ choice: "Keep" })] }, 'row "w1" choice: is not allowed');
+  refused({ rows: [row({ selected: true })] }, 'row "w1" selected: is not allowed');
+  refused({ firstAsk: { ...firstAsk, sentences: ["a", "b"] } }, "firstAsk");
+
+  const two = validate({ items: [item({ rows: [row()] }), item({ id: "lessons-2", rows: [row()] })] });
+  assert.ok(two.some((p) => p.includes("2 lessons cards are open at once")), two.join(" | "));
+  const answered = validate({ items: [item({ rows: [row()], status: "answered" }), item({ id: "lessons-2", rows: [row()] })] });
+  assert.deepEqual(answered, [], "an answered card does not count");
+});
+
+test("validate: a lesson's own words never get the lessons card refused, but the card's own text still can", () => {
+  const marker = "TASK_" + "COMPLETE";
+  const words = ["Requirements 12 and 13 are checked by check-versions.mjs.", "Risk 3 is the slow blame on Windows.", `Never print ${marker} in a spec file.`, "The grill step reads the map first."];
+  const rows = words.map((text, i) => ({ id: `w${i}`, type: "lesson", text, why: text, origin: "You said this.", choices: ["Keep", "Reword", "Drop"] }));
+  rows.push({ id: "log1", type: "log-line", text: words[0], lessons: [words[1]], choices: ["Move", "Reword and move", "Leave"] });
+  rows.push({ id: "fix1", type: "agents-fix", text: words[2], before: words[1], after: words[2], file: "AGENTS.md", choices: ["Apply", "Reword", "Drop"] });
+  const item = (extra) => ({ id: "lessons", kind: "lessons", title: "Lessons to keep", status: "open", rows, ...extra });
+  assert.deepEqual(validate({ items: [item()] }), [], "rows are the project's words");
+  const firstAsk = { lesson: { id: "w1", text: words[1], why: words[0] }, sentences: ["a", "b", "c"], yes: "Switch Learning on", no: "Not for this project", later: "Later." };
+  assert.deepEqual(validate({ items: [item({ rows: undefined, firstAsk })] }), [], "so is the first ask's lesson");
+  // What the agent wrote around them is still held to the rules.
+  assert.ok(validate({ items: [item({ body: words[1] })] }).some((p) => p.includes("Risk 3")), "the body");
+  assert.ok(validate({ items: [item({ rows: undefined, firstAsk: { ...firstAsk, sentences: ["a", "b", words[0]] } })] }).some((p) => p.includes("Requirements 12")), "a first-ask sentence");
+  // Any other kind of card with the same words is refused as before.
+  assert.ok(validate({ items: [{ id: "q1", kind: "notice", title: "A note", body: words[1], status: "open" }] }).length > 0);
+});
+
+test("validate: the dashboard refuses question cards but draws the lessons card", () => {
+  const rows = [{ id: "w1", type: "lesson", text: "x", choices: ["Keep", "Reword", "Drop"] }];
+  assert.deepEqual(validate({ workflow: "dashboard", items: [{ id: "lessons", kind: "lessons", title: "Lessons to keep", status: "open", rows }] }), []);
+  assert.ok(validate({ workflow: "dashboard", items: [{ id: "q1", kind: "text", title: "Name", status: "open" }] }).some((p) => p.includes("the dashboard draws no question cards")));
+});
+
+test("validate: a multi's pick-list fields are checked only when present, each refusal naming the field", () => {
+  const opt = (k, extra = {}) => ({ k, text: `pkg ${k}`, ...extra });
+  const multi = (options, extra = {}) => validate({ items: [{ id: "picks", kind: "multi", title: "Updates to apply", status: "open", options, ...extra }] });
+  const refused = (problems, ...parts) => {
+    assert.ok(
+      problems.some((p) => p.startsWith('item "picks"') && parts.every((part) => p.includes(part))),
+      `${parts.join(" + ")}: ${problems.join(" | ")}`
+    );
+  };
+
+  // Accepted: none of the fields (Dead Code's shape), then every field at its edge.
+  assert.deepEqual(multi([opt("A"), opt("B")], { presets: [{ label: "Both", ks: ["A", "B"] }] }), []);
+  assert.deepEqual(
+    multi(
+      [
+        opt("A", { group: "Safe", batch: "npm-root", more: "x".repeat(4096) }),
+        opt("B", { group: "S".repeat(40), batch: "npm-root", locked: false }),
+        opt("C", { locked: true, more: "Needs Node 22." }),
+      ],
+      { counter: { rounds: "check rounds" }, presets: [{ label: "All safe", ks: ["A", "B"] }] }
+    ),
+    []
+  );
+
+  // Refused: each field out of shape.
+  refused(multi([opt("A", { group: "" })]), "options:", 'option "A"', '"group"', "1 to 40");
+  refused(multi([opt("A", { group: "G".repeat(41) })]), 'option "A"', '"group"');
+  refused(multi([opt("A", { group: 3 })]), 'option "A"', '"group"');
+  refused(multi([opt("A", { more: "x".repeat(4097) })]), 'option "A"', '"more"', "4 KB");
+  refused(multi([opt("A", { more: "é".repeat(2049) })]), 'option "A"', '"more"'); // 4098 bytes, 2049 characters
+  refused(multi([opt("A", { more: ["x"] })]), 'option "A"', '"more"');
+  refused(multi([opt("A", { batch: 7 })]), 'option "A"', '"batch"');
+  refused(multi([opt("A", { batch: "" })]), 'option "A"', '"batch"');
+  refused(multi([opt("A", { locked: "yes" })]), 'option "A"', '"locked"');
+  refused(multi([opt("A")], { counter: { rounds: 2 } }), "counter:", '"rounds"');
+  refused(multi([opt("A")], { counter: "check rounds" }), "counter:", '"rounds"');
+  refused(multi([opt("A")], { counter: {} }), "counter:");
+  refused(
+    multi([opt("A"), opt("B", { locked: true })], { presets: [{ label: "Everything", ks: ["A", "B"] }] }),
+    "presets:",
+    'preset "Everything"',
+    '"B"',
+    "locked"
+  );
+  const notMulti = validate({ items: [{ id: "picks", kind: "choice", title: "Updates to apply", status: "open", options: [opt("A")], counter: { rounds: "check rounds" } }] });
+  refused(notMulti, "counter:", "only a multi");
+  // Every refusal carries the field done right, as the other rules do.
+  for (const p of multi([opt("A", { group: "" })])) assert.match(p, /\{/);
+});
+
+test("lessons answers: a line per decision, what was left waiting, and the decisions file's JSON", () => {
+  const item = {
+    id: "lessons",
+    kind: "lessons",
+    title: "Lessons to keep",
+    rows: [
+      { id: "a", type: "lesson", text: "Old words", why: "Because", area: "General", choices: ["Keep", "Reword", "Drop"] },
+      { id: "b", type: "agents-fix", text: "new", file: ".agents-docs/x.md", before: "old", after: "new", choices: ["Apply", "Reword", "Drop"] },
+      { id: "c", type: "doubt", text: "Saved", choices: ["Keep", "Reword", "Retire"] },
+      { id: "d", type: "log-line", text: "A log line", choices: ["Move", "Reword and move", "Leave in the log"] },
+    ],
+  };
+  const decisions = [
+    lessonDecision(item.rows[0], "Reword", { text: " New words ", why: "Because", area: "Web console" }),
+    lessonDecision(item.rows[1], "Apply"),
+    lessonDecision(item.rows[2], "Retire"),
+  ];
+  assert.deepEqual(decisions, [
+    { id: "a", choice: "Reword", text: "New words", why: "Because", area: "Web console" },
+    { id: "b", choice: "Apply" },
+    { id: "c", choice: "Retire" },
+  ]);
+  const v = { decisions };
+  assert.deepEqual(lessonLines(item, v), ["Reword: New words", "Apply: .agents-docs/x.md", "Retire: Saved", "1 left waiting"]);
+  assert.deepEqual(answerLines(item, v), lessonLines(item, v));
+  const reply = lessonsReply(item, v).split("\n");
+  assert.equal(reply[0], "3 decided, 1 left waiting");
+  assert.equal(reply[1], "Reword: New words");
+  assert.deepEqual(JSON.parse(reply.find((l) => l.startsWith("Decisions: ")).slice("Decisions: ".length)), decisions);
+  assert.deepEqual(lessonLines(item, { decisions: [] }), ["4 left waiting"], "nothing chosen leaves everything waiting");
+  assert.deepEqual(lessonLines(item, { firstAsk: "yes" }), ["Switch Learning on"]);
+  assert.deepEqual(lessonLines(item, { firstAsk: "no" }), ["Not for this project"]);
+
+  // A refused row kept after its words changed goes as a Reword; unchanged, Keep stays Keep.
+  const bad = { id: "r", type: "lesson", text: "key AKIA...", refused: { pattern: "aws-access-key", part: "AKIA" }, choices: ["Reword", "Drop"] };
+  assert.deepEqual(lessonDecision(bad, "Keep", { text: "Keys live in the vault." }), { id: "r", choice: "Reword", text: "Keys live in the vault." });
+  assert.deepEqual(lessonDecision(bad, "Keep", { text: bad.text }), { id: "r", choice: "Keep" });
+  // An emptied Why goes as "", so decide does not keep the old one.
+  assert.deepEqual(lessonDecision(item.rows[0], "Reword", { text: "Old words", why: "" }), { id: "a", choice: "Reword", text: "Old words", why: "" });
+  // A log line's Reword and move goes as the lessons decide takes, one per lesson it becomes.
+  const log = { id: "log:1", type: "log-line", text: "A log line", lessons: ["First.", "Second."], choices: ["Move", "Reword and move", "Leave in the log"] };
+  assert.deepEqual(lessonEditStart(log).lessons, ["First.", "Second."], "the edit starts from the lessons, not the line");
+  assert.deepEqual(lessonDecision(log, "Reword and move", { lessons: ["First, reworded.", "Second."], why: "Seen twice." }), {
+    id: "log:1",
+    choice: "Reword and move",
+    lessons: [
+      { text: "First, reworded.", why: "Seen twice." },
+      { text: "Second.", why: "Seen twice." },
+    ],
+  });
+  assert.equal(lessonMissing(log, lessonDecision(log, "Reword and move", { lessons: ["", "Second."] })), "The lesson");
+  assert.equal(lessonReworded(log, lessonEditStart(log)), false, "the seed is never a reword");
+  const fix = { id: "f", type: "agents-fix", text: "new", refused: { pattern: "x", part: "x" }, choices: ["Reword", "Drop"] };
+  assert.equal(lessonReworded(fix, lessonEditStart(fix)), false, "a fix with no after: the seed matches its words");
+  // A reword left empty names the missing field.
+  assert.equal(lessonMissing(item.rows[0], lessonDecision(item.rows[0], "Reword", { text: "  " })), "The lesson");
+  assert.equal(lessonMissing(item.rows[0], lessonDecision(item.rows[0], "Keep")), "");
+});
+
+test("the loop stop card's lessons line shows only while lessons wait and Learning is on or not set up", () => {
+  assert.equal(loopLessonsLine({ state: "on", waiting: 2 }), "2 lessons are waiting for your review. Open the dashboard to review them.");
+  assert.equal(loopLessonsLine({ state: "not-set-up", waiting: 1 }), "1 lesson is waiting for your review. Open the dashboard to review them.");
+  for (const l of [null, {}, { state: "on", waiting: 0 }, { state: "off", waiting: 3 }, { state: "paused", waiting: 3 }]) assert.equal(loopLessonsLine(l), "");
+});
+
 test("attachmentName: slug of the original name, 8 characters of the upload id, the upload's own extension", () => {
   const up = (uuid, ext) => path.join(HOME, "sessions", "x", "uploads", `${uuid}${ext}`);
   const a = up("3f2b9c1e-8a4d-4f6e-9b7a-2c5d1e0f4a6b", ".jpg");
@@ -2093,8 +2288,8 @@ test("workspace cursor never moves backwards, and only changes past it are pendi
   }
 });
 
-test("subagents: only the sixteen opted-in workflows offer the switch", () => {
-  for (const w of ["init", "init-update", "pathfinder", "plan", "revise-plan", "document", "implement", "implement-review", "quick-task", "review", "finalize", "xray", "diagnose", "pr-prep", "test", "dead-code"]) {
+test("subagents: only the seventeen opted-in workflows offer the switch", () => {
+  for (const w of ["init", "init-update", "pathfinder", "plan", "revise-plan", "document", "implement", "implement-review", "quick-task", "review", "finalize", "xray", "diagnose", "pr-prep", "test", "dead-code", "deps"]) {
     assert.equal(offered(w), true, w);
     assert.ok(defaultInstruction(w).length > 0, `${w} has a default instruction`);
   }
@@ -2102,7 +2297,7 @@ test("subagents: only the sixteen opted-in workflows offer the switch", () => {
     assert.equal(offered(w), false, String(w));
     assert.equal(defaultInstruction(w), "");
   }
-  assert.equal(Object.keys(SUBAGENT_WORKFLOWS).length, 16);
+  assert.equal(Object.keys(SUBAGENT_WORKFLOWS).length, 17);
   assert.deepEqual(defaultSetting("review"), { workflow: "review", on: true, instruction: null, max: 3, strength: "balanced" });
   assert.equal(defaultSetting("changelog").on, false, "a skill without the switch is never on");
   assert.equal(effectiveInstruction({ workflow: "review", instruction: "  " }), defaultInstruction("review"));
@@ -2392,7 +2587,7 @@ test("meter: the weights and labels built from the skill list are the ones writt
     "pathfinder-chart": 2, "pathfinder-question": 0, "pathfinder-research": 1,
     plan: 2, "revise-plan": 1, document: 2, "implement-phase": 2, "implement-review-phase": 3,
     review: 2, "quick-task": 1, init: 2, "init-update": 2, finalize: 1, handoff: 0, git: 1,
-    "git-commits": 0, "git-conflict": 1, changelog: 1, xray: 1, diagnose: 1, "pr-prep": 1, test: 1, "dead-code": 1,
+    "git-commits": 0, "git-conflict": 1, changelog: 1, xray: 1, diagnose: 1, "pr-prep": 1, test: 1, "dead-code": 1, deps: 1,
     "ui-prototype-round": 1,
   });
   assert.deepEqual({ ...LAUNCH_LABELS }, {
@@ -2401,6 +2596,7 @@ test("meter: the weights and labels built from the skill list are the ones writt
     "init-update": "Init update started", finalize: "Finalize started", git: "Git started",
     changelog: "Changelog started", xray: "X-ray started", diagnose: "Diagnose started",
     "pr-prep": "PR Prep started", test: "Test started", "dead-code": "Dead Code started",
+    deps: "Update Dependencies started",
   });
   assert.deepEqual({ ...RUN_LABELS }, {
     "pathfinder-chart": "Pathfinder map written", "pathfinder-question": "Pathfinder question settled",
@@ -2410,7 +2606,7 @@ test("meter: the weights and labels built from the skill list are the ones writt
     "quick-task": "Quick task built", init: "Init run", "init-update": "Init update run",
     finalize: "Finalize run", handoff: "Handoff written", git: "Git run", "git-commits": "Commits in Git",
     "git-conflict": "Git conflict help", changelog: "Changelog run", xray: "X-ray run", diagnose: "Diagnose run",
-    "pr-prep": "PR Prep run", test: "Test run", "dead-code": "Dead Code run",
+    "pr-prep": "PR Prep run", test: "Test run", "dead-code": "Dead Code run", deps: "Update Dependencies run",
     "ui-prototype-round": "Prototype round drawn",
   });
   for (const t of [WEIGHTS, LAUNCH_LABELS, RUN_LABELS]) assert.ok(Object.isFrozen(t));

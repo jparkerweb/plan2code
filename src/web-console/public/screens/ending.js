@@ -29,6 +29,7 @@ import {
   DASHBOARD_REPLY,
   COMMIT_REPLY,
   CHANGELOG_REPLY,
+  loopLessonsLine,
 } from "../answers.js";
 import { hooks, page, saveNow, redraw } from "../state.js";
 
@@ -168,6 +169,24 @@ let loopPressed = null;
 // app for a second agent. Keyed by the ending it was pressed on.
 let askUpFor = null;
 
+// The waiting-lessons line under a loop stop's reason (FR-13): fetched once per
+// ending from /learning/state, then drawn; a failed fetch adds nothing.
+let loopLessons = { key: null, line: "" };
+function loopLessonsFor(key) {
+  if (loopLessons.key === key) return loopLessons.line;
+  loopLessons = { key, line: "" };
+  fetch("/learning/state", { cache: "no-store" })
+    .then((res) => (res.ok ? res.json() : null))
+    .then((learning) => {
+      const line = loopLessonsLine(learning);
+      if (loopLessons.key !== key || !line) return;
+      loopLessons.line = line;
+      redraw();
+    })
+    .catch(() => {});
+  return "";
+}
+
 // Whether the stop screen's Details is open, kept across redraws (keyed like askUpFor).
 let loopDetailsOpen = null;
 
@@ -226,7 +245,18 @@ export function renderLoopEnd(end) {
   // long, goes under it rather than in the heading.
   const reason = !finished && typeof end.reason === "string" && end.reason ? end.reason : "";
   card.appendChild(el("h2", "loop-end-heading", finished ? "Every phase is built" : reason || end.line));
-  if ((finished || reason) && end.line) card.appendChild(el("p", "loop-line", end.line));
+  // On a stop the full line is the colored reason, and the advice sits under it.
+  if ((finished || reason) && end.line) card.appendChild(el("p", finished ? "loop-line" : "loop-line loop-why", end.line));
+  if (!finished && typeof end.advice === "string" && end.advice) {
+    const next = el("p", "loop-advice");
+    next.appendChild(el("strong", null, "What to do next: "));
+    next.appendChild(document.createTextNode(end.advice));
+    card.appendChild(next);
+  }
+  if (!finished) {
+    const lessons = loopLessonsFor(loopEndKey(end));
+    if (lessons) card.appendChild(el("p", "loop-line loop-lessons", lessons));
+  }
 
   const evidence = end.evidence && docs().find((d) => d.id === end.evidence);
   if (evidence) {

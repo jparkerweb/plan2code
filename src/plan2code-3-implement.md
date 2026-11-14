@@ -21,6 +21,7 @@ The FIRST thing you do, before anything else in this file — before reading a s
 ## Rules
 
 - Follow `./AGENTS.md` if it exists
+- **Lessons:** then read `references/lessons.md` and follow its Start and While working sections (`node "<S>/lessons.mjs"`).
 - Implement specs EXACTLY - no creative additions
 - ONE phase per conversation (default)
 - Tests: after each task run the tests covering what it touched; at phase end run the phase file's `## Phase Testing` lines plus tests for any other file the phase changed; never the full suite unless the phase file lists a `Full suite:` line
@@ -209,7 +210,7 @@ On user "approved":
    | Phase X: [Name] | Y | [One-sentence goal] |
    | Phase X+1: [Name] | Z | [One-sentence goal] |
 
-5. Write a one-line subject for the phase, then give the user the `command` from `commit-msg.mjs --subject "<subject>" --files <path> ...`, one `--files` per file the phase created or changed. It enforces the format: subject ≤100 chars and EXACTLY TWO -m flags (subject, `AI Assisted`), no body. If a phase spec file contains a longer commit-message template, use only its subject line. The diff is the body; the PR is the explanation. On Windows PowerShell 5.1 (no `&&`), give `add` and `commit` as two commands instead.
+5. Before this, follow `references/lessons.md` → End. (Not under `--loop`.) Then write a one-line subject for the phase, then give the user the `command` from `commit-msg.mjs --subject "<subject>" --files <path> ...`, one `--files` per file the phase created or changed. It enforces the format: subject ≤100 chars and EXACTLY TWO -m flags (subject, `AI Assisted`), no body. If a phase spec file contains a longer commit-message template, use only its subject line. The diff is the body; the PR is the explanation. On Windows PowerShell 5.1 (no `&&`), give `add` and `commit` as two commands instead.
 6. **If more phases:** "NEXT STEP: Start NEW conversation and run: `/plan2code-3-implement specs/<feature>/overview.md --web`"
 7. **If final phase:** "NEXT STEP: Start NEW conversation and run: `/plan2code-4-finalize --web`"
 8. Mention `/plan2code-1b-revise-plan --web` option
@@ -266,5 +267,7 @@ NEXT STEP: `/plan2code-1b-revise-plan specs/<feature>/overview.md --web`. The da
 A phase whose Notes still hold a waiting `**Plan change:**` gets one question in place of "Resume?" (console: a `choice`): **Revise the plan first** (recommended) or **Resume Phase X anyway**. Revise first: change nothing and end as a pause with the NEXT STEP above (console: that `finish.command`, headline starting "Paused"). Resume anyway: rewrite the line to `**Plan change (dropped <YYYY-MM-DD>):**`, then carry on.
 
 ## Learning Capture
+
+With Learning active, `references/lessons.md` → End replaces this section. Otherwise:
 
 At session end, if you discovered undocumented commands, dependency quirks, gotchas (>5min cost), framework workarounds, or missing `AGENTS.md` patterns → prompt user to update AGENTS.md. If yes, apply the edit directly.

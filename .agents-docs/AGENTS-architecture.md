@@ -13,5 +13,6 @@ This file is an index. The architecture notes are split by area so each file sta
 | Web console: design points | [AGENTS-architecture-console-design.md](./AGENTS-architecture-console-design.md) | why the console is built as it is: preferences, the wait, the transport, notebook, handoffs, tests, adding a page file |
 | Activities | [AGENTS-architecture-activities.md](./AGENTS-architecture-activities.md) | every game but Ghoul Rush, and the rules every game follows ("Building an Activities game") |
 | Ghoul Rush | [core](./AGENTS-architecture-ghoul-core.md), [stages](./AGENTS-architecture-ghoul-stages.md), [rides](./AGENTS-architecture-ghoul-rides.md) | the files table for the Ghoul Rush game |
+| Bounce Road | [AGENTS-architecture-bounce.md](./AGENTS-architecture-bounce.md) | the files table for the Bounce Road game |
 
 The web console's files tables run across six files (server and contract, page, activities, and the three Ghoul Rush files); `scripts/test-web-console-shape.mjs` reads them all and fails when a console file has no row in any of them.

@@ -87,7 +87,7 @@ Feedback is collected during finalize (Step 5) or retroactively via the CLI. Pip
 | `archival_success_rate` | ≥ 0.99 | higher is better |
 | `avg_user_rating` | ≥ 7.0 | higher is better |
 
-On start the CLI asks for the plan2code repo path (default: saved `plan2codeRepoPath` in `~/.plan2code-metrics.json`, else auto-detected up to 5 parent dirs) and the project path (default: cwd). Data is stored in `<project>/.plan2code-metrics/` (runs/, aggregated.json, proposals/).
+On start the CLI asks for the plan2code repo path (default: saved `plan2codeRepoPath` in `~/.plan2code-metrics.json`, else auto-detected up to 5 parent dirs) and the project path (default: cwd). Data is stored in `<project>/.plan2code/metrics/` (runs/, aggregated.json, proposals/).
 
 ## Prompt fingerprints and the one-time regrouping
 

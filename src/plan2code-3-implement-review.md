@@ -15,6 +15,7 @@ The FIRST thing you do, before anything else in this file: Implementation Mode's
 This file controls the two referenced workflows. Follow each referenced workflow except where this contract overrides its transition, sign-off, approval, session-end, or scope instructions.
 
 - Follow `./AGENTS.md` if it exists.
+- **Lessons:** then read `references/lessons.md` and follow its Start and While working sections (`node "<S>/lessons.mjs"`); `<S>` is this skill's own `scripts/`.
 - Keep the phase `[/]` until the final reviewed implementation is approved.
 - Never treat implementation completion, review completion, or a fix selection as phase approval.
 - Never ask for implementation sign-off before review.
@@ -77,7 +78,7 @@ When the user replies `approved` to the final sign-off:
 
 1. Run Implementation Mode's `After Approval / Session End` actions.
 2. Mark overview.md `[/]` to `[x]` and set the phase status to `Complete` (`specs.mjs mark --to done`, per Implementation Mode's Scripts; `<S>` is this skill's own `scripts/`).
-3. Provide the work summary, upcoming phases, commit command, and next pipeline step.
+3. Before this, follow `references/lessons.md` → End. Then provide the work summary, upcoming phases, commit command, and next pipeline step.
 4. Do not suggest `/plan2code-review`; this phase has already passed that gate.
 5. Mention `/plan2code-1b-revise-plan` only when it remains relevant.
 

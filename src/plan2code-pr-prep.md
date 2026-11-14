@@ -14,6 +14,8 @@ The FIRST thing you do, before anything else in this file, before reading the br
 
 Read `./AGENTS.md` when it exists: its commands, its `## Test map` and anything it says about slow suites. PR Prep still works without one: the scripts find the project's commands from its config files, and nothing here needs Plan2Code's specs.
 
+**Lessons:** then read `references/lessons.md` and follow its Start and While working sections (`node "<S>/lessons.mjs"`).
+
 ## Scripts
 
 `<S>` is `scripts/` beside this SKILL.md (`~/.agents/skills/plan2code-pr-prep/scripts/` globally). Run from the project root. Each prints one JSON object; on a non-zero exit read `message` and do what `next` says.

@@ -23,9 +23,8 @@ approve.
 - `--fix <levels>`: a comma list from `critical`, `warning`, `suggestion`, the
   levels to fix in the one fix round. Absent means findings are reported, not
   fixed.
-- `--fix smart`: Smart pick. A triage step chooses which findings to fix, in
-  place of a level list (see Triage). The one fix round and the fresh re-check
-  are unchanged.
+- `--fix smart`: Smart pick. A triage step picks the findings to fix in place
+  of a level list (see Triage).
 - `--guess`: when a task needs a decision the spec does not make, take the best
   guess, mark the task `[?]` with a one-line note as an indented line right under
   it in the phase file (`  - Assumed: what you chose and why`), and carry on. The
@@ -36,7 +35,7 @@ approve.
 
 - Build the phase `--phase` names, without asking (Choosing the phase).
 - No sign-off card, no "Approve this phase", no Show me it working, no Continue
-  offer.
+  offer. A loop run notes lessons and never lists them: no `lessons` card.
 - Never run `specs.mjs mark --to done`, and never set `[x]` on the phase in
   `overview.md`. Tasks inside the phase file are still checked off as they
   finish: `[x]`, `[!]` when blocked, `[?]` when assumed.
@@ -154,7 +153,8 @@ At the end of the run, post once a top-level `loopOutcome`:
   chosen level (every level in Smart pick) after the re-check, and, in Smart pick,
   the triage skipped no Critical (otherwise `failed`, reason `findings`). Otherwise `"failed"`, with the first matching
   `reason`: `tests`, `findings`, `blocked`, `conflict` or `other`. A passed
-  outcome has `"reason": null`.
+  outcome has `"reason": null`. A `failed` report adds `nextStep`: one line
+  (300 characters) with the one thing to do, naming a file or command.
 - `review.triage` is present only with `--fix smart`: `ran: true` and `skipped` listing
   every skipped finding with its reason (an empty list when nothing was skipped).
   A picked Critical or Warning still left after the re-check fails the phase with

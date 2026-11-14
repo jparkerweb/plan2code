@@ -14,6 +14,8 @@ The FIRST thing you do, before anything else in this file, before running a scri
 
 Read `./AGENTS.md` when it exists: its commands, its `## Test map` and anything it says about slow suites or code reached by name. Dead Code still works without one, but the test map is what tells it which tests and build to run after a removal; without it the scripts read the project's config files, and the person confirms the commands.
 
+**Lessons:** follow `references/lessons.md` → Start and While working.
+
 ## Scripts
 
 `<S>` is `scripts/` beside this SKILL.md (`~/.agents/skills/plan2code-dead-code/scripts/` globally). Run from the project root. Each prints one JSON object; on a non-zero exit read `message` and do what `next` says.
@@ -21,9 +23,9 @@ Read `./AGENTS.md` when it exists: its commands, its `## Test map` and anything 
 - `node "<S>/dead-code.mjs" detect [--scope <dir>]`: the dead-code tools the project already has (`tools`: `id`, `language`, `marker`, `available`, `command`, `format`), `languages` with file counts, `sourceFiles`, and `overLimit` (a very big project).
 - `node "<S>/dead-code.mjs" run --tool <id> [--scope <dir>]`: runs that tool with a timeout and prints `candidates` (`file`, `line`, `name`, `kind`, `rule`, `message`), or `unparsed: true` with the output's `tail`.
 - `node "<S>/dead-code.mjs" narrow --candidates <file>`: `folders` ranked by candidate count.
-- `node "<S>/dead-code.mjs" keep list|filter|add|remove`: the shared keep list, `.plan2code-dead-code/keep.md`. `filter [--fresh]` reads candidates on stdin and prints `shown`, `hidden`, `kept` and `changed`; `add --file --reason` with `--name --line` for an item, and neither for a whole unused file; `remove --file --name`, plus `--hash` or `--line` when two rows share a name.
+- `node "<S>/dead-code.mjs" keep list|filter|add|remove`: the shared keep list, `.plan2code/dead-code/keep.md`. `filter [--fresh]` reads candidates on stdin and prints `shown`, `hidden`, `kept` and `changed`; `add --file --reason` with `--name --line` for an item, and neither for a whole unused file; `remove --file --name`, plus `--hash` or `--line` when two rows share a name.
 - `node "<S>/dead-code.mjs" backup <files...> [--run <id>]` and `restore --run <id> [--files <f>...] [--verify]`: copies outside the project and a checked put-back.
-- `node "<S>/dead-code.mjs" report write --findings <file>`: saves `.plan2code-dead-code/reports/DEAD-CODE-<date>.md`, only on a yes.
+- `node "<S>/dead-code.mjs" report write --findings <file>`: saves `.plan2code/dead-code/reports/DEAD-CODE-<date>.md`, only on a yes.
 - `node "<S>/dead-code.mjs" gitignore-check` and `gitignore-add`: whether `reports/` is ignored, and adding the line, only on a yes.
 - `node "<S>/test-map.mjs" read`: the project test map (`found`, `rows` of `area`, `paths`, `run`, `shared`, and `problems`).
 - `node "<S>/test-commands.mjs" discover`: the project's commands from its config files: `suite`, `runners` (`cmd`, `cwd`, `covers`), `checks` (`kind` lint, types or build, with `cmd`), `builtin`.
@@ -40,7 +42,7 @@ Read `./AGENTS.md` when it exists: its commands, its `## Test map` and anything 
 - Follow `./AGENTS.md` when it exists.
 - **Never** run `git commit`, `git push`, `git add` or `git stash`. Read-only git is fine. The changes stay unstaged for the person to look at.
 - **Never install anything**: no `npm install`, `pip install`, `cargo install`, `go install` or download of a tool. A tool the project already has may be run.
-- **Write only** code removals, the Step 7.5 review fixes the person picks, `.plan2code-dead-code/keep.md`, and, on a yes, the saved report and the `.gitignore` line.
+- **Write only** code removals, the Step 7.5 review fixes the person picks, `.plan2code/dead-code/keep.md`, and, on a yes, the saved report and the `.gitignore` line.
 - **Nothing is removed before the person picks it.** Nothing is pre-ticked.
 - **Silence is not proof.** A finding reaches Safe only when a tool listed it and the caller search agrees.
 - **Never partial without saying so.** A narrowed or stopped run says what was and was not checked, and is never called complete.

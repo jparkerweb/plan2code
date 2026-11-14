@@ -86,6 +86,10 @@
   padding: 1px 5px;
   overflow-wrap: anywhere;
 }
+/* Help, "Learning": one example lesson, set apart like a quoted card. */
+.help-panel .help-example { margin: 0 0 12px; padding: 10px 12px; background: var(--panel-2); border: 1px solid var(--rule); border-left-width: 4px; border-radius: var(--radius); }
+.help-panel .help-example p { margin: 0 0 4px; }
+.help-panel .help-example p:last-child { margin-bottom: 0; }
 /* Help, "When something looks stuck": a calm callout and a symptom / cause / action list. */
 .help-panel .help-callout {
   display: flex; align-items: flex-start; gap: 12px;

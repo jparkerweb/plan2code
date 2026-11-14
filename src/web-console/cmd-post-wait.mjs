@@ -797,7 +797,8 @@ function markPickedUp(result) {
 const SAFE_SPEC = /^specs\/[^/\\"'`$;&|<>(){}*?!#~\r\n]+$/;
 
 // The send's `__` actions, whole, for the agent: the docs dispatch on them by
-// `i`. A `type` that only repeats `i` ("__stop" and "stop") is left out. The
+// `i` (`__delete` and `__learning` with every field, a `__launch` with its
+// `fromBanner`). A `type` that only repeats `i` ("__stop" and "stop") is left out. The
 // card answers, comments and skips are already in `reply`.
 export function sessionActions(result) {
   const actions = (result && Array.isArray(result.actions) && result.actions) || [];

@@ -35,6 +35,8 @@ On `local`, the map's bookkeeping is a script; the decisions are yours. `node "<
 
 Load `./AGENTS.md` if it exists — its conventions govern; never re-ask what it answers. If missing, fold it into the Step 0 gate batch: *"No `AGENTS.md`. Pathfinder can chart without it. Continue, or run `plan2code-init` first?"* Record the outcome as the first line of `## Ground rules`: ``- `AGENTS.md` exists and governs.`` or, when missing, exactly ``- `AGENTS.md` is absent.`` (the handoff reads it).
 
+**Lessons:** then read `references/lessons.md` and follow its Start and While working sections (`node "<S>/lessons.mjs"`).
+
 ## Rules
 
 - **Plan, don't do.** Every question resolves a DECISION. The pull to just build it is the edge of the map — hand off.

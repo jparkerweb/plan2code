@@ -50,7 +50,7 @@ function saveUserConfig(config: UserConfig): void {
 
 // ── Defaults ──────────────────────────────────────────────────────────────────
 
-const DEFAULT_METRICS_DIR = '.plan2code-metrics';
+const DEFAULT_METRICS_DIR = '.plan2code/metrics';
 const DEFAULT_RUNS_SUBDIR = 'runs';
 const DEFAULT_AGGREGATED_FILE = 'aggregated.json';
 const DEFAULT_PROPOSALS_SUBDIR = 'proposals';
@@ -283,7 +283,7 @@ async function flowImport(): Promise<void> {
   console.log();
 
   const sourcePath = await input({
-    message: 'Path to run JSON file (e.g., /path/to/project/.plan2code-metrics/runs/run-xxx.json):',
+    message: 'Path to run JSON file (e.g., /path/to/project/.plan2code/metrics/runs/run-xxx.json):',
     validate: (v) => {
       if (!fs.existsSync(v)) return 'File not found';
       if (!v.endsWith('.json')) return 'Must be a .json file';
@@ -629,7 +629,7 @@ async function flowDelete(): Promise<void> {
   const { metricsDir, runsDir, aggregatedPath, proposalsDir } = getMetricsDirs();
 
   if (!fs.existsSync(metricsDir)) {
-    console.log(chalk.yellow('No metrics data found (.plan2code-metrics/ does not exist).'));
+    console.log(chalk.yellow('No metrics data found (.plan2code/metrics/ does not exist).'));
     return;
   }
 

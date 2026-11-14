@@ -28,7 +28,7 @@ The page draws the cards itself — you never send the list. It also knows the r
 `recommend` is a skill name, or omit it; `note` says what you made of the project.
 
 - No AGENTS.md → `recommend: "plan2code-init"`; the note says why.
-- A spec mid-pipeline → recommend its next step; that card's `details` names where it stands ("Plan drafted", "Phase 2 of 4 is next"). The picker pre-selects the most recently touched spec that is not `fixed` — recommend for THAT one.
+- A spec mid-pipeline → recommend its next step; that card's `details` names where it stands ("Plan drafted", "Phase 2 of 4 is next"). The picker pre-selects the most recently touched spec that is not `fixed` or `upgraded` — recommend for THAT one.
   - `exploring` ("Exploring"): Pathfinder is next.
   - `mapped` ("Ready to plan"): Plan is next.
   - `planned` ("Ready to document"): Document is next.
@@ -39,7 +39,9 @@ The page draws the cards itself — you never send the list. It also knows the r
 - A spec that scans `unrecognized` ("files on disk") is input, not progress: its folder rides along on a Pathfinder or Plan launch as reference, and those are the only pipeline cards it lights. Read the files and recommend the fit — a settled design doc the person wrote is Plan's brief, loose notes are Pathfinder's. No skill generates such a doc; see the table below for what each one does write. Never flag Document or anything downstream of it for such a spec. A spec holding only saved prototypes is such input, and its folder also rides along on a Quick Task launch: Plan when the prototype settles what to build, Quick Task when what it shows is a small change, Pathfinder when much is still open.
 - A `diagnosed` spec ("Bug diagnosed") is a bug Diagnose wrote up: recommend Quick Task, or Plan when its `DIAGNOSIS-<date>.md` sizes the fix as big; its folder rides along on either launch.
 - A `fixed` spec ("Bug fixed") is a diagnosed bug Quick Task fixed but did not archive: finished, so never recommend for it or name it in the note; the picker never pre-selects one and hides it while unavailable workflows are hidden. The person archives it (Quick Task offers that once the bug is fixed) or deletes it with the picker's ✕.
-- Nothing on disk, or only `fixed` specs → `recommend: "plan2code-0-pathfinder"`; the note invites the first idea.
+- An `upgrade` spec ("Upgrade ready") is a held-back dependency upgrade Update dependencies wrote up (`UPGRADE-<date>.md`): recommend Quick Task, or Plan when the brief's call sites and notes make it big; its folder rides along on either launch.
+- An `upgraded` spec ("Upgrade done") is that brief once Quick Task applied it: finished, treated exactly like `fixed`.
+- Nothing on disk, or only `fixed` or `upgraded` specs → `recommend: "plan2code-0-pathfinder"`; the note invites the first idea.
 - A handoff in `state.scan.handoffs` newer than the most recently touched spec is usually the place to start: say so in `note` (the page has no card to `recommend` for it).
 - Recommend only what you would tell a person who asked "where do I start?". When in doubt, no flag and a neutral note — the page falls back to flagging the selected spec's own next step.
 - `recommend` must name a lit card for the initial selection. If the person switches specs or starts fresh, the page derives the suggestion and detail from its scan instead.
@@ -55,9 +57,9 @@ Ground truth for menu notes and Ask-tab answers. For anything beyond this table,
 | init | codebase, README, agent rule files | `AGENTS.md`, `.agents-docs/AGENTS-<section>.md`; points CLAUDE.md etc. at AGENTS.md |
 | init-update | `AGENTS.md`, codebase | `AGENTS.md`, `.agents-docs/` |
 | 0-pathfinder | the idea, loose notes | `pathfinder/map.md`, `pathfinder/questions/NN-<slug>.md`; cleared → `PLAN-DRAFT-<date>.md`; a UI prototype's `prototypes/<name>.html` and `<name>.md` on a yes |
-| 1-plan | idea or `PLAN-DRAFT` | `PLAN-DRAFT-<date>.md`, `PLAN-CONVERSATION-<date>.md`; a UI prototype's `prototypes/<name>.html` and `<name>.md` on a yes |
+| 1-plan | idea, `PLAN-DRAFT`, or a `DIAGNOSIS-*.md` or `UPGRADE-*.md` brief | `PLAN-DRAFT-<date>.md`, `PLAN-CONVERSATION-<date>.md`; a UI prototype's `prototypes/<name>.html` and `<name>.md` on a yes |
 | 1b-revise-plan | `overview.md`, `phase-X.md`, a waiting `**Plan change:**` brief | the same, revised; the brief marked applied or dropped; a UI prototype's `prototypes/<name>.html` and `<name>.md` on a yes |
-| quick-task | the ask; a `DIAGNOSIS-*.md` when launched on one; a saved prototype's `.md` and `.html` when launched on its folder | code; the diagnosis set to `Fixed`, then the folder moved to `specs--completed/` on a yes; a built prototype's folder moved there too on a yes; escalated → `PLAN-DRAFT-<date>.md`; a UI prototype's `prototypes/<name>.html` and `<name>.md` only when asked |
+| quick-task | the ask; a `DIAGNOSIS-*.md` or `UPGRADE-*.md` when launched on one; a saved prototype's `.md` and `.html` when launched on its folder | code; the diagnosis set to `Fixed` (an upgrade brief to `Done`), then the folder moved to `specs--completed/` on a yes; a built prototype's folder moved there too on a yes; escalated → `PLAN-DRAFT-<date>.md`; a UI prototype's `prototypes/<name>.html` and `<name>.md` only when asked |
 | 2-document | `PLAN-DRAFT`, `PLAN-CONVERSATION` (optional) | `overview.md`, `phase-X.md` |
 | 3-implement(-review) | `overview.md`, `phase-X.md` | code; `[x]` marks + completion summary in `phase-X.md`; paused for a revision, a `**Plan change:**` brief in its Notes |
 | review | spec, diff | the fixes picked; no spec writes |
@@ -69,14 +71,17 @@ Ground truth for menu notes and Ask-tab answers. For anything beyond this table,
 | diagnose | the bug, the codebase, `references/building-habits.md` | `DIAGNOSIS-<date>.md`; no code changes |
 | pr-prep | git diff and status, the `AGENTS.md` test map, the project's config files, the PR template | the page report and description; `PR-READINESS-<date>.md` on a yes; the `AGENTS.md` test map on a yes; no commits, no push |
 | test | the codebase, the `AGENTS.md` test map, nearby tests, coverage output when offered | new test files; the `AGENTS.md` test map on a yes; `PLAN-DRAFT-<date>.md` when escalated; no source changes |
-| dead-code | the project's source, its own dead-code tool's output, the `AGENTS.md` test map, `.plan2code-dead-code/keep.md` | code removals the person picks; `.plan2code-dead-code/keep.md`; `.plan2code-dead-code/reports/DEAD-CODE-<date>.md` and the `.gitignore` line on a yes; no commits, no staging |
+| dead-code | the project's source, its own dead-code tool's output, the `AGENTS.md` test map, `.plan2code/dead-code/keep.md` | code removals the person picks; `.plan2code/dead-code/keep.md`; `.plan2code/dead-code/reports/DEAD-CODE-<date>.md` and the `.gitignore` line on a yes; no commits, no staging |
+| deps | the project's manifests and lockfiles, each package manager's outdated and audit output, release notes, the `AGENTS.md` test map | manifests and lockfiles for the updates the person picks (anything that breaks put back); `specs/<package>-upgrade/UPGRADE-<date>.md` for a ticked hand-off; no source changes, no commits, no staging |
 | ui-prototype | the request, the project's style and component source files, attached images | draft pages under ~/.plan2code/prototypes/; `prototypes/<name>.html` and its `.md` on a yes; no code changes |
+
+Learning (the dashboard's own row, not a skill; "A Learning action arrives") reads `.plan2code/lessons/` and the waiting lessons on this machine, and writes `.plan2code/settings.json`, lesson files and `AGENTS.md` wording on a yes; no commits.
 
 ## A pick arrives
 
 A card click is a send whose action is `__launch`, carrying `skill`, `workflow` and, when a spec was picked, `spec`; the send also names `resume` (the command to run) and `skillFile`.
 
-`__launch` names no question; like `__stop` it is about the session. `spec` is the picker's selected spec dir — present only when the launched skill takes a spec (or is Quick Task on a `diagnosed` spec or a folder of only saved prototypes) and the person picked one; absent means "start from scratch".
+`__launch` names no question; like `__stop` it is about the session. `spec` is the picker's selected spec dir — present only when the launched skill takes a spec (or is Quick Task on a `diagnosed` or `upgrade` spec or a folder of only saved prototypes) and the person picked one; absent means "start from scratch".
 
 > **Never hand this to a skill-invocation tool. Open its `SKILL.md` with your own file-read tool instead.** Every Plan2Code skill below the dashboard ships `disable-model-invocation: true` on purpose — it exists to be read and followed inline, not launched as a sub-skill — and calling one through a skill-invocation tool errors out and strands the hand-off mid-launch.
 
@@ -108,6 +113,7 @@ If `skill` is not in the table below, say so on the page and stay the dashboard.
 | plan2code-xray | xray | | plan2code-diagnose | diagnose |
 | plan2code-pr-prep | pr-prep | | plan2code-test | test |
 | plan2code-dead-code | dead-code | | plan2code-ui-prototype | ui-prototype |
+| plan2code-deps | deps | | | |
 
 ## A pick-up arrives
 
@@ -121,9 +127,23 @@ The ✕ on a picker chip asks for that spec to go, after a two-step confirm on t
 2. `node "<D>/console.mjs" open --resume <sid> --no-open --workflow dashboard`, which rescans `specs/`.
 3. Post the menu again with `--wait`; the note says what was deleted, or why it was not. Stay the dashboard.
 
-A `fixed` spec is deleted after one confirm on the page (its own Delete button, no name to type); your steps are the same.
+A `fixed` or `upgraded` spec is deleted after one confirm on the page (its own Delete button, no name to type); your steps are the same.
 
 A handoff's Delete is the same `__delete` with `handoff` (an id) instead of `spec`: run `node "<D>/console.mjs" delete-handoff --handoff <action.handoff>`, then steps 2 and 3.
+
+## A Learning action arrives
+
+The Learning row and banner send a `__learning` action with `do`. It is no hop: no `resume`, you stay the dashboard. Run `node "<S>/lessons.mjs"` (`<S>`: scripts/ beside this SKILL.md) as `references/lessons.md` says:
+
+- `switch-on`: `switch on`; when it returns `offerLogMove`, say so in the next menu's `note` ("To move the failure log into lessons: More, then Move the failure log into lessons."). The dashboard shows no question, so never ask it here.
+- `switch-off`: `switch off`.
+- `move-log`: `list --log-all`, then the card below.
+- `remove`: `remove --confirm` (the page already asked).
+- `review`: `list`, then the card below. While the state is `not-set-up`, `list --first-ask` instead: a `firstAsk` goes up as the reference's The first ask card (never `decide --file` before it), then `decide --first-ask yes` or `decide --first-ask no --skill dashboard`; on Yes, the card below from the list it returns.
+
+The card: post `list`'s `card` as one `lessons` item with `--wait` (the page shows it over the menu; give it a new `id` when an earlier lessons card is in the session). Write the reply's `Decisions:` JSON to a file in the session folder, adding what End step 6 says a choice still needs, run `decide --file <that file>`, and handle its results as End step 7 does. An empty `card` needs no post. The lessons card is the only question the dashboard shows: where End says to ask (a Move's `why` and `about`, or once more for an item), take `about` from the files the line names and post that row again as a new lessons card with the choices `Reword and move` and `Leave` (other rows: their own choices), its `note` saying what is needed.
+
+Then `node "<D>/console.mjs" open --resume <sid> --no-open --workflow dashboard` to rescan, and post the menu again with `"settle":true` and `--wait`, its note saying what changed (after the card, `decide`'s `closing` line). Never stage or commit.
 
 ## Coming back from another skill
 

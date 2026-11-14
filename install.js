@@ -146,7 +146,11 @@ const SOURCE_PROMPTS = [
     bare: true,
     displayName: 'Dashboard Mode',
     description: 'Open the web console dashboard and launch any Plan2Code skill from the menu',
-    additionalReferences: [{ source: 'web-console', target: 'web-console' }]
+    scripts: ['lessons.mjs', 'glob.mjs', 'test-map.mjs'],
+    additionalReferences: [
+      { source: 'web-console', target: 'web-console' },
+      { source: 'shared-references/lessons.md', target: 'lessons.md' }
+    ]
   },
   {
     source: 'plan2code-init.md',
@@ -183,12 +187,13 @@ const SOURCE_PROMPTS = [
     // ui-prototype.md rides along (with its references, shell and scripts) for the
     // offer of a UI prototype, which runs in the same conversation; every carried
     // name starts with ui-prototype so none collides with this skill's own files.
-    scripts: ['ui-prototype.mjs', 'ui-prototype-round.mjs', 'ui-prototype-page.mjs', 'ui-prototype-drafts.mjs', 'ui-prototype-block.mjs'],
+    scripts: ['ui-prototype.mjs', 'ui-prototype-round.mjs', 'ui-prototype-page.mjs', 'ui-prototype-drafts.mjs', 'ui-prototype-block.mjs', 'lessons.mjs', 'glob.mjs', 'test-map.mjs'],
     additionalReferences: [
       { source: 'web-console', target: 'web-console' },
       { source: 'shared-references/helper-strength.md', target: 'helper-strength.md' },
       { source: 'plan2code-ui-prototype.md', target: 'ui-prototype.md' },
-      { source: 'plan2code-ui-prototype-references' }
+      { source: 'plan2code-ui-prototype-references' },
+      { source: 'shared-references/lessons.md', target: 'lessons.md' }
     ]
   },
   {
@@ -203,7 +208,7 @@ const SOURCE_PROMPTS = [
     // ui-prototype.md rides along (with its references, shell and scripts) for the
     // offer of a UI prototype, which runs in the same conversation; every carried
     // name starts with ui-prototype so none collides with this skill's own files.
-    scripts: ['specs.mjs', 'commit-msg.mjs', 'review-scope.mjs', 'glob.mjs', 'test-map.mjs', 'test-match.mjs', 'run-check.mjs', 'ui-prototype.mjs', 'ui-prototype-round.mjs', 'ui-prototype-page.mjs', 'ui-prototype-drafts.mjs', 'ui-prototype-block.mjs'],
+    scripts: ['specs.mjs', 'commit-msg.mjs', 'review-scope.mjs', 'glob.mjs', 'test-map.mjs', 'test-match.mjs', 'run-check.mjs', 'lessons.mjs', 'ui-prototype.mjs', 'ui-prototype-round.mjs', 'ui-prototype-page.mjs', 'ui-prototype-drafts.mjs', 'ui-prototype-block.mjs'],
     additionalReferences: [
       { source: 'web-console', target: 'web-console' },
       { source: 'shared-references/building-habits.md', target: 'building-habits.md' },
@@ -213,7 +218,8 @@ const SOURCE_PROMPTS = [
       { source: 'plan2code-review.md', target: 'review.md' },
       { source: 'plan2code-review-references' },
       { source: 'plan2code-ui-prototype.md', target: 'ui-prototype.md' },
-      { source: 'plan2code-ui-prototype-references' }
+      { source: 'plan2code-ui-prototype-references' },
+      { source: 'shared-references/lessons.md', target: 'lessons.md' }
     ]
   },
   {
@@ -225,12 +231,13 @@ const SOURCE_PROMPTS = [
     // ui-prototype.md rides along (with its references, shell and scripts) for the
     // offer of a UI prototype, which runs in the same conversation; every carried
     // name starts with ui-prototype so none collides with this skill's own files.
-    scripts: ['specs.mjs', 'ui-prototype.mjs', 'ui-prototype-round.mjs', 'ui-prototype-page.mjs', 'ui-prototype-drafts.mjs', 'ui-prototype-block.mjs'],
+    scripts: ['specs.mjs', 'ui-prototype.mjs', 'ui-prototype-round.mjs', 'ui-prototype-page.mjs', 'ui-prototype-drafts.mjs', 'ui-prototype-block.mjs', 'lessons.mjs', 'glob.mjs', 'test-map.mjs'],
     additionalReferences: [
       { source: 'web-console', target: 'web-console' },
       { source: 'shared-references/helper-strength.md', target: 'helper-strength.md' },
       { source: 'plan2code-ui-prototype.md', target: 'ui-prototype.md' },
-      { source: 'plan2code-ui-prototype-references' }
+      { source: 'plan2code-ui-prototype-references' },
+      { source: 'shared-references/lessons.md', target: 'lessons.md' }
     ]
   },
   {
@@ -242,12 +249,13 @@ const SOURCE_PROMPTS = [
     // ui-prototype.md rides along (with its references, shell and scripts) for the
     // offer of a UI prototype, which runs in the same conversation; every carried
     // name starts with ui-prototype so none collides with this skill's own files.
-    scripts: ['specs.mjs', 'ui-prototype.mjs', 'ui-prototype-round.mjs', 'ui-prototype-page.mjs', 'ui-prototype-drafts.mjs', 'ui-prototype-block.mjs'],
+    scripts: ['specs.mjs', 'ui-prototype.mjs', 'ui-prototype-round.mjs', 'ui-prototype-page.mjs', 'ui-prototype-drafts.mjs', 'ui-prototype-block.mjs', 'lessons.mjs', 'glob.mjs', 'test-map.mjs'],
     additionalReferences: [
       { source: 'web-console', target: 'web-console' },
       { source: 'shared-references/helper-strength.md', target: 'helper-strength.md' },
       { source: 'plan2code-ui-prototype.md', target: 'ui-prototype.md' },
-      { source: 'plan2code-ui-prototype-references' }
+      { source: 'plan2code-ui-prototype-references' },
+      { source: 'shared-references/lessons.md', target: 'lessons.md' }
     ]
   },
   {
@@ -256,11 +264,12 @@ const SOURCE_PROMPTS = [
     name: 'document',
     displayName: 'Documentation Mode',
     description: 'Transform planning output into structured implementation docs',
-    scripts: ['specs.mjs'],
+    scripts: ['specs.mjs', 'lessons.mjs', 'glob.mjs', 'test-map.mjs'],
     additionalReferences: [
       { source: 'web-console', target: 'web-console' },
       { source: 'shared-references/helper-strength.md', target: 'helper-strength.md' },
-      { source: 'shared-references/test-runs.md', target: 'test-runs.md' }
+      { source: 'shared-references/test-runs.md', target: 'test-runs.md' },
+      { source: 'shared-references/lessons.md', target: 'lessons.md' }
     ]
   },
   {
@@ -271,7 +280,7 @@ const SOURCE_PROMPTS = [
     description: 'Execute implementation phase by phase',
     // review.md rides along for the web console's review offer on the sign-off
     // card, which runs the review in the same session before the phase is approved.
-    scripts: ['specs.mjs', 'commit-msg.mjs', 'review-scope.mjs', 'glob.mjs', 'test-map.mjs', 'test-match.mjs', 'run-check.mjs'],
+    scripts: ['specs.mjs', 'commit-msg.mjs', 'review-scope.mjs', 'glob.mjs', 'test-map.mjs', 'test-match.mjs', 'run-check.mjs', 'lessons.mjs'],
     additionalReferences: [
       { source: 'web-console', target: 'web-console' },
       { source: 'shared-references/building-habits.md', target: 'building-habits.md' },
@@ -279,7 +288,8 @@ const SOURCE_PROMPTS = [
       { source: 'shared-references/helper-strength.md', target: 'helper-strength.md' },
       { source: 'shared-references/test-runs.md', target: 'test-runs.md' },
       { source: 'plan2code-review.md', target: 'review.md' },
-      { source: 'plan2code-review-references' }
+      { source: 'plan2code-review-references' },
+      { source: 'shared-references/lessons.md', target: 'lessons.md' }
     ]
   },
   {
@@ -288,7 +298,7 @@ const SOURCE_PROMPTS = [
     name: 'implement-review',
     displayName: 'Implementation + Review Mode',
     description: 'Implement one phase, review it, then request sign-off',
-    scripts: ['specs.mjs', 'commit-msg.mjs', 'review-scope.mjs', 'glob.mjs', 'test-map.mjs', 'test-match.mjs', 'run-check.mjs'],
+    scripts: ['specs.mjs', 'commit-msg.mjs', 'review-scope.mjs', 'glob.mjs', 'test-map.mjs', 'test-match.mjs', 'run-check.mjs', 'lessons.mjs'],
     additionalReferences: [
       { source: 'web-console', target: 'web-console' },
       { source: 'plan2code-3-implement.md', target: 'implement.md' },
@@ -297,7 +307,8 @@ const SOURCE_PROMPTS = [
       { source: 'shared-references/helper-strength.md', target: 'helper-strength.md' },
       { source: 'shared-references/test-runs.md', target: 'test-runs.md' },
       { source: 'plan2code-review.md', target: 'review.md' },
-      { source: 'plan2code-review-references' }
+      { source: 'plan2code-review-references' },
+      { source: 'shared-references/lessons.md', target: 'lessons.md' }
     ]
   },
   {
@@ -309,12 +320,13 @@ const SOURCE_PROMPTS = [
     // Shown to the agent in place of the generic header text: when the skill fits and its command.
     skillDescription: "Use when a change, branch or spec needs an independent review for bugs, spec drift and gaps, before a commit or pull request. Run it as /plan2code-review.",
     isUtility: true,
-    scripts: ['specs.mjs', 'commit-msg.mjs', 'review-scope.mjs'],
+    scripts: ['specs.mjs', 'commit-msg.mjs', 'review-scope.mjs', 'lessons.mjs', 'glob.mjs', 'test-map.mjs'],
     additionalReferences: [
       { source: 'web-console', target: 'web-console' },
       { source: 'shared-references/review-in-build.md', target: 'review-in-build.md' },
       { source: 'shared-references/helper-strength.md', target: 'helper-strength.md' },
-      { source: 'shared-references/test-runs.md', target: 'test-runs.md' }
+      { source: 'shared-references/test-runs.md', target: 'test-runs.md' },
+      { source: 'shared-references/lessons.md', target: 'lessons.md' }
     ]
   },
   {
@@ -325,14 +337,15 @@ const SOURCE_PROMPTS = [
     description: 'Validate, summarize, and archive completed work',
     // review.md rides along for Step 2.5's final review, which runs in the
     // same session before the summary is written and the spec is archived.
-    scripts: ['specs.mjs', 'commit-msg.mjs', 'review-scope.mjs', 'glob.mjs', 'test-map.mjs', 'test-match.mjs', 'run-check.mjs'],
+    scripts: ['specs.mjs', 'commit-msg.mjs', 'review-scope.mjs', 'glob.mjs', 'test-map.mjs', 'test-match.mjs', 'run-check.mjs', 'lessons.mjs'],
     additionalReferences: [
       { source: 'web-console', target: 'web-console' },
       { source: 'shared-references/helper-strength.md', target: 'helper-strength.md' },
       { source: 'shared-references/test-runs.md', target: 'test-runs.md' },
       { source: 'shared-references/review-in-build.md', target: 'review-in-build.md' },
       { source: 'plan2code-review.md', target: 'review.md' },
-      { source: 'plan2code-review-references' }
+      { source: 'plan2code-review-references' },
+      { source: 'shared-references/lessons.md', target: 'lessons.md' }
     ]
   },
   {
@@ -354,10 +367,11 @@ const SOURCE_PROMPTS = [
     // Shown to the agent in place of the generic header text: when the skill fits and its command.
     skillDescription: "Use when you want to understand how and why an area of the code works, or find its rough spots worth fixing. Run it as /plan2code-xray.",
     isUtility: true,
-    scripts: [],
+    scripts: ['lessons.mjs', 'glob.mjs', 'test-map.mjs'],
     additionalReferences: [
       { source: 'web-console', target: 'web-console' },
-      { source: 'shared-references/helper-strength.md', target: 'helper-strength.md' }
+      { source: 'shared-references/helper-strength.md', target: 'helper-strength.md' },
+      { source: 'shared-references/lessons.md', target: 'lessons.md' }
     ]
   },
   {
@@ -369,11 +383,12 @@ const SOURCE_PROMPTS = [
     // Shown to the agent in place of the generic header text: when the skill fits and its command.
     skillDescription: "Use when a bug's cause is unknown and you want it found and written up without a fix. Run it as /plan2code-diagnose.",
     isUtility: true,
-    scripts: ['specs.mjs'],
+    scripts: ['specs.mjs', 'lessons.mjs', 'glob.mjs', 'test-map.mjs'],
     additionalReferences: [
       { source: 'web-console', target: 'web-console' },
       { source: 'shared-references/building-habits.md', target: 'building-habits.md' },
-      { source: 'shared-references/helper-strength.md', target: 'helper-strength.md' }
+      { source: 'shared-references/helper-strength.md', target: 'helper-strength.md' },
+      { source: 'shared-references/lessons.md', target: 'lessons.md' }
     ]
   },
   {
@@ -385,11 +400,12 @@ const SOURCE_PROMPTS = [
     // Shown to the agent in place of the generic header text: when the skill fits and its command.
     skillDescription: "Use when a branch is nearly done and you want its checks run, a readiness verdict and a pull-request description. Run it as /plan2code-pr-prep.",
     isUtility: true,
-    scripts: ['review-scope.mjs', 'glob.mjs', 'test-map.mjs', 'test-match.mjs', 'test-commands.mjs', 'run-check.mjs'],
+    scripts: ['review-scope.mjs', 'glob.mjs', 'test-map.mjs', 'test-match.mjs', 'test-commands.mjs', 'run-check.mjs', 'lessons.mjs'],
     additionalReferences: [
       { source: 'web-console', target: 'web-console' },
       { source: 'shared-references/test-runs.md', target: 'test-runs.md' },
-      { source: 'shared-references/helper-strength.md', target: 'helper-strength.md' }
+      { source: 'shared-references/helper-strength.md', target: 'helper-strength.md' },
+      { source: 'shared-references/lessons.md', target: 'lessons.md' }
     ]
   },
   {
@@ -401,12 +417,13 @@ const SOURCE_PROMPTS = [
     // Shown to the agent in place of the generic header text: when the skill fits and its command.
     skillDescription: "Use when code has no tests or weak ones and you want unit and integration tests written in the project's own style. Run it as /plan2code-test.",
     isUtility: true,
-    scripts: ['review-scope.mjs', 'glob.mjs', 'test-map.mjs', 'test-match.mjs', 'test-commands.mjs', 'run-check.mjs'],
+    scripts: ['review-scope.mjs', 'glob.mjs', 'test-map.mjs', 'test-match.mjs', 'test-commands.mjs', 'run-check.mjs', 'lessons.mjs'],
     additionalReferences: [
       { source: 'web-console', target: 'web-console' },
       { source: 'shared-references/test-runs.md', target: 'test-runs.md' },
       { source: 'shared-references/building-habits.md', target: 'building-habits.md' },
-      { source: 'shared-references/helper-strength.md', target: 'helper-strength.md' }
+      { source: 'shared-references/helper-strength.md', target: 'helper-strength.md' },
+      { source: 'shared-references/lessons.md', target: 'lessons.md' }
     ]
   },
   {
@@ -421,7 +438,7 @@ const SOURCE_PROMPTS = [
     // review.md rides along for Step 7.5's final review of the removals, which
     // runs in the same session, as Finalize's Step 2.5 does, with the scripts
     // review.md names.
-    scripts: ['test-map.mjs', 'glob.mjs', 'test-commands.mjs', 'run-check.mjs', 'specs.mjs', 'commit-msg.mjs', 'review-scope.mjs'],
+    scripts: ['test-map.mjs', 'glob.mjs', 'test-commands.mjs', 'run-check.mjs', 'specs.mjs', 'commit-msg.mjs', 'review-scope.mjs', 'lessons.mjs'],
     additionalReferences: [
       { source: 'web-console', target: 'web-console' },
       { source: 'plan2code-dead-code-references/caller-search.md', target: 'caller-search.md' },
@@ -429,7 +446,25 @@ const SOURCE_PROMPTS = [
       { source: 'shared-references/test-runs.md', target: 'test-runs.md' },
       { source: 'shared-references/review-in-build.md', target: 'review-in-build.md' },
       { source: 'plan2code-review.md', target: 'review.md' },
-      { source: 'plan2code-review-references' }
+      { source: 'plan2code-review-references' },
+      { source: 'shared-references/lessons.md', target: 'lessons.md' }
+    ]
+  },
+  {
+    source: 'plan2code-deps.md',
+    stepNumber: 'deps',
+    name: 'deps',
+    displayName: 'Update Dependencies Mode',
+    description: 'Find outdated dependencies, label how safe each update is, and apply only what you pick with your checks run after each batch',
+    // Shown to the agent in place of the generic header text: when the skill fits and its command.
+    skillDescription: "Use when you want your project's outdated dependencies found, labeled by how safe each update is, and applied only where you pick, with your checks run and anything that breaks put back. Run it as /plan2code-deps.",
+    isUtility: true,
+    // deps.mjs comes from src/plan2code-deps-scripts/; these are the shared ones it runs.
+    scripts: ['test-map.mjs', 'glob.mjs', 'test-commands.mjs', 'run-check.mjs'],
+    // helper-strength.md for the assess step's helpers (light, medium).
+    additionalReferences: [
+      { source: 'web-console', target: 'web-console' },
+      { source: 'shared-references/helper-strength.md', target: 'helper-strength.md' }
     ]
   },
   {
@@ -441,8 +476,11 @@ const SOURCE_PROMPTS = [
     // Shown to the agent in place of the generic header text: when the skill fits and its command.
     skillDescription: "Use when you want to see several versions of a screen or flow, tune them with live dials and bring your choice back. Run it as /plan2code-ui-prototype.",
     isUtility: true,
-    scripts: ['ui-prototype.mjs', 'ui-prototype-round.mjs', 'ui-prototype-page.mjs', 'ui-prototype-drafts.mjs', 'ui-prototype-block.mjs'],
-    additionalReferences: [{ source: 'web-console', target: 'web-console' }]
+    scripts: ['ui-prototype.mjs', 'ui-prototype-round.mjs', 'ui-prototype-page.mjs', 'ui-prototype-drafts.mjs', 'ui-prototype-block.mjs', 'lessons.mjs', 'glob.mjs', 'test-map.mjs'],
+    additionalReferences: [
+      { source: 'web-console', target: 'web-console' },
+      { source: 'shared-references/lessons.md', target: 'lessons.md' }
+    ]
   },
   {
     source: 'plan2code-changelog.md',
@@ -497,6 +535,7 @@ function generateStepLabel(prompt) {
   if (prompt.stepNumber === 'pr-prep') return 'PR Prep';
   if (prompt.stepNumber === 'test') return 'Test';
   if (prompt.stepNumber === 'dead-code') return 'Dead Code';
+  if (prompt.stepNumber === 'deps') return 'Update Dependencies';
   if (prompt.stepNumber === 'ui-prototype') return 'UI Prototype';
   if (prompt.stepNumber === 'changelog') return 'Changelog';
   if (prompt.stepNumber === 'quick') return 'Quick Task';

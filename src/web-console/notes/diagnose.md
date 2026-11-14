@@ -33,6 +33,8 @@ Once written, re-send `cause` with `"saved":"specs/<name>/DIAGNOSIS-<date>.md"` 
 
 ## The finish
 
+Lessons first: with lessons to offer (`references/lessons.md`, End), post its `card` as one `lessons` item with `--wait` before the finish.
+
 `command` is `/plan2code-quick-task specs/<name>` (small fix) or `/plan2code-1-plan specs/<name>` (big fix), real folder filled in. `body`: the cause, how sure, and that the next step reads the diagnosis first. `"doc":"cause"`, `"dashboard":true` (saved: shown whole, with Copy report). Nothing kept (did not reproduce, no guess held): no `command`, say so in `body`.
 
 A stop before the file is written: `body` says nothing was kept (and names any throwaway script or kept test), `"command":"/plan2code-diagnose"`.

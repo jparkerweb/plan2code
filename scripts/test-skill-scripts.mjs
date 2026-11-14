@@ -22,13 +22,14 @@ test("npm test runs every scripts/test-*.mjs file, and names none that is missin
   assert.deepEqual(listed, onDisk);
 });
 
-test("every skill with scripts ships common.mjs and version.json; dashboard ships none", () => {
+test("every skill with scripts ships common.mjs and version.json; the dashboard ships only Learning's", () => {
   const withScripts = skillNames().filter((s) => fs.existsSync(path.join(SKILLS, s, "scripts")));
   assert.ok(withScripts.length >= 11, `expected most skills to carry scripts, got ${withScripts.join(", ")}`);
   for (const s of withScripts) {
     for (const f of ["common.mjs", "version.json"]) assert.ok(fs.existsSync(path.join(SKILLS, s, "scripts", f)), `${s}/scripts/${f}`);
   }
-  assert.ok(!fs.existsSync(path.join(SKILLS, "plan2code", "scripts")), "the dashboard needs no scripts");
+  // The dashboard runs the approval step (lessons.mjs) and nothing else.
+  assert.deepEqual(fs.readdirSync(path.join(SKILLS, "plan2code", "scripts")).sort(), ["common.mjs", "glob.mjs", "lessons.mjs", "test-map.mjs", "version.json"]);
   const v = JSON.parse(fs.readFileSync(path.join(ROOT, "version.json"), "utf8")).version;
   assert.equal(JSON.parse(fs.readFileSync(path.join(SKILLS, "plan2code-4-finalize", "scripts", "version.json"), "utf8")).version, v);
 });
@@ -840,6 +841,25 @@ test("the skills that run test-match.mjs ship glob.mjs and test-map.mjs beside i
     for (const f of ["test-match.mjs", "glob.mjs", "test-map.mjs"]) assert.ok(fs.existsSync(path.join(SKILLS, s, "scripts", f)), `${s}/scripts/${f}`);
   }
   assert.ok(fs.existsSync(path.join(SKILLS, "plan2code-test", "scripts", "coverage.mjs")), "plan2code-test ships its own coverage.mjs");
+});
+
+test("Learning: fifteen skills read lessons, seven note them, and each ships the script and the reference", () => {
+  const reading = ["0-pathfinder", "1-plan", "1b-revise-plan", "2-document", "3-implement", "3-implement-review", "review", "4-finalize", "quick-task", "diagnose", "xray", "test", "pr-prep", "dead-code", "ui-prototype"].map((n) => `plan2code-${n}`);
+  const noting = ["3-implement", "3-implement-review", "quick-task", "diagnose", "xray", "review", "test"].map((n) => `plan2code-${n}`);
+  const skillMd = (s) => fs.readFileSync(path.join(SKILLS, s, "SKILL.md"), "utf8");
+  const ships = (s) => {
+    for (const f of ["lessons.mjs", "glob.mjs", "test-map.mjs"]) assert.ok(fs.existsSync(path.join(SKILLS, s, "scripts", f)), `${s}/scripts/${f}`);
+    assert.ok(fs.existsSync(path.join(SKILLS, s, "references", "lessons.md")), `${s}/references/lessons.md`);
+  };
+  for (const s of skillNames()) if (skillMd(s).includes("lessons.mjs")) ships(s);
+  for (const s of [...reading, "plan2code"]) ships(s);
+  for (const s of reading) assert.ok(skillMd(s).includes("references/lessons.md"),`${s} reads the lessons reference`);
+  const withEnd = skillNames().filter((s) => skillMd(s).includes("lessons.md` → End")).sort();
+  assert.deepEqual(withEnd, [...noting].sort(), "exactly the seven noting skills run End");
+  for (const s of ["plan2code-init", "plan2code-init-update"]) {
+    assert.ok(!skillMd(s).includes("lessons.mjs") && !skillMd(s).includes("references/lessons.md"), `${s} is unchanged`);
+    assert.ok(!fs.existsSync(path.join(SKILLS, s, "references", "lessons.md")), `${s} ships no lessons reference`);
+  }
 });
 
 test("common.mjs exports the shared loop-token and scrape patterns", async () => {
