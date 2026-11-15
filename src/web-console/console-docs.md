@@ -9,11 +9,12 @@ Docs and their blocks merge by `id`; a new id is added at the end. Patch blocks 
 - `{"id":"b2","state":"settled"}` settles b2 and keeps its text; blocks you leave out stay.
 - `{"id":"b3","_delete":true}` removes a block; a doc entry with `"_delete":true` removes the tab.
 
-## Block content: one of three
+## Block content: one of four
 
 - `md`: markdown you write.
 - `file`: the console reads the text from that project file (inside the project, 512 KB at most). Re-send the block, or the doc with `"refresh":true`, after the file changes. `"select":"tasks"` keeps only its `- [ ] **Task N.M:**` lines. Never paste a file you can name.
 - `image`: `{"id":"s1","image":"shots/run.png","alt":"..."}`: a PNG, JPEG or WebP (5 MB at most) saved directly in the session's `shots/` folder (the `session` path `open` printed), named with letters, digits, `.`, `_` or `-`. Anything else is exit 3.
+- `diff`: `{"id":"changes","diff":"changes.diff"}`: a unified diff `changes.mjs diff` wrote, saved directly in the session folder (a name ending `.diff`, 512 KB at most, longer text is cut). The page draws it as the Changes tab. Never paste a diff you can name; re-send the block after running `changes.mjs diff` again.
 
 ## State
 

@@ -30,6 +30,8 @@ A rule stated in six files is read six times and still skipped. The console sees
 
 Documents are read from `file` blocks rather than pasted so the page and the disk cannot disagree, and a progress post only has to ask for `refresh`. `assumed` and `draft` exist so a half-finished doc is not read as decisions. A doc `version` never goes back because the page keys its "new version" marker on it.
 
+A `diff` block follows the same rule: the agent writes a change set to a `.diff` file with `changes.mjs diff` and names it, so the agent never carries a patch through its own context and a large change costs a few typed tokens, not thousands. The server only reads it (read-only, the one file named, directly inside the session folder, so a block can never point the page at a project or system file) and caps it at the file block's 512 KB. Its text is code the repository holds, so the wording scan leaves it out as it does a `file` block.
+
 ## Noted questions
 
 A person's note on an open question may change what it asks, and the agent's reply in the thread does not say what happens to the question. The server therefore records the fact (`noted`) when the note lands, and `validate()` refuses a new open required question until each noted one is reworded, deleted or confirmed with `stands: true`. A thread cannot answer this: it stays true forever after one reply. The page shows the same flag as a tag, and keeps the arrival notice and a New mark until the new question is opened, since eight seconds is easy to miss mid-sentence.

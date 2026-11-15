@@ -992,6 +992,134 @@ test("an image block under the session's shots folder round-trips, and /shots/ s
   }
 });
 
+// The Changes tab: a `diff` block names a .diff file saved directly in the
+// session folder (changes.mjs diff). The server reads it like a file block,
+// keeps the name and the text on the block and never lets it reach outside.
+test("a diff block reads a .diff file in the session folder, refreshes and turns back into text", () => {
+  const res = cli(["open", "--workflow", "implement", "--no-open"]);
+  const sid = res.json.sid;
+  const dir = res.json.session;
+  const post = (name, patch, opts) => cli(["post", "--session", sid, "--file", payload(name, patch)], opts);
+  const doc = () => readState(dir).docs.find((d) => d.id === "changes");
+  try {
+    const first = "diff --git a/a.txt b/a.txt\n--- a/a.txt\n+++ b/a.txt\n@@ -1 +1 @@\n-old\n+new TASK_COMPLETE\n";
+    fs.writeFileSync(path.join(dir, "changes.diff"), first);
+    post("diff-ok.json", { docs: [{ id: "changes", title: "Changes", blocks: [{ id: "c1", diff: "changes.diff" }] }] });
+    const block = doc().blocks[0];
+    assert.equal(block.diff, "changes.diff");
+    assert.equal(block.text, first, "the file's text, loop markers in a diff are not the agent's words");
+    assert.equal(block.md, undefined, "a diff block holds no markdown");
+    assert.equal(block.state, "settled");
+
+    // The same file again is not a new version; a changed one is, re-sent or refreshed.
+    const v1 = doc().version;
+    post("diff-same.json", { docs: [{ id: "changes", blocks: [{ id: "c1", diff: "changes.diff" }] }] });
+    assert.equal(doc().version, v1);
+    const second = first + "+more\n";
+    fs.writeFileSync(path.join(dir, "changes.diff"), second);
+    post("diff-resend.json", { docs: [{ id: "changes", blocks: [{ id: "c1", diff: "changes.diff" }] }] });
+    assert.equal(doc().blocks[0].text, second);
+    assert.equal(doc().version, v1 + 1);
+    const third = second + "+again\n";
+    fs.writeFileSync(path.join(dir, "changes.diff"), third);
+    post("diff-refresh.json", { docs: [{ id: "changes", refresh: true }] });
+    assert.equal(doc().blocks[0].text, third);
+    assert.equal(doc().version, v1 + 2);
+
+    // An empty file is the page's empty state, not an error.
+    fs.writeFileSync(path.join(dir, "changes.diff"), "");
+    post("diff-empty.json", { docs: [{ id: "changes", refresh: true }] });
+    assert.equal(doc().blocks[0].text, "");
+
+    // A diff block cannot carry other content.
+    const both = post("diff-md.json", { docs: [{ id: "changes", blocks: [{ id: "c2", diff: "changes.diff", md: "text" }] }] }, { expectFail: true });
+    assert.equal(both.status, 3);
+    assert.match(both.stderr, /cannot also carry "md", "file" or "image"/);
+
+    // Text over it: the block stops being a diff and a refresh no longer reads it.
+    post("diff-to-md.json", { docs: [{ id: "changes", blocks: [{ id: "c1", md: "Plain words." }] }] });
+    assert.equal(doc().blocks[0].diff, undefined);
+    assert.equal(doc().blocks[0].text, undefined);
+    assert.equal(doc().blocks[0].md, "Plain words.");
+    const none = post("diff-none.json", { docs: [{ id: "changes", refresh: true }] }, { expectFail: true });
+    assert.match(none.stderr, /found no file or diff blocks to re-read/);
+  } finally {
+    cli(["stop", "--session", sid, "--force"]);
+  }
+});
+
+test("a diff block refuses a path, a wrong extension, a missing file and a link out of the session folder", () => {
+  const res = cli(["open", "--workflow", "implement", "--no-open"]);
+  const sid = res.json.sid;
+  const dir = res.json.session;
+  const outside = fs.mkdtempSync(path.join(os.tmpdir(), "p2c-diff-outside-"));
+  const post = (name, diff) => cli(["post", "--session", sid, "--file", payload(name, { docs: [{ id: "changes", blocks: [{ id: "c1", diff }] }] })], { expectFail: true });
+  try {
+    fs.mkdirSync(path.join(dir, "sub"), { recursive: true });
+    fs.writeFileSync(path.join(dir, "sub", "changes.diff"), "x\n");
+    fs.writeFileSync(path.join(dir, "notes.txt"), "x\n");
+    fs.writeFileSync(path.join(outside, "secret.diff"), "x\n");
+    const cases = [
+      ["sub/changes.diff", /needs a plain name/],
+      ["sub\\changes.diff", /needs a plain name/],
+      ["../changes.diff", /needs a plain name/],
+      [path.join(outside, "secret.diff"), /needs a plain name/],
+      ["notes.txt", /needs a plain name/],
+      ["missing.diff", /does not exist in the session folder. Run changes.mjs diff first/],
+    ];
+    for (const [name, message] of cases) {
+      const r = post("diff-bad.json", name);
+      assert.equal(r.status, 3, name);
+      assert.match(r.stderr, message, name);
+    }
+    try {
+      fs.symlinkSync(path.join(outside, "secret.diff"), path.join(dir, "link.diff"), "file");
+    } catch {
+      console.log("skipped the link case: this platform cannot create a symbolic link here");
+      return;
+    }
+    const linked = post("diff-link.json", "link.diff");
+    assert.equal(linked.status, 3);
+    assert.match(linked.stderr, /is outside the session folder/);
+  } finally {
+    cli(["stop", "--session", sid, "--force"]);
+    fs.rmSync(outside, { recursive: true, force: true });
+  }
+});
+
+test("a diff file over 512 KB is cut at a whole line with the too-large line, never an error", () => {
+  const res = cli(["open", "--workflow", "implement", "--no-open"]);
+  const sid = res.json.sid;
+  const dir = res.json.session;
+  try {
+    const line = "+" + "x".repeat(99) + "\n";
+    fs.writeFileSync(path.join(dir, "big.diff"), line.repeat(Math.ceil((600 * 1024) / line.length)));
+    cli(["post", "--session", sid, "--file", payload("diff-big.json", { docs: [{ id: "changes", blocks: [{ id: "c1", diff: "big.diff" }] }] })]);
+    const text = readState(dir).docs.find((d) => d.id === "changes").blocks[0].text;
+    const notice = "\\ No more lines shown: this change is too large to show in full.\n";
+    assert.ok(text.endsWith(notice), "ends with the plain line");
+    const kept = text.slice(0, -notice.length);
+    assert.ok(Buffer.byteLength(kept) <= 512 * 1024, "within the cap");
+    assert.ok(kept.endsWith("\n") && kept.split("\n").every((l) => l === "" || l === line.trimEnd()), "only whole lines");
+    // A file changes.mjs already cut, and that carries the line, does not get a second one.
+    fs.writeFileSync(path.join(dir, "cut.diff"), "diff --git a/a b/a\n" + notice);
+    cli(["post", "--session", sid, "--file", payload("diff-cut.json", { docs: [{ id: "changes", blocks: [{ id: "c1", diff: "cut.diff" }] }] })]);
+    assert.equal(readState(dir).docs.find((d) => d.id === "changes").blocks[0].text.split(notice).length, 2);
+  } finally {
+    cli(["stop", "--session", sid, "--force"]);
+  }
+});
+
+// The server and changes.mjs each spell the too-large line: they must match.
+test("the too-large line the server adds is the one changes.mjs adds", async () => {
+  const { capPatch } = await import("../src/skill-scripts/changes.mjs");
+  const { DIFF_TOO_LARGE } = await import("../src/web-console/patches.mjs");
+  const patch = "diff --git a/a b/a\n" + "+x\n".repeat(50) + "diff --git a/b b/b\n" + "+y\n".repeat(50);
+  const cut = capPatch(patch, 200);
+  assert.equal(cut.truncated, true);
+  assert.ok(cut.patch.includes(DIFF_TOO_LARGE + "\n"));
+});
+
 // /app.css is the files under public/styles/ joined in CSS_ORDER (one newline
 // after each), then the accent rules. The files themselves are never served.
 test("/app.css is the style files joined in CSS_ORDER with the accent rules last", async () => {

@@ -262,7 +262,7 @@ function mergeDocs(current, patchList) {
     // version: the agent no longer has to track what the page holds, and a
     // repost of unchanged content is not a new version.
     if (prev && typeof entry.version !== "number" && typeof prev.version === "number") {
-      const text = (blocks) => JSON.stringify((blocks || []).map((b) => [b.id, b.md, b.state, b.image, b.alt]));
+      const text = (blocks) => JSON.stringify((blocks || []).map((b) => [b.id, b.md, b.state, b.image, b.alt, b.diff, b.text]));
       if (text(prev.blocks) !== text(doc.blocks)) doc.version = prev.version + 1;
     }
   }
@@ -403,9 +403,9 @@ export function resolveDocFiles(patch, state, worktree) {
       const prev = (state.docs || []).find((d) => d && d.id === entry.id);
       const named = new Set((blocks || []).map((b) => b && b.id));
       const again = ((prev && prev.blocks) || [])
-        .filter((b) => b && typeof b.file === "string" && !named.has(b.id))
-        .map((b) => ({ id: b.id, file: b.file, ...(b.select ? { select: b.select } : {}) }));
-      if (!again.length && !blocks) throw new Error(rule(`doc "${entry.id}"`, "refresh", "found no file blocks to re-read", { id: entry.id, blocks: [FILE_RIGHT] }));
+        .filter((b) => b && (typeof b.file === "string" || typeof b.diff === "string") && !named.has(b.id))
+        .map((b) => (typeof b.diff === "string" ? { id: b.id, diff: b.diff } : { id: b.id, file: b.file, ...(b.select ? { select: b.select } : {}) }));
+      if (!again.length && !blocks) throw new Error(rule(`doc "${entry.id}"`, "refresh", "found no file or diff blocks to re-read", { id: entry.id, blocks: [FILE_RIGHT] }));
       blocks = [...(blocks || []), ...again];
     } else if (refresh !== undefined) throw new Error(rule(`doc "${entry.id}"`, "refresh", "must be true", { id: entry.id, refresh: true }));
     if (!blocks) return rest;
@@ -452,6 +452,9 @@ export function shotType(buf) {
   return null;
 }
 
+export const DIFF_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,99}\.diff$/;
+export const DIFF_TOO_LARGE = "\\ No more lines shown: this change is too large to show in full.";
+
 export function resolveDocImages(patch, state, dir) {
   if (!isPlainObject(patch) || !Array.isArray(patch.docs)) return patch;
   const fold = (p) => (process.platform === "win32" || process.platform === "darwin" ? p.toLowerCase() : p);
@@ -486,6 +489,47 @@ export function resolveDocImages(patch, state, dir) {
     if (shotType(fs.readFileSync(real)) !== want) throw bad(`is not a ${want.toUpperCase()} image (its bytes say otherwise)`);
     return `${SHOTS_DIR_NAME}/${name}`;
   };
+  // Diff blocks: `{ "id": "changes", "diff": "changes.diff" }` names a unified
+  // diff the agent saved directly in the session folder (changes.mjs diff). The
+  // server reads it like a file block, with the same 512 KB cap, and stores the
+  // name beside the text so the page can tell a diff from markdown.
+  const DIFF_RIGHT = { id: "d1", diff: "changes.diff" };
+  const readDiff = (name, docId, blockId) => {
+    const at = `doc "${docId}" block "${blockId}"`;
+    if (typeof name !== "string" || !name.trim()) throw new Error(rule(at, "diff", "must be a file name", DIFF_RIGHT));
+    const bad = (wrong) => new Error(rule(at, "diff", `${name} ${wrong}`, DIFF_RIGHT));
+    if (!DIFF_NAME.test(name)) throw bad("needs a plain name saved directly in the session folder: letters, digits, dots, dashes or underscores, ending .diff");
+    let real;
+    try {
+      real = fs.realpathSync.native(path.resolve(dir, name));
+    } catch {
+      throw bad("does not exist in the session folder. Run changes.mjs diff first");
+    }
+    let realDir;
+    try {
+      realDir = fs.realpathSync.native(path.resolve(dir));
+    } catch {
+      realDir = path.resolve(dir);
+    }
+    if (fold(path.dirname(real)) !== fold(realDir)) throw bad(`is outside the session folder (${path.resolve(dir)}); only a diff saved there can be shown`);
+    const stat = fs.statSync(real);
+    if (!stat.isFile()) throw bad("is not a file");
+    const fd = fs.openSync(real, "r");
+    let raw;
+    try {
+      // One byte past the cap tells a file that fits from one that does not.
+      const buf = Buffer.alloc(Math.min(stat.size, DOC_FILE_MAX + 1));
+      raw = buf.subarray(0, fs.readSync(fd, buf, 0, buf.length, 0));
+    } finally {
+      fs.closeSync(fd);
+    }
+    if (raw.length <= DOC_FILE_MAX) return raw.toString("utf8").replace(/\r\n/g, "\n");
+    // Over the cap is not an error (changes.mjs cuts there itself): keep whole
+    // lines and say so, so a hand-made big file still degrades.
+    const head = raw.subarray(0, DOC_FILE_MAX);
+    const text = head.subarray(0, head.lastIndexOf(0x0a) + 1).toString("utf8").replace(/\r\n/g, "\n");
+    return text.includes(DIFF_TOO_LARGE) ? text : `${text}${DIFF_TOO_LARGE}\n`;
+  };
   const docs = patch.docs.map((entry) => {
     if (!isPlainObject(entry) || !Array.isArray(entry.blocks)) return entry;
     const prevBlocks = (state.docs || []).find((d) => d && d.id === entry.id)?.blocks || [];
@@ -494,15 +538,24 @@ export function resolveDocImages(patch, state, dir) {
       blocks: entry.blocks.map((b) => {
         if (!isPlainObject(b)) return b;
         const prevBlock = prevBlocks.find((x) => x && x.id === b.id);
+        if (b.diff !== undefined && b.diff !== null) {
+          if (["md", "file", "image"].some((k) => k in b && b[k] != null)) {
+            throw new Error(rule(`doc "${entry.id}" block "${b.id}"`, "diff", 'a diff block cannot also carry "md", "file" or "image"', DIFF_RIGHT));
+          }
+          return { state: prevBlock?.state || "settled", ...b, diff: b.diff, text: readDiff(b.diff, entry.id, b.id), md: null, file: null, image: null };
+        }
+        // Text, a file or an image over what was a diff: it stops being one.
+        const wasDiff = prevBlock && typeof prevBlock.diff === "string";
+        const notDiff = wasDiff && ("md" in b || "file" in b || "image" in b) ? { diff: null, text: null } : {};
         if (b.image === undefined || b.image === null) {
           // Text or a file over what was an image: it stops being one.
-          return ("md" in b || "file" in b) && prevBlock && typeof prevBlock.image === "string" ? { ...b, image: null, alt: null } : b;
+          return ("md" in b || "file" in b) && prevBlock && typeof prevBlock.image === "string" ? { ...b, ...notDiff, image: null, alt: null } : { ...b, ...notDiff };
         }
         if (("md" in b && b.md != null) || ("file" in b && b.file != null)) {
           throw new Error(rule(`doc "${entry.id}" block "${b.id}"`, "image", 'an image block cannot also carry "md" or "file"', IMAGE_RIGHT));
         }
         if (b.alt != null && typeof b.alt !== "string") throw new Error(rule(`doc "${entry.id}" block "${b.id}"`, "alt", "must be text", IMAGE_RIGHT));
-        return { state: prevBlock?.state || "settled", ...b, image: check(b.image, entry.id, b.id), md: null, file: null };
+        return { state: prevBlock?.state || "settled", ...b, ...notDiff, image: check(b.image, entry.id, b.id), md: null, file: null };
       }),
     };
   });
@@ -1293,10 +1346,11 @@ export function validate(state) {
   }
   // A doc block read from a file (`file`) is the file's own words, already on
   // disk: the agent cannot reword it, and refusing it would wedge every post
-  // that refreshes it. Only what the agent typed is scanned.
+  // that refreshes it. A diff block is code the repository holds, never prose
+  // the agent wrote: its text may name any word. Only what the agent typed is scanned.
   for (const d of state.docs || []) {
     if (!isPlainObject(d)) continue;
-    const typed = Array.isArray(d.blocks) ? { ...d, blocks: d.blocks.filter((b) => !(isPlainObject(b) && typeof b.file === "string")) } : d;
+    const typed = Array.isArray(d.blocks) ? { ...d, blocks: d.blocks.filter((b) => !(isPlainObject(b) && (typeof b.file === "string" || typeof b.diff === "string"))) } : d;
     scan(typed, `doc "${d.id}"`);
   }
   scan(state.finish || {}, "finish");

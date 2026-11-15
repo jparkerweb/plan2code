@@ -208,7 +208,7 @@ const SOURCE_PROMPTS = [
     // ui-prototype.md rides along (with its references, shell and scripts) for the
     // offer of a UI prototype, which runs in the same conversation; every carried
     // name starts with ui-prototype so none collides with this skill's own files.
-    scripts: ['specs.mjs', 'commit-msg.mjs', 'review-scope.mjs', 'glob.mjs', 'test-map.mjs', 'test-match.mjs', 'run-check.mjs', 'lessons.mjs', 'ui-prototype.mjs', 'ui-prototype-round.mjs', 'ui-prototype-page.mjs', 'ui-prototype-drafts.mjs', 'ui-prototype-block.mjs'],
+    scripts: ['specs.mjs', 'commit-msg.mjs', 'review-scope.mjs', 'glob.mjs', 'test-map.mjs', 'test-match.mjs', 'run-check.mjs', 'lessons.mjs', 'changes.mjs', 'ui-prototype.mjs', 'ui-prototype-round.mjs', 'ui-prototype-page.mjs', 'ui-prototype-drafts.mjs', 'ui-prototype-block.mjs'],
     additionalReferences: [
       { source: 'web-console', target: 'web-console' },
       { source: 'shared-references/building-habits.md', target: 'building-habits.md' },
@@ -280,7 +280,7 @@ const SOURCE_PROMPTS = [
     description: 'Execute implementation phase by phase',
     // review.md rides along for the web console's review offer on the sign-off
     // card, which runs the review in the same session before the phase is approved.
-    scripts: ['specs.mjs', 'commit-msg.mjs', 'review-scope.mjs', 'glob.mjs', 'test-map.mjs', 'test-match.mjs', 'run-check.mjs', 'lessons.mjs'],
+    scripts: ['specs.mjs', 'commit-msg.mjs', 'review-scope.mjs', 'glob.mjs', 'test-map.mjs', 'test-match.mjs', 'run-check.mjs', 'lessons.mjs', 'changes.mjs'],
     additionalReferences: [
       { source: 'web-console', target: 'web-console' },
       { source: 'shared-references/building-habits.md', target: 'building-habits.md' },
@@ -298,7 +298,7 @@ const SOURCE_PROMPTS = [
     name: 'implement-review',
     displayName: 'Implementation + Review Mode',
     description: 'Implement one phase, review it, then request sign-off',
-    scripts: ['specs.mjs', 'commit-msg.mjs', 'review-scope.mjs', 'glob.mjs', 'test-map.mjs', 'test-match.mjs', 'run-check.mjs', 'lessons.mjs'],
+    scripts: ['specs.mjs', 'commit-msg.mjs', 'review-scope.mjs', 'glob.mjs', 'test-map.mjs', 'test-match.mjs', 'run-check.mjs', 'lessons.mjs', 'changes.mjs'],
     additionalReferences: [
       { source: 'web-console', target: 'web-console' },
       { source: 'plan2code-3-implement.md', target: 'implement.md' },
